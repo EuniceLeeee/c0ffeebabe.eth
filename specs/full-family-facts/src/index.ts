@@ -10,6 +10,8 @@ import {
   fieldArray,
   hashCanonicalPartition,
   hashDomain,
+  sha256Hex,
+  type CanonicalJson,
   type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
 import {
@@ -21,6 +23,12 @@ import {
   type SourceCoverageCertificateV1,
   type SourcePlanRefV1,
 } from "./source-wire.ts";
+import {
+  decodeFullFamilyActionOwnerArtifact,
+  decodeFullFamilyInstancePublication,
+  decodeFullFamilyPersistedGraphEdge,
+  decodeFullFamilyStageCapabilityRef,
+} from "./runtime-wire.ts";
 import {
   candidatePartitionKeysRoot,
   decodeCandidatePartitionProofV1,
@@ -220,6 +228,48 @@ export interface FamilyOutcomePartitionV1 {
   readonly items: readonly FamilyOutcomeItemV1[];
 }
 
+export type FullFamilyPartitionRoleV1 =
+  | "source-plans"
+  | "universe-candidates"
+  | "outcomes"
+  | "instance-publications"
+  | "projected-edges"
+  | "declared-coarse-capabilities"
+  | "coarse-rankable"
+  | "coarse-unavailable"
+  | "unranked-admissions"
+  | "declared-exact-capabilities"
+  | "owned-actions";
+
+export interface FullFamilyArtifactDigestV1 {
+  readonly artifactRefId: Hash;
+  readonly contentSha256: Hash;
+}
+
+/** One generic storage index is shared by every Full-Family partition.  The
+ * business artifact bytes remain independent content objects; pages only
+ * preserve their exact ordered semantic refs. */
+export interface FullFamilyArtifactRefPageV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.full-family-artifact-ref-page-v1";
+  readonly refs: readonly FullFamilyArtifactDigestV1[];
+  readonly nextPageRef: FullFamilyArtifactDigestV1 | null;
+}
+
+export interface FullFamilyArtifactRefIndexV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.full-family-artifact-ref-index-v1";
+  readonly pageCount: string;
+  readonly firstPageRef: FullFamilyArtifactDigestV1 | null;
+}
+
+export interface FullFamilyStoredPartitionV1 {
+  readonly count: string;
+  readonly root: Hash;
+  readonly indexArtifactRefId: Hash;
+  readonly indexContentSha256: Hash;
+}
+
 export interface FamilyReleaseEntryV1 {
   readonly familyId: string;
   readonly familyDefinitionHash: Hash;
@@ -357,6 +407,57 @@ export interface FullFamilyFactBundleV1 {
   readonly instanceMatrixRoot: Hash;
   readonly edgeMatrixRoot: Hash;
   readonly families: readonly FullFamilyMatrixEntryV1[];
+}
+
+export interface FullFamilyStoredSourceCoverageBindingV1 {
+  readonly artifactRefId: Hash;
+  readonly contentSha256: Hash;
+}
+
+export interface FullFamilyStoredLineageV1 {
+  readonly nominationClosure: Omit<FullFamilyStoredLineageArtifactBindingV1<NominationClosureV1>, "artifact">;
+  readonly candidatePartitionProof: Omit<FullFamilyStoredLineageArtifactBindingV1<CandidatePartitionProofV1>, "artifact">;
+  readonly candidateProofVerifierBinding: Omit<FullFamilyLineageArtifactBindingV1<FullFamilyCandidateProofVerifierBindingV1>, "artifact">;
+}
+
+export interface FullFamilyStoredMatrixEntryV1 {
+  readonly familyId: string;
+  readonly familyDefinitionHash: Hash;
+  readonly sourcePlanRoot: Hash;
+  readonly candidateCount: string;
+  readonly candidateSetRoot: Hash;
+  readonly sourcePlans: FullFamilyStoredPartitionV1;
+  readonly universeCandidates: FullFamilyStoredPartitionV1;
+  readonly outcomes: FullFamilyStoredPartitionV1;
+  readonly instancePublications: FullFamilyStoredPartitionV1;
+  readonly projectedEdges: FullFamilyStoredPartitionV1;
+  readonly declaredCoarseCapabilities: FullFamilyStoredPartitionV1;
+  readonly coarseRankable: FullFamilyStoredPartitionV1;
+  readonly coarseUnavailable: FullFamilyStoredPartitionV1;
+  readonly unrankedAdmissions: FullFamilyStoredPartitionV1;
+  readonly declaredExactCapabilities: FullFamilyStoredPartitionV1;
+  readonly ownedActions: FullFamilyStoredPartitionV1;
+  readonly entryHash: Hash;
+}
+
+/** Bounded wire form.  The existing FullFamilyFactBundleV1 remains the
+ * materialized semantic view used by the predicate after it follows every
+ * index page and independently decodes every referenced item artifact. */
+export interface FullFamilyFactBundleStorageV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.full-family-facts-storage-v1";
+  readonly runtime: FullFamilyRuntimeBindingV1;
+  readonly releaseIntent: FamilyReleaseSetV1;
+  readonly definitionCatalog: FamilyReleaseSetV1;
+  readonly runtimeComposition: FamilyReleaseSetV1;
+  readonly sourceCoverage: FullFamilyStoredSourceCoverageBindingV1;
+  readonly lineage: FullFamilyStoredLineageV1;
+  readonly familyMatrixCount: string;
+  readonly familyMatrixRoot: Hash;
+  readonly universeMatrixRoot: Hash;
+  readonly instanceMatrixRoot: Hash;
+  readonly edgeMatrixRoot: Hash;
+  readonly families: readonly FullFamilyStoredMatrixEntryV1[];
 }
 
 export interface FullFamilyFactLocatorV1 {
@@ -571,6 +672,94 @@ function decodeOutcomePartition(value: unknown, path: string): FamilyOutcomePart
   if (decoded.count !== String(decoded.items.length)) throw new TypeError(`outcome count mismatch at ${path}.count`);
   if (decoded.root !== hashFamilyOutcomePartition(decoded.items)) throw new TypeError(`outcome root mismatch at ${path}.root`);
   return decoded;
+}
+
+const FULL_FAMILY_PARTITION_ROLES = Object.freeze([
+  "source-plans",
+  "universe-candidates",
+  "outcomes",
+  "instance-publications",
+  "projected-edges",
+  "declared-coarse-capabilities",
+  "coarse-rankable",
+  "coarse-unavailable",
+  "unranked-admissions",
+  "declared-exact-capabilities",
+  "owned-actions",
+] as const);
+
+function decodePartitionRole(value: unknown, path: string): FullFamilyPartitionRoleV1 {
+  if (typeof value !== "string" || !FULL_FAMILY_PARTITION_ROLES.includes(value as FullFamilyPartitionRoleV1)) {
+    throw new TypeError(`unknown Full-Family partition role at ${path}`);
+  }
+  return value as FullFamilyPartitionRoleV1;
+}
+
+function decodeArtifactDigest(value: unknown, path: string): FullFamilyArtifactDigestV1 {
+  return decodeExactObject(value, {
+    artifactRefId: (field, itemPath) => positiveHash(field, itemPath),
+    contentSha256: (field, itemPath) => positiveHash(field, itemPath),
+  }, path);
+}
+
+function nullableArtifactDigest(value: unknown, path: string): FullFamilyArtifactDigestV1 | null {
+  return value === null ? null : decodeArtifactDigest(value, path);
+}
+
+export function sealFullFamilyArtifactRefPageV1(
+  input: Omit<FullFamilyArtifactRefPageV1, "schemaVersion" | "kind">,
+): FullFamilyArtifactRefPageV1 {
+  const refs = input.refs.map((ref, index) => decodeArtifactDigest(ref, `artifactRefPage.refs[${index}]`));
+  if (refs.length === 0 || refs.length > 128) throw new TypeError("Full-Family artifact ref page size must be 1..128");
+  const value = {
+    schemaVersion: 1 as const,
+    kind: "aloha.full-family-artifact-ref-page-v1" as const,
+    refs: deepFreeze(refs),
+    nextPageRef: input.nextPageRef === null ? null : decodeArtifactDigest(input.nextPageRef, "artifactRefPage.nextPageRef"),
+  };
+  return deepFreeze(value);
+}
+
+export function decodeFullFamilyArtifactRefPageV1(value: FullFamilyFactsCodecInput): FullFamilyArtifactRefPageV1 {
+  const decoded = decodeExactObject(parseInput(value), {
+    schemaVersion: (field, path) => exactLiteral(field, 1, path),
+    kind: (field, path) => exactLiteral(field, "aloha.full-family-artifact-ref-page-v1", path),
+    refs: (field, path) => fieldArray(field, (item, itemPath) => decodeArtifactDigest(item, itemPath), path),
+    nextPageRef: (field, path) => nullableArtifactDigest(field, path),
+  });
+  return sealFullFamilyArtifactRefPageV1(decoded);
+}
+
+export function encodeFullFamilyArtifactRefPageV1(value: FullFamilyArtifactRefPageV1): Uint8Array {
+  return encodeCanonicalBytes(decodeFullFamilyArtifactRefPageV1(value));
+}
+
+export function sealFullFamilyArtifactRefIndexV1(
+  input: Omit<FullFamilyArtifactRefIndexV1, "schemaVersion" | "kind">,
+): FullFamilyArtifactRefIndexV1 {
+  const pageCount = assertDecimalString(input.pageCount, "artifactRefIndex.pageCount");
+  if ((pageCount === "0") !== (input.firstPageRef === null)) throw new TypeError("Full-Family ref index empty mismatch");
+  const value = {
+    schemaVersion: 1 as const,
+    kind: "aloha.full-family-artifact-ref-index-v1" as const,
+    pageCount,
+    firstPageRef: input.firstPageRef === null ? null : decodeArtifactDigest(input.firstPageRef, "artifactRefIndex.firstPageRef"),
+  };
+  return deepFreeze(value);
+}
+
+export function decodeFullFamilyArtifactRefIndexV1(value: FullFamilyFactsCodecInput): FullFamilyArtifactRefIndexV1 {
+  const decoded = decodeExactObject(parseInput(value), {
+    schemaVersion: (field, path) => exactLiteral(field, 1, path),
+    kind: (field, path) => exactLiteral(field, "aloha.full-family-artifact-ref-index-v1", path),
+    pageCount: (field, path) => assertDecimalString(field, path),
+    firstPageRef: (field, path) => nullableArtifactDigest(field, path),
+  });
+  return sealFullFamilyArtifactRefIndexV1(decoded);
+}
+
+export function encodeFullFamilyArtifactRefIndexV1(value: FullFamilyArtifactRefIndexV1): Uint8Array {
+  return encodeCanonicalBytes(decodeFullFamilyArtifactRefIndexV1(value));
 }
 
 function decodeReleaseEntry(value: unknown, path: string): FamilyReleaseEntryV1 {
@@ -1018,6 +1207,101 @@ function decodeBundle(value: unknown, path = "$" ): FullFamilyFactBundleV1 {
   return decoded;
 }
 
+function decodeStoredPartition(value: unknown, path: string): FullFamilyStoredPartitionV1 {
+  return decodeExactObject(value, {
+    count: (field, itemPath) => assertDecimalString(field, itemPath),
+    root: (field, itemPath) => positiveHash(field, itemPath),
+    indexArtifactRefId: (field, itemPath) => positiveHash(field, itemPath),
+    indexContentSha256: (field, itemPath) => positiveHash(field, itemPath),
+  }, path);
+}
+
+function decodeStoredMatrixEntry(value: unknown, path: string): FullFamilyStoredMatrixEntryV1 {
+  const decoded = decodeExactObject(value, {
+    familyId: (field, itemPath) => assertNonEmptyString(field, itemPath),
+    familyDefinitionHash: (field, itemPath) => positiveHash(field, itemPath),
+    sourcePlanRoot: (field, itemPath) => positiveHash(field, itemPath),
+    candidateCount: (field, itemPath) => assertDecimalString(field, itemPath),
+    candidateSetRoot: (field, itemPath) => positiveHash(field, itemPath),
+    sourcePlans: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    universeCandidates: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    outcomes: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    instancePublications: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    projectedEdges: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    declaredCoarseCapabilities: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    coarseRankable: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    coarseUnavailable: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    unrankedAdmissions: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    declaredExactCapabilities: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    ownedActions: (field, itemPath) => decodeStoredPartition(field, itemPath),
+    entryHash: (field, itemPath) => positiveHash(field, itemPath),
+  }, path);
+  if (decoded.candidateCount !== decoded.universeCandidates.count) {
+    throw new TypeError(`stored Full-Family matrix entry mismatch at ${path}`);
+  }
+  return decoded;
+}
+
+function decodeStoredSourceCoverage(value: unknown, path: string): FullFamilyStoredSourceCoverageBindingV1 {
+  return decodeExactObject(value, {
+    artifactRefId: (field, itemPath) => positiveHash(field, itemPath),
+    contentSha256: (field, itemPath) => positiveHash(field, itemPath),
+  }, path);
+}
+
+function decodeStoredLineage(value: unknown, path: string): FullFamilyStoredLineageV1 {
+  return decodeExactObject(value, {
+    nominationClosure: (field, itemPath) => decodeExactObject(field, {
+      artifactRefId: (entry, entryPath) => positiveHash(entry, entryPath),
+      contentSha256: (entry, entryPath) => positiveHash(entry, entryPath),
+      storageHash: (entry, entryPath) => positiveHash(entry, entryPath),
+    }, itemPath),
+    candidatePartitionProof: (field, itemPath) => decodeExactObject(field, {
+      artifactRefId: (entry, entryPath) => positiveHash(entry, entryPath),
+      contentSha256: (entry, entryPath) => positiveHash(entry, entryPath),
+      storageHash: (entry, entryPath) => positiveHash(entry, entryPath),
+    }, itemPath),
+    candidateProofVerifierBinding: (field, itemPath) => decodeExactObject(field, {
+      artifactRefId: (entry, entryPath) => positiveHash(entry, entryPath),
+      contentSha256: (entry, entryPath) => positiveHash(entry, entryPath),
+    }, itemPath),
+  }, path);
+}
+
+export function decodeFullFamilyFactBundleStorageV1(
+  value: FullFamilyFactsCodecInput,
+): FullFamilyFactBundleStorageV1 {
+  const decoded = decodeExactObject(parseInput(value), {
+    schemaVersion: (field, path) => exactLiteral(field, 1, path),
+    kind: (field, path) => exactLiteral(field, "aloha.full-family-facts-storage-v1", path),
+    runtime: (field, path) => decodeRuntimeBinding(field, path),
+    releaseIntent: (field, path) => decodeReleaseSet(field, path),
+    definitionCatalog: (field, path) => decodeReleaseSet(field, path),
+    runtimeComposition: (field, path) => decodeReleaseSet(field, path),
+    sourceCoverage: (field, path) => decodeStoredSourceCoverage(field, path),
+    lineage: (field, path) => decodeStoredLineage(field, path),
+    familyMatrixCount: (field, path) => assertDecimalString(field, path),
+    familyMatrixRoot: (field, path) => positiveHash(field, path),
+    universeMatrixRoot: (field, path) => positiveHash(field, path),
+    instanceMatrixRoot: (field, path) => positiveHash(field, path),
+    edgeMatrixRoot: (field, path) => positiveHash(field, path),
+    families: (field, path) => fieldArray(field, (entry, entryPath) => decodeStoredMatrixEntry(entry, entryPath), path),
+  });
+  strictSortedUnique(decoded.families.map(family => family.familyId), "storedFullFamily.families");
+  if (decoded.familyMatrixCount !== String(decoded.families.length)
+    || decoded.familyMatrixRoot !== hashDomain("aloha/full-family/matrix-root/v2", decoded.families.map(entry => entry.entryHash))
+    || decoded.universeMatrixRoot !== hashDomain("aloha/full-family/universe-matrix-root/v1", decoded.families.map(entry => ({ familyId: entry.familyId, root: entry.universeCandidates.root })))
+    || decoded.instanceMatrixRoot !== hashDomain("aloha/full-family/instance-matrix-root/v1", decoded.families.map(entry => ({ familyId: entry.familyId, root: entry.instancePublications.root })))
+    || decoded.edgeMatrixRoot !== hashDomain("aloha/full-family/edge-matrix-root/v1", decoded.families.map(entry => ({ familyId: entry.familyId, root: entry.projectedEdges.root })))) {
+    throw new TypeError("stored Full-Family bundle root/count mismatch");
+  }
+  return deepFreeze(decoded);
+}
+
+export function encodeFullFamilyFactBundleStorageV1(value: FullFamilyFactBundleStorageV1): Uint8Array {
+  return encodeCanonicalBytes(decodeFullFamilyFactBundleStorageV1(value));
+}
+
 export function hashFamilyEvidencePartition(items: readonly FamilyEvidenceItemV1[]): Hash {
   return hashDomain("aloha/full-family/evidence-partition/v2", items);
 }
@@ -1129,6 +1413,388 @@ export function sealFullFamilyFacts(input: FullFamilyFactBundleDraftV1): FullFam
     edgeMatrixRoot: hashFullFamilyEdgeMatrixRoot(families),
     families,
   });
+}
+
+export interface FullFamilyStoredPartitionBindingInputV1 {
+  readonly familyId: string;
+  readonly role: FullFamilyPartitionRoleV1;
+  readonly count: string;
+  readonly root: Hash;
+  readonly indexArtifactRefId: Hash;
+  readonly indexContentSha256: Hash;
+}
+
+function partitionStorageKey(familyId: string, role: FullFamilyPartitionRoleV1): string {
+  return `${familyId}\u001f${role}`;
+}
+
+export function sealFullFamilyFactBundleStorageV1(
+  bundle: FullFamilyFactBundleV1,
+  bindings: readonly FullFamilyStoredPartitionBindingInputV1[],
+): FullFamilyFactBundleStorageV1 {
+  const decoded = decodeFullFamilyFacts(bundle);
+  const byKey = new Map<string, FullFamilyStoredPartitionV1>();
+  for (const [index, binding] of bindings.entries()) {
+    const familyId = assertNonEmptyString(binding.familyId, `storedBindings[${index}].familyId`);
+    const role = decodePartitionRole(binding.role, `storedBindings[${index}].role`);
+    const key = partitionStorageKey(familyId, role);
+    if (byKey.has(key)) throw new TypeError("duplicate Full-Family stored partition binding");
+    byKey.set(key, deepFreeze({
+      count: assertDecimalString(binding.count, `storedBindings[${index}].count`),
+      root: positiveHash(binding.root, `storedBindings[${index}].root`),
+      indexArtifactRefId: positiveHash(binding.indexArtifactRefId, `storedBindings[${index}].indexArtifactRefId`),
+      indexContentSha256: positiveHash(binding.indexContentSha256, `storedBindings[${index}].indexContentSha256`),
+    }));
+  }
+  const take = (
+    familyId: string,
+    role: FullFamilyPartitionRoleV1,
+    semantic: FamilyEvidencePartitionV1 | FamilyOutcomePartitionV1,
+  ): FullFamilyStoredPartitionV1 => {
+    const stored = byKey.get(partitionStorageKey(familyId, role));
+    if (stored === undefined || stored.count !== semantic.count || stored.root !== semantic.root) {
+      throw new TypeError(`missing or mismatched Full-Family stored partition ${familyId}/${role}`);
+    }
+    byKey.delete(partitionStorageKey(familyId, role));
+    return stored;
+  };
+  const families = decoded.families.map(family => deepFreeze({
+    familyId: family.familyId,
+    familyDefinitionHash: family.familyDefinitionHash,
+    sourcePlanRoot: family.sourcePlanRoot,
+    candidateCount: family.candidatePartition.candidateCount,
+    candidateSetRoot: family.candidatePartition.candidateSetRoot,
+    sourcePlans: take(family.familyId, "source-plans", family.sourcePlans),
+    universeCandidates: take(family.familyId, "universe-candidates", family.universeCandidates),
+    outcomes: take(family.familyId, "outcomes", family.outcomes),
+    instancePublications: take(family.familyId, "instance-publications", family.instancePublications),
+    projectedEdges: take(family.familyId, "projected-edges", family.projectedEdges),
+    declaredCoarseCapabilities: take(family.familyId, "declared-coarse-capabilities", family.declaredCoarseCapabilities),
+    coarseRankable: take(family.familyId, "coarse-rankable", family.coarseRankable),
+    coarseUnavailable: take(family.familyId, "coarse-unavailable", family.coarseUnavailable),
+    unrankedAdmissions: take(family.familyId, "unranked-admissions", family.unrankedAdmissions),
+    declaredExactCapabilities: take(family.familyId, "declared-exact-capabilities", family.declaredExactCapabilities),
+    ownedActions: take(family.familyId, "owned-actions", family.ownedActions),
+    entryHash: family.entryHash,
+  }));
+  if (byKey.size !== 0) throw new TypeError("orphan Full-Family stored partition binding");
+  const value = {
+    schemaVersion: 1 as const,
+    kind: "aloha.full-family-facts-storage-v1" as const,
+    runtime: decoded.runtime,
+    releaseIntent: decoded.releaseIntent,
+    definitionCatalog: decoded.definitionCatalog,
+    runtimeComposition: decoded.runtimeComposition,
+    sourceCoverage: deepFreeze({
+      artifactRefId: decoded.sourceCoverage.artifactRefId,
+      contentSha256: decoded.sourceCoverage.contentSha256,
+    }),
+    lineage: deepFreeze({
+      nominationClosure: deepFreeze({
+        artifactRefId: decoded.lineage.nominationClosure.artifactRefId,
+        contentSha256: decoded.lineage.nominationClosure.contentSha256,
+        storageHash: decoded.lineage.nominationClosure.storageHash,
+      }),
+      candidatePartitionProof: deepFreeze({
+        artifactRefId: decoded.lineage.candidatePartitionProof.artifactRefId,
+        contentSha256: decoded.lineage.candidatePartitionProof.contentSha256,
+        storageHash: decoded.lineage.candidatePartitionProof.storageHash,
+      }),
+      candidateProofVerifierBinding: deepFreeze({
+        artifactRefId: decoded.lineage.candidateProofVerifierBinding.artifactRefId,
+        contentSha256: decoded.lineage.candidateProofVerifierBinding.contentSha256,
+      }),
+    }),
+    familyMatrixCount: decoded.familyMatrixCount,
+    familyMatrixRoot: decoded.familyMatrixRoot,
+    universeMatrixRoot: decoded.universeMatrixRoot,
+    instanceMatrixRoot: decoded.instanceMatrixRoot,
+    edgeMatrixRoot: decoded.edgeMatrixRoot,
+    families: deepFreeze(families),
+  };
+  return deepFreeze(value);
+}
+
+export type FullFamilyStoredArtifactResolverV1 = (
+  artifactRefId: Hash,
+  contentSha256: Hash,
+) => Uint8Array;
+
+export type FullFamilyStoredItemDecoderV1 = (input: Readonly<{
+  readonly familyId: string;
+  readonly role: FullFamilyPartitionRoleV1;
+  readonly itemKind: "evidence" | "outcome";
+  readonly artifactRefId: Hash;
+  readonly contentSha256: Hash;
+  readonly bytes: Uint8Array;
+}>) => FamilyEvidenceItemV1 | FamilyOutcomeItemV1;
+
+function storedInstanceIdentityRef(familyDefinitionHash: Hash, instanceKey: string): Hash {
+  return hashDomain("aloha/full-family/instance-identity-ref/v1", { familyDefinitionHash, instanceKey });
+}
+
+/** Domain decoder paired with the generic ref-page reader.  It reconstructs
+ * the semantic item from the one original observer artifact; pages never
+ * duplicate those fields. */
+export const decodeFullFamilyStoredItemV1: FullFamilyStoredItemDecoderV1 = input => {
+  let item: FamilyEvidenceItemV1 | FamilyOutcomeItemV1;
+  if (input.role === "source-plans" || input.role === "universe-candidates") {
+    const artifact = decodeFullFamilyEvidenceArtifact(input.bytes);
+    item = {
+      familyId: artifact.familyId,
+      itemId: artifact.itemId,
+      subjectKey: artifact.subjectKey,
+      evidenceArtifactRefId: input.artifactRefId,
+      evidenceContentSha256: input.contentSha256,
+    };
+  } else if (input.role === "outcomes") {
+    const artifact = decodeFullFamilyOutcomeArtifact(input.bytes);
+    item = {
+      familyId: artifact.familyId,
+      itemId: artifact.itemId,
+      candidateKey: artifact.candidateKey,
+      instanceKey: artifact.instanceKey,
+      outcome: artifact.outcome,
+      evidenceArtifactRefId: input.artifactRefId,
+      evidenceContentSha256: input.contentSha256,
+    };
+  } else if (input.role === "instance-publications") {
+    const artifact = decodeFullFamilyInstancePublication(decodeCanonicalJson(input.bytes));
+    item = {
+      familyId: artifact.familyId,
+      itemId: artifact.instancePublicationHash,
+      subjectKey: storedInstanceIdentityRef(artifact.familyDefinitionHash, artifact.instanceKey),
+      evidenceArtifactRefId: input.artifactRefId,
+      evidenceContentSha256: input.contentSha256,
+    };
+  } else if (input.role === "projected-edges") {
+    const artifact = decodeFullFamilyPersistedGraphEdge(decodeCanonicalJson(input.bytes));
+    item = {
+      familyId: artifact.owningFamilyId,
+      itemId: artifact.edgeId,
+      subjectKey: storedInstanceIdentityRef(artifact.owningFamilyDefinitionHash, artifact.owningInstanceKey),
+      evidenceArtifactRefId: input.artifactRefId,
+      evidenceContentSha256: input.contentSha256,
+    };
+  } else if (input.role === "declared-coarse-capabilities" || input.role === "declared-exact-capabilities") {
+    const artifact = decodeFullFamilyStageCapabilityRef(decodeCanonicalJson(input.bytes));
+    item = {
+      familyId: artifact.familyId,
+      itemId: artifact.ownerRef,
+      subjectKey: artifact.ownerRef,
+      evidenceArtifactRefId: input.artifactRefId,
+      evidenceContentSha256: input.contentSha256,
+    };
+  } else if (input.role === "owned-actions") {
+    const artifact = decodeFullFamilyActionOwnerArtifact(decodeCanonicalJson(input.bytes));
+    item = {
+      familyId: artifact.familyId,
+      itemId: artifact.actionOwnerRef,
+      subjectKey: artifact.actionOwnerRef,
+      evidenceArtifactRefId: input.artifactRefId,
+      evidenceContentSha256: input.contentSha256,
+    };
+  } else {
+    const observation = decodeExactObject(decodeCanonicalJson(input.bytes), {
+      schemaVersion: (field, path) => exactLiteral(field, 1, path),
+      kind: (field, path) => exactLiteral(field, "aloha.family-runtime-coarse-edge-sweep-observation-v1", path),
+      familyId: (field, path) => assertNonEmptyString(field, path),
+      familyDefinitionHash: (field, path) => positiveHash(field, path),
+      releaseMembershipRoot: (field, path) => positiveHash(field, path),
+      binding: (field, path) => canonicalRecord<Record<string, CanonicalJson>>(field, path),
+      routeHandleBindingHash: (field, path) => positiveHash(field, path),
+      amountHash: (field, path) => positiveHash(field, path),
+      projectionId: (field, path) => positiveHash(field, path),
+      stateOutcome: (field, path) => canonicalRecord<Record<string, CanonicalJson>>(field, path),
+      coarseOutcome: (field, path) => canonicalRecord<Record<string, CanonicalJson>>(field, path),
+      observationRoot: (field, path) => positiveHash(field, path),
+    });
+    const { observationRoot, ...observationBody } = observation;
+    const binding = canonicalRecord<Record<string, CanonicalJson>>(observation.binding, "coarseObservation.binding");
+    const edgeId = positiveHash(binding.edgeId, "coarseObservation.binding.edgeId");
+    const coarseOutcome = canonicalRecord<Record<string, CanonicalJson>>(observation.coarseOutcome, "coarseObservation.coarseOutcome");
+    const coarse = canonicalRecord<Record<string, CanonicalJson>>(coarseOutcome.artifact, "coarseObservation.coarseOutcome.artifact");
+    const status = coarse.status;
+    if (observationRoot !== hashDomain("aloha/family-runtime-coarse-edge-sweep-observation/v1", observationBody)
+      || coarseOutcome.kind !== "verified" || coarse.kind !== "coarse"
+      || (status !== "rankable" && status !== "unavailable")
+      || (input.role === "coarse-rankable") !== (status === "rankable")
+      || (input.role === "coarse-unavailable" || input.role === "unranked-admissions") !== (status === "unavailable")) {
+      throw new TypeError("stored Full-Family coarse observation is invalid");
+    }
+    item = {
+      familyId: observation.familyId,
+      itemId: positiveHash(coarse.artifactHash, "coarseObservation.artifactHash"),
+      subjectKey: edgeId,
+      evidenceArtifactRefId: input.artifactRefId,
+      evidenceContentSha256: input.contentSha256,
+    };
+  }
+  const decoded = "candidateKey" in item
+    ? decodeOutcomeItem(item, "storedFullFamily.item")
+    : decodeEvidenceItem(item, "storedFullFamily.item");
+  if (decoded.familyId !== input.familyId
+    || (input.itemKind === "outcome") !== ("candidateKey" in decoded)) {
+    throw new TypeError(`stored Full-Family item domain splice:${input.familyId}/${input.role}`);
+  }
+  return decoded;
+};
+
+function resolveStoredBytes(
+  resolver: FullFamilyStoredArtifactResolverV1,
+  ref: FullFamilyArtifactDigestV1,
+  path: string,
+): Uint8Array {
+  const bytes = resolver(ref.artifactRefId, ref.contentSha256);
+  if (!(bytes instanceof Uint8Array) || sha256Hex(bytes) !== ref.contentSha256) {
+    throw new TypeError(`Full-Family stored artifact digest mismatch at ${path}`);
+  }
+  return bytes;
+}
+
+function materializeStoredPartition(
+  familyId: string,
+  role: FullFamilyPartitionRoleV1,
+  itemKind: "evidence" | "outcome",
+  stored: FullFamilyStoredPartitionV1,
+  resolver: FullFamilyStoredArtifactResolverV1,
+  decodeItem: FullFamilyStoredItemDecoderV1,
+): FamilyEvidencePartitionV1 | FamilyOutcomePartitionV1 {
+  const indexRef = Object.freeze({
+    artifactRefId: stored.indexArtifactRefId,
+    contentSha256: stored.indexContentSha256,
+  });
+  const index = decodeFullFamilyArtifactRefIndexV1(resolveStoredBytes(resolver, indexRef, `${familyId}.${role}.index`));
+  const items: Array<FamilyEvidenceItemV1 | FamilyOutcomeItemV1> = [];
+  let next = index.firstPageRef;
+  let ordinal = 0;
+  while (next !== null) {
+    if (ordinal >= Number(index.pageCount)) throw new TypeError(`Full-Family artifact ref page cycle at ${familyId}/${role}`);
+    const page = decodeFullFamilyArtifactRefPageV1(resolveStoredBytes(resolver, next, `${familyId}.${role}.page[${ordinal}]`));
+    for (const ref of page.refs) {
+      const bytes = resolveStoredBytes(resolver, ref, `${familyId}.${role}.item[${items.length}]`);
+      items.push(decodeItem({ familyId, role, itemKind, ...ref, bytes }));
+    }
+    next = page.nextPageRef;
+    ordinal += 1;
+  }
+  if (String(ordinal) !== index.pageCount || String(items.length) !== stored.count) {
+    throw new TypeError(`Full-Family artifact ref page closure mismatch at ${familyId}/${role}`);
+  }
+  const materialized = itemKind === "evidence"
+    ? sealFamilyEvidencePartition(items as FamilyEvidenceItemV1[])
+    : sealFamilyOutcomePartition(items as FamilyOutcomeItemV1[]);
+  if (materialized.count !== stored.count || materialized.root !== stored.root) {
+    throw new TypeError(`Full-Family materialized partition root mismatch at ${familyId}/${role}`);
+  }
+  return materialized;
+}
+
+export function materializeFullFamilyFactBundleStorageV1(
+  storage: FullFamilyFactBundleStorageV1,
+  resolver: FullFamilyStoredArtifactResolverV1,
+  decodeItem: FullFamilyStoredItemDecoderV1,
+): FullFamilyFactBundleV1 {
+  const decoded = decodeFullFamilyFactBundleStorageV1(storage);
+  const readDirect = (artifactRefId: Hash, contentSha256: Hash, path: string) => resolveStoredBytes(
+    resolver,
+    Object.freeze({ artifactRefId, contentSha256 }),
+    path,
+  );
+  const sourceCoverageArtifact = decodeFullFamilySourceCoverageArtifact(readDirect(
+    decoded.sourceCoverage.artifactRefId,
+    decoded.sourceCoverage.contentSha256,
+    "sourceCoverage",
+  ));
+  const nominationClosure = decodeNominationClosureV1(decodeCanonicalJson(readDirect(
+    decoded.lineage.nominationClosure.artifactRefId,
+    decoded.lineage.nominationClosure.contentSha256,
+    "nominationClosure",
+  )));
+  const candidatePartitionProof = decodeCandidatePartitionProofV1(decodeCanonicalJson(readDirect(
+    decoded.lineage.candidatePartitionProof.artifactRefId,
+    decoded.lineage.candidatePartitionProof.contentSha256,
+    "candidatePartitionProof",
+  )));
+  const candidateProofVerifierBinding = decodeFullFamilyCandidateProofVerifierBinding(readDirect(
+    decoded.lineage.candidateProofVerifierBinding.artifactRefId,
+    decoded.lineage.candidateProofVerifierBinding.contentSha256,
+    "candidateProofVerifierBinding",
+  ));
+  const families = decoded.families.map(stored => {
+    const sourcePlans = materializeStoredPartition(stored.familyId, "source-plans", "evidence", stored.sourcePlans, resolver, decodeItem) as FamilyEvidencePartitionV1;
+    const universeCandidates = materializeStoredPartition(stored.familyId, "universe-candidates", "evidence", stored.universeCandidates, resolver, decodeItem) as FamilyEvidencePartitionV1;
+    const outcomes = materializeStoredPartition(stored.familyId, "outcomes", "outcome", stored.outcomes, resolver, decodeItem) as FamilyOutcomePartitionV1;
+    const candidateKeys = universeCandidates.items.map(item => item.subjectKey).sort(compareText);
+    const candidatePartition = deepFreeze({
+      familyId: stored.familyId,
+      familyDefinitionHash: stored.familyDefinitionHash,
+      familyCandidateKeys: candidateKeys,
+      candidateSetRoot: hashCanonicalPartition("aloha/nomination-family-candidates/v1", candidateKeys),
+      candidateCount: String(candidateKeys.length),
+    });
+    if (candidatePartition.candidateCount !== stored.candidateCount
+      || candidatePartition.candidateSetRoot !== stored.candidateSetRoot) {
+      throw new TypeError(`stored Full-Family candidate denominator mismatch:${stored.familyId}`);
+    }
+    const family = sealFullFamilyMatrixEntry({
+      familyId: stored.familyId,
+      familyDefinitionHash: stored.familyDefinitionHash,
+      sourcePlanRoot: stored.sourcePlanRoot,
+      sourcePlans,
+      candidatePartition,
+      universeCandidates,
+      outcomes,
+      instancePublications: materializeStoredPartition(stored.familyId, "instance-publications", "evidence", stored.instancePublications, resolver, decodeItem) as FamilyEvidencePartitionV1,
+      projectedEdges: materializeStoredPartition(stored.familyId, "projected-edges", "evidence", stored.projectedEdges, resolver, decodeItem) as FamilyEvidencePartitionV1,
+      declaredCoarseCapabilities: materializeStoredPartition(stored.familyId, "declared-coarse-capabilities", "evidence", stored.declaredCoarseCapabilities, resolver, decodeItem) as FamilyEvidencePartitionV1,
+      coarseRankable: materializeStoredPartition(stored.familyId, "coarse-rankable", "evidence", stored.coarseRankable, resolver, decodeItem) as FamilyEvidencePartitionV1,
+      coarseUnavailable: materializeStoredPartition(stored.familyId, "coarse-unavailable", "evidence", stored.coarseUnavailable, resolver, decodeItem) as FamilyEvidencePartitionV1,
+      unrankedAdmissions: materializeStoredPartition(stored.familyId, "unranked-admissions", "evidence", stored.unrankedAdmissions, resolver, decodeItem) as FamilyEvidencePartitionV1,
+      declaredExactCapabilities: materializeStoredPartition(stored.familyId, "declared-exact-capabilities", "evidence", stored.declaredExactCapabilities, resolver, decodeItem) as FamilyEvidencePartitionV1,
+      ownedActions: materializeStoredPartition(stored.familyId, "owned-actions", "evidence", stored.ownedActions, resolver, decodeItem) as FamilyEvidencePartitionV1,
+    });
+    if (family.entryHash !== stored.entryHash) throw new TypeError(`stored Full-Family matrix entry hash mismatch:${stored.familyId}`);
+    return family;
+  });
+  const bundle = sealFullFamilyFacts({
+    runtime: decoded.runtime,
+    releaseIntent: {
+      sourceArtifactRefId: decoded.releaseIntent.sourceArtifactRefId,
+      sourceArtifactContentSha256: decoded.releaseIntent.sourceArtifactContentSha256,
+      contractRoot: decoded.releaseIntent.contractRoot,
+      entries: decoded.releaseIntent.entries.map(({ familyId, familyDefinitionHash }) => ({ familyId, familyDefinitionHash })),
+    },
+    definitionCatalog: {
+      sourceArtifactRefId: decoded.definitionCatalog.sourceArtifactRefId,
+      sourceArtifactContentSha256: decoded.definitionCatalog.sourceArtifactContentSha256,
+      contractRoot: decoded.definitionCatalog.contractRoot,
+      entries: decoded.definitionCatalog.entries.map(({ familyId, familyDefinitionHash }) => ({ familyId, familyDefinitionHash })),
+    },
+    runtimeComposition: {
+      sourceArtifactRefId: decoded.runtimeComposition.sourceArtifactRefId,
+      sourceArtifactContentSha256: decoded.runtimeComposition.sourceArtifactContentSha256,
+      contractRoot: decoded.runtimeComposition.contractRoot,
+      entries: decoded.runtimeComposition.entries.map(({ familyId, familyDefinitionHash }) => ({ familyId, familyDefinitionHash })),
+    },
+    sourceCoverage: {
+      ...decoded.sourceCoverage,
+      artifact: sourceCoverageArtifact,
+    },
+    lineage: {
+      nominationClosure: { ...decoded.lineage.nominationClosure, artifact: nominationClosure },
+      candidatePartitionProof: { ...decoded.lineage.candidatePartitionProof, artifact: candidatePartitionProof },
+      candidateProofVerifierBinding: { ...decoded.lineage.candidateProofVerifierBinding, artifact: candidateProofVerifierBinding },
+    },
+    families,
+  });
+  if (bundle.familyMatrixRoot !== decoded.familyMatrixRoot
+    || bundle.universeMatrixRoot !== decoded.universeMatrixRoot
+    || bundle.instanceMatrixRoot !== decoded.instanceMatrixRoot
+    || bundle.edgeMatrixRoot !== decoded.edgeMatrixRoot) {
+    throw new TypeError("stored Full-Family materialized matrix root mismatch");
+  }
+  return bundle;
 }
 
 export function decodeFullFamilyFacts(value: FullFamilyFactsCodecInput): FullFamilyFactBundleV1 {
@@ -1459,6 +2125,16 @@ export const FULL_FAMILY_FACT_SCHEMA_MANIFEST = Object.freeze({
   schemaHash: hashDomain("aloha/schema-definition/v1", FULL_FAMILY_SCHEMA_DESCRIPTOR),
 });
 
+export const FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST = Object.freeze({
+  id: "aloha.full-family-facts-storage",
+  version: "1.0.0",
+  schemaHash: hashDomain("aloha/schema-definition/v1", {
+    kind: "aloha.full-family-facts-storage-v1",
+    semantics: "bounded-header-plus-shared-linked-ref-page-index",
+    materializedSchemaHash: FULL_FAMILY_FACT_SCHEMA_MANIFEST.schemaHash,
+  }),
+});
+
 function artifactSchemaManifest(id: string, descriptor: unknown, version = "1.0.0") {
   return Object.freeze({
     id,
@@ -1469,6 +2145,15 @@ function artifactSchemaManifest(id: string, descriptor: unknown, version = "1.0.
 
 /** Schema refs required on every independently resolved nested artifact. */
 export const FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS = Object.freeze({
+  artifactRefIndex: artifactSchemaManifest("aloha.full-family-artifact-ref-index", {
+    kind: "aloha.full-family-artifact-ref-index-v1",
+    exactBinding: ["pageCount", "firstPageRef"],
+  }),
+  artifactRefPage: artifactSchemaManifest("aloha.full-family-artifact-ref-page", {
+    kind: "aloha.full-family-artifact-ref-page-v1",
+    maxItems: 128,
+    exactBinding: ["refs", "nextPageRef"],
+  }),
   releaseIntent: artifactSchemaManifest("aloha.full-family-release-intent-artifact", {
     decoder: "specs/release-intent.decodeReleaseIntent",
     exactBinding: ["releaseIntentRoot", "family-denominator"],
@@ -1539,6 +2224,10 @@ export const FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS = Object.freeze({
     decoder: "specs/full-family-facts.fullFamilySearchArtifactHash",
     exactBinding: ["source", "routeBindingHash", "objectiveRef", "amountHash", "payloadHash", "projectionHash", "rankKey"],
   }),
+  coarseObservation: artifactSchemaManifest("aloha.family-runtime-coarse-edge-sweep-observation", {
+    owner: "generated-family-runtime",
+    exactKind: "aloha.family-runtime-coarse-edge-sweep-observation-v1",
+  }),
   outcome: artifactSchemaManifest("aloha.full-family-outcome-artifact", {
     exactFields: [
       "schemaVersion=2", "kind", "readyRecordHash", "familyId", "itemId", "runId", "cutoff",
@@ -1556,9 +2245,10 @@ export const FULL_FAMILY_FACT_LOCATOR_SCHEMA_MANIFEST = Object.freeze({
   version: "1.0.0",
   schemaHash: hashDomain("aloha/schema-definition/v1", {
     exactFields: ["schemaVersion", "kind", "bundleArtifactRefId", "bundleContentSha256"],
-    bundleSchemaHash: FULL_FAMILY_FACT_SCHEMA_MANIFEST.schemaHash,
+    bundleSchemaHash: FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST.schemaHash,
   }),
 });
 
 export const FULL_FAMILY_FACT_SCHEMA_REF = Object.freeze({ ...FULL_FAMILY_FACT_SCHEMA_MANIFEST });
+export const FULL_FAMILY_FACT_STORAGE_SCHEMA_REF = Object.freeze({ ...FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST });
 export const FULL_FAMILY_FACT_LOCATOR_SCHEMA_REF = Object.freeze({ ...FULL_FAMILY_FACT_LOCATOR_SCHEMA_MANIFEST });

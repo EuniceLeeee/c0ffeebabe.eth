@@ -8,6 +8,7 @@ export * from "./stages.ts";
 export * from "./search-adapter.ts";
 export * from "./family-definition.ts";
 export { FLUID_DEX_DEFINITION } from "./family-definition.ts";
+export { FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY } from "./runtime/physical-adapter.ts";
 export {
   FLUID_DEX_NOMINATION_DEFINITION,
   FLUID_DEX_IDENTITY_DEFINITION,

@@ -26,6 +26,7 @@ import type {
   EconomicSafetyFinalizationInputV1,
   EconomicSafetyQualifiedEvaluatorV1,
 } from "./index.ts";
+import { EconomicSafetyPolicyRejectionErrorV1 } from "./policy-rejection.ts";
 import type {
   EconomicValuationOwnerRuntimeBindingV1,
   EconomicValuationOwnerRuntimeDescriptorV1,
@@ -324,13 +325,16 @@ async function evaluatePolicy(
   const last = actions[actions.length - 1]!;
   if (first.input.assetRef !== policy.profitAsset.assetRef || last.output.assetRef !== policy.profitAsset.assetRef) throw new TypeError("economic safety route does not close in the objective asset");
   const quotedGross = BigInt(last.output.amount) - BigInt(first.input.amount);
-  if (quotedGross <= 0n || quotedGross <= BigInt(policy.minNetGain)) throw new TypeError("economic safety route has no positive quoted gain");
-  if (BigInt(first.input.amount) > BigInt(policy.maxValueAtRisk)) throw new TypeError("economic safety value at risk exceeds objective");
-  if (actions.reduce((total, action) => total + action.gasUpperBound, 0n) > BigInt(policy.maxGas)) throw new TypeError("economic safety declared gas exceeds objective");
+  if (quotedGross <= 0n) throw new EconomicSafetyPolicyRejectionErrorV1("quoted-gain-not-positive");
+  if (quotedGross <= BigInt(policy.minNetGain)) throw new EconomicSafetyPolicyRejectionErrorV1("quoted-gain-below-minimum");
+  if (BigInt(first.input.amount) > BigInt(policy.maxValueAtRisk)) throw new EconomicSafetyPolicyRejectionErrorV1("value-at-risk-exceeded");
+  if (actions.reduce((total, action) => total + action.gasUpperBound, 0n) > BigInt(policy.maxGas)) throw new EconomicSafetyPolicyRejectionErrorV1("declared-gas-exceeded");
 
   const finalFacts = record(input.finalSimulationOwnerFacts, "economicSafety.finalSimulationOwnerFacts");
-  assertExactKeys(finalFacts, ["kind", "executorQualification", "projection", "workerReceipt"], "economicSafety.finalSimulationOwnerFacts");
+  assertExactKeys(finalFacts, ["kind", "artifactProgramHash", "wireProgramHash", "executorQualification", "projection", "workerReceipt"], "economicSafety.finalSimulationOwnerFacts");
   if (finalFacts.kind !== "aloha.qualified-final-simulation-owner-facts-v1") throw new TypeError("economic safety final simulation owner kind mismatch");
+  const artifactProgramHash = assertHash(finalFacts.artifactProgramHash, "finalSimulationOwnerFacts.artifactProgramHash");
+  const wireProgramHash = assertHash(finalFacts.wireProgramHash, "finalSimulationOwnerFacts.wireProgramHash");
   const observedQualification = record(finalFacts.executorQualification, "finalSimulationOwnerFacts.executorQualification");
   assertExactKeys(observedQualification, [
     "engineBuildFingerprint", "executableFingerprint", "qualifiedExecutorRegistryRoot",
@@ -357,9 +361,10 @@ async function evaluatePolicy(
     || worker.engineBuildFingerprint !== executorQualification.engineBuildFingerprint) {
     throw new TypeError("economic safety requires the qualified REVM engine");
   }
-  if (worker.generationId !== input.generationId
+  if (artifactProgramHash !== input.programHash
+    || worker.generationId !== input.generationId
     || encodeCanonicalJson(worker.source as CanonicalJson) !== encodeCanonicalJson(input.source as unknown as CanonicalJson)
-    || worker.programHash !== input.programHash) throw new TypeError("economic safety worker receipt source/program mismatch");
+    || worker.programHash !== wireProgramHash) throw new TypeError("economic safety worker receipt source/program mismatch");
   const authority = record(worker.authority, "finalSimulationOwnerFacts.workerReceipt.authority");
   if (worker.authorityRoot !== authority.authorityRoot || worker.workerEpoch !== authority.workerEpoch
     || worker.executorSessionHash !== authority.executorSessionHash) throw new TypeError("economic safety worker authority projection mismatch");
@@ -481,7 +486,7 @@ async function evaluatePolicy(
   const bidCostNative = BigInt(policy.bidCostNative);
   const minNetProfitNative = BigInt(policy.minNetGain) * numerator / denominator;
   const netProfitNative = grossProfitNative - gasCostNative - bidCostNative;
-  if (netProfitNative <= minNetProfitNative || netProfitNative <= 0n) throw new TypeError("economic safety net EV is not positive");
+  if (netProfitNative <= minNetProfitNative || netProfitNative <= 0n) throw new EconomicSafetyPolicyRejectionErrorV1("net-profit-not-positive");
 
   const declarations = input.declaredObligations;
   const revmObservationRoot = hashDomain("aloha/economic-safety/revm-observation/v1", {

@@ -20,6 +20,7 @@ export {
   UNIV2_STANDARD_FAMILY_ID,
   UNIV2_STANDARD_FAMILY_VERSION,
   UNIV2_STANDARD_OWNER_REF,
+  UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_DECLARATION,
   UNIV2_STANDARD_REQUESTED_ARTIFACT_DEPENDENCY_ROOT,
   UNIV2_STANDARD_SEARCH_ADAPTER_DECLARATION,
   UNIV2_STANDARD_STAGE_IDS,
@@ -29,6 +30,7 @@ export {
   UNIV2_STANDARD_EXTENSION_SCHEMA_HASHES,
   UNIV2_STANDARD_SWAP_ACTION_OWNER,
 } from "./family-definition.ts";
+export { FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1 } from "../../../packages/family-sdk/runtime/index.ts";
 export { FAMILY_SEARCH_RUNTIME_ADAPTER_ROLE_V1 } from "../../../packages/family-sdk/search-runtime/index.ts";
 
 export {
@@ -168,6 +170,7 @@ export const UNIV2_STANDARD_RUNTIME_DEFINITIONS = Object.freeze({
 
 /** The real Family-owned factory imported by generated runtime composition. */
 export { UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY } from "./search/adapter.ts";
+export { UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY } from "./runtime/physical-adapter.ts";
 
 export const PUBLIC_ENTRY = Object.freeze({
   familyDefinition: UNIV2_STANDARD_DEFINITION,

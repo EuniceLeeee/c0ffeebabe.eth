@@ -1,4 +1,4 @@
-import { decodeCanonicalJson, deepFreeze, encodeCanonicalJson } from "../../canonical-codec/src/index.ts";
+import { deepFreeze, encodeCanonicalJson } from "../../canonical-codec/src/index.ts";
 import { assertPromotablePartition, type AttestationPartitionV1 } from "../../attestation/src/index.ts";
 import { type InstanceCatalogV1 } from "../../catalog/src/index.ts";
 import type { SourceCoverageCertificateV1 } from "../../discovery/src/index.ts";
@@ -32,7 +32,8 @@ export class SealedRunCapabilityRegistryV1 {
           .map(outcome => outcome.publication.instancePublicationHash)
           .sort();
         const catalogHashes = instanceCatalog.publications.map(value => value.instancePublicationHash).sort();
-        if (encodeCanonicalJson(verifiedHashes) !== encodeCanonicalJson(catalogHashes)) {
+        if (verifiedHashes.length !== catalogHashes.length
+          || verifiedHashes.some((hash, index) => hash !== catalogHashes[index])) {
           throw new TypeError("sealed run instance catalog mismatch");
         }
         return snapshot;
@@ -66,7 +67,7 @@ export class SealedRunCapabilityRegistryV1 {
 }
 
 function cloneFrozen<T>(value: T): T {
-  return deepFreeze(decodeCanonicalJson(encodeCanonicalJson(value)) as T);
+  return deepFreeze(structuredClone(value));
 }
 
 function assertSnapshotBinding(binding: SealedRunBindingV1, snapshot: SealedRunSnapshotV1): void {

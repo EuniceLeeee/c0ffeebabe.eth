@@ -26,6 +26,7 @@ import {
 import { issueSearchSchedulerResourceJoin } from "./internal/scheduler-resource-join.ts";
 import {
   assertIssuedEconomicSafetyFinalizationServiceV1,
+  validateEconomicSafetyChainRejectionV1,
   validateEconomicSafetyEvidenceV1,
   type EconomicSafetyDeclaredObligationV1,
   type EconomicSafetyEvidenceV1,
@@ -1306,11 +1307,19 @@ export async function runResolvedRoutePipeline<Projection, Plan, Exact, Simulati
         declaredObligations: economicSafetyDeclarations(executionProgramOwnerEvidence, program),
       };
       const capability = await ports.economicSafety.finalize(finalizationInput);
-      economicSafety = validateEconomicSafetyEvidenceV1(
-        ports.economicSafety.read(capability),
-        finalizationInput,
-        ports.economicSafety.binding(),
-      );
+      const outcome = ports.economicSafety.read(capability);
+      if (outcome.kind === "aloha.economic-safety-chain-rejection-v1") {
+        const rejection = validateEconomicSafetyChainRejectionV1(outcome, finalizationInput, ports.economicSafety.binding());
+        await assertPostStageFence();
+        return retainResolvedRouteExecutionProgramEvidence(Object.freeze({
+          kind: "chainProvenRejected" as const,
+          stage: "economics-safety" as const,
+          code: rejection.code,
+          evidenceHash: rejection.evidenceRoot,
+          capability,
+        }), executionProgramOwnerEvidence);
+      }
+      economicSafety = validateEconomicSafetyEvidenceV1(outcome, finalizationInput, ports.economicSafety.binding());
     } catch {
       await assertPostStageFence();
       return retainResolvedRouteExecutionProgramEvidence(failure("invalidProgram", "economics-safety", "finalization-authority-invalid") as SearchPipelineOutcomeV1<Simulation>, executionProgramOwnerEvidence);

@@ -1,7 +1,9 @@
 import { decodeCanonicalBytes } from "../../../../packages/canonical-codec/src/index.ts";
 import {
   decodeFullFamilyFactLocator,
-  decodeFullFamilyFacts,
+  decodeFullFamilyFactBundleStorageV1,
+  decodeFullFamilyStoredItemV1,
+  materializeFullFamilyFactBundleStorageV1,
   referencedFullFamilyArtifactDigests,
 } from "../../../../specs/full-family-facts/src/index.ts";
 import { readProductionPredicateMaterialSourceStateV1 } from "../internal/predicate-material-source-owner.ts";
@@ -43,10 +45,23 @@ export const FULL_FAMILY_MATERIAL_PROVIDER = defineProvider(PREDICATE_ID, async 
         discovery.fullFamilyProjection.missing,
       );
     }
-    const bundle = decodeFullFamilyFacts(discovery.fullFamilyBundleArtifact.bytes);
+    const storage = decodeFullFamilyFactBundleStorageV1(discovery.fullFamilyBundleArtifact.bytes);
     const locator = decodeFullFamilyFactLocator(discovery.fullFamilyLocatorArtifact.bytes);
-    const expected = new Map(referencedFullFamilyArtifactDigests(bundle));
     const observedByRef = new Map(discovery.fullFamilyPredicateArtifacts.map(artifact => [artifact.ref.artifactRefId, artifact]));
+    const used = new Set<`0x${string}`>();
+    const bundle = materializeFullFamilyFactBundleStorageV1(storage, (artifactRefId, contentSha256) => {
+      const artifact = observedByRef.get(artifactRefId);
+      if (artifact === undefined || artifact.contentSha256 !== contentSha256) {
+        throw new TypeError(`missing stored Full-Family artifact ${artifactRefId}`);
+      }
+      used.add(artifactRefId);
+      return artifact.bytes;
+    }, decodeFullFamilyStoredItemV1);
+    const expected = new Map(referencedFullFamilyArtifactDigests(bundle));
+    for (const artifactRefId of used) {
+      const artifact = observedByRef.get(artifactRefId)!;
+      expected.set(artifactRefId, artifact.contentSha256);
+    }
     const predicateArtifacts = [];
     for (const [artifactRefId, contentSha256] of expected) {
       const artifact = observedByRef.get(artifactRefId);

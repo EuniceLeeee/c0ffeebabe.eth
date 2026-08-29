@@ -71,6 +71,9 @@ const cutoff: CanonicalCutoffV1 = {
 };
 const inputAsset = erc20AssetPortBindingV1("1", `0x${h("input-asset").slice(-40)}`);
 const outputAsset = erc20AssetPortBindingV1("1", `0x${h("output-asset").slice(-40)}`);
+const unusedRawEvidence = Object.freeze({
+  read(): Uint8Array { throw new TypeError("unused raw evidence"); },
+});
 
 const candidate: CandidateRecordV1 = mergeAndDedupeNominations([{
   kind: "aloha.candidate-nomination",
@@ -341,7 +344,7 @@ function adapter(composition: FamilyRuntimeCompositionV1): ReturnType<typeof cre
 test("generated composition resolves the Family and drives identity through the AttestationProgramPort", async () => {
   const fixture = createComposition();
   const programs = adapter(fixture.composition);
-  const identity = await programs.attestIdentity(candidate, cutoff, new AbortController().signal);
+  const identity = await programs.attestIdentity(candidate, cutoff, new AbortController().signal, unusedRawEvidence);
   assert.equal(identity.kind, "identityVerified");
   if (identity.kind !== "identityVerified") throw new Error("identity stage did not verify");
   assert.equal(identity.familyInstanceKey, "instance-a");
@@ -381,7 +384,7 @@ test("generated composition resolves the Family and drives identity through the 
     ...identity,
     issuerProof: attestationProofPortForReleaseApproval(approval).issueIdentity(proofContext) as IdentityVerifiedV1["issuerProof"],
   });
-  const final = await programs.materializeAndProject(candidate, identityWithProof, cutoff, new AbortController().signal);
+  const final = await programs.materializeAndProject(candidate, identityWithProof, cutoff, new AbortController().signal, unusedRawEvidence);
   assert.equal(final.kind, "verified");
   assert.equal(final.kind === "verified" ? final.publication.instanceKey : null, "instance-a");
   assert.deepEqual(fixture.calls, ["identity", "materialization", "projection"]);
@@ -391,7 +394,7 @@ test("unknown Family is fail-closed before any concrete stage executes", async (
   const fixture = createComposition();
   const programs = adapter(fixture.composition);
   const unknown = { ...candidate, familyId: asFamilyId("unknown-family"), familyDefinitionHash: h("unknown-definition") };
-  const decision = await programs.attestIdentity(unknown, cutoff, new AbortController().signal);
+  const decision = await programs.attestIdentity(unknown, cutoff, new AbortController().signal, unusedRawEvidence);
   assert.equal(decision.kind, "invalidProgram");
   assert.match(decision.kind === "invalidProgram" ? decision.failure.failureCode : "", /not-release-qualified|adapter-error|identity-adapter-error/);
   assert.deepEqual(fixture.calls, []);
@@ -413,7 +416,7 @@ test("rehydration accepts only the composition-issued opaque session", () => {
 test("verified memo reuse accepts a current plugin proof and rejects replay or lineage substitutions", async () => {
   const priorPublication = reusePublicationDraft();
   const valid = createComposition();
-  const reusable = await adapter(valid.composition).reuseVerifiedMemo!(candidate, priorPublication, cutoff, new AbortController().signal);
+  const reusable = await adapter(valid.composition).reuseVerifiedMemo!(candidate, priorPublication, cutoff, new AbortController().signal, unusedRawEvidence);
   assert.equal(reusable.kind, "reusable");
   if (reusable.kind !== "reusable") throw new Error("expected verified memo reuse");
   assert.equal(reusable.identity.familyInstanceKey, candidate.instanceNominationKey);
@@ -422,7 +425,7 @@ test("verified memo reuse accepts a current plugin proof and rejects replay or l
 
   for (const mutation of ["old-publication", "cross-candidate", "cross-cutoff", "requested-dependency"] as const) {
     const fixture = createComposition("verified", mutation);
-    const decision = await adapter(fixture.composition).reuseVerifiedMemo!(candidate, priorPublication, cutoff, new AbortController().signal);
+    const decision = await adapter(fixture.composition).reuseVerifiedMemo!(candidate, priorPublication, cutoff, new AbortController().signal, unusedRawEvidence);
     assert.deepEqual(decision, { kind: "requiresAttestation" }, mutation);
     assert.deepEqual(fixture.calls, ["rehydration"], mutation);
   }
@@ -430,14 +433,14 @@ test("verified memo reuse accepts a current plugin proof and rejects replay or l
 
 test("Family retryable transport remains retryable and is not relabeled as invalid", async () => {
   const fixture = createComposition("retryable");
-  const decision = await adapter(fixture.composition).attestIdentity(candidate, cutoff, new AbortController().signal);
+  const decision = await adapter(fixture.composition).attestIdentity(candidate, cutoff, new AbortController().signal, unusedRawEvidence);
   assert.equal(decision.kind, "retryable");
   if (decision.kind === "retryable") assert.equal(decision.failure.failureCode, "resource-limit");
 });
 
 test("verified Family identity output cannot substitute a different candidate evidence root", async () => {
   const fixture = createComposition("forged-identity-evidence-root");
-  const decision = await adapter(fixture.composition).attestIdentity(candidate, cutoff, new AbortController().signal);
+  const decision = await adapter(fixture.composition).attestIdentity(candidate, cutoff, new AbortController().signal, unusedRawEvidence);
   assert.equal(decision.kind, "invalidProgram");
   if (decision.kind === "invalidProgram") {
     assert.equal(decision.failure.failureCode, "family-identity-evidence-root-mismatch");

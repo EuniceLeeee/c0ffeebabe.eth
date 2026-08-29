@@ -218,6 +218,7 @@ export interface CoarseEnumerationBindingV1 {
   readonly plannerEnumerationRoot: Hash;
   readonly enumerationTruncated: boolean;
   readonly observedUniqueCountLowerBound: string;
+  /** Process-local owner denominator. This array is not a wire envelope. */
   readonly candidates: readonly CoarseEnumerationCandidateV1[];
   readonly coarseEnumerationRoot: Hash;
 }
@@ -293,7 +294,9 @@ export interface CoarseAdmissionV1 {
   readonly provenPruned: string;
   readonly notProbed: string;
   readonly outcome: "complete-no-candidate" | "complete-candidates-terminal" | "retryable-incomplete";
+  /** Process-local selected view. This array is not a wire envelope. */
   readonly selectedCandidateIds: readonly Hash[];
+  /** Process-local complete denominator. This array is not a wire envelope. */
   readonly entries: readonly CoarseAdmissionEntryV1[];
   readonly accountingRoot: Hash;
 }
@@ -305,6 +308,38 @@ const issuedRouteBindings = new WeakMap<object, CoarseRouteBindingV1>();
 const issuedAssessments = new WeakMap<object, CoarseRouteAssessmentV1>();
 const generationOwnerServiceCounts = new Map<Hash, Map<Hash, number>>();
 const MAX_TRACKED_FAIRNESS_GENERATIONS = 4;
+const DENOMINATOR_HASH_TREE_FANOUT = 128;
+
+function boundedOrderedRoot(domain: string, values: readonly unknown[]): Hash {
+  let level = values.length === 0
+    ? [hashDomain(`${domain}/node/v1`, { level: "0", firstOrdinal: "0", values: [] })]
+    : Array.from({ length: Math.ceil(values.length / DENOMINATOR_HASH_TREE_FANOUT) }, (_, index) => {
+      const first = index * DENOMINATOR_HASH_TREE_FANOUT;
+      return hashDomain(`${domain}/node/v1`, {
+        level: "0",
+        firstOrdinal: String(first),
+        values: values.slice(first, first + DENOMINATOR_HASH_TREE_FANOUT),
+      });
+    });
+  let depth = 1;
+  while (level.length > 1) {
+    const previous = level;
+    level = Array.from({ length: Math.ceil(previous.length / DENOMINATOR_HASH_TREE_FANOUT) }, (_, index) => {
+      const first = index * DENOMINATOR_HASH_TREE_FANOUT;
+      return hashDomain(`${domain}/node/v1`, {
+        level: String(depth),
+        firstOrdinal: String(first),
+        values: previous.slice(first, first + DENOMINATOR_HASH_TREE_FANOUT),
+      });
+    });
+    depth += 1;
+  }
+  return hashDomain(domain, {
+    algorithm: "bounded-ordered-tree-v1",
+    count: String(values.length),
+    treeRoot: level[0]!,
+  });
+}
 
 function nonZeroHash(value: unknown, path: string): Hash {
   const result = assertHash(value, path);
@@ -854,6 +889,37 @@ function enumerationRootPayload(input: {
   readonly observedUniqueCountLowerBound: string;
   readonly candidates: readonly NormalizedEnumerationCandidateV1[];
 }): unknown {
+  const orderedCandidateRoot = boundedOrderedRoot(
+    "aloha/coarse-enumeration-candidates/v1",
+    input.candidates.map(candidate => {
+      let assessmentCommitment: Readonly<{ readonly status: "missing" | "invalid" }> | Readonly<{
+        readonly status: "issued";
+        readonly assessmentId: Hash;
+      }>;
+      if (candidate.assessment === null) {
+        assessmentCommitment = Object.freeze({ status: "missing" as const });
+      } else {
+        try {
+          assessmentCommitment = Object.freeze({
+            status: "issued" as const,
+            assessmentId: readIssuedCoarseRouteAssessmentV1(candidate.assessment).assessmentId,
+          });
+        } catch {
+          assessmentCommitment = Object.freeze({ status: "invalid" as const });
+        }
+      }
+      return {
+        candidateId: candidate.binding.candidateId,
+        orderKey: candidate.binding.orderKey,
+        planningProblemHash: candidate.binding.planningProblemHash,
+        routeHash: candidate.binding.routeHash,
+        routeBindingHash: candidate.binding.routeBindingHash,
+        dependencySetRef: candidate.binding.dependencySetRef,
+        ownerRefsRoot: boundedOrderedRoot("aloha/coarse-enumeration-candidate-owner-refs/v1", candidate.binding.ownerRefs),
+        assessmentCommitment,
+      };
+    }),
+  );
   return {
     generationId: input.generationId,
     graphRoot: input.graphRoot,
@@ -866,15 +932,8 @@ function enumerationRootPayload(input: {
     plannerEnumerationRoot: input.plannerEnumerationRoot,
     enumerationTruncated: input.enumerationTruncated,
     observedUniqueCountLowerBound: input.observedUniqueCountLowerBound,
-    candidates: input.candidates.map(candidate => ({
-      candidateId: candidate.binding.candidateId,
-      orderKey: candidate.binding.orderKey,
-      planningProblemHash: candidate.binding.planningProblemHash,
-      routeHash: candidate.binding.routeHash,
-      routeBindingHash: candidate.binding.routeBindingHash,
-      dependencySetRef: candidate.binding.dependencySetRef,
-      ownerRefs: candidate.binding.ownerRefs,
-    })),
+    candidateCount: String(input.candidates.length),
+    orderedCandidateRoot,
   };
 }
 
@@ -948,6 +1007,119 @@ export function coarseEnumerationRootV1(value: Omit<CoarseEnumerationBindingV1, 
   return hashDomain("aloha/coarse-enumeration/v1", enumerationRootPayload({ ...value, candidates }));
 }
 
+export function coarseAdmissionAccountingRootV1(value: Omit<CoarseAdmissionV1, "accountingRoot">): Hash {
+  if (!Array.isArray(value.selectedCandidateIds) || !Array.isArray(value.entries)) {
+    throw new TypeError("coarse admission selected/entry denominator is invalid");
+  }
+  const entryRoots = value.entries.map((entry, index) => {
+    assertPlainObject(entry, `coarseAdmission.entries[${index}]`);
+    assertExactKeys(entry, [
+      "candidateId", "orderKey", "routeHash", "routeBindingHash", "dependencySetRef", "assessmentId",
+      "projectionRoot", "disposition", "reasonCode", "pruneReceipt", "entryRoot",
+    ], `coarseAdmission.entries[${index}]`);
+    for (const key of ["candidateId", "orderKey", "routeHash", "routeBindingHash", "dependencySetRef"] as const) {
+      nonZeroHash(entry[key], `coarseAdmission.entries[${index}].${key}`);
+    }
+    if (entry.assessmentId !== null) nonZeroHash(entry.assessmentId, `coarseAdmission.entries[${index}].assessmentId`);
+    if (entry.projectionRoot !== null) nonZeroHash(entry.projectionRoot, `coarseAdmission.entries[${index}].projectionRoot`);
+    if (entry.disposition !== "ranked-selected" && entry.disposition !== "bounded-unranked-selected"
+      && entry.disposition !== "proven-pruned" && entry.disposition !== "not-probed") {
+      throw new TypeError(`coarseAdmission.entries[${index}].disposition is invalid`);
+    }
+    assertNonEmptyString(entry.reasonCode, `coarseAdmission.entries[${index}].reasonCode`);
+    if ((entry.disposition === "ranked-selected" && (entry.assessmentId === null || entry.projectionRoot === null))
+      || (entry.disposition === "proven-pruned") !== (entry.pruneReceipt !== null)) {
+      throw new TypeError(`coarseAdmission.entries[${index}] disposition evidence is inconsistent`);
+    }
+    const { entryRoot, ...body } = entry;
+    const normalizedEntryRoot = nonZeroHash(entryRoot, `coarseAdmission.entries[${index}].entryRoot`);
+    if (normalizedEntryRoot !== admissionEntryRoot(body as Omit<CoarseAdmissionEntryV1, "entryRoot">)) {
+      throw new TypeError(`coarseAdmission.entries[${index}].entryRoot mismatch`);
+    }
+    return normalizedEntryRoot;
+  });
+  const entryCandidateIds = value.entries.map(entry => entry.candidateId);
+  if (new Set(entryCandidateIds).size !== entryCandidateIds.length) {
+    throw new TypeError("coarse admission entry denominator contains duplicates");
+  }
+  const selectedCandidateIds = value.selectedCandidateIds.map((candidateId, index) => (
+    nonZeroHash(candidateId, `coarseAdmission.selectedCandidateIds[${index}]`)
+  ));
+  if (new Set(selectedCandidateIds).size !== selectedCandidateIds.length) {
+    throw new TypeError("coarse admission selected denominator contains duplicates");
+  }
+  const expectedSelectedCandidateIds = value.entries.flatMap(entry => (
+    entry.disposition === "ranked-selected" || entry.disposition === "bounded-unranked-selected"
+      ? [entry.candidateId]
+      : []
+  ));
+  if (selectedCandidateIds.length !== expectedSelectedCandidateIds.length
+    || selectedCandidateIds.some((candidateId, index) => candidateId !== expectedSelectedCandidateIds[index])) {
+    throw new TypeError("coarse admission selected denominator does not match entry dispositions");
+  }
+  const dispositionCount = (disposition: CoarseAdmissionDispositionV1): string => (
+    String(value.entries.filter(entry => entry.disposition === disposition).length)
+  );
+  if (assertDecimalString(value.denominator, "coarseAdmission.denominator") !== String(value.entries.length)
+    || assertDecimalString(value.rankedSelected, "coarseAdmission.rankedSelected") !== dispositionCount("ranked-selected")
+    || assertDecimalString(value.boundedUnrankedSelected, "coarseAdmission.boundedUnrankedSelected") !== dispositionCount("bounded-unranked-selected")
+    || assertDecimalString(value.provenPruned, "coarseAdmission.provenPruned") !== dispositionCount("proven-pruned")
+    || assertDecimalString(value.notProbed, "coarseAdmission.notProbed") !== dispositionCount("not-probed")) {
+    throw new TypeError("coarse admission scalar accounting does not match entries");
+  }
+  const observedUniqueCountLowerBound = BigInt(assertDecimalString(
+    value.observedUniqueCountLowerBound,
+    "coarseAdmission.observedUniqueCountLowerBound",
+  ));
+  if ((!value.enumerationTruncated && observedUniqueCountLowerBound !== BigInt(value.entries.length))
+    || (value.enumerationTruncated && observedUniqueCountLowerBound <= BigInt(value.entries.length))) {
+    throw new TypeError("coarse admission completeness facts do not match entries");
+  }
+  const rankedLimit = BigInt(assertDecimalString(value.policy.rankedLimit, "coarseAdmission.policy.rankedLimit"));
+  const boundedUnrankedLimit = BigInt(assertDecimalString(value.policy.boundedUnrankedLimit, "coarseAdmission.policy.boundedUnrankedLimit"));
+  if (BigInt(value.rankedSelected) > rankedLimit || BigInt(value.boundedUnrankedSelected) > boundedUnrankedLimit) {
+    throw new TypeError("coarse admission selected counts exceed policy");
+  }
+  const expectedOutcome: CoarseAdmissionV1["outcome"] = value.entries.length === 0 && !value.enumerationTruncated
+    ? "complete-no-candidate"
+    : value.enumerationTruncated || value.entries.some(entry => entry.disposition === "not-probed")
+      ? "retryable-incomplete"
+      : "complete-candidates-terminal";
+  if (value.outcome !== expectedOutcome) throw new TypeError("coarse admission outcome does not match entries");
+  return hashDomain("aloha/coarse-admission/v1", {
+    schemaVersion: value.schemaVersion,
+    kind: value.kind,
+    generationId: value.generationId,
+    graphRoot: value.graphRoot,
+    source: value.source,
+    releaseProvenanceHash: value.releaseProvenanceHash,
+    planningProblemHash: value.planningProblemHash,
+    plannerEnumerationRoot: value.plannerEnumerationRoot,
+    enumerationTruncated: value.enumerationTruncated,
+    observedUniqueCountLowerBound: value.observedUniqueCountLowerBound,
+    coarseEnumerationRoot: value.coarseEnumerationRoot,
+    fairnessSeed: value.fairnessSeed,
+    objective: value.objective,
+    policy: value.policy,
+    denominator: value.denominator,
+    rankedSelected: value.rankedSelected,
+    boundedUnrankedSelected: value.boundedUnrankedSelected,
+    provenPruned: value.provenPruned,
+    notProbed: value.notProbed,
+    outcome: value.outcome,
+    selectedCandidateCount: String(value.selectedCandidateIds.length),
+    orderedSelectedCandidateRoot: boundedOrderedRoot(
+      "aloha/coarse-admission-selected-candidates/v1",
+      selectedCandidateIds,
+    ),
+    entryCount: String(value.entries.length),
+    orderedEntryRoot: boundedOrderedRoot(
+      "aloha/coarse-admission-entries/v1",
+      entryRoots,
+    ),
+  });
+}
+
 export function readIssuedCoarseEnumerationBindingV1(value: unknown): CoarseEnumerationBindingV1 {
   if (value === null || typeof value !== "object") throw new TypeError("coarse enumeration capability is invalid");
   const binding = readCoarseEnumerationBindingV1(value);
@@ -1003,24 +1175,24 @@ function leastServed<T extends { readonly binding: CoarseRouteBindingV1 }>(
     generationOwnerServiceCounts.delete(generationFairnessKey);
   }
   generationOwnerServiceCounts.set(generationFairnessKey, counts);
-  const remaining = [...values];
-  const selected: T[] = [];
-  while (remaining.length > 0 && selected.length < limit) {
-    remaining.sort((left, right) => {
-      const leftCounts = left.binding.ownerRefs.map(ownerRef => counts.get(ownerRef) ?? 0);
-      const rightCounts = right.binding.ownerRefs.map(ownerRef => counts.get(ownerRef) ?? 0);
-      const leftMax = Math.max(...leftCounts);
-      const rightMax = Math.max(...rightCounts);
-      if (leftMax !== rightMax) return leftMax - rightMax;
-      const leftTotal = leftCounts.reduce((total, value) => total + value, 0);
-      const rightTotal = rightCounts.reduce((total, value) => total + value, 0);
-      if (leftTotal !== rightTotal) return leftTotal - rightTotal;
-      const leftTie = hashDomain("aloha/coarse-fairness-tie/v1", { fairnessSeed, candidateId: left.binding.candidateId });
-      const rightTie = hashDomain("aloha/coarse-fairness-tie/v1", { fairnessSeed, candidateId: right.binding.candidateId });
-      return leftTie < rightTie ? -1 : leftTie > rightTie ? 1 : 0;
-    });
-    const next = remaining.shift()!;
-    selected.push(next);
+  // Rank one admission against one immutable service-count snapshot. Updating
+  // counts only after the bounded set is fixed preserves generation-local
+  // fairness across admissions without repeatedly sorting a shrinking 30k
+  // denominator (quadratic in the admitted limit).
+  const selected = values.map(value => {
+    const ownerCounts = value.binding.ownerRefs.map(ownerRef => counts.get(ownerRef) ?? 0);
+    return {
+      value,
+      maximumOwnerCount: Math.max(...ownerCounts),
+      totalOwnerCount: ownerCounts.reduce((total, ownerCount) => total + ownerCount, 0),
+      tie: hashDomain("aloha/coarse-fairness-tie/v1", { fairnessSeed, candidateId: value.binding.candidateId }),
+    };
+  }).sort((left, right) => (
+    left.maximumOwnerCount - right.maximumOwnerCount
+    || left.totalOwnerCount - right.totalOwnerCount
+    || (left.tie < right.tie ? -1 : left.tie > right.tie ? 1 : 0)
+  )).slice(0, limit).map(entry => entry.value);
+  for (const next of selected) {
     for (const ownerRef of next.binding.ownerRefs) counts.set(ownerRef, (counts.get(ownerRef) ?? 0) + 1);
   }
   return Object.freeze(selected);
@@ -1036,6 +1208,10 @@ export function admitCoarseRoutesV1(input: { readonly enumeration: IssuedCoarseE
   const unranked: AssessedCandidateV1[] = [];
   const assessments = new Map<Hash, CoarseRouteAssessmentV1>();
   for (const candidate of candidates) {
+    if (candidate.assessmentCapability === null) {
+      unranked.push({ binding: candidate.binding, assessment: null, reasonCode: "invalid-assessment:coarse route assessment capability is invalid" });
+      continue;
+    }
     let assessment: CoarseRouteAssessmentV1;
     try {
       assessment = readIssuedCoarseRouteAssessmentV1(candidate.assessmentCapability);
@@ -1092,9 +1268,11 @@ export function admitCoarseRoutesV1(input: { readonly enumeration: IssuedCoarseE
   );
   const rankedIds = new Set(rankedSelected.map(value => value.binding.candidateId));
   const unrankedIds = new Set(unrankedSelected.map(value => value.binding.candidateId));
+  const rankableByCandidateId = new Map(rankable.map(value => [value.binding.candidateId, value]));
+  const unrankedByCandidateId = new Map(unranked.map(value => [value.binding.candidateId, value]));
   const entries = candidates.map(candidate => {
-    const ranked = rankable.find(value => value.binding.candidateId === candidate.binding.candidateId);
-    const unrankedValue = unranked.find(value => value.binding.candidateId === candidate.binding.candidateId);
+    const ranked = rankableByCandidateId.get(candidate.binding.candidateId);
+    const unrankedValue = unrankedByCandidateId.get(candidate.binding.candidateId);
     const assessment = assessments.get(candidate.binding.candidateId) ?? null;
     const prune = null;
     const disposition: CoarseAdmissionDispositionV1 = rankedIds.has(candidate.binding.candidateId) ? "ranked-selected"
@@ -1145,5 +1323,5 @@ export function admitCoarseRoutesV1(input: { readonly enumeration: IssuedCoarseE
     selectedCandidateIds,
     entries: deepFreeze(entries),
   });
-  return deepFreeze({ ...body, accountingRoot: hashDomain("aloha/coarse-admission/v1", body) });
+  return deepFreeze({ ...body, accountingRoot: coarseAdmissionAccountingRootV1(body) });
 }

@@ -983,13 +983,30 @@ async function buildFullFamilyQualificationCorpusOnce(): Promise<FullFamilyQuali
     )];
     const coarseItems = !isVerified ? [] : graph.edges.map((edge, index) => {
       const coarse = univ2.coarse[index]!;
+      const observationBody = Object.freeze({
+        schemaVersion: 1 as const,
+        kind: "aloha.family-runtime-coarse-edge-sweep-observation-v1" as const,
+        familyId: family.familyId,
+        familyDefinitionHash: family.familyDefinitionHash,
+        releaseMembershipRoot: h("release-membership-root"),
+        binding: Object.freeze({ edgeId: edge.edgeId }),
+        routeHandleBindingHash: coarse.routeBindingHash,
+        amountHash: coarse.amountHash,
+        projectionId: coarse.projectionHash,
+        stateOutcome: Object.freeze({ kind: "verified", artifact: Object.freeze({ stateFactsRoot: coarse.stateFactsRoot }) }),
+        coarseOutcome: Object.freeze({ kind: "verified", artifact: coarse }),
+      });
+      const observation = Object.freeze({
+        ...observationBody,
+        observationRoot: hashDomain("aloha/family-runtime-coarse-edge-sweep-observation/v1", observationBody),
+      });
       return qualificationEvidenceItem(
         ledger,
         family.familyId,
         coarse.artifactHash,
         edge.edgeId,
-        coarse,
-        "familySearchCoarse",
+        observation,
+        "coarseObservation",
       );
     });
     const actionOwnerRef = catalogHash(catalogEntry.actionOwnerRefs[0]!, `${family.familyId}.actionOwnerRef`);

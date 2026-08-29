@@ -9,6 +9,7 @@ import {
   encodeCanonicalBytes,
   encodeCanonicalJson,
   fieldArray,
+  hashCanonicalPartition,
   hashDomain,
   type CanonicalJson,
   type Hash,
@@ -298,13 +299,19 @@ export function sealFullFamilyInstanceCatalog(
     seen.add(identity);
     return publication;
   }).sort((left, right) => left.instancePublicationHash.localeCompare(right.instancePublicationHash));
+  const instanceCount = String(publications.length);
   return deepFreeze({
     cutoff,
     publications,
-    instanceCount: String(publications.length),
-    instanceCatalogRoot: hashDomain("aloha/instance-catalog/v1", {
+    instanceCount,
+    instanceCatalogRoot: hashDomain("aloha/instance-catalog/v2", {
       cutoff,
-      publicationHashes: publications.map(value => value.instancePublicationHash),
+      instanceCount,
+      publicationSequenceRoot: hashCanonicalPartition(
+        "aloha/instance-catalog-publication-sequence/v1",
+        publications.map(value => value.instancePublicationHash),
+        128,
+      ),
     }),
   });
 }
@@ -389,15 +396,21 @@ export function buildFullFamilyPersistedGraph(catalog: FullFamilyInstanceCatalog
     return deepFreeze({ edgeId: hashDomain("aloha/persisted-graph-edge/v1", payload), ...payload });
   })).sort((left, right) => left.edgeId.localeCompare(right.edgeId));
   if (new Set(edges.map(edge => edge.edgeId)).size !== edges.length) throw new TypeError("duplicate graph edge");
+  const edgeCount = String(edges.length);
   return deepFreeze({
     cutoff: catalog.cutoff,
     instanceCatalogRoot: catalog.instanceCatalogRoot,
     edges,
-    edgeCount: String(edges.length),
-    graphRoot: hashDomain("aloha/persisted-graph/v1", {
+    edgeCount,
+    graphRoot: hashDomain("aloha/persisted-graph/v2", {
       cutoff: catalog.cutoff,
       instanceCatalogRoot: catalog.instanceCatalogRoot,
-      edges,
+      edgeCount,
+      edgeSequenceRoot: hashCanonicalPartition(
+        "aloha/persisted-graph-edge-sequence/v1",
+        edges.map(value => value.edgeId),
+        128,
+      ),
     }),
   });
 }

@@ -14,6 +14,7 @@ import {
 } from "../../../packages/capability-contracts/src/index.ts";
 import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
 import { FAMILY_SEARCH_RUNTIME_ADAPTER_ROLE_V1 } from "../../../packages/family-sdk/search-runtime/index.ts";
+import { FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1 } from "../../../packages/family-sdk/runtime/index.ts";
 import {
   FLUID_DEX_ACTION_OWNER_ID,
   FLUID_DEX_FACTORY_SOURCE_PLAN_ID,
@@ -115,6 +116,12 @@ const runtimeAdapter = Object.freeze({
   }),
   actionOwnerIds: Object.freeze({ action: FLUID_DEX_ACTION_OWNER_ID }),
 });
+const physicalAdapter = Object.freeze({
+  modulePath: `${moduleRoot}/runtime/physical-adapter.ts`,
+  exportName: "FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+  capabilityIds: Object.freeze({}),
+  actionOwnerIds: Object.freeze({}),
+});
 
 const input: FamilyAuthoringDefinitionV1 = {
   manifest: {
@@ -125,6 +132,7 @@ const input: FamilyAuthoringDefinitionV1 = {
       core: [nomination, identity, materialization, projection, rehydration],
       extensions: [state, coarse, exact],
       runtimeAdapter,
+      physicalAdapter,
       actionOwner: FLUID_DEX_ACTION_OWNER,
       facts,
     }),
@@ -161,6 +169,7 @@ const input: FamilyAuthoringDefinitionV1 = {
   },
   runtimeAdapters: {
     [FAMILY_SEARCH_RUNTIME_ADAPTER_ROLE_V1]: runtimeAdapter,
+    [FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1]: physicalAdapter,
   },
   actionOwners: [FLUID_DEX_ACTION_OWNER],
   acceptanceDeclarations: facts,

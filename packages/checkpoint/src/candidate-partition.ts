@@ -1,7 +1,9 @@
 import {
+  assertHash,
   decodeCanonicalJson,
   deepFreeze,
   encodeCanonicalJson,
+  sha256Hex,
   type Hash,
 } from "../../canonical-codec/src/index.ts";
 import {
@@ -23,6 +25,11 @@ import { issueCheckpointCandidatePartitionReader } from "../../candidate-partiti
 interface CandidatePartitionStateV1 {
   readonly binding: CandidatePartitionBindingV1;
   readonly candidates: ReadonlyMap<Hash, CandidateRecordV1>;
+  readonly rawEvidence: CandidatePartitionRawEvidenceSourceV1;
+}
+
+export interface CandidatePartitionRawEvidenceSourceV1 {
+  read(familyCandidateKey: Hash, rawLocatorHash: Hash): Uint8Array;
 }
 
 const bootstrapStates = new WeakMap<object, CandidatePartitionCapabilityRegistryV1>();
@@ -94,6 +101,28 @@ export class CandidatePartitionCapabilityRegistryV1 {
         if (!candidate) throw new TypeError("candidate partition key is absent");
         return cloneCandidate(candidate);
       },
+      readRawEvidence: (
+        capability: CandidatePartitionCapabilityV1,
+        familyCandidateKey: Hash,
+        rawLocatorHash: Hash,
+      ): Uint8Array => {
+        const state = this.#state(capability);
+        const candidate = state.candidates.get(assertHash(familyCandidateKey, "familyCandidateKey"));
+        if (!candidate) throw new TypeError("candidate partition key is absent");
+        const locator = assertHash(rawLocatorHash, "rawLocatorHash");
+        if (!candidate.evidence.some(evidence => evidence.rawLocatorHash === locator)) {
+          throw new TypeError("raw evidence locator is outside the exact candidate record");
+        }
+        const value = state.rawEvidence.read(candidate.familyCandidateKey, locator);
+        if (!(value instanceof Uint8Array) || value.byteLength === 0) {
+          throw new TypeError("candidate raw evidence bytes are unavailable");
+        }
+        const bytes = new Uint8Array(value);
+        if (sha256Hex(bytes) !== locator) {
+          throw new TypeError("candidate raw evidence content hash mismatch");
+        }
+        return bytes;
+      },
     }));
   }
 
@@ -104,7 +133,11 @@ export class CandidatePartitionCapabilityRegistryV1 {
   registerVerifiedProof(
     proofInput: CandidatePartitionProofV1,
     candidatesInput: readonly CandidateRecordV1[],
+    rawEvidence: CandidatePartitionRawEvidenceSourceV1,
   ): CandidatePartitionCapabilityV1 {
+    if (rawEvidence === null || typeof rawEvidence !== "object" || typeof rawEvidence.read !== "function") {
+      throw new TypeError("candidate partition raw evidence source is required");
+    }
     const proof = decodeCandidatePartitionProofV1(proofInput);
     const candidates = candidatesInput.map(cloneCandidate);
     const keys = candidates.map(candidate => candidate.familyCandidateKey);
@@ -124,6 +157,7 @@ export class CandidatePartitionCapabilityRegistryV1 {
     this.#states.set(capability, {
       binding: bindingFromProof(proof),
       candidates: map,
+      rawEvidence,
     });
     return capability as CandidatePartitionCapabilityV1;
   }

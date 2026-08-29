@@ -1805,6 +1805,15 @@ test("pre-release advisory-only observation and Stage 2 denominator reject autho
   validatePreReleaseProductionBoundarySources(runnerExecution, runnerExecutionDiagnostics);
   assert.ok(runnerExecutionDiagnostics.some(item => item.code === "production-advisory-observer-only"));
 
+  const preparedFromAdvisory = new Map(baseline);
+  preparedFromAdvisory.set(workflowPath, baseline.get(workflowPath)!.replace(
+    "prepareQualifiedReleaseAcceptanceForExternalOwnerV1(\n    material.qualifiedReleaseRunner,\n    source,\n  )",
+    "observeQualifiedReleaseAcceptanceAdvisoryV1(material.qualifiedReleaseRunner, source)",
+  ));
+  const preparedFromAdvisoryDiagnostics: BoundaryDiagnostic[] = [];
+  validatePreReleaseProductionBoundarySources(preparedFromAdvisory, preparedFromAdvisoryDiagnostics);
+  assert.ok(preparedFromAdvisoryDiagnostics.some(item => item.code === "production-release-preparation-owner"));
+
   const oldDatabasePath = new Map(baseline);
   oldDatabasePath.set(schemaPath, baseline.get(schemaPath)!.replace(
     'checkpointDatabasePath: "/var/lib/aloha/pre-release/runtime/checkpoint.sqlite",',
@@ -3084,7 +3093,7 @@ test("runtime-release full-family terminal evidence uses only the exact owner an
       importerPath: "packages/runtime-release-authority/src/full-family-terminal-consumer.ts",
       targetPath: "packages/runtime-release-authority/src/internal/full-family-terminal-owner.ts",
       specifier: "./internal/full-family-terminal-owner.ts",
-      allowed: "readRuntimeReleaseFullFamilyTerminalBindingCapabilityV1",
+      allowed: "readRuntimeReleaseFullFamilyTerminalBindingCapabilityV1, readRuntimeReleaseNativeFullFamilyAuditCapabilityV1, readRuntimeReleaseNativeFullFamilyAuditChunkBytesCapabilityV1",
     },
     {
       importerPath: "packages/runtime-release-authority/src/internal/full-family-terminal-owner.ts",
@@ -3096,13 +3105,13 @@ test("runtime-release full-family terminal evidence uses only the exact owner an
       importerPath: "packages/runtime-release-authority/src/internal/full-family-terminal-owner.ts",
       targetPath: "packages/search-pipeline/src/index.ts",
       specifier: "../../../../packages/search-pipeline/src/index.ts",
-      allowed: "readIssuedNativeFullFamilyAuditV1, readIssuedSearchTerminalCapabilityV1, readIssuedSearchTerminalNativeFullFamilyAuditCapabilityV1",
+      allowed: "readIssuedNativeFullFamilyAuditChunkBytesV1, readIssuedNativeFullFamilyAuditManifestV1, readIssuedNativeFullFamilyAuditV1, readIssuedSearchTerminalCapabilityV1, readIssuedSearchTerminalNativeFullFamilyAuditCapabilityV1, searchTerminalEvidenceHashV2",
     },
     {
       importerPath: "acceptance/collectors/src/full-family-observer.ts",
       targetPath: "packages/runtime-release-authority/src/full-family-terminal-consumer.ts",
       specifier: "../../../packages/runtime-release-authority/src/full-family-terminal-consumer.ts",
-      allowed: "readRuntimeReleaseFullFamilyTerminalBindingV1",
+      allowed: "readRuntimeReleaseFullFamilyTerminalBindingV1, readRuntimeReleaseNativeFullFamilyAuditChunkV1, readRuntimeReleaseNativeFullFamilyAuditV1",
     },
     {
       importerPath: "acceptance/collectors/src/full-family-observer.ts",
@@ -3187,7 +3196,7 @@ test("terminal-phase authority composition exact-binds every importer, module an
     ["packages/startup-runtime/src/index.ts", "packages/startup-runtime/src/internal/six-step-route-parent-owner.ts", "./internal/six-step-route-parent-owner.ts", ["issueStartupSixStepRouteParentCapabilityV1"]],
     ["packages/runtime-release-authority/src/six-step-terminal-consumer.ts", "packages/runtime-release-authority/src/internal/six-step-terminal-owner.ts", "./internal/six-step-terminal-owner.ts", ["assertIssuedRuntimeReleaseSixStepTerminalBindingServiceV1", "readRuntimeReleaseSixStepTerminalArtifactCapabilitiesV1", "readRuntimeReleaseSixStepTerminalBindingCapabilityV1"]],
     ["packages/runtime-release-authority/src/internal/six-step-terminal-owner.ts", "packages/runtime-release-authority/src/internal/state.ts", "./state.ts", ["assertActiveRuntimeReleaseAuthorityState"]],
-    ["packages/runtime-release-authority/src/internal/six-step-terminal-owner.ts", "packages/search-pipeline/src/index.ts", "../../../../packages/search-pipeline/src/index.ts", ["readIssuedSearchTerminalCapabilityV1", "readIssuedSearchTerminalSixStepArtifactCapabilitiesV1", "readIssuedSearchTerminalSixStepTraceV1"]],
+    ["packages/runtime-release-authority/src/internal/six-step-terminal-owner.ts", "packages/search-pipeline/src/index.ts", "../../../../packages/search-pipeline/src/index.ts", ["readIssuedSearchTerminalCapabilityV1", "readIssuedSearchTerminalSixStepArtifactCapabilitiesV1", "readIssuedSearchTerminalSixStepTraceV1", "searchTerminalEvidenceHashV2"]],
     ["packages/runtime-release-authority/src/internal/six-step-terminal-owner.ts", "packages/runtime-release-authority/src/internal/strategy-runtime-owner.ts", "./strategy-runtime-owner.ts", ["assertIssuedRuntimeReleaseStrategyRuntimeService"]],
   ] as const;
   const file = (path: string): TrackedFile => ({

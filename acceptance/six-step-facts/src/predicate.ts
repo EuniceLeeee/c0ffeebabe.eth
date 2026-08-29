@@ -272,7 +272,7 @@ function independentlyVerifyWorkerReceipt(
   const workerKeys = ["requestId", "attemptId", "ownerRef", "generationId", "authority", "inputHash", "deadlineAtMs", "authorityRoot", "workerEpoch", "executorSessionHash", "engine", "engineBuildFingerprint", "caller", "observeAccounts", "source", "programHash", "status", "output", "effects", "executionReceiptHash"];
   if (Object.prototype.hasOwnProperty.call(worker ?? {}, "effectTransport")) workerKeys.push("effectTransport");
   const authority = payloadRecord(worker?.authority);
-  if (!exactPayloadKeys(finalFacts, ["kind", "executorQualification", "projection", "workerReceipt"])
+  if (!exactPayloadKeys(finalFacts, ["kind", "artifactProgramHash", "wireProgramHash", "executorQualification", "projection", "workerReceipt"])
     || finalFacts?.kind !== "aloha.qualified-final-simulation-owner-facts-v1"
     || !exactPayloadKeys(observedQualification, ["engineBuildFingerprint", "executableFingerprint", "qualifiedExecutorRegistryRoot", "selectedExecutorLeafHash", "releaseRoleManifestRoot"])
     || !exactPayloadKeys(expectedQualification, ["executorKind", "engineBuildFingerprint", "executableFingerprint", "qualifiedExecutorRegistryRoot", "selectedExecutorLeafHash", "releaseRoleManifestRoot"])
@@ -284,7 +284,8 @@ function independentlyVerifyWorkerReceipt(
     || observedQualification?.releaseRoleManifestRoot !== expectedQualification.releaseRoleManifestRoot
     || !exactPayloadKeys(worker, workerKeys)
     || !exactPayloadKeys(effects, ["format", "bytes", "observedAccounts", "effectsHash"])
-    || worker?.generationId !== generationId || !same(worker?.source, source) || worker?.programHash !== programHash
+    || finalFacts?.artifactProgramHash !== programHash || worker?.programHash !== finalFacts?.wireProgramHash
+    || worker?.generationId !== generationId || !same(worker?.source, source)
     || worker?.status !== "returned" || worker?.engine !== expectedQualification.executorKind
     || worker?.engineBuildFingerprint !== expectedQualification.engineBuildFingerprint
     || authority === null || worker?.authorityRoot !== authority.authorityRoot

@@ -23,6 +23,7 @@ import {
 } from "../../discovery/src/index.ts";
 import {
   buildPersistedGraph,
+  validatePersistedGraphForCatalog,
   type GraphLeaseBindingV1,
   type GraphServingAdmissionGuardPort,
   type GraphServingAdmissionV1,
@@ -1281,20 +1282,12 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       || !sameCutoff(closure.nominationClosure.cutoff, input.ready.cutoff)) {
       throw new Error("serving-nomination-closure-mismatch");
     }
-    const recomputedGraph = buildPersistedGraph(closure.instanceCatalog);
-    const suppliedGraphRoot = hashDomain("aloha/persisted-graph/v1", {
-      cutoff: closure.graph.cutoff,
-      instanceCatalogRoot: closure.graph.instanceCatalogRoot,
-      edges: closure.graph.edges,
-    });
+    validatePersistedGraphForCatalog(closure.graph, closure.instanceCatalog);
     if (
       closure.instanceCatalog.instanceCatalogRoot !== input.ready.instanceCatalogRoot
       || closure.instanceCatalog.instanceCount !== input.ready.instanceCount
       || closure.graph.graphRoot !== input.ready.graphRoot
-      || suppliedGraphRoot !== input.ready.graphRoot
       || closure.graph.edgeCount !== String(closure.graph.edges.length)
-      || recomputedGraph.graphRoot !== input.ready.graphRoot
-      || recomputedGraph.edgeCount !== input.ready.edgeCount
     ) throw new Error("serving-ready-closure-mismatch");
     await this.#store.assertContentRoot("candidate-partition", input.ready.candidatePartitionRoot);
     await this.#store.assertContentRoot("verified-memo-set", input.ready.verifiedMemoSetRoot);

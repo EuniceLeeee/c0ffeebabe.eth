@@ -29,6 +29,10 @@ import {
 } from "../../../packages/canonical-codec/src/index.ts";
 import { nativeAssetReferenceV1 } from "../../../packages/asset-ref/src/index.ts";
 import {
+  encodeNativeFullFamilyAuditBodyV1,
+  nativeFullFamilyAuditSequenceRootV1,
+} from "../../../packages/search-pipeline/src/index.ts";
+import {
   encodeFullGraphCoarseSweepV1,
   fullGraphTransitionSequenceRootV1,
   sealFullGraphCoarseSweepV1,
@@ -151,18 +155,18 @@ function fullFamilyAuditFixture(finalDurableWindowId: Hash) {
     expectedActionLineageCount: "0",
     observedActionLineageCount: "0",
     missingActionCandidateIds: Object.freeze([]),
-    denominatorRoot: hashDomain("aloha/native-full-family-audit-denominator/v1", []),
-    observedReceiptRoot: hashDomain("aloha/native-full-family-audit-observed-receipts/v1", []),
-    missingLegRoot: hashDomain("aloha/native-full-family-audit-missing-legs/v1", []),
-    projectedEdgeDenominatorRoot: hashDomain("aloha/native-full-family-audit-projected-edge-denominator/v1", []),
-    missingProjectedEdgeRoot: hashDomain("aloha/native-full-family-audit-missing-projected-edges/v1", []),
-    actionDenominatorRoot: hashDomain("aloha/native-full-family-audit-action-denominator/v1", []),
-    actionObservedRoot: hashDomain("aloha/native-full-family-audit-action-observed/v1", []),
+    denominatorRoot: nativeFullFamilyAuditSequenceRootV1("denominator", []),
+    observedReceiptRoot: nativeFullFamilyAuditSequenceRootV1("observed-receipts", []),
+    missingLegRoot: nativeFullFamilyAuditSequenceRootV1("missing-legs", []),
+    projectedEdgeDenominatorRoot: nativeFullFamilyAuditSequenceRootV1("projected-edge-denominator", []),
+    missingProjectedEdgeRoot: nativeFullFamilyAuditSequenceRootV1("missing-projected-edges", []),
+    actionDenominatorRoot: nativeFullFamilyAuditSequenceRootV1("action-denominator", []),
+    actionObservedRoot: nativeFullFamilyAuditSequenceRootV1("action-observed", []),
     coarseRoutes: Object.freeze([]),
     projectedEdges: Object.freeze([]),
     actionLineage: Object.freeze([]),
   });
-  return Object.freeze({ ...payload, auditRoot: hashDomain("aloha/native-full-family-audit/v1", payload as unknown as CanonicalJson) });
+  return encodeNativeFullFamilyAuditBodyV1(payload).audit;
 }
 
 function missingProjection(
@@ -306,6 +310,8 @@ function fullGraphSweepFixture(finalDurableWindowId: Hash) {
 function fullFamilyTerminalBindingFixture(projection: ProductionTerminalPhaseFullFamilyProjectionV1) {
   const sweep = fullGraphSweepFixture(projection.finalDurableWindowId);
   const audit = fullFamilyAuditFixture(projection.finalDurableWindowId);
+  const { auditRoot: _auditRoot, ...auditBody } = audit;
+  const nativeAuditManifest = encodeNativeFullFamilyAuditBodyV1(auditBody).manifest;
   const payload = Object.freeze({
     schemaVersion: 1 as const,
     kind: "aloha.runtime-release-full-family-terminal-binding-v1" as const,
@@ -320,7 +326,6 @@ function fullFamilyTerminalBindingFixture(projection: ProductionTerminalPhaseFul
     searchTerminalHash: h(`search-terminal:${projection.finalDurableWindowId}`),
     terminalKind: "unsigned-dry-run" as const,
     terminalLineageHash: h(`terminal-lineage:${projection.finalDurableWindowId}`),
-    nativeAuditRoot: audit.auditRoot,
     readyRecordHash: projection.readyRecordHash,
     generationId: sweep.binding.generationId,
     graphRoot: sweep.binding.graphRoot,
@@ -337,7 +342,7 @@ function fullFamilyTerminalBindingFixture(projection: ProductionTerminalPhaseFul
     }),
     readyCutoff: sweep.binding.readyCutoff,
     actualCurrentSource: sweep.binding.actualCurrentSource,
-    audit,
+    nativeAuditManifest,
   });
   return Object.freeze({
     ...payload,

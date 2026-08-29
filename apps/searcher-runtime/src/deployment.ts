@@ -32,7 +32,10 @@ import {
   type SearcherRuntimeApplicationV1,
 } from "./internal/application-owner.ts";
 import { assertIssuedRuntimeReleaseSearcherStartupService } from "../../../packages/runtime-release-authority/src/searcher-startup-consumer.ts";
-import type { DeploymentCompositionCapabilityV1 } from "../../../packages/runtime-release-authority/src/internal/deployment-composition-owner.ts";
+import {
+  decodeDeploymentRuntimeInfrastructureRequestV1,
+  type DeploymentRuntimeInfrastructureRequestV1,
+} from "../../../packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts";
 
 const MANIFEST_DOMAIN = "aloha/searcher-deployment-manifest/v1";
 const ZERO_HASH = `0x${"0".repeat(64)}` as Hash;
@@ -556,12 +559,12 @@ export async function loadVerifiedDeploymentBundleModuleV1(
 
 /**
  * Load the package-approved composition bytes without a path/evaluation race.
- * The capability itself is subsequently consumed by the candidate-owned
- * deployment composition owner, which rejects structural objects and clones.
+ * The module contributes exact data only. Candidate-owned runtime code turns
+ * the decoded request into process-local capabilities after joining release.
  */
 export async function loadVerifiedDeploymentCompositionModuleV1(
   manifestValue: DeploymentManifestV1,
-): Promise<DeploymentCompositionCapabilityV1> {
+): Promise<DeploymentRuntimeInfrastructureRequestV1> {
   const manifest = decodeDeploymentManifestV1(manifestValue);
   const modulePath = absolutePath(
     manifest.deploymentCompositionModulePath,
@@ -579,7 +582,7 @@ export async function loadVerifiedDeploymentCompositionModuleV1(
 export async function loadVerifiedDeploymentCompositionBytesV1(
   manifestValue: DeploymentManifestV1,
   bytesValue: Uint8Array,
-): Promise<DeploymentCompositionCapabilityV1> {
+): Promise<DeploymentRuntimeInfrastructureRequestV1> {
   const manifest = decodeDeploymentManifestV1(manifestValue);
   return loadVerifiedDeploymentCompositionSnapshotV1(
     manifest.deploymentCompositionModuleSha256,
@@ -593,7 +596,7 @@ export async function loadVerifiedDeploymentCompositionBytesV1(
 export async function loadVerifiedDeploymentCompositionSnapshotV1(
   expectedSha256: Hash,
   bytesValue: Uint8Array,
-): Promise<DeploymentCompositionCapabilityV1> {
+): Promise<DeploymentRuntimeInfrastructureRequestV1> {
   const manifest = Object.freeze({
     deploymentCompositionModuleSha256: hashSchema.decode(
       expectedSha256,
@@ -614,7 +617,7 @@ export async function loadVerifiedDeploymentCompositionSnapshotV1(
   if (exports.length !== 1 || exports[0] !== "deploymentComposition") {
     throw new TypeError("deployment composition module must expose only deploymentComposition");
   }
-  return moduleValue.deploymentComposition as DeploymentCompositionCapabilityV1;
+  return decodeDeploymentRuntimeInfrastructureRequestV1(moduleValue.deploymentComposition);
 }
 
 type DeploymentBundleReleaseV1 = DeploymentBundleReleaseIdentityV1;

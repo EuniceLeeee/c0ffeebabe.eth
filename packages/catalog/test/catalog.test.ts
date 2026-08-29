@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import { decodeCanonicalBytes, encodeCanonicalBytes, hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import { erc20AssetPortBindingV1 } from "../../asset-ref/src/index.ts";
 import {
   sealInstanceCatalog,
   sealInstancePublication,
+  decodeInstanceCatalogV1,
+  encodeInstanceCatalogV1,
   validateInstanceCatalog,
   validateInstancePublication,
   type InstancePublicationDraftV1,
@@ -131,4 +133,86 @@ test("persisted publication and catalog hashes are re-derived, not trusted", () 
     () => validateInstanceCatalog({ ...catalog, instanceCatalogRoot: h("forged") }),
     /root-mismatch/,
   );
+});
+
+test("30k catalog uses bounded linked chunks and reopens every publication without sampling", (t) => {
+  const timings: Record<string, number> = {};
+  let mark = Date.now();
+  const publications = Array.from({ length: 30_000 }, (_, index) => (
+    sealInstancePublication(draft(`ready-instance-${String(index).padStart(5, "0")}`))
+  ));
+  timings.sealPublications = Date.now() - mark;
+  mark = Date.now();
+  const catalog = sealInstanceCatalog(cutoff, publications);
+  validateInstanceCatalog(catalog);
+  timings.sealAndValidateCatalog = Date.now() - mark;
+  mark = Date.now();
+  const encoded = encodeInstanceCatalogV1(catalog);
+  timings.encode = Date.now() - mark;
+  assert.equal(catalog.instanceCount, "30000");
+  assert.ok(encoded.chunks.length > 1);
+  assert.ok(encoded.manifestBytes.byteLength <= 500_000);
+  assert.ok(encoded.chunks.every(chunk => chunk.bytes.byteLength <= 500_000));
+  assert.deepEqual(Object.keys(encoded.manifest).sort(), [
+    "cutoff",
+    "firstPublicationChunkRef",
+    "instanceCatalogRoot",
+    "instanceCount",
+    "kind",
+    "publicationChunkCount",
+    "publicationSequenceRoot",
+    "schemaVersion",
+  ]);
+  assert.deepEqual(Object.keys(encoded.chunks[0]!.ref), ["contentSha256"]);
+  assert.deepEqual(Object.keys(encoded.chunks[0]!.chunk).sort(), [
+    "kind",
+    "nextPublicationChunkRef",
+    "publications",
+    "schemaVersion",
+  ]);
+  const bySha = new Map(encoded.chunks.map(chunk => [chunk.ref.contentSha256, chunk.bytes]));
+  mark = Date.now();
+  const reopened = decodeInstanceCatalogV1(encoded.manifestBytes, ref => {
+    const bytes = bySha.get(ref.contentSha256);
+    if (!bytes) throw new Error("missing test chunk");
+    return bytes;
+  });
+  timings.decode = Date.now() - mark;
+  assert.equal(reopened.publications.length, 30_000);
+  assert.equal(reopened.instanceCatalogRoot, catalog.instanceCatalogRoot);
+  for (const ordinal of [0, 14_999, 29_999]) {
+    assert.equal(reopened.publications[ordinal]!.instancePublicationHash, catalog.publications[ordinal]!.instancePublicationHash);
+  }
+  const expanded = sealInstanceCatalog(cutoff, [...publications, sealInstancePublication(draft("ready-instance-extra"))]);
+  assert.notEqual(expanded.instanceCatalogRoot, catalog.instanceCatalogRoot);
+  t.diagnostic(`30k catalog timings ms ${JSON.stringify(timings)}`);
+});
+
+test("catalog linked chunks fail closed on missing, duplicate, cross-catalog, mutation, or manifest reroot", () => {
+  const first = sealInstanceCatalog(cutoff, Array.from({ length: 260 }, (_, index) => (
+    sealInstancePublication(draft(`chunk-a-${index}`))
+  )));
+  const second = sealInstanceCatalog(cutoff, Array.from({ length: 260 }, (_, index) => (
+    sealInstancePublication(draft(`chunk-b-${index}`))
+  )));
+  const encoded = encodeInstanceCatalogV1(first);
+  const foreign = encodeInstanceCatalogV1(second);
+  const bySha = new Map(encoded.chunks.map(chunk => [chunk.ref.contentSha256, chunk.bytes]));
+  assert.throws(() => decodeInstanceCatalogV1(encoded.manifestBytes, () => {
+    throw new Error("missing");
+  }), /missing/);
+  const firstBytes = encoded.chunks[0]!.bytes;
+  const firstChunkSha = encoded.chunks[0]!.ref.contentSha256;
+  assert.throws(() => decodeInstanceCatalogV1(encoded.manifestBytes, () => firstBytes), /content mismatch/);
+  assert.throws(() => decodeInstanceCatalogV1(encoded.manifestBytes, ref => (
+    ref.contentSha256 === firstChunkSha ? foreign.chunks[0]!.bytes : bySha.get(ref.contentSha256)!
+  )), /content mismatch/);
+  const mutated = encoded.chunks[0]!.bytes.slice();
+  mutated[mutated.length - 2] = mutated[mutated.length - 2]! ^ 1;
+  assert.throws(() => decodeInstanceCatalogV1(encoded.manifestBytes, ref => (
+    ref.contentSha256 === firstChunkSha ? mutated : bySha.get(ref.contentSha256)!
+  )), /content mismatch/);
+  const manifest = decodeCanonicalBytes(encoded.manifestBytes) as Record<string, unknown>;
+  const rerooted = encodeCanonicalBytes({ ...manifest, instanceCatalogRoot: h("rerooted-catalog") });
+  assert.throws(() => decodeInstanceCatalogV1(rerooted, ref => bySha.get(ref.contentSha256)!), /chunk binding|semantic root mismatch/);
 });

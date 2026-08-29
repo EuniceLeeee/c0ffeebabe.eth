@@ -9,6 +9,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   statSync,
@@ -16,7 +17,7 @@ import {
   writeSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { decodeCanonicalJson, sha256Hex } from "../../../packages/canonical-codec/src/index.ts";
 import { encodeCanonicalBytes, hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
 import {
@@ -78,8 +79,18 @@ import {
 } from "../../pre-release-fact-log/src/index.ts";
 import {
   observeProductionReleaseAcceptanceAdvisoryV1,
+  prepareProductionReleaseAcceptanceForExternalOwnerV1,
+  readProductionReleaseAcceptanceSigningRequestV1,
   type ProductionReleaseAcceptanceAdvisoryStatusV1,
 } from "./production-workflow.ts";
+import {
+  materializeFrozenProductionArtifactBaseV1,
+  prepareFrozenProductionArtifactBaseV1,
+} from "./external-release-owner.ts";
+import {
+  decodeDeploymentRuntimeInfrastructureRequestV1,
+  type DeploymentRuntimeInfrastructureRequestV1,
+} from "../../../packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts";
 import type {
   PreReleaseStagingArtifactIdentityV1,
   PreReleaseStagingArtifactNameV1,
@@ -293,6 +304,67 @@ function stableRootBytes(path: string, mode: number): Uint8Array {
   return bytes;
 }
 
+interface FixedProductionPackagingInputsV1 {
+  readonly deploymentInfrastructure: DeploymentRuntimeInfrastructureRequestV1;
+  readonly revmWorkerBytes: Uint8Array;
+  readonly proofSignerBytes: Uint8Array;
+}
+
+/** These three files are external packaging inputs, not candidate runtime
+ * authority. The final runner snapshots their exact root-owned bytes into A
+ * and never executes either binary. */
+function readFixedProductionPackagingInputsV1(): FixedProductionPackagingInputsV1 {
+  const directory = PRE_RELEASE_STAGING_LAYOUT_V1.productionPackagingInputDirectory;
+  if (!existsSync(directory) || realpathSync(directory) !== directory) {
+    throw new TypeError("fixed production packaging input directory is missing");
+  }
+  const directoryStat = lstatSync(directory);
+  if (!directoryStat.isDirectory() || directoryStat.uid !== 0 || directoryStat.gid !== 0
+    || (directoryStat.mode & 0o777) !== 0o700) {
+    throw new TypeError("fixed production packaging input directory is not root-owned and protected");
+  }
+  const expectedNames = [
+    PRE_RELEASE_STAGING_LAYOUT_V1.productionDeploymentInfrastructureInputPath,
+    PRE_RELEASE_STAGING_LAYOUT_V1.productionRevmWorkerInputPath,
+    PRE_RELEASE_STAGING_LAYOUT_V1.productionProofSignerInputPath,
+  ].map(path => basename(path)).sort();
+  const observedNames = readdirSync(directory).sort();
+  if (observedNames.length !== expectedNames.length
+    || observedNames.some((name, index) => name !== expectedNames[index])) {
+    throw new TypeError("fixed production packaging input directory denominator mismatch");
+  }
+  const deploymentInfrastructureBytes = stableRootBytes(
+    PRE_RELEASE_STAGING_LAYOUT_V1.productionDeploymentInfrastructureInputPath,
+    0o400,
+  );
+  const deploymentInfrastructure = decodeDeploymentRuntimeInfrastructureRequestV1(
+    decodeCanonicalJson(deploymentInfrastructureBytes),
+  );
+  if (!Buffer.from(deploymentInfrastructureBytes).equals(
+    Buffer.from(encodeCanonicalBytes(deploymentInfrastructure)),
+  )) {
+    throw new TypeError("fixed production deployment infrastructure input is not canonical exact bytes");
+  }
+  const revmWorkerBytes = stableRootBytes(
+    PRE_RELEASE_STAGING_LAYOUT_V1.productionRevmWorkerInputPath,
+    0o400,
+  );
+  const proofSignerBytes = stableRootBytes(
+    PRE_RELEASE_STAGING_LAYOUT_V1.productionProofSignerInputPath,
+    0o400,
+  );
+  if (revmWorkerBytes.byteLength === 0 || proofSignerBytes.byteLength === 0
+    || sha256Hex(revmWorkerBytes) !== deploymentInfrastructure.revmWorkerExecutableSha256
+    || sha256Hex(proofSignerBytes) !== deploymentInfrastructure.externalProofSigner.executableSha256) {
+    throw new TypeError("fixed production packaging executable bytes do not exact-join deployment infrastructure");
+  }
+  return Object.freeze({
+    deploymentInfrastructure,
+    revmWorkerBytes,
+    proofSignerBytes,
+  });
+}
+
 function canonicalAuthorization(path: string): Readonly<{ readonly bytes: Uint8Array; readonly authorization: PreReleaseLaunchAuthorizationV1 }> {
   const bytes = stableRootBytes(path, 0o600);
   const authorization = decodePreReleaseLaunchAuthorizationV1(decodeCanonicalJson(bytes));
@@ -491,6 +563,14 @@ export interface FinalPreReleaseQualificationV1 {
   readonly advisoryStatus: ProductionReleaseAcceptanceAdvisoryStatusV1;
   readonly factLogPath: string;
   readonly factLogSha256: Hash;
+  readonly releaseAcceptanceSigningRequestPath: string;
+  readonly releaseAcceptanceSigningRequestRoot: Hash;
+  readonly releaseAcceptanceSigningRequestSha256: Hash;
+  readonly productionArtifactBaseRoot: Hash;
+  readonly productionArtifactBaseDirectory: string;
+  readonly productionArtifactBaseManifestPath: string;
+  readonly productionArtifactBaseManifestSha256: Hash;
+  readonly productionArtifactBaseCount: "25";
 }
 
 /** Sole fixed root workflow. It accepts only a genuine in-process Boundary
@@ -621,6 +701,51 @@ export async function runFinalPreReleaseV1(boundaryReceipt: BoundaryReceipt): Pr
       mode: 0o600,
       tempDiscriminator: String(process.pid),
     });
+    const productionPackagingInputs = readFixedProductionPackagingInputsV1();
+    const releaseAcceptancePreparation = await prepareProductionReleaseAcceptanceForExternalOwnerV1(
+      advisoryMaterial,
+    );
+    const releaseAcceptanceSigningRequest = readProductionReleaseAcceptanceSigningRequestV1(
+      releaseAcceptancePreparation,
+    );
+    const releaseAcceptanceSigningRequestBytes = encodeCanonicalBytes(releaseAcceptanceSigningRequest);
+    const frozenProductionArtifactBase = prepareFrozenProductionArtifactBaseV1({
+      repositoryRoot: frozenStaging.manifest.repositoryRoot,
+      controllerBoundaryEvidenceRoot: installedController.controllerBoundaryEvidenceRoot as Hash,
+      stagingArtifactSetRoot: finalRaw.authorization.stagingArtifactSetRoot,
+      stagingManifestRoot: finalRaw.authorization.stagingManifestRoot,
+      stagingArtifacts: frozenStaging.identities,
+      stagingArtifactBytes: frozenStaging.bytes,
+      performanceDatabasePath: bSnapshots.processEvidence.snapshotPath,
+      performanceDatabaseSha256: bSnapshots.processEvidence.contentSha256,
+      preparedAcceptanceCapability: releaseAcceptancePreparation,
+      revmWorkerBytes: productionPackagingInputs.revmWorkerBytes,
+      proofSignerBytes: productionPackagingInputs.proofSignerBytes,
+      deploymentInfrastructure: productionPackagingInputs.deploymentInfrastructure,
+    });
+    let releaseAcceptanceRequestPublished = false;
+    let productionArtifactBasePublication: ReturnType<typeof materializeFrozenProductionArtifactBaseV1>;
+    try {
+      atomicNoClobberPublishV1({
+        directory: PRE_RELEASE_STAGING_LAYOUT_V1.runtimeOutputDirectory,
+        path: PRE_RELEASE_STAGING_LAYOUT_V1.releaseAcceptanceSigningRequestPath,
+        bytes: releaseAcceptanceSigningRequestBytes,
+        uid: 0,
+        gid: 0,
+        mode: 0o600,
+        tempDiscriminator: String(process.pid),
+      });
+      releaseAcceptanceRequestPublished = true;
+      productionArtifactBasePublication = materializeFrozenProductionArtifactBaseV1(
+        frozenProductionArtifactBase,
+      );
+    } catch (error) {
+      if (releaseAcceptanceRequestPublished
+        && existsSync(PRE_RELEASE_STAGING_LAYOUT_V1.releaseAcceptanceSigningRequestPath)) {
+        unlinkSync(PRE_RELEASE_STAGING_LAYOUT_V1.releaseAcceptanceSigningRequestPath);
+      }
+      throw error;
+    }
     const bThaw = invokeFixedPreReleaseThawV1(bProcess);
     thawed = true;
     const qualificationPayload = Object.freeze({
@@ -663,6 +788,14 @@ export async function runFinalPreReleaseV1(boundaryReceipt: BoundaryReceipt): Pr
       advisoryStatus: advisoryJudgment.status,
       factLogPath: PRE_RELEASE_STAGING_LAYOUT_V1.factLogPath,
       factLogSha256: sha256Hex(factLogBytes),
+      releaseAcceptanceSigningRequestPath: PRE_RELEASE_STAGING_LAYOUT_V1.releaseAcceptanceSigningRequestPath,
+      releaseAcceptanceSigningRequestRoot: releaseAcceptanceSigningRequest.requestRoot,
+      releaseAcceptanceSigningRequestSha256: sha256Hex(releaseAcceptanceSigningRequestBytes),
+      productionArtifactBaseRoot: productionArtifactBasePublication.baseRoot,
+      productionArtifactBaseDirectory: productionArtifactBasePublication.directory,
+      productionArtifactBaseManifestPath: productionArtifactBasePublication.manifestPath,
+      productionArtifactBaseManifestSha256: productionArtifactBasePublication.manifestSha256,
+      productionArtifactBaseCount: productionArtifactBasePublication.artifactCount,
     });
   } finally {
     if (!thawed) {

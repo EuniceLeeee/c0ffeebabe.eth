@@ -26,6 +26,9 @@ import {
   type ProducerTerminalV1,
   readIssuedProducerLaneSearchTerminalCapabilityV1,
   readIssuedProducerFinalFullFamilyTerminalSetV1,
+  producerHeadFactsRootV1,
+  producerLaneTerminalSetRootV1,
+  producerOrderedHashRootV1,
 } from "../src/index.ts";
 import {
   issueProducerBoundTriggerV1,
@@ -265,16 +268,19 @@ test("real no-candidate terminal plus observed-empty intake is the healthy denom
   assert.equal(terminalCapability, performanceTerminalCapability);
   assert.equal(readIssuedProducerHeadSchedulerCompletionV1(terminalCapability), null);
   const fullFamily = readIssuedProducerFinalFullFamilyTerminalSetV1(terminalCapability);
-  assert.equal(fullFamily.producerHeadFactsRoot, hashDomain("aloha/searcher-production-evidence-head-facts/v1", facts));
-  assert.equal(fullFamily.laneTerminalSetRoot, hashDomain("aloha/producer-final-full-family-lane-terminal-set/v1", {
-    headHash: facts.headHash,
-    generationId: facts.generationId,
-    graphRoot: facts.graphRoot,
-    lanes: facts.laneFacts,
-    laneFailureObservations: facts.laneFailureObservations,
-  }));
+  assert.equal(fullFamily.producerHeadFactsRoot, producerHeadFactsRootV1(facts));
+  assert.equal(fullFamily.laneTerminalSetRoot, producerLaneTerminalSetRootV1(facts));
   assert.ok(fullFamily.blockscanSearchTerminalCapability);
   assert.throws(() => readIssuedProducerFinalFullFamilyTerminalSetV1({ ...terminalCapability }), /not owner-issued/);
+});
+
+test("Producer bounded ordered identity commits all 30k values without a canonical high-cardinality array", () => {
+  const values = Object.freeze(Array.from({ length: 30_000 }, (_, index) => h("bounded-value", index)));
+  const root = producerOrderedHashRootV1("aloha/test/producer-bounded-30k/v1", values);
+  assert.equal(root, producerOrderedHashRootV1("aloha/test/producer-bounded-30k/v1", [...values]));
+  assert.notEqual(root, producerOrderedHashRootV1("aloha/test/producer-bounded-30k/v1", values.slice(0, -1)));
+  assert.notEqual(root, producerOrderedHashRootV1("aloha/test/producer-bounded-30k/v1", [values[1]!, values[0]!, ...values.slice(2)]));
+  assert.notEqual(root, producerOrderedHashRootV1("aloha/test/producer-bounded-30k/v1", [values[0]!, values[0]!, ...values.slice(2)]));
 });
 
 test("a reorg after both lanes and physical close cannot produce a complete head fact", async () => {

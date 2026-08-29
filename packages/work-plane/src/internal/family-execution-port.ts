@@ -160,9 +160,12 @@ export function createSchedulerOwnedFamilyExecutionPort<Fact>(
     async executeFrozenProgram(request: FamilyFrozenProgramExecutionInput): Promise<FamilyFrozenProgramExecutionResult<Fact>> {
       if (!request || typeof request !== "object") throw new TypeError("family frozen-program request is required");
       for (const key of Reflect.ownKeys(request)) {
-        if (typeof key !== "string" || !["intent", "attemptId", "signal"].includes(key)) throw new TypeError(`unknown family frozen-program request field ${String(key)}`);
+        if (typeof key !== "string" || !["intent", "rawEvidence", "attemptId", "signal"].includes(key)) throw new TypeError(`unknown family frozen-program request field ${String(key)}`);
       }
       if (!Object.prototype.hasOwnProperty.call(request, "intent")) throw new TypeError("family frozen-program request intent is required");
+      if (request.rawEvidence === null || typeof request.rawEvidence !== "object" || typeof request.rawEvidence.read !== "function") {
+        throw new TypeError("family frozen-program raw-evidence read port is required");
+      }
       const intent = detachedIntent(request.intent);
       const signal = request.signal ?? new AbortController().signal;
       const provenance = issuer.provenance(capability);
@@ -179,7 +182,7 @@ export function createSchedulerOwnedFamilyExecutionPort<Fact>(
         programInputRef: intent.programInputRef,
         programInput: intent.programInput,
       });
-      const fact = await physicalExecute({ intent, signal });
+      const fact = await physicalExecute({ intent, rawEvidence: request.rawEvidence, signal });
       const current = issuer.provenance(capability);
       if (current.authorityRoot !== provenance.authorityRoot
         || current.workerEpoch !== provenance.workerEpoch
@@ -248,7 +251,12 @@ function stageIntent(program: FamilyStageProgramV1): CapabilityWorkIntentV1 {
       programInputHash,
       issuerRef: program.stageRef.ownerRef,
     }),
-    programInputRef: program.frozenProgramRef.recordHash,
+    programInputRef: Object.freeze({
+      recordHash: program.frozenProgramRef.recordHash,
+      familyId: String(program.familyId),
+      familyDefinitionHash: program.familyDefinitionHash,
+      familyCandidateKey: program.candidateKey,
+    }),
     consumerDeadline: Number.MAX_SAFE_INTEGER,
     programInput,
   } satisfies CapabilityWorkIntentV1;
@@ -295,10 +303,11 @@ export function createFamilyRuntimeStageExecutors<Fact>(input: {
   assertIssuedFamilyFrozenProgramExecutionPort(input.execution);
   const execute = async ({
     program,
+    rawEvidence,
     attemptId,
     signal,
   }: Parameters<RuntimeStageExecutorV1["execute"]>[0]) => {
-    const result = await input.execution.executeFrozenProgram({ intent: stageIntent(program), attemptId, signal });
+    const result = await input.execution.executeFrozenProgram({ intent: stageIntent(program), rawEvidence, attemptId, signal });
     return transportFacts(program, result as FamilyFrozenProgramExecutionResult<unknown>);
   };
   return Object.freeze(FAMILY_RUNTIME_STAGES.map(stage => Object.freeze({

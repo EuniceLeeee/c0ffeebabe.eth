@@ -28,4 +28,5 @@ export {
   DODO_V2_STAGE_DEFINITIONS,
   requireDodoV2StageDefinition,
 } from "./runtime/definitions.ts";
+export { DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY } from "./runtime/physical-adapter.ts";
 export const PUBLIC_ENTRY = Object.freeze({ familyId: "dodo-v2", familyDefinition: "dodo-v2", runtime: "family-owned" });

@@ -13,7 +13,10 @@ import {
   type CandidateRecordV1,
   type CanonicalCutoffV1,
 } from "../../discovery/src/index.ts";
-import { CandidatePartitionCapabilityRegistryV1 } from "../../checkpoint/src/candidate-partition.ts";
+import {
+  CandidatePartitionCapabilityRegistryV1,
+  type CandidatePartitionRawEvidenceSourceV1,
+} from "../../checkpoint/src/candidate-partition.ts";
 import type {
   AttestationCompositionBindingV1,
 } from "../src/index.ts";
@@ -161,6 +164,9 @@ export function issueCandidatePartitionFixture(
   cutoff: CanonicalCutoffV1,
   runId = "run-a",
   checkpointRevision = "1",
+  rawEvidence: CandidatePartitionRawEvidenceSourceV1 = Object.freeze({
+    read(): Uint8Array { throw new TypeError("test candidate raw evidence is unavailable"); },
+  }),
 ): CandidatePartitionFixtureV1 {
   const binding = approval.resolver.resolve(approval.capability).provenance.runtimeBinding;
   const payload = makeCandidatePartitionProofPayload({
@@ -195,7 +201,7 @@ export function issueCandidatePartitionFixture(
     },
   });
   verifyCandidatePartitionProofHex(candidatePartitionProofSigningBytes(proof), proof.signatureHex);
-  const capability = registry.registerVerifiedProof(proof, candidates);
+  const capability = registry.registerVerifiedProof(proof, candidates, rawEvidence);
   return Object.freeze({ capability, reader: registry.reader, binding: candidatePartitionBindingFromProof(proof) });
 }
 

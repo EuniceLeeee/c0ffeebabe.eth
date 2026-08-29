@@ -1,4 +1,16 @@
-import { assertHash, deepFreeze, hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import {
+  assertDecimalString,
+  assertHash,
+  decodeCanonicalBytes,
+  decodeExactObject,
+  deepFreeze,
+  encodeCanonicalBytes,
+  fieldArray,
+  hashCanonicalPartition,
+  hashDomain,
+  sha256Hex,
+  type Hash,
+} from "../../canonical-codec/src/index.ts";
 import type {
   AssetPortV1,
   InstanceCatalogV1,
@@ -6,7 +18,7 @@ import type {
   StaticTransitionProjectionV1,
 } from "../../catalog/src/index.ts";
 import { validateInstanceCatalog } from "../../catalog/src/index.ts";
-import type { CanonicalCutoffV1 } from "../../discovery/src/index.ts";
+import { decodeCanonicalCutoff, type CanonicalCutoffV1 } from "../../discovery/src/index.ts";
 import type { CanonicalLeaseGuardPort } from "../../canonical-source/src/lease-guard-port.ts";
 
 export interface RehydrationRefV1 {
@@ -38,6 +50,66 @@ export interface PersistedGraphV1 {
   readonly edges: readonly PersistedGraphEdgeV1[];
   readonly edgeCount: string;
   readonly graphRoot: Hash;
+}
+
+export interface PersistedGraphEdgeChunkRefV1 {
+  readonly contentSha256: Hash;
+}
+
+export interface PersistedGraphEdgeChunkV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.persisted-graph-edge-chunk-v1";
+  readonly edges: readonly PersistedGraphEdgeV1[];
+  readonly nextEdgeChunkRef: PersistedGraphEdgeChunkRefV1 | null;
+}
+
+export interface PersistedGraphManifestV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.persisted-graph-manifest-v1";
+  readonly cutoff: CanonicalCutoffV1;
+  readonly instanceCatalogRoot: Hash;
+  readonly edgeCount: string;
+  readonly edgeSequenceRoot: Hash;
+  readonly edgeChunkCount: string;
+  readonly firstEdgeChunkRef: PersistedGraphEdgeChunkRefV1 | null;
+  readonly graphRoot: Hash;
+}
+
+export interface EncodedPersistedGraphV1 {
+  readonly manifest: PersistedGraphManifestV1;
+  readonly manifestBytes: Uint8Array;
+  readonly chunks: readonly Readonly<{
+    readonly ref: PersistedGraphEdgeChunkRefV1;
+    readonly chunk: PersistedGraphEdgeChunkV1;
+    readonly bytes: Uint8Array;
+  }>[];
+}
+
+const GRAPH_SEQUENCE_FANOUT = 128;
+const GRAPH_CHUNK_MAX_ITEMS = 128;
+const GRAPH_CHUNK_MAX_BYTES = 500_000;
+const ownerBuiltGraphCatalogRoots = new WeakMap<object, Hash>();
+
+function edgeSequenceRoot(edges: readonly PersistedGraphEdgeV1[]): Hash {
+  return hashCanonicalPartition(
+    "aloha/persisted-graph-edge-sequence/v1",
+    edges.map(value => value.edgeId),
+    GRAPH_SEQUENCE_FANOUT,
+  );
+}
+
+function graphSemanticRoot(
+  cutoff: CanonicalCutoffV1,
+  instanceCatalogRoot: Hash,
+  edgeCount: string,
+  sequenceRoot: Hash,
+): Hash {
+  return hashDomain("aloha/persisted-graph/v2", {
+    cutoff,
+    instanceCatalogRoot,
+    edgeCount,
+    edgeSequenceRoot: sequenceRoot,
+  });
 }
 
 export interface IssuedRouteHandle {
@@ -132,18 +204,215 @@ export function buildPersistedGraph(instanceCatalog: InstanceCatalogV1): Persist
     publication.transitions.map(projection => sealEdge(publication, projection))
   ).sort((left, right) => compareText(left.edgeId, right.edgeId));
   if (new Set(edges.map(edge => edge.edgeId)).size !== edges.length) throw new Error("duplicate-graph-edge");
-  const graphRoot = hashDomain("aloha/persisted-graph/v1", {
+  const edgeCount = String(edges.length);
+  const graphRoot = graphSemanticRoot(
+    instanceCatalog.cutoff,
+    instanceCatalog.instanceCatalogRoot,
+    edgeCount,
+    edgeSequenceRoot(edges),
+  );
+  const graph = deepFreeze({
     cutoff: instanceCatalog.cutoff,
     instanceCatalogRoot: instanceCatalog.instanceCatalogRoot,
     edges,
-  });
-  return deepFreeze({
-    cutoff: instanceCatalog.cutoff,
-    instanceCatalogRoot: instanceCatalog.instanceCatalogRoot,
-    edges,
-    edgeCount: String(edges.length),
+    edgeCount,
     graphRoot,
   });
+  ownerBuiltGraphCatalogRoots.set(graph, instanceCatalog.instanceCatalogRoot);
+  return graph;
+}
+
+function exactGraphChunkRef(value: unknown, path: string): PersistedGraphEdgeChunkRefV1 {
+  return decodeExactObject(value, {
+    contentSha256: (field, fieldPath) => assertHash(field, fieldPath),
+  }, path);
+}
+
+function buildGraphChunk(
+  edges: readonly PersistedGraphEdgeV1[],
+  nextEdgeChunkRef: PersistedGraphEdgeChunkRefV1 | null,
+): EncodedPersistedGraphV1["chunks"][number] {
+  const chunk = deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.persisted-graph-edge-chunk-v1" as const,
+    edges: deepFreeze([...edges]),
+    nextEdgeChunkRef,
+  });
+  const bytes = encodeCanonicalBytes(chunk);
+  if (bytes.byteLength > GRAPH_CHUNK_MAX_BYTES) {
+    throw new TypeError("persisted graph edge chunk exceeds durable byte cap");
+  }
+  return Object.freeze({
+    chunk,
+    bytes: bytes.slice(),
+    ref: deepFreeze({
+      contentSha256: sha256Hex(bytes),
+    }),
+  });
+}
+
+function encodeGraphChunks(graph: PersistedGraphV1): EncodedPersistedGraphV1["chunks"] {
+  const groups: Array<readonly PersistedGraphEdgeV1[]> = Array.from(
+    { length: Math.ceil(graph.edges.length / GRAPH_CHUNK_MAX_ITEMS) },
+    (_, index) => graph.edges.slice(
+      index * GRAPH_CHUNK_MAX_ITEMS,
+      (index + 1) * GRAPH_CHUNK_MAX_ITEMS,
+    ),
+  );
+  for (;;) {
+    const output: Array<EncodedPersistedGraphV1["chunks"][number]> = new Array(groups.length);
+    let next: PersistedGraphEdgeChunkRefV1 | null = null;
+    let failed = -1;
+    for (let index = groups.length - 1; index >= 0; index -= 1) {
+      const group = groups[index]!;
+      try {
+        const encoded = buildGraphChunk(group, next);
+        output[index] = encoded;
+        next = encoded.ref;
+      } catch {
+        failed = index;
+        break;
+      }
+    }
+    if (failed === -1) return Object.freeze(output.slice());
+    const group = groups[failed]!;
+    if (group.length <= 1) {
+      buildGraphChunk(group, null);
+      throw new TypeError("unreachable persisted graph chunk encoding failure");
+    }
+    const middle = Math.ceil(group.length / 2);
+    groups.splice(failed, 1, group.slice(0, middle), group.slice(middle));
+  }
+}
+
+function validatePersistedGraphShape(graph: PersistedGraphV1): void {
+  if (ownerBuiltGraphCatalogRoots.get(graph) === graph.instanceCatalogRoot) return;
+  if (graph.edgeCount !== String(graph.edges.length)
+    || new Set(graph.edges.map(edge => edge.edgeId)).size !== graph.edges.length
+    || graph.edges.some((edge, index) => index > 0 && graph.edges[index - 1]!.edgeId >= edge.edgeId)
+    || graph.edges.some(edge => {
+      const { edgeId, ...payload } = edge;
+      return edgeId !== hashDomain("aloha/persisted-graph-edge/v1", payload);
+    })
+    || graph.graphRoot !== graphSemanticRoot(
+      graph.cutoff,
+      graph.instanceCatalogRoot,
+      graph.edgeCount,
+      edgeSequenceRoot(graph.edges),
+    )) {
+    throw new TypeError("persisted-graph-root-mismatch");
+  }
+}
+
+export function validatePersistedGraphForCatalog(
+  graph: PersistedGraphV1,
+  catalog: InstanceCatalogV1,
+): void {
+  validateInstanceCatalog(catalog);
+  if (ownerBuiltGraphCatalogRoots.get(graph) === catalog.instanceCatalogRoot) return;
+  validatePersistedGraphShape(graph);
+  const rebuilt = buildPersistedGraph(catalog);
+  if (rebuilt.graphRoot !== graph.graphRoot
+    || rebuilt.edgeCount !== graph.edgeCount
+    || rebuilt.instanceCatalogRoot !== graph.instanceCatalogRoot
+    || !sameCutoff(rebuilt.cutoff, graph.cutoff)) {
+    throw new TypeError("persisted-graph-catalog-mismatch");
+  }
+}
+
+export function encodePersistedGraphV1(graph: PersistedGraphV1): EncodedPersistedGraphV1 {
+  validatePersistedGraphShape(graph);
+  const chunks = encodeGraphChunks(graph);
+  const manifest = deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.persisted-graph-manifest-v1" as const,
+    cutoff: graph.cutoff,
+    instanceCatalogRoot: graph.instanceCatalogRoot,
+    edgeCount: graph.edgeCount,
+    edgeSequenceRoot: edgeSequenceRoot(graph.edges),
+    edgeChunkCount: String(chunks.length),
+    firstEdgeChunkRef: chunks[0]?.ref ?? null,
+    graphRoot: graph.graphRoot,
+  });
+  const manifestBytes = encodeCanonicalBytes(manifest);
+  if (manifestBytes.byteLength > GRAPH_CHUNK_MAX_BYTES) {
+    throw new TypeError("persisted graph manifest exceeds durable byte cap");
+  }
+  return Object.freeze({ manifest, manifestBytes: manifestBytes.slice(), chunks });
+}
+
+export function decodePersistedGraphV1(
+  manifestBytes: Uint8Array,
+  readChunk: (ref: PersistedGraphEdgeChunkRefV1) => Uint8Array,
+  catalog: InstanceCatalogV1,
+): PersistedGraphV1 {
+  if (manifestBytes.byteLength > GRAPH_CHUNK_MAX_BYTES) {
+    throw new TypeError("persisted graph manifest exceeds durable byte cap");
+  }
+  const manifest = decodeExactObject(decodeCanonicalBytes(manifestBytes), {
+    schemaVersion: field => {
+      if (field !== 1) throw new TypeError("persisted graph manifest schema version mismatch");
+      return 1 as const;
+    },
+    kind: field => {
+      if (field !== "aloha.persisted-graph-manifest-v1") throw new TypeError("persisted graph manifest kind mismatch");
+      return "aloha.persisted-graph-manifest-v1" as const;
+    },
+    cutoff: (field, path) => decodeCanonicalCutoff(field, path),
+    instanceCatalogRoot: (field, path) => assertHash(field, path),
+    edgeCount: (field, path) => assertDecimalString(field, path),
+    edgeSequenceRoot: (field, path) => assertHash(field, path),
+    edgeChunkCount: (field, path) => assertDecimalString(field, path),
+    firstEdgeChunkRef: (field, path) => field === null ? null : exactGraphChunkRef(field, path),
+    graphRoot: (field, path) => assertHash(field, path),
+  }, "persistedGraphManifest");
+  const expected = buildPersistedGraph(catalog);
+  if (manifest.graphRoot !== expected.graphRoot
+    || manifest.instanceCatalogRoot !== expected.instanceCatalogRoot
+    || manifest.edgeCount !== expected.edgeCount
+    || manifest.edgeSequenceRoot !== edgeSequenceRoot(expected.edges)
+    || !sameCutoff(manifest.cutoff, expected.cutoff)) {
+    throw new TypeError("persisted graph manifest semantic root mismatch");
+  }
+  const refs: PersistedGraphEdgeChunkRefV1[] = [];
+  let edgeOrdinal = 0;
+  let ref = manifest.firstEdgeChunkRef;
+  while (ref !== null) {
+    if (BigInt(refs.length) >= BigInt(manifest.edgeChunkCount)) {
+      throw new TypeError("persisted graph edge chunk range mismatch");
+    }
+    const bytes = readChunk(ref);
+    if (bytes.byteLength > GRAPH_CHUNK_MAX_BYTES || sha256Hex(bytes) !== ref.contentSha256) {
+      throw new TypeError("persisted graph edge chunk content mismatch");
+    }
+    const chunk = decodeExactObject(decodeCanonicalBytes(bytes), {
+      schemaVersion: field => {
+        if (field !== 1) throw new TypeError("persisted graph chunk schema version mismatch");
+        return 1 as const;
+      },
+      kind: field => {
+        if (field !== "aloha.persisted-graph-edge-chunk-v1") throw new TypeError("persisted graph chunk kind mismatch");
+        return "aloha.persisted-graph-edge-chunk-v1" as const;
+      },
+      edges: (field, path) => fieldArray(field, item => item, path),
+      nextEdgeChunkRef: (field, path) => field === null ? null : exactGraphChunkRef(field, path),
+    }, `persistedGraphChunk[${refs.length}]`);
+    const expectedEdges = expected.edges.slice(edgeOrdinal, edgeOrdinal + chunk.edges.length);
+    if (chunk.edges.length === 0
+      || chunk.edges.length > GRAPH_CHUNK_MAX_ITEMS
+      || sha256Hex(encodeCanonicalBytes(chunk.edges)) !== sha256Hex(encodeCanonicalBytes(expectedEdges))) {
+      throw new TypeError("persisted graph edge chunk binding mismatch");
+    }
+    refs.push(ref);
+    edgeOrdinal += chunk.edges.length;
+    ref = chunk.nextEdgeChunkRef;
+  }
+  if (manifest.edgeChunkCount !== String(refs.length)
+    || manifest.edgeCount !== String(edgeOrdinal)
+    || (manifest.edgeCount === "0") !== (manifest.firstEdgeChunkRef === null)) {
+    throw new TypeError("persisted graph edge chunk denominator incomplete");
+  }
+  return expected;
 }
 
 function sameCutoff(left: CanonicalCutoffV1, right: CanonicalCutoffV1): boolean {
@@ -190,12 +459,15 @@ export class GraphViewLeaseV1 {
       nominationClosureRoot: binding.nominationClosureRoot,
       nominationClosureStorageHash: binding.nominationClosureStorageHash,
     });
-    const recomputedGraph = buildPersistedGraph(catalog);
-    const suppliedGraphRoot = hashDomain("aloha/persisted-graph/v1", {
-      cutoff: graph.cutoff,
-      instanceCatalogRoot: graph.instanceCatalogRoot,
-      edges: graph.edges,
-    });
+    validatePersistedGraphForCatalog(graph, catalog);
+    const recomputedGraph = graph;
+    let suppliedGraphRoot: Hash;
+    try {
+      validatePersistedGraphShape(graph);
+      suppliedGraphRoot = graph.graphRoot;
+    } catch {
+      suppliedGraphRoot = hashDomain("aloha/invalid-persisted-graph/v1", {});
+    }
     if (
       graph.graphRoot !== binding.graphRoot
       || graph.graphRoot !== recomputedGraph.graphRoot

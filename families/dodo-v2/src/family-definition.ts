@@ -12,6 +12,7 @@ import {
   type FamilyFactContractRefV1,
 } from "../../../packages/capability-contracts/src/index.ts";
 import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1 } from "../../../packages/family-sdk/runtime/index.ts";
 import {
   DODO_V2_ACTION_OWNER_ID,
   DODO_V2_CAPABILITY_IDS,
@@ -99,11 +100,17 @@ const actionOwner = Object.freeze({
   modulePath: `${moduleRoot}/action.ts`,
   exportName: "DODO_V2_SWAP_ACTION_PORT",
 });
+const physicalAdapter = Object.freeze({
+  modulePath: `${moduleRoot}/runtime/physical-adapter.ts`,
+  exportName: "DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+  capabilityIds: Object.freeze({}),
+  actionOwnerIds: Object.freeze({}),
+});
 const input: FamilyAuthoringDefinitionV1 = {
   manifest: {
     familyId: DODO_V2_FAMILY_ID,
     version: DODO_V2_FAMILY_VERSION,
-    pluginCodeHash: hashDomain("aloha/dodo-v2/plugin-code/v1", { n, i, m, p, r, state, coarse, exact, actionOwner, facts, sourcePlans: [sourcePlan, historySourcePlan] }),
+    pluginCodeHash: hashDomain("aloha/dodo-v2/plugin-code/v1", { n, i, m, p, r, state, coarse, exact, actionOwner, facts, sourcePlans: [sourcePlan, historySourcePlan], physicalAdapter }),
     authorityDeclarationHash: hashDomain("aloha/dodo-v2/authority/v1", DODO_V2_OWNER_REF),
     sourcePlans: [sourcePlan, historySourcePlan],
   },
@@ -120,6 +127,7 @@ const input: FamilyAuthoringDefinitionV1 = {
       capabilityIds: { state: asCapabilityId(DODO_V2_CAPABILITY_IDS.state), coarse: asCapabilityId(DODO_V2_CAPABILITY_IDS.coarse), exact: asCapabilityId(DODO_V2_CAPABILITY_IDS.exact) },
       actionOwnerIds: { swap: DODO_V2_ACTION_OWNER_ID },
     },
+    [FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1]: physicalAdapter,
   },
   actionOwners: [actionOwner],
   acceptanceDeclarations: facts,

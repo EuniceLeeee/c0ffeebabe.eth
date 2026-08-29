@@ -125,10 +125,10 @@ function exactRuntime(value: FreshQualifiedReleaseRunnerRuntimeV1): FreshQualifi
     throw new TypeError("fresh qualified release runner runtime is invalid");
   }
   const keys = Reflect.ownKeys(value);
-  if (keys.length !== 2 || !keys.includes("install") || !keys.includes("observeAdvisory")) {
+  if (keys.length !== 3 || !keys.includes("install") || !keys.includes("observeAdvisory") || !keys.includes("prepareRelease")) {
     throw new TypeError("fresh qualified release runner runtime denominator is invalid");
   }
-  for (const key of ["install", "observeAdvisory"] as const) {
+  for (const key of ["install", "observeAdvisory", "prepareRelease"] as const) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable
       || typeof descriptor.value !== "function") {

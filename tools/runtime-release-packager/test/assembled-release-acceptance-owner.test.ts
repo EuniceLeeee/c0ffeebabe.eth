@@ -223,7 +223,7 @@ test("advisory accepts only owner-issued material and does not execute structura
   assert.equal(reads, 0);
 });
 
-test("pre-release production workflow has no acceptance/package authority bridge", () => {
+test("pre-release advisory workflow remains separate from the external release owner", () => {
   const source = readFileSync(new URL("../src/production-workflow.ts", import.meta.url), "utf8");
   const state = readFileSync(new URL("../src/internal/pre-release-runtime-receipt-state.ts", import.meta.url), "utf8");
   const stagingOwner = readFileSync(new URL("../src/internal/pre-release-staging-owner.ts", import.meta.url), "utf8");
@@ -235,14 +235,24 @@ test("pre-release production workflow has no acceptance/package authority bridge
   const postSign = source.indexOf("const postSignReport = consumer.verifyPostSign(postSignInput)", currentOwnerMaterial);
   assert.ok(preSign >= 0 && currentOwnerMaterial > preSign && postSign > currentOwnerMaterial);
   assert.match(source, /observeProductionNominationQualificationReuseCompositionV1\(capability\)/);
-  assert.doesNotMatch(source, /preparedAcceptance|prepareProductionRelease|signingRequest|issueProductionReleaseWorkflowCapability|createRuntimeReleaseBinding/);
+  const advisoryStart = source.indexOf("export async function observeProductionReleaseAcceptanceAdvisoryV1(");
+  const externalStart = source.indexOf("export async function prepareProductionReleaseAcceptanceForExternalOwnerV1(");
+  assert.ok(advisoryStart >= 0 && externalStart > advisoryStart);
+  assert.doesNotMatch(source.slice(advisoryStart, externalStart), /preparedAcceptance|signingRequest|issueProductionReleaseWorkflowCapability|createRuntimeReleaseBinding/);
+  assert.match(source.slice(externalStart), /prepareQualifiedReleaseAcceptanceForExternalOwnerV1/);
+  assert.doesNotMatch(source.slice(externalStart), /advisoryJudgment|Fact Log/);
   assert.doesNotMatch(state, /RuntimeReleaseBinding|ReleaseAuthority|SubmissionAuthority/);
   assert.doesNotMatch(stagingOwner, /terminalDiscovery\.snapshotTrustRoot\s*===\s*null[\s\S]{0,160}throw/);
 });
 
-test("packager source contains no prepared acceptance or package publication authority", () => {
+test("external release owner emits signing bytes but contains no signing key or Fact Log gate", () => {
   const packageSource = readFileSync(new URL("../src/deployment-package.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(packageSource, /PreparedReleaseAcceptance|prepareReleasePackage|ApprovalSigningRequest|publishApprovedReleasePackage/);
+  const ownerSource = readFileSync(new URL("../src/external-release-owner.ts", import.meta.url), "utf8");
+  assert.match(ownerSource, /readAssembledReleaseAcceptanceResultsV1/);
+  assert.match(ownerSource, /prepareReleaseAcceptanceV1/);
+  assert.match(ownerSource, /prepareProductionReleasePackageV1/);
+  assert.match(ownerSource, /materializeApprovedProductionReleasePackageV1/);
+  assert.doesNotMatch(`${ownerSource}\n${packageSource}`, /privateKey|createSignedReleaseAcceptanceApprovalV1|createRuntimeReleasePackageApprovalV1|pre-release-fact-log|Fact Log/);
   assert.equal(existsSync(new URL("../src/internal/assembled-release-acceptance-owner.ts", import.meta.url)), false);
   assert.equal(existsSync(new URL("../src/internal/production-release-workflow-owner.ts", import.meta.url)), false);
 });

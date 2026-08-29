@@ -69,7 +69,8 @@ import {
 import { sealRecentObservation, type ObservedBlockV1 } from "../../observation/src/index.ts";
 import { createCanonicalSource, SQLiteCanonicalJournalStore } from "../../canonical-source/src/index.ts";
 import { createSqliteDurableStore, type DurableTransaction } from "../../durable-store/src/index.ts";
-import { createReadyPromotionAuthority } from "../../ready-generation/src/index.ts";
+import { GraphViewLeaseV1 } from "../../graph/src/index.ts";
+import { createReadyPromotionAuthority, type ReadyStorePort } from "../../ready-generation/src/index.ts";
 import { ReadyGenerationServiceV1 } from "../../ready-generation/src/index.ts";
 import { WorkScheduler } from "../../scheduler/src/index.ts";
 import {
@@ -198,7 +199,12 @@ function lifecycle(): InstanceLifecycleSingleFlightPort {
   return { async getOrBuild(_key, build) { return build(); } };
 }
 
-function makePublication(value: CandidateRecordV1, identity: IdentityVerifiedV1, dependencySuffix = "") {
+function makePublication(
+  value: CandidateRecordV1,
+  identity: IdentityVerifiedV1,
+  dependencySuffix = "",
+  transitionCount = 1,
+) {
   return sealInstancePublication({
     familyId: value.familyId,
     familyDefinitionHash: value.familyDefinitionHash,
@@ -211,13 +217,13 @@ function makePublication(value: CandidateRecordV1, identity: IdentityVerifiedV1,
     staticProjectionMemoHash: h("projection-memo"),
     requestedArtifactDependencyRoot: h(`dependencies${dependencySuffix}`),
     validityDependencyRoot: h(`validity${dependencySuffix}`),
-    transitions: [{
+    transitions: Array.from({ length: transitionCount }, (_, transitionIndex) => ({
       inputAssetPorts: [{ ...erc20AssetPortBindingV1(cutoff.chainId, `0x${h("in").slice(-40)}`), portRef: h("in-port"), ordinal: "0" }],
       outputAssetPorts: [{ ...erc20AssetPortBindingV1(cutoff.chainId, `0x${h("out").slice(-40)}`), portRef: h("out-port"), ordinal: "0" }],
-      opaqueTransitionRef: h("transition"),
+      opaqueTransitionRef: h(`transition:${transitionIndex}`),
       constraintRefs: [],
-      staticProjectionHash: h("projection"),
-    }],
+      staticProjectionHash: h(`projection:${transitionIndex}`),
+    })),
     evidenceRoot: identity.evidenceRoot,
   });
 }
@@ -229,6 +235,7 @@ interface ProgramCalls {
 
 interface AttestationTestBehavior {
   materialization: "verified" | "retryable";
+  readonly transitionCount?: number;
   readonly decideMaterialization?: (candidate: CandidateRecordV1) => "verified" | "retryable" | "invalidProgram";
   readonly dependencySuffix?: (candidate: CandidateRecordV1) => string;
   readonly reuseMemo?: (candidate: CandidateRecordV1) => boolean;
@@ -396,7 +403,15 @@ function makeAttestationService(
           },
         };
       }
-      return { kind: "verified", publication: makePublication(value, identity, behavior.dependencySuffix?.(value) ?? "") };
+      return {
+        kind: "verified",
+        publication: makePublication(
+          value,
+          identity,
+          behavior.dependencySuffix?.(value) ?? "",
+          behavior.transitionCount ?? 1,
+        ),
+      };
     },
   };
   return createAttestationService({
@@ -449,6 +464,7 @@ interface HarnessOptions {
   readonly directory?: string;
   readonly preserveDirectory?: boolean;
   readonly reopen?: boolean;
+  readonly leaseTtlMs?: number;
 }
 
 async function makeHarness(count = 1, options: HarnessOptions = {}): Promise<Harness> {
@@ -471,6 +487,7 @@ async function makeHarness(count = 1, options: HarnessOptions = {}): Promise<Har
   }, { journalStore });
   await source.freezeView();
   const durable = createSqliteDurableStore(filename, {
+    leaseTtlMs: options.leaseTtlMs,
     beforeCommit() {
       if (failNextCommit) {
         failNextCommit = false;
@@ -772,14 +789,46 @@ async function flushCapabilities(
   await writer.closeAfterAllProducersAndFlush();
 }
 
-function readyServiceForHarness(value: Harness): Readonly<{
+type ReadyActivationTimings = Record<string, number>;
+
+async function timeReadyStep<T>(
+  timings: ReadyActivationTimings | undefined,
+  key: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await work();
+  } finally {
+    if (timings !== undefined) timings[key] = (timings[key] ?? 0) + Date.now() - startedAt;
+  }
+}
+
+function readyStoreWithTimings(value: Harness, timings: ReadyActivationTimings | undefined): ReadyStorePort {
+  if (timings === undefined) return value.checkpoint;
+  return {
+    putContentAndFsync: (kind, content) => timeReadyStep(
+      timings,
+      kind === "instance-catalog" ? "persistCatalog" : "persistGraph",
+      () => value.checkpoint.putContentAndFsync(kind, content),
+    ),
+    stageReadyCAS: input => timeReadyStep(timings, "stageReady", () => value.checkpoint.stageReadyCAS(input)),
+    activateReadyCAS: input => timeReadyStep(timings, "activateReady", () => value.checkpoint.activateReadyCAS(input)),
+    loadActiveReady: () => value.checkpoint.loadActiveReady(),
+    loadReadyClosure: ready => value.checkpoint.loadReadyClosure(ready),
+    assertContentRoot: (kind, root) => value.checkpoint.assertContentRoot(kind, root),
+    assertReadyAuthorityActive: binding => value.checkpoint.assertReadyAuthorityActive(binding),
+  };
+}
+
+function readyServiceForHarness(value: Harness, timings?: ReadyActivationTimings): Readonly<{
   readonly readyCaller: object;
   readonly readyService: ReadyGenerationServiceV1;
 }> {
   const readyCaller = {};
   const readyService = new ReadyGenerationServiceV1(
     readyCaller,
-    value.checkpoint,
+    readyStoreWithTimings(value, timings),
     value.source,
     () => "1",
     () => ({
@@ -800,29 +849,47 @@ function readyServiceForHarness(value: Harness): Readonly<{
   return Object.freeze({ readyCaller, readyService });
 }
 
-async function activateReadyServiceForHarness(value: Harness): Promise<Readonly<{
+async function activateReadyServiceForHarness(value: Harness, timings?: ReadyActivationTimings): Promise<Readonly<{
   readonly ready: Awaited<ReturnType<ReadyGenerationServiceV1["promote"]>>;
   readonly readyCaller: object;
   readonly readyService: ReadyGenerationServiceV1;
 }>> {
-  const fixture = await openSession(value);
-  await flushCapabilities(value, fixture, fixture.persistenceCapabilities);
+  const fixture = await timeReadyStep(timings, "openSession", () => openSession(value));
+  await timeReadyStep(timings, "flushOutcomeBatches", () => (
+    flushCapabilities(value, fixture, fixture.persistenceCapabilities)
+  ));
+  const partitionStartedAt = Date.now();
   const partition = fixture.session.sealExactPartition(fixture.finalResults.map(result => candidateFinalOutcomeHash(result.outcome)));
-  const sealedRun = await value.checkpoint.sealAttestationPartition(value.run.runId, partition);
+  if (timings !== undefined) timings.sealExactPartition = Date.now() - partitionStartedAt;
+  const sealedRun = await timeReadyStep(timings, "sealPartitionAndMemo", () => (
+    value.checkpoint.sealAttestationPartition(value.run.runId, partition)
+  ));
   const publications = fixture.finalResults.flatMap(result => result.outcome.kind === "verified" ? [result.outcome.publication] : []);
+  const catalogStartedAt = Date.now();
   const instanceCatalog = sealInstanceCatalog(cutoff, publications);
-  const { readyCaller, readyService } = readyServiceForHarness(value);
-  const ready = await readyService.promote(readyCaller, {
-    sealedRun,
-    instanceCatalog,
-    parentGenerationId: value.run.parentGenerationId,
-    policy: promotionPolicy,
-  });
+  if (timings !== undefined) timings.sealInstanceCatalog = Date.now() - catalogStartedAt;
+  const { readyCaller, readyService } = readyServiceForHarness(value, timings);
+  const ready = await timeReadyStep(timings, "readyPromote", () => readyService.promote(readyCaller, {
+      sealedRun,
+      instanceCatalog,
+      parentGenerationId: value.run.parentGenerationId,
+      policy: promotionPolicy,
+    }));
+  if (timings !== undefined) {
+    timings.promoteBuildAndValidation = timings.readyPromote
+      - timings.persistCatalog
+      - timings.persistGraph
+      - timings.stageReady
+      - timings.activateReady;
+  }
   return Object.freeze({ ready, readyCaller, readyService });
 }
 
-async function activateReadyForHarness(value: Harness): Promise<Awaited<ReturnType<ReadyGenerationServiceV1["promote"]>>> {
-  return (await activateReadyServiceForHarness(value)).ready;
+async function activateReadyForHarness(
+  value: Harness,
+  timings?: ReadyActivationTimings,
+): Promise<Awaited<ReturnType<ReadyGenerationServiceV1["promote"]>>> {
+  return (await activateReadyServiceForHarness(value, timings)).ready;
 }
 
 async function beginSuccessorRunForHarness(value: Harness): Promise<Harness["run"]> {
@@ -1552,6 +1619,99 @@ function replaceActivePartitionRecord(
         String(root.revision),
         encodeCanonicalBytes({ ...root, revision: nextRevision }),
         rootReferences,
+      );
+    });
+  } finally {
+    value.durable.releaseWriterLease(lease);
+  }
+}
+
+function mutateAttestationPartitionClosure(
+  value: Harness,
+  mode: "missing" | "reordered" | "duplicate" | "cross-partition",
+): void {
+  const lease = value.durable.acquireWriterLease(`checkpoint-test-attestation-${mode}`);
+  try {
+    value.durable.transaction(lease, tx => {
+      const rootRecord = tx.readRoot();
+      assert.ok(rootRecord);
+      const root = CHECKPOINT_SCHEMA_AUTHORITY.decodeRoot(rootRecord.envelopeBytes) as unknown as Record<string, unknown>;
+      const runHash = rootRecord.references.find(hash => tx.readContent(hash)?.kind === "aloha/in-progress-run/v2");
+      assert.ok(runHash);
+      const runRecord = tx.readContent(runHash);
+      assert.ok(runRecord);
+      const run = CHECKPOINT_SCHEMA_AUTHORITY.decodeRun(runRecord.bytes) as unknown as Record<string, unknown>;
+      const attestationHash = String(run.attestationPartitionStorageHash) as Hash;
+      const attestationRecord = tx.readContent(attestationHash);
+      assert.ok(attestationRecord);
+      const originalOutcomeHash = String(run.outcomePartitionStorageHash) as Hash;
+      let outcomeHash = originalOutcomeHash;
+      let attestationReferences: Hash[] = [originalOutcomeHash];
+      if (mode === "missing") {
+        attestationReferences = [];
+      } else if (mode === "cross-partition") {
+        attestationReferences = [String(run.candidatePartitionStorageHash) as Hash];
+      } else {
+        const outcomeManifestRecord = tx.readContent(originalOutcomeHash);
+        assert.ok(outcomeManifestRecord);
+        const outcomeManifest = decodeCanonicalJson(outcomeManifestRecord.bytes) as Record<string, unknown>;
+        const firstPageHash = (outcomeManifest.pageStorageHashes as Hash[])[0]!;
+        const firstPageRecord = tx.readContent(firstPageHash);
+        assert.ok(firstPageRecord);
+        const firstPage = decodeCanonicalJson(firstPageRecord.bytes) as Record<string, unknown>;
+        const entries = firstPage.entries as Array<Record<string, unknown>>;
+        assert.ok(entries.length >= 2);
+        const mutatedEntries = mode === "reordered"
+          ? [...entries].reverse()
+          : [entries[0]!, entries[0]!, ...entries.slice(1)];
+        const pageHash = tx.putImmutable(
+          "aloha/checkpoint-partition-page/v1",
+          encodeCanonicalBytes({ ...firstPage, entries: mutatedEntries }),
+          mutatedEntries.map(entry => String(entry.storageHash) as Hash),
+        );
+        outcomeHash = tx.putImmutable(
+          "aloha/checkpoint-partition-manifest/v1",
+          encodeCanonicalBytes({
+            ...outcomeManifest,
+            count: String(mutatedEntries.length),
+            pageStorageHashes: [pageHash],
+          }),
+          [pageHash],
+        );
+        attestationReferences = [outcomeHash];
+      }
+      const replacementAttestationHash = tx.putImmutable(
+        "aloha/attestation-partition/v1",
+        attestationRecord.bytes,
+        attestationReferences,
+      );
+      const nextRevision = (BigInt(String(root.revision)) + 1n).toString();
+      const nextRun = {
+        ...run,
+        checkpointRevision: nextRevision,
+        outcomePartitionStorageHash: outcomeHash,
+        attestationPartitionStorageHash: replacementAttestationHash,
+      } as Record<string, unknown>;
+      const nextRunHash = tx.putImmutable(
+        "aloha/in-progress-run/v2",
+        encodeCanonicalBytes(nextRun),
+        [
+          nextRun.recentObservationStorageHash,
+          nextRun.sourceCoverageStorageHash,
+          nextRun.sourceExecutionSetStorageHash,
+          nextRun.sourcePlanEvidenceStorageHash,
+          nextRun.nominationClosureStorageHash,
+          nextRun.candidatePartitionStorageHash,
+          nextRun.candidatePartitionProofStorageHash,
+          nextRun.outcomePartitionStorageHash,
+          nextRun.verifiedMemoSetStorageHash,
+          nextRun.attestationPartitionStorageHash,
+        ] as Hash[],
+      );
+      tx.compareAndSwapRoot(
+        String(root.revision),
+        encodeCanonicalBytes({ ...root, revision: nextRevision }),
+        rootRecord.references.map(hash => hash === runHash ? nextRunHash : hash),
       );
     });
   } finally {
@@ -2688,6 +2848,38 @@ test("session sealing fails before final persistence and succeeds from exact dur
   }
 });
 
+test("compact attestation manifest rejects missing, reordered, duplicate, and cross-partition outcome closure", async (t) => {
+  for (const mode of ["missing", "reordered", "duplicate", "cross-partition"] as const) {
+    await t.test(mode, async () => {
+      const value = await makeHarness(2);
+      try {
+        const fixture = await openSession(value);
+        await flushCapabilities(value, fixture, fixture.persistenceCapabilities);
+        const partition = fixture.session.sealExactPartition(
+          fixture.finalResults.map(result => candidateFinalOutcomeHash(result.outcome)),
+        );
+        await value.checkpoint.sealAttestationPartition(value.run.runId, partition);
+        const sealedEnvelope = activeRunEnvelope(value);
+        const attestationRecord = value.durable.readContent(
+          String(sealedEnvelope.attestationPartitionStorageHash) as Hash,
+        );
+        assert.ok(attestationRecord);
+        assert.equal(
+          Object.prototype.hasOwnProperty.call(decodeCanonicalJson(attestationRecord.bytes), "manifestRoot"),
+          false,
+        );
+        mutateAttestationPartitionClosure(value, mode);
+        await assert.rejects(
+          () => value.checkpoint.loadRun(value.run.runId),
+          /attestation|outcome|partition|reference|order|duplicate|mismatch|corrupt/i,
+        );
+      } finally {
+        value.close();
+      }
+    });
+  }
+});
+
 test("candidate partition capability rejects clones, restart-old handles, and cross-checkpoint handles", async () => {
   const value = await makeHarness(1);
   const other = await makeHarness(1);
@@ -2734,6 +2926,49 @@ test("candidate partition capability rejects clones, restart-old handles, and cr
   } finally {
     value.close();
     other.close();
+  }
+});
+
+test("candidate partition exposes only each candidate's exact durable raw evidence", async () => {
+  const value = await makeHarness(2);
+  try {
+    const [first, second] = value.candidates;
+    assert.ok(first && second);
+    const firstHash = first.evidence[0]!.rawLocatorHash;
+    const firstRead = value.checkpoint.candidatePartitionReader.readRawEvidence(
+      value.run.candidatePartition,
+      first.familyCandidateKey,
+      firstHash,
+    );
+    assert.equal(sha256Hex(firstRead), firstHash);
+
+    const originalByte = firstRead[0]!;
+    firstRead[0] = originalByte ^ 0xff;
+    const secondRead = value.checkpoint.candidatePartitionReader.readRawEvidence(
+      value.run.candidatePartition,
+      first.familyCandidateKey,
+      firstHash,
+    );
+    assert.equal(secondRead[0], originalByte, "reader must return a defensive copy");
+
+    assert.throws(
+      () => value.checkpoint.candidatePartitionReader.readRawEvidence(
+        value.run.candidatePartition,
+        second.familyCandidateKey,
+        firstHash,
+      ),
+      /outside|locator|candidate/i,
+    );
+    assert.throws(
+      () => value.checkpoint.candidatePartitionReader.readRawEvidence(
+        { ...value.run.candidatePartition },
+        first.familyCandidateKey,
+        firstHash,
+      ),
+      /checkpoint-issued|capability/i,
+    );
+  } finally {
+    value.close();
   }
 });
 
@@ -2961,6 +3196,102 @@ test("ready restart revalidates the candidate manifest/records closure and rejec
       /candidate partition|closure|manifest|physical|mismatch|corrupt/i,
     );
   } finally {
+    value.close();
+  }
+});
+
+test("30k Ready graph persists as exact chunks, survives fresh reopen, and opens a complete lease", async (t) => {
+  const timings: Record<string, number> = {};
+  let mark = Date.now();
+  const value = await makeHarness(150, {
+    behavior: { materialization: "verified", transitionCount: 200 },
+    leaseTtlMs: 600_000,
+  });
+  timings.harness = Date.now() - mark;
+  try {
+    mark = Date.now();
+    const ready = await activateReadyForHarness(value, timings);
+    timings.promoteAndPersist = Date.now() - mark;
+    assert.equal(ready.edgeCount, "30000");
+    const catalogStorageHash = value.durable.readIndex("semantic/instance-catalog", ready.instanceCatalogRoot);
+    const graphStorageHash = value.durable.readIndex("semantic/persisted-graph", ready.graphRoot);
+    assert.ok(catalogStorageHash);
+    assert.ok(graphStorageHash);
+    const catalogManifestRecord = value.durable.readContent(catalogStorageHash);
+    const graphManifestRecord = value.durable.readContent(graphStorageHash);
+    assert.ok(catalogManifestRecord);
+    assert.ok(graphManifestRecord);
+    assert.equal(catalogManifestRecord.kind, "aloha/instance-catalog-manifest/v1");
+    assert.equal(graphManifestRecord.kind, "aloha/persisted-graph-manifest/v1");
+    assert.ok(graphManifestRecord.references.length > 1);
+    for (const hash of [...catalogManifestRecord.references, ...graphManifestRecord.references]) {
+      const chunk = value.durable.readContent(hash);
+      assert.ok(chunk);
+      assert.ok(chunk.bytes.byteLength <= 500_000);
+      assert.deepEqual(chunk.references, []);
+    }
+
+    mark = Date.now();
+    value.durable.close();
+    value.durable = createSqliteDurableStore(value.filename);
+    value.partitionBootstrap = createCandidatePartitionBootstrap();
+    const binding = value.approval.resolver.resolve(value.approval.capability).provenance.runtimeBinding;
+    value.checkpoint = new CheckpointStore(
+      value.durable,
+      value.source,
+      value.probeCaller,
+      value.promotionAuthority,
+      value.authority,
+      createCandidatePartitionProofIssuerFixture(binding),
+      value.sixStepArtifacts,
+      value.partitionBootstrap,
+    );
+    timings.freshStoreReopen = Date.now() - mark;
+    mark = Date.now();
+    const active = await value.checkpoint.loadActiveReady();
+    timings.loadActiveReady = Date.now() - mark;
+    assert.equal(active?.readyRecordHash, ready.readyRecordHash);
+    mark = Date.now();
+    const closure = await value.checkpoint.loadReadyClosure(ready);
+    timings.loadReadyClosure = Date.now() - mark;
+    assert.equal(closure.graph.edges.length, 30_000);
+    assert.equal(closure.graph.graphRoot, ready.graphRoot);
+    const admission = { opaque: {} };
+    let issued = 0;
+    mark = Date.now();
+    const lease = await GraphViewLeaseV1.open(
+      admission,
+      closure.graph,
+      closure.instanceCatalog,
+      { issueRouteHandle() { issued += 1; return { opaque: {} }; } },
+      "checkpoint-30k-reopen",
+      { assertViewAuthorityActive() {} },
+      {
+        async consumeServingAdmission(value) {
+          if (value !== admission) throw new Error("unexpected admission");
+          return {
+            generationId: ready.generationId,
+            readyRecordHash: ready.readyRecordHash,
+            generationRefreshPolicyHash: ready.generationRefreshPolicyHash,
+            cutoff: ready.cutoff,
+            definitionCatalogRoot: ready.definitionCatalogRoot,
+            instanceCatalogRoot: ready.instanceCatalogRoot,
+            graphRoot: ready.graphRoot,
+            releaseProvenanceHash: ready.releaseProvenanceHash,
+            candidatePartitionProofStorageHash: ready.candidatePartitionProofStorageHash,
+            nominationClosureRoot: ready.nominationClosureRoot,
+            nominationClosureStorageHash: ready.nominationClosureStorageHash,
+          };
+        },
+        async assertServingBindingCurrent() {},
+      },
+    );
+    timings.openLease = Date.now() - mark;
+    assert.equal(lease.edges.length, 30_000);
+    assert.equal(issued, 30_000);
+    lease.release();
+  } finally {
+    t.diagnostic(`30k stage timings ms ${JSON.stringify(timings)}`);
     value.close();
   }
 });
@@ -3949,10 +4280,17 @@ test("verified memo retains a source-plan-only raw locator", async () => {
     const memoRecord = value.durable.readContent(String(envelope.verifiedMemoSetStorageHash) as Hash);
     assert.ok(memoRecord);
     const memo = decodeCanonicalJson(memoRecord.bytes) as Record<string, unknown>;
+    assert.equal(Object.prototype.hasOwnProperty.call(memo, "manifestRoot"), false);
     const expectedLocatorHash = rawLocator("source:0").rawLocatorHash;
-    assert.deepEqual(memo.retainedRawLocatorHashes, [expectedLocatorHash]);
-    assert.equal(memoRecord.references.length, 1);
-    assert.equal(value.durable.readContent(memoRecord.references[0]!)?.payloadHash, expectedLocatorHash);
+    assert.equal(memo.retainedRawLocatorCount, "1");
+    assert.equal(
+      memo.retainedRawLocatorSequenceRoot,
+      hashCanonicalPartition("aloha/verified-memo-raw-locator-sequence/v1", [expectedLocatorHash]),
+    );
+    const rawReferences = memoRecord.references.filter(reference => (
+      value.durable.readContent(reference)?.payloadHash === expectedLocatorHash
+    ));
+    assert.equal(rawReferences.length, 1);
 
     value.durable.close();
     value.durable = createSqliteDurableStore(value.filename);

@@ -54,6 +54,8 @@ const actionOwnerQualification = generatedEconomicSafetyActionOwnerQualification
 const ZERO_HASH = `0x${"0".repeat(64)}` as Hash;
 const packageArtifactPaths = Object.freeze({
   "acceptance-certificates.json": "/etc/aloha/acceptance-certificates.json",
+  "aloha-proof-signer": "/opt/aloha/bin/aloha-proof-signer",
+  "aloha-revm-worker": "/opt/aloha/bin/aloha-revm-worker",
   "aloha-searcher.service": "/etc/systemd/system/aloha-searcher.service",
   "candidate-proof-verifier-binding.json": "/etc/aloha/candidate-proof-verifier-binding.json",
   "catalog-generation.inputs.json": "/etc/aloha/runtime-facts/catalog-generation.inputs.json",

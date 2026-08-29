@@ -16,6 +16,7 @@ import {
   assertIssuedSearcherProductionEvidenceOwnerV1,
   issueSearcherProductionEvidenceOwnerV1,
   missingExternalRuntimeAnchorEvidenceV1,
+  readSearcherProductionEvidenceHighCardinalityV1,
   SEARCHER_PRODUCTION_EVIDENCE_NAMESPACES,
 } from "../src/production-evidence.ts";
 
@@ -264,6 +265,12 @@ test("owner persists eligible, coverage, candidate, terminal and incomplete perf
   assert.equal(replay.producerTerminalCount, "1");
   assert.deepEqual(replay.incompleteAdmissionIds, []);
   owner.close();
+
+  const highCardinality = readSearcherProductionEvidenceHighCardinalityV1(databasePath);
+  assert.equal(highCardinality.routeDenominators.length, 0);
+  assert.equal(highCardinality.candidateSets.length, 1);
+  assert.equal(highCardinality.candidateSets[0]!.payload.candidateTerminalObservations.length, 0);
+  assert.equal(highCardinality.candidateSets[0]!.payload.candidateRefs.length, 0);
 
   const persisted = createSqliteDurableStore(databasePath);
   persisted.bindStoreRole("searcher-production-evidence");

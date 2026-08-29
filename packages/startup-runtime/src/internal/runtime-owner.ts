@@ -1,6 +1,7 @@
 import type { StartupRuntimeV1 } from "../index.ts";
 import {
   type ReadyStage12EvidenceCapabilityV1,
+  type ReadyStage12EvidenceBindingV1,
   type ReadyStage12EvidenceReaderPortV1,
   type ReadyStage12EvidenceSnapshotV1,
 } from "../../../checkpoint/src/ready-stage12-evidence.ts";
@@ -80,6 +81,18 @@ export function readStartupStage12Evidence(
   if (!evidence) throw new TypeError("startup stage1/2 evidence is unavailable");
   const reader = assertCheckpointReadyStage12EvidenceReader(evidence.reader);
   return reader.read(evidence.capability());
+}
+
+/** Bounded Ready identity for performance facts. This never loads the
+ * candidate/outcome/catalog/Graph snapshot retained by Checkpoint. */
+export function readStartupStage12EvidenceBinding(
+  value: unknown,
+): ReadyStage12EvidenceBindingV1 {
+  assertIssuedStartupRuntime(value);
+  const evidence = stage12Evidence.get(value);
+  if (!evidence) throw new TypeError("startup stage1/2 evidence is unavailable");
+  const reader = assertCheckpointReadyStage12EvidenceReader(evidence.reader);
+  return reader.binding(evidence.capability());
 }
 
 /** Durable replay verifier: re-loads the checkpoint-owned closure and exact-compares every byte. */

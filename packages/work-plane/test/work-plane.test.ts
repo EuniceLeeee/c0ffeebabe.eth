@@ -23,6 +23,9 @@ import { issueTestWorkPlaneCallerCapability } from "./fixtures/caller-authority.
 
 const source = { chainId: "1", number: "100", hash: "hash", stateRoot: "state" } as const;
 const programInput = { amount: 1 } as const;
+const unusedRawEvidence = Object.freeze({
+  read(): Uint8Array { throw new TypeError("unused raw evidence"); },
+});
 const intent: CapabilityWorkIntentV1 = {
   intentId: "intent-1",
   ownerRef: "opaque-owner",
@@ -244,7 +247,7 @@ test("Family receives only a stamped read-only fact view from the scheduler-owne
   });
   assert.equal("scheduler" in port, false);
   assert.equal("issuer" in port, false);
-  const result = await port.executeFrozenProgram({ intent, attemptId: "attempt-family" });
+  const result = await port.executeFrozenProgram({ intent, rawEvidence: unusedRawEvidence, attemptId: "attempt-family" });
   assert.equal(result.authorityRoot, issuer.authorityRoot);
   assert.equal(result.workerEpoch, "epoch-family");
   assert.equal(result.executorSession.startsWith("0x"), true);
@@ -252,10 +255,10 @@ test("Family receives only a stamped read-only fact view from the scheduler-owne
   assert.equal(Object.isFrozen(result), true);
   assert.equal(Object.isFrozen(result.fact), true);
   assert.equal(Object.isFrozen((result.fact as { nested: object }).nested), true);
-  const second = await port.executeFrozenProgram({ intent, attemptId: "attempt-family" });
+  const second = await port.executeFrozenProgram({ intent, rawEvidence: unusedRawEvidence, attemptId: "attempt-family" });
   assert.notEqual(second.executionSessionHash, result.executionSessionHash);
   issuer.rotate({ worker: { ...entry, workerEpoch: "epoch-next" } as never });
-  await assert.rejects(port.executeFrozenProgram({ intent, attemptId: "attempt-family" }), /stale|revoked/);
+  await assert.rejects(port.executeFrozenProgram({ intent, rawEvidence: unusedRawEvidence, attemptId: "attempt-family" }), /stale|revoked/);
   issuer.revoke();
-  await assert.rejects(port.executeFrozenProgram({ intent, attemptId: "attempt-family" }), /revoked/);
+  await assert.rejects(port.executeFrozenProgram({ intent, rawEvidence: unusedRawEvidence, attemptId: "attempt-family" }), /revoked/);
 });

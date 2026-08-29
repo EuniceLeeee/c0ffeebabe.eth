@@ -205,6 +205,14 @@ export interface CandidatePartitionReaderPortV1 {
     capability: CandidatePartitionCapabilityV1,
     familyCandidateKey: Hash,
   ): CandidateRecordV1;
+  /** Read one immutable raw envelope only when it is referenced by the exact
+   * candidate record.  The reader returns a copy; callers never receive a
+   * partition-wide byte map or a storage locator. */
+  readRawEvidence(
+    capability: CandidatePartitionCapabilityV1,
+    familyCandidateKey: Hash,
+    rawLocatorHash: Hash,
+  ): Uint8Array;
 }
 
 export interface CandidatePartitionAuthorityPortV1 extends CandidatePartitionProofIssuerPortV1 {}

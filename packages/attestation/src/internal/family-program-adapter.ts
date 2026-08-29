@@ -16,6 +16,7 @@ import type { CandidateRecordV1, CanonicalCutoffV1 } from "../../../discovery/sr
 import { decodeCanonicalCutoff } from "../../../discovery/src/index.ts";
 import type {
   FamilyLifecycleOutcomeV1,
+  FamilyRawEvidenceReadPortV1,
   FamilyRuntimeStageV1,
   FamilyStageRuntimePortV1,
   FamilyStageProgramV1,
@@ -210,8 +211,9 @@ export function createAttestationProgramPortFromFamilyComposition(
     stage: FamilyStageRuntimePortV1,
     program: FamilyStageProgramV1,
     signal: AbortSignal,
+    rawEvidence: FamilyRawEvidenceReadPortV1,
   ): Promise<FamilyLifecycleOutcomeV1> => {
-    const factSet = await stage.execute({ program, signal, attemptId: program.requestFingerprint });
+    const factSet = await stage.execute({ program, rawEvidence, signal, attemptId: program.requestFingerprint });
     return stage.interpret({ program, factSet });
   };
 
@@ -219,10 +221,11 @@ export function createAttestationProgramPortFromFamilyComposition(
     candidate: CandidateRecordV1,
     cutoff: CanonicalCutoffV1,
     signal: AbortSignal,
+    rawEvidence: FamilyRawEvidenceReadPortV1,
   ): Promise<IdentityDecisionV1> => {
     try {
       const issued = issue(candidate, cutoff, "identity", null, null, null, null);
-      const outcome = await execute(issued.stage, issued.program, signal);
+      const outcome = await execute(issued.stage, issued.program, signal, rawEvidence);
       assertBinding(outcome, candidate, cutoff, "identity", evidenceRoot(candidate));
       if (outcome.kind === "verified") {
         const observation = identityValue(outcome.output, "family.identity.output");
@@ -246,6 +249,7 @@ export function createAttestationProgramPortFromFamilyComposition(
     publication: InstancePublicationV1,
     cutoff: CanonicalCutoffV1,
     signal: AbortSignal,
+    rawEvidence: FamilyRawEvidenceReadPortV1,
   ): Promise<VerifiedMemoReuseDecisionV1> => {
     try {
       validateInstancePublication(publication);
@@ -253,7 +257,7 @@ export function createAttestationProgramPortFromFamilyComposition(
         return Object.freeze({ kind: "requiresAttestation" as const });
       }
       const issued = issue(candidate, cutoff, "rehydration", null, null, candidate.instanceNominationKey, publication);
-      const outcome = await execute(issued.stage, issued.program, signal);
+      const outcome = await execute(issued.stage, issued.program, signal, rawEvidence);
       assertBinding(outcome, candidate, cutoff, "rehydration", evidenceRoot(candidate));
       if (outcome.kind !== "verified") return Object.freeze({ kind: "requiresAttestation" as const });
       const proof = decodeExactObject(outcome.output, {
@@ -340,6 +344,7 @@ export function createAttestationProgramPortFromFamilyComposition(
     identityResult: IdentityVerifiedV1,
     cutoff: CanonicalCutoffV1,
     signal: AbortSignal,
+    rawEvidence: FamilyRawEvidenceReadPortV1,
   ): Promise<InstanceDecisionV1> => {
     try {
       const materializationIssued = issue(
@@ -351,7 +356,7 @@ export function createAttestationProgramPortFromFamilyComposition(
         identityResult.familyInstanceKey,
         null,
       );
-      const materializationOutcome = await execute(materializationIssued.stage, materializationIssued.program, signal);
+      const materializationOutcome = await execute(materializationIssued.stage, materializationIssued.program, signal, rawEvidence);
       assertBinding(materializationOutcome, candidate, cutoff, "materialization", evidenceRoot(candidate));
       if (materializationOutcome.kind !== "verified") {
         if (materializationOutcome.kind === "retryable") {
@@ -368,7 +373,7 @@ export function createAttestationProgramPortFromFamilyComposition(
         identityResult.familyInstanceKey,
         null,
       );
-      const projectionOutcome = await execute(projectionIssued.stage, projectionIssued.program, signal);
+      const projectionOutcome = await execute(projectionIssued.stage, projectionIssued.program, signal, rawEvidence);
       assertBinding(projectionOutcome, candidate, cutoff, "projection", evidenceRoot(candidate));
       if (projectionOutcome.kind !== "verified") {
         if (projectionOutcome.kind === "retryable") {

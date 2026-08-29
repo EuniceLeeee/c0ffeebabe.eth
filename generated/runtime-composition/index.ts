@@ -66,13 +66,20 @@ import { FLUID_DEX_ACTION_PORT as FAMILY_3_ACTION_0 } from "../../families/fluid
 import { UNIV2_STANDARD_SWAP_ACTION_PORT as FAMILY_4_ACTION_0 } from "../../families/univ2-standard/src/public.ts";
 import { UNIV3_STANDARD_SWAP_ACTION_PORT as FAMILY_5_ACTION_0 } from "../../families/univ3-standard/src/public.ts";
 import { UNIV4_ACTION_PORT as FAMILY_6_ACTION_0 } from "../../families/univ4/src/public.ts";
-import { ANGSTROM_V4_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_0_RUNTIME_ADAPTER_0 } from "../../families/angstrom-v4/src/public.ts";
-import { CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_1_RUNTIME_ADAPTER_0 } from "../../families/curve-underlying/src/public.ts";
-import { DODO_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_2_RUNTIME_ADAPTER_0 } from "../../families/dodo-v2/src/public.ts";
-import { FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_3_RUNTIME_ADAPTER_0 } from "../../families/fluid-dex/src/public.ts";
-import { UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY as FAMILY_4_RUNTIME_ADAPTER_0 } from "../../families/univ2-standard/src/public.ts";
-import { UNIV3_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_5_RUNTIME_ADAPTER_0 } from "../../families/univ3-standard/src/public.ts";
-import { UNIV4_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_6_RUNTIME_ADAPTER_0 } from "../../families/univ4/src/public.ts";
+import { ANGSTROM_V4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_0_RUNTIME_ADAPTER_0 } from "../../families/angstrom-v4/src/public.ts";
+import { ANGSTROM_V4_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_0_RUNTIME_ADAPTER_1 } from "../../families/angstrom-v4/src/public.ts";
+import { CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_1_RUNTIME_ADAPTER_0 } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_1_RUNTIME_ADAPTER_1 } from "../../families/curve-underlying/src/public.ts";
+import { DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_2_RUNTIME_ADAPTER_0 } from "../../families/dodo-v2/src/public.ts";
+import { DODO_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_2_RUNTIME_ADAPTER_1 } from "../../families/dodo-v2/src/public.ts";
+import { FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_3_RUNTIME_ADAPTER_0 } from "../../families/fluid-dex/src/public.ts";
+import { FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_3_RUNTIME_ADAPTER_1 } from "../../families/fluid-dex/src/public.ts";
+import { UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_4_RUNTIME_ADAPTER_0 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY as FAMILY_4_RUNTIME_ADAPTER_1 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV3_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_5_RUNTIME_ADAPTER_0 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV3_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_5_RUNTIME_ADAPTER_1 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_6_RUNTIME_ADAPTER_0 } from "../../families/univ4/src/public.ts";
+import { UNIV4_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_6_RUNTIME_ADAPTER_1 } from "../../families/univ4/src/public.ts";
 import { ANGSTROM_V4_SOURCE_PLAN_RUNTIME as FAMILY_0_SOURCE_PLAN_0 } from "../../families/angstrom-v4/src/source-plan.ts";
 import { ANGSTROM_V4_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_0_SOURCE_PLAN_1 } from "../../families/angstrom-v4/src/history-source-plan.ts";
 import { CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME as FAMILY_1_SOURCE_PLAN_0 } from "../../families/curve-underlying/src/source-plan.ts";
@@ -160,31 +167,38 @@ const FAMILY_RUNTIME_DEFINITIONS_6 = Object.freeze([
 ]);
 
 const FAMILY_RUNTIME_ADAPTERS_0 = Object.freeze([
-  Object.freeze({ factory: FAMILY_0_RUNTIME_ADAPTER_0, modulePath: "families/angstrom-v4/src/search-adapter.ts", exportName: "ANGSTROM_V4_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x6b1ee3ebaaeecfc7fecbd90fb315f897c2f987897528d0588d90252eae11e4e6", leafDigest: "0xf057463c1da1989034493880f534bbf939083159593770fa4abb93537181a41a" }),
+  Object.freeze({ factory: FAMILY_0_RUNTIME_ADAPTER_0, modulePath: "families/angstrom-v4/src/runtime/physical-adapter.ts", exportName: "ANGSTROM_V4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0xbf1fef89d033a281d3666bb46843fb41f0c03ac828b8158e71e94b8ff01b68a7", leafDigest: "0xa9ef1c70b162db6c1dc7306953328cf074180debecc6abc7de74a479e2e5d63a" }),
+  Object.freeze({ factory: FAMILY_0_RUNTIME_ADAPTER_1, modulePath: "families/angstrom-v4/src/search-adapter.ts", exportName: "ANGSTROM_V4_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x8827e4a0d2ef9885e8103fe886ce083507a44ce95b337b90e9ef22c8d7798fe6", leafDigest: "0xc37f05fc843ea08d52f46564cc411345f02d4af35ca45f892177e84972c85b0d" }),
 ]);
 
 const FAMILY_RUNTIME_ADAPTERS_1 = Object.freeze([
-  Object.freeze({ factory: FAMILY_1_RUNTIME_ADAPTER_0, modulePath: "families/curve-underlying/src/search-adapter.ts", exportName: "CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x6b9cd87f6f682fccd22a67e9a277fd92d7092487146fef6550406417dece667e", leafDigest: "0x19e04a8572094418708a6e4a1dc0bbca53be76cebdf161577a269e9936a79f8c" }),
+  Object.freeze({ factory: FAMILY_1_RUNTIME_ADAPTER_0, modulePath: "families/curve-underlying/src/runtime/physical-adapter.ts", exportName: "CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0xdd6b417fb443a2fbd3f66f49176cce13d5bfb4ecfc5a767bdfe5a2c2167eff77", leafDigest: "0xf4e15083dc0efae314b7d8102879edde58ec3f52502d166327e19fba4c03e5b5" }),
+  Object.freeze({ factory: FAMILY_1_RUNTIME_ADAPTER_1, modulePath: "families/curve-underlying/src/search-adapter.ts", exportName: "CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0xd627429f628b19e45532e37add01d988a1c60390168149d25656b0760da1adb9", leafDigest: "0xe914605275768583a1637d697d18f36b095e0bf41faf4611aca3d331b5306009" }),
 ]);
 
 const FAMILY_RUNTIME_ADAPTERS_2 = Object.freeze([
-  Object.freeze({ factory: FAMILY_2_RUNTIME_ADAPTER_0, modulePath: "families/dodo-v2/src/search-adapter.ts", exportName: "DODO_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x4295704da1ce29a4103e628733e5c7c8e5398fbce2870706fab13cea0e7f995c", leafDigest: "0xce32ba275541cfbe8aae1453240755fd5a684bbd9da7e0f2ff6cacf87d2d9ca6" }),
+  Object.freeze({ factory: FAMILY_2_RUNTIME_ADAPTER_0, modulePath: "families/dodo-v2/src/runtime/physical-adapter.ts", exportName: "DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x9f7207faa0158db400075b0ad14233a222b90d8932177dad5f83ed6f65a6a2f6", leafDigest: "0xcc86d28ce7b53f768d999646388a37163f4935db07d4a3b187fa43b6e61159c4" }),
+  Object.freeze({ factory: FAMILY_2_RUNTIME_ADAPTER_1, modulePath: "families/dodo-v2/src/search-adapter.ts", exportName: "DODO_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x26368b18c9ef6a0fce62e0a017f122ba0c3165cfaa8e025ecfedcd5ed63828b7", leafDigest: "0xf15430259cd254f22b7b8c9f14cd097de79562230de5c4570ab5cb7997b6a089" }),
 ]);
 
 const FAMILY_RUNTIME_ADAPTERS_3 = Object.freeze([
-  Object.freeze({ factory: FAMILY_3_RUNTIME_ADAPTER_0, modulePath: "families/fluid-dex/src/search-adapter.ts", exportName: "FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x651bb25b74333e4af933eadf3811ca8da4b934b7b3b1c71ff97147d43f15055e", leafDigest: "0xd57f45c33394202303af28dcfb7397b7919aab8952ee904f8db1c332e99ed52a" }),
+  Object.freeze({ factory: FAMILY_3_RUNTIME_ADAPTER_0, modulePath: "families/fluid-dex/src/runtime/physical-adapter.ts", exportName: "FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0xb2aae36a01127b7d880b2a094f805ede4d55043cc5f5813f8995a7e2ce46b9e7", leafDigest: "0xdf9afd52361404d3261e745c5fa55ff707926febff03b2af2753d8a7953f5378" }),
+  Object.freeze({ factory: FAMILY_3_RUNTIME_ADAPTER_1, modulePath: "families/fluid-dex/src/search-adapter.ts", exportName: "FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x77faf69afa33bd2451c51142acdf8cfa322e98d3715a73c6cc7c9abd1242d52e", leafDigest: "0x1b8107906b2a6425bc180a93f5b79114f1ac2c8fa40ae6937061a0c344466075" }),
 ]);
 
 const FAMILY_RUNTIME_ADAPTERS_4 = Object.freeze([
-  Object.freeze({ factory: FAMILY_4_RUNTIME_ADAPTER_0, modulePath: "families/univ2-standard/src/search/adapter.ts", exportName: "UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY", closureRoot: "0x7235e3cc53f157e2425d5e75cec217162157d80143142ba516b68efb70c80591", leafDigest: "0x746538ea9a68c03267be05e0ef80d1d2967e7d8cd0ae4ed93aa7d6766ceec830" }),
+  Object.freeze({ factory: FAMILY_4_RUNTIME_ADAPTER_0, modulePath: "families/univ2-standard/src/runtime/physical-adapter.ts", exportName: "UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x710b8f6187e32f7d9a0bac399dfb0ddaa4e4bfd1983f0c1ea734a87bba42882a", leafDigest: "0x5f93989c3a14f39094d092827f87f3646aeb319a002b7b9fafd43ca37ba4866c" }),
+  Object.freeze({ factory: FAMILY_4_RUNTIME_ADAPTER_1, modulePath: "families/univ2-standard/src/search/adapter.ts", exportName: "UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY", closureRoot: "0x24391e8ac8494bca059657bd3d1e4c48fab6a1cc97337df5705ba006d084e911", leafDigest: "0x94f29495ea36376ad445771648d609c2d93298044d4c9275a744ce711d49849f" }),
 ]);
 
 const FAMILY_RUNTIME_ADAPTERS_5 = Object.freeze([
-  Object.freeze({ factory: FAMILY_5_RUNTIME_ADAPTER_0, modulePath: "families/univ3-standard/src/search-adapter.ts", exportName: "UNIV3_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x830ee73d2675031cade49c0f12d37322596ff9268a83d320f8d56bf8b0cc0cdd", leafDigest: "0x8e5f347ef433c6c71e7f29d5ef3b50b5f3761d697ce83ec1481cbb8586e9b345" }),
+  Object.freeze({ factory: FAMILY_5_RUNTIME_ADAPTER_0, modulePath: "families/univ3-standard/src/runtime/physical-adapter.ts", exportName: "UNIV3_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x1a57501e0e614f208c5bb90326da3b5f7462ef229ee6789b3a4114593f466cf2", leafDigest: "0x47c6c143d79212a107d519bc476343b5350c043d6ebd7152ea75ae8f6100bff7" }),
+  Object.freeze({ factory: FAMILY_5_RUNTIME_ADAPTER_1, modulePath: "families/univ3-standard/src/search-adapter.ts", exportName: "UNIV3_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x88a047a51f7c1ef53ea94bde2551928b37cf053ceb2cca8aa07b1a81a8b34f29", leafDigest: "0xbc88df9fc0a484d0a3dfc6fce0329517040fb6bab3449a195a628fe387385407" }),
 ]);
 
 const FAMILY_RUNTIME_ADAPTERS_6 = Object.freeze([
-  Object.freeze({ factory: FAMILY_6_RUNTIME_ADAPTER_0, modulePath: "families/univ4/src/search-adapter.ts", exportName: "UNIV4_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x40f2013295c1b9b6102f9ab4ecac4ec3f4f227bfd70a2a168d2e46c0fc9c5a13", leafDigest: "0xb466923b570711f8ac989b78d09b70f85e6cf54f4a2e788a284a70f604ed123a" }),
+  Object.freeze({ factory: FAMILY_6_RUNTIME_ADAPTER_0, modulePath: "families/univ4/src/runtime/physical-adapter.ts", exportName: "UNIV4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x56c892b37cf30b488f98f96e1e5fa63e8cd65939ac1a645a1cd6e92f3dfa1ad3", leafDigest: "0x14620983a4c48a99b8507c614a3014c0820563b98ca7fc9358bb01276d65480c" }),
+  Object.freeze({ factory: FAMILY_6_RUNTIME_ADAPTER_1, modulePath: "families/univ4/src/search-adapter.ts", exportName: "UNIV4_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0xb2871a761330fdc1cdd0db34ec384cd5f18f0f19ee1f992dbfef1da6def5f047", leafDigest: "0x41038347a750fb90145a1559ce6300a9cb4201a1596b923be60c64563078d39d" }),
 ]);
 
 const FAMILY_NOMINATION_PROGRAMS_0 = Object.freeze([
@@ -260,103 +274,103 @@ const FAMILY_SOURCE_PLANS_6 = Object.freeze([
 const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
 {
   "schemaVersion": 1,
-  "releaseIntentRoot": "0xa689c2de54e413019f140f0ab64a491ea4de301b550d7741b5a7bfb8d94d9942",
-  "definitionCatalogRoot": "0x90be8da08a232928e0647d4d5b8e53b9e10df37c853dc51446ce4086990c0017",
-  "proposedCapabilitySetRoot": "0xe075e79fdea4a047afa489b968d5d7b70db834dc5d3588d38d702399da5123cb",
-  "nominationProgramSetRoot": "0xfb9516788aaff68ce325a9181cebaa9492570736a6a791905bdd2e68057a900b",
+  "releaseIntentRoot": "0xb163fb020d316b6ca91417ae67ece8afc5d39ad0e78296867759fd990e09eff0",
+  "definitionCatalogRoot": "0xed3d2ecf153b044097cc16619142c6995ac5668698884438c68a726d502a54d9",
+  "proposedCapabilitySetRoot": "0x5d4afea358e375f454ef867714fe06176c705202973871a8953585cbc4cb8e41",
+  "nominationProgramSetRoot": "0x33bc86b777b13f9a35f91a1c7753b9573aec55e9ad6ebe921ca2e5340a3abdaa",
   "families": [
     {
       "entry": {
         "familyId": "angstrom-v4",
-        "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
-        "issuerRef": "0x4165add56c7989ad0f3b75650270cbe8fa15220e402cf975d1cdb669da6a0116",
+        "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+        "issuerRef": "0x04dfe6f4e8144c009097cb4674262448729e5b0fee3a069a0ee6340a7641c8d3",
         "authorityRef": "0xa3bff3fcf4fd5fa576921458220ed77d1b9ea2e095f1f3860eae2fe5afcaaf1b",
         "lifecycleRefs": {
           "nomination": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "nomination",
             "capabilityId": "family.angstrom-v4.nomination",
             "version": "1.0.0",
             "schemaHash": "0xc14bf1f7e2bb5c3e88dcd7b2601c98c788589db49c860e0210a2b04f2865ff3f",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0xe6cd6a5a7caae007f05cab1310963bcd9a387c4b144ecee1f06d7709f4f060a4"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0xbf60b2045ff12823eda7fc7e0c5e8ec0f45c71313726a7a374c4096df17c6b76"
           },
           "identity": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "identity",
             "capabilityId": "family.angstrom-v4.identity",
             "version": "1.0.0",
             "schemaHash": "0xbdd6d6a5ba16b7d5f1418884ab6c21a750d08af63361ada6ff32b8f3bc340ef1",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x962c5a99d0719b0f57e29b0e1b75b4c16403e0ee865b281c6ddaa40d8fe66acd"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x9cfbaec53d52d16a2b30c5dc9f6ecfd0f2011ece62740003d54029e9c58f565a"
           },
           "materialization": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "materialization",
             "capabilityId": "family.angstrom-v4.materialization",
             "version": "1.0.0",
             "schemaHash": "0x990fdc4498f6047197d502853abe4154e51030bf60e068bddb53909c4412f268",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x8f21b90a28290ea7335ec97f3395d0990d3644977461eb4181eae4243bb13754"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x16f3dc90027b5005a868ac2cacde5ccb6094a6e469a17d4fb06dd571034f405c"
           },
           "projection": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "projection",
             "capabilityId": "family.angstrom-v4.projection",
             "version": "1.0.0",
             "schemaHash": "0xc5a5661f136995116f1946f20600a8cdc24392afdc54e8ea343d1ca80fdc18ea",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x3f9117ce21c48e196536ceffad09a3cb5e20b15ee88753c61968e8a936a6f2dd"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x026498255f88383f56d7498f44cc5dcc47d03de47104a47df9834cd8d4b4995f"
           },
           "rehydration": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "rehydration",
             "capabilityId": "family.angstrom-v4.rehydration",
             "version": "1.0.0",
             "schemaHash": "0x6c32109167ae31b7f8bf410f35241846eb538ed29fde9a4cf6646519b05543f3",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x36d9502642a78f05cfe514860bc6d03bbccab762547d42617133212414f5c4cd"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x89b8d9cbd30c0d59e6fa3c2f7dc8224e8d5b207d48e91575d8894dabfcb44bf0"
           }
         },
         "extensionRefs": [
           {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "capability",
             "capabilityId": "family.angstrom-v4.coarse",
             "version": "1.0.0",
             "schemaHash": "0x944ab136cdcc9a1387032f36da595618c12f8b8e89196fb552aa5059361d39eb",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x84edc40673570fff9b2f371e1cacb374607aa7a4b63970c79b0a88b1f06afa11"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0xbebc248cf13a222f49107bd02abf9b29f85d96eba71bad93ab2d9dc84d19be17"
           },
           {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "capability",
             "capabilityId": "family.angstrom-v4.exact",
             "version": "1.0.0",
             "schemaHash": "0x169b1909e08e2eb3b2980a02634655f18b66b3a09356f740ba2474e437ecdf08",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x397dc500ec41fdf09f4bcaf725fefeb132ad0d2638a008c94849545477bd45be"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x8d91942c71921129a8f13ba708ab237dacf0d0d9b1a111857221ba75f2783a67"
           },
           {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "capability",
             "capabilityId": "family.angstrom-v4.state",
             "version": "1.0.0",
             "schemaHash": "0x9ff7fa0a934cfece7dca6bf4f94e6658096b413db18632cc19c9faa4cb6fb7fd",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0xf52975d16e7a4bf25b88f789144c42cc77134c1393a7d58f6da9779e2bb43172"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x9d42c5ce0327071f4c58bbe4ddd57fd8a02a1d08e0fc40cd4878da14c5fe8832"
           }
         ],
         "actionOwnerRefs": [
-          "0x939817ea467aa622d369c081d08ffee84d6687b2dd5b3179e7d466b0dd11b107"
+          "0xf942dc9c31d7b0e27a87a1c1caabee3d4829d8f3c1cdd9c424137c2a5ec0c9e3"
         ],
         "factContractRefs": [
           {
@@ -382,107 +396,107 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         ],
         "sourcePlanRefs": [
           {
-            "ownerRef": "0xce9a28882aa734bb640ffb2ff2c1c344a6fd95d604ed4b19081a17353d305c0a",
-            "sourcePlanRef": "0x6ac99b4d82b4fafd1f460f86c709290f3fa75fa4535dcb5c799bac750b44e8b3",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "ownerRef": "0x546736bb5e838b5166c2ef0a3b84ce04037fe6f4d4d518fa49c5db52bd5b53ea",
+            "sourcePlanRef": "0x294bd036e9f0b36b247e0561411ff2ddc0e1a94131be492738c2c475a294bfc3",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "completeness": "contiguous-history",
             "historyStartBlock": "0"
           },
           {
-            "ownerRef": "0x5d494255a6a3d0014e5dfece5a72f69800eb60cb9c16f38ce4409e5462d2307c",
-            "sourcePlanRef": "0x91fd7bc1e23bc429e2cfa6839f54dd6fea6733a33224c8e4271fb5fa5088d9ae",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "ownerRef": "0x587d342ab9c325bf24548e54c059cc3c6412ee3ba6416f8f12f3660bc81497e1",
+            "sourcePlanRef": "0xd45eaacc2ede1a237a5ea4a37c9d7d1dc59dd2703a7e6eda73178d7334c0d03c",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "completeness": "nomination-only",
             "historyStartBlock": null
           }
         ],
-        "definitionCatalogLeafDigest": "0xbc08c305724d958cdad95169445fb2cafa8139d7bab14e09e8926c603510f207",
-        "capabilityCatalogRoot": "0xcc9e29c4a709cf4d66ed18b8c9fbd94c3dc94d20ed5e8a768a632d8ad87f17e6"
+        "definitionCatalogLeafDigest": "0xec7499322d53ef1ad150712c73afee2d249c4f94b2fa1a0a994b92be95cb9f8e",
+        "capabilityCatalogRoot": "0x2c0e0724aa0f64944ac0a5c882e67ed3ccf791dfe0f35d73dbe0ff43db704bda"
       },
       "publicEntry": {
         "modulePath": "families/angstrom-v4/src/public.ts",
         "exportName": "ANGSTROM_V4_DEFINITION",
-        "closureRoot": "0x350a58e159b27d16a242624afcbd08b68abd5ed35d6762a4e02a299621a6db38"
+        "closureRoot": "0x612fe81296a677170d8735d0d2731f0494e1007b6d9c118a0a9e8184541feec4"
       },
       "stages": [
         {
           "stage": "identity",
           "modulePath": "families/angstrom-v4/src/runtime.ts",
           "exportName": "ANGSTROM_V4_IDENTITY_RUNTIME",
-          "closureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
+          "closureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
           "stageRef": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "identity",
             "capabilityId": "family.angstrom-v4.identity",
             "version": "1.0.0",
             "schemaHash": "0xbdd6d6a5ba16b7d5f1418884ab6c21a750d08af63361ada6ff32b8f3bc340ef1",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x962c5a99d0719b0f57e29b0e1b75b4c16403e0ee865b281c6ddaa40d8fe66acd"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x9cfbaec53d52d16a2b30c5dc9f6ecfd0f2011ece62740003d54029e9c58f565a"
           }
         },
         {
           "stage": "materialization",
           "modulePath": "families/angstrom-v4/src/runtime.ts",
           "exportName": "ANGSTROM_V4_MATERIALIZATION_RUNTIME",
-          "closureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
+          "closureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
           "stageRef": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "materialization",
             "capabilityId": "family.angstrom-v4.materialization",
             "version": "1.0.0",
             "schemaHash": "0x990fdc4498f6047197d502853abe4154e51030bf60e068bddb53909c4412f268",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x8f21b90a28290ea7335ec97f3395d0990d3644977461eb4181eae4243bb13754"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x16f3dc90027b5005a868ac2cacde5ccb6094a6e469a17d4fb06dd571034f405c"
           }
         },
         {
           "stage": "nomination",
           "modulePath": "families/angstrom-v4/src/runtime.ts",
           "exportName": "ANGSTROM_V4_NOMINATION_RUNTIME",
-          "closureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
+          "closureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
           "stageRef": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "nomination",
             "capabilityId": "family.angstrom-v4.nomination",
             "version": "1.0.0",
             "schemaHash": "0xc14bf1f7e2bb5c3e88dcd7b2601c98c788589db49c860e0210a2b04f2865ff3f",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0xe6cd6a5a7caae007f05cab1310963bcd9a387c4b144ecee1f06d7709f4f060a4"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0xbf60b2045ff12823eda7fc7e0c5e8ec0f45c71313726a7a374c4096df17c6b76"
           }
         },
         {
           "stage": "projection",
           "modulePath": "families/angstrom-v4/src/runtime.ts",
           "exportName": "ANGSTROM_V4_PROJECTION_RUNTIME",
-          "closureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
+          "closureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
           "stageRef": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "projection",
             "capabilityId": "family.angstrom-v4.projection",
             "version": "1.0.0",
             "schemaHash": "0xc5a5661f136995116f1946f20600a8cdc24392afdc54e8ea343d1ca80fdc18ea",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x3f9117ce21c48e196536ceffad09a3cb5e20b15ee88753c61968e8a936a6f2dd"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x026498255f88383f56d7498f44cc5dcc47d03de47104a47df9834cd8d4b4995f"
           }
         },
         {
           "stage": "rehydration",
           "modulePath": "families/angstrom-v4/src/runtime.ts",
           "exportName": "ANGSTROM_V4_REHYDRATION_RUNTIME",
-          "closureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
+          "closureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
           "stageRef": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "rehydration",
             "capabilityId": "family.angstrom-v4.rehydration",
             "version": "1.0.0",
             "schemaHash": "0x6c32109167ae31b7f8bf410f35241846eb538ed29fde9a4cf6646519b05543f3",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x36d9502642a78f05cfe514860bc6d03bbccab762547d42617133212414f5c4cd"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x89b8d9cbd30c0d59e6fa3c2f7dc8224e8d5b207d48e91575d8894dabfcb44bf0"
           }
         }
       ],
@@ -491,70 +505,70 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "sourcePlanId": "angstrom-v4.fixed-cutoff-50-block",
           "modulePath": "families/angstrom-v4/src/source-plan.ts",
           "exportName": "ANGSTROM_V4_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x2e46f8675abc264bc69c80b3b038a544d01378be05743829045a7b0e29afcea9",
+          "closureRoot": "0x6a8bc27be54dac72bc99a2811d63e36de1e3cc0757f22bdf9d7f657eac1a27f5",
           "schemaHash": "0x0b3cb589decd6edffe6c6708db4e597038d5393b8984ef377b3975cdaa166729",
           "planRef": {
-            "ownerRef": "0x5d494255a6a3d0014e5dfece5a72f69800eb60cb9c16f38ce4409e5462d2307c",
-            "sourcePlanRef": "0x91fd7bc1e23bc429e2cfa6839f54dd6fea6733a33224c8e4271fb5fa5088d9ae",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "ownerRef": "0x587d342ab9c325bf24548e54c059cc3c6412ee3ba6416f8f12f3660bc81497e1",
+            "sourcePlanRef": "0xd45eaacc2ede1a237a5ea4a37c9d7d1dc59dd2703a7e6eda73178d7334c0d03c",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "completeness": "nomination-only",
             "historyStartBlock": null
           },
-          "leafDigest": "0x347f27bcb2f51cfc3130fde80efd0eeabcc1018df9a426ca4667d0da6a432a1d",
+          "leafDigest": "0xc76a52196d5988462676d5592772b61f621f51df0ec40f585d5fe8e052c72efa",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/angstrom-v4/src/source-plan.ts",
               "exportName": "ANGSTROM_V4_SOURCE_NOMINATION_PROGRAM",
-              "closureRoot": "0x2e46f8675abc264bc69c80b3b038a544d01378be05743829045a7b0e29afcea9",
+              "closureRoot": "0x6a8bc27be54dac72bc99a2811d63e36de1e3cc0757f22bdf9d7f657eac1a27f5",
               "schemaHash": "0x0b3cb589decd6edffe6c6708db4e597038d5393b8984ef377b3975cdaa166729"
             },
             "mutationCorpus": {
               "modulePath": "families/angstrom-v4/src/nomination-qualification.ts",
               "exportName": "ANGSTROM_V4_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0xae08ed717dc8c774597781191d19eae606f0696c98a0e6aeadc1dcc5b95c5c7d"
+              "closureRoot": "0x855b42e2804341de871532ec815f1187c4cfdbb1981640985e5e49ec3cfc364a"
             },
             "independentOracle": {
               "modulePath": "families/angstrom-v4/src/nomination-qualification.ts",
               "exportName": "ANGSTROM_V4_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0xae08ed717dc8c774597781191d19eae606f0696c98a0e6aeadc1dcc5b95c5c7d"
+              "closureRoot": "0x855b42e2804341de871532ec815f1187c4cfdbb1981640985e5e49ec3cfc364a"
             },
-            "nominationProgramRoot": "0xf631d4fadd4a82b3e0b5646086a2131e291723ab798d7bd42b72471d4c19ff6e",
-            "proposalLeafDigest": "0x99b34dffcc4c4fa83bc215b5ed3f8e970c5be1ccbbf3c1308a675b1b13bb2e69"
+            "nominationProgramRoot": "0xf9cf64a7ea9b4beb6278b5bb10aa3086800839c39efa8bbf966ac591c95f2e25",
+            "proposalLeafDigest": "0x0c2cfc4b49b3f0a4a388c260d87d40f0a4d1dc187b7b0f815c3834952650ff8a"
           }
         },
         {
           "sourcePlanId": "angstrom-v4.pool-manager-initialize-history",
           "modulePath": "families/angstrom-v4/src/history-source-plan.ts",
           "exportName": "ANGSTROM_V4_HISTORY_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x4abe2ca11dfef14861468e991e7bcecd00864f52d843e00821124f33f5797580",
+          "closureRoot": "0x9d14d2457baf22a0494dd8829e7b72e89c5a12648159703d14cedd991ab6dd9b",
           "schemaHash": "0xb21d57e42333e731aae90be4211f877a33283118c02c461e439f3e888c4b507e",
           "planRef": {
-            "ownerRef": "0xce9a28882aa734bb640ffb2ff2c1c344a6fd95d604ed4b19081a17353d305c0a",
-            "sourcePlanRef": "0x6ac99b4d82b4fafd1f460f86c709290f3fa75fa4535dcb5c799bac750b44e8b3",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "ownerRef": "0x546736bb5e838b5166c2ef0a3b84ce04037fe6f4d4d518fa49c5db52bd5b53ea",
+            "sourcePlanRef": "0x294bd036e9f0b36b247e0561411ff2ddc0e1a94131be492738c2c475a294bfc3",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "completeness": "contiguous-history",
             "historyStartBlock": "0"
           },
-          "leafDigest": "0xe48623f4d8bb27c152a66e63a5c10863f8dc1f86fad537f0d8189207dcec1315",
+          "leafDigest": "0x368424efd57dc93415b3c1e16c960bd5e7c32bf87f9f5689d2fb2712f7055694",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/angstrom-v4/src/history-source-plan.ts",
               "exportName": "ANGSTROM_V4_HISTORY_NOMINATION_PROGRAM",
-              "closureRoot": "0x4abe2ca11dfef14861468e991e7bcecd00864f52d843e00821124f33f5797580",
+              "closureRoot": "0x9d14d2457baf22a0494dd8829e7b72e89c5a12648159703d14cedd991ab6dd9b",
               "schemaHash": "0xb21d57e42333e731aae90be4211f877a33283118c02c461e439f3e888c4b507e"
             },
             "mutationCorpus": {
               "modulePath": "families/angstrom-v4/src/nomination-qualification.ts",
               "exportName": "ANGSTROM_V4_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0xae08ed717dc8c774597781191d19eae606f0696c98a0e6aeadc1dcc5b95c5c7d"
+              "closureRoot": "0x855b42e2804341de871532ec815f1187c4cfdbb1981640985e5e49ec3cfc364a"
             },
             "independentOracle": {
               "modulePath": "families/angstrom-v4/src/nomination-qualification.ts",
               "exportName": "ANGSTROM_V4_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0xae08ed717dc8c774597781191d19eae606f0696c98a0e6aeadc1dcc5b95c5c7d"
+              "closureRoot": "0x855b42e2804341de871532ec815f1187c4cfdbb1981640985e5e49ec3cfc364a"
             },
-            "nominationProgramRoot": "0x95d4b3c9233ae218c56180e5f92540cad04aec53c4578831819c0b80f5804ce1",
-            "proposalLeafDigest": "0x273f8661c1e50f80c49b6884179a24dc3f12ca602838ddd13813226c2f7d573d"
+            "nominationProgramRoot": "0xe40517e9613541980a79d01f4bba36cd983bb2be134944149ca20b3547bb8fc6",
+            "proposalLeafDigest": "0x0e3435dbe257ad5f12fba5c00115f385d0e98712f71c4e485c815b194f07ace5"
           }
         }
       ],
@@ -562,46 +576,46 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/angstrom-v4/src/runtime.ts",
           "exportName": "ANGSTROM_V4_RUNTIME",
-          "closureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
+          "closureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
           "capabilityRef": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "capability",
             "capabilityId": "family.angstrom-v4.coarse",
             "version": "1.0.0",
             "schemaHash": "0x944ab136cdcc9a1387032f36da595618c12f8b8e89196fb552aa5059361d39eb",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x84edc40673570fff9b2f371e1cacb374607aa7a4b63970c79b0a88b1f06afa11"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0xbebc248cf13a222f49107bd02abf9b29f85d96eba71bad93ab2d9dc84d19be17"
           }
         },
         {
           "modulePath": "families/angstrom-v4/src/runtime.ts",
           "exportName": "ANGSTROM_V4_RUNTIME",
-          "closureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
+          "closureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
           "capabilityRef": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "capability",
             "capabilityId": "family.angstrom-v4.exact",
             "version": "1.0.0",
             "schemaHash": "0x169b1909e08e2eb3b2980a02634655f18b66b3a09356f740ba2474e437ecdf08",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0x397dc500ec41fdf09f4bcaf725fefeb132ad0d2638a008c94849545477bd45be"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x8d91942c71921129a8f13ba708ab237dacf0d0d9b1a111857221ba75f2783a67"
           }
         },
         {
           "modulePath": "families/angstrom-v4/src/runtime.ts",
           "exportName": "ANGSTROM_V4_RUNTIME",
-          "closureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
+          "closureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
           "capabilityRef": {
             "familyId": "angstrom-v4",
-            "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
             "stage": "capability",
             "capabilityId": "family.angstrom-v4.state",
             "version": "1.0.0",
             "schemaHash": "0x9ff7fa0a934cfece7dca6bf4f94e6658096b413db18632cc19c9faa4cb6fb7fd",
-            "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-            "ownerRef": "0xf52975d16e7a4bf25b88f789144c42cc77134c1393a7d58f6da9779e2bb43172"
+            "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+            "ownerRef": "0x9d42c5ce0327071f4c58bbe4ddd57fd8a02a1d08e0fc40cd4878da14c5fe8832"
           }
         }
       ],
@@ -609,8 +623,8 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/angstrom-v4/src/action.ts",
           "exportName": "ANGSTROM_V4_ACTION_PORT",
-          "closureRoot": "0x4d7dddb8a582c98c7e6c2fdc63cfc6aee7e8181d1104e920af3b1aa92c07088f",
-          "ownerRef": "0x939817ea467aa622d369c081d08ffee84d6687b2dd5b3179e7d466b0dd11b107",
+          "closureRoot": "0xff33f45ae09286bdc9ab294e833a390a4769d43bc92ac851c179eff995bdcd41",
+          "ownerRef": "0xf942dc9c31d7b0e27a87a1c1caabee3d4829d8f3c1cdd9c424137c2a5ec0c9e3",
           "ownerId": "family.angstrom-v4.swap-action",
           "version": "1.0.0",
           "schemaHash": "0xa02285be485d0f9cbdec07ffb4243b8b0e21dc366f47afff9ba6193795f8e3fd",
@@ -622,144 +636,153 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
       ],
       "runtimeAdapters": [
         {
+          "role": "physical-lifecycle/v1",
+          "modulePath": "families/angstrom-v4/src/runtime/physical-adapter.ts",
+          "exportName": "ANGSTROM_V4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+          "closureRoot": "0xbf1fef89d033a281d3666bb46843fb41f0c03ac828b8158e71e94b8ff01b68a7",
+          "capabilityRefs": {},
+          "actionOwnerRefs": {},
+          "leafDigest": "0xa9ef1c70b162db6c1dc7306953328cf074180debecc6abc7de74a479e2e5d63a"
+        },
+        {
           "role": "search/v1",
           "modulePath": "families/angstrom-v4/src/search-adapter.ts",
           "exportName": "ANGSTROM_V4_SEARCH_RUNTIME_ADAPTER_FACTORY",
-          "closureRoot": "0x6b1ee3ebaaeecfc7fecbd90fb315f897c2f987897528d0588d90252eae11e4e6",
+          "closureRoot": "0x8827e4a0d2ef9885e8103fe886ce083507a44ce95b337b90e9ef22c8d7798fe6",
           "capabilityRefs": {
             "coarse": {
               "familyId": "angstrom-v4",
-              "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+              "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
               "stage": "capability",
               "capabilityId": "family.angstrom-v4.coarse",
               "version": "1.0.0",
               "schemaHash": "0x944ab136cdcc9a1387032f36da595618c12f8b8e89196fb552aa5059361d39eb",
-              "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-              "ownerRef": "0x84edc40673570fff9b2f371e1cacb374607aa7a4b63970c79b0a88b1f06afa11"
+              "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+              "ownerRef": "0xbebc248cf13a222f49107bd02abf9b29f85d96eba71bad93ab2d9dc84d19be17"
             },
             "exact": {
               "familyId": "angstrom-v4",
-              "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+              "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
               "stage": "capability",
               "capabilityId": "family.angstrom-v4.exact",
               "version": "1.0.0",
               "schemaHash": "0x169b1909e08e2eb3b2980a02634655f18b66b3a09356f740ba2474e437ecdf08",
-              "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-              "ownerRef": "0x397dc500ec41fdf09f4bcaf725fefeb132ad0d2638a008c94849545477bd45be"
+              "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+              "ownerRef": "0x8d91942c71921129a8f13ba708ab237dacf0d0d9b1a111857221ba75f2783a67"
             },
             "state": {
               "familyId": "angstrom-v4",
-              "familyDefinitionHash": "0x5ed29a6fc2bd4fece7ae562e136a36dd98ef9471792f9fc0534446fa83cabe2e",
+              "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
               "stage": "capability",
               "capabilityId": "family.angstrom-v4.state",
               "version": "1.0.0",
               "schemaHash": "0x9ff7fa0a934cfece7dca6bf4f94e6658096b413db18632cc19c9faa4cb6fb7fd",
-              "interpreterHash": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa",
-              "ownerRef": "0xf52975d16e7a4bf25b88f789144c42cc77134c1393a7d58f6da9779e2bb43172"
+              "interpreterHash": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299",
+              "ownerRef": "0x9d42c5ce0327071f4c58bbe4ddd57fd8a02a1d08e0fc40cd4878da14c5fe8832"
             }
           },
           "actionOwnerRefs": {
-            "action": "0x939817ea467aa622d369c081d08ffee84d6687b2dd5b3179e7d466b0dd11b107"
+            "action": "0xf942dc9c31d7b0e27a87a1c1caabee3d4829d8f3c1cdd9c424137c2a5ec0c9e3"
           },
-          "leafDigest": "0xf057463c1da1989034493880f534bbf939083159593770fa4abb93537181a41a"
+          "leafDigest": "0xc37f05fc843ea08d52f46564cc411345f02d4af35ca45f892177e84972c85b0d"
         }
       ],
-      "runtimeAdapterRoot": "0xc7f592dd1cbb7e0ef2ea9ecec9fb75189d170ff52bdc46b87fb175efd3e4df3c",
-      "sourcePlanRoot": "0xeb09311d1588189a6950f877d3d4aa963658ed06005d2a37a29771bc6b9ca5bc",
-      "stageDefinitionRoot": "0x986cfdabb81309eb249ea973faf0d7dbcda0155637991e8bda63cc1f99910852"
+      "runtimeAdapterRoot": "0x04e12c89a69e7905e61059403255ba796e606e5ce8867ae4da603ea41ac84c50",
+      "sourcePlanRoot": "0xca8fe0db40fe96917e550e9748400c1ce7ea8b8f043ba5de28a03f64374d9be3",
+      "stageDefinitionRoot": "0x5f6927aef44dc44b4450fbebccfb8412610550119dfdba9cfdabfdc1e0c773f9"
     },
     {
       "entry": {
         "familyId": "curve-underlying",
-        "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
-        "issuerRef": "0x94dc40f70d5081e6279630718bb78416eeab8d10aab3b99b50d33c98fe8d3d4b",
+        "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
+        "issuerRef": "0xff9af5eac2088c5c91f84902508c51006a06823e65cfd6d5ba2e1c5a1ba75fd1",
         "authorityRef": "0x886485bac74bd8309615d1ddf846266851ced8fc3f043c6119e17c9dc445d02b",
         "lifecycleRefs": {
           "nomination": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "nomination",
             "capabilityId": "family.curve-underlying.nomination",
             "version": "1.0.0",
             "schemaHash": "0x6fe3febbe355a5ab29d549e241cc633a7ff61d2da7bef0a832ac3d93334e1bba",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x2b37bf663634157cb9546f4656de5188eea374b7e8271d2a37733284e30e72e8"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0x2b223b64f2efe5a4994029b538007da666842b1cefed4d6621ee8a27c4f541bc"
           },
           "identity": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "identity",
             "capabilityId": "family.curve-underlying.identity",
             "version": "1.0.0",
             "schemaHash": "0x397c9b851781de04a5b34adc43e17c9feacad776b9b0ff8ea1d52d87165fcd98",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0xec5d731d4d0400c6e9e3f196d28f7b2af0fa6c27290b50d74e9f3be826a90ccb"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0x8c39b652686496c9e995f2dfd04417e36aab7a43dd9e81dcbde0a2b4531e8d1e"
           },
           "materialization": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "materialization",
             "capabilityId": "family.curve-underlying.materialization",
             "version": "1.0.0",
             "schemaHash": "0x315c5215559b3f08586e54df3e75abf5fd5f00ba89c99961ce33e7e42acdb6cb",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x38e2841441949c0b406b2021521cfd6f7f1dc30cf72ba4040a3c8909627552a1"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0xf2b3d016ff6cc0c10ae07dd5c6138378c61033dd2a5da6fcc2dadeb555d044d4"
           },
           "projection": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "projection",
             "capabilityId": "family.curve-underlying.projection",
             "version": "1.0.0",
             "schemaHash": "0xbdf75e9be5bb72823e4c6d201bd1759f6f75677662a481568cffa22caa7ac835",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x96ec1114c8b7f3f7ec788929fb75f71ee57c7981843943c4604c4f9d889ef836"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0xfbbbcca95494f7075722e66fcbf8fce5d1593a3e58f38de9242fc0cb4326fd04"
           },
           "rehydration": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "rehydration",
             "capabilityId": "family.curve-underlying.rehydration",
             "version": "1.0.0",
             "schemaHash": "0x206bdbae0c851c6712cbe13765d5eb34be3b36e2bdee080bc408e978e96cb42d",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0xc6b4d3def40242ea31c96608c6376c84fd3f1230ecb189f56247f1cfe78dd1f3"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0xfdcf3a012dee077ffaa562fff2a60c8126b5cd5b8dcd6e8ab56c5e222c921f39"
           }
         },
         "extensionRefs": [
           {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.coarse",
             "version": "1.0.0",
             "schemaHash": "0xd0fdf9650e8fd1cbf82fa38482a74bb149bf00c7299245d7e40bb96381537205",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x14243e838a441d28dbd9fcea94022f7abbb07228105bcfd9a14c8775c2292693"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0xb394b20b9abd166fa026ddf9f605232cdf05c7c0e56ac0d0fe54c898e8d4fb7f"
           },
           {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.exact",
             "version": "1.0.0",
             "schemaHash": "0xbc2c7384bfcb78b3be364e213f241f32d8ea2929f6eb2a7120d50d27caa32be2",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x55a812eb6942b1bebc84979d838db6ecf46a9cfb8272dd576d7939a0cc2c84a3"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0x3d4d673960943abf2e974d59b17fb127af0fc63c554f072317516bc88f272523"
           },
           {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.state",
             "version": "1.0.0",
             "schemaHash": "0x1a51e44914829de075debc91a33a7831e8b1ca48fc4fb288f5a3faf8907c7e5a",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x84332b7f83eb68d54ed9a0e41668d1a6ac72382b08eebd9b30f6bdfd187a61dc"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0x252c1ab9729a4d3772ba6330d708183babb76c3cf2c7a4263fd6af6af90eca3f"
           }
         ],
         "actionOwnerRefs": [
-          "0x1cb3506025fe8153572c091946aa608b273b6af56af5dc2778737f1267a59e0d"
+          "0x1c374cfee81e546d4ab13835f27ad7f8b4a931f2e115399b35a487a57760a4ae"
         ],
         "factContractRefs": [
           {
@@ -775,107 +798,107 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         ],
         "sourcePlanRefs": [
           {
-            "ownerRef": "0xf640b68488d1bfe18324444540e610c49ec2187a1092681d118751371b9468ed",
-            "sourcePlanRef": "0x456811ba0cfdce1c1ba36f82539706c15fb4af92b477b7f08b26c89ee6255272",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
-            "completeness": "complete-snapshot",
+            "ownerRef": "0xbe9814c38405d54da2a1708a14e353087584ca0a70626d9e67b586e944bb2663",
+            "sourcePlanRef": "0x3c2a0f155a0facf061057889233e68369c6b055a3aee123850758f707a0b9a83",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
+            "completeness": "nomination-only",
             "historyStartBlock": null
           },
           {
-            "ownerRef": "0x21cd388f14cbcc92a2a6a47f41eab0584e61d8e661d91a6fc2e1160513f9b27a",
-            "sourcePlanRef": "0x8449c18a6504e2246178274520b4902683ab615ffb9c5810eac0aa19e0947ee4",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
-            "completeness": "nomination-only",
+            "ownerRef": "0x8db504b7b28e45b8dc86ad61465ea9bf8f9aa709512251a9c76225b1396db632",
+            "sourcePlanRef": "0xa2a1e468e1398df4992f25a4b6f40b912fd2fc42e24e51cbba5ae29645086209",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
+            "completeness": "complete-snapshot",
             "historyStartBlock": null
           }
         ],
-        "definitionCatalogLeafDigest": "0x9b8421b4c2b1a02e76c9ca568973b8b7234e9779537df754e4d84a180ba0ef8b",
-        "capabilityCatalogRoot": "0x955c00a6d45f39462ba28550c3ae7c08e623dfc7d8c460ff4da9b7526829b71d"
+        "definitionCatalogLeafDigest": "0x70661bdca1a954611051c35b655ebc47fc429e32c813131f0bd5569a17cb86d1",
+        "capabilityCatalogRoot": "0x695b431d124ae169aa9e9a7ca1f86255740f6d106991ab40612572d3f6c19033"
       },
       "publicEntry": {
         "modulePath": "families/curve-underlying/src/public.ts",
         "exportName": "CURVE_UNDERLYING_DEFINITION",
-        "closureRoot": "0x970f33afa9409e60e24844593653719af2a3f2bce36bf8b5e751e086e64c18e8"
+        "closureRoot": "0xc65a90367645e706126adb879776d338e54b89892185641acc8562f27aad6a10"
       },
       "stages": [
         {
           "stage": "identity",
           "modulePath": "families/curve-underlying/src/runtime.ts",
           "exportName": "CURVE_IDENTITY_RUNTIME",
-          "closureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
+          "closureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
           "stageRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "identity",
             "capabilityId": "family.curve-underlying.identity",
             "version": "1.0.0",
             "schemaHash": "0x397c9b851781de04a5b34adc43e17c9feacad776b9b0ff8ea1d52d87165fcd98",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0xec5d731d4d0400c6e9e3f196d28f7b2af0fa6c27290b50d74e9f3be826a90ccb"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0x8c39b652686496c9e995f2dfd04417e36aab7a43dd9e81dcbde0a2b4531e8d1e"
           }
         },
         {
           "stage": "materialization",
           "modulePath": "families/curve-underlying/src/runtime.ts",
           "exportName": "CURVE_MATERIALIZATION_RUNTIME",
-          "closureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
+          "closureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
           "stageRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "materialization",
             "capabilityId": "family.curve-underlying.materialization",
             "version": "1.0.0",
             "schemaHash": "0x315c5215559b3f08586e54df3e75abf5fd5f00ba89c99961ce33e7e42acdb6cb",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x38e2841441949c0b406b2021521cfd6f7f1dc30cf72ba4040a3c8909627552a1"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0xf2b3d016ff6cc0c10ae07dd5c6138378c61033dd2a5da6fcc2dadeb555d044d4"
           }
         },
         {
           "stage": "nomination",
           "modulePath": "families/curve-underlying/src/runtime.ts",
           "exportName": "CURVE_NOMINATION_RUNTIME",
-          "closureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
+          "closureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
           "stageRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "nomination",
             "capabilityId": "family.curve-underlying.nomination",
             "version": "1.0.0",
             "schemaHash": "0x6fe3febbe355a5ab29d549e241cc633a7ff61d2da7bef0a832ac3d93334e1bba",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x2b37bf663634157cb9546f4656de5188eea374b7e8271d2a37733284e30e72e8"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0x2b223b64f2efe5a4994029b538007da666842b1cefed4d6621ee8a27c4f541bc"
           }
         },
         {
           "stage": "projection",
           "modulePath": "families/curve-underlying/src/runtime.ts",
           "exportName": "CURVE_PROJECTION_RUNTIME",
-          "closureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
+          "closureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
           "stageRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "projection",
             "capabilityId": "family.curve-underlying.projection",
             "version": "1.0.0",
             "schemaHash": "0xbdf75e9be5bb72823e4c6d201bd1759f6f75677662a481568cffa22caa7ac835",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x96ec1114c8b7f3f7ec788929fb75f71ee57c7981843943c4604c4f9d889ef836"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0xfbbbcca95494f7075722e66fcbf8fce5d1593a3e58f38de9242fc0cb4326fd04"
           }
         },
         {
           "stage": "rehydration",
           "modulePath": "families/curve-underlying/src/runtime.ts",
           "exportName": "CURVE_REHYDRATION_RUNTIME",
-          "closureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
+          "closureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
           "stageRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "rehydration",
             "capabilityId": "family.curve-underlying.rehydration",
             "version": "1.0.0",
             "schemaHash": "0x206bdbae0c851c6712cbe13765d5eb34be3b36e2bdee080bc408e978e96cb42d",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0xc6b4d3def40242ea31c96608c6376c84fd3f1230ecb189f56247f1cfe78dd1f3"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0xfdcf3a012dee077ffaa562fff2a60c8126b5cd5b8dcd6e8ab56c5e222c921f39"
           }
         }
       ],
@@ -884,70 +907,70 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "sourcePlanId": "curve-underlying.fixed-cutoff-50-block",
           "modulePath": "families/curve-underlying/src/source-plan.ts",
           "exportName": "CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0xf7d3ba11656cb88f8af9657323ff57cd589998555919aa5b813a534d59fe696e",
+          "closureRoot": "0xea976aa95a5849f3498f806650ddd14c95bbab154da60bc6325fb700cee0254b",
           "schemaHash": "0x61cccbc043ff96890d37df26edf619903ad88f8227f4cfd1278b4c92b9775634",
           "planRef": {
-            "ownerRef": "0x21cd388f14cbcc92a2a6a47f41eab0584e61d8e661d91a6fc2e1160513f9b27a",
-            "sourcePlanRef": "0x8449c18a6504e2246178274520b4902683ab615ffb9c5810eac0aa19e0947ee4",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "ownerRef": "0xbe9814c38405d54da2a1708a14e353087584ca0a70626d9e67b586e944bb2663",
+            "sourcePlanRef": "0x3c2a0f155a0facf061057889233e68369c6b055a3aee123850758f707a0b9a83",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "completeness": "nomination-only",
             "historyStartBlock": null
           },
-          "leafDigest": "0xd4017d356cf7ce2ad764fb3cb2fd609a00b2728cd07921599a9ddfb47f26429a",
+          "leafDigest": "0x63034f7e42c5d14593b02d0b1f07303246b379a1342735e417f28b324ed21443",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/curve-underlying/src/source-plan.ts",
               "exportName": "CURVE_UNDERLYING_SOURCE_NOMINATION_PROGRAM",
-              "closureRoot": "0xf7d3ba11656cb88f8af9657323ff57cd589998555919aa5b813a534d59fe696e",
+              "closureRoot": "0xea976aa95a5849f3498f806650ddd14c95bbab154da60bc6325fb700cee0254b",
               "schemaHash": "0x61cccbc043ff96890d37df26edf619903ad88f8227f4cfd1278b4c92b9775634"
             },
             "mutationCorpus": {
               "modulePath": "families/curve-underlying/src/nomination-qualification.ts",
               "exportName": "CURVE_UNDERLYING_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x092589a758e999c45faa8c4e67659d7158d24a2ad94b19ca432b22b46a48015a"
+              "closureRoot": "0xc0c367bffc78bc3a0ba53e23102fbe6e38fdc04912afd79fcb4f23f71f3d946f"
             },
             "independentOracle": {
               "modulePath": "families/curve-underlying/src/nomination-qualification.ts",
               "exportName": "CURVE_UNDERLYING_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x092589a758e999c45faa8c4e67659d7158d24a2ad94b19ca432b22b46a48015a"
+              "closureRoot": "0xc0c367bffc78bc3a0ba53e23102fbe6e38fdc04912afd79fcb4f23f71f3d946f"
             },
-            "nominationProgramRoot": "0x70a92f0e00d7f61604e88a04638c44778d1cd7ac077aaefdb9a9c167628bbfdc",
-            "proposalLeafDigest": "0xe709371485668f29965e825477e00a7f1e898e1851eac5aadc4a3827bfb507d3"
+            "nominationProgramRoot": "0x77e5dc40ea3189a399b7fa301eff493cf9407e69300b2d2d44b7ba9c9306408e",
+            "proposalLeafDigest": "0x8878dcc072c2bdb04677a653191c0575abda6667eaa05ebf540915d6fff733ca"
           }
         },
         {
           "sourcePlanId": "curve-underlying.metaregistry-complete-snapshot",
           "modulePath": "families/curve-underlying/src/source-plan.ts",
           "exportName": "CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0xf7d3ba11656cb88f8af9657323ff57cd589998555919aa5b813a534d59fe696e",
+          "closureRoot": "0xea976aa95a5849f3498f806650ddd14c95bbab154da60bc6325fb700cee0254b",
           "schemaHash": "0x4fd17c7eff6c48b7d1e091550192e3bb2c920297e9fc716b66a76a11b4ef7f1a",
           "planRef": {
-            "ownerRef": "0xf640b68488d1bfe18324444540e610c49ec2187a1092681d118751371b9468ed",
-            "sourcePlanRef": "0x456811ba0cfdce1c1ba36f82539706c15fb4af92b477b7f08b26c89ee6255272",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "ownerRef": "0x8db504b7b28e45b8dc86ad61465ea9bf8f9aa709512251a9c76225b1396db632",
+            "sourcePlanRef": "0xa2a1e468e1398df4992f25a4b6f40b912fd2fc42e24e51cbba5ae29645086209",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "completeness": "complete-snapshot",
             "historyStartBlock": null
           },
-          "leafDigest": "0x4e1669391d35f354555f756654a4e928926b7974143762801d9a98c74f5a3b73",
+          "leafDigest": "0x7b7c97c2354682c9c2f1fd43d944fc3c2952878526ecfea1368e5a936c049f72",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/curve-underlying/src/source-plan.ts",
               "exportName": "CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM",
-              "closureRoot": "0xf7d3ba11656cb88f8af9657323ff57cd589998555919aa5b813a534d59fe696e",
+              "closureRoot": "0xea976aa95a5849f3498f806650ddd14c95bbab154da60bc6325fb700cee0254b",
               "schemaHash": "0x4fd17c7eff6c48b7d1e091550192e3bb2c920297e9fc716b66a76a11b4ef7f1a"
             },
             "mutationCorpus": {
               "modulePath": "families/curve-underlying/src/nomination-qualification.ts",
               "exportName": "CURVE_UNDERLYING_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x092589a758e999c45faa8c4e67659d7158d24a2ad94b19ca432b22b46a48015a"
+              "closureRoot": "0xc0c367bffc78bc3a0ba53e23102fbe6e38fdc04912afd79fcb4f23f71f3d946f"
             },
             "independentOracle": {
               "modulePath": "families/curve-underlying/src/nomination-qualification.ts",
               "exportName": "CURVE_UNDERLYING_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x092589a758e999c45faa8c4e67659d7158d24a2ad94b19ca432b22b46a48015a"
+              "closureRoot": "0xc0c367bffc78bc3a0ba53e23102fbe6e38fdc04912afd79fcb4f23f71f3d946f"
             },
-            "nominationProgramRoot": "0xb1a8c74837596daf92153564e76092e4dc70d942a654d3b4a936e589775643f1",
-            "proposalLeafDigest": "0x9a7db6d73ca769763de218ff52f22fa85496dd15b4c5cebae4f51320e1ff088b"
+            "nominationProgramRoot": "0x84de07d4f92dce86c9e1101d6b8c0e448e4d1922df7548b6571003c7ac4c164d",
+            "proposalLeafDigest": "0xe5526802a592604f2d4d0e126960c7ad1dda3a61f7f43becd3bb8ed995477218"
           }
         }
       ],
@@ -955,46 +978,46 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/curve-underlying/src/runtime.ts",
           "exportName": "CURVE_UNDERLYING_RUNTIME",
-          "closureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
+          "closureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
           "capabilityRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.coarse",
             "version": "1.0.0",
             "schemaHash": "0xd0fdf9650e8fd1cbf82fa38482a74bb149bf00c7299245d7e40bb96381537205",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x14243e838a441d28dbd9fcea94022f7abbb07228105bcfd9a14c8775c2292693"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0xb394b20b9abd166fa026ddf9f605232cdf05c7c0e56ac0d0fe54c898e8d4fb7f"
           }
         },
         {
           "modulePath": "families/curve-underlying/src/runtime.ts",
           "exportName": "CURVE_UNDERLYING_RUNTIME",
-          "closureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
+          "closureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
           "capabilityRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.exact",
             "version": "1.0.0",
             "schemaHash": "0xbc2c7384bfcb78b3be364e213f241f32d8ea2929f6eb2a7120d50d27caa32be2",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x55a812eb6942b1bebc84979d838db6ecf46a9cfb8272dd576d7939a0cc2c84a3"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0x3d4d673960943abf2e974d59b17fb127af0fc63c554f072317516bc88f272523"
           }
         },
         {
           "modulePath": "families/curve-underlying/src/runtime.ts",
           "exportName": "CURVE_UNDERLYING_RUNTIME",
-          "closureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
+          "closureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
           "capabilityRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+            "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.state",
             "version": "1.0.0",
             "schemaHash": "0x1a51e44914829de075debc91a33a7831e8b1ca48fc4fb288f5a3faf8907c7e5a",
-            "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-            "ownerRef": "0x84332b7f83eb68d54ed9a0e41668d1a6ac72382b08eebd9b30f6bdfd187a61dc"
+            "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+            "ownerRef": "0x252c1ab9729a4d3772ba6330d708183babb76c3cf2c7a4263fd6af6af90eca3f"
           }
         }
       ],
@@ -1002,8 +1025,8 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/curve-underlying/src/action.ts",
           "exportName": "CURVE_UNDERLYING_SWAP_ACTION_PORT",
-          "closureRoot": "0xd2050292fc37a0c5dd451529eaaffafb1fb5b5050cc2099bcab077661d8ffd38",
-          "ownerRef": "0x1cb3506025fe8153572c091946aa608b273b6af56af5dc2778737f1267a59e0d",
+          "closureRoot": "0x4811fd5d86459756785a0bf757eea9138db21b2555574cdaff449d2960225020",
+          "ownerRef": "0x1c374cfee81e546d4ab13835f27ad7f8b4a931f2e115399b35a487a57760a4ae",
           "ownerId": "family.curve-underlying.swap-action",
           "version": "1.0.0",
           "schemaHash": "0x7139a96a686a897a4d2a8dd4fd1e031d8e2ad29ac58c19846775525304e6e5a6",
@@ -1015,144 +1038,153 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
       ],
       "runtimeAdapters": [
         {
+          "role": "physical-lifecycle/v1",
+          "modulePath": "families/curve-underlying/src/runtime/physical-adapter.ts",
+          "exportName": "CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+          "closureRoot": "0xdd6b417fb443a2fbd3f66f49176cce13d5bfb4ecfc5a767bdfe5a2c2167eff77",
+          "capabilityRefs": {},
+          "actionOwnerRefs": {},
+          "leafDigest": "0xf4e15083dc0efae314b7d8102879edde58ec3f52502d166327e19fba4c03e5b5"
+        },
+        {
           "role": "search/v1",
           "modulePath": "families/curve-underlying/src/search-adapter.ts",
           "exportName": "CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY",
-          "closureRoot": "0x6b9cd87f6f682fccd22a67e9a277fd92d7092487146fef6550406417dece667e",
+          "closureRoot": "0xd627429f628b19e45532e37add01d988a1c60390168149d25656b0760da1adb9",
           "capabilityRefs": {
             "coarse": {
               "familyId": "curve-underlying",
-              "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+              "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
               "stage": "capability",
               "capabilityId": "family.curve-underlying.coarse",
               "version": "1.0.0",
               "schemaHash": "0xd0fdf9650e8fd1cbf82fa38482a74bb149bf00c7299245d7e40bb96381537205",
-              "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-              "ownerRef": "0x14243e838a441d28dbd9fcea94022f7abbb07228105bcfd9a14c8775c2292693"
+              "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+              "ownerRef": "0xb394b20b9abd166fa026ddf9f605232cdf05c7c0e56ac0d0fe54c898e8d4fb7f"
             },
             "exact": {
               "familyId": "curve-underlying",
-              "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+              "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
               "stage": "capability",
               "capabilityId": "family.curve-underlying.exact",
               "version": "1.0.0",
               "schemaHash": "0xbc2c7384bfcb78b3be364e213f241f32d8ea2929f6eb2a7120d50d27caa32be2",
-              "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-              "ownerRef": "0x55a812eb6942b1bebc84979d838db6ecf46a9cfb8272dd576d7939a0cc2c84a3"
+              "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+              "ownerRef": "0x3d4d673960943abf2e974d59b17fb127af0fc63c554f072317516bc88f272523"
             },
             "state": {
               "familyId": "curve-underlying",
-              "familyDefinitionHash": "0x8f90c23029fe839ed39474412a8c933f6d655e6237b008b50a9260bb08c1718f",
+              "familyDefinitionHash": "0x1f73c0644fbaba7e0425ed5ff13a57b8ff310dfaae8323f32dd1a6c23fce70c4",
               "stage": "capability",
               "capabilityId": "family.curve-underlying.state",
               "version": "1.0.0",
               "schemaHash": "0x1a51e44914829de075debc91a33a7831e8b1ca48fc4fb288f5a3faf8907c7e5a",
-              "interpreterHash": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6",
-              "ownerRef": "0x84332b7f83eb68d54ed9a0e41668d1a6ac72382b08eebd9b30f6bdfd187a61dc"
+              "interpreterHash": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e",
+              "ownerRef": "0x252c1ab9729a4d3772ba6330d708183babb76c3cf2c7a4263fd6af6af90eca3f"
             }
           },
           "actionOwnerRefs": {
-            "swap": "0x1cb3506025fe8153572c091946aa608b273b6af56af5dc2778737f1267a59e0d"
+            "swap": "0x1c374cfee81e546d4ab13835f27ad7f8b4a931f2e115399b35a487a57760a4ae"
           },
-          "leafDigest": "0x19e04a8572094418708a6e4a1dc0bbca53be76cebdf161577a269e9936a79f8c"
+          "leafDigest": "0xe914605275768583a1637d697d18f36b095e0bf41faf4611aca3d331b5306009"
         }
       ],
-      "runtimeAdapterRoot": "0xd8e30dabaa7f5595ada421d86f7879b4e3bca8a49c03748a7c3fc882140a05fb",
-      "sourcePlanRoot": "0x54fda9b79ad4009fdab0e22518428a62f6b617025958a7e69f672480c453e582",
-      "stageDefinitionRoot": "0xf4cdab47651d2b9cafefe0235381a8e366b4399c2e5bccbca8c84114185807b3"
+      "runtimeAdapterRoot": "0x6a4a6d4e4e9c8278d2950217e87dbe4252d4b2a2deb98126c50eb99a3550b2ba",
+      "sourcePlanRoot": "0xa3d18fb706e0516c179238933b4e348bf8a20a6fbb57dde1142f45dbf21471f0",
+      "stageDefinitionRoot": "0xaeca24f098235d17876b17fa332b520e469858eae4e05f9bf3aa4a1ae522c0fe"
     },
     {
       "entry": {
         "familyId": "dodo-v2",
-        "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
-        "issuerRef": "0x0e0d80651a8a75bf5cf508d3e2f9d7e621a8fdffeb9eadb77612bf24f80c8df2",
+        "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
+        "issuerRef": "0xdb281687ccddba96ccb0e743711e8183b17a89cd8dddc063173931f29f88cdfc",
         "authorityRef": "0x1d9f74fc1988d23d4694fb4358c3f886956ca9a13b0ac711c8cf32cf776e5d38",
         "lifecycleRefs": {
           "nomination": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "nomination",
             "capabilityId": "family.dodo-v2.nomination",
             "version": "1.0.0",
             "schemaHash": "0xef66bcc81f7e33d4464fafd0a34bf090471725e9f5249017e650225b88f879d6",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x1786b0c00174755b29bdfd531cf2f9078ef7c4de5a9b865793c1feb12e899256"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x753c75a55f3308825a6672a211c12320648d62590fbef60090ba391672179d1c"
           },
           "identity": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "identity",
             "capabilityId": "family.dodo-v2.identity",
             "version": "1.0.0",
             "schemaHash": "0xd942c05e4c473acf1aef87df6d169d1111d358b59ca4d26e4d1386981a1f0b2d",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0xada2ab19538b165deb7740c8df6a004e9c50c45110cb458e7a30b640b26b0ddf"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x1c4ba083f0aa9dcee4de5631a79075624856b13894d295b0ee92979ecff8235c"
           },
           "materialization": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "materialization",
             "capabilityId": "family.dodo-v2.materialization",
             "version": "1.0.0",
             "schemaHash": "0xb6254fc01e49377ec224c32fa80d46befd19d8e1ea8105c3fa438cb52a136bee",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x7f08e0251584897366e9b41c447d0fe877381bc7207561b3fc443e1e5937d5c0"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x8c906a9be064761d7270daa4adc7163785064ba526d87d9b991b347db3ca1cda"
           },
           "projection": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "projection",
             "capabilityId": "family.dodo-v2.projection",
             "version": "1.0.0",
             "schemaHash": "0x59bd57c04010d5a6588f1d6d88f73a67c524aa08468c6caa4e064b5e1f548b6c",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0xda095787929fdc51c0a4299b7a78e8639b96647f8019be2a4076059ba098794c"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x15c3787c98faea6694d10c5a184c5bde9ceff1deaa98b60256c876c0e36b3bcd"
           },
           "rehydration": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "rehydration",
             "capabilityId": "family.dodo-v2.rehydration",
             "version": "1.0.0",
             "schemaHash": "0xb2e5ea051ce7a235f51de9c1ccac87222290ae39ed9c21c6806316a899b17c56",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x66e932058448ae251f08bfed6d07d5c2f727acb79cd4d14f6c1c0b70b9b59a53"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x8c11f5c6ecf360400555ec6619bded972ed6b4441bada94395286eda2c85a16d"
           }
         },
         "extensionRefs": [
           {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "capability",
             "capabilityId": "family.dodo-v2.coarse",
             "version": "1.0.0",
             "schemaHash": "0xc988d83de904d9873d538dd8929f95aa1466c34c832e297b8c06a1441d92aefa",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x1435f846db675672e18e8be94c64237b67a6c31c160468f7f68f0aa3b220d5c8"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x5299f406f12076673e748381a5ab3f07eb7b758de4a9bc3cfa577e3961d15a3e"
           },
           {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "capability",
             "capabilityId": "family.dodo-v2.exact",
             "version": "1.0.0",
             "schemaHash": "0x377bdad6777661aa1d3da2d162b63cbdd50bd55b22fadaf8808104955826dfa8",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x53ea40271b8cbb9499c40bdd0a61a0eb9ac3e9a9148e90c7acd1c87a67907135"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0xa369ff76777383cd793d19269ef1898a465f36f9e8c885ad335c88d5bb8a2063"
           },
           {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "capability",
             "capabilityId": "family.dodo-v2.state",
             "version": "1.0.0",
             "schemaHash": "0x1f962be6704d0532dad2284747d796b4c97e3c4d4ee0576216a4d2be537d2b49",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x684f7102e5afddf1ed0d42f1e7de192bf0909b61ebc2860ccc4b8b1e67c0bfab"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0xd54aa71890b6c7835b0a3f81c39e227dc0d8b6de49972403cdb620c0aeff89f0"
           }
         ],
         "actionOwnerRefs": [
-          "0xadc1132db6f9fca608f1f773a013b0bb9f2394c96db86ff51cc6ec965562c50d"
+          "0xa4e9dc0804fd91d81eaa7ee7079958e43e8d721c687c1c26d6be9a9d8cf2c747"
         ],
         "factContractRefs": [
           {
@@ -1168,107 +1200,107 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         ],
         "sourcePlanRefs": [
           {
-            "ownerRef": "0xfbce797554dd9b3b0514b2e9c53d7ba43e097c5d28fa4a2b7a539c243f33762e",
-            "sourcePlanRef": "0x7ced2466abcd2376d99f22cd67a9d80399659fbc0077bef12152b58562583905",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "ownerRef": "0x1733a0823066d5a85378ff8108bb3df34d8c3fdd2f73cfe319bc8d737d9ac82b",
+            "sourcePlanRef": "0x2cecf7007e3fff1434964420fcb70fd7e101490ddb0aa92991d02917ca995592",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "completeness": "contiguous-history",
             "historyStartBlock": "0"
           },
           {
-            "ownerRef": "0xa4a5cb60048a307293978560dca2bf5748bd71a75cfe857f0ac8888e792210ae",
-            "sourcePlanRef": "0xa369bbea973b59e0bce254be2e6fba71ca8df05466040466fa6811a893c15a5c",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "ownerRef": "0x7819de2f8783213a1a162a31a62cf3d50b316955c15fbc944b21e19bef3ff02e",
+            "sourcePlanRef": "0xcadaefd3606e2dd3b7284e087085c5cc97271a79e7817f2ee1dd5d77409d8481",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "completeness": "nomination-only",
             "historyStartBlock": null
           }
         ],
-        "definitionCatalogLeafDigest": "0xb88437fa6ec1dcacce928b6760d37220f559a0bba16ad3dc114971ff2f32274d",
-        "capabilityCatalogRoot": "0xf3dd4118a28e8b99abe16b89278a3014aab501b004e422362eabcff84515d2f4"
+        "definitionCatalogLeafDigest": "0x5d374993d5821051744798d44d4d4a331357076e55e41df2870ff1f97c8216fd",
+        "capabilityCatalogRoot": "0x052f168836151d6c5b48d2b9f061ebcb795131fb4efd22179f3ef9f98cd25863"
       },
       "publicEntry": {
         "modulePath": "families/dodo-v2/src/public.ts",
         "exportName": "DODO_V2_DEFINITION",
-        "closureRoot": "0x6ae98fc402a216c3532ae750d28144198263e046e91c6b74cf67014c0b0d1693"
+        "closureRoot": "0x07ed3b9cca20ab72cfc9e3acb327222fa28c750fb46363b509f3cae82f9675d0"
       },
       "stages": [
         {
           "stage": "identity",
           "modulePath": "families/dodo-v2/src/runtime.ts",
           "exportName": "DODO_IDENTITY_RUNTIME",
-          "closureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
+          "closureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
           "stageRef": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "identity",
             "capabilityId": "family.dodo-v2.identity",
             "version": "1.0.0",
             "schemaHash": "0xd942c05e4c473acf1aef87df6d169d1111d358b59ca4d26e4d1386981a1f0b2d",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0xada2ab19538b165deb7740c8df6a004e9c50c45110cb458e7a30b640b26b0ddf"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x1c4ba083f0aa9dcee4de5631a79075624856b13894d295b0ee92979ecff8235c"
           }
         },
         {
           "stage": "materialization",
           "modulePath": "families/dodo-v2/src/runtime.ts",
           "exportName": "DODO_MATERIALIZATION_RUNTIME",
-          "closureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
+          "closureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
           "stageRef": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "materialization",
             "capabilityId": "family.dodo-v2.materialization",
             "version": "1.0.0",
             "schemaHash": "0xb6254fc01e49377ec224c32fa80d46befd19d8e1ea8105c3fa438cb52a136bee",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x7f08e0251584897366e9b41c447d0fe877381bc7207561b3fc443e1e5937d5c0"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x8c906a9be064761d7270daa4adc7163785064ba526d87d9b991b347db3ca1cda"
           }
         },
         {
           "stage": "nomination",
           "modulePath": "families/dodo-v2/src/runtime.ts",
           "exportName": "DODO_NOMINATION_RUNTIME",
-          "closureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
+          "closureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
           "stageRef": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "nomination",
             "capabilityId": "family.dodo-v2.nomination",
             "version": "1.0.0",
             "schemaHash": "0xef66bcc81f7e33d4464fafd0a34bf090471725e9f5249017e650225b88f879d6",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x1786b0c00174755b29bdfd531cf2f9078ef7c4de5a9b865793c1feb12e899256"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x753c75a55f3308825a6672a211c12320648d62590fbef60090ba391672179d1c"
           }
         },
         {
           "stage": "projection",
           "modulePath": "families/dodo-v2/src/runtime.ts",
           "exportName": "DODO_PROJECTION_RUNTIME",
-          "closureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
+          "closureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
           "stageRef": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "projection",
             "capabilityId": "family.dodo-v2.projection",
             "version": "1.0.0",
             "schemaHash": "0x59bd57c04010d5a6588f1d6d88f73a67c524aa08468c6caa4e064b5e1f548b6c",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0xda095787929fdc51c0a4299b7a78e8639b96647f8019be2a4076059ba098794c"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x15c3787c98faea6694d10c5a184c5bde9ceff1deaa98b60256c876c0e36b3bcd"
           }
         },
         {
           "stage": "rehydration",
           "modulePath": "families/dodo-v2/src/runtime.ts",
           "exportName": "DODO_REHYDRATION_RUNTIME",
-          "closureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
+          "closureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
           "stageRef": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "rehydration",
             "capabilityId": "family.dodo-v2.rehydration",
             "version": "1.0.0",
             "schemaHash": "0xb2e5ea051ce7a235f51de9c1ccac87222290ae39ed9c21c6806316a899b17c56",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x66e932058448ae251f08bfed6d07d5c2f727acb79cd4d14f6c1c0b70b9b59a53"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x8c11f5c6ecf360400555ec6619bded972ed6b4441bada94395286eda2c85a16d"
           }
         }
       ],
@@ -1277,70 +1309,70 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "sourcePlanId": "dodo-v2.creation-contiguous-history",
           "modulePath": "families/dodo-v2/src/history-source-plan.ts",
           "exportName": "DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0xb3c7b597168ff2aa18373d086797b0942f8081248d8fec7ec34d0ef1a34b417a",
+          "closureRoot": "0x5a6b70e5ce8d3c909872fc3078acd723902abd409f2297d933b97a0731b53eb8",
           "schemaHash": "0xe5ecbe7893db77c2aba38d478e1c754cbad29f1cc6d2b432fea24fa13d0b841b",
           "planRef": {
-            "ownerRef": "0xfbce797554dd9b3b0514b2e9c53d7ba43e097c5d28fa4a2b7a539c243f33762e",
-            "sourcePlanRef": "0x7ced2466abcd2376d99f22cd67a9d80399659fbc0077bef12152b58562583905",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "ownerRef": "0x1733a0823066d5a85378ff8108bb3df34d8c3fdd2f73cfe319bc8d737d9ac82b",
+            "sourcePlanRef": "0x2cecf7007e3fff1434964420fcb70fd7e101490ddb0aa92991d02917ca995592",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "completeness": "contiguous-history",
             "historyStartBlock": "0"
           },
-          "leafDigest": "0xc1b47969f19a9b28711033832590de9d7a12105241a9cd9caaa6cca0119dc2d5",
+          "leafDigest": "0xb703f7572ee7304a4ea0bcf8223abc4adc6b9e005e4c8d1d41cf4fc24adc117e",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/dodo-v2/src/history-source-plan.ts",
               "exportName": "DODO_V2_HISTORY_NOMINATION_PROGRAM",
-              "closureRoot": "0xb3c7b597168ff2aa18373d086797b0942f8081248d8fec7ec34d0ef1a34b417a",
+              "closureRoot": "0x5a6b70e5ce8d3c909872fc3078acd723902abd409f2297d933b97a0731b53eb8",
               "schemaHash": "0xe5ecbe7893db77c2aba38d478e1c754cbad29f1cc6d2b432fea24fa13d0b841b"
             },
             "mutationCorpus": {
               "modulePath": "families/dodo-v2/src/nomination-qualification.ts",
               "exportName": "DODO_V2_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x59f8cfe4233a3cb4d077b84b38a7356849fbf113193dee21693c20362333d278"
+              "closureRoot": "0xa82b2e662df93dada14da6572ad0ea5f931ba2144080a958d034e3532b084ef9"
             },
             "independentOracle": {
               "modulePath": "families/dodo-v2/src/nomination-qualification.ts",
               "exportName": "DODO_V2_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x59f8cfe4233a3cb4d077b84b38a7356849fbf113193dee21693c20362333d278"
+              "closureRoot": "0xa82b2e662df93dada14da6572ad0ea5f931ba2144080a958d034e3532b084ef9"
             },
-            "nominationProgramRoot": "0xaa22b7831e39aef905b2bbbe83655f4c575dbd12af95511493712e0d84656f41",
-            "proposalLeafDigest": "0xe1127b79110202f70ebe824417ce6c8ed7257c02e40b615eaff4351ea2e8a1df"
+            "nominationProgramRoot": "0x92f762c99885c6887511339004d80433d7a4006989828dd2cd712476d8a0abaa",
+            "proposalLeafDigest": "0x64a435b280bf514c7566ab2003cc655e4e34c794d839f0b9b7ee46d661392ffb"
           }
         },
         {
           "sourcePlanId": "dodo-v2.fixed-cutoff-50-block",
           "modulePath": "families/dodo-v2/src/source-plan.ts",
           "exportName": "DODO_V2_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x6ac3e8bf2463dbf328853491c3df643aa52e24ec8a84af10843a45255ec97124",
+          "closureRoot": "0x8182f01a11308262ca14ec7cd5ce3a6150ba2f25c43de321c050ec888ff69267",
           "schemaHash": "0x3d030973ce027e741d4bf0c0cdb36a8ee1d807caebbcd7a0b77b3afc33deb3f5",
           "planRef": {
-            "ownerRef": "0xa4a5cb60048a307293978560dca2bf5748bd71a75cfe857f0ac8888e792210ae",
-            "sourcePlanRef": "0xa369bbea973b59e0bce254be2e6fba71ca8df05466040466fa6811a893c15a5c",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "ownerRef": "0x7819de2f8783213a1a162a31a62cf3d50b316955c15fbc944b21e19bef3ff02e",
+            "sourcePlanRef": "0xcadaefd3606e2dd3b7284e087085c5cc97271a79e7817f2ee1dd5d77409d8481",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "completeness": "nomination-only",
             "historyStartBlock": null
           },
-          "leafDigest": "0x0334718ba2fc4c71b1c56a0c08cd3f24a2d0e8c62d01d22a55e0a2a3630db3ee",
+          "leafDigest": "0xe5e01b8884a5d870cb13c22cef8a19d2914c8f43f554280b50016055642f5e6c",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/dodo-v2/src/source-plan.ts",
               "exportName": "DODO_V2_SOURCE_NOMINATION_PROGRAM",
-              "closureRoot": "0x6ac3e8bf2463dbf328853491c3df643aa52e24ec8a84af10843a45255ec97124",
+              "closureRoot": "0x8182f01a11308262ca14ec7cd5ce3a6150ba2f25c43de321c050ec888ff69267",
               "schemaHash": "0x3d030973ce027e741d4bf0c0cdb36a8ee1d807caebbcd7a0b77b3afc33deb3f5"
             },
             "mutationCorpus": {
               "modulePath": "families/dodo-v2/src/nomination-qualification.ts",
               "exportName": "DODO_V2_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x59f8cfe4233a3cb4d077b84b38a7356849fbf113193dee21693c20362333d278"
+              "closureRoot": "0xa82b2e662df93dada14da6572ad0ea5f931ba2144080a958d034e3532b084ef9"
             },
             "independentOracle": {
               "modulePath": "families/dodo-v2/src/nomination-qualification.ts",
               "exportName": "DODO_V2_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x59f8cfe4233a3cb4d077b84b38a7356849fbf113193dee21693c20362333d278"
+              "closureRoot": "0xa82b2e662df93dada14da6572ad0ea5f931ba2144080a958d034e3532b084ef9"
             },
-            "nominationProgramRoot": "0xb9f7ee50ed3dd7faf1fe9cf2e512a2fb2534f545d26110faa4cb31d8002a67ff",
-            "proposalLeafDigest": "0x6105c7671cf8254b4cde2aa65bcdd693e0ae09d9406f94643ebcd2de2ede5df3"
+            "nominationProgramRoot": "0xb695e9d2d23b76bbbf457495cb75651b14f63384b571a07d805595b6ec7bc5f1",
+            "proposalLeafDigest": "0xe3b8f23d9aaababf7c98a44d447b4a496761f5f68dc59d9b8ddf9abb11569897"
           }
         }
       ],
@@ -1348,46 +1380,46 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/dodo-v2/src/runtime.ts",
           "exportName": "DODO_V2_RUNTIME",
-          "closureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
+          "closureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
           "capabilityRef": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "capability",
             "capabilityId": "family.dodo-v2.coarse",
             "version": "1.0.0",
             "schemaHash": "0xc988d83de904d9873d538dd8929f95aa1466c34c832e297b8c06a1441d92aefa",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x1435f846db675672e18e8be94c64237b67a6c31c160468f7f68f0aa3b220d5c8"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0x5299f406f12076673e748381a5ab3f07eb7b758de4a9bc3cfa577e3961d15a3e"
           }
         },
         {
           "modulePath": "families/dodo-v2/src/runtime.ts",
           "exportName": "DODO_V2_RUNTIME",
-          "closureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
+          "closureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
           "capabilityRef": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "capability",
             "capabilityId": "family.dodo-v2.exact",
             "version": "1.0.0",
             "schemaHash": "0x377bdad6777661aa1d3da2d162b63cbdd50bd55b22fadaf8808104955826dfa8",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x53ea40271b8cbb9499c40bdd0a61a0eb9ac3e9a9148e90c7acd1c87a67907135"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0xa369ff76777383cd793d19269ef1898a465f36f9e8c885ad335c88d5bb8a2063"
           }
         },
         {
           "modulePath": "families/dodo-v2/src/runtime.ts",
           "exportName": "DODO_V2_RUNTIME",
-          "closureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
+          "closureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
           "capabilityRef": {
             "familyId": "dodo-v2",
-            "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+            "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
             "stage": "capability",
             "capabilityId": "family.dodo-v2.state",
             "version": "1.0.0",
             "schemaHash": "0x1f962be6704d0532dad2284747d796b4c97e3c4d4ee0576216a4d2be537d2b49",
-            "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-            "ownerRef": "0x684f7102e5afddf1ed0d42f1e7de192bf0909b61ebc2860ccc4b8b1e67c0bfab"
+            "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+            "ownerRef": "0xd54aa71890b6c7835b0a3f81c39e227dc0d8b6de49972403cdb620c0aeff89f0"
           }
         }
       ],
@@ -1395,8 +1427,8 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/dodo-v2/src/action.ts",
           "exportName": "DODO_V2_SWAP_ACTION_PORT",
-          "closureRoot": "0x5a3d1ad32c458369b49383a30de375433a79ccb402ed44fc457e4f2e25a9d4c4",
-          "ownerRef": "0xadc1132db6f9fca608f1f773a013b0bb9f2394c96db86ff51cc6ec965562c50d",
+          "closureRoot": "0x237d932a68e3b8325c4168663933a07b65f3266d52191dbd96036791920e6598",
+          "ownerRef": "0xa4e9dc0804fd91d81eaa7ee7079958e43e8d721c687c1c26d6be9a9d8cf2c747",
           "ownerId": "family.dodo-v2.swap-action",
           "version": "1.0.0",
           "schemaHash": "0xe0e74ce26e2f5c81ec14fda1c1013f1d17ae018c445b3f86354c48c9629aa693",
@@ -1408,144 +1440,153 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
       ],
       "runtimeAdapters": [
         {
+          "role": "physical-lifecycle/v1",
+          "modulePath": "families/dodo-v2/src/runtime/physical-adapter.ts",
+          "exportName": "DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+          "closureRoot": "0x9f7207faa0158db400075b0ad14233a222b90d8932177dad5f83ed6f65a6a2f6",
+          "capabilityRefs": {},
+          "actionOwnerRefs": {},
+          "leafDigest": "0xcc86d28ce7b53f768d999646388a37163f4935db07d4a3b187fa43b6e61159c4"
+        },
+        {
           "role": "search/v1",
           "modulePath": "families/dodo-v2/src/search-adapter.ts",
           "exportName": "DODO_SEARCH_RUNTIME_ADAPTER_FACTORY",
-          "closureRoot": "0x4295704da1ce29a4103e628733e5c7c8e5398fbce2870706fab13cea0e7f995c",
+          "closureRoot": "0x26368b18c9ef6a0fce62e0a017f122ba0c3165cfaa8e025ecfedcd5ed63828b7",
           "capabilityRefs": {
             "coarse": {
               "familyId": "dodo-v2",
-              "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+              "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
               "stage": "capability",
               "capabilityId": "family.dodo-v2.coarse",
               "version": "1.0.0",
               "schemaHash": "0xc988d83de904d9873d538dd8929f95aa1466c34c832e297b8c06a1441d92aefa",
-              "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-              "ownerRef": "0x1435f846db675672e18e8be94c64237b67a6c31c160468f7f68f0aa3b220d5c8"
+              "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+              "ownerRef": "0x5299f406f12076673e748381a5ab3f07eb7b758de4a9bc3cfa577e3961d15a3e"
             },
             "exact": {
               "familyId": "dodo-v2",
-              "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+              "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
               "stage": "capability",
               "capabilityId": "family.dodo-v2.exact",
               "version": "1.0.0",
               "schemaHash": "0x377bdad6777661aa1d3da2d162b63cbdd50bd55b22fadaf8808104955826dfa8",
-              "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-              "ownerRef": "0x53ea40271b8cbb9499c40bdd0a61a0eb9ac3e9a9148e90c7acd1c87a67907135"
+              "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+              "ownerRef": "0xa369ff76777383cd793d19269ef1898a465f36f9e8c885ad335c88d5bb8a2063"
             },
             "state": {
               "familyId": "dodo-v2",
-              "familyDefinitionHash": "0xf2b9458dc0538def49f6fd56d997d992925310525977795b6b9fc5ad3f7a84a1",
+              "familyDefinitionHash": "0x875358fac8d94663ae976db125caf0d52217e38b18611c9e3e952debebd6c6f0",
               "stage": "capability",
               "capabilityId": "family.dodo-v2.state",
               "version": "1.0.0",
               "schemaHash": "0x1f962be6704d0532dad2284747d796b4c97e3c4d4ee0576216a4d2be537d2b49",
-              "interpreterHash": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037",
-              "ownerRef": "0x684f7102e5afddf1ed0d42f1e7de192bf0909b61ebc2860ccc4b8b1e67c0bfab"
+              "interpreterHash": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f",
+              "ownerRef": "0xd54aa71890b6c7835b0a3f81c39e227dc0d8b6de49972403cdb620c0aeff89f0"
             }
           },
           "actionOwnerRefs": {
-            "swap": "0xadc1132db6f9fca608f1f773a013b0bb9f2394c96db86ff51cc6ec965562c50d"
+            "swap": "0xa4e9dc0804fd91d81eaa7ee7079958e43e8d721c687c1c26d6be9a9d8cf2c747"
           },
-          "leafDigest": "0xce32ba275541cfbe8aae1453240755fd5a684bbd9da7e0f2ff6cacf87d2d9ca6"
+          "leafDigest": "0xf15430259cd254f22b7b8c9f14cd097de79562230de5c4570ab5cb7997b6a089"
         }
       ],
-      "runtimeAdapterRoot": "0x09ba455f239e7aa0d7526d3cba711f8cdab9f9d75556aace7bff7cae1f4574fe",
-      "sourcePlanRoot": "0x17f0e9b2c9a0533a96a25ad6b209f5dfff839ec315eff68556628f1e538d576a",
-      "stageDefinitionRoot": "0x6bbc62b2fd42d9fb71410f2eedb43ff36513800ea89f0e2139cbcb21a2476b78"
+      "runtimeAdapterRoot": "0x0da56010617da716d5dc428c34e9bed84a7dbfcc2f69802c549001fd9baff605",
+      "sourcePlanRoot": "0x279c8cc3aad396d09376fb2cad06f958ad8184812d06fc6b63cd61a786d5ec73",
+      "stageDefinitionRoot": "0xa3bc4a2a31c99d949ed6b083a8e4bd6eca521e20de060039880a872507b2c571"
     },
     {
       "entry": {
         "familyId": "fluid-dex",
-        "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
-        "issuerRef": "0xa9858e8cf82b4a08487bbd61a628934e8ad194446a3c3c7814c0b7f4377a1b78",
+        "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
+        "issuerRef": "0xbd5519ee275153e4b073deadae66534fe6fe5eb326cd5ea339116894b73b0093",
         "authorityRef": "0x9bfdcd3f0095b5090ae00b37e35921516a4ab2da8804201e27cfe64a2dd99213",
         "lifecycleRefs": {
           "nomination": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "nomination",
             "capabilityId": "family.fluid-dex.nomination",
             "version": "1.0.0",
             "schemaHash": "0x76a663488240724bf1c1c00d2fbc3628ed35e6555799cf0a1f6c23c645305e27",
-            "interpreterHash": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
-            "ownerRef": "0x9cd0b6e03a63d29add4a4ae952c19b3217bcb6f3627596f73c07c836bbd52782"
+            "interpreterHash": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
+            "ownerRef": "0x6f3b92e1a8f1911e5d72eabc9ec8facd163e197588126160c15899e3762563f5"
           },
           "identity": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "identity",
             "capabilityId": "family.fluid-dex.identity",
             "version": "1.0.0",
             "schemaHash": "0x0c84ce75475611fe04169469aad0d147d5ed7506ca3345761be690e2b8abcdd5",
-            "interpreterHash": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
-            "ownerRef": "0xb3d1c833b7f1c610601f9e91f944b22b8d1bad1af2a141ded0cf2ee96605f25e"
+            "interpreterHash": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
+            "ownerRef": "0xb2f6d9e099c105e0f4367e987c927b739a53b9add661ffd9bb9395def98d2cc4"
           },
           "materialization": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "materialization",
             "capabilityId": "family.fluid-dex.materialization",
             "version": "1.0.0",
             "schemaHash": "0xd30543ee6a6793f7d4e1de21e4cdbdfe24288121b756d463ed55d5d3aae3525f",
-            "interpreterHash": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
-            "ownerRef": "0x2065c23125554bee06252cbd781665e019dd204dd3edd0f7b7be70671ddfb060"
+            "interpreterHash": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
+            "ownerRef": "0x5c8fff63b14955ac10a204a558d1ecad496b8a2afe0ea8c516c6c12f310268e0"
           },
           "projection": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "projection",
             "capabilityId": "family.fluid-dex.projection",
             "version": "1.0.0",
             "schemaHash": "0x5b6b1c97536cc070ee3ed32fc63c2a8314d2c083359caf76f5ac339ab027c9b8",
-            "interpreterHash": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
-            "ownerRef": "0xb53cd7b94265d8b26ffa0e3748f1021ececf506e9f95f2daf543fd167cdf2192"
+            "interpreterHash": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
+            "ownerRef": "0x1be8485f359bcd27aee5b903addcf0964fab7ecf35fb29d61a6a8cdea926fbb1"
           },
           "rehydration": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "rehydration",
             "capabilityId": "family.fluid-dex.rehydration",
             "version": "1.0.0",
             "schemaHash": "0xfcd35f4b8d105e5097dcc66cc83159c884cb61cb499efcfc11742ff8c8fc784b",
-            "interpreterHash": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
-            "ownerRef": "0xa0c5180ed9f3be1efbd5892061f6a1cf1d13b64a4210a0bc2c7eeb098a1474d9"
+            "interpreterHash": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
+            "ownerRef": "0xd955358acff4894b708d72fa253bfe632fa88afd0c5c79b8f7c5a0b50a28bf6c"
           }
         },
         "extensionRefs": [
           {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "capability",
             "capabilityId": "family.fluid-dex.coarse",
             "version": "1.0.0",
             "schemaHash": "0xbc6fde8b67f7f6c0eb70eae88f0d5698c29562d5cabb99df12fcf7cfef0ea059",
-            "interpreterHash": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
-            "ownerRef": "0xaf4f4a04720c2da06c0fe1d119089500aca22c2516cb4f38f498ee6485bfd50a"
+            "interpreterHash": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
+            "ownerRef": "0x436107848bd7ba4eb4f5b0f4dc31b0a98c301ff20f033b004c2c9cff94a09e88"
           },
           {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "capability",
             "capabilityId": "family.fluid-dex.exact",
             "version": "1.0.0",
             "schemaHash": "0xd91bcf90607cf4881b29aa3ae0e4b8182fe4074104176f8819a4f0e15c75d099",
-            "interpreterHash": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
-            "ownerRef": "0x2f03fa6ce280bd4b14ca13b44853105ea075f4e832e51331f2cb35e80ddb7454"
+            "interpreterHash": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
+            "ownerRef": "0x92ff369bbf5dfabbff900824f78a3a0ee090c12f90a4b2c8c73ee7835afcdf21"
           },
           {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "capability",
             "capabilityId": "family.fluid-dex.state",
             "version": "1.0.0",
             "schemaHash": "0xe45709a4ab1d30f6ab7cde439e53df05b4c9d1f65187a57af31f1efbd17a9de9",
-            "interpreterHash": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
-            "ownerRef": "0x91d58749570c742812892782fd71a0db298bc5eee217ea2517e02ea92d1ac355"
+            "interpreterHash": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
+            "ownerRef": "0x84622bba064ce8b368b614b0a61ec2998720a40a43268e4eec9147fc9d32c107"
           }
         ],
         "actionOwnerRefs": [
-          "0x8cb7e87248146d38623c6e29b42b42f94ed4c8839d78dbd64f419c69b5d4d559"
+          "0xc97daf72853d94dc0101dcb43d6ecdfe87c1f9d51cefe231b809c8fac418e505"
         ],
         "factContractRefs": [
           {
@@ -1566,107 +1607,107 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         ],
         "sourcePlanRefs": [
           {
-            "ownerRef": "0x1a1043d809f61096b5d8751af87d87020136ab71ef427dc79a1e9e8ad4e8c025",
-            "sourcePlanRef": "0x8cf5901e150cc450ce7c2d7e1e929dd5cf490c515a64aee254834a379587311a",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
-            "completeness": "nomination-only",
+            "ownerRef": "0x2c61941b2486dc9c2f467cb5a45132c99df8b1557d0f59e064664838d1b9006f",
+            "sourcePlanRef": "0x6427da75b7528607f0757a14aa2e3fa9e28368a720c3389b104a7db1a676f8c3",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
+            "completeness": "complete-snapshot",
             "historyStartBlock": null
           },
           {
-            "ownerRef": "0xfe2fbb2c615bfa14d9fc85e71a16b4e5d5036049585e76f0f2700e9b61f7ace1",
-            "sourcePlanRef": "0xad2282823b5e2d73a687fdabec62d560fcbf02405368c344b5a89d00e8984af8",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
-            "completeness": "complete-snapshot",
+            "ownerRef": "0xdfcb10c4e1031cef329b27f6ee3040b5d18c8681cf992003519cd65adf60bdc2",
+            "sourcePlanRef": "0xa1ee550ad8be17b3c0bab430fb8ef2b91e676f70535d4b1942717d1167690d14",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
+            "completeness": "nomination-only",
             "historyStartBlock": null
           }
         ],
-        "definitionCatalogLeafDigest": "0xa350895f3740004028acec4677be0a712421fbd99afe86e41c2a9b6424ad2ea0",
-        "capabilityCatalogRoot": "0xeb6c60ac9296a0de1f4c28745ed5a953e68bbfe6cee5305aaa60ed8d25615f3a"
+        "definitionCatalogLeafDigest": "0x2c987367c0bd326833deed4f8dae7bf3ac46583a910c8411128efa7361f11fc3",
+        "capabilityCatalogRoot": "0xbeab476c2886488d66f4d95ae7b050a8823add7f7ae163118f787e61a2fe1ac1"
       },
       "publicEntry": {
         "modulePath": "families/fluid-dex/src/public.ts",
         "exportName": "FLUID_DEX_DEFINITION",
-        "closureRoot": "0x362281bf31497f3cff05dcea4c79e415b0fb4880395c0f93bae5f7d1b57ba00c"
+        "closureRoot": "0x23819b6b35b2f8cb448b313080f2b58f46c945f444c2e32fe0a7e8e83cda2c19"
       },
       "stages": [
         {
           "stage": "identity",
           "modulePath": "families/fluid-dex/src/runtime/definitions.ts",
           "exportName": "FLUID_DEX_IDENTITY_DEFINITION",
-          "closureRoot": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
+          "closureRoot": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
           "stageRef": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "identity",
             "capabilityId": "family.fluid-dex.identity",
             "version": "1.0.0",
             "schemaHash": "0x0c84ce75475611fe04169469aad0d147d5ed7506ca3345761be690e2b8abcdd5",
-            "interpreterHash": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
-            "ownerRef": "0xb3d1c833b7f1c610601f9e91f944b22b8d1bad1af2a141ded0cf2ee96605f25e"
+            "interpreterHash": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
+            "ownerRef": "0xb2f6d9e099c105e0f4367e987c927b739a53b9add661ffd9bb9395def98d2cc4"
           }
         },
         {
           "stage": "materialization",
           "modulePath": "families/fluid-dex/src/runtime/definitions.ts",
           "exportName": "FLUID_DEX_MATERIALIZATION_DEFINITION",
-          "closureRoot": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
+          "closureRoot": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
           "stageRef": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "materialization",
             "capabilityId": "family.fluid-dex.materialization",
             "version": "1.0.0",
             "schemaHash": "0xd30543ee6a6793f7d4e1de21e4cdbdfe24288121b756d463ed55d5d3aae3525f",
-            "interpreterHash": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
-            "ownerRef": "0x2065c23125554bee06252cbd781665e019dd204dd3edd0f7b7be70671ddfb060"
+            "interpreterHash": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
+            "ownerRef": "0x5c8fff63b14955ac10a204a558d1ecad496b8a2afe0ea8c516c6c12f310268e0"
           }
         },
         {
           "stage": "nomination",
           "modulePath": "families/fluid-dex/src/runtime/definitions.ts",
           "exportName": "FLUID_DEX_NOMINATION_DEFINITION",
-          "closureRoot": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
+          "closureRoot": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
           "stageRef": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "nomination",
             "capabilityId": "family.fluid-dex.nomination",
             "version": "1.0.0",
             "schemaHash": "0x76a663488240724bf1c1c00d2fbc3628ed35e6555799cf0a1f6c23c645305e27",
-            "interpreterHash": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
-            "ownerRef": "0x9cd0b6e03a63d29add4a4ae952c19b3217bcb6f3627596f73c07c836bbd52782"
+            "interpreterHash": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
+            "ownerRef": "0x6f3b92e1a8f1911e5d72eabc9ec8facd163e197588126160c15899e3762563f5"
           }
         },
         {
           "stage": "projection",
           "modulePath": "families/fluid-dex/src/runtime/definitions.ts",
           "exportName": "FLUID_DEX_PROJECTION_DEFINITION",
-          "closureRoot": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
+          "closureRoot": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
           "stageRef": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "projection",
             "capabilityId": "family.fluid-dex.projection",
             "version": "1.0.0",
             "schemaHash": "0x5b6b1c97536cc070ee3ed32fc63c2a8314d2c083359caf76f5ac339ab027c9b8",
-            "interpreterHash": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
-            "ownerRef": "0xb53cd7b94265d8b26ffa0e3748f1021ececf506e9f95f2daf543fd167cdf2192"
+            "interpreterHash": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
+            "ownerRef": "0x1be8485f359bcd27aee5b903addcf0964fab7ecf35fb29d61a6a8cdea926fbb1"
           }
         },
         {
           "stage": "rehydration",
           "modulePath": "families/fluid-dex/src/runtime/definitions.ts",
           "exportName": "FLUID_DEX_REHYDRATION_DEFINITION",
-          "closureRoot": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
+          "closureRoot": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
           "stageRef": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "rehydration",
             "capabilityId": "family.fluid-dex.rehydration",
             "version": "1.0.0",
             "schemaHash": "0xfcd35f4b8d105e5097dcc66cc83159c884cb61cb499efcfc11742ff8c8fc784b",
-            "interpreterHash": "0xcff22745c59fc98871dd35357a0502c36b52888d868067cfb4cc13f27daf822c",
-            "ownerRef": "0xa0c5180ed9f3be1efbd5892061f6a1cf1d13b64a4210a0bc2c7eeb098a1474d9"
+            "interpreterHash": "0x7b6991945537b90321e2377da6e009d58aa27f27d5bcdffea8afc5bb8161d389",
+            "ownerRef": "0xd955358acff4894b708d72fa253bfe632fa88afd0c5c79b8f7c5a0b50a28bf6c"
           }
         }
       ],
@@ -1675,70 +1716,70 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "sourcePlanId": "fluid-dex.factory-complete-snapshot",
           "modulePath": "families/fluid-dex/src/source-plan.ts",
           "exportName": "FLUID_DEX_FACTORY_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x0d62f0b5e8666b327bb96a742c080bcde4186bc769f22241717d33ed9e5b9969",
+          "closureRoot": "0x415c368766deecc420dd808d3a6235050519aee114a0a43d709873950f96ee5e",
           "schemaHash": "0x2d7b6aa0ba19329ae8c0811b852b99fea775fce113b904e9156643701e8ed245",
           "planRef": {
-            "ownerRef": "0xfe2fbb2c615bfa14d9fc85e71a16b4e5d5036049585e76f0f2700e9b61f7ace1",
-            "sourcePlanRef": "0xad2282823b5e2d73a687fdabec62d560fcbf02405368c344b5a89d00e8984af8",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "ownerRef": "0x2c61941b2486dc9c2f467cb5a45132c99df8b1557d0f59e064664838d1b9006f",
+            "sourcePlanRef": "0x6427da75b7528607f0757a14aa2e3fa9e28368a720c3389b104a7db1a676f8c3",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "completeness": "complete-snapshot",
             "historyStartBlock": null
           },
-          "leafDigest": "0x3d46766eb9d5774afc9acc6fd7ceb6bd31bcc6283b69ddaa893368200def398f",
+          "leafDigest": "0x85e6d35531f7139756b4d1051f168568ffa427500b9a3be56054717b0ec9cff1",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/fluid-dex/src/source-plan.ts",
               "exportName": "FLUID_DEX_FACTORY_NOMINATION_PROGRAM",
-              "closureRoot": "0x0d62f0b5e8666b327bb96a742c080bcde4186bc769f22241717d33ed9e5b9969",
+              "closureRoot": "0x415c368766deecc420dd808d3a6235050519aee114a0a43d709873950f96ee5e",
               "schemaHash": "0x2d7b6aa0ba19329ae8c0811b852b99fea775fce113b904e9156643701e8ed245"
             },
             "mutationCorpus": {
               "modulePath": "families/fluid-dex/src/nomination-qualification.ts",
               "exportName": "FLUID_DEX_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0xfd2bb04fa8c7caf0b96d80b75cc95e11ea222324e5258d05ed4f83c61e60dd10"
+              "closureRoot": "0x08506b7bfbe2a084893d77c384fa55135890a92506e6045cd37e9b78acdde338"
             },
             "independentOracle": {
               "modulePath": "families/fluid-dex/src/nomination-qualification.ts",
               "exportName": "FLUID_DEX_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0xfd2bb04fa8c7caf0b96d80b75cc95e11ea222324e5258d05ed4f83c61e60dd10"
+              "closureRoot": "0x08506b7bfbe2a084893d77c384fa55135890a92506e6045cd37e9b78acdde338"
             },
-            "nominationProgramRoot": "0x4d98920933457a76a7c521b7c024c9e73910501a27e7fb5113c48ac8ceca7612",
-            "proposalLeafDigest": "0xccbfc72527e3bbfc126675d55d337e530ffafc5c32b13e770a1b8f1e9821807f"
+            "nominationProgramRoot": "0x2910a80ff15374f5e5b42f04dcfee75da20026724d6d1bc127b1f52080c45c68",
+            "proposalLeafDigest": "0x040875220dd43eda414c608d840014f6b78ec25c13bb0673902131ec5a493526"
           }
         },
         {
           "sourcePlanId": "fluid-dex.fixed-cutoff-50-block",
           "modulePath": "families/fluid-dex/src/source-plan.ts",
           "exportName": "FLUID_DEX_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x0d62f0b5e8666b327bb96a742c080bcde4186bc769f22241717d33ed9e5b9969",
+          "closureRoot": "0x415c368766deecc420dd808d3a6235050519aee114a0a43d709873950f96ee5e",
           "schemaHash": "0xb0d0c56aad315032812a0b2ab9475b71b527ec0815da12607e20a4232240b121",
           "planRef": {
-            "ownerRef": "0x1a1043d809f61096b5d8751af87d87020136ab71ef427dc79a1e9e8ad4e8c025",
-            "sourcePlanRef": "0x8cf5901e150cc450ce7c2d7e1e929dd5cf490c515a64aee254834a379587311a",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "ownerRef": "0xdfcb10c4e1031cef329b27f6ee3040b5d18c8681cf992003519cd65adf60bdc2",
+            "sourcePlanRef": "0xa1ee550ad8be17b3c0bab430fb8ef2b91e676f70535d4b1942717d1167690d14",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "completeness": "nomination-only",
             "historyStartBlock": null
           },
-          "leafDigest": "0x04456b250d3594f776274ecf9a4992c44435ced88f804a8c71ed4bf9105d31d1",
+          "leafDigest": "0xd8fc2851888595fecd4c4cb7ee1c73925dda5fdbf05ebd411df0dda928727bdb",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/fluid-dex/src/source-plan.ts",
               "exportName": "FLUID_DEX_SOURCE_NOMINATION_PROGRAM",
-              "closureRoot": "0x0d62f0b5e8666b327bb96a742c080bcde4186bc769f22241717d33ed9e5b9969",
+              "closureRoot": "0x415c368766deecc420dd808d3a6235050519aee114a0a43d709873950f96ee5e",
               "schemaHash": "0xb0d0c56aad315032812a0b2ab9475b71b527ec0815da12607e20a4232240b121"
             },
             "mutationCorpus": {
               "modulePath": "families/fluid-dex/src/nomination-qualification.ts",
               "exportName": "FLUID_DEX_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0xfd2bb04fa8c7caf0b96d80b75cc95e11ea222324e5258d05ed4f83c61e60dd10"
+              "closureRoot": "0x08506b7bfbe2a084893d77c384fa55135890a92506e6045cd37e9b78acdde338"
             },
             "independentOracle": {
               "modulePath": "families/fluid-dex/src/nomination-qualification.ts",
               "exportName": "FLUID_DEX_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0xfd2bb04fa8c7caf0b96d80b75cc95e11ea222324e5258d05ed4f83c61e60dd10"
+              "closureRoot": "0x08506b7bfbe2a084893d77c384fa55135890a92506e6045cd37e9b78acdde338"
             },
-            "nominationProgramRoot": "0x1e662f37323b26c0d3d7b058a307fbf29dfb8b2707307add4bda843c38f38816",
-            "proposalLeafDigest": "0x0defe5a2941f8454126dabd076c21584897a77c63b8534d4da3bad064e6469e5"
+            "nominationProgramRoot": "0xe68ca9d4397539b9640d2fb987aa7e0c762fc1138f0d1dda91ee7f16def20a37",
+            "proposalLeafDigest": "0x9ff34a5227c42d4696c3a6e516c0c4648e0b92ea74f78316cbb6ac74294d4e15"
           }
         }
       ],
@@ -1746,46 +1787,46 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/fluid-dex/src/runtime.ts",
           "exportName": "FLUID_DEX_RUNTIME",
-          "closureRoot": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
+          "closureRoot": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
           "capabilityRef": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "capability",
             "capabilityId": "family.fluid-dex.coarse",
             "version": "1.0.0",
             "schemaHash": "0xbc6fde8b67f7f6c0eb70eae88f0d5698c29562d5cabb99df12fcf7cfef0ea059",
-            "interpreterHash": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
-            "ownerRef": "0xaf4f4a04720c2da06c0fe1d119089500aca22c2516cb4f38f498ee6485bfd50a"
+            "interpreterHash": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
+            "ownerRef": "0x436107848bd7ba4eb4f5b0f4dc31b0a98c301ff20f033b004c2c9cff94a09e88"
           }
         },
         {
           "modulePath": "families/fluid-dex/src/runtime.ts",
           "exportName": "FLUID_DEX_RUNTIME",
-          "closureRoot": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
+          "closureRoot": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
           "capabilityRef": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "capability",
             "capabilityId": "family.fluid-dex.exact",
             "version": "1.0.0",
             "schemaHash": "0xd91bcf90607cf4881b29aa3ae0e4b8182fe4074104176f8819a4f0e15c75d099",
-            "interpreterHash": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
-            "ownerRef": "0x2f03fa6ce280bd4b14ca13b44853105ea075f4e832e51331f2cb35e80ddb7454"
+            "interpreterHash": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
+            "ownerRef": "0x92ff369bbf5dfabbff900824f78a3a0ee090c12f90a4b2c8c73ee7835afcdf21"
           }
         },
         {
           "modulePath": "families/fluid-dex/src/runtime.ts",
           "exportName": "FLUID_DEX_RUNTIME",
-          "closureRoot": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
+          "closureRoot": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
           "capabilityRef": {
             "familyId": "fluid-dex",
-            "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+            "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
             "stage": "capability",
             "capabilityId": "family.fluid-dex.state",
             "version": "1.0.0",
             "schemaHash": "0xe45709a4ab1d30f6ab7cde439e53df05b4c9d1f65187a57af31f1efbd17a9de9",
-            "interpreterHash": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
-            "ownerRef": "0x91d58749570c742812892782fd71a0db298bc5eee217ea2517e02ea92d1ac355"
+            "interpreterHash": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
+            "ownerRef": "0x84622bba064ce8b368b614b0a61ec2998720a40a43268e4eec9147fc9d32c107"
           }
         }
       ],
@@ -1793,8 +1834,8 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/fluid-dex/src/action.ts",
           "exportName": "FLUID_DEX_ACTION_PORT",
-          "closureRoot": "0xc3f6710a39ef732a7151cd6bbcbff78350da9633c874ba87bf78cae641a1bb7e",
-          "ownerRef": "0x8cb7e87248146d38623c6e29b42b42f94ed4c8839d78dbd64f419c69b5d4d559",
+          "closureRoot": "0xd2c664ade69098a5b50354754383fee30eadd40b382dec39e2c6f6406a3e5328",
+          "ownerRef": "0xc97daf72853d94dc0101dcb43d6ecdfe87c1f9d51cefe231b809c8fac418e505",
           "ownerId": "family.fluid-dex.swap-action",
           "version": "1.0.0",
           "schemaHash": "0xefa1238d37025028607b30d011fcf59640234239f737a88f6ec0fb02c10746b7",
@@ -1806,144 +1847,153 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
       ],
       "runtimeAdapters": [
         {
+          "role": "physical-lifecycle/v1",
+          "modulePath": "families/fluid-dex/src/runtime/physical-adapter.ts",
+          "exportName": "FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+          "closureRoot": "0xb2aae36a01127b7d880b2a094f805ede4d55043cc5f5813f8995a7e2ce46b9e7",
+          "capabilityRefs": {},
+          "actionOwnerRefs": {},
+          "leafDigest": "0xdf9afd52361404d3261e745c5fa55ff707926febff03b2af2753d8a7953f5378"
+        },
+        {
           "role": "search/v1",
           "modulePath": "families/fluid-dex/src/search-adapter.ts",
           "exportName": "FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY",
-          "closureRoot": "0x651bb25b74333e4af933eadf3811ca8da4b934b7b3b1c71ff97147d43f15055e",
+          "closureRoot": "0x77faf69afa33bd2451c51142acdf8cfa322e98d3715a73c6cc7c9abd1242d52e",
           "capabilityRefs": {
             "coarse": {
               "familyId": "fluid-dex",
-              "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+              "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
               "stage": "capability",
               "capabilityId": "family.fluid-dex.coarse",
               "version": "1.0.0",
               "schemaHash": "0xbc6fde8b67f7f6c0eb70eae88f0d5698c29562d5cabb99df12fcf7cfef0ea059",
-              "interpreterHash": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
-              "ownerRef": "0xaf4f4a04720c2da06c0fe1d119089500aca22c2516cb4f38f498ee6485bfd50a"
+              "interpreterHash": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
+              "ownerRef": "0x436107848bd7ba4eb4f5b0f4dc31b0a98c301ff20f033b004c2c9cff94a09e88"
             },
             "exact": {
               "familyId": "fluid-dex",
-              "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+              "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
               "stage": "capability",
               "capabilityId": "family.fluid-dex.exact",
               "version": "1.0.0",
               "schemaHash": "0xd91bcf90607cf4881b29aa3ae0e4b8182fe4074104176f8819a4f0e15c75d099",
-              "interpreterHash": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
-              "ownerRef": "0x2f03fa6ce280bd4b14ca13b44853105ea075f4e832e51331f2cb35e80ddb7454"
+              "interpreterHash": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
+              "ownerRef": "0x92ff369bbf5dfabbff900824f78a3a0ee090c12f90a4b2c8c73ee7835afcdf21"
             },
             "state": {
               "familyId": "fluid-dex",
-              "familyDefinitionHash": "0x5b9ea891a5e029ed20fec48678fb8edfa1a0f5b7d3967996e143e269751d6eb8",
+              "familyDefinitionHash": "0x6c625a052f1dbaec205ea3984f9c3ec181b40bf5bfddb9d3089ef9a97579239b",
               "stage": "capability",
               "capabilityId": "family.fluid-dex.state",
               "version": "1.0.0",
               "schemaHash": "0xe45709a4ab1d30f6ab7cde439e53df05b4c9d1f65187a57af31f1efbd17a9de9",
-              "interpreterHash": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76",
-              "ownerRef": "0x91d58749570c742812892782fd71a0db298bc5eee217ea2517e02ea92d1ac355"
+              "interpreterHash": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef",
+              "ownerRef": "0x84622bba064ce8b368b614b0a61ec2998720a40a43268e4eec9147fc9d32c107"
             }
           },
           "actionOwnerRefs": {
-            "action": "0x8cb7e87248146d38623c6e29b42b42f94ed4c8839d78dbd64f419c69b5d4d559"
+            "action": "0xc97daf72853d94dc0101dcb43d6ecdfe87c1f9d51cefe231b809c8fac418e505"
           },
-          "leafDigest": "0xd57f45c33394202303af28dcfb7397b7919aab8952ee904f8db1c332e99ed52a"
+          "leafDigest": "0x1b8107906b2a6425bc180a93f5b79114f1ac2c8fa40ae6937061a0c344466075"
         }
       ],
-      "runtimeAdapterRoot": "0x0bd2d73424616d58bdc01bc0d615131e7cd60a72ca42af82412c8ce56e96360e",
-      "sourcePlanRoot": "0xa6872a866b2f941d4af21c5ef678b21f5721c598b9670071b960be713da32e46",
-      "stageDefinitionRoot": "0x960a3d8b7e8c3cb9d1272a88c09d6d6d2619fdd6ccf7959920d57230d87ceea4"
+      "runtimeAdapterRoot": "0x0fb515e2f9030e9bb45629899d25b4e88800c17f602979d573d579e561085ce5",
+      "sourcePlanRoot": "0xfe9d644a2688c2b2a22dfd51ffc8627902308784aa2e4e83aaa21d424c604903",
+      "stageDefinitionRoot": "0xa81a3500b9c3ed5ce5f07d26c2fc3bbf8bed12af581835d4e994ed6a3e918422"
     },
     {
       "entry": {
         "familyId": "univ2-standard",
-        "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
-        "issuerRef": "0x7e0abc9957684998e3f5e0d8fdbafe88c670a994fd5d7a54ff5fe0a59c82936a",
+        "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
+        "issuerRef": "0xe8b1c7e1e1e67ac3b8c91c3c6db728f72d3fafa1de28757fd1ef8f659c95fb8b",
         "authorityRef": "0x72d666a35ab84e778daecd6e83f020b378cb77310621dfcc1da371779a0dc0c4",
         "lifecycleRefs": {
           "nomination": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "nomination",
             "capabilityId": "family.univ2-standard.nomination",
             "version": "1.0.0",
             "schemaHash": "0x3117b24f85337056097ec9ee69f2a3c60eaeab74ddd3866fac58cc4f2747f31b",
-            "interpreterHash": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
-            "ownerRef": "0x8e650f76e4ad47f9ff43595fd04b20cd174a60fb0d0cfdcbb65bc0f6067db3fb"
+            "interpreterHash": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
+            "ownerRef": "0x16b23403859a184eaab1824c618d6da5a516f9e9834d59f75ddba15fb02b3884"
           },
           "identity": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "identity",
             "capabilityId": "family.univ2-standard.identity",
             "version": "1.0.0",
             "schemaHash": "0x78400eb7677823fe63b50df79ad8bcb928db35f5bb8d24f2b004491094692e75",
-            "interpreterHash": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
-            "ownerRef": "0xa956d176a975fe4eac1abc6511fe3aaac9ce073368077d191af6ae4fd64c3548"
+            "interpreterHash": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
+            "ownerRef": "0xef27c2eeb878dfeb4bf7962e3a2352851a4dfb18f8ccd414538c3b12c110209e"
           },
           "materialization": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "materialization",
             "capabilityId": "family.univ2-standard.materialization",
             "version": "1.0.0",
             "schemaHash": "0x7b6f46bf80fdd4e20efc40fd0ad7aeaffe718db798352265a7f91bc97368b39b",
-            "interpreterHash": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
-            "ownerRef": "0x5fc9ccb5beb4e1ad3d43c7b27815257bd23ba854ff72123f45864dc1f6cd8d66"
+            "interpreterHash": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
+            "ownerRef": "0xecf162de3d46494231660dd3fd518c0873d20f01c35221371aa9d07eb1e484d3"
           },
           "projection": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "projection",
             "capabilityId": "family.univ2-standard.projection",
             "version": "1.0.0",
             "schemaHash": "0xa56b2e88eadacf8723d4286b3d7565224107c847cf500e904ae4cc3ccf9563b5",
-            "interpreterHash": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
-            "ownerRef": "0x4716a9c9586d4f7e6578918e06eb0cc724d0937b44d3cab5de0e39742e9348eb"
+            "interpreterHash": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
+            "ownerRef": "0x8f129a30d57875fe14293496d2d56aaf81a0132a763a8a42536091925aed7023"
           },
           "rehydration": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "rehydration",
             "capabilityId": "family.univ2-standard.rehydration",
             "version": "1.0.0",
             "schemaHash": "0x5af3186a9fc743dbeaab7fad880864674a4bd2e59fdab95bd90c3f045c70501e",
-            "interpreterHash": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
-            "ownerRef": "0x794b0df397314441c998741b72b01eb58b3c7eac7e81ff9f08cff197142cb841"
+            "interpreterHash": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
+            "ownerRef": "0x7a4b154f92cdf0dfa827ac71e1b9ffca551dbb838b5040dc69df37a2d268aa52"
           }
         },
         "extensionRefs": [
           {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "capability",
             "capabilityId": "family.univ2-standard.coarse",
             "version": "1.0.0",
             "schemaHash": "0xf2aae38e672bcb4399bf442d3fbe73220e13430bf8c003fd5ed69efbe8999481",
-            "interpreterHash": "0xd82e7baf846e605e5070cfb4bff692972494276fd2281c72470b8ef556102fe9",
-            "ownerRef": "0xa1afdad5524aecdd2d580d7ba8f668c5a153a95f5a2d3048ffb255a577df7e06"
+            "interpreterHash": "0xce4085428146bc27284a12d8623f6818e71163042c497c5576292103a85105d8",
+            "ownerRef": "0x4148eb74b39507e7b2d0ed5a2508c356854bd0bc8070ac2435ccfd3efe1a7327"
           },
           {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "capability",
             "capabilityId": "family.univ2-standard.exact",
             "version": "1.0.0",
             "schemaHash": "0xa46323cd5995a81b5444faf94fc24ec9f4ff2457b2980c00aee97ab4a1b8c6f1",
-            "interpreterHash": "0xa0b1b95c5a6f36d51b2707126aea568b60b9f1fcaa111be0fcc1e5a31bf52777",
-            "ownerRef": "0xf1f602330a867d2cb2ecee0826ab3759074c5217c842ce505e0a67f89bcd8a35"
+            "interpreterHash": "0xea8bf1b6acf228f07b118a159988bc7a60cee4bdea88f5f3098ff25fc4a96f2f",
+            "ownerRef": "0x64700871ea29c8dbfa45aba49d6caf533c9cefe757a458876e941713f7e8ac6d"
           },
           {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "capability",
             "capabilityId": "family.univ2-standard.state",
             "version": "1.0.0",
             "schemaHash": "0x1e07e9ad84d77080f7bbdfd4c1c45043fef23d95f4150a53630a6c8fc13b7526",
-            "interpreterHash": "0x88caa04edb2e022f2d263378cd54d74992f8ccf0155e80fa23a9f234d19dc7f3",
-            "ownerRef": "0xfa937dbe88f264b8b6cdeabd4ab08c19d8b465ee73269bd9d4371d1efc3bbec5"
+            "interpreterHash": "0xa04eabd540b3682dbd8bf00da54c205970ee20f53a70c246de6459cf77268254",
+            "ownerRef": "0x1751c659a5fcfb94a8803b9201d7c76f0ea86ba873a82539d240c63a10f98f3b"
           }
         ],
         "actionOwnerRefs": [
-          "0x8705718d35e8bfc6cea2f7d45ae25ecdb46d2fc338be697203d12300f1d7881e"
+          "0x27fab102832836eda0e14a46086bfb981d92e6155062117cf8d6a4035226f774"
         ],
         "factContractRefs": [
           {
@@ -1959,107 +2009,107 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         ],
         "sourcePlanRefs": [
           {
-            "ownerRef": "0x8905b550c6a3cba7cb2175adc85c4c0afe8ed1879c6e203ac41a6eae571f2056",
-            "sourcePlanRef": "0x3a8f92965df95cac2fcb0b56a677ce030c220fe9223a887eb5dc47265b080b83",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "ownerRef": "0x1e870f0653f40c8854e33fc1555363c4f2bf8ef3ba9fe98590293457bd05f81f",
+            "sourcePlanRef": "0x9a6722e53c8acb6158c77afefc020e268f6d3babf28a37a181bc48194aef7260",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "completeness": "nomination-only",
             "historyStartBlock": null
           },
           {
-            "ownerRef": "0x7afe95e16388b10275f3627930e1271a7f0fd96f7032dde5ff6d93dff249006a",
-            "sourcePlanRef": "0x6037f2cc86e13636502f18f868bad84f3bd716c250f1e977b5b2f7925bc3e2a9",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "ownerRef": "0xfd8563dd324b0df24f6f23e5695d522fc4a3f991ad8b6b8e14d79885b168c981",
+            "sourcePlanRef": "0xc6d35d2d216bc9bfb04e371c282beab907d787d46e3009032dd940ff6786bc9a",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "completeness": "contiguous-history",
             "historyStartBlock": "0"
           }
         ],
-        "definitionCatalogLeafDigest": "0xb61c3adfc4c7f13d3837e6f4e4020117740e7efea9a2e80dd3e86072250eac0a",
-        "capabilityCatalogRoot": "0xcac281218890555a06e7b63aedafccbb6b8b29445299981279d8276897ea808a"
+        "definitionCatalogLeafDigest": "0x4b3ca63d213d92587bebcecfe1ac35594534b9db5defbd337487d00004ef50ad",
+        "capabilityCatalogRoot": "0xd674983adba41655dac0cdc5a2548fcac9cda7c065dee4c30a82decb3ee1dccb"
       },
       "publicEntry": {
         "modulePath": "families/univ2-standard/src/public.ts",
         "exportName": "UNIV2_STANDARD_DEFINITION",
-        "closureRoot": "0x848dbb92d8b7c507085c5e2b8563c63bcfcf390bbe588e0c4f855adacba379ff"
+        "closureRoot": "0x69fde9db1c6ec95fc3cbd3822a674896a3293187f834b4c37a0216ddde2e5309"
       },
       "stages": [
         {
           "stage": "identity",
           "modulePath": "families/univ2-standard/src/runtime/definitions.ts",
           "exportName": "UNIV2_STANDARD_IDENTITY_DEFINITION",
-          "closureRoot": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
+          "closureRoot": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
           "stageRef": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "identity",
             "capabilityId": "family.univ2-standard.identity",
             "version": "1.0.0",
             "schemaHash": "0x78400eb7677823fe63b50df79ad8bcb928db35f5bb8d24f2b004491094692e75",
-            "interpreterHash": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
-            "ownerRef": "0xa956d176a975fe4eac1abc6511fe3aaac9ce073368077d191af6ae4fd64c3548"
+            "interpreterHash": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
+            "ownerRef": "0xef27c2eeb878dfeb4bf7962e3a2352851a4dfb18f8ccd414538c3b12c110209e"
           }
         },
         {
           "stage": "materialization",
           "modulePath": "families/univ2-standard/src/runtime/definitions.ts",
           "exportName": "UNIV2_STANDARD_MATERIALIZATION_DEFINITION",
-          "closureRoot": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
+          "closureRoot": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
           "stageRef": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "materialization",
             "capabilityId": "family.univ2-standard.materialization",
             "version": "1.0.0",
             "schemaHash": "0x7b6f46bf80fdd4e20efc40fd0ad7aeaffe718db798352265a7f91bc97368b39b",
-            "interpreterHash": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
-            "ownerRef": "0x5fc9ccb5beb4e1ad3d43c7b27815257bd23ba854ff72123f45864dc1f6cd8d66"
+            "interpreterHash": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
+            "ownerRef": "0xecf162de3d46494231660dd3fd518c0873d20f01c35221371aa9d07eb1e484d3"
           }
         },
         {
           "stage": "nomination",
           "modulePath": "families/univ2-standard/src/runtime/definitions.ts",
           "exportName": "UNIV2_STANDARD_NOMINATION_DEFINITION",
-          "closureRoot": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
+          "closureRoot": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
           "stageRef": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "nomination",
             "capabilityId": "family.univ2-standard.nomination",
             "version": "1.0.0",
             "schemaHash": "0x3117b24f85337056097ec9ee69f2a3c60eaeab74ddd3866fac58cc4f2747f31b",
-            "interpreterHash": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
-            "ownerRef": "0x8e650f76e4ad47f9ff43595fd04b20cd174a60fb0d0cfdcbb65bc0f6067db3fb"
+            "interpreterHash": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
+            "ownerRef": "0x16b23403859a184eaab1824c618d6da5a516f9e9834d59f75ddba15fb02b3884"
           }
         },
         {
           "stage": "projection",
           "modulePath": "families/univ2-standard/src/runtime/definitions.ts",
           "exportName": "UNIV2_STANDARD_PROJECTION_DEFINITION",
-          "closureRoot": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
+          "closureRoot": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
           "stageRef": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "projection",
             "capabilityId": "family.univ2-standard.projection",
             "version": "1.0.0",
             "schemaHash": "0xa56b2e88eadacf8723d4286b3d7565224107c847cf500e904ae4cc3ccf9563b5",
-            "interpreterHash": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
-            "ownerRef": "0x4716a9c9586d4f7e6578918e06eb0cc724d0937b44d3cab5de0e39742e9348eb"
+            "interpreterHash": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
+            "ownerRef": "0x8f129a30d57875fe14293496d2d56aaf81a0132a763a8a42536091925aed7023"
           }
         },
         {
           "stage": "rehydration",
           "modulePath": "families/univ2-standard/src/runtime/definitions.ts",
           "exportName": "UNIV2_STANDARD_REHYDRATION_DEFINITION",
-          "closureRoot": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
+          "closureRoot": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
           "stageRef": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "rehydration",
             "capabilityId": "family.univ2-standard.rehydration",
             "version": "1.0.0",
             "schemaHash": "0x5af3186a9fc743dbeaab7fad880864674a4bd2e59fdab95bd90c3f045c70501e",
-            "interpreterHash": "0xf2281d22ffe0e3a4f28b906c854d3d09ca1abfc9f3f4ddf6229602439536900a",
-            "ownerRef": "0x794b0df397314441c998741b72b01eb58b3c7eac7e81ff9f08cff197142cb841"
+            "interpreterHash": "0x369e80027da43dab5d76731807ce4521bc9075e9ef8b7dd299c961c6d8052843",
+            "ownerRef": "0x7a4b154f92cdf0dfa827ac71e1b9ffca551dbb838b5040dc69df37a2d268aa52"
           }
         }
       ],
@@ -2068,70 +2118,70 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "sourcePlanId": "univ2-standard.fixed-cutoff-50-block",
           "modulePath": "families/univ2-standard/src/stages/nomination.ts",
           "exportName": "UNIV2_STANDARD_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x139dfde0200485b54f066b3adfc974d5cf0929035c64a6e3a6fcc67be7c430f0",
+          "closureRoot": "0x33e1fb7d74bb6d0ca80d27dca34799ac2c04c2c61d086021a78d5892cad29788",
           "schemaHash": "0x808bb5320e7cf30fa70971610436597db56866e7ad3432cc8ac304c1a081d8f6",
           "planRef": {
-            "ownerRef": "0x8905b550c6a3cba7cb2175adc85c4c0afe8ed1879c6e203ac41a6eae571f2056",
-            "sourcePlanRef": "0x3a8f92965df95cac2fcb0b56a677ce030c220fe9223a887eb5dc47265b080b83",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "ownerRef": "0x1e870f0653f40c8854e33fc1555363c4f2bf8ef3ba9fe98590293457bd05f81f",
+            "sourcePlanRef": "0x9a6722e53c8acb6158c77afefc020e268f6d3babf28a37a181bc48194aef7260",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "completeness": "nomination-only",
             "historyStartBlock": null
           },
-          "leafDigest": "0xe4bc0c742a4f79e687de4fcb2b6d9bb29dee5b62e1d64a00d0450ac837b00b8f",
+          "leafDigest": "0xc1a895f9b373ee502028c79ef6361feaaf20111cbb2e8b146c0e199a1696bcf0",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/univ2-standard/src/stages/nomination.ts",
               "exportName": "UNIV2_STANDARD_SOURCE_NOMINATION_PROGRAM",
-              "closureRoot": "0x139dfde0200485b54f066b3adfc974d5cf0929035c64a6e3a6fcc67be7c430f0",
+              "closureRoot": "0x33e1fb7d74bb6d0ca80d27dca34799ac2c04c2c61d086021a78d5892cad29788",
               "schemaHash": "0x808bb5320e7cf30fa70971610436597db56866e7ad3432cc8ac304c1a081d8f6"
             },
             "mutationCorpus": {
               "modulePath": "families/univ2-standard/src/nomination-qualification.ts",
               "exportName": "UNIV2_STANDARD_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x20d0c88346e85d14624d8402ac4cedf80eda76d0403384baa0ae8b3acf34f3a8"
+              "closureRoot": "0x023d65dfbd37a3e3582c5a58bacb3fc38b95f207e6a9c11f5cf306780eb2db5f"
             },
             "independentOracle": {
               "modulePath": "families/univ2-standard/src/nomination-qualification.ts",
               "exportName": "UNIV2_STANDARD_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x20d0c88346e85d14624d8402ac4cedf80eda76d0403384baa0ae8b3acf34f3a8"
+              "closureRoot": "0x023d65dfbd37a3e3582c5a58bacb3fc38b95f207e6a9c11f5cf306780eb2db5f"
             },
-            "nominationProgramRoot": "0x50c81672bcbdba8e75b219a5514a5d5640a29b95acae36ac75221579a8942eb7",
-            "proposalLeafDigest": "0x06f9eb8f7e0c8dee3c9cf7aae254db8547dc89c3d416992c948023fdda7919e1"
+            "nominationProgramRoot": "0x93db1fc2cb6ac1de50b758a48554f9bc241a1bcfdaeecb06aabb26dcb3a9922d",
+            "proposalLeafDigest": "0xad3e3e08c81294123a693eb18b9eee350c8d5896307f6bd7addca8a27b3f34c0"
           }
         },
         {
           "sourcePlanId": "univ2-standard.pair-created-contiguous-history",
           "modulePath": "families/univ2-standard/src/history-source-plan.ts",
           "exportName": "UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x8a1b5b3983c2f518a8bdd476ba154faf2a0f271ccdb4b411d015991bf333d87e",
+          "closureRoot": "0x0293e530adb591247e991caefc9a5810ebbae5b85969243d47963836c2045a55",
           "schemaHash": "0x5ce3a68336c555c6c0d55d01dda98f1ce60d0779a8b775de816ba7b0274221b1",
           "planRef": {
-            "ownerRef": "0x7afe95e16388b10275f3627930e1271a7f0fd96f7032dde5ff6d93dff249006a",
-            "sourcePlanRef": "0x6037f2cc86e13636502f18f868bad84f3bd716c250f1e977b5b2f7925bc3e2a9",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "ownerRef": "0xfd8563dd324b0df24f6f23e5695d522fc4a3f991ad8b6b8e14d79885b168c981",
+            "sourcePlanRef": "0xc6d35d2d216bc9bfb04e371c282beab907d787d46e3009032dd940ff6786bc9a",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "completeness": "contiguous-history",
             "historyStartBlock": "0"
           },
-          "leafDigest": "0xb3bc66e62beaef9da0bde2e3ff66a463f53a7abe3ee7cb7f83c7ddf266e34e30",
+          "leafDigest": "0xd42ac25b4aa2846ee8b4a81363ef14ae74c0b9ae3090f6d40764f5ae43684133",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/univ2-standard/src/history-source-plan.ts",
               "exportName": "UNIV2_STANDARD_HISTORY_NOMINATION_PROGRAM",
-              "closureRoot": "0x8a1b5b3983c2f518a8bdd476ba154faf2a0f271ccdb4b411d015991bf333d87e",
+              "closureRoot": "0x0293e530adb591247e991caefc9a5810ebbae5b85969243d47963836c2045a55",
               "schemaHash": "0x5ce3a68336c555c6c0d55d01dda98f1ce60d0779a8b775de816ba7b0274221b1"
             },
             "mutationCorpus": {
               "modulePath": "families/univ2-standard/src/nomination-qualification.ts",
               "exportName": "UNIV2_STANDARD_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x20d0c88346e85d14624d8402ac4cedf80eda76d0403384baa0ae8b3acf34f3a8"
+              "closureRoot": "0x023d65dfbd37a3e3582c5a58bacb3fc38b95f207e6a9c11f5cf306780eb2db5f"
             },
             "independentOracle": {
               "modulePath": "families/univ2-standard/src/nomination-qualification.ts",
               "exportName": "UNIV2_STANDARD_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x20d0c88346e85d14624d8402ac4cedf80eda76d0403384baa0ae8b3acf34f3a8"
+              "closureRoot": "0x023d65dfbd37a3e3582c5a58bacb3fc38b95f207e6a9c11f5cf306780eb2db5f"
             },
-            "nominationProgramRoot": "0xee618e1119b4cdac62577bd351377ac3c722cecd33a72a7a114c27c2645c5a96",
-            "proposalLeafDigest": "0x02df8dd3cacdb05a000ee592bb46d3c36a46e8b424682d267eef38ca805c7e3e"
+            "nominationProgramRoot": "0x5b89e78c97e3fbe949ec0d6fe14d3cf2707232daf834bdc79bee4959fdc80773",
+            "proposalLeafDigest": "0x820e2585c4ca8f42df704b1b5b0d3b6f851611eab4024e521ad76851a1808643"
           }
         }
       ],
@@ -2139,46 +2189,46 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/univ2-standard/src/capabilities/coarse.ts",
           "exportName": "UNIV2_STANDARD_COARSE_PORT",
-          "closureRoot": "0xd82e7baf846e605e5070cfb4bff692972494276fd2281c72470b8ef556102fe9",
+          "closureRoot": "0xce4085428146bc27284a12d8623f6818e71163042c497c5576292103a85105d8",
           "capabilityRef": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "capability",
             "capabilityId": "family.univ2-standard.coarse",
             "version": "1.0.0",
             "schemaHash": "0xf2aae38e672bcb4399bf442d3fbe73220e13430bf8c003fd5ed69efbe8999481",
-            "interpreterHash": "0xd82e7baf846e605e5070cfb4bff692972494276fd2281c72470b8ef556102fe9",
-            "ownerRef": "0xa1afdad5524aecdd2d580d7ba8f668c5a153a95f5a2d3048ffb255a577df7e06"
+            "interpreterHash": "0xce4085428146bc27284a12d8623f6818e71163042c497c5576292103a85105d8",
+            "ownerRef": "0x4148eb74b39507e7b2d0ed5a2508c356854bd0bc8070ac2435ccfd3efe1a7327"
           }
         },
         {
           "modulePath": "families/univ2-standard/src/capabilities/exact.ts",
           "exportName": "UNIV2_STANDARD_EXACT_PORT",
-          "closureRoot": "0xa0b1b95c5a6f36d51b2707126aea568b60b9f1fcaa111be0fcc1e5a31bf52777",
+          "closureRoot": "0xea8bf1b6acf228f07b118a159988bc7a60cee4bdea88f5f3098ff25fc4a96f2f",
           "capabilityRef": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "capability",
             "capabilityId": "family.univ2-standard.exact",
             "version": "1.0.0",
             "schemaHash": "0xa46323cd5995a81b5444faf94fc24ec9f4ff2457b2980c00aee97ab4a1b8c6f1",
-            "interpreterHash": "0xa0b1b95c5a6f36d51b2707126aea568b60b9f1fcaa111be0fcc1e5a31bf52777",
-            "ownerRef": "0xf1f602330a867d2cb2ecee0826ab3759074c5217c842ce505e0a67f89bcd8a35"
+            "interpreterHash": "0xea8bf1b6acf228f07b118a159988bc7a60cee4bdea88f5f3098ff25fc4a96f2f",
+            "ownerRef": "0x64700871ea29c8dbfa45aba49d6caf533c9cefe757a458876e941713f7e8ac6d"
           }
         },
         {
           "modulePath": "families/univ2-standard/src/capabilities/state.ts",
           "exportName": "UNIV2_STANDARD_STATE_PORT",
-          "closureRoot": "0x88caa04edb2e022f2d263378cd54d74992f8ccf0155e80fa23a9f234d19dc7f3",
+          "closureRoot": "0xa04eabd540b3682dbd8bf00da54c205970ee20f53a70c246de6459cf77268254",
           "capabilityRef": {
             "familyId": "univ2-standard",
-            "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+            "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
             "stage": "capability",
             "capabilityId": "family.univ2-standard.state",
             "version": "1.0.0",
             "schemaHash": "0x1e07e9ad84d77080f7bbdfd4c1c45043fef23d95f4150a53630a6c8fc13b7526",
-            "interpreterHash": "0x88caa04edb2e022f2d263378cd54d74992f8ccf0155e80fa23a9f234d19dc7f3",
-            "ownerRef": "0xfa937dbe88f264b8b6cdeabd4ab08c19d8b465ee73269bd9d4371d1efc3bbec5"
+            "interpreterHash": "0xa04eabd540b3682dbd8bf00da54c205970ee20f53a70c246de6459cf77268254",
+            "ownerRef": "0x1751c659a5fcfb94a8803b9201d7c76f0ea86ba873a82539d240c63a10f98f3b"
           }
         }
       ],
@@ -2186,8 +2236,8 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/univ2-standard/src/capabilities/action.ts",
           "exportName": "UNIV2_STANDARD_SWAP_ACTION_PORT",
-          "closureRoot": "0x43f7f21c6b3dadb28046f3561649abab9114c4d46af7fb6e6f5fa7621a85b8fa",
-          "ownerRef": "0x8705718d35e8bfc6cea2f7d45ae25ecdb46d2fc338be697203d12300f1d7881e",
+          "closureRoot": "0x1c37528b99f26a5fed398ec10051280e357634f0d4ef313c17c555b96c8ae8be",
+          "ownerRef": "0x27fab102832836eda0e14a46086bfb981d92e6155062117cf8d6a4035226f774",
           "ownerId": "family.univ2-standard.swap-action",
           "version": "1.0.0",
           "schemaHash": "0x5baea426a6761534cd45990b4db0d9a42061da62b960fccf21f482d480c7d9fb",
@@ -2199,144 +2249,153 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
       ],
       "runtimeAdapters": [
         {
+          "role": "physical-lifecycle/v1",
+          "modulePath": "families/univ2-standard/src/runtime/physical-adapter.ts",
+          "exportName": "UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+          "closureRoot": "0x710b8f6187e32f7d9a0bac399dfb0ddaa4e4bfd1983f0c1ea734a87bba42882a",
+          "capabilityRefs": {},
+          "actionOwnerRefs": {},
+          "leafDigest": "0x5f93989c3a14f39094d092827f87f3646aeb319a002b7b9fafd43ca37ba4866c"
+        },
+        {
           "role": "search/v1",
           "modulePath": "families/univ2-standard/src/search/adapter.ts",
           "exportName": "UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY",
-          "closureRoot": "0x7235e3cc53f157e2425d5e75cec217162157d80143142ba516b68efb70c80591",
+          "closureRoot": "0x24391e8ac8494bca059657bd3d1e4c48fab6a1cc97337df5705ba006d084e911",
           "capabilityRefs": {
             "coarse": {
               "familyId": "univ2-standard",
-              "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+              "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
               "stage": "capability",
               "capabilityId": "family.univ2-standard.coarse",
               "version": "1.0.0",
               "schemaHash": "0xf2aae38e672bcb4399bf442d3fbe73220e13430bf8c003fd5ed69efbe8999481",
-              "interpreterHash": "0xd82e7baf846e605e5070cfb4bff692972494276fd2281c72470b8ef556102fe9",
-              "ownerRef": "0xa1afdad5524aecdd2d580d7ba8f668c5a153a95f5a2d3048ffb255a577df7e06"
+              "interpreterHash": "0xce4085428146bc27284a12d8623f6818e71163042c497c5576292103a85105d8",
+              "ownerRef": "0x4148eb74b39507e7b2d0ed5a2508c356854bd0bc8070ac2435ccfd3efe1a7327"
             },
             "exact": {
               "familyId": "univ2-standard",
-              "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+              "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
               "stage": "capability",
               "capabilityId": "family.univ2-standard.exact",
               "version": "1.0.0",
               "schemaHash": "0xa46323cd5995a81b5444faf94fc24ec9f4ff2457b2980c00aee97ab4a1b8c6f1",
-              "interpreterHash": "0xa0b1b95c5a6f36d51b2707126aea568b60b9f1fcaa111be0fcc1e5a31bf52777",
-              "ownerRef": "0xf1f602330a867d2cb2ecee0826ab3759074c5217c842ce505e0a67f89bcd8a35"
+              "interpreterHash": "0xea8bf1b6acf228f07b118a159988bc7a60cee4bdea88f5f3098ff25fc4a96f2f",
+              "ownerRef": "0x64700871ea29c8dbfa45aba49d6caf533c9cefe757a458876e941713f7e8ac6d"
             },
             "state": {
               "familyId": "univ2-standard",
-              "familyDefinitionHash": "0xf4d04745979d2ae3fa11230586b318c30f07e92f2d41e1c87b61b69684ed4adc",
+              "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
               "stage": "capability",
               "capabilityId": "family.univ2-standard.state",
               "version": "1.0.0",
               "schemaHash": "0x1e07e9ad84d77080f7bbdfd4c1c45043fef23d95f4150a53630a6c8fc13b7526",
-              "interpreterHash": "0x88caa04edb2e022f2d263378cd54d74992f8ccf0155e80fa23a9f234d19dc7f3",
-              "ownerRef": "0xfa937dbe88f264b8b6cdeabd4ab08c19d8b465ee73269bd9d4371d1efc3bbec5"
+              "interpreterHash": "0xa04eabd540b3682dbd8bf00da54c205970ee20f53a70c246de6459cf77268254",
+              "ownerRef": "0x1751c659a5fcfb94a8803b9201d7c76f0ea86ba873a82539d240c63a10f98f3b"
             }
           },
           "actionOwnerRefs": {
-            "swap": "0x8705718d35e8bfc6cea2f7d45ae25ecdb46d2fc338be697203d12300f1d7881e"
+            "swap": "0x27fab102832836eda0e14a46086bfb981d92e6155062117cf8d6a4035226f774"
           },
-          "leafDigest": "0x746538ea9a68c03267be05e0ef80d1d2967e7d8cd0ae4ed93aa7d6766ceec830"
+          "leafDigest": "0x94f29495ea36376ad445771648d609c2d93298044d4c9275a744ce711d49849f"
         }
       ],
-      "runtimeAdapterRoot": "0x539c37907c71e6a629983dea0029238e52c0cfbb85c469a679cbbcaf550799b5",
-      "sourcePlanRoot": "0x639837f14393fa6b9a08e6cf2682b3217f0a9dc55c7fd2898f842fbfdf13cb74",
-      "stageDefinitionRoot": "0x75e50db2d7600d50bb2e37d2d31dfbab8342642bd17dce0bedbd9ceba3d3681a"
+      "runtimeAdapterRoot": "0x7a19940acfb3adcd87c5f43a2f5ea1cbb4afbb26877c6df2f5182988a6d8c5ef",
+      "sourcePlanRoot": "0xd3cde92cbb9d90474f29e080c6acd6d070e4667d11f7679fd756f1cb7ef29a8f",
+      "stageDefinitionRoot": "0x87a0548460cf570d39cb58c4d59955fdececdf5f968da03a3d0253e193e3b285"
     },
     {
       "entry": {
         "familyId": "univ3-standard",
-        "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
-        "issuerRef": "0xc1905e6f317bd82757f368b9eb868b058e5e177275be5666f0ba1cde2c7f7902",
+        "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+        "issuerRef": "0xf77c15baee8ed0ca22e22f1cbec0cd0e283523ec342a55267a5185436de639cc",
         "authorityRef": "0xf830c146820ba531e1d48d12bb0184d28a34ec78168c12e9683ecea02d37f88d",
         "lifecycleRefs": {
           "nomination": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "nomination",
             "capabilityId": "family.univ3-standard.nomination",
             "version": "1.0.0",
             "schemaHash": "0xb030b7fe4e81bff814e0b67a37e9e2c2b3cbc1f78e7388800482005a28e20c7e",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0x7404ad74f72b5e7a3a3b0942de0ee61a74a4ed9b53a24db3781633dadb3b24d6"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0x98420fc44c281f77f53f2ef9c505f072813be5e9e55460a527b96cb6bfbead0f"
           },
           "identity": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "identity",
             "capabilityId": "family.univ3-standard.identity",
             "version": "1.0.0",
             "schemaHash": "0x86f8709652520f5a1ffd3168651fb7c7d6d63ebf09cc1d2b772e18c29a832a4c",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0x59d640b6a731471fa6bd35e507c48f1ad3ad110c9bb57764075c2f882140a48e"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0xf64bd7b11c308e3ca125e764665594eb2e474cc79bf5d45bcb7e436586a3d738"
           },
           "materialization": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "materialization",
             "capabilityId": "family.univ3-standard.materialization",
             "version": "1.0.0",
             "schemaHash": "0xcecd30c348027923b2f5c993aa059cd6f541226c1d76696d704ab9604942fa13",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xadb8dfb4865b01d0ebea8169ac911d4499f6bcca53927c4fe74d41ace0b445ce"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0xd594dd5f3d49e979018c8d3a98c5bc1327fbdd7fd89c8451ed9bfef08912d70b"
           },
           "projection": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "projection",
             "capabilityId": "family.univ3-standard.projection",
             "version": "1.0.0",
             "schemaHash": "0x7d5abd72bcddcc7aa3c8faa25849e6cfc956d86ccc31288ff0bbee74c7c45394",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xe89b20a92c2365a0a0ad74907310c79488e4cabceaf5d18a4d51979e565463c2"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0x156db656ce16c365b5f2f00aa71e59bbba14c8d733861518088f3f9807a76957"
           },
           "rehydration": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "rehydration",
             "capabilityId": "family.univ3-standard.rehydration",
             "version": "1.0.0",
             "schemaHash": "0x132febc603e8fcc5de4d0b3437e6ecbfc0dc90af08e16af4f67ff02e0808df5e",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xcaa0da13d954e6c1de8b9f46e38954b8e378d1e8447ccecf47754317885384ab"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0xa28389ca6ad0bf1e2eaefe73f2ac3ca9a5973acdc190a7a6618d446cbd9b9295"
           }
         },
         "extensionRefs": [
           {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "capability",
             "capabilityId": "family.univ3-standard.coarse",
             "version": "1.0.0",
             "schemaHash": "0x9a3e44d19e8a24413cb9fac945a07d48911700f290e6ef4761c2d2cd82a44eb7",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xf827d69328dc6dee90f142c8026aa9cb3bccc94054cbc21f2e0b0cfe05d088fb"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0x68b165f1ea22b682c0df7b5bb112c8bc7628172e35250015f35860d303a9766e"
           },
           {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "capability",
             "capabilityId": "family.univ3-standard.exact",
             "version": "1.0.0",
             "schemaHash": "0x2099589db353b2af7d799dfadbf25396d2f74901f8fcb062dd0097fe4a99206b",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xa16ba4d7d8da53e50a74682983c1aed52c246bcdfcaf7bdb662a58f916661968"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0x4f8fd714f61fa54600416bc061d5daca2961dcdb9451933367d7ad5ee8a57390"
           },
           {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "capability",
             "capabilityId": "family.univ3-standard.state",
             "version": "1.0.0",
             "schemaHash": "0x269b2e2d536bca46fcde799c408e704a94d64b407952b8bb6b36780031dacda0",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xa41bc9e32ae72e856380c40d222c85ca80851e0fab373418576834658209b1ee"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0xb78a0f29815191fc2d702efdd776f786e12e761ab8eafa1b74e0af4e062dbce4"
           }
         ],
         "actionOwnerRefs": [
-          "0xfd23952c8f9ab0dfa79962811b4d3ef36bb4149ef1083c16961d9c50d18249d7"
+          "0x8fdc1a55f830010fd95aa03148c1b063d902c8dbe0525633a3d84eba2f295e4f"
         ],
         "factContractRefs": [
           {
@@ -2352,107 +2411,107 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         ],
         "sourcePlanRefs": [
           {
-            "ownerRef": "0xa620a7861e82adbeb989a98b20a4966df1a3c70e40cd51993584c8bb7509910d",
-            "sourcePlanRef": "0x73873082e2f1bcb77f02b0bdf6e657e163c3747b3a27db721094f04962e62cea",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "ownerRef": "0xebb3bb8e87181ea5ab258f4ab80b59a35c3a6516dfaed86116f5c4c1929770ec",
+            "sourcePlanRef": "0x0871b091febf471647fea23ebb1872e530244df72e79ee9123349d534dfe1607",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "completeness": "contiguous-history",
             "historyStartBlock": "0"
           },
           {
-            "ownerRef": "0xe61bdb1cdb99308ddd7673bf57f7f971e402a4165f676f867fcd895fd8c6f87c",
-            "sourcePlanRef": "0x7e35d623deb9d253761edbdd49ba7b8d76470a74bfac7d6d9214fc906e085ccd",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "ownerRef": "0x31c74c3e80ebd43b38b801b9f753d69768c3487af4f02145cfd4989e2a15be43",
+            "sourcePlanRef": "0x2cee492c61c2f0f75338cafb2b748ec9ae4ff2db49724c23579b08c51947d7dc",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "completeness": "nomination-only",
             "historyStartBlock": null
           }
         ],
-        "definitionCatalogLeafDigest": "0x8b34247453884768b240e19f7d9ac78d3e41030e88fdaef460b7b40267701af9",
-        "capabilityCatalogRoot": "0x233255b5cb4ed1eea0c4b383967059c01dfb7d84f3171fd67e0d3a0b160b1024"
+        "definitionCatalogLeafDigest": "0xf659ba22d4967dc31cd668650836fec78bf92ed70041c7c057249a3b8bb44a96",
+        "capabilityCatalogRoot": "0x54f2f562cc8d0b621cf612e40706278346524c738830335c2934c745781b6805"
       },
       "publicEntry": {
         "modulePath": "families/univ3-standard/src/public.ts",
         "exportName": "UNIV3_STANDARD_DEFINITION",
-        "closureRoot": "0xc6c7e49bc3b6f60806450bee7f77d0c024d2275f68d1432dbce4b3c5e6e37d98"
+        "closureRoot": "0x69d236cbc6439aa0bf4432e9210fb33eeb17b297bc6b2f0d7a25b6953e2c80ef"
       },
       "stages": [
         {
           "stage": "identity",
           "modulePath": "families/univ3-standard/src/runtime.ts",
           "exportName": "UNIV3_IDENTITY_RUNTIME",
-          "closureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
+          "closureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
           "stageRef": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "identity",
             "capabilityId": "family.univ3-standard.identity",
             "version": "1.0.0",
             "schemaHash": "0x86f8709652520f5a1ffd3168651fb7c7d6d63ebf09cc1d2b772e18c29a832a4c",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0x59d640b6a731471fa6bd35e507c48f1ad3ad110c9bb57764075c2f882140a48e"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0xf64bd7b11c308e3ca125e764665594eb2e474cc79bf5d45bcb7e436586a3d738"
           }
         },
         {
           "stage": "materialization",
           "modulePath": "families/univ3-standard/src/runtime.ts",
           "exportName": "UNIV3_MATERIALIZATION_RUNTIME",
-          "closureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
+          "closureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
           "stageRef": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "materialization",
             "capabilityId": "family.univ3-standard.materialization",
             "version": "1.0.0",
             "schemaHash": "0xcecd30c348027923b2f5c993aa059cd6f541226c1d76696d704ab9604942fa13",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xadb8dfb4865b01d0ebea8169ac911d4499f6bcca53927c4fe74d41ace0b445ce"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0xd594dd5f3d49e979018c8d3a98c5bc1327fbdd7fd89c8451ed9bfef08912d70b"
           }
         },
         {
           "stage": "nomination",
           "modulePath": "families/univ3-standard/src/runtime.ts",
           "exportName": "UNIV3_NOMINATION_RUNTIME",
-          "closureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
+          "closureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
           "stageRef": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "nomination",
             "capabilityId": "family.univ3-standard.nomination",
             "version": "1.0.0",
             "schemaHash": "0xb030b7fe4e81bff814e0b67a37e9e2c2b3cbc1f78e7388800482005a28e20c7e",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0x7404ad74f72b5e7a3a3b0942de0ee61a74a4ed9b53a24db3781633dadb3b24d6"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0x98420fc44c281f77f53f2ef9c505f072813be5e9e55460a527b96cb6bfbead0f"
           }
         },
         {
           "stage": "projection",
           "modulePath": "families/univ3-standard/src/runtime.ts",
           "exportName": "UNIV3_PROJECTION_RUNTIME",
-          "closureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
+          "closureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
           "stageRef": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "projection",
             "capabilityId": "family.univ3-standard.projection",
             "version": "1.0.0",
             "schemaHash": "0x7d5abd72bcddcc7aa3c8faa25849e6cfc956d86ccc31288ff0bbee74c7c45394",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xe89b20a92c2365a0a0ad74907310c79488e4cabceaf5d18a4d51979e565463c2"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0x156db656ce16c365b5f2f00aa71e59bbba14c8d733861518088f3f9807a76957"
           }
         },
         {
           "stage": "rehydration",
           "modulePath": "families/univ3-standard/src/runtime.ts",
           "exportName": "UNIV3_REHYDRATION_RUNTIME",
-          "closureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
+          "closureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
           "stageRef": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "rehydration",
             "capabilityId": "family.univ3-standard.rehydration",
             "version": "1.0.0",
             "schemaHash": "0x132febc603e8fcc5de4d0b3437e6ecbfc0dc90af08e16af4f67ff02e0808df5e",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xcaa0da13d954e6c1de8b9f46e38954b8e378d1e8447ccecf47754317885384ab"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0xa28389ca6ad0bf1e2eaefe73f2ac3ca9a5973acdc190a7a6618d446cbd9b9295"
           }
         }
       ],
@@ -2461,70 +2520,70 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "sourcePlanId": "univ3-standard.fixed-cutoff-50-block",
           "modulePath": "families/univ3-standard/src/source-plan.ts",
           "exportName": "UNIV3_STANDARD_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x5a67bba4d15ed115785d8ab71570c70b18798386d8b283f421cab4cf3ed85b02",
+          "closureRoot": "0x5abe30a590c6d9997855196fb28779001d46cc783ddc79ca09c21467f97fdd03",
           "schemaHash": "0x23979dd1a0aa541ccb5ed63fa73df5e88bf8eebcbb3764fac7c2572429c325f5",
           "planRef": {
-            "ownerRef": "0xe61bdb1cdb99308ddd7673bf57f7f971e402a4165f676f867fcd895fd8c6f87c",
-            "sourcePlanRef": "0x7e35d623deb9d253761edbdd49ba7b8d76470a74bfac7d6d9214fc906e085ccd",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "ownerRef": "0x31c74c3e80ebd43b38b801b9f753d69768c3487af4f02145cfd4989e2a15be43",
+            "sourcePlanRef": "0x2cee492c61c2f0f75338cafb2b748ec9ae4ff2db49724c23579b08c51947d7dc",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "completeness": "nomination-only",
             "historyStartBlock": null
           },
-          "leafDigest": "0xc014fd39d91276a657b020cd00932f2adb8f6cece8ff383f39d50d9d51d5e486",
+          "leafDigest": "0xc64e10c586b30f8dd65f7974b2029dae249e40848cddb706bcebaf29621413e9",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/univ3-standard/src/source-plan.ts",
               "exportName": "UNIV3_STANDARD_SOURCE_NOMINATION_PROGRAM",
-              "closureRoot": "0x5a67bba4d15ed115785d8ab71570c70b18798386d8b283f421cab4cf3ed85b02",
+              "closureRoot": "0x5abe30a590c6d9997855196fb28779001d46cc783ddc79ca09c21467f97fdd03",
               "schemaHash": "0x23979dd1a0aa541ccb5ed63fa73df5e88bf8eebcbb3764fac7c2572429c325f5"
             },
             "mutationCorpus": {
               "modulePath": "families/univ3-standard/src/nomination-qualification.ts",
               "exportName": "UNIV3_STANDARD_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x0fe8b502732665a08cbb5c4b48a0abaa615e2a65e728ca87674fbc7b8a649688"
+              "closureRoot": "0x16154c6d9c12c09400a334aeb3c1d380bcb803f36d21119e805eceeeda5f80da"
             },
             "independentOracle": {
               "modulePath": "families/univ3-standard/src/nomination-qualification.ts",
               "exportName": "UNIV3_STANDARD_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x0fe8b502732665a08cbb5c4b48a0abaa615e2a65e728ca87674fbc7b8a649688"
+              "closureRoot": "0x16154c6d9c12c09400a334aeb3c1d380bcb803f36d21119e805eceeeda5f80da"
             },
-            "nominationProgramRoot": "0xedf20413730a3a906a4a1150470947716ebb73f141a0de036cd9430cff186cbc",
-            "proposalLeafDigest": "0x2df198166874c43e28a3ceddda5cce7ae6fe3254ed90a86bafc6d6a865bffc46"
+            "nominationProgramRoot": "0x07187280412a7b28e0ee48e7bed7a2a93f9dddd109f7283679ef63933a92da10",
+            "proposalLeafDigest": "0xf0106dbfda00a369498eab8822b6483e78cacce14cc1fd123ea13e638098f5be"
           }
         },
         {
           "sourcePlanId": "univ3-standard.pool-created-contiguous-history",
           "modulePath": "families/univ3-standard/src/source-plan.ts",
           "exportName": "UNIV3_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x5a67bba4d15ed115785d8ab71570c70b18798386d8b283f421cab4cf3ed85b02",
+          "closureRoot": "0x5abe30a590c6d9997855196fb28779001d46cc783ddc79ca09c21467f97fdd03",
           "schemaHash": "0x2055e40cec5dd1d617c1545e6b5bd1725bf65402ace7fe8b735d335035372479",
           "planRef": {
-            "ownerRef": "0xa620a7861e82adbeb989a98b20a4966df1a3c70e40cd51993584c8bb7509910d",
-            "sourcePlanRef": "0x73873082e2f1bcb77f02b0bdf6e657e163c3747b3a27db721094f04962e62cea",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "ownerRef": "0xebb3bb8e87181ea5ab258f4ab80b59a35c3a6516dfaed86116f5c4c1929770ec",
+            "sourcePlanRef": "0x0871b091febf471647fea23ebb1872e530244df72e79ee9123349d534dfe1607",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "completeness": "contiguous-history",
             "historyStartBlock": "0"
           },
-          "leafDigest": "0x64ff7d3044068314091b2aa23cc85b3e3619f388590fac109e3a92e476843115",
+          "leafDigest": "0x8af3d98dbf3a2c4c89f677409532be01816717d0be6790b6221af813274f0e53",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/univ3-standard/src/source-plan.ts",
               "exportName": "UNIV3_STANDARD_HISTORY_NOMINATION_PROGRAM",
-              "closureRoot": "0x5a67bba4d15ed115785d8ab71570c70b18798386d8b283f421cab4cf3ed85b02",
+              "closureRoot": "0x5abe30a590c6d9997855196fb28779001d46cc783ddc79ca09c21467f97fdd03",
               "schemaHash": "0x2055e40cec5dd1d617c1545e6b5bd1725bf65402ace7fe8b735d335035372479"
             },
             "mutationCorpus": {
               "modulePath": "families/univ3-standard/src/nomination-qualification.ts",
               "exportName": "UNIV3_STANDARD_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x0fe8b502732665a08cbb5c4b48a0abaa615e2a65e728ca87674fbc7b8a649688"
+              "closureRoot": "0x16154c6d9c12c09400a334aeb3c1d380bcb803f36d21119e805eceeeda5f80da"
             },
             "independentOracle": {
               "modulePath": "families/univ3-standard/src/nomination-qualification.ts",
               "exportName": "UNIV3_STANDARD_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x0fe8b502732665a08cbb5c4b48a0abaa615e2a65e728ca87674fbc7b8a649688"
+              "closureRoot": "0x16154c6d9c12c09400a334aeb3c1d380bcb803f36d21119e805eceeeda5f80da"
             },
-            "nominationProgramRoot": "0xe1af9a492cae1e1932ab38c6aa4b43f50492f79089d9ecf9972010c5a5b4b73f",
-            "proposalLeafDigest": "0x6f139727060a6469331b21374743caa0e58698b72326eae2ff2baf7e0af9bff2"
+            "nominationProgramRoot": "0xc45d8af6f8159c2171bce03239f258fa79127df40ed539c7992acea70095efaf",
+            "proposalLeafDigest": "0x3644099847f01d978e9b015263a5b4280d2b8dd742e74f1042a4235b2257511a"
           }
         }
       ],
@@ -2532,46 +2591,46 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/univ3-standard/src/runtime.ts",
           "exportName": "UNIV3_STANDARD_RUNTIME",
-          "closureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
+          "closureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
           "capabilityRef": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "capability",
             "capabilityId": "family.univ3-standard.coarse",
             "version": "1.0.0",
             "schemaHash": "0x9a3e44d19e8a24413cb9fac945a07d48911700f290e6ef4761c2d2cd82a44eb7",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xf827d69328dc6dee90f142c8026aa9cb3bccc94054cbc21f2e0b0cfe05d088fb"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0x68b165f1ea22b682c0df7b5bb112c8bc7628172e35250015f35860d303a9766e"
           }
         },
         {
           "modulePath": "families/univ3-standard/src/runtime.ts",
           "exportName": "UNIV3_STANDARD_RUNTIME",
-          "closureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
+          "closureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
           "capabilityRef": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "capability",
             "capabilityId": "family.univ3-standard.exact",
             "version": "1.0.0",
             "schemaHash": "0x2099589db353b2af7d799dfadbf25396d2f74901f8fcb062dd0097fe4a99206b",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xa16ba4d7d8da53e50a74682983c1aed52c246bcdfcaf7bdb662a58f916661968"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0x4f8fd714f61fa54600416bc061d5daca2961dcdb9451933367d7ad5ee8a57390"
           }
         },
         {
           "modulePath": "families/univ3-standard/src/runtime.ts",
           "exportName": "UNIV3_STANDARD_RUNTIME",
-          "closureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
+          "closureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
           "capabilityRef": {
             "familyId": "univ3-standard",
-            "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
             "stage": "capability",
             "capabilityId": "family.univ3-standard.state",
             "version": "1.0.0",
             "schemaHash": "0x269b2e2d536bca46fcde799c408e704a94d64b407952b8bb6b36780031dacda0",
-            "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-            "ownerRef": "0xa41bc9e32ae72e856380c40d222c85ca80851e0fab373418576834658209b1ee"
+            "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+            "ownerRef": "0xb78a0f29815191fc2d702efdd776f786e12e761ab8eafa1b74e0af4e062dbce4"
           }
         }
       ],
@@ -2579,8 +2638,8 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/univ3-standard/src/action.ts",
           "exportName": "UNIV3_STANDARD_SWAP_ACTION_PORT",
-          "closureRoot": "0x0146f228724d0e11871f0ed190cea11d831b952a39c0f8b6ccb65cbce95ca760",
-          "ownerRef": "0xfd23952c8f9ab0dfa79962811b4d3ef36bb4149ef1083c16961d9c50d18249d7",
+          "closureRoot": "0x1be22f51d32535be0bdb7ed8b4ed7b8a3b257bdda4a845c6e6b79322684bee2d",
+          "ownerRef": "0x8fdc1a55f830010fd95aa03148c1b063d902c8dbe0525633a3d84eba2f295e4f",
           "ownerId": "family.univ3-standard.swap-action",
           "version": "1.0.0",
           "schemaHash": "0x5b5262eaa27285bfe734b224899003fc4254499b57bd7478a7623c6665cd8528",
@@ -2592,144 +2651,153 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
       ],
       "runtimeAdapters": [
         {
+          "role": "physical-lifecycle/v1",
+          "modulePath": "families/univ3-standard/src/runtime/physical-adapter.ts",
+          "exportName": "UNIV3_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+          "closureRoot": "0x1a57501e0e614f208c5bb90326da3b5f7462ef229ee6789b3a4114593f466cf2",
+          "capabilityRefs": {},
+          "actionOwnerRefs": {},
+          "leafDigest": "0x47c6c143d79212a107d519bc476343b5350c043d6ebd7152ea75ae8f6100bff7"
+        },
+        {
           "role": "search/v1",
           "modulePath": "families/univ3-standard/src/search-adapter.ts",
           "exportName": "UNIV3_SEARCH_RUNTIME_ADAPTER_FACTORY",
-          "closureRoot": "0x830ee73d2675031cade49c0f12d37322596ff9268a83d320f8d56bf8b0cc0cdd",
+          "closureRoot": "0x88a047a51f7c1ef53ea94bde2551928b37cf053ceb2cca8aa07b1a81a8b34f29",
           "capabilityRefs": {
             "coarse": {
               "familyId": "univ3-standard",
-              "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+              "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
               "stage": "capability",
               "capabilityId": "family.univ3-standard.coarse",
               "version": "1.0.0",
               "schemaHash": "0x9a3e44d19e8a24413cb9fac945a07d48911700f290e6ef4761c2d2cd82a44eb7",
-              "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-              "ownerRef": "0xf827d69328dc6dee90f142c8026aa9cb3bccc94054cbc21f2e0b0cfe05d088fb"
+              "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+              "ownerRef": "0x68b165f1ea22b682c0df7b5bb112c8bc7628172e35250015f35860d303a9766e"
             },
             "exact": {
               "familyId": "univ3-standard",
-              "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+              "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
               "stage": "capability",
               "capabilityId": "family.univ3-standard.exact",
               "version": "1.0.0",
               "schemaHash": "0x2099589db353b2af7d799dfadbf25396d2f74901f8fcb062dd0097fe4a99206b",
-              "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-              "ownerRef": "0xa16ba4d7d8da53e50a74682983c1aed52c246bcdfcaf7bdb662a58f916661968"
+              "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+              "ownerRef": "0x4f8fd714f61fa54600416bc061d5daca2961dcdb9451933367d7ad5ee8a57390"
             },
             "state": {
               "familyId": "univ3-standard",
-              "familyDefinitionHash": "0x7b5932822ec6f1aca5ae809a77ef2c03e1b1333de8990bc6a3fb1ab03389610c",
+              "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
               "stage": "capability",
               "capabilityId": "family.univ3-standard.state",
               "version": "1.0.0",
               "schemaHash": "0x269b2e2d536bca46fcde799c408e704a94d64b407952b8bb6b36780031dacda0",
-              "interpreterHash": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc",
-              "ownerRef": "0xa41bc9e32ae72e856380c40d222c85ca80851e0fab373418576834658209b1ee"
+              "interpreterHash": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55",
+              "ownerRef": "0xb78a0f29815191fc2d702efdd776f786e12e761ab8eafa1b74e0af4e062dbce4"
             }
           },
           "actionOwnerRefs": {
-            "swap": "0xfd23952c8f9ab0dfa79962811b4d3ef36bb4149ef1083c16961d9c50d18249d7"
+            "swap": "0x8fdc1a55f830010fd95aa03148c1b063d902c8dbe0525633a3d84eba2f295e4f"
           },
-          "leafDigest": "0x8e5f347ef433c6c71e7f29d5ef3b50b5f3761d697ce83ec1481cbb8586e9b345"
+          "leafDigest": "0xbc88df9fc0a484d0a3dfc6fce0329517040fb6bab3449a195a628fe387385407"
         }
       ],
-      "runtimeAdapterRoot": "0x1d47501164bea24b9fe56d4f26fe28a8f07afb9cf8d9fed76ecaea44da401b42",
-      "sourcePlanRoot": "0x886db1da2a87aa41b0486cd00779ac33a40d1995e1535331e6cfc4ab559fe583",
-      "stageDefinitionRoot": "0xbc9a9245ec154332883e73ee021c8aa0d4ff57412ff7211ba0634ed0bcfb0f56"
+      "runtimeAdapterRoot": "0xeda8e0def2e416a9a2b9c51144380270d04553162eabb024ca1b2e791cd465d2",
+      "sourcePlanRoot": "0x05d8956b1f1c402c40262412fa6e8d824784488b9cc92904b27f4f53b5321bd0",
+      "stageDefinitionRoot": "0x8d9011150e75881885b8843014511d823c84b9879ef2601f4765ac5c1d6e72b2"
     },
     {
       "entry": {
         "familyId": "univ4",
-        "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
-        "issuerRef": "0x93b28829025f6487563fb8fb85049f7c99c87f44df1b8480397e5301b81a8e43",
+        "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+        "issuerRef": "0x80e14eeb3c5f3d58de97a7c6d6dc61b08f1575ffe1dc352dc5599a74cbb0f67b",
         "authorityRef": "0x0c879925fbb61c7dd73fa5e46c52cbc3789b7c9c62f28ca08ae028984b6b33dc",
         "lifecycleRefs": {
           "nomination": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "nomination",
             "capabilityId": "family.univ4.nomination",
             "version": "1.0.0",
             "schemaHash": "0x73fe3354e221a5d6f42463419881667518203e03c2bffd94b2886fd1f93e1ace",
-            "interpreterHash": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
-            "ownerRef": "0xcaf7152993ab82423da84587492b40c6c39d2dc9c3cb000d8b18a26aa9ebed49"
+            "interpreterHash": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
+            "ownerRef": "0xe38f04ed85aba4dbd0f125e5131c0eaf4660eab4ffc202cff6c6c0e5861c1963"
           },
           "identity": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "identity",
             "capabilityId": "family.univ4.identity",
             "version": "1.0.0",
             "schemaHash": "0x1e9ce334b8c997cabd030638c9dcef9c96b2fecf1bcde6856b86d93f621d1401",
-            "interpreterHash": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
-            "ownerRef": "0x2c576a03e4fd98108e0349e0b43530e4a0ecf013b36e077ca23dabfe697be1f3"
+            "interpreterHash": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
+            "ownerRef": "0x6ae3939b64ea2b8c40434662809c341f2d6b06826dcb0d52df1fc0d1a43ff432"
           },
           "materialization": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "materialization",
             "capabilityId": "family.univ4.materialization",
             "version": "1.0.0",
             "schemaHash": "0x0311ce14d7983d7175e0e3ceaf785f4c4f746aae0b7586fbe3fd7a7db64d8b37",
-            "interpreterHash": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
-            "ownerRef": "0xdae8a770495d8a4f6fa6e0b3b3547ebdfb0d3dfa74855522ef23a1077b7de973"
+            "interpreterHash": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
+            "ownerRef": "0x74c7c75e67452de88ca0beaaedc396e4067e29cd03ab79b2f658e12d8a907d34"
           },
           "projection": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "projection",
             "capabilityId": "family.univ4.projection",
             "version": "1.0.0",
             "schemaHash": "0x7aac016223e0603cea91ee42431126990033760386bdbaa6c26f35b56c956ab6",
-            "interpreterHash": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
-            "ownerRef": "0x2ba7a5a88cb9650efe97992f1dbc3713dfa1a51422bd9c9a5ea194690fdbed9c"
+            "interpreterHash": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
+            "ownerRef": "0xdabf19c86e5508a16e844e8d5bc91f85062cf0132a7b39c8fc46f8ec79d01eef"
           },
           "rehydration": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "rehydration",
             "capabilityId": "family.univ4.rehydration",
             "version": "1.0.0",
             "schemaHash": "0x7ce17acdf983b39fbd74d8966999a543f2ab9e5d94240cb46c89c881077a2479",
-            "interpreterHash": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
-            "ownerRef": "0xe6be34c49885aa822f22eabda0af9201afbdf088c0df1c8c4dda1f140b388d1f"
+            "interpreterHash": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
+            "ownerRef": "0x7cdba1d265a7894763d4f44093499c783e752ea791f0a8db87f03de3779ea818"
           }
         },
         "extensionRefs": [
           {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "capability",
             "capabilityId": "family.univ4.coarse",
             "version": "1.0.0",
             "schemaHash": "0x2d244619372a34b051ccdfc6bfe629166da816b992ffa01524436b318f3ea410",
-            "interpreterHash": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
-            "ownerRef": "0x6f3690d9490d57f6f313c7d75d0e7d2bf4968d71c6c66c0e0cc3cdcd021c1e49"
+            "interpreterHash": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
+            "ownerRef": "0xbb498ee8ce59a2a3866ee43ad439b7db1a6f36d27f6d640a5223f228e0d04439"
           },
           {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "capability",
             "capabilityId": "family.univ4.exact",
             "version": "1.0.0",
             "schemaHash": "0x7c31eed9d2a03b97199c8ca9c5046bfe0681cca5efaa7343d173893298df8c85",
-            "interpreterHash": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
-            "ownerRef": "0xa62fb501b1e9528166e2393d3e9bffe517012e98b1759a8039462ef4cd2e2911"
+            "interpreterHash": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
+            "ownerRef": "0xca9e601aac52ff2483c02798b1cf5adb2afe8a4a9dd4cf85d6a64e412401b197"
           },
           {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "capability",
             "capabilityId": "family.univ4.state",
             "version": "1.0.0",
             "schemaHash": "0x9122c96b6f91ac61f48f03c43b73fc025b25e0b246e50713590878bf35baf5f7",
-            "interpreterHash": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
-            "ownerRef": "0x9eb8ec1e3f423d799f9cb5daaa1942de9c1bcd4735752a39504a0f1c51670fe8"
+            "interpreterHash": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
+            "ownerRef": "0xd3f166314a9d36b7dd92dfe3841019c57573229941cc66deb67dbbf33e06b7bb"
           }
         ],
         "actionOwnerRefs": [
-          "0x719692cabe18f0d21ee984f1168bad13cea2de1c764f49cc866108c1a5df1485"
+          "0xb0c49aca41d6af306c78db42c900e30a73b60525d1c07f5234e69e9e1a3b7f7e"
         ],
         "factContractRefs": [
           {
@@ -2755,107 +2823,107 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         ],
         "sourcePlanRefs": [
           {
-            "ownerRef": "0x9e9c4aa602c5d289ad569f9c6c2938767eaf3455b77841c16f0d55197b6f8dd4",
-            "sourcePlanRef": "0x14ca679af3edc8f8a73aa51e84ba646851e33f985898a64bf627aae9fa5b9f66",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "ownerRef": "0xacb0450f071b64ee5ba2ff95204c0b122eaa59d29dbeece26d3a5b31a1d0d6e7",
+            "sourcePlanRef": "0x3ea102b0d5cd106ecc21e1376369e9631008a7272e1e56ef277bc1e41481b8e1",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "completeness": "contiguous-history",
             "historyStartBlock": "0"
           },
           {
-            "ownerRef": "0x2d1b3f265af8c696d28646fcc81c868553bc9f7121a549c95c0ae09a0a9ae72e",
-            "sourcePlanRef": "0x541ccac3bf78374f7a06b852ae561f44a80de30944a142a0e34b402df6777c53",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "ownerRef": "0xa9912d092ad409da7e74b28a259d9095284bd4c5402b71bd695de7b53451523d",
+            "sourcePlanRef": "0xef4c30d9d5bb2c84f8709a4c9f27b757c2f7fd1faa2e30fa4c920102c0fccda7",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "completeness": "nomination-only",
             "historyStartBlock": null
           }
         ],
-        "definitionCatalogLeafDigest": "0x5cba428f4eeb0f2b024ab20b4920d1b7b1b7744f258fb6616ebce5e4c6cecac3",
-        "capabilityCatalogRoot": "0xef7a0112b80d48705970a996ac1d4fd2e1bb3c00b3033b9204fe107ebb320fa1"
+        "definitionCatalogLeafDigest": "0x976106c1f0e2a2434b6cf8216f2c2654d3b32a196462dbfdc1fd25b8433c607d",
+        "capabilityCatalogRoot": "0x173ff3321a9596812eea1fedd4bb6bc24939dee1d7f11e1c88c2affc27f6d9d1"
       },
       "publicEntry": {
         "modulePath": "families/univ4/src/public.ts",
         "exportName": "UNIV4_DEFINITION",
-        "closureRoot": "0xa2f088734bb62bf78d8f9075cd59355cbf28cfba86501c028820bb23816ebaf9"
+        "closureRoot": "0x5b1f08ca6e0735c9c99c6bd0c114bb22fee3c8b6b992771e00d943effc3b806b"
       },
       "stages": [
         {
           "stage": "identity",
           "modulePath": "families/univ4/src/runtime/definitions.ts",
           "exportName": "UNIV4_IDENTITY_DEFINITION",
-          "closureRoot": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
+          "closureRoot": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
           "stageRef": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "identity",
             "capabilityId": "family.univ4.identity",
             "version": "1.0.0",
             "schemaHash": "0x1e9ce334b8c997cabd030638c9dcef9c96b2fecf1bcde6856b86d93f621d1401",
-            "interpreterHash": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
-            "ownerRef": "0x2c576a03e4fd98108e0349e0b43530e4a0ecf013b36e077ca23dabfe697be1f3"
+            "interpreterHash": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
+            "ownerRef": "0x6ae3939b64ea2b8c40434662809c341f2d6b06826dcb0d52df1fc0d1a43ff432"
           }
         },
         {
           "stage": "materialization",
           "modulePath": "families/univ4/src/runtime/definitions.ts",
           "exportName": "UNIV4_MATERIALIZATION_DEFINITION",
-          "closureRoot": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
+          "closureRoot": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
           "stageRef": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "materialization",
             "capabilityId": "family.univ4.materialization",
             "version": "1.0.0",
             "schemaHash": "0x0311ce14d7983d7175e0e3ceaf785f4c4f746aae0b7586fbe3fd7a7db64d8b37",
-            "interpreterHash": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
-            "ownerRef": "0xdae8a770495d8a4f6fa6e0b3b3547ebdfb0d3dfa74855522ef23a1077b7de973"
+            "interpreterHash": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
+            "ownerRef": "0x74c7c75e67452de88ca0beaaedc396e4067e29cd03ab79b2f658e12d8a907d34"
           }
         },
         {
           "stage": "nomination",
           "modulePath": "families/univ4/src/runtime/definitions.ts",
           "exportName": "UNIV4_NOMINATION_DEFINITION",
-          "closureRoot": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
+          "closureRoot": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
           "stageRef": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "nomination",
             "capabilityId": "family.univ4.nomination",
             "version": "1.0.0",
             "schemaHash": "0x73fe3354e221a5d6f42463419881667518203e03c2bffd94b2886fd1f93e1ace",
-            "interpreterHash": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
-            "ownerRef": "0xcaf7152993ab82423da84587492b40c6c39d2dc9c3cb000d8b18a26aa9ebed49"
+            "interpreterHash": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
+            "ownerRef": "0xe38f04ed85aba4dbd0f125e5131c0eaf4660eab4ffc202cff6c6c0e5861c1963"
           }
         },
         {
           "stage": "projection",
           "modulePath": "families/univ4/src/runtime/definitions.ts",
           "exportName": "UNIV4_PROJECTION_DEFINITION",
-          "closureRoot": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
+          "closureRoot": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
           "stageRef": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "projection",
             "capabilityId": "family.univ4.projection",
             "version": "1.0.0",
             "schemaHash": "0x7aac016223e0603cea91ee42431126990033760386bdbaa6c26f35b56c956ab6",
-            "interpreterHash": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
-            "ownerRef": "0x2ba7a5a88cb9650efe97992f1dbc3713dfa1a51422bd9c9a5ea194690fdbed9c"
+            "interpreterHash": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
+            "ownerRef": "0xdabf19c86e5508a16e844e8d5bc91f85062cf0132a7b39c8fc46f8ec79d01eef"
           }
         },
         {
           "stage": "rehydration",
           "modulePath": "families/univ4/src/runtime/definitions.ts",
           "exportName": "UNIV4_REHYDRATION_DEFINITION",
-          "closureRoot": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
+          "closureRoot": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
           "stageRef": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "rehydration",
             "capabilityId": "family.univ4.rehydration",
             "version": "1.0.0",
             "schemaHash": "0x7ce17acdf983b39fbd74d8966999a543f2ab9e5d94240cb46c89c881077a2479",
-            "interpreterHash": "0x10908b3be847b1a85fb13de64e1304dff2bc598ae05b8157f4c01b11437e131d",
-            "ownerRef": "0xe6be34c49885aa822f22eabda0af9201afbdf088c0df1c8c4dda1f140b388d1f"
+            "interpreterHash": "0xf5717d6610e701b6b0e292cf10bbbc7b1530779bafc2bf4259354bcc6526369a",
+            "ownerRef": "0x7cdba1d265a7894763d4f44093499c783e752ea791f0a8db87f03de3779ea818"
           }
         }
       ],
@@ -2864,70 +2932,70 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "sourcePlanId": "univ4.fixed-cutoff-50-block",
           "modulePath": "families/univ4/src/source-plan.ts",
           "exportName": "UNIV4_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x273eaf99950f7e1c099d8b44f02e07652dce1d396f561ad6be55afad2d284969",
+          "closureRoot": "0x61fd9839a603b42d0cea77b2a659e181441a9a4a6803721ce541251b310b5700",
           "schemaHash": "0x0fd1d5a86922c6c2fb763716db032031465569a4d8f5411799cd020ceef780da",
           "planRef": {
-            "ownerRef": "0x2d1b3f265af8c696d28646fcc81c868553bc9f7121a549c95c0ae09a0a9ae72e",
-            "sourcePlanRef": "0x541ccac3bf78374f7a06b852ae561f44a80de30944a142a0e34b402df6777c53",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "ownerRef": "0xa9912d092ad409da7e74b28a259d9095284bd4c5402b71bd695de7b53451523d",
+            "sourcePlanRef": "0xef4c30d9d5bb2c84f8709a4c9f27b757c2f7fd1faa2e30fa4c920102c0fccda7",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "completeness": "nomination-only",
             "historyStartBlock": null
           },
-          "leafDigest": "0x3a3c78731053b8149cef40c3630f7685d010debb9d6c784c4c83619d9a014d90",
+          "leafDigest": "0x038826b247fdd5854ecd972cdfbd45e50c37efe7163a31063309120b15aac780",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/univ4/src/source-plan.ts",
               "exportName": "UNIV4_SOURCE_NOMINATION_PROGRAM",
-              "closureRoot": "0x273eaf99950f7e1c099d8b44f02e07652dce1d396f561ad6be55afad2d284969",
+              "closureRoot": "0x61fd9839a603b42d0cea77b2a659e181441a9a4a6803721ce541251b310b5700",
               "schemaHash": "0x0fd1d5a86922c6c2fb763716db032031465569a4d8f5411799cd020ceef780da"
             },
             "mutationCorpus": {
               "modulePath": "families/univ4/src/nomination-qualification.ts",
               "exportName": "UNIV4_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x80b95a727a1e42fe3aa0286c87b7cddc1a0f30f6f251b46ce9ffca058b989fad"
+              "closureRoot": "0x00ce58d50c5c20ed3c97a86aa4390538fcb900a36e63f23dfff73e6fc699886e"
             },
             "independentOracle": {
               "modulePath": "families/univ4/src/nomination-qualification.ts",
               "exportName": "UNIV4_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x80b95a727a1e42fe3aa0286c87b7cddc1a0f30f6f251b46ce9ffca058b989fad"
+              "closureRoot": "0x00ce58d50c5c20ed3c97a86aa4390538fcb900a36e63f23dfff73e6fc699886e"
             },
-            "nominationProgramRoot": "0xed40f6f542179d23d179d7dcb8ef2c21cf4c3c52eb48f2480564dc9d67de3b3c",
-            "proposalLeafDigest": "0x77ec7adac2f540dd0b8d42272302e50087ab5509ce686e5699de3a5e36fe75af"
+            "nominationProgramRoot": "0xde33f327c6bec5b163fe25c62aa0e611d4b4518620a2312262d7a9ceaaec0ecc",
+            "proposalLeafDigest": "0x630cc865fa27970af9c1378331ff95380016ac7e027cbb2c6187f2afff1526d9"
           }
         },
         {
           "sourcePlanId": "univ4.pool-manager-initialize-history",
           "modulePath": "families/univ4/src/history-source-plan.ts",
           "exportName": "UNIV4_HISTORY_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x4df15398421dc7d574f586bc6a5a6272d3fa971aa0079e43290de72aee5a6c84",
+          "closureRoot": "0x35e257579205f55e24a63e0f506c88fe7c6a962035cf6d265c620f2adf24f672",
           "schemaHash": "0x3fba70dabb3977eca352fd55c543afd24bb255c8ee6fbe79962b4a627cc272a0",
           "planRef": {
-            "ownerRef": "0x9e9c4aa602c5d289ad569f9c6c2938767eaf3455b77841c16f0d55197b6f8dd4",
-            "sourcePlanRef": "0x14ca679af3edc8f8a73aa51e84ba646851e33f985898a64bf627aae9fa5b9f66",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "ownerRef": "0xacb0450f071b64ee5ba2ff95204c0b122eaa59d29dbeece26d3a5b31a1d0d6e7",
+            "sourcePlanRef": "0x3ea102b0d5cd106ecc21e1376369e9631008a7272e1e56ef277bc1e41481b8e1",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "completeness": "contiguous-history",
             "historyStartBlock": "0"
           },
-          "leafDigest": "0x52ef4ba70cdc679038765d18d89db2297cd862f6d40faa0e7452cac9ab6a02cb",
+          "leafDigest": "0x9e9247491cbde2dbd70fba879aa6eee8c08dfca943e6f0e99610106284abc2bd",
           "nominationProgramProposal": {
             "program": {
               "modulePath": "families/univ4/src/history-source-plan.ts",
               "exportName": "UNIV4_HISTORY_NOMINATION_PROGRAM",
-              "closureRoot": "0x4df15398421dc7d574f586bc6a5a6272d3fa971aa0079e43290de72aee5a6c84",
+              "closureRoot": "0x35e257579205f55e24a63e0f506c88fe7c6a962035cf6d265c620f2adf24f672",
               "schemaHash": "0x3fba70dabb3977eca352fd55c543afd24bb255c8ee6fbe79962b4a627cc272a0"
             },
             "mutationCorpus": {
               "modulePath": "families/univ4/src/nomination-qualification.ts",
               "exportName": "UNIV4_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x80b95a727a1e42fe3aa0286c87b7cddc1a0f30f6f251b46ce9ffca058b989fad"
+              "closureRoot": "0x00ce58d50c5c20ed3c97a86aa4390538fcb900a36e63f23dfff73e6fc699886e"
             },
             "independentOracle": {
               "modulePath": "families/univ4/src/nomination-qualification.ts",
               "exportName": "UNIV4_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x80b95a727a1e42fe3aa0286c87b7cddc1a0f30f6f251b46ce9ffca058b989fad"
+              "closureRoot": "0x00ce58d50c5c20ed3c97a86aa4390538fcb900a36e63f23dfff73e6fc699886e"
             },
-            "nominationProgramRoot": "0xec967edbd15dfd6e8e68b273509baecdabc3626d280cee1789da5daa700daa9c",
-            "proposalLeafDigest": "0x645e5fcf6526bd32807bdd6394d32d8d3d5a532ccf393b3c2458b610ccbb987e"
+            "nominationProgramRoot": "0x710e8f572cbf9e7c9b34e0f34e53470f85d23085e38f938e6e68e9b63098564b",
+            "proposalLeafDigest": "0x8ec45898566822bf3696cc62514d2c87cd928de4e772215878067309b90a1a65"
           }
         }
       ],
@@ -2935,46 +3003,46 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/univ4/src/runtime.ts",
           "exportName": "UNIV4_RUNTIME",
-          "closureRoot": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
+          "closureRoot": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
           "capabilityRef": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "capability",
             "capabilityId": "family.univ4.coarse",
             "version": "1.0.0",
             "schemaHash": "0x2d244619372a34b051ccdfc6bfe629166da816b992ffa01524436b318f3ea410",
-            "interpreterHash": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
-            "ownerRef": "0x6f3690d9490d57f6f313c7d75d0e7d2bf4968d71c6c66c0e0cc3cdcd021c1e49"
+            "interpreterHash": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
+            "ownerRef": "0xbb498ee8ce59a2a3866ee43ad439b7db1a6f36d27f6d640a5223f228e0d04439"
           }
         },
         {
           "modulePath": "families/univ4/src/runtime.ts",
           "exportName": "UNIV4_RUNTIME",
-          "closureRoot": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
+          "closureRoot": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
           "capabilityRef": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "capability",
             "capabilityId": "family.univ4.exact",
             "version": "1.0.0",
             "schemaHash": "0x7c31eed9d2a03b97199c8ca9c5046bfe0681cca5efaa7343d173893298df8c85",
-            "interpreterHash": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
-            "ownerRef": "0xa62fb501b1e9528166e2393d3e9bffe517012e98b1759a8039462ef4cd2e2911"
+            "interpreterHash": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
+            "ownerRef": "0xca9e601aac52ff2483c02798b1cf5adb2afe8a4a9dd4cf85d6a64e412401b197"
           }
         },
         {
           "modulePath": "families/univ4/src/runtime.ts",
           "exportName": "UNIV4_RUNTIME",
-          "closureRoot": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
+          "closureRoot": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
           "capabilityRef": {
             "familyId": "univ4",
-            "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
             "stage": "capability",
             "capabilityId": "family.univ4.state",
             "version": "1.0.0",
             "schemaHash": "0x9122c96b6f91ac61f48f03c43b73fc025b25e0b246e50713590878bf35baf5f7",
-            "interpreterHash": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
-            "ownerRef": "0x9eb8ec1e3f423d799f9cb5daaa1942de9c1bcd4735752a39504a0f1c51670fe8"
+            "interpreterHash": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
+            "ownerRef": "0xd3f166314a9d36b7dd92dfe3841019c57573229941cc66deb67dbbf33e06b7bb"
           }
         }
       ],
@@ -2982,8 +3050,8 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         {
           "modulePath": "families/univ4/src/action.ts",
           "exportName": "UNIV4_ACTION_PORT",
-          "closureRoot": "0xbb27f5b30394cb2fe3aa22f1fecf5c06722701d3986d79ab13bb2b3172f9097d",
-          "ownerRef": "0x719692cabe18f0d21ee984f1168bad13cea2de1c764f49cc866108c1a5df1485",
+          "closureRoot": "0x568f2f0c34393b58a5a64a5fb8534c339557c176cc0d6bcda03456a4ad917d28",
+          "ownerRef": "0xb0c49aca41d6af306c78db42c900e30a73b60525d1c07f5234e69e9e1a3b7f7e",
           "ownerId": "family.univ4.swap-action",
           "version": "1.0.0",
           "schemaHash": "0x9c4f696118cdaef51550e1c109d8576888d50342a6bb2cb711177ad509b20123",
@@ -2995,68 +3063,77 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
       ],
       "runtimeAdapters": [
         {
+          "role": "physical-lifecycle/v1",
+          "modulePath": "families/univ4/src/runtime/physical-adapter.ts",
+          "exportName": "UNIV4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+          "closureRoot": "0x56c892b37cf30b488f98f96e1e5fa63e8cd65939ac1a645a1cd6e92f3dfa1ad3",
+          "capabilityRefs": {},
+          "actionOwnerRefs": {},
+          "leafDigest": "0x14620983a4c48a99b8507c614a3014c0820563b98ca7fc9358bb01276d65480c"
+        },
+        {
           "role": "search/v1",
           "modulePath": "families/univ4/src/search-adapter.ts",
           "exportName": "UNIV4_SEARCH_RUNTIME_ADAPTER_FACTORY",
-          "closureRoot": "0x40f2013295c1b9b6102f9ab4ecac4ec3f4f227bfd70a2a168d2e46c0fc9c5a13",
+          "closureRoot": "0xb2871a761330fdc1cdd0db34ec384cd5f18f0f19ee1f992dbfef1da6def5f047",
           "capabilityRefs": {
             "coarse": {
               "familyId": "univ4",
-              "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+              "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
               "stage": "capability",
               "capabilityId": "family.univ4.coarse",
               "version": "1.0.0",
               "schemaHash": "0x2d244619372a34b051ccdfc6bfe629166da816b992ffa01524436b318f3ea410",
-              "interpreterHash": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
-              "ownerRef": "0x6f3690d9490d57f6f313c7d75d0e7d2bf4968d71c6c66c0e0cc3cdcd021c1e49"
+              "interpreterHash": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
+              "ownerRef": "0xbb498ee8ce59a2a3866ee43ad439b7db1a6f36d27f6d640a5223f228e0d04439"
             },
             "exact": {
               "familyId": "univ4",
-              "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+              "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
               "stage": "capability",
               "capabilityId": "family.univ4.exact",
               "version": "1.0.0",
               "schemaHash": "0x7c31eed9d2a03b97199c8ca9c5046bfe0681cca5efaa7343d173893298df8c85",
-              "interpreterHash": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
-              "ownerRef": "0xa62fb501b1e9528166e2393d3e9bffe517012e98b1759a8039462ef4cd2e2911"
+              "interpreterHash": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
+              "ownerRef": "0xca9e601aac52ff2483c02798b1cf5adb2afe8a4a9dd4cf85d6a64e412401b197"
             },
             "state": {
               "familyId": "univ4",
-              "familyDefinitionHash": "0xb2bc9267d772de9babad3e92cde7f85f0c73c939ef3b3494f1fb14a3ab026009",
+              "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
               "stage": "capability",
               "capabilityId": "family.univ4.state",
               "version": "1.0.0",
               "schemaHash": "0x9122c96b6f91ac61f48f03c43b73fc025b25e0b246e50713590878bf35baf5f7",
-              "interpreterHash": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15",
-              "ownerRef": "0x9eb8ec1e3f423d799f9cb5daaa1942de9c1bcd4735752a39504a0f1c51670fe8"
+              "interpreterHash": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13",
+              "ownerRef": "0xd3f166314a9d36b7dd92dfe3841019c57573229941cc66deb67dbbf33e06b7bb"
             }
           },
           "actionOwnerRefs": {
-            "action": "0x719692cabe18f0d21ee984f1168bad13cea2de1c764f49cc866108c1a5df1485"
+            "action": "0xb0c49aca41d6af306c78db42c900e30a73b60525d1c07f5234e69e9e1a3b7f7e"
           },
-          "leafDigest": "0xb466923b570711f8ac989b78d09b70f85e6cf54f4a2e788a284a70f604ed123a"
+          "leafDigest": "0x41038347a750fb90145a1559ce6300a9cb4201a1596b923be60c64563078d39d"
         }
       ],
-      "runtimeAdapterRoot": "0x688de9b4ae6018437df5cc4c5913ebc10b37694f08e63698674279aff26121c2",
-      "sourcePlanRoot": "0xc16e11d3c5ffd402bffab2e7fc0cf8011d50acc5021c849ad9dd884a9ecdbdc0",
-      "stageDefinitionRoot": "0xba9c5ff3c4fe36f8beb257c70f057bead040c110c8641f11d8ac982df7dfb170"
+      "runtimeAdapterRoot": "0xd43b17fc69c157d723c3cbb93371e392ea51530f4068578344cf4adf4095ad88",
+      "sourcePlanRoot": "0x52c0068d4c6885cb60b58f8564fac76ea9d3e13954e5d119d9c9137f81bca645",
+      "stageDefinitionRoot": "0x4cd9a80a9059c3765c4122d11d136bc02b3a6221c701408007c74187de19582a"
     }
   ],
-  "descriptorRoot": "0xc7d64afe542716e5421471cb9b2b4c24db28208163fb579b55139bf20c1be88f"
+  "descriptorRoot": "0x83bff7ae703d8b22b29517d69a268cd2ec151d22de63b8b2e9d28a8382cd35a8"
 }
 ) as unknown as GeneratedFamilyRuntimeDescriptorV1;
 const STRATEGY_RUNTIME_DESCRIPTOR = Object.freeze(
 {
   "schemaVersion": 1,
-  "releaseIntentRoot": "0xa689c2de54e413019f140f0ab64a491ea4de301b550d7741b5a7bfb8d94d9942",
-  "definitionCatalogRoot": "0x90be8da08a232928e0647d4d5b8e53b9e10df37c853dc51446ce4086990c0017",
-  "proposedCapabilitySetRoot": "0xe075e79fdea4a047afa489b968d5d7b70db834dc5d3588d38d702399da5123cb",
+  "releaseIntentRoot": "0xb163fb020d316b6ca91417ae67ece8afc5d39ad0e78296867759fd990e09eff0",
+  "definitionCatalogRoot": "0xed3d2ecf153b044097cc16619142c6995ac5668698884438c68a726d502a54d9",
+  "proposedCapabilitySetRoot": "0x5d4afea358e375f454ef867714fe06176c705202973871a8953585cbc4cb8e41",
   "strategies": [
     {
       "catalogEntry": {
         "strategyId": "route-cycle",
-        "strategyDefinitionHash": "0x7b00276c2d2e6a461cd75485e4a5557c81b428d7576112a7badb2cb75d034e07",
-        "issuerRef": "0x2e1404b298d58c6d4051f013ab2da7b49e100977d579029a375d4fdb9333e392",
+        "strategyDefinitionHash": "0x5a89df92a44743a1b098aa998f1b13b3865538607e042538c6cab6faa03b2f45",
+        "issuerRef": "0xd39f9ca6be779d5bd7118fa998b6603f32181de78f0053eb1f02b5a6c4a30fb2",
         "requiredCapabilityRefs": [],
         "planningProblemIssuer": "0xb142990da552031b3e3bf98a6318aeb57c0dd83f18f5b5beaa8238806b12f6dd",
         "constraintSchemaRefs": [
@@ -3065,10 +3142,10 @@ const STRATEGY_RUNTIME_DESCRIPTOR = Object.freeze(
         "factContractRefs": [
           "0xeb79bd27658d9ddb1bc2df716d92f7d3670337c840c4b5ef1b9f2ea0317ded32"
         ],
-        "definitionCatalogLeafDigest": "0x1a2187a3e70015c8ecfeebc5ddf72e42a82e54c43f6668df81018d3a4d0f12dd",
+        "definitionCatalogLeafDigest": "0x7fb2b12abd038eb0bcccdc27a6896e96373cd4b094ff4ce79a0d2c2e8dc0c812",
         "strategyVersion": "1.0.0",
         "requestedCapabilityDependencyRoot": "0x52eecf71448bc4bff832a86a1cf69001dd0435bdf4d7dd9b561ca3910ac0d489",
-        "implementationClosureRoot": "0x47ae6b1483e55970cffb7a2bde536f5aae0cc5d6fc64a906b7fd228fd25095da",
+        "implementationClosureRoot": "0x36bba9b7eecb8864054065ed5d9f676aa25d60794e39b31b977cc3f7c46a8810",
         "planningTemplate": {
           "kind": "closed-loop-template",
           "entryAssetPolicy": "any-graph-asset",
@@ -3083,12 +3160,12 @@ const STRATEGY_RUNTIME_DESCRIPTOR = Object.freeze(
       },
       "issuerModulePath": "strategies/route-cycle/src/index.ts",
       "issuerExportName": "ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER",
-      "issuerClosureRoot": "0xb515cbf662bc08f0071fbd219d22f54996aee624b2e2100d096a4376e3fb5341",
+      "issuerClosureRoot": "0x2d2f6ff696a8d5e9c8f48c41d480bae9f2946cba36e6c034a29d3c88ae799cdd",
       "planningTemplateHash": "0xed9672250ef7fbdcb54cafe5734ac07282e828f7507b4d650cdf8ea7dac35bda",
-      "leafDigest": "0x3a3effb55f7732611bf773bc1a2a2f115299d7c89faf3463ba700032c4068f5e"
+      "leafDigest": "0xdfd4383b97225e390fd6be3813b9232600bc0f75fb9a9182ed381ac23209c812"
     }
   ],
-  "descriptorRoot": "0xa0492e0fa269d7c158faf3f4b642cbdfe96634d24485d0be2c9a62ecc3cbf684"
+  "descriptorRoot": "0xe713a73ce1cae976ba81c4c268ab82e440469e127c9c6cfd320fe3c34dd02590"
 }
 ) as unknown as GeneratedStrategyRuntimeDescriptorV1;
 

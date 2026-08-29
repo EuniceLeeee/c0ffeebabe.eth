@@ -39,6 +39,7 @@ export interface PlanningEnumerationV1 {
   readonly planningProblem: StrategyPlanningProblemV1;
   readonly graphRoot: Hash;
   readonly candidateLimit: string;
+  /** Process-local owner denominator. This array is not a wire envelope. */
   readonly candidates: readonly PlannedRouteCandidateV1[];
   /** True once at least one additional unique route was observed past the bound. */
   readonly truncated: boolean;
@@ -62,12 +63,61 @@ interface IssuedPlanningEnumerationStateV1 {
 }
 
 const issuedPlanningEnumerations = new WeakMap<object, IssuedPlanningEnumerationStateV1>();
+const ENUMERATION_HASH_TREE_FANOUT = 128;
 
 interface TransitionV1 extends PlannedRouteLegV1 {
   readonly transitionKey: string;
 }
 
 const compare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
+
+function boundedOrderedRoot(domain: string, values: readonly unknown[]): Hash {
+  let level = values.length === 0
+    ? [hashDomain(`${domain}/node/v1`, { level: "0", firstOrdinal: "0", values: [] })]
+    : Array.from({ length: Math.ceil(values.length / ENUMERATION_HASH_TREE_FANOUT) }, (_, index) => {
+      const first = index * ENUMERATION_HASH_TREE_FANOUT;
+      return hashDomain(`${domain}/node/v1`, {
+        level: "0",
+        firstOrdinal: String(first),
+        values: values.slice(first, first + ENUMERATION_HASH_TREE_FANOUT),
+      });
+    });
+  let depth = 1;
+  while (level.length > 1) {
+    const previous = level;
+    level = Array.from({ length: Math.ceil(previous.length / ENUMERATION_HASH_TREE_FANOUT) }, (_, index) => {
+      const first = index * ENUMERATION_HASH_TREE_FANOUT;
+      return hashDomain(`${domain}/node/v1`, {
+        level: String(depth),
+        firstOrdinal: String(first),
+        values: previous.slice(first, first + ENUMERATION_HASH_TREE_FANOUT),
+      });
+    });
+    depth += 1;
+  }
+  return hashDomain(domain, {
+    algorithm: "bounded-ordered-tree-v1",
+    count: String(values.length),
+    treeRoot: level[0]!,
+  });
+}
+
+export function planningEnumerationRootV1(value: Omit<PlanningEnumerationV1, "enumerationRoot">): Hash {
+  const orderedCandidateRoot = boundedOrderedRoot(
+    "aloha/planner-enumeration-candidates/v1",
+    value.candidates.map(candidate => ({ candidateId: candidate.candidateId, orderKey: candidate.orderKey })),
+  );
+  return hashDomain("aloha/planner-enumeration/v1", {
+    kind: value.kind,
+    planningProblemHash: value.planningProblemHash,
+    graphRoot: value.graphRoot,
+    candidateLimit: value.candidateLimit,
+    truncated: value.truncated,
+    observedUniqueCountLowerBound: value.observedUniqueCountLowerBound,
+    candidateCount: String(value.candidates.length),
+    orderedCandidateRoot,
+  });
+}
 
 const PROBLEM_KEYS = Object.freeze([
   "kind", "objectiveRef", "entryAssetRef", "returnAssetRef", "minLegs", "maxLegs", "candidateLimit", "edgeReuse",
@@ -264,7 +314,7 @@ export function enumerateClosedLoopPlanningProblem(input: {
   };
   const enumeration = deepFreeze({
     ...body,
-    enumerationRoot: hashDomain("aloha/planner-enumeration/v1", body),
+    enumerationRoot: planningEnumerationRootV1(body),
   }) as IssuedPlanningEnumerationV1;
   issuedPlanningEnumerations.set(enumeration, Object.freeze({
     enumeration,

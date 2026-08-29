@@ -11,6 +11,8 @@ import {
 import {
   assertIssuedEconomicSafetyFinalizationServiceV1,
   createEconomicSafetyQualifiedEvaluatorV1,
+  EconomicSafetyPolicyRejectionErrorV1,
+  validateEconomicSafetyChainRejectionV1,
   validateEconomicSafetyEvidenceV1,
   type EconomicSafetyDecisionV1,
   type EconomicSafetyFinalizationInputV1,
@@ -139,9 +141,36 @@ test("owner issues exact economics/safety evidence and rejects clone/foreign cap
   assert.throws(() => assertIssuedEconomicSafetyFinalizationServiceV1({ ...owner }), /not owner-issued/);
   const capability = await owner.finalize(input());
   const evidence = owner.read(capability);
+  assert.equal(evidence.kind, "aloha.economic-safety-finalization-evidence-v1");
+  if (evidence.kind !== "aloha.economic-safety-finalization-evidence-v1") throw new TypeError("expected accepted economic safety evidence");
   assert.equal(validateEconomicSafetyEvidenceV1(evidence, input()).evidenceRoot, evidence.evidenceRoot);
   assert.throws(() => owner.read({ ...capability }), /was not issued/);
   assert.throws(() => service().read(capability), /was not issued/);
+});
+
+test("owner seals typed policy rejection while forged capabilities and semantic faults stay invalid", async () => {
+  const owner = issueEconomicSafetyFinalizationServiceV1({
+    authorityRoot: h("authority"),
+    implementationHash: h("implementation"),
+    releaseProvenanceHash: release,
+    evaluator: Object.freeze({ async evaluate(): Promise<never> {
+      throw new EconomicSafetyPolicyRejectionErrorV1("quoted-gain-not-positive");
+    } }),
+  });
+  const capability = await owner.finalize(input());
+  const rejection = owner.read(capability);
+  assert.equal(rejection.kind, "aloha.economic-safety-chain-rejection-v1");
+  if (rejection.kind !== "aloha.economic-safety-chain-rejection-v1") throw new TypeError("expected economic safety rejection");
+  assert.equal(validateEconomicSafetyChainRejectionV1(rejection, input(), owner.binding()).code, "quoted-gain-not-positive");
+  assert.throws(() => owner.read({ ...capability }), /was not issued/);
+
+  const semanticFault = issueEconomicSafetyFinalizationServiceV1({
+    authorityRoot: h("authority"),
+    implementationHash: h("implementation"),
+    releaseProvenanceHash: release,
+    evaluator: Object.freeze({ async evaluate(): Promise<never> { throw new TypeError("worker source/program mismatch"); } }),
+  });
+  await assert.rejects(() => semanticFault.finalize(input()), /worker source\/program mismatch/);
 });
 
 test("economic arithmetic, release, source, owner facts and obligations fail closed", async () => {
@@ -167,6 +196,7 @@ test("durable evidence validation rejects jointly recomputed-looking fact substi
   const owner = service();
   const baseline = input();
   const evidence = owner.read(await owner.finalize(baseline));
+  if (evidence.kind !== "aloha.economic-safety-finalization-evidence-v1") throw new TypeError("expected accepted economic safety evidence");
   assert.throws(() => validateEconomicSafetyEvidenceV1({
     ...evidence,
     executionOwnerFacts: { kind: "execution-owner", gasPolicy: "guessed" },
@@ -492,6 +522,8 @@ test("qualified evaluator independently closes a real UniV2 action loop and exac
   });
   const finalSimulationOwnerFacts = Object.freeze({
     kind: "aloha.qualified-final-simulation-owner-facts-v1",
+    artifactProgramHash: workerBody.programHash,
+    wireProgramHash: workerBody.programHash,
     executorQualification: Object.freeze({
       engineBuildFingerprint: qualification.engineBuildFingerprint,
       executableFingerprint: qualification.executableFingerprint,

@@ -12,6 +12,7 @@ import {
   readIssuedSearchTerminalCapabilityV1,
   readIssuedSearchTerminalSixStepArtifactCapabilitiesV1,
   readIssuedSearchTerminalSixStepTraceV1,
+  searchTerminalEvidenceHashV2,
   type ProductionSixStepArtifactCapabilitiesV1,
   type SearchTerminalCapabilityV1,
   type SearchTerminalSixStepTraceV1,
@@ -217,7 +218,7 @@ function sealBinding(
     || simulation.receiptHash !== terminal.receipt.finalSimulationReceiptHash) {
     throw new TypeError("runtime-release Six-Step terminal lineage mismatch");
   }
-  const searchTerminalHash = hashDomain("aloha/search-terminal-evidence/v1", terminal as unknown as CanonicalJson);
+  const searchTerminalHash = searchTerminalEvidenceHashV2(terminal);
   const payload = deepFreeze({
     schemaVersion: 1 as const,
     kind: "aloha.runtime-release-six-step-terminal-binding-v1" as const,

@@ -8,6 +8,11 @@ import {
   verifyReleasePackageDirectoryV1,
 } from "./deployment-package.ts";
 import { decodeRuntimeReleasePackageApprovalV1, decodeRuntimeReleaseSignerPinV1 } from "../../../specs/release-authority/src/index.ts";
+import { installApprovedProductionReleaseV1 } from "./production-install-owner.ts";
+import {
+  materializeExternalApprovedReleasePackageV1,
+  prepareExternalReleasePackageApprovalV1,
+} from "./external-release-workflow.ts";
 
 function fail(message: string): never {
   process.stderr.write(`${message}\n`);
@@ -65,7 +70,25 @@ async function main(): Promise<void> {
     process.stdout.write(`${encodeCanonicalJson({ packageRoot: manifest.packageRoot, verdict: "pass" })}\n`);
     return;
   }
-  fail("command must be check-package or check-installed");
+  if (command === "install-approved") {
+    exactOptions(options, ["directory"]);
+    const manifest = installApprovedProductionReleaseV1(resolve(options.directory!));
+    process.stdout.write(`${encodeCanonicalJson({ packageRoot: manifest.packageRoot, verdict: "installed" })}\n`);
+    return;
+  }
+  if (command === "prepare-package-approval") {
+    exactOptions(options, ["artifact-base"]);
+    const receipt = prepareExternalReleasePackageApprovalV1(resolve(options["artifact-base"]!));
+    process.stdout.write(`${encodeCanonicalJson(receipt)}\n`);
+    return;
+  }
+  if (command === "materialize-approved") {
+    exactOptions(options, ["prepared"]);
+    const receipt = materializeExternalApprovedReleasePackageV1(resolve(options.prepared!));
+    process.stdout.write(`${encodeCanonicalJson(receipt)}\n`);
+    return;
+  }
+  fail("command must be check-package, check-installed, install-approved, prepare-package-approval, or materialize-approved");
 }
 
 main().catch(error => {

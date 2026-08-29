@@ -381,6 +381,47 @@ export interface BoundaryReceipt {
   };
 }
 
+/**
+ * Bounded machine output for the Boundary CLI.  The in-process
+ * `BoundaryReceipt` remains the complete fact tree used by all validators;
+ * this projection publishes the existing content roots plus roots for the
+ * two previously expanded-only collections.
+ */
+export interface BoundaryMachineReceiptV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.machine-enforced-boundary-receipt";
+  readonly gate: BoundaryReceipt["gate"];
+  readonly verdict: BoundaryReceipt["verdict"];
+  readonly candidate: BoundaryReceipt["candidate"];
+  readonly roots: {
+    readonly scannedFileSetRoot: string;
+    readonly boundaryManifestRoot: string;
+    readonly compilerVersionRoot: string;
+    readonly compilerConfigRoot: string;
+    readonly compilerGraphRoot: string;
+    readonly packageManifestRoot: string;
+    readonly externalDependencyRoot: string;
+    readonly languageBuildRoot: string;
+    readonly implementationClosureSetRoot: string;
+    readonly catalogVerificationRoot: string | null;
+    readonly releaseRoleManifestRoot: string | null;
+    readonly releaseClosureRoot: string | null;
+    readonly diagnosticSetRoot: string;
+    readonly mutationCorpusRoot: string;
+  };
+  readonly counts: {
+    readonly trackedFiles: number;
+    readonly graphNodes: number;
+    readonly graphEdges: number;
+    readonly implementationClosures: number;
+    readonly implementationCompilerInputs: number;
+    readonly diagnostics: number;
+    readonly mutationCases: number;
+  };
+  readonly claims: BoundaryReceipt["claims"];
+  readonly rootDigest: string;
+}
+
 export interface QualifiedRunnerBoundarySnapshotV1 {
   readonly candidateGitRoot: string;
   readonly candidateReleaseCommit: string;
@@ -557,6 +598,7 @@ const SCHEDULER_AUTHORITY_PATH = "packages/scheduler/src/generated/qualified-exe
 const FAMILY_EXECUTION_COMPOSITION_PATH = "packages/work-plane/src/generated/family-execution-composition.ts";
 const RUNTIME_RELEASE_PUBLIC_PATH = "packages/runtime-release-authority/src/index.ts";
 const RUNTIME_RELEASE_BOOTSTRAP_PATH = "packages/runtime-release-authority/src/internal/bootstrap.ts";
+const RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH = "packages/runtime-release-authority/src/internal/http-family-physical-owner.ts";
 const RUNTIME_RELEASE_DISCOVERY_OWNER_PATH = "packages/runtime-release-authority/src/internal/discovery-owner.ts";
 const RUNTIME_RELEASE_DISCOVERY_SOURCE_OWNER_PATH = "packages/runtime-release-authority/src/internal/discovery-source-authority-owner.ts";
 const RUNTIME_RELEASE_STATE_PATH = "packages/runtime-release-authority/src/internal/state.ts";
@@ -750,7 +792,7 @@ const TERMINAL_PHASE_AUTHORITY_IMPORTS = Object.freeze([
   { from: STARTUP_RUNTIME_PUBLIC_PATH, to: STARTUP_SIX_STEP_ROUTE_PARENT_OWNER_PATH, specifier: "./internal/six-step-route-parent-owner.ts", named: ["issueStartupSixStepRouteParentCapabilityV1"] },
   { from: RUNTIME_RELEASE_SIX_STEP_TERMINAL_CONSUMER_PATH, to: RUNTIME_RELEASE_SIX_STEP_TERMINAL_OWNER_PATH, specifier: "./internal/six-step-terminal-owner.ts", named: ["assertIssuedRuntimeReleaseSixStepTerminalBindingServiceV1", "readRuntimeReleaseSixStepTerminalArtifactCapabilitiesV1", "readRuntimeReleaseSixStepTerminalBindingCapabilityV1"] },
   { from: RUNTIME_RELEASE_SIX_STEP_TERMINAL_OWNER_PATH, to: RUNTIME_RELEASE_STATE_PATH, specifier: "./state.ts", named: ["assertActiveRuntimeReleaseAuthorityState"] },
-  { from: RUNTIME_RELEASE_SIX_STEP_TERMINAL_OWNER_PATH, to: "packages/search-pipeline/src/index.ts", specifier: "../../../../packages/search-pipeline/src/index.ts", named: ["readIssuedSearchTerminalCapabilityV1", "readIssuedSearchTerminalSixStepArtifactCapabilitiesV1", "readIssuedSearchTerminalSixStepTraceV1"] },
+  { from: RUNTIME_RELEASE_SIX_STEP_TERMINAL_OWNER_PATH, to: "packages/search-pipeline/src/index.ts", specifier: "../../../../packages/search-pipeline/src/index.ts", named: ["readIssuedSearchTerminalCapabilityV1", "readIssuedSearchTerminalSixStepArtifactCapabilitiesV1", "readIssuedSearchTerminalSixStepTraceV1", "searchTerminalEvidenceHashV2"] },
   { from: RUNTIME_RELEASE_SIX_STEP_TERMINAL_OWNER_PATH, to: RUNTIME_RELEASE_STRATEGY_OWNER_PATH, specifier: "./strategy-runtime-owner.ts", named: ["assertIssuedRuntimeReleaseStrategyRuntimeService"] },
 ] as const);
 
@@ -1066,10 +1108,11 @@ const SENSITIVE_PUBLIC_RUNTIME_IMPORTS = new Map<string, ReadonlySet<string>>([
   ])],
 ]);
 
-/** REVM lifecycle is the sole production owner of the child-process worker
- * transport.  Other production code remains forbidden from spawning. */
+/** Exact production process adapters own the two approved external
+ * executables. Other production code remains forbidden from spawning. */
 const CHILD_PROCESS_RUNTIME_OWNER_PATHS = new Set([
-  "runtime/revm-workers/src/lifecycle.ts",
+  "packages/runtime-release-authority/src/internal/external-proof-owner.ts",
+  "runtime/revm-workers/src/node-worker-factory.ts",
 ]);
 
 // These are current non-public constructor/issuer paths.  `/src/internal/`
@@ -1092,6 +1135,7 @@ const KNOWN_AUTHORITY_CONSTRUCTOR_PATHS = new Set([
   RUNTIME_RELEASE_OBSERVER_STORE_OWNER_PATH,
   "packages/runtime-release-authority/src/index.ts",
   "packages/runtime-release-authority/src/internal/bootstrap.ts",
+  RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH,
   "packages/runtime-release-authority/src/internal/candidate-partition-proof-owner.ts",
   "packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts",
   "packages/runtime-release-authority/src/internal/family-runtime-owner.ts",
@@ -1227,6 +1271,9 @@ const AUTHORITY_OWNER_EDGES = new Set([
   "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/checkpoint/src/candidate-partition.ts",
   "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/checkpoint/src/index.ts",
   "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/work-plane/src/internal/family-execution-port.ts",
+  `${RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH}\u2192${FAMILY_EXECUTION_OWNER_PATH}`,
+  `${RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH}\u2192packages/family-composition/src/internal/generated-runtime-composition.ts`,
+  `${SEARCHER_RELEASE_RUNTIME_OWNER_PATH}\u2192${RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH}`,
   "packages/runtime-release-authority/src/internal/family-runtime-owner.ts\u2192packages/work-plane/src/internal/family-execution-port.ts",
   "packages/runtime-release-authority/src/internal/persisted-attestation-owner.ts\u2192packages/runtime-release-authority/src/index.ts",
   "packages/runtime-release-authority/src/internal/persisted-attestation-owner.ts\u2192packages/runtime-release-authority/src/internal/state.ts",
@@ -1585,6 +1632,18 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
     ["createSchedulerOwnedFamilyExecutionPort"],
   ],
   [
+    `${RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH}\u2192${FAMILY_EXECUTION_OWNER_PATH}`,
+    ["issueQualifiedPhysicalExecutionPort"],
+  ],
+  [
+    `${RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH}\u2192packages/family-composition/src/internal/generated-runtime-composition.ts`,
+    ["executeGeneratedFamilyPhysicalLifecycle", "readGeneratedFamilyRuntimeFactoryMetadata"],
+  ],
+  [
+    `${SEARCHER_RELEASE_RUNTIME_OWNER_PATH}\u2192${RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH}`,
+    ["issueRuntimeReleaseHttpFamilyPhysicalExecutionPortV1"],
+  ],
+  [
     "packages/runtime-release-authority/src/internal/family-runtime-owner.ts\u2192packages/work-plane/src/internal/family-execution-port.ts",
     [
       "assertIssuedFamilyFrozenProgramExecutionPort",
@@ -1679,14 +1738,25 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
   [`${RUNTIME_RELEASE_BOOTSTRAP_PATH}\u2192${RUNTIME_RELEASE_PERFORMANCE_OWNER_PATH}`, ["issueRuntimeReleasePerformanceRuntimeService"]],
   [`${RUNTIME_RELEASE_BOOTSTRAP_PATH}\u2192${RUNTIME_RELEASE_STARTUP_OWNER_PATH}`, ["issueRuntimeReleaseSearcherStartupService"]],
   [`${RUNTIME_RELEASE_BOOTSTRAP_PATH}\u2192${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_OWNER_PATH}`, ["issueRuntimeReleaseFullFamilyTerminalBindingServiceV1"]],
-  [`${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_CONSUMER_PATH}\u2192${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_OWNER_PATH}`, ["readRuntimeReleaseFullFamilyTerminalBindingCapabilityV1"]],
+  [`${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_CONSUMER_PATH}\u2192${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_OWNER_PATH}`, [
+    "readRuntimeReleaseFullFamilyTerminalBindingCapabilityV1",
+    "readRuntimeReleaseNativeFullFamilyAuditCapabilityV1",
+    "readRuntimeReleaseNativeFullFamilyAuditChunkBytesCapabilityV1",
+  ]],
   [`${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_OWNER_PATH}\u2192${RUNTIME_RELEASE_STATE_PATH}`, ["assertActiveRuntimeReleaseAuthorityState"]],
   [`${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_OWNER_PATH}\u2192packages/search-pipeline/src/index.ts`, [
+    "readIssuedNativeFullFamilyAuditChunkBytesV1",
+    "readIssuedNativeFullFamilyAuditManifestV1",
     "readIssuedNativeFullFamilyAuditV1",
     "readIssuedSearchTerminalCapabilityV1",
     "readIssuedSearchTerminalNativeFullFamilyAuditCapabilityV1",
+    "searchTerminalEvidenceHashV2",
   ]],
-  [`${FULL_FAMILY_OBSERVER_PATH}\u2192${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_CONSUMER_PATH}`, ["readRuntimeReleaseFullFamilyTerminalBindingV1"]],
+  [`${FULL_FAMILY_OBSERVER_PATH}\u2192${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_CONSUMER_PATH}`, [
+    "readRuntimeReleaseFullFamilyTerminalBindingV1",
+    "readRuntimeReleaseNativeFullFamilyAuditChunkV1",
+    "readRuntimeReleaseNativeFullFamilyAuditV1",
+  ]],
   [`${FULL_FAMILY_OBSERVER_PATH}\u2192${CHECKPOINT_FULL_FAMILY_PUBLIC_CONSUMER_PATH}`, ["readCheckpointReadyFullFamilyEvidence"]],
   [`${FULL_FAMILY_OBSERVATION_PORT_PUBLIC_PATH}\u2192${FULL_FAMILY_OBSERVATION_PORT_OWNER_PATH}`, ["assertIssuedProductionFullFamilyObservationPortV1"]],
   [`${FULL_FAMILY_COLLECTOR_PORT_PATH}\u2192${FULL_FAMILY_OBSERVATION_PORT_OWNER_PATH}`, ["issueProductionFullFamilyObservationPortV1", "readProductionFullFamilyObservationResultV1"]],
@@ -2175,7 +2245,9 @@ function canonical(value: unknown): string {
 }
 
 function hashDomain(domain: string, value: unknown): string {
-  return `0x${createHash("sha256").update(domain).update("\0").update(canonical(value)).digest("hex")}`;
+  const hash = createHash("sha256").update(domain).update("\0");
+  writeCanonical(value, (chunk) => hash.update(chunk));
+  return `0x${hash.digest("hex")}`;
 }
 
 /** Independently recomputed here; the release generator is not a trust input. */
@@ -3786,7 +3858,9 @@ export function validateDependencyBoundaries(
     const generatedReleaseAuthorityImport = from.path === RELEASE_RUNTIME_PATH && to.path === RELEASE_AUTHORITY_PATH;
     const productionReleaseRuntimeImport = from.fileClass === "production-runtime" && to.path === RELEASE_RUNTIME_PATH;
     const qualifiedReleaseRunnerImport = from.path === QUALIFIED_RELEASE_RUNNER_OWNER_PATH && to.path === RELEASE_RUNTIME_PATH;
-    const familyRuntimeCompositionImport = from.path === RUNTIME_RELEASE_BOOTSTRAP_PATH && to.path === FAMILY_RUNTIME_COMPOSITION_PATH;
+    const familyRuntimeCompositionImport = (from.path === RUNTIME_RELEASE_BOOTSTRAP_PATH
+      || from.path === RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH)
+      && to.path === FAMILY_RUNTIME_COMPOSITION_PATH;
     const valuationOwnerRuntimeCompositionImport = from.path === RUNTIME_RELEASE_ECONOMIC_SAFETY_OWNER_PATH
       && to.path === VALUATION_OWNER_RUNTIME_COMPOSITION_PATH;
     const authorityOwnerEdge = AUTHORITY_OWNER_EDGES.has(`${edge.from}\u2192${edge.to}`);
@@ -7568,6 +7642,22 @@ export function validatePreReleaseProductionBoundarySources(
       || !observeSyntax.includes("observeQualifiedReleaseAcceptanceAdvisoryV1(material.qualifiedReleaseRunner,source)")) {
       diagnostics.push(diagnostic("fail", "production-advisory-observer-only", PRODUCTION_RELEASE_WORKFLOW_PATH, "Production advisory must reopen exact material, revalidate it, and invoke only the observer runner"));
     }
+    const prepare = workflowFile.statements.find((statement): statement is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(statement)
+      && statement.name?.text === "prepareProductionReleaseAcceptanceSigningRequestV1"
+      && hasExportModifier(statement));
+    if (!exactRequiredTypeReferenceParameter(prepare, "PreReleaseAdvisoryMaterialCapabilityV1")) {
+      diagnostics.push(diagnostic("fail", "production-release-preparation-capability-only", PRODUCTION_RELEASE_WORKFLOW_PATH, "Production release preparation must accept exactly one opaque PreReleaseAdvisoryMaterialCapabilityV1"));
+    }
+    const prepareSyntax = prepare?.body === undefined ? null : compactStageOneSyntax(prepare.body);
+    if (prepareSyntax === null
+      || !prepareSyntax.includes("readPreReleaseAdvisoryMaterialV1(capability)")
+      || !prepareSyntax.includes("assertAdvisoryMaterialCurrent(capability,material)")
+      || !prepareSyntax.includes("prepareQualifiedReleaseAcceptanceForExternalOwnerV1(material.qualifiedReleaseRunner,source)")
+      || prepareSyntax.includes("advisoryJudgment")
+      || prepareSyntax.includes("factLog")) {
+      diagnostics.push(diagnostic("fail", "production-release-preparation-owner", PRODUCTION_RELEASE_WORKFLOW_PATH, "Production release preparation must revalidate frozen material and invoke only the qualified external-release runner"));
+    }
   }
 
   const forbiddenAuthoring = [
@@ -8936,4 +9026,81 @@ export function formatReceipt(receipt: BoundaryReceipt): string {
   const chunks: string[] = [];
   writeReceipt(receipt, (chunk) => chunks.push(chunk));
   return chunks.join("");
+}
+
+function implementationClosureSetRootV1(
+  closures: readonly ImplementationClosure[],
+): string {
+  const hash = createHash("sha256")
+    .update("aloha/boundary/implementation-closure-set/v1")
+    .update("\0")
+    .update("[");
+  closures.forEach((closure, index) => {
+    if (index > 0) hash.update(",");
+    writeCanonical({
+      entrypointId: closure.entrypointId,
+      closureDigest: closure.closureDigest,
+    }, (chunk) => hash.update(chunk));
+  });
+  return `0x${hash.update("]").digest("hex")}`;
+}
+
+/**
+ * Project the complete in-process fact tree to fixed-cardinality machine
+ * output.  Every expanded collection is retained by an already validated
+ * root or by a root computed incrementally here; no compiler input or
+ * closure is removed from the gate's validation denominator.
+ */
+export function createBoundaryMachineReceiptV1(
+  receipt: BoundaryReceipt,
+): BoundaryMachineReceiptV1 {
+  const base: Omit<BoundaryMachineReceiptV1, "rootDigest"> = {
+    schemaVersion: 1,
+    kind: "aloha.machine-enforced-boundary-receipt",
+    gate: receipt.gate,
+    verdict: receipt.verdict,
+    candidate: receipt.candidate,
+    roots: {
+      scannedFileSetRoot: receipt.denominator.scannedFileSetRoot,
+      boundaryManifestRoot: receipt.denominator.manifestRoot,
+      compilerVersionRoot: receipt.compiler.compilerVersionRoot,
+      compilerConfigRoot: receipt.compiler.configRoots,
+      compilerGraphRoot: receipt.compiler.graphRoot,
+      packageManifestRoot: receipt.compiler.packageManifestRoot,
+      externalDependencyRoot: receipt.compiler.externalDependencyRoot,
+      languageBuildRoot: receipt.languageBuild.rootDigest,
+      implementationClosureSetRoot: implementationClosureSetRootV1(receipt.implementationClosures),
+      catalogVerificationRoot: receipt.catalogVerification?.receiptRoot ?? null,
+      releaseRoleManifestRoot: receipt.releaseRoleManifest?.rootDigest ?? null,
+      releaseClosureRoot: receipt.releaseClosures?.rootDigest ?? null,
+      diagnosticSetRoot: hashDomain("aloha/boundary/diagnostic-set/v1", receipt.diagnostics),
+      mutationCorpusRoot: receipt.mutationCorpus.root,
+    },
+    counts: {
+      trackedFiles: receipt.denominator.files.length,
+      graphNodes: receipt.graph.nodes.length,
+      graphEdges: receipt.graph.edges.length,
+      implementationClosures: receipt.implementationClosures.length,
+      implementationCompilerInputs: receipt.implementationClosures.reduce(
+        (count, closure) => count + closure.programInputs.length,
+        0,
+      ),
+      diagnostics: receipt.diagnostics.length,
+      mutationCases: receipt.mutationCorpus.cases.length,
+    },
+    claims: receipt.claims,
+  };
+  return Object.freeze({
+    ...base,
+    rootDigest: hashDomain("aloha/boundary/machine-receipt/v1", base),
+  });
+}
+
+/** Emit only the bounded content-addressed Boundary machine receipt. */
+export function writeBoundaryMachineReceiptV1(
+  receipt: BoundaryReceipt,
+  sink: CanonicalSink,
+): void {
+  writeCanonical(createBoundaryMachineReceiptV1(receipt), sink);
+  sink("\n");
 }

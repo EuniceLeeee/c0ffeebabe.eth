@@ -37,6 +37,7 @@ import {
   type FamilyRuntimeAuthorityBindingV1,
   type FamilyRuntimeOwnerV1,
   type FamilyRuntimeStageV1,
+  type FamilyRawEvidenceReadPortV1,
   type FamilyStageIssueInputV1,
   type FamilyStageGenericInvocationV1,
   type FamilyStageProgramV1,
@@ -79,6 +80,13 @@ function authorityBinding(input: FamilyRuntimeAuthorityBindingV1): FamilyRuntime
 
 function stageRefKey(ref: StageCapabilityRefV1): string {
   return encodeCanonicalJson(ref);
+}
+
+function rawEvidencePort(value: unknown): FamilyRawEvidenceReadPortV1 {
+  if (value === null || typeof value !== "object" || typeof (value as { readonly read?: unknown }).read !== "function") {
+    throw new TypeError("Family raw-evidence read port is required");
+  }
+  return value as FamilyRawEvidenceReadPortV1;
 }
 
 function capabilityRefFromStage(ref: StageCapabilityRefV1): CapabilityRefV1 {
@@ -490,9 +498,10 @@ export function createFamilyRuntimeAuthority(input: CreateFamilyRuntimeAuthority
         if (!active) throw new Error("Family runtime authority revoked");
         const program = decodeFamilyStageProgram(executeInput.program);
         if (!exactRef(program.stageRef, ref)) throw new TypeError("Family stage program resolved by wrong stage port");
+        const rawEvidence = rawEvidencePort(executeInput.rawEvidence);
         const attemptId = executeInput.attemptId ?? program.requestFingerprint;
         const signal = executeInput.signal ?? new AbortController().signal;
-        const facts = await stageBinding.executor.execute({ program, attemptId, signal });
+        const facts = await stageBinding.executor.execute({ program, rawEvidence, attemptId, signal });
         if (!Array.isArray(facts) || facts.length === 0) throw new TypeError("Family executor returned no transport facts");
         const factSet = registryOwner.issueFactSet({
           programRequestFingerprint: program.frozenProgram.requestFingerprint,

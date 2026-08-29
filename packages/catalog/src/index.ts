@@ -1,13 +1,18 @@
+import { types as nodeTypes } from "node:util";
 import {
   assertDecimalString,
   assertHash,
   assertNonEmptyString,
+  decodeCanonicalBytes,
   decodeCanonicalJson,
   decodeExactObject,
   deepFreeze,
+  encodeCanonicalBytes,
   encodeCanonicalJson,
   fieldArray,
   hashDomain,
+  hashCanonicalPartition,
+  sha256Hex,
   type Hash,
   type CanonicalJson,
 } from "../../canonical-codec/src/index.ts";
@@ -64,6 +69,90 @@ export interface InstanceCatalogV1 {
   readonly publications: readonly InstancePublicationV1[];
   readonly instanceCount: string;
   readonly instanceCatalogRoot: Hash;
+}
+
+export interface InstanceCatalogPublicationChunkRefV1 {
+  readonly contentSha256: Hash;
+}
+
+export interface InstanceCatalogPublicationChunkV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.instance-catalog-publication-chunk-v1";
+  readonly publications: readonly InstancePublicationV1[];
+  readonly nextPublicationChunkRef: InstanceCatalogPublicationChunkRefV1 | null;
+}
+
+export interface InstanceCatalogManifestV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.instance-catalog-manifest-v1";
+  readonly cutoff: CanonicalCutoffV1;
+  readonly instanceCount: string;
+  readonly publicationSequenceRoot: Hash;
+  readonly publicationChunkCount: string;
+  readonly firstPublicationChunkRef: InstanceCatalogPublicationChunkRefV1 | null;
+  readonly instanceCatalogRoot: Hash;
+}
+
+export interface EncodedInstanceCatalogV1 {
+  readonly manifest: InstanceCatalogManifestV1;
+  readonly manifestBytes: Uint8Array;
+  readonly chunks: readonly Readonly<{
+    readonly ref: InstanceCatalogPublicationChunkRefV1;
+    readonly chunk: InstanceCatalogPublicationChunkV1;
+    readonly bytes: Uint8Array;
+  }>[];
+}
+
+const CATALOG_SEQUENCE_FANOUT = 128;
+const CATALOG_CHUNK_MAX_ITEMS = 128;
+const CATALOG_CHUNK_MAX_BYTES = 500_000;
+const ownerSealedPublications = new WeakSet<object>();
+const ownerSealedCatalogs = new WeakSet<object>();
+
+/** Process-local materialized catalogs are intentionally larger than one wire value. */
+function materializedArray<T>(
+  value: unknown,
+  item: (value: unknown, path: string) => T,
+  path: string,
+): readonly T[] {
+  if (!Array.isArray(value)) throw new TypeError(`expected array at ${path}`);
+  if (nodeTypes.isProxy(value)) throw new TypeError(`Proxy arrays are not accepted at ${path}`);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key === "symbol"
+      || (key !== "length" && (!/^\d+$/.test(key) || Number(key) >= value.length))) {
+      throw new TypeError(`array has extra property at ${path}.${String(key)}`);
+    }
+  }
+  const output: T[] = new Array(value.length);
+  for (let index = 0; index < value.length; index += 1) {
+    const itemPath = `${path}[${index}]`;
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+      throw new TypeError(`sparse or accessor array item at ${itemPath}`);
+    }
+    output[index] = item(descriptor.value, itemPath);
+  }
+  return deepFreeze(output);
+}
+
+function publicationSequenceRoot(publications: readonly InstancePublicationV1[]): Hash {
+  return hashCanonicalPartition(
+    "aloha/instance-catalog-publication-sequence/v1",
+    publications.map(value => value.instancePublicationHash),
+    CATALOG_SEQUENCE_FANOUT,
+  );
+}
+
+function catalogSemanticRoot(
+  cutoff: CanonicalCutoffV1,
+  instanceCount: string,
+  sequenceRoot: Hash,
+): Hash {
+  return hashDomain("aloha/instance-catalog/v2", {
+    cutoff,
+    instanceCount,
+    publicationSequenceRoot: sequenceRoot,
+  });
 }
 
 const decodeAssetPort = (value: unknown, name = "assetPort"): AssetPortV1 => decodeExactObject(value, {
@@ -193,10 +282,12 @@ export function sealInstancePublication(draft: InstancePublicationDraftV1): Inst
     transitions,
     evidenceRoot: decoded.evidenceRoot,
   };
-  return deepFreeze({
+  const publication = deepFreeze({
     ...payload,
     instancePublicationHash: hashDomain("aloha/instance-publication/v1", payload),
   });
+  ownerSealedPublications.add(publication);
+  return publication;
 }
 
 export function sealInstanceCatalog(
@@ -204,7 +295,7 @@ export function sealInstanceCatalog(
   publications: readonly InstancePublicationV1[],
 ): InstanceCatalogV1 {
   const decodedCutoff = decodeCanonicalCutoff(cutoff, "instanceCatalogCutoff");
-  const decodedPublications = fieldArray(
+  const decodedPublications = materializedArray(
     publications,
     (value, path) => decodePublication(value, path),
     "instanceCatalog.publications",
@@ -223,19 +314,24 @@ export function sealInstanceCatalog(
     byIdentity.add(identity);
     return publication;
   }).sort((left, right) => left.instancePublicationHash < right.instancePublicationHash ? -1 : 1);
-  const instanceCatalogRoot = hashDomain("aloha/instance-catalog/v1", {
-    cutoff: decodedCutoff,
-    publicationHashes: sorted.map(value => value.instancePublicationHash),
-  });
-  return deepFreeze({
+  const instanceCount = String(sorted.length);
+  const instanceCatalogRoot = catalogSemanticRoot(
+    decodedCutoff,
+    instanceCount,
+    publicationSequenceRoot(sorted),
+  );
+  const catalog = deepFreeze({
     cutoff: decodedCutoff,
     publications: sorted,
-    instanceCount: String(sorted.length),
+    instanceCount,
     instanceCatalogRoot,
   });
+  ownerSealedCatalogs.add(catalog);
+  return catalog;
 }
 
 export function validateInstancePublication(publication: InstancePublicationV1): void {
+  if (publication !== null && typeof publication === "object" && ownerSealedPublications.has(publication)) return;
   const decoded = decodePublication(publication);
   const resealed = sealInstancePublication({
     familyId: decoded.familyId,
@@ -265,12 +361,14 @@ export function validateInstancePublication(publication: InstancePublicationV1):
     resealed.transitions.length !== decoded.transitions.length
     || resealed.transitions.some((value, index) => value.projectionHash !== decoded.transitions[index]?.projectionHash)
   ) throw new Error("transition-projection-hash-mismatch");
+  ownerSealedPublications.add(publication);
 }
 
 export function validateInstanceCatalog(catalog: InstanceCatalogV1): void {
+  if (catalog !== null && typeof catalog === "object" && ownerSealedCatalogs.has(catalog)) return;
   const decoded = decodeExactObject(catalog, {
     cutoff: (value, path) => decodeCanonicalCutoff(value, path),
-    publications: (value, path) => fieldArray(value, (item, itemPath) => decodePublication(item, itemPath), path),
+    publications: (value, path) => materializedArray(value, (item, itemPath) => decodePublication(item, itemPath), path),
     instanceCount: (value, path) => assertDecimalString(value, path),
     instanceCatalogRoot: (value, path) => assertHash(value, path),
   }, "instanceCatalog");
@@ -279,4 +377,154 @@ export function validateInstanceCatalog(catalog: InstanceCatalogV1): void {
     resealed.instanceCatalogRoot !== decoded.instanceCatalogRoot
     || resealed.instanceCount !== decoded.instanceCount
   ) throw new Error("instance-catalog-root-mismatch");
+}
+
+function exactCatalogChunkRef(value: unknown, path: string): InstanceCatalogPublicationChunkRefV1 {
+  return decodeExactObject(value, {
+    contentSha256: (field, fieldPath) => assertHash(field, fieldPath),
+  }, path);
+}
+
+function buildCatalogChunk(
+  publications: readonly InstancePublicationV1[],
+  nextPublicationChunkRef: InstanceCatalogPublicationChunkRefV1 | null,
+): EncodedInstanceCatalogV1["chunks"][number] {
+  const chunk = deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.instance-catalog-publication-chunk-v1" as const,
+    publications: deepFreeze([...publications]),
+    nextPublicationChunkRef,
+  });
+  const bytes = encodeCanonicalBytes(chunk);
+  if (bytes.byteLength > CATALOG_CHUNK_MAX_BYTES) {
+    throw new TypeError("instance catalog publication chunk exceeds durable byte cap");
+  }
+  return Object.freeze({
+    chunk,
+    bytes: bytes.slice(),
+    ref: deepFreeze({
+      contentSha256: sha256Hex(bytes),
+    }),
+  });
+}
+
+function encodeCatalogChunks(catalog: InstanceCatalogV1): EncodedInstanceCatalogV1["chunks"] {
+  const groups: Array<readonly InstancePublicationV1[]> = Array.from(
+    { length: Math.ceil(catalog.publications.length / CATALOG_CHUNK_MAX_ITEMS) },
+    (_, index) => catalog.publications.slice(
+      index * CATALOG_CHUNK_MAX_ITEMS,
+      (index + 1) * CATALOG_CHUNK_MAX_ITEMS,
+    ),
+  );
+  for (;;) {
+    const output: Array<EncodedInstanceCatalogV1["chunks"][number]> = new Array(groups.length);
+    let next: InstanceCatalogPublicationChunkRefV1 | null = null;
+    let failed = -1;
+    for (let index = groups.length - 1; index >= 0; index -= 1) {
+      const group = groups[index]!;
+      try {
+        const encoded = buildCatalogChunk(group, next);
+        output[index] = encoded;
+        next = encoded.ref;
+      } catch {
+        failed = index;
+        break;
+      }
+    }
+    if (failed === -1) return Object.freeze(output.slice());
+    const group = groups[failed]!;
+    if (group.length <= 1) {
+      buildCatalogChunk(group, null);
+      throw new TypeError("unreachable instance catalog chunk encoding failure");
+    }
+    const middle = Math.ceil(group.length / 2);
+    groups.splice(failed, 1, group.slice(0, middle), group.slice(middle));
+  }
+}
+
+export function encodeInstanceCatalogV1(catalog: InstanceCatalogV1): EncodedInstanceCatalogV1 {
+  validateInstanceCatalog(catalog);
+  const chunks = encodeCatalogChunks(catalog);
+  const manifest = deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.instance-catalog-manifest-v1" as const,
+    cutoff: catalog.cutoff,
+    instanceCount: catalog.instanceCount,
+    publicationSequenceRoot: publicationSequenceRoot(catalog.publications),
+    publicationChunkCount: String(chunks.length),
+    firstPublicationChunkRef: chunks[0]?.ref ?? null,
+    instanceCatalogRoot: catalog.instanceCatalogRoot,
+  });
+  const manifestBytes = encodeCanonicalBytes(manifest);
+  if (manifestBytes.byteLength > CATALOG_CHUNK_MAX_BYTES) {
+    throw new TypeError("instance catalog manifest exceeds durable byte cap");
+  }
+  return Object.freeze({ manifest, manifestBytes: manifestBytes.slice(), chunks });
+}
+
+export function decodeInstanceCatalogV1(
+  manifestBytes: Uint8Array,
+  readChunk: (ref: InstanceCatalogPublicationChunkRefV1) => Uint8Array,
+): InstanceCatalogV1 {
+  if (manifestBytes.byteLength > CATALOG_CHUNK_MAX_BYTES) {
+    throw new TypeError("instance catalog manifest exceeds durable byte cap");
+  }
+  const manifest = decodeExactObject(decodeCanonicalBytes(manifestBytes), {
+    schemaVersion: field => {
+      if (field !== 1) throw new TypeError("instance catalog manifest schema version mismatch");
+      return 1 as const;
+    },
+    kind: field => {
+      if (field !== "aloha.instance-catalog-manifest-v1") throw new TypeError("instance catalog manifest kind mismatch");
+      return "aloha.instance-catalog-manifest-v1" as const;
+    },
+    cutoff: (field, path) => decodeCanonicalCutoff(field, path),
+    instanceCount: (field, path) => assertDecimalString(field, path),
+    publicationSequenceRoot: (field, path) => assertHash(field, path),
+    publicationChunkCount: (field, path) => assertDecimalString(field, path),
+    firstPublicationChunkRef: (field, path) => field === null ? null : exactCatalogChunkRef(field, path),
+    instanceCatalogRoot: (field, path) => assertHash(field, path),
+  }, "instanceCatalogManifest");
+  const publications: InstancePublicationV1[] = [];
+  const refs: InstanceCatalogPublicationChunkRefV1[] = [];
+  let ref = manifest.firstPublicationChunkRef;
+  while (ref !== null) {
+    if (BigInt(refs.length) >= BigInt(manifest.publicationChunkCount)) {
+      throw new TypeError("instance catalog publication chunk range mismatch");
+    }
+    const bytes = readChunk(ref);
+    if (bytes.byteLength > CATALOG_CHUNK_MAX_BYTES || sha256Hex(bytes) !== ref.contentSha256) {
+      throw new TypeError("instance catalog publication chunk content mismatch");
+    }
+    const chunk = decodeExactObject(decodeCanonicalBytes(bytes), {
+      schemaVersion: field => {
+        if (field !== 1) throw new TypeError("instance catalog chunk schema version mismatch");
+        return 1 as const;
+      },
+      kind: field => {
+        if (field !== "aloha.instance-catalog-publication-chunk-v1") throw new TypeError("instance catalog chunk kind mismatch");
+        return "aloha.instance-catalog-publication-chunk-v1" as const;
+      },
+      publications: (field, path) => fieldArray(field, (item, itemPath) => decodePublication(item, itemPath), path),
+      nextPublicationChunkRef: (field, path) => field === null ? null : exactCatalogChunkRef(field, path),
+    }, `instanceCatalogChunk[${refs.length}]`);
+    if (chunk.publications.length === 0
+      || chunk.publications.length > CATALOG_CHUNK_MAX_ITEMS) {
+      throw new TypeError("instance catalog publication chunk binding mismatch");
+    }
+    refs.push(ref);
+    publications.push(...chunk.publications);
+    ref = chunk.nextPublicationChunkRef;
+  }
+  if (manifest.publicationChunkCount !== String(refs.length)
+    || manifest.instanceCount !== String(publications.length)
+    || (manifest.instanceCount === "0") !== (manifest.firstPublicationChunkRef === null)) {
+    throw new TypeError("instance catalog publication chunk denominator incomplete");
+  }
+  const catalog = sealInstanceCatalog(manifest.cutoff, publications);
+  if (publicationSequenceRoot(catalog.publications) !== manifest.publicationSequenceRoot
+    || catalog.instanceCatalogRoot !== manifest.instanceCatalogRoot) {
+    throw new TypeError("instance catalog manifest semantic root mismatch");
+  }
+  return catalog;
 }

@@ -14,6 +14,7 @@ import {
   decodeCanonicalBytes,
   encodeCanonicalBytes,
   gitSha40Schema,
+  hashCanonicalPartition,
   hashDomain,
   sha256Hex,
   type CanonicalJson,
@@ -24,7 +25,16 @@ import {
   type ObservedProductionEventV1,
   type RawPerformanceObservationV1,
 } from "../../../packages/performance-collector/src/index.ts";
-import { validateMaterializedFullGraphSweepV1 } from "../../../acceptance/collectors/src/full-family-observer.ts";
+import {
+  validateMaterializedFullGraphSweepV1,
+  validateNativeFullFamilyAuditWireV1,
+} from "../../../acceptance/collectors/src/full-family-observer.ts";
+import {
+  decodeNativeFullFamilyAuditV1,
+  decodeNativeFullFamilyAuditManifestV1,
+  encodeNativeFullFamilyAuditBodyV1,
+  type NativeFullFamilyAuditV1,
+} from "../../../packages/search-pipeline/src/index.ts";
 import {
   decodeFullGraphCoarseSweepManifestV1,
   decodeFullGraphCoarseSweepV1,
@@ -904,7 +914,35 @@ function decodeReport(value: unknown): AdvisoryReportV1 {
   });
 }
 
-function decodeIndexAndBind(report: AdvisoryReportV1): Readonly<{ readonly sweepByteLength: string }> {
+function indexedContentObjectByteLength(
+  value: unknown,
+  expected: Readonly<{ readonly artifactRefId: Hash; readonly contentSha256: Hash }>,
+  storeIdentityHash: Hash,
+  path: string,
+): string {
+  const artifact = ownRecord(value, path);
+  const ref = ownRecord(artifact.ref, `${path}.ref`);
+  const locator = ownRecord(ref.locator, `${path}.ref.locator`);
+  const immutableLocator = ownRecord(ref.immutableMirrorLocator, `${path}.ref.immutableMirrorLocator`);
+  const byteLength = assertDecimalString(ref.byteLength, `${path}.ref.byteLength`);
+  if (hash(artifact.contentSha256, `${path}.contentSha256`) !== expected.contentSha256
+    || hash(ref.contentSha256, `${path}.ref.contentSha256`) !== expected.contentSha256
+    || hash(ref.artifactRefId, `${path}.ref.artifactRefId`) !== expected.artifactRefId
+    || locator.kind !== "content-object"
+    || immutableLocator.kind !== "content-object"
+    || hash(locator.storeIdentityHash, `${path}.ref.locator.storeIdentityHash`) !== storeIdentityHash
+    || hash(immutableLocator.storeIdentityHash, `${path}.ref.immutableMirrorLocator.storeIdentityHash`) !== storeIdentityHash
+    || hash(locator.objectKey, `${path}.ref.locator.objectKey`) !== expected.contentSha256
+    || hash(immutableLocator.objectKey, `${path}.ref.immutableMirrorLocator.objectKey`) !== expected.contentSha256) {
+    throw new TypeError(`${path} content-object binding mismatch`);
+  }
+  return byteLength;
+}
+
+function decodeIndexAndBind(report: AdvisoryReportV1): Readonly<{
+  readonly sweepByteLength: string;
+  readonly terminalBindingByteLength: string;
+}> {
   const indexBytes = readPhysicalFile(report.factIndex.terminalPhase.index.path, {
     device: report.factIndex.terminalPhase.index.device,
     inode: report.factIndex.terminalPhase.index.inode,
@@ -921,30 +959,19 @@ function decodeIndexAndBind(report: AdvisoryReportV1): Readonly<{ readonly sweep
   if (hash(index.finalDurableWindowId, "terminalPhaseIndex.finalDurableWindowId") !== report.factIndex.terminalPhase.finalDurableWindowId) {
     throw new TypeError("terminal-phase index window mismatch");
   }
-  const artifact = ownRecord(index.fullGraphCoarseSweepArtifact, "terminalPhaseIndex.fullGraphCoarseSweepArtifact");
-  const ref = ownRecord(artifact.ref, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.ref");
-  const locator = ownRecord(ref.locator, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.ref.locator");
-  const immutableLocator = ownRecord(ref.immutableMirrorLocator, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.ref.immutableMirrorLocator");
-  const sweepByteLength = assertDecimalString(ref.byteLength, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.ref.byteLength");
-  if (hash(artifact.contentSha256, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.contentSha256")
-      !== report.factIndex.terminalPhase.fullGraphCoarseSweep.contentSha256
-    || hash(ref.contentSha256, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.ref.contentSha256")
-      !== report.factIndex.terminalPhase.fullGraphCoarseSweep.contentSha256
-    || hash(ref.artifactRefId, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.ref.artifactRefId")
-      !== report.factIndex.terminalPhase.fullGraphCoarseSweep.artifactRefId
-    || locator.kind !== "content-object"
-    || immutableLocator.kind !== "content-object"
-    || hash(locator.storeIdentityHash, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.ref.locator.storeIdentityHash")
-      !== report.factIndex.terminalPhase.observerContentStore.storeIdentityHash
-    || hash(immutableLocator.storeIdentityHash, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.ref.immutableMirrorLocator.storeIdentityHash")
-      !== report.factIndex.terminalPhase.observerContentStore.storeIdentityHash
-    || hash(locator.objectKey, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.ref.locator.objectKey")
-      !== report.factIndex.terminalPhase.fullGraphCoarseSweep.contentSha256
-    || hash(immutableLocator.objectKey, "terminalPhaseIndex.fullGraphCoarseSweepArtifact.ref.immutableMirrorLocator.objectKey")
-      !== report.factIndex.terminalPhase.fullGraphCoarseSweep.contentSha256) {
-    throw new TypeError("terminal-phase index Full-Graph artifact mismatch");
-  }
-  return Object.freeze({ sweepByteLength });
+  const sweepByteLength = indexedContentObjectByteLength(
+    index.fullGraphCoarseSweepArtifact,
+    report.factIndex.terminalPhase.fullGraphCoarseSweep,
+    report.factIndex.terminalPhase.observerContentStore.storeIdentityHash,
+    "terminalPhaseIndex.fullGraphCoarseSweepArtifact",
+  );
+  const terminalBindingByteLength = indexedContentObjectByteLength(
+    index.fullFamilyTerminalBindingArtifact,
+    report.factIndex.terminalPhase.fullFamilyTerminalBinding,
+    report.factIndex.terminalPhase.observerContentStore.storeIdentityHash,
+    "terminalPhaseIndex.fullFamilyTerminalBindingArtifact",
+  );
+  return Object.freeze({ sweepByteLength, terminalBindingByteLength });
 }
 
 function readSweep(report: AdvisoryReportV1, sweepByteLength: string): FullGraphCoarseSweepV1 {
@@ -979,11 +1006,11 @@ function readSweep(report: AdvisoryReportV1, sweepByteLength: string): FullGraph
       if (dirname(chunkPath) !== store.directory || basename(chunkPath) !== chunkName) {
         throw new TypeError("Full-Graph chunk escaped observer content store");
       }
-      return readPhysicalFile(chunkPath, {
+      const bytes = readPhysicalFile(chunkPath, {
         contentSha256: ref.contentSha256,
-        byteLength: ref.byteLength,
         requireWriteOnce: true,
       });
+      return bytes;
     });
     if (manifest.sweepRoot !== sweep.sweepRoot) throw new TypeError("Full-Graph manifest/materialized root mismatch");
     validateMaterializedFullGraphSweepV1(sweep);
@@ -1019,6 +1046,139 @@ function readSweep(report: AdvisoryReportV1, sweepByteLength: string): FullGraph
       throw new TypeError("Full-Graph sweep/report fact binding mismatch");
     }
     return sweep;
+  } finally {
+    closeSync(directoryDescriptor);
+  }
+}
+
+const FULL_FAMILY_TERMINAL_BINDING_KEYS = Object.freeze([
+  "schemaVersion", "kind", "runtimeBindingId", "candidateReleaseCommit", "releaseProvenanceHash",
+  "finalDurableWindowId", "producerTerminalId", "producerHeadFactsRoot", "producerTerminalBindingRoot",
+  "laneTerminalSetRoot", "searchTerminalHash", "terminalKind", "terminalLineageHash",
+  "readyRecordHash", "generationId", "graphRoot", "generatedRuntime", "readyCutoff", "actualCurrentSource",
+  "nativeAuditManifest", "bindingRoot",
+] as const);
+
+function readFullFamilyTerminalBinding(
+  report: AdvisoryReportV1,
+  byteLength: string,
+): FullFamilyTerminalBindingObservationV1 {
+  const store = report.factIndex.terminalPhase.observerContentStore;
+  const directoryDescriptor = openSync(store.directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  try {
+    const before = fstatSync(directoryDescriptor, { bigint: true });
+    if (!before.isDirectory() || before.isSymbolicLink()
+      || before.dev.toString() !== store.device || before.ino.toString() !== store.inode) {
+      throw new TypeError("observer content store physical identity changed");
+    }
+    const marker = readPhysicalFile(join(store.directory, ".aloha-observer-store-identity-v1"), { requireWriteOnce: true });
+    if (Buffer.from(marker).toString("utf8") !== `${store.storeIdentityHash}\n`) {
+      throw new TypeError("observer content store identity marker mismatch");
+    }
+    const contentHash = report.factIndex.terminalPhase.fullFamilyTerminalBinding.contentSha256;
+    const objectName = contentHash.slice(2);
+    const objectPath = join(store.directory, objectName);
+    if (dirname(objectPath) !== store.directory || basename(objectPath) !== objectName) {
+      throw new TypeError("Full-Family terminal binding escaped observer content store");
+    }
+    const value = ownRecord(decodeCanonicalBytes(readPhysicalFile(objectPath, {
+      contentSha256: contentHash,
+      byteLength,
+      requireWriteOnce: true,
+    })), "fullFamilyTerminalBinding");
+    assertExactKeys(value, FULL_FAMILY_TERMINAL_BINDING_KEYS, "fullFamilyTerminalBinding");
+    exactLiteral(value.schemaVersion, 1, "fullFamilyTerminalBinding.schemaVersion");
+    exactLiteral(value.kind, "aloha.runtime-release-full-family-terminal-binding-v1", "fullFamilyTerminalBinding.kind");
+    const bindingRoot = hash(value.bindingRoot, "fullFamilyTerminalBinding.bindingRoot");
+    const { bindingRoot: _bindingRoot, ...bindingPayload } = value;
+    if (bindingRoot !== hashDomain("aloha/runtime-release-full-family-terminal-binding/v1", bindingPayload as CanonicalJson)) {
+      throw new TypeError("Full-Family terminal binding root mismatch");
+    }
+    const runtimeBindingId = hash(value.runtimeBindingId, "fullFamilyTerminalBinding.runtimeBindingId");
+    const candidateReleaseCommit = gitSha40Schema.decode(value.candidateReleaseCommit, "fullFamilyTerminalBinding.candidateReleaseCommit");
+    const releaseProvenanceHash = hash(value.releaseProvenanceHash, "fullFamilyTerminalBinding.releaseProvenanceHash");
+    const finalDurableWindowId = hash(value.finalDurableWindowId, "fullFamilyTerminalBinding.finalDurableWindowId");
+    for (const field of [
+      "producerTerminalId", "producerHeadFactsRoot", "producerTerminalBindingRoot", "laneTerminalSetRoot",
+      "searchTerminalHash", "terminalLineageHash", "readyRecordHash", "graphRoot",
+    ] as const) hash(value[field], `fullFamilyTerminalBinding.${field}`);
+    const terminalKind = value.terminalKind;
+    if (terminalKind !== "unsigned-dry-run" && terminalKind !== "route-set-terminal") {
+      throw new TypeError("Full-Family terminal binding terminalKind mismatch");
+    }
+    nonEmptyString(value.generationId, "fullFamilyTerminalBinding.generationId");
+    currentSourceIdentity(value.readyCutoff, "fullFamilyTerminalBinding.readyCutoff");
+    currentSourceIdentity(value.actualCurrentSource, "fullFamilyTerminalBinding.actualCurrentSource");
+    const generatedRuntime = ownRecord(value.generatedRuntime, "fullFamilyTerminalBinding.generatedRuntime");
+    assertExactKeys(generatedRuntime, [
+      "releaseIntentRoot", "definitionCatalogRoot", "runtimeDescriptorRoot", "families",
+    ], "fullFamilyTerminalBinding.generatedRuntime");
+    hash(generatedRuntime.releaseIntentRoot, "fullFamilyTerminalBinding.generatedRuntime.releaseIntentRoot");
+    hash(generatedRuntime.definitionCatalogRoot, "fullFamilyTerminalBinding.generatedRuntime.definitionCatalogRoot");
+    hash(generatedRuntime.runtimeDescriptorRoot, "fullFamilyTerminalBinding.generatedRuntime.runtimeDescriptorRoot");
+    if (!Array.isArray(generatedRuntime.families) || generatedRuntime.families.length === 0) {
+      throw new TypeError("Full-Family terminal binding generated runtime Family denominator is empty");
+    }
+    for (const [index, rawFamily] of generatedRuntime.families.entries()) {
+      const family = ownRecord(rawFamily, `fullFamilyTerminalBinding.generatedRuntime.families[${index}]`);
+      assertExactKeys(family, ["familyId", "familyDefinitionHash", "sourcePlanRoot", "sourcePlanRefs"], `fullFamilyTerminalBinding.generatedRuntime.families[${index}]`);
+      nonEmptyString(family.familyId, `fullFamilyTerminalBinding.generatedRuntime.families[${index}].familyId`);
+      hash(family.familyDefinitionHash, `fullFamilyTerminalBinding.generatedRuntime.families[${index}].familyDefinitionHash`);
+      hash(family.sourcePlanRoot, `fullFamilyTerminalBinding.generatedRuntime.families[${index}].sourcePlanRoot`);
+      if (!Array.isArray(family.sourcePlanRefs)) throw new TypeError("Full-Family terminal binding sourcePlanRefs must be an array");
+    }
+    const manifestBytes = encodeCanonicalBytes(value.nativeAuditManifest as CanonicalJson);
+    const manifest = decodeNativeFullFamilyAuditManifestV1(manifestBytes);
+    const audit = decodeNativeFullFamilyAuditV1(manifestBytes, ref => {
+      const chunkName = ref.contentSha256.slice(2);
+      const chunkPath = join(store.directory, chunkName);
+      if (dirname(chunkPath) !== store.directory || basename(chunkPath) !== chunkName) {
+        throw new TypeError("native Full-Family audit chunk escaped observer content store");
+      }
+      return readPhysicalFile(chunkPath, {
+        contentSha256: ref.contentSha256,
+        requireWriteOnce: true,
+      });
+    });
+    validateNativeFullFamilyAuditWireV1(audit);
+    if (audit.auditRoot !== manifest.auditRoot
+      || audit.binding.readyRecordHash !== value.readyRecordHash
+      || audit.binding.generationId !== value.generationId
+      || audit.binding.graphRoot !== value.graphRoot
+      || audit.binding.releaseProvenanceHash !== value.releaseProvenanceHash
+      || !sameCanonical(audit.binding.readyCutoff, value.readyCutoff)
+      || !sameCanonical(audit.binding.actualCurrentSource, value.actualCurrentSource)) {
+      throw new TypeError("Full-Family terminal/native-audit binding splice");
+    }
+    if (runtimeBindingId !== report.release.runtimeBindingId
+      || candidateReleaseCommit !== report.release.candidateReleaseCommit
+      || releaseProvenanceHash !== report.release.releaseProvenanceHash
+      || finalDurableWindowId !== report.factIndex.terminalPhase.finalDurableWindowId) {
+      throw new TypeError("Full-Family terminal binding/report splice");
+    }
+    const after = fstatSync(directoryDescriptor, { bigint: true });
+    if (before.dev !== after.dev || before.ino !== after.ino
+      || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) {
+      throw new TypeError("observer content store changed during Full-Family terminal binding read");
+    }
+    const currentDirectoryDescriptor = openSync(
+      store.directory,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    );
+    try {
+      const current = fstatSync(currentDirectoryDescriptor, { bigint: true });
+      if (current.dev !== after.dev || current.ino !== after.ino) {
+        throw new TypeError("observer content store locator changed during native Full-Family read");
+      }
+    } finally {
+      closeSync(currentDirectoryDescriptor);
+    }
+    return Object.freeze({
+      bindingRoot,
+      terminalKind,
+      terminalLineageHash: hash(value.terminalLineageHash, "fullFamilyTerminalBinding.terminalLineageHash"),
+      audit,
+    });
   } finally {
     closeSync(directoryDescriptor);
   }
@@ -1096,6 +1256,22 @@ function record(
 
 function eventIdentity(event: ObservedProductionEventV1): CanonicalJson {
   return Object.freeze({ namespace: event.namespace, sequence: event.sequence, eventId: event.eventId });
+}
+
+function observedOrderedRoot(domain: string, values: readonly CanonicalJson[]): Hash {
+  return hashCanonicalPartition(domain, values, 128);
+}
+
+function materialLocator(
+  report: AdvisoryReportV1,
+  event: ObservedProductionEventV1,
+  materialKind: "route-accounting-entries" | "candidate-terminal-observations",
+): CanonicalJson {
+  return Object.freeze({
+    databasePath: report.factIndex.processEvidenceQuery.databasePath,
+    event: eventIdentity(event),
+    materialKind,
+  });
 }
 
 function headIdentity(value: Readonly<{ readonly admissionId: Hash; readonly headFactsRoot: Hash; readonly headHash: Hash }>): CanonicalJson {
@@ -1741,129 +1917,11 @@ function selectedTerminalOutcome(
   });
 }
 
-interface SelectedRouteCoarseJoinV1 {
-  readonly inputs: readonly CanonicalJson[];
-  readonly reasons: readonly string[];
-}
-
-const ROUTE_LEG_FIELDS = Object.freeze([
-  "edgeId", "transitionRef", "inputAssetRef", "inputPortRef", "outputAssetRef", "outputPortRef",
-] as const);
-
-function selectedRouteCoarseJoin(
-  entry: Readonly<Record<string, CanonicalJson>>,
-  sweep: FullGraphCoarseSweepV1,
-): SelectedRouteCoarseJoinV1 {
-  if (!Array.isArray(entry.legs)) {
-    return Object.freeze({ inputs: Object.freeze([]), reasons: Object.freeze(["selected-route-legs-missing"]) });
-  }
-  if (entry.legs.length === 0) {
-    return Object.freeze({ inputs: Object.freeze([]), reasons: Object.freeze(["selected-route-legs-empty"]) });
-  }
-  const reasons: string[] = [];
-  const seenLegs = new Set<string>();
-  const seenTransitions = new Set<Hash>();
-  const inputs = entry.legs.map((rawLeg, index): CanonicalJson => {
-    let leg: Readonly<Record<string, CanonicalJson>>;
-    try {
-      const raw = ownRecord(rawLeg, `selectedCoarse.legs[${index}]`);
-      assertExactKeys(raw, ROUTE_LEG_FIELDS, `selectedCoarse.legs[${index}]`);
-      leg = Object.freeze(Object.fromEntries(ROUTE_LEG_FIELDS.map(field => [
-        field,
-        hash(raw[field], `selectedCoarse.legs[${index}].${field}`),
-      ]))) as Readonly<Record<string, CanonicalJson>>;
-    } catch {
-      reasons.push("selected-route-leg-invalid");
-      return Object.freeze({
-        legIndex: String(index), leg: null, matchStatus: "invalid-leg",
-        transitionId: null, entryRoot: null, coarseReceipt: null, familyObservation: null,
-      });
-    }
-    const legIdentity = ROUTE_LEG_FIELDS.map(field => leg[field]).join("\u001f");
-    if (seenLegs.has(legIdentity)) {
-      reasons.push("selected-route-leg-duplicate");
-      return Object.freeze({
-        legIndex: String(index), leg: leg as CanonicalJson, matchStatus: "duplicate-leg",
-        transitionId: null, entryRoot: null, coarseReceipt: null, familyObservation: null,
-      });
-    }
-    seenLegs.add(legIdentity);
-    const matches = sweep.entries.filter(candidate => (
-      candidate.edge.edgeId === leg.edgeId
-      && candidate.edge.opaqueTransitionRef === leg.transitionRef
-      && candidate.inputAssetRef === leg.inputAssetRef
-      && candidate.inputPortRef === leg.inputPortRef
-      && candidate.outputAssetRef === leg.outputAssetRef
-      && candidate.outputPortRef === leg.outputPortRef
-    ));
-    if (matches.length !== 1) {
-      reasons.push(matches.length === 0
-        ? "selected-route-coarse-transition-missing"
-        : "selected-route-coarse-transition-ambiguous");
-      return Object.freeze({
-        legIndex: String(index),
-        leg: leg as CanonicalJson,
-        matchStatus: matches.length === 0 ? "missing" : "ambiguous",
-        transitionId: null,
-        entryRoot: null,
-        coarseReceipt: null,
-        familyObservation: null,
-      });
-    }
-    const match = matches[0]!;
-    if (seenTransitions.has(match.transitionId)) {
-      reasons.push("selected-route-leg-duplicate");
-      return Object.freeze({
-        legIndex: String(index), leg: leg as CanonicalJson, matchStatus: "duplicate-transition",
-        transitionId: match.transitionId, entryRoot: match.entryRoot,
-        coarseReceipt: match.receipt as unknown as CanonicalJson | null,
-        familyObservation: match.familyObservation,
-      });
-    }
-    seenTransitions.add(match.transitionId);
-    if (match.status !== "observed" || match.receipt === null || match.familyObservation === null) {
-      reasons.push("selected-route-coarse-observation-missing");
-    }
-    return Object.freeze({
-      legIndex: String(index),
-      leg: leg as CanonicalJson,
-      matchStatus: match.status === "observed" && match.receipt !== null && match.familyObservation !== null
-        ? "observed"
-        : "coarse-observation-missing",
-      transitionId: match.transitionId,
-      entryRoot: match.entryRoot,
-      coarseReceipt: match.receipt as unknown as CanonicalJson | null,
-      familyObservation: match.familyObservation,
-    });
-  });
-  return Object.freeze({
-    inputs: Object.freeze(inputs),
-    reasons: Object.freeze([...new Set(reasons)].sort()),
-  });
-}
-
-function selectedRouteCoarseInputs(
-  entry: Readonly<Record<string, CanonicalJson>>,
-  sweep: FullGraphCoarseSweepV1,
-): readonly CanonicalJson[] {
-  return selectedRouteCoarseJoin(entry, sweep).inputs;
-}
-
-function selectedCoarseConsumptionReasons(
-  observation: RawPerformanceObservationV1,
-  sweep: FullGraphCoarseSweepV1,
-): readonly string[] {
-  const reasons: string[] = [];
-  for (const event of observation.events) {
-    if (event.eventType !== "route-denominator") continue;
-    const payload = routePayload(event);
-    if (payload.denominatorKind !== "accounted") continue;
-    for (const entry of payload.accounting.entries) {
-      if (entry.disposition !== "selected") continue;
-      reasons.push(...selectedRouteCoarseJoin(entry, sweep).reasons);
-    }
-  }
-  return Object.freeze([...new Set(reasons)].sort());
+interface FullFamilyTerminalBindingObservationV1 {
+  readonly bindingRoot: Hash;
+  readonly terminalKind: "unsigned-dry-run" | "route-set-terminal";
+  readonly terminalLineageHash: Hash;
+  readonly audit: NativeFullFamilyAuditV1;
 }
 
 function appendSixStepLineageFacts(
@@ -1947,20 +2005,384 @@ function appendSixStepLineageFacts(
   }
 }
 
+const NATIVE_PRICING_MODEL = "per-route-fresh-no-price-table" as const;
+const NATIVE_PRICING_NOT_APPLICABLE = Object.freeze([
+  "mids", "refreshed", "carried", "implementation-coordinator", "price-cache",
+] as const);
+
+function nativeRouteEntryLegs(entry: Readonly<Record<string, CanonicalJson>> | null): readonly Hash[] | null {
+  if (entry === null || !Array.isArray(entry.legs)) return null;
+  try {
+    return Object.freeze(entry.legs.map((rawLeg, index) => {
+      const leg = ownRecord(rawLeg, `nativeAudit.routeEntry.legs[${index}]`);
+      return hash(leg.edgeId, `nativeAudit.routeEntry.legs[${index}].edgeId`);
+    }));
+  } catch {
+    return null;
+  }
+}
+
+function nativeProductionCoarseInputs(
+  route: AccountedRoutePayloadV1,
+  entry: Readonly<Record<string, CanonicalJson>>,
+  terminalBinding: FullFamilyTerminalBindingObservationV1,
+): readonly CanonicalJson[] {
+  const audit = terminalBinding.audit;
+  const matches = audit.coarseRoutes.filter(routeFact => routeFact.candidateId === entry.candidateId);
+  if (matches.length !== 1
+    || !nativeProductionRouteBindingMatches(route, terminalBinding)) return Object.freeze([]);
+  const routeFact = matches[0]!;
+  const routeLegs = nativeRouteEntryLegs(entry);
+  if (entry.routeHash !== routeFact.routeHash
+    || routeLegs === null
+    || routeLegs.length !== routeFact.legs.length
+    || routeLegs.some((edgeId, index) => edgeId !== routeFact.legs[index]!.edgeId)) return Object.freeze([]);
+  return Object.freeze(routeFact.legs.map(leg => Object.freeze({
+    legIndex: leg.legIndex,
+    edgeId: leg.edgeId,
+    owningFamilyId: leg.owningFamilyId,
+    projectionHash: leg.projectionHash,
+    coarseReceipt: leg.receipt as unknown as CanonicalJson | null,
+    familyObservation: leg.familyObservation,
+    coarseLegFactRoot: leg.factRoot,
+    source: "native-full-family-audit",
+  })));
+}
+
+function nativeProductionRouteBindingMatches(
+  route: AccountedRoutePayloadV1,
+  terminalBinding: FullFamilyTerminalBindingObservationV1,
+): boolean {
+  const accounting = route.accounting as Readonly<Record<string, CanonicalJson>>;
+  const binding = terminalBinding.audit.binding;
+  return route.correlationId === binding.correlationId
+    && accounting.planningProblemHash === binding.planningProblemHash
+    && accounting.enumerationRoot === binding.plannerEnumerationRoot
+    && route.headHash === binding.actualCurrentSource.hash;
+}
+
+function appendNativeFullFamilyAuditFacts(
+  records: PreReleaseFactLogRecordV1[],
+  observation: RawPerformanceObservationV1,
+  sweep: FullGraphCoarseSweepV1,
+  terminalBinding: FullFamilyTerminalBindingObservationV1,
+  sourceClassification: FactSourceClassificationV1,
+): void {
+  const audit = terminalBinding.audit;
+  const routeEvents = observation.events.filter(event => event.eventType === "route-denominator");
+  const candidateEvents = observation.events.filter(event => event.eventType === "candidate-set");
+  const summaryReasons: string[] = [];
+  const addReason = (reasons: string[], reason: string) => {
+    reasons.push(reason);
+    summaryReasons.push(reason);
+  };
+
+  records.push(record("aloha.pre-release-native-full-family-graph-join-v1", {
+    terminalBindingRoot: terminalBinding.bindingRoot,
+    nativeAuditRoot: audit.auditRoot,
+    auditReadyRecordHash: audit.binding.readyRecordHash,
+    auditGenerationId: audit.binding.generationId,
+    auditGraphRoot: audit.binding.graphRoot,
+    auditActualCurrentSource: audit.binding.actualCurrentSource as unknown as CanonicalJson,
+    sweepBindingRoot: sweep.binding.bindingRoot,
+    sweepGraphRoot: sweep.binding.graphRoot,
+    sweepActualCurrentSource: sweep.binding.actualCurrentSource as unknown as CanonicalJson,
+    relation: "independent-production-audit-vs-post-terminal-full-graph-observation",
+    productionPricePublication: false,
+    artifactRole: "independent-full-graph-coverage-observation",
+  }, sourceClassification));
+
+  for (const [index, edge] of audit.projectedEdges.entries()) {
+    records.push(record("aloha.pre-release-native-full-family-projected-edge-v1", {
+      terminalBindingRoot: terminalBinding.bindingRoot,
+      nativeAuditRoot: audit.auditRoot,
+      projectedEdgeIndex: String(index),
+      edgeId: edge.edgeId,
+      owningFamilyId: edge.owningFamilyId,
+      owningFamilyDefinitionHash: edge.owningFamilyDefinitionHash,
+      owningInstanceKey: edge.owningInstanceKey,
+      instancePublicationHash: edge.instancePublicationHash,
+      projectionHash: edge.projectionHash,
+      projectedEdgeFactRoot: edge.factRoot,
+      pricingModel: NATIVE_PRICING_MODEL,
+      pricingStateNotApplicable: NATIVE_PRICING_NOT_APPLICABLE,
+      productionPricePublication: false,
+    }, sourceClassification));
+  }
+
+  for (const [routeIndex, auditRoute] of audit.coarseRoutes.entries()) {
+    const reasons: string[] = [];
+    const candidateRouteEvents = routeEvents.flatMap(event => {
+      const payload = routePayload(event);
+      if (payload.denominatorKind !== "accounted") return [];
+      const accounting = payload.accounting as Readonly<Record<string, CanonicalJson>>;
+      const entries = accounting.entries as readonly Readonly<Record<string, CanonicalJson>>[];
+      const entry = entries.find(value => value.candidateId === auditRoute.candidateId) ?? null;
+      return entry === null ? [] : [{ event, payload, accounting, entry }];
+    });
+    if (candidateRouteEvents.length === 0) addReason(reasons, "native-audit-candidate-route-missing");
+    const exactDenominators = candidateRouteEvents.filter(({ payload, accounting }) => (
+      payload.correlationId === audit.binding.correlationId
+      && accounting.planningProblemHash === audit.binding.planningProblemHash
+      && accounting.enumerationRoot === audit.binding.plannerEnumerationRoot
+    ));
+    if (exactDenominators.length === 0) addReason(reasons, "native-audit-production-route-denominator-missing");
+    if (exactDenominators.length > 1) addReason(reasons, "native-audit-production-route-denominator-ambiguous");
+    const joined = exactDenominators.length === 1 ? exactDenominators[0]! : null;
+    if (joined !== null && joined.payload.headHash !== audit.binding.actualCurrentSource.hash) {
+      addReason(reasons, "native-audit-source-mismatch");
+    }
+    if (joined !== null && joined.entry.routeHash !== auditRoute.routeHash) {
+      addReason(reasons, "native-audit-route-hash-mismatch");
+    }
+    if (auditRoute.assessment === null) addReason(reasons, "native-audit-coarse-assessment-missing");
+    if (auditRoute.legs.some(leg => leg.receipt === null || leg.familyObservation === null)) {
+      addReason(reasons, "native-audit-coarse-leg-receipt-missing");
+    }
+    const routeLegEdgeIds = nativeRouteEntryLegs(joined?.entry ?? null);
+    const auditLegEdgeIds = Object.freeze(auditRoute.legs.map(leg => leg.edgeId));
+    if (routeLegEdgeIds === null
+      || routeLegEdgeIds.length !== auditLegEdgeIds.length
+      || routeLegEdgeIds.some((edgeId, index) => edgeId !== auditLegEdgeIds[index])) {
+      addReason(reasons, "native-audit-coarse-leg-lineage-mismatch");
+    }
+    const actionMatches = audit.actionLineage.filter(action => action.candidateId === auditRoute.candidateId);
+    const action = actionMatches.length === 1 ? actionMatches[0]! : null;
+    if (actionMatches.length > 1
+      || (action !== null && (action.routeHash !== auditRoute.routeHash
+        || action.orderedEdgeIds.length !== auditLegEdgeIds.length
+        || action.orderedEdgeIds.some((edgeId, index) => edgeId !== auditLegEdgeIds[index])))) {
+      addReason(reasons, "native-audit-selected-tail-lineage-missing");
+    }
+
+    const routeLineageExact = joined !== null
+      && joined.payload.headHash === audit.binding.actualCurrentSource.hash
+      && joined.entry.routeHash === auditRoute.routeHash
+      && routeLegEdgeIds !== null
+      && routeLegEdgeIds.length === auditLegEdgeIds.length
+      && routeLegEdgeIds.every((edgeId, index) => edgeId === auditLegEdgeIds[index]);
+    const terminalMatches = !routeLineageExact || joined === null ? [] : candidateEvents.flatMap(event => {
+      const payload = candidatePayload(event);
+      const laneDenominators = payload.laneDenominators.filter(denominator => (
+        denominator.lane === joined.payload.lane
+        && denominator.correlationId === joined.payload.correlationId
+        && denominator.accountingRoot === joined.accounting.root
+      ));
+      if (payload.admissionId !== joined.payload.admissionId
+        || payload.headFactsRoot !== joined.payload.headFactsRoot
+        || payload.headHash !== joined.payload.headHash
+        || laneDenominators.length !== 1) return [];
+      return payload.candidateTerminalObservations.flatMap(terminal => (
+        terminal.lane === joined.payload.lane
+        && terminal.candidateId === auditRoute.candidateId
+          ? [{ event, payload, terminal }]
+          : []
+      ));
+    });
+    const terminalMatch = terminalMatches.length === 1 ? terminalMatches[0]! : null;
+    const terminal = terminalMatch?.terminal as unknown as Readonly<Record<string, unknown>> | undefined;
+    const terminalKind = typeof terminal?.terminalKind === "string" ? terminal.terminalKind : null;
+    const selected = joined?.entry.disposition === "selected";
+    const expectsAction = audit.missingActionCandidateIds.includes(auditRoute.candidateId)
+      || action !== null;
+    const terminalRouteHashMatches = terminal !== undefined && terminal.routeHash === auditRoute.routeHash;
+    if (terminal !== undefined && !terminalRouteHashMatches) {
+      addReason(reasons, "native-audit-terminal-route-hash-mismatch");
+    }
+    const sixStepMatches = !routeLineageExact || joined === null ? [] : records.filter(value => (
+      value.kind === "aloha.pre-release-six-step-selected-lineage-v1"
+      && value.admissionId === joined.payload.admissionId
+      && value.candidateId === auditRoute.candidateId
+      && value.correlationId === audit.binding.correlationId
+      && sameCanonical(value.source, audit.binding.actualCurrentSource)
+    ));
+    const sixStepLineage = sixStepMatches.length === 1 ? sixStepMatches[0]! : null;
+    if (selected && (terminalMatch === null || terminalMatches.length !== 1
+      || !terminalRouteHashMatches
+      || (expectsAction && action === null)
+      || (terminalKind === "passed" && sixStepLineage === null))) {
+      addReason(reasons, "native-audit-selected-tail-lineage-missing");
+    }
+    const outcome = terminal === undefined || !terminalRouteHashMatches
+      ? Object.freeze({
+        outcome: "invalid-basis",
+        simulationStatus: "invalid-basis",
+        simulationAbsenceReason: terminal === undefined ? "terminal-observation-missing" : "terminal-route-hash-mismatch",
+      })
+      : selectedTerminalOutcome(terminal, Object.freeze([]));
+    const tailStatus = terminalRouteHashMatches && terminalKind === "passed"
+      ? "simulated"
+      : terminal === undefined || !terminalRouteHashMatches
+        ? "missing"
+        : "no-sim";
+
+    records.push(record("aloha.pre-release-native-full-family-route-v1", {
+      terminalBindingRoot: terminalBinding.bindingRoot,
+      nativeAuditRoot: audit.auditRoot,
+      routeIndex: String(routeIndex),
+      candidateId: auditRoute.candidateId,
+      routeHash: auditRoute.routeHash,
+      routeBindingHash: auditRoute.routeBindingHash,
+      coarseAssessment: auditRoute.assessment as unknown as CanonicalJson | null,
+      routeFactRoot: auditRoute.routeFactRoot,
+      productionRouteEvent: joined === null ? null : eventIdentity(joined.event),
+      productionAdmissionId: joined?.payload.admissionId ?? null,
+      productionAccountingRoot: joined === null ? null : hash(joined.accounting.root, "nativeAudit.accounting.root"),
+      productionRouteEntry: joined?.entry as CanonicalJson | null ?? null,
+      consistencyStatus: reasons.length === 0 ? "consistent" : "inconsistent",
+      advisoryReasons: Object.freeze([...new Set(reasons)].sort()),
+      pricingModel: NATIVE_PRICING_MODEL,
+      pricingStateNotApplicable: NATIVE_PRICING_NOT_APPLICABLE,
+      productionPricePublication: false,
+    }, sourceClassification));
+
+    for (const [legIndex, leg] of auditRoute.legs.entries()) {
+      const legReasons: string[] = [];
+      if (leg.receipt === null || leg.familyObservation === null) {
+        addReason(legReasons, "native-audit-coarse-leg-receipt-missing");
+      }
+      if (routeLegEdgeIds === null || routeLegEdgeIds[legIndex] !== leg.edgeId) {
+        addReason(legReasons, "native-audit-coarse-leg-lineage-mismatch");
+      }
+      records.push(record("aloha.pre-release-native-full-family-coarse-leg-v1", {
+        terminalBindingRoot: terminalBinding.bindingRoot,
+        nativeAuditRoot: audit.auditRoot,
+        candidateId: auditRoute.candidateId,
+        routeHash: auditRoute.routeHash,
+        legIndex: String(legIndex),
+        edgeId: leg.edgeId,
+        owningFamilyId: leg.owningFamilyId,
+        owningFamilyDefinitionHash: leg.owningFamilyDefinitionHash,
+        owningInstanceKey: leg.owningInstanceKey,
+        instancePublicationHash: leg.instancePublicationHash,
+        projectionHash: leg.projectionHash,
+        coarseReceipt: leg.receipt as unknown as CanonicalJson | null,
+        familyObservation: leg.familyObservation,
+        coarseLegFactRoot: leg.factRoot,
+        consistencyStatus: legReasons.length === 0 ? "consistent" : "inconsistent",
+        advisoryReasons: Object.freeze([...new Set(legReasons)].sort()),
+        pricingModel: NATIVE_PRICING_MODEL,
+        pricingStateNotApplicable: NATIVE_PRICING_NOT_APPLICABLE,
+        productionPricePublication: false,
+      }, sourceClassification));
+    }
+
+    records.push(record("aloha.pre-release-native-full-family-candidate-lineage-v1", {
+      terminalBindingRoot: terminalBinding.bindingRoot,
+      nativeAuditRoot: audit.auditRoot,
+      correlationId: audit.binding.correlationId,
+      planningProblemHash: audit.binding.planningProblemHash,
+      enumerationRoot: audit.binding.plannerEnumerationRoot,
+      source: audit.binding.actualCurrentSource as unknown as CanonicalJson,
+      candidateId: auditRoute.candidateId,
+      routeHash: auditRoute.routeHash,
+      orderedEdgeIds: auditLegEdgeIds,
+      coarseAssessment: auditRoute.assessment as unknown as CanonicalJson | null,
+      actionLineage: action as unknown as CanonicalJson | null,
+      terminalObservation: terminalMatch?.terminal as unknown as CanonicalJson | null ?? null,
+      sixStepLineage,
+      tailStatus,
+      terminalBindingKind: terminalBinding.terminalKind,
+      terminalBindingLineageHash: terminalBinding.terminalLineageHash,
+      ...outcome,
+      consistencyStatus: reasons.length === 0 ? "consistent" : "inconsistent",
+      advisoryReasons: Object.freeze([...new Set(reasons)].sort()),
+      productionPricePublication: false,
+    }, sourceClassification));
+  }
+
+  const enumeratedCandidateIds = Object.freeze(audit.coarseRoutes.map(route => route.candidateId));
+  const coarseResolvedCandidateIds = Object.freeze(audit.coarseRoutes.flatMap(route => (
+    route.assessment !== null && route.legs.every(leg => leg.receipt !== null && leg.familyObservation !== null)
+      ? [route.candidateId]
+      : []
+  )));
+  const admittedCandidateIds = Object.freeze([...new Set(routeEvents.flatMap(event => {
+    const payload = routePayload(event);
+    if (payload.denominatorKind !== "accounted" || payload.correlationId !== audit.binding.correlationId) return [];
+    const accounting = payload.accounting as Readonly<Record<string, CanonicalJson>>;
+    if (accounting.planningProblemHash !== audit.binding.planningProblemHash
+      || accounting.enumerationRoot !== audit.binding.plannerEnumerationRoot) return [];
+    return (accounting.entries as readonly Readonly<Record<string, CanonicalJson>>[])
+      .flatMap(entry => entry.disposition === "selected" ? [entry.candidateId as Hash] : []);
+  }))].sort());
+  const finalSimulationCandidateIds = Object.freeze([...new Set(candidateEvents.flatMap(event => (
+    candidatePayload(event).candidateTerminalObservations.flatMap(terminal => (
+      terminal.terminalKind === "passed" ? [terminal.candidateId] : []
+    ))
+  )))].sort());
+  const coarseInvalidCandidateIds = Object.freeze(enumeratedCandidateIds.filter(id => !coarseResolvedCandidateIds.includes(id)));
+  const candidateRoot = (domain: string, values: readonly Hash[]) => observedOrderedRoot(domain, values);
+  records.push(record("aloha.pre-release-native-full-family-audit-summary-v1", {
+    terminalBindingRoot: terminalBinding.bindingRoot,
+    nativeAuditRoot: audit.auditRoot,
+    binding: audit.binding as unknown as CanonicalJson,
+    expectedCandidateCount: audit.expectedCandidateCount,
+    expectedLegCount: audit.expectedLegCount,
+    observedReceiptCount: audit.observedReceiptCount,
+    missingLegCount: String(audit.missingLegKeys.length),
+    expectedProjectedEdgeCount: audit.expectedProjectedEdgeCount,
+    observedProjectedEdgeCount: audit.observedProjectedEdgeCount,
+    missingProjectedEdgeCount: String(audit.missingProjectedEdgeIds.length),
+    expectedActionLineageCount: audit.expectedActionLineageCount,
+    observedActionLineageCount: audit.observedActionLineageCount,
+    enumeratedCandidateCount: String(enumeratedCandidateIds.length),
+    enumeratedCandidateRoot: candidateRoot("aloha/pre-release/native-summary/enumerated-candidates/v1", enumeratedCandidateIds),
+    coarseResolvedCandidateCount: String(coarseResolvedCandidateIds.length),
+    coarseResolvedCandidateRoot: candidateRoot("aloha/pre-release/native-summary/coarse-resolved-candidates/v1", coarseResolvedCandidateIds),
+    coarseInvalidCandidateCount: String(coarseInvalidCandidateIds.length),
+    coarseInvalidCandidateRoot: candidateRoot("aloha/pre-release/native-summary/coarse-invalid-candidates/v1", coarseInvalidCandidateIds),
+    admittedCandidateCount: String(admittedCandidateIds.length),
+    admittedCandidateRoot: candidateRoot("aloha/pre-release/native-summary/admitted-candidates/v1", admittedCandidateIds),
+    exactCandidateCount: String(admittedCandidateIds.length),
+    exactCandidateRoot: candidateRoot("aloha/pre-release/native-summary/exact-candidates/v1", admittedCandidateIds),
+    finalSimulationCandidateCount: String(finalSimulationCandidateIds.length),
+    finalSimulationCandidateRoot: candidateRoot("aloha/pre-release/native-summary/final-simulation-candidates/v1", finalSimulationCandidateIds),
+    missingActionCandidateCount: String(audit.missingActionCandidateIds.length),
+    missingActionCandidateRoot: candidateRoot("aloha/pre-release/native-summary/missing-action-candidates/v1", audit.missingActionCandidateIds),
+    denominatorRoot: audit.denominatorRoot,
+    observedReceiptRoot: audit.observedReceiptRoot,
+    missingLegRoot: audit.missingLegRoot,
+    projectedEdgeDenominatorRoot: audit.projectedEdgeDenominatorRoot,
+    missingProjectedEdgeRoot: audit.missingProjectedEdgeRoot,
+    actionDenominatorRoot: audit.actionDenominatorRoot,
+    actionObservedRoot: audit.actionObservedRoot,
+    consistencyStatus: summaryReasons.length === 0 ? "consistent" : "inconsistent",
+    advisoryReasons: Object.freeze([...new Set(summaryReasons)].sort()),
+    pricingModel: NATIVE_PRICING_MODEL,
+    pricingStateNotApplicable: NATIVE_PRICING_NOT_APPLICABLE,
+    productionPricePublication: false,
+  }, sourceClassification));
+}
+
+function assertNativeProjectedEdgeDenominatorV1(
+  audit: NativeFullFamilyAuditV1,
+  activeGraph: ProductionActiveReadyGraphSnapshotV1,
+): void {
+  if (audit.expectedProjectedEdgeCount !== activeGraph.edgeCount
+    || audit.projectedEdges.length !== activeGraph.orderedEdgeIds.length
+    || audit.projectedEdges.some((edge, index) => edge.edgeId !== activeGraph.orderedEdgeIds[index])) {
+    throw new TypeError("native full-family projected-edge/active Ready Graph denominator mismatch");
+  }
+}
+
 function buildObservedPreReleaseFactLogRecordsV1(
   report: AdvisoryReportV1,
   observation: RawPerformanceObservationV1,
   sweep: FullGraphCoarseSweepV1,
   activeGraph: ProductionActiveReadyGraphSnapshotV1,
   terminalPhysical: PreReleaseBTerminalPhysicalObservationV1 | null,
+  terminalBinding: FullFamilyTerminalBindingObservationV1 | null,
 ): readonly PreReleaseFactLogRecordV1[] {
   const records: PreReleaseFactLogRecordV1[] = [];
+  if (terminalBinding !== null) {
+    assertNativeProjectedEdgeDenominatorV1(terminalBinding.audit, activeGraph);
+  }
   const encodedSweep = encodeFullGraphCoarseSweepV1(sweep);
   const basisReasons = [...observation.status === "raw-complete" ? [] : [
     `raw-observation-${observation.status}`,
   ], ...duplicateBasisReasons(observation), ...routeCandidateBijectionReasons(observation),
   ...selectedExecutionTelemetryReasons(observation), ...sixStepPartitionReasons(observation),
-  ...selectedCoarseConsumptionReasons(observation, sweep),
   ...terminalPhysical === null ? ["root-owned-terminal-physical-observer-not-executed"] : []];
   try {
     assertPhysicalGraphBasis(report, observation, sweep, activeGraph);
@@ -2027,13 +2449,16 @@ function buildObservedPreReleaseFactLogRecordsV1(
     instanceCatalogRoot: activeGraph.instanceCatalogRoot,
     graphRoot: activeGraph.graphRoot,
     edgeCount: activeGraph.edgeCount,
+    graphEdgeCount: activeGraph.edgeCount,
     familyEdgeCounts: activeGraph.familyEdgeCounts as unknown as CanonicalJson,
     binding: sweep.binding as unknown as CanonicalJson,
     expectedTransitionCount: sweep.expectedTransitionCount,
     expectedTransitionRoot: sweep.expectedTransitionRoot,
     observedTransitionCount: sweep.observedTransitionCount,
+    coarseResolvedTransitionCount: sweep.observedTransitionCount,
     observedTransitionRoot: sweep.observedTransitionRoot,
     missingTransitionCount: sweep.missingTransitionCount,
+    coarseInvalidTransitionCount: sweep.missingTransitionCount,
     missingTransitionRoot: sweep.missingTransitionRoot,
     familyTransitionCounts: sweep.familyTransitionCounts as unknown as CanonicalJson,
     entryChunkCount: encodedSweep.manifest.entryChunkCount,
@@ -2041,6 +2466,8 @@ function buildObservedPreReleaseFactLogRecordsV1(
     firstEntryChunkRef: encodedSweep.manifest.firstEntryChunkRef as unknown as CanonicalJson,
     entryChunkClosureRoot: encodedSweep.manifest.entryChunkClosureRoot,
     sweepRoot: sweep.sweepRoot,
+    productionPricePublication: false,
+    artifactRole: "independent-full-graph-coverage-observation",
   }, invalidBasis ? "invalid-basis" : "root-owned-physical-observation"));
   records.push(record("aloha.pre-release-edge-observation-window-v1", {
     bindingRoot: sweep.binding.bindingRoot,
@@ -2075,13 +2502,28 @@ function buildObservedPreReleaseFactLogRecordsV1(
     if (!candidateByAdmission.has(payload.admissionId)) {
       candidateByAdmission.set(payload.admissionId, { event, payload });
     }
+    const terminalEntryRoots = payload.candidateTerminalObservations.map((terminal, index) => hashDomain(
+      "aloha/pre-release/candidate-terminal-entry/v1",
+      { ordinal: String(index), terminal: terminal as unknown as CanonicalJson },
+    ));
+    const laneDenominators = payload.laneDenominators.map(denominator => {
+      const { observationRoots: _observationRoots, ...summary } = denominator as Readonly<Record<string, CanonicalJson>>;
+      return Object.freeze(summary);
+    });
     records.push(record("aloha.pre-release-candidate-set-v1", {
       event: eventIdentity(event),
       admissionId: payload.admissionId,
       headFactsRoot: payload.headFactsRoot,
       headHash: payload.headHash,
-      laneDenominators: payload.laneDenominators as unknown as CanonicalJson,
-      candidateTerminalObservations: payload.candidateTerminalObservations as unknown as CanonicalJson,
+      laneDenominators: Object.freeze(laneDenominators),
+      candidateTerminalObservationCount: String(payload.candidateTerminalObservations.length),
+      candidateTerminalObservationSequenceRoot: observedOrderedRoot(
+        "aloha/pre-release/candidate-terminal-observations/v1",
+        terminalEntryRoots,
+      ),
+      reportedCandidateTerminalObservationSetRoot:
+        (payload as Readonly<Record<string, CanonicalJson>>).candidateTerminalObservationSetRoot ?? null,
+      materialLocator: materialLocator(report, event, "candidate-terminal-observations"),
     }));
     for (const [index, terminal] of payload.candidateTerminalObservations.entries()) {
       records.push(record("aloha.pre-release-candidate-terminal-v1", {
@@ -2095,9 +2537,30 @@ function buildObservedPreReleaseFactLogRecordsV1(
     }
   }
   appendSixStepLineageFacts(records, observation);
+  if (terminalBinding !== null) {
+    appendNativeFullFamilyAuditFacts(
+      records,
+      observation,
+      sweep,
+      terminalBinding,
+      invalidBasis ? "invalid-basis" : "root-owned-physical-observation",
+    );
+  }
 
   for (const routeEvent of routeEvents) {
     const route = routePayload(routeEvent);
+    const accountingSummary = route.denominatorKind === "accounted"
+      ? (() => {
+          const { entries: _entries, ...summary } = route.accounting;
+          return Object.freeze(summary);
+        })()
+      : null;
+    const accountingEntryRoots = route.denominatorKind === "accounted"
+      ? route.accounting.entries.map((entry, index) => hashDomain(
+          "aloha/route-accounting-entry/v1",
+          { ordinal: String(index), entry: entry as unknown as CanonicalJson },
+        ))
+      : [];
     records.push(record("aloha.pre-release-route-denominator-v1", {
       event: eventIdentity(routeEvent),
       admissionId: route.admissionId,
@@ -2107,9 +2570,33 @@ function buildObservedPreReleaseFactLogRecordsV1(
       correlationId: route.correlationId,
       coverageRoot: route.coverageRoot,
       denominatorKind: route.denominatorKind,
-      payload: route as unknown as CanonicalJson,
+      accounting: accountingSummary as unknown as CanonicalJson | null,
+      accountingEntryCount: String(accountingEntryRoots.length),
+      accountingEntrySequenceRoot: observedOrderedRoot(
+        "aloha/searcher-production-evidence-material/route-accounting-entries/entries/v1",
+        accountingEntryRoots,
+      ),
+      materialLocator: route.denominatorKind === "accounted"
+        ? materialLocator(report, routeEvent, "route-accounting-entries")
+        : null,
     }));
-    const candidate = candidateByAdmission.get(route.admissionId) ?? null;
+    const headCandidateMatches = candidateEvents.flatMap(event => {
+      const payload = candidatePayload(event);
+      return payload.admissionId === route.admissionId
+        && payload.headFactsRoot === route.headFactsRoot
+        && payload.headHash === route.headHash
+        ? [{ event, payload }]
+        : [];
+    });
+    const exactCandidateMatches = route.denominatorKind === "no-input"
+      ? headCandidateMatches
+      : headCandidateMatches.filter(({ payload }) => payload.laneDenominators.filter(item => (
+        item.lane === route.lane
+        && item.correlationId === route.correlationId
+        && item.coverageRoot === route.coverageRoot
+        && item.accountingRoot === route.accounting.root
+      )).length === 1);
+    const candidate = exactCandidateMatches.length === 1 ? exactCandidateMatches[0]! : null;
     if (candidate !== null) joinedHeadAdmissions.add(route.admissionId);
     const headDifferences = compareFields(
       route,
@@ -2146,8 +2633,7 @@ function buildObservedPreReleaseFactLogRecordsV1(
         denominatorKind: "no-input",
         accountingRoot: null,
         selectedCount: "0",
-        selectedCandidateIds: Object.freeze([]),
-        selectedEntries: Object.freeze([]),
+        selectedEntryRoot: observedOrderedRoot("aloha/pre-release/selected-route-entries/v1", []),
       }));
       continue;
     }
@@ -2168,7 +2654,10 @@ function buildObservedPreReleaseFactLogRecordsV1(
       differences: laneDifferences,
     }));
 
-    const terminals = candidate?.payload.candidateTerminalObservations.filter(item => item.lane === route.lane) ?? [];
+    const routeBindingExact = terminalBinding === null || nativeProductionRouteBindingMatches(route, terminalBinding);
+    const terminals = routeBindingExact
+      ? candidate?.payload.candidateTerminalObservations.filter(item => item.lane === route.lane) ?? []
+      : [];
     const joinedTerminalIndexes = new Set<number>();
     const selected: CanonicalJson[] = [];
     for (const [index, entry] of route.accounting.entries.entries()) {
@@ -2216,10 +2705,19 @@ function buildObservedPreReleaseFactLogRecordsV1(
           && value.payload.admissionId === route.admissionId
         ));
         const performanceEvent = performanceEvents.length === 1 ? performanceEvents[0]! : null;
-        const sixStepLineage = records.find(value => value.kind === "aloha.pre-release-six-step-selected-lineage-v1"
-          && value.admissionId === route.admissionId && value.candidateId === entry.candidateId) ?? null;
+        const sixStepLineages = !routeBindingExact || candidateDifferences.length > 0 ? [] : records.filter(value => {
+          if (value.kind !== "aloha.pre-release-six-step-selected-lineage-v1"
+            || value.admissionId !== route.admissionId
+            || value.candidateId !== entry.candidateId
+            || value.correlationId !== route.correlationId) return false;
+          const source = ownRecord(value.source, "selectedOutcome.sixStepLineage.source");
+          return source.hash === route.headHash;
+        });
+        const sixStepLineage = sixStepLineages.length === 1 ? sixStepLineages[0]! : null;
         const outcome = selectedTerminalOutcome(terminalRecord, candidateDifferences);
-        const coarseInputs = selectedRouteCoarseInputs(entry, sweep);
+        const coarseInputs = terminalBinding === null
+          ? Object.freeze([])
+          : nativeProductionCoarseInputs(route, entry, terminalBinding);
         records.push(record("aloha.pre-release-selected-terminal-outcome-v1", {
           routeEvent: eventIdentity(routeEvent),
           candidateSetEvent: candidate === null ? null : eventIdentity(candidate.event),
@@ -2270,10 +2768,7 @@ function buildObservedPreReleaseFactLogRecordsV1(
       denominatorKind: "accounted",
       accountingRoot: route.accounting.root,
       selectedCount: String(selected.length),
-      selectedCandidateIds: Object.freeze(selected.map(
-        item => (item as Readonly<Record<string, CanonicalJson>>).candidateId,
-      )) as CanonicalJson,
-      selectedEntries: Object.freeze(selected),
+      selectedEntryRoot: observedOrderedRoot("aloha/pre-release/selected-route-entries/v1", selected),
     }));
   }
   for (const { event, payload } of candidateByAdmission.values()) {
@@ -2333,8 +2828,22 @@ export function buildPreReleaseFactLogRecordsV1(
   observation: RawPerformanceObservationV1,
   sweep: FullGraphCoarseSweepV1,
   activeGraph: ProductionActiveReadyGraphSnapshotV1,
+  nativeAudit: NativeFullFamilyAuditV1 | null = null,
 ): readonly PreReleaseFactLogRecordV1[] {
-  return buildObservedPreReleaseFactLogRecordsV1(report, observation, sweep, activeGraph, null);
+  if (nativeAudit !== null) {
+    validateNativeFullFamilyAuditWireV1(nativeAudit);
+    const { auditRoot, ...body } = nativeAudit;
+    if (encodeNativeFullFamilyAuditBodyV1(body).manifest.auditRoot !== auditRoot) {
+      throw new TypeError("native full-family audit manifest root mismatch");
+    }
+  }
+  const terminalBinding = nativeAudit === null ? null : Object.freeze({
+    bindingRoot: hashDomain("aloha/pre-release-structural-native-audit-binding/v1", nativeAudit.auditRoot),
+    terminalKind: "route-set-terminal" as const,
+    terminalLineageHash: hashDomain("aloha/pre-release-structural-native-audit-lineage/v1", nativeAudit.auditRoot),
+    audit: nativeAudit,
+  });
+  return buildObservedPreReleaseFactLogRecordsV1(report, observation, sweep, activeGraph, null, terminalBinding);
 }
 
 function readPreReleaseFactLogInputsV1(reportPath: string): Readonly<{
@@ -2342,6 +2851,7 @@ function readPreReleaseFactLogInputsV1(reportPath: string): Readonly<{
   readonly observation: RawPerformanceObservationV1;
   readonly sweep: FullGraphCoarseSweepV1;
   readonly activeGraph: ProductionActiveReadyGraphSnapshotV1;
+  readonly terminalBinding: FullFamilyTerminalBindingObservationV1;
 }> {
   const canonicalReportPath = absolutePath(resolve(reportPath), "reportPath");
   const reportBytes = readPhysicalFile(canonicalReportPath, {});
@@ -2365,11 +2875,12 @@ function readPreReleaseFactLogInputsV1(reportPath: string): Readonly<{
     throw new TypeError("production performance database/report content binding mismatch");
   }
   const sweep = readSweep(report, indexBinding.sweepByteLength);
+  const terminalBinding = readFullFamilyTerminalBinding(report, indexBinding.terminalBindingByteLength);
   const activeGraph = observeFrozenPreReleaseBActiveReadyGraphV1(
     report.factLocators.frozenCheckpointSnapshotPublication,
     PRE_RELEASE_RESTART_CONTROLLER_LAYOUT_V1.bCheckpointSnapshotPath,
   );
-  return Object.freeze({ report, observation, sweep, activeGraph });
+  return Object.freeze({ report, observation, sweep, activeGraph, terminalBinding });
 }
 
 /** Production complete-classification path. The opaque capability exists only
@@ -2388,6 +2899,7 @@ export function readPreReleaseFactLogV1(
     inputs.sweep,
     inputs.activeGraph,
     terminalPhysical,
+    inputs.terminalBinding,
   );
 }
 
@@ -2403,6 +2915,7 @@ export function readPreReleaseFactLogAdvisoryV1(
     inputs.sweep,
     inputs.activeGraph,
     null,
+    inputs.terminalBinding,
   );
 }
 
@@ -2423,7 +2936,8 @@ export function readPreReleaseFactLogStructuralFixtureV1(
   });
   const observation = observeProductionPerformanceDatabaseV1(report.factIndex.processEvidenceQuery.databasePath);
   const sweep = readSweep(report, indexBinding.sweepByteLength);
-  return buildObservedPreReleaseFactLogRecordsV1(report, observation, sweep, activeGraph, null);
+  const terminalBinding = readFullFamilyTerminalBinding(report, indexBinding.terminalBindingByteLength);
+  return buildObservedPreReleaseFactLogRecordsV1(report, observation, sweep, activeGraph, null, terminalBinding);
 }
 
 export function encodePreReleaseFactLogJsonlV1(records: readonly PreReleaseFactLogRecordV1[]): Uint8Array {

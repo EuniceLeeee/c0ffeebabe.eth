@@ -15,6 +15,9 @@ export function materializeUniV3(input: { readonly identity: UniV3IdentityV1; re
   assertCutoff(read.cutoff);
   if (!cutoffEqual(read.cutoff, input.identity.cutoff)) throw new TypeError("univ3 state cutoff mismatch");
   if (read.pool !== input.identity.instanceKey) throw new TypeError("univ3 state pool mismatch");
+  if (read.fee !== input.identity.facts.fee || read.tickSpacing !== input.identity.facts.tickSpacing) {
+    throw new TypeError("univ3 state static identity binding mismatch");
+  }
   if (BigInt(read.sqrtPriceX96) <= 0n || BigInt(read.liquidity) < 0n) throw new TypeError("univ3 state numeric bounds");
   if (read.liquidity === "0") return Object.freeze({ status: "chain-proven-rejected", reasonCode: "zero-liquidity" });
   if (read.tickBitmap.some(word => word.bits.startsWith("-")) || read.ticks.some(tick => !Number.isInteger(tick.tick))) throw new TypeError("univ3 state tick facts malformed");

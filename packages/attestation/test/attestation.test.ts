@@ -3,12 +3,17 @@ import test from "node:test";
 import {
   encodeCanonicalBytes,
   hashDomain,
+  sha256Hex,
   type Hash,
 } from "../../canonical-codec/src/index.ts";
 import { erc20AssetPortBindingV1 } from "../../asset-ref/src/index.ts";
 import { sealInstancePublication } from "../../catalog/src/index.ts";
 import { mergeAndDedupeNominations, type CandidateRecordV1 } from "../../discovery/src/index.ts";
-import { CandidatePartitionCapabilityRegistryV1 } from "../../checkpoint/src/candidate-partition.ts";
+import {
+  CandidatePartitionCapabilityRegistryV1,
+  type CandidatePartitionRawEvidenceSourceV1,
+} from "../../checkpoint/src/candidate-partition.ts";
+import type { FamilyRawEvidenceReadPortV1 } from "../../family-sdk/runtime/index.ts";
 import {
   assertPromotablePartition,
   identityMemoHash,
@@ -52,7 +57,10 @@ const cutoff = { chainId: "1", number: "10", hash: h("block"), stateRoot: h("sta
 const inputAsset = erc20AssetPortBindingV1("1", `0x${h("in").slice(-40)}`);
 const outputAsset = erc20AssetPortBindingV1("1", `0x${h("out").slice(-40)}`);
 
-const candidate = (nominationKey: string): CandidateRecordV1 => mergeAndDedupeNominations([{
+const candidate = (
+  nominationKey: string,
+  rawLocatorHash: Hash = h(`raw:${nominationKey}`),
+): CandidateRecordV1 => mergeAndDedupeNominations([{
   kind: "aloha.candidate-nomination",
   version: "2",
   familyId: "family-a",
@@ -69,7 +77,7 @@ const candidate = (nominationKey: string): CandidateRecordV1 => mergeAndDedupeNo
     logIndex: "0",
     address: "0xabc",
     topic: h("topic"),
-    rawLocatorHash: h(`raw:${nominationKey}`),
+    rawLocatorHash,
   },
 }])[0]!;
 
@@ -241,8 +249,13 @@ function attestArgs(
     rejection: actualRejection,
     composition,
     registry,
-    partitionFor(candidates: readonly CandidateRecordV1[], runId = "run-a", checkpointRevision = "1"): CandidatePartitionFixtureV1 {
-      return issueCandidatePartitionFixture(composition, registry, candidates, cutoff, runId, checkpointRevision);
+    partitionFor(
+      candidates: readonly CandidateRecordV1[],
+      runId = "run-a",
+      checkpointRevision = "1",
+      rawEvidence?: CandidatePartitionRawEvidenceSourceV1,
+    ): CandidatePartitionFixtureV1 {
+      return issueCandidatePartitionFixture(composition, registry, candidates, cutoff, runId, checkpointRevision, rawEvidence);
     },
     serviceFor(programs: AttestationProgramPort) {
       return createAttestationService({
@@ -430,6 +443,7 @@ test("candidate partition capability is not cloneable and a fake reader cannot a
     binding: () => fixture.binding,
     listKeys: () => [value.familyCandidateKey],
     readCandidate: () => value,
+    readRawEvidence: () => { throw new Error("unused"); },
   };
   assert.throws(
     () => createAttestationService({
@@ -445,6 +459,57 @@ test("candidate partition capability is not cloneable and a fake reader cannot a
   assert.throws(
     () => service.openRunSession({ candidatePartition: fixture.capability }).resolveIdentityOrReuseProofOnce(h("wrong-partition-key"), new AbortController().signal),
     /absent|candidate|key/i,
+  );
+});
+
+test("each Attestation candidate receives only its hash-verified raw evidence", async () => {
+  const firstBytes = new TextEncoder().encode("candidate-a-raw-evidence");
+  const secondBytes = new TextEncoder().encode("candidate-b-raw-evidence");
+  const first = candidate("raw-a", sha256Hex(firstBytes));
+  const second = candidate("raw-b", sha256Hex(secondBytes));
+  const values = new Map<string, Uint8Array>([
+    [`${first.familyCandidateKey}:${first.evidence[0]!.rawLocatorHash}`, firstBytes],
+    [`${second.familyCandidateKey}:${second.evidence[0]!.rawLocatorHash}`, secondBytes],
+  ]);
+  const source: CandidatePartitionRawEvidenceSourceV1 = Object.freeze({
+    read(familyCandidateKey: Hash, rawLocatorHash: Hash): Uint8Array {
+      const value = values.get(`${familyCandidateKey}:${rawLocatorHash}`);
+      if (value === undefined) throw new TypeError("test raw evidence is absent");
+      return value;
+    },
+  });
+  const ports = new Map<Hash, FamilyRawEvidenceReadPortV1>();
+  const expected = new Map<Hash, Uint8Array>([
+    [first.familyCandidateKey, firstBytes],
+    [second.familyCandidateKey, secondBytes],
+  ]);
+  const programs: AttestationProgramPort = {
+    async attestIdentity(value, _cutoff, _signal, rawEvidence) {
+      ports.set(value.familyCandidateKey, rawEvidence);
+      const locator = value.evidence[0]!.rawLocatorHash;
+      const observed = rawEvidence.read(locator);
+      assert.deepEqual(observed, expected.get(value.familyCandidateKey));
+      observed[0] = observed[0]! ^ 0xff;
+      assert.deepEqual(rawEvidence.read(locator), expected.get(value.familyCandidateKey));
+      return {
+        kind: "identityVerified",
+        familyInstanceKey: `instance:${value.instanceNominationKey}`,
+        identityMemo: identityMemo(`raw:${value.instanceNominationKey}`),
+        identityMemoHash: memoHash(`raw:${value.instanceNominationKey}`),
+        descriptorHash: h("raw-descriptor"),
+        evidenceRoot: value.candidateEvidenceRoot,
+      };
+    },
+    async materializeAndProject() { throw new Error("unused"); },
+  };
+  const args = attestArgs();
+  const partition = args.partitionFor([first, second], "run-raw-evidence", "1", source);
+  const session = args.serviceFor(programs).openRunSession({ candidatePartition: partition.capability });
+  await session.resolveIdentityOrReuseProofOnce(first.familyCandidateKey, new AbortController().signal);
+  await session.resolveIdentityOrReuseProofOnce(second.familyCandidateKey, new AbortController().signal);
+  assert.throws(
+    () => ports.get(first.familyCandidateKey)!.read(second.evidence[0]!.rawLocatorHash),
+    /outside the exact candidate record/,
   );
 });
 

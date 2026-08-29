@@ -27,6 +27,7 @@ import type {
   InstallQualifiedReleaseAcceptanceRunnerInputV1 as FreshRunnerInstallInputV1,
   QualifiedPredicateCommonEnvelopeMaterialV1,
   QualifiedReleaseAcceptanceAdvisoryRunV1,
+  QualifiedReleaseAcceptancePreparedRunV1,
   QualifiedReleaseAcceptanceRunnerCapabilityV1 as InnerRunnerCapabilityV1,
 } from "./qualified-release-runner-owner.ts";
 import {
@@ -169,8 +170,8 @@ function canonicalClone<T>(value: T): T {
 function exactRuntime(value: FreshQualifiedReleaseRunnerRuntimeV1): FreshQualifiedReleaseRunnerRuntimeV1 {
   if (value === null || typeof value !== "object" || nodeTypes.isProxy(value)) throw new TypeError("fresh qualified release runner runtime is invalid");
   const keys = Reflect.ownKeys(value);
-  if (keys.length !== 2 || !keys.includes("install") || !keys.includes("observeAdvisory")) throw new TypeError("fresh qualified release runner runtime denominator is invalid");
-  for (const key of ["install", "observeAdvisory"] as const) {
+  if (keys.length !== 3 || !keys.includes("install") || !keys.includes("observeAdvisory") || !keys.includes("prepareRelease")) throw new TypeError("fresh qualified release runner runtime denominator is invalid");
+  for (const key of ["install", "observeAdvisory", "prepareRelease"] as const) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable || typeof descriptor.value !== "function") {
       throw new TypeError(`fresh qualified release runner ${key} port is invalid`);
@@ -293,4 +294,14 @@ export async function observeQualifiedReleaseAcceptanceAdvisoryV1(
   if (state === undefined) throw new TypeError("qualified release acceptance runner capability was not packager-loader-issued");
   const loaded = await state.loaded;
   return loaded.runtime.observeAdvisory(loaded.capability, source);
+}
+
+export async function prepareQualifiedReleaseAcceptanceForExternalOwnerV1(
+  capability: QualifiedReleaseAcceptanceRunnerCapabilityV1,
+  source: PredicateMaterialSourcePortV1,
+): Promise<QualifiedReleaseAcceptancePreparedRunV1> {
+  const state = readPublicQualifiedReleaseRunnerStateV1(capability);
+  if (state === undefined) throw new TypeError("qualified release acceptance runner capability was not packager-loader-issued");
+  const loaded = await state.loaded;
+  return loaded.runtime.prepareRelease(loaded.capability, source);
 }

@@ -18,6 +18,7 @@ import {
   type SchedulerWorkDescriptor,
   monotonicNow,
 } from "../../../packages/scheduler/src/index.ts";
+import type { FamilyRawEvidenceReadPortV1 } from "../../../packages/family-sdk/runtime/index.ts";
 import {
   readWorkPlaneCallerCapability,
   workPlaneCallerIntentBindingHash,
@@ -155,6 +156,7 @@ export interface WorkProgramExecutionInput {
  */
 export interface FamilyFrozenProgramExecutionInput {
   readonly intent: CapabilityWorkIntentV1;
+  readonly rawEvidence: FamilyRawEvidenceReadPortV1;
   readonly attemptId?: string;
   readonly signal?: AbortSignal;
 }
@@ -207,6 +209,7 @@ export interface FamilyFrozenProgramExecutionPort<Fact> {
 export interface QualifiedPhysicalExecutionPortV1<Fact> {
   readonly execute: (input: {
     readonly intent: CapabilityWorkIntentV1;
+    readonly rawEvidence: FamilyRawEvidenceReadPortV1;
     readonly signal: AbortSignal;
   }) => Promise<Fact>;
 }

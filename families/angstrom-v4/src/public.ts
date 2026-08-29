@@ -16,3 +16,4 @@ export {
   requireAngstromV4StageDefinition,
 } from "./runtime.ts";
 export { ANGSTROM_V4_DEFINITION } from "./family-definition.ts";
+export { ANGSTROM_V4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY } from "./runtime/physical-adapter.ts";

@@ -8,12 +8,22 @@ import {
   type GeneratedFamilyRuntimeAdapterImportV1,
 } from "../index.ts";
 import {
+  FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1,
   assertFamilySourcePlanNominationProgram,
   assertFamilySourcePlanRuntime,
+  type FamilyPhysicalLifecycleExecutionV1,
+  type FamilyPhysicalLifecycleAdapterFactoryV1,
+  type FamilyPhysicalLifecycleAdapterV1,
+  type FamilyPhysicalLifecyclePortsV1,
+  type FamilyPhysicalTransportResultV1,
   type FamilySourcePlanNominationProgramV1,
   type FamilySourcePlanRuntimeV1,
   type FamilyStageDefinitionV1,
 } from "../../../family-sdk/runtime/index.ts";
+import {
+  assertStageCapabilityRef,
+  type StageCapabilityRefV1,
+} from "../../../family-sdk/runtime-refs/index.ts";
 import { assertHash, type Hash } from "../../../canonical-codec/src/index.ts";
 import type { SourcePlanRefV1 } from "../../../discovery/src/index.ts";
 
@@ -65,6 +75,7 @@ export interface GeneratedFamilyRuntimeFactoryMetadataV1 {
   readonly families: readonly Readonly<{
     readonly familyId: string;
     readonly familyDefinitionHash: Hash;
+    readonly lifecycleRefs: GeneratedFamilyRuntimeDescriptorV1["families"][number]["entry"]["lifecycleRefs"];
     readonly stageDefinitionRoot: Hash;
     readonly sourcePlanRoot: Hash;
     readonly sourcePlanRefs: readonly SourcePlanRefV1[];
@@ -111,6 +122,29 @@ export interface GeneratedFamilyRuntimeAuthorityRegistrationV1 {
 const issuedAuthorities = new WeakMap<object, GeneratedFamilyRuntimeAuthorityStateV1>();
 const generatedFactories = new WeakSet<object>();
 const generatedFactoryMetadata = new WeakMap<object, GeneratedFamilyRuntimeFactoryMetadataV1>();
+interface GeneratedFamilyPhysicalLifecycleFactoryBindingV1 {
+  readonly familyId: string;
+  readonly familyDefinitionHash: Hash;
+  readonly lifecycleRefs: GeneratedFamilyRuntimeDescriptorV1["families"][number]["entry"]["lifecycleRefs"];
+  readonly factory: FamilyPhysicalLifecycleAdapterFactoryV1;
+}
+
+export interface GeneratedFamilyPhysicalLifecycleBindingV1 {
+  readonly familyId: string;
+  readonly familyDefinitionHash: Hash;
+  readonly lifecycleRefs: GeneratedFamilyRuntimeDescriptorV1["families"][number]["entry"]["lifecycleRefs"];
+  readonly adapter: FamilyPhysicalLifecycleAdapterV1;
+}
+
+export interface GeneratedFamilyPhysicalLifecycleRouteV1 {
+  readonly stageRef: StageCapabilityRefV1;
+  readonly execution: FamilyPhysicalLifecycleExecutionV1;
+}
+
+const generatedFactoryPhysicalAdapters = new WeakMap<
+  object,
+  readonly Readonly<GeneratedFamilyPhysicalLifecycleFactoryBindingV1>[]
+>();
 const generatedFactorySourcePlans = new WeakMap<object, readonly Readonly<{
   readonly familyId: string;
   readonly familyDefinitionHash: Hash;
@@ -140,6 +174,79 @@ export function readGeneratedFamilyRuntimeFactoryMetadata(
   const metadata = generatedFactoryMetadata.get(value);
   if (metadata === undefined) throw new TypeError("generated Family runtime factory metadata is unavailable");
   return metadata;
+}
+
+/** Exact generated physical denominator.  It is read only by the deployment
+ * runtime owner, which supplies the neutral RPC transport and stamps the
+ * returned source-less facts with scheduler/release authority. */
+export function readGeneratedFamilyPhysicalLifecycleAdapters(
+  value: unknown,
+): readonly Readonly<GeneratedFamilyPhysicalLifecycleBindingV1>[] {
+  assertGeneratedFamilyRuntimeFactory(value);
+  const metadata = generatedFactoryMetadata.get(value)!;
+  const bindings = generatedFactoryPhysicalAdapters.get(value);
+  if (bindings === undefined
+    || bindings.length !== metadata.families.length
+    || new Set(bindings.map(binding => binding.familyDefinitionHash)).size !== metadata.families.length) {
+    throw new TypeError("generated Family physical lifecycle denominator is incomplete");
+  }
+  return Object.freeze(bindings.map(binding => {
+    const adapter = binding.factory();
+    if (adapter === null || typeof adapter !== "object"
+      || adapter.kind !== "aloha.family-physical-lifecycle-adapter"
+      || adapter.version !== 1
+      || adapter.familyId !== binding.familyId
+      || adapter.familyDefinitionHash !== binding.familyDefinitionHash
+      || typeof adapter.execute !== "function") {
+      throw new TypeError(`generated Family physical lifecycle adapter is invalid ${binding.familyId}`);
+    }
+    return Object.freeze({
+      familyId: binding.familyId,
+      familyDefinitionHash: binding.familyDefinitionHash,
+      lifecycleRefs: Object.freeze({ ...binding.lifecycleRefs }),
+      adapter,
+    });
+  }));
+}
+
+function sameStageRef(left: StageCapabilityRefV1, right: StageCapabilityRefV1): boolean {
+  return left.familyId === right.familyId
+    && left.familyDefinitionHash === right.familyDefinitionHash
+    && left.stage === right.stage
+    && left.capabilityId === right.capabilityId
+    && left.version === right.version
+    && left.schemaHash === right.schemaHash
+    && left.interpreterHash === right.interpreterHash
+    && left.ownerRef === right.ownerRef;
+}
+
+/** Execute exactly one generated physical adapter.  Routing is derived from
+ * the exact generated lifecycle ref; zero or multiple matches fail closed and
+ * non-nominated Families are never invoked or awaited. */
+export async function executeGeneratedFamilyPhysicalLifecycle(
+  factory: GeneratedFamilyRuntimeFactoryV1,
+  route: GeneratedFamilyPhysicalLifecycleRouteV1,
+  ports: FamilyPhysicalLifecyclePortsV1,
+  signal: AbortSignal,
+): Promise<readonly FamilyPhysicalTransportResultV1[]> {
+  assertStageCapabilityRef(route.stageRef, "generatedPhysical.stageRef");
+  const execution = route.execution;
+  const matches = readGeneratedFamilyPhysicalLifecycleAdapters(factory).filter(binding =>
+    binding.familyId === execution.familyId
+    && binding.familyDefinitionHash === execution.familyDefinitionHash,
+  );
+  if (matches.length !== 1) {
+    throw new TypeError("generated Family physical lifecycle route is not unique");
+  }
+  const binding = matches[0]!;
+  const expected = binding.lifecycleRefs[execution.stage];
+  if (!sameStageRef(route.stageRef, expected)
+    || route.stageRef.familyId !== execution.familyId
+    || route.stageRef.familyDefinitionHash !== execution.familyDefinitionHash
+    || route.stageRef.stage !== execution.stage) {
+    throw new TypeError("generated Family physical lifecycle ref mismatch");
+  }
+  return binding.adapter.execute(execution, ports, signal);
 }
 
 /**
@@ -327,6 +434,42 @@ export function createGeneratedFamilyRuntimeFactory(
       }));
     }
   }
+  const physicalBindings: Array<Readonly<GeneratedFamilyPhysicalLifecycleFactoryBindingV1>> = [];
+  for (const [familyIndex, family] of assembly.descriptor.families.entries()) {
+    const descriptors = family.runtimeAdapters
+      .map((descriptor, index) => Object.freeze({ descriptor, index }))
+      .filter(value => value.descriptor.role === FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1);
+    if (descriptors.length > 1) {
+      throw new TypeError(`generated Family physical lifecycle adapter is duplicated ${family.entry.familyId}`);
+    }
+    if (descriptors.length === 0) continue;
+    const { descriptor, index } = descriptors[0]!;
+    if (Object.keys(descriptor.capabilityRefs).length !== 0 || Object.keys(descriptor.actionOwnerRefs).length !== 0) {
+      throw new TypeError(`generated Family physical lifecycle adapter cannot receive central capabilities ${family.entry.familyId}`);
+    }
+    const supplied = assembly.runtimeAdapters[familyIndex]?.[index];
+    const importDescriptor = typeof supplied === "object" && supplied !== null
+      ? supplied as Partial<GeneratedFamilyRuntimeAdapterImportV1>
+      : undefined;
+    const factory = typeof supplied === "function" ? supplied : importDescriptor?.factory;
+    if (typeof factory !== "function") {
+      throw new TypeError(`generated Family physical lifecycle adapter import is missing ${family.entry.familyId}`);
+    }
+    if (importDescriptor !== undefined) {
+      if (importDescriptor.modulePath !== descriptor.modulePath
+        || importDescriptor.exportName !== descriptor.exportName
+        || importDescriptor.closureRoot !== descriptor.closureRoot
+        || importDescriptor.leafDigest !== descriptor.leafDigest) {
+        throw new TypeError(`generated Family physical lifecycle adapter import descriptor mismatch ${family.entry.familyId}`);
+      }
+    }
+    physicalBindings.push(Object.freeze({
+      familyId: family.entry.familyId,
+      familyDefinitionHash: family.entry.familyDefinitionHash,
+      lifecycleRefs: family.entry.lifecycleRefs,
+      factory: factory as FamilyPhysicalLifecycleAdapterFactoryV1,
+    }));
+  }
   const compositions = new WeakMap<object, FamilyRuntimeCompositionV1>();
   const factory: GeneratedFamilyRuntimeFactoryV1 = (capability) => {
     const authorities = authoritiesFor(factory, capability);
@@ -345,6 +488,7 @@ export function createGeneratedFamilyRuntimeFactory(
     return composition;
   };
   generatedFactories.add(factory);
+  generatedFactoryPhysicalAdapters.set(factory, Object.freeze(physicalBindings));
   generatedFactorySourcePlans.set(factory, Object.freeze(sourcePlanBindings));
   generatedFactoryMetadata.set(factory, Object.freeze({
     proposedCapabilitySetRoot: assembly.descriptor.proposedCapabilitySetRoot,
@@ -357,6 +501,7 @@ export function createGeneratedFamilyRuntimeFactory(
     families: Object.freeze(assembly.descriptor.families.map(family => Object.freeze({
       familyId: family.entry.familyId,
       familyDefinitionHash: family.entry.familyDefinitionHash,
+      lifecycleRefs: Object.freeze({ ...family.entry.lifecycleRefs }),
       stageDefinitionRoot: family.stageDefinitionRoot,
       sourcePlanRoot: family.sourcePlanRoot,
       sourcePlanRefs: Object.freeze(family.sourcePlans.map(plan => Object.freeze({ ...plan.planRef }))),

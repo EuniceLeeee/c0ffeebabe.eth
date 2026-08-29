@@ -52,6 +52,12 @@ export interface ObserverArtifactWriteV1 {
   readonly schema: SchemaRef;
 }
 
+export interface ObserverArtifactReadV1 {
+  readonly contentSha256: Hash;
+  readonly mediaType: string;
+  readonly schema: SchemaRef;
+}
+
 export interface ObservedContentArtifactV1 {
   readonly contentSha256: Hash;
   readonly bytes: Uint8Array;
@@ -527,6 +533,56 @@ export class ContentAddressedObserverSinkV1 {
       claim,
       lease,
     });
+  }
+
+  /** Reconstruct the deterministic observer envelope for an already persisted
+   * content object.  Durable indexes therefore store only content identities,
+   * not 30k repeated claim/ref/lease envelopes. */
+  async readArtifact(input: ObserverArtifactReadV1): Promise<ObservedContentArtifactV1> {
+    if (input === null || typeof input !== "object") throw new TypeError("observer artifact read is required");
+    const contentSha256 = assertHash(input.contentSha256, "observerArtifactRead.contentSha256");
+    const mediaType = assertNonEmptyString(input.mediaType, "observerArtifactRead.mediaType");
+    const schema = decodeSchemaRef(input.schema);
+    const bytes = await this.readContent(contentSha256);
+    if (bytes.byteLength > ARTIFACT_MIRROR_MAX_DECODED_BYTES
+      || BigInt(bytes.byteLength) > BigInt(this.#resolverPolicy.maxByteLength)) {
+      throw new TypeError("observer artifact read exceeds configured byte limit");
+    }
+    const lease = createRetentionLeaseReceipt({
+      storeIdentityHash: this.#storeIdentityHash,
+      objectKey: contentSha256,
+      contentSha256,
+      ...this.#lease,
+    });
+    const locator = Object.freeze({
+      kind: "content-object" as const,
+      storeIdentityHash: this.#storeIdentityHash,
+      objectKey: contentSha256,
+    });
+    const ref = createReadOnlyArtifactRef({
+      locator,
+      immutableMirrorLocator: locator,
+      contentSha256,
+      byteLength: String(bytes.byteLength),
+      mediaType,
+      schema,
+      resolverPolicyHash: this.#resolverPolicy.policyHash,
+      retentionLeaseReceiptId: lease.receiptId,
+    });
+    const mirror = createObservedImmutableMirror({
+      storeIdentityHash: this.#storeIdentityHash,
+      objectKey: contentSha256,
+      bytes: encodeArtifactBytes(bytes),
+      mediaType,
+      schema,
+    });
+    const claim = createArtifactResolutionClaim({
+      artifactRefId: ref.artifactRefId,
+      resolverPolicyHash: this.#resolverPolicy.policyHash,
+      observedMirror: mirror,
+      outcome: "content-observed",
+    });
+    return Object.freeze({ contentSha256, bytes, ref, claim, lease });
   }
 
   /** Acceptance-only durable replay seam. The caller supplies the expected

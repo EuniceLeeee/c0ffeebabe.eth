@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import { decodeCanonicalBytes, encodeCanonicalBytes, hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import { erc20AssetPortBindingV1, type AssetPortBindingV1 } from "../../asset-ref/src/index.ts";
 import { sealInstanceCatalog, sealInstancePublication } from "../../catalog/src/index.ts";
-import { buildPersistedGraph, GraphViewLeaseV1, type GraphRouteHandle } from "../src/index.ts";
+import {
+  buildPersistedGraph,
+  decodePersistedGraphV1,
+  encodePersistedGraphV1,
+  GraphViewLeaseV1,
+  type GraphRouteHandle,
+} from "../src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/graph", value);
 const cutoff = { chainId: "1", number: "10", hash: h("block"), stateRoot: h("state") };
@@ -20,6 +26,7 @@ function makePublication(
   input: AssetPortBindingV1,
   output: AssetPortBindingV1,
   evidenceRoot = h(`${familyId}:evidence`),
+  transitionCount = 1,
 ) {
   const identityMemo = { kind: "graph-test-identity", familyId, instanceKey };
   return sealInstancePublication({
@@ -34,13 +41,13 @@ function makePublication(
     staticProjectionMemoHash: h(`${familyId}:memo`),
     requestedArtifactDependencyRoot: h(`${familyId}:dependencies`),
     validityDependencyRoot: h(`${familyId}:validity`),
-    transitions: [{
+    transitions: Array.from({ length: transitionCount }, (_, transitionIndex) => ({
       inputAssetPorts: [{ ...input, portRef: h(`${familyId}:in-port`), ordinal: "0" }],
       outputAssetPorts: [{ ...output, portRef: h(`${familyId}:out-port`), ordinal: "0" }],
-      opaqueTransitionRef: h(`${familyId}:transition`),
+      opaqueTransitionRef: h(`${familyId}:transition:${transitionIndex}`),
       constraintRefs: [],
-      staticProjectionHash: h(`${familyId}:projection`),
-    }],
+      staticProjectionHash: h(`${familyId}:projection:${transitionIndex}`),
+    })),
     evidenceRoot,
   });
 }
@@ -269,4 +276,92 @@ test("a revoked cutoff cannot construct or continue a GraphView lease", async ()
     { assertViewAuthorityActive() { throw new Error("canonical-view-revoked"); } },
     { async assertServingBindingCurrent() {}, async consumeServingAdmission() { return binding; } },
   ), /canonical-view-revoked/);
+});
+
+test("30k graph uses bounded linked chunks and reopens every edge without sampling", (t) => {
+  const timings: Record<string, number> = {};
+  let mark = Date.now();
+  const publications = Array.from({ length: 300 }, (_, index) => makePublication(
+    `dense-family-${String(index).padStart(3, "0")}`,
+    `dense-instance-${index}`,
+    inputAsset,
+    outputAsset,
+    h(`dense-evidence-${index}`),
+    100,
+  ));
+  const catalog = sealInstanceCatalog(cutoff, publications);
+  timings.catalog = Date.now() - mark;
+  mark = Date.now();
+  const graph = buildPersistedGraph(catalog);
+  timings.build = Date.now() - mark;
+  mark = Date.now();
+  const encoded = encodePersistedGraphV1(graph);
+  timings.encode = Date.now() - mark;
+  assert.equal(graph.edgeCount, "30000");
+  assert.ok(encoded.chunks.length > 1);
+  assert.ok(encoded.manifestBytes.byteLength <= 500_000);
+  assert.ok(encoded.chunks.every(chunk => chunk.bytes.byteLength <= 500_000));
+  assert.deepEqual(Object.keys(encoded.manifest).sort(), [
+    "cutoff",
+    "edgeChunkCount",
+    "edgeCount",
+    "edgeSequenceRoot",
+    "firstEdgeChunkRef",
+    "graphRoot",
+    "instanceCatalogRoot",
+    "kind",
+    "schemaVersion",
+  ]);
+  assert.deepEqual(Object.keys(encoded.chunks[0]!.ref), ["contentSha256"]);
+  assert.deepEqual(Object.keys(encoded.chunks[0]!.chunk).sort(), [
+    "edges",
+    "kind",
+    "nextEdgeChunkRef",
+    "schemaVersion",
+  ]);
+  const bySha = new Map(encoded.chunks.map(chunk => [chunk.ref.contentSha256, chunk.bytes]));
+  mark = Date.now();
+  const reopened = decodePersistedGraphV1(encoded.manifestBytes, ref => {
+    const bytes = bySha.get(ref.contentSha256);
+    if (!bytes) throw new Error("missing test chunk");
+    return bytes;
+  }, catalog);
+  timings.decode = Date.now() - mark;
+  assert.equal(reopened.edges.length, 30_000);
+  assert.equal(reopened.graphRoot, graph.graphRoot);
+  for (const ordinal of [0, 14_999, 29_999]) {
+    assert.equal(reopened.edges[ordinal]!.edgeId, graph.edges[ordinal]!.edgeId);
+  }
+  assert.throws(() => encodePersistedGraphV1({ ...graph, edges: [...graph.edges].reverse() }), /root-mismatch/);
+  t.diagnostic(`30k graph timings ms ${JSON.stringify(timings)}`);
+});
+
+test("graph linked chunks fail closed on missing, duplicate, cross-graph, mutation, or manifest reroot", () => {
+  const firstCatalog = sealInstanceCatalog(cutoff, Array.from({ length: 3 }, (_, index) => (
+    makePublication(`chunk-family-a-${index}`, `chunk-instance-a-${index}`, inputAsset, outputAsset, undefined, 100)
+  )));
+  const secondCatalog = sealInstanceCatalog(cutoff, Array.from({ length: 3 }, (_, index) => (
+    makePublication(`chunk-family-b-${index}`, `chunk-instance-b-${index}`, inputAsset, outputAsset, undefined, 100)
+  )));
+  const graph = buildPersistedGraph(firstCatalog);
+  const encoded = encodePersistedGraphV1(graph);
+  const foreign = encodePersistedGraphV1(buildPersistedGraph(secondCatalog));
+  const bySha = new Map(encoded.chunks.map(chunk => [chunk.ref.contentSha256, chunk.bytes]));
+  assert.throws(() => decodePersistedGraphV1(encoded.manifestBytes, () => {
+    throw new Error("missing");
+  }, firstCatalog), /missing/);
+  const firstBytes = encoded.chunks[0]!.bytes;
+  const firstChunkSha = encoded.chunks[0]!.ref.contentSha256;
+  assert.throws(() => decodePersistedGraphV1(encoded.manifestBytes, () => firstBytes, firstCatalog), /content mismatch/);
+  assert.throws(() => decodePersistedGraphV1(encoded.manifestBytes, ref => (
+    ref.contentSha256 === firstChunkSha ? foreign.chunks[0]!.bytes : bySha.get(ref.contentSha256)!
+  ), firstCatalog), /content mismatch/);
+  const mutated = encoded.chunks[0]!.bytes.slice();
+  mutated[mutated.length - 2] = mutated[mutated.length - 2]! ^ 1;
+  assert.throws(() => decodePersistedGraphV1(encoded.manifestBytes, ref => (
+    ref.contentSha256 === firstChunkSha ? mutated : bySha.get(ref.contentSha256)!
+  ), firstCatalog), /content mismatch/);
+  const manifest = decodeCanonicalBytes(encoded.manifestBytes) as Record<string, unknown>;
+  const rerooted = encodeCanonicalBytes({ ...manifest, graphRoot: h("rerooted-graph") });
+  assert.throws(() => decodePersistedGraphV1(rerooted, ref => bySha.get(ref.contentSha256)!, firstCatalog), /manifest .* mismatch/);
 });

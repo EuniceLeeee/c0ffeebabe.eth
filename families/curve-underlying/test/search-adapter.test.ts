@@ -36,7 +36,7 @@ const token0 = address("1");
 const token1 = address("2");
 const amountIn = "1000000000000000000";
 
-function identity() {
+function identity(selectorVariant: "int128" | "uint256" = "int128") {
   const result = verifyCurveUnderlyingIdentityStage({
     candidate: {
       target: pool,
@@ -62,7 +62,7 @@ function identity() {
       handlers: [address("6")],
       underlyingCoins: [token0, token1],
       underlyingDecimals: [18, 18],
-      verifiedDirections: [{ i: 0, j: 1, amountIn: "100", amountOut: "99" }],
+      verifiedDirections: [{ i: 0, j: 1, selectorVariant, amountIn: "100", amountOut: "99" }],
     },
   });
   assert.equal(result.status, "verified");
@@ -92,16 +92,16 @@ assert.equal(localQuery.status, "verified");
 if (localQuery.status !== "verified") throw new Error("quote fixture failed");
 const localAmountOut = localQuery.quote.amountOut;
 
-function routeBinding(): FamilySearchRouteLegBindingV1 {
+function routeBinding(identityValue = protocolIdentity): FamilySearchRouteLegBindingV1 {
   const memo = {
     kind: "curve-underlying-identity-memo" as const,
     familyId: CURVE_UNDERLYING_FAMILY_ID,
     familyDefinitionHash: CURVE_UNDERLYING_FAMILY_AUTHORING_HASH,
     familyCandidateKey: familyCandidateKey(CURVE_UNDERLYING_FAMILY_AUTHORING_HASH, pool),
     instanceNominationKey: pool,
-    candidateSubjectHash: protocolIdentity.candidateSnapshotHash,
+    candidateSubjectHash: identityValue.candidateSnapshotHash,
     candidateEvidenceRoot: h("candidate-evidence-root"),
-    identity: protocolIdentity,
+    identity: identityValue,
   };
   const identityMemo = decodeCanonicalJson(encodeCanonicalJson(memo)) as CanonicalJson;
   return {
@@ -128,17 +128,17 @@ const amount: FamilySearchAmountEnvelopeV1 = Object.freeze({
 const objectivePayload = Object.freeze({ kind: "search-objective", numeraire: amount.outputAssetRef });
 const objective = Object.freeze({ objectiveRef: hashDomain("aloha/search-objective/v1", objectivePayload), payload: objectivePayload });
 
-function input(readPort: FamilySearchSourceReadPortV1 = readPortFactory()): {
+function input(readPort: FamilySearchSourceReadPortV1 = readPortFactory(), identityValue = protocolIdentity): {
   readonly route: FamilySearchRouteLegBindingV1;
   readonly currentSource: FamilySearchCurrentSourceV1;
   readonly objective: typeof objective;
   readonly amount: FamilySearchAmountEnvelopeV1;
   readonly readPort: FamilySearchSourceReadPortV1;
 } {
-  return { route: routeBinding(), currentSource: { source: cutoff, assertCurrent() {} }, objective, amount, readPort };
+  return { route: routeBinding(identityValue), currentSource: { source: cutoff, assertCurrent() {} }, objective, amount, readPort };
 }
 
-function readPortFactory(options: { readonly malformed?: boolean; readonly mismatch?: boolean } = {}): FamilySearchSourceReadPortV1 {
+function readPortFactory(options: { readonly malformed?: boolean; readonly mismatch?: boolean; readonly selectorVariant?: "int128" | "uint256" } = {}): FamilySearchSourceReadPortV1 {
   return {
     read({ request }: { readonly request: FamilySearchSourceReadRequestV1 }) {
       if (options.malformed) return { kind: "returned" as const, requestId: request.requestId, source: request.source, dataHex: "0x01" };
@@ -149,7 +149,8 @@ function readPortFactory(options: { readonly malformed?: boolean; readonly misma
       if (selector === "0x59f4f351") return { kind: "returned" as const, requestId: request.requestId, source: request.source, dataHex: words(100000000000000000000n, 100000000000000000000n, 0n, 0n, 0n, 0n, 0n, 0n) };
       if (selector === "0x4cb088f1") return { kind: "returned" as const, requestId: request.requestId, source: request.source, dataHex: words(18n, 18n, 0n, 0n, 0n, 0n, 0n, 0n) };
       if (selector === "0x8edfdd5f" || selector === "0xfd0684b1") return { kind: "unavailable" as const, requestId: request.requestId, source: request.source, reasonCode: "method-missing" };
-      if (selector === "0x85f11d1e") return { kind: "returned" as const, requestId: request.requestId, source: request.source, dataHex: words(BigInt(localAmountOut)) };
+      const exactSelector = options.selectorVariant === "uint256" ? "0x85f11d1e" : "0x07211ef7";
+      if (selector === exactSelector) return { kind: "returned" as const, requestId: request.requestId, source: request.source, dataHex: words(BigInt(localAmountOut)) };
       throw new Error(`unexpected Curve selector ${selector}`);
     },
   };
@@ -162,7 +163,7 @@ const adapter = CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY({
   composition: { resolveCapability: () => ({}), resolveActionOwner: () => ({}) },
 });
 
-test("Curve adapter consumes raw ABI reads and seals coarse to exact to action", async () => {
+test("Curve adapter carries an int128-only identity variant through exact and action", async () => {
   const result = await adapter.run(input());
   assert.equal(result.kind, "verified");
   if (result.kind !== "verified") return;
@@ -174,6 +175,8 @@ test("Curve adapter consumes raw ABI reads and seals coarse to exact to action",
   const payload = result.artifact.action.payload as unknown as Record<string, unknown>;
   const verified = CURVE_UNDERLYING_SWAP_ACTION_PORT.decode(payload);
   assert.equal(verified.actionHash, result.artifact.action.actionHash);
+  assert.equal(verified.route.selectorVariant, "int128");
+  assert.equal(verified.rawAction.selector, "0xa6417ed6");
   assert.equal(CURVE_UNDERLYING_SWAP_ACTION_PORT.verifyObligations(payload).subjectRoot, result.artifact.action.obligationRoot);
   const reject = (mutation: Record<string, unknown>) => assert.throws(() => CURVE_UNDERLYING_SWAP_ACTION_PORT.decode(mutation));
   const mutationCorpus = [
@@ -185,6 +188,7 @@ test("Curve adapter consumes raw ABI reads and seals coarse to exact to action",
     { id: "output-asset-splice", value: { ...payload, outputs: [{ ...verified.outputs[0]!, assetRef: h("foreign-output-asset") }] } },
     { id: "quote-splice", value: { ...payload, quote: { ...verified.quote, amountIn: (BigInt(verified.quote.amountIn) + 1n).toString() } } },
     { id: "raw-action-splice", value: { ...payload, rawAction: { ...verified.rawAction, actionHash: h("raw-action-splice") } } },
+    { id: "selector-variant-splice", value: { ...payload, route: { ...verified.route, selectorVariant: "uint256" } } },
     { id: "evaluation-splice", value: { ...payload, exactEvaluationHash: h("evaluation-splice") } },
     { id: "obligation-root-splice", value: { ...payload, obligationRoot: h("obligation-splice") } },
     { id: "obligation-proof-splice", value: { ...payload, obligationProofRoot: h("proof-splice") } },
@@ -208,6 +212,26 @@ test("Curve adapter consumes raw ABI reads and seals coarse to exact to action",
   const { actionHash: ignoredCutoffFinal, ...cutoffBody } = cutoffPayload;
   void ignoredCutoffFinal;
   reject({ ...cutoffBody, actionHash: hashDomain("aloha/curve-underlying/search-action/v1", cutoffBody) });
+});
+
+test("Curve adapter carries a uint256-only identity variant through exact and action", async () => {
+  const uintIdentity = identity("uint256");
+  const result = await adapter.run(input(readPortFactory({ selectorVariant: "uint256" }), uintIdentity));
+  assert.equal(result.kind, "verified");
+  if (result.kind !== "verified") return;
+  const action = CURVE_UNDERLYING_SWAP_ACTION_PORT.decode(result.artifact.action.payload);
+  assert.equal(action.route.selectorVariant, "uint256");
+  assert.equal(action.rawAction.selector, "0x65b2489b");
+  assert.equal(action.rawAction.calldata.slice(0, 10), "0x65b2489b");
+});
+
+test("Curve adapter rejects an identity/state selector variant mismatch", async () => {
+  const state = await adapter.readState(input());
+  assert.equal(state.kind, "verified");
+  if (state.kind !== "verified") return;
+  const mismatch = adapter.projectCoarse({ ...input(readPortFactory({ selectorVariant: "uint256" }), identity("uint256")), state: state.artifact });
+  assert.equal(mismatch.kind, "invalidProgram");
+  if (mismatch.kind === "invalidProgram") assert.match(mismatch.code, /state artifact binding mismatch/);
 });
 
 test("Curve adapter fails closed on malformed, stale, and mismatched exact ABI responses", async () => {

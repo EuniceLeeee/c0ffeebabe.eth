@@ -14,6 +14,7 @@ import test from "node:test";
 import {
   decodeCanonicalBytes,
   encodeCanonicalBytes,
+  hashCanonicalPartition,
   hashDomain,
   sha256Hex,
   type CanonicalJson,
@@ -33,6 +34,12 @@ import {
   sealCoarseEdgeProjectionV1,
   type QualifiedCoarseProjectionReceiptV1,
 } from "../../../packages/coarse-economics/src/index.ts";
+import {
+  encodeNativeFullFamilyAuditBodyV1,
+  nativeFullFamilyAuditSequenceRootV1,
+  nativeFullFamilyCoarseRouteFactRootV1,
+  type NativeFullFamilyAuditV1,
+} from "../../../packages/search-pipeline/src/index.ts";
 import {
   buildPreReleaseFactLogRecordsV1,
   encodePreReleaseFactLogJsonlV1,
@@ -140,6 +147,203 @@ function emptySweep(): FullGraphCoarseSweepV1 {
   const sweep = sealFullGraphCoarseSweepV1(body);
   validateMaterializedFullGraphSweepV1(sweep);
   return sweep;
+}
+
+function nativeAudit(
+  sweep: FullGraphCoarseSweepV1,
+  routes: readonly Readonly<{
+    candidateId: Hash;
+    routeHash: Hash;
+    legs: readonly Readonly<{
+      edgeId: Hash;
+      receipt: CanonicalJson | null;
+      familyObservation: CanonicalJson | null;
+      owningFamilyId?: string;
+    }>[];
+    assessment?: CanonicalJson | null;
+    action?: boolean;
+  }>[] = [],
+  includeSweepProjectedEdges = false,
+): NativeFullFamilyAuditV1 {
+  const bindingBody = Object.freeze({
+    correlationId: h("native-audit-correlation"),
+    sourceSessionId: sweep.binding.currentSourceSessionId,
+    generationId: sweep.binding.generationId,
+    readyRecordHash: sweep.binding.readyRecordHash,
+    readyCutoff: sweep.binding.readyCutoff,
+    graphRoot: sweep.binding.graphRoot,
+    releaseProvenanceHash: sweep.binding.releaseProvenanceHash,
+    actualCurrentSource: sweep.binding.actualCurrentSource,
+    planningProblemHash: h("native-audit-planning-problem"),
+    plannerEnumerationRoot: h("native-audit-enumeration"),
+  });
+  const binding = Object.freeze({
+    ...bindingBody,
+    bindingRoot: hashDomain("aloha/native-full-family-audit-binding/v1", bindingBody),
+  });
+  const denominatorKeys: Hash[] = [];
+  const observedRoots: Hash[] = [];
+  const missingLegKeys: Hash[] = [];
+  const coarseRoutes = Object.freeze(routes.map(route => {
+    const legs = Object.freeze(route.legs.map((leg, index) => {
+      const denominatorKey = hashDomain("aloha/native-full-family-audit-leg-key/v1", {
+        candidateId: route.candidateId, legIndex: String(index), edgeId: leg.edgeId,
+      });
+      denominatorKeys.push(denominatorKey);
+      if (leg.receipt === null) missingLegKeys.push(denominatorKey);
+      else observedRoots.push(hashDomain("aloha/native-full-family-audit-observed-receipt/v1", {
+        denominatorKey,
+        receiptRoot: (leg.receipt as Readonly<Record<string, CanonicalJson>>).receiptRoot,
+        familyObservation: leg.familyObservation,
+      }));
+      const factBody = Object.freeze({
+        searchAuditBindingRoot: binding.bindingRoot,
+        candidateId: route.candidateId,
+        routeHash: route.routeHash,
+        routeBindingHash: h(`native-route-binding-${route.candidateId}`),
+        legIndex: String(index),
+        edgeId: leg.edgeId,
+        owningFamilyId: leg.owningFamilyId ?? `family-${index}`,
+        owningFamilyDefinitionHash: h(`native-family-definition-${index}`),
+        owningInstanceKey: `native-instance-${index}`,
+        instancePublicationHash: h(`native-instance-publication-${index}`),
+        projectionHash: h(`native-projection-${index}`),
+        receipt: leg.receipt,
+        familyObservation: leg.familyObservation,
+      });
+      return Object.freeze({
+        ...factBody,
+        factRoot: hashDomain("aloha/native-full-family-coarse-leg-fact/v1", factBody),
+      });
+    }));
+    const routeBody = Object.freeze({
+      searchAuditBindingRoot: binding.bindingRoot,
+      candidateId: route.candidateId,
+      routeHash: route.routeHash,
+      routeBindingHash: h(`native-route-binding-${route.candidateId}`),
+      assessment: route.assessment === undefined ? Object.freeze({ kind: "synthetic-assessment" }) : route.assessment,
+      legs,
+    });
+    return Object.freeze({
+      ...routeBody,
+      routeFactRoot: nativeFullFamilyCoarseRouteFactRootV1(routeBody as never),
+    });
+  }));
+  const edgeById = new Map<Hash, Readonly<{
+    edgeId: Hash;
+    owningFamilyId: string;
+    owningFamilyDefinitionHash: Hash;
+    owningInstanceKey: string;
+    instancePublicationHash: Hash;
+    projectionHash: Hash;
+  }>>();
+  if (includeSweepProjectedEdges) {
+    for (const [index, entry] of sweep.entries.entries()) {
+      if (edgeById.has(entry.edge.edgeId)) continue;
+      edgeById.set(entry.edge.edgeId, Object.freeze({
+        edgeId: entry.edge.edgeId,
+        owningFamilyId: entry.edge.owningFamilyId,
+        owningFamilyDefinitionHash: h(`native-sweep-family-definition-${index}`),
+        owningInstanceKey: `native-sweep-instance-${index}`,
+        instancePublicationHash: h(`native-sweep-instance-publication-${index}`),
+        projectionHash: h(`native-sweep-projection-${index}`),
+      }));
+    }
+  }
+  for (const route of coarseRoutes) for (const leg of route.legs) if (!edgeById.has(leg.edgeId)) edgeById.set(leg.edgeId, leg);
+  const projectedEdges = Object.freeze([...edgeById.values()].map(edge => {
+    const factBody = Object.freeze({
+      searchAuditBindingRoot: binding.bindingRoot,
+      edge: Object.freeze({ edgeId: edge.edgeId }),
+      edgeId: edge.edgeId,
+      owningFamilyId: edge.owningFamilyId,
+      owningFamilyDefinitionHash: edge.owningFamilyDefinitionHash,
+      owningInstanceKey: edge.owningInstanceKey,
+      instancePublicationHash: edge.instancePublicationHash,
+      projectionHash: edge.projectionHash,
+    });
+    return Object.freeze({
+      ...factBody,
+      factRoot: hashDomain("aloha/native-full-family-projected-edge-fact/v1", factBody),
+    });
+  }));
+  const actionLineage = Object.freeze(routes.flatMap(route => {
+    if (route.action !== true) return [];
+    const actionBody = Object.freeze({
+      searchAuditBindingRoot: binding.bindingRoot,
+      candidateId: route.candidateId,
+      routeHash: route.routeHash,
+      orderedEdgeIds: Object.freeze(route.legs.map(leg => leg.edgeId)),
+      executionProgramOwnerEvidence: Object.freeze({ evidenceRoot: h(`native-action-${route.candidateId}`) }),
+    });
+    return [Object.freeze({
+      ...actionBody,
+      factRoot: hashDomain("aloha/native-full-family-action-lineage-fact/v1", actionBody),
+    })];
+  }));
+  const observedEdgeIds = new Set(coarseRoutes.flatMap(route => route.legs.flatMap(leg => leg.receipt === null ? [] : [leg.edgeId])));
+  const missingProjectedEdgeIds = Object.freeze(projectedEdges.flatMap(edge => observedEdgeIds.has(edge.edgeId) ? [] : [edge.edgeId]));
+  const auditBody = Object.freeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.native-full-family-audit-v1" as const,
+    binding,
+    expectedCandidateCount: String(coarseRoutes.length),
+    expectedLegCount: String(denominatorKeys.length),
+    observedReceiptCount: String(observedRoots.length),
+    missingLegKeys: Object.freeze(missingLegKeys),
+    expectedProjectedEdgeCount: String(projectedEdges.length),
+    observedProjectedEdgeCount: String(observedEdgeIds.size),
+    missingProjectedEdgeIds,
+    expectedActionLineageCount: String(actionLineage.length),
+    observedActionLineageCount: String(actionLineage.length),
+    missingActionCandidateIds: Object.freeze([]) as readonly Hash[],
+    denominatorRoot: nativeFullFamilyAuditSequenceRootV1("denominator", denominatorKeys),
+    observedReceiptRoot: nativeFullFamilyAuditSequenceRootV1("observed-receipts", observedRoots),
+    missingLegRoot: nativeFullFamilyAuditSequenceRootV1("missing-legs", missingLegKeys),
+    projectedEdgeDenominatorRoot: nativeFullFamilyAuditSequenceRootV1("projected-edge-denominator", projectedEdges.map(edge => edge.factRoot)),
+    missingProjectedEdgeRoot: nativeFullFamilyAuditSequenceRootV1("missing-projected-edges", missingProjectedEdgeIds),
+    actionDenominatorRoot: nativeFullFamilyAuditSequenceRootV1("action-denominator", actionLineage.map(action => action.candidateId)),
+    actionObservedRoot: nativeFullFamilyAuditSequenceRootV1("action-observed", actionLineage.map(action => action.factRoot)),
+    coarseRoutes,
+    projectedEdges,
+    actionLineage,
+  });
+  return encodeNativeFullFamilyAuditBodyV1(auditBody as never).audit;
+}
+
+function nativeAuditWithProjectedCount(count: number): NativeFullFamilyAuditV1 {
+  const base = nativeAudit(emptySweep());
+  const projectedEdges = Object.freeze(Array.from({ length: count }, (_, index) => {
+    const edgeId = h(`native-projected-${index}`);
+    const factBody = Object.freeze({
+      searchAuditBindingRoot: base.binding.bindingRoot,
+      edge: Object.freeze({ edgeId }),
+      edgeId,
+      owningFamilyId: "synthetic-family",
+      owningFamilyDefinitionHash: h("synthetic-family-definition"),
+      owningInstanceKey: `synthetic-instance-${index}`,
+      instancePublicationHash: h(`synthetic-publication-${index}`),
+      projectionHash: h(`synthetic-projection-${index}`),
+    });
+    return Object.freeze({
+      ...factBody,
+      factRoot: hashDomain("aloha/native-full-family-projected-edge-fact/v1", factBody),
+    });
+  }));
+  const ids = Object.freeze(projectedEdges.map(edge => edge.edgeId));
+  const { auditRoot: _auditRoot, ...body } = base;
+  return encodeNativeFullFamilyAuditBodyV1({
+    ...body,
+    expectedProjectedEdgeCount: String(count),
+    observedProjectedEdgeCount: "0",
+    projectedEdges,
+    missingProjectedEdgeIds: ids,
+    projectedEdgeDenominatorRoot: nativeFullFamilyAuditSequenceRootV1(
+      "projected-edge-denominator",
+      projectedEdges.map(edge => edge.factRoot),
+    ),
+    missingProjectedEdgeRoot: nativeFullFamilyAuditSequenceRootV1("missing-projected-edges", ids),
+  } as never).audit;
 }
 
 function resealSweep(
@@ -674,7 +878,14 @@ function rewriteFullyRerootedReuse(
 function createPhysicalInput(
   nominationQualificationReuse: CanonicalJson = unavailableReuse(),
   sweep: FullGraphCoarseSweepV1 = emptySweep(),
-): Readonly<{ reportPath: string; sweepObjectPath: string; chunkObjectPaths: readonly string[] }> {
+  nativeAuditOverride: NativeFullFamilyAuditV1 | null = null,
+): Readonly<{
+  reportPath: string;
+  sweepObjectPath: string;
+  terminalBindingObjectPath: string;
+  chunkObjectPaths: readonly string[];
+  nativeChunkObjectPaths: readonly string[];
+}> {
   const root = mkdtempSync(join(tmpdir(), "aloha-pre-release-fact-log-"));
   const databasePath = join(root, "production-evidence.sqlite");
   const owner = issueSearcherProductionEvidenceOwnerV1({ databasePath, release: {
@@ -695,6 +906,59 @@ function createPhysicalInput(
   const markerPath = join(storeDirectory, ".aloha-observer-store-identity-v1");
   writeFileSync(markerPath, `${storeIdentityHash}\n`, { mode: 0o400 });
   chmodSync(markerPath, 0o400);
+  const finalDurableWindowId = h("window");
+  const audit = nativeAuditOverride ?? nativeAudit(sweep);
+  const { auditRoot: _nativeAuditRoot, ...nativeAuditBody } = audit;
+  const encodedNativeAudit = encodeNativeFullFamilyAuditBodyV1(nativeAuditBody);
+  const terminalBindingPayload = Object.freeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.runtime-release-full-family-terminal-binding-v1" as const,
+    runtimeBindingId: release.runtimeBindingId,
+    candidateReleaseCommit: release.candidateReleaseCommit,
+    releaseProvenanceHash: release.releaseProvenanceHash,
+    finalDurableWindowId,
+    producerTerminalId: h("producer-terminal"),
+    producerHeadFactsRoot: h("producer-head-facts"),
+    producerTerminalBindingRoot: h("producer-terminal-binding"),
+    laneTerminalSetRoot: h("lane-terminal-set"),
+    searchTerminalHash: h("search-terminal"),
+    terminalKind: "route-set-terminal" as const,
+    terminalLineageHash: h("terminal-lineage"),
+    readyRecordHash: audit.binding.readyRecordHash,
+    generationId: audit.binding.generationId,
+    graphRoot: audit.binding.graphRoot,
+    generatedRuntime: Object.freeze({
+      releaseIntentRoot: h("release-intent"),
+      definitionCatalogRoot: h("generated-definition-catalog"),
+      runtimeDescriptorRoot: h("runtime-descriptor"),
+      families: Object.freeze([Object.freeze({
+        familyId: "synthetic-family",
+        familyDefinitionHash: h("synthetic-family-definition"),
+        sourcePlanRoot: h("synthetic-source-plan"),
+        sourcePlanRefs: Object.freeze([]),
+      })]),
+    }),
+    readyCutoff: audit.binding.readyCutoff,
+    actualCurrentSource: audit.binding.actualCurrentSource,
+    nativeAuditManifest: encodedNativeAudit.manifest,
+  });
+  const terminalBinding = Object.freeze({
+    ...terminalBindingPayload,
+    bindingRoot: hashDomain("aloha/runtime-release-full-family-terminal-binding/v1", terminalBindingPayload),
+  });
+  const terminalBindingBytes = encodeCanonicalBytes(terminalBinding);
+  const terminalBindingContentSha256 = sha256Hex(terminalBindingBytes);
+  const terminalBindingArtifactRefId = h("terminal-binding-ref");
+  const terminalBindingObjectPath = join(storeDirectory, terminalBindingContentSha256.slice(2));
+  writeFileSync(terminalBindingObjectPath, terminalBindingBytes, { mode: 0o400 });
+  chmodSync(terminalBindingObjectPath, 0o400);
+  const nativeChunkObjectPaths: string[] = [];
+  for (const chunk of encodedNativeAudit.chunks) {
+    const chunkPath = join(storeDirectory, chunk.ref.contentSha256.slice(2));
+    writeFileSync(chunkPath, chunk.bytes, { mode: 0o400 });
+    chmodSync(chunkPath, 0o400);
+    nativeChunkObjectPaths.push(chunkPath);
+  }
   const sweepObjectPath = join(storeDirectory, sweepContentSha256.slice(2));
   writeFileSync(sweepObjectPath, sweepBytes, { mode: 0o400 });
   chmodSync(sweepObjectPath, 0o400);
@@ -707,12 +971,23 @@ function createPhysicalInput(
   }
   const storeStat = statSync(storeDirectory, { bigint: true });
 
-  const finalDurableWindowId = h("window");
   const sweepArtifactRefId = h("sweep-artifact-ref");
   const indexBody = Object.freeze({
     schemaVersion: 1 as const,
     kind: "aloha.production-terminal-phase-locator-index-v1" as const,
     finalDurableWindowId,
+    fullFamilyTerminalBindingArtifact: Object.freeze({
+      contentSha256: terminalBindingContentSha256,
+      ref: Object.freeze({
+        artifactRefId: terminalBindingArtifactRefId,
+        contentSha256: terminalBindingContentSha256,
+        byteLength: terminalBindingBytes.byteLength.toString(),
+        locator: Object.freeze({ kind: "content-object", storeIdentityHash, objectKey: terminalBindingContentSha256 }),
+        immutableMirrorLocator: Object.freeze({ kind: "content-object", storeIdentityHash, objectKey: terminalBindingContentSha256 }),
+      }),
+      claim: null,
+      lease: null,
+    }),
     fullGraphCoarseSweepArtifact: Object.freeze({
       contentSha256: sweepContentSha256,
       ref: Object.freeze({
@@ -757,7 +1032,10 @@ function createPhysicalInput(
       }),
       locator: Object.freeze({ locatorRoot: h("locator-root"), artifactRefId: h("locator-ref"), contentSha256: h("locator-content") }),
       manifest: Object.freeze({ manifestRoot: h("manifest-root"), artifactRefId: h("manifest-ref"), contentSha256: h("manifest-content") }),
-      fullFamilyTerminalBinding: Object.freeze({ artifactRefId: h("terminal-binding-ref"), contentSha256: h("terminal-binding-content") }),
+      fullFamilyTerminalBinding: Object.freeze({
+        artifactRefId: terminalBindingArtifactRefId,
+        contentSha256: terminalBindingContentSha256,
+      }),
       fullGraphCoarseSweep: Object.freeze({
         artifactRefId: sweepArtifactRefId,
         contentSha256: sweepContentSha256,
@@ -857,7 +1135,13 @@ function createPhysicalInput(
   const report = sealAdvisoryReport(reportPayload);
   const reportPath = join(root, "advisory-report.json");
   writeFileSync(reportPath, encodeCanonicalBytes(report));
-  return Object.freeze({ reportPath, sweepObjectPath, chunkObjectPaths: Object.freeze(chunkObjectPaths) });
+  return Object.freeze({
+    reportPath,
+    sweepObjectPath,
+    terminalBindingObjectPath,
+    chunkObjectPaths: Object.freeze(chunkObjectPaths),
+    nativeChunkObjectPaths: Object.freeze(nativeChunkObjectPaths),
+  });
 }
 
 test("structural fixture reopens physical advisory locators but cannot claim root-owned authority", () => {
@@ -889,6 +1173,42 @@ test("fails closed when the content-addressed Full-Graph object changes", () => 
   assert.throws(() => readPreReleaseFactLogStructuralFixtureV1(input.reportPath, activeGraphFor()), /(?:byte length|content hash) changed/);
 });
 
+test("fails closed when the indexed Full-Family terminal binding content object changes", () => {
+  const input = createPhysicalInput();
+  chmodSync(input.terminalBindingObjectPath, 0o600);
+  writeFileSync(input.terminalBindingObjectPath, encodeCanonicalBytes({ changed: true }));
+  chmodSync(input.terminalBindingObjectPath, 0o400);
+  assert.throws(
+    () => readPreReleaseFactLogStructuralFixtureV1(input.reportPath, activeGraphFor()),
+    /(?:byte length|content hash) changed/,
+  );
+});
+
+test("native audit schema and hash mutations fail closed before advisory facts are emitted", () => {
+  const sweep = emptySweep();
+  const audit = nativeAudit(sweep);
+  assert.throws(
+    () => buildPreReleaseFactLogRecordsV1(
+      structuralReportFor(sweep) as never,
+      rawObservation() as never,
+      sweep,
+      activeGraphFor() as never,
+      Object.freeze({ ...audit, unexpected: true }) as never,
+    ),
+    /keys mismatch|unexpected/i,
+  );
+  assert.throws(
+    () => buildPreReleaseFactLogRecordsV1(
+      structuralReportFor(sweep) as never,
+      rawObservation() as never,
+      sweep,
+      activeGraphFor() as never,
+      Object.freeze({ ...audit, auditRoot: h("tampered-native-audit-root") }) as never,
+    ),
+    /manifest root mismatch/,
+  );
+});
+
 test("fails closed when a physical middle Full-Graph entry chunk is missing", () => {
   const fixture = syntheticSweep(300);
   const input = createPhysicalInput(unavailableReuse(), fixture.sweep);
@@ -897,6 +1217,51 @@ test("fails closed when a physical middle Full-Graph entry chunk is missing", ()
   assert.throws(
     () => readPreReleaseFactLogStructuralFixtureV1(input.reportPath, fixture.activeGraph as never),
     /ENOENT|no such file/i,
+  );
+});
+
+test("physical native audit chunks fail closed when missing, reordered, next-mutated, or cross-audit", () => {
+  const sweep = emptySweep();
+  const audit = nativeAuditWithProjectedCount(300);
+  const make = () => createPhysicalInput(unavailableReuse(), sweep, audit);
+
+  const missing = make();
+  assert.ok(missing.nativeChunkObjectPaths.length >= 3);
+  unlinkSync(missing.nativeChunkObjectPaths[1]!);
+  assert.throws(
+    () => readPreReleaseFactLogStructuralFixtureV1(missing.reportPath, activeGraphFor() as never),
+    /ENOENT|no such file/i,
+  );
+
+  const reordered = make();
+  chmodSync(reordered.nativeChunkObjectPaths[0]!, 0o600);
+  writeFileSync(reordered.nativeChunkObjectPaths[0]!, readFileSync(reordered.nativeChunkObjectPaths[1]!));
+  chmodSync(reordered.nativeChunkObjectPaths[0]!, 0o400);
+  assert.throws(
+    () => readPreReleaseFactLogStructuralFixtureV1(reordered.reportPath, activeGraphFor() as never),
+    /byte length|content hash|content mismatch/i,
+  );
+
+  const nextMutated = make();
+  const rawChunk = decodeCanonicalBytes(
+    new Uint8Array(readFileSync(nextMutated.nativeChunkObjectPaths[0]!)),
+  ) as Readonly<Record<string, unknown>>;
+  chmodSync(nextMutated.nativeChunkObjectPaths[0]!, 0o600);
+  writeFileSync(nextMutated.nativeChunkObjectPaths[0]!, encodeCanonicalBytes({ ...rawChunk, nextChunkRef: null }));
+  chmodSync(nextMutated.nativeChunkObjectPaths[0]!, 0o400);
+  assert.throws(
+    () => readPreReleaseFactLogStructuralFixtureV1(nextMutated.reportPath, activeGraphFor() as never),
+    /byte length|content hash|content mismatch/i,
+  );
+
+  const cross = make();
+  const other = createPhysicalInput(unavailableReuse(), sweep, nativeAuditWithProjectedCount(301));
+  chmodSync(cross.nativeChunkObjectPaths[0]!, 0o600);
+  writeFileSync(cross.nativeChunkObjectPaths[0]!, readFileSync(other.nativeChunkObjectPaths[0]!));
+  chmodSync(cross.nativeChunkObjectPaths[0]!, 0o400);
+  assert.throws(
+    () => readPreReleaseFactLogStructuralFixtureV1(cross.reportPath, activeGraphFor() as never),
+    /byte length|content hash|content mismatch/i,
   );
 });
 
@@ -1244,8 +1609,20 @@ test("candidate joins retain every denominator entry while exact list selects on
   assert.equal(records.filter(record => record.kind === "aloha.pre-release-route-accounting-entry-v1").length, 2);
   assert.equal(records.filter(record => record.kind === "aloha.pre-release-candidate-join-fact-v1").length, 2);
   const exact = records.find(record => record.kind === "aloha.pre-release-selected-exact-list-v1")!;
-  assert.deepEqual(exact.selectedCandidateIds, [first.candidateId]);
+  assert.equal(exact.selectedEntryRoot, hashCanonicalPartition(
+    "aloha/pre-release/selected-route-entries/v1",
+    [first as unknown as CanonicalJson],
+    128,
+  ));
+  assert.equal("selectedCandidateIds" in exact, false);
+  assert.equal("selectedEntries" in exact, false);
   assert.equal(exact.selectedCount, "1");
+  const routeSummary = records.find(record => record.kind === "aloha.pre-release-route-denominator-v1")!;
+  const candidateSummary = records.find(record => record.kind === "aloha.pre-release-candidate-set-v1")!;
+  assert.equal("payload" in routeSummary, false);
+  assert.equal("entries" in (routeSummary.accounting as Readonly<Record<string, unknown>>), false);
+  assert.equal("candidateTerminalObservations" in candidateSummary, false);
+  assert.ok(candidateSummary.materialLocator !== null);
   const joins = records.filter(record => record.kind === "aloha.pre-release-candidate-join-fact-v1");
   assert.ok(joins.every(record => (record.differences as readonly unknown[]).length === 0));
   assert.ok(records.every(record => record.sourceClassification === "invalid-basis"
@@ -1296,11 +1673,22 @@ test("production reader requires the fixed root-owned frozen-B checkpoint public
 
 test("mechanical high-cardinality Graph denominator is emitted without sampling", () => {
   const fixture = syntheticSweep(30_000);
+  const productionAudit = nativeAudit(fixture.sweep, [Object.freeze({
+    candidateId: h("30k-production-candidate"),
+    routeHash: h("30k-production-route"),
+    assessment: null,
+    legs: Object.freeze([Object.freeze({
+      edgeId: fixture.sweep.entries[0]!.edge.edgeId,
+      receipt: null,
+      familyObservation: null,
+    })]),
+  })], true);
   const records = buildPreReleaseFactLogRecordsV1(
     structuralReportFor(fixture.sweep) as never,
     rawObservation() as never,
     fixture.sweep,
     fixture.activeGraph as never,
+    productionAudit,
   );
   const summary = records.find(record => record.kind === "aloha.pre-release-full-graph-summary-v1")!;
   assert.equal(summary.expectedTransitionCount, "30000");
@@ -1308,11 +1696,71 @@ test("mechanical high-cardinality Graph denominator is emitted without sampling"
   assert.ok(BigInt(summary.entryChunkCount as string) > 1n);
   assert.ok(summary.firstEntryChunkRef !== null);
   assert.equal(records.filter(record => record.kind === "aloha.pre-release-full-graph-transition-v1").length, 30_000);
+  assert.ok(encodePreReleaseFactLogJsonlV1(records).byteLength > 0);
   assert.ok(records.filter(record => record.kind === "aloha.pre-release-full-graph-transition-v1")
     .every(record => "coarseReceipt" in record && "familyObservation" in record));
+  assert.equal(summary.productionPricePublication, false);
+  assert.equal(summary.artifactRole, "independent-full-graph-coverage-observation");
+  const productionSummary = records.find(record => record.kind === "aloha.pre-release-native-full-family-audit-summary-v1")!;
+  assert.equal(productionSummary.consistencyStatus, "inconsistent");
+  assert.ok((productionSummary.advisoryReasons as readonly string[]).includes("native-audit-coarse-assessment-missing"));
+  assert.ok((productionSummary.advisoryReasons as readonly string[]).includes("native-audit-coarse-leg-receipt-missing"));
   assert.equal(summary.sourceClassification, "invalid-basis");
   assert.ok((records.find(record => record.kind === "aloha.pre-release-fact-log-source-v1")!.basisReasons as readonly string[])
     .includes("root-owned-terminal-physical-observer-not-executed"));
+});
+
+test("large native projected-edge denominator is emitted without sampling", () => {
+  const sweep = emptySweep();
+  const audit = nativeAuditWithProjectedCount(30_000);
+  const input = createPhysicalInput(unavailableReuse(), sweep, audit);
+  const activeGraph = Object.freeze({
+    ...activeGraphFor(),
+    edgeCount: audit.expectedProjectedEdgeCount,
+    orderedEdgeIds: Object.freeze(audit.projectedEdges.map(edge => edge.edgeId)),
+  });
+  const records = readPreReleaseFactLogStructuralFixtureV1(input.reportPath, activeGraph as never);
+  const summary = records.find(record => record.kind === "aloha.pre-release-native-full-family-audit-summary-v1")!;
+  assert.equal(summary.expectedProjectedEdgeCount, "30000");
+  assert.equal(summary.projectedEdgeDenominatorRoot, audit.projectedEdgeDenominatorRoot);
+  for (const removed of [
+    "missingLegKeys", "missingProjectedEdgeIds", "enumeratedCandidateIds", "coarseResolvedCandidateIds",
+    "coarseInvalidCandidateIds", "admittedCandidateIds", "exactCandidateIds", "finalSimulationCandidateIds",
+    "missingActionCandidateIds",
+  ]) assert.equal(removed in summary, false, removed);
+  assert.equal(records.filter(record => record.kind === "aloha.pre-release-native-full-family-projected-edge-v1").length, 30_000);
+});
+
+test("physical self-consistently rerooted native audit cannot delete an active Ready Graph edge", () => {
+  const sweep = emptySweep();
+  const completeAudit = nativeAuditWithProjectedCount(32);
+  const projectedEdges = Object.freeze(completeAudit.projectedEdges.slice(0, -1));
+  const missingProjectedEdgeIds = Object.freeze(projectedEdges.map(edge => edge.edgeId));
+  const { auditRoot: _auditRoot, ...body } = completeAudit;
+  const deletedAudit = encodeNativeFullFamilyAuditBodyV1(Object.freeze({
+    ...body,
+    expectedProjectedEdgeCount: String(projectedEdges.length),
+    projectedEdges,
+    missingProjectedEdgeIds,
+    projectedEdgeDenominatorRoot: nativeFullFamilyAuditSequenceRootV1(
+      "projected-edge-denominator",
+      projectedEdges.map(edge => edge.factRoot),
+    ),
+    missingProjectedEdgeRoot: nativeFullFamilyAuditSequenceRootV1(
+      "missing-projected-edges",
+      missingProjectedEdgeIds,
+    ),
+  }) as never).audit;
+  const activeGraph = Object.freeze({
+    ...activeGraphFor(),
+    edgeCount: completeAudit.expectedProjectedEdgeCount,
+    orderedEdgeIds: Object.freeze(completeAudit.projectedEdges.map(edge => edge.edgeId)),
+  });
+  const input = createPhysicalInput(unavailableReuse(), sweep, deletedAudit);
+  assert.throws(
+    () => readPreReleaseFactLogStructuralFixtureV1(input.reportPath, activeGraph as never),
+    /projected-edge\/active Ready Graph denominator mismatch/,
+  );
 });
 
 test("one physical edge with 2x2 ports expands to four exact transitions", () => {
@@ -1571,16 +2019,44 @@ test("the same candidate identity in both lanes remains two selected terminal fa
   assert.equal(records.filter(record => record.kind === "aloha.pre-release-selected-exact-list-v1").length, 2);
 });
 
-test("selected route legs exact-join their per-transition coarse receipt and reject a foreign leg", () => {
+test("production coarse lineage comes only from the native audit and keeps no-sim explicit", () => {
   const fixture = syntheticSweep(2);
   const transition = fixture.sweep.entries[0]!;
-  const coarseReceipt = transition.receipt;
-  const familyObservation = Object.freeze({ observationRoot: h("selected-family-observation") });
-  const selectedEntries = Object.freeze(fixture.sweep.entries.map((entry, index) => index === 0
-    ? Object.freeze({ ...entry, receipt: coarseReceipt, familyObservation })
-    : entry)) as unknown as readonly FullGraphCoarseSweepV1["entries"][number][];
-  const sweep = resealSweep(fixture.sweep, { entries: selectedEntries });
+  const sweepReceipt = transition.receipt!;
+  const auditReceipt = Object.freeze({ ...sweepReceipt, receiptRoot: h("production-receipt-a") });
+  const familyObservation = Object.freeze({ observationRoot: h("production-family-observation-a") });
   const base = selectedOutcomeObservation("retryable", "rpc:timeout");
+  const baseRoute = base.events.find(value => value.eventType === "route-denominator")!;
+  const baseEntry = ((baseRoute.payload as Readonly<Record<string, unknown>>).accounting as Readonly<Record<string, unknown>>)
+    .entries as readonly Readonly<Record<string, unknown>>[];
+  const candidateId = baseEntry[0]!.candidateId as Hash;
+  const routeHash = baseEntry[0]!.routeHash as Hash;
+  const assessmentC = Object.freeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.coarse-route-assessment-v1" as const,
+    routeHash,
+    routeBindingHash: h(`native-route-binding-${candidateId}`),
+    generationId: fixture.sweep.binding.generationId,
+    graphRoot: fixture.sweep.binding.graphRoot,
+    source: fixture.sweep.binding.actualCurrentSource,
+    objectiveRef: fixture.sweep.binding.objectiveRef,
+    releaseProvenanceHash: fixture.sweep.binding.releaseProvenanceHash,
+    releaseMembershipRoot: fixture.sweep.binding.releaseMembershipRoot,
+    orderedProjectionIds: Object.freeze([h("assessment-c-projection")]),
+    orderedProjectionReceiptRoots: Object.freeze([auditReceipt.receiptRoot]),
+    projectionRoot: h("assessment-c-projection-root"),
+    status: "rankable" as const,
+    rankAssetRef: h("assessment-c-rank-asset"),
+    rankScore: "314159",
+    profitUpperBound: Object.freeze({
+      assetRef: h("assessment-c-profit-asset"),
+      amount: "271828",
+      composerProgramRef: h("assessment-c-composer"),
+      proofRoot: h("assessment-c-profit-proof"),
+    }),
+    reasonCodes: Object.freeze(["assessment-c-recognizable"]),
+    assessmentId: h("assessment-c"),
+  });
   const leg = Object.freeze({
     edgeId: transition.edge.edgeId,
     transitionRef: transition.edge.opaqueTransitionRef,
@@ -1589,76 +2065,355 @@ test("selected route legs exact-join their per-transition coarse receipt and rej
     outputAssetRef: transition.outputAssetRef,
     outputPortRef: transition.outputPortRef,
   });
-  const withLeg = (value: typeof base.events[number], selectedLeg: typeof leg) => {
-    if (value.eventType !== "route-denominator") return value;
+  const audit = nativeAudit(fixture.sweep, [Object.freeze({
+    candidateId,
+    routeHash,
+    assessment: assessmentC as unknown as CanonicalJson,
+    legs: Object.freeze([Object.freeze({
+      edgeId: transition.edge.edgeId,
+      receipt: auditReceipt as unknown as CanonicalJson,
+      familyObservation,
+      owningFamilyId: transition.edge.owningFamilyId,
+    })]),
+  })], true);
+  const events = base.events.map(value => {
     const payload = value.payload as Readonly<Record<string, unknown>>;
-    const accounting = payload.accounting as Readonly<Record<string, unknown>>;
-    const entries = accounting.entries as readonly Readonly<Record<string, unknown>>[];
-    return Object.freeze({
-      ...value,
-      payload: Object.freeze({
-        ...payload,
-        accounting: Object.freeze({
-          ...accounting,
-          entries: Object.freeze([Object.freeze({ ...entries[0]!, legs: Object.freeze([selectedLeg]) })]),
+    if (value.eventType === "route-denominator") {
+      const accounting = payload.accounting as Readonly<Record<string, unknown>>;
+      const entries = accounting.entries as readonly Readonly<Record<string, unknown>>[];
+      return Object.freeze({
+        ...value,
+        payload: Object.freeze({
+          ...payload,
+          headHash: audit.binding.actualCurrentSource.hash,
+          correlationId: audit.binding.correlationId,
+          accounting: Object.freeze({
+            ...accounting,
+            planningProblemHash: audit.binding.planningProblemHash,
+            enumerationRoot: audit.binding.plannerEnumerationRoot,
+            entries: Object.freeze([Object.freeze({ ...entries[0]!, legs: Object.freeze([leg]) })]),
+          }),
         }),
-      }),
-    });
-  };
+      });
+    }
+    if (value.eventType === "candidate-set") {
+      const laneDenominators = payload.laneDenominators as readonly Readonly<Record<string, unknown>>[];
+      const terminals = payload.candidateTerminalObservations as readonly Readonly<Record<string, unknown>>[];
+      return Object.freeze({
+        ...value,
+        payload: Object.freeze({
+          ...payload,
+          headHash: audit.binding.actualCurrentSource.hash,
+          laneDenominators: Object.freeze([
+            ...laneDenominators.map(lane => Object.freeze({
+              ...lane,
+              correlationId: audit.binding.correlationId,
+            })),
+            Object.freeze({
+              ...laneDenominators[0]!,
+              lane: "backrun",
+              correlationId: audit.binding.correlationId,
+            }),
+          ]),
+          candidateTerminalObservations: Object.freeze([
+            ...terminals,
+            Object.freeze({ ...terminals[0]!, lane: "backrun", routeHash: h("other-lane-route") }),
+          ]),
+        }),
+      });
+    }
+    return value;
+  });
+  const exactCandidateEvent = events.find(value => value.eventType === "candidate-set")!;
+  events.push(Object.freeze({
+    ...exactCandidateEvent,
+    eventId: h("foreign-head-candidate-event"),
+    sequence: "99",
+    payload: Object.freeze({
+      ...exactCandidateEvent.payload,
+      headHash: h("foreign-candidate-head"),
+    }),
+  }));
   const joined = buildPreReleaseFactLogRecordsV1(
-    structuralReportFor(sweep) as never,
-    rawObservation(base.events.map(value => withLeg(value, leg))) as never,
-    sweep,
+    structuralReportFor(fixture.sweep) as never,
+    rawObservation(events) as never,
+    fixture.sweep,
     fixture.activeGraph as never,
+    audit,
   );
   const outcome = joined.find(record => record.kind === "aloha.pre-release-selected-terminal-outcome-v1")!;
   const input = (outcome.coarseInputs as readonly Readonly<Record<string, unknown>>[])[0]!;
-  assert.equal(input.matchStatus, "observed");
-  assert.equal(input.transitionId, transition.transitionId);
-  assert.deepEqual(input.coarseReceipt, coarseReceipt);
+  assert.equal(input.source, "native-full-family-audit");
+  assert.deepEqual(input.coarseReceipt, auditReceipt);
+  assert.notDeepEqual(input.coarseReceipt, sweepReceipt);
   assert.deepEqual(input.familyObservation, familyObservation);
+  const nativeLeg = joined.find(record => record.kind === "aloha.pre-release-native-full-family-coarse-leg-v1")!;
+  assert.deepEqual(nativeLeg.coarseReceipt, auditReceipt);
+  assert.equal(nativeLeg.pricingModel, "per-route-fresh-no-price-table");
+  assert.deepEqual(nativeLeg.pricingStateNotApplicable, ["mids", "refreshed", "carried", "implementation-coordinator", "price-cache"]);
+  const nativeRoute = joined.find(record => record.kind === "aloha.pre-release-native-full-family-route-v1")!;
+  assert.deepEqual(nativeRoute.coarseAssessment, assessmentC);
+  const lineage = joined.find(record => record.kind === "aloha.pre-release-native-full-family-candidate-lineage-v1")!;
+  assert.deepEqual(lineage.coarseAssessment, assessmentC);
+  assert.equal((lineage.terminalObservation as Readonly<Record<string, unknown>>).lane, "blockscan");
+  assert.equal(lineage.tailStatus, "no-sim");
+  assert.equal(lineage.simulationStatus, "absent");
+  assert.equal(lineage.simulationAbsenceReason, "rpc:timeout");
+  const summary = joined.find(record => record.kind === "aloha.pre-release-native-full-family-audit-summary-v1")!;
+  assert.equal(summary.consistencyStatus, "consistent");
+  assert.ok(joined.every(record => record.advisoryOnly === true));
 
-  const foreignLeg = Object.freeze({ ...leg, edgeId: h("foreign-selected-edge") });
-  const rejected = buildPreReleaseFactLogRecordsV1(
-    structuralReportFor(sweep) as never,
-    rawObservation(base.events.map(value => withLeg(value, foreignLeg))) as never,
-    sweep,
-    fixture.activeGraph as never,
-  );
-  assert.ok((rejected.find(record => record.kind === "aloha.pre-release-fact-log-source-v1")!.basisReasons as readonly string[])
-    .includes("selected-route-coarse-transition-missing"));
-
-  const withLegs = (value: typeof base.events[number], legs: readonly CanonicalJson[] | null) => {
-    if (value.eventType !== "route-denominator") return value;
+  const otherLaneOnly = events.map(value => {
     const payload = value.payload as Readonly<Record<string, unknown>>;
-    const accounting = payload.accounting as Readonly<Record<string, unknown>>;
-    const entries = accounting.entries as readonly Readonly<Record<string, unknown>>[];
-    const { legs: _legs, ...withoutLegs } = entries[0]!;
+    if (value.eventType !== "candidate-set" || payload.headHash !== audit.binding.actualCurrentSource.hash) return value;
+    const terminals = payload.candidateTerminalObservations as readonly Readonly<Record<string, unknown>>[];
     return Object.freeze({
       ...value,
       payload: Object.freeze({
         ...payload,
-        accounting: Object.freeze({
-          ...accounting,
-          entries: Object.freeze([Object.freeze(legs === null ? withoutLegs : { ...withoutLegs, legs: Object.freeze(legs) })]),
-        }),
+        candidateTerminalObservations: Object.freeze(terminals.filter(terminal => terminal.lane === "backrun")),
       }),
     });
+  });
+  const otherLaneSummary = buildPreReleaseFactLogRecordsV1(
+    structuralReportFor(fixture.sweep) as never,
+    rawObservation(otherLaneOnly) as never,
+    fixture.sweep,
+    fixture.activeGraph as never,
+    audit,
+  ).find(record => record.kind === "aloha.pre-release-native-full-family-audit-summary-v1")!;
+  assert.ok((otherLaneSummary.advisoryReasons as readonly string[]).includes("native-audit-selected-tail-lineage-missing"));
+  const terminalRouteMismatch = events.map(value => {
+    const payload = value.payload as Readonly<Record<string, unknown>>;
+    if (value.eventType !== "candidate-set" || payload.headHash !== audit.binding.actualCurrentSource.hash) return value;
+    const terminals = payload.candidateTerminalObservations as readonly Readonly<Record<string, unknown>>[];
+    return Object.freeze({
+      ...value,
+      payload: Object.freeze({
+        ...payload,
+        candidateTerminalObservations: Object.freeze(terminals.map(terminal => terminal.lane === "blockscan"
+          ? Object.freeze({ ...terminal, routeHash: h("foreign-terminal-route") })
+          : terminal)),
+      }),
+    });
+  });
+  const terminalRouteSummary = buildPreReleaseFactLogRecordsV1(
+    structuralReportFor(fixture.sweep) as never,
+    rawObservation(terminalRouteMismatch) as never,
+    fixture.sweep,
+    fixture.activeGraph as never,
+    audit,
+  ).find(record => record.kind === "aloha.pre-release-native-full-family-audit-summary-v1")!;
+  assert.ok((terminalRouteSummary.advisoryReasons as readonly string[]).includes("native-audit-terminal-route-hash-mismatch"));
+
+  const mutateRoute = (mutate: (payload: Readonly<Record<string, unknown>>) => Readonly<Record<string, unknown>>) => (
+    events.map(value => value.eventType === "route-denominator"
+      ? Object.freeze({ ...value, payload: Object.freeze(mutate(value.payload as Readonly<Record<string, unknown>>)) })
+      : value)
+  );
+  const auditReasons = (mutatedEvents: readonly Readonly<Record<string, unknown>>[]) => {
+    const records = buildPreReleaseFactLogRecordsV1(
+      structuralReportFor(fixture.sweep) as never,
+      rawObservation(mutatedEvents) as never,
+      fixture.sweep,
+      fixture.activeGraph as never,
+      audit,
+    );
+    return records.find(record => record.kind === "aloha.pre-release-native-full-family-audit-summary-v1")!
+      .advisoryReasons as readonly string[];
   };
   for (const mutation of [
-    { legs: null, reason: "selected-route-legs-missing" },
-    { legs: [], reason: "selected-route-legs-empty" },
-    { legs: [leg, leg], reason: "selected-route-leg-duplicate" },
-  ] as const) {
-    const mutated = buildPreReleaseFactLogRecordsV1(
-      structuralReportFor(sweep) as never,
-      rawObservation(base.events.map(value => withLegs(value, mutation.legs))) as never,
-      sweep,
-      fixture.activeGraph as never,
-    );
-    assert.ok((mutated.find(record => record.kind === "aloha.pre-release-fact-log-source-v1")!.basisReasons as readonly string[])
-      .includes(mutation.reason), mutation.reason);
+    Object.freeze({
+      reason: "native-audit-production-route-denominator-missing",
+      events: mutateRoute(payload => ({ ...payload, correlationId: h("foreign-correlation") })),
+    }),
+    Object.freeze({
+      reason: "native-audit-production-route-denominator-missing",
+      events: mutateRoute(payload => ({
+        ...payload,
+        accounting: { ...(payload.accounting as Readonly<Record<string, unknown>>), planningProblemHash: h("foreign-problem") },
+      })),
+    }),
+    Object.freeze({
+      reason: "native-audit-production-route-denominator-missing",
+      events: mutateRoute(payload => ({
+        ...payload,
+        accounting: { ...(payload.accounting as Readonly<Record<string, unknown>>), enumerationRoot: h("foreign-enumeration") },
+      })),
+    }),
+    Object.freeze({
+      reason: "native-audit-source-mismatch",
+      events: mutateRoute(payload => ({ ...payload, headHash: h("foreign-source") })),
+    }),
+    Object.freeze({
+      reason: "native-audit-route-hash-mismatch",
+      events: mutateRoute(payload => {
+        const accounting = payload.accounting as Readonly<Record<string, unknown>>;
+        const routeEntries = accounting.entries as readonly Readonly<Record<string, unknown>>[];
+        return { ...payload, accounting: { ...accounting, entries: [{ ...routeEntries[0]!, routeHash: h("foreign-route") }] } };
+      }),
+    }),
+    Object.freeze({
+      reason: "native-audit-candidate-route-missing",
+      events: mutateRoute(payload => {
+        const accounting = payload.accounting as Readonly<Record<string, unknown>>;
+        const routeEntries = accounting.entries as readonly Readonly<Record<string, unknown>>[];
+        return { ...payload, accounting: { ...accounting, entries: [{ ...routeEntries[0]!, candidateId: h("foreign-candidate") }] } };
+      }),
+    }),
+    Object.freeze({
+      reason: "native-audit-coarse-leg-lineage-mismatch",
+      events: mutateRoute(payload => {
+        const accounting = payload.accounting as Readonly<Record<string, unknown>>;
+        const routeEntries = accounting.entries as readonly Readonly<Record<string, unknown>>[];
+        const routeLegs = routeEntries[0]!.legs as readonly Readonly<Record<string, unknown>>[];
+        return { ...payload, accounting: { ...accounting, entries: [{ ...routeEntries[0]!, legs: [{ ...routeLegs[0]!, edgeId: h("foreign-edge") }] }] } };
+      }),
+    }),
+  ]) {
+    assert.ok(auditReasons(mutation.events).includes(mutation.reason), mutation.reason);
   }
+
+  const actionAudit = nativeAudit(fixture.sweep, [Object.freeze({
+    candidateId,
+    routeHash,
+    action: true,
+    legs: Object.freeze([Object.freeze({
+      edgeId: transition.edge.edgeId,
+      receipt: auditReceipt as unknown as CanonicalJson,
+      familyObservation,
+      owningFamilyId: transition.edge.owningFamilyId,
+    })]),
+  })], true);
+  const exactLineageHash = h("exact-tail-lineage");
+  const exactStage36Root = h("exact-tail-stage36");
+  const passedWithoutTail = events.map(value => {
+    const payload = value.payload as Readonly<Record<string, unknown>>;
+    if (value.eventType === "route-denominator") {
+      const accounting = payload.accounting as Readonly<Record<string, unknown>>;
+      const routeEntries = accounting.entries as readonly Readonly<Record<string, unknown>>[];
+      return Object.freeze({
+        ...value,
+        payload: Object.freeze({
+          ...payload,
+          accounting: Object.freeze({
+            ...accounting,
+            entries: Object.freeze([Object.freeze({ ...routeEntries[0]!, terminalKind: "passed", reasonCode: null })]),
+          }),
+        }),
+      });
+    }
+    if (value.eventType === "candidate-set") {
+      const terminals = payload.candidateTerminalObservations as readonly Readonly<Record<string, unknown>>[];
+      return Object.freeze({
+        ...value,
+        payload: Object.freeze({
+          ...payload,
+          candidateTerminalObservations: Object.freeze([Object.freeze({
+            ...terminals[0]!,
+            terminalKind: "passed",
+            reasonCode: null,
+            terminalLineageHash: exactLineageHash,
+            sixStepEvidenceRoot: exactStage36Root,
+          })]),
+        }),
+      });
+    }
+    return value;
+  });
+  const sixStepPerformance = (
+    admissionId: Hash,
+    sequence: string,
+    lineageHash: Hash,
+    stage36Root: Hash,
+  ) => {
+    const programHash = h(`tail-program-${sequence}`);
+    const finalReceiptHash = h(`tail-final-receipt-${sequence}`);
+    return evidenceEvent("performance-facts-complete", sequence, Object.freeze({
+      admissionId,
+      runtimeFacts: Object.freeze({
+        selectedSchedulerCompletion: Object.freeze({ completionId: h(`tail-completion-${sequence}`) }),
+        producerSchedulerJoin: Object.freeze({
+          correlationId: actionAudit.binding.correlationId,
+          generationId: actionAudit.binding.generationId,
+          source: actionAudit.binding.actualCurrentSource,
+          programHash,
+          finalSimulationReceiptHash: finalReceiptHash,
+          unsignedDryRunCandidateId: candidateId,
+          unsignedDryRunLineageHash: lineageHash,
+        }),
+      }),
+      sixStepFacts: Object.freeze({
+        stage12: Object.freeze({ marker: sequence }),
+        stage12Root: h(`tail-stage12-${sequence}`),
+        stage36Root,
+        lineageRoot: h(`tail-six-step-lineage-${sequence}`),
+        stage36: Object.freeze({
+          resolved: Object.freeze({
+            routeCandidateId: candidateId,
+            executionProgram: Object.freeze({ programHash }),
+            executionProgramOwnerEvidence: Object.freeze({ evidenceRoot: h(`tail-execution-owner-${sequence}`) }),
+            finalSimulation: Object.freeze({ receiptHash: finalReceiptHash, effectsHash: h(`tail-effects-${sequence}`) }),
+            finalSimulationOwnerEvidence: Object.freeze({ evidenceRoot: h(`tail-final-owner-${sequence}`) }),
+            unsignedDryRun: Object.freeze({ candidateId, lineageHash }),
+          }),
+        }),
+      }),
+    }));
+  };
+  const foreignAdmissionId = h("foreign-tail-admission");
+  const foreignLineageHash = h("foreign-tail-lineage");
+  const foreignStage36Root = h("foreign-tail-stage36");
+  const passedCandidate = passedWithoutTail.find(value => {
+    const payload = value.payload as Readonly<Record<string, unknown>>;
+    return value.eventType === "candidate-set" && payload.headHash === actionAudit.binding.actualCurrentSource.hash;
+  })!;
+  const passedCandidatePayload = passedCandidate.payload as Readonly<Record<string, unknown>>;
+  const passedTerminal = (passedCandidatePayload.candidateTerminalObservations as readonly CanonicalJson[])[0]!;
+  const foreignCandidate = Object.freeze({
+    ...passedCandidate,
+    eventId: h("foreign-tail-candidate-event"),
+    sequence: "200",
+    payload: Object.freeze({
+      ...passedCandidatePayload,
+      admissionId: foreignAdmissionId,
+      headFactsRoot: h("foreign-tail-head-facts"),
+      headHash: h("foreign-tail-head"),
+      candidateTerminalObservations: Object.freeze([Object.freeze({
+        ...(passedTerminal as Readonly<Record<string, unknown>>),
+        terminalLineageHash: foreignLineageHash,
+        sixStepEvidenceRoot: foreignStage36Root,
+      })]),
+    }),
+  });
+  const foreignSixStepEvents = Object.freeze([
+    ...passedWithoutTail,
+    foreignCandidate,
+    sixStepPerformance(foreignAdmissionId, "201", foreignLineageHash, foreignStage36Root),
+  ]);
+  const tailMissing = buildPreReleaseFactLogRecordsV1(
+    structuralReportFor(fixture.sweep) as never,
+    rawObservation(foreignSixStepEvents) as never,
+    fixture.sweep,
+    fixture.activeGraph as never,
+    actionAudit,
+  ).find(record => record.kind === "aloha.pre-release-native-full-family-audit-summary-v1")!;
+  assert.ok((tailMissing.advisoryReasons as readonly string[]).includes("native-audit-selected-tail-lineage-missing"));
+  const exactSixStepEvents = Object.freeze([
+    ...foreignSixStepEvents,
+    sixStepPerformance(base.admissionId, "202", exactLineageHash, exactStage36Root),
+  ]);
+  const exactTailRecords = buildPreReleaseFactLogRecordsV1(
+    structuralReportFor(fixture.sweep) as never,
+    rawObservation(exactSixStepEvents) as never,
+    fixture.sweep,
+    fixture.activeGraph as never,
+    actionAudit,
+  );
+  const exactTail = exactTailRecords.find(record => record.kind === "aloha.pre-release-native-full-family-candidate-lineage-v1")!;
+  assert.equal((exactTail.sixStepLineage as Readonly<Record<string, unknown>>).admissionId, base.admissionId);
+  assert.equal((exactTail.sixStepLineage as Readonly<Record<string, unknown>>).candidateId, candidateId);
+  assert.ok(!(exactTail.advisoryReasons as readonly string[]).includes("native-audit-selected-tail-lineage-missing"));
 });
 
 test("a missing selected terminal cannot be described as no-sim", () => {

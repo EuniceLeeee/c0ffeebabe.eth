@@ -29,6 +29,7 @@ export {
   UNIV3_STAGE_DEFINITIONS,
   requireUniV3StageDefinition,
 } from "./runtime/definitions.ts";
+export { UNIV3_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY } from "./runtime/physical-adapter.ts";
 
 export const PUBLIC_ENTRY = Object.freeze({
   familyId: "univ3-standard",

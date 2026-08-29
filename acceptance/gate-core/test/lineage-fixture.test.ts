@@ -33,6 +33,7 @@ import {
 } from "../../../specs/artifact-resolution/src/index.ts";
 import { decodeArtifactBytes, decodeArtifactHexBytes, encodeArtifactBytes, encodeArtifactHexBytes } from "../../../specs/artifact-resolution/src/index.ts";
 import {
+  createCommonEnvelopeRoleContractV1,
   createObserverQualificationCertificate,
   createObserverSigningKey,
   createPredicateSpec,
@@ -105,6 +106,7 @@ import {
   RELEASE_PREDICATE_BINDINGS,
   resolvePredicateEvaluator,
 } from "../src/generated/predicate-composition.ts";
+import { RELEASE_ROLE_MANIFEST } from "../src/generated/release-role-manifest.ts";
 import {
   decodeAcceptanceCertificate,
   computeGateCoreAuthorityPinDigest,
@@ -115,7 +117,7 @@ import {
   type GateCoreInputV1,
   type RegistryMembershipFactsV1,
 } from "../src/index.ts";
-import type { PredicateCompositionPortV1, PredicateEvaluatorV1 } from "../src/predicate-composition.ts";
+import type { PredicateCompositionBindingV1, PredicateCompositionPortV1, PredicateEvaluatorV1 } from "../src/predicate-composition.ts";
 import { evaluateGateCoreForQualification } from "../src/qualification/internal.ts";
 
 const h = (digit: string): Hash => `0x${digit.repeat(64)}` as Hash;
@@ -150,12 +152,15 @@ export function makeLineageFixture(
     readonly qualificationKeyValidFromEpoch?: string;
     readonly qualificationKeyValidThroughEpoch?: string;
     readonly revokeFirstObserverCertificate?: boolean;
+    readonly releasePredicateBindings?: readonly PredicateCompositionBindingV1[];
+    readonly releaseRoleManifestRoot?: Hash;
   } = {},
 ): {
   readonly authority: GateCoreAuthorityPinV1;
   readonly input: GateCoreInputV1;
   readonly mainArtifactRef: ReadOnlyArtifactRefV1;
   readonly signInvocation: (unsigned: ReturnType<typeof createUnsignedSignedObserverInvocationSnapshot>) => SignedObserverInvocationSnapshotV1;
+  readonly releaseAuthorities: readonly GateCoreAuthorityPinV1[];
 } {
   const predicate = ARTIFACT_LINEAGE_PREDICATE_SPEC;
   const predicateClosure = h("3");
@@ -425,7 +430,7 @@ export function makeLineageFixture(
     expectedIssuerKeySetRoot: qualificationIssuerKeySetRoot,
     expectedRegistryApprovalId: registryApproval.approvalId,
     expectedQualificationAudienceHash: qualificationAudienceHash,
-    expectedReleaseRoleManifestRoot: h("d"),
+    expectedReleaseRoleManifestRoot: externalOptions.releaseRoleManifestRoot ?? h("d"),
     expectedCandidateReleaseCommit: "0123456789012345678901234567890123456789",
   };
   const authorityBeforeReleaseApproval: GateCoreAuthorityPinV1 = {
@@ -461,15 +466,31 @@ export function makeLineageFixture(
   const observerQualificationIds = detailedObserverCertificates
     .map((certificate) => certificate.certificateId)
     .sort();
-  const releaseAcceptanceRequirements = sealReleaseAcceptanceRequirementsV1([{
-    predicateId: predicate.predicateId,
-    predicateSpecDigest: predicate.specDigest,
-    predicateCompositionLeafDigest: CURRENT_PREDICATE_BINDING.compositionLeafDigest,
-    authorityPinDigest: computeGateCoreAuthorityPinDigest(authorityBeforeReleaseApproval),
-    verifierCertificateId: verifierCertificate.certificateId,
-    observerCertificateIds: observerQualificationIds,
-    observerCertificateIdsRoot: hashSignedReleaseAuthorityObserverCertificateIdsRoot(observerQualificationIds),
-  }]);
+  const releaseAuthoritiesBeforeApproval = (externalOptions.releasePredicateBindings ?? [CURRENT_PREDICATE_BINDING])
+    .map((binding): GateCoreAuthorityPinV1 => binding.predicateId === predicate.predicateId
+      ? authorityBeforeReleaseApproval
+      : Object.freeze({
+        ...authorityBeforeReleaseApproval,
+        predicate: binding.evaluator.predicateSpec,
+        predicateProgramDescriptorDigest: binding.predicateProgramDescriptorDigest,
+        oracleProgramDescriptorDigest: binding.oracleProgramDescriptorDigest,
+        predicateCompositionLeafDigest: binding.compositionLeafDigest,
+        predicateImplementationExportDigest: binding.predicateImplementationExportDigest,
+        oracleImplementationExportDigest: binding.oracleImplementationExportDigest,
+        signedInvocationRoleId: createCommonEnvelopeRoleContractV1(binding.predicateId).signedInvocationRoleId,
+        selectedPredicateAuthority: createSelectedPredicateAuthorityEntry(binding.predicateId, []),
+      }));
+  const releaseAcceptanceRequirements = sealReleaseAcceptanceRequirementsV1(
+    releaseAuthoritiesBeforeApproval.map((releaseAuthority) => ({
+      predicateId: releaseAuthority.predicate.predicateId,
+      predicateSpecDigest: releaseAuthority.predicate.specDigest,
+      predicateCompositionLeafDigest: releaseAuthority.predicateCompositionLeafDigest,
+      authorityPinDigest: computeGateCoreAuthorityPinDigest(releaseAuthority),
+      verifierCertificateId: verifierCertificate.certificateId,
+      observerCertificateIds: observerQualificationIds,
+      observerCertificateIdsRoot: hashSignedReleaseAuthorityObserverCertificateIdsRoot(observerQualificationIds),
+    })),
+  );
   const releaseApprovalInput = {
     schemaVersion: 3 as const,
     kind: "aloha.signed-release-authority-approval" as const,
@@ -503,6 +524,13 @@ export function makeLineageFixture(
       expectedReleaseAuthorityApprovalId: releaseAuthorityApproval.approvalId,
     },
   };
+  const releaseAuthorities = releaseAuthoritiesBeforeApproval.map((releaseAuthority) => Object.freeze({
+    ...releaseAuthority,
+    externalQualification: Object.freeze({
+      ...releaseAuthority.externalQualification,
+      expectedReleaseAuthorityApprovalId: releaseAuthorityApproval.approvalId,
+    }),
+  }));
 
   const targetAnchor: ProcessAnchorV1 = {
     systemId,
@@ -944,6 +972,7 @@ export function makeLineageFixture(
   const signedInvocationSnapshot = signInvocation(unsignedInvocation);
   return {
     authority,
+    releaseAuthorities: Object.freeze(releaseAuthorities),
     input: {
       query,
       snapshot,
@@ -1004,6 +1033,51 @@ export function evaluateQualifiedLineageFixture() {
         observerQualificationIds: fixture.input.observerCertificates.map(value => value.certificateId).sort(),
       }),
     }),
+  });
+}
+
+/**
+ * Test-only external packaging fixture for the exact generated predicate
+ * denominator. The manifest/BOM select every authority; the shared issuer
+ * signs one V3 approval over that exact set. No acceptance verdict is copied
+ * or manufactured for the additional predicates.
+ */
+export function evaluateQualifiedReleaseDenominatorFixture() {
+  const manifestPredicateIds = RELEASE_ROLE_MANIFEST.predicateAdapters
+    .map((entry) => entry.predicateId)
+    .sort();
+  const bindings = [...RELEASE_PREDICATE_BINDINGS]
+    .sort((left, right) => left.predicateId.localeCompare(right.predicateId));
+  assert.deepEqual(bindings.map((binding) => binding.predicateId), manifestPredicateIds);
+  const fixture = makeLineageFixture(false, false, {
+    releasePredicateBindings: bindings,
+    releaseRoleManifestRoot: RELEASE_ROLE_MANIFEST.rootDigest,
+  });
+  const result = evaluateQualification(fixture.authority, fixture.input);
+  assert.equal(result.verdict, "pass", JSON.stringify(result.reasons));
+  const evidence = fixture.input.externalQualification;
+  return Object.freeze({
+    fixture,
+    result,
+    externalQualifications: Object.freeze(fixture.releaseAuthorities.map((authority) => Object.freeze({
+      pin: authority.externalQualification,
+      evidence,
+      registry: fixture.input.registry,
+      registryFacts: fixture.input.registryFacts,
+      verifierCertificate: fixture.input.verifierCertificate,
+      observerCertificates: fixture.input.observerCertificates,
+      release: Object.freeze({
+        authorityPinDigest: computeGateCoreAuthorityPinDigest(authority),
+        predicateId: authority.predicate.predicateId,
+        predicateSpecDigest: authority.predicate.specDigest,
+        predicateCompositionLeafDigest: authority.predicateCompositionLeafDigest,
+        predicateCompositionRootDigest: authority.predicateCompositionRootDigest,
+        gateCoreRuntimeClosureDigest: authority.gateCoreRuntimeClosureDigest,
+        gateCoreImplementationClosureDigest: authority.gateCoreImplementationClosureDigest,
+        verifierQualificationId: authority.verifierQualificationId,
+        observerQualificationIds: fixture.input.observerCertificates.map(value => value.certificateId).sort(),
+      }),
+    }))),
   });
 }
 

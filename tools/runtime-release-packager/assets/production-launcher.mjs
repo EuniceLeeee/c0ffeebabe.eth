@@ -35,6 +35,8 @@ const ACCEPTANCE_CERTIFICATE_KEYS = Object.freeze([
 
 const INSTALL_PATHS = Object.freeze({
   "acceptance-certificates.json": "/etc/aloha/acceptance-certificates.json",
+  "aloha-proof-signer": "/opt/aloha/bin/aloha-proof-signer",
+  "aloha-revm-worker": "/opt/aloha/bin/aloha-revm-worker",
   "aloha-searcher.service": "/etc/systemd/system/aloha-searcher.service",
   "catalog-generation.inputs.json": "/etc/aloha/runtime-facts/catalog-generation.inputs.json",
   "candidate-proof-verifier-binding.json": "/etc/aloha/candidate-proof-verifier-binding.json",

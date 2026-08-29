@@ -46,21 +46,27 @@ import {
 import { decodeReleaseIntent } from "../../../../specs/release-intent/src/index.ts";
 import {
   decodeFullFamilyFactLocator,
-  decodeFullFamilyFacts,
+  decodeFullFamilyArtifactRefIndexV1,
+  decodeFullFamilyArtifactRefPageV1,
+  decodeFullFamilyFactBundleStorageV1,
   decodeFullFamilyCandidateProofVerifierBinding,
+  decodeFullFamilyStoredItemV1,
   decodeFullFamilyEvidenceArtifact,
   decodeFullFamilyOutcomeArtifact,
   decodeFullFamilyReleaseProjectionArtifact,
   decodeFullFamilySourceCoverageArtifact,
   decodeFullFamilyReadyRecord,
-  encodeFullFamilyFacts,
+  encodeFullFamilyArtifactRefIndexV1,
+  encodeFullFamilyArtifactRefPageV1,
+  encodeFullFamilyFactBundleStorageV1,
   evaluateFullFamilyPredicate,
   FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS,
-  FULL_FAMILY_FACT_SCHEMA_MANIFEST,
+  FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST,
   FULL_FAMILY_ORACLE_PROGRAM_DESCRIPTOR_DIGEST,
   FULL_FAMILY_PREDICATE_PROGRAM_DESCRIPTOR_DIGEST,
   FULL_FAMILY_PREDICATE_SPEC,
   referencedFullFamilyArtifactDigests,
+  materializeFullFamilyFactBundleStorageV1,
   type FamilyEvidenceItemV1,
   type FamilyOutcomeItemV1,
   type FamilyReleaseSetV1,
@@ -86,7 +92,7 @@ import {
   createCommonEnvelopeRoleContractV1,
 } from "../../../../specs/qualification/src/index.ts";
 
-const FULL_FAMILY_ADAPTER_VERSION = "full-family-gate-core-adapter-v10";
+const FULL_FAMILY_ADAPTER_VERSION = "full-family-gate-core-adapter-v11";
 const FULL_FAMILY_INVOCATION_SEAL_ROLE_ID = createCommonEnvelopeRoleContractV1(
   FULL_FAMILY_PREDICATE_SPEC.predicateId,
 ).signedInvocationRoleId;
@@ -111,9 +117,9 @@ const GENERATED_RUNTIME_METADATA: FullFamilyGeneratedRuntimeMetadataV1 = (() => 
 })();
 
 const BUNDLE_SCHEMA_REF = Object.freeze({
-  id: FULL_FAMILY_FACT_SCHEMA_MANIFEST.id,
-  version: FULL_FAMILY_FACT_SCHEMA_MANIFEST.version,
-  schemaHash: FULL_FAMILY_FACT_SCHEMA_MANIFEST.schemaHash,
+  id: FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST.id,
+  version: FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST.version,
+  schemaHash: FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST.schemaHash,
 });
 
 function artifactSchemaRef(manifest: { readonly id: string; readonly version: string; readonly schemaHash: Hash }) {
@@ -494,8 +500,28 @@ function validateCapabilityArtifact(
   }
 }
 
-function validateCoarseArtifact(bytes: Uint8Array, item: FamilyEvidenceItemV1, expectedStatus: "rankable" | "unavailable"): void {
-  const value = decodeCanonicalObject(bytes, "familySearchCoarse");
+function validateCoarseArtifact(bytes: Uint8Array, item: FamilyEvidenceItemV1, expectedStatus: "rankable" | "unavailable"): FullFamilySearchCoarseArtifactV1 {
+  const observation = decodeCanonicalObject(bytes, "familySearchCoarseObservation");
+  assertExactKeys(observation, [
+    "schemaVersion", "kind", "familyId", "familyDefinitionHash", "releaseMembershipRoot",
+    "binding", "routeHandleBindingHash", "amountHash", "projectionId", "stateOutcome",
+    "coarseOutcome", "observationRoot",
+  ], "familySearchCoarseObservation");
+  const { observationRoot, ...observationBody } = observation;
+  const binding = observation.binding as { readonly edgeId?: unknown };
+  const coarseOutcome = observation.coarseOutcome as { readonly kind?: unknown; readonly artifact?: unknown };
+  if (observation.schemaVersion !== 1
+    || observation.kind !== "aloha.family-runtime-coarse-edge-sweep-observation-v1"
+    || observationRoot !== hashDomain("aloha/family-runtime-coarse-edge-sweep-observation/v1", observationBody)
+    || observation.familyId !== item.familyId
+    || binding.edgeId !== item.subjectKey
+    || coarseOutcome.kind !== "verified") {
+    throw new TypeError("coarse owner observation binding mismatch");
+  }
+  const value = coarseOutcome.artifact;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("coarse owner observation artifact is invalid");
+  }
   assertExactKeys(value, [
     "kind", "status", "source", "routeBindingHash", "objectiveRef", "amountHash", "payload", "payloadHash",
     "artifactHash", "projectionHash", "stateFactsRoot", "input", "output", "conservativeOutputUpperBound",
@@ -519,6 +545,7 @@ function validateCoarseArtifact(bytes: Uint8Array, item: FamilyEvidenceItemV1, e
     || (expectedStatus === "rankable") !== (coarse.rankKey !== null)) {
     throw new TypeError("coarse production artifact binding mismatch");
   }
+  return coarse;
 }
 
 function validateActionOwnerArtifact(
@@ -642,7 +669,7 @@ function productionEvidenceExpectation(
   }
   if (role === "coarse-rankable" || role === "coarse-unavailable") {
     return wrap(
-      artifactSchemaRef(FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.familySearchCoarse),
+      artifactSchemaRef(FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.coarseObservation),
       bytes => validateCoarseArtifact(bytes, item, role === "coarse-rankable" ? "rankable" : "unavailable"),
     );
   }
@@ -1141,12 +1168,15 @@ function validateProductionArtifactClosure(
         report("predicate-observation-mismatch", `$.families[${familyIndex}].projectedEdges.items[${index}]`);
       }
     }
-    for (const partition of [family.coarseRankable, family.coarseUnavailable]) {
+    for (const [partition, expectedStatus] of [
+      [family.coarseRankable, "rankable"],
+      [family.coarseUnavailable, "unavailable"],
+    ] as const) {
       for (const item of partition.items) {
         const bytes = bytesByRef.get(item.evidenceArtifactRefId);
         if (bytes === undefined) continue;
         try {
-          const coarse = decodeCanonicalObject(bytes, "familySearchCoarse") as unknown as FullFamilySearchCoarseArtifactV1;
+          const coarse = validateCoarseArtifact(bytes, item, expectedStatus);
           if (!observedEdges.has(item.subjectKey)) throw new TypeError("coarse edge missing");
           if (!sameJson(coarse.source, bundle.runtime.actualCurrentSource)) throw new TypeError("coarse current source mismatch");
         } catch {
@@ -1219,14 +1249,66 @@ function evaluateLiveWithGeneratedRuntime(
     || !sameJson(bundleRef.schema, BUNDLE_SCHEMA_REF)
   ) report("artifact-content-mismatch", "$.predicateFacts[0].bundleArtifactRefId");
   if (bundleBytes === null) return "invalid";
-  const bundle = decodeCanonicalArtifact(
+  const storage = decodeCanonicalArtifact(
     bundleBytes,
-    value => decodeFullFamilyFacts(value),
+    value => decodeFullFamilyFactBundleStorageV1(value),
     "$.predicateFacts[0].bundleArtifactRefId",
     report,
   );
-  if (bundle === null) return "invalid";
-  if (!sameBytes(bundleBytes, encodeFullFamilyFacts(bundle))) report("canonical-bytes-mismatch", "$.predicateFacts[0].bundleArtifactRefId");
+  if (storage === null) return "invalid";
+  if (!sameBytes(bundleBytes, encodeFullFamilyFactBundleStorageV1(storage))) {
+    report("canonical-bytes-mismatch", "$.predicateFacts[0].bundleArtifactRefId");
+  }
+  const traversed = new Map<Hash, Readonly<{ readonly contentSha256: Hash; readonly bytes: Uint8Array }>>();
+  let bundle: FullFamilyFactBundleV1;
+  try {
+    const qualificationEvidenceRoles = Object.freeze({
+      "source-plans": "source-plan",
+      "universe-candidates": "universe-candidate",
+      "instance-publications": "instance-publication",
+      "projected-edges": "projected-edge",
+      "declared-coarse-capabilities": "declared-coarse-capability",
+      "coarse-rankable": "coarse-rankable",
+      "coarse-unavailable": "coarse-unavailable",
+      "unranked-admissions": "unranked-admission",
+      "declared-exact-capabilities": "declared-exact-capability",
+      "owned-actions": "owned-action",
+    } as const);
+    bundle = materializeFullFamilyFactBundleStorageV1(
+      storage,
+      (artifactRefId, contentSha256) => {
+        const existing = traversed.get(artifactRefId);
+        if (existing !== undefined) {
+          if (existing.contentSha256 !== contentSha256) throw new TypeError("stored artifact ref digest splice");
+          return existing.bytes;
+        }
+        const bytes = bindArtifact(artifactRefId, contentSha256, runtime, index, report);
+        if (bytes === null) throw new TypeError("stored artifact unavailable");
+        traversed.set(artifactRefId, Object.freeze({ contentSha256, bytes }));
+        return bytes;
+      },
+      input => {
+        if (requireProductionArtifacts || input.itemKind === "outcome") {
+          return decodeFullFamilyStoredItemV1(input);
+        }
+        if (input.role === "outcomes") throw new TypeError("qualification evidence item kind mismatch");
+        const artifact = decodeFullFamilyEvidenceArtifact(input.bytes);
+        if (artifact.familyId !== input.familyId || artifact.role !== qualificationEvidenceRoles[input.role]) {
+          throw new TypeError("qualification evidence artifact role splice");
+        }
+        return Object.freeze({
+          familyId: artifact.familyId,
+          itemId: artifact.itemId,
+          subjectKey: artifact.subjectKey,
+          evidenceArtifactRefId: input.artifactRefId,
+          evidenceContentSha256: input.contentSha256,
+        });
+      },
+    );
+  } catch {
+    report("schema-invalid", "$.predicateFacts[0].bundleArtifactRefId.storageClosure");
+    return "invalid";
+  }
   let expected: Map<Hash, Hash>;
   let nestedExpectations: ReadonlyMap<Hash, FullFamilyNestedExpectationV1>;
   try {
@@ -1235,6 +1317,13 @@ function evaluateLiveWithGeneratedRuntime(
     if (nestedExpectations.size !== expected.size
       || [...expected.keys()].some(artifactRefId => !nestedExpectations.has(artifactRefId))) {
       throw new TypeError("full-family nested semantic denominator mismatch");
+    }
+    for (const [artifactRefId, artifact] of traversed) {
+      const existing = expected.get(artifactRefId);
+      if (existing !== undefined && existing !== artifact.contentSha256) {
+        throw new TypeError("stored artifact ref conflicts with semantic evidence ref");
+      }
+      expected.set(artifactRefId, artifact.contentSha256);
     }
     const existing = expected.get(locator.bundleArtifactRefId);
     if (existing !== undefined && existing !== locator.bundleContentSha256) throw new TypeError("bundle ref conflicts with evidence ref");
@@ -1248,8 +1337,34 @@ function evaluateLiveWithGeneratedRuntime(
   for (const [artifactRefId, digest] of expected) {
     const bytes = artifactRefId === locator.bundleArtifactRefId
       ? bundleBytes
-      : bindArtifact(artifactRefId, digest, runtime, index, report);
+      : traversed.get(artifactRefId)?.bytes ?? bindArtifact(artifactRefId, digest, runtime, index, report);
     if (bytes !== null) bytesByRef.set(artifactRefId, bytes);
+  }
+  for (const [artifactRefId, artifact] of traversed) {
+    if (nestedExpectations.has(artifactRefId)) continue;
+    const ref = index.refsById.get(artifactRefId);
+    const path = `$.artifactRefs.${artifactRefId}`;
+    let expectedSchema: ReturnType<typeof artifactSchemaRef> | null = null;
+    let canonical = false;
+    try {
+      const value = decodeCanonicalObject(artifact.bytes, "storedArtifact");
+      if (value.kind === "aloha.full-family-artifact-ref-index-v1") {
+        const decoded = decodeFullFamilyArtifactRefIndexV1(artifact.bytes);
+        canonical = sameBytes(artifact.bytes, encodeFullFamilyArtifactRefIndexV1(decoded));
+        expectedSchema = artifactSchemaRef(FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.artifactRefIndex);
+      } else if (value.kind === "aloha.full-family-artifact-ref-page-v1") {
+        const decoded = decodeFullFamilyArtifactRefPageV1(artifact.bytes);
+        canonical = sameBytes(artifact.bytes, encodeFullFamilyArtifactRefPageV1(decoded));
+        expectedSchema = artifactSchemaRef(FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.artifactRefPage);
+      }
+    } catch {
+      canonical = false;
+    }
+    if (expectedSchema === null) report("schema-invalid", path);
+    else if (ref === undefined || ref.mediaType !== "application/json" || !sameJson(ref.schema, expectedSchema)) {
+      report("artifact-content-mismatch", `${path}.schema`);
+    }
+    if (!canonical) report("canonical-bytes-mismatch", path);
   }
   for (const [artifactRefId, expectation] of nestedExpectations) {
     const ref = index.refsById.get(artifactRefId);

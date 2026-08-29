@@ -343,6 +343,12 @@ test("pre-release staging accepts only the exact canonical hardened systemd unit
   assert.equal(PRE_RELEASE_STAGING_LAYOUT_V1.authorizationLedgerPath, "/var/lib/aloha/pre-release/authorization-ledger/authorization-claims.sqlite");
   assert.equal(PRE_RELEASE_STAGING_LAYOUT_V1.advisoryJudgmentPath, "/var/lib/aloha/pre-release/runtime/advisory-judgment.json");
   assert.equal(PRE_RELEASE_STAGING_LAYOUT_V1.factLogPath, "/var/lib/aloha/pre-release/runtime/pre-release-fact-log.jsonl");
+  assert.equal(PRE_RELEASE_STAGING_LAYOUT_V1.releaseAcceptanceSigningRequestPath, "/var/lib/aloha/pre-release/runtime/release-acceptance-signing-request.json");
+  assert.equal(PRE_RELEASE_STAGING_LAYOUT_V1.productionArtifactBaseRepositoryPath, "/var/lib/aloha/pre-release/runtime/production-artifact-bases");
+  assert.equal(PRE_RELEASE_STAGING_LAYOUT_V1.productionPackagingInputDirectory, "/var/lib/aloha/pre-release/package-inputs");
+  assert.equal(PRE_RELEASE_STAGING_LAYOUT_V1.productionDeploymentInfrastructureInputPath, "/var/lib/aloha/pre-release/package-inputs/deployment-runtime-infrastructure.json");
+  assert.equal(PRE_RELEASE_STAGING_LAYOUT_V1.productionRevmWorkerInputPath, "/var/lib/aloha/pre-release/package-inputs/aloha-revm-worker");
+  assert.equal(PRE_RELEASE_STAGING_LAYOUT_V1.productionProofSignerInputPath, "/var/lib/aloha/pre-release/package-inputs/aloha-proof-signer");
   assert.equal(dirname(PRE_RELEASE_STAGING_LAYOUT_V1.authorizationLedgerPath), "/var/lib/aloha/pre-release/authorization-ledger");
   assert.ok(PRE_RELEASE_STAGING_LAYOUT_V1.advisoryJudgmentPath.startsWith(`${PRE_RELEASE_STAGING_LAYOUT_V1.runtimeOutputDirectory}/`));
   assert.match(PRE_RELEASE_SYSTEMD_UNIT_V1, /^User=aloha$/m);
@@ -764,6 +770,12 @@ test("fixed final CLI keeps Boundary receipt in-process and runner orders A, con
     "readImportedFrozenPreReleaseBTerminalPhysicalObservationV1(importedB)",
     "readPreReleaseFactLogV1(",
     "PRE_RELEASE_STAGING_LAYOUT_V1.factLogPath",
+    "readFixedProductionPackagingInputsV1()",
+    "prepareProductionReleaseAcceptanceForExternalOwnerV1(",
+    "readProductionReleaseAcceptanceSigningRequestV1(",
+    "prepareFrozenProductionArtifactBaseV1({",
+    "PRE_RELEASE_STAGING_LAYOUT_V1.releaseAcceptanceSigningRequestPath",
+    "materializeFrozenProductionArtifactBaseV1(",
     "invokeFixedPreReleaseThawV1(bProcess)",
     'systemctl(["stop", PRE_RELEASE_STAGING_LAYOUT_V1.systemdUnit])',
   ]) {
@@ -771,7 +783,11 @@ test("fixed final CLI keeps Boundary receipt in-process and runner orders A, con
     assert.ok(next > cursor, `final pre-release step is absent or out of order: ${step}`);
     cursor = next;
   }
+  assert.match(source, /readdirSync\(directory\)\.sort\(\)/);
+  assert.match(source, /sha256Hex\(revmWorkerBytes\) !== deploymentInfrastructure\.revmWorkerExecutableSha256/);
+  assert.match(source, /sha256Hex\(proofSignerBytes\) !== deploymentInfrastructure\.externalProofSigner\.executableSha256/);
   assert.doesNotMatch(source, /\bsign\s*\(|broadcast:\s*true|promote:\s*true/);
+  assert.doesNotMatch(source, /releaseAcceptanceApproval|runtimeReleasePackageApproval/);
   assert.doesNotMatch(source, /void importedB|advisoryJudgment\.status\s*!==\s*"pass"/);
 });
 

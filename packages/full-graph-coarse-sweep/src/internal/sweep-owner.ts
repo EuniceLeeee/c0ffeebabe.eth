@@ -57,12 +57,49 @@ const results = new WeakMap<object, Readonly<{
   chunks: readonly FullGraphCoarseSweepEntryChunkV1[];
 }>>();
 
+const FULL_GRAPH_SWEEP_MAX_CONCURRENCY = 32;
+
 interface RuntimeGraphTransitionV1 {
   readonly transitionId: Hash;
   readonly transitionKey: string;
   readonly edge: RuntimeGraphEdgeV1;
   readonly input: AssetPortV1;
   readonly output: AssetPortV1;
+}
+
+async function orderedBoundedMap<Input, Output>(
+  values: readonly Input[],
+  worker: (value: Input, ordinal: number) => Promise<Output>,
+): Promise<readonly Output[]> {
+  if (values.length === 0) return Object.freeze([]);
+  const output: Output[] = new Array(values.length);
+  const failures: Array<Readonly<{ readonly ordinal: number; readonly error: unknown }>> = [];
+  let nextOrdinal = 0;
+  let stopped = false;
+  const run = async (): Promise<void> => {
+    for (;;) {
+      if (stopped) return;
+      const ordinal = nextOrdinal;
+      if (ordinal >= values.length) return;
+      nextOrdinal += 1;
+      try {
+        output[ordinal] = await worker(values[ordinal]!, ordinal);
+      } catch (error) {
+        failures.push(Object.freeze({ ordinal, error }));
+        stopped = true;
+        return;
+      }
+    }
+  };
+  await Promise.all(Array.from(
+    { length: Math.min(FULL_GRAPH_SWEEP_MAX_CONCURRENCY, values.length) },
+    () => run(),
+  ));
+  if (failures.length > 0) {
+    failures.sort((left, right) => left.ordinal - right.ordinal);
+    throw failures[0]!.error;
+  }
+  return Object.freeze(output);
 }
 
 /** Independent implementation of the planner's complete transition rule:
@@ -211,7 +248,6 @@ export async function issueFullGraphCoarseSweepCapabilityV1(input: {
   }));
   let snapshotCommitted = false;
   try {
-    const entries: FullGraphCoarseSweepEntryV1[] = [];
     const transitions = graphTransitions(session.lease.edges);
     const routeContexts = new Map<Hash, Promise<Readonly<{
       readonly routeHandle: FamilyIssuedRouteHandleV1;
@@ -234,101 +270,102 @@ export async function issueFullGraphCoarseSweepCapabilityV1(input: {
       routeContexts.set(edge.edgeId, created);
       return created;
     };
-    for (const [ordinal, transition] of transitions.entries()) {
-    await session.assertCurrent(input.signal);
-    await session.lease.assertActive();
-    input.assertReleaseCurrent();
-    const edge = transition.edge;
-    const seam = input.composition.resolveCoarseProjection(edge.owningFamilyDefinitionHash);
-    if (seam === null) {
-      entries.push(missingEntry(binding.bindingRoot, ordinal, transition, "coarse-owner-missing"));
-      continue;
-    }
-    const { routeHandle, routeBindingHash } = await routeContext(edge);
-    const edgeBindingBody = deepFreeze({
-      schemaVersion: 1 as const,
-      kind: "aloha.coarse-edge-sweep-binding-v1" as const,
-      familyId: edge.owningFamilyId,
-      familyDefinitionHash: edge.owningFamilyDefinitionHash,
-      edgeId: edge.edgeId,
-      transitionRef: edge.opaqueTransitionRef,
-      inputAssetRef: transition.input.assetRef,
-      inputPortRef: transition.input.portRef,
-      outputAssetRef: transition.output.assetRef,
-      outputPortRef: transition.output.portRef,
-      routeBindingHash,
-      routeOwnerRef: familyCoarseRouteOwnerRefV1(edge.owningFamilyDefinitionHash, routeBindingHash),
-      generationId: ready.generationId,
-      readyRecordHash: ready.readyRecordHash,
-      graphRoot: ready.graphRoot,
-      readyCutoff: ready.cutoff,
-      source,
-      objectiveRef: objective.objectiveRef,
-      releaseProvenanceHash: input.release.releaseProvenanceHash,
-    });
-    const edgeBinding: CoarseEdgeSweepBindingV1 = deepFreeze({
-      ...edgeBindingBody,
-      bindingRoot: coarseEdgeSweepBindingRootV1(edgeBindingBody),
-    });
-    const issuedBinding = issueCoarseEdgeSweepBindingV1(edgeBinding);
-    const amount = familySearchAmount({
-      inputAssetRef: transition.input.assetRef,
-      outputAssetRef: transition.output.assetRef,
-      amountIn: invocation.amountSeed.amountIn,
-      recipient: invocation.amountSeed.recipient,
-    });
-    const projectionCapability = await input.composition.issueCoarseEdgeSweepProjection(seam.producer, {
-      binding: issuedBinding,
-      issuedHandle: routeHandle,
-      currentSource: Object.freeze({
-        sessionId: session.sessionId,
+    const entries = await orderedBoundedMap(transitions, async (transition, ordinal) => {
+      await session.assertCurrent(input.signal);
+      await session.lease.assertActive();
+      input.assertReleaseCurrent();
+      const edge = transition.edge;
+      const seam = input.composition.resolveCoarseProjection(edge.owningFamilyDefinitionHash);
+      if (seam === null) {
+        return missingEntry(binding.bindingRoot, ordinal, transition, "coarse-owner-missing");
+      }
+      const { routeHandle, routeBindingHash } = await routeContext(edge);
+      const edgeBindingBody = deepFreeze({
+        schemaVersion: 1 as const,
+        kind: "aloha.coarse-edge-sweep-binding-v1" as const,
+        familyId: edge.owningFamilyId,
+        familyDefinitionHash: edge.owningFamilyDefinitionHash,
+        edgeId: edge.edgeId,
+        transitionRef: edge.opaqueTransitionRef,
+        inputAssetRef: transition.input.assetRef,
+        inputPortRef: transition.input.portRef,
+        outputAssetRef: transition.output.assetRef,
+        outputPortRef: transition.output.portRef,
+        routeBindingHash,
+        routeOwnerRef: familyCoarseRouteOwnerRefV1(edge.owningFamilyDefinitionHash, routeBindingHash),
+        generationId: ready.generationId,
+        readyRecordHash: ready.readyRecordHash,
+        graphRoot: ready.graphRoot,
+        readyCutoff: ready.cutoff,
         source,
-        assertCurrent: () => session.assertCurrent(input.signal),
-      }),
-      sourceRead: invocation.sourceRead,
-      objective,
-      amount,
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
-      ...(input.deadlineAtMs === undefined ? {} : { deadlineAtMs: input.deadlineAtMs }),
+        objectiveRef: objective.objectiveRef,
+        releaseProvenanceHash: input.release.releaseProvenanceHash,
+      });
+      const edgeBinding: CoarseEdgeSweepBindingV1 = deepFreeze({
+        ...edgeBindingBody,
+        bindingRoot: coarseEdgeSweepBindingRootV1(edgeBindingBody),
+      });
+      const issuedBinding = issueCoarseEdgeSweepBindingV1(edgeBinding);
+      const amount = familySearchAmount({
+        inputAssetRef: transition.input.assetRef,
+        outputAssetRef: transition.output.assetRef,
+        amountIn: invocation.amountSeed.amountIn,
+        recipient: invocation.amountSeed.recipient,
+      });
+      const projectionCapability = await input.composition.issueCoarseEdgeSweepProjection(seam.producer, {
+        binding: issuedBinding,
+        issuedHandle: routeHandle,
+        currentSource: Object.freeze({
+          sessionId: session.sessionId,
+          source,
+          assertCurrent: () => session.assertCurrent(input.signal),
+        }),
+        sourceRead: invocation.sourceRead,
+        objective,
+        amount,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+        ...(input.deadlineAtMs === undefined ? {} : { deadlineAtMs: input.deadlineAtMs }),
+      });
+      // Preserve the Family-owned raw observation before admitting the generic
+      // qualified receipt; neither is reconstructed from the other.
+      const familyObservation = input.composition.readCoarseEdgeSweepObservation(seam.producer, projectionCapability);
+      const qualified = readQualifiedCoarseProjectionV1({ service: seam.service, capability: projectionCapability });
+      const receipt = readQualifiedCoarseProjectionReceiptV1(qualified);
+      if (familyObservation.binding.bindingRoot !== edgeBinding.bindingRoot
+        || familyObservation.projectionId !== receipt.projection.projectionId
+        || familyObservation.releaseMembershipRoot !== input.release.releaseMembershipRoot
+        || receipt.releaseMembershipRoot !== input.release.releaseMembershipRoot
+        || receipt.releaseProvenanceHash !== input.release.releaseProvenanceHash
+        || receipt.projection.edgeId !== edge.edgeId
+        || receipt.projection.routeBindingHash !== routeBindingHash
+        || receipt.projection.graphRoot !== ready.graphRoot
+        || receipt.projection.source.hash !== source.hash
+        || familyObservation.amountHash !== familySearchAmountHash(amount)) {
+        throw new TypeError("full-Graph sweep Family observation/qualified receipt join mismatch");
+      }
+      const entryBody = deepFreeze({
+        bindingRoot: binding.bindingRoot,
+        ordinal: String(ordinal),
+        transitionId: transition.transitionId,
+        edge: persistedEdge(edge),
+        inputAssetRef: transition.input.assetRef,
+        inputPortRef: transition.input.portRef,
+        outputAssetRef: transition.output.assetRef,
+        outputPortRef: transition.output.portRef,
+        status: "observed" as const,
+        missingReason: null,
+        receipt,
+        familyObservation: familyObservation as unknown as CanonicalJson,
+      });
+      const entry = deepFreeze({
+        ...entryBody,
+        entryRoot: hashDomain("aloha/full-graph-coarse-sweep-entry/v1", entryBody as unknown as CanonicalJson),
+      });
+      await session.assertCurrent(input.signal);
+      await session.lease.assertActive();
+      input.assertReleaseCurrent();
+      return entry;
     });
-    // Preserve the Family-owned raw observation before admitting the generic
-    // qualified receipt; neither is reconstructed from the other.
-    const familyObservation = input.composition.readCoarseEdgeSweepObservation(seam.producer, projectionCapability);
-    const qualified = readQualifiedCoarseProjectionV1({ service: seam.service, capability: projectionCapability });
-    const receipt = readQualifiedCoarseProjectionReceiptV1(qualified);
-    if (familyObservation.binding.bindingRoot !== edgeBinding.bindingRoot
-      || familyObservation.projectionId !== receipt.projection.projectionId
-      || familyObservation.releaseMembershipRoot !== input.release.releaseMembershipRoot
-      || receipt.releaseMembershipRoot !== input.release.releaseMembershipRoot
-      || receipt.releaseProvenanceHash !== input.release.releaseProvenanceHash
-      || receipt.projection.edgeId !== edge.edgeId
-      || receipt.projection.routeBindingHash !== routeBindingHash
-      || receipt.projection.graphRoot !== ready.graphRoot
-      || receipt.projection.source.hash !== source.hash
-      || familyObservation.amountHash !== familySearchAmountHash(amount)) {
-      throw new TypeError("full-Graph sweep Family observation/qualified receipt join mismatch");
-    }
-    const entryBody = deepFreeze({
-      bindingRoot: binding.bindingRoot,
-      ordinal: String(ordinal),
-      transitionId: transition.transitionId,
-      edge: persistedEdge(edge),
-      inputAssetRef: transition.input.assetRef,
-      inputPortRef: transition.input.portRef,
-      outputAssetRef: transition.output.assetRef,
-      outputPortRef: transition.output.portRef,
-      status: "observed" as const,
-      missingReason: null,
-      receipt,
-      familyObservation: familyObservation as unknown as CanonicalJson,
-    });
-    entries.push(deepFreeze({
-      ...entryBody,
-      entryRoot: hashDomain("aloha/full-graph-coarse-sweep-entry/v1", entryBody as unknown as CanonicalJson),
-    }));
-    await session.assertCurrent(input.signal);
-    input.assertReleaseCurrent();
-  }
   await session.assertCurrent(input.signal);
   await session.lease.assertActive();
   input.assertReleaseCurrent();

@@ -65,6 +65,82 @@ export const FAMILY_RUNTIME_STAGES = Object.freeze([
 
 export type FamilyRuntimeStageV1 = (typeof FAMILY_RUNTIME_STAGES)[number];
 
+/** Source-less request owned by one Family lifecycle adapter.  The runtime
+ * supplies only a neutral RPC transport; target/data selection remains in
+ * the Family closure. */
+export interface FamilyPhysicalRpcRequestV1 {
+  readonly requestId: Hash;
+  readonly method: "eth_call" | "eth_getCode";
+  readonly params: CanonicalJson;
+}
+
+export type FamilyPhysicalTransportFailureCodeV1 =
+  | "rpc"
+  | "deadline"
+  | "abort"
+  | "queue-full"
+  | "resource-limit"
+  | "worker-crash"
+  | "source-stale";
+
+/** One physical RPC completion.  The request already owns correlation
+ * identity; this result carries only the transport fact and never a Family
+ * verdict. */
+export type FamilyPhysicalRpcCompletionV1 =
+  | { readonly kind: "returned"; readonly dataHex: string }
+  | { readonly kind: "reverted"; readonly dataHex: string }
+  | {
+    readonly kind: "transportFailure";
+    readonly failureCode: FamilyPhysicalTransportFailureCodeV1;
+  };
+
+export interface FamilyPhysicalRpcPortV1 {
+  readonly request: (
+    input: FamilyPhysicalRpcRequestV1,
+    signal: AbortSignal,
+  ) => Promise<FamilyPhysicalRpcCompletionV1>;
+}
+
+export type FamilyPhysicalTransportResultV1 =
+  | { readonly kind: "returned"; readonly requestId: Hash; readonly dataHex: string }
+  | { readonly kind: "reverted"; readonly requestId: Hash; readonly dataHex: string }
+  | {
+    readonly kind: "transportFailure";
+    readonly requestId: Hash;
+    readonly failureCode: FamilyPhysicalTransportFailureCodeV1;
+  };
+
+export interface FamilyPhysicalLifecycleExecutionV1 {
+  readonly familyId: string;
+  readonly familyDefinitionHash: Hash;
+  readonly stage: FamilyRuntimeStageV1;
+  readonly source: ProgramSourceAnchorV1;
+  readonly programInput: CanonicalJson;
+}
+
+/** Exact owner-provided physical resources.  RPC supplies transport facts;
+ * rawEvidence exposes only the already-qualified content-addressed join. */
+export interface FamilyPhysicalLifecyclePortsV1 {
+  readonly rpc: FamilyPhysicalRpcPortV1;
+  readonly rawEvidence: FamilyRawEvidenceReadPortV1;
+}
+
+export interface FamilyPhysicalLifecycleAdapterV1 {
+  readonly kind: "aloha.family-physical-lifecycle-adapter";
+  readonly version: 1;
+  readonly familyId: string;
+  readonly familyDefinitionHash: Hash;
+  readonly execute: (
+    input: FamilyPhysicalLifecycleExecutionV1,
+    ports: FamilyPhysicalLifecyclePortsV1,
+    signal: AbortSignal,
+  ) => Promise<readonly FamilyPhysicalTransportResultV1[]>;
+}
+
+export type FamilyPhysicalLifecycleAdapterFactoryV1 = () => FamilyPhysicalLifecycleAdapterV1;
+
+export const FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1 = "physical-lifecycle/v1" as const;
+
 export const FAMILY_STAGE_PROGRAM_SCHEMA = hashDomain("aloha/family-stage-program-schema/v1", {
   fields: [
     "kind",
@@ -142,6 +218,7 @@ export interface FamilyFrozenProgramRefV1 {
 
 export interface FamilyStageExecuteInputV1 {
   readonly program: FamilyStageProgramV1;
+  readonly rawEvidence: FamilyRawEvidenceReadPortV1;
   readonly attemptId?: string;
   readonly signal?: AbortSignal;
 }
@@ -154,6 +231,7 @@ export interface FamilyStageExecuteInputV1 {
 export interface RuntimeStageExecutorV1 {
   readonly execute: (input: {
     readonly program: FamilyStageProgramV1;
+    readonly rawEvidence: FamilyRawEvidenceReadPortV1;
     readonly attemptId: string;
     readonly signal: AbortSignal;
   }) => Promise<readonly TransportFactV1[]>;

@@ -199,7 +199,7 @@ test("Curve MetaRegistry snapshot enumerates every pool and contributes omission
       handlers: [address("6")],
       underlyingCoins: [address("3"), address("4")],
       underlyingDecimals: [18, 6],
-      verifiedDirections: [{ i: 0, j: 1, amountIn: "100", amountOut: "99" }],
+      verifiedDirections: [{ i: 0, j: 1, selectorVariant: "int128", amountIn: "100", amountOut: "99" }],
     },
   });
   const identityMemo = identity.identityMemo as Record<string, unknown>;

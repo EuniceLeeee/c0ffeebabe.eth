@@ -3,7 +3,11 @@ import test from "node:test";
 import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
 import type { ReadyFullFamilyEvidenceSnapshotV1 } from "../../../packages/checkpoint/src/ready-full-family-evidence.ts";
 import { readCheckpointReadyFullFamilyEvidence } from "../../../packages/checkpoint/src/ready-full-family-evidence-consumer.ts";
-import type { NativeFullFamilyAuditV1 } from "../../../packages/search-pipeline/src/index.ts";
+import {
+  encodeNativeFullFamilyAuditBodyV1,
+  nativeFullFamilyAuditSequenceRootV1,
+  type NativeFullFamilyAuditV1,
+} from "../../../packages/search-pipeline/src/index.ts";
 import type { RuntimeReleaseFullFamilyTerminalBindingV1 } from "../../../packages/runtime-release-authority/src/full-family-terminal-consumer.ts";
 import { readRuntimeReleaseFullGraphCoarseSweepManifestV1 } from "../../../packages/runtime-release-authority/src/full-graph-coarse-sweep-consumer.ts";
 import {
@@ -409,21 +413,19 @@ function fixture(): Readonly<{
     expectedActionLineageCount: "0",
     observedActionLineageCount: "0",
     missingActionCandidateIds: Object.freeze([]),
-    denominatorRoot: hashDomain("aloha/native-full-family-audit-denominator/v1", []),
-    observedReceiptRoot: hashDomain("aloha/native-full-family-audit-observed-receipts/v1", []),
-    missingLegRoot: hashDomain("aloha/native-full-family-audit-missing-legs/v1", []),
-    projectedEdgeDenominatorRoot: hashDomain("aloha/native-full-family-audit-projected-edge-denominator/v1", []),
-    missingProjectedEdgeRoot: hashDomain("aloha/native-full-family-audit-missing-projected-edges/v1", []),
-    actionDenominatorRoot: hashDomain("aloha/native-full-family-audit-action-denominator/v1", []),
-    actionObservedRoot: hashDomain("aloha/native-full-family-audit-action-observed/v1", []),
+    denominatorRoot: nativeFullFamilyAuditSequenceRootV1("denominator", []),
+    observedReceiptRoot: nativeFullFamilyAuditSequenceRootV1("observed-receipts", []),
+    missingLegRoot: nativeFullFamilyAuditSequenceRootV1("missing-legs", []),
+    projectedEdgeDenominatorRoot: nativeFullFamilyAuditSequenceRootV1("projected-edge-denominator", []),
+    missingProjectedEdgeRoot: nativeFullFamilyAuditSequenceRootV1("missing-projected-edges", []),
+    actionDenominatorRoot: nativeFullFamilyAuditSequenceRootV1("action-denominator", []),
+    actionObservedRoot: nativeFullFamilyAuditSequenceRootV1("action-observed", []),
     coarseRoutes: Object.freeze([]),
     projectedEdges: Object.freeze([]),
     actionLineage: Object.freeze([]),
   });
-  const audit = Object.freeze({
-    ...auditBody,
-    auditRoot: hashDomain("aloha/native-full-family-audit/v1", auditBody),
-  });
+  const encodedAudit = encodeNativeFullFamilyAuditBodyV1(auditBody);
+  const audit = encodedAudit.audit;
   const release = Object.freeze({
     sourceContentSha256: Object.freeze({
       releaseIntent: h("release-source"),
@@ -478,7 +480,6 @@ function fixture(): Readonly<{
     searchTerminalHash: h("search-terminal"),
     terminalKind: "route-set-terminal" as const,
     terminalLineageHash: h("terminal-lineage"),
-    nativeAuditRoot: audit.auditRoot,
     readyRecordHash: ready.readyRecordHash,
     generationId: ready.generationId,
     graphRoot: ready.graphRoot,
@@ -495,7 +496,7 @@ function fixture(): Readonly<{
     }),
     readyCutoff: ready.cutoff,
     actualCurrentSource: audit.binding.actualCurrentSource,
-    audit,
+    nativeAuditManifest: encodedAudit.manifest,
   });
   const terminalBinding = Object.freeze({
     ...terminalBindingBody,
@@ -516,16 +517,57 @@ function auditWithBinding(
   });
   const { auditRoot: _oldAuditRoot, binding: _oldBinding, ...oldAudit } = value;
   const auditBody = Object.freeze({ ...oldAudit, binding });
-  return Object.freeze({
-    ...auditBody,
-    auditRoot: hashDomain("aloha/native-full-family-audit/v1", auditBody),
-  });
+  return encodeNativeFullFamilyAuditBodyV1(auditBody).audit;
+}
+
+function auditWithProjectedEdgeIds(
+  value: NativeFullFamilyAuditV1,
+  edgeIds: readonly Hash[],
+): NativeFullFamilyAuditV1 {
+  const projectedEdges = Object.freeze(edgeIds.map((edgeId, index) => {
+    const body = Object.freeze({
+      searchAuditBindingRoot: value.binding.bindingRoot,
+      edge: Object.freeze({ edgeId }),
+      edgeId,
+      owningFamilyId: "alpha-family",
+      owningFamilyDefinitionHash: h("alpha-family-definition"),
+      owningInstanceKey: `alpha-instance-${index}`,
+      instancePublicationHash: h(`alpha-publication-${index}`),
+      projectionHash: h(`alpha-projection-${index}`),
+    });
+    return Object.freeze({
+      ...body,
+      factRoot: hashDomain("aloha/native-full-family-projected-edge-fact/v1", body),
+    });
+  }));
+  const observedEdgeIds = new Set(value.coarseRoutes.flatMap(route =>
+    route.legs.flatMap(leg => leg.receipt === null ? [] : [leg.edgeId])));
+  const missingProjectedEdgeIds = Object.freeze(projectedEdges.flatMap(edge =>
+    observedEdgeIds.has(edge.edgeId) ? [] : [edge.edgeId]));
+  const { auditRoot: _auditRoot, ...body } = value;
+  return encodeNativeFullFamilyAuditBodyV1(Object.freeze({
+    ...body,
+    expectedProjectedEdgeCount: String(projectedEdges.length),
+    observedProjectedEdgeCount: String(observedEdgeIds.size),
+    missingProjectedEdgeIds,
+    projectedEdgeDenominatorRoot: nativeFullFamilyAuditSequenceRootV1(
+      "projected-edge-denominator",
+      projectedEdges.map(edge => edge.factRoot),
+    ),
+    missingProjectedEdgeRoot: nativeFullFamilyAuditSequenceRootV1(
+      "missing-projected-edges",
+      missingProjectedEdgeIds,
+    ),
+    projectedEdges,
+  }) as never).audit;
 }
 
 function terminalBindingForAudit(
   value: RuntimeReleaseFullFamilyTerminalBindingV1,
   audit: NativeFullFamilyAuditV1,
 ): RuntimeReleaseFullFamilyTerminalBindingV1 {
+  const { auditRoot: _auditRoot, ...auditBody } = audit;
+  const nativeAuditManifest = encodeNativeFullFamilyAuditBodyV1(auditBody).manifest;
   const body = Object.freeze({
     schemaVersion: value.schemaVersion,
     kind: value.kind,
@@ -540,14 +582,13 @@ function terminalBindingForAudit(
     searchTerminalHash: value.searchTerminalHash,
     terminalKind: value.terminalKind,
     terminalLineageHash: value.terminalLineageHash,
-    nativeAuditRoot: audit.auditRoot,
     readyRecordHash: value.readyRecordHash,
     generationId: value.generationId,
     graphRoot: value.graphRoot,
     generatedRuntime: value.generatedRuntime,
     readyCutoff: value.readyCutoff,
     actualCurrentSource: audit.binding.actualCurrentSource,
-    audit,
+    nativeAuditManifest,
   });
   return Object.freeze({
     ...body,
@@ -653,9 +694,9 @@ test("full-Graph sweep is the denominator and missing coarse owner facts remain 
       graph: { ...value.snapshot.stage12.graph, edges: [edge as never], edgeCount: "1" },
     },
   };
-  const audit = auditWithBinding(value.audit, {
+  const audit = auditWithProjectedEdgeIds(auditWithBinding(value.audit, {
     actualCurrentSource: { ...cutoff, number: "50", hash: h("block:50"), stateRoot: h("state:50") },
-  });
+  }), [edge.edgeId]);
   const terminalBinding = terminalBindingForAudit(value.terminalBinding, audit);
   const missingEntries = missingTransitionEntries([edge]);
   const sweep = fullGraphSweep(snapshot, terminalBinding, missingEntries);
@@ -841,16 +882,47 @@ test("full-Graph sweep cannot replace the active Ready Graph with a self-consist
       graph: { ...value.snapshot.stage12.graph, edges: edges as never, edgeCount: String(edges.length) },
     },
   };
-  const changedSubset = fullGraphSweep(snapshot, value.terminalBinding, Object.freeze([]));
+  const audit = auditWithProjectedEdgeIds(value.audit, edges.map(edge => edge.edgeId));
+  const terminalBinding = terminalBindingForAudit(value.terminalBinding, audit);
+  const changedSubset = fullGraphSweep(snapshot, terminalBinding, Object.freeze([]));
   const missing = validateProductionFullFamilyBindings(
     snapshot,
-    value.audit,
+    audit,
     value.release,
     value.verifier,
-    value.terminalBinding,
+    terminalBinding,
     changedSubset,
   );
   assert.equal(missing.some(item => item.code === "graph-transition-audit-denominator-incomplete"), true);
+});
+
+test("self-consistently rerooted native audit cannot delete an active Ready Graph edge", () => {
+  const value = fixture();
+  const edges = ["a", "b", "c", "d"].map(label => graphEdge(
+    label,
+    value.release.families[0]!.familyDefinitionHash,
+  ));
+  const snapshot = {
+    ...value.snapshot,
+    stage12: {
+      ...value.snapshot.stage12,
+      graph: { ...value.snapshot.stage12.graph, edges: edges as never, edgeCount: String(edges.length) },
+    },
+  };
+  const deletedAudit = auditWithProjectedEdgeIds(value.audit, edges.slice(0, -1).map(edge => edge.edgeId));
+  const terminalBinding = terminalBindingForAudit(value.terminalBinding, deletedAudit);
+  const sweep = fullGraphSweep(snapshot, terminalBinding, missingTransitionEntries(edges));
+  assert.throws(
+    () => validateProductionFullFamilyBindings(
+      snapshot,
+      deletedAudit,
+      value.release,
+      value.verifier,
+      terminalBinding,
+      sweep,
+    ),
+    /projected-edge\/active Ready Graph denominator mismatch/,
+  );
 });
 
 test("an unrelated Family adds only its transition denominator leaf", () => {
@@ -876,6 +948,13 @@ test("an unrelated Family adds only its transition denominator leaf", () => {
     value.terminalBinding,
     missingTransitionEntries([alpha, beta]),
   );
+  const expandedAudit = auditWithProjectedEdgeIds(value.audit, [alpha.edgeId, beta.edgeId]);
+  const expandedTerminalBinding = terminalBindingForAudit(value.terminalBinding, expandedAudit);
+  const joinedExpandedSweep = fullGraphSweep(
+    expandedSnapshot,
+    expandedTerminalBinding,
+    missingTransitionEntries([alpha, beta]),
+  );
   const alphaLeaf = alphaSweep.familyTransitionCounts.find(item => item.familyId === "alpha-family");
   assert.deepEqual(
     expandedSweep.familyTransitionCounts.find(item => item.familyId === "alpha-family"),
@@ -895,11 +974,11 @@ test("an unrelated Family adds only its transition denominator leaf", () => {
   assert.deepEqual(
     validateProductionFullFamilyBindings(
       expandedSnapshot,
-      value.audit,
+      expandedAudit,
       value.release,
       value.verifier,
-      value.terminalBinding,
-      expandedSweep,
+      expandedTerminalBinding,
+      joinedExpandedSweep,
     ).map(item => item.code),
     ["coarse-family-artifact-unavailable"],
   );

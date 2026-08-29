@@ -127,7 +127,7 @@ function verified() {
       handlers: [addr("6")],
       underlyingCoins: [addr("1"), addr("2")],
       underlyingDecimals: [18, 18],
-      verifiedDirections: [{ i: 0, j: 1, amountIn: "100", amountOut: "99" }],
+      verifiedDirections: [{ i: 0, j: 1, selectorVariant: "int128", amountIn: "100", amountOut: "99" }],
     },
   });
   assert.equal(identity.status, "verified");
@@ -165,7 +165,7 @@ test("Curve identity is reverse registry plus complete underlying domain", () =>
   const nomination = nominateCurveUnderlying(seed);
   assert.equal(nomination.status, "nominated");
   if (nomination.status !== "nominated") throw new Error("nomination failed");
-  const rejected = verifyCurveUnderlyingIdentityStage({ candidate: nomination.candidate, reads: { cutoff, pool: addr("5"), metaRegistry: CURVE_METAREGISTRY, registryPool: addr("7"), poolHasCode: true, handlers: [addr("6")], underlyingCoins: [addr("1"), addr("2")], underlyingDecimals: [18, 18], verifiedDirections: [{ i: 0, j: 1, amountIn: "1", amountOut: "1" }] } });
+  const rejected = verifyCurveUnderlyingIdentityStage({ candidate: nomination.candidate, reads: { cutoff, pool: addr("5"), metaRegistry: CURVE_METAREGISTRY, registryPool: addr("7"), poolHasCode: true, handlers: [addr("6")], underlyingCoins: [addr("1"), addr("2")], underlyingDecimals: [18, 18], verifiedDirections: [{ i: 0, j: 1, selectorVariant: "int128", amountIn: "1", amountOut: "1" }] } });
   assert.deepEqual(rejected, { status: "chain-proven-rejected", reasonCode: "registry-reverse-binding-failed" });
   const facts = verified();
   const exact = exactCurveUnderlying({ ...facts, amountIn: "1000000000000000000" });

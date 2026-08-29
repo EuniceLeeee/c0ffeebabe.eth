@@ -763,8 +763,23 @@ test("deployment composition loader executes only exact approved bytes and expor
   const directory = mkdtempSync(join(realpathSync(tmpdir()), "aloha-deployment-composition-"));
   const modulePath = join(directory, "deployment-composition.mjs");
   const marker = `__aloha_composition_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const request = Object.freeze({
+    schemaVersion: 1,
+    kind: "aloha.deployment-runtime-infrastructure",
+    revmWorkerExecutablePath: "/opt/aloha/bin/aloha-revm-worker",
+    revmWorkerExecutableSha256: h("deployment-composition-revm"),
+    externalProofSigner: Object.freeze({
+      schemaVersion: 1,
+      kind: "aloha.external-proof-signer",
+      executablePath: "/opt/aloha/bin/aloha-proof-signer",
+      executableSha256: h("deployment-composition-signer"),
+      attestationPublicKeyHex: `0x${"11".repeat(32)}`,
+      candidatePartitionPublicKeyHex: `0x${"22".repeat(32)}`,
+      nominationQualifications: Object.freeze([]),
+    }),
+  });
   const goodBytes = new TextEncoder().encode(
-    `globalThis[${JSON.stringify(marker)}] = "verified"; export const deploymentComposition = Object.freeze(Object.create(null));`,
+    `globalThis[${JSON.stringify(marker)}] = "verified"; export const deploymentComposition = Object.freeze(${JSON.stringify(request)});`,
   );
   const manifestBytes = encodeDeploymentManifestV1({
     ...payload("/tmp/aloha-searcher.log"),
@@ -778,12 +793,12 @@ test("deployment composition loader executes only exact approved bytes and expor
     assert.equal((globalThis as Record<string, unknown>)[marker], undefined);
 
     writeFileSync(modulePath, goodBytes);
-    const capability = await loadVerifiedDeploymentCompositionModuleV1(manifest);
-    assert.equal(typeof capability, "object");
+    const decoded = await loadVerifiedDeploymentCompositionModuleV1(manifest);
+    assert.deepEqual(decoded, request);
     assert.equal((globalThis as Record<string, unknown>)[marker], "verified");
 
     const extraBytes = new TextEncoder().encode(
-      "export const deploymentComposition = Object.freeze(Object.create(null)); export const extra = true;",
+      `export const deploymentComposition = Object.freeze(${JSON.stringify(request)}); export const extra = true;`,
     );
     writeFileSync(modulePath, extraBytes);
     const extraManifest = decodeDeploymentManifestV1(decodeCanonicalJson(encodeDeploymentManifestV1({

@@ -18,6 +18,7 @@ import {
 } from "../../canonical-codec/src/index.ts";
 import { validateInstancePublication, type InstancePublicationV1 } from "../../catalog/src/index.ts";
 import { candidatePartitionRoot, runCandidateKey, type CandidateRecordV1, type CanonicalCutoffV1 } from "../../discovery/src/index.ts";
+import type { FamilyRawEvidenceReadPortV1 } from "../../family-sdk/runtime/index.ts";
 import type {
   AttestationCompositionBindingV1,
   AttestationIdentityOriginV1,
@@ -500,18 +501,20 @@ export interface InstanceLifecycleSingleFlightPort {
 }
 
 export interface AttestationProgramPort {
-  attestIdentity(candidate: CandidateRecordV1, cutoff: CanonicalCutoffV1, signal: AbortSignal): Promise<IdentityDecisionV1>;
+  attestIdentity(candidate: CandidateRecordV1, cutoff: CanonicalCutoffV1, signal: AbortSignal, rawEvidence: FamilyRawEvidenceReadPortV1): Promise<IdentityDecisionV1>;
   reuseVerifiedMemo?(
     candidate: CandidateRecordV1,
     publication: InstancePublicationV1,
     cutoff: CanonicalCutoffV1,
     signal: AbortSignal,
+    rawEvidence: FamilyRawEvidenceReadPortV1,
   ): Promise<VerifiedMemoReuseDecisionV1>;
   materializeAndProject(
     candidate: CandidateRecordV1,
     identity: IdentityVerifiedV1,
     cutoff: CanonicalCutoffV1,
     signal: AbortSignal,
+    rawEvidence: FamilyRawEvidenceReadPortV1,
   ): Promise<InstanceDecisionV1>;
 }
 

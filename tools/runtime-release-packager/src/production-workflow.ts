@@ -5,6 +5,7 @@ import { hashProcessAnchor } from "../../../specs/core-envelope/src/index.ts";
 import { runtimeReleaseBindingProvenanceHash } from "../../../specs/release-authority/src/index.ts";
 import {
   observeQualifiedReleaseAcceptanceAdvisoryV1,
+  prepareQualifiedReleaseAcceptanceForExternalOwnerV1,
   readQualifiedReleaseLineageObservationV1,
 } from "./internal/qualified-release-public-runner-state.ts";
 import {
@@ -46,6 +47,11 @@ import {
   observeProductionNominationQualificationReuseCompositionV1,
   readProductionNominationQualificationReusePostSignInputV1,
 } from "./nomination-qualification-reuse-owner.ts";
+import type { AcceptanceCertificateV1 } from "../../../specs/acceptance-certificate/src/index.ts";
+import type {
+  ReleaseAcceptanceSetV1,
+  SignedReleaseAcceptanceApprovalSigningInputV1,
+} from "../../../specs/qualification/src/index.ts";
 
 export type ProductionReleaseAcceptanceAdvisoryStatusV1 = "pass" | "fail" | "invalid" | "incomplete";
 
@@ -53,6 +59,28 @@ export interface ProductionReleaseAcceptanceAdvisoryReasonV1 {
   readonly predicateId: string;
   readonly code: string;
 }
+
+export interface ProductionReleaseAcceptanceSigningRequestV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.release-acceptance-signing-request";
+  readonly acceptanceCertificates: readonly AcceptanceCertificateV1[];
+  readonly releaseAcceptanceSet: ReleaseAcceptanceSetV1;
+  readonly signingInput: SignedReleaseAcceptanceApprovalSigningInputV1;
+  readonly signingBytesHex: string;
+  readonly requestRoot: Hash;
+}
+
+export type ProductionReleaseAcceptancePreparationCapabilityV1 = object;
+
+interface ProductionReleaseAcceptancePreparationStateV1 {
+  readonly preparedAcceptance: Awaited<ReturnType<typeof prepareQualifiedReleaseAcceptanceForExternalOwnerV1>>["preparedAcceptance"];
+  readonly signingRequest: ProductionReleaseAcceptanceSigningRequestV1;
+}
+
+const productionReleaseAcceptancePreparations = new WeakMap<
+  object,
+  ProductionReleaseAcceptancePreparationStateV1
+>();
 
 export interface ProductionReleaseAcceptanceAdvisoryFactIndexV1 {
   readonly terminalPhase: Readonly<{
@@ -611,5 +639,74 @@ export async function observeProductionReleaseAcceptanceAdvisoryV1(
     factIndex,
     material.checkpointSnapshotPublication,
     capability,
+  );
+}
+
+/** Re-evaluate the frozen-B denominator through the qualified runner and
+ * return only the canonical bytes an external signer must approve. Advisory
+ * judgments and Fact Log output are deliberately not inputs to this path. */
+export async function prepareProductionReleaseAcceptanceForExternalOwnerV1(
+  capability: PreReleaseAdvisoryMaterialCapabilityV1,
+): Promise<ProductionReleaseAcceptancePreparationCapabilityV1> {
+  if (arguments.length !== 1) throw new TypeError("production release acceptance preparation accepts one advisory material capability");
+  const material = readPreReleaseAdvisoryMaterialV1(capability);
+  const projection = assertAdvisoryMaterialCurrent(capability, material);
+  readAdvisoryStagingArtifactBytes(projection, material);
+  const source = issueAdvisoryPredicateSource(capability, projection, material);
+  const run = await prepareQualifiedReleaseAcceptanceForExternalOwnerV1(
+    material.qualifiedReleaseRunner,
+    source,
+  );
+  const prepared = run.preparedAcceptance;
+  const payload = Object.freeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.release-acceptance-signing-request" as const,
+    acceptanceCertificates: prepared.acceptanceCertificates,
+    releaseAcceptanceSet: prepared.releaseAcceptanceSet,
+    signingInput: prepared.signingInput,
+    signingBytesHex: `0x${Buffer.from(prepared.signingBytes).toString("hex")}`,
+  });
+  const signingRequest = Object.freeze({
+    ...payload,
+    requestRoot: hashDomain("aloha/release-acceptance-signing-request/v1", payload as never),
+  });
+  const preparation = Object.freeze(Object.create(null));
+  productionReleaseAcceptancePreparations.set(preparation, Object.freeze({
+    preparedAcceptance: prepared,
+    signingRequest,
+  }));
+  return preparation;
+}
+
+function readProductionReleaseAcceptancePreparationStateV1(
+  capability: ProductionReleaseAcceptancePreparationCapabilityV1,
+): ProductionReleaseAcceptancePreparationStateV1 {
+  if (capability === null || typeof capability !== "object") {
+    throw new TypeError("production release acceptance preparation capability is invalid");
+  }
+  const state = productionReleaseAcceptancePreparations.get(capability);
+  if (state === undefined) {
+    throw new TypeError("production release acceptance preparation was not qualified-runner-issued");
+  }
+  return state;
+}
+
+export function readProductionReleaseAcceptanceSigningRequestV1(
+  capability: ProductionReleaseAcceptancePreparationCapabilityV1,
+): ProductionReleaseAcceptanceSigningRequestV1 {
+  return readProductionReleaseAcceptancePreparationStateV1(capability).signingRequest;
+}
+
+export function readProductionReleasePreparedAcceptanceV1(
+  capability: ProductionReleaseAcceptancePreparationCapabilityV1,
+): ProductionReleaseAcceptancePreparationStateV1["preparedAcceptance"] {
+  return readProductionReleaseAcceptancePreparationStateV1(capability).preparedAcceptance;
+}
+
+export async function prepareProductionReleaseAcceptanceSigningRequestV1(
+  capability: PreReleaseAdvisoryMaterialCapabilityV1,
+): Promise<ProductionReleaseAcceptanceSigningRequestV1> {
+  return readProductionReleaseAcceptanceSigningRequestV1(
+    await prepareProductionReleaseAcceptanceForExternalOwnerV1(capability),
   );
 }

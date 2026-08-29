@@ -3,6 +3,7 @@ import {
   assertExactKeys,
   assertHash,
   assertNonEmptyString,
+  decodeCanonicalBytes,
   decodeCanonicalJson,
   encodeCanonicalBytes,
   encodeCanonicalJson,
@@ -21,7 +22,13 @@ import {
   type ReadyFullFamilyEvidenceSnapshotV1,
   type ReadyStage12EvidenceCapabilityV1,
 } from "../../../packages/checkpoint/src/ready-full-family-evidence-consumer.ts";
-import type { NativeFullFamilyAuditV1 } from "../../../packages/search-pipeline/src/index.ts";
+import {
+  nativeFullFamilyAuditSequenceRootV1,
+  nativeFullFamilyCoarseRouteFactRootV1,
+  type NativeFullFamilyAuditChunkV1,
+  type NativeFullFamilyAuditManifestV1,
+  type NativeFullFamilyAuditV1,
+} from "../../../packages/search-pipeline/src/index.ts";
 import {
   familySearchArtifactHash,
   familySearchPayloadHash,
@@ -30,6 +37,8 @@ import {
 } from "../../../packages/family-sdk/search-runtime/index.ts";
 import {
   readRuntimeReleaseFullFamilyTerminalBindingV1,
+  readRuntimeReleaseNativeFullFamilyAuditChunkV1,
+  readRuntimeReleaseNativeFullFamilyAuditV1,
   type RuntimeReleaseFullFamilyTerminalBindingCapabilityV1,
   type RuntimeReleaseFullFamilyTerminalBindingV1,
 } from "../../../packages/runtime-release-authority/src/full-family-terminal-consumer.ts";
@@ -55,6 +64,11 @@ import { encodeNominationClosureV1 } from "../../../specs/nomination-authority/s
 import type { SchemaRef } from "../../../specs/core-envelope/src/index.ts";
 import {
   decodeFullFamilyCandidateProofVerifierBinding,
+  decodeFullFamilyEvidenceArtifact,
+  decodeFullFamilyOutcomeArtifact,
+  decodeFullFamilyInstancePublication,
+  decodeFullFamilyStageCapabilityRef,
+  decodeFullFamilyActionOwnerArtifact,
   decodeFullFamilyPersistedGraphEdge,
   createFullFamilyFactLocator,
   deriveFullFamilyOutcomeSummary,
@@ -62,7 +76,9 @@ import {
   encodeFullFamilyCandidateProofVerifierBinding,
   encodeFullFamilyEvidenceArtifact,
   encodeFullFamilyFactLocator,
-  encodeFullFamilyFacts,
+  encodeFullFamilyFactBundleStorageV1,
+  encodeFullFamilyArtifactRefIndexV1,
+  encodeFullFamilyArtifactRefPageV1,
   encodeFullFamilyOutcomeArtifact,
   encodeFullFamilyReadyRecord,
   encodeFullFamilyReleaseProjectionArtifact,
@@ -72,16 +88,22 @@ import {
   hashFamilyReleaseSet,
   hashFullFamilyActualCurrentSource,
   hashFullFamilyReadyCutoff,
+  sealFullFamilyArtifactRefIndexV1,
+  sealFullFamilyArtifactRefPageV1,
+  sealFullFamilyFactBundleStorageV1,
   sealFamilyEvidencePartition,
   sealFamilyOutcomePartition,
   sealFullFamilyFacts,
   sealFullFamilyMatrixEntry,
   FULL_FAMILY_FACT_LOCATOR_SCHEMA_REF,
-  FULL_FAMILY_FACT_SCHEMA_REF,
+  FULL_FAMILY_FACT_STORAGE_SCHEMA_REF,
   type FamilyEvidenceItemV1,
   type FamilyOutcomeItemV1,
+  type FullFamilyStoredItemDecoderV1,
   type FullFamilyFactBundleV1,
   type FullFamilyFactLocatorV1,
+  type FullFamilyPartitionRoleV1,
+  type FullFamilyStoredPartitionBindingInputV1,
   type FullFamilyCandidateProofVerifierBindingV1,
   type FullFamilyActionOwnerArtifactV1,
   type FullFamilyEvidenceArtifactV1,
@@ -219,7 +241,12 @@ const RAW_STRATEGY_CATALOG_SOURCE_SCHEMA = localSchema("aloha.observer.raw-strat
 });
 const NATIVE_AUDIT_SCHEMA = localSchema("aloha.native-full-family-audit", {
   owner: "search-pipeline",
-  exactKind: "aloha.native-full-family-audit-v1",
+  exactKind: "aloha.native-full-family-audit-manifest-v1",
+});
+const NATIVE_AUDIT_CHUNK_SCHEMA = localSchema("aloha.native-full-family-audit-chunk", {
+  owner: "search-pipeline",
+  exactKind: "aloha.native-full-family-audit-chunk-v1",
+  next: "content-addressed",
 });
 const FULL_GRAPH_COARSE_SWEEP_SCHEMA = localSchema("aloha.full-graph-coarse-sweep", {
   owner: "runtime-release-authority",
@@ -240,10 +267,6 @@ const FULL_GRAPH_COARSE_SWEEP_CHUNK_SCHEMA = localSchema("aloha.full-graph-coars
 const FULL_FAMILY_TERMINAL_BINDING_SCHEMA = localSchema("aloha.runtime-release-full-family-terminal-binding", {
   owner: "runtime-release-authority",
   exactKind: "aloha.runtime-release-full-family-terminal-binding-v1",
-});
-const RAW_FAMILY_COARSE_OBSERVATION_SCHEMA = localSchema("aloha.family-runtime-coarse-edge-sweep-observation", {
-  owner: "generated-family-runtime",
-  exactKind: "aloha.family-runtime-coarse-edge-sweep-observation-v1",
 });
 const ACTUAL_CURRENT_SOURCE_SCHEMA = localSchema("aloha.full-family.actual-current-source", {
   exactFields: ["chainId", "number", "hash", "stateRoot"],
@@ -561,7 +584,9 @@ export function validateNativeFullFamilyAuditWireV1(audit: NativeFullFamilyAudit
       }
     }
     const { routeFactRoot, ...routePayload } = route;
-    if (routeFactRoot !== hashDomain("aloha/native-full-family-coarse-route-fact/v1", routePayload as unknown as CanonicalJson)) {
+    if (routeFactRoot !== nativeFullFamilyCoarseRouteFactRootV1(
+      routePayload as Omit<NativeFullFamilyAuditV1["coarseRoutes"][number], "routeFactRoot">,
+    )) {
       throw new TypeError("native full-family coarse route fact root mismatch");
     }
   }
@@ -594,25 +619,35 @@ export function validateNativeFullFamilyAuditWireV1(audit: NativeFullFamilyAudit
   ));
   const actionIds = new Set([...audit.actionLineage.map(value => value.candidateId), ...audit.missingActionCandidateIds]);
   const orderedActionIds = audit.coarseRoutes.flatMap(route => actionIds.has(route.candidateId) ? [route.candidateId] : []);
-  const { auditRoot, ...auditPayload } = audit;
   if (audit.expectedCandidateCount !== String(audit.coarseRoutes.length)
     || audit.expectedLegCount !== String(denominatorKeys.length)
     || audit.observedReceiptCount !== String(observedRoots.length)
-    || !sameCanonical(audit.missingLegKeys, derivedMissingLegKeys)
+    || !sameOrderedHashes(audit.missingLegKeys, derivedMissingLegKeys)
     || audit.expectedProjectedEdgeCount !== String(audit.projectedEdges.length)
     || audit.observedProjectedEdgeCount !== String(observedProjectedEdgeIds.size)
-    || !sameCanonical(audit.missingProjectedEdgeIds, missingProjectedEdgeIds)
+    || !sameOrderedHashes(audit.missingProjectedEdgeIds, missingProjectedEdgeIds)
     || audit.expectedActionLineageCount !== String(orderedActionIds.length)
     || audit.observedActionLineageCount !== String(audit.actionLineage.length)
-    || audit.denominatorRoot !== hashDomain("aloha/native-full-family-audit-denominator/v1", denominatorKeys)
-    || audit.observedReceiptRoot !== hashDomain("aloha/native-full-family-audit-observed-receipts/v1", observedRoots)
-    || audit.missingLegRoot !== hashDomain("aloha/native-full-family-audit-missing-legs/v1", derivedMissingLegKeys)
-    || audit.projectedEdgeDenominatorRoot !== hashDomain("aloha/native-full-family-audit-projected-edge-denominator/v1", audit.projectedEdges.map(edge => edge.factRoot))
-    || audit.missingProjectedEdgeRoot !== hashDomain("aloha/native-full-family-audit-missing-projected-edges/v1", missingProjectedEdgeIds)
-    || audit.actionDenominatorRoot !== hashDomain("aloha/native-full-family-audit-action-denominator/v1", orderedActionIds)
-    || audit.actionObservedRoot !== hashDomain("aloha/native-full-family-audit-action-observed/v1", audit.actionLineage.map(action => action.factRoot))
-    || auditRoot !== hashDomain("aloha/native-full-family-audit/v1", auditPayload as unknown as CanonicalJson)) {
+    || audit.denominatorRoot !== nativeFullFamilyAuditSequenceRootV1("denominator", denominatorKeys)
+    || audit.observedReceiptRoot !== nativeFullFamilyAuditSequenceRootV1("observed-receipts", observedRoots)
+    || audit.missingLegRoot !== nativeFullFamilyAuditSequenceRootV1("missing-legs", derivedMissingLegKeys)
+    || audit.projectedEdgeDenominatorRoot !== nativeFullFamilyAuditSequenceRootV1("projected-edge-denominator", audit.projectedEdges.map(edge => edge.factRoot))
+    || audit.missingProjectedEdgeRoot !== nativeFullFamilyAuditSequenceRootV1("missing-projected-edges", missingProjectedEdgeIds)
+    || audit.actionDenominatorRoot !== nativeFullFamilyAuditSequenceRootV1("action-denominator", orderedActionIds)
+    || audit.actionObservedRoot !== nativeFullFamilyAuditSequenceRootV1("action-observed", audit.actionLineage.map(action => action.factRoot))) {
     throw new TypeError("native full-family audit semantic denominator/root mismatch");
+  }
+}
+
+function assertNativeProjectedEdgeDenominatorV1(
+  audit: NativeFullFamilyAuditV1,
+  graphEdgeCount: string,
+  orderedGraphEdgeIds: readonly Hash[],
+): void {
+  if (audit.expectedProjectedEdgeCount !== graphEdgeCount
+    || audit.projectedEdges.length !== orderedGraphEdgeIds.length
+    || audit.projectedEdges.some((edge, index) => edge.edgeId !== orderedGraphEdgeIds[index])) {
+    throw new TypeError("native full-family projected-edge/active Ready Graph denominator mismatch");
   }
 }
 
@@ -813,8 +848,8 @@ export function validateProductionFullFamilyBindings(
     || !sameCutoff(audit.binding.readyCutoff, ready.cutoff)) {
     throw new TypeError("native audit/ready splice");
   }
-  if (terminalBinding.nativeAuditRoot !== audit.auditRoot
-    || !sameCanonical(terminalBinding.audit, audit)
+  if (terminalBinding.nativeAuditManifest.auditRoot !== audit.auditRoot
+    || terminalBinding.nativeAuditManifest.binding.bindingRoot !== audit.binding.bindingRoot
     || terminalBinding.releaseProvenanceHash !== ready.releaseProvenanceHash
     || terminalBinding.readyRecordHash !== ready.readyRecordHash
     || terminalBinding.generationId !== ready.generationId
@@ -837,6 +872,11 @@ export function validateProductionFullFamilyBindings(
     throw new TypeError("candidate proof verifier/ready splice");
   }
   validateNativeFullFamilyAuditWireV1(audit);
+  assertNativeProjectedEdgeDenominatorV1(
+    audit,
+    snapshot.stage12.graph.edgeCount,
+    snapshot.stage12.graph.edges.map(edge => edge.edgeId),
+  );
   validateMaterializedFullGraphSweepV1(sweep);
   if (sweep.binding.runtimeBindingId !== terminalBinding.runtimeBindingId
     || sweep.binding.releaseProvenanceHash !== ready.releaseProvenanceHash
@@ -926,6 +966,63 @@ async function write(
   return artifact;
 }
 
+async function writeStoredPartitionIndex(
+  sink: ContentAddressedObserverSinkV1,
+  output: FullFamilyObservedArtifactV1[],
+  familyId: string,
+  role: FullFamilyPartitionRoleV1,
+  partition: Readonly<{
+    readonly count: string;
+    readonly root: Hash;
+    readonly items: readonly (FamilyEvidenceItemV1 | FamilyOutcomeItemV1)[];
+  }>,
+): Promise<FullFamilyStoredPartitionBindingInputV1> {
+  const pageCount = Math.ceil(partition.items.length / 128);
+  const forwardRefs: Array<Readonly<{ readonly artifactRefId: Hash; readonly contentSha256: Hash }>> = new Array(pageCount);
+  let nextPageRef: Readonly<{ readonly artifactRefId: Hash; readonly contentSha256: Hash }> | null = null;
+  for (let pageOrdinal = pageCount - 1; pageOrdinal >= 0; pageOrdinal -= 1) {
+    const startIndex = pageOrdinal * 128;
+    const page = sealFullFamilyArtifactRefPageV1({
+      refs: partition.items.slice(startIndex, startIndex + 128).map(item => Object.freeze({
+        artifactRefId: item.evidenceArtifactRefId,
+        contentSha256: item.evidenceContentSha256,
+      })),
+      nextPageRef,
+    });
+    const artifact = await write(
+      sink,
+      output,
+      `full-family-ref-page:${familyId}:${role}:${pageOrdinal}`,
+      encodeFullFamilyArtifactRefPageV1(page),
+      schema("artifactRefPage"),
+    );
+    nextPageRef = Object.freeze({
+      artifactRefId: artifact.ref.artifactRefId,
+      contentSha256: artifact.contentSha256,
+    });
+    forwardRefs[pageOrdinal] = nextPageRef;
+  }
+  const index = sealFullFamilyArtifactRefIndexV1({
+    pageCount: String(pageCount),
+    firstPageRef: forwardRefs[0] ?? null,
+  });
+  const indexArtifact = await write(
+    sink,
+    output,
+    `full-family-ref-index:${familyId}:${role}`,
+    encodeFullFamilyArtifactRefIndexV1(index),
+    schema("artifactRefIndex"),
+  );
+  return Object.freeze({
+    familyId,
+    role,
+    count: partition.count,
+    root: partition.root,
+    indexArtifactRefId: indexArtifact.ref.artifactRefId,
+    indexContentSha256: indexArtifact.contentSha256,
+  });
+}
+
 function familyMaterial(
   release: FullFamilyReleaseArtifactObservationV1,
 ): Map<string, {
@@ -971,7 +1068,10 @@ export async function observeProductionFullFamily(
   const terminalBinding = readProductionRuntimeReleaseFullFamilyTerminalBinding(
     input.runtimeReleaseTerminalBindingCapability,
   );
-  const audit = terminalBinding.audit;
+  const audit = readRuntimeReleaseNativeFullFamilyAuditV1(
+    input.runtimeReleaseTerminalBindingCapability,
+  );
+  const nativeAuditManifest: NativeFullFamilyAuditManifestV1 = terminalBinding.nativeAuditManifest;
   const sweep = readFullGraphSweep(input.fullGraphCoarseSweepCapability);
   const snapshot = await readCheckpointReadyFullFamilyEvidence(
     input.checkpointReader,
@@ -1005,7 +1105,36 @@ export async function observeProductionFullFamily(
     encodeCanonicalBytes(terminalBinding),
     FULL_FAMILY_TERMINAL_BINDING_SCHEMA,
   );
-  await write(input.sink, observedArtifacts, "native-full-family-audit", encodeCanonicalBytes(audit), NATIVE_AUDIT_SCHEMA);
+  for (const section of nativeAuditManifest.sections) {
+    let ref = section.firstChunkRef;
+    let chunkCount = 0;
+    while (ref !== null) {
+      const bytes = readRuntimeReleaseNativeFullFamilyAuditChunkV1(
+        input.runtimeReleaseTerminalBindingCapability,
+        ref,
+      );
+      await write(
+        input.sink,
+        observedArtifacts,
+        `native-full-family-audit-chunk:${section.section}:${chunkCount}`,
+        bytes,
+        NATIVE_AUDIT_CHUNK_SCHEMA,
+      );
+      const chunk = decodeCanonicalBytes(bytes) as unknown as NativeFullFamilyAuditChunkV1;
+      ref = chunk.nextChunkRef;
+      chunkCount += 1;
+    }
+    if (String(chunkCount) !== section.chunkCount) {
+      throw new TypeError("native full-family audit observer chunk count mismatch");
+    }
+  }
+  await write(
+    input.sink,
+    observedArtifacts,
+    "native-full-family-audit",
+    encodeCanonicalBytes(nativeAuditManifest),
+    NATIVE_AUDIT_SCHEMA,
+  );
   const encodedSweep = encodeFullGraphCoarseSweepV1(sweep);
   for (const chunk of encodedSweep.chunks) {
     await write(
@@ -1195,27 +1324,20 @@ export async function observeProductionFullFamily(
     if (material === undefined || material.familyDefinitionHash !== entry.edge.owningFamilyDefinitionHash) {
       throw new TypeError("full-Graph sweep/release Family splice");
     }
-    await write(
+    const ownerObservationArtifact = await write(
       input.sink,
       observedArtifacts,
       `coarse-owner-observation:${entry.edge.edgeId}`,
       encodeCanonicalBytes(entry.familyObservation),
-      RAW_FAMILY_COARSE_OBSERVATION_SCHEMA,
+      schema("coarseObservation"),
     );
     if (observed.coarse === null) continue;
-    const artifact = await write(
-      input.sink,
-      observedArtifacts,
-      `coarse-artifact:${entry.edge.edgeId}`,
-      encodeCanonicalBytes(observed.coarse),
-      schema("familySearchCoarse"),
-    );
     const item = Object.freeze({
       familyId: entry.edge.owningFamilyId,
       itemId: observed.coarse.artifactHash,
       subjectKey: entry.edge.edgeId,
-      evidenceArtifactRefId: artifact.ref.artifactRefId,
-      evidenceContentSha256: artifact.contentSha256,
+      evidenceArtifactRefId: ownerObservationArtifact.ref.artifactRefId,
+      evidenceContentSha256: ownerObservationArtifact.contentSha256,
     });
     if (observed.coarse.status === "rankable") {
       material.coarseRankable.push(item);
@@ -1398,12 +1520,38 @@ export async function observeProductionFullFamily(
       },
       families: matrix,
     });
+    const storedPartitionBindings: FullFamilyStoredPartitionBindingInputV1[] = [];
+    for (const family of bundle.families) {
+      const partitions = [
+        ["source-plans", family.sourcePlans],
+        ["universe-candidates", family.universeCandidates],
+        ["outcomes", family.outcomes],
+        ["instance-publications", family.instancePublications],
+        ["projected-edges", family.projectedEdges],
+        ["declared-coarse-capabilities", family.declaredCoarseCapabilities],
+        ["coarse-rankable", family.coarseRankable],
+        ["coarse-unavailable", family.coarseUnavailable],
+        ["unranked-admissions", family.unrankedAdmissions],
+        ["declared-exact-capabilities", family.declaredExactCapabilities],
+        ["owned-actions", family.ownedActions],
+      ] as const;
+      for (const [role, partition] of partitions) {
+        storedPartitionBindings.push(await writeStoredPartitionIndex(
+          input.sink,
+          observedArtifacts,
+          family.familyId,
+          role,
+          partition,
+        ));
+      }
+    }
+    const storedBundle = sealFullFamilyFactBundleStorageV1(bundle, storedPartitionBindings);
     bundleArtifact = await write(
       input.sink,
       observedArtifacts,
       "full-family-fact-bundle",
-      encodeFullFamilyFacts(bundle),
-      FULL_FAMILY_FACT_SCHEMA_REF,
+      encodeFullFamilyFactBundleStorageV1(storedBundle),
+      FULL_FAMILY_FACT_STORAGE_SCHEMA_REF,
     );
     locator = createFullFamilyFactLocator({
       bundleArtifactRefId: bundleArtifact.ref.artifactRefId,

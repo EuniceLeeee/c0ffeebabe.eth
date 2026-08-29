@@ -171,7 +171,9 @@ export function issueCandidatePartitionCapabilityFixture(input: {
       candidatePartitionProofIssuerKeyId: input.binding.candidatePartitionProofIssuerKeyId,
     },
   });
-  const capability = registry.registerVerifiedProof(proof, input.candidates);
+  const capability = registry.registerVerifiedProof(proof, input.candidates, Object.freeze({
+    read(): Uint8Array { throw new TypeError("test candidate raw evidence is unavailable"); },
+  }));
   return Object.freeze({
     issuer,
     registry,

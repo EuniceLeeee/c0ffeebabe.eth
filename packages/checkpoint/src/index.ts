@@ -3,10 +3,12 @@ import { lstatSync, realpathSync, statSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import {
   assertExactKeys,
+  assertDecimalString,
   assertHash,
   assertNonEmptyString,
   assertPlainObject,
   decodeCanonicalJson,
+  decodeExactObject,
   deepFreeze,
   encodeCanonicalBytes,
   encodeCanonicalJson,
@@ -82,13 +84,18 @@ import {
   type CandidatePartitionBootstrapV1,
 } from "./candidate-partition.ts";
 import {
+  decodeInstanceCatalogV1,
+  encodeInstanceCatalogV1,
+  sealInstanceCatalog,
   validateInstanceCatalog,
   validateInstancePublication,
+  type InstanceCatalogPublicationChunkRefV1,
   type InstanceCatalogV1,
   type InstancePublicationV1,
 } from "../../catalog/src/index.ts";
 import {
   candidatePartitionRoot,
+  decodeCanonicalCutoff,
   decodePersistedSourcePlanExecutionSet,
   decodeSourcePlanEvidenceReceipt,
   sourcePlanIdentity,
@@ -103,8 +110,11 @@ import {
   type PersistedSourcePlanExecutionSetV1,
 } from "../../discovery/src/index.ts";
 import {
-  buildPersistedGraph,
+  decodePersistedGraphV1,
+  encodePersistedGraphV1,
+  validatePersistedGraphForCatalog,
   type ActiveReadyAuthorityBindingV1,
+  type PersistedGraphEdgeChunkRefV1,
   type PersistedGraphV1,
 } from "../../graph/src/index.ts";
 import {
@@ -209,8 +219,10 @@ const SOURCE_EXECUTION_SET_KIND = "aloha/persisted-source-plan-execution-set/v1"
 const SOURCE_PLAN_EVIDENCE_KIND = "aloha/source-plan-evidence/v1";
 const NOMINATION_CLOSURE_KIND = "aloha/nomination-closure/v1";
 const VERIFIED_MEMO_SET_KIND = "aloha/verified-memo-set/v1";
-const INSTANCE_CATALOG_KIND = "aloha/instance-catalog/v1";
-const GRAPH_KIND = "aloha/persisted-graph/v1";
+const INSTANCE_CATALOG_KIND = "aloha/instance-catalog-manifest/v1";
+const INSTANCE_CATALOG_CHUNK_KIND = "aloha/instance-catalog-publication-chunk/v1";
+const GRAPH_KIND = "aloha/persisted-graph-manifest/v1";
+const GRAPH_CHUNK_KIND = "aloha/persisted-graph-edge-chunk/v1";
 const READY_CLOSURE_KIND = "aloha/ready-closure/v1";
 const READY_STAGE_KIND = "aloha/ready-stage/v1";
 const DIAGNOSTIC_KIND = "aloha/checkpoint-diagnostic/v1";
@@ -231,7 +243,7 @@ const ROOT_FIELDS = ["revision", "verifiedMemoRoot", "inProgressRunId", "stagedR
 const RUN_FIELDS = ["runId", "parentGenerationId", "checkpointRevision", "candidatePartitionRevision", "cutoff", "recentObservationRoot", "recentObservationStorageHash", "definitionCatalogRoot", "sourceCoverageRoot", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidatePartitionRoot", "candidatePartitionStorageHash", "candidatePartitionProofStorageHash", "candidateRecordCount", "outcomePartitionRoot", "outcomePartitionStorageHash", "partialOutcomePartitionStorageHash", "attestationPartitionStorageHash", "verifiedMemoSetRoot", "verifiedMemoSetStorageHash", "accounting"] as const;
 const PARTITION_MANIFEST_FIELDS = ["runId", "partitionKind", "count", "pageStorageHashes"] as const;
 const PARTITION_PAGE_FIELDS = ["runId", "partitionKind", "pageIndex", "entries"] as const;
-const VERIFIED_MEMO_SET_FIELDS = ["memos", "retainedRawLocatorHashes", "verifiedMemoSetRoot"] as const;
+const VERIFIED_MEMO_SET_FIELDS = ["schemaVersion", "kind", "memoCount", "memoCatalogRoot", "retainedRawLocatorCount", "retainedRawLocatorSequenceRoot", "verifiedMemoSetRoot"] as const;
 const CANDIDATE_PARTITION_COMMITMENT_FIELDS = ["readyRecordHash", "runId", "cutoff", "candidatePartitionRoot", "candidatePartitionStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidateRecordCount", "candidateKeysRoot", "recentObservationRoot", "sourceCoverageRoot", "checkpointRevision", "candidatePartitionProofStorageHash", "exactOutcomePartitionRoot", "sealedRevision", "stageRevision", "stageRecordHash", "readyBaseHash"] as const;
 const READY_CLOSURE_FIELDS = ["ready", "candidatePartitionStorageHash", "outcomePartitionStorageHash", "attestationPartitionStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidateRecordCount", "candidateKeysRoot", "recentObservationRoot", "sourceCoverageRoot", "candidatePartitionRevision", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "candidatePartitionCommitmentStorageHash", "candidatePartitionProofStorageHash", "verifiedMemoSetStorageHash", "instanceCatalogStorageHash", "graphStorageHash"] as const;
 const READY_STAGE_FIELDS = ["stageRevision", "stageRecordHash", "expectedRevision", "runId", "readyBase", "readyBaseHash", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "verifiedMemoSetStorageHash", "instanceCatalogStorageHash", "graphStorageHash", "sealedRevision"] as const;
@@ -269,7 +281,7 @@ export const CHECKPOINT_SCHEMA_MANIFEST = deepFreeze({
     { kind: REJECTION_TRANSPORT_RAW_KIND, wire: "opaque-bytes", codecAuthority: "attestation RejectionEvidenceBundle.transportFacts[*].canonicalBytesHex", referenceContract: "none" },
     { kind: REJECTION_EFFECT_RAW_KIND, wire: "opaque-bytes", codecAuthority: "attestation RejectionEvidenceBundle.effectObservations[*].canonicalBytesHex", referenceContract: "none" },
     { kind: REJECTION_DECISION_RAW_KIND, wire: "opaque-bytes", codecAuthority: "attestation RejectionEvidenceBundle.decisionBytesHex", referenceContract: "none" },
-    { kind: ATTESTATION_PARTITION_KIND, fields: ["runId", "cutoff", "candidatePartitionRoot", "outcomes", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "accounting", "exactOutcomePartitionRoot"], codecAuthority: "attestation.validateAttestationPartition", referenceContract: "exact outcome partition manifest" },
+    { kind: ATTESTATION_PARTITION_KIND, fields: ["schemaVersion", "kind", "runId", "cutoff", "candidatePartitionRoot", "outcomeCount", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "accounting", "exactOutcomePartitionRoot"], codecAuthority: "checkpoint.decodeAttestationPartitionRecordWith+attestation.validateAttestationPartition", referenceContract: "exact outcome partition manifest" },
     { kind: RAW_EVIDENCE_LOCATOR_KIND, wire: "opaque-bytes", codecAuthority: "sha256(raw locator bytes)", referenceContract: "none" },
     { kind: PARTITION_PAGE_KIND, fields: PARTITION_PAGE_FIELDS, codecAuthority: "checkpoint.loadPartition", referenceContract: "exact ordered entry storage envelopes" },
     { kind: PARTITION_MANIFEST_KIND, fields: PARTITION_MANIFEST_FIELDS, codecAuthority: "checkpoint.loadPartition", referenceContract: "exact ordered page storage envelopes" },
@@ -278,9 +290,11 @@ export const CHECKPOINT_SCHEMA_MANIFEST = deepFreeze({
     { kind: SOURCE_EXECUTION_SET_KIND, fields: ["kind", "version", "cutoff", "executions", "executionSetRoot"], codecAuthority: "discovery.decodePersistedSourcePlanExecutionSet", referenceContract: "all and only raw locator physical envelopes named by the exact persisted executions; predecessor roots resolve through the active parent ready closure" },
     { kind: SOURCE_PLAN_EVIDENCE_KIND, wire: "canonical-array", codecAuthority: "discovery.decodeSourcePlanEvidenceReceipt", referenceContract: "all and only raw locator physical envelopes named by source-plan evidence receipts" },
     { kind: NOMINATION_CLOSURE_KIND, codecAuthority: "nomination-authority.decodeNominationClosureV1", referenceContract: "exact recent observation + source coverage + persisted source execution set + source-plan evidence + candidate manifest", semanticHashDomain: "aloha/nomination-closure/v1" },
-    { kind: VERIFIED_MEMO_SET_KIND, fields: VERIFIED_MEMO_SET_FIELDS, codecAuthority: "checkpoint.decodeMemoSet+catalog.validateInstancePublication", referenceContract: "all and only raw locator physical envelopes retained by exact verified publications", semanticHashDomain: "aloha/verified-memo-set/v2" },
-    { kind: INSTANCE_CATALOG_KIND, fields: ["cutoff", "publications", "instanceCount", "instanceCatalogRoot"], codecAuthority: "catalog.validateInstanceCatalog", referenceContract: "none" },
-    { kind: GRAPH_KIND, fields: ["cutoff", "instanceCatalogRoot", "edges", "edgeCount", "graphRoot"], codecAuthority: "graph.buildPersistedGraph", referenceContract: "none", semanticHashDomain: "aloha/persisted-graph/v1" },
+    { kind: VERIFIED_MEMO_SET_KIND, fields: VERIFIED_MEMO_SET_FIELDS, codecAuthority: "checkpoint.decodeMemoSetRecordWith+catalog.decodeInstanceCatalogV1", referenceContract: "exact memo catalog manifest/chunks plus all and only retained raw locator physical envelopes", semanticHashDomain: "aloha/verified-memo-set/v3" },
+    { kind: INSTANCE_CATALOG_KIND, fields: ["schemaVersion", "kind", "cutoff", "instanceCount", "publicationSequenceRoot", "publicationChunkCount", "firstPublicationChunkRef", "instanceCatalogRoot"], codecAuthority: "catalog.decodeInstanceCatalogV1", referenceContract: "all and only linked publication chunks" },
+    { kind: INSTANCE_CATALOG_CHUNK_KIND, fields: ["schemaVersion", "kind", "publications", "nextPublicationChunkRef"], codecAuthority: "catalog.decodeInstanceCatalogV1", referenceContract: "none" },
+    { kind: GRAPH_KIND, fields: ["schemaVersion", "kind", "cutoff", "instanceCatalogRoot", "edgeCount", "edgeSequenceRoot", "edgeChunkCount", "firstEdgeChunkRef", "graphRoot"], codecAuthority: "graph.decodePersistedGraphV1", referenceContract: "all and only linked edge chunks", semanticHashDomain: "aloha/persisted-graph/v2" },
+    { kind: GRAPH_CHUNK_KIND, fields: ["schemaVersion", "kind", "edges", "nextEdgeChunkRef"], codecAuthority: "graph.decodePersistedGraphV1", referenceContract: "none" },
     { kind: READY_CLOSURE_KIND, fields: READY_CLOSURE_FIELDS, codecAuthority: "checkpoint.decodeReadyClosure", referenceContract: "exact source coverage + candidate manifest/records + outcome manifest/records + attestation partition + candidate partition commitment + candidate partition proof + verified memo + instance catalog + graph", semanticHashDomain: "aloha/ready-generation/v1" },
     { kind: READY_STAGE_KIND, fields: READY_STAGE_FIELDS, codecAuthority: "checkpoint.decodeReadyStage", referenceContract: "exact source coverage + verified memo + instance catalog + graph; staged is never a serving authority", semanticHashDomain: "aloha/ready-stage/v1" },
     { kind: DIAGNOSTIC_KIND, fields: MEMO_SEED_RECEIPT_FIELDS, codecAuthority: "checkpoint.decodeMemoSeedReceipt", referenceContract: "exact prior memo-seed receipt when sequence is greater than one" },
@@ -316,6 +330,21 @@ interface RunAccountingV1 {
   readonly chainProvenRejected: string;
   readonly retryable: string;
   readonly invalidProgram: string;
+}
+
+interface AttestationPartitionManifestV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.attestation-partition-manifest-v1";
+  readonly runId: string;
+  readonly cutoff: CanonicalCutoffV1;
+  readonly candidatePartitionRoot: Hash;
+  readonly outcomeCount: string;
+  readonly attestationAuthorityRoot: Hash;
+  readonly releaseAuthorityRoot: Hash;
+  readonly releaseProvenanceHash: Hash;
+  readonly executorAuthorityRoot: Hash;
+  readonly accounting: RunAccountingV1;
+  readonly exactOutcomePartitionRoot: Hash;
 }
 
 interface StoredRunEnvelopeV2 {
@@ -598,6 +627,16 @@ export interface VerifiedMemoSetV1 {
   readonly verifiedMemoSetRoot: Hash;
 }
 
+interface VerifiedMemoSetManifestV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.verified-memo-set-manifest-v1";
+  readonly memoCount: string;
+  readonly memoCatalogRoot: Hash | null;
+  readonly retainedRawLocatorCount: string;
+  readonly retainedRawLocatorSequenceRoot: Hash;
+  readonly verifiedMemoSetRoot: Hash;
+}
+
 export interface OutcomeWriterOptions {
   readonly writerCapability: AttestationWriterCapabilityV1;
   readonly writerId?: string;
@@ -808,13 +847,7 @@ function sameCutoff(left: BeginRunInputV1["cutoff"], right: BeginRunInputV1["cut
 }
 
 function emptyMemoSet(): VerifiedMemoSetV1 {
-  const memos: readonly InstancePublicationV1[] = deepFreeze([]);
-  const retainedRawLocatorHashes: readonly Hash[] = deepFreeze([]);
-  return deepFreeze({
-    memos,
-    retainedRawLocatorHashes,
-    verifiedMemoSetRoot: hashDomain("aloha/verified-memo-set/v2", { memos, retainedRawLocatorHashes }),
-  });
+  return verifiedMemoSet([], []);
 }
 
 function decodeRoot(bytes: Uint8Array): CheckpointRootV1 {
@@ -936,6 +969,119 @@ function readContentStore(store: SQLiteDurableStore, hash: Hash, kind: string, c
   if (!record) throw new CorruptDurableStoreError(`${context} is missing ${hash}`);
   if (record.kind !== kind) throw new CorruptDurableStoreError(`${context} kind mismatch`);
   return record.bytes;
+}
+
+function linkedChunkReader<Ref extends { readonly contentSha256: Hash }>(
+  read: DurableContentReader,
+  manifestRecord: DurableContentRecord,
+  chunkKind: string,
+  context: string,
+): {
+  readonly readChunk: (ref: Ref) => Uint8Array;
+  readonly assertComplete: () => void;
+} {
+  if (new Set(manifestRecord.references).size !== manifestRecord.references.length) {
+    throw new CorruptDurableStoreError(`${context} has duplicate physical references`);
+  }
+  const byContentSha = new Map<Hash, { readonly storageHash: Hash; readonly bytes: Uint8Array }>();
+  for (const storageHash of manifestRecord.references) {
+    const record = read(storageHash);
+    if (!record || record.kind !== chunkKind) {
+      throw new CorruptDurableStoreError(`${context} chunk kind or content is missing`);
+    }
+    if (record.references.length !== 0) {
+      throw new CorruptDurableStoreError(`${context} chunk physical references must be empty`);
+    }
+    const contentSha = sha256Hex(record.bytes);
+    if (byContentSha.has(contentSha)) {
+      throw new CorruptDurableStoreError(`${context} has duplicate chunk content`);
+    }
+    byContentSha.set(contentSha, { storageHash, bytes: record.bytes });
+  }
+  const consumed = new Set<Hash>();
+  return Object.freeze({
+    readChunk(ref: Ref): Uint8Array {
+      const found = byContentSha.get(ref.contentSha256);
+      if (!found) throw new CorruptDurableStoreError(`${context} linked chunk is not referenced`);
+      if (consumed.has(found.storageHash)) {
+        throw new CorruptDurableStoreError(`${context} linked chunk is reused`);
+      }
+      consumed.add(found.storageHash);
+      return found.bytes;
+    },
+    assertComplete(): void {
+      if (consumed.size !== manifestRecord.references.length) {
+        throw new CorruptDurableStoreError(`${context} physical chunk closure is not exact`);
+      }
+    },
+  });
+}
+
+function decodeInstanceCatalogRecordWith(
+  read: DurableContentReader,
+  storageHash: Hash,
+  context: string,
+): InstanceCatalogV1 {
+  const record = read(storageHash);
+  if (!record || record.kind !== INSTANCE_CATALOG_KIND) {
+    throw new CorruptDurableStoreError(`${context} manifest kind or content is missing`);
+  }
+  try {
+    const chunks = linkedChunkReader<InstanceCatalogPublicationChunkRefV1>(
+      read,
+      record,
+      INSTANCE_CATALOG_CHUNK_KIND,
+      context,
+    );
+    const catalog = decodeInstanceCatalogV1(record.bytes, chunks.readChunk);
+    chunks.assertComplete();
+    return catalog;
+  } catch (error) {
+    if (error instanceof CorruptDurableStoreError) throw error;
+    throw new CorruptDurableStoreError(
+      `${context} validation failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function decodePersistedGraphRecordWith(
+  read: DurableContentReader,
+  storageHash: Hash,
+  catalog: InstanceCatalogV1,
+  context: string,
+): PersistedGraphV1 {
+  const record = read(storageHash);
+  if (!record || record.kind !== GRAPH_KIND) {
+    throw new CorruptDurableStoreError(`${context} manifest kind or content is missing`);
+  }
+  try {
+    const chunks = linkedChunkReader<PersistedGraphEdgeChunkRefV1>(
+      read,
+      record,
+      GRAPH_CHUNK_KIND,
+      context,
+    );
+    const graph = decodePersistedGraphV1(record.bytes, chunks.readChunk, catalog);
+    chunks.assertComplete();
+    return graph;
+  } catch (error) {
+    if (error instanceof CorruptDurableStoreError) throw error;
+    throw new CorruptDurableStoreError(
+      `${context} validation failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function graphEdgesByPublication(
+  graph: PersistedGraphV1,
+): ReadonlyMap<Hash, readonly PersistedGraphV1["edges"][number][]> {
+  const mutable = new Map<Hash, PersistedGraphV1["edges"][number][]>();
+  for (const edge of graph.edges) {
+    const edges = mutable.get(edge.instancePublicationHash);
+    if (edges === undefined) mutable.set(edge.instancePublicationHash, [edge]);
+    else edges.push(edge);
+  }
+  return new Map([...mutable].map(([publicationHash, edges]) => [publicationHash, Object.freeze(edges)]));
 }
 
 function validateRawLocatorReferences(
@@ -1320,27 +1466,282 @@ function outcomePartitionRoot(runId: string, outcomes: readonly CandidateFinalOu
   });
 }
 
-function verifiedMemoSet(value: readonly InstancePublicationV1[], locatorHashes: readonly Hash[]): VerifiedMemoSetV1 {
-  const memos = cloneCanonical<readonly InstancePublicationV1[]>([...value]);
-  for (const memo of memos) validateInstancePublication(memo);
-  const retainedRawLocatorHashes = deepFreeze([...new Set(locatorHashes.map((hash, index) =>
-    assertHash(hash, `verifiedMemoSet.retainedRawLocatorHashes[${index}]`)))].sort(compareText));
+function attestationPartitionManifestBytes(partition: AttestationPartitionV1): Uint8Array {
+  return encodeCanonicalBytes(deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.attestation-partition-manifest-v1" as const,
+    runId: partition.runId,
+    cutoff: partition.cutoff,
+    candidatePartitionRoot: partition.candidatePartitionRoot,
+    outcomeCount: String(partition.outcomes.length),
+    attestationAuthorityRoot: partition.attestationAuthorityRoot,
+    releaseAuthorityRoot: partition.releaseAuthorityRoot,
+    releaseProvenanceHash: partition.releaseProvenanceHash,
+    executorAuthorityRoot: partition.executorAuthorityRoot,
+    accounting: partition.accounting,
+    exactOutcomePartitionRoot: partition.exactOutcomePartitionRoot,
+  }));
+}
+
+function decodeAttestationPartitionRecordWith(
+  read: DurableContentReader,
+  storageHash: Hash,
+  outcomePartitionStorageHash: Hash,
+  runId: string,
+  context: string,
+): AttestationPartitionV1 {
+  const record = read(storageHash);
+  if (!record || record.kind !== ATTESTATION_PARTITION_KIND) {
+    throw new CorruptDurableStoreError(`${context} is missing or has the wrong kind`);
+  }
+  if (record.references.length !== 1 || record.references[0] !== outcomePartitionStorageHash) {
+    throw new CorruptDurableStoreError(`${context} outcome partition reference is not exact`);
+  }
+  const readBytes = (hash: Hash, kind: string, childContext: string): Uint8Array => {
+    const child = read(hash);
+    if (!child) throw new CorruptDurableStoreError(`${childContext} is missing ${hash}`);
+    if (child.kind !== kind) throw new CorruptDurableStoreError(`${childContext} kind mismatch`);
+    return child.bytes;
+  };
+  const outcomes = loadPartition(
+    readBytes,
+    outcomePartitionStorageHash,
+    runId,
+    "outcome",
+  ).map(entry => {
+    const outcome = cloneCanonical<CandidateFinalOutcomeV1>(decodeCanonicalJson(readBytes(
+      entry.storageHash,
+      OUTCOME_KIND,
+      `${context} outcome`,
+    )));
+    if (outcome.familyCandidateKey !== entry.key) {
+      throw new CorruptDurableStoreError(`${context} outcome key mismatch`);
+    }
+    return outcome;
+  });
+  let manifest: AttestationPartitionManifestV1;
+  try {
+    manifest = decodeExactObject(decodeCanonicalJson(record.bytes), {
+      schemaVersion: field => {
+        if (field !== 1) throw new TypeError("attestation partition manifest schema version mismatch");
+        return 1 as const;
+      },
+      kind: field => {
+        if (field !== "aloha.attestation-partition-manifest-v1") throw new TypeError("attestation partition manifest kind mismatch");
+        return "aloha.attestation-partition-manifest-v1" as const;
+      },
+      runId: (field, path) => assertNonEmptyString(field, path),
+      cutoff: (field, path) => decodeCanonicalCutoff(field, path),
+      candidatePartitionRoot: (field, path) => assertHash(field, path),
+      outcomeCount: (field, path) => assertDecimalString(field, path),
+      attestationAuthorityRoot: (field, path) => assertHash(field, path),
+      releaseAuthorityRoot: (field, path) => assertHash(field, path),
+      releaseProvenanceHash: (field, path) => assertHash(field, path),
+      executorAuthorityRoot: (field, path) => assertHash(field, path),
+      accounting: (field, path) => decodeExactObject(field, {
+        pending: (value, valuePath) => assertDecimalString(value, valuePath),
+        verified: (value, valuePath) => assertDecimalString(value, valuePath),
+        chainProvenRejected: (value, valuePath) => assertDecimalString(value, valuePath),
+        retryable: (value, valuePath) => assertDecimalString(value, valuePath),
+        invalidProgram: (value, valuePath) => assertDecimalString(value, valuePath),
+      }, path),
+      exactOutcomePartitionRoot: (field, path) => assertHash(field, path),
+    }, context);
+  } catch (error) {
+    throw new CorruptDurableStoreError(
+      `${context} manifest validation failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const exactOutcomePartitionRoot = hashDomain("aloha/exact-outcome-partition/v1", {
+    runId: manifest.runId,
+    cutoff: manifest.cutoff,
+    candidatePartitionRoot: manifest.candidatePartitionRoot,
+    attestationAuthorityRoot: manifest.attestationAuthorityRoot,
+    releaseAuthorityRoot: manifest.releaseAuthorityRoot,
+    releaseProvenanceHash: manifest.releaseProvenanceHash,
+    executorAuthorityRoot: manifest.executorAuthorityRoot,
+    outcomesRoot: hashCanonicalPartition("aloha/candidate-outcomes/v1", outcomes),
+  });
+  const expectedFinalAccounting = outcomeAccounting(outcomes.length, outcomes);
+  if (manifest.runId !== runId
+    || manifest.outcomeCount !== String(outcomes.length)
+    || manifest.exactOutcomePartitionRoot !== exactOutcomePartitionRoot
+    || manifest.accounting.pending !== "0"
+    || manifest.accounting.verified !== expectedFinalAccounting.verified
+    || manifest.accounting.chainProvenRejected !== expectedFinalAccounting.chainProvenRejected
+    || manifest.accounting.retryable !== expectedFinalAccounting.retryable
+    || manifest.accounting.invalidProgram !== expectedFinalAccounting.invalidProgram) {
+    throw new CorruptDurableStoreError(`${context} manifest binding mismatch`);
+  }
   return deepFreeze({
-    memos,
-    retainedRawLocatorHashes,
-    verifiedMemoSetRoot: hashDomain("aloha/verified-memo-set/v2", { memos, retainedRawLocatorHashes }),
+    runId: manifest.runId,
+    cutoff: manifest.cutoff,
+    candidatePartitionRoot: manifest.candidatePartitionRoot,
+    outcomes,
+    attestationAuthorityRoot: manifest.attestationAuthorityRoot,
+    releaseAuthorityRoot: manifest.releaseAuthorityRoot,
+    releaseProvenanceHash: manifest.releaseProvenanceHash,
+    executorAuthorityRoot: manifest.executorAuthorityRoot,
+    accounting: manifest.accounting,
+    exactOutcomePartitionRoot: manifest.exactOutcomePartitionRoot,
   });
 }
 
-function decodeMemoSet(bytes: Uint8Array): VerifiedMemoSetV1 {
-  const value = exactObject(decodeCanonicalJson(bytes), VERIFIED_MEMO_SET_FIELDS, "verifiedMemoSet");
-  if (!Array.isArray(value.memos)) throw new CorruptDurableStoreError("verified memo set is not an array");
-  if (!Array.isArray(value.retainedRawLocatorHashes)) throw new CorruptDurableStoreError("verified memo locator set is not an array");
-  const memo = verifiedMemoSet(
-    cloneCanonical<readonly InstancePublicationV1[]>(value.memos),
-    value.retainedRawLocatorHashes as Hash[],
+function verifiedMemoSet(value: readonly InstancePublicationV1[], locatorHashes: readonly Hash[]): VerifiedMemoSetV1 {
+  if (!Array.isArray(value)) throw new TypeError("verified memo set memos must be an array");
+  const memos = Object.freeze(value.map((memo) => {
+    validateInstancePublication(memo);
+    return memo;
+  }).sort((left, right) => compareText(left.instancePublicationHash, right.instancePublicationHash)));
+  if (new Set(memos.map(memo => memo.instancePublicationHash)).size !== memos.length) {
+    throw new TypeError("duplicate verified memo publication");
+  }
+  const retainedRawLocatorHashes = deepFreeze([...new Set(locatorHashes.map((hash, index) =>
+    assertHash(hash, `verifiedMemoSet.retainedRawLocatorHashes[${index}]`)))].sort(compareText));
+  const memoCatalogRoot = memos.length === 0
+    ? null
+    : sealInstanceCatalog(memos[0]!.cutoff, memos).instanceCatalogRoot;
+  const retainedRawLocatorSequenceRoot = hashCanonicalPartition(
+    "aloha/verified-memo-raw-locator-sequence/v1",
+    retainedRawLocatorHashes,
   );
-  if (memo.verifiedMemoSetRoot !== value.verifiedMemoSetRoot) throw new CorruptDurableStoreError("verified memo root mismatch");
+  return Object.freeze({
+    memos,
+    retainedRawLocatorHashes,
+    verifiedMemoSetRoot: hashDomain("aloha/verified-memo-set/v3", {
+      memoCount: String(memos.length),
+      memoCatalogRoot,
+      retainedRawLocatorCount: String(retainedRawLocatorHashes.length),
+      retainedRawLocatorSequenceRoot,
+    }),
+  });
+}
+
+function verifiedMemoManifest(
+  memo: VerifiedMemoSetV1,
+  memoCatalogRoot: Hash | null,
+): VerifiedMemoSetManifestV1 {
+  return deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.verified-memo-set-manifest-v1" as const,
+    memoCount: String(memo.memos.length),
+    memoCatalogRoot,
+    retainedRawLocatorCount: String(memo.retainedRawLocatorHashes.length),
+    retainedRawLocatorSequenceRoot: hashCanonicalPartition(
+      "aloha/verified-memo-raw-locator-sequence/v1",
+      memo.retainedRawLocatorHashes,
+    ),
+    verifiedMemoSetRoot: memo.verifiedMemoSetRoot,
+  });
+}
+
+function putVerifiedMemoSet(
+  tx: DurableTransaction,
+  memo: VerifiedMemoSetV1,
+  rawLocatorStorageHashes: readonly Hash[],
+): Hash {
+  let memoCatalogRoot: Hash | null = null;
+  let catalogStorageHash: Hash | null = null;
+  let catalogChunkStorageHashes: readonly Hash[] = [];
+  if (memo.memos.length !== 0) {
+    const catalog = sealInstanceCatalog(memo.memos[0]!.cutoff, memo.memos);
+    const encoded = encodeInstanceCatalogV1(catalog);
+    catalogChunkStorageHashes = encoded.chunks.map(chunk => tx.putImmutable(
+      INSTANCE_CATALOG_CHUNK_KIND,
+      chunk.bytes,
+    ));
+    catalogStorageHash = tx.putImmutable(
+      INSTANCE_CATALOG_KIND,
+      encoded.manifestBytes,
+      catalogChunkStorageHashes,
+    );
+    memoCatalogRoot = catalog.instanceCatalogRoot;
+  }
+  const manifest = verifiedMemoManifest(memo, memoCatalogRoot);
+  return tx.putImmutable(
+    VERIFIED_MEMO_SET_KIND,
+    encodeCanonicalBytes(manifest),
+    [
+      ...(catalogStorageHash === null ? [] : [catalogStorageHash]),
+      ...rawLocatorStorageHashes,
+    ],
+  );
+}
+
+function decodeMemoSetRecordWith(
+  read: DurableContentReader,
+  storageHash: Hash,
+  context: string,
+): VerifiedMemoSetV1 {
+  const record = read(storageHash);
+  if (!record || record.kind !== VERIFIED_MEMO_SET_KIND) {
+    throw new CorruptDurableStoreError(`${context} is missing or has the wrong kind`);
+  }
+  const catalogHashes: Hash[] = [];
+  const rawLocatorStorageHashes: Hash[] = [];
+  for (const reference of record.references) {
+    const child = read(reference);
+    if (!child) throw new CorruptDurableStoreError(`${context} reference is missing`);
+    if (child.kind === INSTANCE_CATALOG_KIND) catalogHashes.push(reference);
+    else if (child.kind === RAW_EVIDENCE_LOCATOR_KIND) rawLocatorStorageHashes.push(reference);
+    else throw new CorruptDurableStoreError(`${context} has an unexpected reference kind`);
+  }
+  let manifest: VerifiedMemoSetManifestV1;
+  try {
+    manifest = decodeExactObject(decodeCanonicalJson(record.bytes), {
+      schemaVersion: field => {
+        if (field !== 1) throw new TypeError("verified memo manifest schema version mismatch");
+        return 1 as const;
+      },
+      kind: field => {
+        if (field !== "aloha.verified-memo-set-manifest-v1") throw new TypeError("verified memo manifest kind mismatch");
+        return "aloha.verified-memo-set-manifest-v1" as const;
+      },
+      memoCount: (field, path) => assertDecimalString(field, path),
+      memoCatalogRoot: (field, path) => field === null ? null : assertHash(field, path),
+      retainedRawLocatorCount: (field, path) => assertDecimalString(field, path),
+      retainedRawLocatorSequenceRoot: (field, path) => assertHash(field, path),
+      verifiedMemoSetRoot: (field, path) => assertHash(field, path),
+    }, context);
+  } catch (error) {
+    throw new CorruptDurableStoreError(
+      `${context} manifest validation failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  let memos: readonly InstancePublicationV1[] = [];
+  if (manifest.memoCount === "0") {
+    if (manifest.memoCatalogRoot !== null || catalogHashes.length !== 0) {
+      throw new CorruptDurableStoreError(`${context} empty memo catalog closure mismatch`);
+    }
+  } else {
+    if (manifest.memoCatalogRoot === null || catalogHashes.length !== 1) {
+      throw new CorruptDurableStoreError(`${context} memo catalog closure mismatch`);
+    }
+    const catalog = decodeInstanceCatalogRecordWith(read, catalogHashes[0]!, `${context} catalog`);
+    if (catalog.instanceCatalogRoot !== manifest.memoCatalogRoot
+      || catalog.instanceCount !== manifest.memoCount) {
+      throw new CorruptDurableStoreError(`${context} memo catalog root mismatch`);
+    }
+    memos = catalog.publications;
+  }
+  const locatorHashes = rawLocatorStorageHashes.map((hash, index) => {
+    const raw = read(hash)!;
+    if (raw.references.length !== 0) {
+      throw new CorruptDurableStoreError(`${context} raw locator ${index} has references`);
+    }
+    return sha256Hex(raw.bytes);
+  }).sort(compareText);
+  validateRawLocatorReferences(read, rawLocatorStorageHashes, locatorHashes, context);
+  const memo = verifiedMemoSet(memos, locatorHashes);
+  if (manifest.memoCount !== String(memo.memos.length)
+    || manifest.retainedRawLocatorCount !== String(memo.retainedRawLocatorHashes.length)
+    || manifest.retainedRawLocatorSequenceRoot !== hashCanonicalPartition(
+      "aloha/verified-memo-raw-locator-sequence/v1",
+      memo.retainedRawLocatorHashes,
+    )
+    || manifest.verifiedMemoSetRoot !== memo.verifiedMemoSetRoot) {
+    throw new CorruptDurableStoreError(`${context} verified memo root mismatch`);
+  }
   return memo;
 }
 
@@ -1536,7 +1937,7 @@ export const CHECKPOINT_SCHEMA_AUTHORITY = Object.freeze({
   decodeRoot,
   decodeRun,
   decodeCandidatePartitionCommitment,
-  decodeMemoSet,
+  decodeMemoSetRecordWith,
   decodeReadyClosure,
   decodeReadyStage,
   decodeMemoSeedReceipt,
@@ -1555,6 +1956,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   readonly #candidatePartitionReader: CandidatePartitionReaderPortV1;
   readonly #sixStepArtifacts: CheckpointSixStepArtifactPortV1;
   readonly #validatedRunStorageHashes = new Set<Hash>();
+  readonly #validatedReadyStageStorageHashes = new Set<Hash>();
   readonly #validatedReadyClosureStorageHashes = new Set<Hash>();
   /** One durable partial can mint at most one process-local resume handle. */
   readonly #issuedResumeClaims = new Set<string>();
@@ -1962,7 +2364,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     if (!memoRecord || memoRecord.kind !== VERIFIED_MEMO_SET_KIND) {
       throw new CorruptDurableStoreError("active run prior verified memo set is missing");
     }
-    const memoSet = decodeMemoSet(memoRecord.bytes);
+    const memoSet = decodeMemoSetRecordWith(
+      hash => this.#durable.readContent(hash),
+      loaded.envelope.verifiedMemoSetStorageHash,
+      "active run prior verified memo set",
+    );
     if (memoSet.verifiedMemoSetRoot !== loaded.envelope.verifiedMemoSetRoot) {
       throw new CorruptDurableStoreError("active run prior verified memo root mismatch");
     }
@@ -2055,12 +2461,25 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     const stage = this.#findReadyStageRecord(record.references, root.stagedReadyStorageHash);
     const loaded = this.#loadActiveRunRead(record, root, stage.runId);
     if (!loaded.envelope.attestationPartitionStorageHash) throw new CorruptDurableStoreError("staged run is not sealed");
-    const partition = cloneCanonical<AttestationPartitionV1>(decodeCanonicalJson(readContentStore(this.#durable, loaded.envelope.attestationPartitionStorageHash, ATTESTATION_PARTITION_KIND, "staged attestation partition")));
+    const partition = decodeAttestationPartitionRecordWith(
+      hash => this.#durable.readContent(hash),
+      loaded.envelope.attestationPartitionStorageHash,
+      loaded.envelope.outcomePartitionStorageHash,
+      loaded.envelope.runId,
+      "staged attestation partition",
+    );
     this.#attestationAuthority.validateDurablePartition(partition, loaded.builderRun.candidates);
     assertPromotablePartition(partition, loaded.builderRun.candidates.map(candidate => candidate.familyCandidateKey));
-    const instanceCatalog = cloneCanonical<InstanceCatalogV1>(decodeCanonicalJson(readContentStore(this.#durable, stage.instanceCatalogStorageHash, INSTANCE_CATALOG_KIND, "staged instance catalog")));
-    validateInstanceCatalog(instanceCatalog);
-    const memo = decodeMemoSet(readContentStore(this.#durable, stage.verifiedMemoSetStorageHash, VERIFIED_MEMO_SET_KIND, "staged verified memo set"));
+    const instanceCatalog = decodeInstanceCatalogRecordWith(
+      hash => this.#durable.readContent(hash),
+      stage.instanceCatalogStorageHash,
+      "staged instance catalog",
+    );
+    const memo = decodeMemoSetRecordWith(
+      hash => this.#durable.readContent(hash),
+      stage.verifiedMemoSetStorageHash,
+      "staged verified memo set",
+    );
     assertVerifiedPublicationCatalog(memo.memos, instanceCatalog);
     const sealedRunSnapshot = this.#sealedRunSnapshot(loaded.envelope, loaded.builderRun.candidates, partition, loaded.sourceCoverage);
     const sealedRun = this.#issueSealedRun(loaded.envelope.runId);
@@ -2422,7 +2841,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         const currentRecord = tx.readRoot();
         if (!currentRecord) throw new CorruptDurableStoreError("checkpoint root missing");
         const root = rootFromRecord(currentRecord);
-        const loaded = this.#loadActiveRunTx(tx, currentRecord, root, runId);
+        const loaded = this.#loadActiveRunTx(tx, currentRecord, root, runId, true);
         if (loaded.envelope.attestationPartitionStorageHash !== null) {
           throw new CheckpointRunStateError("run is already sealed");
         }
@@ -2432,8 +2851,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         if (loaded.envelope.partialOutcomePartitionStorageHash !== null || tx.listIndex(`partial-outcome/${runId}`).length !== 0) {
           throw new CheckpointRunStateError("cannot seal while partial identity outcomes remain");
         }
-        const persistedHashes = persisted.map(candidateFinalOutcomeHash).sort(compareText);
-        const partitionHashes = partition.outcomes.map(candidateFinalOutcomeHash).sort(compareText);
+        const persistedHashes = persisted.map(candidateFinalOutcomeHash);
+        const partitionHashes = partition.outcomes.map(candidateFinalOutcomeHash);
         if (
           persistedHashes.length !== partitionHashes.length
           || persistedHashes.some((outcomeHash, index) => outcomeHash !== partitionHashes[index])
@@ -2474,12 +2893,12 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           if (!storageHash) throw new CorruptDurableStoreError("verified memo raw locator is absent");
           return storageHash;
         });
-        const memoStorageHash = tx.putImmutable(
-          VERIFIED_MEMO_SET_KIND,
-          encodeCanonicalBytes(memoSet),
-          retainedRawStorageHashes,
+        const memoStorageHash = putVerifiedMemoSet(tx, memoSet, retainedRawStorageHashes);
+        const partitionStorageHash = tx.putImmutable(
+          ATTESTATION_PARTITION_KIND,
+          attestationPartitionManifestBytes(partition),
+          [loaded.envelope.outcomePartitionStorageHash],
         );
-        const partitionStorageHash = tx.putImmutable(ATTESTATION_PARTITION_KIND, encodeCanonicalBytes(partition), [loaded.envelope.outcomePartitionStorageHash]);
         const nextRevision = (BigInt(root.revision) + 1n).toString();
         const nextRun: StoredRunEnvelopeV2 = deepFreeze({
           ...loaded.envelope,
@@ -2588,29 +3007,38 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   }
 
   async putContentAndFsync(kind: "instance-catalog" | "persisted-graph", value: object): Promise<Hash> {
-    let semanticRoot: Hash;
-    let storageKind: string;
-    if (kind === "instance-catalog") {
-      validateInstanceCatalog(value as InstanceCatalogV1);
-      semanticRoot = (value as InstanceCatalogV1).instanceCatalogRoot;
-      storageKind = INSTANCE_CATALOG_KIND;
-    } else {
-      const graph = value as PersistedGraphV1;
-      const suppliedRoot = hashDomain("aloha/persisted-graph/v1", { cutoff: graph.cutoff, instanceCatalogRoot: graph.instanceCatalogRoot, edges: graph.edges });
-      if (suppliedRoot !== graph.graphRoot || graph.edgeCount !== String(graph.edges.length)) throw new CheckpointError("graph-root-mismatch", "persisted graph is not self-validating");
-      semanticRoot = graph.graphRoot;
-      storageKind = GRAPH_KIND;
-    }
     const owner = `checkpoint-content/${kind}/${randomUUID()}`;
     const lease = this.#durable.acquireWriterLease(owner);
     try {
+      if (kind === "instance-catalog") {
+        const catalog = value as InstanceCatalogV1;
+        const encoded = encodeInstanceCatalogV1(catalog);
+        this.#durable.transaction(lease, tx => {
+          const chunkHashes = encoded.chunks.map(chunk => tx.putImmutable(
+            INSTANCE_CATALOG_CHUNK_KIND,
+            chunk.bytes,
+          ));
+          const storageHash = tx.putImmutable(INSTANCE_CATALOG_KIND, encoded.manifestBytes, chunkHashes);
+          const previous = tx.getIndex("semantic/instance-catalog", catalog.instanceCatalogRoot);
+          if (previous !== null && previous !== storageHash) {
+            throw new CorruptDurableStoreError("instance-catalog semantic root aliases different manifest bytes");
+          }
+          tx.setIndex("semantic/instance-catalog", catalog.instanceCatalogRoot, storageHash);
+        });
+        return catalog.instanceCatalogRoot;
+      }
+      const graph = value as PersistedGraphV1;
+      const encoded = encodePersistedGraphV1(graph);
       this.#durable.transaction(lease, tx => {
-        const storageHash = tx.putImmutable(storageKind, encodeCanonicalBytes(value));
-        const previous = tx.getIndex(`semantic/${kind}`, semanticRoot);
-        if (previous !== null && previous !== storageHash) throw new CorruptDurableStoreError(`${kind} semantic root aliases different bytes`);
-        tx.setIndex(`semantic/${kind}`, semanticRoot, storageHash);
+        const chunkHashes = encoded.chunks.map(chunk => tx.putImmutable(GRAPH_CHUNK_KIND, chunk.bytes));
+        const storageHash = tx.putImmutable(GRAPH_KIND, encoded.manifestBytes, chunkHashes);
+        const previous = tx.getIndex("semantic/persisted-graph", graph.graphRoot);
+        if (previous !== null && previous !== storageHash) {
+          throw new CorruptDurableStoreError("persisted-graph semantic root aliases different manifest bytes");
+        }
+        tx.setIndex("semantic/persisted-graph", graph.graphRoot, storageHash);
       });
-      return semanticRoot;
+      return graph.graphRoot;
     } finally {
       this.#durable.releaseWriterLease(lease);
     }
@@ -2638,14 +3066,15 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     this.#canonical.assertActiveFence(input.fence);
     validateInstanceCatalog(input.instanceCatalog);
     validateReadyGenerationBase(input.ready);
-    const recomputedGraph = buildPersistedGraph(input.instanceCatalog);
-    if (recomputedGraph.graphRoot !== input.graph.graphRoot || encodeCanonicalJson(recomputedGraph) !== encodeCanonicalJson(input.graph)) {
+    try {
+      validatePersistedGraphForCatalog(input.graph, input.instanceCatalog);
+    } catch {
       throw new CheckpointError("graph-closure-mismatch", "ready graph is not derived from the instance catalog");
     }
     const owner = `checkpoint-stage/${input.expectedInProgressRunId}/${randomUUID()}`;
     const lease = this.#durable.acquireWriterLease(owner);
     try {
-      return this.#durable.transaction(lease, tx => {
+      const result = this.#durable.transaction(lease, tx => {
         tx.addBeforeCommitGuard(() => {
           assertPromotionAuthority();
           this.#canonical.assertActiveFence(input.fence);
@@ -2658,7 +3087,12 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         if (root.stagedReadyStorageHash !== null) {
           if (root.inProgressRunId !== input.expectedInProgressRunId) throw new CheckpointRunStateError("staged ready run is not active");
           this.#validateRootReferenceSetTx(tx, currentRecord, root, true);
-          const existing = this.#findReadyStageRecordWith(tx.readContent.bind(tx), currentRecord.references, root.stagedReadyStorageHash);
+          const existing = this.#findReadyStageRecordWith(
+            tx.readContent.bind(tx),
+            currentRecord.references,
+            root.stagedReadyStorageHash,
+            true,
+          );
           if (
             existing.readyBase.definitionCatalogRoot !== input.ready.definitionCatalogRoot
             || existing.readyBase.generationRefreshPolicyHash !== policyHash
@@ -2698,10 +3132,20 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           true,
         );
         if (!loaded.envelope.attestationPartitionStorageHash) throw new CheckpointRunStateError("run is not sealed for promotion");
-        const partition = cloneCanonical<AttestationPartitionV1>(decodeCanonicalJson(readContent(tx, loaded.envelope.attestationPartitionStorageHash, ATTESTATION_PARTITION_KIND, "attestation partition")));
+        const partition = decodeAttestationPartitionRecordWith(
+          tx.readContent.bind(tx),
+          loaded.envelope.attestationPartitionStorageHash,
+          loaded.envelope.outcomePartitionStorageHash,
+          loaded.envelope.runId,
+          "attestation partition",
+        );
         this.#attestationAuthority.validateDurablePartition(partition, loaded.builderRun.candidates);
         assertPromotablePartition(partition, loaded.builderRun.candidates.map(candidate => candidate.familyCandidateKey));
-        const memo = decodeMemoSet(readContent(tx, loaded.envelope.verifiedMemoSetStorageHash, VERIFIED_MEMO_SET_KIND, "verified memo set"));
+        const memo = decodeMemoSetRecordWith(
+          tx.readContent.bind(tx),
+          loaded.envelope.verifiedMemoSetStorageHash,
+          "verified memo set",
+        );
         assertVerifiedPublicationCatalog(memo.memos, input.instanceCatalog);
         const ready = input.ready;
         if (
@@ -2726,8 +3170,27 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         const catalogStorageHash = tx.getIndex("semantic/instance-catalog", input.instanceCatalog.instanceCatalogRoot);
         const graphStorageHash = tx.getIndex("semantic/persisted-graph", input.graph.graphRoot);
         if (!catalogStorageHash || !graphStorageHash) throw new CorruptDurableStoreError("ready content was not fsynced before stage CAS");
-        if (encodeCanonicalJson(decodeCanonicalJson(readContent(tx, catalogStorageHash, INSTANCE_CATALOG_KIND, "instance catalog"))) !== encodeCanonicalJson(input.instanceCatalog)) throw new CorruptDurableStoreError("instance catalog bytes mismatch");
-        if (encodeCanonicalJson(decodeCanonicalJson(readContent(tx, graphStorageHash, GRAPH_KIND, "graph"))) !== encodeCanonicalJson(input.graph)) throw new CorruptDurableStoreError("graph bytes mismatch");
+        const storedCatalog = decodeInstanceCatalogRecordWith(
+          tx.readContent.bind(tx),
+          catalogStorageHash,
+          "instance catalog",
+        );
+        if (storedCatalog.instanceCatalogRoot !== input.instanceCatalog.instanceCatalogRoot
+          || storedCatalog.instanceCount !== input.instanceCatalog.instanceCount
+          || !sameCutoff(storedCatalog.cutoff, input.instanceCatalog.cutoff)) {
+          throw new CorruptDurableStoreError("instance catalog bytes mismatch");
+        }
+        const storedGraph = decodePersistedGraphRecordWith(
+          tx.readContent.bind(tx),
+          graphStorageHash,
+          storedCatalog,
+          "graph",
+        );
+        if (storedGraph.graphRoot !== input.graph.graphRoot
+          || storedGraph.edgeCount !== input.graph.edgeCount
+          || !sameCutoff(storedGraph.cutoff, input.graph.cutoff)) {
+          throw new CorruptDurableStoreError("graph bytes mismatch");
+        }
         const stageRevision = (BigInt(root.revision) + 1n).toString();
         const stageWithoutHash: Omit<ReadyStageV1, "stageRecordHash"> = deepFreeze({
           stageRevision,
@@ -2780,6 +3243,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           stageRecordHash: stage.stageRecordHash,
         });
       });
+      this.#validatedReadyStageStorageHashes.add(result.stage.stageStorageHash);
+      return result;
     } finally {
       this.#durable.releaseWriterLease(lease);
     }
@@ -2830,7 +3295,12 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         if (root.stagedReadyStorageHash === null) throw new CheckpointRunStateError("staged ready is absent");
         if (root.inProgressRunId !== input.expectedInProgressRunId) throw new CheckpointRunStateError("ready activation run is not active");
         this.#validateRootReferenceSetTx(tx, currentRecord, root, true);
-        const stage = this.#findReadyStageRecordWith(tx.readContent.bind(tx), currentRecord.references, root.stagedReadyStorageHash);
+        const stage = this.#findReadyStageRecordWith(
+          tx.readContent.bind(tx),
+          currentRecord.references,
+          root.stagedReadyStorageHash,
+          true,
+        );
         assertPromotionAuthority(stage);
         if (
           root.stagedReadyStorageHash !== input.stage.stageStorageHash
@@ -2945,7 +3415,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           closure.instanceCatalogStorageHash,
           closure.graphStorageHash,
         ]);
-        const memo = decodeMemoSet(readContent(tx, stage.verifiedMemoSetStorageHash, VERIFIED_MEMO_SET_KIND, "verified memo set"));
+        const memo = decodeMemoSetRecordWith(
+          tx.readContent.bind(tx),
+          stage.verifiedMemoSetStorageHash,
+          "verified memo set",
+        );
         const nextRoot: CheckpointRootV1 = deepFreeze({
           ...root,
           revision: promotionRevision,
@@ -3012,6 +3486,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       hash => this.#durable.readContent(hash),
       currentRecord.references,
       root.stagedReadyStorageHash,
+      true,
     );
     if (stage.stageRecordHash !== input.stage.stageRecordHash
       || stage.readyBaseHash !== input.stage.readyBaseHash
@@ -3030,24 +3505,20 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       ...readyPayload,
       readyRecordHash: hashDomain("aloha/ready-generation/v1", readyPayload),
     });
-    const instanceCatalog = cloneCanonical<InstanceCatalogV1>(decodeCanonicalJson(readContentStore(
-      this.#durable,
+    const instanceCatalog = decodeInstanceCatalogRecordWith(
+      hash => this.#durable.readContent(hash),
       stage.instanceCatalogStorageHash,
-      INSTANCE_CATALOG_KIND,
       "ready Stage 1/2 instance catalog",
-    )));
-    const graph = cloneCanonical<PersistedGraphV1>(decodeCanonicalJson(readContentStore(
-      this.#durable,
+    );
+    const graph = decodePersistedGraphRecordWith(
+      hash => this.#durable.readContent(hash),
       stage.graphStorageHash,
-      GRAPH_KIND,
+      instanceCatalog,
       "ready Stage 1/2 graph",
-    )));
-    validateInstanceCatalog(instanceCatalog);
-    if (encodeCanonicalJson(buildPersistedGraph(instanceCatalog)) !== encodeCanonicalJson(graph)) {
-      throw new CorruptDurableStoreError("ready Stage 1/2 graph closure mismatch");
-    }
+    );
     const candidates = new Map(loaded.builderRun.candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
     const publications = new Map(instanceCatalog.publications.map(publication => [publication.instancePublicationHash, publication]));
+    const edgesByPublication = graphEdgesByPublication(graph);
     const stage1ByEdgeId = new Map<Hash, CheckpointSixStepArtifactCapabilityV1>();
     const stage2ByEdgeId = new Map<Hash, CheckpointSixStepArtifactCapabilityV1>();
     for (const outcome of this.#loadOutcomesStore(loaded.envelope)) {
@@ -3066,7 +3537,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         outcome,
         sourceCoverage: loaded.sourceCoverage,
       });
-      const edges = graph.edges.filter(edge => edge.instancePublicationHash === publication.instancePublicationHash);
+      const edges = edgesByPublication.get(publication.instancePublicationHash) ?? [];
       if (edges.length !== publication.transitions.length) {
         throw new CorruptDurableStoreError("ready Stage 1/2 edge denominator mismatch");
       }
@@ -3122,11 +3593,17 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || nominationClosure.sourceCoverageRoot !== ready.sourceCoverageRoot
       || !sameCutoff(nominationClosure.cutoff, ready.cutoff)
     ) throw new CorruptDurableStoreError("ready nomination closure mismatch");
-    const instanceCatalog = cloneCanonical<InstanceCatalogV1>(decodeCanonicalJson(readContentStore(this.#durable, closure.instanceCatalogStorageHash, INSTANCE_CATALOG_KIND, "instance catalog")));
-    const graph = cloneCanonical<PersistedGraphV1>(decodeCanonicalJson(readContentStore(this.#durable, closure.graphStorageHash, GRAPH_KIND, "persisted graph")));
-    validateInstanceCatalog(instanceCatalog);
-    const rebuilt = buildPersistedGraph(instanceCatalog);
-    if (encodeCanonicalJson(rebuilt) !== encodeCanonicalJson(graph)) throw new CorruptDurableStoreError("ready graph closure mismatch");
+    const instanceCatalog = decodeInstanceCatalogRecordWith(
+      hash => this.#durable.readContent(hash),
+      closure.instanceCatalogStorageHash,
+      "instance catalog",
+    );
+    const graph = decodePersistedGraphRecordWith(
+      hash => this.#durable.readContent(hash),
+      closure.graphStorageHash,
+      instanceCatalog,
+      "persisted graph",
+    );
     await this.#canonical.assertStillCanonical(ready.cutoff);
     const finalRootRecord = this.#durable.readRoot();
     if (!finalRootRecord) throw new CorruptDurableStoreError("checkpoint root missing after ready closure load");
@@ -3183,6 +3660,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       "ready Stage 1/2 outcome",
     ))));
     const publications = new Map(instanceCatalog.publications.map(publication => [publication.instancePublicationHash, publication]));
+    const edgesByPublication = graphEdgesByPublication(graph);
     const stage1ByEdgeId = new Map<Hash, CheckpointSixStepArtifactCapabilityV1>();
     const stage2ByEdgeId = new Map<Hash, CheckpointSixStepArtifactCapabilityV1>();
     for (const outcome of outcomes) {
@@ -3201,7 +3679,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         outcome,
         sourceCoverage,
       });
-      const edges = graph.edges.filter(edge => edge.instancePublicationHash === publication.instancePublicationHash);
+      const edges = edgesByPublication.get(publication.instancePublicationHash) ?? [];
       if (edges.length !== publication.transitions.length) throw new CorruptDurableStoreError("ready Stage 1/2 restart edge denominator mismatch");
       for (const edge of edges) {
         const stage2 = await this.#sixStepArtifacts.emitReadyEdge({
@@ -3341,17 +3819,21 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       });
       return outcome;
     });
-    const partition = cloneCanonical<AttestationPartitionV1>(decodeCanonicalJson(readContentStore(
-      this.#durable,
+    const partition = decodeAttestationPartitionRecordWith(
+      hash => this.#durable.readContent(hash),
       closure.attestationPartitionStorageHash,
-      ATTESTATION_PARTITION_KIND,
+      closure.outcomePartitionStorageHash,
+      commitment.runId,
       "ready stage1/2 attestation partition",
-    )));
+    );
     this.#attestationAuthority.validateDurablePartition(partition, candidates);
     if (
       partition.runId !== commitment.runId
       || partition.exactOutcomePartitionRoot !== state.binding.exactOutcomePartitionRoot
-      || encodeCanonicalJson(partition.outcomes) !== encodeCanonicalJson(outcomes)
+      || partition.outcomes.length !== outcomes.length
+      || partition.outcomes.some((outcome, index) => (
+        candidateFinalOutcomeHash(outcome) !== candidateFinalOutcomeHash(outcomes[index]!)
+      ))
     ) throw new CorruptDurableStoreError("ready stage1/2 outcome partition mismatch");
     const candidatePartitionProof = decodeCandidatePartitionProofBytes(readContentStore(
       this.#durable,
@@ -3376,6 +3858,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     const publicationsByHash = new Map(
       closureView.instanceCatalog.publications.map(publication => [publication.instancePublicationHash, publication]),
     );
+    const edgesByPublication = graphEdgesByPublication(closureView.graph);
     const verifiedInstances = verifiedOutcomes.map(outcome => {
       const candidate = candidatesByKey.get(outcome.familyCandidateKey);
       const publication = publicationsByHash.get(outcome.publication.instancePublicationHash);
@@ -3385,9 +3868,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         || encodeCanonicalJson(publication) !== encodeCanonicalJson(outcome.publication)
         || publication.familyCandidateKey !== candidate.familyCandidateKey
       ) throw new CorruptDurableStoreError("ready stage1/2 verified publication binding mismatch");
-      const edges = closureView.graph.edges.filter(edge => (
-        edge.instancePublicationHash === publication.instancePublicationHash
-      ));
+      const edges = edgesByPublication.get(publication.instancePublicationHash) ?? [];
       if (edges.length !== publication.transitions.length) {
         throw new CorruptDurableStoreError("ready stage1/2 graph edge membership mismatch");
       }
@@ -3735,7 +4216,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         throw new CorruptDurableStoreError("candidate partition commitment root mismatch");
       }
     } else {
-      const memo = decodeMemoSet(readContentStore(this.#durable, closure.verifiedMemoSetStorageHash, VERIFIED_MEMO_SET_KIND, "verified memo set"));
+      const memo = decodeMemoSetRecordWith(
+        hash => this.#durable.readContent(hash),
+        closure.verifiedMemoSetStorageHash,
+        "verified memo set",
+      );
       if (memo.verifiedMemoSetRoot !== root) throw new CorruptDurableStoreError("verified memo root mismatch");
     }
     await this.#canonical.assertStillCanonical(closure.ready.cutoff);
@@ -3813,11 +4298,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           });
         }
       }
-      this.#durable.transaction(lease, tx => {
+      const nextRunStorageHash = this.#durable.transaction(lease, tx => {
       const currentRecord = tx.readRoot();
       if (!currentRecord) throw new CorruptDurableStoreError("checkpoint root missing");
       const root = rootFromRecord(currentRecord);
-      const loaded = this.#loadActiveRunTx(tx, currentRecord, root, runId);
+      const loaded = this.#loadActiveRunTx(tx, currentRecord, root, runId, true);
       const candidates = new Map(loaded.builderRun.candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
       const existing = new Map(this.#loadOutcomes(tx, loaded.envelope).map(outcome => [outcome.familyCandidateKey, outcome]));
       const partials = new Map(this.#loadPartialOutcomes(tx, loaded.envelope).map(partial => [partial.familyCandidateKey, partial]));
@@ -3936,7 +4421,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           false,
         ),
       );
+      return nextRunHash;
       });
+      this.#validatedRunStorageHashes.add(nextRunStorageHash);
     } catch (error) {
       (claim as AttestationPersistenceBatchClaimV1 | undefined)?.abort();
       claim = undefined;
@@ -3955,7 +4442,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         const raced = tx.readRoot();
         if (raced) return rootFromRecord(raced);
         const memo = emptyMemoSet();
-        const memoStorageHash = tx.putImmutable(VERIFIED_MEMO_SET_KIND, encodeCanonicalBytes(memo));
+        const memoStorageHash = putVerifiedMemoSet(tx, memo, []);
         const root: CheckpointRootV1 = deepFreeze({
           revision: "1",
           verifiedMemoRoot: memo.verifiedMemoSetRoot,
@@ -4047,13 +4534,24 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       this.#findMemoStorageHashWith(read, available, root.verifiedMemoRoot),
     ];
     if (root.inProgressRunId) {
-      expectedReferences.push(this.#findActiveRunRecordWith(read, available, root, root.inProgressRunId).storageHash);
+      expectedReferences.push(this.#findActiveRunRecordWith(
+        read,
+        available,
+        root,
+        root.inProgressRunId,
+        allowValidatedReadyCache,
+      ).storageHash);
     }
     if (root.stagedReadyStorageHash !== null) {
       if (root.inProgressRunId === null) {
         throw new CorruptDurableStoreError("staged ready exists without an active run");
       }
-      const stage = this.#findReadyStageRecordWith(read, available, root.stagedReadyStorageHash);
+      const stage = this.#findReadyStageRecordWith(
+        read,
+        available,
+        root.stagedReadyStorageHash,
+        allowValidatedReadyCache,
+      );
       if (
         stage.stageRevision !== root.revision
         || stage.runId !== root.inProgressRunId
@@ -4383,11 +4881,17 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     references: readonly Hash[],
     root: CheckpointRootV1,
     runId: string,
+    allowValidatedReadyCache = false,
   ) {
     if (root.inProgressRunId !== runId) throw new CheckpointRunStateError(`run ${runId} is not active`);
     const expectedRunRevision = root.stagedReadyStorageHash === null
       ? root.revision
-      : this.#findReadyStageRecordWith(read, references, root.stagedReadyStorageHash).expectedRevision;
+      : this.#findReadyStageRecordWith(
+        read,
+        references,
+        root.stagedReadyStorageHash,
+        allowValidatedReadyCache,
+      ).expectedRevision;
     let found: { readonly envelope: StoredRunEnvelopeV2; readonly storageHash: Hash } | null = null;
     for (const hash of references) {
       const content = read(hash);
@@ -4409,14 +4913,23 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     allowValidatedReadyCache = false,
   ) {
     this.#validateRootReferenceSetTx(tx, record, root, allowValidatedReadyCache);
-    const found = this.#findActiveRunRecordWith(hash => tx.readContent(hash), record.references, root, runId);
+    const found = this.#findActiveRunRecordWith(
+      hash => tx.readContent(hash),
+      record.references,
+      root,
+      runId,
+      allowValidatedReadyCache,
+    );
     const loaded = this.#hydrateRun(tx, root, found.envelope, found.storageHash);
     this.#assertRunIndexesWith(
       namespace => tx.listIndex(namespace),
       (hash, kind, context) => readContent(tx, hash, kind, context),
       loaded.envelope,
     );
-    this.#validateRunPhysicalReferencesWith(hash => tx.readContent(hash), loaded);
+    if (!allowValidatedReadyCache || !this.#validatedRunStorageHashes.has(loaded.storageHash)) {
+      this.#validateRunPhysicalReferencesWith(hash => tx.readContent(hash), loaded);
+      this.#validatedRunStorageHashes.add(loaded.storageHash);
+    }
     return loaded;
   }
 
@@ -4508,6 +5021,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       throw new CorruptDurableStoreError(`source-plan evidence validation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     const candidateEntries = loadPartition(read, envelope.candidatePartitionStorageHash, envelope.runId, "candidate");
+    const candidateRawStorageByKey = new Map<Hash, ReadonlyMap<Hash, Hash>>();
     const candidates = candidateEntries.map(entry => {
       const candidateRecord = readRecord(entry.storageHash);
       if (!candidateRecord || candidateRecord.kind !== CANDIDATE_KIND) {
@@ -4521,6 +5035,18 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         candidate.evidence.map(value => value.rawLocatorHash),
         "candidate record",
       );
+      const rawStorageByHash = new Map<Hash, Hash>();
+      for (const reference of candidateRecord.references) {
+        const rawRecord = readRecord(reference);
+        if (
+          !rawRecord
+          || rawRecord.kind !== RAW_EVIDENCE_LOCATOR_KIND
+          || rawRecord.references.length !== 0
+          || rawStorageByHash.has(rawRecord.payloadHash)
+        ) throw new CorruptDurableStoreError("candidate raw evidence reference is invalid");
+        rawStorageByHash.set(rawRecord.payloadHash, reference);
+      }
+      candidateRawStorageByKey.set(candidate.familyCandidateKey, rawStorageByHash);
       return candidate;
     });
     if (String(candidates.length) !== envelope.candidateRecordCount || candidatePartitionRoot(candidates) !== envelope.candidatePartitionRoot) throw new CorruptDurableStoreError("candidate partition root mismatch");
@@ -4619,11 +5145,13 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     }
     if (envelope.attestationPartitionStorageHash !== null) {
       if (partials.length !== 0) throw new CorruptDurableStoreError("sealed run still has partial identity outcomes");
-      const partition = cloneCanonical<AttestationPartitionV1>(decodeCanonicalJson(read(
+      const partition = decodeAttestationPartitionRecordWith(
+        readRecord,
         envelope.attestationPartitionStorageHash,
-        ATTESTATION_PARTITION_KIND,
+        envelope.outcomePartitionStorageHash,
+        envelope.runId,
         "attestation partition",
-      )));
+      );
       this.#attestationAuthority.validateDurablePartition(partition, candidates);
       if (
         partition.runId !== envelope.runId
@@ -4639,7 +5167,10 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           executorAuthorityRoot: partition.executorAuthorityRoot,
           outcomesRoot: hashCanonicalPartition("aloha/candidate-outcomes/v1", outcomes),
         })
-        || encodeCanonicalJson(partition.outcomes) !== encodeCanonicalJson(outcomes)
+        || partition.outcomes.length !== outcomes.length
+        || partition.outcomes.some((outcome, index) => (
+          candidateFinalOutcomeHash(outcome) !== candidateFinalOutcomeHash(outcomes[index]!)
+        ))
       ) throw new CorruptDurableStoreError("sealed attestation partition does not match durable outcomes");
     }
     const proofBytes = read(
@@ -4669,8 +5200,32 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || proofBinding.sourceCoverageRoot !== envelope.sourceCoverageRoot
       || proofBinding.checkpointRevision !== envelope.candidatePartitionRevision
     ) throw new CorruptDurableStoreError("candidate partition proof does not bind the active run");
-    const candidatePartition = this.#candidatePartitionCapabilities.registerVerifiedProof(verifiedProof, candidates);
-    const memo = decodeMemoSet(read(envelope.verifiedMemoSetStorageHash, VERIFIED_MEMO_SET_KIND, "verified memo set"));
+    const durable = this.#durable;
+    const candidatePartition = this.#candidatePartitionCapabilities.registerVerifiedProof(
+      verifiedProof,
+      candidates,
+      Object.freeze({
+        read(familyCandidateKey: Hash, rawLocatorHash: Hash): Uint8Array {
+          const storageHash = candidateRawStorageByKey.get(familyCandidateKey)?.get(rawLocatorHash);
+          if (storageHash === undefined) {
+            throw new TypeError("candidate raw evidence locator is outside the durable candidate closure");
+          }
+          const record = durable.readContent(storageHash);
+          if (
+            !record
+            || record.kind !== RAW_EVIDENCE_LOCATOR_KIND
+            || record.payloadHash !== rawLocatorHash
+            || record.references.length !== 0
+          ) throw new CorruptDurableStoreError("candidate raw evidence is unavailable or corrupt");
+          return new Uint8Array(record.bytes);
+        },
+      }),
+    );
+    const memo = decodeMemoSetRecordWith(
+      readRecord,
+      envelope.verifiedMemoSetStorageHash,
+      "verified memo set",
+    );
     if (memo.verifiedMemoSetRoot !== envelope.verifiedMemoSetRoot) throw new CorruptDurableStoreError("run verified memo root mismatch");
     const builderRun: InternalBuilderRunV1 = deepFreeze({
       runId: envelope.runId,
@@ -4828,12 +5383,13 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     if (loaded.envelope.attestationPartitionStorageHash === null) {
       throw new CheckpointRunStateError("sealed run has no durable attestation partition");
     }
-    const partition = cloneCanonical<AttestationPartitionV1>(decodeCanonicalJson(readContentStore(
-      this.#durable,
+    const partition = decodeAttestationPartitionRecordWith(
+      hash => this.#durable.readContent(hash),
       loaded.envelope.attestationPartitionStorageHash,
-      ATTESTATION_PARTITION_KIND,
+      loaded.envelope.outcomePartitionStorageHash,
+      loaded.envelope.runId,
       "sealed attestation partition",
-    )));
+    );
     this.#attestationAuthority.validateDurablePartition(partition, loaded.builderRun.candidates);
     return this.#sealedRunSnapshot(loaded.envelope, loaded.builderRun.candidates, partition, loaded.sourceCoverage);
   }
@@ -4859,8 +5415,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     for (const hash of references) {
       const content = read(hash);
       if (content?.kind !== VERIFIED_MEMO_SET_KIND) continue;
-      const memo = decodeMemoSet(content.bytes);
-      validateRawLocatorReferences(read, content.references, memo.retainedRawLocatorHashes, "verified memo set");
+      const memo = decodeMemoSetRecordWith(read, hash, "verified memo set");
       if (memo.verifiedMemoSetRoot !== semanticRoot) continue;
       if (found !== null) throw new CorruptDurableStoreError("verified memo set has multiple root records");
       found = hash;
@@ -4971,13 +5526,13 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     }
   }
 
-  #validateRunPhysicalReferences(loaded: { readonly envelope: StoredRunEnvelopeV2; readonly storageHash: Hash; readonly builderRun: InProgressBuilderRunV1 }): void {
+  #validateRunPhysicalReferences(loaded: { readonly envelope: StoredRunEnvelopeV2; readonly storageHash: Hash; readonly builderRun: InternalBuilderRunV1 }): void {
     this.#validateRunPhysicalReferencesWith(hash => this.#durable.readContent(hash), loaded);
   }
 
   #validateRunPhysicalReferencesWith(
     read: DurableContentReader,
-    loaded: { readonly envelope: StoredRunEnvelopeV2; readonly storageHash: Hash; readonly builderRun: InProgressBuilderRunV1 },
+    loaded: { readonly envelope: StoredRunEnvelopeV2; readonly storageHash: Hash; readonly builderRun: InternalBuilderRunV1 },
   ): void {
     const runReferences = runContentReferences(loaded.envelope);
     this.#assertRecordReferencesWith(read, loaded.storageHash, RUN_KIND, runReferences, "active run");
@@ -5053,21 +5608,16 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     }
     const memoRecord = read(loaded.envelope.verifiedMemoSetStorageHash);
     if (!memoRecord || memoRecord.kind !== VERIFIED_MEMO_SET_KIND) throw new CorruptDurableStoreError("run memo set is missing");
-    const memo = decodeMemoSet(memoRecord.bytes);
-    validateRawLocatorReferences(
-      read,
-      memoRecord.references,
-      memo.retainedRawLocatorHashes,
-      "run memo set",
-    );
+    decodeMemoSetRecordWith(read, loaded.envelope.verifiedMemoSetStorageHash, "run memo set");
     if (loaded.envelope.attestationPartitionStorageHash !== null) {
-      this.#assertRecordReferencesWith(
+      const partition = decodeAttestationPartitionRecordWith(
         read,
         loaded.envelope.attestationPartitionStorageHash,
-        ATTESTATION_PARTITION_KIND,
-        [loaded.envelope.outcomePartitionStorageHash],
+        loaded.envelope.outcomePartitionStorageHash,
+        loaded.envelope.runId,
         "attestation partition",
       );
+      this.#attestationAuthority.validateDurablePartition(partition, loaded.builderRun.candidates);
     }
   }
 
@@ -5113,18 +5663,24 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           ) throw new CheckpointRunStateError("memo seed run closure mismatch");
           this.#attestationAuthority.validateDurablePartition(memoSeed.partition, loaded.builderRun.candidates);
           assertPromotablePartition(memoSeed.partition, memoSeed.candidateKeys);
-          const durablePartition = cloneCanonical<AttestationPartitionV1>(decodeCanonicalJson(readContent(
-            tx,
+          const durablePartition = decodeAttestationPartitionRecordWith(
+            tx.readContent.bind(tx),
             loaded.envelope.attestationPartitionStorageHash,
-            ATTESTATION_PARTITION_KIND,
+            loaded.envelope.outcomePartitionStorageHash,
+            loaded.envelope.runId,
             "memo seed attestation partition",
-          )));
+          );
           this.#attestationAuthority.validateDurablePartition(durablePartition, loaded.builderRun.candidates);
-          if (encodeCanonicalJson(durablePartition) !== encodeCanonicalJson(memoSeed.partition)) {
+          if (durablePartition.exactOutcomePartitionRoot !== memoSeed.partition.exactOutcomePartitionRoot
+            || durablePartition.attestationAuthorityRoot !== memoSeed.partition.attestationAuthorityRoot
+            || durablePartition.releaseAuthorityRoot !== memoSeed.partition.releaseAuthorityRoot
+            || durablePartition.releaseProvenanceHash !== memoSeed.partition.releaseProvenanceHash
+            || durablePartition.executorAuthorityRoot !== memoSeed.partition.executorAuthorityRoot
+            || encodeCanonicalJson(durablePartition.accounting) !== encodeCanonicalJson(memoSeed.partition.accounting)) {
             throw new CheckpointRunStateError("memo seed attestation authority mismatch");
           }
           memoStorageHash = loaded.envelope.verifiedMemoSetStorageHash;
-          decodeMemoSet(readContent(tx, memoStorageHash, VERIFIED_MEMO_SET_KIND, "memo seed"));
+          decodeMemoSetRecordWith(tx.readContent.bind(tx), memoStorageHash, "memo seed");
           verifiedMemoRoot = memoSeed.verifiedMemoSetRoot;
         }
         const nextRevision = (BigInt(root.revision) + 1n).toString();
@@ -5202,6 +5758,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     read: DurableContentReader,
     references: readonly Hash[],
     stageStorageHash: Hash,
+    allowValidatedCache = false,
   ): ReadyStageV1 {
     if (!references.includes(stageStorageHash)) {
       throw new CorruptDurableStoreError("staged ready is not root-reachable");
@@ -5222,6 +5779,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     ].sort(compareText);
     if (encodeCanonicalJson(content.references) !== encodeCanonicalJson(expectedReferences)) {
       throw new CorruptDurableStoreError("staged ready physical references mismatch");
+    }
+    if (allowValidatedCache && this.#validatedReadyStageStorageHashes.has(stageStorageHash)) {
+      return stage;
     }
     const sourceExecutionRecord = read(stage.sourceExecutionSetStorageHash);
     if (!sourceExecutionRecord || sourceExecutionRecord.kind !== SOURCE_EXECUTION_SET_KIND) {
@@ -5260,6 +5820,25 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       sourcePlanEvidence.flatMap(value => value.rawLocatorHashes),
       "staged source-plan evidence",
     );
+    const catalog = decodeInstanceCatalogRecordWith(
+      read,
+      stage.instanceCatalogStorageHash,
+      "staged instance catalog",
+    );
+    const graph = decodePersistedGraphRecordWith(
+      read,
+      stage.graphStorageHash,
+      catalog,
+      "staged graph",
+    );
+    if (catalog.instanceCatalogRoot !== stage.readyBase.instanceCatalogRoot
+      || catalog.instanceCount !== stage.readyBase.instanceCount
+      || graph.graphRoot !== stage.readyBase.graphRoot
+      || graph.edgeCount !== stage.readyBase.edgeCount
+      || !sameCutoff(catalog.cutoff, stage.readyBase.cutoff)
+      || !sameCutoff(graph.cutoff, stage.readyBase.cutoff)) {
+      throw new CorruptDurableStoreError("staged catalog/graph lineage mismatch");
+    }
     return stage;
   }
 
@@ -5499,14 +6078,23 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             [closure.outcomePartitionStorageHash],
             "ready attestation partition",
           );
-          const partition = cloneCanonical<AttestationPartitionV1>(decodeCanonicalJson(partitionRecord.bytes));
+          const partition = decodeAttestationPartitionRecordWith(
+            read,
+            closure.attestationPartitionStorageHash,
+            closure.outcomePartitionStorageHash,
+            commitment.runId,
+            "ready attestation partition",
+          );
           this.#attestationAuthority.validateDurablePartition(partition, candidates);
           if (
             partition.runId !== commitment.runId
             || !sameCutoff(partition.cutoff, closure.ready.cutoff)
             || partition.candidatePartitionRoot !== closure.ready.candidatePartitionRoot
             || partition.exactOutcomePartitionRoot !== closure.ready.exactOutcomePartitionRoot
-            || encodeCanonicalJson(partition.outcomes) !== encodeCanonicalJson(outcomes)
+            || partition.outcomes.length !== outcomes.length
+            || partition.outcomes.some((outcome, index) => (
+              candidateFinalOutcomeHash(outcome) !== candidateFinalOutcomeHash(outcomes[index]!)
+            ))
           ) throw new CorruptDurableStoreError("ready attestation partition lineage mismatch");
           const proofRecord = read(closure.candidatePartitionProofStorageHash);
           if (!proofRecord || proofRecord.kind !== CANDIDATE_PARTITION_PROOF_KIND) {
@@ -5593,13 +6181,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           ) throw new CorruptDurableStoreError("candidate partition commitment lineage mismatch");
           const memoRecord = read(closure.verifiedMemoSetStorageHash);
           if (!memoRecord || memoRecord.kind !== VERIFIED_MEMO_SET_KIND) throw new CorruptDurableStoreError("ready memo set is missing");
-          const memo = decodeMemoSet(memoRecord.bytes);
-          validateRawLocatorReferences(
-            read,
-            memoRecord.references,
-            memo.retainedRawLocatorHashes,
-            "ready memo set",
-          );
+          const memo = decodeMemoSetRecordWith(read, closure.verifiedMemoSetStorageHash, "ready memo set");
           if (memo.verifiedMemoSetRoot !== closure.ready.verifiedMemoSetRoot) {
             throw new CorruptDurableStoreError("ready memo root mismatch");
           }
@@ -5724,19 +6306,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             nominationQualificationBindings(nominationClosure),
           );
 
-          const catalogRecord = read(closure.instanceCatalogStorageHash);
-          if (!catalogRecord || catalogRecord.kind !== INSTANCE_CATALOG_KIND) {
-            throw new CorruptDurableStoreError("ready instance catalog is missing");
-          }
-          this.#assertRecordReferencesWith(
+          const catalog = decodeInstanceCatalogRecordWith(
             read,
             closure.instanceCatalogStorageHash,
-            INSTANCE_CATALOG_KIND,
-            [],
             "ready instance catalog",
           );
-          const catalog = cloneCanonical<InstanceCatalogV1>(decodeCanonicalJson(catalogRecord.bytes));
-          validateInstanceCatalog(catalog);
           if (
             catalog.instanceCatalogRoot !== closure.ready.instanceCatalogRoot
             || catalog.instanceCount !== closure.ready.instanceCount
@@ -5744,22 +6318,14 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           ) throw new CorruptDurableStoreError("ready instance catalog root mismatch");
           assertVerifiedPublicationCatalog(memo.memos, catalog);
 
-          const graphRecord = read(closure.graphStorageHash);
-          if (!graphRecord || graphRecord.kind !== GRAPH_KIND) {
-            throw new CorruptDurableStoreError("ready graph is missing");
-          }
-          this.#assertRecordReferencesWith(
+          const graph = decodePersistedGraphRecordWith(
             read,
             closure.graphStorageHash,
-            GRAPH_KIND,
-            [],
+            catalog,
             "ready graph",
           );
-          const graph = cloneCanonical<PersistedGraphV1>(decodeCanonicalJson(graphRecord.bytes));
-          const rebuiltGraph = buildPersistedGraph(catalog);
           if (
-            encodeCanonicalJson(graph) !== encodeCanonicalJson(rebuiltGraph)
-            || graph.graphRoot !== closure.ready.graphRoot
+            graph.graphRoot !== closure.ready.graphRoot
             || graph.edgeCount !== closure.ready.edgeCount
             || !sameCutoff(graph.cutoff, closure.ready.cutoff)
           ) throw new CorruptDurableStoreError("ready graph root mismatch");

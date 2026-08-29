@@ -1,8 +1,10 @@
 import {
   installQualifiedReleaseAcceptanceRunnerV1,
   observeQualifiedReleaseAcceptanceAdvisoryV1,
+  prepareQualifiedReleaseAcceptanceV1,
   type InstallQualifiedReleaseAcceptanceRunnerInputV1,
   type QualifiedReleaseAcceptanceAdvisoryRunV1,
+  type QualifiedReleaseAcceptancePreparedRunV1,
   type QualifiedReleaseAcceptanceRunnerCapabilityV1,
 } from "./qualified-release-runner-owner.ts";
 import type { PredicateMaterialSourcePortV1 } from "../../../../acceptance/gate-core/src/index.ts";
@@ -35,6 +37,10 @@ export interface FreshQualifiedReleaseRunnerRuntimeV1 {
     capability: QualifiedReleaseAcceptanceRunnerCapabilityV1,
     source: PredicateMaterialSourcePortV1,
   ) => Promise<QualifiedReleaseAcceptanceAdvisoryRunV1>;
+  readonly prepareRelease: (
+    capability: QualifiedReleaseAcceptanceRunnerCapabilityV1,
+    source: PredicateMaterialSourcePortV1,
+  ) => Promise<QualifiedReleaseAcceptancePreparedRunV1>;
 }
 
 /** Exact-commit advisory bundle entry. It contains no result-to-authority bridge. */
@@ -91,6 +97,12 @@ export function createFreshQualifiedReleaseRunnerRuntimeV1(
       source: PredicateMaterialSourcePortV1,
     ): Promise<QualifiedReleaseAcceptanceAdvisoryRunV1> {
       return observeQualifiedReleaseAcceptanceAdvisoryV1(capability, bridgeSource(source));
+    },
+    async prepareRelease(
+      capability: QualifiedReleaseAcceptanceRunnerCapabilityV1,
+      source: PredicateMaterialSourcePortV1,
+    ): Promise<QualifiedReleaseAcceptancePreparedRunV1> {
+      return prepareQualifiedReleaseAcceptanceV1(capability, bridgeSource(source));
     },
   });
 }

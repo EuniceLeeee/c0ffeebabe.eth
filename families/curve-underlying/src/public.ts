@@ -1,6 +1,6 @@
 export * from "./kernel/math.ts";
 export * from "./manifest.ts";
-export type { CurveCutoffV1, CurveEvidenceV1, CurveCandidateV1, CurveIdentityReadFactsV1, CurveIdentityV1, CurveVariantV1, CurveStateReadFactsV1, CurveMaterializedStateV1, CurveRouteV1, CurveQuoteV1, CurveActionV1, CurveExecutionIntentV1, CurveObservationV1 } from "./types.ts";
+export type { CurveCutoffV1, CurveEvidenceV1, CurveCandidateV1, CurveIdentityReadFactsV1, CurveIdentityV1, CurveSelectorVariantV1, CurveVariantV1, CurveStateReadFactsV1, CurveMaterializedStateV1, CurveRouteV1, CurveQuoteV1, CurveActionV1, CurveExecutionIntentV1, CurveObservationV1 } from "./types.ts";
 export { assertCutoff, assertDecimal, cutoffEqual, familyCandidateKey } from "./types.ts";
 export * from "./discovery.ts";
 export * from "./nomination.ts";
@@ -27,4 +27,5 @@ export {
   CURVE_UNDERLYING_STAGE_DEFINITIONS,
   requireCurveUnderlyingStageDefinition,
 } from "./runtime/definitions.ts";
+export { CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY } from "./runtime/physical-adapter.ts";
 export const PUBLIC_ENTRY = Object.freeze({ familyId: "curve-underlying", familyDefinition: "curve-underlying", runtime: "family-owned" });

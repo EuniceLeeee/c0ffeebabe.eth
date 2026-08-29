@@ -15,6 +15,7 @@ import {
   type CandidateRecordV1,
   type CanonicalCutoffV1,
 } from "../../../discovery/src/index.ts";
+import type { FamilyRawEvidenceReadPortV1 } from "../../../family-sdk/runtime/index.ts";
 import type {
   CandidatePartitionCapabilityV1,
   CandidatePartitionReaderPortV1,
@@ -1024,6 +1025,23 @@ function createAttestationRunSession(
     return frozen;
   };
 
+  const rawEvidencePorts = new Map<Hash, FamilyRawEvidenceReadPortV1>();
+  const rawEvidenceFor = (candidate: CandidateRecordV1): FamilyRawEvidenceReadPortV1 => {
+    const existing = rawEvidencePorts.get(candidate.familyCandidateKey);
+    if (existing !== undefined) return existing;
+    const port = Object.freeze({
+      read(rawLocatorHash: Hash): Uint8Array {
+        return candidatePartitionReader.readRawEvidence(
+          input.candidatePartition,
+          candidate.familyCandidateKey,
+          rawLocatorHash,
+        );
+      },
+    });
+    rawEvidencePorts.set(candidate.familyCandidateKey, port);
+    return port;
+  };
+
   const issueIdentityContinuation = (
     candidate: CandidateRecordV1,
     identity: IdentityVerifiedV1,
@@ -1239,7 +1257,7 @@ function createAttestationRunSession(
         }
         consumedAttestationVerifiedMemoReuseCapabilities.add(memoReuse.capability);
         if (programs.reuseVerifiedMemo === undefined) throw new TypeError("attestation-memo-reuse-program-missing");
-        const reuseDecision = await programs.reuseVerifiedMemo(candidate, memoReuse.state.publication, cutoff, signal);
+        const reuseDecision = await programs.reuseVerifiedMemo(candidate, memoReuse.state.publication, cutoff, signal, rawEvidenceFor(candidate));
         if (reuseDecision.kind === "reusable") {
           const reuseProof = reuseDecision.proof;
           if (
@@ -1284,7 +1302,7 @@ function createAttestationRunSession(
         }
       }
       try {
-        const decision = await programs.attestIdentity(candidate, cutoff, signal);
+        const decision = await programs.attestIdentity(candidate, cutoff, signal, rawEvidenceFor(candidate));
         if (decision.kind === "identityVerified") {
           const normalizedIdentity = issueIdentityWithProof(
             runId,
@@ -1363,7 +1381,7 @@ function createAttestationRunSession(
         });
         const decision = await instanceLifecycle.getOrBuild(
           workKey,
-          () => programs.materializeAndProject(candidate, identity, cutoff, signal),
+          () => programs.materializeAndProject(candidate, identity, cutoff, signal, rawEvidenceFor(candidate)),
         );
         if (decision.kind === "verified") validateVerifiedPublication(candidate, identity, cutoff, decision.publication);
         const result = issueFinal(candidate, decision, "materialization", expectedIdentitySubjectHash, identity.issuerProof);

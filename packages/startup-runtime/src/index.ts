@@ -64,6 +64,7 @@ export {
   assertIssuedStartupRuntime,
   readStartupFullFamilyEvidenceBinding,
   readStartupStage12Evidence,
+  readStartupStage12EvidenceBinding,
   type StartupFullFamilyEvidenceBindingV1,
   verifyStartupStage12Evidence,
 } from "./internal/runtime-owner.ts";

@@ -24,11 +24,14 @@ test("Curve search calls are selector- and target-bound", () => {
   const balances = encodeCurveStateCall("underlyingBalances", pool);
   assert.equal(balances.target, CURVE_METAREGISTRY);
   assert.equal(balances.data, `0x${CURVE_SEARCH_SELECTORS.underlyingBalances.slice(2)}${word(BigInt(pool))}`);
-  const dy = encodeCurveStateCall("getDyUnderlying", pool, [1, 0, "123"]);
+  const dy = encodeCurveStateCall("getDyUnderlying", pool, [1, 0, "123"], "int128");
   assert.equal(dy.target, pool);
-  assert.equal(dy.data, `0x${CURVE_SEARCH_SELECTORS.getDyUnderlying.slice(2)}${word(1n)}${word(0n)}${word(123n)}`);
+  assert.equal(dy.data, `0x${CURVE_SEARCH_SELECTORS.getDyUnderlyingInt128.slice(2)}${word(1n)}${word(0n)}${word(123n)}`);
   assert.throws(() => encodeCurveStateCall("getDyUnderlying", pool), /indices are required/);
-  assert.throws(() => encodeCurveStateCall("getDyUnderlying", pool, [2 ** 127, 0, "1"]), /int128/);
+  assert.throws(() => encodeCurveStateCall("getDyUnderlying", pool, [1, 0, "123"]), /selector variant is required/);
+  assert.throws(() => encodeCurveStateCall("getDyUnderlying", pool, [2 ** 127, 0, "1"], "int128"), /int128/);
+  const dyUint = encodeCurveStateCall("getDyUnderlying", pool, [1, 0, "123"], "uint256");
+  assert.equal(dyUint.data, `0x${CURVE_SEARCH_SELECTORS.getDyUnderlyingUint256.slice(2)}${word(1n)}${word(0n)}${word(123n)}`);
 });
 
 test("Curve search decodes fixed and dynamic ABI arrays without coercing shapes", () => {

@@ -19,6 +19,13 @@ import { issueCoarseProjectionServiceV1 } from "../../coarse-economics/src/inter
 import { issueQualifiedCoarseProjectionOwnerCapabilityV1 } from "../../coarse-economics/src/internal/qualification-owner.ts";
 import {
   runSearchPipeline,
+  decodeNativeFullFamilyAuditV1,
+  encodeNativeFullFamilyAuditBodyV1,
+  nativeFullFamilyAuditSequenceRootV1,
+  nativeFullFamilyAuditSemanticRootV1,
+  routeAccountingRootV1,
+  routeSetTerminalLineageHashV2,
+  searchTerminalEvidenceHashV2,
   readIssuedSearchTerminalCapabilityV1,
   readIssuedSearchTerminalCandidateTimingsV1,
   readIssuedSearchTerminalCoarseTimingV1,
@@ -31,6 +38,7 @@ import {
   sealExecutionProgram,
   sealUnsignedDryRunReceipt,
   type CurrentSourceSessionV1,
+  type NativeFullFamilyAuditSectionV1,
   type RoutePipelineInputV1,
   type RoutePipelinePortsV1,
   type SearchObjectiveV1,
@@ -514,6 +522,215 @@ test("route coordinator preserves selected/pruned/notProbed/failed denominator",
   assert.equal(otherAudit.binding.sourceSessionId, h("other-source-session"));
   assert.notEqual(otherAudit.binding.bindingRoot, audit.binding.bindingRoot);
   assert.notEqual(otherAudit.auditRoot, audit.auditRoot);
+});
+
+test("native audit chunks all 30k projected edges without sampling and rejects broken chains", async () => {
+  const result = await runSearchPipeline(ports(), input());
+  assert.equal(result.kind, "route-set-terminal");
+  const base = readIssuedNativeFullFamilyAuditV1(
+    readIssuedSearchTerminalNativeFullFamilyAuditCapabilityV1(result.terminalCapability),
+  );
+  const { routeHandle: _routeHandle, ...template } = edges[0]!;
+  const projectedEdges = Object.freeze(Array.from({ length: 30_000 }, (_, index) => {
+    const edgeId = h(`30k-projected-edge-${index}`);
+    const persisted = Object.freeze({ ...template, edgeId });
+    const body = Object.freeze({
+      searchAuditBindingRoot: base.binding.bindingRoot,
+      edge: persisted,
+      edgeId,
+      owningFamilyId: persisted.owningFamilyId,
+      owningFamilyDefinitionHash: persisted.owningFamilyDefinitionHash,
+      owningInstanceKey: persisted.owningInstanceKey,
+      instancePublicationHash: persisted.instancePublicationHash,
+      projectionHash: persisted.projectionHash,
+    });
+    return Object.freeze({
+      ...body,
+      factRoot: hashDomain("aloha/native-full-family-projected-edge-fact/v1", body),
+    });
+  }));
+  const missingProjectedEdgeIds = Object.freeze(projectedEdges.map(edgeFact => edgeFact.edgeId));
+  const empty = (purpose: Parameters<typeof nativeFullFamilyAuditSequenceRootV1>[0]) =>
+    nativeFullFamilyAuditSequenceRootV1(purpose, []);
+  const encoded = encodeNativeFullFamilyAuditBodyV1(Object.freeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.native-full-family-audit-v1" as const,
+    binding: base.binding,
+    expectedCandidateCount: "0",
+    expectedLegCount: "0",
+    observedReceiptCount: "0",
+    missingLegKeys: Object.freeze([]),
+    expectedProjectedEdgeCount: "30000",
+    observedProjectedEdgeCount: "0",
+    missingProjectedEdgeIds,
+    expectedActionLineageCount: "0",
+    observedActionLineageCount: "0",
+    missingActionCandidateIds: Object.freeze([]),
+    denominatorRoot: empty("denominator"),
+    observedReceiptRoot: empty("observed-receipts"),
+    missingLegRoot: empty("missing-legs"),
+    projectedEdgeDenominatorRoot: nativeFullFamilyAuditSequenceRootV1(
+      "projected-edge-denominator",
+      projectedEdges.map(edgeFact => edgeFact.factRoot),
+    ),
+    missingProjectedEdgeRoot: nativeFullFamilyAuditSequenceRootV1("missing-projected-edges", missingProjectedEdgeIds),
+    actionDenominatorRoot: empty("action-denominator"),
+    actionObservedRoot: empty("action-observed"),
+    coarseRoutes: Object.freeze([]),
+    projectedEdges,
+    actionLineage: Object.freeze([]),
+  }));
+  assert.ok(encoded.manifestBytes.byteLength <= 500_000);
+  assert.ok(encoded.chunks.length > 2);
+  assert.equal(encoded.chunks.every(chunk => chunk.bytes.byteLength <= 500_000), true);
+  assert.deepEqual(Object.keys(encoded.chunks[0]!.ref), ["contentSha256"]);
+  assert.deepEqual(Object.keys(encoded.chunks[0]!.chunk), ["schemaVersion", "kind", "entries", "nextChunkRef"]);
+  assert.equal("chunkRoot" in encoded.chunks[0]!.chunk, false);
+  assert.equal("chunkClosureRoot" in encoded.manifest.sections[0]!, false);
+  const topologyOnlyChange = Object.freeze({
+    ...encoded.manifest,
+    sections: Object.freeze(encoded.manifest.sections.map(section => Object.freeze({
+      ...section,
+      chunkCount: section.firstChunkRef === null ? section.chunkCount : String(BigInt(section.chunkCount) + 1n),
+    }))),
+  });
+  assert.equal(nativeFullFamilyAuditSemanticRootV1(topologyOnlyChange), encoded.audit.auditRoot);
+  assert.notEqual(nativeFullFamilyAuditSemanticRootV1(Object.freeze({
+    ...encoded.manifest,
+    sections: Object.freeze(encoded.manifest.sections.map((section, index) => index === 0
+      ? Object.freeze({ ...section, sectionRoot: h("changed-native-audit-section-root") })
+      : section)),
+  })), encoded.audit.auditRoot);
+  const bytesByHash = new Map(encoded.chunks.map(chunk => [chunk.ref.contentSha256, chunk.bytes]));
+  const chunksByHash = new Map(encoded.chunks.map(chunk => [chunk.ref.contentSha256, chunk]));
+  const sectionChunks = (section: NativeFullFamilyAuditSectionV1) => {
+    const output: typeof encoded.chunks[number][] = [];
+    let ref = encoded.manifest.sections.find(value => value.section === section)!.firstChunkRef;
+    while (ref !== null) {
+      const chunk = chunksByHash.get(ref.contentSha256)!;
+      output.push(chunk);
+      ref = chunk.chunk.nextChunkRef;
+    }
+    return output;
+  };
+  const materialized = decodeNativeFullFamilyAuditV1(encoded.manifestBytes, ref => bytesByHash.get(ref.contentSha256)!);
+  assert.equal(materialized.projectedEdges.length, 30_000);
+
+  const projectedChunks = sectionChunks("projected-edges");
+  assert.ok(projectedChunks.length > 2);
+  assert.throws(
+    () => decodeNativeFullFamilyAuditV1(encoded.manifestBytes, ref => {
+      if (ref.contentSha256 === projectedChunks[1]!.ref.contentSha256) throw new TypeError("missing");
+      return bytesByHash.get(ref.contentSha256)!;
+    }),
+    /missing/,
+  );
+  assert.throws(
+    () => decodeNativeFullFamilyAuditV1(encoded.manifestBytes, ref => (
+      ref.contentSha256 === projectedChunks[0]!.ref.contentSha256
+        ? projectedChunks[1]!.bytes
+        : bytesByHash.get(ref.contentSha256)!
+    )),
+    /content mismatch/,
+  );
+  assert.throws(
+    () => decodeNativeFullFamilyAuditV1(encoded.manifestBytes, ref => (
+      ref.contentSha256 === projectedChunks[1]!.ref.contentSha256
+        ? projectedChunks[0]!.bytes
+        : bytesByHash.get(ref.contentSha256)!
+    )),
+    /content mismatch/,
+  );
+  const other = encodeNativeFullFamilyAuditBodyV1({
+    ...(() => { const { auditRoot: _auditRoot, ...body } = encoded.audit; return body; })(),
+    missingActionCandidateIds: Object.freeze([h("cross-audit")]),
+    expectedActionLineageCount: "1",
+    actionDenominatorRoot: nativeFullFamilyAuditSequenceRootV1("action-denominator", [h("cross-audit")]),
+  });
+  const otherChunksByHash = new Map(other.chunks.map(chunk => [chunk.ref.contentSha256, chunk]));
+  const crossRef = other.manifest.sections.find(value => value.section === "missing-action-candidate-ids")!.firstChunkRef!;
+  const crossChunk = otherChunksByHash.get(crossRef.contentSha256)!;
+  assert.throws(
+    () => decodeNativeFullFamilyAuditV1(encoded.manifestBytes, ref => (
+      ref.contentSha256 === projectedChunks[0]!.ref.contentSha256 ? crossChunk.bytes : bytesByHash.get(ref.contentSha256)!
+    )),
+    /content mismatch/,
+  );
+  const { auditRoot: _encodedAuditRoot, ...encodedBody } = encoded.audit;
+  const oversizedActionBody = Object.freeze({
+    searchAuditBindingRoot: base.binding.bindingRoot,
+    candidateId: h("oversized-action-candidate"),
+    routeHash: h("oversized-action-route"),
+    orderedEdgeIds: Object.freeze([]),
+    executionProgramOwnerEvidence: Object.freeze({
+      oversizedOwnerObservation: Object.freeze(Array.from({ length: 100 }, () => "x".repeat(6_000))),
+    }),
+  });
+  assert.throws(
+    () => encodeNativeFullFamilyAuditBodyV1({
+      ...encodedBody,
+      actionLineage: Object.freeze([Object.freeze({
+        ...oversizedActionBody,
+        factRoot: hashDomain("aloha/native-full-family-action-lineage-fact/v1", oversizedActionBody),
+      })]) as never,
+    }),
+    /chunk exceeds observer artifact byte cap/,
+  );
+
+  const accountingEntries = Object.freeze(Array.from({ length: 30_000 }, (_, index) => Object.freeze({
+    candidateId: h(`30k-accounting-candidate-${index}`),
+    legs: Object.freeze([]),
+    disposition: "notProbed" as const,
+    terminalKind: "not-run" as const,
+    routeHash: null,
+    reasonCode: null,
+    evidenceHash: null,
+    policyTerminal: null,
+  })).sort((left, right) => left.candidateId.localeCompare(right.candidateId)));
+  const accountingBody = Object.freeze({
+    planningProblemHash: base.binding.planningProblemHash,
+    enumerationRoot: base.binding.plannerEnumerationRoot,
+    admissionPolicyHash: result.receipt.accounting.admissionPolicyHash,
+    enumerationTruncated: false,
+    observedUniqueCountLowerBound: "30000",
+    total: 30_000,
+    selected: 0,
+    pruned: 0,
+    notProbed: 30_000,
+    failed: 0,
+    entries: accountingEntries,
+  });
+  const accounting = Object.freeze({ ...accountingBody, root: routeAccountingRootV1(accountingBody) });
+  const { accounting: _oldAccounting, accountingRoot: _oldAccountingRoot, lineageHash: _oldLineage, ...fixedReceipt } = result.receipt;
+  const terminalBody = Object.freeze({ ...fixedReceipt, accounting, accountingRoot: accounting.root });
+  const terminal = Object.freeze({
+    kind: "route-set-terminal" as const,
+    receipt: Object.freeze({ ...terminalBody, lineageHash: routeSetTerminalLineageHashV2(terminalBody) }),
+  });
+  assert.match(searchTerminalEvidenceHashV2(terminal), /^0x[0-9a-f]{64}$/);
+  assert.throws(
+    () => searchTerminalEvidenceHashV2(Object.freeze({
+      ...terminal,
+      receipt: Object.freeze({
+        ...terminal.receipt,
+        accounting: Object.freeze({ ...accounting, entries: accounting.entries.slice(1), total: 29_999, notProbed: 29_999 }),
+      }),
+    })),
+    /root\/count closure mismatch/,
+  );
+  assert.throws(
+    () => searchTerminalEvidenceHashV2(Object.freeze({
+      ...terminal,
+      receipt: Object.freeze({
+        ...terminal.receipt,
+        accounting: Object.freeze({
+          ...accounting,
+          entries: Object.freeze([Object.freeze({ ...accounting.entries[0]!, reasonCode: "changed" }), ...accounting.entries.slice(1)]),
+        }),
+      }),
+    })),
+    /root\/count closure mismatch/,
+  );
 });
 
 test("qualified per-edge absolute bounds remain rank-only without a route-domain proof", async () => {

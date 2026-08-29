@@ -54,7 +54,7 @@ import {
   candidatePartitionBootstrapReader,
   createCandidatePartitionBootstrap,
 } from "../../checkpoint/src/candidate-partition.ts";
-import { createCanonicalSource, SQLiteCanonicalJournalStore } from "../../canonical-source/src/index.ts";
+import { createCanonicalSource, SQLiteCanonicalJournalStore, type CanonicalHead } from "../../canonical-source/src/index.ts";
 import { createSqliteDurableStore } from "../../durable-store/src/index.ts";
 import { createReadyPromotionAuthority, ReadyGenerationServiceV1 } from "../../ready-generation/src/index.ts";
 import { startStartupRuntime } from "../../startup-runtime/src/index.ts";
@@ -105,7 +105,10 @@ import {
 } from "../../../specs/release-authority/src/index.ts";
 import { verifyRuntimeReleaseBindingSignatureV1 } from "../../../tools/runtime-release-packager/src/index.ts";
 import { verifyReleaseRequirementDenominatorV1 } from "../../../tools/runtime-release-packager/src/release-acceptance.ts";
-import { evaluateQualifiedLineageFixture } from "../../../acceptance/gate-core/test/lineage-fixture.test.ts";
+import {
+  evaluateQualifiedLineageFixture,
+  evaluateQualifiedReleaseDenominatorFixture,
+} from "../../../acceptance/gate-core/test/lineage-fixture.test.ts";
 import {
   nominationEvidenceRefHash,
   sealNominationClosureV1,
@@ -139,7 +142,6 @@ import {
 } from "../../../families/univ2-standard/src/public.ts";
 import {
   missingExternalRuntimeAnchorEvidenceV1,
-  type SearcherRuntimeOutcomeV1,
 } from "../../../apps/searcher-runtime/src/index.ts";
 import {
   issueSearcherRuntimeApplicationOwnerV1,
@@ -159,8 +161,11 @@ import {
 import {
   readIssuedProducerHeadFactsCapabilityV1,
   readIssuedProducerHeadTerminalCapabilityV1,
-  readIssuedProducerLaneSixStepTraceV1,
 } from "../../producer/src/internal/owners.ts";
+import {
+  validateUnsignedDryRunReceiptValue,
+  type UnsignedDryRunReceiptV1,
+} from "../../search-pipeline/src/index.ts";
 import { decodeExecutorExecuteCalldata, decodePackedCallProgram } from "../../execution-program/src/index.ts";
 import {
   createRethQualifiedExecutorStateOwner,
@@ -208,17 +213,7 @@ import {
 import {
   createReleaseFamilyRuntimeComposition,
 } from "../../../generated/runtime-composition/index.ts";
-import {
-  createGeneratedStrategyRuntimeFactory,
-} from "../../strategy-composition/src/internal/generated-runtime-composition.ts";
-import {
-  sealGeneratedStrategyRuntimeDescriptor,
-  strategyPlanningTemplateHash,
-  type GeneratedStrategyRuntimeEntryV1,
-} from "../../strategy-composition/src/index.ts";
-import { compileStrategy } from "../../strategy-sdk/src/index.ts";
-import { ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER, ROUTE_CYCLE_STRATEGY } from "../../../strategies/route-cycle/src/index.ts";
-import { issueRuntimeReleaseStrategyRuntimeService } from "../../runtime-release-authority/src/internal/strategy-runtime-owner.ts";
+import { ROUTE_CYCLE_STRATEGY } from "../../../strategies/route-cycle/src/index.ts";
 import {
   createDeploymentPerformanceWindowBasisV1,
   createHardwareProfileObservationV1,
@@ -255,9 +250,12 @@ function openMutableSqlite(path: string): MutableSqliteDatabaseV1 {
   return new loaded.DatabaseSync(path);
 }
 
-function mutateProductionCandidateEvent(
+function mutateProductionEvent(
   sourcePath: string,
   label: string,
+  namespace: string,
+  eventType: string,
+  matches: (event: Record<string, unknown>) => boolean,
   mutate: (event: Record<string, unknown>) => void,
 ): string {
   const destination = join(dirname(sourcePath), `mutation-${label}.sqlite`);
@@ -273,9 +271,14 @@ function mutateProductionCandidateEvent(
       SELECT sequence, bytes, offset_start
       FROM durable_append_log
       WHERE namespace=?
-    `).all(SEARCHER_PRODUCTION_EVIDENCE_NAMESPACES.candidateSets);
-    assert.equal(rows.length, 1);
-    const row = rows[0]!;
+    `).all(namespace);
+    const matchingRows = rows.filter(row => {
+      if (!(row.bytes instanceof Uint8Array)) return false;
+      const event = decodeCanonicalJson(row.bytes) as Record<string, unknown>;
+      return event.eventType === eventType && matches(event);
+    });
+    assert.equal(matchingRows.length, 1);
+    const row = matchingRows[0]!;
     if (!(row.bytes instanceof Uint8Array) || typeof row.offset_start !== "string") throw new TypeError("candidate mutation row is malformed");
     const event = structuredClone(decodeCanonicalJson(row.bytes)) as Record<string, unknown>;
     mutate(event);
@@ -294,7 +297,7 @@ function mutateProductionCandidateEvent(
       bytes,
       bytes.byteLength.toString(),
       (BigInt(row.offset_start) + BigInt(bytes.byteLength)).toString(),
-      SEARCHER_PRODUCTION_EVIDENCE_NAMESPACES.candidateSets,
+      namespace,
       row.sequence,
     );
     database.exec(`
@@ -310,126 +313,18 @@ function mutateProductionCandidateEvent(
   return destination;
 }
 
-function recomputeCandidateObservationRoots(payload: Record<string, unknown>, observation: Record<string, unknown>): void {
-  const timingPayload = {
-    kind: "aloha.route-candidate-terminal-timing-facts-v1",
-    correlationId: observation.correlationId,
-    generationId: observation.generationId,
-    graphRoot: observation.graphRoot,
-    planningProblemHash: observation.planningProblemHash,
-    enumerationRoot: observation.enumerationRoot,
-    admissionPolicyHash: observation.admissionPolicyHash,
-    candidateId: observation.candidateId,
-    disposition: observation.disposition,
-    terminalKind: observation.terminalKind,
-    routeHash: observation.routeHash,
-    reasonCode: observation.reasonCode,
-    evidenceHash: observation.evidenceHash,
-    policyTerminal: observation.policyTerminal,
-    terminalLineageHash: observation.terminalLineageHash,
-    sixStepEvidenceRoot: observation.sixStepEvidenceRoot,
-    startedMonotonicNs: observation.startedMonotonicNs,
-    finishedMonotonicNs: observation.finishedMonotonicNs,
-    timingUs: observation.timingUs,
-  };
-  observation.timingRoot = hashDomain("aloha/route-candidate-terminal-timing-facts/v1", timingPayload);
-  const { kind: _timingKind, ...timingFields } = timingPayload;
-  observation.observationRoot = hashDomain("aloha/producer-candidate-terminal-observation/v1", {
-    kind: "aloha.producer-candidate-terminal-observation-v1",
-    lane: observation.lane,
-    headHash: observation.headHash,
-    ...timingFields,
-    performanceCandidateRef: observation.performanceCandidateRef,
-    performanceOutcome: observation.performanceOutcome,
-    timingRoot: observation.timingRoot,
-  });
-  const observations = payload.candidateTerminalObservations as Record<string, unknown>[];
-  const denominators = payload.laneDenominators as Record<string, unknown>[];
-  const denominator = denominators.find(item => item.lane === observation.lane);
-  if (denominator === undefined) throw new TypeError("candidate mutation lane denominator is missing");
-  denominator.observationRoots = observations
-    .filter(item => item.lane === observation.lane)
-    .map(item => item.observationRoot);
-  denominator.observationSetRoot = hashDomain("aloha/producer-lane-candidate-terminal-observation-set/v1", {
-    lane: denominator.lane,
-    correlationId: denominator.correlationId,
-    accountingRoot: denominator.accountingRoot,
-    observationRoots: denominator.observationRoots,
-  });
-  payload.candidateTerminalObservationSetRoot = hashDomain(
-    "aloha/performance-candidate-terminal-observation-set-root/v1",
-    denominators.map(item => item.observationSetRoot),
-  );
-}
-
-function replaceWithPostSuccessTerminal(
-  payload: Record<string, unknown>,
-  mutate: (terminal: Record<string, unknown>) => void,
-): void {
-  const observations = payload.candidateTerminalObservations as Record<string, unknown>[];
-  const winner = observations.find(item => item.performanceOutcome === "verified");
-  const rejected = observations.find(item => item.performanceOutcome === "policy-rejected");
-  if (winner === undefined || rejected === undefined) throw new TypeError("post-success mutation subjects are missing");
-  const terminal: Record<string, unknown> = {
-    kind: "aloha.route-post-success-policy-terminal-v1",
-    policyKind: "post-success-first-eligible",
-    admissionPolicyHash: rejected.admissionPolicyHash,
-    planningProblemHash: rejected.planningProblemHash,
-    enumerationRoot: rejected.enumerationRoot,
-    winnerCandidateId: winner.candidateId,
-    winnerTerminalLineageHash: winner.terminalLineageHash,
-    candidateId: rejected.candidateId,
-    routeHash: rejected.routeHash,
-    decisionMonotonicNs: rejected.finishedMonotonicNs,
-  };
-  mutate(terminal);
-  terminal.receiptHash = hashDomain("aloha/route-post-success-policy-terminal-receipt/v1", terminal);
-  rejected.disposition = "selected";
-  rejected.terminalKind = "policyRejected";
-  rejected.performanceOutcome = "policy-rejected";
-  rejected.reasonCode = "post-success:first-eligible";
-  rejected.evidenceHash = terminal.receiptHash;
-  rejected.policyTerminal = terminal;
-  rejected.terminalLineageHash = null;
-  rejected.sixStepEvidenceRoot = null;
-  recomputeCandidateObservationRoots(payload, rejected);
-}
-
-function replaceVerifiedTerminal(
-  payload: Record<string, unknown>,
-  outcome: "chain-proven-rejected" | "simulation-reverted",
-): void {
-  const observations = payload.candidateTerminalObservations as Record<string, unknown>[];
-  const verified = observations.find(item => item.performanceOutcome === "verified");
-  if (verified === undefined) throw new TypeError("verified mutation subject is missing");
-  verified.disposition = "selected";
-  verified.terminalKind = "chainProvenRejected";
-  verified.performanceOutcome = outcome;
-  verified.reasonCode = outcome === "simulation-reverted" ? "final-sim:simulation-reverted" : "exact:chain-proven-rejected";
-  verified.evidenceHash = verified.terminalLineageHash;
-  verified.policyTerminal = null;
-  verified.terminalLineageHash = null;
-  verified.sixStepEvidenceRoot = null;
-  recomputeCandidateObservationRoots(payload, verified);
-}
-
-function removeAllCandidateObservations(payload: Record<string, unknown>): void {
-  payload.candidateRefs = [];
-  payload.candidateTerminalObservations = [];
-  const denominators = payload.laneDenominators as Record<string, unknown>[];
-  for (const denominator of denominators) {
-    denominator.candidateCount = "0";
-    denominator.observationRoots = [];
-    denominator.observationSetRoot = hashDomain("aloha/producer-lane-candidate-terminal-observation-set/v1", {
-      lane: denominator.lane,
-      correlationId: denominator.correlationId,
-      accountingRoot: denominator.accountingRoot,
-      observationRoots: [],
-    });
-  }
-  payload.candidateTerminalObservationSetRoot = hashDomain(
-    "aloha/performance-candidate-terminal-observation-set-root/v1",
-    denominators.map(item => item.observationSetRoot),
+function mutateProductionCompletePerformanceEvent(
+  sourcePath: string,
+  label: string,
+  mutate: (event: Record<string, unknown>) => void,
+): string {
+  return mutateProductionEvent(
+    sourcePath,
+    label,
+    SEARCHER_PRODUCTION_EVIDENCE_NAMESPACES.performance,
+    "performance-facts-complete",
+    event => (event.payload as Record<string, unknown>).sixStepFacts !== null,
+    mutate,
   );
 }
 const address = (digit: string) => `0x${digit.repeat(40)}`;
@@ -857,6 +752,10 @@ test("generated composition binds real UniV2 public definitions, then seals cata
     () => composition.resolveAdapter(family.entry.familyDefinitionHash, "search/other/v1"),
     /not release-qualified/,
   );
+  assert.throws(
+    () => composition.resolveAdapter(family.entry.familyDefinitionHash, "physical-lifecycle/v1"),
+    /search runtime adapter role is not supported/,
+  );
   const nominated = nominateUniV2(nominationObservation());
   assert.equal(nominated.status, "nominated");
   const nomination = nominated.candidate;
@@ -1116,7 +1015,7 @@ test("generated adapter registry is fail-closed for role, import, closure, and r
     mutate(() => ({ closureRoot: h("forged-closure") })),
     mutate(adapter => ({ capabilityRefs: { ...adapter.capabilityRefs, state: { ...adapter.capabilityRefs.state, schemaHash: h("forged-schema") } } })),
   ]) {
-    assert.throws(() => createGeneratedFamilyRuntimeComposition(input), /descriptor root mismatch|adapter leaf digest mismatch|adapter root mismatch|not release-qualified/);
+    assert.throws(() => createGeneratedFamilyRuntimeComposition(input), /descriptor root mismatch|adapter leaf digest mismatch|adapter root mismatch|capability binding mismatch|not release-qualified/);
   }
 });
 
@@ -1140,6 +1039,8 @@ async function startLocalRpc(
   callRequests: readonly Record<string, unknown>[];
   canonicalRequests: readonly Record<string, unknown>[];
   recentRpcFacts: { headers: number; logs: number };
+  setRuntimeHead(head: CanonicalHead): void;
+  setRuntimeReserves(reserves: Readonly<Record<string, string>>): void;
   close(): Promise<void>;
 }>> {
   const callRequests: Record<string, unknown>[] = [];
@@ -1147,13 +1048,19 @@ async function startLocalRpc(
   const recentRpcFacts = { headers: 0, logs: 0 };
   const recentHeaderNumbers = new Set<string>();
   const recentLogBlockHashes = new Set<string>();
-  const headNumber = BigInt(head.number);
-  const recentFrom = headNumber > 49n ? headNumber - 49n : 0n;
-  const observationHash = (number: bigint): Hash => number === headNumber
+  const initialHeadNumber = BigInt(head.number);
+  const recentFrom = initialHeadNumber > 49n ? initialHeadNumber - 49n : 0n;
+  const observationHash = (number: bigint): Hash => number === initialHeadNumber
     ? head.hash
-    : number === headNumber - 1n
+    : number === initialHeadNumber - 1n
       ? h("evidence-block")
       : h(`observation-block:${number}`);
+  let runtimeHead: CanonicalHead = Object.freeze({
+    ...head,
+    parentHash: observationHash(initialHeadNumber - 1n),
+  });
+  const runtimeHeadsByNumber = new Map<string, CanonicalHead>([[runtimeHead.number, runtimeHead]]);
+  let runtimeReserves = reservesByPool;
   const handler: HttpHandler = async (incoming, outgoing) => {
     const payload = JSON.parse(await httpBody(incoming)) as Record<string, unknown>;
     assert.equal(payload.jsonrpc, "2.0");
@@ -1169,8 +1076,8 @@ async function startLocalRpc(
       if (tag === "pending") {
         assert.equal(params[1], true);
         result = {
-          number: `0x${(headNumber + 1n).toString(16)}`,
-          parentHash: head.hash,
+          number: `0x${(BigInt(runtimeHead.number) + 1n).toString(16)}`,
+          parentHash: runtimeHead.hash,
           transactions: [],
         };
         outgoing.writeHead(200, { "content-type": "application/json" });
@@ -1178,18 +1085,33 @@ async function startLocalRpc(
         return;
       }
       assert.equal(params[1], false);
-      const number = tag === "latest" ? headNumber : BigInt(tag);
-      assert.ok(number >= recentFrom && number <= headNumber);
+      const number = tag === "latest" ? BigInt(runtimeHead.number) : BigInt(tag);
+      const knownRuntimeHead = runtimeHeadsByNumber.get(number.toString());
+      assert.ok(tag === "latest" || knownRuntimeHead !== undefined || (number >= recentFrom && number <= initialHeadNumber));
       if (tag !== "latest") {
         recentHeaderNumbers.add(number.toString());
         recentRpcFacts.headers = recentHeaderNumbers.size;
       }
-      result = {
-        number: `0x${number.toString(16)}`,
-        hash: observationHash(number),
-        parentHash: number === 0n ? h("genesis-parent") : observationHash(number - 1n),
-        stateRoot: number === headNumber ? head.stateRoot : h(`observation-state:${number}`),
-      };
+      result = tag === "latest"
+        ? {
+            number: `0x${number.toString(16)}`,
+            hash: runtimeHead.hash,
+            parentHash: runtimeHead.parentHash,
+            stateRoot: runtimeHead.stateRoot,
+          }
+        : knownRuntimeHead !== undefined
+          ? {
+              number: `0x${number.toString(16)}`,
+              hash: knownRuntimeHead.hash,
+              parentHash: knownRuntimeHead.parentHash,
+              stateRoot: knownRuntimeHead.stateRoot,
+            }
+        : {
+            number: `0x${number.toString(16)}`,
+            hash: observationHash(number),
+            parentHash: number === 0n ? h("genesis-parent") : observationHash(number - 1n),
+            stateRoot: number === initialHeadNumber ? head.stateRoot : h(`observation-state:${number}`),
+          };
     } else if (method === "eth_getLogs") {
       canonicalRequests.push(payload);
       const params = payload.params as readonly Record<string, unknown>[];
@@ -1199,7 +1121,7 @@ async function startLocalRpc(
       } else {
         recentLogBlockHashes.add(blockHash);
         recentRpcFacts.logs = recentLogBlockHashes.size;
-        const evidenceNumber = headNumber - 1n;
+        const evidenceNumber = initialHeadNumber - 1n;
         result = blockHash === observationHash(evidenceNumber)
           ? Object.keys(reservesByPool).sort().map((poolAddress, index) => ({
               address: poolAddress,
@@ -1218,16 +1140,19 @@ async function startLocalRpc(
       const data = params[0]?.data;
       if (typeof params[1] === "string") {
         canonicalRequests.push(payload);
-        assert.equal(params[1], `0x${headNumber.toString(16)}`);
-        assert.equal(data, "0x956aae3a", "only the Curve MetaRegistry pool-count discovery read is expected");
+        assert.equal(params[1], `0x${initialHeadNumber.toString(16)}`);
+        assert.ok(
+          data === "0x956aae3a" || data === "0x93656c17" || data === "0x8d654023",
+          `unexpected complete-snapshot discovery selector ${String(data)}`,
+        );
         result = `0x${word(0n)}`;
       } else {
         callRequests.push(payload);
         assert.equal(params[1]?.requireCanonical, true);
-        assert.equal(params[1]?.blockHash, head.hash);
+        assert.equal(params[1]?.blockHash, runtimeHead.hash);
         assert.equal(data, UNIV2_GET_RESERVES_SELECTOR);
         const target = String(params[0]?.to ?? "").toLowerCase();
-        result = reservesByPool[target];
+        result = runtimeReserves[target];
         if (result === undefined) {
           outgoing.writeHead(500, { "content-type": "application/json" });
           outgoing.end(JSON.stringify({ jsonrpc: "2.0", id: payload.id, error: { code: -32000, message: "unknown pool" } }));
@@ -1251,48 +1176,19 @@ async function startLocalRpc(
     callRequests,
     canonicalRequests,
     recentRpcFacts,
+    setRuntimeHead(nextHead) {
+      runtimeHead = Object.freeze({ ...nextHead });
+      runtimeHeadsByNumber.set(runtimeHead.number, runtimeHead);
+    },
+    setRuntimeReserves(nextReserves) {
+      runtimeReserves = nextReserves;
+    },
     async close() {
       if (closed) return;
       closed = true;
       server.close();
       await once(server, "close");
     },
-  });
-}
-
-function strategyRuntimeFactory(
-  definitionCatalogRoot: Hash,
-  qualifiedCapabilityRefsRoot: Hash,
-) {
-  const catalogEntry = compileStrategy(ROUTE_CYCLE_STRATEGY, []).entry;
-  const issuerClosureRoot = h("vertical-strategy-issuer-closure");
-  const planningTemplateHash = strategyPlanningTemplateHash(catalogEntry.planningTemplate);
-  const entry: GeneratedStrategyRuntimeEntryV1 = Object.freeze({
-    catalogEntry,
-    issuerModulePath: ROUTE_CYCLE_STRATEGY.planningProblemIssuer.modulePath,
-    issuerExportName: ROUTE_CYCLE_STRATEGY.planningProblemIssuer.exportName,
-    issuerClosureRoot,
-    planningTemplateHash,
-    leafDigest: hashDomain("aloha/generated-strategy-runtime-leaf/v1", {
-      strategyId: catalogEntry.strategyId,
-      strategyDefinitionHash: catalogEntry.strategyDefinitionHash,
-      definitionCatalogLeafDigest: catalogEntry.definitionCatalogLeafDigest,
-      issuerModulePath: ROUTE_CYCLE_STRATEGY.planningProblemIssuer.modulePath,
-      issuerExportName: ROUTE_CYCLE_STRATEGY.planningProblemIssuer.exportName,
-      issuerClosureRoot,
-      planningTemplateHash,
-    }),
-  });
-  const descriptor = sealGeneratedStrategyRuntimeDescriptor({
-    schemaVersion: 1,
-    releaseIntentRoot: h("vertical-strategy-release"),
-    definitionCatalogRoot,
-    proposedCapabilitySetRoot: qualifiedCapabilityRefsRoot,
-    strategies: [entry],
-  });
-  return createGeneratedStrategyRuntimeFactory({
-    descriptor,
-    issuers: [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
   });
 }
 
@@ -1325,7 +1221,7 @@ function externallyPackagedVerticalComposition(
   if (family === undefined || !metadata.families.some(entry => entry.familyId === UNIV2_STANDARD_FAMILY_ID)) {
     throw new Error("generated release factory does not contain UniV2 Family");
   }
-  const gateCore = evaluateQualifiedLineageFixture();
+  const gateCore = evaluateQualifiedReleaseDenominatorFixture();
   const certificate = gateCore.result.certificate;
   const selectedExecutor = Object.freeze({
     executorKind: "revm",
@@ -1374,9 +1270,9 @@ function externallyPackagedVerticalComposition(
     endpointLocatorHash: hashRuntimeReleaseDiscoveryEndpointLocatorV1(discoveryEndpoint),
     qualificationRoot: h("vertical-discovery-source-qualification"),
   });
-  const { approval: releaseApproval } = verifyReleaseRequirementDenominatorV1([
-    gateCore.externalQualification,
-  ]);
+  const { approval: releaseApproval } = verifyReleaseRequirementDenominatorV1(
+    gateCore.externalQualifications,
+  );
   const payload: RuntimeReleaseBindingPayloadV1 = Object.freeze({
     schemaVersion: 1,
     kind: "aloha.runtime-release-binding",
@@ -1740,7 +1636,7 @@ async function createOfflineStructuralUniV2Services(
           objective,
           callerId: caller,
           deadlineMs: 20_000,
-          admission: { topK: 1, boundedUnrankedBudget: 0 },
+          admission: { topK: 4, boundedUnrankedBudget: 0 },
         },
       },
     });
@@ -1778,8 +1674,8 @@ async function createOfflineStructuralUniV2Services(
 
     const policy = Object.freeze({
       observationWindowBlocks: "50" as const,
-      targetRefreshAgeBlocks: "10",
-      maxServingAgeBlocks: "30",
+      targetRefreshAgeBlocks: "199",
+      maxServingAgeBlocks: "200",
       minPromotionMarginBlocks: "2",
       maxInProgressRuns: "1" as const,
     });
@@ -1930,20 +1826,23 @@ async function createOfflineStructuralUniV2Services(
 }
 
 test("offline structural release refuses a single-certificate denominator", () => {
-  const directory = mkdtempSync(join(tmpdir(), "aloha-univ2-incomplete-denominator-"));
-  try {
-    const bundleModulePath = join(directory, "deployment-bundle.mjs");
-    writeFileSync(bundleModulePath, "export const offlineStructuralOnly = true;\n");
-    assert.throws(
-      () => externallyPackagedVerticalComposition("http://127.0.0.1:1", realpathSync(bundleModulePath)),
-      /denominator|requirement count|qualification|release-role manifest/,
-    );
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const single = evaluateQualifiedLineageFixture();
+  assert.throws(
+    () => verifyReleaseRequirementDenominatorV1([single.externalQualification]),
+    /denominator|requirement count|qualification|release-role manifest/,
+  );
 });
 
-test.skip("offline structural UniV2 path awaits the generic full-denominator assembler", async (t) => {
+test("offline structural release fixture qualifies the exact generated predicate denominator", () => {
+  const qualified = evaluateQualifiedReleaseDenominatorFixture();
+  const verified = verifyReleaseRequirementDenominatorV1(qualified.externalQualifications);
+  assert.equal(
+    verified.externalQualifications.length,
+    verified.approval.releaseAcceptanceRequirements.length,
+  );
+});
+
+test("offline structural UniV2 path carries owner-issued Six-Step evidence through the raw observer", async (t) => {
   execFileSync("forge", ["build"], { cwd: resolve(repositoryRoot, "contracts"), stdio: "inherit" });
   execFileSync("cargo", ["build", "--quiet", "--manifest-path", resolve(repositoryRoot, "runtime/revm-worker-rust/Cargo.toml")], { cwd: repositoryRoot, stdio: "inherit" });
 
@@ -1964,9 +1863,14 @@ test.skip("offline structural UniV2 path awaits the generic full-denominator ass
   assert.equal(released.binding.releaseAuthorityApprovalId, released.gateCoreCertificate.releaseAuthorityApprovalId);
   let startup: Awaited<ReturnType<typeof services.startup.startStartup>> | null = null;
   let application: SearcherRuntimeApplicationV1 | null = null;
+  let completedHeadCount = 0;
   t.after(async () => {
-    if (application === null) await startup?.close();
-    else await application.stop();
+    try {
+      if (application === null) await startup?.close();
+      else await application.stop();
+    } catch (error) {
+      throw new Error(`vertical application cleanup failed after ${completedHeadCount} completed heads`, { cause: error });
+    }
     await structural.close();
     released.composition.revoke();
     released.authority.revoke();
@@ -2044,6 +1948,7 @@ test.skip("offline structural UniV2 path awaits the generic full-denominator ass
     released.schedulerIssuer,
     released.schedulerCapability,
   );
+  let finalSimulationSource: Readonly<Pick<CanonicalHead, "chainId" | "number" | "hash" | "stateRoot">> = cutoff;
   const stateOwner = createRethQualifiedExecutorStateOwner({
     endpoint: "http://reth.vertical.test",
     fetch: (async (_url, init) => {
@@ -2051,7 +1956,17 @@ test.skip("offline structural UniV2 path awaits the generic full-denominator ass
       const target = typeof request.params[0] === "string" ? request.params[0].toLowerCase() : "";
       let result: unknown;
       if (request.method === "eth_getBlockByHash") {
-        result = { hash: cutoff.hash, number: "0x64", stateRoot: cutoff.stateRoot, timestamp: "0x7", gasLimit: "0x1c9c380", baseFeePerGas: "0x0", miner: address("4"), mixHash: h("vertical-mix") };
+        assert.equal(request.params[0], finalSimulationSource.hash);
+        result = {
+          hash: finalSimulationSource.hash,
+          number: `0x${BigInt(finalSimulationSource.number).toString(16)}`,
+          stateRoot: finalSimulationSource.stateRoot,
+          timestamp: "0x7",
+          gasLimit: "0x1c9c380",
+          baseFeePerGas: "0x0",
+          miner: address("4"),
+          mixHash: h("vertical-mix"),
+        };
       } else if (request.method === "eth_getBalance") {
         result = "0x0";
       } else if (request.method === "eth_getTransactionCount") {
@@ -2068,21 +1983,9 @@ test.skip("offline structural UniV2 path awaits the generic full-denominator ass
     }) as typeof globalThis.fetch,
   });
   const observedProgram: { value: { readonly programBytes: string } | null } = { value: null };
-  let runtimeSessionId: Hash | null = null;
+  const runtimeSessionIds = new Set<Hash>();
   const rpcRequests = structural.rpc.callRequests;
-  const observedSearch: {
-    outcome: SearcherRuntimeOutcomeV1<unknown> | null;
-    sourceStats: { readonly logicalReads: number; readonly physicalBuilds: number; readonly settledHits: number; readonly inFlightJoins: number } | null;
-    headFacts: unknown;
-    producerTerminal: unknown;
-  } = { outcome: null, sourceStats: null, headFacts: null, producerTerminal: null };
-  const strategyRuntime = issueRuntimeReleaseStrategyRuntimeService(
-    structural.authority,
-    strategyRuntimeFactory(
-      services.catalog.loadExact().definitionCatalogRoot,
-      structural.binding.qualifiedCapabilityRefsRoot,
-    ),
-  );
+  const strategyRuntime = services.strategyRuntime;
   const evidenceDirectory = mkdtempSync(join(tmpdir(), "aloha-univ2-production-evidence-"));
   t.after(() => rmSync(evidenceDirectory, { recursive: true, force: true }));
   const evidencePath = join(evidenceDirectory, "production-evidence.sqlite");
@@ -2139,8 +2042,8 @@ test.skip("offline structural UniV2 path awaits the generic full-denominator ass
     finalSimulationFactory: issueQualifiedFinalSimulationPortFactoryV1({
       async issue(currentSource, currentSourceCapability) {
         const sessionId = currentSource.sessionId;
-        if (runtimeSessionId === null) runtimeSessionId = sessionId;
-        else assert.equal(sessionId, runtimeSessionId, "both lanes must use the same ProducerSession");
+        assert.equal(runtimeSessionIds.has(sessionId), false, "each canonical head must own a fresh ProducerSession");
+        runtimeSessionIds.add(sessionId);
         const executorSnapshot = await stateOwner.issue({
           session: currentSourceCapability,
           authority: revmAuthority,
@@ -2173,271 +2076,193 @@ test.skip("offline structural UniV2 path awaits the generic full-denominator ass
     evidence,
   });
   application = applicationOwner.open(startup);
-  const observedHead = await runtimeSource.headSource.next(new AbortController().signal);
-  if (observedHead === null) throw new Error("vertical Reth source did not emit a canonical head");
-  const admission = await application.submitHead(observedHead);
-  if (admission === null) throw new Error("vertical Reth ingress did not observe the canonical head");
-  assert.equal(admission.accepted, true);
-  await application.waitForIdle();
+  let previousHead: CanonicalHead | null = null;
+  let successfulHeadRequestCount = 0;
+  const neutralReserves = Object.freeze({
+    [poolA]: `0x${word(1_000_000n)}${word(1_000_000n)}${word(42n)}`,
+    [poolTwo]: `0x${word(1_000_000n)}${word(1_000_000n)}${word(42n)}`,
+  });
+  for (let index = 0; index < 100; index += 1) {
+    if (index > 0) {
+      if (previousHead === null) throw new Error("vertical performance head parent is missing");
+      const nextHead = Object.freeze({
+        chainId: cutoff.chainId,
+        number: (BigInt(cutoff.number) + BigInt(index)).toString(),
+        hash: h(`vertical-performance-head:${index}`),
+        parentHash: previousHead.hash,
+        stateRoot: h(`vertical-performance-state:${index}`),
+      });
+      finalSimulationSource = nextHead;
+      structural.rpc.setRuntimeHead(nextHead);
+    }
+    try {
+      const observedHead = await runtimeSource.headSource.next(new AbortController().signal);
+      if (observedHead === null) throw new Error(`vertical Reth source did not emit canonical head ${index + 1}`);
+      const admission: { readonly accepted: boolean } | null = await application.submitHead(observedHead);
+      if (admission === null) throw new Error(`vertical Reth ingress did not observe canonical head ${index + 1}`);
+      assert.equal(admission.accepted, true);
+      await application.waitForIdle();
+      previousHead = observedHead;
+    } catch (error) {
+      throw new Error(`vertical performance head ${index + 1} failed after ${evidence.replay().producerTerminalCount} durable terminals`, { cause: error });
+    }
+    completedHeadCount = index + 1;
+    if (index === 0) {
+      successfulHeadRequestCount = rpcRequests.length;
+      structural.rpc.setRuntimeReserves(neutralReserves);
+    }
+  }
   const terminalCapability = application.readFinalDurableProducerTerminal();
   const terminalEvidence = readIssuedProducerHeadTerminalCapabilityV1(terminalCapability);
-  const facts = terminalEvidence.facts === null ? null : readIssuedProducerHeadFactsCapabilityV1(terminalEvidence.facts);
-  observedSearch.producerTerminal = terminalEvidence.terminal;
-  observedSearch.headFacts = facts;
-  const observedBlockscan = facts?.laneFacts.find(value => value.lane === "blockscan");
-  if (observedBlockscan?.terminalOutcome !== undefined) observedSearch.outcome = observedBlockscan.terminalOutcome as SearcherRuntimeOutcomeV1<unknown>;
-  if (observedBlockscan?.currentSource !== undefined && facts?.currentSourcePhysical !== null && facts?.currentSourcePhysical !== undefined) {
-    observedSearch.sourceStats = {
-      ...facts.currentSourcePhysical,
-      logicalReads: observedBlockscan.currentSource.logicalReads,
-      settledHits: observedBlockscan.currentSource.settledHits,
-      inFlightJoins: observedBlockscan.currentSource.inFlightJoins,
-    };
-  }
-  assert.equal(evidence.replay().producerTerminalCount, "1");
-  const result = observedSearch.outcome;
-  if (result === null || result.kind !== "unsigned-dry-run") {
-    throw new Error(`vertical search did not produce a dry-run receipt: ${JSON.stringify({
-      observedSearch,
-      revmPool: services.revmPool.snapshot(),
-      telemetry: application.telemetry(),
-      terminal: readIssuedProducerHeadTerminalCapabilityV1(application.readFinalDurableProducerTerminal()),
-    })}`);
-  }
-  assert.equal(result.receipt.signer, null);
-  assert.equal(result.receipt.transactionHash, null);
-  assert.equal(result.receipt.generationId, ready.generationId);
-  assert.equal(result.receipt.readyRecordHash, ready.readyRecordHash);
-  assert.equal(result.receipt.graphRoot, graph.graphRoot);
-  assert.equal(result.receipt.orderedEdgeIds.length, 2);
-  const headFacts = observedSearch.headFacts as {
-    readonly complete: boolean;
-    readonly candidateRefs: readonly Hash[];
-    readonly laneFacts: readonly {
-      readonly lane: "blockscan" | "backrun";
-      readonly terminalKind: string;
-      readonly complete: boolean;
-      readonly candidateIds: readonly Hash[];
-      readonly currentSource: {
-        readonly kind: string;
-        readonly lane: "blockscan" | "backrun";
-        readonly correlationId: Hash;
-        readonly source: typeof cutoff;
-        readonly logicalReads: number;
-        readonly settledHits: number;
-        readonly inFlightJoins: number;
-        readonly consumerAborts: number;
-        readonly consumerDeadlines: number;
-      };
-    }[];
-  };
-  assert.equal(headFacts.complete, false);
-  assert.ok(headFacts.candidateRefs.length > 1, "head denominator must retain non-selected candidates");
-  const blockscanFacts = headFacts.laneFacts.find(value => value.lane === "blockscan");
-  const backrunFacts = headFacts.laneFacts.find(value => value.lane === "backrun");
-  assert.equal(blockscanFacts?.complete, false);
-  assert.equal(blockscanFacts?.terminalKind, "unsigned-dry-run");
-  if (blockscanFacts === undefined) throw new Error("vertical blockscan facts are missing");
-  const sixStepTrace = readIssuedProducerLaneSixStepTraceV1(blockscanFacts);
-  assert.ok(sixStepTrace?.resolved.executionProgramOwnerEvidence);
-  assert.ok(sixStepTrace.resolved.finalSimulationOwnerEvidence);
-  assert.equal(sixStepTrace.resolved.executionProgramOwnerEvidence.programHash, result.receipt.programHash);
-  assert.equal(sixStepTrace.resolved.finalSimulationOwnerEvidence.finalSimulationReceiptHash, result.receipt.finalSimulationReceiptHash);
-  assert.equal(
-    (sixStepTrace.resolved.executionProgramOwnerEvidence.facts as Record<string, unknown>).kind,
-    "aloha.search-runtime.execution-program-owner-facts-v1",
-  );
-  assert.equal(
-    (sixStepTrace.resolved.finalSimulationOwnerEvidence.facts as Record<string, unknown>).kind,
-    "aloha.qualified-final-simulation-owner-facts-v1",
-  );
-  assert.equal(backrunFacts?.complete, true);
-  assert.equal(backrunFacts?.terminalKind, "no-input");
-  assert.deepEqual(backrunFacts?.candidateIds, []);
-  assert.equal(backrunFacts?.currentSource.kind, "aloha.current-source-rpc.logical-scope-facts-v1");
-  assert.equal(backrunFacts?.currentSource.lane, "backrun");
-  assert.deepEqual(backrunFacts?.currentSource.source, cutoff);
-  assert.deepEqual({
-    logicalReads: backrunFacts?.currentSource.logicalReads,
-    settledHits: backrunFacts?.currentSource.settledHits,
-    inFlightJoins: backrunFacts?.currentSource.inFlightJoins,
-    consumerAborts: backrunFacts?.currentSource.consumerAborts,
-    consumerDeadlines: backrunFacts?.currentSource.consumerDeadlines,
-  }, {
-    logicalReads: 0,
-    settledHits: 0,
-    inFlightJoins: 0,
-    consumerAborts: 0,
-    consumerDeadlines: 0,
-  });
-  const producerTerminal = observedSearch.producerTerminal as { readonly status: string; readonly reason: string };
-  assert.equal(producerTerminal.status, "failed");
-  assert.equal(producerTerminal.reason, "lane_retryable");
-  if (observedSearch.sourceStats === null) throw new Error("vertical search did not expose current-source facts");
-  const stats = observedSearch.sourceStats;
-  assert.ok(stats.logicalReads > 1, `expected repeated logical reserve reads: ${JSON.stringify(stats)}`);
-  assert.equal(stats.physicalBuilds, 2, JSON.stringify(stats));
-  assert.equal(stats.settledHits, stats.logicalReads - 2, JSON.stringify(stats));
-  assert.equal(stats.inFlightJoins, 0, JSON.stringify(stats));
-  assert.ok(runtimeSessionId, "release runtime must open one ProducerSession");
-  // Repeated stage reads for each route leg collapse to one physical request
-  // per distinct pool. The profitable route crosses two pools.
-  assert.equal(rpcRequests.length, 2);
-  const persistedEvidence = createSqliteDurableStore(evidencePath);
-  try {
-    persistedEvidence.bindStoreRole("searcher-production-evidence");
-    const candidateRows = persistedEvidence.readAppendLog(SEARCHER_PRODUCTION_EVIDENCE_NAMESPACES.candidateSets);
-    assert.equal(candidateRows.length, 1);
-    const candidateEvent = decodeCanonicalJson(candidateRows[0]!.bytes) as Record<string, unknown>;
-    const candidatePayload = candidateEvent.payload as Record<string, unknown>;
-    assert.equal("candidateSetRoot" in candidatePayload, false);
-    assert.ok(Array.isArray(candidatePayload.candidateTerminalObservations));
-    const observations = candidatePayload.candidateTerminalObservations as readonly Record<string, unknown>[];
-    assert.deepEqual(observations.map(observation => observation.performanceCandidateRef).sort(), headFacts.candidateRefs);
-    assert.equal(observations.filter(observation => observation.performanceOutcome === "verified").length, 1);
-    assert.equal(observations.filter(observation => observation.performanceOutcome === "policy-rejected").length, 3);
-    const verifiedObservation = observations.find(observation => observation.performanceOutcome === "verified");
-    assert.equal(verifiedObservation?.terminalLineageHash, result.receipt.lineageHash);
-    assert.equal(verifiedObservation?.sixStepEvidenceRoot, sixStepTrace.traceRoot);
-    assert.equal(candidatePayload.candidateTerminalObservationSetRoot, hashDomain(
-      "aloha/performance-candidate-terminal-observation-set-root/v1",
-      (candidatePayload.laneDenominators as readonly Record<string, unknown>[]).map(value => value.observationSetRoot),
-    ));
-  } finally {
-    persistedEvidence.close();
-  }
+  const finalHeadFacts = terminalEvidence.facts === null ? null : readIssuedProducerHeadFactsCapabilityV1(terminalEvidence.facts);
+  assert.equal(terminalEvidence.terminal.status, "completed", JSON.stringify(terminalEvidence.terminal));
+  assert.equal(finalHeadFacts?.complete, true);
+  assert.equal(evidence.replay().producerTerminalCount, "100");
+  assert.equal(evidence.replay().performanceFactsCompleteCount, "100");
+
   const rawPerformanceObservation = observeProductionPerformanceDatabaseV1(evidencePath);
-  assert.equal(rawPerformanceObservation.status, "incomplete", JSON.stringify(rawPerformanceObservation.reasons));
+  assert.equal(rawPerformanceObservation.status, "raw-complete", JSON.stringify(rawPerformanceObservation.reasons));
   assert.equal(rawPerformanceObservation.databaseSha256After, rawPerformanceObservation.databaseSha256Before);
   assert.equal(rawPerformanceObservation.storageSetRootAfter, rawPerformanceObservation.storageSetRootBefore);
-  const rawCandidateEvent = rawPerformanceObservation.events.find(event => event.eventType === "candidate-set");
-  assert.ok(rawCandidateEvent, JSON.stringify(rawPerformanceObservation.reasons));
+  assert.equal(rawPerformanceObservation.bundle?.heads.length, 100);
+  const rawCompleteEvents = rawPerformanceObservation.events.filter(event => event.eventType === "performance-facts-complete");
+  const rawProducerTerminals = rawPerformanceObservation.events.filter(event => event.eventType === "producer-terminal");
+  assert.equal(rawCompleteEvents.length, 100);
+  assert.equal(rawProducerTerminals.length, 100);
+  const successfulEvents = rawCompleteEvents.filter(event => event.payload.sixStepFacts !== null);
+  assert.equal(successfulEvents.length, 1, "exactly one durable head must carry owner-issued Six-Step success");
+  const rawCompleteEvent = successfulEvents[0]!;
+  const successfulAdmissionId = rawCompleteEvent.payload.admissionId;
+  const rawCandidateEvent = rawPerformanceObservation.events.find(event =>
+    event.eventType === "candidate-set" && event.payload.admissionId === successfulAdmissionId);
+  const rawCoverageEvent = rawPerformanceObservation.events.find(event =>
+    event.eventType === "head-coverage" && event.payload.admissionId === successfulAdmissionId);
+  const rawProducerTerminalEvent = rawProducerTerminals.find(event =>
+    (event.payload.terminal as Record<string, unknown>).terminalId === rawCompleteEvent.payload.terminalId);
+  assert.ok(rawCandidateEvent, "successful head candidate facts are missing");
+  assert.ok(rawCoverageEvent, "successful head coverage facts are missing");
+  assert.ok(rawProducerTerminalEvent, "successful head Producer terminal is missing");
+  const rawSixStep = rawCompleteEvent.payload.sixStepFacts as Record<string, unknown>;
+  const rawStage12 = rawSixStep.stage12 as Record<string, unknown>;
+  const rawStage36 = rawSixStep.stage36 as Record<string, unknown>;
+  const resolvedSixStep = rawStage36.resolved as Record<string, unknown>;
+  const receipt = resolvedSixStep.unsignedDryRun as unknown as UnsignedDryRunReceiptV1;
+  validateUnsignedDryRunReceiptValue(receipt);
+  assert.equal(receipt.signer, null);
+  assert.equal(receipt.transactionHash, null);
+  assert.equal(receipt.generationId, ready.generationId);
+  assert.equal(receipt.readyRecordHash, ready.readyRecordHash);
+  assert.equal(receipt.graphRoot, graph.graphRoot);
+  assert.equal(receipt.orderedEdgeIds.length, 2);
+  assert.equal(rawCoverageEvent.payload.complete, true);
+  const candidateRefs = rawCandidateEvent.payload.candidateRefs as readonly Hash[];
+  assert.ok(candidateRefs.length > 1, "head denominator must retain non-selected candidates");
+  const candidateObservations = rawCandidateEvent.payload.candidateTerminalObservations as readonly Record<string, unknown>[];
+  assert.equal(candidateObservations.filter(observation => observation.performanceOutcome === "verified").length, 1);
+  assert.equal(candidateObservations.filter(observation => observation.performanceOutcome === "policy-rejected").length, 3);
+  const verifiedObservation = candidateObservations.find(observation => observation.performanceOutcome === "verified");
+  assert.equal(verifiedObservation?.terminalLineageHash, receipt.lineageHash);
+  assert.equal(verifiedObservation?.sixStepEvidenceRoot, rawSixStep.stage36Root);
+  const executionEvidence = resolvedSixStep.executionProgramOwnerEvidence as Record<string, unknown>;
+  const finalSimulationEvidence = resolvedSixStep.finalSimulationOwnerEvidence as Record<string, unknown>;
+  assert.equal(executionEvidence.programHash, receipt.programHash);
+  assert.equal(finalSimulationEvidence.finalSimulationReceiptHash, receipt.finalSimulationReceiptHash);
+  assert.equal((executionEvidence.facts as Record<string, unknown>).kind, "aloha.search-runtime.execution-program-owner-facts-v1");
+  assert.equal((finalSimulationEvidence.facts as Record<string, unknown>).kind, "aloha.qualified-final-simulation-owner-facts-v1");
+  const sourceLogicalFacts = rawCoverageEvent.payload.currentSourceLogicalFacts as readonly Record<string, unknown>[];
+  const blockscanSourceFacts = sourceLogicalFacts.find(value => value.lane === "blockscan");
+  const backrunSourceFacts = sourceLogicalFacts.find(value => value.lane === "backrun");
+  const sourcePhysicalFacts = rawCoverageEvent.payload.currentSourcePhysicalFacts as Record<string, unknown>;
+  assert.ok(blockscanSourceFacts);
+  assert.ok(backrunSourceFacts);
+  assert.equal(backrunSourceFacts.kind, "aloha.current-source-rpc.logical-scope-facts-v1");
+  assert.deepEqual(backrunSourceFacts.source, cutoff);
+  assert.deepEqual({
+    logicalReads: backrunSourceFacts.logicalReads,
+    settledHits: backrunSourceFacts.settledHits,
+    inFlightJoins: backrunSourceFacts.inFlightJoins,
+    consumerAborts: backrunSourceFacts.consumerAborts,
+    consumerDeadlines: backrunSourceFacts.consumerDeadlines,
+  }, { logicalReads: 0, settledHits: 0, inFlightJoins: 0, consumerAborts: 0, consumerDeadlines: 0 });
+  assert.ok(Number(blockscanSourceFacts.logicalReads) > 1, `expected repeated logical reserve reads: ${JSON.stringify(blockscanSourceFacts)}`);
+  assert.equal(sourcePhysicalFacts.physicalBuilds, 2, JSON.stringify(sourcePhysicalFacts));
+  assert.equal(blockscanSourceFacts.settledHits, Number(blockscanSourceFacts.logicalReads) - 2, JSON.stringify(blockscanSourceFacts));
+  assert.equal(blockscanSourceFacts.inFlightJoins, 0, JSON.stringify(blockscanSourceFacts));
+  const producerTerminal = rawProducerTerminalEvent.payload.terminal as Record<string, unknown>;
+  assert.equal(producerTerminal.status, "completed");
+  assert.equal(producerTerminal.reason, "completed-with-no-backrun-input");
+  assert.equal(runtimeSessionIds.size, 100, "each durable head must use an isolated ProducerSession");
+  assert.equal(successfulHeadRequestCount, 2, "the successful head must issue one physical reserve read per distinct pool");
   assert.equal(
     (rawCandidateEvent.payload.candidateTerminalObservations as readonly unknown[]).length,
-    headFacts.candidateRefs.length,
+    candidateRefs.length,
   );
-  assert.ok(rawPerformanceObservation.reasons.includes("eligible-head-count-not-100"));
-  const healthyRawVariants = [
-    {
-      id: "complete-no-candidate-shape",
-      apply(event: Record<string, unknown>) {
-        removeAllCandidateObservations(event.payload as Record<string, unknown>);
-      },
-    },
-    {
-      id: "all-chain-proven-rejected-shape",
-      apply(event: Record<string, unknown>) {
-        replaceVerifiedTerminal(event.payload as Record<string, unknown>, "chain-proven-rejected");
-      },
-    },
-    {
-      id: "simulation-reverted-shape",
-      apply(event: Record<string, unknown>) {
-        replaceVerifiedTerminal(event.payload as Record<string, unknown>, "simulation-reverted");
-      },
-    },
-  ] as const;
-  for (const variant of healthyRawVariants) {
-    const variantPath = mutateProductionCandidateEvent(evidencePath, variant.id, variant.apply);
-    const observed = observeProductionPerformanceDatabaseV1(variantPath);
-    assert.equal(observed.status, "incomplete", `${variant.id}: ${JSON.stringify(observed.reasons)}`);
-    assert.ok(observed.reasons.includes("eligible-head-count-not-100"), variant.id);
+  const selectedParents = rawStage12.selectedParents as readonly Record<string, unknown>[];
+  const selectedGraphLegs = rawStage36.selectedGraphLegs as readonly Record<string, unknown>[];
+  assert.deepEqual(selectedParents.map(parent => parent.edgeId), receipt.orderedEdgeIds);
+  assert.deepEqual(selectedGraphLegs.map(leg => leg.edgeId), receipt.orderedEdgeIds);
+  assert.deepEqual(
+    selectedParents.map(parent => parent.edgeId),
+    selectedGraphLegs.map(leg => leg.edgeId),
+    "Stage1/2 selected parents must preserve the exact Stage3 Graph-leg order",
+  );
+  const productionArtifactSetRoots = (rawStage36.resolved as Record<string, unknown>).productionArtifactSetRoots as readonly unknown[];
+  assert.equal(rawStage12.stage3ArtifactSetRoot, productionArtifactSetRoots[0]);
+  for (const parent of selectedParents) {
+    assert.match(String(parent.stage1EventId), /^0x[0-9a-f]{64}$/);
+    assert.match(String(parent.stage1ArtifactSetRoot), /^0x[0-9a-f]{64}$/);
+    assert.match(String(parent.stage2EventId), /^0x[0-9a-f]{64}$/);
+    assert.match(String(parent.stage2ArtifactSetRoot), /^0x[0-9a-f]{64}$/);
+    assert.match(String(parent.instancePublicationRoot), /^0x[0-9a-f]{64}$/);
+    assert.match(String(parent.edgeContentRoot), /^0x[0-9a-f]{64}$/);
   }
-  const candidateMutations = [
+  for (const forbidden of ["candidates", "outcomes", "verifiedInstances", "instanceCatalog", "graph"]) {
+    assert.equal(Object.prototype.hasOwnProperty.call(rawStage12, forbidden), false);
+  }
+  assert.deepEqual(rawPerformanceObservation.reasons, []);
+  for (const mutation of [
     {
-      id: "missing-candidate-ref",
+      id: "stage12-parent-reorder",
       apply(event: Record<string, unknown>) {
-        const payload = event.payload as Record<string, unknown>;
-        payload.candidateRefs = (payload.candidateRefs as readonly unknown[]).slice(1);
+        const facts = (event.payload as Record<string, unknown>).sixStepFacts as Record<string, unknown>;
+        const stage12 = facts.stage12 as Record<string, unknown>;
+        const parents = stage12.selectedParents as readonly unknown[];
+        stage12.selectedParents = [parents[1], parents[0], ...parents.slice(2)];
       },
-      reason: /candidateRefs denominator mismatch/,
     },
     {
-      id: "duplicate-candidate-observation",
+      id: "stage12-parent-edge-splice",
       apply(event: Record<string, unknown>) {
-        const payload = event.payload as Record<string, unknown>;
-        const observations = payload.candidateTerminalObservations as readonly unknown[];
-        payload.candidateTerminalObservations = [observations[0], ...observations];
+        const facts = (event.payload as Record<string, unknown>).sixStepFacts as Record<string, unknown>;
+        const stage12 = facts.stage12 as Record<string, unknown>;
+        const parents = stage12.selectedParents as Record<string, unknown>[];
+        parents[0]!.edgeId = h("stage12-edge-splice");
       },
-      reason: /order\/identity mismatch|duplicate/,
     },
-    {
-      id: "cross-lane-candidate-ref",
-      apply(event: Record<string, unknown>) {
-        const payload = event.payload as Record<string, unknown>;
-        const observations = payload.candidateTerminalObservations as Record<string, unknown>[];
-        observations[0]!.performanceCandidateRef = h("candidate-ref-splice");
-      },
-      reason: /performanceCandidateRef mismatch/,
-    },
-    {
-      id: "candidate-timing-root",
-      apply(event: Record<string, unknown>) {
-        const payload = event.payload as Record<string, unknown>;
-        const observations = payload.candidateTerminalObservations as Record<string, unknown>[];
-        observations[0]!.timingRoot = h("timing-root-splice");
-      },
-      reason: /timingRoot mismatch/,
-    },
-    {
-      id: "candidate-observation-root",
-      apply(event: Record<string, unknown>) {
-        const payload = event.payload as Record<string, unknown>;
-        const observations = payload.candidateTerminalObservations as Record<string, unknown>[];
-        observations[0]!.observationRoot = h("observation-root-splice");
-      },
-      reason: /observationRoot mismatch/,
-    },
-    {
-      id: "simulation-outcome-mapping",
-      apply(event: Record<string, unknown>) {
-        const payload = event.payload as Record<string, unknown>;
-        const observations = payload.candidateTerminalObservations as Record<string, unknown>[];
-        const verified = observations.find(observation => observation.performanceOutcome === "verified");
-        if (verified === undefined) throw new TypeError("verified mutation subject is missing");
-        verified.performanceOutcome = "simulation-reverted";
-      },
-      reason: /performanceOutcome mismatch/,
-    },
-    {
-      id: "post-success-winner-lineage",
-      apply(event: Record<string, unknown>) {
-        const payload = event.payload as Record<string, unknown>;
-        replaceWithPostSuccessTerminal(payload, terminal => {
-          terminal.winnerTerminalLineageHash = h("winner-lineage-splice");
-        });
-      },
-      reason: /winner lineage mismatch/,
-    },
-    {
-      id: "post-success-decision-time",
-      apply(event: Record<string, unknown>) {
-        const payload = event.payload as Record<string, unknown>;
-        replaceWithPostSuccessTerminal(payload, terminal => {
-          terminal.decisionMonotonicNs = (BigInt(terminal.decisionMonotonicNs as string) + 1_000n).toString();
-        });
-      },
-      reason: /winner lineage mismatch/,
-    },
-  ] as const;
-  for (const mutation of candidateMutations) {
-    const mutatedPath = mutateProductionCandidateEvent(evidencePath, mutation.id, mutation.apply);
+  ] as const) {
+    const mutatedPath = mutateProductionCompletePerformanceEvent(evidencePath, mutation.id, mutation.apply);
     const observed = observeProductionPerformanceDatabaseV1(mutatedPath);
     assert.equal(observed.status, "invalid", mutation.id);
-    assert.match(observed.reasons[0] ?? "", mutation.reason, mutation.id);
   }
   assert.ok(structural.rpc.canonicalRequests.some(request => request.method === "eth_chainId"));
   assert.ok(structural.rpc.canonicalRequests.some(request => request.method === "eth_getBlockByNumber"));
   assert.ok(structural.rpc.canonicalRequests.some(request => request.method === "eth_getBlockByNumber"
     && (request.params as readonly unknown[])[0] === "pending"
     && (request.params as readonly unknown[])[1] === true));
-  for (const request of rpcRequests) {
+  assert.equal(rpcRequests.length, 200, "each of 100 heads must read both distinct graph pools exactly once");
+  for (const [index, request] of rpcRequests.entries()) {
     const params = request.params as readonly Record<string, unknown>[];
-    assert.deepEqual(params[1], { blockHash: cutoff.hash, requireCanonical: true });
+    assert.equal(params[1]?.requireCanonical, true);
+    const expectedHeadIndex = Math.floor(index / 2);
+    assert.equal(
+      params[1]?.blockHash,
+      expectedHeadIndex === 0 ? cutoff.hash : h(`vertical-performance-head:${expectedHeadIndex}`),
+    );
     assert.equal(params[0]?.data, UNIV2_GET_RESERVES_SELECTOR);
   }
   const rpcTargets = rpcRequests.map(request => String((request.params as readonly Record<string, unknown>[])[0]?.to).toLowerCase());
-  assert.deepEqual([...rpcTargets].sort(), [poolA, poolTwo].sort());
+  assert.equal(rpcTargets.filter(target => target === poolA).length, 100);
+  assert.equal(rpcTargets.filter(target => target === poolTwo).length, 100);
   if (observedProgram.value === null) throw new Error("final simulation did not receive an execution program");
   const packed = decodePackedCallProgram(decodeExecutorExecuteCalldata(observedProgram.value.programBytes));
   assert.equal(packed.length, 4);

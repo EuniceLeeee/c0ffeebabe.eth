@@ -1379,7 +1379,7 @@ function oracleRecomputeWorker(
   if (Object.prototype.hasOwnProperty.call(worker ?? {}, "effectTransport")) keys.push("effectTransport");
   const authority = oraclePayloadRecord(worker?.authority);
   const simulationFact = oraclePayloadRecord(simulation?.simulation);
-  if (!oracleExactPayloadKeys(finalFacts, ["kind", "executorQualification", "projection", "workerReceipt"])
+  if (!oracleExactPayloadKeys(finalFacts, ["kind", "artifactProgramHash", "wireProgramHash", "executorQualification", "projection", "workerReceipt"])
     || finalFacts?.kind !== "aloha.qualified-final-simulation-owner-facts-v1"
     || !oracleExactPayloadKeys(observedQualification, ["engineBuildFingerprint", "executableFingerprint", "qualifiedExecutorRegistryRoot", "selectedExecutorLeafHash", "releaseRoleManifestRoot"])
     || !oracleExactPayloadKeys(expectedQualification, ["executorKind", "engineBuildFingerprint", "executableFingerprint", "qualifiedExecutorRegistryRoot", "selectedExecutorLeafHash", "releaseRoleManifestRoot"])
@@ -1390,7 +1390,8 @@ function oracleRecomputeWorker(
     || observedQualification?.selectedExecutorLeafHash !== expectedQualification.selectedExecutorLeafHash
     || observedQualification?.releaseRoleManifestRoot !== expectedQualification.releaseRoleManifestRoot
     || !oracleExactPayloadKeys(worker, keys) || !oracleExactPayloadKeys(effects, ["format", "bytes", "observedAccounts", "effectsHash"])
-    || worker?.generationId !== generationId || !same(worker?.source, source) || worker?.programHash !== programHash
+    || finalFacts?.artifactProgramHash !== programHash || worker?.programHash !== finalFacts?.wireProgramHash
+    || worker?.generationId !== generationId || !same(worker?.source, source)
     || worker?.status !== "returned" || worker?.engine !== expectedQualification.executorKind
     || worker?.engineBuildFingerprint !== expectedQualification.engineBuildFingerprint || authority === null
     || worker?.authorityRoot !== authority.authorityRoot || worker?.workerEpoch !== authority.workerEpoch

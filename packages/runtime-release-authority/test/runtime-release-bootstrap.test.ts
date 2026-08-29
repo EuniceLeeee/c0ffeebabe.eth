@@ -293,7 +293,7 @@ function applicationObservationPorts(directory: string) {
       producerTerminalBindingRoot: terminal.producerTerminalBindingRoot,
       laneTerminalSetRoot: terminal.laneTerminalSetRoot,
       readyRecordHash: terminal.readyRecordHash,
-      auditRoot: terminal.nativeAuditRoot,
+      auditRoot: terminal.nativeAuditManifest.auditRoot,
       fullGraphCoarseSweepRoot: sweep.sweepRoot,
       actualCurrentSource: terminal.actualCurrentSource,
       actualCurrentSourceRoot: hashDomain(

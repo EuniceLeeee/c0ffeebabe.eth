@@ -25,6 +25,7 @@ import {
   ECONOMIC_SAFETY_REVM_OBSERVATION_SCHEMA_REF_V1,
   type EconomicSafetyProfileRequiredClaimV1,
 } from "../../../specs/economic-safety-profile/src/index.ts";
+import type { EconomicSafetyPolicyRejectionCodeV1 } from "./policy-rejection.ts";
 
 export type { EconomicValuationFactV1 } from "../../../specs/economic-valuation-owner/src/index.ts";
 
@@ -136,11 +137,42 @@ export interface EconomicSafetyEvidenceV1 {
   readonly evidenceRoot: Hash;
 }
 
-export type EconomicSafetyEvidenceCapabilityV1 = object;
+export { EconomicSafetyPolicyRejectionErrorV1 } from "./policy-rejection.ts";
+export type { EconomicSafetyPolicyRejectionCodeV1 } from "./policy-rejection.ts";
+
+export interface EconomicSafetyChainRejectionV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.economic-safety-chain-rejection-v1";
+  readonly authorityRoot: Hash;
+  readonly implementationHash: Hash;
+  readonly releaseProvenanceHash: Hash;
+  readonly correlationId: Hash;
+  readonly generationId: string;
+  readonly source: EconomicSafetySourceV1;
+  readonly objectiveRef: Hash;
+  readonly exactHash: Hash;
+  readonly programHash: Hash;
+  readonly obligationRoot: Hash;
+  readonly finalSimulationReceiptHash: Hash;
+  readonly effectsHash: Hash;
+  readonly executionOwnerEvidenceRoot: Hash;
+  readonly finalSimulationOwnerEvidenceRoot: Hash;
+  readonly executionOwnerFactsRoot: Hash;
+  readonly finalSimulationOwnerFactsRoot: Hash;
+  readonly declaredObligationSetRoot: Hash;
+  readonly code: EconomicSafetyPolicyRejectionCodeV1;
+  readonly evidenceRoot: Hash;
+}
+
+export type EconomicSafetyFinalizationOutcomeV1 = EconomicSafetyEvidenceV1 | EconomicSafetyChainRejectionV1;
+
+export interface EconomicSafetyEvidenceCapabilityV1 {
+  readonly kind: "opaque-qualified-stage-rejection-capability";
+}
 
 export interface EconomicSafetyFinalizationServiceV1 {
   readonly finalize: (input: EconomicSafetyFinalizationInputV1) => Promise<EconomicSafetyEvidenceCapabilityV1>;
-  readonly read: (capability: EconomicSafetyEvidenceCapabilityV1) => EconomicSafetyEvidenceV1;
+  readonly read: (capability: EconomicSafetyEvidenceCapabilityV1) => EconomicSafetyFinalizationOutcomeV1;
   readonly binding: () => EconomicSafetyEvidenceAuthorityExpectationV1;
 }
 
@@ -160,6 +192,7 @@ export interface EconomicSafetyDecisionV1 {
 export interface EconomicSafetyQualifiedEvaluatorV1 {
   readonly evaluate: (input: EconomicSafetyFinalizationInputV1) => Promise<EconomicSafetyDecisionV1>;
 }
+
 
 export {
   createEconomicSafetyQualifiedEvaluatorV1,
@@ -477,6 +510,91 @@ export function validateEconomicSafetyEvidenceV1(
     || body.declaredObligationSetRoot !== hashDomain("aloha/economic-safety/declared-obligation-set/v1", body.declaredObligations)) throw new TypeError("economic safety evidence fact commitment mismatch");
   const evidenceRoot = positiveHash(value.evidenceRoot, "economicSafety.evidence.evidenceRoot");
   if (evidenceRoot !== hashDomain("aloha/economic-safety-finalization-evidence/v1", evidencePayload(body))) throw new TypeError("economic safety evidence root mismatch");
+  return deepFreeze({ ...body, evidenceRoot });
+}
+
+function policyRejectionCode(value: unknown, path: string): EconomicSafetyPolicyRejectionCodeV1 {
+  if (value !== "quoted-gain-not-positive" && value !== "quoted-gain-below-minimum"
+    && value !== "value-at-risk-exceeded" && value !== "declared-gas-exceeded"
+    && value !== "net-profit-not-positive") throw new TypeError(`${path} is invalid`);
+  return value;
+}
+
+function economicSafetyChainRejectionBody(
+  inputValue: {
+    readonly authorityRoot: Hash;
+    readonly implementationHash: Hash;
+    readonly releaseProvenanceHash: Hash;
+    readonly input: EconomicSafetyFinalizationInputV1;
+    readonly code: EconomicSafetyPolicyRejectionCodeV1;
+  },
+): Omit<EconomicSafetyChainRejectionV1, "evidenceRoot"> {
+  const normalized = normalizeEconomicSafetyFinalizationInputV1(inputValue.input);
+  if (normalized.releaseProvenanceHash !== inputValue.releaseProvenanceHash) throw new TypeError("economic safety rejection release provenance mismatch");
+  return deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.economic-safety-chain-rejection-v1" as const,
+    authorityRoot: positiveHash(inputValue.authorityRoot, "economicSafety.rejection.authorityRoot"),
+    implementationHash: positiveHash(inputValue.implementationHash, "economicSafety.rejection.implementationHash"),
+    releaseProvenanceHash: normalized.releaseProvenanceHash,
+    correlationId: normalized.correlationId,
+    generationId: normalized.generationId,
+    source: normalized.source,
+    objectiveRef: normalized.objectiveRef,
+    exactHash: normalized.exactHash,
+    programHash: normalized.programHash,
+    obligationRoot: normalized.obligationRoot,
+    finalSimulationReceiptHash: normalized.finalSimulationReceiptHash,
+    effectsHash: normalized.effectsHash,
+    executionOwnerEvidenceRoot: normalized.executionOwnerEvidenceRoot,
+    finalSimulationOwnerEvidenceRoot: normalized.finalSimulationOwnerEvidenceRoot,
+    executionOwnerFactsRoot: hashDomain("aloha/economic-safety/execution-owner-facts/v1", normalized.executionOwnerFacts),
+    finalSimulationOwnerFactsRoot: hashDomain("aloha/economic-safety/final-simulation-owner-facts/v1", normalized.finalSimulationOwnerFacts),
+    declaredObligationSetRoot: hashDomain("aloha/economic-safety/declared-obligation-set/v1", normalized.declaredObligations),
+    code: policyRejectionCode(inputValue.code, "economicSafety.rejection.code"),
+  });
+}
+
+export function sealEconomicSafetyChainRejectionV1(inputValue: {
+  readonly authorityRoot: Hash;
+  readonly implementationHash: Hash;
+  readonly releaseProvenanceHash: Hash;
+  readonly input: EconomicSafetyFinalizationInputV1;
+  readonly code: EconomicSafetyPolicyRejectionCodeV1;
+}): EconomicSafetyChainRejectionV1 {
+  const body = economicSafetyChainRejectionBody(inputValue);
+  return deepFreeze({ ...body, evidenceRoot: hashDomain("aloha/economic-safety-chain-rejection/v1", body as unknown as CanonicalJson) });
+}
+
+export function validateEconomicSafetyChainRejectionV1(
+  value: EconomicSafetyChainRejectionV1,
+  expected: EconomicSafetyFinalizationInputV1,
+  authority: EconomicSafetyEvidenceAuthorityExpectationV1,
+): EconomicSafetyChainRejectionV1 {
+  assertPlainObject(value, "economicSafety.rejection");
+  assertExactKeys(value, [
+    "schemaVersion", "kind", "authorityRoot", "implementationHash", "releaseProvenanceHash", "correlationId",
+    "generationId", "source", "objectiveRef", "exactHash", "programHash", "obligationRoot", "finalSimulationReceiptHash",
+    "effectsHash", "executionOwnerEvidenceRoot", "finalSimulationOwnerEvidenceRoot", "executionOwnerFactsRoot",
+    "finalSimulationOwnerFactsRoot", "declaredObligationSetRoot", "code", "evidenceRoot",
+  ], "economicSafety.rejection");
+  if (value.schemaVersion !== 1 || value.kind !== "aloha.economic-safety-chain-rejection-v1") throw new TypeError("economic safety rejection kind/version mismatch");
+  const body = economicSafetyChainRejectionBody({
+    authorityRoot: positiveHash(value.authorityRoot, "economicSafety.rejection.authorityRoot"),
+    implementationHash: positiveHash(value.implementationHash, "economicSafety.rejection.implementationHash"),
+    releaseProvenanceHash: positiveHash(value.releaseProvenanceHash, "economicSafety.rejection.releaseProvenanceHash"),
+    input: expected,
+    code: policyRejectionCode(value.code, "economicSafety.rejection.code"),
+  });
+  if (body.authorityRoot !== authority.authorityRoot || body.implementationHash !== authority.implementationHash
+    || body.releaseProvenanceHash !== authority.releaseProvenanceHash) throw new TypeError("economic safety rejection authority binding mismatch");
+  for (const key of Object.keys(body) as (keyof typeof body)[]) {
+    if (encodeCanonicalJson(value[key] as CanonicalJson) !== encodeCanonicalJson(body[key] as CanonicalJson)) {
+      throw new TypeError(`economic safety rejection ${String(key)} mismatch`);
+    }
+  }
+  const evidenceRoot = positiveHash(value.evidenceRoot, "economicSafety.rejection.evidenceRoot");
+  if (evidenceRoot !== hashDomain("aloha/economic-safety-chain-rejection/v1", body as unknown as CanonicalJson)) throw new TypeError("economic safety rejection root mismatch");
   return deepFreeze({ ...body, evidenceRoot });
 }
 

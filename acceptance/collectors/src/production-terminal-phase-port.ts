@@ -28,7 +28,6 @@ import {
 import type { SchemaRef } from "../../../specs/core-envelope/src/index.ts";
 import { sourcePlanIdentity } from "../../../packages/discovery/src/index.ts";
 import type { ProductionSixStepStoredArtifactV1 } from "../../../packages/evidence-emitter/src/index.ts";
-import { referencedFullFamilyArtifactDigests } from "../../../specs/full-family-facts/src/index.ts";
 import type { ProductionFullFamilyObserverResultV1 } from "./full-family-observer.ts";
 import { ContentAddressedObserverSinkV1, type ObservedContentArtifactV1 } from "./content-addressed-sink.ts";
 import {
@@ -38,7 +37,10 @@ import {
   readProductionSixStepCollectorResultV1,
 } from "./production-six-step-port.ts";
 import type { ProductionSixStepObserverResultV1 } from "./six-step-observer.ts";
-import { ProductionTerminalPhaseLocatorIndexV1 } from "./terminal-phase-locator-index.ts";
+import {
+  ProductionTerminalPhaseLocatorIndexV1,
+  readStoredFullFamilyPredicateArtifactsV1,
+} from "./terminal-phase-locator-index.ts";
 import { createProductionTerminalPhaseFullFamilyProjectionV1 } from "./terminal-phase-full-family-projection.ts";
 import { TERMINAL_SELECTION_ARTIFACT_SCHEMA_REFS } from "../../terminal-selection-facts/src/schema.ts";
 
@@ -158,7 +160,7 @@ export function assertProductionTerminalPhaseReleaseMetadataV1(
     || result.producerTerminalBindingRoot !== terminal.producerTerminalBindingRoot
     || result.laneTerminalSetRoot !== terminal.laneTerminalSetRoot
     || result.readyRecordHash !== terminal.readyRecordHash
-    || result.auditRoot !== terminal.nativeAuditRoot
+    || result.auditRoot !== terminal.nativeAuditManifest.auditRoot
     || finalWindow.finalDurableWindowId !== terminal.finalDurableWindowId
     || finalWindow.release.bindingId !== terminal.runtimeBindingId
     || finalWindow.release.releaseProvenanceHash !== terminal.releaseProvenanceHash
@@ -280,18 +282,9 @@ export function issueProductionTerminalPhaseCollectorPortV1(
     if (fullFamilyTerminalBindingArtifact === null || fullGraphCoarseSweepArtifact === null) {
       throw new TypeError("terminal-phase Full-Family projection source artifacts are missing");
     }
-    const fullFamilyPredicateArtifacts = (() => {
-      if (fullFamilyResult.bundle === null || fullFamilyResult.bundleArtifact === null) return Object.freeze([]);
-      const expected = new Map(referencedFullFamilyArtifactDigests(fullFamilyResult.bundle));
-      const byRef = new Map(fullFamilyResult.observedArtifacts.map(value => [value.artifact.ref.artifactRefId, value.artifact]));
-      return Object.freeze([...expected].sort(([left], [right]) => left.localeCompare(right)).map(([artifactRefId, contentSha256]) => {
-        const artifact = byRef.get(artifactRefId);
-        if (artifact === undefined || artifact.contentSha256 !== contentSha256) {
-          throw new TypeError(`terminal-phase Full-Family referenced artifact is missing: ${artifactRefId}`);
-        }
-        return artifact;
-      }));
-    })();
+    const fullFamilyPredicateArtifacts = fullFamilyResult.bundleArtifact === null
+      ? Object.freeze([])
+      : await readStoredFullFamilyPredicateArtifactsV1(sink, fullFamilyResult.bundleArtifact.bytes);
     const sixStepResult = readProductionSixStepCollectorResultV1(
       invocation.sixStepObservationResultCapability as ProductionSixStepObservationResultCapabilityV1,
     );

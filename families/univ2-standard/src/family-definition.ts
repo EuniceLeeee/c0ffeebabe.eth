@@ -3,6 +3,7 @@ import {
   familyAuthoringDigest,
   type FamilyAuthoringDefinitionV1,
 } from "../../../packages/family-sdk/authoring/index.ts";
+import { FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1 } from "../../../packages/family-sdk/runtime/index.ts";
 import { FAMILY_SEARCH_RUNTIME_ADAPTER_ROLE_V1 } from "../../../packages/family-sdk/search-runtime/index.ts";
 import {
   asCapabilityId,
@@ -204,11 +205,21 @@ const factContracts: readonly FamilyFactContractRefV1[] = Object.freeze([
   }),
 ]);
 
+export const UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_DECLARATION = Object.freeze({
+  modulePath: "families/univ2-standard/src/runtime/physical-adapter.ts",
+  exportName: "UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+  capabilityIds: Object.freeze({}),
+  actionOwnerIds: Object.freeze({}),
+});
+
 const pluginCodeHash = hashDomain("aloha/univ2-standard/plugin-code/v1", {
   moduleRoot,
   stages: [nomination, identity, materialization, projection, rehydration],
   extensions: [stateExtension, coarseExtension, exactExtension],
-  runtimeAdapters: { [FAMILY_SEARCH_RUNTIME_ADAPTER_ROLE_V1]: UNIV2_STANDARD_SEARCH_ADAPTER_DECLARATION },
+  runtimeAdapters: {
+    [FAMILY_SEARCH_RUNTIME_ADAPTER_ROLE_V1]: UNIV2_STANDARD_SEARCH_ADAPTER_DECLARATION,
+    [FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1]: UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_DECLARATION,
+  },
   actionOwners: [UNIV2_STANDARD_SWAP_ACTION_OWNER],
   factContracts,
 });
@@ -268,6 +279,7 @@ const definitionInput: FamilyAuthoringDefinitionV1 = {
   },
   runtimeAdapters: {
     [FAMILY_SEARCH_RUNTIME_ADAPTER_ROLE_V1]: UNIV2_STANDARD_SEARCH_ADAPTER_DECLARATION,
+    [FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1]: UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_DECLARATION,
   },
   actionOwners: [UNIV2_STANDARD_SWAP_ACTION_OWNER],
   acceptanceDeclarations: factContracts,

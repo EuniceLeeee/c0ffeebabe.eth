@@ -47,15 +47,21 @@ import {
   createFullFamilyFactLocator,
   decodeFullFamilyOutcomeArtifact,
   deriveFullFamilyOutcomeSummary,
+  encodeFullFamilyArtifactRefIndexV1,
+  encodeFullFamilyArtifactRefPageV1,
   encodeFullFamilyCandidateProofVerifierBinding,
   encodeFullFamilyEvidenceArtifact,
-  encodeFullFamilyFacts,
+  encodeFullFamilyFactBundleStorageV1,
   encodeFullFamilyOutcomeArtifact,
   encodeFullFamilyReadyRecord,
   encodeFullFamilyReleaseProjectionArtifact,
   encodeFullFamilySourceCoverageArtifact,
   FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS,
   FULL_FAMILY_FACT_SCHEMA_MANIFEST,
+  FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST,
+  sealFullFamilyArtifactRefIndexV1,
+  sealFullFamilyArtifactRefPageV1,
+  sealFullFamilyFactBundleStorageV1,
   sealFamilyEvidencePartition,
   sealFamilyOutcomePartition,
   sealFullFamilyFacts,
@@ -64,6 +70,8 @@ import {
   type FamilyOutcomeItemV1,
   type FamilyReleaseSetDraftV1,
   type FullFamilyFactBundleV1,
+  type FullFamilyPartitionRoleV1,
+  type FullFamilyStoredPartitionBindingInputV1,
   type FullFamilyMatrixEntryV1,
   type FullFamilyCandidateProofVerifierBindingV1,
   type FullFamilyEvidenceArtifactV1,
@@ -250,6 +258,77 @@ class ArtifactSet {
     this.artifacts.push(artifact);
     return artifact;
   }
+}
+
+function storeBoundedBundle(bundle: FullFamilyFactBundleV1): Readonly<{
+  readonly bundleArtifact: StoredArtifactV1;
+  readonly storageArtifacts: readonly StoredArtifactV1[];
+}> {
+  const artifacts = new Map<Hash, StoredArtifactV1>();
+  const add = (bytes: Uint8Array, schema: SchemaRef): StoredArtifactV1 => {
+    const artifact = storeArtifact(bytes, schema);
+    artifacts.set(artifact.ref.artifactRefId, artifact);
+    return artifact;
+  };
+  const bindings: FullFamilyStoredPartitionBindingInputV1[] = [];
+  for (const family of bundle.families) {
+    const partitions = [
+      ["source-plans", family.sourcePlans],
+      ["universe-candidates", family.universeCandidates],
+      ["outcomes", family.outcomes],
+      ["instance-publications", family.instancePublications],
+      ["projected-edges", family.projectedEdges],
+      ["declared-coarse-capabilities", family.declaredCoarseCapabilities],
+      ["coarse-rankable", family.coarseRankable],
+      ["coarse-unavailable", family.coarseUnavailable],
+      ["unranked-admissions", family.unrankedAdmissions],
+      ["declared-exact-capabilities", family.declaredExactCapabilities],
+      ["owned-actions", family.ownedActions],
+    ] as const;
+    for (const [role, partition] of partitions) {
+      let nextPageRef: Readonly<{ readonly artifactRefId: Hash; readonly contentSha256: Hash }> | null = null;
+      const pageCount = Math.ceil(partition.items.length / 128);
+      for (let ordinal = pageCount - 1; ordinal >= 0; ordinal -= 1) {
+        const page = sealFullFamilyArtifactRefPageV1({
+          refs: partition.items.slice(ordinal * 128, (ordinal + 1) * 128).map(item => Object.freeze({
+            artifactRefId: item.evidenceArtifactRefId,
+            contentSha256: item.evidenceContentSha256,
+          })),
+          nextPageRef,
+        });
+        const artifact = add(
+          encodeFullFamilyArtifactRefPageV1(page),
+          schemaRef(FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.artifactRefPage),
+        );
+        nextPageRef = Object.freeze({
+          artifactRefId: artifact.ref.artifactRefId,
+          contentSha256: artifact.ref.contentSha256,
+        });
+      }
+      const index = sealFullFamilyArtifactRefIndexV1({
+        pageCount: String(pageCount),
+        firstPageRef: nextPageRef,
+      });
+      const indexArtifact = add(
+        encodeFullFamilyArtifactRefIndexV1(index),
+        schemaRef(FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.artifactRefIndex),
+      );
+      bindings.push(Object.freeze({
+        familyId: family.familyId,
+        role: role as FullFamilyPartitionRoleV1,
+        count: partition.count,
+        root: partition.root,
+        indexArtifactRefId: indexArtifact.ref.artifactRefId,
+        indexContentSha256: indexArtifact.ref.contentSha256,
+      }));
+    }
+  }
+  const storage = sealFullFamilyFactBundleStorageV1(bundle, bindings);
+  const bundleArtifact = add(
+    encodeCanonicalBytes(storage),
+    schemaRef(FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST),
+  );
+  return Object.freeze({ bundleArtifact, storageArtifacts: Object.freeze([...artifacts.values()]) });
 }
 
 function evidence(
@@ -955,13 +1034,8 @@ function buildFixture(
     },
     families,
   });
-  const bundleSchema = {
-    id: FULL_FAMILY_FACT_SCHEMA_MANIFEST.id,
-    version: FULL_FAMILY_FACT_SCHEMA_MANIFEST.version,
-    schemaHash: FULL_FAMILY_FACT_SCHEMA_MANIFEST.schemaHash,
-  };
-  const bundleArtifact = storeArtifact(encodeFullFamilyFacts(bundle), bundleSchema);
-  store.artifacts.push(bundleArtifact);
+  const { bundleArtifact, storageArtifacts } = storeBoundedBundle(bundle);
+  store.artifacts.push(...storageArtifacts);
   const refs = store.artifacts.map(artifact => artifact.ref);
   const claims = store.artifacts.map(artifact => artifact.claim);
   const leases = store.artifacts.map(artifact => artifact.lease);
@@ -995,13 +1069,10 @@ function buildFixture(
 
 async function buildQualificationAdapterCorpus() {
   const fixture = await buildFullFamilyQualificationCorpus();
-  const bundleArtifact = storeArtifact(
-    encodeFullFamilyFacts(fixture.bundle),
-    schemaRef(FULL_FAMILY_FACT_SCHEMA_MANIFEST),
-  );
-  const refs = [...fixture.artifacts.map(artifact => artifact.ref), bundleArtifact.ref];
-  const claims = [...fixture.artifacts.map(artifact => artifact.claim), bundleArtifact.claim];
-  const leases = [...fixture.artifacts.map(artifact => artifact.lease), bundleArtifact.lease];
+  const { bundleArtifact, storageArtifacts } = storeBoundedBundle(fixture.bundle);
+  const refs = [...fixture.artifacts.map(artifact => artifact.ref), ...storageArtifacts.map(artifact => artifact.ref)];
+  const claims = [...fixture.artifacts.map(artifact => artifact.claim), ...storageArtifacts.map(artifact => artifact.claim)];
+  const leases = [...fixture.artifacts.map(artifact => artifact.lease), ...storageArtifacts.map(artifact => artifact.lease)];
   const verifier = fixture.bundle.lineage.candidateProofVerifierBinding;
   const runtime: PredicateRuntimeFactsV1 = {
     facts: [createFullFamilyFactLocator({
@@ -1043,22 +1114,34 @@ function replaceBundle(runtime: PredicateRuntimeFactsV1, bundle: FullFamilyFactB
   const oldLocator = runtime.facts[0] as { readonly bundleArtifactRefId: Hash };
   const oldRef = runtime.refs.find(ref => ref.artifactRefId === oldLocator.bundleArtifactRefId);
   assert.ok(oldRef !== undefined);
-  const replacement = storeArtifact(encodeFullFamilyFacts(bundle), oldRef.schema);
-  const oldClaim = runtime.claims.find(claim => claim.artifactRefId === oldRef.artifactRefId);
-  assert.ok(oldClaim !== undefined);
+  const storageSchemaIds = new Set<string>([
+    FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST.id,
+    FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.artifactRefIndex.id,
+    FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.artifactRefPage.id,
+  ]);
+  const removedRefIds = new Set(runtime.refs
+    .filter(ref => ref.schema !== null && storageSchemaIds.has(ref.schema.id))
+    .map(ref => ref.artifactRefId));
+  const removedClaimIds = new Set<string>(runtime.claims
+    .filter(claim => removedRefIds.has(claim.artifactRefId))
+    .map(claim => claim.claimId));
+  const removedLeaseIds = new Set(runtime.refs
+    .filter(ref => removedRefIds.has(ref.artifactRefId))
+    .map(ref => ref.retentionLeaseReceiptId));
+  const { bundleArtifact: replacement, storageArtifacts } = storeBoundedBundle(bundle);
   return {
     facts: [createFullFamilyFactLocator({
       bundleArtifactRefId: replacement.ref.artifactRefId,
       bundleContentSha256: replacement.ref.contentSha256,
     })],
-    refs: [...runtime.refs.filter(ref => ref.artifactRefId !== oldRef.artifactRefId), replacement.ref],
-    claims: [...runtime.claims.filter(claim => claim.artifactRefId !== oldRef.artifactRefId), replacement.claim],
+    refs: [...runtime.refs.filter(ref => !removedRefIds.has(ref.artifactRefId)), ...storageArtifacts.map(artifact => artifact.ref)],
+    claims: [...runtime.claims.filter(claim => !removedRefIds.has(claim.artifactRefId)), ...storageArtifacts.map(artifact => artifact.claim)],
     policies: runtime.policies,
-    leases: [...runtime.leases.filter(lease => lease.receiptId !== oldRef.retentionLeaseReceiptId), replacement.lease],
+    leases: [...runtime.leases.filter(lease => !removedLeaseIds.has(lease.receiptId)), ...storageArtifacts.map(artifact => artifact.lease)],
     observations: runtime.observations.map(observation => ({
       ...observation,
-      rawArtifactRefs: [...observation.rawArtifactRefs.filter(ref => ref.artifactRefId !== oldRef.artifactRefId), replacement.ref],
-      observedClaimIds: [...observation.observedClaimIds.filter(id => id !== oldClaim.claimId), replacement.claim.claimId],
+      rawArtifactRefs: [...observation.rawArtifactRefs.filter(ref => !removedRefIds.has(ref.artifactRefId)), ...storageArtifacts.map(artifact => artifact.ref)],
+      observedClaimIds: [...observation.observedClaimIds.filter(id => !removedClaimIds.has(id)), ...storageArtifacts.map(artifact => artifact.claim.claimId)],
     })),
     trustedObserverInvocation: runtime.trustedObserverInvocation,
     trustedPredicateAuthority: runtime.trustedPredicateAuthority,
@@ -1089,10 +1172,10 @@ function replaceBundleAndAuthenticate(
   runtime: PredicateRuntimeFactsV1,
   bundle: FullFamilyFactBundleV1,
 ): PredicateRuntimeFactsV1 {
-  const oldBundleRefId = (runtime.facts[0] as { readonly bundleArtifactRefId: Hash }).bundleArtifactRefId;
   const replaced = replaceBundle(runtime, bundle);
-  const newBundleRefId = (replaced.facts[0] as { readonly bundleArtifactRefId: Hash }).bundleArtifactRefId;
   const observer = replaced.trustedObserverInvocation;
+  const currentRefIds = new Set(runtime.refs.map(ref => ref.artifactRefId));
+  const replacedRefIds = new Set(replaced.refs.map(ref => ref.artifactRefId));
   return {
     ...replaced,
     trustedObserverInvocation: observer == null
@@ -1100,8 +1183,8 @@ function replaceBundleAndAuthenticate(
       : {
         ...observer,
         authenticatedArtifactRefIds: [...new Set(observer.authenticatedArtifactRefIds
-          .filter(refId => refId !== oldBundleRefId)
-          .concat(newBundleRefId))].sort(),
+          .filter(refId => replacedRefIds.has(refId))
+          .concat(replaced.refs.filter(ref => !currentRefIds.has(ref.artifactRefId)).map(ref => ref.artifactRefId)))].sort(),
       },
   };
 }
@@ -1457,7 +1540,9 @@ test("qualification full-family adapter rejects a fixture denominator despite se
   assert.equal(FULL_FAMILY_PREDICATE_EVALUATOR.evaluateLive(fixture.runtime, {
     add: (code, path) => reasons.push({ code, path }),
   }), "invalid");
-  assert.ok(reasons.some(reason => reason.code === "registry-mismatch" || reason.code === "predicate-observation-mismatch"));
+  assert.ok(reasons.some(reason => reason.code === "schema-invalid"
+    || reason.code === "registry-mismatch"
+    || reason.code === "predicate-observation-mismatch"));
 });
 
 test("qualification full-family adapter accepts corpus-derived Catalog, Graph, coarse and action artifacts", async () => {
@@ -1467,12 +1552,11 @@ test("qualification full-family adapter accepts corpus-derived Catalog, Graph, c
     add: (code, path) => reasons.push({ code, path }),
   }), "pass", JSON.stringify(reasons));
   assert.equal(fixture.bundle.runtime.graphRoot, fixture.graphRoot);
-  const chunkedBundleClaim = runtime.claims.find(claim =>
-    claim.observedMirror !== null &&
-    claim.observedMirror.bytes.byteLength === String(encodeFullFamilyFacts(fixture.bundle).byteLength));
+  const bundleRefId = (runtime.facts[0] as { readonly bundleArtifactRefId: Hash }).bundleArtifactRefId;
+  const chunkedBundleClaim = runtime.claims.find(claim => claim.artifactRefId === bundleRefId);
   assert.ok(chunkedBundleClaim?.observedMirror);
-  assert.ok(Number(chunkedBundleClaim.observedMirror.bytes.byteLength) > ARTIFACT_BYTES_CHUNK_BYTE_LENGTH);
-  assert.ok(chunkedBundleClaim.observedMirror.bytes.chunks.length > 1);
+  assert.ok(Number(chunkedBundleClaim.observedMirror.bytes.byteLength) <= ARTIFACT_BYTES_CHUNK_BYTE_LENGTH);
+  assert.equal(chunkedBundleClaim.observedMirror.bytes.chunks.length, 1);
   assert.notDeepEqual(fixture.bundle.runtime.readyCutoff, fixture.bundle.runtime.actualCurrentSource);
   assert.deepEqual(
     fixture.bundle.families.find(family => family.familyId === "univ2-standard")!
@@ -1762,7 +1846,24 @@ test("full-family adapter rejects generated denominator and re-addressed executi
       },
     },
   } as FullFamilyFactBundleV1;
-  assert.equal(evaluate(replaceBundle(fixture.runtime, executionSplice), fixture.bundle).verdict, "invalid");
+  const replacementCoverage = storeArtifact(
+    encodeFullFamilySourceCoverageArtifact(executionSplice.sourceCoverage.artifact),
+    schemaRef(FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.sourceCoverage),
+  );
+  const readdressedExecutionSplice = {
+    ...executionSplice,
+    sourceCoverage: {
+      artifactRefId: replacementCoverage.ref.artifactRefId,
+      contentSha256: replacementCoverage.ref.contentSha256,
+      artifact: executionSplice.sourceCoverage.artifact,
+    },
+  } as FullFamilyFactBundleV1;
+  const withCoverage = replaceObservedArtifact(
+    fixture.runtime,
+    fixture.bundle.sourceCoverage.artifactRefId,
+    replacementCoverage,
+  );
+  assert.equal(evaluate(replaceBundle(withCoverage, readdressedExecutionSplice), fixture.bundle).verdict, "invalid");
 });
 
 test("full-family adapter rejects a coherently re-addressed physical observation splice", () => {

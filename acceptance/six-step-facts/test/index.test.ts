@@ -800,6 +800,8 @@ async function realProductionCrossFamilyFixture(options: Readonly<{
   });
   const finalOwnerFacts = Object.freeze({
     kind: "aloha.qualified-final-simulation-owner-facts-v1",
+    artifactProgramHash: program.programHash,
+    wireProgramHash: workerReceipt.programHash,
     executorQualification: Object.freeze({
       engineBuildFingerprint: qualificationExecutor.engineBuildFingerprint,
       executableFingerprint: qualificationExecutor.executableFingerprint,

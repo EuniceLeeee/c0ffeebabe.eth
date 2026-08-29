@@ -50,6 +50,8 @@ import {
   readIssuedSearchTerminalPlannerEnumerationV1,
   readIssuedSearchTerminalSchedulerResourceJoinV1,
   readIssuedSearchTerminalSixStepTraceV1,
+  routeAccountingRootV1,
+  routeSetTerminalLineageHashV2,
   validateUnsignedDryRunReceiptValue,
   type IssuedSearchTerminalV1,
   type SearchSchedulerResourceJoinV1,
@@ -65,6 +67,7 @@ import {
   assertNonEmptyString,
   assertPlainObject,
   deepFreeze,
+  hashCanonicalPartition,
   hashDomain,
   type Hash,
 } from "../../../canonical-codec/src/index.ts";
@@ -86,6 +89,9 @@ const laneFailureObservationsIssued = new WeakMap<object, ProducerLaneFailureObs
 const laneSearchTerminals = new WeakMap<object, SearchTerminalCapabilityV1>();
 const headFactsIssued = new WeakMap<object, ProducerHeadFactsV1>();
 const headTerminalIssued = new WeakMap<object, ProducerHeadTerminalEvidenceV1>();
+export function producerOrderedHashRootV1(domain: string, values: readonly Hash[]): Hash {
+  return hashCanonicalPartition(domain, values, 128);
+}
 
 function objectValue(value: unknown, context: string): Record<string, unknown> {
   assertPlainObject(value, context);
@@ -668,7 +674,7 @@ function normalizeAccounting(value: unknown): ProducerLaneAccountingV1 {
       }
     }
   }
-  const expectedRoot = hashDomain("aloha/route-accounting/v1", {
+  const expectedRoot = routeAccountingRootV1({
     planningProblemHash: normalized.planningProblemHash,
     enumerationRoot: normalized.enumerationRoot,
     admissionPolicyHash: normalized.admissionPolicyHash,
@@ -767,7 +773,7 @@ function issueProducerLaneFactsV1(input: Omit<ProducerLaneFactsV1, "complete"> &
   } else if (terminalRecord.kind !== terminalKind) {
     throw new TypeError("producer lane stage kind does not match terminal evidence");
   }
-  const expectedCoverageRoot = hashDomain("aloha/producer-lane-coverage/v1", {
+  const expectedCoverageRoot = hashDomain("aloha/producer-lane-coverage/v2", {
     lane: record.lane,
     headHash,
     generationId,
@@ -781,7 +787,8 @@ function issueProducerLaneFactsV1(input: Omit<ProducerLaneFactsV1, "complete"> &
     accountingRoot: accounting?.root ?? null,
     enumerationRoot: accounting?.enumerationRoot ?? null,
     terminalLineageHash,
-    candidateIds,
+    candidateIdCount: String(candidateIds.length),
+    candidateIdsRoot: producerOrderedHashRootV1("aloha/producer-lane-candidate-ids/v1", candidateIds),
     currentSource,
   });
   if (coverageRoot !== expectedCoverageRoot) throw new TypeError("producer lane coverage root mismatch");
@@ -862,6 +869,93 @@ export function assertIssuedProducerLaneFactsV1(value: unknown): asserts value i
 export function readIssuedProducerLaneFactsV1(value: unknown): ProducerLaneFactsV1 {
   assertIssuedProducerLaneFactsV1(value);
   return laneFactsIssued.get(value as object)!;
+}
+
+export function producerLaneFactsIdentityRootV1(value: ProducerLaneFactsV1): Hash {
+  const lane = readIssuedProducerLaneFactsV1(value);
+  const candidateIdsRoot = producerOrderedHashRootV1(
+    "aloha/producer-lane-candidate-ids/v1",
+    lane.candidateIds,
+  );
+  const terminalOutcomeRoot = hashDomain("aloha/producer-lane-terminal-outcome-identity/v1", {
+    terminalKind: lane.terminalKind,
+    terminalLineageHash: lane.terminalLineageHash,
+    accountingRoot: lane.accounting?.root ?? null,
+  });
+  const currentSourceRoot = hashDomain("aloha/producer-lane-current-source/v1", lane.currentSource);
+  return hashDomain("aloha/producer-lane-facts-identity/v1", {
+    lane: lane.lane,
+    headHash: lane.headHash,
+    generationId: lane.generationId,
+    graphRoot: lane.graphRoot,
+    triggerRef: lane.triggerRef,
+    txHash: lane.txHash,
+    correlationId: lane.correlationId,
+    pendingEvidenceHash: lane.pendingEvidenceHash,
+    pendingSnapshotHash: lane.pendingSnapshotHash,
+    affectedEdgeIdsRoot: lane.affectedEdgeIdsRoot,
+    outcome: lane.outcome,
+    terminalKind: lane.terminalKind,
+    terminalOutcomeRoot,
+    accountingRoot: lane.accounting?.root ?? null,
+    accountingEntryCount: String(lane.accounting?.entries.length ?? 0),
+    enumerationRoot: lane.accounting?.enumerationRoot ?? null,
+    coverageRoot: lane.coverageRoot,
+    candidateIdCount: String(lane.candidateIds.length),
+    candidateIdsRoot,
+    currentSourceRoot,
+    terminalLineageHash: lane.terminalLineageHash,
+    complete: lane.complete,
+  });
+}
+
+export function producerLaneFailureObservationRootV1(value: ProducerLaneFailureObservationV1): Hash {
+  const observation = readIssuedProducerLaneFailureObservationV1(value);
+  return hashDomain("aloha/producer-lane-failure-observation-identity/v1", observation);
+}
+
+export function producerHeadFactsRootV1(value: ProducerHeadFactsV1): Hash {
+  const laneFacts = [...value.laneFacts]
+    .map(facts => ({ lane: readIssuedProducerLaneFactsV1(facts).lane, root: producerLaneFactsIdentityRootV1(facts) }))
+    .sort((left, right) => left.lane === right.lane ? 0 : left.lane === "blockscan" ? -1 : 1);
+  const failures = [...value.laneFailureObservations]
+    .map(observation => ({ lane: readIssuedProducerLaneFailureObservationV1(observation).lane, root: producerLaneFailureObservationRootV1(observation) }))
+    .sort((left, right) => left.lane === right.lane ? 0 : left.lane === "blockscan" ? -1 : 1);
+  const currentSourcePhysicalRoot = value.currentSourcePhysical === null
+    ? null
+    : hashDomain("aloha/current-source-rpc-physical-facts/v1", value.currentSourcePhysical);
+  return hashDomain("aloha/searcher-production-evidence-head-facts/v2", {
+    headHash: value.headHash,
+    generationId: value.generationId,
+    graphRoot: value.graphRoot,
+    laneFactCount: String(laneFacts.length),
+    laneFactRoots: laneFacts,
+    laneFailureCount: String(failures.length),
+    laneFailureRoots: failures,
+    candidateRefCount: String(value.candidateRefs.length),
+    candidateRefsRoot: producerOrderedHashRootV1("aloha/producer-head-candidate-refs/v1", value.candidateRefs),
+    currentSourcePhysicalRoot,
+    sourceCoverageRoot: value.sourceCoverageRoot,
+    complete: value.complete,
+  });
+}
+
+export function producerLaneTerminalSetRootV1(value: ProducerHeadFactsV1): Hash {
+  const laneRoots = (["blockscan", "backrun"] as const).map(lane => {
+    const facts = value.laneFacts.find(candidate => readIssuedProducerLaneFactsV1(candidate).lane === lane);
+    if (facts === undefined) throw new TypeError(`producer terminal set lacks ${lane}`);
+    return Object.freeze({ lane, laneFactsRoot: producerLaneFactsIdentityRootV1(facts) });
+  });
+  return hashDomain("aloha/producer-final-full-family-lane-terminal-set/v2", {
+    producerHeadFactsRoot: producerHeadFactsRootV1(value),
+    headHash: value.headHash,
+    generationId: value.generationId,
+    graphRoot: value.graphRoot,
+    laneCount: "2",
+    lanes: laneRoots,
+    laneFailureCount: String(value.laneFailureObservations.length),
+    laneFailureRoots: value.laneFailureObservations.map(producerLaneFailureObservationRootV1),
+  });
 }
 
 export function readIssuedProducerNoInputLaneDenominatorV1(
@@ -1134,7 +1228,7 @@ function assertTerminalBinding(
     if (receipt.kind !== "aloha.route-set-terminal-v1" || receipt.signer !== null || receipt.transactionHash !== null) throw new TypeError("route-set terminal receipt is invalid");
     if (receipt.accountingRoot !== accounting.root || receipt.accounting.root !== accounting.root) throw new TypeError("route-set terminal accounting mismatch");
     const { lineageHash, ...body } = receipt;
-    if (lineageHash !== hashDomain("aloha/route-set-terminal-lineage/v1", body)) throw new TypeError("route-set terminal lineage mismatch");
+    if (lineageHash !== routeSetTerminalLineageHashV2(body)) throw new TypeError("route-set terminal lineage mismatch");
     if (accounting.entries.some(entry => entry.terminalKind === "passed")) throw new TypeError("route-set terminal cannot contain a passed candidate");
   }
   return accounting;
@@ -1192,7 +1286,7 @@ function issueTerminalLaneFacts(
     || !sameSourceView(currentSource.source, request.head)) {
     throw new TypeError("producer terminal current-source logical facts do not bind lane trigger/source");
   }
-  const coverageRoot = hashDomain("aloha/producer-lane-coverage/v1", {
+  const coverageRoot = hashDomain("aloha/producer-lane-coverage/v2", {
     lane: request.kind,
     headHash: request.head.hash,
     generationId: request.generationId,
@@ -1206,7 +1300,8 @@ function issueTerminalLaneFacts(
     accountingRoot: accounting.root,
     enumerationRoot: accounting.enumerationRoot,
     terminalLineageHash,
-    candidateIds,
+    candidateIdCount: String(candidateIds.length),
+    candidateIdsRoot: producerOrderedHashRootV1("aloha/producer-lane-candidate-ids/v1", candidateIds),
     currentSource,
   });
   const complete = laneOutcome === "completed" && !accounting.enumerationTruncated;
@@ -1264,7 +1359,7 @@ function issueNoInputLaneFacts(
     reasonCode: "pending-set-observed-empty" as const,
   };
   const terminalLineageHash = hashDomain("aloha/searcher-lane-no-input/v1", terminalBody);
-  const coverageRoot = hashDomain("aloha/producer-lane-coverage/v1", {
+  const coverageRoot = hashDomain("aloha/producer-lane-coverage/v2", {
     lane: "backrun",
     headHash: request.head.hash,
     generationId: request.generationId,
@@ -1278,7 +1373,8 @@ function issueNoInputLaneFacts(
     accountingRoot: null,
     enumerationRoot: null,
     terminalLineageHash,
-    candidateIds: [],
+    candidateIdCount: "0",
+    candidateIdsRoot: producerOrderedHashRootV1("aloha/producer-lane-candidate-ids/v1", []),
     currentSource,
   });
   const laneFacts = issueProducerLaneFactsV1({
@@ -1605,14 +1701,8 @@ export function readIssuedProducerFinalFullFamilyTerminalSetV1(
   if (blockscanTerminal.kind !== blockscan.facts.terminalKind) {
     throw new TypeError("full-family blockscan terminal kind mismatch");
   }
-  const producerHeadFactsRoot = hashDomain("aloha/searcher-production-evidence-head-facts/v1", facts);
-  const laneTerminalSetRoot = hashDomain("aloha/producer-final-full-family-lane-terminal-set/v1", {
-    headHash: facts.headHash,
-    generationId: facts.generationId,
-    graphRoot: facts.graphRoot,
-    lanes: [blockscan.facts, backrun.facts],
-    laneFailureObservations: facts.laneFailureObservations,
-  });
+  const producerHeadFactsRoot = producerHeadFactsRootV1(facts);
+  const laneTerminalSetRoot = producerLaneTerminalSetRootV1(facts);
   return Object.freeze({ blockscanSearchTerminalCapability, producerHeadFactsRoot, laneTerminalSetRoot });
 }
 

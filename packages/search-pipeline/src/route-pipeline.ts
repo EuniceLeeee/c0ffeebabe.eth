@@ -3,13 +3,18 @@ import {
   assertExactKeys,
   assertHash,
   assertPlainObject,
+  decodeCanonicalBytes,
   decodeCanonicalJson,
   deepFreeze,
+  encodeCanonicalBytes,
   encodeCanonicalJson,
+  hashCanonicalPartition,
   hashDomain,
+  sha256Hex,
   type CanonicalJson,
   type Hash,
 } from "../../canonical-codec/src/index.ts";
+import { ARTIFACT_MIRROR_MAX_DECODED_BYTES } from "../../../specs/artifact-resolution/src/index.ts";
 import type {
   GraphRouteHandle,
   IssuedRouteHandle,
@@ -37,6 +42,7 @@ import {
   validateRouteCapability,
   validateSearchObjective,
   validateSourceView,
+  validateUnsignedDryRunReceiptValue,
   type CoarseBoundedUnrankedV1,
   type CoarseRankableV1,
   type CurrentSourceSessionV1,
@@ -229,6 +235,107 @@ export interface RouteAccountingV1 {
   readonly root: Hash;
 }
 
+/** Ordered bounded root for a potentially high-cardinality route denominator.
+ * Each canonical entry is hashed independently; the complete entries array is
+ * never passed to the canonical codec as one value. */
+export function routeAccountingRootV1(value: Omit<RouteAccountingV1, "root">): Hash {
+  const entryRoots = value.entries.map((entry, ordinal) => hashDomain("aloha/route-accounting-entry/v1", {
+    ordinal: String(ordinal),
+    entry,
+  }));
+  const entriesRoot = boundedNativeAuditSequenceRoot(
+    "aloha/route-accounting-entries/v1",
+    entryRoots as unknown as readonly CanonicalJson[],
+  );
+  return hashDomain("aloha/route-accounting/v2", {
+    planningProblemHash: value.planningProblemHash,
+    enumerationRoot: value.enumerationRoot,
+    admissionPolicyHash: value.admissionPolicyHash,
+    enumerationTruncated: value.enumerationTruncated,
+    observedUniqueCountLowerBound: value.observedUniqueCountLowerBound,
+    total: value.total,
+    selected: value.selected,
+    pruned: value.pruned,
+    notProbed: value.notProbed,
+    failed: value.failed,
+    entryCount: String(value.entries.length),
+    entriesRoot,
+  });
+}
+
+function routeAccountingIdentityV1(accounting: RouteAccountingV1): CanonicalJson {
+  const entries = accounting.entries;
+  for (let index = 1; index < entries.length; index += 1) {
+    if (entries[index - 1]!.candidateId >= entries[index]!.candidateId) {
+      throw new TypeError("route accounting entries are not unique/ordered");
+    }
+  }
+  const selected = entries.filter(entry => entry.disposition === "selected").length;
+  const pruned = entries.filter(entry => entry.disposition === "pruned").length;
+  const notProbed = entries.filter(entry => entry.disposition === "notProbed").length;
+  const failed = entries.filter(entry => entry.disposition === "failed").length;
+  const { root, ...body } = accounting;
+  if (accounting.total !== entries.length || accounting.selected !== selected || accounting.pruned !== pruned
+    || accounting.notProbed !== notProbed || accounting.failed !== failed
+    || selected + pruned + notProbed + failed !== entries.length
+    || root !== routeAccountingRootV1(body)) {
+    throw new TypeError("route accounting root/count closure mismatch");
+  }
+  return Object.freeze({
+    planningProblemHash: accounting.planningProblemHash,
+    enumerationRoot: accounting.enumerationRoot,
+    admissionPolicyHash: accounting.admissionPolicyHash,
+    enumerationTruncated: accounting.enumerationTruncated,
+    observedUniqueCountLowerBound: accounting.observedUniqueCountLowerBound,
+    total: accounting.total,
+    selected,
+    pruned,
+    notProbed,
+    failed,
+    entryCount: String(entries.length),
+    root,
+  });
+}
+
+export function routeSetTerminalLineageHashV2(
+  value: Omit<RouteSetTerminalReceiptV1, "lineageHash">,
+): Hash {
+  const { accounting, accountingRoot, ...fixedReceipt } = value;
+  const accountingIdentity = routeAccountingIdentityV1(accounting);
+  if (accountingRoot !== accounting.root) throw new TypeError("route-set terminal accounting root mismatch");
+  return hashDomain("aloha/route-set-terminal-lineage/v2", {
+    ...fixedReceipt,
+    accounting: accountingIdentity,
+    accountingRoot,
+  });
+}
+
+/** Bounded identity for either terminal kind. It revalidates the complete
+ * accounting denominator via per-entry hashes before projecting only its
+ * bounded identity into the terminal hash. */
+export function searchTerminalEvidenceHashV2(terminal: IssuedSearchTerminalV1): Hash {
+  if (terminal.kind === "unsigned-dry-run") {
+    validateUnsignedDryRunReceiptValue(terminal.receipt);
+    return hashDomain("aloha/search-terminal-evidence/v2", {
+      kind: terminal.kind,
+      receipt: terminal.receipt,
+      accounting: routeAccountingIdentityV1(terminal.accounting),
+    });
+  }
+  const { lineageHash, accounting, ...receiptBody } = terminal.receipt;
+  if (lineageHash !== routeSetTerminalLineageHashV2({ ...receiptBody, accounting })) {
+    throw new TypeError("route-set terminal lineage mismatch");
+  }
+  return hashDomain("aloha/search-terminal-evidence/v2", {
+    kind: terminal.kind,
+    receipt: {
+      ...receiptBody,
+      accounting: routeAccountingIdentityV1(accounting),
+      lineageHash,
+    },
+  });
+}
+
 export interface RouteCandidateTerminalTimingFactsV1 {
   readonly kind: "aloha.route-candidate-terminal-timing-facts-v1";
   readonly correlationId: Hash;
@@ -402,6 +509,18 @@ export interface NativeFullFamilyCoarseRouteFactV1 {
   readonly routeFactRoot: Hash;
 }
 
+export interface NativeFullFamilyCoarseRouteHeaderV1 {
+  readonly searchAuditBindingRoot: Hash;
+  readonly candidateId: Hash;
+  readonly routeHash: Hash;
+  readonly routeBindingHash: Hash;
+  readonly assessment: CoarseRouteAssessmentV1 | null;
+  readonly firstLegOrdinal: string;
+  readonly legCount: string;
+  readonly legFactRoot: Hash;
+  readonly routeFactRoot: Hash;
+}
+
 /** Exact Graph edge denominator owned by the active lease. Route attempts may
  * observe only a subset; the missing set stays explicit and cannot be
  * confused with a complete full-Graph coarse sweep. */
@@ -453,6 +572,105 @@ export interface NativeFullFamilyAuditV1 {
   readonly auditRoot: Hash;
 }
 
+export type NativeFullFamilyAuditSectionV1 =
+  | "coarse-route-headers"
+  | "coarse-leg-facts"
+  | "projected-edges"
+  | "action-lineage"
+  | "missing-leg-keys"
+  | "missing-projected-edge-ids"
+  | "missing-action-candidate-ids";
+
+export type NativeFullFamilyAuditChunkEntryV1 =
+  | NativeFullFamilyCoarseRouteHeaderV1
+  | NativeFullFamilyCoarseLegFactV1
+  | NativeFullFamilyProjectedEdgeFactV1
+  | NativeFullFamilyActionLineageFactV1
+  | Hash;
+
+export interface NativeFullFamilyAuditChunkRefV1 {
+  readonly contentSha256: Hash;
+}
+
+export interface NativeFullFamilyAuditChunkV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.native-full-family-audit-chunk-v1";
+  readonly entries: readonly NativeFullFamilyAuditChunkEntryV1[];
+  readonly nextChunkRef: NativeFullFamilyAuditChunkRefV1 | null;
+}
+
+export interface NativeFullFamilyAuditSectionManifestV1 {
+  readonly section: NativeFullFamilyAuditSectionV1;
+  readonly entryCount: string;
+  readonly chunkCount: string;
+  readonly firstChunkRef: NativeFullFamilyAuditChunkRefV1 | null;
+  readonly sectionRoot: Hash;
+}
+
+/** Bounded public identity. High-cardinality material is retained only in
+ * content-addressed semantic chunks owned by the invocation capability. */
+export interface NativeFullFamilyAuditManifestV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.native-full-family-audit-manifest-v1";
+  readonly binding: NativeFullFamilyAuditBindingV1;
+  readonly expectedCandidateCount: string;
+  readonly expectedLegCount: string;
+  readonly observedReceiptCount: string;
+  readonly expectedProjectedEdgeCount: string;
+  readonly observedProjectedEdgeCount: string;
+  readonly expectedActionLineageCount: string;
+  readonly observedActionLineageCount: string;
+  readonly denominatorRoot: Hash;
+  readonly observedReceiptRoot: Hash;
+  readonly missingLegRoot: Hash;
+  readonly projectedEdgeDenominatorRoot: Hash;
+  readonly missingProjectedEdgeRoot: Hash;
+  readonly actionDenominatorRoot: Hash;
+  readonly actionObservedRoot: Hash;
+  readonly sections: readonly NativeFullFamilyAuditSectionManifestV1[];
+  readonly auditRoot: Hash;
+}
+
+export interface EncodedNativeFullFamilyAuditV1 {
+  readonly audit: NativeFullFamilyAuditV1;
+  readonly manifest: NativeFullFamilyAuditManifestV1;
+  readonly manifestBytes: Uint8Array;
+  readonly chunks: readonly Readonly<{
+    readonly ref: NativeFullFamilyAuditChunkRefV1;
+    readonly chunk: NativeFullFamilyAuditChunkV1;
+    readonly bytes: Uint8Array;
+  }>[];
+}
+
+export function nativeFullFamilyAuditSemanticRootV1(
+  value: Omit<NativeFullFamilyAuditManifestV1, "auditRoot"> | NativeFullFamilyAuditManifestV1,
+): Hash {
+  return hashDomain("aloha/native-full-family-audit-semantic/v1", {
+    schemaVersion: value.schemaVersion,
+    kind: value.kind,
+    binding: value.binding,
+    expectedCandidateCount: value.expectedCandidateCount,
+    expectedLegCount: value.expectedLegCount,
+    observedReceiptCount: value.observedReceiptCount,
+    expectedProjectedEdgeCount: value.expectedProjectedEdgeCount,
+    observedProjectedEdgeCount: value.observedProjectedEdgeCount,
+    expectedActionLineageCount: value.expectedActionLineageCount,
+    observedActionLineageCount: value.observedActionLineageCount,
+    denominatorRoot: value.denominatorRoot,
+    observedReceiptRoot: value.observedReceiptRoot,
+    missingLegRoot: value.missingLegRoot,
+    projectedEdgeDenominatorRoot: value.projectedEdgeDenominatorRoot,
+    missingProjectedEdgeRoot: value.missingProjectedEdgeRoot,
+    actionDenominatorRoot: value.actionDenominatorRoot,
+    actionObservedRoot: value.actionObservedRoot,
+    sections: value.sections.map(section => ({
+      section: section.section,
+      entryCount: section.entryCount,
+      sectionRoot: section.sectionRoot,
+    })),
+  });
+}
+
 type PreparedRoute<Projection> = {
   readonly candidate: PlannedRouteCandidateV1;
   readonly startedMonotonicNs: bigint;
@@ -499,15 +717,221 @@ interface IssuedSearchTerminalStateV1 {
 }
 
 const issuedSearchTerminals = new WeakMap<object, IssuedSearchTerminalStateV1>();
-const issuedNativeFullFamilyAudits = new WeakMap<object, NativeFullFamilyAuditV1>();
+interface IssuedNativeFullFamilyAuditStateV1 {
+  readonly manifest: NativeFullFamilyAuditManifestV1;
+  readonly chunks: ReadonlyMap<Hash, Uint8Array>;
+}
+
+const issuedNativeFullFamilyAudits = new WeakMap<object, IssuedNativeFullFamilyAuditStateV1>();
+const NATIVE_AUDIT_CHUNK_INITIAL_ITEMS = 128;
+const NATIVE_AUDIT_SECTIONS: readonly NativeFullFamilyAuditSectionV1[] = Object.freeze([
+  "coarse-route-headers",
+  "coarse-leg-facts",
+  "projected-edges",
+  "action-lineage",
+  "missing-leg-keys",
+  "missing-projected-edge-ids",
+  "missing-action-candidate-ids",
+]);
+export const NATIVE_FULL_FAMILY_COARSE_LEG_MAX_CANONICAL_BYTES = 450_000;
+
+function boundedNativeAuditSequenceRoot(domain: string, values: readonly CanonicalJson[]): Hash {
+  return hashCanonicalPartition(domain, values, 128);
+}
+
+export function nativeFullFamilyCoarseRouteFactRootV1(
+  route: Omit<NativeFullFamilyCoarseRouteFactV1, "routeFactRoot">,
+): Hash {
+  return hashDomain("aloha/native-full-family-coarse-route-fact/v2", {
+    searchAuditBindingRoot: route.searchAuditBindingRoot,
+    candidateId: route.candidateId,
+    routeHash: route.routeHash,
+    routeBindingHash: route.routeBindingHash,
+    assessment: route.assessment,
+    legCount: String(route.legs.length),
+    legFactRoot: boundedNativeAuditSequenceRoot(
+      "aloha/native-full-family-coarse-route-leg-facts/v1",
+      route.legs.map(leg => leg.factRoot) as unknown as readonly CanonicalJson[],
+    ),
+  });
+}
+
+export type NativeFullFamilyAuditSequencePurposeV1 =
+  | "denominator"
+  | "observed-receipts"
+  | "missing-legs"
+  | "projected-edge-denominator"
+  | "missing-projected-edges"
+  | "action-denominator"
+  | "action-observed";
+
+export function nativeFullFamilyAuditSequenceRootV1(
+  purpose: NativeFullFamilyAuditSequencePurposeV1,
+  values: readonly Hash[],
+): Hash {
+  return boundedNativeAuditSequenceRoot(
+    `aloha/native-full-family-audit-${purpose}/v2`,
+    values as unknown as readonly CanonicalJson[],
+  );
+}
+
+function nativeAuditSectionEntries(
+  value: Omit<NativeFullFamilyAuditV1, "auditRoot">,
+  section: NativeFullFamilyAuditSectionV1,
+): readonly NativeFullFamilyAuditChunkEntryV1[] {
+  switch (section) {
+    case "coarse-route-headers": {
+      let firstLegOrdinal = 0;
+      return value.coarseRoutes.map(route => {
+        const header = deepFreeze({
+          searchAuditBindingRoot: route.searchAuditBindingRoot,
+          candidateId: route.candidateId,
+          routeHash: route.routeHash,
+          routeBindingHash: route.routeBindingHash,
+          assessment: route.assessment,
+          firstLegOrdinal: String(firstLegOrdinal),
+          legCount: String(route.legs.length),
+          legFactRoot: boundedNativeAuditSequenceRoot(
+            "aloha/native-full-family-coarse-route-leg-facts/v1",
+            route.legs.map(leg => leg.factRoot) as unknown as readonly CanonicalJson[],
+          ),
+          routeFactRoot: route.routeFactRoot,
+        });
+        firstLegOrdinal += route.legs.length;
+        return header;
+      });
+    }
+    case "coarse-leg-facts": return value.coarseRoutes.flatMap(route => route.legs);
+    case "projected-edges": return value.projectedEdges;
+    case "action-lineage": return value.actionLineage;
+    case "missing-leg-keys": return value.missingLegKeys;
+    case "missing-projected-edge-ids": return value.missingProjectedEdgeIds;
+    case "missing-action-candidate-ids": return value.missingActionCandidateIds;
+  }
+}
+
+function nativeAuditSectionRoot(
+  section: NativeFullFamilyAuditSectionV1,
+  entries: readonly NativeFullFamilyAuditChunkEntryV1[],
+): Hash {
+  const semanticValues = entries.map(entry => {
+    if (typeof entry === "string") return entry;
+    if (section === "coarse-route-headers") return (entry as NativeFullFamilyCoarseRouteHeaderV1).routeFactRoot;
+    if (section === "coarse-leg-facts") return (entry as NativeFullFamilyCoarseLegFactV1).factRoot;
+    return (entry as NativeFullFamilyProjectedEdgeFactV1 | NativeFullFamilyActionLineageFactV1).factRoot;
+  });
+  return boundedNativeAuditSequenceRoot(
+    `aloha/native-full-family-audit-section/${section}/v1`,
+    semanticValues as unknown as readonly CanonicalJson[],
+  );
+}
+
+function buildNativeAuditChunk(
+  entries: readonly NativeFullFamilyAuditChunkEntryV1[],
+  nextChunkRef: NativeFullFamilyAuditChunkRefV1 | null,
+): Readonly<{ readonly ref: NativeFullFamilyAuditChunkRefV1; readonly chunk: NativeFullFamilyAuditChunkV1; readonly bytes: Uint8Array }> {
+  const body = deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.native-full-family-audit-chunk-v1" as const,
+    entries: deepFreeze([...entries]),
+    nextChunkRef,
+  });
+  const chunk = body;
+  const bytes = encodeCanonicalBytes(chunk as unknown as CanonicalJson);
+  if (bytes.byteLength > ARTIFACT_MIRROR_MAX_DECODED_BYTES) {
+    throw new TypeError("native full-family audit chunk exceeds observer artifact byte cap");
+  }
+  const ref = deepFreeze({ contentSha256: sha256Hex(bytes) });
+  return Object.freeze({ ref, chunk, bytes });
+}
+
+function encodeNativeAuditSection(
+  entries: readonly NativeFullFamilyAuditChunkEntryV1[],
+): readonly Readonly<{ readonly ref: NativeFullFamilyAuditChunkRefV1; readonly chunk: NativeFullFamilyAuditChunkV1; readonly bytes: Uint8Array }>[] {
+  const groups: Array<readonly NativeFullFamilyAuditChunkEntryV1[]> = Array.from(
+    { length: Math.ceil(entries.length / NATIVE_AUDIT_CHUNK_INITIAL_ITEMS) },
+    (_, index) => entries.slice(index * NATIVE_AUDIT_CHUNK_INITIAL_ITEMS, (index + 1) * NATIVE_AUDIT_CHUNK_INITIAL_ITEMS),
+  );
+  for (;;) {
+    const output = new Array<Readonly<{ readonly ref: NativeFullFamilyAuditChunkRefV1; readonly chunk: NativeFullFamilyAuditChunkV1; readonly bytes: Uint8Array }>>(groups.length);
+    let nextRef: NativeFullFamilyAuditChunkRefV1 | null = null;
+    let failedIndex = -1;
+    for (let index = groups.length - 1; index >= 0; index -= 1) {
+      try {
+        const encoded = buildNativeAuditChunk(groups[index]!, nextRef);
+        output[index] = encoded;
+        nextRef = encoded.ref;
+      } catch {
+        failedIndex = index;
+        break;
+      }
+    }
+    if (failedIndex === -1) return Object.freeze(output);
+    const failed = groups[failedIndex]!;
+    if (failed.length <= 1) {
+      buildNativeAuditChunk(failed, null);
+      throw new TypeError("unreachable native full-family audit chunk encoding failure");
+    }
+    const middle = Math.ceil(failed.length / 2);
+    groups.splice(failedIndex, 1, failed.slice(0, middle), failed.slice(middle));
+  }
+}
+
+export function encodeNativeFullFamilyAuditBodyV1(
+  value: Omit<NativeFullFamilyAuditV1, "auditRoot">,
+): EncodedNativeFullFamilyAuditV1 {
+  const {
+    schemaVersion: _schemaVersion,
+    kind: _kind,
+    missingLegKeys: _missingLegKeys,
+    missingProjectedEdgeIds: _missingProjectedEdgeIds,
+    missingActionCandidateIds: _missingActionCandidateIds,
+    coarseRoutes: _coarseRoutes,
+    projectedEdges: _projectedEdges,
+    actionLineage: _actionLineage,
+    ...boundedHeader
+  } = value;
+  const chunks: EncodedNativeFullFamilyAuditV1["chunks"][number][] = [];
+  const sections = NATIVE_AUDIT_SECTIONS.map(section => {
+    const entries = nativeAuditSectionEntries(value, section);
+    const encoded = encodeNativeAuditSection(entries);
+    chunks.push(...encoded);
+    const refs = encoded.map(item => item.ref);
+    return deepFreeze({
+      section,
+      entryCount: String(entries.length),
+      chunkCount: String(refs.length),
+      firstChunkRef: refs[0] ?? null,
+      sectionRoot: nativeAuditSectionRoot(section, entries),
+    });
+  });
+  const manifestBody: Omit<NativeFullFamilyAuditManifestV1, "auditRoot"> = deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.native-full-family-audit-manifest-v1" as const,
+    ...boundedHeader,
+    sections: deepFreeze(sections),
+  });
+  const manifest = deepFreeze({
+    ...manifestBody,
+    auditRoot: nativeFullFamilyAuditSemanticRootV1(manifestBody),
+  });
+  const manifestBytes = encodeCanonicalBytes(manifest as unknown as CanonicalJson);
+  if (manifestBytes.byteLength > ARTIFACT_MIRROR_MAX_DECODED_BYTES) {
+    throw new TypeError("native full-family audit manifest exceeds observer artifact byte cap");
+  }
+  const audit = deepFreeze({ ...value, auditRoot: manifest.auditRoot });
+  return Object.freeze({ audit, manifest, manifestBytes, chunks: Object.freeze(chunks) });
+}
 
 function issueNativeFullFamilyAudit(value: Omit<NativeFullFamilyAuditV1, "auditRoot">): NativeFullFamilyAuditCapabilityV1 {
-  const audit = deepFreeze({
-    ...value,
-    auditRoot: hashDomain("aloha/native-full-family-audit/v1", value as unknown as CanonicalJson),
-  });
+  const encoded = encodeNativeFullFamilyAuditBodyV1(value);
+  const chunks = new Map<Hash, Uint8Array>();
+  for (const item of encoded.chunks) chunks.set(item.ref.contentSha256, item.bytes);
   const capability = Object.freeze(Object.create(null)) as NativeFullFamilyAuditCapabilityV1;
-  issuedNativeFullFamilyAudits.set(capability, audit);
+  issuedNativeFullFamilyAudits.set(capability, Object.freeze({
+    manifest: encoded.manifest,
+    chunks,
+  }));
   return capability;
 }
 
@@ -748,20 +1172,305 @@ export function readIssuedSearchTerminalNativeFullFamilyAuditCapabilityV1(
   return state.nativeFullFamilyAudit;
 }
 
-export function readIssuedNativeFullFamilyAuditV1(
+function issuedNativeAuditState(
   capability: NativeFullFamilyAuditCapabilityV1,
-): NativeFullFamilyAuditV1 {
+): IssuedNativeFullFamilyAuditStateV1 {
   if (capability === null || typeof capability !== "object") {
     throw new TypeError("native full-family audit capability is required");
   }
   assertExactKeys(capability, [], "nativeFullFamilyAuditCapability");
-  const audit = issuedNativeFullFamilyAudits.get(capability);
-  if (audit === undefined) throw new TypeError("native full-family audit capability was not issued");
-  const { auditRoot: _auditRoot, ...payload } = audit;
-  if (audit.auditRoot !== hashDomain("aloha/native-full-family-audit/v1", payload as unknown as CanonicalJson)) {
-    throw new TypeError("native full-family audit identity mismatch");
+  const state = issuedNativeFullFamilyAudits.get(capability);
+  if (state === undefined) throw new TypeError("native full-family audit capability was not issued");
+  return state;
+}
+
+export function readIssuedNativeFullFamilyAuditManifestV1(
+  capability: NativeFullFamilyAuditCapabilityV1,
+): NativeFullFamilyAuditManifestV1 {
+  const manifest = issuedNativeAuditState(capability).manifest;
+  if (manifest.auditRoot !== nativeFullFamilyAuditSemanticRootV1(manifest)) {
+    throw new TypeError("native full-family audit manifest identity mismatch");
   }
-  return audit;
+  return manifest;
+}
+
+/** Exact content read: the complete manifest-issued ref must match. A caller
+ * cannot select substitute bytes, DTOs, or a reader implementation. */
+export function readIssuedNativeFullFamilyAuditChunkBytesV1(
+  capability: NativeFullFamilyAuditCapabilityV1,
+  ref: NativeFullFamilyAuditChunkRefV1,
+): Uint8Array {
+  const state = issuedNativeAuditState(capability);
+  exactNativeAuditChunkRef(ref, "nativeFullFamilyAuditChunkRef");
+  const bytes = state.chunks.get(ref.contentSha256);
+  if (bytes === undefined) {
+    throw new TypeError("native full-family audit chunk ref was not issued for this audit");
+  }
+  if (bytes.byteLength > ARTIFACT_MIRROR_MAX_DECODED_BYTES || sha256Hex(bytes) !== ref.contentSha256) {
+    throw new TypeError("native full-family audit chunk bytes no longer match their ref");
+  }
+  return Uint8Array.from(bytes);
+}
+
+function exactNativeAuditChunkRef(value: NativeFullFamilyAuditChunkRefV1, path: string): void {
+  assertPlainObject(value, path);
+  assertExactKeys(value, ["contentSha256"], path);
+  assertHash(value.contentSha256, `${path}.contentSha256`);
+}
+
+export function decodeNativeFullFamilyAuditManifestV1(
+  bytes: Uint8Array,
+): NativeFullFamilyAuditManifestV1 {
+  if (bytes.byteLength > ARTIFACT_MIRROR_MAX_DECODED_BYTES) {
+    throw new TypeError("native full-family audit manifest exceeds observer artifact byte cap");
+  }
+  const manifest = decodeCanonicalBytes(bytes) as unknown as NativeFullFamilyAuditManifestV1;
+  assertExactKeys(manifest, [
+    "schemaVersion", "kind", "binding", "expectedCandidateCount", "expectedLegCount", "observedReceiptCount",
+    "expectedProjectedEdgeCount", "observedProjectedEdgeCount", "expectedActionLineageCount",
+    "observedActionLineageCount", "denominatorRoot", "observedReceiptRoot", "missingLegRoot",
+    "projectedEdgeDenominatorRoot", "missingProjectedEdgeRoot", "actionDenominatorRoot", "actionObservedRoot",
+    "sections", "auditRoot",
+  ], "nativeFullFamilyAuditManifest");
+  if (manifest.schemaVersion !== 1 || manifest.kind !== "aloha.native-full-family-audit-manifest-v1") {
+    throw new TypeError("native full-family audit manifest kind/version mismatch");
+  }
+  for (const key of [
+    "expectedCandidateCount", "expectedLegCount", "observedReceiptCount", "expectedProjectedEdgeCount",
+    "observedProjectedEdgeCount", "expectedActionLineageCount", "observedActionLineageCount",
+  ] as const) assertDecimalString(manifest[key], `nativeFullFamilyAuditManifest.${key}`);
+  for (const key of [
+    "denominatorRoot", "observedReceiptRoot", "missingLegRoot", "projectedEdgeDenominatorRoot",
+    "missingProjectedEdgeRoot", "actionDenominatorRoot", "actionObservedRoot", "auditRoot",
+  ] as const) assertHash(manifest[key], `nativeFullFamilyAuditManifest.${key}`);
+  assertPlainObject(manifest.binding, "nativeFullFamilyAuditManifest.binding");
+  const { bindingRoot, ...bindingBody } = manifest.binding;
+  if (bindingRoot !== hashDomain("aloha/native-full-family-audit-binding/v1", bindingBody as unknown as CanonicalJson)) {
+    throw new TypeError("native full-family audit manifest binding root mismatch");
+  }
+  if (!Array.isArray(manifest.sections) || manifest.sections.length !== NATIVE_AUDIT_SECTIONS.length) {
+    throw new TypeError("native full-family audit manifest section denominator mismatch");
+  }
+  for (const [index, descriptor] of manifest.sections.entries()) {
+    assertExactKeys(descriptor, [
+      "section", "entryCount", "chunkCount", "firstChunkRef", "sectionRoot",
+    ], `nativeFullFamilyAuditManifest.sections[${index}]`);
+    if (descriptor.section !== NATIVE_AUDIT_SECTIONS[index]) {
+      throw new TypeError("native full-family audit manifest section order mismatch");
+    }
+    assertDecimalString(descriptor.entryCount, `nativeFullFamilyAuditManifest.sections[${index}].entryCount`);
+    assertDecimalString(descriptor.chunkCount, `nativeFullFamilyAuditManifest.sections[${index}].chunkCount`);
+    assertHash(descriptor.sectionRoot, `nativeFullFamilyAuditManifest.sections[${index}].sectionRoot`);
+    const firstChunkRef = descriptor.firstChunkRef as NativeFullFamilyAuditChunkRefV1 | null;
+    if ((descriptor.chunkCount === "0") !== (firstChunkRef === null)) {
+      throw new TypeError("native full-family audit manifest first chunk/count mismatch");
+    }
+    if (firstChunkRef !== null) {
+      exactNativeAuditChunkRef(firstChunkRef, `nativeFullFamilyAuditManifest.sections[${index}].firstChunkRef`);
+    }
+  }
+  if (manifest.auditRoot !== nativeFullFamilyAuditSemanticRootV1(manifest)) {
+    throw new TypeError("native full-family audit manifest root mismatch");
+  }
+  return deepFreeze(manifest);
+}
+
+function assertNativeAuditSemanticClosure(audit: NativeFullFamilyAuditV1): void {
+  const denominatorKeys: Hash[] = [];
+  const observedRoots: Hash[] = [];
+  const missingLegKeys: Hash[] = [];
+  const observedProjectedEdgeIds = new Set<Hash>();
+  for (const route of audit.coarseRoutes) {
+    if (route.searchAuditBindingRoot !== audit.binding.bindingRoot) throw new TypeError("native audit route binding mismatch");
+    for (const [legIndex, leg] of route.legs.entries()) {
+      const denominatorKey = hashDomain("aloha/native-full-family-audit-leg-key/v1", {
+        candidateId: route.candidateId,
+        legIndex: String(legIndex),
+        edgeId: leg.edgeId,
+      });
+      denominatorKeys.push(denominatorKey);
+      const { factRoot, ...legBody } = leg;
+      if (leg.searchAuditBindingRoot !== audit.binding.bindingRoot || leg.candidateId !== route.candidateId
+        || leg.routeHash !== route.routeHash || leg.routeBindingHash !== route.routeBindingHash
+        || leg.legIndex !== String(legIndex)
+        || factRoot !== hashDomain("aloha/native-full-family-coarse-leg-fact/v1", legBody as unknown as CanonicalJson)) {
+        throw new TypeError("native audit coarse leg semantic mismatch");
+      }
+      if (leg.receipt === null) {
+        if (leg.familyObservation !== null) throw new TypeError("native audit missing receipt retained observation");
+        missingLegKeys.push(denominatorKey);
+      } else {
+        if (leg.familyObservation === null) throw new TypeError("native audit observed receipt lacks observation");
+        observedRoots.push(hashDomain("aloha/native-full-family-audit-observed-receipt/v1", {
+          denominatorKey,
+          receiptRoot: leg.receipt.receiptRoot,
+          familyObservation: leg.familyObservation,
+        }));
+        observedProjectedEdgeIds.add(leg.edgeId);
+      }
+    }
+    const { routeFactRoot, ...routeBody } = route;
+    if (routeFactRoot !== nativeFullFamilyCoarseRouteFactRootV1(routeBody)) {
+      throw new TypeError("native audit coarse route root mismatch");
+    }
+  }
+  for (const edge of audit.projectedEdges) {
+    const { factRoot, ...edgeBody } = edge;
+    if (edge.searchAuditBindingRoot !== audit.binding.bindingRoot || edge.edge.edgeId !== edge.edgeId
+      || factRoot !== hashDomain("aloha/native-full-family-projected-edge-fact/v1", edgeBody as unknown as CanonicalJson)) {
+      throw new TypeError("native audit projected edge semantic mismatch");
+    }
+  }
+  for (const action of audit.actionLineage) {
+    const { factRoot, ...actionBody } = action;
+    if (action.searchAuditBindingRoot !== audit.binding.bindingRoot
+      || factRoot !== hashDomain("aloha/native-full-family-action-lineage-fact/v1", actionBody as unknown as CanonicalJson)) {
+      throw new TypeError("native audit action lineage semantic mismatch");
+    }
+  }
+  const missingProjectedEdgeIds = audit.projectedEdges.flatMap(edge => observedProjectedEdgeIds.has(edge.edgeId) ? [] : [edge.edgeId]);
+  const actionIds = new Set([...audit.actionLineage.map(action => action.candidateId), ...audit.missingActionCandidateIds]);
+  const orderedActionIds = audit.coarseRoutes.flatMap(route => actionIds.has(route.candidateId) ? [route.candidateId] : []);
+  const same = (left: readonly Hash[], right: readonly Hash[]) => left.length === right.length
+    && left.every((value, index) => value === right[index]);
+  if (audit.expectedCandidateCount !== String(audit.coarseRoutes.length)
+    || audit.expectedLegCount !== String(denominatorKeys.length)
+    || audit.observedReceiptCount !== String(observedRoots.length)
+    || !same(audit.missingLegKeys, missingLegKeys)
+    || audit.expectedProjectedEdgeCount !== String(audit.projectedEdges.length)
+    || audit.observedProjectedEdgeCount !== String(observedProjectedEdgeIds.size)
+    || !same(audit.missingProjectedEdgeIds, missingProjectedEdgeIds)
+    || audit.expectedActionLineageCount !== String(orderedActionIds.length)
+    || audit.observedActionLineageCount !== String(audit.actionLineage.length)
+    || audit.denominatorRoot !== nativeFullFamilyAuditSequenceRootV1("denominator", denominatorKeys)
+    || audit.observedReceiptRoot !== nativeFullFamilyAuditSequenceRootV1("observed-receipts", observedRoots)
+    || audit.missingLegRoot !== nativeFullFamilyAuditSequenceRootV1("missing-legs", missingLegKeys)
+    || audit.projectedEdgeDenominatorRoot !== nativeFullFamilyAuditSequenceRootV1("projected-edge-denominator", audit.projectedEdges.map(edge => edge.factRoot))
+    || audit.missingProjectedEdgeRoot !== nativeFullFamilyAuditSequenceRootV1("missing-projected-edges", missingProjectedEdgeIds)
+    || audit.actionDenominatorRoot !== nativeFullFamilyAuditSequenceRootV1("action-denominator", orderedActionIds)
+    || audit.actionObservedRoot !== nativeFullFamilyAuditSequenceRootV1("action-observed", audit.actionLineage.map(action => action.factRoot))) {
+    throw new TypeError("native full-family audit semantic closure mismatch");
+  }
+}
+
+/** Pure restart-safe decoder. Production composition uses the fixed consumer;
+ * physical observers may supply only bytes named by each manifest ref. */
+export function decodeNativeFullFamilyAuditV1(
+  manifestBytes: Uint8Array,
+  readChunk: (ref: NativeFullFamilyAuditChunkRefV1) => Uint8Array,
+): NativeFullFamilyAuditV1 {
+  const manifest = decodeNativeFullFamilyAuditManifestV1(manifestBytes);
+  const bySection = new Map<NativeFullFamilyAuditSectionV1, readonly NativeFullFamilyAuditChunkEntryV1[]>();
+  for (const [sectionIndex, descriptor] of manifest.sections.entries()) {
+    const expectedSection = NATIVE_AUDIT_SECTIONS[sectionIndex];
+    if (descriptor.section !== expectedSection
+      || (descriptor.chunkCount === "0") !== (descriptor.firstChunkRef === null)) {
+      throw new TypeError("native full-family audit section order/first-ref mismatch");
+    }
+    const entries: NativeFullFamilyAuditChunkEntryV1[] = [];
+    const refs: NativeFullFamilyAuditChunkRefV1[] = [];
+    let ref = descriptor.firstChunkRef;
+    while (ref !== null) {
+      if (refs.length >= Number(descriptor.chunkCount)) throw new TypeError("native full-family audit chunk chain exceeds its manifest count");
+      exactNativeAuditChunkRef(ref, `nativeFullFamilyAuditChunkRef[${descriptor.section}:${refs.length}]`);
+      const bytes = readChunk(ref);
+      if (!(bytes instanceof Uint8Array)
+        || bytes.byteLength > ARTIFACT_MIRROR_MAX_DECODED_BYTES || sha256Hex(bytes) !== ref.contentSha256) {
+        throw new TypeError("native full-family audit chunk content mismatch");
+      }
+      const chunk = decodeCanonicalBytes(bytes) as unknown as NativeFullFamilyAuditChunkV1;
+      assertExactKeys(chunk, [
+        "schemaVersion", "kind", "entries", "nextChunkRef",
+      ], `nativeFullFamilyAuditChunk[${descriptor.section}:${refs.length}]`);
+      if (chunk.schemaVersion !== 1 || chunk.kind !== "aloha.native-full-family-audit-chunk-v1"
+        || !Array.isArray(chunk.entries)) {
+        throw new TypeError("native full-family audit chunk kind/entries mismatch");
+      }
+      if (chunk.nextChunkRef !== null) exactNativeAuditChunkRef(chunk.nextChunkRef, "nativeFullFamilyAuditChunk.nextChunkRef");
+      refs.push(ref);
+      entries.push(...chunk.entries);
+      ref = chunk.nextChunkRef;
+    }
+    if (descriptor.chunkCount !== String(refs.length) || descriptor.entryCount !== String(entries.length)
+      || descriptor.sectionRoot !== nativeAuditSectionRoot(descriptor.section, entries)) {
+      throw new TypeError("native full-family audit section root/count mismatch");
+    }
+    bySection.set(descriptor.section, Object.freeze(entries));
+  }
+  const headers = bySection.get("coarse-route-headers") as readonly NativeFullFamilyCoarseRouteHeaderV1[];
+  const flatLegs = bySection.get("coarse-leg-facts") as readonly NativeFullFamilyCoarseLegFactV1[];
+  let legCursor = 0;
+  const coarseRoutes = headers.map(header => {
+    const legCount = Number(header.legCount);
+    if (!Number.isSafeInteger(legCount) || legCount < 0 || header.firstLegOrdinal !== String(legCursor)) {
+      throw new TypeError("native full-family audit coarse route leg range mismatch");
+    }
+    const legs = Object.freeze(flatLegs.slice(legCursor, legCursor + legCount));
+    if (legs.length !== legCount || header.legFactRoot !== boundedNativeAuditSequenceRoot(
+      "aloha/native-full-family-coarse-route-leg-facts/v1",
+      legs.map(leg => leg.factRoot) as unknown as readonly CanonicalJson[],
+    )) throw new TypeError("native full-family audit coarse route leg closure mismatch");
+    legCursor += legCount;
+    const route = deepFreeze({
+      searchAuditBindingRoot: header.searchAuditBindingRoot,
+      candidateId: header.candidateId,
+      routeHash: header.routeHash,
+      routeBindingHash: header.routeBindingHash,
+      assessment: header.assessment,
+      legs,
+      routeFactRoot: header.routeFactRoot,
+    });
+    const { routeFactRoot, ...routeBody } = route;
+    if (routeFactRoot !== nativeFullFamilyCoarseRouteFactRootV1(routeBody)) {
+      throw new TypeError("native full-family audit coarse route header root mismatch");
+    }
+    return route;
+  });
+  if (legCursor !== flatLegs.length) throw new TypeError("native full-family audit orphan coarse leg facts");
+  const materialized = deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.native-full-family-audit-v1" as const,
+    binding: manifest.binding,
+    expectedCandidateCount: manifest.expectedCandidateCount,
+    expectedLegCount: manifest.expectedLegCount,
+    observedReceiptCount: manifest.observedReceiptCount,
+    missingLegKeys: bySection.get("missing-leg-keys") as readonly Hash[],
+    expectedProjectedEdgeCount: manifest.expectedProjectedEdgeCount,
+    observedProjectedEdgeCount: manifest.observedProjectedEdgeCount,
+    missingProjectedEdgeIds: bySection.get("missing-projected-edge-ids") as readonly Hash[],
+    expectedActionLineageCount: manifest.expectedActionLineageCount,
+    observedActionLineageCount: manifest.observedActionLineageCount,
+    missingActionCandidateIds: bySection.get("missing-action-candidate-ids") as readonly Hash[],
+    denominatorRoot: manifest.denominatorRoot,
+    observedReceiptRoot: manifest.observedReceiptRoot,
+    missingLegRoot: manifest.missingLegRoot,
+    projectedEdgeDenominatorRoot: manifest.projectedEdgeDenominatorRoot,
+    missingProjectedEdgeRoot: manifest.missingProjectedEdgeRoot,
+    actionDenominatorRoot: manifest.actionDenominatorRoot,
+    actionObservedRoot: manifest.actionObservedRoot,
+    coarseRoutes: deepFreeze(coarseRoutes),
+    projectedEdges: bySection.get("projected-edges") as readonly NativeFullFamilyProjectedEdgeFactV1[],
+    actionLineage: bySection.get("action-lineage") as readonly NativeFullFamilyActionLineageFactV1[],
+    auditRoot: manifest.auditRoot,
+  });
+  assertNativeAuditSemanticClosure(materialized);
+  return materialized;
+}
+
+function materializeIssuedNativeFullFamilyAuditV1(
+  capability: NativeFullFamilyAuditCapabilityV1,
+): NativeFullFamilyAuditV1 {
+  const manifest = readIssuedNativeFullFamilyAuditManifestV1(capability);
+  return decodeNativeFullFamilyAuditV1(
+    encodeCanonicalBytes(manifest as unknown as CanonicalJson),
+    ref => readIssuedNativeFullFamilyAuditChunkBytesV1(capability, ref),
+  );
+}
+
+export function readIssuedNativeFullFamilyAuditV1(
+  capability: NativeFullFamilyAuditCapabilityV1,
+): NativeFullFamilyAuditV1 {
+  return materializeIssuedNativeFullFamilyAuditV1(capability);
 }
 
 /**
@@ -1022,8 +1731,8 @@ function makeAccounting(
   const policyHash = admissionPolicyHash(policy);
   const enumerationTruncated = enumeration.truncated;
   const observedUniqueCountLowerBound = enumeration.observedUniqueCountLowerBound;
-  const root = hashDomain("aloha/route-accounting/v1", { planningProblemHash, enumerationRoot, admissionPolicyHash: policyHash, enumerationTruncated, observedUniqueCountLowerBound, total, selected, pruned, notProbed, failed, entries });
-  return deepFreeze({ planningProblemHash, enumerationRoot, admissionPolicyHash: policyHash, enumerationTruncated, observedUniqueCountLowerBound, total, selected, pruned, notProbed, failed, entries, root });
+  const payload = { planningProblemHash, enumerationRoot, admissionPolicyHash: policyHash, enumerationTruncated, observedUniqueCountLowerBound, total, selected, pruned, notProbed, failed, entries };
+  return deepFreeze({ ...payload, root: routeAccountingRootV1(payload) });
 }
 
 function sealRouteCandidateTerminalTimings(
@@ -1105,7 +1814,7 @@ function sealRouteSetTerminalReceipt(
     signer: null,
     transactionHash: null,
   };
-  return deepFreeze({ ...body, lineageHash: hashDomain("aloha/route-set-terminal-lineage/v1", body) });
+  return deepFreeze({ ...body, lineageHash: routeSetTerminalLineageHashV2(body) });
 }
 
 function coarseObjective(value: SearchObjectiveV1): CoarseAdmissionObjectiveV1 {
@@ -1343,6 +2052,10 @@ function buildNativeFullFamilyAudit(
         receipt,
         familyObservation: attempt?.familyObservation ?? null,
       });
+      if (encodeCanonicalBytes(factBody as unknown as CanonicalJson).byteLength
+        > NATIVE_FULL_FAMILY_COARSE_LEG_MAX_CANONICAL_BYTES) {
+        throw new TypeError("native full-family coarse leg exceeds the owner chunk contract");
+      }
       return deepFreeze({
         ...factBody,
         factRoot: hashDomain("aloha/native-full-family-coarse-leg-fact/v1", factBody as unknown as CanonicalJson),
@@ -1356,10 +2069,7 @@ function buildNativeFullFamilyAudit(
       assessment,
       legs: deepFreeze(legs),
     });
-    return deepFreeze({
-      ...routeBody,
-      routeFactRoot: hashDomain("aloha/native-full-family-coarse-route-fact/v1", routeBody as unknown as CanonicalJson),
-    });
+    return deepFreeze({ ...routeBody, routeFactRoot: nativeFullFamilyCoarseRouteFactRootV1(routeBody) });
   });
   const successfulTerminal = terminal.kind === "unsigned-dry-run" ? terminal : null;
   if (successfulTerminal !== null && !actionExpectedCandidateIds.has(successfulTerminal.receipt.candidateId)) {
@@ -1397,6 +2107,10 @@ function buildNativeFullFamilyAudit(
       orderedEdgeIds: deepFreeze(prepared.candidate.legs.map(leg => leg.edgeId)),
       executionProgramOwnerEvidence: evidence,
     });
+    if (encodeCanonicalBytes(actionBody as unknown as CanonicalJson).byteLength
+      > NATIVE_FULL_FAMILY_COARSE_LEG_MAX_CANONICAL_BYTES) {
+      throw new TypeError("native full-family action lineage exceeds the owner chunk contract");
+    }
     return [deepFreeze({
       ...actionBody,
       factRoot: hashDomain("aloha/native-full-family-action-lineage-fact/v1", actionBody as unknown as CanonicalJson),
@@ -1428,13 +2142,13 @@ function buildNativeFullFamilyAudit(
     expectedActionLineageCount: orderedExpectedActionCandidateIds.length.toString(),
     observedActionLineageCount: actionLineage.length.toString(),
     missingActionCandidateIds: deepFreeze(missingActionCandidateIds),
-    denominatorRoot: hashDomain("aloha/native-full-family-audit-denominator/v1", denominatorKeys),
-    observedReceiptRoot: hashDomain("aloha/native-full-family-audit-observed-receipts/v1", observedRoots),
-    missingLegRoot: hashDomain("aloha/native-full-family-audit-missing-legs/v1", missingLegKeys),
-    projectedEdgeDenominatorRoot: hashDomain("aloha/native-full-family-audit-projected-edge-denominator/v1", projectedEdges.map(edge => edge.factRoot)),
-    missingProjectedEdgeRoot: hashDomain("aloha/native-full-family-audit-missing-projected-edges/v1", missingProjectedEdgeIds),
-    actionDenominatorRoot: hashDomain("aloha/native-full-family-audit-action-denominator/v1", orderedExpectedActionCandidateIds),
-    actionObservedRoot: hashDomain("aloha/native-full-family-audit-action-observed/v1", actionLineage.map(fact => fact.factRoot)),
+    denominatorRoot: nativeFullFamilyAuditSequenceRootV1("denominator", denominatorKeys),
+    observedReceiptRoot: nativeFullFamilyAuditSequenceRootV1("observed-receipts", observedRoots),
+    missingLegRoot: nativeFullFamilyAuditSequenceRootV1("missing-legs", missingLegKeys),
+    projectedEdgeDenominatorRoot: nativeFullFamilyAuditSequenceRootV1("projected-edge-denominator", projectedEdges.map(edge => edge.factRoot)),
+    missingProjectedEdgeRoot: nativeFullFamilyAuditSequenceRootV1("missing-projected-edges", missingProjectedEdgeIds),
+    actionDenominatorRoot: nativeFullFamilyAuditSequenceRootV1("action-denominator", orderedExpectedActionCandidateIds),
+    actionObservedRoot: nativeFullFamilyAuditSequenceRootV1("action-observed", actionLineage.map(fact => fact.factRoot)),
     coarseRoutes: deepFreeze(coarseRoutes),
     projectedEdges: deepFreeze(projectedEdges),
     actionLineage: deepFreeze(actionLineage),

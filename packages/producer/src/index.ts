@@ -45,6 +45,11 @@ import {
   readIssuedProducerHeadTerminalCapabilityV1,
   issueProducerHeadFactsCapabilityV1,
   issueProducerHeadTerminalCapabilityV1,
+  producerHeadFactsRootV1,
+  producerLaneFactsIdentityRootV1,
+  producerLaneFailureObservationRootV1,
+  producerLaneTerminalSetRootV1,
+  producerOrderedHashRootV1,
 } from "./internal/owners.ts";
 
 export type { CanonicalHead, ProducerSessionV1 } from "../../canonical-source/src/index.ts";
@@ -77,6 +82,11 @@ export {
   readIssuedProducerHeadFactsCapabilityV1,
   readIssuedProducerHeadSchedulerCompletionV1,
   readIssuedProducerHeadTerminalCapabilityV1,
+  producerHeadFactsRootV1,
+  producerLaneFactsIdentityRootV1,
+  producerLaneFailureObservationRootV1,
+  producerLaneTerminalSetRootV1,
+  producerOrderedHashRootV1,
 } from "./internal/owners.ts";
 export {
   createRethProducerIngressPortV1,
@@ -789,7 +799,7 @@ function mergeProducerLaneFactsV1(input: {
     && (input.laneOutcomes[1]?.kind === "completed" || input.laneOutcomes[1]?.kind === "no-input")
     && factsByLane.every(facts => facts.complete)
     && input.allowComplete !== false;
-  const sourceCoverageRoot = hashDomain("aloha/producer-head-source-coverage/v1", {
+  const sourceCoverageRoot = hashDomain("aloha/producer-head-source-coverage/v2", {
     head: input.head,
     generationId: input.generationId,
     graphRoot: input.graphRoot,
@@ -801,40 +811,22 @@ function mergeProducerLaneFactsV1(input: {
           lane,
           outcome: input.laneOutcomes[lane === "blockscan" ? 0 : 1]?.kind ?? null,
           reasonCode: input.laneOutcomes[lane === "blockscan" ? 0 : 1]?.reasonCode ?? null,
-          facts: null,
-          failureObservation: failure === undefined ? null : {
-            kind: failure.kind,
-            lane: failure.lane,
-            headHash: failure.headHash,
-            generationId: failure.generationId,
-            graphRoot: failure.graphRoot,
-            outcome: failure.outcome,
-            reasonCode: failure.reasonCode,
-            currentSource: failure.currentSource,
-            complete: failure.complete,
-          },
+          laneFactsRoot: null,
+          failureObservationRoot: failure === undefined ? null : producerLaneFailureObservationRootV1(failure),
         }
         : {
           lane,
           outcome: facts.outcome,
-          terminalKind: facts.terminalKind,
-          triggerRef: facts.triggerRef,
-          txHash: facts.txHash,
-          correlationId: facts.correlationId,
-          pendingEvidenceHash: facts.pendingEvidenceHash,
-          pendingSnapshotHash: facts.pendingSnapshotHash,
-          affectedEdgeIdsRoot: facts.affectedEdgeIdsRoot,
-          accountingRoot: facts.accounting?.root ?? null,
-          enumerationRoot: facts.accounting?.enumerationRoot ?? null,
-          coverageRoot: facts.coverageRoot,
-          terminalLineageHash: facts.terminalLineageHash,
-          currentSource: facts.currentSource,
-          candidateIds: facts.candidateIds,
+          laneFactsRoot: producerLaneFactsIdentityRootV1(facts),
+          failureObservationRoot: null,
           complete: facts.complete,
         };
     }),
-    candidateRefs,
-    currentSourcePhysical,
+    candidateRefCount: String(candidateRefs.length),
+    candidateRefsRoot: producerOrderedHashRootV1("aloha/producer-head-candidate-refs/v1", candidateRefs),
+    currentSourcePhysicalRoot: currentSourcePhysical === null
+      ? null
+      : hashDomain("aloha/current-source-rpc-physical-facts/v1", currentSourcePhysical),
     currentSourceJoined,
     complete,
   });

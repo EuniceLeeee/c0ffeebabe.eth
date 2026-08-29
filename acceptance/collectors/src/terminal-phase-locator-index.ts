@@ -27,7 +27,7 @@ import {
   type ArtifactResolutionClaimV1,
   type RetentionLeaseReceiptV1,
 } from "../../../specs/artifact-resolution/src/index.ts";
-import type { ReadOnlyArtifactRefV1 } from "../../../specs/core-envelope/src/index.ts";
+import type { ReadOnlyArtifactRefV1, SchemaRef } from "../../../specs/core-envelope/src/index.ts";
 import {
   EVIDENCE_SCHEMA_MANIFESTS,
   assertEvidenceEventMatchesReceipt,
@@ -42,17 +42,23 @@ import {
 } from "../../../specs/evidence/src/six-step.ts";
 import {
   decodeFullFamilyFactLocator,
-  decodeFullFamilyFacts,
+  decodeFullFamilyArtifactRefIndexV1,
+  decodeFullFamilyArtifactRefPageV1,
+  decodeFullFamilyFactBundleStorageV1,
+  decodeFullFamilyStoredItemV1,
+  decodeFullFamilySourceCoverageArtifact,
+  materializeFullFamilyFactBundleStorageV1,
   decodeFullFamilyPersistedGraphEdge,
   referencedFullFamilyArtifactDigests,
   validateFullFamilyFacts,
+  FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS,
+  FULL_FAMILY_FACT_STORAGE_SCHEMA_REF,
+  type FullFamilyPartitionRoleV1,
   type FullFamilyFactBundleV1,
   type FullFamilyGeneratedRuntimeMetadataV1,
 } from "../../../specs/full-family-facts/src/index.ts";
 import { ContentAddressedObserverSinkV1, type ObservedContentArtifactV1 } from "./content-addressed-sink.ts";
-import {
-  validateNativeFullFamilyAuditWireV1,
-} from "./full-family-observer.ts";
+import { decodeNativeFullFamilyAuditManifestV1 } from "../../../packages/search-pipeline/src/index.ts";
 import {
   decodeFullGraphCoarseSweepManifestV1,
   fullGraphTransitionSequenceRootV1,
@@ -92,7 +98,6 @@ export interface ProductionTerminalPhaseLocatorIndexRecordV1 {
   readonly fullFamilyProjectionArtifact: NonNullable<ProductionTerminalPhaseLocatorIndexRecordV1["selectedProcessArtifact"]>;
   readonly fullFamilyTerminalBindingArtifact: NonNullable<ProductionTerminalPhaseLocatorIndexRecordV1["selectedProcessArtifact"]>;
   readonly fullGraphCoarseSweepArtifact: NonNullable<ProductionTerminalPhaseLocatorIndexRecordV1["selectedProcessArtifact"]>;
-  readonly fullFamilyPredicateArtifacts: readonly NonNullable<ProductionTerminalPhaseLocatorIndexRecordV1["selectedProcessArtifact"]>[];
   readonly fullFamilyBundleArtifact: ProductionTerminalPhaseLocatorIndexRecordV1["selectedProcessArtifact"];
   readonly fullFamilyLocatorArtifact: ProductionTerminalPhaseLocatorIndexRecordV1["selectedProcessArtifact"];
   readonly sixStepTerminalBindingArtifact: ProductionTerminalPhaseLocatorIndexRecordV1["selectedProcessArtifact"];
@@ -252,6 +257,92 @@ async function exactIndexedArtifactBytes(
     throw new TypeError(`${label} bytes/ref/claim/lease/mirror mismatch`);
   }
   return bytes;
+}
+
+function fullFamilyItemSchema(role: FullFamilyPartitionRoleV1): SchemaRef {
+  if (role === "source-plans" || role === "universe-candidates") return FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.evidence;
+  if (role === "outcomes") return FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.outcome;
+  if (role === "instance-publications") return FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.instancePublication;
+  if (role === "projected-edges") return FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.graphEdge;
+  if (role === "declared-coarse-capabilities" || role === "declared-exact-capabilities") {
+    return FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.generatedCapabilityRef;
+  }
+  if (role === "owned-actions") return FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.generatedActionOwner;
+  return FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.coarseObservation;
+}
+
+export async function readStoredFullFamilyPredicateArtifactsV1(
+  sink: ContentAddressedObserverSinkV1,
+  storageBytes: Uint8Array,
+): Promise<readonly ObservedContentArtifactV1[]> {
+  const storage = decodeFullFamilyFactBundleStorageV1(storageBytes);
+  const artifacts = new Map<Hash, ObservedContentArtifactV1>();
+  const add = async (artifactRefId: Hash, contentSha256: Hash, artifactSchema: SchemaRef) => {
+    const observed = await sink.readArtifact({ contentSha256, mediaType: "application/json", schema: artifactSchema });
+    if (observed.ref.artifactRefId !== artifactRefId) {
+      throw new TypeError("stored Full-Family artifact ref/content/schema splice");
+    }
+    const prior = artifacts.get(artifactRefId);
+    if (prior !== undefined && prior.contentSha256 !== contentSha256) {
+      throw new TypeError("stored Full-Family artifact ref is bound to multiple contents");
+    }
+    artifacts.set(artifactRefId, observed);
+    return observed;
+  };
+  await add(storage.releaseIntent.sourceArtifactRefId, storage.releaseIntent.sourceArtifactContentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.releaseIntent);
+  await add(storage.definitionCatalog.sourceArtifactRefId, storage.definitionCatalog.sourceArtifactContentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.releaseProjection);
+  await add(storage.runtimeComposition.sourceArtifactRefId, storage.runtimeComposition.sourceArtifactContentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.releaseProjection);
+  const sourceCoverage = await add(storage.sourceCoverage.artifactRefId, storage.sourceCoverage.contentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.sourceCoverage);
+  const coverage = decodeFullFamilySourceCoverageArtifact(sourceCoverage.bytes);
+  for (const execution of coverage.executions) {
+    await add(execution.executionArtifactRefId, execution.executionContentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.sourceExecution);
+    await add(execution.evidenceArtifactRefId, execution.evidenceContentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.sourceEvidence);
+    for (const physical of execution.physicalObservations) {
+      await add(physical.artifactRefId, physical.contentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.sourcePhysicalObservation);
+    }
+  }
+  await add(storage.lineage.nominationClosure.artifactRefId, storage.lineage.nominationClosure.contentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.nominationClosure);
+  await add(storage.lineage.candidatePartitionProof.artifactRefId, storage.lineage.candidatePartitionProof.contentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.candidatePartitionProof);
+  await add(storage.lineage.candidateProofVerifierBinding.artifactRefId, storage.lineage.candidateProofVerifierBinding.contentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.candidateProofVerifierBinding);
+  await add(storage.runtime.readyRecordArtifactRefId, storage.runtime.readyRecordContentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.readyRecord);
+  const partitions = (family: typeof storage.families[number]) => [
+    ["source-plans", family.sourcePlans],
+    ["universe-candidates", family.universeCandidates],
+    ["outcomes", family.outcomes],
+    ["instance-publications", family.instancePublications],
+    ["projected-edges", family.projectedEdges],
+    ["declared-coarse-capabilities", family.declaredCoarseCapabilities],
+    ["coarse-rankable", family.coarseRankable],
+    ["coarse-unavailable", family.coarseUnavailable],
+    ["unranked-admissions", family.unrankedAdmissions],
+    ["declared-exact-capabilities", family.declaredExactCapabilities],
+    ["owned-actions", family.ownedActions],
+  ] as const;
+  for (const family of storage.families) {
+    for (const [role, partition] of partitions(family)) {
+      const indexArtifact = await add(
+        partition.indexArtifactRefId,
+        partition.indexContentSha256,
+        FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.artifactRefIndex,
+      );
+      const index = decodeFullFamilyArtifactRefIndexV1(indexArtifact.bytes);
+      let next = index.firstPageRef;
+      let pageCount = 0;
+      while (next !== null) {
+        if (pageCount >= Number(index.pageCount)) throw new TypeError("stored Full-Family ref-page cycle");
+        const pageArtifact = await add(next.artifactRefId, next.contentSha256, FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.artifactRefPage);
+        const page = decodeFullFamilyArtifactRefPageV1(pageArtifact.bytes);
+        const itemSchema = fullFamilyItemSchema(role);
+        for (const ref of page.refs) {
+          await add(ref.artifactRefId, ref.contentSha256, itemSchema);
+        }
+        next = page.nextPageRef;
+        pageCount += 1;
+      }
+      if (String(pageCount) !== index.pageCount) throw new TypeError("stored Full-Family ref-page count mismatch");
+    }
+  }
+  return Object.freeze([...artifacts.values()].sort((left, right) => left.ref.artifactRefId.localeCompare(right.ref.artifactRefId)));
 }
 
 /** Six-Step producer artifacts keep their native primary locator (including
@@ -480,8 +571,8 @@ function processIdentity(bytes: Uint8Array): Readonly<{
 const FULL_FAMILY_TERMINAL_BINDING_KEYS = [
   "schemaVersion", "kind", "runtimeBindingId", "candidateReleaseCommit", "releaseProvenanceHash",
   "finalDurableWindowId", "producerTerminalId", "producerHeadFactsRoot", "producerTerminalBindingRoot",
-  "laneTerminalSetRoot", "searchTerminalHash", "terminalKind", "terminalLineageHash", "nativeAuditRoot",
-  "readyRecordHash", "generationId", "graphRoot", "generatedRuntime", "readyCutoff", "actualCurrentSource", "audit", "bindingRoot",
+  "laneTerminalSetRoot", "searchTerminalHash", "terminalKind", "terminalLineageHash",
+  "readyRecordHash", "generationId", "graphRoot", "generatedRuntime", "readyCutoff", "actualCurrentSource", "nativeAuditManifest", "bindingRoot",
 ] as const;
 
 function fullFamilyTerminalIdentity(bytes: Uint8Array) {
@@ -498,15 +589,10 @@ function fullFamilyTerminalIdentity(bytes: Uint8Array) {
   )) {
     throw new TypeError("terminal-phase Full-Family terminal binding root mismatch");
   }
-  const audit = record(value.audit, "terminalPhaseFullFamilyTerminalBinding.audit");
-  validateNativeFullFamilyAuditWireV1(audit as never);
-  const auditRoot = assertHash(audit.auditRoot, "terminalPhaseFullFamilyTerminalBinding.audit.auditRoot");
-  const { auditRoot: _auditRoot, ...auditPayload } = audit;
-  if (auditRoot !== hashDomain("aloha/native-full-family-audit/v1", auditPayload as CanonicalJson)
-    || auditRoot !== assertHash(value.nativeAuditRoot, "terminalPhaseFullFamilyTerminalBinding.nativeAuditRoot")) {
-    throw new TypeError("terminal-phase Full-Family terminal native-audit root mismatch");
-  }
-  const auditBinding = record(audit.binding, "terminalPhaseFullFamilyTerminalBinding.audit.binding");
+  const auditManifest = decodeNativeFullFamilyAuditManifestV1(
+    encodeCanonicalBytes(value.nativeAuditManifest as CanonicalJson),
+  );
+  const auditBinding = auditManifest.binding;
   if (auditBinding.readyRecordHash !== value.readyRecordHash
     || auditBinding.graphRoot !== value.graphRoot
     || auditBinding.releaseProvenanceHash !== value.releaseProvenanceHash
@@ -540,7 +626,7 @@ function fullFamilyTerminalIdentity(bytes: Uint8Array) {
   return Object.freeze({
     finalDurableWindowId: assertHash(value.finalDurableWindowId, "terminalPhaseFullFamilyTerminalBinding.finalDurableWindowId"),
     readyRecordHash: assertHash(value.readyRecordHash, "terminalPhaseFullFamilyTerminalBinding.readyRecordHash"),
-    auditRoot,
+    auditRoot: auditManifest.auditRoot,
     producerTerminalBindingRoot: assertHash(
       value.producerTerminalBindingRoot,
       "terminalPhaseFullFamilyTerminalBinding.producerTerminalBindingRoot",
@@ -735,14 +821,43 @@ function assertFullFamilyArtifactsManifestJoin(
       || locatorArtifact.contentSha256 !== projection.locatorContentSha256) {
       throw new TypeError("terminal-phase observed Full-Family artifact denominator mismatch");
     }
-    const bundle = decodeFullFamilyFacts(decodeCanonicalBytes(bundleBytes) as object);
+    const storage = decodeFullFamilyFactBundleStorageV1(bundleBytes);
+    const artifactBytesByRef = new Map<Hash, Readonly<{ readonly contentSha256: Hash; readonly bytes: Uint8Array }>>();
+    for (const [position, artifact] of predicateArtifacts.entries()) {
+      const bytes = predicateArtifactBytes[position];
+      if (bytes === undefined || sha256Hex(bytes) !== artifact.contentSha256) {
+        throw new TypeError("terminal-phase Full-Family predicate artifact bytes are incomplete");
+      }
+      if (artifactBytesByRef.has(artifact.ref.artifactRefId)) {
+        throw new TypeError("terminal-phase Full-Family predicate artifact is duplicated");
+      }
+      artifactBytesByRef.set(artifact.ref.artifactRefId, Object.freeze({ contentSha256: artifact.contentSha256, bytes }));
+    }
+    const usedRefs = new Set<Hash>();
+    const bundle = materializeFullFamilyFactBundleStorageV1(storage, (artifactRefId, contentSha256) => {
+      const artifact = artifactBytesByRef.get(artifactRefId);
+      if (artifact === undefined || artifact.contentSha256 !== contentSha256) {
+        throw new TypeError("terminal-phase Full-Family stored artifact is missing");
+      }
+      usedRefs.add(artifactRefId);
+      return artifact.bytes;
+    }, decodeFullFamilyStoredItemV1);
     const locator = decodeFullFamilyFactLocator(decodeCanonicalBytes(locatorBytes) as object);
     if (locator.bundleArtifactRefId !== bundleArtifact.ref.artifactRefId
       || locator.bundleContentSha256 !== bundleArtifact.contentSha256
       || projection.readyRecordHash !== bundle.runtime.readyRecordHash) {
       throw new TypeError("terminal-phase Full-Family locator/bundle/projection splice");
     }
-    const expected = [...referencedFullFamilyArtifactDigests(bundle)].sort(([left], [right]) => left.localeCompare(right));
+    const expectedMap = new Map(referencedFullFamilyArtifactDigests(bundle));
+    for (const artifactRefId of usedRefs) {
+      const observed = artifactBytesByRef.get(artifactRefId)!;
+      const prior = expectedMap.get(artifactRefId);
+      if (prior !== undefined && prior !== observed.contentSha256) {
+        throw new TypeError("terminal-phase Full-Family stored/semantic artifact digest splice");
+      }
+      expectedMap.set(artifactRefId, observed.contentSha256);
+    }
+    const expected = [...expectedMap].sort(([left], [right]) => left.localeCompare(right));
     if (predicateArtifacts.length !== expected.length || predicateArtifactBytes.length !== expected.length) {
       throw new TypeError("terminal-phase Full-Family predicate artifact closure denominator mismatch");
     }
@@ -1181,7 +1296,7 @@ function decodeIndex(value: unknown): ProductionTerminalPhaseLocatorIndexRecordV
     "schemaVersion", "kind", "finalDurableWindowId", "locatorRoot", "locatorContentSha256",
     "locatorArtifactRefId", "locatorArtifact", "manifestRoot", "manifestContentSha256", "manifestArtifact",
     "fullFamilyProjectionArtifact", "fullFamilyTerminalBindingArtifact", "fullGraphCoarseSweepArtifact",
-    "fullFamilyPredicateArtifacts", "fullFamilyBundleArtifact", "fullFamilyLocatorArtifact", "sixStepTerminalBindingArtifact",
+    "fullFamilyBundleArtifact", "fullFamilyLocatorArtifact", "sixStepTerminalBindingArtifact",
     "sixStepPredicateArtifacts", "selectedProcessArtifact", "indexRoot",
   ], "terminalPhaseLocatorIndex");
   if (index.schemaVersion !== 1 || index.kind !== "aloha.production-terminal-phase-locator-index-v1") {
@@ -1210,20 +1325,6 @@ function decodeIndex(value: unknown): ProductionTerminalPhaseLocatorIndexRecordV
       index.fullGraphCoarseSweepArtifact,
       "terminalPhaseLocatorIndex.fullGraphCoarseSweepArtifact",
     ),
-    fullFamilyPredicateArtifacts: (() => {
-      if (!Array.isArray(index.fullFamilyPredicateArtifacts)) {
-        throw new TypeError("terminalPhaseLocatorIndex.fullFamilyPredicateArtifacts must be an array");
-      }
-      let previous: Hash | null = null;
-      return Object.freeze(index.fullFamilyPredicateArtifacts.map((value, position) => {
-        const artifact = decodeIndexedArtifact(value, `terminalPhaseLocatorIndex.fullFamilyPredicateArtifacts[${position}]`);
-        if (previous !== null && previous >= artifact.ref.artifactRefId) {
-          throw new TypeError("terminalPhaseLocatorIndex Full-Family predicate artifacts are not exact-sorted");
-        }
-        previous = artifact.ref.artifactRefId;
-        return artifact;
-      }));
-    })(),
     fullFamilyBundleArtifact: decodeNullableIndexedArtifact(
       index.fullFamilyBundleArtifact,
       "terminalPhaseLocatorIndex.fullFamilyBundleArtifact",
@@ -1635,7 +1736,6 @@ export class ProductionTerminalPhaseLocatorIndexV1 {
       fullFamilyProjectionArtifact,
       fullFamilyTerminalBindingArtifact,
       fullGraphCoarseSweepArtifact,
-      fullFamilyPredicateArtifacts,
       fullFamilyBundleArtifact,
       fullFamilyLocatorArtifact,
       sixStepTerminalBindingArtifact,
@@ -1793,17 +1893,14 @@ export class ProductionTerminalPhaseLocatorIndexV1 {
       null,
       "terminal-phase full-Graph coarse-sweep restart artifact",
     );
-    const fullFamilyPredicateArtifactBytes = await Promise.all(index.fullFamilyPredicateArtifacts.map((artifact, position) =>
-      exactIndexedArtifactBytes(
-        this.#sink,
-        artifact,
-        null,
-        `terminal-phase Full-Family predicate restart artifact[${position}]`,
-      )));
     const fullFamilyBundleBytes = await readOptional(
       index.fullFamilyBundleArtifact,
       "terminal-phase Full-Family bundle restart artifact",
     );
+    const fullFamilyPredicateArtifacts = fullFamilyBundleBytes === null
+      ? Object.freeze([])
+      : await readStoredFullFamilyPredicateArtifactsV1(this.#sink, fullFamilyBundleBytes);
+    const fullFamilyPredicateArtifactBytes = Object.freeze(fullFamilyPredicateArtifacts.map(artifact => artifact.bytes));
     const fullFamilyLocatorBytes = await readOptional(
       index.fullFamilyLocatorArtifact,
       "terminal-phase Full-Family locator restart artifact",
@@ -1843,7 +1940,7 @@ export class ProductionTerminalPhaseLocatorIndexV1 {
       fullFamilyTerminalBindingBytes,
       index.fullGraphCoarseSweepArtifact,
       fullGraphCoarseSweepBytes,
-      index.fullFamilyPredicateArtifacts,
+      fullFamilyPredicateArtifacts,
       fullFamilyPredicateArtifactBytes,
       expected.generatedRuntimeMetadata,
     );
@@ -1963,13 +2060,6 @@ export class ProductionTerminalPhaseLocatorIndexV1 {
       claim: index.fullGraphCoarseSweepArtifact.claim,
       lease: index.fullGraphCoarseSweepArtifact.lease,
     });
-    const fullFamilyPredicateArtifacts = Object.freeze(index.fullFamilyPredicateArtifacts.map((artifact, position) => Object.freeze({
-      contentSha256: artifact.contentSha256,
-      bytes: fullFamilyPredicateArtifactBytes[position]!,
-      ref: artifact.ref,
-      claim: artifact.claim,
-      lease: artifact.lease,
-    })));
     const observerContentDirectory = await realpath(this.#sink.directory);
     const observerContentDirectoryHandle = await open(
       observerContentDirectory,

@@ -14,9 +14,15 @@ import {
   type FinalDurableWindowCapabilityV1,
 } from "../../../../packages/final-durable-window/src/index.ts";
 import {
+  readIssuedNativeFullFamilyAuditChunkBytesV1,
+  readIssuedNativeFullFamilyAuditManifestV1,
   readIssuedNativeFullFamilyAuditV1,
   readIssuedSearchTerminalCapabilityV1,
   readIssuedSearchTerminalNativeFullFamilyAuditCapabilityV1,
+  searchTerminalEvidenceHashV2,
+  type NativeFullFamilyAuditCapabilityV1,
+  type NativeFullFamilyAuditChunkRefV1,
+  type NativeFullFamilyAuditManifestV1,
   type NativeFullFamilyAuditV1,
   type SearchTerminalCapabilityV1,
 } from "../../../../packages/search-pipeline/src/index.ts";
@@ -58,15 +64,14 @@ export interface RuntimeReleaseFullFamilyTerminalBindingV1 {
   readonly searchTerminalHash: Hash;
   readonly terminalKind: "unsigned-dry-run" | "route-set-terminal";
   readonly terminalLineageHash: Hash;
-  readonly nativeAuditRoot: Hash;
   readonly readyRecordHash: Hash;
   readonly generationId: string;
   readonly graphRoot: Hash;
   /** Release-owner projection from the exact generated runtime factory. */
   readonly generatedRuntime: RuntimeReleaseFullFamilyGeneratedMetadataV1;
-  readonly readyCutoff: NativeFullFamilyAuditV1["binding"]["readyCutoff"];
-  readonly actualCurrentSource: NativeFullFamilyAuditV1["binding"]["actualCurrentSource"];
-  readonly audit: NativeFullFamilyAuditV1;
+  readonly readyCutoff: NativeFullFamilyAuditManifestV1["binding"]["readyCutoff"];
+  readonly actualCurrentSource: NativeFullFamilyAuditManifestV1["binding"]["actualCurrentSource"];
+  readonly nativeAuditManifest: NativeFullFamilyAuditManifestV1;
   readonly bindingRoot: Hash;
 }
 
@@ -90,6 +95,7 @@ interface ServiceStateV1 {
 
 interface CapabilityStateV1 extends Omit<ServiceStateV1, "consumedHeadTerminals"> {
   readonly binding: RuntimeReleaseFullFamilyTerminalBindingV1;
+  readonly nativeAuditCapability: NativeFullFamilyAuditCapabilityV1;
 }
 
 const serviceStates = new WeakMap<object, ServiceStateV1>();
@@ -141,7 +147,10 @@ function sealBinding(
   headTerminalCapability: ProducerHeadTerminalCapabilityV1,
   finalDurableWindowCapability: FinalDurableWindowCapabilityV1,
   startup: StartupRuntimeV1,
-): RuntimeReleaseFullFamilyTerminalBindingV1 {
+): Readonly<{
+  readonly binding: RuntimeReleaseFullFamilyTerminalBindingV1;
+  readonly nativeAuditCapability: NativeFullFamilyAuditCapabilityV1;
+}> {
   const finalWindow = readFinalDurableWindowBindingV1(finalDurableWindowCapability);
   assertIssuedStartupRuntime(startup);
   const ready = startup.readServingGeneration(finalWindow.serving.generationId);
@@ -176,12 +185,14 @@ function sealBinding(
   }
   const terminalCapability: SearchTerminalCapabilityV1 = terminalSet.blockscanSearchTerminalCapability;
   const terminal = readIssuedSearchTerminalCapabilityV1(terminalCapability);
-  const audit = readIssuedNativeFullFamilyAuditV1(
-    readIssuedSearchTerminalNativeFullFamilyAuditCapabilityV1(terminalCapability),
-  );
+  const nativeAuditCapability = readIssuedSearchTerminalNativeFullFamilyAuditCapabilityV1(terminalCapability);
+  const audit = readIssuedNativeFullFamilyAuditV1(nativeAuditCapability);
+  const nativeAuditManifest = readIssuedNativeFullFamilyAuditManifestV1(nativeAuditCapability);
   const receipt = terminal.receipt;
   const accounting = terminal.kind === "unsigned-dry-run" ? terminal.accounting : terminal.receipt.accounting;
-  if (audit.binding.releaseProvenanceHash !== service.releaseProvenanceHash) {
+  if (nativeAuditManifest.auditRoot !== audit.auditRoot
+    || nativeAuditManifest.binding.bindingRoot !== audit.binding.bindingRoot
+    || audit.binding.releaseProvenanceHash !== service.releaseProvenanceHash) {
     throw new TypeError("search terminal audit belongs to another runtime release");
   }
   if (audit.binding.correlationId !== receipt.correlationId
@@ -196,7 +207,7 @@ function sealBinding(
     || audit.expectedCandidateCount !== String(accounting.entries.length)) {
     throw new TypeError("search terminal/native full-family audit binding mismatch");
   }
-  const searchTerminalHash = hashDomain("aloha/search-terminal-evidence/v1", terminal);
+  const searchTerminalHash = searchTerminalEvidenceHashV2(terminal);
   const payload = deepFreeze({
     schemaVersion: 1 as const,
     kind: "aloha.runtime-release-full-family-terminal-binding-v1" as const,
@@ -211,19 +222,19 @@ function sealBinding(
     searchTerminalHash,
     terminalKind: terminal.kind,
     terminalLineageHash: receipt.lineageHash,
-    nativeAuditRoot: audit.auditRoot,
     readyRecordHash: receipt.readyRecordHash,
     generationId: receipt.generationId,
     graphRoot: receipt.graphRoot,
     generatedRuntime: service.generatedRuntime,
     readyCutoff: receipt.cutoff,
     actualCurrentSource: receipt.source,
-    audit,
+    nativeAuditManifest,
   });
-  return deepFreeze({
+  const binding = deepFreeze({
     ...payload,
     bindingRoot: hashDomain("aloha/runtime-release-full-family-terminal-binding/v1", payload),
   });
+  return Object.freeze({ binding, nativeAuditCapability });
 }
 
 export function issueRuntimeReleaseFullFamilyTerminalBindingServiceV1(
@@ -270,7 +281,7 @@ export function issueRuntimeReleaseFullFamilyTerminalBindingServiceV1(
       if (active.consumedHeadTerminals.has(input.headTerminal)) {
         throw new TypeError("Producer head Full-Family binding was already issued");
       }
-      const binding = sealBinding(active, input.headTerminal, input.finalDurableWindow, input.startup);
+      const sealed = sealBinding(active, input.headTerminal, input.finalDurableWindow, input.startup);
       active.consumedHeadTerminals.add(input.headTerminal);
       const capability = Object.freeze(Object.create(null)) as RuntimeReleaseFullFamilyTerminalBindingCapabilityV1;
       capabilityStates.set(capability, Object.freeze({
@@ -280,7 +291,8 @@ export function issueRuntimeReleaseFullFamilyTerminalBindingServiceV1(
         releaseProvenanceHash: active.releaseProvenanceHash,
         candidateReleaseCommit: active.candidateReleaseCommit,
         generatedRuntime: active.generatedRuntime,
-        binding,
+        binding: sealed.binding,
+        nativeAuditCapability: sealed.nativeAuditCapability,
       }));
       return capability;
     },
@@ -293,6 +305,19 @@ export function readRuntimeReleaseFullFamilyTerminalBindingCapabilityV1(
   capability: RuntimeReleaseFullFamilyTerminalBindingCapabilityV1,
 ): RuntimeReleaseFullFamilyTerminalBindingV1 {
   return currentCapability(capability).binding;
+}
+
+export function readRuntimeReleaseNativeFullFamilyAuditCapabilityV1(
+  capability: RuntimeReleaseFullFamilyTerminalBindingCapabilityV1,
+): NativeFullFamilyAuditV1 {
+  return readIssuedNativeFullFamilyAuditV1(currentCapability(capability).nativeAuditCapability);
+}
+
+export function readRuntimeReleaseNativeFullFamilyAuditChunkBytesCapabilityV1(
+  capability: RuntimeReleaseFullFamilyTerminalBindingCapabilityV1,
+  ref: NativeFullFamilyAuditChunkRefV1,
+): Uint8Array {
+  return readIssuedNativeFullFamilyAuditChunkBytesV1(currentCapability(capability).nativeAuditCapability, ref);
 }
 
 export function assertIssuedRuntimeReleaseFullFamilyTerminalBindingServiceV1(

@@ -4,6 +4,7 @@ import { TextDecoder } from "node:util";
 import { buildSync, type Metafile } from "esbuild";
 import ts from "typescript";
 import { sha256Hex, type Hash } from "../../../../packages/canonical-codec/src/index.ts";
+import { PRODUCTION_RELEASE_LAYOUT_V1 } from "../deployment-package.ts";
 
 const PRODUCTION_RUNTIME_ENTRY_V1 = "apps/searcher-runtime/src/release-runtime.ts";
 const PRODUCTION_LAUNCHER_ENTRY_V1 = "tools/runtime-release-packager/assets/production-launcher.mjs";
@@ -11,10 +12,13 @@ const QUALIFIED_RELEASE_RUNNER_ENTRY_V1 = "tools/runtime-release-packager/src/in
 const OUTPUT_FILE_V1 = "aloha-production-runtime.mjs";
 const QUALIFIED_RELEASE_RUNNER_OUTPUT_FILE_V1 = "aloha-qualified-release-runner.mjs";
 const FORBIDDEN_LOADER_MODULES = Object.freeze(new Set([
-  "node:child_process",
   "node:module",
   "node:vm",
   "node:worker_threads",
+]));
+const PRODUCTION_CHILD_PROCESS_OWNERS = Object.freeze(new Set([
+  "packages/runtime-release-authority/src/internal/external-proof-owner.ts",
+  "runtime/revm-workers/src/node-worker-factory.ts",
 ]));
 const FORBIDDEN_PRODUCTION_BUILD_GRAPH_SEGMENTS = Object.freeze([
   "node_modules",
@@ -32,6 +36,10 @@ const QUALIFIED_RELEASE_RUNNER_BUILTINS = Object.freeze(new Set([
 ]));
 const FORBIDDEN_LOADER_PROPERTIES = Object.freeze(new Set([
   "createRequire", "getBuiltinModule", "register", "eval", "Function", "Worker", "WebAssembly",
+]));
+const ALLOWED_PRODUCTION_OPT_PATHS = Object.freeze(new Set([
+  PRODUCTION_RELEASE_LAYOUT_V1.revmWorkerExecutablePath,
+  PRODUCTION_RELEASE_LAYOUT_V1.proofSignerExecutablePath,
 ]));
 
 export interface BuiltProductionRuntimeBundleV1 {
@@ -65,6 +73,21 @@ function assertMetafile(
       throw new TypeError(`${label} bundle has a non-builtin import: ${imported.path}`);
     }
   }
+  const childProcessOwners = Object.entries(metafile.inputs)
+    .filter(([, input]) => input.imports.some(imported => imported.external
+      && imported.path === "node:child_process"
+      && imported.kind === "import-statement"))
+    .map(([path]) => path)
+    .sort();
+  if (label === "production runtime") {
+    const expected = [...PRODUCTION_CHILD_PROCESS_OWNERS].sort();
+    if (childProcessOwners.length !== expected.length
+      || childProcessOwners.some((path, index) => path !== expected[index])) {
+      throw new TypeError("production runtime child-process owner denominator mismatch");
+    }
+  } else if (childProcessOwners.length !== 0) {
+    throw new TypeError(`${label} bundle contains a child-process owner`);
+  }
   for (const path of [...Object.keys(metafile.inputs), ...Object.keys(metafile.outputs)]) {
     if (isAbsolute(path) || path.includes("\\")
       || forbiddenGraphSegments.some(segment => path.includes(segment))
@@ -84,6 +107,17 @@ function moduleSpecifier(value: ts.Expression, _source: ts.SourceFile, label: st
     throw new TypeError(`${label} must reference a node:* builtin`);
   }
   return value.text;
+}
+
+function assertNoUnexpectedProductionOptPath(source: ts.SourceFile, label: string): void {
+  const visit = (node: ts.Node): void => {
+    if (ts.isStringLiteralLike(node) && node.text.includes("/opt/aloha")
+      && !ALLOWED_PRODUCTION_OPT_PATHS.has(node.text)) {
+      throw new TypeError(`${label} references an unapproved /opt/aloha path`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
 }
 
 function propertyName(expression: ts.Expression, name: string): expression is ts.PropertyAccessExpression {
@@ -193,7 +227,7 @@ export function assertProductionLauncherArtifactV1(bytesValue: Uint8Array): void
   } catch {
     throw new TypeError("production launcher is not UTF-8 JavaScript");
   }
-  if (sourceText.includes("/opt/aloha") || sourceText.includes("node_modules")
+  if (sourceText.includes("node_modules")
     || sourceText.includes("node:child_process") || sourceText.includes("/usr/bin/git")) {
     throw new TypeError("production launcher references a candidate checkout or external loader");
   }
@@ -202,6 +236,7 @@ export function assertProductionLauncherArtifactV1(bytesValue: Uint8Array): void
     readonly parseDiagnostics?: readonly ts.Diagnostic[];
   }).parseDiagnostics ?? [];
   if (parseDiagnostics.length !== 0) throw new TypeError("production launcher is not valid JavaScript");
+  assertNoUnexpectedProductionOptPath(source, "production launcher");
   const imports: string[] = [];
   let dynamicImportCount = 0;
   const visit = (node: ts.Node): void => {
@@ -248,7 +283,7 @@ export function assertSelfContainedRuntimeBundleV1(bytesValue: Uint8Array): void
   } catch {
     throw new TypeError("production runtime bundle is not UTF-8 JavaScript");
   }
-  if (sourceText.includes("/opt/aloha") || sourceText.includes("node_modules")
+  if (sourceText.includes("node_modules")
     || sourceText.includes("file://")) {
     throw new TypeError("production runtime bundle references a checkout or node_modules");
   }
@@ -257,6 +292,7 @@ export function assertSelfContainedRuntimeBundleV1(bytesValue: Uint8Array): void
     readonly parseDiagnostics?: readonly ts.Diagnostic[];
   }).parseDiagnostics ?? [];
   if (parseDiagnostics.length !== 0) throw new TypeError("production runtime bundle is not valid JavaScript");
+  assertNoUnexpectedProductionOptPath(source, "production runtime bundle");
   let dynamicImportCount = 0;
   const exportedNames: string[] = [];
   const visit = (node: ts.Node): void => {

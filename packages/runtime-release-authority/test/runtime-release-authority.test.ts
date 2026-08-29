@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
+import { chmodSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
-import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import { hashDomain, sha256Hex, type Hash } from "../../canonical-codec/src/index.ts";
 import {
   createRuntimeReleaseBindingV1, createRuntimeReleaseDiscoverySourceQualificationV1,
   hashRuntimeReleaseDiscoveryEndpointLocatorV1, hashQualifiedExecutorRegistryEntry, hashQualifiedExecutorRegistryRoot,
@@ -22,6 +25,11 @@ import {
   issueRuntimeReleaseExecutorLeaseV1,
   issueRuntimeReleaseRevmWorkerAuthorityIssuer,
 } from "../src/internal/revm-worker-owner.ts";
+import {
+  issueDeploymentRuntimeInfrastructureV1,
+  readDeploymentRuntimeInfrastructureV1,
+} from "../src/internal/deployment-runtime-owner.ts";
+import { readIssuedRevmWorkerDeploymentPort } from "../../../runtime/revm-workers/src/internal/authority.ts";
 import type { RevmWorkerAuthorityBindingV1 } from "../../../runtime/revm-workers/src/protocol.ts";
 import { WorkScheduler, type QualifiedExecutorAuthorityCapability, type QualifiedExecutorAuthorityIssuer } from "../../scheduler/src/index.ts";
 import { issueQualifiedSharedSchedulerRuntimePort } from "../../scheduler/src/internal/shared-runtime-owner.ts";
@@ -764,4 +772,96 @@ test("REVM owner rejects a scheduler from another release and fences replacement
   revoked.authority.revoke();
   assert.throws(() => revokedOwner.issue(), /revoked/);
   assert.throws(() => revokedOwner.assertCurrent(revokedBinding), /revoked/);
+});
+
+test("same-bundle deployment infrastructure issues real scheduler and REVM brands", () => {
+  const directory = mkdtempSync(join(tmpdir(), "aloha-deployment-runtime-"));
+  try {
+    const executablePath = join(realpathSync(directory), "aloha-revm-worker");
+    const executableBytes = new TextEncoder().encode("#!/bin/sh\nexit 0\n");
+    writeFileSync(executablePath, executableBytes);
+    chmodSync(executablePath, 0o755);
+    const executableFingerprint = sha256Hex(executableBytes);
+    const selectedExecutor = Object.freeze({ ...executor, executableFingerprint });
+    const value = issued({
+      ...payload,
+      qualifiedExecutorRegistry: [selectedExecutor],
+      qualifiedExecutorRegistryRoot: hashQualifiedExecutorRegistryRoot([selectedExecutor]),
+      selectedExecutorLeafHash: hashQualifiedExecutorRegistryEntry(selectedExecutor),
+      selectedExecutor,
+    });
+    const request = Object.freeze({
+      schemaVersion: 1 as const,
+      kind: "aloha.deployment-runtime-infrastructure" as const,
+      revmWorkerExecutablePath: executablePath,
+      revmWorkerExecutableSha256: executableFingerprint,
+      externalProofSigner: Object.freeze({
+        schemaVersion: 1 as const,
+        kind: "aloha.external-proof-signer" as const,
+        executablePath,
+        executableSha256: executableFingerprint,
+        attestationPublicKeyHex: `0x${"11".repeat(32)}` as const,
+        candidatePartitionPublicKeyHex: `0x${"22".repeat(32)}` as const,
+        nominationQualifications: Object.freeze(value.binding.nominationQualificationSet.entries
+          .map((entry, index) => Object.freeze({
+            sourcePlanIdentity: h(`deployment-source-plan:${index}`),
+            sourcePlanLeafDigest: h(`deployment-source-plan-leaf:${index}`),
+            nominationProgramRoot: h(`deployment-nomination-program:${index}`),
+            nominationProgramProposalLeafDigest: entry.proposalLeafDigest,
+            qualificationLeafDigest: entry.qualificationLeafDigest,
+          }))
+          .sort((left, right) => left.nominationProgramProposalLeafDigest.localeCompare(right.nominationProgramProposalLeafDigest))),
+      }),
+    });
+    const capability = issueDeploymentRuntimeInfrastructureV1({ binding: value.binding, request });
+    const infrastructure = readDeploymentRuntimeInfrastructureV1(capability, value.binding);
+    const provenance = infrastructure.scheduler.issuer.provenance(infrastructure.scheduler.capability);
+    assert.equal(provenance.authorityRoot, value.binding.executorAuthorityRoot);
+    assert.equal(provenance.workerEpoch, value.binding.workerEpoch);
+    assert.equal(provenance.executorSession, value.binding.executorSessionHash);
+    assert.equal(
+      infrastructure.scheduler.issuer.open({
+        worker: { workerEpoch: value.binding.workerEpoch, ...value.binding.selectedExecutor },
+      }),
+      infrastructure.scheduler.capability,
+    );
+    assert.equal(
+      readIssuedRevmWorkerDeploymentPort(infrastructure.revmDeployment).qualification.executableFingerprint,
+      executableFingerprint,
+    );
+
+    assert.throws(
+      () => readDeploymentRuntimeInfrastructureV1({ ...capability }, value.binding),
+      /not issued/,
+    );
+    assert.throws(
+      () => readIssuedRevmWorkerDeploymentPort({ ...infrastructure.revmDeployment }),
+      /not deployment-issued/,
+    );
+    assert.throws(
+      () => infrastructure.scheduler.issuer.provenance({ ...infrastructure.scheduler.capability }),
+      /not issued/,
+    );
+    const foreign = issued({
+      ...payload,
+      qualifiedExecutorRegistry: [selectedExecutor],
+      qualifiedExecutorRegistryRoot: hashQualifiedExecutorRegistryRoot([selectedExecutor]),
+      selectedExecutorLeafHash: hashQualifiedExecutorRegistryEntry(selectedExecutor),
+      selectedExecutor,
+      executorSessionHash: h("foreign-deployment-session"),
+    });
+    assert.throws(
+      () => readDeploymentRuntimeInfrastructureV1(capability, foreign.binding),
+      /release identity mismatch/,
+    );
+    assert.throws(
+      () => issueDeploymentRuntimeInfrastructureV1({
+        binding: value.binding,
+        request: { ...request, revmWorkerExecutableSha256: h("wrong-worker-bytes") },
+      }),
+      /does not join/,
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

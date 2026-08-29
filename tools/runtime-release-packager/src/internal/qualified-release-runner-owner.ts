@@ -59,9 +59,12 @@ import {
   assembleReleaseGateInvocations,
   evaluateAssembledReleaseGateInvocations,
 } from "../../../../acceptance/gate-core/src/generated/release-runtime.ts";
+import { readAssembledReleaseAcceptanceResultsV1 } from "../../../../acceptance/gate-core/src/internal/assembled-acceptance-owner.ts";
 import {
   assertRuntimeBindingJoinsReleaseApprovalV1,
+  prepareReleaseAcceptanceV1,
   verifyReleaseRequirementDenominatorV1,
+  type PreparedReleaseAcceptanceV1,
 } from "../release-acceptance.ts";
 import { verifyRuntimeReleaseBindingSignatureV1 } from "./runtime-binding-verifier.ts";
 import {
@@ -101,12 +104,18 @@ export interface QualifiedReleaseAcceptanceAdvisoryRunV1 {
   readonly evaluations: readonly AssembledPredicateEvaluationV1[];
 }
 
+export interface QualifiedReleaseAcceptancePreparedRunV1 {
+  readonly evaluations: readonly AssembledPredicateEvaluationV1[];
+  readonly preparedAcceptance: PreparedReleaseAcceptanceV1;
+}
+
 type InstalledMaterialV1 =
   | Readonly<{ readonly status: "available"; readonly value: QualifiedPredicateCommonEnvelopeMaterialV1 }>
   | Readonly<{ readonly status: "invalid"; readonly evidenceRoot: Hash }>;
 
 interface RunnerStateV1 {
   readonly runtimeBinding: RuntimeReleaseBindingV1;
+  readonly externalQualifications: readonly VerifyExternalQualificationInputV2[];
   readonly qualificationByPredicate: ReadonlyMap<string, VerifyExternalQualificationInputV2>;
   readonly materialByPredicate: ReadonlyMap<string, InstalledMaterialV1>;
   readonly clock: DeploymentReleaseClockCapabilityV1;
@@ -518,6 +527,7 @@ export function installQualifiedReleaseAcceptanceRunnerV1(
   });
   state = Object.freeze({
     runtimeBinding,
+    externalQualifications,
     qualificationByPredicate,
     materialByPredicate,
     clock: issueDeploymentReleaseClockV1(runtimeBinding.bindingId),
@@ -545,4 +555,33 @@ export async function observeQualifiedReleaseAcceptanceAdvisoryV1(
   }
   const assembled = await assembleReleaseGateInvocations(state.authority, source);
   return Object.freeze({ evaluations: evaluateAssembledReleaseGateInvocations(assembled) });
+}
+
+/** External-release path for the same generated denominator. It returns only
+ * certificates and signer bytes; it owns no signer or package authority. */
+export async function prepareQualifiedReleaseAcceptanceV1(
+  capability: QualifiedReleaseAcceptanceRunnerCapabilityV1,
+  source: PredicateMaterialSourcePortV1,
+): Promise<QualifiedReleaseAcceptancePreparedRunV1> {
+  if (capability === null || typeof capability !== "object") {
+    throw new TypeError("qualified release acceptance runner capability is invalid");
+  }
+  const state = runners.get(capability);
+  if (state === undefined) {
+    throw new TypeError("qualified release acceptance runner capability was not deployment-owner-issued");
+  }
+  const assembled = await assembleReleaseGateInvocations(state.authority, source);
+  const evaluations = evaluateAssembledReleaseGateInvocations(assembled);
+  if (!evaluations.every(evaluation => evaluation.status === "evaluated" && evaluation.verdict === "pass")) {
+    throw new TypeError("assembled GateCore denominator did not pass");
+  }
+  const results = readAssembledReleaseAcceptanceResultsV1(assembled);
+  return Object.freeze({
+    evaluations,
+    preparedAcceptance: prepareReleaseAcceptanceV1({
+      runtimeBinding: state.runtimeBinding,
+      externalQualifications: state.externalQualifications,
+      acceptanceCertificates: results.map(result => result.certificate),
+    }),
+  });
 }

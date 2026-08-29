@@ -20,6 +20,7 @@ import type {
   FamilyRoutePublicationV1,
   FamilyRouteProjectionV1,
   FamilyRouteRehydrationRefV1,
+  FamilyPhysicalLifecycleAdapterFactoryV1,
   FamilyRuntimeAuthorityBindingV1,
   FamilyRuntimeOwnerV1,
   FamilyRuntimePortV1,
@@ -160,7 +161,7 @@ export interface GeneratedFamilyRuntimeAdapterV1 {
 
 /** Static-import sidecar used to re-check descriptor identity at composition time. */
 export interface GeneratedFamilyRuntimeAdapterImportV1 {
-  readonly factory: FamilySearchAdapterFactoryV1;
+  readonly factory: FamilySearchAdapterFactoryV1 | FamilyPhysicalLifecycleAdapterFactoryV1;
   readonly modulePath: string;
   readonly exportName: string;
   readonly closureRoot: Hash;
@@ -955,7 +956,9 @@ export function createGeneratedFamilyRuntimeComposition(
           || importDescriptor.leafDigest !== adapter.leafDigest
         ) throw new TypeError("generated Family runtime adapter import descriptor mismatch " + family.entry.familyId);
       }
-      adapterFactories.set(`${family.entry.familyDefinitionHash}\u0000${adapter.role}`, factory as FamilySearchAdapterFactoryV1);
+      if (adapter.role === "search/v1") {
+        adapterFactories.set(`${family.entry.familyDefinitionHash}\u0000${adapter.role}`, factory as FamilySearchAdapterFactoryV1);
+      }
     }
   }
   const adapterCache = new Map<string, FamilySearchAdapterV1>();
@@ -984,6 +987,7 @@ export function createGeneratedFamilyRuntimeComposition(
   const resolveAdapter = (familyDefinitionHashInput: Hash, roleInput: string): FamilySearchAdapterV1 => {
     const entry = base.require(familyDefinitionHashInput);
     const role = assertNonEmptyString(roleInput, "runtimeAdapterRole");
+    if (!role.startsWith("search/")) throw new TypeError("Family search runtime adapter role is not supported");
     const key = `${entry.familyDefinitionHash}\u0000${role}`;
     const existing = adapterCache.get(key);
     if (existing !== undefined) return existing;

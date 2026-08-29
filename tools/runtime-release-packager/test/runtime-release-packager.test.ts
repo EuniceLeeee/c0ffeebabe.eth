@@ -329,6 +329,8 @@ test("install and deploy entrypoints remain verification-only and the service un
   const deploymentPackage = readFileSync(new URL("../src/deployment-package.ts", import.meta.url), "utf8");
   assert.equal(unit, PRODUCTION_SYSTEMD_UNIT_V1);
   assert.equal(PRODUCTION_RELEASE_LAYOUT_V1.entrypointPath, "/etc/aloha/production-launcher.mjs");
+  assert.equal(PRODUCTION_RELEASE_LAYOUT_V1.revmWorkerExecutablePath, "/opt/aloha/bin/aloha-revm-worker");
+  assert.equal(PRODUCTION_RELEASE_LAYOUT_V1.proofSignerExecutablePath, "/opt/aloha/bin/aloha-proof-signer");
   assert.equal(
     PRODUCTION_RELEASE_LAYOUT_V1.nominationQualificationDeploymentFactPath,
     "/etc/aloha/nomination-qualification-deployment-fact.json",
@@ -336,6 +338,7 @@ test("install and deploy entrypoints remain verification-only and the service un
   assert.match(productionEntry, /"nomination-qualification-deployment-fact\.json": "\/etc\/aloha\/nomination-qualification-deployment-fact\.json"/);
   assert.match(deploymentPackage, /load\("nomination-qualification-deployment-fact\.json"\)/);
   assert.match(deploymentPackage, /assertNominationQualificationDeploymentFactJoinsBinding/);
+  assert.match(deploymentPackage, /sha256Hex\(revmWorkerBytes\) !== binding\.selectedExecutor\.executableFingerprint/);
   assert.deepEqual(
     productionEntry.match(/^import .*$/gm),
     [
@@ -367,7 +370,10 @@ test("install and deploy entrypoints remain verification-only and the service un
   assert.equal(spawnSync(deployPath, [], { encoding: "utf8" }).status, 64);
   const packageAttempt = spawnSync(process.execPath, ["--experimental-strip-types", packagerCliPath, "package"], { encoding: "utf8" });
   assert.equal(packageAttempt.status, 64);
-  assert.match(packageAttempt.stderr, /command must be check-package or check-installed/);
+  assert.match(
+    packageAttempt.stderr,
+    /command must be check-package, check-installed, install-approved, prepare-package-approval, or materialize-approved/,
+  );
 });
 
 function acceptedRuntimeScannerFixture(prefix = "", dynamic = ""): Uint8Array {
@@ -392,7 +398,10 @@ test("production runtime bundle and launcher are deterministic, distinct, and ch
     .filter(imported => imported.external)
     .map(imported => imported.path);
   assert.doesNotMatch(source, new RegExp(repositoryRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.doesNotMatch(source, /architecture-boundaries|runtime-bundle-builder|esbuild|node_modules|\/opt\/aloha|file:\/\/|import\.meta/);
+  const sourceWithoutApprovedExecutables = source
+    .replaceAll(PRODUCTION_RELEASE_LAYOUT_V1.revmWorkerExecutablePath, "")
+    .replaceAll(PRODUCTION_RELEASE_LAYOUT_V1.proofSignerExecutablePath, "");
+  assert.doesNotMatch(sourceWithoutApprovedExecutables, /architecture-boundaries|runtime-bundle-builder|esbuild|node_modules|\/opt\/aloha|file:\/\/|import\.meta/);
   assert.equal(inputPaths.some(path => /architecture-boundaries|runtime-release-packager|typescript|esbuild|node_modules/.test(path)), false);
   assert.equal(
     inputPaths.filter(path => path.startsWith("acceptance/")).every(
@@ -406,10 +415,17 @@ test("production runtime bundle and launcher are deterministic, distinct, and ch
   assert.equal(inputPaths.some(path => [
     "acceptance/collectors/src/internal/artifact-lineage-stage-one-owner.ts",
     "acceptance/collectors/src/internal/artifact-lineage-stage-two-git-owner.ts",
-    "runtime/revm-workers/src/node-worker-factory.ts",
   ].includes(path)), false);
+  assert.deepEqual(
+    inputPaths.filter(path => first.metafile.inputs[path]!.imports.some(
+      imported => imported.external && imported.path === "node:child_process",
+    )).sort(),
+    [
+      "packages/runtime-release-authority/src/internal/external-proof-owner.ts",
+      "runtime/revm-workers/src/node-worker-factory.ts",
+    ],
+  );
   assert.equal(externalImports.some(path => [
-    "node:child_process",
     "node:module",
     "node:vm",
     "node:worker_threads",
@@ -448,7 +464,7 @@ test("qualified release runner scanner rejects secondary loaders and export wide
   assert.doesNotThrow(() => assertSelfContainedQualifiedReleaseRunnerBundleV1(accepted));
   for (const [source, reason] of [
     [Buffer.from('import "./relative.mjs";\nconst createFreshQualifiedReleaseRunnerRuntimeV1=()=>({});\nexport { createFreshQualifiedReleaseRunnerRuntimeV1 };'), /node:\* builtin/],
-    [Buffer.from('import "node:child_process";\nconst createFreshQualifiedReleaseRunnerRuntimeV1=()=>({});\nexport { createFreshQualifiedReleaseRunnerRuntimeV1 };'), /node:\* builtin/],
+    [Buffer.from('import "node:child_process";\nconst createFreshQualifiedReleaseRunnerRuntimeV1=()=>({});\nexport { createFreshQualifiedReleaseRunnerRuntimeV1 };'), /unapproved builtin/],
     [Buffer.from('const createFreshQualifiedReleaseRunnerRuntimeV1=()=>import("./runner.mjs");\nexport { createFreshQualifiedReleaseRunnerRuntimeV1 };'), /dynamic import/],
     [Buffer.from('const createFreshQualifiedReleaseRunnerRuntimeV1=()=>require("runner");\nexport { createFreshQualifiedReleaseRunnerRuntimeV1 };'), /require loader/],
     [Buffer.from('const createFreshQualifiedReleaseRunnerRuntimeV1=()=>({}); const extra=1;\nexport { createFreshQualifiedReleaseRunnerRuntimeV1, extra };'), /non-exact export surface/],

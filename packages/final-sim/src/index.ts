@@ -908,6 +908,8 @@ export function createQualifiedFinalSimulationPort(
         const receipt = finalReceipt({ program, simulation });
         const facts = assertCanonical({
           kind: "aloha.qualified-final-simulation-owner-facts-v1",
+          artifactProgramHash: simulation.artifactProgramHash,
+          wireProgramHash: simulation.wireProgramHash,
           executorQualification: qualification,
           projection: {
             input: projected.input,

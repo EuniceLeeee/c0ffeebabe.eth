@@ -32,6 +32,9 @@ const h = (value: string): Hash => hashDomain("test/family-runtime", value);
 const familyId = asFamilyId("demo-family");
 const familyDefinitionHash = h("definition");
 const source = { chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") } as const;
+const unusedRawEvidence = Object.freeze({
+  read(): Uint8Array { throw new TypeError("unused raw evidence"); },
+});
 
 test("search objective and amount envelopes reject every undeclared caller field", () => {
   const objectivePayload = Object.freeze({ kind: "surplus" });
@@ -196,7 +199,7 @@ test("five stage runtime issues one source/payload-bound program and interprets 
   assert.equal(program.frozenProgram.source.hash, source.hash);
   assert.deepEqual(decodeCanonicalJson(program.frozenProgram.canonicalPayloadBytes), { amount: "7" });
   assert.notEqual(program.requestFingerprint, program.frozenProgram.requestFingerprint);
-  const factSet = await stage.execute({ program, attemptId: "attempt-1" });
+  const factSet = await stage.execute({ program, rawEvidence: unusedRawEvidence, attemptId: "attempt-1" });
   assert.equal(typeof factSet.factSetHash, "string");
   assert.deepEqual(stage.interpret({ program, factSet }), {
     familyId,
@@ -231,7 +234,7 @@ test("stage binding, source, and exact owner fact-set are fail-closed", async ()
       reusePublication: null,
     },
   });
-  await assert.rejects(() => projection.execute({ program }), /wrong stage port/);
+  await assert.rejects(() => projection.execute({ program, rawEvidence: unusedRawEvidence }), /wrong stage port/);
   assert.throws(() => identity.interpret({ program: { ...program, evidenceRoot: h("changed") }, factSet: {} as never }), /fingerprint mismatch|transport/);
   const fakeFactOutcome = identity.interpret({ program, factSet: {} as never });
   assert.deepEqual(fakeFactOutcome, {
@@ -257,7 +260,7 @@ test("terminal rejection is plugin-owned and retains the same lifecycle binding"
       reusePublication: null,
     },
   });
-  const factSet = await stage.execute({ program });
+  const factSet = await stage.execute({ program, rawEvidence: unusedRawEvidence });
   const outcome = stage.interpret({ program, factSet });
   assert.equal(outcome.kind, "chainProvenRejected");
   if (outcome.kind === "chainProvenRejected") {
@@ -283,7 +286,7 @@ test("transport failure maps to retryable without invoking Family interpretation
       reusePublication: null,
     },
   });
-  const factSet = await stage.execute({ program });
+  const factSet = await stage.execute({ program, rawEvidence: unusedRawEvidence });
   const outcome = stage.interpret({ program, factSet });
   assert.equal(outcome.kind, "retryable");
   if (outcome.kind === "retryable") assert.equal(outcome.failureCode, "resource-limit");

@@ -36,6 +36,7 @@ import {
   PRODUCTION_EVIDENCE_NAMESPACES,
   observeProductionPerformanceDatabaseV1,
 } from "../src/index.ts";
+import { decodeObservedSixStepFactsV1 } from "../src/raw-sqlite-observer.ts";
 
 const h = (digit: string): Hash => `0x${digit.repeat(64)}` as Hash;
 const release = Object.freeze({
@@ -458,6 +459,89 @@ test("per-head raw receipt root and log range consume the denominator-expanded r
   const legacyRoot = hashDomain("aloha/raw-production-performance-head-receipt-set/v1", [h("1"), h("2"), h("5")]);
   const denominatorExpandedRoot = hashDomain("aloha/raw-production-performance-head-receipt-set/v1", [h("1"), h("2"), h("3"), h("4"), h("5")]);
   assert.notEqual(denominatorExpandedRoot, legacyRoot);
+});
+
+test("raw Six-Step facts retain only bounded Ready roots and selected Stage1/2 parents", () => {
+  const legs = Object.freeze(["a", "b"].map((digit, index) => Object.freeze({
+    edgeId: h(digit),
+    owningFamilyId: `family-${index}`,
+    owningFamilyDefinitionHash: h(index === 0 ? "c" : "d"),
+    owningInstanceKey: `instance-${index}`,
+    instancePublicationHash: h(index === 0 ? "e" : "f"),
+    staticProjectionHash: h(index === 0 ? "1" : "2"),
+    projectionHash: h(index === 0 ? "3" : "4"),
+  })));
+  const stage3ArtifactSetRoot = h("5");
+  const stage12 = Object.freeze({
+    binding: Object.freeze({
+      readyRecordHash: h("6"),
+      generationId: "generation-30k",
+      cutoff: Object.freeze({ chainId: "1", number: "100", hash: h("7"), stateRoot: h("8") }),
+      definitionCatalogRoot: h("9"),
+      sourceCoverageRoot: h("a"),
+      candidatePartitionRoot: h("b"),
+      exactOutcomePartitionRoot: h("c"),
+      verifiedMemoSetRoot: h("d"),
+      instanceCatalogRoot: h("e"),
+      graphRoot: h("f"),
+      releaseProvenanceHash: h("1"),
+      promotionRevision: "12",
+    }),
+    selectedParents: Object.freeze(legs.map((leg, index) => Object.freeze({
+      edgeId: leg.edgeId,
+      selectedLegRoot: hashDomain("aloha/searcher-production-evidence-selected-graph-leg/v1", leg),
+      stage1EventId: h(index === 0 ? "2" : "3"),
+      stage1ArtifactSetRoot: h(index === 0 ? "4" : "5"),
+      stage2EventId: h(index === 0 ? "6" : "7"),
+      stage2ArtifactSetRoot: h(index === 0 ? "8" : "9"),
+      instancePublicationRoot: h(index === 0 ? "a" : "b"),
+      edgeContentRoot: h(index === 0 ? "c" : "d"),
+    }))),
+    stage3EventId: h("e"),
+    stage3ArtifactSetRoot,
+  });
+  const stage36Body = Object.freeze({
+    selectedGraphLegs: legs,
+    resolved: Object.freeze({
+      productionArtifactSetRoots: Object.freeze([stage3ArtifactSetRoot, h("6"), h("7"), h("8")]),
+      timings: Object.freeze({
+        planner: Object.freeze({ startedMonotonicNs: "1000", finishedMonotonicNs: "2000", durationUs: "1" }),
+        exact: Object.freeze({ startedMonotonicNs: "2000", finishedMonotonicNs: "3000", durationUs: "1" }),
+        executionProgram: Object.freeze({ startedMonotonicNs: "3000", finishedMonotonicNs: "4000", durationUs: "1" }),
+        finalSimulation: Object.freeze({ startedMonotonicNs: "4000", finishedMonotonicNs: "5000", durationUs: "1" }),
+      }),
+    }),
+  });
+  const stage36 = Object.freeze({
+    ...stage36Body,
+    traceRoot: hashDomain("aloha/search-terminal-six-step-trace/v1", stage36Body),
+  });
+  const stage12Root = hashDomain("aloha/searcher-production-evidence-stage12/v1", stage12);
+  const joined = Object.freeze({
+    stage12,
+    stage36,
+    stage12Root,
+    stage36Root: stage36.traceRoot,
+    lineageRoot: hashDomain("aloha/searcher-production-evidence-six-step-lineage/v1", { stage12Root, stage36Root: stage36.traceRoot }),
+  });
+  const observed = decodeObservedSixStepFactsV1(joined);
+  assert.equal(observed.stage12Root, stage12Root);
+  assert.ok(encodeCanonicalBytes(stage12).byteLength < 16_000);
+  for (const forbidden of ["candidates", "outcomes", "verifiedInstances", "instanceCatalog", "graph"]) {
+    assert.equal(Object.prototype.hasOwnProperty.call(stage12, forbidden), false);
+  }
+  assert.throws(() => decodeObservedSixStepFactsV1({
+    ...joined,
+    stage12: { ...stage12, candidates: [] },
+  }), /unknown field/);
+  assert.throws(() => decodeObservedSixStepFactsV1({
+    ...joined,
+    stage12: { ...stage12, selectedParents: [stage12.selectedParents[1], stage12.selectedParents[0]] },
+  }), /selected parent leg mismatch/);
+  assert.throws(() => decodeObservedSixStepFactsV1({
+    ...joined,
+    stage12: { ...stage12, selectedParents: [stage12.selectedParents[0], stage12.selectedParents[0]] },
+  }), /duplicate edges/);
 });
 
 test("raw observer rejects self-consistent candidate/coarse shrink when the backrun coverage denominator row is missing", async () => {

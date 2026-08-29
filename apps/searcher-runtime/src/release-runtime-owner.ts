@@ -44,8 +44,12 @@ import {
   verifyAndIssueRuntimeReleaseAuthorityV1,
 } from "../../../packages/runtime-release-authority/src/index.ts";
 import {
-  readDeploymentCompositionCapabilityV1,
-} from "../../../packages/runtime-release-authority/src/internal/deployment-composition-owner.ts";
+  issueDeploymentRuntimeInfrastructureV1,
+  readDeploymentRuntimeInfrastructureV1,
+} from "../../../packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts";
+import {
+  issueRuntimeReleaseHttpFamilyPhysicalExecutionPortV1,
+} from "../../../packages/runtime-release-authority/src/internal/http-family-physical-owner.ts";
 import {
   issueRuntimeReleaseQualifiedDiscoverySourcePort,
 } from "../../../packages/runtime-release-authority/src/internal/discovery-source-authority-owner.ts";
@@ -166,6 +170,8 @@ function issueTerminalObservationPortsV1(input: Readonly<{
 
 const PACKAGE_ARTIFACT_PATHS = Object.freeze({
   "acceptance-certificates.json": "/etc/aloha/acceptance-certificates.json",
+  "aloha-proof-signer": "/opt/aloha/bin/aloha-proof-signer",
+  "aloha-revm-worker": "/opt/aloha/bin/aloha-revm-worker",
   "aloha-searcher.service": "/etc/systemd/system/aloha-searcher.service",
   "catalog-generation.inputs.json": "/etc/aloha/runtime-facts/catalog-generation.inputs.json",
   "candidate-proof-verifier-binding.json": "/etc/aloha/candidate-proof-verifier-binding.json",
@@ -698,11 +704,15 @@ async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
       valuationOwnerRef: runtimePolicy.economicSafety.valuationOwnerRef,
     }]),
   );
-  const compositionCapability = await loadVerifiedDeploymentCompositionSnapshotV1(
+  const infrastructureRequest = await loadVerifiedDeploymentCompositionSnapshotV1(
     input.deploymentCompositionSha256,
     artifacts["deployment-composition.mjs"]!.bytes,
   );
-  const external = readDeploymentCompositionCapabilityV1(compositionCapability, binding);
+  const infrastructureCapability = issueDeploymentRuntimeInfrastructureV1({
+    binding,
+    request: infrastructureRequest,
+  });
+  const external = readDeploymentRuntimeInfrastructureV1(infrastructureCapability, binding);
   const runtimeSource = createRethSearcherRuntimeSourceV1({
     canonical: {
       profile: source.profile,
@@ -736,6 +746,13 @@ async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
     providerIdentity: source.providerIdentity,
     backendEpoch: source.backendEpoch,
   });
+  const physicalExecution = issueRuntimeReleaseHttpFamilyPhysicalExecutionPortV1({
+    issuer: external.scheduler.issuer,
+    capability: external.scheduler.capability,
+    schedulerRuntime: external.scheduler.runtime,
+    endpoint: source.endpoint,
+    timeoutMs: source.timeoutMs,
+  });
   const lifecycle = new SingleFlightInstanceLifecycleV1();
   const rejectionExecutor: RejectionTransportExecutorV1 = Object.freeze({
     async execute(): Promise<never> {
@@ -759,7 +776,7 @@ async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
     },
     candidatePartitionProofIssuer: external.candidatePartitionProofIssuer,
     checkpoint: { durable, canonical: runtimeSource.canonical },
-    scheduler: external.scheduler,
+    scheduler: Object.freeze({ ...external.scheduler, physicalExecution }),
     revm: { deploymentPort: issueRuntimeReleaseRevmWorkerDeploymentPort(authority, external.revmDeployment) },
     ready: {
       policy: {

@@ -24,6 +24,7 @@ import {
   readIssuedProducerLaneFactsV1,
   readIssuedProducerHeadFactsCapabilityV1,
   readIssuedProducerHeadTerminalCapabilityV1,
+  producerHeadFactsRootV1,
   type CanonicalHead,
   type ProducerEligibleHeadInputV1,
   type ProducerCurrentSourceLogicalFactsV1,
@@ -49,13 +50,13 @@ import {
   readIssuedProducerLaneSixStepTraceV1,
 } from "../../../packages/producer/src/internal/owners.ts";
 import type { ProducerCandidateTerminalObservationV1 } from "../../../packages/producer/src/index.ts";
+import type { ReadyStage12EvidenceBindingV1 } from "../../../packages/checkpoint/src/index.ts";
+import { readProductionSixStepArtifactMaterialV1 } from "../../../packages/evidence-emitter/src/index.ts";
 import {
-  buildPersistedGraph,
-} from "../../../packages/graph/src/index.ts";
-import {
-  validateInstanceCatalog,
-} from "../../../packages/catalog/src/index.ts";
-import type { ReadyStage12EvidenceSnapshotV1 } from "../../../packages/checkpoint/src/index.ts";
+  decodeSixStepStageFacts,
+  decodeSixStepWitnessContent,
+  hashSixStepWitnessContentRoot,
+} from "../../../specs/evidence/src/six-step.ts";
 import { validateProcessResourceObservationValue } from "../../../packages/process-resource-observer/src/index.ts";
 import {
   validateSchedulerPerformanceRangeFactValue,
@@ -84,10 +85,17 @@ import {
 } from "../../../specs/performance/src/index.ts";
 import {
   readIssuedSearchTerminalCapabilityV1,
+  routeAccountingRootV1,
+  type ProductionSixStepArtifactCapabilitiesV1,
   type RouteAccountingV1,
   type SearchSchedulerResourceJoinV1,
 } from "../../../packages/search-pipeline/src/index.ts";
-import type { RouteCoarseTimingFactsV1, SearchTerminalSixStepTraceV1 } from "../../../packages/search-pipeline/src/route-pipeline.ts";
+import {
+  readIssuedSearchTerminalSixStepArtifactCapabilitiesV1,
+  type RouteCoarseTimingFactsV1,
+  type SearchSixStepGraphLegV1,
+  type SearchTerminalSixStepTraceV1,
+} from "../../../packages/search-pipeline/src/route-pipeline.ts";
 import {
   assertIssuedRuntimeReleasePerformanceRuntimeService,
   RuntimeReleasePerformanceHeadSamplePendingError,
@@ -100,8 +108,7 @@ import {
 } from "../../../packages/runtime-release-authority/src/performance-runtime-consumer.ts";
 import {
   assertIssuedStartupRuntime,
-  readStartupStage12Evidence,
-  verifyStartupStage12Evidence,
+  readStartupStage12EvidenceBinding,
   type StartupRuntimeV1,
 } from "../../../packages/startup-runtime/src/index.ts";
 import type { RuntimeAnchorReceiptV1 } from "./deployment.ts";
@@ -132,6 +139,12 @@ import {
   createTerminalPhaseInvalidFactV1,
   issueFinalDurableWindowCapabilityV1,
 } from "../../../packages/final-durable-window/src/internal/owner.ts";
+import {
+  persistSearcherProductionEvidenceMaterialV1,
+  readSearcherProductionEvidenceMaterialV1,
+  searcherProductionEvidenceOrderedRootV1,
+  type SearcherProductionEvidenceMaterialManifestV1,
+} from "./production-evidence-material.ts";
 
 export type {
   TerminalPhaseInvalidFactV1,
@@ -225,7 +238,7 @@ interface HeadCoveragePayloadV1 {
   readonly complete: boolean;
 }
 
-interface CandidateSetPayloadV1 {
+export interface CandidateSetPayloadV1 {
   readonly admissionId: Hash;
   readonly headFactsRoot: Hash;
   readonly headHash: Hash;
@@ -243,7 +256,25 @@ interface CandidateSetPayloadV1 {
   readonly candidateTerminalObservationSetRoot: Hash;
 }
 
-interface RouteDenominatorCommonV1 {
+interface CandidateSetManifestPayloadV1 {
+  readonly admissionId: Hash;
+  readonly headFactsRoot: Hash;
+  readonly headHash: Hash;
+  readonly candidateRefCount: string;
+  readonly candidateRefsRoot: Hash;
+  readonly laneDenominators: readonly Readonly<{
+    readonly lane: ProducerCurrentSourceLogicalFactsV1["lane"];
+    readonly correlationId: Hash;
+    readonly coverageRoot: Hash;
+    readonly accountingRoot: Hash;
+    readonly candidateCount: string;
+    readonly observationSetRoot: Hash;
+  }>[];
+  readonly candidateTerminalObservationSetRoot: Hash;
+  readonly material: SearcherProductionEvidenceMaterialManifestV1;
+}
+
+export interface RouteDenominatorCommonV1 {
   readonly admissionId: Hash;
   readonly headFactsRoot: Hash;
   readonly headHash: Hash;
@@ -252,7 +283,7 @@ interface RouteDenominatorCommonV1 {
   readonly coverageRoot: Hash;
 }
 
-interface AccountedRouteDenominatorPayloadV1 extends RouteDenominatorCommonV1 {
+export interface AccountedRouteDenominatorPayloadV1 extends RouteDenominatorCommonV1 {
   readonly denominatorKind: "accounted";
   readonly plannerCandidateIdentity: Readonly<{
     readonly planningProblemHash: Hash;
@@ -265,7 +296,17 @@ interface AccountedRouteDenominatorPayloadV1 extends RouteDenominatorCommonV1 {
   readonly accounting: RouteAccountingV1;
 }
 
-interface NoInputRouteDenominatorPayloadV1 extends RouteDenominatorCommonV1 {
+interface AccountedRouteDenominatorManifestPayloadV1 extends RouteDenominatorCommonV1 {
+  readonly denominatorKind: "accounted";
+  readonly plannerCandidateIdentity: AccountedRouteDenominatorPayloadV1["plannerCandidateIdentity"];
+  readonly accounting: Omit<RouteAccountingV1, "entries"> & Readonly<{
+    readonly entryCount: string;
+    readonly entrySequenceRoot: Hash;
+  }>;
+  readonly material: SearcherProductionEvidenceMaterialManifestV1;
+}
+
+export interface NoInputRouteDenominatorPayloadV1 extends RouteDenominatorCommonV1 {
   readonly denominatorKind: "no-input";
   readonly pendingSnapshot: Readonly<{
     readonly pendingNumber: string;
@@ -280,7 +321,8 @@ interface NoInputRouteDenominatorPayloadV1 extends RouteDenominatorCommonV1 {
   readonly currentSource: ProducerCurrentSourceLogicalFactsV1;
 }
 
-type RouteDenominatorPayloadV1 = AccountedRouteDenominatorPayloadV1 | NoInputRouteDenominatorPayloadV1;
+export type RouteDenominatorPayloadV1 = AccountedRouteDenominatorPayloadV1 | NoInputRouteDenominatorPayloadV1;
+type RouteDenominatorWirePayloadV1 = AccountedRouteDenominatorManifestPayloadV1 | NoInputRouteDenominatorPayloadV1;
 
 interface CanonicalProducerSchedulerJoinV1 extends Omit<SearchSchedulerResourceJoinV1, "schedulerCompletion"> {}
 
@@ -289,11 +331,29 @@ interface JoinedRuntimePerformanceFactsV1 extends RuntimeReleasePerformanceHeadF
 }
 
 interface JoinedSixStepPerformanceFactsV1 {
-  readonly stage12: ReadyStage12EvidenceSnapshotV1;
+  readonly stage12: Stage12SelectedRouteFactsV1;
   readonly stage36: SearchTerminalSixStepTraceV1;
   readonly stage12Root: Hash;
   readonly stage36Root: Hash;
   readonly lineageRoot: Hash;
+}
+
+interface Stage12SelectedRouteParentV1 {
+  readonly edgeId: Hash;
+  readonly selectedLegRoot: Hash;
+  readonly stage1EventId: Hash;
+  readonly stage1ArtifactSetRoot: Hash;
+  readonly stage2EventId: Hash;
+  readonly stage2ArtifactSetRoot: Hash;
+  readonly instancePublicationRoot: Hash;
+  readonly edgeContentRoot: Hash;
+}
+
+interface Stage12SelectedRouteFactsV1 {
+  readonly binding: ReadyStage12EvidenceBindingV1;
+  readonly selectedParents: readonly Stage12SelectedRouteParentV1[];
+  readonly stage3EventId: Hash;
+  readonly stage3ArtifactSetRoot: Hash;
 }
 
 export type MissingPerformanceFactReasonV1 =
@@ -344,6 +404,9 @@ interface TerminalPhaseInvalidPayloadV1 extends TerminalPhaseInvalidFactV1 {}
 
 type PerformancePayloadV1 = IncompletePerformanceFactsPayloadV1 | CompletePerformanceFactsPayloadV1;
 type ProductionEvidencePayloadV1 = PerformanceWindowBasisPayloadV1 | PerformanceWindowCommitmentV1 | EligibleHeadPayloadV1 | OrphanReplacementPayloadV1 | HeadCoveragePayloadV1 | RouteDenominatorPayloadV1 | CandidateSetPayloadV1 | PerformancePayloadV1 | ProducerTerminalPayloadV1 | TerminalPhaseInvalidPayloadV1;
+type ProductionEvidenceWirePayloadV1 = Exclude<ProductionEvidencePayloadV1, RouteDenominatorPayloadV1 | CandidateSetPayloadV1>
+  | RouteDenominatorWirePayloadV1
+  | CandidateSetManifestPayloadV1;
 
 interface ProductionEvidenceEventV1 {
   readonly schemaVersion: 1;
@@ -358,7 +421,7 @@ interface ProductionEvidenceEventV1 {
   readonly payload: ProductionEvidencePayloadV1;
 }
 
-type ProductionEvidenceEventDraftV1 = Omit<ProductionEvidenceEventV1, "eventId">;
+type ProductionEvidenceEventDraftV1 = Omit<ProductionEvidenceEventV1, "eventId" | "payload"> & Readonly<{ readonly payload: ProductionEvidenceWirePayloadV1 }>;
 
 export interface SearcherProductionEvidencePartitionReplayV1 {
   readonly partitionId: Hash;
@@ -553,11 +616,6 @@ function servingFromStartupGeneration(
     readyRecordHash: generation.readyRecordHash,
     sourceCoverageRoot: generation.sourceCoverageRoot,
   }, "productionEvidence.startupGeneration");
-}
-
-function eventPayload(value: ProductionEvidenceEventV1): ProductionEvidenceEventDraftV1 {
-  const { eventId: _eventId, ...payload } = value;
-  return payload;
 }
 
 function eventId(value: ProductionEvidenceEventDraftV1): Hash {
@@ -880,6 +938,50 @@ function exactCandidatePolicyTerminal(
   return Object.freeze({ ...body, receiptHash });
 }
 
+function exactRouteAccountingEntry(value: unknown, path: string): RouteAccountingV1["entries"][number] {
+  assertPlainObject(value, path);
+  assertExactKeys(value, ["candidateId", "legs", "disposition", "terminalKind", "routeHash", "reasonCode", "evidenceHash", "policyTerminal"], path);
+  const item = value as Record<string, unknown>;
+  if (!Array.isArray(item.legs) || item.legs.length < 2) throw new TypeError(`${path}.legs is invalid`);
+  const legs = Object.freeze(item.legs.map((leg, legIndex) => {
+    const legPath = `${path}.legs[${legIndex}]`;
+    assertPlainObject(leg, legPath);
+    assertExactKeys(leg, ["edgeId", "transitionRef", "inputAssetRef", "inputPortRef", "outputAssetRef", "outputPortRef"], legPath);
+    const value = leg as Record<string, unknown>;
+    return Object.freeze({
+      edgeId: nonZeroHash(value.edgeId, `${legPath}.edgeId`),
+      transitionRef: nonZeroHash(value.transitionRef, `${legPath}.transitionRef`),
+      inputAssetRef: nonZeroHash(value.inputAssetRef, `${legPath}.inputAssetRef`),
+      inputPortRef: nonZeroHash(value.inputPortRef, `${legPath}.inputPortRef`),
+      outputAssetRef: nonZeroHash(value.outputAssetRef, `${legPath}.outputAssetRef`),
+      outputPortRef: nonZeroHash(value.outputPortRef, `${legPath}.outputPortRef`),
+    });
+  }));
+  if (item.disposition !== "selected" && item.disposition !== "pruned" && item.disposition !== "notProbed" && item.disposition !== "failed") {
+    throw new TypeError(`${path}.disposition is invalid`);
+  }
+  if (item.terminalKind !== "not-run" && item.terminalKind !== "policyRejected" && item.terminalKind !== "passed"
+    && item.terminalKind !== "retryable" && item.terminalKind !== "invalidProgram" && item.terminalKind !== "chainProvenRejected") {
+    throw new TypeError(`${path}.terminalKind is invalid`);
+  }
+  const policyTerminal = item.policyTerminal === null ? null : exactCandidatePolicyTerminal(item.policyTerminal, `${path}.policyTerminal`);
+  const normalized = Object.freeze({
+    candidateId: nonZeroHash(item.candidateId, `${path}.candidateId`),
+    legs,
+    disposition: item.disposition,
+    terminalKind: item.terminalKind,
+    routeHash: nullableHash(item.routeHash, `${path}.routeHash`),
+    reasonCode: item.reasonCode === null ? null : assertNonEmptyString(item.reasonCode, `${path}.reasonCode`),
+    evidenceHash: nullableHash(item.evidenceHash, `${path}.evidenceHash`),
+    policyTerminal,
+  });
+  if ((normalized.terminalKind === "policyRejected") !== (policyTerminal !== null)
+    || (policyTerminal !== null && (policyTerminal.candidateId !== normalized.candidateId || policyTerminal.routeHash !== normalized.routeHash))) {
+    throw new TypeError(`${path} policy terminal mismatch`);
+  }
+  return normalized;
+}
+
 function exactRouteAccounting(value: unknown, path: string): RouteAccountingV1 {
   assertPlainObject(value, path);
   assertExactKeys(value, [
@@ -890,50 +992,7 @@ function exactRouteAccounting(value: unknown, path: string): RouteAccountingV1 {
   if (typeof record.enumerationTruncated !== "boolean") throw new TypeError(`${path}.enumerationTruncated is invalid`);
   const observedUniqueCountLowerBound = assertDecimalString(record.observedUniqueCountLowerBound, `${path}.observedUniqueCountLowerBound`);
   if (!Array.isArray(record.entries)) throw new TypeError(`${path}.entries must be an array`);
-  const entries = Object.freeze(record.entries.map((entry, index): RouteAccountingV1["entries"][number] => {
-    const entryPath = `${path}.entries[${index}]`;
-    assertPlainObject(entry, entryPath);
-    assertExactKeys(entry, ["candidateId", "legs", "disposition", "terminalKind", "routeHash", "reasonCode", "evidenceHash", "policyTerminal"], entryPath);
-    const item = entry as Record<string, unknown>;
-    if (!Array.isArray(item.legs) || item.legs.length < 2) throw new TypeError(`${entryPath}.legs is invalid`);
-    const legs = Object.freeze(item.legs.map((leg, legIndex) => {
-      const legPath = `${entryPath}.legs[${legIndex}]`;
-      assertPlainObject(leg, legPath);
-      assertExactKeys(leg, ["edgeId", "transitionRef", "inputAssetRef", "inputPortRef", "outputAssetRef", "outputPortRef"], legPath);
-      const value = leg as Record<string, unknown>;
-      return Object.freeze({
-        edgeId: nonZeroHash(value.edgeId, `${legPath}.edgeId`),
-        transitionRef: nonZeroHash(value.transitionRef, `${legPath}.transitionRef`),
-        inputAssetRef: nonZeroHash(value.inputAssetRef, `${legPath}.inputAssetRef`),
-        inputPortRef: nonZeroHash(value.inputPortRef, `${legPath}.inputPortRef`),
-        outputAssetRef: nonZeroHash(value.outputAssetRef, `${legPath}.outputAssetRef`),
-        outputPortRef: nonZeroHash(value.outputPortRef, `${legPath}.outputPortRef`),
-      });
-    }));
-    if (item.disposition !== "selected" && item.disposition !== "pruned" && item.disposition !== "notProbed" && item.disposition !== "failed") {
-      throw new TypeError(`${entryPath}.disposition is invalid`);
-    }
-    if (item.terminalKind !== "not-run" && item.terminalKind !== "policyRejected" && item.terminalKind !== "passed"
-      && item.terminalKind !== "retryable" && item.terminalKind !== "invalidProgram" && item.terminalKind !== "chainProvenRejected") {
-      throw new TypeError(`${entryPath}.terminalKind is invalid`);
-    }
-    const policyTerminal = item.policyTerminal === null ? null : exactCandidatePolicyTerminal(item.policyTerminal, `${entryPath}.policyTerminal`);
-    const normalized = Object.freeze({
-      candidateId: nonZeroHash(item.candidateId, `${entryPath}.candidateId`),
-      legs,
-      disposition: item.disposition,
-      terminalKind: item.terminalKind,
-      routeHash: nullableHash(item.routeHash, `${entryPath}.routeHash`),
-      reasonCode: item.reasonCode === null ? null : assertNonEmptyString(item.reasonCode, `${entryPath}.reasonCode`),
-      evidenceHash: nullableHash(item.evidenceHash, `${entryPath}.evidenceHash`),
-      policyTerminal,
-    });
-    if ((normalized.terminalKind === "policyRejected") !== (policyTerminal !== null)
-      || (policyTerminal !== null && (policyTerminal.candidateId !== normalized.candidateId || policyTerminal.routeHash !== normalized.routeHash))) {
-      throw new TypeError(`${entryPath} policy terminal mismatch`);
-    }
-    return normalized;
-  }));
+  const entries = Object.freeze(record.entries.map((entry, index) => exactRouteAccountingEntry(entry, `${path}.entries[${index}]`)));
   for (let index = 1; index < entries.length; index += 1) {
     if (entries[index - 1]!.candidateId >= entries[index]!.candidateId) throw new TypeError(`${path}.entries order mismatch`);
   }
@@ -964,7 +1023,7 @@ function exactRouteAccounting(value: unknown, path: string): RouteAccountingV1 {
     entries,
   });
   const root = nonZeroHash(record.root, `${path}.root`);
-  if (root !== hashDomain("aloha/route-accounting/v1", payload)) throw new TypeError(`${path}.root mismatch`);
+  if (root !== routeAccountingRootV1(payload)) throw new TypeError(`${path}.root mismatch`);
   return deepFreeze({ ...payload, root });
 }
 
@@ -1070,7 +1129,106 @@ function exactProducerCandidateTerminalObservation(
 }
 
 function headFactsRoot(facts: ProducerHeadFactsV1): Hash {
-  return hashDomain("aloha/searcher-production-evidence-head-facts/v1", facts);
+  return producerHeadFactsRootV1(facts);
+}
+
+function routeAccountingEntryRoot(entry: RouteAccountingV1["entries"][number], ordinal: number): Hash {
+  return hashDomain("aloha/route-accounting-entry/v1", { ordinal: String(ordinal), entry });
+}
+
+function routeAccountingEntrySequenceRoot(entries: RouteAccountingV1["entries"]): Hash {
+  return searcherProductionEvidenceOrderedRootV1(
+    "aloha/searcher-production-evidence-material/route-accounting-entries/entries/v1",
+    entries.map(routeAccountingEntryRoot),
+  );
+}
+
+function candidateObservationSequenceRoot(observations: readonly ProducerCandidateTerminalObservationV1[]): Hash {
+  return searcherProductionEvidenceOrderedRootV1(
+    "aloha/searcher-production-evidence-material/candidate-terminal-observations/entries/v1",
+    observations.map(observation => observation.observationRoot),
+  );
+}
+
+function accountedMaterialBindingRoot(value: Omit<AccountedRouteDenominatorManifestPayloadV1, "material">): Hash {
+  return hashDomain("aloha/searcher-production-evidence-accounted-route-material-binding/v1", value);
+}
+
+function candidateMaterialBindingRoot(value: Omit<CandidateSetManifestPayloadV1, "material">): Hash {
+  return hashDomain("aloha/searcher-production-evidence-candidate-material-binding/v1", value);
+}
+
+function persistAccountedRouteDenominator(
+  store: SQLiteDurableStore,
+  value: AccountedRouteDenominatorPayloadV1,
+): AccountedRouteDenominatorManifestPayloadV1 {
+  const accounting = Object.freeze({
+    planningProblemHash: value.accounting.planningProblemHash,
+    enumerationRoot: value.accounting.enumerationRoot,
+    admissionPolicyHash: value.accounting.admissionPolicyHash,
+    enumerationTruncated: value.accounting.enumerationTruncated,
+    observedUniqueCountLowerBound: value.accounting.observedUniqueCountLowerBound,
+    total: value.accounting.total,
+    selected: value.accounting.selected,
+    pruned: value.accounting.pruned,
+    notProbed: value.accounting.notProbed,
+    failed: value.accounting.failed,
+    root: value.accounting.root,
+    entryCount: String(value.accounting.entries.length),
+    entrySequenceRoot: routeAccountingEntrySequenceRoot(value.accounting.entries),
+  });
+  const withoutMaterial = deepFreeze({
+    admissionId: value.admissionId,
+    headFactsRoot: value.headFactsRoot,
+    headHash: value.headHash,
+    lane: value.lane,
+    correlationId: value.correlationId,
+    coverageRoot: value.coverageRoot,
+    denominatorKind: "accounted" as const,
+    plannerCandidateIdentity: value.plannerCandidateIdentity,
+    accounting,
+  });
+  const bindingRoot = accountedMaterialBindingRoot(withoutMaterial);
+  const material = persistSearcherProductionEvidenceMaterialV1(store, {
+    materialKind: "route-accounting-entries",
+    bindingRoot,
+    entries: value.accounting.entries as unknown as readonly import("../../../packages/canonical-codec/src/index.ts").CanonicalJson[],
+    entryRoots: value.accounting.entries.map(routeAccountingEntryRoot),
+  });
+  if (material.entrySequenceRoot !== accounting.entrySequenceRoot) throw new TypeError("route accounting material sequence root mismatch");
+  return deepFreeze({ ...withoutMaterial, material });
+}
+
+function persistCandidateSet(
+  store: SQLiteDurableStore,
+  value: CandidateSetPayloadV1,
+): CandidateSetManifestPayloadV1 {
+  const laneDenominators = Object.freeze(value.laneDenominators.map(denominator => Object.freeze({
+    lane: denominator.lane,
+    correlationId: denominator.correlationId,
+    coverageRoot: denominator.coverageRoot,
+    accountingRoot: denominator.accountingRoot,
+    candidateCount: denominator.candidateCount,
+    observationSetRoot: denominator.observationSetRoot,
+  })));
+  const withoutMaterial = deepFreeze({
+    admissionId: value.admissionId,
+    headFactsRoot: value.headFactsRoot,
+    headHash: value.headHash,
+    candidateRefCount: String(value.candidateRefs.length),
+    candidateRefsRoot: searcherProductionEvidenceOrderedRootV1("aloha/searcher-production-evidence-candidate-refs/v1", value.candidateRefs),
+    laneDenominators,
+    candidateTerminalObservationSetRoot: value.candidateTerminalObservationSetRoot,
+  });
+  const bindingRoot = candidateMaterialBindingRoot(withoutMaterial);
+  const material = persistSearcherProductionEvidenceMaterialV1(store, {
+    materialKind: "candidate-terminal-observations",
+    bindingRoot,
+    entries: value.candidateTerminalObservations as unknown as readonly import("../../../packages/canonical-codec/src/index.ts").CanonicalJson[],
+    entryRoots: value.candidateTerminalObservations.map(observation => observation.observationRoot),
+  });
+  if (material.entrySequenceRoot !== candidateObservationSequenceRoot(value.candidateTerminalObservations)) throw new TypeError("candidate observation material sequence root mismatch");
+  return deepFreeze({ ...withoutMaterial, material });
 }
 
 function terminalBindingRoot(terminal: ProducerTerminalV1, facts: ProducerHeadFactsV1 | null): Hash {
@@ -1085,6 +1243,7 @@ interface ProducerSchedulerJoinObservationV1 {
 interface ProducerSixStepObservationV1 {
   readonly kind: "missing" | "exact" | "ambiguous";
   readonly trace: SearchTerminalSixStepTraceV1 | null;
+  readonly artifacts: ProductionSixStepArtifactCapabilitiesV1 | null;
 }
 
 /**
@@ -1118,14 +1277,23 @@ function producerSchedulerJoin(facts: ProducerHeadFactsV1): ProducerSchedulerJoi
 }
 
 function producerSixStepTrace(facts: ProducerHeadFactsV1): ProducerSixStepObservationV1 {
-  const traces: SearchTerminalSixStepTraceV1[] = [];
+  const observations: Array<Readonly<{
+    readonly trace: SearchTerminalSixStepTraceV1;
+    readonly artifacts: ProductionSixStepArtifactCapabilitiesV1;
+  }>> = [];
   for (const laneCapability of facts.laneFacts) {
     const trace = readIssuedProducerLaneSixStepTraceV1(laneCapability);
-    if (trace !== null) traces.push(trace);
+    if (trace === null) continue;
+    const terminal = readIssuedProducerLaneSearchTerminalCapabilityV1(laneCapability);
+    if (terminal === null) throw new TypeError("production evidence Six-Step lane lacks its search terminal capability");
+    observations.push(Object.freeze({
+      trace,
+      artifacts: readIssuedSearchTerminalSixStepArtifactCapabilitiesV1(terminal),
+    }));
   }
-  if (traces.length === 0) return Object.freeze({ kind: "missing" as const, trace: null });
-  if (traces.length !== 1) return Object.freeze({ kind: "ambiguous" as const, trace: null });
-  return Object.freeze({ kind: "exact" as const, trace: traces[0]! });
+  if (observations.length === 0) return Object.freeze({ kind: "missing" as const, trace: null, artifacts: null });
+  if (observations.length !== 1) return Object.freeze({ kind: "ambiguous" as const, trace: null, artifacts: null });
+  return Object.freeze({ kind: "exact" as const, trace: observations[0]!.trace, artifacts: observations[0]!.artifacts });
 }
 
 function canonicalProducerSchedulerJoin(join: SearchSchedulerResourceJoinV1): CanonicalProducerSchedulerJoinV1 {
@@ -1313,13 +1481,20 @@ function exactSixStepTrace(value: unknown, path: string): SearchTerminalSixStepT
     "schemaVersion", "kind", "binding", "routeCandidateId", "orderedEdgeIds", "routeBinding",
     "strategy", "objective", "source", "correlationId", "coarse", "planner", "exact",
     "executionProgram", "executionProgramOwnerEvidence", "finalSimulation", "finalSimulationOwnerEvidence",
-    "economicSafety", "unsignedDryRun", "timings", "traceRoot",
+    "economicSafety", "unsignedDryRun", "timings", "productionArtifactSetRoots", "traceRoot",
   ], resolvedPath);
   if (trace.resolved.schemaVersion !== 1 || trace.resolved.kind !== "aloha.resolved-route-six-step-trace-v1") throw new TypeError(`${resolvedPath} kind/version mismatch`);
   nonZeroHash(trace.resolved.routeCandidateId, `${resolvedPath}.routeCandidateId`);
   if (!Array.isArray(trace.resolved.orderedEdgeIds) || trace.resolved.orderedEdgeIds.length !== trace.selectedGraphLegs.length) throw new TypeError(`${resolvedPath}.orderedEdgeIds mismatch`);
   trace.resolved.orderedEdgeIds.forEach((edgeId, index) => {
     if (nonZeroHash(edgeId, `${resolvedPath}.orderedEdgeIds[${index}]`) !== trace.selectedGraphLegs[index]!.edgeId) throw new TypeError(`${resolvedPath}.orderedEdgeIds order mismatch`);
+  });
+  if (!Array.isArray(trace.resolved.productionArtifactSetRoots)
+    || trace.resolved.productionArtifactSetRoots.length !== 4) {
+    throw new TypeError(`${resolvedPath}.productionArtifactSetRoots is invalid`);
+  }
+  trace.resolved.productionArtifactSetRoots.forEach((root, index) => {
+    nonZeroHash(root, `${resolvedPath}.productionArtifactSetRoots[${index}]`);
   });
   assertPlainObject(trace.resolved.source, `${resolvedPath}.source`);
   nonZeroHash(trace.resolved.correlationId, `${resolvedPath}.correlationId`);
@@ -1387,13 +1562,18 @@ function exactSixStepTrace(value: unknown, path: string): SearchTerminalSixStepT
   const finalEvidenceRoot = hashDomain("aloha/final-simulation-six-step-evidence/v1", (({ evidenceRoot: _root, ...body }) => body)(finalEvidence));
   if (finalEvidence.evidenceRoot !== finalEvidenceRoot) throw new TypeError(`${resolvedPath}.finalSimulationOwnerEvidence root mismatch`);
   const finalOwnerFacts = canonicalRecord(finalEvidence.facts, `${resolvedPath}.finalSimulationOwnerEvidence.facts`);
-  assertExactKeys(finalOwnerFacts, ["kind", "projection", "workerReceipt"], `${resolvedPath}.finalSimulationOwnerEvidence.facts`);
+  assertExactKeys(finalOwnerFacts, ["kind", "artifactProgramHash", "wireProgramHash", "executorQualification", "projection", "workerReceipt"], `${resolvedPath}.finalSimulationOwnerEvidence.facts`);
   if (finalOwnerFacts.kind !== "aloha.qualified-final-simulation-owner-facts-v1") throw new TypeError(`${resolvedPath}.finalSimulationOwnerEvidence facts are incomplete`);
   const objective = canonicalRecord(trace.resolved.objective, `${resolvedPath}.objective`);
   const exact = canonicalRecord(trace.resolved.exact, `${resolvedPath}.exact`);
   const program = canonicalRecord(trace.resolved.executionProgram, `${resolvedPath}.executionProgram`);
   const simulation = canonicalRecord(trace.resolved.finalSimulation, `${resolvedPath}.finalSimulation`);
   const binding = canonicalRecord(trace.resolved.binding, `${resolvedPath}.binding`);
+  const finalWorkerReceipt = canonicalRecord(finalOwnerFacts.workerReceipt, `${resolvedPath}.finalSimulationOwnerEvidence.facts.workerReceipt`);
+  if (finalOwnerFacts.artifactProgramHash !== program.programHash
+    || finalOwnerFacts.wireProgramHash !== finalWorkerReceipt.programHash) {
+    throw new TypeError(`${resolvedPath}.finalSimulationOwnerEvidence artifact/wire program binding mismatch`);
+  }
   if (hasOwnerObservation) {
     const observation = canonicalRecord(executionEvidence.ownerObservation, `${resolvedPath}.executionProgramOwnerEvidence.ownerObservation`);
     const programEffectTransport = Object.prototype.hasOwnProperty.call(program, "effectTransport") ? program.effectTransport : null;
@@ -1450,33 +1630,66 @@ function exactSixStepTrace(value: unknown, path: string): SearchTerminalSixStepT
   return deepFreeze(trace);
 }
 
-function exactStage12Snapshot(value: unknown, path: string): ReadyStage12EvidenceSnapshotV1 {
+function exactStage12Binding(value: unknown, path: string): ReadyStage12EvidenceBindingV1 {
   assertPlainObject(value, path);
-  assertExactKeys(value, ["binding", "runId", "candidates", "outcomes", "candidatePartitionProof", "sourceCoverage", "verifiedInstances", "instanceCatalog", "graph", "promotionLineage"], path);
-  const snapshot = value as unknown as ReadyStage12EvidenceSnapshotV1;
-  assertPlainObject(snapshot.binding, `${path}.binding`);
-  assertExactKeys(snapshot.binding, ["readyRecordHash", "generationId", "cutoff", "definitionCatalogRoot", "sourceCoverageRoot", "candidatePartitionRoot", "exactOutcomePartitionRoot", "verifiedMemoSetRoot", "instanceCatalogRoot", "graphRoot", "releaseProvenanceHash", "promotionRevision"], `${path}.binding`);
-  nonZeroHash(snapshot.binding.readyRecordHash, `${path}.binding.readyRecordHash`);
-  assertNonEmptyString(snapshot.binding.generationId, `${path}.binding.generationId`);
-  for (const key of ["definitionCatalogRoot", "sourceCoverageRoot", "candidatePartitionRoot", "exactOutcomePartitionRoot", "verifiedMemoSetRoot", "instanceCatalogRoot", "graphRoot", "releaseProvenanceHash"] as const) nonZeroHash(snapshot.binding[key], `${path}.binding.${key}`);
-  assertDecimalString(snapshot.binding.promotionRevision, `${path}.binding.promotionRevision`);
-  assertNonEmptyString(snapshot.runId, `${path}.runId`);
-  if (!Array.isArray(snapshot.candidates) || !Array.isArray(snapshot.outcomes) || !Array.isArray(snapshot.verifiedInstances)) throw new TypeError(`${path} partition arrays are invalid`);
-  validateInstanceCatalog(snapshot.instanceCatalog);
-  const recomputedGraph = buildPersistedGraph(snapshot.instanceCatalog);
-  if (!sameExact(recomputedGraph, snapshot.graph)
-    || snapshot.instanceCatalog.instanceCatalogRoot !== snapshot.binding.instanceCatalogRoot
-    || snapshot.graph.graphRoot !== snapshot.binding.graphRoot
-    || snapshot.graph.instanceCatalogRoot !== snapshot.binding.instanceCatalogRoot
-    || snapshot.sourceCoverage.sourceCoverageRoot !== snapshot.binding.sourceCoverageRoot) {
-    throw new TypeError(`${path} catalog/Graph/source binding mismatch`);
-  }
-  assertPlainObject(snapshot.promotionLineage, `${path}.promotionLineage`);
-  if (snapshot.promotionLineage.promotionRevision !== snapshot.binding.promotionRevision) throw new TypeError(`${path}.promotionLineage revision mismatch`);
-  return deepFreeze(snapshot);
+  assertExactKeys(value, ["readyRecordHash", "generationId", "cutoff", "definitionCatalogRoot", "sourceCoverageRoot", "candidatePartitionRoot", "exactOutcomePartitionRoot", "verifiedMemoSetRoot", "instanceCatalogRoot", "graphRoot", "releaseProvenanceHash", "promotionRevision"], path);
+  const record = value as Record<string, unknown>;
+  assertPlainObject(record.cutoff, `${path}.cutoff`);
+  assertExactKeys(record.cutoff, ["chainId", "number", "hash", "stateRoot"], `${path}.cutoff`);
+  const cutoff = record.cutoff as Record<string, unknown>;
+  return deepFreeze({
+    readyRecordHash: nonZeroHash(record.readyRecordHash, `${path}.readyRecordHash`),
+    generationId: assertNonEmptyString(record.generationId, `${path}.generationId`),
+    cutoff: Object.freeze({
+      chainId: assertDecimalString(cutoff.chainId, `${path}.cutoff.chainId`),
+      number: assertDecimalString(cutoff.number, `${path}.cutoff.number`),
+      hash: nonZeroHash(cutoff.hash, `${path}.cutoff.hash`),
+      stateRoot: nonZeroHash(cutoff.stateRoot, `${path}.cutoff.stateRoot`),
+    }),
+    definitionCatalogRoot: nonZeroHash(record.definitionCatalogRoot, `${path}.definitionCatalogRoot`),
+    sourceCoverageRoot: nonZeroHash(record.sourceCoverageRoot, `${path}.sourceCoverageRoot`),
+    candidatePartitionRoot: nonZeroHash(record.candidatePartitionRoot, `${path}.candidatePartitionRoot`),
+    exactOutcomePartitionRoot: nonZeroHash(record.exactOutcomePartitionRoot, `${path}.exactOutcomePartitionRoot`),
+    verifiedMemoSetRoot: nonZeroHash(record.verifiedMemoSetRoot, `${path}.verifiedMemoSetRoot`),
+    instanceCatalogRoot: nonZeroHash(record.instanceCatalogRoot, `${path}.instanceCatalogRoot`),
+    graphRoot: nonZeroHash(record.graphRoot, `${path}.graphRoot`),
+    releaseProvenanceHash: nonZeroHash(record.releaseProvenanceHash, `${path}.releaseProvenanceHash`),
+    promotionRevision: assertDecimalString(record.promotionRevision, `${path}.promotionRevision`),
+  });
 }
 
-function stage12Root(value: ReadyStage12EvidenceSnapshotV1): Hash {
+function exactStage12SelectedRouteFacts(value: unknown, path: string): Stage12SelectedRouteFactsV1 {
+  assertPlainObject(value, path);
+  assertExactKeys(value, ["binding", "selectedParents", "stage3EventId", "stage3ArtifactSetRoot"], path);
+  const record = value as Record<string, unknown>;
+  const binding = exactStage12Binding(record.binding, `${path}.binding`);
+  if (!Array.isArray(record.selectedParents) || record.selectedParents.length < 2) throw new TypeError(`${path}.selectedParents is invalid`);
+  const selectedParents = record.selectedParents.map((value, index) => {
+    const parentPath = `${path}.selectedParents[${index}]`;
+    assertPlainObject(value, parentPath);
+    assertExactKeys(value, ["edgeId", "selectedLegRoot", "stage1EventId", "stage1ArtifactSetRoot", "stage2EventId", "stage2ArtifactSetRoot", "instancePublicationRoot", "edgeContentRoot"], parentPath);
+    const parent = value as Record<string, unknown>;
+    return Object.freeze({
+      edgeId: nonZeroHash(parent.edgeId, `${parentPath}.edgeId`),
+      selectedLegRoot: nonZeroHash(parent.selectedLegRoot, `${parentPath}.selectedLegRoot`),
+      stage1EventId: nonZeroHash(parent.stage1EventId, `${parentPath}.stage1EventId`),
+      stage1ArtifactSetRoot: nonZeroHash(parent.stage1ArtifactSetRoot, `${parentPath}.stage1ArtifactSetRoot`),
+      stage2EventId: nonZeroHash(parent.stage2EventId, `${parentPath}.stage2EventId`),
+      stage2ArtifactSetRoot: nonZeroHash(parent.stage2ArtifactSetRoot, `${parentPath}.stage2ArtifactSetRoot`),
+      instancePublicationRoot: nonZeroHash(parent.instancePublicationRoot, `${parentPath}.instancePublicationRoot`),
+      edgeContentRoot: nonZeroHash(parent.edgeContentRoot, `${parentPath}.edgeContentRoot`),
+    });
+  });
+  if (new Set(selectedParents.map(parent => parent.edgeId)).size !== selectedParents.length) throw new TypeError(`${path}.selectedParents contains duplicate edges`);
+  return deepFreeze({
+    binding,
+    selectedParents: Object.freeze(selectedParents),
+    stage3EventId: nonZeroHash(record.stage3EventId, `${path}.stage3EventId`),
+    stage3ArtifactSetRoot: nonZeroHash(record.stage3ArtifactSetRoot, `${path}.stage3ArtifactSetRoot`),
+  });
+}
+
+function stage12Root(value: Stage12SelectedRouteFactsV1): Hash {
   return hashDomain("aloha/searcher-production-evidence-stage12/v1", value);
 }
 
@@ -1484,7 +1697,7 @@ function exactJoinedSixStepFacts(value: unknown, path: string): JoinedSixStepPer
   assertPlainObject(value, path);
   assertExactKeys(value, ["stage12", "stage36", "stage12Root", "stage36Root", "lineageRoot"], path);
   const record = value as Record<string, unknown>;
-  const stage12 = exactStage12Snapshot(record.stage12, `${path}.stage12`);
+  const stage12 = exactStage12SelectedRouteFacts(record.stage12, `${path}.stage12`);
   const stage36 = exactSixStepTrace(record.stage36, `${path}.stage36`);
   const stage12Identity = nonZeroHash(record.stage12Root, `${path}.stage12Root`);
   const stage36Root = nonZeroHash(record.stage36Root, `${path}.stage36Root`);
@@ -1498,6 +1711,110 @@ function exactJoinedSixStepFacts(value: unknown, path: string): JoinedSixStepPer
 function canonicalRecord(value: unknown, path: string): Record<string, unknown> {
   assertPlainObject(value, path);
   return value as Record<string, unknown>;
+}
+
+function selectedLegRoot(leg: SearchSixStepGraphLegV1): Hash {
+  return hashDomain("aloha/searcher-production-evidence-selected-graph-leg/v1", leg);
+}
+
+function selectedWitnessContent(
+  material: ReturnType<typeof readProductionSixStepArtifactMaterialV1>,
+  role: string,
+  expectedContentRoot: Hash,
+): ReturnType<typeof decodeSixStepWitnessContent> {
+  const matches = material.witnessArtifacts.map(artifact => decodeSixStepWitnessContent(artifact.bytes)).filter(value => value.role === role);
+  if (matches.length !== 1 || hashSixStepWitnessContentRoot(matches[0]!) !== expectedContentRoot) {
+    throw new TypeError(`production evidence Stage1/2 ${role} witness is not exact`);
+  }
+  return matches[0]!;
+}
+
+function buildStage12SelectedRouteFacts(input: Readonly<{
+  readonly binding: ReadyStage12EvidenceBindingV1;
+  readonly trace: SearchTerminalSixStepTraceV1;
+  readonly artifacts: ProductionSixStepArtifactCapabilitiesV1;
+}>): Stage12SelectedRouteFactsV1 {
+  const binding = exactStage12Binding(input.binding, "productionEvidence.stage12.binding");
+  if (input.artifacts.stage1.length !== input.trace.selectedGraphLegs.length
+    || input.artifacts.stage2.length !== input.trace.selectedGraphLegs.length) {
+    throw new TypeError("production evidence Stage1/2 artifact denominator mismatch");
+  }
+  const stage3 = readProductionSixStepArtifactMaterialV1(input.artifacts.stage3);
+  const stage3Facts = decodeSixStepStageFacts(stage3.event.facts);
+  if (stage3.event.stage.ordinal !== 3 || stage3Facts.stageId !== "planner_consumption"
+    || stage3.artifactSetRoot !== input.trace.resolved.productionArtifactSetRoots[0]
+    || stage3.event.parentEventIds.length !== input.trace.selectedGraphLegs.length
+    || stage3Facts.orderedInstanceBindings.length !== input.trace.selectedGraphLegs.length) {
+    throw new TypeError("production evidence Stage3 artifact denominator mismatch");
+  }
+  const selectedParents = input.trace.selectedGraphLegs.map((leg, index) => {
+    const stage1 = readProductionSixStepArtifactMaterialV1(input.artifacts.stage1[index]!);
+    const stage2 = readProductionSixStepArtifactMaterialV1(input.artifacts.stage2[index]!);
+    const stage1Facts = decodeSixStepStageFacts(stage1.event.facts);
+    const stage2Facts = decodeSixStepStageFacts(stage2.event.facts);
+    const routeBinding = stage3Facts.orderedInstanceBindings[index]!;
+    if (stage1.event.stage.ordinal !== 1 || stage1Facts.stageId !== "universe_instance"
+      || stage2.event.stage.ordinal !== 2 || stage2Facts.stageId !== "edge_ready_generation"
+      || stage1.event.parentEventIds.length !== 0
+      || stage2.event.parentEventIds.length !== 1 || stage2.event.parentEventIds[0] !== stage1.event.eventId
+      || stage3.event.parentEventIds[index] !== stage2.event.eventId
+      || routeBinding.edgeId !== leg.edgeId
+      || routeBinding.instanceKey !== leg.owningInstanceKey
+      || routeBinding.stage1EventId !== stage1.event.eventId
+      || routeBinding.stage2EventId !== stage2.event.eventId
+      || routeBinding.instancePublicationRoot !== stage2Facts.instancePublication.contentRoot
+      || stage1Facts.instancePublication.contentRoot !== stage2Facts.instancePublication.contentRoot
+      || stage2Facts.generationId !== binding.generationId
+      || stage2Facts.promotionRevision !== binding.promotionRevision
+      || stage2.event.scope.generationId !== binding.generationId
+      || stage2.event.definitionCatalogRoot !== binding.definitionCatalogRoot
+      || stage2.event.instanceCatalogRoot !== binding.instanceCatalogRoot
+      || stage2.event.graphRoot !== binding.graphRoot
+      || stage2.event.cutoff.number !== binding.cutoff.number
+      || stage2.event.cutoff.hash !== binding.cutoff.hash
+      || stage2.event.cutoff.stateRoot !== binding.cutoff.stateRoot
+      || stage2.event.familyId !== leg.owningFamilyId
+      || stage2.event.familyDefinitionHash !== leg.owningFamilyDefinitionHash
+      || stage2.event.instanceKey !== leg.owningInstanceKey) {
+      throw new TypeError(`production evidence Stage1/2 selected parent ${index} lineage mismatch`);
+    }
+    const publication = canonicalRecord(
+      selectedWitnessContent(stage2, "instance-publication", stage2Facts.instancePublication.contentRoot).payload,
+      `productionEvidence.stage12.selectedParents[${index}].publication`,
+    );
+    const edge = canonicalRecord(
+      selectedWitnessContent(stage2, "edge", stage2Facts.edge.contentRoot).payload,
+      `productionEvidence.stage12.selectedParents[${index}].edge`,
+    );
+    if (publication.instancePublicationHash !== leg.instancePublicationHash
+      || publication.instanceKey !== leg.owningInstanceKey
+      || publication.familyDefinitionHash !== leg.owningFamilyDefinitionHash
+      || edge.edgeId !== leg.edgeId
+      || edge.owningFamilyId !== leg.owningFamilyId
+      || edge.owningFamilyDefinitionHash !== leg.owningFamilyDefinitionHash
+      || edge.owningInstanceKey !== leg.owningInstanceKey
+      || edge.instancePublicationHash !== leg.instancePublicationHash
+      || edge.staticProjectionHash !== leg.staticProjectionHash
+      || edge.projectionHash !== leg.projectionHash) {
+      throw new TypeError(`production evidence Stage1/2 selected parent ${index} does not bind the selected Graph leg`);
+    }
+    return Object.freeze({
+      edgeId: leg.edgeId,
+      selectedLegRoot: selectedLegRoot(leg),
+      stage1EventId: stage1.event.eventId,
+      stage1ArtifactSetRoot: stage1.artifactSetRoot,
+      stage2EventId: stage2.event.eventId,
+      stage2ArtifactSetRoot: stage2.artifactSetRoot,
+      instancePublicationRoot: stage2Facts.instancePublication.contentRoot,
+      edgeContentRoot: stage2Facts.edge.contentRoot,
+    });
+  });
+  return exactStage12SelectedRouteFacts({
+    binding,
+    selectedParents,
+    stage3EventId: stage3.event.eventId,
+    stage3ArtifactSetRoot: stage3.artifactSetRoot,
+  }, "productionEvidence.stage12");
 }
 
 function validateJoinedSixStepContext(input: {
@@ -1543,24 +1860,10 @@ function validateJoinedSixStepContext(input: {
     throw new TypeError("production evidence Stage3 planning/candidate lineage mismatch");
   }
   if (new Set(stage36.selectedGraphLegs.map(leg => leg.edgeId)).size !== stage36.selectedGraphLegs.length) throw new TypeError("production evidence Stage3 selected duplicate Graph edges");
-  for (const leg of stage36.selectedGraphLegs) {
-    const edge = stage12.graph.edges.find(candidate => candidate.edgeId === leg.edgeId);
-    if (edge === undefined
-      || edge.owningFamilyId !== leg.owningFamilyId
-      || edge.owningFamilyDefinitionHash !== leg.owningFamilyDefinitionHash
-      || edge.owningInstanceKey !== leg.owningInstanceKey
-      || edge.instancePublicationHash !== leg.instancePublicationHash
-      || edge.staticProjectionHash !== leg.staticProjectionHash
-      || edge.projectionHash !== leg.projectionHash) {
-      throw new TypeError("production evidence Stage3 leg does not join the durable Graph");
-    }
-    const verified = stage12.verifiedInstances.find(instance => instance.publication.instancePublicationHash === leg.instancePublicationHash);
-    if (verified === undefined
-      || verified.publication.instanceKey !== leg.owningInstanceKey
-      || verified.publication.familyDefinitionHash !== leg.owningFamilyDefinitionHash
-      || !verified.edges.some(candidate => candidate.edgeId === leg.edgeId)) {
-      throw new TypeError("production evidence Graph leg lacks its verified Stage1/2 instance lineage");
-    }
+  if (stage12.selectedParents.length !== stage36.selectedGraphLegs.length
+    || stage12.selectedParents.some((parent, index) => parent.edgeId !== stage36.selectedGraphLegs[index]!.edgeId
+      || parent.selectedLegRoot !== selectedLegRoot(stage36.selectedGraphLegs[index]!))) {
+    throw new TypeError("production evidence Stage3 legs do not join their selected Stage1/2 parents");
   }
   const program = canonicalRecord(stage36.resolved.executionProgram, "productionEvidence.sixStep.stage36.executionProgram");
   const exact = canonicalRecord(stage36.resolved.exact, "productionEvidence.sixStep.stage36.exact");
@@ -1607,6 +1910,7 @@ function validateJoinedSixStepContext(input: {
 async function joinSixStepFacts(input: {
   readonly startup: StartupRuntimeV1;
   readonly trace: SearchTerminalSixStepTraceV1;
+  readonly artifacts: ProductionSixStepArtifactCapabilitiesV1;
   readonly runtimeFacts: JoinedRuntimePerformanceFactsV1;
   readonly release: SearcherProductionEvidenceReleaseV1;
   readonly runtimeAnchor: RuntimeAnchorReceiptV1;
@@ -1614,15 +1918,15 @@ async function joinSixStepFacts(input: {
   readonly head: CanonicalHead;
   readonly candidateIds: readonly Hash[];
 }): Promise<JoinedSixStepPerformanceFactsV1> {
-  const stage12 = exactStage12Snapshot(
-    canonicalClone(await readStartupStage12Evidence(input.startup), "productionEvidence.stage12"),
-    "productionEvidence.stage12",
-  );
-  await verifyStartupStage12Evidence(input.startup, stage12);
   const stage36 = exactSixStepTrace(
     canonicalClone(input.trace, "productionEvidence.stage36"),
     "productionEvidence.stage36",
   );
+  const stage12 = buildStage12SelectedRouteFacts({
+    binding: readStartupStage12EvidenceBinding(input.startup),
+    trace: stage36,
+    artifacts: input.artifacts,
+  });
   const stage12Identity = stage12Root(stage12);
   const stage36Root = stage36.traceRoot;
   const facts = deepFreeze({
@@ -1684,10 +1988,179 @@ function exactProducerTerminal(value: unknown, path: string): ProducerTerminalV1
   return deepFreeze({ kind: "aloha.producer-terminal-v1" as const, terminalId, ...terminalWithoutId });
 }
 
+function materializeAccountedRouteDenominator(
+  store: Pick<SQLiteDurableStore, "readContent" | "readIndex">,
+  record: Record<string, unknown>,
+  path: string,
+  common: RouteDenominatorCommonV1,
+): AccountedRouteDenominatorPayloadV1 {
+  assertExactKeys(record, ["admissionId", "headFactsRoot", "headHash", "lane", "correlationId", "coverageRoot", "denominatorKind", "plannerCandidateIdentity", "accounting", "material"], path);
+  if (record.denominatorKind !== "accounted") throw new TypeError(`${path}.denominatorKind is invalid`);
+  assertPlainObject(record.plannerCandidateIdentity, `${path}.plannerCandidateIdentity`);
+  assertExactKeys(record.plannerCandidateIdentity, ["planningProblemHash", "objectiveRef", "entryAssetRef", "returnAssetRef"], `${path}.plannerCandidateIdentity`);
+  const rawIdentity = record.plannerCandidateIdentity as Record<string, unknown>;
+  const plannerCandidateIdentity = Object.freeze({
+    planningProblemHash: nonZeroHash(rawIdentity.planningProblemHash, `${path}.plannerCandidateIdentity.planningProblemHash`),
+    objectiveRef: nonZeroHash(rawIdentity.objectiveRef, `${path}.plannerCandidateIdentity.objectiveRef`),
+    entryAssetRef: nonZeroHash(rawIdentity.entryAssetRef, `${path}.plannerCandidateIdentity.entryAssetRef`),
+    returnAssetRef: nonZeroHash(rawIdentity.returnAssetRef, `${path}.plannerCandidateIdentity.returnAssetRef`),
+  });
+  assertPlainObject(record.accounting, `${path}.accounting`);
+  assertExactKeys(record.accounting, [
+    "planningProblemHash", "enumerationRoot", "admissionPolicyHash", "enumerationTruncated",
+    "observedUniqueCountLowerBound", "total", "selected", "pruned", "notProbed", "failed", "root",
+    "entryCount", "entrySequenceRoot",
+  ], `${path}.accounting`);
+  const rawAccounting = record.accounting as Record<string, unknown>;
+  if (typeof rawAccounting.enumerationTruncated !== "boolean") throw new TypeError(`${path}.accounting.enumerationTruncated is invalid`);
+  const accountingSummary = Object.freeze({
+    planningProblemHash: nonZeroHash(rawAccounting.planningProblemHash, `${path}.accounting.planningProblemHash`),
+    enumerationRoot: nonZeroHash(rawAccounting.enumerationRoot, `${path}.accounting.enumerationRoot`),
+    admissionPolicyHash: nonZeroHash(rawAccounting.admissionPolicyHash, `${path}.accounting.admissionPolicyHash`),
+    enumerationTruncated: rawAccounting.enumerationTruncated,
+    observedUniqueCountLowerBound: assertDecimalString(rawAccounting.observedUniqueCountLowerBound, `${path}.accounting.observedUniqueCountLowerBound`),
+    total: nonNegativeSafeInteger(rawAccounting.total, `${path}.accounting.total`),
+    selected: nonNegativeSafeInteger(rawAccounting.selected, `${path}.accounting.selected`),
+    pruned: nonNegativeSafeInteger(rawAccounting.pruned, `${path}.accounting.pruned`),
+    notProbed: nonNegativeSafeInteger(rawAccounting.notProbed, `${path}.accounting.notProbed`),
+    failed: nonNegativeSafeInteger(rawAccounting.failed, `${path}.accounting.failed`),
+    root: nonZeroHash(rawAccounting.root, `${path}.accounting.root`),
+    entryCount: assertDecimalString(rawAccounting.entryCount, `${path}.accounting.entryCount`),
+    entrySequenceRoot: nonZeroHash(rawAccounting.entrySequenceRoot, `${path}.accounting.entrySequenceRoot`),
+  });
+  const withoutMaterial = deepFreeze({ ...common, denominatorKind: "accounted" as const, plannerCandidateIdentity, accounting: accountingSummary });
+  const bindingRoot = accountedMaterialBindingRoot(withoutMaterial);
+  const materialized = readSearcherProductionEvidenceMaterialV1(store, record.material, {
+    materialKind: "route-accounting-entries",
+    bindingRoot,
+    decodeEntry: (entry, ordinal) => exactRouteAccountingEntry(entry, `${path}.material.entries[${ordinal}]`),
+    entryRoot: routeAccountingEntryRoot,
+  });
+  if (accountingSummary.entryCount !== String(materialized.entries.length)
+    || accountingSummary.entrySequenceRoot !== materialized.manifest.entrySequenceRoot) {
+    throw new TypeError(`${path}.accounting material summary mismatch`);
+  }
+  const accounting = exactRouteAccounting({
+    planningProblemHash: accountingSummary.planningProblemHash,
+    enumerationRoot: accountingSummary.enumerationRoot,
+    admissionPolicyHash: accountingSummary.admissionPolicyHash,
+    enumerationTruncated: accountingSummary.enumerationTruncated,
+    observedUniqueCountLowerBound: accountingSummary.observedUniqueCountLowerBound,
+    total: accountingSummary.total,
+    selected: accountingSummary.selected,
+    pruned: accountingSummary.pruned,
+    notProbed: accountingSummary.notProbed,
+    failed: accountingSummary.failed,
+    entries: materialized.entries,
+    root: accountingSummary.root,
+  }, `${path}.accountingMaterialized`);
+  if (plannerCandidateIdentity.planningProblemHash !== accounting.planningProblemHash
+    || plannerCandidateIdentity.entryAssetRef !== plannerCandidateIdentity.returnAssetRef
+    || accounting.entries.some(entry => entry.candidateId !== hashDomain("aloha/planner-route-candidate/v1", {
+      planningProblemHash: plannerCandidateIdentity.planningProblemHash,
+      objectiveRef: plannerCandidateIdentity.objectiveRef,
+      entryAssetRef: plannerCandidateIdentity.entryAssetRef,
+      returnAssetRef: plannerCandidateIdentity.returnAssetRef,
+      legs: entry.legs,
+    }))) {
+    throw new TypeError(`${path}.plannerCandidateIdentity mismatch`);
+  }
+  return deepFreeze({ ...common, denominatorKind: "accounted" as const, plannerCandidateIdentity, accounting });
+}
+
+function materializeCandidateSet(
+  store: Pick<SQLiteDurableStore, "readContent" | "readIndex">,
+  record: Record<string, unknown>,
+  path: string,
+): CandidateSetPayloadV1 {
+  assertExactKeys(record, [
+    "admissionId", "headFactsRoot", "headHash", "candidateRefCount", "candidateRefsRoot",
+    "laneDenominators", "candidateTerminalObservationSetRoot", "material",
+  ], path);
+  const admissionId = nonZeroHash(record.admissionId, `${path}.admissionId`);
+  const headFactsRoot = nonZeroHash(record.headFactsRoot, `${path}.headFactsRoot`);
+  const headHash = nonZeroHash(record.headHash, `${path}.headHash`);
+  const candidateRefCount = assertDecimalString(record.candidateRefCount, `${path}.candidateRefCount`);
+  const candidateRefsRoot = nonZeroHash(record.candidateRefsRoot, `${path}.candidateRefsRoot`);
+  if (!Array.isArray(record.laneDenominators)) throw new TypeError(`${path}.laneDenominators must be an array`);
+  const laneSummaries = Object.freeze(record.laneDenominators.map((value, index) => {
+    const itemPath = `${path}.laneDenominators[${index}]`;
+    assertPlainObject(value, itemPath);
+    assertExactKeys(value, ["lane", "correlationId", "coverageRoot", "accountingRoot", "candidateCount", "observationSetRoot"], itemPath);
+    const item = value as Record<string, unknown>;
+    if (item.lane !== "blockscan" && item.lane !== "backrun") throw new TypeError(`${itemPath}.lane is invalid`);
+    return Object.freeze({
+      lane: item.lane,
+      correlationId: nonZeroHash(item.correlationId, `${itemPath}.correlationId`),
+      coverageRoot: nonZeroHash(item.coverageRoot, `${itemPath}.coverageRoot`),
+      accountingRoot: nonZeroHash(item.accountingRoot, `${itemPath}.accountingRoot`),
+      candidateCount: assertDecimalString(item.candidateCount, `${itemPath}.candidateCount`),
+      observationSetRoot: nonZeroHash(item.observationSetRoot, `${itemPath}.observationSetRoot`),
+    });
+  }));
+  if (new Set(laneSummaries.map(value => value.lane)).size !== laneSummaries.length
+    || laneSummaries.some((value, index) => value.lane !== (["blockscan", "backrun"] as const).filter(lane => laneSummaries.some(item => item.lane === lane))[index])) {
+    throw new TypeError(`${path}.laneDenominators order is invalid`);
+  }
+  const candidateTerminalObservationSetRoot = nonZeroHash(record.candidateTerminalObservationSetRoot, `${path}.candidateTerminalObservationSetRoot`);
+  const withoutMaterial = deepFreeze({ admissionId, headFactsRoot, headHash, candidateRefCount, candidateRefsRoot, laneDenominators: laneSummaries, candidateTerminalObservationSetRoot });
+  const materialized = readSearcherProductionEvidenceMaterialV1(store, record.material, {
+    materialKind: "candidate-terminal-observations",
+    bindingRoot: candidateMaterialBindingRoot(withoutMaterial),
+    decodeEntry: (entry, ordinal) => exactProducerCandidateTerminalObservation(entry, `${path}.material.entries[${ordinal}]`),
+    entryRoot: observation => observation.observationRoot,
+  });
+  const observations = materialized.entries;
+  for (let index = 1; index < observations.length; index += 1) {
+    const previous = observations[index - 1]!;
+    const current = observations[index]!;
+    if ((previous.lane === "backrun" && current.lane === "blockscan")
+      || (previous.lane === current.lane && previous.candidateId >= current.candidateId)) {
+      throw new TypeError(`${path}.candidateTerminalObservations must be lane/candidate ordered`);
+    }
+  }
+  const candidateRefs = sortedUniqueHashes(observations.map(value => value.performanceCandidateRef), `${path}.candidateRefs`);
+  if (candidateRefCount !== String(candidateRefs.length)
+    || candidateRefsRoot !== searcherProductionEvidenceOrderedRootV1("aloha/searcher-production-evidence-candidate-refs/v1", candidateRefs)) {
+    throw new TypeError(`${path}.candidateRefs closure mismatch`);
+  }
+  const laneDenominators = Object.freeze(laneSummaries.map(summary => {
+    const laneObservations = observations.filter(observation => observation.lane === summary.lane);
+    const observationRoots = Object.freeze(laneObservations.map(observation => observation.observationRoot));
+    if (summary.candidateCount !== String(laneObservations.length)
+      || laneObservations.some(observation => observation.correlationId !== summary.correlationId)
+      || summary.observationSetRoot !== hashDomain("aloha/producer-lane-candidate-terminal-observation-set/v1", {
+        lane: summary.lane,
+        correlationId: summary.correlationId,
+        accountingRoot: summary.accountingRoot,
+        observationRoots,
+      })) throw new TypeError(`${path}.${summary.lane} observation denominator mismatch`);
+    return Object.freeze({ ...summary, observationRoots });
+  }));
+  if (laneDenominators.flatMap(value => value.observationRoots).length !== observations.length
+    || candidateTerminalObservationSetRoot !== hashDomain("aloha/performance-candidate-terminal-observation-set-root/v1", laneDenominators.map(value => value.observationSetRoot))
+    || observations.some(value => value.headHash !== headHash)) {
+    throw new TypeError(`${path} observation set closure mismatch`);
+  }
+  for (const observation of observations) {
+    if (observation.policyTerminal?.kind !== "aloha.route-post-success-policy-terminal-v1") continue;
+    const policyTerminal = observation.policyTerminal;
+    const winner = observations.find(candidate => candidate.lane === observation.lane
+      && candidate.candidateId === policyTerminal.winnerCandidateId);
+    if (winner?.performanceOutcome !== "verified"
+      || winner.terminalLineageHash !== policyTerminal.winnerTerminalLineageHash
+      || policyTerminal.decisionMonotonicNs !== observation.finishedMonotonicNs) {
+      throw new TypeError(`${path}.candidateTerminalObservations post-success winner mismatch`);
+    }
+  }
+  return deepFreeze({ admissionId, headFactsRoot, headHash, candidateRefs, candidateTerminalObservations: observations, laneDenominators, candidateTerminalObservationSetRoot });
+}
+
 function exactPayload(
   eventType: ProductionEvidenceEventTypeV1,
   value: unknown,
   envelope: Readonly<{ release: SearcherProductionEvidenceReleaseV1; runtimeAnchor: RuntimeAnchorReceiptV1 }>,
+  store: Pick<SQLiteDurableStore, "readContent" | "readIndex">,
 ): ProductionEvidencePayloadV1 {
   const path = `productionEvidence.${eventType}.payload`;
   assertPlainObject(value, path);
@@ -1865,107 +2338,10 @@ function exactPayload(
         currentSource,
       });
     }
-    assertExactKeys(record, ["admissionId", "headFactsRoot", "headHash", "lane", "correlationId", "coverageRoot", "denominatorKind", "plannerCandidateIdentity", "accounting"], path);
-    if (record.denominatorKind !== "accounted") throw new TypeError(`${path}.denominatorKind is invalid`);
-    const accounting = exactRouteAccounting(record.accounting, `${path}.accounting`);
-    assertPlainObject(record.plannerCandidateIdentity, `${path}.plannerCandidateIdentity`);
-    assertExactKeys(record.plannerCandidateIdentity, ["planningProblemHash", "objectiveRef", "entryAssetRef", "returnAssetRef"], `${path}.plannerCandidateIdentity`);
-    const rawIdentity = record.plannerCandidateIdentity as Record<string, unknown>;
-    const plannerCandidateIdentity = Object.freeze({
-      planningProblemHash: nonZeroHash(rawIdentity.planningProblemHash, `${path}.plannerCandidateIdentity.planningProblemHash`),
-      objectiveRef: nonZeroHash(rawIdentity.objectiveRef, `${path}.plannerCandidateIdentity.objectiveRef`),
-      entryAssetRef: nonZeroHash(rawIdentity.entryAssetRef, `${path}.plannerCandidateIdentity.entryAssetRef`),
-      returnAssetRef: nonZeroHash(rawIdentity.returnAssetRef, `${path}.plannerCandidateIdentity.returnAssetRef`),
-    });
-    if (plannerCandidateIdentity.planningProblemHash !== accounting.planningProblemHash
-      || plannerCandidateIdentity.entryAssetRef !== plannerCandidateIdentity.returnAssetRef
-      || accounting.entries.some(entry => entry.candidateId !== hashDomain("aloha/planner-route-candidate/v1", {
-        planningProblemHash: plannerCandidateIdentity.planningProblemHash,
-        objectiveRef: plannerCandidateIdentity.objectiveRef,
-        entryAssetRef: plannerCandidateIdentity.entryAssetRef,
-        returnAssetRef: plannerCandidateIdentity.returnAssetRef,
-        legs: entry.legs,
-      }))) {
-      throw new TypeError(`${path}.plannerCandidateIdentity mismatch`);
-    }
-    return deepFreeze({
-      ...common,
-      denominatorKind: "accounted" as const,
-      plannerCandidateIdentity,
-      accounting,
-    });
+    return materializeAccountedRouteDenominator(store, record, path, common);
   }
   if (eventType === "candidate-set") {
-    assertExactKeys(record, ["admissionId", "headFactsRoot", "headHash", "candidateRefs", "candidateTerminalObservations", "laneDenominators", "candidateTerminalObservationSetRoot"], path);
-    if (!Array.isArray(record.candidateRefs)) throw new TypeError(`${path}.candidateRefs must be an array`);
-    if (!Array.isArray(record.candidateTerminalObservations)) throw new TypeError(`${path}.candidateTerminalObservations must be an array`);
-    const candidateRefs = sortedUniqueHashes(record.candidateRefs as readonly Hash[], `${path}.candidateRefs`);
-    const candidateTerminalObservations = Object.freeze(record.candidateTerminalObservations.map((value, index) => exactProducerCandidateTerminalObservation(value, `${path}.candidateTerminalObservations[${index}]`)));
-    for (let index = 1; index < candidateTerminalObservations.length; index += 1) {
-      const previous = candidateTerminalObservations[index - 1]!;
-      const current = candidateTerminalObservations[index]!;
-      const previousLaneOrder = previous.lane === "blockscan" ? 0 : 1;
-      const currentLaneOrder = current.lane === "blockscan" ? 0 : 1;
-      if (previousLaneOrder > currentLaneOrder || (previous.lane === current.lane && previous.candidateId >= current.candidateId)) {
-        throw new TypeError(`${path}.candidateTerminalObservations must be lane/candidate ordered`);
-      }
-    }
-    const observedCandidateRefs = sortedUniqueHashes(candidateTerminalObservations.map(value => value.performanceCandidateRef), `${path}.candidateTerminalObservations.performanceCandidateRefs`);
-    if (!sameExact(candidateRefs, observedCandidateRefs)) throw new TypeError(`${path}.candidateRefs denominator mismatch`);
-    for (const observation of candidateTerminalObservations) {
-      if (observation.policyTerminal?.kind !== "aloha.route-post-success-policy-terminal-v1") continue;
-      const policyTerminal = observation.policyTerminal;
-      const winner = candidateTerminalObservations.find(candidate => candidate.lane === observation.lane
-        && candidate.candidateId === policyTerminal.winnerCandidateId);
-      if (winner?.performanceOutcome !== "verified"
-        || winner.terminalLineageHash !== policyTerminal.winnerTerminalLineageHash
-        || policyTerminal.decisionMonotonicNs !== observation.finishedMonotonicNs) {
-        throw new TypeError(`${path}.candidateTerminalObservations post-success winner mismatch`);
-      }
-    }
-    if (!Array.isArray(record.laneDenominators)) throw new TypeError(`${path}.laneDenominators must be an array`);
-    const laneDenominators = Object.freeze(record.laneDenominators.map((value, index) => {
-      const itemPath = `${path}.laneDenominators[${index}]`;
-      assertPlainObject(value, itemPath);
-      assertExactKeys(value, ["lane", "correlationId", "coverageRoot", "accountingRoot", "candidateCount", "observationRoots", "observationSetRoot"], itemPath);
-      const item = value as Record<string, unknown>;
-      if (item.lane !== "blockscan" && item.lane !== "backrun") throw new TypeError(`${itemPath}.lane is invalid`);
-      if (!Array.isArray(item.observationRoots)) throw new TypeError(`${itemPath}.observationRoots must be an array`);
-      const laneObservations = candidateTerminalObservations.filter(observation => observation.lane === item.lane);
-      const observationRoots = Object.freeze(item.observationRoots.map((root, rootIndex) => nonZeroHash(root, `${itemPath}.observationRoots[${rootIndex}]`)));
-      if (!sameExact(observationRoots, laneObservations.map(observation => observation.observationRoot))) throw new TypeError(`${itemPath}.observationRoots mismatch`);
-      const candidateCount = assertDecimalString(item.candidateCount, `${itemPath}.candidateCount`);
-      if (candidateCount !== laneObservations.length.toString()) throw new TypeError(`${itemPath}.candidateCount mismatch`);
-      const observationSetRoot = nonZeroHash(item.observationSetRoot, `${itemPath}.observationSetRoot`);
-      const correlationId = nonZeroHash(item.correlationId, `${itemPath}.correlationId`);
-      const accountingRoot = nonZeroHash(item.accountingRoot, `${itemPath}.accountingRoot`);
-      if (laneObservations.some(observation => observation.correlationId !== correlationId)
-        || observationSetRoot !== hashDomain("aloha/producer-lane-candidate-terminal-observation-set/v1", {
-          lane: item.lane,
-          correlationId,
-          accountingRoot,
-          observationRoots,
-        })) throw new TypeError(`${itemPath}.observationSetRoot mismatch`);
-      return Object.freeze({
-        lane: item.lane,
-        correlationId,
-        coverageRoot: nonZeroHash(item.coverageRoot, `${itemPath}.coverageRoot`),
-        accountingRoot,
-        candidateCount,
-        observationRoots,
-        observationSetRoot,
-      });
-    }));
-    if (new Set(laneDenominators.map(value => value.lane)).size !== laneDenominators.length
-      || laneDenominators.some((value, index) => value.lane !== (["blockscan", "backrun"] as const).filter(lane => laneDenominators.some(item => item.lane === lane))[index])) {
-      throw new TypeError(`${path}.laneDenominators order is invalid`);
-    }
-    if (laneDenominators.flatMap(value => value.observationRoots).length !== candidateTerminalObservations.length) throw new TypeError(`${path}.laneDenominators are incomplete`);
-    const candidateTerminalObservationSetRoot = nonZeroHash(record.candidateTerminalObservationSetRoot, `${path}.candidateTerminalObservationSetRoot`);
-    if (candidateTerminalObservationSetRoot !== hashDomain("aloha/performance-candidate-terminal-observation-set-root/v1", laneDenominators.map(value => value.observationSetRoot))) throw new TypeError(`${path}.candidateTerminalObservationSetRoot mismatch`);
-    const headHash = nonZeroHash(record.headHash, `${path}.headHash`);
-    if (candidateTerminalObservations.some(value => value.headHash !== headHash)) throw new TypeError(`${path}.candidateTerminalObservations head mismatch`);
-    return Object.freeze({ admissionId: nonZeroHash(record.admissionId, `${path}.admissionId`), headFactsRoot: nonZeroHash(record.headFactsRoot, `${path}.headFactsRoot`), headHash, candidateRefs, candidateTerminalObservations, laneDenominators, candidateTerminalObservationSetRoot });
+    return materializeCandidateSet(store, record, path);
   }
   if (eventType === "performance-facts-incomplete") {
     assertExactKeys(record, ["admissionId", "terminalBindingRoot", "terminalId", "terminalMonotonicNs", "headHash", "sourceCoverageRoot", "candidateSetRoot", "candidateCount", "runtimeFacts", "sixStepFacts", "factStatus", "missingFactReasons"], path);
@@ -2020,7 +2396,7 @@ function exactPayload(
   return Object.freeze({ terminalBindingRoot: bindingRoot, terminal, headFactsRoot: factsRoot });
 }
 
-function exactEvent(raw: DurableAppendRecord): ProductionEvidenceEventV1 {
+function exactEvent(raw: DurableAppendRecord, store: Pick<SQLiteDurableStore, "readContent" | "readIndex">): ProductionEvidenceEventV1 {
   const value = decodeCanonicalBytes(raw.bytes);
   const path = `productionEvidence.${raw.namespace}/${raw.sequence}`;
   assertPlainObject(value, path);
@@ -2049,17 +2425,30 @@ function exactEvent(raw: DurableAppendRecord): ProductionEvidenceEventV1 {
   if ((provisional && serving !== null) || (requiresServing && serving === null)) {
     throw new TypeError("production evidence event serving phase mismatch");
   }
-  const decoded: ProductionEvidenceEventV1 = deepFreeze({
+  const decodedEventId = nonZeroHash(record.eventId, "productionEvidence.eventId");
+  const wireDraft: ProductionEvidenceEventDraftV1 = deepFreeze({
     schemaVersion: 1 as const,
     kind: EVENT_KIND,
-    eventId: nonZeroHash(record.eventId, "productionEvidence.eventId"),
     eventType,
     sequence,
     namespace,
     release,
     runtimeAnchor,
     serving,
-    payload: exactPayload(eventType, record.payload, { release, runtimeAnchor }),
+    payload: record.payload as ProductionEvidenceWirePayloadV1,
+  });
+  if (decodedEventId !== eventId(wireDraft)) throw new TypeError("production evidence event identity mismatch");
+  const decoded: ProductionEvidenceEventV1 = deepFreeze({
+    schemaVersion: 1 as const,
+    kind: EVENT_KIND,
+    eventId: decodedEventId,
+    eventType,
+    sequence,
+    namespace,
+    release,
+    runtimeAnchor,
+    serving,
+    payload: exactPayload(eventType, record.payload, { release, runtimeAnchor }, store),
   });
   if (eventType === "producer-terminal") {
     const terminal = (decoded.payload as ProducerTerminalPayloadV1).terminal;
@@ -2070,7 +2459,6 @@ function exactEvent(raw: DurableAppendRecord): ProductionEvidenceEventV1 {
       throw new TypeError("production evidence producer terminal serving mismatch");
     }
   }
-  if (decoded.eventId !== eventId(eventPayload(decoded))) throw new TypeError("production evidence event identity mismatch");
   if (raw.eventId !== decoded.eventId || raw.contentSha256 !== sha256Hex(raw.bytes)) throw new TypeError("production evidence append receipt mismatch");
   return decoded;
 }
@@ -2544,7 +2932,7 @@ class ProductionEvidenceOwnerStateV1 {
     for (const namespace of Object.values(SEARCHER_PRODUCTION_EVIDENCE_NAMESPACES)) {
       const records = this.#store.readAppendLog(namespace);
       const events = Object.freeze(records.map(record => {
-        const event = exactEvent(record);
+        const event = exactEvent(record, this.#store);
         rawByEventId.set(event.eventId, record);
         return event;
       }));
@@ -3386,9 +3774,15 @@ class ProductionEvidenceOwnerStateV1 {
       const projection = projectionFromFacts(state.payload.admissionId, facts);
       await this.#append("head-coverage", projection.coverage, serving);
       for (const denominator of projection.routeDenominators) {
-        await this.#append("route-denominator", denominator, serving);
+        await this.#append(
+          "route-denominator",
+          denominator.denominatorKind === "accounted"
+            ? persistAccountedRouteDenominator(this.#store, denominator)
+            : denominator,
+          serving,
+        );
       }
-      await this.#append("candidate-set", projection.candidates, serving);
+      await this.#append("candidate-set", persistCandidateSet(this.#store, projection.candidates), serving);
       state.factsCapability = capability as object;
       state.facts = facts;
       this.#servingByAdmission.set(state.payload.admissionId, serving);
@@ -3453,7 +3847,7 @@ class ProductionEvidenceOwnerStateV1 {
         ? Object.freeze({ kind: "missing" as const, join: null })
         : producerSchedulerJoin(state.facts);
       const sixStep = state.facts === null
-        ? Object.freeze({ kind: "missing" as const, trace: null })
+        ? Object.freeze({ kind: "missing" as const, trace: null, artifacts: null })
         : producerSixStepTrace(state.facts);
       let runtimeFacts: JoinedRuntimePerformanceFactsV1 | null = null;
       let claim: ReturnType<RuntimeReleasePerformanceRuntimeServiceV1["claimHead"]> | null = null;
@@ -3514,6 +3908,7 @@ class ProductionEvidenceOwnerStateV1 {
           && schedulerJoin.kind === "exact"
           && sixStep.kind === "exact"
           && sixStep.trace !== null
+          && sixStep.artifacts !== null
           && sixStep.trace.resolved.executionProgramOwnerEvidence !== null
           && Object.prototype.hasOwnProperty.call(
             sixStep.trace.resolved.executionProgramOwnerEvidence,
@@ -3523,6 +3918,7 @@ class ProductionEvidenceOwnerStateV1 {
           ? await joinSixStepFacts({
             startup: this.#startup!,
             trace: sixStep.trace!,
+            artifacts: sixStep.artifacts!,
             runtimeFacts: runtimeFacts!,
             release: this.#release,
             runtimeAnchor: this.#runtimeAnchor,
@@ -3624,13 +4020,13 @@ class ProductionEvidenceOwnerStateV1 {
 
   async #appendWithEvent(
     eventType: ProductionEvidenceEventTypeV1,
-    payload: ProductionEvidencePayloadV1,
+    payload: ProductionEvidenceWirePayloadV1,
     serving: ServingBindingV1 | null,
   ): Promise<Readonly<{ readonly receipt: DurableAppendReceipt; readonly durableAppend: DurableAppendCapabilityV1 }>> {
     const namespace = namespaceFor(eventType);
     const sequence = this.#store.readAppendLog(namespace).length.toString();
     const draft: ProductionEvidenceEventDraftV1 = deepFreeze({ schemaVersion: 1 as const, kind: EVENT_KIND, eventType, sequence, namespace, release: this.#release, runtimeAnchor: this.#runtimeAnchor, serving, payload });
-    const event: ProductionEvidenceEventV1 = Object.freeze({ ...draft, eventId: eventId(draft) });
+    const event = Object.freeze({ ...draft, eventId: eventId(draft) });
     const bytes = encodeCanonicalBytes(event);
     const durableAppend = this.#store.appendFsyncMonotonicCapability({ namespace, sequence, eventId: event.eventId, contentSha256: sha256Hex(bytes), bytes });
     const persisted = readDurableAppendCapabilityV1(durableAppend);
@@ -3644,7 +4040,7 @@ class ProductionEvidenceOwnerStateV1 {
 
   async #append(
     eventType: ProductionEvidenceEventTypeV1,
-    payload: ProductionEvidencePayloadV1,
+    payload: ProductionEvidenceWirePayloadV1,
     serving: ServingBindingV1 | null,
   ): Promise<DurableAppendReceipt> {
     return (await this.#appendWithEvent(eventType, payload, serving)).receipt;
@@ -3672,6 +4068,66 @@ class ProductionEvidenceOwnerStateV1 {
     const run = this.#tail.then(operation);
     this.#tail = run.then(() => undefined, () => undefined);
     return run;
+  }
+}
+
+export interface SearcherProductionEvidenceMaterializedRouteDenominatorEventV1 {
+  readonly eventId: Hash;
+  readonly sequence: string;
+  readonly release: SearcherProductionEvidenceReleaseV1;
+  readonly runtimeAnchor: RuntimeAnchorReceiptV1;
+  readonly serving: ServingBindingV1;
+  readonly payload: RouteDenominatorPayloadV1;
+}
+
+export interface SearcherProductionEvidenceMaterializedCandidateSetEventV1 {
+  readonly eventId: Hash;
+  readonly sequence: string;
+  readonly release: SearcherProductionEvidenceReleaseV1;
+  readonly runtimeAnchor: RuntimeAnchorReceiptV1;
+  readonly serving: ServingBindingV1;
+  readonly payload: CandidateSetPayloadV1;
+}
+
+/** Read-only physical contract for advisory observers. Every returned route
+ * entry and candidate observation has been reopened from SQLite content,
+ * traversed through the exact linked manifest, and rejoined to its semantic
+ * denominator root. */
+export function readSearcherProductionEvidenceHighCardinalityV1(databasePath: string): Readonly<{
+  readonly routeDenominators: readonly SearcherProductionEvidenceMaterializedRouteDenominatorEventV1[];
+  readonly candidateSets: readonly SearcherProductionEvidenceMaterializedCandidateSetEventV1[];
+}> {
+  if (typeof databasePath !== "string" || !databasePath.startsWith("/")) throw new TypeError("production evidence database path must be absolute");
+  const store = createSqliteDurableStore(databasePath);
+  try {
+    store.bindStoreRole(EVIDENCE_ROLE);
+    const routeDenominators = store.readAppendLog(SEARCHER_PRODUCTION_EVIDENCE_NAMESPACES.routeDenominators).map(record => {
+      const event = exactEvent(record, store);
+      if (event.eventType !== "route-denominator" || event.serving === null) throw new TypeError("production evidence route denominator physical event mismatch");
+      return deepFreeze({
+        eventId: event.eventId,
+        sequence: event.sequence,
+        release: event.release,
+        runtimeAnchor: event.runtimeAnchor,
+        serving: event.serving,
+        payload: event.payload as RouteDenominatorPayloadV1,
+      });
+    });
+    const candidateSets = store.readAppendLog(SEARCHER_PRODUCTION_EVIDENCE_NAMESPACES.candidateSets).map(record => {
+      const event = exactEvent(record, store);
+      if (event.eventType !== "candidate-set" || event.serving === null) throw new TypeError("production evidence candidate set physical event mismatch");
+      return deepFreeze({
+        eventId: event.eventId,
+        sequence: event.sequence,
+        release: event.release,
+        runtimeAnchor: event.runtimeAnchor,
+        serving: event.serving,
+        payload: event.payload as CandidateSetPayloadV1,
+      });
+    });
+    return deepFreeze({ routeDenominators, candidateSets });
+  } finally {
+    store.close();
   }
 }
 

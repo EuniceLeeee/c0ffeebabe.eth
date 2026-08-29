@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { erc20AssetRefV1 } from "../../asset-ref/src/index.ts";
-import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import { encodeCanonicalJson, hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import {
   sealGeneratedStrategyRuntimeDescriptor,
   strategyPlanningTemplateHash,
@@ -22,6 +22,7 @@ import {
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../../strategy-composition/src/internal/trigger-owner.ts";
 import {
   enumerateClosedLoopPlanningProblem,
+  planningEnumerationRootV1,
   readIssuedPlanningEnumerationV1,
 } from "../src/index.ts";
 
@@ -455,4 +456,56 @@ test("complete enumeration is an owner-issued capability and a spliced clone is 
     () => readIssuedPlanningEnumerationV1(JSON.parse(JSON.stringify(issued))),
     /planner enumeration was not issued by the planner owner/,
   );
+});
+
+test("enumeration root commits ordered candidate identity and scalar counts without materializing route payloads", () => {
+  const issued = enumerateClosedLoopPlanningProblem({ problem: problem([
+    edge("ab", ["a"], ["b"]), edge("ba", ["b"], ["a"]),
+    edge("ac", ["a"], ["c"]), edge("ca", ["c"], ["a"]),
+  ]) });
+  const first = issued.candidates[0]!;
+  const second = issued.candidates[1]!;
+  const root = planningEnumerationRootV1(issued);
+  const inaccessiblePayload = new Proxy(first, {
+    get(target, property, receiver) {
+      if (property === "legs" || property === "loopIntent") throw new Error("high-cardinality payload was read");
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const inaccessibleProblem = new Proxy(issued.planningProblem, {
+    get() { throw new Error("planning problem payload was read"); },
+  });
+  assert.equal(planningEnumerationRootV1({
+    ...issued,
+    planningProblem: inaccessibleProblem,
+    candidates: [inaccessiblePayload, second],
+  }), root);
+  assert.notEqual(planningEnumerationRootV1({
+    ...issued,
+    candidates: [{ ...first, candidateId: h("test/planner/mutation/v1", "candidate") }, second],
+  }), root);
+  assert.notEqual(planningEnumerationRootV1({ ...issued, candidates: [second, first] }), root);
+  assert.notEqual(planningEnumerationRootV1({ ...issued, candidates: [first, first] }), root);
+  assert.notEqual(planningEnumerationRootV1({ ...issued, candidates: [first, second, first] }), root);
+  assert.notEqual(planningEnumerationRootV1({ ...issued, observedUniqueCountLowerBound: "3" }), root);
+});
+
+test("30k planner denominator remains owner-readable while canonical wire encoding stays explicitly out of scope", () => {
+  const forwardCount = 174;
+  const backwardCount = 173;
+  const entry = asset("high-cardinality-entry");
+  const intermediate = asset("high-cardinality-intermediate");
+  const edges = [
+    ...Array.from({ length: forwardCount }, (_, index) => edgeWithAssetRefs(`high-forward-${index}`, [entry], [intermediate])),
+    ...Array.from({ length: backwardCount }, (_, index) => edgeWithAssetRefs(`high-backward-${index}`, [intermediate], [entry])),
+  ];
+  const issued = enumerateClosedLoopPlanningProblem({
+    problem: problemWithCandidateLimit(edges, "30000", entry),
+  });
+  assert.equal(issued.candidates.length, 30_000);
+  assert.equal(issued.truncated, true);
+  assert.equal(issued.observedUniqueCountLowerBound, "30001");
+  assert.equal(readIssuedPlanningEnumerationV1(issued), issued);
+  assert.equal(planningEnumerationRootV1(issued), issued.enumerationRoot);
+  assert.throws(() => encodeCanonicalJson(issued), /array exceeds policy/);
 });

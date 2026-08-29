@@ -79,6 +79,7 @@ import {
 } from "../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
 import { verifyRuntimeReleaseBindingSignatureV1 } from "./internal/runtime-binding-verifier.ts";
 import type { GitReleaseEvidenceV1 } from "./git-release-evidence.ts";
+import { decodeProductionDeploymentCompositionV1 } from "./deployment-composition-artifact.ts";
 
 export { verifyRuntimeReleaseBindingSignatureV1 } from "./internal/runtime-binding-verifier.ts";
 
@@ -113,6 +114,8 @@ export const PRODUCTION_RELEASE_LAYOUT_V1 = deepFreeze({
   performanceProfilePath: "/etc/aloha/performance-profile.json",
   hardwareProfilePath: "/etc/aloha/hardware-profile.json",
   performanceBasisPath: "/etc/aloha/performance-window-basis.json",
+  revmWorkerExecutablePath: "/opt/aloha/bin/aloha-revm-worker",
+  proofSignerExecutablePath: "/opt/aloha/bin/aloha-proof-signer",
   runtimeSignerPinPath: "/etc/aloha/trust/runtime-release-signer-pin.json",
   packageApprovalPath: "/etc/aloha/trust/runtime-release-package-approval.json",
   systemdUnitPath: "/etc/systemd/system/aloha-searcher.service",
@@ -122,7 +125,7 @@ export const PRODUCTION_RELEASE_LAYOUT_V1 = deepFreeze({
 });
 export const PRODUCTION_RELEASE_REPOSITORY_ROOT_V1 = "/opt/aloha";
 
-const PACKAGE_INSTALL_PATHS_V1: Readonly<Record<string, string>> = Object.freeze({
+export const PACKAGE_INSTALL_PATHS_V1: Readonly<Record<string, string>> = Object.freeze({
   "acceptance-certificates.json": PRODUCTION_RELEASE_LAYOUT_V1.acceptanceCertificatesPath,
   "aloha-searcher.service": PRODUCTION_RELEASE_LAYOUT_V1.systemdUnitPath,
   "catalog-generation.inputs.json": PRODUCTION_RELEASE_LAYOUT_V1.catalogGenerationInputPath,
@@ -138,6 +141,8 @@ const PACKAGE_INSTALL_PATHS_V1: Readonly<Record<string, string>> = Object.freeze
   "performance-profile.json": PRODUCTION_RELEASE_LAYOUT_V1.performanceProfilePath,
   "performance-window-basis.json": PRODUCTION_RELEASE_LAYOUT_V1.performanceBasisPath,
   "production-launcher.mjs": PRODUCTION_RELEASE_LAYOUT_V1.entrypointPath,
+  "aloha-revm-worker": PRODUCTION_RELEASE_LAYOUT_V1.revmWorkerExecutablePath,
+  "aloha-proof-signer": PRODUCTION_RELEASE_LAYOUT_V1.proofSignerExecutablePath,
   "runtime-release-binding.json": PRODUCTION_RELEASE_LAYOUT_V1.runtimeBindingPath,
   "nomination-qualification-deployment-fact.json": PRODUCTION_RELEASE_LAYOUT_V1.nominationQualificationDeploymentFactPath,
   "release-authority-approval.json": PRODUCTION_RELEASE_LAYOUT_V1.releaseAuthorityApprovalPath,
@@ -232,7 +237,7 @@ function regularCanonicalPath(path: string, label: string): string {
   return path;
 }
 
-function verifyPackageApprovalSignature(
+export function verifyPackageApprovalSignature(
   approvalValue: RuntimeReleasePackageApprovalV1,
   pinValue: RuntimeReleaseSignerPinV1,
 ): RuntimeReleasePackageApprovalV1 {
@@ -313,11 +318,19 @@ function releaseEnvironment(commit: string): Uint8Array {
   ].join("\n"));
 }
 
+export function productionReleaseEnvironmentBytesV1(commit: string): Uint8Array {
+  return new Uint8Array(releaseEnvironment(gitSha40Schema.decode(commit)));
+}
+
+export function productionProcessCommandSha256V1(): Hash {
+  return sha256Hex(PRODUCTION_PROCESS_COMMAND_BYTES_V1);
+}
+
 function assertCanonicalBytes(actual: Uint8Array, expected: Uint8Array, label: string): void {
   if (!Buffer.from(actual).equals(Buffer.from(expected))) throw new TypeError(`${label} artifact is not canonical exact bytes`);
 }
 
-function releasePackageApprovalPayload(
+export function releasePackageApprovalPayload(
   manifest: ReleasePackageManifestV1,
 ): RuntimeReleasePackageApprovalPayloadV1 {
   return deepFreeze({
@@ -339,7 +352,7 @@ function releasePackageApprovalPayload(
   });
 }
 
-function assertPackageApprovalJoin(
+export function assertPackageApprovalJoin(
   manifest: ReleasePackageManifestV1,
   approval: RuntimeReleasePackageApprovalV1,
 ): void {
@@ -487,7 +500,7 @@ export function verifyReleasePackageDirectoryV1(
   return manifest;
 }
 
-function verifyReleaseArtifactSemanticsV1(
+export function verifyReleaseArtifactSemanticsV1(
   manifest: ReleasePackageManifestV1,
   signerPinValue: RuntimeReleaseSignerPinV1,
   load: (name: string) => Uint8Array,
@@ -506,6 +519,8 @@ function verifyReleaseArtifactSemanticsV1(
   const performanceBasisBytes = load("performance-window-basis.json");
   const bundleBytes = load("deployment-bundle.mjs");
   const launcherBytes = load("production-launcher.mjs");
+  const revmWorkerBytes = load("aloha-revm-worker");
+  const proofSignerBytes = load("aloha-proof-signer");
   const deploymentCompositionModuleBytes = load("deployment-composition.mjs");
   const deploymentSourceConfigBytes = load("deployment-source.json");
   const deploymentRuntimePolicyBytes = load("runtime-policy.json");
@@ -529,6 +544,13 @@ function verifyReleaseArtifactSemanticsV1(
   const releaseAcceptanceSet = decodeReleaseAcceptanceSetV1(releaseAcceptanceSetBytes);
   const releaseAcceptanceApproval = decodeSignedReleaseAcceptanceApprovalV1(releaseAcceptanceApprovalBytes);
   const binding = verifyRuntimeReleaseBindingSignatureV1(decodeRuntimeReleaseBindingV1(bindingBytes), signerPin);
+  const deploymentComposition = decodeProductionDeploymentCompositionV1(deploymentCompositionModuleBytes);
+  if (deploymentComposition.revmWorkerExecutablePath !== PRODUCTION_RELEASE_LAYOUT_V1.revmWorkerExecutablePath
+    || deploymentComposition.revmWorkerExecutableSha256 !== sha256Hex(revmWorkerBytes)
+    || deploymentComposition.externalProofSigner.executablePath !== PRODUCTION_RELEASE_LAYOUT_V1.proofSignerExecutablePath
+    || deploymentComposition.externalProofSigner.executableSha256 !== sha256Hex(proofSignerBytes)) {
+    throw new TypeError("deployment composition executable artifacts do not exact-join the package");
+  }
   const nominationQualificationDeploymentFact = verifyNominationQualificationDeploymentFactSignature(
     decodeNominationQualificationDeploymentFactV1(nominationQualificationDeploymentFactBytes),
     signerPin,
@@ -619,6 +641,8 @@ function verifyReleaseArtifactSemanticsV1(
   }
   if (sha256Hex(bundleBytes) !== binding.searcherRuntime.bundleModuleSha256
     || sha256Hex(launcherBytes) !== binding.searcherRuntime.entrypointSha256
+    || sha256Hex(revmWorkerBytes) !== binding.selectedExecutor.executableFingerprint
+    || proofSignerBytes.byteLength === 0
     || binding.searcherRuntime.bundleModulePath !== PRODUCTION_RELEASE_LAYOUT_V1.bundleModulePath
     || deployment.searcherRuntimeBundleModulePath !== PRODUCTION_RELEASE_LAYOUT_V1.bundleModulePath
     || deployment.serviceName !== PRODUCTION_RELEASE_LAYOUT_V1.serviceName
@@ -670,6 +694,10 @@ export function verifyInstalledReleaseV1(input: VerifyInstalledReleaseInputV1): 
     const bytes = new Uint8Array(readFileSync(path));
     if (sha256Hex(bytes) !== artifact.sha256 || bytes.byteLength.toString() !== artifact.byteLength) {
       throw new TypeError(`installed artifact mismatch: ${artifact.name}`);
+    }
+    if ((artifact.name === "aloha-revm-worker" || artifact.name === "aloha-proof-signer")
+      && (lstatSync(path).mode & 0o111) === 0) {
+      throw new TypeError(`installed executable artifact is not executable: ${artifact.name}`);
     }
   }
   const signerPinPath = regularCanonicalPath(input.signerPinPath, "runtime release signer trust pin");

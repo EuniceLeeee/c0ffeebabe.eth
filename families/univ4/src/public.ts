@@ -9,6 +9,7 @@ export * from "./stages.ts";
 export * from "./search-adapter.ts";
 export * from "./family-definition.ts";
 export { UNIV4_DEFINITION } from "./family-definition.ts";
+export { UNIV4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY } from "./runtime/physical-adapter.ts";
 export {
   UNIV4_NOMINATION_DEFINITION,
   UNIV4_IDENTITY_DEFINITION,

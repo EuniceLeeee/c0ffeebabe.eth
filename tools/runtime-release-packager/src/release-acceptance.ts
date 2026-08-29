@@ -12,6 +12,7 @@ import {
   releaseAcceptanceApprovalSigningBytes,
   sealReleaseAcceptanceSetV1,
   type ReleaseAcceptanceSetV1,
+  type SignedReleaseAcceptanceApprovalSigningInputV1,
   type SignedReleaseAcceptanceApprovalV1,
   type SignedReleaseAuthorityApprovalV3,
 } from "../../../specs/qualification/src/index.ts";
@@ -103,6 +104,15 @@ export interface VerifiedReleaseAcceptanceEvidenceV1 {
   readonly releaseAcceptanceApproval: SignedReleaseAcceptanceApprovalV1;
 }
 
+export interface PreparedReleaseAcceptanceV1 {
+  readonly runtimeBinding: RuntimeReleaseBindingV1;
+  readonly releaseAuthorityApproval: SignedReleaseAuthorityApprovalV3;
+  readonly acceptanceCertificates: readonly AcceptanceCertificateV1[];
+  readonly releaseAcceptanceSet: ReleaseAcceptanceSetV1;
+  readonly signingInput: SignedReleaseAcceptanceApprovalSigningInputV1;
+  readonly signingBytes: Uint8Array;
+}
+
 export function assertRuntimeBindingJoinsReleaseApprovalV1(
   bindingValue: RuntimeReleaseBindingV1,
   approvalValue: SignedReleaseAuthorityApprovalV3,
@@ -162,9 +172,12 @@ function verifyAcceptanceApprovalSignature(
   )) throw new TypeError("release acceptance approval signature invalid");
 }
 
-export function verifyReleaseAcceptanceEvidenceV1(
-  input: ReleaseAcceptanceEvidenceInputV1,
-): VerifiedReleaseAcceptanceEvidenceV1 {
+/** Build only the exact bytes an external qualified runner must sign.  The
+ * packager neither accepts a verdict DTO nor owns a signing key. */
+export function prepareReleaseAcceptanceV1(input: Omit<
+  ReleaseAcceptanceEvidenceInputV1,
+  "releaseAcceptanceSet" | "releaseAcceptanceApproval"
+>): PreparedReleaseAcceptanceV1 {
   const binding = decodeRuntimeReleaseBindingV1(input.runtimeBinding);
   const denominator = verifyReleaseRequirementDenominatorV1(input.externalQualifications);
   const requirements = denominator.approval.releaseAcceptanceRequirements;
@@ -199,7 +212,7 @@ export function verifyReleaseAcceptanceEvidenceV1(
     certificateByPredicate.set(requirement.predicateId, certificate);
   }
   if (certificates.length !== requirements.length) throw new TypeError("acceptance certificate set contains an extra certificate");
-  const expectedSet = sealReleaseAcceptanceSetV1(
+  const releaseAcceptanceSet = sealReleaseAcceptanceSetV1(
     denominator.approval.releaseAcceptanceRequirementSetRoot,
     requirements.map(requirement => {
       const certificate = certificateByPredicate.get(requirement.predicateId)!;
@@ -214,6 +227,48 @@ export function verifyReleaseAcceptanceEvidenceV1(
       };
     }),
   );
+  const signingInput: SignedReleaseAcceptanceApprovalSigningInputV1 = Object.freeze({
+    schemaVersion: 1,
+    kind: "aloha.signed-release-acceptance-approval",
+    releaseAuthorityApprovalId: denominator.approval.approvalId,
+    releaseAuthorityApprovalPayloadHash: denominator.approval.payloadHash,
+    runtimeReleaseBindingId: binding.bindingId,
+    releaseAcceptanceRequirementSetRoot: releaseAcceptanceSet.releaseAcceptanceRequirementSetRoot,
+    releaseAcceptanceSetRoot: releaseAcceptanceSet.root,
+    predicateCompositionRootDigest: binding.predicateCompositionRootDigest,
+    gateCoreRuntimeClosureDigest: binding.gateCoreRuntimeClosureDigest,
+    gateCoreImplementationClosureDigest: binding.gateCoreImplementationClosureDigest,
+    releaseRoleManifestRoot: binding.releaseRoleManifestRoot,
+    candidateReleaseCommit: binding.candidateReleaseCommit,
+    externalTrustAnchorRoot: binding.externalTrustAnchorRoot,
+    issuerKeySetRoot: binding.externalIssuerKeySetRoot,
+    registryApprovalId: binding.qualificationRegistryApprovalId,
+    registryRoot: binding.qualificationRegistryRoot,
+    epoch: binding.qualificationEpoch,
+    audienceHash: binding.qualificationAudienceHash,
+    issuerId: denominator.approval.qualifiedRunnerIssuerId,
+    keyId: denominator.approval.qualifiedRunnerKeyId,
+    qualifiedRunnerImplementationClosureDigest: denominator.approval.qualifiedRunnerImplementationClosureDigest,
+    qualifiedRunnerImplementationExportDigest: denominator.approval.qualifiedRunnerImplementationExportDigest,
+  });
+  return Object.freeze({
+    runtimeBinding: binding,
+    releaseAuthorityApproval: denominator.approval,
+    acceptanceCertificates: Object.freeze(certificates),
+    releaseAcceptanceSet,
+    signingInput,
+    signingBytes: releaseAcceptanceApprovalSigningBytes(signingInput),
+  });
+}
+
+export function verifyReleaseAcceptanceEvidenceV1(
+  input: ReleaseAcceptanceEvidenceInputV1,
+): VerifiedReleaseAcceptanceEvidenceV1 {
+  const prepared = prepareReleaseAcceptanceV1(input);
+  const binding = prepared.runtimeBinding;
+  const denominator = verifyReleaseRequirementDenominatorV1(input.externalQualifications);
+  const certificates = prepared.acceptanceCertificates;
+  const expectedSet = prepared.releaseAcceptanceSet;
   const acceptanceSet = decodeReleaseAcceptanceSetV1(input.releaseAcceptanceSet);
   if (!equalBytes(acceptanceSet, expectedSet)) throw new TypeError("release acceptance set does not equal the exact certificate denominator");
   const acceptanceApproval = decodeSignedReleaseAcceptanceApprovalV1(input.releaseAcceptanceApproval);

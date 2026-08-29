@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "kind": "aloha.catalog-impact-receipt",
   "beforeSnapshotRoot": "0x0405f705a90d3fa70d22e105b749ebfbb7c4b0d584b9ed6c7c862aba5adca204",
-  "afterSnapshotRoot": "0xa15d6c4b54cfa5e2baf49c7db49dce23b350be53685ccdec10706979a573601f",
+  "afterSnapshotRoot": "0x0d1280fbd578d83cb631aa90a56113f34b5fa6ddb38fe1f5e2d4a973d787fee7",
   "beforeDefinitionCatalogRoot": "0xc1ec5f78f872a882db64a3227f2c90573c1073e22a9dba19e5c7adf1529775dc",
-  "afterDefinitionCatalogRoot": "0x90be8da08a232928e0647d4d5b8e53b9e10df37c853dc51446ce4086990c0017",
+  "afterDefinitionCatalogRoot": "0xed3d2ecf153b044097cc16619142c6995ac5668698884438c68a726d502a54d9",
   "beforeCapabilityCatalogRoot": "0x12948d85524eff81b03b2f8decf47950aac5a240fe43332241f775575039dbcf",
-  "afterCapabilityCatalogRoot": "0x0f1994b48baae0e4f92f9396a72eece6ded2989de7d6bf9f145ffe2aff005c17",
+  "afterCapabilityCatalogRoot": "0x591d417bb1e098f8a0663603fc99e8b434bab8fe0116c30916cd19a02366537b",
   "changedCapabilityIds": [
     "family.angstrom-v4.coarse",
     "family.angstrom-v4.exact",
@@ -73,5 +73,5 @@
     "univ4"
   ],
   "reusableArtifacts": [],
-  "receiptRoot": "0xe2bc158788e35dbde188dc7a9972e5659c602cf73ad477e83bafad69d8ca0e32"
+  "receiptRoot": "0x8ea44a889972d767bb98b3dbc33528e351662b5e6315ebbc6b577148e39ece6d"
 }

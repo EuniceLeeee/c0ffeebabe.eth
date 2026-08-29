@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import { encodeCanonicalJson, hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import {
   enumerateClosedLoopPlanningProblem,
   type IssuedPlanningEnumerationV1,
@@ -19,13 +19,16 @@ import {
   issueGeneratedStrategyRuntimeAuthorityCapability,
 } from "../../strategy-composition/src/internal/generated-runtime-composition.ts";
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../../strategy-composition/src/internal/trigger-owner.ts";
-import { compileStrategy } from "../../strategy-sdk/src/index.ts";
+import { compileStrategy, defineStrategy } from "../../strategy-sdk/src/index.ts";
 import { ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER, ROUTE_CYCLE_STRATEGY } from "../../../strategies/route-cycle/src/index.ts";
 import {
   admitCoarseRoutesV1,
+  coarseAdmissionAccountingRootV1,
+  coarseEnumerationRootV1,
   issueCoarseRouteAssessmentV1,
   readIssuedCoarseRouteAssessmentV1,
   readIssuedCoarseRouteBindingV1,
+  readIssuedCoarseEnumerationBindingV1,
   readQualifiedCoarseProjectionReceiptV1,
   readQualifiedCoarseProjectionV1,
   sealCoarseEdgeProjectionV1,
@@ -139,6 +142,77 @@ function plannerEnumeration(twoCycles = false, objectiveValue = objective): Issu
 function emptyPlannerEnumeration(): IssuedPlanningEnumerationV1 {
   const graphRoot = h("graph-empty");
   return enumerateClosedLoopPlanningProblem({ problem: planningProblem(graphRoot, []) });
+}
+
+function highCardinalityPlannerEnumeration(): IssuedPlanningEnumerationV1 {
+  const definition = defineStrategy({
+    ...ROUTE_CYCLE_STRATEGY,
+    planningTemplate: { ...ROUTE_CYCLE_STRATEGY.planningTemplate, candidateLimit: "30000" },
+  });
+  const catalogEntry = compileStrategy(definition, []).entry;
+  const planningHash = strategyPlanningTemplateHash(catalogEntry.planningTemplate);
+  const entryBody = {
+    catalogEntry,
+    issuerModulePath: definition.planningProblemIssuer.modulePath,
+    issuerExportName: definition.planningProblemIssuer.exportName,
+    issuerClosureRoot: strategyIssuerClosureRoot,
+    planningTemplateHash: planningHash,
+  };
+  const runtimeEntry: GeneratedStrategyRuntimeEntryV1 = Object.freeze({
+    ...entryBody,
+    leafDigest: hashDomain("aloha/generated-strategy-runtime-leaf/v1", {
+      strategyId: catalogEntry.strategyId,
+      strategyDefinitionHash: catalogEntry.strategyDefinitionHash,
+      definitionCatalogLeafDigest: catalogEntry.definitionCatalogLeafDigest,
+      issuerModulePath: entryBody.issuerModulePath,
+      issuerExportName: entryBody.issuerExportName,
+      issuerClosureRoot: entryBody.issuerClosureRoot,
+      planningTemplateHash: planningHash,
+    }),
+  });
+  const descriptor = sealGeneratedStrategyRuntimeDescriptor({
+    schemaVersion: 1,
+    releaseIntentRoot: strategyDescriptor.releaseIntentRoot,
+    definitionCatalogRoot: strategyDescriptor.definitionCatalogRoot,
+    proposedCapabilitySetRoot: strategyDescriptor.proposedCapabilitySetRoot,
+    strategies: [runtimeEntry],
+  });
+  const issuer = Object.freeze({ ...ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER, planningTemplateHash: planningHash });
+  const factory = createGeneratedStrategyRuntimeFactory({ descriptor, issuers: [issuer] });
+  const composition = factory(issueGeneratedStrategyRuntimeAuthorityCapability({
+    factory,
+    qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
+    releaseProvenanceHash,
+    assertCurrent: () => {},
+  }));
+  const graphRoot = h("graph-high-cardinality");
+  const binding = Object.freeze({
+    generationId: "generation-1",
+    definitionCatalogRoot: descriptor.definitionCatalogRoot,
+    graphRoot,
+    readyRecordHash: h("ready"),
+    releaseProvenanceHash,
+    sourceHash: source.hash,
+  });
+  const edges = [
+    ...Array.from({ length: 174 }, (_, index) => graphEdge(`high-forward-${index}`, assetA, assetB)),
+    ...Array.from({ length: 173 }, (_, index) => graphEdge(`high-backward-${index}`, assetB, assetA)),
+  ];
+  const problem = composition.issuePlanningProblems({
+    binding,
+    edges,
+    trigger: issueStrategyPlanningTriggerCapabilityV1({
+      binding,
+      lane: "blockscan",
+      triggerRef: h("trigger:high-cardinality"),
+      objectiveRef: objective.objectiveRef,
+      entryAssetRef: assetA,
+      returnAssetRef: assetA,
+      affectedEdgeIds: [],
+      correlationId: h("correlation:high-cardinality"),
+    }),
+  })[0]!;
+  return enumerateClosedLoopPlanningProblem({ problem });
 }
 
 interface RouteFixture {
@@ -420,4 +494,96 @@ test("per-edge absolute output caps remain rank-only without a route-domain prof
   const unbounded = admitCoarseRoutesV1({ enumeration: enumeration(planner, [unboundedBinding], [assessment(unboundedBinding, { bounded: false })], { rankedLimit: 0, boundedUnrankedLimit: 0 }, pruneObjective) });
   assert.equal(unbounded.provenPruned, "0");
   assert.equal(unbounded.outcome, "retryable-incomplete");
+});
+
+test("coarse roots commit ordered identities, entry roots, duplicates, and scalar counts", () => {
+  const planner = plannerEnumeration(true);
+  const routes = planner.candidates.map((candidate, index) => route(candidate, planner.graphRoot, h(`root-owner:${index}`)));
+  const capability = enumeration(planner, routes, [null, null], { rankedLimit: 0, boundedUnrankedLimit: 0 });
+  const binding = readIssuedCoarseEnumerationBindingV1(capability);
+  assert.equal(coarseEnumerationRootV1(binding), binding.coarseEnumerationRoot);
+
+  const mutatedRouteValue = Object.freeze({ ...routes[0]!.value, dependencySetRef: h("mutated-dependency") });
+  const mutatedRoute = issueCoarseRouteBindingV1(mutatedRouteValue);
+  assert.notEqual(coarseEnumerationRootV1({
+    ...binding,
+    candidates: [{ ...binding.candidates[0]!, binding: mutatedRoute }, binding.candidates[1]!],
+  }), binding.coarseEnumerationRoot);
+  assert.notEqual(coarseEnumerationRootV1({ ...binding, candidates: [...binding.candidates].reverse() }), binding.coarseEnumerationRoot);
+  assert.notEqual(coarseEnumerationRootV1({ ...binding, candidates: [binding.candidates[0]!, binding.candidates[0]!] }), binding.coarseEnumerationRoot);
+  assert.notEqual(coarseEnumerationRootV1({ ...binding, candidates: [...binding.candidates, binding.candidates[0]!] }), binding.coarseEnumerationRoot);
+  assert.notEqual(coarseEnumerationRootV1({ ...binding, observedUniqueCountLowerBound: "3" }), binding.coarseEnumerationRoot);
+  const assessed = assessment(routes[0]!);
+  const assessedRoot = coarseEnumerationRootV1({
+    ...binding,
+    candidates: [{ ...binding.candidates[0]!, assessment: assessed }, binding.candidates[1]!],
+  });
+  assert.notEqual(assessedRoot, binding.coarseEnumerationRoot);
+  assert.notEqual(coarseEnumerationRootV1({
+    ...binding,
+    candidates: [{ ...binding.candidates[0]!, assessment: assessment(routes[0]!, { finalAmount: "111" }) }, binding.candidates[1]!],
+  }), assessedRoot);
+  assert.notEqual(coarseEnumerationRootV1({
+    ...binding,
+    candidates: [{ ...binding.candidates[0]!, assessment: Object.freeze({}) }, binding.candidates[1]!],
+  }), binding.coarseEnumerationRoot);
+  assert.throws(
+    () => enumeration(planner, [routes[1]!, routes[0]!], [null, null]),
+    /does not match the planner-issued identity/,
+  );
+  assert.throws(
+    () => enumeration(planner, [routes[0]!, routes[0]!], [null, null]),
+    /does not match the planner-issued identity/,
+  );
+
+  const admission = admitCoarseRoutesV1({ enumeration: capability });
+  assert.equal(coarseAdmissionAccountingRootV1(admission), admission.accountingRoot);
+  assert.throws(() => coarseAdmissionAccountingRootV1({
+    ...admission,
+    entries: [{ ...admission.entries[0]!, entryRoot: h("mutated-entry-root") }, admission.entries[1]!],
+  }), /entryRoot mismatch/);
+  assert.throws(() => coarseAdmissionAccountingRootV1({
+    ...admission,
+    entries: [{ ...admission.entries[0]!, reasonCode: "mutated-reason" }, admission.entries[1]!],
+  }), /entryRoot mismatch/);
+  assert.throws(() => coarseAdmissionAccountingRootV1({
+    ...admission,
+    entries: [{ ...admission.entries[0]!, assessmentId: h("mutated-assessment") }, admission.entries[1]!],
+  }), /entryRoot mismatch/);
+  assert.notEqual(coarseAdmissionAccountingRootV1({ ...admission, entries: [...admission.entries].reverse() }), admission.accountingRoot);
+  assert.notEqual(coarseAdmissionAccountingRootV1({
+    ...admission,
+    observedUniqueCountLowerBound: "1",
+    denominator: "1",
+    notProbed: "1",
+    entries: [admission.entries[0]!],
+  }), admission.accountingRoot);
+  assert.throws(() => coarseAdmissionAccountingRootV1({ ...admission, entries: [admission.entries[0]!, admission.entries[0]!] }), /duplicates/);
+  assert.throws(() => coarseAdmissionAccountingRootV1({ ...admission, entries: [...admission.entries, admission.entries[0]!] }), /duplicates/);
+  assert.throws(() => coarseAdmissionAccountingRootV1({ ...admission, denominator: "3" }), /scalar accounting/);
+  assert.throws(() => coarseAdmissionAccountingRootV1({ ...admission, selectedCandidateIds: [admission.entries[0]!.candidateId] }), /selected denominator/);
+  assert.throws(() => coarseAdmissionAccountingRootV1({ ...admission, outcome: "complete-candidates-terminal" }), /outcome/);
+});
+
+test("30k coarse denominator, nonzero owner-fair selection, and accounting stay bounded", () => {
+  const planner = highCardinalityPlannerEnumeration();
+  assert.equal(planner.candidates.length, 30_000);
+  const routes = planner.candidates.map((candidate, index) => route(candidate, planner.graphRoot, h(`high-cardinality-owner:${index % 64}`)));
+  const capability = enumeration(
+    planner,
+    routes,
+    Array.from({ length: routes.length }, () => null),
+    { rankedLimit: 0, boundedUnrankedLimit: 30_000 },
+  );
+  const binding = readIssuedCoarseEnumerationBindingV1(capability);
+  assert.equal(binding.candidates.length, 30_000);
+  assert.equal(coarseEnumerationRootV1(binding), binding.coarseEnumerationRoot);
+  const admission = admitCoarseRoutesV1({ enumeration: capability });
+  assert.equal(admission.denominator, "30000");
+  assert.equal(admission.entries.length, 30_000);
+  assert.equal(admission.boundedUnrankedSelected, "30000");
+  assert.equal(admission.selectedCandidateIds.length, 30_000);
+  assert.equal(coarseAdmissionAccountingRootV1(admission), admission.accountingRoot);
+  assert.throws(() => encodeCanonicalJson(binding), /array exceeds policy/);
+  assert.throws(() => encodeCanonicalJson(admission), /array exceeds policy/);
 });

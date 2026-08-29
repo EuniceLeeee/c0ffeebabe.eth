@@ -1,5 +1,5 @@
-import { CURVE_METAREGISTRY } from "./manifest.ts";
-import { canonicalAddress } from "./types.ts";
+import { CURVE_METAREGISTRY, CURVE_UNDERLYING_I128_GET_DY_SELECTOR, CURVE_UNDERLYING_UINT_GET_DY_SELECTOR } from "./manifest.ts";
+import { canonicalAddress, type CurveSelectorVariantV1 } from "./types.ts";
 
 const UINT256 = 1n << 256n;
 const WORD_HEX = 64;
@@ -13,7 +13,8 @@ export const CURVE_SEARCH_SELECTORS = Object.freeze({
   storedRates: "0xfd0684b1",
   underlyingBalances: "0x59f4f351",
   underlyingDecimals: "0x4cb088f1",
-  getDyUnderlying: "0x85f11d1e",
+  getDyUnderlyingInt128: CURVE_UNDERLYING_I128_GET_DY_SELECTOR,
+  getDyUnderlyingUint256: CURVE_UNDERLYING_UINT_GET_DY_SELECTOR,
 } as const);
 
 function word(value: bigint, path: string): string {
@@ -37,9 +38,10 @@ function call(selector: string, args: readonly string[] = []): string {
 }
 
 export function encodeCurveStateCall(
-  kind: keyof typeof CURVE_SEARCH_SELECTORS,
+  kind: Exclude<keyof typeof CURVE_SEARCH_SELECTORS, "getDyUnderlyingInt128" | "getDyUnderlyingUint256"> | "getDyUnderlying",
   pool: string,
   indices?: readonly [number, number, string],
+  selectorVariant?: CurveSelectorVariantV1,
 ): { readonly target: string; readonly data: string; readonly responseEncoding: `abi-${string}` } {
   const target = kind === "underlyingBalances" || kind === "underlyingDecimals"
     ? canonicalAddress(CURVE_METAREGISTRY)
@@ -49,12 +51,14 @@ export function encodeCurveStateCall(
     : kind === "getDyUnderlying"
     ? indices === undefined
       ? (() => { throw new TypeError("curve get_dy_underlying indices are required"); })()
-      : call(CURVE_SEARCH_SELECTORS[kind], [signedWord(BigInt(indices[0]), 128, "curve i"), signedWord(BigInt(indices[1]), 128, "curve j"), word(BigInt(indices[2]), "curve amount")])
+      : selectorVariant === undefined
+      ? (() => { throw new TypeError("curve get_dy_underlying selector variant is required"); })()
+      : call(selectorVariant === "int128" ? CURVE_SEARCH_SELECTORS.getDyUnderlyingInt128 : CURVE_SEARCH_SELECTORS.getDyUnderlyingUint256, [selectorVariant === "int128" ? signedWord(BigInt(indices[0]), 128, "curve i") : word(BigInt(indices[0]), "curve i"), selectorVariant === "int128" ? signedWord(BigInt(indices[1]), 128, "curve j") : word(BigInt(indices[1]), "curve j"), word(BigInt(indices[2]), "curve amount")])
     : call(CURVE_SEARCH_SELECTORS[kind]);
   return Object.freeze({
     target,
     data,
-    responseEncoding: `abi-curve-${kind}-v1`,
+    responseEncoding: `abi-curve-${kind}${kind === "getDyUnderlying" ? `-${selectorVariant}` : ""}-v1`,
   });
 }
 
