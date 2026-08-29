@@ -27,9 +27,10 @@ import {
   type SchemaRef,
 } from "../../../specs/core-envelope/src/index.ts";
 import {
+  ARTIFACT_MIRROR_MAX_DECODED_BYTES,
   ARTIFACT_RESOLUTION_SCHEMA_MANIFESTS,
-  decodeArtifactBytes,
-  encodeArtifactBytes,
+  decodeArtifactHexBytes,
+  preflightArtifactBytesByteLength,
 } from "../../../specs/artifact-resolution/src/index.ts";
 
 export type { Hash, ReadOnlyArtifactLocatorV1, ReadOnlyArtifactRefV1, SchemaRef };
@@ -58,11 +59,18 @@ function preflightClaimMirrorBudget(
     shape === "structural" ? [...Object.keys(claimFields), "claimId"] : Object.keys(claimFields),
     path,
   );
-  const policy = resolverPolicySchema.decode(
-    readOwnEnumerableDataProperty(value, "resolverPolicy", path),
-    `${path}.resolverPolicy`,
-  );
-  const maxByteLength = BigInt(policy.maxByteLength);
+  const policyPath = `${path}.resolverPolicy`;
+  const policy = readOwnEnumerableDataProperty(value, "resolverPolicy", path);
+  assertPlainObject(policy, policyPath);
+  assertExactKeys(policy, [
+    "schemaVersion", "kind", "policyHash", "allowedLocatorKind", "digestAlgorithm",
+    "maxByteLength", "requireExactLengthMediaAndSchema", "minimumRemainingStoreEpochs",
+    "failureOutcome",
+  ], policyPath);
+  const maxByteLength = BigInt(assertDecimalString(
+    readOwnEnumerableDataProperty(policy, "maxByteLength", policyPath),
+    `${policyPath}.maxByteLength`,
+  ));
   const resolution = readOwnEnumerableDataProperty(value, "resolutionClaim", path);
   assertPlainObject(resolution, `${path}.resolutionClaim`);
   assertExactKeys(
@@ -95,11 +103,16 @@ function preflightClaimMirrorBudget(
     ),
     `${path}.resolutionClaim.observedMirror.byteLength`,
   );
-  if (typeof bytes !== "string") {
-    throw new TypeError(`mirror bytes must be a string at ${path}.resolutionClaim.observedMirror.bytes`);
-  }
-  // This bound is checked before hex validation, byte allocation or hashing.
-  if (BigInt(byteLength) > maxByteLength || BigInt(Math.max(0, bytes.length - 2)) > maxByteLength * 2n) {
+  const actualByteLength = preflightArtifactBytesByteLength(
+    bytes,
+    `${path}.resolutionClaim.observedMirror.bytes`,
+  );
+  // These joins run before the semantic schema can allocate or hash bytes.
+  if (
+    actualByteLength !== BigInt(byteLength) ||
+    actualByteLength > maxByteLength ||
+    actualByteLength > BigInt(ARTIFACT_MIRROR_MAX_DECODED_BYTES)
+  ) {
     throw new TypeError(`mirror bytes exceed resolver policy before decode at ${path}.resolutionClaim.observedMirror.bytes`);
   }
 }
@@ -406,7 +419,7 @@ export function createArtifactLineageObservationFromBytes(
     "mediaType", "schema", "observedStoreEpoch",
   ] as const;
   const copied = copyDraft<ArtifactLineageObservationFromBytesDraft>(draft, fields);
-  const rawBytes = copied.rawBytes === null ? null : decodeArtifactBytes(copied.rawBytes, "$.draft.rawBytes");
+  const rawBytes = copied.rawBytes === null ? null : decodeArtifactHexBytes(copied.rawBytes, "$.draft.rawBytes");
   return createArtifactLineageObservation({
     ...copied,
     contentSha256: rawBytes === null ? null : sha256Hex(rawBytes),

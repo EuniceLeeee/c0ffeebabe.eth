@@ -1,0 +1,10 @@
+{
+  "name": "@aloha/full-graph-coarse-sweep",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

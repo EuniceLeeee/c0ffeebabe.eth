@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import { erc20AssetPortBindingV1, type AssetPortBindingV1 } from "../../asset-ref/src/index.ts";
 import { sealInstanceCatalog, sealInstancePublication } from "../../catalog/src/index.ts";
 import { buildPersistedGraph, GraphViewLeaseV1, type GraphRouteHandle } from "../src/index.ts";
 
@@ -8,26 +9,43 @@ const h = (value: string): Hash => hashDomain("test/graph", value);
 const cutoff = { chainId: "1", number: "10", hash: h("block"), stateRoot: h("state") };
 const releaseProvenanceHash = h("release-provenance");
 const candidatePartitionProofStorageHash = h("candidate-proof-storage");
-const publication = sealInstancePublication({
-  familyId: "family-a",
-  familyDefinitionHash: h("definition"),
-  familyCandidateKey: h("candidate"),
-  instanceKey: "instance-a",
-  cutoff,
-  identityMemoHash: h("identity"),
-  descriptorHash: h("descriptor"),
-  staticProjectionMemoHash: h("memo"),
-  requestedArtifactDependencyRoot: h("dependencies"),
-  validityDependencyRoot: h("validity"),
-  transitions: [{
-    inputAssetPorts: [{ assetRef: h("in"), portRef: h("in-port"), ordinal: "0" }],
-    outputAssetPorts: [{ assetRef: h("out"), portRef: h("out-port"), ordinal: "0" }],
-    opaqueTransitionRef: h("transition"),
-    constraintRefs: [],
-    staticProjectionHash: h("projection"),
-  }],
-  evidenceRoot: h("evidence"),
-});
+const nominationClosureRoot = h("nomination-closure");
+const nominationClosureStorageHash = h("nomination-closure-storage");
+const inputAsset = erc20AssetPortBindingV1("1", "0x1111111111111111111111111111111111111111");
+const outputAsset = erc20AssetPortBindingV1("1", "0x2222222222222222222222222222222222222222");
+
+function makePublication(
+  familyId: string,
+  instanceKey: string,
+  input: AssetPortBindingV1,
+  output: AssetPortBindingV1,
+  evidenceRoot = h(`${familyId}:evidence`),
+) {
+  const identityMemo = { kind: "graph-test-identity", familyId, instanceKey };
+  return sealInstancePublication({
+    familyId,
+    familyDefinitionHash: h(`${familyId}:definition`),
+    familyCandidateKey: h(`${familyId}:candidate`),
+    instanceKey,
+    cutoff,
+    identityMemo,
+    identityMemoHash: hashDomain("aloha/identity-memo/v1", identityMemo),
+    descriptorHash: h(`${familyId}:descriptor`),
+    staticProjectionMemoHash: h(`${familyId}:memo`),
+    requestedArtifactDependencyRoot: h(`${familyId}:dependencies`),
+    validityDependencyRoot: h(`${familyId}:validity`),
+    transitions: [{
+      inputAssetPorts: [{ ...input, portRef: h(`${familyId}:in-port`), ordinal: "0" }],
+      outputAssetPorts: [{ ...output, portRef: h(`${familyId}:out-port`), ordinal: "0" }],
+      opaqueTransitionRef: h(`${familyId}:transition`),
+      constraintRefs: [],
+      staticProjectionHash: h(`${familyId}:projection`),
+    }],
+    evidenceRoot,
+  });
+}
+
+const publication = makePublication("family-a", "instance-a", inputAsset, outputAsset);
 
 test("Graph is deterministically projected only from verified publications", () => {
   const catalog = sealInstanceCatalog(cutoff, [publication]);
@@ -39,6 +57,27 @@ test("Graph is deterministically projected only from verified publications", () 
     "opaqueTransitionRef", "outputAssetPorts", "owningFamilyDefinitionHash", "projectionHash",
     "owningFamilyId", "owningInstanceKey", "rehydrationRef", "staticProjectionHash",
   ].sort());
+});
+
+test("cross-Family joins share AssetRef while Family ports and existing edge identities stay isolated", () => {
+  const familyB = makePublication("family-b", "instance-b", outputAsset, inputAsset);
+  const unrelatedInput = erc20AssetPortBindingV1("1", "0x3333333333333333333333333333333333333333");
+  const unrelatedOutput = erc20AssetPortBindingV1("1", "0x4444444444444444444444444444444444444444");
+  const unrelated = makePublication("family-c", "instance-c", unrelatedInput, unrelatedOutput);
+  const base = buildPersistedGraph(sealInstanceCatalog(cutoff, [publication, familyB]));
+  const expanded = buildPersistedGraph(sealInstanceCatalog(cutoff, [publication, familyB, unrelated]));
+  const familyAEdge = base.edges.find(edge => edge.owningFamilyId === "family-a")!;
+  const familyBEdge = base.edges.find(edge => edge.owningFamilyId === "family-b")!;
+  assert.equal(familyAEdge.outputAssetPorts[0]!.assetRef, familyBEdge.inputAssetPorts[0]!.assetRef);
+  assert.notEqual(familyAEdge.outputAssetPorts[0]!.portRef, familyBEdge.inputAssetPorts[0]!.portRef);
+  for (const edge of base.edges) {
+    const sameEdge = expanded.edges.find(candidate => candidate.owningFamilyId === edge.owningFamilyId)!;
+    assert.equal(sameEdge.edgeId, edge.edgeId);
+    assert.equal(sameEdge.projectionHash, edge.projectionHash);
+    assert.deepEqual(sameEdge.inputAssetPorts, edge.inputAssetPorts);
+    assert.deepEqual(sameEdge.outputAssetPorts, edge.outputAssetPorts);
+  }
+  assert.notEqual(expanded.graphRoot, base.graphRoot);
 });
 
 test("route handle authority is lease-owned and cannot alter persisted graph root", async () => {
@@ -54,6 +93,8 @@ test("route handle authority is lease-owned and cannot alter persisted graph roo
     graphRoot: graph.graphRoot,
     releaseProvenanceHash,
     candidatePartitionProofStorageHash,
+    nominationClosureRoot,
+    nominationClosureStorageHash,
   };
   let canonical = true;
   let readyActive = true;
@@ -93,6 +134,8 @@ test("route handle authority is lease-owned and cannot alter persisted graph roo
     "graphRoot",
     "releaseProvenanceHash",
     "candidatePartitionProofStorageHash",
+    "nominationClosureRoot",
+    "nominationClosureStorageHash",
   ].sort());
   assert.equal(graph.graphRoot, buildPersistedGraph(catalog).graphRoot);
   assert.equal("issuedRouteHandle" in graph.edges[0]!, false);
@@ -142,6 +185,8 @@ test("a publication/root mismatch cannot open a GraphView", async () => {
     graphRoot: graph.graphRoot,
     releaseProvenanceHash,
     candidatePartitionProofStorageHash,
+    nominationClosureRoot,
+    nominationClosureStorageHash,
   };
   const admission = { opaque: {} };
   await assert.rejects(() => GraphViewLeaseV1.open(
@@ -153,6 +198,49 @@ test("a publication/root mismatch cannot open a GraphView", async () => {
     { assertViewAuthorityActive() {} },
     { async assertServingBindingCurrent() {}, async consumeServingAdmission() { return wrongBinding; } },
   ), /root-mismatch/);
+});
+
+test("evidence-root mutation changes publication/Graph identity before any route handle is issued", async () => {
+  const catalog = sealInstanceCatalog(cutoff, [publication]);
+  const graph = buildPersistedGraph(catalog);
+  const mutatedPublication = makePublication(
+    "family-a",
+    "instance-a",
+    inputAsset,
+    outputAsset,
+    h("family-a:mutated-evidence"),
+  );
+  const mutatedCatalog = sealInstanceCatalog(cutoff, [mutatedPublication]);
+  const mutatedGraph = buildPersistedGraph(mutatedCatalog);
+  assert.notEqual(mutatedPublication.instancePublicationHash, publication.instancePublicationHash);
+  assert.notEqual(mutatedCatalog.instanceCatalogRoot, catalog.instanceCatalogRoot);
+  assert.notEqual(mutatedGraph.graphRoot, graph.graphRoot);
+
+  const binding = {
+    generationId: "generation-a",
+    readyRecordHash: h("ready"),
+    generationRefreshPolicyHash: h("policy"),
+    cutoff,
+    definitionCatalogRoot: h("definitions"),
+    instanceCatalogRoot: catalog.instanceCatalogRoot,
+    graphRoot: graph.graphRoot,
+    releaseProvenanceHash,
+    candidatePartitionProofStorageHash,
+    nominationClosureRoot,
+    nominationClosureStorageHash,
+  };
+  const admission = { opaque: {} };
+  let issued = 0;
+  await assert.rejects(() => GraphViewLeaseV1.open(
+    admission,
+    mutatedGraph,
+    mutatedCatalog,
+    { issueRouteHandle() { issued += 1; return { opaque: {} }; } },
+    "epoch",
+    { assertViewAuthorityActive() {} },
+    { async assertServingBindingCurrent() {}, async consumeServingAdmission() { return binding; } },
+  ), /root-mismatch/);
+  assert.equal(issued, 0);
 });
 
 test("a revoked cutoff cannot construct or continue a GraphView lease", async () => {
@@ -168,6 +256,8 @@ test("a revoked cutoff cannot construct or continue a GraphView lease", async ()
     graphRoot: graph.graphRoot,
     releaseProvenanceHash,
     candidatePartitionProofStorageHash,
+    nominationClosureRoot,
+    nominationClosureStorageHash,
   };
   const admission = { opaque: {} };
   await assert.rejects(() => GraphViewLeaseV1.open(

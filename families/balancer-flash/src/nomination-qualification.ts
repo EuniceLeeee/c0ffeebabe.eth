@@ -1,0 +1,5 @@
+import { hashDomain } from "../../../packages/canonical-codec/src/index.ts";
+export const BALANCER_FLASH_NOMINATION_MUTATION_CORPUS = Object.freeze({ schemaVersion: 1, corpusRoot: hashDomain("aloha/balancer-flash/nomination-mutation-corpus/v1", ["wrong-vault-topic", "raw-log-mismatch", "duplicate-vault", "foreign-raw-locator"]) });
+export const BALANCER_FLASH_NOMINATION_INDEPENDENT_ORACLE = Object.freeze({ schemaVersion: 1, oracleRoot: hashDomain("aloha/balancer-flash/nomination-independent-oracle/v1", ["vault-flash-loan-log", "singleton-vault-identity", "recent-window-ownership"]) });
+export const BALANCER_FLASH_SINGLETON_MUTATION_CORPUS = Object.freeze({ schemaVersion: 1, corpusRoot: hashDomain("aloha/balancer-flash/singleton-mutation-corpus/v1", ["wrong-vault", "wrong-cutoff", "spliced-code-response", "missing-raw-locator"]) });
+export const BALANCER_FLASH_SINGLETON_INDEPENDENT_ORACLE = Object.freeze({ schemaVersion: 1, oracleRoot: hashDomain("aloha/balancer-flash/singleton-independent-oracle/v1", ["canonical-v2-vault-address", "cutoff-eth-get-code", "zero-code-empty-partition"]) });

@@ -187,6 +187,8 @@ export interface SharedWorkStats {
   readonly inFlightJoins: number;
   readonly physicalBuilds: number;
   readonly buildFailures: number;
+  /** Physical results rejected by the validity predicate and never cached. */
+  readonly invalidResults: number;
   readonly consumerAborts: number;
   readonly consumerDeadlines: number;
   readonly physicalAborts: number;
@@ -254,6 +256,7 @@ export class SharedWorkCache<K, V> {
     inFlightJoins: 0,
     physicalBuilds: 0,
     buildFailures: 0,
+    invalidResults: 0,
     consumerAborts: 0,
     consumerDeadlines: 0,
     physicalAborts: 0,
@@ -296,11 +299,35 @@ export class SharedWorkCache<K, V> {
     assertConsumerLease(lease);
     const canonical = this.keyCodec(key);
     assertSemanticWorkKey(canonical.value);
+    // Reject an already-finished logical consumer before touching either
+    // settled or in-flight state.  Otherwise the cache would create a
+    // physical Promise and only detach the consumer afterward, allowing a
+    // builder to start work that has no remaining consumer.
+    if (lease.signal?.aborted) {
+      this.statState.consumerAborts += 1;
+      return Promise.reject(new SharedWorkRejected("abort", "consumer aborted"));
+    }
+    if (lease.deadlineAtMs !== undefined && lease.deadlineAtMs <= this.clock()) {
+      this.statState.consumerDeadlines += 1;
+      return Promise.reject(new SharedWorkRejected("deadline", "consumer deadline elapsed"));
+    }
     const validity = this.defaultValidity;
     const settled = this.findSettled(canonical);
-    if (settled !== undefined && settled.valid(settled.value, key)) {
-      this.statState.settledHits += 1;
-      return this.resolveSettled(settled.value, lease);
+    if (settled !== undefined) {
+      let valid = false;
+      try {
+        valid = settled.valid(settled.value, key);
+      } catch {
+        // A validity observer is allowed to discover that a previously
+        // settled result can no longer be trusted.  Remove it instead of
+        // repeatedly retaining an entry whose observer itself is broken.
+        this.removeSettledIfSame(settled);
+      }
+      if (valid) {
+        this.statState.settledHits += 1;
+        return this.resolveSettled(settled.value, lease);
+      }
+      if (!valid) this.removeSettledIfSame(settled);
     }
 
     let entry = this.findInFlight(canonical);
@@ -326,7 +353,18 @@ export class SharedWorkCache<K, V> {
       promise.then(
         (value) => {
           entry!.settled = true;
-          if (entry!.generation === this.generation && !entry!.invalidated) {
+          let valid = false;
+          try {
+            valid = entry!.valid(value, key);
+          } catch {
+            // A malformed validity observer must not pin the physical entry
+            // or turn a failed cache admission into a reusable result.
+            this.statState.invalidResults += 1;
+            this.removeInFlightIfSame(entry!);
+            return;
+          }
+          if (!valid) this.statState.invalidResults += 1;
+          if (entry!.generation === this.generation && !entry!.invalidated && valid) {
             this.settled.set(canonical.hash, [
               ...(this.settled.get(canonical.hash) ?? []).filter(
                 (candidate) => candidate.key.bytes !== canonical.bytes,
@@ -372,11 +410,30 @@ export class SharedWorkCache<K, V> {
     >();
     const results: Array<Promise<V>> = [];
     for (const entry of canonicalEntries) {
-      const settled = this.findSettled(entry.canonical);
-      if (settled !== undefined && settled.valid(settled.value, entry.key)) {
-        this.statState.settledHits += 1;
-        results.push(this.resolveSettled(settled.value, entry.consumer));
+      if (entry.consumer.signal?.aborted) {
+        this.statState.consumerAborts += 1;
+        results.push(Promise.reject(new SharedWorkRejected("abort", "consumer aborted")));
         continue;
+      }
+      if (entry.consumer.deadlineAtMs !== undefined && entry.consumer.deadlineAtMs <= this.clock()) {
+        this.statState.consumerDeadlines += 1;
+        results.push(Promise.reject(new SharedWorkRejected("deadline", "consumer deadline elapsed")));
+        continue;
+      }
+      const settled = this.findSettled(entry.canonical);
+      if (settled !== undefined) {
+        let valid = false;
+        try {
+          valid = settled.valid(settled.value, entry.key);
+        } catch {
+          this.removeSettledIfSame(settled);
+        }
+        if (valid) {
+          this.statState.settledHits += 1;
+          results.push(this.resolveSettled(settled.value, entry.consumer));
+          continue;
+        }
+        if (!valid) this.removeSettledIfSame(settled);
       }
       const existing = this.findInFlight(entry.canonical);
       if (existing !== undefined) {
@@ -422,11 +479,16 @@ export class SharedWorkCache<K, V> {
       promise.then(
         (value) => {
           entry.settled = true;
-          if (
-            entry.generation === this.generation &&
-            !entry.invalidated &&
-            entry.valid(value, item.key)
-          ) {
+          let valid = false;
+          try {
+            valid = entry.valid(value, item.key);
+          } catch {
+            this.statState.invalidResults += 1;
+            this.removeInFlightIfSame(entry);
+            return;
+          }
+          if (!valid) this.statState.invalidResults += 1;
+          if (entry.generation === this.generation && !entry.invalidated && valid) {
             this.settled.set(entry.key.hash, [
               ...(this.settled.get(entry.key.hash) ?? []).filter(
                 (candidate) => candidate.key.bytes !== entry.key.bytes,
@@ -568,6 +630,14 @@ export class SharedWorkCache<K, V> {
     else this.inFlight.set(entry.key.hash, retained);
   }
 
+  private removeSettledIfSame(entry: SettledEntry<K, V>): void {
+    const entries = this.settled.get(entry.key.hash);
+    if (!entries) return;
+    const retained = entries.filter((candidate) => candidate !== entry);
+    if (retained.length === 0) this.settled.delete(entry.key.hash);
+    else this.settled.set(entry.key.hash, retained);
+  }
+
   private attachConsumer(
     entry: InFlightEntry<K, V>,
     lease: ConsumerLease,
@@ -588,6 +658,11 @@ export class SharedWorkCache<K, V> {
         !entry.settled &&
         !entry.controller.signal.aborted
       ) {
+        // A physical request that no longer has a consumer is no longer a
+        // valid join target.  Mark it before aborting so a new logical read
+        // creates fresh physical work instead of joining an already-aborted
+        // promise during the abort/settle race.
+        entry.invalidated = true;
         this.statState.physicalAborts += 1;
         entry.controller.abort("last-consumer-left");
       }

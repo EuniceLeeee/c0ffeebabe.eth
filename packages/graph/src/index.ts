@@ -7,7 +7,7 @@ import type {
 } from "../../catalog/src/index.ts";
 import { validateInstanceCatalog } from "../../catalog/src/index.ts";
 import type { CanonicalCutoffV1 } from "../../discovery/src/index.ts";
-import type { CanonicalLeaseGuardPort } from "../../canonical-source/src/index.ts";
+import type { CanonicalLeaseGuardPort } from "../../canonical-source/src/lease-guard-port.ts";
 
 export interface RehydrationRefV1 {
   readonly familyDefinitionHash: Hash;
@@ -78,6 +78,8 @@ export interface GraphLeaseBindingV1 {
   readonly graphRoot: Hash;
   readonly releaseProvenanceHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
 }
 
 export type ActiveReadyAuthorityBindingV1 = GraphLeaseBindingV1;
@@ -185,6 +187,8 @@ export class GraphViewLeaseV1 {
       graphRoot: binding.graphRoot,
       releaseProvenanceHash: binding.releaseProvenanceHash,
       candidatePartitionProofStorageHash: binding.candidatePartitionProofStorageHash,
+      nominationClosureRoot: binding.nominationClosureRoot,
+      nominationClosureStorageHash: binding.nominationClosureStorageHash,
     });
     const recomputedGraph = buildPersistedGraph(catalog);
     const suppliedGraphRoot = hashDomain("aloha/persisted-graph/v1", {
@@ -232,6 +236,8 @@ export class GraphViewLeaseV1 {
       graphRoot: binding.graphRoot,
       releaseProvenanceHash: binding.releaseProvenanceHash,
       candidatePartitionProofStorageHash: binding.candidatePartitionProofStorageHash,
+      nominationClosureRoot: binding.nominationClosureRoot,
+      nominationClosureStorageHash: binding.nominationClosureStorageHash,
       processEpoch,
     });
     this.edges = deepFreeze(runtimeEdges);

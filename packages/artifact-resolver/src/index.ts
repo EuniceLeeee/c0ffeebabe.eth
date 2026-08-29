@@ -12,6 +12,7 @@ import {
   type SchemaRef,
 } from "../../../specs/core-envelope/src/index.ts";
 import {
+  ARTIFACT_MIRROR_MAX_DECODED_BYTES,
   createArtifactResolutionClaim,
   createObservedImmutableMirror,
   decodeResolverPolicy,
@@ -67,7 +68,8 @@ function normalizeMirror(
   if (!isConcreteUint8Array(rawBytes)) {
     throw new TypeError("immutable mirror bytes must be a concrete Uint8Array");
   }
-  if (BigInt(rawBytes.length) > maxByteLength) return null;
+  if (BigInt(rawBytes.length) > maxByteLength
+    || rawBytes.length > ARTIFACT_MIRROR_MAX_DECODED_BYTES) return null;
   const bytes = new Uint8Array(rawBytes.length);
   for (let index = 0; index < rawBytes.length; index += 1) {
     bytes[index] = rawBytes[index]!;

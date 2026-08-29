@@ -1,23 +1,37 @@
-import { readFileSync } from "node:fs";
-import { encodeIntegrityReport, validateReferenceLockIntegrity } from "./index.ts";
+import { rmSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  createGitIndexSnapshot,
+  executeMaterializedIndexCli,
+  installSnapshotCompilerDependencies,
+} from "./index-snapshot.ts";
 
 function argument(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   return index < 0 ? undefined : process.argv[index + 1];
 }
-
-const repoPath = argument("--repo") ?? "/private/tmp/mev-s1-impl";
-const ledgerPath = argument("--ledger");
-const referenceLockPath = argument("--reference-lock");
-const report = validateReferenceLockIntegrity({ repoPath, ledger: ledgerPath, referenceLock: referenceLockPath });
-const output = encodeIntegrityReport(report);
-const outputPath = argument("--out");
-if (outputPath !== undefined) {
-  // The report is an explicit operator artifact; the validator itself never
-  // mutates the reference repository or the Aloha source tree.
-  const { writeFileSync } = await import("node:fs");
-  writeFileSync(outputPath, `${output}\n`, { encoding: "utf8", flag: "wx" });
-} else {
-  process.stdout.write(`${output}\n`);
+const repoPath = resolve(argument("--repo") ?? new URL("../../..", import.meta.url).pathname);
+const referenceRepoPath = resolve(argument("--reference-repo") ?? "/private/tmp/mev-s1-impl");
+const useIndexSnapshot = process.argv.includes("--index-snapshot");
+const materializedIndexRoot = process.argv.includes("--materialized-index-root");
+const generate = process.argv.includes("--generate");
+if (useIndexSnapshot && (generate || materializedIndexRoot)) {
+  throw new TypeError("index snapshot launcher flags are mutually exclusive");
 }
-if (report.verdict !== "pass") process.exitCode = 1;
+
+if (useIndexSnapshot) {
+  const snapshotRoot = createGitIndexSnapshot(repoPath);
+  try {
+    installSnapshotCompilerDependencies(snapshotRoot);
+    executeMaterializedIndexCli(snapshotRoot, [
+      "--repo", snapshotRoot,
+      "--reference-repo", referenceRepoPath,
+      "--materialized-index-root",
+    ]);
+  } finally {
+    rmSync(snapshotRoot, { recursive: true, force: true });
+  }
+} else {
+  const { runReferenceLockIntegrityCli } = await import("./runtime-cli.ts");
+  process.exitCode = await runReferenceLockIntegrityCli({ repoPath, referenceRepoPath, generate });
+}

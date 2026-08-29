@@ -1,1 +1,7 @@
-{"name":"@aloha/family-eigenpie","private":true,"type":"module","exports":{".":"./kernel/codec.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}
+{
+  "name": "@aloha/family-eigenpie",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/public.ts", "./family-definition": "./src/family-definition.ts", "./runtime": "./src/runtime.ts", "./kernel/codec": "./kernel/codec.ts" },
+  "scripts": { "test": "node --experimental-strip-types --test test/*.test.ts", "typecheck": "tsc -p tsconfig.json" }
+}

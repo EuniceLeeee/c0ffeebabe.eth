@@ -8,16 +8,20 @@ import {
   createTestQualifiedExecutorAuthorityIssuer,
   testReleaseApprovalPort,
 } from "../../scheduler/test/fixtures/qualified-release.ts";
+import { issueQualifiedSharedSchedulerRuntimePort } from "../../scheduler/src/internal/shared-runtime-owner.ts";
 import { hashDomain } from "../../canonical-codec/src/index.ts";
+import * as publicWorkPlane from "../src/index.ts";
 import {
   WorkPlane,
-  createCallerAuthority,
   type CapabilityWorkIntentV1,
 } from "../src/index.ts";
-import { createSchedulerOwnedFamilyExecutionPort } from "../src/internal/family-execution-port.ts";
+import {
+  createSchedulerOwnedFamilyExecutionPort,
+  issueQualifiedPhysicalExecutionPort,
+} from "../src/internal/family-execution-port.ts";
+import { issueTestWorkPlaneCallerCapability } from "./fixtures/caller-authority.ts";
 
 const source = { chainId: "1", number: "100", hash: "hash", stateRoot: "state" } as const;
-const caller = createCallerAuthority({ callerId: "caller", authorityToken: "authority" });
 const programInput = { amount: 1 } as const;
 const intent: CapabilityWorkIntentV1 = {
   intentId: "intent-1",
@@ -33,8 +37,14 @@ const intent: CapabilityWorkIntentV1 = {
   programInput,
 };
 
-test("work plane binds caller, schedules generic declaration, fences and seals receipt", async () => {
+test("public work-plane entrypoint exposes no caller authority issuer", () => {
+  assert.equal("createCallerAuthority" in publicWorkPlane, false);
+  assert.equal("issueWorkPlaneCallerCapability" in publicWorkPlane, false);
+});
+
+test("work plane consumes an owner-issued caller capability, schedules, fences and seals receipt", async () => {
   const scheduler = new WorkScheduler();
+  const caller = issueTestWorkPlaneCallerCapability({ scheduler, intent });
   const seen: string[] = [];
   const plane = new WorkPlane({
     scheduler,
@@ -44,9 +54,8 @@ test("work plane binds caller, schedules generic declaration, fences and seals r
       seen.push(`${ownerRef}:${capabilityRef}:${workClassRef}`);
     },
     fence: { assertCurrent: ({ source: current }) => assert.deepEqual(current, source) },
-    caller: { bind: ({ intent: value, requested }) => ({ ...requested, boundIntentId: String(value.intentId), sourceHash: source.hash, issuerRef: value.frozenProgramRef.issuerRef }) },
     execute: async ({ intent: received, permit }) => {
-      permit.assertCaller(caller);
+      permit.assertWork(String(received.intentId));
       assert.equal(received.programInputRef, "input-1");
       return { raw: true };
     },
@@ -56,31 +65,46 @@ test("work plane binds caller, schedules generic declaration, fences and seals r
   assert.equal(outcome.kind, "resolved");
   if (outcome.kind === "resolved") {
     assert.equal(outcome.fact, true);
-    assert.equal(outcome.receipt.callerId, "caller");
+    assert.match(outcome.receipt.callerId, /^0x[0-9a-f]{64}$/);
+    assert.match(outcome.receipt.authorityTokenHash, /^0x[0-9a-f]{64}$/);
     assert.equal(outcome.receipt.permitId !== null, true);
     assert.equal(outcome.receipt.failureCode, null);
   }
   assert.deepEqual(seen, ["opaque-owner:opaque-capability:opaque-class"]);
 });
 
-test("caller mismatch fails closed before a protocol result can be interpreted", async () => {
+test("forged, cloned, cross-intent and cross-scheduler caller capabilities fail closed before execution", async () => {
   const scheduler = new WorkScheduler();
+  let executions = 0;
   const plane = new WorkPlane({
     scheduler,
     resolveWorkClass: (value) => ({ phase: value.phase, lane: "startup-RPC-fast", resource: "rpc" }),
     decodeIntent: () => undefined,
     assertMembership: () => undefined,
     fence: { assertCurrent: () => undefined },
-    caller: { bind: ({ intent: value, requested }) => ({ ...requested, boundIntentId: value.intentId === "intent-1" ? "not-this-intent" : String(value.intentId), sourceHash: source.hash, issuerRef: value.frozenProgramRef.issuerRef }) },
-    execute: async () => "should-not-run",
+    execute: async () => { executions += 1; return "should-not-run"; },
     interpret: ({ result }) => result,
   });
-  const outcome = await plane.execute({ intent, caller: { callerId: "other", authorityToken: "other" } });
-  assert.equal(outcome.kind, "unresolved");
-  if (outcome.kind === "unresolved") {
-    assert.equal(outcome.failure.stage, "authority");
-    assert.equal(outcome.failure.retryClass, "invalid-program");
+  const genuine = issueTestWorkPlaneCallerCapability({ scheduler, intent });
+  const otherIntent = Object.freeze({ ...intent, intentId: "intent-other" });
+  const cases: readonly unknown[] = [
+    { callerId: "forged", authorityToken: "forged" },
+    Object.freeze({ ...genuine }),
+    new Proxy(genuine, {}),
+    issueTestWorkPlaneCallerCapability({ scheduler, intent: otherIntent }),
+    issueTestWorkPlaneCallerCapability({ scheduler: new WorkScheduler(), intent }),
+  ];
+  for (const caller of cases) {
+    const outcome = await plane.execute({ intent, caller: caller as never });
+    assert.equal(outcome.kind, "unresolved");
+    if (outcome.kind === "unresolved") {
+      assert.equal(outcome.failure.stage, "authority");
+      assert.equal(outcome.failure.code, "caller-mismatch");
+      assert.equal(outcome.failure.retryClass, "invalid-program");
+      assert.equal(outcome.receipt.callerId, "invalid");
+    }
   }
+  assert.equal(executions, 0);
 });
 
 test("program input is canonicalized, deeply frozen, and hash-bound", async () => {
@@ -96,13 +120,13 @@ test("program input is canonicalized, deeply frozen, and hash-bound", async () =
   };
   let seenInput!: CapabilityWorkIntentV1["programInput"];
   const scheduler = new WorkScheduler();
+  const caller = issueTestWorkPlaneCallerCapability({ scheduler, intent: frozenIntent });
   const plane = new WorkPlane({
     scheduler,
     resolveWorkClass: (value) => ({ phase: value.phase, lane: "startup-RPC-fast", resource: "rpc" }),
     decodeIntent: () => undefined,
     assertMembership: ({ programIssuerRef }) => assert.equal(programIssuerRef, "issuer-1"),
     fence: { assertCurrent: () => undefined },
-    caller: { bind: ({ intent: value, requested }) => ({ ...requested, boundIntentId: value.intentId, sourceHash: value.source.hash, issuerRef: value.frozenProgramRef.issuerRef }) },
     execute: async ({ intent: value }) => { seenInput = value.programInput; return true; },
     interpret: ({ result }) => result,
   });
@@ -123,11 +147,10 @@ test("program input hash mutation is an invalid program before execution", async
     decodeIntent: () => undefined,
     assertMembership: () => undefined,
     fence: { assertCurrent: () => undefined },
-    caller: { bind: ({ intent: value, requested }) => ({ ...requested, boundIntentId: value.intentId, sourceHash: value.source.hash, issuerRef: value.frozenProgramRef.issuerRef }) },
     execute: async () => { throw new Error("must not execute"); },
     interpret: ({ result }) => result,
   });
-  const outcome = await plane.execute({ intent: { ...intent, intentId: "intent-bad-input", frozenProgramRef: { ...intent.frozenProgramRef, programInputHash: "0xbad" } }, caller });
+  const outcome = await plane.execute({ intent: { ...intent, intentId: "intent-bad-input", frozenProgramRef: { ...intent.frozenProgramRef, programInputHash: "0xbad" } }, caller: undefined as never });
   assert.equal(outcome.kind, "unresolved");
   if (outcome.kind === "unresolved") assert.equal(outcome.failure.code, "invalid-intent");
 });
@@ -139,7 +162,6 @@ test("unknown intent fields and malformed caller input fail closed with a termin
     decodeIntent: () => undefined,
     assertMembership: () => undefined,
     fence: { assertCurrent: () => undefined },
-    caller: { bind: ({ intent: value, requested }) => ({ ...requested, boundIntentId: value.intentId, sourceHash: value.source.hash, issuerRef: value.frozenProgramRef.issuerRef }) },
     execute: async () => { throw new Error("must not execute"); },
     interpret: ({ result }) => result,
   });
@@ -166,6 +188,7 @@ test("Family receives only a stamped read-only fact view from the scheduler-owne
   const entry = registry.entries[0]!;
   const issuer = createTestQualifiedExecutorAuthorityIssuer(registry, testReleaseApprovalPort(registry, entry.releaseRoleManifestRoot, entry.candidateCommit));
   const capability = issuer.open({ worker: { ...entry, workerEpoch: "epoch-family" } as never });
+  const schedulerRuntime = issueQualifiedSharedSchedulerRuntimePort({ scheduler: new WorkScheduler(), issuer, capability });
   const fakeIssuers: readonly unknown[] = [
     { ...issuer },
     new Proxy(issuer, {}),
@@ -182,41 +205,49 @@ test("Family receives only a stamped read-only fact view from the scheduler-owne
   ];
   for (const fakeIssuer of fakeIssuers) {
     assert.throws(
-      () => createSchedulerOwnedFamilyExecutionPort({
+      () => issueQualifiedPhysicalExecutionPort({
         issuer: fakeIssuer as never,
         capability,
-        execute: async () => true,
+        schedulerRuntime,
+        execute: async () => ({ nested: { value: 7 } }),
       }),
       /not release-issued/,
     );
   }
   const secondIssuer = createTestQualifiedExecutorAuthorityIssuer(registry, testReleaseApprovalPort(registry, entry.releaseRoleManifestRoot, entry.candidateCommit));
   const secondCapability = secondIssuer.open({ worker: { ...entry, workerEpoch: "epoch-other" } as never });
-  const crossIssuerPort = createSchedulerOwnedFamilyExecutionPort({
-    issuer,
+  const secondSchedulerRuntime = issueQualifiedSharedSchedulerRuntimePort({ scheduler: new WorkScheduler(), issuer: secondIssuer, capability: secondCapability });
+  const crossPhysicalPort = issueQualifiedPhysicalExecutionPort({
+    issuer: secondIssuer,
     capability: secondCapability,
-    execute: async () => true,
+    schedulerRuntime: secondSchedulerRuntime,
+    execute: async () => ({ nested: { value: 7 } }),
   });
-  await assert.rejects(
-    crossIssuerPort.executeFrozenProgram({ intent, attemptId: "attempt-cross-issuer" }),
-    /not issued by this issuer/,
-  );
-  let callbackProvenance!: string;
-  const port = createSchedulerOwnedFamilyExecutionPort({
+  assert.throws(() => createSchedulerOwnedFamilyExecutionPort({
     issuer,
     capability,
-    execute: async ({ intent: received, provenance }) => {
-      callbackProvenance = provenance.executorSession;
+    physicalExecution: crossPhysicalPort,
+  }), /not bound to this qualified executor/);
+  const physicalExecution = issueQualifiedPhysicalExecutionPort({
+    issuer,
+    capability,
+    schedulerRuntime,
+    execute: async ({ intent: received }) => {
       assert.equal(received.source.hash, source.hash);
       return { nested: { value: 7 } };
     },
+  });
+  const port = createSchedulerOwnedFamilyExecutionPort({
+    issuer,
+    capability,
+    physicalExecution,
   });
   assert.equal("scheduler" in port, false);
   assert.equal("issuer" in port, false);
   const result = await port.executeFrozenProgram({ intent, attemptId: "attempt-family" });
   assert.equal(result.authorityRoot, issuer.authorityRoot);
   assert.equal(result.workerEpoch, "epoch-family");
-  assert.equal(result.executorSession, callbackProvenance);
+  assert.equal(result.executorSession.startsWith("0x"), true);
   assert.equal(result.executionSessionHash.startsWith("0x"), true);
   assert.equal(Object.isFrozen(result), true);
   assert.equal(Object.isFrozen(result.fact), true);

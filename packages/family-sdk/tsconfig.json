@@ -8,5 +8,5 @@
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "authoring/**/*.ts", "runtime-refs/**/*.ts", "conformance/**/*.ts", "test/**/*.test.ts"]
+  "include": ["src/**/*.ts", "authoring/**/*.ts", "runtime-refs/**/*.ts", "runtime/**/*.ts", "search-runtime/**/*.ts", "conformance/**/*.ts", "test/**/*.test.ts"]
 }

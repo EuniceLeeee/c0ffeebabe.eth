@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "forgeVersion": "1.7.1",
+  "forgeCommit": "4072e48705af9d93e3c0f6e29e93b5e9a40caed8",
+  "forgeBuildTimestamp": "2026-05-08T07:54:31.470926000Z (1778226871)",
+  "forgeBuildProfile": "dist",
+  "solcVersion": "0.8.24",
+  "solcCommit": "e11b9ed9"
+}

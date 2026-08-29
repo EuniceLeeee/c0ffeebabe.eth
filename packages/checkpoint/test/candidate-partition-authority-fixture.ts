@@ -28,6 +28,7 @@ import {
   type CandidatePartitionCapabilityV1,
   type CandidatePartitionBindingV1,
   type CandidatePartitionReaderPortV1,
+  type CandidateNominationQualificationBindingV1,
 } from "../../../specs/candidate-partition-authority/src/index.ts";
 import { issueCandidatePartitionProofIssuerPort } from "../../../specs/candidate-partition-authority/src/internal/issuer-owner.ts";
 import {
@@ -59,6 +60,7 @@ function verifyHex(bytes: Uint8Array, value: string): void {
 export function createCandidatePartitionProofIssuerFixture(
   binding: RuntimeReleaseBindingV1,
   currentBinding: () => RuntimeReleaseBindingV1 = () => binding,
+  qualifiedBindings?: readonly CandidateNominationQualificationBindingV1[],
 ): CandidatePartitionProofIssuerPortV1 {
   const release = (): CandidatePartitionProofReleaseBindingV1 => {
     const current = currentBinding();
@@ -70,6 +72,30 @@ export function createCandidatePartitionProofIssuerFixture(
   };
   return issueCandidatePartitionProofIssuerPort(Object.freeze({
     currentRelease: release,
+    assertNominationQualificationsQualified(bindings: readonly CandidateNominationQualificationBindingV1[]) {
+      const current = currentBinding();
+      const qualifiedByProposal = new Map(current.nominationQualificationSet.entries.map(entry => [
+        entry.proposalLeafDigest,
+        entry.qualificationLeafDigest,
+      ]));
+      if (bindings.length !== qualifiedByProposal.size) {
+        throw new TypeError("candidate partition fixture nomination qualification set is incomplete");
+      }
+      const seen = new Set<Hash>();
+      for (const value of bindings) {
+        if (seen.has(value.nominationProgramProposalLeafDigest)) {
+          throw new TypeError("candidate partition fixture nomination qualification set has duplicates");
+        }
+        seen.add(value.nominationProgramProposalLeafDigest);
+        if (qualifiedByProposal.get(value.nominationProgramProposalLeafDigest) !== value.qualificationLeafDigest) {
+          throw new TypeError("candidate partition fixture nomination qualification is not externally signed");
+        }
+      }
+      if (qualifiedBindings !== undefined
+        && JSON.stringify(bindings) !== JSON.stringify(qualifiedBindings)) {
+        throw new TypeError("candidate partition fixture nomination qualification binding mismatch");
+      }
+    },
     issue(payload: CandidatePartitionProofPayloadV1) {
       const payloadHash = candidatePartitionProofPayloadHash(payload);
       const proofId = candidatePartitionProofId(payloadHash);
@@ -127,6 +153,8 @@ export function issueCandidatePartitionCapabilityFixture(input: {
     cutoff: input.cutoff,
     candidatePartitionRoot: candidatePartitionRoot(input.candidates),
     candidatePartitionStorageHash: hashDomain("test/candidate-partition-storage", `${runId}:${checkpointRevision}`),
+    nominationClosureRoot: hashDomain("test/nomination-closure", `${runId}:${checkpointRevision}`),
+    nominationClosureStorageHash: hashDomain("test/nomination-closure-storage", `${runId}:${checkpointRevision}`),
     candidates: input.candidates,
     recentObservationRoot: hashDomain("test/candidate-partition-observation", `${runId}:${checkpointRevision}`),
     sourceCoverageRoot: hashDomain("test/candidate-partition-coverage", `${runId}:${checkpointRevision}`),

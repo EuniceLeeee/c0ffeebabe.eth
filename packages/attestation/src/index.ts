@@ -12,6 +12,7 @@ import {
   hashCanonicalPartition,
   hashDomain,
   hashDomainBytes,
+  type CanonicalJson,
   type CanonicalJsonObject,
   type Hash,
 } from "../../canonical-codec/src/index.ts";
@@ -19,6 +20,7 @@ import { validateInstancePublication, type InstancePublicationV1 } from "../../c
 import { candidatePartitionRoot, runCandidateKey, type CandidateRecordV1, type CanonicalCutoffV1 } from "../../discovery/src/index.ts";
 import type {
   AttestationCompositionBindingV1,
+  AttestationIdentityOriginV1,
   AttestationIdentityIssuerProofV1,
   AttestationOutcomeIssuerProofV1,
   AttestationIdentityProofVerificationContextV1,
@@ -31,6 +33,13 @@ import type {
   CandidatePartitionBindingV1,
   CandidatePartitionReaderPortV1,
 } from "../../../specs/candidate-partition-authority/src/index.ts";
+import {
+  candidateFinalOutcomeBodyHash as candidateFinalOutcomeBodyHashWire,
+  candidateFinalOutcomeHash as candidateFinalOutcomeHashWire,
+  exactOutcomePartitionRootV1,
+  validateCandidateFinalOutcomeV1 as validateCandidateFinalOutcomeWireV1,
+  type CandidateFinalOutcomeWireV1,
+} from "../../../specs/candidate-final-outcome/src/index.ts";
 
 export type {
   AttestationCompositionCapabilityV1,
@@ -43,6 +52,8 @@ export type {
   AttestationIdentityProofIssueInputV1,
   AttestationIdentityProofVerificationContextV1,
   AttestationReleaseProvenanceV2,
+  AttestationIdentityOriginV1,
+  VerifiedMemoReuseProofV1,
 } from "./internal-authority.ts";
 
 export { validateIdentityIssuerProof };
@@ -82,7 +93,7 @@ export interface FrameworkFailureBindingV1 {
   readonly authorityRoot: Hash;
   readonly runId: string;
   readonly familyCandidateKey: Hash;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly stage: AttestationStageV1;
   readonly failureClass: FrameworkFailureClassV1;
   readonly failureCode: string;
@@ -112,7 +123,7 @@ export interface OutcomeFailureV1 {
   readonly stage: AttestationStageV1;
   readonly failureCode: string;
   readonly attemptCount: string;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly evidenceRoot: Hash;
   /** Null for invalidProgram; mandatory framework binding for retryable. */
   readonly frameworkBinding: FrameworkFailureBindingV1 | null;
@@ -193,7 +204,7 @@ export interface RejectionEvidenceBundleV2 {
   readonly stage: Exclude<AttestationStageV1, "framework">;
   readonly familyDefinitionHash: Hash;
   readonly familyCandidateKey: Hash;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly identitySubjectHash: Hash | null;
   readonly instanceNominationKey: string | null;
   /** The framework executor authority that produced every child fact. */
@@ -231,7 +242,7 @@ export interface IssuedRejectionFactTokenV1 extends RejectionFactTokenV1 {
   readonly stage: Exclude<AttestationStageV1, "framework">;
   readonly familyDefinitionHash: Hash;
   readonly familyCandidateKey: Hash;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly identitySubjectHash: Hash | null;
   readonly instanceNominationKey: string | null;
   readonly executorAuthorityRoot: Hash;
@@ -359,7 +370,7 @@ export interface RejectionProofBindingV2 {
   readonly cutoffNumber: string;
   readonly familyDefinitionHash: Hash;
   readonly familyCandidateKey: Hash;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   /** Exactly one of identitySubjectHash and instanceNominationKey is set. */
   readonly identitySubjectHash: Hash | null;
   readonly instanceNominationKey: string | null;
@@ -430,6 +441,9 @@ export type AttestationPartitionCapabilityV1 = Omit<AttestationPartitionV1, "out
 export interface IdentityVerifiedObservationV1 {
   readonly kind: "identityVerified";
   readonly familyInstanceKey: string;
+  /** Opaque, Family-owned canonical identity value. Central code only
+   * canonicalizes it and commits it to the fixed memo hash domain. */
+  readonly identityMemo: CanonicalJson;
   readonly identityMemoHash: Hash;
   readonly descriptorHash: Hash;
   readonly evidenceRoot: Hash;
@@ -487,6 +501,12 @@ export interface InstanceLifecycleSingleFlightPort {
 
 export interface AttestationProgramPort {
   attestIdentity(candidate: CandidateRecordV1, cutoff: CanonicalCutoffV1, signal: AbortSignal): Promise<IdentityDecisionV1>;
+  reuseVerifiedMemo?(
+    candidate: CandidateRecordV1,
+    publication: InstancePublicationV1,
+    cutoff: CanonicalCutoffV1,
+    signal: AbortSignal,
+  ): Promise<VerifiedMemoReuseDecisionV1>;
   materializeAndProject(
     candidate: CandidateRecordV1,
     identity: IdentityVerifiedV1,
@@ -495,17 +515,37 @@ export interface AttestationProgramPort {
   ): Promise<InstanceDecisionV1>;
 }
 
+export type VerifiedMemoReuseDecisionV1 =
+  | {
+    readonly kind: "reusable";
+    readonly identity: IdentityVerifiedObservationV1;
+    readonly proof: import("./internal-authority.ts").VerifiedMemoReuseProofV1;
+  }
+  | { readonly kind: "requiresAttestation" };
+
 export interface AttestationRunSessionInputV1 {
   /** Checkpoint-issued opaque capability; all run/cutoff/root/key facts derive from it. */
   readonly candidatePartition: CandidatePartitionCapabilityV1;
   /** Opaque capabilities reissued by the constructor-bound authority from exact durable partials. */
   readonly identityResumeCapabilities?: readonly AttestationIdentityResumeCapabilityV1[];
+  /** Opaque capabilities reissued by the constructor-bound authority from exact durable final outcomes. */
+  readonly outcomeResumeCapabilities?: readonly AttestationOutcomeResumeCapabilityV1[];
+  /** One-shot handles issued from the active run's root-reachable prior
+   * VerifiedMemoSet. Callers cannot construct or pass publication DTOs. */
+  readonly verifiedMemoReuseCapabilities?: readonly AttestationVerifiedMemoReuseCapabilityV1[];
 }
 
 export type AttestationWriterCapabilityV1 = object;
 
 /** Process-local opaque proof that an exact durable partial identity may be reused once. */
 export type AttestationIdentityResumeCapabilityV1 = object;
+
+/** Process-local opaque proof that an exact durable final outcome may be reused once. */
+export type AttestationOutcomeResumeCapabilityV1 = object;
+
+/** Process-local opaque proof that one root-reachable verified publication
+ * may be considered once for one exact current candidate. */
+export type AttestationVerifiedMemoReuseCapabilityV1 = object;
 
 /**
  * Session-local proof that an identity result was produced by this session.
@@ -527,6 +567,31 @@ export interface AttestationIdentityResumeInputV1 {
   readonly releaseAuthorityRoot: Hash;
   readonly releaseProvenanceHash: Hash;
   readonly executorAuthorityRoot: Hash;
+}
+
+export interface AttestationOutcomeResumeInputV1 {
+  readonly runId: string;
+  readonly cutoff: CanonicalCutoffV1;
+  readonly candidatePartition: CandidatePartitionCapabilityV1;
+  readonly candidatePartitionReader: CandidatePartitionReaderPortV1;
+  readonly familyCandidateKey: Hash;
+  readonly candidate: CandidateRecordV1;
+  readonly outcome: AttestationOutcomeCapabilityV1;
+  readonly outcomeHash: Hash;
+  readonly attestationAuthorityRoot: Hash;
+  readonly releaseAuthorityRoot: Hash;
+  readonly releaseProvenanceHash: Hash;
+  readonly executorAuthorityRoot: Hash;
+}
+
+export interface AttestationVerifiedMemoReuseInputV1 {
+  readonly runId: string;
+  readonly cutoff: CanonicalCutoffV1;
+  readonly candidatePartition: CandidatePartitionCapabilityV1;
+  readonly candidatePartitionReader: CandidatePartitionReaderPortV1;
+  readonly familyCandidateKey: Hash;
+  readonly publication: InstancePublicationV1;
+  readonly verifiedMemoSetRoot: Hash;
 }
 
 export interface AttestationOutcomeBindingContextV1 {
@@ -603,6 +668,9 @@ export interface AttestationPersistenceBatchClaimV1 {
 export type AttestationIdentitySessionResultV1 =
   | {
     readonly kind: "identityVerified";
+    /** `durable` means the identity came from a checkpoint-owned partial and
+     * must not be enqueued as a new partial again. */
+    readonly durability: "new" | "durable";
     readonly candidate: CandidateRecordV1;
     readonly identity: IdentityVerifiedV1;
     readonly continuation: AttestationIdentityContinuationV1;
@@ -612,6 +680,9 @@ export type AttestationIdentitySessionResultV1 =
 
 export interface AttestationFinalSessionResultV1 {
   readonly kind: "final";
+  /** `durable` means the final outcome was rehydrated from checkpoint and
+   * must not be treated as a newly produced final. */
+  readonly durability: "new" | "durable";
   readonly outcome: AttestationOutcomeCapabilityV1;
   readonly persistenceCapability: AttestationPersistenceCapabilityV1;
 }
@@ -717,7 +788,7 @@ export interface StoredRetryableProbeV1 {
   readonly probeCapability: RetryableProbeCapabilityV1;
   readonly candidatePartition: CandidatePartitionCapabilityV1;
   readonly candidatePartitionBinding: CandidatePartitionBindingV1;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly before: Extract<CandidateFinalOutcomeV1, { readonly kind: "retryable" }>;
   readonly beforeOutcomeHash: Hash;
 }
@@ -743,7 +814,7 @@ export interface ProbeReceiptV1 {
   readonly afterOutcomeHash: Hash;
   readonly beforeKind: "retryable";
   readonly afterKind: CandidateFinalOutcomeV1["kind"];
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly evidenceRoot: Hash;
   readonly checkpointRevisionBefore: string;
   readonly checkpointRevision: string;
@@ -842,20 +913,26 @@ export function freezeCandidateRecord(
   context: string,
 ): CandidateRecordV1 {
   const candidate = exactObject(value, [
+    "kind",
+    "version",
     "familyId",
     "familyDefinitionHash",
     "instanceNominationKey",
     "familyCandidateKey",
-    "candidateSnapshotHash",
+    "candidateSubjectHash",
+    "candidateEvidenceRoot",
     "evidence",
   ], context);
   if (!Array.isArray(candidate.evidence)) throw new TypeError(`${context}.evidence must be an array`);
   const normalized = decodeCanonicalJson(encodeCanonicalBytes({
+    kind: candidate.kind === "aloha.candidate-record" ? candidate.kind : (() => { throw new TypeError(`${context}.kind is invalid`); })(),
+    version: candidate.version === "2" ? candidate.version : (() => { throw new TypeError(`${context}.version is invalid`); })(),
     familyId: assertNonEmptyString(candidate.familyId, `${context}.familyId`),
     familyDefinitionHash: assertHash(candidate.familyDefinitionHash, `${context}.familyDefinitionHash`),
     instanceNominationKey: assertNonEmptyString(candidate.instanceNominationKey, `${context}.instanceNominationKey`),
     familyCandidateKey: assertHash(candidate.familyCandidateKey, `${context}.familyCandidateKey`),
-    candidateSnapshotHash: assertHash(candidate.candidateSnapshotHash, `${context}.candidateSnapshotHash`),
+    candidateSubjectHash: assertHash(candidate.candidateSubjectHash, `${context}.candidateSubjectHash`),
+    candidateEvidenceRoot: assertHash(candidate.candidateEvidenceRoot, `${context}.candidateEvidenceRoot`),
     evidence: candidate.evidence,
   })) as unknown as CandidateRecordV1;
   return deepFreeze(normalized);
@@ -1027,7 +1104,7 @@ export function rejectionContextValues(context: RejectionFactContextV1): {
   readonly stage: Exclude<AttestationStageV1, "framework">;
   readonly familyDefinitionHash: Hash;
   readonly familyCandidateKey: Hash;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly identitySubjectHash: Hash | null;
   readonly instanceNominationKey: string | null;
 } {
@@ -1039,7 +1116,7 @@ export function rejectionContextValues(context: RejectionFactContextV1): {
   const cutoffStateRoot = assertHash(context.cutoff.stateRoot, "rejection.context.cutoff.stateRoot");
   const familyDefinitionHash = assertHash(candidate.familyDefinitionHash, "rejection.context.familyDefinitionHash");
   const familyCandidateKey = assertHash(candidate.familyCandidateKey, "rejection.context.familyCandidateKey");
-  const candidateSnapshotHash = assertHash(candidate.candidateSnapshotHash, "rejection.context.candidateSnapshotHash");
+  const candidateSubjectHash = assertHash(candidate.candidateSubjectHash, "rejection.context.candidateSubjectHash");
   const identitySubjectHash = context.identitySubjectHash === null
     ? null
     : assertHash(context.identitySubjectHash, "rejection.context.identitySubjectHash");
@@ -1057,7 +1134,7 @@ export function rejectionContextValues(context: RejectionFactContextV1): {
     stage: context.stage,
     familyDefinitionHash,
     familyCandidateKey,
-    candidateSnapshotHash,
+    candidateSubjectHash,
     identitySubjectHash,
     instanceNominationKey: context.stage === "identity" ? assertNonEmptyString(candidate.instanceNominationKey, "rejection.context.instanceNominationKey") : null,
   });
@@ -1186,7 +1263,7 @@ export function decodePersistedEffectObservationRecord(
 export function validateEvidenceBundle(value: unknown, context: string): RejectionEvidenceBundleV2 {
   const raw = exactObject(value, [
     "kind", "version", "issuerId", "runId", "chainId", "cutoffNumber", "cutoffHash", "cutoffStateRoot",
-    "stage", "familyDefinitionHash", "familyCandidateKey", "candidateSnapshotHash", "identitySubjectHash",
+    "stage", "familyDefinitionHash", "familyCandidateKey", "candidateSubjectHash", "identitySubjectHash",
     "instanceNominationKey", "executorAuthorityRoot", "workerEpoch", "executorSessionHash", "executionSessionHash", "request", "transportFacts", "effectObservations", "decisionCode", "decisionBytesHex",
     "requestFingerprint", "orderedTransportFactsRoot", "effectObservationRoot", "decisionBytesHash", "evidenceBundleRoot",
   ], context);
@@ -1243,7 +1320,7 @@ export function validateEvidenceBundle(value: unknown, context: string): Rejecti
     stage: stage as Exclude<AttestationStageV1, "framework">,
     familyDefinitionHash: assertHash(raw.familyDefinitionHash, `${context}.familyDefinitionHash`),
     familyCandidateKey: assertHash(raw.familyCandidateKey, `${context}.familyCandidateKey`),
-    candidateSnapshotHash: assertHash(raw.candidateSnapshotHash, `${context}.candidateSnapshotHash`),
+    candidateSubjectHash: assertHash(raw.candidateSubjectHash, `${context}.candidateSubjectHash`),
     identitySubjectHash,
     instanceNominationKey,
     executorAuthorityRoot: assertHash(raw.executorAuthorityRoot, `${context}.executorAuthorityRoot`),
@@ -1340,7 +1417,7 @@ export function contextMatchesEvidence(bundle: RejectionEvidenceBundleV2, contex
   const expected = rejectionContextValues(context);
   for (const field of [
     "runId", "chainId", "cutoffNumber", "cutoffHash", "cutoffStateRoot", "stage", "familyDefinitionHash",
-    "familyCandidateKey", "candidateSnapshotHash", "identitySubjectHash", "instanceNominationKey",
+    "familyCandidateKey", "candidateSubjectHash", "identitySubjectHash", "instanceNominationKey",
   ] as const) {
     if (bundle[field] !== expected[field]) throw new TypeError("rejection-fact-context-mismatch");
   }
@@ -1355,7 +1432,7 @@ export function rejectionProofFromEvidence(
     cutoffNumber: evidence.cutoffNumber,
     familyDefinitionHash: evidence.familyDefinitionHash,
     familyCandidateKey: evidence.familyCandidateKey,
-    candidateSnapshotHash: evidence.candidateSnapshotHash,
+    candidateSubjectHash: evidence.candidateSubjectHash,
     identitySubjectHash: evidence.identitySubjectHash,
     instanceNominationKey: evidence.instanceNominationKey,
     executorAuthorityRoot: evidence.executorAuthorityRoot,
@@ -1397,7 +1474,7 @@ export const decodeFrameworkFailureBinding = (
     "authorityRoot",
     "runId",
     "familyCandidateKey",
-    "candidateSnapshotHash",
+    "candidateSubjectHash",
     "stage",
     "failureClass",
     "failureCode",
@@ -1417,7 +1494,7 @@ export const decodeFrameworkFailureBinding = (
     authorityRoot: assertHash(binding.authorityRoot, `${context}.authorityRoot`),
     runId: assertNonEmptyString(binding.runId, `${context}.runId`),
     familyCandidateKey: assertHash(binding.familyCandidateKey, `${context}.familyCandidateKey`),
-    candidateSnapshotHash: assertHash(binding.candidateSnapshotHash, `${context}.candidateSnapshotHash`),
+    candidateSubjectHash: assertHash(binding.candidateSubjectHash, `${context}.candidateSubjectHash`),
     stage: binding.stage as AttestationStageV1,
     failureClass: binding.failureClass as FrameworkFailureClassV1,
     failureCode: assertNonEmptyString(binding.failureCode, `${context}.failureCode`),
@@ -1440,7 +1517,7 @@ export function frameworkContextMatches(
   if (
     binding.runId !== context.runId
     || binding.familyCandidateKey !== context.candidate.familyCandidateKey
-    || binding.candidateSnapshotHash !== context.candidate.candidateSnapshotHash
+    || binding.candidateSubjectHash !== context.candidate.candidateSubjectHash
     || binding.stage !== context.stage
   ) throw new TypeError("framework-failure-context-mismatch");
 }
@@ -1479,7 +1556,7 @@ export function sealProbeReceipt(input: ProbeReceiptInputV1): ProbeReceiptV1 {
 export function validateProbeReceipt(raw: ProbeReceiptV1): ProbeReceiptV1 {
   const value = exactObject(raw, [
     "runId", "familyCandidateKey", "cutoff", "beforeOutcomeHash", "afterOutcomeHash",
-    "beforeKind", "afterKind", "candidateSnapshotHash", "evidenceRoot",
+    "beforeKind", "afterKind", "candidateSubjectHash", "evidenceRoot",
     "checkpointRevisionBefore", "checkpointRevision", "priorOutcomePartitionRoot",
     "activeOutcomePartitionRoot", "canonicalJournalEpoch", "canonicalJournalRoot",
     "transitionAuthorityRoot", "sequence", "priorReceiptHash", "priorLineageRoot",
@@ -1497,7 +1574,7 @@ export function validateProbeReceipt(raw: ProbeReceiptV1): ProbeReceiptV1 {
     afterOutcomeHash: assertHash(value.afterOutcomeHash, "probeReceipt.afterOutcomeHash"),
     beforeKind: "retryable",
     afterKind: value.afterKind as ProbeReceiptV1["afterKind"],
-    candidateSnapshotHash: assertHash(value.candidateSnapshotHash, "probeReceipt.candidateSnapshotHash"),
+    candidateSubjectHash: assertHash(value.candidateSubjectHash, "probeReceipt.candidateSubjectHash"),
     evidenceRoot: assertHash(value.evidenceRoot, "probeReceipt.evidenceRoot"),
     checkpointRevisionBefore: assertDecimalString(value.checkpointRevisionBefore, "probeReceipt.checkpointRevisionBefore"),
     checkpointRevision: assertDecimalString(value.checkpointRevision, "probeReceipt.checkpointRevision"),
@@ -1534,7 +1611,7 @@ export function validateProbeReceipt(raw: ProbeReceiptV1): ProbeReceiptV1 {
   return sealed;
 }
 export function candidateFinalOutcomeHash(outcome: CandidateFinalOutcomeV1): Hash {
-  return hashDomain("aloha/candidate-final-outcome/v1", outcome);
+  return candidateFinalOutcomeHashWire(outcome as unknown as CandidateFinalOutcomeWireV1);
 }
 
 /** Hash of the exact final outcome body before the release-bound outcome proof.
@@ -1544,10 +1621,7 @@ export function candidateFinalOutcomeHash(outcome: CandidateFinalOutcomeV1): Has
 export function candidateFinalOutcomeBodyHash(
   outcome: CandidateFinalOutcomeV1 | Omit<CandidateFinalOutcomeV1, "outcomeIssuerProof">,
 ): Hash {
-  const { outcomeIssuerProof: _outcomeIssuerProof, ...body } = outcome as CandidateFinalOutcomeV1 & {
-    readonly outcomeIssuerProof?: unknown;
-  };
-  return hashDomain("aloha/candidate-final-outcome-body/v1", body);
+  return candidateFinalOutcomeBodyHashWire(outcome as unknown as CandidateFinalOutcomeWireV1);
 }
 
 export const compareText = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
@@ -1575,7 +1649,7 @@ export function validateFailure(
 ): OutcomeFailureV1 {
   const failure = exactObject(
     value,
-    ["stage", "failureCode", "attemptCount", "candidateSnapshotHash", "evidenceRoot", "frameworkBinding"],
+    ["stage", "failureCode", "attemptCount", "candidateSubjectHash", "evidenceRoot", "frameworkBinding"],
     context,
   );
   if (!ATTESTATION_STAGES.includes(failure.stage as AttestationStageV1)) {
@@ -1596,7 +1670,7 @@ export function validateFailure(
       || frameworkBinding.stage !== failure.stage
       || frameworkBinding.failureCode !== failure.failureCode
       || frameworkBinding.attemptCount !== attemptCount
-      || frameworkBinding.candidateSnapshotHash !== failure.candidateSnapshotHash
+      || frameworkBinding.candidateSubjectHash !== failure.candidateSubjectHash
       || frameworkBinding.evidenceRoot !== failure.evidenceRoot
     )
   ) throw new TypeError(`${context}.frameworkBinding lineage mismatch`);
@@ -1604,7 +1678,7 @@ export function validateFailure(
     stage: failure.stage as OutcomeFailureV1["stage"],
     failureCode: assertNonEmptyString(failure.failureCode, `${context}.failureCode`),
     attemptCount,
-    candidateSnapshotHash: assertHash(failure.candidateSnapshotHash, `${context}.candidateSnapshotHash`),
+    candidateSubjectHash: assertHash(failure.candidateSubjectHash, `${context}.candidateSubjectHash`),
     evidenceRoot: assertHash(failure.evidenceRoot, `${context}.evidenceRoot`),
     frameworkBinding,
   });
@@ -1615,7 +1689,7 @@ export function validateDerivedRejectionProof(
   context: string,
 ): RejectionProofBindingV2 {
   const proof = exactObject(value, [
-    "stage", "chainId", "cutoffNumber", "familyDefinitionHash", "familyCandidateKey", "candidateSnapshotHash",
+    "stage", "chainId", "cutoffNumber", "familyDefinitionHash", "familyCandidateKey", "candidateSubjectHash",
     "identitySubjectHash", "instanceNominationKey", "executorAuthorityRoot", "workerEpoch", "executorSessionHash", "executionSessionHash", "cutoffHash", "cutoffStateRoot", "orderedTransportFactsRoot",
     "effectObservationRoot", "decisionCode", "decisionBytesHash", "requestFingerprint", "evidenceBundleRoot",
     "authorityRoot", "proofHash",
@@ -1627,7 +1701,7 @@ export function validateDerivedRejectionProof(
   assertDecimalString(proof.cutoffNumber, `${context}.cutoffNumber`);
   assertHash(proof.familyDefinitionHash, `${context}.familyDefinitionHash`);
   assertHash(proof.familyCandidateKey, `${context}.familyCandidateKey`);
-  assertHash(proof.candidateSnapshotHash, `${context}.candidateSnapshotHash`);
+  assertHash(proof.candidateSubjectHash, `${context}.candidateSubjectHash`);
   if (proof.identitySubjectHash !== null) assertHash(proof.identitySubjectHash, `${context}.identitySubjectHash`);
   if (proof.instanceNominationKey !== null) assertNonEmptyString(proof.instanceNominationKey, `${context}.instanceNominationKey`);
   assertHash(proof.executorAuthorityRoot, `${context}.executorAuthorityRoot`);
@@ -1663,6 +1737,7 @@ export function validateVerifiedPublication(
     || publication.familyDefinitionHash !== candidate.familyDefinitionHash
     || publication.familyCandidateKey !== candidate.familyCandidateKey
     || publication.instanceKey !== identity.familyInstanceKey
+    || encodeCanonicalJson(publication.identityMemo) !== encodeCanonicalJson(identity.identityMemo)
     || publication.identityMemoHash !== identity.identityMemoHash
     || publication.descriptorHash !== identity.descriptorHash
     || publication.evidenceRoot !== identity.evidenceRoot
@@ -1673,18 +1748,28 @@ export function validateVerifiedPublication(
   ) throw new Error("publication-lineage-mismatch");
 }
 
+/** Fixed central commitment for the Family-owned opaque identity value. */
+export function identityMemoHash(value: CanonicalJson): Hash {
+  return hashDomain("aloha/identity-memo/v1", value);
+}
+
 export function validateIdentityObservation(
   value: unknown,
   context: string,
 ): IdentityVerifiedObservationV1 {
   const raw = exactObject(value, [
-    "kind", "familyInstanceKey", "identityMemoHash", "descriptorHash", "evidenceRoot",
+    "kind", "familyInstanceKey", "identityMemo", "identityMemoHash", "descriptorHash", "evidenceRoot",
   ], context);
   if (raw.kind !== "identityVerified") throw new TypeError(`${context}.kind is invalid`);
+  const identityMemo = decodeCanonicalJson(encodeCanonicalJson(raw.identityMemo));
+  const expectedIdentityMemoHash = identityMemoHash(identityMemo);
+  const memoHash = assertHash(raw.identityMemoHash, `${context}.identityMemoHash`);
+  if (memoHash !== expectedIdentityMemoHash) throw new TypeError(`${context}.identityMemoHash does not match identityMemo`);
   return deepFreeze({
     kind: "identityVerified" as const,
     familyInstanceKey: assertNonEmptyString(raw.familyInstanceKey, `${context}.familyInstanceKey`),
-    identityMemoHash: assertHash(raw.identityMemoHash, `${context}.identityMemoHash`),
+    identityMemo,
+    identityMemoHash: memoHash,
     descriptorHash: assertHash(raw.descriptorHash, `${context}.descriptorHash`),
     evidenceRoot: assertHash(raw.evidenceRoot, `${context}.evidenceRoot`),
   });
@@ -1705,6 +1790,7 @@ export function identityObservationSemanticHash(
   candidatePartitionRoot: Hash,
   candidate: CandidateRecordV1,
   identity: IdentityVerifiedObservationV1,
+  identityOrigin: AttestationIdentityOriginV1,
   authority: AttestationIdentitySemanticAuthorityV1,
 ): Hash {
   return hashDomain("aloha/attestation-identity-observation/v1", {
@@ -1713,6 +1799,7 @@ export function identityObservationSemanticHash(
     candidatePartitionRoot,
     candidate,
     identity,
+    identityOrigin,
     releaseProvenanceHash: authority.releaseProvenanceHash,
     attestationAuthorityRoot: authority.attestationAuthorityRoot,
     releaseAuthorityRoot: authority.releaseAuthorityRoot,
@@ -1728,6 +1815,7 @@ export function verifiedIdentitySubjectHash(
   return hashDomain("aloha/verified-identity-subject/v1", {
     familyDefinitionHash: candidate.familyDefinitionHash,
     familyInstanceKey: identity.familyInstanceKey,
+    identityMemo: identity.identityMemo,
     identityMemoHash: identity.identityMemoHash,
     descriptorHash: identity.descriptorHash,
   });
@@ -1739,6 +1827,7 @@ export function identityProofVerificationContext(
   candidatePartitionRoot: Hash,
   candidate: CandidateRecordV1,
   identity: IdentityVerifiedObservationV1,
+  identityOrigin: AttestationIdentityOriginV1,
   authority: AttestationIdentitySemanticAuthorityV1,
 ): AttestationIdentityProofVerificationContextV1 {
   const identityObservation = validateIdentityObservation(identity, "attestation.identityObservation");
@@ -1748,6 +1837,7 @@ export function identityProofVerificationContext(
     candidatePartitionRoot: assertHash(candidatePartitionRoot, "identityProof.candidatePartitionRoot"),
     candidate,
     identityObservation,
+    identityOrigin,
     identitySubjectHash: verifiedIdentitySubjectHash(candidate, identityObservation),
     identitySemanticHash: identityObservationSemanticHash(
       runId,
@@ -1755,6 +1845,7 @@ export function identityProofVerificationContext(
       candidatePartitionRoot,
       candidate,
       identityObservation,
+      identityOrigin,
       authority,
     ),
     releaseProvenanceHash: authority.releaseProvenanceHash,
@@ -1771,162 +1862,12 @@ export function validateCandidateFinalOutcome(
   candidate: CandidateRecordV1,
   outcome: CandidateFinalOutcomeV1,
 ): void {
-  assertPlainObject(outcome, "candidateFinalOutcome");
-  assertNonEmptyString(outcome.kind, "candidateFinalOutcome.kind");
-  const attestationAuthorityRoot = assertHash(
-    outcome.attestationAuthorityRoot,
-    "candidateFinalOutcome.attestationAuthorityRoot",
-  );
-  const executorAuthorityRoot = assertHash(
-    outcome.executorAuthorityRoot,
-    "candidateFinalOutcome.executorAuthorityRoot",
-  );
-  const releaseAuthorityRoot = assertHash(
-    outcome.releaseAuthorityRoot,
-    "candidateFinalOutcome.releaseAuthorityRoot",
-  );
-  const releaseProvenanceHash = assertHash(
-    outcome.releaseProvenanceHash,
-    "candidateFinalOutcome.releaseProvenanceHash",
-  );
-  const outcomeIssuerProof = validateOutcomeIssuerProof(
-    outcome.outcomeIssuerProof,
-    null,
-  );
-  const identityProof = outcome.identityProof === null
-    ? null
-    : validateIdentityIssuerProof(outcome.identityProof);
-  const identityObservation = identityProof === null
-    ? null
-    : validateIdentityObservation(identityProof.identityObservation, "candidateFinalOutcome.identityProof.identityObservation");
-  if (identityProof !== null && identityObservation !== null) {
-    if (
-      identityProof.runId !== runId
-      || encodeCanonicalJson(identityProof.cutoff) !== encodeCanonicalJson(cutoff)
-      || identityProof.familyDefinitionHash !== candidate.familyDefinitionHash
-      || identityProof.familyCandidateKey !== candidate.familyCandidateKey
-      || identityProof.candidateSnapshotHash !== candidate.candidateSnapshotHash
-      || identityProof.candidatePartitionRoot !== outcomeIssuerProof.candidatePartitionRoot
-      || identityProof.releaseProvenanceHash !== releaseProvenanceHash
-      || identityProof.attestationAuthorityRoot !== attestationAuthorityRoot
-      || identityProof.executorAuthorityRoot !== executorAuthorityRoot
-      || identityProof.releaseAuthorityRoot !== releaseAuthorityRoot
-      || identityProof.frameworkAuthorityRoot !== outcomeIssuerProof.frameworkAuthorityRoot
-      || identityProof.issuerKeyId !== outcomeIssuerProof.issuerKeyId
-      || identityProof.identitySubjectHash !== verifiedIdentitySubjectHash(candidate, identityObservation)
-      || identityProof.identitySemanticHash !== identityObservationSemanticHash(
-        runId,
-        cutoff,
-        identityProof.candidatePartitionRoot,
-        candidate,
-        identityObservation,
-        {
-          releaseProvenanceHash,
-          attestationAuthorityRoot,
-          releaseAuthorityRoot,
-          frameworkAuthorityRoot: identityProof.frameworkAuthorityRoot,
-          executorAuthorityRoot,
-          attestationProofIssuerKeyId: identityProof.issuerKeyId,
-        },
-      )
-    ) throw new TypeError("candidateFinalOutcome.identityProof lineage mismatch");
-  }
-  let rebuilt: CandidateFinalOutcomeBodyV1;
-  switch (outcome.kind) {
-    case "verified":
-      if (identityProof === null) throw new TypeError("candidateFinalOutcome.identityProof is required for verified");
-      assertExactKeys(outcome, ["kind", "runCandidateKey", "familyCandidateKey", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "instanceKey", "publication", "identityProof", "outcomeIssuerProof"], "candidateFinalOutcome");
-      assertHash(outcome.runCandidateKey, "candidateFinalOutcome.runCandidateKey");
-      assertHash(outcome.familyCandidateKey, "candidateFinalOutcome.familyCandidateKey");
-      assertNonEmptyString(outcome.instanceKey, "candidateFinalOutcome.instanceKey");
-      validateVerifiedPublication(candidate, identityObservation!, cutoff, outcome.publication);
-      rebuilt = deepFreeze({
-        kind: "verified",
-        runCandidateKey: runCandidateKey(runId, candidate.familyCandidateKey),
-        familyCandidateKey: candidate.familyCandidateKey,
-        instanceKey: outcome.instanceKey,
-        publication: outcome.publication,
-        identityProof: identityProof!,
-        outcomeIssuerProof,
-      });
-      break;
-    case "chainProvenRejected":
-      assertExactKeys(outcome, ["kind", "runCandidateKey", "familyCandidateKey", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "proof", "rejectionEvidence", "identityProof", "outcomeIssuerProof"], "candidateFinalOutcome");
-      assertHash(outcome.runCandidateKey, "candidateFinalOutcome.runCandidateKey");
-      assertHash(outcome.familyCandidateKey, "candidateFinalOutcome.familyCandidateKey");
-      {
-        const evidence = validateEvidenceBundle(outcome.rejectionEvidence, "candidateFinalOutcome.rejectionEvidence");
-        const proof = validateDerivedRejectionProof(outcome.proof, evidence, "candidateFinalOutcome.proof");
-        const context: RejectionFactContextV1 = {
-          runId,
-          candidate,
-          cutoff,
-          stage: proof.stage,
-          identitySubjectHash: proof.stage === "identity" ? null : proof.identitySubjectHash,
-        };
-        contextMatchesEvidence(evidence, context);
-        if ((proof.stage === "identity") !== (identityProof === null)) {
-          throw new TypeError("candidateFinalOutcome.identityProof rejection-stage mismatch");
-        }
-        if (identityProof !== null && identityProof.identitySubjectHash !== proof.identitySubjectHash) {
-          throw new TypeError("candidateFinalOutcome.identityProof rejection-subject mismatch");
-        }
-        if (proof.executorAuthorityRoot !== executorAuthorityRoot) {
-          throw new TypeError("candidateFinalOutcome.executorAuthorityRoot mismatch");
-        }
-        rebuilt = deepFreeze({
-          kind: "chainProvenRejected",
-          runCandidateKey: runCandidateKey(runId, candidate.familyCandidateKey),
-          familyCandidateKey: candidate.familyCandidateKey,
-          proof,
-          rejectionEvidence: evidence,
-          identityProof,
-          outcomeIssuerProof,
-        });
-      }
-      break;
-    case "retryable":
-      assertExactKeys(outcome, ["kind", "runCandidateKey", "familyCandidateKey", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "failure", "identityProof", "outcomeIssuerProof"], "candidateFinalOutcome");
-      assertHash(outcome.runCandidateKey, "candidateFinalOutcome.runCandidateKey");
-      assertHash(outcome.familyCandidateKey, "candidateFinalOutcome.familyCandidateKey");
-      rebuilt = deepFreeze({
-        kind: outcome.kind,
-        runCandidateKey: runCandidateKey(runId, candidate.familyCandidateKey),
-        familyCandidateKey: candidate.familyCandidateKey,
-        failure: validateFailure(outcome.failure, "candidateFinalOutcome.failure", "retryable"),
-        identityProof,
-        outcomeIssuerProof,
-      });
-      break;
-    case "invalidProgram":
-      assertExactKeys(outcome, ["kind", "runCandidateKey", "familyCandidateKey", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "failure", "identityProof", "outcomeIssuerProof"], "candidateFinalOutcome");
-      assertHash(outcome.runCandidateKey, "candidateFinalOutcome.runCandidateKey");
-      assertHash(outcome.familyCandidateKey, "candidateFinalOutcome.familyCandidateKey");
-      rebuilt = deepFreeze({
-        kind: outcome.kind,
-        runCandidateKey: runCandidateKey(runId, candidate.familyCandidateKey),
-        familyCandidateKey: candidate.familyCandidateKey,
-        failure: validateFailure(outcome.failure, "candidateFinalOutcome.failure", "invalidProgram"),
-        identityProof,
-        outcomeIssuerProof,
-      });
-      break;
-    default:
-      throw new Error("unknown-candidate-outcome");
-  }
-  const normalized = deepFreeze({
-    ...rebuilt,
-    attestationAuthorityRoot,
-    releaseAuthorityRoot,
-    releaseProvenanceHash,
-    executorAuthorityRoot,
-  }) as CandidateFinalOutcomeV1;
-  if (encodeCanonicalJson(normalized) !== encodeCanonicalJson(outcome)) {
-    throw new Error("candidate-outcome-lineage-mismatch");
-  }
-  if (candidateFinalOutcomeBodyHash(normalized) !== normalized.outcomeIssuerProof.outcomeBodyHash) {
-    throw new Error("candidate-outcome-proof-body-hash-mismatch");
-  }
+  validateCandidateFinalOutcomeWireV1({
+    runId,
+    cutoff,
+    candidatePartitionRoot: outcome.outcomeIssuerProof.candidatePartitionRoot,
+    candidate,
+  }, outcome);
 }
 
 export function validateAttestationPartition(
@@ -1979,7 +1920,7 @@ export function validateAttestationPartition(
   if (encodeCanonicalJson(expectedAccounting) !== encodeCanonicalJson(partition.accounting)) {
     throw new Error("outcome-accounting-mismatch");
   }
-  const recomputedRoot = hashDomain("aloha/exact-outcome-partition/v1", {
+  const recomputedRoot = exactOutcomePartitionRootV1({
     runId: partition.runId,
     cutoff: partition.cutoff,
     candidatePartitionRoot: partition.candidatePartitionRoot,
@@ -1987,7 +1928,7 @@ export function validateAttestationPartition(
     releaseAuthorityRoot: partition.releaseAuthorityRoot,
     releaseProvenanceHash: partition.releaseProvenanceHash,
     executorAuthorityRoot: partition.executorAuthorityRoot,
-    outcomesRoot: hashCanonicalPartition("aloha/candidate-outcomes/v1", sorted),
+    outcomes: sorted as unknown as readonly CandidateFinalOutcomeWireV1[],
   });
   if (recomputedRoot !== partition.exactOutcomePartitionRoot) throw new Error("outcome-partition-root-mismatch");
 }

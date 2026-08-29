@@ -1,5 +1,5 @@
-import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
+import { DatabaseSync as NodeDatabaseSync } from "node:sqlite";
 import {
   decodeCanonicalJson,
   encodeCanonicalJson,
@@ -47,17 +47,12 @@ export class SQLiteDriverUnavailableError extends Error {
 /** Load the host's real SQLite driver, or fail with an explicit capability error. */
 export function loadNodeSqliteDriver(): SqliteDriver {
   try {
-    const require = createRequire(import.meta.url);
-    const loaded = require("node:sqlite") as {
-      readonly DatabaseSync?: new (filename: string) => SqliteDatabase;
-    };
-    if (typeof loaded.DatabaseSync !== "function") {
+    if (typeof NodeDatabaseSync !== "function") {
       throw new Error("node:sqlite does not expose DatabaseSync");
     }
-    const DatabaseSync = loaded.DatabaseSync;
     return Object.freeze({
       open(filename: string): SqliteDatabase {
-        return new DatabaseSync(filename);
+        return new NodeDatabaseSync(filename);
       },
     });
   } catch (error) {
@@ -124,6 +119,30 @@ export class CorruptDurableStoreError extends DurableStoreError {
   }
 }
 
+export class AppendSequenceConflictError extends DurableStoreError {
+  readonly namespace: string;
+  readonly expectedSequence: string;
+  readonly actualSequence: string;
+
+  constructor(namespace: string, expectedSequence: string, actualSequence: string) {
+    super(
+      "append-sequence-conflict",
+      `durable append-log ${namespace} expected sequence ${expectedSequence}, received ${actualSequence}`,
+    );
+    this.name = "AppendSequenceConflictError";
+    this.namespace = namespace;
+    this.expectedSequence = expectedSequence;
+    this.actualSequence = actualSequence;
+  }
+}
+
+export class AppendEventConflictError extends DurableStoreError {
+  constructor(namespace: string, eventId: Hash) {
+    super("append-event-conflict", `durable append-log ${namespace} already contains event ${eventId}`);
+    this.name = "AppendEventConflictError";
+  }
+}
+
 export interface WriterLease {
   readonly owner: string;
   readonly token: string;
@@ -143,6 +162,47 @@ export interface DurableContentRecord {
   readonly kind: string;
   readonly bytes: Uint8Array;
   readonly references: readonly Hash[];
+}
+
+/** Protocol-neutral exact bytes accepted by one durable append-log namespace. */
+export interface DurableAppendRequest {
+  readonly namespace: string;
+  readonly sequence: string;
+  readonly eventId: Hash;
+  readonly contentSha256: Hash;
+  readonly bytes: Uint8Array;
+}
+
+/** Receipt returned only after SQLite has committed under WAL + synchronous=FULL. */
+export interface DurableAppendReceipt {
+  readonly namespace: string;
+  readonly sequence: string;
+  readonly eventId: Hash;
+  readonly contentSha256: Hash;
+  readonly byteLength: string;
+  readonly offsetStart: string;
+  readonly offsetEnd: string;
+  readonly fsynced: true;
+}
+
+export interface DurableAppendRecord extends DurableAppendReceipt {
+  readonly bytes: Uint8Array;
+}
+
+/** Opaque proof that this exact row was committed by SQLiteDurableStore. */
+export type DurableAppendCapabilityV1 = object;
+
+const durableAppendCapabilities = new WeakMap<object, DurableAppendRecord>();
+
+export function readDurableAppendCapabilityV1(
+  capability: DurableAppendCapabilityV1,
+): DurableAppendRecord {
+  if (capability === null || typeof capability !== "object" || Reflect.ownKeys(capability).length !== 0) {
+    throw new TypeError("durable append capability is invalid");
+  }
+  const record = durableAppendCapabilities.get(capability);
+  if (record === undefined) throw new TypeError("durable append capability was not owner-issued");
+  return Object.freeze({ ...record, bytes: Uint8Array.from(record.bytes) });
 }
 
 export interface DurableStoreOptions {
@@ -193,6 +253,14 @@ const DURABLE_TABLE_NAMES = [
   "durable_store_identity",
   DURABLE_SCHEMA_CONTRACT_TABLE,
 ] as const;
+const DURABLE_APPEND_LOG_SCHEMA_VERSION = "1";
+const DURABLE_APPEND_LOG_SCHEMA_CONTRACT_KIND = "aloha/durable-append-log-sqlite-schema/v1";
+const DURABLE_APPEND_LOG_SCHEMA_CONTRACT_TABLE = "durable_append_log_schema_contract";
+const DURABLE_APPEND_LOG_TABLE = "durable_append_log";
+const DURABLE_APPEND_LOG_TABLE_NAMES = [
+  DURABLE_APPEND_LOG_TABLE,
+  DURABLE_APPEND_LOG_SCHEMA_CONTRACT_TABLE,
+] as const;
 const DEFAULT_LEASE_TTL_MS = 30_000;
 
 type SchemaColumn = Readonly<{
@@ -215,6 +283,12 @@ type SchemaTable = Readonly<{
   sql: string;
   columns: readonly SchemaColumn[];
   indexes: readonly SchemaIndex[];
+}>;
+
+type SchemaTrigger = Readonly<{
+  name: string;
+  tableName: string;
+  sql: string;
 }>;
 
 type SchemaContract = Readonly<{
@@ -270,6 +344,42 @@ const DURABLE_SCHEMA_CREATE_SQL = Object.freeze({
         role_binding_hash TEXT
       );`,
   });
+
+const DURABLE_APPEND_LOG_SCHEMA_CREATE_SQL = Object.freeze({
+  durable_append_log: `
+      CREATE TABLE durable_append_log (
+        namespace TEXT NOT NULL CHECK (length(namespace) > 0),
+        sequence TEXT NOT NULL CHECK (sequence = '0' OR (length(sequence) > 0 AND sequence NOT LIKE '0%' AND sequence NOT GLOB '*[^0-9]*')),
+        event_id TEXT NOT NULL,
+        content_sha256 TEXT NOT NULL,
+        bytes BLOB NOT NULL,
+        byte_length TEXT NOT NULL CHECK (byte_length = '0' OR (length(byte_length) > 0 AND byte_length NOT LIKE '0%' AND byte_length NOT GLOB '*[^0-9]*')),
+        offset_start TEXT NOT NULL CHECK (offset_start = '0' OR (length(offset_start) > 0 AND offset_start NOT LIKE '0%' AND offset_start NOT GLOB '*[^0-9]*')),
+        offset_end TEXT NOT NULL CHECK (offset_end = '0' OR (length(offset_end) > 0 AND offset_end NOT LIKE '0%' AND offset_end NOT GLOB '*[^0-9]*')),
+        PRIMARY KEY(namespace, sequence),
+        UNIQUE(namespace, event_id)
+      );`,
+  durable_append_log_schema_contract: `
+      CREATE TABLE durable_append_log_schema_contract (
+        contract_id INTEGER PRIMARY KEY CHECK (contract_id = 1),
+        schema_version TEXT NOT NULL,
+        schema_digest TEXT NOT NULL,
+        core_schema_digest TEXT NOT NULL,
+        core_instance_nonce TEXT NOT NULL
+      );`,
+  durable_append_log_no_update: `
+      CREATE TRIGGER durable_append_log_no_update
+      BEFORE UPDATE ON durable_append_log
+      BEGIN
+        SELECT RAISE(ABORT, 'durable append-log is append-only');
+      END;`,
+  durable_append_log_no_delete: `
+      CREATE TRIGGER durable_append_log_no_delete
+      BEFORE DELETE ON durable_append_log
+      BEGIN
+        SELECT RAISE(ABORT, 'durable append-log is append-only');
+      END;`,
+});
 
 function normalizeSchemaSql(value: unknown, context: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -348,9 +458,74 @@ const EXPECTED_SCHEMA_DESCRIPTOR: readonly SchemaTable[] = Object.freeze([
   },
 ]);
 
+const EXPECTED_APPEND_LOG_SCHEMA_DESCRIPTOR: readonly SchemaTable[] = Object.freeze([
+  {
+    name: DURABLE_APPEND_LOG_TABLE,
+    sql: normalizeSchemaSql(
+      DURABLE_APPEND_LOG_SCHEMA_CREATE_SQL.durable_append_log,
+      "expected durable_append_log",
+    ),
+    columns: Object.freeze([
+      { name: "namespace", type: "TEXT", notNull: 1, primaryKey: 1, defaultValue: null },
+      { name: "sequence", type: "TEXT", notNull: 1, primaryKey: 2, defaultValue: null },
+      { name: "event_id", type: "TEXT", notNull: 1, primaryKey: 0, defaultValue: null },
+      { name: "content_sha256", type: "TEXT", notNull: 1, primaryKey: 0, defaultValue: null },
+      { name: "bytes", type: "BLOB", notNull: 1, primaryKey: 0, defaultValue: null },
+      { name: "byte_length", type: "TEXT", notNull: 1, primaryKey: 0, defaultValue: null },
+      { name: "offset_start", type: "TEXT", notNull: 1, primaryKey: 0, defaultValue: null },
+      { name: "offset_end", type: "TEXT", notNull: 1, primaryKey: 0, defaultValue: null },
+    ]),
+    indexes: Object.freeze([
+      { unique: 1, origin: "u", partial: 0, columns: Object.freeze(["namespace", "event_id"]) },
+      { unique: 1, origin: "pk", partial: 0, columns: Object.freeze(["namespace", "sequence"]) },
+    ]),
+  },
+  {
+    name: DURABLE_APPEND_LOG_SCHEMA_CONTRACT_TABLE,
+    sql: normalizeSchemaSql(
+      DURABLE_APPEND_LOG_SCHEMA_CREATE_SQL.durable_append_log_schema_contract,
+      "expected durable_append_log_schema_contract",
+    ),
+    columns: Object.freeze([
+      { name: "contract_id", type: "INTEGER", notNull: 0, primaryKey: 1, defaultValue: null },
+      { name: "schema_version", type: "TEXT", notNull: 1, primaryKey: 0, defaultValue: null },
+      { name: "schema_digest", type: "TEXT", notNull: 1, primaryKey: 0, defaultValue: null },
+      { name: "core_schema_digest", type: "TEXT", notNull: 1, primaryKey: 0, defaultValue: null },
+      { name: "core_instance_nonce", type: "TEXT", notNull: 1, primaryKey: 0, defaultValue: null },
+    ]),
+    indexes: Object.freeze([]),
+  },
+]);
+
+const EXPECTED_APPEND_LOG_TRIGGER_DESCRIPTOR: readonly SchemaTrigger[] = Object.freeze([
+  Object.freeze({
+    name: "durable_append_log_no_delete",
+    tableName: DURABLE_APPEND_LOG_TABLE,
+    sql: normalizeSchemaSql(
+      DURABLE_APPEND_LOG_SCHEMA_CREATE_SQL.durable_append_log_no_delete,
+      "expected durable_append_log_no_delete",
+    ),
+  }),
+  Object.freeze({
+    name: "durable_append_log_no_update",
+    tableName: DURABLE_APPEND_LOG_TABLE,
+    sql: normalizeSchemaSql(
+      DURABLE_APPEND_LOG_SCHEMA_CREATE_SQL.durable_append_log_no_update,
+      "expected durable_append_log_no_update",
+    ),
+  }),
+]);
+
 const DURABLE_SCHEMA_DIGEST = hashDomain(
   DURABLE_SCHEMA_CONTRACT_KIND,
   EXPECTED_SCHEMA_DESCRIPTOR,
+);
+const DURABLE_APPEND_LOG_SCHEMA_DIGEST = hashDomain(
+  DURABLE_APPEND_LOG_SCHEMA_CONTRACT_KIND,
+  {
+    tables: EXPECTED_APPEND_LOG_SCHEMA_DESCRIPTOR,
+    triggers: EXPECTED_APPEND_LOG_TRIGGER_DESCRIPTOR,
+  },
 );
 const ROLE_BINDING_HASH_DOMAIN = "aloha/durable-store-role-binding/v1";
 
@@ -379,7 +554,10 @@ function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-function schemaDescriptor(database: SqliteDatabase): readonly SchemaTable[] {
+function schemaDescriptor(
+  database: SqliteDatabase,
+  expectedDescriptor: readonly SchemaTable[],
+): readonly SchemaTable[] {
   const tableRows = database.prepare(
     "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
   ).all() as readonly { name?: unknown; sql?: unknown }[];
@@ -389,7 +567,7 @@ function schemaDescriptor(database: SqliteDatabase): readonly SchemaTable[] {
     tableSql.set(name, row.sql);
   }
   const tableNames = new Set(tableSql.keys());
-  return Object.freeze(EXPECTED_SCHEMA_DESCRIPTOR.map(expected => {
+  return Object.freeze(expectedDescriptor.map(expected => {
     if (!tableNames.has(expected.name)) {
       throw new CorruptDurableStoreError(`durable schema table is missing: ${expected.name}`);
     }
@@ -446,11 +624,35 @@ function schemaDescriptor(database: SqliteDatabase): readonly SchemaTable[] {
 }
 
 function assertSchemaDescriptor(database: SqliteDatabase): void {
-  const actual = schemaDescriptor(database);
+  const actual = schemaDescriptor(database, EXPECTED_SCHEMA_DESCRIPTOR);
   const actualDigest = hashDomain(DURABLE_SCHEMA_CONTRACT_KIND, actual);
   if (actualDigest !== DURABLE_SCHEMA_DIGEST) {
     throw new CorruptDurableStoreError(
       `durable SQLite schema digest mismatch: expected ${DURABLE_SCHEMA_DIGEST}, actual ${actualDigest}`,
+    );
+  }
+}
+
+function assertAppendLogSchemaDescriptor(database: SqliteDatabase): void {
+  const tables = schemaDescriptor(database, EXPECTED_APPEND_LOG_SCHEMA_DESCRIPTOR);
+  const triggerRows = database.prepare(
+    "SELECT name, tbl_name, sql FROM sqlite_master WHERE type='trigger' ORDER BY name",
+  ).all() as readonly { name?: unknown; tbl_name?: unknown; sql?: unknown }[];
+  const ownedTables = new Set<string>(DURABLE_APPEND_LOG_TABLE_NAMES);
+  const triggers = Object.freeze(triggerRows.flatMap((row, index) => {
+    const tableName = assertNonEmptyText(row.tbl_name, `sqlite trigger ${index}.table`);
+    if (!ownedTables.has(tableName)) return [];
+    const name = assertNonEmptyText(row.name, `sqlite trigger ${index}.name`);
+    return [Object.freeze({
+      name,
+      tableName,
+      sql: normalizeSchemaSql(row.sql, `sqlite trigger ${name}.sql`),
+    })];
+  }));
+  const actualDigest = hashDomain(DURABLE_APPEND_LOG_SCHEMA_CONTRACT_KIND, { tables, triggers });
+  if (actualDigest !== DURABLE_APPEND_LOG_SCHEMA_DIGEST) {
+    throw new CorruptDurableStoreError(
+      `durable append-log SQLite schema digest mismatch: expected ${DURABLE_APPEND_LOG_SCHEMA_DIGEST}, actual ${actualDigest}`,
     );
   }
 }
@@ -480,6 +682,137 @@ function readSchemaContract(database: SqliteDatabase): SchemaContract {
     throw new CorruptDurableStoreError("durable schema version contract mismatch");
   }
   return Object.freeze({ schemaVersion, schemaDigest, instanceNonce, roleBindingHash });
+}
+
+function assertAppendLogSchemaContract(database: SqliteDatabase): void {
+  assertAppendLogSchemaDescriptor(database);
+  const coreContract = readSchemaContract(database);
+  const rows = database.prepare(
+    `SELECT contract_id, schema_version, schema_digest, core_schema_digest, core_instance_nonce
+     FROM ${DURABLE_APPEND_LOG_SCHEMA_CONTRACT_TABLE}`,
+  ).all() as readonly {
+    contract_id?: unknown;
+    schema_version?: unknown;
+    schema_digest?: unknown;
+    core_schema_digest?: unknown;
+    core_instance_nonce?: unknown;
+  }[];
+  if (rows.length !== 1 || statementNumber(rows[0]?.contract_id, "durable append-log schema contract.contract_id") !== 1) {
+    throw new CorruptDurableStoreError("durable append-log schema contract must contain exactly one row");
+  }
+  const row = rows[0]!;
+  if (
+    assertNonEmptyText(row.schema_version, "durable append-log schema contract.schema_version") !== DURABLE_APPEND_LOG_SCHEMA_VERSION
+    || assertHash(row.schema_digest, "durable append-log schema contract.schema_digest") !== DURABLE_APPEND_LOG_SCHEMA_DIGEST
+    || assertHash(row.core_schema_digest, "durable append-log schema contract.core_schema_digest") !== coreContract.schemaDigest
+    || assertNonEmptyText(row.core_instance_nonce, "durable append-log schema contract.core_instance_nonce") !== coreContract.instanceNonce
+  ) {
+    throw new CorruptDurableStoreError("durable append-log schema version or core binding mismatch");
+  }
+}
+
+type StoredAppendRecord = Readonly<{
+  namespace: string;
+  sequence: string;
+  eventId: Hash;
+  contentSha256: Hash;
+  bytes: Uint8Array;
+  byteLength: string;
+  offsetStart: string;
+  offsetEnd: string;
+}>;
+
+type AppendNamespaceState = Readonly<{
+  records: readonly StoredAppendRecord[];
+  nextSequence: string;
+  nextOffset: string;
+}>;
+
+function validateAppendLogRows(database: SqliteDatabase): ReadonlyMap<string, AppendNamespaceState> {
+  assertAppendLogSchemaContract(database);
+  const rows = database.prepare(
+    `SELECT namespace, sequence, event_id, content_sha256, bytes, byte_length, offset_start, offset_end
+     FROM ${DURABLE_APPEND_LOG_TABLE}`,
+  ).all() as readonly {
+    namespace?: unknown;
+    sequence?: unknown;
+    event_id?: unknown;
+    content_sha256?: unknown;
+    bytes?: unknown;
+    byte_length?: unknown;
+    offset_start?: unknown;
+    offset_end?: unknown;
+  }[];
+  const grouped = new Map<string, StoredAppendRecord[]>();
+  for (const [index, row] of rows.entries()) {
+    const namespace = assertNonEmptyText(row.namespace, `durable append-log row[${index}].namespace`);
+    const sequence = assertDecimal(row.sequence, `durable append-log ${namespace}.sequence`);
+    const eventId = assertHash(row.event_id, `durable append-log ${namespace}/${sequence}.event_id`);
+    const contentSha256 = assertHash(
+      row.content_sha256,
+      `durable append-log ${namespace}/${sequence}.content_sha256`,
+    );
+    const bytes = copyBytes(row.bytes, `durable append-log ${namespace}/${sequence}.bytes`);
+    const byteLength = assertDecimal(row.byte_length, `durable append-log ${namespace}/${sequence}.byte_length`);
+    const offsetStart = assertDecimal(row.offset_start, `durable append-log ${namespace}/${sequence}.offset_start`);
+    const offsetEnd = assertDecimal(row.offset_end, `durable append-log ${namespace}/${sequence}.offset_end`);
+    if (byteLength !== String(bytes.byteLength)) {
+      throw new CorruptDurableStoreError(`durable append-log byte length mismatch at ${namespace}/${sequence}`);
+    }
+    if (sha256Hex(bytes) !== contentSha256) {
+      throw new CorruptDurableStoreError(`durable append-log content hash mismatch at ${namespace}/${sequence}`);
+    }
+    const records = grouped.get(namespace) ?? [];
+    records.push(Object.freeze({
+      namespace,
+      sequence,
+      eventId,
+      contentSha256,
+      bytes,
+      byteLength,
+      offsetStart,
+      offsetEnd,
+    }));
+    grouped.set(namespace, records);
+  }
+
+  const result = new Map<string, AppendNamespaceState>();
+  for (const [namespace, mutableRecords] of grouped) {
+    mutableRecords.sort((left, right) => {
+      const leftSequence = BigInt(left.sequence);
+      const rightSequence = BigInt(right.sequence);
+      return leftSequence < rightSequence ? -1 : leftSequence > rightSequence ? 1 : 0;
+    });
+    let expectedSequence = 0n;
+    let expectedOffset = 0n;
+    const eventIds = new Set<Hash>();
+    for (const record of mutableRecords) {
+      if (BigInt(record.sequence) !== expectedSequence) {
+        throw new CorruptDurableStoreError(
+          `durable append-log sequence gap or reorder at ${namespace}: expected ${expectedSequence}, found ${record.sequence}`,
+        );
+      }
+      if (eventIds.has(record.eventId)) {
+        throw new CorruptDurableStoreError(`durable append-log duplicate event at ${namespace}/${record.sequence}`);
+      }
+      if (BigInt(record.offsetStart) !== expectedOffset) {
+        throw new CorruptDurableStoreError(`durable append-log cumulative offset mismatch at ${namespace}/${record.sequence}`);
+      }
+      const expectedEnd = expectedOffset + BigInt(record.byteLength);
+      if (BigInt(record.offsetEnd) !== expectedEnd) {
+        throw new CorruptDurableStoreError(`durable append-log end offset mismatch at ${namespace}/${record.sequence}`);
+      }
+      eventIds.add(record.eventId);
+      expectedSequence += 1n;
+      expectedOffset = expectedEnd;
+    }
+    result.set(namespace, Object.freeze({
+      records: Object.freeze([...mutableRecords]),
+      nextSequence: expectedSequence.toString(),
+      nextOffset: expectedOffset.toString(),
+    }));
+  }
+  return result;
 }
 
 function readIdentityRows(database: SqliteDatabase): readonly { readonly identityId: number; readonly role: string }[] {
@@ -814,10 +1147,7 @@ function compareAndSwapRootRow(
   return updated;
 }
 
-function createSchema(database: SqliteDatabase): void {
-  database.exec("PRAGMA journal_mode=WAL;");
-  database.exec("PRAGMA foreign_keys=ON;");
-  database.exec("PRAGMA synchronous=FULL;");
+function assertSqliteDurability(database: SqliteDatabase): void {
   const journal = database.prepare("PRAGMA journal_mode").get() as Record<string, unknown>;
   const foreignKeys = database.prepare("PRAGMA foreign_keys").get() as Record<string, unknown>;
   const synchronous = database.prepare("PRAGMA synchronous").get() as Record<string, unknown>;
@@ -830,6 +1160,13 @@ function createSchema(database: SqliteDatabase): void {
   if (Number(Object.values(synchronous)[0]) !== 2) {
     throw new DurableStoreError("sqlite-durability-unavailable", "SQLite synchronous=FULL is not active");
   }
+}
+
+function createSchema(database: SqliteDatabase): boolean {
+  database.exec("PRAGMA journal_mode=WAL;");
+  database.exec("PRAGMA foreign_keys=ON;");
+  database.exec("PRAGMA synchronous=FULL;");
+  assertSqliteDurability(database);
   const tableList = DURABLE_TABLE_NAMES.map(name => `'${name}'`).join(", ");
   const existingOwnedTables = database.prepare(
     `SELECT name FROM sqlite_master WHERE type='table' AND name IN (${tableList}) ORDER BY name`,
@@ -841,9 +1178,50 @@ function createSchema(database: SqliteDatabase): void {
       `INSERT INTO ${DURABLE_SCHEMA_CONTRACT_TABLE}(contract_id, schema_version, schema_digest, instance_nonce, role_binding_hash)
        VALUES (1, ?, ?, ?, NULL)`,
     ).run(DURABLE_SCHEMA_VERSION, DURABLE_SCHEMA_DIGEST, randomUUID());
-    return;
+    return true;
   }
   readSchemaContract(database);
+  return false;
+}
+
+function createAppendLogSchema(database: SqliteDatabase, coreCreated: boolean): void {
+  const tableList = DURABLE_APPEND_LOG_TABLE_NAMES.map(name => `'${name}'`).join(", ");
+  const existingOwnedTables = database.prepare(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name IN (${tableList}) ORDER BY name`,
+  ).all() as readonly { name?: unknown }[];
+  if (existingOwnedTables.length === 0) {
+    if (!coreCreated) {
+      throw new CorruptDurableStoreError(
+        "durable append-log schema is missing from an existing strict-only store",
+      );
+    }
+    const coreContract = readSchemaContract(database);
+    try {
+      database.exec("BEGIN IMMEDIATE");
+      database.exec(Object.values(DURABLE_APPEND_LOG_SCHEMA_CREATE_SQL).join("\n"));
+      assertAppendLogSchemaDescriptor(database);
+      database.prepare(
+        `INSERT INTO ${DURABLE_APPEND_LOG_SCHEMA_CONTRACT_TABLE}
+         (contract_id, schema_version, schema_digest, core_schema_digest, core_instance_nonce)
+         VALUES (1, ?, ?, ?, ?)`,
+      ).run(
+        DURABLE_APPEND_LOG_SCHEMA_VERSION,
+        DURABLE_APPEND_LOG_SCHEMA_DIGEST,
+        coreContract.schemaDigest,
+        coreContract.instanceNonce,
+      );
+      assertAppendLogSchemaContract(database);
+      database.exec("COMMIT");
+    } catch (error) {
+      try { database.exec("ROLLBACK"); } catch { /* preserve primary failure */ }
+      throw error;
+    }
+    return;
+  }
+  if (existingOwnedTables.length !== DURABLE_APPEND_LOG_TABLE_NAMES.length) {
+    throw new CorruptDurableStoreError("durable append-log schema is partially present");
+  }
+  validateAppendLogRows(database);
 }
 
 function reachableFrom(
@@ -861,6 +1239,58 @@ function reachableFrom(
     pending.push(...record.references);
   }
   return reachable;
+}
+
+function normalizeAppendRequest(request: DurableAppendRequest): DurableAppendRequest {
+  if (!request || typeof request !== "object") throw new TypeError("durable append request is invalid");
+  if (typeof request.namespace !== "string" || request.namespace.length === 0) {
+    throw new TypeError("durable append namespace must be non-empty");
+  }
+  if (typeof request.sequence !== "string" || !/^(0|[1-9][0-9]*)$/.test(request.sequence)) {
+    throw new TypeError("durable append sequence must be a canonical decimal string");
+  }
+  if (typeof request.eventId !== "string" || !HASH_PATTERN.test(request.eventId)) {
+    throw new TypeError("durable append eventId must be a lowercase sha256 hash");
+  }
+  if (typeof request.contentSha256 !== "string" || !HASH_PATTERN.test(request.contentSha256)) {
+    throw new TypeError("durable append contentSha256 must be a lowercase sha256 hash");
+  }
+  if (!(request.bytes instanceof Uint8Array)) throw new TypeError("durable append bytes must be Uint8Array");
+  const bytes = new Uint8Array(request.bytes);
+  if (sha256Hex(bytes) !== request.contentSha256) {
+    throw new DurableStoreError("append-content-mismatch", "durable append contentSha256 does not match exact bytes");
+  }
+  return Object.freeze({
+    namespace: request.namespace,
+    sequence: request.sequence,
+    eventId: request.eventId,
+    contentSha256: request.contentSha256,
+    bytes,
+  });
+}
+
+function assertStoredAppendMatches(
+  record: StoredAppendRecord | undefined,
+  request: DurableAppendRequest,
+  offsetStart: string,
+  offsetEnd: string,
+): void {
+  if (
+    !record
+    || record.namespace !== request.namespace
+    || record.sequence !== request.sequence
+    || record.eventId !== request.eventId
+    || record.contentSha256 !== request.contentSha256
+    || record.byteLength !== String(request.bytes.byteLength)
+    || record.offsetStart !== offsetStart
+    || record.offsetEnd !== offsetEnd
+    || record.bytes.byteLength !== request.bytes.byteLength
+    || !record.bytes.every((byte, index) => byte === request.bytes[index])
+  ) {
+    throw new CorruptDurableStoreError(
+      `durable append-log committed row does not bind exact request at ${request.namespace}/${request.sequence}`,
+    );
+  }
 }
 
 export class SQLiteDurableStore {
@@ -889,7 +1319,8 @@ export class SQLiteDurableStore {
     const driver = loadNodeSqliteDriver();
     try {
       this.database = driver.open(filename);
-      createSchema(this.database);
+      const coreCreated = createSchema(this.database);
+      createAppendLogSchema(this.database, coreCreated);
     } catch (error) {
       if (error instanceof SQLiteDriverUnavailableError) throw error;
       throw sqliteFailure(error, `opening SQLite durable store ${filename}`);
@@ -1019,6 +1450,114 @@ export class SQLiteDurableStore {
   listIndexNamespaces(): readonly string[] {
     this.assertRoleAccess();
     return new SQLiteTransaction(this.database, () => this.assertRoleAccess()).listIndexNamespaces();
+  }
+
+  readAppendLog(namespace: string): readonly DurableAppendRecord[] {
+    this.assertRoleAccess();
+    if (typeof namespace !== "string" || namespace.length === 0) {
+      throw new TypeError("durable append namespace must be non-empty");
+    }
+    assertSqliteDurability(this.database);
+    const state = validateAppendLogRows(this.database).get(namespace);
+    if (!state) return Object.freeze([]);
+    return Object.freeze(state.records.map((record) => Object.freeze({
+      namespace: record.namespace,
+      sequence: record.sequence,
+      eventId: record.eventId,
+      contentSha256: record.contentSha256,
+      bytes: new Uint8Array(record.bytes),
+      byteLength: record.byteLength,
+      offsetStart: record.offsetStart,
+      offsetEnd: record.offsetEnd,
+      fsynced: true as const,
+    })));
+  }
+
+  appendFsyncMonotonic(
+    request: DurableAppendRequest,
+    lease?: WriterLease,
+  ): DurableAppendReceipt {
+    const normalized = normalizeAppendRequest(request);
+    this.assertRoleAccess();
+    assertSqliteDurability(this.database);
+    const append = (owned: WriterLease): DurableAppendReceipt => {
+      const committed = this.transaction(owned, (tx) => {
+        const states = validateAppendLogRows(this.database);
+        const state = states.get(normalized.namespace);
+        const expectedSequence = state?.nextSequence ?? "0";
+        const offsetStart = state?.nextOffset ?? "0";
+        if (normalized.sequence !== expectedSequence) {
+          throw new AppendSequenceConflictError(
+            normalized.namespace,
+            expectedSequence,
+            normalized.sequence,
+          );
+        }
+        if (state?.records.some((record) => record.eventId === normalized.eventId)) {
+          throw new AppendEventConflictError(normalized.namespace, normalized.eventId);
+        }
+        const byteLength = String(normalized.bytes.byteLength);
+        const offsetEnd = (BigInt(offsetStart) + BigInt(byteLength)).toString();
+        this.database.prepare(
+          `INSERT INTO ${DURABLE_APPEND_LOG_TABLE}
+           (namespace, sequence, event_id, content_sha256, bytes, byte_length, offset_start, offset_end)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          normalized.namespace,
+          normalized.sequence,
+          normalized.eventId,
+          normalized.contentSha256,
+          normalized.bytes,
+          byteLength,
+          offsetStart,
+          offsetEnd,
+        );
+        tx.addBeforeCommitGuard(() => {
+          assertSqliteDurability(this.database);
+          const guarded = validateAppendLogRows(this.database).get(normalized.namespace);
+          assertStoredAppendMatches(
+            guarded?.records.find((record) => record.sequence === normalized.sequence),
+            normalized,
+            offsetStart,
+            offsetEnd,
+          );
+        });
+        return Object.freeze({
+          namespace: normalized.namespace,
+          sequence: normalized.sequence,
+          eventId: normalized.eventId,
+          contentSha256: normalized.contentSha256,
+          byteLength,
+          offsetStart,
+          offsetEnd,
+        });
+      });
+      // SQLite's FULL synchronous COMMIT completed before transaction() returned.
+      assertSqliteDurability(this.database);
+      return Object.freeze({ ...committed, fsynced: true as const });
+    };
+    return lease ? append(lease) : this.withTemporaryLease(append);
+  }
+
+  appendFsyncMonotonicCapability(
+    request: DurableAppendRequest,
+    lease?: WriterLease,
+  ): DurableAppendCapabilityV1 {
+    const receipt = this.appendFsyncMonotonic(request, lease);
+    const record = this.readAppendLog(receipt.namespace).find(candidate => (
+      candidate.sequence === receipt.sequence && candidate.eventId === receipt.eventId
+    ));
+    if (record === undefined
+      || record.contentSha256 !== receipt.contentSha256
+      || record.byteLength !== receipt.byteLength
+      || record.offsetStart !== receipt.offsetStart
+      || record.offsetEnd !== receipt.offsetEnd
+      || record.fsynced !== true) {
+      throw new TypeError("durable append capability row mismatch");
+    }
+    const capability = Object.freeze(Object.create(null)) as DurableAppendCapabilityV1;
+    durableAppendCapabilities.set(capability, Object.freeze({ ...record, bytes: Uint8Array.from(record.bytes) }));
+    return capability;
   }
 
   acquireWriterLease(owner: string, ttlMs = this.leaseTtlMs): WriterLease {

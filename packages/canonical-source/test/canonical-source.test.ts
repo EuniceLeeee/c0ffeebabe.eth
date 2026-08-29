@@ -12,6 +12,7 @@ import {
   CanonicalSourceError,
   SQLiteCanonicalJournalStore,
   type CanonicalHeader,
+  type CanonicalHeadObservationReaderPortV1,
   type CanonicalHeaderAbsenceEvidenceV1,
   type CanonicalJournalStorePort,
 } from "../src/index.ts";
@@ -21,8 +22,16 @@ const header = (overrides: Partial<CanonicalHeader> = {}): CanonicalHeader => ({
   chainId: "1",
   number: "100",
   hash: hash("1"),
+  parentHash: hash("0"),
   stateRoot: hash("2"),
   ...overrides,
+});
+
+const view = (value: CanonicalHeader) => ({
+  chainId: value.chainId,
+  number: value.number,
+  hash: value.hash,
+  stateRoot: value.stateRoot,
 });
 
 const journalResources: Array<{ store: SQLiteCanonicalJournalStore; directory: string; closed: boolean }> = [];
@@ -120,13 +129,21 @@ function provider(initial: CanonicalHeader, chainGenesis = "0") {
   };
 }
 
-test("freezes exact chain/number/hash/stateRoot and clamps the 50-block range to genesis", async () => {
-  const harness = provider(header({ number: "120" }), "100");
-  const view = await harness.source.freezeView();
-  assert.deepEqual(view, header({ number: "120" }));
-  assert.equal((await harness.source.checkStillCanonical(view)).ok, true);
-  assert.equal(await harness.source.ageInBlocks(view), "0");
-  assert.deepEqual(harness.source.recentObservationRange(view), { from: "100", to: "120" });
+test("freezes exact chain/number/hash/stateRoot and requires a complete 50-block range", async () => {
+  const harness = provider(header({ number: "149" }), "100");
+  const cutoff = await harness.source.freezeView();
+  assert.deepEqual(cutoff, view(header({ number: "149" })));
+  assert.equal((await harness.source.checkStillCanonical(cutoff)).ok, true);
+  assert.equal(await harness.source.ageInBlocks(cutoff), "0");
+  assert.deepEqual(harness.source.recentObservationRange(cutoff), { from: "100", to: "149" });
+
+  const early = provider(header({ number: "48" }));
+  const earlyView = await early.source.freezeView();
+  assert.throws(
+    () => early.source.recentObservationRange(earlyView),
+    (error: unknown) => error instanceof CanonicalSourceError
+      && error.code === "recent-observation-window-unavailable",
+  );
 });
 
 test("same-height chain/hash/state mutations fail closed while transport is retryable", async () => {
@@ -250,9 +267,9 @@ test("an observed reorg permanently revokes the exact cutoff across provider rol
 
 test("unissued views and failed journal CAS never become in-memory authority", async () => {
   const fixture = provider(header());
-  const view = await fixture.source.freezeView();
+  const issuedView = await fixture.source.freezeView();
   await assert.rejects(
-    () => fixture.source.assertStillCanonical(header({ number: "101", hash: hash("3") })),
+    () => fixture.source.assertStillCanonical(view(header({ number: "101", hash: hash("3") }))),
     /was not issued by this durable journal/,
   );
 
@@ -268,14 +285,14 @@ test("unissued views and failed journal CAS never become in-memory authority", a
     journalStore: conflictingStore,
   });
   const priorEpoch = contender.journalEpoch;
-  assert.deepEqual(contender.currentView, view);
+  assert.deepEqual(contender.currentView, issuedView);
   failCas = true;
   fixture.setHead(header({ number: "101", hash: hash("3"), stateRoot: hash("4") }));
   await assert.rejects(() => contender.freezeView(), /canonical journal CAS failed/);
   assert.equal(contender.journalEpoch, priorEpoch);
-  assert.deepEqual(contender.currentView, view);
+  assert.deepEqual(contender.currentView, issuedView);
   assert.throws(
-    () => contender.assertViewAuthorityActive(header({ number: "101", hash: hash("3"), stateRoot: hash("4") })),
+    () => contender.assertViewAuthorityActive(view(header({ number: "101", hash: hash("3"), stateRoot: hash("4") }))),
     /not active/,
   );
 });
@@ -371,7 +388,7 @@ test("a journal update during an asynchronous provider read invalidates the obse
     if (!delayNextRead) return originalRead(number);
     delayNextRead = false;
     return new Promise(resolve => {
-      releaseRead = () => resolve({ kind: "found" as const, header: view });
+      releaseRead = () => resolve({ kind: "found" as const, header: header() });
       markReadStarted();
     });
   };
@@ -419,12 +436,81 @@ test("promotion freshness is issuer-owned, policy-bound, and expires with its fe
 test("unknown fields, accessors, and proxies are rejected before values are copied", async () => {
   const base = header();
   const rogue = { ...base, extra: "ignored" } as CanonicalHeader;
-  await assert.rejects(() => provider(rogue).source.freezeView(), /exact canonical header/);
+  await assert.rejects(() => provider(rogue).source.freezeView(), /exact observed canonical header/);
   let getterRead = false;
   const accessor = { ...base } as Record<string, unknown>;
   Object.defineProperty(accessor, "hash", { enumerable: true, get() { getterRead = true; return base.hash; } });
-  await assert.rejects(() => provider(accessor as unknown as CanonicalHeader).source.freezeView(), /exact canonical header/);
+  await assert.rejects(() => provider(accessor as unknown as CanonicalHeader).source.freezeView(), /exact observed canonical header/);
   assert.equal(getterRead, false);
   const proxied = new Proxy(base, { ownKeys() { throw new Error("trap"); } });
-  await assert.rejects(() => provider(proxied).source.freezeView(), /exact canonical header/);
+  await assert.rejects(() => provider(proxied).source.freezeView(), /exact observed canonical header/);
+});
+
+test("current-head observations are full-header, process-local opaque capabilities", async () => {
+  const first = provider(header());
+  const second = provider(header());
+  const capability = await first.source.observeCurrentHead();
+  const reader: CanonicalHeadObservationReaderPortV1 = first.source.headObservationReader;
+  const observation = reader.read(capability);
+
+  assert.deepEqual(Reflect.ownKeys(capability), []);
+  assert.deepEqual(observation.head, header());
+  assert.equal(observation.head.parentHash, hash("0"));
+  assert.equal(observation.journalEpoch, first.source.journalEpoch);
+  assert.match(observation.observedMonotonicNs, /^(0|[1-9][0-9]*)$/);
+  reader.assert(capability);
+
+  assert.throws(
+    () => reader.assert({ ...capability }),
+    /not issued by this source/,
+  );
+  assert.throws(
+    () => reader.assert(observation),
+    /not issued by this source/,
+  );
+  assert.throws(
+    () => second.source.headObservationReader.assert(capability),
+    /not issued by this source/,
+  );
+});
+
+test("current-head observation requires exact parentHash agreement", async () => {
+  const fixture = provider(header());
+  fixture.headerProvider.getHeader = async number => ({
+    kind: "found" as const,
+    header: header({ number, parentHash: hash("9") }),
+  });
+  await assert.rejects(
+    () => fixture.source.observeCurrentHead(),
+    /parentHash does not match/,
+  );
+});
+
+test("journal movement during current-head observation prevents capability issuance", async () => {
+  const fixture = provider(header());
+  const peer = fixture.openPeer();
+  const originalRead = fixture.headerProvider.getHeader.bind(fixture.headerProvider);
+  let releaseRead!: () => void;
+  let markReadStarted!: () => void;
+  const readStarted = new Promise<void>(resolve => { markReadStarted = resolve; });
+  let delayNextRead = true;
+  fixture.headerProvider.getHeader = async number => {
+    if (!delayNextRead) return originalRead(number);
+    delayNextRead = false;
+    return new Promise(resolve => {
+      releaseRead = () => resolve({ kind: "found" as const, header: header() });
+      markReadStarted();
+    });
+  };
+
+  const pending = fixture.source.observeCurrentHead();
+  await readStarted;
+  fixture.setHead(header({ number: "101", hash: hash("3"), parentHash: hash("1"), stateRoot: hash("4") }));
+  await peer.source.freezeView();
+  releaseRead();
+  await assert.rejects(
+    () => pending,
+    (error: unknown) => error instanceof CanonicalSourceError && error.code === "fence-invalid",
+  );
+  peer.close();
 });

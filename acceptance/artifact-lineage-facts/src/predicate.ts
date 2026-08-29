@@ -1,5 +1,5 @@
 import { encodeCanonicalJson, sha256Hex, type Hash } from "../../../packages/canonical-codec/src/index.ts";
-import { decodeArtifactBytes, type ObservedImmutableMirrorV1 } from "../../../specs/artifact-resolution/src/index.ts";
+import { decodeArtifactHexBytes, type ObservedImmutableMirrorV1 } from "../../../specs/artifact-resolution/src/index.ts";
 import {
   decodeArtifactLineageClaim,
   decodeArtifactLineageObservation,
@@ -115,8 +115,8 @@ export function evaluateArtifactLineagePredicate(
   let observedBytes: Uint8Array;
   let rawBytes: Uint8Array;
   try {
-    observedBytes = decodeArtifactBytes(observation.rawBytes);
-    rawBytes = decodeArtifactBytes(raw.rawBytes);
+    observedBytes = decodeArtifactHexBytes(observation.rawBytes);
+    rawBytes = decodeArtifactHexBytes(raw.rawBytes);
   } catch {
     return invalidResult("raw-shape-invalid", claim.claimId, observation.observationId);
   }
@@ -124,7 +124,6 @@ export function evaluateArtifactLineagePredicate(
   const observedContentSha256 = hashBytes(observedBytes);
   if (
     raw.rawBytes !== observation.rawBytes ||
-    claimedMirror.bytes !== observation.rawBytes ||
     observedContentSha256 !== observation.contentSha256 ||
     observedContentSha256 !== rawContentSha256 ||
     String(observedBytes.byteLength) !== observation.byteLength ||

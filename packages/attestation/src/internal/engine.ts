@@ -23,6 +23,7 @@ import { candidatePartitionKeysRoot } from "../../../../specs/candidate-partitio
 import {
   type AttestationCompositionResolvedV2,
   type AttestationIdentityIssuerProofV1,
+  type AttestationIdentityOriginV1,
 } from "../internal-authority.ts";
 import {
   ATTESTATION_STAGES,
@@ -64,6 +65,8 @@ import {
   type AttestationIdentityContinuationV1,
   type AttestationIdentitySessionResultV1,
   type AttestationOutcomeCapabilityV1,
+  type AttestationOutcomeResumeCapabilityV1,
+  type AttestationVerifiedMemoReuseCapabilityV1,
   type AttestationPartitionCapabilityV1,
   type AttestationPersistenceBatchClaimV1,
   type AttestationPersistenceCapabilityV1,
@@ -110,13 +113,22 @@ import {
   bindOutcomeAuthority,
   bindPartitionAuthority,
   issueAttestationValidationAuthority,
+  verifyOutcomeForAuthority,
   verifyIdentityForAuthority,
 } from "./validation-authority-issuer.ts";
 import {
   attestationIdentityResumeStates,
+  attestationOutcomeResumeStates,
+  attestationVerifiedMemoReuseStates,
   consumedAttestationIdentityResumeCapabilities,
+  consumedAttestationOutcomeResumeCapabilities,
+  consumedAttestationVerifiedMemoReuseCapabilities,
+  registerAttestationOutcomeCapability,
+  registerAttestationService,
   type AttestationAuthorityStateV1,
   type AttestationIdentityResumeStateV1,
+  type AttestationOutcomeResumeStateV1,
+  type AttestationVerifiedMemoReuseStateV1,
   type AttestationWriterConsumerV1,
 } from "./validation-authority-state.ts";
 import { validateIdentityIssuerProof } from "./identity-proof.ts";
@@ -434,7 +446,7 @@ export function createRejectionFactRuntimeInternal(
     assertExactKeys(issued, [
       "issuerId", "programId", "executionSessionHash", "runId", "chainId", "cutoffNumber",
       "cutoffHash", "cutoffStateRoot", "stage", "familyDefinitionHash", "familyCandidateKey",
-      "candidateSnapshotHash", "identitySubjectHash", "instanceNominationKey", "executorAuthorityRoot",
+      "candidateSubjectHash", "identitySubjectHash", "instanceNominationKey", "executorAuthorityRoot",
       "workerEpoch", "executorSessionHash", "requestFingerprint",
       "orderedTransportFactsRoot", "effectObservationRoot", "tokenHash",
     ], "rejectionFactToken");
@@ -449,7 +461,7 @@ export function createRejectionFactRuntimeInternal(
     const expectedContext = rejectionContextValues(context);
     for (const field of [
       "runId", "chainId", "cutoffNumber", "cutoffHash", "cutoffStateRoot", "stage",
-      "familyDefinitionHash", "familyCandidateKey", "candidateSnapshotHash",
+      "familyDefinitionHash", "familyCandidateKey", "candidateSubjectHash",
       "identitySubjectHash", "instanceNominationKey",
     ] as const) {
       if (issued[field] !== expectedContext[field]) throw new TypeError("rejection-fact-token-context-mismatch");
@@ -521,7 +533,7 @@ export function createFrameworkFailureRuntimeInternal(
         authorityRoot: issuerRoot,
         runId: assertNonEmptyString(context.runId, "frameworkFailure.runId"),
         familyCandidateKey: assertHash(context.candidate.familyCandidateKey, "frameworkFailure.familyCandidateKey"),
-        candidateSnapshotHash: assertHash(context.candidate.candidateSnapshotHash, "frameworkFailure.candidateSnapshotHash"),
+        candidateSubjectHash: assertHash(context.candidate.candidateSubjectHash, "frameworkFailure.candidateSubjectHash"),
         stage,
         failureClass: input.failureClass,
         failureCode: assertNonEmptyString(input.failureCode, "frameworkFailure.failureCode"),
@@ -594,7 +606,7 @@ const outcomeFor = (
           || proof.cutoffNumber !== cutoff.number
           || proof.cutoffHash !== cutoff.hash
           || proof.cutoffStateRoot !== cutoff.stateRoot
-          || proof.candidateSnapshotHash !== candidate.candidateSnapshotHash
+          || proof.candidateSubjectHash !== candidate.candidateSubjectHash
         ) throw new Error("rejection-proof-candidate-mismatch");
         return deepFreeze({
           kind: decision.kind,
@@ -610,7 +622,7 @@ const outcomeFor = (
       if (
         decision.failure.failureCode.length === 0
         || !/^[1-9][0-9]*$/.test(decision.failure.attemptCount)
-        || decision.failure.candidateSnapshotHash !== candidate.candidateSnapshotHash
+        || decision.failure.candidateSubjectHash !== candidate.candidateSubjectHash
         || decision.failure.evidenceRoot.length === 0
       ) throw new Error("failure-lineage-mismatch");
       if ("frameworkFailureToken" in decision) {
@@ -640,7 +652,7 @@ const outcomeFor = (
         decision.failure.stage !== expectedStage
         || decision.failure.failureCode.length === 0
         || !/^[1-9][0-9]*$/.test(decision.failure.attemptCount)
-        || decision.failure.candidateSnapshotHash !== candidate.candidateSnapshotHash
+        || decision.failure.candidateSubjectHash !== candidate.candidateSubjectHash
         || decision.failure.evidenceRoot.length === 0
         || decision.failure.frameworkBinding !== null
       ) throw new Error("failure-lineage-mismatch");
@@ -674,7 +686,7 @@ const frameworkFailure = (
           stage,
           failureCode: binding.failureCode,
           attemptCount: binding.attemptCount,
-          candidateSnapshotHash: candidate.candidateSnapshotHash,
+          candidateSubjectHash: candidate.candidateSubjectHash,
           evidenceRoot: binding.evidenceRoot,
           frameworkBinding: binding,
         },
@@ -691,8 +703,8 @@ const frameworkFailure = (
       stage,
       failureCode: "plugin-program-threw",
       attemptCount: "1",
-      candidateSnapshotHash: candidate.candidateSnapshotHash,
-      evidenceRoot: hashDomain("aloha/candidate-evidence-set/v1", candidate.evidence),
+      candidateSubjectHash: candidate.candidateSubjectHash,
+      evidenceRoot: candidate.candidateEvidenceRoot,
       frameworkBinding: null,
     },
   }, frameworkRuntime, rejectionValidator, stage, null, identityProof);
@@ -808,6 +820,7 @@ export function createAttestationServiceInternal(
       );
     },
   } satisfies AttestationServiceV1;
+  registerAttestationService(service, authorityState);
   return Object.freeze(service);
 }
 
@@ -819,13 +832,14 @@ interface AttestationSessionPersistenceStateV1 {
   readonly stage: "identity" | "materialization";
   readonly identity: IdentityVerifiedV1 | null;
   readonly outcome: AttestationOutcomeCapabilityV1 | null;
+  readonly durability: "new" | "durable";
 }
 
 interface AttestationIdentityContinuationStateV1 {
   readonly runId: string;
   readonly candidatePartitionRoot: Hash;
   readonly familyCandidateKey: Hash;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly candidate: CandidateRecordV1;
   readonly identity: IdentityVerifiedV1;
   status: "pending" | "materializing" | "completed" | "collision";
@@ -838,6 +852,7 @@ function issueIdentityWithProof(
   candidatePartitionRoot: Hash,
   candidate: CandidateRecordV1,
   observation: IdentityVerifiedObservationV1,
+  identityOrigin: AttestationIdentityOriginV1,
   authority: AttestationAuthorityStateV1,
 ): IdentityVerifiedV1 {
   const normalizedObservation = validateIdentityObservation(observation, "attestation.identityVerified");
@@ -847,6 +862,7 @@ function issueIdentityWithProof(
     candidatePartitionRoot,
     candidate,
     normalizedObservation,
+    identityOrigin,
     {
       releaseProvenanceHash: authority.releaseProvenanceHash,
       attestationAuthorityRoot: authority.authorityRoot,
@@ -922,6 +938,68 @@ function createAttestationRunSession(
     }
     resumeByCandidate.set(resumeState.familyCandidateKey, { capability: suppliedCapability, state: resumeState });
   }
+  const outcomeResumeCapabilities = input.outcomeResumeCapabilities ?? [];
+  if (!Array.isArray(outcomeResumeCapabilities)) throw new TypeError("attestationSession.outcomeResumeCapabilities must be an array");
+  const outcomeResumeByCandidate = new Map<Hash, { readonly capability: AttestationOutcomeResumeCapabilityV1; readonly state: AttestationOutcomeResumeStateV1 }>();
+  for (const suppliedCapability of outcomeResumeCapabilities) {
+    if (suppliedCapability === null || typeof suppliedCapability !== "object") {
+      throw new TypeError("attestation-outcome-resume-capability-invalid");
+    }
+    if (!authority.resumeCapabilities.has(suppliedCapability)) {
+      throw new TypeError("attestation-outcome-resume-capability-not-issued");
+    }
+    const resumeState = attestationOutcomeResumeStates.get(suppliedCapability);
+    if (!resumeState || consumedAttestationOutcomeResumeCapabilities.has(suppliedCapability)) {
+      throw new TypeError("attestation-outcome-resume-capability-consumed");
+    }
+    if (
+      resumeState.runId !== runId
+      || resumeState.candidatePartitionRoot !== candidatePartitionRoot
+      || encodeCanonicalJson(resumeState.cutoff) !== encodeCanonicalJson(cutoff)
+      || resumeState.attestationAuthorityRoot !== authority.authorityRoot
+      || resumeState.releaseAuthorityRoot !== authority.releaseAuthorityRoot
+      || resumeState.releaseProvenanceHash !== authority.releaseProvenanceHash
+      || resumeState.executorAuthorityRoot !== authority.executorAuthorityRoot
+      || !candidateKeySet.has(resumeState.familyCandidateKey)
+    ) throw new TypeError("attestation-outcome-resume-capability-lineage-mismatch");
+    if (outcomeResumeByCandidate.has(resumeState.familyCandidateKey)) {
+      throw new TypeError("attestation-outcome-resume-capability-duplicate");
+    }
+    if (resumeByCandidate.has(resumeState.familyCandidateKey)) {
+      throw new TypeError("attestation-resume-capability-duplicate");
+    }
+    outcomeResumeByCandidate.set(resumeState.familyCandidateKey, { capability: suppliedCapability, state: resumeState });
+  }
+  const verifiedMemoReuseCapabilities = input.verifiedMemoReuseCapabilities ?? [];
+  if (!Array.isArray(verifiedMemoReuseCapabilities)) throw new TypeError("attestationSession.verifiedMemoReuseCapabilities must be an array");
+  const memoReuseByCandidate = new Map<Hash, { readonly capability: AttestationVerifiedMemoReuseCapabilityV1; readonly state: AttestationVerifiedMemoReuseStateV1 }>();
+  for (const suppliedCapability of verifiedMemoReuseCapabilities) {
+    if (suppliedCapability === null || typeof suppliedCapability !== "object") {
+      throw new TypeError("attestation-memo-reuse-capability-invalid");
+    }
+    if (!authority.resumeCapabilities.has(suppliedCapability)) {
+      throw new TypeError("attestation-memo-reuse-capability-not-issued");
+    }
+    const reuseState = attestationVerifiedMemoReuseStates.get(suppliedCapability);
+    if (!reuseState || consumedAttestationVerifiedMemoReuseCapabilities.has(suppliedCapability)) {
+      throw new TypeError("attestation-memo-reuse-capability-consumed");
+    }
+    if (
+      reuseState.runId !== runId
+      || reuseState.candidatePartitionRoot !== candidatePartitionRoot
+      || encodeCanonicalJson(reuseState.cutoff) !== encodeCanonicalJson(cutoff)
+      || reuseState.authorityRoot !== authority.authorityRoot
+      || reuseState.releaseAuthorityRoot !== authority.releaseAuthorityRoot
+      || reuseState.releaseProvenanceHash !== authority.releaseProvenanceHash
+      || !candidateKeySet.has(reuseState.familyCandidateKey)
+    ) throw new TypeError("attestation-memo-reuse-capability-lineage-mismatch");
+    if (
+      resumeByCandidate.has(reuseState.familyCandidateKey)
+      || outcomeResumeByCandidate.has(reuseState.familyCandidateKey)
+      || memoReuseByCandidate.has(reuseState.familyCandidateKey)
+    ) throw new TypeError("attestation-memo-reuse-capability-duplicate");
+    memoReuseByCandidate.set(reuseState.familyCandidateKey, { capability: suppliedCapability, state: reuseState });
+  }
   const writerCapability = Object.freeze({}) as AttestationWriterCapabilityV1;
   const writerCapabilities = new WeakSet<object>([writerCapability]);
   const persistenceStates = new WeakMap<object, AttestationSessionPersistenceStateV1>();
@@ -933,6 +1011,7 @@ function createAttestationRunSession(
   const identityInFlight = new Map<Hash, Promise<AttestationIdentitySessionResultV1>>();
   const continuationStates = new WeakMap<object, AttestationIdentityContinuationStateV1>();
   const finalOutcomes = new Map<Hash, AttestationOutcomeCapabilityV1>();
+  const durableFinalKeys = new Set<Hash>();
 
   const candidateForSession = (familyCandidateKey: Hash): CandidateRecordV1 => {
     const key = assertHash(familyCandidateKey, "attestationSession.familyCandidateKey");
@@ -954,7 +1033,7 @@ function createAttestationRunSession(
       runId,
       candidatePartitionRoot,
       familyCandidateKey: candidate.familyCandidateKey,
-      candidateSnapshotHash: candidate.candidateSnapshotHash,
+      candidateSubjectHash: candidate.candidateSubjectHash,
       candidate,
       identity,
       status: "pending",
@@ -975,7 +1054,7 @@ function createAttestationRunSession(
       state.runId !== runId
       || state.candidatePartitionRoot !== candidatePartitionRoot
       || state.familyCandidateKey !== state.candidate.familyCandidateKey
-      || state.candidateSnapshotHash !== state.candidate.candidateSnapshotHash
+      || state.candidateSubjectHash !== state.candidate.candidateSubjectHash
       || !candidateKeySet.has(state.familyCandidateKey)
     ) throw new TypeError("attestation-identity-continuation-lineage-mismatch");
     return state;
@@ -986,6 +1065,7 @@ function createAttestationRunSession(
     stage: "identity" | "materialization",
     identity: IdentityVerifiedV1 | null,
     outcome: AttestationOutcomeCapabilityV1 | null,
+    durability: "new" | "durable" = "new",
   ): AttestationPersistenceCapabilityV1 => {
     let outcomeHash: Hash;
     if (outcome) {
@@ -1019,6 +1099,7 @@ function createAttestationRunSession(
       stage,
       identity,
       outcome,
+      durability,
     });
     persistenceCapabilities.add(capability);
     return capability;
@@ -1028,12 +1109,15 @@ function createAttestationRunSession(
     candidate: CandidateRecordV1,
     outcome: AttestationOutcomeCapabilityV1,
     expectedStage: Exclude<AttestationStageV1, "framework">,
+    durability: "new" | "durable" = "new",
   ): AttestationFinalSessionResultV1 => {
     finalOutcomes.set(candidate.familyCandidateKey, outcome);
+    if (durability === "durable") durableFinalKeys.add(candidate.familyCandidateKey);
     return Object.freeze({
       kind: "final" as const,
+      durability,
       outcome,
-      persistenceCapability: persistence(candidate, expectedStage === "identity" ? "identity" : "materialization", null, outcome),
+      persistenceCapability: persistence(candidate, expectedStage === "identity" ? "identity" : "materialization", null, outcome, durability),
     });
   };
 
@@ -1070,19 +1154,39 @@ function createAttestationRunSession(
   ): Promise<AttestationIdentitySessionResultV1> => {
     const candidate = candidateForSession(familyCandidateKey);
     const knownSnapshot = identityCandidateSnapshots.get(candidate.familyCandidateKey);
-    if (knownSnapshot !== undefined && knownSnapshot !== candidate.candidateSnapshotHash) {
+    if (knownSnapshot !== undefined && knownSnapshot !== candidate.candidateSubjectHash) {
       throw new TypeError("attestation-session-candidate-snapshot-mismatch");
     }
-    identityCandidateSnapshots.set(candidate.familyCandidateKey, candidate.candidateSnapshotHash);
+    identityCandidateSnapshots.set(candidate.familyCandidateKey, candidate.candidateSubjectHash);
     const existing = identityResults.get(candidate.familyCandidateKey);
     if (existing) return Promise.resolve(existing);
     const inFlight = identityInFlight.get(candidate.familyCandidateKey);
     if (inFlight) return inFlight;
     const computation = (async (): Promise<AttestationIdentitySessionResultV1> => {
       if (signal.aborted) throw signal.reason;
+      const finalResume = outcomeResumeByCandidate.get(candidate.familyCandidateKey);
+      if (finalResume) {
+        if (finalResume.state.candidateSubjectHash !== candidate.candidateSubjectHash) {
+          throw new TypeError("attestation-outcome-resume-candidate-snapshot-mismatch");
+        }
+        if (consumedAttestationOutcomeResumeCapabilities.has(finalResume.capability)) {
+          throw new TypeError("attestation-outcome-resume-capability-consumed");
+        }
+        consumedAttestationOutcomeResumeCapabilities.add(finalResume.capability);
+        const normalizedOutcome = verifyOutcomeForAuthority(finalResume.state.outcome, authority, {
+          runId,
+          cutoff,
+          candidatePartitionRoot,
+          candidate,
+        });
+        registerAttestationOutcomeCapability(normalizedOutcome, authority);
+        const result = resultFromOutcome(candidate, normalizedOutcome, "materialization", "durable");
+        identityResults.set(candidate.familyCandidateKey, result);
+        return result;
+      }
       const resume = resumeByCandidate.get(candidate.familyCandidateKey);
       if (resume) {
-        if (resume.state.candidateSnapshotHash !== candidate.candidateSnapshotHash) {
+        if (resume.state.candidateSubjectHash !== candidate.candidateSubjectHash) {
           throw new TypeError("attestation-identity-resume-candidate-snapshot-mismatch");
         }
         const expectedOutcomeHash = attestationPartialIdentitySemanticHash({
@@ -1114,13 +1218,70 @@ function createAttestationRunSession(
         });
         const identityResult = Object.freeze({
           kind: "identityVerified" as const,
+          durability: "durable" as const,
           candidate,
           identity: normalizedIdentity,
           continuation: issueIdentityContinuation(candidate, normalizedIdentity),
-          persistenceCapability: persistence(candidate, "identity", normalizedIdentity, null),
+          persistenceCapability: persistence(candidate, "identity", normalizedIdentity, null, "durable"),
         });
         identityResults.set(candidate.familyCandidateKey, identityResult);
         return identityResult;
+      }
+      const memoReuse = memoReuseByCandidate.get(candidate.familyCandidateKey);
+      if (memoReuse) {
+        if (
+          memoReuse.state.candidateSubjectHash !== candidate.candidateSubjectHash
+          || memoReuse.state.publication.familyId !== candidate.familyId
+          || memoReuse.state.publication.instanceKey !== candidate.instanceNominationKey
+        ) throw new TypeError("attestation-memo-reuse-candidate-binding-mismatch");
+        if (consumedAttestationVerifiedMemoReuseCapabilities.has(memoReuse.capability)) {
+          throw new TypeError("attestation-memo-reuse-capability-consumed");
+        }
+        consumedAttestationVerifiedMemoReuseCapabilities.add(memoReuse.capability);
+        if (programs.reuseVerifiedMemo === undefined) throw new TypeError("attestation-memo-reuse-program-missing");
+        const reuseDecision = await programs.reuseVerifiedMemo(candidate, memoReuse.state.publication, cutoff, signal);
+        if (reuseDecision.kind === "reusable") {
+          const reuseProof = reuseDecision.proof;
+          if (
+            reuseProof.familyId !== candidate.familyId
+            || reuseProof.familyDefinitionHash !== candidate.familyDefinitionHash
+            || reuseProof.familyCandidateKey !== candidate.familyCandidateKey
+            || reuseProof.candidateSubjectHash !== candidate.candidateSubjectHash
+            || reuseProof.instanceNominationKey !== candidate.instanceNominationKey
+            || encodeCanonicalJson(reuseProof.cutoff) !== encodeCanonicalJson(cutoff)
+            || reuseProof.oldInstancePublicationHash !== memoReuse.state.publication.instancePublicationHash
+            || reuseProof.requestedArtifactDependencyRoot !== memoReuse.state.publication.requestedArtifactDependencyRoot
+            || reuseProof.descriptorHash !== memoReuse.state.publication.descriptorHash
+            || reuseProof.validityDependencyRoot !== memoReuse.state.publication.validityDependencyRoot
+            || reuseProof.identityMemoHash !== reuseDecision.identity.identityMemoHash
+            || encodeCanonicalJson(reuseProof.identityMemo) !== encodeCanonicalJson(reuseDecision.identity.identityMemo)
+            || reuseProof.evidenceRoot !== reuseDecision.identity.evidenceRoot
+          ) throw new TypeError("attestation-memo-reuse-proof-binding-mismatch");
+          const identityOrigin = deepFreeze({
+            kind: "verified-memo-reuse" as const,
+            verifiedMemoSetRoot: memoReuse.state.verifiedMemoSetRoot,
+            proof: reuseProof,
+          });
+          const normalizedIdentity = issueIdentityWithProof(
+            runId,
+            cutoff,
+            candidatePartitionRoot,
+            candidate,
+            reuseDecision.identity,
+            identityOrigin,
+            authority,
+          );
+          const identityResult = Object.freeze({
+            kind: "identityVerified" as const,
+            durability: "new" as const,
+            candidate,
+            identity: normalizedIdentity,
+            continuation: issueIdentityContinuation(candidate, normalizedIdentity),
+            persistenceCapability: persistence(candidate, "identity", normalizedIdentity, null),
+          });
+          identityResults.set(candidate.familyCandidateKey, identityResult);
+          return identityResult;
+        }
       }
       try {
         const decision = await programs.attestIdentity(candidate, cutoff, signal);
@@ -1131,10 +1292,12 @@ function createAttestationRunSession(
             candidatePartitionRoot,
             candidate,
             decision,
+            deepFreeze({ kind: "fresh" as const }),
             authority,
           );
           const identityResult = Object.freeze({
             kind: "identityVerified" as const,
+            durability: "new" as const,
             candidate,
             identity: normalizedIdentity,
             continuation: issueIdentityContinuation(candidate, normalizedIdentity),
@@ -1263,7 +1426,7 @@ function createAttestationRunSession(
         stage: "identity",
         failureCode: "nomination-key-collision",
         attemptCount: "1",
-        candidateSnapshotHash: item.candidate.candidateSnapshotHash,
+        candidateSubjectHash: item.candidate.candidateSubjectHash,
         evidenceRoot,
         frameworkBinding: null,
       },
@@ -1386,7 +1549,8 @@ function createAttestationRunSession(
       const outcomeHash = candidateFinalOutcomeHash(outcome);
       return ![...persistenceCapabilities].some(capability => {
         const state = persistenceStates.get(capability);
-        return state?.outcomeHash === outcomeHash && consumedPersistence.has(capability);
+      return state?.outcomeHash === outcomeHash
+        && (consumedPersistence.has(capability) || durableFinalKeys.has(outcome.familyCandidateKey));
       });
     });
     if (missingPersistence) throw new TypeError("attestation-session-writer-not-drained");
@@ -1425,7 +1589,7 @@ export async function probeRetryableCandidate(
     || stored.candidatePartitionBinding.candidatePartitionRoot !== stored.before.outcomeIssuerProof.candidatePartitionRoot
     || stored.before.familyCandidateKey !== familyCandidateKey
     || stored.before.runCandidateKey !== runCandidateKey(runId, familyCandidateKey)
-    || stored.before.failure.candidateSnapshotHash !== stored.candidateSnapshotHash
+    || stored.before.failure.candidateSubjectHash !== stored.candidateSubjectHash
   ) throw new Error("probe-stored-lineage-mismatch");
   await canonical.assertStillCanonical(stored.cutoff);
   const session = service.openRunSession({
@@ -1452,7 +1616,7 @@ export async function probeRetryableCandidate(
     || receipt.beforeOutcomeHash !== stored.beforeOutcomeHash
     || receipt.afterOutcomeHash !== afterOutcomeHash
     || receipt.afterKind !== after.kind
-    || receipt.candidateSnapshotHash !== stored.candidateSnapshotHash
+    || receipt.candidateSubjectHash !== stored.candidateSubjectHash
     || receipt.evidenceRoot !== stored.before.failure.evidenceRoot
   ) throw new Error("probe-receipt-transition-mismatch");
   return receipt;

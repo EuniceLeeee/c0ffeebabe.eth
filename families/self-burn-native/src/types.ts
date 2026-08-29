@@ -1,0 +1,19 @@
+import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import type { NativeDelta, SupplyDelta, TokenDelta } from "../kernel/effects.ts";
+import { SELF_BURN_NATIVE_FAMILY_ID } from "./manifest.ts";
+export interface SelfBurnNativeCutoffV1 { readonly chainId: string; readonly number: string; readonly hash: Hash; readonly stateRoot: Hash; }
+export interface SelfBurnNativeObservationV1 { readonly kind: "log" | "call" | "address-surface"; readonly cutoff: SelfBurnNativeCutoffV1; readonly blockNumber: string; readonly blockHash: Hash; readonly txHash: Hash; readonly logIndex: string; readonly target: string; readonly rawLocatorHash: Hash; readonly topic?: Hash | null; }
+export interface SelfBurnNativeCandidateV1 { readonly target: string; readonly instanceNominationKey: string; readonly candidateSnapshotHash: Hash; readonly evidence: SelfBurnNativeObservationV1; }
+export interface SelfBurnNativeIdentityReadFactsV1 { readonly cutoff: SelfBurnNativeCutoffV1; readonly target: string; readonly reverseTarget: string; readonly token: string; readonly actor: string; readonly redeemSelector: `0x${string}`; }
+export interface SelfBurnNativeIdentityV1 { readonly cutoff: SelfBurnNativeCutoffV1; readonly candidateSnapshotHash: Hash; readonly instanceKey: string; readonly factsHash: Hash; readonly facts: { readonly target: string; readonly token: string; readonly actor: string; readonly redeemSelector: `0x${string}` }; }
+export interface SelfBurnNativeStateReadFactsV1 { readonly cutoff: SelfBurnNativeCutoffV1; readonly instanceKey: string; readonly stateHash: Hash; }
+export interface SelfBurnNativeMaterializedStateV1 extends SelfBurnNativeStateReadFactsV1 { readonly identityFactsHash: Hash; readonly materializedHash: Hash; }
+export interface SelfBurnNativeRouteV1 { readonly instanceKey: string; readonly inputAsset: string; readonly outputAsset: string; readonly routeBindingHash: Hash; }
+export interface SelfBurnNativeExactReadFactsV1 { readonly completion: "returned"; readonly returnDataHex: string; readonly tokenDeltas: readonly TokenDelta[]; readonly nativeDeltas: readonly NativeDelta[]; readonly supplyDeltas: readonly SupplyDelta[]; readonly token: string; readonly actor: string; readonly amountIn: string; }
+export interface SelfBurnNativeExactV1 { readonly cutoff: SelfBurnNativeCutoffV1; readonly routeBindingHash: Hash; readonly amountIn: string; readonly nativePayout: string; readonly effectsHash: Hash; }
+export interface SelfBurnNativeActionV1 { readonly cutoff: SelfBurnNativeCutoffV1; readonly target: string; readonly calldata: string; readonly exactEffectsHash: Hash; readonly actionHash: Hash; }
+export interface SelfBurnNativeExecutionIntentV1 { readonly kind: "self-burn-native-execution-intent"; readonly cutoff: SelfBurnNativeCutoffV1; readonly target: string; readonly calldata: string; readonly actionHash: Hash; readonly exactEffectsHash: Hash; }
+export function canonicalAddress(value: string): string { if (!/^0x[0-9a-fA-F]{40}$/.test(value)) throw new TypeError("self-burn-native address must be 20 bytes"); return `0x${value.slice(2).toLowerCase()}`; }
+export function assertCutoff(value: SelfBurnNativeCutoffV1): SelfBurnNativeCutoffV1 { if (!/^\d+$/.test(value.chainId) || !/^\d+$/.test(value.number) || !/^0x[0-9a-f]{64}$/.test(value.hash) || !/^0x[0-9a-f]{64}$/.test(value.stateRoot)) throw new TypeError("self-burn-native cutoff is not canonical"); return Object.freeze({ ...value }); }
+export function cutoffEqual(left: SelfBurnNativeCutoffV1, right: SelfBurnNativeCutoffV1): boolean { return left.chainId === right.chainId && left.number === right.number && left.hash === right.hash && left.stateRoot === right.stateRoot; }
+export function familyCandidateKey(key: string): Hash { return hashDomain("aloha/family-candidate/v1", { family: SELF_BURN_NATIVE_FAMILY_ID, instanceNominationKey: key }); }

@@ -2,6 +2,6 @@
   "name": "@aloha/family-dodo-v2",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/public.ts", "./kernel/math": "./src/kernel/math.ts" },
+  "exports": { ".": "./src/public.ts", "./family-definition": "./src/family-definition.ts", "./kernel/math": "./src/kernel/math.ts", "./runtime": "./src/runtime.ts" },
   "scripts": { "test": "node --experimental-strip-types --test test/*.test.ts", "typecheck": "tsc -p tsconfig.json" }
 }

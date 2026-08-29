@@ -3,32 +3,94 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { encodeCanonicalJson, hashCanonicalPartition, hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import { sealInstanceCatalog } from "../../catalog/src/index.ts";
-import { recentObservationRange, sealSourceCoverage } from "../../discovery/src/index.ts";
+import {
+  recentObservationRange,
+  sealSourceCoverage,
+  sourcePlanEvidenceRoot,
+  sourcePlanExecutionRoot,
+  sourcePlanIdentity,
+  SOURCE_EVIDENCE_VERSION_V1,
+  type SourcePlanExecutionV1,
+} from "../../discovery/src/index.ts";
 import { buildPersistedGraph } from "../../graph/src/index.ts";
 import { issueCheckpointSealedRunReader } from "../../sealed-run-runtime/src/internal/reader-issuer.ts";
 import type { SealedRunBindingV1, SealedRunCapabilityV1, SealedRunReaderPortV1, SealedRunSnapshotV1 } from "../../sealed-run-runtime/src/contract.ts";
 import { readyBindingPortForReleaseApproval, releaseApproval } from "../../attestation/test/authority-fixture.ts";
 import { runtimeReleaseBindingProvenanceHash } from "../../../specs/release-authority/src/index.ts";
-import { ReadyGenerationServiceV1, createReadyPromotionAuthority, readyGenerationBaseHash, type CanonicalFencePort, type ReadyActivationInputV1, type ReadyStageInputV1, type ReadyStorePort } from "../src/index.ts";
+import {
+  sealNominationClosureV1,
+  sealQualifiedSourcePlanNominationReceiptV1,
+} from "../../../specs/nomination-authority/src/index.ts";
+import { ReadyGenerationServiceV1, createReadyPromotionAuthority, readyGenerationBaseHash, type CanonicalFencePort, type ReadyActivationInputV1, type ReadyGenerationV1, type ReadyStageInputV1, type ReadyStorePort } from "../src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/ready-capability", value);
 const cutoff = { chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") };
 const policy = { observationWindowBlocks: "50" as const, targetRefreshAgeBlocks: "20", maxServingAgeBlocks: "50", minPromotionMarginBlocks: "2", maxInProgressRuns: "1" as const };
 const plan = { ownerRef: h("owner"), sourcePlanRef: h("plan"), familyDefinitionHash: h("definition"), completeness: "complete-snapshot" as const, historyStartBlock: null };
-const coverage = sealSourceCoverage(cutoff, [plan], [{ plan, cutoff, outcome: "complete", from: "100", through: "100", previousAppliedThrough: null, resultPartitionRoot: h("results") }]);
+const sourceEvidenceRefs = Object.freeze([]);
+const rawLocatorHashes = Object.freeze([]);
+const sourceEvidenceRoot = sourcePlanEvidenceRoot({ plan, cutoff, refs: sourceEvidenceRefs, rawLocatorHashes });
+const sourceExecutionWithoutRoot: Omit<SourcePlanExecutionV1, "executionRoot"> = Object.freeze({
+  kind: "source-plan-execution",
+  version: SOURCE_EVIDENCE_VERSION_V1,
+  plan,
+  cutoff,
+  outcome: "complete",
+  from: "100",
+  through: "100",
+  previousAppliedThrough: null,
+  resultPartitionRoot: h("results"),
+  opaqueResult: Object.freeze({ kind: "ready-generation-test-empty" }),
+  sourceEvidenceRefs,
+  rawLocatorHashes,
+  sourceEvidenceRoot,
+});
+const coverage = sealSourceCoverage(cutoff, [plan], [{
+  ...sourceExecutionWithoutRoot,
+  executionRoot: sourcePlanExecutionRoot(sourceExecutionWithoutRoot),
+}]);
 const instanceCatalog = sealInstanceCatalog(cutoff, []);
 const graph = buildPersistedGraph(instanceCatalog);
 const release = releaseApproval(h("framework"), h("executor"));
 const releaseBinding = release.resolver.resolve(release.capability).provenance.runtimeBinding;
 const releaseProvenanceHash = runtimeReleaseBindingProvenanceHash(releaseBinding);
 const releaseBindingPort = readyBindingPortForReleaseApproval(release);
+const candidateRoot = hashCanonicalPartition("aloha/candidate-partition/v2", []);
+const nominationReceipt = sealQualifiedSourcePlanNominationReceiptV1({
+  cutoff,
+  familyId: "family.empty",
+  familyDefinitionHash: plan.familyDefinitionHash,
+  sourcePlanIdentity: sourcePlanIdentity(plan),
+  sourcePlanLeafDigest: h("source-plan-leaf"),
+  nominationProgramRoot: h("nomination-program"),
+  nominationProgramProposalLeafDigest: h("nomination-program-proposal"),
+  qualificationRoot: h("nomination-qualification"),
+  denominator: {
+    kind: "complete-source-result",
+    persistedExecutionRoot: h("persisted-execution"),
+    resultPartitionRoot: sourceExecutionWithoutRoot.resultPartitionRoot,
+  },
+  claims: [],
+});
+const nominationClosure = sealNominationClosureV1({
+  cutoff,
+  recentObservationRoot: h("recent-observation"),
+  sourceExecutionSetRoot: h("source-execution-set"),
+  sourceCoverageRoot: coverage.sourceCoverageRoot,
+  sourcePlanIdentities: [sourcePlanIdentity(plan)],
+  receipts: [nominationReceipt],
+  candidates: [],
+  candidatePartitionRoot: candidateRoot,
+});
 
 function binding(): SealedRunBindingV1 {
   const base = {
     runId: "run-a", parentGenerationId: null, cutoff, recentObservationRange: recentObservationRange(cutoff.number),
     definitionCatalogRoot: h("definitions"), sourceCoverageRoot: coverage.sourceCoverageRoot,
-    candidatePartitionRoot: h("candidates"), candidatePartitionStorageHash: h("candidate-storage"),
+    candidatePartitionRoot: candidateRoot, candidatePartitionStorageHash: h("candidate-storage"),
     candidatePartitionProofStorageHash: h("candidate-proof"),
+    nominationClosureRoot: nominationClosure.root,
+    nominationClosureStorageHash: h("nomination-storage"),
     verifiedMemoSetRoot: h("memos"), checkpointRevision: "7", attestationAuthorityRoot: h("attestation"),
     releaseAuthorityRoot: h("release"), releaseProvenanceHash, executorAuthorityRoot: h("executor"),
   };
@@ -82,25 +144,35 @@ class Canonical implements CanonicalFencePort {
   async observePromotionFreshness(fence: { journalEpoch: string; canonicalJournalRoot: Hash }, request: { cutoff: typeof cutoff; maxPromotionAgeBlocks: string; generationRefreshPolicyHash: Hash }) {
     this.events.push("freshness");
     if (BigInt(this.age) > BigInt(request.maxPromotionAgeBlocks)) throw new Error("promotion-cutoff-too-old");
-    const payload = { cutoff: request.cutoff, observedHead: request.cutoff, observedAgeBlocks: this.age, maxPromotionAgeBlocks: request.maxPromotionAgeBlocks, generationRefreshPolicyHash: request.generationRefreshPolicyHash, journalEpoch: fence.journalEpoch, canonicalJournalRoot: fence.canonicalJournalRoot };
+    const observedHead = {
+      ...request.cutoff,
+      number: (BigInt(request.cutoff.number) + BigInt(this.age)).toString(),
+      hash: h(`observed-head:${this.age}`),
+      parentHash: h(`observed-parent:${this.age}`),
+      stateRoot: h(`observed-state:${this.age}`),
+    };
+    const payload = { cutoff: request.cutoff, observedHead, observedAgeBlocks: this.age, maxPromotionAgeBlocks: request.maxPromotionAgeBlocks, generationRefreshPolicyHash: request.generationRefreshPolicyHash, journalEpoch: fence.journalEpoch, canonicalJournalRoot: fence.canonicalJournalRoot };
     return { token: "fresh", receipt: { ...payload, freshnessReceiptHash: hashDomain("aloha/promotion-freshness-receipt/v1", payload) } };
   }
   assertPromotionFreshness() {}
 }
 
 class Store implements ReadyStorePort {
-  staged: ReadyStageInputV1 | null = null; activated: ReadyActivationInputV1 | null = null; events: string[] = [];
+  staged: ReadyStageInputV1 | null = null; activated: ReadyActivationInputV1 | null = null; active: ReadyGenerationV1 | null = null; events: string[] = [];
   async putContentAndFsync(kind: "instance-catalog" | "persisted-graph", value: object): Promise<Hash> { return kind === "instance-catalog" ? (value as typeof instanceCatalog).instanceCatalogRoot : (value as typeof graph).graphRoot; }
   async stageReadyCAS(value: ReadyStageInputV1) {
     this.events.push("stage"); this.staged = value;
-    return { stage: { stageStorageHash: h("stage-storage"), runId: value.expectedInProgressRunId, expectedRevision: value.expectedRevision, sealedRevision: value.expectedRevision, stageRevision: (BigInt(value.expectedRevision) + 1n).toString(), stageRecordHash: h("stage"), readyBaseHash: readyGenerationBaseHash(value.ready), cutoff: value.ready.cutoff, generationRefreshPolicyHash: value.ready.generationRefreshPolicyHash, definitionCatalogRoot: value.ready.definitionCatalogRoot, releaseProvenanceHash: value.ready.releaseProvenanceHash, candidatePartitionProofStorageHash: value.ready.candidatePartitionProofStorageHash }, stageRevision: "8", stageRecordHash: h("stage") };
+    return { stage: { stageStorageHash: h("stage-storage"), runId: value.expectedInProgressRunId, expectedRevision: value.expectedRevision, sealedRevision: value.expectedRevision, stageRevision: (BigInt(value.expectedRevision) + 1n).toString(), stageRecordHash: h("stage"), readyBaseHash: readyGenerationBaseHash(value.ready), cutoff: value.ready.cutoff, generationRefreshPolicyHash: value.ready.generationRefreshPolicyHash, definitionCatalogRoot: value.ready.definitionCatalogRoot, releaseProvenanceHash: value.ready.releaseProvenanceHash, candidatePartitionProofStorageHash: value.ready.candidatePartitionProofStorageHash, nominationClosureRoot: value.ready.nominationClosureRoot, nominationClosureStorageHash: value.ready.nominationClosureStorageHash }, stageRevision: "8", stageRecordHash: h("stage") };
   }
   async activateReadyCAS(value: ReadyActivationInputV1) {
     this.activated = value; const promotionRevision = "9";
     const readyPayload = { ...this.staged!.ready, promotionFreshness: value.freshness.receipt, promotedAtMonotonicNs: value.promotedAtMonotonicNs, promotionRevision };
-    return { promotionRevision, readyRecordHash: hashDomain("aloha/ready-generation/v1", readyPayload) };
+    const readyRecordHash = hashDomain("aloha/ready-generation/v1", readyPayload);
+    this.active = { ...readyPayload, readyRecordHash };
+    return { promotionRevision, readyRecordHash };
   }
-  async loadReadyClosure() { return { sourceCoverage: coverage, instanceCatalog, graph }; }
+  async loadActiveReady() { return this.active; }
+  async loadReadyClosure() { return { sourceCoverage: coverage, nominationClosure, instanceCatalog, graph }; }
   async assertContentRoot() {} assertReadyAuthorityActive() {}
 }
 
@@ -150,4 +222,22 @@ test("caller authority cannot substitute sealed run authority", async () => {
   const issued = issuedReader(); const value = makeService(issued.reader);
   await assert.rejects(() => value.service.promote({}, promotionInput(issued.capability)), /unauthorized/);
   await assert.rejects(() => value.service.promote(value.caller, promotionInput({})), /not-issued/);
+});
+
+test("reusable ready is admitted only through the durable record and current bindings", async () => {
+  const issued = issuedReader(); const store = new Store(); const canonical = new Canonical();
+  const value = makeService(issued.reader, store, canonical);
+  const promoted = await value.service.promote(value.caller, promotionInput(issued.capability));
+  const catalog = { definitionCatalogRoot: h("definitions"), declaredSourcePlans: [plan] };
+  const reusable = await value.service.findLatestReusable(catalog, policy);
+  assert.equal(reusable?.readyRecordHash, promoted.readyRecordHash);
+
+  assert.equal(await value.service.findLatestReusable({
+    definitionCatalogRoot: h("definitions"),
+    declaredSourcePlans: [{ ...plan, ownerRef: h("foreign-owner") }],
+  }, policy), null);
+  assert.equal(await value.service.findLatestReusable(catalog, { ...policy, maxServingAgeBlocks: "51" }), null);
+
+  canonical.age = "51";
+  assert.equal(await value.service.findLatestReusable(catalog, policy), null);
 });

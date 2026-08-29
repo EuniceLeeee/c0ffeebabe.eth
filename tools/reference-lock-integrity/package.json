@@ -8,9 +8,11 @@
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "check": "node --experimental-strip-types src/cli.ts"
+    "generate": "node --experimental-strip-types src/cli.ts --generate",
+    "check": "node --experimental-strip-types src/cli.ts --index-snapshot"
   },
   "dependencies": {
-    "@aloha/reuse-ledger-spec": "*"
+    "@aloha/reuse-ledger-spec": "*",
+    "typescript": "5.9.3"
   }
 }

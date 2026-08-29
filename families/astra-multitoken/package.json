@@ -1,1 +1,18 @@
-{"name":"@aloha/family-astra-multitoken","private":true,"type":"module","exports":{".":"./kernel/effects.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}
+{
+  "name": "@aloha/family-astra-multitoken",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/public.ts",
+    "./family-definition": "./src/family-definition.ts",
+    "./runtime": "./src/runtime.ts",
+    "./runtime/definitions": "./src/runtime/definitions.ts",
+    "./source-plan": "./src/source-plan.ts",
+    "./source-plan-runtime": "./src/source-plan-runtime.ts",
+    "./kernel/effects": "./kernel/effects.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

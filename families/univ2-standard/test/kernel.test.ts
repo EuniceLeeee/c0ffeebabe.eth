@@ -30,10 +30,11 @@ test("ABI word decoders reject padding and width mutations", () => {
   assert.throws(() => decodeReserves(`0x${word(1n << 112n)}${word(13n)}${word(42n)}`), /uint112/);
 });
 
-test("reverse factory binding is load-bearing in identity", () => {
-  const facts = { pool: address("1"), factory: address("2"), token0: address("3"), token1: address("4"), reversePool: address("1") };
+test("both factory getPair directions are load-bearing in identity", () => {
+  const facts = { pool: address("1"), factory: address("2"), token0: address("3"), token1: address("4"), forwardPair: address("1"), reversePair: address("1") };
   const verified = verifyUniV2Identity(facts);
   assert.equal(verified.status, "verified");
-  assert.deepEqual(verifyUniV2Identity({ ...facts, reversePool: address("5") }), { status: "chain-proven-rejected", reasonCode: "factory-reverse-binding-failed" });
+  assert.deepEqual(verifyUniV2Identity({ ...facts, forwardPair: address("5") }), { status: "chain-proven-rejected", reasonCode: "factory-forward-binding-failed" });
+  assert.deepEqual(verifyUniV2Identity({ ...facts, reversePair: address("5") }), { status: "chain-proven-rejected", reasonCode: "factory-reverse-binding-failed" });
   assert.deepEqual(verifyUniV2Identity({ ...facts, token1: facts.token0 }), { status: "chain-proven-rejected", reasonCode: "identical-assets" });
 });

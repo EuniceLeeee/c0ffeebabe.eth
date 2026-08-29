@@ -10,6 +10,7 @@ import {
 import {
   createArtifactResolutionClaim,
   createObservedImmutableMirror,
+  encodeArtifactBytes,
   recomputeArtifactResolutionClaimId,
   type ArtifactResolutionClaimV1,
 } from "../../artifact-resolution/src/index.ts";
@@ -156,7 +157,7 @@ function fixture() {
       observedMirror: createObservedImmutableMirror({
         storeIdentityHash: ref.immutableMirrorLocator.storeIdentityHash,
         objectKey: ref.immutableMirrorLocator.objectKey,
-        bytes: "0x726177",
+        bytes: encodeArtifactBytes(new Uint8Array([0x72, 0x61, 0x77])),
         mediaType: ref.mediaType,
         schema: ref.schema,
       }),

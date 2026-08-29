@@ -13,17 +13,21 @@
     "specs/*",
     "strategies/*",
     "tools/*",
-    "tools/reference-only/*"
+    "tools/reference-only/*",
+    "valuation-owners/*"
   ],
   "scripts": {
     "build": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present && npm run typecheck --workspaces --if-present",
-    "architecture-boundary": "npm run check --workspace @aloha/boundary-gate",
+    "architecture-boundary": "npm run check --workspace @aloha/boundary-gate && npm run check-reference-lock-integrity",
+    "check-reference-lock-integrity": "npm run check --workspace @aloha/reference-lock-integrity",
+    "generate-catalog": "node --experimental-strip-types tools/catalog-generator/src/cli.ts",
+    "check-catalog": "node --experimental-strip-types tools/catalog-generator/src/cli.ts --check",
     "generate-release-role-manifest": "npm run generate --workspace @aloha/release-role-manifest",
     "check-release-role-manifest": "npm run generate --workspace @aloha/release-role-manifest -- --check"
   },
   "devDependencies": {
-    "@types/node": "20.19.41",
+    "@types/node": "22.20.1",
     "typescript": "5.9.3"
   }
 }

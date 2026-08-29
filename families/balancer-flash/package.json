@@ -1,0 +1,15 @@
+{
+  "name": "@aloha/family-balancer-flash",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/public.ts",
+    "./family-definition": "./src/family-definition.ts",
+    "./source-plan": "./src/source-plan.ts",
+    "./search": "./src/search-adapter.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

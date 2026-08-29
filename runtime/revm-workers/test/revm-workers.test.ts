@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import test from "node:test";
 import {
   RevmSimulationClient,
@@ -15,13 +16,26 @@ import {
   type RevmWorkerSimulateRequestV1,
 } from "../src/index.ts";
 import { RevmWorkerController, RevmWorkerPool } from "../src/lifecycle.ts";
+import { createNodeRevmWorkerChannel } from "../src/node-worker-factory.ts";
+import { issueRevmWorkerAuthorityIssuer } from "../src/internal/authority.ts";
+import {
+  captureRevmWorkerResourceObservation,
+  issueRevmWorkerResourceObservationPort,
+  readRevmWorkerResourceObservation,
+} from "../src/internal/resource-observation.ts";
 import { authorityFor, createTestRevmAuthorityIssuer } from "./qualified-authority.ts";
 
 const program = {
   format: "frozen-program-v1" as const,
   schemaHash: "schema-hash",
   bytes: "0xreal-program-bytes",
-};
+  effectTransport: {
+    caller: { ref: { kind: "observed-sender" as const }, executionMode: "impersonated-call-frame" as const },
+    preCalls: [],
+    observeTokenBalances: [{ token: "0x1111111111111111111111111111111111111111", account: { kind: "observed-sender" as const } }],
+    observeLogs: true,
+  },
+} as const;
 const programHash = hashFrozenProgram({ ...program, programHash: "placeholder" });
 const qualification = { engineBuildFingerprint: "revm-build-1", executableFingerprint: "revm-executable-1" } as const;
 const request: RevmWorkerSimulateRequestV1 = {
@@ -98,6 +112,7 @@ function responseFor(bound: RevmWorkerSimulateRequestV1): RevmWorkerResultV1 {
     status: "returned",
     output: "0xoutput",
     effects,
+    effectTransport: bound.program.effectTransport,
     executionReceiptHash: "placeholder",
   };
   return { ...response, executionReceiptHash: hashExecutionReceipt(response) };
@@ -134,6 +149,48 @@ test("wire round-trip preserves caller mode, verified actors, and every observed
     assert.deepEqual(decoded.observeAccounts, ["account-a", "account-b"]);
     assert.equal(decoded.source.number, "300");
     assert.equal(decoded.program.programHash, request.program.programHash);
+    assert.deepEqual(decoded.program.effectTransport, request.program.effectTransport);
+  }
+});
+
+test("node channel retains an eager worker hello until the controller subscribes", async () => {
+  const child = spawn(process.execPath, [
+    "-e",
+    'process.stdout.write("eager-hello\\nnext-response\\n"); setInterval(() => undefined, 1_000);',
+  ], { stdio: ["pipe", "pipe", "pipe"] });
+  const channel = createNodeRevmWorkerChannel(child);
+  try {
+    // Force the worker output to become readable before the controller owns
+    // the line listener.  The channel must preserve backpressure, not buffer
+    // an unbounded producer or discard the qualification line.
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    let unsubscribe = (): void => undefined;
+    const observed = new Promise<string>((resolve) => {
+      unsubscribe = channel.onLine((line) => {
+        unsubscribe();
+        resolve(line);
+      });
+    });
+    const line = await Promise.race([
+      observed,
+      new Promise<string>((resolve) => setTimeout(() => resolve("<deadline>"), 500)),
+    ]);
+    unsubscribe();
+    assert.equal(line, "eager-hello");
+
+    // Removing the last listener pauses without consuming another complete
+    // line that may already share the same kernel chunk.
+    const next = new Promise<string>((resolve) => {
+      unsubscribe = channel.onLine(resolve);
+    });
+    assert.equal(await Promise.race([
+      next,
+      new Promise<string>((resolve) => setTimeout(() => resolve("<deadline>"), 500)),
+    ]), "next-response");
+    unsubscribe();
+  } finally {
+    await channel.kill("SIGTERM");
+    assert.equal(await channel.waitForExit(1_000), true);
   }
 });
 
@@ -187,6 +244,32 @@ test("qualified pool dispatch binds one controller epoch to both request and res
   await pool.retireAll();
 });
 
+test("authority loss before bind retires the stale worker and counts its replacement", async () => {
+  const bindings = [authorityFor("bind-race-1"), authorityFor("bind-race-2")] as const;
+  let active = 0;
+  const authority = issueRevmWorkerAuthorityIssuer({
+    issue: () => bindings[active]!,
+    assertCurrent: (binding) => {
+      if (binding !== bindings[active]) throw new Error("runtime release rotated before bind");
+    },
+  });
+  const pool = new RevmWorkerPool({ factory: fakeFactory(), authority, qualification, maxWorkers: 1, timeoutMs: 50 });
+  await pool.submit(freshDispatch({ requestId: "bind-race-first", ownerRef: "bind-race-first-owner" }));
+  active = 1;
+  await assert.rejects(
+    pool.submit(freshDispatch({ requestId: "bind-race-stale", ownerRef: "bind-race-stale-owner" })),
+    (error: unknown) => error instanceof Error && /rotated before bind/.test(error.message),
+  );
+  assert.equal(pool.snapshot().workers.length, 0);
+  assert.equal(pool.snapshot().reaped, 1);
+  await pool.submit(freshDispatch({ requestId: "bind-race-replacement", ownerRef: "bind-race-replacement-owner" }));
+  const snapshot = pool.snapshot();
+  assert.equal(snapshot.spawned, 2);
+  assert.equal(snapshot.restarted, 1);
+  assert.equal(snapshot.orphanedWorkers, 0);
+  await pool.retireAll();
+});
+
 test("rotation while a response is in flight rejects it before settlement and retires the worker", async () => {
   const lineListeners = new Set<(line: string) => void>();
   const exitListeners = new Set<(code: number | null) => void>();
@@ -235,9 +318,18 @@ test("response epoch, source, caller, and program mutations fail closed", async 
     [(response) => ({ ...response, programHash: "wrong-program" }), /program hash/],
   ];
   for (const [transform, message] of cases) {
-    const pool = new RevmWorkerPool({ factory: fakeFactory(transform), authority: createTestRevmAuthorityIssuer(), qualification, maxWorkers: 1, timeoutMs: 8 });
+    let responseObserved = false;
+    const observedTransform = (response: RevmWorkerResultV1): RevmWorkerResultV1 => {
+      responseObserved = true;
+      return transform(response);
+    };
+    // This case proves response-binding rejection, not deadline behavior. Give
+    // the deliberately unmatched epoch enough time to retire even when the
+    // host is simultaneously compiling the full boundary graph.
+    const pool = new RevmWorkerPool({ factory: fakeFactory(observedTransform), authority: createTestRevmAuthorityIssuer(), qualification, maxWorkers: 1, timeoutMs: 100 });
     const client = new RevmSimulationClient({ pool });
-    await assert.rejects(client.simulate({ ...simulationRequest, requestId: `mutation-${Math.random()}`, deadlineAtMs: performance.now() + 100 }), message);
+    await assert.rejects(client.simulate({ ...simulationRequest, requestId: `mutation-${Math.random()}`, deadlineAtMs: performance.now() + 2_000 }), message);
+    assert.equal(responseObserved, true, "the mutated worker response must be emitted before its rejection is asserted");
     await pool.retireAll();
   }
 });
@@ -257,10 +349,56 @@ test("timed out worker is retired and cannot be reused before kill/reap", async 
   const controller = new RevmWorkerController({ epoch: "epoch-timeout", channel, qualification, authority: timeoutAuthority, assertAuthorityCurrent: () => undefined, timeoutMs: 5 });
   const hello = encodeWorkerLine({ wireVersion: 1, kind: "hello", op: "hello", workerEpoch: "epoch-timeout", engine: "revm", ...qualification });
   for (const listener of lineListeners) listener(hello);
-  await assert.rejects(controller.submit({ ...request, workerEpoch: "epoch-timeout", authority: timeoutAuthority }), /retired|timed out/);
+  await assert.rejects(controller.submit({
+    ...request,
+    workerEpoch: "epoch-timeout",
+    authority: timeoutAuthority,
+    deadlineAtMs: performance.now() + 1_000,
+  }), /retired|timed out/);
   assert.equal(controller.state, "dead");
   assert.equal(killed >= 1, true);
   assert.equal(controller.snapshot().pending, 0);
+});
+
+test("an unreaped worker remains capacity-bearing and is reported as orphaned", async () => {
+  const exitListeners = new Set<(code: number | null) => void>();
+  const factory = {
+    spawn: async (epoch: string) => {
+      const lineListeners = new Set<(line: string) => void>();
+      setTimeout(() => {
+        const hello = encodeWorkerLine({ wireVersion: 1, kind: "hello", op: "hello", workerEpoch: epoch, engine: "revm", ...qualification });
+        for (const listener of lineListeners) listener(hello);
+      }, 0);
+      return {
+        send: async () => undefined,
+        onLine: (listener: (line: string) => void) => { lineListeners.add(listener); return () => lineListeners.delete(listener); },
+        onExit: (listener: (code: number | null) => void) => { exitListeners.add(listener); return () => exitListeners.delete(listener); },
+        kill: async () => undefined,
+        waitForExit: async () => false,
+      };
+    },
+  };
+  const pool = new RevmWorkerPool({ factory, authority: createTestRevmAuthorityIssuer(), qualification, maxWorkers: 1, timeoutMs: 2 });
+  await assert.rejects(pool.submit(freshDispatch({ requestId: "unreaped-worker", deadlineAtMs: performance.now() + 100 })), /timeout|retired/);
+  const snapshot = pool.snapshot();
+  assert.equal(snapshot.workers.length, 1);
+  assert.equal(snapshot.workers[0]?.state, "retiring");
+  assert.equal(snapshot.workers[0]?.reaped, false);
+  assert.equal(snapshot.workers[0]?.orphaned, true);
+  assert.equal(snapshot.orphanedWorkers, 1);
+  assert.equal(snapshot.reaped, 0);
+  assert.equal(snapshot.restarted, 0);
+  const resourcePort = issueRevmWorkerResourceObservationPort(pool);
+  const resourceFact = readRevmWorkerResourceObservation(resourcePort, captureRevmWorkerResourceObservation(resourcePort));
+  assert.equal(resourceFact.workerCount, "1");
+  assert.equal(resourceFact.retiringWorkers, "1");
+  assert.equal(resourceFact.orphanedWorkers, "1");
+  for (const listener of [...exitListeners]) listener(0);
+  const reapedSnapshot = pool.snapshot();
+  assert.equal(reapedSnapshot.workers.length, 0);
+  assert.equal(reapedSnapshot.orphanedWorkers, 0);
+  assert.equal(reapedSnapshot.reaped, 1);
+  await pool.retireAll();
 });
 
 test("REVM response schema binds effect observation scope and rejects unknown fields", () => {
@@ -291,6 +429,7 @@ test("REVM response schema binds effect observation scope and rejects unknown fi
     status: "returned",
     output: "0xoutput",
     effects,
+    effectTransport: request.program.effectTransport,
     executionReceiptHash: "placeholder",
   };
   assert.equal(decodeWorkerLine(encodeWorkerLine(response)).kind, "response");

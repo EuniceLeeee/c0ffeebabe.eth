@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createObserverQualificationCertificate,
+  createCommonEnvelopePredicateSpecV1,
+  createCommonEnvelopeRoleContractV1,
   createObserverRoleSpec,
   createPredicateSpec,
   createQualificationRegistry,
@@ -17,6 +19,8 @@ import {
   hashObserverSigningKeySetRoot,
   hashRevokedObserverKeyIdsRoot,
   recomputeObserverSigningKeyId,
+  assertPredicateCommonEnvelopeRoleContractV1,
+  COMMON_ENVELOPE_ROLE_CONTRACT_VERSION,
   QUALIFICATION_SCHEMA_MANIFESTS,
   type Hash,
 } from "../src/index.ts";
@@ -173,6 +177,54 @@ test("predicate contains full role semantics and role mutation coverage is exact
   const { specDigest: _specDigest, ...predicatePayload } = predicate;
   assert.throws(() => createPredicateSpec({ ...predicatePayload, observationSchemaRefs: [] }), /required observer role schema is not declared/);
   assert.throws(() => decodeQualificationRegistry({ ...registry, registryId: h("f") }));
+});
+
+test("common envelope contract composes four exact versioned roles without predicate switches", () => {
+  const commonInput: import("../src/index.ts").CommonEnvelopePredicateSpecInputV1 = {
+    predicateId: "fixture.common-envelope",
+    version: "1.0.0",
+    claimSchemaRefs: predicate.claimSchemaRefs,
+    observationSchemaRefs: [role.observationSchema],
+    requiredObserverRoles: [role],
+    passRuleDigest: h("5"),
+    failRuleDigest: h("6"),
+    invalidRuleDigest: h("7"),
+    anchorPolicyDigest: h("8"),
+    tolerancePolicyDigest: h("9"),
+    forbiddenProducerSelectors: ["legacy"],
+    criticalMutationIds: ["mutation-a", "mutation-b"],
+    independentOracleKinds: ["chain", "math"],
+    verifierQualificationSpecDigest: h("a"),
+  };
+  const commonPredicate = createCommonEnvelopePredicateSpecV1(commonInput);
+  const contract = assertPredicateCommonEnvelopeRoleContractV1(commonPredicate);
+  assert.equal(contract.version, COMMON_ENVELOPE_ROLE_CONTRACT_VERSION);
+  assert.equal(contract.requiredObserverRoles.length, 4);
+  assert.equal(commonPredicate.requiredObserverRoles.length, 5);
+  assert.equal(
+    commonPredicate.requiredObserverRoles.filter((candidate) => candidate.roleId === contract.signedInvocationRoleId).length,
+    1,
+  );
+  assert.notEqual(
+    createCommonEnvelopeRoleContractV1("fixture.other").signedInvocationRoleId,
+    contract.signedInvocationRoleId,
+  );
+
+  const invocationRole = commonPredicate.requiredObserverRoles.find((candidate) => candidate.roleId === contract.signedInvocationRoleId)!;
+  const mutatedRoles = commonPredicate.requiredObserverRoles.map((candidate) => candidate.roleId === invocationRole.roleId
+    ? { ...candidate, anchorPolicyDigest: h("f") }
+    : candidate);
+  assert.throws(
+    () => assertPredicateCommonEnvelopeRoleContractV1({ ...commonPredicate, requiredObserverRoles: mutatedRoles } as never),
+    /common envelope role mismatch/,
+  );
+  assert.throws(
+    () => createCommonEnvelopePredicateSpecV1({
+      ...commonInput,
+      requiredObserverRoles: [invocationRole],
+    }),
+    /collides with common envelope contract/,
+  );
 });
 
 test("certificate id/payload and root mutation fail closed", () => {

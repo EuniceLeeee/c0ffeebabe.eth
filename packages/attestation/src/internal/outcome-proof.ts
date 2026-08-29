@@ -15,14 +15,14 @@ import type {
 } from "../internal-authority.ts";
 
 const PROOF_KIND = "aloha.attestation-outcome-issuer-proof" as const;
-const PROOF_VERSION = "1" as const;
+const PROOF_VERSION = "2" as const;
 const ZERO_HASH = `0x${"0".repeat(64)}` as Hash;
 const ZERO_SIGNATURE = `0x${"00".repeat(64)}`;
 
 export const OUTCOME_PROOF_DOMAINS = Object.freeze({
-  payload: "aloha/attestation-outcome-issuer-proof/payload/v1",
-  id: "aloha/attestation-outcome-issuer-proof/id/v1",
-  signing: "aloha/attestation-outcome-issuer-proof/signing/v1",
+  payload: "aloha/attestation-outcome-issuer-proof/payload/v2",
+  id: "aloha/attestation-outcome-issuer-proof/id/v2",
+  signing: "aloha/attestation-outcome-issuer-proof/signing/v2",
 });
 
 type ProofCore = Omit<
@@ -54,7 +54,7 @@ function proofCore(input: AttestationOutcomeProofIssueInputV1, sequence: string)
     candidatePartitionRoot: nonZeroHash(input.candidatePartitionRoot, "outcomeProof.candidatePartitionRoot"),
     familyDefinitionHash: nonZeroHash(input.candidate.familyDefinitionHash, "outcomeProof.familyDefinitionHash"),
     familyCandidateKey: nonZeroHash(input.candidate.familyCandidateKey, "outcomeProof.familyCandidateKey"),
-    candidateSnapshotHash: nonZeroHash(input.candidate.candidateSnapshotHash, "outcomeProof.candidateSnapshotHash"),
+    candidateSubjectHash: nonZeroHash(input.candidate.candidateSubjectHash, "outcomeProof.candidateSubjectHash"),
     outcomeBodyHash: nonZeroHash(input.outcomeBodyHash, "outcomeProof.outcomeBodyHash"),
     releaseProvenanceHash: nonZeroHash(input.releaseProvenanceHash, "outcomeProof.releaseProvenanceHash"),
     attestationAuthorityRoot: nonZeroHash(input.attestationAuthorityRoot, "outcomeProof.attestationAuthorityRoot"),
@@ -74,7 +74,7 @@ function proofCoreFromRecord(value: AttestationOutcomeIssuerProofV1): ProofCore 
     candidatePartitionRoot: nonZeroHash(value.candidatePartitionRoot, "outcomeProof.candidatePartitionRoot"),
     familyDefinitionHash: nonZeroHash(value.familyDefinitionHash, "outcomeProof.familyDefinitionHash"),
     familyCandidateKey: nonZeroHash(value.familyCandidateKey, "outcomeProof.familyCandidateKey"),
-    candidateSnapshotHash: nonZeroHash(value.candidateSnapshotHash, "outcomeProof.candidateSnapshotHash"),
+    candidateSubjectHash: nonZeroHash(value.candidateSubjectHash, "outcomeProof.candidateSubjectHash"),
     outcomeBodyHash: nonZeroHash(value.outcomeBodyHash, "outcomeProof.outcomeBodyHash"),
     releaseProvenanceHash: nonZeroHash(value.releaseProvenanceHash, "outcomeProof.releaseProvenanceHash"),
     attestationAuthorityRoot: nonZeroHash(value.attestationAuthorityRoot, "outcomeProof.attestationAuthorityRoot"),
@@ -117,7 +117,7 @@ export function validateOutcomeIssuerProof(
 ): AttestationOutcomeIssuerProofV1 {
   assertExactKeys(value, [
     "kind", "version", "proofHash", "payloadHash", "runId", "cutoff", "candidatePartitionRoot",
-    "familyDefinitionHash", "familyCandidateKey", "candidateSnapshotHash", "outcomeBodyHash",
+    "familyDefinitionHash", "familyCandidateKey", "candidateSubjectHash", "outcomeBodyHash",
     "releaseProvenanceHash", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot",
     "releaseAuthorityRoot", "sequence", "signatureAlgorithm", "issuerKeyId", "signatureHex",
   ], "outcomeProof");

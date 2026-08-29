@@ -1,0 +1,18 @@
+{
+  "name": "@aloha/acceptance-collectors",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./content-addressed-sink": "./src/content-addressed-sink.ts",
+    "./full-family-release-artifacts": "./src/full-family-release-artifacts.ts",
+    "./full-family-observer": "./src/full-family-observer.ts",
+    "./production-full-family-port": "./src/production-full-family-port.ts",
+    "./six-step-observer": "./src/six-step-observer.ts",
+    "./production-six-step-port": "./src/production-six-step-port.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

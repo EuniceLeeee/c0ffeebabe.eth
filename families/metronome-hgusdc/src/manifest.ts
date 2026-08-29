@@ -1,0 +1,12 @@
+import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { asSchemaRef } from "../../../packages/capability-contracts/src/index.ts";
+export const METRONOME_HGUSDC_FAMILY_ID = "metronome-hgusdc" as const;
+export const METRONOME_HGUSDC_FAMILY_VERSION = "1.0.0" as const;
+export const METRONOME_HGUSDC_SOURCE_WINDOW_BLOCKS = 50 as const;
+export const METRONOME_HGUSDC_SOURCE_PLAN_ID = "metronome-hgusdc.fixed-cutoff-50-block" as const;
+export const METRONOME_HGUSDC_SOURCE_PLAN_SCHEMA_HASH = asSchemaRef(hashDomain("aloha/metronome-hgusdc/source-plan-schema/v1", METRONOME_HGUSDC_SOURCE_PLAN_ID));
+export const METRONOME_HGUSDC_CAPABILITY_IDS = Object.freeze({ state: "family.metronome-hgusdc.state", coarse: "family.metronome-hgusdc.coarse", exact: "family.metronome-hgusdc.exact" } as const);
+export const METRONOME_HGUSDC_ACTION_OWNER_ID = "family.metronome-hgusdc.exit-action" as const;
+export const METRONOME_HGUSDC_MANIFEST = Object.freeze({ familyId: METRONOME_HGUSDC_FAMILY_ID, version: METRONOME_HGUSDC_FAMILY_VERSION, domain: "protocol" as const, sourcePlans: Object.freeze([{ id: METRONOME_HGUSDC_SOURCE_PLAN_ID, windowBlocks: METRONOME_HGUSDC_SOURCE_WINDOW_BLOCKS, evidenceChannel: "nominate" as const }]), core: Object.freeze(["nomination", "identity", "materialization", "projection", "rehydration"] as const), extensions: Object.freeze(["state", "coarse", "exact"] as const), actionOwners: Object.freeze([METRONOME_HGUSDC_ACTION_OWNER_ID]) });
+export const METRONOME_HGUSDC_FAMILY_DEFINITION_HASH: Hash = hashDomain("aloha/metronome-hgusdc/family-definition/v1", METRONOME_HGUSDC_MANIFEST);
+export const METRONOME_HGUSDC_OWNER_REF: Hash = hashDomain("aloha/metronome-hgusdc/owner/v1", { familyId: METRONOME_HGUSDC_FAMILY_ID, version: METRONOME_HGUSDC_FAMILY_VERSION });

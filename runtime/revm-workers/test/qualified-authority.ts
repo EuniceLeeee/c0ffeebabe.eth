@@ -2,10 +2,15 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
 import {
   createRuntimeReleaseBindingV1,
+  createRuntimeReleaseDiscoverySourceQualificationV1,
+  hashRuntimeReleaseDiscoveryEndpointLocatorV1,
   runtimeReleaseBindingSigningBytes,
   hashRuntimeReleaseExecutorLeaseV1,
+  sealRuntimeReleaseNominationQualificationSetV1,
   type RuntimeReleaseBindingPayloadV1,
 } from "../../../specs/release-authority/src/index.ts";
+import { generatedEconomicValuationOwnerQualificationSetFixtureV1 } from "../../../specs/release-authority/test/generated-valuation-owner-qualification-fixture.ts";
+import { generatedEconomicSafetyActionOwnerQualificationFixtureV1 } from "../../../specs/release-authority/test/generated-action-owner-qualification-fixture.ts";
 import { verifyAndIssueRuntimeReleaseAuthorityV1 } from "../../../packages/runtime-release-authority/src/index.ts";
 import { issueRuntimeReleaseExecutorLeaseV1 } from "../../../packages/runtime-release-authority/src/internal/revm-worker-owner.ts";
 import { issueRuntimeReleaseQualifiedExecutorAuthorityIssuer } from "../../../packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts";
@@ -46,6 +51,15 @@ interface Deployment {
 
 function deployment(): Deployment {
   const registry = createQualifiedExecutorRegistry(executor);
+  const valuationQualification = generatedEconomicValuationOwnerQualificationSetFixtureV1("revm-workers");
+  const actionOwnerQualification = generatedEconomicSafetyActionOwnerQualificationFixtureV1("revm-workers");
+  const nominationQualificationSet = sealRuntimeReleaseNominationQualificationSetV1([{
+    proposalLeafDigest: h("nomination-proposal"),
+    criticalMutationCorpusRoot: h("nomination-mutations"),
+    independentOracleCaseRoot: h("nomination-oracle"),
+    qualificationSpecDigest: h("nomination-spec"),
+    verifierQualificationCertificateRoot: h("nomination-certificate"),
+  }]);
   const releaseApproval = {
     registryRoot: registry.registryRoot,
     releaseRoleManifestRoot: executor.releaseRoleManifestRoot,
@@ -58,11 +72,30 @@ function deployment(): Deployment {
   const payload: RuntimeReleaseBindingPayloadV1 = {
     schemaVersion: 1,
     kind: "aloha.runtime-release-binding",
-    acceptanceCertificate: { certificateId: h("certificate"), payloadHash: h("certificate-payload"), verdict: "pass" },
-    releaseAuthorityApprovalId: h("approval"), releaseAuthorityApprovalPayloadHash: h("approval-payload"), authorityPinDigest: h("pin"),
+    releaseAuthorityApprovalId: h("approval"), releaseAuthorityApprovalPayloadHash: h("approval-payload"), releaseAcceptanceRequirementSetRoot: h("acceptance-requirements"),
     externalTrustAnchorRoot: h("anchor"), externalIssuerKeySetRoot: h("keys"), qualificationRegistryApprovalId: h("registry-approval"), qualificationRegistryRoot: h("registry"), qualificationEpoch: "1", qualificationAudienceHash: h("audience"),
     predicateCompositionRootDigest: h("composition"), gateCoreRuntimeClosureDigest: executor.closureFingerprint, gateCoreImplementationClosureDigest: h("gate-core"),
-    qualifiedExecutorRegistryRoot: registry.registryRoot, selectedExecutorLeafHash: hashDomain("aloha/qualified-executor-registry/v1", executor), selectedExecutor: executor,
+    searcherRuntime: { runtimeArtifactRoot: h("searcher-artifact"), implementationClosureDigest: h("searcher-closure"), nodeExecutableSha256: h("searcher-node"), entrypointSha256: h("searcher-entrypoint"), bundleModulePath: "/etc/aloha/deployment-bundle.mjs", bundleModuleSha256: h("searcher-bundle") },
+    discoverySourceQualification: createRuntimeReleaseDiscoverySourceQualificationV1({
+      providerIdentity: "reth-mainnet",
+      backendEpoch: "reth-backend-1",
+      profile: "reth-json-rpc-v1",
+      chainId: "1",
+      endpointLocatorHash: hashRuntimeReleaseDiscoveryEndpointLocatorV1("http://127.0.0.1:8545"),
+      qualificationRoot: h("discovery-source-qualification"),
+    }),
+    qualifiedExecutorRegistry: registry.entries, qualifiedExecutorRegistryRoot: registry.registryRoot,
+    valuationOwnerRegistryRoot: valuationQualification.registry.valuationOwnerRegistryRoot,
+    valuationOwnerQualificationCertificates: valuationQualification.certificates,
+    qualifiedValuationOwnerSetRoot: valuationQualification.root,
+    actionOwnerRegistryRoot: actionOwnerQualification.registry.actionOwnerRegistryRoot,
+    actionOwnerQualificationCertificates: actionOwnerQualification.certificates,
+    qualifiedActionOwnerSetRoot: actionOwnerQualification.root,
+    safetyProfile: actionOwnerQualification.profile,
+    safetyProfileRoot: actionOwnerQualification.profileRoot,
+    qualifiedCapabilityRefsRoot: h("qualified-capability-refs"),
+    nominationProgramSetRoot: nominationQualificationSet.programSetRoot, nominationQualificationSet, nominationQualificationSetRoot: nominationQualificationSet.root,
+    selectedExecutorLeafHash: hashDomain("aloha/qualified-executor-registry/v1", executor), selectedExecutor: executor,
     releaseRoleManifestRoot: executor.releaseRoleManifestRoot, candidateReleaseCommit: executor.candidateCommit, workerEpoch: "release-epoch", executorSessionHash: h("release-session"),
     frameworkAuthorityRoot: h("framework"), executorAuthorityRoot, releaseAuthorityRoot: h("release-authority"), attestationProofIssuerKeyId: h("proof"), candidatePartitionProofIssuerKeyId: h("partition-proof"),
   };

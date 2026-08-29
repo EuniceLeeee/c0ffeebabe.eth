@@ -8,6 +8,7 @@ import {
 } from "../../artifact-lineage-facts/src/reference-model.ts";
 import {
   ARTIFACT_LINEAGE_INVOCATION_SEAL_MUTATION_IDS,
+  ARTIFACT_LINEAGE_INVOCATION_SEAL_OBSERVER_ROLE,
   ARTIFACT_LINEAGE_MUTATION_IDS,
   ARTIFACT_LINEAGE_SIDECAR_MUTATION_IDS,
   ARTIFACT_LINEAGE_PREDICATE_PROGRAM_DESCRIPTOR_DIGEST,
@@ -31,12 +32,18 @@ import {
 } from "../src/generated/predicate-composition.ts";
 import { RELEASE_ROLE_MANIFEST } from "../src/generated/release-role-manifest.ts";
 import {
+  computeGateCoreAuthorityPinDigest,
+  createSelectedPredicateAuthorityEntry,
   type GateCoreAuthorityPinV1,
   type GateCoreInputV1,
 } from "../src/index.ts";
 import { evaluateGateCore } from "../src/generated/release-runtime.ts";
 import { evaluateGateCoreForQualification } from "../src/qualification/internal.ts";
 import * as releaseExports from "../src/generated/release-runtime.ts";
+import {
+  assertPredicateCommonEnvelopeRoleContractV1,
+  COMMON_ENVELOPE_ROLE_CONTRACT_VERSION,
+} from "../../../specs/qualification/src/index.ts";
 
 const hash = (digit: string) => `0x${digit.repeat(64)}` as `0x${string}`;
 const CURRENT_PREDICATE_BINDING = RELEASE_PREDICATE_BINDINGS[0]!;
@@ -53,11 +60,16 @@ test("generic core and live predicate closure do not import qualification oracle
   assert.doesNotMatch(releaseSource, /qualification\/internal|reference-model|CASE_MATERIAL/);
 });
 
-test("package release surface has one runtime export and no internal subpath", () => {
+test("package release surface exposes only runtime evaluation and opaque assembly consumers", () => {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { exports?: unknown };
   assert.deepEqual(manifest.exports, { ".": "./src/generated/release-runtime.ts" });
-  assert.deepEqual(Object.keys(releaseExports), ["evaluateGateCore"]);
+  assert.deepEqual(Object.keys(releaseExports), [
+    "assembleReleaseGateInvocations",
+    "assertCommonEnvelopeAuthorityPortV1",
+    "evaluateAssembledReleaseGateInvocations",
+    "evaluateGateCore",
+  ]);
   const authoritySource = readFileSync(join(root, "src/generated/release-authority.ts"), "utf8");
   assert.match(authoritySource, /RELEASE_AUTHORITY[^=]*= null/);
   assert.doesNotMatch(authoritySource, /ARTIFACT_LINEAGE|fixture|CASE_MATERIAL/);
@@ -91,11 +103,33 @@ function authority(): GateCoreAuthorityPinV1 {
     gateCoreImplementationClosureDigest: hash("4"),
     gateCoreRuntimeClosureDigest: hash("7"),
     verifierQualificationId: hash("5"),
-    signedInvocationRoleId: "artifact-lineage-invocation-seal-observer",
+    signedInvocationRoleId: ARTIFACT_LINEAGE_INVOCATION_SEAL_OBSERVER_ROLE.roleId,
     maxInvocationTtlUnixNs: "1000000000",
     expectedAudienceHash: hash("8"),
+    selectedPredicateAuthority: createSelectedPredicateAuthorityEntry(
+      ARTIFACT_LINEAGE_PREDICATE_SPEC.predicateId,
+      [],
+    ),
   };
 }
+
+test("an unrelated predicate authority entry cannot alter the selected predicate pin or leaf", () => {
+  const selected = authority();
+  const selectedDigest = computeGateCoreAuthorityPinDigest(selected);
+  const selectedLeaf = CURRENT_PREDICATE_BINDING.compositionLeafDigest;
+  const releaseEntries = [selected.selectedPredicateAuthority];
+  const unrelated = createSelectedPredicateAuthorityEntry("aloha.unrelated.facts", [{
+    roleId: "unrelated-authority",
+    artifactRefId: hash("a"),
+    contentSha256: hash("b"),
+    schema: { id: "aloha.unrelated-authority", version: "1.0.0", schemaHash: hash("c") },
+  }]);
+  const selectedAfter = [...releaseEntries, unrelated]
+    .find(entry => entry.predicateId === selected.predicate.predicateId)!;
+  assert.deepEqual(selectedAfter, selected.selectedPredicateAuthority);
+  assert.equal(computeGateCoreAuthorityPinDigest(selected), selectedDigest);
+  assert.equal(CURRENT_PREDICATE_BINDING.compositionLeafDigest, selectedLeaf);
+});
 
 function emptyInput(): GateCoreInputV1 {
   return {
@@ -165,7 +199,44 @@ test("composition metadata is attached to the checked module export", () => {
   assert.ok(generatedEntry);
   assert.equal(generatedEntry.modulePath, entry.modulePath);
   assert.equal(generatedEntry.exportName, entry.exportName);
+  assert.equal(generatedEntry.materialProviderModulePath, entry.materialProviderModulePath);
+  assert.equal(generatedEntry.materialProviderExportName, entry.materialProviderExportName);
+  assert.equal(generatedEntry.materialProviderContractDigest, entry.materialProviderContractDigest);
   assert.equal(resolvePredicateEvaluator(entry.predicateId)?.evaluator, ARTIFACT_LINEAGE_PREDICATE_EVALUATOR);
+  assert.equal(resolvePredicateEvaluator(entry.predicateId)?.materialProvider, CURRENT_PREDICATE_BINDING.materialProvider);
+});
+
+test("all eight generated predicate bindings implement the exact common envelope role contract", () => {
+  assert.equal(RELEASE_PREDICATE_BINDINGS.length, 8);
+  for (const binding of RELEASE_PREDICATE_BINDINGS) {
+    const contract = assertPredicateCommonEnvelopeRoleContractV1(binding.evaluator.predicateSpec);
+    assert.equal(binding.commonEnvelopeRoleContractVersion, COMMON_ENVELOPE_ROLE_CONTRACT_VERSION);
+    assert.equal(binding.evaluator.commonEnvelopeRoleContractVersion, COMMON_ENVELOPE_ROLE_CONTRACT_VERSION);
+    assert.equal(binding.materialProvider.predicateId, binding.predicateId);
+    assert.equal(binding.materialProvider.providerContractDigest, binding.materialProviderContractDigest);
+    assert.equal(
+      binding.evaluator.predicateSpec.requiredObserverRoles.filter((role) => role.roleId === contract.signedInvocationRoleId).length,
+      1,
+    );
+    assert.equal(contract.requiredObserverRoles.length, 4);
+  }
+});
+
+test("a missing or mutated common envelope role is rejected", () => {
+  const predicate = CURRENT_PREDICATE_BINDING.evaluator.predicateSpec;
+  const contract = assertPredicateCommonEnvelopeRoleContractV1(predicate);
+  const missing = {
+    ...predicate,
+    requiredObserverRoles: predicate.requiredObserverRoles.filter((role) => role.roleId !== "store-epoch-observation"),
+  };
+  assert.throws(() => assertPredicateCommonEnvelopeRoleContractV1(missing as never), /common envelope role mismatch/);
+  const mutated = {
+    ...predicate,
+    requiredObserverRoles: predicate.requiredObserverRoles.map((role) => role.roleId === contract.signedInvocationRoleId
+      ? { ...role, observerQualificationSpecDigest: hash("f") }
+      : role),
+  };
+  assert.throws(() => assertPredicateCommonEnvelopeRoleContractV1(mutated as never), /common envelope role mismatch/);
 });
 
 test("qualification corpus covers positive, fail, invalid, and every declared mutation", () => {

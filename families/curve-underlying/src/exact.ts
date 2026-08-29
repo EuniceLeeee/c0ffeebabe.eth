@@ -1,0 +1,4 @@
+import { coarseCurveUnderlying } from "./pricing.ts";
+import type { CurveIdentityV1, CurveMaterializedStateV1, CurveQuoteV1, CurveRouteV1 } from "./types.ts";
+export type CurveExactOutcomeV1 = { readonly status: "verified"; readonly quote: CurveQuoteV1 } | { readonly status: "chain-proven-rejected"; readonly reasonCode: "zero-output" } | { readonly status: "unavailable"; readonly reasonCode: "quote-error" };
+export function exactCurveUnderlying(input: { readonly identity: CurveIdentityV1; readonly state: CurveMaterializedStateV1; readonly route: CurveRouteV1; readonly amountIn: string }): CurveExactOutcomeV1 { const result = coarseCurveUnderlying(input); if (result.status === "unavailable") return Object.freeze({ status: "unavailable", reasonCode: "quote-error" }); if (result.quote.amountOut === "0") return Object.freeze({ status: "chain-proven-rejected", reasonCode: "zero-output" }); return Object.freeze({ status: "verified", quote: result.quote }); }

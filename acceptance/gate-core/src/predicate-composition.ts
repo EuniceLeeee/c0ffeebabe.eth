@@ -14,6 +14,7 @@ import type {
   GateReasonCode,
   GateVerdict,
 } from "./predicate-contract.ts";
+import type { PredicateMaterialProviderV1 } from "./material-provider.ts";
 
 /**
  * A predicate adapter is the only place that knows a predicate's typed live
@@ -36,10 +37,55 @@ export interface PredicateRuntimeFactsV1 {
     readonly rawArtifactRefs: readonly ReadOnlyArtifactRefV1[];
     readonly observedClaimIds: readonly string[];
   }[];
+  /** Narrow projection assembled only after GateCore verifies the signed
+   * observer invocation, its registry key and the subject-artifact ref closure. */
+  readonly trustedObserverInvocation?: Readonly<{
+    readonly keyId: Hash;
+    readonly observerQualificationId: Hash;
+    readonly roleId: string;
+    readonly authenticatedArtifactRefIds: readonly Hash[];
+    readonly candidateReleaseCommit: string;
+  }> | null;
+  /** Selected-predicate authority artifacts are pinned by the externally
+   * signed GateCore authority.  The generic core verifies only this neutral
+   * content-addressed envelope; the selected predicate owns its role/schema
+   * semantics. */
+  readonly trustedPredicateAuthority?: SelectedPredicateAuthorityEntryV1;
+  /** Neutral projection of the externally signed release requirement set.
+   * GateCore exposes it only after the V3 approval signature and the selected
+   * requirement have both verified. Predicate adapters may join related
+   * qualification identities without accepting caller-reported digests. */
+  readonly trustedReleaseQualificationBindings?: readonly Readonly<{
+    readonly predicateId: string;
+    readonly predicateSpecDigest: Hash;
+    readonly verifierQualificationId: Hash;
+  }>[];
+}
+
+export interface PredicateAuthorityArtifactBindingV1 {
+  readonly roleId: string;
+  readonly artifactRefId: Hash;
+  readonly contentSha256: Hash;
+  readonly schema: Readonly<{
+    readonly id: string;
+    readonly version: string;
+    readonly schemaHash: Hash;
+  }>;
+}
+
+/** One authority entry for the selected predicate only.  There is no global
+ * predicate map here, so adding an unrelated predicate cannot change this
+ * predicate's authority entry or qualification leaf. */
+export interface SelectedPredicateAuthorityEntryV1 {
+  readonly predicateId: string;
+  readonly artifactBindings: readonly PredicateAuthorityArtifactBindingV1[];
+  readonly bindingSetRoot: Hash;
 }
 
 export interface PredicateEvaluatorV1 {
   readonly predicateId: string;
+  /** Shared GateCore input-envelope role contract implemented by the spec. */
+  readonly commonEnvelopeRoleContractVersion: string;
   /** Versioned plugin-owned adapter contract identity. */
   readonly adapterVersion: string;
   readonly predicateSpec: PredicateSpecV1;
@@ -60,6 +106,7 @@ export interface PredicateEvaluatorV1 {
  */
 export interface PredicateCompositionBindingV1 {
   readonly predicateId: string;
+  readonly commonEnvelopeRoleContractVersion: string;
   readonly predicateSpecDigest: Hash;
   readonly predicateProgramDescriptorDigest: Hash;
   readonly oracleProgramDescriptorDigest: Hash;
@@ -68,7 +115,10 @@ export interface PredicateCompositionBindingV1 {
   readonly compositionLeafDigest: Hash;
   readonly predicateImplementationExportDigest: Hash;
   readonly oracleImplementationExportDigest: Hash;
+  readonly materialProviderContractDigest: Hash;
+  readonly materialProviderImplementationExportDigest: Hash;
   readonly evaluator: PredicateEvaluatorV1;
+  readonly materialProvider: PredicateMaterialProviderV1;
 }
 
 /** Trusted release binding supplied by the package wrapper, never by input. */

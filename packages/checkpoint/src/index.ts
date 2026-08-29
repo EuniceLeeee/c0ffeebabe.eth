@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { lstatSync, realpathSync, statSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import {
   assertExactKeys,
@@ -25,6 +26,7 @@ import {
   validateIdentityIssuerProof,
   attestationPartialIdentitySemanticHash,
   validateRejectionEvidenceBundle,
+  validateIdentityObservation,
   type AttestationOutcomeCapabilityV1,
   type AttestationValidationAuthorityV1,
   type AttestationPartitionCapabilityV1,
@@ -33,6 +35,8 @@ import {
   type AttestationPersistenceBatchClaimV1,
   type AttestationPersistedOutcomeV1,
   type AttestationIdentityResumeCapabilityV1,
+  type AttestationOutcomeResumeCapabilityV1,
+  type AttestationVerifiedMemoReuseCapabilityV1,
   type IdentityVerifiedV1,
   validateProbeReceipt,
   type AttestationPartitionV1,
@@ -44,7 +48,11 @@ import {
   type RetryableProbeCapabilityV1,
 } from "../../attestation/src/index.ts";
 import { assertAttestationValidationAuthority as assertIssuedAttestationValidationAuthority } from "../../attestation/src/internal/validation-authority-verifier.ts";
-import { rehydrateIdentityResumeCapabilityForCheckpoint } from "../../attestation/src/internal/validation-authority-rehydrator.ts";
+import {
+  rehydrateIdentityResumeCapabilityForCheckpoint,
+  rehydrateOutcomeResumeCapabilityForCheckpoint,
+  rehydrateVerifiedMemoReuseCapabilityForCheckpoint,
+} from "../../attestation/src/internal/validation-authority-rehydrator.ts";
 import {
   candidatePartitionProofPayloadHash,
   candidatePartitionBindingFromProof,
@@ -55,10 +63,18 @@ import {
   type CandidatePartitionBindingV1,
   type CandidatePartitionCapabilityV1,
   type CandidatePartitionProofIssuerPortV1,
-  type CandidatePartitionProofV1,
   type CandidatePartitionReaderPortV1,
+  type CandidateNominationQualificationBindingV1,
 } from "../../../specs/candidate-partition-authority/src/index.ts";
 import { assertIssuedCandidatePartitionProofIssuer } from "../../../specs/candidate-partition-authority/src/internal/issuer-consumer.ts";
+import {
+  decodeNominationClosureBytesV1,
+  decodeNominationClosureV1,
+  encodeNominationClosureV1,
+  nominationEvidenceRefHash,
+  sealNominationClosureV1,
+  type NominationClosureV1,
+} from "../../../specs/nomination-authority/src/index.ts";
 import {
   CandidatePartitionCapabilityRegistryV1,
   consumeCandidatePartitionBootstrap,
@@ -71,7 +87,21 @@ import {
   type InstanceCatalogV1,
   type InstancePublicationV1,
 } from "../../catalog/src/index.ts";
-import { candidatePartitionRoot, validateSourceCoverageCertificate, type CandidateRecordV1, type SourceCoverageCertificateV1 } from "../../discovery/src/index.ts";
+import {
+  candidatePartitionRoot,
+  decodePersistedSourcePlanExecutionSet,
+  decodeSourcePlanEvidenceReceipt,
+  sourcePlanIdentity,
+  validateSourceCoverageCertificate,
+  validateSourcePlanEvidenceReceipts,
+  validatePersistedExecutionCoverage,
+  type CanonicalCutoffV1,
+  type CandidateRecordV1,
+  type SourceCoverageCertificateV1,
+  type SourcePlanEvidenceReceiptV1,
+  type SourcePlanRefV1,
+  type PersistedSourcePlanExecutionSetV1,
+} from "../../discovery/src/index.ts";
 import {
   buildPersistedGraph,
   type ActiveReadyAuthorityBindingV1,
@@ -87,6 +117,7 @@ import type {
   BuilderCheckpointPort,
   BuilderCheckpointRootV1,
   InProgressBuilderRunV1,
+  SourcePlanPredecessorClosureV1,
 } from "../../generation-builder/src/index.ts";
 import {
   assertIssuedReadyPromotionAuthorityPort,
@@ -130,12 +161,37 @@ import {
   type DurableTransaction,
   type WriterLease,
 } from "../../durable-store/src/index.ts";
+import {
+  type ReadyStage12EvidenceBindingV1,
+  type ReadyStage12EvidenceCapabilityV1,
+  type ReadyStage12EvidenceReaderPortV1,
+  type ReadyStage12EvidenceSnapshotV1,
+} from "./ready-stage12-evidence.ts";
+import { registerCheckpointReadyStage12EvidenceReader } from "./internal/ready-stage12-evidence-issuer.ts";
+import { assertCheckpointSixStepArtifactPortV1 } from "./internal/six-step-artifact-port-owner.ts";
+import type {
+  ReadyFullFamilyEvidenceReaderPortV1,
+  ReadyFullFamilyEvidenceSnapshotV1,
+} from "./ready-full-family-evidence.ts";
+import { registerCheckpointReadyFullFamilyEvidenceReader } from "./internal/ready-full-family-evidence-issuer.ts";
+
+export type {
+  ReadyStage12EvidenceBindingV1,
+  ReadyStage12EvidenceCapabilityV1,
+  ReadyStage12EvidenceReaderPortV1,
+  ReadyStage12EvidenceSnapshotV1,
+  ReadyStage12VerifiedInstanceV1,
+} from "./ready-stage12-evidence.ts";
+export type {
+  ReadyFullFamilyEvidenceReaderPortV1,
+  ReadyFullFamilyEvidenceSnapshotV1,
+} from "./ready-full-family-evidence.ts";
 
 const CHECKPOINT_ROOT_KIND = "aloha/checkpoint-root/v2";
 const RUN_KIND = "aloha/in-progress-run/v2";
-const CANDIDATE_KIND = "aloha/candidate-record/v1";
-const CANDIDATE_PARTITION_COMMITMENT_KIND = "aloha/candidate-partition-commitment/v1";
-const CANDIDATE_PARTITION_PROOF_KIND = "aloha/candidate-partition-proof/v1";
+const CANDIDATE_KIND = "aloha/candidate-record/v2";
+const CANDIDATE_PARTITION_COMMITMENT_KIND = "aloha/candidate-partition-commitment/v2";
+const CANDIDATE_PARTITION_PROOF_KIND = "aloha/candidate-partition-proof/v2";
 const OUTCOME_KIND = "aloha/candidate-final-outcome/v1";
 const PARTIAL_OUTCOME_KIND = "aloha/attestation-partial-outcome/v1";
 const REJECTION_BUNDLE_KIND = "aloha/rejection-evidence-bundle/v2";
@@ -149,6 +205,9 @@ const PARTITION_PAGE_KIND = "aloha/checkpoint-partition-page/v1";
 const PARTITION_MANIFEST_KIND = "aloha/checkpoint-partition-manifest/v1";
 const RECENT_OBSERVATION_KIND = "aloha/recent-observation/v1";
 const SOURCE_COVERAGE_KIND = "aloha/source-coverage/v1";
+const SOURCE_EXECUTION_SET_KIND = "aloha/persisted-source-plan-execution-set/v1";
+const SOURCE_PLAN_EVIDENCE_KIND = "aloha/source-plan-evidence/v1";
+const NOMINATION_CLOSURE_KIND = "aloha/nomination-closure/v1";
 const VERIFIED_MEMO_SET_KIND = "aloha/verified-memo-set/v1";
 const INSTANCE_CATALOG_KIND = "aloha/instance-catalog/v1";
 const GRAPH_KIND = "aloha/persisted-graph/v1";
@@ -159,21 +218,29 @@ const PROBE_RECEIPT_KIND = "aloha/probe-transition-receipt/v1";
 const PARTITION_PAGE_SIZE = 128;
 const EMPTY_MEMO_SEED_LINEAGE_ROOT = hashDomain("aloha/memo-seed-lineage-empty/v1", {});
 
+/**
+ * Process-local identity for the checkpoint owner.  A structural object with
+ * the same public methods must never be accepted as the release-owned
+ * persisted-attestation checkpoint edge.
+ */
+const checkpointStoreInstances = new WeakSet<object>();
+
 type DurableContentReader = (hash: Hash) => DurableContentRecord | null;
 
 const ROOT_FIELDS = ["revision", "verifiedMemoRoot", "inProgressRunId", "stagedReadyStorageHash", "latestMemoSeedReceiptHash", "memoSeedSequence", "memoSeedLineageRoot", "latestProbeReceiptHash", "probeReceiptSequence", "probeReceiptLineageRoot", "readyGenerationId", "readyGenerationRecordHash", "schemaHash"] as const;
-const RUN_FIELDS = ["runId", "parentGenerationId", "checkpointRevision", "candidatePartitionRevision", "cutoff", "recentObservationRoot", "recentObservationStorageHash", "definitionCatalogRoot", "sourceCoverageRoot", "sourceCoverageStorageHash", "candidatePartitionRoot", "candidatePartitionStorageHash", "candidatePartitionProofStorageHash", "candidateRecordCount", "outcomePartitionRoot", "outcomePartitionStorageHash", "partialOutcomePartitionStorageHash", "attestationPartitionStorageHash", "verifiedMemoSetRoot", "verifiedMemoSetStorageHash", "accounting"] as const;
+const RUN_FIELDS = ["runId", "parentGenerationId", "checkpointRevision", "candidatePartitionRevision", "cutoff", "recentObservationRoot", "recentObservationStorageHash", "definitionCatalogRoot", "sourceCoverageRoot", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidatePartitionRoot", "candidatePartitionStorageHash", "candidatePartitionProofStorageHash", "candidateRecordCount", "outcomePartitionRoot", "outcomePartitionStorageHash", "partialOutcomePartitionStorageHash", "attestationPartitionStorageHash", "verifiedMemoSetRoot", "verifiedMemoSetStorageHash", "accounting"] as const;
 const PARTITION_MANIFEST_FIELDS = ["runId", "partitionKind", "count", "pageStorageHashes"] as const;
 const PARTITION_PAGE_FIELDS = ["runId", "partitionKind", "pageIndex", "entries"] as const;
 const VERIFIED_MEMO_SET_FIELDS = ["memos", "retainedRawLocatorHashes", "verifiedMemoSetRoot"] as const;
-const CANDIDATE_PARTITION_COMMITMENT_FIELDS = ["readyRecordHash", "runId", "cutoff", "candidatePartitionRoot", "candidatePartitionStorageHash", "candidateRecordCount", "candidateKeysRoot", "recentObservationRoot", "sourceCoverageRoot", "checkpointRevision", "candidatePartitionProofStorageHash", "exactOutcomePartitionRoot", "sealedRevision", "stageRevision", "stageRecordHash", "readyBaseHash"] as const;
-const READY_CLOSURE_FIELDS = ["ready", "candidatePartitionStorageHash", "candidateRecordCount", "candidateKeysRoot", "recentObservationRoot", "sourceCoverageRoot", "candidatePartitionRevision", "sourceCoverageStorageHash", "candidatePartitionCommitmentStorageHash", "candidatePartitionProofStorageHash", "verifiedMemoSetStorageHash", "instanceCatalogStorageHash", "graphStorageHash"] as const;
-const READY_STAGE_FIELDS = ["stageRevision", "stageRecordHash", "expectedRevision", "runId", "readyBase", "readyBaseHash", "sourceCoverageStorageHash", "verifiedMemoSetStorageHash", "instanceCatalogStorageHash", "graphStorageHash", "sealedRevision"] as const;
+const CANDIDATE_PARTITION_COMMITMENT_FIELDS = ["readyRecordHash", "runId", "cutoff", "candidatePartitionRoot", "candidatePartitionStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidateRecordCount", "candidateKeysRoot", "recentObservationRoot", "sourceCoverageRoot", "checkpointRevision", "candidatePartitionProofStorageHash", "exactOutcomePartitionRoot", "sealedRevision", "stageRevision", "stageRecordHash", "readyBaseHash"] as const;
+const READY_CLOSURE_FIELDS = ["ready", "candidatePartitionStorageHash", "outcomePartitionStorageHash", "attestationPartitionStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidateRecordCount", "candidateKeysRoot", "recentObservationRoot", "sourceCoverageRoot", "candidatePartitionRevision", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "candidatePartitionCommitmentStorageHash", "candidatePartitionProofStorageHash", "verifiedMemoSetStorageHash", "instanceCatalogStorageHash", "graphStorageHash"] as const;
+const READY_STAGE_FIELDS = ["stageRevision", "stageRecordHash", "expectedRevision", "runId", "readyBase", "readyBaseHash", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "verifiedMemoSetStorageHash", "instanceCatalogStorageHash", "graphStorageHash", "sealedRevision"] as const;
 const MEMO_SEED_RECEIPT_FIELDS = ["runId", "cutoff", "reason", "sealedRevision", "definitionCatalogRoot", "checkpointSchemaHash", "candidatePartitionRoot", "sourceCoverageRoot", "exactOutcomePartitionRoot", "verifiedMemoRoot", "canonicalJournalEpoch", "canonicalJournalRoot", "sequence", "priorReceiptHash", "priorLineageRoot", "receiptLineageRoot"] as const;
+const STORED_PROBE_RECEIPT_FIELDS = ["receipt", "candidatePartitionStorageHash", "priorOutcomePartitionStorageHash", "activeOutcomePartitionStorageHash"] as const;
 
 export const CHECKPOINT_SCHEMA_MANIFEST = deepFreeze({
   id: "aloha.checkpoint-durable-closure",
-  version: "12.0.0",
+  version: "15.0.0",
   physicalEnvelope: {
     hashDomain: DURABLE_CONTENT_ENVELOPE_HASH_DOMAIN,
     identityFields: ["kind", "payloadHash", "references"],
@@ -186,8 +253,8 @@ export const CHECKPOINT_SCHEMA_MANIFEST = deepFreeze({
   },
   records: [
     { kind: CHECKPOINT_ROOT_KIND, fields: ROOT_FIELDS, codecAuthority: "checkpoint.decodeRoot", referenceContract: "exact active memo + optional active run + optional active ready closure + optional latest memo-seed receipt; no extra physical references" },
-    { kind: RUN_KIND, fields: RUN_FIELDS, codecAuthority: "checkpoint.decodeRun", referenceContract: "exact run closure" },
-    { kind: CANDIDATE_KIND, fields: ["familyId", "familyDefinitionHash", "instanceNominationKey", "candidateSnapshotHash", "familyCandidateKey", "evidence"], codecAuthority: "discovery.CandidateRecordV1", referenceContract: "all and only raw locator physical envelopes named by evidence" },
+    { kind: RUN_KIND, fields: RUN_FIELDS, codecAuthority: "checkpoint.decodeRun", referenceContract: "exact run closure including source-plan evidence and its raw locator envelopes" },
+    { kind: CANDIDATE_KIND, fields: ["kind", "version", "familyId", "familyDefinitionHash", "instanceNominationKey", "familyCandidateKey", "candidateSubjectHash", "candidateEvidenceRoot", "evidence"], codecAuthority: "discovery.CandidateRecordV1", referenceContract: "all and only raw locator physical envelopes named by evidence" },
     { kind: CANDIDATE_PARTITION_COMMITMENT_KIND, fields: CANDIDATE_PARTITION_COMMITMENT_FIELDS, codecAuthority: "checkpoint.decodeCandidatePartitionCommitment", referenceContract: "exact signed candidate partition proof + candidate manifest/record closure" },
     { kind: CANDIDATE_PARTITION_PROOF_KIND, codecAuthority: "candidate-partition-authority.decodeCandidatePartitionProofV1", referenceContract: "exact signed candidate partition proof for the active run" },
     { kind: OUTCOME_KIND, variants: {
@@ -197,7 +264,7 @@ export const CHECKPOINT_SCHEMA_MANIFEST = deepFreeze({
       invalidProgram: ["kind", "runCandidateKey", "familyCandidateKey", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "failure", "identityProof", "outcomeIssuerProof"],
     }, codecAuthority: "attestation.validateCandidateFinalOutcome", referenceContract: "chainProvenRejected: exactly one rejection evidence bundle; all other variants: no physical references", semanticHashDomain: "aloha/candidate-final-outcome/v1" },
     { kind: PARTIAL_OUTCOME_KIND, fields: ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "kind", "identity", "outcome"], codecAuthority: "attestation.AttestationPersistedOutcomeV1", referenceContract: "exact partial identity event; no physical references" },
-    { kind: REJECTION_BUNDLE_KIND, fields: ["kind", "version", "issuerId", "runId", "chainId", "cutoffNumber", "cutoffHash", "cutoffStateRoot", "stage", "familyDefinitionHash", "familyCandidateKey", "candidateSnapshotHash", "identitySubjectHash", "instanceNominationKey", "executorAuthorityRoot", "workerEpoch", "executorSessionHash", "executionSessionHash", "request", "transportFacts", "effectObservations", "decisionCode", "decisionBytesHex", "requestFingerprint", "orderedTransportFactsRoot", "effectObservationRoot", "decisionBytesHash", "evidenceBundleRoot"], codecAuthority: "attestation.validateRejectionEvidenceBundle", referenceContract: "exactly one request raw + ordered transport raw + ordered effect raw + one decision raw; no extras" },
+    { kind: REJECTION_BUNDLE_KIND, fields: ["kind", "version", "issuerId", "runId", "chainId", "cutoffNumber", "cutoffHash", "cutoffStateRoot", "stage", "familyDefinitionHash", "familyCandidateKey", "candidateSubjectHash", "identitySubjectHash", "instanceNominationKey", "executorAuthorityRoot", "workerEpoch", "executorSessionHash", "executionSessionHash", "request", "transportFacts", "effectObservations", "decisionCode", "decisionBytesHex", "requestFingerprint", "orderedTransportFactsRoot", "effectObservationRoot", "decisionBytesHash", "evidenceBundleRoot"], codecAuthority: "attestation.validateRejectionEvidenceBundle", referenceContract: "exactly one request raw + ordered transport raw + ordered effect raw + one decision raw; no extras" },
     { kind: REJECTION_REQUEST_RAW_KIND, wire: "opaque-bytes", codecAuthority: "attestation RejectionEvidenceBundle.request.canonicalBytesHex", referenceContract: "none" },
     { kind: REJECTION_TRANSPORT_RAW_KIND, wire: "opaque-bytes", codecAuthority: "attestation RejectionEvidenceBundle.transportFacts[*].canonicalBytesHex", referenceContract: "none" },
     { kind: REJECTION_EFFECT_RAW_KIND, wire: "opaque-bytes", codecAuthority: "attestation RejectionEvidenceBundle.effectObservations[*].canonicalBytesHex", referenceContract: "none" },
@@ -208,13 +275,16 @@ export const CHECKPOINT_SCHEMA_MANIFEST = deepFreeze({
     { kind: PARTITION_MANIFEST_KIND, fields: PARTITION_MANIFEST_FIELDS, codecAuthority: "checkpoint.loadPartition", referenceContract: "exact ordered page storage envelopes" },
     { kind: RECENT_OBSERVATION_KIND, fields: ["cutoff", "range", "orderedHeaders", "evidence", "observationRoot"], codecAuthority: "observation.validateRecentObservationReceipt", referenceContract: "all and only raw locator physical envelopes named by observation evidence" },
     { kind: SOURCE_COVERAGE_KIND, fields: ["cutoff", "entries", "sourceCoverageRoot"], codecAuthority: "discovery.validateSourceCoverageCertificate", referenceContract: "none" },
+    { kind: SOURCE_EXECUTION_SET_KIND, fields: ["kind", "version", "cutoff", "executions", "executionSetRoot"], codecAuthority: "discovery.decodePersistedSourcePlanExecutionSet", referenceContract: "all and only raw locator physical envelopes named by the exact persisted executions; predecessor roots resolve through the active parent ready closure" },
+    { kind: SOURCE_PLAN_EVIDENCE_KIND, wire: "canonical-array", codecAuthority: "discovery.decodeSourcePlanEvidenceReceipt", referenceContract: "all and only raw locator physical envelopes named by source-plan evidence receipts" },
+    { kind: NOMINATION_CLOSURE_KIND, codecAuthority: "nomination-authority.decodeNominationClosureV1", referenceContract: "exact recent observation + source coverage + persisted source execution set + source-plan evidence + candidate manifest", semanticHashDomain: "aloha/nomination-closure/v1" },
     { kind: VERIFIED_MEMO_SET_KIND, fields: VERIFIED_MEMO_SET_FIELDS, codecAuthority: "checkpoint.decodeMemoSet+catalog.validateInstancePublication", referenceContract: "all and only raw locator physical envelopes retained by exact verified publications", semanticHashDomain: "aloha/verified-memo-set/v2" },
     { kind: INSTANCE_CATALOG_KIND, fields: ["cutoff", "publications", "instanceCount", "instanceCatalogRoot"], codecAuthority: "catalog.validateInstanceCatalog", referenceContract: "none" },
     { kind: GRAPH_KIND, fields: ["cutoff", "instanceCatalogRoot", "edges", "edgeCount", "graphRoot"], codecAuthority: "graph.buildPersistedGraph", referenceContract: "none", semanticHashDomain: "aloha/persisted-graph/v1" },
-    { kind: READY_CLOSURE_KIND, fields: READY_CLOSURE_FIELDS, codecAuthority: "checkpoint.decodeReadyClosure", referenceContract: "exact source coverage + candidate manifest/records + candidate partition commitment + candidate partition proof + verified memo + instance catalog + graph", semanticHashDomain: "aloha/ready-generation/v1" },
+    { kind: READY_CLOSURE_KIND, fields: READY_CLOSURE_FIELDS, codecAuthority: "checkpoint.decodeReadyClosure", referenceContract: "exact source coverage + candidate manifest/records + outcome manifest/records + attestation partition + candidate partition commitment + candidate partition proof + verified memo + instance catalog + graph", semanticHashDomain: "aloha/ready-generation/v1" },
     { kind: READY_STAGE_KIND, fields: READY_STAGE_FIELDS, codecAuthority: "checkpoint.decodeReadyStage", referenceContract: "exact source coverage + verified memo + instance catalog + graph; staged is never a serving authority", semanticHashDomain: "aloha/ready-stage/v1" },
     { kind: DIAGNOSTIC_KIND, fields: MEMO_SEED_RECEIPT_FIELDS, codecAuthority: "checkpoint.decodeMemoSeedReceipt", referenceContract: "exact prior memo-seed receipt when sequence is greater than one" },
-    { kind: PROBE_RECEIPT_KIND, codecAuthority: "attestation.validateProbeReceipt", referenceContract: "exact prior probe receipt when sequence is greater than one", semanticHashDomain: "aloha/single-instance-probe-receipt/v2" },
+    { kind: PROBE_RECEIPT_KIND, fields: STORED_PROBE_RECEIPT_FIELDS, codecAuthority: "checkpoint.decodeStoredProbeReceipt+attestation.validateProbeReceipt", referenceContract: "exact prior probe receipt plus the immutable candidate and before/after outcome partitions", semanticHashDomain: "aloha/single-instance-probe-receipt/v2" },
   ],
 });
 
@@ -260,6 +330,11 @@ interface StoredRunEnvelopeV2 {
   readonly definitionCatalogRoot: Hash;
   readonly sourceCoverageRoot: Hash;
   readonly sourceCoverageStorageHash: Hash;
+  readonly sourceExecutionSetRoot: Hash;
+  readonly sourceExecutionSetStorageHash: Hash;
+  readonly sourcePlanEvidenceStorageHash: Hash;
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
   readonly candidatePartitionRoot: Hash;
   readonly candidatePartitionStorageHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
@@ -273,6 +348,22 @@ interface StoredRunEnvelopeV2 {
   readonly accounting: RunAccountingV1;
 }
 
+function runContentReferences(run: StoredRunEnvelopeV2): readonly Hash[] {
+  return Object.freeze([
+    run.recentObservationStorageHash,
+    run.sourceCoverageStorageHash,
+    run.sourceExecutionSetStorageHash,
+    run.sourcePlanEvidenceStorageHash,
+    run.nominationClosureStorageHash,
+    run.candidatePartitionStorageHash,
+    run.candidatePartitionProofStorageHash,
+    run.outcomePartitionStorageHash,
+    ...(run.partialOutcomePartitionStorageHash === null ? [] : [run.partialOutcomePartitionStorageHash]),
+    ...(run.attestationPartitionStorageHash === null ? [] : [run.attestationPartitionStorageHash]),
+    run.verifiedMemoSetStorageHash,
+  ]);
+}
+
 /** Internal hydration view; raw candidates never cross the checkpoint port. */
 type InternalBuilderRunV1 = InProgressBuilderRunV1 & {
   readonly candidates: readonly CandidateRecordV1[];
@@ -283,10 +374,80 @@ interface RetryableProbeCapabilityStateV1 {
   readonly familyCandidateKey: Hash;
   readonly expectedOutcomeHash: Hash;
   readonly checkpointRevision: string;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly candidatePartitionBinding: CandidatePartitionBindingV1;
   readonly candidatePartition: CandidatePartitionCapabilityV1;
   used: boolean;
+}
+
+interface StoredProbeReceiptEnvelopeV1 {
+  readonly receipt: ProbeReceiptV1;
+  readonly candidatePartitionStorageHash: Hash;
+  readonly priorOutcomePartitionStorageHash: Hash;
+  readonly activeOutcomePartitionStorageHash: Hash;
+}
+
+/** Root-reachable, read-only evidence for one actually committed retryable
+ * probe.  Both outcome partitions are loaded from immutable checkpoint
+ * records retained by the stored receipt; no caller supplies either set. */
+export interface CheckpointProbeEvidenceV1 {
+  readonly receipt: ProbeReceiptV1;
+  readonly beforeOutcomes: readonly CandidateFinalOutcomeV1[];
+  readonly afterOutcomes: readonly CandidateFinalOutcomeV1[];
+  readonly candidatePartitionStorageHash: Hash;
+  readonly priorOutcomePartitionStorageHash: Hash;
+  readonly activeOutcomePartitionStorageHash: Hash;
+  readonly evidenceRoot: Hash;
+}
+
+/**
+ * Read-only, root-reachable active-run snapshot used by the external runtime
+ * restart observer.  The two storage hashes are locators into the same raw
+ * SQLite content graph; they are not producer verdicts.  Acceptance reopens
+ * that database and exact-joins the decoded rows to this snapshot.
+ */
+export interface CheckpointRuntimeRestartSnapshotV1 {
+  readonly checkpointStore: CheckpointRuntimeStoreAnchorV1;
+  readonly checkpointRevision: string;
+  readonly checkpointRootEnvelopeHash: Hash;
+  readonly runEnvelopeStorageHash: Hash;
+  readonly runId: string;
+  readonly cutoff: CanonicalCutoffV1;
+  readonly candidatePartitionRoot: Hash;
+  readonly outcomePartitionRoot: Hash;
+  readonly candidates: readonly CandidateRecordV1[];
+  readonly partials: readonly AttestationPersistedOutcomeV1[];
+  readonly outcomes: readonly CandidateFinalOutcomeV1[];
+  readonly probeEvidence: CheckpointProbeEvidenceV1 | null;
+}
+
+export interface CheckpointRuntimeStoreAnchorV1 {
+  readonly path: string;
+  readonly device: string;
+  readonly inode: string;
+}
+
+function decodeStoredProbeReceiptEnvelope(
+  bytes: Uint8Array,
+  context = "stored probe receipt",
+): StoredProbeReceiptEnvelopeV1 {
+  const value = cloneCanonical<Record<string, unknown>>(decodeCanonicalJson(bytes));
+  const exact = exactObject(value, STORED_PROBE_RECEIPT_FIELDS, context);
+  return deepFreeze({
+    receipt: validateProbeReceipt(exact.receipt as ProbeReceiptV1),
+    candidatePartitionStorageHash: assertHash(
+      exact.candidatePartitionStorageHash,
+      `${context}.candidatePartitionStorageHash`,
+    ),
+    priorOutcomePartitionStorageHash: assertHash(
+      exact.priorOutcomePartitionStorageHash,
+      `${context}.priorOutcomePartitionStorageHash`,
+    ),
+    activeOutcomePartitionStorageHash: assertHash(
+      exact.activeOutcomePartitionStorageHash,
+      `${context}.activeOutcomePartitionStorageHash`,
+    ),
+  });
 }
 
 function publicBuilderRun(run: InternalBuilderRunV1): InProgressBuilderRunV1 {
@@ -296,8 +457,11 @@ function publicBuilderRun(run: InternalBuilderRunV1): InProgressBuilderRunV1 {
     checkpointRevision: run.checkpointRevision,
     cutoff: run.cutoff,
     recentObservation: run.recentObservation,
+    sourcePlanEvidence: run.sourcePlanEvidence,
     definitionCatalogRoot: run.definitionCatalogRoot,
     sourceCoverage: run.sourceCoverage,
+    sourceExecutionSet: run.sourceExecutionSet,
+    nominationClosure: run.nominationClosure,
     candidatePartition: run.candidatePartition,
     candidatePartitionBinding: run.candidatePartitionBinding,
   });
@@ -321,6 +485,12 @@ interface ReadyClosureV1 {
   readonly ready: ReadyGenerationV1;
   /** The immutable candidate manifest remains a transitive descendant of the ready root. */
   readonly candidatePartitionStorageHash: Hash;
+  /** Exact final outcomes remain reachable after the mutable run indexes are cleared. */
+  readonly outcomePartitionStorageHash: Hash;
+  /** The sealed partition binds the exact outcome set and authority roots. */
+  readonly attestationPartitionStorageHash: Hash;
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
   readonly candidateRecordCount: string;
   readonly candidateKeysRoot: Hash;
   readonly recentObservationRoot: Hash;
@@ -328,11 +498,57 @@ interface ReadyClosureV1 {
   /** The proof's checkpointRevision (equal to the immutable candidatePartitionRevision). */
   readonly candidatePartitionRevision: string;
   readonly sourceCoverageStorageHash: Hash;
+  readonly sourceExecutionSetRoot: Hash;
+  readonly sourceExecutionSetStorageHash: Hash;
+  readonly sourcePlanEvidenceStorageHash: Hash;
   readonly candidatePartitionCommitmentStorageHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly verifiedMemoSetStorageHash: Hash;
   readonly instanceCatalogStorageHash: Hash;
   readonly graphStorageHash: Hash;
+}
+
+interface ReadyStage12EvidenceCapabilityStateV1 {
+  readonly binding: ReadyStage12EvidenceBindingV1;
+  readonly ready: ReadyGenerationV1;
+  readonly artifacts: ReadyStage12ArtifactAuthorityV1;
+}
+
+interface ReadyStage12ArtifactAuthorityV1 {
+  readonly stage1ByEdgeId: ReadonlyMap<Hash, CheckpointSixStepArtifactCapabilityV1>;
+  readonly stage2ByEdgeId: ReadonlyMap<Hash, CheckpointSixStepArtifactCapabilityV1>;
+}
+
+export type CheckpointSixStepArtifactCapabilityV1 = object;
+
+export interface CheckpointSixStepVerifiedOutcomeInputV1 {
+  readonly runId: string;
+  readonly cutoff: CanonicalCutoffV1;
+  readonly candidatePartitionRoot: Hash;
+  readonly candidate: CandidateRecordV1;
+  readonly outcome: Extract<CandidateFinalOutcomeV1, { readonly kind: "verified" }>;
+  readonly sourceCoverage: SourceCoverageCertificateV1;
+}
+
+export interface CheckpointSixStepReadyEdgeInputV1 {
+  readonly parent: CheckpointSixStepArtifactCapabilityV1;
+  readonly ready: ReadyGenerationV1;
+  readonly candidate: CandidateRecordV1;
+  readonly outcome: Extract<CandidateFinalOutcomeV1, { readonly kind: "verified" }>;
+  readonly publication: InstancePublicationV1;
+  readonly edge: PersistedGraphV1["edges"][number];
+  readonly sourceCoverage: SourceCoverageCertificateV1;
+}
+
+/** Producer-native Stage 1/2 append authority. Its issuer lives behind the
+ * internal runtime-release composition boundary. */
+export interface CheckpointSixStepArtifactPortV1 {
+  readonly emitVerifiedOutcome: (
+    input: CheckpointSixStepVerifiedOutcomeInputV1,
+  ) => Promise<CheckpointSixStepArtifactCapabilityV1>;
+  readonly emitReadyEdge: (
+    input: CheckpointSixStepReadyEdgeInputV1,
+  ) => Promise<CheckpointSixStepArtifactCapabilityV1>;
 }
 
 interface ReadyStageV1 {
@@ -343,6 +559,11 @@ interface ReadyStageV1 {
   readonly readyBase: ReadyGenerationBaseV1;
   readonly readyBaseHash: Hash;
   readonly sourceCoverageStorageHash: Hash;
+  readonly sourceExecutionSetRoot: Hash;
+  readonly sourceExecutionSetStorageHash: Hash;
+  readonly sourcePlanEvidenceStorageHash: Hash;
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
   readonly verifiedMemoSetStorageHash: Hash;
   readonly instanceCatalogStorageHash: Hash;
   readonly graphStorageHash: Hash;
@@ -355,6 +576,8 @@ interface CandidatePartitionCommitmentV1 {
   readonly cutoff: BeginRunInputV1["cutoff"];
   readonly candidatePartitionRoot: Hash;
   readonly candidatePartitionStorageHash: Hash;
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
   readonly candidateRecordCount: string;
   readonly candidateKeysRoot: Hash;
   readonly recentObservationRoot: Hash;
@@ -381,6 +604,32 @@ export interface OutcomeWriterOptions {
   readonly flushEveryItems?: number;
   readonly flushEveryMs?: number;
   readonly mailboxCapacity?: number;
+}
+
+/** Exact active-run difference used by the release-owned attestation
+ * coordinator. Both sets are issued atomically from the current durable
+ * closure; neither contains raw DTO authority. */
+export interface AttestationResumeCapabilitiesV1 {
+  readonly identity: readonly AttestationIdentityResumeCapabilityV1[];
+  readonly final: readonly AttestationOutcomeResumeCapabilityV1[];
+  /** Durable retryable outcomes are re-executed through the checkpoint CAS
+   * edge; they are intentionally not converted into final-resume handles. */
+  readonly retryable: readonly Hash[];
+  /** Prior-generation verified publications, represented only by one-shot
+   * process-local handles bound to exact current candidates. */
+  readonly memoReuse: readonly AttestationVerifiedMemoReuseCapabilityV1[];
+  /**
+   * Two-phase claim for the returned process-local handles.  The checkpoint
+   * does not permanently consume the durable difference until the owner has
+   * successfully opened and sealed the corresponding session.  Any startup
+   * failure must call abort so a same-process retry can mint a fresh handle.
+   */
+  readonly claim: AttestationResumeClaimV1;
+}
+
+export interface AttestationResumeClaimV1 {
+  commit(): void;
+  abort(): void;
 }
 
 export interface SignalHookPort {
@@ -451,7 +700,11 @@ function rawEvidenceLocatorContents(
   const seen = new Set<Hash>();
   return Object.freeze(values.map((raw, index) => {
     assertPlainObject(raw, `rawEvidenceLocators[${index}]`);
-    assertExactKeys(raw, ["rawLocatorHash", "bytes"], `rawEvidenceLocators[${index}]`);
+    assertExactKeys(raw, ["kind", "version", "rawLocatorHash", "bytes"], `rawEvidenceLocators[${index}]`);
+    if (
+      readOwnEnumerableDataProperty(raw, "kind", `rawEvidenceLocators[${index}]`) !== "raw-evidence-locator"
+      || readOwnEnumerableDataProperty(raw, "version", `rawEvidenceLocators[${index}]`) !== 1
+    ) throw new CheckpointRunStateError(`raw evidence locator ${index} kind/version is invalid`);
     const rawLocatorHash = assertHash(
       readOwnEnumerableDataProperty(raw, "rawLocatorHash", `rawEvidenceLocators[${index}]`),
       `rawEvidenceLocators[${index}].rawLocatorHash`,
@@ -468,6 +721,85 @@ function rawEvidenceLocatorContents(
     seen.add(rawLocatorHash);
     return Object.freeze({ rawLocatorHash, bytes });
   }).sort((left, right) => compareText(left.rawLocatorHash, right.rawLocatorHash)));
+}
+
+function mergedRawEvidenceLocatorContents(
+  recent: readonly RawEvidenceLocatorContentV1[],
+  sourcePlan: readonly RawEvidenceLocatorContentV1[],
+): readonly { readonly rawLocatorHash: Hash; readonly bytes: Uint8Array }[] {
+  const byHash = new Map<Hash, RawEvidenceLocatorContentV1>();
+  for (const value of [...recent, ...sourcePlan]) {
+    const previous = byHash.get(value.rawLocatorHash);
+    if (previous !== undefined) {
+      if (!sameBytes(previous.bytes, value.bytes)) {
+        throw new CheckpointRunStateError(`raw evidence locator ${value.rawLocatorHash} has conflicting bytes`);
+      }
+      continue;
+    }
+    byHash.set(value.rawLocatorHash, value);
+  }
+  return rawEvidenceLocatorContents([...byHash.values()]);
+}
+
+function sourcePlanRefsFromCoverage(
+  sourceCoverage: SourceCoverageCertificateV1,
+): readonly SourcePlanRefV1[] {
+  return Object.freeze(sourceCoverage.entries.map(entry => Object.freeze({
+    ownerRef: entry.ownerRef,
+    sourcePlanRef: entry.sourcePlanRef,
+    familyDefinitionHash: entry.familyDefinitionHash,
+    completeness: entry.completeness,
+    historyStartBlock: entry.historyStartBlock,
+  })));
+}
+
+function decodeSourcePlanEvidenceSet(
+  bytes: Uint8Array,
+  context: string,
+): readonly SourcePlanEvidenceReceiptV1[] {
+  const raw = decodeCanonicalJson(bytes);
+  if (!Array.isArray(raw)) throw new CorruptDurableStoreError(`${context} must be an array`);
+  const decoded = raw.map((value, index) => decodeSourcePlanEvidenceReceipt(value, `${context}[${index}]`));
+  const identity = (value: SourcePlanEvidenceReceiptV1): Hash => sourcePlanIdentity(value.plan);
+  const sorted = [...decoded].sort((left, right) => compareText(identity(left), identity(right)));
+  if (decoded.some((value, index) => identity(value) !== identity(sorted[index]!))) {
+    throw new CorruptDurableStoreError(`${context} is not in canonical source-plan order`);
+  }
+  return deepFreeze(decoded);
+}
+
+function validateSourcePlanEvidenceExecutionJoin(
+  receipts: readonly SourcePlanEvidenceReceiptV1[],
+  executionSet: PersistedSourcePlanExecutionSetV1,
+): void {
+  const byIdentity = new Map(receipts.map(receipt => [sourcePlanIdentity(receipt.plan), receipt]));
+  if (byIdentity.size !== receipts.length || receipts.length !== executionSet.executions.length) {
+    throw new CheckpointRunStateError("source-plan evidence/execution partition mismatch");
+  }
+  for (const persisted of executionSet.executions) {
+    const execution = persisted.execution;
+    const receipt = byIdentity.get(sourcePlanIdentity(execution.plan));
+    if (receipt === undefined
+      || receipt.evidenceRoot !== execution.sourceEvidenceRoot
+      || encodeCanonicalJson(receipt.plan) !== encodeCanonicalJson(execution.plan)
+      || encodeCanonicalJson(receipt.cutoff) !== encodeCanonicalJson(execution.cutoff)
+      || encodeCanonicalJson(receipt.refs) !== encodeCanonicalJson(execution.sourceEvidenceRefs)
+      || encodeCanonicalJson(receipt.rawLocatorHashes) !== encodeCanonicalJson(execution.rawLocatorHashes)) {
+      throw new CheckpointRunStateError("source-plan evidence/execution bytes mismatch");
+    }
+  }
+}
+
+function nominationQualificationBindings(
+  closure: NominationClosureV1,
+): readonly CandidateNominationQualificationBindingV1[] {
+  return deepFreeze(closure.receipts.map(receipt => ({
+    sourcePlanIdentity: receipt.sourcePlanIdentity,
+    sourcePlanLeafDigest: receipt.sourcePlanLeafDigest,
+    nominationProgramRoot: receipt.nominationProgramRoot,
+    nominationProgramProposalLeafDigest: receipt.nominationProgramProposalLeafDigest,
+    qualificationLeafDigest: receipt.qualificationRoot,
+  })));
 }
 
 function sameCutoff(left: BeginRunInputV1["cutoff"], right: BeginRunInputV1["cutoff"]): boolean {
@@ -526,6 +858,11 @@ function decodeRun(bytes: Uint8Array): StoredRunEnvelopeV2 {
     definitionCatalogRoot: assertHash(value.definitionCatalogRoot, "storedRun.definitionCatalogRoot"),
     sourceCoverageRoot: assertHash(value.sourceCoverageRoot, "storedRun.sourceCoverageRoot"),
     sourceCoverageStorageHash: assertHash(value.sourceCoverageStorageHash, "storedRun.sourceCoverageStorageHash"),
+    sourceExecutionSetRoot: assertHash(value.sourceExecutionSetRoot, "storedRun.sourceExecutionSetRoot"),
+    sourceExecutionSetStorageHash: assertHash(value.sourceExecutionSetStorageHash, "storedRun.sourceExecutionSetStorageHash"),
+    sourcePlanEvidenceStorageHash: assertHash(value.sourcePlanEvidenceStorageHash, "storedRun.sourcePlanEvidenceStorageHash"),
+    nominationClosureRoot: assertHash(value.nominationClosureRoot, "storedRun.nominationClosureRoot"),
+    nominationClosureStorageHash: assertHash(value.nominationClosureStorageHash, "storedRun.nominationClosureStorageHash"),
     candidatePartitionRoot: assertHash(value.candidatePartitionRoot, "storedRun.candidatePartitionRoot"),
     candidatePartitionStorageHash: assertHash(value.candidatePartitionStorageHash, "storedRun.candidatePartitionStorageHash"),
     candidatePartitionProofStorageHash: assertHash(value.candidatePartitionProofStorageHash, "storedRun.candidatePartitionProofStorageHash"),
@@ -547,14 +884,18 @@ function decodeRun(bytes: Uint8Array): StoredRunEnvelopeV2 {
 }
 
 function decodePersistedIdentity(value: unknown, context: string): IdentityVerifiedV1 {
-  const raw = exactObject(value, ["kind", "familyInstanceKey", "identityMemoHash", "descriptorHash", "evidenceRoot", "issuerProof"], context);
+  const raw = exactObject(value, ["kind", "familyInstanceKey", "identityMemo", "identityMemoHash", "descriptorHash", "evidenceRoot", "issuerProof"], context);
   if (raw.kind !== "identityVerified") throw new CorruptDurableStoreError(`${context}.kind is invalid`);
+  const observation = validateIdentityObservation({
+    kind: raw.kind,
+    familyInstanceKey: raw.familyInstanceKey,
+    identityMemo: raw.identityMemo,
+    identityMemoHash: raw.identityMemoHash,
+    descriptorHash: raw.descriptorHash,
+    evidenceRoot: raw.evidenceRoot,
+  }, context);
   return deepFreeze({
-    kind: "identityVerified" as const,
-    familyInstanceKey: assertNonEmptyString(raw.familyInstanceKey, `${context}.familyInstanceKey`),
-    identityMemoHash: assertHash(raw.identityMemoHash, `${context}.identityMemoHash`),
-    descriptorHash: assertHash(raw.descriptorHash, `${context}.descriptorHash`),
-    evidenceRoot: assertHash(raw.evidenceRoot, `${context}.evidenceRoot`),
+    ...observation,
     issuerProof: validateIdentityIssuerProof(raw.issuerProof),
   });
 }
@@ -623,6 +964,164 @@ function validateRawLocatorReferences(
     throw new CorruptDurableStoreError(`${context} raw locator semantic set mismatch`);
   }
   return bySemanticHash;
+}
+
+function validateSourceExecutionSetRecord(
+  read: (hash: Hash) => DurableContentRecord | null,
+  storageHash: Hash,
+  coverage: SourceCoverageCertificateV1 | null,
+  seen = new Set<Hash>(),
+): { readonly set: PersistedSourcePlanExecutionSetV1; readonly rawStorageBySemanticHash: ReadonlyMap<Hash, Hash> } {
+  if (seen.has(storageHash)) throw new CorruptDurableStoreError("source execution predecessor cycle");
+  seen.add(storageHash);
+  const record = read(storageHash);
+  if (!record || record.kind !== SOURCE_EXECUTION_SET_KIND) {
+    throw new CorruptDurableStoreError("source execution set is missing");
+  }
+  const set = decodePersistedSourcePlanExecutionSet(decodeCanonicalJson(record.bytes), "durable source execution set");
+  if (coverage !== null) validatePersistedExecutionCoverage(set, coverage);
+  const rawReferences: Hash[] = [];
+  const predecessorReferences: Hash[] = [];
+  for (const reference of record.references) {
+    const child = read(reference);
+    if (child?.kind === RAW_EVIDENCE_LOCATOR_KIND) rawReferences.push(reference);
+    else if (child?.kind === SOURCE_EXECUTION_SET_KIND) predecessorReferences.push(reference);
+    else throw new CorruptDurableStoreError("source execution set has a foreign physical reference");
+  }
+  const rawStorageBySemanticHash = validateRawLocatorReferences(
+    read,
+    rawReferences,
+    set.executions.flatMap(value => value.execution.rawLocatorHashes),
+    "source execution set",
+  );
+  const predecessorRoots = set.executions
+    .map(value => value.previousExecutionRoot)
+    .filter((value): value is Hash => value !== null);
+  if (predecessorRoots.length === 0) {
+    if (predecessorReferences.length !== 0) throw new CorruptDurableStoreError("first source execution set has a predecessor reference");
+    return { set, rawStorageBySemanticHash };
+  }
+  if (predecessorReferences.length !== 1) throw new CorruptDurableStoreError("source execution predecessor reference is not exact");
+  const prior = validateSourceExecutionSetRecord(read, predecessorReferences[0]!, null, seen).set;
+  const priorByRoot = new Map(prior.executions.map(value => [value.persistedExecutionRoot, value]));
+  for (const current of set.executions) {
+    if (current.previousExecutionRoot === null) continue;
+    const predecessor = priorByRoot.get(current.previousExecutionRoot);
+    if (
+      predecessor === undefined
+      || sourcePlanIdentity(predecessor.execution.plan) !== sourcePlanIdentity(current.execution.plan)
+      || predecessor.sourcePlanLeafDigest !== current.sourcePlanLeafDigest
+      || predecessor.sourcePlanSchemaHash !== current.sourcePlanSchemaHash
+      || predecessor.sourcePlanClosureRoot !== current.sourcePlanClosureRoot
+      || predecessor.sourceAuthorityRoot !== current.sourceAuthorityRoot
+      || predecessor.execution.cutoff.chainId !== current.execution.cutoff.chainId
+      || predecessor.execution.through !== prior.cutoff.number
+      || current.execution.previousAppliedThrough !== predecessor.execution.through
+      || BigInt(current.execution.from) !== BigInt(predecessor.execution.through) + 1n
+      || BigInt(current.execution.cutoff.number) <= BigInt(predecessor.execution.cutoff.number)
+    ) throw new CorruptDurableStoreError("source execution predecessor splice/gap mismatch");
+  }
+  return { set, rawStorageBySemanticHash };
+}
+
+function validateNominationClosureAgainstRun(input: {
+  readonly closure: NominationClosureV1;
+  readonly cutoff: BeginRunInputV1["cutoff"];
+  readonly recentObservation: RecentObservationReceiptV1;
+  readonly sourceCoverage: SourceCoverageCertificateV1;
+  readonly sourceExecutionSet: PersistedSourcePlanExecutionSetV1;
+  readonly candidates: readonly CandidateRecordV1[];
+  readonly candidatePartitionRoot: Hash;
+}): NominationClosureV1 {
+  const closure = decodeNominationClosureV1(input.closure);
+  if (!sameCutoff(closure.cutoff, input.cutoff)
+    || closure.recentObservationRoot !== input.recentObservation.observationRoot
+    || closure.sourceCoverageRoot !== input.sourceCoverage.sourceCoverageRoot
+    || closure.sourceExecutionSetRoot !== input.sourceExecutionSet.executionSetRoot
+    || closure.candidatePartitionRoot !== input.candidatePartitionRoot
+    || closure.candidateCount !== String(input.candidates.length)) {
+    throw new CheckpointRunStateError("nomination closure run binding mismatch");
+  }
+  const executions = new Map(input.sourceExecutionSet.executions.map(execution => [
+    sourcePlanIdentity(execution.execution.plan),
+    execution,
+  ]));
+  const coverageIdentities = input.sourceCoverage.entries.map(sourcePlanIdentity).sort(compareText);
+  const executionIdentities = [...executions.keys()].sort(compareText);
+  if (executions.size !== input.sourceExecutionSet.executions.length
+    || encodeCanonicalJson(coverageIdentities) !== encodeCanonicalJson(executionIdentities)
+    || encodeCanonicalJson(executionIdentities) !== encodeCanonicalJson(closure.sourcePlanIdentities)) {
+    throw new CheckpointRunStateError("nomination closure source-plan denominator mismatch");
+  }
+  const evidenceByHash = new Map<Hash, CandidateRecordV1["evidence"][number]>();
+  const sealedEvidence = new Set([
+    ...input.recentObservation.evidence,
+    ...input.sourceExecutionSet.executions.flatMap(value => value.execution.sourceEvidenceRefs),
+  ].map(value => encodeCanonicalJson(value)));
+  for (const candidate of input.candidates) {
+    for (const evidence of candidate.evidence) {
+      if (!sealedEvidence.has(encodeCanonicalJson(evidence))) {
+        throw new CheckpointRunStateError("candidate evidence is outside the exact observation/source-plan execution evidence");
+      }
+      const evidenceHash = nominationEvidenceRefHash(evidence);
+      if (evidenceByHash.has(evidenceHash)) throw new CheckpointRunStateError("candidate evidence is duplicated across candidates");
+      evidenceByHash.set(evidenceHash, evidence);
+    }
+  }
+  const recentEvidenceHashes = new Set(input.recentObservation.evidence.map(nominationEvidenceRefHash));
+  for (const receipt of closure.receipts) {
+    const execution = executions.get(receipt.sourcePlanIdentity);
+    if (execution === undefined
+      || execution.sourcePlanLeafDigest !== receipt.sourcePlanLeafDigest
+      || execution.execution.plan.familyDefinitionHash !== receipt.familyDefinitionHash) {
+      throw new CheckpointRunStateError("nomination receipt source-plan qualification mismatch");
+    }
+    const plan = execution.execution.plan;
+    if (receipt.denominator.kind === "complete-source-result") {
+      if ((plan.completeness !== "complete-snapshot" && plan.completeness !== "contiguous-history")
+        || receipt.denominator.persistedExecutionRoot !== execution.persistedExecutionRoot
+        || receipt.denominator.resultPartitionRoot !== execution.execution.resultPartitionRoot) {
+        throw new CheckpointRunStateError("complete nomination denominator mismatch");
+      }
+    } else if (receipt.denominator.kind === "point-lookup") {
+      if (plan.completeness !== "point-lookup"
+        || receipt.denominator.persistedExecutionRoot !== execution.persistedExecutionRoot
+        || receipt.denominator.resultPartitionRoot !== execution.execution.resultPartitionRoot) {
+        throw new CheckpointRunStateError("point-lookup nomination denominator mismatch");
+      }
+    } else {
+      if (plan.completeness !== "nomination-only"
+        || receipt.denominator.recentObservationRoot !== input.recentObservation.observationRoot
+        || receipt.denominator.relevantEvidenceRefHashes.some(hash => !recentEvidenceHashes.has(hash))) {
+        throw new CheckpointRunStateError("recent nomination denominator mismatch");
+      }
+    }
+    for (const claim of receipt.claims) {
+      const evidence = evidenceByHash.get(claim.evidenceRefHash);
+      if (evidence === undefined) throw new CheckpointRunStateError("nomination claim evidence is absent");
+      if (receipt.denominator.kind === "recent-observation") {
+        if (evidence.kind !== "recent-log") throw new CheckpointRunStateError("recent nomination claim uses source-plan evidence");
+      } else if (evidence.kind !== "source-plan"
+        || evidence.ownerRef !== plan.ownerRef
+        || evidence.sourcePlanRef !== plan.sourcePlanRef) {
+        throw new CheckpointRunStateError("source nomination claim evidence plan mismatch");
+      }
+    }
+  }
+  const rebuilt = sealNominationClosureV1({
+    cutoff: closure.cutoff,
+    recentObservationRoot: closure.recentObservationRoot,
+    sourceExecutionSetRoot: closure.sourceExecutionSetRoot,
+    sourceCoverageRoot: closure.sourceCoverageRoot,
+    sourcePlanIdentities: closure.sourcePlanIdentities,
+    receipts: closure.receipts,
+    candidates: input.candidates,
+    candidatePartitionRoot: input.candidatePartitionRoot,
+  });
+  if (encodeCanonicalJson(rebuilt) !== encodeCanonicalJson(closure)) {
+    throw new CheckpointRunStateError("nomination closure recomputation mismatch");
+  }
+  return closure;
 }
 
 /** Decode the raw byte strings carried by an issuer-owned rejection bundle. */
@@ -869,6 +1368,8 @@ function decodeCandidatePartitionCommitment(bytes: Uint8Array): CandidatePartiti
     },
     candidatePartitionRoot: assertHash(value.candidatePartitionRoot, "candidatePartitionCommitment.candidatePartitionRoot"),
     candidatePartitionStorageHash: assertHash(value.candidatePartitionStorageHash, "candidatePartitionCommitment.candidatePartitionStorageHash"),
+    nominationClosureRoot: assertHash(value.nominationClosureRoot, "candidatePartitionCommitment.nominationClosureRoot"),
+    nominationClosureStorageHash: assertHash(value.nominationClosureStorageHash, "candidatePartitionCommitment.nominationClosureStorageHash"),
     candidateRecordCount: decimal(value.candidateRecordCount, "candidatePartitionCommitment.candidateRecordCount"),
     candidateKeysRoot: assertHash(value.candidateKeysRoot, "candidatePartitionCommitment.candidateKeysRoot"),
     recentObservationRoot: assertHash(value.recentObservationRoot, "candidatePartitionCommitment.recentObservationRoot"),
@@ -890,12 +1391,19 @@ function decodeReadyClosure(bytes: Uint8Array): ReadyClosureV1 {
   return deepFreeze({
     ready,
     candidatePartitionStorageHash: assertHash(value.candidatePartitionStorageHash, "readyClosure.candidatePartitionStorageHash"),
+    outcomePartitionStorageHash: assertHash(value.outcomePartitionStorageHash, "readyClosure.outcomePartitionStorageHash"),
+    attestationPartitionStorageHash: assertHash(value.attestationPartitionStorageHash, "readyClosure.attestationPartitionStorageHash"),
+    nominationClosureRoot: assertHash(value.nominationClosureRoot, "readyClosure.nominationClosureRoot"),
+    nominationClosureStorageHash: assertHash(value.nominationClosureStorageHash, "readyClosure.nominationClosureStorageHash"),
     candidateRecordCount: decimal(value.candidateRecordCount, "readyClosure.candidateRecordCount"),
     candidateKeysRoot: assertHash(value.candidateKeysRoot, "readyClosure.candidateKeysRoot"),
     recentObservationRoot: assertHash(value.recentObservationRoot, "readyClosure.recentObservationRoot"),
     sourceCoverageRoot: assertHash(value.sourceCoverageRoot, "readyClosure.sourceCoverageRoot"),
     candidatePartitionRevision: decimal(value.candidatePartitionRevision, "readyClosure.candidatePartitionRevision"),
     sourceCoverageStorageHash: assertHash(value.sourceCoverageStorageHash, "readyClosure.sourceCoverageStorageHash"),
+    sourceExecutionSetRoot: assertHash(value.sourceExecutionSetRoot, "readyClosure.sourceExecutionSetRoot"),
+    sourceExecutionSetStorageHash: assertHash(value.sourceExecutionSetStorageHash, "readyClosure.sourceExecutionSetStorageHash"),
+    sourcePlanEvidenceStorageHash: assertHash(value.sourcePlanEvidenceStorageHash, "readyClosure.sourcePlanEvidenceStorageHash"),
     candidatePartitionCommitmentStorageHash: assertHash(value.candidatePartitionCommitmentStorageHash, "readyClosure.candidatePartitionCommitmentStorageHash"),
     candidatePartitionProofStorageHash: assertHash(value.candidatePartitionProofStorageHash, "readyClosure.candidatePartitionProofStorageHash"),
     verifiedMemoSetStorageHash: assertHash(value.verifiedMemoSetStorageHash, "readyClosure.verifiedMemoSetStorageHash"),
@@ -912,6 +1420,11 @@ function readyStagePayload(stage: Omit<ReadyStageV1, "stageRecordHash">): object
     readyBase: stage.readyBase,
     readyBaseHash: stage.readyBaseHash,
     sourceCoverageStorageHash: stage.sourceCoverageStorageHash,
+    sourceExecutionSetRoot: stage.sourceExecutionSetRoot,
+    sourceExecutionSetStorageHash: stage.sourceExecutionSetStorageHash,
+    sourcePlanEvidenceStorageHash: stage.sourcePlanEvidenceStorageHash,
+    nominationClosureRoot: stage.nominationClosureRoot,
+    nominationClosureStorageHash: stage.nominationClosureStorageHash,
     verifiedMemoSetStorageHash: stage.verifiedMemoSetStorageHash,
     instanceCatalogStorageHash: stage.instanceCatalogStorageHash,
     graphStorageHash: stage.graphStorageHash,
@@ -931,6 +1444,11 @@ function decodeReadyStage(bytes: Uint8Array): ReadyStageV1 {
     readyBase,
     readyBaseHash: assertHash(value.readyBaseHash, "readyStage.readyBaseHash"),
     sourceCoverageStorageHash: assertHash(value.sourceCoverageStorageHash, "readyStage.sourceCoverageStorageHash"),
+    sourceExecutionSetRoot: assertHash(value.sourceExecutionSetRoot, "readyStage.sourceExecutionSetRoot"),
+    sourceExecutionSetStorageHash: assertHash(value.sourceExecutionSetStorageHash, "readyStage.sourceExecutionSetStorageHash"),
+    sourcePlanEvidenceStorageHash: assertHash(value.sourcePlanEvidenceStorageHash, "readyStage.sourcePlanEvidenceStorageHash"),
+    nominationClosureRoot: assertHash(value.nominationClosureRoot, "readyStage.nominationClosureRoot"),
+    nominationClosureStorageHash: assertHash(value.nominationClosureStorageHash, "readyStage.nominationClosureStorageHash"),
     verifiedMemoSetStorageHash: assertHash(value.verifiedMemoSetStorageHash, "readyStage.verifiedMemoSetStorageHash"),
     instanceCatalogStorageHash: assertHash(value.instanceCatalogStorageHash, "readyStage.instanceCatalogStorageHash"),
     graphStorageHash: assertHash(value.graphStorageHash, "readyStage.graphStorageHash"),
@@ -1035,13 +1553,25 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   readonly #candidatePartitionProofIssuer: CandidatePartitionProofIssuerPortV1;
   readonly #candidatePartitionCapabilities: CandidatePartitionCapabilityRegistryV1;
   readonly #candidatePartitionReader: CandidatePartitionReaderPortV1;
+  readonly #sixStepArtifacts: CheckpointSixStepArtifactPortV1;
   readonly #validatedRunStorageHashes = new Set<Hash>();
   readonly #validatedReadyClosureStorageHashes = new Set<Hash>();
   /** One durable partial can mint at most one process-local resume handle. */
   readonly #issuedResumeClaims = new Set<string>();
+  /** One durable final can mint at most one process-local resume handle. */
+  readonly #issuedOutcomeResumeClaims = new Set<string>();
+  /** One root-reachable prior publication can be considered once per exact
+   * current run candidate. */
+  readonly #issuedMemoReuseClaims = new Set<string>();
+  readonly #pendingResumeClaimKeys = new Set<string>();
   readonly #probeStates = new WeakMap<object, RetryableProbeCapabilityStateV1>();
   readonly #issuedProbeClaims = new Set<string>();
   readonly #sealedRuns = new SealedRunCapabilityRegistryV1();
+  readonly #readyStage12EvidenceStates = new WeakMap<object, ReadyStage12EvidenceCapabilityStateV1>();
+  readonly #readyStage12EvidenceByReady = new Map<Hash, ReadyStage12EvidenceCapabilityV1>();
+  readonly #readyStage12ArtifactsByReady = new Map<Hash, ReadyStage12ArtifactAuthorityV1>();
+  readonly #readyStage12EvidenceReader: ReadyStage12EvidenceReaderPortV1;
+  readonly #readyFullFamilyEvidenceReader: ReadyFullFamilyEvidenceReaderPortV1;
 
   constructor(
     durable: SQLiteDurableStore,
@@ -1050,9 +1580,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     promotionAuthority: ReadyPromotionAuthorityGuardPort,
     attestationAuthority: AttestationValidationAuthorityV1,
     candidatePartitionProofIssuer: CandidatePartitionProofIssuerPortV1,
+    sixStepArtifacts: CheckpointSixStepArtifactPortV1,
     candidatePartitionBootstrap: CandidatePartitionBootstrapV1 = createCandidatePartitionBootstrap(),
   ) {
     durable.bindStoreRole("checkpoint");
+    checkpointStoreInstances.add(this);
     this.#durable = durable;
     this.#canonical = canonical;
     this.#probeCaller = probeCaller;
@@ -1063,6 +1595,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     }
     this.#candidatePartitionCapabilities = consumeCandidatePartitionBootstrap(candidatePartitionBootstrap);
     this.#candidatePartitionReader = this.#candidatePartitionCapabilities.reader;
+    assertCheckpointSixStepArtifactPortV1(sixStepArtifacts);
+    this.#sixStepArtifacts = sixStepArtifacts;
     this.#promotionAuthority = assertIssuedReadyPromotionAuthorityPort(promotionAuthority);
     try {
       this.#attestationAuthority = assertIssuedAttestationValidationAuthority(attestationAuthority);
@@ -1072,6 +1606,37 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         error instanceof Error ? error.message : "attestation validation authority is not issued",
       );
     }
+    this.#readyStage12EvidenceReader = Object.freeze({
+      binding: (capability: ReadyStage12EvidenceCapabilityV1) => this.#readyStage12EvidenceBinding(capability),
+      read: (capability: ReadyStage12EvidenceCapabilityV1) => this.#readReadyStage12Evidence(capability),
+      verify: async (capability: ReadyStage12EvidenceCapabilityV1, snapshot: ReadyStage12EvidenceSnapshotV1) => {
+        const authoritative = await this.#readReadyStage12Evidence(capability);
+        if (encodeCanonicalJson(authoritative) !== encodeCanonicalJson(snapshot)) {
+          throw new CorruptDurableStoreError("ready stage1/2 evidence snapshot does not match checkpoint authority");
+        }
+        return authoritative;
+      },
+      routeParents: (capability: ReadyStage12EvidenceCapabilityV1, orderedEdgeIds: readonly Hash[]) => {
+        const state = this.#readyStage12EvidenceStates.get(capability);
+        if (!state) throw new TypeError("ready stage1/2 evidence capability is not checkpoint-issued");
+        const stage1 = orderedEdgeIds.map(edgeId => {
+          const parent = state.artifacts.stage1ByEdgeId.get(assertHash(edgeId, "readyStage12.routeEdgeId"));
+          if (parent === undefined) throw new TypeError("ready Stage 1 route parent is unavailable");
+          return parent;
+        });
+        const stage2 = orderedEdgeIds.map(edgeId => {
+          const parent = state.artifacts.stage2ByEdgeId.get(assertHash(edgeId, "readyStage12.routeEdgeId"));
+          if (parent === undefined) throw new TypeError("ready Stage 2 route parent is unavailable");
+          return parent;
+        });
+        return Object.freeze({ stage1: Object.freeze(stage1), stage2: Object.freeze(stage2) });
+      },
+    });
+    registerCheckpointReadyStage12EvidenceReader(this.#readyStage12EvidenceReader);
+    this.#readyFullFamilyEvidenceReader = Object.freeze({
+      read: (capability: ReadyStage12EvidenceCapabilityV1) => this.#readReadyFullFamilyEvidence(capability),
+    });
+    registerCheckpointReadyFullFamilyEvidenceReader(this.#readyFullFamilyEvidenceReader);
   }
 
   /** Constructor-bound reader used by Attestation; it accepts only handles
@@ -1083,6 +1648,17 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   /** Checkpoint-issued, read-only composition port for ReadyGeneration. */
   get sealedRunReader(): SealedRunReaderPortV1 {
     return this.#sealedRuns.reader;
+  }
+
+  /** Read-only owner port. It can inspect exact checkpoint-issued handles but
+   * has no method that mints or replaces Stage 1/2 facts. */
+  get readyStage12EvidenceReader(): ReadyStage12EvidenceReaderPortV1 {
+    return this.#readyStage12EvidenceReader;
+  }
+
+  /** Full-Family durable facts over the same checkpoint-issued Stage 1/2 handle. */
+  get readyFullFamilyEvidenceReader(): ReadyFullFamilyEvidenceReaderPortV1 {
+    return this.#readyFullFamilyEvidenceReader;
   }
 
   /**
@@ -1120,26 +1696,215 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     return publicBuilderRun(loaded.builderRun);
   }
 
+  async loadSourcePlanPredecessor(parentGenerationId: string | null): Promise<SourcePlanPredecessorClosureV1 | null> {
+    if (parentGenerationId === null) return null;
+    const record = this.#durable.readRoot();
+    if (!record) throw new CorruptDurableStoreError("checkpoint root missing");
+    const root = rootFromRecord(record);
+    this.#validateRootReferenceSet(record, root);
+    if (root.readyGenerationId !== parentGenerationId || root.readyGenerationRecordHash === null) return null;
+    const closure = this.#findReadyClosureRecord(record.references, root.readyGenerationRecordHash).closure;
+    const sourceCoverage = cloneCanonical<SourceCoverageCertificateV1>(decodeCanonicalJson(
+      readContentStore(this.#durable, closure.sourceCoverageStorageHash, SOURCE_COVERAGE_KIND, "predecessor source coverage"),
+    ));
+    if (sourceCoverage.sourceCoverageRoot !== closure.sourceCoverageRoot) {
+      throw new CorruptDurableStoreError("predecessor source coverage root mismatch");
+    }
+    const validated = validateSourceExecutionSetRecord(
+      hash => this.#durable.readContent(hash),
+      closure.sourceExecutionSetStorageHash,
+      sourceCoverage,
+    );
+    if (validated.set.executionSetRoot !== closure.sourceExecutionSetRoot) {
+      throw new CorruptDurableStoreError("predecessor source execution set root mismatch");
+    }
+    const rawEvidenceLocators = [...validated.rawStorageBySemanticHash.entries()]
+      .sort(([left], [right]) => compareText(left, right))
+      .map(([rawLocatorHash, storageHash]) => {
+        const raw = this.#durable.readContent(storageHash);
+        if (!raw || raw.kind !== RAW_EVIDENCE_LOCATOR_KIND || raw.payloadHash !== rawLocatorHash) {
+          throw new CorruptDurableStoreError("predecessor raw locator is missing");
+        }
+        return Object.freeze({
+          kind: "raw-evidence-locator" as const,
+          version: 1 as const,
+          rawLocatorHash,
+          bytes: new Uint8Array(raw.bytes),
+        });
+      });
+    return Object.freeze({
+      sourceCoverage,
+      sourceExecutionSet: validated.set,
+      rawEvidenceLocators: Object.freeze(rawEvidenceLocators),
+    });
+  }
+
   /**
-   * Rehydrates process-local identity resume capabilities from the exact
-   * active-run partial records. The returned objects contain no durable data
-   * and are accepted only by the attestation authority that issued them.
+   * Read the latest committed single-target probe exclusively from the
+   * root-reachable durable lineage.  Callers cannot provide the receipt,
+   * candidate, or either side of the outcome transition.
    */
-  async loadIdentityResumeCapabilities(runId: string): Promise<readonly AttestationIdentityResumeCapabilityV1[]> {
+  loadLatestProbeEvidence(): CheckpointProbeEvidenceV1 | null {
+    const releaseFence = this.#captureReleaseFence();
+    const record = this.#durable.readRoot();
+    if (!record) return null;
+    const root = rootFromRecord(record);
+    this.#validateRootReferenceSet(record, root);
+    if (root.latestProbeReceiptHash === null) return null;
+    const evidence = this.#validateProbeReceiptChainWith(
+      hash => this.#durable.readContent(hash),
+      root.latestProbeReceiptHash,
+    );
+    const finalRecord = this.#durable.readRoot();
+    if (!finalRecord) throw new CorruptDurableStoreError("checkpoint root missing after probe evidence load");
+    const finalRoot = rootFromRecord(finalRecord);
+    if (
+      finalRecord.envelopeHash !== record.envelopeHash
+      || finalRoot.revision !== root.revision
+      || finalRoot.latestProbeReceiptHash !== root.latestProbeReceiptHash
+      || finalRoot.probeReceiptLineageRoot !== root.probeReceiptLineageRoot
+    ) throw new CheckpointRunStateError("probe evidence changed during durable load");
+    this.#assertReleaseFenceUnchanged(releaseFence);
+    return evidence;
+  }
+
+  /** Physical SQLite identity observed by the checkpoint owner itself.  It
+   * binds restart evidence to one durable file, not merely to a copied set of
+   * self-consistent root bytes. */
+  loadRuntimeStoreAnchor(): CheckpointRuntimeStoreAnchorV1 {
+    const path = realpathSync(this.#durable.filename);
+    if (!lstatSync(path).isFile()) throw new CheckpointRunStateError("checkpoint runtime store is not a physical file");
+    const before = statSync(path, { bigint: true });
+    const after = statSync(path, { bigint: true });
+    if (before.dev !== after.dev || before.ino !== after.ino) {
+      throw new CheckpointRunStateError("checkpoint runtime store identity changed during observation");
+    }
+    return deepFreeze({ path, device: String(after.dev), inode: String(after.ino) });
+  }
+
+  /**
+   * Observe the exact active run without consuming any resume capability.
+   * This is intentionally narrower than loadAttestationResumeCapabilities:
+   * it cannot claim, reissue, persist, or promote anything.  The returned
+   * storage hashes let an external observer independently re-read the raw
+   * SQLite closure instead of trusting this semantic projection by itself.
+   */
+  async loadRuntimeRestartSnapshot(): Promise<CheckpointRuntimeRestartSnapshotV1> {
+    const releaseFence = this.#captureReleaseFence();
+    const rootRecord = this.#durable.readRoot();
+    if (!rootRecord) throw new CheckpointRunStateError("runtime restart snapshot requires a checkpoint root");
+    const root = rootFromRecord(rootRecord);
+    this.#validateRootReferenceSet(rootRecord, root);
+    if (root.inProgressRunId === null) {
+      throw new CheckpointRunStateError("runtime restart snapshot requires an active run");
+    }
+    const loaded = this.#loadActiveRun(root.inProgressRunId);
+    const partials = this.#loadPartialOutcomesStore(loaded.envelope);
+    const outcomes = this.#loadOutcomesStore(loaded.envelope);
+    const probeEvidence = root.latestProbeReceiptHash === null
+      ? null
+      : this.#validateProbeReceiptChainWith(
+          hash => this.#durable.readContent(hash),
+          root.latestProbeReceiptHash,
+        );
+    await this.#canonical.assertStillCanonical(loaded.envelope.cutoff);
+    const finalRecord = this.#durable.readRoot();
+    if (!finalRecord) throw new CheckpointRunStateError("runtime restart checkpoint root disappeared");
+    const finalRoot = rootFromRecord(finalRecord);
+    if (finalRecord.envelopeHash !== rootRecord.envelopeHash
+      || finalRoot.revision !== root.revision
+      || finalRoot.inProgressRunId !== root.inProgressRunId
+      || finalRoot.latestProbeReceiptHash !== root.latestProbeReceiptHash) {
+      throw new CheckpointRunStateError("runtime restart snapshot changed during durable load");
+    }
+    this.#assertReleaseFenceUnchanged(releaseFence);
+    return deepFreeze({
+      checkpointStore: this.loadRuntimeStoreAnchor(),
+      checkpointRevision: root.revision,
+      checkpointRootEnvelopeHash: rootRecord.envelopeHash,
+      runEnvelopeStorageHash: loaded.storageHash,
+      runId: loaded.envelope.runId,
+      cutoff: loaded.envelope.cutoff,
+      candidatePartitionRoot: loaded.envelope.candidatePartitionRoot,
+      outcomePartitionRoot: loaded.envelope.outcomePartitionRoot,
+      candidates: loaded.builderRun.candidates,
+      partials,
+      outcomes,
+      probeEvidence,
+    });
+  }
+
+  /**
+   * Read the active ready record from the checkpoint root, never from a
+   * caller-provided object. The closure decoder and root-reference validator
+   * prove the durable identity; the canonical and release fences prove that
+   * the record is still eligible to be considered by ReadyGeneration.
+   */
+  async loadActiveReady(): Promise<ReadyGenerationV1 | null> {
+    const releaseFence = this.#captureReleaseFence();
+    const record = this.#durable.readRoot();
+    if (!record) return null;
+    const root = rootFromRecord(record);
+    this.#validateRootReferenceSet(record, root);
+    if (root.readyGenerationRecordHash === null || root.readyGenerationId === null) return null;
+    const found = this.#findReadyClosure(record.references, root.readyGenerationRecordHash);
+    const ready = found.ready;
+    if (ready.generationId !== root.readyGenerationId || ready.readyRecordHash !== root.readyGenerationRecordHash) {
+      throw new CorruptDurableStoreError("active ready generation pointer mismatch");
+    }
+    await this.#canonical.assertStillCanonical(ready.cutoff);
+    const finalRecord = this.#durable.readRoot();
+    if (!finalRecord) throw new CorruptDurableStoreError("checkpoint root missing after active ready load");
+    const finalRoot = rootFromRecord(finalRecord);
+    if (
+      finalRecord.envelopeHash !== record.envelopeHash
+      || finalRoot.revision !== root.revision
+      || finalRoot.readyGenerationId !== root.readyGenerationId
+      || finalRoot.readyGenerationRecordHash !== root.readyGenerationRecordHash
+    ) throw new CheckpointRunStateError("active ready generation changed during active ready load");
+    // Fence the asynchronous durable read against canonical drift as well as
+    // release rotation. Release mismatch is deliberately returned to
+    // ReadyGeneration, which classifies it as non-reusable under the current
+    // release instead of hiding the exact stale binding here.
+    await this.#canonical.assertStillCanonical(ready.cutoff);
+    this.#assertReleaseFenceUnchanged(releaseFence);
+    return ready;
+  }
+
+  /**
+   * Rehydrate the exact active-run difference in one claim boundary. Final
+   * outcomes are included as well as identity partials, so a restarted owner
+   * can skip already-completed candidates without asking a Family program to
+   * recreate a result. All records are validated before either claim set is
+   * marked consumed.
+   */
+  async loadAttestationResumeCapabilities(runId: string): Promise<AttestationResumeCapabilitiesV1> {
     const loaded = this.#loadActiveRun(runId);
     const partials = this.#loadPartialOutcomesStore(loaded.envelope);
+    const outcomes = this.#loadOutcomesStore(loaded.envelope);
     const candidates = new Map(loaded.builderRun.candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
-    const claimedKeys: string[] = [];
-    const capabilities = partials.map(partial => {
+    const identityClaims: string[] = [];
+    const finalClaims: string[] = [];
+    const identityCapabilities: AttestationIdentityResumeCapabilityV1[] = [];
+    const finalCapabilities: AttestationOutcomeResumeCapabilityV1[] = [];
+    const memoReuseCapabilities: AttestationVerifiedMemoReuseCapabilityV1[] = [];
+    const retryable: Hash[] = [];
+    const identityKeys = new Set<string>();
+    const finalKeys = new Set<string>();
+    const memoClaims: string[] = [];
+    for (const partial of partials) {
       if (partial.identity === null) throw new CorruptDurableStoreError("partial identity is missing its identity record");
       const candidate = candidates.get(partial.familyCandidateKey);
       if (!candidate) throw new CorruptDurableStoreError("partial identity candidate is absent");
       const proofHash = partial.identity.issuerProof.proofHash;
       const claimKey = `${loaded.envelope.runId}:${partial.familyCandidateKey}:${proofHash}`;
-      if (this.#issuedResumeClaims.has(claimKey)) {
+      if (this.#issuedResumeClaims.has(claimKey) || this.#pendingResumeClaimKeys.has(claimKey)) {
         throw new CheckpointRunStateError("durable partial resume capability already claimed");
       }
-      const capability = rehydrateIdentityResumeCapabilityForCheckpoint(this.#attestationAuthority, {
+      if (identityKeys.has(partial.familyCandidateKey) || finalKeys.has(partial.familyCandidateKey)) {
+        throw new CorruptDurableStoreError("durable resume closure contains duplicate candidate");
+      }
+      identityCapabilities.push(rehydrateIdentityResumeCapabilityForCheckpoint(this.#attestationAuthority, {
         runId: loaded.envelope.runId,
         cutoff: loaded.envelope.cutoff,
         candidatePartition: loaded.builderRun.candidatePartition,
@@ -1151,12 +1916,127 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         releaseAuthorityRoot: partial.releaseAuthorityRoot,
         releaseProvenanceHash: partial.releaseProvenanceHash,
         executorAuthorityRoot: partial.executorAuthorityRoot,
-      });
-      claimedKeys.push(claimKey);
-      return capability;
+      }));
+      identityClaims.push(claimKey);
+      identityKeys.add(partial.familyCandidateKey);
+    }
+    for (const outcome of outcomes) {
+      const candidate = candidates.get(outcome.familyCandidateKey);
+      if (!candidate) throw new CorruptDurableStoreError("final outcome candidate is absent");
+      if (identityKeys.has(outcome.familyCandidateKey) || finalKeys.has(outcome.familyCandidateKey)) {
+        throw new CorruptDurableStoreError("durable resume closure contains both partial and final outcome");
+      }
+      if (outcome.kind === "retryable") {
+        this.#attestationAuthority.validateDurableOutcome(outcome, {
+          runId: loaded.envelope.runId,
+          cutoff: loaded.envelope.cutoff,
+          candidatePartitionRoot: loaded.envelope.candidatePartitionRoot,
+          candidate,
+        });
+        retryable.push(outcome.familyCandidateKey);
+        continue;
+      }
+      const outcomeHash = candidateFinalOutcomeHash(outcome);
+      const claimKey = `${loaded.envelope.runId}:${outcome.familyCandidateKey}:${outcomeHash}`;
+      if (this.#issuedOutcomeResumeClaims.has(claimKey) || this.#pendingResumeClaimKeys.has(claimKey)) {
+        throw new CheckpointRunStateError("durable final outcome resume capability already claimed");
+      }
+      finalCapabilities.push(rehydrateOutcomeResumeCapabilityForCheckpoint(this.#attestationAuthority, {
+        runId: loaded.envelope.runId,
+        cutoff: loaded.envelope.cutoff,
+        candidatePartition: loaded.builderRun.candidatePartition,
+        candidatePartitionReader: this.#candidatePartitionReader,
+        familyCandidateKey: outcome.familyCandidateKey,
+        candidate,
+        outcome,
+        outcomeHash,
+        attestationAuthorityRoot: outcome.attestationAuthorityRoot,
+        releaseAuthorityRoot: outcome.releaseAuthorityRoot,
+        releaseProvenanceHash: outcome.releaseProvenanceHash,
+        executorAuthorityRoot: outcome.executorAuthorityRoot,
+      }));
+      finalClaims.push(claimKey);
+      finalKeys.add(outcome.familyCandidateKey);
+    }
+    const memoRecord = this.#durable.readContent(loaded.envelope.verifiedMemoSetStorageHash);
+    if (!memoRecord || memoRecord.kind !== VERIFIED_MEMO_SET_KIND) {
+      throw new CorruptDurableStoreError("active run prior verified memo set is missing");
+    }
+    const memoSet = decodeMemoSet(memoRecord.bytes);
+    if (memoSet.verifiedMemoSetRoot !== loaded.envelope.verifiedMemoSetRoot) {
+      throw new CorruptDurableStoreError("active run prior verified memo root mismatch");
+    }
+    const publicationsByInstance = new Map<string, InstancePublicationV1>();
+    for (const publication of memoSet.memos) {
+      const instance = `${publication.familyId}\u0000${publication.instanceKey}`;
+      if (publicationsByInstance.has(instance)) throw new CorruptDurableStoreError("verified memo set contains duplicate Family instance");
+      publicationsByInstance.set(instance, publication);
+    }
+    for (const candidate of loaded.builderRun.candidates) {
+      if (identityKeys.has(candidate.familyCandidateKey) || finalKeys.has(candidate.familyCandidateKey) || retryable.includes(candidate.familyCandidateKey)) continue;
+      const publication = publicationsByInstance.get(`${candidate.familyId}\u0000${candidate.instanceNominationKey}`);
+      if (!publication) continue;
+      const claimKey = `${loaded.envelope.runId}:${candidate.familyCandidateKey}:${publication.instancePublicationHash}:${memoSet.verifiedMemoSetRoot}`;
+      if (this.#issuedMemoReuseClaims.has(claimKey) || this.#pendingResumeClaimKeys.has(claimKey)) {
+        throw new CheckpointRunStateError("verified memo reuse capability already claimed");
+      }
+      memoReuseCapabilities.push(rehydrateVerifiedMemoReuseCapabilityForCheckpoint(this.#attestationAuthority, {
+        runId: loaded.envelope.runId,
+        cutoff: loaded.envelope.cutoff,
+        candidatePartition: loaded.builderRun.candidatePartition,
+        candidatePartitionReader: this.#candidatePartitionReader,
+        familyCandidateKey: candidate.familyCandidateKey,
+        publication,
+        verifiedMemoSetRoot: memoSet.verifiedMemoSetRoot,
+      }));
+      memoClaims.push(claimKey);
+    }
+    const allClaimKeys = [...identityClaims, ...finalClaims, ...memoClaims];
+    for (const claimKey of allClaimKeys) this.#pendingResumeClaimKeys.add(claimKey);
+    let claimState: "pending" | "committed" | "aborted" = "pending";
+    const claim = Object.freeze({
+      commit: (): void => {
+        if (claimState !== "pending") throw new CheckpointRunStateError("attestation resume claim already closed");
+        for (const claimKey of identityClaims) {
+          if (this.#issuedResumeClaims.has(claimKey)) {
+            claimState = "aborted";
+            for (const key of allClaimKeys) this.#pendingResumeClaimKeys.delete(key);
+            throw new CheckpointRunStateError("durable partial resume capability was claimed concurrently");
+          }
+        }
+        for (const claimKey of finalClaims) {
+          if (this.#issuedOutcomeResumeClaims.has(claimKey)) {
+            claimState = "aborted";
+            for (const key of allClaimKeys) this.#pendingResumeClaimKeys.delete(key);
+            throw new CheckpointRunStateError("durable final outcome resume capability was claimed concurrently");
+          }
+        }
+        for (const claimKey of memoClaims) {
+          if (this.#issuedMemoReuseClaims.has(claimKey)) {
+            claimState = "aborted";
+            for (const key of allClaimKeys) this.#pendingResumeClaimKeys.delete(key);
+            throw new CheckpointRunStateError("verified memo reuse capability was claimed concurrently");
+          }
+        }
+        for (const claimKey of identityClaims) this.#issuedResumeClaims.add(claimKey);
+        for (const claimKey of finalClaims) this.#issuedOutcomeResumeClaims.add(claimKey);
+        for (const claimKey of memoClaims) this.#issuedMemoReuseClaims.add(claimKey);
+        for (const key of allClaimKeys) this.#pendingResumeClaimKeys.delete(key);
+        claimState = "committed";
+      },
+      abort: (): void => {
+        if (claimState !== "pending") throw new CheckpointRunStateError("attestation resume claim already closed");
+        for (const key of allClaimKeys) this.#pendingResumeClaimKeys.delete(key);
+        claimState = "aborted";
+      },
+    }) satisfies AttestationResumeClaimV1;
+    return deepFreeze({
+      identity: deepFreeze(identityCapabilities),
+      final: deepFreeze(finalCapabilities),
+      retryable: deepFreeze(retryable.sort(compareText)),
+      memoReuse: deepFreeze(memoReuseCapabilities),
+      claim,
     });
-    for (const claimKey of claimedKeys) this.#issuedResumeClaims.add(claimKey);
-    return deepFreeze(capabilities);
   }
 
   /**
@@ -1224,22 +2104,52 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       completeness: entry.completeness,
       historyStartBlock: entry.historyStartBlock,
     })));
+    const sourceExecutionSet = decodePersistedSourcePlanExecutionSet(input.sourceExecutionSet, "beginRun.sourceExecutionSet");
+    validatePersistedExecutionCoverage(sourceExecutionSet, input.sourceCoverage);
     validateRecentObservationReceipt(input.recentObservation, this.#canonical.recentObservationRange(cutoff));
     if (!sameCutoff(input.recentObservation.cutoff, cutoff)) throw new CheckpointRunStateError("observation cutoff mismatch");
+    const sourcePlanEvidence = decodeSourcePlanEvidenceSet(
+      encodeCanonicalBytes(input.sourcePlanEvidence),
+      "beginRun.sourcePlanEvidence",
+    );
+    validateSourcePlanEvidenceReceipts(
+      sourcePlanEvidence,
+      cutoff,
+      sourcePlanRefsFromCoverage(input.sourceCoverage),
+    );
+    validateSourcePlanEvidenceExecutionJoin(sourcePlanEvidence, sourceExecutionSet);
     const computedCandidatePartitionRoot = candidatePartitionRoot(input.candidates);
-    const rawLocators = rawEvidenceLocatorContents(input.rawEvidenceLocators);
+    const nominationClosure = validateNominationClosureAgainstRun({
+      closure: input.nominationClosure,
+      cutoff,
+      recentObservation: input.recentObservation,
+      sourceCoverage: input.sourceCoverage,
+      sourceExecutionSet,
+      candidates: input.candidates,
+      candidatePartitionRoot: computedCandidatePartitionRoot,
+    });
+    const rawLocators = mergedRawEvidenceLocatorContents(
+      input.recentRawEvidenceLocators,
+      input.sourcePlanRawEvidenceLocators,
+    );
     const expectedLocatorHashes = deepFreeze([
-      ...new Set(input.recentObservation.evidence.map(value => value.rawLocatorHash)),
+      ...new Set([
+        ...input.recentObservation.evidence.map(value => value.rawLocatorHash),
+        ...sourcePlanEvidence.flatMap(value => value.rawLocatorHashes),
+      ]),
     ].sort(compareText));
     if (
       rawLocators.length !== expectedLocatorHashes.length
       || rawLocators.some((value, index) => value.rawLocatorHash !== expectedLocatorHashes[index])
     ) throw new CheckpointRunStateError("raw evidence locator partition mismatch");
-    const recentEvidence = new Set(input.recentObservation.evidence.map(value => encodeCanonicalJson(value)));
+    const sealedEvidence = new Set([
+      ...input.recentObservation.evidence,
+      ...sourcePlanEvidence.flatMap(value => value.refs),
+    ].map(value => encodeCanonicalJson(value)));
     for (const candidate of input.candidates) {
       for (const evidence of candidate.evidence) {
-        if (!recentEvidence.has(encodeCanonicalJson(evidence))) {
-          throw new CheckpointRunStateError("candidate evidence is not in the sealed recent observation");
+        if (!sealedEvidence.has(encodeCanonicalJson(evidence))) {
+          throw new CheckpointRunStateError("candidate evidence is not in the sealed observation/source-plan evidence");
         }
       }
     }
@@ -1265,13 +2175,70 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           }
           rawStorageBySemanticHash.set(locator.rawLocatorHash, stored);
         }
-        const rawStorageHashes = expectedLocatorHashes.map(hash => rawStorageBySemanticHash.get(hash)!);
         const recentStorageHash = tx.putImmutable(
           RECENT_OBSERVATION_KIND,
           encodeCanonicalBytes(input.recentObservation),
-          rawStorageHashes,
+          input.recentObservation.evidence.map(value => rawStorageBySemanticHash.get(value.rawLocatorHash)!),
         );
         const coverageStorageHash = tx.putImmutable(SOURCE_COVERAGE_KIND, encodeCanonicalBytes(input.sourceCoverage));
+        const sourcePlanRawLocatorHashes = [...new Set(sourcePlanEvidence.flatMap(value => value.rawLocatorHashes))].sort(compareText);
+        const sourcePlanRawStorageHashes = sourcePlanRawLocatorHashes.map(hash => {
+          const storageHash = rawStorageBySemanticHash.get(hash);
+          if (storageHash === undefined) throw new CheckpointRunStateError(`source-plan raw locator ${hash} is not durable`);
+          return storageHash;
+        });
+        const sourcePlanEvidenceStorageHash = tx.putImmutable(
+          SOURCE_PLAN_EVIDENCE_KIND,
+          encodeCanonicalBytes(sourcePlanEvidence),
+          sourcePlanRawStorageHashes,
+        );
+        const predecessorRoots = sourceExecutionSet.executions
+          .map(value => value.previousExecutionRoot)
+          .filter((value): value is Hash => value !== null);
+        let predecessorExecutionSetStorageHash: Hash | null = null;
+        if (predecessorRoots.length > 0) {
+          if (root.readyGenerationRecordHash === null || root.readyGenerationId !== input.parentGenerationId) {
+            throw new CheckpointRunStateError("source execution predecessor has no active parent ready closure");
+          }
+          const priorReady = this.#findReadyClosureRecordWith(
+            hash => tx.readContent(hash),
+            currentRecord.references,
+            root.readyGenerationRecordHash,
+            false,
+          ).closure;
+          const priorRecord = tx.readContent(priorReady.sourceExecutionSetStorageHash);
+          if (!priorRecord || priorRecord.kind !== SOURCE_EXECUTION_SET_KIND) {
+            throw new CorruptDurableStoreError("parent source execution set is missing");
+          }
+          const priorSet = decodePersistedSourcePlanExecutionSet(decodeCanonicalJson(priorRecord.bytes), "parent source execution set");
+          if (priorSet.executionSetRoot !== priorReady.sourceExecutionSetRoot) {
+            throw new CorruptDurableStoreError("parent source execution set root mismatch");
+          }
+          const priorByRoot = new Map(priorSet.executions.map(value => [value.persistedExecutionRoot, value]));
+          for (const current of sourceExecutionSet.executions) {
+            if (current.previousExecutionRoot === null) continue;
+            const prior = priorByRoot.get(current.previousExecutionRoot);
+            if (
+              prior === undefined
+              || sourcePlanIdentity(prior.execution.plan) !== sourcePlanIdentity(current.execution.plan)
+              || prior.sourcePlanLeafDigest !== current.sourcePlanLeafDigest
+              || prior.sourcePlanSchemaHash !== current.sourcePlanSchemaHash
+              || prior.sourcePlanClosureRoot !== current.sourcePlanClosureRoot
+              || prior.sourceAuthorityRoot !== current.sourceAuthorityRoot
+              || prior.execution.cutoff.chainId !== current.execution.cutoff.chainId
+              || prior.execution.through !== priorSet.cutoff.number
+              || current.execution.previousAppliedThrough !== prior.execution.through
+              || BigInt(current.execution.from) !== BigInt(prior.execution.through) + 1n
+              || BigInt(current.execution.cutoff.number) <= BigInt(prior.execution.cutoff.number)
+            ) throw new CheckpointRunStateError("source execution predecessor lineage mismatch");
+          }
+          predecessorExecutionSetStorageHash = priorReady.sourceExecutionSetStorageHash;
+        }
+        const sourceExecutionSetStorageHash = tx.putImmutable(
+          SOURCE_EXECUTION_SET_KIND,
+          encodeCanonicalBytes(sourceExecutionSet),
+          [...sourcePlanRawStorageHashes, ...(predecessorExecutionSetStorageHash === null ? [] : [predecessorExecutionSetStorageHash])],
+        );
         const candidateEntries: PartitionEntryV1[] = [];
         for (const candidate of input.candidates) {
           const storageHash = tx.putImmutable(
@@ -1283,9 +2250,17 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           candidateEntries.push({ key: candidate.familyCandidateKey, storageHash });
         }
         const candidateManifestHash = putPartition(tx, runId, "candidate", candidateEntries);
+        const nominationClosureStorageHash = tx.putImmutable(
+          NOMINATION_CLOSURE_KIND,
+          encodeNominationClosureV1(nominationClosure),
+          [recentStorageHash, coverageStorageHash, sourceExecutionSetStorageHash, sourcePlanEvidenceStorageHash, candidateManifestHash],
+        );
         const outcomeManifestHash = putPartition(tx, runId, "outcome", []);
         const memoStorageHash = this.#findMemoStorageHash(tx, currentRecord.references, root.verifiedMemoRoot);
         const nextRevision = (BigInt(root.revision) + 1n).toString();
+        this.#candidatePartitionProofIssuer.assertNominationQualificationsQualified(
+          nominationQualificationBindings(nominationClosure),
+        );
         const release = this.#candidatePartitionProofIssuer.currentRelease();
         const releaseProvenanceHash = release.releaseProvenanceHash;
         const proofPayload = makeCandidatePartitionProofPayload({
@@ -1293,6 +2268,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           cutoff,
           candidatePartitionRoot: computedCandidatePartitionRoot,
           candidatePartitionStorageHash: candidateManifestHash,
+          nominationClosureRoot: nominationClosure.root,
+          nominationClosureStorageHash,
           candidates: input.candidates,
           recentObservationRoot: input.recentObservation.observationRoot,
           sourceCoverageRoot: input.sourceCoverage.sourceCoverageRoot,
@@ -1323,6 +2300,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           definitionCatalogRoot: input.definitionCatalogRoot,
           sourceCoverageRoot: input.sourceCoverage.sourceCoverageRoot,
           sourceCoverageStorageHash: coverageStorageHash,
+          sourceExecutionSetRoot: sourceExecutionSet.executionSetRoot,
+          sourceExecutionSetStorageHash,
+          sourcePlanEvidenceStorageHash,
+          nominationClosureRoot: nominationClosure.root,
+          nominationClosureStorageHash,
           candidatePartitionRoot: computedCandidatePartitionRoot,
           candidatePartitionStorageHash: candidateManifestHash,
           candidatePartitionProofStorageHash: proofStorageHash,
@@ -1335,7 +2317,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           verifiedMemoSetStorageHash: memoStorageHash,
           accounting: outcomeAccounting(input.candidates.length, []),
         });
-        const runStorageHash = tx.putImmutable(RUN_KIND, encodeCanonicalBytes(run), [recentStorageHash, coverageStorageHash, candidateManifestHash, proofStorageHash, outcomeManifestHash, memoStorageHash]);
+        const runStorageHash = tx.putImmutable(RUN_KIND, encodeCanonicalBytes(run), runContentReferences(run));
         const nextRoot = deepFreeze({ ...root, revision: nextRevision, inProgressRunId: runId });
         tx.compareAndSwapRoot(
           root.revision,
@@ -1476,8 +2458,19 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           allRecentLocatorHashes,
           "recent observation",
         );
+        const sourcePlanRecord = tx.readContent(loaded.envelope.sourcePlanEvidenceStorageHash);
+        if (!sourcePlanRecord || sourcePlanRecord.kind !== SOURCE_PLAN_EVIDENCE_KIND) {
+          throw new CorruptDurableStoreError("source-plan evidence is missing while sealing memos");
+        }
+        const sourcePlanEvidence = decodeSourcePlanEvidenceSet(sourcePlanRecord.bytes, "source-plan evidence");
+        const sourcePlanStorageBySemanticHash = validateRawLocatorReferences(
+          hash => tx.readContent(hash),
+          sourcePlanRecord.references,
+          sourcePlanEvidence.flatMap(value => value.rawLocatorHashes),
+          "source-plan evidence",
+        );
         const retainedRawStorageHashes = memoSet.retainedRawLocatorHashes.map(hash => {
-          const storageHash = rawStorageBySemanticHash.get(hash);
+          const storageHash = rawStorageBySemanticHash.get(hash) ?? sourcePlanStorageBySemanticHash.get(hash);
           if (!storageHash) throw new CorruptDurableStoreError("verified memo raw locator is absent");
           return storageHash;
         });
@@ -1495,16 +2488,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           verifiedMemoSetRoot: memoSet.verifiedMemoSetRoot,
           verifiedMemoSetStorageHash: memoStorageHash,
         });
-        const nextRunHash = tx.putImmutable(RUN_KIND, encodeCanonicalBytes(nextRun), [
-          nextRun.recentObservationStorageHash,
-          nextRun.sourceCoverageStorageHash,
-          nextRun.candidatePartitionStorageHash,
-          nextRun.candidatePartitionProofStorageHash,
-          nextRun.outcomePartitionStorageHash,
-          ...(nextRun.partialOutcomePartitionStorageHash === null ? [] : [nextRun.partialOutcomePartitionStorageHash]),
-          partitionStorageHash,
-          memoStorageHash,
-        ]);
+        const nextRunHash = tx.putImmutable(RUN_KIND, encodeCanonicalBytes(nextRun), runContentReferences(nextRun));
         const nextRoot = deepFreeze({ ...root, revision: nextRevision });
         tx.compareAndSwapRoot(
           root.revision,
@@ -1534,6 +2518,73 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         persistenceCapability: AttestationPersistenceCapabilityV1,
       ) => this.#replaceRetryable(probeCapability, writerCapability, persistenceCapability),
     });
+  }
+
+  /**
+   * Internal release-owner retry edge. It is deliberately not part of the
+   * public ProbeStorePort: the owner re-executes a durable retryable outcome
+   * and then performs the same checkpoint CAS/receipt transition. If the
+   * transaction fails before commit, the one-shot probe claim is released so
+   * a same-process retry is possible; a post-commit fence failure leaves the
+   * changed durable outcome authoritative.
+   */
+  async _replaceRetryableOutcomeForOwner(
+    runId: string,
+    familyCandidateKey: Hash,
+    writerCapability: AttestationWriterCapabilityV1,
+    persistenceCapability: AttestationPersistenceCapabilityV1,
+  ): Promise<void> {
+    const probe = await this.#loadRetryable(runId, familyCandidateKey);
+    if (probe.beforeOutcomeHash === persistenceCapability.outcomeHash) {
+      const claim = this.#attestationAuthority.claimWriterCapabilities(writerCapability, [persistenceCapability]);
+      try {
+        const persisted = claim.entries[0];
+        if (
+          !persisted
+          || persisted.kind !== "final"
+          || persisted.identity !== null
+          || persisted.outcome === null
+          || persisted.runId !== runId
+          || persisted.familyCandidateKey !== familyCandidateKey
+          || persisted.outcomeHash !== probe.beforeOutcomeHash
+        ) throw new OutcomeStateConflictError("retryable owner no-op persistence lineage mismatch");
+      } catch (error) {
+        claim.abort();
+        throw error;
+      }
+      // The exact durable hash is already present, so consuming this
+      // session capability is the no-op CAS result that lets sealExactPartition
+      // account for the candidate without writing a duplicate record.
+      claim.commit();
+      const claimKey = `${runId}:${familyCandidateKey}:${probe.beforeOutcomeHash}:${probe.checkpointRevision}`;
+      this.#issuedProbeClaims.delete(claimKey);
+      return;
+    }
+    try {
+      await this.#replaceRetryable(probe.probeCapability, writerCapability, persistenceCapability);
+    } catch (error) {
+      try {
+        const current = await this.#loadActiveRun(runId);
+        const currentHash = this.#durable.readIndex(`outcome/${runId}`, familyCandidateKey);
+        const currentRecord = currentHash === null ? null : this.#durable.readContent(currentHash);
+        const currentOutcome = currentRecord?.kind === OUTCOME_KIND
+          ? cloneCanonical<CandidateFinalOutcomeV1>(decodeCanonicalJson(currentRecord.bytes))
+          : null;
+        if (
+          current.envelope.checkpointRevision === probe.checkpointRevision
+          && currentOutcome !== null
+          && currentOutcome.kind === "retryable"
+          && candidateFinalOutcomeHash(currentOutcome) === probe.beforeOutcomeHash
+        ) {
+          const claimKey = `${runId}:${familyCandidateKey}:${probe.beforeOutcomeHash}:${probe.checkpointRevision}`;
+          this.#issuedProbeClaims.delete(claimKey);
+        }
+      } catch {
+        // Preserve the original CAS/fence error; a fresh CheckpointStore will
+        // revalidate the durable root before issuing another retry edge.
+      }
+      throw error;
+    }
   }
 
   async putContentAndFsync(kind: "instance-catalog" | "persisted-graph", value: object): Promise<Hash> {
@@ -1579,6 +2630,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         || binding.generationRefreshPolicyHash !== policyHash
         || binding.releaseProvenanceHash !== input.ready.releaseProvenanceHash
         || binding.candidatePartitionProofStorageHash !== input.ready.candidatePartitionProofStorageHash
+        || binding.nominationClosureRoot !== input.ready.nominationClosureRoot
+        || binding.nominationClosureStorageHash !== input.ready.nominationClosureStorageHash
       ) throw new CheckpointRunStateError("ready promotion authority binding mismatch");
     };
     assertPromotionAuthority();
@@ -1660,6 +2713,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           || ready.definitionCatalogRoot !== loaded.envelope.definitionCatalogRoot
           || ready.sourceCoverageRoot !== loaded.envelope.sourceCoverageRoot
           || ready.candidatePartitionRoot !== loaded.envelope.candidatePartitionRoot
+          || ready.nominationClosureRoot !== loaded.envelope.nominationClosureRoot
+          || ready.nominationClosureStorageHash !== loaded.envelope.nominationClosureStorageHash
           || ready.exactOutcomePartitionRoot !== partition.exactOutcomePartitionRoot
           || ready.verifiedMemoSetRoot !== memo.verifiedMemoSetRoot
           || ready.instanceCatalogRoot !== input.instanceCatalog.instanceCatalogRoot
@@ -1681,6 +2736,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           readyBase: ready,
           readyBaseHash: readyGenerationBaseHash(ready),
           sourceCoverageStorageHash: loaded.envelope.sourceCoverageStorageHash,
+          sourceExecutionSetRoot: loaded.envelope.sourceExecutionSetRoot,
+          sourceExecutionSetStorageHash: loaded.envelope.sourceExecutionSetStorageHash,
+          sourcePlanEvidenceStorageHash: loaded.envelope.sourcePlanEvidenceStorageHash,
+          nominationClosureRoot: loaded.envelope.nominationClosureRoot,
+          nominationClosureStorageHash: loaded.envelope.nominationClosureStorageHash,
           verifiedMemoSetStorageHash: loaded.envelope.verifiedMemoSetStorageHash,
           instanceCatalogStorageHash: catalogStorageHash,
           graphStorageHash,
@@ -1692,6 +2752,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         });
         const stageStorageHash = tx.putImmutable(READY_STAGE_KIND, encodeCanonicalBytes(stage), [
           stage.sourceCoverageStorageHash,
+          stage.sourceExecutionSetStorageHash,
+          stage.sourcePlanEvidenceStorageHash,
+          stage.nominationClosureStorageHash,
           stage.verifiedMemoSetStorageHash,
           stage.instanceCatalogStorageHash,
           stage.graphStorageHash,
@@ -1734,6 +2797,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         || binding.generationRefreshPolicyHash !== policyHash
         || binding.releaseProvenanceHash !== input.stage.releaseProvenanceHash
         || binding.candidatePartitionProofStorageHash !== input.stage.candidatePartitionProofStorageHash
+        || binding.nominationClosureRoot !== input.stage.nominationClosureRoot
+        || binding.nominationClosureStorageHash !== input.stage.nominationClosureStorageHash
       ) throw new CheckpointRunStateError("ready activation authority binding mismatch");
       if (stage !== undefined && (
         binding.definitionCatalogRoot !== stage.readyBase.definitionCatalogRoot
@@ -1741,12 +2806,15 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         || binding.graphRoot !== stage.readyBase.graphRoot
         || binding.releaseProvenanceHash !== stage.readyBase.releaseProvenanceHash
         || binding.candidatePartitionProofStorageHash !== stage.readyBase.candidatePartitionProofStorageHash
+        || binding.nominationClosureRoot !== stage.readyBase.nominationClosureRoot
+        || binding.nominationClosureStorageHash !== stage.readyBase.nominationClosureStorageHash
       )) throw new CheckpointRunStateError("ready activation authority closure mismatch");
     };
     assertPromotionAuthority();
     this.#canonical.assertActiveFence(input.fence);
     this.#canonical.assertPromotionFreshness(input.fence, input.freshness);
     decimal(input.promotedAtMonotonicNs, "promotedAtMonotonicNs");
+    await this.#emitReadyStage12BeforeActivation(input);
     const owner = `checkpoint-activate/${input.expectedInProgressRunId}/${randomUUID()}`;
     const lease = this.#durable.acquireWriterLease(owner);
     try {
@@ -1777,6 +2845,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           || stage.readyBase.definitionCatalogRoot !== input.stage.definitionCatalogRoot
           || stage.readyBase.releaseProvenanceHash !== input.stage.releaseProvenanceHash
           || stage.readyBase.candidatePartitionProofStorageHash !== input.stage.candidatePartitionProofStorageHash
+          || stage.readyBase.nominationClosureRoot !== input.stage.nominationClosureRoot
+          || stage.readyBase.nominationClosureStorageHash !== input.stage.nominationClosureStorageHash
         ) throw new CheckpointRunStateError("ready activation stage binding mismatch");
         if (stage.readyBase.generationRefreshPolicyHash !== policyHash) throw new CheckpointRunStateError("ready activation policy mismatch");
         const maxPromotionAgeBlocks = (
@@ -1816,6 +2886,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           cutoff: stage.readyBase.cutoff,
           candidatePartitionRoot: stage.readyBase.candidatePartitionRoot,
           candidatePartitionStorageHash: loaded.envelope.candidatePartitionStorageHash,
+          nominationClosureRoot: stage.readyBase.nominationClosureRoot,
+          nominationClosureStorageHash: stage.readyBase.nominationClosureStorageHash,
           candidateRecordCount: loaded.envelope.candidateRecordCount,
           candidateKeysRoot: candidatePartitionKeysRoot(loaded.builderRun.candidates.map(candidate => candidate.familyCandidateKey)),
           recentObservationRoot: loaded.envelope.recentObservationRoot,
@@ -1831,17 +2903,28 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         const candidatePartitionCommitmentStorageHash = tx.putImmutable(
           CANDIDATE_PARTITION_COMMITMENT_KIND,
           encodeCanonicalBytes(candidatePartitionCommitment),
-          [candidatePartitionCommitment.candidatePartitionProofStorageHash, candidatePartitionCommitment.candidatePartitionStorageHash],
+          [
+            candidatePartitionCommitment.candidatePartitionProofStorageHash,
+            candidatePartitionCommitment.candidatePartitionStorageHash,
+            candidatePartitionCommitment.nominationClosureStorageHash,
+          ],
         );
         const closure: ReadyClosureV1 = deepFreeze({
           ready: fullReady,
           candidatePartitionStorageHash: candidatePartitionCommitment.candidatePartitionStorageHash,
+          outcomePartitionStorageHash: loaded.envelope.outcomePartitionStorageHash,
+          attestationPartitionStorageHash: loaded.envelope.attestationPartitionStorageHash!,
+          nominationClosureRoot: candidatePartitionCommitment.nominationClosureRoot,
+          nominationClosureStorageHash: candidatePartitionCommitment.nominationClosureStorageHash,
           candidateRecordCount: candidatePartitionCommitment.candidateRecordCount,
           candidateKeysRoot: candidatePartitionCommitment.candidateKeysRoot,
           recentObservationRoot: candidatePartitionCommitment.recentObservationRoot,
           sourceCoverageRoot: candidatePartitionCommitment.sourceCoverageRoot,
           candidatePartitionRevision: candidatePartitionCommitment.checkpointRevision,
           sourceCoverageStorageHash: stage.sourceCoverageStorageHash,
+          sourceExecutionSetRoot: stage.sourceExecutionSetRoot,
+          sourceExecutionSetStorageHash: stage.sourceExecutionSetStorageHash,
+          sourcePlanEvidenceStorageHash: stage.sourcePlanEvidenceStorageHash,
           candidatePartitionCommitmentStorageHash,
           candidatePartitionProofStorageHash: stage.readyBase.candidatePartitionProofStorageHash,
           verifiedMemoSetStorageHash: stage.verifiedMemoSetStorageHash,
@@ -1850,7 +2933,12 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         });
         const closureStorageHash = tx.putImmutable(READY_CLOSURE_KIND, encodeCanonicalBytes(closure), [
           closure.sourceCoverageStorageHash,
+          closure.sourceExecutionSetStorageHash,
+          closure.sourcePlanEvidenceStorageHash,
+          closure.nominationClosureStorageHash,
           closure.candidatePartitionStorageHash,
+          closure.outcomePartitionStorageHash,
+          closure.attestationPartitionStorageHash,
           closure.candidatePartitionCommitmentStorageHash,
           closure.candidatePartitionProofStorageHash,
           closure.verifiedMemoSetStorageHash,
@@ -1907,7 +2995,109 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     }
   }
 
-  async loadReadyClosure(ready: ReadyGenerationV1): Promise<{ readonly sourceCoverage: SourceCoverageCertificateV1; readonly instanceCatalog: InstanceCatalogV1; readonly graph: PersistedGraphV1 }> {
+  async #emitReadyStage12BeforeActivation(input: ReadyActivationInputV1): Promise<void> {
+    const currentRecord = this.#durable.readRoot();
+    if (!currentRecord) throw new CorruptDurableStoreError("checkpoint root missing");
+    const root = rootFromRecord(currentRecord);
+    if (root.revision !== input.stage.stageRevision
+      || root.stagedReadyStorageHash === null
+      || root.inProgressRunId !== input.expectedInProgressRunId) {
+      const state = await this.resolveStagedPromotion(input.stage);
+      if (state.kind === "committed") return;
+      if (state.kind === "staged") throw new ReadyPromotionRetryError();
+      throw new ReadyPromotionFatalError("ready-promotion-stage-mismatch");
+    }
+    this.#validateRootReferenceSet(currentRecord, root);
+    const stage = this.#findReadyStageRecordWith(
+      hash => this.#durable.readContent(hash),
+      currentRecord.references,
+      root.stagedReadyStorageHash,
+    );
+    if (stage.stageRecordHash !== input.stage.stageRecordHash
+      || stage.readyBaseHash !== input.stage.readyBaseHash
+      || stage.runId !== input.stage.runId) {
+      throw new CheckpointRunStateError("ready Stage 1/2 preview stage binding mismatch");
+    }
+    const loaded = this.#loadActiveRun(stage.runId);
+    const promotionRevision = (BigInt(root.revision) + 1n).toString();
+    const readyPayload = deepFreeze({
+      ...stage.readyBase,
+      promotionFreshness: input.freshness.receipt,
+      promotedAtMonotonicNs: input.promotedAtMonotonicNs,
+      promotionRevision,
+    });
+    const ready: ReadyGenerationV1 = deepFreeze({
+      ...readyPayload,
+      readyRecordHash: hashDomain("aloha/ready-generation/v1", readyPayload),
+    });
+    const instanceCatalog = cloneCanonical<InstanceCatalogV1>(decodeCanonicalJson(readContentStore(
+      this.#durable,
+      stage.instanceCatalogStorageHash,
+      INSTANCE_CATALOG_KIND,
+      "ready Stage 1/2 instance catalog",
+    )));
+    const graph = cloneCanonical<PersistedGraphV1>(decodeCanonicalJson(readContentStore(
+      this.#durable,
+      stage.graphStorageHash,
+      GRAPH_KIND,
+      "ready Stage 1/2 graph",
+    )));
+    validateInstanceCatalog(instanceCatalog);
+    if (encodeCanonicalJson(buildPersistedGraph(instanceCatalog)) !== encodeCanonicalJson(graph)) {
+      throw new CorruptDurableStoreError("ready Stage 1/2 graph closure mismatch");
+    }
+    const candidates = new Map(loaded.builderRun.candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
+    const publications = new Map(instanceCatalog.publications.map(publication => [publication.instancePublicationHash, publication]));
+    const stage1ByEdgeId = new Map<Hash, CheckpointSixStepArtifactCapabilityV1>();
+    const stage2ByEdgeId = new Map<Hash, CheckpointSixStepArtifactCapabilityV1>();
+    for (const outcome of this.#loadOutcomesStore(loaded.envelope)) {
+      if (outcome.kind !== "verified") continue;
+      const candidate = candidates.get(outcome.familyCandidateKey);
+      const publication = publications.get(outcome.publication.instancePublicationHash);
+      if (candidate === undefined || publication === undefined
+        || encodeCanonicalJson(publication) !== encodeCanonicalJson(outcome.publication)) {
+        throw new CorruptDurableStoreError("ready Stage 1/2 verified instance binding mismatch");
+      }
+      const parent = await this.#sixStepArtifacts.emitVerifiedOutcome({
+        runId: stage.runId,
+        cutoff: loaded.envelope.cutoff,
+        candidatePartitionRoot: loaded.envelope.candidatePartitionRoot,
+        candidate,
+        outcome,
+        sourceCoverage: loaded.sourceCoverage,
+      });
+      const edges = graph.edges.filter(edge => edge.instancePublicationHash === publication.instancePublicationHash);
+      if (edges.length !== publication.transitions.length) {
+        throw new CorruptDurableStoreError("ready Stage 1/2 edge denominator mismatch");
+      }
+      for (const edge of edges) {
+        const stage2 = await this.#sixStepArtifacts.emitReadyEdge({
+          parent,
+          ready,
+          candidate,
+          outcome,
+          publication,
+          edge,
+          sourceCoverage: loaded.sourceCoverage,
+        });
+        if (stage1ByEdgeId.has(edge.edgeId) || stage2ByEdgeId.has(edge.edgeId)) {
+          throw new CorruptDurableStoreError("ready Stage 1/2 edge identity is duplicated");
+        }
+        stage1ByEdgeId.set(edge.edgeId, parent);
+        stage2ByEdgeId.set(edge.edgeId, stage2);
+      }
+    }
+    this.#readyStage12ArtifactsByReady.set(ready.readyRecordHash, Object.freeze({ stage1ByEdgeId, stage2ByEdgeId }));
+  }
+
+  async loadReadyClosure(ready: ReadyGenerationV1): Promise<{
+    readonly sourceCoverage: SourceCoverageCertificateV1;
+    readonly nominationClosure: NominationClosureV1;
+    readonly instanceCatalog: InstanceCatalogV1;
+    readonly graph: PersistedGraphV1;
+    readonly stage12EvidenceCapability: ReadyStage12EvidenceCapabilityV1;
+  }> {
+    const releaseFence = this.#captureReleaseFence();
     await this.#canonical.assertStillCanonical(ready.cutoff);
     const rootRecord = this.#durable.readRoot();
     if (!rootRecord) throw new CorruptDurableStoreError("checkpoint root missing");
@@ -1919,6 +3109,19 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     const closure = this.#findReadyClosure(rootRecord.references, ready.readyRecordHash);
     if (encodeCanonicalJson(closure.ready) !== encodeCanonicalJson(ready)) throw new CorruptDurableStoreError("ready closure record mismatch");
     const sourceCoverage = cloneCanonical<SourceCoverageCertificateV1>(decodeCanonicalJson(readContentStore(this.#durable, closure.sourceCoverageStorageHash, SOURCE_COVERAGE_KIND, "source coverage")));
+    const nominationClosure = decodeNominationClosureBytesV1(readContentStore(
+      this.#durable,
+      closure.nominationClosureStorageHash,
+      NOMINATION_CLOSURE_KIND,
+      "nomination closure",
+    ));
+    if (
+      nominationClosure.root !== closure.nominationClosureRoot
+      || nominationClosure.root !== ready.nominationClosureRoot
+      || nominationClosure.candidatePartitionRoot !== ready.candidatePartitionRoot
+      || nominationClosure.sourceCoverageRoot !== ready.sourceCoverageRoot
+      || !sameCutoff(nominationClosure.cutoff, ready.cutoff)
+    ) throw new CorruptDurableStoreError("ready nomination closure mismatch");
     const instanceCatalog = cloneCanonical<InstanceCatalogV1>(decodeCanonicalJson(readContentStore(this.#durable, closure.instanceCatalogStorageHash, INSTANCE_CATALOG_KIND, "instance catalog")));
     const graph = cloneCanonical<PersistedGraphV1>(decodeCanonicalJson(readContentStore(this.#durable, closure.graphStorageHash, GRAPH_KIND, "persisted graph")));
     validateInstanceCatalog(instanceCatalog);
@@ -1934,7 +3137,468 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || finalRoot.readyGenerationId !== ready.generationId
       || finalRoot.readyGenerationRecordHash !== ready.readyRecordHash
     ) throw new CheckpointRunStateError("active ready generation changed during closure loading");
-    return deepFreeze({ sourceCoverage, instanceCatalog, graph });
+    this.#assertReleaseFenceUnchanged(releaseFence);
+    await this.#reopenReadyStage12Artifacts(closure, sourceCoverage, instanceCatalog, graph);
+    const stage12EvidenceCapability = this.#issueReadyStage12Evidence(closure.ready);
+    return deepFreeze({ sourceCoverage, nominationClosure, instanceCatalog, graph, stage12EvidenceCapability });
+  }
+
+  async #reopenReadyStage12Artifacts(
+    closure: ReadyClosureV1,
+    sourceCoverage: SourceCoverageCertificateV1,
+    instanceCatalog: InstanceCatalogV1,
+    graph: PersistedGraphV1,
+  ): Promise<void> {
+    if (this.#readyStage12ArtifactsByReady.has(closure.ready.readyRecordHash)) return;
+    const commitment = decodeCandidatePartitionCommitment(readContentStore(
+      this.#durable,
+      closure.candidatePartitionCommitmentStorageHash,
+      CANDIDATE_PARTITION_COMMITMENT_KIND,
+      "ready Stage 1/2 candidate partition commitment",
+    ));
+    const candidates = new Map(loadPartition(
+      (hash, kind, context) => readContentStore(this.#durable, hash, kind, context),
+      closure.candidatePartitionStorageHash,
+      commitment.runId,
+      "candidate",
+    ).map(entry => {
+      const candidate = cloneCanonical<CandidateRecordV1>(decodeCanonicalJson(readContentStore(
+        this.#durable,
+        entry.storageHash,
+        CANDIDATE_KIND,
+        "ready Stage 1/2 candidate",
+      )));
+      if (candidate.familyCandidateKey !== entry.key) throw new CorruptDurableStoreError("ready Stage 1/2 candidate key mismatch");
+      return [candidate.familyCandidateKey, candidate] as const;
+    }));
+    const outcomes = loadPartition(
+      (hash, kind, context) => readContentStore(this.#durable, hash, kind, context),
+      closure.outcomePartitionStorageHash,
+      commitment.runId,
+      "outcome",
+    ).map(entry => cloneCanonical<CandidateFinalOutcomeV1>(decodeCanonicalJson(readContentStore(
+      this.#durable,
+      entry.storageHash,
+      OUTCOME_KIND,
+      "ready Stage 1/2 outcome",
+    ))));
+    const publications = new Map(instanceCatalog.publications.map(publication => [publication.instancePublicationHash, publication]));
+    const stage1ByEdgeId = new Map<Hash, CheckpointSixStepArtifactCapabilityV1>();
+    const stage2ByEdgeId = new Map<Hash, CheckpointSixStepArtifactCapabilityV1>();
+    for (const outcome of outcomes) {
+      if (outcome.kind !== "verified") continue;
+      const candidate = candidates.get(outcome.familyCandidateKey);
+      const publication = publications.get(outcome.publication.instancePublicationHash);
+      if (candidate === undefined || publication === undefined
+        || encodeCanonicalJson(publication) !== encodeCanonicalJson(outcome.publication)) {
+        throw new CorruptDurableStoreError("ready Stage 1/2 restart publication mismatch");
+      }
+      const stage1 = await this.#sixStepArtifacts.emitVerifiedOutcome({
+        runId: commitment.runId,
+        cutoff: closure.ready.cutoff,
+        candidatePartitionRoot: closure.ready.candidatePartitionRoot,
+        candidate,
+        outcome,
+        sourceCoverage,
+      });
+      const edges = graph.edges.filter(edge => edge.instancePublicationHash === publication.instancePublicationHash);
+      if (edges.length !== publication.transitions.length) throw new CorruptDurableStoreError("ready Stage 1/2 restart edge denominator mismatch");
+      for (const edge of edges) {
+        const stage2 = await this.#sixStepArtifacts.emitReadyEdge({
+          parent: stage1,
+          ready: closure.ready,
+          candidate,
+          outcome,
+          publication,
+          edge,
+          sourceCoverage,
+        });
+        if (stage2ByEdgeId.has(edge.edgeId)) throw new CorruptDurableStoreError("ready Stage 1/2 restart edge identity duplicated");
+        stage1ByEdgeId.set(edge.edgeId, stage1);
+        stage2ByEdgeId.set(edge.edgeId, stage2);
+      }
+    }
+    this.#readyStage12ArtifactsByReady.set(closure.ready.readyRecordHash, Object.freeze({ stage1ByEdgeId, stage2ByEdgeId }));
+  }
+
+  #readyStage12BindingFor(ready: ReadyGenerationV1): ReadyStage12EvidenceBindingV1 {
+    validateReadyGeneration(ready);
+    return deepFreeze({
+      readyRecordHash: ready.readyRecordHash,
+      generationId: ready.generationId,
+      cutoff: deepFreeze({ ...ready.cutoff }),
+      definitionCatalogRoot: ready.definitionCatalogRoot,
+      sourceCoverageRoot: ready.sourceCoverageRoot,
+      candidatePartitionRoot: ready.candidatePartitionRoot,
+      exactOutcomePartitionRoot: ready.exactOutcomePartitionRoot,
+      verifiedMemoSetRoot: ready.verifiedMemoSetRoot,
+      instanceCatalogRoot: ready.instanceCatalogRoot,
+      graphRoot: ready.graphRoot,
+      releaseProvenanceHash: ready.releaseProvenanceHash,
+      promotionRevision: ready.promotionRevision,
+    });
+  }
+
+  #issueReadyStage12Evidence(ready: ReadyGenerationV1): ReadyStage12EvidenceCapabilityV1 {
+    const binding = this.#readyStage12BindingFor(ready);
+    const artifacts = this.#readyStage12ArtifactsByReady.get(binding.readyRecordHash);
+    if (artifacts === undefined) throw new CheckpointRunStateError("ready Stage 1/2 artifacts were not reopened");
+    const existing = this.#readyStage12EvidenceByReady.get(binding.readyRecordHash);
+    if (existing !== undefined) {
+      const state = this.#readyStage12EvidenceStates.get(existing);
+      if (!state || encodeCanonicalJson(state.binding) !== encodeCanonicalJson(binding)) {
+        throw new CheckpointRunStateError("ready stage1/2 capability binding changed");
+      }
+      return existing;
+    }
+    const capability = Object.freeze(Object.create(null)) as ReadyStage12EvidenceCapabilityV1;
+    this.#readyStage12EvidenceStates.set(capability, Object.freeze({ binding, ready, artifacts }));
+    this.#readyStage12EvidenceByReady.set(binding.readyRecordHash, capability);
+    return capability;
+  }
+
+  #readyStage12EvidenceBinding(
+    capability: ReadyStage12EvidenceCapabilityV1,
+  ): ReadyStage12EvidenceBindingV1 {
+    if (capability === null || typeof capability !== "object") {
+      throw new TypeError("ready stage1/2 evidence capability is invalid");
+    }
+    const state = this.#readyStage12EvidenceStates.get(capability);
+    if (!state) throw new TypeError("ready stage1/2 evidence capability is not checkpoint-issued");
+    return state.binding;
+  }
+
+  async #readReadyStage12Evidence(
+    capability: ReadyStage12EvidenceCapabilityV1,
+  ): Promise<ReadyStage12EvidenceSnapshotV1> {
+    const state = this.#readyStage12EvidenceStates.get(capability);
+    if (!state) throw new TypeError("ready stage1/2 evidence capability is not checkpoint-issued");
+    const releaseFence = this.#captureReleaseFence();
+    const closureView = await this.loadReadyClosure(state.ready);
+    if (closureView.stage12EvidenceCapability !== capability) {
+      throw new CheckpointRunStateError("ready stage1/2 evidence capability was reissued");
+    }
+    const rootRecord = this.#durable.readRoot();
+    if (!rootRecord) throw new CorruptDurableStoreError("checkpoint root missing");
+    const root = rootFromRecord(rootRecord);
+    this.#validateRootReferenceSet(rootRecord, root);
+    if (
+      root.readyGenerationId !== state.binding.generationId
+      || root.readyGenerationRecordHash !== state.binding.readyRecordHash
+    ) throw new CheckpointRunStateError("ready stage1/2 evidence generation is not active");
+    const closure = this.#findReadyClosure(rootRecord.references, state.binding.readyRecordHash);
+    if (encodeCanonicalJson(this.#readyStage12BindingFor(closure.ready)) !== encodeCanonicalJson(state.binding)) {
+      throw new CorruptDurableStoreError("ready stage1/2 evidence binding mismatch");
+    }
+    const commitment = decodeCandidatePartitionCommitment(readContentStore(
+      this.#durable,
+      closure.candidatePartitionCommitmentStorageHash,
+      CANDIDATE_PARTITION_COMMITMENT_KIND,
+      "ready stage1/2 candidate partition commitment",
+    ));
+    const candidateEntries = loadPartition(
+      (hash, kind, context) => readContentStore(this.#durable, hash, kind, context),
+      closure.candidatePartitionStorageHash,
+      commitment.runId,
+      "candidate",
+    );
+    const candidates = candidateEntries.map(entry => {
+      const candidate = cloneCanonical<CandidateRecordV1>(decodeCanonicalJson(readContentStore(
+        this.#durable,
+        entry.storageHash,
+        CANDIDATE_KIND,
+        "ready stage1/2 candidate",
+      )));
+      if (candidate.familyCandidateKey !== entry.key) {
+        throw new CorruptDurableStoreError("ready stage1/2 candidate key mismatch");
+      }
+      return candidate;
+    });
+    const candidatesByKey = new Map(candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
+    const outcomeEntries = loadPartition(
+      (hash, kind, context) => readContentStore(this.#durable, hash, kind, context),
+      closure.outcomePartitionStorageHash,
+      commitment.runId,
+      "outcome",
+    );
+    const outcomes = outcomeEntries.map(entry => {
+      const outcome = cloneCanonical<CandidateFinalOutcomeV1>(decodeCanonicalJson(readContentStore(
+        this.#durable,
+        entry.storageHash,
+        OUTCOME_KIND,
+        "ready stage1/2 outcome",
+      )));
+      const outcomeKey = assertHash(entry.key, "readyStage12.outcome.key");
+      const candidate = candidatesByKey.get(outcomeKey);
+      if (!candidate || outcome.familyCandidateKey !== outcomeKey) {
+        throw new CorruptDurableStoreError("ready stage1/2 outcome candidate mismatch");
+      }
+      this.#attestationAuthority.validateDurableOutcome(outcome, {
+        runId: commitment.runId,
+        cutoff: closure.ready.cutoff,
+        candidatePartitionRoot: closure.ready.candidatePartitionRoot,
+        candidate,
+      });
+      return outcome;
+    });
+    const partition = cloneCanonical<AttestationPartitionV1>(decodeCanonicalJson(readContentStore(
+      this.#durable,
+      closure.attestationPartitionStorageHash,
+      ATTESTATION_PARTITION_KIND,
+      "ready stage1/2 attestation partition",
+    )));
+    this.#attestationAuthority.validateDurablePartition(partition, candidates);
+    if (
+      partition.runId !== commitment.runId
+      || partition.exactOutcomePartitionRoot !== state.binding.exactOutcomePartitionRoot
+      || encodeCanonicalJson(partition.outcomes) !== encodeCanonicalJson(outcomes)
+    ) throw new CorruptDurableStoreError("ready stage1/2 outcome partition mismatch");
+    const candidatePartitionProof = decodeCandidatePartitionProofBytes(readContentStore(
+      this.#durable,
+      closure.candidatePartitionProofStorageHash,
+      CANDIDATE_PARTITION_PROOF_KIND,
+      "ready stage1/2 candidate partition proof",
+    ));
+    const verifiedCandidatePartitionProof = this.#candidatePartitionProofIssuer.verify(candidatePartitionProof, {
+      binding: candidatePartitionBindingFromProof(candidatePartitionProof),
+      release: this.#candidatePartitionProofIssuer.currentRelease(),
+    });
+    if (encodeCanonicalJson(candidatePartitionProof) !== encodeCanonicalJson(verifiedCandidatePartitionProof)) {
+      throw new CorruptDurableStoreError("ready stage1/2 candidate partition proof bytes changed");
+    }
+    const verifiedOutcomes = outcomes.filter(
+      (outcome): outcome is Extract<CandidateFinalOutcomeV1, { readonly kind: "verified" }> => outcome.kind === "verified",
+    );
+    assertVerifiedPublicationCatalog(
+      verifiedOutcomes.map(outcome => outcome.publication),
+      closureView.instanceCatalog,
+    );
+    const publicationsByHash = new Map(
+      closureView.instanceCatalog.publications.map(publication => [publication.instancePublicationHash, publication]),
+    );
+    const verifiedInstances = verifiedOutcomes.map(outcome => {
+      const candidate = candidatesByKey.get(outcome.familyCandidateKey);
+      const publication = publicationsByHash.get(outcome.publication.instancePublicationHash);
+      if (
+        !candidate
+        || !publication
+        || encodeCanonicalJson(publication) !== encodeCanonicalJson(outcome.publication)
+        || publication.familyCandidateKey !== candidate.familyCandidateKey
+      ) throw new CorruptDurableStoreError("ready stage1/2 verified publication binding mismatch");
+      const edges = closureView.graph.edges.filter(edge => (
+        edge.instancePublicationHash === publication.instancePublicationHash
+      ));
+      if (edges.length !== publication.transitions.length) {
+        throw new CorruptDurableStoreError("ready stage1/2 graph edge membership mismatch");
+      }
+      return deepFreeze({
+        candidate,
+        outcome,
+        publication,
+        identityProof: outcome.identityProof,
+        attestationOrigin: outcome.identityProof.identityOrigin,
+        edges: deepFreeze([...edges]),
+      });
+    });
+    const finalRootRecord = this.#durable.readRoot();
+    if (!finalRootRecord || finalRootRecord.envelopeHash !== rootRecord.envelopeHash) {
+      throw new CheckpointRunStateError("ready stage1/2 evidence root changed during read");
+    }
+    await this.#canonical.assertStillCanonical(state.binding.cutoff);
+    const postCanonicalRoot = this.#durable.readRoot();
+    if (!postCanonicalRoot || postCanonicalRoot.envelopeHash !== rootRecord.envelopeHash) {
+      throw new CheckpointRunStateError("ready stage1/2 evidence root changed during canonical fence");
+    }
+    this.#assertReleaseFenceUnchanged(releaseFence);
+    return deepFreeze({
+      binding: state.binding,
+      runId: commitment.runId,
+      candidates: deepFreeze(candidates),
+      outcomes: deepFreeze(outcomes),
+      candidatePartitionProof: verifiedCandidatePartitionProof,
+      sourceCoverage: closureView.sourceCoverage,
+      verifiedInstances: deepFreeze(verifiedInstances),
+      instanceCatalog: closureView.instanceCatalog,
+      graph: closureView.graph,
+      promotionLineage: deepFreeze({
+        candidatePartitionRevision: closure.candidatePartitionRevision,
+        sealedRevision: commitment.sealedRevision,
+        stageRevision: commitment.stageRevision,
+        stageRecordHash: commitment.stageRecordHash,
+        readyBaseHash: commitment.readyBaseHash,
+        promotionRevision: closure.ready.promotionRevision,
+        promotionFreshness: closure.ready.promotionFreshness,
+        promotedAtMonotonicNs: closure.ready.promotedAtMonotonicNs,
+      }),
+    });
+  }
+
+  async #readReadyFullFamilyEvidence(
+    capability: ReadyStage12EvidenceCapabilityV1,
+  ): Promise<ReadyFullFamilyEvidenceSnapshotV1> {
+    const state = this.#readyStage12EvidenceStates.get(capability);
+    if (!state) throw new TypeError("ready stage1/2 evidence capability is not checkpoint-issued");
+
+    const releaseFence = this.#captureReleaseFence();
+    await this.#canonical.assertStillCanonical(state.binding.cutoff);
+
+    const rootRecord = this.#durable.readRoot();
+    if (!rootRecord) throw new CorruptDurableStoreError("checkpoint root missing");
+    const root = rootFromRecord(rootRecord);
+    this.#validateRootReferenceSet(rootRecord, root);
+    if (
+      root.readyGenerationId !== state.binding.generationId
+      || root.readyGenerationRecordHash !== state.binding.readyRecordHash
+    ) throw new CheckpointRunStateError("ready full-Family evidence generation is not active");
+
+    const read: DurableContentReader = hash => this.#durable.readContent(hash);
+    const closure = this.#findReadyClosureRecordWith(
+      read,
+      rootRecord.references,
+      state.binding.readyRecordHash,
+      false,
+    ).closure;
+    if (
+      encodeCanonicalJson(this.#readyStage12BindingFor(closure.ready)) !== encodeCanonicalJson(state.binding)
+      || encodeCanonicalJson(closure.ready) !== encodeCanonicalJson(state.ready)
+    ) throw new CorruptDurableStoreError("ready full-Family evidence binding mismatch");
+
+    const sourceCoverageRecord = read(closure.sourceCoverageStorageHash);
+    if (!sourceCoverageRecord || sourceCoverageRecord.kind !== SOURCE_COVERAGE_KIND) {
+      throw new CorruptDurableStoreError("ready full-Family source coverage is missing");
+    }
+    const sourceCoverage = cloneCanonical<SourceCoverageCertificateV1>(
+      decodeCanonicalJson(sourceCoverageRecord.bytes),
+    );
+    const sourceExecutions = validateSourceExecutionSetRecord(
+      read,
+      closure.sourceExecutionSetStorageHash,
+      sourceCoverage,
+    );
+    if (sourceExecutions.set.executionSetRoot !== closure.sourceExecutionSetRoot) {
+      throw new CorruptDurableStoreError("ready full-Family source execution root mismatch");
+    }
+
+    const sourcePlanEvidenceRecord = read(closure.sourcePlanEvidenceStorageHash);
+    if (!sourcePlanEvidenceRecord || sourcePlanEvidenceRecord.kind !== SOURCE_PLAN_EVIDENCE_KIND) {
+      throw new CorruptDurableStoreError("ready full-Family source-plan evidence is missing");
+    }
+    const sourcePlanEvidenceReceipts = decodeSourcePlanEvidenceSet(
+      sourcePlanEvidenceRecord.bytes,
+      "ready full-Family source-plan evidence",
+    );
+    validateSourcePlanEvidenceReceipts(
+      sourcePlanEvidenceReceipts,
+      closure.ready.cutoff,
+      sourcePlanRefsFromCoverage(sourceCoverage),
+    );
+    validateSourcePlanEvidenceExecutionJoin(sourcePlanEvidenceReceipts, sourceExecutions.set);
+    const sourcePlanRawStorage = validateRawLocatorReferences(
+      read,
+      sourcePlanEvidenceRecord.references,
+      sourcePlanEvidenceReceipts.flatMap(value => value.rawLocatorHashes),
+      "ready full-Family source-plan evidence",
+    );
+
+    const nominationRecord = read(closure.nominationClosureStorageHash);
+    if (!nominationRecord || nominationRecord.kind !== NOMINATION_CLOSURE_KIND) {
+      throw new CorruptDurableStoreError("ready full-Family nomination closure is missing");
+    }
+    const nominationClosure = decodeNominationClosureBytesV1(nominationRecord.bytes);
+    const recentReferences = nominationRecord.references.filter(reference => (
+      read(reference)?.kind === RECENT_OBSERVATION_KIND
+    ));
+    if (recentReferences.length !== 1) {
+      throw new CorruptDurableStoreError("ready full-Family recent observation reference is not exact");
+    }
+    const recentRecord = read(recentReferences[0]!);
+    if (!recentRecord || recentRecord.kind !== RECENT_OBSERVATION_KIND) {
+      throw new CorruptDurableStoreError("ready full-Family recent observation is missing");
+    }
+    const recentObservation = cloneCanonical<RecentObservationReceiptV1>(
+      decodeCanonicalJson(recentRecord.bytes),
+    );
+    validateRecentObservationReceipt(
+      recentObservation,
+      this.#canonical.recentObservationRange(closure.ready.cutoff),
+    );
+    const recentRawStorage = validateRawLocatorReferences(
+      read,
+      recentRecord.references,
+      recentObservation.evidence.map(value => value.rawLocatorHash),
+      "ready full-Family recent observation",
+    );
+
+    const rawStorageBySemanticHash = new Map<Hash, Hash>();
+    for (const entries of [
+      sourceExecutions.rawStorageBySemanticHash,
+      sourcePlanRawStorage,
+      recentRawStorage,
+    ]) {
+      for (const [rawLocatorHash, storageHash] of entries) {
+        const previous = rawStorageBySemanticHash.get(rawLocatorHash);
+        if (previous !== undefined && previous !== storageHash) {
+          throw new CorruptDurableStoreError("ready full-Family raw locator storage binding conflicts");
+        }
+        rawStorageBySemanticHash.set(rawLocatorHash, storageHash);
+      }
+    }
+    const rawEvidenceLocatorContents = [...rawStorageBySemanticHash.entries()]
+      .sort(([left], [right]) => compareText(left, right))
+      .map(([rawLocatorHash, storageHash]) => {
+        const record = read(storageHash);
+        if (
+          !record
+          || record.kind !== RAW_EVIDENCE_LOCATOR_KIND
+          || record.payloadHash !== rawLocatorHash
+          || record.references.length !== 0
+        ) throw new CorruptDurableStoreError("ready full-Family raw locator is invalid");
+        return Object.freeze({
+          kind: "raw-evidence-locator" as const,
+          version: 1 as const,
+          rawLocatorHash,
+          bytes: new Uint8Array(record.bytes),
+        });
+      });
+
+    const stage12 = await this.#readReadyStage12Evidence(capability);
+
+    const finalRootRecord = this.#durable.readRoot();
+    if (!finalRootRecord) {
+      throw new CorruptDurableStoreError("checkpoint root missing after ready full-Family evidence read");
+    }
+    const finalRoot = rootFromRecord(finalRootRecord);
+    if (
+      finalRootRecord.envelopeHash !== rootRecord.envelopeHash
+      || finalRoot.revision !== root.revision
+      || finalRoot.readyGenerationId !== root.readyGenerationId
+      || finalRoot.readyGenerationRecordHash !== root.readyGenerationRecordHash
+    ) throw new CheckpointRunStateError("ready full-Family evidence root changed during read");
+    await this.#canonical.assertStillCanonical(state.binding.cutoff);
+    const postCanonicalRoot = this.#durable.readRoot();
+    if (!postCanonicalRoot || postCanonicalRoot.envelopeHash !== rootRecord.envelopeHash) {
+      throw new CheckpointRunStateError("ready full-Family evidence root changed during canonical fence");
+    }
+    this.#assertReleaseFenceUnchanged(releaseFence);
+
+    // Raw locator bytes are defensive copies of durable content. Typed arrays
+    // are deliberately outside canonical JSON and cannot be deepFreeze'd;
+    // freezing the envelope/array is sufficient because a later read always
+    // reconstructs fresh bytes from the root-reachable store.
+    return Object.freeze({
+      ready: closure.ready,
+      stage12,
+      nominationClosure,
+      sourceExecutionSet: sourceExecutions.set,
+      sourcePlanEvidenceReceipts,
+      rawEvidenceLocatorContents: Object.freeze(rawEvidenceLocatorContents),
+      sourceCoverageStorageHash: closure.sourceCoverageStorageHash,
+      sourceExecutionSetStorageHash: closure.sourceExecutionSetStorageHash,
+      sourcePlanEvidenceStorageHash: closure.sourcePlanEvidenceStorageHash,
+      nominationClosureStorageHash: closure.nominationClosureStorageHash,
+      candidatePartitionStorageHash: closure.candidatePartitionStorageHash,
+      candidatePartitionProofStorageHash: closure.candidatePartitionProofStorageHash,
+    });
   }
 
   assertReadyAuthorityActive(rawBinding: ActiveReadyAuthorityBindingV1): void {
@@ -1952,6 +3616,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         "graphRoot",
         "releaseProvenanceHash",
         "candidatePartitionProofStorageHash",
+        "nominationClosureRoot",
+        "nominationClosureStorageHash",
       ],
       "activeReadyBinding",
     );
@@ -1974,6 +3640,14 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     const candidatePartitionProofStorageHash = assertHash(
       readOwnEnumerableDataProperty(rawBinding, "candidatePartitionProofStorageHash", "activeReadyBinding"),
       "activeReadyBinding.candidatePartitionProofStorageHash",
+    );
+    const nominationClosureRoot = assertHash(
+      readOwnEnumerableDataProperty(rawBinding, "nominationClosureRoot", "activeReadyBinding"),
+      "activeReadyBinding.nominationClosureRoot",
+    );
+    const nominationClosureStorageHash = assertHash(
+      readOwnEnumerableDataProperty(rawBinding, "nominationClosureStorageHash", "activeReadyBinding"),
+      "activeReadyBinding.nominationClosureStorageHash",
     );
     const generationRefreshPolicyHash = assertHash(
       readOwnEnumerableDataProperty(rawBinding, "generationRefreshPolicyHash", "activeReadyBinding"),
@@ -2010,6 +3684,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || closure.ready.graphRoot !== graphRoot
       || closure.ready.releaseProvenanceHash !== releaseProvenanceHash
       || closure.ready.candidatePartitionProofStorageHash !== candidatePartitionProofStorageHash
+      || closure.ready.nominationClosureRoot !== nominationClosureRoot
+      || closure.ready.nominationClosureStorageHash !== nominationClosureStorageHash
       || !sameCutoff(closure.ready.cutoff, cutoff)
     ) throw new CheckpointRunStateError("ready authority binding mismatch");
     const finalRecord = this.#durable.readRoot();
@@ -2047,9 +3723,12 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         encodeCanonicalJson(record.references) !== encodeCanonicalJson([
           closure.candidatePartitionProofStorageHash,
           closure.candidatePartitionStorageHash,
+          closure.nominationClosureStorageHash,
         ].sort(compareText))
         || commitment.candidatePartitionProofStorageHash !== closure.candidatePartitionProofStorageHash
         || commitment.candidatePartitionStorageHash !== closure.candidatePartitionStorageHash
+        || commitment.nominationClosureRoot !== closure.nominationClosureRoot
+        || commitment.nominationClosureStorageHash !== closure.nominationClosureStorageHash
         || commitment.candidatePartitionRoot !== root
         || commitment.readyRecordHash !== closure.ready.readyRecordHash
       ) {
@@ -2084,14 +3763,56 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     this.#durable.releaseWriterLease(lease);
   }
 
-  _flushOutcomeBatch(
+  async _flushOutcomeBatch(
     runId: string,
     writerCapability: AttestationWriterCapabilityV1,
     batch: readonly AttestationPersistenceCapabilityV1[],
     lease: WriterLease,
-  ): void {
+  ): Promise<void> {
     let claim: AttestationPersistenceBatchClaimV1 | undefined;
     try {
+      const preview = this.#loadActiveRun(runId);
+      const previewCandidates = new Map(preview.builderRun.candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
+      const claimed = this.#attestationAuthority.claimWriterCapabilities(writerCapability, batch);
+      claim = claimed;
+      for (const persisted of claimed.entries) {
+        const record = exactObject(
+          persisted,
+          ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "kind", "identity", "outcome"],
+          "attestation persisted outcome preview",
+        ) as unknown as AttestationPersistedOutcomeV1;
+        if (record.kind !== "final" || record.outcome === null) continue;
+        const candidate = previewCandidates.get(assertHash(record.familyCandidateKey, "attestation persisted outcome preview.familyCandidateKey"));
+        if (candidate === undefined
+          || assertNonEmptyString(record.runId, "attestation persisted outcome preview.runId") !== runId
+          || assertHash(record.candidatePartitionRoot, "attestation persisted outcome preview.candidatePartitionRoot") !== preview.envelope.candidatePartitionRoot) {
+          throw new CheckpointRunStateError("attestation persisted outcome preview binding mismatch");
+        }
+        this.#attestationAuthority.validateOutcomeCapability(record.outcome, {
+          runId,
+          cutoff: preview.envelope.cutoff,
+          candidatePartitionRoot: preview.envelope.candidatePartitionRoot,
+          candidate,
+        });
+        const outcome = cloneCanonical<CandidateFinalOutcomeV1>(record.outcome);
+        if (candidateFinalOutcomeHash(outcome) !== assertHash(record.outcomeHash, "attestation persisted outcome preview.outcomeHash")
+          || outcome.attestationAuthorityRoot !== assertHash(record.attestationAuthorityRoot, "attestation persisted outcome preview.attestationAuthorityRoot")
+          || outcome.releaseAuthorityRoot !== assertHash(record.releaseAuthorityRoot, "attestation persisted outcome preview.releaseAuthorityRoot")
+          || outcome.releaseProvenanceHash !== assertHash(record.releaseProvenanceHash, "attestation persisted outcome preview.releaseProvenanceHash")
+          || outcome.executorAuthorityRoot !== assertHash(record.executorAuthorityRoot, "attestation persisted outcome preview.executorAuthorityRoot")) {
+          throw new CheckpointRunStateError("attestation persisted outcome preview authority mismatch");
+        }
+        if (outcome.kind === "verified") {
+          await this.#sixStepArtifacts.emitVerifiedOutcome({
+            runId,
+            cutoff: preview.envelope.cutoff,
+            candidatePartitionRoot: preview.envelope.candidatePartitionRoot,
+            candidate,
+            outcome,
+            sourceCoverage: preview.sourceCoverage,
+          });
+        }
+      }
       this.#durable.transaction(lease, tx => {
       const currentRecord = tx.readRoot();
       if (!currentRecord) throw new CorruptDurableStoreError("checkpoint root missing");
@@ -2100,8 +3821,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       const candidates = new Map(loaded.builderRun.candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
       const existing = new Map(this.#loadOutcomes(tx, loaded.envelope).map(outcome => [outcome.familyCandidateKey, outcome]));
       const partials = new Map(this.#loadPartialOutcomes(tx, loaded.envelope).map(partial => [partial.familyCandidateKey, partial]));
-      claim = this.#attestationAuthority.claimWriterCapabilities(writerCapability, batch);
-      for (const persisted of claim.entries) {
+      for (const persisted of claimed.entries) {
         const persistedObject = exactObject(
           persisted,
           ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "kind", "identity", "outcome"],
@@ -2204,15 +3924,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         partialOutcomePartitionStorageHash: partialManifestHash,
         accounting: outcomeAccounting(loaded.builderRun.candidates.length, outcomes),
       });
-      const nextRunHash = tx.putImmutable(RUN_KIND, encodeCanonicalBytes(nextRun), [
-        nextRun.recentObservationStorageHash,
-        nextRun.sourceCoverageStorageHash,
-        nextRun.candidatePartitionStorageHash,
-        nextRun.candidatePartitionProofStorageHash,
-        nextRun.outcomePartitionStorageHash,
-        ...(nextRun.partialOutcomePartitionStorageHash === null ? [] : [nextRun.partialOutcomePartitionStorageHash]),
-        nextRun.verifiedMemoSetStorageHash,
-      ]);
+      const nextRunHash = tx.putImmutable(RUN_KIND, encodeCanonicalBytes(nextRun), runContentReferences(nextRun));
       const nextRoot = deepFreeze({ ...root, revision: nextRevision });
       tx.compareAndSwapRoot(
         root.revision,
@@ -2389,7 +4101,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       if (!available.includes(root.latestProbeReceiptHash)) {
         throw new CorruptDurableStoreError("probe receipt is not root-reachable");
       }
-      const receipt = this.#validateProbeReceiptChainWith(read, root.latestProbeReceiptHash);
+      const receipt = this.#validateProbeReceiptChainWith(read, root.latestProbeReceiptHash).receipt;
       if (
         receipt.sequence !== root.probeReceiptSequence
         || receipt.receiptLineageRoot !== root.probeReceiptLineageRoot
@@ -2450,20 +4162,21 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   #validateProbeReceiptChainWith(
     read: DurableContentReader,
     latestHash: Hash,
-  ): ProbeReceiptV1 {
+  ): CheckpointProbeEvidenceV1 {
     let currentHash: Hash | null = latestHash;
     let child: ProbeReceiptV1 | null = null;
-    let latest: ProbeReceiptV1 | null = null;
+    let latest: CheckpointProbeEvidenceV1 | null = null;
     while (currentHash !== null) {
       const record = read(currentHash);
       if (!record || record.kind !== PROBE_RECEIPT_KIND) {
         throw new CorruptDurableStoreError("probe receipt kind mismatch");
       }
-      const receipt = validateProbeReceipt(
-        cloneCanonical<ProbeReceiptV1>(decodeCanonicalJson(record.bytes)),
-      );
-      latest ??= receipt;
+      const envelope = decodeStoredProbeReceiptEnvelope(record.bytes);
+      const receipt = envelope.receipt;
+      const evidence = this.#validateProbeEvidenceEnvelopeWith(read, envelope);
+      latest ??= evidence;
       const sequence = BigInt(receipt.sequence);
+      if (sequence < 1n) throw new CorruptDurableStoreError("probe receipt sequence is invalid");
       if (child !== null) {
         if (
           BigInt(child.sequence) !== sequence + 1n
@@ -2471,9 +4184,28 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           || child.priorLineageRoot !== receipt.receiptLineageRoot
         ) throw new CorruptDurableStoreError("probe receipt predecessor mismatch");
       }
-      const expectedReferences = receipt.priorReceiptHash === null ? [] : [receipt.priorReceiptHash];
-      if (encodeCanonicalJson(record.references) !== encodeCanonicalJson(expectedReferences)) {
+      const expectedReferences = [
+        ...(receipt.priorReceiptHash === null ? [] : [receipt.priorReceiptHash]),
+        envelope.candidatePartitionStorageHash,
+        envelope.priorOutcomePartitionStorageHash,
+        envelope.activeOutcomePartitionStorageHash,
+      ];
+      if (
+        encodeCanonicalJson(record.references)
+        !== encodeCanonicalJson([...new Set(expectedReferences)].sort(compareText))
+      ) {
         throw new CorruptDurableStoreError("probe receipt physical predecessor mismatch");
+      }
+      if (sequence === 1n) {
+        if (
+          receipt.priorReceiptHash !== null
+          || receipt.priorLineageRoot !== EMPTY_PROBE_RECEIPT_LINEAGE_ROOT
+        ) throw new CorruptDurableStoreError("probe receipt origin mismatch");
+      } else if (
+        receipt.priorReceiptHash === null
+        || receipt.priorLineageRoot === EMPTY_PROBE_RECEIPT_LINEAGE_ROOT
+      ) {
+        throw new CorruptDurableStoreError("probe receipt predecessor is absent");
       }
       child = receipt;
       currentHash = receipt.priorReceiptHash;
@@ -2482,6 +4214,138 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       throw new CorruptDurableStoreError("probe receipt lineage is incomplete");
     }
     return latest;
+  }
+
+  #validateProbeEvidenceEnvelopeWith(
+    read: DurableContentReader,
+    envelope: StoredProbeReceiptEnvelopeV1,
+  ): CheckpointProbeEvidenceV1 {
+    const receipt = envelope.receipt;
+    const readBytes = (hash: Hash, kind: string, context: string): Uint8Array => {
+      const record = read(hash);
+      if (!record || record.kind !== kind) {
+        throw new CorruptDurableStoreError(`${context} kind or content is missing`);
+      }
+      return record.bytes;
+    };
+
+    this.#validatePartitionPhysicalWith(
+      read,
+      envelope.candidatePartitionStorageHash,
+      receipt.runId,
+      "candidate",
+    );
+    this.#validatePartitionPhysicalWith(
+      read,
+      envelope.priorOutcomePartitionStorageHash,
+      receipt.runId,
+      "outcome",
+    );
+    this.#validatePartitionPhysicalWith(
+      read,
+      envelope.activeOutcomePartitionStorageHash,
+      receipt.runId,
+      "outcome",
+    );
+
+    const candidateEntries = loadPartition(
+      readBytes,
+      envelope.candidatePartitionStorageHash,
+      receipt.runId,
+      "candidate",
+    );
+    const candidates = candidateEntries.map(entry => {
+      const candidate = cloneCanonical<CandidateRecordV1>(decodeCanonicalJson(
+        readBytes(entry.storageHash, CANDIDATE_KIND, "probe candidate"),
+      ));
+      if (candidate.familyCandidateKey !== entry.key) {
+        throw new CorruptDurableStoreError("probe candidate physical key mismatch");
+      }
+      return candidate;
+    });
+    const partitionRoot = candidatePartitionRoot(candidates);
+    const candidateByKey = new Map(candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
+    const targetCandidate = candidateByKey.get(receipt.familyCandidateKey);
+    if (!targetCandidate || targetCandidate.candidateSubjectHash !== receipt.candidateSubjectHash) {
+      throw new CorruptDurableStoreError("probe target candidate binding mismatch");
+    }
+
+    const loadOutcomes = (manifestHash: Hash, context: string) => {
+      const entries = loadPartition(readBytes, manifestHash, receipt.runId, "outcome");
+      const outcomes = entries.map(entry => {
+        const outcome = cloneCanonical<CandidateFinalOutcomeV1>(decodeCanonicalJson(
+          readBytes(entry.storageHash, OUTCOME_KIND, `${context} outcome`),
+        ));
+        if (outcome.familyCandidateKey !== entry.key) {
+          throw new CorruptDurableStoreError(`${context} outcome physical key mismatch`);
+        }
+        const candidate = candidateByKey.get(entry.key);
+        if (!candidate) throw new CorruptDurableStoreError(`${context} outcome candidate is absent`);
+        this.#attestationAuthority.validateDurableOutcome(outcome, {
+          runId: receipt.runId,
+          cutoff: receipt.cutoff,
+          candidatePartitionRoot: partitionRoot,
+          candidate,
+        });
+        return outcome;
+      });
+      return { entries, outcomes: deepFreeze(outcomes) };
+    };
+
+    const before = loadOutcomes(envelope.priorOutcomePartitionStorageHash, "probe prior");
+    const after = loadOutcomes(envelope.activeOutcomePartitionStorageHash, "probe active");
+    if (
+      outcomePartitionRoot(receipt.runId, before.outcomes) !== receipt.priorOutcomePartitionRoot
+      || outcomePartitionRoot(receipt.runId, after.outcomes) !== receipt.activeOutcomePartitionRoot
+    ) throw new CorruptDurableStoreError("probe outcome partition semantic root mismatch");
+    if (before.entries.length !== after.entries.length) {
+      throw new CorruptDurableStoreError("probe changed the outcome partition denominator");
+    }
+
+    const beforeByKey = new Map(before.outcomes.map(outcome => [outcome.familyCandidateKey, outcome]));
+    const afterByKey = new Map(after.outcomes.map(outcome => [outcome.familyCandidateKey, outcome]));
+    let changed = 0;
+    for (const [index, priorEntry] of before.entries.entries()) {
+      const activeEntry = after.entries[index];
+      if (!activeEntry || priorEntry.key !== activeEntry.key) {
+        throw new CorruptDurableStoreError("probe changed the outcome partition key set");
+      }
+      if (priorEntry.storageHash !== activeEntry.storageHash) {
+        if (priorEntry.key !== receipt.familyCandidateKey) {
+          throw new CorruptDurableStoreError("probe changed a non-target outcome");
+        }
+        changed += 1;
+      }
+    }
+    if (changed !== 1) throw new CorruptDurableStoreError("probe did not change exactly one target outcome");
+
+    const beforeTarget = beforeByKey.get(receipt.familyCandidateKey);
+    const afterTarget = afterByKey.get(receipt.familyCandidateKey);
+    if (
+      !beforeTarget
+      || !afterTarget
+      || beforeTarget.kind !== receipt.beforeKind
+      || afterTarget.kind !== receipt.afterKind
+      || candidateFinalOutcomeHash(beforeTarget) !== receipt.beforeOutcomeHash
+      || candidateFinalOutcomeHash(afterTarget) !== receipt.afterOutcomeHash
+    ) throw new CorruptDurableStoreError("probe target outcome transition mismatch");
+
+    const evidenceRoot = hashDomain("aloha/checkpoint-probe-evidence/v1", {
+      envelope,
+      candidatePartitionRoot: partitionRoot,
+      candidateEntries,
+      priorOutcomeEntries: before.entries,
+      activeOutcomeEntries: after.entries,
+    });
+    return deepFreeze({
+      receipt,
+      beforeOutcomes: before.outcomes,
+      afterOutcomes: after.outcomes,
+      candidatePartitionStorageHash: envelope.candidatePartitionStorageHash,
+      priorOutcomePartitionStorageHash: envelope.priorOutcomePartitionStorageHash,
+      activeOutcomePartitionStorageHash: envelope.activeOutcomePartitionStorageHash,
+      evidenceRoot,
+    });
   }
 
   #loadActiveRun(runId: string): { readonly envelope: StoredRunEnvelopeV2; readonly storageHash: Hash; readonly builderRun: InternalBuilderRunV1; readonly sourceCoverage: SourceCoverageCertificateV1 } {
@@ -2621,13 +4485,74 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       completeness: entry.completeness,
       historyStartBlock: entry.historyStartBlock,
     })));
+    const sourceExecutionSet = decodePersistedSourcePlanExecutionSet(
+      decodeCanonicalJson(read(envelope.sourceExecutionSetStorageHash, SOURCE_EXECUTION_SET_KIND, "source execution set")),
+      "source execution set",
+    );
+    if (sourceExecutionSet.executionSetRoot !== envelope.sourceExecutionSetRoot) {
+      throw new CorruptDurableStoreError("source execution set root mismatch");
+    }
+    validatePersistedExecutionCoverage(sourceExecutionSet, sourceCoverage);
+    const sourcePlanEvidence = decodeSourcePlanEvidenceSet(
+      read(envelope.sourcePlanEvidenceStorageHash, SOURCE_PLAN_EVIDENCE_KIND, "source-plan evidence"),
+      "source-plan evidence",
+    );
+    try {
+      validateSourcePlanEvidenceReceipts(
+        sourcePlanEvidence,
+        envelope.cutoff,
+        sourcePlanRefsFromCoverage(sourceCoverage),
+      );
+      validateSourcePlanEvidenceExecutionJoin(sourcePlanEvidence, sourceExecutionSet);
+    } catch (error) {
+      throw new CorruptDurableStoreError(`source-plan evidence validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
     const candidateEntries = loadPartition(read, envelope.candidatePartitionStorageHash, envelope.runId, "candidate");
     const candidates = candidateEntries.map(entry => {
-      const candidate = cloneCanonical<CandidateRecordV1>(decodeCanonicalJson(read(entry.storageHash, CANDIDATE_KIND, "candidate record")));
+      const candidateRecord = readRecord(entry.storageHash);
+      if (!candidateRecord || candidateRecord.kind !== CANDIDATE_KIND) {
+        throw new CorruptDurableStoreError("candidate record is missing or has the wrong kind");
+      }
+      const candidate = cloneCanonical<CandidateRecordV1>(decodeCanonicalJson(candidateRecord.bytes));
       if (candidate.familyCandidateKey !== entry.key) throw new CorruptDurableStoreError("candidate partition key mismatch");
+      validateRawLocatorReferences(
+        readRecord,
+        candidateRecord.references,
+        candidate.evidence.map(value => value.rawLocatorHash),
+        "candidate record",
+      );
       return candidate;
     });
     if (String(candidates.length) !== envelope.candidateRecordCount || candidatePartitionRoot(candidates) !== envelope.candidatePartitionRoot) throw new CorruptDurableStoreError("candidate partition root mismatch");
+    const nominationRecord = readRecord(envelope.nominationClosureStorageHash);
+    if (!nominationRecord || nominationRecord.kind !== NOMINATION_CLOSURE_KIND) {
+      throw new CorruptDurableStoreError("nomination closure is missing or has the wrong kind");
+    }
+    const expectedNominationReferences = [
+      envelope.recentObservationStorageHash,
+      envelope.sourceCoverageStorageHash,
+      envelope.sourceExecutionSetStorageHash,
+      envelope.sourcePlanEvidenceStorageHash,
+      envelope.candidatePartitionStorageHash,
+    ].sort(compareText);
+    if (encodeCanonicalJson([...nominationRecord.references].sort(compareText)) !== encodeCanonicalJson(expectedNominationReferences)) {
+      throw new CorruptDurableStoreError("nomination closure physical reference set mismatch");
+    }
+    const nominationClosure = validateNominationClosureAgainstRun({
+      closure: decodeNominationClosureBytesV1(nominationRecord.bytes),
+      cutoff: envelope.cutoff,
+      recentObservation,
+      sourceCoverage,
+      sourceExecutionSet,
+      candidates,
+      candidatePartitionRoot: envelope.candidatePartitionRoot,
+    });
+    if (nominationClosure.root !== envelope.nominationClosureRoot) {
+      throw new CorruptDurableStoreError("nomination closure root mismatch");
+    }
+    this.#candidatePartitionProofIssuer.assertNominationQualificationsQualified(
+      nominationQualificationBindings(nominationClosure),
+    );
     const candidatesByKey = new Map(candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
     const partials = envelope.partialOutcomePartitionStorageHash === null
       ? []
@@ -2737,6 +4662,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || !sameCutoff(proofBinding.cutoff, envelope.cutoff)
       || proofBinding.candidatePartitionRoot !== envelope.candidatePartitionRoot
       || proofBinding.candidatePartitionStorageHash !== envelope.candidatePartitionStorageHash
+      || proofBinding.nominationClosureRoot !== envelope.nominationClosureRoot
+      || proofBinding.nominationClosureStorageHash !== envelope.nominationClosureStorageHash
       || proofBinding.recordCount !== envelope.candidateRecordCount
       || proofBinding.recentObservationRoot !== envelope.recentObservationRoot
       || proofBinding.sourceCoverageRoot !== envelope.sourceCoverageRoot
@@ -2751,8 +4678,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       checkpointRevision: envelope.checkpointRevision,
       cutoff: envelope.cutoff,
       recentObservation,
+      sourcePlanEvidence,
       definitionCatalogRoot: envelope.definitionCatalogRoot,
       sourceCoverage,
+      sourceExecutionSet,
+      nominationClosure,
       sourceCoverageRoot: sourceCoverage.sourceCoverageRoot,
       candidatePartition: candidatePartition,
       candidatePartitionBinding: proofBinding,
@@ -2782,6 +4712,39 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       return outcome;
     });
     if (outcomePartitionRoot(run.runId, outcomes) !== run.outcomePartitionRoot) throw new CorruptDurableStoreError("outcome partition root mismatch");
+    return deepFreeze(outcomes);
+  }
+
+  #loadOutcomesStore(run: StoredRunEnvelopeV2): readonly CandidateFinalOutcomeV1[] {
+    const entries = loadPartition(
+      (hash, kind, context) => readContentStore(this.#durable, hash, kind, context),
+      run.outcomePartitionStorageHash,
+      run.runId,
+      "outcome",
+    );
+    const outcomes = entries.map(entry => {
+      const outcome = cloneCanonical<CandidateFinalOutcomeV1>(
+        decodeCanonicalJson(readContentStore(this.#durable, entry.storageHash, OUTCOME_KIND, "candidate outcome")),
+      );
+      if (outcome.familyCandidateKey !== entry.key) throw new CorruptDurableStoreError("outcome partition key mismatch");
+      const record = this.#durable.readContent(entry.storageHash);
+      if (!record || record.kind !== OUTCOME_KIND) throw new CorruptDurableStoreError("outcome record is missing");
+      if (outcome.kind === "chainProvenRejected") {
+        if (record.references.length !== 1) throw new CorruptDurableStoreError("chain rejection outcome must reference exactly one bundle");
+        validateRejectionBundlePhysicalWith(
+          hash => this.#durable.readContent(hash),
+          record.references[0]!,
+          outcome.rejectionEvidence,
+          "outcome partition rejection",
+        );
+      } else if (record.references.length !== 0) {
+        throw new CorruptDurableStoreError("non-rejection outcome must not reference a rejection bundle");
+      }
+      return outcome;
+    });
+    if (outcomePartitionRoot(run.runId, outcomes) !== run.outcomePartitionRoot) {
+      throw new CorruptDurableStoreError("outcome partition root mismatch");
+    }
     return deepFreeze(outcomes);
   }
 
@@ -2841,6 +4804,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       candidatePartitionRoot: run.candidatePartitionRoot,
       candidatePartitionStorageHash: run.candidatePartitionStorageHash,
       candidatePartitionProofStorageHash: run.candidatePartitionProofStorageHash,
+      nominationClosureRoot: run.nominationClosureRoot,
+      nominationClosureStorageHash: run.nominationClosureStorageHash,
       candidateKeys: candidates.map(candidate => candidate.familyCandidateKey).sort(compareText),
       verifiedMemoSetRoot: run.verifiedMemoSetRoot,
       exactOutcomePartitionRoot: partition.exactOutcomePartitionRoot,
@@ -3014,16 +4979,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     read: DurableContentReader,
     loaded: { readonly envelope: StoredRunEnvelopeV2; readonly storageHash: Hash; readonly builderRun: InProgressBuilderRunV1 },
   ): void {
-    const runReferences = [
-      loaded.envelope.recentObservationStorageHash,
-      loaded.envelope.sourceCoverageStorageHash,
-      loaded.envelope.candidatePartitionStorageHash,
-      loaded.envelope.candidatePartitionProofStorageHash,
-      loaded.envelope.outcomePartitionStorageHash,
-      ...(loaded.envelope.partialOutcomePartitionStorageHash === null ? [] : [loaded.envelope.partialOutcomePartitionStorageHash]),
-      loaded.envelope.verifiedMemoSetStorageHash,
-      ...(loaded.envelope.attestationPartitionStorageHash === null ? [] : [loaded.envelope.attestationPartitionStorageHash]),
-    ];
+    const runReferences = runContentReferences(loaded.envelope);
     this.#assertRecordReferencesWith(read, loaded.storageHash, RUN_KIND, runReferences, "active run");
     const proofRecord = read(loaded.envelope.candidatePartitionProofStorageHash);
     if (!proofRecord || proofRecord.kind !== CANDIDATE_PARTITION_PROOF_KIND) {
@@ -3031,6 +4987,27 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     }
     decodeCandidatePartitionProofBytes(proofRecord.bytes);
     this.#assertRecordReferencesWith(read, loaded.envelope.candidatePartitionProofStorageHash, CANDIDATE_PARTITION_PROOF_KIND, [], "candidate partition proof");
+    const nominationRecord = read(loaded.envelope.nominationClosureStorageHash);
+    if (!nominationRecord || nominationRecord.kind !== NOMINATION_CLOSURE_KIND) {
+      throw new CorruptDurableStoreError("nomination closure is missing");
+    }
+    const nominationClosure = decodeNominationClosureBytesV1(nominationRecord.bytes);
+    if (nominationClosure.root !== loaded.envelope.nominationClosureRoot) {
+      throw new CorruptDurableStoreError("nomination closure root mismatch");
+    }
+    this.#assertRecordReferencesWith(
+      read,
+      loaded.envelope.nominationClosureStorageHash,
+      NOMINATION_CLOSURE_KIND,
+      [
+        loaded.envelope.recentObservationStorageHash,
+        loaded.envelope.sourceCoverageStorageHash,
+        loaded.envelope.sourceExecutionSetStorageHash,
+        loaded.envelope.sourcePlanEvidenceStorageHash,
+        loaded.envelope.candidatePartitionStorageHash,
+      ],
+      "nomination closure",
+    );
     const recentLocators = loaded.builderRun.recentObservation.evidence.map(value => value.rawLocatorHash);
     const recentRecord = read(loaded.envelope.recentObservationStorageHash);
     if (!recentRecord || recentRecord.kind !== RECENT_OBSERVATION_KIND) {
@@ -3041,6 +5018,33 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       recentRecord.references,
       recentLocators,
       "recent observation",
+    );
+    const sourcePlanRecord = read(loaded.envelope.sourcePlanEvidenceStorageHash);
+    if (!sourcePlanRecord || sourcePlanRecord.kind !== SOURCE_PLAN_EVIDENCE_KIND) {
+      throw new CorruptDurableStoreError("source-plan evidence is missing");
+    }
+    const sourcePlanEvidence = decodeSourcePlanEvidenceSet(sourcePlanRecord.bytes, "source-plan evidence");
+    const sourcePlanLocatorHashes = [...new Set(sourcePlanEvidence.flatMap(value => value.rawLocatorHashes))].sort(compareText);
+    validateRawLocatorReferences(
+      read,
+      sourcePlanRecord.references,
+      sourcePlanLocatorHashes,
+      "source-plan evidence",
+    );
+    const durableExecutions = validateSourceExecutionSetRecord(
+      read,
+      loaded.envelope.sourceExecutionSetStorageHash,
+      loaded.builderRun.sourceCoverage,
+    );
+    if (durableExecutions.set.executionSetRoot !== loaded.envelope.sourceExecutionSetRoot) {
+      throw new CorruptDurableStoreError("active run source execution set root mismatch");
+    }
+    this.#assertRecordReferencesWith(
+      read,
+      loaded.envelope.sourcePlanEvidenceStorageHash,
+      SOURCE_PLAN_EVIDENCE_KIND,
+      sourcePlanRecord.references,
+      "source-plan evidence",
     );
     this.#validatePartitionPhysicalWith(read, loaded.envelope.candidatePartitionStorageHash, loaded.envelope.runId, "candidate");
     this.#validatePartitionPhysicalWith(read, loaded.envelope.outcomePartitionStorageHash, loaded.envelope.runId, "outcome");
@@ -3209,6 +5213,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     const stage = decodeReadyStage(content.bytes);
     const expectedReferences = [
       stage.sourceCoverageStorageHash,
+      stage.sourceExecutionSetStorageHash,
+      stage.sourcePlanEvidenceStorageHash,
+      stage.nominationClosureStorageHash,
       stage.verifiedMemoSetStorageHash,
       stage.instanceCatalogStorageHash,
       stage.graphStorageHash,
@@ -3216,6 +5223,43 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     if (encodeCanonicalJson(content.references) !== encodeCanonicalJson(expectedReferences)) {
       throw new CorruptDurableStoreError("staged ready physical references mismatch");
     }
+    const sourceExecutionRecord = read(stage.sourceExecutionSetStorageHash);
+    if (!sourceExecutionRecord || sourceExecutionRecord.kind !== SOURCE_EXECUTION_SET_KIND) {
+      throw new CorruptDurableStoreError("staged source execution set is missing");
+    }
+    const sourceExecutionSet = decodePersistedSourcePlanExecutionSet(
+      decodeCanonicalJson(sourceExecutionRecord.bytes),
+      "staged source execution set",
+    );
+    if (sourceExecutionSet.executionSetRoot !== stage.sourceExecutionSetRoot) {
+      throw new CorruptDurableStoreError("staged source execution set root mismatch");
+    }
+    const sourceCoverageRecord = read(stage.sourceCoverageStorageHash);
+    if (!sourceCoverageRecord || sourceCoverageRecord.kind !== SOURCE_COVERAGE_KIND) {
+      throw new CorruptDurableStoreError("staged source coverage is missing");
+    }
+    const sourceCoverage = cloneCanonical<SourceCoverageCertificateV1>(decodeCanonicalJson(sourceCoverageRecord.bytes));
+    validatePersistedExecutionCoverage(sourceExecutionSet, sourceCoverage);
+    const sourcePlanEvidenceRecord = read(stage.sourcePlanEvidenceStorageHash);
+    if (!sourcePlanEvidenceRecord || sourcePlanEvidenceRecord.kind !== SOURCE_PLAN_EVIDENCE_KIND) {
+      throw new CorruptDurableStoreError("staged source-plan evidence is missing");
+    }
+    const sourcePlanEvidence = decodeSourcePlanEvidenceSet(
+      sourcePlanEvidenceRecord.bytes,
+      "staged source-plan evidence",
+    );
+    validateSourcePlanEvidenceReceipts(
+      sourcePlanEvidence,
+      stage.readyBase.cutoff,
+      sourcePlanRefsFromCoverage(sourceCoverage),
+    );
+    validateSourcePlanEvidenceExecutionJoin(sourcePlanEvidence, sourceExecutionSet);
+    validateRawLocatorReferences(
+      read,
+      sourcePlanEvidenceRecord.references,
+      sourcePlanEvidence.flatMap(value => value.rawLocatorHashes),
+      "staged source-plan evidence",
+    );
     return stage;
   }
 
@@ -3233,6 +5277,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       definitionCatalogRoot: stage.readyBase.definitionCatalogRoot,
       releaseProvenanceHash: stage.readyBase.releaseProvenanceHash,
       candidatePartitionProofStorageHash: stage.readyBase.candidatePartitionProofStorageHash,
+      nominationClosureRoot: stage.readyBase.nominationClosureRoot,
+      nominationClosureStorageHash: stage.readyBase.nominationClosureStorageHash,
     });
   }
 
@@ -3263,6 +5309,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         && commitment.stageRevision === expected.stageRevision
         && commitment.stageRecordHash === expected.stageRecordHash
         && commitment.readyBaseHash === expected.readyBaseHash
+        && commitment.nominationClosureRoot === expected.nominationClosureRoot
+        && commitment.nominationClosureStorageHash === expected.nominationClosureStorageHash
         && sameCutoff(commitment.cutoff, expected.cutoff)
       ) {
         return deepFreeze({ kind: "committed", stage: expected, ready: activeReady });
@@ -3302,7 +5350,12 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       const closure = decodeReadyClosure(content.bytes);
       const expectedReferences = [
         closure.sourceCoverageStorageHash,
+        closure.sourceExecutionSetStorageHash,
+        closure.sourcePlanEvidenceStorageHash,
+        closure.nominationClosureStorageHash,
         closure.candidatePartitionStorageHash,
+        closure.outcomePartitionStorageHash,
+        closure.attestationPartitionStorageHash,
         closure.candidatePartitionCommitmentStorageHash,
         closure.candidatePartitionProofStorageHash,
         closure.verifiedMemoSetStorageHash,
@@ -3322,12 +5375,18 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             read,
             closure.candidatePartitionCommitmentStorageHash,
             CANDIDATE_PARTITION_COMMITMENT_KIND,
-            [closure.candidatePartitionProofStorageHash, closure.candidatePartitionStorageHash],
+            [
+              closure.candidatePartitionProofStorageHash,
+              closure.candidatePartitionStorageHash,
+              closure.nominationClosureStorageHash,
+            ],
             "candidate partition commitment",
           );
           const commitment = decodeCandidatePartitionCommitment(commitmentRecord.bytes);
           if (
             commitment.candidatePartitionStorageHash !== closure.candidatePartitionStorageHash
+            || commitment.nominationClosureRoot !== closure.nominationClosureRoot
+            || commitment.nominationClosureStorageHash !== closure.nominationClosureStorageHash
             || commitment.candidateRecordCount !== closure.candidateRecordCount
             || commitment.candidateKeysRoot !== closure.candidateKeysRoot
             || commitment.recentObservationRoot !== closure.recentObservationRoot
@@ -3361,6 +5420,12 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             if (candidate.familyCandidateKey !== entry.key) {
               throw new CorruptDurableStoreError("ready candidate partition key mismatch");
             }
+            validateRawLocatorReferences(
+              read,
+              candidateRecord.references,
+              candidate.evidence.map(value => value.rawLocatorHash),
+              "ready candidate record",
+            );
             return candidate;
           });
           const candidateKeys = candidates.map(candidate => candidate.familyCandidateKey);
@@ -3372,6 +5437,77 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             || candidatePartitionKeysRoot(candidateKeys) !== closure.candidateKeysRoot
             || candidatePartitionKeysRoot(candidateKeys) !== commitment.candidateKeysRoot
           ) throw new CorruptDurableStoreError("ready candidate partition semantic closure mismatch");
+          this.#validatePartitionPhysicalWith(
+            read,
+            closure.outcomePartitionStorageHash,
+            commitment.runId,
+            "outcome",
+          );
+          const candidatesByKey = new Map(candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
+          const outcomeEntries = loadPartition(
+            (outcomeHash, kind, context) => {
+              const outcomeRecord = read(outcomeHash);
+              if (!outcomeRecord || outcomeRecord.kind !== kind) {
+                throw new CorruptDurableStoreError(`${context} is missing or has the wrong kind`);
+              }
+              return outcomeRecord.bytes;
+            },
+            closure.outcomePartitionStorageHash,
+            commitment.runId,
+            "outcome",
+          );
+          const outcomes = outcomeEntries.map(entry => {
+            const outcomeRecord = read(entry.storageHash);
+            if (!outcomeRecord || outcomeRecord.kind !== OUTCOME_KIND) {
+              throw new CorruptDurableStoreError("ready candidate outcome is missing");
+            }
+            const outcome = cloneCanonical<CandidateFinalOutcomeV1>(decodeCanonicalJson(outcomeRecord.bytes));
+            const outcomeKey = assertHash(entry.key, "readyClosure.outcome.key");
+            const candidate = candidatesByKey.get(outcomeKey);
+            if (!candidate || outcome.familyCandidateKey !== outcomeKey) {
+              throw new CorruptDurableStoreError("ready outcome candidate binding mismatch");
+            }
+            this.#attestationAuthority.validateDurableOutcome(outcome, {
+              runId: commitment.runId,
+              cutoff: closure.ready.cutoff,
+              candidatePartitionRoot: closure.ready.candidatePartitionRoot,
+              candidate,
+            });
+            if (outcome.kind === "chainProvenRejected") {
+              if (outcomeRecord.references.length !== 1) {
+                throw new CorruptDurableStoreError("ready chain rejection outcome must reference exactly one bundle");
+              }
+              validateRejectionBundlePhysicalWith(
+                read,
+                outcomeRecord.references[0]!,
+                outcome.rejectionEvidence,
+                "ready candidate rejection outcome",
+              );
+            } else if (outcomeRecord.references.length !== 0) {
+              throw new CorruptDurableStoreError("ready non-rejection outcome has physical references");
+            }
+            return outcome;
+          });
+          const partitionRecord = read(closure.attestationPartitionStorageHash);
+          if (!partitionRecord || partitionRecord.kind !== ATTESTATION_PARTITION_KIND) {
+            throw new CorruptDurableStoreError("ready attestation partition is missing");
+          }
+          this.#assertRecordReferencesWith(
+            read,
+            closure.attestationPartitionStorageHash,
+            ATTESTATION_PARTITION_KIND,
+            [closure.outcomePartitionStorageHash],
+            "ready attestation partition",
+          );
+          const partition = cloneCanonical<AttestationPartitionV1>(decodeCanonicalJson(partitionRecord.bytes));
+          this.#attestationAuthority.validateDurablePartition(partition, candidates);
+          if (
+            partition.runId !== commitment.runId
+            || !sameCutoff(partition.cutoff, closure.ready.cutoff)
+            || partition.candidatePartitionRoot !== closure.ready.candidatePartitionRoot
+            || partition.exactOutcomePartitionRoot !== closure.ready.exactOutcomePartitionRoot
+            || encodeCanonicalJson(partition.outcomes) !== encodeCanonicalJson(outcomes)
+          ) throw new CorruptDurableStoreError("ready attestation partition lineage mismatch");
           const proofRecord = read(closure.candidatePartitionProofStorageHash);
           if (!proofRecord || proofRecord.kind !== CANDIDATE_PARTITION_PROOF_KIND) {
             throw new CorruptDurableStoreError("ready candidate partition proof is missing");
@@ -3401,6 +5537,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             policyHash: closure.ready.generationRefreshPolicyHash,
             releaseProvenanceHash: closure.ready.releaseProvenanceHash,
             candidatePartitionProofStorageHash: closure.ready.candidatePartitionProofStorageHash,
+            nominationClosureRoot: closure.ready.nominationClosureRoot,
+            nominationClosureStorageHash: closure.ready.nominationClosureStorageHash,
           });
           if (
             commitment.readyRecordHash !== closure.ready.readyRecordHash
@@ -3410,6 +5548,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             || verifiedProof.runId !== commitment.runId
             || verifiedProof.candidatePartitionRoot !== closure.ready.candidatePartitionRoot
             || verifiedProof.candidatePartitionStorageHash !== closure.candidatePartitionStorageHash
+            || verifiedProof.nominationClosureRoot !== closure.nominationClosureRoot
+            || verifiedProof.nominationClosureStorageHash !== closure.nominationClosureStorageHash
             || verifiedProof.recordCount !== closure.candidateRecordCount
             || verifiedProof.candidateKeysRoot !== closure.candidateKeysRoot
             || verifiedProof.recentObservationRoot !== closure.recentObservationRoot
@@ -3419,6 +5559,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             || !sameCutoff(commitment.cutoff, closure.ready.cutoff)
             || commitment.candidatePartitionRoot !== closure.ready.candidatePartitionRoot
             || commitment.candidatePartitionStorageHash !== closure.candidatePartitionStorageHash
+            || commitment.nominationClosureRoot !== closure.nominationClosureRoot
+            || commitment.nominationClosureStorageHash !== closure.nominationClosureStorageHash
             || commitment.candidateRecordCount !== closure.candidateRecordCount
             || commitment.candidateKeysRoot !== closure.candidateKeysRoot
             || commitment.recentObservationRoot !== closure.recentObservationRoot
@@ -3434,6 +5576,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
               definitionCatalogRoot: closure.ready.definitionCatalogRoot,
               sourceCoverageRoot: closure.ready.sourceCoverageRoot,
               candidatePartitionRoot: closure.ready.candidatePartitionRoot,
+              nominationClosureRoot: closure.ready.nominationClosureRoot,
+              nominationClosureStorageHash: closure.ready.nominationClosureStorageHash,
               exactOutcomePartitionRoot: closure.ready.exactOutcomePartitionRoot,
               verifiedMemoSetRoot: closure.ready.verifiedMemoSetRoot,
               instanceCatalogRoot: closure.ready.instanceCatalogRoot,
@@ -3489,6 +5633,96 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             || sourceCoverage.sourceCoverageRoot !== commitment.sourceCoverageRoot
             || !sameCutoff(sourceCoverage.cutoff, closure.ready.cutoff)
           ) throw new CorruptDurableStoreError("ready source coverage root mismatch");
+          const readyExecutions = validateSourceExecutionSetRecord(
+            read,
+            closure.sourceExecutionSetStorageHash,
+            sourceCoverage,
+          );
+          if (readyExecutions.set.executionSetRoot !== closure.sourceExecutionSetRoot) {
+            throw new CorruptDurableStoreError("ready source execution set root mismatch");
+          }
+          const sourcePlanEvidenceRecord = read(closure.sourcePlanEvidenceStorageHash);
+          if (!sourcePlanEvidenceRecord || sourcePlanEvidenceRecord.kind !== SOURCE_PLAN_EVIDENCE_KIND) {
+            throw new CorruptDurableStoreError("ready source-plan evidence is missing");
+          }
+          const sourcePlanEvidence = decodeSourcePlanEvidenceSet(
+            sourcePlanEvidenceRecord.bytes,
+            "ready source-plan evidence",
+          );
+          validateSourcePlanEvidenceReceipts(
+            sourcePlanEvidence,
+            closure.ready.cutoff,
+            sourcePlanRefsFromCoverage(sourceCoverage),
+          );
+          validateSourcePlanEvidenceExecutionJoin(sourcePlanEvidence, readyExecutions.set);
+          validateRawLocatorReferences(
+            read,
+            sourcePlanEvidenceRecord.references,
+            sourcePlanEvidence.flatMap(value => value.rawLocatorHashes),
+            "ready source-plan evidence",
+          );
+
+          const nominationRecord = read(closure.nominationClosureStorageHash);
+          if (!nominationRecord || nominationRecord.kind !== NOMINATION_CLOSURE_KIND) {
+            throw new CorruptDurableStoreError("ready nomination closure is missing");
+          }
+          const recentReferences = nominationRecord.references.filter(reference => (
+            read(reference)?.kind === RECENT_OBSERVATION_KIND
+          ));
+          if (recentReferences.length !== 1) {
+            throw new CorruptDurableStoreError("ready nomination closure recent observation reference is not exact");
+          }
+          const expectedNominationReferences = [
+            recentReferences[0]!,
+            closure.sourceCoverageStorageHash,
+            closure.sourceExecutionSetStorageHash,
+            closure.sourcePlanEvidenceStorageHash,
+            closure.candidatePartitionStorageHash,
+          ].sort(compareText);
+          if (encodeCanonicalJson(nominationRecord.references) !== encodeCanonicalJson(expectedNominationReferences)) {
+            throw new CorruptDurableStoreError("ready nomination closure physical references mismatch");
+          }
+          const recentRecord = read(recentReferences[0]!);
+          if (!recentRecord || recentRecord.kind !== RECENT_OBSERVATION_KIND) {
+            throw new CorruptDurableStoreError("ready recent observation is missing");
+          }
+          const recentObservation = cloneCanonical<RecentObservationReceiptV1>(
+            decodeCanonicalJson(recentRecord.bytes),
+          );
+          validateRecentObservationReceipt(
+            recentObservation,
+            this.#canonical.recentObservationRange(closure.ready.cutoff),
+          );
+          validateRawLocatorReferences(
+            read,
+            recentRecord.references,
+            recentObservation.evidence.map(value => value.rawLocatorHash),
+            "ready recent observation",
+          );
+          let nominationClosure: NominationClosureV1;
+          try {
+            nominationClosure = validateNominationClosureAgainstRun({
+              closure: decodeNominationClosureBytesV1(nominationRecord.bytes),
+              cutoff: closure.ready.cutoff,
+              recentObservation,
+              sourceCoverage,
+              sourceExecutionSet: readyExecutions.set,
+              candidates,
+              candidatePartitionRoot: closure.ready.candidatePartitionRoot,
+            });
+          } catch (error) {
+            throw new CorruptDurableStoreError(
+              `ready nomination closure validation failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          if (
+            nominationClosure.root !== closure.nominationClosureRoot
+            || nominationClosure.root !== closure.ready.nominationClosureRoot
+            || closure.nominationClosureStorageHash !== closure.ready.nominationClosureStorageHash
+          ) throw new CorruptDurableStoreError("ready nomination closure lineage mismatch");
+          this.#candidatePartitionProofIssuer.assertNominationQualificationsQualified(
+            nominationQualificationBindings(nominationClosure),
+          );
 
           const catalogRecord = read(closure.instanceCatalogStorageHash);
           if (!catalogRecord || catalogRecord.kind !== INSTANCE_CATALOG_KIND) {
@@ -3569,7 +5803,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     }
     if (before.kind !== "retryable") throw new OutcomeStateConflictError("probe target is not retryable");
     const candidatePartitionBinding = loaded.builderRun.candidatePartitionBinding;
-    const candidateSnapshotHash = candidate.candidateSnapshotHash;
+    const candidateSubjectHash = candidate.candidateSubjectHash;
     const beforeOutcomeHash = candidateFinalOutcomeHash(before);
     const claimKey = `${runId}:${familyCandidateKey}:${beforeOutcomeHash}:${loaded.envelope.checkpointRevision}`;
     if (this.#issuedProbeClaims.has(claimKey)) {
@@ -3581,7 +5815,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       familyCandidateKey,
       expectedOutcomeHash: beforeOutcomeHash,
       checkpointRevision: loaded.envelope.checkpointRevision,
-      candidateSnapshotHash,
+      candidateSubjectHash,
       candidatePartitionBinding,
       candidatePartition: loaded.builderRun.candidatePartition,
       used: false,
@@ -3594,7 +5828,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       probeCapability,
       candidatePartition: loaded.builderRun.candidatePartition,
       candidatePartitionBinding,
-      candidateSnapshotHash,
+      candidateSubjectHash,
       before,
       beforeOutcomeHash,
     });
@@ -3655,7 +5889,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         if (
           loaded.builderRun.candidatePartitionBinding.candidatePartitionRoot !== probeState.candidatePartitionBinding.candidatePartitionRoot
           || loaded.builderRun.candidatePartitionBinding.candidatePartitionStorageHash !== probeState.candidatePartitionBinding.candidatePartitionStorageHash
-          || candidate.candidateSnapshotHash !== probeState.candidateSnapshotHash
+          || candidate.candidateSubjectHash !== probeState.candidateSubjectHash
         ) throw new OutcomeStateConflictError("probe capability lineage mismatch");
         const previousStorageHash = tx.getIndex(`outcome/${runId}`, familyCandidateKey);
         if (!previousStorageHash) throw new OutcomeStateConflictError("probe outcome is absent");
@@ -3710,15 +5944,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         const nextRevision = (BigInt(root.revision) + 1n).toString();
         const activeOutcomePartitionRoot = outcomePartitionRoot(runId, outcomes);
         const nextRun: StoredRunEnvelopeV2 = deepFreeze({ ...loaded.envelope, checkpointRevision: nextRevision, outcomePartitionRoot: activeOutcomePartitionRoot, outcomePartitionStorageHash: manifest, accounting: outcomeAccounting(loaded.builderRun.candidates.length, outcomes) });
-        const nextRunStorageHash = tx.putImmutable(RUN_KIND, encodeCanonicalBytes(nextRun), [
-          nextRun.recentObservationStorageHash,
-          nextRun.sourceCoverageStorageHash,
-          nextRun.candidatePartitionStorageHash,
-          nextRun.candidatePartitionProofStorageHash,
-          nextRun.outcomePartitionStorageHash,
-          ...(nextRun.partialOutcomePartitionStorageHash === null ? [] : [nextRun.partialOutcomePartitionStorageHash]),
-          nextRun.verifiedMemoSetStorageHash,
-        ]);
+        const nextRunStorageHash = tx.putImmutable(RUN_KIND, encodeCanonicalBytes(nextRun), runContentReferences(nextRun));
         const receipt = sealProbeReceipt({
           runId,
           familyCandidateKey,
@@ -3727,7 +5953,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           afterOutcomeHash: nextOutcomeHash,
           beforeKind: "retryable",
           afterKind: next.kind,
-          candidateSnapshotHash: candidate.candidateSnapshotHash,
+          candidateSubjectHash: candidate.candidateSubjectHash,
           evidenceRoot: previous.failure.evidenceRoot,
           checkpointRevisionBefore: root.revision,
           checkpointRevision: nextRevision,
@@ -3739,10 +5965,21 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           priorReceiptHash: root.latestProbeReceiptHash,
           priorLineageRoot: root.probeReceiptLineageRoot,
         });
+        const receiptEnvelope: StoredProbeReceiptEnvelopeV1 = deepFreeze({
+          receipt,
+          candidatePartitionStorageHash: loaded.envelope.candidatePartitionStorageHash,
+          priorOutcomePartitionStorageHash: loaded.envelope.outcomePartitionStorageHash,
+          activeOutcomePartitionStorageHash: manifest,
+        });
         const receiptStorageHash = tx.putImmutable(
           PROBE_RECEIPT_KIND,
-          encodeCanonicalBytes(receipt),
-          receipt.priorReceiptHash === null ? [] : [receipt.priorReceiptHash],
+          encodeCanonicalBytes(receiptEnvelope),
+          [
+            ...(receipt.priorReceiptHash === null ? [] : [receipt.priorReceiptHash]),
+            receiptEnvelope.candidatePartitionStorageHash,
+            receiptEnvelope.priorOutcomePartitionStorageHash,
+            receiptEnvelope.activeOutcomePartitionStorageHash,
+          ],
         );
         const nextRoot = deepFreeze({
           ...root,
@@ -3787,6 +6024,16 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       throw error;
     }
   }
+}
+
+/** Internal owner seam; callers cannot forge this with a shape-compatible
+ * checkpoint facade.  The release owner narrows the returned instance to the
+ * exact methods it needs and keeps the class itself private to the join. */
+export function assertIssuedCheckpointStore(value: unknown): CheckpointStore {
+  if (value === null || typeof value !== "object" || !checkpointStoreInstances.has(value)) {
+    throw new TypeError("checkpoint store is not issued");
+  }
+  return value as CheckpointStore;
 }
 
 export class DurableOutcomeWriterActor {
@@ -3857,13 +6104,13 @@ export class DurableOutcomeWriterActor {
           await this.#wait(Math.max(0, this.#flushEveryMs - (performance.now() - this.#lastFlush)));
         }
         if (this.#pending.length >= this.#flushEveryItems || this.#forceFlush || performance.now() - this.#lastFlush >= this.#flushEveryMs || (!this.#accepting && this.#queue.length === 0)) {
-          this.#flushPending();
+          await this.#flushPending();
           this.#lastFlush = performance.now();
           this.#forceFlush = false;
           this.#resolveWaiters();
         }
       }
-      this.#flushPending();
+      await this.#flushPending();
       this.#resolveWaiters();
     } catch (error) {
       while (this.#waiters.length > 0) this.#waiters.shift()!.reject(error);
@@ -3874,11 +6121,11 @@ export class DurableOutcomeWriterActor {
     }
   }
 
-  #flushPending(): void {
+  async #flushPending(): Promise<void> {
     if (this.#pending.length === 0) return;
     this.#lease = this.#checkpoint._renewWriterLease(this.#lease);
     const batch = this.#pending.splice(0, this.#pending.length);
-    this.#checkpoint._flushOutcomeBatch(this.#runId, this.#writerCapability, batch, this.#lease);
+    await this.#checkpoint._flushOutcomeBatch(this.#runId, this.#writerCapability, batch, this.#lease);
   }
 
   #wait(timeoutMs: number): Promise<void> {
@@ -3923,7 +6170,8 @@ export function createCheckpointStore(
   promotionAuthority: ReadyPromotionAuthorityGuardPort,
   attestationAuthority: AttestationValidationAuthorityV1,
   candidatePartitionProofIssuer: CandidatePartitionProofIssuerPortV1,
+  sixStepArtifacts: CheckpointSixStepArtifactPortV1,
   candidatePartitionBootstrap?: CandidatePartitionBootstrapV1,
 ): CheckpointStore {
-  return new CheckpointStore(durable, canonical, probeCaller, promotionAuthority, attestationAuthority, candidatePartitionProofIssuer, candidatePartitionBootstrap);
+  return new CheckpointStore(durable, canonical, probeCaller, promotionAuthority, attestationAuthority, candidatePartitionProofIssuer, sixStepArtifacts, candidatePartitionBootstrap);
 }

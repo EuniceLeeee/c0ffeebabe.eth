@@ -7,6 +7,7 @@ import {
   type ArtifactLineageFactBundleV1,
 } from "../../../artifact-lineage-facts/src/runtime.ts";
 import { encodeCanonicalJson, type Hash } from "../../../../packages/canonical-codec/src/index.ts";
+import { COMMON_ENVELOPE_ROLE_CONTRACT_VERSION } from "../../../../specs/qualification/src/index.ts";
 import type { GateVerdict } from "../predicate-contract.ts";
 import type {
   PredicateEvaluatorV1,
@@ -108,6 +109,7 @@ function evaluateLive(
 
 export const ARTIFACT_LINEAGE_PREDICATE_EVALUATOR: PredicateEvaluatorV1 = Object.freeze({
   predicateId: ARTIFACT_LINEAGE_PREDICATE_SPEC.predicateId,
+  commonEnvelopeRoleContractVersion: COMMON_ENVELOPE_ROLE_CONTRACT_VERSION,
   adapterVersion: ARTIFACT_LINEAGE_ADAPTER_VERSION,
   predicateSpec: ARTIFACT_LINEAGE_PREDICATE_SPEC,
   predicateProgramDescriptorDigest: ARTIFACT_LINEAGE_PREDICATE_PROGRAM_DESCRIPTOR_DIGEST,

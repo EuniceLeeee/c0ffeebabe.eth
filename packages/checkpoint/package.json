@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./ready-full-family-evidence-consumer": "./src/ready-full-family-evidence-consumer.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",

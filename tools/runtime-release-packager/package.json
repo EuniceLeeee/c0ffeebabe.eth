@@ -2,9 +2,20 @@
   "name": "@aloha/runtime-release-packager",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./final-pre-release-runner": "./src/final-pre-release-runner.ts",
+    "./pre-release-b-active-ready-graph-observer": "./src/pre-release-b-active-ready-graph-observer.ts"
+  },
+  "bin": {
+    "aloha-runtime-release-packager": "./src/cli.ts",
+    "aloha-final-pre-release": "./src/final-pre-release-cli.ts"
+  },
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }

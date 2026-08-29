@@ -19,10 +19,156 @@ import type {
   CanonicalFencePort,
 } from "../../ready-generation/src/index.ts";
 import type { BlockRangeV1, CanonicalCutoffV1 } from "../../discovery/src/index.ts";
+import type { CanonicalLeaseGuardPort } from "./lease-guard-port.ts";
+export type { CanonicalLeaseGuardPort } from "./lease-guard-port.ts";
 
 export type BlockNumber = string;
-export type CanonicalHeader = CanonicalCutoffV1;
 export type CanonicalSourceView = CanonicalCutoffV1;
+/** Exact observed chain header; unlike a cutoff, it proves its parent edge. */
+export interface CanonicalHeader extends CanonicalSourceView {
+  readonly parentHash: Hash;
+}
+/** A producer head is an exact current-chain source anchor, never a ready cutoff. */
+export type CanonicalHeadV1 = CanonicalHeader;
+export type CanonicalHead = CanonicalHeadV1;
+
+/** Process-local opaque proof of one stable, exact current-head observation. */
+declare const canonicalHeadObservationCapabilityBrand: unique symbol;
+export interface CanonicalHeadObservationCapabilityV1 {
+  readonly [canonicalHeadObservationCapabilityBrand]: never;
+}
+
+export interface CanonicalHeadObservationV1 {
+  readonly head: CanonicalHead;
+  readonly journalEpoch: string;
+  readonly canonicalJournalRoot: Hash;
+  readonly observedMonotonicNs: string;
+}
+
+/** Read-only verifier for capabilities issued by one CanonicalSource owner. */
+export interface CanonicalHeadObservationReaderPortV1 {
+  readonly assert: (
+    capability: unknown,
+  ) => asserts capability is CanonicalHeadObservationCapabilityV1;
+  readonly read: (
+    capability: CanonicalHeadObservationCapabilityV1,
+  ) => CanonicalHeadObservationV1;
+}
+
+/** Process-local identity of the canonical source authority. */
+declare const canonicalSourceAuthorityBrand: unique symbol;
+export interface CanonicalSourceAuthorityV1 {
+  readonly [canonicalSourceAuthorityBrand]: never;
+}
+
+/**
+ * The portion of a GraphView lease that a producer is allowed to pin.
+ *
+ * This deliberately mirrors the graph package's binding structurally instead
+ * of importing GraphView.  canonical-source owns source/session authority;
+ * graph owns route handles and graph semantics.
+ */
+export interface ProducerGenerationBindingV1 {
+  readonly generationId: string;
+  readonly readyRecordHash: Hash;
+  readonly generationRefreshPolicyHash: Hash;
+  readonly cutoff: CanonicalSourceView;
+  readonly definitionCatalogRoot: Hash;
+  readonly instanceCatalogRoot: Hash;
+  readonly graphRoot: Hash;
+  readonly releaseProvenanceHash: Hash;
+  readonly candidatePartitionProofStorageHash: Hash;
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
+}
+
+/** Minimal GraphView lease contract needed by a producer session. */
+export interface ProducerGraphViewV1 {
+  readonly binding: ProducerGenerationBindingV1;
+  readonly edges?: readonly unknown[];
+  assertActive(): Promise<void> | void;
+}
+
+/**
+ * Opaque process-local proof of one CanonicalSource-issued producer session.
+ * Consumers receive this capability instead of the structurally wider
+ * ProducerSession object; clones and lookalikes carry no authority.
+ */
+declare const producerCurrentSourceSessionCapabilityBrand: unique symbol;
+export interface ProducerCurrentSourceSessionCapabilityV1 {
+  readonly [producerCurrentSourceSessionCapabilityBrand]: never;
+}
+
+export interface ProducerCurrentSourceSessionViewV1 {
+  readonly sessionId: Hash;
+  readonly source: CanonicalHead;
+  readonly generation: ProducerGenerationBindingV1;
+  readonly generationId: string;
+  readonly canonicalSourceAuthority: CanonicalSourceAuthorityV1;
+  readonly assertCurrent: (signal?: AbortSignal) => Promise<void>;
+}
+
+const producerCurrentSourceSessions = new WeakMap<object, ProducerCurrentSourceSessionViewV1>();
+
+export function readIssuedProducerCurrentSourceSessionCapabilityV1(
+  value: unknown,
+): ProducerCurrentSourceSessionViewV1 {
+  if (value === null || typeof value !== "object") {
+    throw new TypeError("producer current-source session capability is required");
+  }
+  const session = producerCurrentSourceSessions.get(value);
+  if (session === undefined) {
+    throw new TypeError("producer current-source session capability is not canonical-source issued");
+  }
+  return session;
+}
+
+/**
+ * Structural current-source contract consumed by the search pipeline.  The
+ * source is the producer's current head, while the lease is one immutable
+ * ready generation for the whole session.
+ */
+export interface ProducerSessionV1<GraphView extends ProducerGraphViewV1 = ProducerGraphViewV1> {
+  readonly sessionId: Hash;
+  readonly currentSourceCapability: ProducerCurrentSourceSessionCapabilityV1;
+  readonly source: CanonicalHead;
+  readonly head: CanonicalHead;
+  readonly lease: GraphView;
+  readonly graphView: GraphView;
+  readonly generation: ProducerGenerationBindingV1;
+  readonly generationId: string;
+  readonly closed: boolean;
+  assertCurrent(signal?: AbortSignal): Promise<void>;
+  close(): Promise<void>;
+}
+
+export interface ProducerHeadObservationV1 {
+  readonly sourceHeadSeenAtMs: number;
+  readonly sourceHeadSeenMonotonicMs: number;
+}
+
+export interface ProducerHeadRunContextV1 extends ProducerHeadObservationV1 {
+  readonly revision: string;
+}
+
+export type ProducerHeadDropReasonV1 =
+  | "scheduler_coalesced"
+  | "shutdown_pending_dropped";
+
+export interface ProducerHeadDropV1 extends ProducerHeadRunContextV1 {
+  readonly head: CanonicalHead;
+  readonly reason: ProducerHeadDropReasonV1;
+}
+
+export interface ProducerHeadSchedulerTelemetryV1 {
+  readonly submitted: number;
+  readonly started: number;
+  readonly completed: number;
+  readonly coalesced: number;
+  readonly latestSubmitted: CanonicalHead | null;
+  readonly active: CanonicalHead | null;
+  readonly pending: CanonicalHead | null;
+}
 
 export interface CanonicalHeaderAbsenceEvidenceV1 {
   readonly chainId: string;
@@ -115,17 +261,18 @@ export interface CanonicalJournalStorePort {
   compareAndSwap(expectedToken: string | null, bytes: Uint8Array): string;
 }
 
-export interface CanonicalLeaseGuardPort {
-  assertViewAuthorityActive(cutoff: CanonicalSourceView): void;
-}
-
 export class CanonicalSourceError extends Error {
   readonly code:
     | "invalid-header"
     | CanonicalCheckFailure
     | "promotion-stale"
     | "canonical-view-superseded"
-    | "fence-invalid";
+    | "fence-invalid"
+    | "producer-session-closed"
+    | "producer-session-invalidated"
+    | "generation-mismatch"
+    | "topology-mismatch"
+    | "recent-observation-window-unavailable";
   readonly retryable: boolean;
   readonly expected?: CanonicalSourceView;
   readonly observed?: CanonicalHeader | null;
@@ -192,11 +339,171 @@ function exactView(raw: unknown, context: string): CanonicalSourceView {
   }
 }
 
+function exactHeader(raw: unknown, context: string): CanonicalHeader {
+  try {
+    assertPlainObject(raw, context);
+    assertExactKeys(raw, ["chainId", "number", "hash", "parentHash", "stateRoot"], context);
+    return deepFreeze({
+      chainId: assertNonEmptyString(readOwnEnumerableDataProperty(raw, "chainId", context), `${context}.chainId`),
+      number: assertDecimalString(readOwnEnumerableDataProperty(raw, "number", context), `${context}.number`),
+      hash: assertHash(readOwnEnumerableDataProperty(raw, "hash", context), `${context}.hash`),
+      parentHash: assertHash(readOwnEnumerableDataProperty(raw, "parentHash", context), `${context}.parentHash`),
+      stateRoot: assertHash(readOwnEnumerableDataProperty(raw, "stateRoot", context), `${context}.stateRoot`),
+    });
+  } catch (error) {
+    if (error instanceof CanonicalSourceError) throw error;
+    throw new CanonicalSourceError(
+      "invalid-header",
+      `${context} is not an exact observed canonical header: ${error instanceof Error ? error.message : String(error)}`,
+      false,
+    );
+  }
+}
+
+function viewFromHeader(header: CanonicalHeader): CanonicalSourceView {
+  return deepFreeze({
+    chainId: header.chainId,
+    number: header.number,
+    hash: header.hash,
+    stateRoot: header.stateRoot,
+  });
+}
+
 function sameView(left: CanonicalSourceView, right: CanonicalSourceView): boolean {
   return left.chainId === right.chainId
     && left.number === right.number
     && left.hash === right.hash
     && left.stateRoot === right.stateRoot;
+}
+
+function sameHeader(left: CanonicalHeader, right: CanonicalHeader): boolean {
+  return sameView(left, right) && left.parentHash === right.parentHash;
+}
+
+function exactProducerGenerationBinding(
+  raw: unknown,
+  context: string,
+): ProducerGenerationBindingV1 {
+  try {
+    assertPlainObject(raw, context);
+    assertExactKeys(raw, [
+      "generationId",
+      "readyRecordHash",
+      "generationRefreshPolicyHash",
+      "cutoff",
+      "definitionCatalogRoot",
+      "instanceCatalogRoot",
+      "graphRoot",
+      "releaseProvenanceHash",
+      "candidatePartitionProofStorageHash",
+      "nominationClosureRoot",
+      "nominationClosureStorageHash",
+    ], context);
+    return deepFreeze({
+      generationId: assertNonEmptyString(
+        readOwnEnumerableDataProperty(raw, "generationId", context),
+        `${context}.generationId`,
+      ),
+      readyRecordHash: assertHash(
+        readOwnEnumerableDataProperty(raw, "readyRecordHash", context),
+        `${context}.readyRecordHash`,
+      ),
+      generationRefreshPolicyHash: assertHash(
+        readOwnEnumerableDataProperty(raw, "generationRefreshPolicyHash", context),
+        `${context}.generationRefreshPolicyHash`,
+      ),
+      cutoff: exactView(
+        readOwnEnumerableDataProperty(raw, "cutoff", context),
+        `${context}.cutoff`,
+      ),
+      definitionCatalogRoot: assertHash(
+        readOwnEnumerableDataProperty(raw, "definitionCatalogRoot", context),
+        `${context}.definitionCatalogRoot`,
+      ),
+      instanceCatalogRoot: assertHash(
+        readOwnEnumerableDataProperty(raw, "instanceCatalogRoot", context),
+        `${context}.instanceCatalogRoot`,
+      ),
+      graphRoot: assertHash(
+        readOwnEnumerableDataProperty(raw, "graphRoot", context),
+        `${context}.graphRoot`,
+      ),
+      releaseProvenanceHash: assertHash(
+        readOwnEnumerableDataProperty(raw, "releaseProvenanceHash", context),
+        `${context}.releaseProvenanceHash`,
+      ),
+      candidatePartitionProofStorageHash: assertHash(
+        readOwnEnumerableDataProperty(raw, "candidatePartitionProofStorageHash", context),
+        `${context}.candidatePartitionProofStorageHash`,
+      ),
+      nominationClosureRoot: assertHash(
+        readOwnEnumerableDataProperty(raw, "nominationClosureRoot", context),
+        `${context}.nominationClosureRoot`,
+      ),
+      nominationClosureStorageHash: assertHash(
+        readOwnEnumerableDataProperty(raw, "nominationClosureStorageHash", context),
+        `${context}.nominationClosureStorageHash`,
+      ),
+    });
+  } catch (error) {
+    if (error instanceof CanonicalSourceError) throw error;
+    throw new CanonicalSourceError(
+      "generation-mismatch",
+      `${context} is not an exact producer generation binding: ${error instanceof Error ? error.message : String(error)}`,
+      false,
+    );
+  }
+}
+
+function sameProducerGenerationBinding(
+  left: ProducerGenerationBindingV1,
+  right: ProducerGenerationBindingV1,
+): boolean {
+  return left.generationId === right.generationId
+    && left.readyRecordHash === right.readyRecordHash
+    && left.generationRefreshPolicyHash === right.generationRefreshPolicyHash
+    && sameView(left.cutoff, right.cutoff)
+    && left.definitionCatalogRoot === right.definitionCatalogRoot
+    && left.instanceCatalogRoot === right.instanceCatalogRoot
+    && left.graphRoot === right.graphRoot
+    && left.releaseProvenanceHash === right.releaseProvenanceHash
+    && left.candidatePartitionProofStorageHash === right.candidatePartitionProofStorageHash
+    && left.nominationClosureRoot === right.nominationClosureRoot
+    && left.nominationClosureStorageHash === right.nominationClosureStorageHash;
+}
+
+function assertProducerGraphView(
+  raw: unknown,
+  context: string,
+): ProducerGraphViewV1 {
+  if (raw === null || typeof raw !== "object") {
+    throw new CanonicalSourceError("generation-mismatch", `${context} is required`, false);
+  }
+  const graph = raw as Record<string, unknown>;
+  const binding = exactProducerGenerationBinding(
+    readOwnEnumerableDataProperty(graph, "binding", context),
+    `${context}.binding`,
+  );
+  if (typeof graph.assertActive !== "function") {
+    throw new CanonicalSourceError("generation-mismatch", `${context}.assertActive is required`, false);
+  }
+  const edges = Object.prototype.hasOwnProperty.call(graph, "edges")
+    ? readOwnEnumerableDataProperty(graph, "edges", context)
+    : undefined;
+  if (edges !== undefined) {
+    if (!Array.isArray(edges) || !Object.isFrozen(edges)) {
+      throw new CanonicalSourceError("topology-mismatch", `${context}.edges must be an immutable array`, false);
+    }
+    for (const edge of edges) {
+      if (edge !== null && typeof edge === "object" && !Object.isFrozen(edge)) {
+        throw new CanonicalSourceError("topology-mismatch", `${context}.edges contains mutable topology`, false);
+      }
+    }
+  }
+  // Keep validation strict while returning the caller's lease object so route
+  // capability identity remains owned by the graph package.
+  void binding;
+  return raw as ProducerGraphViewV1;
 }
 
 function canonicalViewKey(view: CanonicalSourceView): string {
@@ -323,7 +630,7 @@ function exactHeaderReadResult(raw: unknown, requestedNumber: BlockNumber): Cano
         assertExactKeys(raw, ["kind", "header"], "canonicalHeaderReadResult");
         return deepFreeze({
           kind,
-          header: exactView(
+          header: exactHeader(
             readOwnEnumerableDataProperty(raw, "header", "canonicalHeaderReadResult"),
             "canonicalHeaderReadResult.header",
           ),
@@ -387,6 +694,11 @@ interface ActivePromotionFreshness {
   readonly receiptHash: Hash;
 }
 
+interface CanonicalHeadObservationStateV1 {
+  readonly observation: CanonicalHeadObservationV1;
+  readonly journalToken: string | null;
+}
+
 function exactCanonicalFence(rawFence: CanonicalFenceV1): CanonicalFenceV1 {
   try {
     assertPlainObject(rawFence, "canonicalFence");
@@ -436,7 +748,7 @@ function exactPromotionFreshnessReceipt(
   ], context);
   const receipt = deepFreeze({
     cutoff: exactView(readOwnEnumerableDataProperty(raw, "cutoff", context), `${context}.cutoff`),
-    observedHead: exactView(readOwnEnumerableDataProperty(raw, "observedHead", context), `${context}.observedHead`),
+    observedHead: exactHeader(readOwnEnumerableDataProperty(raw, "observedHead", context), `${context}.observedHead`),
     observedAgeBlocks: assertDecimalString(
       readOwnEnumerableDataProperty(raw, "observedAgeBlocks", context),
       `${context}.observedAgeBlocks`,
@@ -500,10 +812,13 @@ export class CanonicalSource implements CanonicalFencePort {
   readonly #journalStore: CanonicalJournalStorePort;
   readonly #activeFences = new Map<string, ActiveFence>();
   readonly #activePromotionFreshness = new Map<string, ActivePromotionFreshness>();
+  readonly #headObservations = new WeakMap<object, CanonicalHeadObservationStateV1>();
+  readonly #headObservationReader: CanonicalHeadObservationReaderPortV1;
   readonly #issuedViews = new Map<string, CanonicalSourceView>();
   readonly #provenAbsences = new Map<string, CanonicalHeaderAbsenceEvidenceV1>();
   #journalEpoch = 0n;
   #currentView: CanonicalSourceView | null = null;
+  readonly #authority: CanonicalSourceAuthorityV1;
   #journalToken: string | null = null;
   #journalRoot = sealCanonicalJournalState({
     epoch: "0",
@@ -522,6 +837,15 @@ export class CanonicalSource implements CanonicalFencePort {
       throw new CanonicalSourceError("invalid-header", "durable canonical journal store is required", false);
     }
     this.#journalStore = options.journalStore;
+    this.#authority = Object.freeze(Object.create(null)) as CanonicalSourceAuthorityV1;
+    this.#headObservationReader = Object.freeze({
+      assert: (capability: unknown): asserts capability is CanonicalHeadObservationCapabilityV1 => {
+        this.#assertHeadObservation(capability);
+      },
+      read: (capability: CanonicalHeadObservationCapabilityV1): CanonicalHeadObservationV1 => {
+        return this.#headObservationState(capability).observation;
+      },
+    });
     const genesis = options.chainGenesis ?? "0";
     try {
       this.#chainGenesis = BigInt(assertDecimalString(genesis, "chainGenesis"));
@@ -544,14 +868,79 @@ export class CanonicalSource implements CanonicalFencePort {
     return this.#currentView;
   }
 
+  /** Opaque identity used to bind startup and application to one source. */
+  get authority(): CanonicalSourceAuthorityV1 {
+    return this.#authority;
+  }
+
+  /** Read-only port for this owner's process-local head observations. */
+  get headObservationReader(): CanonicalHeadObservationReaderPortV1 {
+    return this.#headObservationReader;
+  }
+
+  /**
+   * Observe latest and its exact numbered header under one stable journal
+   * anchor, then issue an opaque process-local capability for that result.
+   */
+  async observeCurrentHead(
+    signal?: AbortSignal,
+  ): Promise<CanonicalHeadObservationCapabilityV1> {
+    this.#synchronizeJournal();
+    const journalTokenBeforeRead = this.#journalToken;
+    const journalRootBeforeRead = this.#journalRoot;
+    const journalEpochBeforeRead = this.#journalEpoch;
+    const latest = await this.#readLatest(signal);
+    this.#assertJournalAnchor(
+      journalTokenBeforeRead,
+      journalRootBeforeRead,
+      journalEpochBeforeRead,
+    );
+    const readResult = await this.#readHeader(latest.number, signal);
+    this.#assertJournalAnchor(
+      journalTokenBeforeRead,
+      journalRootBeforeRead,
+      journalEpochBeforeRead,
+    );
+    if (readResult.kind === "unavailable") {
+      throw new CanonicalSourceError("transport", "canonical current head is unavailable", true, latest, null);
+    }
+    if (readResult.kind !== "found") {
+      throw new CanonicalSourceError("missing-header", "canonical current head is absent", false, latest, null);
+    }
+    const reason = compareHeaders(latest, readResult.header);
+    if (reason !== null) throw failureError(reason, latest, readResult.header);
+    if (!sameHeader(latest, readResult.header)) {
+      throw new CanonicalSourceError(
+        "invalid-header",
+        "canonical current head parentHash does not match its exact numbered read",
+        false,
+        latest,
+        readResult.header,
+      );
+    }
+    const observation = deepFreeze({
+      head: latest,
+      journalEpoch: journalEpochBeforeRead.toString(),
+      canonicalJournalRoot: journalRootBeforeRead,
+      observedMonotonicNs: process.hrtime.bigint().toString(),
+    });
+    const capability = Object.freeze(Object.create(null)) as CanonicalHeadObservationCapabilityV1;
+    this.#headObservations.set(capability, {
+      observation,
+      journalToken: journalTokenBeforeRead,
+    });
+    return capability;
+  }
+
   async freezeView(signal?: AbortSignal): Promise<CanonicalSourceView> {
     this.#synchronizeJournal();
     const latest = await this.#readLatest(signal);
+    const cutoff = viewFromHeader(latest);
     if (BigInt(latest.number) < this.#chainGenesis) {
       throw new CanonicalSourceError("invalid-header", "canonical head precedes configured genesis", false);
     }
-    if (this.#provenAbsences.has(canonicalViewKey(latest))) {
-      throw new CanonicalSourceError("missing-header", "revoked canonical cutoff cannot be reissued", false, latest, null);
+    if (this.#provenAbsences.has(canonicalViewKey(cutoff))) {
+      throw new CanonicalSourceError("missing-header", "revoked canonical cutoff cannot be reissued", false, cutoff, null);
     }
     const readResult = await this.#readHeader(latest.number, signal);
     if (readResult.kind === "unavailable") {
@@ -562,16 +951,73 @@ export class CanonicalSource implements CanonicalFencePort {
     }
     const reason = compareHeaders(latest, readResult.header);
     if (reason !== null) throw failureError(reason, latest, readResult.header);
+    if (!sameHeader(latest, readResult.header)) {
+      throw new CanonicalSourceError(
+        "invalid-header",
+        "canonical freeze parentHash does not match its exact numbered read",
+        false,
+        latest,
+        readResult.header,
+      );
+    }
     const issuedViews = new Map(this.#issuedViews);
-    issuedViews.set(canonicalViewKey(latest), latest);
+    issuedViews.set(canonicalViewKey(cutoff), cutoff);
     this.#persistJournalState({
       epoch: (this.#journalEpoch + 1n).toString(),
-      currentView: latest,
+      currentView: cutoff,
       issuedViews: [...issuedViews.values()],
       provenAbsences: [...this.#provenAbsences.values()],
     });
     this.#revokeAllFences();
-    return latest;
+    return cutoff;
+  }
+
+  /**
+   * Open one producer session for one observed canonical head and one already
+   * admitted GraphView lease.  The head is checked independently from the
+   * ready cutoff; a ready cutoff or predecessor state can never substitute for
+   * this source.
+   */
+  async openHeadSession<GraphView extends ProducerGraphViewV1>(
+    observationCapability: CanonicalHeadObservationCapabilityV1,
+    rawLease: GraphView,
+    signal?: AbortSignal,
+  ): Promise<ProducerSessionV1<GraphView>> {
+    this.#synchronizeJournal();
+    const observationState = this.#headObservationState(observationCapability);
+    const observation = observationState.observation;
+    if (
+      observationState.journalToken !== this.#journalToken
+      || observation.journalEpoch !== this.journalEpoch
+      || observation.canonicalJournalRoot !== this.#journalRoot
+    ) {
+      throw new CanonicalSourceError(
+        "fence-invalid",
+        "canonical head observation journal anchor is no longer current",
+        false,
+      );
+    }
+    const head = observation.head;
+    const lease = assertProducerGraphView(rawLease, "producerGraphView") as GraphView;
+    try {
+      await lease.assertActive();
+    } catch (error) {
+      if (error instanceof CanonicalSourceError) throw error;
+      throw new CanonicalSourceError(
+        "generation-mismatch",
+        `producer GraphView is not active: ${error instanceof Error ? error.message : String(error)}`,
+        false,
+      );
+    }
+    await this.#assertHeadCurrent(head, signal);
+    const session = createProducerSession(
+      head,
+      lease,
+      (checkSignal?: AbortSignal) => this.#assertHeadCurrent(head, checkSignal),
+      this.#authority,
+    );
+    await session.assertCurrent(signal);
+    return session;
   }
 
   async checkStillCanonical(
@@ -817,7 +1263,7 @@ export class CanonicalSource implements CanonicalFencePort {
         "canonical cutoff is not the current issued view",
         false,
         cutoff,
-        this.#currentView,
+        null,
       );
     }
     const token = randomUUID();
@@ -907,8 +1353,16 @@ export class CanonicalSource implements CanonicalFencePort {
     if (cutoff < this.#chainGenesis) {
       throw new CanonicalSourceError("invalid-header", "canonical cutoff precedes configured genesis", false);
     }
-    const unclamped = cutoff > 49n ? cutoff - 49n : 0n;
-    const from = unclamped < this.#chainGenesis ? this.#chainGenesis : unclamped;
+    if (cutoff < 49n || cutoff - 49n < this.#chainGenesis) {
+      throw new CanonicalSourceError(
+        "recent-observation-window-unavailable",
+        "canonical recent observation window is not a complete 50 blocks",
+        false,
+        view,
+        null,
+      );
+    }
+    const from = cutoff - 49n;
     return deepFreeze({ from: from.toString(), to: view.number });
   }
 
@@ -921,6 +1375,29 @@ export class CanonicalSource implements CanonicalFencePort {
     }
   }
 
+  #assertHeadObservation(
+    capability: unknown,
+  ): asserts capability is CanonicalHeadObservationCapabilityV1 {
+    if (
+      capability === null
+      || typeof capability !== "object"
+      || !this.#headObservations.has(capability)
+    ) {
+      throw new CanonicalSourceError(
+        "fence-invalid",
+        "canonical head observation capability was not issued by this source",
+        false,
+      );
+    }
+  }
+
+  #headObservationState(
+    capability: CanonicalHeadObservationCapabilityV1,
+  ): CanonicalHeadObservationStateV1 {
+    this.#assertHeadObservation(capability);
+    return this.#headObservations.get(capability)!;
+  }
+
   async #readHeader(number: BlockNumber, signal?: AbortSignal): Promise<CanonicalHeaderReadResult> {
     try {
       return exactHeaderReadResult(await this.#provider.getHeader(number, signal), number);
@@ -930,6 +1407,21 @@ export class CanonicalSource implements CanonicalFencePort {
         "transport",
         `canonical header read failed: ${error instanceof Error ? error.message : String(error)}`,
         true,
+      );
+    }
+  }
+
+  async #assertHeadCurrent(head: CanonicalHead, signal?: AbortSignal): Promise<void> {
+    const latest = await this.#readLatest(signal);
+    const reason = compareHeaders(head, latest);
+    if (reason !== null) throw failureError(reason, head, latest);
+    if (!sameHeader(head, latest)) {
+      throw new CanonicalSourceError(
+        "invalid-header",
+        "producer head parentHash no longer matches the canonical latest header",
+        false,
+        head,
+        latest,
       );
     }
   }
@@ -1038,7 +1530,7 @@ export class CanonicalSource implements CanonicalFencePort {
 
   async #readLatest(signal?: AbortSignal): Promise<CanonicalHeader> {
     try {
-      return exactView(await this.#provider.getLatestHeader(signal), "latestHeader");
+      return exactHeader(await this.#provider.getLatestHeader(signal), "latestHeader");
     } catch (error) {
       if (error instanceof CanonicalSourceError) throw error;
       throw new CanonicalSourceError(
@@ -1052,6 +1544,388 @@ export class CanonicalSource implements CanonicalFencePort {
   #revokeAllFences(): void {
     this.#activeFences.clear();
     this.#activePromotionFreshness.clear();
+  }
+}
+
+const producerSessionConstructorToken = Symbol("producer-session-constructor");
+
+type ProducerHeadSchedule = {
+  readonly head: CanonicalHead;
+  readonly revision: string;
+  readonly sourceHeadSeenAtMs: number;
+  readonly sourceHeadSeenMonotonicMs: number;
+};
+
+function producerSessionError(
+  code: "producer-session-closed" | "producer-session-invalidated",
+  message: string,
+): CanonicalSourceError {
+  return new CanonicalSourceError(code, message, false);
+}
+
+function graphEdges(raw: ProducerGraphViewV1): readonly unknown[] | null {
+  if (!Object.prototype.hasOwnProperty.call(raw, "edges")) return null;
+  const edges = (raw as { readonly edges?: unknown }).edges;
+  return edges === undefined ? null : edges as readonly unknown[];
+}
+
+/** A current-head session with an immutable graph-generation binding. */
+export class ProducerSession<GraphView extends ProducerGraphViewV1 = ProducerGraphViewV1>
+  implements ProducerSessionV1<GraphView> {
+  readonly sessionId: Hash;
+  readonly currentSourceCapability: ProducerCurrentSourceSessionCapabilityV1;
+  readonly source: CanonicalHead;
+  readonly head: CanonicalHead;
+  readonly lease: GraphView;
+  readonly graphView: GraphView;
+  readonly generation: ProducerGenerationBindingV1;
+  readonly generationId: string;
+  #closed = false;
+  #invalidated: CanonicalSourceError | null = null;
+  readonly #checkHead: (signal?: AbortSignal) => Promise<void>;
+  readonly #edgesPresent: boolean;
+  readonly #edges: readonly unknown[] | null;
+  readonly #edgeRefs: readonly unknown[] | null;
+
+  constructor(
+    token: typeof producerSessionConstructorToken,
+    head: CanonicalHead,
+    lease: GraphView,
+    checkHead: (signal?: AbortSignal) => Promise<void>,
+    canonicalSourceAuthority: CanonicalSourceAuthorityV1,
+  ) {
+    if (token !== producerSessionConstructorToken) {
+      throw new CanonicalSourceError("generation-mismatch", "producer session constructor is private", false);
+    }
+    const exactHead = exactHeader(head, "producerSession.head");
+    assertProducerGraphView(lease, "producerSession.lease");
+    const generation = exactProducerGenerationBinding(lease.binding, "producerSession.lease.binding");
+    const currentEdges = graphEdges(lease);
+    this.sessionId = hashDomain("aloha/producer-session/v1", {
+      nonce: randomUUID(),
+      head: exactHead,
+      generation,
+    });
+    this.source = exactHead;
+    this.head = exactHead;
+    this.lease = lease;
+    this.graphView = lease;
+    this.generation = generation;
+    this.generationId = generation.generationId;
+    this.#checkHead = checkHead;
+    this.#edgesPresent = currentEdges !== null;
+    this.#edges = currentEdges;
+    this.#edgeRefs = currentEdges === null ? null : Object.freeze([...currentEdges]);
+    const capability = Object.freeze(Object.create(null)) as ProducerCurrentSourceSessionCapabilityV1;
+    producerCurrentSourceSessions.set(capability, Object.freeze({
+      sessionId: this.sessionId,
+      source: this.source,
+      generation: this.generation,
+      generationId: this.generationId,
+      canonicalSourceAuthority,
+      assertCurrent: (signal?: AbortSignal) => this.assertCurrent(signal),
+    }));
+    this.currentSourceCapability = capability;
+    Object.freeze(this);
+  }
+
+  get closed(): boolean {
+    return this.#closed;
+  }
+
+  async assertCurrent(signal?: AbortSignal): Promise<void> {
+    if (this.#closed) {
+      throw producerSessionError("producer-session-closed", "producer session is closed");
+    }
+    if (this.#invalidated) throw this.#invalidated;
+    try {
+      await this.#assertGraphPinned();
+      await this.#checkHead(signal);
+      await this.#assertGraphPinned();
+    } catch (error) {
+      if (error instanceof CanonicalSourceError && error.retryable) throw error;
+      const invalidated = error instanceof CanonicalSourceError
+        ? error
+        : new CanonicalSourceError(
+          "producer-session-invalidated",
+          `producer session check failed: ${error instanceof Error ? error.message : String(error)}`,
+          false,
+        );
+      this.#invalidated = invalidated;
+      throw invalidated;
+    }
+  }
+
+  async close(): Promise<void> {
+    this.#closed = true;
+  }
+
+  async #assertGraphPinned(): Promise<void> {
+    const observedBefore = exactProducerGenerationBinding(
+      this.lease.binding,
+      "producerSession.lease.binding",
+    );
+    if (!sameProducerGenerationBinding(this.generation, observedBefore)) {
+      throw new CanonicalSourceError(
+        "generation-mismatch",
+        "producer session GraphView generation changed",
+        false,
+      );
+    }
+    const observedEdgesBefore = graphEdges(this.lease);
+    if (
+      (observedEdgesBefore === null) !== !this.#edgesPresent
+      || (observedEdgesBefore !== null && observedEdgesBefore !== this.#edges)
+      || (observedEdgesBefore !== null
+        && this.#edgeRefs !== null
+        && (observedEdgesBefore.length !== this.#edgeRefs.length
+          || observedEdgesBefore.some((edge, index) => edge !== this.#edgeRefs![index])))
+    ) {
+      throw new CanonicalSourceError(
+        "topology-mismatch",
+        "producer session GraphView topology changed",
+        false,
+      );
+    }
+    try {
+      await this.lease.assertActive();
+    } catch (error) {
+      if (error instanceof CanonicalSourceError) throw error;
+      throw new CanonicalSourceError(
+        "generation-mismatch",
+        `producer session GraphView is not active: ${error instanceof Error ? error.message : String(error)}`,
+        false,
+      );
+    }
+    const observedAfter = exactProducerGenerationBinding(
+      this.lease.binding,
+      "producerSession.lease.binding",
+    );
+    if (!sameProducerGenerationBinding(this.generation, observedAfter)) {
+      throw new CanonicalSourceError(
+        "generation-mismatch",
+        "producer session GraphView generation changed during assertion",
+        false,
+      );
+    }
+    const observedEdgesAfter = graphEdges(this.lease);
+    if (observedEdgesAfter !== observedEdgesBefore) {
+      throw new CanonicalSourceError(
+        "topology-mismatch",
+        "producer session GraphView topology changed during assertion",
+        false,
+      );
+    }
+  }
+}
+
+function createProducerSession<GraphView extends ProducerGraphViewV1>(
+  head: CanonicalHead,
+  lease: GraphView,
+  checkHead: (signal?: AbortSignal) => Promise<void>,
+  canonicalSourceAuthority: CanonicalSourceAuthorityV1,
+): ProducerSession<GraphView> {
+  return new ProducerSession(producerSessionConstructorToken, head, lease, checkHead, canonicalSourceAuthority);
+}
+
+/**
+ * One active producer head and at most one pending newer head.  Revisions are
+ * immutable trigger/evidence contexts for the same head; they never refresh
+ * or replace the pinned GraphView.
+ */
+export class ProducerHeadScheduler {
+  readonly #runHead: (
+    head: CanonicalHead,
+    context: ProducerHeadRunContextV1,
+  ) => Promise<void>;
+  readonly #onError: (
+    head: CanonicalHead,
+    error: unknown,
+  ) => void;
+  readonly #onDrop: (drop: ProducerHeadDropV1) => void;
+  #active: ProducerHeadSchedule | null = null;
+  #pending: ProducerHeadSchedule | null = null;
+  #accepting = true;
+  #drainTask: Promise<void> | null = null;
+  #latestSubmitted: ProducerHeadSchedule | null = null;
+  #submitted = 0;
+  #started = 0;
+  #completed = 0;
+  #coalesced = 0;
+
+  constructor(
+    runHead: (
+      head: CanonicalHead,
+      context: ProducerHeadRunContextV1,
+    ) => Promise<void>,
+    onError: (
+      head: CanonicalHead,
+      error: unknown,
+    ) => void = () => {},
+    onDrop: (drop: ProducerHeadDropV1) => void = () => {},
+  ) {
+    this.#runHead = runHead;
+    this.#onError = onError;
+    this.#onDrop = onDrop;
+  }
+
+  /** Submit the initial immutable execution context for a canonical head. */
+  schedule(
+    rawHead: CanonicalHead,
+    observation: ProducerHeadObservationV1 = {
+      sourceHeadSeenAtMs: Date.now(),
+      sourceHeadSeenMonotonicMs: performance.now(),
+    },
+  ): boolean {
+    return this.#submit(rawHead, "0", observation, false);
+  }
+
+  /** Submit a newer immutable context for the same head. */
+  scheduleRevision(
+    rawHead: CanonicalHead,
+    revision: string,
+    observation: ProducerHeadObservationV1,
+  ): boolean {
+    const exactRevision = assertDecimalString(revision, "producerHead.revision");
+    if (BigInt(exactRevision) <= 0n) {
+      throw new CanonicalSourceError("invalid-header", "producer head revision must be positive", false);
+    }
+    return this.#submit(rawHead, exactRevision, observation, true);
+  }
+
+  async shutdown(): Promise<void> {
+    this.#accepting = false;
+    if (this.#pending !== null) {
+      this.#reportDrop(this.#pending, "shutdown_pending_dropped");
+      this.#pending = null;
+    }
+    await this.#drainTask;
+  }
+
+  telemetry(): ProducerHeadSchedulerTelemetryV1 {
+    return Object.freeze({
+      submitted: this.#submitted,
+      started: this.#started,
+      completed: this.#completed,
+      coalesced: this.#coalesced,
+      latestSubmitted: this.#latestSubmitted?.head ?? null,
+      active: this.#active?.head ?? null,
+      pending: this.#pending?.head ?? null,
+    });
+  }
+
+  get accepting(): boolean {
+    return this.#accepting;
+  }
+
+  #submit(
+    rawHead: CanonicalHead,
+    revision: string,
+    observation: ProducerHeadObservationV1,
+    isRevision: boolean,
+  ): boolean {
+    const head = exactHeader(rawHead, "producerHead");
+    if (!Number.isFinite(observation.sourceHeadSeenAtMs) || !Number.isFinite(observation.sourceHeadSeenMonotonicMs)) {
+      throw new CanonicalSourceError("invalid-header", "producer head observation is not finite", false);
+    }
+    const candidate = Object.freeze({
+      head,
+      revision,
+      sourceHeadSeenAtMs: observation.sourceHeadSeenAtMs,
+      sourceHeadSeenMonotonicMs: observation.sourceHeadSeenMonotonicMs,
+    });
+    if (!this.#accepting) return false;
+    this.#submitted += 1;
+    if (!isRevision && this.#latestSubmitted !== null && candidate.head.number === this.#latestSubmitted.head.number) {
+      this.#coalesced += 1;
+      this.#reportDrop(candidate, "scheduler_coalesced");
+      return false;
+    }
+    if (this.#latestSubmitted !== null && this.#compare(candidate, this.#latestSubmitted) <= 0) {
+      this.#coalesced += 1;
+      this.#reportDrop(candidate, "scheduler_coalesced");
+      return false;
+    }
+    const previousLatest = this.#latestSubmitted;
+    this.#latestSubmitted = candidate;
+    if (!this.#admit(candidate)) {
+      if (this.#latestSubmitted === candidate) this.#latestSubmitted = previousLatest;
+      return false;
+    }
+    return true;
+  }
+
+  #admit(candidate: ProducerHeadSchedule): boolean {
+    if (this.#active !== null) {
+      if (this.#pending !== null) {
+        if (this.#compare(candidate, this.#pending) <= 0) {
+          this.#coalesced += 1;
+          this.#reportDrop(candidate, "scheduler_coalesced");
+          return false;
+        }
+        this.#coalesced += 1;
+        this.#reportDrop(this.#pending, "scheduler_coalesced");
+      }
+      this.#pending = candidate;
+      return true;
+    }
+    this.#active = candidate;
+    this.#drainTask = this.#drain();
+    void this.#drainTask;
+    return true;
+  }
+
+  async #drain(): Promise<void> {
+    while (this.#active !== null) {
+      const current = this.#active;
+      this.#started += 1;
+      try {
+        await this.#runHead(current.head, {
+          revision: current.revision,
+          sourceHeadSeenAtMs: current.sourceHeadSeenAtMs,
+          sourceHeadSeenMonotonicMs: current.sourceHeadSeenMonotonicMs,
+        });
+      } catch (error) {
+        try {
+          this.#onError(current.head, error);
+        } catch {
+          // Observability cannot change scheduler sequencing.
+        }
+      } finally {
+        this.#completed += 1;
+      }
+      this.#active = this.#pending;
+      this.#pending = null;
+    }
+  }
+
+  #compare(left: ProducerHeadSchedule, right: ProducerHeadSchedule): number {
+    const leftNumber = BigInt(left.head.number);
+    const rightNumber = BigInt(right.head.number);
+    if (leftNumber !== rightNumber) return leftNumber < rightNumber ? -1 : 1;
+    const leftRevision = BigInt(left.revision);
+    const rightRevision = BigInt(right.revision);
+    if (leftRevision !== rightRevision) return leftRevision < rightRevision ? -1 : 1;
+    if (sameHeader(left.head, right.head)) return 0;
+    // A same-height reorg is only valid as an explicitly newer revision.  The
+    // key makes the ordering deterministic for duplicate revision inputs.
+    const leftKey = `${canonicalViewKey(left.head)}:${left.head.parentHash}`;
+    const rightKey = `${canonicalViewKey(right.head)}:${right.head.parentHash}`;
+    return leftKey < rightKey ? -1 : 1;
+  }
+
+  #reportDrop(schedule: ProducerHeadSchedule, reason: ProducerHeadDropReasonV1): void {
+    try {
+      this.#onDrop(Object.freeze({
+        head: schedule.head,
+        revision: schedule.revision,
+        sourceHeadSeenAtMs: schedule.sourceHeadSeenAtMs,
+        sourceHeadSeenMonotonicMs: schedule.sourceHeadSeenMonotonicMs,
+        reason,
+      }));
+    } catch {
+      // Drop accounting is best effort and must not disrupt admission.
+    }
   }
 }
 
@@ -1076,3 +1950,9 @@ export function createCanonicalHeaderProvider(input: {
 export function encodeCanonicalSourceView(view: CanonicalSourceView): Uint8Array {
   return encodeCanonicalBytes(exactView(view, "canonicalView"));
 }
+
+export {
+  RethCanonicalHeaderProviderV1,
+  createRethCanonicalHeaderProviderV1,
+  type RethCanonicalHeaderProviderConfigV1,
+} from "./reth-rpc.ts";

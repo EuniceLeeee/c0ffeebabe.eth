@@ -11,11 +11,67 @@ import {
   hashDomain,
   type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
-import {
-  decodeCanonicalCutoff,
-  type CandidateRecordV1,
-  type CanonicalCutoffV1,
-} from "../../../packages/discovery/src/index.ts";
+
+/**
+ * Candidate-partition is a frozen wire contract.  Keep the small projections
+ * it needs here instead of importing the discovery implementation package;
+ * otherwise a discovery/runtime change could silently change the durable
+ * proof schema or pull a producer authority into the spec closure.
+ */
+export interface CanonicalCutoffV1 {
+  readonly chainId: string;
+  readonly number: string;
+  readonly hash: Hash;
+  readonly stateRoot: Hash;
+}
+
+const CANDIDATE_EVIDENCE_VERSION_V1 = 1 as const;
+
+export interface RecentLogEvidenceRefV1 {
+  readonly kind: "recent-log";
+  readonly version: typeof CANDIDATE_EVIDENCE_VERSION_V1;
+  readonly sourcePlanRef: null;
+  readonly ownerRef: null;
+  readonly blockNumber: string;
+  readonly blockHash: Hash;
+  readonly txHash: Hash;
+  readonly logIndex: string;
+  readonly address: string;
+  readonly topic: Hash;
+  readonly rawLocatorHash: Hash;
+}
+
+export interface SourcePlanEvidenceRefV1 {
+  readonly kind: "source-plan";
+  readonly version: typeof CANDIDATE_EVIDENCE_VERSION_V1;
+  readonly ownerRef: Hash;
+  readonly sourcePlanRef: Hash;
+  readonly evidenceRef: Hash;
+  readonly rawLocatorHash: Hash;
+}
+
+export type CandidateEvidenceRefV1 = RecentLogEvidenceRefV1 | SourcePlanEvidenceRefV1;
+
+export interface CandidateRecordV1 {
+  readonly kind: "aloha.candidate-record";
+  readonly version: "2";
+  readonly familyId: string;
+  readonly familyDefinitionHash: Hash;
+  readonly instanceNominationKey: string;
+  readonly familyCandidateKey: Hash;
+  readonly candidateSubjectHash: Hash;
+  readonly candidateEvidenceRoot: Hash;
+  readonly evidence: readonly CandidateEvidenceRefV1[];
+}
+
+function decodeCanonicalCutoff(value: unknown, name = "canonicalCutoff"): CanonicalCutoffV1 {
+  return decodeExactObject(value, {
+    chainId: (field, path) => assertNonEmptyString(field, path),
+    number: (field, path) => assertDecimalString(field, path),
+    hash: (field, path) => assertHash(field, path),
+    stateRoot: (field, path) => assertHash(field, path),
+  }, name);
+}
 
 /**
  * This package is the neutral wire/port contract for the candidate partition.
@@ -25,13 +81,13 @@ import {
  */
 
 export const CANDIDATE_PARTITION_PROOF_KIND = "aloha.candidate-partition-proof" as const;
-export const CANDIDATE_PARTITION_PROOF_VERSION = "1" as const;
+export const CANDIDATE_PARTITION_PROOF_VERSION = "2" as const;
 export const CANDIDATE_PARTITION_PROOF_DOMAINS = Object.freeze({
-  payload: "aloha/candidate-partition-proof/payload/v1",
-  id: "aloha/candidate-partition-proof/id/v1",
-  signing: "aloha/candidate-partition-proof/signing/v1",
-  capability: "aloha/candidate-partition-capability/v1",
-  keys: "aloha/candidate-partition-keys/v1",
+  payload: "aloha/candidate-partition-proof/payload/v2",
+  id: "aloha/candidate-partition-proof/id/v2",
+  signing: "aloha/candidate-partition-proof/signing/v2",
+  capability: "aloha/candidate-partition-capability/v2",
+  keys: "aloha/candidate-partition-keys/v2",
 });
 
 const signaturePattern = /^0x[0-9a-f]{128}$/;
@@ -61,13 +117,16 @@ function decimal(value: unknown, path: string): string {
 }
 
 export interface CandidatePartitionBindingV1 {
-  readonly schemaVersion: "1";
+  readonly schemaVersion: "2";
   readonly kind: "aloha.candidate-partition-binding";
   readonly runId: string;
   readonly cutoff: CanonicalCutoffV1;
   readonly candidatePartitionRoot: Hash;
   /** Durable content-envelope hash for the exact candidate manifest. */
   readonly candidatePartitionStorageHash: Hash;
+  /** Exact durable nomination-denominator closure that produced this partition. */
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
   readonly recordCount: string;
   readonly candidateKeysRoot: Hash;
   readonly recentObservationRoot: Hash;
@@ -79,7 +138,7 @@ export interface CandidatePartitionBindingV1 {
 }
 
 export interface CandidatePartitionProofPayloadV1 extends CandidatePartitionBindingV1 {
-  readonly proofVersion: "1";
+  readonly proofVersion: "2";
 }
 
 export interface CandidatePartitionProofV1 extends CandidatePartitionProofPayloadV1 {
@@ -101,6 +160,16 @@ export interface CandidatePartitionProofReleaseBindingV1 {
   readonly candidatePartitionProofIssuerKeyId: Hash;
 }
 
+/** Exact receipt projection checked by the release owner against its generated
+ * source-plan binding and externally signed nomination qualification set. */
+export interface CandidateNominationQualificationBindingV1 {
+  readonly sourcePlanIdentity: Hash;
+  readonly sourcePlanLeafDigest: Hash;
+  readonly nominationProgramRoot: Hash;
+  readonly nominationProgramProposalLeafDigest: Hash;
+  readonly qualificationLeafDigest: Hash;
+}
+
 export interface CandidatePartitionProofVerificationContextV1 {
   readonly binding: CandidatePartitionBindingV1;
   readonly release: CandidatePartitionProofReleaseBindingV1;
@@ -109,6 +178,11 @@ export interface CandidatePartitionProofVerificationContextV1 {
 export interface CandidatePartitionProofIssuerPortV1 {
   /** Return only the current release projection required by Checkpoint. */
   currentRelease(): CandidatePartitionProofReleaseBindingV1;
+  /** Fail unless every exact receipt binding belongs to the current release's
+   * generated plan map and externally signed qualification set. */
+  assertNominationQualificationsQualified(
+    bindings: readonly CandidateNominationQualificationBindingV1[],
+  ): void;
   /** The external release issuer signs the exact payload bytes. */
   issue(payload: CandidatePartitionProofPayloadV1): CandidatePartitionProofV1;
   /** Verify current release binding, key rotation and the Ed25519 signature. */
@@ -147,15 +221,15 @@ export function candidatePartitionBindingPayload(
 ): CandidatePartitionProofPayloadV1 {
   return deepFreeze({
     ...decodeBinding(input),
-    proofVersion: "1" as const,
+    proofVersion: "2" as const,
   });
 }
 
 function decodeBinding(value: unknown): CandidatePartitionBindingV1 {
   return decodeExactObject(value, {
     schemaVersion: (field, path) => {
-      if (field !== "1") throw new TypeError(`${path} must be \"1\"`);
-      return "1" as const;
+      if (field !== "2") throw new TypeError(`${path} must be \"2\"`);
+      return "2" as const;
     },
     kind: (field, path) => {
       if (field !== "aloha.candidate-partition-binding") throw new TypeError(`${path} has invalid kind`);
@@ -165,6 +239,8 @@ function decodeBinding(value: unknown): CandidatePartitionBindingV1 {
     cutoff: (field, path) => decodeCanonicalCutoff(field, path),
     candidatePartitionRoot: (field, path) => nonZeroHash(field, path),
     candidatePartitionStorageHash: (field, path) => nonZeroHash(field, path),
+    nominationClosureRoot: (field, path) => nonZeroHash(field, path),
+    nominationClosureStorageHash: (field, path) => nonZeroHash(field, path),
     recordCount: (field, path) => decimal(field, path),
     candidateKeysRoot: (field, path) => nonZeroHash(field, path),
     recentObservationRoot: (field, path) => nonZeroHash(field, path),
@@ -178,8 +254,8 @@ function decodeBinding(value: unknown): CandidatePartitionBindingV1 {
 function decodePayload(value: unknown): CandidatePartitionProofPayloadV1 {
   return decodeExactObject(value, {
     schemaVersion: (field, path) => {
-      if (field !== "1") throw new TypeError(`${path} must be \"1\"`);
-      return "1" as const;
+      if (field !== "2") throw new TypeError(`${path} must be \"2\"`);
+      return "2" as const;
     },
     kind: (field, path) => {
       if (field !== "aloha.candidate-partition-binding") throw new TypeError(`${path} has invalid kind`);
@@ -189,6 +265,8 @@ function decodePayload(value: unknown): CandidatePartitionProofPayloadV1 {
     cutoff: (field, path) => decodeCanonicalCutoff(field, path),
     candidatePartitionRoot: (field, path) => nonZeroHash(field, path),
     candidatePartitionStorageHash: (field, path) => nonZeroHash(field, path),
+    nominationClosureRoot: (field, path) => nonZeroHash(field, path),
+    nominationClosureStorageHash: (field, path) => nonZeroHash(field, path),
     recordCount: (field, path) => decimal(field, path),
     candidateKeysRoot: (field, path) => nonZeroHash(field, path),
     recentObservationRoot: (field, path) => nonZeroHash(field, path),
@@ -197,8 +275,8 @@ function decodePayload(value: unknown): CandidatePartitionProofPayloadV1 {
     releaseProvenanceHash: (field, path) => nonZeroHash(field, path),
     issuerKeyId: (field, path) => nonZeroHash(field, path),
     proofVersion: (field, path) => {
-      if (field !== "1") throw new TypeError(`${path} must be \"1\"`);
-      return "1" as const;
+      if (field !== "2") throw new TypeError(`${path} must be \"2\"`);
+      return "2" as const;
     },
   }, "candidatePartitionProofPayload");
 }
@@ -210,8 +288,8 @@ export function decodeCandidatePartitionBindingV1(value: unknown): CandidatePart
 export function decodeCandidatePartitionProofV1(value: unknown): CandidatePartitionProofV1 {
   const decoded = decodeExactObject(value, {
     schemaVersion: (field, path) => {
-      if (field !== "1") throw new TypeError(`${path} must be \"1\"`);
-      return "1" as const;
+      if (field !== "2") throw new TypeError(`${path} must be \"2\"`);
+      return "2" as const;
     },
     kind: (field, path) => {
       if (field !== "aloha.candidate-partition-binding") throw new TypeError(`${path} has invalid kind`);
@@ -221,6 +299,8 @@ export function decodeCandidatePartitionProofV1(value: unknown): CandidatePartit
     cutoff: (field, path) => decodeCanonicalCutoff(field, path),
     candidatePartitionRoot: (field, path) => nonZeroHash(field, path),
     candidatePartitionStorageHash: (field, path) => nonZeroHash(field, path),
+    nominationClosureRoot: (field, path) => nonZeroHash(field, path),
+    nominationClosureStorageHash: (field, path) => nonZeroHash(field, path),
     recordCount: (field, path) => decimal(field, path),
     candidateKeysRoot: (field, path) => nonZeroHash(field, path),
     recentObservationRoot: (field, path) => nonZeroHash(field, path),
@@ -229,8 +309,8 @@ export function decodeCandidatePartitionProofV1(value: unknown): CandidatePartit
     releaseProvenanceHash: (field, path) => nonZeroHash(field, path),
     issuerKeyId: (field, path) => nonZeroHash(field, path),
     proofVersion: (field, path) => {
-      if (field !== "1") throw new TypeError(`${path} must be \"1\"`);
-      return "1" as const;
+      if (field !== "2") throw new TypeError(`${path} must be \"2\"`);
+      return "2" as const;
     },
     proofId: (field, path) => nonZeroHash(field, path),
     payloadHash: (field, path) => nonZeroHash(field, path),
@@ -258,6 +338,8 @@ function payloadFromProof(value: CandidatePartitionProofV1): CandidatePartitionP
     cutoff: value.cutoff,
     candidatePartitionRoot: value.candidatePartitionRoot,
     candidatePartitionStorageHash: value.candidatePartitionStorageHash,
+    nominationClosureRoot: value.nominationClosureRoot,
+    nominationClosureStorageHash: value.nominationClosureStorageHash,
     recordCount: value.recordCount,
     candidateKeysRoot: value.candidateKeysRoot,
     recentObservationRoot: value.recentObservationRoot,
@@ -280,6 +362,8 @@ export function candidatePartitionBindingFromProof(
     cutoff: proof.cutoff,
     candidatePartitionRoot: proof.candidatePartitionRoot,
     candidatePartitionStorageHash: proof.candidatePartitionStorageHash,
+    nominationClosureRoot: proof.nominationClosureRoot,
+    nominationClosureStorageHash: proof.nominationClosureStorageHash,
     recordCount: proof.recordCount,
     candidateKeysRoot: proof.candidateKeysRoot,
     recentObservationRoot: proof.recentObservationRoot,
@@ -308,7 +392,7 @@ export function candidatePartitionProofSigningBytes(
   const signer = signerKeyId ?? ("proofId" in value ? value.signerKeyId : payload.issuerKeyId);
   return encodeCanonicalBytes({
     domain: CANDIDATE_PARTITION_PROOF_DOMAINS.signing,
-    version: 1,
+    version: 2,
     proofId,
     payloadHash,
     signerKeyId: nonZeroHash(signer, "signerKeyId"),
@@ -318,7 +402,7 @@ export function candidatePartitionProofSigningBytes(
 
 export function candidatePartitionProofHash(value: CandidatePartitionProofV1): Hash {
   const proof = decodeCandidatePartitionProofV1(value);
-  return hashDomain("aloha/candidate-partition-proof/record/v1", proof);
+  return hashDomain("aloha/candidate-partition-proof/record/v2", proof);
 }
 
 export function validateCandidatePartitionProof(
@@ -332,6 +416,8 @@ export function validateCandidatePartitionProof(
     || !sameCutoff(proof.cutoff, binding.cutoff)
     || proof.candidatePartitionRoot !== binding.candidatePartitionRoot
     || proof.candidatePartitionStorageHash !== binding.candidatePartitionStorageHash
+    || proof.nominationClosureRoot !== binding.nominationClosureRoot
+    || proof.nominationClosureStorageHash !== binding.nominationClosureStorageHash
     || proof.recordCount !== binding.recordCount
     || proof.candidateKeysRoot !== binding.candidateKeysRoot
     || proof.recentObservationRoot !== binding.recentObservationRoot
@@ -366,6 +452,8 @@ export function makeCandidatePartitionProofPayload(input: {
   readonly cutoff: CanonicalCutoffV1;
   readonly candidatePartitionRoot: Hash;
   readonly candidatePartitionStorageHash: Hash;
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
   readonly candidates: readonly CandidateRecordV1[];
   readonly recentObservationRoot: Hash;
   readonly sourceCoverageRoot: Hash;
@@ -376,12 +464,14 @@ export function makeCandidatePartitionProofPayload(input: {
   const candidates = [...input.candidates];
   const keys = candidates.map(candidate => candidate.familyCandidateKey);
   return candidatePartitionBindingPayload({
-    schemaVersion: "1",
+    schemaVersion: "2",
     kind: "aloha.candidate-partition-binding",
     runId: assertNonEmptyString(input.runId, "candidatePartition.runId"),
     cutoff: decodeCanonicalCutoff(input.cutoff, "candidatePartition.cutoff"),
     candidatePartitionRoot: nonZeroHash(input.candidatePartitionRoot, "candidatePartition.candidatePartitionRoot"),
     candidatePartitionStorageHash: nonZeroHash(input.candidatePartitionStorageHash, "candidatePartition.candidatePartitionStorageHash"),
+    nominationClosureRoot: nonZeroHash(input.nominationClosureRoot, "candidatePartition.nominationClosureRoot"),
+    nominationClosureStorageHash: nonZeroHash(input.nominationClosureStorageHash, "candidatePartition.nominationClosureStorageHash"),
     recordCount: decimal(candidates.length.toString(), "candidatePartition.recordCount"),
     candidateKeysRoot: candidatePartitionKeysRoot(keys),
     recentObservationRoot: nonZeroHash(input.recentObservationRoot, "candidatePartition.recentObservationRoot"),
@@ -407,7 +497,7 @@ export function assertCandidatePartitionProofShape(value: unknown): void {
   if (value === null || typeof value !== "object") throw new TypeError("candidate partition proof is not an object");
   assertExactKeys(value, [
     "schemaVersion", "kind", "runId", "cutoff", "candidatePartitionRoot",
-    "candidatePartitionStorageHash", "recordCount", "candidateKeysRoot",
+    "candidatePartitionStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "recordCount", "candidateKeysRoot",
     "recentObservationRoot", "sourceCoverageRoot", "checkpointRevision",
     "releaseProvenanceHash", "issuerKeyId", "proofVersion", "proofId",
     "payloadHash", "signatureAlgorithm", "signerKeyId", "signatureHex",

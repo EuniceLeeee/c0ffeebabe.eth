@@ -20,6 +20,7 @@ import {
   type Infer,
 } from "../../../packages/canonical-codec/src/index.ts";
 import { CORE_SCHEMA_MANIFESTS, type SchemaRef } from "../../core-envelope/src/index.ts";
+import { QUALIFIED_FACT_SCHEMA_MANIFESTS } from "../../qualified-facts/src/index.ts";
 
 export type { Hash, SchemaRef };
 export type QualificationCodecInput = string | Uint8Array | object;
@@ -421,6 +422,218 @@ function objectId(kind: string, payload: Hash): Hash {
 
 function roleSetHash(roles: readonly ObserverRoleSpecV1[]): Hash {
   return hashDomain("aloha/observer-role-set/v1", roles);
+}
+
+export const COMMON_ENVELOPE_ROLE_CONTRACT_VERSION = "1.0.0" as const;
+
+export const COMMON_ENVELOPE_ACQUISITION_MUTATION_IDS = Object.freeze([
+  "acquisition-process-anchor",
+  "acquisition-raw-range-splice",
+  "sidecar-duplicate-orphan-omission",
+  "sidecar-facts-hash",
+  "sidecar-id",
+  "sidecar-observer-implementation",
+  "sidecar-schema-role-swap",
+  "sidecar-wrong-observer-certificate",
+].sort());
+
+export const COMMON_ENVELOPE_TARGET_MUTATION_IDS = Object.freeze([
+  "sidecar-duplicate-orphan-omission",
+  "sidecar-facts-hash",
+  "sidecar-id",
+  "sidecar-observer-implementation",
+  "sidecar-schema-role-swap",
+  "sidecar-wrong-observer-certificate",
+  "target-process-anchor",
+  "target-raw-range-splice",
+].sort());
+
+export const COMMON_ENVELOPE_STORE_MUTATION_IDS = Object.freeze([
+  "sidecar-duplicate-orphan-omission",
+  "sidecar-facts-hash",
+  "sidecar-id",
+  "sidecar-observer-implementation",
+  "sidecar-schema-role-swap",
+  "sidecar-wrong-observer-certificate",
+  "store-epoch",
+  "store-identity",
+  "store-raw-ref-splice",
+].sort());
+
+export const COMMON_ENVELOPE_INVOCATION_MUTATION_IDS = Object.freeze([
+  "invocation-binding-duplicate",
+  "invocation-binding-extra",
+  "invocation-binding-forged-object",
+  "invocation-binding-hash",
+  "invocation-binding-length",
+  "invocation-binding-mirror-hash",
+  "invocation-binding-mirror-media",
+  "invocation-binding-mirror-schema",
+  "invocation-binding-object-id",
+  "invocation-binding-raw-partition-overlap",
+  "invocation-binding-raw-ref",
+  "invocation-binding-receipt-boundary-overlap",
+  "invocation-binding-reorder",
+  "invocation-binding-subject-input-overlap",
+  "invocation-binding-subset",
+  "invocation-binding-unsigned-derived-object",
+  "invocation-expiry-boundary",
+  "invocation-key-audience",
+  "invocation-key-expired",
+  "invocation-key-locator-capability",
+  "invocation-key-revoked",
+  "invocation-key-role",
+  "invocation-key-unregistered",
+  "invocation-ordinary-observer-role",
+  "invocation-query",
+  "invocation-signature-byte",
+  "invocation-signature-missing",
+  "invocation-signature-payload",
+  "invocation-signature-random",
+  "invocation-snapshot",
+].sort());
+
+export const COMMON_ENVELOPE_CRITICAL_MUTATION_IDS = Object.freeze([
+  ...new Set([
+    ...COMMON_ENVELOPE_ACQUISITION_MUTATION_IDS,
+    ...COMMON_ENVELOPE_TARGET_MUTATION_IDS,
+    ...COMMON_ENVELOPE_STORE_MUTATION_IDS,
+    ...COMMON_ENVELOPE_INVOCATION_MUTATION_IDS,
+  ]),
+].sort());
+
+function schemaRefOf(manifest: { readonly id: string; readonly version: string; readonly schemaHash: Hash }): SchemaRef {
+  return Object.freeze({ id: manifest.id, version: manifest.version, schemaHash: manifest.schemaHash });
+}
+
+function commonEnvelopeRole(
+  roleId: string,
+  observationSchema: SchemaRef,
+  requiredCriticalMutationIds: readonly string[],
+): ObserverRoleSpecV1 {
+  return createObserverRoleSpec({
+    roleId,
+    observationSchema,
+    anchorPolicyDigest: hashDomain("aloha/common-envelope-role/anchor-policy/v1", {
+      contractVersion: COMMON_ENVELOPE_ROLE_CONTRACT_VERSION,
+      roleId,
+      observationSchema,
+    }),
+    observerQualificationSpecDigest: hashDomain("aloha/common-envelope-role/qualification-spec/v1", {
+      contractVersion: COMMON_ENVELOPE_ROLE_CONTRACT_VERSION,
+      roleId,
+      observationSchema,
+      requiredCriticalMutationIds,
+    }),
+    requiredCriticalMutationIds,
+    minimumIndependentOracleCases: "1",
+  });
+}
+
+export interface CommonEnvelopeRoleContractV1 {
+  readonly version: typeof COMMON_ENVELOPE_ROLE_CONTRACT_VERSION;
+  readonly predicateId: string;
+  readonly signedInvocationRoleId: string;
+  readonly requiredObserverRoles: readonly ObserverRoleSpecV1[];
+  readonly observationSchemaRefs: readonly SchemaRef[];
+  readonly criticalMutationIds: readonly string[];
+}
+
+/** Predicate-independent envelope mechanics. The predicate id is used only to
+ * derive its dedicated invocation-seal role; there is no predicate catalog or
+ * predicate-specific branch in this contract. */
+export function createCommonEnvelopeRoleContractV1(predicateId: string): CommonEnvelopeRoleContractV1 {
+  if (typeof predicateId !== "string" || predicateId.length === 0) throw new TypeError("common envelope predicateId is required");
+  const signedInvocationRoleId = `${predicateId}.signed-invocation-seal`;
+  const roles = [
+    commonEnvelopeRole(
+      "acquisition-observer-process",
+      schemaRefOf(QUALIFIED_FACT_SCHEMA_MANIFESTS.acquisitionProcessObservation),
+      COMMON_ENVELOPE_ACQUISITION_MUTATION_IDS,
+    ),
+    commonEnvelopeRole(
+      signedInvocationRoleId,
+      schemaRefOf(QUALIFIED_FACT_SCHEMA_MANIFESTS.signedObserverInvocationSnapshot),
+      COMMON_ENVELOPE_INVOCATION_MUTATION_IDS,
+    ),
+    commonEnvelopeRole(
+      "store-epoch-observation",
+      schemaRefOf(QUALIFIED_FACT_SCHEMA_MANIFESTS.storeEpochObservation),
+      COMMON_ENVELOPE_STORE_MUTATION_IDS,
+    ),
+    commonEnvelopeRole(
+      "target-production-process",
+      schemaRefOf(QUALIFIED_FACT_SCHEMA_MANIFESTS.targetProcessObservation),
+      COMMON_ENVELOPE_TARGET_MUTATION_IDS,
+    ),
+  ].sort((left, right) => left.roleId.localeCompare(right.roleId));
+  return deepFreeze({
+    version: COMMON_ENVELOPE_ROLE_CONTRACT_VERSION,
+    predicateId,
+    signedInvocationRoleId,
+    requiredObserverRoles: roles,
+    observationSchemaRefs: roles.map((role) => role.observationSchema)
+      .sort((left, right) => encodeCanonicalJson(left).localeCompare(encodeCanonicalJson(right))),
+    criticalMutationIds: [...COMMON_ENVELOPE_CRITICAL_MUTATION_IDS],
+  });
+}
+
+type PredicateSpecPayloadV1 = Omit<PredicateSpecV1, "specDigest">;
+export type CommonEnvelopePredicateSpecInputV1 = Omit<
+  PredicateSpecPayloadV1,
+  "observerRoleSetHash" | "criticalMutationSetHash"
+>;
+
+/** Compose the shared envelope denominator with one predicate's ordinary
+ * roles. Derived role/mutation hashes cannot be supplied by the caller. */
+export function createCommonEnvelopePredicateSpecV1(
+  input: CommonEnvelopePredicateSpecInputV1,
+): PredicateSpecV1 {
+  const contract = createCommonEnvelopeRoleContractV1(input.predicateId);
+  const commonRoleIds = new Set(contract.requiredObserverRoles.map((role) => role.roleId));
+  const commonSchemas = new Set(contract.observationSchemaRefs.map((schema) => encodeCanonicalJson(schema)));
+  for (const role of input.requiredObserverRoles) {
+    if (commonRoleIds.has(role.roleId) || commonSchemas.has(encodeCanonicalJson(role.observationSchema))) {
+      throw new TypeError(`ordinary observer role collides with common envelope contract: ${role.roleId}`);
+    }
+  }
+  const requiredObserverRoles = [...contract.requiredObserverRoles, ...input.requiredObserverRoles]
+    .sort((left, right) => left.roleId.localeCompare(right.roleId));
+  const observationSchemaRefs = [...new Map(
+    [...contract.observationSchemaRefs, ...input.observationSchemaRefs]
+      .map((schema) => [encodeCanonicalJson(schema), schema] as const),
+  ).values()].sort((left, right) => encodeCanonicalJson(left).localeCompare(encodeCanonicalJson(right)));
+  const criticalMutationIds = [...new Set([...contract.criticalMutationIds, ...input.criticalMutationIds])].sort();
+  return createPredicateSpec({
+    ...input,
+    observationSchemaRefs,
+    requiredObserverRoles,
+    observerRoleSetHash: roleSetHash(requiredObserverRoles),
+    criticalMutationIds,
+    criticalMutationSetHash: mutationSetHash(criticalMutationIds),
+  });
+}
+
+export function assertPredicateCommonEnvelopeRoleContractV1(
+  predicate: PredicateSpecV1,
+): CommonEnvelopeRoleContractV1 {
+  const contract = createCommonEnvelopeRoleContractV1(predicate.predicateId);
+  for (const expected of contract.requiredObserverRoles) {
+    const byRole = predicate.requiredObserverRoles.filter((role) => role.roleId === expected.roleId);
+    const bySchema = predicate.requiredObserverRoles.filter((role) => encodeCanonicalJson(role.observationSchema) === encodeCanonicalJson(expected.observationSchema));
+    if (byRole.length !== 1 || bySchema.length !== 1 || encodeCanonicalJson(byRole[0]) !== encodeCanonicalJson(expected)) {
+      throw new TypeError(`predicate common envelope role mismatch: ${expected.roleId}`);
+    }
+  }
+  for (const schema of contract.observationSchemaRefs) {
+    if (predicate.observationSchemaRefs.filter((candidate) => encodeCanonicalJson(candidate) === encodeCanonicalJson(schema)).length !== 1) {
+      throw new TypeError(`predicate common envelope observation schema mismatch: ${schema.id}`);
+    }
+  }
+  for (const mutationId of contract.criticalMutationIds) {
+    if (!predicate.criticalMutationIds.includes(mutationId)) throw new TypeError(`predicate common envelope mutation missing: ${mutationId}`);
+  }
+  return contract;
 }
 
 function mutationSetHash(ids: readonly string[]): Hash {

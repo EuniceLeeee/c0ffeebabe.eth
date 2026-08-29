@@ -14,6 +14,8 @@ export interface SealedRunBindingV1 {
   readonly sourceCoverageRoot: Hash;
   readonly candidatePartitionRoot: Hash;
   readonly candidatePartitionStorageHash: Hash;
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly exactOutcomePartitionRoot: Hash;
   readonly verifiedMemoSetRoot: Hash;

@@ -1,0 +1,4 @@
+import { coarseDodoV2 } from "./pricing.ts";
+import type { DodoIdentityV1, DodoMaterializedStateV1, DodoQuoteV1, DodoRouteV1 } from "./types.ts";
+export type DodoExactOutcomeV1 = { readonly status: "verified"; readonly quote: DodoQuoteV1 } | { readonly status: "chain-proven-rejected"; readonly reasonCode: "zero-output" } | { readonly status: "unavailable"; readonly reasonCode: "quote-error" };
+export function exactDodoV2(input: { readonly identity: DodoIdentityV1; readonly state: DodoMaterializedStateV1; readonly route: DodoRouteV1; readonly amountIn: string }): DodoExactOutcomeV1 { const result = coarseDodoV2(input); if (result.status === "unavailable") return Object.freeze({ status: "unavailable", reasonCode: "quote-error" }); if (result.quote.amountOut === "0") return Object.freeze({ status: "chain-proven-rejected", reasonCode: "zero-output" }); return Object.freeze({ status: "verified", quote: result.quote }); }

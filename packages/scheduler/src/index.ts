@@ -5,6 +5,21 @@ import {
   hashQualifiedExecutorRegistryRoot,
   type QualifiedExecutorRegistryEntryV1,
 } from "../../../specs/release-authority/src/index.ts";
+import {
+  issueSchedulerWorkCompletionHandle,
+  markSchedulerPermitIssued,
+  markSchedulerPermitReleased,
+  markSchedulerWorkAttempt,
+  observeSchedulerPerformanceState,
+  recordSchedulerWorkCompletion,
+  registerSchedulerPerformanceJournal,
+  settleSchedulerWorkCompletionHandle,
+} from "./internal/performance-state.ts";
+
+export {
+  validateSchedulerPerformanceRangeFactValue,
+  validateSchedulerWorkCompletionFactValue,
+} from "./internal/performance-state.ts";
 
 export {
   decodeQualifiedExecutorRegistryEntryV1,
@@ -14,9 +29,14 @@ export {
 } from "../../../specs/release-authority/src/index.ts";
 export type { QualifiedExecutorRegistryEntryV1 } from "../../../specs/release-authority/src/index.ts";
 
-/** One process-wide clock contract for all scheduler-owned deadlines. */
+/** Scheduling/deadline clock. It is never an authority for performance facts. */
 export type MonotonicClock = () => number;
 export const monotonicNow: MonotonicClock = (): number => performance.now();
+
+/** Non-injectable process-monotonic source for scheduler-owned F5 facts. */
+function factualMonotonicNowNs(): bigint {
+  return process.hrtime.bigint();
+}
 
 /**
  * The scheduler deliberately treats these identifiers as opaque.  In
@@ -158,8 +178,130 @@ export interface SchedulerPermit {
   readonly resource: SchedulerResource;
   readonly lane: SchedulerLane;
   readonly signal: AbortSignal;
+  /** Exact admitted work identity; only a release-bound reader can resolve it. */
+  readonly completion: SchedulerWorkCompletionHandleV1;
   assertCaller(caller: CallerAuthority): void;
   assertWork(workId: WorkIdentifier): void;
+}
+
+export type SchedulerWorkCompletionOutcomeV1 =
+  | "completed"
+  | "execution-failed"
+  | "aborted"
+  | "deadline"
+  | "queue-full"
+  | "resource-limit"
+  | "invalid-program";
+
+export interface SchedulerWorkCompletionWorkV1 {
+  readonly workId: WorkIdentifier;
+  readonly phase: WorkPhase;
+  readonly workClassRef: WorkClassRef;
+  readonly ownerRef: OwnerRef;
+  readonly lane: SchedulerLane;
+  readonly resource: SchedulerResource;
+  readonly cost: string;
+  readonly quotaKey: string | null;
+}
+
+export interface SchedulerWorkCompletionFactV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.scheduler-work-completion-v1";
+  readonly runtime: SchedulerPerformanceRuntimeBindingV1;
+  readonly sequence: string;
+  readonly completionId: Hash;
+  readonly work: SchedulerWorkCompletionWorkV1;
+  readonly callerId: string;
+  readonly permitId: string | null;
+  readonly queuedAtMonotonicUs: string;
+  readonly permitIssuedAtMonotonicUs: string | null;
+  readonly finishedAtMonotonicUs: string;
+  readonly queueWaitUs: string | null;
+  readonly serviceUs: string | null;
+  readonly permitsIssued: string;
+  readonly permitsReleased: string;
+  readonly outcome: SchedulerWorkCompletionOutcomeV1;
+}
+
+export interface SchedulerPerformanceRuntimeBindingV1 {
+  readonly schedulerRuntimeId: Hash;
+  readonly qualifiedExecutorRegistryRoot: Hash;
+  readonly executorAuthorityRoot: Hash;
+  readonly workerEpoch: string;
+  readonly executorSession: Hash;
+  readonly authorityVersion: string;
+}
+
+export type SchedulerWorkCompletionFactDraftV1 = Omit<
+  SchedulerWorkCompletionFactV1,
+  "schemaVersion" | "kind" | "runtime" | "sequence" | "completionId"
+>;
+
+/** Opaque scheduler-owned completion. Structural clones are never facts. */
+export type SchedulerWorkCompletionCapabilityV1 = object;
+export type SchedulerWorkCompletionHandleV1 = object;
+export type SchedulerPerformanceCursorCapabilityV1 = object;
+export type SchedulerPerformanceRangeCapabilityV1 = object;
+
+export interface SchedulerPerformanceRangeFactV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.scheduler-performance-range-v1";
+  readonly rangeId: Hash;
+  readonly runtime: SchedulerPerformanceRuntimeBindingV1;
+  readonly startSequence: string;
+  readonly endSequence: string;
+  readonly completionCount: string;
+  readonly attemptedWorkStart: string;
+  readonly attemptedWorkEnd: string;
+  readonly openedAtMonotonicNs: string;
+  readonly sealedAtMonotonicNs: string;
+  readonly startSnapshot: SchedulerSnapshot;
+  readonly endSnapshot: SchedulerSnapshot;
+  readonly orderedCompletionRoot: Hash;
+  readonly queueTelemetry: readonly SchedulerQueueTelemetryFactV1[];
+  readonly permitAccounting: readonly SchedulerPermitAccountingFactV1[];
+  readonly resourceSamples: readonly SchedulerResourceSampleFactV1[];
+}
+
+export interface SchedulerQueueTelemetryFactV1 {
+  readonly lane: string;
+  readonly resource: string;
+  readonly current: string;
+  readonly max: string;
+  readonly oldestAgeUs: string;
+  readonly accepted: string;
+  readonly rejected: string;
+  readonly cancelled: string;
+}
+
+export interface SchedulerPermitAccountingFactV1 {
+  readonly ownerRef: string;
+  readonly lane: string;
+  readonly resource: string;
+  readonly issued: string;
+  readonly released: string;
+  readonly active: string;
+}
+
+export interface SchedulerResourceSampleFactV1 {
+  readonly resource: string;
+  readonly current: string;
+  readonly capacity: string;
+  readonly max: string;
+}
+
+export interface SchedulerLivePerformanceObservationV1 {
+  readonly lanes: readonly Readonly<{
+    lane: string;
+    resource: string;
+    current: string;
+    oldestAgeUs: string;
+  }>[];
+  readonly resources: readonly Readonly<{
+    resource: string;
+    current: string;
+    capacity: string;
+  }>[];
 }
 
 export interface LanePolicy {
@@ -188,7 +330,6 @@ export interface SchedulerProfile {
 
 export const DEFAULT_RESOURCE_PROFILE: Readonly<Record<string, ResourcePolicy>> = Object.freeze({
   rpc: Object.freeze({ capacity: 8, maxCost: 1 }),
-  revm: Object.freeze({ capacity: 4, maxCost: 1 }),
   "revm-heavy": Object.freeze({ capacity: 4, maxCost: 1 }),
   "final-sim": Object.freeze({ capacity: 2, maxCost: 1 }),
 });
@@ -301,6 +442,7 @@ export interface ScheduledWork<T> {
 interface QueuedWork<T> {
   readonly input: ScheduledWork<T>;
   readonly queuedAtMs: number;
+  readonly queuedAtFactualNs: bigint;
   readonly resolve: (value: T | PromiseLike<T>) => void;
   readonly reject: (reason?: unknown) => void;
   readonly signal: AbortSignal;
@@ -430,6 +572,8 @@ export class WorkScheduler {
     for (const [name, raw] of Object.entries({ ...DEFAULT_QUOTA_PROFILE, ...(profile.quotas ?? {}) })) {
       this.quotas.set(name, Object.freeze({ concurrency: positiveInteger(raw.concurrency, `quota ${name}.concurrency`) }));
     }
+    registerSchedulerPerformanceJournal(this);
+    observeSchedulerPerformanceState(this);
   }
 
   registerLane(name: string, policy: LanePolicy): void {
@@ -447,6 +591,7 @@ export class WorkScheduler {
       queued: 0,
       active: 0,
     });
+    observeSchedulerPerformanceState(this);
   }
 
   registerResource(name: string, policy: ResourcePolicy): void {
@@ -456,6 +601,7 @@ export class WorkScheduler {
       policy: Object.freeze({ capacity, maxCost: policy.maxCost === undefined ? capacity : positiveInteger(policy.maxCost, `resource ${name}.maxCost`) }),
       active: 0,
     });
+    observeSchedulerPerformanceState(this);
   }
 
   registerQuota(name: string, policy: QuotaPolicy): void {
@@ -464,29 +610,41 @@ export class WorkScheduler {
   }
 
   async run<T>(input: ScheduledWork<T>): Promise<T> {
+    markSchedulerWorkAttempt(this);
     const work = asReadonlyWork(input.work);
     assertCaller(input.caller);
     const lane = this.lanes.get(work.lane);
-    if (!lane) throw new SchedulerError({ code: "resource-limit", message: `lane is not registered: ${work.lane}`, work });
+    if (!lane) {
+      this.accountingState.rejected += 1;
+      this.accountingState.resourceLimit += 1;
+      this.recordRejected(work, input.caller, "resource-limit");
+      throw new SchedulerError({ code: "resource-limit", message: `lane is not registered: ${work.lane}`, work });
+    }
     if (work.cost! > lane.policy.concurrency) {
       this.accountingState.rejected += 1;
       this.accountingState.resourceLimit += 1;
+      this.recordRejected(work, input.caller, "invalid-program");
       throw new SchedulerError({ code: "impossible-cost", retryClass: "invalid-program", message: `lane cannot admit work cost ${work.cost}`, work });
     }
     const resourceName = lane.policy.resource ?? work.resource;
     if (resourceName !== work.resource) {
+      this.accountingState.rejected += 1;
+      this.accountingState.resourceLimit += 1;
+      this.recordRejected(work, input.caller, "resource-limit");
       throw new SchedulerError({ code: "resource-limit", message: `work resource does not match lane resource`, work });
     }
     const resource = this.resources.get(work.resource);
     if (!resource || work.cost! > resource.policy.capacity || work.cost! > (resource.policy.maxCost ?? resource.policy.capacity)) {
       this.accountingState.rejected += 1;
       this.accountingState.resourceLimit += 1;
+      this.recordRejected(work, input.caller, "invalid-program");
       throw new SchedulerError({ code: "impossible-cost", retryClass: "invalid-program", message: `resource cannot admit work cost ${work.cost}`, work });
     }
     const quotaKey = work.quotaKey ?? work.resource;
     if (work.quotaKey !== undefined && (typeof work.quotaKey !== "string" || work.quotaKey.length === 0)) {
       this.accountingState.rejected += 1;
       this.accountingState.resourceLimit += 1;
+      this.recordRejected(work, input.caller, "invalid-program");
       throw new SchedulerError({ code: "resource-limit", retryClass: "invalid-program", message: "quotaKey must be non-empty", work });
     }
     const quota = work.quotaKey === undefined
@@ -495,21 +653,26 @@ export class WorkScheduler {
     if (quota && work.cost! > quota.concurrency) {
       this.accountingState.rejected += 1;
       this.accountingState.resourceLimit += 1;
+      this.recordRejected(work, input.caller, "invalid-program");
       throw new SchedulerError({ code: "impossible-cost", retryClass: "invalid-program", message: `quota cannot admit work cost ${work.cost}`, work });
     }
     if (work.signal?.aborted) {
       this.accountingState.cancelled += 1;
+      this.recordRejected(work, input.caller, "aborted");
       throw new SchedulerError({ code: "aborted", message: "work was aborted before admission", work });
     }
     if (work.deadlineAtMs !== undefined && work.deadlineAtMs <= this.clock()) {
       this.accountingState.cancelled += 1;
+      this.recordRejected(work, input.caller, "deadline");
       throw new SchedulerError({ code: "deadline", message: "work deadline elapsed before admission", work });
     }
-    const immediate = this.tryAdmit(work, input.caller, input.execute, lane, resource, quotaKey);
+    const queuedAtFactualNs = factualMonotonicNowNs();
+    const immediate = this.tryAdmit(work, input.caller, input.execute, lane, resource, quotaKey, queuedAtFactualNs);
     if (immediate !== undefined) return immediate;
     if (lane.queued >= lane.policy.queueCap) {
       this.accountingState.rejected += 1;
       this.accountingState.queueFull += 1;
+      this.recordRejected(work, input.caller, "queue-full");
       throw new SchedulerError({ code: "queue-full", message: `lane queue is full: ${work.lane}`, work });
     }
     return new Promise<T>((resolve, reject) => {
@@ -522,10 +685,14 @@ export class WorkScheduler {
         if (queued.timer !== undefined) clearTimeout(queued.timer);
         work.signal?.removeEventListener("abort", onAbort);
         this.accountingState.cancelled += 1;
-        reject(new SchedulerError({ code: "aborted", message: "queued work was aborted", work }));
+        this.settleQueuedRejection(
+          queued,
+          "aborted",
+          new SchedulerError({ code: "aborted", message: "queued work was aborted", work }),
+        );
         this.drainLane(work.lane);
       };
-      queued = { input: { ...input, work }, queuedAtMs, resolve, reject, signal: work.signal ?? new AbortController().signal, onAbort, timer: undefined, settled: false };
+      queued = { input: { ...input, work }, queuedAtMs, queuedAtFactualNs, resolve, reject, signal: work.signal ?? new AbortController().signal, onAbort, timer: undefined, settled: false };
       const queue = lane.ownerQueues.get(work.ownerRef) ?? [];
       if (!lane.ownerQueues.has(work.ownerRef)) {
         lane.ownerQueues.set(work.ownerRef, queue);
@@ -533,6 +700,7 @@ export class WorkScheduler {
       }
       queue.push(queued as QueuedWork<unknown>);
       lane.queued += 1;
+      observeSchedulerPerformanceState(this);
       work.signal?.addEventListener("abort", onAbort, { once: true });
       if (work.deadlineAtMs !== undefined) {
         const delay = Math.max(0, work.deadlineAtMs - this.clock());
@@ -542,7 +710,11 @@ export class WorkScheduler {
           this.removeQueued(lane, queued);
           work.signal?.removeEventListener("abort", onAbort);
           this.accountingState.cancelled += 1;
-          reject(new SchedulerError({ code: "deadline", message: "queued work deadline elapsed", work }));
+          this.settleQueuedRejection(
+            queued,
+            "deadline",
+            new SchedulerError({ code: "deadline", message: "queued work deadline elapsed", work }),
+          );
           this.drainLane(work.lane);
         }, delay);
       }
@@ -580,6 +752,54 @@ export class WorkScheduler {
     });
   }
 
+  /** Package-owned raw observation used by the release-bound performance
+   * journal. It exposes no mutation or authority surface. */
+  performanceObservation(): SchedulerLivePerformanceObservationV1 {
+    const now = factualMonotonicNowNs();
+    const laneObservations = new Map<string, { lane: string; resource: string; current: bigint; oldestQueuedAt: bigint | null }>();
+    for (const [laneName, lane] of this.lanes) {
+      if (lane.policy.resource !== undefined) {
+        laneObservations.set(`${laneName}\u0000${lane.policy.resource}`, {
+          lane: laneName,
+          resource: lane.policy.resource,
+          current: 0n,
+          oldestQueuedAt: null,
+        });
+      }
+      for (const queue of lane.ownerQueues.values()) {
+        for (const queued of queue) {
+          if (queued.settled) continue;
+          const key = `${laneName}\u0000${queued.input.work.resource}`;
+          const observation = laneObservations.get(key) ?? {
+            lane: laneName,
+            resource: queued.input.work.resource,
+            current: 0n,
+            oldestQueuedAt: null,
+          };
+          observation.current += 1n;
+          if (observation.oldestQueuedAt === null || queued.queuedAtFactualNs < observation.oldestQueuedAt) {
+            observation.oldestQueuedAt = queued.queuedAtFactualNs;
+          }
+          laneObservations.set(key, observation);
+        }
+      }
+    }
+    const lanes = [...laneObservations.values()].map(observation => {
+      return Object.freeze({
+        lane: observation.lane,
+        resource: observation.resource,
+        current: observation.current.toString(),
+        oldestAgeUs: (observation.oldestQueuedAt === null ? 0n : (now - observation.oldestQueuedAt) / 1_000n).toString(),
+      });
+    }).sort((left, right) => `${left.lane}\u0000${left.resource}`.localeCompare(`${right.lane}\u0000${right.resource}`));
+    const resources = [...this.resources.entries()].map(([resource, state]) => Object.freeze({
+      resource,
+      current: state.active.toString(),
+      capacity: state.policy.capacity.toString(),
+    })).sort((left, right) => left.resource.localeCompare(right.resource));
+    return Object.freeze({ lanes: Object.freeze(lanes), resources: Object.freeze(resources) });
+  }
+
   assertPermitConservation(): void {
     const snapshot = this.snapshot();
     const active = Object.values(snapshot.activeByResource).reduce((sum, value) => sum + value, 0);
@@ -595,9 +815,10 @@ export class WorkScheduler {
     lane: LaneState,
     resource: ResourceState,
     quotaKey: string,
+    queuedAtFactualNs: bigint,
   ): Promise<T> | undefined {
     if (!this.canAdmit(work, lane, resource, quotaKey)) return undefined;
-    return this.start(work, caller, execute, lane, resource, quotaKey, 0);
+    return this.start(work, caller, execute, lane, resource, quotaKey, 0, queuedAtFactualNs);
   }
 
   private canAdmit(work: Readonly<SchedulerWorkDescriptor>, lane: LaneState, resource: ResourceState, quotaKey: string): boolean {
@@ -623,19 +844,24 @@ export class WorkScheduler {
     resource: ResourceState,
     quotaKey: string,
     queueWaitMs: number,
+    queuedAtFactualNs: bigint,
   ): Promise<T> {
     this.accountingState.accepted += 1;
     lane.active += work.cost!;
     resource.active += work.cost!;
     this.activeByQuota.set(quotaKey, (this.activeByQuota.get(quotaKey) ?? 0) + work.cost!);
     this.accountingState.permitsIssued += work.cost!;
+    markSchedulerPermitIssued(this, work, work.cost!);
+    observeSchedulerPerformanceState(this);
     const controller = new AbortController();
     const linkedAbort = (): void => controller.abort(work.signal?.reason);
     work.signal?.addEventListener("abort", linkedAbort, { once: true });
+    if (work.signal?.aborted) linkedAbort();
     let released = false;
     const permitId = `${work.workId}:${++this.permitSequence}`;
+    const completionHandle = issueSchedulerWorkCompletionHandle(this);
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-    const release = (): void => {
+    const release = (drain = true): void => {
       if (released) return;
       released = true;
       if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
@@ -644,17 +870,22 @@ export class WorkScheduler {
       resource.active -= work.cost!;
       this.activeByQuota.set(quotaKey, (this.activeByQuota.get(quotaKey) ?? 0) - work.cost!);
       this.accountingState.permitsReleased += work.cost!;
-      this.drainLane(work.lane);
+      markSchedulerPermitReleased(this, work, work.cost!);
+      observeSchedulerPerformanceState(this);
+      if (drain) this.drainLane(work.lane);
     };
+    const issuedAtFactualNs = factualMonotonicNowNs();
+    const issuedAtMs = this.clock();
     const permit: SchedulerPermit = {
       permitId,
       work,
       caller: Object.freeze({ ...caller }),
-      issuedAtMs: this.clock(),
+      issuedAtMs,
       queueWaitMs,
       resource: work.resource,
       lane: work.lane,
       signal: controller.signal,
+      completion: completionHandle,
       assertCaller: (candidate: CallerAuthority): void => {
         if (candidate.callerId !== caller.callerId || candidate.authorityToken !== caller.authorityToken) {
           throw new SchedulerError({ code: "caller-mismatch", message: "caller authority does not own permit", work });
@@ -669,16 +900,62 @@ export class WorkScheduler {
         if (!controller.signal.aborted) controller.abort(new SchedulerError({ code: "deadline", message: "work deadline elapsed", work }));
       }, Math.max(0, work.deadlineAtMs - this.clock()));
     }
+    let outcome: SchedulerWorkCompletionOutcomeV1 = "completed";
     const complete = Promise.resolve()
-      .then(() => execute(permit))
+      .then(() => {
+        if (controller.signal.aborted) {
+          const reason = controller.signal.reason;
+          throw reason instanceof SchedulerError
+            ? reason
+            : new SchedulerError({ code: "aborted", message: "work was aborted before execution", work });
+        }
+        return execute(permit);
+      })
       .then((value) => {
+        if (controller.signal.aborted) {
+          const reason = controller.signal.reason;
+          throw reason instanceof SchedulerError
+            ? reason
+            : new SchedulerError({ code: "aborted", message: "work was aborted before settlement", work });
+        }
         this.accountingState.completed += 1;
         return value;
-      }, (error: unknown) => {
+      })
+      .catch((error: unknown) => {
         this.accountingState.failed += 1;
+        const abortReason = controller.signal.aborted ? controller.signal.reason : null;
+        outcome = abortReason instanceof SchedulerError && abortReason.code === "deadline"
+          ? "deadline"
+          : controller.signal.aborted || error instanceof SchedulerError && error.code === "aborted"
+            ? "aborted"
+            : error instanceof SchedulerError && error.code === "deadline"
+              ? "deadline"
+              : "execution-failed";
         throw error;
       })
-      .finally(release);
+      .finally(() => {
+        const finishedAtFactualNs = factualMonotonicNowNs();
+        release(false);
+        try {
+          const completion = this.recordCompletion({
+            work,
+            caller,
+            permitId,
+            queuedAtFactualNs,
+            issuedAtFactualNs,
+            finishedAtFactualNs,
+            outcome,
+            permitsIssued: work.cost!,
+            permitsReleased: work.cost!,
+          });
+          settleSchedulerWorkCompletionHandle(this, completionHandle, completion, null);
+        } catch (error) {
+          settleSchedulerWorkCompletionHandle(this, completionHandle, null, error);
+          throw error;
+        } finally {
+          this.drainLane(work.lane);
+        }
+      });
     // `run` owns the physical callback.  Its returned promise is deliberately
     // chained without an early logical timeout so release follows settlement.
     return complete;
@@ -692,6 +969,7 @@ export class WorkScheduler {
     if (index >= 0) {
       queue.splice(index, 1);
       lane.queued -= 1;
+      observeSchedulerPerformanceState(this);
     }
     if (queue.length === 0) {
       lane.ownerQueues.delete(owner);
@@ -728,9 +1006,14 @@ export class WorkScheduler {
           queued.settled = true;
           queue!.shift();
           lane.queued -= 1;
+          observeSchedulerPerformanceState(this);
           work.signal.removeEventListener("abort", queued.onAbort);
           this.accountingState.cancelled += 1;
-          queued.reject(new SchedulerError({ code: "aborted", message: "queued work was aborted", work }));
+          this.settleQueuedRejection(
+            queued,
+            "aborted",
+            new SchedulerError({ code: "aborted", message: "queued work was aborted", work }),
+          );
           progressed = true;
           break;
         }
@@ -738,10 +1021,15 @@ export class WorkScheduler {
           queued.settled = true;
           queue!.shift();
           lane.queued -= 1;
+          observeSchedulerPerformanceState(this);
           work.signal?.removeEventListener("abort", queued.onAbort);
           if (queued.timer !== undefined) clearTimeout(queued.timer);
           this.accountingState.cancelled += 1;
-          queued.reject(new SchedulerError({ code: "deadline", message: "queued work deadline elapsed", work }));
+          this.settleQueuedRejection(
+            queued,
+            "deadline",
+            new SchedulerError({ code: "deadline", message: "queued work deadline elapsed", work }),
+          );
           progressed = true;
           break;
         }
@@ -762,12 +1050,95 @@ export class WorkScheduler {
         if (queued.timer !== undefined) clearTimeout(queued.timer);
         work.signal?.removeEventListener("abort", queued.onAbort);
         const queuedWaitMs = Math.max(0, this.clock() - queued.queuedAtMs);
-        const result = this.start(work, queued.input.caller, queued.input.execute, lane, resource, quotaKey, queuedWaitMs);
+        const result = this.start(work, queued.input.caller, queued.input.execute, lane, resource, quotaKey, queuedWaitMs, queued.queuedAtFactualNs);
         result.then(queued.resolve, queued.reject);
         progressed = true;
         break;
       }
     }
+  }
+
+  private recordRejected(
+    work: Readonly<SchedulerWorkDescriptor>,
+    caller: CallerAuthority,
+    outcome: SchedulerWorkCompletionOutcomeV1,
+    queuedAtFactualNs = factualMonotonicNowNs(),
+  ): void {
+    const finishedAtFactualNs = factualMonotonicNowNs();
+    this.recordCompletion({
+      work,
+      caller,
+      permitId: null,
+      queuedAtFactualNs,
+      issuedAtFactualNs: null,
+      finishedAtFactualNs,
+      outcome,
+      permitsIssued: 0,
+      permitsReleased: 0,
+    });
+  }
+
+  private settleQueuedRejection<T>(
+    queued: QueuedWork<T>,
+    outcome: SchedulerWorkCompletionOutcomeV1,
+    workError: SchedulerError,
+  ): void {
+    let rejection: unknown = workError;
+    try {
+      this.recordRejected(
+        queued.input.work,
+        queued.input.caller,
+        outcome,
+        queued.queuedAtFactualNs,
+      );
+    } catch (completionError) {
+      rejection = completionError;
+    }
+    queued.reject(rejection);
+  }
+
+  private recordCompletion(input: {
+    readonly work: Readonly<SchedulerWorkDescriptor>;
+    readonly caller: CallerAuthority;
+    readonly permitId: string | null;
+    readonly queuedAtFactualNs: bigint;
+    readonly issuedAtFactualNs: bigint | null;
+    readonly finishedAtFactualNs: bigint;
+    readonly outcome: SchedulerWorkCompletionOutcomeV1;
+    readonly permitsIssued: number;
+    readonly permitsReleased: number;
+  }): SchedulerWorkCompletionCapabilityV1 | null {
+    if (input.issuedAtFactualNs !== null && input.finishedAtFactualNs < input.issuedAtFactualNs) throw new TypeError("scheduler completion clock moved backwards");
+    if (input.finishedAtFactualNs < input.queuedAtFactualNs) throw new TypeError("scheduler completion queue clock moved backwards");
+    if (input.issuedAtFactualNs !== null && input.issuedAtFactualNs < input.queuedAtFactualNs) throw new TypeError("scheduler completion admission clock moved backwards");
+    const microseconds = (value: bigint): bigint => value / 1_000n;
+    const queuedAtUs = microseconds(input.queuedAtFactualNs);
+    const issuedAtUs = input.issuedAtFactualNs === null ? null : microseconds(input.issuedAtFactualNs);
+    const finishedAtUs = microseconds(input.finishedAtFactualNs);
+    const queueWaitUs = (issuedAtUs ?? finishedAtUs) - queuedAtUs;
+    const serviceUs = issuedAtUs === null ? null : finishedAtUs - issuedAtUs;
+    return recordSchedulerWorkCompletion(this, {
+      work: Object.freeze({
+        workId: input.work.workId,
+        phase: input.work.phase,
+        workClassRef: input.work.workClassRef,
+        ownerRef: input.work.ownerRef,
+        lane: input.work.lane,
+        resource: input.work.resource,
+        cost: String(input.work.cost!),
+        quotaKey: input.work.quotaKey ?? null,
+      }),
+      callerId: input.caller.callerId,
+      permitId: input.permitId,
+      queuedAtMonotonicUs: queuedAtUs.toString(),
+      permitIssuedAtMonotonicUs: issuedAtUs?.toString() ?? null,
+      finishedAtMonotonicUs: finishedAtUs.toString(),
+      queueWaitUs: queueWaitUs?.toString() ?? null,
+      serviceUs: serviceUs?.toString() ?? null,
+      permitsIssued: String(input.permitsIssued),
+      permitsReleased: String(input.permitsReleased),
+      outcome: input.outcome,
+    });
   }
 }
 

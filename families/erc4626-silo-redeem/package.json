@@ -1,1 +1,7 @@
-{"name":"@aloha/family-erc4626-silo-redeem","private":true,"type":"module","exports":{".":"./kernel/effects.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}
+{
+  "name": "@aloha/family-erc4626-silo-redeem",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/public.ts", "./family-definition": "./src/family-definition.ts", "./runtime": "./src/runtime.ts", "./kernel/effects": "./kernel/effects.ts" },
+  "scripts": { "test": "node --experimental-strip-types --test test/*.test.ts", "typecheck": "tsc -p tsconfig.json" }
+}

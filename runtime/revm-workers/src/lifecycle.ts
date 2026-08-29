@@ -13,7 +13,6 @@ import {
   type RevmWorkerSimulateRequestV1,
   type RevmWorkerAuthorityBindingV1,
 } from "./protocol.ts";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { monotonicNow, type MonotonicClock } from "../../../packages/scheduler/src/index.ts";
 import { assertIssuedRevmWorkerAuthorityIssuer } from "./internal/authority.ts";
 
@@ -47,96 +46,6 @@ export interface RevmWorkerAuthorityIssuer {
   assertCurrent(binding: RevmWorkerAuthorityBindingV1): void;
 }
 
-export interface NodeRevmWorkerFactoryOptions {
-  readonly command: string;
-  readonly args?: readonly string[];
-  readonly cwd?: string;
-  readonly env?: NodeJS.ProcessEnv;
-  readonly qualification: RevmWorkerQualification;
-}
-
-/**
- * Real child-process adapter.  It only transports the protocol; it does not
- * implement or emulate EVM execution in TypeScript.
- */
-export function createNodeRevmWorkerFactory(options: NodeRevmWorkerFactoryOptions): RevmWorkerFactory {
-  return Object.freeze({
-    async spawn(_epoch: string): Promise<RevmWorkerChannel> {
-      const child = spawn(options.command, [...(options.args ?? [])], {
-        cwd: options.cwd,
-        env: options.env,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      return createNodeRevmWorkerChannel(child);
-    },
-  });
-}
-
-export function createNodeRevmWorkerChannel(child: ChildProcessWithoutNullStreams): RevmWorkerChannel {
-  const lineListeners = new Set<(line: string) => void>();
-  const exitListeners = new Set<(code: number | null) => void>();
-  let buffer = "";
-  let exited = false;
-  let exitCode: number | null = null;
-  let resolveExit: ((code: number | null) => void) | null = null;
-  child.stdout.setEncoding("utf8");
-  child.stdout.on("data", (chunk: string) => {
-    buffer += chunk;
-    for (;;) {
-      const index = buffer.indexOf("\n");
-      if (index < 0) break;
-      const line = buffer.slice(0, index);
-      buffer = buffer.slice(index + 1);
-      for (const listener of lineListeners) listener(line);
-    }
-  });
-  child.on("exit", (code) => {
-    exited = true;
-    exitCode = code;
-    for (const listener of exitListeners) listener(code);
-    resolveExit?.(code);
-    resolveExit = null;
-  });
-  return Object.freeze({
-    send(line: string): Promise<void> {
-      if (exited || child.stdin.destroyed) return Promise.reject(new Error("REVM worker stdin is closed"));
-      return new Promise<void>((resolve, reject) => {
-        child.stdin.write(line, (error) => error ? reject(error) : resolve());
-      });
-    },
-    onLine(listener: (line: string) => void): () => void {
-      lineListeners.add(listener);
-      return () => lineListeners.delete(listener);
-    },
-    onExit(listener: (code: number | null) => void): () => void {
-      exitListeners.add(listener);
-      if (exited) listener(exitCode);
-      return () => exitListeners.delete(listener);
-    },
-    kill(signal = "SIGTERM"): void {
-      if (!exited) child.kill(signal as NodeJS.Signals);
-    },
-    waitForExit(timeoutMs: number): Promise<boolean> {
-      if (exited) return Promise.resolve(true);
-      return new Promise<boolean>((resolve) => {
-        let done = false;
-        const timer = setTimeout(() => {
-          if (done) return;
-          done = true;
-          if (resolveExit) resolveExit = null;
-          resolve(false);
-        }, timeoutMs);
-        resolveExit = () => {
-          if (done) return;
-          done = true;
-          clearTimeout(timer);
-          resolve(true);
-        };
-      });
-    },
-  });
-}
-
 export type RevmWorkerLifecycleCode = "not-ready" | "busy" | "deadline" | "timeout" | "retired" | "worker-error" | "invalid-request" | "invalid-response" | "engine-unqualified" | "queue-full" | "resource-limit";
 
 export class RevmWorkerLifecycleError extends Error {
@@ -168,6 +77,8 @@ export interface RevmWorkerControllerSnapshot {
   readonly pending: number;
   readonly staleResponses: number;
   readonly retireReason: string | null;
+  readonly reaped: boolean;
+  readonly orphaned: boolean;
   readonly engineBuildFingerprint: string | null;
   readonly executableFingerprint: string | null;
 }
@@ -187,6 +98,8 @@ export class RevmWorkerController {
   private _state: RevmWorkerState = "starting";
   private retirePromise: Promise<void> | null = null;
   private retireReason: string | null = null;
+  private reaped = false;
+  private orphaned = false;
   private staleResponses = 0;
   private helloTimer: ReturnType<typeof setTimeout> | undefined;
   private helloResolve: (() => void) | null = null;
@@ -224,7 +137,16 @@ export class RevmWorkerController {
   get state(): RevmWorkerState { return this._state; }
 
   bind(request: RevmWorkerDispatchRequestV1): RevmWorkerSimulateRequestV1 {
-    this.assertAuthorityCurrent();
+    try {
+      this.assertAuthorityCurrent();
+    } catch (error) {
+      throw new RevmWorkerLifecycleError({
+        code: "engine-unqualified",
+        workerEpoch: this.epoch,
+        requestId: request.requestId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
     return bindQualifiedWorkerEpoch(request, this.epoch, this.authority);
   }
 
@@ -284,20 +206,30 @@ export class RevmWorkerController {
       }
       let exited = false;
       try {
-        exited = await this.channel.waitForExit(this.timeoutMs);
+        exited = await this.channel.waitForExit(this.timeoutMs) || this.reaped;
       } catch {
-        exited = false;
+        exited = this.reaped;
       }
       if (!exited) {
         try {
           await this.channel.kill("SIGKILL");
-          await this.channel.waitForExit(this.timeoutMs);
+          exited = await this.channel.waitForExit(this.timeoutMs) || this.reaped;
         } catch {
+          exited = this.reaped;
           // The process boundary remains fail-closed even if the OS did not
           // provide a positive reap observation.
         }
       }
-      this._state = "dead";
+      if (exited) {
+        this.reaped = true;
+        this._state = "dead";
+      } else {
+        // An unconfirmed child remains capacity-bearing and cannot be
+        // replaced.  Marking it dead here would both lose the orphan fact and
+        // permit the pool to oversubscribe its real process limit.
+        this.orphaned = true;
+        this._state = "retiring";
+      }
       for (const pending of this.pending.values()) {
         clearTimeout(pending.timer);
         if (pending.onAbort && pending.signal) pending.signal.removeEventListener("abort", pending.onAbort);
@@ -306,13 +238,13 @@ export class RevmWorkerController {
       }
       this.pending.clear();
       this.unsubscribeLine();
-      this.unsubscribeExit();
+      if (this.reaped) this.unsubscribeExit();
     })();
     return this.retirePromise;
   }
 
   snapshot(): RevmWorkerControllerSnapshot {
-    return Object.freeze({ epoch: this.epoch, state: this._state, pending: this.pending.size, staleResponses: this.staleResponses, retireReason: this.retireReason, engineBuildFingerprint: this.hello?.engineBuildFingerprint ?? null, executableFingerprint: this.hello?.executableFingerprint ?? null });
+    return Object.freeze({ epoch: this.epoch, state: this._state, pending: this.pending.size, staleResponses: this.staleResponses, retireReason: this.retireReason, reaped: this.reaped, orphaned: this.orphaned, engineBuildFingerprint: this.hello?.engineBuildFingerprint ?? null, executableFingerprint: this.hello?.executableFingerprint ?? null });
   }
 
   private onLine(line: string): void {
@@ -384,12 +316,13 @@ export class RevmWorkerController {
 
   private onExit(code: number | null): void {
     if (this._state === "dead") return;
+    this.reaped = true;
     if (this._state === "retiring") {
       // retire() owns pending rejection while it waits for kill/reap; an exit
       // notification must not downgrade a timeout/retire reason to a generic
       // worker error.
       this._state = "dead";
-      this.retireReason = `exit:${code ?? "unknown"}`;
+      this.unsubscribeExit();
       return;
     }
     this._state = "dead";
@@ -418,11 +351,16 @@ interface QueuedSubmission {
 
 export interface RevmWorkerPoolSnapshot {
   readonly workers: readonly RevmWorkerControllerSnapshot[];
+  readonly starting: number;
   readonly queued: number;
   readonly activeByOwner: Readonly<Record<string, number>>;
   readonly queueFull: number;
   readonly resourceLimit: number;
   readonly retired: number;
+  readonly spawned: number;
+  readonly restarted: number;
+  readonly reaped: number;
+  readonly orphanedWorkers: number;
 }
 
 export interface RevmWorkerPoolOptions {
@@ -456,6 +394,10 @@ export class RevmWorkerPool {
   private queueFull = 0;
   private resourceLimit = 0;
   private retired = 0;
+  private spawned = 0;
+  private restarted = 0;
+  private reaped = 0;
+  private replacementCredits = 0;
   private draining = false;
   private closed = false;
 
@@ -537,7 +479,8 @@ export class RevmWorkerPool {
     this.pruneDead();
     const activeByOwner: Record<string, number> = {};
     for (const [owner, count] of this.activeByOwner) activeByOwner[owner] = count;
-    return Object.freeze({ workers: Object.freeze(this.controllers.map((controller) => controller.snapshot())), queued: this.queue.length, activeByOwner: Object.freeze(activeByOwner), queueFull: this.queueFull, resourceLimit: this.resourceLimit, retired: this.retired });
+    const workers = Object.freeze(this.controllers.map((controller) => controller.snapshot()));
+    return Object.freeze({ workers, starting: this.starting, queued: this.queue.length, activeByOwner: Object.freeze(activeByOwner), queueFull: this.queueFull, resourceLimit: this.resourceLimit, retired: this.retired, spawned: this.spawned, restarted: this.restarted, reaped: this.reaped, orphanedWorkers: workers.filter((worker) => worker.orphaned).length });
   }
 
   private async drain(): Promise<void> {
@@ -549,6 +492,7 @@ export class RevmWorkerPool {
         let controller = this.controllers.find((candidate) => candidate.state === "ready");
         if (!controller && this.controllers.length + this.starting < this.maxWorkers && this.queue.length > 0) {
           this.starting += 1;
+          let spawnStillStarting = true;
           try {
             const authority = this.authority.issue();
             assertAuthorityBinding(authority);
@@ -556,6 +500,13 @@ export class RevmWorkerPool {
             const channel = await this.factory.spawn(epoch);
             controller = new RevmWorkerController({ epoch, channel, qualification: this.qualification, authority, assertAuthorityCurrent: () => this.authority.assertCurrent(authority), timeoutMs: this.timeoutMs, clock: this.clock });
             this.controllers.push(controller);
+            this.starting -= 1;
+            spawnStillStarting = false;
+            this.spawned += 1;
+            if (this.replacementCredits > 0) {
+              this.replacementCredits -= 1;
+              this.restarted += 1;
+            }
             await controller.waitUntilReady();
           } catch (error) {
             const failed = this.queue.shift();
@@ -567,7 +518,7 @@ export class RevmWorkerPool {
             if (controller && controller.state !== "dead") await controller.retire("qualification-failed");
             controller = undefined;
           } finally {
-            this.starting -= 1;
+            if (spawnStillStarting) this.starting -= 1;
           }
         }
         if (!controller) return;
@@ -585,7 +536,8 @@ export class RevmWorkerPool {
           if (remaining <= 0) this.activeByOwner.delete(owner);
           else this.activeByOwner.set(owner, remaining);
           queued.reject(error);
-          void this.drain();
+          await controller.retire("engine-unqualified");
+          this.pruneDead();
           continue;
         }
         void controller.submit(request, queued.signal).then(
@@ -648,8 +600,14 @@ export class RevmWorkerPool {
   }
 
   private pruneDead(): void {
+    const dead = this.controllers.filter((controller) => controller.state === "dead");
     const live = this.controllers.filter((controller) => controller.state !== "dead");
-    this.retired += this.controllers.length - live.length;
+    this.retired += dead.length;
+    this.replacementCredits += dead.length;
+    for (const controller of dead) {
+      const snapshot = controller.snapshot();
+      if (snapshot.reaped) this.reaped += 1;
+    }
     this.controllers.splice(0, this.controllers.length, ...live);
   }
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import { erc20AssetPortBindingV1 } from "../../asset-ref/src/index.ts";
 import {
   sealInstanceCatalog,
   sealInstancePublication,
@@ -11,6 +12,8 @@ import {
 
 const h = (value: string): Hash => hashDomain("test/catalog", value);
 const cutoff = { chainId: "1", number: "10", hash: h("block"), stateRoot: h("state") };
+const inputAsset = erc20AssetPortBindingV1("1", "0x1111111111111111111111111111111111111111");
+const outputAsset = erc20AssetPortBindingV1("1", "0x2222222222222222222222222222222222222222");
 
 const draft = (instanceKey = "instance-a"): InstancePublicationDraftV1 => ({
   familyId: "family-a",
@@ -18,14 +21,15 @@ const draft = (instanceKey = "instance-a"): InstancePublicationDraftV1 => ({
   familyCandidateKey: h(`candidate:${instanceKey}`),
   instanceKey,
   cutoff,
-  identityMemoHash: h("identity"),
+  identityMemo: { kind: "catalog-test-identity", instanceKey },
+  identityMemoHash: hashDomain("aloha/identity-memo/v1", { kind: "catalog-test-identity", instanceKey }),
   descriptorHash: h("descriptor"),
   staticProjectionMemoHash: h("memo"),
   requestedArtifactDependencyRoot: h("artifact-dependencies"),
   validityDependencyRoot: h("validity"),
   transitions: [{
-    inputAssetPorts: [{ assetRef: h("in"), portRef: h("in-port"), ordinal: "0" }],
-    outputAssetPorts: [{ assetRef: h("out"), portRef: h("out-port"), ordinal: "0" }],
+    inputAssetPorts: [{ ...inputAsset, portRef: h("in-port"), ordinal: "0" }],
+    outputAssetPorts: [{ ...outputAsset, portRef: h("out-port"), ordinal: "0" }],
     opaqueTransitionRef: h("transition"),
     constraintRefs: [h("constraint")],
     staticProjectionHash: h("projection"),
@@ -50,6 +54,33 @@ test("unknown protocol fields cannot be silently dropped by publication freeze",
     transitions: [{ ...draft().transitions[0]!, v3Fee: 3000 }],
   } as unknown as InstancePublicationDraftV1;
   assert.throws(() => sealInstancePublication(mutated), /unknown field/);
+});
+
+test("asset ports reject naked caller hashes, forged refs, and cross-chain identity", () => {
+  const value = draft();
+  const transition = value.transitions[0]!;
+  assert.throws(() => sealInstancePublication({
+    ...value,
+    transitions: [{
+      ...transition,
+      inputAssetPorts: [{ assetRef: h("caller-asset"), portRef: h("in-port"), ordinal: "0" } as never],
+    }],
+  }), /missing field "assetIdentity"/);
+  assert.throws(() => sealInstancePublication({
+    ...value,
+    transitions: [{
+      ...transition,
+      inputAssetPorts: [{ ...inputAsset, assetRef: h("forged-asset"), portRef: h("in-port"), ordinal: "0" }],
+    }],
+  }), /does not match identity/);
+  const otherChain = erc20AssetPortBindingV1("10", inputAsset.assetIdentity.address!);
+  assert.throws(() => sealInstancePublication({
+    ...value,
+    transitions: [{
+      ...transition,
+      inputAssetPorts: [{ ...otherChain, portRef: h("in-port"), ordinal: "0" }],
+    }],
+  }), /asset-port-chain-mismatch/);
 });
 
 test("catalog decoders reject accessors, proxies, malformed hashes, and non-arrays", () => {

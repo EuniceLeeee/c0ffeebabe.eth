@@ -1,0 +1,18 @@
+import { ERC4626_MANIFEST } from "./manifest.ts";
+import { captureErc4626Evidence } from "./capture.ts";
+import { decodeErc4626Candidate } from "./discovery.ts";
+import { exactErc4626 } from "./exact.ts";
+import { compileErc4626Execution } from "./execution.ts";
+import { verifyErc4626IdentityStage } from "./identity.ts";
+import { materializeErc4626 } from "./instance.ts";
+import { nominateErc4626 } from "./nomination.ts";
+import { coarseErc4626 } from "./pricing.ts";
+import { deriveErc4626Routes } from "./routes.ts";
+export const ERC4626_RUNTIME = Object.freeze({ manifest: ERC4626_MANIFEST, discover: decodeErc4626Candidate, capture: captureErc4626Evidence, nominate: nominateErc4626, identity: verifyErc4626IdentityStage, materialize: materializeErc4626, routes: deriveErc4626Routes, coarse: coarseErc4626, exact: exactErc4626, execute: compileErc4626Execution });
+export const ERC4626_NOMINATION_RUNTIME = Object.freeze({ stage: "nomination", run: nominateErc4626 });
+export const ERC4626_IDENTITY_RUNTIME = Object.freeze({ stage: "identity", run: verifyErc4626IdentityStage });
+export const ERC4626_MATERIALIZATION_RUNTIME = Object.freeze({ stage: "materialization", run: materializeErc4626 });
+export const ERC4626_PROJECTION_RUNTIME = Object.freeze({ stage: "projection", run: deriveErc4626Routes });
+export const ERC4626_REHYDRATION_RUNTIME = Object.freeze({ stage: "rehydration", run: deriveErc4626Routes });
+export { ERC4626_SEARCH_RUNTIME_ADAPTER_FACTORY } from "./search-adapter.ts";
+export { ERC4626_NOMINATION_DEFINITION, ERC4626_IDENTITY_DEFINITION, ERC4626_MATERIALIZATION_DEFINITION, ERC4626_PROJECTION_DEFINITION, ERC4626_REHYDRATION_DEFINITION, ERC4626_STAGE_DEFINITIONS, ERC4626_STAGE_IDS, requireErc4626StageDefinition } from "./runtime/definitions.ts";

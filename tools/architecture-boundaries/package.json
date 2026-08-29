@@ -8,9 +8,11 @@
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "check": "node --experimental-strip-types src/cli.ts"
+    "check": "node --experimental-strip-types src/cli.ts",
+    "project-runtime-boundary": "node --experimental-strip-types src/runtime-boundary-projection-cli.ts"
   },
   "dependencies": {
+    "esbuild": "0.28.2",
     "typescript": "5.9.3"
   }
 }

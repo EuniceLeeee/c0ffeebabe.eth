@@ -1,0 +1,3 @@
+import { hashDomain } from "../../../packages/canonical-codec/src/index.ts";
+export const DODO_V2_NOMINATION_MUTATION_CORPUS = Object.freeze({ schemaVersion: 1, corpusRoot: hashDomain("aloha/dodo-v2/nomination-mutation-corpus/v1", ["wrong-swap-topic", "malformed-swap-abi", "raw-log-mismatch", "duplicate-pool", "history-factory-topic-swap", "history-filter-injection", "history-creation-abi-truncation", "history-grid-cell-deletion", "history-range-splice"]) });
+export const DODO_V2_NOMINATION_INDEPENDENT_ORACLE = Object.freeze({ schemaVersion: 1, oracleRoot: hashDomain("aloha/dodo-v2/nomination-independent-oracle/v1", ["swap-log-pool", "base-quote-domain", "recent-window-ownership", "official-three-factory-creation-history", "current-getdodopool-reverse-binding"]) });

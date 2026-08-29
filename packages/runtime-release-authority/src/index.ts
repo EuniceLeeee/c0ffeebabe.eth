@@ -24,9 +24,36 @@ export type {
   RuntimeReleaseSchedulerInputV1,
   RuntimeReleaseRevmInputV1,
   RuntimeReleaseReadyInputV1,
+  RuntimeReleasePerformanceInputV1,
+  RuntimeReleaseFinalSimulationInputV1,
+  RuntimeReleaseCatalogInputV1,
+  RuntimeReleaseCatalogSnapshotV1,
+  RuntimeReleaseCatalogServiceV1,
   RuntimeReleaseCompositionInputV1,
   RuntimeReleaseCompositionServicesV1,
+  RuntimeReleaseFamilyRuntimeServiceV1,
+  RuntimeReleaseStrategyRuntimeServiceV1,
+  RuntimeReleaseFullFamilyTerminalBindingServiceV1,
+  RuntimeReleaseFullGraphCoarseSweepServiceV1,
+  RuntimeReleaseSixStepTerminalBindingServiceV1,
 } from "./internal/bootstrap.ts";
+export type {
+  RuntimeReleaseObserverStoreBindingV1,
+  RuntimeReleaseObserverStoreInputV1,
+  RuntimeReleaseObserverStoreServiceV1,
+} from "./internal/observer-store-owner.ts";
+export {
+  openInstalledRuntimeReleasePerformanceDeploymentPortV1,
+} from "./internal/performance-deployment-owner.ts";
+export type {
+  RuntimeReleasePerformanceDeploymentPortV1,
+} from "./internal/performance-deployment-owner.ts";
+export {
+  issueInstalledRuntimeReleasePerformancePolicyPortV1,
+} from "./internal/performance-policy-owner.ts";
+export type {
+  RuntimeReleasePerformancePolicyPortV1,
+} from "./internal/performance-policy-owner.ts";
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 

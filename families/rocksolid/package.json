@@ -1,0 +1,1 @@
+{"name":"@aloha/family-rocksolid","private":true,"type":"module","exports":{".":"./src/public.ts","./kernel":"./kernel/quote.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}

@@ -1,0 +1,21 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { hashDomain } from "../../../packages/canonical-codec/src/index.ts";
+import { ERC4626_SOURCE_PLAN_ID, ERC4626_CAPABILITY_IDS } from "../src/manifest.ts";
+import { ERC4626_SOURCE_NOMINATION_PROGRAM, ERC4626_SOURCE_PLAN, ERC4626_SOURCE_PLAN_RUNTIME } from "../src/source-plan.ts";
+import { ERC4626_DEFINITION } from "../src/family-definition.ts";
+import { ERC4626_FAMILY_AUTHORING_HASH } from "../src/family-definition.ts";
+import { decodeErc4626Candidate, ERC4626_OWNED_LOG_TOPIC } from "../src/discovery.ts";
+import { nominateErc4626 } from "../src/nomination.ts";
+import { verifyErc4626IdentityStage } from "../src/identity.ts";
+import { deriveErc4626Routes } from "../src/routes.ts";
+import { coarseErc4626 } from "../src/pricing.ts";
+const addr = (digit: string) => `0x${digit.repeat(40)}`; const h = (label: string) => hashDomain("aloha/test/erc4626", label); const cutoff = { chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") } as const; const observation = { kind: "call" as const, target: addr("5"), blockNumber: "100", blockHash: h("b"), txHash: h("tx"), logIndex: "0", rawLocatorHash: h("raw"), cutoff };
+test("ERC4626 source and absence slots are explicit", () => { assert.equal(ERC4626_SOURCE_PLAN.sourcePlanId, ERC4626_SOURCE_PLAN_ID); assert.equal(ERC4626_SOURCE_NOMINATION_PROGRAM.schemaHash, ERC4626_SOURCE_PLAN.schemaHash); assert.equal(ERC4626_DEFINITION.extensions[ERC4626_CAPABILITY_IDS.state]?.kind, "absent"); assert.equal(ERC4626_DEFINITION.extensions[ERC4626_CAPABILITY_IDS.exact]?.kind, "absent"); });
+test("ERC4626 source execution is positive-only", async () => {
+  const plan = { ownerRef: h("owner"), sourcePlanRef: h("plan"), familyDefinitionHash: ERC4626_FAMILY_AUTHORING_HASH, completeness: "nomination-only" as const, historyStartBlock: null };
+  const result = await ERC4626_SOURCE_PLAN_RUNTIME.execute({ plan, cutoff, previousAppliedThrough: null }, { request: async () => { throw new Error("physical source producer must not be called"); } }, new AbortController().signal);
+  assert.equal(result.execution.outcome, "positive-only");
+});
+test("ERC4626 log admission is family-owned and rejects an unrelated topic", () => { assert.equal(decodeErc4626Candidate({ ...observation, kind: "log", topic: h("unrelated-topic") }, "erc4626-call"), null); assert.ok(decodeErc4626Candidate({ ...observation, kind: "log", topic: ERC4626_OWNED_LOG_TOPIC }, "erc4626-call")); });
+test("ERC4626 reverse identity and rounding kernel are family-owned", () => { const seed = decodeErc4626Candidate(observation, "erc4626-call"); assert.ok(seed); const nominated = nominateErc4626(seed); assert.equal(nominated.status, "nominated"); if (nominated.status !== "nominated") throw new Error("nomination failed"); const identity = verifyErc4626IdentityStage({ candidate: nominated.candidate, reads: { cutoff, target: addr("5"), reverseTarget: addr("5"), asset: addr("1") } }); assert.equal(identity.status, "verified"); if (identity.status !== "verified") throw new Error("identity failed"); const route = deriveErc4626Routes(identity.identity)[0]!; assert.equal(coarseErc4626({ identity: identity.identity, route, referenceAmount: "1000000", observedAmount: "1000001" }).status, "rankable"); assert.equal(coarseErc4626({ identity: identity.identity, route, referenceAmount: "1", observedAmount: "100000" }).status, "unavailable"); });

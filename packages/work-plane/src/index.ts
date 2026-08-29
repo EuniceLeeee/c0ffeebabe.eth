@@ -3,6 +3,8 @@ import {
   deepFreeze,
   encodeCanonicalJson,
   assertExactKeys,
+  assertHash,
+  assertNonEmptyString,
   hashDomain,
   type CanonicalJson,
   type Hash,
@@ -16,6 +18,10 @@ import {
   type SchedulerWorkDescriptor,
   monotonicNow,
 } from "../../../packages/scheduler/src/index.ts";
+import {
+  readWorkPlaneCallerCapability,
+  workPlaneCallerIntentBindingHash,
+} from "./internal/caller-authority-state.ts";
 
 export interface WorkSourceView {
   readonly chainId: string;
@@ -62,22 +68,11 @@ export interface WorkClassDeclaration {
   readonly cost?: number;
 }
 
-export interface CallerBinding extends CallerAuthority {
-  readonly boundIntentId: string;
-  readonly sourceHash: string;
-  readonly issuerRef: OpaqueRef;
-}
+declare const workPlaneCallerCapabilityBrand: unique symbol;
 
-export function createCallerAuthority(input: {
-  readonly callerId: string;
-  readonly authorityToken?: string;
-}): CallerAuthority {
-  if (input.callerId.length === 0) throw new TypeError("callerId must be non-empty");
-  const authorityToken = input.authorityToken ?? hashDomain("aloha/work-plane-caller/v1", {
-    callerId: input.callerId,
-    nonce: `${Date.now()}-${Math.random()}`,
-  });
-  return Object.freeze({ callerId: input.callerId, authorityToken });
+/** Owner-issued process-local authority. It has no structural wire form. */
+export interface WorkPlaneCallerCapabilityV1 {
+  readonly [workPlaneCallerCapabilityBrand]: "WorkPlaneCallerCapabilityV1";
 }
 
 export interface WorkReceiptV1 {
@@ -164,6 +159,29 @@ export interface FamilyFrozenProgramExecutionInput {
   readonly signal?: AbortSignal;
 }
 
+/**
+ * Exact result returned by the physical work owner.  It deliberately has no
+ * source, authority, session, or program fingerprint fields.  Those facts
+ * are release-owned and are added only by the Family transport bridge after
+ * the scheduler authority has been observed again.
+ */
+export type SourceLessTransportResultV1 =
+  | {
+    readonly kind: "returned";
+    readonly requestId: Hash;
+    readonly dataHex: string;
+  }
+  | {
+    readonly kind: "reverted";
+    readonly requestId: Hash;
+    readonly dataHex: string;
+  }
+  | {
+    readonly kind: "transportFailure";
+    readonly requestId: Hash;
+    readonly failureCode: "rpc" | "deadline" | "abort" | "queue-full" | "resource-limit" | "worker-crash" | "source-stale";
+  };
+
 export interface FamilyStampedFactView<Fact> {
   readonly fact: Fact;
   readonly source: WorkSourceView;
@@ -180,6 +198,17 @@ export interface FamilyFrozenProgramExecutionPort<Fact> {
   readonly executeFrozenProgram: (
     input: FamilyFrozenProgramExecutionInput,
   ) => Promise<FamilyFrozenProgramExecutionResult<Fact>>;
+}
+
+/**
+ * Owner-issued physical execution edge. The release bootstrap consumes only
+ * this opaque capability; it never accepts a raw scheduler callback.
+ */
+export interface QualifiedPhysicalExecutionPortV1<Fact> {
+  readonly execute: (input: {
+    readonly intent: CapabilityWorkIntentV1;
+    readonly signal: AbortSignal;
+  }) => Promise<Fact>;
 }
 
 export interface WorkPlanePorts<ProgramResult, Fact> {
@@ -200,12 +229,6 @@ export interface WorkPlanePorts<ProgramResult, Fact> {
       readonly generationLeaseRef: GenerationLeaseRef;
     }) => void;
   };
-  readonly caller: {
-    readonly bind: (input: {
-      readonly intent: CapabilityWorkIntentV1;
-      readonly requested: CallerAuthority;
-    }) => CallerBinding;
-  };
   /** Executes the complete frozen program; no local EVM substitute is provided. */
   readonly execute: (input: WorkProgramExecutionInput) => Promise<ProgramResult>;
   /** Owning generated interpreter turns returned typed data into a fact. */
@@ -218,7 +241,7 @@ export interface WorkPlanePorts<ProgramResult, Fact> {
 
 export interface ExecuteWorkInput {
   readonly intent: CapabilityWorkIntentV1;
-  readonly caller: CallerAuthority;
+  readonly caller: WorkPlaneCallerCapabilityV1;
   readonly signal?: AbortSignal;
 }
 
@@ -276,20 +299,6 @@ function intentKey(intent: CapabilityWorkIntentV1): Hash {
 
 function authorityTokenHash(caller: CallerAuthority): Hash {
   return hashDomain("aloha/work-plane-authority-token/v1", caller.authorityToken);
-}
-
-function receiptCaller(value: unknown): CallerAuthority {
-  try {
-    if (value !== null && typeof value === "object") {
-      const caller = value as Record<string, unknown>;
-      if (typeof caller.callerId === "string" && caller.callerId.length > 0 && typeof caller.authorityToken === "string" && caller.authorityToken.length > 0) {
-        return Object.freeze({ callerId: caller.callerId, authorityToken: caller.authorityToken });
-      }
-    }
-  } catch {
-    // Preserve a terminal failed receipt even for accessor/proxy input.
-  }
-  return Object.freeze({ callerId: "invalid", authorityToken: "invalid" });
 }
 
 function receiptOpaque(value: unknown): OpaqueRef {
@@ -432,7 +441,7 @@ export class WorkPlane<ProgramResult, Fact> {
     const start = now(this.clock);
     const phases: WorkPhaseReceipt[] = [];
     let currentPhase = "intent";
-    let caller: CallerBinding | null = null;
+    let caller: Readonly<CallerAuthority> | null = null;
     let declaration: WorkClassDeclaration | null = null;
     let permitId: string | null = null;
     let queueWaitMs: number | null = null;
@@ -480,17 +489,14 @@ export class WorkPlane<ProgramResult, Fact> {
       })));
       await runPhase("authority", () => invokePort("lease-invalid", () => this.ports.fence.assertCurrent({ source, generationLeaseRef: intent.generationLeaseRef })));
       await runPhase("authority", () => {
-        assertExactKeys(input.caller, ["callerId", "authorityToken"]);
-        const bound = invokePort("caller-mismatch", () => this.ports.caller.bind({ intent, requested: input.caller }));
-        assertExactKeys(bound, ["callerId", "authorityToken", "boundIntentId", "sourceHash", "issuerRef"]);
-        opaqueCopy(bound.issuerRef, "caller issuerRef");
-        if (bound.boundIntentId !== String(intent.intentId) || bound.sourceHash !== source.hash) {
-          throw new Error("caller authority was not bound to this intent/source");
+        const issued = readWorkPlaneCallerCapability(input.caller);
+        if (issued.scheduler !== this.ports.scheduler) {
+          throw new TypeError("work-plane caller capability belongs to another scheduler");
         }
-        caller = bound;
-        if (bound.callerId !== input.caller.callerId || bound.authorityToken !== input.caller.authorityToken || refKey(bound.issuerRef) !== refKey(intent.frozenProgramRef.issuerRef)) {
-          throw new Error("caller authority was not bound to requested caller");
+        if (issued.intentBindingHash !== workPlaneCallerIntentBindingHash(intent)) {
+          throw new TypeError("work-plane caller capability belongs to another intent");
         }
+        caller = issued.caller;
       });
       declaration = await runPhase("admission", () => invokePort("unknown-capability", () => this.ports.resolveWorkClass(intent)));
       if (declaration.phase !== intent.phase) throw new WorkPlanePortError("unknown-capability", new Error("work class phase declaration mismatch"));
@@ -566,7 +572,7 @@ export class WorkPlane<ProgramResult, Fact> {
         message: error instanceof Error ? error.message : String(error),
       });
       const finished = now(this.clock);
-      const failedCaller = receiptCaller(caller === null ? input.caller : caller);
+      const failedCaller = caller ?? Object.freeze({ callerId: "invalid", authorityToken: "invalid" });
       const failedLease = receiptLease(intent?.generationLeaseRef, source);
       const receipt = freezeReceipt({
         intentId: typeof intent?.intentId === "string" ? intent.intentId : "invalid",

@@ -5,32 +5,40 @@ import {
   createExternalQualificationTrustAnchorV2,
   createSignedQualificationRegistryApprovalV2,
   createSignedObserverCertificateV2,
-  createSignedReleaseAuthorityApprovalV2,
+  createSignedReleaseAcceptanceApprovalV1,
+  createSignedReleaseAuthorityApprovalV3,
   createSignedVerifierCertificateV2,
   decodeExternalQualificationIssuerKeyV2,
   decodeExternalQualificationTrustAnchorV2,
   decodeSignedQualificationRegistryApprovalV2,
   decodeSignedObserverCertificateV2,
-  decodeSignedReleaseAuthorityApprovalV2,
+  decodeSignedReleaseAcceptanceApprovalV1,
+  decodeSignedReleaseAuthorityApprovalV3,
   decodeSignedVerifierCertificateV2,
   encodeExternalQualificationIssuerKeyV2,
   encodeExternalQualificationTrustAnchorV2,
   encodeSignedQualificationRegistryApprovalV2,
   encodeSignedObserverCertificateV2,
-  encodeSignedReleaseAuthorityApprovalV2,
+  encodeSignedReleaseAcceptanceApprovalV1,
+  encodeSignedReleaseAuthorityApprovalV3,
   encodeSignedVerifierCertificateV2,
   hashExternalQualificationIssuerKeySetRoot,
   hashExternalQualificationIssuerSetRoot,
   hashSignedReleaseAuthorityObserverCertificateIdsRoot,
   observerCertificateSigningBytes,
   qualificationRegistryApprovalSigningBytes,
+  releaseAcceptanceApprovalSigningBytes,
   releaseAuthorityApprovalSigningBytes,
   recomputeExternalQualificationIssuerKeyId,
   recomputeExternalQualificationTrustAnchorId,
   recomputeSignedQualificationRegistryApprovalId,
   recomputeSignedQualificationRegistryApprovalPayloadHash,
+  recomputeSignedReleaseAcceptanceApprovalId,
+  recomputeSignedReleaseAcceptanceApprovalPayloadHash,
   recomputeSignedReleaseAuthorityApprovalId,
   recomputeSignedReleaseAuthorityApprovalPayloadHash,
+  sealReleaseAcceptanceRequirementsV1,
+  sealReleaseAcceptanceSetV1,
   recomputeSignedObserverCertificateV2Id,
   recomputeSignedVerifierCertificateV2Id,
   verifierCertificateSigningBytes,
@@ -118,28 +126,79 @@ const trustAnchor = createExternalQualificationTrustAnchorV2({
 });
 
 const observerCertificateIds = [observer.certificateId] as const;
-const releaseInput = {
-  schemaVersion: 2 as const,
-  kind: "aloha.signed-release-authority-approval" as const,
+const releaseRequirements = sealReleaseAcceptanceRequirementsV1([{
+  predicateId: "aloha.test.predicate",
+  predicateSpecDigest: h("d"),
+  predicateCompositionLeafDigest: h("e"),
   authorityPinDigest: h("7"),
+  verifierCertificateId: verifier.certificateId,
+  observerCertificateIds,
+  observerCertificateIdsRoot: hashSignedReleaseAuthorityObserverCertificateIdsRoot(observerCertificateIds),
+}]);
+const releaseInput = {
+  schemaVersion: 3 as const,
+  kind: "aloha.signed-release-authority-approval" as const,
   externalTrustAnchorRoot: trustAnchor.anchorId,
   issuerKeySetRoot,
   registryApprovalId: approval.approvalId,
   registryRoot: approval.registryRoot,
-  verifierCertificateId: verifier.certificateId,
-  observerCertificateIds,
-  observerCertificateIdsRoot: hashSignedReleaseAuthorityObserverCertificateIdsRoot(observerCertificateIds),
+  ...releaseRequirements,
   predicateCompositionRootDigest: h("8"),
   gateCoreRuntimeClosureDigest: h("9"),
   gateCoreImplementationClosureDigest: h("a"),
   releaseRoleManifestRoot: h("b"),
   candidateReleaseCommit: "a".repeat(40),
+  qualifiedRunnerIssuerId: keyA.issuerId,
+  qualifiedRunnerKeyId: keyA.keyId,
+  qualifiedRunnerImplementationClosureDigest: hashDomain("test/qualification-runner", "closure"),
+  qualifiedRunnerImplementationExportDigest: hashDomain("test/qualification-runner", "export"),
   epoch: "8",
   audienceHash: h("3"),
   issuerId: keyA.issuerId,
   keyId: keyA.keyId,
 };
-const release = createSignedReleaseAuthorityApprovalV2(releaseInput, sig("dd"));
+const release = createSignedReleaseAuthorityApprovalV3(releaseInput, sig("dd"));
+
+const releaseAcceptanceSet = sealReleaseAcceptanceSetV1(
+  release.releaseAcceptanceRequirementSetRoot,
+  [{
+    predicateId: release.releaseAcceptanceRequirements[0]!.predicateId,
+    predicateSpecDigest: release.releaseAcceptanceRequirements[0]!.predicateSpecDigest,
+    predicateCompositionLeafDigest: release.releaseAcceptanceRequirements[0]!.predicateCompositionLeafDigest,
+    requirementLeafDigest: release.releaseAcceptanceRequirements[0]!.requirementLeafDigest,
+    acceptanceCertificateId: h("6"),
+    acceptanceCertificatePayloadHash: h("c"),
+    verdict: "pass",
+  }],
+);
+const releaseAcceptanceApprovalInput = {
+  schemaVersion: 1 as const,
+  kind: "aloha.signed-release-acceptance-approval" as const,
+  releaseAuthorityApprovalId: release.approvalId,
+  releaseAuthorityApprovalPayloadHash: release.payloadHash,
+  runtimeReleaseBindingId: h("f"),
+  releaseAcceptanceRequirementSetRoot: release.releaseAcceptanceRequirementSetRoot,
+  releaseAcceptanceSetRoot: releaseAcceptanceSet.root,
+  predicateCompositionRootDigest: release.predicateCompositionRootDigest,
+  gateCoreRuntimeClosureDigest: release.gateCoreRuntimeClosureDigest,
+  gateCoreImplementationClosureDigest: release.gateCoreImplementationClosureDigest,
+  releaseRoleManifestRoot: release.releaseRoleManifestRoot,
+  candidateReleaseCommit: release.candidateReleaseCommit,
+  externalTrustAnchorRoot: release.externalTrustAnchorRoot,
+  issuerKeySetRoot: release.issuerKeySetRoot,
+  registryApprovalId: release.registryApprovalId,
+  registryRoot: release.registryRoot,
+  epoch: release.epoch,
+  audienceHash: release.audienceHash,
+  issuerId: release.qualifiedRunnerIssuerId,
+  keyId: release.qualifiedRunnerKeyId,
+  qualifiedRunnerImplementationClosureDigest: release.qualifiedRunnerImplementationClosureDigest,
+  qualifiedRunnerImplementationExportDigest: release.qualifiedRunnerImplementationExportDigest,
+};
+const releaseAcceptanceApproval = createSignedReleaseAcceptanceApprovalV1(
+  releaseAcceptanceApprovalInput,
+  sig("ee"),
+);
 
 test("V2 objects are exact signed wire objects and round-trip byte-identically", () => {
   assert.deepEqual(decodeExternalQualificationIssuerKeyV2(encodeExternalQualificationIssuerKeyV2(keyA)), keyA);
@@ -147,7 +206,7 @@ test("V2 objects are exact signed wire objects and round-trip byte-identically",
   assert.deepEqual(decodeSignedObserverCertificateV2(encodeSignedObserverCertificateV2(observer)), observer);
   assert.deepEqual(decodeSignedVerifierCertificateV2(encodeSignedVerifierCertificateV2(verifier)), verifier);
   assert.deepEqual(decodeExternalQualificationTrustAnchorV2(encodeExternalQualificationTrustAnchorV2(trustAnchor)), trustAnchor);
-  assert.deepEqual(decodeSignedReleaseAuthorityApprovalV2(encodeSignedReleaseAuthorityApprovalV2(release)), release);
+  assert.deepEqual(decodeSignedReleaseAuthorityApprovalV3(encodeSignedReleaseAuthorityApprovalV3(release)), release);
   assert.equal(recomputeExternalQualificationIssuerKeyId(keyA), keyA.keyId);
   assert.equal(recomputeSignedQualificationRegistryApprovalPayloadHash(approval), approval.payloadHash);
   assert.equal(recomputeSignedQualificationRegistryApprovalId(approval), approval.approvalId);
@@ -271,16 +330,18 @@ test("trust anchor is an observed, content-addressed interval with designated go
 test("release authority approval binds every release and qualification root without self-authority", () => {
   const signingBytes = releaseAuthorityApprovalSigningBytes(release);
   const mutatedFields = [
-    "authorityPinDigest",
     "externalTrustAnchorRoot",
     "issuerKeySetRoot",
     "registryApprovalId",
     "registryRoot",
-    "verifierCertificateId",
+    "releaseAcceptanceRequirementSetRoot",
     "predicateCompositionRootDigest",
     "gateCoreRuntimeClosureDigest",
     "gateCoreImplementationClosureDigest",
     "releaseRoleManifestRoot",
+    "qualifiedRunnerKeyId",
+    "qualifiedRunnerImplementationClosureDigest",
+    "qualifiedRunnerImplementationExportDigest",
     "audienceHash",
     "keyId",
   ] as const;
@@ -288,19 +349,64 @@ test("release authority approval binds every release and qualification root with
     assert.notDeepEqual(signingBytes, releaseAuthorityApprovalSigningBytes({ ...release, [field]: h("f") }), field);
   }
   assert.notDeepEqual(signingBytes, releaseAuthorityApprovalSigningBytes({ ...release, candidateReleaseCommit: "b".repeat(40) }));
+  assert.notDeepEqual(signingBytes, releaseAuthorityApprovalSigningBytes({
+    ...release,
+    releaseAcceptanceRequirements: [{ ...release.releaseAcceptanceRequirements[0]!, authorityPinDigest: h("f") }],
+  }));
   assert.notDeepEqual(signingBytes, releaseAuthorityApprovalSigningBytes({ ...release, epoch: "9" }));
-  assert.notDeepEqual(signingBytes, releaseAuthorityApprovalSigningBytes({ ...release, observerCertificateIdsRoot: h("f") }));
-  assert.throws(() => decodeSignedReleaseAuthorityApprovalV2({ ...release, observerCertificateIds: [h("f"), observer.certificateId] }));
+  assert.notDeepEqual(signingBytes, releaseAuthorityApprovalSigningBytes({ ...release, releaseAcceptanceRequirementSetRoot: h("f") }));
+  assert.throws(() => decodeSignedReleaseAuthorityApprovalV3({ ...release, releaseAcceptanceRequirements: [] }));
   assert.throws(() => hashSignedReleaseAuthorityObserverCertificateIdsRoot([observer.certificateId, observer.certificateId]));
   assert.throws(() => hashSignedReleaseAuthorityObserverCertificateIdsRoot([observer.certificateId, h("0")]));
-  assert.throws(() => decodeSignedReleaseAuthorityApprovalV2({ ...release, candidateReleaseCommit: "A".repeat(40) }));
-  assert.throws(() => createSignedReleaseAuthorityApprovalV2({ ...releaseInput, candidateReleaseCommit: "0".repeat(40) }, sig("ee")));
-  assert.throws(() => decodeSignedReleaseAuthorityApprovalV2({ ...release, extra: true } as never));
+  assert.throws(() => decodeSignedReleaseAuthorityApprovalV3({ ...release, candidateReleaseCommit: "A".repeat(40) }));
+  assert.throws(() => createSignedReleaseAuthorityApprovalV3({ ...releaseInput, candidateReleaseCommit: "0".repeat(40) }, sig("ee")));
+  assert.throws(() => decodeSignedReleaseAuthorityApprovalV3({ ...release, extra: true } as never));
   const withoutSignature = { ...release } as Record<string, unknown>;
   delete withoutSignature.signatureHex;
-  assert.throws(() => decodeSignedReleaseAuthorityApprovalV2(withoutSignature));
-  assert.throws(() => decodeSignedReleaseAuthorityApprovalV2({ ...release, schemaVersion: 1 } as never));
+  assert.throws(() => decodeSignedReleaseAuthorityApprovalV3(withoutSignature));
+  assert.throws(() => decodeSignedReleaseAuthorityApprovalV3({ ...release, schemaVersion: 1 } as never));
   assert.notEqual(recomputeSignedReleaseAuthorityApprovalId(release), recomputeSignedReleaseAuthorityApprovalId(
-    createSignedReleaseAuthorityApprovalV2({ ...releaseInput, authorityPinDigest: h("f") }, sig("ee")),
+    createSignedReleaseAuthorityApprovalV3({ ...releaseInput, releaseRoleManifestRoot: h("f") }, sig("ee")),
   ));
+});
+
+test("post-run acceptance approval binds the exact result set and V3-authorized runner", () => {
+  assert.deepEqual(
+    decodeSignedReleaseAcceptanceApprovalV1(encodeSignedReleaseAcceptanceApprovalV1(releaseAcceptanceApproval)),
+    releaseAcceptanceApproval,
+  );
+  assert.equal(
+    recomputeSignedReleaseAcceptanceApprovalId(releaseAcceptanceApproval),
+    releaseAcceptanceApproval.approvalId,
+  );
+  assert.equal(
+    recomputeSignedReleaseAcceptanceApprovalPayloadHash(releaseAcceptanceApproval),
+    releaseAcceptanceApproval.payloadHash,
+  );
+  const signingBytes = releaseAcceptanceApprovalSigningBytes(releaseAcceptanceApproval);
+  for (const field of [
+    "releaseAuthorityApprovalId",
+    "releaseAuthorityApprovalPayloadHash",
+    "runtimeReleaseBindingId",
+    "releaseAcceptanceRequirementSetRoot",
+    "releaseAcceptanceSetRoot",
+    "qualifiedRunnerImplementationClosureDigest",
+    "qualifiedRunnerImplementationExportDigest",
+    "keyId",
+  ] as const) {
+    assert.notDeepEqual(
+      signingBytes,
+      releaseAcceptanceApprovalSigningBytes({ ...releaseAcceptanceApproval, [field]: h("0") }),
+      field,
+    );
+  }
+  assert.notDeepEqual(
+    signingBytes,
+    releaseAcceptanceApprovalSigningBytes({ ...releaseAcceptanceApproval, issuerId: "foreign-runner" }),
+  );
+  assert.throws(() => decodeSignedReleaseAcceptanceApprovalV1({ ...releaseAcceptanceApproval, extra: true } as never));
+  assert.throws(() => decodeSignedReleaseAcceptanceApprovalV1({
+    ...releaseAcceptanceApproval,
+    qualifiedRunnerImplementationClosureDigest: "not-a-hash",
+  } as never));
 });

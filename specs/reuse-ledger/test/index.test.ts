@@ -1,60 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  computeReuseLedgerRoot,
-  decodeReferenceLock,
-  decodeReuseLedger,
-  deriveReferenceLock,
-} from "../src/index.ts";
-import {
-  CURRENT_REFERENCE_LOCK,
-  CURRENT_REUSE_LEDGER,
-  REQUIRED_AUDIT_ENTRY_IDS,
-} from "../src/current-ledger.ts";
+import { hashDomain } from "../../../packages/canonical-codec/src/index.ts";
+import { CURRENT_AUDIT_ENTRY_COUNT, CURRENT_REUSE_DECLARATIONS, REQUIRED_AUDIT_ENTRY_COUNT, REQUIRED_AUDIT_ENTRY_IDS, REQUIRED_AUDIT_ENTRY_SET_DOMAIN, REQUIRED_AUDIT_ENTRY_SET_ROOT } from "../src/current-ledger.ts";
+import { entryIdFor, REFERENCE_COMMIT, REUSE_AUTHORITY_SCHEMA_VERSION, type AuthorityManifestV2 } from "../src/index.ts";
+import * as requirements from "../src/evidence-requirements.ts";
 
-test("current audited ledger is exact, frozen, and has no LP row", () => {
-  assert.equal(CURRENT_REUSE_LEDGER.entries.length, 27);
-  assert.deepEqual(
-    CURRENT_REUSE_LEDGER.entries.map(entry => entry.entryId),
-    [...REQUIRED_AUDIT_ENTRY_IDS].sort(),
-  );
-  assert.equal(Object.isFrozen(CURRENT_REUSE_LEDGER), true);
-  assert.equal(Object.isFrozen(CURRENT_REUSE_LEDGER.entries), true);
-  assert.equal(CURRENT_REUSE_LEDGER.entries.some(entry => /lp/i.test(entry.destination)), false);
-  assert.deepEqual(decodeReuseLedger(CURRENT_REUSE_LEDGER), CURRENT_REUSE_LEDGER);
-  assert.deepEqual(decodeReferenceLock(CURRENT_REFERENCE_LOCK), CURRENT_REFERENCE_LOCK);
+test("current denominator is 27 exact, unique, hard-cut declarations", () => {
+  assert.equal(CURRENT_AUDIT_ENTRY_COUNT, REQUIRED_AUDIT_ENTRY_COUNT);
+  assert.equal(new Set(REQUIRED_AUDIT_ENTRY_IDS).size, REQUIRED_AUDIT_ENTRY_COUNT);
+  assert.equal(hashDomain(REQUIRED_AUDIT_ENTRY_SET_DOMAIN, REQUIRED_AUDIT_ENTRY_IDS), REQUIRED_AUDIT_ENTRY_SET_ROOT);
+  assert.deepEqual(CURRENT_REUSE_DECLARATIONS.map(item => item.entryId).sort(), REQUIRED_AUDIT_ENTRY_IDS);
+  assert.equal(CURRENT_REUSE_DECLARATIONS.every(item => item.creditStatus === "credited" && item.nonCreditReason === null), true);
+  assert.equal(CURRENT_REUSE_DECLARATIONS.every(item => item.adoptionMode === "invariant-only-rewrite"), true);
+  assert.equal(JSON.stringify(CURRENT_REUSE_DECLARATIONS).match(/future|pending/gi), null);
 });
-test("reference lock is mechanically derived from the same exact source/blob set", () => {
-  assert.deepEqual(deriveReferenceLock(CURRENT_REUSE_LEDGER), CURRENT_REFERENCE_LOCK);
-  assert.equal(CURRENT_REFERENCE_LOCK.entries.length, CURRENT_REUSE_LEDGER.entries.length);
-  for (const entry of CURRENT_REUSE_LEDGER.entries) {
-    const lock = CURRENT_REFERENCE_LOCK.entries.find(candidate => candidate.entryId === entry.entryId);
-    assert.ok(lock);
-    assert.equal(lock.sourceCommit, entry.sourceCommit);
-    assert.equal(lock.sourcePath, entry.sourcePath);
-    assert.equal(lock.sourceBlob, entry.sourceBlob);
-    assert.equal(lock.allowedDisposition, entry.adoptionMode);
+
+test("entry identity binds the old path and ordered symbol set", () => {
+  const first = CURRENT_REUSE_DECLARATIONS[0]!;
+  assert.equal(first.entryId, entryIdFor(first.sourcePath, first.sourceSymbols.map(symbol => symbol.name)));
+  assert.notEqual(first.entryId, entryIdFor(first.sourcePath, [...first.sourceSymbols].reverse().map(symbol => symbol.name)));
+  assert.equal(REFERENCE_COMMIT.length, 40);
+});
+
+test("reuse authority manifest schema version is owned by the canonical ledger spec", () => {
+  const schemaVersion: AuthorityManifestV2["schemaVersion"] = REUSE_AUTHORITY_SCHEMA_VERSION;
+  assert.equal(schemaVersion, 2);
+});
+
+test("every evidence declaration resolves a named requirement-only export", () => {
+  for (const declaration of CURRENT_REUSE_DECLARATIONS) {
+    const value = (requirements as Record<string, unknown>)[declaration.evidence.requirementExportName] as { authority?: unknown; productionOraclePass?: unknown; testModulePath?: unknown; testCaseName?: unknown } | undefined;
+    assert.ok(value, declaration.evidence.requirementExportName);
+    assert.equal(value.authority, "requirement-only");
+    assert.equal(value.productionOraclePass, false);
+    assert.equal(value.testModulePath, declaration.evidence.testModulePath);
+    assert.equal(value.testCaseName, declaration.evidence.testCaseName);
   }
-});
-
-test("entry id binds source path and symbol, so a symbol-only edit cannot hide", () => {
-  const entry = CURRENT_REUSE_LEDGER.entries[0]!;
-  const mutated = { ...entry, symbol: `${entry.symbol}.changed` };
-  const candidate = {
-    ...CURRENT_REUSE_LEDGER,
-    entries: [mutated, ...CURRENT_REUSE_LEDGER.entries.slice(1)],
-    reuseLedgerRoot: computeReuseLedgerRoot([mutated, ...CURRENT_REUSE_LEDGER.entries.slice(1)]),
-  };
-  assert.throws(() => decodeReuseLedger(candidate), /entryId does not bind source path and symbol/);
-});
-
-test("unknown fields and missing required fields fail closed", () => {
-  assert.throws(() => decodeReuseLedger({ ...CURRENT_REUSE_LEDGER, extra: true }), /unknown field/);
-  const { factOracle: _factOracle, ...withoutOracle } = CURRENT_REUSE_LEDGER.entries[0]!;
-  const entries = [withoutOracle, ...CURRENT_REUSE_LEDGER.entries.slice(1)];
-  assert.throws(() => decodeReuseLedger({
-    ...CURRENT_REUSE_LEDGER,
-    entries,
-    reuseLedgerRoot: computeReuseLedgerRoot(entries as typeof CURRENT_REUSE_LEDGER.entries),
-  }), /missing field/);
 });

@@ -5,11 +5,13 @@ import {
   hashDomain,
   type Hash,
 } from "../../canonical-codec/src/index.ts";
+import { erc20AssetPortBindingV1 } from "../../asset-ref/src/index.ts";
 import { sealInstancePublication } from "../../catalog/src/index.ts";
 import { mergeAndDedupeNominations, type CandidateRecordV1 } from "../../discovery/src/index.ts";
 import { CandidatePartitionCapabilityRegistryV1 } from "../../checkpoint/src/candidate-partition.ts";
 import {
   assertPromotablePartition,
+  identityMemoHash,
   validateCandidateFinalOutcome,
   validateRejectionEvidenceBundle,
   verifiedIdentitySubjectHash,
@@ -44,14 +46,23 @@ import {
 } from "./authority-fixture.ts";
 
 const h = (value: string): Hash => hashDomain("test/attestation", value);
+const identityMemo = (value: string) => ({ kind: "test-identity-memo", value } as const);
+const memoHash = (value: string): Hash => identityMemoHash(identityMemo(value));
 const cutoff = { chainId: "1", number: "10", hash: h("block"), stateRoot: h("state") };
+const inputAsset = erc20AssetPortBindingV1("1", `0x${h("in").slice(-40)}`);
+const outputAsset = erc20AssetPortBindingV1("1", `0x${h("out").slice(-40)}`);
 
 const candidate = (nominationKey: string): CandidateRecordV1 => mergeAndDedupeNominations([{
+  kind: "aloha.candidate-nomination",
+  version: "2",
   familyId: "family-a",
   familyDefinitionHash: h("definition"),
   instanceNominationKey: nominationKey,
-  candidateSnapshotHash: h(`snapshot:${nominationKey}`),
   evidence: {
+    kind: "recent-log",
+    version: 1,
+    sourcePlanRef: null,
+    ownerRef: null,
     blockNumber: "10",
     blockHash: cutoff.hash,
     txHash: h(`tx:${nominationKey}`),
@@ -74,14 +85,15 @@ const publication = (value: CandidateRecordV1, identity: IdentityVerifiedV1) => 
   familyCandidateKey: value.familyCandidateKey,
   instanceKey: identity.familyInstanceKey,
   cutoff,
+  identityMemo: identity.identityMemo,
   identityMemoHash: identity.identityMemoHash,
   descriptorHash: identity.descriptorHash,
   staticProjectionMemoHash: h("projection-memo"),
   requestedArtifactDependencyRoot: h("dependencies"),
   validityDependencyRoot: h("validity"),
   transitions: [{
-    inputAssetPorts: [{ assetRef: h("in"), portRef: h("in-port"), ordinal: "0" }],
-    outputAssetPorts: [{ assetRef: h("out"), portRef: h("out-port"), ordinal: "0" }],
+    inputAssetPorts: [{ ...inputAsset, portRef: h("in-port"), ordinal: "0" }],
+    outputAssetPorts: [{ ...outputAsset, portRef: h("out-port"), ordinal: "0" }],
     opaqueTransitionRef: h("transition"),
     constraintRefs: [],
     staticProjectionHash: h("projection"),
@@ -302,7 +314,8 @@ test("active signed runtime binding is checked for every proof issue and verify,
   const identity: IdentityVerifiedObservationV1 = {
     kind: "identityVerified",
     familyInstanceKey: "instance:active-runtime-binding",
-    identityMemoHash: h("active-identity"),
+    identityMemo: identityMemo("active-identity"),
+    identityMemoHash: memoHash("active-identity"),
     descriptorHash: h("active-descriptor"),
     evidenceRoot: h("active-evidence"),
   };
@@ -445,7 +458,8 @@ test("identity and instance lifecycle execute exactly once per candidate/instanc
       return {
         kind: "identityVerified",
         familyInstanceKey: `instance:${value.instanceNominationKey}`,
-        identityMemoHash: h(`identity:${value.instanceNominationKey}`),
+        identityMemo: identityMemo(`identity:${value.instanceNominationKey}`),
+        identityMemoHash: memoHash(`identity:${value.instanceNominationKey}`),
         descriptorHash: h("descriptor"),
         evidenceRoot: h(`evidence:${value.instanceNominationKey}`),
       };
@@ -462,12 +476,33 @@ test("identity and instance lifecycle execute exactly once per candidate/instanc
   assertPromotablePartition(partition, candidates.map(value => value.familyCandidateKey));
 });
 
+test("central identity memo commitment rejects an opaque value/hash mismatch", async () => {
+  const value = candidate("memo-binding");
+  const memoValue = identityMemo("memo-binding");
+  const programs: AttestationProgramPort = {
+    async attestIdentity() {
+      return {
+        kind: "identityVerified" as const,
+        familyInstanceKey: "instance:memo-binding",
+        identityMemo: { ...memoValue, value: "tampered" },
+        identityMemoHash: memoHash("memo-binding"),
+        descriptorHash: h("descriptor"),
+        evidenceRoot: h("evidence"),
+      };
+    },
+    async materializeAndProject() { throw new Error("memo mismatch must not materialize"); },
+  };
+  const partition = await attestPartition(attestArgs(), programs, [value]);
+  assert.equal(partition.outcomes[0]?.kind, "invalidProgram");
+});
+
 test("constructor-bound run sessions separate partial identity persistence and seal only after writer drain", async () => {
   const value = candidate("session");
   const identity: IdentityVerifiedObservationV1 = {
     kind: "identityVerified",
     familyInstanceKey: "instance:session",
-    identityMemoHash: h("session-identity"),
+    identityMemo: identityMemo("session-identity"),
+    identityMemoHash: memoHash("session-identity"),
     descriptorHash: h("session-descriptor"),
     evidenceRoot: h("session-evidence"),
   };
@@ -511,7 +546,8 @@ test("raw candidate or hand-written identity cannot cross the continuation bound
   const identity: IdentityVerifiedObservationV1 = {
     kind: "identityVerified",
     familyInstanceKey: "instance:continuation-boundary",
-    identityMemoHash: h("continuation-identity"),
+    identityMemo: identityMemo("continuation-identity"),
+    identityMemoHash: memoHash("continuation-identity"),
     descriptorHash: h("continuation-descriptor"),
     evidenceRoot: h("continuation-evidence"),
   };
@@ -559,7 +595,8 @@ test("collision admission requires two same-session continuations and cannot con
       return {
         kind: "identityVerified" as const,
         familyInstanceKey: "same-instance",
-        identityMemoHash: h("collision-identity"),
+        identityMemo: identityMemo("collision-identity"),
+        identityMemoHash: memoHash("collision-identity"),
         descriptorHash: h("collision-descriptor"),
         evidenceRoot: h("collision-evidence"),
       };
@@ -603,7 +640,8 @@ test("session resolve and materialize are single-flight and share one continuati
       return {
         kind: "identityVerified" as const,
         familyInstanceKey: "concurrent-instance",
-        identityMemoHash: h("concurrent-identity"),
+        identityMemo: identityMemo("concurrent-identity"),
+        identityMemoHash: memoHash("concurrent-identity"),
         descriptorHash: h("concurrent-descriptor"),
         evidenceRoot: h("concurrent-evidence"),
       };
@@ -641,7 +679,7 @@ test("two nomination keys resolving to one instance are invalid, never silently 
   const args = attestArgs();
   const programs: AttestationProgramPort = {
     async attestIdentity() {
-      return { kind: "identityVerified", familyInstanceKey: "same", identityMemoHash: h("identity"), descriptorHash: h("descriptor"), evidenceRoot: h("evidence") };
+      return { kind: "identityVerified", familyInstanceKey: "same", identityMemo: identityMemo("identity"), identityMemoHash: memoHash("identity"), descriptorHash: h("descriptor"), evidenceRoot: h("evidence") };
     },
     async materializeAndProject() {
       lifecycleCalls += 1;
@@ -671,7 +709,7 @@ test("plugin explicit retryable remains retryable without framework transport bi
           stage: "identity",
           failureCode: "rpc-deadline",
           attemptCount: "3",
-          candidateSnapshotHash: candidateValue.candidateSnapshotHash,
+          candidateSubjectHash: candidateValue.candidateSubjectHash,
           evidenceRoot: h("evidence"),
           frameworkBinding: null,
         },
@@ -791,7 +829,9 @@ test("freezeProgram commits a deep normalized context and recomputes its program
     context: mutableContext,
     request: mutableRequest,
   });
-  mutableCandidate.evidence[0]!.address = "0xmutated";
+  const mutableEvidence = mutableCandidate.evidence[0];
+  if (mutableEvidence?.kind !== "recent-log") throw new Error("expected recent-log evidence");
+  mutableEvidence.address = "0xmutated";
   mutableContext.cutoff.number = "11";
   mutableRequest.record.to = "0xmutated";
   let observed: FrozenProgramExecutionViewV1 | undefined;
@@ -814,7 +854,8 @@ test("freezeProgram commits a deep normalized context and recomputes its program
   assert.equal(observed?.programId, program.programId);
   assert.equal(observed?.request.record.to, "0xabc");
   assert.equal(fixture.calls[0]?.context.cutoff.number, "10");
-  assert.equal(fixture.calls[0]?.context.candidate.evidence[0]?.address, "0xabc");
+  const frozenEvidence = fixture.calls[0]?.context.candidate.evidence[0];
+  assert.equal(frozenEvidence?.kind === "recent-log" ? frozenEvidence.address : undefined, "0xabc");
 });
 
 test("AttestationService snapshots mutable run inputs before Family async work", async () => {
@@ -836,7 +877,8 @@ test("AttestationService snapshots mutable run inputs before Family async work",
       return {
         kind: "identityVerified" as const,
         familyInstanceKey: "service-input-instance",
-        identityMemoHash: h("service-input-identity"),
+        identityMemo: identityMemo("service-input-identity"),
+        identityMemoHash: memoHash("service-input-identity"),
         descriptorHash: h("service-input-descriptor"),
         evidenceRoot: h("service-input-evidence"),
       };
@@ -852,7 +894,9 @@ test("AttestationService snapshots mutable run inputs before Family async work",
     mutableCandidate.familyCandidateKey,
     new AbortController().signal,
   );
-  mutableCandidate.evidence[0]!.address = "0xcaller-mutated";
+  const mutableEvidence = mutableCandidate.evidence[0];
+  if (mutableEvidence?.kind !== "recent-log") throw new Error("expected recent-log evidence");
+  mutableEvidence.address = "0xcaller-mutated";
   release();
   const identityResult = await identityPromise;
   assert.equal(identityResult.kind, "identityVerified");
@@ -864,7 +908,8 @@ test("AttestationService snapshots mutable run inputs before Family async work",
   finalClaim.commit();
   const sealed = session.sealExactPartition([final.persistenceCapability.outcomeHash]);
   const observedPartition = service.validationAuthority.validatePartitionCapability(sealed, [originalCandidate]);
-  assert.equal(seenCandidate?.evidence[0]?.address, "0xabc");
+  const seenEvidence = seenCandidate?.evidence[0];
+  assert.equal(seenEvidence?.kind === "recent-log" ? seenEvidence.address : undefined, "0xabc");
   assert.equal(seenCutoff?.number, "10");
   assert.equal(observedPartition.outcomes[0]?.kind, "verified");
 });
@@ -1118,7 +1163,8 @@ test("materialization rejection binds the exact verified identity subject", asyn
   const identity = {
     kind: "identityVerified" as const,
     familyInstanceKey: "instance:a",
-    identityMemoHash: h("identity"),
+    identityMemo: identityMemo("identity"),
+    identityMemoHash: memoHash("identity"),
     descriptorHash: h("descriptor"),
     evidenceRoot: h("identity-evidence"),
   };

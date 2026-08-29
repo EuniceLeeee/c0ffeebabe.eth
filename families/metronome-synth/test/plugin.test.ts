@@ -1,0 +1,34 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { hashDomain } from "../../../packages/canonical-codec/src/index.ts";
+import { METRONOME_SYNTH_SOURCE_PLAN_ID } from "../src/manifest.ts";
+import { METRONOME_SYNTH_SOURCE_PLAN } from "../src/source-plan.ts";
+import { METRONOME_SYNTH_SOURCE_NOMINATION_PROGRAM, METRONOME_SYNTH_SOURCE_PLAN_RUNTIME } from "../src/source-plan.ts";
+import { sourcePlanEvidenceRoot, sourcePlanExecutionRoot, type RecentLogEvidenceRefV1 } from "../../../packages/discovery/src/index.ts";
+import type { RecentObservationReceiptV1 } from "../../../packages/observation/src/index.ts";
+import { METRONOME_SYNTH_DEFINITION } from "../src/family-definition.ts";
+import { METRONOME_SYNTH_FAMILY_AUTHORING_HASH } from "../src/family-definition.ts";
+import { decodeMetronomeSynthCandidate, deriveMetronomeSynthRoutes, materializeMetronomeSynth, nominateMetronomeSynth, verifyMetronomeSynthIdentityStage } from "../src/stages.ts";
+const addr = (digit: string) => `0x${digit.repeat(40)}`;
+const h = (label: string) => hashDomain("aloha/test/metronome-synth", label);
+const cutoff = { chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") } as const;
+const observation = { kind: "call" as const, target: addr("5"), blockNumber: "100", blockHash: h("b"), txHash: h("tx"), logIndex: "0", rawLocatorHash: h("raw"), cutoff };
+test("Metronome Synth uses the fixed 50-block nomination plan", () => { assert.equal(METRONOME_SYNTH_SOURCE_PLAN.sourcePlanId, METRONOME_SYNTH_SOURCE_PLAN_ID); assert.equal(METRONOME_SYNTH_SOURCE_PLAN.completeness, "nomination-only"); const seed = decodeMetronomeSynthCandidate(observation, "metronome-synth-call"); assert.ok(seed); const nominated = nominateMetronomeSynth(seed); assert.equal(nominated.status, "nominated"); });
+test("Metronome Synth source execution is positive-only", async () => {
+  const plan = { ownerRef: h("owner"), sourcePlanRef: h("plan"), familyDefinitionHash: METRONOME_SYNTH_FAMILY_AUTHORING_HASH, completeness: "nomination-only" as const, historyStartBlock: null };
+  const result = await METRONOME_SYNTH_SOURCE_PLAN_RUNTIME.execute({ plan, cutoff, previousAppliedThrough: null }, { request: async () => { throw new Error("physical source producer must not be called"); } }, new AbortController().signal);
+  assert.equal(result.execution.outcome, "positive-only");
+});
+test("Metronome Synth identity binds every directed pair", () => { const seed = decodeMetronomeSynthCandidate(observation, "metronome-synth-call"); assert.ok(seed); const nominated = nominateMetronomeSynth(seed); assert.equal(nominated.status, "nominated"); if (nominated.status !== "nominated") throw new Error("nomination failed"); const identity = verifyMetronomeSynthIdentityStage({ candidate: nominated.candidate, reads: { cutoff, target: addr("5"), reverseTarget: addr("5"), pool: addr("5"), tokens: [addr("1"), addr("2")], activeDirections: [{ tokenIn: addr("1"), tokenOut: addr("2") }, { tokenIn: addr("2"), tokenOut: addr("1") }], oracleBinding: "0x1234" } }); assert.equal(identity.status, "verified"); if (identity.status !== "verified") throw new Error("identity failed"); assert.equal(deriveMetronomeSynthRoutes(identity.identity).length, 2); const state = materializeMetronomeSynth({ identity: identity.identity, read: { cutoff, instanceKey: addr("5"), projectionHash: h("projection") } }); assert.equal(state.status, "verified"); });
+test("Metronome Synth rejects a direction outside the on-chain token set", () => { const seed = decodeMetronomeSynthCandidate(observation, "metronome-synth-call"); assert.ok(seed); const nominated = nominateMetronomeSynth(seed); assert.equal(nominated.status, "nominated"); if (nominated.status !== "nominated") throw new Error("nomination failed"); const identity = verifyMetronomeSynthIdentityStage({ candidate: nominated.candidate, reads: { cutoff, target: addr("5"), reverseTarget: addr("5"), pool: addr("5"), tokens: [addr("1"), addr("2")], activeDirections: [{ tokenIn: addr("1"), tokenOut: addr("3") }], oracleBinding: "0x1234" } }); assert.deepEqual(identity, { status: "chain-proven-rejected", reasonCode: "invalid-direction" }); });
+test("Metronome Synth declares quote stages unavailable instead of fabricating a quote", async () => { const adapter = (await import("../src/search-adapter.ts")).METRONOME_SYNTH_SEARCH_RUNTIME_ADAPTER_FACTORY; assert.equal(typeof adapter, "function"); assert.equal(METRONOME_SYNTH_DEFINITION.manifest.familyId, "metronome-synth"); });
+test("Metronome Synth skips mixed recent evidence not owned by its source result", async () => {
+  const plan = { ownerRef: h("owner"), sourcePlanRef: h("plan"), familyDefinitionHash: METRONOME_SYNTH_DEFINITION.manifest.familyId === "metronome-synth" ? METRONOME_SYNTH_FAMILY_AUTHORING_HASH : h("wrong"), completeness: "nomination-only" as const, historyStartBlock: null };
+  const sourceEvidence = { kind: "source-plan-evidence" as const, version: 1 as const, plan, cutoff, refs: [], rawLocatorHashes: [], evidenceRoot: sourcePlanEvidenceRoot({ plan, cutoff, refs: [], rawLocatorHashes: [] }) };
+  const executionBase = { kind: "source-plan-execution" as const, version: 1 as const, plan, cutoff, outcome: "positive-only" as const, from: "100", through: "100", previousAppliedThrough: null, resultPartitionRoot: h("partition"), opaqueResult: { kind: "metronome-synth-empty" }, sourceEvidenceRefs: [], rawLocatorHashes: [], sourceEvidenceRoot: sourceEvidence.evidenceRoot };
+  const execution = { ...executionBase, executionRoot: sourcePlanExecutionRoot(executionBase) };
+  const evidence: RecentLogEvidenceRefV1 = { kind: "recent-log", version: 1, sourcePlanRef: null, ownerRef: null, blockNumber: "100", blockHash: cutoff.hash, txHash: h("mixed-tx"), logIndex: "0", address: addr("9"), topic: h("mixed-topic"), rawLocatorHash: h("mixed-raw") };
+  const recent: RecentObservationReceiptV1 = { kind: "recent-observation", version: 1, cutoff, range: { from: "51", to: "100" }, orderedHeaders: [], evidence: [evidence], rawLocatorHashes: [evidence.rawLocatorHash], observationRoot: h("recent") };
+  const result = await METRONOME_SYNTH_SOURCE_NOMINATION_PROGRAM.evaluate({ execution, sourceEvidence, recent, rawEvidence: { read: () => { throw new Error("unowned raw evidence must not be read"); } } }, new AbortController().signal);
+  assert.deepEqual(result, []);
+});

@@ -1,0 +1,12 @@
+import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { asSchemaRef } from "../../../packages/capability-contracts/src/index.ts";
+export const SELF_BURN_NATIVE_FAMILY_ID = "self-burn-native" as const;
+export const SELF_BURN_NATIVE_FAMILY_VERSION = "1.0.0" as const;
+export const SELF_BURN_NATIVE_SOURCE_WINDOW_BLOCKS = 50 as const;
+export const SELF_BURN_NATIVE_SOURCE_PLAN_ID = "self-burn-native.fixed-cutoff-50-block" as const;
+export const SELF_BURN_NATIVE_SOURCE_PLAN_SCHEMA_HASH = asSchemaRef(hashDomain("aloha/self-burn-native/source-plan-schema/v1", SELF_BURN_NATIVE_SOURCE_PLAN_ID));
+export const SELF_BURN_NATIVE_CAPABILITY_IDS = Object.freeze({ state: "family.self-burn-native.state", coarse: "family.self-burn-native.coarse", exact: "family.self-burn-native.exact", trigger: "family.self-burn-native.trigger" } as const);
+export const SELF_BURN_NATIVE_ACTION_OWNER_ID = "family.self-burn-native.redeem-action" as const;
+export const SELF_BURN_NATIVE_MANIFEST = Object.freeze({ familyId: SELF_BURN_NATIVE_FAMILY_ID, version: SELF_BURN_NATIVE_FAMILY_VERSION, domain: "protocol" as const, sourcePlans: Object.freeze([{ id: SELF_BURN_NATIVE_SOURCE_PLAN_ID, windowBlocks: SELF_BURN_NATIVE_SOURCE_WINDOW_BLOCKS, evidenceChannel: "nominate" as const }]), core: Object.freeze(["nomination", "identity", "materialization", "projection", "rehydration"] as const), extensions: Object.freeze(["state", "coarse", "exact", "trigger"] as const), actionOwners: Object.freeze([SELF_BURN_NATIVE_ACTION_OWNER_ID]) });
+export const SELF_BURN_NATIVE_FAMILY_DEFINITION_HASH: Hash = hashDomain("aloha/self-burn-native/family-definition/v1", SELF_BURN_NATIVE_MANIFEST);
+export const SELF_BURN_NATIVE_OWNER_REF: Hash = hashDomain("aloha/self-burn-native/owner/v1", { familyId: SELF_BURN_NATIVE_FAMILY_ID, version: SELF_BURN_NATIVE_FAMILY_VERSION });

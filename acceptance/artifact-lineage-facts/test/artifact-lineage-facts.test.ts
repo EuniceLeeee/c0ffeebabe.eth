@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import * as ts from "typescript";
-import { hashDomain } from "../../../packages/canonical-codec/src/index.ts";
+import { hashDomain, sha256Hex } from "../../../packages/canonical-codec/src/index.ts";
 import {
   ARTIFACT_LINEAGE_CASE_MATERIAL,
   ARTIFACT_LINEAGE_CASE_RESULTS,
@@ -37,7 +37,15 @@ import {
   decodeArtifactLineageFactBundle,
   evaluateArtifactLineagePredicate,
 } from "../src/runtime.ts";
-import { createResolverPolicy } from "../../../specs/artifact-resolution/src/index.ts";
+import {
+  ARTIFACT_BYTES_CHUNK_BYTE_LENGTH,
+  createArtifactResolutionClaim,
+  createObservedImmutableMirror,
+  createResolverPolicy,
+  createRetentionLeaseReceipt,
+  encodeArtifactBytes,
+} from "../../../specs/artifact-resolution/src/index.ts";
+import { createReadOnlyArtifactRef } from "../../../specs/core-envelope/src/index.ts";
 import { QUALIFIED_FACT_SCHEMA_MANIFESTS } from "../../../specs/qualified-facts/src/index.ts";
 
 const zeroHash = `0x${"0".repeat(64)}`;
@@ -87,6 +95,7 @@ test("oracle source has no production artifact-lineage decoder dependency", () =
   const source = ts.sys.readFile(sourcePath);
   assert.equal(typeof source, "string");
   assert.doesNotMatch(source!, /decodeArtifactLineage(?:Claim|Observation|RawFacts)/);
+  assert.doesNotMatch(source!, /\bdecodeArtifactBytes\b/);
 });
 
 test("slice exposes frozen executable schemas and refinement-bound predicate spec", () => {
@@ -176,6 +185,97 @@ test("mirror byte budget is enforced before mirror decode and fact-bundle refine
     () => createArtifactLineageClaim({ ...claimDraft, resolverPolicy: tinyPolicy }),
     /exceed resolver policy before decode/,
   );
+});
+
+test("claim qualification accepts the first mandatory multi-chunk mirror", () => {
+  const positive = ARTIFACT_LINEAGE_CASE_MATERIAL.find((entry) => entry.caseId === "artifact-lineage-positive")!;
+  const bytes = new Uint8Array(ARTIFACT_BYTES_CHUNK_BYTE_LENGTH + 1);
+  bytes[bytes.length - 1] = 1;
+  const contentSha256 = sha256Hex(bytes);
+  const policy = createResolverPolicy({
+    schemaVersion: 1,
+    kind: "aloha.artifact-resolver-policy",
+    allowedLocatorKind: "content-object",
+    digestAlgorithm: "sha256",
+    maxByteLength: String(bytes.byteLength),
+    requireExactLengthMediaAndSchema: true,
+    minimumRemainingStoreEpochs: positive.claim.resolverPolicy.minimumRemainingStoreEpochs,
+    failureOutcome: "invalid",
+  });
+  const storeIdentityHash = positive.claim.artifactRef.immutableMirrorLocator.storeIdentityHash;
+  const lease = createRetentionLeaseReceipt({
+    storeIdentityHash,
+    objectKey: contentSha256,
+    contentSha256,
+    validFromStoreEpoch: positive.claim.retentionLease.validFromStoreEpoch,
+    validThroughStoreEpoch: positive.claim.retentionLease.validThroughStoreEpoch,
+    issuerId: positive.claim.retentionLease.issuerId,
+    issuerQualificationId: positive.claim.retentionLease.issuerQualificationId,
+    qualificationRegistryRoot: positive.claim.retentionLease.qualificationRegistryRoot,
+  });
+  const locator = { kind: "content-object" as const, storeIdentityHash, objectKey: contentSha256 };
+  const ref = createReadOnlyArtifactRef({
+    locator,
+    immutableMirrorLocator: locator,
+    contentSha256,
+    byteLength: String(bytes.byteLength),
+    mediaType: positive.claim.artifactRef.mediaType,
+    schema: positive.claim.artifactRef.schema,
+    resolverPolicyHash: policy.policyHash,
+    retentionLeaseReceiptId: lease.receiptId,
+  });
+  const mirror = createObservedImmutableMirror({
+    storeIdentityHash,
+    objectKey: contentSha256,
+    bytes: encodeArtifactBytes(bytes),
+    mediaType: ref.mediaType,
+    schema: ref.schema,
+  });
+  const resolutionClaim = createArtifactResolutionClaim({
+    artifactRefId: ref.artifactRefId,
+    resolverPolicyHash: policy.policyHash,
+    observedMirror: mirror,
+    outcome: "content-observed",
+  });
+  const claim = createArtifactLineageClaim({
+    schemaVersion: 1,
+    kind: "aloha.artifact-lineage-claim",
+    artifactRef: ref,
+    resolverPolicy: policy,
+    resolutionClaim,
+    retentionLease: lease,
+    observedStoreEpoch: positive.claim.observedStoreEpoch,
+  });
+  assert.equal(claim.resolutionClaim.observedMirror?.bytes.chunks.length, 2);
+  assert.deepEqual(decodeArtifactLineageClaim(claim), claim);
+});
+
+test("independent oracle rejects hostile and non-canonical mirror chunk envelopes without production decode", () => {
+  const positive = ARTIFACT_LINEAGE_CASE_MATERIAL.find((entry) => entry.caseId === "artifact-lineage-positive")!;
+  const mirror = positive.claim.resolutionClaim.observedMirror!;
+  let trapHits = 0;
+  const proxyChunks = new Proxy([...mirror.bytes.chunks], {
+    get() { trapHits += 1; throw new Error("oracle proxy get must not run"); },
+    ownKeys() { trapHits += 1; throw new Error("oracle proxy keys must not run"); },
+    getOwnPropertyDescriptor() { trapHits += 1; throw new Error("oracle proxy descriptor must not run"); },
+  });
+  const hostileClaim = {
+    ...positive.claim,
+    resolutionClaim: {
+      ...positive.claim.resolutionClaim,
+      observedMirror: { ...mirror, bytes: { ...mirror.bytes, chunks: proxyChunks } },
+    },
+  };
+  assert.equal(evaluateArtifactLineageOracle(hostileClaim, positive.observation, positive.rawFacts).verdict, "invalid");
+  assert.equal(trapHits, 0);
+  const legacyClaim = {
+    ...positive.claim,
+    resolutionClaim: {
+      ...positive.claim.resolutionClaim,
+      observedMirror: { ...mirror, bytes: positive.observation.rawBytes },
+    },
+  };
+  assert.equal(evaluateArtifactLineageOracle(legacyClaim, positive.observation, positive.rawFacts).verdict, "invalid");
 });
 
 test("oracle corpus has exact positive, negative and invalid material", () => {

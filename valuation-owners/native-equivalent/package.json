@@ -1,0 +1,14 @@
+{
+  "name": "@aloha/valuation-owner-native-equivalent",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/runtime.ts",
+    "./declaration": "./src/declaration.ts",
+    "./qualification": "./src/qualification.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

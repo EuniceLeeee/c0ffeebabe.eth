@@ -6,14 +6,23 @@ import {
 } from "../../../../specs/candidate-partition-authority/src/index.ts";
 import { issueCandidatePartitionProofIssuerPort } from "../../../../specs/candidate-partition-authority/src/internal/issuer-owner.ts";
 import { assertIssuedCandidatePartitionProofIssuer } from "../../../../specs/candidate-partition-authority/src/internal/issuer-consumer.ts";
-import type { CandidatePartitionProofPayloadV1, CandidatePartitionProofVerificationContextV1 } from "../../../../specs/candidate-partition-authority/src/index.ts";
+import type {
+  CandidateNominationQualificationBindingV1,
+  CandidatePartitionProofPayloadV1,
+  CandidatePartitionProofVerificationContextV1,
+} from "../../../../specs/candidate-partition-authority/src/index.ts";
 import { runtimeReleaseBindingProvenanceHash } from "../../../../specs/release-authority/src/index.ts";
 import type { RuntimeReleaseAuthorityV1 } from "../index.ts";
+import {
+  assertRuntimeReleaseNominationQualificationVerifier,
+  type RuntimeReleaseNominationQualificationVerifierPortV1,
+} from "./nomination-qualification-owner.ts";
 import { assertActiveRuntimeReleaseAuthorityState } from "./state.ts";
 
 interface CandidatePartitionProofIssuerStateV1 {
   readonly authority: RuntimeReleaseAuthorityV1;
   readonly implementation: CandidatePartitionProofIssuerPortV1;
+  readonly nominationQualifications: RuntimeReleaseNominationQualificationVerifierPortV1;
   readonly version: bigint;
 }
 
@@ -58,19 +67,29 @@ function assertCurrent(state: CandidatePartitionProofIssuerStateV1): CandidatePa
 export function issueRuntimeReleaseCandidatePartitionProofIssuer(
   authorityValue: unknown,
   implementationValue: unknown,
+  nominationQualificationsValue: unknown,
 ): CandidatePartitionProofIssuerPortV1 {
   const authority = authorityValue as RuntimeReleaseAuthorityV1;
   const authorityState = assertActiveRuntimeReleaseAuthorityState(authorityValue);
   const implementation = assertIssuedCandidatePartitionProofIssuer(implementationValue);
+  const nominationQualifications = assertRuntimeReleaseNominationQualificationVerifier(
+    nominationQualificationsValue,
+    authority,
+  );
   const state: CandidatePartitionProofIssuerStateV1 = {
     authority,
     implementation,
+    nominationQualifications,
     version: authorityState.version,
   };
   assertCurrent(state);
   const issuer = issueCandidatePartitionProofIssuerPort(Object.freeze({
     currentRelease(): CandidatePartitionProofReleaseBindingV1 {
       return assertCurrent(state);
+    },
+    assertNominationQualificationsQualified(bindings: readonly CandidateNominationQualificationBindingV1[]) {
+      assertCurrent(state);
+      state.nominationQualifications.assertQualified(bindings);
     },
     issue(payload: CandidatePartitionProofPayloadV1) {
       const release = assertCurrent(state);

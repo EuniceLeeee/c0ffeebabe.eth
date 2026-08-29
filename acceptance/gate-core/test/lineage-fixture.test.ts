@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
 import {
-  CANONICAL_LIMITS,
   encodeCanonicalJson,
   hashDomain,
   sha256Hex,
@@ -22,6 +21,7 @@ import {
   type ReadOnlyArtifactRefV1,
 } from "../../../specs/core-envelope/src/index.ts";
 import {
+  ARTIFACT_MIRROR_MAX_DECODED_BYTES,
   createArtifactResolutionClaim,
   createObservedImmutableMirror,
   createResolverPolicy,
@@ -31,7 +31,7 @@ import {
   type ResolverPolicyV1,
   type RetentionLeaseReceiptV1,
 } from "../../../specs/artifact-resolution/src/index.ts";
-import { decodeArtifactBytes, encodeArtifactBytes } from "../../../specs/artifact-resolution/src/index.ts";
+import { decodeArtifactBytes, decodeArtifactHexBytes, encodeArtifactBytes, encodeArtifactHexBytes } from "../../../specs/artifact-resolution/src/index.ts";
 import {
   createObserverQualificationCertificate,
   createObserverSigningKey,
@@ -42,7 +42,7 @@ import {
   createExternalQualificationTrustAnchorV2,
   createSignedObserverCertificateV2,
   createSignedQualificationRegistryApprovalV2,
-  createSignedReleaseAuthorityApprovalV2,
+  createSignedReleaseAuthorityApprovalV3,
   createSignedVerifierCertificateV2,
   hashExternalQualificationIssuerKeySetRoot,
   hashExternalQualificationIssuerSetRoot,
@@ -50,6 +50,7 @@ import {
   observerCertificateSigningBytes,
   qualificationRegistryApprovalSigningBytes,
   releaseAuthorityApprovalSigningBytes,
+  sealReleaseAcceptanceRequirementsV1,
   verifierCertificateSigningBytes,
   type ObserverQualificationCertificateV1,
   type QualificationRegistrySnapshotV1,
@@ -107,6 +108,7 @@ import {
 import {
   decodeAcceptanceCertificate,
   computeGateCoreAuthorityPinDigest,
+  createSelectedPredicateAuthorityEntry,
   recomputeAcceptanceCertificateId,
   recomputeAcceptanceCertificatePayloadHash,
   type GateCoreAuthorityPinV1,
@@ -451,32 +453,46 @@ export function makeLineageFixture(
     signedInvocationRoleId: ARTIFACT_LINEAGE_INVOCATION_SEAL_OBSERVER_ROLE.roleId,
     maxInvocationTtlUnixNs: "1000000000",
     expectedAudienceHash: ARTIFACT_LINEAGE_INVOCATION_AUDIENCE_HASH,
+    selectedPredicateAuthority: createSelectedPredicateAuthorityEntry(
+      predicate.predicateId,
+      [],
+    ),
   };
   const observerQualificationIds = detailedObserverCertificates
     .map((certificate) => certificate.certificateId)
     .sort();
-  const releaseApprovalInput = {
-    schemaVersion: 2 as const,
-    kind: "aloha.signed-release-authority-approval" as const,
+  const releaseAcceptanceRequirements = sealReleaseAcceptanceRequirementsV1([{
+    predicateId: predicate.predicateId,
+    predicateSpecDigest: predicate.specDigest,
+    predicateCompositionLeafDigest: CURRENT_PREDICATE_BINDING.compositionLeafDigest,
     authorityPinDigest: computeGateCoreAuthorityPinDigest(authorityBeforeReleaseApproval),
+    verifierCertificateId: verifierCertificate.certificateId,
+    observerCertificateIds: observerQualificationIds,
+    observerCertificateIdsRoot: hashSignedReleaseAuthorityObserverCertificateIdsRoot(observerQualificationIds),
+  }]);
+  const releaseApprovalInput = {
+    schemaVersion: 3 as const,
+    kind: "aloha.signed-release-authority-approval" as const,
     externalTrustAnchorRoot: qualificationTrustAnchor.anchorId,
     issuerKeySetRoot: qualificationIssuerKeySetRoot,
     registryApprovalId: registryApproval.approvalId,
     registryRoot: registry.registryId,
-    verifierCertificateId: verifierCertificate.certificateId,
-    observerCertificateIds: observerQualificationIds,
-    observerCertificateIdsRoot: hashSignedReleaseAuthorityObserverCertificateIdsRoot(observerQualificationIds),
+    ...releaseAcceptanceRequirements,
     predicateCompositionRootDigest: PREDICATE_COMPOSITION_ROOT_DIGEST,
     gateCoreRuntimeClosureDigest: authorityBeforeReleaseApproval.gateCoreRuntimeClosureDigest,
     gateCoreImplementationClosureDigest: authorityBeforeReleaseApproval.gateCoreImplementationClosureDigest,
     releaseRoleManifestRoot: externalQualificationPinBase.expectedReleaseRoleManifestRoot,
     candidateReleaseCommit: externalQualificationPinBase.expectedCandidateReleaseCommit,
+    qualifiedRunnerIssuerId: issuerId,
+    qualifiedRunnerKeyId: qualificationIssuerKey.keyId,
+    qualifiedRunnerImplementationClosureDigest: hashDomain("test/qualified-runner", "closure"),
+    qualifiedRunnerImplementationExportDigest: hashDomain("test/qualified-runner", "export"),
     epoch: registry.epoch,
     audienceHash: qualificationAudienceHash,
     issuerId,
     keyId: qualificationIssuerKey.keyId,
   };
-  const releaseAuthorityApproval = createSignedReleaseAuthorityApprovalV2(
+  const releaseAuthorityApproval = createSignedReleaseAuthorityApprovalV3(
     releaseApprovalInput,
     signQualification(releaseAuthorityApprovalSigningBytes(releaseApprovalInput)),
   );
@@ -503,7 +519,7 @@ export function makeLineageFixture(
     pid: "502",
     processStartTicks: "1002",
   };
-  const storeRawFacts = encodeArtifactBytes(new TextEncoder().encode(encodeCanonicalJson({
+  const storeRawFacts = encodeArtifactHexBytes(new TextEncoder().encode(encodeCanonicalJson({
     schemaVersion: 1,
     kind: "aloha.store-epoch-raw-facts",
     storeIdentityHash,
@@ -532,7 +548,7 @@ export function makeLineageFixture(
     const mirrorDraft = createObservedImmutableMirror({
       storeIdentityHash,
       objectKey: h("0"),
-      bytes: rawBytes,
+      bytes: encodeArtifactBytes(decodeArtifactHexBytes(rawBytes)),
       mediaType: "application/octet-stream",
       schema: null,
     });
@@ -632,7 +648,7 @@ export function makeLineageFixture(
     const mutatedMirror = createObservedImmutableMirror({
       storeIdentityHash,
       objectKey: original.claim.artifactRef.contentSha256,
-      bytes: mutatedBytes,
+      bytes: encodeArtifactBytes(decodeArtifactHexBytes(mutatedBytes)),
       mediaType: original.claim.artifactRef.mediaType,
       schema: null,
     });
@@ -978,6 +994,9 @@ export function evaluateQualifiedLineageFixture() {
       observerCertificates: fixture.input.observerCertificates,
       release: Object.freeze({
         authorityPinDigest: computeGateCoreAuthorityPinDigest(fixture.authority),
+        predicateId: fixture.authority.predicate.predicateId,
+        predicateSpecDigest: fixture.authority.predicate.specDigest,
+        predicateCompositionLeafDigest: fixture.authority.predicateCompositionLeafDigest,
         predicateCompositionRootDigest: fixture.authority.predicateCompositionRootDigest,
         gateCoreRuntimeClosureDigest: fixture.authority.gateCoreRuntimeClosureDigest,
         gateCoreImplementationClosureDigest: fixture.authority.gateCoreImplementationClosureDigest,
@@ -1318,6 +1337,22 @@ test("external qualification trust, signatures, validity, revocation, and releas
     },
     { ...fixture.authority, predicateCompositionRootDigest: h("f") },
     { ...fixture.authority, gateCoreRuntimeClosureDigest: h("f") },
+    {
+      ...fixture.authority,
+      selectedPredicateAuthority: createSelectedPredicateAuthorityEntry(
+        fixture.authority.predicate.predicateId,
+        [{
+          roleId: "forged-authority-artifact",
+          artifactRefId: h("a"),
+          contentSha256: h("b"),
+          schema: {
+            id: "aloha.test.forged-authority",
+            version: "1.0.0",
+            schemaHash: h("c"),
+          },
+        }],
+      ),
+    },
   ];
   for (const [index, authority] of releaseBindingMutations.entries()) {
     assertInvalid(`release binding ${index}`, authority, fixture.input);
@@ -1412,7 +1447,7 @@ test("artifactRefId enumerable accessor is rejected without being invoked", () =
   assert.ok(result.reasons.some((reason) => reason.code === "artifact-claim-mismatch"));
 });
 
-test("oversized non-hex mirror bytes stop at resolver-policy preflight", () => {
+test("legacy single-string mirror bytes are rejected by the unique chunked preflight", () => {
   const fixture = makeLineageFixture();
   const sourceClaim = fixture.input.artifactClaims[0]!;
   const oversizedNonHexBytes = `0x${"gg".repeat(4097)}`;
@@ -1432,10 +1467,142 @@ test("oversized non-hex mirror bytes stop at resolver-policy preflight", () => {
   } as unknown as GateCoreInputV1;
   const result = evaluateQualification(fixture.authority, input);
   assert.equal(result.verdict, "invalid");
-  assert.ok(result.reasons.some((reason) =>
-    reason.code === "resolver-policy-mismatch" &&
-    reason.path === "$.artifactClaims[0].observedMirror.byteLength",
-  ));
+  assert.ok(result.reasons.some((reason) => reason.code === "artifact-claim-mismatch"));
+  assert.equal(result.reasons.some((reason) => reason.code === "invocation-signature-mismatch"), false);
+});
+
+test("chunked mirror preflight rejects hostile and non-canonical chunk containers without invoking accessors", () => {
+  const fixture = makeLineageFixture();
+  const sourceClaim = fixture.input.artifactClaims[0]!;
+  const sourceBytes = sourceClaim.observedMirror!.bytes;
+  assert.ok(sourceBytes.chunks.length > 0);
+  let trapHits = 0;
+  const evaluateBytes = (bytes: unknown) => evaluateQualification(fixture.authority, {
+    ...fixture.input,
+    artifactClaims: [{
+      ...sourceClaim,
+      observedMirror: { ...sourceClaim.observedMirror!, bytes },
+    }, ...fixture.input.artifactClaims.slice(1)],
+  } as unknown as GateCoreInputV1);
+  const expectPreflightInvalid = (bytes: unknown): void => {
+    const result = evaluateBytes(bytes);
+    assert.equal(result.verdict, "invalid");
+    assert.ok(result.reasons.some(reason => reason.code === "artifact-claim-mismatch"));
+    assert.equal(result.reasons.some(reason => reason.code === "invocation-signature-mismatch"), false);
+  };
+
+  const wrongCount = new Array(10_000);
+  Object.defineProperty(wrongCount, "0", {
+    enumerable: true,
+    get() { trapHits += 1; throw new Error("wrong-count chunk getter must not run"); },
+  });
+  expectPreflightInvalid({ ...sourceBytes, chunks: wrongCount });
+
+  const proxiedChunks = new Proxy([...sourceBytes.chunks], {
+    get() { trapHits += 1; throw new Error("proxy get must not run"); },
+    ownKeys() { trapHits += 1; throw new Error("proxy ownKeys must not run"); },
+    getOwnPropertyDescriptor() { trapHits += 1; throw new Error("proxy descriptor must not run"); },
+  });
+  expectPreflightInvalid({ ...sourceBytes, chunks: proxiedChunks });
+
+  const accessorChunk: Record<string, unknown> = { index: "0" };
+  Object.defineProperty(accessorChunk, "bytes", {
+    enumerable: true,
+    get() { trapHits += 1; throw new Error("chunk bytes getter must not run"); },
+  });
+  expectPreflightInvalid({ ...sourceBytes, chunks: [accessorChunk] });
+  expectPreflightInvalid({ ...sourceBytes, chunks: new Array(sourceBytes.chunks.length) });
+  expectPreflightInvalid({ ...sourceBytes, chunks: [{ ...sourceBytes.chunks[0]!, extra: true }] });
+  expectPreflightInvalid({ ...sourceBytes, chunks: [{ ...sourceBytes.chunks[0]!, index: "1" }] });
+  expectPreflightInvalid({ ...sourceBytes, chunks: [{ ...sourceBytes.chunks[0]!, bytes: "0xA0" }] });
+  expectPreflightInvalid({ ...sourceBytes, chunks: [{ ...sourceBytes.chunks[0]!, bytes: "0x0" }] });
+  assert.equal(trapHits, 0);
+});
+
+test("chunked mirror preflight exact-joins inner and outer decoded byte lengths", () => {
+  const fixture = makeLineageFixture();
+  const sourceClaim = fixture.input.artifactClaims[0]!;
+  const sourceMirror = sourceClaim.observedMirror!;
+  const evaluateMirror = (observedMirror: unknown) => evaluateQualification(fixture.authority, {
+    ...fixture.input,
+    artifactClaims: [{ ...sourceClaim, observedMirror }, ...fixture.input.artifactClaims.slice(1)],
+  } as unknown as GateCoreInputV1);
+  const innerMismatch = evaluateMirror({
+    ...sourceMirror,
+    bytes: { ...sourceMirror.bytes, byteLength: String(Number(sourceMirror.bytes.byteLength) + 1) },
+  });
+  assert.equal(innerMismatch.verdict, "invalid");
+  assert.ok(innerMismatch.reasons.some(reason => reason.code === "artifact-claim-mismatch"));
+  const outerMismatch = evaluateMirror({
+    ...sourceMirror,
+    byteLength: String(Number(sourceMirror.byteLength) + 1),
+  });
+  assert.equal(outerMismatch.verdict, "invalid");
+  assert.ok(outerMismatch.reasons.some(reason => reason.code === "artifact-claim-mismatch"));
+});
+
+test("mirror byteLength preflight rejects overlong inner and outer decimals before later claim inspection", () => {
+  const fixture = makeLineageFixture();
+  const sourceClaim = fixture.input.artifactClaims[0]!;
+  const sourceMirror = sourceClaim.observedMirror!;
+  let chunkAccessorHits = 0;
+  const overlongInnerBytes = { ...sourceMirror.bytes } as Record<string, unknown>;
+  overlongInnerBytes.byteLength = "1000000";
+  Object.defineProperty(overlongInnerBytes, "chunks", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      chunkAccessorHits += 1;
+      throw new Error("overlong byteLength must reject before chunk access");
+    },
+  });
+  const laterHostileClaim = { ...sourceClaim } as Record<string, unknown>;
+  Object.defineProperty(laterHostileClaim, "observedMirror", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      throw new Error("later claim must not be inspected after terminal preflight failure");
+    },
+  });
+  const evaluateClaims = (artifactClaims: readonly unknown[]) => evaluateQualification(fixture.authority, {
+    ...fixture.input,
+    artifactClaims,
+  } as unknown as GateCoreInputV1);
+
+  const innerResult = evaluateClaims([{
+    ...sourceClaim,
+    observedMirror: { ...sourceMirror, bytes: overlongInnerBytes },
+  }, laterHostileClaim]);
+  assert.equal(innerResult.verdict, "invalid");
+  assert.equal(chunkAccessorHits, 0);
+  assert.deepEqual(innerResult.reasons, [{
+    code: "artifact-claim-mismatch",
+    path: "$.artifactClaims[0]",
+  }]);
+
+  const outerResult = evaluateClaims([{
+    ...sourceClaim,
+    observedMirror: { ...sourceMirror, byteLength: "1000000" },
+  }, laterHostileClaim]);
+  assert.equal(outerResult.verdict, "invalid");
+  assert.deepEqual(outerResult.reasons, [{
+    code: "artifact-claim-mismatch",
+    path: "$.artifactClaims[0]",
+  }]);
+
+  const exactOverCapResult = evaluateClaims([{
+    ...sourceClaim,
+    observedMirror: {
+      ...sourceMirror,
+      bytes: { ...sourceMirror.bytes, byteLength: "500001" },
+      byteLength: "500001",
+    },
+  }, laterHostileClaim]);
+  assert.equal(exactOverCapResult.verdict, "invalid");
+  assert.deepEqual(exactOverCapResult.reasons, [{
+    code: "artifact-claim-mismatch",
+    path: "$.artifactClaims[0]",
+  }]);
 });
 
 test("top-level input arrays are bounded dense data arrays before decoding", () => {
@@ -1537,17 +1704,99 @@ test("nested registry and invocation arrays reject accessors without invoking th
   assert.ok(invocationResult.reasons.some((reason) => reason.code === "schema-invalid" && reason.path === "$.input"));
 });
 
+test("external qualification envelope rejects extras and accessors without reading raw evidence", () => {
+  const fixture = makeLineageFixture();
+  const withExtra = {
+    ...fixture.input,
+    externalQualification: { ...fixture.input.externalQualification, extra: true },
+  } as unknown as GateCoreInputV1;
+  const extraResult = evaluateQualification(fixture.authority, withExtra);
+  assert.equal(extraResult.verdict, "invalid");
+  assert.ok(extraResult.reasons.some(reason => reason.code === "external-trust-anchor-mismatch"));
+
+  const hostile = { ...fixture.input.externalQualification } as Record<string, unknown>;
+  let getterInvoked = false;
+  Object.defineProperty(hostile, "issuerKeys", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      getterInvoked = true;
+      throw new Error("raw external qualification accessor must not run");
+    },
+  });
+  const accessorResult = evaluateQualification(fixture.authority, {
+    ...fixture.input,
+    externalQualification: hostile,
+  } as unknown as GateCoreInputV1);
+  assert.equal(getterInvoked, false);
+  assert.equal(accessorResult.verdict, "invalid");
+  assert.ok(accessorResult.reasons.some(reason => reason.code === "external-trust-anchor-mismatch"));
+});
+
 test("cumulative mirror byte budget stops before downstream decoding", () => {
   const fixture = makeLineageFixture();
+  const sourceClaim = fixture.input.artifactClaims[0]!;
+  const sourceMirror = sourceClaim.observedMirror!;
+  const firstMirrorBytes = encodeArtifactBytes(new Uint8Array(ARTIFACT_MIRROR_MAX_DECODED_BYTES));
+  const secondMirrorBytes = encodeArtifactBytes(new Uint8Array(1));
+  const withBytes = (bytes: ReturnType<typeof encodeArtifactBytes>) => ({
+    ...sourceClaim,
+    observedMirror: {
+      ...sourceMirror,
+      bytes,
+      byteLength: bytes.byteLength,
+      contentSha256: bytes.contentSha256,
+    },
+  });
+  const laterHostileClaim = { ...sourceClaim } as Record<string, unknown>;
+  Object.defineProperty(laterHostileClaim, "observedMirror", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      throw new Error("claim after aggregate overflow must not be inspected");
+    },
+  });
+  const input = {
+    ...fixture.input,
+    artifactClaims: [withBytes(firstMirrorBytes), withBytes(secondMirrorBytes), laterHostileClaim],
+  } as unknown as GateCoreInputV1;
+  const result = evaluateQualification(fixture.authority, input);
+  assert.equal(result.verdict, "invalid");
+  assert.deepEqual(result.reasons, [{
+    code: "artifact-claim-mismatch",
+    path: "$.artifactClaims[1]",
+  }]);
+});
+
+test("cumulative mirror byte budget accepts the exact cap before downstream semantic rejection", () => {
+  const fixture = makeLineageFixture();
   const input = structuredClone(fixture.input) as unknown as GateCoreInputV1;
-  const mirrorBytes = `0x${"00".repeat(Math.floor(CANONICAL_LIMITS.maxBytes / 2) + 1)}`;
+  const unchangedBytes = input.artifactClaims.slice(2).reduce(
+    (total, claim) => total + Number(claim.observedMirror?.byteLength ?? "0"),
+    0,
+  );
+  const replacementBudget = ARTIFACT_MIRROR_MAX_DECODED_BYTES - unchangedBytes;
+  const firstMirrorBytes = encodeArtifactBytes(new Uint8Array(Math.floor(replacementBudget / 2)));
+  const secondMirrorBytes = encodeArtifactBytes(new Uint8Array(replacementBudget - Number(firstMirrorBytes.byteLength)));
   (input as unknown as { artifactClaims: GateCoreInputV1["artifactClaims"] }).artifactClaims = input.artifactClaims.map((claim, index) => index < 2
-    ? { ...claim, observedMirror: { ...claim.observedMirror!, bytes: mirrorBytes } }
+    ? {
+      ...claim,
+      observedMirror: {
+        ...claim.observedMirror!,
+        bytes: index === 0 ? firstMirrorBytes : secondMirrorBytes,
+        byteLength: (index === 0 ? firstMirrorBytes : secondMirrorBytes).byteLength,
+        contentSha256: (index === 0 ? firstMirrorBytes : secondMirrorBytes).contentSha256,
+      },
+    }
     : claim);
   const result = evaluateQualification(fixture.authority, input);
   assert.equal(result.verdict, "invalid");
-  assert.ok(result.reasons.some((reason) => reason.code === "artifact-claim-mismatch"));
-  assert.equal(result.reasons.some((reason) => reason.code === "invocation-signature-mismatch"), false);
+  // Reaching joins beyond the terminal preflight proves total == cap is not
+  // rejected as an aggregate resource violation.
+  assert.ok(
+    result.reasons.some(reason => reason.code === "artifact-claim-missing" || reason.code === "artifact-content-mismatch"),
+    JSON.stringify(result.reasons),
+  );
 });
 
 test("an unrelated expired signing key does not invalidate the selected seal key", () => {

@@ -1,348 +1,76 @@
 import {
-  assertExactKeys,
-  assertGitSha40,
-  assertHash,
-  assertNonEmptyString,
-  decodeExactObject,
-  deepFreeze,
-  fieldArray,
-  fieldBoolean,
-  hashDomain,
-  type ExactFieldDecoder,
-  type Hash,
+  assertGitSha40, assertHash, assertNonEmptyString, decodeExactObject, deepFreeze,
+  fieldArray, hashDomain, type ExactFieldDecoder, type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
 
 export const REFERENCE_REPOSITORY_ID = "impl" as const;
 export const REFERENCE_COMMIT = "5f104cedd4b4778316c177ce4fa08a6761af85b1" as const;
-export const REUSE_LEDGER_SCHEMA_VERSION = 1 as const;
-export const REFERENCE_LOCK_SCHEMA_VERSION = 1 as const;
+export const REUSE_AUTHORITY_SCHEMA_VERSION = 2 as const;
+export type AdoptionMode = "isolated-pure-kernel" | "invariant-only-rewrite" | "reference-witness" | "rejected";
+export type CreditStatus = "credited" | "non-credit";
 
-export type AdoptionMode =
-  | "isolated-pure-kernel"
-  | "invariant-only-rewrite"
-  | "reference-witness"
-  | "rejected";
-
-export type DependencyKind = "source" | "external" | "future";
-
-export interface SourceRangeV1 {
-  readonly startLine: number;
-  readonly endLine: number;
+export interface SourceSymbolV2 { readonly name: string; readonly startLine: number; readonly endLine: number; readonly contentSha256: Hash }
+export interface SourceLockV2 { readonly repositoryId: typeof REFERENCE_REPOSITORY_ID; readonly commit: typeof REFERENCE_COMMIT; readonly path: string; readonly blob: string; readonly license: string; readonly symbols: readonly SourceSymbolV2[] }
+export interface CompilerAuthorityV2 { readonly entrypointId: string; readonly modulePath: string; readonly configPath: string; readonly closureDigest: Hash; readonly programInputSetRoot: Hash; readonly externalDependencyRoot: Hash; readonly sourceFileSetRoot: Hash }
+export interface DestinationAuthorityV2 { readonly modulePath: string; readonly exportNames: readonly string[]; readonly contentSha256: Hash; readonly compiler: CompilerAuthorityV2 }
+export interface EvidenceAuthorityV2 {
+  readonly requirementId: string; readonly requirementModulePath: string; readonly requirementExportName: string;
+  readonly requirementContentSha256: Hash; readonly requirementCompiler: CompilerAuthorityV2;
+  readonly testModulePath: string; readonly testCaseName: string; readonly testContentSha256: Hash; readonly testCompiler: CompilerAuthorityV2;
+  readonly authority: "requirement-only"; readonly productionOraclePass: false;
 }
+export interface ReuseReceiptV2 { readonly kind: "aloha.reuse-receipt"; readonly schemaVersion: 2; readonly entryId: string; readonly adoptionMode: AdoptionMode; readonly creditStatus: CreditStatus; readonly selectedSourceRoot: Hash; readonly destinationClosureRoot: Hash; readonly evidenceClosureRoot: Hash; readonly receiptId: Hash; readonly candidateCommitBinding: "external-release-post-commit-exact-join" }
+export interface ReuseLedgerEntryV2 { readonly entryId: string; readonly adoptionMode: AdoptionMode; readonly creditStatus: CreditStatus; readonly nonCreditReason: string | null; readonly productionImportAllowed: false; readonly source: SourceLockV2; readonly destinations: readonly DestinationAuthorityV2[]; readonly evidence: EvidenceAuthorityV2; readonly releaseDependencyClosureRoot: Hash; readonly reuseReceiptId: Hash }
+export interface ReuseLedgerV2 { readonly kind: "aloha.reuse-ledger"; readonly schemaVersion: 2; readonly sourceRepositoryId: typeof REFERENCE_REPOSITORY_ID; readonly sourceCommit: typeof REFERENCE_COMMIT; readonly historicalDecisionEntryIds: readonly string[]; readonly releaseReuseEntryIds: readonly string[]; readonly entries: readonly ReuseLedgerEntryV2[]; readonly reuseLedgerRoot: Hash; readonly productionOraclePassClaimed: false }
+export interface ReferenceLockEntryV2 { readonly entryId: string; readonly source: SourceLockV2; readonly allowedDisposition: AdoptionMode; readonly releaseCredit: CreditStatus }
+export interface ReferenceLockV2 { readonly kind: "aloha.reference-lock"; readonly schemaVersion: 2; readonly sourceRepositoryId: typeof REFERENCE_REPOSITORY_ID; readonly sourceCommit: typeof REFERENCE_COMMIT; readonly entries: readonly ReferenceLockEntryV2[]; readonly referenceLockRoot: Hash }
+export interface ReuseReceiptSetV2 { readonly kind: "aloha.reuse-receipt-set"; readonly schemaVersion: 2; readonly receipts: readonly ReuseReceiptV2[]; readonly receiptSetRoot: Hash }
+export interface AuthorityManifestV2 { readonly kind: "aloha.reuse-authority-manifest"; readonly schemaVersion: typeof REUSE_AUTHORITY_SCHEMA_VERSION; readonly fixedOutputPaths: readonly string[]; readonly outputBytes: readonly { readonly path: string; readonly byteLength: number; readonly contentSha256: Hash }[]; readonly declarationInputRoot: Hash; readonly generatorInputRoot: Hash; readonly selectedSourceRoot: Hash; readonly destinationClosureRoot: Hash; readonly evidenceClosureRoot: Hash; readonly candidateCommit: null; readonly candidateCommitBinding: "external-release-post-commit-exact-join"; readonly artifactSetRoot: Hash }
 
-export interface SourceDependencyV1 {
-  readonly kind: "source";
-  readonly path: string;
-  readonly blob: string;
-  readonly relation: string;
+export interface SourceSymbolDeclarationV2 { readonly name: string; readonly startLine: number; readonly endLine: number }
+export interface DestinationDeclarationV2 { readonly modulePath: string; readonly exportNames: readonly string[] }
+export interface EvidenceDeclarationV2 { readonly requirementExportName: string; readonly testModulePath: string; readonly testCaseName: string }
+export interface ReuseDeclarationV2 { readonly entryId: string; readonly sourcePath: string; readonly sourceBlob: string; readonly sourceSymbols: readonly SourceSymbolDeclarationV2[]; readonly adoptionMode: AdoptionMode; readonly creditStatus: CreditStatus; readonly nonCreditReason: string | null; readonly destinations: readonly DestinationDeclarationV2[]; readonly evidence: EvidenceDeclarationV2 }
+
+const TEXT: ExactFieldDecoder<string> = (value, path) => assertNonEmptyString(value, path);
+const HASH: ExactFieldDecoder<Hash> = (value, path) => assertHash(value, path);
+const GIT: ExactFieldDecoder<string> = (value, path) => assertGitSha40(value, path);
+const PATH: ExactFieldDecoder<string> = (value, path) => { const decoded = TEXT(value, path); if (decoded.startsWith("/") || decoded.startsWith(".") || decoded.includes("\\") || decoded.split("/").includes("..")) throw new TypeError(`invalid repository path at ${path}`); return decoded; };
+const FALSE: ExactFieldDecoder<false> = (value, path) => { if (value !== false) throw new TypeError(`false required at ${path}`); return false; };
+const nullableText: ExactFieldDecoder<string | null> = (value, path) => value === null ? null : TEXT(value, path);
+const enumDecoder = <T extends readonly string[]>(values: T): ExactFieldDecoder<T[number]> => (value, path) => { const decoded = TEXT(value, path); if (!(values as readonly string[]).includes(decoded)) throw new TypeError(`value outside enum at ${path}`); return decoded as T[number]; };
+const positive = (value: unknown, path: string): number => { if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) throw new TypeError(`positive integer required at ${path}`); return value; };
+const texts = (value: unknown, path: string): readonly string[] => fieldArray(value, TEXT, path);
+const version = (value: unknown, path: string): 2 => { if (value !== 2) throw new TypeError(`schema mismatch at ${path}`); return 2; };
+const repository = (value: unknown, path: string): typeof REFERENCE_REPOSITORY_ID => { if (value !== REFERENCE_REPOSITORY_ID) throw new TypeError(`repository mismatch at ${path}`); return REFERENCE_REPOSITORY_ID; };
+const commit = (value: unknown, path: string): typeof REFERENCE_COMMIT => { if (GIT(value, path) !== REFERENCE_COMMIT) throw new TypeError(`commit mismatch at ${path}`); return REFERENCE_COMMIT; };
+
+function decodeCompiler(value: unknown, path: string): CompilerAuthorityV2 { return Object.freeze(decodeExactObject(value, { entrypointId: TEXT, modulePath: PATH, configPath: PATH, closureDigest: HASH, programInputSetRoot: HASH, externalDependencyRoot: HASH, sourceFileSetRoot: HASH }, path)); }
+function decodeSymbol(value: unknown, path: string): SourceSymbolV2 { const decoded = decodeExactObject(value, { name: TEXT, startLine: positive, endLine: positive, contentSha256: HASH }, path); if (decoded.endLine < decoded.startLine) throw new TypeError(`reversed symbol range at ${path}`); return Object.freeze(decoded); }
+function decodeSource(value: unknown, path: string): SourceLockV2 { const decoded = decodeExactObject(value, { repositoryId: repository, commit, path: PATH, blob: GIT, license: TEXT, symbols: (item, itemPath) => fieldArray(item, decodeSymbol, itemPath) }, path); if (decoded.symbols.length === 0 || new Set(decoded.symbols.map(item => item.name)).size !== decoded.symbols.length) throw new TypeError(`source symbol exact set invalid at ${path}`); return Object.freeze(decoded); }
+function decodeDestination(value: unknown, path: string): DestinationAuthorityV2 { const decoded = decodeExactObject(value, { modulePath: PATH, exportNames: texts, contentSha256: HASH, compiler: decodeCompiler }, path); if (decoded.exportNames.length === 0 || new Set(decoded.exportNames).size !== decoded.exportNames.length || decoded.compiler.modulePath !== decoded.modulePath) throw new TypeError(`destination binding invalid at ${path}`); return Object.freeze(decoded); }
+function decodeEvidence(value: unknown, path: string): EvidenceAuthorityV2 { const decoded = decodeExactObject(value, { requirementId: TEXT, requirementModulePath: PATH, requirementExportName: TEXT, requirementContentSha256: HASH, requirementCompiler: decodeCompiler, testModulePath: PATH, testCaseName: TEXT, testContentSha256: HASH, testCompiler: decodeCompiler, authority: (item, itemPath) => enumDecoder(["requirement-only"] as const)(item, itemPath), productionOraclePass: FALSE }, path); if (decoded.requirementCompiler.modulePath !== decoded.requirementModulePath || decoded.testCompiler.modulePath !== decoded.testModulePath) throw new TypeError(`evidence compiler path mismatch at ${path}`); return Object.freeze(decoded); }
+function decodeEntry(value: unknown, path: string): ReuseLedgerEntryV2 { const decoded = decodeExactObject(value, { entryId: TEXT, adoptionMode: enumDecoder(["isolated-pure-kernel", "invariant-only-rewrite", "reference-witness", "rejected"] as const), creditStatus: enumDecoder(["credited", "non-credit"] as const), nonCreditReason: nullableText, productionImportAllowed: FALSE, source: decodeSource, destinations: (item, itemPath) => fieldArray(item, decodeDestination, itemPath), evidence: decodeEvidence, releaseDependencyClosureRoot: HASH, reuseReceiptId: HASH }, path); if ((decoded.creditStatus === "credited") !== (decoded.nonCreditReason === null)) throw new TypeError(`credit reason mismatch at ${path}`); if (decoded.creditStatus === "credited" && decoded.destinations.length === 0) throw new TypeError(`credited entry lacks destination at ${path}`); if (new Set(decoded.destinations.map(item => item.modulePath)).size !== decoded.destinations.length) throw new TypeError(`duplicate destination at ${path}`); return Object.freeze(decoded); }
+function exactSorted(values: readonly string[], path: string): readonly string[] { if (new Set(values).size !== values.length || [...values].sort().some((value, index) => value !== values[index])) throw new TypeError(`sorted unique exact set required at ${path}`); return Object.freeze([...values]); }
+
+export function computeReuseReceiptId(input: Omit<ReuseReceiptV2, "receiptId">): Hash { return hashDomain("aloha/reuse-receipt/v2", input); }
+export function computeReuseLedgerRoot(input: Omit<ReuseLedgerV2, "reuseLedgerRoot">): Hash { return hashDomain("aloha/reuse-ledger/v2", input); }
+export function computeReferenceLockRoot(entries: readonly ReferenceLockEntryV2[]): Hash { return hashDomain("aloha/reference-lock/v2", entries); }
+export function computeReceiptSetRoot(receipts: readonly ReuseReceiptV2[]): Hash { return hashDomain("aloha/reuse-receipt-set/v2", receipts); }
+
+export function decodeReuseLedger(value: unknown, path = "reuseLedger"): ReuseLedgerV2 {
+  const decoded = decodeExactObject(value, { kind: (item, itemPath) => enumDecoder(["aloha.reuse-ledger"] as const)(item, itemPath), schemaVersion: version, sourceRepositoryId: repository, sourceCommit: commit, historicalDecisionEntryIds: texts, releaseReuseEntryIds: texts, entries: (item, itemPath) => fieldArray(item, decodeEntry, itemPath), reuseLedgerRoot: HASH, productionOraclePassClaimed: FALSE }, path);
+  const historical = exactSorted(decoded.historicalDecisionEntryIds, `${path}.historicalDecisionEntryIds`); exactSorted(decoded.releaseReuseEntryIds, `${path}.releaseReuseEntryIds`); const entryIds = exactSorted(decoded.entries.map(item => item.entryId), `${path}.entries`);
+  if (JSON.stringify(historical) !== JSON.stringify(entryIds)) throw new TypeError("historical decision denominator mismatch");
+  const credited = decoded.entries.filter(item => item.creditStatus === "credited").map(item => item.entryId); if (JSON.stringify(credited) !== JSON.stringify(decoded.releaseReuseEntryIds)) throw new TypeError("release reuse exact set mismatch");
+  const { reuseLedgerRoot: _stored, ...facts } = decoded; if (computeReuseLedgerRoot(facts) !== decoded.reuseLedgerRoot) throw new TypeError("reuse ledger root mismatch"); return deepFreeze(decoded);
 }
-
-export interface ExternalDependencyV1 {
-  readonly kind: "external";
-  readonly packageName: string;
-  readonly version: string;
-  readonly relation: string;
+export function decodeReferenceLock(value: unknown, path = "referenceLock"): ReferenceLockV2 {
+  const decodeLockEntry = (item: unknown, itemPath: string): ReferenceLockEntryV2 => Object.freeze(decodeExactObject(item, { entryId: TEXT, source: decodeSource, allowedDisposition: enumDecoder(["isolated-pure-kernel", "invariant-only-rewrite", "reference-witness", "rejected"] as const), releaseCredit: enumDecoder(["credited", "non-credit"] as const) }, itemPath));
+  const decoded = decodeExactObject(value, { kind: (item, itemPath) => enumDecoder(["aloha.reference-lock"] as const)(item, itemPath), schemaVersion: version, sourceRepositoryId: repository, sourceCommit: commit, entries: (item, itemPath) => fieldArray(item, decodeLockEntry, itemPath), referenceLockRoot: HASH }, path); exactSorted(decoded.entries.map(item => item.entryId), `${path}.entries`); if (computeReferenceLockRoot(decoded.entries) !== decoded.referenceLockRoot) throw new TypeError("reference lock root mismatch"); return deepFreeze(decoded);
 }
-
-export interface FutureDependencyV1 {
-  readonly kind: "future";
-  readonly contract: string;
-  readonly status: "pending";
-  readonly relation: string;
+export function decodeReuseReceiptSet(value: unknown, path = "receiptSet"): ReuseReceiptSetV2 {
+  const decodeReceipt = (item: unknown, itemPath: string): ReuseReceiptV2 => { const decoded = decodeExactObject(item, { kind: (value, valuePath) => enumDecoder(["aloha.reuse-receipt"] as const)(value, valuePath), schemaVersion: version, entryId: TEXT, adoptionMode: enumDecoder(["isolated-pure-kernel", "invariant-only-rewrite", "reference-witness", "rejected"] as const), creditStatus: enumDecoder(["credited", "non-credit"] as const), selectedSourceRoot: HASH, destinationClosureRoot: HASH, evidenceClosureRoot: HASH, receiptId: HASH, candidateCommitBinding: (value, valuePath) => enumDecoder(["external-release-post-commit-exact-join"] as const)(value, valuePath) }, itemPath); const { receiptId: _stored, ...facts } = decoded; if (computeReuseReceiptId(facts) !== decoded.receiptId) throw new TypeError(`receipt identity mismatch at ${itemPath}`); return Object.freeze(decoded); };
+  const decoded = decodeExactObject(value, { kind: (item, itemPath) => enumDecoder(["aloha.reuse-receipt-set"] as const)(item, itemPath), schemaVersion: version, receipts: (item, itemPath) => fieldArray(item, decodeReceipt, itemPath), receiptSetRoot: HASH }, path); exactSorted(decoded.receipts.map(item => item.entryId), `${path}.receipts`); if (computeReceiptSetRoot(decoded.receipts) !== decoded.receiptSetRoot) throw new TypeError("receipt set root mismatch"); return deepFreeze(decoded);
 }
-
-export type DependencyV1 = SourceDependencyV1 | ExternalDependencyV1 | FutureDependencyV1;
-
-export interface FactOracleV1 {
-  readonly kind: "independent-observer" | "mathematical-oracle" | "chain-oracle" | "reference-witness";
-  readonly oracleId: string;
-  readonly source: string;
-  readonly claim: string;
-}
-
-export interface ReviewMetadataV1 {
-  readonly reviewId: string;
-  readonly reviewMode: "adversarial" | "two-person" | "mechanical";
-  readonly reviewer: string;
-  readonly reviewedCommit: string;
-  readonly notes: string;
-}
-
-export interface ReuseLedgerEntryV1 {
-  readonly entryId: string;
-  readonly sourceRepo: string;
-  readonly sourceCommit: string;
-  readonly sourcePath: string;
-  readonly sourceBlob: string;
-  readonly symbol: string;
-  readonly sourceRange: SourceRangeV1;
-  readonly adoptionMode: AdoptionMode;
-  readonly destination: string;
-  readonly oldDependencyClosure: readonly DependencyV1[];
-  readonly newDependencyClosure: readonly DependencyV1[];
-  readonly factOracle: FactOracleV1;
-  readonly affectedCapabilityRoot: Hash;
-  readonly reviewMetadata: ReviewMetadataV1;
-  readonly productionImportAllowed: boolean;
-}
-
-export interface ReuseLedgerV1 {
-  readonly schemaVersion: typeof REUSE_LEDGER_SCHEMA_VERSION;
-  readonly sourceRepo: string;
-  readonly sourceCommit: string;
-  readonly entries: readonly ReuseLedgerEntryV1[];
-  readonly reuseLedgerRoot: Hash;
-}
-
-export interface ReferenceLockEntryV1 {
-  readonly entryId: string;
-  readonly sourceRepo: string;
-  readonly sourceCommit: string;
-  readonly sourcePath: string;
-  readonly sourceBlob: string;
-  readonly license: string;
-  readonly allowedDisposition: AdoptionMode;
-}
-
-export interface ReferenceLockV1 {
-  readonly schemaVersion: typeof REFERENCE_LOCK_SCHEMA_VERSION;
-  readonly sourceRepo: string;
-  readonly sourceCommit: string;
-  readonly entries: readonly ReferenceLockEntryV1[];
-  readonly referenceLockRoot: Hash;
-}
-
-const ADOPTION_MODES = [
-  "isolated-pure-kernel",
-  "invariant-only-rewrite",
-  "reference-witness",
-  "rejected",
-] as const;
-const DEPENDENCY_KINDS = ["source", "external", "future"] as const;
-const ORACLE_KINDS = ["independent-observer", "mathematical-oracle", "chain-oracle", "reference-witness"] as const;
-const REVIEW_MODES = ["adversarial", "two-person", "mechanical"] as const;
-const HASH_DECODER: ExactFieldDecoder<Hash> = (value, path) => assertHash(value, path);
-const GIT_DECODER: ExactFieldDecoder<string> = (value, path) => assertGitSha40(value, path);
-const TEXT_DECODER: ExactFieldDecoder<string> = (value, path) => assertNonEmptyString(value, path);
-
-function enumDecoder<T extends readonly string[]>(values: T): ExactFieldDecoder<T[number]> {
-  return (value, path) => {
-    const decoded = TEXT_DECODER(value, path);
-    if (!(values as readonly string[]).includes(decoded)) throw new TypeError(`value is outside enum at ${path}`);
-    return decoded as T[number];
-  };
-}
-
-function pathDecoder(value: unknown, path: string): string {
-  const decoded = TEXT_DECODER(value, path);
-  if (decoded.startsWith("/") || decoded.startsWith(".") || decoded.includes("\\") || decoded.includes("..") || decoded.includes("?") || decoded.includes("#")) {
-    throw new TypeError(`non-relative source path at ${path}`);
-  }
-  return decoded;
-}
-
-function positiveLine(value: unknown, path: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
-    throw new TypeError(`positive line number required at ${path}`);
-  }
-  return value;
-}
-
-function decodeSourceRange(value: unknown, path: string): SourceRangeV1 {
-  const decoded = decodeExactObject(value, {
-    startLine: positiveLine,
-    endLine: positiveLine,
-  }, path);
-  if (decoded.endLine < decoded.startLine) throw new TypeError(`source range is reversed at ${path}`);
-  return Object.freeze(decoded);
-}
-
-function decodeDependency(value: unknown, path: string): DependencyV1 {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`dependency must be an object at ${path}`);
-  const kind = TEXT_DECODER((value as Record<string, unknown>).kind, `${path}.kind`);
-  if (kind === "source") {
-    return Object.freeze(decodeExactObject(value, {
-      kind: (item, itemPath) => enumDecoder(["source"] as const)(item, itemPath),
-      path: pathDecoder,
-      blob: GIT_DECODER,
-      relation: TEXT_DECODER,
-    }, path));
-  }
-  if (kind === "external") {
-    return Object.freeze(decodeExactObject(value, {
-      kind: (item, itemPath) => enumDecoder(["external"] as const)(item, itemPath),
-      packageName: TEXT_DECODER,
-      version: TEXT_DECODER,
-      relation: TEXT_DECODER,
-    }, path));
-  }
-  if (kind === "future") {
-    return Object.freeze(decodeExactObject(value, {
-      kind: (item, itemPath) => enumDecoder(["future"] as const)(item, itemPath),
-      contract: TEXT_DECODER,
-      status: (item, itemPath) => enumDecoder(["pending"] as const)(item, itemPath),
-      relation: TEXT_DECODER,
-    }, path));
-  }
-  throw new TypeError(`unknown dependency kind ${kind} at ${path}.kind`);
-}
-
-function decodeOracle(value: unknown, path: string): FactOracleV1 {
-  return Object.freeze(decodeExactObject(value, {
-    kind: enumDecoder(ORACLE_KINDS),
-    oracleId: TEXT_DECODER,
-    source: TEXT_DECODER,
-    claim: TEXT_DECODER,
-  }, path));
-}
-
-function decodeReview(value: unknown, path: string): ReviewMetadataV1 {
-  return Object.freeze(decodeExactObject(value, {
-    reviewId: TEXT_DECODER,
-    reviewMode: enumDecoder(REVIEW_MODES),
-    reviewer: TEXT_DECODER,
-    reviewedCommit: GIT_DECODER,
-    notes: TEXT_DECODER,
-  }, path));
-}
-
-function decodeEntry(value: unknown, path: string): ReuseLedgerEntryV1 {
-  const decoded = decodeExactObject(value, {
-    entryId: TEXT_DECODER,
-    sourceRepo: TEXT_DECODER,
-    sourceCommit: GIT_DECODER,
-    sourcePath: pathDecoder,
-    sourceBlob: GIT_DECODER,
-    symbol: TEXT_DECODER,
-    sourceRange: decodeSourceRange,
-    adoptionMode: enumDecoder(ADOPTION_MODES),
-    destination: TEXT_DECODER,
-    oldDependencyClosure: (item, itemPath) => fieldArray(item, decodeDependency, itemPath),
-    newDependencyClosure: (item, itemPath) => fieldArray(item, decodeDependency, itemPath),
-    factOracle: decodeOracle,
-    affectedCapabilityRoot: HASH_DECODER,
-    reviewMetadata: decodeReview,
-    productionImportAllowed: fieldBoolean,
-  }, path);
-  if (decoded.sourceRepo !== REFERENCE_REPOSITORY_ID) throw new TypeError(`unknown source repository at ${path}.sourceRepo`);
-  if (decoded.sourceCommit !== REFERENCE_COMMIT) throw new TypeError(`source commit is not the frozen reference at ${path}.sourceCommit`);
-  if (decoded.entryId !== entryIdFor(decoded.sourcePath, decoded.symbol)) throw new TypeError(`entryId does not bind source path and symbol at ${path}.entryId`);
-  if (decoded.adoptionMode === "rejected" && decoded.productionImportAllowed) throw new TypeError(`rejected entry cannot be production-importable at ${path}`);
-  if (decoded.reviewMetadata.reviewedCommit !== decoded.sourceCommit) throw new TypeError(`review commit mismatch at ${path}`);
-  const dependencyKeys = (dependency: DependencyV1): string => dependency.kind === "source"
-    ? `${dependency.kind}:${dependency.path}`
-    : dependency.kind === "external"
-      ? `${dependency.kind}:${dependency.packageName}@${dependency.version}`
-      : `${dependency.kind}:${dependency.contract}`;
-  for (const closureName of ["oldDependencyClosure", "newDependencyClosure"] as const) {
-    const keys = decoded[closureName].map(dependencyKeys);
-    if (new Set(keys).size !== keys.length) throw new TypeError(`duplicate dependency in ${path}.${closureName}`);
-  }
-  return Object.freeze(decoded);
-}
-
-function sortEntries(entries: readonly ReuseLedgerEntryV1[]): readonly ReuseLedgerEntryV1[] {
-  const sorted = [...entries].sort((left, right) => left.entryId.localeCompare(right.entryId));
-  if (new Set(sorted.map(entry => entry.entryId)).size !== sorted.length) throw new TypeError("duplicate reuse ledger entryId");
-  return Object.freeze(sorted);
-}
-
-export function computeReuseLedgerRoot(entries: readonly ReuseLedgerEntryV1[]): Hash {
-  return hashDomain("aloha/reuse-ledger/v1", entries);
-}
-
-export function sealReuseLedger(
-  entries: readonly ReuseLedgerEntryV1[],
-  sourceRepo: string = REFERENCE_REPOSITORY_ID,
-  sourceCommit: string = REFERENCE_COMMIT,
-): ReuseLedgerV1 {
-  if (sourceRepo !== REFERENCE_REPOSITORY_ID) throw new TypeError("reuse ledger source repository mismatch");
-  if (sourceCommit !== REFERENCE_COMMIT) throw new TypeError("reuse ledger source commit mismatch");
-  const normalized = sortEntries(entries.map((entry, index) => decodeEntry(entry, `reuseLedger.entries[${index}]`)));
-  return deepFreeze({
-    schemaVersion: REUSE_LEDGER_SCHEMA_VERSION,
-    sourceRepo,
-    sourceCommit,
-    entries: normalized,
-    reuseLedgerRoot: computeReuseLedgerRoot(normalized),
-  });
-}
-
-export function decodeReuseLedger(value: unknown, path = "reuseLedger"): ReuseLedgerV1 {
-  const decoded = decodeExactObject(value, {
-    schemaVersion: (item, itemPath) => {
-      if (item !== REUSE_LEDGER_SCHEMA_VERSION) throw new TypeError(`unsupported reuse ledger schema at ${itemPath}`);
-      return REUSE_LEDGER_SCHEMA_VERSION;
-    },
-    sourceRepo: TEXT_DECODER,
-    sourceCommit: GIT_DECODER,
-    entries: (item, itemPath) => fieldArray(item, decodeEntry, itemPath),
-    reuseLedgerRoot: HASH_DECODER,
-  }, path);
-  const sealed = sealReuseLedger(decoded.entries, decoded.sourceRepo, decoded.sourceCommit);
-  if (sealed.reuseLedgerRoot !== decoded.reuseLedgerRoot) throw new TypeError("reuse ledger root mismatch");
-  return sealed;
-}
-
-function decodeLockEntry(value: unknown, path: string): ReferenceLockEntryV1 {
-  return Object.freeze(decodeExactObject(value, {
-    entryId: TEXT_DECODER,
-    sourceRepo: TEXT_DECODER,
-    sourceCommit: GIT_DECODER,
-    sourcePath: pathDecoder,
-    sourceBlob: GIT_DECODER,
-    license: TEXT_DECODER,
-    allowedDisposition: enumDecoder(ADOPTION_MODES),
-  }, path));
-}
-
-export function computeReferenceLockRoot(entries: readonly ReferenceLockEntryV1[]): Hash {
-  return hashDomain("aloha/reference-lock/v1", entries);
-}
-
-export function sealReferenceLock(entries: readonly ReferenceLockEntryV1[]): ReferenceLockV1 {
-  const normalized = Object.freeze([...entries].map((entry, index) => decodeLockEntry(entry, `referenceLock.entries[${index}]`)).sort((left, right) => left.entryId.localeCompare(right.entryId)));
-  if (new Set(normalized.map(entry => entry.entryId)).size !== normalized.length) throw new TypeError("duplicate reference lock entryId");
-  const sourceRepo = normalized[0]?.sourceRepo ?? REFERENCE_REPOSITORY_ID;
-  const sourceCommit = normalized[0]?.sourceCommit ?? REFERENCE_COMMIT;
-  if (sourceRepo !== REFERENCE_REPOSITORY_ID || sourceCommit !== REFERENCE_COMMIT) throw new TypeError("reference lock source mismatch");
-  if (normalized.some(entry => entry.sourceRepo !== sourceRepo || entry.sourceCommit !== sourceCommit)) throw new TypeError("reference lock entries are not homogeneous");
-  return deepFreeze({ schemaVersion: REFERENCE_LOCK_SCHEMA_VERSION, sourceRepo, sourceCommit, entries: normalized, referenceLockRoot: computeReferenceLockRoot(normalized) });
-}
-
-export function decodeReferenceLock(value: unknown, path = "referenceLock"): ReferenceLockV1 {
-  const decoded = decodeExactObject(value, {
-    schemaVersion: (item, itemPath) => {
-      if (item !== REFERENCE_LOCK_SCHEMA_VERSION) throw new TypeError(`unsupported reference lock schema at ${itemPath}`);
-      return REFERENCE_LOCK_SCHEMA_VERSION;
-    },
-    sourceRepo: TEXT_DECODER,
-    sourceCommit: GIT_DECODER,
-    entries: (item, itemPath) => fieldArray(item, decodeLockEntry, itemPath),
-    referenceLockRoot: HASH_DECODER,
-  }, path);
-  const sealed = sealReferenceLock(decoded.entries);
-  if (sealed.sourceRepo !== decoded.sourceRepo || sealed.sourceCommit !== decoded.sourceCommit) throw new TypeError("reference lock header mismatch");
-  if (sealed.referenceLockRoot !== decoded.referenceLockRoot) throw new TypeError("reference lock root mismatch");
-  return sealed;
-}
-
-export function deriveReferenceLock(ledger: ReuseLedgerV1): ReferenceLockV1 {
-  return sealReferenceLock(ledger.entries.map(entry => ({
-    entryId: entry.entryId,
-    sourceRepo: entry.sourceRepo,
-    sourceCommit: entry.sourceCommit,
-    sourcePath: entry.sourcePath,
-    sourceBlob: entry.sourceBlob,
-    license: "not-copied-until-reviewed",
-    allowedDisposition: entry.adoptionMode,
-  })));
-}
-
-export function cloneLedgerForMutation(ledger: ReuseLedgerV1): ReuseLedgerV1 {
-  return decodeReuseLedger(JSON.parse(JSON.stringify(ledger)));
-}
-
-export function entryIdFor(sourcePath: string, symbol: string): string {
-  return `reuse.${sourcePath.replace(/[^a-z0-9]+/gi, ".").replace(/^\.|\.$/g, "")}.${symbol.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
-}
+export function entryIdFor(sourcePath: string, symbols: readonly string[] | string): string { const symbolText = typeof symbols === "string" ? symbols : symbols.join(";"); return `reuse.${sourcePath.replace(/[^a-z0-9]+/gi, ".").replace(/^\.|\.$/g, "")}.${symbolText.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; }

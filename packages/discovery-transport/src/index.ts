@@ -5,6 +5,7 @@ import {
 import {
   assertExactKeys,
   decodeCanonicalJson,
+  decodeJson,
   encodeCanonicalJson,
 } from "../../../packages/canonical-codec/src/index.ts";
 import {
@@ -59,6 +60,117 @@ export interface UnderlyingRpcRequest {
 export interface DiscoveryTransportPort {
   request<T>(input: UnderlyingRpcRequest): Promise<T>;
 }
+
+export interface HttpJsonRpcDiscoveryPortOptions {
+  readonly endpoint: string | URL;
+  readonly headers?: Readonly<Record<string, string>>;
+  /** Injectable HTTP only; response interpretation remains fixed here. */
+  readonly fetch?: typeof globalThis.fetch;
+}
+
+export class HttpJsonRpcDiscoveryError extends Error {
+  readonly code: "http" | "rpc" | "malformed-response";
+
+  constructor(code: "http" | "rpc" | "malformed-response", message: string) {
+    super(message);
+    this.name = "HttpJsonRpcDiscoveryError";
+    this.code = code;
+  }
+}
+
+function endpointUrl(value: string | URL): string {
+  let endpoint: URL;
+  try {
+    endpoint = value instanceof URL ? new URL(value.href) : new URL(value);
+  } catch {
+    throw new TypeError("discovery RPC endpoint must be a URL");
+  }
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
+    throw new TypeError("discovery RPC endpoint must use HTTP(S)");
+  }
+  return endpoint.href;
+}
+
+/**
+ * The only network-aware discovery edge.  It emits the exact JSON-RPC
+ * result value and owns no SourcePlan, Family, admission or evidence logic.
+ */
+export class HttpJsonRpcDiscoveryPort implements DiscoveryTransportPort {
+  private readonly endpoint: string;
+  private readonly headers: Readonly<Record<string, string>>;
+  private readonly fetchImpl: typeof globalThis.fetch;
+
+  constructor(options: HttpJsonRpcDiscoveryPortOptions) {
+    if (options === null || typeof options !== "object") throw new TypeError("HTTP discovery options are required");
+    this.endpoint = endpointUrl(options.endpoint);
+    this.headers = Object.freeze({ ...options.headers });
+    for (const [key, value] of Object.entries(this.headers)) {
+      if (typeof value !== "string") throw new TypeError(`headers.${key} must be a string`);
+    }
+    this.fetchImpl = options.fetch ?? globalThis.fetch;
+    if (typeof this.fetchImpl !== "function") throw new TypeError("global fetch is required");
+  }
+
+  async request<T>(input: UnderlyingRpcRequest): Promise<T> {
+    const response = await this.fetchImpl(this.endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        ...this.headers,
+      },
+      body: encodeCanonicalJson({
+        jsonrpc: "2.0",
+        id: input.requestId,
+        method: input.method,
+        params: input.params,
+      }),
+      signal: input.signal,
+    });
+    if (!response.ok) {
+      throw new HttpJsonRpcDiscoveryError("http", `discovery RPC returned HTTP ${response.status}`);
+    }
+    let decoded: unknown;
+    try {
+      decoded = decodeJson(await response.text());
+      if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) {
+        throw new TypeError("response must be an object");
+      }
+      const record = decoded as Record<string, unknown>;
+      if (record.jsonrpc !== "2.0" || record.id !== input.requestId) {
+        throw new TypeError("JSON-RPC response identity mismatch");
+      }
+      if (Object.prototype.hasOwnProperty.call(record, "result")) {
+        assertExactKeys(record, ["jsonrpc", "id", "result"], "discoveryRpc.response");
+        return record.result as T;
+      }
+      assertExactKeys(record, ["jsonrpc", "id", "error"], "discoveryRpc.response");
+      if (record.error === null || typeof record.error !== "object" || Array.isArray(record.error)) {
+        throw new TypeError("JSON-RPC error must be an object");
+      }
+      const error = record.error as Record<string, unknown>;
+      assertExactKeys(
+        error,
+        Object.prototype.hasOwnProperty.call(error, "data") ? ["code", "message", "data"] : ["code", "message"],
+        "discoveryRpc.response.error",
+      );
+      if (typeof error.code !== "number" || !Number.isInteger(error.code) || typeof error.message !== "string") {
+        throw new TypeError("JSON-RPC error fields are invalid");
+      }
+      throw new HttpJsonRpcDiscoveryError("rpc", `JSON-RPC ${error.code}: ${error.message}`);
+    } catch (error) {
+      if (error instanceof HttpJsonRpcDiscoveryError) throw error;
+      throw new HttpJsonRpcDiscoveryError(
+        "malformed-response",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+}
+
+export const createHttpJsonRpcDiscoveryPort = (
+  options: HttpJsonRpcDiscoveryPortOptions,
+): HttpJsonRpcDiscoveryPort => new HttpJsonRpcDiscoveryPort(options);
 
 export type DiscoveryTransportFailureCode =
   | "abort"
@@ -304,6 +416,7 @@ export class DiscoveryTransport {
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 5_000;
     if (!Number.isFinite(this.defaultTimeoutMs) || this.defaultTimeoutMs <= 0)
       throw new TypeError("defaultTimeoutMs must be positive");
+    issuedDiscoveryTransports.add(this);
   }
 
   async request<T>(input: DiscoveryTransportRequest): Promise<T> {
@@ -485,6 +598,16 @@ export class DiscoveryTransport {
         throw error;
       },
     );
+  }
+}
+
+const issuedDiscoveryTransports = new WeakSet<object>();
+
+export function assertIssuedDiscoveryTransport(
+  value: unknown,
+): asserts value is DiscoveryTransport {
+  if (value === null || typeof value !== "object" || !issuedDiscoveryTransports.has(value)) {
+    throw new TypeError("discovery transport is not owner-issued");
   }
 }
 

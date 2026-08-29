@@ -1,10 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import { hashDomain, sha256Hex, type Hash } from "../../canonical-codec/src/index.ts";
 import { sealInstanceCatalog } from "../../catalog/src/index.ts";
 import { CanonicalSourceError } from "../../canonical-source/src/index.ts";
 import { CASConflictError } from "../../durable-store/src/index.ts";
-import { mergeAndDedupeNominations, recentObservationRange, type CandidateRecordV1, type CanonicalCutoffV1 } from "../../discovery/src/index.ts";
+import {
+  candidatePartitionRoot,
+  mergeAndDedupeNominations,
+  recentObservationRange,
+  sealSourceCoverage,
+  sourcePlanDiscoveryRoot,
+  sourcePlanEvidenceRoot,
+  sourcePlanExecutionRoot,
+  sourcePlanIdentity,
+  sealPersistedSourcePlanExecution,
+  sealPersistedSourcePlanExecutionSet,
+  type CandidateRecordV1,
+  type CanonicalCutoffV1,
+  type SourcePlanExecutionV1,
+  type SourcePlanEvidenceReceiptV1,
+} from "../../discovery/src/index.ts";
+import { sealRecentObservation } from "../../observation/src/index.ts";
+import {
+  nominationEvidenceRefHash,
+  sealNominationClosureV1,
+  sealQualifiedSourcePlanNominationReceiptV1,
+  type NominationClosureV1,
+} from "../../../specs/nomination-authority/src/index.ts";
 import { readyBindingPortForReleaseApproval, releaseApproval } from "../../attestation/test/authority-fixture.ts";
 import { issueCandidatePartitionCapabilityFixture } from "../../checkpoint/test/candidate-partition-authority-fixture.ts";
 import type { CandidatePartitionCapabilityV1, CandidatePartitionBindingV1 } from "../../../specs/candidate-partition-authority/src/index.ts";
@@ -17,7 +39,7 @@ import {
   type SealedRunBindingV1,
   type SealedRunCapabilityV1,
 } from "../../ready-generation/src/index.ts";
-import { GenerationBuilderV1, type GenerationBuilderDependencies, type InProgressBuilderRunV1 } from "../src/index.ts";
+import { GenerationBuilderV1, type BeginRunInputV1, type GenerationBuilderDependencies, type InProgressBuilderRunV1 } from "../src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/builder", value);
 const cutoff: CanonicalCutoffV1 = { chainId: "1", number: "49", hash: h("block"), stateRoot: h("state") };
@@ -40,22 +62,118 @@ function blocks() {
   return values;
 }
 
-function candidate(): CandidateRecordV1 {
+function sourceExecution(): SourcePlanExecutionV1 {
+  const plan = {
+    ownerRef: h("owner"),
+    sourcePlanRef: h("plan"),
+    familyDefinitionHash: h("definition"),
+    completeness: "complete-snapshot" as const,
+    historyStartBlock: null,
+  };
+  const rawLocatorHash = sha256Hex(new TextEncoder().encode("builder-source-raw"));
+  const sourceEvidenceRefs = [{
+    kind: "source-plan" as const,
+    version: 1 as const,
+    ownerRef: plan.ownerRef,
+    sourcePlanRef: plan.sourcePlanRef,
+    evidenceRef: h("source-evidence"),
+    rawLocatorHash,
+  }];
+  const sourceEvidenceRoot = sourcePlanEvidenceRoot({ plan, cutoff, refs: sourceEvidenceRefs, rawLocatorHashes: [rawLocatorHash] });
+  const base = {
+    kind: "source-plan-execution" as const,
+    version: 1 as const,
+    plan,
+    cutoff,
+    outcome: "complete" as const,
+    from: "49",
+    through: "49",
+    previousAppliedThrough: null,
+    resultPartitionRoot: h("source-partition"),
+    opaqueResult: { kind: "builder-source-result", marker: "ok" },
+    sourceEvidenceRefs,
+    rawLocatorHashes: [rawLocatorHash],
+    sourceEvidenceRoot,
+  };
+  return { ...base, executionRoot: sourcePlanExecutionRoot(base) };
+}
+
+function sourceEvidence(value: SourcePlanExecutionV1): SourcePlanEvidenceReceiptV1 {
+  return {
+    kind: "source-plan-evidence",
+    version: 1,
+    plan: value.plan,
+    cutoff: value.cutoff,
+    refs: value.sourceEvidenceRefs,
+    rawLocatorHashes: value.rawLocatorHashes,
+    evidenceRoot: value.sourceEvidenceRoot,
+  };
+}
+
+function sourceExecutionSet(value: SourcePlanExecutionV1) {
+  return sealPersistedSourcePlanExecutionSet(value.cutoff, [sealPersistedSourcePlanExecution({
+    execution: value,
+    sourcePlanLeafDigest: h("plan-leaf"),
+    sourcePlanSchemaHash: h("plan-schema"),
+    sourcePlanClosureRoot: h("plan-closure"),
+    sourceAuthorityRoot: h("source-authority"),
+    releaseBindingId: h("release-binding"),
+    releaseProvenanceHash: h("release-provenance"),
+    sourceAnchorRoot: h("source-anchor"),
+    previousExecutionRoot: null,
+  })]);
+}
+
+function candidate(execution: SourcePlanExecutionV1): CandidateRecordV1 {
   return mergeAndDedupeNominations([{
+    kind: "aloha.candidate-nomination",
+    version: "2",
     familyId: "family-a",
-    familyDefinitionHash: h("family-definition"),
+    familyDefinitionHash: execution.plan.familyDefinitionHash,
     instanceNominationKey: "instance-a",
-    candidateSnapshotHash: h("candidate-snapshot"),
-    evidence: {
-      blockNumber: cutoff.number,
-      blockHash: cutoff.hash,
-      txHash: h("candidate-tx"),
-      logIndex: "0",
-      address: `0x${"1".repeat(40)}`,
-      topic: h("candidate-topic"),
-      rawLocatorHash: h("candidate-raw-locator"),
-    },
+    evidence: execution.sourceEvidenceRefs[0]!,
   }])[0]!;
+}
+
+function nominationClosure(
+  execution: SourcePlanExecutionV1,
+  executionSet: ReturnType<typeof sourceExecutionSet>,
+  recentObservationRoot: Hash,
+  sourceCoverageRoot: Hash,
+  candidates: readonly CandidateRecordV1[],
+): NominationClosureV1 {
+  const identity = sourcePlanIdentity(execution.plan);
+  const receipt = sealQualifiedSourcePlanNominationReceiptV1({
+    cutoff,
+    familyId: candidates[0]!.familyId,
+    familyDefinitionHash: execution.plan.familyDefinitionHash,
+    sourcePlanIdentity: identity,
+    sourcePlanLeafDigest: executionSet.executions[0]!.sourcePlanLeafDigest,
+    nominationProgramRoot: h("nomination-program"),
+    nominationProgramProposalLeafDigest: h("nomination-program-proposal"),
+    qualificationRoot: h("nomination-qualification"),
+    denominator: {
+      kind: "complete-source-result",
+      persistedExecutionRoot: executionSet.executions[0]!.persistedExecutionRoot,
+      resultPartitionRoot: execution.resultPartitionRoot,
+    },
+    claims: candidates.map(value => ({
+      sourcePlanIdentity: identity,
+      familyCandidateKey: value.familyCandidateKey,
+      instanceNominationKey: value.instanceNominationKey,
+      evidenceRefHash: nominationEvidenceRefHash(value.evidence[0]!),
+    })),
+  });
+  return sealNominationClosureV1({
+    cutoff,
+    recentObservationRoot,
+    sourceExecutionSetRoot: executionSet.executionSetRoot,
+    sourceCoverageRoot,
+    sourcePlanIdentities: [identity],
+    receipts: [receipt],
+    candidates,
+    candidatePartitionRoot: candidatePartitionRoot(candidates),
+  });
 }
 
 function fixture(existing: InProgressBuilderRunV1 | null = null) {
@@ -64,8 +182,27 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
   let root = { revision: "1", inProgressRunId: existing?.runId ?? null, stagedReadyStorageHash: null as Hash | null, readyGenerationId: null, readyGenerationRecordHash: null as Hash | null };
   let age = "1";
   let canonicalError: unknown = null;
+  let capturedBeginInput: BeginRunInputV1 | null = null;
+  let capturedNomination: { sourceExecutions: readonly SourcePlanExecutionV1[]; sourceEvidenceCount: number; sourceRawCount: number; recentRawCount: number } | null = null;
+  const execution = sourceExecution();
+  const executionSet = sourceExecutionSet(execution);
+  const coverage = sealSourceCoverage(cutoff, [execution.plan], [execution]);
+  const recent = sealRecentObservation(cutoff, recentObservationRange(cutoff.number), blocks(), []);
   const instanceCatalog = sealInstanceCatalog(cutoff, []);
-  const candidateValue = candidate();
+  const candidateValue = candidate(execution);
+  const candidates = [candidateValue];
+  const nominationClosureValue = nominationClosure(
+    execution,
+    executionSet,
+    recent.observationRoot,
+    coverage.sourceCoverageRoot,
+    candidates,
+  );
+  const nominationClosureStorageHash = h("nomination-closure-storage");
+  const nominationCapabilities = new WeakMap<object, {
+    readonly candidates: readonly CandidateRecordV1[];
+    readonly nominationClosure: NominationClosureV1;
+  }>();
   const approval = releaseApproval(h("framework"), h("executor"), "epoch-1", h("executor-session"));
   const releaseBinding = approval.resolver.resolve(approval.capability).provenance.runtimeBinding;
   const partitionFixture = issueCandidatePartitionCapabilityFixture({
@@ -87,6 +224,8 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
     sourceCoverageRoot: h("coverage"),
     candidatePartitionRoot: candidatePartitionBinding.candidatePartitionRoot,
     candidatePartitionStorageHash: candidatePartitionBinding.candidatePartitionStorageHash,
+    nominationClosureRoot: nominationClosureValue.root,
+    nominationClosureStorageHash,
     candidatePartitionProofStorageHash: h("candidate-proof-storage"),
     exactOutcomePartitionRoot: h("outcomes"),
     verifiedMemoSetRoot: h("memos"),
@@ -111,17 +250,22 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
     checkpoint: {
       async loadAndValidateRoot() { events.push("load-root"); return root; },
       async loadRun() { events.push("load-run"); if (!storedRun) throw new Error("missing"); return storedRun; },
+      async loadSourcePlanPredecessor() { return null; },
       async loadStagedPromotion() { events.push("load-stage"); return null; },
       async beginNewRunAndPersistPartition(input) {
         events.push("begin-run");
+        capturedBeginInput = input;
         const run = {
           runId: "run-new",
           parentGenerationId: input.parentGenerationId,
           checkpointRevision: "2",
           cutoff: input.cutoff,
           recentObservation: input.recentObservation,
+          sourcePlanEvidence: input.sourcePlanEvidence,
           definitionCatalogRoot: input.definitionCatalogRoot,
           sourceCoverage: input.sourceCoverage,
+          sourceExecutionSet: input.sourceExecutionSet,
+          nominationClosure: input.nominationClosure,
           candidatePartition,
           candidatePartitionBinding,
         };
@@ -146,28 +290,60 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
     discovery: {
       async executeAllDeclaredPlans() {
         events.push("source-plans");
-        return [{
-          plan: { ownerRef: h("owner"), sourcePlanRef: h("plan"), familyDefinitionHash: h("definition"), completeness: "complete-snapshot" as const, historyStartBlock: null },
-          cutoff,
-          outcome: "complete" as const,
-          from: "49",
-          through: "49",
-          previousAppliedThrough: null,
-          resultPartitionRoot: h("source-partition"),
-        }];
+        const rawBytes = new TextEncoder().encode("builder-source-raw");
+        const evidence = sourceEvidence(execution);
+        const discovery = {
+          kind: "source-plan-discovery" as const,
+          version: 1 as const,
+          executions: [execution],
+          evidence: [evidence],
+          rawEvidenceLocators: [{ kind: "raw-evidence-locator" as const, version: 1 as const, rawLocatorHash: execution.rawLocatorHashes[0]!, bytes: rawBytes }],
+          discoveryRoot: sourcePlanDiscoveryRoot({
+            executions: [execution],
+            evidence: [evidence],
+            rawEvidenceLocators: [{ kind: "raw-evidence-locator" as const, version: 1 as const, rawLocatorHash: execution.rawLocatorHashes[0]!, bytes: rawBytes }],
+          }),
+        };
+        return { discovery, sourceExecutionSet: executionSet };
       },
       async scanRecentBlocks() {
         events.push("recent-50");
-        return { blocks: blocks(), rawEvidenceLocators: [] };
+        return { kind: "recent-observation-scan" as const, version: 1 as const, blocks: blocks(), rawEvidenceLocators: [] };
       },
-      async nominateAll() { events.push("nominate"); return []; },
+      async nominateAll(_catalog, _cutoff, sourceExecutions, sourceEvidence, sourceRawEvidenceLocators, _recent, recentRawEvidenceLocators, issuedExecutionSet, issuedCoverage) {
+        events.push("nominate");
+        capturedNomination = {
+          sourceExecutions,
+          sourceEvidenceCount: sourceEvidence.length,
+          sourceRawCount: sourceRawEvidenceLocators.length,
+          recentRawCount: recentRawEvidenceLocators.length,
+        };
+        assert.equal(issuedExecutionSet.executionSetRoot, executionSet.executionSetRoot);
+        assert.equal(issuedCoverage.sourceCoverageRoot, coverage.sourceCoverageRoot);
+        const capability = Object.freeze(Object.create(null));
+        nominationCapabilities.set(capability, Object.freeze({ candidates, nominationClosure: nominationClosureValue }));
+        return capability;
+      },
+      readIssuedNomination(capability) {
+        events.push("read-nomination");
+        const result = nominationCapabilities.get(capability);
+        if (result === undefined) throw new TypeError("nomination capability was not issued by this discovery owner");
+        return result;
+      },
     },
     attestation: {
       async attestAndPersistDifference(run) {
         events.push("attest");
         return {
           sealedRun,
-          sealedRunBinding: { ...sealedRunBinding, runId: run.runId, parentGenerationId: run.parentGenerationId, checkpointRevision: run.checkpointRevision, sourceCoverageRoot: run.sourceCoverage.sourceCoverageRoot },
+          sealedRunBinding: {
+            ...sealedRunBinding,
+            runId: run.runId,
+            parentGenerationId: run.parentGenerationId,
+            checkpointRevision: run.checkpointRevision,
+            sourceCoverageRoot: run.sourceCoverage.sourceCoverageRoot,
+            nominationClosureRoot: run.nominationClosure.root,
+          },
           instanceCatalog,
         };
       },
@@ -181,7 +357,7 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
           const generationRefreshPolicyHashValue = generationRefreshPolicyHash(input.policy);
           const freshnessPayload = {
             cutoff: sealedRunBinding.cutoff,
-            observedHead: sealedRunBinding.cutoff,
+            observedHead: { ...sealedRunBinding.cutoff, parentHash: h("promotion-parent") },
             observedAgeBlocks: "0",
             maxPromotionAgeBlocks: "48",
             generationRefreshPolicyHash: generationRefreshPolicyHashValue,
@@ -201,6 +377,8 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
             definitionCatalogRoot: sealedRunBinding.definitionCatalogRoot,
             sourceCoverageRoot: sealedRunBinding.sourceCoverageRoot,
             candidatePartitionRoot: sealedRunBinding.candidatePartitionRoot,
+            nominationClosureRoot: sealedRunBinding.nominationClosureRoot,
+            nominationClosureStorageHash: sealedRunBinding.nominationClosureStorageHash,
             candidatePartitionProofStorageHash: sealedRunBinding.candidatePartitionProofStorageHash,
             exactOutcomePartitionRoot: sealedRunBinding.exactOutcomePartitionRoot,
             releaseProvenanceHash: sealedRunBinding.releaseProvenanceHash,
@@ -219,6 +397,8 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
     deps,
     events,
     getRun: () => storedRun,
+    getBeginInput: () => capturedBeginInput,
+    getNomination: () => capturedNomination,
     setAge: (value: string) => { age = value; },
     setCanonicalError: (value: unknown) => { canonicalError = value; },
     sealedRunBinding,
@@ -240,6 +420,8 @@ function issuedDefinitionChangedError(): unknown {
       graphRoot: h("graph"),
       releaseProvenanceHash: h("release-provenance"),
       candidatePartitionProofStorageHash: h("candidate-proof-storage"),
+      nominationClosureRoot: h("nomination-closure"),
+      nominationClosureStorageHash: h("nomination-closure-storage"),
       policy,
     });
   } catch (error) {
@@ -276,6 +458,8 @@ async function stagedFixture(firstPromotionError: unknown, options: StagedFixtur
     definitionCatalogRoot: run!.definitionCatalogRoot,
     releaseProvenanceHash: staged.sealedRunBinding.releaseProvenanceHash,
     candidatePartitionProofStorageHash: staged.sealedRunBinding.candidatePartitionProofStorageHash,
+    nominationClosureRoot: staged.sealedRunBinding.nominationClosureRoot,
+    nominationClosureStorageHash: staged.sealedRunBinding.nominationClosureStorageHash,
   };
   let stageAvailable = true;
   let promotionCalls = 0;
@@ -378,6 +562,8 @@ async function firstPromotionAmbiguousFixture() {
           definitionCatalogRoot: binding.definitionCatalogRoot,
           releaseProvenanceHash: binding.releaseProvenanceHash,
           candidatePartitionProofStorageHash: binding.candidatePartitionProofStorageHash,
+          nominationClosureRoot: binding.nominationClosureRoot,
+          nominationClosureStorageHash: binding.nominationClosureStorageHash,
         };
         return { sealedRun: captured.sealedRun, sealedRunBinding: binding, instanceCatalog: captured.instanceCatalog, stage };
       },
@@ -409,12 +595,39 @@ async function firstPromotionAmbiguousFixture() {
 }
 
 test("new run order is source coverage then exact 50 blocks then nomination, attestation and promotion", async () => {
-  const { deps, events } = fixture();
+  const { deps, events, getBeginInput, getNomination } = fixture();
   const builder = new GenerationBuilderV1(deps);
   await builder.buildNextReady(new AbortController().signal);
+  const beginInput = getBeginInput();
+  assert.notEqual(beginInput, null);
   assert.deepEqual(events.filter(value => !["load-root", "canonical"].includes(value)), [
-    "load-stage", "freeze", "source-plans", "recent-50", "nominate", "begin-run", "attest", "promote",
+    "load-stage", "freeze", "source-plans", "recent-50", "nominate", "read-nomination", "begin-run", "attest", "promote",
   ]);
+  assert.equal(beginInput!.sourcePlanEvidence.length, 1);
+  assert.equal(beginInput!.recentRawEvidenceLocators.length, 0);
+  assert.equal(beginInput!.sourcePlanRawEvidenceLocators.length, 1);
+  assert.equal(
+    beginInput!.nominationClosure.sourceExecutionSetRoot,
+    beginInput!.sourceExecutionSet.executionSetRoot,
+  );
+  assert.equal(
+    beginInput!.nominationClosure.sourceCoverageRoot,
+    beginInput!.sourceCoverage.sourceCoverageRoot,
+  );
+  assert.equal(
+    beginInput!.nominationClosure.candidatePartitionRoot,
+    candidatePartitionRoot(beginInput!.candidates),
+  );
+  const denominator = beginInput!.nominationClosure.receipts[0]!.denominator;
+  assert.equal(denominator.kind, "complete-source-result");
+  assert.equal(
+    denominator.persistedExecutionRoot,
+    beginInput!.sourceExecutionSet.executions[0]!.persistedExecutionRoot,
+  );
+  assert.equal(getNomination()?.sourceExecutions.length, 1);
+  assert.equal(getNomination()?.sourceEvidenceCount, 1);
+  assert.equal(getNomination()?.sourceRawCount, 1);
+  assert.equal(getNomination()?.recentRawCount, 0);
 });
 
 test("first promotion post-CAS ambiguity reloads the exact committed stage before returning", async () => {

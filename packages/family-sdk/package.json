@@ -6,7 +6,9 @@
     ".": "./src/index.ts",
     "./authoring": "./authoring/index.ts",
     "./runtime-refs": "./runtime-refs/index.ts",
-    "./conformance": "./conformance/index.ts"
+    "./conformance": "./conformance/index.ts",
+    "./runtime": "./runtime/index.ts",
+    "./search-runtime": "./search-runtime/index.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",

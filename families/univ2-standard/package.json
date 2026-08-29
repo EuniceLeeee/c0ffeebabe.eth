@@ -4,9 +4,25 @@
   "type": "module",
   "exports": {
     ".": "./src/public.ts",
+    "./family-definition": "./src/family-definition.ts",
+    "./schema": "./src/schema/index.ts",
+    "./stages/nomination": "./src/stages/nomination.ts",
+    "./stages/identity": "./src/stages/identity.ts",
+    "./stages/materialization": "./src/stages/materialization.ts",
+    "./stages/projection": "./src/stages/projection.ts",
+    "./stages/rehydration": "./src/stages/rehydration.ts",
+    "./runtime/definitions": "./src/runtime/definitions.ts",
+    "./capabilities/state": "./src/capabilities/state.ts",
+    "./capabilities/coarse": "./src/capabilities/coarse.ts",
+    "./capabilities/exact": "./src/capabilities/exact.ts",
+    "./capabilities/action": "./src/capabilities/action.ts",
+    "./capabilities/route-handle": "./src/capabilities/route-handle.ts",
+    "./search": "./src/search/adapter.ts",
+    "./search/adapter": "./src/search/adapter.ts",
     "./kernel/math": "./src/kernel/math.ts",
     "./kernel/codec": "./src/kernel/codec.ts",
-    "./kernel/identity": "./src/kernel/identity.ts"
+    "./kernel/identity": "./src/kernel/identity.ts",
+    "./kernel/state": "./src/kernel/state.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",

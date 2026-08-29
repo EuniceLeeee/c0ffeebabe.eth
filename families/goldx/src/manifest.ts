@@ -1,0 +1,12 @@
+import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { asSchemaRef } from "../../../packages/capability-contracts/src/index.ts";
+export const GOLDX_FAMILY_ID = "goldx" as const;
+export const GOLDX_FAMILY_VERSION = "1.0.0" as const;
+export const GOLDX_SOURCE_WINDOW_BLOCKS = 50 as const;
+export const GOLDX_SOURCE_PLAN_ID = "goldx.fixed-cutoff-50-block" as const;
+export const GOLDX_SOURCE_PLAN_SCHEMA_HASH = asSchemaRef(hashDomain("aloha/goldx/source-plan-schema/v1", GOLDX_SOURCE_PLAN_ID));
+export const GOLDX_CAPABILITY_IDS = Object.freeze({ state: "family.goldx.state", coarse: "family.goldx.coarse", exact: "family.goldx.exact" } as const);
+export const GOLDX_ACTION_OWNER_ID = "family.goldx.swap-action" as const;
+export const GOLDX_MANIFEST = Object.freeze({ familyId: GOLDX_FAMILY_ID, version: GOLDX_FAMILY_VERSION, domain: "protocol" as const, sourcePlans: Object.freeze([{ id: GOLDX_SOURCE_PLAN_ID, windowBlocks: GOLDX_SOURCE_WINDOW_BLOCKS, evidenceChannel: "nominate" as const }]), core: Object.freeze(["nomination", "identity", "materialization", "projection", "rehydration"] as const), extensions: Object.freeze(["state", "coarse", "exact"] as const), actionOwners: Object.freeze([GOLDX_ACTION_OWNER_ID]) });
+export const GOLDX_FAMILY_DEFINITION_HASH: Hash = hashDomain("aloha/goldx/family-definition/v1", GOLDX_MANIFEST);
+export const GOLDX_OWNER_REF: Hash = hashDomain("aloha/goldx/owner/v1", { familyId: GOLDX_FAMILY_ID, version: GOLDX_FAMILY_VERSION });

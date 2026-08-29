@@ -41,7 +41,7 @@ export type ArtifactLineageRoleId =
   | "acquisition-observer-process"
   | "target-production-process"
   | "store-epoch-observation"
-  | "artifact-lineage-invocation-seal-observer";
+  | "aloha.artifact-lineage.facts.signed-invocation-seal";
 
 export interface RoleQualificationCase {
   readonly roleId: ArtifactLineageRoleId;
@@ -296,13 +296,13 @@ function sidecarCases(
   return evaluateRoleCases(role.roleId as ArtifactLineageRoleId, cases, (input) => evaluateSidecarOracle(input as SidecarOracleContext), mutationIds);
 }
 
-const INVOCATION_PUBLIC_KEY_HEX = "0x29c14eae5c75b008cfa80af395938840cfdfdc994850613646c9104d8bfcf35e";
+const INVOCATION_PUBLIC_KEY_HEX = "0x35ad603563afcc844093909898ad33dc87e207780947b25811bd648dd6c3e75e";
 const INVOCATION_CORPUS_SIGNATURES = Object.freeze({
-  base: "0xa0848eb7dbdceb967f838dff65a9586ca5ff00ff075a5c6f956dbda7792b0b0ed0fdfac9b10094253343d9fd97902d5c2a0e282a9da443aa7c9678db35da280f",
-  audience: "0x8056286058b4087602cee15f72fdd44f0bbfbaa5135429963d8a34270ca46436444f4b708ce4242126d196814a36439d985e332bc51c42b39cae2fa0688dd506",
-  ordinaryRole: "0x45920e5503de9d83499ee85516bfaaa177095652a7785d5a2c93de3c16731e08358016fbd007e52ba409801d5adacec1b427185ce4fce128fbdb09a468db6407",
-  query: "0x97f76416e8cbf084b3c94d2b59cc7dcf007100983f2404f149098f638db904b7cdde3fa4da69a1eaf3b2da78e08c8bc413732c9ba2acf4a3332f2af5a65e0803",
-  snapshot: "0x0e84cdf9dc19f0ea9adce95d397276beec1ab43def3d8d5a7e7bd3ced0ab591ef5cc8d9aa4af05f7d1befbeda248f9f90671214b99eeee0c40de2c9a9dc92801",
+  base: "0x351e24b8983edb9fe67f8f175078b3db8bae518b9336052cb57a8dd6612a3f78c7c9ea68d86f1ada9573d0f354da97af83c571298dcd598d37679b6fc2e6c40f",
+  audience: "0x3c5cc3c66c018bcc14092e8e882877481d7fa0f0a2b3156b489f13ec6728fc54d247e979ff9b068e1803c22155985c4309f99711826795720b169802206b8701",
+  ordinaryRole: "0x8c37968361c740a468853a3401455851a8f610d8f6b780979ed756648a8e3f5595ddc0f638fcc61aa2686aa4356c7e93fafcdb2bab06b596f840cdf701b61306",
+  query: "0x115ff9462acac24dbb102e4267a8ed69980ee8900fac9bfd6c8ea527f4542c6fe219510ef2999426e0232556ca9d44ae62b669ebc997cfc5f684da367ac96d02",
+  snapshot: "0xd4e92c9b582d49e581b11952ecd52a2934e140850fb3e0210a36207c2d32d267f24cb612d8f7798c3f06f08f3b1062547426a17168e61105e71347e756f8060a",
 });
 
 function invocationBinding(

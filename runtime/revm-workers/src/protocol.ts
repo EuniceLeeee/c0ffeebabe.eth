@@ -10,6 +10,10 @@ import {
   decodeRuntimeReleaseExecutorLeaseV1,
   type RuntimeReleaseExecutorLeaseV1,
 } from "../../../specs/release-authority/src/index.ts";
+import {
+  normalizeEffectTransportDeclaration,
+  type EffectTransportDeclarationV1,
+} from "../../../packages/execution-program/src/index.ts";
 
 export const REVM_WIRE_VERSION = 1 as const;
 export type RevmCallerMode = "top-level" | "impersonated-call-frame";
@@ -48,6 +52,8 @@ export interface FrozenProgramWire {
   readonly programHash: Hash | string;
   /** Canonical encoded program bytes; the worker, not this package, interprets EVM semantics. */
   readonly bytes: string;
+  /** Optional owner-declared effect transport capability, bound by programHash. */
+  readonly effectTransport?: EffectTransportDeclarationV1;
 }
 
 export interface RevmWorkerSimulateRequestV1 {
@@ -113,6 +119,8 @@ export interface RevmWorkerResultV1 {
   readonly status: "returned" | "reverted";
   readonly output: string;
   readonly effects: RevmExecutionEffectsWire;
+  /** Worker echo of the exact declaration carried by the frozen program. */
+  readonly effectTransport?: EffectTransportDeclarationV1;
   readonly executionReceiptHash: Hash | string;
 }
 
@@ -139,6 +147,7 @@ export interface RevmWorkerErrorV1 {
   readonly deadlineAtMs: number;
   readonly code: RevmWorkerFailureCode;
   readonly message: string;
+  readonly effectTransport?: EffectTransportDeclarationV1;
 }
 
 export type RevmWorkerResponseV1 = RevmWorkerResultV1 | RevmWorkerErrorV1;
@@ -232,12 +241,18 @@ function parseStringMap(value: unknown, field: string): Readonly<Record<string, 
 
 function parseProgram(value: unknown): FrozenProgramWire {
   if (!isRecord(value) || value.format !== "frozen-program-v1") throw new TypeError("program format is unsupported");
-  assertExactKeys(value, ["format", "schemaHash", "programHash", "bytes"]);
+  const keys = ["format", "schemaHash", "programHash", "bytes"];
+  if (Object.prototype.hasOwnProperty.call(value, "effectTransport")) keys.push("effectTransport");
+  assertExactKeys(value, keys);
+  const effectTransport = Object.prototype.hasOwnProperty.call(value, "effectTransport")
+    ? normalizeEffectTransportDeclaration(value.effectTransport, "program.effectTransport")
+    : undefined;
   return Object.freeze({
     format: "frozen-program-v1",
     schemaHash: requireString(value.schemaHash, "program.schemaHash"),
     programHash: requireString(value.programHash, "program.programHash"),
     bytes: requireString(value.bytes, "program.bytes"),
+    ...(effectTransport === undefined ? {} : { effectTransport }),
   });
 }
 
@@ -321,15 +336,22 @@ function parseResponse(value: Record<string, unknown>): RevmWorkerResponseV1 {
   const requestId = requireString(value.requestId, "requestId");
   const workerEpoch = requireString(value.workerEpoch, "workerEpoch");
   if (value.kind === "error") {
-    assertExactKeys(value, ["wireVersion", "kind", "op", "requestId", "workerEpoch", "ownerRef", "generationId", "attemptId", "authority", "inputHash", "deadlineAtMs", "code", "message"]);
+    const keys = ["wireVersion", "kind", "op", "requestId", "workerEpoch", "ownerRef", "generationId", "attemptId", "authority", "inputHash", "deadlineAtMs", "code", "message"];
+    if (Object.prototype.hasOwnProperty.call(value, "effectTransport")) keys.push("effectTransport");
+    assertExactKeys(value, keys);
     const code = value.code;
     const validCodes: readonly RevmWorkerFailureCode[] = ["invalid-request", "invalid-response", "worker-error", "timeout", "retired", "source-stale", "engine-unqualified"];
     if (typeof code !== "string" || !validCodes.includes(code as RevmWorkerFailureCode)) throw new TypeError("error.code is unsupported");
     const authority = parseAuthority(value.authority);
     if (authority.workerEpoch !== workerEpoch) throw new TypeError("error worker epoch does not match authority");
-    return Object.freeze({ wireVersion: REVM_WIRE_VERSION, kind: "error", op: "simulate", requestId, workerEpoch, ownerRef: requireString(value.ownerRef, "ownerRef"), generationId: requireString(value.generationId, "generationId"), attemptId: requireString(value.attemptId, "attemptId"), authority, inputHash: requireString(value.inputHash, "inputHash"), deadlineAtMs: numberField(value.deadlineAtMs, "deadlineAtMs"), code: code as RevmWorkerFailureCode, message: requireString(value.message, "message") });
+    const effectTransport = Object.prototype.hasOwnProperty.call(value, "effectTransport")
+      ? normalizeEffectTransportDeclaration(value.effectTransport, "error.effectTransport")
+      : undefined;
+    return Object.freeze({ wireVersion: REVM_WIRE_VERSION, kind: "error", op: "simulate", requestId, workerEpoch, ownerRef: requireString(value.ownerRef, "ownerRef"), generationId: requireString(value.generationId, "generationId"), attemptId: requireString(value.attemptId, "attemptId"), authority, inputHash: requireString(value.inputHash, "inputHash"), deadlineAtMs: numberField(value.deadlineAtMs, "deadlineAtMs"), code: code as RevmWorkerFailureCode, message: requireString(value.message, "message"), ...(effectTransport === undefined ? {} : { effectTransport }) });
   }
-  assertExactKeys(value, ["wireVersion", "kind", "op", "requestId", "workerEpoch", "ownerRef", "generationId", "attemptId", "authority", "inputHash", "deadlineAtMs", "engine", "engineBuildFingerprint", "source", "caller", "observeAccounts", "programHash", "status", "output", "effects", "executionReceiptHash"]);
+  const keys = ["wireVersion", "kind", "op", "requestId", "workerEpoch", "ownerRef", "generationId", "attemptId", "authority", "inputHash", "deadlineAtMs", "engine", "engineBuildFingerprint", "source", "caller", "observeAccounts", "programHash", "status", "output", "effects", "executionReceiptHash"];
+  if (Object.prototype.hasOwnProperty.call(value, "effectTransport")) keys.push("effectTransport");
+  assertExactKeys(value, keys);
   if (value.engine !== "revm") throw new TypeError("worker response is not qualified REVM output");
   const status = value.status;
   if (status !== "returned" && status !== "reverted") throw new TypeError("response.status is unsupported");
@@ -338,6 +360,9 @@ function parseResponse(value: Record<string, unknown>): RevmWorkerResponseV1 {
   if (effects.observedAccounts.length !== observeAccounts.length || effects.observedAccounts.some((account, index) => account !== observeAccounts[index])) throw new TypeError("effects observation scope does not match response scope");
   const authority = parseAuthority(value.authority);
   if (authority.workerEpoch !== workerEpoch) throw new TypeError("response worker epoch does not match authority");
+  const effectTransport = Object.prototype.hasOwnProperty.call(value, "effectTransport")
+    ? normalizeEffectTransportDeclaration(value.effectTransport, "response.effectTransport")
+    : undefined;
   return Object.freeze({
     wireVersion: REVM_WIRE_VERSION,
     kind: "response",
@@ -359,6 +384,7 @@ function parseResponse(value: Record<string, unknown>): RevmWorkerResponseV1 {
     status,
     output: requireString(value.output, "output"),
     effects,
+    ...(effectTransport === undefined ? {} : { effectTransport }),
     executionReceiptHash: requireString(value.executionReceiptHash, "executionReceiptHash"),
   });
 }
@@ -415,11 +441,13 @@ export function decodeWorkerLine(line: string): RevmWorkerMessageV1 {
 }
 
 export function hashFrozenProgram(program: FrozenProgramWire): Hash {
-  return hashDomain("aloha/frozen-program-wire/v1", {
+  const body = {
     format: program.format,
     schemaHash: program.schemaHash,
     bytes: program.bytes,
-  });
+    ...(program.effectTransport === undefined ? {} : { effectTransport: normalizeEffectTransportDeclaration(program.effectTransport) }),
+  };
+  return hashDomain("aloha/frozen-program-wire/v1", body);
 }
 
 export function hashInput(input: CanonicalJson): Hash {
@@ -451,6 +479,7 @@ export function hashExecutionReceipt(response: RevmWorkerResultV1): Hash {
     status: response.status,
     output: response.output,
     effects: response.effects,
+    ...(response.effectTransport === undefined ? {} : { effectTransport: normalizeEffectTransportDeclaration(response.effectTransport) }),
   });
 }
 

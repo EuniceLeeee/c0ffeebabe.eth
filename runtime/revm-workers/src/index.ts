@@ -18,6 +18,7 @@ import {
   type RevmWorkerResultV1,
   type RevmWorkerAuthorityBindingV1,
 } from "./protocol.ts";
+import { sameEffectTransportDeclaration, type EffectTransportDeclarationV1 } from "../../../packages/execution-program/src/index.ts";
 import {
   RevmWorkerLifecycleError,
   RevmWorkerPool,
@@ -60,6 +61,7 @@ export interface RevmSimulationReceipt {
   readonly status: "returned" | "reverted";
   readonly output: string;
   readonly effects: RevmWorkerResultV1["effects"];
+  readonly effectTransport?: EffectTransportDeclarationV1;
   readonly executionReceiptHash: string;
 }
 
@@ -78,7 +80,8 @@ export class RevmSimulationError extends Error {
 }
 
 export interface RevmSimulationClientOptions {
-  readonly pool?: RevmWorkerPool;
+  /** The release bootstrap may expose a narrow, authority-guarded pool port. */
+  readonly pool?: Pick<RevmWorkerPool, "submit" | "snapshot">;
 }
 
 function equalSource(left: RevmSourceAnchor, right: RevmSourceAnchor): boolean {
@@ -148,7 +151,7 @@ function mapLifecycleError(error: RevmWorkerLifecycleError): RevmSimulationFailu
  * evaluator, fixture response, or guessed EVM result in this class.
  */
 export class RevmSimulationClient {
-  private readonly pool?: RevmWorkerPool;
+  private readonly pool?: Pick<RevmWorkerPool, "submit" | "snapshot">;
 
   constructor(options: RevmSimulationClientOptions = {}) {
     this.pool = options.pool;
@@ -198,6 +201,7 @@ export class RevmSimulationClient {
       status: response.status,
       output: response.output,
       effects: Object.freeze({ ...response.effects, observedAccounts: Object.freeze([...response.effects.observedAccounts]) }),
+      ...(response.effectTransport === undefined ? {} : { effectTransport: response.effectTransport }),
       executionReceiptHash: response.executionReceiptHash,
     });
   }
@@ -218,6 +222,7 @@ export class RevmSimulationClient {
     if (!equalCaller(response.caller, request.caller)) throw new RevmSimulationError({ code: "caller-mismatch", requestId: request.requestId, message: "REVM response caller binding mismatch" });
     if (!equalAccounts(response.observeAccounts, request.observeAccounts)) throw new RevmSimulationError({ code: "observe-scope-mismatch", requestId: request.requestId, message: "REVM response observe-account scope mismatch" });
     if (!equalAccounts(response.effects.observedAccounts, request.observeAccounts)) throw new RevmSimulationError({ code: "observe-scope-mismatch", requestId: request.requestId, message: "REVM effects observe-account scope mismatch" });
+    if (!sameEffectTransportDeclaration(response.effectTransport, request.program.effectTransport)) throw new RevmSimulationError({ code: "program-mismatch", requestId: request.requestId, message: "REVM response effect transport declaration mismatch" });
     if (response.programHash !== request.program.programHash || response.programHash !== hashFrozenProgram(request.program)) throw new RevmSimulationError({ code: "program-mismatch", requestId: request.requestId, message: "REVM response program hash mismatch" });
     if (response.workerEpoch !== request.workerEpoch) throw new RevmSimulationError({ code: "invalid-response", requestId: request.requestId, message: "REVM response worker epoch mismatch" });
     if (response.executionReceiptHash !== hashExecutionReceipt(response)) throw new RevmSimulationError({ code: "invalid-response", requestId: request.requestId, message: "REVM execution receipt hash mismatch" });

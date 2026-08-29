@@ -1,0 +1,12 @@
+import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { asSchemaRef } from "../../../packages/capability-contracts/src/index.ts";
+export const PSM_FAMILY_ID = "psm" as const;
+export const PSM_FAMILY_VERSION = "1.0.0" as const;
+export const PSM_SOURCE_WINDOW_BLOCKS = 50 as const;
+export const PSM_SOURCE_PLAN_ID = "psm.fixed-cutoff-50-block" as const;
+export const PSM_SOURCE_PLAN_SCHEMA_HASH = asSchemaRef(hashDomain("aloha/psm/source-plan-schema/v1", PSM_SOURCE_PLAN_ID));
+export const PSM_CAPABILITY_IDS = Object.freeze({ state: "family.psm.state", coarse: "family.psm.coarse", exact: "family.psm.exact" } as const);
+export const PSM_ACTION_OWNER_ID = "family.psm.swap-action" as const;
+export const PSM_MANIFEST = Object.freeze({ familyId: PSM_FAMILY_ID, version: PSM_FAMILY_VERSION, domain: "protocol" as const, sourcePlans: Object.freeze([{ id: PSM_SOURCE_PLAN_ID, windowBlocks: PSM_SOURCE_WINDOW_BLOCKS, evidenceChannel: "nominate" as const }]), core: Object.freeze(["nomination", "identity", "materialization", "projection", "rehydration"] as const), extensions: Object.freeze(["state", "coarse", "exact"] as const), actionOwners: Object.freeze([PSM_ACTION_OWNER_ID]) });
+export const PSM_FAMILY_DEFINITION_HASH: Hash = hashDomain("aloha/psm/family-definition/v1", PSM_MANIFEST);
+export const PSM_OWNER_REF: Hash = hashDomain("aloha/psm/owner/v1", { familyId: PSM_FAMILY_ID, version: PSM_FAMILY_VERSION });

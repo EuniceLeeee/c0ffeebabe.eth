@@ -13,22 +13,17 @@ import {
   stringSchema,
   type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
+import { types as nodeTypes } from "node:util";
+import {
+  ARTIFACT_LINEAGE_ORACLE_PROGRAM_DESCRIPTOR_DIGEST,
+  ARTIFACT_LINEAGE_ORACLE_VERSION,
+} from "./oracle-descriptor.ts";
 
-// Keep the descriptor identity local so the oracle compiler closure does not
-// pull in the production schema manifest merely to re-export a constant.
-export const ARTIFACT_LINEAGE_ORACLE_PROGRAM_DESCRIPTOR_DIGEST = sha256Hex([
-  "aloha/artifact-lineage/oracle-program-descriptor/v2",
-  "sha256-bytes",
-  "canonical-hex-copy",
-  "exact-locator-media-schema",
-  "outcome-required",
-  "lease-epoch-only",
-  "producer-outcome-ignored",
-].join("\0"));
+export { ARTIFACT_LINEAGE_ORACLE_PROGRAM_DESCRIPTOR_DIGEST } from "./oracle-descriptor.ts";
 
 /** Stable plugin-owned oracle binding consumed by the release generator. */
 export const ORACLE_PROGRAM_DESCRIPTOR_DIGEST = ARTIFACT_LINEAGE_ORACLE_PROGRAM_DESCRIPTOR_DIGEST;
-export const ORACLE_VERSION = "artifact-lineage-independent-oracle-v2" as const;
+export const ORACLE_VERSION = ARTIFACT_LINEAGE_ORACLE_VERSION;
 
 /*
  * This file is deliberately a clean-room oracle. It may use canonical/hash
@@ -142,11 +137,24 @@ interface RetentionLeaseReceiptV1 {
 interface ObservedImmutableMirrorV1 {
   readonly storeIdentityHash: Hash;
   readonly objectKey: Hash;
-  readonly bytes: string;
+  readonly bytes: ArtifactMirrorBytesV1;
   readonly contentSha256: Hash;
   readonly byteLength: string;
   readonly mediaType: string;
   readonly schema: SchemaRef | null;
+}
+
+interface ArtifactMirrorByteChunkV1 {
+  readonly index: string;
+  readonly bytes: string;
+}
+
+interface ArtifactMirrorBytesV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.canonical-artifact-bytes";
+  readonly byteLength: string;
+  readonly contentSha256: Hash;
+  readonly chunks: readonly ArtifactMirrorByteChunkV1[];
 }
 
 interface ArtifactResolutionClaimV1 {
@@ -281,6 +289,133 @@ function decodeHex(value: string): Uint8Array {
     bytes[index] = Number.parseInt(value.slice(2 + index * 2, 4 + index * 2), 16);
   }
   return bytes;
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  for (let index = 0; index < left.byteLength; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
+}
+
+const ORACLE_ARTIFACT_CHUNK_BYTE_LENGTH = 65_534;
+const ORACLE_ARTIFACT_MIRROR_MAX_DECODED_BYTES = 500_000;
+
+function oracleExactDenseArrayLength(value: unknown, expectedLength: number, path: string): number {
+  if (value !== null && typeof value === "object" && nodeTypes.isProxy(value)) {
+    throw new TypeError(`Proxy array is not accepted at ${path}`);
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value) === false) {
+    throw new TypeError(`expected array at ${path}`);
+  }
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+  if (
+    lengthDescriptor === undefined ||
+    !("value" in lengthDescriptor) ||
+    typeof lengthDescriptor.value !== "number" ||
+    !Number.isSafeInteger(lengthDescriptor.value) ||
+    lengthDescriptor.value !== expectedLength
+  ) {
+    throw new TypeError(`array length does not match artifact byteLength at ${path}`);
+  }
+  const ownKeys = Reflect.ownKeys(value);
+  if (
+    ownKeys.length !== expectedLength + 1 ||
+    ownKeys.some((key) => key !== "length" &&
+      (typeof key !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(key) || Number(key) >= expectedLength))
+  ) {
+    throw new TypeError(`expected dense exact array at ${path}`);
+  }
+  return expectedLength;
+}
+
+function decodeOracleArtifactMirrorBytes(
+  value: unknown,
+  path: string,
+  policyMaxByteLength: bigint,
+): { readonly envelope: ArtifactMirrorBytesV1; readonly decoded: Uint8Array } {
+  assertPlainObject(value, path);
+  assertExactKeys(value, ["schemaVersion", "kind", "byteLength", "contentSha256", "chunks"], path);
+  const schemaVersion = oracleLiteral(1)(readOwnEnumerableDataProperty(value, "schemaVersion", path), `${path}.schemaVersion`);
+  const kind = oracleLiteral("aloha.canonical-artifact-bytes")(readOwnEnumerableDataProperty(value, "kind", path), `${path}.kind`);
+  const byteLength = oracleDecimal(readOwnEnumerableDataProperty(value, "byteLength", path), `${path}.byteLength`);
+  const declaredByteLength = BigInt(byteLength);
+  if (
+    declaredByteLength > policyMaxByteLength ||
+    declaredByteLength > BigInt(ORACLE_ARTIFACT_MIRROR_MAX_DECODED_BYTES)
+  ) {
+    throw new TypeError(`artifact mirror exceeds decoded-byte bound at ${path}.byteLength`);
+  }
+  const contentSha256 = oracleHash(readOwnEnumerableDataProperty(value, "contentSha256", path), `${path}.contentSha256`);
+  const expectedChunkCount = declaredByteLength === 0n
+    ? 0
+    : Number(
+      (declaredByteLength + BigInt(ORACLE_ARTIFACT_CHUNK_BYTE_LENGTH) - 1n) /
+      BigInt(ORACLE_ARTIFACT_CHUNK_BYTE_LENGTH),
+    );
+  const rawChunks = readOwnEnumerableDataProperty(value, "chunks", path);
+  oracleExactDenseArrayLength(rawChunks, expectedChunkCount, `${path}.chunks`);
+
+  const chunks: ArtifactMirrorByteChunkV1[] = [];
+  let actualByteLength = 0;
+  for (let index = 0; index < expectedChunkCount; index += 1) {
+    const chunkPath = `${path}.chunks[${index}]`;
+    const descriptor = Object.getOwnPropertyDescriptor(rawChunks as readonly unknown[], String(index));
+    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+      throw new TypeError(`expected enumerable data property at ${chunkPath}`);
+    }
+    const chunk = oracleObject(descriptor.value, chunkPath, {
+      index: (entry, entryPath) => {
+        if (entry !== String(index)) throw new TypeError(`chunk index mismatch at ${entryPath}`);
+        return entry;
+      },
+      bytes: (entry, entryPath) => {
+        if (typeof entry !== "string") throw new TypeError(`chunk bytes must be a string at ${entryPath}`);
+        return entry;
+      },
+    }) as unknown as ArtifactMirrorByteChunkV1;
+    const finalChunk = index === expectedChunkCount - 1;
+    const expectedChunkByteLength = finalChunk
+      ? Number(declaredByteLength - BigInt(index * ORACLE_ARTIFACT_CHUNK_BYTE_LENGTH))
+      : ORACLE_ARTIFACT_CHUNK_BYTE_LENGTH;
+    if (chunk.bytes.length !== 2 + expectedChunkByteLength * 2) {
+      throw new TypeError(`chunk length mismatch at ${chunkPath}.bytes`);
+    }
+    if (!/^0x(?:[0-9a-f]{2})*$/.test(chunk.bytes)) {
+      throw new TypeError(`chunk bytes must be lowercase even-length hex at ${chunkPath}.bytes`);
+    }
+    const chunkByteLength = (chunk.bytes.length - 2) / 2;
+    if (
+      (!finalChunk && chunkByteLength !== ORACLE_ARTIFACT_CHUNK_BYTE_LENGTH) ||
+      (finalChunk && (chunkByteLength === 0 || chunkByteLength > ORACLE_ARTIFACT_CHUNK_BYTE_LENGTH))
+    ) {
+      throw new TypeError(`chunk length mismatch at ${chunkPath}.bytes`);
+    }
+    actualByteLength += chunkByteLength;
+    if (actualByteLength > ORACLE_ARTIFACT_MIRROR_MAX_DECODED_BYTES) {
+      throw new TypeError(`artifact mirror exceeds decoded-byte bound at ${path}.chunks`);
+    }
+    chunks.push(chunk);
+  }
+  if (BigInt(actualByteLength) !== declaredByteLength) {
+    throw new TypeError(`artifact byteLength does not match chunks at ${path}.byteLength`);
+  }
+
+  const decoded = new Uint8Array(actualByteLength);
+  let offset = 0;
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunkBytes = decodeHex(chunks[index]!.bytes);
+    decoded.set(chunkBytes, offset);
+    offset += chunkBytes.byteLength;
+  }
+  if (sha256Hex(decoded) !== contentSha256) {
+    throw new TypeError(`artifact content hash does not match chunks at ${path}.contentSha256`);
+  }
+  return Object.freeze({
+    envelope: Object.freeze({ schemaVersion, kind, byteLength, contentSha256, chunks: Object.freeze(chunks) }),
+    decoded,
+  });
 }
 
 function decodeOracleSchemaRef(value: unknown, path: string): SchemaRef {
@@ -441,35 +576,24 @@ function decodeOracleLease(value: unknown, path: string): RetentionLeaseReceiptV
   return lease;
 }
 
-function preflightOracleMirrorBudget(value: unknown, maxByteLength: bigint, path: string): void {
-  assertPlainObject(value, path);
-  assertExactKeys(value, ["storeIdentityHash", "objectKey", "bytes", "contentSha256", "byteLength", "mediaType", "schema"], path);
-  const bytes = oracleString(readOwnEnumerableDataProperty(value, "bytes", path), `${path}.bytes`);
-  const byteLength = BigInt(oracleDecimal(readOwnEnumerableDataProperty(value, "byteLength", path), `${path}.byteLength`));
-  if (byteLength > maxByteLength || BigInt(Math.max(0, bytes.length - 2)) > maxByteLength * 2n) {
-    throw new TypeError(`mirror bytes exceed resolver policy before decode at ${path}.bytes`);
-  }
-}
-
 function decodeOracleObservedMirror(
   value: unknown,
   path: string,
-  maxByteLength?: bigint,
+  maxByteLength: bigint,
 ): ObservedImmutableMirrorV1 {
-  if (maxByteLength !== undefined) preflightOracleMirrorBudget(value, maxByteLength, path);
   const mirror = oracleObject(value, path, {
     storeIdentityHash: oracleHash,
     objectKey: oracleHash,
-    bytes: oracleString,
+    bytes: (entry, entryPath) => decodeOracleArtifactMirrorBytes(entry, entryPath, maxByteLength).envelope,
     contentSha256: oracleHash,
     byteLength: oracleDecimal,
     mediaType: oracleNonEmpty,
     schema: oracleNullable(decodeOracleSchemaRef),
   }) as unknown as ObservedImmutableMirrorV1;
-  const length = hexByteLength(mirror.bytes);
-  if (length === null) throw new TypeError(`mirror bytes are not lowercase even hex at ${path}`);
-  const bytes = decodeHex(mirror.bytes);
-  if (String(length) !== mirror.byteLength || sha256Hex(bytes) !== mirror.contentSha256) {
+  if (
+    mirror.bytes.byteLength !== mirror.byteLength ||
+    mirror.bytes.contentSha256 !== mirror.contentSha256
+  ) {
     throw new TypeError(`mirror bytes do not match sidecars at ${path}`);
   }
   return mirror;
@@ -688,9 +812,15 @@ export function evaluateArtifactLineageOracle(
 
   let rawBytes: Uint8Array;
   let observedBytes: Uint8Array;
+  let claimedMirrorBytes: Uint8Array;
   try {
     rawBytes = decodeHex(raw.rawBytes);
     observedBytes = decodeHex(observation.rawBytes);
+    claimedMirrorBytes = decodeOracleArtifactMirrorBytes(
+      claim.resolutionClaim.observedMirror.bytes,
+      "$.claim.resolutionClaim.observedMirror.bytes",
+      maxByteLength,
+    ).decoded;
   } catch {
     return invalidResult("raw-shape-invalid", claim.claimId, observation.observationId);
   }
@@ -699,9 +829,10 @@ export function evaluateArtifactLineageOracle(
   const claimedMirror = claim.resolutionClaim.observedMirror;
   if (
     raw.rawBytes !== observation.rawBytes ||
-    claimedMirror.bytes !== observation.rawBytes ||
+    !bytesEqual(claimedMirrorBytes, observedBytes) ||
     observedHash !== observation.contentSha256 ||
     observedHash !== rawHash ||
+    hashBytes(claimedMirrorBytes) !== observedHash ||
     String(observedBytes.byteLength) !== observation.byteLength ||
     String(rawBytes.byteLength) !== observation.byteLength
   ) {

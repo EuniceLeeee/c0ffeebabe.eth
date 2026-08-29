@@ -1,0 +1,15 @@
+[package]
+name = "aloha-revm-worker"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+hex = "0.4"
+revm = { version = "40.0.3", features = ["optional_eip3607"] }
+ryu-js = "1.0.3"
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
+sha2 = "0.10"
+
+[dev-dependencies]
+assert_cmd = "2.0"

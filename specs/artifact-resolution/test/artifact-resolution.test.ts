@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  ARTIFACT_BYTES_CHUNK_BYTE_LENGTH,
+  ARTIFACT_MIRROR_MAX_DECODED_BYTES,
   ARTIFACT_RESOLUTION_SCHEMA_MANIFESTS,
   createArtifactResolutionClaim,
   createObservedImmutableMirror,
@@ -16,6 +18,7 @@ import {
   encodeObservedImmutableMirror,
   encodeResolverPolicy,
   encodeRetentionLeaseReceipt,
+  preflightArtifactBytesByteLength,
   recomputeArtifactResolutionClaimId,
   type ArtifactResolutionClaimV1,
   type Hash,
@@ -53,7 +56,7 @@ const lease = createRetentionLeaseReceipt({
 const mirror = createObservedImmutableMirror({
   storeIdentityHash: h("1"),
   objectKey: h("2"),
-  bytes: "0x726177",
+  bytes: encodeArtifactBytes(new Uint8Array([0x72, 0x61, 0x77])),
   mediaType: "application/json",
   schema,
 });
@@ -81,11 +84,11 @@ test("executable schema hashes are stable golden values", () => {
   );
   assert.equal(
     ARTIFACT_RESOLUTION_SCHEMA_MANIFESTS.observedImmutableMirror.schemaHash,
-    "0x3db1eda63599e87992614c905bf325d6f4c7f3e75dfd655f5afb2012d11529c6",
+    "0x504148fa0fb188a605b77c2848f72e829582db8538e473a6959d5a5a67b6d300",
   );
   assert.equal(
     ARTIFACT_RESOLUTION_SCHEMA_MANIFESTS.artifactResolutionClaim.schemaHash,
-    "0xfa11b1c9f22d52de8563c64873e48ead198e03b07ddff72144fb6e94b25f10c2",
+    "0x3e97521df798eac7398229ce619febd8afa0c0e0c4531a2e8388b3e0712319ea",
   );
 });
 
@@ -167,12 +170,24 @@ test("binary codec accepts only exact native Uint8Array and never invokes hostil
       throw new Error("iterator getter must not run");
     },
   });
-  assert.equal(encodeArtifactBytes(iteratorShadow), "0x726177");
+  assert.deepEqual(encodeArtifactBytes(iteratorShadow), {
+    schemaVersion: 1,
+    kind: "aloha.canonical-artifact-bytes",
+    byteLength: "3",
+    contentSha256: "0xd7439bee24773bcbfa2d0a97947ee36227b10d1022b1a55847e928965bb6bfde",
+    chunks: [{ index: "0", bytes: "0x726177" }],
+  });
   assert.equal(iteratorGetterHits, 0);
 });
 
 test("observed mirror derives and validates exact bytes, hash and length", () => {
-  assert.equal(mirror.bytes, "0x726177");
+  assert.deepEqual(mirror.bytes, {
+    schemaVersion: 1,
+    kind: "aloha.canonical-artifact-bytes",
+    byteLength: "3",
+    contentSha256: "0xd7439bee24773bcbfa2d0a97947ee36227b10d1022b1a55847e928965bb6bfde",
+    chunks: [{ index: "0", bytes: "0x726177" }],
+  });
   assert.equal(mirror.byteLength, "3");
   assert.equal(
     mirror.contentSha256,
@@ -187,7 +202,7 @@ test("observed mirror derives and validates exact bytes, hash and length", () =>
 
   assert.throws(() => decodeObservedImmutableMirror({
     ...mirror,
-    bytes: "0x7261",
+    bytes: encodeArtifactBytes(new Uint8Array([0x72, 0x61])),
   }));
   assert.throws(() => decodeObservedImmutableMirror({
     ...mirror,
@@ -200,17 +215,152 @@ test("observed mirror derives and validates exact bytes, hash and length", () =>
   assert.throws(() => createObservedImmutableMirror({
     storeIdentityHash: h("1"),
     objectKey: h("2"),
-    bytes: "0xABCDEF",
+    bytes: {
+      ...mirror.bytes,
+      chunks: [{ index: "0", bytes: "0xABCDEF" }],
+    },
     mediaType: "application/json",
     schema,
   }));
   assert.throws(() => createObservedImmutableMirror({
     storeIdentityHash: h("1"),
     objectKey: h("2"),
-    bytes: "0x0",
+    bytes: {
+      ...mirror.bytes,
+      chunks: [{ index: "0", bytes: "0x0" }],
+    },
     mediaType: "application/json",
     schema,
   }));
+});
+
+test("artifact bytes have one exact chunked wire shape across empty and size boundaries", () => {
+  const empty = encodeArtifactBytes(new Uint8Array());
+  assert.deepEqual(empty, {
+    schemaVersion: 1,
+    kind: "aloha.canonical-artifact-bytes",
+    byteLength: "0",
+    contentSha256: "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    chunks: [],
+  });
+  assert.deepEqual(decodeArtifactBytes(empty), new Uint8Array());
+  assert.throws(() => decodeArtifactBytes("0x"));
+
+  const exact = new Uint8Array(ARTIFACT_BYTES_CHUNK_BYTE_LENGTH).fill(0x5a);
+  const exactEncoded = encodeArtifactBytes(exact);
+  assert.equal(exactEncoded.chunks.length, 1);
+  assert.equal(exactEncoded.chunks[0]!.bytes.length, 2 + ARTIFACT_BYTES_CHUNK_BYTE_LENGTH * 2);
+  assert.ok(exactEncoded.chunks[0]!.bytes.length < 131_072);
+  assert.deepEqual(decodeArtifactBytes(exactEncoded), exact);
+
+  const split = new Uint8Array(ARTIFACT_BYTES_CHUNK_BYTE_LENGTH + 1).fill(0x6b);
+  const splitEncoded = encodeArtifactBytes(split);
+  assert.deepEqual(splitEncoded.chunks.map((chunk) => [chunk.index, chunk.bytes.length]), [
+    ["0", 2 + ARTIFACT_BYTES_CHUNK_BYTE_LENGTH * 2],
+    ["1", 4],
+  ]);
+  assert.deepEqual(decodeArtifactBytes(splitEncoded), split);
+});
+
+test("artifact bytes reject missing, reordered, duplicate and non-canonical chunks", () => {
+  const source = new Uint8Array(ARTIFACT_BYTES_CHUNK_BYTE_LENGTH + 2).fill(0x31);
+  const encoded = encodeArtifactBytes(source);
+  const first = encoded.chunks[0]!;
+  const second = encoded.chunks[1]!;
+
+  assert.throws(() => decodeArtifactBytes({ ...encoded, chunks: [first] }));
+  assert.throws(() => decodeArtifactBytes({ ...encoded, chunks: [second, first] }));
+  assert.throws(() => decodeArtifactBytes({ ...encoded, chunks: [first, { ...second, index: "0" }] }));
+  assert.throws(() => decodeArtifactBytes({
+    ...encoded,
+    chunks: [
+      { ...first, bytes: first.bytes.slice(0, -2) },
+      { ...second, bytes: `0x31${second.bytes.slice(2)}` },
+    ],
+  }));
+  assert.throws(() => decodeArtifactBytes({
+    ...encoded,
+    chunks: [{ ...first, bytes: `${first.bytes}00` }, second],
+  }));
+  assert.throws(() => decodeArtifactBytes({
+    ...encoded,
+    chunks: [{ ...first, bytes: `0xAB${first.bytes.slice(4)}` }, second],
+  }));
+  assert.throws(() => decodeArtifactBytes({ ...encoded, byteLength: String(source.length - 1) }));
+  assert.throws(() => decodeArtifactBytes({ ...encoded, contentSha256: h("f") }));
+});
+
+test("artifact byte preflight rejects hostile cardinality, sparse, accessor and proxy arrays before item reads", () => {
+  let itemReads = 0;
+  const oversizedCardinality = new Array(16_384);
+  Object.defineProperty(oversizedCardinality, "0", {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      itemReads += 1;
+      throw new Error("cardinality rejection must precede item reads");
+    },
+  });
+  assert.throws(() => preflightArtifactBytesByteLength({
+    ...mirror.bytes,
+    byteLength: "1",
+    chunks: oversizedCardinality,
+  }));
+  assert.equal(itemReads, 0);
+
+  const sparse = new Array(1);
+  assert.throws(() => preflightArtifactBytesByteLength({ ...mirror.bytes, byteLength: "1", chunks: sparse }));
+
+  const accessor = new Array(1);
+  Object.defineProperty(accessor, "0", {
+    configurable: true,
+    enumerable: true,
+    get: () => {
+      itemReads += 1;
+      throw new Error("accessor must not run");
+    },
+  });
+  assert.throws(() => preflightArtifactBytesByteLength({ ...mirror.bytes, byteLength: "1", chunks: accessor }));
+  assert.equal(itemReads, 0);
+
+  let proxyReads = 0;
+  const proxy = new Proxy([{ index: "0", bytes: "0x00" }], {
+    get: () => {
+      proxyReads += 1;
+      throw new Error("proxy trap must not run");
+    },
+    getOwnPropertyDescriptor: () => {
+      proxyReads += 1;
+      throw new Error("proxy trap must not run");
+    },
+    ownKeys: () => {
+      proxyReads += 1;
+      throw new Error("proxy trap must not run");
+    },
+  });
+  assert.throws(() => preflightArtifactBytesByteLength({ ...mirror.bytes, byteLength: "1", chunks: proxy }));
+  assert.equal(proxyReads, 0);
+});
+
+test("inline mirror cap is exactly realizable by one canonical claim envelope", () => {
+  const maximumBytes = new Uint8Array(ARTIFACT_MIRROR_MAX_DECODED_BYTES).fill(0x7a);
+  const maximumMirror = createObservedImmutableMirror({
+    storeIdentityHash: h("1"),
+    objectKey: h("2"),
+    bytes: encodeArtifactBytes(maximumBytes),
+    mediaType: "application/octet-stream",
+    schema: null,
+  });
+  const maximumClaim = createArtifactResolutionClaim({
+    artifactRefId: h("6"),
+    resolverPolicyHash: policy.policyHash,
+    observedMirror: maximumMirror,
+    outcome: "content-observed",
+  });
+  assert.ok(encodeArtifactResolutionClaim(maximumClaim).byteLength <= 1_048_576);
+  assert.deepEqual(decodeArtifactBytes(maximumMirror.bytes), maximumBytes);
+  assert.throws(() => encodeArtifactBytes(new Uint8Array(ARTIFACT_MIRROR_MAX_DECODED_BYTES + 1)));
+  assert.throws(() => encodeArtifactBytes(new Uint8Array(600_000)));
 });
 
 test("claim outcome/mirror relation and claim ID are fail-closed", () => {

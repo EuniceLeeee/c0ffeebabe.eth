@@ -1,0 +1,18 @@
+import { GOLDX_MANIFEST } from "./manifest.ts";
+import { captureGoldxEvidence } from "./capture.ts";
+import { decodeGoldxCandidate } from "./discovery.ts";
+import { exactGoldx } from "./exact.ts";
+import { compileGoldxExecution } from "./execution.ts";
+import { verifyGoldxIdentityStage } from "./identity.ts";
+import { materializeGoldx } from "./instance.ts";
+import { nominateGoldx } from "./nomination.ts";
+import { coarseGoldx } from "./pricing.ts";
+import { deriveGoldxRoutes } from "./routes.ts";
+export const GOLDX_RUNTIME = Object.freeze({ manifest: GOLDX_MANIFEST, discover: decodeGoldxCandidate, capture: captureGoldxEvidence, nominate: nominateGoldx, identity: verifyGoldxIdentityStage, materialize: materializeGoldx, routes: deriveGoldxRoutes, coarse: coarseGoldx, exact: exactGoldx, execute: compileGoldxExecution });
+export const GOLDX_NOMINATION_RUNTIME = Object.freeze({ stage: "nomination", run: nominateGoldx });
+export const GOLDX_IDENTITY_RUNTIME = Object.freeze({ stage: "identity", run: verifyGoldxIdentityStage });
+export const GOLDX_MATERIALIZATION_RUNTIME = Object.freeze({ stage: "materialization", run: materializeGoldx });
+export const GOLDX_PROJECTION_RUNTIME = Object.freeze({ stage: "projection", run: deriveGoldxRoutes });
+export const GOLDX_REHYDRATION_RUNTIME = Object.freeze({ stage: "rehydration", run: deriveGoldxRoutes });
+export { GOLDX_SEARCH_RUNTIME_ADAPTER_FACTORY } from "./search-adapter.ts";
+export { GOLDX_NOMINATION_DEFINITION, GOLDX_IDENTITY_DEFINITION, GOLDX_MATERIALIZATION_DEFINITION, GOLDX_PROJECTION_DEFINITION, GOLDX_REHYDRATION_DEFINITION, GOLDX_STAGE_DEFINITIONS, GOLDX_STAGE_IDS, requireGoldxStageDefinition } from "./runtime/definitions.ts";

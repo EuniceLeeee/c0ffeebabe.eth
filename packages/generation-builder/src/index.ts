@@ -3,19 +3,29 @@ import type {
   CandidatePartitionBindingV1,
   CandidatePartitionCapabilityV1,
 } from "../../../specs/candidate-partition-authority/src/index.ts";
+import {
+  decodeNominationClosureV1,
+  type NominationClosureV1,
+} from "../../../specs/nomination-authority/src/index.ts";
 import { CanonicalSourceError } from "../../canonical-source/src/index.ts";
 import type { InstanceCatalogV1 } from "../../catalog/src/index.ts";
 import {
-  mergeAndDedupeNominations,
+  decodePersistedSourcePlanExecutionSet,
+  decodeSourcePlanDiscoveryResult,
+  validateSourcePlanEvidenceReceipts,
+  validatePersistedExecutionCoverage,
   sealSourceCoverage,
-  type CandidateNominationV1,
   type CandidateRecordV1,
   type CanonicalCutoffV1,
   type SourcePlanExecutionV1,
+  type SourcePlanDiscoveryResultV1,
+  type SourcePlanEvidenceReceiptV1,
   type SourceCoverageCertificateV1,
+  type PersistedSourcePlanExecutionSetV1,
   type SourcePlanRefV1,
 } from "../../discovery/src/index.ts";
 import {
+  decodeRecentObservationScan,
   sealRecentObservation,
   type RawEvidenceLocatorContentV1,
   type RecentObservationReceiptV1,
@@ -56,8 +66,11 @@ export interface InProgressBuilderRunV1 {
   readonly checkpointRevision: string;
   readonly cutoff: CanonicalCutoffV1;
   readonly recentObservation: RecentObservationReceiptV1;
+  readonly sourcePlanEvidence: readonly SourcePlanEvidenceReceiptV1[];
   readonly definitionCatalogRoot: Hash;
   readonly sourceCoverage: SourceCoverageCertificateV1;
+  readonly sourceExecutionSet: PersistedSourcePlanExecutionSetV1;
+  readonly nominationClosure: NominationClosureV1;
   /** The only candidate authority exposed after checkpoint persistence. */
   readonly candidatePartition: CandidatePartitionCapabilityV1;
   readonly candidatePartitionBinding: CandidatePartitionBindingV1;
@@ -68,15 +81,20 @@ export interface BeginRunInputV1 {
   readonly parentGenerationId: string | null;
   readonly cutoff: CanonicalCutoffV1;
   readonly recentObservation: RecentObservationReceiptV1;
+  readonly sourcePlanEvidence: readonly SourcePlanEvidenceReceiptV1[];
   readonly definitionCatalogRoot: Hash;
   readonly sourceCoverage: SourceCoverageCertificateV1;
+  readonly sourceExecutionSet: PersistedSourcePlanExecutionSetV1;
+  readonly nominationClosure: NominationClosureV1;
   readonly candidates: readonly CandidateRecordV1[];
-  readonly rawEvidenceLocators: readonly RawEvidenceLocatorContentV1[];
+  readonly recentRawEvidenceLocators: readonly RawEvidenceLocatorContentV1[];
+  readonly sourcePlanRawEvidenceLocators: readonly RawEvidenceLocatorContentV1[];
 }
 
 export interface BuilderCheckpointPort {
   loadAndValidateRoot(): Promise<BuilderCheckpointRootV1>;
   loadRun(runId: string): Promise<InProgressBuilderRunV1>;
+  loadSourcePlanPredecessor(parentGenerationId: string | null): Promise<SourcePlanPredecessorClosureV1 | null>;
   loadStagedPromotion(): Promise<{ readonly sealedRun: SealedRunCapabilityV1; readonly sealedRunBinding: SealedRunBindingV1; readonly instanceCatalog: InstanceCatalogV1; readonly stage: ReadyStageIdentityV1 } | null>;
   beginNewRunAndPersistPartition(input: BeginRunInputV1): Promise<InProgressBuilderRunV1>;
   sealRunAndClearInProgressCAS(run: InProgressBuilderRunV1, reason: "stale-cutoff" | "definition-root-changed" | "run-corrupt"): Promise<void>;
@@ -93,15 +111,43 @@ export interface BuilderCanonicalPort {
 }
 
 export interface BuilderDiscoveryPort {
-  executeAllDeclaredPlans(catalog: BuilderCatalogV1, cutoff: CanonicalCutoffV1, signal: AbortSignal): Promise<readonly SourcePlanExecutionV1[]>;
+  executeAllDeclaredPlans(
+    catalog: BuilderCatalogV1,
+    cutoff: CanonicalCutoffV1,
+    predecessor: SourcePlanPredecessorClosureV1 | null,
+    signal: AbortSignal,
+  ): Promise<DurableSourcePlanDiscoveryResultV1>;
   scanRecentBlocks(cutoff: CanonicalCutoffV1, signal: AbortSignal): Promise<RecentObservationScanV1>;
   nominateAll(
     catalog: BuilderCatalogV1,
     cutoff: CanonicalCutoffV1,
     sourceExecutions: readonly SourcePlanExecutionV1[],
+    sourceEvidence: readonly SourcePlanEvidenceReceiptV1[],
+    sourceRawEvidenceLocators: readonly RawEvidenceLocatorContentV1[],
     recent: RecentObservationReceiptV1,
+    recentRawEvidenceLocators: readonly RawEvidenceLocatorContentV1[],
+    sourceExecutionSet: PersistedSourcePlanExecutionSetV1,
+    sourceCoverage: SourceCoverageCertificateV1,
     signal: AbortSignal,
-  ): Promise<readonly CandidateNominationV1[]>;
+  ): Promise<BuilderNominationCapabilityV1>;
+  readIssuedNomination(capability: BuilderNominationCapabilityV1): {
+    readonly candidates: readonly CandidateRecordV1[];
+    readonly nominationClosure: NominationClosureV1;
+  };
+}
+
+/** Process-local discovery-owner authority; JSON clones and shape fakes fail. */
+export type BuilderNominationCapabilityV1 = object;
+
+export interface SourcePlanPredecessorClosureV1 {
+  readonly sourceCoverage: SourceCoverageCertificateV1;
+  readonly sourceExecutionSet: PersistedSourcePlanExecutionSetV1;
+  readonly rawEvidenceLocators: readonly RawEvidenceLocatorContentV1[];
+}
+
+export interface DurableSourcePlanDiscoveryResultV1 {
+  readonly discovery: SourcePlanDiscoveryResultV1;
+  readonly sourceExecutionSet: PersistedSourcePlanExecutionSetV1;
 }
 
 export interface PersistedAttestationPort {
@@ -427,6 +473,14 @@ export class GenerationBuilderV1 {
           || existing.recentObservation.range.to !== this.#deps.canonical.recentObservationRange(existing.cutoff).to
           || !sameCutoff(existing.recentObservation.cutoff, existing.cutoff)
         ) reason = "run-corrupt";
+        else {
+          try {
+            validateSourcePlanEvidenceReceipts(existing.sourcePlanEvidence, existing.cutoff, catalog.declaredSourcePlans);
+            validatePersistedExecutionCoverage(existing.sourceExecutionSet, existing.sourceCoverage);
+          } catch {
+            reason = "run-corrupt";
+          }
+        }
       } catch (error) {
         if (!isTerminalCanonicalMismatch(error)) throw error;
         reason = "stale-cutoff";
@@ -438,25 +492,62 @@ export class GenerationBuilderV1 {
     }
 
     const cutoff = await this.#deps.canonical.freezeView(signal);
-    const sourceExecutions = await this.#deps.discovery.executeAllDeclaredPlans(catalog, cutoff, signal);
-    const coverage = sealSourceCoverage(cutoff, catalog.declaredSourcePlans, sourceExecutions);
-    const recentScan = await this.#deps.discovery.scanRecentBlocks(cutoff, signal);
+    let predecessor = await this.#deps.checkpoint.loadSourcePlanPredecessor(root.readyGenerationId);
+    if (predecessor !== null) {
+      try {
+        validatePersistedExecutionCoverage(predecessor.sourceExecutionSet, predecessor.sourceCoverage);
+        await this.#deps.canonical.assertStillCanonical(predecessor.sourceCoverage.cutoff);
+        if (
+          predecessor.sourceCoverage.cutoff.chainId !== cutoff.chainId
+          || decimal(predecessor.sourceCoverage.cutoff.number) >= decimal(cutoff.number)
+        ) predecessor = null;
+      } catch (error) {
+        if (!isTerminalCanonicalMismatch(error)) throw error;
+        predecessor = null;
+      }
+    }
+    const durableDiscovery = await this.#deps.discovery.executeAllDeclaredPlans(catalog, cutoff, predecessor, signal);
+    const sourceDiscovery = decodeSourcePlanDiscoveryResult(durableDiscovery.discovery);
+    const sourceExecutionSet = decodePersistedSourcePlanExecutionSet(durableDiscovery.sourceExecutionSet);
+    const coverage = sealSourceCoverage(cutoff, catalog.declaredSourcePlans, sourceDiscovery.executions);
+    validatePersistedExecutionCoverage(sourceExecutionSet, coverage);
+    const recentScan = decodeRecentObservationScan(
+      await this.#deps.discovery.scanRecentBlocks(cutoff, signal),
+    );
     const recent = sealRecentObservation(
       cutoff,
       this.#deps.canonical.recentObservationRange(cutoff),
       recentScan.blocks,
+      recentScan.rawEvidenceLocators,
     );
-    const nominations = await this.#deps.discovery.nominateAll(catalog, cutoff, sourceExecutions, recent, signal);
-    const candidates = mergeAndDedupeNominations(nominations);
+    const nominationResultCapability = await this.#deps.discovery.nominateAll(
+      catalog,
+      cutoff,
+      sourceDiscovery.executions,
+      sourceDiscovery.evidence,
+      sourceDiscovery.rawEvidenceLocators,
+      recent,
+      recentScan.rawEvidenceLocators,
+      sourceExecutionSet,
+      coverage,
+      signal,
+    );
+    const nominationResult = this.#deps.discovery.readIssuedNomination(nominationResultCapability);
+    const candidates = nominationResult.candidates;
+    const nominationClosure = decodeNominationClosureV1(nominationResult.nominationClosure);
     const run = await this.#deps.checkpoint.beginNewRunAndPersistPartition({
       expectedRootRevision: root.revision,
       parentGenerationId: root.readyGenerationId,
       cutoff,
       recentObservation: recent,
+      sourcePlanEvidence: sourceDiscovery.evidence,
       definitionCatalogRoot: catalog.definitionCatalogRoot,
       sourceCoverage: coverage,
+      sourceExecutionSet,
+      nominationClosure,
       candidates,
-      rawEvidenceLocators: recentScan.rawEvidenceLocators,
+      recentRawEvidenceLocators: recentScan.rawEvidenceLocators,
+      sourcePlanRawEvidenceLocators: sourceDiscovery.rawEvidenceLocators,
     });
       return { run };
   }

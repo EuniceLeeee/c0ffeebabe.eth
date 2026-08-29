@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assertIssuedDiscoveryTransport,
   DiscoveryTransport,
   DiscoveryTransportError,
+  HttpJsonRpcDiscoveryError,
+  HttpJsonRpcDiscoveryPort,
   type UnderlyingRpcRequest,
 } from "../src/index.ts";
 import { WorkScheduler } from "../../scheduler/src/index.ts";
@@ -121,5 +124,98 @@ test("discovery requires the exact canonical envelope", async () => {
   await assert.rejects(
     transport.request({ ...request, unexpected: true } as never),
     /unknown discovery envelope field/,
+  );
+});
+
+test("discovery transport owner identity cannot be cloned or supplied by shape", () => {
+  const transport = new DiscoveryTransport({
+    scheduler: new WorkScheduler(),
+    caller,
+    port: { request: async <T>() => ({ ok: true }) as T },
+  });
+  assert.doesNotThrow(() => assertIssuedDiscoveryTransport(transport));
+  assert.throws(() => assertIssuedDiscoveryTransport({ ...transport }), /not owner-issued/);
+  assert.throws(() => assertIssuedDiscoveryTransport({ request: transport.request.bind(transport) }), /not owner-issued/);
+});
+
+test("the HTTP edge returns only an exact JSON-RPC result and preserves the request signal", async () => {
+  let captured: RequestInit | undefined;
+  const port = new HttpJsonRpcDiscoveryPort({
+    endpoint: "http://127.0.0.1:8545",
+    fetch: async (_input, init) => {
+      captured = init;
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { raw: "fact" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  const controller = new AbortController();
+  const value = await port.request<{ readonly raw: string }>({
+    requestId: "rpc-request",
+    provider: { provider: "reth", backendEpoch: "epoch" },
+    source: request.source,
+    method: "eth_getLogs",
+    params: [{ blockHash: "0x" + "1".repeat(64) }],
+    requestCodec: "ethereum-json-rpc-result.v1",
+    target: null,
+    manager: null,
+    topic: null,
+    lookback: 50,
+    chunk: 1,
+    deadlineAtMs: 100,
+    signal: controller.signal,
+  });
+  assert.deepEqual(value, { raw: "fact" });
+  assert.equal(captured?.signal, controller.signal);
+  assert.deepEqual(JSON.parse(String(captured?.body)), {
+    id: "rpc-request",
+    jsonrpc: "2.0",
+    method: "eth_getLogs",
+    params: [{ blockHash: "0x" + "1".repeat(64) }],
+  });
+});
+
+test("the HTTP edge rejects mismatched, extra-field, and RPC error responses", async () => {
+  const input: UnderlyingRpcRequest = {
+    requestId: "rpc-request",
+    provider: { provider: "reth", backendEpoch: "epoch" },
+    source: request.source,
+    method: "eth_getLogs",
+    params: [],
+    requestCodec: "ethereum-json-rpc-result.v1",
+    target: null,
+    manager: null,
+    topic: null,
+    lookback: 50,
+    chunk: 1,
+    deadlineAtMs: 100,
+    signal: new AbortController().signal,
+  };
+  for (const response of [
+    { jsonrpc: "2.0", id: "other", result: [] },
+    { jsonrpc: "2.0", id: "rpc-request", result: [], forged: true },
+  ]) {
+    const port = new HttpJsonRpcDiscoveryPort({
+      endpoint: "http://127.0.0.1:8545",
+      fetch: async () => new Response(JSON.stringify(response), { status: 200 }),
+    });
+    await assert.rejects(
+      port.request(input),
+      (error: unknown) => error instanceof HttpJsonRpcDiscoveryError && error.code === "malformed-response",
+    );
+  }
+  const rpc = new HttpJsonRpcDiscoveryPort({
+    endpoint: "http://127.0.0.1:8545",
+    fetch: async () => new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      id: "rpc-request",
+      error: { code: -32000, message: "unavailable" },
+    }), { status: 200 }),
+  });
+  await assert.rejects(
+    rpc.request(input),
+    (error: unknown) => error instanceof HttpJsonRpcDiscoveryError && error.code === "rpc",
   );
 });

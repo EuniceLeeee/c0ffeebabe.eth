@@ -1,0 +1,3 @@
+import { hashDomain } from "../../../packages/canonical-codec/src/index.ts";
+export const ETHERTOKEN_NATIVE_REDEEM_NOMINATION_MUTATION_CORPUS = Object.freeze({ schemaVersion: 1, corpusRoot: hashDomain("aloha/ethertoken-native-redeem/nomination-mutation-corpus/v1", ["wrong-owned-topic", "raw-log-mismatch", "duplicate-token", "foreign-raw-locator"]) });
+export const ETHERTOKEN_NATIVE_REDEEM_NOMINATION_INDEPENDENT_ORACLE = Object.freeze({ schemaVersion: 1, oracleRoot: hashDomain("aloha/ethertoken-native-redeem/nomination-independent-oracle/v1", ["owned-native-redeem-log", "token-target", "recent-window-ownership"]) });

@@ -31,14 +31,21 @@ import {
 } from "../../runtime-release-authority/src/index.ts";
 import {
   createRuntimeReleaseBindingV1,
+  createRuntimeReleaseDiscoverySourceQualificationV1,
+  hashRuntimeReleaseDiscoveryEndpointLocatorV1,
   hashQualifiedExecutorRegistryEntry,
+  hashQualifiedExecutorRegistryRoot,
+  sealRuntimeReleaseNominationQualificationSetV1,
   runtimeReleaseBindingProvenanceHash,
   runtimeReleaseBindingSigningBytes,
   decodeRuntimeReleaseBindingV1,
   type QualifiedExecutorRegistryEntryV1,
   type RuntimeReleaseBindingV1,
+  type RuntimeReleaseNominationQualificationSetV1,
   type RuntimeReleaseReadyBindingPortV1,
 } from "../../../specs/release-authority/src/index.ts";
+import { generatedEconomicValuationOwnerQualificationSetFixtureV1 } from "../../../specs/release-authority/test/generated-valuation-owner-qualification-fixture.ts";
+import { generatedEconomicSafetyActionOwnerQualificationFixtureV1 } from "../../../specs/release-authority/test/generated-action-owner-qualification-fixture.ts";
 import {
   identityProofSigningBytes,
   issueIdentityIssuerProof,
@@ -94,8 +101,10 @@ const TEST_RUNTIME_PUBLIC_KEY = createPublicKey(TEST_RUNTIME_PRIVATE_KEY);
 const TEST_PROOF_PUBLIC_KEY = createPublicKey(TEST_PROOF_PRIVATE_KEY);
 const TEST_CANDIDATE_PARTITION_PUBLIC_KEY = createPublicKey(TEST_CANDIDATE_PARTITION_PRIVATE_KEY);
 const TEST_RUNTIME_SIGNER_KEY_ID = hashDomain("test/runtime-release-signer-key", "v2");
-const TEST_ATTESTATION_PROOF_KEY_ID = hashDomain("test/attestation-proof-signer-key", "v2");
+export const TEST_ATTESTATION_PROOF_KEY_ID = hashDomain("test/attestation-proof-signer-key", "v2");
 export const TEST_CANDIDATE_PARTITION_PROOF_KEY_ID = hashDomain("test/candidate-partition-proof-signer-key", "v1");
+const valuationQualification = generatedEconomicValuationOwnerQualificationSetFixtureV1("attestation-authority");
+const actionOwnerQualification = generatedEconomicSafetyActionOwnerQualificationFixtureV1("attestation-authority");
 
 interface ActiveApprovalState {
   readonly authority: RuntimeReleaseAuthorityV1;
@@ -159,6 +168,8 @@ export function issueCandidatePartitionFixture(
     cutoff,
     candidatePartitionRoot: candidatePartitionRoot(candidates),
     candidatePartitionStorageHash: hashDomain("test/candidate-partition-storage", `${runId}:${checkpointRevision}`),
+    nominationClosureRoot: hashDomain("test/nomination-closure", `${runId}:${checkpointRevision}`),
+    nominationClosureStorageHash: hashDomain("test/nomination-closure-storage", `${runId}:${checkpointRevision}`),
     candidates,
     recentObservationRoot: hashDomain("test/candidate-partition-observation", `${runId}:${checkpointRevision}`),
     sourceCoverageRoot: hashDomain("test/candidate-partition-coverage", `${runId}:${checkpointRevision}`),
@@ -210,8 +221,13 @@ function verifyActiveBinding(
   const binding = decodeRuntimeReleaseBindingV1(
     state.authority.resolver.resolve(state.authority.capability),
   );
-  if (binding.signerKeyId !== TEST_RUNTIME_SIGNER_KEY_ID) throw new TypeError("test runtime release signer key mismatch");
-  verifyRuntimeHex(runtimeReleaseBindingSigningBytes(binding), binding.signatureHex);
+  // The fixture can either own the test runtime signer or attach its proof
+  // port to a runtime authority already issued by the candidate verifier from
+  // an externally signed binding.  Re-verify only the key this fixture owns;
+  // foreign signer pins remain encapsulated by RuntimeReleaseAuthority.
+  if (binding.signerKeyId === TEST_RUNTIME_SIGNER_KEY_ID) {
+    verifyRuntimeHex(runtimeReleaseBindingSigningBytes(binding), binding.signatureHex);
+  }
   if (expectedBinding !== null && binding.bindingId !== expectedBinding.bindingId) {
     throw new TypeError("test runtime release binding stale");
   }
@@ -287,6 +303,22 @@ function runtimeBinding(
   workerEpoch: string,
   executorSessionHash: Hash,
   releaseAuthorityRoot: Hash,
+  qualifiedCapabilityRefsRoot: Hash = hashDomain("test/release-approval", "qualified-capability-refs"),
+  discoverySourceQualification: RuntimeReleaseBindingV1["discoverySourceQualification"] = createRuntimeReleaseDiscoverySourceQualificationV1({
+    providerIdentity: "reth-mainnet",
+    backendEpoch: "reth-backend-1",
+    profile: "reth-json-rpc-v1",
+    chainId: "1",
+    endpointLocatorHash: hashRuntimeReleaseDiscoveryEndpointLocatorV1("http://127.0.0.1:8545"),
+    qualificationRoot: hashDomain("test/release-approval", "discovery-source-qualification"),
+  }),
+  nominationQualificationSet: RuntimeReleaseNominationQualificationSetV1 = sealRuntimeReleaseNominationQualificationSetV1([{
+    proposalLeafDigest: hashDomain("test/release-approval", "nomination-proposal"),
+    criticalMutationCorpusRoot: hashDomain("test/release-approval", "nomination-mutations"),
+    independentOracleCaseRoot: hashDomain("test/release-approval", "nomination-oracle"),
+    qualificationSpecDigest: hashDomain("test/release-approval", "nomination-spec"),
+    verifierQualificationCertificateRoot: hashDomain("test/release-approval", "nomination-certificate"),
+  }]),
 ): RuntimeReleaseBindingV1 {
   const selectedExecutor: QualifiedExecutorRegistryEntryV1 = {
     executorKind: "test-executor",
@@ -299,21 +331,14 @@ function runtimeBinding(
     candidateCommit: "a".repeat(40),
   };
   const selectedExecutorLeafHash = hashQualifiedExecutorRegistryEntry(selectedExecutor);
-  const qualifiedExecutorRegistryRoot = hashDomain("aloha/qualified-executor-registry-root/v1", {
-    entries: [selectedExecutor],
-    leafRoots: [selectedExecutorLeafHash],
-  });
+  const qualifiedExecutorRegistry = Object.freeze([selectedExecutor]);
+  const qualifiedExecutorRegistryRoot = hashQualifiedExecutorRegistryRoot(qualifiedExecutorRegistry);
   const payload = {
     schemaVersion: 1 as const,
     kind: "aloha.runtime-release-binding" as const,
-    acceptanceCertificate: {
-      certificateId: hashDomain("test/acceptance-certificate", "id"),
-      payloadHash: hashDomain("test/acceptance-certificate", "payload"),
-      verdict: "pass" as const,
-    },
     releaseAuthorityApprovalId: hashDomain("test/release-approval", "id"),
     releaseAuthorityApprovalPayloadHash: hashDomain("test/release-approval", "payload"),
-    authorityPinDigest: hashDomain("test/release-approval", "pin"),
+    releaseAcceptanceRequirementSetRoot: hashDomain("test/release-approval", "acceptance-requirements"),
     externalTrustAnchorRoot: hashDomain("test/release-approval", "trust-anchor"),
     externalIssuerKeySetRoot: hashDomain("test/release-approval", "issuer-key-set"),
     qualificationRegistryApprovalId: hashDomain("test/release-approval", "registry-approval"),
@@ -323,7 +348,22 @@ function runtimeBinding(
     predicateCompositionRootDigest: hashDomain("test/release-approval", "predicate-composition"),
     gateCoreRuntimeClosureDigest: hashDomain("test/release-approval", "runtime-closure"),
     gateCoreImplementationClosureDigest: hashDomain("test/release-approval", "core-closure"),
+    searcherRuntime: { runtimeArtifactRoot: hashDomain("test/release-approval", "searcher-artifact"), implementationClosureDigest: hashDomain("test/release-approval", "searcher-closure"), nodeExecutableSha256: hashDomain("test/release-approval", "searcher-node"), entrypointSha256: hashDomain("test/release-approval", "searcher-entrypoint"), bundleModulePath: "/etc/aloha/deployment-bundle.mjs", bundleModuleSha256: hashDomain("test/release-approval", "searcher-bundle") },
+    discoverySourceQualification,
+    qualifiedExecutorRegistry,
     qualifiedExecutorRegistryRoot,
+    valuationOwnerRegistryRoot: valuationQualification.registry.valuationOwnerRegistryRoot,
+    valuationOwnerQualificationCertificates: valuationQualification.certificates,
+    qualifiedValuationOwnerSetRoot: valuationQualification.root,
+    actionOwnerRegistryRoot: actionOwnerQualification.registry.actionOwnerRegistryRoot,
+    actionOwnerQualificationCertificates: actionOwnerQualification.certificates,
+    qualifiedActionOwnerSetRoot: actionOwnerQualification.root,
+    safetyProfile: actionOwnerQualification.profile,
+    safetyProfileRoot: actionOwnerQualification.profileRoot,
+    qualifiedCapabilityRefsRoot,
+    nominationProgramSetRoot: nominationQualificationSet.programSetRoot,
+    nominationQualificationSet,
+    nominationQualificationSetRoot: nominationQualificationSet.root,
     selectedExecutorLeafHash,
     selectedExecutor,
     releaseRoleManifestRoot: selectedExecutor.releaseRoleManifestRoot,
@@ -344,12 +384,56 @@ export function releaseApproval(
   workerEpoch = "epoch-1",
   executorSessionHash: Hash = hashDomain("test/executor-session", executorAuthorityRoot),
   releaseAuthorityRoot: Hash = hashDomain("test/release-authority", "v1"),
+  qualifiedCapabilityRefsRoot: Hash = hashDomain("test/release-approval", "qualified-capability-refs"),
+  discoveryEndpoint = "http://127.0.0.1:8545",
+  nominationQualificationSet?: RuntimeReleaseNominationQualificationSetV1,
 ): AttestationCompositionBindingV1 {
-  const binding = runtimeBinding(frameworkAuthorityRoot, executorAuthorityRoot, workerEpoch, executorSessionHash, releaseAuthorityRoot);
+  const binding = runtimeBinding(
+    frameworkAuthorityRoot,
+    executorAuthorityRoot,
+    workerEpoch,
+    executorSessionHash,
+    releaseAuthorityRoot,
+    qualifiedCapabilityRefsRoot,
+    createRuntimeReleaseDiscoverySourceQualificationV1({
+      providerIdentity: "reth-mainnet",
+      backendEpoch: "reth-backend-1",
+      profile: "reth-json-rpc-v1",
+      chainId: "1",
+      endpointLocatorHash: hashRuntimeReleaseDiscoveryEndpointLocatorV1(discoveryEndpoint),
+      qualificationRoot: hashDomain("test/release-approval", "discovery-source-qualification"),
+    }),
+    nominationQualificationSet,
+  );
   const authority = verifyAndIssueRuntimeReleaseAuthorityV1(binding, {
     signerKeyId: TEST_RUNTIME_SIGNER_KEY_ID,
     publicKeyHex: runtimePublicKeyHex(),
   });
+  const state: ActiveApprovalState = { authority };
+  const proofPortCapability = issueRuntimeReleaseAttestationProofPort(
+    authority,
+    issueDeploymentAttestationProofPort(proofPort(state, binding)),
+  );
+  const approval = issueRuntimeReleaseAttestationComposition(authority, proofPortCapability);
+  approvals.set(approval, state);
+  return approval;
+}
+
+/**
+ * Test-only proof-composition bridge for a runtime authority that was issued
+ * from an independently packaged and verified release binding.  This helper
+ * does not create or sign the runtime binding; it only supplies the offline
+ * attestation-proof signer used by structural integration tests.
+ */
+export function testAttestationCompositionForRuntimeAuthority(
+  authority: RuntimeReleaseAuthorityV1,
+): AttestationCompositionBindingV1 {
+  const binding = decodeRuntimeReleaseBindingV1(
+    authority.resolver.resolve(authority.capability),
+  );
+  if (binding.attestationProofIssuerKeyId !== TEST_ATTESTATION_PROOF_KEY_ID) {
+    throw new TypeError("external runtime binding does not select the test attestation proof issuer");
+  }
   const state: ActiveApprovalState = { authority };
   const proofPortCapability = issueRuntimeReleaseAttestationProofPort(
     authority,
@@ -413,6 +497,8 @@ export function rotateReleaseApproval(
     next.workerEpoch ?? current.workerEpoch,
     next.executorSessionHash ?? current.executorSessionHash,
     next.releaseAuthorityRoot ?? current.releaseAuthorityRoot,
+    current.qualifiedCapabilityRefsRoot,
+    current.discoverySourceQualification,
   );
   state.authority.rotate(nextBinding);
 }

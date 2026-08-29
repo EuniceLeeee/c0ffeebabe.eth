@@ -1,4 +1,4 @@
-import type { Hash } from "../../canonical-codec/src/index.ts";
+import type { CanonicalJson, Hash } from "../../canonical-codec/src/index.ts";
 import type { CandidateRecordV1, CanonicalCutoffV1 } from "../../discovery/src/index.ts";
 import type { RuntimeReleaseBindingV1 } from "../../../specs/release-authority/src/index.ts";
 import type {
@@ -6,6 +6,33 @@ import type {
   RuntimeReleaseAttestationCompositionCapabilityV1,
   RuntimeReleaseAttestationCompositionResolutionPortV1,
 } from "../../../specs/release-authority/src/index.ts";
+
+export interface VerifiedMemoReuseProofV1 {
+  readonly kind: "verifiedMemoReuseProof";
+  readonly familyId: string;
+  readonly familyDefinitionHash: Hash;
+  readonly familyCandidateKey: Hash;
+  readonly candidateSubjectHash: Hash;
+  readonly instanceNominationKey: string;
+  readonly cutoff: CanonicalCutoffV1;
+  readonly oldInstancePublicationHash: Hash;
+  readonly requestedArtifactDependencyRoot: Hash;
+  readonly descriptorHash: Hash;
+  readonly validityDependencyRoot: Hash;
+  readonly candidateToCanonicalIdentityBindingProof: Hash;
+  readonly identityMemo: CanonicalJson;
+  readonly identityMemoHash: Hash;
+  readonly evidenceRoot: Hash;
+  readonly proofHash: Hash;
+}
+
+export type AttestationIdentityOriginV1 =
+  | { readonly kind: "fresh" }
+  | {
+    readonly kind: "verified-memo-reuse";
+    readonly verifiedMemoSetRoot: Hash;
+    readonly proof: VerifiedMemoReuseProofV1;
+  };
 
 /**
  * Release qualification is outside the candidate repository.  These are
@@ -20,13 +47,14 @@ export interface AttestationIdentityProofIssueInputV1 {
   readonly runId: string;
   readonly cutoff: CanonicalCutoffV1;
   readonly candidatePartitionRoot: Hash;
-  readonly candidate: Pick<CandidateRecordV1, "familyDefinitionHash" | "familyCandidateKey" | "candidateSnapshotHash">;
+  readonly candidate: Pick<CandidateRecordV1, "familyDefinitionHash" | "familyCandidateKey" | "candidateSubjectHash">;
   /** Exact normalized family observation.  Restart verification derives the
    * subject and semantic hashes from these signed bytes rather than trusting
    * a separately persisted identity-shaped object. */
   readonly identityObservation: {
     readonly kind: "identityVerified";
     readonly familyInstanceKey: string;
+    readonly identityMemo: CanonicalJson;
     readonly identityMemoHash: Hash;
     readonly descriptorHash: Hash;
     readonly evidenceRoot: Hash;
@@ -35,6 +63,9 @@ export interface AttestationIdentityProofIssueInputV1 {
   /** The proof binds the pre-proof identity semantic hash; the persisted
    * partial hash additionally commits the returned proofHash. */
   readonly identitySemanticHash: Hash;
+  /** Owner-observed source of this identity. The signed proof makes this
+   * durable across checkpoint restart and prevents fresh/reuse substitution. */
+  readonly identityOrigin: AttestationIdentityOriginV1;
   readonly releaseProvenanceHash: Hash;
   readonly attestationAuthorityRoot: Hash;
   readonly frameworkAuthorityRoot: Hash;
@@ -47,7 +78,7 @@ export type AttestationIdentityProofVerificationContextV1 = AttestationIdentityP
 
 export interface AttestationIdentityIssuerProofV1 {
   readonly kind: "aloha.attestation-identity-issuer-proof";
-  readonly version: "1";
+  readonly version: "2";
   readonly proofHash: Hash;
   readonly payloadHash: Hash;
   readonly runId: string;
@@ -55,16 +86,18 @@ export interface AttestationIdentityIssuerProofV1 {
   readonly candidatePartitionRoot: Hash;
   readonly familyDefinitionHash: Hash;
   readonly familyCandidateKey: Hash;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly identityObservation: {
     readonly kind: "identityVerified";
     readonly familyInstanceKey: string;
+    readonly identityMemo: CanonicalJson;
     readonly identityMemoHash: Hash;
     readonly descriptorHash: Hash;
     readonly evidenceRoot: Hash;
   };
   readonly identitySubjectHash: Hash;
   readonly identitySemanticHash: Hash;
+  readonly identityOrigin: AttestationIdentityOriginV1;
   readonly releaseProvenanceHash: Hash;
   readonly attestationAuthorityRoot: Hash;
   readonly frameworkAuthorityRoot: Hash;
@@ -86,7 +119,7 @@ export interface AttestationOutcomeProofIssueInputV1 {
   readonly runId: string;
   readonly cutoff: CanonicalCutoffV1;
   readonly candidatePartitionRoot: Hash;
-  readonly candidate: Pick<CandidateRecordV1, "familyDefinitionHash" | "familyCandidateKey" | "candidateSnapshotHash">;
+  readonly candidate: Pick<CandidateRecordV1, "familyDefinitionHash" | "familyCandidateKey" | "candidateSubjectHash">;
   readonly outcomeBodyHash: Hash;
   readonly releaseProvenanceHash: Hash;
   readonly attestationAuthorityRoot: Hash;
@@ -100,7 +133,7 @@ export type AttestationOutcomeProofVerificationContextV1 = AttestationOutcomePro
 
 export interface AttestationOutcomeIssuerProofV1 {
   readonly kind: "aloha.attestation-outcome-issuer-proof";
-  readonly version: "1";
+  readonly version: "2";
   readonly proofHash: Hash;
   readonly payloadHash: Hash;
   readonly runId: string;
@@ -108,7 +141,7 @@ export interface AttestationOutcomeIssuerProofV1 {
   readonly candidatePartitionRoot: Hash;
   readonly familyDefinitionHash: Hash;
   readonly familyCandidateKey: Hash;
-  readonly candidateSnapshotHash: Hash;
+  readonly candidateSubjectHash: Hash;
   readonly outcomeBodyHash: Hash;
   readonly releaseProvenanceHash: Hash;
   readonly attestationAuthorityRoot: Hash;

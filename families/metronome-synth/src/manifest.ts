@@ -1,0 +1,12 @@
+import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { asSchemaRef } from "../../../packages/capability-contracts/src/index.ts";
+export const METRONOME_SYNTH_FAMILY_ID = "metronome-synth" as const;
+export const METRONOME_SYNTH_FAMILY_VERSION = "1.0.0" as const;
+export const METRONOME_SYNTH_SOURCE_WINDOW_BLOCKS = 50 as const;
+export const METRONOME_SYNTH_SOURCE_PLAN_ID = "metronome-synth.fixed-cutoff-50-block" as const;
+export const METRONOME_SYNTH_SOURCE_PLAN_SCHEMA_HASH = asSchemaRef(hashDomain("aloha/metronome-synth/source-plan-schema/v1", METRONOME_SYNTH_SOURCE_PLAN_ID));
+export const METRONOME_SYNTH_CAPABILITY_IDS = Object.freeze({ state: "family.metronome-synth.state", coarse: "family.metronome-synth.coarse", exact: "family.metronome-synth.exact" } as const);
+export const METRONOME_SYNTH_ACTION_OWNER_ID = "family.metronome-synth.swap-action" as const;
+export const METRONOME_SYNTH_MANIFEST = Object.freeze({ familyId: METRONOME_SYNTH_FAMILY_ID, version: METRONOME_SYNTH_FAMILY_VERSION, domain: "protocol" as const, sourcePlans: Object.freeze([{ id: METRONOME_SYNTH_SOURCE_PLAN_ID, windowBlocks: METRONOME_SYNTH_SOURCE_WINDOW_BLOCKS, evidenceChannel: "nominate" as const }]), core: Object.freeze(["nomination", "identity", "materialization", "projection", "rehydration"] as const), extensions: Object.freeze(["state", "coarse", "exact"] as const), actionOwners: Object.freeze([METRONOME_SYNTH_ACTION_OWNER_ID]) });
+export const METRONOME_SYNTH_FAMILY_DEFINITION_HASH: Hash = hashDomain("aloha/metronome-synth/family-definition/v1", METRONOME_SYNTH_MANIFEST);
+export const METRONOME_SYNTH_OWNER_REF: Hash = hashDomain("aloha/metronome-synth/owner/v1", { familyId: METRONOME_SYNTH_FAMILY_ID, version: METRONOME_SYNTH_FAMILY_VERSION });

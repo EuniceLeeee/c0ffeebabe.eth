@@ -1,0 +1,336 @@
+{
+  "schemaVersion": 1,
+  "kind": "aloha.catalog-impact-snapshot",
+  "definitionCatalogRoot": "0x90be8da08a232928e0647d4d5b8e53b9e10df37c853dc51446ce4086990c0017",
+  "capabilityCatalogRoot": "0x0f1994b48baae0e4f92f9396a72eece6ded2989de7d6bf9f145ffe2aff005c17",
+  "capabilities": [
+    {
+      "id": "family.angstrom-v4.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x944ab136cdcc9a1387032f36da595618c12f8b8e89196fb552aa5059361d39eb",
+      "interpreterHash": "0xf63f1c5b5bc75b1fb7b7a2451cf483a5b9aad948df5cfae55c0e73babbbe0d58",
+      "dependencyIds": [
+        "family.angstrom-v4.state"
+      ],
+      "implementationClosureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa"
+    },
+    {
+      "id": "family.angstrom-v4.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x169b1909e08e2eb3b2980a02634655f18b66b3a09356f740ba2474e437ecdf08",
+      "interpreterHash": "0x3f76772724985bf5d8979b8fdd4cd44cce48d50a908595677ea427134ba7dae6",
+      "dependencyIds": [
+        "family.angstrom-v4.state"
+      ],
+      "implementationClosureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa"
+    },
+    {
+      "id": "family.angstrom-v4.state",
+      "version": "1.0.0",
+      "schemaHash": "0x9ff7fa0a934cfece7dca6bf4f94e6658096b413db18632cc19c9faa4cb6fb7fd",
+      "interpreterHash": "0xbd91c2e3e33eda0073363051b86a83d968c05a0d1593677bc3cf9c59cf312835",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x45040ef023238903a241ee30d74610bc446392ce2f54e4b8b259772ff63aeafa"
+    },
+    {
+      "id": "family.curve-underlying.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0xd0fdf9650e8fd1cbf82fa38482a74bb149bf00c7299245d7e40bb96381537205",
+      "interpreterHash": "0x52ed315a9504be9e9e087ff23d459d360c2c1ce5f55f7a43974e3520953b094b",
+      "dependencyIds": [
+        "family.curve-underlying.state"
+      ],
+      "implementationClosureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6"
+    },
+    {
+      "id": "family.curve-underlying.exact",
+      "version": "1.0.0",
+      "schemaHash": "0xbc2c7384bfcb78b3be364e213f241f32d8ea2929f6eb2a7120d50d27caa32be2",
+      "interpreterHash": "0xe5d42627eba62cbfb78b72fa58348a992359e22368399b42d9f08b414d4f8f63",
+      "dependencyIds": [
+        "family.curve-underlying.state"
+      ],
+      "implementationClosureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6"
+    },
+    {
+      "id": "family.curve-underlying.state",
+      "version": "1.0.0",
+      "schemaHash": "0x1a51e44914829de075debc91a33a7831e8b1ca48fc4fb288f5a3faf8907c7e5a",
+      "interpreterHash": "0x94cbb5db9747b77a5a71e1e9cb9fe5bf1230b8630a4bd3c64707634f71612d9b",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x9addd3ef494745fbb86fee7a6bf6a7c1156b09ee432ee4bbe8f08974c57f26d6"
+    },
+    {
+      "id": "family.dodo-v2.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0xc988d83de904d9873d538dd8929f95aa1466c34c832e297b8c06a1441d92aefa",
+      "interpreterHash": "0x3658b567d0c15b905beeaf7c52d97916b0266d4b44d7540201f45277f21ff510",
+      "dependencyIds": [
+        "family.dodo-v2.state"
+      ],
+      "implementationClosureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037"
+    },
+    {
+      "id": "family.dodo-v2.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x377bdad6777661aa1d3da2d162b63cbdd50bd55b22fadaf8808104955826dfa8",
+      "interpreterHash": "0xf109a6ed9fb43482f40cece5f3a878b33bcf53138504d83cb3b4f74d7f0af8c3",
+      "dependencyIds": [
+        "family.dodo-v2.state"
+      ],
+      "implementationClosureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037"
+    },
+    {
+      "id": "family.dodo-v2.state",
+      "version": "1.0.0",
+      "schemaHash": "0x1f962be6704d0532dad2284747d796b4c97e3c4d4ee0576216a4d2be537d2b49",
+      "interpreterHash": "0x1a4bcd9a49f63bfb58c2f8ae11b523be5c86c5a6c59e430aa32a16b3ba8df875",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0xce5ccc83ef63308c36047009718a16d50a0ea266de2149e7e893bad144c52037"
+    },
+    {
+      "id": "family.fluid-dex.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0xbc6fde8b67f7f6c0eb70eae88f0d5698c29562d5cabb99df12fcf7cfef0ea059",
+      "interpreterHash": "0x54f35c6b3380de32cdc26da35f64b0b48a6e910e541fafe8834f3aa97357925b",
+      "dependencyIds": [
+        "family.fluid-dex.state"
+      ],
+      "implementationClosureRoot": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76"
+    },
+    {
+      "id": "family.fluid-dex.exact",
+      "version": "1.0.0",
+      "schemaHash": "0xd91bcf90607cf4881b29aa3ae0e4b8182fe4074104176f8819a4f0e15c75d099",
+      "interpreterHash": "0x5c3beee31763e8ffb974a2ddaf60cea1369877811521dc031d5b4033769d4cb1",
+      "dependencyIds": [
+        "family.fluid-dex.state"
+      ],
+      "implementationClosureRoot": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76"
+    },
+    {
+      "id": "family.fluid-dex.state",
+      "version": "1.0.0",
+      "schemaHash": "0xe45709a4ab1d30f6ab7cde439e53df05b4c9d1f65187a57af31f1efbd17a9de9",
+      "interpreterHash": "0x8bc78cb560e425ce87208a5a6d8dab21804050925a655184866834e16543edaf",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x474bb91052bbac08c157627b3372e9d28643d69f3d3a4b4063bdb9559cd26c76"
+    },
+    {
+      "id": "family.univ2-standard.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0xf2aae38e672bcb4399bf442d3fbe73220e13430bf8c003fd5ed69efbe8999481",
+      "interpreterHash": "0x659a143806d0fa1a90bc39055b8330c4bb1004cae9a5bb436faefb6a0a3ea63e",
+      "dependencyIds": [
+        "family.univ2-standard.state"
+      ],
+      "implementationClosureRoot": "0xd82e7baf846e605e5070cfb4bff692972494276fd2281c72470b8ef556102fe9"
+    },
+    {
+      "id": "family.univ2-standard.exact",
+      "version": "1.0.0",
+      "schemaHash": "0xa46323cd5995a81b5444faf94fc24ec9f4ff2457b2980c00aee97ab4a1b8c6f1",
+      "interpreterHash": "0xe38bd637cc21e005f9b3010bd2c0253746917c42957266def4d0920bb6a9f5df",
+      "dependencyIds": [
+        "family.univ2-standard.state"
+      ],
+      "implementationClosureRoot": "0xa0b1b95c5a6f36d51b2707126aea568b60b9f1fcaa111be0fcc1e5a31bf52777"
+    },
+    {
+      "id": "family.univ2-standard.state",
+      "version": "1.0.0",
+      "schemaHash": "0x1e07e9ad84d77080f7bbdfd4c1c45043fef23d95f4150a53630a6c8fc13b7526",
+      "interpreterHash": "0xa4cb10d4facee0abe85b65b5ea92912f45c599d0f41ca3a3254ff4f8003d6ab0",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x88caa04edb2e022f2d263378cd54d74992f8ccf0155e80fa23a9f234d19dc7f3"
+    },
+    {
+      "id": "family.univ3-standard.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x9a3e44d19e8a24413cb9fac945a07d48911700f290e6ef4761c2d2cd82a44eb7",
+      "interpreterHash": "0x82e8f0b2118d6a34bb2caa42f1d7f525b5d1697f977a3fcc85ef7192b3ec6c25",
+      "dependencyIds": [
+        "family.univ3-standard.state"
+      ],
+      "implementationClosureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc"
+    },
+    {
+      "id": "family.univ3-standard.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x2099589db353b2af7d799dfadbf25396d2f74901f8fcb062dd0097fe4a99206b",
+      "interpreterHash": "0x2a3e2d6155c0476d7fde10b0b60da3a830942dd1bd5adcadfa575158c2c00bbe",
+      "dependencyIds": [
+        "family.univ3-standard.state"
+      ],
+      "implementationClosureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc"
+    },
+    {
+      "id": "family.univ3-standard.state",
+      "version": "1.0.0",
+      "schemaHash": "0x269b2e2d536bca46fcde799c408e704a94d64b407952b8bb6b36780031dacda0",
+      "interpreterHash": "0xf3b5e6c3a86633d08f020b6bdc436efd369ef28f2ff1ea176dbec321c2d755d0",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x3dc6d1b8ba907be3a583b83ac7319a3eb12a8281d087967fdc77cf4badf704bc"
+    },
+    {
+      "id": "family.univ4.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x2d244619372a34b051ccdfc6bfe629166da816b992ffa01524436b318f3ea410",
+      "interpreterHash": "0x248e0bf17554a8d1675405b74e6f1d219ffbf2b54837059662a8e65bc72671bd",
+      "dependencyIds": [
+        "family.univ4.state"
+      ],
+      "implementationClosureRoot": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15"
+    },
+    {
+      "id": "family.univ4.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x7c31eed9d2a03b97199c8ca9c5046bfe0681cca5efaa7343d173893298df8c85",
+      "interpreterHash": "0x55508f9eecce1129f208a216045d2f4ac6ab189988bd32cb6a95322c64cc5e6d",
+      "dependencyIds": [
+        "family.univ4.state"
+      ],
+      "implementationClosureRoot": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15"
+    },
+    {
+      "id": "family.univ4.state",
+      "version": "1.0.0",
+      "schemaHash": "0x9122c96b6f91ac61f48f03c43b73fc025b25e0b246e50713590878bf35baf5f7",
+      "interpreterHash": "0x344de912c2481c7fde23bf6ecca5d74478db113aeab90a7bb4647bf4a4b06876",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0xc8556227be0e1cd2da0ea9bbba4557faf91d1ea9df22a6cd45a4910186963f15"
+    }
+  ],
+  "artifacts": [
+    {
+      "artifactId": "family:angstrom-v4",
+      "artifactKind": "family",
+      "familyId": "angstrom-v4",
+      "definitionCatalogLeafDigest": "0xbc08c305724d958cdad95169445fb2cafa8139d7bab14e09e8926c603510f207",
+      "requestedDependencyClosure": [
+        "family.angstrom-v4.coarse",
+        "family.angstrom-v4.exact",
+        "family.angstrom-v4.state"
+      ],
+      "requestedDependencyRoot": "0xcc9e29c4a709cf4d66ed18b8c9fbd94c3dc94d20ed5e8a768a632d8ad87f17e6",
+      "memoRoot": "0x1cbac655e7a82bb13309e5cf68df6d8e4e576ddb7d9a9e09e1ec2d1c4954786b",
+      "nominationProposalLeafDigests": [
+        "0x273f8661c1e50f80c49b6884179a24dc3f12ca602838ddd13813226c2f7d573d",
+        "0x99b34dffcc4c4fa83bc215b5ed3f8e970c5be1ccbbf3c1308a675b1b13bb2e69"
+      ]
+    },
+    {
+      "artifactId": "family:curve-underlying",
+      "artifactKind": "family",
+      "familyId": "curve-underlying",
+      "definitionCatalogLeafDigest": "0x9b8421b4c2b1a02e76c9ca568973b8b7234e9779537df754e4d84a180ba0ef8b",
+      "requestedDependencyClosure": [
+        "family.curve-underlying.coarse",
+        "family.curve-underlying.exact",
+        "family.curve-underlying.state"
+      ],
+      "requestedDependencyRoot": "0x955c00a6d45f39462ba28550c3ae7c08e623dfc7d8c460ff4da9b7526829b71d",
+      "memoRoot": "0xd5b9018df8e83afc5d40a6f8e2d26f22e131323c57362b757e3960a726245269",
+      "nominationProposalLeafDigests": [
+        "0x9a7db6d73ca769763de218ff52f22fa85496dd15b4c5cebae4f51320e1ff088b",
+        "0xe709371485668f29965e825477e00a7f1e898e1851eac5aadc4a3827bfb507d3"
+      ]
+    },
+    {
+      "artifactId": "family:dodo-v2",
+      "artifactKind": "family",
+      "familyId": "dodo-v2",
+      "definitionCatalogLeafDigest": "0xb88437fa6ec1dcacce928b6760d37220f559a0bba16ad3dc114971ff2f32274d",
+      "requestedDependencyClosure": [
+        "family.dodo-v2.coarse",
+        "family.dodo-v2.exact",
+        "family.dodo-v2.state"
+      ],
+      "requestedDependencyRoot": "0xf3dd4118a28e8b99abe16b89278a3014aab501b004e422362eabcff84515d2f4",
+      "memoRoot": "0x159e2979e198edb8bd00651a41284bb957e413dcddc7d7215d59de31634b6dca",
+      "nominationProposalLeafDigests": [
+        "0x6105c7671cf8254b4cde2aa65bcdd693e0ae09d9406f94643ebcd2de2ede5df3",
+        "0xe1127b79110202f70ebe824417ce6c8ed7257c02e40b615eaff4351ea2e8a1df"
+      ]
+    },
+    {
+      "artifactId": "family:fluid-dex",
+      "artifactKind": "family",
+      "familyId": "fluid-dex",
+      "definitionCatalogLeafDigest": "0xa350895f3740004028acec4677be0a712421fbd99afe86e41c2a9b6424ad2ea0",
+      "requestedDependencyClosure": [
+        "family.fluid-dex.coarse",
+        "family.fluid-dex.exact",
+        "family.fluid-dex.state"
+      ],
+      "requestedDependencyRoot": "0xeb6c60ac9296a0de1f4c28745ed5a953e68bbfe6cee5305aaa60ed8d25615f3a",
+      "memoRoot": "0x864163f10140526786d8b0d1496ce9d4e9cdd3430901ccb270204ee3463a0c9a",
+      "nominationProposalLeafDigests": [
+        "0x0defe5a2941f8454126dabd076c21584897a77c63b8534d4da3bad064e6469e5",
+        "0xccbfc72527e3bbfc126675d55d337e530ffafc5c32b13e770a1b8f1e9821807f"
+      ]
+    },
+    {
+      "artifactId": "family:univ2-standard",
+      "artifactKind": "family",
+      "familyId": "univ2-standard",
+      "definitionCatalogLeafDigest": "0xb61c3adfc4c7f13d3837e6f4e4020117740e7efea9a2e80dd3e86072250eac0a",
+      "requestedDependencyClosure": [
+        "family.univ2-standard.coarse",
+        "family.univ2-standard.exact",
+        "family.univ2-standard.state"
+      ],
+      "requestedDependencyRoot": "0xcac281218890555a06e7b63aedafccbb6b8b29445299981279d8276897ea808a",
+      "memoRoot": "0xeb71ab307f344b291527f1d67d8fefad36212490ef6d336b91c94a3fb4429e92",
+      "nominationProposalLeafDigests": [
+        "0x02df8dd3cacdb05a000ee592bb46d3c36a46e8b424682d267eef38ca805c7e3e",
+        "0x06f9eb8f7e0c8dee3c9cf7aae254db8547dc89c3d416992c948023fdda7919e1"
+      ]
+    },
+    {
+      "artifactId": "family:univ3-standard",
+      "artifactKind": "family",
+      "familyId": "univ3-standard",
+      "definitionCatalogLeafDigest": "0x8b34247453884768b240e19f7d9ac78d3e41030e88fdaef460b7b40267701af9",
+      "requestedDependencyClosure": [
+        "family.univ3-standard.coarse",
+        "family.univ3-standard.exact",
+        "family.univ3-standard.state"
+      ],
+      "requestedDependencyRoot": "0x233255b5cb4ed1eea0c4b383967059c01dfb7d84f3171fd67e0d3a0b160b1024",
+      "memoRoot": "0x42eacd6dd62a4c88e8348730e4fe727c38a365a4b2ba06cfdeb71659be7c11a4",
+      "nominationProposalLeafDigests": [
+        "0x2df198166874c43e28a3ceddda5cce7ae6fe3254ed90a86bafc6d6a865bffc46",
+        "0x6f139727060a6469331b21374743caa0e58698b72326eae2ff2baf7e0af9bff2"
+      ]
+    },
+    {
+      "artifactId": "family:univ4",
+      "artifactKind": "family",
+      "familyId": "univ4",
+      "definitionCatalogLeafDigest": "0x5cba428f4eeb0f2b024ab20b4920d1b7b1b7744f258fb6616ebce5e4c6cecac3",
+      "requestedDependencyClosure": [
+        "family.univ4.coarse",
+        "family.univ4.exact",
+        "family.univ4.state"
+      ],
+      "requestedDependencyRoot": "0xef7a0112b80d48705970a996ac1d4fd2e1bb3c00b3033b9204fe107ebb320fa1",
+      "memoRoot": "0xe9f92a568c7878c247583ce2896834d7ae1f69f38e2f9e069bc6aaea770e3da7",
+      "nominationProposalLeafDigests": [
+        "0x645e5fcf6526bd32807bdd6394d32d8d3d5a532ccf393b3c2458b610ccbb987e",
+        "0x77ec7adac2f540dd0b8d42272302e50087ab5509ce686e5699de3a5e36fe75af"
+      ]
+    },
+    {
+      "artifactId": "strategy:route-cycle",
+      "artifactKind": "strategy",
+      "familyId": null,
+      "definitionCatalogLeafDigest": "0x1a2187a3e70015c8ecfeebc5ddf72e42a82e54c43f6668df81018d3a4d0f12dd",
+      "requestedDependencyClosure": [],
+      "requestedDependencyRoot": "0xf0fe49c2f553f4786b5a840f5d291c9de3f2b1de764e5de50b0579495a730a36",
+      "memoRoot": "0x0dd7ddc7c45c0d9743729470487fcedd10166cbe1a3be18f4b9f5a1e86278a3f",
+      "nominationProposalLeafDigests": []
+    }
+  ],
+  "snapshotRoot": "0xa15d6c4b54cfa5e2baf49c7db49dce23b350be53685ccdec10706979a573601f"
+}

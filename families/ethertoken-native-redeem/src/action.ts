@@ -1,0 +1,5 @@
+import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { canonicalAddress, type EtherTokenNativeRedeemActionV1, type EtherTokenNativeRedeemIdentityV1, type EtherTokenNativeRedeemQuoteV1 } from "./types.ts";
+export function buildEtherTokenNativeRedeemAction(input: { readonly identity: EtherTokenNativeRedeemIdentityV1; readonly quote: EtherTokenNativeRedeemQuoteV1; readonly calldata: string }): EtherTokenNativeRedeemActionV1 { if (!/^0x[0-9a-fA-F]*$/.test(input.calldata) || input.calldata.length % 2 !== 0) throw new TypeError("ethertoken calldata is not canonical"); const payload = { cutoff: input.identity.cutoff, target: canonicalAddress(input.identity.instanceKey), calldata: input.calldata, exactQuoteHash: input.quote.quoteHash }; return Object.freeze({ ...payload, actionHash: hashDomain("aloha/ethertoken-native-redeem/action/v1", payload) }); }
+export const ETHERTOKEN_NATIVE_REDEEM_ACTION_PORT = Object.freeze({ actionOwnerId: "family.ethertoken-native-redeem.redeem-action", build: buildEtherTokenNativeRedeemAction });
+export type EtherTokenNativeRedeemActionOwnerRefV1 = Hash;

@@ -1,0 +1,22 @@
+import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import type { DodoPmmState } from "./kernel/math.ts";
+
+export interface DodoCutoffV1 { readonly chainId: string; readonly number: string; readonly hash: Hash; readonly stateRoot: Hash; }
+export interface DodoEvidenceV1 { readonly kind: "log" | "call" | "address-surface"; readonly cutoff: DodoCutoffV1; readonly blockNumber: string; readonly blockHash: Hash; readonly txHash: Hash; readonly logIndex: string; readonly target: string; readonly rawLocatorHash: Hash; readonly topic0?: Hash; readonly selector?: string; readonly sellBase?: boolean; }
+export interface DodoCandidateV1 { readonly target: string; readonly instanceNominationKey: string; readonly candidateSnapshotHash: Hash; readonly evidence: DodoEvidenceV1; }
+export interface DodoIdentityReadFactsV1 { readonly cutoff: DodoCutoffV1; readonly pool: string; readonly factory: string; readonly registry: string; readonly registryPool: string; readonly baseToken: string; readonly quoteToken: string; readonly quoteActor: string; readonly pmm: DodoPmmState; readonly lpFeeRate: string; readonly mtFeeRate: string; }
+export interface DodoIdentityV1 { readonly cutoff: DodoCutoffV1; readonly candidateSnapshotHash: Hash; readonly instanceKey: string; readonly factsHash: Hash; readonly facts: { readonly pool: string; readonly factory: string; readonly registry: string; readonly baseToken: string; readonly quoteToken: string; readonly quoteActor: string; readonly pmm: DodoPmmState; readonly lpFeeRate: string; readonly mtFeeRate: string; }; }
+export interface DodoStateReadFactsV1 { readonly cutoff: DodoCutoffV1; readonly pool: string; readonly pmm: DodoPmmState; readonly lpFeeRate: string; readonly mtFeeRate: string; /** Current-source actor query result for this route amount. */ readonly exactAmountOut?: string; }
+export interface DodoMaterializedStateV1 extends DodoStateReadFactsV1 { readonly identityFactsHash: Hash; readonly stateHash: Hash; }
+export interface DodoRouteV1 { readonly instanceKey: string; readonly inputToken: string; readonly outputToken: string; readonly sellBase: boolean; readonly routeBindingHash: Hash; }
+export interface DodoQuoteV1 { readonly cutoff: DodoCutoffV1; readonly routeBindingHash: Hash; readonly amountIn: string; readonly amountOut: string; readonly grossAmountOut: string; readonly lpFee: string; readonly mtFee: string; readonly stateHash: Hash; readonly quoteHash: Hash; }
+export interface DodoActionV1 { readonly cutoff: DodoCutoffV1; readonly routeBindingHash: Hash; readonly exactQuoteHash: Hash; readonly target: string; readonly selector: string; readonly calldata: string; readonly actionHash: Hash; }
+export interface DodoExecutionIntentV1 { readonly kind: "dodo-v2-execution-intent"; readonly cutoff: DodoCutoffV1; readonly target: string; readonly calldata: string; readonly actionHash: Hash; readonly exactQuoteHash: Hash; }
+export interface DodoObservationV1 { readonly kind: "log" | "call" | "address-surface"; readonly target: string; readonly blockNumber: string; readonly blockHash: Hash; readonly txHash: Hash; readonly logIndex: string; readonly rawLocatorHash: Hash; readonly cutoff: DodoCutoffV1; readonly topic0?: Hash; readonly selector?: string; readonly sellBase?: boolean; }
+
+export function canonicalAddress(value: string): string { if (!/^0x[0-9a-fA-F]{40}$/.test(value)) throw new TypeError("dodo address must be 20 bytes"); return `0x${value.slice(2).toLowerCase()}`; }
+export function sameAddress(left: string, right: string): boolean { return canonicalAddress(left) === canonicalAddress(right); }
+export function cutoffEqual(left: DodoCutoffV1, right: DodoCutoffV1): boolean { return left.chainId === right.chainId && left.number === right.number && left.hash === right.hash && left.stateRoot === right.stateRoot; }
+export function assertCutoff(value: DodoCutoffV1): DodoCutoffV1 { if (!/^\d+$/.test(value.chainId) || !/^\d+$/.test(value.number) || !/^0x[0-9a-f]{64}$/.test(value.hash) || !/^0x[0-9a-f]{64}$/.test(value.stateRoot)) throw new TypeError("dodo cutoff is not canonical"); return Object.freeze({ ...value }); }
+export function assertDecimal(value: string, label: string): string { if (!/^\d+$/.test(value)) throw new TypeError(`${label} must be an unsigned decimal string`); return value; }
+export function familyCandidateKey(instanceNominationKey: string): Hash { return hashDomain("aloha/family-candidate/v1", { family: "dodo-v2", instanceNominationKey }); }

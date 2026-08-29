@@ -1,0 +1,5 @@
+import { hashDomain } from "../../../packages/canonical-codec/src/index.ts";
+export const MORPHO_FLASH_NOMINATION_MUTATION_CORPUS = Object.freeze({ schemaVersion: 1, corpusRoot: hashDomain("aloha/morpho-flash/nomination-mutation-corpus/v1", ["wrong-morpho-topic", "raw-log-mismatch", "wrong-singleton", "duplicate-market"]) });
+export const MORPHO_FLASH_NOMINATION_INDEPENDENT_ORACLE = Object.freeze({ schemaVersion: 1, oracleRoot: hashDomain("aloha/morpho-flash/nomination-independent-oracle/v1", ["singleton-flash-loan-log", "market-id-domain", "recent-window-ownership"]) });
+export const MORPHO_FLASH_SINGLETON_MUTATION_CORPUS = Object.freeze({ schemaVersion: 1, corpusRoot: hashDomain("aloha/morpho-flash/singleton-mutation-corpus/v1", ["wrong-singleton", "wrong-cutoff", "spliced-code-response", "missing-raw-locator"]) });
+export const MORPHO_FLASH_SINGLETON_INDEPENDENT_ORACLE = Object.freeze({ schemaVersion: 1, oracleRoot: hashDomain("aloha/morpho-flash/singleton-independent-oracle/v1", ["canonical-morpho-blue-address", "cutoff-eth-get-code", "zero-code-empty-partition"]) });

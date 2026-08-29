@@ -1,1 +1,7 @@
-{"name":"@aloha/family-goldx","private":true,"type":"module","exports":{".":"./kernel/quote.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}
+{
+  "name": "@aloha/family-goldx",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/public.ts", "./family-definition": "./src/family-definition.ts", "./runtime": "./src/runtime.ts", "./kernel/quote": "./kernel/quote.ts" },
+  "scripts": { "test": "node --experimental-strip-types --test test/*.test.ts", "typecheck": "tsc -p tsconfig.json" }
+}

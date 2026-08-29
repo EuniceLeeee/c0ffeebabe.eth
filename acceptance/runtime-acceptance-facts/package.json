@@ -1,0 +1,17 @@
+{
+  "name": "@aloha/runtime-acceptance-facts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/runtime.ts",
+    "./runtime": "./src/runtime.ts",
+    "./qualification": "./src/qualification.ts",
+    "./oracle": "./src/reference-model.ts",
+    "./schema": "../../../specs/runtime-acceptance-facts/src/index.ts",
+    "./spec": "./src/spec.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

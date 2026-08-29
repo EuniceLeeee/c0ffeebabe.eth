@@ -51,6 +51,8 @@ import {
   type SemanticArtifactV1,
 } from "../../../specs/core-envelope/src/index.ts";
 import {
+  ARTIFACT_BYTES_CHUNK_BYTE_LENGTH,
+  ARTIFACT_MIRROR_MAX_DECODED_BYTES,
   decodeArtifactResolutionClaim,
   decodeArtifactBytes,
   decodeResolverPolicy,
@@ -62,6 +64,9 @@ import {
   type RetentionLeaseReceiptV1,
 } from "../../../specs/artifact-resolution/src/index.ts";
 import {
+  assertPredicateCommonEnvelopeRoleContractV1,
+  COMMON_ENVELOPE_ROLE_CONTRACT_VERSION,
+  decodeSignedReleaseAuthorityApprovalV3,
   decodeObserverCertificate,
   decodePredicate,
   decodeQualificationRegistry,
@@ -105,6 +110,8 @@ import type {
   PredicateCompositionBindingV1,
   PredicateCompositionPortV1,
   PredicateEvaluatorV1,
+  PredicateAuthorityArtifactBindingV1,
+  SelectedPredicateAuthorityEntryV1,
 } from "./predicate-composition.ts";
 import {
   verifyExternalQualificationV2,
@@ -116,6 +123,7 @@ import {
   type GateReasonCode,
   type GateVerdict,
 } from "./predicate-contract.ts";
+import { assertCommonEnvelopeAuthorityPortV1 } from "./internal/material-provider-state.ts";
 
 export type { Hash } from "../../../packages/canonical-codec/src/index.ts";
 export type {
@@ -152,6 +160,21 @@ export type {
   ExternalQualificationAuthorityPinV2,
   ExternalQualificationEvidenceV2,
 } from "../../../packages/external-qualification-verifier/src/index.ts";
+export {
+  PREDICATE_MATERIAL_PROVIDER_CONTRACT_VERSION,
+  type AssembledPredicateEvaluationV1,
+  type AssembledReleaseInvocationSetCapabilityV1,
+  type CommonEnvelopeAuthorityPortV1,
+  type PredicateDomainMaterialCapabilityV1,
+  type PredicateMaterialProviderV1,
+  type PredicateMaterialSourcePortV1,
+  type PredicateMaterialUnavailableCodeV1,
+} from "./material-provider.ts";
+export {
+  assembleReleasePredicateInvocationsV1,
+  evaluateAssembledReleaseInvocationsV1,
+} from "./release-material-assembler.ts";
+export { assertCommonEnvelopeAuthorityPortV1 };
 
 /**
  * The reason catalog is intentionally closed.  A caller cannot smuggle a
@@ -219,6 +242,8 @@ export interface GateCoreAuthorityPinV1 {
   readonly maxInvocationTtlUnixNs: string;
   /** Release audience policy; signed invocations must carry this hash. */
   readonly expectedAudienceHash: Hash;
+  /** Content-addressed authority facts for this selected predicate only. */
+  readonly selectedPredicateAuthority: SelectedPredicateAuthorityEntryV1;
 }
 
 export interface GateCoreInputV1 {
@@ -361,8 +386,132 @@ function mapUnique<T>(
 interface ArtifactClaimPreflightV1 {
   readonly artifactRefId: Hash;
   readonly resolverPolicyHash: Hash;
-  readonly observedWireByteLength: bigint | null;
+  readonly actualDecodedByteLength: bigint | null;
   readonly declaredByteLength: bigint | null;
+}
+
+function exactDenseArrayLength(
+  value: unknown,
+  expectedLength: number,
+  path: string,
+): number {
+  if (value !== null && typeof value === "object" && nodeTypes.isProxy(value)) {
+    throw new TypeError(`${path} must not be a Proxy`);
+  }
+  if (!Array.isArray(value)) throw new TypeError(`${path} must be an array`);
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+  if (
+    lengthDescriptor === undefined ||
+    !("value" in lengthDescriptor) ||
+    typeof lengthDescriptor.value !== "number" ||
+    !Number.isSafeInteger(lengthDescriptor.value) ||
+    lengthDescriptor.value !== expectedLength
+  ) {
+    throw new TypeError(`${path} length does not match the declared artifact byte length`);
+  }
+  // expectedLength is derived only after the decoded-byte cap is enforced, so
+  // this reflection is bounded by the wire contract rather than caller input.
+  const ownKeys = Reflect.ownKeys(value);
+  if (
+    ownKeys.length !== expectedLength + 1 ||
+    ownKeys.some((key) =>
+      key !== "length" &&
+      (typeof key !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(key) || Number(key) >= expectedLength))
+  ) {
+    throw new TypeError(`${path} must be a dense exact array`);
+  }
+  return expectedLength;
+}
+
+function preflightInlineMirrorByteLength(value: unknown, path: string): bigint {
+  if (typeof value !== "string" || value.length > 6) {
+    throw new TypeError(`artifact byteLength invalid at ${path}`);
+  }
+  if (!/^(?:0|[1-9]\d*)$/.test(value)) {
+    throw new TypeError(`artifact byteLength invalid at ${path}`);
+  }
+  const byteLength = BigInt(value);
+  if (byteLength > BigInt(ARTIFACT_MIRROR_MAX_DECODED_BYTES)) {
+    throw new TypeError(`artifact bytes exceed decoded-byte bound at ${path}`);
+  }
+  return byteLength;
+}
+
+/**
+ * Inspect the mirror byte envelope without a schema decoder, hashing or byte
+ * allocation. The returned length is recomputed from the chunk strings; no
+ * caller-provided length or digest is treated as a resource-bound fact.
+ */
+function preflightArtifactMirrorBytes(value: unknown, path: string): bigint {
+  assertPlainObject(value, path);
+  assertExactKeys(value, ["schemaVersion", "kind", "byteLength", "contentSha256", "chunks"], path);
+  if (readOwnEnumerableDataProperty(value, "schemaVersion", path) !== 1) {
+    throw new TypeError(`artifact bytes schemaVersion invalid at ${path}.schemaVersion`);
+  }
+  if (readOwnEnumerableDataProperty(value, "kind", path) !== "aloha.canonical-artifact-bytes") {
+    throw new TypeError(`artifact bytes kind invalid at ${path}.kind`);
+  }
+  const declaredByteLength = preflightInlineMirrorByteLength(
+    readOwnEnumerableDataProperty(value, "byteLength", path),
+    `${path}.byteLength`,
+  );
+  if (!isHash(readOwnEnumerableDataProperty(value, "contentSha256", path))) {
+    throw new TypeError(`artifact bytes content hash invalid at ${path}.contentSha256`);
+  }
+  const expectedChunkCount = declaredByteLength === 0n
+    ? 0
+    : Number(
+      (declaredByteLength + BigInt(ARTIFACT_BYTES_CHUNK_BYTE_LENGTH) - 1n) /
+      BigInt(ARTIFACT_BYTES_CHUNK_BYTE_LENGTH),
+    );
+  const chunks = readOwnEnumerableDataProperty(value, "chunks", path);
+  exactDenseArrayLength(chunks, expectedChunkCount, `${path}.chunks`);
+
+  let actualByteLength = 0n;
+  for (let index = 0; index < expectedChunkCount; index += 1) {
+    const chunkPath = `${path}.chunks[${index}]`;
+    const descriptor = Object.getOwnPropertyDescriptor(chunks as readonly unknown[], String(index));
+    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+      throw new TypeError(`${chunkPath} must be an enumerable data property`);
+    }
+    const chunk = descriptor.value;
+    assertPlainObject(chunk, chunkPath);
+    assertExactKeys(chunk, ["index", "bytes"], chunkPath);
+    if (readOwnEnumerableDataProperty(chunk, "index", chunkPath) !== String(index)) {
+      throw new TypeError(`artifact byte chunk index invalid at ${chunkPath}.index`);
+    }
+    const wireBytes = readOwnEnumerableDataProperty(chunk, "bytes", chunkPath);
+    const finalChunk = index === expectedChunkCount - 1;
+    const expectedChunkByteLength = finalChunk
+      ? Number(declaredByteLength - BigInt(index * ARTIFACT_BYTES_CHUNK_BYTE_LENGTH))
+      : ARTIFACT_BYTES_CHUNK_BYTE_LENGTH;
+    const expectedWireCodeUnits = 2 + expectedChunkByteLength * 2;
+    if (
+      typeof wireBytes !== "string" ||
+      wireBytes.length !== expectedWireCodeUnits ||
+      wireBytes.length >= CANONICAL_LIMITS.maxStringCodeUnits
+    ) {
+      throw new TypeError(`artifact byte chunk length invalid at ${chunkPath}.bytes`);
+    }
+    if (!/^0x(?:[0-9a-f]{2})*$/.test(wireBytes)) {
+      throw new TypeError(`artifact byte chunk must be lowercase even-length hex at ${chunkPath}.bytes`);
+    }
+    const chunkByteLength = (wireBytes.length - 2) / 2;
+    if (
+      (!finalChunk && chunkByteLength !== ARTIFACT_BYTES_CHUNK_BYTE_LENGTH) ||
+      (finalChunk && (chunkByteLength === 0 || chunkByteLength > ARTIFACT_BYTES_CHUNK_BYTE_LENGTH))
+    ) {
+      throw new TypeError(`artifact byte chunk length invalid at ${chunkPath}.bytes`);
+    }
+    actualByteLength += BigInt(chunkByteLength);
+    if (actualByteLength > BigInt(ARTIFACT_MIRROR_MAX_DECODED_BYTES)) {
+      throw new TypeError(`artifact bytes exceed decoded-byte bound at ${path}.chunks`);
+    }
+  }
+  if (actualByteLength !== declaredByteLength) {
+    throw new TypeError(`artifact byteLength does not match chunks at ${path}.byteLength`);
+  }
+  return actualByteLength;
 }
 
 function preflightArtifactResolutionClaim(
@@ -385,7 +534,7 @@ function preflightArtifactResolutionClaim(
   }
   if (observedMirror === null) {
     if (outcome === "content-observed") throw new TypeError(`content-observed claim requires mirror at ${path}`);
-    return { artifactRefId, resolverPolicyHash, observedWireByteLength: null, declaredByteLength: null };
+    return { artifactRefId, resolverPolicyHash, actualDecodedByteLength: null, declaredByteLength: null };
   }
   if (outcome === "missing") throw new TypeError(`missing claim cannot carry mirror at ${path}`);
   const mirrorPath = `${path}.observedMirror`;
@@ -393,21 +542,17 @@ function preflightArtifactResolutionClaim(
   assertExactKeys(observedMirror, ["storeIdentityHash", "objectKey", "bytes", "contentSha256", "byteLength", "mediaType", "schema"], mirrorPath);
   const bytes = readOwnEnumerableDataProperty(observedMirror, "bytes", mirrorPath);
   const declaredByteLength = readOwnEnumerableDataProperty(observedMirror, "byteLength", mirrorPath);
-  if (typeof bytes !== "string" || !bytes.startsWith("0x") || bytes.length % 2 !== 0) {
-    throw new TypeError(`artifact bytes wire envelope invalid at ${mirrorPath}.bytes`);
-  }
-  const observedWireByteLength = BigInt((bytes.length - 2) / 2);
-  const maximumMirrorBytes = BigInt(CANONICAL_LIMITS.maxBytes);
-  if (observedWireByteLength > maximumMirrorBytes) {
-    throw new TypeError(`artifact mirror exceeds canonical byte bound before decode at ${mirrorPath}.bytes`);
-  }
-  const decodedDeclaredByteLength = assertDecimalString(declaredByteLength, `${mirrorPath}.byteLength`);
-  const declaredMirrorByteLength = BigInt(decodedDeclaredByteLength);
-  if (declaredMirrorByteLength > maximumMirrorBytes) {
-    throw new TypeError(`artifact mirror exceeds canonical byte bound before decode at ${mirrorPath}.byteLength`);
+  const actualDecodedByteLength = preflightArtifactMirrorBytes(bytes, `${mirrorPath}.bytes`);
+  const maximumMirrorBytes = BigInt(ARTIFACT_MIRROR_MAX_DECODED_BYTES);
+  const declaredMirrorByteLength = preflightInlineMirrorByteLength(
+    declaredByteLength,
+    `${mirrorPath}.byteLength`,
+  );
+  if (actualDecodedByteLength !== declaredMirrorByteLength) {
+    throw new TypeError(`artifact mirror inner/outer byte length mismatch at ${mirrorPath}.bytes`);
   }
   if (mirrorBudget !== undefined) {
-    mirrorBudget.totalBytes += observedWireByteLength;
+    mirrorBudget.totalBytes += actualDecodedByteLength;
     if (mirrorBudget.totalBytes > maximumMirrorBytes) {
       throw new TypeError(`input mirror byte budget exceeded before decode at ${mirrorPath}.bytes`);
     }
@@ -415,7 +560,7 @@ function preflightArtifactResolutionClaim(
   return {
     artifactRefId,
     resolverPolicyHash,
-    observedWireByteLength,
+    actualDecodedByteLength,
     declaredByteLength: declaredMirrorByteLength,
   };
 }
@@ -523,6 +668,67 @@ function decodeRegistryAuthorityPin(value: unknown, path: string): RegistryAutho
   return { expectedRegistryRoot, expectedGovernanceTrustAnchorHash, expectedEpoch: assertDecimalString(expectedEpoch, `${path}.expectedEpoch`) };
 }
 
+function predicateAuthorityBindingSetRoot(
+  predicateId: string,
+  bindings: readonly PredicateAuthorityArtifactBindingV1[],
+): Hash {
+  return hashDomain("aloha/selected-predicate-authority-binding-set/v1", {
+    predicateId,
+    bindings,
+  });
+}
+
+function decodeSelectedPredicateAuthority(
+  value: unknown,
+  path: string,
+): SelectedPredicateAuthorityEntryV1 {
+  assertPlainObject(value, path);
+  assertExactKeys(value, ["predicateId", "artifactBindings", "bindingSetRoot"], path);
+  const predicateId = readOwnEnumerableDataProperty(value, "predicateId", path);
+  const artifactBindingsValue = readOwnEnumerableDataProperty(value, "artifactBindings", path);
+  const bindingSetRoot = readOwnEnumerableDataProperty(value, "bindingSetRoot", path);
+  if (typeof predicateId !== "string" || predicateId.length === 0) throw new TypeError(`predicate authority id invalid at ${path}.predicateId`);
+  if (!Array.isArray(artifactBindingsValue)) throw new TypeError(`predicate authority bindings invalid at ${path}.artifactBindings`);
+  const artifactBindings = artifactBindingsValue.map((bindingValue, index): PredicateAuthorityArtifactBindingV1 => {
+    const bindingPath = `${path}.artifactBindings[${index}]`;
+    assertPlainObject(bindingValue, bindingPath);
+    assertExactKeys(bindingValue, ["roleId", "artifactRefId", "contentSha256", "schema"], bindingPath);
+    const roleId = readOwnEnumerableDataProperty(bindingValue, "roleId", bindingPath);
+    const artifactRefId = readOwnEnumerableDataProperty(bindingValue, "artifactRefId", bindingPath);
+    const contentSha256 = readOwnEnumerableDataProperty(bindingValue, "contentSha256", bindingPath);
+    const schemaValue = readOwnEnumerableDataProperty(bindingValue, "schema", bindingPath);
+    assertPlainObject(schemaValue, `${bindingPath}.schema`);
+    assertExactKeys(schemaValue, ["id", "version", "schemaHash"], `${bindingPath}.schema`);
+    const id = readOwnEnumerableDataProperty(schemaValue, "id", `${bindingPath}.schema`);
+    const version = readOwnEnumerableDataProperty(schemaValue, "version", `${bindingPath}.schema`);
+    const schemaHash = readOwnEnumerableDataProperty(schemaValue, "schemaHash", `${bindingPath}.schema`);
+    if (typeof roleId !== "string" || roleId.length === 0 || typeof id !== "string" || id.length === 0 || typeof version !== "string" || version.length === 0) {
+      throw new TypeError(`predicate authority text invalid at ${bindingPath}`);
+    }
+    if (!isHash(artifactRefId) || !isHash(contentSha256) || !isHash(schemaHash)) throw new TypeError(`predicate authority hash invalid at ${bindingPath}`);
+    return Object.freeze({ roleId, artifactRefId, contentSha256, schema: Object.freeze({ id, version, schemaHash }) });
+  });
+  const ordered = [...artifactBindings].sort((left, right) => left.roleId.localeCompare(right.roleId));
+  if (!sameJson(artifactBindings, ordered) || new Set(artifactBindings.map(binding => binding.roleId)).size !== artifactBindings.length) {
+    throw new TypeError(`predicate authority bindings must be role-sorted and unique at ${path}.artifactBindings`);
+  }
+  if (!isHash(bindingSetRoot) || bindingSetRoot !== predicateAuthorityBindingSetRoot(predicateId, artifactBindings)) {
+    throw new TypeError(`predicate authority binding root invalid at ${path}.bindingSetRoot`);
+  }
+  return Object.freeze({ predicateId, artifactBindings: Object.freeze(artifactBindings), bindingSetRoot });
+}
+
+export function createSelectedPredicateAuthorityEntry(
+  predicateId: string,
+  artifactBindings: readonly PredicateAuthorityArtifactBindingV1[],
+): SelectedPredicateAuthorityEntryV1 {
+  return decodeSelectedPredicateAuthority({
+    predicateId,
+    artifactBindings,
+    bindingSetRoot: predicateAuthorityBindingSetRoot(predicateId, artifactBindings),
+  }, "selectedPredicateAuthority");
+}
+
 function decodeExternalQualificationAuthorityPin(
   value: unknown,
   path: string,
@@ -581,7 +787,7 @@ function decodeExternalQualificationAuthorityPin(
 
 function decodeGateCoreAuthorityPin(value: unknown, path: string): GateCoreAuthorityPinV1 {
   assertPlainObject(value, path);
-  assertExactKeys(value, ["registry", "externalQualification", "predicate", "predicateProgramDescriptorDigest", "oracleProgramDescriptorDigest", "predicateCompositionLeafDigest", "predicateCompositionRootDigest", "predicateImplementationClosureDigest", "predicateImplementationExportDigest", "oracleImplementationClosureDigest", "oracleImplementationExportDigest", "gateCoreImplementationClosureDigest", "gateCoreRuntimeClosureDigest", "verifierQualificationId", "signedInvocationRoleId", "maxInvocationTtlUnixNs", "expectedAudienceHash"], path);
+  assertExactKeys(value, ["registry", "externalQualification", "predicate", "predicateProgramDescriptorDigest", "oracleProgramDescriptorDigest", "predicateCompositionLeafDigest", "predicateCompositionRootDigest", "predicateImplementationClosureDigest", "predicateImplementationExportDigest", "oracleImplementationClosureDigest", "oracleImplementationExportDigest", "gateCoreImplementationClosureDigest", "gateCoreRuntimeClosureDigest", "verifierQualificationId", "signedInvocationRoleId", "maxInvocationTtlUnixNs", "expectedAudienceHash", "selectedPredicateAuthority"], path);
   const registry = decodeRegistryAuthorityPin(readOwnEnumerableDataProperty(value, "registry", path), `${path}.registry`);
   const externalQualification = decodeExternalQualificationAuthorityPin(readOwnEnumerableDataProperty(value, "externalQualification", path), `${path}.externalQualification`);
   const predicate = decodePredicate(readOwnEnumerableDataProperty(value, "predicate", path) as object);
@@ -599,14 +805,16 @@ function decodeGateCoreAuthorityPin(value: unknown, path: string): GateCoreAutho
   const signedInvocationRoleId = readOwnEnumerableDataProperty(value, "signedInvocationRoleId", path);
   const maxInvocationTtlUnixNs = readOwnEnumerableDataProperty(value, "maxInvocationTtlUnixNs", path);
   const expectedAudienceHash = readOwnEnumerableDataProperty(value, "expectedAudienceHash", path);
+  const selectedPredicateAuthority = decodeSelectedPredicateAuthority(readOwnEnumerableDataProperty(value, "selectedPredicateAuthority", path), `${path}.selectedPredicateAuthority`);
   if (!isHash(predicateProgramDescriptorDigest) || !isHash(oracleProgramDescriptorDigest) || !isHash(predicateCompositionLeafDigest) || !isHash(predicateCompositionRootDigest) || !isHash(predicateImplementationClosureDigest) || !isHash(predicateImplementationExportDigest) || !isHash(oracleImplementationClosureDigest) || !isHash(oracleImplementationExportDigest) || !isHash(gateCoreImplementationClosureDigest) || !isHash(gateCoreRuntimeClosureDigest) || !isHash(verifierQualificationId) || !isHash(expectedAudienceHash)) throw new TypeError(`authority digest invalid at ${path}`);
   if (typeof signedInvocationRoleId !== "string" || signedInvocationRoleId.length === 0) throw new TypeError(`authority signedInvocationRoleId invalid at ${path}`);
   if (typeof maxInvocationTtlUnixNs !== "string") throw new TypeError(`authority maxInvocationTtlUnixNs invalid at ${path}`);
   assertDecimalString(maxInvocationTtlUnixNs, `${path}.maxInvocationTtlUnixNs`);
   if (BigInt(maxInvocationTtlUnixNs) <= 0n) throw new TypeError(`authority maxInvocationTtlUnixNs must be positive at ${path}`);
   if (expectedAudienceHash === ZERO_HASH) throw new TypeError(`authority expectedAudienceHash cannot be zero at ${path}`);
+  if (selectedPredicateAuthority.predicateId !== predicate.predicateId) throw new TypeError(`selected predicate authority mismatch at ${path}.selectedPredicateAuthority.predicateId`);
   if (predicateImplementationClosureDigest === ZERO_HASH || predicateImplementationExportDigest === ZERO_HASH || oracleImplementationClosureDigest === ZERO_HASH || oracleImplementationExportDigest === ZERO_HASH || gateCoreImplementationClosureDigest === ZERO_HASH || gateCoreRuntimeClosureDigest === ZERO_HASH) throw new TypeError(`authority implementation digest cannot be zero at ${path}`);
-  return { registry, externalQualification, predicate, predicateProgramDescriptorDigest, oracleProgramDescriptorDigest, predicateCompositionLeafDigest, predicateCompositionRootDigest, predicateImplementationClosureDigest, predicateImplementationExportDigest, oracleImplementationClosureDigest, oracleImplementationExportDigest, gateCoreImplementationClosureDigest, gateCoreRuntimeClosureDigest, verifierQualificationId, signedInvocationRoleId, maxInvocationTtlUnixNs, expectedAudienceHash };
+  return { registry, externalQualification, predicate, predicateProgramDescriptorDigest, oracleProgramDescriptorDigest, predicateCompositionLeafDigest, predicateCompositionRootDigest, predicateImplementationClosureDigest, predicateImplementationExportDigest, oracleImplementationClosureDigest, oracleImplementationExportDigest, gateCoreImplementationClosureDigest, gateCoreRuntimeClosureDigest, verifierQualificationId, signedInvocationRoleId, maxInvocationTtlUnixNs, expectedAudienceHash, selectedPredicateAuthority };
 }
 
 const GATE_CORE_INPUT_KEYS = [
@@ -738,16 +946,15 @@ function preflightNestedInputArrays(value: unknown, path: string, seen: WeakSet<
 
 function preflightInputMirrorBudget(input: GateCoreInputV1, issues: IssueSink): boolean {
   const mirrorBudget = { totalBytes: 0n };
-  let valid = true;
   for (const [index, value] of input.artifactClaims.entries()) {
     try {
       preflightArtifactResolutionClaim(value, `$.artifactClaims[${index}]`, mirrorBudget);
     } catch {
       issues.add("artifact-claim-mismatch", `$.artifactClaims[${index}]`);
-      valid = false;
+      return false;
     }
   }
-  return valid;
+  return true;
 }
 
 /**
@@ -759,7 +966,6 @@ function preflightInputMirrorBudget(input: GateCoreInputV1, issues: IssueSink): 
 function decodeGateCoreInput(value: unknown, path: string): GateCoreInputV1 {
   assertPlainObject(value, path);
   assertExactKeys(value, GATE_CORE_INPUT_KEYS, path);
-  preflightNestedInputArrays(value, path);
   const readArray = (key: string): readonly unknown[] => {
     const candidate = readOwnEnumerableDataProperty(value, key, path);
     return copyExactInputArray(candidate, `${path}.${key}`);
@@ -769,10 +975,7 @@ function decodeGateCoreInput(value: unknown, path: string): GateCoreInputV1 {
     snapshot: readOwnEnumerableDataProperty(value, "snapshot", path) as QualifiedFactSnapshotV1,
     registry: readOwnEnumerableDataProperty(value, "registry", path) as QualificationRegistrySnapshotV1,
     registryFacts: readOwnEnumerableDataProperty(value, "registryFacts", path) as RegistryMembershipFactsV1,
-    externalQualification: decodeExternalQualificationEvidenceEnvelope(
-      readOwnEnumerableDataProperty(value, "externalQualification", path),
-      `${path}.externalQualification`,
-    ),
+    externalQualification: readOwnEnumerableDataProperty(value, "externalQualification", path) as ExternalQualificationEvidenceV2,
     verifierCertificate: readOwnEnumerableDataProperty(value, "verifierCertificate", path) as VerifierQualificationCertificateV1,
     observerCertificates: readArray("observerCertificates") as readonly ObserverQualificationCertificateV1[],
     artifactRefs: readArray("artifactRefs") as readonly ReadOnlyArtifactRefV1[],
@@ -937,8 +1140,8 @@ function validateArtifacts(
       continue;
     }
     if (
-      preflight.observedWireByteLength !== null &&
-      (preflight.declaredByteLength !== preflight.observedWireByteLength || preflight.observedWireByteLength > BigInt(policy.maxByteLength))
+      preflight.actualDecodedByteLength !== null &&
+      (preflight.declaredByteLength !== preflight.actualDecodedByteLength || preflight.actualDecodedByteLength > BigInt(policy.maxByteLength))
     ) {
       issues.add("resolver-policy-mismatch", `${path}.observedMirror.byteLength`);
       continue;
@@ -1822,18 +2025,37 @@ function evaluateGateCoreInternal(inputValue: unknown, authority: GateCoreAuthor
   let predicate: PredicateSpecV1 | null = null;
   let registry: QualificationRegistrySnapshotV1 | null = null;
   let invocation: SignedObserverInvocationSnapshotV1 | null = null;
-  const authorityPin = authority === null
-    ? null
-    : safeDecode(() => decodeGateCoreAuthorityPin(authority, "$.authority"), issues, "registry-mismatch", "$.authority");
   const input = safeDecode(() => decodeGateCoreInput(inputValue, "$.input"), issues, "schema-invalid", "$.input");
   if (input === null) {
     const reasons = sortedReasons(issues.issues);
-    const certificate = buildCertificate(null, null, authorityPin?.predicate ?? null, null, null, authorityPin, null, [], "invalid", reasons);
+    const certificate = buildCertificate(null, null, null, null, null, null, null, [], "invalid", reasons);
     return deepFreeze({ verdict: "invalid", certificate, reasons });
   }
   // Mirror byte bounds run before any certificate/registry/claim decoding or
   // content-byte allocation. A failed preflight is terminal for this input.
   if (!preflightInputMirrorBudget(input, issues)) {
+    const reasons = sortedReasons(issues.issues);
+    const certificate = buildCertificate(null, null, null, null, null, null, null, [], "invalid", reasons);
+    return deepFreeze({ verdict: "invalid", certificate, reasons });
+  }
+  try {
+    preflightNestedInputArrays(inputValue, "$.input");
+  } catch {
+    issues.add("schema-invalid", "$.input");
+    const reasons = sortedReasons(issues.issues);
+    const certificate = buildCertificate(null, null, null, null, null, null, null, [], "invalid", reasons);
+    return deepFreeze({ verdict: "invalid", certificate, reasons });
+  }
+  const authorityPin = authority === null
+    ? null
+    : safeDecode(() => decodeGateCoreAuthorityPin(authority, "$.authority"), issues, "registry-mismatch", "$.authority");
+  const externalQualification = safeDecode(
+    () => decodeExternalQualificationEvidenceEnvelope(input.externalQualification, "$.externalQualification"),
+    issues,
+    "external-trust-anchor-mismatch",
+    "$.externalQualification",
+  );
+  if (externalQualification === null) {
     const reasons = sortedReasons(issues.issues);
     const certificate = buildCertificate(null, null, authorityPin?.predicate ?? null, null, null, authorityPin, null, [], "invalid", reasons);
     return deepFreeze({ verdict: "invalid", certificate, reasons });
@@ -1854,6 +2076,19 @@ function evaluateGateCoreInternal(inputValue: unknown, authority: GateCoreAuthor
   if (predicateBinding === null || evaluator === null || predicate === null) {
     issues.add("predicate-composition-mismatch", "$.authority.predicate.predicateId");
   } else {
+    try {
+      const commonEnvelope = assertPredicateCommonEnvelopeRoleContractV1(predicate);
+      if (
+        commonEnvelope.version !== COMMON_ENVELOPE_ROLE_CONTRACT_VERSION ||
+        predicateBinding.commonEnvelopeRoleContractVersion !== COMMON_ENVELOPE_ROLE_CONTRACT_VERSION ||
+        evaluator.commonEnvelopeRoleContractVersion !== COMMON_ENVELOPE_ROLE_CONTRACT_VERSION ||
+        authorityPin?.signedInvocationRoleId !== commonEnvelope.signedInvocationRoleId
+      ) {
+        issues.add("predicate-composition-mismatch", "$.authority.predicate.commonEnvelopeRoleContractVersion");
+      }
+    } catch {
+      issues.add("predicate-composition-mismatch", "$.authority.predicate.requiredObserverRoles");
+    }
     if (!sameJson(predicate, evaluator.predicateSpec) || predicateBinding.predicateSpecDigest !== evaluator.predicateSpec.specDigest) {
       issues.add("predicate-composition-mismatch", "$.authority.predicate");
     }
@@ -1876,6 +2111,7 @@ function evaluateGateCoreInternal(inputValue: unknown, authority: GateCoreAuthor
   invocation = safeDecode(() => decodeSignedObserverInvocationSnapshot(input.signedInvocationSnapshot), issues, "invocation-mismatch", "$.signedInvocationSnapshot");
   const normalizedInput: GateCoreInputV1 = {
     ...input,
+    externalQualification,
     registryFacts: registryFacts ?? input.registryFacts,
     sidecarObservations,
     signedInvocationSnapshot: invocation ?? input.signedInvocationSnapshot,
@@ -1917,11 +2153,13 @@ function evaluateGateCoreInternal(inputValue: unknown, authority: GateCoreAuthor
       issues.add("verifier-qualification-missing", "$.authority.verifierQualificationId");
     }
   }
+  let externalQualificationVerified = false;
   if (
     authorityPin !== null &&
     registry !== null &&
     registryFacts !== null &&
-    verifier !== null
+    verifier !== null &&
+    predicate !== null
   ) {
     if (
       registry.governanceTrustAnchorHash !== authorityPin.externalQualification.expectedTrustAnchorRoot ||
@@ -1931,13 +2169,16 @@ function evaluateGateCoreInternal(inputValue: unknown, authority: GateCoreAuthor
     }
     const external = verifyExternalQualificationV2({
       pin: authorityPin.externalQualification,
-      evidence: input.externalQualification,
+      evidence: externalQualification,
       registry,
       registryFacts,
       verifierCertificate: verifier,
       observerCertificates: observers,
       release: {
         authorityPinDigest: computeGateCoreAuthorityPinDigest(authorityPin),
+        predicateId: predicate.predicateId,
+        predicateSpecDigest: predicate.specDigest,
+        predicateCompositionLeafDigest: authorityPin.predicateCompositionLeafDigest,
         predicateCompositionRootDigest: authorityPin.predicateCompositionRootDigest,
         gateCoreRuntimeClosureDigest: authorityPin.gateCoreRuntimeClosureDigest,
         gateCoreImplementationClosureDigest: authorityPin.gateCoreImplementationClosureDigest,
@@ -1945,6 +2186,7 @@ function evaluateGateCoreInternal(inputValue: unknown, authority: GateCoreAuthor
         observerQualificationIds: observers.map((observer) => observer.certificateId).sort(),
       },
     });
+    externalQualificationVerified = external.verified;
     for (const issue of external.issues) issues.add(issue.code, issue.path);
   } else {
     issues.add("external-trust-anchor-mismatch", "$.externalQualification");
@@ -1958,10 +2200,12 @@ function evaluateGateCoreInternal(inputValue: unknown, authority: GateCoreAuthor
     const observation = safeDecode(() => decodeQualifiedObservation(value), issues, "observation-mismatch", `$.observations[${index}]`);
     if (observation !== null) observations.push(observation);
   }
+  let invocationKeyMaterial: ObserverSigningKeyV1 | null = null;
   if (invocation !== null && query !== null && snapshot !== null && predicate !== null && verifier !== null && registry !== null && registryFacts !== null && authorityPin !== null) {
     const key = registryFacts.observerSigningKeys.find((candidate) => candidate.keyId === invocation!.keyId);
     if (key === undefined) issues.add("invocation-key-mismatch", "$.signedInvocationSnapshot.keyId");
     else {
+      const invocationIssueCount = issues.issues.length;
       const ordinaryObserverQualificationIds = new Set<Hash>([
         ...observations.map((observation) => observation.observerQualificationId),
         ...sidecarObservations.map((observation) => observation.observerQualificationId),
@@ -1971,6 +2215,7 @@ function evaluateGateCoreInternal(inputValue: unknown, authority: GateCoreAuthor
         ...observations.map((observation) => verifier.requiredObserverRoles.find((role) => role.observerQualificationId === observation.observerQualificationId)?.roleId).filter((role): role is string => role !== undefined),
       ]);
       invocationKey(key, invocation, registry, registryFacts, query, snapshot, predicate, verifier, observers, ordinaryObserverQualificationIds, ordinaryRoleIds, authorityPin, nowUnixNs, issues);
+      if (issues.issues.length === invocationIssueCount) invocationKeyMaterial = key;
     }
   }
   validateObservationQualificationBindings(observations, predicate, verifier, observers, registry, issues);
@@ -2016,6 +2261,27 @@ function evaluateGateCoreInternal(inputValue: unknown, authority: GateCoreAuthor
       policies: artifactResult.policies.filter((policy) => artifactResult.refs.some((ref) => ref.resolverPolicyHash === policy.policyHash && !invocationRawRefSet.has(ref.artifactRefId))),
       leases: artifactResult.leases.filter((lease) => artifactResult.refs.some((ref) => ref.retentionLeaseReceiptId === lease.receiptId && !invocationRawRefSet.has(ref.artifactRefId))),
       observations,
+      trustedObserverInvocation: invocation === null || invocationKeyMaterial === null || authorityPin === null || !externalQualificationVerified
+        ? null
+        : Object.freeze({
+            keyId: invocationKeyMaterial.keyId,
+            observerQualificationId: invocation.observerQualificationId,
+            roleId: invocation.roleId,
+            authenticatedArtifactRefIds: Object.freeze(subjectResult.refs.map(ref => ref.artifactRefId).sort()),
+            candidateReleaseCommit: authorityPin.externalQualification.expectedCandidateReleaseCommit,
+          }),
+      trustedPredicateAuthority: authorityPin === null || !externalQualificationVerified
+        ? undefined
+        : authorityPin.selectedPredicateAuthority,
+      trustedReleaseQualificationBindings: !externalQualificationVerified
+        ? undefined
+        : Object.freeze(decodeSignedReleaseAuthorityApprovalV3(
+            normalizedInput.externalQualification.releaseAuthorityApproval,
+          ).releaseAcceptanceRequirements.map(requirement => Object.freeze({
+            predicateId: requirement.predicateId,
+            predicateSpecDigest: requirement.predicateSpecDigest,
+            verifierQualificationId: requirement.verifierCertificateId,
+          }))),
     }, issues);
   const reasons = sortedReasons(issues.issues);
   const verdict = enforceEvaluatorVerdictContract(programVerdict, reasons);

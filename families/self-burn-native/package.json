@@ -1,1 +1,1 @@
-{"name":"@aloha/family-self-burn-native","private":true,"type":"module","exports":{".":"./kernel/effects.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}
+{"name":"@aloha/family-self-burn-native","private":true,"type":"module","exports":{".":"./src/public.ts","./kernel":"./kernel/effects.ts"},"scripts":{"test":"node --experimental-strip-types --test test/*.test.ts","typecheck":"tsc -p tsconfig.json"}}

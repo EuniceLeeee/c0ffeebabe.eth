@@ -745,14 +745,19 @@ specifier及其exact logical install owner/lock record。真实路径只用于�
 该entry closure目标的module augmentation属于closure；无关augmentation、普通未引用source和已安装但未消费的
 package不得污染它。dirty/untracked、index bytes不一致、unresolved edge、untracked closure member或ambiguous
 path均返回invalid/null，不得签发closure observation；program descriptor、函数名、`Function.toString()`或调用者
-提供的手写file list都不能替代该digest。
+提供的手写file list都不能替代该digest。production closure query与qualified-runner join只可消费同一Boundary进程在
+`clean + pass + diagnostics=0 + exact pushed`后登记的opaque receipt identity及其deep-frozen issued snapshot；spread/clone、
+把collector receipt的`pushed`字段改成true、或在签发后替换receipt内closure/manifest/candidate字段均不得获得authority。
 
 [PFD] boundary graph必须来自同一个真实TypeScript Program的usage-site resolution，不能再用独立AST scanner猜
 另一张图：NodeNext的`import`/`require`/dynamic import/`ImportTypeNode`/JSDoc import按各自resolution mode解析，
 `/// <reference types>`使用type-reference resolver，module augmentation也保留真实target edge。`parsed.fileNames`或
 Program实际读取的repository外source、realpath逃逸、symlink逃逸或未跟踪source一律invalid，不能先filter再让
 receipt通过。所有source root必须由release layout声明；`runtime/`属于production-runtime，未知root不能默认降成
-metadata。clean/pushed事实还必须证明upstream是非`.` remote的`refs/remotes/*`，本地同SHA ref不能冒充已push。
+metadata。clean/pushed事实还必须证明upstream是canonical `origin/<same branch>` remote-tracking ref，并由固定`/usr/bin/git`
+在隔离Git配置和禁交互环境中直接读取canonical GitHub repository的`refs/heads/<same branch>`；HEAD、本地upstream与
+远端返回的唯一40-hex tip必须三者exact相等。本地同SHA ref、`.`/本地bare remote、伪造remote-tracking ref、调用者
+提供的remote URL或仅有本地`origin/*`缓存都不能冒充已push。
 
 [PFD] 某entrypoint的compiler closure只要实际消费`node:` builtin，就必须额外绑定当前Node executable bytes、
 `process.version/process.versions/process.release`、platform与arch；未消费Node builtin的无关closure不得被该runtime
@@ -1832,6 +1837,13 @@ instance publications。每条 edge 绑定 publication hash；Graph root 是 can
 Merkle/content root。Promotion只持久化RehydrationRef，不持久化handle；process打开GraphView时由owning
 plugin重签IssuedRouteHandle。schema/dependency不匹配使generation invalidProgram，不能跳过后继续ready。
 
+[PFD] `instancePublicationHash` 是 route 层对完整 publication 的唯一内容承诺；其原像已经包含
+`evidenceRoot`、identity memo、descriptor、validity/artifact dependency roots 与全部transition projection。
+Graph/rehydrator不得把这些字段再复制成一套可独立漂移的平行authority。任一 evidence 或 publication 字段变化
+必须先改变该instance publication leaf、InstanceCatalog root与Graph root，并在旧active-ready binding下于任何
+route handle签发前拒绝。新增或修改无关Family会产生新的catalog/Graph组合与ready generation，但不得改变既有
+Family definition leaf、adapter closure或其qualification certificate；只重验变化leaf及其实际依赖者。
+
 [PFD] Family签发的原始IssuedRouteHandle不能直接挂在RuntimeGraphEdge上。GraphView为每条runtime edge生成
 module-private opaque `GraphRouteHandle`，并在该lease私有WeakMap中保存它到Family handle的映射；下游只有通过
 同一lease的`resolveRouteHandle(edgeId, graphRouteHandle)`且每次先同时核对edgeId与该edge的lease-owned handle、
@@ -2137,11 +2149,76 @@ interface SafetyObligationRef {
 不相容均fail closed。这样当前debt mint不会被当普通swap绕过安全门；未来新position语义也只新增extension
 owner，不改safety core。本baseline不定义LP obligation schema。
 
+[PFD] ActionOwner的运行时函数存在不等于已资格化。每个Family action payload必须携带足以让package-owned
+`decode/verifyObligations`独立重算的原始语义：exact evaluation lineage、输入/输出资产流、calldata/route/quote
+binding、action hash、obligation root与obligation proof root；只重哈希caller提供的outer envelope、metadata声明
+或固定throwing placeholder均不能进入release。资格化链固定为：
+
+~~~text
+Family-owned action declaration + executable verifier closure
+→ independent positive / negative / invalid corpus
+→ per-action-owner qualification certificate leaf
+→ complete generated ActionOwner certificate set/root
+→ external signed RuntimeReleaseBinding exact join
+→ generated runtime ActionOwner registry exact membership
+~~~
+
+新增ActionOwner只增加自身declaration、verifier、qualification leaf及release BOM leaf；旧owner leaf和generic
+safety/economics core的资格证保持不变。Release composition root会改变，但不得因此重跑与新增owner没有依赖关系的
+Swap/Protocol/Family语义验收。
+
+[PFD] 当前release要求的安全类别由generated declarative `SafetyProfile`给出，而不是中央写死
+`no-external-repayment-proof`、`no-standing-position-proof`或Family分支。Profile至少绑定required claim-schema
+exact set、每个schema的qualified owner leaf、完整owner certificate-set root、REVM observation schema/root及
+profile composition root。中央只执行通用exact-set coverage、owner membership、verifier receipt join与资产守恒：
+
+~~~ts
+interface SafetyProfileV1 {
+  readonly profileRef: Hash;
+  readonly requiredClaims: readonly {
+    readonly claimSchemaRef: SchemaRef;
+    readonly ownerRef: GeneratedSafetyOwnerRef;
+    readonly qualificationLeafDigest: Hash;
+    readonly revmObservationSchemaRef: SchemaRef;
+  }[];
+  readonly qualifiedOwnerSetRoot: Hash;
+  readonly profileCompositionRoot: Hash;
+}
+~~~
+
+Wire owner固定为`specs/economic-safety-profile/src/index.ts`，release生成物固定为
+`generated/safety-profile/index.ts`，唯一production composition consumer固定为
+`packages/runtime-release-authority/src/internal/economic-safety-owner.ts`。`packages/economics-safety`只消费已经
+exact-decode且release-bound的profile与qualified owner bindings，不能生成profile、补默认claim或签发资格。
+
+未来增加flashloan、standing-position或LP分类时，只新增schema owner、qualification leaf与BOM/profile声明；不得
+修改中央evaluator或加入Family/协议判断。本baseline不提供LP schema、LP模板或LP Adapter Family，也不把LP缺席
+解释为允许缺少现有repayment/standing-position事实。
+
 [PFD] economics在final-sim产生真实gas后签发source-bound EconomicReceipt：next-block EIP-1559 fee由目标parent
 整数计算，profit-token valuation来自generated valuation/oracle owner的current-source fact，bid由versioned
 policy计算。WETH、stablecoin、Chainlink地址或token decimals不得写进central evaluator；这些是asset/oracle
 capability data。valuation unavailable、oracle stale、gas measurement unavailable或fee source mismatch都不能
 通过EV/submission gate。coarse阶段可读取同一valuation view帮助排序，但不能替代final EconomicReceipt。
+
+[PFD] Valuation owner是顶层plugin层`valuation-owners/<id>/`，不属于中央`packages/`，也不能由
+runtime-release authority内置。Candidate catalog只能生成owner proposal、identity与compiler closure；proposal或
+自洽registry不是资格。固定链为：
+
+~~~text
+valuation owner proposal
+→ acceptance-owned executable qualification
+→ per-owner qualification certificate leaf
+→ complete certificate set/root
+→ external signed RuntimeReleaseBinding
+→ generated runtime valuation registry exact join
+~~~
+
+Production runtime只能通过generated valuation registry调用owner的公开runtime entry；中央、Family和application
+不得直接import具体owner。每个certificate leaf绑定owner ref、implementation/fact schema、predicate/reference
+oracle program、critical mutation corpus与implementation closure；完整certificate set必须与proposal registry
+一一对应、排序唯一且无缺失。新增valuation owner只改变自身leaf、完整set root和release BOM root，不改变已有owner
+leaf，也不迫使不依赖它的Family、Swap/Protocol或generic Six-Step core重新资格化。
 
 ### 16.7 Final simulation 与 submission
 
@@ -2255,9 +2332,36 @@ run后临时放宽，也不得用 impl 更慢来判 Aloha pass。
 [PFD] 100/100 指“同一 exact SHA、PID/process-start、log inode、generation 下连续100个 eligible canonical
 heads 全部被及时、显式且健康地结算”，不是99%、不是任选100个、不是100次脚本循环，也不要求每个 head
 都有盈利candidate。Healthy只允许`complete-no-candidate`（完整scan/coverage证明无candidate）或
-`complete-candidates-terminal`（该head全部admitted candidates按冻结policy正常结算，包括正常policy reject或
+`complete-candidates-terminal`（该head全部enumerated candidates按冻结policy正常结算，包括正常policy reject或
 final-sim reject）；timeout、queue-full、resource failure、stale、unknown、evidence invalid或未完成均是unhealthy，
 仍占分母并使100/100失败。至少一条真实dry-run candidate仍须完整通过六步。
+
+[PFD] Head级候选分母固定为`ProducerHeadFactsV1.candidateRefs`：它是两个lane全部enumerated accounting entries
+经`performanceLaneCandidateRefV1(lane, semanticCandidateId)`域分离后得到的严格排序、唯一集合，包含selected、
+proven-pruned与policy-terminal候选，不能只取最终执行或通过的候选。`ProducerLaneFactsV1.candidateIds`则只表示
+该lane内`disposition=selected`的语义candidate ID；二者用途不同，禁止互换。每个`candidateRef`必须恰有一个
+同lane、同head/generation/Graph/planning/enumeration/policy的terminal observation，lane denominator root、
+全head observation-set root与candidate-set root必须独立复算并exact join；相同semantic candidate即使同时出现在
+blockscan/backrun，也必须是两个不同的performance candidate refs。
+
+[PFD] Durable candidate terminal矩阵固定如下；`not-run`只允许作为进程内临时占位，进入durable observation即
+`invalid`，不能映射成可接受的retryable事实：
+
+| Pipeline terminal | Performance outcome | 合法 disposition / load-bearing binding |
+|---|---|---|
+| `passed` | `verified` | `selected`；必须有同candidate terminal lineage与SixStep evidence |
+| `chainProvenRejected` + `final-sim:simulation-reverted` | `simulation-reverted` | `selected`；必须有final-sim evidence |
+| 其他`chainProvenRejected` | `chain-proven-rejected` | `selected`或`pruned`；`pruned`只允许该terminal且必须有chain proof |
+| admission `policyRejected` | `policy-rejected` | `notProbed`；`policyTerminal.kind=aloha.route-policy-rejection-v1` |
+| post-success `policyRejected` | `policy-rejected` | `selected`；`policyTerminal.kind=aloha.route-post-success-policy-terminal-v1`，并绑定winner candidate、winner terminal lineage与同一decision time |
+| `retryable` | `retryable` | `selected` |
+| `invalidProgram` | `invalid-program` | `selected` |
+
+[PFD] 一个healthy head可有零个passed candidate：完整no-candidate，或全部enumerated candidates均已由
+chain-proven rejection、policy terminal或明确simulation revert闭合；`retryable`、`invalidProgram`与任何未完成
+仍使head unhealthy。只有恰好一个`passed`时才要求并接受selected scheduler completion、Producer scheduler join
+与同candidate六步lineage。首个成功candidate后，
+同一lane尚未执行的selected candidates必须写入winner-bound post-success `policyTerminal`，不能残留`not-run`。
 
 [PFD] eligible set由独立canonical-header collector在process进入ready-serving状态时预先确定：该区间内每个
 canonical replacement head都eligible；no-candidate、timeout、queue-full、stale、resource failure仍在分母。
@@ -2268,6 +2372,41 @@ Warmup/maintenance只能以process/ready anchor划定整个连续区间，不能
 `windowStartAnchor + eligibilityRuleHash + performanceProfileHash + targetCount(100)`；commit后不能因看到结果
 而后移起点或缩短窗口。pre-ready heads从未进入该窗口；reorg orphan只由同一ordinal的canonical replacement
 结算。除此以外`excludedHeads`必须为空，missing/unknown直接fail或invalid，不能用“客观原因”删除。
+
+[PFD] Production evidence 的durable顺序为：`performance-window-basis` fsync →
+`performance-window-commitment` fsync → 恰好100个eligible admissions；每个ordinal依次持久化其coverage、
+每个有planner accounting的lane各一条独立`route-denominator`、candidate denominator与complete/incomplete
+performance terminal，随后才允许同binding的Producer terminal fsync。`route-denominator`必须从Producer保留的
+exact SearchTerminal capability反查planner-issued enumeration/accounting，不能从candidate-set或terminal observations
+反向重建；它至少绑定planning problem identity、enumeration root/truncation/count、每个candidate ID与完整ordered legs、
+admission disposition/terminal及accounting root。raw observer必须按planner原candidate-ID公式重算legs身份，并证明
+coverage coarse correlations ↔ route-denominator lanes ↔ candidate-set lane denominators为exact bijection；整lane、candidate
+或leg方向缺失都必须记录`invalid/incomplete`，不能靠三个下游artifact一起缩小分母通过。
+第100个Producer terminal durable后才可发出window complete并受控停止；进程restart后run loop必须先检查已完成
+窗口再读取新head。第101个head必须在任何append前拒绝，不能产生orphan event。第一个eligible head必须exact等于
+已提交的`windowStartAnchor`，之后按number+1、parentHash与monotonic admission形成canonical连续链。
+
+[PFD] 第100个Producer terminal fsync并不等于进程可立即退出。唯一application owner随后进入不可逆的
+acceptance-terminal phase：冻结所有新admission、等待Producer idle并关闭其正常F5 lanes，exact验证最终terminal
+为ordinal 100且其五字段canonical head、replacement revision、generation、ready与Graph binding均属于当前窗口；
+然后只观察一次current canonical head。若source已移动则本次事实为`invalid`并停止，禁止重采样直到碰到相同head。
+source未移动时，在同一个Startup/GraphView lease上对完整Graph transition denominator执行一次Full-Graph coarse sweep，
+再将该sweep、checkpoint Stage 1/2、release-intent/generated catalog与真实Six-Step process evidence交给各自独立
+collector封存，最后才关闭Startup/source/evidence并让systemd进程正常结束。Full-Graph/Full-Family/Six-Step任一
+缺失或invalid都不得缩小分母、回到Producer、开启fallback或产生第二次sweep。
+
+[PFD] Full-Graph coarse sweep的物理分母不是`edgeCount`。它必须与planner的Graph transition规则一致，对每个active
+Ready Graph edge枚举所有合法`inputAssetPort × outputAssetPort`方向，并以完整transition ID set/root/count作为expected
+denominator；每个方向必须有observed coarse fact或显式missing/invalid。一个2-input×2-output edge的分母是4而不是1。
+实际规模由root-owned active Ready Graph独立派生，约三万只可作为现实量级观察，绝不能成为硬编码阈值。按edge
+计数、每edge只选第一对ports、或从已产生的coarse rows反推expected集合，都会制造完整价格表被缩成几十项仍通过的
+假阳性。
+
+[PFD] acceptance-terminal phase不是F5第101个head，也不进入性能窗口。sweep前后Producer的submitted/accepted/
+started/completed/dropped/failed/cancelled/terminalCount/active/pending/fatal事实必须逐字段相同；独立acceptance source
+read与coarse work有自己的deadline/resource scope，不能污染两个normal lanes、selected candidate或100-head timing。
+只有exact `performance-facts-complete` raw event、同binding Producer terminal与其fsynced bytes可以进入Six-Step
+process join；仅有同namespace的任意`DurableAppendReceipt`、caller传入terminal hash或自洽DTO不构成durability证明。
 
 [PFD] Critical-path各P99预算按11s显式组成；coarse包含在source+coarse combined budget内，不再重复相加，并与head completion P99使用同一candidate-bearing head分母，
 避免“每个组件单独过门但总和超过12s”。无candidate head仍进入100/100 terminal分母，但不伪装成
@@ -2285,6 +2424,19 @@ candidate-path样本count必须等于content-addressed candidate-bearing head se
 [PFD] 每阶段记录 queue wait、service time、end-to-end time、source scan count、physical/logical request、
 single-flight join、dedupe hit、memo reuse、retry reason、RPC/REVM concurrency、CPU、RSS、worker restart、
 completed/missed heads、P50/P95/P99。分母与完整 receipt set 必须随指标一起 hash。
+
+[PFD] Production performance由独立raw SQLite observer验收，而不是由Producer/runtime自报verdict。Observer必须以
+`readOnly + query_only + read transaction`打开真实durable database，验证固定schema、append-only triggers与
+schema contract；对transaction内读取前后的main/WAL/SHM storage-set bytes roots做byte-identical检查，并从原始
+BLOB exact-decode event、复算content hash、sequence/offset、event/row roots以及release/serving/head/candidate/
+route-denominator/performance/Producer-terminal joins。只有raw bytes闭合exact 100时状态才可为`raw-complete`；missing、duplicate、
+splice、未知字段、坏hash、越界offset或观察期间storage变化均为`invalid`或非complete，observer不接受producer
+给出的expected verdict，也不按DS/impl/Aloha分支选择阈值。
+
+[PFD] 所有monotonic纳秒差值到整数微秒的规范转换是floor division：
+`durationUs = (finishedMonotonicNs - startedMonotonicNs) / 1000`；不要求纳秒差可被1000整除。无scheduler work的
+healthy no-pass head允许queue/permit/resource telemetry数组为空，但不得伪造scheduler completion；存在六步passed
+candidate的head必须有exact selected completion、Producer scheduler join及其runtime telemetry，二者不能互相套用。
 
 [PFD] 对比 impl/Aloha 时使用相同 canonical head window、provider、hardware profile、dry-run policy 与 raw
 receipt set。旧实现只用于定位回归：Aloha 即使比旧实现快也不能替代绝对预算、六步 lineage 或安全门；
@@ -2367,6 +2519,34 @@ raw runtime / chain / Reth / process / filesystem
  (frozen PredicateSpecs; pass / fail / invalid + reasons)
 ~~~
 
+#### 18.3.1 当前推进阶段：事实账本与判断，暂不作为运行 Gate
+
+[PFD] 在真实 Aloha dry-run 样本、critical mutation corpus、独立observer与oracle尚未完成qualification之前，
+本节的collector、EvidenceCore与predicate只能形成**advisory acceptance judgment**。当前输出固定为
+`pass | fail | invalid | incomplete`与完整reason/fact ledger；它可以指出实现或验收器可能错误，但不得阻止
+Aloha dry-run启动、不得把non-pass转换成runtime failure，也不得签发或参与签发RuntimeReleaseBinding、release
+authority、runtime authority或submission authority。此阶段不得把“脚本退出0”“单元测试绿色”或advisory
+`pass`写成production通过。
+
+[PFD] Advisory-only不放宽物理与安全边界。exact candidate SHA、PID/start/runtime anchor、append-only raw bytes、
+content hash、checkpoint/Ready Graph物理可达性、默认dry-run、signer absent、禁止签名/广播与human submission gate
+仍是硬约束；缺失、篡改或无法读取时必须如实记录`invalid/incomplete`，不能补fixture、缩小分母或静默跳过。
+Aloha dry-run可以在advisory non-pass下继续采集事实，但该结果不得被包装成release资格。
+
+[PFD] Pre-release Fact Log必须保留可人工核对的原始分母与逐项事实，不能只输出汇总状态：root-owned active
+Ready Graph独立派生的完整transition ID set/root/count、每个transition的coarse observation或明确missing、每个
+head/lane的planner route denominator、完整candidate与selected-exact名单、每个selected candidate的final-sim
+evidence或精确no-sim原因，以及这些对象之间的source/head/generation/Graph/route/candidate lineage join。现实运行中
+约三万transition是观察值，不是硬编码门槛；实际expected count必须每次从物理Graph重算。Fact Log可以帮助人工判断
+production代码或验收器是否空转、缩小分母或互相自证，但其记录、汇总与判断仍全部是advisory，不能签发release、
+runtime或submission authority。
+
+[PFD] 只有某个predicate的Fact Contract已冻结，并在真实物理样本、正/负/invalid mutation、独立observer/oracle、
+implementation closure与qualification失效规则上全部闭合后，才可通过单独ADR把**该predicate**升级成machine gate。
+升级必须是逐predicate、逐dependency closure的；不得因为一个predicate合格就把整套advisory判断整体升级，也不得
+迫使无依赖的Family、Swap或Protocol重新验收。最终production release仍须满足§19.4.1的外部签名组合；当前阶段
+没有合法的candidate-side authority mint路径。
+
 [PFD] `EvidenceCore`不得import systemd、AWS/SSM、impl、任意reference importer、Aloha production、planner或Family代码；
 `ObserverAdapter`不得生成expected verdict，也不得调用production builder补缺失事实；`GateCore`不得读日志
 文案或trust任意report布尔值。环境transport metadata只进入外层observation envelope；若locator本身load-bearing，
@@ -2377,9 +2557,11 @@ deployment manifest；log observer绑定device/inode/offset range/raw bytes hash
 不得先读取完整进程环境再靠敏感词denylist过滤。链上receipt/header/state必须保留可重读raw locator，validator
 独立复算bytes hash与canonical relation。
 
-[PFD] acceptance CLI只能序列化最终`AcceptanceCertificate.verdict`：`pass`唯一对应exit 0，`fail`与`invalid`
-使用不同的非零exit code；若保留顶层`status`，它必须由同一verdict机械派生且字面相等。CLI不得同时输出
-pass与任何内部non-pass，也不得用“命令成功执行”覆盖predicate结果。
+[PFD] qualification完成并被ADR升级为gate后的acceptance CLI只能序列化最终
+`AcceptanceCertificate.verdict`：`pass`唯一对应exit 0，`fail`与`invalid`使用不同的非零exit code；若保留
+顶层`status`，它必须由同一verdict机械派生且字面相等。当前advisory CLI不得借exit code阻止dry-run，必须把
+`pass | fail | invalid | incomplete`写入机器可读artifact。两种模式都不得同时输出pass与任何内部non-pass，
+也不得用“命令成功执行”覆盖predicate结果。
 
 [REJ] 旧六步不能靠改名映射成新六步：旧 step 1 混合 discovery 与 Graph，旧 step 2 是 route
 enumeration，旧 step 3/4 是 quote→solver，旧 step 5 才是 sim，旧 step 6 是 EV。Aloha 的 planner→exact
@@ -2483,10 +2665,21 @@ interface RetentionLeaseReceiptV1 {
   readonly qualificationRegistryRoot: Hash;
 }
 
+interface CanonicalArtifactBytesV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.canonical-artifact-bytes";
+  readonly byteLength: DecimalString;
+  readonly contentSha256: Hash;
+  readonly chunks: readonly {
+    readonly index: DecimalString;
+    readonly bytes: `0x${string}`; // lowercase even-length hex
+  }[];
+}
+
 interface ObservedImmutableMirrorV1 {
   readonly storeIdentityHash: Hash;
   readonly objectKey: Hash;
-  readonly bytes: Bytes;
+  readonly bytes: CanonicalArtifactBytesV1;
   readonly contentSha256: Hash;
   readonly byteLength: DecimalString;
   readonly mediaType: string;
@@ -2553,6 +2746,20 @@ head内临时artifact可随bounded session回收，但被验收引用的artifact
 不创建第二ArtifactStore、第二checkpoint或第二ready authority。
 
 ### 19.2 Evidence Schema
+
+[PFD] `ObservedImmutableMirrorV1.bytes`只有上述`CanonicalArtifactBytesV1`一种exact wire：chunk index必须是与
+数组位置相等的canonical decimal；每个非末chunk恰为65,534 decoded bytes，末chunk为1..65,534 bytes；空内容
+必须`byteLength="0"`且`chunks=[]`，不得放一个空chunk。inner/outer `byteLength`和`contentSha256`必须逐项相等，
+并由decoded bytes复算。旧的单个`0x...` mirror bytes与任何alternate chunk shape均不兼容，必须invalid，不能
+通过compat decoder升级。`rawFacts`若某个冻结的stage schema确实需要单个hex字段，可以定义自己独立的bounded
+hex contract；它不改变、复用或放宽immutable-mirror wire。
+
+[PFD] Inline mirror decoded-byte上限固定为500,000 bytes，并作为
+`aloha.canonical-artifact-bytes.refinement.v1`的schema/refinement identity组成部分；改变上限、chunk尺寸或上述
+canonical规则都会改变schema/refinement identity并使依赖它的qualification失效。`CANONICAL_LIMITS.maxBytes =
+1,048,576`约束的是完整canonical JSON envelope，不是mirror decoded-byte上限，两者不得互相替代。超过500,000
+bytes的artifact必须使用另行冻结的content-addressed partition合同；在该partition合同完成并资格化之前，artifact
+sink与resolver都必须fail closed，不得截断、扩大inline上限或退回single-hex表示。
 
 [PFD] EvidenceEventV1 顶层 core 字段 exact-key；扩展只能位于已声明 schema hash 的 extensions：
 
@@ -2786,6 +2993,16 @@ current store epoch、issuer qualification/registry membership、process anchor�
 并与同一boot/device/inode对象一致；JSON pointer先验证parent content再取值。Boundary raw artifact与process
 log range使用两个独立ArtifactRef，禁止用一个含糊hash同时代表二者。
 
+[PFD] GateCore在任何byte-carrying mirror schema decode、byte allocation或content hash之前，必须以pure preflight从
+chunk字符串长度重算actual decoded-byte sum：先验证exact object/dense array、chunk count/index/hex与固定chunk尺寸，
+再逐mirror exact join inner/outer declared length并对本次input的全部mirror执行同一500,000-byte aggregate bound。
+随后exact-decode只读ref与policy，并在分配mirror bytes之前join `ReadOnlyArtifactRefV1.byteLength`与对应
+`ResolverPolicyV1.maxByteLength`；全部通过后才可逐chunk decode并复算content SHA-256。此后仍须对每个mirror的
+hash/length/media/schema/object key、每个policy/claim/ref binding以及
+snapshot的ordered claim/ref aggregate roots和counts分别复算并exact join，任一missing、duplicate、orphan或budget
+不一致均invalid。该wire/schema变化只使实际依赖artifact-mirror decode/refinement的qualification、generated
+composition/authority失效；无此dependency closure的Family、Swap或Protocol不得被迫重验。
+
 [PFD] 所有`*ArtifactRefId`与snapshot的`orderedRawArtifactRefIds`只引用`artifactRefId`；`locatorId`仅标识“去哪里
 读取”，不绑定读取到的bytes，绝不能代替artifactRefId进入content/lineage root。
 
@@ -2846,10 +3063,15 @@ interface HeadWindowCommitmentV1 {
   readonly eligibilityRuleHash: Hash;
   readonly performanceProfileHash: Hash;
   readonly targetCount: "100";
-  readonly commitProductionReceiptId: Hash;
-  readonly commitArtifactRef: ReadOnlyArtifactRefV1;
+  readonly commitContextBindingId: Hash;
+  readonly commitAppendRecordId: Hash;
   readonly committedMonotonicNs: DecimalString;
 }
+
+// commitContextBindingId与commitAppendRecordId只分别承诺release/runtime/serving/basis上下文和
+// SQLite durable append record的exact元数据；它们不是ProductionReceiptV1或ReadOnlyArtifactRefV1。
+// 独立observer必须读取原始append bytes并复核元数据与上下文，才生成真正的core-envelope evidence；
+// producer输出的这两个content identity本身不能进入acceptance verdict。
 
 type HealthyHeadOutcome =
   | "complete-no-candidate"
@@ -3406,6 +3628,36 @@ Attestation session、Checkpoint、Family execution、Ready service和非敏感l
 时验证。Ready构造器只能取得窄`RuntimeReleaseReadyBindingPortV1`，其结果由bootstrap包装为release-guarded facade，
 不得泄漏private composition、proof issuer、scheduler issuer、resolver、signer或rotate/revoke能力。
 
+[PFD] `RuntimeReleaseBindingV1`在package bytes产生前签发，因此不能声称保护未来的`packageRoot`。外部packager
+完成content-addressed package后，只生成下列approval payload与signing bytes；它仍不持私钥、不签名。外部issuer
+签发的approval作为package之外的deployment sidecar，避免把自身signature纳入`packageRoot`造成循环：
+
+~~~ts
+interface RuntimeReleasePackageApprovalV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.runtime-release-package-approval";
+  readonly packageRoot: Hash;
+  readonly bindingId: Hash;
+  readonly releaseProvenanceHash: Hash;
+  readonly acceptanceCertificateId: Hash;
+  readonly acceptanceCertificatePayloadHash: Hash;
+  readonly candidateReleaseCommit: GitSha40;
+  readonly performanceBasisId: Hash;
+  readonly performanceProfileHash: Hash;
+  readonly hardwareProfileRoot: Hash;
+  readonly providerRoot: Hash;
+  readonly approvalId: Hash;
+  readonly payloadHash: Hash;
+  readonly signerKeyId: Hash;
+  readonly signatureAlgorithm: "ed25519";
+  readonly signatureHex: string;
+}
+~~~
+
+[PFD] install/start/restart必须用candidate closure外固定的signer pin验签该sidecar，并逐项exact join package
+manifest、signed runtime binding、pass certificate与performance artifacts。单独的文本`expected packageRoot`、
+自洽package manifest或RuntimeReleaseBinding都不能替代这个approval；candidate不得在本地补签或广播。
+
 [PFD] 上述每种对象均使用自己的domain separator与exact wire schema；顶层key set必须与对应`kind`完全相等，
 unknown key、duplicate key、缺失字段、非canonical JSON或kind/schema不匹配均为`invalid`。每个schema固定自己的
 identity-exclusion set；不得由decoder任意排除时间、commit、签名、raw locator或其它字段。声明`payloadHash`的
@@ -3907,7 +4159,7 @@ valuation、bid与net EV；unknown/stale不能通过。验收/采集编排器、
 | execution | 伪造program、缺action owner/interpreter/exact binding、观察pair被Cartesian展开 |
 | simulation/economics | 伪造final-sim、缺program/source/receipt；用effect sim替代final sim；gas/fee/valuation/bid splice或stale仍allow |
 | schema | unknown core field、duplicate key、非规范number/address/hash、未知version被忽略 |
-| performance | 空分母、丢失败样本、任选100 heads、跨PID拼接、serial证据冒充同窗 |
+| performance | 空分母、丢失败样本、任选100 heads、跨PID拼接、serial证据冒充同窗；删除/重复candidate observation、candidateRef跨lane或candidate denominator/root错配；篡改timing/observation root、simulation-reverted映射、post-success winner lineage/decision time；写入durable `not-run`；把no-pass head伪造六步/telemetry或把passed head清空scheduler join；第101个head产生append |
 
 [PFD] negative corpus 可以人为损坏真实 evidence，也可以构造最小无成功语义的格式样本来测 parser；它不能
 用手写成功 fixture证明production成功。每个 mutation记录base artifact root、mutator code hash、expected
@@ -3942,6 +4194,19 @@ declaredExactCapability、ownedAction计数与roots；这些字段均由
 architecture-neutral schema定义，不沿用旧expected/priced术语。Family名称只用于展示；verdict由BOM exact
 set与schema facts驱动。当前BOM没有LP entry，因此既不要求也不接受伪LP row。
 
+[PFD] 全族acceptance必须在上述唯一acceptance-terminal phase内绑定四个互不替代的事实面：独立读取的
+release-intent/generated Family exact set、checkpoint root-reachable Stage 1/2 partition、同generation/Graph/current
+source的Full-Graph coarse sweep、以及runtime-release terminal/process anchors。Full-Graph sweep按Graph中每条edge的
+严格ordinal记录`observed`或`missing`；missing coarse owner、asset port、receipt或Family observation必须保留为
+missing/invalid，不能过滤后让observed subset通过。粗价格只证明该edge在指定current source上的可排名性/不可用性，
+不改变Graph、Instance publication、exact/action authority，也不能替代真实Six-Step的current-source exact与final sim。
+
+[PFD] `ownedAction`在全族矩阵中专指generated Family catalog/runtime composition里的action-owner declaration
+分母：每项绑定`familyId + familyDefinitionHash + actionOwnerRef`，且Family局部owner leaf可独立复用。它不表示
+该Family必须在一次live planner terminal里实际build action。真实current-source exact、action artifact、program、
+effect/obligation lineage只由§21 Step 4/5及six-step predicate验收；禁止把一次route只涉及部分Family的自然结果
+解释成全族缺失，也禁止用generated owner declaration替代真实six-step action。
+
 ### 23.2 Restart 与差集
 
 [PFD] 在同 exact SHA或语义closure兼容的新SHA下进行systemd restart，验证：
@@ -3962,6 +4227,12 @@ set与schema facts驱动。当前BOM没有LP entry，因此既不要求也不接
 profile。Normalized denominator的`excludedHeads` MUST为空；pre-ready observations与被replacement取代的orphan
 只进入独立non-denominator audit。任何missing或unknown不从分母删除。
 
+[PFD] 每个head的candidate denominator必须使用lane-qualified、strict-sorted的全部
+`ProducerHeadFactsV1.candidateRefs`，不能使用lane-local selected-only `candidateIds`代替。Observer从raw candidate-set
+与terminal observations复算candidate-set root、每lane observation-set/accounting/coverage roots及全head terminal
+set root；每个ref恰好一次，cross-lane、missing、duplicate、splice或durable `not-run`一律invalid。零passed的healthy
+head不得携带selected scheduler/SixStep join；恰好一个passed的head必须携带exact同candidate六步与scheduler joins。
+
 [PFD] 首个计数head前只冻结window start、eligibility rule、profile与targetCount；真实未来99个hash不可能也不得
 预知。之后canonical-header collector在outcome可见前按规则append-only接收下一个head并分配ordinal，最终ordered
 number/hash set只能由该预冻规则与append log推导；reorg以显式orphan→replacement lineage在同ordinal结算，不做
@@ -3969,6 +4240,12 @@ last-write-wins覆盖。每个ordinal恰有一个最终terminal receipt；duplic
 log offset或采集中process/generation变化均使窗口`invalid`，不得skip。timing sample数必须等于denominator；
 candidate overlap必须从两个content-addressed candidate sets计算，不能用heads/sec代替；窗口时长由monotonic
 start/end anchors复算，不能信调用者传入。顶层verdict只能由PredicateSpec结果派生，不得与内部gate冲突。
+
+[PFD] Raw observer必须直接读取immutable SQLite bytes并证明schema/trigger、sequence/offset、content hashes、
+storage-set before/after与全部lineage；不得读取runtime verdict或调用production builder补事实。首个eligible必须
+exact等于`windowStartAnchor`；basis/commitment、100个eligible及其coverage/candidate/performance/Producer terminal
+必须按fsync顺序闭合，第100个terminal之后才complete，第101个admission在append前失败。纳秒到微秒使用floor
+division；该转换和no-scheduler-work允许空telemetry的规则都必须进入qualified observer与mutation corpus。
 
 [PFD] 最终门至少包括：
 
@@ -5226,11 +5503,13 @@ imports始终R3/R4，不能以“仍在审计”为由复制。
 4. readyGeneration为同一CAS，producer只持有immutableGraphView；
 5. 至少一条真实dry-run candidate以同generation/cutoff/roots/correlation完成六步到finalsim；
 6. restart复用、差集、singleprobe与SIGTERM恢复由durable facts证明；
-7. 连续100/100与P50/P95/P99、throughput、resource/queue预算通过；
-8. central Family/protocol/domain semantics=0，authoring façade runtime closure=0，旧repo/reference-only
+7. lane-qualified全候选terminal分母、独立raw SQLite observer、连续exact 100/100与P50/P95/P99、throughput、resource/queue预算通过；
+8. 第100个durable terminal后的单次same-head Full-Graph sweep、全族Stage 1/2+coarse exact join及真实Six-Step
+   process/fsync join均由独立collector封存；sweep不改变F5分母且source moved不重采样；
+9. central Family/protocol/domain semantics=0，authoring façade runtime closure=0，旧repo/reference-only
    production closure=0，legacy authority/import/runtime/log/consumer=0；
-9. defaultdry-run、finalsim、standing/repayment/conservation与human signing/broadcast gate完整；
-10. canonical文档、schema、generated catalog、runtime与acceptance receipt指向同一版本化合同；当前release
+10. defaultdry-run、finalsim、standing/repayment/conservation与human signing/broadcast gate完整；
+11. canonical文档、schema、generated catalog、runtime与acceptance receipt指向同一版本化合同；当前release
     BOM/catalog无LP资产，generic extension isolation predicate有效。
 
 [PFD] 任一项缺失都只能报告具体缺口，不能用build、unit、fixture、partialGraph、单次live、数量parity或

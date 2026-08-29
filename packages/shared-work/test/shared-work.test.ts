@@ -93,12 +93,65 @@ test("failed physical build is removed and can be retried", async () => {
   );
   assert.equal(cache.snapshot().inFlightEntries, 0);
   assert.equal(cache.snapshot().settledEntries, 0);
+  assert.equal(cache.snapshot().stats.buildFailures, 1);
+  assert.equal(cache.snapshot().stats.invalidResults, 0);
   assert.equal(
     await cache.getOrBuild(key, consumerLease("retry"), async () => {
       builds += 1;
       return 8;
     }),
     8,
+  );
+  assert.equal(builds, 2);
+});
+
+test("an unsuccessful value is not admitted to the settled cache", async () => {
+  const cache = new SharedWorkCache<typeof key, { readonly kind: "returned" | "unavailable" }>({
+    validity: (value) => value.kind === "returned",
+  });
+  let builds = 0;
+  assert.deepEqual(
+    await cache.getOrBuild(key, consumerLease("unavailable"), async () => {
+      builds += 1;
+      return { kind: "unavailable" as const };
+    }),
+    { kind: "unavailable" },
+  );
+  assert.equal(cache.snapshot().settledEntries, 0);
+  assert.deepEqual(
+    await cache.getOrBuild(key, consumerLease("returned"), async () => {
+      builds += 1;
+      return { kind: "returned" as const };
+    }),
+    { kind: "returned" },
+  );
+  assert.equal(builds, 2);
+  assert.equal(cache.snapshot().settledEntries, 1);
+  assert.equal(cache.snapshot().stats.invalidResults, 1);
+});
+
+test("a throwing validity observer cannot pin a physical entry", async () => {
+  const cache = new SharedWorkCache<typeof key, number>({
+    validity: () => { throw new Error("observer failed"); },
+  });
+  let builds = 0;
+  assert.equal(
+    await cache.getOrBuild(key, consumerLease("first"), async () => {
+      builds += 1;
+      return 1;
+    }),
+    1,
+  );
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(cache.snapshot().inFlightEntries, 0);
+  assert.equal(cache.snapshot().settledEntries, 0);
+  assert.equal(cache.snapshot().stats.invalidResults, 1);
+  assert.equal(
+    await cache.getOrBuild(key, consumerLease("retry"), async () => {
+      builds += 1;
+      return 2;
+    }),
+    2,
   );
   assert.equal(builds, 2);
 });
@@ -125,6 +178,44 @@ test("consumer abort detaches logically but physical work settles before inFligh
   assert.equal(cache.snapshot().inFlightEntries, 1);
   finish(3);
   await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(cache.snapshot().inFlightEntries, 0);
+});
+
+test("last consumer departure invalidates the old physical join target", async () => {
+  const cache = new SharedWorkCache<typeof key, number>();
+  const firstController = new AbortController();
+  const finishes: Array<(value: number) => void> = [];
+  let builds = 0;
+  const first = cache.getOrBuild(
+    key,
+    consumerLease("first", { signal: firstController.signal }),
+    async (physicalSignal) => {
+      builds += 1;
+      assert.equal(physicalSignal.aborted, false);
+      return new Promise<number>((resolve) => finishes.push(resolve));
+    },
+  );
+  await Promise.resolve();
+  firstController.abort("no-longer-needed");
+  await assert.rejects(first);
+
+  // The old physical promise is intentionally still pending.  A new logical
+  // read must not join it after its last consumer has left.
+  const second = cache.getOrBuild(
+    key,
+    consumerLease("second"),
+    async () => {
+      builds += 1;
+      return new Promise<number>((resolve) => finishes.push(resolve));
+    },
+  );
+  await Promise.resolve();
+  assert.equal(builds, 2);
+  finishes[1]!(2);
+  assert.equal(await second, 2);
+  finishes[0]!(1);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(cache.snapshot().settledEntries, 1);
   assert.equal(cache.snapshot().inFlightEntries, 0);
 });
 
@@ -201,4 +292,107 @@ test("settled hits still honor an already-aborted or expired consumer", async ()
     (error: unknown) =>
       error instanceof SharedWorkRejected && error.code === "deadline",
   );
+});
+
+test("an already-finished consumer never starts a physical builder", async () => {
+  const cache = new SharedWorkCache<typeof key, number>();
+  const aborted = new AbortController();
+  aborted.abort("before-dispatch");
+  let builds = 0;
+  await assert.rejects(
+    cache.getOrBuild(
+      key,
+      consumerLease("aborted-before-dispatch", { signal: aborted.signal }),
+      async () => {
+        builds += 1;
+        return 1;
+      },
+    ),
+    (error: unknown) => error instanceof SharedWorkRejected && error.code === "abort",
+  );
+  await assert.rejects(
+    cache.getOrBuild(
+      key,
+      consumerLease("deadline-before-dispatch", { deadlineAtMs: 0 }),
+      async () => {
+        builds += 1;
+        return 2;
+      },
+    ),
+    (error: unknown) => error instanceof SharedWorkRejected && error.code === "deadline",
+  );
+  assert.equal(builds, 0);
+  assert.deepEqual(cache.snapshot(), {
+    settledEntries: 0,
+    inFlightEntries: 0,
+    consumers: 0,
+    stats: {
+      settledHits: 0,
+      inFlightJoins: 0,
+      physicalBuilds: 0,
+      buildFailures: 0,
+      invalidResults: 0,
+      consumerAborts: 1,
+      consumerDeadlines: 1,
+      physicalAborts: 0,
+    },
+  });
+});
+
+test("a settled result whose validity later fails is evicted before retry", async () => {
+  let accepted = true;
+  const cache = new SharedWorkCache<typeof key, number>({
+    validity: () => accepted,
+  });
+  let builds = 0;
+  assert.equal(
+    await cache.getOrBuild(key, consumerLease("first"), async () => {
+      builds += 1;
+      return 1;
+    }),
+    1,
+  );
+  accepted = false;
+  assert.equal(
+    await cache.getOrBuild(key, consumerLease("retry"), async () => {
+      builds += 1;
+      return 2;
+    }),
+    2,
+  );
+  assert.equal(builds, 2);
+  assert.equal(cache.snapshot().settledEntries, 0);
+  accepted = true;
+  assert.equal(
+    await cache.getOrBuild(key, consumerLease("recovered"), async () => {
+      builds += 1;
+      return 3;
+    }),
+    3,
+  );
+  assert.equal(builds, 3);
+});
+
+test("a batch excludes already-finished consumers before physical construction", async () => {
+  const cache = new SharedWorkCache<typeof key, number>();
+  const aborted = new AbortController();
+  aborted.abort("before-batch");
+  let builds = 0;
+  await assert.rejects(
+    cache.getOrBuildBatch(
+      [
+        { key, consumer: consumerLease("batch-aborted", { signal: aborted.signal }) },
+        { key: { ...key, request: { ...key.request, topic: "topic-b" } }, consumer: consumerLease("batch-deadline", { deadlineAtMs: 0 }) },
+      ],
+      async ({ keys }) => {
+        builds += 1;
+        return keys.map(() => 1);
+      },
+    ),
+    (error: unknown) => error instanceof SharedWorkRejected && error.code === "abort",
+  );
+  assert.equal(builds, 0);
+  assert.equal(cache.snapshot().stats.physicalBuilds, 0);
+  assert.equal(cache.snapshot().stats.consumerAborts, 1);
+  assert.equal(cache.snapshot().stats.consumerDeadlines, 1);
 });

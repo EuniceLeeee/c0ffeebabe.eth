@@ -27,7 +27,15 @@ const definition = (): FamilyAuthoringDefinitionV1 => ({
     version: "1.0.0",
     pluginCodeHash: h("plugin"),
     authorityDeclarationHash: h("authority"),
-    sourcePlanIds: ["fixed-cutoff-50-block"],
+    sourcePlans: [{
+      sourcePlanId: "fixed-cutoff-50-block",
+      completeness: "nomination-only",
+      historyStartBlock: null,
+      schemaHash: asSchemaRef(h("source-plan-schema")),
+      modulePath: "families/demo/source-plan.ts",
+      exportName: "sourcePlan",
+      nominationProgram: { kind: "absent", reason: "not-in-release" },
+    }],
   },
   core: {
     nomination: { ...moduleRef("nomination"), sourcePlanIds: ["fixed-cutoff-50-block"] },

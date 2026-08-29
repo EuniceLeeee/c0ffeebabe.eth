@@ -4,6 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/public.ts",
+    "./family-definition": "./src/family-definition.ts",
+    "./runtime": "./src/runtime.ts",
     "./kernel/math": "./src/kernel/math.ts",
     "./kernel/codec": "./src/kernel/codec.ts",
     "./kernel/identity": "./src/kernel/identity.ts"

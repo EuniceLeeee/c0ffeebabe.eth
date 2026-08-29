@@ -1,4 +1,72 @@
-export type Address=`0x${string}`;export interface TokenDelta{readonly token:Address;readonly account:Address;readonly delta:bigint}export interface AstraEffectProgram{readonly caller:Address;readonly executionMode:"impersonated-internal-call-frame";readonly observeTokenBalances:readonly{readonly token:Address;readonly account:Address}[];readonly observeLogs:true}
-function addr(v:string):Address{if(!/^0x[0-9a-fA-F]{40}$/.test(v))throw new TypeError("invalid address");return v.toLowerCase()as Address;}function sum(ds:readonly TokenDelta[],t:string,a:string):bigint{const nt=addr(t),na=addr(a);return ds.reduce((s,d)=>addr(d.token)===nt&&addr(d.account)===na?s+d.delta:s,0n);}function pairs(i:{caller:string;target:string;tokenIn:string;tokenOut:string}){const c=addr(i.caller),t=addr(i.target);return[{token:addr(i.tokenIn),account:c},{token:addr(i.tokenIn),account:t},{token:addr(i.tokenOut),account:c},{token:addr(i.tokenOut),account:t}]as const;}
-export function astraEffectProgram(i:{caller:string;target:string;tokenIn:string;tokenOut:string}):AstraEffectProgram{return Object.freeze({caller:addr(i.caller),executionMode:"impersonated-internal-call-frame",observeTokenBalances:Object.freeze([...pairs(i)].sort((a,b)=>a.token.localeCompare(b.token)||a.account.localeCompare(b.account))),observeLogs:true});}
-export function validateAstraExchange(i:{tokenDeltas:readonly TokenDelta[];caller:string;target:string;tokenIn:string;tokenOut:string;amountIn:bigint;amountOut:bigint}):bigint{if(i.amountIn<=0n||i.amountOut<=0n)throw new RangeError("amounts must be positive");const allowed=new Set(pairs(i).map(p=>`${p.token}:${p.account}`));if(i.tokenDeltas.some(d=>d.delta!==0n&&!allowed.has(`${addr(d.token)}:${addr(d.account)}`)))throw new Error("unowned token/account delta");if(sum(i.tokenDeltas,i.tokenIn,i.caller)!==-i.amountIn||sum(i.tokenDeltas,i.tokenIn,i.target)!==i.amountIn||sum(i.tokenDeltas,i.tokenOut,i.caller)!==i.amountOut||sum(i.tokenDeltas,i.tokenOut,i.target)!==-i.amountOut)throw new Error("four-party conservation failed");return i.amountOut;}
+export type Address = `0x${string}`;
+
+export interface TokenDelta {
+  readonly token: Address;
+  readonly account: Address;
+  readonly delta: bigint;
+}
+
+export interface AstraEffectProgram {
+  readonly caller: Address;
+  readonly executionMode: "impersonated-call-frame";
+  readonly observeTokenBalances: readonly { readonly token: Address; readonly account: Address }[];
+  readonly observeLogs: true;
+}
+
+function addr(value: string): Address {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value)) throw new TypeError("invalid address");
+  return value.toLowerCase() as Address;
+}
+
+function pairs(input: { readonly caller: string; readonly target: string; readonly tokenIn: string; readonly tokenOut: string }) {
+  const caller = addr(input.caller);
+  const target = addr(input.target);
+  const tokenIn = addr(input.tokenIn);
+  const tokenOut = addr(input.tokenOut);
+  if (caller === target || tokenIn === tokenOut) throw new TypeError("Astra effect scope is not distinct");
+  return [
+    { token: tokenIn, account: caller },
+    { token: tokenIn, account: target },
+    { token: tokenOut, account: caller },
+    { token: tokenOut, account: target },
+  ] as const;
+}
+
+function sum(deltas: readonly TokenDelta[], token: string, account: string): bigint {
+  const expectedToken = addr(token);
+  const expectedAccount = addr(account);
+  return deltas.reduce(
+    (total, delta) => addr(delta.token) === expectedToken && addr(delta.account) === expectedAccount ? total + delta.delta : total,
+    0n,
+  );
+}
+
+export function astraEffectProgram(input: { readonly caller: string; readonly target: string; readonly tokenIn: string; readonly tokenOut: string }): AstraEffectProgram {
+  return Object.freeze({
+    caller: addr(input.caller),
+    executionMode: "impersonated-call-frame" as const,
+    observeTokenBalances: Object.freeze([...pairs(input)].sort((left, right) => left.token.localeCompare(right.token) || left.account.localeCompare(right.account))),
+    observeLogs: true as const,
+  });
+}
+
+/** Require exactly the four declared token/account segments; aggregation is not a valid observation. */
+export function validateAstraExchange(input: { readonly tokenDeltas: readonly TokenDelta[]; readonly caller: string; readonly target: string; readonly tokenIn: string; readonly tokenOut: string; readonly amountIn: bigint; readonly amountOut: bigint }): bigint {
+  if (input.amountIn <= 0n || input.amountOut <= 0n) throw new RangeError("amounts must be positive");
+  const expected = pairs(input);
+  const expectedKeys = new Set(expected.map(pair => `${pair.token}:${pair.account}`));
+  if (input.tokenDeltas.length !== expected.length) throw new Error("Astra token/account observation cardinality mismatch");
+  const actualKeys = input.tokenDeltas.map(delta => {
+    const key = `${addr(delta.token)}:${addr(delta.account)}`;
+    if (!expectedKeys.has(key)) throw new Error("unowned token/account delta");
+    return key;
+  });
+  if (new Set(actualKeys).size !== expectedKeys.size) throw new Error("duplicate token/account delta");
+  if (
+    sum(input.tokenDeltas, input.tokenIn, input.caller) !== -input.amountIn
+    || sum(input.tokenDeltas, input.tokenIn, input.target) !== input.amountIn
+    || sum(input.tokenDeltas, input.tokenOut, input.caller) !== input.amountOut
+    || sum(input.tokenDeltas, input.tokenOut, input.target) !== -input.amountOut
+  ) throw new Error("four-party conservation failed");
+  return input.amountOut;
+}

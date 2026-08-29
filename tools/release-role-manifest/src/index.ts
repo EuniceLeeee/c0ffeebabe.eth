@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, relative, resolve, sep } from "node:path";
 import * as ts from "typescript";
+import { COMMON_ENVELOPE_ROLE_CONTRACT_VERSION } from "../../../specs/qualification/src/index.ts";
 
 export type Hash = `0x${string}`;
 
@@ -17,7 +18,9 @@ export interface RoleBindingInputV1 {
  */
 export interface ReleaseCompositionInputV1 {
   readonly schemaVersion: 1;
+  readonly commonEnvelopeRoleContractVersion: string;
   readonly genericCore: RoleBindingInputV1;
+  readonly qualifiedRunner: RoleBindingInputV1;
   readonly releaseRuntime: RoleBindingInputV1;
   readonly predicateAdapters: readonly PredicateCompositionInputV1[];
 }
@@ -33,6 +36,9 @@ export interface PredicateCompositionInputV1 {
   readonly exportName: string;
   readonly oracleModulePath: string;
   readonly oracleExportName: string;
+  readonly materialProviderModulePath: string;
+  readonly materialProviderExportName: string;
+  readonly materialProviderContractDigest: Hash;
 }
 
 /**
@@ -53,18 +59,29 @@ export interface PredicateCompositionLeafInputV2 {
   readonly oracleExportName: string;
   readonly predicateImplementationExportDigest: Hash;
   readonly oracleImplementationExportDigest: Hash;
+  readonly materialProviderModulePath: string;
+  readonly materialProviderExportName: string;
+  readonly materialProviderContractDigest: Hash;
+  readonly materialProviderImplementationExportDigest: Hash;
 }
 
 export interface GeneratedPredicateCompositionBindingV1 extends PredicateCompositionInputV1, PredicateCompositionLeafInputV2 {
+  readonly commonEnvelopeRoleContractVersion: string;
   readonly compositionLeafDigest: Hash;
 }
 
 export interface GeneratedReleaseRoleManifestV1 {
   readonly schemaVersion: 1;
+  readonly commonEnvelopeRoleContractVersion: string;
   readonly genericCore: RoleBindingInputV1 & { readonly entrypointId: string };
+  readonly qualifiedRunner: RoleBindingInputV1 & {
+    readonly entrypointId: string;
+    readonly implementationExportDigest: Hash;
+  };
   readonly predicateAdapters: readonly (GeneratedPredicateCompositionBindingV1 & {
     readonly entrypointId: string;
     readonly oracleEntrypointId: string;
+    readonly materialProviderEntrypointId: string;
   })[];
   readonly releaseRuntime: RoleBindingInputV1 & { readonly entrypointId: string };
   readonly predicateCompositionRootDigest: Hash;
@@ -182,7 +199,7 @@ export function computeImplementationExportDigest(rootInput: string, binding: Ro
 }
 
 export function computePredicateCompositionLeafDigest(value: PredicateCompositionLeafInputV2): Hash {
-  return hashDomain("aloha/predicate-composition-leaf/v2", value);
+  return hashDomain("aloha/predicate-composition-leaf/v3", value);
 }
 
 function posixPath(value: string): string {
@@ -227,17 +244,15 @@ function assertNoDynamicLoaders(sourcePath: string, sourceFile: ts.SourceFile): 
       throw new TypeError(`dynamic import is not allowed in release closure: ${sourcePath}`);
     }
     if (ts.isCallExpression(node)) {
-      const calleeName = ts.isIdentifier(node.expression)
-        ? node.expression.text
-        : ts.isPropertyAccessExpression(node.expression) ? node.expression.name.text : null;
-      if (calleeName === "require") {
+      const directCalleeName = ts.isIdentifier(node.expression) ? node.expression.text : null;
+      if (directCalleeName === "require") {
         const argument = node.arguments.length === 1 ? node.arguments[0] : undefined;
         if (argument === undefined || (!ts.isStringLiteral(argument) && !ts.isNoSubstitutionTemplateLiteral(argument))) {
           throw new TypeError(`dynamic require is not allowed in release closure: ${sourcePath}`);
         }
         staticRequires.push(argument.text);
       }
-      if (calleeName === "createRequire" || calleeName === "eval" || calleeName === "Function" || calleeName === "Worker") {
+      if (directCalleeName === "createRequire" || directCalleeName === "eval" || directCalleeName === "Function" || directCalleeName === "Worker") {
         throw new TypeError(`dynamic loader is not allowed in release closure: ${sourcePath}`);
       }
     }
@@ -333,16 +348,17 @@ function assertBinding(value: unknown, label: string): RoleBindingInputV1 {
 function assertComposition(value: unknown): ReleaseCompositionInputV1 {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError("release composition must be an object");
   const record = value as Record<string, unknown>;
-  exactKeys(record, ["schemaVersion", "genericCore", "releaseRuntime", "predicateAdapters"], "release composition");
+  exactKeys(record, ["schemaVersion", "commonEnvelopeRoleContractVersion", "genericCore", "qualifiedRunner", "releaseRuntime", "predicateAdapters"], "release composition");
   if (record.schemaVersion !== 1) throw new TypeError("unsupported release composition schema");
+  if (record.commonEnvelopeRoleContractVersion !== COMMON_ENVELOPE_ROLE_CONTRACT_VERSION) throw new TypeError("unsupported common envelope role contract version");
   const rawEntries = record.predicateAdapters;
   if (!Array.isArray(rawEntries) || rawEntries.length === 0) throw new TypeError("release composition requires predicate adapters");
   const predicateAdapters: PredicateCompositionInputV1[] = [];
   for (const [index, raw] of rawEntries.entries()) {
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) throw new TypeError(`predicate adapter ${index} must be an object`);
     const entry = raw as Record<string, unknown>;
-    exactKeys(entry, ["predicateId", "predicateSpecDigest", "predicateProgramDescriptorDigest", "oracleProgramDescriptorDigest", "adapterVersion", "oracleVersion", "modulePath", "exportName", "oracleModulePath", "oracleExportName"], `predicate adapter ${index}`);
-    if (typeof entry.predicateId !== "string" || entry.predicateId.length === 0 || !isHash(entry.predicateSpecDigest) || !isHash(entry.predicateProgramDescriptorDigest) || !isHash(entry.oracleProgramDescriptorDigest) || typeof entry.adapterVersion !== "string" || entry.adapterVersion.length === 0 || typeof entry.oracleVersion !== "string" || entry.oracleVersion.length === 0 || typeof entry.modulePath !== "string" || typeof entry.exportName !== "string" || typeof entry.oracleModulePath !== "string" || typeof entry.oracleExportName !== "string") {
+    exactKeys(entry, ["predicateId", "predicateSpecDigest", "predicateProgramDescriptorDigest", "oracleProgramDescriptorDigest", "adapterVersion", "oracleVersion", "modulePath", "exportName", "oracleModulePath", "oracleExportName", "materialProviderModulePath", "materialProviderExportName", "materialProviderContractDigest"], `predicate adapter ${index}`);
+    if (typeof entry.predicateId !== "string" || entry.predicateId.length === 0 || !isHash(entry.predicateSpecDigest) || !isHash(entry.predicateProgramDescriptorDigest) || !isHash(entry.oracleProgramDescriptorDigest) || typeof entry.adapterVersion !== "string" || entry.adapterVersion.length === 0 || typeof entry.oracleVersion !== "string" || entry.oracleVersion.length === 0 || typeof entry.modulePath !== "string" || typeof entry.exportName !== "string" || typeof entry.oracleModulePath !== "string" || typeof entry.oracleExportName !== "string" || typeof entry.materialProviderModulePath !== "string" || typeof entry.materialProviderExportName !== "string" || !isHash(entry.materialProviderContractDigest)) {
       throw new TypeError(`predicate adapter ${index} has invalid binding`);
     }
     predicateAdapters.push(Object.freeze({
@@ -356,6 +372,9 @@ function assertComposition(value: unknown): ReleaseCompositionInputV1 {
       exportName: entry.exportName,
       oracleModulePath: entry.oracleModulePath,
       oracleExportName: entry.oracleExportName,
+      materialProviderModulePath: entry.materialProviderModulePath,
+      materialProviderExportName: entry.materialProviderExportName,
+      materialProviderContractDigest: entry.materialProviderContractDigest,
     }));
   }
   const sorted = [...predicateAdapters].sort((left, right) => left.predicateId.localeCompare(right.predicateId));
@@ -363,7 +382,9 @@ function assertComposition(value: unknown): ReleaseCompositionInputV1 {
   if (new Set(predicateAdapters.map((entry) => entry.predicateId)).size !== predicateAdapters.length) throw new TypeError("duplicate predicateId in release composition");
   return Object.freeze({
     schemaVersion: 1,
+    commonEnvelopeRoleContractVersion: record.commonEnvelopeRoleContractVersion,
     genericCore: assertBinding(record.genericCore, "genericCore"),
+    qualifiedRunner: assertBinding(record.qualifiedRunner, "qualifiedRunner"),
     releaseRuntime: assertBinding(record.releaseRuntime, "releaseRuntime"),
     predicateAdapters: Object.freeze(predicateAdapters),
   });
@@ -376,15 +397,17 @@ function directlyExportedNames(root: string, modulePath: string): ReadonlySet<st
   const names = new Set<string>();
   const exported = (node: ts.Node & { readonly modifiers?: ts.NodeArray<ts.ModifierLike> }): boolean =>
     Boolean(node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword));
+  const declared = (node: ts.Node & { readonly modifiers?: ts.NodeArray<ts.ModifierLike> }): boolean =>
+    Boolean(node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword));
   for (const statement of source.statements) {
-    if (ts.isVariableStatement(statement) && exported(statement)) {
+    if (ts.isVariableStatement(statement) && exported(statement) && !declared(statement)) {
       for (const declaration of statement.declarationList.declarations) {
-        if (ts.isIdentifier(declaration.name)) names.add(declaration.name.text);
+        if (ts.isIdentifier(declaration.name) && declaration.initializer !== undefined) names.add(declaration.name.text);
       }
-    } else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) || ts.isEnumDeclaration(statement)) && exported(statement) && statement.name !== undefined) {
+    } else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement))
+      && exported(statement) && !declared(statement) && statement.name !== undefined
+      && (!ts.isFunctionDeclaration(statement) || statement.body !== undefined)) {
       names.add(statement.name.text);
-    } else if (ts.isExportDeclaration(statement) && statement.moduleSpecifier === undefined && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
-      for (const element of statement.exportClause.elements) names.add(element.name.text);
     }
   }
   return names;
@@ -485,6 +508,7 @@ function staticCompositionValue(root: string, compositionPath: string): ReleaseC
         if (!ts.isPropertyAssignment(property) || ts.isComputedPropertyName(property.name)) throw new TypeError(`${path} composition contains a non-static property`);
         const key = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) ? property.name.text : null;
         if (key === null) throw new TypeError(`${path} composition contains a non-static property name`);
+        if (Object.prototype.hasOwnProperty.call(result, key)) throw new TypeError(`${path} composition contains duplicate property ${key}`);
         result[key] = literal(property.initializer);
       }
       return result;
@@ -623,8 +647,12 @@ function renderPredicateComposition(
   const evaluatorImports = entries.map((entry, index) =>
     `import { ${entry.exportName} as predicateEvaluator${index} } from ${JSON.stringify(moduleSpecifier(outputPath, entry.modulePath))};`,
   );
+  const materialProviderImports = entries.map((entry, index) =>
+    `import { ${entry.materialProviderExportName} as materialProvider${index} } from ${JSON.stringify(moduleSpecifier(outputPath, entry.materialProviderModulePath))};`,
+  );
   const bindings = entries.map((entry, index) => `  Object.freeze({
     predicateId: ${JSON.stringify(entry.predicateId)},
+    commonEnvelopeRoleContractVersion: ${JSON.stringify(entry.commonEnvelopeRoleContractVersion)},
     predicateSpecDigest: ${JSON.stringify(entry.predicateSpecDigest)},
     predicateProgramDescriptorDigest: ${JSON.stringify(entry.predicateProgramDescriptorDigest)},
     oracleProgramDescriptorDigest: ${JSON.stringify(entry.oracleProgramDescriptorDigest)},
@@ -633,11 +661,15 @@ function renderPredicateComposition(
     compositionLeafDigest: ${JSON.stringify(entry.compositionLeafDigest)},
     predicateImplementationExportDigest: ${JSON.stringify(entry.predicateImplementationExportDigest)},
     oracleImplementationExportDigest: ${JSON.stringify(entry.oracleImplementationExportDigest)},
+    materialProviderContractDigest: ${JSON.stringify(entry.materialProviderContractDigest)},
+    materialProviderImplementationExportDigest: ${JSON.stringify(entry.materialProviderImplementationExportDigest)},
     evaluator: predicateEvaluator${index},
+    materialProvider: materialProvider${index},
   })`).join(",\n");
   const evaluatorTypePath = moduleSpecifier(outputPath, "acceptance/gate-core/src/predicate-composition.ts");
   return `/* generated by tools/release-role-manifest; DO NOT EDIT */
 ${evaluatorImports.join("\n")}
+${materialProviderImports.join("\n")}
 import type { PredicateCompositionBindingV1 } from ${JSON.stringify(evaluatorTypePath)};
 export type { PredicateCompositionBindingV1 as ReleasePredicateBindingV1 };
 
@@ -661,31 +693,41 @@ function renderReleaseRuntime(): string {
   return `/* generated by tools/release-role-manifest; DO NOT EDIT */
 import {
   createReleaseAuthorityUnavailableResult,
-  evaluateGateCoreRuntime,
-  type GateCoreInputV1,
   type GateCoreResultV1,
 } from "../index.ts";
 import {
-  PREDICATE_COMPOSITION_ROOT_DIGEST,
-  resolvePredicateEvaluator,
-} from "./predicate-composition.ts";
-import { RELEASE_AUTHORITY } from "./release-authority.ts";
+  assertCommonEnvelopeAuthorityPortV1,
+  assembleReleasePredicateInvocationsV1,
+  evaluateAssembledReleaseInvocationsV1,
+  type AssembledReleaseInvocationSetCapabilityV1,
+  type CommonEnvelopeAuthorityPortV1,
+  type PredicateMaterialSourcePortV1,
+} from "../index.ts";
+import { RELEASE_PREDICATE_BINDINGS } from "./predicate-composition.ts";
 
-const RELEASE_COMPOSITION = Object.freeze({
-  rootDigest: PREDICATE_COMPOSITION_ROOT_DIGEST,
-  resolve: resolvePredicateEvaluator,
-});
-
-/** The generated package entrypoint is fail-closed until authority is qualified. */
+/** Candidate package entrypoint.  Candidate authority is permanently null;
+ * deployment acceptance runs only through the qualified release runner. */
 export function evaluateGateCore(_untrustedInput: unknown): GateCoreResultV1 {
-  if (RELEASE_AUTHORITY === null) return createReleaseAuthorityUnavailableResult();
-  const nowUnixNs = (BigInt(Date.now()) * 1_000_000n).toString();
-  return evaluateGateCoreRuntime(RELEASE_AUTHORITY, _untrustedInput, RELEASE_COMPOSITION, nowUnixNs);
+  return createReleaseAuthorityUnavailableResult();
 }
 
+/** Release-owned all-predicate material path.  Inputs are opaque ports and
+ * the generic assembler mechanically traverses the generated binding list. */
+export function assembleReleaseGateInvocations(
+  authority: CommonEnvelopeAuthorityPortV1,
+  source: PredicateMaterialSourcePortV1,
+): Promise<AssembledReleaseInvocationSetCapabilityV1> {
+  return assembleReleasePredicateInvocationsV1(authority, source, RELEASE_PREDICATE_BINDINGS);
+}
+
+export { evaluateAssembledReleaseInvocationsV1 as evaluateAssembledReleaseGateInvocations };
+export { assertCommonEnvelopeAuthorityPortV1 };
+
 export type {
-  GateCoreInputV1,
   GateCoreResultV1,
+  AssembledReleaseInvocationSetCapabilityV1,
+  CommonEnvelopeAuthorityPortV1,
+  PredicateMaterialSourcePortV1,
 } from "../index.ts";
 `;
 }
@@ -722,6 +764,7 @@ export async function generateReleaseRoleManifest(options: GenerateOptionsV1): P
   assertStaticCompositionSource(root, compositionPath);
   const composition = staticCompositionValue(root, compositionPath);
   assertDirectNamedExport(root, composition.genericCore);
+  assertDirectNamedExport(root, composition.qualifiedRunner);
   const genericCore = {
     ...composition.genericCore,
     entrypointId: compilerEntrypointId(root, composition.genericCore, false),
@@ -730,12 +773,21 @@ export async function generateReleaseRoleManifest(options: GenerateOptionsV1): P
     ...composition.releaseRuntime,
     entrypointId: compilerEntrypointId(root, composition.releaseRuntime, true),
   } as const;
+  const qualifiedRunnerPath = repoPath(root, composition.qualifiedRunner.modulePath);
+  const qualifiedRunner = {
+    ...composition.qualifiedRunner,
+    modulePath: qualifiedRunnerPath,
+    entrypointId: compilerEntrypointId(root, composition.qualifiedRunner, false),
+    implementationExportDigest: computeImplementationExportDigest(root, composition.qualifiedRunner),
+  } as const;
   const predicateAdapters: Array<GeneratedReleaseRoleManifestV1["predicateAdapters"][number]> = [];
   for (const entry of composition.predicateAdapters) {
     const adapterPath = repoPath(root, entry.modulePath);
     assertDirectNamedExport(root, { modulePath: adapterPath, exportName: entry.exportName });
     const oraclePath = repoPath(root, entry.oracleModulePath);
     assertDirectNamedExport(root, { modulePath: oraclePath, exportName: entry.oracleExportName });
+    const materialProviderPath = repoPath(root, entry.materialProviderModulePath);
+    assertDirectNamedExport(root, { modulePath: materialProviderPath, exportName: entry.materialProviderExportName });
     const predicateImplementationExportDigest = computeImplementationExportDigest(root, {
       modulePath: adapterPath,
       exportName: entry.exportName,
@@ -744,23 +796,32 @@ export async function generateReleaseRoleManifest(options: GenerateOptionsV1): P
       modulePath: oraclePath,
       exportName: entry.oracleExportName,
     });
+    const materialProviderImplementationExportDigest = computeImplementationExportDigest(root, {
+      modulePath: materialProviderPath,
+      exportName: entry.materialProviderExportName,
+    });
     const normalizedEntry = Object.freeze({
       ...entry,
       modulePath: adapterPath,
       oracleModulePath: oraclePath,
+      materialProviderModulePath: materialProviderPath,
     });
     const compositionLeafDigest = computePredicateCompositionLeafDigest({
       ...normalizedEntry,
       predicateImplementationExportDigest,
       oracleImplementationExportDigest,
+      materialProviderImplementationExportDigest,
     });
     predicateAdapters.push(Object.freeze({
       ...normalizedEntry,
+      commonEnvelopeRoleContractVersion: composition.commonEnvelopeRoleContractVersion,
       compositionLeafDigest,
       predicateImplementationExportDigest,
       oracleImplementationExportDigest,
+      materialProviderImplementationExportDigest,
       entrypointId: compilerEntrypointId(root, { modulePath: adapterPath, exportName: entry.exportName }, false),
       oracleEntrypointId: compilerEntrypointId(root, { modulePath: oraclePath, exportName: entry.oracleExportName }, false),
+      materialProviderEntrypointId: compilerEntrypointId(root, { modulePath: materialProviderPath, exportName: entry.materialProviderExportName }, false),
     }));
   }
   if (new Set(predicateAdapters.map((entry) => entry.compositionLeafDigest)).size !== predicateAdapters.length) {
@@ -769,7 +830,9 @@ export async function generateReleaseRoleManifest(options: GenerateOptionsV1): P
   const predicateCompositionRootDigest = computePredicateCompositionRootDigest(predicateAdapters);
   const manifestWithoutRoot = {
     schemaVersion: 1 as const,
+    commonEnvelopeRoleContractVersion: composition.commonEnvelopeRoleContractVersion,
     genericCore,
+    qualifiedRunner,
     predicateAdapters: Object.freeze(predicateAdapters),
     releaseRuntime,
     predicateCompositionRootDigest,
@@ -786,7 +849,7 @@ export async function generateReleaseRoleManifest(options: GenerateOptionsV1): P
   ];
   const generatedTextByPath = new Map([...generatedOutputs, ...fixedOutputs].map((output) => [repoPath(root, output.path), output.text] as const));
   const excluded = new Set([...generatedTextByPath.keys(), ledgerPath]);
-  const inputRoots = [compositionPath, composition.genericCore.modulePath, composition.releaseRuntime.modulePath, ...predicateAdapters.flatMap((entry) => [entry.modulePath, entry.oracleModulePath])];
+  const inputRoots = [compositionPath, composition.genericCore.modulePath, composition.qualifiedRunner.modulePath, composition.releaseRuntime.modulePath, ...predicateAdapters.flatMap((entry) => [entry.modulePath, entry.oracleModulePath, entry.materialProviderModulePath])];
   const inputSourcePaths = transitiveTrackedSources(root, inputRoots, excluded);
   const inputPaths = [...new Set([...inputSourcePaths, ...metadataInputsFor(root, inputSourcePaths)])].sort();
   const generatorSourcePaths = compilerSourceClosure(root, GENERATOR_SOURCE_PATHS);
@@ -902,7 +965,7 @@ export function verifyReleaseRoleManifestLedger(
   if (canonical(ledger.generatorFiles.map((record) => record.path)) !== canonical(expectedGeneratorPaths)) errors.push("generator-set");
   try {
     const composition = staticCompositionValue(root, ledger.compositionPath);
-    const inputRoots = [ledger.compositionPath, composition.genericCore.modulePath, composition.releaseRuntime.modulePath, ...composition.predicateAdapters.flatMap((entry) => [entry.modulePath, entry.oracleModulePath])];
+    const inputRoots = [ledger.compositionPath, composition.genericCore.modulePath, composition.qualifiedRunner.modulePath, composition.releaseRuntime.modulePath, ...composition.predicateAdapters.flatMap((entry) => [entry.modulePath, entry.oracleModulePath, entry.materialProviderModulePath])];
     const inputSources = transitiveTrackedSources(root, inputRoots, new Set(PRODUCTION_GENERATED_OUTPUT_PATHS));
     const expectedInputPaths = inputSources.concat(metadataInputsFor(root, inputSources)).filter((path, index, all) => all.indexOf(path) === index).sort();
     if (canonical(ledger.inputFiles.map((record) => record.path)) !== canonical(expectedInputPaths)) errors.push("input-set");

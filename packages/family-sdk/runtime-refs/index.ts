@@ -1,5 +1,6 @@
 import { assertHash, assertNonEmptyString, decodeExactObject, type Hash } from "../../canonical-codec/src/index.ts";
 import type { CapabilityId, CapabilityRefV1, CapabilityVersion, FamilyFactContractRefV1, OwnerRef, SchemaRef } from "../../capability-contracts/src/index.ts";
+import type { SourcePlanRefV1 } from "../../discovery/src/index.ts";
 
 export type FamilyId = string & { readonly __familyId: unique symbol };
 export type FamilyCandidateKey = Hash;
@@ -37,6 +38,8 @@ export interface GeneratedFamilyEntryV1 {
   readonly extensionRefs: readonly StageCapabilityRefV1[];
   readonly actionOwnerRefs: readonly ActionOwnerRef[];
   readonly factContractRefs: readonly FamilyFactContractRefV1[];
+  /** Exact generated source authority; deployment code cannot replace this set. */
+  readonly sourcePlanRefs: readonly SourcePlanRefV1[];
   readonly definitionCatalogLeafDigest: Hash;
   readonly capabilityCatalogRoot: Hash;
 }

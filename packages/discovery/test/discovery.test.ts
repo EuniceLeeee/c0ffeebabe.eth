@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import { hashDomain, sha256Hex, type Hash } from "../../canonical-codec/src/index.ts";
 import {
   candidatePartitionRoot,
   familyCandidateKey,
   mergeAndDedupeNominations,
   recentObservationRange,
   sealSourceCoverage,
+  sourcePlanEvidenceRoot,
+  sourcePlanDiscoveryRoot,
+  sourcePlanExecutionRoot,
+  decodeSourcePlanDiscoveryResult,
   validateSourceCoverageCertificate,
   type CandidateNominationV1,
   type CanonicalCutoffV1,
   type SourcePlanExecutionV1,
+  type SourcePlanEvidenceReceiptV1,
 } from "../src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/discovery", value);
@@ -22,11 +27,16 @@ const cutoff: CanonicalCutoffV1 = {
 };
 
 const nomination = (tx: string, logIndex: string): CandidateNominationV1 => ({
+  kind: "aloha.candidate-nomination",
+  version: "2",
   familyId: "family-a",
   familyDefinitionHash: h("definition"),
   instanceNominationKey: "target:0xabc",
-  candidateSnapshotHash: h("snapshot"),
   evidence: {
+    kind: "recent-log",
+    version: 1,
+    ownerRef: null,
+    sourcePlanRef: null,
     blockNumber: "100",
     blockHash: cutoff.hash,
     txHash: h(tx),
@@ -37,9 +47,10 @@ const nomination = (tx: string, logIndex: string): CandidateNominationV1 => ({
   },
 });
 
-test("recent observation is exactly 50 blocks and clamps only at genesis", () => {
+test("recent observation is exactly 50 blocks and rejects an unavailable early window", () => {
+  assert.deepEqual(recentObservationRange("49"), { from: "0", to: "49" });
   assert.deepEqual(recentObservationRange("100"), { from: "51", to: "100" });
-  assert.deepEqual(recentObservationRange("12"), { from: "0", to: "12" });
+  assert.throws(() => recentObservationRange("48"), /recent-observation-window-unavailable/);
 });
 
 test("candidate dedupe preserves every distinct evidence identity", () => {
@@ -61,9 +72,22 @@ test("same opaque candidate key with different payload fails closed", () => {
   assert.throws(
     () => mergeAndDedupeNominations([
       nomination("tx-a", "1"),
-      { ...nomination("tx-b", "2"), candidateSnapshotHash: h("changed") },
+      { ...nomination("tx-b", "2"), familyId: "family-b" },
     ]),
     /candidate-key-collision/,
+  );
+});
+
+test("v1 nomination and record wires are rejected", () => {
+  const current = nomination("tx-a", "1");
+  assert.throws(
+    () => mergeAndDedupeNominations([{ ...current, version: "1" } as unknown as CandidateNominationV1]),
+    /version/,
+  );
+  const record = mergeAndDedupeNominations([current])[0]!;
+  assert.throws(
+    () => candidatePartitionRoot([{ ...record, version: "1" } as unknown as typeof record]),
+    /version/,
   );
 });
 
@@ -105,20 +129,63 @@ const execution = (
   through: string,
   previousAppliedThrough: string | null,
   historyStartBlock: string | null = completeness === "contiguous-history" ? "0" : null,
-): SourcePlanExecutionV1 => ({
-  plan: {
+): SourcePlanExecutionV1 => {
+  const plan = {
     ownerRef: h(`owner:${completeness}`),
     sourcePlanRef: h(`plan:${completeness}`),
     familyDefinitionHash: h("definition"),
     completeness,
     historyStartBlock,
-  },
-  cutoff,
-  outcome: completeness === "nomination-only" ? "positive-only" : "complete",
-  from,
-  through,
-  previousAppliedThrough,
-  resultPartitionRoot: h(`partition:${completeness}`),
+  } as const;
+  const rawLocatorHash = sha256Hex(new TextEncoder().encode(`raw:${completeness}`));
+  const sourceEvidenceRefs = [{
+    kind: "source-plan" as const,
+    version: 1 as const,
+    ownerRef: plan.ownerRef,
+    sourcePlanRef: plan.sourcePlanRef,
+    evidenceRef: h(`evidence:${completeness}`),
+    rawLocatorHash,
+  }];
+  const sourceEvidenceRoot = sourcePlanEvidenceRoot({
+    plan,
+    cutoff,
+    refs: sourceEvidenceRefs,
+    rawLocatorHashes: [rawLocatorHash],
+  });
+  const base = {
+    kind: "source-plan-execution" as const,
+    version: 1 as const,
+    plan,
+    cutoff,
+    outcome: completeness === "nomination-only" ? "positive-only" as const : "complete" as const,
+    from,
+    through,
+    previousAppliedThrough,
+    resultPartitionRoot: h(`partition:${completeness}`),
+    opaqueResult: { kind: "test-source-result", completeness },
+    sourceEvidenceRefs,
+    rawLocatorHashes: [rawLocatorHash],
+    sourceEvidenceRoot,
+  };
+  return { ...base, executionRoot: sourcePlanExecutionRoot(base) };
+};
+
+const resealExecution = (
+  value: SourcePlanExecutionV1,
+  patch: Partial<Omit<SourcePlanExecutionV1, "executionRoot">>,
+): SourcePlanExecutionV1 => {
+  const next = { ...value, ...patch } as Omit<SourcePlanExecutionV1, "executionRoot">;
+  return { ...next, executionRoot: sourcePlanExecutionRoot(next) };
+};
+
+const sourceEvidenceReceipt = (value: SourcePlanExecutionV1): SourcePlanEvidenceReceiptV1 => ({
+  kind: "source-plan-evidence",
+  version: 1,
+  plan: value.plan,
+  cutoff: value.cutoff,
+  refs: value.sourceEvidenceRefs,
+  rawLocatorHashes: value.rawLocatorHashes,
+  evidenceRoot: value.sourceEvidenceRoot,
 });
 
 test("only complete snapshot/history advance omission authority", () => {
@@ -200,10 +267,10 @@ test("cursor gaps and transport failures never advance coverage", () => {
     /history-cursor-gap/,
   );
   assert.throws(
-    () => sealSourceCoverage(cutoff, [execution("complete-snapshot", "100", "100", null).plan], [{
-      ...execution("complete-snapshot", "100", "100", null),
-      outcome: "retryable",
-    }]),
+    () => sealSourceCoverage(cutoff, [execution("complete-snapshot", "100", "100", null).plan], [resealExecution(
+      execution("complete-snapshot", "100", "100", null),
+      { outcome: "retryable" },
+    )]),
     /source-retryable/,
   );
 });
@@ -284,4 +351,118 @@ test("source coverage rejects non-array entries, bad ranges, and forged complete
     () => sealSourceCoverage(cutoff, [multiBlockPoint.plan], [multiBlockPoint]),
     /point-lookup-incomplete/,
   );
+});
+
+test("source-plan evidence and opaque result are bound into execution and discovery roots", () => {
+  const value = execution("complete-snapshot", "100", "100", null);
+  const receipt = sourceEvidenceReceipt(value);
+  const rawBytes = new TextEncoder().encode("raw:complete-snapshot");
+  const raw = {
+    kind: "raw-evidence-locator" as const,
+    version: 1 as const,
+    rawLocatorHash: value.rawLocatorHashes[0]!,
+    bytes: rawBytes,
+  };
+  const discoveryRoot = sourcePlanDiscoveryRoot({ executions: [value], evidence: [receipt], rawEvidenceLocators: [raw] });
+  const discovered = decodeSourcePlanDiscoveryResult({
+    kind: "source-plan-discovery",
+    version: 1,
+    executions: [value],
+    evidence: [receipt],
+    rawEvidenceLocators: [raw],
+    discoveryRoot,
+  });
+  assert.equal(discovered.discoveryRoot, discoveryRoot);
+  assert.throws(
+    () => sourcePlanEvidenceRoot({
+      plan: value.plan,
+      cutoff: value.cutoff,
+      refs: value.sourceEvidenceRefs,
+      rawLocatorHashes: [value.rawLocatorHashes[0]!, value.rawLocatorHashes[0]!],
+    }),
+    /locators contain duplicates/,
+  );
+  assert.throws(
+    () => decodeSourcePlanDiscoveryResult({
+      ...discovered,
+      executions: [{ ...value, opaqueResult: { kind: "tampered" } }],
+      discoveryRoot,
+    }),
+    /executionRoot mismatch/,
+  );
+  assert.throws(
+    () => decodeSourcePlanDiscoveryResult({
+      ...discovered,
+      evidence: [{ ...receipt, refs: [] }],
+      discoveryRoot,
+    }),
+    /evidenceRoot mismatch|evidence\/execution mismatch/,
+  );
+  assert.throws(
+    () => decodeSourcePlanDiscoveryResult({
+      ...discovered,
+      rawEvidenceLocators: [],
+      discoveryRoot,
+    }),
+    /does not exactly match|discoveryRoot mismatch/,
+  );
+  assert.throws(
+    () => decodeSourcePlanDiscoveryResult({
+      ...discovered,
+      rawEvidenceLocators: [{ ...raw, bytes: new TextEncoder().encode("changed") }],
+      discoveryRoot,
+    }),
+    /hash mismatch/,
+  );
+});
+
+test("recomputed roots cannot move an execution across its declared plan or cutoff", () => {
+  const original = execution("complete-snapshot", "100", "100", null);
+  const alteredPlan = { ...original.plan, sourcePlanRef: h("other-plan") };
+  const alteredRefs = original.sourceEvidenceRefs.map(ref => ({ ...ref, sourcePlanRef: alteredPlan.sourcePlanRef }));
+  const altered = resealExecution(original, {
+    plan: alteredPlan,
+    sourceEvidenceRefs: alteredRefs,
+    sourceEvidenceRoot: sourcePlanEvidenceRoot({
+      plan: alteredPlan,
+      cutoff: original.cutoff,
+      refs: alteredRefs,
+      rawLocatorHashes: original.rawLocatorHashes,
+    }),
+  });
+  assert.throws(
+    () => sealSourceCoverage(cutoff, [original.plan], [altered]),
+    /undeclared-source-partition/,
+  );
+  const alteredCutoff = { ...cutoff, hash: h("other-cutoff") };
+  const cutoffAltered = resealExecution(original, {
+    cutoff: alteredCutoff,
+    sourceEvidenceRoot: sourcePlanEvidenceRoot({
+      plan: original.plan,
+      cutoff: alteredCutoff,
+      refs: original.sourceEvidenceRefs,
+      rawLocatorHashes: original.rawLocatorHashes,
+    }),
+  });
+  assert.throws(
+    () => sealSourceCoverage(cutoff, [original.plan], [cutoffAltered]),
+    /coverage-cutoff-mismatch/,
+  );
+});
+
+test("candidate dedupe keeps recent-log and source-plan evidence instead of collapsing by candidate key", () => {
+  const source = execution("complete-snapshot", "100", "100", null);
+  const records = mergeAndDedupeNominations([
+    nomination("tx-a", "1"),
+    {
+      kind: "aloha.candidate-nomination",
+      version: "2",
+      familyId: "family-a",
+      familyDefinitionHash: h("definition"),
+      instanceNominationKey: "target:0xabc",
+      evidence: source.sourceEvidenceRefs[0]!,
+    },
+  ]);
+  assert.equal(records.length, 1);
+  assert.deepEqual(new Set(records[0]!.evidence.map(item => item.kind)), new Set(["recent-log", "source-plan"]));
 });

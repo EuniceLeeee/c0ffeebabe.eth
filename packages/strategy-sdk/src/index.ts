@@ -71,6 +71,60 @@ export interface LoopIntentV1 {
   readonly legs: readonly RouteLegIntentV1[];
 }
 
+/**
+ * Build-time Strategy data.  A Strategy must not bake asset identities from a
+ * fixture into the release catalog: the concrete LoopIntent is issued later
+ * from the active GraphView.  This template is therefore deliberately about
+ * graph topology and generic constraints only.
+ */
+export interface ClosedLoopPlanningTemplateV1 {
+  readonly kind: "closed-loop-template";
+  readonly entryAssetPolicy: "any-graph-asset";
+  readonly minLegs: string;
+  readonly maxLegs: string;
+  readonly candidateLimit: string;
+  readonly edgeReuse: "forbid";
+  readonly constraintSchemaRefs: readonly SchemaRef[];
+}
+
+/** Neutral planning output shared by Strategy plugins and the generated
+ * runtime composition.  The binding/edge payloads are opaque at this layer;
+ * Strategy code may only consume the trigger's owner-issued objective and
+ * affected set. */
+export interface ClosedLoopPlanningProblemDraftV1 {
+  readonly kind: "closed-loop";
+  readonly objectiveRef: Hash;
+  readonly entryAssetRef: Hash;
+  readonly returnAssetRef: Hash;
+  readonly minLegs: string;
+  readonly maxLegs: string;
+  readonly candidateLimit: string;
+  readonly edgeReuse: "forbid";
+  readonly requiredAnchorEdgeIds: readonly Hash[];
+  readonly constraintSchemaRefs: readonly Hash[];
+}
+
+export interface StrategyPlanningProblemIssuerV1 {
+  readonly strategyId: string;
+  readonly version: string;
+  readonly planningTemplateHash: Hash;
+  readonly issue: (input: {
+    readonly template: ClosedLoopPlanningTemplateV1;
+    readonly binding: unknown;
+    readonly edges: readonly unknown[];
+    readonly trigger: {
+      readonly objectiveRef: Hash;
+      readonly entryAssetRef: Hash;
+      readonly returnAssetRef: Hash;
+      readonly affectedEdgeIds: readonly Hash[];
+    };
+  }) => ClosedLoopPlanningProblemDraftV1;
+}
+
+export function strategyPlanningTemplateHash(template: ClosedLoopPlanningTemplateV1): Hash {
+  return hashDomain("aloha/strategy-planning-template/v1", template);
+}
+
 export interface StrategyAuthoringDefinitionV1 {
   readonly strategyId: string;
   readonly version: string;
@@ -79,7 +133,7 @@ export interface StrategyAuthoringDefinitionV1 {
   readonly planningProblemIssuer: PlanningProblemIssuerRefV1;
   readonly constraintSchemaRefs: readonly SchemaRef[];
   readonly factContractRefs: readonly SchemaRef[];
-  readonly loopIntent: LoopIntentV1;
+  readonly planningTemplate: ClosedLoopPlanningTemplateV1;
   /** Direct static public entry used by the release-intent compiler. */
   readonly modulePath: string;
   readonly exportName: string;
@@ -94,7 +148,7 @@ export interface GeneratedStrategyCatalogLeafV1 extends SharedGeneratedStrategyE
   readonly strategyVersion: CapabilityVersion;
   readonly requestedCapabilityDependencyRoot: Hash;
   readonly implementationClosureRoot: Hash;
-  readonly loopIntent: LoopIntentV1;
+  readonly planningTemplate: ClosedLoopPlanningTemplateV1;
 }
 
 export interface StrategyCompilationResultV1 {
@@ -178,31 +232,28 @@ function issuer(value: unknown, path: string): PlanningProblemIssuerRefV1 {
   });
 }
 
-function routeLeg(value: unknown, path: string): RouteLegIntentV1 {
-  const record = exactObject(value, ["fromAssetRef", "toAssetRef", "selectionRef", "requiredCapabilityPredicates"], path);
+function planningTemplate(value: unknown, path: string): ClosedLoopPlanningTemplateV1 {
+  const record = exactObject(value, ["kind", "entryAssetPolicy", "minLegs", "maxLegs", "candidateLimit", "edgeReuse", "constraintSchemaRefs"], path);
+  if (record.kind !== "closed-loop-template") throw new TypeError(`unsupported planning template kind at ${path}.kind`);
+  if (record.entryAssetPolicy !== "any-graph-asset") throw new TypeError(`unsupported entry asset policy at ${path}.entryAssetPolicy`);
+  if (record.edgeReuse !== "forbid") throw new TypeError(`unsupported edge reuse policy at ${path}.edgeReuse`);
+  const minLegs = assertNonEmptyString(record.minLegs, `${path}.minLegs`);
+  const maxLegs = assertNonEmptyString(record.maxLegs, `${path}.maxLegs`);
+  const candidateLimit = assertNonEmptyString(record.candidateLimit, `${path}.candidateLimit`);
+  if (!/^[1-9][0-9]*$/.test(minLegs) || !/^[1-9][0-9]*$/.test(maxLegs) || !/^[1-9][0-9]*$/.test(candidateLimit)) {
+    throw new TypeError(`planning leg bounds must be positive canonical decimals at ${path}`);
+  }
+  if (BigInt(minLegs) < 2n || BigInt(maxLegs) < BigInt(minLegs)) {
+    throw new TypeError(`invalid closed-loop planning leg bounds at ${path}`);
+  }
   return Object.freeze({
-    fromAssetRef: assertHash(record.fromAssetRef, `${path}.fromAssetRef`),
-    toAssetRef: assertHash(record.toAssetRef, `${path}.toAssetRef`),
-    selectionRef: assertHash(record.selectionRef, `${path}.selectionRef`),
-    requiredCapabilityPredicates: predicates(record.requiredCapabilityPredicates, `${path}.requiredCapabilityPredicates`),
-  });
-}
-
-function loopIntent(value: unknown, path: string): LoopIntentV1 {
-  const record = exactObject(value, ["kind", "entryAssetRef", "returnAssetRef", "objectiveRef", "constraintSchemaRefs", "legs"], path);
-  if (record.kind !== "closed-loop") throw new TypeError(`unsupported loop intent kind at ${path}.kind`);
-  const legs = fieldArray(record.legs, (item, itemPath) => routeLeg(item, itemPath), `${path}.legs`);
-  if (legs.length === 0) throw new TypeError(`loop intent must contain at least one leg at ${path}.legs`);
-  const entryAssetRef = assertHash(record.entryAssetRef, `${path}.entryAssetRef`);
-  const returnAssetRef = assertHash(record.returnAssetRef, `${path}.returnAssetRef`);
-  if (entryAssetRef !== returnAssetRef) throw new TypeError(`closed-loop entry/return asset mismatch at ${path}`);
-  return Object.freeze({
-    kind: "closed-loop" as const,
-    entryAssetRef,
-    returnAssetRef,
-    objectiveRef: assertHash(record.objectiveRef, `${path}.objectiveRef`),
+    kind: "closed-loop-template" as const,
+    entryAssetPolicy: "any-graph-asset" as const,
+    minLegs,
+    maxLegs,
+    candidateLimit,
+    edgeReuse: "forbid" as const,
     constraintSchemaRefs: hashArray(record.constraintSchemaRefs, `${path}.constraintSchemaRefs`),
-    legs: Object.freeze(legs),
   });
 }
 
@@ -215,7 +266,7 @@ export function normalizeStrategyDefinition(value: unknown, path = "strategy"): 
     "planningProblemIssuer",
     "constraintSchemaRefs",
     "factContractRefs",
-    "loopIntent",
+    "planningTemplate",
     "modulePath",
     "exportName",
   ], path);
@@ -224,18 +275,7 @@ export function normalizeStrategyDefinition(value: unknown, path = "strategy"): 
   const version = assertNonEmptyString(record.version, `${path}.version`);
   if (!VERSION_RE.test(version)) throw new TypeError(`invalid strategy version at ${path}.version`);
   const requiredCapabilityPredicates = predicates(record.requiredCapabilityPredicates, `${path}.requiredCapabilityPredicates`);
-  const normalizedLoopIntent = loopIntent(record.loopIntent, `${path}.loopIntent`);
-  const declaredById = new Map(requiredCapabilityPredicates.map(predicate => [predicate.capabilityId, predicate] as const));
-  for (const [legIndex, leg] of normalizedLoopIntent.legs.entries()) {
-    for (const legPredicate of leg.requiredCapabilityPredicates) {
-      const declared = declaredById.get(legPredicate.capabilityId);
-      if (declared === undefined
-        || declared.minimumVersion !== legPredicate.minimumVersion
-        || JSON.stringify(declared.schemaRefs) !== JSON.stringify(legPredicate.schemaRefs)) {
-        throw new TypeError(`leg capability predicate must exactly match a top-level declaration at ${path}.loopIntent.legs[${legIndex}]`);
-      }
-    }
-  }
+  const normalizedPlanningTemplate = planningTemplate(record.planningTemplate, `${path}.planningTemplate`);
   return deepFreeze({
     strategyId,
     version,
@@ -244,7 +284,7 @@ export function normalizeStrategyDefinition(value: unknown, path = "strategy"): 
     planningProblemIssuer: issuer(record.planningProblemIssuer, `${path}.planningProblemIssuer`),
     constraintSchemaRefs: hashArray(record.constraintSchemaRefs, `${path}.constraintSchemaRefs`),
     factContractRefs: hashArray(record.factContractRefs, `${path}.factContractRefs`),
-    loopIntent: normalizedLoopIntent,
+    planningTemplate: normalizedPlanningTemplate,
     modulePath: staticPath(record.modulePath, `${path}.modulePath`),
     exportName: staticExport(record.exportName, `${path}.exportName`),
   });
@@ -336,7 +376,7 @@ export function compileStrategy(
     strategyVersion: asCapabilityVersion(normalized.version),
     requestedCapabilityDependencyRoot,
     implementationClosureRoot: normalized.pluginCodeHash,
-    loopIntent: normalized.loopIntent,
+    planningTemplate: normalized.planningTemplate,
   };
   const definitionCatalogLeafDigest = catalogLeafDigest({
     leafId: `strategy:${normalized.strategyId}`,
@@ -366,7 +406,7 @@ function generatedEntry(value: unknown, path: string): GeneratedStrategyCatalogL
     "strategyVersion",
     "requestedCapabilityDependencyRoot",
     "implementationClosureRoot",
-    "loopIntent",
+    "planningTemplate",
   ], path);
   const refs = fieldArray(record.requiredCapabilityRefs, (item, itemPath) => normalizeCapabilityRef(item as CapabilityRefV1, itemPath), `${path}.requiredCapabilityRefs`);
   if (new Set(refs.map(ref => ref.capabilityId)).size !== refs.length) throw new TypeError(`duplicate capability ref at ${path}`);
@@ -382,7 +422,7 @@ function generatedEntry(value: unknown, path: string): GeneratedStrategyCatalogL
     strategyVersion: asCapabilityVersion(record.strategyVersion as string, `${path}.strategyVersion`),
     requestedCapabilityDependencyRoot: assertHash(record.requestedCapabilityDependencyRoot, `${path}.requestedCapabilityDependencyRoot`),
     implementationClosureRoot: assertHash(record.implementationClosureRoot, `${path}.implementationClosureRoot`),
-    loopIntent: loopIntent(record.loopIntent, `${path}.loopIntent`),
+    planningTemplate: planningTemplate(record.planningTemplate, `${path}.planningTemplate`),
   });
   if (!STRATEGY_ID_RE.test(entry.strategyId)) throw new TypeError(`invalid strategy id at ${path}.strategyId`);
   if (capabilityRoot(entry.requiredCapabilityRefs) !== entry.requestedCapabilityDependencyRoot) {

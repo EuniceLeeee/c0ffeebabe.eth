@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  asCapabilityId,
   asCapabilityVersion,
   asOwnerRef,
   asSchemaRef,
@@ -38,28 +39,27 @@ test("strategy authoring is protocol-neutral and canonical", () => {
   assert.deepEqual(normalized.requiredCapabilityPredicates, ROUTE_CYCLE_STRATEGY.requiredCapabilityPredicates);
   assert.equal(encodeStrategyDefinition(normalized), encodeStrategyDefinition(ROUTE_CYCLE_STRATEGY));
   assert.equal(Object.isFrozen(normalized), true);
-  assert.equal(Object.isFrozen(normalized.loopIntent), true);
+  assert.equal(Object.isFrozen(normalized.planningTemplate), true);
 });
 
 test("compiler resolves only qualified capability refs and emits data-only leaf", () => {
   const result = compileStrategy(ROUTE_CYCLE_STRATEGY, qualifiedRefs());
   assert.equal(result.entry.strategyId, "route-cycle");
-  assert.equal(result.entry.loopIntent.kind, "closed-loop");
-  assert.equal(result.entry.requiredCapabilityRefs.length, 2);
-  assert.equal(result.entry.requiredCapabilityRefs.some(ref => ref.capabilityId === "graph-transition"), true);
+  assert.equal(result.entry.planningTemplate.kind, "closed-loop-template");
+  assert.equal(result.entry.requiredCapabilityRefs.length, 0);
   assert.equal(Object.values(result.entry).some(value => typeof value === "function"), false);
   validateStrategyCatalog(sealStrategyCatalog([result.entry]));
 });
 
-test("capability mutation changes only the strategy dependency/leaf closure", () => {
-  const refs = [...qualifiedRefs()];
-  const before = compileStrategy(ROUTE_CYCLE_STRATEGY, refs).entry;
-  refs[0] = Object.freeze({ ...refs[0]!, interpreterHash: hash("test/changed-interpreter/v1", refs[0]!.capabilityId) });
-  const after = compileStrategy(ROUTE_CYCLE_STRATEGY, refs).entry;
+test("planning-template mutation changes only the Strategy leaf closure", () => {
+  const before = compileStrategy(ROUTE_CYCLE_STRATEGY, []).entry;
+  const after = compileStrategy(defineStrategy({
+    ...ROUTE_CYCLE_STRATEGY,
+    planningTemplate: { ...ROUTE_CYCLE_STRATEGY.planningTemplate, maxLegs: "5" },
+  }), []).entry;
   assert.notEqual(before.strategyDefinitionHash, after.strategyDefinitionHash);
-  assert.notEqual(before.requestedCapabilityDependencyRoot, after.requestedCapabilityDependencyRoot);
+  assert.equal(before.requestedCapabilityDependencyRoot, after.requestedCapabilityDependencyRoot);
   assert.notEqual(before.definitionCatalogLeafDigest, after.definitionCatalogLeafDigest);
-  assert.equal(before.loopIntent.entryAssetRef, after.loopIntent.entryAssetRef);
 });
 
 test("adding an unrelated future strategy changes catalog root, not an existing strategy leaf", () => {
@@ -73,7 +73,7 @@ test("adding an unrelated future strategy changes catalog root, not an existing 
     planningProblemIssuer: {
       ...ROUTE_CYCLE_STRATEGY.planningProblemIssuer,
       modulePath: "strategies/future-independent/src/index.ts",
-      exportName: "FUTURE_INDEPENDENT_STRATEGY",
+      exportName: "FUTURE_INDEPENDENT_PLANNING_PROBLEM_ISSUER",
       ownerRef: asOwnerRef(hash("test/future-issuer/v1", "future-independent")),
     },
   }), qualifiedRefs()).entry;
@@ -84,30 +84,37 @@ test("adding an unrelated future strategy changes catalog root, not an existing 
 });
 
 test("strategy compiler rejects absent or non-exact capability versions", () => {
-  const refs = qualifiedRefs();
-  assert.throws(() => compileStrategy(ROUTE_CYCLE_STRATEGY, refs.slice(1)), /missing capability ref/);
-  const changed = refs.map(ref => ref.capabilityId === "graph-transition"
-    ? { ...ref, version: "1.0.1" as typeof ref.version }
-    : ref);
-  assert.throws(() => compileStrategy(ROUTE_CYCLE_STRATEGY, changed), /exactly satisfy/);
+  const capabilityId = asCapabilityId("generic-state-read");
+  const schemaRef = asSchemaRef(hash("test/strategy-schema/v1", capabilityId));
+  const definition = defineStrategy({
+    ...ROUTE_CYCLE_STRATEGY,
+    requiredCapabilityPredicates: [{ capabilityId, minimumVersion: asCapabilityVersion("1.0.0"), schemaRefs: [schemaRef] }],
+  });
+  assert.throws(() => compileStrategy(definition, []), /missing capability ref/);
+  const ref: CapabilityRefV1 = Object.freeze({
+    capabilityId,
+    version: asCapabilityVersion("1.0.1"),
+    schemaHash: schemaRef,
+    interpreterHash: hash("test/strategy-interpreter/v1", capabilityId),
+    ownerRef: asOwnerRef(hash("test/strategy-owner/v1", capabilityId)),
+  });
+  assert.throws(() => compileStrategy(definition, [ref]), /exactly satisfy/);
 });
 
-test("every per-leg capability predicate is an exact subset of the top-level closure", () => {
+test("planning template rejects fixture assets and invalid bounds", () => {
   const definition = structuredClone(ROUTE_CYCLE_STRATEGY) as unknown as StrategyAuthoringDefinitionV1;
-  const firstLeg = definition.loopIntent.legs[0]!;
   assert.throws(() => normalizeStrategyDefinition({
     ...definition,
-    loopIntent: {
-      ...definition.loopIntent,
-      legs: [{
-        ...firstLeg,
-        requiredCapabilityPredicates: [{
-          ...firstLeg.requiredCapabilityPredicates[0]!,
-          minimumVersion: asCapabilityVersion("2.0.0"),
-        }],
-      }, ...definition.loopIntent.legs.slice(1)],
-    },
-  }), /exactly match a top-level declaration/);
+    planningTemplate: { ...definition.planningTemplate, minLegs: "5", maxLegs: "4" },
+  }), /invalid closed-loop planning leg bounds/);
+  assert.throws(() => normalizeStrategyDefinition({
+    ...definition,
+    planningTemplate: { ...definition.planningTemplate, entryAssetRef: hash("test/fixture-asset/v1", "x") } as never,
+  }), /non-exact keys/);
+  assert.throws(() => normalizeStrategyDefinition({
+    ...definition,
+    planningTemplate: { ...definition.planningTemplate, objectiveRef: hash("test/legacy-objective/v1", "x") } as never,
+  }), /non-exact keys/);
 });
 
 test("catalog rejects forged leaf and duplicate strategy id", () => {

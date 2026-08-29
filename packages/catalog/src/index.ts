@@ -2,15 +2,24 @@ import {
   assertDecimalString,
   assertHash,
   assertNonEmptyString,
+  decodeCanonicalJson,
   decodeExactObject,
   deepFreeze,
+  encodeCanonicalJson,
   fieldArray,
   hashDomain,
   type Hash,
+  type CanonicalJson,
 } from "../../canonical-codec/src/index.ts";
 import { decodeCanonicalCutoff, type CanonicalCutoffV1 } from "../../discovery/src/index.ts";
+import {
+  assertAssetReferenceMatchesV1,
+  decodeAssetIdentityV1,
+  type AssetIdentityV1,
+} from "../../asset-ref/src/index.ts";
 
 export interface AssetPortV1 {
+  readonly assetIdentity: AssetIdentityV1;
   readonly assetRef: Hash;
   readonly portRef: Hash;
   readonly ordinal: string;
@@ -34,6 +43,8 @@ export interface InstancePublicationDraftV1 {
   readonly familyCandidateKey: Hash;
   readonly instanceKey: string;
   readonly cutoff: CanonicalCutoffV1;
+  /** Family-owned canonical value. Central code persists and hashes it but never interprets it. */
+  readonly identityMemo: CanonicalJson;
   readonly identityMemoHash: Hash;
   readonly descriptorHash: Hash;
   readonly staticProjectionMemoHash: Hash;
@@ -56,6 +67,7 @@ export interface InstanceCatalogV1 {
 }
 
 const decodeAssetPort = (value: unknown, name = "assetPort"): AssetPortV1 => decodeExactObject(value, {
+  assetIdentity: (field, path) => decodeAssetIdentityV1(field, path),
   assetRef: (field, path) => assertHash(field, path),
   portRef: (field, path) => assertHash(field, path),
   ordinal: (field, path) => assertDecimalString(field, path),
@@ -89,8 +101,14 @@ const projection = (draft: unknown, name = "transitionProjection"): StaticTransi
   if (decoded.inputAssetPorts.length === 0 || decoded.outputAssetPorts.length === 0) {
     throw new Error("transition-missing-asset-ports");
   }
-  const inputAssetPorts = decoded.inputAssetPorts.map(assetPort => deepFreeze({ ...assetPort }));
-  const outputAssetPorts = decoded.outputAssetPorts.map(assetPort => deepFreeze({ ...assetPort }));
+  const inputAssetPorts = decoded.inputAssetPorts.map((assetPort, index) => {
+    assertAssetReferenceMatchesV1(assetPort.assetIdentity, assetPort.assetRef, `${name}.inputAssetPorts[${index}]`);
+    return deepFreeze({ ...assetPort, assetIdentity: assetPort.assetIdentity });
+  });
+  const outputAssetPorts = decoded.outputAssetPorts.map((assetPort, index) => {
+    assertAssetReferenceMatchesV1(assetPort.assetIdentity, assetPort.assetRef, `${name}.outputAssetPorts[${index}]`);
+    return deepFreeze({ ...assetPort, assetIdentity: assetPort.assetIdentity });
+  });
   const constraintRefs = [...decoded.constraintRefs];
   if (new Set(constraintRefs).size !== constraintRefs.length) throw new Error("duplicate-constraint-ref");
   constraintRefs.sort();
@@ -113,6 +131,7 @@ const decodePublicationDraft = (
   familyCandidateKey: (field, path) => assertHash(field, path),
   instanceKey: (field, path) => assertNonEmptyString(field, path),
   cutoff: (field, path) => decodeCanonicalCutoff(field, path),
+  identityMemo: (field) => decodeCanonicalJson(encodeCanonicalJson(field)),
   identityMemoHash: (field, path) => assertHash(field, path),
   descriptorHash: (field, path) => assertHash(field, path),
   staticProjectionMemoHash: (field, path) => assertHash(field, path),
@@ -131,6 +150,7 @@ const decodePublication = (
   familyCandidateKey: (field, path) => assertHash(field, path),
   instanceKey: (field, path) => assertNonEmptyString(field, path),
   cutoff: (field, path) => decodeCanonicalCutoff(field, path),
+  identityMemo: (field) => decodeCanonicalJson(encodeCanonicalJson(field)),
   identityMemoHash: (field, path) => assertHash(field, path),
   descriptorHash: (field, path) => assertHash(field, path),
   staticProjectionMemoHash: (field, path) => assertHash(field, path),
@@ -143,10 +163,20 @@ const decodePublication = (
 
 export function sealInstancePublication(draft: InstancePublicationDraftV1): InstancePublicationV1 {
   const decoded = decodePublicationDraft(draft);
+  if (hashDomain("aloha/identity-memo/v1", decoded.identityMemo) !== decoded.identityMemoHash) {
+    throw new Error("identity-memo-hash-mismatch");
+  }
   const transitions = decoded.transitions.map((value, index) => projection(value, `instancePublication.transitions[${index}]`))
     .sort((left, right) => left.projectionHash < right.projectionHash ? -1 : left.projectionHash > right.projectionHash ? 1 : 0);
   if (new Set(transitions.map(value => value.projectionHash)).size !== transitions.length) {
     throw new Error("duplicate-transition-projection");
+  }
+  for (const [transitionIndex, transition] of transitions.entries()) {
+    for (const [portIndex, port] of [...transition.inputAssetPorts, ...transition.outputAssetPorts].entries()) {
+      if (port.assetIdentity.chainId !== decoded.cutoff.chainId) {
+        throw new Error(`asset-port-chain-mismatch:${transitionIndex}:${portIndex}`);
+      }
+    }
   }
   const payload = {
     familyId: decoded.familyId,
@@ -154,6 +184,7 @@ export function sealInstancePublication(draft: InstancePublicationDraftV1): Inst
     familyCandidateKey: decoded.familyCandidateKey,
     instanceKey: decoded.instanceKey,
     cutoff: decoded.cutoff,
+    identityMemo: decoded.identityMemo,
     identityMemoHash: decoded.identityMemoHash,
     descriptorHash: decoded.descriptorHash,
     staticProjectionMemoHash: decoded.staticProjectionMemoHash,
@@ -212,6 +243,7 @@ export function validateInstancePublication(publication: InstancePublicationV1):
     familyCandidateKey: decoded.familyCandidateKey,
     instanceKey: decoded.instanceKey,
     cutoff: decoded.cutoff,
+    identityMemo: decoded.identityMemo,
     identityMemoHash: decoded.identityMemoHash,
     descriptorHash: decoded.descriptorHash,
     staticProjectionMemoHash: decoded.staticProjectionMemoHash,

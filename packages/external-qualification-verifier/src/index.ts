@@ -9,19 +9,22 @@ import {
   decodeExternalQualificationTrustAnchorV2,
   decodeSignedObserverCertificateV2,
   decodeSignedQualificationRegistryApprovalV2,
-  decodeSignedReleaseAuthorityApprovalV2,
+  decodeSignedReleaseAuthorityApprovalV3,
+  decodeSignedReleaseAcceptanceApprovalV1,
   decodeSignedVerifierCertificateV2,
   hashExternalQualificationIssuerKeySetRoot,
   hashExternalQualificationIssuerSetRoot,
   observerCertificateSigningBytes,
   qualificationRegistryApprovalSigningBytes,
   releaseAuthorityApprovalSigningBytes,
+  releaseAcceptanceApprovalSigningBytes,
   verifierCertificateSigningBytes,
   type ExternalQualificationIssuerKeyV2,
   type ExternalQualificationTrustAnchorV2,
   type SignedObserverCertificateV2,
   type SignedQualificationRegistryApprovalV2,
-  type SignedReleaseAuthorityApprovalV2,
+  type SignedReleaseAuthorityApprovalV3,
+  type SignedReleaseAcceptanceApprovalV1,
   type SignedVerifierCertificateV2,
 } from "../../../specs/qualification/src/index.ts";
 import type {
@@ -64,7 +67,7 @@ export interface ExternalQualificationEvidenceV2 {
   readonly registryApproval: SignedQualificationRegistryApprovalV2;
   readonly signedVerifierCertificate: SignedVerifierCertificateV2;
   readonly signedObserverCertificates: readonly SignedObserverCertificateV2[];
-  readonly releaseAuthorityApproval: SignedReleaseAuthorityApprovalV2;
+  readonly releaseAuthorityApproval: SignedReleaseAuthorityApprovalV3;
 }
 
 export interface ExternalQualificationRegistryFactsV1 {
@@ -75,6 +78,9 @@ export interface ExternalQualificationRegistryFactsV1 {
 
 export interface ExternalQualificationReleaseBindingsV2 {
   readonly authorityPinDigest: Hash;
+  readonly predicateId: string;
+  readonly predicateSpecDigest: Hash;
+  readonly predicateCompositionLeafDigest: Hash;
   readonly predicateCompositionRootDigest: Hash;
   readonly gateCoreRuntimeClosureDigest: Hash;
   readonly gateCoreImplementationClosureDigest: Hash;
@@ -95,6 +101,18 @@ export interface VerifyExternalQualificationInputV2 {
 export interface ExternalQualificationVerificationResultV2 {
   readonly verified: boolean;
   readonly issues: readonly ExternalQualificationIssueV2[];
+}
+
+export interface VerifySignedReleaseAcceptanceApprovalInputV1 {
+  readonly approval: SignedReleaseAcceptanceApprovalV1;
+  readonly trustAnchor: ExternalQualificationTrustAnchorV2;
+  readonly issuerKeys: readonly ExternalQualificationIssuerKeyV2[];
+  readonly expected: Omit<SignedReleaseAcceptanceApprovalV1, "approvalId" | "payloadHash" | "signatureAlgorithm" | "signatureHex" | "issuerId" | "keyId" | "epoch" | "audienceHash" | "externalTrustAnchorRoot" | "issuerKeySetRoot" | "registryApprovalId" | "registryRoot"> & {
+    readonly registryApprovalId: Hash;
+    readonly registryRoot: Hash;
+    readonly epoch: string;
+    readonly audienceHash: Hash;
+  };
 }
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -180,7 +198,7 @@ function decodeEvidence(
       signedObserverCertificates: Object.freeze(
         evidence.signedObserverCertificates.map((certificate) => decodeSignedObserverCertificateV2(certificate)),
       ),
-      releaseAuthorityApproval: decodeSignedReleaseAuthorityApprovalV2(evidence.releaseAuthorityApproval),
+      releaseAuthorityApproval: decodeSignedReleaseAuthorityApprovalV3(evidence.releaseAuthorityApproval),
     });
   } catch {
     add(issues, "external-trust-anchor-mismatch", "$.externalQualification");
@@ -338,15 +356,22 @@ export function verifyExternalQualificationV2(
   }
 
   const expectedObserverIds = [...input.release.observerQualificationIds].sort();
+  const selectedRequirements = releaseAuthorityApproval.releaseAcceptanceRequirements.filter(
+    requirement => requirement.predicateId === input.release.predicateId,
+  );
+  const selectedRequirement = selectedRequirements.length === 1 ? selectedRequirements[0]! : null;
   if (
     releaseAuthorityApproval.approvalId !== input.pin.expectedReleaseAuthorityApprovalId ||
-    releaseAuthorityApproval.authorityPinDigest !== input.release.authorityPinDigest ||
     releaseAuthorityApproval.externalTrustAnchorRoot !== input.pin.expectedTrustAnchorRoot ||
     releaseAuthorityApproval.issuerKeySetRoot !== input.pin.expectedIssuerKeySetRoot ||
     releaseAuthorityApproval.registryApprovalId !== input.pin.expectedRegistryApprovalId ||
     releaseAuthorityApproval.registryRoot !== input.registry.registryId ||
-    releaseAuthorityApproval.verifierCertificateId !== input.release.verifierQualificationId ||
-    !sameJson(releaseAuthorityApproval.observerCertificateIds, expectedObserverIds) ||
+    selectedRequirement === null ||
+    selectedRequirement.authorityPinDigest !== input.release.authorityPinDigest ||
+    selectedRequirement.predicateSpecDigest !== input.release.predicateSpecDigest ||
+    selectedRequirement.predicateCompositionLeafDigest !== input.release.predicateCompositionLeafDigest ||
+    selectedRequirement.verifierCertificateId !== input.release.verifierQualificationId ||
+    !sameJson(selectedRequirement.observerCertificateIds, expectedObserverIds) ||
     releaseAuthorityApproval.predicateCompositionRootDigest !== input.release.predicateCompositionRootDigest ||
     releaseAuthorityApproval.gateCoreRuntimeClosureDigest !== input.release.gateCoreRuntimeClosureDigest ||
     releaseAuthorityApproval.gateCoreImplementationClosureDigest !== input.release.gateCoreImplementationClosureDigest ||
@@ -370,4 +395,62 @@ export function verifyExternalQualificationV2(
     verified: issues.length === 0,
     issues: Object.freeze([...issues]),
   });
+}
+
+/**
+ * Verify the post-run release acceptance seal against the same externally
+ * pinned governance key used by the V3 requirement approval.  This function
+ * never creates a result set, accepts a verifier callback, or signs bytes.
+ */
+export function verifySignedReleaseAcceptanceApprovalV1(
+  input: VerifySignedReleaseAcceptanceApprovalInputV1,
+): ExternalQualificationVerificationResultV2 {
+  const issues: ExternalQualificationIssueV2[] = [];
+  let approval: SignedReleaseAcceptanceApprovalV1;
+  let trustAnchor: ExternalQualificationTrustAnchorV2;
+  let issuerKeys: readonly ExternalQualificationIssuerKeyV2[];
+  try {
+    approval = decodeSignedReleaseAcceptanceApprovalV1(input.approval);
+    trustAnchor = decodeExternalQualificationTrustAnchorV2(input.trustAnchor);
+    issuerKeys = Object.freeze(input.issuerKeys.map(key => decodeExternalQualificationIssuerKeyV2(key)));
+  } catch {
+    add(issues, "external-release-approval-mismatch", "$.releaseAcceptanceApproval");
+    return Object.freeze({ verified: false, issues: Object.freeze(issues) });
+  }
+  let issuerKeySetRoot: Hash | null = null;
+  try {
+    issuerKeySetRoot = hashExternalQualificationIssuerKeySetRoot(issuerKeys);
+  } catch {
+    add(issues, "external-issuer-key-mismatch", "$.releaseAcceptanceApproval.issuerKeys");
+  }
+  const key = keyFor(
+    issuerKeys,
+    trustAnchor.governanceIssuerId,
+    trustAnchor.governanceKeyId,
+    input.expected.epoch,
+    input.expected.audienceHash,
+    issues,
+    "$.releaseAcceptanceApproval.keyId",
+  );
+  const expectedCore = {
+    ...input.expected,
+    externalTrustAnchorRoot: trustAnchor.anchorId,
+    issuerKeySetRoot: trustAnchor.issuerKeySetRoot,
+    issuerId: trustAnchor.governanceIssuerId,
+    keyId: trustAnchor.governanceKeyId,
+  };
+  const actualCore = { ...approval } as Record<string, unknown>;
+  delete actualCore.approvalId;
+  delete actualCore.payloadHash;
+  delete actualCore.signatureAlgorithm;
+  delete actualCore.signatureHex;
+  if (
+    issuerKeySetRoot !== trustAnchor.issuerKeySetRoot
+    || !sameJson(actualCore, expectedCore)
+    || key === null
+    || !verifyEd25519(key, releaseAcceptanceApprovalSigningBytes(approval), approval.signatureHex)
+  ) {
+    add(issues, "external-release-approval-mismatch", "$.releaseAcceptanceApproval");
+  }
+  return Object.freeze({ verified: issues.length === 0, issues: Object.freeze([...issues]) });
 }

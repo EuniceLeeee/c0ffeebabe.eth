@@ -15,8 +15,9 @@ import {
   createObservedImmutableMirror,
   createResolverPolicy,
   createRetentionLeaseReceipt,
-  decodeArtifactBytes,
+  decodeArtifactHexBytes,
   encodeArtifactBytes,
+  encodeArtifactHexBytes,
 } from "../../../specs/artifact-resolution/src/index.ts";
 import {
   type ObserverRoleSpecV1,
@@ -136,7 +137,7 @@ export interface ArtifactLineageQualificationMaterialV1 {
 
 function materializeCaseRawFacts(caseMaterial: ArtifactLineageIndependentOracleCaseV1): ArtifactLineageRawFactsInputV1 | unknown {
   if (caseMaterial.rawBytesForm === undefined) return caseMaterial.rawFacts;
-  const bytes = decodeArtifactBytes(caseMaterial.rawFacts.rawBytes ?? "0x");
+  const bytes = decodeArtifactHexBytes(caseMaterial.rawFacts.rawBytes ?? "0x");
   if (caseMaterial.rawBytesForm === "proxy") {
     return {
       ...caseMaterial.rawFacts,
@@ -364,7 +365,7 @@ function baseFixture(): {
   readonly rawFacts: ArtifactLineageRawFactsInputV1;
 } {
   const bytes = new Uint8Array([0x00, 0xff, 0x41, 0x00]);
-  const bytesHex = encodeArtifactBytes(bytes);
+  const bytesHex = encodeArtifactHexBytes(bytes);
   const contentSha256 = sha256Hex(bytes);
   const policy = createResolverPolicy({
     schemaVersion: 1, kind: "aloha.artifact-resolver-policy", allowedLocatorKind: "content-object",
@@ -392,7 +393,7 @@ function baseFixture(): {
   const refWithIdentity = { ...artifactRefWithLease, artifactRefId: recomputeReadOnlyArtifactRefId(artifactRefWithLease) } as ReadOnlyArtifactRefV1;
   const observedMirror = createObservedImmutableMirror({
     storeIdentityHash: refWithIdentity.immutableMirrorLocator.storeIdentityHash,
-    objectKey: refWithIdentity.immutableMirrorLocator.objectKey, bytes: bytesHex,
+    objectKey: refWithIdentity.immutableMirrorLocator.objectKey, bytes: encodeArtifactBytes(bytes),
     mediaType: refWithIdentity.mediaType, schema: refWithIdentity.schema,
   });
   const resolutionClaim = createArtifactResolutionClaim({
@@ -434,11 +435,11 @@ function mutationCases(): readonly ArtifactLineageIndependentOracleCaseV1[] {
   const base = baseFixture();
   const mutatedBytes = new Uint8Array(base.bytes);
   mutatedBytes[1] = 0xfe;
-  const mutatedBytesHex = encodeArtifactBytes(mutatedBytes);
+  const mutatedBytesHex = encodeArtifactHexBytes(mutatedBytes);
   const mutatedMirror = createObservedImmutableMirror({
     storeIdentityHash: base.artifactRef.immutableMirrorLocator.storeIdentityHash,
     objectKey: base.artifactRef.immutableMirrorLocator.objectKey,
-    bytes: mutatedBytesHex,
+    bytes: encodeArtifactBytes(mutatedBytes),
     mediaType: base.artifactRef.mediaType,
     schema: base.artifactRef.schema,
   });

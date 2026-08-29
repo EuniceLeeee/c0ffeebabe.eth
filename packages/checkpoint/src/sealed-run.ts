@@ -85,6 +85,8 @@ export function sealedRunBinding(snapshot: SealedRunSnapshotV1): SealedRunBindin
     sourceCoverageRoot: snapshot.sourceCoverage.sourceCoverageRoot,
     candidatePartitionRoot: snapshot.candidatePartitionRoot,
     candidatePartitionStorageHash: snapshot.candidatePartitionStorageHash,
+    nominationClosureRoot: snapshot.nominationClosureRoot,
+    nominationClosureStorageHash: snapshot.nominationClosureStorageHash,
     candidatePartitionProofStorageHash: snapshot.candidatePartitionProofStorageHash,
     exactOutcomePartitionRoot: snapshot.partition.exactOutcomePartitionRoot,
     verifiedMemoSetRoot: snapshot.verifiedMemoSetRoot,

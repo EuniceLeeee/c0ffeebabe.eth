@@ -6,8 +6,10 @@ import {
   type ReadOnlyArtifactRefV1,
 } from "../../../specs/core-envelope/src/index.ts";
 import {
+  ARTIFACT_MIRROR_MAX_DECODED_BYTES,
   createResolverPolicy,
   createRetentionLeaseReceipt,
+  encodeArtifactBytes,
   type ResolverPolicyV1,
 } from "../../../specs/artifact-resolution/src/index.ts";
 import {
@@ -103,11 +105,12 @@ test("exact immutable content produces only an untrusted frozen claim", async ()
   mutableBytes[0] = 0;
 
   assert.equal(claim.outcome, "content-observed");
-  assert.equal(claim.observedMirror?.bytes, "0x726177");
+  assert.deepEqual(claim.observedMirror?.bytes, encodeArtifactBytes(sourceBytes));
   assert.equal(claim.observedMirror?.contentSha256, contentSha256);
   assert.equal(Object.isFrozen(claim), true);
   assert.equal(Object.isFrozen(claim.observedMirror), true);
-  assert.equal(typeof claim.observedMirror?.bytes, "string");
+  assert.equal(Object.isFrozen(claim.observedMirror?.bytes), true);
+  assert.equal(Object.isFrozen(claim.observedMirror?.bytes.chunks), true);
   assert.deepEqual(Object.keys(claim).sort(), [
     "artifactRefId",
     "claimId",
@@ -229,6 +232,27 @@ test("actual mirror bytes are bounded before copy and encoding", async () => {
       storeIdentityHash,
       objectKey: contentSha256,
       bytes: new Uint8Array(sourceBytes.length + 1),
+      mediaType: "application/octet-stream",
+      schema,
+    }),
+  );
+  assert.equal(claim.outcome, "content-mismatch");
+  assert.equal(claim.observedMirror, null);
+});
+
+test("inline mirror cap is enforced independently of a larger resolver policy", async () => {
+  const largePolicy = createResolverPolicy({
+    ...policy,
+    policyHash: undefined,
+    maxByteLength: "600000",
+  });
+  const claim = await resolveArtifactClaim(
+    refFor({ resolverPolicyHash: largePolicy.policyHash }),
+    largePolicy,
+    ioFor({
+      storeIdentityHash,
+      objectKey: contentSha256,
+      bytes: new Uint8Array(ARTIFACT_MIRROR_MAX_DECODED_BYTES + 1),
       mediaType: "application/octet-stream",
       schema,
     }),

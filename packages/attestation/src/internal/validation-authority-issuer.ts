@@ -6,6 +6,7 @@ import {
 } from "../../../canonical-codec/src/index.ts";
 import {
   attestationPartialIdentitySemanticHash,
+  candidateFinalOutcomeHash,
   candidateFinalOutcomeBodyHash,
   identityProofVerificationContext,
   validateIdentityObservation,
@@ -13,6 +14,8 @@ import {
   validateCandidateFinalOutcome,
   type AttestationIdentityResumeInputV1,
   type AttestationIdentityResumeCapabilityV1,
+  type AttestationOutcomeResumeInputV1,
+  type AttestationOutcomeResumeCapabilityV1,
   type AttestationOutcomeCapabilityV1,
   type AttestationOutcomeValidationContextV1,
   type AttestationPartitionCapabilityV1,
@@ -24,6 +27,8 @@ import {
   type AttestationOutcomeBindingContextV1,
   type AttestationValidationAuthorityV1,
   type IdentityVerifiedV1,
+  type AttestationVerifiedMemoReuseCapabilityV1,
+  type AttestationVerifiedMemoReuseInputV1,
 } from "../index.ts";
 import { validateOutcomeIssuerProof } from "./outcome-proof.ts";
 import { validateIdentityIssuerProof } from "./identity-proof.ts";
@@ -36,9 +41,12 @@ import {
   registerAttestationOutcomeCapability,
   registerAttestationPartitionCapability,
   registerAttestationIdentityResumeCapability,
+  registerAttestationOutcomeResumeCapability,
   registerAttestationValidationAuthority,
+  registerAttestationVerifiedMemoReuseCapability,
   type AttestationIdentityResumeResolvedInputV1,
 } from "./validation-authority-state.ts";
+import { validateInstancePublication } from "../../../catalog/src/index.ts";
 
 type AttestationOutcomeBodyV1 = Omit<
   AttestationOutcomeCapabilityV1,
@@ -53,6 +61,7 @@ export function verifyIdentityForAuthority(
   const observation = validateIdentityObservation({
     kind: identity.kind,
     familyInstanceKey: identity.familyInstanceKey,
+    identityMemo: identity.identityMemo,
     identityMemoHash: identity.identityMemoHash,
     descriptorHash: identity.descriptorHash,
     evidenceRoot: identity.evidenceRoot,
@@ -63,6 +72,7 @@ export function verifyIdentityForAuthority(
     context.candidatePartitionRoot,
     context.candidate,
     observation,
+    identity.issuerProof.identityOrigin,
     {
       releaseProvenanceHash: authority.releaseProvenanceHash,
       attestationAuthorityRoot: authority.authorityRoot,
@@ -79,7 +89,7 @@ export function verifyIdentityForAuthority(
   return deepFreeze({ ...observation, issuerProof: exact });
 }
 
-function assertOutcomeAuthorityBinding(
+export function assertOutcomeAuthorityBinding(
   outcome: CandidateFinalOutcomeV1,
   authority: AttestationAuthorityStateV1,
   context: AttestationOutcomeBindingContextV1,
@@ -120,6 +130,20 @@ function assertOutcomeAuthorityBinding(
   const verifiedOutcomeProof = authority.attestationProof.verifyOutcome(outcomeProof, proofContext);
   const exactOutcomeProof = validateOutcomeIssuerProof(verifiedOutcomeProof, proofContext);
   if (exactOutcomeProof.proofHash !== outcomeProof.proofHash) throw new TypeError(`${label} outcome proof verifier mismatch`);
+}
+
+/** Verify a durable final outcome against the current constructor-bound
+ * authority. This is intentionally separate from validateOutcomeCapability:
+ * durable bytes are not process-local capabilities and may only enter this
+ * path after the checkpoint has proved their exact storage closure. */
+export function verifyOutcomeForAuthority(
+  outcome: CandidateFinalOutcomeV1,
+  authority: AttestationAuthorityStateV1,
+  context: AttestationOutcomeBindingContextV1,
+): CandidateFinalOutcomeV1 {
+  validateCandidateFinalOutcome(context.runId, context.cutoff, context.candidate, outcome);
+  assertOutcomeAuthorityBinding(outcome, authority, context, "durable attestation outcome");
+  return deepFreeze(outcome);
 }
 
 function assertPartitionAuthorityBinding(
@@ -226,6 +250,50 @@ export function issueAttestationIdentityResumeCapability(
   if (outcomeHash !== input.outcomeHash) throw new TypeError("attestation-identity-resume-hash-mismatch");
   const capability = Object.freeze({}) as AttestationIdentityResumeCapabilityV1;
   registerAttestationIdentityResumeCapability(capability, input, state);
+  return capability;
+}
+
+export function issueAttestationOutcomeResumeCapability(
+  state: AttestationAuthorityStateV1,
+  input: AttestationOutcomeResumeInputV1 & { readonly candidatePartitionRoot: Hash },
+): AttestationOutcomeResumeCapabilityV1 {
+  if (input === null || typeof input !== "object") throw new TypeError("attestation-outcome-resume-input-invalid");
+  if (
+    input.attestationAuthorityRoot !== state.authorityRoot
+    || input.releaseAuthorityRoot !== state.releaseAuthorityRoot
+    || input.releaseProvenanceHash !== state.releaseProvenanceHash
+    || input.executorAuthorityRoot !== state.executorAuthorityRoot
+  ) throw new TypeError("attestation-outcome-resume-authority-mismatch");
+  if (candidateFinalOutcomeHash(input.outcome) !== input.outcomeHash) {
+    throw new TypeError("attestation-outcome-resume-hash-mismatch");
+  }
+  validateCandidateFinalOutcome(input.runId, input.cutoff, input.candidate, input.outcome);
+  assertOutcomeAuthorityBinding(input.outcome, state, {
+    runId: input.runId,
+    cutoff: input.cutoff,
+    candidatePartitionRoot: input.candidatePartitionRoot,
+    candidate: input.candidate,
+  }, "attestation outcome resume");
+  const capability = Object.freeze({}) as AttestationOutcomeResumeCapabilityV1;
+  registerAttestationOutcomeResumeCapability(capability, input, state);
+  return capability;
+}
+
+export function issueAttestationVerifiedMemoReuseCapability(
+  state: AttestationAuthorityStateV1,
+  input: AttestationVerifiedMemoReuseInputV1 & {
+    readonly candidatePartitionRoot: Hash;
+    readonly candidate: CandidateRecordV1;
+  },
+): AttestationVerifiedMemoReuseCapabilityV1 {
+  if (input === null || typeof input !== "object") throw new TypeError("attestation-memo-reuse-input-invalid");
+  validateInstancePublication(input.publication);
+  if (
+    input.publication.familyId !== input.candidate.familyId
+    || input.publication.instanceKey !== input.candidate.instanceNominationKey
+  ) throw new TypeError("attestation-memo-reuse-candidate-binding-mismatch");
+  const capability = Object.freeze({}) as AttestationVerifiedMemoReuseCapabilityV1;
+  registerAttestationVerifiedMemoReuseCapability(capability, input, state);
   return capability;
 }
 
