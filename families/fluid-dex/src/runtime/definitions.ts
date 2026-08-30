@@ -51,6 +51,7 @@ import {
   type CandidateRecordV1,
 } from "../../../../packages/discovery/src/index.ts";
 import { decodeEvmLogObservationBytes } from "../../../../packages/observation/src/index.ts";
+import { decodeFluidDexSwapEvent } from "../abi.ts";
 import {
   FLUID_DEX_FAMILY_DEFINITION_HASH,
 } from "../family-definition.ts";
@@ -759,14 +760,11 @@ function verifyCandidateEvidence(payload: IdentityPayloadV1, value: Uint8Array):
       || raw.logIndex !== evidence.logIndex
       || raw.address !== evidence.address
       || raw.address !== payload.binding.instanceNominationKey
-      || raw.topics.length < 2
       || raw.topics[0] !== evidence.topic
       || raw.topics[0] !== FLUID_DEX_CONTRACT_EVIDENCE_TOPIC
-      || !/^0x(?:[0-9a-f]{64}){2,}$/.test(raw.data)
-      || BigInt(`0x${raw.data.slice(2, 66)}`) === 0n
-      || BigInt(`0x${raw.data.slice(66, 130)}`) === 0n
       || BigInt(raw.blockNumber) > BigInt(payload.cutoff.number)
       || BigInt(raw.blockNumber) < BigInt(payload.cutoff.number) - BigInt(FLUID_DEX_SOURCE_WINDOW_BLOCKS - 1)) throw new TypeError("fluid-dex recent evidence binding mismatch");
+    decodeFluidDexSwapEvent(raw.topics, raw.data, FLUID_DEX_CONTRACT_EVIDENCE_TOPIC);
     return;
   }
   const observed = decodeFamilySourcePlanPhysicalObservation(value, "fluid-dex.identity.factoryEvidence");

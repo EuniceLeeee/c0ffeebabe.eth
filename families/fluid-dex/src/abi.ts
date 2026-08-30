@@ -26,6 +26,30 @@ export function encodeSwapInCall(swap0to1: boolean, amountIn: string, amountOutM
   ].join("")}`.toLowerCase();
 }
 
+export interface FluidDexSwapEventV1 {
+  readonly swap0to1: boolean;
+  readonly amountIn: bigint;
+  readonly amountOut: bigint;
+  readonly recipient: string;
+}
+
+export function decodeFluidDexSwapEvent(
+  topics: readonly string[],
+  data: string,
+  expectedTopic: string,
+): FluidDexSwapEventV1 {
+  if (topics.length !== 1 || topics[0] !== expectedTopic) throw new TypeError("fluid-dex Swap topics mismatch");
+  if (!/^0x(?:[0-9a-f]{64}){4}$/.test(data)) throw new TypeError("fluid-dex Swap data must contain exactly four canonical ABI words");
+  const direction = decodeWord(data, 0, "fluid-dex.Swap.swap0to1");
+  if (direction !== 0n && direction !== 1n) throw new TypeError("fluid-dex Swap direction must be an ABI bool");
+  const amountIn = decodeWord(data, 1, "fluid-dex.Swap.amountIn");
+  const amountOut = decodeWord(data, 2, "fluid-dex.Swap.amountOut");
+  if (amountIn === 0n || amountOut === 0n) throw new TypeError("fluid-dex Swap amounts must be positive");
+  const recipient = decodeAddressWord(data, 3, "fluid-dex.Swap.recipient");
+  if (recipient === "0x0000000000000000000000000000000000000000") throw new TypeError("fluid-dex Swap recipient must be non-zero");
+  return Object.freeze({ swap0to1: direction === 1n, amountIn, amountOut, recipient });
+}
+
 export function decodeUint256(value: string, path: string): bigint {
   if (!/^0x(?:[0-9a-fA-F]{64})+$/.test(value)) throw new TypeError(`${path} must be ABI uint256 return data`);
   return BigInt(`0x${value.slice(2, 66)}`);

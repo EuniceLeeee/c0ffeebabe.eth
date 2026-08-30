@@ -3,7 +3,14 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./acquisition": "./src/acquisition.ts",
+    "./advisory-report": "./src/advisory-report.ts",
+    "./current-adapter-comparator": "./src/current-adapter-comparator.ts",
+    "./family-advisory-matrix": "./src/family-advisory-matrix.ts",
+    "./frozen-rpc-replay": "./src/frozen-rpc-replay.ts",
+    "./pool-identity-observer": "./src/pool-identity-observer.ts",
+    "./variant-observer": "./src/variant-observer.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",

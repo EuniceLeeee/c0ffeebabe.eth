@@ -19,6 +19,7 @@ import type {
 import { decodeFamilySourcePlanPhysicalObservation } from "../../../packages/family-sdk/runtime/index.ts";
 import { decodeEvmLogObservationBytes } from "../../../packages/observation/src/index.ts";
 
+import { decodeFluidDexSwapEvent } from "./abi.ts";
 import { FLUID_DEX_FACTORY, FLUID_DEX_FACTORY_SOURCE_PLAN_ID, FLUID_DEX_FAMILY_ID, FLUID_DEX_SOURCE_PLAN_ID, FLUID_DEX_CONTRACT_EVIDENCE_TOPIC } from "./manifest.ts";
 import { FLUID_DEX_AUTHORING_HASH, FLUID_DEX_FACTORY_SOURCE_PLAN_SCHEMA_HASH, FLUID_DEX_SOURCE_PLAN_SCHEMA_HASH } from "./metadata.ts";
 import { canonicalAddress } from "./types.ts";
@@ -28,12 +29,9 @@ function sameCutoff(left: { readonly chainId: string; readonly number: string; r
   return left.chainId === right.chainId && left.number === right.number && left.hash === right.hash && left.stateRoot === right.stateRoot;
 }
 
-function eventWord(data: string, index: number, path: string): bigint {
-  if (!/^0x(?:[0-9a-f]{64})+$/.test(data) || data.length < 2 + (index + 1) * 64) throw new TypeError(`${path} is not an ABI word`);
-  return BigInt(`0x${data.slice(2 + index * 64, 2 + (index + 1) * 64)}`);
-}
 function verifySwap(raw: ReturnType<typeof decodeEvmLogObservationBytes>, evidence: { readonly address: string; readonly topic: Hash }): void {
-  if (raw.address !== evidence.address || raw.topics[0] !== evidence.topic || raw.topics.length < 2 || eventWord(raw.data, 0, "fluid-dex.Swap.amountIn") === 0n || eventWord(raw.data, 1, "fluid-dex.Swap.amountOut") === 0n) throw new TypeError("fluid-dex Swap log ABI mismatch");
+  if (raw.address !== evidence.address || evidence.topic !== FLUID_DEX_CONTRACT_EVIDENCE_TOPIC) throw new TypeError("fluid-dex Swap log binding mismatch");
+  decodeFluidDexSwapEvent(raw.topics, raw.data, FLUID_DEX_CONTRACT_EVIDENCE_TOPIC);
 }
 
 function assertNominationBinding(input: FamilySourcePlanNominationInputV1): void {

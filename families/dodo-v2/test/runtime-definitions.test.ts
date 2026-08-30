@@ -40,7 +40,7 @@ const bytesHex = (bytes: Uint8Array): string => `0x${Array.from(bytes).map(value
 const canonical = (value: unknown): CanonicalJson => decodeCanonicalJson(encodeCanonicalJson(value));
 const uintWord = (value: bigint): string => value.toString(16).padStart(64, "0");
 const addressWord = (value: string): string => `${"0".repeat(24)}${value.slice(2)}`;
-const indexedAddress = (value: string): Hash => `0x${addressWord(value)}` as Hash;
+const swapData = (soldToken = baseToken, boughtToken = quoteToken, soldAmount = 100n, boughtAmount = 99n, seller = address("3"), receiver = address("4")): string => `0x${addressWord(soldToken)}${addressWord(boughtToken)}${uintWord(soldAmount)}${uintWord(boughtAmount)}${addressWord(seller)}${addressWord(receiver)}`;
 const pmm = Object.freeze({ i: "2000000000000000000", K: "0", B: "1000", Q: "2000", B0: "1000", Q0: "2000", R: 0 as const });
 
 const recentBytes = encodeEvmLogObservation({
@@ -51,10 +51,17 @@ const recentBytes = encodeEvmLogObservation({
   transactionHash: h("recent-tx"),
   logIndex: "0",
   address: pool,
-  topics: [DODO_V2_SWAP_TOPIC, indexedAddress(baseToken), indexedAddress(quoteToken)],
-  data: `0x${uintWord(100n)}${uintWord(99n)}`,
+  topics: [DODO_V2_SWAP_TOPIC],
+  data: swapData(),
 });
 const recentEvidence: RecentLogEvidenceRefV1 = Object.freeze({ kind: "recent-log", version: 1, sourcePlanRef: null, ownerRef: null, blockNumber: source.number, blockHash: source.hash, txHash: h("recent-tx"), logIndex: "0", address: pool, topic: DODO_V2_SWAP_TOPIC, rawLocatorHash: sha256Hex(recentBytes) });
+
+function recentFixture(data: string, topics: readonly Hash[] = [DODO_V2_SWAP_TOPIC]) {
+  const rawBytes = encodeEvmLogObservation({ kind: "evm-log", version: 1, blockNumber: source.number, blockHash: source.hash, transactionHash: h("recent-tx"), logIndex: "0", address: pool, topics, data });
+  const evidence: RecentLogEvidenceRefV1 = Object.freeze({ ...recentEvidence, rawLocatorHash: sha256Hex(rawBytes) });
+  const candidateValue = candidate(evidence);
+  return Object.freeze({ rawBytes, candidate: candidateValue, fact: identityFact(candidateValue, rawBytes) });
+}
 
 function candidate(evidence: RecentLogEvidenceRefV1 | SourcePlanEvidenceRefV1): CanonicalJson {
   return canonical(mergeAndDedupeNominations([{ kind: "aloha.candidate-nomination", version: "2", familyId: DODO_V2_FAMILY_ID, familyDefinitionHash: DODO_V2_FAMILY_AUTHORING_HASH, instanceNominationKey: pool, evidence }])[0]!);
@@ -125,6 +132,20 @@ test("DODO runtime carries recent raw evidence through identity, materialization
     assert.equal((projection.output as { readonly evidenceRoot: Hash }).evidenceRoot, identityOutput.evidenceRoot);
     assert.doesNotThrow(() => DODO_V2_PROJECTION_DEFINITION.outputCodec.decodeExact(projection.output));
     assert.throws(() => DODO_V2_PROJECTION_DEFINITION.outputCodec.decodeExact({ ...projection.output as object, evidenceRoot: h("forged-evidence-root") }), /publication lineage|publication-hash/);
+  }
+});
+
+test("DODO strict identity rejects malformed Swap evidence and a foreign token pair", () => {
+  const invalidCases = [
+    recentFixture(swapData(), [DODO_V2_SWAP_TOPIC, h("injected-topic")]),
+    recentFixture(swapData().slice(0, -64)),
+    recentFixture(`0x1${swapData().slice(3)}`),
+    recentFixture(swapData(baseToken, quoteToken, 0n)),
+    recentFixture(swapData(address("7"), quoteToken)),
+  ];
+  for (const [index, fixture] of invalidCases.entries()) {
+    const prepared = prepare(DODO_V2_IDENTITY_DEFINITION, { stage: "identity", candidate: fixture.candidate, cutoff: source, identityMemo: null, materializationOutput: null });
+    assert.equal(interpret(DODO_V2_IDENTITY_DEFINITION, prepared.payload, prepared.requestId, fixture.fact, `recent-invalid-${index}`).kind, "invalidProgram");
   }
 });
 

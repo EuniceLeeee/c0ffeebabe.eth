@@ -1,37 +1,9 @@
 {
   "schemaVersion": 1,
   "kind": "aloha.catalog-impact-snapshot",
-  "definitionCatalogRoot": "0xed3d2ecf153b044097cc16619142c6995ac5668698884438c68a726d502a54d9",
-  "capabilityCatalogRoot": "0x591d417bb1e098f8a0663603fc99e8b434bab8fe0116c30916cd19a02366537b",
+  "definitionCatalogRoot": "0xad4dede4d7577a321620996f253ebf2ff32a136374a67d1b33e71ebb26039602",
+  "capabilityCatalogRoot": "0x25d0e130686748d5fa887cc38a0a648b781c49a1066ef55b429e53cee61eec38",
   "capabilities": [
-    {
-      "id": "family.angstrom-v4.coarse",
-      "version": "1.0.0",
-      "schemaHash": "0x944ab136cdcc9a1387032f36da595618c12f8b8e89196fb552aa5059361d39eb",
-      "interpreterHash": "0xf63f1c5b5bc75b1fb7b7a2451cf483a5b9aad948df5cfae55c0e73babbbe0d58",
-      "dependencyIds": [
-        "family.angstrom-v4.state"
-      ],
-      "implementationClosureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299"
-    },
-    {
-      "id": "family.angstrom-v4.exact",
-      "version": "1.0.0",
-      "schemaHash": "0x169b1909e08e2eb3b2980a02634655f18b66b3a09356f740ba2474e437ecdf08",
-      "interpreterHash": "0x3f76772724985bf5d8979b8fdd4cd44cce48d50a908595677ea427134ba7dae6",
-      "dependencyIds": [
-        "family.angstrom-v4.state"
-      ],
-      "implementationClosureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299"
-    },
-    {
-      "id": "family.angstrom-v4.state",
-      "version": "1.0.0",
-      "schemaHash": "0x9ff7fa0a934cfece7dca6bf4f94e6658096b413db18632cc19c9faa4cb6fb7fd",
-      "interpreterHash": "0xbd91c2e3e33eda0073363051b86a83d968c05a0d1593677bc3cf9c59cf312835",
-      "dependencyIds": [],
-      "implementationClosureRoot": "0x4b1ffc9855a0a6208f7b18b00a64d287b1abd1e3a5317eaa44beb1a9dd7bc299"
-    },
     {
       "id": "family.curve-underlying.coarse",
       "version": "1.0.0",
@@ -40,7 +12,7 @@
       "dependencyIds": [
         "family.curve-underlying.state"
       ],
-      "implementationClosureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e"
+      "implementationClosureRoot": "0x170d701ae2b70aa889a0f81d305a31c5d67fd9a62362bfc9c5e32bd0517172c6"
     },
     {
       "id": "family.curve-underlying.exact",
@@ -50,7 +22,7 @@
       "dependencyIds": [
         "family.curve-underlying.state"
       ],
-      "implementationClosureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e"
+      "implementationClosureRoot": "0x170d701ae2b70aa889a0f81d305a31c5d67fd9a62362bfc9c5e32bd0517172c6"
     },
     {
       "id": "family.curve-underlying.state",
@@ -58,7 +30,7 @@
       "schemaHash": "0x1a51e44914829de075debc91a33a7831e8b1ca48fc4fb288f5a3faf8907c7e5a",
       "interpreterHash": "0x94cbb5db9747b77a5a71e1e9cb9fe5bf1230b8630a4bd3c64707634f71612d9b",
       "dependencyIds": [],
-      "implementationClosureRoot": "0xde536787ce9c3db608bc68d10cd42501397781b2dab5dbb0ee5d4a9ec20b940e"
+      "implementationClosureRoot": "0x170d701ae2b70aa889a0f81d305a31c5d67fd9a62362bfc9c5e32bd0517172c6"
     },
     {
       "id": "family.dodo-v2.coarse",
@@ -68,7 +40,7 @@
       "dependencyIds": [
         "family.dodo-v2.state"
       ],
-      "implementationClosureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f"
+      "implementationClosureRoot": "0xb92796bc427361889da733b8a908caea3168f9616bbfcba7019b4f809e3b0ec9"
     },
     {
       "id": "family.dodo-v2.exact",
@@ -78,7 +50,7 @@
       "dependencyIds": [
         "family.dodo-v2.state"
       ],
-      "implementationClosureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f"
+      "implementationClosureRoot": "0xb92796bc427361889da733b8a908caea3168f9616bbfcba7019b4f809e3b0ec9"
     },
     {
       "id": "family.dodo-v2.state",
@@ -86,7 +58,7 @@
       "schemaHash": "0x1f962be6704d0532dad2284747d796b4c97e3c4d4ee0576216a4d2be537d2b49",
       "interpreterHash": "0x1a4bcd9a49f63bfb58c2f8ae11b523be5c86c5a6c59e430aa32a16b3ba8df875",
       "dependencyIds": [],
-      "implementationClosureRoot": "0x3cfcbbd07596da044d4fce4401ed931beb80efd0478109ca39c89d15a768c28f"
+      "implementationClosureRoot": "0xb92796bc427361889da733b8a908caea3168f9616bbfcba7019b4f809e3b0ec9"
     },
     {
       "id": "family.fluid-dex.coarse",
@@ -96,7 +68,7 @@
       "dependencyIds": [
         "family.fluid-dex.state"
       ],
-      "implementationClosureRoot": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef"
+      "implementationClosureRoot": "0x4fe971863cce1a4fc33d3c6dacff2e7191d09c05d32c6fe804c7017a886f79c6"
     },
     {
       "id": "family.fluid-dex.exact",
@@ -106,7 +78,7 @@
       "dependencyIds": [
         "family.fluid-dex.state"
       ],
-      "implementationClosureRoot": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef"
+      "implementationClosureRoot": "0x4fe971863cce1a4fc33d3c6dacff2e7191d09c05d32c6fe804c7017a886f79c6"
     },
     {
       "id": "family.fluid-dex.state",
@@ -114,7 +86,7 @@
       "schemaHash": "0xe45709a4ab1d30f6ab7cde439e53df05b4c9d1f65187a57af31f1efbd17a9de9",
       "interpreterHash": "0x8bc78cb560e425ce87208a5a6d8dab21804050925a655184866834e16543edaf",
       "dependencyIds": [],
-      "implementationClosureRoot": "0x44ef0935b918edd361a59a1c7e9e11c1018b1cf950cbdfc448286901c097f7ef"
+      "implementationClosureRoot": "0x4fe971863cce1a4fc33d3c6dacff2e7191d09c05d32c6fe804c7017a886f79c6"
     },
     {
       "id": "family.univ2-standard.coarse",
@@ -124,7 +96,7 @@
       "dependencyIds": [
         "family.univ2-standard.state"
       ],
-      "implementationClosureRoot": "0xce4085428146bc27284a12d8623f6818e71163042c497c5576292103a85105d8"
+      "implementationClosureRoot": "0x3dbbaff1f9141553f55e9e6ee0dc26731abc36cb19aaf014274798d63cf45a5f"
     },
     {
       "id": "family.univ2-standard.exact",
@@ -134,7 +106,7 @@
       "dependencyIds": [
         "family.univ2-standard.state"
       ],
-      "implementationClosureRoot": "0xea8bf1b6acf228f07b118a159988bc7a60cee4bdea88f5f3098ff25fc4a96f2f"
+      "implementationClosureRoot": "0x9e19e0135802642748ec33874b7e7c8f464ab5adb43ee0cc2c191e495ca77cae"
     },
     {
       "id": "family.univ2-standard.state",
@@ -142,195 +114,88 @@
       "schemaHash": "0x1e07e9ad84d77080f7bbdfd4c1c45043fef23d95f4150a53630a6c8fc13b7526",
       "interpreterHash": "0xa4cb10d4facee0abe85b65b5ea92912f45c599d0f41ca3a3254ff4f8003d6ab0",
       "dependencyIds": [],
-      "implementationClosureRoot": "0xa04eabd540b3682dbd8bf00da54c205970ee20f53a70c246de6459cf77268254"
-    },
-    {
-      "id": "family.univ3-standard.coarse",
-      "version": "1.0.0",
-      "schemaHash": "0x9a3e44d19e8a24413cb9fac945a07d48911700f290e6ef4761c2d2cd82a44eb7",
-      "interpreterHash": "0x82e8f0b2118d6a34bb2caa42f1d7f525b5d1697f977a3fcc85ef7192b3ec6c25",
-      "dependencyIds": [
-        "family.univ3-standard.state"
-      ],
-      "implementationClosureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55"
-    },
-    {
-      "id": "family.univ3-standard.exact",
-      "version": "1.0.0",
-      "schemaHash": "0x2099589db353b2af7d799dfadbf25396d2f74901f8fcb062dd0097fe4a99206b",
-      "interpreterHash": "0x2a3e2d6155c0476d7fde10b0b60da3a830942dd1bd5adcadfa575158c2c00bbe",
-      "dependencyIds": [
-        "family.univ3-standard.state"
-      ],
-      "implementationClosureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55"
-    },
-    {
-      "id": "family.univ3-standard.state",
-      "version": "1.0.0",
-      "schemaHash": "0x269b2e2d536bca46fcde799c408e704a94d64b407952b8bb6b36780031dacda0",
-      "interpreterHash": "0xf3b5e6c3a86633d08f020b6bdc436efd369ef28f2ff1ea176dbec321c2d755d0",
-      "dependencyIds": [],
-      "implementationClosureRoot": "0x99c3316570905a962bd693ab4d7e8f6ae96f1f0034a4c7cd9594188375ae8a55"
-    },
-    {
-      "id": "family.univ4.coarse",
-      "version": "1.0.0",
-      "schemaHash": "0x2d244619372a34b051ccdfc6bfe629166da816b992ffa01524436b318f3ea410",
-      "interpreterHash": "0x248e0bf17554a8d1675405b74e6f1d219ffbf2b54837059662a8e65bc72671bd",
-      "dependencyIds": [
-        "family.univ4.state"
-      ],
-      "implementationClosureRoot": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13"
-    },
-    {
-      "id": "family.univ4.exact",
-      "version": "1.0.0",
-      "schemaHash": "0x7c31eed9d2a03b97199c8ca9c5046bfe0681cca5efaa7343d173893298df8c85",
-      "interpreterHash": "0x55508f9eecce1129f208a216045d2f4ac6ab189988bd32cb6a95322c64cc5e6d",
-      "dependencyIds": [
-        "family.univ4.state"
-      ],
-      "implementationClosureRoot": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13"
-    },
-    {
-      "id": "family.univ4.state",
-      "version": "1.0.0",
-      "schemaHash": "0x9122c96b6f91ac61f48f03c43b73fc025b25e0b246e50713590878bf35baf5f7",
-      "interpreterHash": "0x344de912c2481c7fde23bf6ecca5d74478db113aeab90a7bb4647bf4a4b06876",
-      "dependencyIds": [],
-      "implementationClosureRoot": "0xd624156c3244ce40585183b8df12557ae1fe7833289443f4c01a3348dd0a2d13"
+      "implementationClosureRoot": "0x6e5b632c80a121fa3ab4bca4487f7a0517d73da127354f84aab43d3978ae6069"
     }
   ],
   "artifacts": [
     {
-      "artifactId": "family:angstrom-v4",
-      "artifactKind": "family",
-      "familyId": "angstrom-v4",
-      "definitionCatalogLeafDigest": "0xec7499322d53ef1ad150712c73afee2d249c4f94b2fa1a0a994b92be95cb9f8e",
-      "requestedDependencyClosure": [
-        "family.angstrom-v4.coarse",
-        "family.angstrom-v4.exact",
-        "family.angstrom-v4.state"
-      ],
-      "requestedDependencyRoot": "0x2c0e0724aa0f64944ac0a5c882e67ed3ccf791dfe0f35d73dbe0ff43db704bda",
-      "memoRoot": "0x0511e0bc707cb16ac567293c7de4c51884d5682c8654eabcf5bc3aa28a9d8aa2",
-      "nominationProposalLeafDigests": [
-        "0x0c2cfc4b49b3f0a4a388c260d87d40f0a4d1dc187b7b0f815c3834952650ff8a",
-        "0x0e3435dbe257ad5f12fba5c00115f385d0e98712f71c4e485c815b194f07ace5"
-      ]
-    },
-    {
       "artifactId": "family:curve-underlying",
       "artifactKind": "family",
       "familyId": "curve-underlying",
-      "definitionCatalogLeafDigest": "0x70661bdca1a954611051c35b655ebc47fc429e32c813131f0bd5569a17cb86d1",
+      "definitionCatalogLeafDigest": "0x561874916d78a7835ce91a5e260fd11c1af12ef265775b6be95f8918806b6c46",
       "requestedDependencyClosure": [
         "family.curve-underlying.coarse",
         "family.curve-underlying.exact",
         "family.curve-underlying.state"
       ],
-      "requestedDependencyRoot": "0x695b431d124ae169aa9e9a7ca1f86255740f6d106991ab40612572d3f6c19033",
-      "memoRoot": "0x9db7626ea4a5be596a19875c047c74f39335380837501c8855d8aebd4eb1f262",
+      "requestedDependencyRoot": "0xd74f39afe77c5ed2fe82fb5f60b33d22ea4a4ecf4c564e7385b936bb96950aa0",
+      "memoRoot": "0x2064fb7d383af9b351b397bb49f47638b7a3d3d1368f9e27accf4e74f6b42723",
       "nominationProposalLeafDigests": [
-        "0x8878dcc072c2bdb04677a653191c0575abda6667eaa05ebf540915d6fff733ca",
-        "0xe5526802a592604f2d4d0e126960c7ad1dda3a61f7f43becd3bb8ed995477218"
+        "0x595114f4ad5e8378b4216fa50c040f1a9ee3ed4d5b38295d4249a9a32c93c23a",
+        "0x6372a0d5dd05870dda80a1db71f589823418925f6f55579b141c5a4f20642bc4"
       ]
     },
     {
       "artifactId": "family:dodo-v2",
       "artifactKind": "family",
       "familyId": "dodo-v2",
-      "definitionCatalogLeafDigest": "0x5d374993d5821051744798d44d4d4a331357076e55e41df2870ff1f97c8216fd",
+      "definitionCatalogLeafDigest": "0x517d63e3b337ce208c5a730f001bc6006a7f9282cbb18d9f7a388616917d2d33",
       "requestedDependencyClosure": [
         "family.dodo-v2.coarse",
         "family.dodo-v2.exact",
         "family.dodo-v2.state"
       ],
-      "requestedDependencyRoot": "0x052f168836151d6c5b48d2b9f061ebcb795131fb4efd22179f3ef9f98cd25863",
-      "memoRoot": "0xfa5d1e1fefc07e1909d48c72d13746188b6cab643cb88f6d3f6e6fdd6d02746c",
+      "requestedDependencyRoot": "0x6e2a346b09f9a2e6042378f9f36e5f8cce793bb73637adf0f7805cb7a9e37810",
+      "memoRoot": "0x634d35df5e6813809f80298a23535f6cc14fb99f7a1e92c2a6e255e8935fad49",
       "nominationProposalLeafDigests": [
-        "0x64a435b280bf514c7566ab2003cc655e4e34c794d839f0b9b7ee46d661392ffb",
-        "0xe3b8f23d9aaababf7c98a44d447b4a496761f5f68dc59d9b8ddf9abb11569897"
+        "0xdae763308c283180a65f2e5fcc52e95cbc7fdeae84636482280ba7b0f5e82ce4",
+        "0xfe4ad2af0ba2f08c816fefee9f56426d911f0484343e7f052eb083938ac3b5b5"
       ]
     },
     {
       "artifactId": "family:fluid-dex",
       "artifactKind": "family",
       "familyId": "fluid-dex",
-      "definitionCatalogLeafDigest": "0x2c987367c0bd326833deed4f8dae7bf3ac46583a910c8411128efa7361f11fc3",
+      "definitionCatalogLeafDigest": "0x5daeff2ae191f02a5f25cf34671001f27f00321a88a034a501c492eb7bb853e9",
       "requestedDependencyClosure": [
         "family.fluid-dex.coarse",
         "family.fluid-dex.exact",
         "family.fluid-dex.state"
       ],
-      "requestedDependencyRoot": "0xbeab476c2886488d66f4d95ae7b050a8823add7f7ae163118f787e61a2fe1ac1",
-      "memoRoot": "0xba3869b62e743174ae53641b6d8b8d74a2d874d1a8126ed518c7c1eea850a863",
+      "requestedDependencyRoot": "0x417a0e6940a944c02d448e8cd4d6e50f493e40f52acfd7ca16bf76ed9a13bbe6",
+      "memoRoot": "0x75c7dbfa4d74a1dda129a07d12ef7caea77781271767efa8214a2037c54222ef",
       "nominationProposalLeafDigests": [
-        "0x040875220dd43eda414c608d840014f6b78ec25c13bb0673902131ec5a493526",
-        "0x9ff34a5227c42d4696c3a6e516c0c4648e0b92ea74f78316cbb6ac74294d4e15"
+        "0x4f10891938432d5f1fa83ab3af00559f7edbcb52d1680e825346f4ecb6f1c0c4",
+        "0xeb35bfc37949742fcac98bc22d353b25a764efa0613217e186845174f3c7c351"
       ]
     },
     {
       "artifactId": "family:univ2-standard",
       "artifactKind": "family",
       "familyId": "univ2-standard",
-      "definitionCatalogLeafDigest": "0x4b3ca63d213d92587bebcecfe1ac35594534b9db5defbd337487d00004ef50ad",
+      "definitionCatalogLeafDigest": "0xed89138bfbaf04c382e3773f10170a5a1696846f256513d34c0ca8e19999e806",
       "requestedDependencyClosure": [
         "family.univ2-standard.coarse",
         "family.univ2-standard.exact",
         "family.univ2-standard.state"
       ],
-      "requestedDependencyRoot": "0xd674983adba41655dac0cdc5a2548fcac9cda7c065dee4c30a82decb3ee1dccb",
-      "memoRoot": "0x77c800936a6e977c057db0a9ce74b9cae68b57ac0673511e85aa77ab7aaa9188",
+      "requestedDependencyRoot": "0x928aa3a32692a115f7468ef4d963e40d94059e497b3b37932ea9d5fe83cca2d1",
+      "memoRoot": "0xa889202a5d6b73b93abb7ce58bbaa28c788893833910f21aba7f2215bf1977b6",
       "nominationProposalLeafDigests": [
-        "0x820e2585c4ca8f42df704b1b5b0d3b6f851611eab4024e521ad76851a1808643",
-        "0xad3e3e08c81294123a693eb18b9eee350c8d5896307f6bd7addca8a27b3f34c0"
-      ]
-    },
-    {
-      "artifactId": "family:univ3-standard",
-      "artifactKind": "family",
-      "familyId": "univ3-standard",
-      "definitionCatalogLeafDigest": "0xf659ba22d4967dc31cd668650836fec78bf92ed70041c7c057249a3b8bb44a96",
-      "requestedDependencyClosure": [
-        "family.univ3-standard.coarse",
-        "family.univ3-standard.exact",
-        "family.univ3-standard.state"
-      ],
-      "requestedDependencyRoot": "0x54f2f562cc8d0b621cf612e40706278346524c738830335c2934c745781b6805",
-      "memoRoot": "0x0c50a59089b8f57eb96ddacaa67a35b4446c6d2ccb05824c615b27631ddfbaf0",
-      "nominationProposalLeafDigests": [
-        "0x3644099847f01d978e9b015263a5b4280d2b8dd742e74f1042a4235b2257511a",
-        "0xf0106dbfda00a369498eab8822b6483e78cacce14cc1fd123ea13e638098f5be"
-      ]
-    },
-    {
-      "artifactId": "family:univ4",
-      "artifactKind": "family",
-      "familyId": "univ4",
-      "definitionCatalogLeafDigest": "0x976106c1f0e2a2434b6cf8216f2c2654d3b32a196462dbfdc1fd25b8433c607d",
-      "requestedDependencyClosure": [
-        "family.univ4.coarse",
-        "family.univ4.exact",
-        "family.univ4.state"
-      ],
-      "requestedDependencyRoot": "0x173ff3321a9596812eea1fedd4bb6bc24939dee1d7f11e1c88c2affc27f6d9d1",
-      "memoRoot": "0x5a8645ea7f110c33e56fddeeb4cb2965acc7e234e1c003316cd40a80640d343b",
-      "nominationProposalLeafDigests": [
-        "0x630cc865fa27970af9c1378331ff95380016ac7e027cbb2c6187f2afff1526d9",
-        "0x8ec45898566822bf3696cc62514d2c87cd928de4e772215878067309b90a1a65"
+        "0x766c1ec6f839e9aa2717aab2a6d9667543fbaaa2b87c9e516e2547b94d1d750a",
+        "0xe7d39a81671a1ddf866d2d845d56567c893c3365935b038c7acd15bd6a6d4914"
       ]
     },
     {
       "artifactId": "strategy:route-cycle",
       "artifactKind": "strategy",
       "familyId": null,
-      "definitionCatalogLeafDigest": "0x7fb2b12abd038eb0bcccdc27a6896e96373cd4b094ff4ce79a0d2c2e8dc0c812",
+      "definitionCatalogLeafDigest": "0x0ce5788c07fe92d6cd6a95e6d3a9cc38eba8073959168148158faf873b43e310",
       "requestedDependencyClosure": [],
       "requestedDependencyRoot": "0xf0fe49c2f553f4786b5a840f5d291c9de3f2b1de764e5de50b0579495a730a36",
-      "memoRoot": "0x42d4069d930c45594a07fdc1d24919e8c8ee5add57385ed3b4789ce3998741cd",
+      "memoRoot": "0x3b760aff39be9ea032800e5dcec3f04dd6f88fe0e02b87be37367dfe242ab40d",
       "nominationProposalLeafDigests": []
     }
   ],
-  "snapshotRoot": "0x0d1280fbd578d83cb631aa90a56113f34b5fa6ddb38fe1f5e2d4a973d787fee7"
+  "snapshotRoot": "0x7120d1e08e1a8091b3f3094d5e5388b0495e1d9e34d4565ae51f60b0b42f364f"
 }

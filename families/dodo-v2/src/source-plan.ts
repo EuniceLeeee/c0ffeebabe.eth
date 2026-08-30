@@ -25,6 +25,7 @@ import {
 import { DODO_V2_FAMILY_AUTHORING_HASH } from "./family-definition.ts";
 import { decodeDodoCandidate } from "./discovery.ts";
 import { nominateDodoV2 } from "./nomination.ts";
+import { decodeDodoV2SwapLog } from "./swap-log.ts";
 
 
 function sameCutoff(
@@ -37,22 +38,8 @@ function sameCutoff(
     && left.stateRoot === right.stateRoot;
 }
 
-function abiWords(data: string, count: number, path: string): readonly bigint[] {
-  if (!new RegExp(`^0x(?:[0-9a-f]{64}){${count}}$`).test(data)) throw new TypeError(`${path} must contain exactly ${count} ABI words`);
-  return Object.freeze(Array.from({ length: count }, (_, index) => BigInt(`0x${data.slice(2 + index * 64, 2 + (index + 1) * 64)}`)));
-}
-
-function indexedAddress(value: string, path: string): string {
-  if (!/^0x0{24}[0-9a-f]{40}$/.test(value)) throw new TypeError(`${path} is not a padded indexed address`);
-  return `0x${value.slice(-40)}`;
-}
-
 function verifySwapLog(raw: ReturnType<typeof decodeEvmLogObservationBytes>): void {
-  if (raw.topics.length !== 3 || raw.topics[0] !== DODO_V2_SWAP_TOPIC) throw new TypeError("dodo-v2 Swap topic layout mismatch");
-  indexedAddress(raw.topics[1]!, "dodo-v2.DODOSwap.fromToken");
-  indexedAddress(raw.topics[2]!, "dodo-v2.DODOSwap.toToken");
-  const values = abiWords(raw.data, 2, "dodo-v2.DODOSwap.data");
-  if (values[0] === 0n || values[1] === 0n) throw new TypeError("dodo-v2 DODOSwap contains a zero amount");
+  decodeDodoV2SwapLog(raw);
 }
 
 function readRawEvidence(

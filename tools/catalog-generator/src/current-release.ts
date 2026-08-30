@@ -36,9 +36,6 @@ import {
   CURVE_UNDERLYING_DEFINITION,
 } from "../../../families/curve-underlying/src/family-definition.ts";
 import {
-  ANGSTROM_V4_DEFINITION,
-} from "../../../families/angstrom-v4/src/family-definition.ts";
-import {
   DODO_V2_DEFINITION,
 } from "../../../families/dodo-v2/src/family-definition.ts";
 import {
@@ -47,12 +44,6 @@ import {
 import {
   UNIV2_STANDARD_DEFINITION,
 } from "../../../families/univ2-standard/src/family-definition.ts";
-import {
-  UNIV3_STANDARD_DEFINITION,
-} from "../../../families/univ3-standard/src/family-definition.ts";
-import {
-  UNIV4_DEFINITION,
-} from "../../../families/univ4/src/family-definition.ts";
 import {
   ROUTE_CYCLE_STRATEGY,
 } from "../../../strategies/route-cycle/src/index.ts";
@@ -145,16 +136,14 @@ export function selectCatalogCompilerClosureCandidates(
  * force requalification of this release.
  */
 const CURRENT_RELEASE_FAMILY_SOURCES: readonly CurrentReleaseFamilySourceV1[] = Object.freeze([
-  Object.freeze({ definition: ANGSTROM_V4_DEFINITION, modulePath: "families/angstrom-v4/src/public.ts", exportName: "ANGSTROM_V4_DEFINITION" }),
   Object.freeze({ definition: CURVE_UNDERLYING_DEFINITION, modulePath: "families/curve-underlying/src/public.ts", exportName: "CURVE_UNDERLYING_DEFINITION" }),
   Object.freeze({ definition: DODO_V2_DEFINITION, modulePath: "families/dodo-v2/src/public.ts", exportName: "DODO_V2_DEFINITION" }),
   Object.freeze({ definition: FLUID_DEX_DEFINITION, modulePath: "families/fluid-dex/src/public.ts", exportName: "FLUID_DEX_DEFINITION" }),
   Object.freeze({ definition: UNIV2_STANDARD_DEFINITION, modulePath: "families/univ2-standard/src/public.ts", exportName: "UNIV2_STANDARD_DEFINITION" }),
-  Object.freeze({ definition: UNIV3_STANDARD_DEFINITION, modulePath: "families/univ3-standard/src/public.ts", exportName: "UNIV3_STANDARD_DEFINITION" }),
-  Object.freeze({ definition: UNIV4_DEFINITION, modulePath: "families/univ4/src/public.ts", exportName: "UNIV4_DEFINITION" }),
 ]);
 
 const CURRENT_RELEASE_EXCLUSIONS: readonly CurrentReleaseFamilyDecisionV1[] = Object.freeze([
+  Object.freeze({ familyId: "angstrom-v4", decision: "exclude", exclusionReasons: Object.freeze(["execution-program-blocked", "final-simulation-blocked"] as const) }),
   Object.freeze({ familyId: "astra-multitoken", decision: "exclude", exclusionReasons: Object.freeze(["exact-effect-observation-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
   Object.freeze({ familyId: "balancer-flash", decision: "exclude", exclusionReasons: Object.freeze(["qualified-funding-authority-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
   Object.freeze({ familyId: "eigenpie", decision: "exclude", exclusionReasons: Object.freeze(["qualified-state-authority-absent", "exact-effect-observation-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
@@ -170,6 +159,8 @@ const CURRENT_RELEASE_EXCLUSIONS: readonly CurrentReleaseFamilyDecisionV1[] = Ob
   Object.freeze({ familyId: "rocksolid", decision: "exclude", exclusionReasons: Object.freeze(["source-nomination-only"] as const) }),
   Object.freeze({ familyId: "self-burn-native", decision: "exclude", exclusionReasons: Object.freeze(["source-nomination-only"] as const) }),
   Object.freeze({ familyId: "wsteth", decision: "exclude", exclusionReasons: Object.freeze(["source-nomination-only"] as const) }),
+  Object.freeze({ familyId: "univ3-standard", decision: "exclude", exclusionReasons: Object.freeze(["execution-program-blocked", "final-simulation-blocked"] as const) }),
+  Object.freeze({ familyId: "univ4", decision: "exclude", exclusionReasons: Object.freeze(["execution-program-blocked", "final-simulation-blocked"] as const) }),
 ]);
 
 function validateIncludedFamily(source: CurrentReleaseFamilySourceV1): void {

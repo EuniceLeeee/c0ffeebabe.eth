@@ -1,12 +1,4 @@
-import {
-  closeSync,
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   assertExactKeys,
@@ -17,6 +9,7 @@ import {
   type CanonicalJson,
   type Hash,
 } from "../../../../packages/canonical-codec/src/index.ts";
+import { writeImmutableFile } from "./immutable-file.ts";
 
 export const HISTORICAL_FAMILY_FACT_MANIFEST_KIND =
   "aloha.historical-family-fact-manifest" as const;
@@ -32,8 +25,7 @@ export type HistoricalRpcMethod =
   | typeof RECEIPT_METHOD
   | typeof TRACE_METHOD
   | typeof HEADER_METHOD;
-export type FamilyFactStatus = "validated" | "contradicted" | "unresolved";
-export type SupportedFamily = "univ2-standard" | "univ3-standard";
+export type SupportedSelectorCandidateV1 = "univ2-standard" | "univ3-standard";
 
 export interface HistoricalRpcObjectKeyV1 {
   readonly chainId: string;
@@ -69,61 +61,6 @@ export interface HistoricalFamilyFactManifestV1 {
   readonly manifestRoot: Hash;
 }
 
-export interface HistoricalFamilyAcquisitionDescriptorV1 {
-  readonly schemaVersion: 1;
-  readonly kind: "aloha.historical-family-acquisition-descriptor";
-  readonly advisoryOnly: true;
-  readonly chainId: string;
-  readonly txHash: Hash;
-  readonly canonicalBlockHash: Hash | null;
-  readonly canonicalBlockHashSource: "receipt.blockHash-then-header.hash";
-  readonly requiredMethods: readonly HistoricalRpcMethod[];
-  readonly expectedFamilies: readonly SupportedFamily[];
-}
-
-export interface FamilySwapFactV1 {
-  readonly family: SupportedFamily;
-  readonly logIndex: string;
-  readonly pool: string;
-  readonly successfulCallIndex: string | null;
-  readonly selector: string;
-  readonly amount0: string;
-  readonly amount1: string;
-  readonly direction: "zero-for-one" | "one-for-zero";
-}
-
-export interface HistoricalFamilyFactObservationV1 {
-  readonly advisoryOnly: true;
-  readonly status: FamilyFactStatus;
-  readonly reasons: readonly string[];
-  readonly chainId: string | null;
-  readonly canonicalBlockHash: Hash | null;
-  readonly txHash: Hash | null;
-  readonly facts: readonly FamilySwapFactV1[];
-}
-
-export interface HistoricalFamilyFactEvaluationRequestV1 {
-  readonly expectedFamilies: readonly SupportedFamily[];
-}
-
-export const TX149_ACQUISITION_DESCRIPTOR_V1: HistoricalFamilyAcquisitionDescriptorV1 =
-  Object.freeze({
-    schemaVersion: 1,
-    kind: "aloha.historical-family-acquisition-descriptor",
-    advisoryOnly: true,
-    chainId: "1",
-    txHash: "0x149df3ec17a6044e0c66c25aa55ce044abe33bf14cedea26295e1b6d4c9fde60",
-    canonicalBlockHash: null,
-    canonicalBlockHashSource: "receipt.blockHash-then-header.hash",
-    requiredMethods: Object.freeze([
-      TRANSACTION_METHOD,
-      RECEIPT_METHOD,
-      TRACE_METHOD,
-      HEADER_METHOD,
-    ]),
-    expectedFamilies: Object.freeze(["univ2-standard", "univ3-standard"] as const),
-  });
-
 const ROLES: readonly HistoricalRpcRole[] = Object.freeze([
   "transaction",
   "receipt",
@@ -136,30 +73,8 @@ const METHODS: Readonly<Record<HistoricalRpcRole, HistoricalRpcMethod>> = Object
   trace: TRACE_METHOD,
   header: HEADER_METHOD,
 });
-const UNIV2_SWAP_TOPIC =
-  "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822";
-const UNIV3_SWAP_TOPIC =
-  "0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
-const UNIV2_SWAP_SELECTOR = "0x022c0d9f";
-const UNIV3_SWAP_SELECTOR = "0x128acb08";
-
 function fail(message: string): never {
   throw new TypeError(message);
-}
-
-class HistoricalFactContradiction extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "HistoricalFactContradiction";
-  }
-}
-
-function contradiction(message: string): never {
-  throw new HistoricalFactContradiction(message);
-}
-
-function hasOwn(value: object, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function plainObject(value: unknown, path: string): Record<string, unknown> {
@@ -187,24 +102,6 @@ function hash(value: unknown, path: string): Hash {
   const result = text(value, path).toLowerCase();
   if (!/^0x[0-9a-f]{64}$/.test(result)) fail(`expected 32-byte hash at ${path}`);
   return result as Hash;
-}
-
-function address(value: unknown, path: string): string {
-  const result = text(value, path).toLowerCase();
-  if (!/^0x[0-9a-f]{40}$/.test(result)) fail(`expected address at ${path}`);
-  return result;
-}
-
-function hexData(value: unknown, path: string): string {
-  const result = text(value, path).toLowerCase();
-  if (!/^0x(?:[0-9a-f]{2})*$/.test(result)) fail(`expected even-length hex data at ${path}`);
-  return result;
-}
-
-function hexQuantity(value: unknown, path: string): bigint {
-  const result = text(value, path).toLowerCase();
-  if (!/^0x(?:0|[1-9a-f][0-9a-f]*)$/.test(result)) fail(`expected canonical hex quantity at ${path}`);
-  return BigInt(result);
 }
 
 function canonicalArray(value: unknown, path: string): readonly CanonicalJson[] {
@@ -296,21 +193,7 @@ function buildManifest(inputs: readonly HistoricalRpcObjectInputV1[]): Historica
 }
 
 function writeExclusiveOrVerify(path: string, bytes: Uint8Array): void {
-  try {
-    const descriptor = openSync(path, "wx", 0o600);
-    try {
-      writeFileSync(descriptor, bytes);
-    } finally {
-      closeSync(descriptor);
-    }
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== "EEXIST") throw error;
-    const stat = lstatSync(path);
-    if (!stat.isFile() || stat.isSymbolicLink()) fail(`content-addressed path is not a regular file: ${path}`);
-    const existing = readFileSync(path);
-    if (!existing.equals(Buffer.from(bytes))) fail(`immutable content-addressed object changed: ${path}`);
-  }
+  writeImmutableFile(path, bytes, "immutable content-addressed object changed");
 }
 
 function ensurePrivateDirectory(path: string): void {
@@ -406,207 +289,4 @@ export function loadHistoricalFamilyFactBundleV1(
     results[entry.role] = decodeCanonicalBytes(Uint8Array.from(bytes));
   }
   return Object.freeze({ manifest, results: Object.freeze(results) });
-}
-
-interface TraceCall {
-  readonly index: number;
-  readonly to: string;
-  readonly selector: string;
-}
-
-function successfulCalls(trace: CanonicalJson): readonly TraceCall[] {
-  const calls: TraceCall[] = [];
-  let index = 0;
-  const visit = (raw: unknown, parentSuccessful: boolean): void => {
-    const node = plainObject(raw, "$.trace");
-    const currentIndex = index++;
-    const ownSuccessful = parentSuccessful && node.error === undefined && node.revertReason === undefined;
-    if (ownSuccessful && typeof node.to === "string" && typeof node.input === "string") {
-      const input = hexData(node.input, "$.trace.input");
-      calls.push({
-        index: currentIndex,
-        to: address(node.to, "$.trace.to"),
-        selector: input.length >= 10 ? input.slice(0, 10) : input,
-      });
-    }
-    if (node.calls !== undefined) {
-      if (!Array.isArray(node.calls)) fail("trace calls must be an array");
-      for (const child of node.calls) visit(child, ownSuccessful);
-    }
-  };
-  visit(trace, true);
-  return Object.freeze(calls);
-}
-
-function word(data: string, index: number, signed: boolean): bigint {
-  const body = data.slice(2);
-  const start = index * 64;
-  if (body.length < start + 64) fail("swap log data is truncated");
-  const unsigned = BigInt(`0x${body.slice(start, start + 64)}`);
-  if (!signed || unsigned < (1n << 255n)) return unsigned;
-  return unsigned - (1n << 256n);
-}
-
-function decodeSwapLog(
-  raw: unknown,
-  calls: readonly TraceCall[],
-  minimumCallIndex: number,
-): FamilySwapFactV1 | null {
-  const log = plainObject(raw, "$.receipt.logs[]");
-  if (!hasOwn(log, "topics")) contradiction("receipt log topics missing");
-  const topics = canonicalArray(log.topics, "$.receipt.logs[].topics");
-  if (topics.length === 0 || typeof topics[0] !== "string") return null;
-  const topic0 = hash(topics[0], "$.receipt.logs[].topics[0]");
-  const family = topic0 === UNIV2_SWAP_TOPIC
-    ? "univ2-standard"
-    : topic0 === UNIV3_SWAP_TOPIC
-      ? "univ3-standard"
-      : null;
-  if (family === null) return null;
-  if (!hasOwn(log, "address")) contradiction(`${family} pool identity missing`);
-  if (!hasOwn(log, "logIndex")) contradiction(`${family} log order missing`);
-  if (!hasOwn(log, "data")) contradiction(`${family} amount data missing`);
-  const pool = address(log.address, "$.receipt.logs[].address");
-  const logIndex = hexQuantity(log.logIndex, "$.receipt.logs[].logIndex").toString();
-  const data = hexData(log.data, "$.receipt.logs[].data");
-  const selector = family === "univ2-standard" ? UNIV2_SWAP_SELECTOR : UNIV3_SWAP_SELECTOR;
-  let amount0: bigint;
-  let amount1: bigint;
-  let direction: FamilySwapFactV1["direction"];
-  if (family === "univ2-standard") {
-    const amount0In = word(data, 0, false);
-    const amount1In = word(data, 1, false);
-    const amount0Out = word(data, 2, false);
-    const amount1Out = word(data, 3, false);
-    if (amount0In > 0n && amount1In === 0n && amount0Out === 0n && amount1Out > 0n) {
-      amount0 = amount0In;
-      amount1 = -amount1Out;
-      direction = "zero-for-one";
-    } else if (amount1In > 0n && amount0In === 0n && amount1Out === 0n && amount0Out > 0n) {
-      amount0 = -amount0Out;
-      amount1 = amount1In;
-      direction = "one-for-zero";
-    } else contradiction("UniV2 Swap amounts do not describe one exact direction");
-  } else {
-    amount0 = word(data, 0, true);
-    amount1 = word(data, 1, true);
-    if (amount0 > 0n && amount1 < 0n) direction = "zero-for-one";
-    else if (amount0 < 0n && amount1 > 0n) direction = "one-for-zero";
-    else contradiction("UniV3 Swap amounts do not have opposite non-zero signs");
-  }
-  const call = calls.find((candidate) =>
-    candidate.index > minimumCallIndex && candidate.to === pool && candidate.selector === selector);
-  return Object.freeze({
-    family,
-    logIndex,
-    pool,
-    successfulCallIndex: call === undefined ? null : String(call.index),
-    selector,
-    amount0: amount0.toString(),
-    amount1: amount1.toString(),
-    direction,
-  });
-}
-
-function contradicted(manifest: HistoricalFamilyFactManifestV1, reasons: readonly string[], facts: readonly FamilySwapFactV1[] = []): HistoricalFamilyFactObservationV1 {
-  return Object.freeze({
-    advisoryOnly: true,
-    status: "contradicted",
-    reasons: Object.freeze([...reasons]),
-    chainId: manifest.chainId,
-    canonicalBlockHash: manifest.canonicalBlockHash,
-    txHash: manifest.txHash,
-    facts: Object.freeze([...facts]),
-  });
-}
-
-function unresolved(
-  manifest: HistoricalFamilyFactManifestV1 | null,
-  reason: string,
-): HistoricalFamilyFactObservationV1 {
-  return Object.freeze({
-    advisoryOnly: true,
-    status: "unresolved",
-    reasons: Object.freeze([reason]),
-    chainId: manifest?.chainId ?? null,
-    canonicalBlockHash: manifest?.canonicalBlockHash ?? null,
-    txHash: manifest?.txHash ?? null,
-    facts: Object.freeze([]),
-  });
-}
-
-export function evaluateHistoricalFamilyFactsV1(
-  rootDirectory: string,
-  expectedManifestRoot: Hash,
-  request: HistoricalFamilyFactEvaluationRequestV1,
-): HistoricalFamilyFactObservationV1 {
-  let bundle: ReturnType<typeof loadHistoricalFamilyFactBundleV1>;
-  try {
-    bundle = loadHistoricalFamilyFactBundleV1(rootDirectory, expectedManifestRoot);
-  } catch (error) {
-    return unresolved(null, error instanceof Error ? error.message : String(error));
-  }
-  const { manifest, results } = bundle;
-  try {
-    const transaction = plainObject(results.transaction, "$.transaction");
-    const receipt = plainObject(results.receipt, "$.receipt");
-    const header = plainObject(results.header, "$.header");
-    if (!hasOwn(transaction, "hash")) return contradicted(manifest, ["transaction hash missing"]);
-    if (!hasOwn(transaction, "blockHash")) return contradicted(manifest, ["transaction block hash missing"]);
-    if (!hasOwn(receipt, "transactionHash")) return contradicted(manifest, ["receipt transaction hash missing"]);
-    if (!hasOwn(receipt, "blockHash")) return contradicted(manifest, ["receipt block hash missing"]);
-    if (!hasOwn(header, "hash")) return contradicted(manifest, ["header hash missing"]);
-    if (hash(transaction.hash, "$.transaction.hash") !== manifest.txHash) return contradicted(manifest, ["transaction hash mismatch"]);
-    if (hash(transaction.blockHash, "$.transaction.blockHash") !== manifest.canonicalBlockHash) return contradicted(manifest, ["transaction block hash mismatch"]);
-    if (hash(receipt.transactionHash, "$.receipt.transactionHash") !== manifest.txHash) return contradicted(manifest, ["receipt transaction hash mismatch"]);
-    if (hash(receipt.blockHash, "$.receipt.blockHash") !== manifest.canonicalBlockHash) return contradicted(manifest, ["receipt block hash mismatch"]);
-    if (hash(header.hash, "$.header.hash") !== manifest.canonicalBlockHash) return contradicted(manifest, ["header hash mismatch"]);
-    if (!hasOwn(receipt, "status")) return contradicted(manifest, ["receipt status missing"]);
-    if (hexQuantity(receipt.status, "$.receipt.status") !== 1n) return contradicted(manifest, ["receipt status is not successful"]);
-    if (!hasOwn(receipt, "logs")) return contradicted(manifest, ["receipt logs missing"]);
-    if (!Array.isArray(receipt.logs)) fail("unsupported receipt logs schema");
-    const calls = successfulCalls(results.trace);
-    const facts: FamilySwapFactV1[] = [];
-    let priorLogIndex: bigint | null = null;
-    let priorMatchedCallIndex = -1;
-    for (const raw of receipt.logs) {
-      const log = plainObject(raw, "$.receipt.logs[]");
-      if (!hasOwn(log, "logIndex")) return contradicted(manifest, ["receipt log order missing"], facts);
-      const currentLogIndex = hexQuantity(log.logIndex, "$.receipt.logs[].logIndex");
-      if (priorLogIndex !== null && currentLogIndex <= priorLogIndex) {
-        return contradicted(manifest, ["receipt log order is not strictly increasing"], facts);
-      }
-      priorLogIndex = currentLogIndex;
-      const fact = decodeSwapLog(raw, calls, priorMatchedCallIndex);
-      if (fact !== null) {
-        facts.push(fact);
-        if (fact.successfulCallIndex !== null) priorMatchedCallIndex = Number(fact.successfulCallIndex);
-      }
-    }
-    const expected = [...request.expectedFamilies];
-    if (expected.length === 0 || new Set(expected).size !== expected.length || expected.some((family) => family !== "univ2-standard" && family !== "univ3-standard")) {
-      return contradicted(manifest, ["expected family denominator is invalid"], facts);
-    }
-    const reasons: string[] = [];
-    for (const family of expected) {
-      const familyFacts = facts.filter((fact) => fact.family === family);
-      if (familyFacts.length === 0) reasons.push(`${family} ordered swap log missing`);
-      if (familyFacts.some((fact) => fact.successfulCallIndex === null)) reasons.push(`${family} successful call evidence missing`);
-    }
-    if (reasons.length > 0) return contradicted(manifest, reasons, facts);
-    return Object.freeze({
-      advisoryOnly: true,
-      status: "validated",
-      reasons: Object.freeze([]),
-      chainId: manifest.chainId,
-      canonicalBlockHash: manifest.canonicalBlockHash,
-      txHash: manifest.txHash,
-      facts: Object.freeze(facts),
-    });
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return error instanceof HistoricalFactContradiction
-      ? contradicted(manifest, [reason])
-      : unresolved(manifest, reason);
-  }
 }

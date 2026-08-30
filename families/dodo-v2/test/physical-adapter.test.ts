@@ -33,7 +33,7 @@ const source = Object.freeze({ chainId: "1", number: "100", hash: cutoff.hash, s
 const pool = address("5");
 const baseToken = address("1");
 const quoteToken = address("2");
-const indexedAddress = (value: string): Hash => `0x${word(BigInt(value))}` as Hash;
+const swapData = (): string => `0x${word(BigInt(baseToken))}${word(BigInt(quoteToken))}${word(100n)}${word(99n)}${word(BigInt(address("3")))}${word(BigInt(address("4")))}`;
 const evidenceBytes = encodeEvmLogObservation({
   kind: "evm-log",
   version: 1,
@@ -42,8 +42,8 @@ const evidenceBytes = encodeEvmLogObservation({
   transactionHash: h("tx"),
   logIndex: "0",
   address: pool,
-  topics: [DODO_V2_SWAP_TOPIC, indexedAddress(baseToken), indexedAddress(quoteToken)],
-  data: words(100n, 99n),
+  topics: [DODO_V2_SWAP_TOPIC],
+  data: swapData(),
 });
 const evidenceHash = sha256Hex(evidenceBytes);
 const evidence = Object.freeze({

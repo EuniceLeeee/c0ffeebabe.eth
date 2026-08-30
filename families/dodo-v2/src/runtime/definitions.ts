@@ -13,6 +13,7 @@ import { decodeDodoCreationHistoryEntries } from "../history-source-plan.ts";
 import { verifyDodoIdentityStage, dodoIdentityDescriptorHash } from "../identity.ts";
 import { materializeDodoV2, resealDodoState } from "../instance.ts";
 import { deriveDodoRoutes } from "../routes.ts";
+import { decodeDodoV2SwapLog } from "../swap-log.ts";
 import type { DodoCandidateV1, DodoCutoffV1, DodoIdentityV1, DodoMaterializedStateV1, DodoStateReadFactsV1 } from "../types.ts";
 import type { DodoPmmState } from "../kernel/math.ts";
 
@@ -85,8 +86,6 @@ function identityFact(value: unknown): { readonly candidateSnapshotHash: Hash; r
 
 function hexBytes(value: string, path: string): Uint8Array { const hex = bytes(value, path); const raw = new Uint8Array((hex.length - 2) / 2); for (let index = 0; index < raw.length; index += 1) raw[index] = Number.parseInt(hex.slice(2 + index * 2, 4 + index * 2), 16); return raw; }
 function blockTag(value: string): string { return `0x${BigInt(value).toString(16)}`; }
-function abiWords(data: string, count: number, path: string): readonly bigint[] { if (!new RegExp(`^0x(?:[0-9a-f]{64}){${count}}$`).test(data)) throw new TypeError(`${path} ABI mismatch`); return Object.freeze(Array.from({ length: count }, (_, index) => BigInt(`0x${data.slice(2 + index * 64, 2 + (index + 1) * 64)}`))); }
-
 function candidateFromIdentityEvidence(payload: IdentityPayload, rawBytes: Uint8Array, reads: Parameters<typeof verifyDodoIdentityStage>[0]["reads"]): DodoCandidateV1 {
   if (sha256Hex(rawBytes) !== payload.evidence.rawLocatorHash) throw new TypeError("dodo-v2 identity raw locator mismatch");
   let blockNumber: string;
@@ -96,9 +95,12 @@ function candidateFromIdentityEvidence(payload: IdentityPayload, rawBytes: Uint8
   let topic0: Hash;
   if (payload.evidence.kind === "recent-log") {
     const raw = decodeEvmLogObservationBytes(rawBytes, "dodo-v2.identity.recentEvidence");
-    if (raw.blockNumber !== payload.evidence.blockNumber || raw.blockHash !== payload.evidence.blockHash || raw.transactionHash !== payload.evidence.txHash || raw.logIndex !== payload.evidence.logIndex || raw.address !== payload.evidence.address || raw.address !== payload.candidate.instanceNominationKey || raw.topics.length !== 3 || raw.topics[0] !== payload.evidence.topic || raw.topics[0] !== DODO_V2_SWAP_TOPIC) throw new TypeError("dodo-v2 recent evidence binding mismatch");
-    const amounts = abiWords(raw.data, 2, "dodo-v2 DODOSwap");
-    if (amounts[0] === 0n || amounts[1] === 0n || BigInt(raw.blockNumber) > BigInt(payload.cutoff.number) || BigInt(raw.blockNumber) < BigInt(payload.cutoff.number) - 49n) throw new TypeError("dodo-v2 recent evidence window mismatch");
+    if (raw.blockNumber !== payload.evidence.blockNumber || raw.blockHash !== payload.evidence.blockHash || raw.transactionHash !== payload.evidence.txHash || raw.logIndex !== payload.evidence.logIndex || raw.address !== payload.evidence.address || raw.address !== payload.candidate.instanceNominationKey || raw.topics[0] !== payload.evidence.topic) throw new TypeError("dodo-v2 recent evidence binding mismatch");
+    const swap = decodeDodoV2SwapLog(raw, "dodo-v2.identity.DODOSwap");
+    const tokenPairMatches = (swap.soldToken === reads.baseToken && swap.boughtToken === reads.quoteToken)
+      || (swap.soldToken === reads.quoteToken && swap.boughtToken === reads.baseToken);
+    if (!tokenPairMatches) throw new TypeError("dodo-v2 recent evidence token binding mismatch");
+    if (BigInt(raw.blockNumber) > BigInt(payload.cutoff.number) || BigInt(raw.blockNumber) < BigInt(payload.cutoff.number) - 49n) throw new TypeError("dodo-v2 recent evidence window mismatch");
     blockNumber = raw.blockNumber; blockHash = raw.blockHash; txHash = raw.transactionHash; logIndex = raw.logIndex; topic0 = DODO_V2_SWAP_TOPIC;
   } else {
     const observed = decodeFamilySourcePlanPhysicalObservation(rawBytes, "dodo-v2.identity.historyEvidence");

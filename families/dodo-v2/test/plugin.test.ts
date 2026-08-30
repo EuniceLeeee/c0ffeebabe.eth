@@ -15,13 +15,15 @@ import { exactDodoV2 } from "../src/exact.ts";
 import { buildDodoAction } from "../src/action.ts";
 import { compileDodoExecution } from "../src/execution.ts";
 import { DODO_V2_HISTORY_SOURCE_PLAN, DODO_V2_SOURCE_NOMINATION_PROGRAM, DODO_V2_SOURCE_PLAN, DODO_V2_SOURCE_PLAN_RUNTIME } from "../src/source-plan.ts";
+import { decodeDodoV2SwapLog } from "../src/swap-log.ts";
 
 const addr = (digit: string) => `0x${digit.repeat(40)}`;
 const h = (label: string) => hashDomain("aloha/test/dodo", label);
 const cutoff = { chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") } as const;
-const observation = { kind: "call" as const, target: addr("5"), blockNumber: "100", blockHash: h("b100"), txHash: h("tx"), logIndex: "0", selector: DODO_V2_SELL_BASE_SELECTOR, rawLocatorHash: h("raw"), cutoff, sellBase: true };
+const observation = { kind: "call" as const, callType: "CALL" as const, callSucceeded: true, target: addr("5"), blockNumber: "100", blockHash: h("b100"), txHash: h("tx"), logIndex: "0", selector: DODO_V2_SELL_BASE_SELECTOR, rawLocatorHash: h("raw"), cutoff, sellBase: true };
 const word = (value: bigint) => value.toString(16).padStart(64, "0");
-const indexedAddress = (value: string) => `0x${"0".repeat(24)}${value.slice(2)}` as `0x${string}`;
+const addressWord = (value: string) => `${"0".repeat(24)}${value.slice(2)}`;
+const swapData = (soldToken = addr("1"), boughtToken = addr("2"), soldAmount = 100n, boughtAmount = 99n, seller = addr("3"), receiver = addr("4")) => `0x${addressWord(soldToken)}${addressWord(boughtToken)}${word(soldAmount)}${word(boughtAmount)}${addressWord(seller)}${addressWord(receiver)}`;
 
 test("DODO owns a recent 50-block nomination plan and a complete creation-history plan", () => {
   assert.equal(DODO_V2_SOURCE_PLAN.sourcePlanId, DODO_V2_SOURCE_PLAN_ID);
@@ -62,8 +64,8 @@ test("DODO source runtime is deterministic and nominates only matching recent lo
     transactionHash: h("owned-tx"),
     logIndex: "0",
     address: addr("5"),
-    topics: [DODO_V2_SWAP_TOPIC, indexedAddress(addr("1")), indexedAddress(addr("2"))],
-    data: `0x${word(100n)}${word(99n)}`,
+    topics: [DODO_V2_SWAP_TOPIC],
+    data: swapData(),
   });
   const rawHash = sha256Hex(bytes);
   const evidence = { kind: "recent-log" as const, version: 1 as const, sourcePlanRef: null, ownerRef: null, blockNumber: "100", blockHash: cutoff.hash, txHash: h("owned-tx"), logIndex: "0", address: addr("5"), topic: DODO_V2_SWAP_TOPIC, rawLocatorHash: rawHash };
@@ -81,6 +83,23 @@ test("DODO source runtime is deterministic and nominates only matching recent lo
   }, new AbortController().signal);
   assert.equal(nominations.length, 1);
   assert.deepEqual(reads, [rawHash]);
+});
+
+test("DODO decodes the real six-word Swap layout and rejects ABI mutations", () => {
+  const realData = "0x000000000000000000000000dac17f958d2ee523a2206206994597c13d831ec7000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000000000000000000000000000000000000001b7df00000000000000000000000000000000000000000000000000003be1fec1f3c5000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015000000000000000000000000e08d97e151473a848c3d9ca3f323cb720472d015";
+  assert.deepEqual(decodeDodoV2SwapLog({ topics: [DODO_V2_SWAP_TOPIC], data: realData }), {
+    soldToken: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    boughtToken: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    soldAmount: 112607n,
+    boughtAmount: 65841827804101n,
+    seller: "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+    receiver: "0xe08d97e151473a848c3d9ca3f323cb720472d015",
+  });
+  assert.throws(() => decodeDodoV2SwapLog({ topics: [DODO_V2_SWAP_TOPIC, h("injected-topic")], data: realData }), /topic layout/);
+  assert.throws(() => decodeDodoV2SwapLog({ topics: [DODO_V2_SWAP_TOPIC], data: realData.slice(0, -64) }), /exactly 6 ABI words/);
+  assert.throws(() => decodeDodoV2SwapLog({ topics: [DODO_V2_SWAP_TOPIC], data: `0x1${realData.slice(3)}` }), /canonical padded nonzero address/);
+  assert.throws(() => decodeDodoV2SwapLog({ topics: [DODO_V2_SWAP_TOPIC], data: swapData(addr("1"), addr("2"), 0n) }), /zero amount/);
+  assert.throws(() => decodeDodoV2SwapLog({ topics: [DODO_V2_SWAP_TOPIC], data: swapData(addr("1"), addr("2"), 1n, 1n, addr("0")) }), /canonical padded nonzero address/);
 });
 
 function verified() {
@@ -105,6 +124,8 @@ test("DODO nomination has a bounded window and exact selector matching", () => {
   assert.equal(nominateDodoV2(seed).status, "nominated");
   assert.deepEqual(nominateDodoV2({ ...seed, evidence: { ...seed.evidence, blockNumber: "49" } }), { status: "chain-proven-rejected", reasonCode: "evidence-before-window" });
   assert.equal(decodeDodoCandidate({ ...observation, selector: "0xdeadbeef" }, "dodo-v2-sell-base-call"), null);
+  assert.equal(decodeDodoCandidate({ ...observation, callType: "DELEGATECALL" }, "dodo-v2-sell-base-call"), null);
+  assert.equal(decodeDodoCandidate({ ...observation, callSucceeded: false }, "dodo-v2-sell-base-call"), null);
 });
 
 test("DODO reverse registry binding and PMM fee semantics reach action", () => {

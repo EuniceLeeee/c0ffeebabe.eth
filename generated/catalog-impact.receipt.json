@@ -2,15 +2,12 @@
   "schemaVersion": 1,
   "kind": "aloha.catalog-impact-receipt",
   "beforeSnapshotRoot": "0x0405f705a90d3fa70d22e105b749ebfbb7c4b0d584b9ed6c7c862aba5adca204",
-  "afterSnapshotRoot": "0x0d1280fbd578d83cb631aa90a56113f34b5fa6ddb38fe1f5e2d4a973d787fee7",
+  "afterSnapshotRoot": "0x7120d1e08e1a8091b3f3094d5e5388b0495e1d9e34d4565ae51f60b0b42f364f",
   "beforeDefinitionCatalogRoot": "0xc1ec5f78f872a882db64a3227f2c90573c1073e22a9dba19e5c7adf1529775dc",
-  "afterDefinitionCatalogRoot": "0xed3d2ecf153b044097cc16619142c6995ac5668698884438c68a726d502a54d9",
+  "afterDefinitionCatalogRoot": "0xad4dede4d7577a321620996f253ebf2ff32a136374a67d1b33e71ebb26039602",
   "beforeCapabilityCatalogRoot": "0x12948d85524eff81b03b2f8decf47950aac5a240fe43332241f775575039dbcf",
-  "afterCapabilityCatalogRoot": "0x591d417bb1e098f8a0663603fc99e8b434bab8fe0116c30916cd19a02366537b",
+  "afterCapabilityCatalogRoot": "0x25d0e130686748d5fa887cc38a0a648b781c49a1066ef55b429e53cee61eec38",
   "changedCapabilityIds": [
-    "family.angstrom-v4.coarse",
-    "family.angstrom-v4.exact",
-    "family.angstrom-v4.state",
     "family.curve-underlying.coarse",
     "family.curve-underlying.exact",
     "family.curve-underlying.state",
@@ -22,18 +19,9 @@
     "family.fluid-dex.state",
     "family.univ2-standard.coarse",
     "family.univ2-standard.exact",
-    "family.univ2-standard.state",
-    "family.univ3-standard.coarse",
-    "family.univ3-standard.exact",
-    "family.univ3-standard.state",
-    "family.univ4.coarse",
-    "family.univ4.exact",
-    "family.univ4.state"
+    "family.univ2-standard.state"
   ],
   "changedCapabilityClosure": [
-    "family.angstrom-v4.coarse",
-    "family.angstrom-v4.exact",
-    "family.angstrom-v4.state",
     "family.curve-underlying.coarse",
     "family.curve-underlying.exact",
     "family.curve-underlying.state",
@@ -45,33 +33,21 @@
     "family.fluid-dex.state",
     "family.univ2-standard.coarse",
     "family.univ2-standard.exact",
-    "family.univ2-standard.state",
-    "family.univ3-standard.coarse",
-    "family.univ3-standard.exact",
-    "family.univ3-standard.state",
-    "family.univ4.coarse",
-    "family.univ4.exact",
-    "family.univ4.state"
+    "family.univ2-standard.state"
   ],
   "affectedArtifactIds": [
-    "family:angstrom-v4",
     "family:curve-underlying",
     "family:dodo-v2",
     "family:fluid-dex",
     "family:univ2-standard",
-    "family:univ3-standard",
-    "family:univ4",
     "strategy:route-cycle"
   ],
   "affectedFamilyIds": [
-    "angstrom-v4",
     "curve-underlying",
     "dodo-v2",
     "fluid-dex",
-    "univ2-standard",
-    "univ3-standard",
-    "univ4"
+    "univ2-standard"
   ],
   "reusableArtifacts": [],
-  "receiptRoot": "0x8ea44a889972d767bb98b3dbc33528e351662b5e6315ebbc6b577148e39ece6d"
+  "receiptRoot": "0x8f25b716918ef7f575df756e91ccd66b025a9c88033b3003af177db95815d949"
 }

@@ -203,22 +203,16 @@ test("current release records exclusions without importing them into the product
     "wsteth",
   ]);
   assert.deepEqual(decisions.filter(item => item.decision === "include").map(item => item.familyId), [
-    "angstrom-v4",
     "curve-underlying",
     "dodo-v2",
     "fluid-dex",
     "univ2-standard",
-    "univ3-standard",
-    "univ4",
   ]);
   assert.deepEqual(releaseInput().families.map(item => item.definition.manifest.familyId), [
-    "angstrom-v4",
     "curve-underlying",
     "dodo-v2",
     "fluid-dex",
     "univ2-standard",
-    "univ3-standard",
-    "univ4",
   ]);
   for (const item of decisions.filter(candidate => candidate.decision === "include")) assert.deepEqual(item.exclusionReasons, []);
   for (const item of decisions.filter(candidate => candidate.decision === "exclude")) assert.ok(item.exclusionReasons.length > 0);
@@ -235,6 +229,10 @@ test("current release records exclusions without importing them into the product
   }
   for (const familyId of ["balancer-flash", "morpho-flash"]) {
     assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("qualified-funding-authority-absent"));
+  }
+  for (const familyId of ["angstrom-v4", "univ3-standard", "univ4"]) {
+    assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("execution-program-blocked"));
+    assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("final-simulation-blocked"));
   }
   assert.ok(decisions.find(item => item.familyId === "fluid-credit")?.exclusionReasons.includes("qualified-credit-authority-absent"));
 });
@@ -262,13 +260,12 @@ test("compiler entrypoint BOM is derived from every included public definition a
   const specs = currentCatalogCompilerEntrypointSpecs();
   const keys = specs.map(spec => `${spec.modulePath}#${spec.exportName}`);
   assert.equal(new Set(keys).size, keys.length);
-  assert.ok(keys.includes("families/angstrom-v4/src/public.ts#ANGSTROM_V4_DEFINITION"));
+  assert.ok(keys.includes("families/curve-underlying/src/public.ts#CURVE_UNDERLYING_DEFINITION"));
   assert.ok(keys.includes("families/dodo-v2/src/public.ts#DODO_V2_DEFINITION"));
   assert.ok(keys.includes("families/dodo-v2/src/history-source-plan.ts#DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME"));
   assert.ok(keys.includes("families/dodo-v2/src/history-source-plan.ts#DODO_V2_HISTORY_NOMINATION_PROGRAM"));
   assert.ok(keys.includes("families/fluid-dex/src/public.ts#FLUID_DEX_DEFINITION"));
   assert.ok(keys.includes("families/univ2-standard/src/stages/nomination.ts#UNIV2_STANDARD_SOURCE_PLAN_RUNTIME"));
-  assert.ok(keys.includes("families/univ4/src/public.ts#UNIV4_DEFINITION"));
   assert.ok(keys.includes("strategies/route-cycle/src/index.ts#ROUTE_CYCLE_STRATEGY"));
   assert.ok(keys.includes("strategies/route-cycle/src/index.ts#ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER"));
   assert.ok(keys.includes("valuation-owners/native-equivalent/src/runtime.ts#createNativeEquivalentValuationOwnerV1"));
@@ -283,6 +280,13 @@ test("compiler entrypoint BOM is derived from every included public definition a
   assert.equal(specs.find(spec => spec.exportName === "UNIV2_STANDARD_SOURCE_PLAN_RUNTIME")?.preferredKind, "compiler-root");
   assert.equal(specs.find(spec => spec.exportName === "ROUTE_CYCLE_STRATEGY")?.preferredKind, "package-entrypoint");
   assert.equal(specs.find(spec => spec.exportName === "ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER")?.preferredKind, "compiler-root");
+});
+
+test("execution-incomplete Families are absent from the release compiler import closure", () => {
+  const source = readFileSync(resolve(repositoryRoot, "tools/catalog-generator/src/current-release.ts"), "utf8");
+  for (const familyId of ["angstrom-v4", "univ3-standard", "univ4"]) {
+    assert.doesNotMatch(source, new RegExp(`from [^\\n]*families/${familyId}/`));
+  }
 });
 
 test("every current release compiler entrypoint directly exports its declared symbol", () => {
