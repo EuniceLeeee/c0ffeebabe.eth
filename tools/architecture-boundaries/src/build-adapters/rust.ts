@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import {
   existsSync,
   lstatSync,
-  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -415,8 +414,8 @@ export function collectRustBuildAdapterFacts(
     diagnostics.push(invalid("rust-toolchain-executable-missing", pinPath, "Pinned cargo and rustc executables must both be available"));
     return { facts: null, diagnostics };
   }
-  const cargoHome = join(tmpdir(), "aloha-boundary-cargo-home-v1");
-  mkdirSync(cargoHome, { recursive: true });
+  const cargoHome = mkdtempSync(join(tmpdir(), "aloha-boundary-cargo-home-v1-"));
+  try {
   for (const configName of ["config", "config.toml"]) {
     if (existsSync(join(cargoHome, configName))) diagnostics.push(invalid("cargo-home-config-present", configName, "Boundary-owned CARGO_HOME must not contain mutable configuration"));
   }
@@ -788,4 +787,7 @@ export function collectRustBuildAdapterFacts(
     rootDigest: hashDomain("aloha/rust/build-adapter/v1", digestInput),
   };
   return { facts, diagnostics };
+  } finally {
+    rmSync(cargoHome, { recursive: true, force: true });
+  }
 }

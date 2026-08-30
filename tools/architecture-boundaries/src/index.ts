@@ -1082,6 +1082,23 @@ const VALUATION_OWNER_CENTRAL_IMPORT_ALLOWLIST = Object.freeze([
   "specs/economic-valuation-owner/",
 ]);
 
+/** The reference-lock integrity tool owns exactly these four generated
+ * authority artifacts.  Its independent CLI is chained after this gate, but
+ * the boundary still requires the fixed generator/spec/package/CLI inputs to
+ * be present in the tracked denominator before recognizing that ownership. */
+const REFERENCE_LOCK_GENERATED_AUTHORITY_PATHS = new Set([
+  "generated/authority/authority-manifest.json",
+  "generated/authority/reference-lock.json",
+  "generated/authority/reuse-ledger.yaml",
+  "generated/authority/reuse-receipts.json",
+]);
+const REFERENCE_LOCK_GENERATOR_OWNER_PATHS = Object.freeze([
+  "tools/reference-lock-integrity/src/index.ts",
+  "specs/reuse-ledger/src/index.ts",
+  "tools/reference-lock-integrity/package.json",
+  "tools/reference-lock-integrity/src/cli.ts",
+] as const);
+
 // These public package roots still mix a constructor/issuer with ordinary
 // ports.  They are sensitive until physically split; listing them here makes
 // direct runtime imports fail closed instead of hiding behind a public index.
@@ -3534,7 +3551,7 @@ function validateCatalogGenerationVerification(
   return validateCatalogGenerationVerificationReceipt(actual, expected, diagnostics);
 }
 
-function validateGeneratedTree(root: string, files: readonly TrackedFile[], requireReleaseTree: boolean, diagnostics: BoundaryDiagnostic[]): Set<string> {
+export function validateGeneratedTree(root: string, files: readonly TrackedFile[], requireReleaseTree: boolean, diagnostics: BoundaryDiagnostic[]): Set<string> {
   const generated = files.filter((file) => file.fileClass === "generated");
   const generatorPaths = validateReleaseGeneratedTree(root, files, generated, requireReleaseTree, diagnostics);
   validateCatalogGeneratedTree(root, files, diagnostics);
@@ -3544,6 +3561,10 @@ function validateGeneratedTree(root: string, files: readonly TrackedFile[], requ
     SCHEDULER_AUTHORITY_PATH,
     FAMILY_EXECUTION_COMPOSITION_PATH,
   ]);
+  const trackedPaths = new Set(files.map((file) => file.path));
+  if (REFERENCE_LOCK_GENERATOR_OWNER_PATHS.every((path) => trackedPaths.has(path))) {
+    for (const path of REFERENCE_LOCK_GENERATED_AUTHORITY_PATHS) generatedByKnownOwner.add(path);
+  }
   // The scheduler authority is a separately fixed fail-closed placeholder,
   // not a release-role generator output.  It is validated by the exact-null
   // check in runBoundaryGate and must not be mistaken for an unqualified

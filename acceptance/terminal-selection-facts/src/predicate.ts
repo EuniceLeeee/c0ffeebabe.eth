@@ -301,7 +301,7 @@ function checkSelectionJoin(
   raw: RawTerminalSelectionObservationV1,
   manifest: TerminalSelectionManifestV1,
   projection: TerminalSelectionFullFamilyProjectionV1,
-  process: TerminalSelectionProcessEvidenceV1,
+  processEvidence: TerminalSelectionProcessEvidenceV1,
   reasons: TerminalSelectionReasonV1[],
 ): void {
   const selection = raw.selection;
@@ -315,42 +315,42 @@ function checkSelectionJoin(
     || selection.selectedProducerTerminalId !== terminal.selectedProducerTerminalId) {
     add(reasons, "predicate-observation-mismatch", "$.rawSelectionToTerminalManifest");
   }
-  if (terminal.joinedProcessEvidenceRoot !== process.evidenceRoot
-    || terminal.selectedProducerTerminalId !== process.producerTerminalId
-    || selection.selectedPerformanceEventId !== process.durableAppend.eventId
-    || selection.selectedProducerTerminalEventId !== process.producerTerminalDurableAppend.eventId
-    || terminal.performanceAppendRecordId !== process.durableAppendRecordId
-    || terminal.producerTerminalAppendRecordId !== process.producerTerminalDurableAppendRecordId) {
+  if (terminal.joinedProcessEvidenceRoot !== processEvidence.evidenceRoot
+    || terminal.selectedProducerTerminalId !== processEvidence.producerTerminalId
+    || selection.selectedPerformanceEventId !== processEvidence.durableAppend.eventId
+    || selection.selectedProducerTerminalEventId !== processEvidence.producerTerminalDurableAppend.eventId
+    || terminal.performanceAppendRecordId !== processEvidence.durableAppendRecordId
+    || terminal.producerTerminalAppendRecordId !== processEvidence.producerTerminalDurableAppendRecordId) {
     add(reasons, "predicate-observation-mismatch", "$.terminalManifestToSelectedProcess");
   }
-  if (process.durableAppend.namespace !== "searcher-production-evidence/performance/v1"
-    || process.producerTerminalDurableAppend.namespace !== "searcher-production-evidence/producer-terminals/v1") {
+  if (processEvidence.durableAppend.namespace !== "searcher-production-evidence/performance/v1"
+    || processEvidence.producerTerminalDurableAppend.namespace !== "searcher-production-evidence/producer-terminals/v1") {
     add(reasons, "predicate-observation-mismatch", "$.selectedProcess.durableAppend");
   }
-  if (manifest.processAnchorRoot !== terminalSelectionProcessAnchorRoot(process)
-    || manifest.runtimeAnchorRoot !== terminalSelectionRuntimeAnchorRoot(process)
-    || manifest.runtimeArtifactRoot !== process.runtimeAnchor.runtimeArtifactRoot) {
+  if (manifest.processAnchorRoot !== terminalSelectionProcessAnchorRoot(processEvidence)
+    || manifest.runtimeAnchorRoot !== terminalSelectionRuntimeAnchorRoot(processEvidence)
+    || manifest.runtimeArtifactRoot !== processEvidence.runtimeAnchor.runtimeArtifactRoot) {
     add(reasons, "process-anchor-mismatch", "$.selectedProcess.runtimeAnchor");
   }
-  if (process.runtimeBindingId !== process.runtimeAnchor.bindingId
-    || process.releaseProvenanceHash !== process.runtimeAnchor.releaseProvenanceHash
-    || process.candidateReleaseCommit !== process.runtimeAnchor.candidateReleaseCommit) {
+  if (processEvidence.runtimeBindingId !== processEvidence.runtimeAnchor.bindingId
+    || processEvidence.releaseProvenanceHash !== processEvidence.runtimeAnchor.releaseProvenanceHash
+    || processEvidence.candidateReleaseCommit !== processEvidence.runtimeAnchor.candidateReleaseCommit) {
     add(reasons, "process-anchor-mismatch", "$.selectedProcess.release");
   }
-  if (hashField(raw.release, "bindingId") !== process.runtimeBindingId
-    || hashField(raw.release, "releaseProvenanceHash") !== process.releaseProvenanceHash
-    || stringField(raw.release, "candidateReleaseCommit") !== process.candidateReleaseCommit) {
+  if (hashField(raw.release, "bindingId") !== processEvidence.runtimeBindingId
+    || hashField(raw.release, "releaseProvenanceHash") !== processEvidence.releaseProvenanceHash
+    || stringField(raw.release, "candidateReleaseCommit") !== processEvidence.candidateReleaseCommit) {
     add(reasons, "process-anchor-mismatch", "$.raw.release");
   }
-  if (stringField(raw.serving, "generationId") !== process.generationId
-    || hashField(raw.serving, "graphRoot") !== process.graphRoot
-    || hashField(raw.serving, "readyRecordHash") !== process.readyRecordHash
-    || hashField(raw.serving, "sourceCoverageRoot") !== process.serving.sourceCoverageRoot) {
+  if (stringField(raw.serving, "generationId") !== processEvidence.generationId
+    || hashField(raw.serving, "graphRoot") !== processEvidence.graphRoot
+    || hashField(raw.serving, "readyRecordHash") !== processEvidence.readyRecordHash
+    || hashField(raw.serving, "sourceCoverageRoot") !== processEvidence.serving.sourceCoverageRoot) {
     add(reasons, "process-anchor-mismatch", "$.raw.serving");
   }
-  if (projection.producerTerminalBindingRoot !== process.producerTerminalBindingRoot
+  if (projection.producerTerminalBindingRoot !== processEvidence.producerTerminalBindingRoot
     || projection.finalDurableWindowId !== manifest.finalDurableWindowId
-    || projection.readyRecordHash !== process.readyRecordHash
+    || projection.readyRecordHash !== processEvidence.readyRecordHash
     || projection.fullGraphCoarseSweepRoot !== manifest.fullGraphCoarseSweepRoot) {
     add(reasons, "predicate-observation-mismatch", "$.terminalManifest.fullFamily.producerTerminalBindingRoot");
   }
@@ -416,7 +416,7 @@ export function evaluateTerminalSelectionPredicate(
     reasons,
     "$.fullFamilyProjection",
   );
-  const process = hasSelectedProcess ? observeArtifact(
+  const processEvidence = hasSelectedProcess ? observeArtifact(
     fact.artifacts[3]!.artifactRefId,
     TERMINAL_SELECTION_ARTIFACT_SCHEMA_REFS.processEvidence,
     runtime,
@@ -449,10 +449,10 @@ export function evaluateTerminalSelectionPredicate(
       const verdict: TerminalSelectionPredicateVerdict = reasons.length === 0 ? "fail" : "invalid";
       return Object.freeze({ verdict, reasons: Object.freeze(reasons) });
     }
-    if (raw.value.selection.selectedIndex === null || manifest.value.sixStep.status !== "observed" || process === null) {
+    if (raw.value.selection.selectedIndex === null || manifest.value.sixStep.status !== "observed" || processEvidence === null) {
       add(reasons, "predicate-observation-mismatch", "$.selectedTerminalDenominator");
     } else {
-      checkSelectionJoin(raw.value, manifest.value, projection.value, process.value, reasons);
+      checkSelectionJoin(raw.value, manifest.value, projection.value, processEvidence.value, reasons);
       const completePredicateArtifacts = observedPredicateArtifacts.filter((value): value is NonNullable<typeof value> => value !== null);
       const closure = completePredicateArtifacts.map(value => {
         const lease = runtime.leases.find(candidate => candidate.receiptId === value.ref.retentionLeaseReceiptId);
@@ -477,7 +477,7 @@ export function evaluateTerminalSelectionPredicate(
         add(reasons, "predicate-observation-mismatch", "$.terminalManifest.sixStep.predicateArtifactClosure");
       }
       if (invocation !== undefined && invocation !== null
-        && invocation.candidateReleaseCommit !== process.value.candidateReleaseCommit) {
+        && invocation.candidateReleaseCommit !== processEvidence.value.candidateReleaseCommit) {
         add(reasons, "process-anchor-mismatch", "$.trustedObserverInvocation.candidateReleaseCommit");
       }
     }

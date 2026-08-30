@@ -785,6 +785,17 @@ export function assertPlainObject(
   }
 }
 
+/** Reject array proxies before any reflective array inspection can invoke traps. */
+export function assertConcreteArray(
+  value: unknown,
+  path = "$",
+): asserts value is unknown[] {
+  if (!Array.isArray(value)) {
+    fail("invalid-field", "expected an array", path);
+  }
+  rejectProxy(value, path);
+}
+
 /** Read a union discriminator without invoking accessors or proxy traps. */
 export function readOwnEnumerableDataProperty(
   value: unknown,

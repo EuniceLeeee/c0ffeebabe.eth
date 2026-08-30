@@ -24,18 +24,12 @@ export type {
   RuntimeReleaseSchedulerInputV1,
   RuntimeReleaseRevmInputV1,
   RuntimeReleaseReadyInputV1,
-  RuntimeReleasePerformanceInputV1,
-  RuntimeReleaseFinalSimulationInputV1,
   RuntimeReleaseCatalogInputV1,
   RuntimeReleaseCatalogSnapshotV1,
   RuntimeReleaseCatalogServiceV1,
   RuntimeReleaseCompositionInputV1,
   RuntimeReleaseCompositionServicesV1,
   RuntimeReleaseFamilyRuntimeServiceV1,
-  RuntimeReleaseStrategyRuntimeServiceV1,
-  RuntimeReleaseFullFamilyTerminalBindingServiceV1,
-  RuntimeReleaseFullGraphCoarseSweepServiceV1,
-  RuntimeReleaseSixStepTerminalBindingServiceV1,
 } from "./internal/bootstrap.ts";
 export type {
   RuntimeReleaseObserverStoreBindingV1,

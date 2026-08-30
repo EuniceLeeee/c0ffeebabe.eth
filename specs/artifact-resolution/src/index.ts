@@ -1,7 +1,7 @@
-import { types as nodeTypes } from "node:util";
 import {
   CANONICAL_LIMITS,
   arraySchema,
+  assertConcreteArray,
   assertDecimalString,
   assertExactKeys,
   assertHash,
@@ -127,9 +127,7 @@ export function preflightArtifactBytesByteLength(value: unknown, path = "$"): bi
   }
   const chunksValue = readOwnEnumerableDataProperty(value, "chunks", path);
   const chunksPath = `${path}.chunks`;
-  if (!Array.isArray(chunksValue) || nodeTypes.isProxy(chunksValue)) {
-    throw new TypeError(`artifact byte chunks must be a concrete array at ${chunksPath}`);
-  }
+  assertConcreteArray(chunksValue, chunksPath);
   const lengthDescriptor = Object.getOwnPropertyDescriptor(chunksValue, "length");
   if (lengthDescriptor === undefined || !("value" in lengthDescriptor)
     || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) {

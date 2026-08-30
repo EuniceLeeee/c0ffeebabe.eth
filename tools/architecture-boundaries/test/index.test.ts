@@ -41,6 +41,7 @@ import {
   validateAndQueryImplementationClosureDigest,
   validateAttestationContractOwnershipSources,
   validateCatalogGeneratedTree,
+  validateGeneratedTree,
   validateCatalogGenerationVerificationReceipt,
   validateDependencyBoundaries,
   validateGateCorePackageExports,
@@ -384,6 +385,42 @@ test("catalog generated ownership includes safety profile in the exact ledger-ba
     missingSafetyProfile,
   );
   assert.ok(missingSafetyProfile.some(value => value.code === "catalog-generated-output-set"));
+});
+
+test("reference-lock generator owns only the four fixed generated authority artifacts", () => {
+  const file = (path: string): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: classifyBoundaryPathV1(path).language,
+    fileClass: classifyBoundaryPathV1(path).fileClass,
+  });
+  const artifacts = [
+    "generated/authority/authority-manifest.json",
+    "generated/authority/reference-lock.json",
+    "generated/authority/reuse-ledger.yaml",
+    "generated/authority/reuse-receipts.json",
+  ];
+  const owners = [
+    "tools/reference-lock-integrity/src/index.ts",
+    "specs/reuse-ledger/src/index.ts",
+    "tools/reference-lock-integrity/package.json",
+    "tools/reference-lock-integrity/src/cli.ts",
+  ];
+  const inspect = (paths: readonly string[]): readonly BoundaryDiagnostic[] => {
+    const diagnostics: BoundaryDiagnostic[] = [];
+    validateGeneratedTree("/unused", paths.map(file), false, diagnostics);
+    return diagnostics;
+  };
+
+  assert.deepEqual(inspect([...artifacts, ...owners]), []);
+  assert.ok(inspect([...artifacts, ...owners, "generated/authority/forged.json"])
+    .some((item) => item.code === "generated-regeneration-contract-missing"
+      && item.path === "generated/authority/forged.json"));
+  assert.ok(inspect([...artifacts, ...owners.slice(1)])
+    .some((item) => item.code === "generated-regeneration-contract-missing"));
 });
 
 test("Attestation contract ownership rejects duplicate validators, authority shapes, and public shape assertions", () => {
