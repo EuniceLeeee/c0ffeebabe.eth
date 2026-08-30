@@ -1158,6 +1158,7 @@ test("qualification certificate executes every declared mutation against both ve
     certificate,
     {
       ownerRef: qualificationValuationOwnerRef,
+      supportedAssetRefs: Object.freeze([qualificationProfitAsset.assetRef]),
       proposedOwnerLeafDigest: qualificationValuationLeafDigest,
       implementationHash: qualificationValuationOwnerImplementationHash,
       factSchemaRef: qualificationValuationFactSchemaRef,

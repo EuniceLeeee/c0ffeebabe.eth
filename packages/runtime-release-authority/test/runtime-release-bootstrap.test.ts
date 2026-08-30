@@ -9,7 +9,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { decodeCanonicalJson, encodeCanonicalBytes, hashDomain, sha256Hex, type Hash } from "../../canonical-codec/src/index.ts";
-import { erc20AssetPortBindingV1 } from "../../asset-ref/src/index.ts";
+import { erc20AssetPortBindingV1, erc20AssetReferenceV1 } from "../../asset-ref/src/index.ts";
+import { encodeEconomicSafetyObjectiveTemplatesV1 } from "../../economics-safety/src/index.ts";
 import {
   type AttestationCompositionBindingV1,
   type InstanceLifecycleSingleFlightPort,
@@ -52,6 +53,8 @@ import {
   issueRuntimeReleaseQualifiedDiscoverySourcePort,
   readRuntimeReleaseQualifiedDiscoverySourcePort,
 } from "../src/internal/discovery-source-authority-owner.ts";
+import { issueRuntimeReleaseEconomicSafetyEvaluatorCapabilityV1 } from "../src/internal/economic-safety-owner.ts";
+import { readGeneratedEconomicValuationOwnerProposalRegistryV1 } from "../../../generated/valuation-owner-registry/index.ts";
 import {
   issueQualifiedPhysicalExecutionPort,
 } from "../../work-plane/src/internal/family-execution-port.ts";
@@ -746,6 +749,33 @@ test("generated scheduler authority remains fail-closed until deployment composi
   assert.equal(QUALIFIED_EXECUTOR_AUTHORITY, null);
 });
 
+test("runtime-release bootstrap rejects an objective outside its selected valuation-owner coverage", async () => {
+  const value = await fixture();
+  try {
+    const valuationOwnerRef = readGeneratedEconomicValuationOwnerProposalRegistryV1().entries[0]!.ownerRef;
+    const unsupportedProfitAsset = erc20AssetReferenceV1("1", "0x0000000000000000000000000000000000000001");
+    assert.throws(
+      () => issueRuntimeReleaseEconomicSafetyEvaluatorCapabilityV1(
+        value.authority,
+        encodeEconomicSafetyObjectiveTemplatesV1([Object.freeze({
+          objectiveRef: h("unsupported-profit-objective"),
+          profitAsset: unsupportedProfitAsset,
+          profitAccount: "0x0000000000000000000000000000000000000001",
+          minNetGain: "1",
+          maxGas: "1000000",
+          maxValueAtRisk: "1000000",
+          priorityFeePerGas: "0",
+          bidCostNative: "0",
+          valuationOwnerRef,
+        })]),
+      ),
+      /does not uniquely cover the selected profit asset/,
+    );
+  } finally {
+    await value.close();
+  }
+});
+
 test("performance deployment port is exact-byte, process-local, release-bound, and rotation-fenced", async () => {
   const first = await fixture();
   const second = await fixture();
@@ -1228,6 +1258,10 @@ test("release-owned full-Graph sweep preserves all 2x2 missing transitions and r
     const head = await source.headSource.next(new AbortController().signal);
     assert.ok(head);
     const headObservation = source.consumeHeadObservation(head);
+    const sweepExecution = Object.freeze({
+      transactionOrigin: "runtime-release-bootstrap",
+      executorAddress: "acceptance-recipient",
+    });
 
     let failingFenceCount = 0;
     const failingLease = makeLease(() => {
@@ -1241,6 +1275,7 @@ test("release-owned full-Graph sweep preserves all 2x2 missing transitions and r
           session: failingSession,
           sourceRead: source.issueFullGraphCoarseSweepSourceRead(failingSession.currentSourceCapability),
           amountSeed: { amountIn: "1", recipient: "acceptance-recipient" },
+          execution: sweepExecution,
         })),
         /transient full-Graph fence failure/,
       );
@@ -1265,6 +1300,7 @@ test("release-owned full-Graph sweep preserves all 2x2 missing transitions and r
       session,
       sourceRead: source.issueFullGraphCoarseSweepSourceRead(session.currentSourceCapability),
       amountSeed: { amountIn: "1", recipient: "acceptance-recipient" },
+      execution: sweepExecution,
     }));
     await fenceBlocked;
     const competingSession = await source.canonical.openHeadSession(headObservation, makeLease(() => {}));
@@ -1274,6 +1310,7 @@ test("release-owned full-Graph sweep preserves all 2x2 missing transitions and r
           session: competingSession,
           sourceRead: source.issueFullGraphCoarseSweepSourceRead(competingSession.currentSourceCapability),
           amountSeed: { amountIn: "1", recipient: "acceptance-recipient" },
+          execution: sweepExecution,
         })),
         /already in flight/,
       );
@@ -1312,6 +1349,7 @@ test("release-owned full-Graph sweep preserves all 2x2 missing transitions and r
           session: replaySession,
           sourceRead: source.issueFullGraphCoarseSweepSourceRead(replaySession.currentSourceCapability),
           amountSeed: { amountIn: "1", recipient: "acceptance-recipient" },
+          execution: sweepExecution,
         })),
         /already ran for this exact Ready\/current-source snapshot/,
       );
@@ -1676,6 +1714,7 @@ test("release-owned application submits an observed head, emits a producer termi
     const observations = applicationObservationPorts(join(evidenceDirectory, "observer-store"));
     const evidence = issueSearcherProductionEvidenceOwnerV1({
       databasePath: evidencePath,
+      economicSafety: services.economicSafety,
       release: {
         bindingId: services.release.bindingId,
         releaseProvenanceHash: services.release.releaseProvenanceHash,
@@ -1720,7 +1759,13 @@ test("release-owned application submits an observed head, emits a producer termi
         releaseProvenanceHash: services.release.releaseProvenanceHash,
         candidateReleaseCommit: services.release.candidateReleaseCommit,
       },
-      coreInput: { amountSeed: { amountIn: "1", recipient: "0x0000000000000000000000000000000000000001" } },
+      coreInput: {
+        amountSeed: { amountIn: "1", recipient: "0x0000000000000000000000000000000000000001" },
+        execution: {
+          transactionOrigin: "runtime-release-bootstrap",
+          executorAddress: "0x0000000000000000000000000000000000000001",
+        },
+      },
       finalSimulationFactory,
       evidence,
       source,
@@ -1903,6 +1948,7 @@ function openApplicationLifecycleFixture(
   const observations = applicationObservationPorts(`${evidencePath}.observer-store`);
   const evidence = issueSearcherProductionEvidenceOwnerV1({
     databasePath: evidencePath,
+    economicSafety: services.economicSafety,
     release: {
       bindingId: services.release.bindingId,
       releaseProvenanceHash: services.release.releaseProvenanceHash,
@@ -1948,7 +1994,13 @@ function openApplicationLifecycleFixture(
       candidateReleaseCommit: services.release.candidateReleaseCommit,
     },
     source: value.runtimeSource,
-    coreInput: { amountSeed: { amountIn: "1", recipient: "0x0000000000000000000000000000000000000001" } },
+    coreInput: {
+      amountSeed: { amountIn: "1", recipient: "0x0000000000000000000000000000000000000001" },
+      execution: {
+        transactionOrigin: "runtime-release-bootstrap",
+        executorAddress: "0x0000000000000000000000000000000000000001",
+      },
+    },
     finalSimulationFactory: issueQualifiedFinalSimulationPortFactoryV1({
       async issue() {
         throw new TypeError("empty lifecycle Graph must not request final simulation");
@@ -2528,6 +2580,7 @@ test("release-owned performance evidence closes exact 100 complete heads and rej
   });
   const evidence = issueSearcherProductionEvidenceOwnerV1({
     databasePath: evidencePath,
+    economicSafety: services.economicSafety,
     release: {
       bindingId: services.release.bindingId,
       releaseProvenanceHash: services.release.releaseProvenanceHash,

@@ -4,6 +4,10 @@ import {
   type ProducerSessionV1,
 } from "../../../canonical-source/src/index.ts";
 import type { StartupProducerLeaseV1 } from "../../../startup-runtime/src/index.ts";
+import {
+  familySearchExecutionContext,
+  type FamilySearchExecutionContextV1,
+} from "../../../family-sdk/search-runtime/index.ts";
 import type {
   FullGraphCoarseSweepInvocationCapabilityV1,
   FullGraphCoarseSweepSourceReadCapabilityV1,
@@ -23,6 +27,7 @@ export interface FullGraphCoarseSweepInvocationStateV1 {
   readonly canonicalSourceAuthority: object;
   readonly sourceRead: ReturnType<typeof consumeFullGraphCoarseSweepSourceReadCapabilityV1>["port"];
   readonly amountSeed: FullGraphCoarseSweepAmountSeedV1;
+  readonly execution: FamilySearchExecutionContextV1;
 }
 
 const states = new WeakMap<object, FullGraphCoarseSweepInvocationStateV1>();
@@ -41,14 +46,19 @@ export function issueFullGraphCoarseSweepInvocationCapabilityV1(input: {
   readonly session: ProducerSessionV1<StartupProducerLeaseV1>;
   readonly sourceRead: FullGraphCoarseSweepSourceReadCapabilityV1;
   readonly amountSeed: FullGraphCoarseSweepAmountSeedV1;
+  readonly execution: FamilySearchExecutionContextV1;
 }): FullGraphCoarseSweepInvocationCapabilityV1 {
-  assertExactKeys(input, ["session", "sourceRead", "amountSeed"], "fullGraphSweepInvocation");
+  assertExactKeys(input, ["session", "sourceRead", "amountSeed", "execution"], "fullGraphSweepInvocation");
   if (input.session === null || typeof input.session !== "object") throw new TypeError("full-Graph sweep producer session is required");
   if (consumedSessions.has(input.session.currentSourceCapability)) throw new TypeError("full-Graph sweep invocation already issued for current-source session");
   const current = readIssuedProducerCurrentSourceSessionCapabilityV1(input.session.currentSourceCapability);
   assertExactKeys(input.amountSeed, ["amountIn", "recipient"], "fullGraphSweepInvocation.amountSeed");
   if (!/^[1-9][0-9]*$/.test(input.amountSeed.amountIn)) throw new TypeError("full-Graph sweep amountIn must be positive decimal");
   assertNonEmptyString(input.amountSeed.recipient, "fullGraphSweepInvocation.amountSeed.recipient");
+  const execution = familySearchExecutionContext(input.execution, "fullGraphSweepInvocation.execution");
+  if (execution.executorAddress !== input.amountSeed.recipient) {
+    throw new TypeError("full-Graph sweep executor/recipient mismatch");
+  }
   const sourceRead = readFullGraphCoarseSweepSourceReadCapabilityV1(input.sourceRead);
   if (current.sessionId !== input.session.sessionId
     || current.generationId !== input.session.generationId
@@ -72,6 +82,7 @@ export function issueFullGraphCoarseSweepInvocationCapabilityV1(input: {
     canonicalSourceAuthority: current.canonicalSourceAuthority,
     sourceRead: consumedSourceRead.port,
     amountSeed: Object.freeze({ ...input.amountSeed }),
+    execution,
   }));
   consumedSessions.add(input.session.currentSourceCapability);
   return capability;

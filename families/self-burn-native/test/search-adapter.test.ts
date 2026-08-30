@@ -90,6 +90,7 @@ const amount: FamilySearchAmountEnvelopeV1 = Object.freeze({
   amountIn,
   recipient,
 });
+const execution = Object.freeze({ transactionOrigin: address("7"), executorAddress: amount.recipient });
 const effects = Object.freeze({
   kind: "self-burn-native-effects-v1" as const,
   actor: recipient,
@@ -103,7 +104,7 @@ const objectivePayload = effects;
 const objective = Object.freeze({ objectiveRef: hashDomain("aloha/search-objective/v1", objectivePayload), payload: objectivePayload });
 
 function input(readPort: FamilySearchSourceReadPortV1 = readPortFactory()) {
-  return { route: routeBinding(), currentSource: { source: cutoff, assertCurrent() {} } satisfies FamilySearchCurrentSourceV1, objective, amount, readPort };
+  return { route: routeBinding(), currentSource: { source: cutoff, assertCurrent() {} } satisfies FamilySearchCurrentSourceV1, objective, amount, execution, readPort };
 }
 function readPortFactory(options: { readonly malformed?: boolean; readonly mismatch?: boolean } = {}): FamilySearchSourceReadPortV1 {
   return {

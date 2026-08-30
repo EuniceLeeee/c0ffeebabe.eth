@@ -2131,6 +2131,30 @@ interpreter hashes。它是 execution program 的唯一价格/状态输入。
 compiler 只负责有序组合、资金流引用、caller/preCall/effect contract、repayment/standing-position/
 conservation obligations 与 hash；不知道 swap、vault、debt mint 或具体协议。
 
+[PFD] 顶层交易主体与执行/结算合约是两个不同的release-bound角色，不能继续用一个含糊的`caller`或
+`executor`字段代替：
+
+~~~ts
+interface FamilySearchExecutionContextV1 {
+  readonly transactionOrigin: Address;
+  readonly executorAddress: Address;
+}
+~~~
+
+唯一production owner从同一份已签名deployment policy与executor state签发该context：
+`transactionOrigin = callerAddress`，`executorAddress = amount.recipient = profitAccount`。普通F5、terminal
+Full-Graph sweep、Family state/coarse/exact/action与final-sim必须消费同一context或其hash；caller不能在请求中
+替换、交换或只提供其中一个角色。`executionContextHash`进入Full-Graph binding及任何actor-sensitive Family
+request/state lineage；current-source transport仍只按完整calldata与source组成semantic key，不获得协议或角色
+解释权。
+
+[VEF] DODO V2的角色分离是load-bearing实例：官方contractV2 commit
+`2f1bcdac7ef1beee7599a756e2eed26732c2536d`中`DVMTrader.sellBase/sellQuote`按
+`querySellBase/querySellQuote(tx.origin, input)`计算actor-sensitive fee/quote，而pool的`msg.sender`与output
+receiver仍是Aloha executor。故DODO quote actor绑定`transactionOrigin`，transfer、receiver、effect observation与
+profit account绑定`executorAddress`；二者互换必须invalid。未来Family只能声明自己的角色语义，中央不得加入
+`if familyId`分支。
+
 [PFD] standing-position guard不是协议分类表，obligation也不是position/debt/credit的中央closed union：
 
 ~~~ts
@@ -2216,9 +2240,16 @@ valuation owner proposal
 
 Production runtime只能通过generated valuation registry调用owner的公开runtime entry；中央、Family和application
 不得直接import具体owner。每个certificate leaf绑定owner ref、implementation/fact schema、predicate/reference
-oracle program、critical mutation corpus与implementation closure；完整certificate set必须与proposal registry
+oracle program、critical mutation corpus、严格排序非空的`supportedAssetRefs`与implementation closure；完整certificate set必须与proposal registry
 一一对应、排序唯一且无缺失。新增valuation owner只改变自身leaf、完整set root和release BOM root，不改变已有owner
 leaf，也不迫使不依赖它的Family、Swap/Protocol或generic Six-Step core重新资格化。
+
+[PFD] 当前initial release的WETH-only范围不是deployment policy schema或central decoder语义。通用policy只验证
+`profitAsset.assetRef == objective.numeraireAssetRef`；当前signed/generated valuation-owner BOM只有singleton
+`native-equivalent`，该plugin自己的proposal、qualification certificate与runtime binding exact-bind唯一mainnet WETH
+`supportedAssetRefs`。Runtime bootstrap在evaluator/service ready之前通用验证selected `valuationOwnerRef`唯一存在且覆盖
+selected profit asset；普通ERC-20 policy可以结构化decode，但在没有另一个已生成、已资格化且覆盖该asset的owner时
+必须fail-closed。未来增加新valuation owner只增加plugin与BOM leaf，不修改deployment schema或generic evaluator core。
 
 ### 16.7 Final simulation 与 submission
 
@@ -2540,6 +2571,19 @@ evidence或精确no-sim原因，以及这些对象之间的source/head/generatio
 约三万transition是观察值，不是硬编码门槛；实际expected count必须每次从物理Graph重算。Fact Log可以帮助人工判断
 production代码或验收器是否空转、缩小分母或互相自证，但其记录、汇总与判断仍全部是advisory，不能签发release、
 runtime或submission authority。
+
+[PFD] 当前首个mixed dry-run/final-sim release slice的generated BOM只包含`curve-underlying`、`dodo-v2`、
+`fluid-dex`与`univ2-standard`。这表示当前可执行分片，不表示其他已实现Family通过、被删除或成为legacy；其余Family
+必须以显式exclusion reason留在release decision ledger，直到各自complete source、exact、ActionOwner/effect与
+final-sim依赖闭合后，才可通过新增BOM leaf进入release。测试和observer必须读取generated metadata的exact set，
+不得硬编码Family ordinal或把旧的7/20-Family数量当authority。
+
+[PFD] 历史真实交易反向取证是Family适配的事实加速器，不是旧capture harness复活：只读observer从canonical
+transaction/receipt/header/trace或log取得exact prefix/pre-state与协议调用/effect事实，content-addressed存储原始bytes，
+并把当前generated Adapter source/import/closure、execution context、current-source transcript与消费完整性分别绑定。
+永久cache只保存可重放的事实locator/bytes，不能保存producer verdict；任一requested root、generated closure、source、
+transaction membership或transcript变化都必须失败关闭。该历史事实可支持人工/advisory判断Family是否适配正确并缩短
+等待live样本的时间，但在独立chain/state qualification闭合前不得升级成release gate或production authority。
 
 [PFD] 只有某个predicate的Fact Contract已冻结，并在真实物理样本、正/负/invalid mutation、独立observer/oracle、
 implementation closure与qualification失效规则上全部闭合后，才可通过单独ADR把**该predicate**升级成machine gate。

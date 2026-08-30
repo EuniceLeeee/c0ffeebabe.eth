@@ -594,13 +594,24 @@ export function createEconomicSafetyQualifiedEvaluatorV1(
     const path = `economicSafety.valuationOwners[${index}]`;
     const observeCurrentSource: EconomicSafetyValuationOwnerBindingV1["observeCurrentSource"] = owner.observeCurrentSource;
     assertExactKeys(owner, [
-      "ownerRef", "implementationHash", "factSchemaRef", "implementationClosureRoot",
+      "ownerRef", "supportedAssetRefs", "implementationHash", "factSchemaRef", "implementationClosureRoot",
       "qualificationLeafDigest", "valuationOwnerRegistryRoot", "qualifiedValuationOwnerSetRoot",
       "observeCurrentSource",
     ], path);
     if (typeof observeCurrentSource !== "function") throw new TypeError(`${path}.observeCurrentSource must be owner-issued`);
+    if (!Array.isArray(owner.supportedAssetRefs) || owner.supportedAssetRefs.length === 0) {
+      throw new TypeError(`${path}.supportedAssetRefs must be non-empty`);
+    }
+    const supportedAssetRefs = Object.freeze(owner.supportedAssetRefs.map((assetRef, assetIndex) =>
+      assertHash(assetRef, `${path}.supportedAssetRefs[${assetIndex}]`)));
+    for (let assetIndex = 1; assetIndex < supportedAssetRefs.length; assetIndex += 1) {
+      if (supportedAssetRefs[assetIndex - 1]! >= supportedAssetRefs[assetIndex]!) {
+        throw new TypeError(`${path}.supportedAssetRefs must be strictly sorted and unique`);
+      }
+    }
     return Object.freeze({
       ownerRef: assertHash(owner.ownerRef, `${path}.ownerRef`),
+      supportedAssetRefs,
       implementationHash: assertHash(owner.implementationHash, `${path}.implementationHash`),
       factSchemaRef: assertHash(owner.factSchemaRef, `${path}.factSchemaRef`),
       implementationClosureRoot: assertHash(owner.implementationClosureRoot, `${path}.implementationClosureRoot`),
@@ -611,7 +622,10 @@ export function createEconomicSafetyQualifiedEvaluatorV1(
     });
   }));
   if (new Set(normalizedValuationOwners.map(owner => owner.ownerRef)).size !== normalizedValuationOwners.length) throw new TypeError("economic safety valuation owners contain duplicates");
-  if (normalized.some(template => !normalizedValuationOwners.some(owner => owner.ownerRef === template.valuationOwnerRef))) throw new TypeError("economic safety template valuation owner is unavailable");
+  if (normalized.some(template => {
+    const owners = normalizedValuationOwners.filter(owner => owner.ownerRef === template.valuationOwnerRef);
+    return owners.length !== 1 || !owners[0]!.supportedAssetRefs.includes(template.profitAsset.assetRef);
+  })) throw new TypeError("economic safety template valuation owner does not uniquely cover the selected profit asset");
   assertExactKeys(executorQualification, [
     "executorKind", "engineBuildFingerprint", "executableFingerprint",
     "qualifiedExecutorRegistryRoot", "selectedExecutorLeafHash", "releaseRoleManifestRoot",

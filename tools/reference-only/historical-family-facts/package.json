@@ -6,10 +6,14 @@
     ".": "./src/index.ts",
     "./acquisition": "./src/acquisition.ts",
     "./advisory-report": "./src/advisory-report.ts",
+    "./candidate-generated-search-adapter": "./src/candidate-generated-search-adapter.ts",
     "./current-adapter-comparator": "./src/current-adapter-comparator.ts",
+    "./execution-prefix": "./src/execution-prefix.ts",
     "./family-advisory-matrix": "./src/family-advisory-matrix.ts",
+    "./family-current-source-replay": "./src/family-current-source-replay.ts",
     "./frozen-rpc-replay": "./src/frozen-rpc-replay.ts",
     "./pool-identity-observer": "./src/pool-identity-observer.ts",
+    "./release-family-fact-closure": "./src/release-family-fact-closure.ts",
     "./variant-observer": "./src/variant-observer.ts"
   },
   "scripts": {

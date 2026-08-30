@@ -988,6 +988,7 @@ function renderValuationOwnerRegistry(registry: GeneratedEconomicValuationOwnerR
     "  const owners: readonly EconomicValuationOwnerRuntimeBindingV1[] = Object.freeze([",
     ...registry.entries.map((entry, index) => [
       `    VALUATION_OWNER_${index}_FACTORY(Object.freeze({`,
+      `      supportedAssetRefs: Object.freeze(${JSON.stringify(entry.supportedAssetRefs)}) satisfies readonly Hash[],`,
       `      implementationClosureRoot: ${JSON.stringify(entry.implementationClosureRoot)},`,
       `      qualificationLeafDigest: ${JSON.stringify(entry.qualificationLeafDigest)},`,
       `      valuationOwnerRegistryRoot: ${JSON.stringify(registry.valuationOwnerRegistryRoot)},`,

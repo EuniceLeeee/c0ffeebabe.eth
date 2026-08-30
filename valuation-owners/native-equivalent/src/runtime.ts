@@ -9,6 +9,7 @@ import type { EconomicValuationOwnerRuntimeBindingV1 } from "../../../specs/econ
 
 const MAINNET_WRAPPED_NATIVE_ADDRESS = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 const MAINNET_WRAPPED_NATIVE_ASSET = erc20AssetReferenceV1("1", MAINNET_WRAPPED_NATIVE_ADDRESS);
+export const NATIVE_EQUIVALENT_SUPPORTED_ASSET_REFS_V1 = Object.freeze([MAINNET_WRAPPED_NATIVE_ASSET.assetRef]);
 
 export const NATIVE_EQUIVALENT_VALUATION_OWNER_REF_V1: Hash = hashDomain(
   "aloha/economic-safety/valuation-owner-ref/v1",
@@ -36,6 +37,7 @@ export const NATIVE_EQUIVALENT_VALUATION_FACT_SCHEMA_REF_V1: Hash = hashDomain(
 );
 
 export interface NativeEquivalentValuationQualificationBindingV1 {
+  readonly supportedAssetRefs: readonly Hash[];
   readonly implementationClosureRoot: Hash;
   readonly qualificationLeafDigest: Hash;
   readonly valuationOwnerRegistryRoot: Hash;
@@ -48,8 +50,13 @@ export interface NativeEquivalentValuationQualificationBindingV1 {
 export function createNativeEquivalentValuationOwnerV1(
   qualification: NativeEquivalentValuationQualificationBindingV1,
 ): EconomicValuationOwnerRuntimeBindingV1 {
+  if (qualification.supportedAssetRefs.length !== 1
+    || qualification.supportedAssetRefs[0] !== NATIVE_EQUIVALENT_SUPPORTED_ASSET_REFS_V1[0]) {
+    throw new TypeError("native-equivalent generated asset coverage does not match the plugin declaration");
+  }
   return Object.freeze({
     ownerRef: NATIVE_EQUIVALENT_VALUATION_OWNER_REF_V1,
+    supportedAssetRefs: NATIVE_EQUIVALENT_SUPPORTED_ASSET_REFS_V1,
     implementationHash: NATIVE_EQUIVALENT_VALUATION_OWNER_IMPLEMENTATION_HASH_V1,
     factSchemaRef: NATIVE_EQUIVALENT_VALUATION_FACT_SCHEMA_REF_V1,
     implementationClosureRoot: qualification.implementationClosureRoot,

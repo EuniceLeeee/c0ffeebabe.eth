@@ -663,7 +663,7 @@ export function validateMaterializedFullGraphSweepV1(sweep: FullGraphCoarseSweep
     "releaseMembershipRoot", "definitionCatalogRoot", "familyCompositionRoot",
     "generationId", "readyRecordHash", "graphRoot", "readyCutoff",
     "recentObservationRange", "currentSourceSessionId", "actualCurrentSource",
-    "amountSeedHash", "objectiveRef", "bindingRoot",
+    "amountSeedHash", "executionContextHash", "objectiveRef", "bindingRoot",
   ], "fullGraphSweep.binding");
   for (const [key, value] of Object.entries({
     runtimeBindingId: sweep.binding.runtimeBindingId,
@@ -675,6 +675,7 @@ export function validateMaterializedFullGraphSweepV1(sweep: FullGraphCoarseSweep
     graphRoot: sweep.binding.graphRoot,
     currentSourceSessionId: sweep.binding.currentSourceSessionId,
     amountSeedHash: sweep.binding.amountSeedHash,
+    executionContextHash: sweep.binding.executionContextHash,
     objectiveRef: sweep.binding.objectiveRef,
     bindingRoot: sweep.binding.bindingRoot,
   })) assertHash(value, `fullGraphSweep.binding.${key}`);

@@ -112,7 +112,7 @@ function verified() {
   const identity = verifyDodoIdentityStage({ candidate: nomination.candidate, reads: { cutoff, pool: addr("5"), factory: DODO_V2_FACTORIES[0]!.address, registry: DODO_V2_FACTORIES[0]!.address, registryPool: addr("5"), baseToken: addr("1"), quoteToken: addr("2"), quoteActor: DODO_V2_QUOTE_ACTOR, pmm, lpFeeRate: (DODO_DECIMAL_ONE / 10n).toString(), mtFeeRate: "0" } });
   assert.equal(identity.status, "verified");
   if (identity.status !== "verified") throw new Error("identity failed");
-  const state = materializeDodoV2({ identity: identity.identity, read: { cutoff, pool: addr("5"), pmm, lpFeeRate: (DODO_DECIMAL_ONE / 10n).toString(), mtFeeRate: "0" } });
+  const state = materializeDodoV2({ identity: identity.identity, read: { cutoff, pool: addr("5"), quoteActor: DODO_V2_QUOTE_ACTOR, pmm, lpFeeRate: (DODO_DECIMAL_ONE / 10n).toString(), mtFeeRate: "0" } });
   assert.equal(state.status, "verified");
   if (state.status !== "verified") throw new Error("state failed");
   return { identity: identity.identity, state: state.state, route: deriveDodoRoutes(identity.identity)[0]! };

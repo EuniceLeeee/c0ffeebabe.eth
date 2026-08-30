@@ -34,7 +34,7 @@ function sweepFixture(count: number, label = "a", largeObservation = false): Ful
     generationId: `generation:${label}`, readyRecordHash: h(`${label}:ready`), graphRoot: h(`${label}:graph`),
     readyCutoff: source, recentObservationRange: Object.freeze({ from: "1", to: "50", blockCount: "50" as const }),
     currentSourceSessionId: h(`${label}:source-session`), actualCurrentSource: source,
-    amountSeedHash: h(`${label}:amount`), objectiveRef: h(`${label}:objective`),
+    amountSeedHash: h(`${label}:amount`), executionContextHash: h(`${label}:execution`), objectiveRef: h(`${label}:objective`),
   });
   const binding = Object.freeze({
     ...bindingBody,

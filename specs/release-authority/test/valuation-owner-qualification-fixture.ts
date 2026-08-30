@@ -13,6 +13,7 @@ export function testEconomicValuationOwnerQualificationSetV1(scope: string) {
       schemaVersion: 1,
       kind: "aloha.economic-valuation-owner-qualification-certificate",
       ownerRef: h("owner"),
+      supportedAssetRefs: Object.freeze([h("asset")]),
       proposedOwnerLeafDigest: h("proposal-leaf"),
       implementationHash: h("implementation"),
       factSchemaRef: h("fact-schema"),

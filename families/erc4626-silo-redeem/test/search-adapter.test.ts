@@ -35,6 +35,7 @@ function routeBinding(): FamilySearchRouteLegBindingV1 {
 }
 
 const amount: FamilySearchAmountEnvelopeV1 = Object.freeze({ inputAssetRef: erc20AssetRefV1("1", vault), outputAssetRef: erc20AssetRefV1("1", payoutToken), amountIn, recipient: actor });
+const execution = Object.freeze({ transactionOrigin: address("7"), executorAddress: amount.recipient });
 const effectPayload = Object.freeze({ kind: "erc4626-silo-redeem-effects-v1", actor, completion: "returned", returnDataHex: `0x${word(9n)}`, tokenDeltas: [{ token: vault, account: actor, delta: "-10" }, { token: payoutToken, account: actor, delta: "9" }], supplyDeltas: [{ token: vault, delta: "-10" }] });
 const objective = Object.freeze({ objectiveRef: hashDomain("aloha/search-objective/v1", effectPayload), payload: effectPayload });
 
@@ -42,7 +43,7 @@ function readPort(): FamilySearchSourceReadPortV1 {
   return { read({ request }: { readonly request: FamilySearchSourceReadRequestV1 }) { assert.equal(request.target, vault); assert.equal(request.responseEncoding, "abi-uint256"); assert.equal(request.data.slice(0, 10), "0x4cdad506"); return { kind: "returned" as const, requestId: request.requestId, source: request.source, dataHex: `0x${word(9n)}` }; } };
 }
 function input(objectiveValue = objective) {
-  return { route: routeBinding(), currentSource: { source: cutoff, assertCurrent() {} } satisfies FamilySearchCurrentSourceV1, objective: objectiveValue, amount, readPort: readPort() };
+  return { route: routeBinding(), currentSource: { source: cutoff, assertCurrent() {} } satisfies FamilySearchCurrentSourceV1, objective: objectiveValue, amount, execution, readPort: readPort() };
 }
 
 const adapter = ERC4626_SILO_REDEEM_SEARCH_RUNTIME_ADAPTER_FACTORY({ familyDefinitionHash: ERC4626_SILO_REDEEM_FAMILY_AUTHORING_HASH, capabilityRefs: { exact: h("exact"), trigger: h("trigger") } as never, actionOwnerRefs: { redeem: asOwnerRef(h("action-owner")) }, composition: { resolveCapability: () => ({}), resolveActionOwner: () => ({}) } });

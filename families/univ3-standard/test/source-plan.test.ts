@@ -80,6 +80,7 @@ async function assertSearchAcceptsRuntimePublication(publicationValue: Record<st
       amountIn: "1",
       recipient: address("8"),
     },
+    execution: { transactionOrigin: address("7"), executorAddress: address("8") },
     readPort: { read({ request }) { return { kind: "unavailable", requestId: request.requestId, source: request.source, reasonCode: "runtime-publication-seam-stop" }; } },
   });
   assert.equal(result.kind, "unavailable", JSON.stringify(result));

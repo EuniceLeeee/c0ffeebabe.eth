@@ -33,6 +33,7 @@ function routeBinding(): FamilySearchRouteLegBindingV1 {
 }
 
 const amount: FamilySearchAmountEnvelopeV1 = Object.freeze({ inputAssetRef: erc20AssetRefV1("1", token), outputAssetRef: nativeAssetRefV1("1"), amountIn, recipient: actor });
+const execution = Object.freeze({ transactionOrigin: address("7"), executorAddress: amount.recipient });
 const effectPayload = Object.freeze({ kind: "ethertoken-native-redeem-effects-v1", actor, completion: "returned", returnDataHex: "0x", tokenDeltas: [{ token, account: actor, delta: "-10" }], nativeDeltas: [{ account: actor, delta: "10" }], supplyDeltas: [{ token, delta: "-10" }] });
 const objective = Object.freeze({ objectiveRef: hashDomain("aloha/search-objective/v1", effectPayload), payload: effectPayload });
 
@@ -40,7 +41,7 @@ function readPort(): FamilySearchSourceReadPortV1 {
   return { read({ request }: { readonly request: FamilySearchSourceReadRequestV1 }) { assert.equal(request.target, target); assert.equal(request.responseEncoding, "hex"); assert.equal(request.data.slice(0, 10), "0x2e1a7d4d"); return { kind: "returned" as const, requestId: request.requestId, source: request.source, dataHex: "0x" }; } };
 }
 function input(objectiveValue = objective) {
-  return { route: routeBinding(), currentSource: { source: cutoff, assertCurrent() {} } satisfies FamilySearchCurrentSourceV1, objective: objectiveValue, amount, readPort: readPort() };
+  return { route: routeBinding(), currentSource: { source: cutoff, assertCurrent() {} } satisfies FamilySearchCurrentSourceV1, objective: objectiveValue, amount, execution, readPort: readPort() };
 }
 
 const adapter = ETHERTOKEN_NATIVE_REDEEM_SEARCH_RUNTIME_ADAPTER_FACTORY({ familyDefinitionHash: ETHERTOKEN_NATIVE_REDEEM_FAMILY_AUTHORING_HASH, capabilityRefs: { exact: h("exact"), trigger: h("trigger") } as never, actionOwnerRefs: { redeem: asOwnerRef(h("action-owner")) }, composition: { resolveCapability: () => ({}), resolveActionOwner: () => ({}) } });

@@ -26,6 +26,7 @@ import {
   type SourceViewV1,
 } from "../../../search-pipeline/src/index.ts";
 import { createContractEconomicSafetyService } from "../../../search-pipeline/test/economic-safety-fixture.ts";
+import type { EconomicSafetyEvidenceAuthorityExpectationV1 } from "../../../economics-safety/src/index.ts";
 import { createProductionSixStepTailFixture } from "../../../search-pipeline/test/production-six-step-fixture.ts";
 import { issueRouteCyclePlanningProblem } from "../../../search-pipeline/test/issued-strategy.ts";
 import {
@@ -100,6 +101,9 @@ function issueTruncatedPlanningProblem(input: {
   readonly correlationId: Hash;
   readonly objectiveRef: Hash;
   readonly entryAssetRef: Hash;
+  readonly lane: "blockscan" | "backrun";
+  readonly triggerRef: Hash;
+  readonly affectedEdgeIds: readonly Hash[];
 }): StrategyPlanningProblemV1 {
   const entryAssetRef = input.entryAssetRef;
   const catalogEntry = compileStrategy(TRUNCATED_STRATEGY, []).entry;
@@ -159,12 +163,12 @@ function issueTruncatedPlanningProblem(input: {
         releaseProvenanceHash: input.releaseProvenanceHash,
         sourceHash: input.sourceHash,
       },
-      lane: "blockscan",
-      triggerRef: h("truncated-strategy", "trigger"),
+      lane: input.lane,
+      triggerRef: input.triggerRef,
       objectiveRef: input.objectiveRef,
       entryAssetRef,
       returnAssetRef: entryAssetRef,
-      affectedEdgeIds: [],
+      affectedEdgeIds: input.affectedEdgeIds,
       correlationId: input.correlationId,
     }),
   })[0]!;
@@ -277,6 +281,8 @@ export function createSearchTerminalFixture(input: {
   readonly releaseProvenanceHash?: Hash;
   /** Test-only generated composition join; defaults preserve existing fixtures. */
   readonly proposedCapabilitySetRoot?: Hash;
+  /** Test-only release-owned binding for terminal authority joins. */
+  readonly economicSafetyAuthority?: EconomicSafetyEvidenceAuthorityExpectationV1;
 }): TerminalFixture {
   const loopCount = input.mode === "no-candidate" ? 0 : input.mode === "truncated" ? 5 : input.mode === "unsigned-with-earlier-retryable" ? 2 : 1;
   const edges = graphEdges(loopCount);
@@ -380,6 +386,9 @@ export function createSearchTerminalFixture(input: {
         objectiveRef,
         entryAssetRef: objectiveEntryAssetRef,
         proposedCapabilitySetRoot: input.proposedCapabilitySetRoot,
+        lane: triggerFacts.lane,
+        triggerRef: triggerFacts.triggerRef,
+        affectedEdgeIds: triggerFacts.affectedEdgeIds,
       });
       const currentSource: CurrentSourceSessionV1 = Object.freeze({
         sessionId: h("source-session", request.revision),
@@ -515,7 +524,11 @@ export function createSearchTerminalFixture(input: {
             };
           },
         },
-        economicSafety: createContractEconomicSafetyService(releaseBoundLeaseBinding.releaseProvenanceHash, value => h("economic-safety", value)),
+        economicSafety: createContractEconomicSafetyService(
+          releaseBoundLeaseBinding.releaseProvenanceHash,
+          value => h("economic-safety", value),
+          input.economicSafetyAuthority,
+        ),
         unsignedDryRun: { issue: value => sealUnsignedDryRunReceipt(value) },
       };
       const pipelineInput: RoutePipelineInputV1 = {

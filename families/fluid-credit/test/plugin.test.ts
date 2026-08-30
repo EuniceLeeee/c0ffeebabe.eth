@@ -129,6 +129,7 @@ function verified() {
 
 function searchInput(objectivePayload: CanonicalJson) {
   const facts = verified();
+  const recipient = addr("8");
   const nominationKey = facts.identity.facts.vault;
   const identityMemo = decodeCanonicalJson(encodeCanonicalJson({
     kind: "fluid-credit-identity-memo",
@@ -161,8 +162,9 @@ function searchInput(objectivePayload: CanonicalJson) {
       inputAssetRef: erc20AssetRefV1("1", facts.identity.facts.collateralAsset),
       outputAssetRef: erc20AssetRefV1("1", facts.identity.facts.debtAsset),
       amountIn: "1000",
-      recipient: addr("8"),
+      recipient,
     },
+    execution: { transactionOrigin: addr("7"), executorAddress: recipient },
     readPort: {
       read({ request }: { readonly request: FamilySearchSourceReadRequestV1 }) {
         const balance = request.target === facts.identity.facts.collateralAsset ? 10_000n : 10_000n;

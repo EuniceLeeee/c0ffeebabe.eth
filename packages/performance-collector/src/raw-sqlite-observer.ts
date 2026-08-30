@@ -266,6 +266,8 @@ interface ObservedAccountedRouteDenominatorPayloadV1 {
     readonly objectiveRef: Hash;
     readonly entryAssetRef: Hash;
     readonly returnAssetRef: Hash;
+    readonly triggerRef: Hash;
+    readonly affectedEdgeIdsRoot: Hash;
   }>;
   readonly accounting: ObservedRouteAccountingV1;
 }
@@ -790,13 +792,17 @@ function exactRouteDenominatorPayload(value: Readonly<Record<string, unknown>>, 
   assertExactKeys(value, ["admissionId", "headFactsRoot", "headHash", "lane", "correlationId", "coverageRoot", "denominatorKind", "plannerCandidateIdentity", "accounting"], path);
   if (value.denominatorKind !== "accounted") throw new TypeError(`${path}.denominatorKind is invalid`);
   assertPlainObject(value.plannerCandidateIdentity, `${path}.plannerCandidateIdentity`);
-  assertExactKeys(value.plannerCandidateIdentity, ["planningProblemHash", "objectiveRef", "entryAssetRef", "returnAssetRef"], `${path}.plannerCandidateIdentity`);
+  assertExactKeys(value.plannerCandidateIdentity, [
+    "planningProblemHash", "objectiveRef", "entryAssetRef", "returnAssetRef", "triggerRef", "affectedEdgeIdsRoot",
+  ], `${path}.plannerCandidateIdentity`);
   const rawIdentity = value.plannerCandidateIdentity as Record<string, unknown>;
   const plannerCandidateIdentity = Object.freeze({
     planningProblemHash: nonZeroHash(rawIdentity.planningProblemHash, `${path}.plannerCandidateIdentity.planningProblemHash`),
     objectiveRef: nonZeroHash(rawIdentity.objectiveRef, `${path}.plannerCandidateIdentity.objectiveRef`),
     entryAssetRef: nonZeroHash(rawIdentity.entryAssetRef, `${path}.plannerCandidateIdentity.entryAssetRef`),
     returnAssetRef: nonZeroHash(rawIdentity.returnAssetRef, `${path}.plannerCandidateIdentity.returnAssetRef`),
+    triggerRef: nonZeroHash(rawIdentity.triggerRef, `${path}.plannerCandidateIdentity.triggerRef`),
+    affectedEdgeIdsRoot: nonZeroHash(rawIdentity.affectedEdgeIdsRoot, `${path}.plannerCandidateIdentity.affectedEdgeIdsRoot`),
   });
   const accounting = exactRouteAccounting(value.accounting, `${path}.accounting`);
   if (plannerCandidateIdentity.planningProblemHash !== accounting.planningProblemHash

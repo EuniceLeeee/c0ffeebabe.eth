@@ -79,7 +79,7 @@ function identityFact(candidateValue: CanonicalJson, evidenceBytes: Uint8Array, 
 }
 
 function stateFact() {
-  return Object.freeze({ kind: "dodo-v2-state-facts" as const, version: 1 as const, read: Object.freeze({ cutoff: source, pool, pmm, lpFeeRate: "100000000000000000", mtFeeRate: "0" }) });
+  return Object.freeze({ kind: "dodo-v2-state-facts" as const, version: 1 as const, read: Object.freeze({ cutoff: source, pool, quoteActor: DODO_V2_QUOTE_ACTOR, pmm, lpFeeRate: "100000000000000000", mtFeeRate: "0" }) });
 }
 
 function program(definition: FamilyStageDefinitionV1, requestFingerprint: Hash): FrozenProgramEnvelopeV1 {

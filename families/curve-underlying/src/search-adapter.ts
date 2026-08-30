@@ -16,7 +16,6 @@ import {
   candidateSubjectHash as centralCandidateSubjectHash,
   familyCandidateKey as centralFamilyCandidateKey,
 } from "../../../packages/discovery/src/index.ts";
-import { decodePackedCallProgram, encodePackedCallProgram } from "../../../packages/execution-program/src/index.ts";
 import {
   familySearchAmount,
   familySearchAmountHash,
@@ -39,7 +38,7 @@ import {
   type FamilySearchStateArtifactV1,
 } from "../../../packages/family-sdk/search-runtime/index.ts";
 import { CURVE_UNDERLYING_FAMILY_DEFINITION_HASH } from "./family-definition.ts";
-import { buildCurveSearchAction, buildCurveUnderlyingAction, CURVE_UNDERLYING_SWAP_ACTION_PORT } from "./action.ts";
+import { CURVE_UNDERLYING_SWAP_ACTION_PORT } from "./action.ts";
 import { exactCurveUnderlying } from "./exact.ts";
 import { materializeCurveUnderlying } from "./instance.ts";
 import { CURVE_UNDERLYING_FAMILY_ID } from "./manifest.ts";
@@ -176,18 +175,79 @@ function validateExact(ctx: Context, artifact: FamilySearchExactArtifactV1): Cur
   if (quote.routeBindingHash !== ctx.protocolRoute.routeBindingHash || quote.amountIn !== ctx.amount.amountIn || artifact.evaluationHash !== evaluationHash || artifact.inputs[0]?.assetRef !== ctx.amount.inputAssetRef || artifact.outputs[0]?.assetRef !== ctx.amount.outputAssetRef || artifact.outputs[0]?.amount !== quote.amountOut || artifact.obligationRoot !== hashDomain("aloha/curve-underlying/search-obligation/v1", { evaluationHash, routeBindingHash: ctx.routeBindingHash })) throw new TypeError("curve search exact artifact lineage mismatch");
   return quote;
 }
-function actionArtifact(ctx: Context, exact: FamilySearchExactArtifactV1, quote: CurveQuoteV1, actionOwnerRef: Hash): FamilySearchActionArtifactV1 {
-  const rawAction = buildCurveUnderlyingAction({ identity: ctx.identity, route: ctx.protocolRoute, quote, minAmountOut: quote.amountOut }); const action = buildCurveSearchAction({ rawAction, quote, route: ctx.protocolRoute, searchRouteBindingHash: ctx.routeBindingHash, stateFactsRoot: exact.stateFactsRoot, inputs: exact.inputs, outputs: exact.outputs, exactEvaluationHash: exact.evaluationHash, obligationRoot: exact.obligationRoot }); const payload = canonical(action); const payloadHash = familySearchPayloadHash("action", payload);
-  const opaqueBytes = encodePackedCallProgram([{ target: rawAction.target as `0x${string}`, value: "0", calldata: rawAction.calldata as `0x${string}` }]); const calls = decodePackedCallProgram(opaqueBytes, "curve action program");
-  if (calls.length !== 1 || calls[0]!.target !== rawAction.target || calls[0]!.value !== "0" || calls[0]!.calldata !== rawAction.calldata) throw new TypeError("curve action program binding mismatch");
-  return Object.freeze({ kind: "action", status: "ready", source: ctx.source, routeBindingHash: ctx.routeBindingHash, objectiveRef: ctx.objective.objectiveRef, amountHash: familySearchAmountHash(ctx.amount), payload, payloadHash, artifactHash: familySearchArtifactHash({ kind: "action", source: ctx.source, routeBindingHash: ctx.routeBindingHash, objectiveRef: ctx.objective.objectiveRef, amountHash: familySearchAmountHash(ctx.amount), payloadHash }), actionHash: action.actionHash, exactEvaluationHash: exact.evaluationHash, actionOwnerId: CURVE_UNDERLYING_SWAP_ACTION_PORT.actionOwnerId, actionOwnerRef, opaqueBytes, inputs: exact.inputs, outputs: exact.outputs, obligationRoot: exact.obligationRoot });
+export function assertCurveActionArtifactExactBinding(value: FamilySearchActionArtifactV1): FamilySearchActionArtifactV1 {
+  assertExactKeys(value, ["actionHash", "actionOwnerId", "actionOwnerRef", "amountHash", "artifactHash", "effectTransport", "exactEvaluationHash", "inputs", "kind", "objectiveRef", "obligationRoot", "opaqueBytes", "outputs", "payload", "payloadHash", "routeBindingHash", "source", "status"], "curve.actionArtifact");
+  if (value.kind !== "action" || value.status !== "ready" || value.effectTransport === undefined) throw new TypeError("curve action artifact discriminator mismatch");
+  const source = familySearchSource(value.source, "curve.actionArtifact.source");
+  const payload = canonical(value.payload);
+  const payloadHash = familySearchPayloadHash("action", payload);
+  if (value.payloadHash !== payloadHash
+    || value.artifactHash !== familySearchArtifactHash({ kind: "action", source, routeBindingHash: value.routeBindingHash, objectiveRef: value.objectiveRef, amountHash: value.amountHash, payloadHash })) throw new TypeError("curve action artifact hash mismatch");
+  const verified = CURVE_UNDERLYING_SWAP_ACTION_PORT.decode(payload);
+  if (!sameFamilySearchSource(source, verified.quote.cutoff)
+    || verified.searchRouteBindingHash !== value.routeBindingHash
+    || value.amountHash !== familySearchAmountHash({ inputAssetRef: verified.inputs[0]!.assetRef, outputAssetRef: verified.outputs[0]!.assetRef, amountIn: verified.inputs[0]!.amount, recipient: verified.recipient })
+    || verified.actionHash !== value.actionHash
+    || verified.exactEvaluationHash !== value.exactEvaluationHash
+    || verified.actionOwnerId !== value.actionOwnerId
+    || verified.opaqueBytes !== value.opaqueBytes
+    || encodeCanonicalJson(verified.effectTransport as unknown as CanonicalJson) !== encodeCanonicalJson(value.effectTransport as unknown as CanonicalJson)
+    || encodeCanonicalJson(verified.inputs as unknown as CanonicalJson) !== encodeCanonicalJson(value.inputs as unknown as CanonicalJson)
+    || encodeCanonicalJson(verified.outputs as unknown as CanonicalJson) !== encodeCanonicalJson(value.outputs as unknown as CanonicalJson)
+    || verified.obligationRoot !== value.obligationRoot) throw new TypeError("curve action artifact exact binding mismatch");
+  return value;
 }
-function decodeReadResult(result: FamilySearchSourceReadResultV1, requestId: Hash, source: ReturnType<typeof familySearchSource>): string { if (result.kind !== "returned") throw new Error(result.reasonCode || "source-read-unavailable"); if (result.requestId !== requestId || !sameFamilySearchSource(result.source, source)) throw new TypeError("curve search source response binding mismatch"); if (!/^0x(?:[0-9a-fA-F]{2})*$/.test(result.dataHex)) throw new TypeError("curve search source response is not canonical bytes"); return result.dataHex.toLowerCase(); }
+type CurveActionPort = typeof CURVE_UNDERLYING_SWAP_ACTION_PORT;
+function resolvedActionPort(value: object): CurveActionPort {
+  if (value !== CURVE_UNDERLYING_SWAP_ACTION_PORT) throw new TypeError("generated curve action owner identity mismatch");
+  return value as CurveActionPort;
+}
+function actionArtifact(ctx: Context, exact: FamilySearchExactArtifactV1, quote: CurveQuoteV1, actionOwnerRef: Hash, actionPort: CurveActionPort): FamilySearchActionArtifactV1 {
+  const rawAction = actionPort.build({ identity: ctx.identity, route: ctx.protocolRoute, quote, minAmountOut: quote.amountOut });
+  const action = actionPort.buildSearchAction({
+    rawAction,
+    quote,
+    route: ctx.protocolRoute,
+    recipient: ctx.amount.recipient,
+    searchRouteBindingHash: ctx.routeBindingHash,
+    stateFactsRoot: exact.stateFactsRoot,
+    inputs: exact.inputs,
+    outputs: exact.outputs,
+    exactEvaluationHash: exact.evaluationHash,
+    obligationRoot: exact.obligationRoot,
+  });
+  const payload = canonical(action);
+  const payloadHash = familySearchPayloadHash("action", payload);
+  const artifact = Object.freeze({
+    kind: "action" as const,
+    status: "ready" as const,
+    source: ctx.source,
+    routeBindingHash: ctx.routeBindingHash,
+    objectiveRef: ctx.objective.objectiveRef,
+    amountHash: familySearchAmountHash(ctx.amount),
+    payload,
+    payloadHash,
+    artifactHash: familySearchArtifactHash({ kind: "action", source: ctx.source, routeBindingHash: ctx.routeBindingHash, objectiveRef: ctx.objective.objectiveRef, amountHash: familySearchAmountHash(ctx.amount), payloadHash }),
+    actionHash: action.actionHash,
+    exactEvaluationHash: exact.evaluationHash,
+    actionOwnerId: actionPort.actionOwnerId,
+    actionOwnerRef,
+    opaqueBytes: action.opaqueBytes,
+    effectTransport: action.effectTransport,
+    inputs: exact.inputs,
+    outputs: exact.outputs,
+    obligationRoot: exact.obligationRoot,
+  });
+  return assertCurveActionArtifactExactBinding(artifact);
+}
+function unavailableReason(result: Exclude<FamilySearchSourceReadResultV1, { readonly kind: "returned" }>): string { return result.kind === "unavailable" ? result.reasonCode : "unexpected-reverted-response"; }
+function decodeReadResult(result: FamilySearchSourceReadResultV1, requestId: Hash, source: ReturnType<typeof familySearchSource>): string { if (result.kind !== "returned") throw new Error(unavailableReason(result)); if (result.requestId !== requestId || !sameFamilySearchSource(result.source, source)) throw new TypeError("curve search source response binding mismatch"); if (!/^0x(?:[0-9a-fA-F]{2})*$/.test(result.dataHex)) throw new TypeError("curve search source response is not canonical bytes"); return result.dataHex.toLowerCase(); }
 
 const factory: FamilySearchAdapterFactoryV1 = input => {
   if (input.familyDefinitionHash !== CURVE_UNDERLYING_FAMILY_DEFINITION_HASH) throw new TypeError("curve search factory definition mismatch");
   for (const ref of Object.values(input.capabilityRefs)) input.composition.resolveCapability(input.familyDefinitionHash, ref);
-  const actionOwnerRef = assertHash(input.actionOwnerRefs.swap, "curve actionOwnerRefs.swap"); input.composition.resolveActionOwner(input.familyDefinitionHash, input.actionOwnerRefs.swap);
+  const actionOwnerRef = assertHash(input.actionOwnerRefs.swap, "curve actionOwnerRefs.swap");
+  const actionPort = resolvedActionPort(input.composition.resolveActionOwner(input.familyDefinitionHash, input.actionOwnerRefs.swap));
   const readState: FamilySearchAdapterV1["readState"] = async request => {
     try {
       const ctx = context(request);
@@ -216,7 +276,7 @@ const factory: FamilySearchAdapterFactoryV1 = input => {
             responses.set(spec.key, { requestId, dataHex: null });
             continue;
           }
-          return unavailableFamilySearchStage("state", result.reasonCode || "source-read-unavailable", { requestId, key: spec.key });
+          return unavailableFamilySearchStage("state", unavailableReason(result), { requestId, key: spec.key });
         }
         responses.set(spec.key, { requestId, dataHex: decodeReadResult(result, requestId, ctx.source) });
       }
@@ -225,7 +285,7 @@ const factory: FamilySearchAdapterFactoryV1 = input => {
       await request.currentSource.assertCurrent();
       let exactResult: FamilySearchSourceReadResultV1;
       try { exactResult = await request.readPort.read({ request: { kind: "family-search.current-source-read", requestId: exactRequestId, source: ctx.source, target: exactPhysical.target, data: exactPhysical.data, responseEncoding: exactPhysical.responseEncoding }, signal: request.signal, ...(request.deadlineAtMs === undefined ? {} : { deadlineAtMs: request.deadlineAtMs }) }); } catch (error) { return unavailableFamilySearchStage("state", "source-transport-unavailable", { requestId: exactRequestId, key: "exactAmountOut", error: String(error) }); }
-      if (exactResult.kind !== "returned") return unavailableFamilySearchStage("state", exactResult.reasonCode || "source-read-unavailable", { requestId: exactRequestId, key: "exactAmountOut" });
+      if (exactResult.kind !== "returned") return unavailableFamilySearchStage("state", unavailableReason(exactResult), { requestId: exactRequestId, key: "exactAmountOut" });
       responses.set("exactAmountOut", { requestId: exactRequestId, dataHex: decodeReadResult(exactResult, exactRequestId, ctx.source) });
       await request.currentSource.assertCurrent();
       const required = (key: string): string => {
@@ -254,7 +314,7 @@ const factory: FamilySearchAdapterFactoryV1 = input => {
   };
   const projectCoarse: FamilySearchAdapterV1["projectCoarse"] = request => { try { const ctx = context(request); const state = materializedState(ctx, request.state); const result = coarseCurveUnderlying({ identity: ctx.identity, state, route: ctx.protocolRoute, amountIn: ctx.amount.amountIn }); if (result.status !== "rankable") return unavailableFamilySearchStage("coarse", result.reasonCode, { stateHash: state.stateHash }); return Object.freeze({ kind: "verified" as const, artifact: coarseArtifact(ctx, request.state, state, result.quote) }); } catch (error) { return Object.freeze({ kind: "invalidProgram" as const, stage: "coarse", code: error instanceof Error ? error.message : "curve-coarse-invalid" }); } };
   const evaluateExact: FamilySearchAdapterV1["evaluateExact"] = request => { try { const ctx = context(request); const state = materializedState(ctx, request.state); validateCoarse(ctx, request.state, state, request.coarse); const result = exactCurveUnderlying({ identity: ctx.identity, state, route: ctx.protocolRoute, amountIn: ctx.amount.amountIn }); if (result.status !== "verified") return unavailableFamilySearchStage("exact", result.status === "unavailable" ? result.reasonCode : result.reasonCode, { stateHash: state.stateHash }); if (state.exactSelectorVariant !== ctx.protocolRoute.selectorVariant) throw new TypeError("curve exact selector variant diverges from identity route"); if (state.exactAmountOut === undefined || state.exactAmountOut !== result.quote.amountOut) throw new TypeError("curve exact ABI quote diverges from local kernel quote"); return Object.freeze({ kind: "verified" as const, artifact: exactArtifact(ctx, request.state, result.quote) }); } catch (error) { return Object.freeze({ kind: "invalidProgram" as const, stage: "exact", code: error instanceof Error ? error.message : "curve-exact-invalid" }); } };
-  const buildAction: FamilySearchAdapterV1["buildAction"] = request => { try { const ctx = context(request); if (request.exact.kind !== "exact" || request.exact.status !== "verified") return unavailableFamilySearchStage("action", "exact-unavailable", request.exact); const quote = validateExact(ctx, request.exact); return Object.freeze({ kind: "verified" as const, artifact: actionArtifact(ctx, request.exact, quote, actionOwnerRef) }); } catch (error) { return Object.freeze({ kind: "invalidProgram" as const, stage: "action", code: error instanceof Error ? error.message : "curve-action-invalid" }); } };
+  const buildAction: FamilySearchAdapterV1["buildAction"] = request => { try { const ctx = context(request); if (request.exact.kind !== "exact" || request.exact.status !== "verified") return unavailableFamilySearchStage("action", "exact-unavailable", request.exact); const quote = validateExact(ctx, request.exact); return Object.freeze({ kind: "verified" as const, artifact: actionArtifact(ctx, request.exact, quote, actionOwnerRef, actionPort) }); } catch (error) { return Object.freeze({ kind: "invalidProgram" as const, stage: "action", code: error instanceof Error ? error.message : "curve-action-invalid" }); } };
   const run: FamilySearchAdapterV1["run"] = async (request: FamilySearchRunRequestV1) => { const state = await readState(request); if (state.kind !== "verified") return state; const coarse = projectCoarse({ ...request, state: state.artifact }); if (coarse.kind !== "verified") return coarse; if (coarse.artifact.status !== "rankable") return unavailableFamilySearchStage("coarse", coarse.artifact.reasonCode ?? "coarse-unavailable", coarse.artifact); const exact = evaluateExact({ ...request, state: state.artifact, coarse: coarse.artifact }); if (exact.kind !== "verified") return exact; if (exact.artifact.status !== "verified") return unavailableFamilySearchStage("exact", exact.artifact.reasonCode ?? "exact-unavailable", exact.artifact); const action = buildAction({ ...request, exact: exact.artifact }); if (action.kind !== "verified") return action; return Object.freeze({ kind: "verified" as const, artifact: Object.freeze({ state: state.artifact, coarse: coarse.artifact, exact: exact.artifact, action: action.artifact }) }); };
   return Object.freeze({ readState, projectCoarse, evaluateExact, buildAction, run });
 };

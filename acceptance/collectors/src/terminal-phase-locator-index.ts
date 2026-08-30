@@ -658,7 +658,7 @@ function fullGraphCoarseSweepIdentity(bytes: Uint8Array) {
     "runtimeBindingId", "releaseProvenanceHash", "candidateReleaseCommit", "releaseMembershipRoot",
     "definitionCatalogRoot", "familyCompositionRoot", "generationId", "readyRecordHash", "graphRoot",
     "readyCutoff", "recentObservationRange", "currentSourceSessionId", "actualCurrentSource",
-    "amountSeedHash", "objectiveRef", "bindingRoot",
+    "amountSeedHash", "executionContextHash", "objectiveRef", "bindingRoot",
   ], "terminalPhaseFullGraphCoarseSweep.binding");
   const bindingRoot = assertHash(binding.bindingRoot, "terminalPhaseFullGraphCoarseSweep.binding.bindingRoot");
   const { bindingRoot: _bindingRoot, ...bindingPayload } = binding;

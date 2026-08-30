@@ -13,7 +13,7 @@ export const FLUID_DEX_CAPABILITY_IDS = Object.freeze({
 } as const);
 export const FLUID_DEX_ACTION_OWNER_ID = "family.fluid-dex.swap-action" as const;
 
-/** Fluid DEX Swap(address,address,uint256,uint256) event. */
+/** Fluid DEX Swap(bool,uint256,uint256,address) event. */
 export const FLUID_DEX_CONTRACT_EVIDENCE_TOPIC: Hash = "0xdc004dbca4ef9c966218431ee5d9133d337ad018dd5b5c5493722803f75c64f7";
 
 export const FLUID_DEX_MANIFEST = Object.freeze({

@@ -65,6 +65,7 @@ import { erc20AssetReferenceV1 } from "../../asset-ref/src/index.ts";
 import {
   economicSafetyObjectivePolicyRootV1,
   encodeEconomicSafetyObjectiveTemplatesV1,
+  type EconomicSafetyEvidenceAuthorityExpectationV1,
 } from "../../economics-safety/src/index.ts";
 import {
   issueRuntimeReleaseEconomicSafetyEvaluatorCapabilityV1,
@@ -234,7 +235,7 @@ function familyCompositionFor(release: ReturnType<typeof issueAuthority>) {
 }
 
 function issueEconomicSafety(release: ReturnType<typeof issueAuthority>) {
-  const profitAsset = erc20AssetReferenceV1("1", `0x${"1".repeat(40)}`);
+  const profitAsset = erc20AssetReferenceV1("1", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
   const evaluatorCapability = issueRuntimeReleaseEconomicSafetyEvaluatorCapabilityV1(
     release.authority,
     encodeEconomicSafetyObjectiveTemplatesV1([{
@@ -256,7 +257,11 @@ function issueEconomicSafety(release: ReturnType<typeof issueAuthority>) {
   });
 }
 
-async function successfulTerminal(releaseProvenanceHash: Hash, label: string): Promise<SearchTerminalCapabilityV1> {
+async function successfulTerminal(
+  releaseProvenanceHash: Hash,
+  label: string,
+  economicSafetyAuthority?: EconomicSafetyEvidenceAuthorityExpectationV1,
+): Promise<SearchTerminalCapabilityV1> {
   const head: CanonicalHead = Object.freeze({
     chainId: "1",
     number: "100",
@@ -271,6 +276,7 @@ async function successfulTerminal(releaseProvenanceHash: Hash, label: string): P
     mode: "unsigned-passed",
     releaseProvenanceHash,
     proposedCapabilitySetRoot: TEST_STRATEGY_CAPABILITY_ROOT,
+    economicSafetyAuthority,
   });
   const source = issueProducerIngressSourceForTestV1({
     async observe() {
@@ -349,9 +355,9 @@ function matchingStrategyFactory(terminal: SearchTerminalCapabilityV1) {
 test("Six-Step terminal binding is release/Strategy exact, opaque, one-shot, and rotation fenced", async () => {
   const release = issueAuthority();
   const provenance = runtimeReleaseBindingProvenanceHash(release.binding);
-  const terminal = await successfulTerminal(provenance, "current");
-  const strategy = issueRuntimeReleaseStrategyRuntimeService(release.authority, matchingStrategyFactory(terminal));
   const economicSafety = issueEconomicSafety(release);
+  const terminal = await successfulTerminal(provenance, "current", economicSafety.binding());
+  const strategy = issueRuntimeReleaseStrategyRuntimeService(release.authority, matchingStrategyFactory(terminal));
   const service = issueRuntimeReleaseSixStepTerminalBindingServiceV1(release.authority, strategy, economicSafety);
   const capability = service.bindSuccessfulTerminal(terminal);
   const observed = readRuntimeReleaseSixStepTerminalBindingV1(capability);
@@ -396,9 +402,9 @@ test("Six-Step terminal binding is release/Strategy exact, opaque, one-shot, and
 test("Six-Step terminal binding rejects a terminal from another release and a non-success terminal", async () => {
   const release = issueAuthority();
   const provenance = runtimeReleaseBindingProvenanceHash(release.binding);
-  const terminal = await successfulTerminal(provenance, "strategy-seed");
-  const strategy = issueRuntimeReleaseStrategyRuntimeService(release.authority, matchingStrategyFactory(terminal));
   const economicSafety = issueEconomicSafety(release);
+  const terminal = await successfulTerminal(provenance, "strategy-seed", economicSafety.binding());
+  const strategy = issueRuntimeReleaseStrategyRuntimeService(release.authority, matchingStrategyFactory(terminal));
   const service = issueRuntimeReleaseSixStepTerminalBindingServiceV1(release.authority, strategy, economicSafety);
 
   const foreign = issueAuthority();
@@ -411,7 +417,7 @@ test("Six-Step terminal binding rejects a terminal from another release and a no
     () => issueRuntimeReleaseSixStepTerminalBindingServiceV1(release.authority, strategy, { ...economicSafety }),
     /unavailable|stale/,
   );
-  const foreignTerminal = await successfulTerminal(runtimeReleaseBindingProvenanceHash(foreign.binding), "foreign");
+  const foreignTerminal = await successfulTerminal(runtimeReleaseBindingProvenanceHash(foreign.binding), "foreign", foreignEconomicSafety.binding());
   assert.throws(() => service.bindSuccessfulTerminal(foreignTerminal), /lineage mismatch/);
 
   const head: CanonicalHead = Object.freeze({ chainId: "1", number: "100", hash: h("empty-head"), parentHash: h("empty-parent"), stateRoot: h("empty-state") });

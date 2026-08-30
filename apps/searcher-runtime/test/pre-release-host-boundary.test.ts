@@ -237,7 +237,7 @@ function preReleaseStartupFixture() {
     observerContentDirectory: "/tmp/observer-content", terminalLocatorDirectory: "/tmp/terminal-locators",
   });
   const provenance = runtimeReleaseBindingProvenanceHash(binding);
-  const profitAsset = erc20AssetReferenceV1("1", `0x${"55".repeat(20)}`);
+  const profitAsset = erc20AssetReferenceV1("1", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
   bytes["runtime-policy.json"] = encodeCanonicalBytes({
     schemaVersion: 1, kind: "aloha.deployment-runtime-policy-v1", bindingId: binding.bindingId,
     releaseProvenanceHash: provenance, frameworkAuthorityRoot: binding.frameworkAuthorityRoot,
@@ -248,7 +248,7 @@ function preReleaseStartupFixture() {
       valuationOwnerRef: h("native-numeraire-valuation-owner"),
     },
     callerId: `0x${"33".repeat(20)}`, deadlineMs: 1000, admission: { topK: 1, boundedUnrankedBudget: 0 },
-    amountSeed: { amountIn: "1", recipient: `0x${"11".repeat(20)}` },
+    amountSeed: { amountIn: "1", recipient: `0x${"22".repeat(20)}` },
   });
   bytes["executor-state.json"] = encodeCanonicalBytes({
     schemaVersion: 1, kind: "aloha.deployment-executor-state-v1", bindingId: binding.bindingId,

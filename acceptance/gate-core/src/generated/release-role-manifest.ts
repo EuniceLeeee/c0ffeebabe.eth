@@ -11,7 +11,7 @@ export const RELEASE_ROLE_MANIFEST = Object.freeze({
     "modulePath": "tools/runtime-release-packager/src/internal/qualified-release-runner-owner.ts",
     "exportName": "observeQualifiedReleaseAcceptanceAdvisoryV1",
     "entrypointId": "compiler-root:tools/runtime-release-packager/tsconfig.json:tools/runtime-release-packager/src/internal/qualified-release-runner-owner.ts",
-    "implementationExportDigest": "0xed221b5d710773ef18446306e24e815db6fdb71a970335ef5fa528fb9487e8f8"
+    "implementationExportDigest": "0xf42ace44b4a90a8a046ba8702495fe6c1428e7b6e50e6e0e4016c575747c100e"
   },
   "predicateAdapters": [
     {
@@ -144,9 +144,9 @@ export const RELEASE_ROLE_MANIFEST = Object.freeze({
       "materialProviderExportName": "SIX_STEP_MATERIAL_PROVIDER",
       "materialProviderContractDigest": "0xc132f3bb2a141ab37abd74d5aeacf2538e8a4becf99c43983580eea87c340944",
       "commonEnvelopeRoleContractVersion": "1.0.0",
-      "compositionLeafDigest": "0x0446874a30f2cb2da92ca59066659afef93a163772175e50a32b0df6e67e9f94",
+      "compositionLeafDigest": "0xbc672b733f2e548226606ac3909f59a9296a2fa4b86e1955669739710a90c244",
       "predicateImplementationExportDigest": "0xdacbb404c84e5984543848c2f9ffac6fe02af03aa8fe18ab80077163aab89ae5",
-      "oracleImplementationExportDigest": "0x520c0484529165046617ba86d9b87567e0fb661a0202f87bb02dc9bbc26d5057",
+      "oracleImplementationExportDigest": "0x5a9bcd07a7da11862e1377ecc027b5e055aefdf82e4d2b52effab8a9843b4688",
       "materialProviderImplementationExportDigest": "0xa12a185dd2db0c49152ca39a50ececc06a9d346c6099725322c49ce7241f5b40",
       "entrypointId": "compiler-root:acceptance/gate-core/tsconfig.json:acceptance/gate-core/src/predicates/six-step.ts",
       "oracleEntrypointId": "compiler-root:acceptance/six-step-facts/tsconfig.json:acceptance/six-step-facts/src/reference-model.ts",
@@ -204,6 +204,6 @@ export const RELEASE_ROLE_MANIFEST = Object.freeze({
     "exportName": "evaluateGateCore",
     "entrypointId": "package-entrypoint:acceptance/gate-core/package.json:.:acceptance/gate-core/src/generated/release-runtime.ts:acceptance/gate-core/tsconfig.json"
   },
-  "predicateCompositionRootDigest": "0x3170df4905cbc1dc8317be7abbf9bd40e981a036a878b0b78f742d02e5404263",
-  "rootDigest": "0xaa9a03fc60ea54bc22c54ed9e5977c25051679e15cb603b63000e3c2bfe783dd"
+  "predicateCompositionRootDigest": "0x5aa061f83b7ecc5687449949c641e4cfdc4456e934194aa366174f16add53e88",
+  "rootDigest": "0x229f66fa64185fd23dfdd72fdd12ed32434e8e41008e8a0e003c7ae7a5602dab"
 } as const);

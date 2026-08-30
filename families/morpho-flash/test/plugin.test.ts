@@ -115,6 +115,7 @@ function verified() {
 
 function searchInput(objectivePayload: CanonicalJson, amountExtension?: Readonly<Record<string, unknown>>) {
   const facts = verified();
+  const recipient = facts.identity.facts.receiver;
   const identityMemo = decodeCanonicalJson(encodeCanonicalJson({
     kind: "morpho-flash-identity-memo",
     version: 1,
@@ -145,9 +146,10 @@ function searchInput(objectivePayload: CanonicalJson, amountExtension?: Readonly
       inputAssetRef: erc20AssetRefV1("1", facts.identity.facts.asset),
       outputAssetRef: h("funding-obligation-asset"),
       amountIn: "100",
-      recipient: facts.identity.facts.receiver,
+      recipient,
       ...amountExtension,
     },
+    execution: { transactionOrigin: addr("7"), executorAddress: recipient },
     readPort: {
       read({ request }: { readonly request: FamilySearchSourceReadRequestV1 }) {
         return { kind: "returned" as const, requestId: request.requestId, source: request.source, dataHex: `0x${1000n.toString(16).padStart(64, "0")}` };

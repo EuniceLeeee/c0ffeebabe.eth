@@ -5,6 +5,7 @@ export * from "./metadata.ts";
 export * from "./types.ts";
 export * from "./source-plan.ts";
 export * from "./stages.ts";
+export * from "./action.ts";
 export * from "./search-adapter.ts";
 export * from "./family-definition.ts";
 export { FLUID_DEX_DEFINITION } from "./family-definition.ts";

@@ -201,6 +201,9 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
   if (typeof input.coreInput.amountSeed !== "object" || input.coreInput.amountSeed === null) {
     throw new TypeError("searcher core amount seed is required");
   }
+  if (typeof input.coreInput.execution !== "object" || input.coreInput.execution === null) {
+    throw new TypeError("searcher core execution context is required");
+  }
   const owner: SearcherRuntimeApplicationOwnerV1 = Object.freeze({
     open(startup: StartupRuntimeV1): SearcherRuntimeApplicationV1 {
       assertIssuedStartupRuntime(startup);
@@ -305,6 +308,7 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
               session,
               sourceRead,
               amountSeed: input.coreInput.amountSeed,
+              execution: input.coreInput.execution,
             });
             return input.fullGraphCoarseSweep.run(invocation, {
               signal,

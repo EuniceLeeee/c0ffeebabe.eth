@@ -9,6 +9,7 @@ import type {
 } from "../../family-sdk/runtime/index.ts";
 import {
   executeGeneratedFamilyPhysicalLifecycle,
+  readGeneratedFamilyRuntimeFactoryMetadata,
   readGeneratedFamilyPhysicalLifecycleAdapters,
 } from "../src/internal/generated-runtime-composition.ts";
 import { createReleaseFamilyRuntimeComposition } from "../../../generated/runtime-composition/index.ts";
@@ -23,17 +24,13 @@ const h = (value: string): Hash => hashDomain("aloha/generated-physical-router-t
 const address = (digit: string): string => `0x${digit.repeat(40)}`;
 const word = (value: string): string => `0x${"0".repeat(24)}${value.slice(2)}`;
 
-test("generated physical router installs seven Families and invokes only the nominated lifecycle", async () => {
+test("generated physical router installs the exact release Families and invokes only the nominated lifecycle", async () => {
+  const metadata = readGeneratedFamilyRuntimeFactoryMetadata(createReleaseFamilyRuntimeComposition);
   const bindings = readGeneratedFamilyPhysicalLifecycleAdapters(createReleaseFamilyRuntimeComposition);
-  assert.deepEqual(bindings.map(binding => binding.familyId), [
-    "angstrom-v4",
-    "curve-underlying",
-    "dodo-v2",
-    "fluid-dex",
-    "univ2-standard",
-    "univ3-standard",
-    "univ4",
-  ]);
+  assert.deepEqual(
+    bindings.map(binding => [binding.familyId, binding.familyDefinitionHash]),
+    metadata.families.map(family => [family.familyId, family.familyDefinitionHash]),
+  );
   const binding = bindings.find(value => value.familyId === "univ2-standard")!;
   const pool = address("1");
   const token0 = address("2");

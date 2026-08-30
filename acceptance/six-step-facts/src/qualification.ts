@@ -85,6 +85,7 @@ export interface SixStepQualificationCertificateV1 {
 
 export interface SixStepValuationOwnerQualificationSubjectV1 {
   readonly ownerRef: Hash;
+  readonly supportedAssetRefs: readonly Hash[];
   readonly proposedOwnerLeafDigest: Hash;
   readonly implementationHash: Hash;
   readonly factSchemaRef: Hash;

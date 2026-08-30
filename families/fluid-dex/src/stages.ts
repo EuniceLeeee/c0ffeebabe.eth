@@ -1,6 +1,5 @@
 import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
 import {
-  FLUID_DEX_ACTION_OWNER_ID,
   FLUID_DEX_CONTRACT_EVIDENCE_TOPIC,
   FLUID_DEX_FAMILY_ID,
   FLUID_DEX_FAMILY_VERSION,
@@ -248,12 +247,6 @@ export function buildFluidDexAction(input: {
   };
   return Object.freeze({ ...payload, actionHash: hashDomain("aloha/fluid-dex/action/v1", payload) });
 }
-export const FLUID_DEX_ACTION_PORT = Object.freeze({
-  actionOwnerId: FLUID_DEX_ACTION_OWNER_ID,
-  actionKind: "swap",
-  build: buildFluidDexAction,
-});
-
 export function compileFluidDexExecution(input: {
   readonly identity: FluidDexIdentityV1;
   readonly action: FluidDexActionV1;

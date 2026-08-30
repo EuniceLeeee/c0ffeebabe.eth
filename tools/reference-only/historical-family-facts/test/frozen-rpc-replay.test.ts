@@ -64,12 +64,17 @@ test("captures, reloads, and replays exact response bytes without a verdict", as
       },
     });
     assert.equal(calls.length, 1);
+    assert.equal(manifest.advisoryOnly, true);
     assert.equal(manifest.transportFactsOnly, true);
+    assert.equal(manifest.chainStateQualified, false);
+    assert.equal(manifest.transportOrigin, "reader-port-observed/untrusted-reader-port");
+    assert.equal(manifest.fenceClaimLevel, "before-after-observation-only-a-b-a-not-excluded");
     assert.match(manifest.descriptorSetRoot, /^0x[0-9a-f]{64}$/);
     assert.match(manifest.responseObjectClosureRoot, /^0x[0-9a-f]{64}$/);
     assert.equal("verdict" in manifest, false);
     assert.equal("pass" in manifest, false);
     const replay = loadFrozenHistoricalRpcReplayV1(directory, manifest.manifestRoot);
+    assert.equal(replay.transportOrigin, "reader-port-observed/untrusted-reader-port");
     assert.deepEqual(decodeCanonicalBytes(replay.read(descriptor())), { result: "0x1234" });
     assert.deepEqual(replay.stats(), { requests: 1, misses: 0, missedDescriptors: [] });
     assert.equal(replay.descriptorSetRoot, manifest.descriptorSetRoot);
@@ -77,7 +82,7 @@ test("captures, reloads, and replays exact response bytes without a verdict", as
   });
 });
 
-test("parameter, method, lane, and owner changes are recorded descriptor misses", async () => {
+test("parameter, lane, and owner changes are recorded descriptor misses while unsupported methods are invalid", async () => {
   await withStore((directory) => {
     const manifest = materializeHistoricalRpcReplayV1(directory, [{
       descriptor: descriptor(),
@@ -86,14 +91,14 @@ test("parameter, method, lane, and owner changes are recorded descriptor misses"
     const replay = loadFrozenHistoricalRpcReplayV1(directory, manifest.manifestRoot);
     for (const changed of [
       descriptor({ canonicalParams: [{ to: address, data: "0x70a08231" }, "0x64"] }),
-      descriptor({ method: "eth_getCode" }),
       descriptor({ lane: "base" }),
       descriptor({ owner: { ownerId: "@aloha/other#read", implementationClosureRoot: closureRoot } }),
     ]) assert.throws(() => replay.read(changed), /descriptor miss/);
+    assert.throws(() => replay.read(descriptor({ method: "eth_getCode" })), /no compiled historical cutoff binding/);
     assert.equal(replay.stats().misses, 4);
     assert.deepEqual(
       replay.stats().missedDescriptors.map((miss) => miss.reason),
-      ["descriptor-miss", "descriptor-miss", "descriptor-miss", "descriptor-miss"],
+      ["descriptor-miss", "descriptor-miss", "descriptor-miss", "descriptor-invalid"],
     );
   });
 });
@@ -148,6 +153,27 @@ test("one descriptor key cannot be captured with different response bytes", asyn
   });
 });
 
+test("direct materialization is explicitly untrusted caller material and cannot select another origin", async () => {
+  await withStore((directory) => {
+    const manifest = materializeHistoricalRpcReplayV1(directory, [{
+      descriptor: descriptor(),
+      responseBytes: response({ result: "0x1" }),
+    }]);
+    assert.equal(manifest.advisoryOnly, true);
+    assert.equal(manifest.chainStateQualified, false);
+    assert.equal(manifest.transportOrigin, "caller-materialized/untrusted-caller-material");
+    assert.equal(manifest.fenceClaimLevel, "before-after-observation-only-a-b-a-not-excluded");
+    assert.throws(
+      () => materializeHistoricalRpcReplayV1(directory, [{
+        descriptor: descriptor(),
+        responseBytes: response({ result: "0x1" }),
+        transportOrigin: "reader-port-observed/untrusted-reader-port",
+      } as never]),
+      /unknown field "transportOrigin"|response bytes/,
+    );
+  });
+});
+
 test("capture rejects mutable reads and cross-cutoff descriptor sets", async () => {
   await withStore((directory) => {
     assert.throws(() => materializeHistoricalRpcReplayV1(directory, [{
@@ -184,6 +210,30 @@ test("cutoff binding rejects a fixed-number or EIP-1898 parameter mismatch", asy
       }),
       responseBytes: response({ result: "0x1" }),
     }]), /does not exactly bind canonical source cutoff/);
+  });
+});
+
+test("cutoff parameter ownership is compiled rather than caller-declared", async () => {
+  await withStore((directory) => {
+    assert.throws(() => materializeHistoricalRpcReplayV1(directory, [{
+      descriptor: descriptor({ cutoffBinding: { kind: "block-number-param", paramIndex: "0" } }),
+      responseBytes: response({ result: "0x1" }),
+    }]), /eth_call cutoff must be exact parameter 1/);
+    assert.throws(() => materializeHistoricalRpcReplayV1(directory, [{
+      descriptor: descriptor({
+        method: "eth_getCode",
+        canonicalParams: [address, "0x64"],
+      }),
+      responseBytes: response({ result: "0x1" }),
+    }]), /no compiled historical cutoff binding/);
+    assert.throws(() => materializeHistoricalRpcReplayV1(directory, [{
+      descriptor: descriptor({
+        method: "eth_chainId",
+        canonicalParams: ["ignored"],
+        cutoffBinding: { kind: "source-invariant", paramIndex: null },
+      }),
+      responseBytes: response("0x1"),
+    }]), /must not have parameters/);
   });
 });
 

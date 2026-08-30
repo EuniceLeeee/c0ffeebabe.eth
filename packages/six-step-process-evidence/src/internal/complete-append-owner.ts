@@ -20,6 +20,7 @@ import {
   readIssuedProducerHeadTerminalCapabilityV1,
   readIssuedProducerLaneFactsV1,
   readIssuedProducerLaneSearchTerminalCapabilityV1,
+  producerHeadFactsRootV1,
   type ProducerHeadTerminalCapabilityV1,
 } from "../../../producer/src/index.ts";
 import {
@@ -27,8 +28,12 @@ import {
   readIssuedSearchTerminalSchedulerResourceJoinV1,
   readIssuedSearchTerminalSixStepTraceV1,
   type SearchTerminalCapabilityV1,
+  type SearchTerminalSixStepTraceV1,
 } from "../../../search-pipeline/src/index.ts";
-import type { ReadyStage12EvidenceSnapshotV1 } from "../../../checkpoint/src/index.ts";
+import type {
+  ReadyStage12EvidenceBindingV1,
+  ReadyStage12EvidenceSnapshotV1,
+} from "../../../checkpoint/src/index.ts";
 import {
   assertIssuedRuntimeReleasePerformanceRuntimeService,
   type RuntimeReleasePerformanceHeadClaimCapabilityV1,
@@ -53,6 +58,24 @@ const PRODUCER_TERMINAL_NAMESPACE = "searcher-production-evidence/producer-termi
 export type SearcherProductionSixStepPerformanceAppendCapabilityV1 = object;
 export type SearcherProductionSixStepCompleteAppendCapabilityV1 = object;
 
+export interface SearcherProductionSelectedStage12ParentV1 {
+  readonly edgeId: Hash;
+  readonly selectedLegRoot: Hash;
+  readonly stage1EventId: Hash;
+  readonly stage1ArtifactSetRoot: Hash;
+  readonly stage2EventId: Hash;
+  readonly stage2ArtifactSetRoot: Hash;
+  readonly instancePublicationRoot: Hash;
+  readonly edgeContentRoot: Hash;
+}
+
+export interface SearcherProductionSelectedStage12FactsV1 {
+  readonly binding: ReadyStage12EvidenceBindingV1;
+  readonly selectedParents: readonly SearcherProductionSelectedStage12ParentV1[];
+  readonly stage3EventId: Hash;
+  readonly stage3ArtifactSetRoot: Hash;
+}
+
 export interface SearcherProductionSixStepCompleteAppendIssueInputV1 {
   readonly startup: StartupRuntimeV1;
   readonly performanceRuntime: RuntimeReleasePerformanceRuntimeServiceV1;
@@ -69,7 +92,7 @@ export interface SearcherProductionSixStepCompleteAppendFinalizeInputV1 {
 
 export interface SearcherProductionSixStepCompleteAppendMaterialV1 {
   readonly searchTerminalCapability: SearchTerminalCapabilityV1;
-  readonly stage12: ReadyStage12EvidenceSnapshotV1;
+  readonly stage12: SearcherProductionSelectedStage12FactsV1;
   readonly runtimeFacts: RuntimeReleasePerformanceHeadFactsV1;
   readonly producerSchedulerJoin: SearcherProductionSixStepSchedulerJoinV1;
   readonly runtimeAnchor: SixStepRuntimeAnchorV1;
@@ -128,6 +151,60 @@ function sameCanonical(left: unknown, right: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+function positiveHash(value: unknown, path: string): Hash {
+  const hash = assertHash(value, path);
+  if (/^0x0{64}$/.test(hash)) throw new TypeError(`${path} must be non-zero`);
+  return hash;
+}
+
+function exactSelectedStage12Facts(
+  value: unknown,
+  startup: ReadyStage12EvidenceSnapshotV1,
+  trace: SearchTerminalSixStepTraceV1,
+): SearcherProductionSelectedStage12FactsV1 {
+  const stage12 = record(value, "sixStepCompleteAppend.sixStepFacts.stage12");
+  assertExactKeys(stage12, ["binding", "selectedParents", "stage3EventId", "stage3ArtifactSetRoot"], "sixStepCompleteAppend.sixStepFacts.stage12");
+  if (!sameCanonical(stage12.binding, startup.binding)) {
+    throw new TypeError("Six-Step selected Stage1/2 binding does not match the Checkpoint snapshot");
+  }
+  if (!Array.isArray(stage12.selectedParents)
+    || stage12.selectedParents.length !== trace.selectedGraphLegs.length
+    || stage12.selectedParents.length < 2) {
+    throw new TypeError("Six-Step selected Stage1/2 parent denominator mismatch");
+  }
+  const selectedParents = stage12.selectedParents.map((rawParent, index) => {
+    const path = `sixStepCompleteAppend.sixStepFacts.stage12.selectedParents[${index}]`;
+    const parent = record(rawParent, path);
+    assertExactKeys(parent, ["edgeId", "selectedLegRoot", "stage1EventId", "stage1ArtifactSetRoot", "stage2EventId", "stage2ArtifactSetRoot", "instancePublicationRoot", "edgeContentRoot"], path);
+    const leg = trace.selectedGraphLegs[index]!;
+    const edgeId = positiveHash(parent.edgeId, `${path}.edgeId`);
+    const selectedLegRoot = positiveHash(parent.selectedLegRoot, `${path}.selectedLegRoot`);
+    if (edgeId !== leg.edgeId
+      || selectedLegRoot !== hashDomain("aloha/searcher-production-evidence-selected-graph-leg/v1", leg as unknown as CanonicalJson)) {
+      throw new TypeError(`${path} does not bind the retained terminal route leg`);
+    }
+    return Object.freeze({
+      edgeId,
+      selectedLegRoot,
+      stage1EventId: positiveHash(parent.stage1EventId, `${path}.stage1EventId`),
+      stage1ArtifactSetRoot: positiveHash(parent.stage1ArtifactSetRoot, `${path}.stage1ArtifactSetRoot`),
+      stage2EventId: positiveHash(parent.stage2EventId, `${path}.stage2EventId`),
+      stage2ArtifactSetRoot: positiveHash(parent.stage2ArtifactSetRoot, `${path}.stage2ArtifactSetRoot`),
+      instancePublicationRoot: positiveHash(parent.instancePublicationRoot, `${path}.instancePublicationRoot`),
+      edgeContentRoot: positiveHash(parent.edgeContentRoot, `${path}.edgeContentRoot`),
+    });
+  });
+  if (new Set(selectedParents.map(parent => parent.edgeId)).size !== selectedParents.length) {
+    throw new TypeError("Six-Step selected Stage1/2 parents contain duplicate edges");
+  }
+  return deepFreeze({
+    binding: startup.binding,
+    selectedParents: Object.freeze(selectedParents),
+    stage3EventId: positiveHash(stage12.stage3EventId, "sixStepCompleteAppend.sixStepFacts.stage12.stage3EventId"),
+    stage3ArtifactSetRoot: positiveHash(stage12.stage3ArtifactSetRoot, "sixStepCompleteAppend.sixStepFacts.stage12.stage3ArtifactSetRoot"),
+  });
 }
 
 function exactAppend(
@@ -243,7 +320,7 @@ export async function issueSearcherProductionSixStepPerformanceAppendCapabilityV
   assertExactKeys(payload, ["admissionId", "terminalBindingRoot", "terminalId", "terminalMonotonicNs", "headHash", "sourceCoverageRoot", "candidateSetRoot", "candidateCount", "runtimeFacts", "sixStepFacts", "factStatus"], "sixStepCompleteAppend.payload");
   assertDecimalString(payload.terminalMonotonicNs, "sixStepCompleteAppend.terminalMonotonicNs");
   const admissionId = assertHash(payload.admissionId, "sixStepCompleteAppend.admissionId");
-  const expectedHeadFactsRoot = hashDomain("aloha/searcher-production-evidence-head-facts/v1", headFacts as unknown as CanonicalJson);
+  const expectedHeadFactsRoot = producerHeadFactsRootV1(headFacts);
   const expectedTerminalBindingRoot = hashDomain("aloha/searcher-production-evidence-terminal-binding/v1", { terminalId: terminalEvidence.terminal.terminalId, headFactsRoot: expectedHeadFactsRoot });
   const candidateRefs = [...headFacts.candidateRefs].sort();
   if (new Set(candidateRefs).size !== candidateRefs.length) throw new TypeError("Producer head candidate refs are not unique");
@@ -276,9 +353,10 @@ export async function issueSearcherProductionSixStepPerformanceAppendCapabilityV
 
   const sixStepFacts = record(payload.sixStepFacts, "sixStepCompleteAppend.sixStepFacts");
   assertExactKeys(sixStepFacts, ["stage12", "stage36", "stage12Root", "stage36Root", "lineageRoot"], "sixStepCompleteAppend.sixStepFacts");
-  const stage12 = await readStartupStage12Evidence(input.startup);
-  await verifyStartupStage12Evidence(input.startup, stage12);
+  const startupStage12 = await readStartupStage12Evidence(input.startup);
+  await verifyStartupStage12Evidence(input.startup, startupStage12);
   const retainedTrace = readIssuedSearchTerminalSixStepTraceV1(searchTerminalCapability);
+  const stage12 = exactSelectedStage12Facts(sixStepFacts.stage12, startupStage12, retainedTrace);
   const expectedStage12Root = hashDomain("aloha/searcher-production-evidence-stage12/v1", stage12 as unknown as CanonicalJson);
   const expectedLineageRoot = hashDomain("aloha/searcher-production-evidence-six-step-lineage/v1", { stage12Root: expectedStage12Root, stage36Root: retainedTrace.traceRoot });
   if (!sameCanonical(sixStepFacts.stage12, stage12)
@@ -326,7 +404,7 @@ export function issueSearcherProductionSixStepCompleteAppendCapabilityV1(
   const terminalEvidence = readIssuedProducerHeadTerminalCapabilityV1(input.headTerminalCapability);
   if (terminalEvidence.facts === null) throw new TypeError("Six-Step Producer terminal facts are missing");
   const headFacts = readIssuedProducerHeadFactsCapabilityV1(terminalEvidence.facts);
-  const expectedHeadFactsRoot = hashDomain("aloha/searcher-production-evidence-head-facts/v1", headFacts as unknown as CanonicalJson);
+  const expectedHeadFactsRoot = producerHeadFactsRootV1(headFacts);
   const expectedTerminalBindingRoot = hashDomain("aloha/searcher-production-evidence-terminal-binding/v1", {
     terminalId: terminalEvidence.terminal.terminalId,
     headFactsRoot: expectedHeadFactsRoot,

@@ -80,6 +80,8 @@ function generatedValuationOwners(binding: ReturnType<typeof assertActiveRuntime
     if (
       owner === undefined
       || owner.ownerRef !== entry.ownerRef
+      || owner.supportedAssetRefs.length !== entry.supportedAssetRefs.length
+      || owner.supportedAssetRefs.some((assetRef, assetIndex) => assetRef !== entry.supportedAssetRefs[assetIndex])
       || owner.implementationHash !== entry.implementationHash
       || owner.factSchemaRef !== entry.factSchemaRef
       || owner.implementationClosureRoot !== entry.implementationClosureRoot
@@ -89,6 +91,7 @@ function generatedValuationOwners(binding: ReturnType<typeof assertActiveRuntime
     ) throw new TypeError(`runtime-release valuation-owner binding mismatch ${entry.ownerRef}`);
     return Object.freeze({
       ownerRef: owner.ownerRef,
+      supportedAssetRefs: owner.supportedAssetRefs,
       implementationHash: owner.implementationHash,
       factSchemaRef: owner.factSchemaRef,
       implementationClosureRoot: owner.implementationClosureRoot,
@@ -163,6 +166,12 @@ export function issueRuntimeReleaseEconomicSafetyEvaluatorCapabilityV1(
   const actionOwners = actionOwnerQualification.policies;
   const valuation = generatedValuationOwners(state.binding);
   const valuationOwners = valuation.descriptors;
+  for (const template of templates) {
+    const owners = valuationOwners.filter(owner => owner.ownerRef === template.valuationOwnerRef);
+    if (owners.length !== 1 || !owners[0]!.supportedAssetRefs.includes(template.profitAsset.assetRef)) {
+      throw new TypeError("runtime-release valuation owner does not uniquely cover the selected profit asset");
+    }
+  }
   const executorQualification = Object.freeze({
     executorKind: state.binding.selectedExecutor.executorKind,
     engineBuildFingerprint: state.binding.selectedExecutor.engineBuildFingerprint,

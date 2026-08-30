@@ -34,6 +34,7 @@ export interface EconomicValuationFactV1 {
 
 export interface EconomicValuationOwnerRuntimeDescriptorV1 {
   readonly ownerRef: Hash;
+  readonly supportedAssetRefs: readonly Hash[];
   readonly implementationHash: Hash;
   readonly factSchemaRef: Hash;
   readonly implementationClosureRoot: Hash;
@@ -54,6 +55,7 @@ export interface EconomicValuationOwnerRuntimeBindingV1 extends EconomicValuatio
 
 export interface EconomicValuationOwnerDeclarationV1 {
   readonly ownerRef: Hash;
+  readonly supportedAssetRefs: readonly Hash[];
   readonly modulePath: string;
   readonly exportName: string;
   readonly implementationHash: Hash;
@@ -90,6 +92,7 @@ export interface EconomicValuationOwnerQualificationCertificateV1 {
   readonly schemaVersion: 1;
   readonly kind: "aloha.economic-valuation-owner-qualification-certificate";
   readonly ownerRef: Hash;
+  readonly supportedAssetRefs: readonly Hash[];
   readonly proposedOwnerLeafDigest: Hash;
   readonly implementationHash: Hash;
   readonly factSchemaRef: Hash;
@@ -161,17 +164,24 @@ function sortedUniqueHashes(value: unknown, path: string): readonly Hash[] {
   return Object.freeze(hashes);
 }
 
+function nonEmptySortedUniqueHashes(value: unknown, path: string): readonly Hash[] {
+  const hashes = sortedUniqueHashes(value, path);
+  if (hashes.length === 0) throw new TypeError(`${path} must be non-empty`);
+  return hashes;
+}
+
 export function normalizeEconomicValuationOwnerDeclarationV1(
   value: EconomicValuationOwnerDeclarationV1,
 ): EconomicValuationOwnerDeclarationV1 {
   assertExactKeys(value, [
-    "ownerRef", "modulePath", "exportName", "implementationHash", "factSchemaRef",
+    "ownerRef", "supportedAssetRefs", "modulePath", "exportName", "implementationHash", "factSchemaRef",
     "sourceReadCapabilityRefs", "qualificationModulePath", "qualificationSpecExportName",
     "criticalMutationCorpusExportName", "independentOracleCasesExportName",
     "qualificationSpecDigest", "criticalMutationCorpusRoot", "independentOracleCaseRoot",
   ], "economicValuationOwnerDeclaration");
   return deepFreeze({
     ownerRef: nonZeroHash(value.ownerRef, "economicValuationOwnerDeclaration.ownerRef"),
+    supportedAssetRefs: nonEmptySortedUniqueHashes(value.supportedAssetRefs, "economicValuationOwnerDeclaration.supportedAssetRefs"),
     modulePath: modulePath(value.modulePath, "economicValuationOwnerDeclaration.modulePath"),
     exportName: exportName(value.exportName, "economicValuationOwnerDeclaration.exportName"),
     implementationHash: nonZeroHash(value.implementationHash, "economicValuationOwnerDeclaration.implementationHash"),
@@ -192,6 +202,7 @@ function declarationFields(
 ): EconomicValuationOwnerDeclarationV1 {
   return {
     ownerRef: value.ownerRef,
+    supportedAssetRefs: value.supportedAssetRefs,
     modulePath: value.modulePath,
     exportName: value.exportName,
     implementationHash: value.implementationHash,
@@ -246,7 +257,7 @@ export function sealGeneratedEconomicValuationOwnerRegistryV1(
   if (!Array.isArray(values) || values.length === 0) throw new TypeError("economic valuation owner registry must be non-empty");
   const entries = values.map((value, index) => {
     assertExactKeys(value, [
-      "ownerRef", "modulePath", "exportName", "implementationHash", "factSchemaRef",
+      "ownerRef", "supportedAssetRefs", "modulePath", "exportName", "implementationHash", "factSchemaRef",
       "sourceReadCapabilityRefs", "qualificationModulePath", "qualificationSpecExportName",
       "criticalMutationCorpusExportName", "independentOracleCasesExportName",
       "qualificationSpecDigest", "criticalMutationCorpusRoot", "independentOracleCaseRoot",
@@ -284,7 +295,7 @@ export function sealGeneratedEconomicValuationOwnerRegistryV1(
 }
 
 const CERTIFICATE_KEYS = Object.freeze([
-  "schemaVersion", "kind", "ownerRef", "proposedOwnerLeafDigest", "implementationHash", "factSchemaRef",
+  "schemaVersion", "kind", "ownerRef", "supportedAssetRefs", "proposedOwnerLeafDigest", "implementationHash", "factSchemaRef",
   "implementationClosureRoot", "qualificationSpecDigest", "qualificationSpecClosureRoot",
   "criticalMutationCorpusRoot", "criticalMutationCorpusClosureRoot", "independentOracleCaseRoot",
   "independentOracleClosureRoot", "executedPositiveCaseRoot", "executedNegativeCaseRoot",
@@ -299,6 +310,7 @@ function qualificationCertificateBody(
     schemaVersion: 1 as const,
     kind: "aloha.economic-valuation-owner-qualification-certificate" as const,
     ownerRef: nonZeroHash(value.ownerRef, "valuationQualification.ownerRef"),
+    supportedAssetRefs: nonEmptySortedUniqueHashes(value.supportedAssetRefs, "valuationQualification.supportedAssetRefs"),
     proposedOwnerLeafDigest: nonZeroHash(value.proposedOwnerLeafDigest, "valuationQualification.proposedOwnerLeafDigest"),
     implementationHash: nonZeroHash(value.implementationHash, "valuationQualification.implementationHash"),
     factSchemaRef: nonZeroHash(value.factSchemaRef, "valuationQualification.factSchemaRef"),
@@ -391,6 +403,8 @@ export function joinEconomicValuationOwnerQualificationSetV1(
     const certificate = certificateSet.certificates[index]!;
     if (
       certificate.ownerRef !== proposal.ownerRef
+      || certificate.supportedAssetRefs.length !== proposal.supportedAssetRefs.length
+      || certificate.supportedAssetRefs.some((assetRef, assetIndex) => assetRef !== proposal.supportedAssetRefs[assetIndex])
       || certificate.proposedOwnerLeafDigest !== proposal.qualificationLeafDigest
       || certificate.implementationHash !== proposal.implementationHash
       || certificate.factSchemaRef !== proposal.factSchemaRef

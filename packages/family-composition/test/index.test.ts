@@ -29,6 +29,7 @@ import {
 } from "../src/index.ts";
 import {
   createGeneratedFamilyRuntimeFactory,
+  readGeneratedFamilyRuntimeAdapterFactories,
   readGeneratedFamilyRuntimeFactoryMetadata,
 } from "../src/internal/generated-runtime-composition.ts";
 import {
@@ -358,6 +359,77 @@ test("generated factory closes the assembly and fails closed without a release a
   );
 });
 
+test("generated factory exact-binds every runtime adapter import descriptor and keeps actual factories private", () => {
+  const fixture = generatedFixture();
+  const adapterBase = Object.freeze({
+    role: "search/v1",
+    modulePath: "families/composition-family/search-adapter.ts",
+    exportName: "SEARCH_ADAPTER_FACTORY",
+    closureRoot: h("generated-adapter-closure"),
+    capabilityRefs: Object.freeze({}),
+    actionOwnerRefs: Object.freeze({}),
+  });
+  const adapter = Object.freeze({ ...adapterBase, leafDigest: runtimeAdapterLeafDigest(adapterBase) });
+  const family = fixture.descriptor.families[0]!;
+  const changedFamily = Object.freeze({
+    ...family,
+    runtimeAdapters: Object.freeze([adapter]),
+    runtimeAdapterRoot: hashDomain("aloha/family-runtime-adapter-set/v1", [adapter.leafDigest]),
+  });
+  const withoutRoot = Object.freeze({
+    schemaVersion: fixture.descriptor.schemaVersion,
+    releaseIntentRoot: fixture.descriptor.releaseIntentRoot,
+    definitionCatalogRoot: fixture.descriptor.definitionCatalogRoot,
+    proposedCapabilitySetRoot: fixture.descriptor.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: fixture.descriptor.nominationProgramSetRoot,
+    families: Object.freeze([changedFamily]),
+  });
+  const descriptor = Object.freeze({
+    ...withoutRoot,
+    descriptorRoot: hashDomain("aloha/generated-family-runtime-descriptor/v1", withoutRoot),
+  });
+  const actualFactory: FamilySearchAdapterFactoryV1 = () => { throw new TypeError("not opened"); };
+  const exactImport = Object.freeze({
+    factory: actualFactory,
+    modulePath: adapter.modulePath,
+    exportName: adapter.exportName,
+    closureRoot: adapter.closureRoot,
+    leafDigest: adapter.leafDigest,
+  });
+  const assembly = {
+    descriptor,
+    definitions: [fixture.definitions],
+    extensions: [[]],
+    actionOwners: [[]],
+    runtimeAdapters: [[exactImport]],
+    sourcePlans: [[fixture.sourcePlan]],
+    nominationPrograms: [[fixture.nominationProgram]],
+  } as const;
+  const factory = createGeneratedFamilyRuntimeFactory(assembly);
+  const bindings = readGeneratedFamilyRuntimeAdapterFactories(factory);
+  assert.equal(bindings.length, 1);
+  assert.equal(bindings[0]!.actualFactory, actualFactory);
+  assert.deepEqual(bindings[0]!.descriptor, adapter);
+  for (const mutation of [
+    { modulePath: "families/forged/search-adapter.ts" },
+    { exportName: "FORGED_FACTORY" },
+    { closureRoot: h("forged-adapter-closure") },
+    { leafDigest: h("forged-adapter-leaf") },
+  ]) {
+    assert.throws(
+      () => createGeneratedFamilyRuntimeFactory({
+        ...assembly,
+        runtimeAdapters: [[{ ...exactImport, ...mutation }]],
+      }),
+      /import descriptor mismatch/,
+    );
+  }
+  assert.throws(
+    () => createGeneratedFamilyRuntimeFactory({ ...assembly, runtimeAdapters: [[actualFactory]] }),
+    /import descriptor is missing/,
+  );
+});
+
 function coarseFixture(options: Readonly<{ stateUnavailable?: boolean }> = {}) {
   const fixture = generatedFixture();
   const capabilityRef: StageCapabilityRefV1 = Object.freeze({
@@ -528,6 +600,7 @@ function coarseFixture(options: Readonly<{ stateUnavailable?: boolean }> = {}) {
   const objectivePayload = Object.freeze({ mode: "test" }) as CanonicalJson;
   const objective = Object.freeze({ objectiveRef: hashDomain("aloha/search-objective/v1", objectivePayload), payload: objectivePayload });
   const amount = Object.freeze({ inputAssetRef: h("asset-in"), outputAssetRef: h("asset-out"), amountIn: "10", recipient: "recipient" });
+  const execution = Object.freeze({ transactionOrigin: "caller", executorAddress: amount.recipient });
   const resolvedRouteBindingHash = familySearchRouteBindingHash(composition.resolveRouteHandle(issuedHandle, familyDefinitionHash));
   const bindingValue = {
     candidateId: h("candidate"),
@@ -556,6 +629,7 @@ function coarseFixture(options: Readonly<{ stateUnavailable?: boolean }> = {}) {
     source,
     objective,
     amount,
+    execution,
     bindingValue,
     binding: issueCoarseRouteBindingV1(bindingValue),
     sourceRead: Object.freeze({ async read() { throw new Error("adapter fixture does not make physical reads"); } }),
@@ -575,6 +649,7 @@ test("generated coarse seam binds release, route, transition, source and objecti
     sourceRead: fixture.sourceRead,
     objective: fixture.objective,
     amount: fixture.amount,
+    execution: fixture.execution,
   });
   assert.equal(fences, 2);
   const receipt = readQualifiedCoarseProjectionReceiptV1(readQualifiedCoarseProjectionV1({ service: fixture.seam.service, capability }));
@@ -643,6 +718,7 @@ test("generated coarse seam binds release, route, transition, source and objecti
       sourceRead: fixture.sourceRead,
       objective: field === "objective" ? value : fixture.objective,
       amount: field === "amount" ? value : fixture.amount,
+      execution: fixture.execution,
     } as never;
     await assert.rejects(() => fixture.composition.issueCoarseProjection(fixture.seam.producer, request), expected);
   }
@@ -650,7 +726,7 @@ test("generated coarse seam binds release, route, transition, source and objecti
   await assert.rejects(
     () => fixture.composition.issueCoarseProjection(fixture.seam.producer, {
       binding: wrongOwner, legIndex: 0, issuedHandle: fixture.issuedHandle,
-      currentSource, sourceRead: fixture.sourceRead, objective: fixture.objective, amount: fixture.amount,
+      currentSource, sourceRead: fixture.sourceRead, objective: fixture.objective, amount: fixture.amount, execution: fixture.execution,
     }),
     /route owner mismatch/,
   );
@@ -658,7 +734,7 @@ test("generated coarse seam binds release, route, transition, source and objecti
   await assert.rejects(
     () => fixture.composition.issueCoarseProjection(fixture.seam.producer, {
       binding: wrongRelease, legIndex: 0, issuedHandle: fixture.issuedHandle,
-      currentSource, sourceRead: fixture.sourceRead, objective: fixture.objective, amount: fixture.amount,
+      currentSource, sourceRead: fixture.sourceRead, objective: fixture.objective, amount: fixture.amount, execution: fixture.execution,
     }),
     /release provenance mismatch/,
   );
@@ -679,6 +755,7 @@ test("generated coarse seam binds release, route, transition, source and objecti
       sourceRead: fixture.sourceRead,
       objective: fixture.objective,
       amount: fixture.amount,
+      execution: fixture.execution,
     }),
     /current source changed after read/,
   );
@@ -730,6 +807,7 @@ test("generated coarse edge sweep observes one real directed edge without weaken
     sourceRead: fixture.sourceRead,
     objective: fixture.objective,
     amount: fixture.amount,
+    execution: fixture.execution,
   });
   const observation = fixture.composition.readCoarseEdgeSweepObservation(fixture.seam.producer, capability);
   const receipt = readQualifiedCoarseProjectionReceiptV1(readQualifiedCoarseProjectionV1({
@@ -754,6 +832,7 @@ test("generated coarse edge sweep observes one real directed edge without weaken
       sourceRead: fixture.sourceRead,
       objective: fixture.objective,
       amount: fixture.amount,
+      execution: fixture.execution,
     }),
     /binding capability|not issued/,
   );
@@ -773,6 +852,7 @@ test("generated coarse observation retains exact state-unavailable and does not 
     sourceRead: fixture.sourceRead,
     objective: fixture.objective,
     amount: fixture.amount,
+    execution: fixture.execution,
   });
   const receipt = readQualifiedCoarseProjectionReceiptV1(readQualifiedCoarseProjectionV1({
     service: fixture.seam.service,

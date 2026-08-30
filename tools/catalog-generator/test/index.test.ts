@@ -226,6 +226,7 @@ function generation(root: string, familyIds: readonly string[], adapterRoles: re
   const valuationIndependentOracleCases = Object.freeze([Object.freeze({ asset: "native", verdict: "valid" })]);
   const valuationDeclaration: EconomicValuationOwnerDeclarationV1 = Object.freeze({
     ownerRef: h("valuation-owner"),
+    supportedAssetRefs: Object.freeze([h("valuation-asset")]),
     modulePath: "valuation-owners/test/src/runtime.ts",
     exportName: "createTestValuationOwner",
     implementationHash: h("valuation-owner-implementation"),
@@ -385,6 +386,7 @@ function withValuationOwner(input: ReturnType<typeof generation>, root: string, 
   const independentOracleCases = Object.freeze([Object.freeze({ asset: name, verdict: "valid" })]);
   const declaration: EconomicValuationOwnerDeclarationV1 = Object.freeze({
     ownerRef: h(`${name}:valuation-owner`),
+    supportedAssetRefs: Object.freeze([h(`${name}:valuation-asset`)]),
     modulePath: `valuation-owners/${name}/src/runtime.ts`,
     exportName: "createValuationOwner",
     implementationHash: h(`${name}:valuation-implementation`),

@@ -21,6 +21,7 @@ import {
 import {
   familySearchAmount,
   familySearchAmountHash,
+  familySearchExecutionContextHash,
   familySearchObjective,
   familySearchRouteBindingHash,
 } from "../../../family-sdk/search-runtime/index.ts";
@@ -205,6 +206,7 @@ export async function issueFullGraphCoarseSweepCapabilityV1(input: {
     blockCount: "50" as const,
   });
   const amountSeedHash = hashDomain("aloha/full-graph-coarse-sweep-amount-seed/v1", invocation.amountSeed);
+  const executionContextHash = familySearchExecutionContextHash(invocation.execution);
   const objectivePayload = deepFreeze({
     schemaVersion: 1,
     kind: "aloha.full-graph-coarse-sweep-objective-v1",
@@ -214,6 +216,7 @@ export async function issueFullGraphCoarseSweepCapabilityV1(input: {
     readyCutoff: ready.cutoff,
     actualCurrentSource: source,
     amountSeedHash,
+    executionContextHash,
   }) as unknown as CanonicalJson;
   const objective = familySearchObjective({
     payload: objectivePayload,
@@ -234,6 +237,7 @@ export async function issueFullGraphCoarseSweepCapabilityV1(input: {
     currentSourceSessionId: session.sessionId,
     actualCurrentSource: source,
     amountSeedHash,
+    executionContextHash,
     objectiveRef: objective.objectiveRef,
   });
   const binding = deepFreeze({
@@ -323,6 +327,7 @@ export async function issueFullGraphCoarseSweepCapabilityV1(input: {
         sourceRead: invocation.sourceRead,
         objective,
         amount,
+        execution: invocation.execution,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
         ...(input.deadlineAtMs === undefined ? {} : { deadlineAtMs: input.deadlineAtMs }),
       });

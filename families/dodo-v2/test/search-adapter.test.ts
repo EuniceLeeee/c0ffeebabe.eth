@@ -10,6 +10,7 @@ import {
 import { erc20AssetRefV1, nativeAssetRefV1 } from "../../../packages/asset-ref/src/index.ts";
 import { familyCandidateKey } from "../../../packages/discovery/src/index.ts";
 import { asOwnerRef } from "../../../packages/capability-contracts/src/index.ts";
+import { decodePackedCallProgram, encodePackedCallProgram } from "../../../packages/execution-program/src/index.ts";
 import type {
   FamilySearchAmountEnvelopeV1,
   FamilySearchCurrentSourceV1,
@@ -92,7 +93,10 @@ const identityMemoIdentity = {
     },
   },
 };
-const stateWithoutQuery = materializeDodoV2({ identity: protocolIdentity, read: { cutoff, pool, pmm, lpFeeRate, mtFeeRate: "0" } });
+const transactionOrigin = address("7");
+const executorAddress = address("8");
+const execution = Object.freeze({ transactionOrigin, executorAddress });
+const stateWithoutQuery = materializeDodoV2({ identity: protocolIdentity, read: { cutoff, pool, quoteActor: transactionOrigin, pmm, lpFeeRate, mtFeeRate: "0" } });
 assert.equal(stateWithoutQuery.status, "verified");
 if (stateWithoutQuery.status !== "verified") throw new Error("state fixture failed");
 assert.equal(resealDodoState(stateWithoutQuery.state), stateWithoutQuery.state.stateHash);
@@ -131,18 +135,19 @@ const amount: FamilySearchAmountEnvelopeV1 = Object.freeze({
   inputAssetRef: erc20AssetRefV1("1", baseToken),
   outputAssetRef: erc20AssetRefV1("1", quoteToken),
   amountIn,
-  recipient: address("8"),
+  recipient: executorAddress,
 });
 const objectivePayload = Object.freeze({ kind: "search-objective", numeraire: amount.outputAssetRef });
 const objective = Object.freeze({ objectiveRef: hashDomain("aloha/search-objective/v1", objectivePayload), payload: objectivePayload });
 
 function input(readPort: FamilySearchSourceReadPortV1 = readPortFactory()) {
-  return { route: routeBinding(), currentSource: { source: cutoff, assertCurrent() {} }, objective, amount, readPort };
+  return { route: routeBinding(), currentSource: { source: cutoff, assertCurrent() {} }, objective, amount, execution, readPort };
 }
 
-function readPortFactory(options: { readonly malformed?: boolean; readonly mismatch?: boolean; readonly queryMismatch?: boolean } = {}): FamilySearchSourceReadPortV1 {
+function readPortFactory(options: { readonly malformed?: boolean; readonly mismatch?: boolean; readonly queryMismatch?: boolean; readonly observedRequests?: FamilySearchSourceReadRequestV1[] } = {}): FamilySearchSourceReadPortV1 {
   return {
     read({ request }: { readonly request: FamilySearchSourceReadRequestV1 }) {
+      options.observedRequests?.push(request);
       if (options.malformed) return { kind: "returned" as const, requestId: request.requestId, source: request.source, dataHex: "0x01" };
       if (options.mismatch) return { kind: "returned" as const, requestId: request.requestId, source: { ...request.source, number: "101" }, dataHex: words(1n, 0n) };
       const selector = request.data.slice(0, 10);
@@ -158,11 +163,21 @@ const adapter = DODO_SEARCH_RUNTIME_ADAPTER_FACTORY({
   familyDefinitionHash: DODO_V2_FAMILY_AUTHORING_HASH,
   capabilityRefs: {},
   actionOwnerRefs: { swap: asOwnerRef(h("action-owner")) },
-  composition: { resolveCapability: () => ({}), resolveActionOwner: () => ({}) },
+  composition: { resolveCapability: () => ({}), resolveActionOwner: () => DODO_V2_SWAP_ACTION_PORT },
+});
+
+test("DODO adapter rejects a shape-compatible but non-generated action owner", () => {
+  assert.throws(() => DODO_SEARCH_RUNTIME_ADAPTER_FACTORY({
+    familyDefinitionHash: DODO_V2_FAMILY_AUTHORING_HASH,
+    capabilityRefs: {},
+    actionOwnerRefs: { swap: asOwnerRef(h("action-owner")) },
+    composition: { resolveCapability: () => ({}), resolveActionOwner: () => ({ ...DODO_V2_SWAP_ACTION_PORT }) },
+  }), /action owner identity mismatch/);
 });
 
 test("DODO adapter consumes raw PMM/query ABI and seals coarse to exact to action", async () => {
-  const result = await adapter.run(input());
+  const observedRequests: FamilySearchSourceReadRequestV1[] = [];
+  const result = await adapter.run(input(readPortFactory({ observedRequests })));
   assert.equal(result.kind, "verified");
   if (result.kind !== "verified") return;
   assert.equal(result.artifact.state.kind, "state");
@@ -170,10 +185,31 @@ test("DODO adapter consumes raw PMM/query ABI and seals coarse to exact to actio
   assert.equal(result.artifact.exact.status, "verified");
   assert.equal(result.artifact.action.status, "ready");
   assert.equal(result.artifact.action.exactEvaluationHash, result.artifact.exact.evaluationHash);
+  const actorWord = transactionOrigin.slice(2).padStart(64, "0");
+  const actorSensitive = observedRequests.filter(request => request.data.startsWith("0x44096609") || request.data.startsWith("0x79a04876") || request.data.startsWith("0x66410a21"));
+  assert.equal(actorSensitive.length, 2);
+  assert.ok(actorSensitive.every(request => request.data.slice(10, 74) === actorWord));
+  assert.ok(actorSensitive.every(request => !request.data.includes(executorAddress.slice(2).padStart(64, "0"), 10)));
   const payload = result.artifact.action.payload as unknown as Record<string, unknown>;
   const verified = DODO_V2_SWAP_ACTION_PORT.decode(payload);
+  assert.equal(result.artifact.action.opaqueBytes, verified.opaqueBytes);
+  assert.deepEqual(result.artifact.action.effectTransport, verified.effectTransport);
+  const calls = decodePackedCallProgram(verified.opaqueBytes, "dodo test action program");
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0]!.target, verified.route.inputToken);
+  assert.equal(calls[0]!.calldata, `0xa9059cbb${"0".repeat(24)}${pool.slice(2)}${BigInt(verified.quote.amountIn).toString(16).padStart(64, "0")}`);
+  assert.equal(calls[1]!.target, pool);
+  assert.equal(calls[1]!.calldata, verified.rawAction.calldata);
+  assert.deepEqual(verified.effectTransport.observeTokenBalances, [
+    { token: baseToken, account: amount.recipient },
+    { token: quoteToken, account: amount.recipient },
+    { token: baseToken, account: pool },
+    { token: quoteToken, account: pool },
+  ]);
   assert.equal(DODO_V2_SWAP_ACTION_PORT.verifyObligations(payload).subjectRoot, result.artifact.action.obligationRoot);
   const reject = (mutation: Record<string, unknown>) => assert.throws(() => DODO_V2_SWAP_ACTION_PORT.decode(mutation));
+  const proofRoot = (value: typeof verified) => hashDomain("aloha/dodo-v2/action-obligation-postcondition/v1", { rawActionHash: value.rawAction.actionHash, routeBindingHash: value.route.routeBindingHash, recipient: value.recipient, opaqueBytes: value.opaqueBytes, effectTransport: value.effectTransport, exactEvaluationHash: value.exactEvaluationHash, obligationRoot: value.obligationRoot, inputs: value.inputs, outputs: value.outputs, stateFactsRoot: value.stateFactsRoot, sellBase: value.sellBase });
+  const reroot = (value: typeof verified): Record<string, unknown> => { const withProof = { ...value, obligationProofRoot: proofRoot(value) }; const { actionHash: ignored, ...body } = withProof; void ignored; return { ...body, actionHash: hashDomain("aloha/dodo-v2/search-action/v1", body) }; };
   const rerootedAmountOut = (BigInt(verified.quote.amountOut) + 1n).toString();
   const rerootedQuoteBody = { ...verified.quote, amountOut: rerootedAmountOut };
   const { quoteHash: ignoredRerootedQuote, ...rerootedQuoteWithoutHash } = rerootedQuoteBody;
@@ -186,10 +222,12 @@ test("DODO adapter consumes raw PMM/query ABI and seals coarse to exact to actio
   const rerootedOutputs = [{ ...verified.outputs[0]!, amount: rerootedAmountOut }];
   const rerootedEvaluation = hashDomain("aloha/dodo-v2/search-exact-evaluation/v1", { quoteHash: rerootedQuote.quoteHash, stateHash: rerootedQuote.stateHash });
   const rerootedObligation = hashDomain("aloha/dodo-v2/search-obligation/v1", { evaluationHash: rerootedEvaluation, routeBindingHash: verified.searchRouteBindingHash });
-  const rerootedProof = hashDomain("aloha/dodo-v2/action-obligation-postcondition/v1", { rawActionHash: rerootedRaw.actionHash, routeBindingHash: verified.route.routeBindingHash, exactEvaluationHash: rerootedEvaluation, obligationRoot: rerootedObligation, inputs: verified.inputs, outputs: rerootedOutputs, stateFactsRoot: verified.stateFactsRoot, sellBase: verified.sellBase });
-  const rerootedPayload = { ...verified, quote: rerootedQuote, rawAction: rerootedRaw, outputs: rerootedOutputs, exactEvaluationHash: rerootedEvaluation, obligationRoot: rerootedObligation, obligationProofRoot: rerootedProof };
-  const { actionHash: ignoredRerootedFinal, ...rerootedBody } = rerootedPayload;
-  void ignoredRerootedFinal;
+  const rerootedPayload = { ...verified, quote: rerootedQuote, rawAction: rerootedRaw, outputs: rerootedOutputs, exactEvaluationHash: rerootedEvaluation, obligationRoot: rerootedObligation };
+  const changedTransferTarget = encodePackedCallProgram([{ ...calls[0]!, target: address("9") as `0x${string}` }, calls[1]!]);
+  const changedTransferAmount = encodePackedCallProgram([{ ...calls[0]!, calldata: `${calls[0]!.calldata.slice(0, -64)}${(BigInt(verified.quote.amountIn) + 1n).toString(16).padStart(64, "0")}` as `0x${string}` }, calls[1]!]);
+  const reversedCalls = encodePackedCallProgram([calls[1]!, calls[0]!]);
+  const changedTransport = { ...verified.effectTransport, caller: { ...verified.effectTransport.caller, executionMode: "impersonated-call-frame" as const } };
+  const changedObservations = { ...verified.effectTransport, observeTokenBalances: verified.effectTransport.observeTokenBalances.slice(0, -1) };
   const mutationCorpus = [
     { id: "metadata-splice", value: { ...payload, actionImplementationHash: h("implementation-splice") } },
     { id: "state-facts-root-splice", value: { ...payload, stateFactsRoot: h("facts-splice") } },
@@ -199,6 +237,13 @@ test("DODO adapter consumes raw PMM/query ABI and seals coarse to exact to actio
     { id: "output-asset-splice", value: { ...payload, outputs: [{ ...verified.outputs[0]!, assetRef: h("foreign-output-asset") }] } },
     { id: "quote-splice", value: { ...payload, quote: { ...verified.quote, amountIn: (BigInt(verified.quote.amountIn) + 1n).toString() } } },
     { id: "raw-action-splice", value: { ...payload, rawAction: { ...verified.rawAction, actionHash: h("raw-action-splice") } } },
+    { id: "opaque-program-splice", value: { ...payload, opaqueBytes: "0x01" } },
+    { id: "opaque-program-noncanonical", value: { ...payload, opaqueBytes: verified.opaqueBytes.toUpperCase().replace("0X", "0x") } },
+    { id: "transfer-target-splice", value: { ...payload, opaqueBytes: changedTransferTarget } },
+    { id: "transfer-amount-splice", value: { ...payload, opaqueBytes: changedTransferAmount } },
+    { id: "call-order-splice", value: { ...payload, opaqueBytes: reversedCalls } },
+    { id: "effect-transport-splice", value: { ...payload, effectTransport: changedTransport } },
+    { id: "effect-observation-splice", value: { ...payload, effectTransport: changedObservations } },
     { id: "evaluation-splice", value: { ...payload, exactEvaluationHash: h("evaluation-splice") } },
     { id: "obligation-root-splice", value: { ...payload, obligationRoot: h("obligation-splice") } },
     { id: "obligation-proof-splice", value: { ...payload, obligationProofRoot: h("proof-splice") } },
@@ -209,16 +254,21 @@ test("DODO adapter consumes raw PMM/query ABI and seals coarse to exact to actio
     { id: "raw-action-field-injection", value: { ...payload, rawAction: { ...verified.rawAction, unexpected: true } } },
     { id: "quote-cutoff-field-injection", value: { ...payload, quote: { ...verified.quote, cutoff: { ...verified.quote.cutoff, unexpected: true } } } },
     { id: "raw-cutoff-field-injection", value: { ...payload, rawAction: { ...verified.rawAction, cutoff: { ...verified.rawAction.cutoff, unexpected: true } } } },
-    { id: "fee-arithmetic-reroot", value: { ...rerootedBody, actionHash: hashDomain("aloha/dodo-v2/search-action/v1", rerootedBody) } },
+    { id: "fee-arithmetic-reroot", value: reroot(rerootedPayload) },
   ] as const;
   assert.deepEqual(mutationCorpus.map(mutation => mutation.id), DODO_V2_ACTION_MUTATION_EXECUTION_IDS);
   assert.equal(DODO_V2_ACTION_MUTATION_CORPUS_ROOT, hashDomain("aloha/dodo-v2/action-verifier-mutations/v1", { executionIds: DODO_V2_ACTION_MUTATION_EXECUTION_IDS }));
   for (const mutation of mutationCorpus) reject(mutation.value);
+  reject(reroot({ ...verified, opaqueBytes: changedTransferTarget }));
+  reject(reroot({ ...verified, opaqueBytes: changedTransferAmount }));
+  reject(reroot({ ...verified, opaqueBytes: reversedCalls }));
+  reject(reroot({ ...verified, effectTransport: changedTransport }));
+  reject(reroot({ ...verified, effectTransport: changedObservations }));
   reject({ ...payload, route: { ...verified.route, inputToken: address("9") } });
   reject({ ...payload, rawAction: { ...verified.rawAction, target: address("9") } });
   reject({ ...payload, sellBase: !verified.sellBase });
   const foreignInputs = [{ ...verified.inputs[0]!, assetRef: h("joint-foreign-input") }];
-  const foreignProof = hashDomain("aloha/dodo-v2/action-obligation-postcondition/v1", { rawActionHash: verified.rawAction.actionHash, routeBindingHash: verified.route.routeBindingHash, exactEvaluationHash: verified.exactEvaluationHash, obligationRoot: verified.obligationRoot, inputs: foreignInputs, outputs: verified.outputs, stateFactsRoot: verified.stateFactsRoot, sellBase: verified.sellBase });
+  const foreignProof = proofRoot({ ...verified, inputs: foreignInputs });
   const foreignPayload = { ...verified, inputs: foreignInputs, obligationProofRoot: foreignProof };
   const { actionHash: ignoredForeign, ...foreignBody } = foreignPayload;
   void ignoredForeign;
@@ -227,7 +277,7 @@ test("DODO adapter consumes raw PMM/query ABI and seals coarse to exact to actio
   const { actionHash: ignoredCutoffRaw, ...cutoffRawWithoutHash } = cutoffRawBody;
   void ignoredCutoffRaw;
   const cutoffRaw = { ...cutoffRawWithoutHash, actionHash: hashDomain("aloha/dodo-v2/action/v1", cutoffRawWithoutHash) };
-  const cutoffProof = hashDomain("aloha/dodo-v2/action-obligation-postcondition/v1", { rawActionHash: cutoffRaw.actionHash, routeBindingHash: verified.route.routeBindingHash, exactEvaluationHash: verified.exactEvaluationHash, obligationRoot: verified.obligationRoot, inputs: verified.inputs, outputs: verified.outputs, stateFactsRoot: verified.stateFactsRoot, sellBase: verified.sellBase });
+  const cutoffProof = proofRoot({ ...verified, rawAction: cutoffRaw });
   const cutoffPayload = { ...verified, rawAction: cutoffRaw, obligationProofRoot: cutoffProof };
   const { actionHash: ignoredCutoffFinal, ...cutoffBody } = cutoffPayload;
   void ignoredCutoffFinal;
@@ -260,6 +310,8 @@ test("DODO adapter fails closed on malformed, stale, query-mismatched, and forge
   if (exact.kind !== "verified") return;
   const mutatedAmount = adapter.evaluateExact({ ...input(), amount: { ...amount, amountIn: "11" }, state: state.artifact, coarse: coarse.artifact });
   assert.equal(mutatedAmount.kind, "invalidProgram");
+  const swappedActors = adapter.evaluateExact({ ...input(), execution: { transactionOrigin: executorAddress, executorAddress: transactionOrigin }, state: state.artifact, coarse: coarse.artifact });
+  assert.equal(swappedActors.kind, "invalidProgram");
   const mutatedRoute = adapter.projectCoarse({ ...input(), route: { ...routeBinding(), projectionHash: h("mutated") }, state: state.artifact });
   assert.equal(mutatedRoute.kind, "invalidProgram");
   const forgedAction = adapter.buildAction({ ...input(), exact: { ...exact.artifact, evaluationHash: h("forged") } });

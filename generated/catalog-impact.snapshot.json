@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "aloha.catalog-impact-snapshot",
-  "definitionCatalogRoot": "0xad4dede4d7577a321620996f253ebf2ff32a136374a67d1b33e71ebb26039602",
-  "capabilityCatalogRoot": "0x25d0e130686748d5fa887cc38a0a648b781c49a1066ef55b429e53cee61eec38",
+  "definitionCatalogRoot": "0xbe54399f10b3a7b0ff0e6cdae36c08cf657183637525e72b04b11269d2087ad5",
+  "capabilityCatalogRoot": "0x2cac0df267c355c99240ecbc947254ff4c5184a430a6307b602a9e2838085520",
   "capabilities": [
     {
       "id": "family.curve-underlying.coarse",
@@ -12,7 +12,7 @@
       "dependencyIds": [
         "family.curve-underlying.state"
       ],
-      "implementationClosureRoot": "0x170d701ae2b70aa889a0f81d305a31c5d67fd9a62362bfc9c5e32bd0517172c6"
+      "implementationClosureRoot": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585"
     },
     {
       "id": "family.curve-underlying.exact",
@@ -22,7 +22,7 @@
       "dependencyIds": [
         "family.curve-underlying.state"
       ],
-      "implementationClosureRoot": "0x170d701ae2b70aa889a0f81d305a31c5d67fd9a62362bfc9c5e32bd0517172c6"
+      "implementationClosureRoot": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585"
     },
     {
       "id": "family.curve-underlying.state",
@@ -30,7 +30,7 @@
       "schemaHash": "0x1a51e44914829de075debc91a33a7831e8b1ca48fc4fb288f5a3faf8907c7e5a",
       "interpreterHash": "0x94cbb5db9747b77a5a71e1e9cb9fe5bf1230b8630a4bd3c64707634f71612d9b",
       "dependencyIds": [],
-      "implementationClosureRoot": "0x170d701ae2b70aa889a0f81d305a31c5d67fd9a62362bfc9c5e32bd0517172c6"
+      "implementationClosureRoot": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585"
     },
     {
       "id": "family.dodo-v2.coarse",
@@ -40,7 +40,7 @@
       "dependencyIds": [
         "family.dodo-v2.state"
       ],
-      "implementationClosureRoot": "0xb92796bc427361889da733b8a908caea3168f9616bbfcba7019b4f809e3b0ec9"
+      "implementationClosureRoot": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29"
     },
     {
       "id": "family.dodo-v2.exact",
@@ -50,7 +50,7 @@
       "dependencyIds": [
         "family.dodo-v2.state"
       ],
-      "implementationClosureRoot": "0xb92796bc427361889da733b8a908caea3168f9616bbfcba7019b4f809e3b0ec9"
+      "implementationClosureRoot": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29"
     },
     {
       "id": "family.dodo-v2.state",
@@ -58,7 +58,7 @@
       "schemaHash": "0x1f962be6704d0532dad2284747d796b4c97e3c4d4ee0576216a4d2be537d2b49",
       "interpreterHash": "0x1a4bcd9a49f63bfb58c2f8ae11b523be5c86c5a6c59e430aa32a16b3ba8df875",
       "dependencyIds": [],
-      "implementationClosureRoot": "0xb92796bc427361889da733b8a908caea3168f9616bbfcba7019b4f809e3b0ec9"
+      "implementationClosureRoot": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29"
     },
     {
       "id": "family.fluid-dex.coarse",
@@ -68,7 +68,7 @@
       "dependencyIds": [
         "family.fluid-dex.state"
       ],
-      "implementationClosureRoot": "0x4fe971863cce1a4fc33d3c6dacff2e7191d09c05d32c6fe804c7017a886f79c6"
+      "implementationClosureRoot": "0xadc77a859da56aba2f21e587bc1a8ae8bb1d4d498ea19a28130b5307e4234de2"
     },
     {
       "id": "family.fluid-dex.exact",
@@ -78,7 +78,7 @@
       "dependencyIds": [
         "family.fluid-dex.state"
       ],
-      "implementationClosureRoot": "0x4fe971863cce1a4fc33d3c6dacff2e7191d09c05d32c6fe804c7017a886f79c6"
+      "implementationClosureRoot": "0xadc77a859da56aba2f21e587bc1a8ae8bb1d4d498ea19a28130b5307e4234de2"
     },
     {
       "id": "family.fluid-dex.state",
@@ -86,7 +86,7 @@
       "schemaHash": "0xe45709a4ab1d30f6ab7cde439e53df05b4c9d1f65187a57af31f1efbd17a9de9",
       "interpreterHash": "0x8bc78cb560e425ce87208a5a6d8dab21804050925a655184866834e16543edaf",
       "dependencyIds": [],
-      "implementationClosureRoot": "0x4fe971863cce1a4fc33d3c6dacff2e7191d09c05d32c6fe804c7017a886f79c6"
+      "implementationClosureRoot": "0xadc77a859da56aba2f21e587bc1a8ae8bb1d4d498ea19a28130b5307e4234de2"
     },
     {
       "id": "family.univ2-standard.coarse",
@@ -96,7 +96,7 @@
       "dependencyIds": [
         "family.univ2-standard.state"
       ],
-      "implementationClosureRoot": "0x3dbbaff1f9141553f55e9e6ee0dc26731abc36cb19aaf014274798d63cf45a5f"
+      "implementationClosureRoot": "0x29bc24a7b8bbee0da23bc8ce6cd34e3a6ef857c5de7818e6260713e556669908"
     },
     {
       "id": "family.univ2-standard.exact",
@@ -106,7 +106,7 @@
       "dependencyIds": [
         "family.univ2-standard.state"
       ],
-      "implementationClosureRoot": "0x9e19e0135802642748ec33874b7e7c8f464ab5adb43ee0cc2c191e495ca77cae"
+      "implementationClosureRoot": "0x7d7b2fb6ea9dd262ea173eb8214797233c95e8d41c62ee06aa3fabd6f68ef7f0"
     },
     {
       "id": "family.univ2-standard.state",
@@ -114,7 +114,7 @@
       "schemaHash": "0x1e07e9ad84d77080f7bbdfd4c1c45043fef23d95f4150a53630a6c8fc13b7526",
       "interpreterHash": "0xa4cb10d4facee0abe85b65b5ea92912f45c599d0f41ca3a3254ff4f8003d6ab0",
       "dependencyIds": [],
-      "implementationClosureRoot": "0x6e5b632c80a121fa3ab4bca4487f7a0517d73da127354f84aab43d3978ae6069"
+      "implementationClosureRoot": "0x4fe4d6a332262edb5e2e230f74f48a52d64fe5061acdb2a82d4f56d8da0da457"
     }
   ],
   "artifacts": [
@@ -122,68 +122,68 @@
       "artifactId": "family:curve-underlying",
       "artifactKind": "family",
       "familyId": "curve-underlying",
-      "definitionCatalogLeafDigest": "0x561874916d78a7835ce91a5e260fd11c1af12ef265775b6be95f8918806b6c46",
+      "definitionCatalogLeafDigest": "0x732078418838756274d3685db7e5f9f4620a598eec89732518b979e286453adb",
       "requestedDependencyClosure": [
         "family.curve-underlying.coarse",
         "family.curve-underlying.exact",
         "family.curve-underlying.state"
       ],
-      "requestedDependencyRoot": "0xd74f39afe77c5ed2fe82fb5f60b33d22ea4a4ecf4c564e7385b936bb96950aa0",
-      "memoRoot": "0x2064fb7d383af9b351b397bb49f47638b7a3d3d1368f9e27accf4e74f6b42723",
+      "requestedDependencyRoot": "0xe609ba1469e1a704ebed639faca0a863b44bee12089ded60713b065c2c9535a1",
+      "memoRoot": "0x264a5881a3bb1bf86d3ee629ee4aceb6ad944fa0c6f46864f4f0595ef2c1bb9b",
       "nominationProposalLeafDigests": [
-        "0x595114f4ad5e8378b4216fa50c040f1a9ee3ed4d5b38295d4249a9a32c93c23a",
-        "0x6372a0d5dd05870dda80a1db71f589823418925f6f55579b141c5a4f20642bc4"
+        "0x22911447a0017bfd230b533ad6f5b66858ea939c5431b6168462b30c5daf771d",
+        "0xe493ae3ba335285a46cc3c322900f7a58e2c80e393c3ea24be605fb0b946b783"
       ]
     },
     {
       "artifactId": "family:dodo-v2",
       "artifactKind": "family",
       "familyId": "dodo-v2",
-      "definitionCatalogLeafDigest": "0x517d63e3b337ce208c5a730f001bc6006a7f9282cbb18d9f7a388616917d2d33",
+      "definitionCatalogLeafDigest": "0xc8846996520c0a433a05b80afb0b201097cf01dbaf594b3907633a3fd624c438",
       "requestedDependencyClosure": [
         "family.dodo-v2.coarse",
         "family.dodo-v2.exact",
         "family.dodo-v2.state"
       ],
-      "requestedDependencyRoot": "0x6e2a346b09f9a2e6042378f9f36e5f8cce793bb73637adf0f7805cb7a9e37810",
-      "memoRoot": "0x634d35df5e6813809f80298a23535f6cc14fb99f7a1e92c2a6e255e8935fad49",
+      "requestedDependencyRoot": "0x7928016bd74aea2fbf78e0d0756e5c55fa21a11363421c56dfd254745efc23aa",
+      "memoRoot": "0x1bfaf357b9c02f4b5079db4e6fa6b809c50fd04236c89529157f68d2903df9ce",
       "nominationProposalLeafDigests": [
-        "0xdae763308c283180a65f2e5fcc52e95cbc7fdeae84636482280ba7b0f5e82ce4",
-        "0xfe4ad2af0ba2f08c816fefee9f56426d911f0484343e7f052eb083938ac3b5b5"
+        "0xaad48df03e81f3181bb51bf4f0dfae40ba79fee509da926065d8d05e01e72088",
+        "0xda9180ba7f7fe076741d3cad5cb8ee85877ee7ccf3a845a1a693d169aa808873"
       ]
     },
     {
       "artifactId": "family:fluid-dex",
       "artifactKind": "family",
       "familyId": "fluid-dex",
-      "definitionCatalogLeafDigest": "0x5daeff2ae191f02a5f25cf34671001f27f00321a88a034a501c492eb7bb853e9",
+      "definitionCatalogLeafDigest": "0x78be1545fd7cd4ca942c7ed985e18cc61927ca072e80bb3f6bff9794536c8d87",
       "requestedDependencyClosure": [
         "family.fluid-dex.coarse",
         "family.fluid-dex.exact",
         "family.fluid-dex.state"
       ],
-      "requestedDependencyRoot": "0x417a0e6940a944c02d448e8cd4d6e50f493e40f52acfd7ca16bf76ed9a13bbe6",
-      "memoRoot": "0x75c7dbfa4d74a1dda129a07d12ef7caea77781271767efa8214a2037c54222ef",
+      "requestedDependencyRoot": "0xef07cc30596253408cc9013d36ffbd3808b372076ae35a28c3129f26b8def208",
+      "memoRoot": "0x038abcb455387588592ed38fb6a9e6ee6317a7af1f24f5e0317f77be90c12025",
       "nominationProposalLeafDigests": [
-        "0x4f10891938432d5f1fa83ab3af00559f7edbcb52d1680e825346f4ecb6f1c0c4",
-        "0xeb35bfc37949742fcac98bc22d353b25a764efa0613217e186845174f3c7c351"
+        "0x28763638822faeffb76b02f0a4c42f8f45838100c5538e05062dc570abbc7e00",
+        "0x465908f741b4b7deb2379638dfb7258459c035d72bc1b315a7600a91a7ec4294"
       ]
     },
     {
       "artifactId": "family:univ2-standard",
       "artifactKind": "family",
       "familyId": "univ2-standard",
-      "definitionCatalogLeafDigest": "0xed89138bfbaf04c382e3773f10170a5a1696846f256513d34c0ca8e19999e806",
+      "definitionCatalogLeafDigest": "0x23703c992cc12e66e4a724f457db71e776bccb24d1bc5993a3e782e21423312f",
       "requestedDependencyClosure": [
         "family.univ2-standard.coarse",
         "family.univ2-standard.exact",
         "family.univ2-standard.state"
       ],
-      "requestedDependencyRoot": "0x928aa3a32692a115f7468ef4d963e40d94059e497b3b37932ea9d5fe83cca2d1",
-      "memoRoot": "0xa889202a5d6b73b93abb7ce58bbaa28c788893833910f21aba7f2215bf1977b6",
+      "requestedDependencyRoot": "0x67ae962f6d7bdc800813a923cf28b0a3fec9c3c0b7c58e80873e0f480b9947c3",
+      "memoRoot": "0x1a36617dfa8d2e854af524c961ecfb5b6e9f8a01329b7760eb98c273fe46385a",
       "nominationProposalLeafDigests": [
-        "0x766c1ec6f839e9aa2717aab2a6d9667543fbaaa2b87c9e516e2547b94d1d750a",
-        "0xe7d39a81671a1ddf866d2d845d56567c893c3365935b038c7acd15bd6a6d4914"
+        "0x213e1c8b181aed088c690eedea86ed7e13f52cdc2bb7f4e3a729c7ffb74d09c3",
+        "0xe3faee5ef2e0ad228682919e2c579cc7acc6a13974eb9ad60b019e5cda7e4dc0"
       ]
     },
     {
@@ -197,5 +197,5 @@
       "nominationProposalLeafDigests": []
     }
   ],
-  "snapshotRoot": "0x7120d1e08e1a8091b3f3094d5e5388b0495e1d9e34d4565ae51f60b0b42f364f"
+  "snapshotRoot": "0x9a12dd6e74d05a235610040d4bd3cfbcb1df4fa0888eabe916a48f04d2fde16e"
 }

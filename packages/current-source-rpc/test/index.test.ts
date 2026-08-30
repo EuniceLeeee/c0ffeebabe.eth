@@ -33,6 +33,14 @@ const request = Object.freeze({
   data: "0xdeadBEEF",
   responseEncoding: "hex",
 });
+const declaredRevertData = Object.freeze({
+  kind: "declared-revert-data" as const,
+  dataEncoding: "abi-test-custom-error" as const,
+  selector: "0xb3bfda99" as const,
+  byteLength: 36,
+});
+const declaredRequest = Object.freeze({ ...request, requestId: hash("declared-request"), declaredRevertData });
+const declaredPayload = `0xb3bfda99${"0".repeat(63)}1`;
 
 type Handler = (request: IncomingMessage, response: ServerResponse<IncomingMessage>) => void | Promise<void>;
 
@@ -184,6 +192,82 @@ test("JSON-RPC error and malformed response never become hand-written success", 
   }, async (endpoint) => {
     const transport = new CurrentSourceRpcReadTransport({ endpoint, currentSource: session({}) });
     assert.equal(reason(await transport.read({ request })), "malformed-response");
+  });
+});
+
+test("only an explicitly declared exact custom-error payload becomes a reverted transport fact", async () => {
+  await withServer(async (_incoming, outgoing) => {
+    outgoing.writeHead(200, { "content-type": "application/json" });
+    outgoing.end(JSON.stringify({
+      jsonrpc: "2.0",
+      id: declaredRequest.requestId,
+      error: { code: 3, message: "opaque provider text", data: declaredPayload },
+    }));
+  }, async (endpoint) => {
+    const transport = new CurrentSourceRpcReadTransport({ endpoint, currentSource: session({}) });
+    assert.deepEqual(await transport.read({ request: declaredRequest }), {
+      kind: "reverted",
+      reasonCode: "declared-revert-data",
+      requestId: declaredRequest.requestId,
+      source,
+      rpcErrorCode: 3,
+      dataEncoding: declaredRevertData.dataEncoding,
+      dataHex: declaredPayload,
+    });
+  });
+
+  await withServer(async (_incoming, outgoing) => {
+    outgoing.writeHead(200, { "content-type": "application/json" });
+    outgoing.end(JSON.stringify({ jsonrpc: "2.0", id: request.requestId, error: { code: 3, message: "execution reverted", data: declaredPayload } }));
+  }, async (endpoint) => {
+    const transport = new CurrentSourceRpcReadTransport({ endpoint, currentSource: session({}) });
+    assert.equal(reason(await transport.read({ request })), "rpc");
+  });
+});
+
+test("declared revert data rejects malformed code, nested data, wrong selector and wrong length", async () => {
+  const cases = [
+    { error: { code: "3", message: "execution reverted", data: declaredPayload }, reason: "malformed-response" },
+    { error: { code: 3, message: "execution reverted", data: { data: declaredPayload } }, reason: "malformed-response" },
+    { error: { code: 3, message: "execution reverted", data: `0xdeadbeef${"0".repeat(64)}` }, reason: "rpc" },
+    { error: { code: 3, message: "execution reverted", data: "0xb3bfda99" }, reason: "rpc" },
+  ] as const;
+  for (const item of cases) {
+    await withServer(async (_incoming, outgoing) => {
+      outgoing.writeHead(200, { "content-type": "application/json" });
+      outgoing.end(JSON.stringify({ jsonrpc: "2.0", id: declaredRequest.requestId, error: item.error }));
+    }, async (endpoint) => {
+      const transport = new CurrentSourceRpcReadTransport({ endpoint, currentSource: session({}) });
+      assert.equal(reason(await transport.read({ request: declaredRequest })), item.reason);
+    });
+  }
+});
+
+test("declared revert outcome remains behind the post-read current-source fence", async () => {
+  let assertions = 0;
+  const current = session({ assertCurrent: () => { assertions += 1; if (assertions === 2) throw new Error("reorg"); } });
+  await withServer(async (_incoming, outgoing) => {
+    outgoing.writeHead(200, { "content-type": "application/json" });
+    outgoing.end(JSON.stringify({ jsonrpc: "2.0", id: declaredRequest.requestId, error: { code: -32000, message: "execution reverted", data: declaredPayload } }));
+  }, async (endpoint) => {
+    const transport = new CurrentSourceRpcReadTransport({ endpoint, currentSource: current });
+    assert.equal(reason(await transport.read({ request: declaredRequest })), "source-stale");
+    assert.equal(assertions, 2);
+  });
+});
+
+test("declared completion is part of the WorkKey and cannot leak into an ordinary Family read", async () => {
+  let calls = 0;
+  await withServer(async (_incoming, outgoing) => {
+    calls += 1;
+    outgoing.writeHead(200, { "content-type": "application/json" });
+    outgoing.end(JSON.stringify({ jsonrpc: "2.0", id: declaredRequest.requestId, error: { code: 3, message: "execution reverted", data: declaredPayload } }));
+  }, async (endpoint) => {
+    const transport = new CurrentSourceRpcReadTransport({ endpoint, currentSource: session({}) });
+    assert.equal((await transport.read({ request: declaredRequest })).kind, "reverted");
+    const ordinary = Object.freeze({ ...request, requestId: declaredRequest.requestId });
+    assert.equal(reason(await transport.read({ request: ordinary })), "rpc");
+    assert.equal(calls, 2);
   });
 });
 

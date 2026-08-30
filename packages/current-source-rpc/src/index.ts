@@ -58,12 +58,15 @@ interface RpcSuccessResponse {
 
 interface RpcErrorResponse {
   readonly kind: "rpc";
+  readonly errorCode: number;
+  readonly dataHex: string | null;
 }
 
 type DecodedRpcResponse = RpcSuccessResponse | RpcErrorResponse;
 
 type PhysicalRpcOutcome =
   | { readonly kind: "returned"; readonly dataHex: string }
+  | { readonly kind: "reverted"; readonly errorCode: number; readonly dataHex: string; readonly dataEncoding: `abi-${string}` }
   | { readonly kind: "unavailable"; readonly reasonCode: CurrentSourceRpcReasonCode };
 
 export interface CurrentSourceRpcFactStats {
@@ -203,7 +206,10 @@ function readInput(value: unknown): ReadInput {
 }
 
 function readRequest(value: unknown): FamilySearchSourceReadRequestV1 {
-  assertExactKeys(value, ["kind", "requestId", "source", "target", "data", "responseEncoding"], "read.request");
+  const input = value as Record<string, unknown>;
+  const fields = ["kind", "requestId", "source", "target", "data", "responseEncoding"];
+  if (value !== null && typeof value === "object" && hasOwn(input, "declaredRevertData")) fields.push("declaredRevertData");
+  assertExactKeys(value, fields, "read.request");
   const request = value as Record<string, unknown>;
   if (request.kind !== "family-search.current-source-read") {
     throw new TypeError("read.request.kind mismatch");
@@ -212,6 +218,18 @@ function readRequest(value: unknown): FamilySearchSourceReadRequestV1 {
   if (responseEncoding !== "hex" && !/^abi-[a-z0-9][a-z0-9+._:-]*$/.test(responseEncoding)) {
     throw new TypeError("read.request.responseEncoding must describe raw hex or ABI return bytes");
   }
+  let declaredRevertData: FamilySearchSourceReadRequestV1["declaredRevertData"];
+  if (hasOwn(request, "declaredRevertData")) {
+    assertExactKeys(request.declaredRevertData, ["kind", "dataEncoding", "selector", "byteLength"], "read.request.declaredRevertData");
+    const declaration = request.declaredRevertData as Record<string, unknown>;
+    if (declaration.kind !== "declared-revert-data") throw new TypeError("read.request.declaredRevertData.kind mismatch");
+    const dataEncoding = assertNonEmptyString(declaration.dataEncoding, "read.request.declaredRevertData.dataEncoding");
+    if (!/^abi-[a-z0-9][a-z0-9+._:-]*$/.test(dataEncoding)) throw new TypeError("read.request.declaredRevertData.dataEncoding must describe ABI revert bytes");
+    const selector = assertHexBytes(declaration.selector, "read.request.declaredRevertData.selector");
+    if (selector.length !== 10) throw new TypeError("read.request.declaredRevertData.selector must be four bytes");
+    if (typeof declaration.byteLength !== "number" || !Number.isSafeInteger(declaration.byteLength) || declaration.byteLength < 4) throw new TypeError("read.request.declaredRevertData.byteLength must be a positive safe integer");
+    declaredRevertData = Object.freeze({ kind: "declared-revert-data", dataEncoding: dataEncoding as `abi-${string}`, selector: selector.toLowerCase() as `0x${string}`, byteLength: declaration.byteLength });
+  }
   return deepFreeze({
     kind: "family-search.current-source-read" as const,
     requestId: assertHash(request.requestId, "read.request.requestId"),
@@ -219,6 +237,7 @@ function readRequest(value: unknown): FamilySearchSourceReadRequestV1 {
     target: assertHexAddress(request.target, "read.request.target"),
     data: assertHexBytes(request.data, "read.request.data"),
     responseEncoding: responseEncoding as FamilySearchSourceReadRequestV1["responseEncoding"],
+    ...(declaredRevertData === undefined ? {} : { declaredRevertData }),
   });
 }
 
@@ -273,16 +292,21 @@ function decodeRpcResponse(body: string, requestId: Hash): DecodedRpcResponse | 
   }
 
   if (hasOwn(response, "error")) {
+    let error: Record<string, unknown>;
     try {
       assertExactKeys(response, ["jsonrpc", "id", "error"], "rpc.response");
       if (response.error === null || typeof response.error !== "object" || Array.isArray(response.error)) return null;
-      const error = response.error as Record<string, unknown>;
+      error = response.error as Record<string, unknown>;
       assertExactKeys(error, hasOwn(error, "data") ? ["code", "message", "data"] : ["code", "message"], "rpc.response.error");
-      if (typeof error.code !== "number" || !Number.isInteger(error.code) || typeof error.message !== "string") return null;
+      if (typeof error.code !== "number" || !Number.isSafeInteger(error.code) || typeof error.message !== "string") return null;
     } catch {
       return null;
     }
-    return { kind: "rpc" };
+    const dataHex = hasOwn(error, "data") && typeof error.data === "string" && HEX_BYTES_RE.test(error.data)
+      ? error.data
+      : null;
+    if (hasOwn(error, "data") && dataHex === null) return null;
+    return { kind: "rpc", errorCode: error.code, dataHex };
   }
 
   return null;
@@ -408,7 +432,7 @@ export class CurrentSourceRpcReadTransport implements FamilySearchSourceReadPort
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     if (typeof this.fetchImpl !== "function") throw new TypeError("global fetch is required");
     this.sharedWork = new SharedWorkCache<SemanticWorkKey, PhysicalRpcOutcome>({
-      validity: (value) => value.kind === "returned",
+      validity: (value) => value.kind === "returned" || value.kind === "reverted",
     });
     this.openedMonotonicNs = process.hrtime.bigint();
   }
@@ -577,6 +601,14 @@ export class CurrentSourceRpcReadTransport implements FamilySearchSourceReadPort
       request: {
         calldata: request.data,
         responseEncoding: request.responseEncoding,
+        declaredRevertData: request.declaredRevertData === undefined
+          ? null
+          : {
+            kind: request.declaredRevertData.kind,
+            dataEncoding: request.declaredRevertData.dataEncoding,
+            selector: request.declaredRevertData.selector,
+            byteLength: request.declaredRevertData.byteLength,
+          },
       },
     };
     let physical: PhysicalRpcOutcome | null = null;
@@ -620,6 +652,17 @@ export class CurrentSourceRpcReadTransport implements FamilySearchSourceReadPort
       return unavailable(request, readFailure ?? "transport");
     }
     if (physical.kind === "unavailable") return unavailable(request, physical.reasonCode);
+    if (physical.kind === "reverted") {
+      return Object.freeze({
+        kind: "reverted" as const,
+        reasonCode: "declared-revert-data" as const,
+        requestId: request.requestId,
+        source: request.source,
+        rpcErrorCode: physical.errorCode,
+        dataEncoding: physical.dataEncoding,
+        dataHex: physical.dataHex,
+      });
+    }
     return Object.freeze({
       kind: "returned" as const,
       requestId: request.requestId,
@@ -722,7 +765,21 @@ export class CurrentSourceRpcReadTransport implements FamilySearchSourceReadPort
     if (!response.ok) return Object.freeze({ kind: "unavailable", reasonCode: "unavailable" });
     const decoded = decodeRpcResponse(responseBody, request.requestId);
     if (decoded === null) return Object.freeze({ kind: "unavailable", reasonCode: "malformed-response" });
-    if (decoded.kind === "rpc") return Object.freeze({ kind: "unavailable", reasonCode: "rpc" });
+    if (decoded.kind === "rpc") {
+      const declaration = request.declaredRevertData;
+      if (declaration !== undefined
+        && decoded.dataHex !== null
+        && (decoded.dataHex.length - 2) / 2 === declaration.byteLength
+        && decoded.dataHex.slice(0, 10).toLowerCase() === declaration.selector) {
+        return Object.freeze({
+          kind: "reverted",
+          errorCode: decoded.errorCode,
+          dataHex: decoded.dataHex,
+          dataEncoding: declaration.dataEncoding,
+        });
+      }
+      return Object.freeze({ kind: "unavailable", reasonCode: "rpc" });
+    }
     return Object.freeze({ kind: "returned", dataHex: decoded.dataHex });
   }
 

@@ -330,6 +330,9 @@ async function runSearcherLane<Simulation>(
       draft = Object.freeze({ kind: "retryable", reasonCode: backrunIntake.reasonCode });
     } else {
       if (searchInput === null) throw new TypeError("lane search input is unavailable");
+      if (searchInput.callerId !== coreInput.execution.transactionOrigin) {
+        throw new TypeError("lane caller does not match the release execution origin");
+      }
       const boundTrigger = issueProducerBoundTriggerV1({ ingress: searchInput.trigger, laneInput: input });
       const planning = issueLanePlanningProblem(input, searchInput, boundTrigger, strategyRuntime);
       const generated = createGeneratedSearchRuntimePorts({

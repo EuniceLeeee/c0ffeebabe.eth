@@ -232,7 +232,8 @@ export function assertDeploymentRuntimeArtifactsJoinReleaseV1(
     || executor.executorAuthorityRoot !== binding.executorAuthorityRoot
     || executor.selectedExecutorLeafHash !== binding.selectedExecutorLeafHash
     || policy.callerId !== executor.callerAddress
-    || policy.economicSafety.profitAccount !== executor.executorAddress) {
+    || policy.economicSafety.profitAccount !== executor.executorAddress
+    || policy.amountSeed.recipient !== executor.executorAddress) {
     throw new TypeError("deployment runtime artifacts do not join the signed release");
   }
 }

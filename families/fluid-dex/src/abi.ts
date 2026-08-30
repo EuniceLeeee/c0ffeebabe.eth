@@ -1,5 +1,9 @@
 export const FLUID_DEX_CONSTANTS_SELECTOR = "0xb7791bf2" as const;
 export const FLUID_DEX_SWAP_IN_SELECTOR = "0x2668dfaa" as const;
+export const FLUID_DEX_SWAP_RESULT_SELECTOR = "0xb3bfda99" as const;
+export const FLUID_DEX_QUOTE_RECIPIENT = "0x000000000000000000000000000000000000dead" as const;
+export const FLUID_DEX_ERC20_APPROVE_SELECTOR = "0x095ea7b3" as const;
+export const FLUID_DEX_MAX_UINT256 = (1n << 256n) - 1n;
 
 const WORD_BYTES = 32;
 
@@ -24,6 +28,10 @@ export function encodeSwapInCall(swap0to1: boolean, amountIn: string, amountOutM
     word(BigInt(amountOutMin), "fluid-dex.swapIn.amountOutMin"),
     addressWord(to, "fluid-dex.swapIn.to"),
   ].join("")}`.toLowerCase();
+}
+
+export function encodeFluidDexApproveCall(spender: string, amount = FLUID_DEX_MAX_UINT256): string {
+  return `${FLUID_DEX_ERC20_APPROVE_SELECTOR}${addressWord(spender, "fluid-dex.approve.spender")}${word(amount, "fluid-dex.approve.amount")}`.toLowerCase();
 }
 
 export interface FluidDexSwapEventV1 {
@@ -53,6 +61,12 @@ export function decodeFluidDexSwapEvent(
 export function decodeUint256(value: string, path: string): bigint {
   if (!/^0x(?:[0-9a-fA-F]{64})+$/.test(value)) throw new TypeError(`${path} must be ABI uint256 return data`);
   return BigInt(`0x${value.slice(2, 66)}`);
+}
+
+export function decodeFluidDexSwapResultRevert(value: string, path: string): bigint {
+  if (!/^0x[0-9a-fA-F]{72}$/.test(value)) throw new TypeError(`${path} must be exact FluidDexSwapResult(uint256) revert data`);
+  if (value.slice(0, 10).toLowerCase() !== FLUID_DEX_SWAP_RESULT_SELECTOR) throw new TypeError(`${path} has an unknown custom-error selector`);
+  return BigInt(`0x${value.slice(10)}`);
 }
 
 function decodeAddressWord(value: string, index: number, path: string): string {

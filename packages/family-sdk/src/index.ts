@@ -6,6 +6,8 @@ export type { GeneratedFamilyEntryV1, StageFamilyRefsV1 } from "../runtime-refs/
 export {
   familySearchAmount,
   familySearchAmountHash,
+  familySearchExecutionContext,
+  familySearchExecutionContextHash,
   familySearchArtifactHash,
   familySearchObjective,
   familySearchPayloadHash,
@@ -36,6 +38,7 @@ export type {
   FamilySearchCurrentSourceV1,
   FamilySearchExactArtifactV1,
   FamilySearchExactRequestV1,
+  FamilySearchExecutionContextV1,
   FamilySearchLegRequestV1,
   FamilySearchObjectiveV1,
   FamilySearchRouteLegBindingV1,

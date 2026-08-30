@@ -175,6 +175,7 @@ const objectivePayload = Object.freeze({
 });
 const objective = familySearchObjective({ objectiveRef: hashDomain("aloha/search-objective/v1", objectivePayload), payload: objectivePayload });
 const amountSeed = Object.freeze({ amountIn: "100", recipient: "0xrecipient" });
+const execution = Object.freeze({ transactionOrigin: "0xcaller", executorAddress: amountSeed.recipient });
 
 function issuePlanningProblem() {
   const catalogEntry = compileStrategy(ROUTE_CYCLE_STRATEGY, []).entry;
@@ -653,6 +654,7 @@ test("generated search ports consume exact non-first Graph ports and compose ord
       },
     },
     amountSeed,
+    execution,
   });
   const finalSimulation = {
     simulate: ({ program }: { readonly program: { readonly programBytes: string } }) => {
@@ -753,6 +755,9 @@ test("generated search ports consume exact non-first Graph ports and compose ord
   const ownerFacts = executionEvidence.facts as Record<string, unknown>;
   assert.equal(ownerFacts.kind, "aloha.search-runtime.execution-program-owner-facts-v1");
   assert.equal((ownerFacts.actionOwners as readonly unknown[]).length, 2);
+  assert.deepEqual(ownerFacts.routeAssetReferences, [asset("asset-a"), asset("asset-b")]
+    .map(reference => ({ identity: reference.assetIdentity, assetRef: reference.assetRef }))
+    .sort((left, right) => left.assetRef.localeCompare(right.assetRef)));
   assert.equal(Object.prototype.hasOwnProperty.call(ownerFacts, "actionArtifacts"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(ownerFacts, "effectTransport"), false);
   const ownerObservation = executionEvidence.ownerObservation as Record<string, unknown>;
@@ -800,6 +805,7 @@ test("native audit retains the raw unavailable state outcome and leaves later co
       },
     },
     amountSeed,
+    execution,
   });
   const result = await runSearchPipeline({
     ...core,
@@ -839,7 +845,7 @@ test("native audit retains the raw unavailable state outcome and leaves later co
 });
 
 test("caller-recomputed planning problems fail before route admission", async () => {
-  const core = createGeneratedSearchRuntimePorts({ composition: generatedComposition(), sourceRead: { read: () => { throw new Error("not reached"); } }, amountSeed });
+  const core = createGeneratedSearchRuntimePorts({ composition: generatedComposition(), sourceRead: { read: () => { throw new Error("not reached"); } }, amountSeed, execution });
   const result = await runSearchPipeline({
     ...core,
     finalSimulation: { simulate: () => { throw new Error("not reached"); } },
@@ -862,5 +868,6 @@ test("runtime amount seed rejects removed callback and every unknown field", () 
     composition: generatedComposition(),
     sourceRead: { read: () => { throw new Error("not reached"); } },
     amountSeed: { ...amountSeed, callbackDataHex: "0x1234" } as never,
+    execution,
   }), /unknown field/);
 });

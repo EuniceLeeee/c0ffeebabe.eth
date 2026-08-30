@@ -16,6 +16,10 @@ import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/ind
 import { FAMILY_SEARCH_RUNTIME_ADAPTER_ROLE_V1 } from "../../../packages/family-sdk/search-runtime/index.ts";
 import { FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1 } from "../../../packages/family-sdk/runtime/index.ts";
 import {
+  FLUID_DEX_ACTION_IMPLEMENTATION_HASH,
+  FLUID_DEX_ACTION_SCHEMA_REF,
+} from "./action-contract.ts";
+import {
   FLUID_DEX_ACTION_OWNER_ID,
   FLUID_DEX_FACTORY_SOURCE_PLAN_ID,
   FLUID_DEX_FAMILY_ID,
@@ -81,8 +85,8 @@ const exact = slot("exact");
 export const FLUID_DEX_ACTION_OWNER = Object.freeze({
   ownerId: FLUID_DEX_ACTION_OWNER_ID,
   version,
-  schemaHash: asSchemaRef(hashDomain("aloha/fluid-dex/action-schema/v1", "swap")),
-  implementationHash: hashDomain("aloha/fluid-dex/action-implementation/v1", "swap"),
+  schemaHash: asSchemaRef(FLUID_DEX_ACTION_SCHEMA_REF),
+  implementationHash: FLUID_DEX_ACTION_IMPLEMENTATION_HASH,
   actionKinds: Object.freeze(["swap"]),
   modulePath: `${moduleRoot}/action.ts`,
   exportName: "FLUID_DEX_ACTION_PORT",

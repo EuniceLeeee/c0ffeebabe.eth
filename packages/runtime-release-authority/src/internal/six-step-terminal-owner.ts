@@ -195,6 +195,7 @@ function sealBinding(
   const leaseBinding = canonicalRecord(trace.resolved.binding, "sixStepTerminal.trace.resolved.binding");
   const program = canonicalRecord(trace.resolved.executionProgram, "sixStepTerminal.trace.resolved.executionProgram");
   const simulation = canonicalRecord(trace.resolved.finalSimulation, "sixStepTerminal.trace.resolved.finalSimulation");
+  const economicSafety = canonicalRecord(trace.resolved.economicSafety, "sixStepTerminal.trace.resolved.economicSafety");
   const planningProblem = canonicalRecord(trace.planningProblem, "sixStepTerminal.trace.planningProblem");
   const routeCandidate = canonicalRecord(trace.routeCandidate, "sixStepTerminal.trace.routeCandidate");
   assertExactKeys(leaseBinding, [
@@ -215,7 +216,10 @@ function sealBinding(
     || trace.resolved.routeCandidateId !== routeCandidate.candidateId
     || !sameSource(trace.resolved.source, terminal.receipt.source)
     || program.programHash !== terminal.receipt.programHash
-    || simulation.receiptHash !== terminal.receipt.finalSimulationReceiptHash) {
+    || simulation.receiptHash !== terminal.receipt.finalSimulationReceiptHash
+    || economicSafety.authorityRoot !== state.economicEvaluatorAuthorityRoot
+    || economicSafety.implementationHash !== state.economicEvaluatorImplementationHash
+    || economicSafety.releaseProvenanceHash !== state.releaseProvenanceHash) {
     throw new TypeError("runtime-release Six-Step terminal lineage mismatch");
   }
   const searchTerminalHash = searchTerminalEvidenceHashV2(terminal);

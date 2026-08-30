@@ -31,6 +31,18 @@ export interface FamilySearchCurrentSourceV1 {
   readonly assertCurrent: () => Promise<void> | void;
 }
 
+/**
+ * Family-owned declaration for an EVM method whose successful observation is
+ * carried in direct JSON-RPC error data.  The transport preserves the bytes;
+ * only the owning Family may interpret the declared ABI payload.
+ */
+export interface FamilySearchDeclaredRevertDataV1 {
+  readonly kind: "declared-revert-data";
+  readonly dataEncoding: `abi-${string}`;
+  readonly selector: `0x${string}`;
+  readonly byteLength: number;
+}
+
 /** Narrow physical transport owned by the current-source/state runtime. */
 export interface FamilySearchSourceReadRequestV1 {
   readonly kind: "family-search.current-source-read";
@@ -44,6 +56,7 @@ export interface FamilySearchSourceReadRequestV1 {
    * transport to synthesize a protocol object (for example canonical JSON).
    */
   readonly responseEncoding: "hex" | `abi-${string}`;
+  readonly declaredRevertData?: FamilySearchDeclaredRevertDataV1;
 }
 
 export type FamilySearchSourceReadResultV1 =
@@ -51,6 +64,15 @@ export type FamilySearchSourceReadResultV1 =
     readonly kind: "returned";
     readonly requestId: Hash;
     readonly source: FamilySearchSourceV1;
+    readonly dataHex: string;
+  }
+  | {
+    readonly kind: "reverted";
+    readonly reasonCode: "declared-revert-data";
+    readonly requestId: Hash;
+    readonly source: FamilySearchSourceV1;
+    readonly rpcErrorCode: number;
+    readonly dataEncoding: `abi-${string}`;
     readonly dataHex: string;
   }
   | {
@@ -104,6 +126,13 @@ export interface FamilySearchAmountEnvelopeV1 {
   readonly recipient: string;
 }
 
+/** Release-bound EVM actors. The transaction origin prices actor-sensitive
+ * protocol calls; the executor is the program receiver/profit account. */
+export interface FamilySearchExecutionContextV1 {
+  readonly transactionOrigin: string;
+  readonly executorAddress: string;
+}
+
 /** A resolved process-local handle binding is the only route-leg identity input. */
 export type FamilySearchRouteLegBindingV1 = FamilyRouteHandleBindingV1;
 
@@ -112,6 +141,7 @@ export interface FamilySearchLegRequestV1 {
   readonly currentSource: FamilySearchCurrentSourceV1;
   readonly objective: FamilySearchObjectiveV1;
   readonly amount: FamilySearchAmountEnvelopeV1;
+  readonly execution: FamilySearchExecutionContextV1;
 }
 
 export interface FamilySearchAssetAmountV1 {
@@ -294,6 +324,22 @@ export function familySearchAmount(value: FamilySearchAmountEnvelopeV1, path = "
 
 export function familySearchAmountHash(amount: FamilySearchAmountEnvelopeV1): Hash {
   return hashDomain("aloha/family-search-amount/v1", familySearchAmount(amount));
+}
+
+export function familySearchExecutionContext(
+  value: FamilySearchExecutionContextV1,
+  path = "execution",
+): FamilySearchExecutionContextV1 {
+  if (value === null || typeof value !== "object") throw new TypeError(`${path} is required`);
+  assertExactKeys(value, ["transactionOrigin", "executorAddress"], path);
+  return deepFreeze({
+    transactionOrigin: assertNonEmptyString(value.transactionOrigin, `${path}.transactionOrigin`),
+    executorAddress: assertNonEmptyString(value.executorAddress, `${path}.executorAddress`),
+  });
+}
+
+export function familySearchExecutionContextHash(value: FamilySearchExecutionContextV1): Hash {
+  return hashDomain("aloha/family-search-execution-context/v1", familySearchExecutionContext(value));
 }
 
 export function validateFamilySearchRouteLegBinding(value: unknown, path = "route"): FamilySearchRouteLegBindingV1 {

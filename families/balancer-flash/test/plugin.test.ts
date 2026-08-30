@@ -136,6 +136,7 @@ function verified() {
 
 function searchInput(objectivePayload: CanonicalJson) {
   const facts = verified();
+  const recipient = addr("9");
   const subjectHash = candidateSubjectHash(BALANCER_FLASH_FAMILY_DEFINITION_HASH, facts.identity.instanceKey);
   const releaseIdentity = { ...facts.identity, candidateSnapshotHash: subjectHash };
   const identityMemo = decodeCanonicalJson(encodeCanonicalJson({
@@ -168,8 +169,9 @@ function searchInput(objectivePayload: CanonicalJson) {
       inputAssetRef: erc20AssetRefV1("1", facts.identity.facts.inputAsset),
       outputAssetRef: erc20AssetRefV1("1", facts.identity.facts.outputAsset),
       amountIn: "10",
-      recipient: addr("9"),
+      recipient,
     },
+    execution: { transactionOrigin: addr("8"), executorAddress: recipient },
     readPort: {
       read({ request }: { readonly request: FamilySearchSourceReadRequestV1 }) {
         const balance = request.target === facts.identity.facts.inputAsset ? 100n : 200n;

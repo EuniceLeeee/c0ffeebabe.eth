@@ -3,6 +3,7 @@ import {
   NATIVE_EQUIVALENT_VALUATION_FACT_SCHEMA_REF_V1,
   NATIVE_EQUIVALENT_VALUATION_OWNER_IMPLEMENTATION_HASH_V1,
   NATIVE_EQUIVALENT_VALUATION_OWNER_REF_V1,
+  NATIVE_EQUIVALENT_SUPPORTED_ASSET_REFS_V1,
 } from "./runtime.ts";
 import {
   NATIVE_EQUIVALENT_VALUATION_INDEPENDENT_ORACLE_CASE_ROOT_V1,
@@ -15,6 +16,7 @@ import {
  * declaration or qualification.ts. */
 export const NATIVE_EQUIVALENT_VALUATION_OWNER_DECLARATION_V1: EconomicValuationOwnerDeclarationV1 = Object.freeze({
   ownerRef: NATIVE_EQUIVALENT_VALUATION_OWNER_REF_V1,
+  supportedAssetRefs: NATIVE_EQUIVALENT_SUPPORTED_ASSET_REFS_V1,
   modulePath: "valuation-owners/native-equivalent/src/runtime.ts",
   exportName: "createNativeEquivalentValuationOwnerV1",
   implementationHash: NATIVE_EQUIVALENT_VALUATION_OWNER_IMPLEMENTATION_HASH_V1,

@@ -33,12 +33,14 @@ import type {
   FamilySearchAdapterV1,
   FamilySearchAmountEnvelopeV1,
   FamilySearchCurrentSourceV1,
+  FamilySearchExecutionContextV1,
   FamilySearchObjectiveV1,
   FamilySearchSourceReadPortV1,
 } from "../../family-sdk/search-runtime/index.ts";
 import {
   familySearchAmount,
   familySearchAmountHash,
+  familySearchExecutionContext,
   familySearchObjective,
   familySearchRouteBindingHash,
   familySearchSource,
@@ -327,6 +329,7 @@ export interface FamilyRuntimeCoarseProjectionRequestV1 {
   readonly sourceRead: FamilySearchSourceReadPortV1;
   readonly objective: FamilySearchObjectiveV1;
   readonly amount: FamilySearchAmountEnvelopeV1;
+  readonly execution: FamilySearchExecutionContextV1;
   readonly deadlineAtMs?: number;
   readonly signal?: AbortSignal;
 }
@@ -340,6 +343,7 @@ export interface FamilyRuntimeCoarseEdgeSweepRequestV1 {
   readonly sourceRead: FamilySearchSourceReadPortV1;
   readonly objective: FamilySearchObjectiveV1;
   readonly amount: FamilySearchAmountEnvelopeV1;
+  readonly execution: FamilySearchExecutionContextV1;
   readonly deadlineAtMs?: number;
   readonly signal?: AbortSignal;
 }
@@ -1071,6 +1075,8 @@ export function createGeneratedFamilyRuntimeComposition(
       const objective = familySearchObjective(request.objective);
       if (objective.objectiveRef !== binding.objectiveRef) throw new TypeError("generated Family coarse objective mismatch");
       const amount = familySearchAmount(request.amount);
+      const execution = familySearchExecutionContext(request.execution, "generatedCoarse.execution");
+      if (execution.executorAddress !== amount.recipient) throw new TypeError("generated Family coarse executor/recipient mismatch");
       if (amount.inputAssetRef !== leg.inputAssetRef || amount.outputAssetRef !== leg.outputAssetRef) {
         throw new TypeError("generated Family coarse route asset mismatch");
       }
@@ -1112,6 +1118,7 @@ export function createGeneratedFamilyRuntimeComposition(
           currentSource: adapterCurrentSource,
           objective,
           amount,
+          execution,
           readPort: request.sourceRead,
           ...(request.deadlineAtMs === undefined ? {} : { deadlineAtMs: request.deadlineAtMs }),
           ...(request.signal === undefined ? {} : { signal: request.signal }),
@@ -1132,7 +1139,7 @@ export function createGeneratedFamilyRuntimeComposition(
         } else {
           if (stateOutcome.kind !== "verified") throw new TypeError("generated Family coarse state outcome kind is invalid");
           if (stateOutcome.artifact.routeBindingHash !== routeBindingHash) throw new TypeError("generated Family coarse state route binding mismatch");
-          const rawCoarseOutcome = adapter.projectCoarse({ route, currentSource: adapterCurrentSource, objective, amount, state: stateOutcome.artifact });
+          const rawCoarseOutcome = adapter.projectCoarse({ route, currentSource: adapterCurrentSource, objective, amount, execution, state: stateOutcome.artifact });
           coarseOutcomeSnapshot = canonicalObservationValue(rawCoarseOutcome, "generatedCoarse.coarseOutcome");
           const coarseOutcome = coarseOutcomeSnapshot as unknown as ReturnType<FamilySearchAdapterV1["projectCoarse"]>;
           if (coarseOutcome.kind === "invalidProgram") throw new TypeError(`generated Family coarse projection invalid: ${coarseOutcome.code}`);
@@ -1238,6 +1245,8 @@ export function createGeneratedFamilyRuntimeComposition(
       const objective = familySearchObjective(request.objective);
       if (objective.objectiveRef !== binding.objectiveRef) throw new TypeError("generated Family coarse edge sweep objective mismatch");
       const amount = familySearchAmount(request.amount);
+      const execution = familySearchExecutionContext(request.execution, "generatedCoarseEdgeSweep.execution");
+      if (execution.executorAddress !== amount.recipient) throw new TypeError("generated Family coarse edge sweep executor/recipient mismatch");
       if (amount.inputAssetRef !== binding.inputAssetRef || amount.outputAssetRef !== binding.outputAssetRef) {
         throw new TypeError("generated Family coarse edge sweep asset direction mismatch");
       }
@@ -1279,6 +1288,7 @@ export function createGeneratedFamilyRuntimeComposition(
           currentSource: adapterCurrentSource,
           objective,
           amount,
+          execution,
           readPort: request.sourceRead,
           ...(request.deadlineAtMs === undefined ? {} : { deadlineAtMs: request.deadlineAtMs }),
           ...(request.signal === undefined ? {} : { signal: request.signal }),
@@ -1299,7 +1309,7 @@ export function createGeneratedFamilyRuntimeComposition(
         } else {
           if (stateOutcome.kind !== "verified") throw new TypeError("generated Family coarse edge sweep state outcome kind is invalid");
           if (stateOutcome.artifact.routeBindingHash !== routeBindingHash) throw new TypeError("generated Family coarse edge sweep state route binding mismatch");
-          const rawCoarseOutcome = adapter.projectCoarse({ route, currentSource: adapterCurrentSource, objective, amount, state: stateOutcome.artifact });
+          const rawCoarseOutcome = adapter.projectCoarse({ route, currentSource: adapterCurrentSource, objective, amount, execution, state: stateOutcome.artifact });
           coarseOutcomeSnapshot = canonicalObservationValue(rawCoarseOutcome, "generatedCoarseEdgeSweep.coarseOutcome");
           const coarseOutcome = coarseOutcomeSnapshot as unknown as ReturnType<FamilySearchAdapterV1["projectCoarse"]>;
           if (coarseOutcome.kind === "invalidProgram") throw new TypeError(`generated Family coarse edge sweep projection invalid: ${coarseOutcome.code}`);

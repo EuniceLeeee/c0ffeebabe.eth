@@ -902,7 +902,7 @@ test("same-height reorg and shutdown settle active and pending heads exactly onc
   assert.equal(shutdown.terminals.filter(item => item.reason === "shutdown_active_cancelled").length, 1);
 });
 
-test("forged ports and performance seal failures fail closed", async () => {
+test("forged ports fail closed", () => {
   const currentHead = head("113", "ports");
   const fixture = createSearchTerminalFixture({ head: currentHead, generationId: "generation-ports", mode: "no-candidate" });
   const owner = issueProducerSessionOwnerV1({ async withProducerSession(_head, run) { return run(fixture.session); } });
@@ -912,9 +912,17 @@ test("forged ports and performance seal failures fail closed", async () => {
   const currentSource = issueProducerCurrentSourceHeadPortV1({ closeHead: () => fixture.closePhysicalFacts() });
   assert.throws(() => new ProducerRuntimeV1({ sessionOwner: {} as never, blockscan, backrun: blockscan as never, currentSource, performance, terminal }), /session owner.*not owner-issued/);
   assert.throws(() => new ProducerRuntimeV1({ sessionOwner: owner, blockscan, backrun: blockscan as never, currentSource, performance, terminal }), /both producer lanes/);
+});
+
+test("lost performance seal acknowledgement after durable append preserves one terminal capability", async () => {
+  const currentHead = head("113", "ports");
+  const fixture = createSearchTerminalFixture({ head: currentHead, generationId: "generation-ports", mode: "no-candidate" });
+  const owner = issueProducerSessionOwnerV1({ async withProducerSession(_head, run) { return run(fixture.session); } });
+  const currentSource = issueProducerCurrentSourceHeadPortV1({ closeHead: () => fixture.closePhysicalFacts() });
   const envelope = await ingressEnvelope(currentHead, "empty");
-  const performanceTerminals: unknown[] = [];
-  let journalTerminal: unknown;
+  const performanceTerminals: ProducerHeadTerminalCapabilityV1[] = [];
+  let journalTerminal: ProducerHeadTerminalCapabilityV1 | undefined;
+  let loseFirstAcknowledgement = true;
   const runtime = new ProducerRuntimeV1({
     sessionOwner: owner,
     blockscan: issueProducerLanePortV1({ kind: "blockscan", run: async request => (await fixture.run(request)).draft }),
@@ -923,23 +931,26 @@ test("forged ports and performance seal failures fail closed", async () => {
       return { kind: "no-input", absence: request.input as never, currentSource: fixture.logicalFacts("backrun", intake.correlationId) };
     } }),
     currentSource,
-    performance: issueProducerPerformancePortV1<unknown>({ acceptEligibleHead(input) { return admittedHead(input); }, readEligibleHeadBinding: readAdmittedHead, bindEligibleHeadSession({ eligibleHead }) { return eligibleHead; }, bindEligibleHeadFacts({ eligibleHead }) { return eligibleHead; }, sealHeadTerminal({ terminal: value }) { performanceTerminals.push(value); throw new Error("append failed"); } }),
+    performance: issueProducerPerformancePortV1<unknown>({ acceptEligibleHead(input) { return admittedHead(input); }, readEligibleHeadBinding: readAdmittedHead, bindEligibleHeadSession({ eligibleHead }) { return eligibleHead; }, bindEligibleHeadFacts({ eligibleHead }) { return eligibleHead; }, sealHeadTerminal({ terminal: value }) {
+      performanceTerminals.push(value);
+      if (loseFirstAcknowledgement) {
+        loseFirstAcknowledgement = false;
+        throw new Error("acknowledgement lost after durable append");
+      }
+    } }),
     terminal: issueProducerTerminalPortV1({ appendTerminal({ terminal: value }) { journalTerminal = value; } }),
   });
   await runtime.submit(envelope);
   await runtime.waitForIdle();
   assert.equal(runtime.accepting, false);
   assert.equal(runtime.telemetry().fatal, true);
-  assert.equal(performanceTerminals.length, 2);
-  assert.equal(journalTerminal, performanceTerminals[1]);
-  assert.notEqual(journalTerminal, performanceTerminals[0]);
-  const preliminary = readIssuedProducerHeadTerminalCapabilityV1(performanceTerminals[0]);
-  const durable = readIssuedProducerHeadTerminalCapabilityV1(journalTerminal);
-  assert.equal(preliminary.terminal.status, "completed");
-  assert.equal(durable.terminal.status, "failed");
-  assert.equal(durable.terminal.reason, "performance_append_failed");
-  assert.equal(durable.terminal.graphRoot, preliminary.terminal.graphRoot);
-  assert.equal(durable.facts, preliminary.facts);
+  assert.ok(journalTerminal);
+  const journalTerminalId = readIssuedProducerHeadTerminalCapabilityV1(journalTerminal).terminal.terminalId;
+  assert.deepEqual(
+    performanceTerminals.map(value => readIssuedProducerHeadTerminalCapabilityV1(value).terminal.terminalId),
+    [journalTerminalId],
+  );
+  assert.equal(performanceTerminals[0], journalTerminal);
 });
 
 test("current-source logical facts remain owner-issued and reject caller verdict fields", async () => {

@@ -28,6 +28,7 @@ import {
 import { issueProducerIngressSourceForTestV1 } from "../../producer/test/fixtures/ingress-source.ts";
 import { createSearchTerminalFixture } from "../../producer/test/fixtures/search-terminal.ts";
 import { issueStartupRuntime } from "../../startup-runtime/src/internal/runtime-owner.ts";
+import { createContractEconomicSafetyService } from "../../search-pipeline/test/economic-safety-fixture.ts";
 import type { RuntimeAnchorReceiptV1 } from "../../../apps/searcher-runtime/src/deployment.ts";
 import {
   issueSearcherProductionEvidenceOwnerV1,
@@ -44,6 +45,7 @@ const release = Object.freeze({
   releaseProvenanceHash: h("2"),
   candidateReleaseCommit: "a".repeat(40),
 });
+const economicSafety = createContractEconomicSafetyService(release.releaseProvenanceHash, h);
 
 interface MutableSqliteDatabase {
   exec(sql: string): void;
@@ -127,6 +129,7 @@ async function productionDatabase(headCount: number): Promise<string> {
     databasePath,
     release,
     runtimeAnchor: runtimeAnchor(),
+    economicSafety,
   });
   const ports = owner.bindServing(startup());
   let parentHash = h("d");
@@ -290,13 +293,13 @@ async function productionDatabaseWithRouteDenominator(twoDenominatorLanes = fals
   });
   const directory = mkdtempSync(join(tmpdir(), "aloha-route-denominator-observer-"));
   const databasePath = join(directory, "production-evidence.sqlite");
-  const owner = issueSearcherProductionEvidenceOwnerV1({ databasePath, release, runtimeAnchor: runtimeAnchor() });
+  const owner = issueSearcherProductionEvidenceOwnerV1({ databasePath, release, runtimeAnchor: runtimeAnchor(), economicSafety });
   const ports = owner.bindServing(fixtureStartup);
   const eligible = await ports.performance.acceptEligibleHead({ head: fixtureHead, revision: "0" });
   await ports.performance.bindEligibleHeadSession({ eligibleHead: eligible, session: fixture.session as ProducerSessionV1 });
   await ports.performance.bindEligibleHeadFacts({ eligibleHead: eligible, facts: factsCapability });
   owner.close();
-  const restartedOwner = issueSearcherProductionEvidenceOwnerV1({ databasePath, release, runtimeAnchor: runtimeAnchor() });
+  const restartedOwner = issueSearcherProductionEvidenceOwnerV1({ databasePath, release, runtimeAnchor: runtimeAnchor(), economicSafety });
   restartedOwner.bindServing(fixtureStartup);
   restartedOwner.close();
   return databasePath;

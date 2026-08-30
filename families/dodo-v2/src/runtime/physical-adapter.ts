@@ -303,6 +303,7 @@ async function state(
     read: {
       cutoff,
       pool,
+      quoteActor: DODO_V2_QUOTE_ACTOR,
       pmm,
       lpFeeRate: feeWords[0]!.toString(),
       mtFeeRate: feeWords[1]!.toString(),

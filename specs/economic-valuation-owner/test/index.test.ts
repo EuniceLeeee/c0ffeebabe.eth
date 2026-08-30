@@ -14,6 +14,7 @@ import {
 const h = (value: string): Hash => hashDomain("test/economic-valuation-owner", value);
 const declaration = (name: string): EconomicValuationOwnerDeclarationV1 => ({
   ownerRef: h(`${name}:owner`),
+  supportedAssetRefs: [h(`${name}:asset`)],
   modulePath: `valuation-owners/${name}/src/runtime.ts`,
   exportName: "readEconomicValuationOwnerV1",
   implementationHash: h(`${name}:implementation`),
@@ -40,6 +41,7 @@ test("registry roots bind runtime identity, closure, fact schema and qualificati
     sealQualifiedEconomicValuationOwnerEntryV1({ ...declaration("native"), implementationHash: h("changed") }, h("native:closure"), closures),
     sealQualifiedEconomicValuationOwnerEntryV1(declaration("native"), h("changed-closure"), closures),
     sealQualifiedEconomicValuationOwnerEntryV1({ ...declaration("native"), factSchemaRef: h("changed-schema") }, h("native:closure"), closures),
+    sealQualifiedEconomicValuationOwnerEntryV1({ ...declaration("native"), supportedAssetRefs: [h("changed-asset")] }, h("native:closure"), closures),
     sealQualifiedEconomicValuationOwnerEntryV1({ ...declaration("native"), independentOracleCaseRoot: h("changed-oracle") }, h("native:closure"), closures),
   ]) {
     const registry = sealGeneratedEconomicValuationOwnerRegistryV1([changed]);
@@ -55,6 +57,10 @@ test("registry rejects stale leaves, duplicates and non-canonical source capabil
     ...declaration("native"),
     sourceReadCapabilityRefs: [h("z"), h("a")],
   }, h("native:closure"), closures), /strictly sorted and unique/);
+  assert.throws(() => sealQualifiedEconomicValuationOwnerEntryV1({
+    ...declaration("native"),
+    supportedAssetRefs: [],
+  }, h("native:closure"), closures), /must be non-empty/);
 });
 
 test("externally issued qualification certificates bind executed oracle/mutation outcomes and exact proposed owner leaf", () => {
@@ -64,6 +70,7 @@ test("externally issued qualification certificates bind executed oracle/mutation
     schemaVersion: 1,
     kind: "aloha.economic-valuation-owner-qualification-certificate",
     ownerRef: entry.ownerRef,
+    supportedAssetRefs: entry.supportedAssetRefs,
     proposedOwnerLeafDigest: entry.qualificationLeafDigest,
     implementationHash: entry.implementationHash,
     factSchemaRef: entry.factSchemaRef,
@@ -118,6 +125,18 @@ test("externally issued qualification certificates bind executed oracle/mutation
         ...certificate,
         proposedOwnerLeafDigest: h("foreign-proposal"),
       })]).root,
+    ),
+    /does not exact-join proposal/,
+  );
+  const foreignCoverage = sealEconomicValuationOwnerQualificationCertificateV1({
+    ...certificate,
+    supportedAssetRefs: [h("foreign-asset")],
+  });
+  assert.throws(
+    () => joinEconomicValuationOwnerQualificationSetV1(
+      registry,
+      [foreignCoverage],
+      sealEconomicValuationOwnerQualificationCertificateSetV1([foreignCoverage]).root,
     ),
     /does not exact-join proposal/,
   );

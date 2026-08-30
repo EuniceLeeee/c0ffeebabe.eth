@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { erc20AssetReferenceV1 } from "../../../packages/asset-ref/src/index.ts";
 import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
-import { createNativeEquivalentValuationOwnerV1 } from "../src/runtime.ts";
+import { createNativeEquivalentValuationOwnerV1, NATIVE_EQUIVALENT_SUPPORTED_ASSET_REFS_V1 } from "../src/runtime.ts";
 
 const h = (value: string): Hash => hashDomain("test/native-equivalent-valuation", value);
 const qualification = Object.freeze({
+  supportedAssetRefs: NATIVE_EQUIVALENT_SUPPORTED_ASSET_REFS_V1,
   implementationClosureRoot: h("closure"),
   qualificationLeafDigest: h("leaf"),
   valuationOwnerRegistryRoot: h("registry"),
@@ -39,4 +40,11 @@ test("foreign asset and chain fail closed", async () => {
     source: { ...source, chainId: "10" },
     asset: erc20AssetReferenceV1("10", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
   }), /does not support/);
+});
+
+test("runtime factory rejects generated coverage that differs from the plugin declaration", () => {
+  assert.throws(
+    () => createNativeEquivalentValuationOwnerV1({ ...qualification, supportedAssetRefs: [h("foreign-asset")] }),
+    /coverage does not match/,
+  );
 });

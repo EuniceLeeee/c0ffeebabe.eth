@@ -21,6 +21,7 @@ import {
   type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
 import { issueSearcherProductionEvidenceOwnerV1 } from "../../../apps/searcher-runtime/src/production-evidence.ts";
+import { createContractEconomicSafetyService } from "../../../packages/search-pipeline/test/economic-safety-fixture.ts";
 import type { RuntimeAnchorReceiptV1 } from "../../../apps/searcher-runtime/src/deployment.ts";
 import {
   encodeFullGraphCoarseSweepV1,
@@ -53,6 +54,7 @@ const release = Object.freeze({
   runtimeBindingId: h("runtime-binding"),
   releaseProvenanceHash: h("release-provenance"),
 });
+const economicSafety = createContractEconomicSafetyService(release.releaseProvenanceHash, h);
 
 function joinContract() {
   return Object.freeze({
@@ -122,6 +124,7 @@ function emptySweep(): FullGraphCoarseSweepV1 {
     currentSourceSessionId: h("current-source-session"),
     actualCurrentSource: source,
     amountSeedHash: h("amount-seed"),
+    executionContextHash: h("execution-context"),
     objectiveRef: h("objective"),
   });
   const binding = Object.freeze({
@@ -892,7 +895,7 @@ function createPhysicalInput(
     bindingId: release.runtimeBindingId,
     releaseProvenanceHash: release.releaseProvenanceHash,
     candidateReleaseCommit: release.candidateReleaseCommit,
-  }, runtimeAnchor: runtimeAnchor() });
+  }, runtimeAnchor: runtimeAnchor(), economicSafety });
   owner.close();
   const databaseStat = statSync(databasePath, { bigint: true });
   const databaseSha256 = sha256Hex(readFileSync(databasePath));

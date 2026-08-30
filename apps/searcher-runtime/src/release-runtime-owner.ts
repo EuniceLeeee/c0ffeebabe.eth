@@ -898,6 +898,8 @@ async function loadInstalledProductionDeploymentBundleV1(input: Readonly<{
       candidateReleaseCommit: services.release.candidateReleaseCommit,
     },
     runtimeAnchor,
+    economicSafety: services.economicSafety,
+    strategyRuntime: services.strategyRuntime,
   });
   const runtimeAcceptance = issueProductionRuntimeAcceptanceEvidenceOwnerV1({
     databasePath: source.productionEvidenceDatabasePath,
@@ -939,7 +941,13 @@ async function loadInstalledProductionDeploymentBundleV1(input: Readonly<{
       candidateReleaseCommit: services.release.candidateReleaseCommit,
     },
     source: runtimeSource,
-    coreInput: { amountSeed: runtimePolicy.amountSeed },
+    coreInput: {
+      amountSeed: runtimePolicy.amountSeed,
+      execution: Object.freeze({
+        transactionOrigin: runtimePolicy.callerId,
+        executorAddress: runtimePolicy.amountSeed.recipient,
+      }),
+    },
     finalSimulationFactory: services.finalSimulationFactory,
     evidence,
   });
@@ -1237,6 +1245,8 @@ async function startPreReleaseRuntimeServiceV1(
     databasePath: source.productionEvidenceDatabasePath,
     release,
     runtimeAnchor,
+    economicSafety: core.services.economicSafety,
+    strategyRuntime: core.services.strategyRuntime,
   });
   const runtimeAcceptance = issueProductionRuntimeAcceptanceEvidenceOwnerV1({
     databasePath: source.productionEvidenceDatabasePath,
@@ -1274,7 +1284,13 @@ async function startPreReleaseRuntimeServiceV1(
     economicSafety: core.services.economicSafety,
     release,
     source: core.runtimeSource,
-    coreInput: { amountSeed: core.runtimePolicy.amountSeed },
+    coreInput: {
+      amountSeed: core.runtimePolicy.amountSeed,
+      execution: Object.freeze({
+        transactionOrigin: core.runtimePolicy.callerId,
+        executorAddress: core.runtimePolicy.amountSeed.recipient,
+      }),
+    },
     finalSimulationFactory: core.services.finalSimulationFactory,
     evidence,
   });

@@ -52,6 +52,7 @@ const valuationCertificate = sealEconomicValuationOwnerQualificationCertificateV
   schemaVersion: 1,
   kind: "aloha.economic-valuation-owner-qualification-certificate",
   ownerRef: h("valuation-owner"),
+  supportedAssetRefs: Object.freeze([h("valuation-asset")]),
   proposedOwnerLeafDigest: h("valuation-owner-leaf"),
   implementationHash: h("valuation-owner-implementation"),
   factSchemaRef: h("valuation-fact-schema"),

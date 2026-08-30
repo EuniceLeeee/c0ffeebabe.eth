@@ -71,6 +71,7 @@ import { createCanonicalSource, SQLiteCanonicalJournalStore } from "../../canoni
 import { createSqliteDurableStore, type DurableTransaction } from "../../durable-store/src/index.ts";
 import { GraphViewLeaseV1 } from "../../graph/src/index.ts";
 import { createReadyPromotionAuthority, type ReadyStorePort } from "../../ready-generation/src/index.ts";
+import { createContractEconomicSafetyService } from "../../search-pipeline/test/economic-safety-fixture.ts";
 import { ReadyGenerationServiceV1 } from "../../ready-generation/src/index.ts";
 import { WorkScheduler } from "../../scheduler/src/index.ts";
 import {
@@ -1183,6 +1184,7 @@ async function runRuntimeRestartChild(role: RuntimeRestartChildRole, directory: 
         databasePath,
         release: acceptance.artifacts.release,
         runtimeAnchor: acceptance.artifacts.runtimeAnchor,
+        economicSafety: createContractEconomicSafetyService(acceptance.artifacts.release.releaseProvenanceHash, h),
       });
       try {
         const ports = evidence.bindServing(startup);

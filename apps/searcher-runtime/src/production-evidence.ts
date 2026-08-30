@@ -63,10 +63,17 @@ import {
   validateSchedulerWorkCompletionFactValue,
 } from "../../../packages/scheduler/src/index.ts";
 import {
+  assertIssuedEconomicSafetyFinalizationServiceV1,
   validateEconomicSafetyEvidenceV1,
   type EconomicSafetyDeclaredObligationV1,
+  type EconomicSafetyEvidenceAuthorityExpectationV1,
   type EconomicSafetyFinalizationInputV1,
+  type EconomicSafetyFinalizationServiceV1,
 } from "../../../packages/economics-safety/src/index.ts";
+import {
+  decodeAssetReferenceV1,
+  type AssetReferenceV1,
+} from "../../../packages/asset-ref/src/index.ts";
 import {
   createPerformanceWindowCommitment,
   createPerformanceAdmissionOrphanReplacementLineage,
@@ -111,6 +118,11 @@ import {
   readStartupStage12EvidenceBinding,
   type StartupRuntimeV1,
 } from "../../../packages/startup-runtime/src/index.ts";
+import {
+  assertIssuedRuntimeReleaseStrategyRuntimeService,
+  type RuntimeReleaseStrategyEvidenceExpectationV1,
+  type RuntimeReleaseStrategyRuntimeServiceV1,
+} from "../../../packages/runtime-release-authority/src/internal/strategy-runtime-owner.ts";
 import type { RuntimeAnchorReceiptV1 } from "./deployment.ts";
 import {
   issueSearcherProductionSixStepCompleteAppendCapabilityV1,
@@ -145,6 +157,16 @@ import {
   searcherProductionEvidenceOrderedRootV1,
   type SearcherProductionEvidenceMaterialManifestV1,
 } from "./production-evidence-material.ts";
+import {
+  exactProductionPlanningProblemV1,
+  exactProductionRouteCandidateV1,
+  validateProductionCandidateEvidenceJoinV1,
+  validateProductionPlanningContextJoinV1,
+  validateProductionPassedCandidateSixStepJoinV1,
+  validateProductionResolvedRouteBindingV1,
+  validateProductionStage2EdgeMembershipV1,
+  validateProductionStrategyQualificationV1,
+} from "./internal/production-evidence-validation.ts";
 
 export type {
   TerminalPhaseInvalidFactV1,
@@ -290,6 +312,8 @@ export interface AccountedRouteDenominatorPayloadV1 extends RouteDenominatorComm
     readonly objectiveRef: Hash;
     readonly entryAssetRef: Hash;
     readonly returnAssetRef: Hash;
+    readonly triggerRef: Hash;
+    readonly affectedEdgeIdsRoot: Hash;
   }>;
   /** Complete planner-derived candidate denominator read from the exact
    * search-pipeline terminal capability, never rebuilt from candidate-set. */
@@ -500,6 +524,12 @@ export interface SearcherProductionEvidenceOwnerInputV1 {
   readonly databasePath: string;
   readonly release: SearcherProductionEvidenceReleaseV1;
   readonly runtimeAnchor: RuntimeAnchorReceiptV1;
+  /** Release-owned evaluator authority. Required at construction so durable
+   * replay never derives an implementation identity from retained evidence. */
+  readonly economicSafety: EconomicSafetyFinalizationServiceV1;
+  /** Required by release composition. Omission keeps structural/offline
+   * observers usable but makes any passed Six-Step fact fail closed. */
+  readonly strategyRuntime?: RuntimeReleaseStrategyRuntimeServiceV1;
 }
 
 const ownersIssued = new WeakSet<object>();
@@ -1102,7 +1132,8 @@ function exactProducerCandidateTerminalObservation(
     performanceOutcome,
     timingRoot,
   });
-  if ((payload.terminalKind === "passed") !== (payload.terminalLineageHash !== null && payload.sixStepEvidenceRoot !== null)
+  if ((payload.terminalKind === "passed" && (payload.terminalLineageHash === null || payload.sixStepEvidenceRoot === null))
+    || (payload.terminalKind !== "passed" && (payload.terminalLineageHash !== null || payload.sixStepEvidenceRoot !== null))
     || (payload.terminalKind === "passed" && (payload.disposition !== "selected" || payload.evidenceHash !== payload.terminalLineageHash))
     || (payload.terminalKind === "policyRejected") !== (payload.policyTerminal !== null)
     || (payload.policyTerminal !== null && (payload.policyTerminal.candidateId !== payload.candidateId
@@ -1445,6 +1476,48 @@ function exactDeclaredObligations(value: unknown, path: string): readonly Econom
   return Object.freeze(obligations);
 }
 
+export function decodeProductionExecutionRouteAssetReferencesV1(
+  value: unknown,
+  actionOwners: unknown,
+  sourceChainId: unknown,
+  path = "productionEvidence.executionProgramOwnerEvidence.facts.routeAssetReferences",
+): readonly AssetReferenceV1[] {
+  if (!Array.isArray(value) || value.length === 0) throw new TypeError(`${path} must be a non-empty array`);
+  if (!Array.isArray(actionOwners) || actionOwners.length === 0) throw new TypeError(`${path} action owner denominator is empty`);
+  const chainId = assertDecimalString(sourceChainId, `${path}.sourceChainId`);
+  const references = value.map((item, index) => decodeAssetReferenceV1(item, `${path}[${index}]`));
+  for (const [index, reference] of references.entries()) {
+    if (reference.identity.chainId !== chainId) throw new TypeError(`${path}[${index}] chain id mismatch`);
+    if (index > 0 && references[index - 1]!.assetRef >= reference.assetRef) {
+      throw new TypeError(`${path} must be strictly ordered without duplicate asset refs`);
+    }
+  }
+  const actionAssetRefs = new Set<Hash>();
+  for (const [ownerIndex, rawOwner] of actionOwners.entries()) {
+    const ownerPath = `${path}.actionOwners[${ownerIndex}]`;
+    const owner = canonicalRecord(rawOwner, ownerPath);
+    for (const field of ["inputs", "outputs"] as const) {
+      const amounts = owner[field];
+      if (!Array.isArray(amounts) || amounts.length === 0) throw new TypeError(`${ownerPath}.${field} must be a non-empty array`);
+      for (const [amountIndex, rawAmount] of amounts.entries()) {
+        const amountPath = `${ownerPath}.${field}[${amountIndex}]`;
+        const amount = canonicalRecord(rawAmount, amountPath);
+        assertExactKeys(amount, ["assetRef", "amount"], amountPath);
+        actionAssetRefs.add(nonZeroHash(amount.assetRef, `${amountPath}.assetRef`));
+        const quantity = assertDecimalString(amount.amount, `${amountPath}.amount`);
+        if (BigInt(quantity) <= 0n) throw new TypeError(`${amountPath}.amount must be positive`);
+      }
+    }
+  }
+  const referencedAssetRefs = references.map(reference => reference.assetRef);
+  const expectedAssetRefs = [...actionAssetRefs].sort((left, right) => left.localeCompare(right));
+  if (referencedAssetRefs.length !== expectedAssetRefs.length
+    || referencedAssetRefs.some((assetRef, index) => assetRef !== expectedAssetRefs[index])) {
+    throw new TypeError(`${path} does not exact-cover action input/output asset refs`);
+  }
+  return Object.freeze(references);
+}
+
 function exactSixStepTrace(value: unknown, path: string): SearchTerminalSixStepTraceV1 {
   assertPlainObject(value, path);
   assertExactKeys(value, [
@@ -1515,15 +1588,22 @@ function exactSixStepTrace(value: unknown, path: string): SearchTerminalSixStepT
   const executionEvidenceRoot = hashDomain("aloha/execution-program-six-step-evidence/v1", (({ evidenceRoot: _root, ...body }) => body)(executionEvidence));
   if (executionEvidence.evidenceRoot !== executionEvidenceRoot) throw new TypeError(`${resolvedPath}.executionProgramOwnerEvidence root mismatch`);
   const executionOwnerFacts = canonicalRecord(executionEvidence.facts, `${resolvedPath}.executionProgramOwnerEvidence.facts`);
-  assertExactKeys(executionOwnerFacts, ["kind", "callerMode", "preCalls", "observationPairs", "observeLogs", "callSequence", "actionOwners", "declaredObligations", "obligationRoot"], `${resolvedPath}.executionProgramOwnerEvidence.facts`);
+  assertExactKeys(executionOwnerFacts, ["kind", "callerMode", "preCalls", "observationPairs", "observeLogs", "callSequence", "routeAssetReferences", "actionOwners", "declaredObligations", "obligationRoot"], `${resolvedPath}.executionProgramOwnerEvidence.facts`);
   if (executionOwnerFacts.kind !== "aloha.search-runtime.execution-program-owner-facts-v1"
     || typeof executionOwnerFacts.callerMode !== "string"
     || !Array.isArray(executionOwnerFacts.preCalls)
     || !Array.isArray(executionOwnerFacts.observationPairs)
     || !Array.isArray(executionOwnerFacts.callSequence)
+    || !Array.isArray(executionOwnerFacts.routeAssetReferences)
     || !Array.isArray(executionOwnerFacts.actionOwners)
     || !Array.isArray(executionOwnerFacts.declaredObligations)
     || typeof executionOwnerFacts.observeLogs !== "boolean") throw new TypeError(`${resolvedPath}.executionProgramOwnerEvidence facts are incomplete`);
+  decodeProductionExecutionRouteAssetReferencesV1(
+    executionOwnerFacts.routeAssetReferences,
+    executionOwnerFacts.actionOwners,
+    trace.resolved.source.chainId,
+    `${resolvedPath}.executionProgramOwnerEvidence.facts.routeAssetReferences`,
+  );
   const declaredObligations = exactDeclaredObligations(executionOwnerFacts.declaredObligations, `${resolvedPath}.executionProgramOwnerEvidence.facts.declaredObligations`);
   const executionObligationRoot = nonZeroHash(executionOwnerFacts.obligationRoot, `${resolvedPath}.executionProgramOwnerEvidence.facts.obligationRoot`);
   if (hasOwnerObservation) {
@@ -1733,10 +1813,12 @@ function buildStage12SelectedRouteFacts(input: Readonly<{
   readonly binding: ReadyStage12EvidenceBindingV1;
   readonly trace: SearchTerminalSixStepTraceV1;
   readonly artifacts: ProductionSixStepArtifactCapabilitiesV1;
+  readonly routeLegs: RouteAccountingV1["entries"][number]["legs"];
 }>): Stage12SelectedRouteFactsV1 {
   const binding = exactStage12Binding(input.binding, "productionEvidence.stage12.binding");
   if (input.artifacts.stage1.length !== input.trace.selectedGraphLegs.length
-    || input.artifacts.stage2.length !== input.trace.selectedGraphLegs.length) {
+    || input.artifacts.stage2.length !== input.trace.selectedGraphLegs.length
+    || input.routeLegs.length !== input.trace.selectedGraphLegs.length) {
     throw new TypeError("production evidence Stage1/2 artifact denominator mismatch");
   }
   const stage3 = readProductionSixStepArtifactMaterialV1(input.artifacts.stage3);
@@ -1786,6 +1868,11 @@ function buildStage12SelectedRouteFacts(input: Readonly<{
       selectedWitnessContent(stage2, "edge", stage2Facts.edge.contentRoot).payload,
       `productionEvidence.stage12.selectedParents[${index}].edge`,
     );
+    validateProductionStage2EdgeMembershipV1(
+      edge,
+      input.routeLegs[index]!,
+      `productionEvidence.stage12.selectedParents[${index}].edge`,
+    );
     if (publication.instancePublicationHash !== leg.instancePublicationHash
       || publication.instanceKey !== leg.owningInstanceKey
       || publication.familyDefinitionHash !== leg.owningFamilyDefinitionHash
@@ -1821,19 +1908,99 @@ function validateJoinedSixStepContext(input: {
   readonly facts: JoinedSixStepPerformanceFactsV1;
   readonly runtimeFacts: JoinedRuntimePerformanceFactsV1;
   readonly release: SearcherProductionEvidenceReleaseV1;
-  readonly runtimeAnchor: RuntimeAnchorReceiptV1;
   readonly serving: ServingBindingV1;
   readonly head: CanonicalHead;
-  readonly candidateIds: readonly Hash[];
+  readonly candidateObservation: ProducerCandidateTerminalObservationV1;
+  readonly accounting: RouteAccountingV1;
+  readonly candidateEntry: RouteAccountingV1["entries"][number];
+  readonly plannerCandidateIdentity: AccountedRouteDenominatorPayloadV1["plannerCandidateIdentity"];
+  readonly economicSafetyAuthority: EconomicSafetyEvidenceAuthorityExpectationV1;
+  readonly strategyExpectation: RuntimeReleaseStrategyEvidenceExpectationV1 | null;
 }): void {
   const { stage12, stage36 } = input.facts;
   const binding = stage12.binding;
+  if (input.candidateEntry.terminalKind !== "passed"
+    || input.candidateEntry.reasonCode !== null
+    || input.candidateObservation.performanceOutcome !== "verified"
+    || input.candidateObservation.candidateId !== input.candidateEntry.candidateId
+    || input.accounting.entries.filter(entry => entry.candidateId === input.candidateEntry.candidateId).length !== 1
+    || !input.accounting.entries.some(entry => sameExact(entry, input.candidateEntry))
+    || input.candidateObservation.planningProblemHash !== input.accounting.planningProblemHash
+    || input.candidateObservation.enumerationRoot !== input.accounting.enumerationRoot
+    || input.candidateObservation.admissionPolicyHash !== input.accounting.admissionPolicyHash) {
+    throw new TypeError("production evidence passed candidate accounting witness splice");
+  }
+  validateProductionCandidateEvidenceJoinV1(input.candidateEntry, input.candidateObservation);
   if (binding.readyRecordHash !== input.serving.readyRecordHash
     || binding.generationId !== input.serving.generationId
     || binding.graphRoot !== input.serving.graphRoot
     || binding.sourceCoverageRoot !== input.serving.sourceCoverageRoot
     || binding.releaseProvenanceHash !== input.release.releaseProvenanceHash) {
     throw new TypeError("production evidence Stage1/2 serving lineage mismatch");
+  }
+  const planningProblem = exactProductionPlanningProblemV1(stage36.planningProblem, "productionEvidence.sixStep.stage36.planningProblem");
+  validateProductionStrategyQualificationV1(planningProblem, input.strategyExpectation);
+  const candidateLimit = BigInt(planningProblem.candidateLimit);
+  const observedUniqueCountLowerBound = BigInt(assertDecimalString(
+    input.accounting.observedUniqueCountLowerBound,
+    "productionEvidence.accounting.observedUniqueCountLowerBound",
+  ));
+  if (!Number.isSafeInteger(input.accounting.total) || input.accounting.total < 0
+    || BigInt(input.accounting.total) > candidateLimit
+    || (input.accounting.enumerationTruncated
+      ? BigInt(input.accounting.total) !== candidateLimit
+        || observedUniqueCountLowerBound <= BigInt(input.accounting.total)
+      : observedUniqueCountLowerBound !== BigInt(input.accounting.total))) {
+    throw new TypeError("production evidence planner candidate denominator/truncation mismatch");
+  }
+  const routeCandidate = exactProductionRouteCandidateV1(
+    stage36.routeCandidate,
+    planningProblem,
+    input.candidateEntry,
+    "productionEvidence.sixStep.stage36.routeCandidate",
+  );
+  const resolvedObjective = canonicalRecord(
+    stage36.resolved.objective,
+    "productionEvidence.sixStep.stage36.resolved.objective",
+  );
+  validateProductionPlanningContextJoinV1({
+    problem: planningProblem,
+    candidateCorrelationId: input.candidateObservation.correlationId,
+    resolvedCorrelationId: nonZeroHash(
+      stage36.resolved.correlationId,
+      "productionEvidence.sixStep.stage36.resolved.correlationId",
+    ),
+    resolvedObjectiveRef: nonZeroHash(
+      resolvedObjective.objectiveRef,
+      "productionEvidence.sixStep.stage36.resolved.objective.objectiveRef",
+    ),
+  });
+  if (input.plannerCandidateIdentity.triggerRef !== planningProblem.triggerRef
+    || input.plannerCandidateIdentity.affectedEdgeIdsRoot !== hashDomain(
+      "aloha/producer-trigger-affected-edges/v1",
+      planningProblem.requiredAnchorEdgeIds,
+    )) {
+    throw new TypeError("production evidence owner-issued trigger/planning splice");
+  }
+  const topK = Number(assertDecimalString(stage36.admission.topK, "productionEvidence.sixStep.stage36.admission.topK"));
+  const boundedUnrankedBudget = Number(assertDecimalString(stage36.admission.boundedUnrankedBudget, "productionEvidence.sixStep.stage36.admission.boundedUnrankedBudget"));
+  if (!Number.isSafeInteger(topK) || !Number.isSafeInteger(boundedUnrankedBudget)
+    || topK < 0 || boundedUnrankedBudget < 0
+    || stage36.admission.admissionPolicyHash !== hashDomain("aloha/route-admission-policy/v1", { topK, boundedUnrankedBudget })
+    || stage36.admission.enumerationRoot !== input.accounting.enumerationRoot
+    || stage36.admission.accountingRoot !== input.accounting.root
+    || planningProblem.problemHash !== input.accounting.planningProblemHash
+    || planningProblem.generationId !== input.serving.generationId
+    || planningProblem.graphRoot !== input.serving.graphRoot
+    || planningProblem.readyRecordHash !== input.serving.readyRecordHash
+    || planningProblem.definitionCatalogRoot !== binding.definitionCatalogRoot
+    || planningProblem.releaseProvenanceHash !== input.release.releaseProvenanceHash
+    || planningProblem.triggerHeadHash !== input.head.hash
+    || planningProblem.lane !== input.candidateObservation.lane
+    || planningProblem.strategyCompositionRoot !== stage36.strategyCompositionRoot
+    || input.candidateObservation.generationId !== binding.generationId
+    || input.candidateObservation.graphRoot !== binding.graphRoot) {
+    throw new TypeError("production evidence Stage3 planning/admission witness splice");
   }
   const resolvedBinding = canonicalRecord(stage36.resolved.binding, "productionEvidence.sixStep.stage36.resolved.binding");
   if (resolvedBinding.readyRecordHash !== binding.readyRecordHash
@@ -1851,31 +2018,69 @@ function validateJoinedSixStepContext(input: {
     || stage36.resolved.source.stateRoot !== input.head.stateRoot) {
     throw new TypeError("production evidence Stage3-6 source does not join the canonical head");
   }
-  const planningProblem = canonicalRecord(stage36.planningProblem, "productionEvidence.sixStep.stage36.planningProblem");
-  const routeCandidate = canonicalRecord(stage36.routeCandidate, "productionEvidence.sixStep.stage36.routeCandidate");
   if (planningProblem.problemHash !== stage36.planningProblemHash
     || routeCandidate.planningProblemHash !== stage36.planningProblemHash
     || routeCandidate.candidateId !== stage36.resolved.routeCandidateId
-    || !input.candidateIds.includes(stage36.resolved.routeCandidateId)) {
+    || routeCandidate.candidateId !== input.candidateEntry.candidateId
+    || input.candidateObservation.candidateId !== input.candidateEntry.candidateId) {
     throw new TypeError("production evidence Stage3 planning/candidate lineage mismatch");
   }
   if (new Set(stage36.selectedGraphLegs.map(leg => leg.edgeId)).size !== stage36.selectedGraphLegs.length) throw new TypeError("production evidence Stage3 selected duplicate Graph edges");
   if (stage12.selectedParents.length !== stage36.selectedGraphLegs.length
+    || routeCandidate.legs.length !== stage36.selectedGraphLegs.length
     || stage12.selectedParents.some((parent, index) => parent.edgeId !== stage36.selectedGraphLegs[index]!.edgeId
-      || parent.selectedLegRoot !== selectedLegRoot(stage36.selectedGraphLegs[index]!))) {
+      || parent.selectedLegRoot !== selectedLegRoot(stage36.selectedGraphLegs[index]!)
+      || routeCandidate.legs[index]!.edgeId !== stage36.selectedGraphLegs[index]!.edgeId)) {
     throw new TypeError("production evidence Stage3 legs do not join their selected Stage1/2 parents");
   }
   const program = canonicalRecord(stage36.resolved.executionProgram, "productionEvidence.sixStep.stage36.executionProgram");
   const exact = canonicalRecord(stage36.resolved.exact, "productionEvidence.sixStep.stage36.exact");
-  const routeBinding = canonicalRecord(stage36.resolved.routeBinding, "productionEvidence.sixStep.stage36.routeBinding");
   const simulation = canonicalRecord(stage36.resolved.finalSimulation, "productionEvidence.sixStep.stage36.finalSimulation");
   const dryRun = canonicalRecord(stage36.resolved.unsignedDryRun, "productionEvidence.sixStep.stage36.unsignedDryRun");
   const economicSafety = stage36.resolved.economicSafety;
   const executionEvidence = stage36.resolved.executionProgramOwnerEvidence;
   const finalEvidence = stage36.resolved.finalSimulationOwnerEvidence;
+  if (executionEvidence === null) throw new TypeError("production evidence execution owner evidence is missing");
+  const executionOwnerFacts = canonicalRecord(
+    executionEvidence.facts,
+    "productionEvidence.sixStep.stage36.executionProgramOwnerEvidence.facts",
+  );
+  if (!Array.isArray(executionOwnerFacts.actionOwners)) {
+    throw new TypeError("production evidence execution action-owner denominator is missing");
+  }
+  const routeBinding = validateProductionResolvedRouteBindingV1({
+    value: stage36.resolved.routeBinding,
+    candidate: routeCandidate,
+    problem: planningProblem,
+    generationId: binding.generationId,
+    graphRoot: binding.graphRoot,
+    source: input.head,
+    objectiveRef: planningProblem.objectiveRef,
+    releaseProvenanceHash: input.release.releaseProvenanceHash,
+    actionOwners: executionOwnerFacts.actionOwners,
+    path: "productionEvidence.sixStep.stage36.routeBinding",
+  });
   const join = input.runtimeFacts.producerSchedulerJoin;
-  if (executionEvidence === null
-    || !Object.prototype.hasOwnProperty.call(executionEvidence, "ownerObservation")
+  const coarse = canonicalRecord(stage36.resolved.coarse, "productionEvidence.sixStep.stage36.coarse");
+  const planned = canonicalRecord(stage36.resolved.planner, "productionEvidence.sixStep.stage36.planner");
+  validateProductionPassedCandidateSixStepJoinV1({
+    candidate: input.candidateObservation,
+    accountingRoot: input.accounting.root,
+    sixStep: {
+      candidateId: stage36.resolved.routeCandidateId,
+      correlationId: stage36.resolved.correlationId,
+      generationId: binding.generationId,
+      graphRoot: binding.graphRoot,
+      planningProblemHash: stage36.planningProblemHash,
+      enumerationRoot: stage36.admission.enumerationRoot,
+      admissionPolicyHash: stage36.admission.admissionPolicyHash,
+      accountingRoot: stage36.admission.accountingRoot,
+      routeHash: nonZeroHash(routeBinding.routeHash, "productionEvidence.sixStep.stage36.routeBinding.routeHash"),
+      unsignedDryRunLineageHash: nonZeroHash(dryRun.lineageHash, "productionEvidence.sixStep.stage36.unsignedDryRun.lineageHash"),
+      stage36Root: stage36.traceRoot,
+    },
+  });
+  if (!Object.prototype.hasOwnProperty.call(executionEvidence, "ownerObservation")
     || finalEvidence === null
     || join === null || input.runtimeFacts.selectedSchedulerCompletion === null
     || join.correlationId !== stage36.resolved.correlationId
@@ -1886,6 +2091,13 @@ function validateJoinedSixStepContext(input: {
     || executionEvidence.correlationId !== stage36.resolved.correlationId
     || executionEvidence.generationId !== binding.generationId
     || executionEvidence.routeHash !== routeBinding.routeHash
+    || input.candidateEntry.routeHash !== routeBinding.routeHash
+    || coarse.routeHash !== routeBinding.routeHash
+    || planned.routeHash !== routeBinding.routeHash
+    || exact.routeHash !== routeBinding.routeHash
+    || program.routeHash !== routeBinding.routeHash
+    || dryRun.routeHash !== routeBinding.routeHash
+    || dryRun.routeBindingHash !== routeBinding.routeBindingHash
     || executionEvidence.exactHash !== exact.exactHash
     || executionEvidence.programHash !== program.programHash
     || finalEvidence.correlationId !== stage36.resolved.correlationId
@@ -1901,8 +2113,10 @@ function validateJoinedSixStepContext(input: {
     || dryRun.finalSimulationReceiptHash !== join.finalSimulationReceiptHash
     || dryRun.lineageHash !== join.unsignedDryRunLineageHash
     || dryRun.safetyRoot !== economicSafety.evidenceRoot
-    || economicSafety.releaseProvenanceHash !== input.release.releaseProvenanceHash
-    || economicSafety.implementationHash !== input.runtimeAnchor.implementationClosureDigest) {
+    || economicSafety.authorityRoot !== input.economicSafetyAuthority.authorityRoot
+    || economicSafety.implementationHash !== input.economicSafetyAuthority.implementationHash
+    || economicSafety.releaseProvenanceHash !== input.economicSafetyAuthority.releaseProvenanceHash
+    || economicSafety.releaseProvenanceHash !== input.release.releaseProvenanceHash) {
     throw new TypeError("production evidence Stage5/6 scheduler/dry-run lineage mismatch");
   }
 }
@@ -1913,10 +2127,14 @@ async function joinSixStepFacts(input: {
   readonly artifacts: ProductionSixStepArtifactCapabilitiesV1;
   readonly runtimeFacts: JoinedRuntimePerformanceFactsV1;
   readonly release: SearcherProductionEvidenceReleaseV1;
-  readonly runtimeAnchor: RuntimeAnchorReceiptV1;
   readonly serving: ServingBindingV1;
   readonly head: CanonicalHead;
-  readonly candidateIds: readonly Hash[];
+  readonly candidateObservation: ProducerCandidateTerminalObservationV1;
+  readonly accounting: RouteAccountingV1;
+  readonly candidateEntry: RouteAccountingV1["entries"][number];
+  readonly plannerCandidateIdentity: AccountedRouteDenominatorPayloadV1["plannerCandidateIdentity"];
+  readonly economicSafetyAuthority: EconomicSafetyEvidenceAuthorityExpectationV1;
+  readonly strategyExpectation: RuntimeReleaseStrategyEvidenceExpectationV1 | null;
 }): Promise<JoinedSixStepPerformanceFactsV1> {
   const stage36 = exactSixStepTrace(
     canonicalClone(input.trace, "productionEvidence.stage36"),
@@ -1926,6 +2144,7 @@ async function joinSixStepFacts(input: {
     binding: readStartupStage12EvidenceBinding(input.startup),
     trace: stage36,
     artifacts: input.artifacts,
+    routeLegs: input.candidateEntry.legs,
   });
   const stage12Identity = stage12Root(stage12);
   const stage36Root = stage36.traceRoot;
@@ -1940,10 +2159,14 @@ async function joinSixStepFacts(input: {
     facts,
     runtimeFacts: input.runtimeFacts,
     release: input.release,
-    runtimeAnchor: input.runtimeAnchor,
     serving: input.serving,
     head: input.head,
-    candidateIds: input.candidateIds,
+    candidateObservation: input.candidateObservation,
+    accounting: input.accounting,
+    candidateEntry: input.candidateEntry,
+    plannerCandidateIdentity: input.plannerCandidateIdentity,
+    economicSafetyAuthority: input.economicSafetyAuthority,
+    strategyExpectation: input.strategyExpectation,
   });
   return facts;
 }
@@ -1997,13 +2220,17 @@ function materializeAccountedRouteDenominator(
   assertExactKeys(record, ["admissionId", "headFactsRoot", "headHash", "lane", "correlationId", "coverageRoot", "denominatorKind", "plannerCandidateIdentity", "accounting", "material"], path);
   if (record.denominatorKind !== "accounted") throw new TypeError(`${path}.denominatorKind is invalid`);
   assertPlainObject(record.plannerCandidateIdentity, `${path}.plannerCandidateIdentity`);
-  assertExactKeys(record.plannerCandidateIdentity, ["planningProblemHash", "objectiveRef", "entryAssetRef", "returnAssetRef"], `${path}.plannerCandidateIdentity`);
+  assertExactKeys(record.plannerCandidateIdentity, [
+    "planningProblemHash", "objectiveRef", "entryAssetRef", "returnAssetRef", "triggerRef", "affectedEdgeIdsRoot",
+  ], `${path}.plannerCandidateIdentity`);
   const rawIdentity = record.plannerCandidateIdentity as Record<string, unknown>;
   const plannerCandidateIdentity = Object.freeze({
     planningProblemHash: nonZeroHash(rawIdentity.planningProblemHash, `${path}.plannerCandidateIdentity.planningProblemHash`),
     objectiveRef: nonZeroHash(rawIdentity.objectiveRef, `${path}.plannerCandidateIdentity.objectiveRef`),
     entryAssetRef: nonZeroHash(rawIdentity.entryAssetRef, `${path}.plannerCandidateIdentity.entryAssetRef`),
     returnAssetRef: nonZeroHash(rawIdentity.returnAssetRef, `${path}.plannerCandidateIdentity.returnAssetRef`),
+    triggerRef: nonZeroHash(rawIdentity.triggerRef, `${path}.plannerCandidateIdentity.triggerRef`),
+    affectedEdgeIdsRoot: nonZeroHash(rawIdentity.affectedEdgeIdsRoot, `${path}.plannerCandidateIdentity.affectedEdgeIdsRoot`),
   });
   assertPlainObject(record.accounting, `${path}.accounting`);
   assertExactKeys(record.accounting, [
@@ -2562,11 +2789,23 @@ function projectionFromFacts(admissionId: Hash, facts: ProducerHeadFactsV1): {
       })) {
       throw new TypeError("producer lane planner enumeration/accounting mismatch");
     }
+    const planningProblem = enumeration.planningProblem;
+    if (planningProblem.lane !== lane.lane
+      || planningProblem.triggerRef !== lane.triggerRef
+      || planningProblem.triggerCorrelationId !== lane.correlationId
+      || planningProblem.triggerHeadHash !== lane.headHash
+      || planningProblem.generationId !== lane.generationId
+      || planningProblem.graphRoot !== lane.graphRoot
+      || hashDomain("aloha/producer-trigger-affected-edges/v1", planningProblem.requiredAnchorEdgeIds) !== lane.affectedEdgeIdsRoot) {
+      throw new TypeError("producer lane owner-issued trigger/planning problem mismatch");
+    }
     const plannerCandidateIdentity = Object.freeze({
       planningProblemHash: enumeration.planningProblemHash,
-      objectiveRef: enumeration.planningProblem.objectiveRef,
-      entryAssetRef: enumeration.planningProblem.entryAssetRef,
-      returnAssetRef: enumeration.planningProblem.returnAssetRef,
+      objectiveRef: planningProblem.objectiveRef,
+      entryAssetRef: planningProblem.entryAssetRef,
+      returnAssetRef: planningProblem.returnAssetRef,
+      triggerRef: lane.triggerRef,
+      affectedEdgeIdsRoot: lane.affectedEdgeIdsRoot,
     });
     const observationRoots = Object.freeze(observations.map(observation => observation.observationRoot));
     return [Object.freeze({ lane, upstreamAccounting, plannerCandidateIdentity, observations, observationRoots })];
@@ -2807,6 +3046,8 @@ class ProductionEvidenceOwnerStateV1 {
   readonly #sixStepCompleteAppendByTerminal = new WeakMap<object, SearcherProductionSixStepCompleteAppendCapabilityV1>();
   readonly #sixStepCompleteAppends: SearcherProductionSixStepCompleteAppendCapabilityV1[] = [];
   #performanceRuntime: RuntimeReleasePerformanceRuntimeServiceV1 | null = null;
+  readonly #economicSafetyAuthority: EconomicSafetyEvidenceAuthorityExpectationV1;
+  readonly #strategyExpectation: RuntimeReleaseStrategyEvidenceExpectationV1 | null;
   #performanceWindowBasis: RuntimeReleasePerformanceWindowFactsV1 | null = null;
   #performanceCommitment: PerformanceWindowCommitmentV1 | null = null;
   #performanceWindow: RuntimeReleasePerformanceWindowCapabilityV1 | null = null;
@@ -2823,11 +3064,26 @@ class ProductionEvidenceOwnerStateV1 {
 
   constructor(input: SearcherProductionEvidenceOwnerInputV1) {
     assertPlainObject(input, "searcherProductionEvidenceOwner");
-    assertExactKeys(input, ["databasePath", "release", "runtimeAnchor"], "searcherProductionEvidenceOwner");
+    const inputKeys = ["databasePath", "release", "runtimeAnchor", "economicSafety"];
+    if (Object.prototype.hasOwnProperty.call(input, "strategyRuntime")) inputKeys.push("strategyRuntime");
+    assertExactKeys(input, inputKeys, "searcherProductionEvidenceOwner");
     if (typeof input.databasePath !== "string" || !input.databasePath.startsWith("/")) throw new TypeError("production evidence database path must be absolute");
     this.#release = exactRelease(input.release, "searcherProductionEvidenceOwner.release");
     this.#runtimeAnchor = exactRuntimeAnchor(input.runtimeAnchor, "searcherProductionEvidenceOwner.runtimeAnchor");
     if (!sameRelease(this.#release, runtimeAnchorRelease(this.#runtimeAnchor))) throw new TypeError("production evidence runtime anchor release mismatch");
+    assertIssuedEconomicSafetyFinalizationServiceV1(input.economicSafety);
+    this.#economicSafetyAuthority = input.economicSafety.binding();
+    if (this.#economicSafetyAuthority.releaseProvenanceHash !== this.#release.releaseProvenanceHash) {
+      throw new TypeError("production evidence economic-safety release mismatch");
+    }
+    if (input.strategyRuntime === undefined) this.#strategyExpectation = null;
+    else {
+      assertIssuedRuntimeReleaseStrategyRuntimeService(input.strategyRuntime);
+      this.#strategyExpectation = input.strategyRuntime.readEvidenceExpectation();
+      if (this.#strategyExpectation.releaseProvenanceHash !== this.#release.releaseProvenanceHash) {
+        throw new TypeError("production evidence Strategy qualification release mismatch");
+      }
+    }
     this.#store = createSqliteDurableStore(input.databasePath);
     try {
       this.#store.bindStoreRole(EVIDENCE_ROLE);
@@ -3197,24 +3453,47 @@ class ProductionEvidenceOwnerStateV1 {
         const laneTerminal = coveragePayload.laneTerminalFacts.find(value => value.lane === denominator.lane);
         const routeDenominator = accountedDenominators.find(value => value.lane === denominator.lane);
         const observations = candidatePayload.candidateTerminalObservations.filter(value => value.lane === denominator.lane);
-        if (laneTerminal === undefined || laneTerminal.kind !== "coverage"
-          || routeDenominator === undefined
-          || routeDenominator.headFactsRoot !== candidatePayload.headFactsRoot
-          || routeDenominator.headHash !== candidatePayload.headHash
-          || routeDenominator.correlationId !== denominator.correlationId
-          || routeDenominator.coverageRoot !== denominator.coverageRoot
-          || routeDenominator.accounting.root !== denominator.accountingRoot
-          || routeDenominator.accounting.entries.length !== observations.length
-          || routeDenominator.accounting.entries.some((entry, index) => entry.candidateId !== observations[index]?.candidateId
-            || entry.disposition !== observations[index]?.disposition
-            || entry.terminalKind !== observations[index]?.terminalKind
-            || entry.routeHash !== observations[index]?.routeHash
-            || entry.reasonCode !== observations[index]?.reasonCode
-            || entry.evidenceHash !== observations[index]?.evidenceHash
-            || !sameExact(entry.policyTerminal, observations[index]?.policyTerminal))
-          || laneTerminal.correlationId !== denominator.correlationId
-          || laneTerminal.coverageRoot !== denominator.coverageRoot) {
-          throw new TypeError("production evidence candidate denominator/coverage splice");
+        if (laneTerminal === undefined || laneTerminal.kind !== "coverage") {
+          throw new TypeError("production evidence candidate denominator lacks lane coverage");
+        }
+        if (routeDenominator === undefined) {
+          throw new TypeError("production evidence candidate denominator lacks accounted route denominator");
+        }
+        if (routeDenominator.headFactsRoot !== candidatePayload.headFactsRoot) {
+          throw new TypeError("production evidence candidate denominator head-facts root splice");
+        }
+        if (routeDenominator.headHash !== candidatePayload.headHash) {
+          throw new TypeError("production evidence candidate denominator head hash splice");
+        }
+        if (routeDenominator.correlationId !== denominator.correlationId) {
+          throw new TypeError("production evidence candidate denominator correlation splice");
+        }
+        if (routeDenominator.coverageRoot !== denominator.coverageRoot) {
+          throw new TypeError("production evidence candidate denominator route coverage root splice");
+        }
+        if (routeDenominator.accounting.root !== denominator.accountingRoot) {
+          throw new TypeError("production evidence candidate denominator accounting root splice");
+        }
+        if (routeDenominator.accounting.entries.length !== observations.length) {
+          throw new TypeError("production evidence candidate denominator observation count splice");
+        }
+        for (const [index, entry] of routeDenominator.accounting.entries.entries()) {
+          const observation = observations[index]!;
+          if (entry.candidateId !== observation.candidateId) throw new TypeError("production evidence candidate denominator candidate id splice");
+          if (observation.planningProblemHash !== routeDenominator.accounting.planningProblemHash) throw new TypeError("production evidence candidate denominator planning problem splice");
+          if (observation.enumerationRoot !== routeDenominator.accounting.enumerationRoot) throw new TypeError("production evidence candidate denominator enumeration splice");
+          if (observation.admissionPolicyHash !== routeDenominator.accounting.admissionPolicyHash) throw new TypeError("production evidence candidate denominator admission policy splice");
+          if (entry.disposition !== observation.disposition) throw new TypeError("production evidence candidate denominator disposition splice");
+          validateProductionCandidateEvidenceJoinV1(entry, observation);
+          if (entry.routeHash !== observation.routeHash) throw new TypeError("production evidence candidate denominator route hash splice");
+          if (entry.reasonCode !== observation.reasonCode) throw new TypeError("production evidence candidate denominator reason code splice");
+          if (!sameExact(entry.policyTerminal, observation.policyTerminal)) throw new TypeError("production evidence candidate denominator policy terminal splice");
+        }
+        if (laneTerminal.correlationId !== denominator.correlationId) {
+          throw new TypeError("production evidence candidate coverage correlation splice");
+        }
+        if (laneTerminal.coverageRoot !== denominator.coverageRoot) {
+          throw new TypeError("production evidence candidate lane coverage root splice");
         }
       }
       for (const denominator of admissionDenominators.filter((value): value is NoInputRouteDenominatorPayloadV1 => value.denominatorKind === "no-input")) {
@@ -3310,6 +3589,14 @@ class ProductionEvidenceOwnerStateV1 {
         throw new TypeError("production evidence terminal precedes a candidate terminal observation");
       }
       const passed = candidatePayload?.candidateTerminalObservations.filter(observation => observation.performanceOutcome === "verified") ?? [];
+      const passedRouteDenominator = passed.length === 1
+        ? [...routeDenominators.values()]
+          .map(event => event.payload as RouteDenominatorPayloadV1)
+          .find((denominator): denominator is AccountedRouteDenominatorPayloadV1 => denominator.admissionId === admissionId
+            && denominator.denominatorKind === "accounted"
+            && denominator.lane === passed[0]!.lane)
+        : undefined;
+      const passedEntry = passedRouteDenominator?.accounting.entries.find(entry => entry.candidateId === passed[0]?.candidateId);
       if (payload.runtimeFacts !== null) {
         const resourceScope = payload.runtimeFacts.resource.scope;
         if (eligiblePayload.windowId === null
@@ -3337,29 +3624,37 @@ class ProductionEvidenceOwnerStateV1 {
           if (payload.sixStepFacts !== null || payload.runtimeFacts.selectedSchedulerCompletion !== null || payload.runtimeFacts.producerSchedulerJoin !== null) {
             throw new TypeError("production evidence no-pass head carries selected execution facts");
           }
-        } else if (passed.length === 1 && payload.sixStepFacts !== null && payload.runtimeFacts.selectedSchedulerCompletion !== null && payload.runtimeFacts.producerSchedulerJoin !== null) {
+        } else if (passed.length === 1 && passedRouteDenominator !== undefined && passedEntry !== undefined && payload.sixStepFacts !== null && payload.runtimeFacts.selectedSchedulerCompletion !== null && payload.runtimeFacts.producerSchedulerJoin !== null) {
           validateJoinedSixStepContext({
             facts: payload.sixStepFacts,
             runtimeFacts: payload.runtimeFacts,
             release: performanceEvent.release,
-            runtimeAnchor: performanceEvent.runtimeAnchor,
             serving: performanceServing!,
             head: eligiblePayload.head,
-            candidateIds: [passed[0]!.candidateId],
+            candidateObservation: passed[0]!,
+            accounting: passedRouteDenominator.accounting,
+            candidateEntry: passedEntry,
+            plannerCandidateIdentity: passedRouteDenominator.plannerCandidateIdentity,
+            economicSafetyAuthority: this.#economicSafetyAuthority,
+            strategyExpectation: this.#strategyExpectation,
           });
         } else {
           throw new TypeError("production evidence passed head lacks exact selected execution facts");
         }
       } else if (payload.sixStepFacts !== null) {
-        if (payload.runtimeFacts === null || coveragePayload === undefined || candidatePayload === undefined || passed.length !== 1) throw new TypeError("production evidence retained SixStep facts lack their runtime/head projections");
+        if (payload.runtimeFacts === null || coveragePayload === undefined || candidatePayload === undefined || passed.length !== 1 || passedRouteDenominator === undefined || passedEntry === undefined) throw new TypeError("production evidence retained SixStep facts lack their runtime/head projections");
         validateJoinedSixStepContext({
           facts: payload.sixStepFacts,
           runtimeFacts: payload.runtimeFacts,
           release: performanceEvent.release,
-          runtimeAnchor: performanceEvent.runtimeAnchor,
           serving: performanceServing!,
           head: eligiblePayload.head,
-          candidateIds: [passed[0]!.candidateId],
+          candidateObservation: passed[0]!,
+          accounting: passedRouteDenominator.accounting,
+          candidateEntry: passedEntry,
+          plannerCandidateIdentity: passedRouteDenominator.plannerCandidateIdentity,
+          economicSafetyAuthority: this.#economicSafetyAuthority,
+          strategyExpectation: this.#strategyExpectation,
         });
       }
       const terminalPayload = terminals.get(payload.terminalId)?.payload as ProducerTerminalPayloadV1 | undefined;
@@ -3900,7 +4195,24 @@ class ProductionEvidenceOwnerStateV1 {
           }
         }
         const passed = state.facts === null ? [] : passedCandidateObservations(state.facts);
+        const passedLaneFacts = passed.length === 1 && state.facts !== null
+          ? state.facts.laneFacts.find(lane => lane.lane === passed[0]!.lane) ?? null
+          : null;
+        const passedAccounting = passedLaneFacts?.accounting ?? null;
+        const passedEnumeration = passedLaneFacts === null ? null : readIssuedProducerLanePlannerEnumerationV1(passedLaneFacts);
+        const passedPlannerCandidateIdentity = passedLaneFacts === null || passedEnumeration === null ? null : Object.freeze({
+          planningProblemHash: passedEnumeration.planningProblemHash,
+          objectiveRef: passedEnumeration.planningProblem.objectiveRef,
+          entryAssetRef: passedEnumeration.planningProblem.entryAssetRef,
+          returnAssetRef: passedEnumeration.planningProblem.returnAssetRef,
+          triggerRef: passedLaneFacts.triggerRef,
+          affectedEdgeIdsRoot: passedLaneFacts.affectedEdgeIdsRoot,
+        });
+        const passedEntry = passedAccounting?.entries.find(entry => entry.candidateId === passed[0]?.candidateId) ?? null;
         const canJoinSixStep = passed.length === 1
+          && passedAccounting !== null
+          && passedPlannerCandidateIdentity !== null
+          && passedEntry !== null
           && state.facts !== null
           && serving !== null
           && state.facts.complete
@@ -3921,10 +4233,14 @@ class ProductionEvidenceOwnerStateV1 {
             artifacts: sixStep.artifacts!,
             runtimeFacts: runtimeFacts!,
             release: this.#release,
-            runtimeAnchor: this.#runtimeAnchor,
             serving: serving!,
             head: state.payload.head,
-            candidateIds: state.facts!.laneFacts.flatMap(lane => lane.accounting?.entries.map(entry => entry.candidateId) ?? []),
+            candidateObservation: passed[0]!,
+            accounting: passedAccounting!,
+            candidateEntry: passedEntry!,
+            plannerCandidateIdentity: passedPlannerCandidateIdentity!,
+            economicSafetyAuthority: this.#economicSafetyAuthority,
+            strategyExpectation: this.#strategyExpectation,
           })
           : null;
         const terminalMonotonicNs = process.hrtime.bigint().toString();
@@ -4134,7 +4450,10 @@ export function readSearcherProductionEvidenceHighCardinalityV1(databasePath: st
 export function issueSearcherProductionEvidenceOwnerV1(input: SearcherProductionEvidenceOwnerInputV1): SearcherProductionEvidenceOwnerV1 {
   const state = new ProductionEvidenceOwnerStateV1(input);
   const owner: SearcherProductionEvidenceOwnerV1 = Object.freeze({
-    bindServing: (startup: StartupRuntimeV1, performanceRuntime?: RuntimeReleasePerformanceRuntimeServiceV1) => state.bindServing(startup, performanceRuntime),
+    bindServing: (
+      startup: StartupRuntimeV1,
+      performanceRuntime?: RuntimeReleasePerformanceRuntimeServiceV1,
+    ) => state.bindServing(startup, performanceRuntime),
     replay: () => state.replay(),
     close: () => state.close(),
   });

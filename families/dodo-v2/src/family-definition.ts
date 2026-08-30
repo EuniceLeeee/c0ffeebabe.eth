@@ -13,6 +13,7 @@ import {
 } from "../../../packages/capability-contracts/src/index.ts";
 import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
 import { FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1 } from "../../../packages/family-sdk/runtime/index.ts";
+import { DODO_V2_ACTION_IMPLEMENTATION_HASH, DODO_V2_ACTION_SCHEMA_REF } from "./action.ts";
 import {
   DODO_V2_ACTION_OWNER_ID,
   DODO_V2_CAPABILITY_IDS,
@@ -94,8 +95,8 @@ const historySourcePlan = Object.freeze({
 const actionOwner = Object.freeze({
   ownerId: DODO_V2_ACTION_OWNER_ID,
   version,
-  schemaHash: asSchemaRef(hashDomain("aloha/dodo-v2/action-schema/v1", "swap")),
-  implementationHash: hashDomain("aloha/dodo-v2/action-implementation/v1", "swap"),
+  schemaHash: asSchemaRef(DODO_V2_ACTION_SCHEMA_REF),
+  implementationHash: DODO_V2_ACTION_IMPLEMENTATION_HASH,
   actionKinds: Object.freeze(["swap"]),
   modulePath: `${moduleRoot}/action.ts`,
   exportName: "DODO_V2_SWAP_ACTION_PORT",

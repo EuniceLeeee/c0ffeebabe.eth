@@ -35,6 +35,7 @@ import {
   familySearchAmount,
   familySearchAmountHash,
   familySearchArtifactHash,
+  familySearchExecutionContext,
   familySearchObjective,
   familySearchPayloadHash,
   familySearchRouteBindingHash,
@@ -86,6 +87,13 @@ export interface SearchRuntimeCoreInputV1 {
   readonly amountSeed: Readonly<{
     readonly amountIn: string;
     readonly recipient: string;
+  }>;
+  /** Release-bound actors for EVM calls. These roles are deliberately
+   * separate: transactionOrigin prices actor-sensitive reads, while the
+   * executor receives/settles the compiled action program. */
+  readonly execution: Readonly<{
+    readonly transactionOrigin: string;
+    readonly executorAddress: string;
   }>;
 }
 
@@ -322,6 +330,10 @@ function makeRoutePorts(
   assertExactKeys(input.amountSeed, ["amountIn", "recipient"], "searchRuntime.amountSeed");
   assertDecimalString(input.amountSeed.amountIn, "searchRuntime.amountSeed.amountIn");
   assertNonEmptyString(input.amountSeed.recipient, "searchRuntime.amountSeed.recipient");
+  const execution = familySearchExecutionContext(input.execution, "searchRuntime.execution");
+  if (execution.executorAddress !== input.amountSeed.recipient) {
+    throw new TypeError("searchRuntime executor/recipient mismatch");
+  }
   const noStageRejectionAuthority = Object.freeze({
     read(): never {
       throw new TypeError("search runtime stage does not issue chain rejection capabilities");
@@ -429,6 +441,7 @@ function makeRoutePorts(
             sourceRead: input.sourceRead,
             objective,
             amount,
+            execution,
             deadlineAtMs: request.deadlineAtMs,
             signal: request.signal,
           });
@@ -543,6 +556,7 @@ function makeRoutePorts(
             currentSource: currentSource as FamilySearchCurrentSourceV1,
             objective: context.objective,
             amount,
+            execution,
             readPort: input.sourceRead,
             signal,
             deadlineAtMs,
@@ -556,6 +570,7 @@ function makeRoutePorts(
             currentSource: currentSource as FamilySearchCurrentSourceV1,
             objective: context.objective,
             amount,
+            execution,
             state: stateOutcome.artifact,
           });
           if (coarseOutcome.kind === "unavailable") return unavailable("exact", coarseOutcome) as ExactOutcomeV1<SearchRuntimeExactV1>;
@@ -566,6 +581,7 @@ function makeRoutePorts(
             currentSource: currentSource as FamilySearchCurrentSourceV1,
             objective: context.objective,
             amount,
+            execution,
             state: stateOutcome.artifact,
             coarse: coarseOutcome.artifact,
           });
@@ -621,7 +637,7 @@ function makeRoutePorts(
         for (const leg of exactValue.legs) {
           const resolved = context.legs.find(item => item.edgeId === leg.edgeId);
           if (resolved === undefined) throw new TypeError("execution-route-leg-missing");
-          const outcome = await resolved.adapter.buildAction({ route: resolved.route, currentSource: currentSource as FamilySearchCurrentSourceV1, objective: context.objective, amount: leg.amount, exact: leg.exact });
+          const outcome = await resolved.adapter.buildAction({ route: resolved.route, currentSource: currentSource as FamilySearchCurrentSourceV1, objective: context.objective, amount: leg.amount, execution, exact: leg.exact });
           if (outcome.kind === "unavailable") return unavailable("execution-program", outcome) as ExecutionProgramOutcomeV1;
           if (outcome.kind === "invalidProgram") return stageFailure("execution-program", outcome) as ExecutionProgramOutcomeV1;
           validateAction(outcome.artifact, resolved, source, context.objective, leg.amount, leg.exact);

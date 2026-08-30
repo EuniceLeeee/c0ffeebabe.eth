@@ -212,6 +212,7 @@ test("Reth source owns one physical transport per session and rejects cross-sess
     await assert.rejects(runtimeSource.closeCurrentSourceReadHead(sessionA.currentSourceCapability), /already closed/);
     const sweepSourceRead = runtimeSource.issueFullGraphCoarseSweepSourceRead(sessionA.currentSourceCapability);
     const crossSessionSourceRead = runtimeSource.issueFullGraphCoarseSweepSourceRead(sessionB.currentSourceCapability);
+    const sweepExecution = Object.freeze({ transactionOrigin: "acceptance-caller", executorAddress: "acceptance-recipient" });
     const crossGraphLease = Object.freeze({
       ...sessionA.lease,
       binding: Object.freeze({ ...sessionA.lease.binding, graphRoot: hash("cross-graph") }),
@@ -221,6 +222,7 @@ test("Reth source owns one physical transport per session and rejects cross-sess
         session: Object.freeze({ ...sessionA, lease: crossGraphLease, graphView: crossGraphLease }) as never,
         sourceRead: sweepSourceRead,
         amountSeed: { amountIn: "1", recipient: "acceptance-recipient" },
+        execution: sweepExecution,
       }),
       /session\/source\/Graph binding mismatch/,
     );
@@ -233,6 +235,7 @@ test("Reth source owns one physical transport per session and rejects cross-sess
         session: Object.freeze({ ...sessionA, lease: crossReadyLease, graphView: crossReadyLease }) as never,
         sourceRead: sweepSourceRead,
         amountSeed: { amountIn: "1", recipient: "acceptance-recipient" },
+        execution: sweepExecution,
       }),
       /session\/source\/Graph binding mismatch/,
     );
@@ -241,6 +244,7 @@ test("Reth source owns one physical transport per session and rejects cross-sess
         session: sessionA as never,
         sourceRead: crossSessionSourceRead,
         amountSeed: { amountIn: "1", recipient: "acceptance-recipient" },
+        execution: sweepExecution,
       }),
       /session\/source\/Graph binding mismatch/,
     );
@@ -248,6 +252,7 @@ test("Reth source owns one physical transport per session and rejects cross-sess
       session: sessionA as never,
       sourceRead: sweepSourceRead,
       amountSeed: { amountIn: "1", recipient: "acceptance-recipient" },
+      execution: sweepExecution,
     });
     const sweepState = consumeFullGraphCoarseSweepInvocationCapabilityV1(sweepInvocation);
     assert.deepEqual(await sweepState.sourceRead.read({ request: { ...request, requestId: hash("c") } }), {
@@ -266,6 +271,7 @@ test("Reth source owns one physical transport per session and rejects cross-sess
         session: sessionA as never,
         sourceRead: {} as never,
         amountSeed: { amountIn: "1", recipient: "acceptance-recipient" },
+        execution: sweepExecution,
       }),
       /already issued/,
     );
@@ -274,6 +280,7 @@ test("Reth source owns one physical transport per session and rejects cross-sess
         session: sessionB as never,
         sourceRead: crossSessionSourceRead,
         amountSeed: { amountIn: "0", recipient: "acceptance-recipient" },
+        execution: sweepExecution,
       }),
       /amountIn must be positive/,
     );
@@ -282,6 +289,7 @@ test("Reth source owns one physical transport per session and rejects cross-sess
         session: sessionB as never,
         sourceRead: crossSessionSourceRead,
         amountSeed: { amountIn: "1", recipient: "acceptance-recipient" },
+        execution: sweepExecution,
       }),
     ));
   } finally {

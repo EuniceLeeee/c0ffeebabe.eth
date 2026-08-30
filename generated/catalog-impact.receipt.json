@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "kind": "aloha.catalog-impact-receipt",
   "beforeSnapshotRoot": "0x0405f705a90d3fa70d22e105b749ebfbb7c4b0d584b9ed6c7c862aba5adca204",
-  "afterSnapshotRoot": "0x7120d1e08e1a8091b3f3094d5e5388b0495e1d9e34d4565ae51f60b0b42f364f",
+  "afterSnapshotRoot": "0x9a12dd6e74d05a235610040d4bd3cfbcb1df4fa0888eabe916a48f04d2fde16e",
   "beforeDefinitionCatalogRoot": "0xc1ec5f78f872a882db64a3227f2c90573c1073e22a9dba19e5c7adf1529775dc",
-  "afterDefinitionCatalogRoot": "0xad4dede4d7577a321620996f253ebf2ff32a136374a67d1b33e71ebb26039602",
+  "afterDefinitionCatalogRoot": "0xbe54399f10b3a7b0ff0e6cdae36c08cf657183637525e72b04b11269d2087ad5",
   "beforeCapabilityCatalogRoot": "0x12948d85524eff81b03b2f8decf47950aac5a240fe43332241f775575039dbcf",
-  "afterCapabilityCatalogRoot": "0x25d0e130686748d5fa887cc38a0a648b781c49a1066ef55b429e53cee61eec38",
+  "afterCapabilityCatalogRoot": "0x2cac0df267c355c99240ecbc947254ff4c5184a430a6307b602a9e2838085520",
   "changedCapabilityIds": [
     "family.curve-underlying.coarse",
     "family.curve-underlying.exact",
@@ -49,5 +49,5 @@
     "univ2-standard"
   ],
   "reusableArtifacts": [],
-  "receiptRoot": "0x8f25b716918ef7f575df756e91ccd66b025a9c88033b3003af177db95815d949"
+  "receiptRoot": "0xe974c4ba93dbdbd9df0d81e6f62e31e090562cd1d5f4fbb720180a58617ab361"
 }

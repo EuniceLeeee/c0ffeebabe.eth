@@ -15,17 +15,17 @@ const words = (...values: bigint[]) => `0x${values.map(word).join("")}`;
 
 test("DODO search calls bind the pool, actor, route, and amount", () => {
   const pool = address("a");
-  assert.deepEqual(encodeDodoStateCall("pmm", pool), {
+  assert.deepEqual(encodeDodoStateCall("pmm", pool, DODO_V2_QUOTE_ACTOR), {
     target: pool,
     data: `0x${DODO_SEARCH_SELECTORS.pmm.slice(2)}`,
     responseEncoding: "abi-dodo-pmm-v1",
   });
-  const fee = encodeDodoStateCall("userFeeRate", pool);
+  const fee = encodeDodoStateCall("userFeeRate", pool, DODO_V2_QUOTE_ACTOR);
   assert.equal(fee.data, `0x${DODO_SEARCH_SELECTORS.userFeeRate.slice(2)}${word(BigInt(DODO_V2_QUOTE_ACTOR))}`);
-  const query = encodeDodoStateCall("querySellQuote", pool, "123");
+  const query = encodeDodoStateCall("querySellQuote", pool, DODO_V2_QUOTE_ACTOR, "123");
   assert.equal(query.data, `0x${DODO_SEARCH_SELECTORS.querySellQuote.slice(2)}${word(BigInt(DODO_V2_QUOTE_ACTOR))}${word(123n)}`);
-  assert.throws(() => encodeDodoStateCall("querySellBase", pool), /amount/);
-  assert.throws(() => encodeDodoStateCall("querySellBase", pool, "-1"), /amount/);
+  assert.throws(() => encodeDodoStateCall("querySellBase", pool, DODO_V2_QUOTE_ACTOR), /amount/);
+  assert.throws(() => encodeDodoStateCall("querySellBase", pool, DODO_V2_QUOTE_ACTOR, "-1"), /amount/);
 });
 
 test("DODO search decodes PMM, fee, and the single-word query return", () => {

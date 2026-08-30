@@ -13,12 +13,14 @@ export function generatedEconomicValuationOwnerQualificationSetFixtureV1(scope: 
     const h = (field: string) => hashDomain("test/generated-economic-valuation-owner-qualification/v1", {
       scope,
       ownerRef: proposal.ownerRef,
+      supportedAssetRefs: proposal.supportedAssetRefs,
       field,
     });
     return sealEconomicValuationOwnerQualificationCertificateV1({
       schemaVersion: 1,
       kind: "aloha.economic-valuation-owner-qualification-certificate",
       ownerRef: proposal.ownerRef,
+      supportedAssetRefs: proposal.supportedAssetRefs,
       proposedOwnerLeafDigest: proposal.qualificationLeafDigest,
       implementationHash: proposal.implementationHash,
       factSchemaRef: proposal.factSchemaRef,

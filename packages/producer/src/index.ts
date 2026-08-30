@@ -1202,16 +1202,10 @@ export class ProducerRuntimeV1<Session extends ProducerSessionV1 = ProducerSessi
           terminal: terminalCapability,
         });
       } catch (error) {
-        status = "failed";
-        reason = "performance_append_failed";
         this.#enterFatal(error);
-        terminalCapability = this.#issueTerminal(item, status, reason, laneOutcomes, generationId, graphRoot, factsCapability);
-        try {
-          await this.#options.performance.sealHeadTerminal({ eligibleHead: item.eligibleHead, terminal: terminalCapability });
-        } catch {
-          // The explicit failed terminal remains the only durable journal
-          // conclusion even if the performance sink is unavailable.
-        }
+        // A rejected acknowledgement cannot distinguish a pre-append failure
+        // from a durable append whose acknowledgement was lost. Preserve the
+        // exact terminal capability and never retry under a different identity.
       }
     }
     await this.#enqueue(async () => {
@@ -1352,24 +1346,9 @@ export class ProducerRuntimeV1<Session extends ProducerSessionV1 = ProducerSessi
       try {
         await this.#options.performance.sealHeadTerminal({ eligibleHead: item.eligibleHead, terminal });
       } catch (error) {
-        finalStatus = "failed";
-        finalReason = "performance_append_failed";
         this.#enterFatal(error);
-        terminal = this.#issueTerminal(
-          item,
-          finalStatus,
-          finalReason,
-          laneOutcomes,
-          generationId,
-          graphRoot,
-          finalFacts,
-        );
-        try {
-          await this.#options.performance.sealHeadTerminal({ eligibleHead: item.eligibleHead, terminal });
-        } catch {
-          // The durable producer journal remains explicitly failed. The
-          // incomplete performance window is independently invalid.
-        }
+        // Seal failure is an uncertain commit. Keep the same capability for
+        // the producer journal so a durable performance append cannot diverge.
       }
     }
     await this.#appendTerminal(item, terminal);
@@ -1385,7 +1364,15 @@ export class ProducerRuntimeV1<Session extends ProducerSessionV1 = ProducerSessi
     try {
       await this.#options.terminal.appendTerminal({ terminal });
     } catch (error) {
+      const priorFatal = this.#fatal;
       this.#enterFatal(error);
+      if (priorFatal !== null && priorFatal !== error) {
+        throw new AggregateError(
+          [priorFatal, error],
+          "producer terminal append failed after an earlier fatal error",
+          { cause: priorFatal },
+        );
+      }
       throw error;
     }
     item.terminalEmitted = true;

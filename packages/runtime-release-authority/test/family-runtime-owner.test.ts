@@ -275,7 +275,13 @@ function isolationFactory(families: readonly GeneratedFamilyRuntimeFamilyV1[]) {
     definitions: families.map(() => Object.freeze([])),
     extensions: families.map(() => Object.freeze([])),
     actionOwners: families.map(() => Object.freeze([])),
-    runtimeAdapters: families.map(() => Object.freeze([])),
+    runtimeAdapters: families.map(family => family.runtimeAdapters.map(adapter => Object.freeze({
+      factory: () => { throw new TypeError("isolation adapter must not be opened"); },
+      modulePath: adapter.modulePath,
+      exportName: adapter.exportName,
+      closureRoot: adapter.closureRoot,
+      leafDigest: adapter.leafDigest,
+    }))),
     sourcePlans: families.map(() => Object.freeze([])),
     nominationPrograms: families.map(() => Object.freeze([])),
   });

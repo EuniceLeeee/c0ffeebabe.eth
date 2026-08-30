@@ -352,7 +352,7 @@ test("deployment manifest is canonical, self-bound, and rejects mutations", () =
 });
 
 test("deployment runtime policy and executor state are exact and release-bound", () => {
-  const profitAsset = erc20AssetReferenceV1("1", `0x${"55".repeat(20)}`);
+  const profitAsset = erc20AssetReferenceV1("1", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
   const policy = {
     schemaVersion: 1,
     kind: "aloha.deployment-runtime-policy-v1",
@@ -377,7 +377,7 @@ test("deployment runtime policy and executor state are exact and release-bound",
     callerId: `0x${"33".repeat(20)}`,
     deadlineMs: 1000,
     admission: { topK: 8, boundedUnrankedBudget: 16 },
-    amountSeed: { amountIn: "1000000", recipient: `0x${"11".repeat(20)}` },
+    amountSeed: { amountIn: "1000000", recipient: `0x${"22".repeat(20)}` },
   } as const;
   const executor = {
     schemaVersion: 1,
@@ -423,6 +423,14 @@ test("deployment runtime policy and executor state are exact and release-bound",
       },
     })),
     /does not match the objective numeraire/,
+  );
+  const unsupportedProfitAsset = erc20AssetReferenceV1("1", `0x${"77".repeat(20)}`);
+  assert.doesNotThrow(
+    () => decodeDeploymentRuntimePolicyBytesV1(encodeCanonicalBytes({
+      ...policy,
+      objective: { ...policy.objective, numeraireAssetRef: unsupportedProfitAsset.assetRef },
+      economicSafety: { ...policy.economicSafety, profitAsset: unsupportedProfitAsset },
+    })),
   );
   assert.throws(
     () => assertDeploymentRuntimeArtifactsJoinReleaseV1(decodedPolicy, { ...decodedExecutor, executorAddress: `0x${"66".repeat(20)}` }, binding),

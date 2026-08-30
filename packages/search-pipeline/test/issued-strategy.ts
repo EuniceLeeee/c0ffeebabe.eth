@@ -31,6 +31,9 @@ export function issueRouteCyclePlanningProblem(input: {
   readonly objectiveRef?: Hash;
   readonly entryAssetRef?: Hash;
   readonly proposedCapabilitySetRoot?: Hash;
+  readonly lane?: "blockscan" | "backrun";
+  readonly triggerRef?: Hash;
+  readonly affectedEdgeIds?: readonly Hash[];
 }): IssuedStrategyPlanningProblemV1 {
   const catalogEntry = compileStrategy(ROUTE_CYCLE_STRATEGY, []).entry;
   const issuerClosureRoot = h("test/search-pipeline/issuer-closure/v1", "route-cycle");
@@ -107,12 +110,12 @@ export function issueRouteCyclePlanningProblem(input: {
         releaseProvenanceHash,
         sourceHash,
       },
-      lane: "blockscan",
-      triggerRef: h("test/search-pipeline/trigger/v1", input.graphRoot),
+      lane: input.lane ?? "blockscan",
+      triggerRef: input.triggerRef ?? h("test/search-pipeline/trigger/v1", input.graphRoot),
       objectiveRef: input.objectiveRef ?? h("test/search-pipeline/objective/v1", "default"),
       entryAssetRef,
       returnAssetRef: entryAssetRef,
-      affectedEdgeIds: [],
+      affectedEdgeIds: input.affectedEdgeIds ?? [],
       correlationId,
     }),
   })[0]!;

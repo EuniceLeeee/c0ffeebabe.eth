@@ -12,7 +12,6 @@ import {
 } from "../../../packages/canonical-codec/src/index.ts";
 import { erc20AssetRefV1 } from "../../../packages/asset-ref/src/index.ts";
 import { familyCandidateKey as centralFamilyCandidateKey } from "../../../packages/discovery/src/index.ts";
-import { decodePackedCallProgram, encodePackedCallProgram } from "../../../packages/execution-program/src/index.ts";
 import {
   familySearchAmount,
   familySearchAmountHash,
@@ -35,22 +34,24 @@ import {
   type FamilySearchStateArtifactV1,
 } from "../../../packages/family-sdk/search-runtime/index.ts";
 import { FLUID_DEX_FAMILY_DEFINITION_HASH } from "./family-definition.ts";
-import { FLUID_DEX_ACTION_PORT, buildFluidDexAction, buildFluidDexSearchAction } from "./action.ts";
+import { FLUID_DEX_ACTION_PORT, buildFluidDexAction, type FluidDexActionPortV1 } from "./action.ts";
 import { assertFluidDexRoute, coarseFluidDex, deriveFluidDexRoutes, exactFluidDex, materializeFluidDex } from "./stages.ts";
 import { FLUID_DEX_FAMILY_ID } from "./manifest.ts";
-import { decodeConstantsView, decodeUint256, encodeConstantsView, encodeSwapInCall, type FluidDexConstantsV1 } from "./abi.ts";
+import { decodeConstantsView, decodeFluidDexSwapResultRevert, encodeConstantsView, encodeSwapInCall, FLUID_DEX_QUOTE_RECIPIENT, FLUID_DEX_SWAP_RESULT_SELECTOR, type FluidDexConstantsV1 } from "./abi.ts";
 import type { FluidDexIdentityV1, FluidDexMaterializedStateV1, FluidDexQuoteV1, FluidDexRouteV1, FluidDexStateReadFactsV1 } from "./types.ts";
 
 type Source = ReturnType<typeof familySearchSource>;
 type StatePayload = {
   readonly kind: "fluid-dex-state-read";
-  readonly version: 1;
+  readonly version: 2;
   readonly cutoff: Source;
   readonly routeBindingHash: Hash;
   readonly amountHash: Hash;
   readonly instanceKey: string;
   readonly constantsReturnDataHex: string;
   readonly quoteReturnDataHex: string;
+  readonly quoteCompletion: "reverted-as-declared";
+  readonly quoteRpcErrorCode: number;
   readonly read: FluidDexStateReadFactsV1;
   readonly requestIds: readonly Hash[];
 };
@@ -142,8 +143,9 @@ function stateRequest(ctx: Context, kind: "constants" | "quote", swap0to1 = fals
       requestId,
       source: ctx.source,
       target: ctx.identity.instanceKey,
-      data: kind === "constants" ? encodeConstantsView() : encodeSwapInCall(swap0to1, ctx.amount.amountIn, "0", ctx.amount.recipient),
+      data: kind === "constants" ? encodeConstantsView() : encodeSwapInCall(swap0to1, ctx.amount.amountIn, "0", FLUID_DEX_QUOTE_RECIPIENT),
       responseEncoding: kind === "constants" ? "abi-fluid-dex-constants-view" as const : "abi-fluid-dex-swap-in" as const,
+      ...(kind === "quote" ? { declaredRevertData: Object.freeze({ kind: "declared-revert-data" as const, dataEncoding: "abi-fluid-dex-swap-result-error" as const, selector: FLUID_DEX_SWAP_RESULT_SELECTOR, byteLength: 36 }) } : {}),
     }),
     requestId,
     kind,
@@ -151,9 +153,16 @@ function stateRequest(ctx: Context, kind: "constants" | "quote", swap0to1 = fals
 }
 
 function returned(result: FamilySearchSourceReadResultV1, requestId: Hash, source: Source, path: string): string {
-  if (result.kind !== "returned") throw new Error(result.reasonCode || "source-read-unavailable");
+  if (result.kind !== "returned") throw new Error(result.kind === "unavailable" ? result.reasonCode : "source-read-reverted");
   if (result.requestId !== requestId || !sameFamilySearchSource(result.source, source)) throw new TypeError("fluid-dex search source response binding mismatch");
   return bytes(result.dataHex, path);
+}
+
+function declaredQuoteRevert(result: FamilySearchSourceReadResultV1, requestId: Hash, source: Source, path: string): { readonly dataHex: string; readonly rpcErrorCode: number } {
+  if (result.kind !== "reverted") throw new Error(result.kind === "unavailable" ? result.reasonCode : "fluid-dex quote returned instead of its declared revert");
+  if (result.requestId !== requestId || !sameFamilySearchSource(result.source, source)) throw new TypeError("fluid-dex search source response binding mismatch");
+  if (!Number.isSafeInteger(result.rpcErrorCode) || result.dataEncoding !== "abi-fluid-dex-swap-result-error") throw new TypeError("fluid-dex search declared revert transport mismatch");
+  return Object.freeze({ dataHex: bytes(result.dataHex, path), rpcErrorCode: result.rpcErrorCode });
 }
 
 function assertConstants(ctx: Context, constants: FluidDexConstantsV1): boolean {
@@ -164,11 +173,12 @@ function assertConstants(ctx: Context, constants: FluidDexConstantsV1): boolean 
 }
 
 function decodeStatePayload(value: unknown, path = "fluid-dex.state.payload"): StatePayload {
-  const source = exact(value, ["amountHash", "constantsReturnDataHex", "cutoff", "instanceKey", "kind", "quoteReturnDataHex", "read", "requestIds", "routeBindingHash", "version"], path);
-  if (source.kind !== "fluid-dex-state-read" || source.version !== 1) throw new TypeError("fluid-dex state payload discriminator mismatch");
+  const source = exact(value, ["amountHash", "constantsReturnDataHex", "cutoff", "instanceKey", "kind", "quoteCompletion", "quoteReturnDataHex", "quoteRpcErrorCode", "read", "requestIds", "routeBindingHash", "version"], path);
+  if (source.kind !== "fluid-dex-state-read" || source.version !== 2 || source.quoteCompletion !== "reverted-as-declared") throw new TypeError("fluid-dex state payload discriminator mismatch");
+  if (typeof source.quoteRpcErrorCode !== "number" || !Number.isSafeInteger(source.quoteRpcErrorCode)) throw new TypeError(`${path}.quoteRpcErrorCode must be a safe integer`);
   const readSource = exact(source.read, ["cutoff", "instanceKey", "reserveIn", "reserveOut"], `${path}.read`);
   if (!Array.isArray(source.requestIds) || source.requestIds.length !== 2) throw new TypeError(`${path}.requestIds must contain two reads`);
-  return Object.freeze({ kind: "fluid-dex-state-read", version: 1, cutoff: familySearchSource(source.cutoff, `${path}.cutoff`), routeBindingHash: hash(source.routeBindingHash, `${path}.routeBindingHash`), amountHash: hash(source.amountHash, `${path}.amountHash`), instanceKey: address(source.instanceKey, `${path}.instanceKey`), constantsReturnDataHex: bytes(source.constantsReturnDataHex, `${path}.constantsReturnDataHex`), quoteReturnDataHex: bytes(source.quoteReturnDataHex, `${path}.quoteReturnDataHex`), read: Object.freeze({ cutoff: familySearchSource(readSource.cutoff, `${path}.read.cutoff`) as FluidDexStateReadFactsV1["cutoff"], instanceKey: address(readSource.instanceKey, `${path}.read.instanceKey`), reserveIn: decimal(readSource.reserveIn, `${path}.read.reserveIn`), reserveOut: decimal(readSource.reserveOut, `${path}.read.reserveOut`) }), requestIds: Object.freeze(source.requestIds.map((item, index) => hash(item, `${path}.requestIds[${index}]`))) });
+  return Object.freeze({ kind: "fluid-dex-state-read", version: 2, cutoff: familySearchSource(source.cutoff, `${path}.cutoff`), routeBindingHash: hash(source.routeBindingHash, `${path}.routeBindingHash`), amountHash: hash(source.amountHash, `${path}.amountHash`), instanceKey: address(source.instanceKey, `${path}.instanceKey`), constantsReturnDataHex: bytes(source.constantsReturnDataHex, `${path}.constantsReturnDataHex`), quoteCompletion: "reverted-as-declared", quoteRpcErrorCode: source.quoteRpcErrorCode, quoteReturnDataHex: bytes(source.quoteReturnDataHex, `${path}.quoteReturnDataHex`), read: Object.freeze({ cutoff: familySearchSource(readSource.cutoff, `${path}.read.cutoff`) as FluidDexStateReadFactsV1["cutoff"], instanceKey: address(readSource.instanceKey, `${path}.read.instanceKey`), reserveIn: decimal(readSource.reserveIn, `${path}.read.reserveIn`), reserveOut: decimal(readSource.reserveOut, `${path}.read.reserveOut`) }), requestIds: Object.freeze(source.requestIds.map((item, index) => hash(item, `${path}.requestIds[${index}]`))) });
 }
 
 function materializedState(ctx: Context, artifact: FamilySearchStateArtifactV1): { readonly payload: StatePayload; readonly state: FluidDexMaterializedStateV1; readonly constants: FluidDexConstantsV1; readonly swap0to1: boolean } {
@@ -178,7 +188,7 @@ function materializedState(ctx: Context, artifact: FamilySearchStateArtifactV1):
   if (artifact.payloadHash !== payloadHash || artifact.artifactHash !== familySearchArtifactHash({ kind: "state", source: ctx.source, routeBindingHash: ctx.routeBindingHash, objectiveRef: null, amountHash: null, payloadHash }) || payload.amountHash !== ctx.amountHash || payload.routeBindingHash !== ctx.routeBindingHash || payload.instanceKey !== ctx.identity.instanceKey || !sameFamilySearchSource(payload.cutoff, ctx.source) || !sameFamilySearchSource(payload.read.cutoff, ctx.source) || payload.read.instanceKey !== ctx.identity.instanceKey) throw new TypeError("fluid-dex search state artifact lineage mismatch");
   const constants = decodeConstantsView(payload.constantsReturnDataHex);
   const swap0to1 = assertConstants(ctx, constants);
-  const observedAmountOut = decodeUint256(payload.quoteReturnDataHex, "fluid-dex search swapIn return data");
+  const observedAmountOut = decodeFluidDexSwapResultRevert(payload.quoteReturnDataHex, "fluid-dex search swapIn revert data");
   if (payload.read.reserveIn !== ctx.amount.amountIn || payload.read.reserveOut !== observedAmountOut.toString(10) || artifact.factsRoot !== hashDomain("aloha/fluid-dex/state-facts/v1", payload.read)) throw new TypeError("fluid-dex search state facts mismatch");
   const materialized = materializeFluidDex({ identity: ctx.identity, read: payload.read });
   if (materialized.status !== "verified") throw new TypeError(`fluid-dex search state ${materialized.reasonCode}`);
@@ -192,7 +202,7 @@ function stateArtifact(ctx: Context, payload: StatePayload): FamilySearchStateAr
 }
 
 function quoteFromState(ctx: Context, payload: StatePayload): FluidDexQuoteV1 {
-  const result = coarseFluidDex({ identity: ctx.identity, route: ctx.protocolRoute, amountIn: ctx.amount.amountIn, observedAmountOut: decodeUint256(payload.quoteReturnDataHex, "fluid-dex search swapIn return data").toString(10) });
+  const result = coarseFluidDex({ identity: ctx.identity, route: ctx.protocolRoute, amountIn: ctx.amount.amountIn, observedAmountOut: decodeFluidDexSwapResultRevert(payload.quoteReturnDataHex, "fluid-dex search swapIn revert data").toString(10) });
   if (result.status !== "rankable") throw new TypeError(`fluid-dex quote ${result.reasonCode}`);
   return result.quote;
 }
@@ -252,21 +262,29 @@ function validateExact(ctx: Context, artifact: FamilySearchExactArtifactV1): { r
   return Object.freeze({ ...decoded, action });
 }
 
-function actionArtifact(ctx: Context, exactArtifactValue: FamilySearchExactArtifactV1, decoded: { readonly quote: FluidDexQuoteV1; readonly swap0to1: boolean; readonly token0: string; readonly token1: string; readonly action: ReturnType<typeof buildFluidDexAction> }, actionOwnerRef: Hash): FamilySearchActionArtifactV1 {
-  const action = buildFluidDexSearchAction({ rawAction: decoded.action, quote: decoded.quote, route: ctx.protocolRoute, token0: decoded.token0, token1: decoded.token1, swap0to1: decoded.swap0to1, recipient: ctx.amount.recipient, stateFactsRoot: exactArtifactValue.stateFactsRoot, inputs: exactArtifactValue.inputs, outputs: exactArtifactValue.outputs, exactEvaluationHash: exactArtifactValue.evaluationHash, obligationRoot: exactArtifactValue.obligationRoot });
+function actionArtifact(ctx: Context, exactArtifactValue: FamilySearchExactArtifactV1, decoded: { readonly quote: FluidDexQuoteV1; readonly swap0to1: boolean; readonly token0: string; readonly token1: string; readonly action: ReturnType<typeof buildFluidDexAction> }, actionOwnerRef: Hash, actionPort: FluidDexActionPortV1): FamilySearchActionArtifactV1 {
+  const action = actionPort.build({ rawAction: decoded.action, quote: decoded.quote, route: ctx.protocolRoute, token0: decoded.token0, token1: decoded.token1, swap0to1: decoded.swap0to1, recipient: ctx.amount.recipient, stateFactsRoot: exactArtifactValue.stateFactsRoot, inputs: exactArtifactValue.inputs, outputs: exactArtifactValue.outputs, exactEvaluationHash: exactArtifactValue.evaluationHash, obligationRoot: exactArtifactValue.obligationRoot });
   const payload = canonical(action);
+  const payloadAction = actionPort.decode(payload);
+  if (payloadAction.actionHash !== action.actionHash
+    || payloadAction.opaqueBytes !== action.opaqueBytes
+    || encodeCanonicalJson(payloadAction.effectTransport) !== encodeCanonicalJson(action.effectTransport)) throw new TypeError("fluid-dex action payload/program/transport binding mismatch");
   const payloadHash = familySearchPayloadHash("action", payload);
-  const opaqueBytes = encodePackedCallProgram([{ target: decoded.action.target as `0x${string}`, value: "0", calldata: decoded.action.calldata as `0x${string}` }]);
-  const calls = decodePackedCallProgram(opaqueBytes, "fluid-dex action program");
-  if (calls.length !== 1 || calls[0]!.target !== decoded.action.target || calls[0]!.value !== "0" || calls[0]!.calldata !== decoded.action.calldata) throw new TypeError("fluid-dex action program binding mismatch");
-  return Object.freeze({ kind: "action", status: "ready", source: ctx.source, routeBindingHash: ctx.routeBindingHash, objectiveRef: ctx.objective.objectiveRef, amountHash: ctx.amountHash, payload, payloadHash, artifactHash: familySearchArtifactHash({ kind: "action", source: ctx.source, routeBindingHash: ctx.routeBindingHash, objectiveRef: ctx.objective.objectiveRef, amountHash: ctx.amountHash, payloadHash }), actionHash: action.actionHash, exactEvaluationHash: exactArtifactValue.evaluationHash, actionOwnerId: FLUID_DEX_ACTION_PORT.actionOwnerId, actionOwnerRef, opaqueBytes, inputs: exactArtifactValue.inputs, outputs: exactArtifactValue.outputs, obligationRoot: exactArtifactValue.obligationRoot });
+  return Object.freeze({ kind: "action", status: "ready", source: ctx.source, routeBindingHash: ctx.routeBindingHash, objectiveRef: ctx.objective.objectiveRef, amountHash: ctx.amountHash, payload, payloadHash, artifactHash: familySearchArtifactHash({ kind: "action", source: ctx.source, routeBindingHash: ctx.routeBindingHash, objectiveRef: ctx.objective.objectiveRef, amountHash: ctx.amountHash, payloadHash }), actionHash: action.actionHash, exactEvaluationHash: exactArtifactValue.evaluationHash, actionOwnerId: actionPort.actionOwnerId, actionOwnerRef, opaqueBytes: action.opaqueBytes, effectTransport: action.effectTransport, inputs: exactArtifactValue.inputs, outputs: exactArtifactValue.outputs, obligationRoot: exactArtifactValue.obligationRoot });
+}
+
+function resolvedActionPort(value: object): FluidDexActionPortV1 {
+  if (value !== FLUID_DEX_ACTION_PORT) throw new TypeError("generated fluid-dex action owner identity mismatch");
+  const port = value as Partial<FluidDexActionPortV1>;
+  if (port.actionOwnerId !== FLUID_DEX_ACTION_PORT.actionOwnerId || typeof port.build !== "function" || typeof port.decode !== "function" || typeof port.verifyObligations !== "function") throw new TypeError("generated fluid-dex action owner port is incomplete");
+  return port as FluidDexActionPortV1;
 }
 
 const factory: FamilySearchAdapterFactoryV1 = input => {
   if (input.familyDefinitionHash !== FLUID_DEX_FAMILY_DEFINITION_HASH) throw new TypeError("fluid-dex search factory definition mismatch");
   for (const ref of Object.values(input.capabilityRefs)) input.composition.resolveCapability(input.familyDefinitionHash, ref);
   const actionOwnerRef = assertHash(input.actionOwnerRefs.action, "fluid-dex action owner ref");
-  input.composition.resolveActionOwner(input.familyDefinitionHash, input.actionOwnerRefs.action);
+  const actionPort = resolvedActionPort(input.composition.resolveActionOwner(input.familyDefinitionHash, input.actionOwnerRefs.action));
 
   const readState: FamilySearchAdapterV1["readState"] = async request => {
     try {
@@ -299,18 +317,21 @@ const factory: FamilySearchAdapterFactoryV1 = input => {
         return unavailable("state", "swap-in-simulation-unavailable", { requestId: quotePhysical.requestId, error: String(error) });
       }
       let quoteReturnDataHex: string;
+      let quoteRpcErrorCode: number;
       try {
-        quoteReturnDataHex = returned(quoteResult, quotePhysical.requestId, ctx.source, "fluid-dex.swapIn.returnDataHex");
+        const quoteRevert = declaredQuoteRevert(quoteResult, quotePhysical.requestId, ctx.source, "fluid-dex.swapIn.revertDataHex");
+        quoteReturnDataHex = quoteRevert.dataHex;
+        quoteRpcErrorCode = quoteRevert.rpcErrorCode;
       } catch (error) {
         return unavailable("state", "swap-in-simulation-unavailable", { requestId: quotePhysical.requestId, error: String(error) });
       }
-      const observedAmountOut = decodeUint256(quoteReturnDataHex, "fluid-dex.swapIn.returnDataHex");
+      const observedAmountOut = decodeFluidDexSwapResultRevert(quoteReturnDataHex, "fluid-dex.swapIn.revertDataHex");
       if (observedAmountOut === 0n) return unavailable("state", "swap-in-zero-output", { requestId: quotePhysical.requestId });
       await request.currentSource.assertCurrent();
       const read: FluidDexStateReadFactsV1 = Object.freeze({ cutoff: ctx.source as FluidDexStateReadFactsV1["cutoff"], instanceKey: ctx.identity.instanceKey, reserveIn: ctx.amount.amountIn, reserveOut: observedAmountOut.toString(10) });
       const materialized = materializeFluidDex({ identity: ctx.identity, read });
       if (materialized.status !== "verified") return unavailable("state", `state-${materialized.reasonCode}`, { instanceKey: ctx.identity.instanceKey });
-      const payload: StatePayload = Object.freeze({ kind: "fluid-dex-state-read", version: 1, cutoff: ctx.source, routeBindingHash: ctx.routeBindingHash, amountHash: ctx.amountHash, instanceKey: ctx.identity.instanceKey, constantsReturnDataHex, quoteReturnDataHex, read, requestIds: Object.freeze([constantsPhysical.requestId, quotePhysical.requestId]) });
+      const payload: StatePayload = Object.freeze({ kind: "fluid-dex-state-read", version: 2, cutoff: ctx.source, routeBindingHash: ctx.routeBindingHash, amountHash: ctx.amountHash, instanceKey: ctx.identity.instanceKey, constantsReturnDataHex, quoteCompletion: "reverted-as-declared", quoteRpcErrorCode, quoteReturnDataHex, read, requestIds: Object.freeze([constantsPhysical.requestId, quotePhysical.requestId]) });
       return Object.freeze({ kind: "verified" as const, artifact: stateArtifact(ctx, payload) });
     } catch (error) {
       return invalid("state", error);
@@ -347,7 +368,7 @@ const factory: FamilySearchAdapterFactoryV1 = input => {
       const ctx = context(request);
       if (request.exact.kind !== "exact" || request.exact.status !== "verified") return unavailable("action", "exact-unavailable", request.exact);
       const decoded = validateExact(ctx, request.exact);
-      return Object.freeze({ kind: "verified" as const, artifact: actionArtifact(ctx, request.exact, decoded, actionOwnerRef) });
+      return Object.freeze({ kind: "verified" as const, artifact: actionArtifact(ctx, request.exact, decoded, actionOwnerRef, actionPort) });
     } catch (error) {
       return invalid("action", error);
     }

@@ -1,16 +1,23 @@
 import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import { nativeAssetReferenceV1 } from "../../asset-ref/src/index.ts";
-import type { EconomicSafetyFinalizationInputV1 } from "../../economics-safety/src/index.ts";
+import type {
+  EconomicSafetyEvidenceAuthorityExpectationV1,
+  EconomicSafetyFinalizationInputV1,
+} from "../../economics-safety/src/index.ts";
 import { issueEconomicSafetyFinalizationServiceV1 } from "../../economics-safety/src/internal/owner.ts";
 import { ECONOMIC_SAFETY_REVM_OBSERVATION_SCHEMA_REF_V1 } from "../../../specs/economic-safety-profile/src/index.ts";
 
 export function createContractEconomicSafetyService(
   releaseProvenanceHash: Hash,
   hash: (value: string) => Hash,
+  authority?: EconomicSafetyEvidenceAuthorityExpectationV1,
 ) {
+  if (authority !== undefined && authority.releaseProvenanceHash !== releaseProvenanceHash) {
+    throw new TypeError("test economic-safety authority release mismatch");
+  }
   return issueEconomicSafetyFinalizationServiceV1({
-    authorityRoot: hash("economic-safety-authority"),
-    implementationHash: hash("economic-safety-implementation"),
+    authorityRoot: authority?.authorityRoot ?? hash("economic-safety-authority"),
+    implementationHash: authority?.implementationHash ?? hash("economic-safety-implementation"),
     releaseProvenanceHash,
     evaluator: Object.freeze({
       async evaluate(input: EconomicSafetyFinalizationInputV1) {

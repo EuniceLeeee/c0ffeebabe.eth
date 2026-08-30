@@ -11,7 +11,6 @@ import {
   type Hash,
 } from "../../../canonical-codec/src/index.ts";
 import type { DurableAppendReceipt } from "../../../durable-store/src/index.ts";
-import type { ReadyStage12EvidenceSnapshotV1 } from "../../../checkpoint/src/index.ts";
 import type {
   RuntimeReleasePerformanceHeadFactsV1,
 } from "../../../runtime-release-authority/src/performance-runtime-consumer.ts";
@@ -24,6 +23,7 @@ import { hashProcessLogAnchor } from "../../../../specs/performance/src/index.ts
 import {
   readSearcherProductionSixStepCompleteAppendMaterialV1,
   type SearcherProductionSixStepCompleteAppendCapabilityV1,
+  type SearcherProductionSelectedStage12FactsV1,
 } from "./complete-append-owner.ts";
 
 const PERFORMANCE_NAMESPACE = "searcher-production-evidence/performance/v1";
@@ -82,7 +82,7 @@ export interface SearcherProductionSixStepProcessEvidenceV1 {
   readonly currentSource: RuntimeReleaseSixStepTerminalBindingV1["currentSource"];
   readonly programHash: Hash;
   readonly finalSimulationReceiptHash: Hash;
-  readonly stage12: ReadyStage12EvidenceSnapshotV1;
+  readonly stage12: SearcherProductionSelectedStage12FactsV1;
   readonly stage12Root: Hash;
   readonly sixStepLineageRoot: Hash;
   readonly runtimeFacts: RuntimeReleasePerformanceHeadFactsV1;

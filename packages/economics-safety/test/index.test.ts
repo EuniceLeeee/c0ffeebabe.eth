@@ -244,6 +244,7 @@ test("qualified evaluator rejects an objective absent from the release policy se
     valuationOwnerRef: h("valuation-owner"),
   })], actionOwners, [Object.freeze({
     ownerRef: h("valuation-owner"),
+    supportedAssetRefs: Object.freeze([profitAsset.assetRef]),
     implementationHash: h("valuation-owner-implementation"),
     factSchemaRef: h("valuation-fact-schema"),
     implementationClosureRoot: h("valuation-closure"),
@@ -346,6 +347,7 @@ test("qualified evaluator independently closes a real UniV2 action loop and exac
   const qualifiedValuationOwnerSetRoot = h("qualified-valuation-set");
   const valuationOwner = Object.freeze({
     ownerRef: valuationOwnerRef,
+    supportedAssetRefs: Object.freeze([profitAsset.assetRef]),
     implementationHash: valuationImplementationHash,
     factSchemaRef: valuationFactSchemaRef,
     implementationClosureRoot: valuationImplementationClosureRoot,

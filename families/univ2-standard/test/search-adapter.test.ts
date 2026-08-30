@@ -130,6 +130,7 @@ const amount: FamilySearchAmountEnvelopeV1 = Object.freeze({
   amountIn: "100000",
   recipient,
 });
+const execution = Object.freeze({ transactionOrigin: address("7"), executorAddress: amount.recipient });
 const objectivePayload = Object.freeze({ kind: "search-objective", numeraire: amount.outputAssetRef });
 const objective = Object.freeze({
   objectiveRef: hashDomain("aloha/search-objective/v1", objectivePayload),
@@ -162,6 +163,7 @@ function input(readPort: FamilySearchSourceReadPortV1 = readPortFactory(false)) 
     currentSource: sourceSession(),
     objective,
     amount,
+    execution,
     readPort,
   };
 }

@@ -480,6 +480,16 @@ test("runtime-release Strategy service is generated, release-bound, and rotation
   assert.doesNotThrow(() => assertIssuedRuntimeReleaseStrategyRuntimeService(service));
   const metadata = service.readMetadata();
   assert.equal(metadata.releaseProvenanceHash, runtimeReleaseBindingProvenanceHash(value.binding));
+  const evidenceExpectation = service.readEvidenceExpectation();
+  assert.equal(evidenceExpectation.releaseProvenanceHash, metadata.releaseProvenanceHash);
+  assert.equal(evidenceExpectation.definitionCatalogRoot, metadata.definitionCatalogRoot);
+  assert.equal(evidenceExpectation.strategyCompositionRoot, metadata.compositionRoot);
+  assert.equal(evidenceExpectation.entries.length, 1);
+  assert.equal(evidenceExpectation.entries[0]!.catalogEntry.strategyId, ROUTE_CYCLE_STRATEGY.strategyId);
+  assert.deepEqual(
+    evidenceExpectation.entries[0]!.catalogEntry.planningTemplate,
+    ROUTE_CYCLE_STRATEGY.planningTemplate,
+  );
   const request = strategyPlanningFixture(value);
   const planning = service.issuePlanningProblem(request);
   assert.equal(planning.strategyCompositionRoot, metadata.compositionRoot);
@@ -498,6 +508,7 @@ test("runtime-release Strategy service is generated, release-bound, and rotation
   }), /Graph mismatch/);
   value.authority.rotate(value.binding);
   assert.throws(() => service.readMetadata(), /stale|rotation/);
+  assert.throws(() => service.readEvidenceExpectation(), /stale|rotation/);
   assert.throws(() => service.issuePlanningProblem(request), /stale|rotation/);
   value.authority.revoke();
   assert.throws(() => service.readMetadata(), /revoked/);

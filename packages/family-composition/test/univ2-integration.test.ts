@@ -44,7 +44,10 @@ import {
 } from "../../attestation/test/authority-fixture.ts";
 import { generatedEconomicValuationOwnerQualificationSetFixtureV1 } from "../../../specs/release-authority/test/generated-valuation-owner-qualification-fixture.ts";
 import { generatedEconomicSafetyActionOwnerQualificationFixtureV1 } from "../../../specs/release-authority/test/generated-action-owner-qualification-fixture.ts";
-import { createCandidatePartitionProofIssuerFixture } from "../../checkpoint/test/candidate-partition-authority-fixture.ts";
+import {
+  candidatePartitionProofPublicKeyHexFixture,
+  createCandidatePartitionProofIssuerFixture,
+} from "../../checkpoint/test/candidate-partition-authority-fixture.ts";
 import {
   CheckpointStore,
   type CheckpointSixStepArtifactPortV1,
@@ -147,9 +150,27 @@ import {
   issueSearcherRuntimeApplicationOwnerV1,
   type SearcherRuntimeApplicationV1,
 } from "../../../apps/searcher-runtime/src/internal/application-owner.ts";
-import { issueProductionFullFamilyObservationPortV1 } from "../../full-family-observation-port/src/internal/owner.ts";
-import { issueProductionSixStepObservationPortV1 } from "../../six-step-observation-port/src/internal/owner.ts";
-import { issueProductionTerminalPhaseObservationPortV1 } from "../../terminal-phase-observation-port/src/internal/owner.ts";
+import {
+  issueProductionFullFamilyCollectorPortV1,
+  readProductionFullFamilyCollectorResultV1,
+} from "../../../acceptance/collectors/src/production-full-family-port.ts";
+import {
+  issueProductionSixStepCollectorPortV1,
+  readProductionSixStepCollectorResultV1,
+} from "../../../acceptance/collectors/src/production-six-step-port.ts";
+import {
+  issueProductionTerminalPhaseCollectorPortV1,
+  readProductionTerminalPhaseCollectorResultV1,
+} from "../../../acceptance/collectors/src/production-terminal-phase-port.ts";
+import {
+  ProductionTerminalPhaseLocatorIndexV1,
+} from "../../../acceptance/collectors/src/terminal-phase-locator-index.ts";
+import {
+  readReleaseOwnedObserverStoreV1,
+} from "../../../acceptance/collectors/src/internal/release-owned-observer-store.ts";
+import {
+  encodeFullFamilyCandidateProofVerifierBinding,
+} from "../../../specs/full-family-facts/src/index.ts";
 import {
   issueSearcherProductionEvidenceOwnerV1,
   SEARCHER_PRODUCTION_EVIDENCE_NAMESPACES,
@@ -343,8 +364,8 @@ const producerHead = Object.freeze({
 });
 const pool = address("1");
 const poolB = address("5");
-const token0 = address("2");
-const token1 = address("3");
+const token0 = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+const token1 = address("d");
 const factory = address("f");
 const executorAddress = address("e");
 const rawEvidenceBytes = encodeEvmLogObservation(Object.freeze({
@@ -1991,6 +2012,7 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
   const evidencePath = join(evidenceDirectory, "production-evidence.sqlite");
   const evidence = issueSearcherProductionEvidenceOwnerV1({
     databasePath: evidencePath,
+    economicSafety: services.economicSafety,
     release: {
       bindingId: services.release.bindingId,
       releaseProvenanceHash: services.release.releaseProvenanceHash,
@@ -2020,15 +2042,45 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
       dryRun: true,
     },
   });
+  const observerStoreCapability = services.observerStore.issueObserverStore({
+    directory: join(evidenceDirectory, "observer-store/content"),
+  });
+  const observerSink = readReleaseOwnedObserverStoreV1(observerStoreCapability).sink;
+  const terminalLocatorIndex = new ProductionTerminalPhaseLocatorIndexV1({
+    directory: join(evidenceDirectory, "observer-store/terminal-locators"),
+    sink: observerSink,
+  });
+  const fullFamilyObservation = issueProductionFullFamilyCollectorPortV1({
+    releaseIntentCanonicalBytes: encodeCanonicalBytes(currentCatalogInput(repositoryRoot).releaseIntent),
+    familyCatalogSourceBytes: new Uint8Array(readFileSync(resolve(repositoryRoot, "generated/family-catalog/index.ts"))),
+    runtimeCompositionSourceBytes: new Uint8Array(readFileSync(resolve(repositoryRoot, "generated/runtime-composition/index.ts"))),
+    strategyCatalogSourceBytes: new Uint8Array(readFileSync(resolve(repositoryRoot, "generated/strategy-catalog/index.ts"))),
+    candidateProofVerifierBindingBytes: encodeFullFamilyCandidateProofVerifierBinding({
+      schemaVersion: 1,
+      kind: "aloha.full-family-candidate-proof-verifier-binding",
+      runtimeBindingId: structural.binding.bindingId,
+      releaseProvenanceHash: runtimeReleaseBindingProvenanceHash(structural.binding),
+      releaseAuthorityRoot: structural.binding.releaseAuthorityRoot,
+      candidateReleaseCommit: structural.binding.candidateReleaseCommit,
+      proofKeyId: structural.binding.candidatePartitionProofIssuerKeyId,
+      proofPublicKeyHex: candidatePartitionProofPublicKeyHexFixture(),
+    }),
+    sink: observerSink,
+  });
+  const sixStepObservation = issueProductionSixStepCollectorPortV1(observerSink);
+  const terminalPhaseObservation = issueProductionTerminalPhaseCollectorPortV1({
+    sink: observerSink,
+    locatorIndex: terminalLocatorIndex,
+  });
   const applicationOwner = issueSearcherRuntimeApplicationOwnerV1({
     strategyRuntime,
     performanceRuntime: services.performance,
     fullGraphCoarseSweep: services.fullGraphCoarseSweep,
     fullFamilyTerminalBinding: services.fullFamilyTerminalBinding,
     sixStepTerminalBinding: services.sixStepTerminalBinding,
-    fullFamilyObservation: issueProductionFullFamilyObservationPortV1(async () => Object.freeze({})),
-    sixStepObservation: issueProductionSixStepObservationPortV1(async () => Object.freeze({})),
-    terminalPhaseObservation: issueProductionTerminalPhaseObservationPortV1(async () => Object.freeze({})),
+    fullFamilyObservation,
+    sixStepObservation,
+    terminalPhaseObservation,
     economicSafety: services.economicSafety,
     release: {
       bindingId: services.release.bindingId,
@@ -2038,6 +2090,7 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
     source: runtimeSource,
     coreInput: {
       amountSeed: { amountIn: "100", recipient: executor },
+      execution: { transactionOrigin: caller, executorAddress: executor },
     },
     finalSimulationFactory: issueQualifiedFinalSimulationPortFactoryV1({
       async issue(currentSource, currentSourceCapability) {
@@ -2108,6 +2161,7 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
     }
     completedHeadCount = index + 1;
     if (index === 0) {
+      evidence.replay();
       successfulHeadRequestCount = rpcRequests.length;
       structural.rpc.setRuntimeReserves(neutralReserves);
     }
@@ -2117,10 +2171,22 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
   const finalHeadFacts = terminalEvidence.facts === null ? null : readIssuedProducerHeadFactsCapabilityV1(terminalEvidence.facts);
   assert.equal(terminalEvidence.terminal.status, "completed", JSON.stringify(terminalEvidence.terminal));
   assert.equal(finalHeadFacts?.complete, true);
-  assert.equal(evidence.replay().producerTerminalCount, "100");
-  assert.equal(evidence.replay().performanceFactsCompleteCount, "100");
-
+  const performanceReplay = evidence.replay();
   const rawPerformanceObservation = observeProductionPerformanceDatabaseV1(evidencePath);
+  const ordinalByAdmissionId = new Map(rawPerformanceObservation.events
+    .filter(event => event.eventType === "eligible-head" || event.eventType === "orphan-replacement")
+    .map(event => [event.payload.admissionId, event.payload.ordinal]));
+  const incompletePerformanceEvents = rawPerformanceObservation.events
+    .filter(event => event.eventType === "performance-facts-incomplete")
+    .map(event => ({
+      ordinal: ordinalByAdmissionId.get(event.payload.admissionId) ?? "unknown",
+      admissionId: event.payload.admissionId,
+      terminalId: event.payload.terminalId,
+      reasons: event.payload.missingFactReasons,
+    }));
+  assert.equal(performanceReplay.producerTerminalCount, "100");
+  assert.equal(performanceReplay.performanceFactsCompleteCount, "100", `incomplete performance events: ${JSON.stringify(incompletePerformanceEvents)}`);
+
   assert.equal(rawPerformanceObservation.status, "raw-complete", JSON.stringify(rawPerformanceObservation.reasons));
   assert.equal(rawPerformanceObservation.databaseSha256After, rawPerformanceObservation.databaseSha256Before);
   assert.equal(rawPerformanceObservation.storageSetRootAfter, rawPerformanceObservation.storageSetRootBefore);
@@ -2244,13 +2310,15 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
     const observed = observeProductionPerformanceDatabaseV1(mutatedPath);
     assert.equal(observed.status, "invalid", mutation.id);
   }
+  if (previousHead === null) throw new TypeError("vertical performance final head is missing");
+  const producerRpcRequests = Object.freeze([...rpcRequests]);
   assert.ok(structural.rpc.canonicalRequests.some(request => request.method === "eth_chainId"));
   assert.ok(structural.rpc.canonicalRequests.some(request => request.method === "eth_getBlockByNumber"));
   assert.ok(structural.rpc.canonicalRequests.some(request => request.method === "eth_getBlockByNumber"
     && (request.params as readonly unknown[])[0] === "pending"
     && (request.params as readonly unknown[])[1] === true));
-  assert.equal(rpcRequests.length, 200, "each of 100 heads must read both distinct graph pools exactly once");
-  for (const [index, request] of rpcRequests.entries()) {
+  assert.equal(producerRpcRequests.length, 200, "each of 100 heads must read both distinct graph pools exactly once");
+  for (const [index, request] of producerRpcRequests.entries()) {
     const params = request.params as readonly Record<string, unknown>[];
     assert.equal(params[1]?.requireCanonical, true);
     const expectedHeadIndex = Math.floor(index / 2);
@@ -2260,9 +2328,36 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
     );
     assert.equal(params[0]?.data, UNIV2_GET_RESERVES_SELECTOR);
   }
-  const rpcTargets = rpcRequests.map(request => String((request.params as readonly Record<string, unknown>[])[0]?.to).toLowerCase());
+  const rpcTargets = producerRpcRequests.map(request => String((request.params as readonly Record<string, unknown>[])[0]?.to).toLowerCase());
   assert.equal(rpcTargets.filter(target => target === poolA).length, 100);
   assert.equal(rpcTargets.filter(target => target === poolTwo).length, 100);
+  await application.run();
+  const sweepRequests = rpcRequests.slice(producerRpcRequests.length);
+  assert.equal(rpcRequests.length, 202, "terminal full-Graph sweep must remain outside the 100-head F5 request denominator");
+  assert.equal(sweepRequests.length, 2, "the two-edge Ready Graph must issue two acceptance-only physical reads");
+  assert.deepEqual(
+    sweepRequests.map(request => String((request.params as readonly Record<string, unknown>[])[0]?.to).toLowerCase()).sort(),
+    [poolA, poolTwo].sort(),
+  );
+  for (const request of sweepRequests) {
+    const params = request.params as readonly Record<string, unknown>[];
+    assert.equal(params[1]?.requireCanonical, true);
+    assert.equal(params[1]?.blockHash, previousHead.hash);
+    assert.equal(params[0]?.data, UNIV2_GET_RESERVES_SELECTOR);
+  }
+  const fullFamilyResult = readProductionFullFamilyCollectorResultV1(application.readFullFamilyObservation());
+  assert.equal(fullFamilyResult.kind, "aloha.production-full-family-observation-v1", JSON.stringify(fullFamilyResult.missing));
+  assert.deepEqual(fullFamilyResult.missing, []);
+  const sixStepResult = readProductionSixStepCollectorResultV1(application.readSixStepObservation());
+  assert.equal(sixStepResult.status, "observed");
+  const terminalResult = readProductionTerminalPhaseCollectorResultV1(application.readTerminalPhaseObservation());
+  assert.equal(terminalResult.manifest.sixStep.status, "observed");
+  assert.equal(terminalResult.manifest.finalDurableWindowId, fullFamilyResult.finalDurableWindowId);
+  const durableTerminal = await terminalLocatorIndex.read(terminalResult.manifest.finalDurableWindowId);
+  assert.equal(durableTerminal.index.indexRoot, terminalResult.locatorIndexRoot);
+  assert.equal(durableTerminal.manifest.manifestRoot, terminalResult.manifest.manifestRoot);
+  assert.equal(durableTerminal.fullFamilyProjection.status, "observed");
+  assert.equal(durableTerminal.sixStepPhysicalStatus, "observed", durableTerminal.sixStepPhysicalReason ?? undefined);
   if (observedProgram.value === null) throw new Error("final simulation did not receive an execution program");
   const packed = decodePackedCallProgram(decodeExecutorExecuteCalldata(observedProgram.value.programBytes));
   assert.equal(packed.length, 4);

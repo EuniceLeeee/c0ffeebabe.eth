@@ -45,6 +45,7 @@ export interface FullGraphCoarseSweepBindingV1 {
   readonly currentSourceSessionId: Hash;
   readonly actualCurrentSource: CanonicalCutoffV1;
   readonly amountSeedHash: Hash;
+  readonly executionContextHash: Hash;
   readonly objectiveRef: Hash;
   readonly bindingRoot: Hash;
 }
@@ -465,11 +466,11 @@ function exactBinding(value: FullGraphCoarseSweepBindingV1): void {
     "runtimeBindingId", "releaseProvenanceHash", "candidateReleaseCommit", "releaseMembershipRoot",
     "definitionCatalogRoot", "familyCompositionRoot", "generationId", "readyRecordHash", "graphRoot",
     "readyCutoff", "recentObservationRange", "currentSourceSessionId", "actualCurrentSource",
-    "amountSeedHash", "objectiveRef", "bindingRoot",
+    "amountSeedHash", "executionContextHash", "objectiveRef", "bindingRoot",
   ], "fullGraphSweepManifest.binding");
   for (const key of [
     "runtimeBindingId", "releaseProvenanceHash", "releaseMembershipRoot", "definitionCatalogRoot",
-    "familyCompositionRoot", "readyRecordHash", "graphRoot", "currentSourceSessionId", "amountSeedHash",
+    "familyCompositionRoot", "readyRecordHash", "graphRoot", "currentSourceSessionId", "amountSeedHash", "executionContextHash",
     "objectiveRef", "bindingRoot",
   ] as const) assertHash(value[key], `fullGraphSweepManifest.binding.${key}`);
   if (!/^[0-9a-f]{40}$/.test(value.candidateReleaseCommit)) throw new TypeError("fullGraphSweepManifest binding candidate commit is invalid");

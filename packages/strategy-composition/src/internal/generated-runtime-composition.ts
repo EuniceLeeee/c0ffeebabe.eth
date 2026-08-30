@@ -33,6 +33,7 @@ export interface GeneratedStrategyRuntimeFactoryMetadataV1 {
   readonly proposedCapabilitySetRoot: Hash;
   readonly descriptorRoot: Hash;
   readonly strategies: readonly Readonly<{
+    readonly catalogEntry: GeneratedStrategyRuntimeDescriptorV1["strategies"][number]["catalogEntry"];
     readonly strategyId: string;
     readonly strategyDefinitionHash: Hash;
     readonly issuerModulePath: string;
@@ -179,6 +180,7 @@ export function createGeneratedStrategyRuntimeFactory(
     proposedCapabilitySetRoot: descriptor.proposedCapabilitySetRoot,
     descriptorRoot: descriptor.descriptorRoot,
     strategies: Object.freeze(descriptor.strategies.map(entry => Object.freeze({
+      catalogEntry: entry.catalogEntry,
       strategyId: entry.catalogEntry.strategyId,
       strategyDefinitionHash: entry.catalogEntry.strategyDefinitionHash,
       issuerModulePath: entry.issuerModulePath,

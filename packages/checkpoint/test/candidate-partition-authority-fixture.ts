@@ -45,6 +45,15 @@ const PRIVATE_KEY = createPrivateKey({
 });
 const PUBLIC_KEY = createPublicKey(PRIVATE_KEY);
 
+/** Test-only public half of the external candidate-partition proof issuer.
+ * Consumers can construct the exact verifier artifact without copying or
+ * learning the fixture private key. */
+export function candidatePartitionProofPublicKeyHexFixture(): `0x${string}` {
+  const spki = Buffer.from(PUBLIC_KEY.export({ format: "der", type: "spki" }));
+  if (spki.byteLength !== 44) throw new TypeError("candidate partition fixture public key encoding is invalid");
+  return `0x${spki.subarray(spki.byteLength - 32).toString("hex")}`;
+}
+
 function signHex(bytes: Uint8Array): `0x${string}` {
   const signature = signSignature(null, bytes, PRIVATE_KEY);
   return `0x${Buffer.from(signature).toString("hex")}` as `0x${string}`;

@@ -11,6 +11,7 @@ import type { FrozenProgramEnvelopeV1 } from "../../../packages/request-program/
 import { sealRecentObservation } from "../../../packages/observation/src/index.ts";
 import {
   CURVE_METAREGISTRY,
+  CURVE_UNDERLYING_SWAP_ACTION_PORT,
   CURVE_UNDERLYING_FAMILY_AUTHORING_HASH,
   CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME,
   CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM,
@@ -113,7 +114,7 @@ async function assertSearchAcceptsRuntimePublication(publicationValue: Record<st
     familyDefinitionHash: publication.familyDefinitionHash,
     capabilityRefs: {},
     actionOwnerRefs: { swap: asOwnerRef(h("search-action-owner")) },
-    composition: { resolveCapability: () => ({}), resolveActionOwner: () => ({}) },
+    composition: { resolveCapability: () => ({}), resolveActionOwner: () => CURVE_UNDERLYING_SWAP_ACTION_PORT },
   });
   const objectivePayload = Object.freeze({ kind: "runtime-publication-search-seam" });
   const result = await adapter.readState({
@@ -138,6 +139,7 @@ async function assertSearchAcceptsRuntimePublication(publicationValue: Record<st
       amountIn: "1",
       recipient: address("8"),
     },
+    execution: { transactionOrigin: address("7"), executorAddress: address("8") },
     readPort: { read({ request }) { return { kind: "unavailable", requestId: request.requestId, source: request.source, reasonCode: "runtime-publication-seam-stop" }; } },
   });
   assert.equal(result.kind, "unavailable", JSON.stringify(result));

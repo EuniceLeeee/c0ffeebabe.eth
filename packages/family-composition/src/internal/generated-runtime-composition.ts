@@ -129,6 +129,13 @@ interface GeneratedFamilyPhysicalLifecycleFactoryBindingV1 {
   readonly factory: FamilyPhysicalLifecycleAdapterFactoryV1;
 }
 
+export interface GeneratedFamilyRuntimeAdapterFactoryBindingV1 {
+  readonly familyId: string;
+  readonly familyDefinitionHash: Hash;
+  readonly descriptor: GeneratedFamilyRuntimeDescriptorV1["families"][number]["runtimeAdapters"][number];
+  readonly actualFactory: GeneratedFamilyRuntimeAdapterImportV1["factory"];
+}
+
 export interface GeneratedFamilyPhysicalLifecycleBindingV1 {
   readonly familyId: string;
   readonly familyDefinitionHash: Hash;
@@ -144,6 +151,10 @@ export interface GeneratedFamilyPhysicalLifecycleRouteV1 {
 const generatedFactoryPhysicalAdapters = new WeakMap<
   object,
   readonly Readonly<GeneratedFamilyPhysicalLifecycleFactoryBindingV1>[]
+>();
+const generatedFactoryRuntimeAdapters = new WeakMap<
+  object,
+  readonly Readonly<GeneratedFamilyRuntimeAdapterFactoryBindingV1>[]
 >();
 const generatedFactorySourcePlans = new WeakMap<object, readonly Readonly<{
   readonly familyId: string;
@@ -174,6 +185,16 @@ export function readGeneratedFamilyRuntimeFactoryMetadata(
   const metadata = generatedFactoryMetadata.get(value);
   if (metadata === undefined) throw new TypeError("generated Family runtime factory metadata is unavailable");
   return metadata;
+}
+
+/** Read-only exact named-import identities closed over by generated output. */
+export function readGeneratedFamilyRuntimeAdapterFactories(
+  value: unknown,
+): readonly Readonly<GeneratedFamilyRuntimeAdapterFactoryBindingV1>[] {
+  assertGeneratedFamilyRuntimeFactory(value);
+  const bindings = generatedFactoryRuntimeAdapters.get(value);
+  if (bindings === undefined) throw new TypeError("generated Family runtime adapter factories are unavailable");
+  return bindings;
 }
 
 /** Exact generated physical denominator.  It is read only by the deployment
@@ -378,6 +399,10 @@ export function issueGeneratedFamilyRuntimeAuthorityCapability(
 export function createGeneratedFamilyRuntimeFactory(
   assembly: GeneratedFamilyRuntimeAssemblyV1,
 ): GeneratedFamilyRuntimeFactoryV1 {
+  if (!Array.isArray(assembly.runtimeAdapters)
+    || assembly.runtimeAdapters.length !== assembly.descriptor.families.length) {
+    throw new TypeError("generated Family runtime adapter imports are incomplete");
+  }
   if (!Array.isArray(assembly.sourcePlans) || assembly.sourcePlans.length !== assembly.descriptor.families.length) {
     throw new TypeError("generated Family source plan imports are incomplete");
   }
@@ -434,8 +459,36 @@ export function createGeneratedFamilyRuntimeFactory(
       }));
     }
   }
+  const runtimeAdapterBindings: Array<Readonly<GeneratedFamilyRuntimeAdapterFactoryBindingV1>> = [];
   const physicalBindings: Array<Readonly<GeneratedFamilyPhysicalLifecycleFactoryBindingV1>> = [];
   for (const [familyIndex, family] of assembly.descriptor.families.entries()) {
+    const suppliedAdapters = assembly.runtimeAdapters[familyIndex];
+    if (!Array.isArray(suppliedAdapters) || suppliedAdapters.length !== family.runtimeAdapters.length) {
+      throw new TypeError(`generated Family runtime adapter imports are incomplete ${family.entry.familyId}`);
+    }
+    for (const [adapterIndex, descriptor] of family.runtimeAdapters.entries()) {
+      const supplied = suppliedAdapters[adapterIndex];
+      if (supplied === null || typeof supplied !== "object" || typeof supplied.factory !== "function") {
+        throw new TypeError(`generated Family runtime adapter import descriptor is missing ${family.entry.familyId}:${descriptor.role}`);
+      }
+      if (supplied.modulePath !== descriptor.modulePath
+        || supplied.exportName !== descriptor.exportName
+        || supplied.closureRoot !== descriptor.closureRoot
+        || supplied.leafDigest !== descriptor.leafDigest) {
+        throw new TypeError(`generated Family runtime adapter import descriptor mismatch ${family.entry.familyId}:${descriptor.role}`);
+      }
+      runtimeAdapterBindings.push(Object.freeze({
+        familyId: family.entry.familyId,
+        familyDefinitionHash: family.entry.familyDefinitionHash,
+        descriptor: Object.freeze({
+          ...descriptor,
+          capabilityRefs: Object.freeze(Object.fromEntries(Object.entries(descriptor.capabilityRefs)
+            .map(([role, ref]) => [role, Object.freeze({ ...ref })]))),
+          actionOwnerRefs: Object.freeze({ ...descriptor.actionOwnerRefs }),
+        }),
+        actualFactory: supplied.factory,
+      }));
+    }
     const descriptors = family.runtimeAdapters
       .map((descriptor, index) => Object.freeze({ descriptor, index }))
       .filter(value => value.descriptor.role === FAMILY_PHYSICAL_LIFECYCLE_ADAPTER_ROLE_V1);
@@ -443,26 +496,14 @@ export function createGeneratedFamilyRuntimeFactory(
       throw new TypeError(`generated Family physical lifecycle adapter is duplicated ${family.entry.familyId}`);
     }
     if (descriptors.length === 0) continue;
-    const { descriptor, index } = descriptors[0]!;
+    const { descriptor } = descriptors[0]!;
     if (Object.keys(descriptor.capabilityRefs).length !== 0 || Object.keys(descriptor.actionOwnerRefs).length !== 0) {
       throw new TypeError(`generated Family physical lifecycle adapter cannot receive central capabilities ${family.entry.familyId}`);
     }
-    const supplied = assembly.runtimeAdapters[familyIndex]?.[index];
-    const importDescriptor = typeof supplied === "object" && supplied !== null
-      ? supplied as Partial<GeneratedFamilyRuntimeAdapterImportV1>
-      : undefined;
-    const factory = typeof supplied === "function" ? supplied : importDescriptor?.factory;
-    if (typeof factory !== "function") {
-      throw new TypeError(`generated Family physical lifecycle adapter import is missing ${family.entry.familyId}`);
-    }
-    if (importDescriptor !== undefined) {
-      if (importDescriptor.modulePath !== descriptor.modulePath
-        || importDescriptor.exportName !== descriptor.exportName
-        || importDescriptor.closureRoot !== descriptor.closureRoot
-        || importDescriptor.leafDigest !== descriptor.leafDigest) {
-        throw new TypeError(`generated Family physical lifecycle adapter import descriptor mismatch ${family.entry.familyId}`);
-      }
-    }
+    const factory = runtimeAdapterBindings.find(binding =>
+      binding.familyDefinitionHash === family.entry.familyDefinitionHash
+      && binding.descriptor.role === descriptor.role)?.actualFactory;
+    if (typeof factory !== "function") throw new TypeError(`generated Family physical lifecycle adapter import is missing ${family.entry.familyId}`);
     physicalBindings.push(Object.freeze({
       familyId: family.entry.familyId,
       familyDefinitionHash: family.entry.familyDefinitionHash,
@@ -488,6 +529,7 @@ export function createGeneratedFamilyRuntimeFactory(
     return composition;
   };
   generatedFactories.add(factory);
+  generatedFactoryRuntimeAdapters.set(factory, Object.freeze(runtimeAdapterBindings));
   generatedFactoryPhysicalAdapters.set(factory, Object.freeze(physicalBindings));
   generatedFactorySourcePlans.set(factory, Object.freeze(sourcePlanBindings));
   generatedFactoryMetadata.set(factory, Object.freeze({

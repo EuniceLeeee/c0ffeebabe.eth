@@ -36,6 +36,15 @@ export interface RuntimeReleaseStrategyRuntimeMetadataV1 {
   readonly compositionRoot: Hash;
 }
 
+export interface RuntimeReleaseStrategyEvidenceExpectationV1 {
+  readonly releaseProvenanceHash: Hash;
+  readonly definitionCatalogRoot: Hash;
+  readonly strategyCatalogRoot: Hash;
+  readonly strategyCompositionRoot: Hash;
+  readonly strategyIssuerClosureRoot: Hash;
+  readonly entries: ReturnType<typeof readGeneratedStrategyRuntimeFactoryMetadata>["strategies"];
+}
+
 export interface RuntimeReleaseStrategyPlanningRequestV1 {
   readonly trigger: ProducerBoundTriggerV1;
   readonly binding: StrategyGraphBindingV1;
@@ -55,6 +64,7 @@ export interface RuntimeReleaseStrategyPlanningResultV1 {
 
 export interface RuntimeReleaseStrategyRuntimeServiceV1 {
   readonly readMetadata: () => RuntimeReleaseStrategyRuntimeMetadataV1;
+  readonly readEvidenceExpectation: () => RuntimeReleaseStrategyEvidenceExpectationV1;
   readonly issuePlanningProblem: (
     input: RuntimeReleaseStrategyPlanningRequestV1,
   ) => RuntimeReleaseStrategyPlanningResultV1;
@@ -107,10 +117,22 @@ export function issueRuntimeReleaseStrategyRuntimeService(
     releaseProvenanceHash: composition.releaseProvenanceHash,
     compositionRoot: composition.compositionRoot,
   });
+  const evidenceExpectation: RuntimeReleaseStrategyEvidenceExpectationV1 = Object.freeze({
+    releaseProvenanceHash: composition.releaseProvenanceHash,
+    definitionCatalogRoot: composition.definitionCatalogRoot,
+    strategyCatalogRoot: factoryMetadata.strategyCatalogRoot,
+    strategyCompositionRoot: composition.compositionRoot,
+    strategyIssuerClosureRoot: composition.issuerClosureRoot,
+    entries: factoryMetadata.strategies,
+  });
   const service: RuntimeReleaseStrategyRuntimeServiceV1 = Object.freeze({
     readMetadata() {
       assertCurrent();
       return runtimeMetadata;
+    },
+    readEvidenceExpectation() {
+      assertCurrent();
+      return evidenceExpectation;
     },
     issuePlanningProblem(input: RuntimeReleaseStrategyPlanningRequestV1) {
       assertCurrent();

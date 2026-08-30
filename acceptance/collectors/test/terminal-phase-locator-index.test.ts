@@ -249,6 +249,7 @@ function fullGraphSweepFixture(finalDurableWindowId: Hash) {
     currentSourceSessionId: h(`source-session:${finalDurableWindowId}`),
     actualCurrentSource: Object.freeze({ chainId: "1", number: "100", hash: h("current-head"), stateRoot: h("current-state") }),
     amountSeedHash: h(`amount-seed:${finalDurableWindowId}`),
+    executionContextHash: h(`execution-context:${finalDurableWindowId}`),
     objectiveRef: h(`objective:${finalDurableWindowId}`),
   });
   const binding = Object.freeze({
@@ -901,6 +902,7 @@ test("selected process artifact remains exact in the publishing process and miss
     })]);
     const valuationOwners = Object.freeze([Object.freeze({
       ownerRef: h("valuation-owner"),
+      supportedAssetRefs: Object.freeze([objectiveTemplates[0]!.profitAsset.assetRef]),
       implementationHash: h("valuation-owner-implementation"),
       factSchemaRef: h("valuation-owner-fact-schema"),
       implementationClosureRoot: h("valuation-owner-closure"),

@@ -66,7 +66,13 @@ export interface HistoricalRpcReplayManifestEntryV1 {
 export interface HistoricalRpcReplayManifestV1 {
   readonly schemaVersion: 1;
   readonly kind: typeof HISTORICAL_RPC_REPLAY_MANIFEST_KIND;
+  readonly advisoryOnly: true;
   readonly transportFactsOnly: true;
+  readonly chainStateQualified: false;
+  readonly transportOrigin:
+    | "caller-materialized/untrusted-caller-material"
+    | "reader-port-observed/untrusted-reader-port";
+  readonly fenceClaimLevel: "before-after-observation-only-a-b-a-not-excluded";
   readonly sourceCutoff: HistoricalRpcSourceCutoffV1;
   readonly entries: readonly HistoricalRpcReplayManifestEntryV1[];
   readonly descriptorSetRoot: Hash;
@@ -203,11 +209,18 @@ function decodeCutoffBinding(
     if (method !== "eth_chainId" && method !== "net_version") {
       descriptorFail(`RPC method ${method} is not source-invariant`);
     }
+    if (params.length !== 0) descriptorFail(`${method} must not have parameters`);
     return Object.freeze({ kind: "source-invariant", paramIndex: null });
+  }
+  if (method !== "eth_call") {
+    descriptorFail(`RPC method ${method} has no compiled historical cutoff binding`);
   }
   const indexText = unsignedDecimal(object.paramIndex, `${path}.paramIndex`);
   const index = Number(indexText);
   if (!Number.isSafeInteger(index) || index >= params.length) descriptorFail("cutoff paramIndex is out of range");
+  if (params.length !== 2 || index !== 1) {
+    descriptorFail("eth_call cutoff must be exact parameter 1 of a two-parameter request");
+  }
   if (object.kind === "block-number-param") {
     if (params[index] !== cutoff.blockNumber) descriptorFail("block-number param does not equal source cutoff");
     return Object.freeze({ kind: "block-number-param", paramIndex: indexText });
@@ -318,7 +331,10 @@ function computeManifestRoot(manifest: Omit<HistoricalRpcReplayManifestV1, "mani
   return hashDomain("aloha/historical-rpc-replay-manifest/v1", manifest);
 }
 
-function buildManifest(captures: readonly HistoricalRpcReplayCaptureV1[]): Readonly<{
+function buildManifest(
+  captures: readonly HistoricalRpcReplayCaptureV1[],
+  transportOrigin: HistoricalRpcReplayManifestV1["transportOrigin"],
+): Readonly<{
   manifest: HistoricalRpcReplayManifestV1;
   objects: ReadonlyMap<Hash, Uint8Array>;
 }> {
@@ -327,6 +343,7 @@ function buildManifest(captures: readonly HistoricalRpcReplayCaptureV1[]): Reado
   const objects = new Map<Hash, Uint8Array>();
   let sourceCutoff: HistoricalRpcSourceCutoffV1 | null = null;
   captures.forEach((capture, index) => {
+    assertExactKeys(capture, ["descriptor", "responseBytes"], `$.captures[${index}]`);
     const descriptor = decodeHistoricalRpcReadDescriptorV1(capture.descriptor);
     if (sourceCutoff === null) sourceCutoff = descriptor.sourceCutoff;
     if (!canonicalEqual(sourceCutoff, descriptor.sourceCutoff)) fail("capture source cutoff mismatch");
@@ -355,7 +372,11 @@ function buildManifest(captures: readonly HistoricalRpcReplayCaptureV1[]): Reado
   const base = {
     schemaVersion: 1 as const,
     kind: HISTORICAL_RPC_REPLAY_MANIFEST_KIND,
+    advisoryOnly: true as const,
     transportFactsOnly: true as const,
+    chainStateQualified: false as const,
+    transportOrigin,
+    fenceClaimLevel: "before-after-observation-only-a-b-a-not-excluded" as const,
     sourceCutoff: sourceCutoff!,
     entries: orderedEntries,
     descriptorSetRoot: computeDescriptorSetRoot(orderedEntries),
@@ -381,7 +402,19 @@ export function materializeHistoricalRpcReplayV1(
   rootDirectory: string,
   captures: readonly HistoricalRpcReplayCaptureV1[],
 ): HistoricalRpcReplayManifestV1 {
-  const built = buildManifest(captures);
+  return materializeHistoricalRpcReplay(
+    rootDirectory,
+    captures,
+    "caller-materialized/untrusted-caller-material",
+  );
+}
+
+function materializeHistoricalRpcReplay(
+  rootDirectory: string,
+  captures: readonly HistoricalRpcReplayCaptureV1[],
+  transportOrigin: HistoricalRpcReplayManifestV1["transportOrigin"],
+): HistoricalRpcReplayManifestV1 {
+  const built = buildManifest(captures, transportOrigin);
   const root = join(resolve(rootDirectory), STORE_DIRECTORY);
   const objects = join(root, "objects");
   const manifests = join(root, "manifests");
@@ -408,20 +441,32 @@ export async function captureHistoricalRpcReplayV1(
     const decoded = decodeHistoricalRpcReadDescriptorV1(descriptor);
     captures.push(Object.freeze({ descriptor: decoded, responseBytes: await reader.read(decoded) }));
   }
-  return materializeHistoricalRpcReplayV1(rootDirectory, captures);
+  return materializeHistoricalRpcReplay(
+    rootDirectory,
+    captures,
+    "reader-port-observed/untrusted-reader-port",
+  );
 }
 
 function decodeManifest(value: unknown): HistoricalRpcReplayManifestV1 {
   const object = plainObject(value, "$.manifest");
+  const transportOrigin = object.transportOrigin;
   assertExactKeys(object, [
-    "schemaVersion", "kind", "transportFactsOnly", "sourceCutoff", "entries",
+    "schemaVersion", "kind", "advisoryOnly", "transportFactsOnly", "chainStateQualified",
+    "transportOrigin", "fenceClaimLevel", "sourceCutoff", "entries",
     "descriptorSetRoot", "responseObjectClosureRoot", "manifestRoot",
   ], "$.manifest");
   if (
     object.schemaVersion !== 1 ||
     object.kind !== HISTORICAL_RPC_REPLAY_MANIFEST_KIND ||
-    object.transportFactsOnly !== true
+    object.advisoryOnly !== true ||
+    object.transportFactsOnly !== true ||
+    object.chainStateQualified !== false ||
+    (transportOrigin !== "caller-materialized/untrusted-caller-material"
+      && transportOrigin !== "reader-port-observed/untrusted-reader-port") ||
+    object.fenceClaimLevel !== "before-after-observation-only-a-b-a-not-excluded"
   ) fail("invalid historical RPC replay manifest discriminator");
+  const decodedTransportOrigin = transportOrigin as HistoricalRpcReplayManifestV1["transportOrigin"];
   const sourceCutoff = decodeCutoff(object.sourceCutoff, "$.manifest.sourceCutoff");
   if (!Array.isArray(object.entries) || object.entries.length === 0) fail("replay manifest has no entries");
   const seen = new Set<Hash>();
@@ -460,7 +505,11 @@ function decodeManifest(value: unknown): HistoricalRpcReplayManifestV1 {
   const base = {
     schemaVersion: 1 as const,
     kind: HISTORICAL_RPC_REPLAY_MANIFEST_KIND,
+    advisoryOnly: true as const,
     transportFactsOnly: true as const,
+    chainStateQualified: false as const,
+    transportOrigin: decodedTransportOrigin,
+    fenceClaimLevel: "before-after-observation-only-a-b-a-not-excluded" as const,
     sourceCutoff,
     entries: Object.freeze(entries),
     descriptorSetRoot,
@@ -473,6 +522,7 @@ function decodeManifest(value: unknown): HistoricalRpcReplayManifestV1 {
 
 /** Frozen replay port. It records every miss and has no upstream fallback. */
 export interface FrozenHistoricalRpcReplayPortV1 {
+  readonly transportOrigin: HistoricalRpcReplayManifestV1["transportOrigin"];
   readonly descriptorSetRoot: Hash;
   readonly responseObjectClosureRoot: Hash;
   readonly manifestRoot: Hash;
@@ -485,6 +535,7 @@ export interface FrozenHistoricalRpcReplayPortV1 {
 }
 
 class LoadedFrozenHistoricalRpcReplayPortV1 implements FrozenHistoricalRpcReplayPortV1 {
+  readonly transportOrigin: HistoricalRpcReplayManifestV1["transportOrigin"];
   readonly descriptorSetRoot: Hash;
   readonly responseObjectClosureRoot: Hash;
   readonly manifestRoot: Hash;
@@ -494,6 +545,7 @@ class LoadedFrozenHistoricalRpcReplayPortV1 implements FrozenHistoricalRpcReplay
   #requests = 0;
 
   constructor(manifest: HistoricalRpcReplayManifestV1, responses: ReadonlyMap<Hash, Uint8Array>) {
+    this.transportOrigin = manifest.transportOrigin;
     this.descriptorSetRoot = manifest.descriptorSetRoot;
     this.responseObjectClosureRoot = manifest.responseObjectClosureRoot;
     this.manifestRoot = manifest.manifestRoot;

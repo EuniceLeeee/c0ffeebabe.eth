@@ -1,4 +1,3 @@
-import { DODO_V2_QUOTE_ACTOR } from "./manifest.ts";
 import { canonicalAddress } from "./types.ts";
 import type { DodoPmmState } from "./kernel/math.ts";
 
@@ -31,15 +30,18 @@ function call(selector: string, args: readonly string[] = []): string {
 export function encodeDodoStateCall(
   kind: "pmm" | "userFeeRate" | "querySellBase" | "querySellQuote",
   pool: string,
+  quoteActor?: string,
   amountIn?: string,
 ): { readonly target: string; readonly data: string; readonly responseEncoding: `abi-${string}` } {
   const target = canonicalAddress(pool);
   if (kind === "pmm") return Object.freeze({ target, data: call(DODO_SEARCH_SELECTORS.pmm), responseEncoding: "abi-dodo-pmm-v1" });
-  if (kind === "userFeeRate") return Object.freeze({ target, data: call(DODO_SEARCH_SELECTORS.userFeeRate, [word(BigInt(canonicalAddress(DODO_V2_QUOTE_ACTOR)), "quote actor")]), responseEncoding: "abi-dodo-fee-rate-v1" });
+  if (quoteActor === undefined) throw new TypeError("DODO quote actor is required");
+  const actorWord = word(BigInt(canonicalAddress(quoteActor)), "quote actor");
+  if (kind === "userFeeRate") return Object.freeze({ target, data: call(DODO_SEARCH_SELECTORS.userFeeRate, [actorWord]), responseEncoding: "abi-dodo-fee-rate-v1" });
   if (amountIn === undefined || !/^\d+$/.test(amountIn)) throw new TypeError("DODO query amount must be an unsigned decimal string");
   return Object.freeze({
     target,
-    data: call(DODO_SEARCH_SELECTORS[kind], [word(BigInt(canonicalAddress(DODO_V2_QUOTE_ACTOR)), "quote actor"), word(BigInt(amountIn), "query amount")]),
+    data: call(DODO_SEARCH_SELECTORS[kind], [actorWord, word(BigInt(amountIn), "query amount")]),
     responseEncoding: "abi-dodo-query-v1",
   });
 }

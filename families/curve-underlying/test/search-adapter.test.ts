@@ -17,14 +17,16 @@ import type {
   FamilySearchSourceReadRequestV1,
 } from "../../../packages/family-sdk/search-runtime/index.ts";
 import { asOwnerRef } from "../../../packages/capability-contracts/src/index.ts";
-import { CURVE_UNDERLYING_FAMILY_AUTHORING_HASH } from "../src/family-definition.ts";
-import { CURVE_UNDERLYING_ACTION_MUTATION_CORPUS_ROOT, CURVE_UNDERLYING_ACTION_MUTATION_EXECUTION_IDS, CURVE_UNDERLYING_SWAP_ACTION_PORT } from "../src/action.ts";
+import { decodePackedCallProgram, encodePackedCallProgram } from "../../../packages/execution-program/src/index.ts";
+import { CURVE_UNDERLYING_DEFINITION, CURVE_UNDERLYING_FAMILY_AUTHORING_HASH } from "../src/family-definition.ts";
+import { CURVE_UNDERLYING_ACTION_IMPLEMENTATION_HASH, CURVE_UNDERLYING_ACTION_MUTATION_CORPUS_ROOT, CURVE_UNDERLYING_ACTION_MUTATION_EXECUTION_IDS, CURVE_UNDERLYING_ACTION_SCHEMA_REF, CURVE_UNDERLYING_SWAP_ACTION_PORT } from "../src/action.ts";
 import { exactCurveUnderlying } from "../src/exact.ts";
 import { verifyCurveUnderlyingIdentityStage } from "../src/identity.ts";
 import { materializeCurveUnderlying, resealCurveState } from "../src/instance.ts";
 import { CURVE_METAREGISTRY, CURVE_UNDERLYING_FAMILY_ID } from "../src/manifest.ts";
 import { deriveCurveUnderlyingRoutes } from "../src/routes.ts";
 import { CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY } from "../src/runtime.ts";
+import { assertCurveActionArtifactExactBinding } from "../src/search-adapter.ts";
 
 const address = (digit: string) => `0x${digit.repeat(40)}`;
 const h = (value: string): Hash => hashDomain("aloha/curve-search-adapter-test/v1", value);
@@ -125,6 +127,7 @@ const amount: FamilySearchAmountEnvelopeV1 = Object.freeze({
   amountIn,
   recipient: address("8"),
 });
+const execution = Object.freeze({ transactionOrigin: address("7"), executorAddress: amount.recipient });
 const objectivePayload = Object.freeze({ kind: "search-objective", numeraire: amount.outputAssetRef });
 const objective = Object.freeze({ objectiveRef: hashDomain("aloha/search-objective/v1", objectivePayload), payload: objectivePayload });
 
@@ -133,9 +136,10 @@ function input(readPort: FamilySearchSourceReadPortV1 = readPortFactory(), ident
   readonly currentSource: FamilySearchCurrentSourceV1;
   readonly objective: typeof objective;
   readonly amount: FamilySearchAmountEnvelopeV1;
+  readonly execution: typeof execution;
   readonly readPort: FamilySearchSourceReadPortV1;
 } {
-  return { route: routeBinding(identityValue), currentSource: { source: cutoff, assertCurrent() {} }, objective, amount, readPort };
+  return { route: routeBinding(identityValue), currentSource: { source: cutoff, assertCurrent() {} }, objective, amount, execution, readPort };
 }
 
 function readPortFactory(options: { readonly malformed?: boolean; readonly mismatch?: boolean; readonly selectorVariant?: "int128" | "uint256" } = {}): FamilySearchSourceReadPortV1 {
@@ -160,7 +164,16 @@ const adapter = CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY({
   familyDefinitionHash: CURVE_UNDERLYING_FAMILY_AUTHORING_HASH,
   capabilityRefs: {},
   actionOwnerRefs: { swap: asOwnerRef(h("action-owner")) },
-  composition: { resolveCapability: () => ({}), resolveActionOwner: () => ({}) },
+  composition: { resolveCapability: () => ({}), resolveActionOwner: () => CURVE_UNDERLYING_SWAP_ACTION_PORT },
+});
+
+test("Curve adapter rejects a shape-compatible but non-generated action owner", () => {
+  assert.throws(() => CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY({
+    familyDefinitionHash: CURVE_UNDERLYING_FAMILY_AUTHORING_HASH,
+    capabilityRefs: {},
+    actionOwnerRefs: { swap: asOwnerRef(h("action-owner")) },
+    composition: { resolveCapability: () => ({}), resolveActionOwner: () => ({ ...CURVE_UNDERLYING_SWAP_ACTION_PORT }) },
+  }), /action owner identity mismatch/);
 });
 
 test("Curve adapter carries an int128-only identity variant through exact and action", async () => {
@@ -177,6 +190,44 @@ test("Curve adapter carries an int128-only identity variant through exact and ac
   assert.equal(verified.actionHash, result.artifact.action.actionHash);
   assert.equal(verified.route.selectorVariant, "int128");
   assert.equal(verified.rawAction.selector, "0xa6417ed6");
+  assert.equal(verified.schemaVersion, 2);
+  assert.equal(CURVE_UNDERLYING_DEFINITION.actionOwners[0]!.schemaHash, CURVE_UNDERLYING_ACTION_SCHEMA_REF);
+  assert.equal(CURVE_UNDERLYING_DEFINITION.actionOwners[0]!.implementationHash, CURVE_UNDERLYING_ACTION_IMPLEMENTATION_HASH);
+  assert.equal(verified.recipient, amount.recipient);
+  assert.equal(verified.opaqueBytes, result.artifact.action.opaqueBytes);
+  assert.deepEqual(verified.effectTransport, result.artifact.action.effectTransport);
+  assert.equal(assertCurveActionArtifactExactBinding(result.artifact.action), result.artifact.action);
+  assert.throws(() => assertCurveActionArtifactExactBinding({ ...result.artifact.action, opaqueBytes: "0x01" }));
+  assert.throws(() => assertCurveActionArtifactExactBinding({ ...result.artifact.action, effectTransport: { ...verified.effectTransport, observeLogs: false } }));
+  assert.throws(() => assertCurveActionArtifactExactBinding({ ...result.artifact.action, amountHash: h("foreign-amount") }));
+  const calls = decodePackedCallProgram(verified.opaqueBytes);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0]!.target, token0);
+  assert.equal(calls[0]!.value, "0");
+  assert.equal(calls[0]!.calldata.slice(0, 10), "0x095ea7b3");
+  assert.equal(calls[0]!.calldata.slice(34, 74), pool.slice(2));
+  assert.equal(BigInt(`0x${calls[0]!.calldata.slice(74)}`), 0n);
+  assert.equal(calls[1]!.target, token0);
+  assert.equal(calls[1]!.value, "0");
+  assert.equal(calls[1]!.calldata.slice(0, 10), "0x095ea7b3");
+  assert.equal(calls[1]!.calldata.slice(34, 74), pool.slice(2));
+  assert.equal(BigInt(`0x${calls[1]!.calldata.slice(74)}`), (1n << 256n) - 1n);
+  assert.equal(calls[2]!.target, pool);
+  assert.equal(calls[2]!.value, "0");
+  assert.equal(calls[2]!.calldata, verified.rawAction.calldata);
+  assert.deepEqual(verified.effectTransport, {
+    caller: { ref: { kind: "observed-sender" }, executionMode: "top-level" },
+    preCalls: [],
+    observeTokenBalances: [
+      { token: token0, account: { kind: "observed-sender" } },
+      { token: token0, account: amount.recipient },
+      { token: token0, account: pool },
+      { token: token1, account: pool },
+      { token: token1, account: amount.recipient },
+      { token: token1, account: { kind: "observed-sender" } },
+    ],
+    observeLogs: true,
+  });
   assert.equal(CURVE_UNDERLYING_SWAP_ACTION_PORT.verifyObligations(payload).subjectRoot, result.artifact.action.obligationRoot);
   const reject = (mutation: Record<string, unknown>) => assert.throws(() => CURVE_UNDERLYING_SWAP_ACTION_PORT.decode(mutation));
   const mutationCorpus = [
@@ -190,6 +241,14 @@ test("Curve adapter carries an int128-only identity variant through exact and ac
     { id: "raw-action-splice", value: { ...payload, rawAction: { ...verified.rawAction, actionHash: h("raw-action-splice") } } },
     { id: "selector-variant-splice", value: { ...payload, route: { ...verified.route, selectorVariant: "uint256" } } },
     { id: "evaluation-splice", value: { ...payload, exactEvaluationHash: h("evaluation-splice") } },
+    { id: "opaque-program-splice", value: { ...payload, opaqueBytes: "0x01" } },
+    { id: "approve-token-splice", value: { ...payload, opaqueBytes: encodePackedCallProgram([{ ...calls[0]!, target: token1 as `0x${string}` }, calls[1]!, calls[2]!]) } },
+    { id: "approve-spender-splice", value: { ...payload, opaqueBytes: encodePackedCallProgram([{ ...calls[0]!, calldata: `${calls[0]!.calldata.slice(0, 34)}${address("9").slice(2)}${calls[0]!.calldata.slice(74)}` as `0x${string}` }, calls[1]!, calls[2]!]) } },
+    { id: "approve-zero-amount-splice", value: { ...payload, opaqueBytes: encodePackedCallProgram([{ ...calls[0]!, calldata: `${calls[0]!.calldata.slice(0, 74)}${word(1n)}` as `0x${string}` }, calls[1]!, calls[2]!]) } },
+    { id: "approve-max-amount-splice", value: { ...payload, opaqueBytes: encodePackedCallProgram([calls[0]!, { ...calls[1]!, calldata: `${calls[1]!.calldata.slice(0, 74)}${word(1n)}` as `0x${string}` }, calls[2]!]) } },
+    { id: "program-order-splice", value: { ...payload, opaqueBytes: encodePackedCallProgram([calls[1]!, calls[0]!, calls[2]!]) } },
+    { id: "effect-transport-splice", value: { ...payload, effectTransport: { ...verified.effectTransport, observeLogs: false } } },
+    { id: "recipient-splice", value: { ...payload, recipient: address("7") } },
     { id: "obligation-root-splice", value: { ...payload, obligationRoot: h("obligation-splice") } },
     { id: "obligation-proof-splice", value: { ...payload, obligationProofRoot: h("proof-splice") } },
     { id: "final-action-splice", value: { ...payload, actionHash: h("action-splice") } },
@@ -197,21 +256,22 @@ test("Curve adapter carries an int128-only identity variant through exact and ac
     { id: "quote-field-injection", value: { ...payload, quote: { ...verified.quote, unexpected: true } } },
     { id: "route-field-injection", value: { ...payload, route: { ...verified.route, unexpected: true } } },
     { id: "raw-action-field-injection", value: { ...payload, rawAction: { ...verified.rawAction, unexpected: true } } },
+    { id: "effect-transport-field-injection", value: { ...payload, effectTransport: { ...verified.effectTransport, unexpected: true } } },
     { id: "quote-cutoff-field-injection", value: { ...payload, quote: { ...verified.quote, cutoff: { ...verified.quote.cutoff, unexpected: true } } } },
     { id: "raw-cutoff-field-injection", value: { ...payload, rawAction: { ...verified.rawAction, cutoff: { ...verified.rawAction.cutoff, unexpected: true } } } },
   ] as const;
   assert.deepEqual(mutationCorpus.map(mutation => mutation.id), CURVE_UNDERLYING_ACTION_MUTATION_EXECUTION_IDS);
-  assert.equal(CURVE_UNDERLYING_ACTION_MUTATION_CORPUS_ROOT, hashDomain("aloha/curve-underlying/action-verifier-mutations/v1", { executionIds: CURVE_UNDERLYING_ACTION_MUTATION_EXECUTION_IDS }));
+  assert.equal(CURVE_UNDERLYING_ACTION_MUTATION_CORPUS_ROOT, hashDomain("aloha/curve-underlying/action-verifier-mutations/v2", { executionIds: CURVE_UNDERLYING_ACTION_MUTATION_EXECUTION_IDS }));
   for (const mutation of mutationCorpus) reject(mutation.value);
   const cutoffRawBody = { ...verified.rawAction, cutoff: { ...verified.rawAction.cutoff, number: "101" } };
   const { actionHash: ignoredCutoffRaw, ...cutoffRawWithoutHash } = cutoffRawBody;
   void ignoredCutoffRaw;
   const cutoffRaw = { ...cutoffRawWithoutHash, actionHash: hashDomain("aloha/curve-underlying/action/v1", cutoffRawWithoutHash) };
-  const cutoffProof = hashDomain("aloha/curve-underlying/action-obligation-postcondition/v1", { rawActionHash: cutoffRaw.actionHash, exactEvaluationHash: verified.exactEvaluationHash, obligationRoot: verified.obligationRoot, inputs: verified.inputs, outputs: verified.outputs, stateFactsRoot: verified.stateFactsRoot, routeBindingHash: verified.route.routeBindingHash });
+  const cutoffProof = hashDomain("aloha/curve-underlying/action-obligation-postcondition/v2", { rawActionHash: cutoffRaw.actionHash, exactEvaluationHash: verified.exactEvaluationHash, obligationRoot: verified.obligationRoot, inputs: verified.inputs, outputs: verified.outputs, stateFactsRoot: verified.stateFactsRoot, routeBindingHash: verified.route.routeBindingHash, recipient: verified.recipient, opaqueBytes: verified.opaqueBytes, effectTransport: verified.effectTransport });
   const cutoffPayload = { ...verified, rawAction: cutoffRaw, obligationProofRoot: cutoffProof };
   const { actionHash: ignoredCutoffFinal, ...cutoffBody } = cutoffPayload;
   void ignoredCutoffFinal;
-  reject({ ...cutoffBody, actionHash: hashDomain("aloha/curve-underlying/search-action/v1", cutoffBody) });
+  reject({ ...cutoffBody, actionHash: hashDomain("aloha/curve-underlying/search-action/v2", cutoffBody) });
 });
 
 test("Curve adapter carries a uint256-only identity variant through exact and action", async () => {

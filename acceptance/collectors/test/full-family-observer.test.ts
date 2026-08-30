@@ -59,6 +59,7 @@ function fullGraphSweep(
     currentSourceSessionId: h("sweep-source-session"),
     actualCurrentSource: terminal.actualCurrentSource as FullGraphCoarseSweepV1["binding"]["actualCurrentSource"],
     amountSeedHash: h("amount-seed"),
+    executionContextHash: h("execution-context"),
     objectiveRef: h("sweep-objective"),
   });
   const binding = Object.freeze({

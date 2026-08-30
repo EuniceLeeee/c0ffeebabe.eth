@@ -47,13 +47,10 @@ import {
 import { createReleaseFamilyRuntimeComposition } from "../../../generated/runtime-composition/index.ts";
 import { FAMILY_CATALOG } from "../../../generated/family-catalog/index.ts";
 import { sealReleaseIntent } from "../../../specs/release-intent/src/index.ts";
-import { ANGSTROM_V4_DEFINITION } from "../../../families/angstrom-v4/src/family-definition.ts";
 import { CURVE_UNDERLYING_DEFINITION } from "../../../families/curve-underlying/src/family-definition.ts";
 import { DODO_V2_DEFINITION } from "../../../families/dodo-v2/src/family-definition.ts";
 import { FLUID_DEX_DEFINITION } from "../../../families/fluid-dex/src/family-definition.ts";
 import { UNIV2_STANDARD_DEFINITION } from "../../../families/univ2-standard/src/family-definition.ts";
-import { UNIV3_STANDARD_DEFINITION } from "../../../families/univ3-standard/src/family-definition.ts";
-import { UNIV4_DEFINITION } from "../../../families/univ4/src/family-definition.ts";
 import { ROUTE_CYCLE_STRATEGY } from "../../../strategies/route-cycle/src/index.ts";
 import {
   familySearchRouteBindingHash,
@@ -134,11 +131,6 @@ const catalogHash = (value: string, path: string): Hash => {
 function qualificationReleaseIntent() {
   const families = [
     Object.freeze({
-      definition: ANGSTROM_V4_DEFINITION,
-      modulePath: "families/angstrom-v4/src/public.ts",
-      exportName: "ANGSTROM_V4_DEFINITION",
-    }),
-    Object.freeze({
       definition: CURVE_UNDERLYING_DEFINITION,
       modulePath: "families/curve-underlying/src/public.ts",
       exportName: "CURVE_UNDERLYING_DEFINITION",
@@ -157,16 +149,6 @@ function qualificationReleaseIntent() {
       definition: UNIV2_STANDARD_DEFINITION,
       modulePath: "families/univ2-standard/src/public.ts",
       exportName: "UNIV2_STANDARD_DEFINITION",
-    }),
-    Object.freeze({
-      definition: UNIV3_STANDARD_DEFINITION,
-      modulePath: "families/univ3-standard/src/public.ts",
-      exportName: "UNIV3_STANDARD_DEFINITION",
-    }),
-    Object.freeze({
-      definition: UNIV4_DEFINITION,
-      modulePath: "families/univ4/src/public.ts",
-      exportName: "UNIV4_DEFINITION",
     }),
   ].map(({ definition, modulePath, exportName }) => Object.freeze({
     familyId: definition.manifest.familyId,
@@ -514,6 +496,7 @@ function buildUniV2QualificationArtifacts() {
     });
     const inputPort = edge.inputAssetPorts[0]!;
     const outputPort = edge.outputAssetPorts[0]!;
+    const recipient = address("9");
     const run = await adapter.run({
       route,
       currentSource,
@@ -522,8 +505,9 @@ function buildUniV2QualificationArtifacts() {
         inputAssetRef: inputPort.assetRef,
         outputAssetRef: outputPort.assetRef,
         amountIn: "1000",
-        recipient: address("9"),
+        recipient,
       },
+      execution: { transactionOrigin: address("8"), executorAddress: recipient },
       readPort: reserveRead,
     });
     if (run.kind !== "verified") throw new Error(`qualification UniV2 search failed: ${JSON.stringify(run)}`);
@@ -685,7 +669,7 @@ async function buildFullFamilyQualificationCorpusOnce(): Promise<FullFamilyQuali
   const sourceCoverage = sealSourceCoverage(QUALIFICATION_CUTOFF, sourcePlans, sourceResults.map(result => result.execution));
 
   const candidatePlans = new Map<string, SourcePlanRefV1>();
-  for (const familyId of ["univ2-standard", "univ3-standard"]) {
+  for (const familyId of ["dodo-v2", "univ2-standard"]) {
     const family = generatedRuntime.families.find(item => item.familyId === familyId)!;
     candidatePlans.set(familyId, family.sourcePlanRefs[0]!);
   }
@@ -716,7 +700,7 @@ async function buildFullFamilyQualificationCorpusOnce(): Promise<FullFamilyQuali
   };
   const candidates = Object.freeze([
     makeCandidate("univ2-standard", univ2.nomination.instanceNominationKey),
-    makeCandidate("univ3-standard", "univ3-standard:chain-rejected-qualification-candidate"),
+    makeCandidate("dodo-v2", "dodo-v2:chain-rejected-qualification-candidate"),
   ].sort((left, right) => left.familyCandidateKey.localeCompare(right.familyCandidateKey)));
   const receipts = sourceResults.map(result => {
     const family = generatedRuntime.families.find(value => value.familyDefinitionHash === result.plan.familyDefinitionHash)!;
