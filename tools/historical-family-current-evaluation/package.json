@@ -1,0 +1,17 @@
+{
+  "name": "@aloha/historical-family-current-evaluation",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./advisory-report": "./src/advisory-report.ts",
+    "./candidate-generated-search-adapter": "./src/candidate-generated-search-adapter.ts",
+    "./current-adapter-comparator": "./src/current-adapter-comparator.ts",
+    "./family-advisory-matrix": "./src/family-advisory-matrix.ts",
+    "./family-current-source-replay": "./src/family-current-source-replay.ts",
+    "./release-family-fact-closure": "./src/release-family-fact-closure.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

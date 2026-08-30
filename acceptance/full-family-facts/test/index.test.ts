@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import {
   buildFullFamilyQualificationCorpus,
   QUALIFICATION_OBSERVED_HEAD,
@@ -648,6 +649,12 @@ test("pure predicate and independent model agree on every semantic mutation", ()
 test("caller verdict is data, not authority", () => {
   const { bundle, generatedRuntime } = buildBundle();
   assert.equal(evaluateFullFamilyPredicate({ ...bundle, producerVerdict: "pass" }, generatedRuntime).verdict, "invalid");
+});
+
+test("independent full-family model uses the frozen source-plan wire contract", () => {
+  const source = readFileSync(new URL("../src/reference-model.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /packages\/discovery/);
+  assert.match(source, /specs\/full-family-facts\/src\/source-wire/);
 });
 
 test("an unrelated generated Family changes only the aggregate denominator root", () => {

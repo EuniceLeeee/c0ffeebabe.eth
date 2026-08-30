@@ -4,6 +4,7 @@ import {
   type AssembledPredicateEvaluationV1,
   type AssembledReleaseInvocationSetCapabilityV1,
   type CommonEnvelopeAuthorityPortV1,
+  type PredicateDomainMaterialStateV1,
   type PredicateMaterialSourcePortV1,
 } from "./material-provider.ts";
 import {
@@ -13,7 +14,6 @@ import {
 } from "./internal/material-provider-state.ts";
 import {
   readPredicateDomainMaterialCapabilityV1,
-  type PredicateDomainMaterialStateV1,
 } from "./internal/predicate-domain-material-state.ts";
 import { evaluateGateCoreRuntime } from "./index.ts";
 import { sealAssembledReleaseAcceptanceResultsV1 } from "./internal/assembled-acceptance-owner.ts";

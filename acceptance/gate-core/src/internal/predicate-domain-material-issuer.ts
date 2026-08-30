@@ -1,9 +1,8 @@
 import { types as nodeTypes } from "node:util";
 import { CANONICAL_LIMITS } from "../../../../packages/canonical-codec/src/index.ts";
-import type { PredicateDomainMaterialCapabilityV1 } from "../material-provider.ts";
+import type { PredicateDomainMaterialCapabilityV1, PredicateDomainMaterialStateV1 } from "../material-provider.ts";
 import {
   registerPredicateDomainMaterialCapabilityV1,
-  type PredicateDomainMaterialStateV1,
 } from "./predicate-domain-material-state.ts";
 
 export function issuePredicateDomainMaterialCapabilityV1(

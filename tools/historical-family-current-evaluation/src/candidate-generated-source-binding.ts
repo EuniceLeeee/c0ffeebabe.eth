@@ -1,5 +1,5 @@
 import ts from "typescript";
-import type { GeneratedFamilyRuntimeFactoryMetadataV1 } from "../../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
+import type { GeneratedFamilyRuntimeFactoryMetadataV1 } from "../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
 
 type FamilyMetadata = GeneratedFamilyRuntimeFactoryMetadataV1["families"][number];
 

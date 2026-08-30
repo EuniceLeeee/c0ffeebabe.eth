@@ -1,4 +1,6 @@
 import type { Hash } from "../../../packages/canonical-codec/src/index.ts";
+import type { ArtifactResolutionClaimV1, ResolverPolicyV1, RetentionLeaseReceiptV1 } from "../../../specs/artifact-resolution/src/index.ts";
+import type { ReadOnlyArtifactRefV1 } from "../../../specs/core-envelope/src/index.ts";
 
 /**
  * Opaque release-owned ports.  Their issuers and readers live below
@@ -20,6 +22,27 @@ export type PredicateMaterialUnavailableCodeV1 =
   | "common-envelope-authority-missing"
   | "common-envelope-material-missing"
   | "common-envelope-material-invalid";
+
+/** Inert material DTOs. Capability ownership and storage remain internal. */
+export interface PredicateDomainMaterialV1 {
+  readonly status: "available";
+  readonly predicateId: string;
+  readonly candidateReleaseCommit: string;
+  readonly artifactRefs: readonly ReadOnlyArtifactRefV1[];
+  readonly artifactClaims: readonly ArtifactResolutionClaimV1[];
+  readonly resolverPolicies: readonly ResolverPolicyV1[];
+  readonly retentionLeases: readonly RetentionLeaseReceiptV1[];
+  readonly predicateFacts: readonly unknown[];
+}
+
+export interface PredicateDomainMaterialUnavailableV1 {
+  readonly status: "missing" | "invalid";
+  readonly predicateId: string;
+  readonly code: PredicateMaterialUnavailableCodeV1;
+  readonly evidenceRoot: Hash;
+}
+
+export type PredicateDomainMaterialStateV1 = PredicateDomainMaterialV1 | PredicateDomainMaterialUnavailableV1;
 
 /** One generated binding invokes one fixed provider.  The source and result
  * are both opaque capabilities; no GateCoreInput-shaped public surface is

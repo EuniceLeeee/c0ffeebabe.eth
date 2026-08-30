@@ -21,13 +21,11 @@ import {
 import {
   decodeFullFamilySourcePlanEvidenceReceipt,
   decodeFullFamilySourcePlanExecution,
+  decodeFullFamilySourcePlanRef,
   fullFamilySourcePlanIdentity,
   sealFullFamilySourceCoverage,
   type SourcePlanExecutionV1,
 } from "../../../../specs/full-family-facts/src/source-wire.ts";
-import { createReleaseFamilyRuntimeComposition } from "../../../../generated/runtime-composition/index.ts";
-import { FAMILY_CATALOG } from "../../../../generated/family-catalog/index.ts";
-import { readGeneratedFamilyRuntimeFactoryMetadata } from "../../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
 import {
   buildFullFamilyPersistedGraph,
   decodeFullFamilyActionOwnerArtifact,
@@ -97,24 +95,6 @@ const FULL_FAMILY_INVOCATION_SEAL_ROLE_ID = createCommonEnvelopeRoleContractV1(
   FULL_FAMILY_PREDICATE_SPEC.predicateId,
 ).signedInvocationRoleId;
 const CANDIDATE_PROOF_VERIFIER_AUTHORITY_ROLE = "candidate-partition-proof-verifier";
-
-const GENERATED_FACTORY_METADATA = readGeneratedFamilyRuntimeFactoryMetadata(createReleaseFamilyRuntimeComposition);
-
-const GENERATED_RUNTIME_METADATA: FullFamilyGeneratedRuntimeMetadataV1 = (() => {
-  const metadata = GENERATED_FACTORY_METADATA;
-  return Object.freeze({
-    releaseIntentRoot: metadata.releaseIntentRoot,
-    definitionCatalogRoot: metadata.definitionCatalogRoot,
-    descriptorRoot: metadata.descriptorRoot,
-    families: Object.freeze(metadata.families.map(family => Object.freeze({
-      familyId: family.familyId,
-      familyDefinitionHash: family.familyDefinitionHash,
-      sourcePlanRoot: family.sourcePlanRoot,
-      sourcePlanRefs: Object.freeze([...family.sourcePlanRefs]
-        .sort((left, right) => fullFamilySourcePlanIdentity(left).localeCompare(fullFamilySourcePlanIdentity(right)))),
-    })).sort((left, right) => left.familyId.localeCompare(right.familyId))),
-  });
-})();
 
 const BUNDLE_SCHEMA_REF = Object.freeze({
   id: FULL_FAMILY_FACT_STORAGE_SCHEMA_MANIFEST.id,
@@ -419,52 +399,231 @@ function releaseProjectionExpectation(
   });
 }
 
-function productionDefinitionCatalogExpectation(
-  releaseSet: FamilyReleaseSetV1,
-): FullFamilyNestedExpectationV1 {
+interface ProductionFamilyCatalogV1 {
+  readonly releaseIntentRoot: Hash;
+  readonly proposedCapabilitySetRoot: Hash;
+  readonly definitionCatalogRoot: Hash;
+  readonly entries: readonly Readonly<{
+    readonly familyId: string;
+    readonly familyDefinitionHash: Hash;
+    readonly actionOwnerRefs: readonly Hash[];
+    readonly sourcePlanRefs: FullFamilyGeneratedRuntimeMetadataV1["families"][number]["sourcePlanRefs"];
+    readonly definitionCatalogLeafDigest: Hash;
+  }>[];
+}
+
+function exactHash(value: unknown, path: string): Hash {
+  if (typeof value !== "string" || !/^0x[0-9a-f]{64}$/.test(value) || value === `0x${"0".repeat(64)}`) {
+    throw new TypeError(`invalid hash at ${path}`);
+  }
+  return value as Hash;
+}
+
+function exactString(value: unknown, path: string): string {
+  if (typeof value !== "string" || value.length === 0) throw new TypeError(`invalid string at ${path}`);
+  return value;
+}
+
+function exactArray(value: unknown, path: string): readonly unknown[] {
+  if (!Array.isArray(value)) throw new TypeError(`invalid array at ${path}`);
+  return value;
+}
+
+function decodeProductionDefinitionCatalog(bytes: Uint8Array): ProductionFamilyCatalogV1 {
+  const decoded = decodeCanonicalObject(bytes, "definitionCatalog");
+  assertExactKeys(decoded, [
+    "schemaVersion", "releaseIntentRoot", "capabilityIndexRoot", "proposedCapabilitySetRoot", "entries",
+    "definitionCatalogRoot",
+  ], "definitionCatalog");
+  if (decoded.schemaVersion !== 1) throw new TypeError("definition catalog schema version mismatch");
+  exactHash(decoded.capabilityIndexRoot, "definitionCatalog.capabilityIndexRoot");
+  const entries = exactArray(decoded.entries, "definitionCatalog.entries").map((value, index) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError("definition catalog entry invalid");
+    const entry = value as Record<string, unknown>;
+    assertExactKeys(entry, [
+      "familyId", "familyDefinitionHash", "issuerRef", "authorityRef", "lifecycleRefs", "extensionRefs",
+      "actionOwnerRefs", "factContractRefs", "sourcePlanRefs", "definitionCatalogLeafDigest", "capabilityCatalogRoot",
+    ], `definitionCatalog.entries[${index}]`);
+    const familyId = exactString(entry.familyId, `definitionCatalog.entries[${index}].familyId`);
+    const familyDefinitionHash = exactHash(entry.familyDefinitionHash, `definitionCatalog.entries[${index}].familyDefinitionHash`);
+    exactHash(entry.issuerRef, `definitionCatalog.entries[${index}].issuerRef`);
+    exactHash(entry.authorityRef, `definitionCatalog.entries[${index}].authorityRef`);
+    exactHash(entry.capabilityCatalogRoot, `definitionCatalog.entries[${index}].capabilityCatalogRoot`);
+    const lifecycle = entry.lifecycleRefs as Record<string, unknown>;
+    assertExactKeys(lifecycle, ["nomination", "identity", "materialization", "projection", "rehydration"], `definitionCatalog.entries[${index}].lifecycleRefs`);
+    for (const [stage, ref] of Object.entries(lifecycle)) {
+      const stageRef = decodeFullFamilyStageCapabilityRef(ref, `definitionCatalog.entries[${index}].lifecycleRefs.${stage}`);
+      if (stageRef.familyId !== familyId || stageRef.familyDefinitionHash !== familyDefinitionHash || stageRef.stage !== stage) {
+        throw new TypeError("definition catalog lifecycle binding mismatch");
+      }
+    }
+    for (const [extensionIndex, ref] of exactArray(entry.extensionRefs, `definitionCatalog.entries[${index}].extensionRefs`).entries()) {
+      const stageRef = decodeFullFamilyStageCapabilityRef(ref, `definitionCatalog.entries[${index}].extensionRefs[${extensionIndex}]`);
+      if (stageRef.familyId !== familyId || stageRef.familyDefinitionHash !== familyDefinitionHash || stageRef.stage !== "capability") {
+        throw new TypeError("definition catalog extension binding mismatch");
+      }
+    }
+    const actionOwnerRefs = exactArray(entry.actionOwnerRefs, `definitionCatalog.entries[${index}].actionOwnerRefs`)
+      .map(ownerRef => exactHash(ownerRef, `definitionCatalog.entries[${index}].actionOwnerRefs`));
+    for (const [factIndex, fact] of exactArray(entry.factContractRefs, `definitionCatalog.entries[${index}].factContractRefs`).entries()) {
+      if (fact === null || typeof fact !== "object" || Array.isArray(fact)) throw new TypeError("fact contract ref invalid");
+      assertExactKeys(fact, ["factContractId", "version", "schemaHash"], `definitionCatalog.entries[${index}].factContractRefs[${factIndex}]`);
+      const record = fact as Record<string, unknown>;
+      exactString(record.factContractId, "factContractId");
+      exactString(record.version, "factContractVersion");
+      exactHash(record.schemaHash, "factContractSchemaHash");
+    }
+    const sourcePlanRefs = exactArray(entry.sourcePlanRefs, `definitionCatalog.entries[${index}].sourcePlanRefs`)
+      .map((plan, planIndex) => decodeFullFamilySourcePlanRef(plan, `definitionCatalog.entries[${index}].sourcePlanRefs[${planIndex}]`));
+    if (sourcePlanRefs.some(plan => plan.familyDefinitionHash !== familyDefinitionHash)) throw new TypeError("catalog source plan family splice");
+    return Object.freeze({
+      familyId,
+      familyDefinitionHash,
+      actionOwnerRefs: Object.freeze(actionOwnerRefs),
+      sourcePlanRefs: Object.freeze(sourcePlanRefs),
+      definitionCatalogLeafDigest: exactHash(entry.definitionCatalogLeafDigest, `definitionCatalog.entries[${index}].definitionCatalogLeafDigest`),
+    });
+  });
+  if (entries.length === 0 || new Set(entries.map(entry => entry.familyId)).size !== entries.length
+    || !sameJson(entries.map(entry => entry.familyId), [...entries].sort((a, b) => a.familyId.localeCompare(b.familyId)).map(entry => entry.familyId))) {
+    throw new TypeError("definition catalog denominator invalid");
+  }
+  const definitionCatalogRoot = exactHash(decoded.definitionCatalogRoot, "definitionCatalog.definitionCatalogRoot");
+  if (definitionCatalogRoot !== hashDomain("aloha/family-definition-catalog/v1", entries.map(entry => entry.definitionCatalogLeafDigest).sort())) {
+    throw new TypeError("definition catalog root mismatch");
+  }
+  return Object.freeze({
+    releaseIntentRoot: exactHash(decoded.releaseIntentRoot, "definitionCatalog.releaseIntentRoot"),
+    proposedCapabilitySetRoot: exactHash(decoded.proposedCapabilitySetRoot, "definitionCatalog.proposedCapabilitySetRoot"),
+    definitionCatalogRoot,
+    entries: Object.freeze(entries),
+  });
+}
+
+function decodeProductionRuntimeMetadata(bytes: Uint8Array): FullFamilyGeneratedRuntimeMetadataV1 & { readonly proposedCapabilitySetRoot: Hash } {
+  const decoded = decodeCanonicalObject(bytes, "runtimeComposition");
+  assertExactKeys(decoded, [
+    "proposedCapabilitySetRoot", "nominationProgramSetRoot", "nominationProgramProposalLeafDigests", "releaseIntentRoot",
+    "definitionCatalogRoot", "descriptorRoot", "families",
+  ], "runtimeComposition");
+  exactHash(decoded.nominationProgramSetRoot, "runtimeComposition.nominationProgramSetRoot");
+  for (const digest of exactArray(decoded.nominationProgramProposalLeafDigests, "runtimeComposition.nominationProgramProposalLeafDigests")) {
+    exactHash(digest, "runtimeComposition.nominationProgramProposalLeafDigests");
+  }
+  const families = exactArray(decoded.families, "runtimeComposition.families").map((value, index) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) throw new TypeError("runtime family invalid");
+    const family = value as Record<string, unknown>;
+    assertExactKeys(family, [
+      "familyId", "familyDefinitionHash", "lifecycleRefs", "stageDefinitionRoot", "sourcePlanRoot", "sourcePlanRefs",
+      "extensions", "runtimeAdapters", "actionOwners",
+    ], `runtimeComposition.families[${index}]`);
+    const familyId = exactString(family.familyId, `runtimeComposition.families[${index}].familyId`);
+    const familyDefinitionHash = exactHash(family.familyDefinitionHash, `runtimeComposition.families[${index}].familyDefinitionHash`);
+    exactHash(family.stageDefinitionRoot, `runtimeComposition.families[${index}].stageDefinitionRoot`);
+    const sourcePlanRefs = exactArray(family.sourcePlanRefs, `runtimeComposition.families[${index}].sourcePlanRefs`)
+      .map((plan, planIndex) => decodeFullFamilySourcePlanRef(plan, `runtimeComposition.families[${index}].sourcePlanRefs[${planIndex}]`));
+    if (sourcePlanRefs.some(plan => plan.familyDefinitionHash !== familyDefinitionHash)) throw new TypeError("runtime source plan family splice");
+    if (new Set(sourcePlanRefs.map(fullFamilySourcePlanIdentity)).size !== sourcePlanRefs.length) throw new TypeError("runtime source plan duplicate");
+    exactArray(family.extensions, `runtimeComposition.families[${index}].extensions`);
+    exactArray(family.runtimeAdapters, `runtimeComposition.families[${index}].runtimeAdapters`);
+    exactArray(family.actionOwners, `runtimeComposition.families[${index}].actionOwners`);
+    return Object.freeze({
+      familyId,
+      familyDefinitionHash,
+      sourcePlanRoot: exactHash(family.sourcePlanRoot, `runtimeComposition.families[${index}].sourcePlanRoot`),
+      sourcePlanRefs: Object.freeze([...sourcePlanRefs].sort((left, right) => fullFamilySourcePlanIdentity(left).localeCompare(fullFamilySourcePlanIdentity(right)))),
+    });
+  });
+  if (families.length === 0 || new Set(families.map(family => family.familyId)).size !== families.length) throw new TypeError("runtime family denominator invalid");
+  return Object.freeze({
+    proposedCapabilitySetRoot: exactHash(decoded.proposedCapabilitySetRoot, "runtimeComposition.proposedCapabilitySetRoot"),
+    releaseIntentRoot: exactHash(decoded.releaseIntentRoot, "runtimeComposition.releaseIntentRoot"),
+    definitionCatalogRoot: exactHash(decoded.definitionCatalogRoot, "runtimeComposition.definitionCatalogRoot"),
+    descriptorRoot: exactHash(decoded.descriptorRoot, "runtimeComposition.descriptorRoot"),
+    families: Object.freeze([...families].sort((left, right) => left.familyId.localeCompare(right.familyId))),
+  });
+}
+
+function exactReleaseFamilyEntries(releaseSet: FamilyReleaseSetV1, entries: readonly Readonly<{ familyId: string; familyDefinitionHash: Hash }>[]): boolean {
+  return releaseSet.count === String(entries.length) && sameJson(
+    releaseSet.entries.map(entry => ({ familyId: entry.familyId, familyDefinitionHash: entry.familyDefinitionHash })),
+    entries.map(entry => ({ familyId: entry.familyId, familyDefinitionHash: entry.familyDefinitionHash })),
+  );
+}
+
+function productionDefinitionCatalogExpectation(releaseSet: FamilyReleaseSetV1): FullFamilyNestedExpectationV1 {
   return Object.freeze({
     schema: artifactSchemaRef(FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.definitionCatalog),
-    semanticIdentity: FAMILY_CATALOG,
+    semanticIdentity: Object.freeze({ role: "definition-catalog", sourceArtifactContentSha256: releaseSet.sourceArtifactContentSha256 }),
     validate: (bytes: Uint8Array, report: ReportIssue) => {
-      const decoded = decodeCanonicalArtifact(bytes, value => decodeCanonicalJson(value), "$.definitionCatalog.sourceArtifact", report);
-      if (decoded === null) return;
-      // Exact generated bytes are the authority; the explicit joins below
-      // retain actionable diagnostics without accepting a reconstructed
-      // catalog lookalike.
-      if (!sameJson(decoded, FAMILY_CATALOG)) {
+      try {
+        const catalog = decodeProductionDefinitionCatalog(bytes);
+        if (!exactReleaseFamilyEntries(releaseSet, catalog.entries)) {
+          throw new TypeError("definition catalog release projection mismatch");
+        }
+      } catch {
         report("registry-mismatch", "$.definitionCatalog.sourceArtifact");
-        return;
-      }
-      const entries = FAMILY_CATALOG.entries.map(entry => ({
-        familyId: entry.familyId,
-        familyDefinitionHash: entry.familyDefinitionHash,
-      }));
-      if (releaseSet.count !== String(entries.length)
-        || !sameJson(releaseSet.entries.map(entry => ({
-          familyId: entry.familyId,
-          familyDefinitionHash: entry.familyDefinitionHash,
-        })), entries)) {
-        report("registry-mismatch", "$.definitionCatalog.entries");
       }
     },
   });
 }
 
-function productionRuntimeCompositionExpectation(
-  releaseSet: FamilyReleaseSetV1,
-): FullFamilyNestedExpectationV1 {
+function productionRuntimeCompositionExpectation(releaseSet: FamilyReleaseSetV1): FullFamilyNestedExpectationV1 {
   return Object.freeze({
     schema: artifactSchemaRef(FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.runtimeComposition),
-    semanticIdentity: GENERATED_FACTORY_METADATA,
+    semanticIdentity: Object.freeze({ role: "runtime-composition", sourceArtifactContentSha256: releaseSet.sourceArtifactContentSha256 }),
     validate: (bytes: Uint8Array, report: ReportIssue) => {
-      const decoded = decodeCanonicalArtifact(bytes, value => decodeCanonicalJson(value), "$.runtimeComposition.sourceArtifact", report);
-      if (decoded === null) return;
-      if (!sameJson(decoded, GENERATED_FACTORY_METADATA)
-        || releaseSet.contractRoot !== GENERATED_FACTORY_METADATA.descriptorRoot) {
+      try {
+        const metadata = decodeProductionRuntimeMetadata(bytes);
+        if (releaseSet.contractRoot !== metadata.descriptorRoot || !exactReleaseFamilyEntries(releaseSet, metadata.families)) {
+          throw new TypeError("runtime composition release projection mismatch");
+        }
+      } catch {
         report("registry-mismatch", "$.runtimeComposition.sourceArtifact");
       }
     },
   });
+}
+
+function deriveProductionRuntimeMetadata(
+  bundle: FullFamilyFactBundleV1,
+  bytesByRef: ReadonlyMap<Hash, Uint8Array>,
+  report: ReportIssue,
+): FullFamilyGeneratedRuntimeMetadataV1 | null {
+  const catalogBytes = bytesByRef.get(bundle.definitionCatalog.sourceArtifactRefId);
+  const runtimeBytes = bytesByRef.get(bundle.runtimeComposition.sourceArtifactRefId);
+  if (catalogBytes === undefined || runtimeBytes === undefined) {
+    report("predicate-observation-missing", "$.runtimeComposition.sourceArtifact");
+    return null;
+  }
+  try {
+    const catalog = decodeProductionDefinitionCatalog(catalogBytes);
+    const metadata = decodeProductionRuntimeMetadata(runtimeBytes);
+    if (catalog.releaseIntentRoot !== metadata.releaseIntentRoot
+      || catalog.releaseIntentRoot !== bundle.runtime.releaseIntentRoot
+      || catalog.proposedCapabilitySetRoot !== metadata.proposedCapabilitySetRoot
+      || metadata.definitionCatalogRoot !== bundle.runtime.definitionCatalogRoot
+      || metadata.descriptorRoot !== bundle.runtime.generatedRuntimeDescriptorRoot
+      || metadata.descriptorRoot !== bundle.runtime.runtimeCompositionRoot
+      || catalog.entries.length !== metadata.families.length) {
+      throw new TypeError("production release artifact root splice");
+    }
+    for (const family of metadata.families) {
+      const entry = catalog.entries.find(value => value.familyId === family.familyId);
+      if (entry === undefined
+        || entry.familyDefinitionHash !== family.familyDefinitionHash
+        || !sameJson(
+          [...entry.sourcePlanRefs].sort((left, right) => fullFamilySourcePlanIdentity(left).localeCompare(fullFamilySourcePlanIdentity(right))),
+          family.sourcePlanRefs,
+        )) {
+        throw new TypeError("production release artifact family splice");
+      }
+    }
+    return metadata;
+  } catch {
+    report("registry-mismatch", "$.runtimeComposition.sourceArtifact");
+    return null;
+  }
 }
 
 function instanceIdentityRef(familyDefinitionHash: Hash, instanceKey: string): Hash {
@@ -1140,10 +1299,19 @@ function validateProductionArtifactClosure(
   bytesByRef: ReadonlyMap<Hash, Uint8Array>,
   report: ReportIssue,
 ): void {
+  let definitionCatalog: ProductionFamilyCatalogV1;
+  try {
+    const bytes = bytesByRef.get(bundle.definitionCatalog.sourceArtifactRefId);
+    if (bytes === undefined) throw new TypeError("definition catalog missing");
+    definitionCatalog = decodeProductionDefinitionCatalog(bytes);
+  } catch {
+    report("registry-mismatch", "$.definitionCatalog.sourceArtifact");
+    return;
+  }
   const publications: FullFamilyInstancePublicationV1[] = [];
   const observedEdges = new Map<Hash, FullFamilyPersistedGraphEdgeV1>();
   for (const [familyIndex, family] of bundle.families.entries()) {
-    const catalogEntry = FAMILY_CATALOG.entries.find(entry => entry.familyId === family.familyId);
+    const catalogEntry = definitionCatalog.entries.find(entry => entry.familyId === family.familyId);
     if (catalogEntry === undefined || catalogEntry.familyDefinitionHash !== family.familyDefinitionHash) {
       report("registry-mismatch", `$.families[${familyIndex}].familyDefinitionHash`);
       continue;
@@ -1219,7 +1387,7 @@ function validateProductionArtifactClosure(
 }
 
 function evaluateLiveWithGeneratedRuntime(
-  generatedRuntime: FullFamilyGeneratedRuntimeMetadataV1,
+  suppliedRuntime: FullFamilyGeneratedRuntimeMetadataV1 | null,
   runtime: PredicateRuntimeFactsV1,
   issues: PredicateIssueSinkV1,
   requireProductionArtifacts: boolean,
@@ -1376,6 +1544,10 @@ function evaluateLiveWithGeneratedRuntime(
     const bytes = bytesByRef.get(artifactRefId);
     if (bytes !== undefined) expectation.validate(bytes, report);
   }
+  const generatedRuntime = requireProductionArtifacts
+    ? deriveProductionRuntimeMetadata(bundle, bytesByRef, report)
+    : suppliedRuntime;
+  if (generatedRuntime === null) return "invalid";
   validateSourceExecutionClosure(bundle, generatedRuntime, bytesByRef, report);
   validateCandidateLineage(bundle, runtime, bytesByRef, report, requireProductionArtifacts);
   validateOutcomeLineageClosure(bundle, runtime, bytesByRef, report);
@@ -1409,5 +1581,5 @@ export const FULL_FAMILY_PREDICATE_EVALUATOR: PredicateEvaluatorV1 = Object.free
   predicateSpec: FULL_FAMILY_PREDICATE_SPEC,
   predicateProgramDescriptorDigest: FULL_FAMILY_PREDICATE_PROGRAM_DESCRIPTOR_DIGEST,
   oracleProgramDescriptorDigest: FULL_FAMILY_ORACLE_PROGRAM_DESCRIPTOR_DIGEST,
-  evaluateLive: (runtime: PredicateRuntimeFactsV1, issues: PredicateIssueSinkV1) => evaluateLiveWithGeneratedRuntime(GENERATED_RUNTIME_METADATA, runtime, issues, true),
+  evaluateLive: (runtime: PredicateRuntimeFactsV1, issues: PredicateIssueSinkV1) => evaluateLiveWithGeneratedRuntime(null, runtime, issues, true),
 });

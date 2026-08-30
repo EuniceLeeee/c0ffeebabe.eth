@@ -78,6 +78,15 @@ function verifyBinding(
   return { binding, deploymentPin: pin };
 }
 
+/** Verification-only seam for phase admission. It creates no capability and
+ * retains no process-local authority. */
+export function verifyRuntimeReleaseBindingAuthenticityV1(
+  bindingValue: RuntimeReleaseBindingV1,
+  deploymentPin: RuntimeReleaseSignerPinV1,
+): void {
+  verifyBinding(bindingValue, deploymentPin);
+}
+
 const resolver: RuntimeReleaseResolutionPortV1 = Object.freeze({
   resolve(capability: RuntimeReleaseResolutionCapabilityV1) {
     const state = stateForRuntimeReleaseCapability(capability);

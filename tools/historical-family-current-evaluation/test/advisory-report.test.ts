@@ -7,7 +7,7 @@ import {
   encodeCanonicalBytes,
   type CanonicalJson,
   type Hash,
-} from "../../../../packages/canonical-codec/src/index.ts";
+} from "../../../packages/canonical-codec/src/index.ts";
 import {
   buildHistoricalFamilyAdvisoryReportV1,
   loadHistoricalFamilyAdvisoryReportV1,
@@ -19,7 +19,7 @@ import {
   type HistoricalRpcMethod,
   type HistoricalRpcObjectInputV1,
   type HistoricalRpcRole,
-} from "../src/index.ts";
+} from "../../reference-only/historical-family-facts/src/index.ts";
 
 const txHash = `0x${"1".repeat(64)}` as Hash;
 const blockHash = `0x${"2".repeat(64)}` as Hash;

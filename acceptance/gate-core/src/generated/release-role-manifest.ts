@@ -52,9 +52,9 @@ export const RELEASE_ROLE_MANIFEST = Object.freeze({
       "materialProviderExportName": "FULL_FAMILY_MATERIAL_PROVIDER",
       "materialProviderContractDigest": "0xc3e5170edefa14ad134efec09b33228bcfcdb96133276177f78a08d9ebfca924",
       "commonEnvelopeRoleContractVersion": "1.0.0",
-      "compositionLeafDigest": "0x2a46f7b3984d01ea1eeeb860572582ecbd455297582b6a3903995f1d5faab600",
-      "predicateImplementationExportDigest": "0x6ed98b59a0c3806a24a05a443ae64f21949291f704027859cdcd92c0d2a8e986",
-      "oracleImplementationExportDigest": "0x48b6304e9cf9d545797a269323f623e99d41559a41e7f13a642b93c5ae501e5e",
+      "compositionLeafDigest": "0x097e6fff013c47e00a2e3df000b28aa75b4ca45eb1c3429a32b9222b2c8e61a3",
+      "predicateImplementationExportDigest": "0x9d5936ca72983763ad0a32439253f51ba4c91486edf0b00b74bfcb834357d800",
+      "oracleImplementationExportDigest": "0x0181e7f1a3e8a6e36828ef7aacb119bc524fb3f20e04efe77224d04de1fb000b",
       "materialProviderImplementationExportDigest": "0x5b6115dafc4a918b77e5df7c9876a6f6c087aee9e5dfb8fc85e55c1802284476",
       "entrypointId": "compiler-root:acceptance/gate-core/tsconfig.json:acceptance/gate-core/src/predicates/full-family.ts",
       "oracleEntrypointId": "compiler-root:acceptance/full-family-facts/tsconfig.json:acceptance/full-family-facts/src/reference-model.ts",
@@ -190,9 +190,9 @@ export const RELEASE_ROLE_MANIFEST = Object.freeze({
       "materialProviderExportName": "TERMINAL_SELECTION_MATERIAL_PROVIDER",
       "materialProviderContractDigest": "0x3590a7a74cb587f45cf84ffb5c81fd3f456b40f4aa79cf2b45ec46ac620ecaaf",
       "commonEnvelopeRoleContractVersion": "1.0.0",
-      "compositionLeafDigest": "0x0a7ba0923167001bc9efcc760988112fbedefe6453bda4b0d223874829298c9c",
+      "compositionLeafDigest": "0x373d5b404188d836925ff6861ef914d454213ac083a212241275703dc3723444",
       "predicateImplementationExportDigest": "0xf23d6d401f509269c791101e2d302da5ba4ec3acdb068a70bcfa8cc7a2bf5e8c",
-      "oracleImplementationExportDigest": "0x44ebd7df7c26166cb79e75dc8614a7e8e9d880c943d9986e527206088a03555d",
+      "oracleImplementationExportDigest": "0x123e282c730c9e0370c1d0474b6f64240c5bb694eabab79915da2dbc56ceaaf5",
       "materialProviderImplementationExportDigest": "0x0a21f71a6a641eeec256c8bae26e1085ab9f68c12dfe65519af5e96c5da2092d",
       "entrypointId": "compiler-root:acceptance/gate-core/tsconfig.json:acceptance/gate-core/src/predicates/terminal-selection.ts",
       "oracleEntrypointId": "compiler-root:acceptance/terminal-selection-facts/tsconfig.json:acceptance/terminal-selection-facts/src/reference-model.ts",
@@ -204,6 +204,6 @@ export const RELEASE_ROLE_MANIFEST = Object.freeze({
     "exportName": "evaluateGateCore",
     "entrypointId": "package-entrypoint:acceptance/gate-core/package.json:.:acceptance/gate-core/src/generated/release-runtime.ts:acceptance/gate-core/tsconfig.json"
   },
-  "predicateCompositionRootDigest": "0x5aa061f83b7ecc5687449949c641e4cfdc4456e934194aa366174f16add53e88",
-  "rootDigest": "0x229f66fa64185fd23dfdd72fdd12ed32434e8e41008e8a0e003c7ae7a5602dab"
+  "predicateCompositionRootDigest": "0xd7804809ed44e98bd8fbf8dd33034440c4236841a24c67ce38d3681c5db7d668",
+  "rootDigest": "0xc191d5555ab26801859480772f37805f1445d856859375fa10074937bd41a7c1"
 } as const);

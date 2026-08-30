@@ -669,6 +669,25 @@ const NOMINATION_QUALIFICATION_REUSE_OWNER_PATH = "tools/runtime-release-package
 const NOMINATION_QUALIFICATION_REUSE_STATE_PATH = "tools/runtime-release-packager/src/internal/nomination-qualification-reuse-owner-state.ts";
 const RELEASE_PACKAGER_PUBLIC_ROOT_PATH = "tools/runtime-release-packager/src/index.ts";
 const RELEASE_DEPLOYMENT_PACKAGE_PATH = "tools/runtime-release-packager/src/deployment-package.ts";
+const RELEASE_PACKAGING_GENERATED_IMPORTS = new Map<string, Readonly<{
+  readonly specifier: string;
+  readonly imported: readonly { readonly name: string; readonly typeOnly: boolean }[];
+}>>([
+  [
+    `${RELEASE_DEPLOYMENT_PACKAGE_PATH}\u2192${FAMILY_RUNTIME_COMPOSITION_PATH}`,
+    Object.freeze({
+      specifier: "../../../generated/runtime-composition/index.ts",
+      imported: Object.freeze([{ name: "createReleaseFamilyRuntimeComposition", typeOnly: false }]),
+    }),
+  ],
+  [
+    "tools/runtime-release-packager/src/release-acceptance.ts\u2192acceptance/gate-core/src/generated/release-role-manifest.ts",
+    Object.freeze({
+      specifier: "../../../acceptance/gate-core/src/generated/release-role-manifest.ts",
+      imported: Object.freeze([{ name: "RELEASE_ROLE_MANIFEST", typeOnly: false }]),
+    }),
+  ],
+]);
 const FORBIDDEN_RELEASE_AUTHORING_PATHS = Object.freeze([
   "tools/runtime-release-packager/src/internal/assembled-release-acceptance-owner.ts",
   "tools/runtime-release-packager/src/internal/production-release-workflow-owner.ts",
@@ -826,12 +845,34 @@ const PREDICATE_MATERIAL_SOURCE_OWNER_EDGES = new Set(PREDICATE_MATERIAL_SOURCE_
   .map((edge) => `${edge.from}\u2192${edge.to}`));
 
 const PRODUCTION_RELEASE_ADVISORY_AUTHORITY_IMPORTS = Object.freeze([
-  { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: QUALIFIED_RELEASE_PUBLIC_RUNNER_STATE_PATH, specifier: "./internal/qualified-release-public-runner-state.ts", named: ["observeQualifiedReleaseAcceptanceAdvisoryV1", "readQualifiedReleaseLineageObservationV1"] },
+  { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: QUALIFIED_RELEASE_PUBLIC_RUNNER_STATE_PATH, specifier: "./internal/qualified-release-public-runner-state.ts", named: ["observeQualifiedReleaseAcceptanceAdvisoryV1", "prepareQualifiedReleaseAcceptanceForExternalOwnerV1", "readQualifiedReleaseLineageObservationV1"] },
   { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: COLLECTOR_RUNTIME_BOUNDARY_OBSERVERS_PATH, specifier: "../../../acceptance/collectors/src/production-runtime-boundary-observers.ts", named: ["issueProductionClosureMaterialObserverPortsV1"] },
   { from: COLLECTOR_PRODUCTION_CLOSURE_OBSERVER_PATH, to: RELEASE_ASSEMBLED_ACCEPTANCE_PATH, specifier: "../../../tools/runtime-release-packager/src/assembled-release-acceptance.ts", named: ["readQualifiedReleaseLineageObservationV1"] },
   { from: COLLECTOR_RUNTIME_BOUNDARY_OBSERVERS_PATH, to: RELEASE_ASSEMBLED_ACCEPTANCE_PATH, specifier: "../../../tools/runtime-release-packager/src/assembled-release-acceptance.ts", named: [] },
   { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: ROOT_PREDICATE_MATERIAL_SOURCE_OWNER_PATH, specifier: "./internal/root-predicate-material-source-owner.ts", named: ["issueRootPredicateMaterialSourceV1"] },
   { from: RUNTIME_RELEASE_BOOTSTRAP_PATH, to: RUNTIME_RELEASE_OBSERVER_STORE_OWNER_PATH, specifier: "./observer-store-owner.ts", named: ["issueRuntimeReleaseObserverStoreServiceV1"] },
+] as const);
+
+/** The installed/pre-release application receives one opaque central owner.
+ * All authority construction and acceptance-observer splicing stays behind
+ * these exact imports; no class-wide runtime-to-acceptance exception exists. */
+const PRODUCTION_RUNTIME_OWNER_AUTHORITY_IMPORTS = Object.freeze([
+  { from: SEARCHER_RELEASE_RUNTIME_OWNER_PATH, to: "packages/runtime-release-authority/src/production-runtime-owner.ts", specifier: "../../../packages/runtime-release-authority/src/production-runtime-owner.ts", named: ["VerifiedRuntimeReleaseOwnerPortV1", "openVerifiedRuntimeReleaseOwnerPortV1", "verifyExternalRuntimeReleaseBindingV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/index.ts", specifier: "./index.ts", named: ["RuntimeReleaseCompositionInputV1", "RuntimeReleaseCompositionServicesV1", "buildRuntimeReleaseComposition", "verifyAndIssueRuntimeReleaseAuthorityV1", "verifyRuntimeReleaseBindingAuthenticityV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts", specifier: "./internal/deployment-runtime-owner.ts", named: ["DeploymentRuntimeInfrastructurePortsV1", "DeploymentRuntimeInfrastructureRequestV1", "issueDeploymentRuntimeInfrastructureV1", "readDeploymentRuntimeInfrastructureV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH, specifier: "./internal/http-family-physical-owner.ts", named: ["issueRuntimeReleaseHttpFamilyPhysicalExecutionPortV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_DISCOVERY_SOURCE_OWNER_PATH, specifier: "./internal/discovery-source-authority-owner.ts", named: ["RuntimeReleaseDiscoverySourceDeploymentInputV1", "issueRuntimeReleaseQualifiedDiscoverySourcePort"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_ECONOMIC_SAFETY_OWNER_PATH, specifier: "./internal/economic-safety-owner.ts", named: ["issueRuntimeReleaseEconomicSafetyEvaluatorCapabilityV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_REVM_OWNER_PATH, specifier: "./internal/revm-worker-owner.ts", named: ["issueRuntimeReleaseRevmWorkerDeploymentPort"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_PERFORMANCE_POLICY_OWNER_PATH, specifier: "./internal/performance-policy-owner.ts", named: ["RuntimeReleasePerformancePolicyPortV1", "issueInstalledRuntimeReleasePerformancePolicyPortV1", "issuePreReleaseRuntimeReleasePerformancePolicyPortV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/internal/performance-deployment-owner.ts", specifier: "./internal/performance-deployment-owner.ts", named: ["openInstalledRuntimeReleasePerformanceDeploymentPortV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", specifier: "./internal/production-terminal-observation-owner.ts", named: ["RuntimeReleaseTerminalObservationInputV1", "issueRuntimeReleaseTerminalObservationPortsV1"] },
+  { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: FULL_FAMILY_COLLECTOR_PORT_PATH, specifier: "../../../../acceptance/collectors/src/production-full-family-port.ts", named: ["issueProductionFullFamilyCollectorPortV1"] },
+  { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: SIX_STEP_COLLECTOR_PORT_PATH, specifier: "../../../../acceptance/collectors/src/production-six-step-port.ts", named: ["issueProductionSixStepCollectorPortV1"] },
+  { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: TERMINAL_PHASE_COLLECTOR_PORT_PATH, specifier: "../../../../acceptance/collectors/src/production-terminal-phase-port.ts", named: ["issueProductionTerminalPhaseCollectorPortV1"] },
+  { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: TERMINAL_PHASE_LOCATOR_INDEX_PATH, specifier: "../../../../acceptance/collectors/src/terminal-phase-locator-index.ts", named: ["ProductionTerminalPhaseLocatorIndexV1"] },
+  { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: RELEASE_OWNED_OBSERVER_STORE_PATH, specifier: "../../../../acceptance/collectors/src/internal/release-owned-observer-store.ts", named: ["readReleaseOwnedObserverStoreV1"] },
+  { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: RUNTIME_RELEASE_OBSERVER_STORE_OWNER_PATH, specifier: "./observer-store-owner.ts", named: ["RuntimeReleaseObserverStoreServiceV1"] },
 ] as const);
 
 /** Receipt, Stage 2, and release-binding authority are deliberately narrower
@@ -923,6 +964,7 @@ const PRE_RELEASE_RESTRICTED_RUNTIME_EXPORTS = new Map<string, ReadonlySet<strin
   ])],
   [QUALIFIED_RELEASE_PUBLIC_RUNNER_STATE_PATH, new Set([
     "installVerifiedQualifiedReleaseRunnerWireV1",
+    "prepareQualifiedReleaseAcceptanceForExternalOwnerV1",
     "readAuthorizedQualifiedReleaseRunnerWireV1",
     "readPublicQualifiedReleaseRunnerStateV1",
     "readQualifiedReleaseLineageObservationV1",
@@ -1150,6 +1192,8 @@ const KNOWN_AUTHORITY_CONSTRUCTOR_PATHS = new Set([
   ARTIFACT_LINEAGE_STAGE_TWO_GIT_OWNER_PATH,
   RELEASE_OWNED_OBSERVER_STORE_PATH,
   RUNTIME_RELEASE_OBSERVER_STORE_OWNER_PATH,
+  "packages/runtime-release-authority/src/production-runtime-owner.ts",
+  "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts",
   "packages/runtime-release-authority/src/index.ts",
   "packages/runtime-release-authority/src/internal/bootstrap.ts",
   RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH,
@@ -1195,6 +1239,7 @@ const AUTHORITY_OWNER_EDGES = new Set([
   `${RUNTIME_RELEASE_SIX_STEP_PRODUCTION_OWNER_PATH}\u2192${CHECKPOINT_PUBLIC_PATH}`,
   ...PREDICATE_MATERIAL_SOURCE_OWNER_EDGES,
   ...PRODUCTION_RELEASE_ADVISORY_OWNER_EDGES,
+  ...PRODUCTION_RUNTIME_OWNER_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
   ...PRE_RELEASE_BOUNDARY_OWNER_EDGES,
   ...CATALOG_NOMINATION_REUSE_OWNER_EDGES,
   ...ARTIFACT_LINEAGE_STAGE_ONE_OWNER_EDGES,
@@ -1437,6 +1482,10 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
     edge.named,
   ] as const),
   ...PRODUCTION_RELEASE_ADVISORY_AUTHORITY_IMPORTS.map((edge) => [
+    `${edge.from}\u2192${edge.to}`,
+    edge.named,
+  ] as const),
+  ...PRODUCTION_RUNTIME_OWNER_AUTHORITY_IMPORTS.map((edge) => [
     `${edge.from}\u2192${edge.to}`,
     edge.named,
   ] as const),
@@ -1856,6 +1905,10 @@ const AUTHORITY_MODULE_SPECIFIERS = new Map<string, string>([
     `${edge.from}\u2192${edge.to}`,
     edge.specifier,
   ] as const),
+  ...PRODUCTION_RUNTIME_OWNER_AUTHORITY_IMPORTS.map((edge) => [
+    `${edge.from}\u2192${edge.to}`,
+    edge.specifier,
+  ] as const),
   ...PRE_RELEASE_BOUNDARY_AUTHORITY_IMPORTS.map((edge) => [
     `${edge.from}\u2192${edge.to}`,
     edge.specifier,
@@ -2154,6 +2207,7 @@ const REQUIRED_AUTHORITY_IMPORT_EDGES = new Set([
   ...TERMINAL_PHASE_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
   ...PREDICATE_MATERIAL_SOURCE_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
   ...PRODUCTION_RELEASE_ADVISORY_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
+  ...PRODUCTION_RUNTIME_OWNER_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
   ...PRE_RELEASE_BOUNDARY_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
   ...CATALOG_NOMINATION_REUSE_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
   ...PRE_RELEASE_SCHEMA_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
@@ -2960,6 +3014,38 @@ export function inspectSourceText(path: string, source: string, options: SourceS
     return ts.isCallExpression(value) && isIdentifierNamed(value.expression, createRequireNames);
   };
   const isRequireAlias = (expression: ts.Expression): boolean => isIdentifierNamed(expression, requireNames);
+  const isVerifiedDeploymentSnapshotLoader = (node: ts.CallExpression, argument: ts.Expression | undefined): boolean => {
+    if (path !== SEARCHER_DEPLOYMENT_PATH || argument === undefined) return false;
+    let owner: ts.Node | undefined = node.parent;
+    while (owner !== undefined && !ts.isFunctionDeclaration(owner)) owner = owner.parent;
+    if (owner === undefined || owner.name === undefined || owner.body === undefined) return false;
+    const expected = owner.name.text === "loadVerifiedDeploymentBundleModuleV1"
+      ? { bytes: "bundleModuleBytes", hash: "manifest.searcherRuntimeBundleModuleSha256" }
+      : owner.name.text === "loadVerifiedDeploymentCompositionSnapshotV1"
+        ? { bytes: "bytes", hash: "manifest.deploymentCompositionModuleSha256" }
+        : null;
+    if (expected === null) return false;
+    const template = unwrapped(argument);
+    if (!ts.isTemplateExpression(template)
+      || template.head.text !== "data:text/javascript;base64,"
+      || template.templateSpans.length !== 2
+      || template.templateSpans[0]!.literal.text !== "#"
+      || template.templateSpans[1]!.literal.text !== "") return false;
+    const compact = (value: ts.Node): string => value.getText(file).replace(/\s+/g, "");
+    if (compact(template.templateSpans[0]!.expression) !== `Buffer.from(${expected.bytes}).toString("base64")`
+      || compact(template.templateSpans[1]!.expression) !== `${expected.hash}.slice(2)`) return false;
+    const containsThrow = (value: ts.Node): boolean => {
+      if (ts.isThrowStatement(value)) return true;
+      let found = false;
+      ts.forEachChild(value, child => { if (!found && containsThrow(child)) found = true; });
+      return found;
+    };
+    return owner.body.statements.some(statement =>
+      statement.getStart(file) < node.getStart(file)
+      && ts.isIfStatement(statement)
+      && compact(statement.expression) === `sha256Hex(${expected.bytes})!==${expected.hash}`
+      && containsThrow(statement.thenStatement));
+  };
   const visit = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node)) {
       const specifier = moduleSpecifierText(node.moduleSpecifier);
@@ -3047,7 +3133,8 @@ export function inspectSourceText(path: string, source: string, options: SourceS
           && deploymentCall.arguments.length === 1
           && ts.isIdentifier(deploymentCall.arguments[0])
           && deploymentCall.arguments[0].text === "path";
-        if (specifier === null && !isDeploymentBundleLoader) report("dynamic-import-nonliteral", argument ?? node, "Dynamic import must use one literal module specifier");
+        const isVerifiedSnapshotLoader = isVerifiedDeploymentSnapshotLoader(node, argument);
+        if (specifier === null && !isDeploymentBundleLoader && !isVerifiedSnapshotLoader) report("dynamic-import-nonliteral", argument ?? node, "Dynamic import must use one literal module specifier");
         else if (specifier !== null) imports.push({ specifier, offset: argument.getStart(file), dynamic: true });
       } else if (ts.isCallExpression(expression) && isIdentifierNamed(expression.expression, createRequireNames)) {
         const argument = node.arguments[0];
@@ -3884,7 +3971,14 @@ export function validateDependencyBoundaries(
       && to.path === FAMILY_RUNTIME_COMPOSITION_PATH;
     const valuationOwnerRuntimeCompositionImport = from.path === RUNTIME_RELEASE_ECONOMIC_SAFETY_OWNER_PATH
       && to.path === VALUATION_OWNER_RUNTIME_COMPOSITION_PATH;
+    const releasePackagingGeneratedImport = RELEASE_PACKAGING_GENERATED_IMPORTS.get(`${edge.from}\u2192${edge.to}`);
     const authorityOwnerEdge = AUTHORITY_OWNER_EDGES.has(`${edge.from}\u2192${edge.to}`);
+    if (releasePackagingGeneratedImport !== undefined) {
+      if (edge.specifier !== releasePackagingGeneratedImport.specifier) {
+        diagnostics.push(diagnostic("fail", "release-packaging-generated-specifier", edge.from, `Release packaging must use exact generated module specifier ${releasePackagingGeneratedImport.specifier}`));
+      }
+      validateNarrowPortImport(edge, releasePackagingGeneratedImport.imported);
+    }
     if (to.path === PRE_RELEASE_TERMINAL_PHYSICAL_STATE_PATH && !authorityOwnerEdge) {
       diagnostics.push(diagnostic(
         "fail",
@@ -4158,7 +4252,8 @@ export function validateDependencyBoundaries(
       from.fileClass !== "generated" &&
       !productionReleaseRuntimeImport &&
       !qualifiedReleaseRunnerImport &&
-      !generatedReleaseAuthorityImport
+      !generatedReleaseAuthorityImport &&
+      releasePackagingGeneratedImport === undefined
     ) {
       diagnostics.push(diagnostic("fail", "generated-consumer-boundary", edge.from, `Only generated modules may compose generated artifacts, and apps may consume runtime composition only: ${edge.to}`));
     }
@@ -4173,6 +4268,13 @@ export function validateDependencyBoundaries(
         fromPath,
         `Required owner-issued authority consumer edge is missing: ${fromPath} → ${toPath}`,
       ));
+    }
+  }
+  for (const requiredEdge of RELEASE_PACKAGING_GENERATED_IMPORTS.keys()) {
+    const [fromPath, toPath] = requiredEdge.split("\u2192");
+    if (!byPath.has(fromPath) || !byPath.has(toPath)) continue;
+    if (!edges.some(edge => edge.from === fromPath && edge.to === toPath)) {
+      diagnostics.push(diagnostic("fail", "release-packaging-generated-edge-missing", fromPath, `Release packaging generated binding is missing: ${fromPath} → ${toPath}`));
     }
   }
   if (byPath.has(PRE_RELEASE_FACT_LOG_PATH) && byPath.has(PRE_RELEASE_ACTIVE_READY_GRAPH_OBSERVER_PATH)
@@ -5538,6 +5640,7 @@ function isSharedReleasePort(path: string): boolean {
     path.startsWith("packages/canonical-codec/") ||
     path === "acceptance/gate-core/src/predicate-composition.ts" ||
     path === "acceptance/gate-core/src/predicate-contract.ts" ||
+    path === "acceptance/gate-core/src/material-provider.ts" ||
     // Six-step stage bytes are a frozen fact codec in the neutral spec layer,
     // not adapter or oracle semantics.
     path === "specs/evidence/src/six-step.ts";
@@ -5561,6 +5664,20 @@ function assertReleaseOwnedClosuresDisjoint(
   if (overlap.length > 0) {
     diagnostics.push(diagnostic("fail", "release-closure-role-overlap", left.entrypointId, `${left.role} and ${right.role} own overlapping compiler-closure source at ${overlap.join(", ")}`));
   }
+}
+
+/** Multiple named exports may deliberately share one compiler root.  Their
+ * exact identities remain independently bound by the manifest export digest;
+ * disjointness applies between distinct implementation roots, not between
+ * two names selected from the same root. */
+function assertDistinctReleaseOwnedClosuresDisjoint(
+  receipt: Pick<BoundaryReceipt, "implementationClosures">,
+  left: ReleaseClosureRefV1,
+  right: ReleaseClosureRefV1,
+  diagnostics: BoundaryDiagnostic[],
+): void {
+  if (left.entrypointId === right.entrypointId) return;
+  assertReleaseOwnedClosuresDisjoint(receipt, left, right, diagnostics);
 }
 
 function assertReleaseClosureContains(
@@ -7562,6 +7679,7 @@ export function validatePreReleaseOwnerHostSources(
     const expectedFunctions = [
       "installVerifiedQualifiedReleaseRunnerWireV1",
       "observeQualifiedReleaseAcceptanceAdvisoryV1",
+      "prepareQualifiedReleaseAcceptanceForExternalOwnerV1",
       "readAuthorizedQualifiedReleaseRunnerWireV1",
       "readPublicQualifiedReleaseRunnerStateV1",
       "readQualifiedReleaseLineageObservationV1",
@@ -7663,20 +7781,32 @@ export function validatePreReleaseProductionBoundarySources(
       || !observeSyntax.includes("observeQualifiedReleaseAcceptanceAdvisoryV1(material.qualifiedReleaseRunner,source)")) {
       diagnostics.push(diagnostic("fail", "production-advisory-observer-only", PRODUCTION_RELEASE_WORKFLOW_PATH, "Production advisory must reopen exact material, revalidate it, and invoke only the observer runner"));
     }
-    const prepare = workflowFile.statements.find((statement): statement is ts.FunctionDeclaration =>
+    const prepareCapability = workflowFile.statements.find((statement): statement is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(statement)
+      && statement.name?.text === "prepareProductionReleaseAcceptanceForExternalOwnerV1"
+      && hasExportModifier(statement));
+    if (!exactRequiredTypeReferenceParameter(prepareCapability, "PreReleaseAdvisoryMaterialCapabilityV1")) {
+      diagnostics.push(diagnostic("fail", "production-release-preparation-capability-only", PRODUCTION_RELEASE_WORKFLOW_PATH, "Production release preparation must accept exactly one opaque PreReleaseAdvisoryMaterialCapabilityV1"));
+    }
+    const prepareCapabilitySyntax = prepareCapability?.body === undefined ? null : compactStageOneSyntax(prepareCapability.body);
+    const signingRequest = workflowFile.statements.find((statement): statement is ts.FunctionDeclaration =>
       ts.isFunctionDeclaration(statement)
       && statement.name?.text === "prepareProductionReleaseAcceptanceSigningRequestV1"
       && hasExportModifier(statement));
-    if (!exactRequiredTypeReferenceParameter(prepare, "PreReleaseAdvisoryMaterialCapabilityV1")) {
-      diagnostics.push(diagnostic("fail", "production-release-preparation-capability-only", PRODUCTION_RELEASE_WORKFLOW_PATH, "Production release preparation must accept exactly one opaque PreReleaseAdvisoryMaterialCapabilityV1"));
-    }
-    const prepareSyntax = prepare?.body === undefined ? null : compactStageOneSyntax(prepare.body);
-    if (prepareSyntax === null
-      || !prepareSyntax.includes("readPreReleaseAdvisoryMaterialV1(capability)")
-      || !prepareSyntax.includes("assertAdvisoryMaterialCurrent(capability,material)")
-      || !prepareSyntax.includes("prepareQualifiedReleaseAcceptanceForExternalOwnerV1(material.qualifiedReleaseRunner,source)")
-      || prepareSyntax.includes("advisoryJudgment")
-      || prepareSyntax.includes("factLog")) {
+    const signingRequestSyntax = signingRequest?.body === undefined ? null : compactStageOneSyntax(signingRequest.body);
+    const invokesQualifiedPreparation = prepareCapabilitySyntax !== null
+      && /prepareQualifiedReleaseAcceptanceForExternalOwnerV1\(material\.qualifiedReleaseRunner,source,?\)/.test(prepareCapabilitySyntax);
+    const delegatesSigningRequest = signingRequestSyntax !== null
+      && /readProductionReleaseAcceptanceSigningRequestV1\(awaitprepareProductionReleaseAcceptanceForExternalOwnerV1\(capability\),?\)/.test(signingRequestSyntax);
+    if (prepareCapabilitySyntax === null
+      || !prepareCapabilitySyntax.includes("readPreReleaseAdvisoryMaterialV1(capability)")
+      || !prepareCapabilitySyntax.includes("assertAdvisoryMaterialCurrent(capability,material)")
+      || !invokesQualifiedPreparation
+      || prepareCapabilitySyntax.includes("advisoryJudgment")
+      || prepareCapabilitySyntax.includes("factLog")
+      || !exactRequiredTypeReferenceParameter(signingRequest, "PreReleaseAdvisoryMaterialCapabilityV1")
+      || signingRequestSyntax === null
+      || !delegatesSigningRequest) {
       diagnostics.push(diagnostic("fail", "production-release-preparation-owner", PRODUCTION_RELEASE_WORKFLOW_PATH, "Production release preparation must revalidate frozen material and invoke only the qualified external-release runner"));
     }
   }
@@ -7861,12 +7991,12 @@ export function deriveReleaseClosureFacts(
   for (const adapter of predicateAdapters) assertReleaseOwnedClosuresDisjoint(receipt, genericCore, adapter, diagnostics);
   for (let left = 0; left < predicateAdapters.length; left += 1) {
     for (let right = left + 1; right < predicateAdapters.length; right += 1) {
-      assertReleaseOwnedClosuresDisjoint(receipt, predicateAdapters[left]!, predicateAdapters[right]!, diagnostics);
+      assertDistinctReleaseOwnedClosuresDisjoint(receipt, predicateAdapters[left]!, predicateAdapters[right]!, diagnostics);
     }
   }
   for (let left = 0; left < qualificationOracles.length; left += 1) {
     for (let right = left + 1; right < qualificationOracles.length; right += 1) {
-      assertReleaseOwnedClosuresDisjoint(receipt, qualificationOracles[left]!, qualificationOracles[right]!, diagnostics);
+      assertDistinctReleaseOwnedClosuresDisjoint(receipt, qualificationOracles[left]!, qualificationOracles[right]!, diagnostics);
     }
   }
   for (const oracle of qualificationOracles) {
@@ -8000,12 +8130,12 @@ export function validateReleaseClosureFacts(
   }
   for (let left = 0; left < facts.predicateAdapters.length; left += 1) {
     for (let right = left + 1; right < facts.predicateAdapters.length; right += 1) {
-      assertReleaseOwnedClosuresDisjoint(receipt, facts.predicateAdapters[left]!, facts.predicateAdapters[right]!, diagnostics);
+      assertDistinctReleaseOwnedClosuresDisjoint(receipt, facts.predicateAdapters[left]!, facts.predicateAdapters[right]!, diagnostics);
     }
   }
   for (let left = 0; left < facts.qualificationOracles.length; left += 1) {
     for (let right = left + 1; right < facts.qualificationOracles.length; right += 1) {
-      assertReleaseOwnedClosuresDisjoint(receipt, facts.qualificationOracles[left]!, facts.qualificationOracles[right]!, diagnostics);
+      assertDistinctReleaseOwnedClosuresDisjoint(receipt, facts.qualificationOracles[left]!, facts.qualificationOracles[right]!, diagnostics);
     }
   }
   assertReleaseClosureContains(receipt, facts.releaseRuntime, facts.genericCore, diagnostics);

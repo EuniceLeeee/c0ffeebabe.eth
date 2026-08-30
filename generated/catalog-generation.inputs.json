@@ -480,36 +480,36 @@
       "modulePath": "tools/catalog-generator/src/index.ts",
       "exportName": "generateCatalogWithImpact",
       "entrypointId": "compiler-root:tools/catalog-generator/tsconfig.json:tools/catalog-generator/src/index.ts#generateCatalogWithImpact",
-      "closureDigest": "0x475bee382eeb136c25d7b4388af2cb52fdf6c1bb3cb69f82834fb5a102877f57",
-      "programInputSetRoot": "0xf48666ea208f9e6b1a9b33c2f5bc07ce61ae6aec124352585e4a3ad9e66d2498"
+      "closureDigest": "0xdcae707544c9d5c10b784ca18f37ca42b64d92c42780d7df79c6e674b79072dd",
+      "programInputSetRoot": "0x31c5d3dcb0b0cec746b1980e5ca3e6f274837601e995f7770f6371d0184175ac"
     },
     {
       "modulePath": "valuation-owners/native-equivalent/src/qualification.ts",
       "exportName": "NATIVE_EQUIVALENT_VALUATION_INDEPENDENT_ORACLE_CASES_V1",
       "entrypointId": "compiler-root:valuation-owners/native-equivalent/tsconfig.json:valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_INDEPENDENT_ORACLE_CASES_V1",
-      "closureDigest": "0x5b547b4bb0eb739533ed877ca2da07c0933cf605cb8d21ade5176a8f631f6f59",
-      "programInputSetRoot": "0x9af55ecbb31576879d3087caca2647e6ba4d51f8e4134cec2a264c780525a69a"
+      "closureDigest": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
+      "programInputSetRoot": "0x3f6843d4795904c73acd0c7c7e2e422854534776e6a688f2500f70fd8afa27a1"
     },
     {
       "modulePath": "valuation-owners/native-equivalent/src/qualification.ts",
       "exportName": "NATIVE_EQUIVALENT_VALUATION_MUTATION_CORPUS_V1",
       "entrypointId": "compiler-root:valuation-owners/native-equivalent/tsconfig.json:valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_MUTATION_CORPUS_V1",
-      "closureDigest": "0x5b547b4bb0eb739533ed877ca2da07c0933cf605cb8d21ade5176a8f631f6f59",
-      "programInputSetRoot": "0x9af55ecbb31576879d3087caca2647e6ba4d51f8e4134cec2a264c780525a69a"
+      "closureDigest": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
+      "programInputSetRoot": "0x3f6843d4795904c73acd0c7c7e2e422854534776e6a688f2500f70fd8afa27a1"
     },
     {
       "modulePath": "valuation-owners/native-equivalent/src/qualification.ts",
       "exportName": "NATIVE_EQUIVALENT_VALUATION_QUALIFICATION_SPEC_V1",
       "entrypointId": "compiler-root:valuation-owners/native-equivalent/tsconfig.json:valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_QUALIFICATION_SPEC_V1",
-      "closureDigest": "0x5b547b4bb0eb739533ed877ca2da07c0933cf605cb8d21ade5176a8f631f6f59",
-      "programInputSetRoot": "0x9af55ecbb31576879d3087caca2647e6ba4d51f8e4134cec2a264c780525a69a"
+      "closureDigest": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
+      "programInputSetRoot": "0x3f6843d4795904c73acd0c7c7e2e422854534776e6a688f2500f70fd8afa27a1"
     },
     {
       "modulePath": "valuation-owners/native-equivalent/src/runtime.ts",
       "exportName": "createNativeEquivalentValuationOwnerV1",
       "entrypointId": "compiler-root:valuation-owners/native-equivalent/tsconfig.json:valuation-owners/native-equivalent/src/runtime.ts#createNativeEquivalentValuationOwnerV1",
-      "closureDigest": "0x4d58051891faa7cf1113b039d419bbe41c9f5ffdb1204697f2e90a294314806b",
-      "programInputSetRoot": "0x3966a749b41206ccaa89076d0f04883564e740fba1542f590dbf524c1caac19c"
+      "closureDigest": "0x3235630ce07e12067baa9a8c2c385d99fe8e156341b6563acd54612564da60c6",
+      "programInputSetRoot": "0xb0c6789e5c33d05e34b86ed1430e011120ce0f4e9e8ca6f8b345f0a526b91330"
     }
   ],
   "proposedCapabilitySet": {

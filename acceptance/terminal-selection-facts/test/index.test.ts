@@ -844,6 +844,7 @@ test("reference model implementation closure contains no terminal production exe
     "decodeRawTerminalSelectionObservationV1", "decodeTerminalSelectionManifestV1",
     "decodeTerminalSelectionProcessEvidenceV1",
   ]) assert.equal(source.includes(forbidden), false, forbidden);
+  assert.doesNotMatch(source, /\bprocess\s*(?:\.|\[)|\b(?:const|let|var)\s+process\b/);
 });
 
 test("an exact no-successful-dry-run terminal is a factual failure, not a fabricated pass", () => {

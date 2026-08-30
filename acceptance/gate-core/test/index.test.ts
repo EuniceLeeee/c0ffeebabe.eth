@@ -60,6 +60,14 @@ test("generic core and live predicate closure do not import qualification oracle
   assert.doesNotMatch(releaseSource, /qualification\/internal|reference-model|CASE_MATERIAL/);
 });
 
+test("full-family acceptance derives release facts without generated or composition internals", () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const adapterSource = readFileSync(join(root, "src/predicates/full-family.ts"), "utf8");
+  const providerSource = readFileSync(join(root, "../collectors/src/material-providers/shared.ts"), "utf8");
+  assert.doesNotMatch(adapterSource, /generated\/(?:family-catalog|runtime-composition)|family-composition\/src\/internal/);
+  assert.doesNotMatch(providerSource, /gate-core\/src\/internal\/predicate-domain-material-state/);
+});
+
 test("package release surface exposes only runtime evaluation and opaque assembly consumers", () => {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { exports?: unknown };

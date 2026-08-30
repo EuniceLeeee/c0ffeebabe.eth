@@ -120,8 +120,8 @@
     },
     {
       "path": "acceptance/collectors/src/material-providers/shared.ts",
-      "contentSha256": "0xaa7cb50df64e93f214e42d39167bd6f0d39593824f6892b02c7d2bf883a6baee",
-      "byteLength": 5097
+      "contentSha256": "0x7d90ad7e83c9652369424564bb157a1c365ec467ebbaeb7fe439fdce3c686c06",
+      "byteLength": 5014
     },
     {
       "path": "acceptance/collectors/src/material-providers/six-step.ts",
@@ -185,8 +185,8 @@
     },
     {
       "path": "acceptance/full-family-facts/src/reference-model.ts",
-      "contentSha256": "0x34012016d125aa2ec114190ec2959c35ce6636478a77e9308d9e6015d89a1dcb",
-      "byteLength": 13632
+      "contentSha256": "0x3f662fbd1464796f412f2d5286725acde50bf25f955e717edfecde0c6819bf53",
+      "byteLength": 13703
     },
     {
       "path": "acceptance/full-family-facts/src/runtime.ts",
@@ -230,23 +230,23 @@
     },
     {
       "path": "acceptance/gate-core/src/internal/material-provider-state.ts",
-      "contentSha256": "0xd52040e7254d0f1b55156a13247b0f8cd2838356b923e37e5ba34eb1574f7d47",
-      "byteLength": 2229
+      "contentSha256": "0xf6a2e1748d743150bdfc6b7bc3afc8472056212a5bdcb94d047442f03e5ce1a9",
+      "byteLength": 2171
     },
     {
       "path": "acceptance/gate-core/src/internal/predicate-domain-material-issuer.ts",
-      "contentSha256": "0x8d541ac788ef0cac10bf774bb48dcfa785e1726cf36c84e07811ac0085b124be",
-      "byteLength": 2637
+      "contentSha256": "0x0405b88f1e73f4f5aa2d33f69787757ab2124cb833b0282944c6909051239bc1",
+      "byteLength": 2630
     },
     {
       "path": "acceptance/gate-core/src/internal/predicate-domain-material-state.ts",
-      "contentSha256": "0x680ed5ce96ec0204fbe9e49c759b2b7e99fc8a527cc30b89b960af7fabcd0686",
-      "byteLength": 2042
+      "contentSha256": "0xac159d97c9ca6be07401a98cf9aa4d65f9dd37b3d5afdcfabf89416feb2d6ac2",
+      "byteLength": 1047
     },
     {
       "path": "acceptance/gate-core/src/material-provider.ts",
-      "contentSha256": "0xd5968f00eba634d607d580d344ece705a2dd9eb187028b13e26586a9bec8a815",
-      "byteLength": 1699
+      "contentSha256": "0x4e807aea61dafe989a853bed564334ff248497cec30bfad7bc083672ee8d5bba",
+      "byteLength": 2783
     },
     {
       "path": "acceptance/gate-core/src/predicate-composition.ts",
@@ -265,8 +265,8 @@
     },
     {
       "path": "acceptance/gate-core/src/predicates/full-family.ts",
-      "contentSha256": "0xa805bda7668bdd40cb11ca2b83568dbe73ae93cb7275109dad6f9a7b4a1e46ab",
-      "byteLength": 65616
+      "contentSha256": "0x42d5b78b7ab29fc083d2b79c9738978b438a5097f82508ade78a2d320434321a",
+      "byteLength": 76933
     },
     {
       "path": "acceptance/gate-core/src/predicates/performance.ts",
@@ -295,7 +295,7 @@
     },
     {
       "path": "acceptance/gate-core/src/release-material-assembler.ts",
-      "contentSha256": "0x641dab1fad704a9f6b5579ec3ffffa10f40762527f7144fe83721f545316cfb8",
+      "contentSha256": "0x5ee3a1da533c4c502e07ccd809385ea8a21a89da353716f5b46da5659de627b5",
       "byteLength": 5574
     },
     {
@@ -450,8 +450,8 @@
     },
     {
       "path": "acceptance/terminal-selection-facts/src/reference-model.ts",
-      "contentSha256": "0x900bf43ad63d6c19b421aa6711ef5bb8d13ca87dcb41a9fc785dbe763a38ac46",
-      "byteLength": 77173
+      "contentSha256": "0xc935fce2a62284b9497fd443e955350babacd6ee318ae5b07dc680d76d4eb9a0",
+      "byteLength": 77405
     },
     {
       "path": "acceptance/terminal-selection-facts/src/runtime.ts",
@@ -924,11 +924,6 @@
       "byteLength": 270
     },
     {
-      "path": "generated/family-catalog/index.ts",
-      "contentSha256": "0x6d18f5db646afb080e3bdc4b16317cfa43ce74058463dfab2a597047fe538dd5",
-      "byteLength": 27196
-    },
-    {
       "path": "generated/runtime-composition/index.ts",
       "contentSha256": "0xaa13debd2ea433f39b566f76625a7757e4d041eeddab5ed6e22c99a52bd69c2d",
       "byteLength": 107098
@@ -945,7 +940,7 @@
     },
     {
       "path": "generated/valuation-owner-registry/index.ts",
-      "contentSha256": "0x4e2b20c16263df90278672710af655b803d52e6d64cf57d451c353d7caa7b907",
+      "contentSha256": "0x211bfafcf7e5a90d5eab37377c7788f0d2941eb7dc394aa2a3373b0e234d157a",
       "byteLength": 4298
     },
     {
@@ -1785,8 +1780,8 @@
     },
     {
       "path": "packages/runtime-release-authority/package.json",
-      "contentSha256": "0x7105597bbdf883a0fdfc7c56a66e6def4f15c27d5d5d3efb1a76852eee2065e7",
-      "byteLength": 810
+      "contentSha256": "0xce5380c41d59cebb2e7266f3d3bd38023afa699d6c711a5c46c197ed218bb4e5",
+      "byteLength": 881
     },
     {
       "path": "packages/runtime-release-authority/src/full-family-terminal-consumer.ts",
@@ -1800,8 +1795,8 @@
     },
     {
       "path": "packages/runtime-release-authority/src/index.ts",
-      "contentSha256": "0xa11f4ac30e9986ed8f56196b2a95572e2ed38fdd61c533f73bd006a6be79f4e1",
-      "byteLength": 4818
+      "contentSha256": "0x49350115c8e70352b6cf747ddd5b93a5885e27bbcc4b4e45d56c6f6216a9ad52",
+      "byteLength": 5140
     },
     {
       "path": "packages/runtime-release-authority/src/internal/attestation-composition-consumer.ts",
@@ -2410,8 +2405,8 @@
     },
     {
       "path": "specs/economic-valuation-owner/src/index.ts",
-      "contentSha256": "0x31e843948ac73d068d67120d9c70ad86a2c47e9fc95918fc1647f1b30bd169c6",
-      "byteLength": 23198
+      "contentSha256": "0x22abb1ab8e367a680fafa7b41e4b01c796d086bbdfdfd0e4e2dab958a4451607",
+      "byteLength": 23570
     },
     {
       "path": "specs/economic-valuation-owner/tsconfig.json",
@@ -2754,15 +2749,15 @@
   "outputs": [
     {
       "path": "acceptance/gate-core/src/generated/predicate-composition.ts",
-      "contentSha256": "0x2f7e36120efd9eaabc70859cff3b58ca6e424e70c960362b5caf325799323872",
+      "contentSha256": "0xf8dd03d88a2a5f49b9dfadae9531d301a9b3611e8173d4aaddfa2891404f339a",
       "byteLength": 12274,
       "manifestRootDigest": null
     },
     {
       "path": "acceptance/gate-core/src/generated/release-role-manifest.ts",
-      "contentSha256": "0xbe43851a3a8191b588221df80ae47491320809ca380cbb4a0a3c11deaae9895a",
+      "contentSha256": "0x3422da2892d4fa4c4a47d70f88a59ab9495c5df158a06ee24d7178d8cb6f387c",
       "byteLength": 17747,
-      "manifestRootDigest": "0x229f66fa64185fd23dfdd72fdd12ed32434e8e41008e8a0e003c7ae7a5602dab"
+      "manifestRootDigest": "0xc191d5555ab26801859480772f37805f1445d856859375fa10074937bd41a7c1"
     },
     {
       "path": "acceptance/gate-core/src/generated/release-runtime.ts",
@@ -2778,7 +2773,7 @@
       "byteLength": 268
     }
   ],
-  "inputRoot": "0x3bbc354d13cf1d53e753f60895c2a76ea88c574494973f0d159e556ace834acb",
+  "inputRoot": "0x71f9db0c4ced0b5018d57bc60383027597e4d0f5fea3140a167825a1566bef6c",
   "generatorRoot": "0x0358d57d72c0165764592517d33e1efa42682f2817ffb82cada56da9416b5e8e",
-  "ledgerHash": "0x22eaac7773ffdf9b65ba4f8e3d1fafb19a02fe501ab99f22a58f0ffe032378ed"
+  "ledgerHash": "0x6629c9691972cbee9eaa4af6f5f983bb5fbeaa924347cb03a0b8c26e419a89bb"
 }

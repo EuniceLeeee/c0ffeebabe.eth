@@ -7,7 +7,18 @@ import {
   type CanonicalJson,
   type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
-import type { AssetReferenceV1 } from "../../../packages/asset-ref/src/index.ts";
+
+/** Frozen asset projection consumed by a valuation owner.  Runtime asset
+ * decoding remains package-owned; the spec binds only the canonical wire
+ * fields and never imports a production package contract. */
+export interface EconomicValuationAssetReferenceV1 {
+  readonly identity: Readonly<{
+    readonly chainId: string;
+    readonly kind: "erc20" | "native";
+    readonly address: string | null;
+  }>;
+  readonly assetRef: Hash;
+}
 
 export interface EconomicValuationSourceV1 {
   readonly chainId: string;
@@ -49,7 +60,7 @@ export interface EconomicValuationOwnerRuntimeBindingV1 extends EconomicValuatio
   readonly observeCurrentSource: (input: Readonly<{
     generationId: string;
     source: EconomicValuationSourceV1;
-    asset: AssetReferenceV1;
+    asset: EconomicValuationAssetReferenceV1;
   }>) => Promise<EconomicValuationFactV1>;
 }
 

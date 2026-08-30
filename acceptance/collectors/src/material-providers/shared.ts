@@ -4,6 +4,7 @@ import type { ObservedContentArtifactV1 } from "../content-addressed-sink.ts";
 import {
   PREDICATE_MATERIAL_PROVIDER_CONTRACT_VERSION,
   type PredicateDomainMaterialCapabilityV1,
+  type PredicateDomainMaterialV1,
   type PredicateMaterialProviderV1,
   type PredicateMaterialSourcePortV1,
   type PredicateMaterialUnavailableCodeV1,
@@ -11,7 +12,6 @@ import {
 import {
   issuePredicateDomainMaterialCapabilityV1,
 } from "../../../gate-core/src/internal/predicate-domain-material-issuer.ts";
-import type { PredicateDomainMaterialV1 } from "../../../gate-core/src/internal/predicate-domain-material-state.ts";
 import {
   assertProductionPredicateMaterialSourcePortV1,
 } from "../internal/predicate-material-source-owner.ts";

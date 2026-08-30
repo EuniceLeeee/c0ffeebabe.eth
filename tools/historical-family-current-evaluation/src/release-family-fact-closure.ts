@@ -5,16 +5,16 @@ import {
   hashDomain,
   type CanonicalJson,
   type Hash,
-} from "../../../../packages/canonical-codec/src/index.ts";
+} from "../../../packages/canonical-codec/src/index.ts";
 import { buildHistoricalFamilyAdvisoryReportV1 } from "./advisory-report.ts";
-import { loadHistoricalExecutionPrefixV1 } from "./execution-prefix.ts";
+import { loadHistoricalExecutionPrefixV1 } from "../../reference-only/historical-family-facts/src/execution-prefix.ts";
 import { loadGeneratedFamilySearchAdapterBindingV1 } from "./family-current-source-replay.ts";
 import {
   buildHistoricalFamilyAdvisoryMatrixV1,
   HISTORICAL_FAMILY_SPECIMENS_V1,
   type HistoricalSpecimenDescriptorV1,
 } from "./family-advisory-matrix.ts";
-import { loadHistoricalFamilyFactBundleV1 } from "./index.ts";
+import { loadHistoricalFamilyFactBundleV1 } from "../../reference-only/historical-family-facts/src/index.ts";
 
 export type ReleaseHistoricalFamilyIdV1 =
   | "curve-underlying"

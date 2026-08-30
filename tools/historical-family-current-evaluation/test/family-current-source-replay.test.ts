@@ -8,17 +8,17 @@ import {
   encodeCanonicalBytes,
   hashDomain,
   type Hash,
-} from "../../../../packages/canonical-codec/src/index.ts";
+} from "../../../packages/canonical-codec/src/index.ts";
 import type {
   FamilySearchCurrentSourceV1,
   FamilySearchSourceReadRequestV1,
-} from "../../../../packages/family-sdk/search-runtime/index.ts";
+} from "../../../packages/family-sdk/search-runtime/index.ts";
 import {
   UNIV2_STANDARD_FAMILY_DEFINITION_HASH,
   UNIV2_STANDARD_FAMILY_ID,
-} from "../../../../families/univ2-standard/src/public.ts";
-import { FLUID_DEX_SWAP_RESULT_SELECTOR } from "../../../../families/fluid-dex/src/abi.ts";
-import { FLUID_DEX_FAMILY_ID } from "../../../../families/fluid-dex/src/manifest.ts";
+} from "../../../families/univ2-standard/src/public.ts";
+import { FLUID_DEX_SWAP_RESULT_SELECTOR } from "../../../families/fluid-dex/src/abi.ts";
+import { FLUID_DEX_FAMILY_ID } from "../../../families/fluid-dex/src/manifest.ts";
 import {
   createFamilyCurrentSourceCaptureV1,
   createFrozenFamilyCurrentSourceReplayV1,

@@ -806,6 +806,40 @@ test("deployment bundle loading is allowed only at the exact absolute-path shell
   assert.ok(wrongShape.diagnostics.some((item) => item.code === "dynamic-import-nonliteral"));
 });
 
+test("deployment snapshot loading permits only the two exact hash-fenced data URL evaluators", () => {
+  for (const expected of [
+    {
+      functionName: "loadVerifiedDeploymentBundleModuleV1",
+      bytes: "bundleModuleBytes",
+      hash: "manifest.searcherRuntimeBundleModuleSha256",
+    },
+    {
+      functionName: "loadVerifiedDeploymentCompositionSnapshotV1",
+      bytes: "bytes",
+      hash: "manifest.deploymentCompositionModuleSha256",
+    },
+  ] as const) {
+    const source = [
+      `async function ${expected.functionName}() {`,
+      `  const ${expected.bytes} = new Uint8Array();`,
+      "  const manifest = { searcherRuntimeBundleModuleSha256: '0x00', deploymentCompositionModuleSha256: '0x00' };",
+      `  if (sha256Hex(${expected.bytes}) !== ${expected.hash}) throw new TypeError('hash mismatch');`,
+      `  return import(\`data:text/javascript;base64,\${Buffer.from(${expected.bytes}).toString("base64")}#\${${expected.hash}.slice(2)}\`);`,
+      "}",
+    ].join("\n");
+    const baseline = inspectSourceText("apps/searcher-runtime/src/deployment.ts", source);
+    assert.equal(baseline.diagnostics.some(item => item.code === "dynamic-import-nonliteral"), false);
+    for (const mutation of [
+      source.replace(`sha256Hex(${expected.bytes})`, "sha256Hex(otherBytes)"),
+      source.replace(`${expected.hash}.slice(2)`, `${expected.hash}.slice(1)`),
+      source.replace(expected.functionName, "loadUnownedSnapshot"),
+    ]) {
+      assert.ok(inspectSourceText("apps/searcher-runtime/src/deployment.ts", mutation).diagnostics
+        .some(item => item.code === "dynamic-import-nonliteral"));
+    }
+  }
+});
+
 test("boundary receipt exposes source/build facts only and never claims runtime legacy=0", () => {
   const receipt = runBoundaryGate({ requirePushed: false });
   const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -1022,6 +1056,63 @@ test("release roles are compiler closures and unrelated predicate leaves only mo
     assert.throws(() => assertQualifiedRunnerApprovalJoinsBoundaryReceiptV1({ ...baseline }, runnerApproval as never, []), /was not issued as a successful production observation/);
     const baselineOne = baselineFacts.predicateAdapters[0];
     assert.ok(baselineOne);
+
+    const sharedRootLeafInput = {
+      ...leafOneInput,
+      exportName: "PREDICATE_EVALUATOR_ALTERNATE",
+      predicateId: "fixture.predicate.shared-root",
+      predicateSpecDigest: `0x${"6".repeat(64)}`,
+      predicateProgramDescriptorDigest: `0x${"7".repeat(64)}`,
+      oracleProgramDescriptorDigest: `0x${"8".repeat(64)}`,
+      adapterVersion: "fixture-adapter-shared-root",
+      oracleVersion: "fixture-oracle-shared-root",
+      predicateImplementationExportDigest: computeImplementationExportDigest(
+        predicateOnePath,
+        "PREDICATE_EVALUATOR_ALTERNATE",
+        sha256(Buffer.from(predicateOneSource)),
+      ),
+      oracleExportName: "evaluateArtifactLineageOracleAlternate",
+      oracleImplementationExportDigest: computeImplementationExportDigest(
+        oracleOnePath,
+        "evaluateArtifactLineageOracleAlternate",
+        sha256(Buffer.from(oracleOneSource)),
+      ),
+      materialProviderExportName: "MATERIAL_PROVIDER_ALTERNATE",
+      materialProviderContractDigest: `0x${"b".repeat(64)}`,
+      materialProviderImplementationExportDigest: computeImplementationExportDigest(
+        materialProviderOnePath,
+        "MATERIAL_PROVIDER_ALTERNATE",
+        sha256(Buffer.from(materialProviderOneSource)),
+      ),
+    };
+    const sharedRootLeaf = computePredicateCompositionLeafDigest(sharedRootLeafInput);
+    const { rootDigest: _sharedRootManifestRoot, ...sharedRootManifestWithoutRoot } = manifest;
+    const sharedRootManifestBase = {
+      ...sharedRootManifestWithoutRoot,
+      predicateAdapters: [
+        ...manifest.predicateAdapters,
+        {
+          entrypointId: roles.predicateAdapterEntrypointIds[0]!,
+          ...sharedRootLeafInput,
+          compositionLeafDigest: sharedRootLeaf,
+          oracleEntrypointId: roles.qualificationOracleEntrypointId,
+          materialProviderEntrypointId: roles.materialProviderEntrypointId,
+        },
+      ],
+      predicateCompositionRootDigest: computePredicateCompositionRootDigest([leafOne, sharedRootLeaf]),
+    };
+    const sharedRootManifest = {
+      ...sharedRootManifestBase,
+      rootDigest: computeReleaseRoleManifestRootDigest(sharedRootManifestBase),
+    } satisfies ReleaseRoleManifestV1;
+    const sharedRootDerivation = deriveReleaseClosureFacts(baseline, sharedRootManifest);
+    assert.ok(sharedRootDerivation.facts, JSON.stringify(sharedRootDerivation.diagnostics));
+    assert.equal(sharedRootDerivation.facts.predicateAdapters.length, 2);
+    assert.equal(sharedRootDerivation.facts.qualificationOracles.length, 2);
+    assert.notEqual(
+      sharedRootDerivation.facts.predicateAdapters[0]!.implementationExportDigest,
+      sharedRootDerivation.facts.predicateAdapters[1]!.implementationExportDigest,
+    );
 
     for (const mutation of [
       { field: "exportName" as const, value: "PREDICATE_EVALUATOR_ALTERNATE", expected: "release-export-digest-mismatch" },
@@ -1851,6 +1942,15 @@ test("pre-release advisory-only observation and Stage 2 denominator reject autho
   validatePreReleaseProductionBoundarySources(preparedFromAdvisory, preparedFromAdvisoryDiagnostics);
   assert.ok(preparedFromAdvisoryDiagnostics.some(item => item.code === "production-release-preparation-owner"));
 
+  const bypassedPreparation = new Map(baseline);
+  bypassedPreparation.set(workflowPath, baseline.get(workflowPath)!.replace(
+    "await prepareProductionReleaseAcceptanceForExternalOwnerV1(capability)",
+    "capability",
+  ));
+  const bypassedPreparationDiagnostics: BoundaryDiagnostic[] = [];
+  validatePreReleaseProductionBoundarySources(bypassedPreparation, bypassedPreparationDiagnostics);
+  assert.ok(bypassedPreparationDiagnostics.some(item => item.code === "production-release-preparation-owner"));
+
   const oldDatabasePath = new Map(baseline);
   oldDatabasePath.set(schemaPath, baseline.get(schemaPath)!.replace(
     'checkpointDatabasePath: "/var/lib/aloha/pre-release/runtime/checkpoint.sqlite",',
@@ -1910,6 +2010,7 @@ test("split production runtime and pre-release owner reject cross-phase, snapsho
   const runnerState = [
     "installVerifiedQualifiedReleaseRunnerWireV1",
     "observeQualifiedReleaseAcceptanceAdvisoryV1",
+    "prepareQualifiedReleaseAcceptanceForExternalOwnerV1",
     "readAuthorizedQualifiedReleaseRunnerWireV1",
     "readPublicQualifiedReleaseRunnerStateV1",
     "readQualifiedReleaseLineageObservationV1",

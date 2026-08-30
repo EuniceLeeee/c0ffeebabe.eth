@@ -1214,7 +1214,7 @@ export function evaluateTerminalSelectionReferenceModel(
   const manifest = readArtifact(input, expectedRefs[1]!, ORACLE_ARTIFACT_SCHEMA_REFS.terminalManifest, decodeOracleTerminalManifest, reasons, "manifest");
   const projectionEnvelope = readArtifactEnvelope(input, expectedRefs[2]!, ORACLE_ARTIFACT_SCHEMA_REFS.fullFamilyProjection, decodeOracleFullFamilyProjection, reasons, "projection");
   const projection = projectionEnvelope?.value ?? null;
-  const process = hasSelectedProcess
+  const selectedProcess = hasSelectedProcess
     ? readArtifact(input, expectedRefs[3]!, ORACLE_ARTIFACT_SCHEMA_REFS.processEvidence, decodeOracleProcessEvidence, reasons, "process")
     : null;
   const closure = predicateArtifacts.map((entry, index) => readArtifactEnvelope(
@@ -1257,16 +1257,16 @@ export function evaluateTerminalSelectionReferenceModel(
       if (input.trustedObserverInvocation?.candidateReleaseCommit !== stringField(raw.release, "candidateReleaseCommit")) add(reasons, "observer-release");
       return Object.freeze({ verdict: reasons.length === 0 ? "fail" : "invalid", reasons: Object.freeze(reasons) });
     }
-    if (raw.selection.selectedIndex === null || manifest.sixStep.status !== "observed" || process === null) {
+    if (raw.selection.selectedIndex === null || manifest.sixStep.status !== "observed" || selectedProcess === null) {
       add(reasons, "selected-terminal-denominator");
       return Object.freeze({ verdict: "invalid", reasons: Object.freeze(reasons) });
     }
-    if (manifest.sixStep.joinedProcessEvidenceRoot !== process.evidenceRoot
-      || manifest.sixStep.selectedProducerTerminalId !== process.producerTerminalId
-      || raw.selection.selectedPerformanceEventId !== process.durableAppend.eventId
-      || raw.selection.selectedProducerTerminalEventId !== process.producerTerminalDurableAppend.eventId
-      || manifest.sixStep.performanceAppendRecordId !== process.durableAppendRecordId
-      || manifest.sixStep.producerTerminalAppendRecordId !== process.producerTerminalDurableAppendRecordId) add(reasons, "manifest-process-join");
+    if (manifest.sixStep.joinedProcessEvidenceRoot !== selectedProcess.evidenceRoot
+      || manifest.sixStep.selectedProducerTerminalId !== selectedProcess.producerTerminalId
+      || raw.selection.selectedPerformanceEventId !== selectedProcess.durableAppend.eventId
+      || raw.selection.selectedProducerTerminalEventId !== selectedProcess.producerTerminalDurableAppend.eventId
+      || manifest.sixStep.performanceAppendRecordId !== selectedProcess.durableAppendRecordId
+      || manifest.sixStep.producerTerminalAppendRecordId !== selectedProcess.producerTerminalDurableAppendRecordId) add(reasons, "manifest-process-join");
     const completeClosure = closure.filter((value): value is NonNullable<typeof value> => value !== null);
     const closureRows = completeClosure.map(value => Object.freeze({
       artifactRefId: value.ref.artifactRefId,
@@ -1296,25 +1296,25 @@ export function evaluateTerminalSelectionReferenceModel(
       || completeClosure.length !== predicateArtifacts.length
       || orderedEventArtifactRefIds === null
       || !same(manifest.sixStep.eventArtifactRefIds, orderedEventArtifactRefIds)) add(reasons, "six-step-artifact-closure");
-    if (process.durableAppend.namespace !== "searcher-production-evidence/performance/v1"
-      || process.producerTerminalDurableAppend.namespace !== "searcher-production-evidence/producer-terminals/v1") add(reasons, "durable-namespace");
-    if (manifest.processAnchorRoot !== oracleProcessAnchorRoot(process.runtimeAnchor)
-      || manifest.runtimeAnchorRoot !== oracleRuntimeAnchorRoot(process.runtimeAnchor)
-      || manifest.runtimeArtifactRoot !== process.runtimeAnchor.runtimeArtifactRoot) add(reasons, "process-anchor");
-    if (process.runtimeBindingId !== process.runtimeAnchor.bindingId
-      || process.releaseProvenanceHash !== process.runtimeAnchor.releaseProvenanceHash
-      || process.candidateReleaseCommit !== process.runtimeAnchor.candidateReleaseCommit) add(reasons, "process-release-anchor");
-    if (hashField(raw.release, "bindingId") !== process.runtimeBindingId
-      || hashField(raw.release, "releaseProvenanceHash") !== process.releaseProvenanceHash
-      || stringField(raw.release, "candidateReleaseCommit") !== process.candidateReleaseCommit
-      || stringField(raw.serving, "generationId") !== process.generationId
-      || hashField(raw.serving, "graphRoot") !== process.graphRoot
-      || hashField(raw.serving, "readyRecordHash") !== process.readyRecordHash
-      || hashField(raw.serving, "sourceCoverageRoot") !== process.serving.sourceCoverageRoot) add(reasons, "raw-process-anchor");
-    if (input.trustedObserverInvocation?.candidateReleaseCommit !== process.candidateReleaseCommit) add(reasons, "observer-release");
-    if (projection.producerTerminalBindingRoot !== process.producerTerminalBindingRoot
+    if (selectedProcess.durableAppend.namespace !== "searcher-production-evidence/performance/v1"
+      || selectedProcess.producerTerminalDurableAppend.namespace !== "searcher-production-evidence/producer-terminals/v1") add(reasons, "durable-namespace");
+    if (manifest.processAnchorRoot !== oracleProcessAnchorRoot(selectedProcess.runtimeAnchor)
+      || manifest.runtimeAnchorRoot !== oracleRuntimeAnchorRoot(selectedProcess.runtimeAnchor)
+      || manifest.runtimeArtifactRoot !== selectedProcess.runtimeAnchor.runtimeArtifactRoot) add(reasons, "process-anchor");
+    if (selectedProcess.runtimeBindingId !== selectedProcess.runtimeAnchor.bindingId
+      || selectedProcess.releaseProvenanceHash !== selectedProcess.runtimeAnchor.releaseProvenanceHash
+      || selectedProcess.candidateReleaseCommit !== selectedProcess.runtimeAnchor.candidateReleaseCommit) add(reasons, "process-release-anchor");
+    if (hashField(raw.release, "bindingId") !== selectedProcess.runtimeBindingId
+      || hashField(raw.release, "releaseProvenanceHash") !== selectedProcess.releaseProvenanceHash
+      || stringField(raw.release, "candidateReleaseCommit") !== selectedProcess.candidateReleaseCommit
+      || stringField(raw.serving, "generationId") !== selectedProcess.generationId
+      || hashField(raw.serving, "graphRoot") !== selectedProcess.graphRoot
+      || hashField(raw.serving, "readyRecordHash") !== selectedProcess.readyRecordHash
+      || hashField(raw.serving, "sourceCoverageRoot") !== selectedProcess.serving.sourceCoverageRoot) add(reasons, "raw-process-anchor");
+    if (input.trustedObserverInvocation?.candidateReleaseCommit !== selectedProcess.candidateReleaseCommit) add(reasons, "observer-release");
+    if (projection.producerTerminalBindingRoot !== selectedProcess.producerTerminalBindingRoot
       || projection.finalDurableWindowId !== manifest.finalDurableWindowId
-      || projection.readyRecordHash !== process.readyRecordHash
+      || projection.readyRecordHash !== selectedProcess.readyRecordHash
       || projection.fullGraphCoarseSweepRoot !== manifest.fullGraphCoarseSweepRoot) add(reasons, "terminal-process-binding");
   }
   return Object.freeze({

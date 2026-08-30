@@ -17,7 +17,7 @@
     },
     {
       "path": "input/compiler-closures",
-      "contentSha256": "0x9ff6c2be5f1a58fc347fab9eca30027220f6479880fd3a37bb08aac161a21d40",
+      "contentSha256": "0x7f46021afc61bdb213b9f8f6127167bb25bce776145f1df6ba305e4a4ae95285",
       "byteLength": 31797
     },
     {
@@ -462,25 +462,25 @@
     },
     {
       "logicalPath": "valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_INDEPENDENT_ORACLE_CASES_V1",
-      "contentSha256": "0x5b547b4bb0eb739533ed877ca2da07c0933cf605cb8d21ade5176a8f631f6f59",
+      "contentSha256": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_MUTATION_CORPUS_V1",
-      "contentSha256": "0x5b547b4bb0eb739533ed877ca2da07c0933cf605cb8d21ade5176a8f631f6f59",
+      "contentSha256": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_QUALIFICATION_SPEC_V1",
-      "contentSha256": "0x5b547b4bb0eb739533ed877ca2da07c0933cf605cb8d21ade5176a8f631f6f59",
+      "contentSha256": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "valuation-owners/native-equivalent/src/runtime.ts#createNativeEquivalentValuationOwnerV1",
-      "contentSha256": "0x4d58051891faa7cf1113b039d419bbe41c9f5ffdb1204697f2e90a294314806b",
+      "contentSha256": "0x3235630ce07e12067baa9a8c2c385d99fe8e156341b6563acd54612564da60c6",
       "byteLength": 0,
       "sourceKind": "tracked"
     }
@@ -488,7 +488,7 @@
   "generatorRecords": [
     {
       "logicalPath": "tools/catalog-generator/src/index.ts#generateCatalogWithImpact",
-      "contentSha256": "0x475bee382eeb136c25d7b4388af2cb52fdf6c1bb3cb69f82834fb5a102877f57",
+      "contentSha256": "0xdcae707544c9d5c10b784ca18f37ca42b64d92c42780d7df79c6e674b79072dd",
       "byteLength": 0,
       "sourceKind": "tracked"
     }
@@ -532,13 +532,13 @@
     },
     {
       "path": "generated/valuation-owner-registry/index.ts",
-      "contentSha256": "0x9e82a47f87c479e6a8acbebe9d951d58f00a5dc9059aae89aa5aa448f8d8b285",
+      "contentSha256": "0xe2d77a2ebc4d9c3907a862cb8fcc59aee6488780253c306fc503368d732b2130",
       "byteLength": 4472,
-      "catalogRoot": "0xfcc96b0bfda45336884db22f18c9fd8c76b2603d01054e3d3dd59c90b50e3e73"
+      "catalogRoot": "0x794797839aef1a87077163fc92e61c81fee56f328254d89a56f305dcc8b8e01a"
     }
   ],
-  "inputRoot": "0xcfb129d767fccdedbf6f5472a4c3f76f10ed0abb62bfcb7fa94558951819538e",
-  "compilerRoot": "0x1347e4bf3f6ed2b64eb50effd51f9cae69931b665d5cda7da3dacfafc5e9f16b",
-  "generatorRoot": "0x8c0a4e9175daeeaf0285c914657fbb6a08e32c877b9e3b171f4d2a2f5152ddd7",
-  "ledgerHash": "0x5f5ddcc743f00265564915cf10bb8b0ddb780080de4a83bc985a29010803095f"
+  "inputRoot": "0x7a63ed843401f44745f0108d7b77a3508fcc8e526dcb9b294f77e17fb8e5fd00",
+  "compilerRoot": "0x82e632e204e4a77de704550dc0c264fb46b0c9efb8c3aa214d566b3ccf6b8f43",
+  "generatorRoot": "0x7a366ca1d669beafe2a12e456541a4a46670b4537f34e1066da5fb34d435fbcf",
+  "ledgerHash": "0xd30da0ae90c57eee812aaa5b42efd38d60ceddb38ca514cfcf6a633ceb762f25"
 }

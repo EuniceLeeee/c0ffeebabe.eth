@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hashDomain, type Hash } from "../../../../packages/canonical-codec/src/index.ts";
-import { decodePackedCallProgram } from "../../../../packages/execution-program/src/index.ts";
-import { FAMILY_CATALOG } from "../../../../generated/family-catalog/index.ts";
+import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { decodePackedCallProgram } from "../../../packages/execution-program/src/index.ts";
+import { FAMILY_CATALOG } from "../../../generated/family-catalog/index.ts";
 import {
   nominateUniV2,
   UNIV2_STANDARD_FAMILY_DEFINITION_HASH,
@@ -12,14 +12,14 @@ import {
   UNIV2_SYNC_EVENT_TOPIC0,
   verifyUniV2IdentityStage,
   type UniV2SwapActionInputV1,
-} from "../../../../families/univ2-standard/src/public.ts";
+} from "../../../families/univ2-standard/src/public.ts";
 import {
   deriveUniV3Routes,
   UNIV3_STANDARD_FAMILY_DEFINITION_HASH,
   UNIV3_STANDARD_SWAP_ACTION_PORT,
   type UniV3IdentityV1,
   type UniV3QuoteV1,
-} from "../../../../families/univ3-standard/src/public.ts";
+} from "../../../families/univ3-standard/src/public.ts";
 import { compareCurrentAdapterExecutionVariantV1 } from "../src/current-adapter-comparator.ts";
 
 const h = (label: string): Hash => hashDomain("aloha/current-adapter-comparator/test/v1", label);

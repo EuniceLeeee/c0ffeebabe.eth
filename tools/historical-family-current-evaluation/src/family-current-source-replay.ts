@@ -8,20 +8,20 @@ import {
   hashDomain,
   sha256Hex,
   type Hash,
-} from "../../../../packages/canonical-codec/src/index.ts";
-import { CurrentSourceRpcReadTransport } from "../../../../packages/current-source-rpc/src/index.ts";
+} from "../../../packages/canonical-codec/src/index.ts";
+import { CurrentSourceRpcReadTransport } from "../../../packages/current-source-rpc/src/index.ts";
 import {
   familySearchSource,
   type FamilySearchCurrentSourceV1,
   type FamilySearchSourceReadPortV1,
   type FamilySearchSourceReadRequestV1,
   type FamilySearchSourceReadResultV1,
-} from "../../../../packages/family-sdk/search-runtime/index.ts";
+} from "../../../packages/family-sdk/search-runtime/index.ts";
 import {
   readGeneratedFamilyRuntimeAdapterFactories,
   readGeneratedFamilyRuntimeFactoryMetadata,
-} from "../../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
-import { createReleaseFamilyRuntimeComposition } from "../../../../generated/runtime-composition/index.ts";
+} from "../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
+import { createReleaseFamilyRuntimeComposition } from "../../../generated/runtime-composition/index.ts";
 import {
   HISTORICAL_RPC_REPLAY_DESCRIPTOR_KIND,
   captureHistoricalRpcReplayV1,
@@ -29,8 +29,8 @@ import {
   loadFrozenHistoricalRpcReplayV1,
   type HistoricalRpcReadDescriptorV1,
   type HistoricalRpcReplayCaptureV1,
-} from "./frozen-rpc-replay.ts";
-import { writeImmutableFile } from "./immutable-file.ts";
+} from "../../reference-only/historical-family-facts/src/frozen-rpc-replay.ts";
+import { writeImmutableFile } from "../../reference-only/historical-family-facts/src/immutable-file.ts";
 
 export const FAMILY_CURRENT_SOURCE_REPLAY_MANIFEST_KIND =
   "aloha.family-current-source-replay-manifest-v1" as const;
@@ -84,7 +84,7 @@ export interface FamilyCurrentSourceReplayManifestV1 {
 
 type ReadInput = Parameters<FamilySearchSourceReadPortV1["read"]>[0];
 const GENERATED_RUNTIME_PATH = fileURLToPath(new URL(
-  "../../../../generated/runtime-composition/index.ts",
+  "../../../generated/runtime-composition/index.ts",
   import.meta.url,
 ));
 const GENERATED_RUNTIME_LOGICAL_PATH = "generated/runtime-composition/index.ts";

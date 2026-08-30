@@ -11,25 +11,25 @@ import {
   hashDomain,
   type CanonicalJson,
   type Hash,
-} from "../../../../packages/canonical-codec/src/index.ts";
-import { erc20AssetRefV1 } from "../../../../packages/asset-ref/src/index.ts";
-import { candidateSubjectHash, familyCandidateKey } from "../../../../packages/discovery/src/index.ts";
+} from "../../../packages/canonical-codec/src/index.ts";
+import { erc20AssetRefV1 } from "../../../packages/asset-ref/src/index.ts";
+import { candidateSubjectHash, familyCandidateKey } from "../../../packages/discovery/src/index.ts";
 import {
   createReleaseFamilyRuntimeComposition,
-} from "../../../../generated/runtime-composition/index.ts";
+} from "../../../generated/runtime-composition/index.ts";
 import {
   readGeneratedFamilyRuntimeAdapterFactories,
   readGeneratedFamilyRuntimeFactoryMetadata,
   type GeneratedFamilyRuntimeFactoryMetadataV1,
-} from "../../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
+} from "../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
 import {
   nominateUniV2,
   UNIV2_STANDARD_FAMILY_DEFINITION_HASH,
   UNIV2_STANDARD_FAMILY_ID,
   UNIV2_SYNC_EVENT_TOPIC0,
   verifyUniV2IdentityStage,
-} from "../../../../families/univ2-standard/src/public.ts";
-import { UNIV2_STANDARD_REQUESTED_ARTIFACT_DEPENDENCY_ROOT } from "../../../../families/univ2-standard/src/family-definition.ts";
+} from "../../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_REQUESTED_ARTIFACT_DEPENDENCY_ROOT } from "../../../families/univ2-standard/src/family-definition.ts";
 import {
   captureCandidateGeneratedSearchAdapterV1,
   inspectCandidateGeneratedSearchAdapterV1,
@@ -159,7 +159,7 @@ test("fixed generated metadata/source binds all four candidate search Adapters w
     binding.familyDefinitionHash === UNIV2_STANDARD_FAMILY_DEFINITION_HASH
     && binding.descriptor.role === "search/v1");
   assert.equal(univ2.length, 1);
-  assert.equal(univ2[0]!.actualFactory, (await import("../../../../families/univ2-standard/src/public.ts")).UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY);
+  assert.equal(univ2[0]!.actualFactory, (await import("../../../families/univ2-standard/src/public.ts")).UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY);
   for (const familyId of ["curve-underlying", "dodo-v2", "fluid-dex", "univ2-standard"]) {
     const binding = await inspectCandidateGeneratedSearchAdapterV1(familyId);
     assert.equal(binding.familyId, familyId);
@@ -428,7 +428,7 @@ test("cross-family route executes the candidate Adapter but cannot create a seal
 
 test("strict source binding rejects import/descriptor/assembly and capability/action splices", () => {
   const metadata = readGeneratedFamilyRuntimeFactoryMetadata(createReleaseFamilyRuntimeComposition);
-  const sourceText = readFileSync(join(process.cwd(), "../../../generated/runtime-composition/index.ts"), "utf8");
+  const sourceText = readFileSync(join(process.cwd(), "../../generated/runtime-composition/index.ts"), "utf8");
   const verify = (source: string, selectedMetadata = metadata) => verifyCandidateGeneratedSourceBindingV1({
     source,
     metadata: selectedMetadata,

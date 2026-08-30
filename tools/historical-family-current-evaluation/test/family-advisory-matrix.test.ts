@@ -3,8 +3,8 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { encodeCanonicalBytes, type CanonicalJson, type Hash } from "../../../../packages/canonical-codec/src/index.ts";
-import { encodeSwapCall } from "../../../../families/univ4/src/abi.ts";
+import { encodeCanonicalBytes, type CanonicalJson, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { encodeSwapCall } from "../../../families/univ4/src/abi.ts";
 import {
   buildHistoricalFamilyAdvisoryMatrixV1,
   decodeHistoricalPoolManagerSwapV1,
@@ -18,7 +18,7 @@ import {
   materializeHistoricalFamilyFactBundleV1,
   type HistoricalRpcObjectInputV1,
   type HistoricalRpcRole,
-} from "../src/index.ts";
+} from "../../reference-only/historical-family-facts/src/index.ts";
 
 const store = "/Users/eunice/.cache/aloha/historical-family-facts";
 const hasSpecimens = HISTORICAL_FAMILY_SPECIMENS_V1.every((item) =>

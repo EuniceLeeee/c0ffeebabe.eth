@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./production-runtime-owner": "./src/production-runtime-owner.ts",
     "./full-graph-coarse-sweep-consumer": "./src/full-graph-coarse-sweep-consumer.ts",
     "./full-family-terminal-consumer": "./src/full-family-terminal-consumer.ts",
     "./six-step-terminal-consumer": "./src/six-step-terminal-consumer.ts",

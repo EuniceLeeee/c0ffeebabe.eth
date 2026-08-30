@@ -2,6 +2,10 @@ import {
   candidatePartitionKeysRoot,
 } from "../../../specs/candidate-partition-authority/src/index.ts";
 import {
+  fullFamilySourcePlanIdentity,
+  type SourcePlanRefV1,
+} from "../../../specs/full-family-facts/src/source-wire.ts";
+import {
   hashDomain,
 } from "../../../packages/canonical-codec/src/index.ts";
 import {
@@ -12,10 +16,6 @@ import {
   type FullFamilyFactBundleV1,
   type FullFamilyGeneratedRuntimeMetadataV1,
 } from "./schema.ts";
-import {
-  sourcePlanIdentity,
-  type SourcePlanRefV1,
-} from "../../../packages/discovery/src/index.ts";
 
 export type FullFamilyReferenceVerdict = "pass" | "fail" | "invalid";
 
@@ -105,7 +105,7 @@ export function evaluateFullFamilyReferenceModel(
     sourcePlanRef: binding.sourcePlanRef,
   }), binding]));
   if (executionByPlan.size !== coverage.executions.length) return invalid("source-execution-duplicate");
-  const coverageEntries = new Map(coverage.sourceCoverage.entries.map(entry => [sourcePlanIdentity(entry), entry]));
+  const coverageEntries = new Map(coverage.sourceCoverage.entries.map(entry => [fullFamilySourcePlanIdentity(entry), entry]));
   const allCandidateKeys: string[] = [];
   const allInstanceKeys: string[] = [];
   const allEdgeIds: string[] = [];
@@ -119,12 +119,12 @@ export function evaluateFullFamilyReferenceModel(
     if (!familyBound(family.familyId, partitions)) return invalid("cross-family-evidence");
     const familyPlans = plansByFamily.get(family.familyId) ?? [];
     if (familyPlans.length === 0) return invalid("source-plan-empty");
-    const declaredPlanIds = new Set(familyPlans.map(sourcePlanIdentity));
+    const declaredPlanIds = new Set(familyPlans.map(fullFamilySourcePlanIdentity));
     const observedPlanIds = new Set(family.sourcePlans.items.map(item => item.subjectKey));
     if (observedPlanIds.size !== family.sourcePlans.items.length || !sameSet(declaredPlanIds, observedPlanIds)) return invalid("source-plan-partition");
     for (const plan of familyPlans) {
-      const execution = executionByPlan.get(sourcePlanIdentity(plan));
-      const coverageEntry = coverageEntries.get(sourcePlanIdentity(plan));
+      const execution = executionByPlan.get(fullFamilySourcePlanIdentity(plan));
+      const coverageEntry = coverageEntries.get(fullFamilySourcePlanIdentity(plan));
       if (execution === undefined || coverageEntry === undefined
         || coverageEntry.ownerRef !== plan.ownerRef
         || coverageEntry.sourcePlanRef !== plan.sourcePlanRef
@@ -172,7 +172,7 @@ export function evaluateFullFamilyReferenceModel(
         plan.completeness === "complete-snapshot" || plan.completeness === "contiguous-history"
       ));
       if (authoritativePlans.length === 0
-        || authoritativePlans.some(plan => coverageEntries.get(sourcePlanIdentity(plan))?.contributesOmissionAuthority !== true)) {
+        || authoritativePlans.some(plan => coverageEntries.get(fullFamilySourcePlanIdentity(plan))?.contributesOmissionAuthority !== true)) {
         return invalid("source-coverage-omission-authority");
       }
     }

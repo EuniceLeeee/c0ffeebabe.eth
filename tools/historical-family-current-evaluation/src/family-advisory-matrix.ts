@@ -1,25 +1,25 @@
 import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { encodeCanonicalBytes, hashDomain, sha256Hex, type CanonicalJson, type Hash } from "../../../../packages/canonical-codec/src/index.ts";
-import { FAMILY_CATALOG } from "../../../../generated/family-catalog/index.ts";
-import { CURVE_UNDERLYING_ACTION_IMPLEMENTATION_HASH } from "../../../../families/curve-underlying/src/action.ts";
-import { CURVE_UNDERLYING_FAMILY_DEFINITION_HASH } from "../../../../families/curve-underlying/src/family-definition.ts";
-import { CURVE_UNDERLYING_I128_SELECTOR } from "../../../../families/curve-underlying/src/manifest.ts";
-import { DODO_V2_ACTION_IMPLEMENTATION_HASH } from "../../../../families/dodo-v2/src/action.ts";
-import { DODO_V2_FAMILY_AUTHORING_HASH } from "../../../../families/dodo-v2/src/family-definition.ts";
-import { DODO_V2_SELL_QUOTE_SELECTOR } from "../../../../families/dodo-v2/src/manifest.ts";
-import { FLUID_DEX_ACTION_IMPLEMENTATION_HASH } from "../../../../families/fluid-dex/src/action-contract.ts";
-import { encodeSwapInCall, FLUID_DEX_SWAP_IN_SELECTOR } from "../../../../families/fluid-dex/src/abi.ts";
-import { FLUID_DEX_FAMILY_DEFINITION_HASH } from "../../../../families/fluid-dex/src/family-definition.ts";
-import { UNIV4_ACTION_IMPLEMENTATION_HASH } from "../../../../families/univ4/src/action-contract.ts";
-import { encodeSwapCall as encodeUniv4Swap, poolIdForKey as univ4PoolId, UNIV4_POOL_MANAGER, UNIV4_SWAP_SELECTOR, type Univ4PoolKey } from "../../../../families/univ4/src/abi.ts";
-import { UNIV4_FAMILY_DEFINITION_HASH } from "../../../../families/univ4/src/family-definition.ts";
-import { ANGSTROM_V4_ACTION_IMPLEMENTATION_HASH } from "../../../../families/angstrom-v4/src/action-contract.ts";
-import { ANGSTROM_MAINNET_HOOK, ANGSTROM_V4_POOL_MANAGER, ANGSTROM_V4_SWAP_SELECTOR, encodeSwapCall as encodeAngstromSwap, poolIdForKey as angstromPoolId, type AngstromV4PoolKey } from "../../../../families/angstrom-v4/src/abi.ts";
-import { ANGSTROM_V4_FAMILY_DEFINITION_HASH } from "../../../../families/angstrom-v4/src/family-definition.ts";
-import { currentReleaseFamilyDecisions, type CurrentReleaseFamilyExclusionReasonV1 } from "../../../catalog-generator/src/current-release.ts";
-import { loadHistoricalFamilyFactBundleV1 } from "./index.ts";
+import { encodeCanonicalBytes, hashDomain, sha256Hex, type CanonicalJson, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { FAMILY_CATALOG } from "../../../generated/family-catalog/index.ts";
+import { CURVE_UNDERLYING_ACTION_IMPLEMENTATION_HASH } from "../../../families/curve-underlying/src/action.ts";
+import { CURVE_UNDERLYING_FAMILY_DEFINITION_HASH } from "../../../families/curve-underlying/src/family-definition.ts";
+import { CURVE_UNDERLYING_I128_SELECTOR } from "../../../families/curve-underlying/src/manifest.ts";
+import { DODO_V2_ACTION_IMPLEMENTATION_HASH } from "../../../families/dodo-v2/src/action.ts";
+import { DODO_V2_FAMILY_AUTHORING_HASH } from "../../../families/dodo-v2/src/family-definition.ts";
+import { DODO_V2_SELL_QUOTE_SELECTOR } from "../../../families/dodo-v2/src/manifest.ts";
+import { FLUID_DEX_ACTION_IMPLEMENTATION_HASH } from "../../../families/fluid-dex/src/action-contract.ts";
+import { encodeSwapInCall, FLUID_DEX_SWAP_IN_SELECTOR } from "../../../families/fluid-dex/src/abi.ts";
+import { FLUID_DEX_FAMILY_DEFINITION_HASH } from "../../../families/fluid-dex/src/family-definition.ts";
+import { UNIV4_ACTION_IMPLEMENTATION_HASH } from "../../../families/univ4/src/action-contract.ts";
+import { encodeSwapCall as encodeUniv4Swap, poolIdForKey as univ4PoolId, UNIV4_POOL_MANAGER, UNIV4_SWAP_SELECTOR, type Univ4PoolKey } from "../../../families/univ4/src/abi.ts";
+import { UNIV4_FAMILY_DEFINITION_HASH } from "../../../families/univ4/src/family-definition.ts";
+import { ANGSTROM_V4_ACTION_IMPLEMENTATION_HASH } from "../../../families/angstrom-v4/src/action-contract.ts";
+import { ANGSTROM_MAINNET_HOOK, ANGSTROM_V4_POOL_MANAGER, ANGSTROM_V4_SWAP_SELECTOR, encodeSwapCall as encodeAngstromSwap, poolIdForKey as angstromPoolId, type AngstromV4PoolKey } from "../../../families/angstrom-v4/src/abi.ts";
+import { ANGSTROM_V4_FAMILY_DEFINITION_HASH } from "../../../families/angstrom-v4/src/family-definition.ts";
+import { currentReleaseFamilyDecisions, type CurrentReleaseFamilyExclusionReasonV1 } from "../../catalog-generator/src/current-release.ts";
+import { loadHistoricalFamilyFactBundleV1 } from "../../reference-only/historical-family-facts/src/index.ts";
 
 export type HistoricalSpecimenFamilyV1 = "curve-underlying" | "dodo-v2" | "fluid-dex" | "univ4" | "angstrom-v4";
 export type HistoricalSpecimenVariantV1 = "exchange-underlying-int128" | "sell-quote" | "swap-in" | "pool-manager-exact-input" | "official-adapter-hook-aware-exact-input";
@@ -67,11 +67,11 @@ export const HISTORICAL_FAMILY_SPECIMENS_V1: readonly HistoricalSpecimenDescript
 export const HISTORICAL_FAMILY_ADVISORY_MATRIX_SPEC_DIGEST_V1 = hashDomain("aloha/historical-family-variant-advisory-matrix-spec/v1", Object.freeze({ advisoryOnly: true, specimenBinding: "exact-manifest-tx-block-frame-event-and-v4-context", axes: Object.freeze(["selector-shape", "reverse-identity", "variant", "current-action-binding", "effects-fork-replay"]), noInference: "earlier axes never imply effects or qualification" }));
 
 const SOURCES: Readonly<Record<HistoricalSpecimenFamilyV1, readonly string[]>> = Object.freeze({
-  "curve-underlying": Object.freeze(["../../../../families/curve-underlying/src/action.ts", "../../../../families/curve-underlying/src/manifest.ts", "../../../../families/curve-underlying/src/search-adapter.ts"]),
-  "dodo-v2": Object.freeze(["../../../../families/dodo-v2/src/action.ts", "../../../../families/dodo-v2/src/manifest.ts", "../../../../families/dodo-v2/src/search-adapter.ts"]),
-  "fluid-dex": Object.freeze(["../../../../families/fluid-dex/src/abi.ts", "../../../../families/fluid-dex/src/action-contract.ts", "../../../../families/fluid-dex/src/search-adapter.ts"]),
-  univ4: Object.freeze(["../../../../families/univ4/src/abi.ts", "../../../../families/univ4/src/action-contract.ts", "../../../../families/univ4/src/search-adapter.ts"]),
-  "angstrom-v4": Object.freeze(["../../../../families/angstrom-v4/src/abi.ts", "../../../../families/angstrom-v4/src/action-contract.ts", "../../../../families/angstrom-v4/src/search-adapter.ts"]),
+  "curve-underlying": Object.freeze(["../../../families/curve-underlying/src/action.ts", "../../../families/curve-underlying/src/manifest.ts", "../../../families/curve-underlying/src/search-adapter.ts"]),
+  "dodo-v2": Object.freeze(["../../../families/dodo-v2/src/action.ts", "../../../families/dodo-v2/src/manifest.ts", "../../../families/dodo-v2/src/search-adapter.ts"]),
+  "fluid-dex": Object.freeze(["../../../families/fluid-dex/src/abi.ts", "../../../families/fluid-dex/src/action-contract.ts", "../../../families/fluid-dex/src/search-adapter.ts"]),
+  univ4: Object.freeze(["../../../families/univ4/src/abi.ts", "../../../families/univ4/src/action-contract.ts", "../../../families/univ4/src/search-adapter.ts"]),
+  "angstrom-v4": Object.freeze(["../../../families/angstrom-v4/src/abi.ts", "../../../families/angstrom-v4/src/action-contract.ts", "../../../families/angstrom-v4/src/search-adapter.ts"]),
 });
 const ACTION_HASHES: Readonly<Record<HistoricalSpecimenFamilyV1, Hash>> = Object.freeze({ "curve-underlying": CURVE_UNDERLYING_ACTION_IMPLEMENTATION_HASH, "dodo-v2": DODO_V2_ACTION_IMPLEMENTATION_HASH, "fluid-dex": FLUID_DEX_ACTION_IMPLEMENTATION_HASH, univ4: UNIV4_ACTION_IMPLEMENTATION_HASH, "angstrom-v4": ANGSTROM_V4_ACTION_IMPLEMENTATION_HASH });
 const DEFINITION_HASHES: Readonly<Record<HistoricalSpecimenFamilyV1, Hash>> = Object.freeze({ "curve-underlying": CURVE_UNDERLYING_FAMILY_DEFINITION_HASH, "dodo-v2": DODO_V2_FAMILY_AUTHORING_HASH, "fluid-dex": FLUID_DEX_FAMILY_DEFINITION_HASH, univ4: UNIV4_FAMILY_DEFINITION_HASH, "angstrom-v4": ANGSTROM_V4_FAMILY_DEFINITION_HASH });
@@ -203,7 +203,7 @@ function row(rootDirectory: string, specimen: HistoricalSpecimenDescriptorV1): H
   return Object.freeze({ ...body, rowRoot: hashDomain("aloha/historical-family-variant-advisory-row/v1", body) });
 }
 
-export const HISTORICAL_FAMILY_ADVISORY_MATRIX_IMPLEMENTATION_DIGEST_V1 = hashDomain("aloha/historical-family-variant-advisory-matrix-implementation/v1", Object.freeze({ sourceSha256: sha256Hex(readFileSync(fileURLToPath(import.meta.url))), loaderSha256: sha256Hex(readFileSync(fileURLToPath(new URL("./index.ts", import.meta.url)))) }));
+export const HISTORICAL_FAMILY_ADVISORY_MATRIX_IMPLEMENTATION_DIGEST_V1 = hashDomain("aloha/historical-family-variant-advisory-matrix-implementation/v1", Object.freeze({ sourceSha256: sha256Hex(readFileSync(fileURLToPath(import.meta.url))), loaderSha256: sha256Hex(readFileSync(fileURLToPath(new URL("../../reference-only/historical-family-facts/src/index.ts", import.meta.url)))) }));
 
 export function buildHistoricalFamilyAdvisoryMatrixV1(rootDirectory: string, specimens: readonly HistoricalSpecimenDescriptorV1[] = HISTORICAL_FAMILY_SPECIMENS_V1): HistoricalFamilyAdvisoryMatrixV1 {
   if (!Array.isArray(specimens) || specimens.length === 0) fail("specimen set is empty"); const descriptorRoots = specimens.map((item) => hashDomain("aloha/historical-family-specimen-descriptor/v1", item)); if (new Set(descriptorRoots).size !== descriptorRoots.length) fail("duplicate specimen descriptor"); const rows = Object.freeze(specimens.map((item) => row(rootDirectory, item))), specimenSetRoot = hashDomain("aloha/historical-family-specimen-set/v1", Object.freeze(descriptorRoots)); const body = Object.freeze({ specDigest: HISTORICAL_FAMILY_ADVISORY_MATRIX_SPEC_DIGEST_V1, implementationDigest: HISTORICAL_FAMILY_ADVISORY_MATRIX_IMPLEMENTATION_DIGEST_V1, specimenSetRoot, rowRoots: Object.freeze(rows.map((item) => item.rowRoot)) });

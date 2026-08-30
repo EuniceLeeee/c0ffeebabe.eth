@@ -300,13 +300,8 @@ test("release runtime entrypoint exposes only the fixed native startup surface",
   const acceptanceImports = [...ownerImports.matchAll(/from ["']([^"']*acceptance\/[^"']*)["']/g)]
     .map(match => match[1])
     .sort();
-  assert.deepEqual(acceptanceImports, [
-    "../../../acceptance/collectors/src/internal/release-owned-observer-store.ts",
-    "../../../acceptance/collectors/src/production-full-family-port.ts",
-    "../../../acceptance/collectors/src/production-six-step-port.ts",
-    "../../../acceptance/collectors/src/production-terminal-phase-port.ts",
-    "../../../acceptance/collectors/src/terminal-phase-locator-index.ts",
-  ]);
+  assert.deepEqual(acceptanceImports, []);
+  assert.match(ownerImports, /runtime-release-authority\/src\/production-runtime-owner\.ts/);
   assert.doesNotMatch(ownerImports, /acceptance\/(?:gate-core|full-family-facts|six-step-facts)|runtime-release-packager|runtime-acceptance-evidence\.ts|node:child_process/);
   assert.match(ownerSource, /from "\.\/native-runtime-lifecycle-evidence\.ts"/);
   assert.match(ownerSource, /decodeNominationQualificationDeploymentFactV1/);

@@ -3,9 +3,9 @@ import type { GateCoreAuthorityPinV1, GateCoreInputV1 } from "../index.ts";
 import type { PredicateCompositionBindingV1 } from "../predicate-composition.ts";
 import type {
   CommonEnvelopeAuthorityPortV1,
+  PredicateDomainMaterialV1,
   PredicateMaterialUnavailableCodeV1,
 } from "../material-provider.ts";
-import type { PredicateDomainMaterialV1 } from "./predicate-domain-material-state.ts";
 
 export type CommonEnvelopeAssemblyStateV1 =
   | Readonly<{

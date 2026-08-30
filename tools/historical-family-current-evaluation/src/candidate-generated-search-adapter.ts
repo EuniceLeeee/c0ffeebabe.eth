@@ -9,18 +9,18 @@ import {
   sha256Hex,
   type CanonicalJson,
   type Hash,
-} from "../../../../packages/canonical-codec/src/index.ts";
-import { createReleaseFamilyRuntimeComposition } from "../../../../generated/runtime-composition/index.ts";
+} from "../../../packages/canonical-codec/src/index.ts";
+import { createReleaseFamilyRuntimeComposition } from "../../../generated/runtime-composition/index.ts";
 import {
   readGeneratedFamilyRuntimeAdapterFactories,
   readGeneratedFamilyRuntimeFactoryMetadata,
   type GeneratedFamilyRuntimeFactoryMetadataV1,
-} from "../../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
+} from "../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
 import type {
   GeneratedFamilyRuntimeActionOwnerV1,
   GeneratedFamilyRuntimeAdapterV1,
   GeneratedFamilyRuntimeExtensionV1,
-} from "../../../../packages/family-composition/src/index.ts";
+} from "../../../packages/family-composition/src/index.ts";
 import {
   familySearchAmount,
   familySearchExecutionContext,
@@ -33,8 +33,8 @@ import {
   type FamilySearchLegRequestV1,
   type FamilySearchRunArtifactsV1,
   type FamilySearchStageOutcomeV1,
-} from "../../../../packages/family-sdk/search-runtime/index.ts";
-import type { ActionOwnerRef, StageCapabilityRefV1 } from "../../../../packages/family-sdk/runtime-refs/index.ts";
+} from "../../../packages/family-sdk/search-runtime/index.ts";
+import type { ActionOwnerRef, StageCapabilityRefV1 } from "../../../packages/family-sdk/runtime-refs/index.ts";
 import {
   createFamilyCurrentSourceCaptureV1,
   createFrozenFamilyCurrentSourceReplayV1,
@@ -44,21 +44,21 @@ import {
   verifyCandidateGeneratedSourceBindingV1,
   type CandidateGeneratedSourceBindingV1,
 } from "./candidate-generated-source-binding.ts";
-import { writeImmutableFile } from "./immutable-file.ts";
+import { writeImmutableFile } from "../../reference-only/historical-family-facts/src/immutable-file.ts";
 
 export const CANDIDATE_GENERATED_SEARCH_DIAGNOSTIC_MANIFEST_KIND =
   "aloha.candidate-generated-search-adapter-diagnostic-v1" as const;
 
 const GENERATED_RUNTIME_PATH = fileURLToPath(new URL(
-  "../../../../generated/runtime-composition/index.ts",
+  "../../../generated/runtime-composition/index.ts",
   import.meta.url,
 ));
 const GENERATED_RUNTIME_LOGICAL_PATH = "generated/runtime-composition/index.ts";
 const GENERATED_RUNTIME_URL = new URL(
-  "../../../../generated/runtime-composition/index.ts",
+  "../../../generated/runtime-composition/index.ts",
   import.meta.url,
 );
-const REPOSITORY_ROOT_URL = new URL("../../../../", import.meta.url);
+const REPOSITORY_ROOT_URL = new URL("../../../", import.meta.url);
 const STORE_DIRECTORY = "candidate-generated-search-adapter-v1";
 
 type MetadataFamily = GeneratedFamilyRuntimeFactoryMetadataV1["families"][number];

@@ -1,50 +1,38 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { hashDomain, sha256Hex, type Hash } from "../../../../packages/canonical-codec/src/index.ts";
-import { decodePackedCallProgram } from "../../../../packages/execution-program/src/index.ts";
-import { FAMILY_CATALOG } from "../../../../generated/family-catalog/index.ts";
+import { hashDomain, sha256Hex, type Hash } from "../../../packages/canonical-codec/src/index.ts";
+import { decodePackedCallProgram } from "../../../packages/execution-program/src/index.ts";
+import { FAMILY_CATALOG } from "../../../generated/family-catalog/index.ts";
 import {
   UNIV2_STANDARD_FAMILY_DEFINITION_HASH,
   UNIV2_STANDARD_SWAP_ACTION_PORT,
   type UniV2SwapActionInputV1,
-} from "../../../../families/univ2-standard/src/public.ts";
+} from "../../../families/univ2-standard/src/public.ts";
 import {
   UNIV3_STANDARD_FAMILY_DEFINITION_HASH,
   UNIV3_STANDARD_SWAP_ACTION_PORT,
-} from "../../../../families/univ3-standard/src/public.ts";
+} from "../../../families/univ3-standard/src/public.ts";
 import {
   currentReleaseFamilyDecisions,
   type CurrentReleaseFamilyExclusionReasonV1,
-} from "../../../catalog-generator/src/current-release.ts";
-import type { HistoricalExecutionSettlementCoverageV1 } from "./variant-observer.ts";
+} from "../../catalog-generator/src/current-release.ts";
+import type {
+  HistoricalCurrentClosureBindingV1,
+  HistoricalCurrentComparisonReasonCodeV1,
+  HistoricalCurrentComparisonStatusV1,
+  HistoricalCurrentComparisonV1,
+} from "../../reference-only/historical-family-facts/src/comparison-contract.ts";
+import type { HistoricalExecutionSettlementCoverageV1 } from "../../reference-only/historical-family-facts/src/variant-observer.ts";
 
-export type CurrentAdapterComparisonStatus =
-  | "consistent"
-  | "contradicted"
-  | "unresolved";
+export type CurrentAdapterComparisonStatus = HistoricalCurrentComparisonStatusV1;
 
-export type CurrentAdapterComparisonReasonCode =
-  | "current-action-exact-match"
-  | "effects-not-qualified"
-  | "variant-not-covered"
-  | "observed-action-invalid"
-  | "observed-variant-metadata-mismatch"
-  | "settlement-not-proven"
-  | "synthetic-probe-not-byte-comparable"
-  | "current-action-build-unavailable"
-  | "current-action-abi-invalid"
-  | "current-action-target-mismatch"
-  | "current-action-calldata-mismatch";
+export type CurrentAdapterComparisonReasonCode = HistoricalCurrentComparisonReasonCodeV1;
 
 export type ObservedSwapDirection = "zero-for-one" | "one-for-zero";
 
-export interface CurrentAdapterClosureBindingV1 {
-  readonly family: "univ2-standard" | "univ3-standard";
-  readonly familyDefinitionHash: Hash;
+export interface CurrentAdapterClosureBindingV1 extends HistoricalCurrentClosureBindingV1 {
   readonly releaseDecision: "include" | "exclude";
   readonly releaseExclusionReasons: readonly CurrentReleaseFamilyExclusionReasonV1[];
-  readonly definitionCatalogLeafDigest: Hash | null;
-  readonly actionOwnerRefs: readonly Hash[];
 }
 
 interface ObservedExecutionBaseV1 {
@@ -81,14 +69,7 @@ export type CurrentAdapterComparisonInputV1 =
   | UniV2CurrentAdapterComparisonInputV1
   | UniV3CurrentAdapterComparisonInputV1;
 
-export interface CurrentAdapterComparisonV1 {
-  readonly schemaVersion: 1;
-  readonly kind: "aloha.current-adapter-execution-variant-comparison";
-  readonly advisoryOnly: true;
-  readonly comparatorSpecDigest: Hash;
-  readonly comparatorImplementationDigest: Hash;
-  readonly status: CurrentAdapterComparisonStatus;
-  readonly reasonCodes: readonly CurrentAdapterComparisonReasonCode[];
+export interface CurrentAdapterComparisonV1 extends HistoricalCurrentComparisonV1 {
   readonly currentClosureBinding: CurrentAdapterClosureBindingV1;
 }
 
@@ -111,7 +92,7 @@ export const CURRENT_ADAPTER_COMPARATOR_IMPLEMENTATION_DIGEST_V1 = hashDomain(
   Object.freeze({
     sourceSha256: sha256Hex(readFileSync(fileURLToPath(import.meta.url))),
     executionProgramSourceSha256: sha256Hex(readFileSync(fileURLToPath(new URL(
-      "../../../../packages/execution-program/src/index.ts",
+      "../../../packages/execution-program/src/index.ts",
       import.meta.url,
     )))),
   }),

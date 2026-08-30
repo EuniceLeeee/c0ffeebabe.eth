@@ -1565,6 +1565,66 @@ test("qualification full-family adapter accepts corpus-derived Catalog, Graph, c
   );
 });
 
+test("production full-family adapter rejects an exact-addressed runtime metadata object with extra keys", async () => {
+  const { fixture, runtime } = await buildQualificationAdapterCorpus();
+  const current = fixture.artifacts.find(artifact => artifact.schemaKey === "runtimeComposition")!;
+  const decoded = decodeCanonicalJson(current.bytes) as Record<string, unknown>;
+  const replacement = storeArtifact(
+    encodeCanonicalBytes({ ...decoded, producerVerdict: "pass" }),
+    schemaRef(FULL_FAMILY_ARTIFACT_SCHEMA_MANIFESTS.runtimeComposition),
+  );
+  const draft = (set: FullFamilyFactBundleV1["releaseIntent"], source = {
+    artifactRefId: set.sourceArtifactRefId,
+    contentSha256: set.sourceArtifactContentSha256,
+  }): FamilyReleaseSetDraftV1 => ({
+    sourceArtifactRefId: source.artifactRefId,
+    sourceArtifactContentSha256: source.contentSha256,
+    contractRoot: set.contractRoot,
+    entries: set.entries.map(({ familyId, familyDefinitionHash }) => ({ familyId, familyDefinitionHash })),
+  });
+  const bundle = sealFullFamilyFacts({
+    runtime: fixture.bundle.runtime,
+    releaseIntent: draft(fixture.bundle.releaseIntent),
+    definitionCatalog: draft(fixture.bundle.definitionCatalog),
+    runtimeComposition: draft(fixture.bundle.runtimeComposition, replacement.ref),
+    sourceCoverage: fixture.bundle.sourceCoverage,
+    lineage: fixture.bundle.lineage,
+    families: fixture.bundle.families,
+  });
+  const replaced = replaceObservedArtifact(runtime, current.artifactRefId, replacement);
+  const observer = replaced.trustedObserverInvocation!;
+  const authenticated = {
+    ...replaced,
+    trustedObserverInvocation: {
+      ...observer,
+      authenticatedArtifactRefIds: observer.authenticatedArtifactRefIds
+        .filter(refId => refId !== current.artifactRefId)
+        .concat(replacement.ref.artifactRefId)
+        .sort(),
+    },
+  };
+  const reasons: { code: string; path: string }[] = [];
+  const verdict = FULL_FAMILY_PREDICATE_EVALUATOR.evaluateLive(
+    replaceBundleAndAuthenticate(authenticated, bundle),
+    { add: (code, path) => reasons.push({ code, path }) },
+  );
+  assert.equal(verdict, "invalid");
+  assert.ok(reasons.some(reason => reason.code === "registry-mismatch"
+    && reason.path === "$.runtimeComposition.sourceArtifact"), JSON.stringify(reasons));
+
+  const missingReasons: { code: string; path: string }[] = [];
+  const missing = {
+    ...runtime,
+    refs: runtime.refs.filter(ref => ref.artifactRefId !== current.artifactRefId),
+    claims: runtime.claims.filter(claim => claim.artifactRefId !== current.artifactRefId),
+    leases: runtime.leases.filter(lease => lease.receiptId !== current.ref.retentionLeaseReceiptId),
+  };
+  assert.equal(FULL_FAMILY_PREDICATE_EVALUATOR.evaluateLive(missing, {
+    add: (code, path) => missingReasons.push({ code, path }),
+  }), "invalid");
+  assert.ok(missingReasons.some(reason => reason.code === "artifact-ref-mismatch"), JSON.stringify(missingReasons));
+});
+
 test("production full-family adapter rejects a coherent cross-run actual current source", async () => {
   const { fixture, runtime } = await buildQualificationAdapterCorpus();
   const actualCurrentSource = Object.freeze({

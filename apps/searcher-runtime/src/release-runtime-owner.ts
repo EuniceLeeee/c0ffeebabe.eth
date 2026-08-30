@@ -38,27 +38,10 @@ import {
   type NominationQualificationDeploymentFactV1,
 } from "../../../specs/release-authority/src/index.ts";
 import {
-  buildRuntimeReleaseComposition,
-  openInstalledRuntimeReleasePerformanceDeploymentPortV1,
-  issueInstalledRuntimeReleasePerformancePolicyPortV1,
-  verifyAndIssueRuntimeReleaseAuthorityV1,
-} from "../../../packages/runtime-release-authority/src/index.ts";
-import {
-  issueDeploymentRuntimeInfrastructureV1,
-  readDeploymentRuntimeInfrastructureV1,
-} from "../../../packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts";
-import {
-  issueRuntimeReleaseHttpFamilyPhysicalExecutionPortV1,
-} from "../../../packages/runtime-release-authority/src/internal/http-family-physical-owner.ts";
-import {
-  issueRuntimeReleaseQualifiedDiscoverySourcePort,
-} from "../../../packages/runtime-release-authority/src/internal/discovery-source-authority-owner.ts";
-import {
-  issueRuntimeReleaseRevmWorkerDeploymentPort,
-} from "../../../packages/runtime-release-authority/src/internal/revm-worker-owner.ts";
-import {
-  issueRuntimeReleaseEconomicSafetyEvaluatorCapabilityV1,
-} from "../../../packages/runtime-release-authority/src/internal/economic-safety-owner.ts";
+  openVerifiedRuntimeReleaseOwnerPortV1,
+  verifyExternalRuntimeReleaseBindingV1,
+  type VerifiedRuntimeReleaseOwnerPortV1,
+} from "../../../packages/runtime-release-authority/src/production-runtime-owner.ts";
 import {
   encodeEconomicSafetyObjectiveTemplatesV1,
 } from "../../../packages/economics-safety/src/index.ts";
@@ -95,12 +78,6 @@ import {
   type RuntimeAnchorObservationV1,
   type RuntimeAnchorReceiptV1,
 } from "./deployment.ts";
-import {
-  issuePreReleaseRuntimeReleasePerformancePolicyPortV1,
-  type RuntimeReleasePerformancePolicyPortV1,
-} from "../../../packages/runtime-release-authority/src/internal/performance-policy-owner.ts";
-import type { RuntimeReleaseAuthorityV1 } from "../../../packages/runtime-release-authority/src/index.ts";
-import type { RuntimeReleaseQualifiedDiscoverySourcePortV1 } from "../../../packages/runtime-release-authority/src/internal/discovery-source-authority-owner.ts";
 import { startReleaseSearcherStartup } from "./index.ts";
 import type { SearcherRuntimeApplicationV1 } from "./internal/application-owner.ts";
 import {
@@ -113,20 +90,6 @@ import {
   decodeDeploymentExecutorStateDescriptorBytesV1,
   decodeDeploymentRuntimePolicyBytesV1,
 } from "./deployment-runtime-policy.ts";
-import {
-  issueProductionFullFamilyCollectorPortV1,
-} from "../../../acceptance/collectors/src/production-full-family-port.ts";
-import {
-  issueProductionSixStepCollectorPortV1,
-} from "../../../acceptance/collectors/src/production-six-step-port.ts";
-import {
-  issueProductionTerminalPhaseCollectorPortV1,
-} from "../../../acceptance/collectors/src/production-terminal-phase-port.ts";
-import {
-  ProductionTerminalPhaseLocatorIndexV1,
-} from "../../../acceptance/collectors/src/terminal-phase-locator-index.ts";
-import { readReleaseOwnedObserverStoreV1 } from "../../../acceptance/collectors/src/internal/release-owned-observer-store.ts";
-import type { RuntimeReleaseObserverStoreServiceV1 } from "../../../packages/runtime-release-authority/src/internal/observer-store-owner.ts";
 
 const BINDING_PATH = "/etc/aloha/runtime-release-binding.json";
 const DEPLOYMENT_MANIFEST_PATH = "/etc/aloha/searcher-deployment.json";
@@ -136,37 +99,6 @@ const PACKAGE_DOMAIN = "aloha/runtime-release-package/v1";
 const ZERO_HASH = `0x${"0".repeat(64)}` as Hash;
 export const SIX_STEP_EVIDENCE_DIRECTORY_NAME = "six-step-evidence";
 const runtimeAcceptanceOwners = new WeakMap<object, ProductionRuntimeAcceptanceEvidenceOwnerV1>();
-
-function issueTerminalObservationPortsV1(input: Readonly<{
-  readonly observerStore: RuntimeReleaseObserverStoreServiceV1;
-  readonly observerContentDirectory: string;
-  readonly terminalLocatorDirectory: string;
-  readonly releaseIntentCanonicalBytes: Uint8Array;
-  readonly familyCatalogSourceBytes: Uint8Array;
-  readonly runtimeCompositionSourceBytes: Uint8Array;
-  readonly strategyCatalogSourceBytes: Uint8Array;
-  readonly candidateProofVerifierBindingBytes: Uint8Array;
-}>) {
-  const observerStore = input.observerStore.issueObserverStore({
-    directory: input.observerContentDirectory,
-  });
-  const sink = readReleaseOwnedObserverStoreV1(observerStore).sink;
-  const fullFamilyObservation = issueProductionFullFamilyCollectorPortV1({
-    releaseIntentCanonicalBytes: input.releaseIntentCanonicalBytes,
-    familyCatalogSourceBytes: input.familyCatalogSourceBytes,
-    runtimeCompositionSourceBytes: input.runtimeCompositionSourceBytes,
-    strategyCatalogSourceBytes: input.strategyCatalogSourceBytes,
-    candidateProofVerifierBindingBytes: input.candidateProofVerifierBindingBytes,
-    sink,
-  });
-  const sixStepObservation = issueProductionSixStepCollectorPortV1(sink);
-  const locatorIndex = new ProductionTerminalPhaseLocatorIndexV1({
-    directory: input.terminalLocatorDirectory,
-    sink,
-  });
-  const terminalPhaseObservation = issueProductionTerminalPhaseCollectorPortV1({ sink, locatorIndex });
-  return Object.freeze({ fullFamilyObservation, sixStepObservation, terminalPhaseObservation });
-}
 
 const PACKAGE_ARTIFACT_PATHS = Object.freeze({
   "acceptance-certificates.json": "/etc/aloha/acceptance-certificates.json",
@@ -557,7 +489,7 @@ export function issuePreReleaseRuntimeStartupCapabilityV1(input: unknown): Produ
   const pin = decodeRuntimeReleaseSignerPinV1(
     decodeCanonicalJson(artifacts["runtime-release-signer-pin.json"]!.bytes) as object,
   );
-  verifyAndIssueRuntimeReleaseAuthorityV1(binding, pin);
+  verifyExternalRuntimeReleaseBindingV1(binding, pin);
   const provenance = runtimeReleaseBindingProvenanceHash(binding);
   if (authorization.candidateReleaseCommit !== binding.candidateReleaseCommit
     || authorization.runtimeBindingId !== binding.bindingId
@@ -665,24 +597,23 @@ function qualifiedCapabilityProjection(
 
 interface VerifiedRuntimeCoreInputV1 {
   readonly binding: ReturnType<typeof decodeRuntimeReleaseBindingV1>;
-  readonly authority: RuntimeReleaseAuthorityV1;
+  readonly owner: VerifiedRuntimeReleaseOwnerPortV1;
   readonly source: DeploymentSourceConfigV1;
   readonly artifacts: Readonly<Record<string, ProductionSnapshotFileV1>>;
   readonly deploymentCompositionSha256: Hash;
   readonly runtimeAnchor: RuntimeAnchorReceiptV1;
   /** Owner-derived from the independently observed physical process anchor. */
   readonly processEpoch: Hash;
-  readonly issuePerformancePolicy: (
-    authority: RuntimeReleaseAuthorityV1,
-    qualifiedSource: RuntimeReleaseQualifiedDiscoverySourcePortV1,
-  ) => RuntimeReleasePerformancePolicyPortV1;
+  readonly performance:
+    | Readonly<{ readonly phase: "installed-production" }>
+    | Readonly<{ readonly phase: "pre-release"; readonly profileBytes: Uint8Array }>;
 }
 
 /** One runtime composition core for installed production and pre-release.
  * Phase owners must already have verified signatures, paths, storage
  * projection, anchors, and the composition digest before entering here. */
 async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
-  const { binding, authority, source, artifacts } = input;
+  const { binding, owner, source, artifacts } = input;
   const runtimePolicy = decodeDeploymentRuntimePolicyBytesV1(artifacts["runtime-policy.json"]!.bytes);
   const executorState = decodeDeploymentExecutorStateDescriptorBytesV1(artifacts["executor-state.json"]!.bytes);
   assertDeploymentRuntimeArtifactsJoinReleaseV1(runtimePolicy, executorState, binding);
@@ -690,29 +621,26 @@ async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
     throw new TypeError("deployment economic profit asset does not join the qualified source chain");
   }
   const objectiveRef = hashDomain("aloha/search-objective/v1", runtimePolicy.objective);
-  const economicSafetyEvaluator = issueRuntimeReleaseEconomicSafetyEvaluatorCapabilityV1(
-    authority,
-    encodeEconomicSafetyObjectiveTemplatesV1([{
-      objectiveRef,
-      profitAsset: runtimePolicy.economicSafety.profitAsset,
-      profitAccount: runtimePolicy.economicSafety.profitAccount,
-      minNetGain: runtimePolicy.objective.minNetGain,
-      maxGas: runtimePolicy.objective.maxGas,
-      maxValueAtRisk: runtimePolicy.objective.maxValueAtRisk,
-      priorityFeePerGas: runtimePolicy.economicSafety.priorityFeePerGas,
-      bidCostNative: runtimePolicy.economicSafety.bidCostNative,
-      valuationOwnerRef: runtimePolicy.economicSafety.valuationOwnerRef,
-    }]),
-  );
+  const economicSafetyObjectiveTemplatesBytes = encodeEconomicSafetyObjectiveTemplatesV1([{
+    objectiveRef,
+    profitAsset: runtimePolicy.economicSafety.profitAsset,
+    profitAccount: runtimePolicy.economicSafety.profitAccount,
+    minNetGain: runtimePolicy.objective.minNetGain,
+    maxGas: runtimePolicy.objective.maxGas,
+    maxValueAtRisk: runtimePolicy.objective.maxValueAtRisk,
+    priorityFeePerGas: runtimePolicy.economicSafety.priorityFeePerGas,
+    bidCostNative: runtimePolicy.economicSafety.bidCostNative,
+    valuationOwnerRef: runtimePolicy.economicSafety.valuationOwnerRef,
+  }]);
   const infrastructureRequest = await loadVerifiedDeploymentCompositionSnapshotV1(
     input.deploymentCompositionSha256,
     artifacts["deployment-composition.mjs"]!.bytes,
   );
-  const infrastructureCapability = issueDeploymentRuntimeInfrastructureV1({
-    binding,
+  const infrastructure = owner.bindInfrastructure({
     request: infrastructureRequest,
+    endpoint: source.endpoint,
+    timeoutMs: source.timeoutMs,
   });
-  const external = readDeploymentRuntimeInfrastructureV1(infrastructureCapability, binding);
   const runtimeSource = createRethSearcherRuntimeSourceV1({
     canonical: {
       profile: source.profile,
@@ -739,31 +667,16 @@ async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
     },
   });
   const durable = createSqliteDurableStore(source.checkpointDatabasePath);
-  const qualifiedSource = issueRuntimeReleaseQualifiedDiscoverySourcePort(authority, {
-    profile: source.profile,
-    endpoint: source.endpoint,
-    chainId: source.chainId,
-    providerIdentity: source.providerIdentity,
-    backendEpoch: source.backendEpoch,
-  });
-  const physicalExecution = issueRuntimeReleaseHttpFamilyPhysicalExecutionPortV1({
-    issuer: external.scheduler.issuer,
-    capability: external.scheduler.capability,
-    schedulerRuntime: external.scheduler.runtime,
-    endpoint: source.endpoint,
-    timeoutMs: source.timeoutMs,
-  });
   const lifecycle = new SingleFlightInstanceLifecycleV1();
   const rejectionExecutor: RejectionTransportExecutorV1 = Object.freeze({
     async execute(): Promise<never> {
       throw new TypeError("attestation rejection transport is unavailable");
     },
   });
-  const services = buildRuntimeReleaseComposition({
-    authority,
+  const services = owner.compose({
+    infrastructure,
     catalog: { qualifiedCapabilityProjection: qualifiedCapabilityProjection(binding, artifacts["catalog-generation.inputs.json"]!.bytes) },
     attestation: {
-      proofPort: external.attestationProof,
       build(composition: AttestationCompositionBindingV1) {
         const frameworkRuntime = createFrameworkFailureRuntime(composition, { classify() { return null; } });
         const rejectionIssuer = createRejectionExecutorAuthorityIssuer(composition);
@@ -774,10 +687,7 @@ async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
         };
       },
     },
-    candidatePartitionProofIssuer: external.candidatePartitionProofIssuer,
     checkpoint: { durable, canonical: runtimeSource.canonical },
-    scheduler: Object.freeze({ ...external.scheduler, physicalExecution }),
-    revm: { deploymentPort: issueRuntimeReleaseRevmWorkerDeploymentPort(authority, external.revmDeployment) },
     ready: {
       policy: {
         observationWindowBlocks: "50",
@@ -788,7 +698,14 @@ async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
       },
       monotonicNow: () => process.hrtime.bigint().toString(),
     },
-    performance: { policy: input.issuePerformancePolicy(authority, qualifiedSource) },
+    qualifiedDiscoverySource: {
+      profile: source.profile,
+      endpoint: source.endpoint,
+      chainId: source.chainId,
+      providerIdentity: source.providerIdentity,
+      backendEpoch: source.backendEpoch,
+    },
+    performance: input.performance,
     finalSimulation: {
       endpoint: source.endpoint,
       timeoutMs: source.timeoutMs,
@@ -798,7 +715,7 @@ async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
       executorConfig: executorState.executorConfig,
       accounts: executorState.accounts,
     },
-    economicSafetyEvaluator,
+    economicSafetyObjectiveTemplatesBytes,
     sixStep: {
       process: {
         systemId: `${input.runtimeAnchor.serviceName}/${input.runtimeAnchor.systemdUnit}`,
@@ -819,7 +736,7 @@ async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
       observerContentDirectory: source.observerContentDirectory,
       evidenceDirectory: join(dirname(source.observerContentDirectory), SIX_STEP_EVIDENCE_DIRECTORY_NAME),
     },
-    startup: { source: qualifiedSource, processEpoch: input.processEpoch },
+    startup: { processEpoch: input.processEpoch },
   });
   return Object.freeze({
     services,
@@ -852,7 +769,7 @@ async function loadInstalledProductionDeploymentBundleV1(input: Readonly<{
   }
   const binding = decodeRuntimeReleaseBindingV1(state.artifacts["runtime-release-binding.json"]!.bytes);
   const signerPin = decodeRuntimeReleaseSignerPinV1(decodeCanonicalJson(state.pinBytes) as object);
-  const authority = verifyAndIssueRuntimeReleaseAuthorityV1(binding, signerPin);
+  const owner = openVerifiedRuntimeReleaseOwnerPortV1(binding, signerPin);
   const provenance = runtimeReleaseBindingProvenanceHash(binding);
   if (manifest.bindingId !== binding.bindingId
     || manifest.releaseProvenanceHash !== provenance
@@ -867,7 +784,7 @@ async function loadInstalledProductionDeploymentBundleV1(input: Readonly<{
   );
   const core = await buildVerifiedRuntimeCoreV1({
     binding,
-    authority,
+    owner,
     source,
     artifacts: state.artifacts,
     deploymentCompositionSha256: manifest.deploymentCompositionModuleSha256,
@@ -880,10 +797,7 @@ async function loadInstalledProductionDeploymentBundleV1(input: Readonly<{
       pid: runtimeAnchor.pid,
       processStartTicks: runtimeAnchor.processStartTicks,
     }),
-    issuePerformancePolicy: installedAuthority => issueInstalledRuntimeReleasePerformancePolicyPortV1({
-      authority: installedAuthority,
-      deployment: openInstalledRuntimeReleasePerformanceDeploymentPortV1(installedAuthority),
-    }),
+    performance: Object.freeze({ phase: "installed-production" as const }),
   });
   const {
     services,
@@ -917,7 +831,7 @@ async function loadInstalledProductionDeploymentBundleV1(input: Readonly<{
     releaseEnvironmentBytes: state.artifacts["searcher-release.env"]!.bytes,
     logPath: manifest.logPath,
   });
-  const terminalObservations = issueTerminalObservationPortsV1({
+  const terminalObservations = owner.bindTerminalObservations({
     observerStore: services.observerStore,
     observerContentDirectory: source.observerContentDirectory,
     terminalLocatorDirectory: source.terminalLocatorDirectory,
@@ -1146,7 +1060,7 @@ async function startPreReleaseRuntimeServiceV1(
   const signerPin = decodeRuntimeReleaseSignerPinV1(
     decodeCanonicalJson(artifacts["runtime-release-signer-pin.json"]!.bytes) as object,
   );
-  const authority = verifyAndIssueRuntimeReleaseAuthorityV1(binding, signerPin);
+  const owner = openVerifiedRuntimeReleaseOwnerPortV1(binding, signerPin);
   const sourceSigned = assertDeploymentSourceJoinsReleaseV1(
     decodeDeploymentSourceConfigBytesV1(artifacts["deployment-source.json"]!.bytes),
     binding,
@@ -1214,7 +1128,7 @@ async function startPreReleaseRuntimeServiceV1(
   });
   const core = await buildVerifiedRuntimeCoreV1({
     binding,
-    authority,
+    owner,
     source,
     artifacts,
     deploymentCompositionSha256: hashSchema.decode(
@@ -1230,10 +1144,9 @@ async function startPreReleaseRuntimeServiceV1(
       pid: runtimeAnchor.pid,
       processStartTicks: runtimeAnchor.processStartTicks,
     }),
-    issuePerformancePolicy: (activeAuthority, qualifiedSource) => issuePreReleaseRuntimeReleasePerformancePolicyPortV1({
-      authority: activeAuthority,
-      performanceProfileBytes: artifacts["performance-profile.json"]!.bytes,
-      qualifiedSource,
+    performance: Object.freeze({
+      phase: "pre-release" as const,
+      profileBytes: artifacts["performance-profile.json"]!.bytes,
     }),
   });
   const release = Object.freeze({
@@ -1264,7 +1177,7 @@ async function startPreReleaseRuntimeServiceV1(
     releaseEnvironmentBytes: artifacts["searcher-pre-release.env"]!.bytes,
     logPath: requiredFixedPaths.logPath,
   });
-  const terminalObservations = issueTerminalObservationPortsV1({
+  const terminalObservations = owner.bindTerminalObservations({
     observerStore: core.services.observerStore,
     observerContentDirectory: source.observerContentDirectory,
     terminalLocatorDirectory: source.terminalLocatorDirectory,

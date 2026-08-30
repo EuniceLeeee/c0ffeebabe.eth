@@ -14,7 +14,7 @@ import {
   sha256Hex,
   type CanonicalJson,
   type Hash,
-} from "../../../../packages/canonical-codec/src/index.ts";
+} from "../../../packages/canonical-codec/src/index.ts";
 import {
   nominateUniV2,
   UNIV2_STANDARD_EXACT_PORT,
@@ -22,23 +22,23 @@ import {
   UNIV2_SYNC_EVENT_TOPIC0,
   verifyUniV2IdentityStage,
   type UniV2SwapActionInputV1,
-} from "../../../../families/univ2-standard/src/public.ts";
+} from "../../../families/univ2-standard/src/public.ts";
 import {
   deriveUniV3Routes,
   UNIV3_STANDARD_SWAP_ACTION_PORT,
   type UniV3IdentityV1,
   type UniV3QuoteV1,
-} from "../../../../families/univ3-standard/src/public.ts";
+} from "../../../families/univ3-standard/src/public.ts";
 import {
   compareCurrentAdapterExecutionVariantV1,
   type CurrentAdapterComparisonV1,
 } from "./current-adapter-comparator.ts";
-import { loadHistoricalFamilyFactBundleV1 } from "./index.ts";
+import { loadHistoricalFamilyFactBundleV1 } from "../../reference-only/historical-family-facts/src/index.ts";
 import {
   observeHistoricalExecutionVariantsV1,
   type HistoricalExecutionVariantCaseV1,
   type HistoricalExecutionVariantObservationV1,
-} from "./variant-observer.ts";
+} from "../../reference-only/historical-family-facts/src/variant-observer.ts";
 
 const REPORT_SPEC = Object.freeze({
   schemaVersion: 1,
