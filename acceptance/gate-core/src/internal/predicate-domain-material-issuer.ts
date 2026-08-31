@@ -2,6 +2,7 @@ import { types as nodeTypes } from "node:util";
 import { CANONICAL_LIMITS } from "../../../../packages/canonical-codec/src/index.ts";
 import type { PredicateDomainMaterialCapabilityV1, PredicateDomainMaterialStateV1 } from "../material-provider.ts";
 import {
+  readPredicateDomainMaterialCapabilityV1,
   registerPredicateDomainMaterialCapabilityV1,
 } from "./predicate-domain-material-state.ts";
 
@@ -51,4 +52,12 @@ export function issuePredicateDomainMaterialCapabilityV1(
     });
   }
   return registerPredicateDomainMaterialCapabilityV1(storedState);
+}
+
+/** Narrow provider-owned reader. Release assembly reaches capability state
+ * only through the exact generated material-provider binding. */
+export function readIssuedPredicateDomainMaterialCapabilityV1(
+  capability: PredicateDomainMaterialCapabilityV1,
+): PredicateDomainMaterialStateV1 {
+  return readPredicateDomainMaterialCapabilityV1(capability);
 }

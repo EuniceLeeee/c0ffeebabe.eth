@@ -14,7 +14,7 @@ import {
   TERMINAL_SELECTION_ARTIFACT_SCHEMA_REFS,
   type RawTerminalSelectionObservationV1,
   type TerminalSelectionFactV1,
-} from "../../terminal-selection-facts/src/runtime.ts";
+} from "../../terminal-selection-facts/src/schema.ts";
 import { ContentAddressedObserverSinkV1, type ObservedContentArtifactV1 } from "./content-addressed-sink.ts";
 import {
   assertProductionTerminalPhaseDurableDiscoveryV1,

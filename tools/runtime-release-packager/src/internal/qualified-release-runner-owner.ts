@@ -54,7 +54,7 @@ import {
   type CommonEnvelopeAssemblyStateV1,
 } from "../../../../acceptance/gate-core/src/internal/material-provider-state.ts";
 import { issueCommonEnvelopeAuthorityPortV1 } from "../../../../acceptance/gate-core/src/internal/common-envelope-authority-issuer.ts";
-import type { PredicateDomainMaterialV1 } from "../../../../acceptance/gate-core/src/internal/predicate-domain-material-state.ts";
+import type { PredicateDomainMaterialV1 } from "../../../../acceptance/gate-core/src/material-provider.ts";
 import {
   assembleReleaseGateInvocations,
   evaluateAssembledReleaseGateInvocations,

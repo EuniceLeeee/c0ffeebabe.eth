@@ -12,7 +12,7 @@ export type CommonEnvelopeAuthorityPortV1 = object;
 export type PredicateDomainMaterialCapabilityV1 = object;
 export type AssembledReleaseInvocationSetCapabilityV1 = object;
 
-export const PREDICATE_MATERIAL_PROVIDER_CONTRACT_VERSION = "1.0.0" as const;
+export const PREDICATE_MATERIAL_PROVIDER_CONTRACT_VERSION = "2.0.0" as const;
 
 export type PredicateMaterialUnavailableCodeV1 =
   | "owner-port-missing"
@@ -54,6 +54,11 @@ export interface PredicateMaterialProviderV1 {
   readonly provide: (
     source: PredicateMaterialSourcePortV1,
   ) => Promise<PredicateDomainMaterialCapabilityV1>;
+  /** Provider-owned reader for the opaque capability returned by `provide`.
+   * Generic GateCore never imports the provider's capability state owner. */
+  readonly read: (
+    capability: PredicateDomainMaterialCapabilityV1,
+  ) => PredicateDomainMaterialStateV1;
 }
 export interface AssembledPredicateEvaluationV1 {
   readonly predicateId: string;

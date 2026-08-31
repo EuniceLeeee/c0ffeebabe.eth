@@ -1283,3 +1283,26 @@ test("valuation oracle leaves are isolated from generic dispatch and unrelated o
     assert.doesNotMatch(source, /mainnet-wrapped-native-is-native-numeraire/);
   }
 });
+
+test("production and reference valuation compositions consume only their own manifests", () => {
+  const productionComposition = readFileSync(new URL("../src/composition/valuation-oracle-composition.ts", import.meta.url), "utf8");
+  const referenceComposition = readFileSync(new URL("../src/composition/reference-valuation-oracle-composition.ts", import.meta.url), "utf8");
+  const qualificationManifest = readFileSync(new URL("../src/composition/valuation-oracle-manifest.ts", import.meta.url), "utf8");
+  const qualification = readFileSync(new URL("../src/qualification.ts", import.meta.url), "utf8");
+
+  assert.ok(productionComposition.includes("./predicate-valuation-oracle-manifest.ts"));
+  assert.ok(productionComposition.includes("../valuation-oracles/native-equivalent.ts"));
+  assert.equal(productionComposition.includes("./reference-valuation-oracle-manifest.ts"), false);
+  assert.equal(productionComposition.includes("../reference-valuation-oracles/native-equivalent.ts"), false);
+
+  assert.ok(referenceComposition.includes("./reference-valuation-oracle-manifest.ts"));
+  assert.ok(referenceComposition.includes("../reference-valuation-oracles/native-equivalent.ts"));
+  assert.equal(referenceComposition.includes("./predicate-valuation-oracle-manifest.ts"), false);
+  assert.equal(referenceComposition.includes("../valuation-oracles/native-equivalent.ts"), false);
+
+  assert.ok(qualificationManifest.includes("./predicate-valuation-oracle-manifest.ts"));
+  assert.ok(qualificationManifest.includes("./reference-valuation-oracle-manifest.ts"));
+  assert.ok(qualification.includes("./composition/valuation-oracle-manifest.ts"));
+  assert.equal(qualification.includes("./composition/predicate-valuation-oracle-manifest.ts"), false);
+  assert.equal(qualification.includes("./composition/reference-valuation-oracle-manifest.ts"), false);
+});

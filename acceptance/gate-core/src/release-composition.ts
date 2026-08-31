@@ -54,7 +54,7 @@ export const RELEASE_ROLE_COMPOSITION = Object.freeze({
     oracleExportName: "evaluateArtifactLineageOracle",
     materialProviderModulePath: "acceptance/collectors/src/material-providers/artifact-lineage.ts",
     materialProviderExportName: "ARTIFACT_LINEAGE_MATERIAL_PROVIDER",
-    materialProviderContractDigest: "0xcd6273428674ff1750d647c5299635406d511800a9fa025b0932958ca750f855" as Hash,
+    materialProviderContractDigest: "0xe64f0cf45473d4777839fe8004d09f3d030a35aa1d631261ccff13a28f88151a" as Hash,
   }, {
     predicateId: "aloha.full-family.facts",
     predicateSpecDigest: "0x44383fab2b57e703c722ee21852f80c1d7addc5de0b03573f7c0f54afd73a50d" as Hash,
@@ -68,7 +68,7 @@ export const RELEASE_ROLE_COMPOSITION = Object.freeze({
     oracleExportName: "evaluateFullFamilyReferenceModel",
     materialProviderModulePath: "acceptance/collectors/src/material-providers/full-family.ts",
     materialProviderExportName: "FULL_FAMILY_MATERIAL_PROVIDER",
-    materialProviderContractDigest: "0xc3e5170edefa14ad134efec09b33228bcfcdb96133276177f78a08d9ebfca924" as Hash,
+    materialProviderContractDigest: "0x6d9dbf46290a735b307f3e5ffbee75c5eb8567f4c858cc85bf8d7bf92f9b7ec3" as Hash,
   }, {
     predicateId: "aloha.legacy-shaped-authority-zero",
     predicateSpecDigest: "0x147831b195b0e100da01f9e5a79d2c6a1663fefad8f34a3c2b512376f58280f8" as Hash,
@@ -82,7 +82,7 @@ export const RELEASE_ROLE_COMPOSITION = Object.freeze({
     oracleExportName: "evaluateLegacyShapedAuthorityReferenceModel",
     materialProviderModulePath: "acceptance/collectors/src/material-providers/runtime-boundaries.ts",
     materialProviderExportName: "LEGACY_SHAPED_AUTHORITY_ZERO_MATERIAL_PROVIDER",
-    materialProviderContractDigest: "0xeb66f19f5cb55697f9f93cf48b2128469fe7b03b480a124b5180e6b96c274c24" as Hash,
+    materialProviderContractDigest: "0xf288279c1937b7ee16152b5b20531e29e23906bcc319d78e3e9c5df7abf5fd72" as Hash,
   }, {
     predicateId: "aloha.performance.facts",
     predicateSpecDigest: "0xe588c7970985e9049b3cf74489f2e75f0ab07fbaa62c581e8091b8993c159085" as Hash,
@@ -96,7 +96,7 @@ export const RELEASE_ROLE_COMPOSITION = Object.freeze({
     oracleExportName: "evaluatePerformanceReferenceModel",
     materialProviderModulePath: "acceptance/collectors/src/material-providers/performance.ts",
     materialProviderExportName: "PERFORMANCE_MATERIAL_PROVIDER",
-    materialProviderContractDigest: "0x16478451b563d343dd062ff7a3985e868766ac3ac05143bad30df6f3dd96e353" as Hash,
+    materialProviderContractDigest: "0xd69c012457c3dfb69eb9f72afc20f8b78322374660b5caa01a144986d08d24b5" as Hash,
   }, {
     predicateId: "aloha.runtime-restart.facts",
     predicateSpecDigest: "0xf9e10bcaba618ab3a457efec86424ddbeb049330d98375eaba550775abe33433" as Hash,
@@ -110,7 +110,7 @@ export const RELEASE_ROLE_COMPOSITION = Object.freeze({
     oracleExportName: "evaluateRuntimeRestartReferenceModel",
     materialProviderModulePath: "acceptance/collectors/src/material-providers/runtime-boundaries.ts",
     materialProviderExportName: "RUNTIME_RESTART_MATERIAL_PROVIDER",
-    materialProviderContractDigest: "0xc8256b102180019b712194dc928fa245b688e79549078051c856701b6545c672" as Hash,
+    materialProviderContractDigest: "0x35e11707bd4d7e49e0340604524f9a181bd1813181462b48bff8db3e8defcfc7" as Hash,
   }, {
     predicateId: "aloha.six-step.facts",
     // These digests are generated from the frozen six-step spec and descriptor
@@ -126,7 +126,7 @@ export const RELEASE_ROLE_COMPOSITION = Object.freeze({
     oracleExportName: "evaluateSixStepReferenceModel",
     materialProviderModulePath: "acceptance/collectors/src/material-providers/six-step.ts",
     materialProviderExportName: "SIX_STEP_MATERIAL_PROVIDER",
-    materialProviderContractDigest: "0xc132f3bb2a141ab37abd74d5aeacf2538e8a4becf99c43983580eea87c340944" as Hash,
+    materialProviderContractDigest: "0xa547e9c16bc048cbf751938daa24d6a7f7a575bffe0c6123591019fbdec67b92" as Hash,
   }, {
     predicateId: "aloha.source-repository-production-closure-zero",
     predicateSpecDigest: "0x23b26ebe18de016685f5e27fb79571f32a5c2edb967c5804a8b52285cbdef567" as Hash,
@@ -140,7 +140,7 @@ export const RELEASE_ROLE_COMPOSITION = Object.freeze({
     oracleExportName: "evaluateSourceRepositoryProductionClosureReferenceModel",
     materialProviderModulePath: "acceptance/collectors/src/material-providers/runtime-boundaries.ts",
     materialProviderExportName: "SOURCE_REPOSITORY_PRODUCTION_CLOSURE_ZERO_MATERIAL_PROVIDER",
-    materialProviderContractDigest: "0x9b7c614acafd557b82e4895e6f4a8a54be80d6a8118e75ec2108d0f98a8a62a9" as Hash,
+    materialProviderContractDigest: "0xfc131804460d4da504920430572c4a24e9183b1f1a2fc9b921927f757987de26" as Hash,
   }, {
     predicateId: "aloha.terminal-selection-lineage.facts",
     predicateSpecDigest: "0x6225c27ecf4d524b0536d1ac6f756e39e039f94852121cd20e489fa69ddea943" as Hash,
@@ -154,7 +154,7 @@ export const RELEASE_ROLE_COMPOSITION = Object.freeze({
     oracleExportName: "evaluateTerminalSelectionReferenceModel",
     materialProviderModulePath: "acceptance/collectors/src/material-providers/terminal-selection.ts",
     materialProviderExportName: "TERMINAL_SELECTION_MATERIAL_PROVIDER",
-    materialProviderContractDigest: "0x3590a7a74cb587f45cf84ffb5c81fd3f456b40f4aa79cf2b45ec46ac620ecaaf" as Hash,
+    materialProviderContractDigest: "0x213f510cdeff8e8e381e236f57bccde47f28e8b9caa2e4dc7bd8b8671e577605" as Hash,
   }],
 });
 

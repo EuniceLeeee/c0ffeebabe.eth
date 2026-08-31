@@ -7,6 +7,7 @@ import { assertIssuedRuntimeReleaseStrategyRuntimeService } from "./internal/str
 
 export { assertIssuedRuntimeReleaseStrategyRuntimeService };
 export type {
+  RuntimeReleaseStrategyEvidenceExpectationV1,
   RuntimeReleaseStrategyPlanningRequestV1,
   RuntimeReleaseStrategyPlanningResultV1,
   RuntimeReleaseStrategyRuntimeMetadataV1,

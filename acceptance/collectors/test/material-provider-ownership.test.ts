@@ -4,9 +4,7 @@ import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/ind
 import {
   issuePredicateDomainMaterialCapabilityV1,
 } from "../../gate-core/src/internal/predicate-domain-material-issuer.ts";
-import {
-  readPredicateDomainMaterialCapabilityV1,
-} from "../../gate-core/src/internal/predicate-domain-material-state.ts";
+import { PERFORMANCE_MATERIAL_PROVIDER } from "../src/material-providers/performance.ts";
 import {
   issueProductionPerformanceMaterialObserverOwnerPortV1,
   observeProductionPerformanceMaterialV1,
@@ -47,7 +45,7 @@ test("predicate material issuer snapshots list containers before capability publ
   facts[0] = Object.freeze({ ordinal: "forged" });
   facts.push(Object.freeze({ ordinal: "1" }));
   refs.push(undefined as never);
-  const stored = readPredicateDomainMaterialCapabilityV1(capability);
+  const stored = PERFORMANCE_MATERIAL_PROVIDER.read(capability);
   assert.equal(stored.status, "available");
   if (stored.status !== "available") throw new TypeError("available material expected");
   assert.deepEqual(stored.predicateFacts, [originalFact]);
@@ -55,6 +53,10 @@ test("predicate material issuer snapshots list containers before capability publ
   assert.ok(Object.isFrozen(stored));
   assert.ok(Object.isFrozen(stored.predicateFacts));
   assert.ok(Object.isFrozen(stored.artifactRefs));
+  assert.throws(
+    () => PERFORMANCE_MATERIAL_PROVIDER.read(Object.freeze({})),
+    /was not provider-issued/,
+  );
 });
 
 test("pre-release performance observer is release-bound, typed missing/unqualified, and single-read", () => {

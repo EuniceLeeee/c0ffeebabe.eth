@@ -100,8 +100,8 @@
     },
     {
       "path": "acceptance/collectors/src/internal/terminal-selection-material-owner.ts",
-      "contentSha256": "0x0bbd319ce6824dd79a29add9efc99cc724bc0609aeafbc278cbef3f18258f182",
-      "byteLength": 3923
+      "contentSha256": "0xdb2b10f8cf4ac77a479444000dc4036fe6975e1cf23bd4d41efcdda694907274",
+      "byteLength": 3922
     },
     {
       "path": "acceptance/collectors/src/material-providers/artifact-lineage.ts",
@@ -115,8 +115,8 @@
     },
     {
       "path": "acceptance/collectors/src/material-providers/performance.ts",
-      "contentSha256": "0xac0df16ec2df330d4ebafec34116ced94f86c0e4dcb578c7a35f0ee468b7afa4",
-      "byteLength": 6169
+      "contentSha256": "0x280e142baf3abc01746dffa54a959051fdb2e0687c37ae19b4044c8f2d827064",
+      "byteLength": 6168
     },
     {
       "path": "acceptance/collectors/src/material-providers/runtime-boundaries.ts",
@@ -125,8 +125,8 @@
     },
     {
       "path": "acceptance/collectors/src/material-providers/shared.ts",
-      "contentSha256": "0x7d90ad7e83c9652369424564bb157a1c365ec467ebbaeb7fe439fdce3c686c06",
-      "byteLength": 5014
+      "contentSha256": "0x925851a4002b0897ea54b93b2a94b2e6dc6997a6c5ab1d1d58d43e67d005f7e7",
+      "byteLength": 5248
     },
     {
       "path": "acceptance/collectors/src/material-providers/six-step.ts",
@@ -240,8 +240,8 @@
     },
     {
       "path": "acceptance/gate-core/src/internal/predicate-domain-material-issuer.ts",
-      "contentSha256": "0x0405b88f1e73f4f5aa2d33f69787757ab2124cb833b0282944c6909051239bc1",
-      "byteLength": 2630
+      "contentSha256": "0xf2dbdd189d17415b9511d7853b33f057d584a0456ae6469dfa350a1d7c723b43",
+      "byteLength": 3030
     },
     {
       "path": "acceptance/gate-core/src/internal/predicate-domain-material-state.ts",
@@ -250,8 +250,8 @@
     },
     {
       "path": "acceptance/gate-core/src/material-provider.ts",
-      "contentSha256": "0x4e807aea61dafe989a853bed564334ff248497cec30bfad7bc083672ee8d5bba",
-      "byteLength": 2783
+      "contentSha256": "0x3fff7745590ca089a223c5bee63ea802cf16d4a581b554f4f29f8db010748805",
+      "byteLength": 3049
     },
     {
       "path": "acceptance/gate-core/src/predicate-composition.ts",
@@ -295,13 +295,13 @@
     },
     {
       "path": "acceptance/gate-core/src/release-composition.ts",
-      "contentSha256": "0xbb68f3a64e8956c7fa31eb12150a656110199024363f21b86aabe5170c29ba81",
+      "contentSha256": "0x54f1b95b7177f7fe80f94bbda39b6efbae7f69dda5961f9a005044baad72673d",
       "byteLength": 10708
     },
     {
       "path": "acceptance/gate-core/src/release-material-assembler.ts",
-      "contentSha256": "0x5ee3a1da533c4c502e07ccd809385ea8a21a89da353716f5b46da5659de627b5",
-      "byteLength": 5574
+      "contentSha256": "0xd17ada1df0b730f0aeb7a1c990957aa01b0c2fcf162842b913a309c0eff1145e",
+      "byteLength": 5541
     },
     {
       "path": "acceptance/gate-core/tsconfig.json",
@@ -379,19 +379,24 @@
       "byteLength": 450
     },
     {
+      "path": "acceptance/six-step-facts/src/composition/predicate-valuation-oracle-manifest.ts",
+      "contentSha256": "0x7f3326cb721552b7489e6de686cea64b093f211c5a0e73f8c980f269856efc1f",
+      "byteLength": 570
+    },
+    {
       "path": "acceptance/six-step-facts/src/composition/reference-valuation-oracle-composition.ts",
-      "contentSha256": "0x9b5a3c66659bbd41b877cf9ff8f3d7a5b1ae5e6984d90f0b3a45f04f72f5b2d8",
-      "byteLength": 974
+      "contentSha256": "0xc32f933cc2cb04ba637f59e0bf035ac52ec7c0dabc2e4d9d37e395e26fd32080",
+      "byteLength": 1004
+    },
+    {
+      "path": "acceptance/six-step-facts/src/composition/reference-valuation-oracle-manifest.ts",
+      "contentSha256": "0x13a22125f97052a5a8fac3e7b222dba31262bdb23e0fc3f652093dfd09afed0b",
+      "byteLength": 439
     },
     {
       "path": "acceptance/six-step-facts/src/composition/valuation-oracle-composition.ts",
-      "contentSha256": "0xd5b43ca1f45528ba38d92c9f29d09341860f9ab12b49f9928bd0dabc5cf18d84",
-      "byteLength": 1023
-    },
-    {
-      "path": "acceptance/six-step-facts/src/composition/valuation-oracle-manifest.ts",
-      "contentSha256": "0x8c2d3a58f507ca5dc7c138497471e87156bd5d2dcf2c3cffc315c9c7070c6613",
-      "byteLength": 1310
+      "contentSha256": "0x2baae41e129f24c7fc98f0c564b7df97cbfec41318849757358bc103d75703dc",
+      "byteLength": 1053
     },
     {
       "path": "acceptance/six-step-facts/src/predicate.ts",
@@ -2605,8 +2610,8 @@
     },
     {
       "path": "tools/runtime-release-packager/src/internal/qualified-release-runner-owner.ts",
-      "contentSha256": "0x59f40aa5ad41ae3b9088f4c4932df5f678a3ff34282926cf89104659ab5f3b69",
-      "byteLength": 28032
+      "contentSha256": "0x9f35e08876e41dbdf1bc683e60fff5f3e41898465d442c83d61a9f6dfd6891c5",
+      "byteLength": 28009
     },
     {
       "path": "tools/runtime-release-packager/src/internal/runtime-binding-verifier.ts",
@@ -2754,15 +2759,15 @@
   "outputs": [
     {
       "path": "acceptance/gate-core/src/generated/predicate-composition.ts",
-      "contentSha256": "0x5c7846513296f45762353bf0ae0d39db936c47bf423af2e4b907734df34dc417",
+      "contentSha256": "0x364eb6473169ca646c466a30e8a94b20e8aca0cd61e904ababd45c9d87e089d5",
       "byteLength": 12274,
       "manifestRootDigest": null
     },
     {
       "path": "acceptance/gate-core/src/generated/release-role-manifest.ts",
-      "contentSha256": "0x97bf412088908d330c656dce5ed222185598f83f414d5a0abd2427d2122cec9f",
+      "contentSha256": "0x9642ab671358ab54552a7bd407203b6478c805d399db85bed36572bcb1b96e18",
       "byteLength": 17747,
-      "manifestRootDigest": "0xbdce2947132bb61e61515440852fdf834805a0412f56ef1002424e5e3a3bcdac"
+      "manifestRootDigest": "0xa6a3a59f3c729344525b6fcc1d00e9a20624f07d4fcc9298e54b36cc84cf940f"
     },
     {
       "path": "acceptance/gate-core/src/generated/release-runtime.ts",
@@ -2778,7 +2783,7 @@
       "byteLength": 268
     }
   ],
-  "inputRoot": "0x839d841111991915e6bcbc5fd20448d0bbefa7659d155364de9c8d333a85f664",
+  "inputRoot": "0xbe7aa2d57e178859f655c443747f70b05ad0fd5a79bc7d9b4200ea351f16c5ca",
   "generatorRoot": "0x936e6c87581b38d0a25456bab50c039005c1f8aad9ea450d893bcbf97080c7e0",
-  "ledgerHash": "0x122fcf2078addc270d32f5a4587c90bec12f197bdc6425c31504233cbdc0a297"
+  "ledgerHash": "0x6c973e07a4d05f2cb22a50e236c2f0b396630b9f7f26da99360550eba6698cc0"
 }

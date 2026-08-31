@@ -122,7 +122,7 @@ import {
   assertIssuedRuntimeReleaseStrategyRuntimeService,
   type RuntimeReleaseStrategyEvidenceExpectationV1,
   type RuntimeReleaseStrategyRuntimeServiceV1,
-} from "../../../packages/runtime-release-authority/src/internal/strategy-runtime-owner.ts";
+} from "../../../packages/runtime-release-authority/src/strategy-runtime-consumer.ts";
 import type { RuntimeAnchorReceiptV1 } from "./deployment.ts";
 import {
   issueSearcherProductionSixStepCompleteAppendCapabilityV1,

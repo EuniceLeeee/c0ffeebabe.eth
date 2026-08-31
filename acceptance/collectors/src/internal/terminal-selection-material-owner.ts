@@ -1,7 +1,7 @@
 import type { Hash } from "../../../../packages/canonical-codec/src/index.ts";
 import type { ArtifactResolutionClaimV1, ResolverPolicyV1, RetentionLeaseReceiptV1 } from "../../../../specs/artifact-resolution/src/index.ts";
 import type { ReadOnlyArtifactRefV1 } from "../../../../specs/core-envelope/src/index.ts";
-import type { RawTerminalSelectionObservationV1, TerminalSelectionFactV1 } from "../../../terminal-selection-facts/src/runtime.ts";
+import type { RawTerminalSelectionObservationV1, TerminalSelectionFactV1 } from "../../../terminal-selection-facts/src/schema.ts";
 
 export type ProductionTerminalSelectionMaterialCapabilityV1 = object;
 

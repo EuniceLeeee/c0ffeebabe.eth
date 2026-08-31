@@ -8,6 +8,10 @@ import { createResolverPolicy } from "../../../specs/artifact-resolution/src/ind
 import { ContentAddressedObserverSinkV1 } from "../../collectors/src/content-addressed-sink.ts";
 import { issueProductionPredicateMaterialSourcePortV1 } from "../../collectors/src/internal/predicate-material-source-issuer.ts";
 import { issueCommonEnvelopeAuthorityPortV1 } from "../src/internal/common-envelope-authority-issuer.ts";
+import {
+  issuePredicateDomainMaterialCapabilityV1,
+  readIssuedPredicateDomainMaterialCapabilityV1,
+} from "../src/internal/predicate-domain-material-issuer.ts";
 import { readAssembledReleaseAcceptanceResultsV1 } from "../src/internal/assembled-acceptance-owner.ts";
 import {
   assembleReleasePredicateInvocationsV1,
@@ -132,4 +136,51 @@ test("performance unqualified missing flows through its material provider into t
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("generic assembler fails closed on a forged reader and a cross-predicate issued capability", async () => {
+  const binding = RELEASE_PREDICATE_BINDINGS.find(value => value.predicateId === "aloha.performance.facts");
+  assert.ok(binding);
+  const authority = issueCommonEnvelopeAuthorityPortV1(async () => {
+    throw new TypeError("invalid provider material must not reach CommonEnvelope authority");
+  });
+  const source = Object.freeze({});
+  const throwingReaderBinding = Object.freeze({
+    ...binding,
+    materialProvider: Object.freeze({
+      predicateId: binding.predicateId,
+      providerContractVersion: binding.materialProvider.providerContractVersion,
+      providerContractDigest: binding.materialProviderContractDigest,
+      async provide() { return Object.freeze({}); },
+      read() { throw new TypeError("forged reader"); },
+    }),
+  });
+  const forged = await assembleReleasePredicateInvocationsV1(authority, source, [throwingReaderBinding]);
+  assert.deepEqual(evaluateAssembledReleaseInvocationsV1(forged), [Object.freeze({
+    predicateId: binding.predicateId,
+    status: "invalid",
+    unavailableCode: "owner-material-invalid",
+    verdict: null,
+    certificateId: null,
+  })]);
+
+  const wrongPredicateBinding = Object.freeze({
+    ...binding,
+    materialProvider: Object.freeze({
+      predicateId: binding.predicateId,
+      providerContractVersion: binding.materialProvider.providerContractVersion,
+      providerContractDigest: binding.materialProviderContractDigest,
+      async provide() {
+        return issuePredicateDomainMaterialCapabilityV1(Object.freeze({
+          status: "missing" as const,
+          predicateId: "aloha.not-performance.facts",
+          code: "owner-material-missing" as const,
+          evidenceRoot: h("wrong-predicate"),
+        }));
+      },
+      read: readIssuedPredicateDomainMaterialCapabilityV1,
+    }),
+  });
+  const crossPredicate = await assembleReleasePredicateInvocationsV1(authority, source, [wrongPredicateBinding]);
+  assert.equal(evaluateAssembledReleaseInvocationsV1(crossPredicate)[0]?.status, "invalid");
 });

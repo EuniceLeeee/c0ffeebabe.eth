@@ -1,6 +1,7 @@
 import { hashDomain, type Hash } from "../../../packages/canonical-codec/src/index.ts";
 import type { PredicateCompositionBindingV1 } from "./predicate-composition.ts";
 import {
+  PREDICATE_MATERIAL_PROVIDER_CONTRACT_VERSION,
   type AssembledPredicateEvaluationV1,
   type AssembledReleaseInvocationSetCapabilityV1,
   type CommonEnvelopeAuthorityPortV1,
@@ -12,9 +13,6 @@ import {
   invokeCommonEnvelopeAuthorityPortV1,
   type CommonEnvelopeAssemblyStateV1,
 } from "./internal/material-provider-state.ts";
-import {
-  readPredicateDomainMaterialCapabilityV1,
-} from "./internal/predicate-domain-material-state.ts";
 import { evaluateGateCoreRuntime } from "./index.ts";
 import { sealAssembledReleaseAcceptanceResultsV1 } from "./internal/assembled-acceptance-owner.ts";
 
@@ -45,11 +43,11 @@ export async function assembleReleasePredicateInvocationsV1(
     try {
       if (binding.materialProvider.predicateId !== binding.predicateId
         || binding.materialProvider.providerContractDigest !== binding.materialProviderContractDigest
-        || binding.materialProvider.providerContractVersion !== "1.0.0") {
+        || binding.materialProvider.providerContractVersion !== PREDICATE_MATERIAL_PROVIDER_CONTRACT_VERSION) {
         throw new TypeError("generated material provider contract mismatch");
       }
       const capability = await binding.materialProvider.provide(source);
-      material = readPredicateDomainMaterialCapabilityV1(capability);
+      material = binding.materialProvider.read(capability);
       if (material.predicateId !== binding.predicateId) throw new TypeError("predicate material provider identity mismatch");
     } catch (error) {
       state = Object.freeze({

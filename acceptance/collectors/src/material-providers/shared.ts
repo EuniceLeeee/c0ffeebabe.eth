@@ -11,16 +11,18 @@ import {
 } from "../../../gate-core/src/material-provider.ts";
 import {
   issuePredicateDomainMaterialCapabilityV1,
+  readIssuedPredicateDomainMaterialCapabilityV1,
 } from "../../../gate-core/src/internal/predicate-domain-material-issuer.ts";
 import {
   assertProductionPredicateMaterialSourcePortV1,
 } from "../internal/predicate-material-source-owner.ts";
 
 export function providerContractDigest(predicateId: string): Hash {
-  return hashDomain("aloha/predicate-material-provider-contract/v1", {
+  return hashDomain("aloha/predicate-material-provider-contract/v2", {
     version: PREDICATE_MATERIAL_PROVIDER_CONTRACT_VERSION,
     predicateId,
     output: "opaque-domain-material-capability",
+    read: "provider-owned-capability-reader",
     unavailable: "typed-missing-or-invalid",
   });
 }
@@ -107,6 +109,9 @@ export function defineProvider(
     async provide(source: PredicateMaterialSourcePortV1) {
       assertProductionPredicateMaterialSourcePortV1(source);
       return provide(source);
+    },
+    read(capability: PredicateDomainMaterialCapabilityV1) {
+      return readIssuedPredicateDomainMaterialCapabilityV1(capability);
     },
   });
 }

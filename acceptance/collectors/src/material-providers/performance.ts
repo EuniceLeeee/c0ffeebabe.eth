@@ -8,7 +8,7 @@ import {
   PERFORMANCE_PROFILE_SCHEMA_MANIFEST,
   type PerformanceEventV1,
   type PerformanceFactBundleV1,
-} from "../../../performance-facts/src/runtime.ts";
+} from "../../../performance-facts/src/schema.ts";
 import { readProductionPredicateMaterialSourceStateV1 } from "../internal/predicate-material-source-owner.ts";
 import type { ObservedContentArtifactV1 } from "../content-addressed-sink.ts";
 import { available, defineProvider, unavailable } from "./shared.ts";
