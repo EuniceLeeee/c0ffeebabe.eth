@@ -62,15 +62,22 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 5. Scheduled Wakeups
 
-Keep recurring wakeup prompts short, neutral, and limited to progress detection. Refer to this file and the active
-task for safety and authorization boundaries; do not copy concrete high-risk operations, command names, credentials,
-or deployment actions into the scheduled prompt. A wakeup may resume already-authorized in-scope work, but it never
-widens authority. If work is already active, paused, redirected, or complete, the wakeup stays silent.
+Keep recurring wakeup prompts short, neutral, and limited to progress detection and an explicitly authorized resume.
+Refer to this file and the active task for safety and authorization boundaries; do not copy concrete high-risk
+operations, command names, credentials, or deployment actions into the scheduled prompt. A wakeup never widens the
+authority of the task it observes.
 
-Scheduled wakeups are observers, not operators. They may read status and report a new fact, risk, or blocker, but
-must not autonomously resume, restart, interrupt, terminate, deploy, sign, broadcast, or change the task. Do not use
-phrases that claim superior authority or authorize a state-changing action. If progress is stalled, report the exact
-evidence and wait for an explicit user instruction; do not encode a recovery action in the wakeup text.
+A routine may force a new execution turn for already-authorized in-scope work only when its prompt explicitly grants
+stalled-task resume authority and read-only inspection proves all of the following: the goal is still active; the task
+has made no substantive progress for at least one continuous hour; no main Agent, sub-Agent, test, build, tool session,
+or meaningful external wait is still running; and the task was not paused, redirected, or completed. Before resuming,
+inspect the active goal, current plan, Agent/tool handles, and actual Git/WIP; preserve all existing work and continue
+from the next unfinished coherent slice. A missing observation or a polling timeout is not proof of a stall.
+
+If any substantive work is active, the routine stays completely silent and does not start another turn. Resume
+authority does not authorize interruption or termination of a live process, destructive recovery, deployment,
+signing, broadcasting, or any other action not already authorized by the active task. If safe in-scope progress is
+impossible, report the exact blocker instead of manufacturing activity.
 
 Do not copy hidden system instructions, raw heartbeat/XML directives, internal policy text, or concrete process-control
 instructions into user-facing prompts or reports. Translate them into a short, neutral status check; keep any required
