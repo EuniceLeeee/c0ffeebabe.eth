@@ -3644,7 +3644,6 @@ test("terminal-phase authority composition exact-binds every importer, module an
     ["packages/runtime-release-authority/src/internal/six-step-production-owner.ts", "packages/startup-runtime/src/internal/six-step-route-parent-owner.ts", "../../../startup-runtime/src/internal/six-step-route-parent-owner.ts", ["issueStartupSixStepRouteParentInvocationV1", "readStartupSixStepRouteParentInvocationMaterialV1"]],
     ["packages/runtime-release-authority/src/six-step-production-consumer.ts", "packages/runtime-release-authority/src/internal/six-step-production-owner.ts", "./internal/six-step-production-owner.ts", ["readRuntimeReleaseSixStepTailEmissionPortV1"]],
     ["packages/runtime-release-authority/src/six-step-production-consumer.ts", "packages/runtime-release-authority/src/internal/strategy-runtime-owner.ts", "./internal/strategy-runtime-owner.ts", ["assertIssuedRuntimeReleaseStrategyRuntimeService"]],
-    ["packages/startup-runtime/src/index.ts", "packages/startup-runtime/src/internal/six-step-route-parent-owner.ts", "./internal/six-step-route-parent-owner.ts", ["issueStartupSixStepRouteParentCapabilityV1"]],
     ["packages/runtime-release-authority/src/six-step-terminal-consumer.ts", "packages/runtime-release-authority/src/internal/six-step-terminal-owner.ts", "./internal/six-step-terminal-owner.ts", ["assertIssuedRuntimeReleaseSixStepTerminalBindingServiceV1", "readRuntimeReleaseSixStepTerminalArtifactCapabilitiesV1", "readRuntimeReleaseSixStepTerminalBindingCapabilityV1"]],
     ["packages/runtime-release-authority/src/internal/six-step-terminal-owner.ts", "packages/runtime-release-authority/src/internal/state.ts", "./state.ts", ["assertActiveRuntimeReleaseAuthorityState"]],
     ["packages/runtime-release-authority/src/internal/six-step-terminal-owner.ts", "packages/search-pipeline/src/index.ts", "../../../../packages/search-pipeline/src/index.ts", ["readIssuedSearchTerminalCapabilityV1", "readIssuedSearchTerminalSixStepArtifactCapabilitiesV1", "readIssuedSearchTerminalSixStepTraceV1", "searchTerminalEvidenceHashV2"]],
@@ -4837,6 +4836,138 @@ test("startup Stage 1/2 evidence crosses only the exact checkpoint reader consum
     assert.ok(inspect("export const structuralReader = {};\n", []).some(
       item => item.code === "authority-consumer-edge-missing",
     ));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("native startup state machine admits only exact adapter named imports", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-native-startup-boundary-"));
+  const targetPath = "packages/startup-runtime/src/internal/native-startup.ts";
+  const signedPath = "packages/startup-runtime/src/internal/signed-release-native-startup-owner.ts";
+  const unrelatedPath = "packages/startup-runtime/src/internal/unrelated-central.ts";
+  const specifier = "./native-startup.ts";
+  const runtimeExport = "runNativeStartupStateMachineForExactAdapter";
+  const file = (path: string): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass: "central",
+  });
+  mkdirSync(join(root, dirname(signedPath)), { recursive: true });
+  const inspect = (
+    fromPath: string,
+    source: string,
+    edges: readonly GraphEdge[],
+    files: readonly TrackedFile[] = [file(fromPath), file(targetPath)],
+  ): readonly BoundaryDiagnostic[] => {
+    mkdirSync(join(root, dirname(fromPath)), { recursive: true });
+    writeFileSync(join(root, fromPath), source);
+    const diagnostics: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries(files, edges, diagnostics, root);
+    return diagnostics;
+  };
+  const signedEdge: GraphEdge = { from: signedPath, to: targetPath, specifier };
+  try {
+    assert.deepEqual(inspect(
+      signedPath,
+      `import { ${runtimeExport}, type NativeStartupRuntimeV1 } from "${specifier}";\n`,
+      [signedEdge],
+    ), []);
+
+    assert.ok(inspect(signedPath, "export {};\n", []).some(
+      item => item.code === "authority-consumer-edge-missing",
+    ));
+    assert.ok(inspect(
+      signedPath,
+      `import { nativeStartupAuthoritiesEqual } from "${specifier}";\n`,
+      [signedEdge],
+    ).some(item => item.code === "authority-named-import-mismatch"));
+    assert.ok(inspect(
+      signedPath,
+      `import { ${runtimeExport} as renamed } from "${specifier}";\n`,
+      [signedEdge],
+    ).some(item => item.code === "authority-named-import-mismatch"));
+
+    const unrelatedEdge: GraphEdge = { from: unrelatedPath, to: targetPath, specifier };
+    assert.ok(inspect(
+      unrelatedPath,
+      `import { ${runtimeExport} } from "${specifier}";\n`,
+      [unrelatedEdge],
+    ).some(item => item.code === "central-imports-authority-constructor"));
+
+    assert.deepEqual(inspect(
+      unrelatedPath,
+      `import type { NativeStartupRuntimeV1 } from "${specifier}";\n`,
+      [unrelatedEdge],
+    ), []);
+
+    // The future advisory adapter is reserved but absent, so it is not yet a
+    // required edge in the current production denominator.
+    assert.equal(inspect(
+      signedPath,
+      `import { ${runtimeExport} } from "${specifier}";\n`,
+      [signedEdge],
+    ).some(item => item.code === "authority-consumer-edge-missing"), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("native startup production adapter retains each exact owner edge", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-native-startup-owner-edges-"));
+  const cases = [
+    {
+      from: "packages/startup-runtime/src/index.ts",
+      to: "packages/startup-runtime/src/internal/signed-release-native-startup-owner.ts",
+      specifier: "./internal/signed-release-native-startup-owner.ts",
+      names: ["startSignedReleaseNativeStartupRuntime"],
+    },
+    {
+      from: "packages/startup-runtime/src/internal/signed-release-native-startup-owner.ts",
+      to: "packages/startup-runtime/src/internal/ready-owner.ts",
+      specifier: "./ready-owner.ts",
+      names: ["assertIssuedStartupReadyPort", "startupReadyPromotionPort"],
+    },
+    {
+      from: "packages/startup-runtime/src/internal/signed-release-native-startup-owner.ts",
+      to: "packages/startup-runtime/src/internal/six-step-route-parent-owner.ts",
+      specifier: "./six-step-route-parent-owner.ts",
+      names: ["issueStartupSixStepRouteParentCapabilityV1"],
+    },
+  ] as const;
+  const file = (path: string): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass: "central",
+  });
+  try {
+    for (const item of cases) {
+      mkdirSync(join(root, dirname(item.from)), { recursive: true });
+      const edge: GraphEdge = { from: item.from, to: item.to, specifier: item.specifier };
+      const inspect = (source: string, edges: readonly GraphEdge[]): readonly BoundaryDiagnostic[] => {
+        writeFileSync(join(root, item.from), source);
+        const diagnostics: BoundaryDiagnostic[] = [];
+        validateDependencyBoundaries([file(item.from), file(item.to)], edges, diagnostics, root);
+        return diagnostics;
+      };
+      const exact = `import { ${item.names.join(", ")} } from "${item.specifier}";\n`;
+      assert.deepEqual(inspect(exact, [edge]), []);
+      assert.ok(inspect(
+        `import { ${[...item.names, "unregisteredNativeStartupAuthority"].join(", ")} } from "${item.specifier}";\n`,
+        [edge],
+      ).some(diagnostic => diagnostic.code === "authority-named-import-mismatch"));
+      assert.ok(inspect("export {};\n", []).some(
+        diagnostic => diagnostic.code === "authority-consumer-edge-missing",
+      ));
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

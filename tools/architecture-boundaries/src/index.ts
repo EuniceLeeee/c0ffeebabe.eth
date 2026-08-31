@@ -660,6 +660,9 @@ const PROCESS_RESOURCE_SCOPE_OWNER_PATH = "packages/process-resource-observer/sr
 const STARTUP_READY_OWNER_PATH = "packages/startup-runtime/src/internal/ready-owner.ts";
 const STARTUP_RUNTIME_OWNER_PATH = "packages/startup-runtime/src/internal/runtime-owner.ts";
 const STARTUP_SIX_STEP_ROUTE_PARENT_OWNER_PATH = "packages/startup-runtime/src/internal/six-step-route-parent-owner.ts";
+const NATIVE_STARTUP_STATE_MACHINE_PATH = "packages/startup-runtime/src/internal/native-startup.ts";
+const SIGNED_RELEASE_NATIVE_STARTUP_OWNER_PATH = "packages/startup-runtime/src/internal/signed-release-native-startup-owner.ts";
+const ADVISORY_OBSERVATION_NATIVE_STARTUP_OWNER_PATH = "packages/startup-runtime/src/internal/advisory-observation-native-startup-owner.ts";
 const PRODUCTION_RELEASE_WORKFLOW_PATH = "tools/runtime-release-packager/src/production-workflow.ts";
 const EXTERNAL_RELEASE_OWNER_PATH = "tools/runtime-release-packager/src/external-release-owner.ts";
 const QUALIFIED_RELEASE_PUBLIC_RUNNER_STATE_PATH = "tools/runtime-release-packager/src/internal/qualified-release-public-runner-state.ts";
@@ -916,7 +919,6 @@ const TERMINAL_PHASE_AUTHORITY_IMPORTS = Object.freeze([
   { from: RUNTIME_RELEASE_SIX_STEP_PRODUCTION_OWNER_PATH, to: STARTUP_SIX_STEP_ROUTE_PARENT_OWNER_PATH, specifier: "../../../startup-runtime/src/internal/six-step-route-parent-owner.ts", named: ["issueStartupSixStepRouteParentInvocationV1", "readStartupSixStepRouteParentInvocationMaterialV1"] },
   { from: RUNTIME_RELEASE_SIX_STEP_PRODUCTION_CONSUMER_PATH, to: RUNTIME_RELEASE_SIX_STEP_PRODUCTION_OWNER_PATH, specifier: "./internal/six-step-production-owner.ts", named: ["readRuntimeReleaseSixStepTailEmissionPortV1"] },
   { from: RUNTIME_RELEASE_SIX_STEP_PRODUCTION_CONSUMER_PATH, to: RUNTIME_RELEASE_STRATEGY_OWNER_PATH, specifier: "./internal/strategy-runtime-owner.ts", named: ["assertIssuedRuntimeReleaseStrategyRuntimeService"] },
-  { from: STARTUP_RUNTIME_PUBLIC_PATH, to: STARTUP_SIX_STEP_ROUTE_PARENT_OWNER_PATH, specifier: "./internal/six-step-route-parent-owner.ts", named: ["issueStartupSixStepRouteParentCapabilityV1"] },
   { from: RUNTIME_RELEASE_SIX_STEP_TERMINAL_CONSUMER_PATH, to: RUNTIME_RELEASE_SIX_STEP_TERMINAL_OWNER_PATH, specifier: "./internal/six-step-terminal-owner.ts", named: ["assertIssuedRuntimeReleaseSixStepTerminalBindingServiceV1", "readRuntimeReleaseSixStepTerminalArtifactCapabilitiesV1", "readRuntimeReleaseSixStepTerminalBindingCapabilityV1"] },
   { from: RUNTIME_RELEASE_SIX_STEP_TERMINAL_OWNER_PATH, to: RUNTIME_RELEASE_STATE_PATH, specifier: "./state.ts", named: ["assertActiveRuntimeReleaseAuthorityState"] },
   { from: RUNTIME_RELEASE_SIX_STEP_TERMINAL_OWNER_PATH, to: "packages/search-pipeline/src/index.ts", specifier: "../../../../packages/search-pipeline/src/index.ts", named: ["readIssuedSearchTerminalCapabilityV1", "readIssuedSearchTerminalSixStepArtifactCapabilitiesV1", "readIssuedSearchTerminalSixStepTraceV1", "searchTerminalEvidenceHashV2"] },
@@ -1437,6 +1439,11 @@ const EXACT_AUTHORITY_CONSTRUCTOR_IMPORT_ROWS = Object.freeze([
   ["packages/producer/src/index.ts", "packages/producer/src/internal/reth-intake.ts", "./internal/reth-intake.ts", [], ["RethProducerIngressSourceV1", "createRethProducerIngressPortV1"]],
   ["packages/producer/src/internal/reth-intake.ts", "packages/producer/src/internal/owners.ts", "./owners.ts", ["issueProducerIngressPortV1"], []],
   ["packages/producer/src/internal/reth-intake.ts", "packages/producer/src/internal/source-brand.ts", "./source-brand.ts", ["brandProducerIngressSource"], []],
+  [STARTUP_RUNTIME_PUBLIC_PATH, SIGNED_RELEASE_NATIVE_STARTUP_OWNER_PATH, "./internal/signed-release-native-startup-owner.ts", ["startSignedReleaseNativeStartupRuntime"], []],
+  [SIGNED_RELEASE_NATIVE_STARTUP_OWNER_PATH, STARTUP_READY_OWNER_PATH, "./ready-owner.ts", ["assertIssuedStartupReadyPort", "startupReadyPromotionPort"], []],
+  [SIGNED_RELEASE_NATIVE_STARTUP_OWNER_PATH, STARTUP_SIX_STEP_ROUTE_PARENT_OWNER_PATH, "./six-step-route-parent-owner.ts", ["issueStartupSixStepRouteParentCapabilityV1"], []],
+  [SIGNED_RELEASE_NATIVE_STARTUP_OWNER_PATH, NATIVE_STARTUP_STATE_MACHINE_PATH, "./native-startup.ts", ["runNativeStartupStateMachineForExactAdapter"], []],
+  [ADVISORY_OBSERVATION_NATIVE_STARTUP_OWNER_PATH, NATIVE_STARTUP_STATE_MACHINE_PATH, "./native-startup.ts", ["runNativeStartupStateMachineForExactAdapter"], []],
   ["packages/runtime-release-authority/src/index.ts", "packages/runtime-release-authority/src/internal/performance-deployment-owner.ts", "./internal/performance-deployment-owner.ts", [], ["openInstalledRuntimeReleasePerformanceDeploymentPortV1"]],
   ["packages/runtime-release-authority/src/index.ts", "packages/runtime-release-authority/src/internal/performance-policy-owner.ts", "./internal/performance-policy-owner.ts", [], ["issueInstalledRuntimeReleasePerformancePolicyPortV1"]],
   ["packages/runtime-release-authority/src/internal/bootstrap.ts", "packages/runtime-release-authority/src/internal/nomination-qualification-owner.ts", "./nomination-qualification-owner.ts", ["issueRuntimeReleaseNominationQualificationVerifier"], []],

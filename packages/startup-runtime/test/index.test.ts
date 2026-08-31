@@ -40,6 +40,22 @@ import {
 } from "../src/internal/six-step-route-parent-owner.ts";
 import { sealEmptyNominationClosureFixture } from "../../../specs/nomination-authority/test/fixture.ts";
 import { generatedCompositionFixture } from "./generated-composition-fixture.ts";
+import {
+  classifyNativeStartupPromotionRecovery,
+  nativeStartupAuthoritiesEqual,
+  pinNativeStartupAuthority,
+  runNativeStartupStateMachineForExactAdapter,
+} from "../src/internal/native-startup.ts";
+import type {
+  NativeStartupAuthorityProjectionV1,
+  NativeStartupGenerationHandleV1,
+  NativeStartupOwnerPortV1,
+  NativeStartupPromotionBoundaryV1,
+  NativeStartupPromotionRequestV1,
+} from "../src/internal/native-startup-contract.ts";
+import * as nativeContractModule from "../src/internal/native-startup-contract.ts";
+import * as signedAdapterModule from "../src/internal/signed-release-native-startup-owner.ts";
+import { registerCheckpointReadyFullFamilyEvidenceReader } from "../../checkpoint/src/internal/ready-full-family-evidence-issuer.ts";
 
 const cutoff = { number: "100" };
 
@@ -88,6 +104,138 @@ test("startup rejects structural Family composition fakes and clones", () => {
   };
   assert.throws(() => createGeneratedRouteHandleIssuer(fake), /not generated/);
   assert.throws(() => createGeneratedRouteHandleIssuer({ ...fake }), /not generated/);
+});
+
+test("native startup has no owner registrar and null promotion recovery stays closed", () => {
+  assert.deepEqual(Object.keys(nativeContractModule), ["decodeNativeStartupGenerationIdentityV1"]);
+  assert.deepEqual(Object.keys(signedAdapterModule), ["startSignedReleaseNativeStartupRuntime"]);
+  assert.equal(classifyNativeStartupPromotionRecovery(h("prior"), null, true), "keep-closed");
+  assert.equal(classifyNativeStartupPromotionRecovery(h("prior"), h("prior"), true), "reopen-current");
+  assert.equal(classifyNativeStartupPromotionRecovery(h("prior"), h("prior"), false), "keep-closed");
+  assert.equal(classifyNativeStartupPromotionRecovery(h("prior"), h("next"), true), "load-current");
+});
+
+test("native startup pins all four authority identity fields", () => {
+  const authority: NativeStartupAuthorityProjectionV1 = Object.freeze({
+    authorityClass: "signed-release",
+    runtimeInstanceId: h("authority-instance"),
+    runtimeLineageRoot: h("authority-lineage"),
+    implementationCommit: "a".repeat(40),
+  });
+  const pinned = pinNativeStartupAuthority(null, authority);
+  assert.equal(Object.isFrozen(pinned), true);
+  assert.equal(pinNativeStartupAuthority(pinned, Object.freeze({ ...authority })), pinned);
+  assert.equal(nativeStartupAuthoritiesEqual(pinned, authority), true);
+  const mutations: readonly NativeStartupAuthorityProjectionV1[] = [
+    Object.freeze({ ...authority, authorityClass: "advisory-observation" }),
+    Object.freeze({ ...authority, runtimeInstanceId: h("other-instance") }),
+    Object.freeze({ ...authority, runtimeLineageRoot: h("other-lineage") }),
+    Object.freeze({ ...authority, implementationCommit: "b".repeat(40) }),
+  ];
+  for (const mutation of mutations) {
+    assert.equal(nativeStartupAuthoritiesEqual(pinned, mutation), false);
+    assert.throws(() => pinNativeStartupAuthority(pinned, mutation), /startup-generation-authority-changed/);
+  }
+});
+
+test("native startup real recovery paths remain closed until close", async () => {
+  const baseAuthority: NativeStartupAuthorityProjectionV1 = Object.freeze({
+    authorityClass: "signed-release",
+    runtimeInstanceId: h("recovery-instance"),
+    runtimeLineageRoot: h("recovery-lineage"),
+    implementationCommit: "c".repeat(40),
+  });
+  const scenarios = ["null-current", "read-error", "load-error", "authority-mutation"] as const;
+  for (const scenario of scenarios) {
+    const initialCandidate = Object.freeze({});
+    const initialLoaded = Object.freeze({});
+    const nextCandidate = Object.freeze({});
+    const nextLoaded = Object.freeze({});
+    const promotionRequest = Object.freeze({});
+    const initialRoot = h(`initial-root:${scenario}`);
+    const nextRoot = h(`next-root:${scenario}`);
+    let boundary: NativeStartupPromotionBoundaryV1 | null = null;
+    const owner: NativeStartupOwnerPortV1<object, object, object> = Object.freeze({
+      targetRefreshAgeBlocks: "0",
+      createGenerationBuilder(value: NativeStartupPromotionBoundaryV1) {
+        boundary = value;
+        return Object.freeze({
+          loadOrBuildInitial: async () => initialCandidate,
+          buildNext: async () => {
+            await boundary!.promote(promotionRequest as NativeStartupPromotionRequestV1);
+          },
+        });
+      },
+      async promote() {
+        if (scenario === "authority-mutation") return nextCandidate;
+        throw new Error(`promotion-observation-failed:${scenario}`);
+      },
+      async findLatestReusable() {
+        if (scenario === "null-current") return null;
+        if (scenario === "read-error") throw new Error("recovery-read-error");
+        return nextCandidate;
+      },
+      generationRecordRoot(handle: NativeStartupGenerationHandleV1) {
+        return handle === nextCandidate ? nextRoot : initialRoot;
+      },
+      async loadGeneration(handle: NativeStartupGenerationHandleV1) {
+        if (handle === nextCandidate && scenario === "load-error") {
+          throw new Error("recovery-load-error");
+        }
+        const next = handle === nextCandidate;
+        return Object.freeze({
+          handle: next ? nextLoaded : initialLoaded,
+          identity: Object.freeze({
+            generationId: next ? `next-${scenario}` : `initial-${scenario}`,
+            graphRoot: h(`graph:${scenario}:${next}`),
+            recordRoot: next ? nextRoot : initialRoot,
+            sourceCoverageRoot: h(`coverage:${scenario}:${next}`),
+            definitionCatalogRoot: h(`catalog:${scenario}:${next}`),
+            cutoff: Object.freeze({ number: "100" }),
+            observationRange: Object.freeze({ from: "51", to: "100" }),
+            authority: next && scenario === "authority-mutation"
+              ? Object.freeze({ ...baseAuthority, runtimeInstanceId: h("mutated-runtime-instance") })
+              : baseAuthority,
+          }),
+        });
+      },
+      async openProducerLease() { return Object.freeze({}); },
+      releaseProducerLease() {},
+      async openProducerSession() { return Object.freeze({}); },
+      async closeProducerSession() {},
+      producerSessionHeadNumber() { return "100"; },
+    });
+    const runtime = await runNativeStartupStateMachineForExactAdapter(
+      owner,
+      new AbortController().signal,
+    );
+    assert.throws(() => assertIssuedStartupRuntime(runtime), /not owner-issued/);
+    await runtime.withProducerSession(Object.freeze({}), async () => undefined);
+    await assert.rejects(
+      runtime.waitForGenerationIdle(),
+      scenario === "null-current"
+        ? /promotion-observation-failed:null-current/
+        : scenario === "read-error"
+          ? /recovery-read-error/
+          : scenario === "load-error"
+            ? /recovery-load-error/
+            : /startup-generation-authority-changed/,
+    );
+
+    let entered = false;
+    const blocked = runtime.withProducerSession(Object.freeze({}), async () => {
+      entered = true;
+    });
+    const blockedClosed = assert.rejects(blocked, /startup-runtime-closed/);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(entered, false, `${scenario} must keep admission closed`);
+    await runtime.close();
+    await blockedClosed;
+    await assert.rejects(
+      runtime.withProducerSession(Object.freeze({}), async () => undefined),
+      /startup-runtime-closed/,
+    );
+  }
 });
 
 test("startup reuses one durable ready closure while renewing the lease per producer session", async () => {
@@ -447,7 +595,7 @@ test("startup reuses one durable ready closure while renewing the lease per prod
   const catalog = {
     loadExact: () => ({ definitionCatalogRoot: readyPayload.definitionCatalogRoot, declaredSourcePlans: [plan] }),
   };
-  const runtime = await startStartupRuntime({
+  const startupInput = {
     policy: readyPolicy,
     catalog,
     checkpoint,
@@ -464,7 +612,8 @@ test("startup reuses one durable ready closure while renewing the lease per prod
     processEpoch: "startup-test-process",
     releaseBindingId: release.bindingId,
     candidateReleaseCommit: release.candidateReleaseCommit,
-  });
+  };
+  const runtime = await startStartupRuntime(startupInput);
   const initialServing = runtime.readActiveGeneration();
   assert.equal(initialServing.generationId, ready.generationId);
   assert.equal(initialServing.readyRecordHash, ready.readyRecordHash);
@@ -555,6 +704,11 @@ test("startup reuses one durable ready closure while renewing the lease per prod
   assert.throws(
     () => void readStartupFullFamilyEvidenceBinding(runtime),
     /full-Family evidence reader is not checkpoint-issued/,
+  );
+  registerCheckpointReadyFullFamilyEvidenceReader(structuralFullFamilyReader);
+  assert.throws(
+    () => void readStartupFullFamilyEvidenceBinding(runtime, ""),
+    /startup-stage12-generation-unknown/,
   );
   await runtime.close();
   assert.equal(await runtime.close(), undefined);
