@@ -26,7 +26,7 @@ import {
   derivePerformanceGenerationSegments,
   decodeHardwareProfileObservationV1,
   decodePerformanceAdmissionOrphanReplacementLineage,
-  decodePerformanceFactBundle,
+  decodePartitionedPerformanceFactBundle,
   decodePerformanceWindowCommitment,
   decodeProductionPerformanceProfile,
   hashCandidateBearingHeadSetRoot,
@@ -251,6 +251,34 @@ interface ObservedRouteAccountingV1 {
   readonly failed: number;
   readonly entries: readonly ObservedRouteAccountingEntryV1[];
   readonly root: Hash;
+}
+
+/** Independently validates the evidence transition from the search-pipeline
+ * accounting terminal to the later Producer candidate observation. A passed
+ * accounting entry intentionally has no evidence yet; its terminal lineage
+ * and Six-Step evidence are issued only by the post-accounting observation. */
+export function validateRawCandidateEvidenceJoinV1(
+  entry: Pick<ObservedRouteAccountingEntryV1, "terminalKind" | "evidenceHash" | "reasonCode">,
+  observation: Pick<ObservedCandidateTerminalV1, "terminalKind" | "evidenceHash" | "terminalLineageHash" | "sixStepEvidenceRoot">,
+): void {
+  if (entry.terminalKind !== observation.terminalKind) {
+    throw new TypeError("raw candidate denominator terminal kind splice");
+  }
+  if (entry.terminalKind === "passed") {
+    if (entry.reasonCode !== null
+      || entry.evidenceHash !== null
+      || observation.evidenceHash === null
+      || observation.evidenceHash !== observation.terminalLineageHash
+      || observation.sixStepEvidenceRoot === null) {
+      throw new TypeError("raw passed candidate lineage evidence splice");
+    }
+    return;
+  }
+  if (entry.evidenceHash !== observation.evidenceHash
+    || observation.terminalLineageHash !== null
+    || observation.sixStepEvidenceRoot !== null) {
+    throw new TypeError("raw non-passed candidate evidence splice");
+  }
 }
 
 interface ObservedAccountedRouteDenominatorPayloadV1 {
@@ -2311,6 +2339,10 @@ function joinEvents(events: readonly ObservedProductionEventV1[]): {
         const coarse = coverage.coarseTimingFacts.find(item => item.correlationId === denominator.correlationId);
         const laneObservations = candidates.observations.filter(item => item.lane === denominator.lane);
         const upstream = accountedDenominators.find(item => item.lane === denominator.lane);
+        for (const [index, entry] of (upstream?.accounting.entries ?? []).entries()) {
+          const observation = laneObservations[index];
+          if (observation !== undefined) validateRawCandidateEvidenceJoinV1(entry, observation);
+        }
         if (terminal?.kind !== "coverage"
           || upstream === undefined
           || upstream.admissionId !== candidates.admissionId
@@ -2325,10 +2357,8 @@ function joinEvents(events: readonly ObservedProductionEventV1[]): {
           || upstream.accounting.entries.length !== laneObservations.length
           || upstream.accounting.entries.some((entry, index) => entry.candidateId !== laneObservations[index]?.candidateId
             || entry.disposition !== laneObservations[index]?.disposition
-            || entry.terminalKind !== laneObservations[index]?.terminalKind
             || entry.routeHash !== laneObservations[index]?.routeHash
             || entry.reasonCode !== laneObservations[index]?.reasonCode
-            || entry.evidenceHash !== laneObservations[index]?.evidenceHash
             || !sameCanonical(entry.policyTerminal, laneObservations[index]?.policyTerminal))
           || terminal.correlationId !== denominator.correlationId
           || terminal.coverageRoot !== denominator.coverageRoot
@@ -2852,7 +2882,7 @@ function projectPerformanceBundle(
     windowEndMonotonicNs,
     windowDurationUs: (windowDurationNs / 1_000n).toString(),
   });
-  return decodePerformanceFactBundle({
+  return decodePartitionedPerformanceFactBundle({
     profile,
     commitment,
     heads,

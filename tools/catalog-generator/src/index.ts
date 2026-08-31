@@ -359,6 +359,58 @@ export function assertStaticEntrypoint(root: string, binding: ModuleEntrypointV1
   return path;
 }
 
+function assertPublicRuntimeReExport(
+  root: string,
+  publicModulePath: string,
+  binding: ModuleEntrypointV1,
+): void {
+  const source = ts.createSourceFile(
+    publicModulePath,
+    sourceText(root, publicModulePath),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const targetPath = repoPath(root, binding.modulePath);
+  let exactBindings = 0;
+  let conflictingBindings = 0;
+  for (const statement of source.statements) {
+    if (ts.isVariableStatement(statement)) {
+      const exported = statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) === true;
+      if (exported && statement.declarationList.declarations.some(declaration =>
+        ts.isIdentifier(declaration.name) && declaration.name.text === binding.exportName)) conflictingBindings += 1;
+      continue;
+    }
+    if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement))
+      && statement.name?.text === binding.exportName
+      && statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
+      conflictingBindings += 1;
+      continue;
+    }
+    if (!ts.isExportDeclaration(statement)
+      || statement.isTypeOnly
+      || statement.exportClause === undefined
+      || !ts.isNamedExports(statement.exportClause)) continue;
+    const exposed = statement.exportClause.elements.filter(element =>
+      !element.isTypeOnly && element.name.text === binding.exportName);
+    if (exposed.length === 0) continue;
+    if (statement.moduleSpecifier === undefined || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      conflictingBindings += exposed.length;
+      continue;
+    }
+    const exportedPath = repoPath(root, resolve(root, dirname(publicModulePath), statement.moduleSpecifier.text));
+    for (const element of exposed) {
+      const originalName = element.propertyName?.text ?? element.name.text;
+      if (exportedPath === targetPath && originalName === binding.exportName) exactBindings += 1;
+      else conflictingBindings += 1;
+    }
+  }
+  if (exactBindings === 1 && conflictingBindings === 0) return;
+  throw new TypeError(
+    `Family public entry must uniquely exact-re-export qualified runtime symbol ${publicModulePath} -> ${binding.modulePath}#${binding.exportName}`,
+  );
+}
+
 function capabilityLeaves(compilerFacts: readonly CatalogCompilerClosureFactV1[], index: CapabilityIndexV1): readonly DependencyLeafV1[] {
   return Object.freeze(index.entries.map(entry => ({
     id: entry.capabilityId,
@@ -530,6 +582,7 @@ function familyRuntimeFamilyDescriptor(
   });
   const sourcePlans: GeneratedFamilyRuntimeSourcePlanV1[] = definition.manifest.sourcePlans.map(plan => {
     const modulePath = assertStaticEntrypoint(root, plan);
+    assertPublicRuntimeReExport(root, publicPath, { modulePath, exportName: plan.exportName });
     const closureRoot = compilerClosure(compilerFacts, { modulePath, exportName: plan.exportName }).root;
     const planRef = entry.sourcePlanRefs.find(candidate => candidate.sourcePlanRef === hashDomain("aloha/family-source-plan-ref/v1", {
       sourcePlanId: plan.sourcePlanId,
@@ -555,8 +608,13 @@ function familyRuntimeFamilyDescriptor(
       throw new TypeError(`release source plan lacks nomination qualification ${definition.manifest.familyId}:${plan.sourcePlanId}`);
     }
     const nomination = nominationSlot.program;
+    const nominationModulePath = assertStaticEntrypoint(root, nomination);
+    assertPublicRuntimeReExport(root, publicPath, {
+      modulePath: nominationModulePath,
+      exportName: nomination.exportName,
+    });
     const program = Object.freeze({
-      modulePath: assertStaticEntrypoint(root, nomination),
+      modulePath: nominationModulePath,
       exportName: nomination.exportName,
       closureRoot: compilerClosure(compilerFacts, nomination).root,
       schemaHash: nomination.schemaHash,
@@ -764,9 +822,9 @@ function renderFamilyRuntimeComposition(
   const adapterImports = descriptor.families.flatMap((family, familyIndex) => family.runtimeAdapters.map((adapter, adapterIndex) =>
     "import { " + adapter.exportName + " as FAMILY_" + familyIndex + "_RUNTIME_ADAPTER_" + adapterIndex + " } from \"../../" + family.publicEntry.modulePath + "\";"));
   const sourcePlanImports = descriptor.families.flatMap((family, familyIndex) => family.sourcePlans.map((plan, planIndex) =>
-    "import { " + plan.exportName + " as FAMILY_" + familyIndex + "_SOURCE_PLAN_" + planIndex + " } from \"../../" + plan.modulePath + "\";"));
+    "import { " + plan.exportName + " as FAMILY_" + familyIndex + "_SOURCE_PLAN_" + planIndex + " } from \"../../" + family.publicEntry.modulePath + "\";"));
   const nominationProgramImports = descriptor.families.flatMap((family, familyIndex) => family.sourcePlans.map((plan, planIndex) =>
-    "import { " + plan.nominationProgramProposal.program.exportName + " as FAMILY_" + familyIndex + "_NOMINATION_PROGRAM_" + planIndex + " } from \"../../" + plan.nominationProgramProposal.program.modulePath + "\";"));
+    "import { " + plan.nominationProgramProposal.program.exportName + " as FAMILY_" + familyIndex + "_NOMINATION_PROGRAM_" + planIndex + " } from \"../../" + family.publicEntry.modulePath + "\";"));
   const strategyImports = strategyDescriptor.strategies.map((entry, index) =>
     "import { " + entry.issuerExportName + " as STRATEGY_" + index + "_PLANNING_PROBLEM_ISSUER } from \"../../" + entry.issuerModulePath + "\";");
   const definitionSets = descriptor.families.flatMap((family, index) => [

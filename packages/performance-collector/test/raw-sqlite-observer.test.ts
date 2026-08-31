@@ -37,7 +37,10 @@ import {
   PRODUCTION_EVIDENCE_NAMESPACES,
   observeProductionPerformanceDatabaseV1,
 } from "../src/index.ts";
-import { decodeObservedSixStepFactsV1 } from "../src/raw-sqlite-observer.ts";
+import {
+  decodeObservedSixStepFactsV1,
+  validateRawCandidateEvidenceJoinV1,
+} from "../src/raw-sqlite-observer.ts";
 
 const h = (digit: string): Hash => `0x${digit.repeat(64)}` as Hash;
 const release = Object.freeze({
@@ -148,7 +151,10 @@ async function productionDatabase(headCount: number): Promise<string> {
   return databasePath;
 }
 
-async function productionDatabaseWithRouteDenominator(twoDenominatorLanes = false): Promise<string> {
+async function productionDatabaseWithRouteDenominator(
+  twoDenominatorLanes = false,
+  mode: "policy-rejected" | "unsigned-passed" = "policy-rejected",
+): Promise<string> {
   const fixtureHead: CanonicalHead = Object.freeze({
     chainId: "1",
     number: "151",
@@ -159,7 +165,7 @@ async function productionDatabaseWithRouteDenominator(twoDenominatorLanes = fals
   const fixture = createSearchTerminalFixture({
     head: fixtureHead,
     generationId: "generation-route-denominator",
-    mode: "policy-rejected",
+    mode,
     releaseProvenanceHash: release.releaseProvenanceHash,
   });
   const pendingTxHash = hashDomain("test/raw-route-pending-transaction/v1", fixtureHead);
@@ -449,6 +455,60 @@ test("raw observer preserves the fixed blockscan-before-backrun denominator orde
   assert.equal(denominators.length, 2);
   assert.deepEqual(denominators.map(event => (event.payload as { readonly lane: string }).lane), ["blockscan", "backrun"]);
   assert.ok(!observation.reasons.some(reason => reason.includes("route-denominator")), JSON.stringify(observation.reasons));
+});
+
+test("raw observer accepts the passed accounting-to-observation evidence transition", async () => {
+  const databasePath = await productionDatabaseWithRouteDenominator(false, "unsigned-passed");
+  const observation = observeProductionPerformanceDatabaseV1(databasePath);
+  assert.equal(observation.status, "incomplete", JSON.stringify(observation.reasons));
+  const candidateSet = observation.events.find(event => event.eventType === "candidate-set");
+  const denominator = observation.events.find(event => event.eventType === "route-denominator"
+    && event.payload.denominatorKind === "accounted");
+  assert.ok(candidateSet);
+  assert.ok(denominator);
+  const candidate = (candidateSet.payload.candidateTerminalObservations as readonly Readonly<Record<string, unknown>>[])[0]!;
+  const accountingEntry = ((denominator.payload.accounting as Readonly<Record<string, unknown>>).entries as readonly Readonly<Record<string, unknown>>[])[0]!;
+  assert.equal(accountingEntry.terminalKind, "passed");
+  assert.equal(accountingEntry.evidenceHash, null);
+  assert.equal(candidate.terminalKind, "passed");
+  assert.equal(candidate.evidenceHash, candidate.terminalLineageHash);
+  assert.notEqual(candidate.sixStepEvidenceRoot, null);
+});
+
+test("raw candidate evidence join distinguishes passed lineage issuance from exact non-passed evidence", () => {
+  const passedEntry = Object.freeze({ terminalKind: "passed" as const, evidenceHash: null, reasonCode: null });
+  const passedObservation = Object.freeze({
+    terminalKind: "passed" as const,
+    evidenceHash: h("1"),
+    terminalLineageHash: h("1"),
+    sixStepEvidenceRoot: h("2"),
+  });
+  assert.doesNotThrow(() => validateRawCandidateEvidenceJoinV1(passedEntry, passedObservation));
+  assert.throws(() => validateRawCandidateEvidenceJoinV1(
+    { ...passedEntry, evidenceHash: h("1") },
+    passedObservation,
+  ), /passed candidate lineage evidence splice/);
+  assert.throws(() => validateRawCandidateEvidenceJoinV1(
+    passedEntry,
+    { ...passedObservation, evidenceHash: h("3") },
+  ), /passed candidate lineage evidence splice/);
+
+  const rejectedEntry = Object.freeze({ terminalKind: "chainProvenRejected" as const, evidenceHash: h("4"), reasonCode: "exact:rejected" });
+  const rejectedObservation = Object.freeze({
+    terminalKind: "chainProvenRejected" as const,
+    evidenceHash: h("4"),
+    terminalLineageHash: null,
+    sixStepEvidenceRoot: null,
+  });
+  assert.doesNotThrow(() => validateRawCandidateEvidenceJoinV1(rejectedEntry, rejectedObservation));
+  assert.throws(() => validateRawCandidateEvidenceJoinV1(
+    rejectedEntry,
+    { ...rejectedObservation, evidenceHash: h("5") },
+  ), /non-passed candidate evidence splice/);
+  assert.throws(() => validateRawCandidateEvidenceJoinV1(
+    rejectedEntry,
+    { ...rejectedObservation, terminalLineageHash: h("4") },
+  ), /non-passed candidate evidence splice/);
 });
 
 test("per-head raw receipt root and log range consume the denominator-expanded relevant event set", () => {

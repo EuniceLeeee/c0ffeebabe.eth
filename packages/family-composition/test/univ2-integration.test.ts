@@ -32,7 +32,7 @@ import {
   createRejectionExecutorAuthorityIssuer,
   createRejectionFactRuntime,
 } from "../../attestation/src/internal/composition.ts";
-import type { AttestationCompositionBindingV1, AttestationServiceV1, InstanceLifecycleSingleFlightPort, RejectionTransportExecutorV1 } from "../../attestation/src/index.ts";
+import type { AttestationServiceV1, RejectionTransportExecutorV1 } from "../../attestation/src/index.ts";
 import {
   releaseApproval,
   attestationProofPortForReleaseApproval,
@@ -1187,6 +1187,11 @@ async function startLocalRpc(
     outgoing.end(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result }));
   };
   const server = createServer((incoming, outgoing) => { void handler(incoming, outgoing); });
+  // The fixed 100-head test performs CPU-only raw-observer mutations before
+  // the final acceptance sweep. Keep the local RPC socket alive across that
+  // deliberate gap instead of racing Node's five-second server default.
+  server.keepAliveTimeout = 60_000;
+  server.headersTimeout = 65_000;
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const serverAddress = server.address();
@@ -1630,6 +1635,29 @@ async function createOfflineStructuralUniV2Services(
   writeFileSync(bundleModulePath, bundleModuleBytes);
   const released = externallyPackagedVerticalComposition(rpc.endpoint, realpathSync(bundleModulePath));
   const { authority, binding } = released;
+  const runtimeAnchor = Object.freeze({
+    kind: "aloha.searcher-runtime-anchor-v1" as const,
+    bindingId: binding.bindingId,
+    releaseProvenanceHash: runtimeReleaseBindingProvenanceHash(binding),
+    manifestHash: h("vertical-manifest"),
+    manifestArtifactSha256: h("vertical-manifest-artifact"),
+    runtimeArtifactRoot: h("vertical-runtime"),
+    implementationClosureDigest: h("vertical-closure"),
+    candidateReleaseCommit: binding.candidateReleaseCommit,
+    entrypointSha256: h("vertical-entrypoint"),
+    nodeExecutableSha256: h("vertical-node"),
+    bundleModulePath: "/opt/aloha/release.mjs",
+    bundleModuleSha256: h("vertical-bundle"),
+    serviceName: "aloha-searcher",
+    systemdUnit: "aloha-searcher.service",
+    bootId: "boot-vertical",
+    invocationId: "invocation-vertical",
+    logDevice: "8",
+    logInode: "9",
+    pid: "42",
+    processStartTicks: "7",
+    dryRun: true,
+  });
   const descriptor = generatedDescriptor();
   const caller = address("6");
   const objectivePayload = {
@@ -1750,17 +1778,6 @@ async function createOfflineStructuralUniV2Services(
       catalog: { qualifiedCapabilityProjection: qualifiedCapabilityProjection(binding) },
       attestation: {
         proofPort: attestationProofPortForReleaseApproval(released.approval),
-        build(composition: AttestationCompositionBindingV1, candidatePartitionReader: ReturnType<typeof candidatePartitionBootstrapReader>) {
-          const frameworkRuntime = createFrameworkFailureRuntime(composition, { classify() { return null; } });
-          const rejectionAuthority = createRejectionExecutorAuthorityIssuer(composition);
-          const rejectionExecutor: RejectionTransportExecutorV1 = { async execute() { return { transport: [], effects: [] }; } };
-          const instanceLifecycle: InstanceLifecycleSingleFlightPort = { async getOrBuild(_key, build) { return build(); } };
-          return {
-            frameworkRuntime,
-            rejectionRuntime: createRejectionFactRuntime(rejectionAuthority.issue(rejectionExecutor)),
-            instanceLifecycle,
-          };
-        },
       },
       candidatePartitionProofIssuer: createCandidatePartitionProofIssuerFixture(binding),
       checkpoint: { durable, canonical },
@@ -1794,16 +1811,21 @@ async function createOfflineStructuralUniV2Services(
       },
       sixStep: {
         process: {
-          systemId: "aloha-family-composition/offline-structural.service",
-          commitSha: binding.candidateReleaseCommit,
-          executableHash: h("offline-structural-six-step-executable"),
-          deploymentManifestHash: h("offline-structural-six-step-manifest"),
-          serviceIdentityHash: h("offline-structural-six-step-service"),
-          pid: String(process.pid),
-          processStartTicks: "1",
-          bootIdHash: h("offline-structural-six-step-boot"),
+          systemId: `${runtimeAnchor.serviceName}/${runtimeAnchor.systemdUnit}`,
+          commitSha: runtimeAnchor.candidateReleaseCommit,
+          executableHash: runtimeAnchor.entrypointSha256,
+          deploymentManifestHash: runtimeAnchor.manifestHash,
+          serviceIdentityHash: hashDomain("aloha/production-six-step-service-identity/v1", {
+            bindingId: runtimeAnchor.bindingId,
+            serviceName: runtimeAnchor.serviceName,
+            systemdUnit: runtimeAnchor.systemdUnit,
+            invocationId: runtimeAnchor.invocationId,
+          }),
+          pid: runtimeAnchor.pid,
+          processStartTicks: runtimeAnchor.processStartTicks,
+          bootIdHash: hashDomain("aloha/searcher-runtime-boot-id/v1", runtimeAnchor.bootId),
         },
-        emitterCodeHash: h("offline-structural-six-step-emitter"),
+        emitterCodeHash: runtimeAnchor.implementationClosureDigest,
         observerContentDirectory: join(directory, "six-step-observer-content"),
         evidenceDirectory: join(directory, "six-step-evidence"),
       },
@@ -1826,6 +1848,7 @@ async function createOfflineStructuralUniV2Services(
       runtimeSource: ownedRuntimeSource,
       rpc,
       caller,
+      runtimeAnchor,
       productionEvidence: missingExternalRuntimeAnchorEvidenceV1(),
       async close() {
         if (closed) return;
@@ -2003,7 +2026,7 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
       return new Response(JSON.stringify({ jsonrpc: "2.0", id: request.id, result }), { status: 200 });
     }) as typeof globalThis.fetch,
   });
-  const observedProgram: { value: { readonly programBytes: string } | null } = { value: null };
+  const observedPrograms = new Map<Hash, Readonly<{ programHash: Hash; programBytes: string }>>();
   const runtimeSessionIds = new Set<Hash>();
   const rpcRequests = structural.rpc.callRequests;
   const strategyRuntime = services.strategyRuntime;
@@ -2013,37 +2036,16 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
   const evidence = issueSearcherProductionEvidenceOwnerV1({
     databasePath: evidencePath,
     economicSafety: services.economicSafety,
+    strategyRuntime,
     release: {
       bindingId: services.release.bindingId,
       releaseProvenanceHash: services.release.releaseProvenanceHash,
       candidateReleaseCommit: services.release.candidateReleaseCommit,
     },
-    runtimeAnchor: {
-      kind: "aloha.searcher-runtime-anchor-v1",
-      bindingId: services.release.bindingId,
-      releaseProvenanceHash: services.release.releaseProvenanceHash,
-      manifestHash: h("vertical-manifest"),
-      manifestArtifactSha256: h("vertical-manifest-artifact"),
-      runtimeArtifactRoot: h("vertical-runtime"),
-      implementationClosureDigest: h("vertical-closure"),
-      candidateReleaseCommit: services.release.candidateReleaseCommit,
-      entrypointSha256: h("vertical-entrypoint"),
-      nodeExecutableSha256: h("vertical-node"),
-      bundleModulePath: "/opt/aloha/release.mjs",
-      bundleModuleSha256: h("vertical-bundle"),
-      serviceName: "aloha-searcher",
-      systemdUnit: "aloha-searcher.service",
-      bootId: "boot-vertical",
-      invocationId: "invocation-vertical",
-      logDevice: "8",
-      logInode: "9",
-      pid: "42",
-      processStartTicks: "7",
-      dryRun: true,
-    },
+    runtimeAnchor: structural.runtimeAnchor,
   });
   const observerStoreCapability = services.observerStore.issueObserverStore({
-    directory: join(evidenceDirectory, "observer-store/content"),
+    directory: join(structural.directory, "six-step-observer-content"),
   });
   const observerSink = readReleaseOwnedObserverStoreV1(observerStoreCapability).sink;
   const terminalLocatorIndex = new ProductionTerminalPhaseLocatorIndexV1({
@@ -2119,7 +2121,14 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
           schemaHash: h("vertical-program-schema"),
           projection: {
             project(input) {
-              observedProgram.value = input.program;
+              const previous = observedPrograms.get(input.program.programHash);
+              if (previous !== undefined && previous.programBytes !== input.program.programBytes) {
+                throw new TypeError("same final-simulation program hash observed with different bytes");
+              }
+              observedPrograms.set(input.program.programHash, Object.freeze({
+                programHash: input.program.programHash,
+                programBytes: input.program.programBytes,
+              }));
               return projection.project(input);
             },
           },
@@ -2224,8 +2233,11 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
   const candidateRefs = rawCandidateEvent.payload.candidateRefs as readonly Hash[];
   assert.ok(candidateRefs.length > 1, "head denominator must retain non-selected candidates");
   const candidateObservations = rawCandidateEvent.payload.candidateTerminalObservations as readonly Record<string, unknown>[];
+  assert.equal(candidateObservations.length, candidateRefs.length);
   assert.equal(candidateObservations.filter(observation => observation.performanceOutcome === "verified").length, 1);
-  assert.equal(candidateObservations.filter(observation => observation.performanceOutcome === "policy-rejected").length, 3);
+  assert.equal(candidateObservations.filter(observation =>
+    observation.performanceOutcome === "chain-proven-rejected"
+      || observation.performanceOutcome === "policy-rejected").length, candidateObservations.length - 1);
   const verifiedObservation = candidateObservations.find(observation => observation.performanceOutcome === "verified");
   assert.equal(verifiedObservation?.terminalLineageHash, receipt.lineageHash);
   assert.equal(verifiedObservation?.sixStepEvidenceRoot, rawSixStep.stage36Root);
@@ -2358,10 +2370,14 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
   assert.equal(durableTerminal.manifest.manifestRoot, terminalResult.manifest.manifestRoot);
   assert.equal(durableTerminal.fullFamilyProjection.status, "observed");
   assert.equal(durableTerminal.sixStepPhysicalStatus, "observed", durableTerminal.sixStepPhysicalReason ?? undefined);
-  if (observedProgram.value === null) throw new Error("final simulation did not receive an execution program");
-  const packed = decodePackedCallProgram(decodeExecutorExecuteCalldata(observedProgram.value.programBytes));
+  const observedProgram = observedPrograms.get(receipt.programHash);
+  if (observedProgram === undefined) throw new Error("successful final simulation did not receive its execution program");
+  const packed = decodePackedCallProgram(decodeExecutorExecuteCalldata(observedProgram.programBytes));
+  assert.deepEqual(packed, (executionEvidence.facts as Record<string, unknown>).callSequence);
   assert.equal(packed.length, 4);
-  assert.deepEqual([packed[1]!.target, packed[3]!.target], [poolA, poolTwo]);
+  const selectedPoolTargets = selectedGraphLegs.map(leg => String(leg.owningInstanceKey).toLowerCase());
+  assert.deepEqual([...selectedPoolTargets].sort(), [poolA, poolTwo].sort());
+  assert.deepEqual([packed[1]!.target, packed[3]!.target], selectedPoolTargets);
   assert.ok([token0, token1].includes(packed[0]!.target));
   assert.ok([token0, token1].includes(packed[2]!.target));
   assert.notEqual(packed[0]!.target, packed[2]!.target);
@@ -2371,9 +2387,9 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
   assert.equal(packed[2]!.calldata.slice(0, 10), "0xa9059cbb");
   assert.equal(packed[3]!.calldata.slice(0, 10), "0x022c0d9f");
   assert.equal(amountWord(packed[0]!.calldata, 1), 100n);
-  assert.equal(addressWordFromCalldata(packed[0]!.calldata, 0), poolA);
+  assert.equal(addressWordFromCalldata(packed[0]!.calldata, 0), selectedPoolTargets[0]);
   assert.equal(addressWordFromCalldata(packed[1]!.calldata, 2), executor);
-  assert.equal(addressWordFromCalldata(packed[2]!.calldata, 0), poolTwo);
+  assert.equal(addressWordFromCalldata(packed[2]!.calldata, 0), selectedPoolTargets[1]);
   assert.equal(addressWordFromCalldata(packed[3]!.calldata, 2), executor);
   const firstOutputWord = packed[0]!.target === token0 ? 1 : 0;
   const secondOutputWord = firstOutputWord === 1 ? 0 : 1;

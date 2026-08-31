@@ -3061,6 +3061,7 @@ class ProductionEvidenceOwnerStateV1 {
   #terminalPhaseInvalidFact: TerminalPhaseInvalidFactV1 | null = null;
   #closed = false;
   #tail: Promise<void> = Promise.resolve();
+  readonly #nextAppendSequenceByNamespace = new Map<ProductionEvidenceNamespaceV1, string>();
 
   constructor(input: SearcherProductionEvidenceOwnerInputV1) {
     assertPlainObject(input, "searcherProductionEvidenceOwner");
@@ -3184,9 +3185,11 @@ class ProductionEvidenceOwnerStateV1 {
   replay(): SearcherProductionEvidenceReplayV1 {
     this.#assertOpen();
     const allEvents: ProductionEvidenceEventV1[] = [];
+    const nextAppendSequenceByNamespace = new Map<ProductionEvidenceNamespaceV1, string>();
     const rawByEventId = new Map<Hash, DurableAppendRecord>();
     for (const namespace of Object.values(SEARCHER_PRODUCTION_EVIDENCE_NAMESPACES)) {
       const records = this.#store.readAppendLog(namespace);
+      nextAppendSequenceByNamespace.set(namespace, records.length.toString());
       const events = Object.freeze(records.map(record => {
         const event = exactEvent(record, this.#store);
         rawByEventId.set(event.eventId, record);
@@ -3832,6 +3835,10 @@ class ProductionEvidenceOwnerStateV1 {
       currentPartitionId ?? hashDomain("aloha/searcher-production-evidence-unbound-partition/v1", { release: this.#release, runtimeAnchor: this.#runtimeAnchor }),
       currentEvents,
     );
+    this.#nextAppendSequenceByNamespace.clear();
+    for (const [namespace, sequence] of nextAppendSequenceByNamespace) {
+      this.#nextAppendSequenceByNamespace.set(namespace, sequence);
+    }
     const { partitionId: _partitionId, ...currentValues } = current;
     return deepFreeze({
       ...currentValues,
@@ -4340,7 +4347,10 @@ class ProductionEvidenceOwnerStateV1 {
     serving: ServingBindingV1 | null,
   ): Promise<Readonly<{ readonly receipt: DurableAppendReceipt; readonly durableAppend: DurableAppendCapabilityV1 }>> {
     const namespace = namespaceFor(eventType);
-    const sequence = this.#store.readAppendLog(namespace).length.toString();
+    const sequence = this.#nextAppendSequenceByNamespace.get(namespace);
+    if (sequence === undefined) {
+      throw new TypeError(`production evidence append namespace ${namespace} was not initialized by replay`);
+    }
     const draft: ProductionEvidenceEventDraftV1 = deepFreeze({ schemaVersion: 1 as const, kind: EVENT_KIND, eventType, sequence, namespace, release: this.#release, runtimeAnchor: this.#runtimeAnchor, serving, payload });
     const event = Object.freeze({ ...draft, eventId: eventId(draft) });
     const bytes = encodeCanonicalBytes(event);
@@ -4351,6 +4361,7 @@ class ProductionEvidenceOwnerStateV1 {
     if (Buffer.compare(Buffer.from(persisted.bytes), Buffer.from(bytes)) !== 0) {
       throw new TypeError("production evidence fixed durable row reader mismatch");
     }
+    this.#nextAppendSequenceByNamespace.set(namespace, (BigInt(sequence) + 1n).toString());
     return Object.freeze({ receipt: Object.freeze(receipt), durableAppend });
   }
 

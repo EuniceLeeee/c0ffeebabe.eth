@@ -19,9 +19,20 @@ import {
   type Hash,
 } from "../src/index.ts";
 import { assertEvidenceEventMatchesReceipt } from "../src/index.ts";
+import { SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1 } from "../src/six-step.ts";
 
 const h = ("0x" + "1".repeat(64)) as Hash;
 const h2 = ("0x" + "2".repeat(64)) as Hash;
+
+test("Six-Step physical boundary denominator is one frozen Fact Contract", () => {
+  const limits = SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1;
+  assert.equal(Object.isFrozen(limits), true);
+  assert.equal(limits.maxRouteLegs, 16);
+  assert.equal(limits.maxEntries, 2 * limits.maxRouteLegs + 4);
+  assert.equal(limits.maxEntryBytes, 64 * 1024 * 1024);
+  assert.equal(limits.maxTotalBytes, 512 * 1024 * 1024);
+  assert.equal(limits.maxLedgerBytes, 64 * 1024 * 1024);
+});
 
 const producer: ProcessAnchorV1 = {
   systemId: "system",

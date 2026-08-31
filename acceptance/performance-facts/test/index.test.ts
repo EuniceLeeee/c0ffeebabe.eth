@@ -126,6 +126,29 @@ test("runtime predicate and independent reference agree on a complete 100-head c
   assert.deepEqual(bundle.generationSegments.map(segment => [segment.firstHeadOrdinal, segment.lastHeadOrdinal]), [["1", "20"], ["21", "100"]]);
 });
 
+test("runtime and reference reject aggregate Proxy/accessor inputs without invoking traps", async () => {
+  const bundle = await buildBundle();
+  let trapHits = 0;
+  const proxy = new Proxy(bundle, {
+    get: () => { trapHits += 1; return undefined; },
+    has: () => { trapHits += 1; return false; },
+    ownKeys: () => { trapHits += 1; return []; },
+  });
+  assert.equal(evaluatePerformancePredicate(proxy).verdict, "invalid");
+  assert.equal(evaluatePerformanceReferenceModel(proxy).verdict, "invalid");
+  assert.equal(trapHits, 0);
+
+  let getterHits = 0;
+  const accessor = { ...bundle };
+  Object.defineProperty(accessor, "profile", {
+    enumerable: true,
+    get: () => { getterHits += 1; return bundle.profile; },
+  });
+  assert.equal(evaluatePerformancePredicate(accessor as never).verdict, "invalid");
+  assert.equal(evaluatePerformanceReferenceModel(accessor as never).verdict, "invalid");
+  assert.equal(getterHits, 0);
+});
+
 test("every declared mutation executes and the no-op is detected as ineffective", async () => {
   const bundle = await buildBundle();
   const runs = runPerformanceMutationRegistry(bundle);

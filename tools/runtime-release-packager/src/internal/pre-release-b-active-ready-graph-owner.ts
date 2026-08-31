@@ -22,13 +22,15 @@ import {
   type Hash,
 } from "../../../../packages/canonical-codec/src/index.ts";
 import {
-  validateInstanceCatalog,
+  decodeInstanceCatalogV1,
   type InstanceCatalogV1,
+  type InstanceCatalogPublicationChunkRefV1,
 } from "../../../../packages/catalog/src/index.ts";
 import { fullGraphTransitionSequenceRootV1 } from "../../../../packages/full-graph-coarse-sweep/src/index.ts";
 import {
-  buildPersistedGraph,
+  decodePersistedGraphV1,
   type PersistedGraphV1,
+  type PersistedGraphEdgeChunkRefV1,
 } from "../../../../packages/graph/src/index.ts";
 import { CHECKPOINT_SCHEMA_AUTHORITY } from "../../../../packages/checkpoint/src/index.ts";
 import {
@@ -42,8 +44,10 @@ import type {
 const CONTENT_DOMAIN = "aloha/durable-content-envelope/v1";
 const ROOT_KIND = "aloha/durable-root-envelope/v1";
 const READY_CLOSURE_KIND = "aloha/ready-closure/v1";
-const INSTANCE_CATALOG_KIND = "aloha/instance-catalog/v1";
-const GRAPH_KIND = "aloha/persisted-graph/v1";
+const INSTANCE_CATALOG_KIND = "aloha/instance-catalog-manifest/v1";
+const INSTANCE_CATALOG_CHUNK_KIND = "aloha/instance-catalog-publication-chunk/v1";
+const GRAPH_KIND = "aloha/persisted-graph-manifest/v1";
+const GRAPH_CHUNK_KIND = "aloha/persisted-graph-edge-chunk/v1";
 
 interface RawContentV1 {
   readonly hash: Hash;
@@ -65,6 +69,44 @@ function exactRefs(value: unknown, path: string): readonly Hash[] {
 
 function same(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(left) === encodeCanonicalJson(right);
+}
+
+export function exactLinkedChunkReader<Ref extends { readonly contentSha256: Hash }>(
+  manifest: RawContentV1,
+  readContent: (hash: Hash) => RawContentV1,
+  chunkKind: string,
+  context: string,
+): Readonly<{
+  readChunk: (ref: Ref) => Uint8Array;
+  assertComplete: () => void;
+}> {
+  if (new Set(manifest.references).size !== manifest.references.length) {
+    throw new TypeError(`${context} has duplicate physical references`);
+  }
+  const byContentSha = new Map<Hash, Readonly<{ storageHash: Hash; bytes: Uint8Array }>>();
+  for (const storageHash of manifest.references) {
+    const content = readContent(storageHash);
+    if (content.kind !== chunkKind) throw new TypeError(`${context} chunk kind or content is missing`);
+    if (content.references.length !== 0) throw new TypeError(`${context} chunk physical references must be empty`);
+    const contentSha = sha256Hex(content.bytes);
+    if (byContentSha.has(contentSha)) throw new TypeError(`${context} has duplicate chunk content`);
+    byContentSha.set(contentSha, Object.freeze({ storageHash, bytes: content.bytes }));
+  }
+  const consumed = new Set<Hash>();
+  return Object.freeze({
+    readChunk(ref: Ref): Uint8Array {
+      const found = byContentSha.get(ref.contentSha256);
+      if (found === undefined) throw new TypeError(`${context} linked chunk is not referenced`);
+      if (consumed.has(found.storageHash)) throw new TypeError(`${context} linked chunk is reused`);
+      consumed.add(found.storageHash);
+      return found.bytes;
+    },
+    assertComplete(): void {
+      if (consumed.size !== manifest.references.length) {
+        throw new TypeError(`${context} physical chunk closure is not exact`);
+      }
+    },
+  });
 }
 
 function readDescriptorBytes(fd: number, byteLength: bigint): Uint8Array {
@@ -233,16 +275,26 @@ export function observeFrozenPreReleaseBActiveReadyGraphV1(
     }
     const catalogRecord = readContent(closure.instanceCatalogStorageHash);
     const graphRecord = readContent(closure.graphStorageHash);
-    if (catalogRecord.kind !== INSTANCE_CATALOG_KIND || catalogRecord.references.length !== 0
-      || graphRecord.kind !== GRAPH_KIND || graphRecord.references.length !== 0) {
+    if (catalogRecord.kind !== INSTANCE_CATALOG_KIND || graphRecord.kind !== GRAPH_KIND) {
       throw new TypeError("active Ready catalog/Graph physical closure mismatch");
     }
-    const catalog = decodeCanonicalJson(catalogRecord.bytes) as unknown as InstanceCatalogV1;
-    validateInstanceCatalog(catalog);
-    const graph = decodeCanonicalJson(graphRecord.bytes) as unknown as PersistedGraphV1;
-    const rebuilt = buildPersistedGraph(catalog);
-    if (!same(graph, rebuilt)
-      || graph.graphRoot !== closure.ready.graphRoot
+    const catalogChunks = exactLinkedChunkReader<InstanceCatalogPublicationChunkRefV1>(
+      catalogRecord,
+      readContent,
+      INSTANCE_CATALOG_CHUNK_KIND,
+      "active Ready instance catalog",
+    );
+    const catalog: InstanceCatalogV1 = decodeInstanceCatalogV1(catalogRecord.bytes, catalogChunks.readChunk);
+    catalogChunks.assertComplete();
+    const graphChunks = exactLinkedChunkReader<PersistedGraphEdgeChunkRefV1>(
+      graphRecord,
+      readContent,
+      GRAPH_CHUNK_KIND,
+      "active Ready persisted Graph",
+    );
+    const graph: PersistedGraphV1 = decodePersistedGraphV1(graphRecord.bytes, graphChunks.readChunk, catalog);
+    graphChunks.assertComplete();
+    if (graph.graphRoot !== closure.ready.graphRoot
       || graph.edgeCount !== closure.ready.edgeCount
       || graph.instanceCatalogRoot !== closure.ready.instanceCatalogRoot
       || !same(graph.cutoff, closure.ready.cutoff)
@@ -268,8 +320,18 @@ export function observeFrozenPreReleaseBActiveReadyGraphV1(
       readyClosureStorageHash: selected.storageHash,
       readyRecordHash: closure.ready.readyRecordHash,
       generationId: closure.ready.generationId,
+      generationRefreshPolicyHash: closure.ready.generationRefreshPolicyHash,
       releaseProvenanceHash: closure.ready.releaseProvenanceHash,
       cutoff: graph.cutoff,
+      definitionCatalogRoot: closure.ready.definitionCatalogRoot,
+      sourceCoverageRoot: closure.ready.sourceCoverageRoot,
+      candidatePartitionRoot: closure.ready.candidatePartitionRoot,
+      exactOutcomePartitionRoot: closure.ready.exactOutcomePartitionRoot,
+      verifiedMemoSetRoot: closure.ready.verifiedMemoSetRoot,
+      candidatePartitionProofStorageHash: closure.ready.candidatePartitionProofStorageHash,
+      nominationClosureRoot: closure.ready.nominationClosureRoot,
+      nominationClosureStorageHash: closure.ready.nominationClosureStorageHash,
+      promotionRevision: closure.ready.promotionRevision,
       instanceCatalogRoot: graph.instanceCatalogRoot,
       instanceCatalogStorageHash: closure.instanceCatalogStorageHash,
       graphStorageHash: closure.graphStorageHash,

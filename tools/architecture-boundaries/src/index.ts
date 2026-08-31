@@ -661,6 +661,7 @@ const STARTUP_READY_OWNER_PATH = "packages/startup-runtime/src/internal/ready-ow
 const STARTUP_RUNTIME_OWNER_PATH = "packages/startup-runtime/src/internal/runtime-owner.ts";
 const STARTUP_SIX_STEP_ROUTE_PARENT_OWNER_PATH = "packages/startup-runtime/src/internal/six-step-route-parent-owner.ts";
 const PRODUCTION_RELEASE_WORKFLOW_PATH = "tools/runtime-release-packager/src/production-workflow.ts";
+const EXTERNAL_RELEASE_OWNER_PATH = "tools/runtime-release-packager/src/external-release-owner.ts";
 const QUALIFIED_RELEASE_PUBLIC_RUNNER_STATE_PATH = "tools/runtime-release-packager/src/internal/qualified-release-public-runner-state.ts";
 const CURRENT_CATALOG_IMPACT_OWNER_PATH = "tools/catalog-generator/src/current-impact-analysis-owner.ts";
 const CURRENT_CATALOG_IMPACT_STATE_PATH = "tools/catalog-generator/src/internal/current-impact-analysis-state.ts";
@@ -685,6 +686,113 @@ const RELEASE_PACKAGING_GENERATED_IMPORTS = new Map<string, Readonly<{
     Object.freeze({
       specifier: "../../../acceptance/gate-core/src/generated/release-role-manifest.ts",
       imported: Object.freeze([{ name: "RELEASE_ROLE_MANIFEST", typeOnly: false }]),
+    }),
+  ],
+]);
+
+/** Current-producer evaluation is an untrusted witness, not release
+ * composition. These exact readers may observe only the generated catalog or
+ * runtime factory named here; no package-wide tools -> generated exception
+ * exists. */
+const CURRENT_EVALUATION_GENERATED_IMPORTS = new Map<string, Readonly<{
+  readonly specifier: string;
+  readonly imported: readonly { readonly name: string; readonly typeOnly: boolean }[];
+}>>([
+  [
+    "tools/historical-family-current-evaluation/src/candidate-generated-search-adapter.ts\u2192generated/runtime-composition/index.ts",
+    Object.freeze({
+      specifier: "../../../generated/runtime-composition/index.ts",
+      imported: Object.freeze([{ name: "createReleaseFamilyRuntimeComposition", typeOnly: false }]),
+    }),
+  ],
+  [
+    "tools/historical-family-current-evaluation/src/family-current-source-replay.ts\u2192generated/runtime-composition/index.ts",
+    Object.freeze({
+      specifier: "../../../generated/runtime-composition/index.ts",
+      imported: Object.freeze([{ name: "createReleaseFamilyRuntimeComposition", typeOnly: false }]),
+    }),
+  ],
+  [
+    "tools/historical-family-current-evaluation/src/current-adapter-comparator.ts\u2192generated/family-catalog/index.ts",
+    Object.freeze({
+      specifier: "../../../generated/family-catalog/index.ts",
+      imported: Object.freeze([{ name: "FAMILY_CATALOG", typeOnly: false }]),
+    }),
+  ],
+  [
+    "tools/historical-family-current-evaluation/src/family-advisory-matrix.ts\u2192generated/family-catalog/index.ts",
+    Object.freeze({
+      specifier: "../../../generated/family-catalog/index.ts",
+      imported: Object.freeze([{ name: "FAMILY_CATALOG", typeOnly: false }]),
+    }),
+  ],
+]);
+
+/** Exact release owners that consume generated composition. Generated output
+ * remains default-deny to every other central module. */
+const CENTRAL_GENERATED_OWNER_IMPORTS = new Map<string, Readonly<{
+  readonly specifier: string;
+  readonly imported: readonly { readonly name: string; readonly typeOnly: boolean }[];
+}>>([
+  [
+    `${RUNTIME_RELEASE_BOOTSTRAP_PATH}\u2192${FAMILY_RUNTIME_COMPOSITION_PATH}`,
+    Object.freeze({
+      specifier: "../../../../generated/runtime-composition/index.ts",
+      imported: Object.freeze([
+        { name: "createReleaseFamilyRuntimeComposition", typeOnly: false },
+        { name: "createReleaseStrategyRuntimeComposition", typeOnly: false },
+      ]),
+    }),
+  ],
+  [
+    `${RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH}\u2192${FAMILY_RUNTIME_COMPOSITION_PATH}`,
+    Object.freeze({
+      specifier: "../../../../generated/runtime-composition/index.ts",
+      imported: Object.freeze([{ name: "createReleaseFamilyRuntimeComposition", typeOnly: false }]),
+    }),
+  ],
+  [
+    `${RUNTIME_RELEASE_ECONOMIC_SAFETY_OWNER_PATH}\u2192${FAMILY_RUNTIME_COMPOSITION_PATH}`,
+    Object.freeze({
+      specifier: "../../../../generated/runtime-composition/index.ts",
+      imported: Object.freeze([{ name: "createReleaseFamilyRuntimeComposition", typeOnly: false }]),
+    }),
+  ],
+  [
+    `${RUNTIME_RELEASE_ECONOMIC_SAFETY_OWNER_PATH}\u2192${VALUATION_OWNER_RUNTIME_COMPOSITION_PATH}`,
+    Object.freeze({
+      specifier: "../../../../generated/valuation-owner-registry/index.ts",
+      imported: Object.freeze([{ name: "readGeneratedEconomicValuationOwnerRegistryV1", typeOnly: false }]),
+    }),
+  ],
+  [
+    `${RUNTIME_RELEASE_ECONOMIC_SAFETY_OWNER_PATH}\u2192generated/safety-profile/index.ts`,
+    Object.freeze({
+      specifier: "../../../../generated/safety-profile/index.ts",
+      imported: Object.freeze([{ name: "readGeneratedEconomicSafetyProfileV1", typeOnly: false }]),
+    }),
+  ],
+]);
+
+/** The production process observer reads two already-issued pre-release
+ * artifacts through fixed, read-only ports. This is not a general runtime ->
+ * authoring dependency. */
+const RUNTIME_AUTHORING_READER_IMPORTS = new Map<string, Readonly<{
+  readonly specifier: string;
+  readonly imported: readonly { readonly name: string; readonly typeOnly: boolean }[];
+}>>([
+  [
+    "apps/searcher-runtime/src/runtime-acceptance-evidence.ts\u2192tools/runtime-release-packager/src/pre-release-staging-contract.ts",
+    Object.freeze({
+      specifier: "../../../tools/runtime-release-packager/src/pre-release-staging-contract.ts",
+      imported: Object.freeze([{ name: "PreReleaseAuthorizationClaimCapabilityV1", typeOnly: true }]),
+    }),
+  ],
+  [
+    "apps/searcher-runtime/src/runtime-acceptance-evidence.ts\u2192tools/pre-release-restart-controller/src/receipt-reader.ts",
+    Object.freeze({
+      specifier: "../../../tools/pre-release-restart-controller/src/receipt-reader.ts",
+      imported: Object.freeze([{ name: "readFixedPreReleaseRestartControllerReceiptV1", typeOnly: false }]),
     }),
   ],
 ]);
@@ -830,7 +938,6 @@ const PREDICATE_MATERIAL_SOURCE_AUTHORITY_IMPORTS = Object.freeze([
   { from: COLLECTOR_PREDICATE_MATERIAL_SOURCE_ISSUER_PATH, to: COLLECTOR_PREDICATE_MATERIAL_SOURCE_OWNER_PATH, specifier: "./predicate-material-source-owner.ts", named: ["registerProductionPredicateMaterialSourceStateV1"] },
   { from: COLLECTOR_PREDICATE_MATERIAL_BRIDGE_ISSUER_PATH, to: COLLECTOR_PREDICATE_MATERIAL_SOURCE_OWNER_PATH, specifier: "./predicate-material-source-owner.ts", named: ["registerProductionPredicateMaterialSourceStateV1"] },
   { from: FRESH_QUALIFIED_RUNNER_HOST_OWNER_PATH, to: COLLECTOR_PREDICATE_MATERIAL_SOURCE_OWNER_PATH, specifier: "../../../../acceptance/collectors/src/internal/predicate-material-source-owner.ts", named: ["readProductionPredicateMaterialSourceStateV1"] },
-  { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: COLLECTOR_PREDICATE_MATERIAL_SOURCE_OWNER_PATH, specifier: "../../../acceptance/collectors/src/internal/predicate-material-source-owner.ts", named: ["readProductionPredicateMaterialSourceStateV1"] },
   { from: QUALIFIED_RELEASE_RUNTIME_ENTRY_PATH, to: COLLECTOR_PREDICATE_MATERIAL_BRIDGE_ISSUER_PATH, specifier: "../../../../acceptance/collectors/src/internal/predicate-material-source-bridge-issuer.ts", named: ["issueBridgedPredicateMaterialSourcePortV1"] },
   { from: COLLECTOR_MATERIAL_PROVIDER_SHARED_PATH, to: COLLECTOR_PREDICATE_MATERIAL_SOURCE_OWNER_PATH, specifier: "../internal/predicate-material-source-owner.ts", named: ["assertProductionPredicateMaterialSourcePortV1"] },
   { from: "acceptance/collectors/src/material-providers/runtime-boundaries.ts", to: COLLECTOR_PREDICATE_MATERIAL_SOURCE_OWNER_PATH, specifier: "../internal/predicate-material-source-owner.ts", named: ["readProductionPredicateMaterialSourceStateV1"] },
@@ -847,32 +954,30 @@ const PREDICATE_MATERIAL_SOURCE_OWNER_EDGES = new Set(PREDICATE_MATERIAL_SOURCE_
 const PRODUCTION_RELEASE_ADVISORY_AUTHORITY_IMPORTS = Object.freeze([
   { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: QUALIFIED_RELEASE_PUBLIC_RUNNER_STATE_PATH, specifier: "./internal/qualified-release-public-runner-state.ts", named: ["observeQualifiedReleaseAcceptanceAdvisoryV1", "prepareQualifiedReleaseAcceptanceForExternalOwnerV1", "readQualifiedReleaseLineageObservationV1"] },
   { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: COLLECTOR_RUNTIME_BOUNDARY_OBSERVERS_PATH, specifier: "../../../acceptance/collectors/src/production-runtime-boundary-observers.ts", named: ["issueProductionClosureMaterialObserverPortsV1"] },
-  { from: COLLECTOR_PRODUCTION_CLOSURE_OBSERVER_PATH, to: RELEASE_ASSEMBLED_ACCEPTANCE_PATH, specifier: "../../../tools/runtime-release-packager/src/assembled-release-acceptance.ts", named: ["readQualifiedReleaseLineageObservationV1"] },
-  { from: COLLECTOR_RUNTIME_BOUNDARY_OBSERVERS_PATH, to: RELEASE_ASSEMBLED_ACCEPTANCE_PATH, specifier: "../../../tools/runtime-release-packager/src/assembled-release-acceptance.ts", named: [] },
   { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: ROOT_PREDICATE_MATERIAL_SOURCE_OWNER_PATH, specifier: "./internal/root-predicate-material-source-owner.ts", named: ["issueRootPredicateMaterialSourceV1"] },
-  { from: RUNTIME_RELEASE_BOOTSTRAP_PATH, to: RUNTIME_RELEASE_OBSERVER_STORE_OWNER_PATH, specifier: "./observer-store-owner.ts", named: ["issueRuntimeReleaseObserverStoreServiceV1"] },
+  { from: RUNTIME_RELEASE_BOOTSTRAP_PATH, to: RUNTIME_RELEASE_OBSERVER_STORE_OWNER_PATH, specifier: "./observer-store-owner.ts", named: ["issueRuntimeReleaseObserverStoreServiceV1", "readRuntimeReleaseObserverSinkV1"] },
+  { from: PRE_RELEASE_TERMINAL_SNAPSHOT_OWNER_PATH, to: RUNTIME_RELEASE_OBSERVER_STORE_OWNER_PATH, specifier: "../../../../packages/runtime-release-authority/src/internal/observer-store-owner.ts", named: ["runtimeReleaseObserverStoreIdentityV1"] },
 ] as const);
 
 /** The installed/pre-release application receives one opaque central owner.
  * All authority construction and acceptance-observer splicing stays behind
  * these exact imports; no class-wide runtime-to-acceptance exception exists. */
 const PRODUCTION_RUNTIME_OWNER_AUTHORITY_IMPORTS = Object.freeze([
-  { from: SEARCHER_RELEASE_RUNTIME_OWNER_PATH, to: "packages/runtime-release-authority/src/production-runtime-owner.ts", specifier: "../../../packages/runtime-release-authority/src/production-runtime-owner.ts", named: ["VerifiedRuntimeReleaseOwnerPortV1", "openVerifiedRuntimeReleaseOwnerPortV1", "verifyExternalRuntimeReleaseBindingV1"] },
-  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/index.ts", specifier: "./index.ts", named: ["RuntimeReleaseCompositionInputV1", "RuntimeReleaseCompositionServicesV1", "buildRuntimeReleaseComposition", "verifyAndIssueRuntimeReleaseAuthorityV1", "verifyRuntimeReleaseBindingAuthenticityV1"] },
-  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts", specifier: "./internal/deployment-runtime-owner.ts", named: ["DeploymentRuntimeInfrastructurePortsV1", "DeploymentRuntimeInfrastructureRequestV1", "issueDeploymentRuntimeInfrastructureV1", "readDeploymentRuntimeInfrastructureV1"] },
+  { from: SEARCHER_RELEASE_RUNTIME_OWNER_PATH, to: "packages/runtime-release-authority/src/production-runtime-owner.ts", specifier: "../../../packages/runtime-release-authority/src/production-runtime-owner.ts", named: ["openVerifiedRuntimeReleaseOwnerPortV1", "verifyExternalRuntimeReleaseBindingV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/index.ts", specifier: "./index.ts", named: ["buildRuntimeReleaseComposition", "verifyAndIssueRuntimeReleaseAuthorityV1", "verifyRuntimeReleaseBindingAuthenticityV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts", specifier: "./internal/deployment-runtime-owner.ts", named: ["issueDeploymentRuntimeInfrastructureV1", "readDeploymentRuntimeInfrastructureV1"] },
   { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH, specifier: "./internal/http-family-physical-owner.ts", named: ["issueRuntimeReleaseHttpFamilyPhysicalExecutionPortV1"] },
-  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_DISCOVERY_SOURCE_OWNER_PATH, specifier: "./internal/discovery-source-authority-owner.ts", named: ["RuntimeReleaseDiscoverySourceDeploymentInputV1", "issueRuntimeReleaseQualifiedDiscoverySourcePort"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_DISCOVERY_SOURCE_OWNER_PATH, specifier: "./internal/discovery-source-authority-owner.ts", named: ["issueRuntimeReleaseQualifiedDiscoverySourcePort"] },
   { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_ECONOMIC_SAFETY_OWNER_PATH, specifier: "./internal/economic-safety-owner.ts", named: ["issueRuntimeReleaseEconomicSafetyEvaluatorCapabilityV1"] },
   { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_REVM_OWNER_PATH, specifier: "./internal/revm-worker-owner.ts", named: ["issueRuntimeReleaseRevmWorkerDeploymentPort"] },
-  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_PERFORMANCE_POLICY_OWNER_PATH, specifier: "./internal/performance-policy-owner.ts", named: ["RuntimeReleasePerformancePolicyPortV1", "issueInstalledRuntimeReleasePerformancePolicyPortV1", "issuePreReleaseRuntimeReleasePerformancePolicyPortV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: RUNTIME_RELEASE_PERFORMANCE_POLICY_OWNER_PATH, specifier: "./internal/performance-policy-owner.ts", named: ["issueInstalledRuntimeReleasePerformancePolicyPortV1", "issuePreReleaseRuntimeReleasePerformancePolicyPortV1"] },
   { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/internal/performance-deployment-owner.ts", specifier: "./internal/performance-deployment-owner.ts", named: ["openInstalledRuntimeReleasePerformanceDeploymentPortV1"] },
-  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", specifier: "./internal/production-terminal-observation-owner.ts", named: ["RuntimeReleaseTerminalObservationInputV1", "issueRuntimeReleaseTerminalObservationPortsV1"] },
+  { from: "packages/runtime-release-authority/src/production-runtime-owner.ts", to: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", specifier: "./internal/production-terminal-observation-owner.ts", named: ["issueRuntimeReleaseTerminalObservationPortsV1"] },
   { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: FULL_FAMILY_COLLECTOR_PORT_PATH, specifier: "../../../../acceptance/collectors/src/production-full-family-port.ts", named: ["issueProductionFullFamilyCollectorPortV1"] },
   { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: SIX_STEP_COLLECTOR_PORT_PATH, specifier: "../../../../acceptance/collectors/src/production-six-step-port.ts", named: ["issueProductionSixStepCollectorPortV1"] },
   { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: TERMINAL_PHASE_COLLECTOR_PORT_PATH, specifier: "../../../../acceptance/collectors/src/production-terminal-phase-port.ts", named: ["issueProductionTerminalPhaseCollectorPortV1"] },
   { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: TERMINAL_PHASE_LOCATOR_INDEX_PATH, specifier: "../../../../acceptance/collectors/src/terminal-phase-locator-index.ts", named: ["ProductionTerminalPhaseLocatorIndexV1"] },
-  { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: RELEASE_OWNED_OBSERVER_STORE_PATH, specifier: "../../../../acceptance/collectors/src/internal/release-owned-observer-store.ts", named: ["readReleaseOwnedObserverStoreV1"] },
-  { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: RUNTIME_RELEASE_OBSERVER_STORE_OWNER_PATH, specifier: "./observer-store-owner.ts", named: ["RuntimeReleaseObserverStoreServiceV1"] },
+  { from: "packages/runtime-release-authority/src/internal/production-terminal-observation-owner.ts", to: RUNTIME_RELEASE_OBSERVER_STORE_OWNER_PATH, specifier: "./observer-store-owner.ts", named: ["assertRuntimeReleaseObserverStoreServiceOwnedByAuthorityV1", "readRuntimeReleaseObserverSinkV1"] },
 ] as const);
 
 /** Receipt, Stage 2, and release-binding authority are deliberately narrower
@@ -888,6 +993,7 @@ const PRE_RELEASE_BOUNDARY_AUTHORITY_IMPORTS = Object.freeze([
   { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: PRE_RELEASE_RUNTIME_RECEIPT_STATE_PATH, specifier: "./internal/pre-release-runtime-receipt-state.ts", named: ["readPreReleaseAdvisoryMaterialV1"] },
   { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: PRE_RELEASE_STAGING_PUBLIC_PATH, specifier: "./pre-release-staging.ts", named: ["readPreReleaseAdvisoryMaterialCapabilityV1"] },
   { from: COLLECTOR_PRODUCTION_CLOSURE_OBSERVER_PATH, to: PRE_RELEASE_STAGING_PUBLIC_PATH, specifier: "../../../tools/runtime-release-packager/src/pre-release-staging.ts", named: ["readPreReleaseAdvisoryMaterialCapabilityV1"] },
+  { from: COLLECTOR_RUNTIME_BOUNDARY_OBSERVERS_PATH, to: PRE_RELEASE_STAGING_PUBLIC_PATH, specifier: "../../../tools/runtime-release-packager/src/pre-release-staging.ts", named: ["readPreReleaseAdvisoryMaterialCapabilityV1"] },
   { from: COLLECTOR_PREDICATE_MATERIAL_SOURCE_PATH, to: ARTIFACT_LINEAGE_STAGE_TWO_GIT_OWNER_PATH, specifier: "./internal/artifact-lineage-stage-two-git-owner.ts", named: ["observeArtifactLineageStageTwoGitEvidenceV1"] },
   { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: PERFORMANCE_MATERIAL_OBSERVER_OWNER_PATH, specifier: "../../../acceptance/collectors/src/internal/performance-material-observer-owner.ts", named: ["readProductionPerformanceMaterialObserverReleaseBindingV1"] },
   { from: PRODUCTION_RELEASE_WORKFLOW_PATH, to: TERMINAL_SELECTION_MATERIAL_OWNER_PATH, specifier: "../../../acceptance/collectors/src/internal/terminal-selection-material-owner.ts", named: ["readProductionTerminalSelectionObserverReleaseBindingV1"] },
@@ -896,8 +1002,10 @@ const PRE_RELEASE_BOUNDARY_AUTHORITY_IMPORTS = Object.freeze([
   { from: FINAL_PRE_RELEASE_RUNNER_PATH, to: SEARCHER_RUNTIME_ACCEPTANCE_EVIDENCE_PATH, specifier: "../../../apps/searcher-runtime/src/runtime-acceptance-evidence.ts", named: ["sealPreReleaseRestartTerminalV1"] },
   { from: SEARCHER_RUNTIME_ACCEPTANCE_EVIDENCE_PATH, to: PRE_RELEASE_AUTHORIZATION_LEDGER_PATH, specifier: "../../../tools/runtime-release-packager/src/internal/pre-release-authorization-ledger.ts", named: ["readFixedPreReleaseAuthorizationClaimV1"] },
   { from: FINAL_PRE_RELEASE_RUNNER_PATH, to: PRE_RELEASE_B_QUALIFICATION_STATE_PATH, specifier: "./internal/pre-release-b-qualification-state.ts", named: ["issueFrozenPreReleaseBQualificationCapabilityV1"] },
+  { from: PRE_RELEASE_TERMINAL_SNAPSHOT_OWNER_PATH, to: PRE_RELEASE_B_QUALIFICATION_STATE_PATH, specifier: "./pre-release-b-qualification-state.ts", named: ["readFrozenPreReleaseBQualificationCapabilityV1"] },
   { from: FINAL_PRE_RELEASE_RUNNER_PATH, to: PRE_RELEASE_STAGING_OWNER_PATH, specifier: "./internal/pre-release-staging-owner.ts", named: ["importFrozenPreReleaseBRuntimeV1", "issueImportedFrozenPreReleaseBAdvisoryMaterialV1", "readImportedFrozenPreReleaseBTerminalPhysicalObservationV1"] },
   { from: PRE_RELEASE_STAGING_OWNER_PATH, to: PRE_RELEASE_B_QUALIFICATION_STATE_PATH, specifier: "./pre-release-b-qualification-state.ts", named: ["readFrozenPreReleaseBQualificationCapabilityV1"] },
+  { from: PRE_RELEASE_STAGING_OWNER_PATH, to: PRE_RELEASE_RUNTIME_RECEIPT_STATE_PATH, specifier: "./pre-release-runtime-receipt-state.ts", named: ["issuePreReleaseAdvisoryMaterialCapabilityV1"] },
   { from: PRE_RELEASE_TERMINAL_SNAPSHOT_OWNER_PATH, to: PRE_RELEASE_TERMINAL_PHYSICAL_STATE_PATH, specifier: "./pre-release-b-terminal-physical-observation-state.ts", named: ["registerPreReleaseBTerminalPhysicalObservationV1"] },
   { from: PRE_RELEASE_TERMINAL_PHYSICAL_OBSERVER_PATH, to: PRE_RELEASE_TERMINAL_PHYSICAL_STATE_PATH, specifier: "./internal/pre-release-b-terminal-physical-observation-state.ts", named: ["readRegisteredPreReleaseBTerminalPhysicalObservationV1"] },
 ] as const);
@@ -941,6 +1049,7 @@ const PRE_RELEASE_SCHEMA_AUTHORITY_IMPORTS = Object.freeze([
   { from: FINAL_PRE_RELEASE_RUNNER_PATH, to: PRE_RELEASE_STAGING_SCHEMA_PATH, specifier: "./internal/pre-release-staging-schema.ts", imported: ["PRE_RELEASE_STAGING_ARTIFACT_NAMES_V1", "PRE_RELEASE_STAGING_LAYOUT_V1", "decodePreReleaseLaunchAuthorizationV1", "decodePreReleaseStagingManifestV1", "hashPreReleaseStagingArtifactSetV1", "preReleaseStagingArtifactPathV1", "verifyPreReleaseLaunchAuthorizationSignatureV1"], exported: [] },
   { from: SEARCHER_RUNTIME_ACCEPTANCE_EVIDENCE_PATH, to: PRE_RELEASE_STAGING_SCHEMA_PATH, specifier: "../../../tools/runtime-release-packager/src/internal/pre-release-staging-schema.ts", imported: ["PRE_RELEASE_STAGING_LAYOUT_V1", "decodePreReleaseLaunchAuthorizationV1", "decodePreReleaseStagingManifestV1"], exported: [] },
   { from: COLLECTOR_PRODUCTION_CLOSURE_OBSERVER_PATH, to: PRE_RELEASE_STAGING_SCHEMA_PATH, specifier: "../../../tools/runtime-release-packager/src/internal/pre-release-staging-schema.ts", imported: ["PRE_RELEASE_SYSTEMD_UNIT_V1", "decodePreReleaseLaunchAuthorizationV1", "decodePreReleaseStagingManifestV1", "hashPreReleaseStagingArtifactSetV1"], exported: [] },
+  { from: EXTERNAL_RELEASE_OWNER_PATH, to: PRE_RELEASE_STAGING_SCHEMA_PATH, specifier: "./internal/pre-release-staging-schema.ts", imported: ["PRE_RELEASE_STAGING_ARTIFACT_NAMES_V1", "PRE_RELEASE_STAGING_LAYOUT_V1", "decodePreReleaseStagingManifestV1", "hashPreReleaseStagingArtifactSetV1"], exported: [] },
 ] as const);
 for (const edge of PRE_RELEASE_SCHEMA_AUTHORITY_IMPORTS) {
   PRE_RELEASE_BOUNDARY_OWNER_EDGES.add(`${edge.from}\u2192${edge.to}`);
@@ -1101,6 +1210,12 @@ const FAMILY_CENTRAL_IMPORT_ALLOWLIST = Object.freeze([
   "packages/credit/src/index.ts",
 ]);
 
+// Family-independent asset identity is a pure value contract. Keep this set
+// exact so future asset-ref internals cannot become a Family escape hatch.
+const FAMILY_CENTRAL_EXACT_IMPORTS = new Set([
+  "packages/asset-ref/src/index.ts",
+]);
+
 // Strategy declarations are even narrower than Family code: they may depend
 // on neutral authoring/runtime-ref contracts only. Keep this exact-path
 // allowlist default-deny so a strategy cannot quietly acquire planner,
@@ -1167,6 +1282,10 @@ const SENSITIVE_PUBLIC_RUNTIME_IMPORTS = new Map<string, ReadonlySet<string>>([
   ])],
 ]);
 
+/** Same-package authority internals remain sensitive by module ownership,
+ * never by guessing whether an exported function name sounds constructor-like. */
+const INTERNAL_AUTHORITY_MODULE_PATH = /\/src\/internal\/[^/]*(?:authority|issuer|owner|state)[^/]*\.(?:ts|js)$/;
+
 /** Exact production process adapters own the two approved external
  * executables. Other production code remains forbidden from spawning. */
 const CHILD_PROCESS_RUNTIME_OWNER_PATHS = new Set([
@@ -1232,9 +1351,84 @@ const GATE_CORE_AUTHORITY_CONSTRUCTOR_PATHS = new Set([
   GATE_CORE_PREDICATE_DOMAIN_MATERIAL_ISSUER_PATH,
 ]);
 
+/**
+ * Runtime authority operations that intentionally cross an owner boundary.
+ * This is not a snapshot of the compiler graph: it contains only the narrow
+ * constructor/issuer/consumer edges that would otherwise be rejected below.
+ * Every row binds the resolved target, source spelling, and complete runtime
+ * import/re-export set so an approved pair cannot acquire more authority by
+ * adding another named import.
+ */
+const EXACT_AUTHORITY_CONSTRUCTOR_IMPORT_ROWS = Object.freeze([
+  ["acceptance/collectors/src/production-closure-observer.ts", "acceptance/collectors/src/internal/release-owned-observer-store.ts", "./internal/release-owned-observer-store.ts", ["readReleaseOwnedObserverStoreV1"], []],
+  ["acceptance/collectors/src/production-performance-material-observer.ts", "acceptance/collectors/src/internal/performance-material-observer-owner.ts", "./internal/performance-material-observer-owner.ts", ["issueProductionPerformanceMaterialObserverOwnerPortV1"], []],
+  ["acceptance/collectors/src/production-runtime-boundary-observers.ts", "acceptance/collectors/src/internal/runtime-boundary-material-owner.ts", "./internal/runtime-boundary-material-owner.ts", ["issueProductionLegacyAuthorityMaterialObserverOwnerPortV1", "issueProductionRuntimeRestartMaterialObserverOwnerPortV1", "issueProductionSourceClosureMaterialObserverOwnerPortV1", "productionRuntimeBoundaryMaterialEvidenceRootV1"], []],
+  ["acceptance/collectors/src/production-terminal-selection-observer.ts", "acceptance/collectors/src/internal/terminal-selection-material-owner.ts", "./internal/terminal-selection-material-owner.ts", ["issueProductionTerminalSelectionMaterialCapabilityV1", "registerProductionTerminalSelectionObserverPortV1"], ["assertIssuedProductionTerminalSelectionObserverPortV1", "readProductionTerminalSelectionMaterialV1"]],
+  ["apps/searcher-runtime/src/internal/reth-source.ts", "packages/producer/src/internal/reth-intake.ts", "../../../../packages/producer/src/internal/reth-intake.ts", ["createRethProducerIngressPortV1"], []],
+  ["apps/searcher-runtime/src/internal/reth-source.ts", "packages/producer/src/internal/owners.ts", "../../../../packages/producer/src/internal/owners.ts", ["issueProducerCurrentSourceHeadPortV1"], []],
+  ["apps/searcher-runtime/src/native-runtime-lifecycle-evidence.ts", "packages/checkpoint/src/index.ts", "../../../packages/checkpoint/src/index.ts", ["assertIssuedCheckpointStore"], []],
+  ["apps/searcher-runtime/src/native-runtime-lifecycle-evidence.ts", "packages/durable-store/src/index.ts", "../../../packages/durable-store/src/index.ts", ["createSqliteDurableStore"], []],
+  ["apps/searcher-runtime/src/production-evidence.ts", "packages/durable-store/src/index.ts", "../../../packages/durable-store/src/index.ts", ["createSqliteDurableStore", "readDurableAppendCapabilityV1"], []],
+  ["apps/searcher-runtime/src/production-evidence.ts", "packages/producer/src/internal/owners.ts", "../../../packages/producer/src/internal/owners.ts", ["issueProducerPerformancePortV1", "issueProducerTerminalPortV1", "readIssuedProducerLaneCandidateTerminalObservationsV1", "readIssuedProducerLaneCoarseTimingV1", "readIssuedProducerLanePlannerEnumerationV1", "readIssuedProducerLaneSchedulerResourceJoinV1", "readIssuedProducerLaneSearchTerminalCapabilityV1", "readIssuedProducerLaneSixStepTraceV1", "readIssuedProducerNoInputLaneDenominatorV1"], []],
+  ["apps/searcher-runtime/src/release-runtime-owner.ts", "packages/durable-store/src/index.ts", "../../../packages/durable-store/src/index.ts", ["createSqliteDurableStore"], []],
+  ["apps/searcher-runtime/src/release-runtime-owner.ts", "apps/searcher-runtime/src/internal/reth-source.ts", "./internal/reth-source.ts", ["createRethSearcherRuntimeSourceV1"], []],
+  ["apps/searcher-runtime/src/release-runtime-owner.ts", "apps/searcher-runtime/src/internal/application-owner.ts", "./internal/application-owner.ts", ["issueSearcherRuntimeApplicationOwnerV1"], []],
+  ["apps/searcher-runtime/src/runtime-acceptance-evidence.ts", "packages/checkpoint/src/index.ts", "../../../packages/checkpoint/src/index.ts", ["assertIssuedCheckpointStore"], []],
+  ["apps/searcher-runtime/src/runtime-acceptance-evidence.ts", "packages/durable-store/src/index.ts", "../../../packages/durable-store/src/index.ts", ["createSqliteDurableStore"], []],
+  ["packages/coarse-economics/src/internal/owner.ts", "packages/coarse-economics/src/internal/state.ts", "./state.ts", ["registerCoarseProjectionServiceV1"], []],
+  ["packages/coarse-economics/src/internal/search-owner.ts", "packages/coarse-economics/src/internal/state.ts", "./state.ts", ["readCoarseRouteBindingV1", "registerCoarseEnumerationBindingV1", "registerCoarseRouteBindingV1"], []],
+  ["packages/economics-safety/src/internal/owner.ts", "packages/economics-safety/src/internal/state.ts", "./state.ts", ["registerEconomicSafetyFinalizationServiceV1"], []],
+  ["packages/evidence-emitter/src/index.ts", "packages/evidence-emitter/src/internal/six-step-production-owner.ts", "./internal/six-step-production-owner.ts", [], ["decodeProductionSixStepArtifactMaterialV1", "productionSixStepBoundaryKeyV1", "readProductionSixStepArtifactMaterialV1", "readProductionSixStepWitnessV1"]],
+  ["packages/family-composition/src/index.ts", "packages/family-composition/src/internal/coarse-runtime-owner.ts", "./internal/coarse-runtime-owner.ts", ["registerGeneratedFamilyCoarseProjectionInstallerV1", "registerGeneratedFamilyCoarseProjectionResultV1"], []],
+  ["packages/full-graph-coarse-sweep/src/internal/sweep-owner.ts", "packages/full-graph-coarse-sweep/src/internal/invocation-owner.ts", "./invocation-owner.ts", ["consumeFullGraphCoarseSweepInvocationCapabilityV1"], []],
+  ["packages/full-graph-coarse-sweep/src/internal/sweep-owner.ts", "packages/full-graph-coarse-sweep/src/internal/snapshot-claim-owner.ts", "./snapshot-claim-owner.ts", ["abortFullGraphSweepSnapshotV1", "claimFullGraphSweepSnapshotV1", "commitFullGraphSweepSnapshotV1"], []],
+  ["packages/performance-collector/src/index.ts", "packages/performance-collector/src/internal/head-terminal-evidence.ts", "./internal/head-terminal-evidence.ts", ["abortPerformanceHeadTerminalEvidenceClaim", "claimPerformanceHeadTerminalEvidence", "commitPerformanceHeadTerminalEvidenceClaim", "readClaimedPerformanceHeadTerminalEvidence"], []],
+  ["packages/producer/src/index.ts", "packages/producer/src/internal/reth-intake.ts", "./internal/reth-intake.ts", [], ["RethProducerIngressSourceV1", "createRethProducerIngressPortV1"]],
+  ["packages/producer/src/internal/reth-intake.ts", "packages/producer/src/internal/owners.ts", "./owners.ts", ["issueProducerIngressPortV1"], []],
+  ["packages/producer/src/internal/reth-intake.ts", "packages/producer/src/internal/source-brand.ts", "./source-brand.ts", ["brandProducerIngressSource"], []],
+  ["packages/runtime-release-authority/src/index.ts", "packages/runtime-release-authority/src/internal/performance-deployment-owner.ts", "./internal/performance-deployment-owner.ts", [], ["openInstalledRuntimeReleasePerformanceDeploymentPortV1"]],
+  ["packages/runtime-release-authority/src/index.ts", "packages/runtime-release-authority/src/internal/performance-policy-owner.ts", "./internal/performance-policy-owner.ts", [], ["issueInstalledRuntimeReleasePerformancePolicyPortV1"]],
+  ["packages/runtime-release-authority/src/internal/bootstrap.ts", "packages/runtime-release-authority/src/internal/nomination-qualification-owner.ts", "./nomination-qualification-owner.ts", ["issueRuntimeReleaseNominationQualificationVerifier"], []],
+  ["packages/runtime-release-authority/src/internal/bootstrap.ts", "packages/final-sim/src/internal/final-simulation-owner.ts", "../../../../packages/final-sim/src/internal/final-simulation-owner.ts", ["issueQualifiedFinalSimulationPortFactoryV1"], []],
+  ["packages/runtime-release-authority/src/internal/bootstrap.ts", "packages/runtime-release-authority/src/internal/strategy-runtime-owner.ts", "./strategy-runtime-owner.ts", ["issueRuntimeReleaseStrategyRuntimeService"], []],
+  ["packages/runtime-release-authority/src/internal/bootstrap.ts", "packages/runtime-release-authority/src/internal/economic-safety-owner.ts", "./economic-safety-owner.ts", ["issueRuntimeReleaseEconomicSafetyServiceV1"], []],
+  ["packages/runtime-release-authority/src/internal/deployment-composition-owner.ts", "specs/candidate-partition-authority/src/internal/issuer-consumer.ts", "../../../../specs/candidate-partition-authority/src/internal/issuer-consumer.ts", ["assertIssuedCandidatePartitionProofIssuer"], []],
+  ["packages/runtime-release-authority/src/internal/deployment-composition-owner.ts", "packages/work-plane/src/internal/family-execution-port.ts", "../../../../packages/work-plane/src/internal/family-execution-port.ts", ["assertQualifiedPhysicalExecutionSchedulerRuntime"], []],
+  ["packages/runtime-release-authority/src/internal/deployment-composition-owner.ts", "packages/runtime-release-authority/src/internal/attestation-proof-owner.ts", "./attestation-proof-owner.ts", ["issueDeploymentAttestationProofPort"], []],
+  ["packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts", "packages/scheduler/src/internal/authority-owner.ts", "../../../scheduler/src/internal/authority-owner.ts", ["issueQualifiedExecutorAuthorityIssuer"], []],
+  ["packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts", "packages/scheduler/src/internal/shared-runtime-owner.ts", "../../../scheduler/src/internal/shared-runtime-owner.ts", ["issueQualifiedSharedSchedulerRuntimePort", "readQualifiedSharedSchedulerRuntimePort"], []],
+  ["packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts", "runtime/revm-workers/src/internal/authority.ts", "../../../../runtime/revm-workers/src/internal/authority.ts", ["issueRevmWorkerDeploymentPort", "readIssuedRevmWorkerDeploymentPort"], []],
+  ["packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts", "packages/runtime-release-authority/src/internal/external-proof-owner.ts", "./external-proof-owner.ts", ["decodeExternalProofSignerRequestV1", "issueExternalProofPortsV1"], []],
+  ["packages/runtime-release-authority/src/internal/economic-safety-owner.ts", "packages/economics-safety/src/internal/owner.ts", "../../../economics-safety/src/internal/owner.ts", ["issueEconomicSafetyFinalizationServiceV1"], []],
+  ["packages/runtime-release-authority/src/internal/external-proof-owner.ts", "packages/attestation/src/internal/identity-proof.ts", "../../../attestation/src/internal/identity-proof.ts", ["identityProofSigningBytes", "issueIdentityIssuerProof", "validateIdentityIssuerProof"], []],
+  ["packages/runtime-release-authority/src/internal/external-proof-owner.ts", "packages/attestation/src/internal/outcome-proof.ts", "../../../attestation/src/internal/outcome-proof.ts", ["issueOutcomeIssuerProof", "outcomeProofSigningBytes", "validateOutcomeIssuerProof"], []],
+  ["packages/runtime-release-authority/src/internal/external-proof-owner.ts", "specs/candidate-partition-authority/src/internal/issuer-owner.ts", "../../../../specs/candidate-partition-authority/src/internal/issuer-owner.ts", ["issueCandidatePartitionProofIssuerPort"], []],
+  ["packages/runtime-release-authority/src/internal/external-proof-owner.ts", "packages/runtime-release-authority/src/internal/attestation-proof-owner.ts", "./attestation-proof-owner.ts", ["issueDeploymentAttestationProofPort"], []],
+  ["packages/runtime-release-authority/src/internal/family-runtime-owner.ts", "packages/family-composition/src/internal/coarse-runtime-owner.ts", "../../../../packages/family-composition/src/internal/coarse-runtime-owner.ts", ["installGeneratedFamilyCoarseProjectionOwnerV1", "readGeneratedFamilyCoarseProjectionCapabilityV1"], []],
+  ["packages/runtime-release-authority/src/internal/family-runtime-owner.ts", "packages/coarse-economics/src/internal/owner.ts", "../../../../packages/coarse-economics/src/internal/owner.ts", ["issueCoarseProjectionServiceV1"], []],
+  ["packages/runtime-release-authority/src/internal/family-runtime-owner.ts", "packages/coarse-economics/src/internal/qualification-owner.ts", "../../../../packages/coarse-economics/src/internal/qualification-owner.ts", ["issueQualifiedCoarseProjectionOwnerCapabilityV1"], []],
+  ["packages/scheduler/src/index.ts", "packages/scheduler/src/internal/performance-state.ts", "./internal/performance-state.ts", ["issueSchedulerWorkCompletionHandle", "markSchedulerPermitIssued", "markSchedulerPermitReleased", "markSchedulerWorkAttempt", "observeSchedulerPerformanceState", "recordSchedulerWorkCompletion", "registerSchedulerPerformanceJournal", "settleSchedulerWorkCompletionHandle"], ["validateSchedulerPerformanceRangeFactValue", "validateSchedulerWorkCompletionFactValue"]],
+  ["packages/scheduler/src/internal/shared-runtime-owner.ts", "packages/scheduler/src/index.ts", "../index.ts", ["WorkScheduler"], []],
+  ["packages/scheduler/src/internal/shared-runtime-owner.ts", "packages/scheduler/src/internal/performance-state.ts", "./performance-state.ts", ["acknowledgeSchedulerPerformanceRange", "bindSchedulerPerformanceJournal", "issueSchedulerPerformanceReaderPort", "openSchedulerPerformanceCursor", "readSchedulerPerformanceRange", "readSchedulerWorkCompletionCapability", "readSchedulerWorkCompletionHandle", "sealSchedulerPerformanceRange"], []],
+  ["packages/search-pipeline/src/index.ts", "packages/search-pipeline/src/internal/scheduler-resource-join.ts", "./internal/scheduler-resource-join.ts", ["issueSearchSchedulerResourceJoin"], []],
+  ["packages/six-step-process-evidence/src/internal/complete-append-owner.ts", "packages/durable-store/src/index.ts", "../../../durable-store/src/index.ts", ["readDurableAppendCapabilityV1"], []],
+  ["packages/work-plane/src/internal/caller-authority-state.ts", "packages/scheduler/src/index.ts", "../../../../packages/scheduler/src/index.ts", ["WorkScheduler"], []],
+] as const);
+
+const EXACT_AUTHORITY_CONSTRUCTOR_IMPORTS: ReadonlyMap<
+  string,
+  readonly [string, string, string, readonly string[], readonly string[]]
+> = new Map(
+  EXACT_AUTHORITY_CONSTRUCTOR_IMPORT_ROWS.map((row) => [`${row[0]}\u2192${row[1]}`, row] as const),
+);
+const EXACT_AUTHORITY_CONSTRUCTOR_TARGET_PATHS: ReadonlySet<string> = new Set(
+  EXACT_AUTHORITY_CONSTRUCTOR_IMPORT_ROWS.map((row) => row[1]),
+);
+
 // Only the declaring owner may import the current internal constructor.  This
 // is an exact edge manifest, not a package-wide or wildcard exception.
 const AUTHORITY_OWNER_EDGES = new Set([
+  ...EXACT_AUTHORITY_CONSTRUCTOR_IMPORTS.keys(),
   ...TERMINAL_PHASE_INTERNAL_OWNER_EDGES,
   `${RUNTIME_RELEASE_SIX_STEP_PRODUCTION_OWNER_PATH}\u2192${CHECKPOINT_PUBLIC_PATH}`,
   ...PREDICATE_MATERIAL_SOURCE_OWNER_EDGES,
@@ -1244,14 +1438,13 @@ const AUTHORITY_OWNER_EDGES = new Set([
   ...CATALOG_NOMINATION_REUSE_OWNER_EDGES,
   ...ARTIFACT_LINEAGE_STAGE_ONE_OWNER_EDGES,
   `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_COMMON_ENVELOPE_ISSUER_PATH}`,
+  `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`,
   `${GATE_CORE_COMMON_ENVELOPE_ISSUER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`,
   `${GATE_CORE_RELEASE_MATERIAL_ASSEMBLER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`,
   `${RELEASE_GENERIC_CORE_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`,
   `${COLLECTOR_MATERIAL_PROVIDER_SHARED_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_ISSUER_PATH}`,
-  `${COLLECTOR_MATERIAL_PROVIDER_SHARED_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`,
   `${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_ISSUER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`,
   `${GATE_CORE_RELEASE_MATERIAL_ASSEMBLER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`,
-  `${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`,
   `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`,
   `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${RELEASE_RUNTIME_PATH}`,
   "packages/request-program/src/index.ts\u2192packages/request-program/src/internal/issuer-state.ts",
@@ -1469,6 +1662,10 @@ const CENTRAL_RUNTIME_OWNER_EDGES = new Set([
   "packages/final-sim/src/index.ts\u2192runtime/revm-workers/src/internal/authority.ts",
   "packages/final-sim/src/internal/state-snapshot.ts\u2192runtime/revm-workers/src/lifecycle.ts",
   "packages/runtime-release-authority/src/internal/revm-worker-owner.ts\u2192runtime/revm-workers/src/protocol.ts",
+  "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192runtime/revm-workers/src/index.ts",
+  "packages/runtime-release-authority/src/internal/deployment-composition-owner.ts\u2192runtime/revm-workers/src/internal/authority.ts",
+  "packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts\u2192runtime/revm-workers/src/node-worker-factory.ts",
+  "packages/runtime-release-authority/src/internal/deployment-runtime-owner.ts\u2192runtime/revm-workers/src/internal/authority.ts",
   `${PROCESS_RESOURCE_OBSERVER_PATH}\u2192${REVM_WORKER_RESOURCE_OBSERVATION_PATH}`,
 ]);
 
@@ -1505,14 +1702,13 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
     `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_COMMON_ENVELOPE_ISSUER_PATH}`,
     ["issueCommonEnvelopeAuthorityPortV1"],
   ],
+  [`${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`, []],
   [`${GATE_CORE_COMMON_ENVELOPE_ISSUER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`, ["registerCommonEnvelopeAuthorityPortV1"]],
   [`${GATE_CORE_RELEASE_MATERIAL_ASSEMBLER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`, ["assertCommonEnvelopeAuthorityPortV1", "invokeCommonEnvelopeAuthorityPortV1"]],
   [`${RELEASE_GENERIC_CORE_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`, ["assertCommonEnvelopeAuthorityPortV1"]],
   [`${COLLECTOR_MATERIAL_PROVIDER_SHARED_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_ISSUER_PATH}`, ["issuePredicateDomainMaterialCapabilityV1"]],
-  [`${COLLECTOR_MATERIAL_PROVIDER_SHARED_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`, []],
   [`${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_ISSUER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`, ["registerPredicateDomainMaterialCapabilityV1"]],
   [`${GATE_CORE_RELEASE_MATERIAL_ASSEMBLER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`, ["readPredicateDomainMaterialCapabilityV1"]],
-  [`${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`, []],
   [`${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`, []],
   [
     `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${RELEASE_RUNTIME_PATH}`,
@@ -1639,7 +1835,7 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
   ],
   [
     `${RUNTIME_RELEASE_BOOTSTRAP_PATH}\u2192${FAMILY_RUNTIME_COMPOSITION_PATH}`,
-    ["createReleaseFamilyRuntimeComposition"],
+    ["createReleaseFamilyRuntimeComposition", "createReleaseStrategyRuntimeComposition"],
   ],
   [
     "packages/runtime-release-authority/src/internal/family-runtime-owner.ts\u2192packages/family-composition/src/internal/generated-runtime-composition.ts",
@@ -1683,7 +1879,7 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
   ],
   [
     "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/attestation/src/internal/composition.ts",
-    ["createAttestationService"],
+    ["createAttestationService", "createFrameworkFailureRuntime", "createRejectionExecutorAuthorityIssuer", "createRejectionFactRuntime"],
   ],
   [
     "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/checkpoint/src/candidate-partition.ts",
@@ -1695,7 +1891,7 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
   ],
   [
     "packages/runtime-release-authority/src/internal/bootstrap.ts\u2192packages/work-plane/src/internal/family-execution-port.ts",
-    ["createSchedulerOwnedFamilyExecutionPort"],
+    ["assertQualifiedPhysicalExecutionSchedulerRuntime", "createSchedulerOwnedFamilyExecutionPort"],
   ],
   [
     `${RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH}\u2192${FAMILY_EXECUTION_OWNER_PATH}`,
@@ -1796,6 +1992,14 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
   ["packages/attestation/src/internal/engine.ts\u2192packages/attestation/src/internal/identity-proof.ts", ["validateIdentityIssuerProof"]],
   ["packages/attestation/src/internal/validation-authority-issuer.ts\u2192packages/attestation/src/internal/identity-proof.ts", ["validateIdentityIssuerProof"]],
   ["packages/attestation/src/internal/validation-authority-issuer.ts\u2192packages/attestation/src/internal/outcome-proof.ts", ["validateOutcomeIssuerProof"]],
+  ["packages/checkpoint/src/index.ts\u2192packages/attestation/src/internal/validation-authority-verifier.ts", ["assertAttestationValidationAuthority"]],
+  ["packages/checkpoint/src/index.ts\u2192packages/attestation/src/internal/validation-authority-rehydrator.ts", [
+    "rehydrateIdentityResumeCapabilityForCheckpoint",
+    "rehydrateOutcomeResumeCapabilityForCheckpoint",
+    "rehydrateVerifiedMemoReuseCapabilityForCheckpoint",
+  ]],
+  ["packages/attestation/src/index.ts\u2192packages/attestation/src/internal/identity-proof.ts", ["validateIdentityIssuerProof"]],
+  ["packages/attestation/src/index.ts\u2192packages/attestation/src/internal/outcome-proof.ts", ["validateOutcomeIssuerProof"]],
   ["packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts\u2192packages/scheduler/src/index.ts", ["assertQualifiedExecutorRegistry"]],
   ["packages/runtime-release-authority/src/internal/revm-worker-owner.ts\u2192packages/runtime-release-authority/src/internal/scheduler-authority-owner.ts", ["assertRuntimeReleaseQualifiedExecutorAuthorityIssuerBoundTo"]],
   ["packages/runtime-release-authority/src/internal/revm-worker-owner.ts\u2192packages/runtime-release-authority/src/internal/state.ts", ["assertActiveRuntimeReleaseAuthorityState"]],
@@ -1805,6 +2009,7 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
   [`${RUNTIME_RELEASE_BOOTSTRAP_PATH}\u2192${RUNTIME_RELEASE_STARTUP_OWNER_PATH}`, ["issueRuntimeReleaseSearcherStartupService"]],
   [`${RUNTIME_RELEASE_BOOTSTRAP_PATH}\u2192${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_OWNER_PATH}`, ["issueRuntimeReleaseFullFamilyTerminalBindingServiceV1"]],
   [`${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_CONSUMER_PATH}\u2192${RUNTIME_RELEASE_FULL_FAMILY_TERMINAL_OWNER_PATH}`, [
+    "assertIssuedRuntimeReleaseFullFamilyTerminalBindingServiceV1",
     "readRuntimeReleaseFullFamilyTerminalBindingCapabilityV1",
     "readRuntimeReleaseNativeFullFamilyAuditCapabilityV1",
     "readRuntimeReleaseNativeFullFamilyAuditChunkBytesCapabilityV1",
@@ -1851,8 +2056,8 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
   [`${RUNTIME_RELEASE_BOOTSTRAP_PATH}\u2192${RUNTIME_RELEASE_FULL_GRAPH_SWEEP_OWNER_PATH}`, ["issueRuntimeReleaseFullGraphCoarseSweepServiceV1"]],
   [`${RUNTIME_RELEASE_FULL_GRAPH_SWEEP_OWNER_PATH}\u2192${RUNTIME_RELEASE_STATE_PATH}`, ["assertActiveRuntimeReleaseAuthorityState"]],
   [`${SEARCHER_APPLICATION_OWNER_PATH}\u2192${RUNTIME_RELEASE_FULL_GRAPH_SWEEP_CONSUMER_PATH}`, ["assertIssuedRuntimeReleaseFullGraphCoarseSweepServiceV1"]],
-  [`packages/runtime-release-authority/src/performance-runtime-consumer.ts\u2192${RUNTIME_RELEASE_PERFORMANCE_OWNER_PATH}`, ["assertIssuedRuntimeReleasePerformanceRuntimeService"]],
-  [`packages/runtime-release-authority/src/searcher-startup-consumer.ts\u2192${RUNTIME_RELEASE_STARTUP_OWNER_PATH}`, ["assertIssuedRuntimeReleaseSearcherStartupService"]],
+  [`packages/runtime-release-authority/src/performance-runtime-consumer.ts\u2192${RUNTIME_RELEASE_PERFORMANCE_OWNER_PATH}`, []],
+  [`packages/runtime-release-authority/src/searcher-startup-consumer.ts\u2192${RUNTIME_RELEASE_STARTUP_OWNER_PATH}`, []],
   [`${RUNTIME_RELEASE_PERFORMANCE_OWNER_PATH}\u2192${RUNTIME_RELEASE_STATE_PATH}`, ["assertActiveRuntimeReleaseAuthorityState"]],
   [`${RUNTIME_RELEASE_PERFORMANCE_OWNER_PATH}\u2192${SCHEDULER_SHARED_RUNTIME_OWNER_PATH}`, [
     "acknowledgeQualifiedSchedulerPerformanceRange",
@@ -1869,6 +2074,7 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
     "claimProcessResourceObservation",
     "commitProcessResourceObservationClaim",
     "ProcessResourceObserver",
+    "ProcessResourceObservationSamplePendingError",
     "readClaimedProcessResourceObservation",
   ]],
   [`${RUNTIME_RELEASE_PERFORMANCE_OWNER_PATH}\u2192packages/producer/src/index.ts`, [
@@ -1889,10 +2095,28 @@ const AUTHORITY_NAMED_IMPORTS = new Map<string, readonly string[]>([
   ["packages/runtime-release-authority/src/internal/revm-worker-owner.ts\u2192runtime/revm-workers/src/protocol.ts", []],
 ]);
 
+const AUTHORITY_NAMED_EXPORTS = new Map<string, readonly string[]>([
+  [`packages/runtime-release-authority/src/performance-runtime-consumer.ts\u2192${RUNTIME_RELEASE_PERFORMANCE_OWNER_PATH}`, [
+    "RuntimeReleasePerformanceHeadSamplePendingError",
+    "assertIssuedRuntimeReleasePerformanceRuntimeService",
+  ]],
+  [`packages/runtime-release-authority/src/searcher-startup-consumer.ts\u2192${RUNTIME_RELEASE_STARTUP_OWNER_PATH}`, [
+    "assertIssuedRuntimeReleaseSearcherStartupService",
+  ]],
+]);
+
 /** Exact source/runtime owner module locators.  Resolved target identity is
  * necessary but not sufficient: an alternate path or alias must not become a
  * second composition seam for these process-local capabilities. */
 const AUTHORITY_MODULE_SPECIFIERS = new Map<string, string>([
+  ...EXACT_AUTHORITY_CONSTRUCTOR_IMPORT_ROWS.map((row) => [
+    `${row[0]}\u2192${row[1]}`,
+    row[2],
+  ] as const),
+  ["packages/checkpoint/src/index.ts\u2192packages/attestation/src/internal/validation-authority-verifier.ts", "../../attestation/src/internal/validation-authority-verifier.ts"],
+  ["packages/checkpoint/src/index.ts\u2192packages/attestation/src/internal/validation-authority-rehydrator.ts", "../../attestation/src/internal/validation-authority-rehydrator.ts"],
+  ["packages/attestation/src/index.ts\u2192packages/attestation/src/internal/identity-proof.ts", "./internal/identity-proof.ts"],
+  ["packages/attestation/src/index.ts\u2192packages/attestation/src/internal/outcome-proof.ts", "./internal/outcome-proof.ts"],
   ...TERMINAL_PHASE_AUTHORITY_IMPORTS.map((edge) => [
     `${edge.from}\u2192${edge.to}`,
     edge.specifier,
@@ -1937,14 +2161,13 @@ const AUTHORITY_MODULE_SPECIFIERS = new Map<string, string>([
     `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_COMMON_ENVELOPE_ISSUER_PATH}`,
     "../../../../acceptance/gate-core/src/internal/common-envelope-authority-issuer.ts",
   ],
+  [`${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`, "../../../../acceptance/gate-core/src/internal/material-provider-state.ts"],
   [`${GATE_CORE_COMMON_ENVELOPE_ISSUER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`, "./material-provider-state.ts"],
   [`${GATE_CORE_RELEASE_MATERIAL_ASSEMBLER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`, "./internal/material-provider-state.ts"],
   [`${RELEASE_GENERIC_CORE_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`, "./internal/material-provider-state.ts"],
   [`${COLLECTOR_MATERIAL_PROVIDER_SHARED_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_ISSUER_PATH}`, "../../../gate-core/src/internal/predicate-domain-material-issuer.ts"],
-  [`${COLLECTOR_MATERIAL_PROVIDER_SHARED_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`, "../../../gate-core/src/internal/predicate-domain-material-state.ts"],
   [`${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_ISSUER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`, "./predicate-domain-material-state.ts"],
   [`${GATE_CORE_RELEASE_MATERIAL_ASSEMBLER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`, "./internal/predicate-domain-material-state.ts"],
-  [`${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`, "./predicate-domain-material-state.ts"],
   [`${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`, "../../../../acceptance/gate-core/src/internal/predicate-domain-material-state.ts"],
   [
     `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${RELEASE_RUNTIME_PATH}`,
@@ -2204,6 +2427,11 @@ const REVM_NARROW_PORT_IMPORTS = new Map<string, readonly { readonly name: strin
  * exact consumer guard.  A matching structural TypeScript interface is not
  * enough and must not silently become a second authority path. */
 const REQUIRED_AUTHORITY_IMPORT_EDGES = new Set([
+  ...EXACT_AUTHORITY_CONSTRUCTOR_IMPORTS.keys(),
+  "packages/checkpoint/src/index.ts\u2192packages/attestation/src/internal/validation-authority-verifier.ts",
+  "packages/checkpoint/src/index.ts\u2192packages/attestation/src/internal/validation-authority-rehydrator.ts",
+  "packages/attestation/src/index.ts\u2192packages/attestation/src/internal/identity-proof.ts",
+  "packages/attestation/src/index.ts\u2192packages/attestation/src/internal/outcome-proof.ts",
   ...TERMINAL_PHASE_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
   ...PREDICATE_MATERIAL_SOURCE_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
   ...PRODUCTION_RELEASE_ADVISORY_AUTHORITY_IMPORTS.map((edge) => `${edge.from}\u2192${edge.to}`),
@@ -2214,14 +2442,13 @@ const REQUIRED_AUTHORITY_IMPORT_EDGES = new Set([
   `${PRE_RELEASE_STAGING_PUBLIC_PATH}\u2192${PRE_RELEASE_RUNTIME_RECEIPT_STATE_PATH}`,
   ...ARTIFACT_LINEAGE_STAGE_ONE_OWNER_EDGES,
   `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_COMMON_ENVELOPE_ISSUER_PATH}`,
+  `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`,
   `${GATE_CORE_COMMON_ENVELOPE_ISSUER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`,
   `${GATE_CORE_RELEASE_MATERIAL_ASSEMBLER_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`,
   `${RELEASE_GENERIC_CORE_PATH}\u2192${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}`,
   `${COLLECTOR_MATERIAL_PROVIDER_SHARED_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_ISSUER_PATH}`,
-  `${COLLECTOR_MATERIAL_PROVIDER_SHARED_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`,
   `${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_ISSUER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`,
   `${GATE_CORE_RELEASE_MATERIAL_ASSEMBLER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`,
-  `${GATE_CORE_MATERIAL_PROVIDER_STATE_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`,
   `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${GATE_CORE_PREDICATE_DOMAIN_MATERIAL_STATE_PATH}`,
   `${QUALIFIED_RELEASE_RUNNER_OWNER_PATH}\u2192${RELEASE_RUNTIME_PATH}`,
   `${SEARCH_PIPELINE_ROUTE_PATH}\u2192${COARSE_SEARCH_OWNER_PATH}`,
@@ -2337,7 +2564,7 @@ export function computeImplementationExportDigest(
 export function computePredicateCompositionLeafDigest(
   entry: Omit<ReleasePredicateBomEntryV1, "entrypointId" | "oracleEntrypointId" | "materialProviderEntrypointId" | "compositionLeafDigest">,
 ): string {
-  return hashDomain("aloha/predicate-composition-leaf/v2", {
+  return hashDomain("aloha/predicate-composition-leaf/v3", {
     predicateId: entry.predicateId,
     predicateSpecDigest: entry.predicateSpecDigest,
     predicateProgramDescriptorDigest: entry.predicateProgramDescriptorDigest,
@@ -2354,7 +2581,6 @@ export function computePredicateCompositionLeafDigest(
     materialProviderExportName: entry.materialProviderExportName,
     materialProviderContractDigest: entry.materialProviderContractDigest,
     materialProviderImplementationExportDigest: entry.materialProviderImplementationExportDigest,
-    commonEnvelopeRoleContractVersion: entry.commonEnvelopeRoleContractVersion,
   });
 }
 
@@ -3737,13 +3963,19 @@ export function validateDependencyBoundaries(
   const isPublicPluginEntry = (file: TrackedFile): boolean => (file.fileClass === "family" || file.fileClass === "strategy") && isFamilyPublic(file.path);
   const isValuationOwnerRuntimeEntry = (file: TrackedFile): boolean =>
     file.fileClass === "valuation-owner" && /\/src\/(?:runtime|public)\.(?:ts|js)$/.test(file.path);
-  const isFamilyAllowedCentralImport = (path: string): boolean => FAMILY_CENTRAL_IMPORT_ALLOWLIST.some((prefix) => path.startsWith(prefix));
+  const isFamilyAllowedCentralImport = (path: string): boolean =>
+    FAMILY_CENTRAL_EXACT_IMPORTS.has(path)
+    || FAMILY_CENTRAL_IMPORT_ALLOWLIST.some((prefix) => path.startsWith(prefix));
   const isStrategyAllowedCentralImport = (path: string): boolean => STRATEGY_CENTRAL_IMPORT_ALLOWLIST.some((allowed) => path === allowed);
   const isValuationOwnerAllowedCentralImport = (path: string): boolean =>
     VALUATION_OWNER_CENTRAL_IMPORT_ALLOWLIST.some((allowed) => path.startsWith(allowed));
   const isCentralInternalPath = (path: string): boolean => path.includes("/src/internal/");
+  const packageScope = (path: string): string => path.split("/").slice(0, 2).join("/");
   const isAuthorityConstructorPath = (path: string): boolean =>
-    isCentralInternalPath(path) || KNOWN_AUTHORITY_CONSTRUCTOR_PATHS.has(path) || SENSITIVE_PUBLIC_CONSTRUCTOR_PATHS.has(path);
+    isCentralInternalPath(path)
+    || KNOWN_AUTHORITY_CONSTRUCTOR_PATHS.has(path)
+    || EXACT_AUTHORITY_CONSTRUCTOR_TARGET_PATHS.has(path)
+    || SENSITIVE_PUBLIC_CONSTRUCTOR_PATHS.has(path);
   const edgeImportsAnyRuntimeName = (edge: GraphEdge, names: ReadonlySet<string>): boolean => {
     const source = byPath.get(edge.from);
     if (source === undefined) return true;
@@ -3777,7 +4009,11 @@ export function validateDependencyBoundaries(
     }
     return false;
   };
-  const validateAuthorityNamedImport = (edge: GraphEdge, expected: readonly string[]): void => {
+  const validateAuthorityNamedImport = (
+    edge: GraphEdge,
+    expected: readonly string[],
+    expectedExports: readonly string[] = [],
+  ): void => {
     const source = byPath.get(edge.from);
     if (!source) return;
     let sourceText: string;
@@ -3836,12 +4072,31 @@ export function validateDependencyBoundaries(
           : element.name.text];
       });
     }).sort();
+    const exported = matchingExports.flatMap(statement => {
+      if (statement.isTypeOnly) return [];
+      if (statement.exportClause === undefined || !ts.isNamedExports(statement.exportClause)) return ["<non-exact>"];
+      return statement.exportClause.elements.flatMap(element => {
+        if (element.isTypeOnly) return [];
+        return [element.name.text !== (element.propertyName?.text ?? element.name.text)
+          ? "<non-exact>"
+          : element.name.text];
+      });
+    }).sort();
     const runtimeImportShapeInvalid = expected.length === 0
-      ? matching.length === 0 || runtimeMatching.length !== 0
+      ? (matching.length === 0 && matchingExports.length === 0) || runtimeMatching.length !== 0
       : runtimeMatching.length === 0;
-    if (runtimeImportShapeInvalid || runtimeMatchingExports.length !== 0 || alternateRuntimeLoad
-      || canonical(imported) !== canonical([...expected].sort())) {
-      diagnostics.push(diagnostic("fail", "authority-named-import-mismatch", edge.from, `Authority edge must import exactly ${expected.join(", ")} from ${edge.to}`));
+    const runtimeExportShapeInvalid = expectedExports.length === 0
+      ? runtimeMatchingExports.length !== 0
+      : runtimeMatchingExports.length === 0;
+    if (runtimeImportShapeInvalid || runtimeExportShapeInvalid || alternateRuntimeLoad
+      || canonical(imported) !== canonical([...expected].sort())
+      || canonical(exported) !== canonical([...expectedExports].sort())) {
+      diagnostics.push(diagnostic(
+        "fail",
+        "authority-named-import-mismatch",
+        edge.from,
+        `Authority edge must import exactly ${expected.join(", ")} and export exactly ${expectedExports.join(", ")} from ${edge.to}`,
+      ));
     }
   };
   const validatePreReleaseSchemaAuthorityImport = (
@@ -3966,13 +4221,22 @@ export function validateDependencyBoundaries(
     const generatedReleaseAuthorityImport = from.path === RELEASE_RUNTIME_PATH && to.path === RELEASE_AUTHORITY_PATH;
     const productionReleaseRuntimeImport = from.fileClass === "production-runtime" && to.path === RELEASE_RUNTIME_PATH;
     const qualifiedReleaseRunnerImport = from.path === QUALIFIED_RELEASE_RUNNER_OWNER_PATH && to.path === RELEASE_RUNTIME_PATH;
-    const familyRuntimeCompositionImport = (from.path === RUNTIME_RELEASE_BOOTSTRAP_PATH
-      || from.path === RUNTIME_RELEASE_HTTP_FAMILY_PHYSICAL_OWNER_PATH)
-      && to.path === FAMILY_RUNTIME_COMPOSITION_PATH;
-    const valuationOwnerRuntimeCompositionImport = from.path === RUNTIME_RELEASE_ECONOMIC_SAFETY_OWNER_PATH
-      && to.path === VALUATION_OWNER_RUNTIME_COMPOSITION_PATH;
+    const centralGeneratedOwnerImport = CENTRAL_GENERATED_OWNER_IMPORTS.get(`${edge.from}\u2192${edge.to}`);
+    const currentEvaluationGeneratedImport = CURRENT_EVALUATION_GENERATED_IMPORTS.get(`${edge.from}\u2192${edge.to}`);
+    const runtimeAuthoringReaderImport = RUNTIME_AUTHORING_READER_IMPORTS.get(`${edge.from}\u2192${edge.to}`);
     const releasePackagingGeneratedImport = RELEASE_PACKAGING_GENERATED_IMPORTS.get(`${edge.from}\u2192${edge.to}`);
     const authorityOwnerEdge = AUTHORITY_OWNER_EDGES.has(`${edge.from}\u2192${edge.to}`);
+    for (const [kind, binding] of [
+      ["central-generated-owner", centralGeneratedOwnerImport],
+      ["current-evaluation-generated", currentEvaluationGeneratedImport],
+      ["runtime-authoring-reader", runtimeAuthoringReaderImport],
+    ] as const) {
+      if (binding === undefined) continue;
+      if (edge.specifier !== binding.specifier) {
+        diagnostics.push(diagnostic("fail", `${kind}-specifier`, edge.from, `Exact boundary edge must use module specifier ${binding.specifier}`));
+      }
+      validateNarrowPortImport(edge, binding.imported);
+    }
     if (releasePackagingGeneratedImport !== undefined) {
       if (edge.specifier !== releasePackagingGeneratedImport.specifier) {
         diagnostics.push(diagnostic("fail", "release-packaging-generated-specifier", edge.from, `Release packaging must use exact generated module specifier ${releasePackagingGeneratedImport.specifier}`));
@@ -4043,8 +4307,20 @@ export function validateDependencyBoundaries(
         `Catalog impact and nomination reuse capabilities may cross only their exact owner or consumer edge: ${edge.to}`,
       ));
     }
-    const authorityNamedImports = AUTHORITY_NAMED_IMPORTS.get(`${edge.from}\u2192${edge.to}`);
-    if (authorityNamedImports) validateAuthorityNamedImport(edge, authorityNamedImports);
+    const authorityKey = `${edge.from}\u2192${edge.to}`;
+    const exactAuthorityConstructorImport = EXACT_AUTHORITY_CONSTRUCTOR_IMPORTS.get(authorityKey);
+    if (exactAuthorityConstructorImport !== undefined) {
+      validateAuthorityNamedImport(
+        edge,
+        exactAuthorityConstructorImport[3],
+        exactAuthorityConstructorImport[4],
+      );
+    }
+    const authorityNamedImports = AUTHORITY_NAMED_IMPORTS.get(authorityKey);
+    const authorityNamedExports = AUTHORITY_NAMED_EXPORTS.get(authorityKey);
+    if (authorityNamedImports !== undefined || authorityNamedExports !== undefined) {
+      validateAuthorityNamedImport(edge, authorityNamedImports ?? [], authorityNamedExports ?? []);
+    }
     const preReleaseSchemaImport = PRE_RELEASE_SCHEMA_AUTHORITY_IMPORTS.find(candidate =>
       candidate.from === edge.from && candidate.to === edge.to);
     if (preReleaseSchemaImport !== undefined) {
@@ -4162,9 +4438,14 @@ export function validateDependencyBoundaries(
     }
     const importsAuthorityConstructor = (() => {
       if (!isAuthorityConstructorPath(to.path)) return false;
-      if (isCentralInternalPath(to.path) || KNOWN_AUTHORITY_CONSTRUCTOR_PATHS.has(to.path)) return true;
       const sensitiveNames = SENSITIVE_PUBLIC_RUNTIME_IMPORTS.get(to.path);
-      if (sensitiveNames === undefined) return true;
+      const allRuntimeNamesSensitive = (EXACT_AUTHORITY_CONSTRUCTOR_TARGET_PATHS.has(to.path) && sensitiveNames === undefined)
+        || KNOWN_AUTHORITY_CONSTRUCTOR_PATHS.has(to.path)
+        || (isCentralInternalPath(to.path) && packageScope(edge.from) !== packageScope(to.path))
+        || INTERNAL_AUTHORITY_MODULE_PATH.test(to.path)
+        || (SENSITIVE_PUBLIC_CONSTRUCTOR_PATHS.has(to.path) && sensitiveNames === undefined);
+      const isSensitiveName = (name: string): boolean => allRuntimeNamesSensitive
+        || sensitiveNames?.has(name) === true;
       const source = byPath.get(edge.from);
       if (source === undefined) return true;
       let sourceText: string;
@@ -4183,18 +4464,22 @@ export function validateDependencyBoundaries(
         if (statement.exportClause === undefined || !ts.isNamedExports(statement.exportClause)) return true;
         if (statement.exportClause.elements.some(element =>
           !element.isTypeOnly
-          && sensitiveNames.has(element.propertyName?.text ?? element.name.text))) return true;
+          && isSensitiveName(element.propertyName?.text ?? element.name.text))) return true;
       }
       const matching = sourceFile.statements.filter((statement): statement is ts.ImportDeclaration =>
         ts.isImportDeclaration(statement)
         && ts.isStringLiteral(statement.moduleSpecifier)
         && statement.moduleSpecifier.text === edge.specifier);
-      if (matching.length !== 1) return true;
-      const clause = matching[0]!.importClause;
-      if (clause === undefined || clause.isTypeOnly) return false;
-      if (clause.name !== undefined || clause.namedBindings === undefined || !ts.isNamedImports(clause.namedBindings)) return true;
-      return clause.namedBindings.elements.some((element) =>
-        !element.isTypeOnly && sensitiveNames.has(element.propertyName?.text ?? element.name.text));
+      for (const statement of matching) {
+        const clause = statement.importClause;
+        if (clause === undefined) return true;
+        if (clause.isTypeOnly) continue;
+        if (clause.name !== undefined || clause.namedBindings === undefined || !ts.isNamedImports(clause.namedBindings)) return true;
+        if (clause.namedBindings.elements.some((element) =>
+          !element.isTypeOnly
+          && isSensitiveName(element.propertyName?.text ?? element.name.text))) return true;
+      }
+      return false;
     })();
     if (to.path === RELEASE_ASSEMBLED_ACCEPTANCE_PATH
       && importsAuthorityConstructor
@@ -4216,11 +4501,13 @@ export function validateDependencyBoundaries(
       }
       if ((to.fileClass === "acceptance-pure-core" || to.fileClass === "acceptance-collector" || to.fileClass === "reference-only")
         && !authorityOwnerEdge) diagnostics.push(diagnostic("fail", "central-imports-governance-tool", edge.from, `Central code imports governance/acceptance source ${edge.to}`));
-      if (to.fileClass === "generated" && !familyRuntimeCompositionImport && !valuationOwnerRuntimeCompositionImport) diagnostics.push(diagnostic("fail", "central-imports-generated", edge.from, `Central code cannot import generated concrete/composition output ${edge.to}`));
+      if (to.fileClass === "generated" && centralGeneratedOwnerImport === undefined) diagnostics.push(diagnostic("fail", "central-imports-generated", edge.from, `Central code cannot import generated concrete/composition output ${edge.to}`));
       if (isSpecs(from.path) && !isSpecs(to.path) && !isCanonicalCodec(to.path)) diagnostics.push(diagnostic("fail", "specs-import-outside-frozen-closure", edge.from, `Frozen specs may only import specs or canonical-codec: ${edge.to}`));
     }
     if (from.fileClass === "production-runtime") {
-      if ((to.fileClass === "authoring" || to.fileClass === "reference-only") && !authorityOwnerEdge) diagnostics.push(diagnostic("fail", "runtime-imports-authoring", edge.from, `Runtime imports ${to.fileClass} source ${edge.to}`));
+      if ((to.fileClass === "authoring" || to.fileClass === "reference-only")
+        && !authorityOwnerEdge
+        && runtimeAuthoringReaderImport === undefined) diagnostics.push(diagnostic("fail", "runtime-imports-authoring", edge.from, `Runtime imports ${to.fileClass} source ${edge.to}`));
       if (to.fileClass === "family" || to.fileClass === "acceptance-pure-core" || to.fileClass === "acceptance-collector") diagnostics.push(diagnostic("fail", "runtime-imports-family-or-acceptance", edge.from, `Runtime cannot import Family or acceptance implementation ${edge.to}`));
       if (to.fileClass === "strategy") diagnostics.push(diagnostic("fail", "runtime-imports-strategy", edge.from, `Runtime must consume generated composition, not concrete Strategy source ${edge.to}`));
       if (to.fileClass === "valuation-owner") diagnostics.push(diagnostic("fail", "runtime-imports-valuation-owner", edge.from, `Runtime must consume generated valuation-owner composition, not concrete owner source ${edge.to}`));
@@ -4253,7 +4540,8 @@ export function validateDependencyBoundaries(
       !productionReleaseRuntimeImport &&
       !qualifiedReleaseRunnerImport &&
       !generatedReleaseAuthorityImport &&
-      releasePackagingGeneratedImport === undefined
+      releasePackagingGeneratedImport === undefined &&
+      currentEvaluationGeneratedImport === undefined
     ) {
       diagnostics.push(diagnostic("fail", "generated-consumer-boundary", edge.from, `Only generated modules may compose generated artifacts, and apps may consume runtime composition only: ${edge.to}`));
     }

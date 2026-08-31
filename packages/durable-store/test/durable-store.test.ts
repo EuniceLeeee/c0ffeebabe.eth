@@ -10,6 +10,7 @@ import {
   WriterLeaseLostError,
   createSqliteDurableStore,
   loadNodeSqliteDriver,
+  type SqliteDatabase,
 } from "../src/index.ts";
 import { encodeCanonicalBytes } from "../../canonical-codec/src/index.ts";
 
@@ -150,10 +151,7 @@ test("deleting the persisted role marker fails closed for an open and reopened s
   assert.throws(() => first.readRoot(), /role marker is missing/);
   first.close();
 
-  const reopened = createSqliteDurableStore(database.filename);
-  assert.throws(() => reopened.readRoot(), /role marker is missing/);
-  assert.throws(() => reopened.bindStoreRole("checkpoint"), /role marker is missing/);
-  reopened.close();
+  assert.throws(() => createSqliteDurableStore(database.filename), /role marker is missing/);
   database.cleanup();
 });
 
@@ -167,10 +165,7 @@ test("mutating the persisted role fails closed before and after reopen", () => {
   assert.throws(() => first.readRoot(), /role binding digest mismatch/);
   first.close();
 
-  const reopened = createSqliteDurableStore(database.filename);
-  assert.throws(() => reopened.bindStoreRole("checkpoint"), /role binding digest mismatch/);
-  assert.throws(() => reopened.readRoot(), /role binding digest mismatch/);
-  reopened.close();
+  assert.throws(() => createSqliteDurableStore(database.filename), /role binding digest mismatch/);
   database.cleanup();
 });
 
@@ -223,6 +218,77 @@ test("schema contract rejects version or structure mutation but ignores unrelate
   changed.close();
   assert.throws(() => createSqliteDurableStore(structure.filename), /schema digest mismatch/);
   structure.cleanup();
+});
+
+test("an open store revalidates external schema, contract, role, and identity mutations before access", async (t) => {
+  const cases: readonly {
+    readonly name: string;
+    readonly mutate: (raw: SqliteDatabase) => void;
+    readonly diagnostic: RegExp;
+  }[] = [
+    {
+      name: "schema",
+      mutate(raw) { raw.exec("DROP TRIGGER durable_append_log_no_delete"); },
+      diagnostic: /append-log SQLite schema digest mismatch/,
+    },
+    {
+      name: "contract",
+      mutate(raw) {
+        raw.prepare("UPDATE durable_append_log_schema_contract SET schema_digest=? WHERE contract_id=1")
+          .run(`0x${"f".repeat(64)}`);
+      },
+      diagnostic: /append-log schema version or core binding mismatch/,
+    },
+    {
+      name: "role",
+      mutate(raw) {
+        raw.prepare("UPDATE durable_store_identity SET store_role='other-role' WHERE identity_id=1").run();
+      },
+      diagnostic: /role binding digest mismatch/,
+    },
+    {
+      name: "identity",
+      mutate(raw) { raw.prepare("DELETE FROM durable_store_identity WHERE identity_id=1").run(); },
+      diagnostic: /role marker is missing/,
+    },
+  ];
+
+  for (const sample of cases) {
+    await t.test(sample.name, () => {
+      const database = tempDatabase();
+      const store = createSqliteDurableStore(database.filename);
+      store.bindStoreRole("checkpoint");
+      const raw = loadNodeSqliteDriver().open(database.filename);
+      try {
+        sample.mutate(raw);
+      } finally {
+        raw.close();
+      }
+      assert.throws(() => store.readRoot(), sample.diagnostic);
+      store.close();
+      database.cleanup();
+    });
+  }
+});
+
+test("a pure-data commit between fence reads cannot preserve a stale validated role", () => {
+  const database = tempDatabase();
+  let raw: SqliteDatabase | null = null;
+  let mutateBetweenReads = false;
+  const store = createSqliteDurableStore(database.filename, {
+    onSchemaRoleFenceInterleave: () => {
+      if (!mutateBetweenReads) return;
+      mutateBetweenReads = false;
+      raw!.prepare("UPDATE durable_store_identity SET store_role='other-role' WHERE identity_id=1").run();
+    },
+  });
+  store.bindStoreRole("checkpoint");
+  raw = loadNodeSqliteDriver().open(database.filename);
+  mutateBetweenReads = true;
+  assert.throws(() => store.readRoot(), /role binding digest mismatch/);
+  raw.close();
+  store.close();
+  database.cleanup();
 });
 
 test("schema contract binds table constraints even when columns and indexes are unchanged", () => {

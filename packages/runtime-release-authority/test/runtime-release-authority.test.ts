@@ -4,7 +4,9 @@ import { chmodSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { hashDomain, sha256Hex, type Hash } from "../../canonical-codec/src/index.ts";
+import { encodeCanonicalBytes, hashDomain, sha256Hex, type Hash } from "../../canonical-codec/src/index.ts";
+import { createEvidenceEvent, EVIDENCE_SCHEMA_MANIFESTS } from "../../../specs/evidence/src/index.ts";
+import { createReadOnlyArtifactRef } from "../../../specs/core-envelope/src/index.ts";
 import {
   createRuntimeReleaseBindingV1, createRuntimeReleaseDiscoverySourceQualificationV1,
   hashRuntimeReleaseDiscoveryEndpointLocatorV1, hashQualifiedExecutorRegistryEntry, hashQualifiedExecutorRegistryRoot,
@@ -42,6 +44,13 @@ import { readGeneratedFamilyRuntimeFactoryMetadata } from "../../family-composit
 import { issueRuntimeReleaseFamilyRuntimeAuthorityCapability } from "../src/internal/family-runtime-owner.ts";
 import { issueRuntimeReleaseNominationQualificationVerifier } from "../src/internal/nomination-qualification-owner.ts";
 import {
+  assertProductionSixStepEvidenceLogAppendSizeV1,
+  assertProductionSixStepEvidenceLogRecoverySizeV1,
+  recoverProductionSixStepEvidenceSequenceFromReaderV1,
+  recoverProductionSixStepEvidenceSequenceV1,
+} from "../src/internal/six-step-production-owner.ts";
+import { SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1 } from "../../../specs/evidence/src/six-step.ts";
+import {
   createGeneratedStrategyRuntimeFactory,
 } from "../../strategy-composition/src/internal/generated-runtime-composition.ts";
 import {
@@ -77,6 +86,155 @@ import type { CanonicalHead } from "../../producer/src/index.ts";
 const h = (value: string): Hash => hashDomain("test/runtime-authority", value);
 const valuationQualification = generatedEconomicValuationOwnerQualificationSetFixtureV1("runtime-release-authority");
 const actionOwnerQualification = generatedEconomicSafetyActionOwnerQualificationFixtureV1("runtime-release-authority");
+
+test("Six-Step evidence restart derives sequence 100 from the canonical production event kind", () => {
+  const boundary = createReadOnlyArtifactRef({
+    locator: {
+      kind: "checkpoint-record",
+      storeIdentityHash: h("recovery-boundary-store"),
+      namespaceHash: h("recovery-boundary-namespace"),
+      keyHash: h("recovery-boundary-key"),
+      revision: "1",
+      recordHash: h("recovery-boundary-record"),
+    },
+    immutableMirrorLocator: {
+      kind: "content-object",
+      storeIdentityHash: h("recovery-mirror-store"),
+      objectKey: h("recovery-boundary-content"),
+    },
+    contentSha256: h("recovery-boundary-content"),
+    byteLength: "1",
+    mediaType: "application/octet-stream",
+    schema: null,
+    resolverPolicyHash: h("recovery-resolver-policy"),
+    retentionLeaseReceiptId: h("recovery-retention-lease"),
+  });
+  const fact = createEvidenceEvent({
+    schemaVersion: 1,
+    kind: "aloha.fact-evidence-event",
+    source: {
+      systemId: "recovery-test",
+      emitterKind: "native",
+      emitterCodeHash: h("recovery-emitter"),
+      rawBoundaryArtifactRef: boundary,
+    },
+    runtime: {
+      commitSha: "a".repeat(40),
+      executableHash: h("recovery-executable"),
+      deploymentManifestHash: h("recovery-deployment"),
+      serviceIdentityHash: h("recovery-service"),
+      pid: "1",
+      processStartTicks: "1",
+      bootIdHash: h("recovery-boot"),
+      logRangeArtifactRefId: h("recovery-log-range"),
+    },
+    artifactLineage: {
+      inputArtifactIds: [h("recovery-input")],
+      outputArtifactId: h("recovery-output"),
+      productionReceiptId: h("recovery-receipt"),
+    },
+    scope: {
+      kind: "builder-run",
+      builderRunId: "recovery-builder",
+      producerSessionId: null,
+      generationId: null,
+      generationRefreshPolicyHash: h("recovery-refresh-policy"),
+    },
+    correlationId: "recovery-correlation",
+    runSequence: "0",
+    cutoff: { number: "1", hash: h("recovery-block"), stateRoot: h("recovery-state") },
+    definitionCatalogRoot: h("recovery-definition-catalog"),
+    strategyCatalogRoot: null,
+    instanceCatalogRoot: null,
+    graphRoot: null,
+    familyId: "recovery-family",
+    candidateKey: "recovery-candidate",
+    familyDefinitionHash: h("recovery-family-definition"),
+    capabilities: [],
+    instanceKey: "recovery-instance",
+    stage: { ordinal: 1, id: "universe_instance", version: 1 },
+    parentEventIds: [],
+    parentOutputHashes: [],
+    inputSchema: { id: "recovery-input", version: "1.0.0", schemaHash: h("recovery-input-schema") },
+    inputs: { source: "production-recovery" },
+    factSchema: { id: "recovery-fact", version: "1.0.0", schemaHash: h("recovery-fact-schema") },
+    facts: { observed: true },
+    outcome: "verified",
+    reasonCode: null,
+    latency: { startedMonotonicNs: "1", finishedMonotonicNs: "2", durationUs: "1" },
+    extensions: [],
+  });
+  const event = encodeCanonicalBytes(fact);
+  const native = encodeCanonicalBytes({ kind: "aloha.six-step-native-boundary-record" });
+  const staleAlias = encodeCanonicalBytes({ kind: "aloha.evidence-event" });
+  const records = [native, staleAlias, ...Array.from({ length: 100 }, () => event)];
+  const bytes = Buffer.concat(records.flatMap(record => [Buffer.from(record), Buffer.from("\n")]));
+  assert.equal(recoverProductionSixStepEvidenceSequenceV1(bytes), 100n);
+  const recoverInSmallChunks = (input: Uint8Array, size = BigInt(input.byteLength)): bigint =>
+    recoverProductionSixStepEvidenceSequenceFromReaderV1(size, (buffer, position) => {
+      const start = Number(position);
+      const length = Math.min(buffer.byteLength, 7, input.byteLength - start);
+      buffer.set(input.subarray(start, start + length));
+      return length;
+    });
+  assert.equal(recoverInSmallChunks(bytes), 100n);
+  assert.throws(
+    () => recoverInSmallChunks(bytes.subarray(0, bytes.byteLength - 1)),
+    /incomplete record/,
+  );
+  assert.throws(
+    () => recoverInSmallChunks(bytes.subarray(0, bytes.byteLength - 1), BigInt(bytes.byteLength)),
+    /truncated during recovery/,
+  );
+  const malformedCanonicalEvent = encodeCanonicalBytes({ kind: EVIDENCE_SCHEMA_MANIFESTS.event.id });
+  assert.throws(
+    () => recoverInSmallChunks(Buffer.concat([
+      Buffer.from(malformedCanonicalEvent),
+      Buffer.from("\n"),
+    ])),
+  );
+  const limit = BigInt(SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxLedgerBytes);
+  const nativeRecord = Buffer.concat([
+    Buffer.from(encodeCanonicalBytes({ kind: "aloha.six-step-native-boundary-record", padding: "a".repeat(65_536) })),
+    Buffer.from("\n"),
+  ]);
+  const repeatCount = Number(limit / BigInt(nativeRecord.byteLength)) + 1;
+  const recoveredSize = BigInt(nativeRecord.byteLength * repeatCount);
+  assert.ok(recoveredSize > limit);
+  assert.equal(recoverProductionSixStepEvidenceSequenceFromReaderV1(
+    recoveredSize,
+    (buffer, position) => {
+      let sourceOffset = Number(position % BigInt(nativeRecord.byteLength));
+      let written = 0;
+      while (written < buffer.byteLength) {
+        const length = Math.min(buffer.byteLength - written, nativeRecord.byteLength - sourceOffset);
+        buffer.set(nativeRecord.subarray(sourceOffset, sourceOffset + length), written);
+        written += length;
+        sourceOffset = 0;
+      }
+      return written;
+    },
+  ), 0n);
+  assert.doesNotThrow(() => assertProductionSixStepEvidenceLogRecoverySizeV1(recoveredSize));
+  assert.throws(
+    () => assertProductionSixStepEvidenceLogRecoverySizeV1(-1n),
+    /must be non-negative/,
+  );
+  assert.doesNotThrow(() => assertProductionSixStepEvidenceLogAppendSizeV1(recoveredSize, 1n));
+  assert.doesNotThrow(() => assertProductionSixStepEvidenceLogAppendSizeV1(recoveredSize, limit));
+  assert.throws(
+    () => assertProductionSixStepEvidenceLogAppendSizeV1(recoveredSize, limit + 1n),
+    /record exceeds its byte policy/,
+  );
+  assert.throws(
+    () => assertProductionSixStepEvidenceLogAppendSizeV1(-1n, 1n),
+    /start must be non-negative/,
+  );
+  assert.throws(
+    () => assertProductionSixStepEvidenceLogAppendSizeV1(0n, -1n),
+    /record exceeds its byte policy/,
+  );
+});
 const executor = { executorKind: "revm", engineBuildFingerprint: h("engine"), executableFingerprint: h("exe"), closureFingerprint: h("closure"), protocolFingerprint: h("protocol"), schemaFingerprint: h("schema"), releaseRoleManifestRoot: h("manifest"), candidateCommit: "3".repeat(40) };
 const generatedFamilyMetadata = readGeneratedFamilyRuntimeFactoryMetadata(createReleaseFamilyRuntimeComposition);
 const nominationQualificationSet = sealRuntimeReleaseNominationQualificationSetV1(

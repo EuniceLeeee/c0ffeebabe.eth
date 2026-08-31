@@ -1,5 +1,8 @@
 import {
   arraySchema,
+  assertConcreteArray,
+  assertExactKeys,
+  CANONICAL_LIMITS,
   canonicalObjectSchema,
   decodeCanonicalJson,
   defineSchema,
@@ -8,6 +11,7 @@ import {
   encodeCanonicalBytes,
   encodeCanonicalJson,
   enumSchema,
+  fieldArray,
   gitSha40Schema,
   hashDomain,
   hashSchema,
@@ -15,6 +19,7 @@ import {
   nullableSchema,
   nonEmptyStringSchema,
   objectSchema,
+  readOwnEnumerableDataProperty,
   semVerSchema,
   refineSchema,
   sha256Hex,
@@ -1529,6 +1534,82 @@ export const PERFORMANCE_FACT_BUNDLE_SCHEMA_MANIFEST = defineSchemaManifest(
 export function decodePerformanceFactBundle(value: string | Uint8Array | object): PerformanceFactBundleV1 {
   const input = typeof value === "string" || ArrayBuffer.isView(value) ? decodeCanonicalJson(value as string | Uint8Array) : value;
   return refinedPerformanceFactBundleSchema.decode(input);
+}
+
+export const PERFORMANCE_PARTITIONED_FACT_BUNDLE_MAX_BYTES = 16 * CANONICAL_LIMITS.maxBytes;
+
+const PERFORMANCE_FACT_BUNDLE_KEYS = Object.freeze([
+  "profile",
+  "commitment",
+  "heads",
+  "lineages",
+  "candidateSets",
+  "candidateTerminals",
+  "metrics",
+  "terminals",
+  "generationSegments",
+  "windowReceipt",
+] as const);
+
+/**
+ * Exact decoder for an in-memory aggregate assembled from independently
+ * bounded performance artifacts.  The wire codec above deliberately remains
+ * a single canonical JSON artifact and therefore retains the global 1 MiB
+ * limit.  This decoder instead validates the aggregate shell and each array
+ * container structurally, then applies the existing exact schema to every
+ * nested fact independently.
+ */
+export function decodePartitionedPerformanceFactBundle(value: object): PerformanceFactBundleV1 {
+  assertExactKeys(value, PERFORMANCE_FACT_BUNDLE_KEYS);
+  let aggregateBytes = 2;
+  let fieldIndex = 0;
+  const charge = (bytes: number, path: string): void => {
+    aggregateBytes += bytes;
+    if (aggregateBytes > PERFORMANCE_PARTITIONED_FACT_BUNDLE_MAX_BYTES) {
+      throw new TypeError(`partitioned performance fact bundle exceeds byte policy at ${path}`);
+    }
+  };
+  const field = (key: typeof PERFORMANCE_FACT_BUNDLE_KEYS[number]): unknown => {
+    charge(new TextEncoder().encode(JSON.stringify(key)).length + 1 + (fieldIndex > 0 ? 1 : 0), `$.${key}`);
+    fieldIndex += 1;
+    return readOwnEnumerableDataProperty(value, key);
+  };
+  const scalar = <T>(
+    key: typeof PERFORMANCE_FACT_BUNDLE_KEYS[number],
+    decode: (entry: unknown, path: string) => T,
+  ): T => {
+    const path = `$.${key}`;
+    const raw = field(key);
+    charge(encodeCanonicalBytes(raw).length, path);
+    return decode(raw, path);
+  };
+  const array = <T>(
+    key: typeof PERFORMANCE_FACT_BUNDLE_KEYS[number],
+    maxItems: number,
+    decode: (entry: unknown, path: string) => T,
+  ): readonly T[] => {
+    const path = `$.${key}`;
+    const raw = field(key);
+    assertConcreteArray(raw, path);
+    if (raw.length > maxItems) throw new TypeError(`partitioned performance fact array exceeds item policy at ${path}`);
+    charge(2 + Math.max(0, raw.length - 1), path);
+    return fieldArray(raw, (entry, entryPath) => {
+      charge(encodeCanonicalBytes(entry).length, entryPath);
+      return decode(entry, entryPath);
+    }, path);
+  };
+  return assertCanonicalBundleOrder(Object.freeze({
+    profile: scalar("profile", (entry, path) => productionPerformanceProfileSchema.decode(entry, path)),
+    commitment: scalar("commitment", (entry, path) => windowCommitmentSchema.decode(entry, path)),
+    heads: array("heads", 100, (entry, path) => eligibleHeadSchema.decode(entry, path)),
+    lineages: array("lineages", 100, (entry, path) => orphanReplacementSchema.decode(entry, path)),
+    candidateSets: array("candidateSets", 100, (entry, path) => candidateSetSchema.decode(entry, path)),
+    candidateTerminals: array("candidateTerminals", CANONICAL_LIMITS.maxArrayItems, (entry, path) => candidateTerminalSchema.decode(entry, path)),
+    metrics: array("metrics", 100, (entry, path) => metricSchema.decode(entry, path)),
+    terminals: array("terminals", 100, (entry, path) => terminalSchema.decode(entry, path)),
+    generationSegments: array("generationSegments", 100, (entry, path) => generationSegmentSchema.decode(entry, path)),
+    windowReceipt: scalar("windowReceipt", (entry, path) => windowReceiptSchema.decode(entry, path)),
+  }), "$");
 }
 
 export function encodePerformanceFactBundle(value: PerformanceFactBundleV1): Uint8Array {

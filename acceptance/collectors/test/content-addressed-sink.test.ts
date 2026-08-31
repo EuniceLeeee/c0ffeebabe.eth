@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rename, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -92,6 +92,36 @@ test("observer sink rejects non-concrete bytes and oversize artifacts", async ()
     await assert.rejects(
       value.write({ bytes: new Proxy(new Uint8Array([1]), {}) as Uint8Array, mediaType: "application/json", schema }),
       /concrete Uint8Array/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("observer sink rejects an oversized physical object before reading its contents", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "aloha-observer-oversized-read-"));
+  try {
+    const value = sink(directory, "600000");
+    await value.write({
+      bytes: encodeCanonicalBytes({ initialize: "store" }),
+      mediaType: "application/json",
+      schema,
+    });
+    const contentSha256 = h("oversized-physical-object");
+    const handle = await open(join(directory, contentSha256.slice(2)), "wx", 0o400);
+    try {
+      await handle.truncate(ARTIFACT_MIRROR_MAX_DECODED_BYTES + 1);
+    } finally {
+      await handle.close();
+    }
+    await assert.rejects(
+      value.readArtifact({
+        contentSha256,
+        mediaType: "application/octet-stream",
+        schema,
+        expectedByteLength: "1",
+      }),
+      /exceeds configured byte limit/,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

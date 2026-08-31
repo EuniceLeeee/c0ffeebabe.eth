@@ -16,6 +16,8 @@ export interface RuntimeReleaseObserverStoreServiceV1 {
   readonly issueObserverStore: (input: RuntimeReleaseObserverStoreInputV1) => ReleaseOwnedObserverStoreCapabilityV1;
 }
 
+export type RuntimeReleaseObserverSinkV1 = ReturnType<typeof readReleaseOwnedObserverStoreV1>["sink"];
+
 export interface RuntimeReleaseObserverStoreInputV1 {
   readonly directory: string;
 }
@@ -125,6 +127,17 @@ export function assertIssuedRuntimeReleaseObserverStoreServiceV1(
   current(service);
 }
 
+export function assertRuntimeReleaseObserverStoreServiceOwnedByAuthorityV1(
+  authority: RuntimeReleaseAuthorityV1,
+  service: RuntimeReleaseObserverStoreServiceV1,
+): void {
+  const issued = services.get(service);
+  if (issued === undefined || issued.authority !== authority) {
+    throw new TypeError("runtime-release observer store service belongs to another release authority");
+  }
+  current(service);
+}
+
 export function assertRuntimeReleaseObserverStoreOwnedByServiceV1(
   service: RuntimeReleaseObserverStoreServiceV1,
   store: ReleaseOwnedObserverStoreCapabilityV1,
@@ -138,6 +151,14 @@ export function assertRuntimeReleaseObserverStoreOwnedByServiceV1(
     throw new TypeError("runtime-release observer store belongs to another or stale release");
   }
   readReleaseOwnedObserverStoreV1(store);
+}
+
+export function readRuntimeReleaseObserverSinkV1(
+  service: RuntimeReleaseObserverStoreServiceV1,
+  store: ReleaseOwnedObserverStoreCapabilityV1,
+): RuntimeReleaseObserverSinkV1 {
+  assertRuntimeReleaseObserverStoreOwnedByServiceV1(service, store);
+  return readReleaseOwnedObserverStoreV1(store).sink;
 }
 
 export function readRuntimeReleaseObserverStoreBindingV1(

@@ -642,6 +642,7 @@ function generatedComposition(
 test("generated search ports consume exact non-first Graph ports and compose ordered opaque actions", async () => {
   let readCount = 0;
   let programBytes = "";
+  let reversedExactRejected = false;
   let executionEvidence: import("../../search-pipeline/src/index.ts").ExecutionProgramSixStepEvidenceV1 | undefined;
   const exactCalls: Array<readonly [string, string]> = [];
   const actionCalls: Array<readonly [string, string]> = [];
@@ -665,6 +666,24 @@ test("generated search ports consume exact non-first Graph ports and compose ord
   const executionProgram = {
     ...core.executionProgram,
     compile: async (input: Parameters<typeof core.executionProgram.compile>[0]) => {
+      if (!reversedExactRejected) {
+        const { exactHash: _exactHash, ...exactBody } = input.exact;
+        const reversedBody = Object.freeze({ ...exactBody, legs: Object.freeze([...input.exact.legs].reverse()) });
+        const reversedExact = Object.freeze({
+          ...reversedBody,
+          exactHash: hashDomain("aloha/search-runtime-exact/v1", reversedBody),
+        });
+        assert.deepEqual(await core.executionProgram.compile({
+          ...input,
+          exact: reversedExact,
+          exactHash: reversedExact.exactHash,
+        }), {
+          kind: "invalidProgram",
+          stage: "execution-program",
+          code: "execution-route-leg-order-mismatch",
+        });
+        reversedExactRejected = true;
+      }
       const compiled = await core.executionProgram.compile(input);
       if (compiled.kind === "compiled") {
         assert.ok(compiled.sixStepEvidence);
@@ -778,6 +797,7 @@ test("generated search ports consume exact non-first Graph ports and compose ord
   const expectedInstances = plannedCandidate.legs.map(leg => edges.find(edge => edge.edgeId === leg.edgeId)!.owningInstanceKey);
   assert.deepEqual(exactCalls, [[expectedInstances[0], "100"], [expectedInstances[1], "77"]]);
   assert.deepEqual(actionCalls, exactCalls);
+  assert.equal(reversedExactRejected, true);
   const edgeALeg = plannedCandidate.legs.find(leg => leg.edgeId === edges[0]!.edgeId)!;
   assert.equal(edgeALeg.inputPortRef, edges[0]!.inputAssetPorts[1]!.portRef);
   assert.equal(edgeALeg.outputPortRef, edges[0]!.outputAssetPorts[1]!.portRef);

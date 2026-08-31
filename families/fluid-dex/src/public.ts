@@ -4,6 +4,12 @@ export * from "./manifest.ts";
 export * from "./metadata.ts";
 export * from "./types.ts";
 export * from "./source-plan.ts";
+export {
+  FLUID_DEX_SOURCE_PLAN_RUNTIME,
+  FLUID_DEX_SOURCE_NOMINATION_PROGRAM,
+  FLUID_DEX_FACTORY_SOURCE_PLAN_RUNTIME,
+  FLUID_DEX_FACTORY_NOMINATION_PROGRAM,
+} from "./source-plan.ts";
 export * from "./stages.ts";
 export * from "./action.ts";
 export * from "./search-adapter.ts";

@@ -1,5 +1,5 @@
 import {
-  decodePerformanceFactBundle,
+  decodePartitionedPerformanceFactBundle,
   createPerformanceAcceptanceReceipt,
   hashCandidateBearingHeadSetRoot,
   hashCandidatePathTimingSampleRoot,
@@ -175,7 +175,7 @@ function decodeBundle(raw: unknown, reasons: PerformanceReasonV1[]): {
   readonly windowReceipt: PerformanceWindowReceiptV1;
 } | null {
   try {
-    return decodePerformanceFactBundle(raw as object);
+    return decodePartitionedPerformanceFactBundle(raw as object);
   } catch {
     add(reasons, "malformed-fact", "$.facts");
     return null;

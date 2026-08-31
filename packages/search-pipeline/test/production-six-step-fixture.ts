@@ -6,6 +6,7 @@ import {
   type CanonicalJsonObject,
   type Hash,
 } from "../../canonical-codec/src/index.ts";
+import type { PersistedGraphEdgeV1 } from "../../graph/src/index.ts";
 import {
   createReadOnlyArtifactRef,
   type ProcessAnchorV1,
@@ -175,6 +176,36 @@ export function createProductionSixStepTailFixture(
     readonly sink?: ContentAddressedObserverSinkV1;
     readonly process?: ProcessAnchorV1;
     readonly fileRangeStride?: number;
+    readonly rawBoundaryPayloadTransform?: (
+      stageId: SixStepStageFactsV1["stageId"],
+      payload: CanonicalJsonObject,
+    ) => CanonicalJsonObject;
+    readonly stage12?: Readonly<{
+      readonly binding: Readonly<{
+        readonly readyRecordHash: Hash;
+        readonly generationId: string;
+        readonly cutoff: Readonly<{ readonly chainId: string; readonly number: string; readonly hash: Hash; readonly stateRoot: Hash }>;
+        readonly definitionCatalogRoot: Hash;
+        readonly sourceCoverageRoot: Hash;
+        readonly candidatePartitionRoot: Hash;
+        readonly exactOutcomePartitionRoot: Hash;
+        readonly verifiedMemoSetRoot: Hash;
+        readonly instanceCatalogRoot: Hash;
+        readonly graphRoot: Hash;
+        readonly releaseProvenanceHash: Hash;
+        readonly promotionRevision: string;
+      }>;
+      readonly selectedGraphLegs: readonly Readonly<{
+        readonly edgeId: Hash;
+        readonly owningFamilyId: string;
+        readonly owningFamilyDefinitionHash: Hash;
+        readonly owningInstanceKey: string;
+        readonly instancePublicationHash: Hash;
+        readonly staticProjectionHash: Hash;
+        readonly projectionHash: Hash;
+      }>[];
+      readonly readyEdges?: readonly PersistedGraphEdgeV1[];
+    }>;
   }> = {},
 ): ProductionSixStepTailEmissionPortV1 {
   const memory = new MemoryStore(options.sink ?? null);
@@ -210,8 +241,11 @@ export function createProductionSixStepTailFixture(
   };
   const artifact = async (key: string, payload: CanonicalJsonObject, stage: number): Promise<ProductionSixStepArtifactCapabilityV1> => {
     const ordinal = Number(/^s([1-6])/.exec(key)?.[1]);
-    const stageId = (["", "universe_instance", "edge_ready_generation", "planner_consumption", "current_source_exact", "execution_program", "final_simulation"] as const)[ordinal]!;
-    const bytes = encodeCanonicalBytes({ schemaVersion: 1, kind: "aloha.six-step-native-boundary-record", stageId, role: stage === 0 ? "raw-boundary" : "native-log", payload });
+    const stageId = (["", "universe_instance", "edge_ready_generation", "planner_consumption", "current_source_exact", "execution_program", "final_simulation"] as const)[ordinal]! as SixStepStageFactsV1["stageId"];
+    const storedPayload = stage === 0 && options.rawBoundaryPayloadTransform !== undefined
+      ? canonical(options.rawBoundaryPayloadTransform(stageId, payload))
+      : payload;
+    const bytes = encodeCanonicalBytes({ schemaVersion: 1, kind: "aloha.six-step-native-boundary-record", stageId, role: stage === 0 ? "raw-boundary" : "native-log", payload: storedPayload });
     return owner.sealArtifact({ artifactKey: h(key), bytes, locator: stage === 0 ? fixtureContentLocator(key) : fixtureLogLocator(stage, bytes.byteLength), mediaType: "application/json", schema });
   };
   const witness = (stageId: SixStepStageFactsV1["stageId"], role: string, payload: CanonicalJsonObject): Promise<ProductionSixStepWitnessCapabilityV1> => owner.sealWitness({ artifactKey: h(`${stageId}:${role}:${JSON.stringify(payload)}`), stageId, role, payload, locator: fixtureContentLocator(`${stageId}:${role}:${JSON.stringify(payload)}`) });
@@ -223,14 +257,30 @@ export function createProductionSixStepTailFixture(
   }>>();
 
   const parentFor = (pipeline: ResolvedRoutePipelineInputV1, route: RouteCapabilityV1, index: number) => {
-    const instanceKey = route.legs[index]!.ownerRef;
-    let pending = stage12.get(instanceKey);
+    const selectedLeg = options.stage12?.selectedGraphLegs.find(leg => leg.edgeId === route.legs[index]!.edgeId);
+    const instanceKey = selectedLeg?.owningInstanceKey ?? route.legs[index]!.ownerRef;
+    const stage12Key = `${route.legs[index]!.edgeId}:${instanceKey}`;
+    let pending = stage12.get(stage12Key);
     if (pending !== undefined) return pending;
     pending = (async () => {
       const base = { instanceKey, routeHash: route.routeHash } as const;
+      const readyEdge = options.stage12?.readyEdges?.find(edge => edge.edgeId === route.legs[index]!.edgeId);
+      const ready = selectedLeg === undefined ? undefined : options.stage12?.binding;
+      const publicationPayload = canonical(selectedLeg === undefined
+        ? { ...base, role: "instance-publication" }
+        : {
+            instanceKey: selectedLeg.owningInstanceKey,
+            instancePublicationHash: selectedLeg.instancePublicationHash,
+            familyDefinitionHash: selectedLeg.owningFamilyDefinitionHash,
+          });
+      const edgePayload = canonical(selectedLeg === undefined
+        ? { ...base, edgeId: route.legs[index]!.edgeId }
+        : readyEdge ?? { ...selectedLeg });
       const s1Witnesses = await Promise.all([
-        witness("universe_instance", "candidate-partition", { ...base, role: "candidate-partition" }),
-        witness("universe_instance", "instance-publication", { ...base, role: "instance-publication" }),
+        witness("universe_instance", "candidate-partition", ready === undefined
+          ? { ...base, role: "candidate-partition" }
+          : { runId: ready.readyRecordHash, candidatePartitionRoot: ready.candidatePartitionRoot }),
+        witness("universe_instance", "instance-publication", publicationPayload),
         witness("universe_instance", "identity-proof", { ...base, role: "identity-proof" }),
         witness("universe_instance", "source-coverage", { ...base, role: "source-coverage" }),
       ]);
@@ -239,29 +289,46 @@ export function createProductionSixStepTailFixture(
         correlationId: pipeline.correlationId,
         runSequence: String(index), cutoff: { number: pipeline.lease.binding.cutoff.number, hash: pipeline.lease.binding.cutoff.hash, stateRoot: pipeline.lease.binding.cutoff.stateRoot },
         definitionCatalogRoot: pipeline.lease.binding.definitionCatalogRoot, strategyCatalogRoot: null,
-        instanceCatalogRoot: null, graphRoot: null, familyId: `fixture-family-${index}`,
-        candidateKey: instanceKey, familyDefinitionHash: h(`family-${index}`), capabilities: [], instanceKey,
+        instanceCatalogRoot: null, graphRoot: null, familyId: selectedLeg?.owningFamilyId ?? `fixture-family-${index}`,
+        candidateKey: instanceKey, familyDefinitionHash: selectedLeg?.owningFamilyDefinitionHash ?? h(`family-${index}`), capabilities: [], instanceKey,
         sourceAnchorHash: h(`source-${index}`), semanticConfigDigest: h("config"), resourceMetricsHash: h("metrics"),
       });
-      const s1Raw = await artifact(`s1-raw-${instanceKey}`, { ...base, boundary: "outcome" }, 0);
+      const s1Raw = await artifact(`s1-raw-${instanceKey}`, ready === undefined
+        ? { ...base, boundary: "outcome" }
+        : {
+            runId: ready.readyRecordHash,
+            candidate: {
+              familyId: selectedLeg!.owningFamilyId,
+              familyDefinitionHash: selectedLeg!.owningFamilyDefinitionHash,
+              familyCandidateKey: selectedLeg!.owningInstanceKey,
+            },
+            outcome: {
+              instanceKey: selectedLeg!.owningInstanceKey,
+              publication: publicationPayload,
+            },
+          }, 0);
       const s1Log = await artifact(`s1-log-${instanceKey}`, { ...base, boundary: "outcome-log" }, 1);
       const s1Facts: SixStepStageFactsV1 = { schemaVersion: 1, kind: "aloha.six-step-stage-facts", stageId: "universe_instance", candidatePartition: readProductionSixStepWitnessV1(s1Witnesses[0]!), instancePublication: readProductionSixStepWitnessV1(s1Witnesses[1]!), identityProof: readProductionSixStepWitnessV1(s1Witnesses[2]!), sourceCoverage: readProductionSixStepWitnessV1(s1Witnesses[3]!) };
       const s1 = await owner.emitStage({ context: context1, stage: { ordinal: 1, id: "universe_instance", version: 1 }, facts: s1Facts, outcome: "verified", reasonCode: null, startedMonotonicNs: "1000", finishedMonotonicNs: "2000", rawBoundary: s1Raw, logRange: s1Log, witnesses: s1Witnesses, parents: [] });
       const s2Witnesses = await Promise.all([
         Promise.resolve(s1Witnesses[1]!),
-        witness("edge_ready_generation", "edge", { ...base, edgeId: route.legs[index]!.edgeId }),
-        witness("edge_ready_generation", "coverage", { ...base, role: "coverage" }),
+        witness("edge_ready_generation", "edge", edgePayload),
+        witness("edge_ready_generation", "coverage", ready === undefined
+          ? { ...base, role: "coverage" }
+          : { sourceCoverageRoot: ready.sourceCoverageRoot }),
         witness("edge_ready_generation", "memo-reuse-proof", { ...base, mode: "fresh" }),
       ]);
       const context2: ProductionSixStepStableContextV1 = Object.freeze({ ...context1, scope: { kind: "ready-generation" as const, builderRunId: pipeline.lease.binding.readyRecordHash, producerSessionId: null, generationId: pipeline.lease.binding.generationId, generationRefreshPolicyHash: pipeline.lease.binding.generationRefreshPolicyHash }, runSequence: (BigInt(context1.runSequence) + 1n).toString(), instanceCatalogRoot: pipeline.lease.binding.instanceCatalogRoot, graphRoot: pipeline.lease.binding.graphRoot });
-      const s2Raw = await artifact(`s2-raw-${instanceKey}`, { ...base, boundary: "ready" }, 0);
+      const s2Raw = await artifact(`s2-raw-${instanceKey}`, ready === undefined
+        ? { ...base, boundary: "ready" }
+        : { ready, publication: publicationPayload, edge: edgePayload }, 0);
       const s2Log = await artifact(`s2-log-${instanceKey}`, { ...base, boundary: "ready-log" }, 2);
-      const s2Facts: SixStepStageFactsV1 = { schemaVersion: 1, kind: "aloha.six-step-stage-facts", stageId: "edge_ready_generation", instancePublication: readProductionSixStepWitnessV1(s2Witnesses[0]!), edge: readProductionSixStepWitnessV1(s2Witnesses[1]!), coverage: readProductionSixStepWitnessV1(s2Witnesses[2]!), promotionRevision: pipeline.lease.binding.generationId, generationId: pipeline.lease.binding.generationId, attestationMode: "fresh", memoReuseProof: readProductionSixStepWitnessV1(s2Witnesses[3]!) };
+      const s2Facts: SixStepStageFactsV1 = { schemaVersion: 1, kind: "aloha.six-step-stage-facts", stageId: "edge_ready_generation", instancePublication: readProductionSixStepWitnessV1(s2Witnesses[0]!), edge: readProductionSixStepWitnessV1(s2Witnesses[1]!), coverage: readProductionSixStepWitnessV1(s2Witnesses[2]!), promotionRevision: ready?.promotionRevision ?? pipeline.lease.binding.generationId, generationId: pipeline.lease.binding.generationId, attestationMode: "fresh", memoReuseProof: readProductionSixStepWitnessV1(s2Witnesses[3]!) };
       const s2 = await owner.emitStage({ context: context2, stage: { ordinal: 2, id: "edge_ready_generation", version: 1 }, facts: s2Facts, outcome: "success", reasonCode: null, startedMonotonicNs: "2000", finishedMonotonicNs: "3000", rawBoundary: s2Raw, logRange: s2Log, witnesses: s2Witnesses, parents: [s1] });
       stage1ByStage2.set(s2, s1);
       return s2;
     })();
-    stage12.set(instanceKey, pending);
+    stage12.set(stage12Key, pending);
     return pending;
   };
 
@@ -288,7 +355,7 @@ export function createProductionSixStepTailFixture(
     else facts = { schemaVersion: 1, kind: "aloha.six-step-stage-facts", stageId: "final_simulation", finalSimulationReceipt: w[0]!, simulationSourceAnchor: { ...pipeline.currentSource.source, hash: pipeline.currentSource.source.hash as Hash, stateRoot: pipeline.currentSource.source.stateRoot as Hash }, economicReceipt: w[1]!, safetyReceipt: w[2]!, dryRun: true };
     const raw = await artifact(`s${stage}-raw-${pipeline.correlationId}`, payload, 0);
     const log = await artifact(`s${stage}-log-${pipeline.correlationId}`, { stage: String(stage), payloadRoot: hashDomain("aloha/test-six-step-payload/v1", payload) }, stage);
-    const context: ProductionSixStepStableContextV1 = Object.freeze({ scope: { kind: "producer-session" as const, builderRunId: pipeline.lease.binding.readyRecordHash, producerSessionId: pipeline.currentSource.sessionId, generationId: pipeline.lease.binding.generationId, generationRefreshPolicyHash: pipeline.lease.binding.generationRefreshPolicyHash }, correlationId: pipeline.correlationId, runSequence: String(stage), cutoff: { number: pipeline.lease.binding.cutoff.number, hash: pipeline.lease.binding.cutoff.hash, stateRoot: pipeline.lease.binding.cutoff.stateRoot }, definitionCatalogRoot: pipeline.lease.binding.definitionCatalogRoot, strategyCatalogRoot: h("strategy-catalog"), instanceCatalogRoot: pipeline.lease.binding.instanceCatalogRoot, graphRoot: pipeline.lease.binding.graphRoot, familyId: "fixture-route", candidateKey: pipeline.routeCandidateId, familyDefinitionHash: h("route-family"), capabilities: [], instanceKey: route.legs[0]!.ownerRef, sourceAnchorHash: h(`source-${pipeline.currentSource.source.hash}`), semanticConfigDigest: h("config"), resourceMetricsHash: h("metrics") });
+    const context: ProductionSixStepStableContextV1 = Object.freeze({ scope: { kind: "producer-session" as const, builderRunId: pipeline.lease.binding.readyRecordHash, producerSessionId: pipeline.currentSource.sessionId, generationId: pipeline.lease.binding.generationId, generationRefreshPolicyHash: pipeline.lease.binding.generationRefreshPolicyHash }, correlationId: pipeline.correlationId, runSequence: String(stage), cutoff: { number: pipeline.lease.binding.cutoff.number, hash: pipeline.lease.binding.cutoff.hash, stateRoot: pipeline.lease.binding.cutoff.stateRoot }, definitionCatalogRoot: pipeline.lease.binding.definitionCatalogRoot, strategyCatalogRoot: h("strategy-catalog"), instanceCatalogRoot: pipeline.lease.binding.instanceCatalogRoot, graphRoot: pipeline.lease.binding.graphRoot, familyId: "fixture-route", candidateKey: pipeline.routeCandidateId, familyDefinitionHash: h("route-family"), capabilities: [], instanceKey: options.stage12?.selectedGraphLegs[0]?.owningInstanceKey ?? route.legs[0]!.ownerRef, sourceAnchorHash: h(`source-${pipeline.currentSource.source.hash}`), semanticConfigDigest: h("config"), resourceMetricsHash: h("metrics") });
     const result = await owner.emitStage({ context, stage: { ordinal: stage, id: stageId, version: 1 }, facts, outcome: "success", reasonCode: null, startedMonotonicNs: timing.startedMonotonicNs, finishedMonotonicNs: timing.finishedMonotonicNs, rawBoundary: raw, logRange: log, witnesses, parents });
     events.push(`six-step-${stage}`);
     return result;

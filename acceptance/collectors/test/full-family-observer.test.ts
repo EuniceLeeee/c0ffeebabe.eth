@@ -19,6 +19,10 @@ import {
   qualifiedCoarseProjectionReceiptRootV1,
   sealCoarseEdgeProjectionV1,
 } from "../../../packages/coarse-economics/src/index.ts";
+import {
+  familySearchArtifactHash,
+  familySearchPayloadHash,
+} from "../../../packages/family-sdk/search-runtime/index.ts";
 import type {
   FullFamilyCandidateProofVerifierBindingV1,
 } from "../../../specs/full-family-facts/src/index.ts";
@@ -278,6 +282,121 @@ function observedUnavailableTransitionEntry(
     missingReason: null,
     receipt,
     familyObservation: familyObservation as never,
+  });
+}
+
+function observedVerifiedTransitionEntry(
+  sweep: FullGraphCoarseSweepV1,
+  entry: FullGraphCoarseSweepV1["entries"][number],
+): FullGraphCoarseSweepV1["entries"][number] {
+  const unavailable = observedUnavailableTransitionEntry(sweep, entry);
+  const priorReceipt = unavailable.receipt!;
+  const priorObservation = unavailable.familyObservation as unknown as Record<string, unknown>;
+  const {
+    schemaVersion: _schemaVersion,
+    kind: _kind,
+    projectionId: _projectionId,
+    estimatedOutput: _estimatedOutput,
+    status: _status,
+    reasonCode: _reasonCode,
+    ...projectionBase
+  } = priorReceipt.projection;
+  const projection = sealCoarseEdgeProjectionV1({
+    ...projectionBase,
+    estimatedOutput: Object.freeze({ assetRef: entry.outputAssetRef, amount: "2" }),
+    status: "rankable",
+    reasonCode: null,
+  });
+  const receiptBody = Object.freeze({
+    schemaVersion: priorReceipt.schemaVersion,
+    kind: priorReceipt.kind,
+    releaseMembershipRoot: priorReceipt.releaseMembershipRoot,
+    releaseProvenanceHash: priorReceipt.releaseProvenanceHash,
+    ownerQualificationLeafDigest: priorReceipt.ownerQualificationLeafDigest,
+    ownerDescriptor: priorReceipt.ownerDescriptor,
+    projection,
+    boundVerification: null,
+  });
+  const receipt = Object.freeze({
+    ...receiptBody,
+    receiptRoot: qualifiedCoarseProjectionReceiptRootV1(receiptBody),
+  });
+  const payload = Object.freeze({ quote: "owner-observed" });
+  const payloadHash = familySearchPayloadHash("coarse", payload);
+  const source = sweep.binding.actualCurrentSource;
+  const routeBindingHash = priorObservation.routeHandleBindingHash as Hash;
+  const amountHash = priorObservation.amountHash as Hash;
+  const coarseArtifact = Object.freeze({
+    kind: "coarse" as const,
+    status: "rankable" as const,
+    source,
+    routeBindingHash,
+    objectiveRef: sweep.binding.objectiveRef,
+    amountHash,
+    payload,
+    payloadHash,
+    artifactHash: familySearchArtifactHash({
+      kind: "coarse",
+      source,
+      routeBindingHash,
+      objectiveRef: sweep.binding.objectiveRef,
+      amountHash,
+      payloadHash,
+    }),
+    // Family quote identity and persisted Graph transition identity are
+    // intentionally different domains.
+    projectionHash: h(`family-coarse-projection:${entry.transitionId}`),
+    stateFactsRoot: projection.stateFactsRoot,
+    input: projection.sampleInput,
+    output: projection.estimatedOutput,
+    // This is raw Family evidence. The generic receipt correctly carries no
+    // proof-qualified conservative bound.
+    conservativeOutputUpperBound: "2",
+    inputCapacityUpperBound: null,
+    rankKey: h(`family-coarse-rank:${entry.transitionId}`),
+    reasonCode: null,
+  });
+  const { observationRoot: _observationRoot, ...priorObservationBody } = priorObservation;
+  const observationBody = Object.freeze({
+    ...priorObservationBody,
+    projectionId: projection.projectionId,
+    stateOutcome: Object.freeze({ kind: "verified", artifact: Object.freeze({ state: "owner-observed" }) }),
+    coarseOutcome: Object.freeze({ kind: "verified", artifact: coarseArtifact }),
+  });
+  const familyObservation = Object.freeze({
+    ...observationBody,
+    observationRoot: hashDomain("aloha/family-runtime-coarse-edge-sweep-observation/v1", observationBody),
+  });
+  return Object.freeze({
+    ...unavailable,
+    receipt,
+    familyObservation: familyObservation as never,
+  });
+}
+
+function withVerifiedCoarseArtifactChanges(
+  entry: FullGraphCoarseSweepV1["entries"][number],
+  changes: Readonly<Record<string, unknown>>,
+): FullGraphCoarseSweepV1["entries"][number] {
+  const { observationRoot: _observationRoot, ...observationBody } =
+    entry.familyObservation as unknown as Record<string, unknown>;
+  const coarseOutcome = observationBody.coarseOutcome as {
+    readonly kind: "verified";
+    readonly artifact: Record<string, unknown>;
+  };
+  const changedBody = Object.freeze({
+    ...observationBody,
+    coarseOutcome: Object.freeze({
+      kind: coarseOutcome.kind,
+      artifact: Object.freeze({ ...coarseOutcome.artifact, ...changes }),
+    }),
+  });
+  return Object.freeze({
+    ...entry,
+    familyObservation: Object.freeze({
+      ...changedBody,
+      observationRoot: hashDomain("aloha/family-runtime-coarse-edge-sweep-observation/v1", changedBody),
+    }) as never,
   });
 }
 
@@ -741,6 +860,79 @@ test("full-Graph sweep is the denominator and missing coarse owner facts remain 
   );
   assert.deepEqual(partialMissing.map(item => item.code), ["coarse-family-artifact-unavailable"]);
   assert.equal(partialMissing.some(item => item.code === "graph-transition-audit-denominator-incomplete"), false);
+
+  const verifiedEntry = observedVerifiedTransitionEntry(sweep, sweep.entries[0]!);
+  const verifiedObservation = verifiedEntry.familyObservation as unknown as {
+    readonly coarseOutcome: { readonly artifact: { readonly projectionHash: Hash; readonly output: unknown } };
+    readonly observationRoot: Hash;
+  };
+  assert.notEqual(
+    verifiedObservation.coarseOutcome.artifact.projectionHash,
+    verifiedEntry.edge.projectionHash,
+    "a Family quote projection is not a persisted Graph transition projection",
+  );
+  const verifiedSweep = fullGraphSweep(
+    snapshot,
+    terminalBinding,
+    Object.freeze([verifiedEntry, ...sweep.entries.slice(1)]),
+  );
+  assert.deepEqual(
+    validateProductionFullFamilyBindings(
+      snapshot,
+      audit,
+      value.release,
+      value.verifier,
+      terminalBinding,
+      verifiedSweep,
+    ).map(item => item.code),
+    ["coarse-family-artifact-unavailable"],
+  );
+
+  const changedEntry = withVerifiedCoarseArtifactChanges(verifiedEntry, {
+    output: Object.freeze({ assetRef: verifiedEntry.outputAssetRef, amount: "3" }),
+  });
+  const changedSweep = fullGraphSweep(
+    snapshot,
+    terminalBinding,
+    Object.freeze([changedEntry, ...sweep.entries.slice(1)]),
+  );
+  assert.throws(
+    () => validateProductionFullFamilyBindings(
+      snapshot,
+      audit,
+      value.release,
+      value.verifier,
+      terminalBinding,
+      changedSweep,
+    ),
+    /coarse owner artifact\/sweep receipt splice/,
+    "Family raw evidence still exact-joins every field preserved by the qualified receipt",
+  );
+  for (const [changes, expected] of [
+    [{ projectionHash: "not-a-hash" }, /projectionHash/],
+    [{ conservativeOutputUpperBound: "02" }, /decimal string/],
+    [{ inputCapacityUpperBound: "02" }, /decimal string/],
+  ] as const) {
+    const invalidWireSweep = fullGraphSweep(
+      snapshot,
+      terminalBinding,
+      Object.freeze([
+        withVerifiedCoarseArtifactChanges(verifiedEntry, changes),
+        ...sweep.entries.slice(1),
+      ]),
+    );
+    assert.throws(
+      () => validateProductionFullFamilyBindings(
+        snapshot,
+        audit,
+        value.release,
+        value.verifier,
+        terminalBinding,
+        invalidWireSweep,
+      ),
+      expected,
+    );
+  }
   for (const changed of [
     { ...partiallyMissingSweep, observedTransitionIds: [] },
     { ...partiallyMissingSweep, missingTransitionRoot: h("foreign-missing-transition-root") },

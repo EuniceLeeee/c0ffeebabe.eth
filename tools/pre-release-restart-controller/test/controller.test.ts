@@ -1,18 +1,29 @@
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
-import { sha256Hex } from "../../../packages/canonical-codec/src/index.ts";
+import {
+  CANONICAL_LIMITS,
+  decodeCanonicalJson,
+  encodeCanonicalBytes,
+  hashCanonicalPartition,
+  hashDomain,
+  sha256Hex,
+  type Hash,
+} from "../../../packages/canonical-codec/src/index.ts";
 import { atomicNoClobberPublishV1 } from "../src/atomic-file.ts";
 import { buildPreReleaseRestartControllerBundleV1 } from "../src/bundle-builder.ts";
+import { readStableOwnedPhysicalFileV1 } from "../src/stable-owned-file.ts";
 import { runPreReleaseRestartControllerV1 } from "../src/controller-owner.ts";
 import {
   assertPreReleaseProcessPreDenominatorV1,
   publishPreReleaseADurableSnapshotsV1,
+  readBoundedPhysicalFileForTestV1,
   snapshotFlatDirectoryForTestV1,
+  snapshotSelectedSixStepBoundariesForTestV1,
   snapshotSqliteDatabaseForTestV1,
 } from "../src/durable-owner.ts";
 import {
@@ -28,9 +39,51 @@ import {
   decodePreReleaseRestartControllerReceiptV1,
   decodePreReleaseRestartControllerRoundLockV1,
   PRE_RELEASE_RESTART_CONTROLLER_LAYOUT_V1 as LAYOUT,
+  PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1,
   PRE_RELEASE_RESTART_CONTROLLER_UNIT_V1,
   sealPreReleaseRestartControllerRoundLockV1,
+  type PreReleaseControllerDirectorySnapshotV1,
 } from "../src/spec.ts";
+
+const BOUNDARY_KEY_SEQUENCE_DOMAIN = "aloha/production-terminal-phase-six-step-boundary-key-sequence/v1";
+
+function terminalIndexBytes(keys: readonly Hash[], finalDurableWindowId: Hash): Uint8Array {
+  const h = (field: string) => hashDomain("test/pre-release-terminal-index-field/v1", { finalDurableWindowId, field });
+  const payload = {
+    schemaVersion: 1,
+    kind: "aloha.production-terminal-phase-locator-index-v1",
+    finalDurableWindowId,
+    locatorRoot: h("locatorRoot"),
+    locatorContentSha256: h("locatorContentSha256"),
+    locatorArtifactRefId: h("locatorArtifactRefId"),
+    locatorArtifact: null,
+    manifestRoot: h("manifestRoot"),
+    manifestContentSha256: h("manifestContentSha256"),
+    manifestArtifact: null,
+    fullFamilyProjectionArtifact: null,
+    fullFamilyTerminalBindingArtifact: null,
+    fullGraphCoarseSweepArtifact: null,
+    fullFamilyBundleArtifact: null,
+    fullFamilyLocatorArtifact: null,
+    sixStepTerminalBindingArtifact: null,
+    sixStepPredicateArtifacts: [],
+    sixStepPredicateArtifactPointerRoot: h("sixStepPredicateArtifactPointerRoot"),
+    sixStepBoundaryKeys: keys,
+    sixStepBoundaryKeyRoot: hashCanonicalPartition(BOUNDARY_KEY_SEQUENCE_DOMAIN, keys, 16),
+    selectedProcessArtifact: null,
+  } as const;
+  return encodeCanonicalBytes({
+    ...payload,
+    indexRoot: hashDomain("aloha/production-terminal-phase-locator-index/v1", payload),
+  });
+}
+
+function boundaryKeys(prefix: string, count: number): readonly Hash[] {
+  return Object.freeze(Array.from({ length: count }, (_, index) => hashDomain(
+    "test/pre-release-selected-six-step-boundary/v1",
+    `${prefix}:${index}`,
+  )).sort());
+}
 
 test("controller unit is one fixed root-owned no-restart owner", () => {
   assert.match(PRE_RELEASE_RESTART_CONTROLLER_UNIT_V1, /^Type=oneshot$/m);
@@ -273,6 +326,376 @@ test("root directory snapshot freezes the exact flat observer and locator denomi
     assert.throws(() => snapshotFlatDirectoryForTestV1(
       "terminal-locator-index", locators, join(directory, "extra-locator-snapshot"), directory,
     ), /denominator is not exact/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("Six-Step snapshot copies only the A terminal-index closure despite 37 unrelated cache files", () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "aloha-selected-a-six-step-")));
+  try {
+    const locatorSource = join(directory, "locator-source");
+    const boundarySource = join(directory, "boundary-source");
+    mkdirSync(locatorSource, { mode: 0o700 });
+    mkdirSync(boundarySource, { mode: 0o700 });
+    const selectedKeys = boundaryKeys("a", 8);
+    for (const key of selectedKeys) writeFileSync(join(boundarySource, `${key.slice(2)}.v8`), key, { mode: 0o400 });
+    for (let index = 0; index < 37; index += 1) {
+      const key = hashDomain("test/pre-release-unrelated-boundary/v1", `a:${index}`);
+      writeFileSync(join(boundarySource, `${key.slice(2)}.v8`), "unrelated", { mode: 0o400 });
+    }
+    const locatorName = `${"a".repeat(64)}.json`;
+    writeFileSync(join(locatorSource, locatorName), terminalIndexBytes(selectedKeys, `0x${"a".repeat(64)}`), { mode: 0o400 });
+    const locatorSnapshot = snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index",
+      locatorSource,
+      join(directory, "locator-snapshot"),
+      directory,
+    ) as unknown as PreReleaseControllerDirectorySnapshotV1;
+    const snapshot = snapshotSelectedSixStepBoundariesForTestV1(
+      boundarySource,
+      join(directory, "boundary-snapshot"),
+      directory,
+      locatorSnapshot,
+    ) as { readonly entries: readonly { readonly name: string }[] };
+    assert.deepEqual(snapshot.entries.map(entry => entry.name), selectedKeys.map(key => `${key.slice(2)}.v8`));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("non-observed terminal index freezes an empty Six-Step boundary closure", () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "aloha-empty-six-step-closure-")));
+  try {
+    const locatorSource = join(directory, "locator-source");
+    const boundarySource = join(directory, "boundary-source");
+    mkdirSync(locatorSource, { mode: 0o700 });
+    mkdirSync(boundarySource, { mode: 0o700 });
+    const finalDurableWindowId = `0x${"d".repeat(64)}` as Hash;
+    writeFileSync(
+      join(locatorSource, `${finalDurableWindowId.slice(2)}.json`),
+      terminalIndexBytes([], finalDurableWindowId),
+      { mode: 0o400 },
+    );
+    for (let index = 0; index < 37; index += 1) {
+      const key = hashDomain("test/pre-release-unrelated-boundary/v1", `empty:${index}`);
+      writeFileSync(join(boundarySource, `${key.slice(2)}.v8`), "unrelated", { mode: 0o400 });
+    }
+    const locatorSnapshot = snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index", locatorSource, join(directory, "locator-snapshot"), directory,
+    ) as unknown as PreReleaseControllerDirectorySnapshotV1;
+    const snapshot = snapshotSelectedSixStepBoundariesForTestV1(
+      boundarySource,
+      join(directory, "boundary-snapshot"),
+      directory,
+      locatorSnapshot,
+    ) as { readonly entries: readonly unknown[] };
+    assert.deepEqual(snapshot.entries, []);
+
+    const oneLegLocatorSource = join(directory, "one-leg-locator-source");
+    mkdirSync(oneLegLocatorSource, { mode: 0o700 });
+    const oneLegWindowId = `0x${"e".repeat(64)}` as Hash;
+    writeFileSync(
+      join(oneLegLocatorSource, `${oneLegWindowId.slice(2)}.json`),
+      terminalIndexBytes(boundaryKeys("one-leg", 6), oneLegWindowId),
+      { mode: 0o400 },
+    );
+    const oneLegLocatorSnapshot = snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index",
+      oneLegLocatorSource,
+      join(directory, "one-leg-locator-snapshot"),
+      directory,
+    ) as unknown as PreReleaseControllerDirectorySnapshotV1;
+    assert.throws(() => snapshotSelectedSixStepBoundariesForTestV1(
+      boundarySource,
+      join(directory, "one-leg-boundary-snapshot"),
+      directory,
+      oneLegLocatorSnapshot,
+    ), /2L\+4/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("Six-Step B snapshot selects the unique new terminal index and fails closed on missing or replaced selected files", () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "aloha-selected-b-six-step-")));
+  try {
+    const aLocatorSource = join(directory, "a-locator-source");
+    const bLocatorSource = join(directory, "b-locator-source");
+    const boundarySource = join(directory, "boundary-source");
+    mkdirSync(aLocatorSource, { mode: 0o700 });
+    mkdirSync(bLocatorSource, { mode: 0o700 });
+    mkdirSync(boundarySource, { mode: 0o700 });
+    const aKeys = boundaryKeys("a", 8);
+    const bKeys = boundaryKeys("b", 8);
+    const aName = `${"a".repeat(64)}.json`;
+    const bName = `${"b".repeat(64)}.json`;
+    writeFileSync(join(aLocatorSource, aName), terminalIndexBytes(aKeys, `0x${"a".repeat(64)}`), { mode: 0o400 });
+    writeFileSync(join(bLocatorSource, aName), terminalIndexBytes(aKeys, `0x${"a".repeat(64)}`), { mode: 0o400 });
+    writeFileSync(join(bLocatorSource, bName), terminalIndexBytes(bKeys, `0x${"b".repeat(64)}`), { mode: 0o400 });
+    for (const key of bKeys) writeFileSync(join(boundarySource, `${key.slice(2)}.v8`), key, { mode: 0o400 });
+    const aLocatorSnapshot = snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index", aLocatorSource, join(directory, "a-locator-snapshot"), directory,
+    ) as unknown as PreReleaseControllerDirectorySnapshotV1;
+    assert.equal(aLocatorSnapshot.entries.length, 1);
+    const bLocatorSnapshot = snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index", bLocatorSource, join(directory, "b-locator-snapshot"), directory, 2,
+    ) as unknown as PreReleaseControllerDirectorySnapshotV1;
+    const replacedPredecessorSource = join(directory, "replaced-predecessor-locator-source");
+    mkdirSync(replacedPredecessorSource, { mode: 0o700 });
+    writeFileSync(
+      join(replacedPredecessorSource, aName),
+      terminalIndexBytes(boundaryKeys("self-consistent-replaced-a", 6), `0x${"a".repeat(64)}`),
+      { mode: 0o400 },
+    );
+    writeFileSync(
+      join(replacedPredecessorSource, bName),
+      terminalIndexBytes(bKeys, `0x${"b".repeat(64)}`),
+      { mode: 0o400 },
+    );
+    const replacedPredecessorSnapshot = snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index",
+      replacedPredecessorSource,
+      join(directory, "replaced-predecessor-locator-snapshot"),
+      directory,
+      2,
+    ) as unknown as PreReleaseControllerDirectorySnapshotV1;
+    assert.throws(() => snapshotSelectedSixStepBoundariesForTestV1(
+      boundarySource,
+      join(directory, "replaced-predecessor-boundary-snapshot"),
+      directory,
+      replacedPredecessorSnapshot,
+      join(directory, "a-locator-snapshot"),
+    ), /predecessor content does not equal/i);
+    const selected = snapshotSelectedSixStepBoundariesForTestV1(
+      boundarySource,
+      join(directory, "b-boundary-snapshot"),
+      directory,
+      bLocatorSnapshot,
+      join(directory, "a-locator-snapshot"),
+    ) as { readonly entries: readonly { readonly name: string }[] };
+    assert.deepEqual(selected.entries.map(entry => entry.name), bKeys.map(key => `${key.slice(2)}.v8`));
+
+    const missingSource = join(directory, "missing-boundary-source");
+    mkdirSync(missingSource, { mode: 0o700 });
+    for (const key of bKeys.slice(1)) writeFileSync(join(missingSource, `${key.slice(2)}.v8`), key, { mode: 0o400 });
+    assert.throws(() => snapshotSelectedSixStepBoundariesForTestV1(
+      missingSource,
+      join(directory, "missing-boundary-snapshot"),
+      directory,
+      bLocatorSnapshot,
+      join(directory, "a-locator-snapshot"),
+    ), /ENOENT|source entry/i);
+
+    const replacedSource = join(directory, "replaced-boundary-source");
+    mkdirSync(replacedSource, { mode: 0o700 });
+    const replacement = join(directory, "replacement.v8");
+    writeFileSync(replacement, "replacement", { mode: 0o400 });
+    for (const key of bKeys) writeFileSync(join(replacedSource, `${key.slice(2)}.v8`), key, { mode: 0o400 });
+    unlinkSync(join(replacedSource, `${bKeys[0]!.slice(2)}.v8`));
+    linkSync(replacement, join(replacedSource, `${bKeys[0]!.slice(2)}.v8`));
+    assert.throws(() => snapshotSelectedSixStepBoundariesForTestV1(
+      replacedSource,
+      join(directory, "replaced-boundary-snapshot"),
+      directory,
+      bLocatorSnapshot,
+      join(directory, "a-locator-snapshot"),
+    ), /byte policy|immutable/i);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("Six-Step selector rejects jointly rewritten keys and key root under the old terminal index root", () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "aloha-six-step-index-root-mutation-")));
+  try {
+    const locatorSource = join(directory, "locator-source");
+    const boundarySource = join(directory, "boundary-source");
+    mkdirSync(locatorSource, { mode: 0o700 });
+    mkdirSync(boundarySource, { mode: 0o700 });
+    const finalDurableWindowId = `0x${"c".repeat(64)}` as Hash;
+    const original = decodeCanonicalJson(terminalIndexBytes(boundaryKeys("original", 8), finalDurableWindowId));
+    assert.equal(typeof original, "object");
+    const replacementKeys = boundaryKeys("replacement", 8);
+    const rewritten = {
+      ...(original as Record<string, unknown>),
+      sixStepBoundaryKeys: replacementKeys,
+      sixStepBoundaryKeyRoot: hashCanonicalPartition(BOUNDARY_KEY_SEQUENCE_DOMAIN, replacementKeys, 16),
+    };
+    writeFileSync(
+      join(locatorSource, `${finalDurableWindowId.slice(2)}.json`),
+      encodeCanonicalBytes(rewritten as never),
+      { mode: 0o400 },
+    );
+    const locatorSnapshot = snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index", locatorSource, join(directory, "locator-snapshot"), directory,
+    ) as unknown as PreReleaseControllerDirectorySnapshotV1;
+    assert.throws(() => snapshotSelectedSixStepBoundariesForTestV1(
+      boundarySource,
+      join(directory, "boundary-snapshot"),
+      directory,
+      locatorSnapshot,
+    ), /index root mismatch/i);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("Six-Step selected index, boundary files, aggregate, and ledger are rejected from metadata before content allocation", () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "aloha-six-step-pre-read-bounds-")));
+  try {
+    const locatorSource = join(directory, "locator-source");
+    const boundarySource = join(directory, "boundary-source");
+    mkdirSync(locatorSource, { mode: 0o700 });
+    mkdirSync(boundarySource, { mode: 0o700 });
+    const locatorPath = join(locatorSource, `${"a".repeat(64)}.json`);
+    writeFileSync(locatorPath, "", { mode: 0o600 });
+    truncateSync(locatorPath, CANONICAL_LIMITS.maxBytes + 1);
+    chmodSync(locatorPath, 0o400);
+    assert.throws(() => snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index", locatorSource, join(directory, "locator-snapshot"), directory,
+    ), /byte policy/i);
+
+    const selectedKeys = boundaryKeys("oversized", 8);
+    const exactLocatorSource = join(directory, "exact-locator-source");
+    mkdirSync(exactLocatorSource, { mode: 0o700 });
+    writeFileSync(
+      join(exactLocatorSource, `${"b".repeat(64)}.json`),
+      terminalIndexBytes(selectedKeys, `0x${"b".repeat(64)}`),
+      { mode: 0o400 },
+    );
+    const exactLocatorSnapshot = snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index", exactLocatorSource, join(directory, "exact-locator-snapshot"), directory,
+    ) as unknown as PreReleaseControllerDirectorySnapshotV1;
+    const oversizedBoundary = join(boundarySource, `${selectedKeys[0]!.slice(2)}.v8`);
+    for (const key of selectedKeys.slice(1)) {
+      writeFileSync(join(boundarySource, `${key.slice(2)}.v8`), key, { mode: 0o400 });
+    }
+    writeFileSync(oversizedBoundary, "", { mode: 0o600 });
+    truncateSync(oversizedBoundary, PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxEntryBytes + 1);
+    chmodSync(oversizedBoundary, 0o400);
+    assert.throws(() => snapshotSelectedSixStepBoundariesForTestV1(
+      boundarySource,
+      join(directory, "oversized-boundary-snapshot"),
+      directory,
+      exactLocatorSnapshot,
+    ), /byte policy/i);
+
+    const aggregateKeys = boundaryKeys("aggregate", 10);
+    const aggregateLocatorSource = join(directory, "aggregate-locator-source");
+    const aggregateBoundarySource = join(directory, "aggregate-boundary-source");
+    mkdirSync(aggregateLocatorSource, { mode: 0o700 });
+    mkdirSync(aggregateBoundarySource, { mode: 0o700 });
+    writeFileSync(
+      join(aggregateLocatorSource, `${"c".repeat(64)}.json`),
+      terminalIndexBytes(aggregateKeys, `0x${"c".repeat(64)}`),
+      { mode: 0o400 },
+    );
+    const aggregateLocatorSnapshot = snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index",
+      aggregateLocatorSource,
+      join(directory, "aggregate-locator-snapshot"),
+      directory,
+    ) as unknown as PreReleaseControllerDirectorySnapshotV1;
+    for (const key of aggregateKeys) {
+      const path = join(aggregateBoundarySource, `${key.slice(2)}.v8`);
+      writeFileSync(path, "", { mode: 0o600 });
+      truncateSync(path, PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxEntryBytes);
+      chmodSync(path, 0o400);
+    }
+    assert.throws(() => snapshotSelectedSixStepBoundariesForTestV1(
+      aggregateBoundarySource,
+      join(directory, "aggregate-boundary-snapshot"),
+      directory,
+      aggregateLocatorSnapshot,
+    ), /aggregate exceeds policy/i);
+
+    const ledger = join(directory, "oversized-evidence.jsonl");
+    writeFileSync(ledger, "", { mode: 0o600 });
+    truncateSync(ledger, PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxLedgerBytes + 1);
+    assert.throws(() => readBoundedPhysicalFileForTestV1(
+      ledger,
+      PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxLedgerBytes,
+    ), /byte length/i);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("receipt reopen uses one descriptor and rejects oversized or path-swapped ledgers before redirected content read", () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "aloha-ledger-reopen-fence-")));
+  try {
+    const uid = BigInt(process.getuid!());
+    const gid = BigInt(process.getgid!());
+    const policy = Object.freeze({ uid, gid, mode: 0o600n, maximumByteLength: 1024n });
+    const oversized = join(directory, "oversized.jsonl");
+    writeFileSync(oversized, "", { mode: 0o600 });
+    truncateSync(oversized, 1025);
+    let postPreflightCalled = false;
+    assert.throws(() => readStableOwnedPhysicalFileV1(oversized, policy, () => {
+      postPreflightCalled = true;
+    }), /size mismatch/i);
+    assert.equal(postPreflightCalled, false, "oversized file is rejected before any content-read hook");
+
+    const swapped = join(directory, "swapped.jsonl");
+    const original = join(directory, "original.jsonl");
+    writeFileSync(swapped, "small", { mode: 0o600 });
+    assert.throws(() => readStableOwnedPhysicalFileV1(swapped, policy, () => {
+      renameSync(swapped, original);
+      writeFileSync(swapped, "", { mode: 0o600 });
+      truncateSync(swapped, 1025);
+    }), /changed during read/i);
+    assert.equal(readFileSync(original, "utf8"), "small");
+
+    const grown = join(directory, "grown.jsonl");
+    writeFileSync(grown, "small", { mode: 0o600 });
+    const grownInode = statSync(grown, { bigint: true }).ino;
+    assert.throws(() => readStableOwnedPhysicalFileV1(grown, policy, () => {
+      writeFileSync(grown, "-same-inode-growth", { flag: "a" });
+    }), /changed during read/i);
+    assert.equal(statSync(grown, { bigint: true }).ino, grownInode);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("selected Six-Step aggregate keeps each preflight descriptor through the bounded content read", () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "aloha-six-step-retained-fd-")));
+  try {
+    const keys = boundaryKeys("retained-fd", 8);
+    const locatorSource = join(directory, "locator-source");
+    const boundarySource = join(directory, "boundary-source");
+    mkdirSync(locatorSource, { mode: 0o700 });
+    mkdirSync(boundarySource, { mode: 0o700 });
+    writeFileSync(
+      join(locatorSource, `${"d".repeat(64)}.json`),
+      terminalIndexBytes(keys, `0x${"d".repeat(64)}`),
+      { mode: 0o400 },
+    );
+    const locatorSnapshot = snapshotFlatDirectoryForTestV1(
+      "terminal-locator-index",
+      locatorSource,
+      join(directory, "locator-snapshot"),
+      directory,
+    ) as unknown as PreReleaseControllerDirectorySnapshotV1;
+    for (const key of keys) {
+      writeFileSync(join(boundarySource, `${key.slice(2)}.v8`), key, { mode: 0o400 });
+    }
+    const grown = join(boundarySource, `${keys[0]!.slice(2)}.v8`);
+    const grownInode = statSync(grown, { bigint: true }).ino;
+    assert.throws(() => snapshotSelectedSixStepBoundariesForTestV1(
+      boundarySource,
+      join(directory, "boundary-snapshot"),
+      directory,
+      locatorSnapshot,
+      null,
+      () => {
+        chmodSync(grown, 0o600);
+        writeFileSync(grown, "-same-inode-growth", { flag: "a" });
+        chmodSync(grown, 0o400);
+      },
+    ), /source entry changed/i);
+    assert.equal(statSync(grown, { bigint: true }).ino, grownInode);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

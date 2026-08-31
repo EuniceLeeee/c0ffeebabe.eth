@@ -8,7 +8,7 @@ import {
   decodePerformanceWindowCommitment,
   decodePerformanceWindowReceipt,
   decodeProductionPerformanceProfile,
-  decodePerformanceFactBundle,
+  decodePartitionedPerformanceFactBundle,
   hashCandidateBearingHeadSetRoot,
   hashCandidatePathTimingSampleRoot,
   hashFullHeadTimingSampleRoot,
@@ -91,7 +91,7 @@ interface DecodedReferenceFactsV1 {
 
 function decodeFacts(value: unknown): DecodedReferenceFactsV1 | null {
   try {
-    const bundle = decodePerformanceFactBundle(value as object);
+    const bundle = decodePartitionedPerformanceFactBundle(value as object);
     return Object.freeze(bundle);
   } catch {
     return null;

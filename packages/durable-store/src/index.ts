@@ -208,6 +208,14 @@ export function readDurableAppendCapabilityV1(
 export interface DurableStoreOptions {
   /** Test-only fault hook. Throwing rolls back the current SQLite transaction. */
   readonly beforeCommit?: () => void;
+  /** Test-only race hook between the two SQLite data-version fence reads. */
+  readonly onSchemaRoleFenceInterleave?: () => void;
+  /** Test-only race hook after append COMMIT and before capability validation. */
+  readonly beforeAppendCapabilityValidation?: () => void;
+  /** Test-only observation hook for full append-log validation. */
+  readonly onFullAppendLogValidation?: () => void;
+  /** Test-only observation hook for full schema, contract, and role validation. */
+  readonly onFullSchemaValidation?: () => void;
   readonly leaseTtlMs?: number;
 }
 
@@ -684,7 +692,7 @@ function readSchemaContract(database: SqliteDatabase): SchemaContract {
   return Object.freeze({ schemaVersion, schemaDigest, instanceNonce, roleBindingHash });
 }
 
-function assertAppendLogSchemaContract(database: SqliteDatabase): void {
+function assertAppendLogSchemaContract(database: SqliteDatabase): SchemaContract {
   assertAppendLogSchemaDescriptor(database);
   const coreContract = readSchemaContract(database);
   const rows = database.prepare(
@@ -709,7 +717,18 @@ function assertAppendLogSchemaContract(database: SqliteDatabase): void {
   ) {
     throw new CorruptDurableStoreError("durable append-log schema version or core binding mismatch");
   }
+  return coreContract;
 }
+
+type SchemaRoleValidationFence = Readonly<{
+  dataVersion: number;
+  schemaVersion: number;
+}>;
+
+type ValidatedSchemaRoleState = Readonly<{
+  fence: SchemaRoleValidationFence;
+  persistedRole: string | null;
+}>;
 
 type StoredAppendRecord = Readonly<{
   namespace: string;
@@ -728,8 +747,131 @@ type AppendNamespaceState = Readonly<{
   nextOffset: string;
 }>;
 
-function validateAppendLogRows(database: SqliteDatabase): ReadonlyMap<string, AppendNamespaceState> {
-  assertAppendLogSchemaContract(database);
+type AppendNamespaceTail = Readonly<{
+  nextSequence: string;
+  nextOffset: string;
+}>;
+
+function decodeStoredAppendRecord(
+  row: {
+    namespace?: unknown;
+    sequence?: unknown;
+    event_id?: unknown;
+    content_sha256?: unknown;
+    bytes?: unknown;
+    byte_length?: unknown;
+    offset_start?: unknown;
+    offset_end?: unknown;
+  },
+  context: string,
+): StoredAppendRecord {
+  const namespace = assertNonEmptyText(row.namespace, `${context}.namespace`);
+  const sequence = assertDecimal(row.sequence, `${context} ${namespace}.sequence`);
+  const eventId = assertHash(row.event_id, `${context} ${namespace}/${sequence}.event_id`);
+  const contentSha256 = assertHash(
+    row.content_sha256,
+    `${context} ${namespace}/${sequence}.content_sha256`,
+  );
+  const bytes = copyBytes(row.bytes, `${context} ${namespace}/${sequence}.bytes`);
+  const byteLength = assertDecimal(row.byte_length, `${context} ${namespace}/${sequence}.byte_length`);
+  const offsetStart = assertDecimal(row.offset_start, `${context} ${namespace}/${sequence}.offset_start`);
+  const offsetEnd = assertDecimal(row.offset_end, `${context} ${namespace}/${sequence}.offset_end`);
+  if (byteLength !== String(bytes.byteLength)) {
+    throw new CorruptDurableStoreError(`durable append-log byte length mismatch at ${namespace}/${sequence}`);
+  }
+  if (sha256Hex(bytes) !== contentSha256) {
+    throw new CorruptDurableStoreError(`durable append-log content hash mismatch at ${namespace}/${sequence}`);
+  }
+  return Object.freeze({
+    namespace,
+    sequence,
+    eventId,
+    contentSha256,
+    bytes,
+    byteLength,
+    offsetStart,
+    offsetEnd,
+  });
+}
+
+function readStoredAppendRecord(
+  database: SqliteDatabase,
+  namespace: string,
+  sequence: string,
+): StoredAppendRecord | undefined {
+  const row = database.prepare(
+    `SELECT namespace, sequence, event_id, content_sha256, bytes, byte_length, offset_start, offset_end
+     FROM ${DURABLE_APPEND_LOG_TABLE} WHERE namespace=? AND sequence=?`,
+  ).get(namespace, sequence) as {
+    namespace?: unknown;
+    sequence?: unknown;
+    event_id?: unknown;
+    content_sha256?: unknown;
+    bytes?: unknown;
+    byte_length?: unknown;
+    offset_start?: unknown;
+    offset_end?: unknown;
+  } | undefined;
+  return row === undefined
+    ? undefined
+    : decodeStoredAppendRecord(row, "durable append-log exact row");
+}
+
+function readSqliteDataVersion(database: SqliteDatabase): number {
+  const row = database.prepare("PRAGMA data_version").get() as Record<string, unknown>;
+  const value = Object.values(row)[0];
+  const version = statementNumber(value, "SQLite data_version");
+  if (version < 0) throw new CorruptDurableStoreError("invalid SQLite data_version");
+  return version;
+}
+
+function readSqliteSchemaVersion(database: SqliteDatabase): number {
+  const row = database.prepare("PRAGMA schema_version").get() as Record<string, unknown>;
+  const value = Object.values(row)[0];
+  const version = statementNumber(value, "SQLite schema_version");
+  if (version < 0) throw new CorruptDurableStoreError("invalid SQLite schema_version");
+  return version;
+}
+
+function readSchemaRoleValidationFence(
+  database: SqliteDatabase,
+  onInterleave?: () => void,
+): SchemaRoleValidationFence {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const dataVersionBefore = readSqliteDataVersion(database);
+    onInterleave?.();
+    const schemaVersion = readSqliteSchemaVersion(database);
+    const dataVersionAfter = readSqliteDataVersion(database);
+    if (dataVersionBefore === dataVersionAfter) {
+      return Object.freeze({ dataVersion: dataVersionAfter, schemaVersion });
+    }
+  }
+  throw new CorruptDurableStoreError("SQLite schema and role fence did not stabilize");
+}
+
+function sameSchemaRoleValidationFence(
+  left: SchemaRoleValidationFence,
+  right: SchemaRoleValidationFence,
+): boolean {
+  return left.dataVersion === right.dataVersion && left.schemaVersion === right.schemaVersion;
+}
+
+function appendNamespaceTails(
+  states: ReadonlyMap<string, AppendNamespaceState>,
+): ReadonlyMap<string, AppendNamespaceTail> {
+  return new Map([...states].map(([namespace, state]) => [
+    namespace,
+    Object.freeze({ nextSequence: state.nextSequence, nextOffset: state.nextOffset }),
+  ]));
+}
+
+function validateAppendLogRows(
+  database: SqliteDatabase,
+  onValidation?: () => void,
+  schemaAlreadyValidated = false,
+): ReadonlyMap<string, AppendNamespaceState> {
+  onValidation?.();
+  if (!schemaAlreadyValidated) assertAppendLogSchemaContract(database);
   const rows = database.prepare(
     `SELECT namespace, sequence, event_id, content_sha256, bytes, byte_length, offset_start, offset_end
      FROM ${DURABLE_APPEND_LOG_TABLE}`,
@@ -745,34 +887,10 @@ function validateAppendLogRows(database: SqliteDatabase): ReadonlyMap<string, Ap
   }[];
   const grouped = new Map<string, StoredAppendRecord[]>();
   for (const [index, row] of rows.entries()) {
-    const namespace = assertNonEmptyText(row.namespace, `durable append-log row[${index}].namespace`);
-    const sequence = assertDecimal(row.sequence, `durable append-log ${namespace}.sequence`);
-    const eventId = assertHash(row.event_id, `durable append-log ${namespace}/${sequence}.event_id`);
-    const contentSha256 = assertHash(
-      row.content_sha256,
-      `durable append-log ${namespace}/${sequence}.content_sha256`,
-    );
-    const bytes = copyBytes(row.bytes, `durable append-log ${namespace}/${sequence}.bytes`);
-    const byteLength = assertDecimal(row.byte_length, `durable append-log ${namespace}/${sequence}.byte_length`);
-    const offsetStart = assertDecimal(row.offset_start, `durable append-log ${namespace}/${sequence}.offset_start`);
-    const offsetEnd = assertDecimal(row.offset_end, `durable append-log ${namespace}/${sequence}.offset_end`);
-    if (byteLength !== String(bytes.byteLength)) {
-      throw new CorruptDurableStoreError(`durable append-log byte length mismatch at ${namespace}/${sequence}`);
-    }
-    if (sha256Hex(bytes) !== contentSha256) {
-      throw new CorruptDurableStoreError(`durable append-log content hash mismatch at ${namespace}/${sequence}`);
-    }
+    const record = decodeStoredAppendRecord(row, `durable append-log row[${index}]`);
+    const namespace = record.namespace;
     const records = grouped.get(namespace) ?? [];
-    records.push(Object.freeze({
-      namespace,
-      sequence,
-      eventId,
-      contentSha256,
-      bytes,
-      byteLength,
-      offsetStart,
-      offsetEnd,
-    }));
+    records.push(record);
     grouped.set(namespace, records);
   }
 
@@ -832,6 +950,29 @@ function roleBindingHash(role: string, contract: SchemaContract): Hash {
     schemaDigest: contract.schemaDigest,
     instanceNonce: contract.instanceNonce,
   });
+}
+
+function validateSchemaRoleState(
+  database: SqliteDatabase,
+  onValidation?: () => void,
+): string | null {
+  onValidation?.();
+  const contract = assertAppendLogSchemaContract(database);
+  const identities = readIdentityRows(database);
+  if (identities.length === 0) {
+    if (contract.roleBindingHash !== null) {
+      throw new DurableStoreError("store-role-mismatch", "durable store role marker is missing");
+    }
+    return null;
+  }
+  if (identities.length !== 1 || identities[0]!.identityId !== 1) {
+    throw new CorruptDurableStoreError("durable store identity must contain exactly one id=1 row");
+  }
+  const persistedRole = identities[0]!.role;
+  if (contract.roleBindingHash === null || roleBindingHash(persistedRole, contract) !== contract.roleBindingHash) {
+    throw new CorruptDurableStoreError("durable store role binding digest mismatch");
+  }
+  return persistedRole;
 }
 
 function copyBytes(value: unknown, context: string): Uint8Array {
@@ -1221,7 +1362,7 @@ function createAppendLogSchema(database: SqliteDatabase, coreCreated: boolean): 
   if (existingOwnedTables.length !== DURABLE_APPEND_LOG_TABLE_NAMES.length) {
     throw new CorruptDurableStoreError("durable append-log schema is partially present");
   }
-  validateAppendLogRows(database);
+  assertAppendLogSchemaContract(database);
 }
 
 function reachableFrom(
@@ -1297,7 +1438,14 @@ export class SQLiteDurableStore {
   readonly filename: string;
   private readonly database: SqliteDatabase;
   private readonly beforeCommit?: () => void;
+  private readonly onSchemaRoleFenceInterleave?: () => void;
+  private readonly beforeAppendCapabilityValidation?: () => void;
+  private readonly onFullAppendLogValidation?: () => void;
+  private readonly onFullSchemaValidation?: () => void;
   private readonly leaseTtlMs: number;
+  private appendLogDataVersion: number;
+  private appendNamespaceTails = new Map<string, AppendNamespaceTail>();
+  private validatedSchemaRoleState: ValidatedSchemaRoleState | null = null;
   private inTransaction = false;
   private boundRole: string | null = null;
 
@@ -1312,6 +1460,10 @@ export class SQLiteDurableStore {
     }
     this.filename = filename;
     this.beforeCommit = options.beforeCommit;
+    this.onSchemaRoleFenceInterleave = options.onSchemaRoleFenceInterleave;
+    this.beforeAppendCapabilityValidation = options.beforeAppendCapabilityValidation;
+    this.onFullAppendLogValidation = options.onFullAppendLogValidation;
+    this.onFullSchemaValidation = options.onFullSchemaValidation;
     this.leaseTtlMs = options.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
     if (!Number.isInteger(this.leaseTtlMs) || this.leaseTtlMs < 1_000) {
       throw new RangeError("leaseTtlMs must be at least 1000ms");
@@ -1321,6 +1473,28 @@ export class SQLiteDurableStore {
       this.database = driver.open(filename);
       const coreCreated = createSchema(this.database);
       createAppendLogSchema(this.database, coreCreated);
+      this.database.exec("BEGIN IMMEDIATE");
+      try {
+        const persistedRole = validateSchemaRoleState(
+          this.database,
+          this.onFullSchemaValidation,
+        );
+        this.appendNamespaceTails = new Map(appendNamespaceTails(
+          validateAppendLogRows(this.database, this.onFullAppendLogValidation, true),
+        ));
+        this.appendLogDataVersion = readSqliteDataVersion(this.database);
+        this.validatedSchemaRoleState = Object.freeze({
+          fence: readSchemaRoleValidationFence(
+            this.database,
+            this.onSchemaRoleFenceInterleave,
+          ),
+          persistedRole,
+        });
+        this.database.exec("COMMIT");
+      } catch (error) {
+        try { this.database.exec("ROLLBACK"); } catch { /* preserve primary failure */ }
+        throw error;
+      }
     } catch (error) {
       if (error instanceof SQLiteDriverUnavailableError) throw error;
       throw sqliteFailure(error, `opening SQLite durable store ${filename}`);
@@ -1385,23 +1559,48 @@ export class SQLiteDurableStore {
     if (initialContract.schemaDigest !== DURABLE_SCHEMA_DIGEST) {
       throw new CorruptDurableStoreError("durable schema contract changed during role binding");
     }
+    this.refreshSchemaRoleValidation();
+    this.assertValidatedRoleAccess();
   }
 
   private assertRoleAccess(): void {
-    const contract = readSchemaContract(this.database);
-    const identities = readIdentityRows(this.database);
-    if (identities.length === 0) {
-      if (contract.roleBindingHash !== null || this.boundRole !== null) {
+    const fence = readSchemaRoleValidationFence(
+      this.database,
+      this.onSchemaRoleFenceInterleave,
+    );
+    if (
+      this.validatedSchemaRoleState === null
+      || !sameSchemaRoleValidationFence(this.validatedSchemaRoleState.fence, fence)
+    ) {
+      this.refreshSchemaRoleValidation(fence);
+    }
+    this.assertValidatedRoleAccess();
+  }
+
+  private refreshSchemaRoleValidation(
+    initialFence = readSchemaRoleValidationFence(
+      this.database,
+      this.onSchemaRoleFenceInterleave,
+    ),
+  ): void {
+    const persistedRole = validateSchemaRoleState(this.database, this.onFullSchemaValidation);
+    const finalFence = readSchemaRoleValidationFence(
+      this.database,
+      this.onSchemaRoleFenceInterleave,
+    );
+    if (!sameSchemaRoleValidationFence(initialFence, finalFence)) {
+      throw new CorruptDurableStoreError("durable schema or role changed during validation");
+    }
+    this.validatedSchemaRoleState = Object.freeze({ fence: finalFence, persistedRole });
+  }
+
+  private assertValidatedRoleAccess(): void {
+    const persistedRole = this.validatedSchemaRoleState?.persistedRole ?? null;
+    if (persistedRole === null) {
+      if (this.boundRole !== null) {
         throw new DurableStoreError("store-role-mismatch", "durable store role marker is missing");
       }
       return;
-    }
-    if (identities.length !== 1 || identities[0]!.identityId !== 1) {
-      throw new CorruptDurableStoreError("durable store identity must contain exactly one id=1 row");
-    }
-    const persistedRole = identities[0]!.role;
-    if (contract.roleBindingHash === null || roleBindingHash(persistedRole, contract) !== contract.roleBindingHash) {
-      throw new CorruptDurableStoreError("durable store role binding digest mismatch");
     }
     if (this.boundRole === null || this.boundRole !== persistedRole) {
       throw new DurableStoreError(
@@ -1482,10 +1681,10 @@ export class SQLiteDurableStore {
     assertSqliteDurability(this.database);
     const append = (owned: WriterLease): DurableAppendReceipt => {
       const committed = this.transaction(owned, (tx) => {
-        const states = validateAppendLogRows(this.database);
-        const state = states.get(normalized.namespace);
-        const expectedSequence = state?.nextSequence ?? "0";
-        const offsetStart = state?.nextOffset ?? "0";
+        this.refreshAppendTailCacheAfterExternalCommit();
+        const tail = this.appendNamespaceTails.get(normalized.namespace);
+        const expectedSequence = tail?.nextSequence ?? "0";
+        const offsetStart = tail?.nextOffset ?? "0";
         if (normalized.sequence !== expectedSequence) {
           throw new AppendSequenceConflictError(
             normalized.namespace,
@@ -1493,7 +1692,9 @@ export class SQLiteDurableStore {
             normalized.sequence,
           );
         }
-        if (state?.records.some((record) => record.eventId === normalized.eventId)) {
+        if (this.database.prepare(
+          `SELECT 1 AS present FROM ${DURABLE_APPEND_LOG_TABLE} WHERE namespace=? AND event_id=?`,
+        ).get(normalized.namespace, normalized.eventId) !== undefined) {
           throw new AppendEventConflictError(normalized.namespace, normalized.eventId);
         }
         const byteLength = String(normalized.bytes.byteLength);
@@ -1514,9 +1715,8 @@ export class SQLiteDurableStore {
         );
         tx.addBeforeCommitGuard(() => {
           assertSqliteDurability(this.database);
-          const guarded = validateAppendLogRows(this.database).get(normalized.namespace);
           assertStoredAppendMatches(
-            guarded?.records.find((record) => record.sequence === normalized.sequence),
+            readStoredAppendRecord(this.database, normalized.namespace, normalized.sequence),
             normalized,
             offsetStart,
             offsetEnd,
@@ -1532,6 +1732,10 @@ export class SQLiteDurableStore {
           offsetEnd,
         });
       });
+      this.appendNamespaceTails.set(normalized.namespace, Object.freeze({
+        nextSequence: (BigInt(committed.sequence) + 1n).toString(),
+        nextOffset: committed.offsetEnd,
+      }));
       // SQLite's FULL synchronous COMMIT completed before transaction() returned.
       assertSqliteDurability(this.database);
       return Object.freeze({ ...committed, fsynced: true as const });
@@ -1543,21 +1747,48 @@ export class SQLiteDurableStore {
     request: DurableAppendRequest,
     lease?: WriterLease,
   ): DurableAppendCapabilityV1 {
-    const receipt = this.appendFsyncMonotonic(request, lease);
-    const record = this.readAppendLog(receipt.namespace).find(candidate => (
-      candidate.sequence === receipt.sequence && candidate.eventId === receipt.eventId
-    ));
-    if (record === undefined
-      || record.contentSha256 !== receipt.contentSha256
-      || record.byteLength !== receipt.byteLength
-      || record.offsetStart !== receipt.offsetStart
-      || record.offsetEnd !== receipt.offsetEnd
-      || record.fsynced !== true) {
-      throw new TypeError("durable append capability row mismatch");
+    const normalized = normalizeAppendRequest(request);
+    const receipt = this.appendFsyncMonotonic(normalized, lease);
+    this.beforeAppendCapabilityValidation?.();
+    if (this.inTransaction) {
+      throw new DurableStoreError("nested-transaction", "cannot validate append capability during a transaction");
     }
-    const capability = Object.freeze(Object.create(null)) as DurableAppendCapabilityV1;
-    durableAppendCapabilities.set(capability, Object.freeze({ ...record, bytes: Uint8Array.from(record.bytes) }));
-    return capability;
+    try {
+      this.database.exec("BEGIN IMMEDIATE");
+      this.inTransaction = true;
+      this.assertRoleAccess();
+      this.refreshAppendTailCacheAfterExternalCommit();
+      const stored = readStoredAppendRecord(this.database, receipt.namespace, receipt.sequence);
+      assertStoredAppendMatches(stored, normalized, receipt.offsetStart, receipt.offsetEnd);
+      this.assertRoleAccess();
+      const record = Object.freeze({
+        ...stored!,
+        bytes: Uint8Array.from(stored!.bytes),
+        fsynced: true as const,
+      });
+      const capability = Object.freeze(Object.create(null)) as DurableAppendCapabilityV1;
+      durableAppendCapabilities.set(
+        capability,
+        Object.freeze({ ...record, bytes: Uint8Array.from(record.bytes) }),
+      );
+      this.database.exec("COMMIT");
+      this.inTransaction = false;
+      return capability;
+    } catch (error) {
+      try { this.database.exec("ROLLBACK"); } catch { /* preserve primary failure */ }
+      this.inTransaction = false;
+      if (error instanceof DurableStoreError) throw error;
+      throw sqliteFailure(error, "validating durable append capability");
+    }
+  }
+
+  private refreshAppendTailCacheAfterExternalCommit(): void {
+    const currentDataVersion = readSqliteDataVersion(this.database);
+    if (currentDataVersion === this.appendLogDataVersion) return;
+    this.appendNamespaceTails = new Map(appendNamespaceTails(
+      validateAppendLogRows(this.database, this.onFullAppendLogValidation),
+    ));
+    this.appendLogDataVersion = currentDataVersion;
   }
 
   acquireWriterLease(owner: string, ttlMs = this.leaseTtlMs): WriterLease {
@@ -1571,6 +1802,9 @@ export class SQLiteDurableStore {
     }
     try {
       this.database.exec("BEGIN IMMEDIATE");
+      // Close the race between the preflight fence and acquisition of the
+      // SQLite writer lock before reading or changing the lease row.
+      this.assertRoleAccess();
       const row = this.database.prepare(
         "SELECT owner, token, expires_at_ms FROM durable_writer_lease WHERE lease_id=1",
       ).get() as {
@@ -1658,6 +1892,9 @@ export class SQLiteDurableStore {
     try {
       this.database.exec("BEGIN IMMEDIATE");
       this.inTransaction = true;
+      // An external commit may land after the preflight fence but before
+      // BEGIN IMMEDIATE. Re-fence under the writer lock before the callback.
+      this.assertRoleAccess();
       this.assertLease(lease);
       const transaction = new SQLiteTransaction(this.database, () => this.assertRoleAccess());
       const result = callback(transaction);

@@ -27,6 +27,7 @@ import {
   ContentAddressedObserverSinkV1,
   type ObservedContentArtifactV1,
 } from "./content-addressed-sink.ts";
+import { productionSixStepObservedRootV1 } from "./internal/six-step-observation-root.ts";
 
 export type SixStepObserverMissingReasonV1 =
   | "no-successful-dry-run"
@@ -356,16 +357,6 @@ export async function observeProductionSixStep(
   });
   return Object.freeze({
     ...payload,
-    observationRoot: hashDomain("aloha/production-six-step-observation/v1", {
-      ...payload,
-      observedArtifacts: observedArtifacts.map(value => ({
-        role: value.role,
-        artifactRefId: value.artifact.ref.artifactRefId,
-        contentSha256: value.artifact.contentSha256,
-        claimId: value.artifact.claim.claimId,
-        leaseReceiptId: value.artifact.lease.receiptId,
-      })),
-      stageArtifactSetRoots: stageArtifacts.map(value => value.artifactSetRoot),
-    }),
+    observationRoot: productionSixStepObservedRootV1(payload),
   });
 }

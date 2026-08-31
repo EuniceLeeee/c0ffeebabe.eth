@@ -8,19 +8,9 @@ import { availableParallelism, cpus, tmpdir, totalmem } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { decodeCanonicalJson, encodeCanonicalBytes, hashDomain, sha256Hex, type Hash } from "../../canonical-codec/src/index.ts";
+import { decodeCanonicalJson, encodeCanonicalBytes, hashCanonicalPartition, hashDomain, sha256Hex, type Hash } from "../../canonical-codec/src/index.ts";
 import { erc20AssetPortBindingV1, erc20AssetReferenceV1 } from "../../asset-ref/src/index.ts";
 import { encodeEconomicSafetyObjectiveTemplatesV1 } from "../../economics-safety/src/index.ts";
-import {
-  type AttestationCompositionBindingV1,
-  type InstanceLifecycleSingleFlightPort,
-  type RejectionTransportExecutorV1,
-} from "../../attestation/src/index.ts";
-import {
-  createFrameworkFailureRuntime,
-  createRejectionExecutorAuthorityIssuer,
-  createRejectionFactRuntime,
-} from "../../attestation/src/internal/composition.ts";
 import {
   attestationProofPortForReleaseApproval,
   releaseApproval,
@@ -100,6 +90,7 @@ import {
   runtimeReleaseObserverStoreEpochV1,
   runtimeReleaseObserverStoreIdentityV1,
 } from "../src/internal/observer-store-owner.ts";
+import { issueRuntimeReleaseTerminalObservationPortsV1 } from "../src/internal/production-terminal-observation-owner.ts";
 import { createResolverPolicy } from "../../../specs/artifact-resolution/src/index.ts";
 import { readRuntimeReleaseFullFamilyTerminalBindingV1 } from "../src/full-family-terminal-consumer.ts";
 import {
@@ -622,9 +613,6 @@ async function fixture(workerEpoch: string = "epoch-1"): Promise<BootstrapFixtur
   const canonical = runtimeSource.canonical;
   await canonical.freezeView();
   const durable = createSqliteDurableStore(join(directory, "checkpoint.sqlite"));
-  const lifecycle: InstanceLifecycleSingleFlightPort = {
-    async getOrBuild() { throw new Error("bootstrap contract does not build instances"); },
-  };
   const qualifiedSource = issueRuntimeReleaseQualifiedDiscoverySourcePort(authority, {
     profile: "reth-json-rpc-v1",
     endpoint: "http://127.0.0.1:8545",
@@ -666,18 +654,6 @@ async function fixture(workerEpoch: string = "epoch-1"): Promise<BootstrapFixtur
     },
     attestation: {
       proofPort: attestationProofPortForReleaseApproval(approval),
-      build(composition: AttestationCompositionBindingV1) {
-        const frameworkRuntime = createFrameworkFailureRuntime(composition, { classify() { return null; } });
-        const rejectionIssuer = createRejectionExecutorAuthorityIssuer(composition);
-        const executor: RejectionTransportExecutorV1 = {
-          async execute() { return { transport: [], effects: [] }; },
-        };
-        return {
-          frameworkRuntime,
-          rejectionRuntime: createRejectionFactRuntime(rejectionIssuer.issue(executor)),
-          instanceLifecycle: lifecycle,
-        };
-      },
     },
     candidatePartitionProofIssuer: createCandidatePartitionProofIssuerFixture(binding),
     checkpoint: { durable, canonical },
@@ -1044,6 +1020,62 @@ test("bootstrap composes real release-bound owners and returns no authority surf
   }
 });
 
+test("Graph and full-Graph consumers must preserve the outer Family route-handle identity", async () => {
+  const first = await fixture("epoch-route-handle-first");
+  const second = await fixture("epoch-route-handle-second");
+  try {
+    const firstComposition = buildRuntimeReleaseComposition(first.input).familyRuntime.openComposition();
+    const secondComposition = buildRuntimeReleaseComposition(second.input).familyRuntime.openComposition();
+    const family = firstComposition.entries[0]!;
+    const identityMemo = Object.freeze({ fixture: "runtime-release-route-handle" });
+    const publication = Object.freeze({
+      familyId: family.familyId,
+      familyDefinitionHash: family.familyDefinitionHash,
+      instanceKey: "runtime-release-route-handle-instance",
+      identityMemo,
+      identityMemoHash: hashDomain("aloha/identity-memo/v1", identityMemo),
+      instancePublicationHash: h("runtime-release-route-handle-publication"),
+      staticProjectionMemoHash: h("runtime-release-route-handle-static-memo"),
+      requestedArtifactDependencyRoot: h("runtime-release-route-handle-dependencies"),
+    });
+    const projection = Object.freeze({
+      staticProjectionHash: h("runtime-release-route-handle-static-projection"),
+      projectionHash: h("runtime-release-route-handle-projection"),
+    });
+    const ref = Object.freeze({
+      familyDefinitionHash: publication.familyDefinitionHash,
+      instanceKey: publication.instanceKey,
+      instancePublicationHash: publication.instancePublicationHash,
+      staticProjectionMemoHash: publication.staticProjectionMemoHash,
+      requestedArtifactDependencyRoot: publication.requestedArtifactDependencyRoot,
+    });
+    const handle = firstComposition.rehydrateRouteHandle(
+      firstComposition.openRehydrationSession(family.familyDefinitionHash),
+      publication,
+      projection,
+      ref,
+    );
+
+    assert.equal(
+      firstComposition.resolveRouteHandle(handle, family.familyDefinitionHash).projectionHash,
+      projection.projectionHash,
+    );
+    assert.throws(
+      () => firstComposition.resolveRouteHandle(handle.opaque as never, family.familyDefinitionHash),
+      /not issued by this authority/,
+      "the opaque payload is not the Family-issued handle",
+    );
+    assert.throws(
+      () => secondComposition.resolveRouteHandle(handle, family.familyDefinitionHash),
+      /not issued by this authority|not release-qualified/,
+      "a handle cannot cross a release-owned composition",
+    );
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
 test("predicate observer store is derived from the signed release and rejects cross-release splice", async () => {
   const first = await fixture();
   const second = await fixture("epoch-observer-store-second-release");
@@ -1052,6 +1084,41 @@ test("predicate observer store is derived from the signed release and rejects cr
   try {
     const firstServices = buildRuntimeReleaseComposition(first.input);
     const secondServices = buildRuntimeReleaseComposition(second.input);
+    assert.throws(
+      () => issueRuntimeReleaseTerminalObservationPortsV1(first.authority, {
+        observerStore: secondServices.observerStore,
+        observerContentDirectory: secondDirectory,
+        terminalLocatorDirectory: join(secondDirectory, "terminal-locators"),
+        releaseIntentCanonicalBytes: new Uint8Array(),
+        familyCatalogSourceBytes: new Uint8Array(),
+        runtimeCompositionSourceBytes: new Uint8Array(),
+        strategyCatalogSourceBytes: new Uint8Array(),
+        candidateProofVerifierBindingBytes: new Uint8Array(),
+      }),
+      /belongs to another release authority/,
+    );
+    let observerStoreAccessorReads = 0;
+    const accessorObservationInput = {
+      observerContentDirectory: secondDirectory,
+      terminalLocatorDirectory: join(secondDirectory, "terminal-locators"),
+      releaseIntentCanonicalBytes: new Uint8Array(),
+      familyCatalogSourceBytes: new Uint8Array(),
+      runtimeCompositionSourceBytes: new Uint8Array(),
+      strategyCatalogSourceBytes: new Uint8Array(),
+      candidateProofVerifierBindingBytes: new Uint8Array(),
+    } as Record<string, unknown>;
+    Object.defineProperty(accessorObservationInput, "observerStore", {
+      enumerable: true,
+      get() {
+        observerStoreAccessorReads += 1;
+        return observerStoreAccessorReads === 1 ? firstServices.observerStore : secondServices.observerStore;
+      },
+    });
+    assert.throws(
+      () => issueRuntimeReleaseTerminalObservationPortsV1(first.authority, accessorObservationInput as never),
+      /data property/,
+    );
+    assert.equal(observerStoreAccessorReads, 0);
     const observerStore = firstServices.observerStore.issueObserverStore({
       directory,
     });
@@ -1230,10 +1297,15 @@ test("release-owned full-Graph sweep preserves all 2x2 missing transitions and r
     });
     const unknownRuntimeEdge = Object.freeze({ ...unknownPersistedEdge, routeHandle: Object.freeze({}) as never });
     const instanceCatalogRoot = h("full-graph-sweep-instance-catalog");
-    const graphRoot = hashDomain("aloha/persisted-graph/v1", {
+    const graphRoot = hashDomain("aloha/persisted-graph/v2", {
       cutoff,
       instanceCatalogRoot,
-      edges: [unknownPersistedEdge],
+      edgeCount: "1",
+      edgeSequenceRoot: hashCanonicalPartition(
+        "aloha/persisted-graph-edge-sequence/v1",
+        [unknownPersistedEdge.edgeId],
+        128,
+      ),
     });
     const leaseBinding = Object.freeze({
         generationId: "full-graph-sweep-generation",

@@ -11,6 +11,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readSync,
   readdirSync,
   realpathSync,
   renameSync,
@@ -18,9 +19,11 @@ import {
   statSync,
   unlinkSync,
   writeSync,
+  type BigIntStats,
 } from "node:fs";
 import { backup, DatabaseSync } from "node:sqlite";
 import {
+  CANONICAL_LIMITS,
   assertDecimalString,
   assertExactKeys,
   assertGitSha40,
@@ -39,12 +42,14 @@ import { candidateFinalOutcomeHash } from "../../../specs/candidate-final-outcom
 import { decodeProcessAnchor, hashProcessAnchor, type ProcessAnchorV1 } from "../../../specs/core-envelope/src/index.ts";
 import {
   PRE_RELEASE_RESTART_CONTROLLER_LAYOUT_V1 as LAYOUT,
+  PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1,
   type PreReleaseControllerCheckpointFactV1,
   type PreReleaseControllerDirectorySnapshotV1,
   type PreReleaseControllerEventFactV1,
   type PreReleaseControllerPhysicalFileSnapshotV1,
   type PreReleaseControllerTerminalFactV1,
 } from "./spec.ts";
+import { readStableOwnedPhysicalFileV1 } from "./stable-owned-file.ts";
 
 const CONTENT_DOMAIN = "aloha/durable-content-envelope/v1";
 const ROOT_KIND = "aloha/durable-root-envelope/v1";
@@ -633,11 +638,31 @@ interface DirectorySnapshotPolicyV1<Uid extends string, Gid extends string, Dire
   readonly requireLinuxDescriptorAnchor: boolean;
 }
 
-function stableFlatSourceEntry(sourceDirectoryAnchor: string, name: string): Readonly<{
-  readonly bytes: Uint8Array;
-  readonly device: bigint;
-  readonly inode: bigint;
-}> {
+interface StableFlatSourceDescriptorV1 {
+  readonly descriptor: number;
+  readonly before: BigIntStats;
+}
+
+function readExactDescriptorBytes(descriptor: number, byteLength: bigint, label: string): Uint8Array {
+  if (byteLength < 0n || byteLength > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new TypeError(`${label} byte length cannot be allocated exactly`);
+  }
+  const bytes = new Uint8Array(Number(byteLength));
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const count = readSync(descriptor, bytes, offset, bytes.byteLength - offset, offset);
+    if (count === 0) throw new TypeError(`${label} was truncated during read`);
+    offset += count;
+  }
+  return bytes;
+}
+
+function openStableFlatSourceEntry(
+  sourceDirectoryAnchor: string,
+  name: string,
+  expectedByteLength: bigint | null,
+  maximumByteLength: bigint | null,
+): StableFlatSourceDescriptorV1 {
   const path = `${sourceDirectoryAnchor}/${name}`;
   const descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
@@ -645,16 +670,50 @@ function stableFlatSourceEntry(sourceDirectoryAnchor: string, name: string): Rea
     if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || (before.mode & 0o022n) !== 0n) {
       throw new TypeError(`pre-release durable directory source entry is not immutable: ${name}`);
     }
-    const bytes = new Uint8Array(readFileSync(descriptor));
-    const after = fstatSync(descriptor, { bigint: true });
-    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size
-      || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs
-      || after.size !== BigInt(bytes.byteLength)) {
-      throw new TypeError(`pre-release durable directory source entry changed: ${name}`);
+    if ((expectedByteLength !== null && before.size !== expectedByteLength)
+      || (maximumByteLength !== null && before.size > maximumByteLength)) {
+      throw new TypeError(`pre-release durable directory source entry exceeds its byte policy: ${name}`);
     }
-    return Object.freeze({ bytes, device: after.dev, inode: after.ino });
-  } finally {
+    return Object.freeze({ descriptor, before });
+  } catch (error) {
     closeSync(descriptor);
+    throw error;
+  }
+}
+
+function readStableFlatSourceDescriptor(
+  source: StableFlatSourceDescriptorV1,
+  name: string,
+): Readonly<{ readonly bytes: Uint8Array; readonly device: bigint; readonly inode: bigint }> {
+  const bytes = readExactDescriptorBytes(
+    source.descriptor,
+    source.before.size,
+    `pre-release durable directory source entry ${name}`,
+  );
+  const after = fstatSync(source.descriptor, { bigint: true });
+  if (source.before.dev !== after.dev || source.before.ino !== after.ino || source.before.size !== after.size
+    || source.before.mtimeNs !== after.mtimeNs || source.before.ctimeNs !== after.ctimeNs
+    || after.size !== BigInt(bytes.byteLength)) {
+    throw new TypeError(`pre-release durable directory source entry changed: ${name}`);
+  }
+  return Object.freeze({ bytes, device: after.dev, inode: after.ino });
+}
+
+function stableFlatSourceEntry(
+  sourceDirectoryAnchor: string,
+  name: string,
+  expectedByteLength: bigint | null = null,
+  maximumByteLength: bigint | null = null,
+): Readonly<{
+  readonly bytes: Uint8Array;
+  readonly device: bigint;
+  readonly inode: bigint;
+}> {
+  const source = openStableFlatSourceEntry(sourceDirectoryAnchor, name, expectedByteLength, maximumByteLength);
+  try {
+    return readStableFlatSourceDescriptor(source, name);
+  } finally {
+    closeSync(source.descriptor);
   }
 }
 
@@ -673,6 +732,8 @@ function publishDirectorySnapshot<Uid extends string, Gid extends string, Direct
   snapshotDirectory: string,
   policy: DirectorySnapshotPolicyV1<Uid, Gid, DirectoryMode, FileMode>,
   expectedEntryCount: number | null,
+  selectedNames: readonly string[] | null = null,
+  afterSixStepPreflightForTest: (() => void) | null = null,
 ): Readonly<{
   readonly snapshotKind: "observer-content" | "terminal-locator-index" | "six-step-boundaries";
   readonly sourceDirectory: string;
@@ -715,6 +776,7 @@ function publishDirectorySnapshot<Uid extends string, Gid extends string, Direct
     sourceDirectory,
     fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
   );
+  const sixStepBoundarySources = new Map<string, StableFlatSourceDescriptorV1>();
   const createdNames: string[] = [];
   try {
     const sourceBefore = fstatSync(sourceDescriptor, { bigint: true });
@@ -726,18 +788,59 @@ function publishDirectorySnapshot<Uid extends string, Gid extends string, Direct
     const sourceDirectoryAnchor = process.platform === "linux"
       ? `/proc/self/fd/${sourceDescriptor}`
       : sourceDirectory;
-    const names = readdirSync(sourceDirectoryAnchor).sort();
-    if (names.length === 0 || (expectedEntryCount !== null && names.length !== expectedEntryCount)) {
+    if (kind === "six-step-boundaries" && selectedNames === null) {
+      throw new TypeError("pre-release Six-Step boundary snapshot requires terminal-index selected names");
+    }
+    const names = selectedNames === null
+      ? readdirSync(sourceDirectoryAnchor).sort()
+      : [...selectedNames];
+    if ((names.length === 0 && !(kind === "six-step-boundaries" && selectedNames !== null))
+      || (expectedEntryCount !== null && names.length !== expectedEntryCount)) {
       throw new TypeError(`pre-release ${kind} source denominator is not exact and non-empty`);
     }
+    if (selectedNames !== null && kind !== "six-step-boundaries") {
+      throw new TypeError("pre-release selected directory snapshot is restricted to Six-Step boundaries");
+    }
+    if (selectedNames !== null && names.some((name, index) => index > 0 && names[index - 1]! >= name)) {
+      throw new TypeError("pre-release selected Six-Step boundary names are not strict-sorted and unique");
+    }
     for (const name of names) snapshotEntryName(kind, name);
+    if (kind === "six-step-boundaries") {
+      const limits = PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1;
+      if (names.length > limits.maxEntries) {
+        throw new TypeError("pre-release six-step-boundaries source entry count exceeds policy");
+      }
+      let totalBytes = 0n;
+      for (const name of names) {
+        const source = openStableFlatSourceEntry(
+          sourceDirectoryAnchor,
+          name,
+          null,
+          BigInt(limits.maxEntryBytes),
+        );
+        sixStepBoundarySources.set(name, source);
+        totalBytes += source.before.size;
+        if (totalBytes > BigInt(limits.maxTotalBytes)) {
+          throw new TypeError("pre-release six-step-boundaries source aggregate exceeds policy");
+        }
+      }
+      afterSixStepPreflightForTest?.();
+    }
     if (kind === "observer-content" && !names.includes(".aloha-observer-store-identity-v1")) {
       throw new TypeError("pre-release observer-content source lacks its store identity marker");
     }
     mkdirSync(temporaryDirectory, { mode: policy.directoryMode });
     let observerStoreIdentityHash: Hash | null = null;
     const entries = names.map(name => {
-      const source = stableFlatSourceEntry(sourceDirectoryAnchor, name);
+      const retainedSource = sixStepBoundarySources.get(name);
+      const source = retainedSource === undefined
+        ? stableFlatSourceEntry(
+          sourceDirectoryAnchor,
+          name,
+          null,
+          kind === "terminal-locator-index" ? BigInt(CANONICAL_LIMITS.maxBytes) : null,
+        )
+        : readStableFlatSourceDescriptor(retainedSource, name);
       const sourceSha256 = sha256Hex(source.bytes);
       if (kind === "observer-content") {
         if (/^[0-9a-f]{64}$/.test(name) && name !== sourceSha256.slice(2)) {
@@ -798,7 +901,7 @@ function publishDirectorySnapshot<Uid extends string, Gid extends string, Direct
     if (sourceBefore.dev !== sourceAfter.dev || sourceBefore.ino !== sourceAfter.ino
       || sourceBefore.mtimeNs !== sourceAfter.mtimeNs || sourceBefore.ctimeNs !== sourceAfter.ctimeNs
       || sourceAfter.dev !== sourcePathAfter.dev || sourceAfter.ino !== sourcePathAfter.ino
-      || readdirSync(sourceDirectoryAnchor).sort().join("\0") !== names.join("\0")) {
+      || (selectedNames === null && readdirSync(sourceDirectoryAnchor).sort().join("\0") !== names.join("\0"))) {
       throw new TypeError(`pre-release ${kind} source directory changed during snapshot`);
     }
     const temporaryDescriptor = openSync(temporaryDirectory, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
@@ -848,13 +951,194 @@ function publishDirectorySnapshot<Uid extends string, Gid extends string, Direct
     }
     throw error;
   } finally {
+    for (const source of sixStepBoundarySources.values()) closeSync(source.descriptor);
     closeSync(sourceDescriptor);
   }
+}
+
+const SIX_STEP_BOUNDARY_KEY_SEQUENCE_DOMAIN = "aloha/production-terminal-phase-six-step-boundary-key-sequence/v1";
+
+function exactSelectedSixStepBoundaryNames(
+  bytes: Uint8Array,
+  indexName: string,
+): readonly string[] {
+  const value = decodeCanonicalJson(bytes);
+  assertPlainObject(value, "terminalLocatorIndex");
+  assertExactKeys(value, [
+    "schemaVersion", "kind", "finalDurableWindowId", "locatorRoot", "locatorContentSha256",
+    "locatorArtifactRefId", "locatorArtifact", "manifestRoot", "manifestContentSha256", "manifestArtifact",
+    "fullFamilyProjectionArtifact", "fullFamilyTerminalBindingArtifact", "fullGraphCoarseSweepArtifact",
+    "fullFamilyBundleArtifact", "fullFamilyLocatorArtifact", "sixStepTerminalBindingArtifact",
+    "sixStepPredicateArtifacts", "sixStepPredicateArtifactPointerRoot", "sixStepBoundaryKeys",
+    "sixStepBoundaryKeyRoot", "selectedProcessArtifact", "indexRoot",
+  ], "terminalLocatorIndex");
+  if (value.schemaVersion !== 1 || value.kind !== "aloha.production-terminal-phase-locator-index-v1") {
+    throw new TypeError("pre-release terminal locator index kind/version mismatch");
+  }
+  const finalDurableWindowId = assertHash(value.finalDurableWindowId, "terminalLocatorIndex.finalDurableWindowId");
+  if (`${finalDurableWindowId.slice(2)}.json` !== indexName) {
+    throw new TypeError("pre-release terminal locator index name/final-window mismatch");
+  }
+  if (!Array.isArray(value.sixStepBoundaryKeys)
+    || value.sixStepBoundaryKeys.length > PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxEntries
+    || Object.keys(value.sixStepBoundaryKeys).length !== value.sixStepBoundaryKeys.length) {
+    throw new TypeError("pre-release terminal locator index Six-Step boundary keys are not a bounded dense array");
+  }
+  let previous: Hash | null = null;
+  const keys = Object.freeze(value.sixStepBoundaryKeys.map((item, index) => {
+    const key = assertHash(item, `terminalLocatorIndex.sixStepBoundaryKeys[${index}]`);
+    if (previous !== null && previous >= key) {
+      throw new TypeError("pre-release terminal locator index Six-Step boundary keys are not strict-sorted and unique");
+    }
+    previous = key;
+    return key;
+  }));
+  if (keys.length !== 0 && (keys.length < 8 || (keys.length - 4) % 2 !== 0)) {
+    throw new TypeError("pre-release terminal locator index Six-Step boundary key denominator is not exact 2L+4");
+  }
+  const expectedRoot = hashCanonicalPartition(SIX_STEP_BOUNDARY_KEY_SEQUENCE_DOMAIN, keys, 16);
+  if (assertHash(value.sixStepBoundaryKeyRoot, "terminalLocatorIndex.sixStepBoundaryKeyRoot") !== expectedRoot) {
+    throw new TypeError("pre-release terminal locator index Six-Step boundary key root mismatch");
+  }
+  const { indexRoot: rawIndexRoot, ...payload } = value;
+  if (assertHash(rawIndexRoot, "terminalLocatorIndex.indexRoot")
+    !== hashDomain("aloha/production-terminal-phase-locator-index/v1", payload as never)) {
+    throw new TypeError("pre-release terminal locator index root mismatch");
+  }
+  return Object.freeze(keys.map(key => `${key.slice(2)}.v8`));
+}
+
+function singlePriorTerminalLocatorEntry<Uid extends string, Gid extends string, DirectoryMode extends string, FileMode extends string>(
+  directory: string,
+  policy: DirectorySnapshotPolicyV1<Uid, Gid, DirectoryMode, FileMode>,
+): Readonly<{ readonly name: string; readonly contentSha256: Hash; readonly byteLength: string }> {
+  if (directory !== realpathSync(directory) || !lstatSync(directory).isDirectory()) {
+    throw new TypeError("pre-release A terminal locator snapshot is not physical");
+  }
+  const descriptor = openSync(directory, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
+  try {
+    const before = fstatSync(descriptor, { bigint: true });
+    if (!before.isDirectory() || before.uid !== BigInt(policy.uid) || before.gid !== BigInt(policy.gid)
+      || (before.mode & 0o777n) !== BigInt(policy.directoryMode)) {
+      throw new TypeError("pre-release A terminal locator snapshot is not fixed-owner");
+    }
+    const anchor = process.platform === "linux" ? `/proc/self/fd/${descriptor}` : directory;
+    const names = readdirSync(anchor);
+    if (names.length !== 1) throw new TypeError("pre-release A terminal locator snapshot denominator is not exactly one");
+    snapshotEntryName("terminal-locator-index", names[0]!);
+    const entry = stableFlatSourceEntry(anchor, names[0]!, null, BigInt(CANONICAL_LIMITS.maxBytes));
+    const entryPath = `${anchor}/${names[0]!}`;
+    const entryMetadata = statSync(entryPath, { bigint: true });
+    if (entryMetadata.dev !== entry.device || entryMetadata.ino !== entry.inode
+      || entryMetadata.uid !== BigInt(policy.uid) || entryMetadata.gid !== BigInt(policy.gid)
+      || (entryMetadata.mode & 0o777n) !== BigInt(policy.fileMode)) {
+      throw new TypeError("pre-release A terminal locator snapshot index is not fixed-owner and bounded");
+    }
+    const after = fstatSync(descriptor, { bigint: true });
+    if (before.dev !== after.dev || before.ino !== after.ino
+      || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) {
+      throw new TypeError("pre-release A terminal locator snapshot changed during selection");
+    }
+    return Object.freeze({
+      name: names[0]!,
+      contentSha256: sha256Hex(entry.bytes),
+      byteLength: String(entry.bytes.byteLength),
+    });
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function selectedSixStepBoundaryNames<Uid extends string, Gid extends string, DirectoryMode extends string, FileMode extends string>(
+  terminalLocators: PreReleaseControllerDirectorySnapshotV1,
+  priorTerminalLocatorSnapshotDirectory: string | null,
+  policy: DirectorySnapshotPolicyV1<Uid, Gid, DirectoryMode, FileMode>,
+): readonly string[] {
+  const expectedCount = priorTerminalLocatorSnapshotDirectory === null ? 1 : 2;
+  if (terminalLocators.snapshotKind !== "terminal-locator-index"
+    || terminalLocators.entries.length !== expectedCount) {
+    throw new TypeError(`pre-release terminal locator snapshot denominator is not exactly ${expectedCount}`);
+  }
+  const priorEntry = priorTerminalLocatorSnapshotDirectory === null
+    ? null
+    : singlePriorTerminalLocatorEntry(priorTerminalLocatorSnapshotDirectory, policy);
+  const selectedEntries = priorEntry === null
+    ? terminalLocators.entries
+    : terminalLocators.entries.filter(entry => entry.name !== priorEntry.name);
+  if (selectedEntries.length !== 1
+    || (priorEntry !== null && !terminalLocators.entries.some(entry => entry.name === priorEntry.name))) {
+    throw new TypeError("pre-release B terminal locator snapshot does not have one exact successor index");
+  }
+  if (priorEntry !== null) {
+    const carriedPredecessor = terminalLocators.entries.find(entry => entry.name === priorEntry.name)!;
+    if (carriedPredecessor.contentSha256 !== priorEntry.contentSha256
+      || carriedPredecessor.byteLength !== priorEntry.byteLength) {
+      throw new TypeError("pre-release B terminal locator predecessor content does not equal the fixed A snapshot");
+    }
+  }
+  const selected = selectedEntries[0]!;
+  const descriptor = openSync(
+    terminalLocators.snapshotDirectory,
+    fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+  );
+  try {
+    const directoryBefore = fstatSync(descriptor, { bigint: true });
+    if (String(directoryBefore.dev) !== terminalLocators.directoryDevice
+      || String(directoryBefore.ino) !== terminalLocators.directoryInode) {
+      throw new TypeError("pre-release terminal locator snapshot directory identity changed");
+    }
+    const anchor = process.platform === "linux" ? `/proc/self/fd/${descriptor}` : terminalLocators.snapshotDirectory;
+    const currentNames = readdirSync(anchor).sort();
+    if (currentNames.length !== terminalLocators.entries.length
+      || currentNames.some((name, index) => name !== terminalLocators.entries[index]?.name)) {
+      throw new TypeError("pre-release terminal locator snapshot denominator changed before selected index read");
+    }
+    const expectedByteLength = BigInt(assertDecimalString(selected.byteLength, "terminalLocatorIndex.byteLength"));
+    const source = stableFlatSourceEntry(
+      anchor,
+      selected.name,
+      expectedByteLength,
+      BigInt(CANONICAL_LIMITS.maxBytes),
+    );
+    if (String(source.device) !== selected.device || String(source.inode) !== selected.inode
+      || sha256Hex(source.bytes) !== selected.contentSha256) {
+      throw new TypeError("pre-release selected terminal locator index identity changed");
+    }
+    const directoryAfter = fstatSync(descriptor, { bigint: true });
+    if (directoryBefore.dev !== directoryAfter.dev || directoryBefore.ino !== directoryAfter.ino
+      || directoryBefore.mtimeNs !== directoryAfter.mtimeNs || directoryBefore.ctimeNs !== directoryAfter.ctimeNs) {
+      throw new TypeError("pre-release terminal locator snapshot changed during selected index read");
+    }
+    return exactSelectedSixStepBoundaryNames(source.bytes, selected.name);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function stableBoundedPhysicalDescriptor(
+  descriptor: number,
+  maximumByteLength: bigint,
+  label: string,
+) {
+  const before = fstatSync(descriptor, { bigint: true });
+  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n
+    || before.size > maximumByteLength) {
+    throw new TypeError(`${label} identity or byte length is invalid`);
+  }
+  const bytes = readExactDescriptorBytes(descriptor, before.size, label);
+  const after = fstatSync(descriptor, { bigint: true });
+  if (before.dev !== after.dev || before.ino !== after.ino
+    || before.size !== after.size || before.mtimeNs !== after.mtimeNs
+    || before.ctimeNs !== after.ctimeNs || after.size !== BigInt(bytes.byteLength)) {
+    throw new TypeError(`${label} changed during read`);
+  }
+  return Object.freeze({ bytes, stat: after });
 }
 
 function publishPhysicalFileSnapshot(
   sourcePath: string,
   snapshotPath: string,
+  maximumByteLength: bigint,
 ): PreReleaseControllerPhysicalFileSnapshotV1 {
   if (typeof process.geteuid !== "function" || process.geteuid() !== 0) {
     throw new TypeError("pre-release physical-file snapshot requires root");
@@ -869,17 +1153,12 @@ function publishPhysicalFileSnapshot(
   const temporaryPath = `${snapshotPath}.tmp.${process.pid}`;
   let destinationDescriptor: number | null = null;
   try {
-    const sourceBefore = fstatSync(sourceDescriptor, { bigint: true });
-    if (!sourceBefore.isFile() || sourceBefore.isSymbolicLink() || sourceBefore.nlink !== 1n) {
-      throw new TypeError("pre-release physical-file snapshot source identity is invalid");
-    }
-    const bytes = new Uint8Array(readFileSync(sourceDescriptor));
-    const sourceAfter = fstatSync(sourceDescriptor, { bigint: true });
-    if (sourceBefore.dev !== sourceAfter.dev || sourceBefore.ino !== sourceAfter.ino
-      || sourceBefore.size !== sourceAfter.size || sourceBefore.mtimeNs !== sourceAfter.mtimeNs
-      || sourceBefore.ctimeNs !== sourceAfter.ctimeNs || sourceAfter.size !== BigInt(bytes.byteLength)) {
-      throw new TypeError("pre-release physical-file snapshot source changed during read");
-    }
+    const source = stableBoundedPhysicalDescriptor(
+      sourceDescriptor,
+      maximumByteLength,
+      "pre-release physical-file snapshot source",
+    );
+    const { bytes } = source;
     destinationDescriptor = openSync(
       temporaryPath,
       fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW,
@@ -900,20 +1179,21 @@ function publishPhysicalFileSnapshot(
     unlinkSync(temporaryPath);
     const parentDescriptor = openSync(LAYOUT.controllerDirectory, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
     try { fsyncSync(parentDescriptor); } finally { closeSync(parentDescriptor); }
-    const snapshotBefore = statSync(snapshotPath, { bigint: true });
-    const snapshotBytes = new Uint8Array(readFileSync(snapshotPath));
-    const snapshotAfter = statSync(snapshotPath, { bigint: true });
-    if (snapshotBefore.dev !== snapshotAfter.dev || snapshotBefore.ino !== snapshotAfter.ino
-      || snapshotBefore.size !== snapshotAfter.size || snapshotBefore.mtimeNs !== snapshotAfter.mtimeNs
-      || snapshotBefore.ctimeNs !== snapshotAfter.ctimeNs || snapshotAfter.size !== BigInt(snapshotBytes.byteLength)
-      || snapshotAfter.uid !== 0n || snapshotAfter.gid !== 0n || (snapshotAfter.mode & 0o777n) !== 0o400n
-      || sha256Hex(snapshotBytes) !== sha256Hex(bytes)) {
+    const snapshot = readStableOwnedPhysicalFileV1(snapshotPath, Object.freeze({
+      uid: 0n,
+      gid: 0n,
+      mode: 0o400n,
+      maximumByteLength,
+    }));
+    const snapshotBytes = snapshot.bytes;
+    const snapshotAfter = snapshot.stat;
+    if (sha256Hex(snapshotBytes) !== sha256Hex(bytes)) {
       throw new TypeError("pre-release physical-file snapshot changed before publication");
     }
     return Object.freeze({
       sourcePath,
-      sourceDevice: String(sourceAfter.dev),
-      sourceInode: String(sourceAfter.ino),
+      sourceDevice: String(source.stat.dev),
+      sourceInode: String(source.stat.ino),
       snapshotPath,
       contentSha256: sha256Hex(snapshotBytes),
       byteLength: String(snapshotBytes.byteLength),
@@ -1031,6 +1311,22 @@ async function publishDatabaseSnapshot<Uid extends string, Gid extends string, M
 /** Test-closure exerciser for the same backup/no-clobber/fsync implementation.
  * Production callers cannot select paths or ownership and use only the fixed
  * root wrappers below. */
+export function readBoundedPhysicalFileForTestV1(
+  path: string,
+  maximumByteLength: number,
+): Uint8Array {
+  const descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    return stableBoundedPhysicalDescriptor(
+      descriptor,
+      BigInt(maximumByteLength),
+      "test physical file",
+    ).bytes;
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 export async function snapshotSqliteDatabaseForTestV1(
   sourcePath: string,
   snapshotPath: string,
@@ -1059,6 +1355,7 @@ export function snapshotFlatDirectoryForTestV1(
   sourceDirectory: string,
   snapshotDirectory: string,
   directory: string,
+  terminalLocatorExpectedEntryCount = 1,
 ): Readonly<Record<string, unknown>> {
   const uid = process.getuid?.();
   const gid = process.getgid?.();
@@ -1075,7 +1372,46 @@ export function snapshotFlatDirectoryForTestV1(
     fileModeText: "256",
     requireEffectiveUid: false,
     requireLinuxDescriptorAnchor: false,
-  }), kind === "terminal-locator-index" ? 1 : null);
+  }), kind === "terminal-locator-index" ? terminalLocatorExpectedEntryCount : null);
+}
+
+/** Test-closure exerciser for the production selector. Boundary names are
+ * always decoded from the selected terminal index; the caller cannot supply
+ * a boundary-name list. */
+export function snapshotSelectedSixStepBoundariesForTestV1(
+  sourceDirectory: string,
+  snapshotDirectory: string,
+  directory: string,
+  terminalLocators: PreReleaseControllerDirectorySnapshotV1,
+  priorTerminalLocatorSnapshotDirectory: string | null = null,
+  afterPreflightForTest: (() => void) | null = null,
+): Readonly<Record<string, unknown>> {
+  const uid = process.getuid?.();
+  const gid = process.getgid?.();
+  if (uid === undefined || gid === undefined) throw new TypeError("snapshot test closure requires POSIX ownership");
+  const policy = Object.freeze({
+    directory,
+    uid,
+    gid,
+    directoryMode: 0o700,
+    fileMode: 0o400,
+    uidText: String(uid),
+    gidText: String(gid),
+    directoryModeText: "448" as const,
+    fileModeText: "256" as const,
+    requireEffectiveUid: false,
+    requireLinuxDescriptorAnchor: false,
+  });
+  const names = selectedSixStepBoundaryNames(terminalLocators, priorTerminalLocatorSnapshotDirectory, policy);
+  return publishDirectorySnapshot(
+    "six-step-boundaries",
+    sourceDirectory,
+    snapshotDirectory,
+    policy,
+    names.length,
+    names,
+    afterPreflightForTest,
+  );
 }
 
 export async function publishPreReleaseADurableSnapshotsV1(): Promise<Readonly<{
@@ -1106,13 +1442,16 @@ export async function publishPreReleaseADurableSnapshotsV1(): Promise<Readonly<{
   const sixStepEvidenceLog = publishPhysicalFileSnapshot(
     LAYOUT.sixStepEvidenceLogPath,
     LAYOUT.sixStepEvidenceLogSnapshotPath,
+    BigInt(PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxLedgerBytes),
   );
+  const selectedBoundaryNames = selectedSixStepBoundaryNames(terminalLocators, null, ROOT_DIRECTORY_SNAPSHOT_POLICY);
   const sixStepBoundaries = publishDirectorySnapshot(
     "six-step-boundaries",
     LAYOUT.sixStepBoundaryDirectory,
     LAYOUT.sixStepBoundarySnapshotDirectory,
     ROOT_DIRECTORY_SNAPSHOT_POLICY,
-    null,
+    selectedBoundaryNames.length,
+    selectedBoundaryNames,
   ) as PreReleaseControllerDirectorySnapshotV1;
   const payload = Object.freeze({ processEvidence, checkpoint, observerContent, terminalLocators, sixStepEvidenceLog, sixStepBoundaries });
   return Object.freeze({ ...payload, snapshotRoot: hashDomain("aloha/pre-release-a-durable-snapshots/v1", payload as never) });
@@ -1146,13 +1485,20 @@ export async function publishPreReleaseBDurableSnapshotsV1(): Promise<Readonly<{
   const sixStepEvidenceLog = publishPhysicalFileSnapshot(
     LAYOUT.sixStepEvidenceLogPath,
     LAYOUT.bSixStepEvidenceLogSnapshotPath,
+    BigInt(PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxLedgerBytes),
+  );
+  const selectedBoundaryNames = selectedSixStepBoundaryNames(
+    terminalLocators,
+    LAYOUT.terminalLocatorSnapshotDirectory,
+    ROOT_DIRECTORY_SNAPSHOT_POLICY,
   );
   const sixStepBoundaries = publishDirectorySnapshot(
     "six-step-boundaries",
     LAYOUT.sixStepBoundaryDirectory,
     LAYOUT.bSixStepBoundarySnapshotDirectory,
     ROOT_DIRECTORY_SNAPSHOT_POLICY,
-    null,
+    selectedBoundaryNames.length,
+    selectedBoundaryNames,
   ) as PreReleaseControllerDirectorySnapshotV1;
   const payload = Object.freeze({ processEvidence, checkpoint, observerContent, terminalLocators, sixStepEvidenceLog, sixStepBoundaries });
   return Object.freeze({ ...payload, snapshotRoot: hashDomain("aloha/pre-release-b-durable-snapshots/v1", payload as never) });

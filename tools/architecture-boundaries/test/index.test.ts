@@ -620,6 +620,20 @@ test("generated BOM binds resolver values to exact named evaluator imports", asy
       implementationExportDigest: `0x${"f".repeat(64)}`,
     },
   };
+  for (const entry of manifest.predicateAdapters) {
+    const {
+      entrypointId: _entrypointId,
+      oracleEntrypointId: _oracleEntrypointId,
+      materialProviderEntrypointId: _materialProviderEntrypointId,
+      compositionLeafDigest: _compositionLeafDigest,
+      ...leafInput
+    } = entry;
+    assert.equal(
+      computePredicateCompositionLeafDigest(leafInput),
+      entry.compositionLeafDigest,
+      `${entry.predicateId} generated composition leaf must match the independent Boundary derivation`,
+    );
+  }
   const root = mkdtempSync(join(tmpdir(), "aloha-generated-bom-identity-"));
   try {
     const paths = [
@@ -1471,6 +1485,91 @@ test("dependency attacks cannot hide behind external edges or strategy/generated
   ]);
 });
 
+test("Family asset identity and generated/runtime witness edges stay exact and default-deny", () => {
+  const file = (path: string, fileClass: TrackedFile["fileClass"]): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass,
+  });
+  const files = [
+    file("families/demo/src/public.ts", "family"),
+    file("packages/asset-ref/src/index.ts", "central"),
+    file("packages/asset-ref/src/internal/owner.ts", "central"),
+    file("tools/historical-family-current-evaluation/src/candidate-generated-search-adapter.ts", "authoring"),
+    file("tools/historical-family-current-evaluation/src/other.ts", "authoring"),
+    file("generated/runtime-composition/index.ts", "generated"),
+    file("packages/runtime-release-authority/src/internal/economic-safety-owner.ts", "central"),
+    file("packages/other/src/index.ts", "central"),
+    file("generated/safety-profile/index.ts", "generated"),
+    file("apps/searcher-runtime/src/runtime-acceptance-evidence.ts", "production-runtime"),
+    file("apps/searcher-runtime/src/other.ts", "production-runtime"),
+    file("tools/runtime-release-packager/src/pre-release-staging-contract.ts", "authoring"),
+    file("packages/runtime-release-authority/src/internal/bootstrap.ts", "central"),
+    file("runtime/revm-workers/src/index.ts", "production-runtime"),
+  ];
+  const edges: GraphEdge[] = [
+    { from: "families/demo/src/public.ts", to: "packages/asset-ref/src/index.ts", specifier: "../../../packages/asset-ref/src/index.ts" },
+    { from: "families/demo/src/public.ts", to: "packages/asset-ref/src/internal/owner.ts", specifier: "../../../packages/asset-ref/src/internal/owner.ts" },
+    { from: "tools/historical-family-current-evaluation/src/candidate-generated-search-adapter.ts", to: "generated/runtime-composition/index.ts", specifier: "../../../generated/runtime-composition/index.ts" },
+    { from: "tools/historical-family-current-evaluation/src/other.ts", to: "generated/runtime-composition/index.ts", specifier: "../../../generated/runtime-composition/index.ts" },
+    { from: "packages/runtime-release-authority/src/internal/economic-safety-owner.ts", to: "generated/safety-profile/index.ts", specifier: "../../../../generated/safety-profile/index.ts" },
+    { from: "packages/other/src/index.ts", to: "generated/safety-profile/index.ts", specifier: "../../../generated/safety-profile/index.ts" },
+    { from: "apps/searcher-runtime/src/runtime-acceptance-evidence.ts", to: "tools/runtime-release-packager/src/pre-release-staging-contract.ts", specifier: "../../../tools/runtime-release-packager/src/pre-release-staging-contract.ts" },
+    { from: "apps/searcher-runtime/src/other.ts", to: "tools/runtime-release-packager/src/pre-release-staging-contract.ts", specifier: "../../../tools/runtime-release-packager/src/pre-release-staging-contract.ts" },
+    { from: "packages/runtime-release-authority/src/internal/bootstrap.ts", to: "runtime/revm-workers/src/index.ts", specifier: "../../../../runtime/revm-workers/src/index.ts" },
+    { from: "packages/other/src/index.ts", to: "runtime/revm-workers/src/index.ts", specifier: "../../../runtime/revm-workers/src/index.ts" },
+  ];
+  const diagnostics: BoundaryDiagnostic[] = [];
+  validateDependencyBoundaries(files, edges, diagnostics);
+  assert.equal(diagnostics.filter(item => item.path === "families/demo/src/public.ts" && item.code === "family-imports-forbidden-central").length, 1);
+  assert.ok(diagnostics.some(item => item.path === "tools/historical-family-current-evaluation/src/other.ts" && item.code === "generated-consumer-boundary"));
+  assert.ok(diagnostics.some(item => item.path === "packages/other/src/index.ts" && item.code === "central-imports-generated"));
+  assert.ok(diagnostics.some(item => item.path === "apps/searcher-runtime/src/other.ts" && item.code === "runtime-imports-authoring"));
+  assert.ok(diagnostics.some(item => item.path === "packages/other/src/index.ts" && item.code === "central-imports-runtime"));
+  assert.ok(!diagnostics.some(item => item.path === "tools/historical-family-current-evaluation/src/candidate-generated-search-adapter.ts"));
+  assert.ok(!diagnostics.some(item => item.path === "packages/runtime-release-authority/src/internal/economic-safety-owner.ts"));
+  assert.ok(!diagnostics.some(item => item.path === "apps/searcher-runtime/src/runtime-acceptance-evidence.ts"));
+  assert.ok(!diagnostics.some(item => item.path === "packages/runtime-release-authority/src/internal/bootstrap.ts" && item.code === "central-imports-runtime"));
+});
+
+test("exact current-evaluation generated reader rejects an extra generated export", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-current-evaluation-generated-boundary-"));
+  const from = "tools/historical-family-current-evaluation/src/candidate-generated-search-adapter.ts";
+  const to = "generated/runtime-composition/index.ts";
+  try {
+    mkdirSync(join(root, dirname(from)), { recursive: true });
+    writeFileSync(join(root, from), [
+      'import { createReleaseFamilyRuntimeComposition, createReleaseStrategyRuntimeComposition } from "../../../generated/runtime-composition/index.ts";',
+      "void createReleaseFamilyRuntimeComposition;",
+      "void createReleaseStrategyRuntimeComposition;",
+      "",
+    ].join("\n"));
+    const tracked = (path: string, fileClass: TrackedFile["fileClass"]): TrackedFile => ({
+      path,
+      mode: "100644",
+      blobSha: "a".repeat(40),
+      contentSha256: `0x${"a".repeat(64)}`,
+      byteLength: 1,
+      language: "typescript",
+      fileClass,
+    });
+    const diagnostics: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries(
+      [tracked(from, "authoring"), tracked(to, "generated")],
+      [{ from, to, specifier: "../../../generated/runtime-composition/index.ts" }],
+      diagnostics,
+      root,
+    );
+    assert.ok(diagnostics.some(item => item.code === "narrow-port-import-mismatch"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("pre-release fact log consumes only the exact public root-owned Ready Graph observer", () => {
   const root = mkdtempSync(join(tmpdir(), "aloha-ready-graph-observer-boundary-"));
   const factLogPath = "tools/pre-release-fact-log/src/index.ts";
@@ -1627,8 +1726,10 @@ test("qualified release runner owns the only CommonEnvelope issuer and generated
   const root = mkdtempSync(join(tmpdir(), "aloha-qualified-release-runner-"));
   const runnerPath = "tools/runtime-release-packager/src/internal/qualified-release-runner-owner.ts";
   const issuerPath = "acceptance/gate-core/src/internal/common-envelope-authority-issuer.ts";
+  const materialStatePath = "acceptance/gate-core/src/internal/material-provider-state.ts";
   const runtimePath = "acceptance/gate-core/src/generated/release-runtime.ts";
   const issuerSpecifier = "../../../../acceptance/gate-core/src/internal/common-envelope-authority-issuer.ts";
+  const materialStateSpecifier = "../../../../acceptance/gate-core/src/internal/material-provider-state.ts";
   const runtimeSpecifier = "../../../../acceptance/gate-core/src/generated/release-runtime.ts";
   const file = (path: string, fileClass: TrackedFile["fileClass"]): TrackedFile => ({
     path,
@@ -1642,18 +1743,27 @@ test("qualified release runner owns the only CommonEnvelope issuer and generated
   const files = [
     file(runnerPath, "authoring"),
     file(issuerPath, "acceptance-pure-core"),
+    file(materialStatePath, "acceptance-pure-core"),
     file(runtimePath, "generated"),
   ];
   const issuerEdge: GraphEdge = { from: runnerPath, to: issuerPath, specifier: issuerSpecifier };
+  const issuerStateEdge: GraphEdge = { from: issuerPath, to: materialStatePath, specifier: "./material-provider-state.ts" };
+  const materialStateEdge: GraphEdge = { from: runnerPath, to: materialStatePath, specifier: materialStateSpecifier };
   const runtimeEdge: GraphEdge = { from: runnerPath, to: runtimePath, specifier: runtimeSpecifier };
   mkdirSync(join(root, dirname(runnerPath)), { recursive: true });
+  mkdirSync(join(root, dirname(issuerPath)), { recursive: true });
+  writeFileSync(
+    join(root, issuerPath),
+    'import { registerCommonEnvelopeAuthorityPortV1 } from "./material-provider-state.ts";\n',
+  );
   const exact = [
     `import { issueCommonEnvelopeAuthorityPortV1 } from "${issuerSpecifier}";`,
+    `import type { CommonEnvelopeAssemblyStateV1 } from "${materialStateSpecifier}";`,
     `import { assembleReleaseGateInvocations, evaluateAssembledReleaseGateInvocations } from "${runtimeSpecifier}";`,
   ].join("\n");
   const inspect = (
     source: string,
-    edges: readonly GraphEdge[] = [issuerEdge, runtimeEdge],
+    edges: readonly GraphEdge[] = [issuerEdge, issuerStateEdge, materialStateEdge, runtimeEdge],
     selectedFiles: readonly TrackedFile[] = files,
   ): readonly BoundaryDiagnostic[] => {
     writeFileSync(join(root, runnerPath), source);
@@ -1678,10 +1788,21 @@ test("qualified release runner owns the only CommonEnvelope issuer and generated
     assert.ok(inspect(
       exact.replace("evaluateAssembledReleaseGateInvocations", "evaluateAssembledReleaseGateInvocations, extra"),
     ).some(item => item.code === "authority-named-import-mismatch"));
+    assert.ok(inspect(
+      exact.replace(
+        `import type { CommonEnvelopeAssemblyStateV1 } from "${materialStateSpecifier}";`,
+        `import { assertCommonEnvelopeAuthorityPortV1 } from "${materialStateSpecifier}";`,
+      ),
+    ).some(item => item.code === "authority-named-import-mismatch"));
+    const alternateMaterialStateSpecifier = `${materialStateSpecifier}?alternate`;
+    assert.ok(inspect(
+      exact.replace(materialStateSpecifier, alternateMaterialStateSpecifier),
+      [issuerEdge, issuerStateEdge, { ...materialStateEdge, specifier: alternateMaterialStateSpecifier }, runtimeEdge],
+    ).some(item => item.code === "authority-module-specifier-mismatch"));
     const alternateRuntimeSpecifier = `${runtimeSpecifier}?alternate`;
     assert.ok(inspect(
       exact.replace(runtimeSpecifier, alternateRuntimeSpecifier),
-      [issuerEdge, { ...runtimeEdge, specifier: alternateRuntimeSpecifier }],
+      [issuerEdge, issuerStateEdge, materialStateEdge, { ...runtimeEdge, specifier: alternateRuntimeSpecifier }],
     ).some(item => item.code === "authority-module-specifier-mismatch"));
 
     const wrongPath = "tools/other/src/issuer.ts";
@@ -1751,7 +1872,7 @@ test("predicate material issuer and reader have separate exact owner edges", () 
     fileClass,
   });
   for (const path of [sharedPath, issuerPath, assemblerPath]) mkdirSync(join(root, dirname(path)), { recursive: true });
-  writeFileSync(join(root, sharedPath), `import { issuePredicateDomainMaterialCapabilityV1 } from "${issuerSpecifier}";\nimport type { PredicateDomainMaterialV1 } from "${stateFromShared}";\n`);
+  writeFileSync(join(root, sharedPath), `import { issuePredicateDomainMaterialCapabilityV1 } from "${issuerSpecifier}";\n`);
   writeFileSync(join(root, issuerPath), `import { registerPredicateDomainMaterialCapabilityV1 } from "${stateFromIssuer}";\n`);
   writeFileSync(join(root, assemblerPath), `import { readPredicateDomainMaterialCapabilityV1 } from "${stateFromAssembler}";\n`);
   const files = [
@@ -1762,7 +1883,6 @@ test("predicate material issuer and reader have separate exact owner edges", () 
   ];
   const edges: GraphEdge[] = [
     { from: sharedPath, to: issuerPath, specifier: issuerSpecifier },
-    { from: sharedPath, to: statePath, specifier: stateFromShared },
     { from: issuerPath, to: statePath, specifier: stateFromIssuer },
     { from: assemblerPath, to: statePath, specifier: stateFromAssembler },
   ];
@@ -1776,6 +1896,16 @@ test("predicate material issuer and reader have separate exact owner edges", () 
     validateDependencyBoundaries(files, edges, alternateLoad, root);
     assert.ok(alternateLoad.some(item => item.code === "authority-named-import-mismatch"));
 
+    writeFileSync(join(root, sharedPath), `import { issuePredicateDomainMaterialCapabilityV1 } from "${issuerSpecifier}";\nimport type { PredicateDomainMaterialV1 } from "${stateFromShared}";\n`);
+    const readerIntrusion: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries(
+      files,
+      [...edges, { from: sharedPath, to: statePath, specifier: stateFromShared }],
+      readerIntrusion,
+      root,
+    );
+    assert.ok(readerIntrusion.some(item => item.code === "gate-core-authority-owner"));
+
     const wrongPath = "tools/other/src/predicate-material.ts";
     mkdirSync(join(root, dirname(wrongPath)), { recursive: true });
     writeFileSync(join(root, wrongPath), `void import("${issuerSpecifier}");\n`);
@@ -1787,6 +1917,58 @@ test("predicate material issuer and reader have separate exact owner edges", () 
       root,
     );
     assert.ok(wrong.some(item => item.code === "gate-core-authority-owner"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("exact authority constructor rows reject expanded or alternate runtime access", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-exact-authority-row-"));
+  const ownerPath = "packages/coarse-economics/src/internal/owner.ts";
+  const statePath = "packages/coarse-economics/src/internal/state.ts";
+  const siblingPath = "packages/coarse-economics/src/internal/sibling.ts";
+  const specifier = "./state.ts";
+  const file = (path: string): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass: "central",
+  });
+  const edge: GraphEdge = { from: ownerPath, to: statePath, specifier };
+  const validate = (source: string): BoundaryDiagnostic[] => {
+    writeFileSync(join(root, ownerPath), source);
+    const diagnostics: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries([file(ownerPath), file(statePath)], [edge], diagnostics, root);
+    return diagnostics;
+  };
+  try {
+    mkdirSync(join(root, dirname(ownerPath)), { recursive: true });
+    writeFileSync(join(root, statePath), "export const registerCoarseProjectionServiceV1 = 1;\n");
+
+    assert.deepEqual(validate(`import { registerCoarseProjectionServiceV1 } from "${specifier}";\n`), []);
+    assert.deepEqual(validate(`import { registerCoarseProjectionServiceV1 } from "${specifier}";\nimport type { ShadowAuthorityV1 } from "${specifier}";\n`), []);
+
+    for (const mutated of [
+      `import { issueShadowAuthorityV1, registerCoarseProjectionServiceV1 } from "${specifier}";\n`,
+      `import * as authorityState from "${specifier}";\n`,
+      `import authorityState from "${specifier}";\n`,
+      `import "${specifier}";\n`,
+    ]) {
+      assert.ok(validate(mutated).some(item => item.code === "authority-named-import-mismatch"));
+    }
+
+    writeFileSync(join(root, siblingPath), `import { registerCoarseProjectionServiceV1 } from "${specifier}";\n`);
+    const siblingDiagnostics: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries(
+      [file(siblingPath), file(statePath)],
+      [{ from: siblingPath, to: statePath, specifier }],
+      siblingDiagnostics,
+      root,
+    );
+    assert.ok(siblingDiagnostics.some(item => item.code === "central-imports-authority-constructor"));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -2129,6 +2311,30 @@ test("pre-release advisory authority modules admit only exact named importers", 
       specifier: "./pre-release-b-qualification-state.ts",
       named: ["readFrozenPreReleaseBQualificationCapabilityV1"],
     },
+    {
+      from: "acceptance/collectors/src/production-runtime-boundary-observers.ts",
+      to: "tools/runtime-release-packager/src/pre-release-staging.ts",
+      specifier: "../../../tools/runtime-release-packager/src/pre-release-staging.ts",
+      named: ["readPreReleaseAdvisoryMaterialCapabilityV1"],
+    },
+    {
+      from: "tools/runtime-release-packager/src/internal/pre-release-b-terminal-snapshot-owner.ts",
+      to: "tools/runtime-release-packager/src/internal/pre-release-b-qualification-state.ts",
+      specifier: "./pre-release-b-qualification-state.ts",
+      named: ["readFrozenPreReleaseBQualificationCapabilityV1"],
+    },
+    {
+      from: "tools/runtime-release-packager/src/internal/pre-release-staging-owner.ts",
+      to: "tools/runtime-release-packager/src/internal/pre-release-runtime-receipt-state.ts",
+      specifier: "./pre-release-runtime-receipt-state.ts",
+      named: ["issuePreReleaseAdvisoryMaterialCapabilityV1"],
+    },
+    {
+      from: "tools/runtime-release-packager/src/internal/pre-release-b-terminal-snapshot-owner.ts",
+      to: "packages/runtime-release-authority/src/internal/observer-store-owner.ts",
+      specifier: "../../../../packages/runtime-release-authority/src/internal/observer-store-owner.ts",
+      named: ["runtimeReleaseObserverStoreIdentityV1"],
+    },
   ] as const;
   const root = mkdtempSync(join(tmpdir(), "aloha-pre-release-host-imports-"));
   const file = (path: string): TrackedFile => ({
@@ -2186,6 +2392,7 @@ test("pre-release advisory authority modules admit only exact named importers", 
         root,
       );
       assert.ok(intruderDiagnostics.some(item => item.code === "pre-release-authority-reader-owner"
+        || item.code === "production-release-advisory-authority-owner"
         || item.code === "qualified-release-runner-authority-owner"
         || item.code === "central-imports-authority-constructor"));
     }
@@ -2212,10 +2419,14 @@ test("pre-release receipt, Stage 2, and release-binding readers have exact consu
   const authorizationLedger = "tools/runtime-release-packager/src/internal/pre-release-authorization-ledger.ts";
   const runtimeAcceptanceEvidence = "apps/searcher-runtime/src/runtime-acceptance-evidence.ts";
   const bQualificationState = "tools/runtime-release-packager/src/internal/pre-release-b-qualification-state.ts";
+  const runtimeBoundaryObservers = "acceptance/collectors/src/production-runtime-boundary-observers.ts";
+  const externalReleaseOwner = "tools/runtime-release-packager/src/external-release-owner.ts";
+  const terminalSnapshotOwner = "tools/runtime-release-packager/src/internal/pre-release-b-terminal-snapshot-owner.ts";
   const paths = [
     workflow, publicReceipt, stagingOwner, receiptState, schema, closureObserver, stageOneState,
     stageTwoOwner, materialSource, performanceOwner, terminalOwner, restartOwner,
     finalRunner, authorizationLedger, runtimeAcceptanceEvidence, bQualificationState,
+    runtimeBoundaryObservers, externalReleaseOwner, terminalSnapshotOwner,
   ] as const;
   const classify = (path: string): TrackedFile["fileClass"] =>
     path.startsWith("acceptance/") ? "acceptance-collector" : "authoring";
@@ -2232,13 +2443,17 @@ test("pre-release receipt, Stage 2, and release-binding readers have exact consu
     [workflow, receiptState, "./internal/pre-release-runtime-receipt-state.ts"],
     [publicReceipt, receiptState, "./internal/pre-release-runtime-receipt-state.ts"],
     [workflow, publicReceipt, "./pre-release-staging.ts"],
+    [workflow, runtimeBoundaryObservers, "../../../acceptance/collectors/src/production-runtime-boundary-observers.ts"],
+    [runtimeBoundaryObservers, restartOwner, "./internal/runtime-boundary-material-owner.ts"],
     [closureObserver, publicReceipt, "../../../tools/runtime-release-packager/src/pre-release-staging.ts"],
+    [runtimeBoundaryObservers, publicReceipt, "../../../tools/runtime-release-packager/src/pre-release-staging.ts"],
     [stagingOwner, schema, "./pre-release-staging-schema.ts"],
     [workflow, schema, "./internal/pre-release-staging-schema.ts"],
     [authorizationLedger, schema, "./pre-release-staging-schema.ts"],
     [finalRunner, schema, "./internal/pre-release-staging-schema.ts"],
     [runtimeAcceptanceEvidence, schema, "../../../tools/runtime-release-packager/src/internal/pre-release-staging-schema.ts"],
     [closureObserver, schema, "../../../tools/runtime-release-packager/src/internal/pre-release-staging-schema.ts"],
+    [externalReleaseOwner, schema, "./internal/pre-release-staging-schema.ts"],
     [materialSource, stageTwoOwner, "./internal/artifact-lineage-stage-two-git-owner.ts"],
     [materialSource, stageOneState, "./internal/artifact-lineage-stage-one-state.ts"],
     [workflow, performanceOwner, "../../../acceptance/collectors/src/internal/performance-material-observer-owner.ts"],
@@ -2248,8 +2463,10 @@ test("pre-release receipt, Stage 2, and release-binding readers have exact consu
     [finalRunner, runtimeAcceptanceEvidence, "../../../apps/searcher-runtime/src/runtime-acceptance-evidence.ts"],
     [runtimeAcceptanceEvidence, authorizationLedger, "../../../tools/runtime-release-packager/src/internal/pre-release-authorization-ledger.ts"],
     [finalRunner, bQualificationState, "./internal/pre-release-b-qualification-state.ts"],
+    [terminalSnapshotOwner, bQualificationState, "./pre-release-b-qualification-state.ts"],
     [finalRunner, stagingOwner, "./internal/pre-release-staging-owner.ts"],
     [stagingOwner, bQualificationState, "./pre-release-b-qualification-state.ts"],
+    [stagingOwner, receiptState, "./pre-release-runtime-receipt-state.ts"],
   ];
   const baselineDiagnostics: BoundaryDiagnostic[] = [];
   validateDependencyBoundaries(
@@ -2259,6 +2476,32 @@ test("pre-release receipt, Stage 2, and release-binding readers have exact consu
     repositoryRoot,
   );
   assert.deepEqual(baselineDiagnostics, []);
+
+  const schemaMutationRoot = mkdtempSync(join(tmpdir(), "aloha-external-release-schema-import-"));
+  try {
+    for (const path of [externalReleaseOwner, schema]) {
+      mkdirSync(join(schemaMutationRoot, dirname(path)), { recursive: true });
+      writeFileSync(join(schemaMutationRoot, path), readFileSync(join(repositoryRoot, path)));
+    }
+    const externalSource = readFileSync(join(schemaMutationRoot, externalReleaseOwner), "utf8");
+    writeFileSync(
+      join(schemaMutationRoot, externalReleaseOwner),
+      externalSource.replace("  hashPreReleaseStagingArtifactSetV1,\n", ""),
+    );
+    const schemaMutationDiagnostics: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries(
+      [externalReleaseOwner, schema].map((path) => ({
+        ...file(path),
+        byteLength: readFileSync(join(schemaMutationRoot, path)).byteLength,
+      })),
+      [{ from: externalReleaseOwner, to: schema, specifier: "./internal/pre-release-staging-schema.ts" }],
+      schemaMutationDiagnostics,
+      schemaMutationRoot,
+    );
+    assert.ok(schemaMutationDiagnostics.some(item => item.code === "pre-release-schema-consumer"));
+  } finally {
+    rmSync(schemaMutationRoot, { recursive: true, force: true });
+  }
 
   const mutation = (
     target: string,
@@ -2640,18 +2883,28 @@ test("current artifact-lineage Stage 1 imports match the frozen exact owner mani
   assert.deepEqual(diagnostics, []);
 
   const intruder = "acceptance/collectors/src/six-step-observer.ts";
-  const intrusionDiagnostics: BoundaryDiagnostic[] = [];
-  validateDependencyBoundaries(
-    [...paths.map(file), file(intruder)],
-    [...rows.map(([from, to, specifier]) => ({ from, to, specifier })), {
-      from: intruder,
-      to: state,
-      specifier: "./internal/artifact-lineage-stage-one-state.ts",
-    }],
-    intrusionDiagnostics,
-    repositoryRoot,
-  );
-  assert.ok(intrusionDiagnostics.some(item => item.code === "collector-imports-authority-constructor"));
+  const intrusionRoot = mkdtempSync(join(tmpdir(), "aloha-artifact-lineage-intrusion-"));
+  try {
+    mkdirSync(join(intrusionRoot, dirname(intruder)), { recursive: true });
+    writeFileSync(
+      join(intrusionRoot, intruder),
+      `import { readArtifactLineageStageTwoAuthorityV1 } from "./internal/artifact-lineage-stage-one-state.ts";\n`,
+    );
+    const intrusionDiagnostics: BoundaryDiagnostic[] = [];
+    validateDependencyBoundaries(
+      [file(intruder), file(state)],
+      [{
+        from: intruder,
+        to: state,
+        specifier: "./internal/artifact-lineage-stage-one-state.ts",
+      }],
+      intrusionDiagnostics,
+      intrusionRoot,
+    );
+    assert.ok(intrusionDiagnostics.some(item => item.code === "collector-imports-authority-constructor"));
+  } finally {
+    rmSync(intrusionRoot, { recursive: true, force: true });
+  }
 });
 
 test("current predicate material source authority imports match the frozen exact manifest", () => {
@@ -3064,7 +3317,6 @@ test("Family and authority-constructor edges are default-deny and exact-owner on
     { from: "packages/attestation/src/internal/validation-authority-issuer.ts", to: "packages/attestation/src/internal/validation-authority-state.ts", specifier: "./validation-authority-state.ts" },
     { from: "packages/attestation/src/internal/validation-authority-verifier.ts", to: "packages/attestation/src/internal/validation-authority-state.ts", specifier: "./validation-authority-state.ts" },
     { from: "packages/checkpoint/src/index.ts", to: "packages/attestation/src/internal/validation-authority-verifier.ts", specifier: "../../attestation/src/internal/validation-authority-verifier.ts" },
-    { from: "packages/checkpoint/src/index.ts", to: "packages/attestation/src/internal/validation-authority-issuer.ts", specifier: "../../attestation/src/internal/validation-authority-issuer.ts" },
     { from: "packages/checkpoint/src/candidate-partition.ts", to: "packages/candidate-partition-runtime/src/internal/reader-issuer.ts", specifier: "../../candidate-partition-runtime/src/internal/reader-issuer.ts" },
     { from: "packages/attestation/src/internal/engine.ts", to: "packages/candidate-partition-runtime/src/internal/reader-consumer.ts", specifier: "../../../candidate-partition-runtime/src/internal/reader-consumer.ts" },
     { from: "packages/ordinary.ts", to: "packages/candidate-partition-runtime/src/internal/reader-issuer.ts", specifier: "./candidate-partition-runtime/src/internal/reader-issuer.ts" },
@@ -3086,7 +3338,6 @@ test("Family and authority-constructor edges are default-deny and exact-owner on
     "central-imports-authority-constructor:packages/ordinary.ts",
     "central-imports-authority-constructor:packages/ordinary.ts",
     "central-imports-authority-constructor:packages/ordinary.ts",
-    "central-imports-authority-constructor:packages/checkpoint/src/index.ts",
     "generated-imports-authority-constructor:generated/not-runtime-composition.ts",
     "family-imports-forbidden-central:families/swap/index.ts",
     "family-imports-forbidden-central:families/swap/index.ts",
@@ -3231,7 +3482,7 @@ test("runtime-release full-family terminal evidence uses only the exact owner an
       importerPath: "packages/runtime-release-authority/src/full-family-terminal-consumer.ts",
       targetPath: "packages/runtime-release-authority/src/internal/full-family-terminal-owner.ts",
       specifier: "./internal/full-family-terminal-owner.ts",
-      allowed: "readRuntimeReleaseFullFamilyTerminalBindingCapabilityV1, readRuntimeReleaseNativeFullFamilyAuditCapabilityV1, readRuntimeReleaseNativeFullFamilyAuditChunkBytesCapabilityV1",
+      allowed: "assertIssuedRuntimeReleaseFullFamilyTerminalBindingServiceV1, readRuntimeReleaseFullFamilyTerminalBindingCapabilityV1, readRuntimeReleaseNativeFullFamilyAuditCapabilityV1, readRuntimeReleaseNativeFullFamilyAuditChunkBytesCapabilityV1",
     },
     {
       importerPath: "packages/runtime-release-authority/src/internal/full-family-terminal-owner.ts",
@@ -4077,6 +4328,78 @@ test("mixed scheduler public roots distinguish neutral runtime imports from auth
     assert.deepEqual(inspect(`import type { QualifiedExecutorAuthorityIssuer } from "${specifier}";\n`), []);
     assert.ok(inspect(`import { createQualifiedExecutorRegistry } from "${specifier}";\n`).some((item) => item.code === "central-imports-authority-constructor"));
     assert.ok(inspect(`import * as scheduler from "${specifier}";\n`).some((item) => item.code === "central-imports-authority-constructor"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Attestation checkpoint and proof seams bind exact runtime imports", () => {
+  const root = mkdtempSync(join(tmpdir(), "aloha-attestation-load-bearing-seams-"));
+  const cases = [
+    {
+      from: "packages/checkpoint/src/index.ts",
+      to: "packages/attestation/src/internal/validation-authority-verifier.ts",
+      specifier: "../../attestation/src/internal/validation-authority-verifier.ts",
+      names: ["assertAttestationValidationAuthority"],
+      extra: "issueShadowValidationAuthority",
+    },
+    {
+      from: "packages/checkpoint/src/index.ts",
+      to: "packages/attestation/src/internal/validation-authority-rehydrator.ts",
+      specifier: "../../attestation/src/internal/validation-authority-rehydrator.ts",
+      names: [
+        "rehydrateIdentityResumeCapabilityForCheckpoint",
+        "rehydrateOutcomeResumeCapabilityForCheckpoint",
+        "rehydrateVerifiedMemoReuseCapabilityForCheckpoint",
+      ],
+      extra: "rehydrateShadowCapabilityForCheckpoint",
+    },
+    {
+      from: "packages/attestation/src/index.ts",
+      to: "packages/attestation/src/internal/identity-proof.ts",
+      specifier: "./internal/identity-proof.ts",
+      names: ["validateIdentityIssuerProof"],
+      extra: "issueIdentityIssuerProof",
+    },
+    {
+      from: "packages/attestation/src/index.ts",
+      to: "packages/attestation/src/internal/outcome-proof.ts",
+      specifier: "./internal/outcome-proof.ts",
+      names: ["validateOutcomeIssuerProof"],
+      extra: "issueOutcomeIssuerProof",
+    },
+  ] as const;
+  const file = (path: string): TrackedFile => ({
+    path,
+    mode: "100644",
+    blobSha: "a".repeat(40),
+    contentSha256: `0x${"a".repeat(64)}`,
+    byteLength: 1,
+    language: "typescript",
+    fileClass: "central",
+  });
+  try {
+    for (const item of cases) {
+      mkdirSync(join(root, dirname(item.from)), { recursive: true });
+      mkdirSync(join(root, dirname(item.to)), { recursive: true });
+      writeFileSync(join(root, item.to), "export {};\n");
+      const edge: GraphEdge = { from: item.from, to: item.to, specifier: item.specifier };
+      const inspect = (source: string, value: GraphEdge = edge): readonly BoundaryDiagnostic[] => {
+        writeFileSync(join(root, item.from), source);
+        const diagnostics: BoundaryDiagnostic[] = [];
+        validateDependencyBoundaries([file(item.from), file(item.to)], [value], diagnostics, root);
+        return diagnostics;
+      };
+      const exact = `import { ${item.names.join(", ")} } from "${item.specifier}";\n`;
+      assert.deepEqual(inspect(exact), []);
+      assert.ok(inspect(
+        `import { ${[...item.names, item.extra].join(", ")} } from "${item.specifier}";\n`,
+      ).some(diagnostic => diagnostic.code === "authority-named-import-mismatch"));
+      assert.ok(inspect(
+        exact.replace(item.specifier, `${item.specifier}?alternate`),
+        { ...edge, specifier: `${item.specifier}?alternate` },
+      ).some(diagnostic => diagnostic.code === "authority-module-specifier-mismatch"));
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

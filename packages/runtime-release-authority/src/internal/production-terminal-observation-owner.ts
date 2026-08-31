@@ -11,9 +11,15 @@ import {
   ProductionTerminalPhaseLocatorIndexV1,
 } from "../../../../acceptance/collectors/src/terminal-phase-locator-index.ts";
 import {
-  readReleaseOwnedObserverStoreV1,
-} from "../../../../acceptance/collectors/src/internal/release-owned-observer-store.ts";
-import type { RuntimeReleaseObserverStoreServiceV1 } from "./observer-store-owner.ts";
+  assertExactKeys,
+  readOwnEnumerableDataProperty,
+} from "../../../canonical-codec/src/index.ts";
+import {
+  assertRuntimeReleaseObserverStoreServiceOwnedByAuthorityV1,
+  readRuntimeReleaseObserverSinkV1,
+  type RuntimeReleaseObserverStoreServiceV1,
+} from "./observer-store-owner.ts";
+import type { RuntimeReleaseAuthorityV1 } from "../index.ts";
 
 export interface RuntimeReleaseTerminalObservationInputV1 {
   readonly observerStore: RuntimeReleaseObserverStoreServiceV1;
@@ -30,23 +36,51 @@ export interface RuntimeReleaseTerminalObservationInputV1 {
  * production application receives only collector ports; collector issuers,
  * stores, and locator construction never cross the facade. */
 export function issueRuntimeReleaseTerminalObservationPortsV1(
+  authority: RuntimeReleaseAuthorityV1,
   input: RuntimeReleaseTerminalObservationInputV1,
 ) {
-  const observerStore = input.observerStore.issueObserverStore({
-    directory: input.observerContentDirectory,
+  const keys = [
+    "observerStore", "observerContentDirectory", "terminalLocatorDirectory",
+    "releaseIntentCanonicalBytes", "familyCatalogSourceBytes", "runtimeCompositionSourceBytes",
+    "strategyCatalogSourceBytes", "candidateProofVerifierBindingBytes",
+  ] as const;
+  assertExactKeys(input, keys, "runtimeReleaseTerminalObservation");
+  const observerStoreService = readOwnEnumerableDataProperty(
+    input,
+    "observerStore",
+    "runtimeReleaseTerminalObservation",
+  ) as RuntimeReleaseObserverStoreServiceV1;
+  const observerContentDirectory = readOwnEnumerableDataProperty(
+    input,
+    "observerContentDirectory",
+    "runtimeReleaseTerminalObservation",
+  ) as string;
+  const terminalLocatorDirectory = readOwnEnumerableDataProperty(
+    input,
+    "terminalLocatorDirectory",
+    "runtimeReleaseTerminalObservation",
+  ) as string;
+  const releaseIntentCanonicalBytes = readOwnEnumerableDataProperty(input, "releaseIntentCanonicalBytes", "runtimeReleaseTerminalObservation") as Uint8Array;
+  const familyCatalogSourceBytes = readOwnEnumerableDataProperty(input, "familyCatalogSourceBytes", "runtimeReleaseTerminalObservation") as Uint8Array;
+  const runtimeCompositionSourceBytes = readOwnEnumerableDataProperty(input, "runtimeCompositionSourceBytes", "runtimeReleaseTerminalObservation") as Uint8Array;
+  const strategyCatalogSourceBytes = readOwnEnumerableDataProperty(input, "strategyCatalogSourceBytes", "runtimeReleaseTerminalObservation") as Uint8Array;
+  const candidateProofVerifierBindingBytes = readOwnEnumerableDataProperty(input, "candidateProofVerifierBindingBytes", "runtimeReleaseTerminalObservation") as Uint8Array;
+  assertRuntimeReleaseObserverStoreServiceOwnedByAuthorityV1(authority, observerStoreService);
+  const observerStore = observerStoreService.issueObserverStore({
+    directory: observerContentDirectory,
   });
-  const sink = readReleaseOwnedObserverStoreV1(observerStore).sink;
+  const sink = readRuntimeReleaseObserverSinkV1(observerStoreService, observerStore);
   const fullFamilyObservation = issueProductionFullFamilyCollectorPortV1({
-    releaseIntentCanonicalBytes: input.releaseIntentCanonicalBytes,
-    familyCatalogSourceBytes: input.familyCatalogSourceBytes,
-    runtimeCompositionSourceBytes: input.runtimeCompositionSourceBytes,
-    strategyCatalogSourceBytes: input.strategyCatalogSourceBytes,
-    candidateProofVerifierBindingBytes: input.candidateProofVerifierBindingBytes,
+    releaseIntentCanonicalBytes,
+    familyCatalogSourceBytes,
+    runtimeCompositionSourceBytes,
+    strategyCatalogSourceBytes,
+    candidateProofVerifierBindingBytes,
     sink,
   });
   const sixStepObservation = issueProductionSixStepCollectorPortV1(sink);
   const locatorIndex = new ProductionTerminalPhaseLocatorIndexV1({
-    directory: input.terminalLocatorDirectory,
+    directory: terminalLocatorDirectory,
     sink,
   });
   const terminalPhaseObservation = issueProductionTerminalPhaseCollectorPortV1({ sink, locatorIndex });

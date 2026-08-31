@@ -25,14 +25,14 @@ const VALUATION_OWNER_REGISTRY = Object.freeze(
       "qualificationSpecDigest": "0xd9f9886d1b1df5030fd01f7c96d166970aaa9c5bc8d072fe7e57c8861354133c",
       "criticalMutationCorpusRoot": "0x63c98fdd00e7dbf870f5210db41c758abcb9e0ba6314c09cd75b81e2cd78d930",
       "independentOracleCaseRoot": "0x04c4b9bf309bc4698493852e0c504162d878c750c0087c5d1e2be5edf6a318b2",
-      "implementationClosureRoot": "0x3235630ce07e12067baa9a8c2c385d99fe8e156341b6563acd54612564da60c6",
-      "qualificationSpecClosureRoot": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
-      "criticalMutationCorpusClosureRoot": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
-      "independentOracleClosureRoot": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
-      "qualificationLeafDigest": "0x663d2d8363cc08045678dac63edc2509e19ac7cdda6ca2f72ba12a33d2591881"
+      "implementationClosureRoot": "0xfc3b30d8adc2dc3b67112ffe5051a05116a471ee08d361e6dfac53e9560c0245",
+      "qualificationSpecClosureRoot": "0x63dbfc70842bd7577b650266d0464c0b6c4dfff7a0e6d8dd080309258e75f878",
+      "criticalMutationCorpusClosureRoot": "0x63dbfc70842bd7577b650266d0464c0b6c4dfff7a0e6d8dd080309258e75f878",
+      "independentOracleClosureRoot": "0x63dbfc70842bd7577b650266d0464c0b6c4dfff7a0e6d8dd080309258e75f878",
+      "qualificationLeafDigest": "0x22cf04c371d0ac118267a59cb62be141b76fbc6d9d40537589ee035e157cf781"
     }
   ],
-  "valuationOwnerRegistryRoot": "0x794797839aef1a87077163fc92e61c81fee56f328254d89a56f305dcc8b8e01a"
+  "valuationOwnerRegistryRoot": "0x0b1cdc81a9cf4f7dfee77c1af009446193d1c6830402bf88e8e5021c8c629568"
 }
 ) as unknown as GeneratedEconomicValuationOwnerRegistryV1;
 
@@ -57,9 +57,9 @@ export function readGeneratedEconomicValuationOwnerRegistryV1(
   const owners: readonly EconomicValuationOwnerRuntimeBindingV1[] = Object.freeze([
     VALUATION_OWNER_0_FACTORY(Object.freeze({
       supportedAssetRefs: Object.freeze(["0x66c45bf41c0fa11b1b81dcdf53432e0dc2d17b8d4d4d33c092379eea9ae769f5"]) satisfies readonly Hash[],
-      implementationClosureRoot: "0x3235630ce07e12067baa9a8c2c385d99fe8e156341b6563acd54612564da60c6",
-      qualificationLeafDigest: "0x663d2d8363cc08045678dac63edc2509e19ac7cdda6ca2f72ba12a33d2591881",
-      valuationOwnerRegistryRoot: "0x794797839aef1a87077163fc92e61c81fee56f328254d89a56f305dcc8b8e01a",
+      implementationClosureRoot: "0xfc3b30d8adc2dc3b67112ffe5051a05116a471ee08d361e6dfac53e9560c0245",
+      qualificationLeafDigest: "0x22cf04c371d0ac118267a59cb62be141b76fbc6d9d40537589ee035e157cf781",
+      valuationOwnerRegistryRoot: "0x0b1cdc81a9cf4f7dfee77c1af009446193d1c6830402bf88e8e5021c8c629568",
       qualifiedValuationOwnerSetRoot,
     })),
   ]);

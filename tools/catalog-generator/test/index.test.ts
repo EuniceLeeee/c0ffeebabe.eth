@@ -151,7 +151,12 @@ function addFamilyFiles(root: string, definition: FamilyAuthoringDefinitionV1): 
   }
   const publicPath = join(root, `families/${definition.manifest.familyId}/public.ts`);
   writeFileSync(publicPath, [
-    ...[...modules, ...definition.manifest.sourcePlans]
+    ...[
+      ...modules,
+      ...definition.manifest.sourcePlans,
+      ...definition.manifest.sourcePlans.flatMap(plan =>
+        plan.nominationProgram.kind === "present" ? [plan.nominationProgram.program] : []),
+    ]
       .map(module => `export { ${module.exportName} } from "./${module.modulePath.split("/").pop()!}";`),
     "export const PUBLIC_ENTRY = Object.freeze({});",
     "",
@@ -453,9 +458,7 @@ test("generator uses compiler-derived closures and a fresh content ledger", () =
     assert.match(artifacts.familyRuntimeCompositionText, /families\/demo-a\/public\.ts/);
     const familyImports = artifacts.familyRuntimeCompositionText.split("\n").filter(line => line.startsWith("import ") && line.includes("families/"));
     assert.ok(familyImports.length > 5);
-    assert.ok(familyImports.some(line => line.includes("/public.ts\";")));
-    assert.match(artifacts.familyRuntimeCompositionText, /nomination-program\.ts/);
-    assert.ok(familyImports.every(line => !/nomination-mutations\.ts|nomination-oracle\.ts/.test(line)));
+    assert.ok(familyImports.every(line => line.includes("/public.ts\";")));
     assert.match(artifacts.familyRuntimeCompositionText, /export const createReleaseFamilyRuntimeComposition/);
     assert.match(artifacts.familyRuntimeCompositionText, /createReleaseStrategyRuntimeComposition/);
     assert.match(artifacts.familyRuntimeCompositionText, /STRATEGY_0_PLANNING_PROBLEM_ISSUER/);
@@ -486,6 +489,36 @@ test("generator uses compiler-derived closures and a fresh content ledger", () =
     assert.ok(checkGeneratedCatalog(input).some(error => error === "output-content:generated/valuation-owner-registry/index.ts"));
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("generated runtime binds one unique public export to the qualified SourcePlan implementation", () => {
+  const mutations = [
+    (source: string) => source.replace(
+      'export { sourcePlan } from "./source-plan.ts";',
+      'export { sourcePlan } from "./alternate-source-plan.ts";',
+    ),
+    (source: string) => `${source}export const sourcePlan = Object.freeze({});\n`,
+    (source: string) => `${source}export { sourcePlan } from "./alternate-source-plan.ts";\n`,
+    (source: string) => source.replace(
+      'export { sourcePlan } from "./source-plan.ts";',
+      'export * from "./source-plan.ts";\nexport * from "./alternate-source-plan.ts";',
+    ),
+  ];
+  for (const mutate of mutations) {
+    const root = mkdtempSync(join(tmpdir(), "aloha-catalog-public-substitution-"));
+    try {
+      const input = generation(root, ["demo-a"]);
+      const publicPath = join(root, "families/demo-a/public.ts");
+      writeFileSync(join(root, "families/demo-a/alternate-source-plan.ts"), "export const sourcePlan = Object.freeze({});\n");
+      writeFileSync(publicPath, mutate(readFileSync(publicPath, "utf8")));
+      assert.throws(
+        () => generateCatalog(input),
+        /public entry must uniquely exact-re-export qualified runtime symbol/,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
 

@@ -5,6 +5,7 @@ import {
   assertNonEmptyString,
   assertPlainObject,
   encodeCanonicalJson,
+  hashCanonicalPartition,
   hashDomain,
   type CanonicalJson,
   type Hash,
@@ -17,6 +18,7 @@ import {
   fullFamilyGeneratedDenominatorRoot,
   type FullFamilyGeneratedRuntimeMetadataV1,
 } from "../../../../specs/full-family-facts/src/index.ts";
+import { SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1 } from "../../../../specs/evidence/src/six-step.ts";
 
 export type ProductionTerminalPhaseSnapshotTrustCapabilityV1 = object;
 
@@ -68,8 +70,18 @@ export interface ProductionActiveReadyGraphSnapshotV1 {
   readonly readyClosureStorageHash: Hash;
   readonly readyRecordHash: Hash;
   readonly generationId: string;
+  readonly generationRefreshPolicyHash: Hash;
   readonly releaseProvenanceHash: Hash;
   readonly cutoff: CanonicalCutoffV1;
+  readonly definitionCatalogRoot: Hash;
+  readonly sourceCoverageRoot: Hash;
+  readonly candidatePartitionRoot: Hash;
+  readonly exactOutcomePartitionRoot: Hash;
+  readonly verifiedMemoSetRoot: Hash;
+  readonly candidatePartitionProofStorageHash: Hash;
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
+  readonly promotionRevision: string;
   readonly instanceCatalogRoot: Hash;
   readonly instanceCatalogStorageHash: Hash;
   readonly graphStorageHash: Hash;
@@ -174,7 +186,10 @@ function canonicalActiveReadyGraph(
   assertPlainObject(input, "snapshotTrust.activeReadyGraph");
   assertExactKeys(input, [
     "checkpointRootEnvelopeHash", "checkpointRevision", "readyClosureStorageHash", "readyRecordHash",
-    "generationId", "releaseProvenanceHash", "cutoff", "instanceCatalogRoot", "instanceCatalogStorageHash",
+    "generationId", "generationRefreshPolicyHash", "releaseProvenanceHash", "cutoff", "definitionCatalogRoot", "sourceCoverageRoot",
+    "candidatePartitionRoot", "exactOutcomePartitionRoot", "verifiedMemoSetRoot", "promotionRevision",
+    "candidatePartitionProofStorageHash", "nominationClosureRoot", "nominationClosureStorageHash",
+    "instanceCatalogRoot", "instanceCatalogStorageHash",
     "graphStorageHash", "graphRoot", "edgeCount", "orderedEdgeIds", "orderedEdges", "expectedTransitionCount",
     "expectedTransitionRoot", "orderedTransitions", "familyEdgeCounts", "familyTransitionCounts",
   ], "snapshotTrust.activeReadyGraph");
@@ -210,10 +225,15 @@ function canonicalActiveReadyGraph(
   }
   const instanceCatalogRoot = assertHash(input.instanceCatalogRoot, "snapshotTrust.activeReadyGraph.instanceCatalogRoot");
   const graphRoot = assertHash(input.graphRoot, "snapshotTrust.activeReadyGraph.graphRoot");
-  if (graphRoot !== hashDomain("aloha/persisted-graph/v1", {
+  if (graphRoot !== hashDomain("aloha/persisted-graph/v2", {
     cutoff,
     instanceCatalogRoot,
-    edges: orderedEdges,
+    edgeCount,
+    edgeSequenceRoot: hashCanonicalPartition(
+      "aloha/persisted-graph-edge-sequence/v1",
+      orderedEdgeIds,
+      128,
+    ),
   })) {
     throw new TypeError("snapshot trust active Ready Graph root mismatch");
   }
@@ -273,8 +293,18 @@ function canonicalActiveReadyGraph(
     readyClosureStorageHash: assertHash(input.readyClosureStorageHash, "snapshotTrust.activeReadyGraph.readyClosureStorageHash"),
     readyRecordHash: assertHash(input.readyRecordHash, "snapshotTrust.activeReadyGraph.readyRecordHash"),
     generationId: assertNonEmptyString(input.generationId, "snapshotTrust.activeReadyGraph.generationId"),
+    generationRefreshPolicyHash: assertHash(input.generationRefreshPolicyHash, "snapshotTrust.activeReadyGraph.generationRefreshPolicyHash"),
     releaseProvenanceHash: assertHash(input.releaseProvenanceHash, "snapshotTrust.activeReadyGraph.releaseProvenanceHash"),
     cutoff,
+    definitionCatalogRoot: assertHash(input.definitionCatalogRoot, "snapshotTrust.activeReadyGraph.definitionCatalogRoot"),
+    sourceCoverageRoot: assertHash(input.sourceCoverageRoot, "snapshotTrust.activeReadyGraph.sourceCoverageRoot"),
+    candidatePartitionRoot: assertHash(input.candidatePartitionRoot, "snapshotTrust.activeReadyGraph.candidatePartitionRoot"),
+    exactOutcomePartitionRoot: assertHash(input.exactOutcomePartitionRoot, "snapshotTrust.activeReadyGraph.exactOutcomePartitionRoot"),
+    verifiedMemoSetRoot: assertHash(input.verifiedMemoSetRoot, "snapshotTrust.activeReadyGraph.verifiedMemoSetRoot"),
+    candidatePartitionProofStorageHash: assertHash(input.candidatePartitionProofStorageHash, "snapshotTrust.activeReadyGraph.candidatePartitionProofStorageHash"),
+    nominationClosureRoot: assertHash(input.nominationClosureRoot, "snapshotTrust.activeReadyGraph.nominationClosureRoot"),
+    nominationClosureStorageHash: assertHash(input.nominationClosureStorageHash, "snapshotTrust.activeReadyGraph.nominationClosureStorageHash"),
+    promotionRevision: assertDecimalString(input.promotionRevision, "snapshotTrust.activeReadyGraph.promotionRevision"),
     instanceCatalogRoot,
     instanceCatalogStorageHash: assertHash(input.instanceCatalogStorageHash, "snapshotTrust.activeReadyGraph.instanceCatalogStorageHash"),
     graphStorageHash: assertHash(input.graphStorageHash, "snapshotTrust.activeReadyGraph.graphStorageHash"),
@@ -313,6 +343,9 @@ function canonicalState(
     activeReadyGraph as unknown as CanonicalJson,
   );
   const generatedRuntimeDenominatorRoot = fullFamilyGeneratedDenominatorRoot(input.generatedRuntimeMetadata);
+  if (activeReadyGraph.definitionCatalogRoot !== input.generatedRuntimeMetadata.definitionCatalogRoot) {
+    throw new TypeError("terminal-phase root-owned Ready/generated definition catalog mismatch");
+  }
   const sourceLedger = Object.freeze({
     sourceDevice: assertDecimalString(input.sixStepSourceLedger.sourceDevice, "snapshotTrust.sixStepSourceLedger.sourceDevice"),
     sourceInode: assertDecimalString(input.sixStepSourceLedger.sourceInode, "snapshotTrust.sixStepSourceLedger.sourceInode"),
@@ -323,18 +356,33 @@ function canonicalState(
     byteLength: assertDecimalString(input.sixStepSourceLedger.byteLength, "snapshotTrust.sixStepSourceLedger.byteLength"),
     fsynced: input.sixStepSourceLedger.fsynced,
   });
-  if (sourceLedger.fsynced !== true || !Array.isArray(input.sixStepBoundaryFiles) || input.sixStepBoundaryFiles.length === 0) {
+  if (sourceLedger.fsynced !== true || !Array.isArray(input.sixStepBoundaryFiles)
+    || input.sixStepBoundaryFiles.length === 0
+    || input.sixStepBoundaryFiles.length > SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxEntries) {
     throw new TypeError("terminal-phase snapshot trust Six-Step physical denominator is incomplete");
   }
+  let sixStepBoundaryTotalBytes = 0n;
   const boundaryFiles = Object.freeze(input.sixStepBoundaryFiles.map((file, index) => {
     if (!/^[0-9a-f]{64}\.v8$/.test(file.name) || file.fsynced !== true
       || (index > 0 && input.sixStepBoundaryFiles[index - 1]!.name >= file.name)) {
       throw new TypeError("terminal-phase snapshot trust Six-Step boundary file denominator is invalid");
     }
+    const byteLength = assertDecimalString(
+      file.byteLength,
+      `snapshotTrust.sixStepBoundaryFiles[${index}].byteLength`,
+    );
+    const byteLengthValue = BigInt(byteLength);
+    if (byteLengthValue > BigInt(SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxEntryBytes)) {
+      throw new TypeError("terminal-phase snapshot trust Six-Step boundary file exceeds byte policy");
+    }
+    sixStepBoundaryTotalBytes += byteLengthValue;
+    if (sixStepBoundaryTotalBytes > BigInt(SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxTotalBytes)) {
+      throw new TypeError("terminal-phase snapshot trust Six-Step boundary aggregate exceeds byte policy");
+    }
     return Object.freeze({
       name: file.name,
       contentSha256: assertHash(file.contentSha256, `snapshotTrust.sixStepBoundaryFiles[${index}].contentSha256`),
-      byteLength: assertDecimalString(file.byteLength, `snapshotTrust.sixStepBoundaryFiles[${index}].byteLength`),
+      byteLength,
       device: assertDecimalString(file.device, `snapshotTrust.sixStepBoundaryFiles[${index}].device`),
       inode: assertDecimalString(file.inode, `snapshotTrust.sixStepBoundaryFiles[${index}].inode`),
       fsynced: true as const,

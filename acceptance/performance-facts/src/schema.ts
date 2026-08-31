@@ -1,4 +1,11 @@
 import type { Hash, PerformanceFactBundleV1 } from "../../../specs/performance/src/index.ts";
+import {
+  assertConcreteArray,
+  assertExactKeys,
+  CANONICAL_LIMITS,
+  encodeCanonicalBytes,
+  readOwnEnumerableDataProperty,
+} from "../../../packages/canonical-codec/src/index.ts";
 
 export {
   DEFAULT_PRODUCTION_PERFORMANCE_PROFILE,
@@ -41,6 +48,7 @@ export {
   decodeHeadTerminalReceipt,
   decodePerformanceAcceptanceReceipt,
   decodePerformanceFactBundle,
+  decodePartitionedPerformanceFactBundle,
   decodePerformanceFactEnvelope,
   decodePerformanceEvent,
   decodePerformanceMetricSample,
@@ -139,11 +147,27 @@ export interface PerformanceRuntimeFactsV1 {
 
 export type PerformancePredicateInputV1 = PerformanceFactBundleV1 | PerformanceRuntimeFactsV1;
 
+const PERFORMANCE_FACT_BUNDLE_KEYS = Object.freeze([
+  "profile",
+  "commitment",
+  "heads",
+  "lineages",
+  "candidateSets",
+  "candidateTerminals",
+  "metrics",
+  "terminals",
+  "generationSegments",
+  "windowReceipt",
+] as const);
+
 export function isPerformanceFactBundle(value: unknown): value is PerformanceFactBundleV1 {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    && "profile" in value && "commitment" in value && "heads" in value && "lineages" in value
-    && "candidateSets" in value && "candidateTerminals" in value && "metrics" in value
-    && "terminals" in value && "generationSegments" in value && "windowReceipt" in value;
+  try {
+    assertExactKeys(value, PERFORMANCE_FACT_BUNDLE_KEYS);
+    for (const key of PERFORMANCE_FACT_BUNDLE_KEYS) readOwnEnumerableDataProperty(value, key);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function unwrapPerformanceFacts(input: PerformancePredicateInputV1): {
@@ -152,9 +176,40 @@ export function unwrapPerformanceFacts(input: PerformancePredicateInputV1): {
   readonly envelope: boolean;
 } | null {
   if (isPerformanceFactBundle(input)) return Object.freeze({ bundle: input, observations: [], envelope: false });
-  if (input === null || typeof input !== "object" || !Array.isArray(input.facts)) return null;
-  const bundle = input.facts.find(isPerformanceFactBundle);
-  if (bundle === undefined) return null;
-  if (input.observations.length === 0) return null;
-  return Object.freeze({ bundle, observations: input.observations, envelope: true });
+  try {
+    assertExactKeys(input, ["facts", "refs", "claims", "observations"]);
+    const exactArray = (
+      key: "facts" | "refs" | "claims" | "observations",
+      preflightItems: boolean,
+    ): readonly unknown[] => {
+      const path = `$.${key}`;
+      const value = readOwnEnumerableDataProperty(input, key);
+      assertConcreteArray(value, path);
+      if (value.length > CANONICAL_LIMITS.maxArrayItems) throw new TypeError(`array exceeds item policy at ${path}`);
+      const ownKeys = Reflect.ownKeys(value);
+      if (ownKeys.some(candidate => typeof candidate === "symbol"
+        || (candidate !== "length" && (!/^(?:0|[1-9][0-9]*)$/.test(candidate) || Number(candidate) >= value.length)))) {
+        throw new TypeError(`array has an extra property at ${path}`);
+      }
+      const items: unknown[] = [];
+      for (let index = 0; index < value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+          throw new TypeError(`array has a sparse or accessor item at ${path}[${index}]`);
+        }
+        if (preflightItems) encodeCanonicalBytes(descriptor.value);
+        items.push(descriptor.value);
+      }
+      return Object.freeze(items);
+    };
+    const facts = exactArray("facts", false);
+    exactArray("refs", true);
+    exactArray("claims", true);
+    const observations = exactArray("observations", true) as readonly PerformanceQualifiedObservationV1[];
+    const bundle = facts.find(isPerformanceFactBundle);
+    if (bundle === undefined || observations.length === 0) return null;
+    return Object.freeze({ bundle, observations, envelope: true });
+  } catch {
+    return null;
+  }
 }

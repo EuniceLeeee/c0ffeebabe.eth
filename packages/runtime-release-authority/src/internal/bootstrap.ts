@@ -1,13 +1,19 @@
 import type {
-  AttestationServiceConstructorV1,
-  AttestationServiceV1,
   AttestationCompositionBindingV1,
+  AttestationServiceV1,
+  InstanceDecisionV1,
+  InstanceLifecycleSingleFlightPort,
+  RejectionTransportExecutorV1,
 } from "../../../../packages/attestation/src/index.ts";
 import { createAttestationProgramPortFromFamilyComposition } from "../../../../packages/attestation/src/internal/family-program-adapter.ts";
-import { createAttestationService } from "../../../../packages/attestation/src/internal/composition.ts";
+import {
+  createAttestationService,
+  createFrameworkFailureRuntime,
+  createRejectionExecutorAuthorityIssuer,
+  createRejectionFactRuntime,
+} from "../../../../packages/attestation/src/internal/composition.ts";
 import type {
   CandidatePartitionProofIssuerPortV1,
-  CandidatePartitionReaderPortV1,
 } from "../../../../specs/candidate-partition-authority/src/index.ts";
 import {
   createCandidatePartitionBootstrap,
@@ -137,9 +143,9 @@ import {
 } from "./six-step-terminal-owner.ts";
 import {
   issueRuntimeReleaseObserverStoreServiceV1,
+  readRuntimeReleaseObserverSinkV1,
   type RuntimeReleaseObserverStoreServiceV1,
 } from "./observer-store-owner.ts";
-import { readReleaseOwnedObserverStoreV1 } from "../../../../acceptance/collectors/src/internal/release-owned-observer-store.ts";
 import { issueRuntimeReleaseSixStepProductionV1 } from "./six-step-production-owner.ts";
 
 export type { RuntimeReleaseStrategyRuntimeServiceV1 } from "./strategy-runtime-owner.ts";
@@ -226,11 +232,6 @@ export interface RuntimeReleaseCompositionInputV1<Fact> {
   readonly catalog: RuntimeReleaseCatalogInputV1;
   readonly attestation: {
     readonly proofPort: RuntimeReleaseAttestationProofPortV1;
-    /** Build only framework/rejection/lifecycle ports after release composition is issued. */
-    readonly build: (
-      composition: AttestationCompositionBindingV1,
-      candidatePartitionReader: CandidatePartitionReaderPortV1,
-    ) => Omit<AttestationServiceConstructorV1, "composition" | "candidatePartitionReader" | "programs">;
   };
   /** Already-issued by deployment-side candidate-partition proof composition. */
   readonly candidatePartitionProofIssuer: CandidatePartitionProofIssuerPortV1;
@@ -264,6 +265,26 @@ export interface RuntimeReleaseCompositionInputV1<Fact> {
     readonly evidenceDirectory: string;
   }>;
 }
+
+class RuntimeReleaseInstanceLifecycleV1 implements InstanceLifecycleSingleFlightPort {
+  readonly #pending = new Map<Hash, Promise<InstanceDecisionV1>>();
+
+  getOrBuild(key: Hash, build: () => Promise<InstanceDecisionV1>): Promise<InstanceDecisionV1> {
+    const existing = this.#pending.get(key);
+    if (existing !== undefined) return existing;
+    const pending = Promise.resolve().then(build).finally(() => {
+      if (this.#pending.get(key) === pending) this.#pending.delete(key);
+    });
+    this.#pending.set(key, pending);
+    return pending;
+  }
+}
+
+const FAIL_CLOSED_REJECTION_EXECUTOR = Object.freeze({
+  async execute(): Promise<never> {
+    throw new TypeError("attestation rejection transport is unavailable");
+  },
+}) satisfies RejectionTransportExecutorV1;
 
 export interface RuntimeReleaseCompositionServicesV1<Fact> {
   /** Public Attestation facade; its validation authority stays checkpoint-private. */
@@ -579,7 +600,7 @@ export function buildRuntimeReleaseComposition<Fact>(
   const sixStepObserverStore = observerStore.issueObserverStore({
     directory: input.sixStep.observerContentDirectory,
   });
-  const sixStepSink = readReleaseOwnedObserverStoreV1(sixStepObserverStore).sink;
+  const sixStepSink = readRuntimeReleaseObserverSinkV1(observerStore, sixStepObserverStore);
   const sixStepCatalog = catalogInternal.loadExact();
   const sixStepStrategy = strategyRuntime.readMetadata();
   const sixStepProduction = issueRuntimeReleaseSixStepProductionV1({
@@ -610,7 +631,10 @@ export function buildRuntimeReleaseComposition<Fact>(
 
   const candidatePartitionBootstrap = createCandidatePartitionBootstrap();
   const candidatePartitionReader = candidatePartitionBootstrapReader(candidatePartitionBootstrap);
-  const attestationConstructor = input.attestation.build(attestationComposition, candidatePartitionReader);
+  const frameworkRuntime = createFrameworkFailureRuntime(attestationComposition, {
+    classify() { return null; },
+  });
+  const rejectionIssuer = createRejectionExecutorAuthorityIssuer(attestationComposition);
   // Identity/materialization meaning is owned by the exact generated Family
   // composition joined above.  It must never arrive through the caller's
   // framework callback, even if a structural object happens to contain a
@@ -619,7 +643,9 @@ export function buildRuntimeReleaseComposition<Fact>(
     composition: ports.familyRuntime.openComposition(),
   });
   const attestationInternal = createAttestationService({
-    ...attestationConstructor,
+    frameworkRuntime,
+    rejectionRuntime: createRejectionFactRuntime(rejectionIssuer.issue(FAIL_CLOSED_REJECTION_EXECUTOR)),
+    instanceLifecycle: new RuntimeReleaseInstanceLifecycleV1(),
     composition: attestationComposition,
     candidatePartitionReader,
     programs: attestationPrograms,

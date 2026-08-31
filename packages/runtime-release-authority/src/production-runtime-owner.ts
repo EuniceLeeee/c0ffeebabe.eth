@@ -3,6 +3,10 @@ import type {
   RuntimeReleaseSignerPinV1,
 } from "../../../specs/release-authority/src/index.ts";
 import {
+  assertExactKeys,
+  readOwnEnumerableDataProperty,
+} from "../../canonical-codec/src/index.ts";
+import {
   buildRuntimeReleaseComposition,
   verifyRuntimeReleaseBindingAuthenticityV1,
   verifyAndIssueRuntimeReleaseAuthorityV1,
@@ -55,7 +59,6 @@ type RuntimeReleaseCompositionFacadeInputV1 = Omit<
   | "startup"
 > & Readonly<{
   readonly infrastructure: RuntimeReleaseInfrastructurePortV1;
-  readonly attestation: Pick<RuntimeReleaseCompositionInputV1<readonly unknown[]>["attestation"], "build">;
   readonly qualifiedDiscoverySource: RuntimeReleaseDiscoverySourceDeploymentInputV1;
   readonly performance:
     | Readonly<{ readonly phase: "installed-production" }>
@@ -63,6 +66,25 @@ type RuntimeReleaseCompositionFacadeInputV1 = Omit<
   readonly startup: Omit<RuntimeReleaseCompositionInputV1<readonly unknown[]>["startup"], "source">;
   readonly economicSafetyObjectiveTemplatesBytes: Uint8Array;
 }>;
+
+const RUNTIME_RELEASE_COMPOSITION_FACADE_KEYS = Object.freeze([
+  "catalog", "checkpoint", "ready", "finalSimulation", "sixStep", "infrastructure",
+  "qualifiedDiscoverySource", "performance", "startup", "economicSafetyObjectiveTemplatesBytes",
+] as const);
+
+function snapshotRuntimeReleaseCompositionFacadeInputV1(
+  input: RuntimeReleaseCompositionFacadeInputV1,
+): RuntimeReleaseCompositionFacadeInputV1 {
+  assertExactKeys(input, RUNTIME_RELEASE_COMPOSITION_FACADE_KEYS, "runtimeReleaseCompositionFacade");
+  const snapshot = Object.create(null) as Record<string, unknown>;
+  for (const key of RUNTIME_RELEASE_COMPOSITION_FACADE_KEYS) {
+    Object.defineProperty(snapshot, key, {
+      enumerable: true,
+      value: readOwnEnumerableDataProperty(input, key, "runtimeReleaseCompositionFacade"),
+    });
+  }
+  return Object.freeze(snapshot) as RuntimeReleaseCompositionFacadeInputV1;
+}
 
 export interface VerifiedRuntimeReleaseOwnerPortV1 {
   bindInfrastructure(
@@ -133,23 +155,25 @@ export function openVerifiedRuntimeReleaseOwnerPortV1(
     },
     compose(this: VerifiedRuntimeReleaseOwnerPortV1, input: RuntimeReleaseCompositionFacadeInputV1) {
       assertReceiver(this);
-      const infrastructure = infrastructures.get(input.infrastructure);
-      if (infrastructure === undefined || consumedInfrastructures.has(input.infrastructure)) {
+      const snapshot = snapshotRuntimeReleaseCompositionFacadeInputV1(input);
+      const infrastructurePort = snapshot.infrastructure;
+      const infrastructure = infrastructures.get(infrastructurePort);
+      if (infrastructure === undefined || consumedInfrastructures.has(infrastructurePort)) {
         throw new TypeError("runtime release infrastructure port is foreign, cloned, or consumed");
       }
-      consumedInfrastructures.add(input.infrastructure);
+      consumedInfrastructures.add(infrastructurePort);
       const qualifiedSource = issueRuntimeReleaseQualifiedDiscoverySourcePort(
         authority,
-        input.qualifiedDiscoverySource,
+        snapshot.qualifiedDiscoverySource,
       );
-      const performancePolicy: RuntimeReleasePerformancePolicyPortV1 = input.performance.phase === "installed-production"
+      const performancePolicy: RuntimeReleasePerformancePolicyPortV1 = snapshot.performance.phase === "installed-production"
         ? issueInstalledRuntimeReleasePerformancePolicyPortV1({
             authority,
             deployment: openInstalledRuntimeReleasePerformanceDeploymentPortV1(authority),
           })
         : issuePreReleaseRuntimeReleasePerformancePolicyPortV1({
             authority,
-            performanceProfileBytes: input.performance.profileBytes,
+            performanceProfileBytes: snapshot.performance.profileBytes,
             qualifiedSource,
           });
       const {
@@ -158,7 +182,7 @@ export function openVerifiedRuntimeReleaseOwnerPortV1(
         performance: _performance,
         economicSafetyObjectiveTemplatesBytes,
         ...composition
-      } = input;
+      } = snapshot;
       void _infrastructure;
       void _qualifiedDiscoverySource;
       void _performance;
@@ -166,7 +190,6 @@ export function openVerifiedRuntimeReleaseOwnerPortV1(
         ...composition,
         authority,
         attestation: {
-          ...composition.attestation,
           proofPort: infrastructure.external.attestationProof,
         },
         candidatePartitionProofIssuer: infrastructure.external.candidatePartitionProofIssuer,
@@ -190,7 +213,7 @@ export function openVerifiedRuntimeReleaseOwnerPortV1(
     },
     bindTerminalObservations(this: VerifiedRuntimeReleaseOwnerPortV1, input: RuntimeReleaseTerminalObservationInputV1) {
       assertReceiver(this);
-      return issueRuntimeReleaseTerminalObservationPortsV1(input);
+      return issueRuntimeReleaseTerminalObservationPortsV1(authority, input);
     },
   });
   return port;

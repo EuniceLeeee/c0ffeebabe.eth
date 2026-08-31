@@ -15,6 +15,7 @@ import {
 } from "../../../packages/canonical-codec/src/index.ts";
 import { candidateFinalOutcomeHash } from "../../../specs/candidate-final-outcome/src/index.ts";
 import { decodeProcessAnchor, hashProcessAnchor, type ProcessAnchorV1 } from "../../../specs/core-envelope/src/index.ts";
+import { SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1 } from "../../../specs/evidence/src/six-step.ts";
 
 export const PRE_RELEASE_RESTART_CONTROLLER_LAYOUT_V1 = Object.freeze({
   controllerServiceName: "aloha-searcher-pre-release-restart-controller",
@@ -57,6 +58,8 @@ export const PRE_RELEASE_RESTART_CONTROLLER_LAYOUT_V1 = Object.freeze({
   drainTimeoutMs: 300_000,
   pollIntervalMs: 100,
 } as const);
+
+export const PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1 = SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1;
 
 export const PRE_RELEASE_RESTART_CONTROLLER_UNIT_V1 = `[Unit]
 Description=Aloha pre-release strict restart controller
@@ -555,6 +558,9 @@ function exactPhysicalFileSnapshot(
   for (const field of ["sourceDevice", "sourceInode", "byteLength", "device", "inode"] as const) {
     decimal(record[field], `${path}.${field}`);
   }
+  if (BigInt(record.byteLength) > BigInt(PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxLedgerBytes)) {
+    throw new TypeError(`${path} exceeds the Six-Step source-ledger byte policy`);
+  }
   return record;
 }
 
@@ -573,8 +579,13 @@ function exactDirectorySnapshot(
   if (record.snapshotKind !== snapshotKind || record.sourceDirectory !== sourceDirectory
     || record.snapshotDirectory !== snapshotDirectory || record.uid !== "0" || record.gid !== "0"
     || record.mode !== "448" || record.directoryFsynced !== true || !Array.isArray(record.entries)
-    || record.entries.length === 0 || (snapshotKind === "terminal-locator-index" && record.entries.length !== 1)) {
+    || (record.entries.length === 0 && snapshotKind !== "six-step-boundaries")
+    || (snapshotKind === "terminal-locator-index" && record.entries.length !== 1)) {
     throw new TypeError(`${path} is not the fixed root-owned directory snapshot`);
+  }
+  if (snapshotKind === "six-step-boundaries"
+    && record.entries.length > PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxEntries) {
+    throw new TypeError(`${path} Six-Step boundary entry count exceeds policy`);
   }
   if (snapshotKind === "observer-content") {
     assertHash(record.observerStoreIdentityHash, `${path}.observerStoreIdentityHash`);
@@ -583,6 +594,7 @@ function exactDirectorySnapshot(
   }
   for (const field of ["directoryDevice", "directoryInode"] as const) decimal(record[field], `${path}.${field}`);
   let previousName: string | null = null;
+  let totalBytes = 0n;
   const entries = record.entries.map((entryValue, index) => {
     const entryPath = `${path}.entries[${index}]`;
     const entry = object(entryValue, entryPath) as unknown as PreReleaseControllerDirectorySnapshotEntryV1;
@@ -604,6 +616,16 @@ function exactDirectorySnapshot(
       throw new TypeError(`${entryPath} content-object name/hash mismatch`);
     }
     for (const field of ["byteLength", "device", "inode"] as const) decimal(entry[field], `${entryPath}.${field}`);
+    const byteLength = BigInt(entry.byteLength);
+    if (snapshotKind === "six-step-boundaries") {
+      if (byteLength > BigInt(PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxEntryBytes)) {
+        throw new TypeError(`${entryPath} Six-Step boundary file exceeds policy`);
+      }
+      totalBytes += byteLength;
+      if (totalBytes > BigInt(PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxTotalBytes)) {
+        throw new TypeError(`${path} Six-Step boundary aggregate exceeds policy`);
+      }
+    }
     return entry;
   });
   if (snapshotKind === "observer-content" && !entries.some(entry => entry.name === ".aloha-observer-store-identity-v1")) {

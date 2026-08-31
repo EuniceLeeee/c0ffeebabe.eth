@@ -634,9 +634,10 @@ function makeRoutePorts(
       try {
         const source = familySearchSource(currentSource.source);
         const actions = [];
-        for (const leg of exactValue.legs) {
-          const resolved = context.legs.find(item => item.edgeId === leg.edgeId);
-          if (resolved === undefined) throw new TypeError("execution-route-leg-missing");
+        if (exactValue.legs.length !== context.legs.length) throw new TypeError("execution-route-leg-count-mismatch");
+        for (const [index, leg] of exactValue.legs.entries()) {
+          const resolved = context.legs[index];
+          if (resolved === undefined || resolved.edgeId !== leg.edgeId) throw new TypeError("execution-route-leg-order-mismatch");
           const outcome = await resolved.adapter.buildAction({ route: resolved.route, currentSource: currentSource as FamilySearchCurrentSourceV1, objective: context.objective, amount: leg.amount, execution, exact: leg.exact });
           if (outcome.kind === "unavailable") return unavailable("execution-program", outcome) as ExecutionProgramOutcomeV1;
           if (outcome.kind === "invalidProgram") return stageFailure("execution-program", outcome) as ExecutionProgramOutcomeV1;

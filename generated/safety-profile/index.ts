@@ -8,43 +8,43 @@ const ACTION_OWNER_REGISTRY = Object.freeze(
   "kind": "aloha.generated-economic-safety-action-owner-registry",
   "entries": [
     {
-      "familyDefinitionHash": "0xbde1f0f7fa7dbc82e4153b3b13f55c40a971a152c612f52a835312033c656002",
-      "ownerId": "family.fluid-dex.swap-action",
-      "ownerRef": "0x14d6f43ccb3e579a27347ea72f08f08738a37d010ac2c46383eac233e8227542",
-      "implementationHash": "0x05b835f0e9aeab44b7f2b5278ab6da1dcf14b196d0c02eeb1da01bbc86ff3d68",
-      "schemaRef": "0xfabc0eb4431f8fd1c1cf8ecf65aefa027b15ec8ab31f54ea413f148c6d75d989",
-      "implementationClosureRoot": "0x985cc7771790595404b1f5312d6ad1848ab9f9a200892abe49acae3735c66f94",
-      "proposalLeafDigest": "0xc7aaf8edc020dc94f7ebc1c0104619d5082b99e5b0cfd6830650202fe0144da8"
-    },
-    {
       "familyDefinitionHash": "0x793a0cc3840dc9cfcbee1e00989b20ff8823619e81a030f5210d2eceb81b8844",
       "ownerId": "family.dodo-v2.swap-action",
-      "ownerRef": "0x37abee12b6f3b07dbaeb350585fb9f3f9ea08f5212bf6f462079515885526dcc",
+      "ownerRef": "0x3ff1d4fff70ee3675ca8a26ca6c890943db310cd0ac22a5a1bdb7e50eeaa9b4e",
       "implementationHash": "0xf8c6d08ecf54c4ee01f2c2a22263ca6ace7c8c3d4270c98fad4eda7132478ecf",
       "schemaRef": "0x1b8a6d71ba59ea9fe5e268dd188f10998226f2c3d4e679b8db9e4fa98e801297",
-      "implementationClosureRoot": "0xa8744957c21d07ed554c334c1a9795dfac44b16c21a62f9482aab4d34aaa2518",
-      "proposalLeafDigest": "0x7b12c53de6c3a7cdea2df3960683e6ea1f6d9fc19710e1551656c73bd1fdb30d"
+      "implementationClosureRoot": "0x58b08dbf3f8d3769033dcdd96bf8ff8a66e1fb535a3a36b032f0faff34e3435d",
+      "proposalLeafDigest": "0xc9b452a874dab190b7655028bf142c2f76328a14e2825dc90445365b10885d39"
+    },
+    {
+      "familyDefinitionHash": "0xbde1f0f7fa7dbc82e4153b3b13f55c40a971a152c612f52a835312033c656002",
+      "ownerId": "family.fluid-dex.swap-action",
+      "ownerRef": "0x82a3ba0aad041073e25143e0248e4b3618d9a5d3d4bdf4f6e54e3f0dce47886d",
+      "implementationHash": "0x05b835f0e9aeab44b7f2b5278ab6da1dcf14b196d0c02eeb1da01bbc86ff3d68",
+      "schemaRef": "0xfabc0eb4431f8fd1c1cf8ecf65aefa027b15ec8ab31f54ea413f148c6d75d989",
+      "implementationClosureRoot": "0x472bcecefb700a52d36985832845e11fc2e69d93e2116ab66bafd2405d5dfbd7",
+      "proposalLeafDigest": "0xa62ade7e867b117327654110cec06f31a6ac409cb5db141fd2867fef023f6090"
     },
     {
       "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
       "ownerId": "family.curve-underlying.swap-action",
-      "ownerRef": "0x4151ae50eac978948aed9945f9a0a3e28498573ae68f86208ac0f0530ec3c1fb",
+      "ownerRef": "0xb2cab4329101fe9a5828727da45ff6ec4e26a3c65965baa248f23a472480d9fe",
       "implementationHash": "0x46a3640a5ad5feecc57fde8f9b8d3a34de65ab1867e74e928c74741e5a0eae09",
       "schemaRef": "0x3ee71544ac34504b08926a54316b0f46e831753edc7f4599b9ca98ba2a767793",
-      "implementationClosureRoot": "0x0e901d5f298e906dc81ae5af6585898e2bc62f50800d005b1a79e52c716e764e",
-      "proposalLeafDigest": "0xe17ca0f6d63c763322aae8a6cd3f73c4911921b1f069595afce7c19f59492eeb"
+      "implementationClosureRoot": "0x6adfabcabcd3b0782e193cec816eee4427dee02e1f5ac759be1efcf6da943c03",
+      "proposalLeafDigest": "0xfee6bfb6f091b5c68392ece3847b187ff5a36e41f96c835d9d3c0bebe604b170"
     },
     {
       "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
       "ownerId": "family.univ2-standard.swap-action",
-      "ownerRef": "0xcebac094c28e04b2aada43dea260c21d2d3f5a0a3276bad904cea1657dff0816",
+      "ownerRef": "0xb8a2c73b2fb6a344ae33abc02665d02109076432811c67e7f32db4d49301cc0c",
       "implementationHash": "0x8a1474dd78aaa26c4946f4cf3c6dedb7e12d4bc3ee2bbc2a7571d5866c85454b",
       "schemaRef": "0x5baea426a6761534cd45990b4db0d9a42061da62b960fccf21f482d480c7d9fb",
-      "implementationClosureRoot": "0x6722825e1565e751e4ea84116881843e42f23c1016dd7f2068911e8edb579948",
-      "proposalLeafDigest": "0x8ddd9c3ed5d581cc94846c2ed918c146ce195007ebb77d0aa12d4e1bb32a43a1"
+      "implementationClosureRoot": "0x3893a21ba38f506b875d3760fe69595f1210cbe95bba2e98cb39490717abda4d",
+      "proposalLeafDigest": "0x620b257f805e52b2c3e55497fc0b6397967bc5d7d480db006a519ac04befdd88"
     }
   ],
-  "actionOwnerRegistryRoot": "0x902471fb0f5a1033e5d42b5b92faea0fe5ec8efe15c8f4d0752dea515814d425"
+  "actionOwnerRegistryRoot": "0x357c437428b610347aa44ac0ea080c9741105f541d67986d2d784f1923364468"
 }
 ) as unknown as GeneratedEconomicSafetyActionOwnerRegistryV1;
 

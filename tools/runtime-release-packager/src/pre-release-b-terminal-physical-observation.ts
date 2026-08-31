@@ -10,6 +10,7 @@ import {
 } from "../../../packages/canonical-codec/src/index.ts";
 import type { RawSixStepWindowSelectionV1 } from "../../../packages/performance-collector/src/raw-sqlite-observer.ts";
 import type { PreReleaseControllerDatabaseSnapshotPublicationV1 } from "../../pre-release-restart-controller/src/durable-owner.ts";
+import { SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1 } from "../../../specs/evidence/src/six-step.ts";
 import type { ProductionReleaseAcceptanceAdvisoryFactIndexV1 } from "./production-workflow.ts";
 import { readRegisteredPreReleaseBTerminalPhysicalObservationV1 } from "./internal/pre-release-b-terminal-physical-observation-state.ts";
 
@@ -161,11 +162,38 @@ export function readPreReleaseBTerminalPhysicalObservationV1(
     || observation.terminal.sixStepBoundaryFiles.length === 0) {
     throw new TypeError("pre-release B terminal physical boundary denominator is empty");
   }
+  if (observation.terminal.sixStepBoundaryFiles.length
+    > SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxEntries) {
+    throw new TypeError("pre-release B terminal physical boundary entry count exceeds policy");
+  }
+  let sixStepBoundaryTotalBytes = 0n;
   for (const [index, file] of observation.terminal.sixStepBoundaryFiles.entries()) {
     assertPlainObject(file, `preReleaseBTerminalPhysical.terminal.sixStepBoundaryFiles[${index}]`);
     assertExactKeys(file, ["name", "contentSha256", "byteLength", "device", "inode", "fsynced"], `preReleaseBTerminalPhysical.terminal.sixStepBoundaryFiles[${index}]`);
     if (file.fsynced !== true) throw new TypeError("pre-release B terminal physical boundary file is not fsynced");
     assertHash(file.contentSha256, `preReleaseBTerminalPhysical.terminal.sixStepBoundaryFiles[${index}].contentSha256`);
+    const name = assertNonEmptyString(
+      file.name,
+      `preReleaseBTerminalPhysical.terminal.sixStepBoundaryFiles[${index}].name`,
+    );
+    if (!/^[0-9a-f]{64}\.v8$/.test(name)
+      || (index > 0 && observation.terminal.sixStepBoundaryFiles[index - 1]!.name >= name)) {
+      throw new TypeError("pre-release B terminal physical boundary names are not exact-sorted");
+    }
+    const byteLength = BigInt(assertDecimalString(
+      file.byteLength,
+      `preReleaseBTerminalPhysical.terminal.sixStepBoundaryFiles[${index}].byteLength`,
+    ));
+    assertDecimalString(file.device, `preReleaseBTerminalPhysical.terminal.sixStepBoundaryFiles[${index}].device`);
+    assertDecimalString(file.inode, `preReleaseBTerminalPhysical.terminal.sixStepBoundaryFiles[${index}].inode`);
+    if (byteLength > BigInt(SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxEntryBytes)) {
+      throw new TypeError("pre-release B terminal physical boundary file exceeds policy");
+    }
+    sixStepBoundaryTotalBytes += byteLength;
+    if (sixStepBoundaryTotalBytes
+      > BigInt(SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxTotalBytes)) {
+      throw new TypeError("pre-release B terminal physical boundary aggregate exceeds policy");
+    }
   }
   const factIndex = observation.terminal.factIndex;
   assertPlainObject(factIndex, "preReleaseBTerminalPhysical.terminal.factIndex");

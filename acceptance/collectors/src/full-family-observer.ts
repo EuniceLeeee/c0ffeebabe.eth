@@ -384,7 +384,30 @@ function exactCoarseArtifact(
   const source = familySearchSource(record.source, "coarseOutcome.artifact.source");
   const payload = decodeCanonicalJson(encodeCanonicalJson(record.payload));
   const payloadHash = familySearchPayloadHash("coarse", payload);
-  const artifact = record as unknown as FamilySearchCoarseArtifactV1;
+  const projectionHash = assertHash(record.projectionHash, "coarseOutcome.artifact.projectionHash");
+  const conservativeOutputUpperBound = record.conservativeOutputUpperBound === null
+    ? null
+    : assertDecimalString(record.conservativeOutputUpperBound, "coarseOutcome.artifact.conservativeOutputUpperBound");
+  const inputCapacityUpperBound = record.inputCapacityUpperBound === null
+    ? null
+    : assertDecimalString(record.inputCapacityUpperBound, "coarseOutcome.artifact.inputCapacityUpperBound");
+  const rankKey = record.rankKey === null
+    ? null
+    : assertHash(record.rankKey, "coarseOutcome.artifact.rankKey");
+  const reasonCode = record.reasonCode === null
+    ? null
+    : assertNonEmptyString(record.reasonCode, "coarseOutcome.artifact.reasonCode");
+  const artifact = Object.freeze({
+    ...record,
+    source,
+    payload,
+    payloadHash,
+    projectionHash,
+    conservativeOutputUpperBound,
+    inputCapacityUpperBound,
+    rankKey,
+    reasonCode,
+  }) as unknown as FamilySearchCoarseArtifactV1;
   if (record.payloadHash !== payloadHash
     || record.artifactHash !== familySearchArtifactHash({
       kind: "coarse",
@@ -398,18 +421,31 @@ function exactCoarseArtifact(
     || artifact.routeBindingHash !== observation.routeHandleBindingHash
     || artifact.objectiveRef !== sweep.binding.objectiveRef
     || artifact.amountHash !== observation.amountHash
-    || artifact.projectionHash !== entry.edge.projectionHash
     || artifact.status !== entry.receipt?.projection.status
     || artifact.stateFactsRoot !== entry.receipt.projection.stateFactsRoot
     || !sameCanonical(artifact.input, entry.receipt.projection.sampleInput)
     || !sameCanonical(artifact.output, entry.receipt.projection.estimatedOutput)
-    || !sameCanonical(
-      artifact.conservativeOutputUpperBound,
-      entry.receipt.projection.conservativeOutputUpperBound,
-    )
-    || artifact.inputCapacityUpperBound !== entry.receipt.projection.inputCapacityUpperBound
     || artifact.reasonCode !== entry.receipt.projection.reasonCode) {
     throw new TypeError("coarse owner artifact/sweep receipt splice");
+  }
+  if (artifact.status === "rankable") {
+    if (artifact.output === null || artifact.rankKey === null || artifact.reasonCode !== null) {
+      throw new TypeError("coarse owner rankable artifact is incomplete");
+    }
+    if (artifact.conservativeOutputUpperBound !== null
+      && BigInt(artifact.conservativeOutputUpperBound) < BigInt(artifact.output.amount)) {
+      throw new TypeError("coarse owner conservative output is below the observed output");
+    }
+    if (artifact.inputCapacityUpperBound !== null
+      && BigInt(artifact.inputCapacityUpperBound) < BigInt(artifact.input.amount)) {
+      throw new TypeError("coarse owner input exceeds its raw capacity");
+    }
+  } else if (artifact.output !== null
+    || artifact.conservativeOutputUpperBound !== null
+    || artifact.inputCapacityUpperBound !== null
+    || artifact.rankKey !== null
+    || artifact.reasonCode === null) {
+    throw new TypeError("coarse owner unavailable artifact carries usable output");
   }
   return Object.freeze(artifact);
 }

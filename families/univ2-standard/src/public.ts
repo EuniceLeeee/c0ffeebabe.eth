@@ -59,6 +59,10 @@ export {
   UNIV2_PAIR_CREATED_TOPIC0,
 } from "./source-plan.ts";
 export * from "./history-source-plan.ts";
+export {
+  UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME,
+  UNIV2_STANDARD_HISTORY_NOMINATION_PROGRAM,
+} from "./history-source-plan.ts";
 export { UNIV2_STANDARD_SOURCE_NOMINATION_PROGRAM, UNIV2_STANDARD_SOURCE_PLAN_RUNTIME } from "./stages/nomination.ts";
 
 export {

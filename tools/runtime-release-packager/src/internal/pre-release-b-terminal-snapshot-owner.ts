@@ -1,6 +1,10 @@
 import {
+  closeSync,
+  constants as fsConstants,
+  fstatSync,
   lstatSync,
-  readFileSync,
+  openSync,
+  readSync,
   readdirSync,
   realpathSync,
   statSync,
@@ -31,6 +35,9 @@ import {
   assertProductionTerminalPhaseDurableDiscoveryV1,
   type ProductionTerminalPhaseDurableDiscoveryV1,
 } from "../../../../acceptance/collectors/src/terminal-phase-locator-index.ts";
+import {
+  SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1,
+} from "../../../../specs/evidence/src/six-step.ts";
 import type { PreReleaseControllerDirectorySnapshotV1 } from "../../../pre-release-restart-controller/src/spec.ts";
 import {
   readFrozenPreReleaseBQualificationCapabilityV1,
@@ -66,6 +73,132 @@ export function assertPreReleaseBDirectorySnapshotEntrySetRootV1(
   }
 }
 
+interface PreReleaseBSnapshotEntryPreflightV1 {
+  readonly descriptor: number;
+  readonly device: bigint;
+  readonly inode: bigint;
+  readonly byteLength: bigint;
+  readonly modifiedAtUnixNs: bigint;
+  readonly changedAtUnixNs: bigint;
+}
+
+function readExactDescriptorBytes(descriptor: number, byteLength: bigint): Uint8Array {
+  if (byteLength < 0n || byteLength > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new TypeError("pre-release B terminal snapshot byte length cannot be allocated exactly");
+  }
+  const bytes = new Uint8Array(Number(byteLength));
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const count = readSync(descriptor, bytes, offset, bytes.byteLength - offset, offset);
+    if (count === 0) throw new TypeError("pre-release B terminal snapshot entry was truncated during read");
+    offset += count;
+  }
+  return bytes;
+}
+
+function closeSixStepBoundarySnapshotResources(
+  resources: ReadonlyMap<string, PreReleaseBSnapshotEntryPreflightV1>,
+): void {
+  for (const resource of resources.values()) closeSync(resource.descriptor);
+}
+
+function preflightSixStepBoundarySnapshotResources(
+  snapshot: PreReleaseControllerDirectorySnapshotV1,
+  names: readonly string[],
+): ReadonlyMap<string, PreReleaseBSnapshotEntryPreflightV1> {
+  if (snapshot.snapshotKind !== "six-step-boundaries") {
+    throw new TypeError("pre-release B Six-Step resource preflight requires the boundary snapshot");
+  }
+  const limits = SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1;
+  if (names.length === 0 || names.length !== snapshot.entries.length) {
+    throw new TypeError("pre-release B Six-Step boundary snapshot denominator changed");
+  }
+  if (names.length > limits.maxEntries) {
+    throw new TypeError("pre-release B Six-Step boundary snapshot entry count exceeds policy");
+  }
+  let totalBytes = 0n;
+  const result = new Map<string, PreReleaseBSnapshotEntryPreflightV1>();
+  try {
+    for (const [index, entry] of snapshot.entries.entries()) {
+      if (names[index] !== entry.name) {
+        throw new TypeError("pre-release B Six-Step boundary snapshot denominator changed");
+      }
+      const path = join(snapshot.snapshotDirectory, entry.name);
+      if (realpathSync(path) !== path || !lstatSync(path).isFile()) {
+        throw new TypeError("pre-release B Six-Step boundary snapshot entry is not a physical file");
+      }
+      const descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+      try {
+        const observed = fstatSync(descriptor, { bigint: true });
+        if (!observed.isFile() || observed.isSymbolicLink() || observed.nlink !== 1n
+          || observed.size > BigInt(limits.maxEntryBytes)
+          || entry.byteLength !== String(observed.size)
+          || entry.device !== String(observed.dev) || entry.inode !== String(observed.ino)) {
+          throw new TypeError("pre-release B Six-Step boundary snapshot entry exceeds policy or changed");
+        }
+        totalBytes += observed.size;
+        if (totalBytes > BigInt(limits.maxTotalBytes)) {
+          throw new TypeError("pre-release B Six-Step boundary snapshot aggregate exceeds policy");
+        }
+        result.set(entry.name, Object.freeze({
+          descriptor,
+          device: observed.dev,
+          inode: observed.ino,
+          byteLength: observed.size,
+          modifiedAtUnixNs: observed.mtimeNs,
+          changedAtUnixNs: observed.ctimeNs,
+        }));
+      } catch (error) {
+        closeSync(descriptor);
+        throw error;
+      }
+    }
+  } catch (error) {
+    closeSixStepBoundarySnapshotResources(result);
+    throw error;
+  }
+  return result;
+}
+
+/** Testable projection of the production pre-read physical resource check.
+ * It reads directory and inode metadata only; file content is never opened
+ * for reading until this complete denominator preflight has succeeded. */
+export function assertPreReleaseBSixStepBoundarySnapshotResourcesV1(
+  snapshot: PreReleaseControllerDirectorySnapshotV1,
+): void {
+  if (realpathSync(snapshot.snapshotDirectory) !== snapshot.snapshotDirectory
+    || !lstatSync(snapshot.snapshotDirectory).isDirectory()) {
+    throw new TypeError("pre-release B Six-Step boundary snapshot directory is not physical");
+  }
+  const names = readdirSync(snapshot.snapshotDirectory).sort();
+  const resources = preflightSixStepBoundarySnapshotResources(snapshot, names);
+  closeSixStepBoundarySnapshotResources(resources);
+}
+
+export function readPreReleaseBSixStepBoundarySnapshotResourcesForTestV1(
+  snapshot: PreReleaseControllerDirectorySnapshotV1,
+  afterPreflightForTest: (() => void) | null = null,
+): void {
+  const names = readdirSync(snapshot.snapshotDirectory).sort();
+  const resources = preflightSixStepBoundarySnapshotResources(snapshot, names);
+  try {
+    afterPreflightForTest?.();
+    for (const entry of snapshot.entries) {
+      const resource = resources.get(entry.name);
+      if (resource === undefined) throw new TypeError("pre-release B Six-Step boundary snapshot denominator changed");
+      const bytes = readExactDescriptorBytes(resource.descriptor, resource.byteLength);
+      const after = fstatSync(resource.descriptor, { bigint: true });
+      if (resource.device !== after.dev || resource.inode !== after.ino
+        || resource.byteLength !== after.size || resource.modifiedAtUnixNs !== after.mtimeNs
+        || resource.changedAtUnixNs !== after.ctimeNs || after.size !== BigInt(bytes.byteLength)) {
+        throw new TypeError("pre-release B Six-Step boundary snapshot changed during bounded read");
+      }
+    }
+  } finally {
+    closeSixStepBoundarySnapshotResources(resources);
+  }
+}
+
 function reopenRootDirectorySnapshot(
   snapshot: PreReleaseControllerDirectorySnapshotV1,
 ): ReadonlyMap<string, Uint8Array> {
@@ -84,34 +217,54 @@ function reopenRootDirectorySnapshot(
     || names.some((name, index) => name !== snapshot.entries[index]?.name)) {
     throw new TypeError("pre-release B terminal snapshot directory identity changed");
   }
+  const sixStepPreflight = snapshot.snapshotKind === "six-step-boundaries"
+    ? preflightSixStepBoundarySnapshotResources(snapshot, names)
+    : null;
   const result = new Map<string, Uint8Array>();
-  for (const entry of snapshot.entries) {
-    const path = join(snapshot.snapshotDirectory, entry.name);
-    if (realpathSync(path) !== path || !lstatSync(path).isFile()) {
-      throw new TypeError("pre-release B terminal snapshot entry is not a physical file");
+  try {
+    for (const entry of snapshot.entries) {
+      const path = join(snapshot.snapshotDirectory, entry.name);
+      const preflight = sixStepPreflight?.get(entry.name) ?? null;
+      if (preflight === null && (realpathSync(path) !== path || !lstatSync(path).isFile())) {
+        throw new TypeError("pre-release B terminal snapshot entry is not a physical file");
+      }
+      const descriptor = preflight?.descriptor
+        ?? openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+      try {
+        const entryBefore = fstatSync(descriptor, { bigint: true });
+        if (preflight !== null && (entryBefore.dev !== preflight.device
+          || entryBefore.ino !== preflight.inode || entryBefore.size !== preflight.byteLength
+          || entryBefore.mtimeNs !== preflight.modifiedAtUnixNs
+          || entryBefore.ctimeNs !== preflight.changedAtUnixNs)) {
+          throw new TypeError("pre-release B Six-Step boundary snapshot changed after resource preflight");
+        }
+        const bytes = readExactDescriptorBytes(descriptor, entryBefore.size);
+        const entryAfter = fstatSync(descriptor, { bigint: true });
+        if (entryBefore.dev !== entryAfter.dev || entryBefore.ino !== entryAfter.ino
+          || entryBefore.size !== entryAfter.size || entryBefore.mtimeNs !== entryAfter.mtimeNs
+          || entryBefore.ctimeNs !== entryAfter.ctimeNs
+          || entryAfter.uid !== 0n || entryAfter.gid !== 0n || (entryAfter.mode & 0o777n) !== 0o400n
+          || entry.device !== String(entryAfter.dev) || entry.inode !== String(entryAfter.ino)
+          || entry.uid !== "0" || entry.gid !== "0" || entry.mode !== "256"
+          || entry.byteLength !== String(bytes.byteLength)
+          || entry.contentSha256 !== sha256Hex(bytes)) {
+          throw new TypeError("pre-release B terminal snapshot entry identity changed");
+        }
+        result.set(entry.name, bytes);
+      } finally {
+        if (preflight === null) closeSync(descriptor);
+      }
     }
-    const entryBefore = statSync(path, { bigint: true });
-    const bytes = new Uint8Array(readFileSync(path));
-    const entryAfter = statSync(path, { bigint: true });
-    if (entryBefore.dev !== entryAfter.dev || entryBefore.ino !== entryAfter.ino
-      || entryBefore.size !== entryAfter.size || entryBefore.mtimeNs !== entryAfter.mtimeNs
-      || entryBefore.ctimeNs !== entryAfter.ctimeNs
-      || entryAfter.uid !== 0n || entryAfter.gid !== 0n || (entryAfter.mode & 0o777n) !== 0o400n
-      || entry.device !== String(entryAfter.dev) || entry.inode !== String(entryAfter.ino)
-      || entry.uid !== "0" || entry.gid !== "0" || entry.mode !== "256"
-      || entry.byteLength !== String(bytes.byteLength)
-      || entry.contentSha256 !== sha256Hex(bytes)) {
-      throw new TypeError("pre-release B terminal snapshot entry identity changed");
+    const after = statSync(snapshot.snapshotDirectory, { bigint: true });
+    if (before.dev !== after.dev || before.ino !== after.ino
+      || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) {
+      throw new TypeError("pre-release B terminal snapshot changed during reopen");
     }
-    result.set(entry.name, bytes);
+    assertPreReleaseBDirectorySnapshotEntrySetRootV1(snapshot);
+    return result;
+  } finally {
+    if (sixStepPreflight !== null) closeSixStepBoundarySnapshotResources(sixStepPreflight);
   }
-  const after = statSync(snapshot.snapshotDirectory, { bigint: true });
-  if (before.dev !== after.dev || before.ino !== after.ino
-    || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) {
-    throw new TypeError("pre-release B terminal snapshot changed during reopen");
-  }
-  assertPreReleaseBDirectorySnapshotEntrySetRootV1(snapshot);
-  return result;
 }
 
 /** The only production mint for terminal snapshot trust. It consumes the

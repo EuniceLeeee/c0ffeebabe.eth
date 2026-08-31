@@ -6,6 +6,14 @@ export * from "./discovery.ts";
 export * from "./nomination.ts";
 export * from "./source-plan.ts";
 export * from "./history-source-plan.ts";
+export {
+  DODO_V2_SOURCE_PLAN_RUNTIME,
+  DODO_V2_SOURCE_NOMINATION_PROGRAM,
+} from "./source-plan.ts";
+export {
+  DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME,
+  DODO_V2_HISTORY_NOMINATION_PROGRAM,
+} from "./history-source-plan.ts";
 export * from "./identity.ts";
 export * from "./instance.ts";
 export * from "./routes.ts";

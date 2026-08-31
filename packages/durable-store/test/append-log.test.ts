@@ -194,6 +194,85 @@ test("a failed FULL-sync transaction rolls back the row and leaves sequence zero
   database.cleanup();
 });
 
+test("append hot path reuses the verified tail and refreshes only after an external commit", () => {
+  const database = tempDatabase();
+  let fullValidations = 0;
+  let fullSchemaValidations = 0;
+  const first = createSqliteDurableStore(database.filename, {
+    onFullAppendLogValidation: () => { fullValidations += 1; },
+    onFullSchemaValidation: () => { fullSchemaValidations += 1; },
+  });
+  assert.equal(fullValidations, 1, "open validates the complete append log once");
+  assert.equal(fullSchemaValidations, 1, "open validates schema and role once");
+  first.bindStoreRole("event-log");
+  assert.equal(fullSchemaValidations, 2, "role binding explicitly refreshes the validated state");
+
+  for (let sequence = 0; sequence < 64; sequence += 1) {
+    first.appendFsyncMonotonicCapability(request(
+      "evidence/v1",
+      String(sequence),
+      new Uint8Array([sequence]),
+    ));
+  }
+  assert.equal(fullValidations, 1, "local append growth must not trigger full-log validation");
+  assert.equal(fullSchemaValidations, 2, "local append growth must not repeat full schema validation");
+
+  const second = createSqliteDurableStore(database.filename);
+  second.bindStoreRole("event-log");
+  second.appendFsyncMonotonic(request("evidence/v1", "64", new Uint8Array([64])));
+  first.appendFsyncMonotonic(request("evidence/v1", "65", new Uint8Array([65])));
+  assert.equal(fullValidations, 2, "an external commit refreshes the complete verified prefix exactly once");
+  assert.equal(fullSchemaValidations, 3, "an external commit refreshes schema and role exactly once");
+
+  second.close();
+  first.close();
+  database.cleanup();
+});
+
+test("an open store detects externally corrupted append bytes before using its cached tail", () => {
+  const database = tempDatabase();
+  const store = createSqliteDurableStore(database.filename);
+  store.appendFsyncMonotonic(request("evidence/v1", "0", new Uint8Array([1, 2])));
+  mutateAppendRows(database.filename, (raw) => {
+    raw.prepare("UPDATE durable_append_log SET bytes=? WHERE namespace='evidence/v1' AND sequence='0'")
+      .run(new Uint8Array([8, 8]));
+  });
+  assert.throws(
+    () => store.appendFsyncMonotonic(request("evidence/v1", "1", new Uint8Array([3]))),
+    /content hash mismatch/,
+  );
+  store.close();
+  database.cleanup();
+});
+
+test("capability validation consumes an external commit and rejects a corrupted old prefix", () => {
+  const database = tempDatabase();
+  let corruptAfterCommit = false;
+  let fullValidations = 0;
+  const store = createSqliteDurableStore(database.filename, {
+    onFullAppendLogValidation: () => { fullValidations += 1; },
+    beforeAppendCapabilityValidation: () => {
+      if (!corruptAfterCommit) return;
+      corruptAfterCommit = false;
+      mutateAppendRows(database.filename, (raw) => {
+        raw.prepare("UPDATE durable_append_log SET bytes=? WHERE namespace='evidence/v1' AND sequence='0'")
+          .run(new Uint8Array([9, 9]));
+      });
+    },
+  });
+  store.appendFsyncMonotonic(request("evidence/v1", "0", new Uint8Array([1, 2])));
+  corruptAfterCommit = true;
+  assert.throws(
+    () => store.appendFsyncMonotonicCapability(
+      request("evidence/v1", "1", new Uint8Array([3])),
+    ),
+    /content hash mismatch/,
+  );
+  assert.equal(fullValidations, 2, "capability validation must revalidate the externally changed prefix");
+  store.close();
+  database.cleanup();
+});
+
 test("append-log checks the writer lease and bound role on every append", () => {
   const database = tempDatabase();
   const first = createSqliteDurableStore(database.filename);

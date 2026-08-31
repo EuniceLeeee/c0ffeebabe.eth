@@ -56,6 +56,7 @@ export interface ObserverArtifactReadV1 {
   readonly contentSha256: Hash;
   readonly mediaType: string;
   readonly schema: SchemaRef;
+  readonly expectedByteLength?: string;
 }
 
 export interface ObservedContentArtifactV1 {
@@ -379,6 +380,7 @@ export class ContentAddressedObserverSinkV1 {
   async #readPhysicalContent(
     contentSha256: Hash,
     expectedIdentity: PhysicalObjectIdentityV1 | null,
+    expectedByteLength: bigint | null = null,
   ): Promise<Readonly<{ readonly bytes: Uint8Array; readonly identity: PhysicalObjectIdentityV1 }>> {
     const directory = await this.#initialize();
     const objectName = contentSha256.slice(2);
@@ -398,6 +400,14 @@ export class ContentAddressedObserverSinkV1 {
       }
       if (expectedIdentity !== null && !samePhysicalIdentity(expectedIdentity, before)) {
         throw new TypeError("observer content object identity changed");
+      }
+      const configuredMaximum = BigInt(this.#resolverPolicy.maxByteLength);
+      if (before.size > BigInt(ARTIFACT_MIRROR_MAX_DECODED_BYTES)
+        || before.size > configuredMaximum) {
+        throw new TypeError("observer content object exceeds configured byte limit");
+      }
+      if (expectedByteLength !== null && before.size !== expectedByteLength) {
+        throw new TypeError("observer content object byte length mismatch");
       }
       const bytes = Uint8Array.from(await handle.readFile());
       const after = await handle.stat({ bigint: true });
@@ -543,7 +553,16 @@ export class ContentAddressedObserverSinkV1 {
     const contentSha256 = assertHash(input.contentSha256, "observerArtifactRead.contentSha256");
     const mediaType = assertNonEmptyString(input.mediaType, "observerArtifactRead.mediaType");
     const schema = decodeSchemaRef(input.schema);
-    const bytes = await this.readContent(contentSha256);
+    const expectedByteLength = input.expectedByteLength === undefined
+      ? null
+      : BigInt(decimal(input.expectedByteLength, "observerArtifactRead.expectedByteLength"));
+    const observed = await this.#readPhysicalContent(
+      contentSha256,
+      this.#objectIdentities.get(contentSha256) ?? null,
+      expectedByteLength,
+    );
+    this.#objectIdentities.set(contentSha256, observed.identity);
+    const bytes = Uint8Array.from(observed.bytes);
     if (bytes.byteLength > ARTIFACT_MIRROR_MAX_DECODED_BYTES
       || BigInt(bytes.byteLength) > BigInt(this.#resolverPolicy.maxByteLength)) {
       throw new TypeError("observer artifact read exceeds configured byte limit");

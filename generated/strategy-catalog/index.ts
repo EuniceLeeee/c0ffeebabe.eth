@@ -3,12 +3,12 @@ export const STRATEGY_CATALOG = Object.freeze({
   "schemaVersion": 1,
   "releaseIntentRoot": "0x57d210c88459dbb63710c8aae573c3a0543e259e4ab848043bea787f2f3ae244",
   "capabilityIndexRoot": "0x2acdd0efe52e8b439c8293c9acd25c33f7b66bd780e9149f4a398f13e71a37d4",
-  "proposedCapabilitySetRoot": "0x79b02f1541a5f30c9e2f669bc5f63ec3dce6d686be5570aa67ca0dfd60c01ffe",
+  "proposedCapabilitySetRoot": "0xa4dafbe03eb8ab2af81a88bf44193a0f1c94028cd80a04564c32e77936362332",
   "entries": [
     {
       "strategyId": "route-cycle",
-      "strategyDefinitionHash": "0xa7460e7dabd7d0c3299b5265fb87bb820e57d8dfbfb2d58f769f91c4936b4fe7",
-      "issuerRef": "0x72bd107539bb4681a4c4957fcc110b4c7806f19c2cdc4993645e8847a8999fb6",
+      "strategyDefinitionHash": "0xb3f89f8e450c176b2202ac134a6666b37918203d3600bb3df3b91292e1b5776f",
+      "issuerRef": "0xb271eda9eb9483d4ef32c851b9f1e9e59fe4ad23b8b238da09bc2efef75f30c1",
       "requiredCapabilityRefs": [],
       "planningProblemIssuer": "0xb142990da552031b3e3bf98a6318aeb57c0dd83f18f5b5beaa8238806b12f6dd",
       "constraintSchemaRefs": [
@@ -17,10 +17,10 @@ export const STRATEGY_CATALOG = Object.freeze({
       "factContractRefs": [
         "0xeb79bd27658d9ddb1bc2df716d92f7d3670337c840c4b5ef1b9f2ea0317ded32"
       ],
-      "definitionCatalogLeafDigest": "0x0ce5788c07fe92d6cd6a95e6d3a9cc38eba8073959168148158faf873b43e310",
+      "definitionCatalogLeafDigest": "0x33a1955d21c17936b9317206778eda3f6cad8ec9e7c1ea164cb679b489c137e1",
       "strategyVersion": "1.0.0",
       "requestedCapabilityDependencyRoot": "0x52eecf71448bc4bff832a86a1cf69001dd0435bdf4d7dd9b561ca3910ac0d489",
-      "implementationClosureRoot": "0xef0dc8bf3d020dd21d62a12c587cf0534655e7395f695889c3cd8729a68f0504",
+      "implementationClosureRoot": "0xd45157f38922576e144d3a612199a510790bd42e59961d94b1b9d0889e12909a",
       "planningTemplate": {
         "kind": "closed-loop-template",
         "entryAssetPolicy": "any-graph-asset",
@@ -34,5 +34,5 @@ export const STRATEGY_CATALOG = Object.freeze({
       }
     }
   ],
-  "definitionCatalogRoot": "0xff2d30eed8e3d73f7fe9f72a9ebc8551f5937fbef9ec94cd26a84aa7a81aefef"
+  "definitionCatalogRoot": "0xc6931d4be4816aec576dec52d239c82474ff33f73720226e609862f99e865564"
 });

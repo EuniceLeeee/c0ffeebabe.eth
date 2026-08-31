@@ -296,6 +296,18 @@ test("refinement specification digest participates in schema identity", () => {
   );
 });
 
+test("arrays reject non-canonical numeric property aliases", () => {
+  for (const key of ["00", "01", "0001"]) {
+    const value = ["zero", "one"];
+    Object.defineProperty(value, key, {
+      enumerable: true,
+      value: "smuggled",
+    });
+    assert.throws(() => encodeCanonicalJson(value), errorCode("invalid-type"));
+    assert.throws(() => arraySchema(stringSchema).decode(value), errorCode("invalid-type"));
+  }
+});
+
 test("bounded depth, string, collection, and byte policy rejects resource abuse", () => {
   let nested: unknown = null;
   for (let index = 0; index < 70; index += 1) nested = [nested];

@@ -262,7 +262,7 @@ export async function issueFullGraphCoarseSweepCapabilityV1(input: {
       if (current !== undefined) return current;
       const created = (async () => {
         const issuedHandle = await session.lease.resolveRouteHandle(edge.edgeId, edge.routeHandle);
-        const routeHandle = issuedHandle.opaque as FamilyIssuedRouteHandleV1;
+        const routeHandle = issuedHandle as FamilyIssuedRouteHandleV1;
         const route = input.composition.resolveRouteHandle(routeHandle, edge.owningFamilyDefinitionHash);
         if (route.familyId !== edge.owningFamilyId || route.familyDefinitionHash !== edge.owningFamilyDefinitionHash
           || route.instanceKey !== edge.owningInstanceKey || route.instancePublicationHash !== edge.instancePublicationHash

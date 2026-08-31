@@ -49,7 +49,7 @@ import {
   type StoredRetryableProbeV1,
   type RetryableProbeCapabilityV1,
 } from "../../attestation/src/index.ts";
-import { assertAttestationValidationAuthority as assertIssuedAttestationValidationAuthority } from "../../attestation/src/internal/validation-authority-verifier.ts";
+import { assertAttestationValidationAuthority } from "../../attestation/src/internal/validation-authority-verifier.ts";
 import {
   rehydrateIdentityResumeCapabilityForCheckpoint,
   rehydrateOutcomeResumeCapabilityForCheckpoint,
@@ -2001,7 +2001,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     this.#sixStepArtifacts = sixStepArtifacts;
     this.#promotionAuthority = assertIssuedReadyPromotionAuthorityPort(promotionAuthority);
     try {
-      this.#attestationAuthority = assertIssuedAttestationValidationAuthority(attestationAuthority);
+      this.#attestationAuthority = assertAttestationValidationAuthority(attestationAuthority);
     } catch (error) {
       throw new CheckpointError(
         "attestation-authority-invalid",

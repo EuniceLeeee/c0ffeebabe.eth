@@ -1,19 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CANONICAL_LIMITS, hashDomain } from "../../../packages/canonical-codec/src/index.ts";
 import {
   DEFAULT_PRODUCTION_PERFORMANCE_PROFILE,
+  PERFORMANCE_PARTITIONED_FACT_BUNDLE_MAX_BYTES,
+  createCandidateSet,
   createCandidateTerminalReceipt,
   createPerformanceAdmissionOrphanReplacementLineage,
   createPerformanceWindowCommitment,
   createDeploymentPerformanceWindowBasisV1,
   hashPerformanceSixStepCompletionLineage,
   createPerformanceFactEnvelope,
+  createPerformanceWindowReceipt,
+  decodePartitionedPerformanceFactBundle,
   decodeDeploymentPerformanceWindowBasisV1,
   decodePerformanceFactEnvelope,
   decodePerformanceAdmissionOrphanReplacementLineage,
   decodeProductionPerformanceProfile,
   encodeDeploymentPerformanceWindowBasisV1,
   encodePerformanceFactEnvelope,
+  encodePerformanceFactBundle,
   encodePerformanceAdmissionOrphanReplacementLineage,
   encodeProductionPerformanceProfile,
   performanceLaneCandidateRefV1,
@@ -22,12 +28,137 @@ import {
 
 const h = (digit: string) => `0x${digit.repeat(64)}` as `0x${string}`;
 
+function largePartitionedBundle() {
+  const profile = DEFAULT_PRODUCTION_PERFORMANCE_PROFILE;
+  const commitment = createPerformanceWindowCommitment({
+    windowStartAnchor: { chainId: "1", number: "100", hash: h("1"), parentHash: h("2"), stateRoot: h("3") },
+    eligibilityRuleHash: h("4"),
+    performanceProfileHash: profile.profileHash,
+    targetCount: "100",
+    processLogAnchor: { commitSha: "a".repeat(40), executableHash: h("5"), pid: "42", processStartTicks: "7", bootIdHash: h("6"), logSystemId: "system", logBootIdHash: h("6"), logDevice: "8", logInode: "9" },
+    releaseBindingId: h("7"), releaseProvenanceHash: h("8"), runtimeAnchorHash: h("9"),
+    providerRoot: h("a"), hardwareProfileRoot: h("b"), commitContextBindingId: h("c"), commitAppendRecordId: h("d"), committedMonotonicNs: "0",
+  });
+  const candidateTerminals = Array.from({ length: 2_500 }, (_, index) => createCandidateTerminalReceipt({
+    windowId: commitment.windowId,
+    ordinal: "1",
+    headRecordId: h("1"),
+    candidateId: hashDomain("aloha/performance-partitioned-decoder-test-candidate/v1", { index: index.toString() }),
+    outcome: "retryable",
+    correlationRoot: h("2"),
+    sixStepCompleted: false,
+    sixStepMode: null,
+    sixStepEvidenceRoot: null,
+    sixStepCompletionRoot: null,
+    timingUs: index.toString(),
+    evidenceRoot: h("3"),
+  })).sort((left, right) => left.receiptId.localeCompare(right.receiptId));
+  const windowReceipt = createPerformanceWindowReceipt({
+    windowId: commitment.windowId,
+    windowCommitmentHash: h("1"),
+    orderedEligibleHeadRecordRoot: h("2"),
+    orderedHeadTerminalReceiptRoot: h("3"),
+    orphanReplacementLineageRoot: h("4"),
+    candidateBearingHeadSetRoot: h("5"),
+    fullHeadTimingSampleRoot: h("6"),
+    candidatePathTimingSampleRoot: h("7"),
+    metricRecomputationRoot: h("8"),
+    generationSegmentRoot: h("9"),
+    rawReceiptSetRoot: h("a"),
+    headCount: "100",
+    healthyHeadCount: "100",
+    excludedHeads: [],
+    windowStartMonotonicNs: "0",
+    windowEndMonotonicNs: "1000",
+    windowDurationUs: "1",
+  });
+  return {
+    profile,
+    commitment,
+    heads: [],
+    lineages: [],
+    candidateSets: [],
+    candidateTerminals,
+    metrics: [],
+    terminals: [],
+    generationSegments: [],
+    windowReceipt,
+  };
+}
+
 test("production profile freezes 100-head nearest-rank budgets and round-trips exact bytes", () => {
   const decoded = decodeProductionPerformanceProfile(encodeProductionPerformanceProfile(DEFAULT_PRODUCTION_PERFORMANCE_PROFILE));
   assert.equal(decoded.profileHash, DEFAULT_PRODUCTION_PERFORMANCE_PROFILE.profileHash);
   assert.equal(decoded.targetCount, "100");
   assert.equal(decoded.percentileAlgorithm, "nearest-rank-v1");
   assert.equal(decoded.budgets.headCompletionP99Us, "11000000");
+});
+
+test("partitioned in-memory bundle decode accepts an aggregate larger than the single-artifact wire limit", () => {
+  const bundle = largePartitionedBundle();
+  assert.ok(Buffer.byteLength(JSON.stringify(bundle)) > CANONICAL_LIMITS.maxBytes);
+  const decoded = decodePartitionedPerformanceFactBundle(bundle);
+  assert.equal(decoded.candidateTerminals.length, 2_500);
+  assert.throws(() => encodePerformanceFactBundle(decoded), /canonical JSON exceeds byte policy/);
+});
+
+test("partitioned bundle shell, arrays, and nested facts remain exact", () => {
+  const bundle = largePartitionedBundle();
+  assert.throws(() => decodePartitionedPerformanceFactBundle({ ...bundle, extra: true }));
+  let getterHits = 0;
+  const accessorShell = { ...bundle };
+  Object.defineProperty(accessorShell, "profile", { enumerable: true, get: () => { getterHits += 1; return bundle.profile; } });
+  assert.throws(() => decodePartitionedPerformanceFactBundle(accessorShell));
+  assert.equal(getterHits, 0);
+  let proxyTrapHits = 0;
+  const proxyBundle = new Proxy(bundle, {
+    get: () => { proxyTrapHits += 1; return undefined; },
+    ownKeys: () => { proxyTrapHits += 1; return []; },
+  });
+  assert.throws(() => decodePartitionedPerformanceFactBundle(proxyBundle));
+  assert.equal(proxyTrapHits, 0);
+
+  const invalidItem = { ...bundle.candidateTerminals[0], extra: true };
+  assert.throws(() => decodePartitionedPerformanceFactBundle({ ...bundle, candidateTerminals: [invalidItem] }));
+  const proxyItem = new Proxy(bundle.candidateTerminals[0]!, {
+    get: () => { proxyTrapHits += 1; return undefined; },
+    ownKeys: () => { proxyTrapHits += 1; return []; },
+  });
+  assert.throws(() => decodePartitionedPerformanceFactBundle({ ...bundle, candidateTerminals: [proxyItem] }));
+  assert.equal(proxyTrapHits, 0);
+
+  const extraArray = [bundle.candidateTerminals[0]];
+  Object.defineProperty(extraArray, "extra", { enumerable: true, value: true });
+  const accessorArray = [bundle.candidateTerminals[0]];
+  Object.defineProperty(accessorArray, "0", { enumerable: true, get: () => bundle.candidateTerminals[0] });
+  const sparseArray = new Array(1);
+  const oversizedArray = new Array(CANONICAL_LIMITS.maxArrayItems + 1).fill(bundle.candidateTerminals[0]);
+  const ambiguousIndexArray = [bundle.candidateTerminals[0]];
+  Object.defineProperty(ambiguousIndexArray, "00", { enumerable: true, value: bundle.candidateTerminals[0] });
+  for (const candidateTerminals of [new Proxy([bundle.candidateTerminals[0]], {}), extraArray, accessorArray, sparseArray, oversizedArray, ambiguousIndexArray]) {
+    assert.throws(() => decodePartitionedPerformanceFactBundle({ ...bundle, candidateTerminals }));
+  }
+});
+
+test("partitioned bundle has a fixed cumulative byte budget", () => {
+  const bundle = largePartitionedBundle();
+  const candidateIds = Array.from({ length: 6_000 }, (_, index) =>
+    hashDomain("aloha/performance-partitioned-decoder-budget-candidate/v1", { index: index.toString() }));
+  const largeSet = createCandidateSet({
+    windowId: bundle.commitment.windowId,
+    ordinal: "1",
+    candidateIds,
+  });
+  assert.ok(Buffer.byteLength(JSON.stringify(largeSet)) < CANONICAL_LIMITS.maxBytes);
+  assert.throws(
+    () => decodePartitionedPerformanceFactBundle({
+      ...bundle,
+      candidateSets: new Array(100).fill(largeSet),
+      candidateTerminals: [],
+    }),
+    new RegExp(`exceeds byte policy`),
+  );
+  assert.equal(PERFORMANCE_PARTITIONED_FACT_BUNDLE_MAX_BYTES, 16 * CANONICAL_LIMITS.maxBytes);
 });
 
 test("profile decoder rejects caller target-count changes", () => {

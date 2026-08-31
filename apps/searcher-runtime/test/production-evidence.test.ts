@@ -470,18 +470,24 @@ test("production resolved route exact-binds planner legs to execution action own
     routeBindingHash: hashDomain("aloha/route-binding/v1", { legs: routeLegs }),
     legs: routeLegs,
   });
+  const coarseSource = Object.freeze({ chainId: "1", number: "10", hash: h("4"), stateRoot: h("5") });
   const context = Object.freeze({
     candidate: candidate as never,
     problem: Object.freeze({ problemHash: candidate.planningProblemHash }) as never,
     generationId: "generation-1",
     graphRoot: h("3"),
-    source: Object.freeze({ chainId: "1", number: "10", hash: h("4"), stateRoot: h("5") }),
+    source: Object.freeze({ ...coarseSource, parentHash: h("canonical-parent") }),
     objectiveRef: h("6"),
     releaseProvenanceHash: h("7"),
     actionOwners,
     path: "routeBinding",
   });
-  assert.doesNotThrow(() => validateProductionResolvedRouteBindingV1({ value: routeBinding, ...context }));
+  const projected = validateProductionResolvedRouteBindingV1({
+    value: routeBinding,
+    ...context,
+  });
+  assert.deepEqual(projected.source, coarseSource);
+  assert.equal("parentHash" in projected.source, false);
 
   const routeBLegs = Object.freeze([
     Object.freeze({ ...routeLegs[0], ownerRef: h("d") }),

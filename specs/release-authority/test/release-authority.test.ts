@@ -31,6 +31,7 @@ import {
   recomputeRuntimeReleasePackageApprovalId,
   recomputeRuntimeReleasePackageApprovalPayloadHash,
   runtimeReleaseDiscoverySourceAuthorityRootV1,
+  runtimeReleaseBindingProvenanceHash,
   runtimeReleaseBindingSigningBytes,
   runtimeReleasePackageApprovalSigningBytes,
   nominationQualificationDeploymentFactSigningBytes,
@@ -345,6 +346,38 @@ test("runtime release wire identity binds every external approval and qualificat
   }, signer, `0x${"11".repeat(64)}`);
   assert.notEqual(changedNomination.payloadHash, original.payloadHash);
   assert.notDeepEqual(runtimeReleaseBindingSigningBytes(changedNomination), runtimeReleaseBindingSigningBytes(original));
+});
+
+test("checked runtime release binding identity is process-local and cannot be inherited by clones", () => {
+  const original = createRuntimeReleaseBindingV1(payload(), h("identity-signer"), `0x${"31".repeat(64)}`);
+  assert.strictEqual(decodeRuntimeReleaseBindingV1(original), original);
+  assert.equal(runtimeReleaseBindingProvenanceHash(original), runtimeReleaseBindingProvenanceHash(original));
+  assert.equal(Object.getOwnPropertySymbols(original).length, 0);
+
+  const jsonClone = JSON.parse(JSON.stringify(original)) as typeof original;
+  const decodedJsonClone = decodeRuntimeReleaseBindingV1(jsonClone);
+  assert.notStrictEqual(decodedJsonClone, jsonClone);
+  assert.strictEqual(decodeRuntimeReleaseBindingV1(decodedJsonClone), decodedJsonClone);
+  assert.equal(runtimeReleaseBindingProvenanceHash(decodedJsonClone), runtimeReleaseBindingProvenanceHash(original));
+
+  const mutableClone = { ...original, qualificationEpoch: "forged-epoch" };
+  assert.throws(() => decodeRuntimeReleaseBindingV1(mutableClone), /payloadHash mismatch/);
+
+  const symbolClone = Object.freeze({ ...original, [Symbol.for("aloha.runtime-release-binding")]: true });
+  assert.throws(() => decodeRuntimeReleaseBindingV1(symbolClone), /symbol properties are not canonical JSON/);
+  assert.throws(
+    () => decodeRuntimeReleaseBindingV1(new Proxy(original, {})),
+    /Proxy objects are not accepted/,
+  );
+
+  const rotated = createRuntimeReleaseBindingV1(
+    { ...payload(), workerEpoch: "worker-rotated", executorSessionHash: h("session-rotated") },
+    h("identity-signer"),
+    `0x${"32".repeat(64)}`,
+  );
+  assert.notEqual(rotated.bindingId, original.bindingId);
+  assert.notEqual(runtimeReleaseBindingProvenanceHash(rotated), runtimeReleaseBindingProvenanceHash(original));
+  assert.strictEqual(decodeRuntimeReleaseBindingV1(rotated), rotated);
 });
 
 test("runtime release rejects an action-owner certificate or SafetyProfile splice", () => {

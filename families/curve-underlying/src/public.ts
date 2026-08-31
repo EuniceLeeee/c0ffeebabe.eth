@@ -5,6 +5,12 @@ export { assertCutoff, assertDecimal, cutoffEqual, familyCandidateKey } from "./
 export * from "./discovery.ts";
 export * from "./nomination.ts";
 export * from "./source-plan.ts";
+export {
+  CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME,
+  CURVE_UNDERLYING_SOURCE_NOMINATION_PROGRAM,
+  CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME,
+  CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM,
+} from "./source-plan.ts";
 export * from "./identity.ts";
 export * from "./instance.ts";
 export * from "./routes.ts";

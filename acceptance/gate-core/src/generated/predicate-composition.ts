@@ -75,9 +75,9 @@ export const RELEASE_PREDICATE_BINDINGS: readonly PredicateCompositionBindingV1[
     oracleProgramDescriptorDigest: "0x67c45cf45e2afb158b97a5602e1b04e6fa9fe1d93a70eb72ebb3b2be7989e358",
     adapterVersion: "performance-gate-core-adapter-v2",
     oracleVersion: "performance-independent-reference-model-v2",
-    compositionLeafDigest: "0xc096bcc2691007d5e431120951526356c7c9a2eaebdbe7a989694198120a32ff",
+    compositionLeafDigest: "0x2c7d81393204ef0f30c8893e0a4b590eddd7d902f3cc1e4be49df4c05e7d4ab6",
     predicateImplementationExportDigest: "0x4a7553b72ecde35e0e559848590ad08bb243a990187e1d2810412ece73e4f285",
-    oracleImplementationExportDigest: "0x53f67964356bf657b228f2feba637a958f3cf7e74d49b618690de5558e1cc62b",
+    oracleImplementationExportDigest: "0xc5b06f2c5000e73382ed4652ff6a865e1e911aa3fcc0008e4040344e8993715a",
     materialProviderContractDigest: "0x16478451b563d343dd062ff7a3985e868766ac3ac05143bad30df6f3dd96e353",
     materialProviderImplementationExportDigest: "0xf2f02acfac8561806b39d9bdd505ce2852db88c971922150eff89555c71f4ba0",
     evaluator: predicateEvaluator3,
@@ -153,7 +153,7 @@ const PREDICATE_EVALUATORS: ReadonlyMap<string, PredicateCompositionBindingV1> =
   RELEASE_PREDICATE_BINDINGS.map((binding) => [binding.predicateId, binding] as const),
 );
 
-export const PREDICATE_COMPOSITION_ROOT_DIGEST = "0xd7804809ed44e98bd8fbf8dd33034440c4236841a24c67ce38d3681c5db7d668" as const;
+export const PREDICATE_COMPOSITION_ROOT_DIGEST = "0x87fd20ffd8a6097df1df27ae185234c8619be926b5bf51620b91b4fcdd1c856d" as const;
 
 export function resolvePredicateEvaluator(predicateId: string): PredicateCompositionBindingV1 | null {
   return PREDICATE_EVALUATORS.get(predicateId) ?? null;

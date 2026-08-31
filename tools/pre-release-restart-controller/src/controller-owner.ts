@@ -7,7 +7,6 @@ import {
   fsyncSync,
   lstatSync,
   openSync,
-  readFileSync,
   readdirSync,
   realpathSync,
   statSync,
@@ -31,6 +30,7 @@ import {
   type PreReleaseProcessPreFactsV1,
 } from "./durable-owner.ts";
 import { atomicNoClobberPublishV1 } from "./atomic-file.ts";
+import { readStableOwnedPhysicalFileV1 } from "./stable-owned-file.ts";
 import {
   assertFixedPreReleaseUnitBytesV1,
   assertRootControllerHostV1,
@@ -50,6 +50,7 @@ import {
   decodePreReleaseRestartControllerReceiptV1,
   decodePreReleaseRestartControllerRoundLockV1,
   PRE_RELEASE_RESTART_CONTROLLER_LAYOUT_V1 as LAYOUT,
+  PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1,
   sealPreReleaseRestartControllerReceiptV1,
   sealPreReleaseRestartControllerRoundLockV1,
   type PreReleaseControllerProcessObservationV1,
@@ -339,16 +340,16 @@ export async function runPreReleaseRestartControllerV1(): Promise<PreReleaseRest
  * files still equal the receipt's exact canonical evidence. */
 export function readFixedPreReleaseRestartControllerReceiptV1(): PreReleaseRestartControllerReceiptV1 {
   assertRootDirectory(LAYOUT.controllerDirectory);
-  const stableRootFile = (path: string, expectedMode = 0o600): Readonly<{ readonly bytes: Uint8Array; readonly stat: ReturnType<typeof statSync> }> => {
-    if (!existsSync(path) || realpathSync(path) !== path || !lstatSync(path).isFile()) throw new TypeError(`pre-release controller durable file is missing: ${path}`);
-    const before = statSync(path, { bigint: true });
-    if (before.uid !== 0n || before.gid !== 0n || (before.mode & 0o777n) !== BigInt(expectedMode)) throw new TypeError(`pre-release controller durable file owner/mode mismatch: ${path}`);
-    const bytes = new Uint8Array(readFileSync(path));
-    const after = statSync(path, { bigint: true });
-    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs
-      || after.size !== BigInt(bytes.byteLength)) throw new TypeError(`pre-release controller durable file changed during read: ${path}`);
-    return Object.freeze({ bytes, stat: after });
-  };
+  const stableRootFile = (
+    path: string,
+    expectedMode = 0o600,
+    maximumByteLength: bigint | null = null,
+  ) => readStableOwnedPhysicalFileV1(path, Object.freeze({
+    uid: 0n,
+    gid: 0n,
+    mode: BigInt(expectedMode),
+    maximumByteLength,
+  }));
   const receiptFile = stableRootFile(LAYOUT.receiptPath);
   const receiptBytes = receiptFile.bytes;
   const receipt = decodePreReleaseRestartControllerReceiptV1(decodeCanonicalJson(receiptBytes));
@@ -361,7 +362,11 @@ export function readFixedPreReleaseRestartControllerReceiptV1(): PreReleaseResta
     }
   }
   const sixStepEvidenceLog = receipt.post.durableSnapshots.sixStepEvidenceLog;
-  const sixStepEvidenceFile = stableRootFile(sixStepEvidenceLog.snapshotPath, 0o400);
+  const sixStepEvidenceFile = stableRootFile(
+    sixStepEvidenceLog.snapshotPath,
+    0o400,
+    BigInt(PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxLedgerBytes),
+  );
   const sixStepEvidenceMetadata = sixStepEvidenceFile.stat as unknown as { readonly dev: bigint; readonly ino: bigint };
   if (sixStepEvidenceLog.device !== String(sixStepEvidenceMetadata.dev)
     || sixStepEvidenceLog.inode !== String(sixStepEvidenceMetadata.ino)

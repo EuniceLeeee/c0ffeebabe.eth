@@ -127,6 +127,12 @@ interface CanonicalBudget {
   bytes: number;
 }
 
+function isCanonicalArrayIndexKey(key: string, length: number): boolean {
+  if (!/^(?:0|[1-9]\d*)$/.test(key)) return false;
+  const index = Number(key);
+  return Number.isSafeInteger(index) && index < length;
+}
+
 function chargeBudget(budget: CanonicalBudget, bytes: number, path: string): void {
   budget.bytes += bytes;
   if (budget.bytes > CANONICAL_LIMITS.maxBytes) {
@@ -188,7 +194,7 @@ function validateCanonicalValue(
         if (key === "length") {
           continue;
         }
-        if (!/^\d+$/.test(key) || Number(key) >= value.length) {
+        if (!isCanonicalArrayIndexKey(key, value.length)) {
           fail("invalid-type", "arrays may not have extra properties", `${path}.${key}`);
         }
       }
@@ -911,7 +917,7 @@ export function fieldArray<T>(
       fail("invalid-field", "symbol array property is not allowed", path);
     }
     if (key === "length") continue;
-    if (!/^\d+$/.test(key) || Number(key) >= value.length) {
+    if (!isCanonicalArrayIndexKey(key, value.length)) {
       fail("invalid-field", "array has extra property", `${path}.${key}`);
     }
   }

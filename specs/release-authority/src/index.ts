@@ -770,6 +770,18 @@ function checkRuntimeReleasePackageApproval(
 const runtimeReleaseBindingCheckedSchema = RELEASE_AUTHORITY_SCHEMA_MANIFESTS.runtimeReleaseBinding.schema;
 const runtimeReleasePackageApprovalCheckedSchema = RELEASE_AUTHORITY_SCHEMA_MANIFESTS.runtimeReleasePackageApproval.schema;
 
+/** Process-local identity only. A binding enters this set exclusively after
+ * the checked schema has rebuilt and deep-frozen the complete wire value.
+ * Raw objects, JSON clones, and objects sharing a bindingId cannot inherit
+ * this identity. */
+const checkedRuntimeReleaseBindings = new WeakSet<object>();
+const runtimeReleaseBindingProvenanceHashes = new WeakMap<object, Hash>();
+
+function markCheckedRuntimeReleaseBinding(value: RuntimeReleaseBindingV1): RuntimeReleaseBindingV1 {
+  checkedRuntimeReleaseBindings.add(value);
+  return value;
+}
+
 function parseInput(value: RuntimeReleaseBindingCodecInput): unknown {
   if (typeof value === "string") return decodeCanonicalJson(value);
   if (ArrayBuffer.isView(value)) return decodeCanonicalJson(value as Uint8Array);
@@ -790,7 +802,10 @@ function bindingHashes(core: RuntimeReleaseBindingPayloadV1): { readonly payload
 }
 
 export function decodeRuntimeReleaseBindingV1(value: RuntimeReleaseBindingCodecInput): RuntimeReleaseBindingV1 {
-  return runtimeReleaseBindingCheckedSchema.decode(parseInput(value));
+  if (typeof value === "object" && value !== null && checkedRuntimeReleaseBindings.has(value)) {
+    return value as RuntimeReleaseBindingV1;
+  }
+  return markCheckedRuntimeReleaseBinding(runtimeReleaseBindingCheckedSchema.decode(parseInput(value)));
 }
 
 export function encodeRuntimeReleaseBindingV1(value: RuntimeReleaseBindingV1): Uint8Array {
@@ -806,14 +821,14 @@ export function createRuntimeReleaseBindingV1(
   const signature = signatureHexSchema.decode(signatureHex);
   const normalizedSignerKeyId = hashSchema.decode(signerKeyId);
   const { payloadHash, bindingId } = bindingHashes(core);
-  return runtimeReleaseBindingCheckedSchema.decode({
+  return markCheckedRuntimeReleaseBinding(runtimeReleaseBindingCheckedSchema.decode({
     ...core,
     bindingId,
     payloadHash,
     signatureAlgorithm: "ed25519",
     signerKeyId: normalizedSignerKeyId,
     signatureHex: signature,
-  });
+  }));
 }
 
 export function recomputeRuntimeReleaseBindingPayloadHash(value: RuntimeReleaseBindingV1): Hash {
@@ -930,7 +945,11 @@ export function nominationQualificationDeploymentFactSigningBytes(
 
 export function runtimeReleaseBindingProvenanceHash(value: RuntimeReleaseBindingV1): Hash {
   const decoded = decodeRuntimeReleaseBindingV1(value);
-  return hashDomain(RELEASE_AUTHORITY_DOMAINS.provenance, decoded);
+  const cached = runtimeReleaseBindingProvenanceHashes.get(decoded);
+  if (cached !== undefined) return cached;
+  const provenanceHash = hashDomain(RELEASE_AUTHORITY_DOMAINS.provenance, decoded);
+  runtimeReleaseBindingProvenanceHashes.set(decoded, provenanceHash);
+  return provenanceHash;
 }
 
 function packageApprovalCore(

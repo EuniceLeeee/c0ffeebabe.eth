@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
 import {
   decodeCanonicalJson,
   encodeCanonicalJson,
@@ -6,10 +6,12 @@ import {
 } from "../../../packages/canonical-codec/src/index.ts";
 import {
   PRE_RELEASE_RESTART_CONTROLLER_LAYOUT_V1 as LAYOUT,
+  PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1,
   decodePreReleaseRestartControllerReceiptV1,
   decodePreReleaseRestartControllerRoundLockV1,
   type PreReleaseRestartControllerReceiptV1,
 } from "./spec.ts";
+import { readStableOwnedPhysicalFileV1 } from "./stable-owned-file.ts";
 
 function assertRootDirectory(path: string): void {
   if (!path.startsWith("/") || realpathSync(path) !== path || !lstatSync(path).isDirectory()) {
@@ -37,23 +39,16 @@ function evidencePayload(input: Omit<PreReleaseRestartControllerReceiptV1, "publ
  * no controller action, process runner, builder, or compiler import. */
 export function readFixedPreReleaseRestartControllerReceiptV1(): PreReleaseRestartControllerReceiptV1 {
   assertRootDirectory(LAYOUT.controllerDirectory);
-  const stableRootFile = (path: string, expectedMode = 0o600): Readonly<{ readonly bytes: Uint8Array; readonly stat: ReturnType<typeof statSync> }> => {
-    if (!existsSync(path) || realpathSync(path) !== path || !lstatSync(path).isFile()) {
-      throw new TypeError(`pre-release controller durable file is missing: ${path}`);
-    }
-    const before = statSync(path, { bigint: true });
-    if (before.uid !== 0n || before.gid !== 0n || (before.mode & 0o777n) !== BigInt(expectedMode)) {
-      throw new TypeError(`pre-release controller durable file owner/mode mismatch: ${path}`);
-    }
-    const bytes = new Uint8Array(readFileSync(path));
-    const after = statSync(path, { bigint: true });
-    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size
-      || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs
-      || after.size !== BigInt(bytes.byteLength)) {
-      throw new TypeError(`pre-release controller durable file changed during read: ${path}`);
-    }
-    return Object.freeze({ bytes, stat: after });
-  };
+  const stableRootFile = (
+    path: string,
+    expectedMode = 0o600,
+    maximumByteLength: bigint | null = null,
+  ) => readStableOwnedPhysicalFileV1(path, Object.freeze({
+    uid: 0n,
+    gid: 0n,
+    mode: BigInt(expectedMode),
+    maximumByteLength,
+  }));
   const receiptFile = stableRootFile(LAYOUT.receiptPath);
   const receipt = decodePreReleaseRestartControllerReceiptV1(decodeCanonicalJson(receiptFile.bytes));
   for (const snapshot of [receipt.post.durableSnapshots.processEvidence, receipt.post.durableSnapshots.checkpoint]) {
@@ -70,7 +65,29 @@ export function readFixedPreReleaseRestartControllerReceiptV1(): PreReleaseResta
       throw new TypeError("pre-release controller durable snapshot changed or mismatched");
     }
   }
-  for (const snapshot of [receipt.post.durableSnapshots.observerContent, receipt.post.durableSnapshots.terminalLocators]) {
+  const sixStepEvidenceLog = receipt.post.durableSnapshots.sixStepEvidenceLog;
+  const sixStepEvidenceFile = stableRootFile(
+    sixStepEvidenceLog.snapshotPath,
+    0o400,
+    BigInt(PRE_RELEASE_SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxLedgerBytes),
+  );
+  const sixStepEvidenceMetadata = sixStepEvidenceFile.stat as unknown as {
+    readonly dev: bigint; readonly ino: bigint; readonly uid: bigint; readonly gid: bigint; readonly mode: bigint;
+  };
+  if (sixStepEvidenceLog.device !== String(sixStepEvidenceMetadata.dev)
+    || sixStepEvidenceLog.inode !== String(sixStepEvidenceMetadata.ino)
+    || sixStepEvidenceLog.uid !== String(sixStepEvidenceMetadata.uid)
+    || sixStepEvidenceLog.gid !== String(sixStepEvidenceMetadata.gid)
+    || sixStepEvidenceLog.mode !== String(sixStepEvidenceMetadata.mode & 0o777n)
+    || sixStepEvidenceLog.byteLength !== String(sixStepEvidenceFile.bytes.byteLength)
+    || sixStepEvidenceLog.contentSha256 !== sha256Hex(sixStepEvidenceFile.bytes)) {
+    throw new TypeError("pre-release controller Six-Step source-ledger snapshot changed or mismatched");
+  }
+  for (const snapshot of [
+    receipt.post.durableSnapshots.observerContent,
+    receipt.post.durableSnapshots.terminalLocators,
+    receipt.post.durableSnapshots.sixStepBoundaries,
+  ]) {
     if (!existsSync(snapshot.snapshotDirectory) || realpathSync(snapshot.snapshotDirectory) !== snapshot.snapshotDirectory
       || !lstatSync(snapshot.snapshotDirectory).isDirectory()) {
       throw new TypeError("pre-release controller durable directory snapshot is missing");

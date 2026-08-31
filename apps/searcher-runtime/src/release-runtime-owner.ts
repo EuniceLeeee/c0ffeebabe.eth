@@ -10,17 +10,6 @@ import {
   sha256Hex,
   type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
-import {
-  createFrameworkFailureRuntime,
-  createRejectionExecutorAuthorityIssuer,
-  createRejectionFactRuntime,
-} from "../../../packages/attestation/src/internal/composition.ts";
-import type {
-  AttestationCompositionBindingV1,
-  InstanceDecisionV1,
-  InstanceLifecycleSingleFlightPort,
-  RejectionTransportExecutorV1,
-} from "../../../packages/attestation/src/index.ts";
 import type { StartupRuntimeV1 } from "../../../packages/startup-runtime/src/index.ts";
 import { createSqliteDurableStore } from "../../../packages/durable-store/src/index.ts";
 import {
@@ -560,20 +549,6 @@ function consumeProductionStartupCapability(capability: ProductionStartupCapabil
   return state;
 }
 
-class SingleFlightInstanceLifecycleV1 implements InstanceLifecycleSingleFlightPort {
-  readonly #pending = new Map<Hash, Promise<InstanceDecisionV1>>();
-
-  getOrBuild(key: Hash, build: () => Promise<InstanceDecisionV1>): Promise<InstanceDecisionV1> {
-    const existing = this.#pending.get(key);
-    if (existing !== undefined) return existing;
-    const pending = Promise.resolve().then(build).finally(() => {
-      if (this.#pending.get(key) === pending) this.#pending.delete(key);
-    });
-    this.#pending.set(key, pending);
-    return pending;
-  }
-}
-
 function qualifiedCapabilityProjection(
   binding: ReturnType<typeof decodeRuntimeReleaseBindingV1>,
   bytes: Uint8Array,
@@ -667,26 +642,9 @@ async function buildVerifiedRuntimeCoreV1(input: VerifiedRuntimeCoreInputV1) {
     },
   });
   const durable = createSqliteDurableStore(source.checkpointDatabasePath);
-  const lifecycle = new SingleFlightInstanceLifecycleV1();
-  const rejectionExecutor: RejectionTransportExecutorV1 = Object.freeze({
-    async execute(): Promise<never> {
-      throw new TypeError("attestation rejection transport is unavailable");
-    },
-  });
   const services = owner.compose({
     infrastructure,
     catalog: { qualifiedCapabilityProjection: qualifiedCapabilityProjection(binding, artifacts["catalog-generation.inputs.json"]!.bytes) },
-    attestation: {
-      build(composition: AttestationCompositionBindingV1) {
-        const frameworkRuntime = createFrameworkFailureRuntime(composition, { classify() { return null; } });
-        const rejectionIssuer = createRejectionExecutorAuthorityIssuer(composition);
-        return {
-          frameworkRuntime,
-          rejectionRuntime: createRejectionFactRuntime(rejectionIssuer.issue(rejectionExecutor)),
-          instanceLifecycle: lifecycle,
-        };
-      },
-    },
     checkpoint: { durable, canonical: runtimeSource.canonical },
     ready: {
       policy: {

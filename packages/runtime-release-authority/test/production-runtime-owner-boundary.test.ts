@@ -23,6 +23,9 @@ test("production facade is the single exact authority-constructor splice", () =>
     "./internal/revm-worker-owner.ts",
   ]);
   assert.match(facade, /consumedInfrastructures\.has/);
+  assert.match(facade, /readOwnEnumerableDataProperty\(input, key, "runtimeReleaseCompositionFacade"\)/);
+  assert.doesNotMatch(facade, /infrastructures\.get\(input\.infrastructure\)/);
+  assert.doesNotMatch(facade, /consumedInfrastructures\.(?:has|add)\(input\.infrastructure\)/);
   assert.match(facade, /receiver !== port/);
   assert.doesNotMatch(facade, /\bsign\s*\(|privateKey|broadcast|promote/);
 });
@@ -32,7 +35,6 @@ test("terminal observation owner has only the fixed collector/store splice", () 
     .map(match => match[1])
     .sort();
   assert.deepEqual(acceptanceImports, [
-    "../../../../acceptance/collectors/src/internal/release-owned-observer-store.ts",
     "../../../../acceptance/collectors/src/production-full-family-port.ts",
     "../../../../acceptance/collectors/src/production-six-step-port.ts",
     "../../../../acceptance/collectors/src/production-terminal-phase-port.ts",

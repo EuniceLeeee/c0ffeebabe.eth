@@ -30,15 +30,20 @@ import {
 import {
   createArtifactResolutionClaim,
 } from "../../../../specs/artifact-resolution/src/index.ts";
-import type { CapabilityRefV1 } from "../../../../specs/evidence/src/index.ts";
+import {
+  decodeEvidenceEvent,
+  EVIDENCE_SCHEMA_MANIFESTS,
+  type CapabilityRefV1,
+} from "../../../../specs/evidence/src/index.ts";
 import {
   decodeSixStepStageFacts,
   hashOrderedInstanceBindingsRoot,
+  SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1,
   SIX_STEP_SCHEMA_MANIFESTS,
   type SixStepStageFactsV1,
   type SixStepStageId,
 } from "../../../../specs/evidence/src/six-step.ts";
-import type { ContentAddressedObserverSinkV1 } from "../../../../acceptance/collectors/src/content-addressed-sink.ts";
+import type { RuntimeReleaseObserverSinkV1 } from "./observer-store-owner.ts";
 import {
   ProductionSixStepArtifactOwnerV1,
   issueProductionSixStepArtifactStoreV1,
@@ -82,7 +87,7 @@ interface ProductionSixStepOwnerBindingV1 {
   readonly process: ProcessAnchorV1;
   readonly emitterCodeHash: Hash;
   readonly directory: string;
-  readonly sink: ContentAddressedObserverSinkV1;
+  readonly sink: RuntimeReleaseObserverSinkV1;
   readonly strategyCatalogRoot: Hash;
   readonly definitionCatalogRoot: Hash;
   readonly releaseProvenanceHash: Hash;
@@ -146,6 +151,97 @@ function syncDirectory(directory: string): void {
   }
 }
 
+export function recoverProductionSixStepEvidenceSequenceV1(bytes: Uint8Array): bigint {
+  return recoverProductionSixStepEvidenceSequenceFromReaderV1(
+    BigInt(bytes.byteLength),
+    (buffer, position) => {
+      const start = Number(position);
+      const length = Math.min(buffer.byteLength, bytes.byteLength - start);
+      buffer.set(bytes.subarray(start, start + length));
+      return length;
+    },
+  );
+}
+
+export function assertProductionSixStepEvidenceLogRecoverySizeV1(size: bigint): void {
+  if (size < 0n) {
+    throw new TypeError("production Six-Step evidence log recovery size must be non-negative");
+  }
+}
+
+export function assertProductionSixStepEvidenceLogAppendSizeV1(
+  start: bigint,
+  recordByteLength: bigint,
+): void {
+  if (start < 0n) {
+    throw new TypeError("production Six-Step evidence log append start must be non-negative");
+  }
+  if (recordByteLength < 0n
+    || recordByteLength > BigInt(SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxLedgerBytes)) {
+    throw new TypeError("production Six-Step evidence log record exceeds its byte policy");
+  }
+}
+
+const PRODUCTION_SIX_STEP_RECOVERY_BUFFER_BYTES = 64 * 1024;
+
+export function recoverProductionSixStepEvidenceSequenceFromReaderV1(
+  size: bigint,
+  read: (buffer: Uint8Array, position: bigint) => number,
+): bigint {
+  assertProductionSixStepEvidenceLogRecoverySizeV1(size);
+  if (size === 0n) return 0n;
+
+  const maxRecordBytes = SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1.maxLedgerBytes;
+  const buffer = Buffer.alloc(PRODUCTION_SIX_STEP_RECOVERY_BUFFER_BYTES);
+  let position = 0n;
+  let events = 0n;
+  let recordByteLength = 0;
+  let recordFragments: Buffer[] = [];
+
+  const appendFragment = (fragment: Uint8Array): void => {
+    recordByteLength += fragment.byteLength;
+    if (recordByteLength > maxRecordBytes) {
+      throw new TypeError("production Six-Step evidence log record exceeds its recovery byte policy");
+    }
+    if (fragment.byteLength > 0) recordFragments.push(Buffer.from(fragment));
+  };
+  const decodeRecord = (): void => {
+    const value = decodeCanonicalJson(Buffer.concat(recordFragments, recordByteLength).toString("utf8"));
+    if (value !== null && typeof value === "object" && !Array.isArray(value)
+      && (value as Record<string, unknown>).kind === EVIDENCE_SCHEMA_MANIFESTS.event.id) {
+      decodeEvidenceEvent(value);
+      events += 1n;
+    }
+    recordByteLength = 0;
+    recordFragments = [];
+  };
+
+  while (position < size) {
+    const remaining = size - position;
+    const requested = Number(remaining < BigInt(buffer.byteLength) ? remaining : BigInt(buffer.byteLength));
+    const readLength = read(buffer.subarray(0, requested), position);
+    if (readLength === 0) {
+      throw new TypeError("production Six-Step evidence log truncated during recovery");
+    }
+    if (!Number.isInteger(readLength) || readLength < 0 || readLength > requested) {
+      throw new TypeError("production Six-Step evidence log recovery read was invalid");
+    }
+    let recordStart = 0;
+    for (let index = 0; index < readLength; index += 1) {
+      if (buffer[index] !== 0x0a) continue;
+      appendFragment(buffer.subarray(recordStart, index));
+      decodeRecord();
+      recordStart = index + 1;
+    }
+    appendFragment(buffer.subarray(recordStart, readLength));
+    position += BigInt(readLength);
+  }
+  if (recordByteLength !== 0) {
+    throw new TypeError("production Six-Step evidence log has an incomplete record");
+  }
+  return events;
+}
+
 class NativeSixStepEvidenceLogV1 {
   readonly #fd: number;
   readonly #systemId: string;
@@ -174,25 +270,10 @@ class NativeSixStepEvidenceLogV1 {
   }
 
   #recoverSequence(size: bigint): bigint {
-    if (size === 0n) return 0n;
-    if (size > BigInt(Number.MAX_SAFE_INTEGER)) throw new TypeError("production Six-Step evidence log is too large to recover");
-    const bytes = Buffer.alloc(Number(size));
-    let offset = 0;
-    while (offset < bytes.byteLength) {
-      const read = readSync(this.#fd, bytes, offset, bytes.byteLength - offset, offset);
-      if (read === 0) throw new TypeError("production Six-Step evidence log truncated during recovery");
-      offset += read;
-    }
-    if (bytes[bytes.byteLength - 1] !== 0x0a) throw new TypeError("production Six-Step evidence log has an incomplete record");
-    let events = 0n;
-    for (const line of bytes.toString("utf8").split("\n").slice(0, -1)) {
-      const value = decodeCanonicalJson(line);
-      if (value !== null && typeof value === "object" && !Array.isArray(value)
-        && (value as Record<string, unknown>).kind === "aloha.evidence-event") {
-        events += 1n;
-      }
-    }
-    return events;
+    return recoverProductionSixStepEvidenceSequenceFromReaderV1(
+      size,
+      (buffer, position) => readSync(this.#fd, buffer, 0, buffer.byteLength, position),
+    );
   }
 
   get initialSequence(): string {
@@ -209,6 +290,7 @@ class NativeSixStepEvidenceLogV1 {
 
   #appendRecord(bytes: Uint8Array): Readonly<{ readonly start: string; readonly end: string }> {
     const start = this.#assertIdentity();
+    assertProductionSixStepEvidenceLogAppendSizeV1(start, BigInt(bytes.byteLength));
     const record = Buffer.concat([Buffer.from(bytes), Buffer.from("\n")]);
     const written = writeSync(this.#fd, record);
     if (written !== record.byteLength) throw new TypeError("production Six-Step evidence log append was partial");
@@ -255,10 +337,10 @@ class NativeSixStepEvidenceLogV1 {
 }
 
 class DurableProductionSixStepStoreV1 implements ProductionSixStepArtifactStoreV1 {
-  readonly #sink: ContentAddressedObserverSinkV1;
+  readonly #sink: RuntimeReleaseObserverSinkV1;
   readonly #boundaryDirectory: string;
 
-  constructor(sink: ContentAddressedObserverSinkV1, directory: string) {
+  constructor(sink: RuntimeReleaseObserverSinkV1, directory: string) {
     this.#sink = sink;
     this.#boundaryDirectory = concreteDirectory(join(directory, "boundaries"));
   }
@@ -729,6 +811,9 @@ class ProductionSixStepCompositionStateV1 {
         };
       }
       const firstParent = readProductionSixStepArtifactMaterialV1(parents[0]!);
+      if (firstParent.event.instanceKey === null) {
+        throw new TypeError(`production Six-Step Stage ${ordinal} parent instance key is unavailable`);
+      }
       const context = this.#context({
         scope: {
           kind: "producer-session",
@@ -746,7 +831,7 @@ class ProductionSixStepCompositionStateV1 {
         familyId: ordinal === 3 ? firstParent.event.familyId : firstParent.event.familyId,
         candidateKey: pipeline.routeCandidateId,
         familyDefinitionHash: firstParent.event.familyDefinitionHash,
-        instanceKey: route.legs[0]?.ownerRef ?? null,
+        instanceKey: firstParent.event.instanceKey,
       });
       return this.#emit({ context, ordinal, facts, witnesses, parents, rawPayload: payload, timing, outcome: "success" });
     };

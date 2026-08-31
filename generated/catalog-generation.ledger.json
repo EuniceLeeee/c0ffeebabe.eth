@@ -17,7 +17,7 @@
     },
     {
       "path": "input/compiler-closures",
-      "contentSha256": "0x7f46021afc61bdb213b9f8f6127167bb25bce776145f1df6ba305e4a4ae95285",
+      "contentSha256": "0x84116049bbfa03a89ee76c44795832e5c839a83c6adf33f7da110011ec44e62d",
       "byteLength": 31797
     },
     {
@@ -37,7 +37,7 @@
     },
     {
       "path": "input/proposed-capability-set",
-      "contentSha256": "0x6cf79a5087ac9f3eb0cbbfd1c31c28ca08af13b0cc19bf2a4c9c68eac4bff6e2",
+      "contentSha256": "0xc0037bc1794cd38bf72fdd82d29327a1d767b5fea1282c31a9a42cc4bd07e668",
       "byteLength": 3828
     },
     {
@@ -54,433 +54,433 @@
   "compilerRecords": [
     {
       "logicalPath": "families/curve-underlying/src/action.ts#CURVE_UNDERLYING_SWAP_ACTION_PORT",
-      "contentSha256": "0x0e901d5f298e906dc81ae5af6585898e2bc62f50800d005b1a79e52c716e764e",
+      "contentSha256": "0x6adfabcabcd3b0782e193cec816eee4427dee02e1f5ac759be1efcf6da943c03",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/nomination-qualification.ts#CURVE_UNDERLYING_NOMINATION_INDEPENDENT_ORACLE",
-      "contentSha256": "0x1b1fc51449bad676fd0e1a03826d6d8a21e27ea30df01694b123327792788bc8",
+      "contentSha256": "0x184e060bce7e6dfd6cd1306b894f1e907adecee594b4c0938bb61f4a58f6bfa6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/nomination-qualification.ts#CURVE_UNDERLYING_NOMINATION_MUTATION_CORPUS",
-      "contentSha256": "0x1b1fc51449bad676fd0e1a03826d6d8a21e27ea30df01694b123327792788bc8",
+      "contentSha256": "0x184e060bce7e6dfd6cd1306b894f1e907adecee594b4c0938bb61f4a58f6bfa6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/public.ts#CURVE_UNDERLYING_DEFINITION",
-      "contentSha256": "0x2a6b0e3e90462ca47d555672200b3a0320cd96796938a17b6e5bc5047d8bfde9",
+      "contentSha256": "0x8ce803ac99e96fd95d415e83e62efa19da6e1a89496299e7ef5afc5d3e7977e5",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/runtime.ts#CURVE_IDENTITY_RUNTIME",
-      "contentSha256": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
+      "contentSha256": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/runtime.ts#CURVE_MATERIALIZATION_RUNTIME",
-      "contentSha256": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
+      "contentSha256": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/runtime.ts#CURVE_NOMINATION_RUNTIME",
-      "contentSha256": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
+      "contentSha256": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/runtime.ts#CURVE_PROJECTION_RUNTIME",
-      "contentSha256": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
+      "contentSha256": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/runtime.ts#CURVE_REHYDRATION_RUNTIME",
-      "contentSha256": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
+      "contentSha256": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/runtime.ts#CURVE_UNDERLYING_RUNTIME",
-      "contentSha256": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
+      "contentSha256": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/runtime/physical-adapter.ts#CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
-      "contentSha256": "0x14eb9e7a350255916513cbe64ede6fb075c0c1c9610ccd63d6a17d9ce6117d71",
+      "contentSha256": "0x61c5a636ba5be79be4a27fa546d4f232b2abc0deb37f431790bb4250b3437897",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/search-adapter.ts#CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY",
-      "contentSha256": "0xa205e6109541f604ed6383f64dcb99b79c0fefb24e1de5634ab4d0fe2b2834af",
+      "contentSha256": "0x8c9566a32d81ff46ea7cb4f7b2a522513be22eb926e03308d2c2dee827c62636",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/source-plan.ts#CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM",
-      "contentSha256": "0x193d48d1d96e57674e425bd016d0c7dd2903381afee8860134d96d22a8c585e0",
+      "contentSha256": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/source-plan.ts#CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME",
-      "contentSha256": "0x193d48d1d96e57674e425bd016d0c7dd2903381afee8860134d96d22a8c585e0",
+      "contentSha256": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/source-plan.ts#CURVE_UNDERLYING_SOURCE_NOMINATION_PROGRAM",
-      "contentSha256": "0x193d48d1d96e57674e425bd016d0c7dd2903381afee8860134d96d22a8c585e0",
+      "contentSha256": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/curve-underlying/src/source-plan.ts#CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME",
-      "contentSha256": "0x193d48d1d96e57674e425bd016d0c7dd2903381afee8860134d96d22a8c585e0",
+      "contentSha256": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/action.ts#DODO_V2_SWAP_ACTION_PORT",
-      "contentSha256": "0xa8744957c21d07ed554c334c1a9795dfac44b16c21a62f9482aab4d34aaa2518",
+      "contentSha256": "0x58b08dbf3f8d3769033dcdd96bf8ff8a66e1fb535a3a36b032f0faff34e3435d",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/history-source-plan.ts#DODO_V2_HISTORY_NOMINATION_PROGRAM",
-      "contentSha256": "0x3daa5ab27a8c349da72a035d7c15d47be5c3179a7531c275d215d0e7325e0fbd",
+      "contentSha256": "0x20dcf54e7d1d80222e309dc216c30f95411a1561d68cc184c64118b0949c373f",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/history-source-plan.ts#DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME",
-      "contentSha256": "0x3daa5ab27a8c349da72a035d7c15d47be5c3179a7531c275d215d0e7325e0fbd",
+      "contentSha256": "0x20dcf54e7d1d80222e309dc216c30f95411a1561d68cc184c64118b0949c373f",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/nomination-qualification.ts#DODO_V2_NOMINATION_INDEPENDENT_ORACLE",
-      "contentSha256": "0xd0753b3c27a263f3c027b6951e5517e3eabaa331083249369f9d755f40f2fb6b",
+      "contentSha256": "0xb401d9f7f3475709f3065e0f759910df3bfb036e173fc3b96331247e6a346d03",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/nomination-qualification.ts#DODO_V2_NOMINATION_MUTATION_CORPUS",
-      "contentSha256": "0xd0753b3c27a263f3c027b6951e5517e3eabaa331083249369f9d755f40f2fb6b",
+      "contentSha256": "0xb401d9f7f3475709f3065e0f759910df3bfb036e173fc3b96331247e6a346d03",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/public.ts#DODO_V2_DEFINITION",
-      "contentSha256": "0x9398db7caa996ff059c4a8e43ba89ecb87aefb0f603c6b8daad0552f2d7aae92",
+      "contentSha256": "0x883d7e1135451d85e975826c922745a35cc0a14c76ad4e1e3b21c8a6cdcf63a4",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/runtime.ts#DODO_IDENTITY_RUNTIME",
-      "contentSha256": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
+      "contentSha256": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/runtime.ts#DODO_MATERIALIZATION_RUNTIME",
-      "contentSha256": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
+      "contentSha256": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/runtime.ts#DODO_NOMINATION_RUNTIME",
-      "contentSha256": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
+      "contentSha256": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/runtime.ts#DODO_PROJECTION_RUNTIME",
-      "contentSha256": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
+      "contentSha256": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/runtime.ts#DODO_REHYDRATION_RUNTIME",
-      "contentSha256": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
+      "contentSha256": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/runtime.ts#DODO_V2_RUNTIME",
-      "contentSha256": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
+      "contentSha256": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/runtime/physical-adapter.ts#DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
-      "contentSha256": "0x84684f1d7adb38dade64704e18e771eeec09446037d8aa7b47fd0d906573cc59",
+      "contentSha256": "0xa0817aa9c2f27e716d49ced1f08aa7f40913e2c002fc62e4a1d59b3aa469e472",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/search-adapter.ts#DODO_SEARCH_RUNTIME_ADAPTER_FACTORY",
-      "contentSha256": "0x4d53aa4c74c987f5ee685fae7e5d4419a5f5c8c45ee000cd170e58a42ced9900",
+      "contentSha256": "0xb525998cd727ad202840f4a9dd0bcd1a3460f0f8d29a9b8e5473a0a89d4af443",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/source-plan.ts#DODO_V2_SOURCE_NOMINATION_PROGRAM",
-      "contentSha256": "0x871f18bbd9d2f19b5af9017b45c162cfe611220e647a6345924bc91120acd41d",
+      "contentSha256": "0xad691fcd5039440d9db66d8a178a86b79c74825e0dbf7773cd4003ca2970585d",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/dodo-v2/src/source-plan.ts#DODO_V2_SOURCE_PLAN_RUNTIME",
-      "contentSha256": "0x871f18bbd9d2f19b5af9017b45c162cfe611220e647a6345924bc91120acd41d",
+      "contentSha256": "0xad691fcd5039440d9db66d8a178a86b79c74825e0dbf7773cd4003ca2970585d",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/action.ts#FLUID_DEX_ACTION_PORT",
-      "contentSha256": "0x985cc7771790595404b1f5312d6ad1848ab9f9a200892abe49acae3735c66f94",
+      "contentSha256": "0x472bcecefb700a52d36985832845e11fc2e69d93e2116ab66bafd2405d5dfbd7",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/nomination-qualification.ts#FLUID_DEX_NOMINATION_INDEPENDENT_ORACLE",
-      "contentSha256": "0xc1428515a4879976d17431c5a86fa6b071bf2ca63d4dcd719945d9c7b7055f59",
+      "contentSha256": "0x9f315f8f974b145cbe29b644f931573c03da7fed91567c54a6ec1a4d0c5a4a4c",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/nomination-qualification.ts#FLUID_DEX_NOMINATION_MUTATION_CORPUS",
-      "contentSha256": "0xc1428515a4879976d17431c5a86fa6b071bf2ca63d4dcd719945d9c7b7055f59",
+      "contentSha256": "0x9f315f8f974b145cbe29b644f931573c03da7fed91567c54a6ec1a4d0c5a4a4c",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/public.ts#FLUID_DEX_DEFINITION",
-      "contentSha256": "0x4e9f44d8fafa4c126660c47a09eafcf0a1249007bcd48239ceb987aca3ac2b3d",
+      "contentSha256": "0xcacd566d30919f04de3511e4dd1836caa3b47853c23a4af3b4546e57985262a8",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/runtime.ts#FLUID_DEX_RUNTIME",
-      "contentSha256": "0xadc77a859da56aba2f21e587bc1a8ae8bb1d4d498ea19a28130b5307e4234de2",
+      "contentSha256": "0x94778685b6423f72460f2b73bfc4ad513a665d8fa3a0568fe0a790b95ccd8088",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/runtime/definitions.ts#FLUID_DEX_IDENTITY_DEFINITION",
-      "contentSha256": "0xc3e5d211e5c4e6e77009a0ed393486ca2e0b296439f49a601be8fc9f24886c48",
+      "contentSha256": "0xdd85fb69cc7970af34c4262074f11da6e392ffdf7f193857fd83c3a4e7d799c8",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/runtime/definitions.ts#FLUID_DEX_MATERIALIZATION_DEFINITION",
-      "contentSha256": "0xc3e5d211e5c4e6e77009a0ed393486ca2e0b296439f49a601be8fc9f24886c48",
+      "contentSha256": "0xdd85fb69cc7970af34c4262074f11da6e392ffdf7f193857fd83c3a4e7d799c8",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/runtime/definitions.ts#FLUID_DEX_NOMINATION_DEFINITION",
-      "contentSha256": "0xc3e5d211e5c4e6e77009a0ed393486ca2e0b296439f49a601be8fc9f24886c48",
+      "contentSha256": "0xdd85fb69cc7970af34c4262074f11da6e392ffdf7f193857fd83c3a4e7d799c8",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/runtime/definitions.ts#FLUID_DEX_PROJECTION_DEFINITION",
-      "contentSha256": "0xc3e5d211e5c4e6e77009a0ed393486ca2e0b296439f49a601be8fc9f24886c48",
+      "contentSha256": "0xdd85fb69cc7970af34c4262074f11da6e392ffdf7f193857fd83c3a4e7d799c8",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/runtime/definitions.ts#FLUID_DEX_REHYDRATION_DEFINITION",
-      "contentSha256": "0xc3e5d211e5c4e6e77009a0ed393486ca2e0b296439f49a601be8fc9f24886c48",
+      "contentSha256": "0xdd85fb69cc7970af34c4262074f11da6e392ffdf7f193857fd83c3a4e7d799c8",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/runtime/physical-adapter.ts#FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
-      "contentSha256": "0xc0521108c8945774e171bcf6ab8e5aca48a28fbe614ea598cf934271a38be2c7",
+      "contentSha256": "0x85282a06671047d57318830cc46a953b64bd9921118942e8244dcdc0235acab5",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/search-adapter.ts#FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY",
-      "contentSha256": "0xf548618cbf76b10923cff767d4e397d990a039056aeb85f4941ae6d3be20466e",
+      "contentSha256": "0x4564198d855322fe91a7610c28483ae8de87ca512a26230ca47ddfc33bd283a8",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/source-plan.ts#FLUID_DEX_FACTORY_NOMINATION_PROGRAM",
-      "contentSha256": "0x83b88f49a5e5b818d045095d187fed0463efa181c8d352786385c0f516a31f35",
+      "contentSha256": "0x2714b82fc0d48b6fe4854abdce5e13a2e8f5a8781df22e5a84fdd58646243f5e",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/source-plan.ts#FLUID_DEX_FACTORY_SOURCE_PLAN_RUNTIME",
-      "contentSha256": "0x83b88f49a5e5b818d045095d187fed0463efa181c8d352786385c0f516a31f35",
+      "contentSha256": "0x2714b82fc0d48b6fe4854abdce5e13a2e8f5a8781df22e5a84fdd58646243f5e",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/source-plan.ts#FLUID_DEX_SOURCE_NOMINATION_PROGRAM",
-      "contentSha256": "0x83b88f49a5e5b818d045095d187fed0463efa181c8d352786385c0f516a31f35",
+      "contentSha256": "0x2714b82fc0d48b6fe4854abdce5e13a2e8f5a8781df22e5a84fdd58646243f5e",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/fluid-dex/src/source-plan.ts#FLUID_DEX_SOURCE_PLAN_RUNTIME",
-      "contentSha256": "0x83b88f49a5e5b818d045095d187fed0463efa181c8d352786385c0f516a31f35",
+      "contentSha256": "0x2714b82fc0d48b6fe4854abdce5e13a2e8f5a8781df22e5a84fdd58646243f5e",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/capabilities/action.ts#UNIV2_STANDARD_SWAP_ACTION_PORT",
-      "contentSha256": "0x6722825e1565e751e4ea84116881843e42f23c1016dd7f2068911e8edb579948",
+      "contentSha256": "0x3893a21ba38f506b875d3760fe69595f1210cbe95bba2e98cb39490717abda4d",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/capabilities/coarse.ts#UNIV2_STANDARD_COARSE_PORT",
-      "contentSha256": "0x29bc24a7b8bbee0da23bc8ce6cd34e3a6ef857c5de7818e6260713e556669908",
+      "contentSha256": "0xce99482bbec7ae5e6584ec87b2aa409a48fa06711a29711f655059df69b1e9e2",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/capabilities/exact.ts#UNIV2_STANDARD_EXACT_PORT",
-      "contentSha256": "0x7d7b2fb6ea9dd262ea173eb8214797233c95e8d41c62ee06aa3fabd6f68ef7f0",
+      "contentSha256": "0xe375614930362a786f4f77682b57051659374b7a1e5ee854b7205a28511a5da2",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/capabilities/state.ts#UNIV2_STANDARD_STATE_PORT",
-      "contentSha256": "0x4fe4d6a332262edb5e2e230f74f48a52d64fe5061acdb2a82d4f56d8da0da457",
+      "contentSha256": "0x8de13f6114c66ae41a7024e5c9c8cead6c58f620b99f950689539661a5569cb5",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/history-source-plan.ts#UNIV2_STANDARD_HISTORY_NOMINATION_PROGRAM",
-      "contentSha256": "0x7e557c3c24d72fbe7fc4920ae93b1404658e70593588112abba4d67b0f40728e",
+      "contentSha256": "0x14d6cfc49df66b7f93ea300bce443eef410e2e0e606c0c17997d5a0e3d347afc",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/history-source-plan.ts#UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME",
-      "contentSha256": "0x7e557c3c24d72fbe7fc4920ae93b1404658e70593588112abba4d67b0f40728e",
+      "contentSha256": "0x14d6cfc49df66b7f93ea300bce443eef410e2e0e606c0c17997d5a0e3d347afc",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/nomination-qualification.ts#UNIV2_STANDARD_NOMINATION_INDEPENDENT_ORACLE",
-      "contentSha256": "0x268573dc87663234f240b5bb43a1b9dc483ae83d8e4a00c336a15c216014a1c5",
+      "contentSha256": "0xd452574d940eeb5ba13ae6683f27108ed70ad64ddf50beee2617da03836033f6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/nomination-qualification.ts#UNIV2_STANDARD_NOMINATION_MUTATION_CORPUS",
-      "contentSha256": "0x268573dc87663234f240b5bb43a1b9dc483ae83d8e4a00c336a15c216014a1c5",
+      "contentSha256": "0xd452574d940eeb5ba13ae6683f27108ed70ad64ddf50beee2617da03836033f6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/public.ts#UNIV2_STANDARD_DEFINITION",
-      "contentSha256": "0x9622875cb677d2ec21a4f179942178ec8bf19653b39d89500d35a5ecbc8aeb16",
+      "contentSha256": "0xb12a783cbf33c4cee6bf77f8ea62944e6512b478fd75cbc7032281e9535129ae",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/runtime/definitions.ts#UNIV2_STANDARD_IDENTITY_DEFINITION",
-      "contentSha256": "0x6d6d0140bda8de6e4f3dbad1a11748ebf8a9faed75969228e2994053c1de5172",
+      "contentSha256": "0xd64cf6537d5eef4f69877f418dc279b61f814b0551465319c621987790d569aa",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/runtime/definitions.ts#UNIV2_STANDARD_MATERIALIZATION_DEFINITION",
-      "contentSha256": "0x6d6d0140bda8de6e4f3dbad1a11748ebf8a9faed75969228e2994053c1de5172",
+      "contentSha256": "0xd64cf6537d5eef4f69877f418dc279b61f814b0551465319c621987790d569aa",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/runtime/definitions.ts#UNIV2_STANDARD_NOMINATION_DEFINITION",
-      "contentSha256": "0x6d6d0140bda8de6e4f3dbad1a11748ebf8a9faed75969228e2994053c1de5172",
+      "contentSha256": "0xd64cf6537d5eef4f69877f418dc279b61f814b0551465319c621987790d569aa",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/runtime/definitions.ts#UNIV2_STANDARD_PROJECTION_DEFINITION",
-      "contentSha256": "0x6d6d0140bda8de6e4f3dbad1a11748ebf8a9faed75969228e2994053c1de5172",
+      "contentSha256": "0xd64cf6537d5eef4f69877f418dc279b61f814b0551465319c621987790d569aa",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/runtime/definitions.ts#UNIV2_STANDARD_REHYDRATION_DEFINITION",
-      "contentSha256": "0x6d6d0140bda8de6e4f3dbad1a11748ebf8a9faed75969228e2994053c1de5172",
+      "contentSha256": "0xd64cf6537d5eef4f69877f418dc279b61f814b0551465319c621987790d569aa",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/runtime/physical-adapter.ts#UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
-      "contentSha256": "0xd17564174b8b7329d5f3e9e1fae36235b8f407fc95373a1b4b6a7055f9e9416e",
+      "contentSha256": "0x06c1ce15d155b758f6ad566811b53e732a44fd20664358c1aee524bc90fb920a",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/search/adapter.ts#UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY",
-      "contentSha256": "0x9af542126695c6b71d69142eb929251eb208b309919123f9fc71a3097e08b009",
+      "contentSha256": "0x1afc673e4dfad96cdeedbfab7419b61a4350f86c052f6b08c90f06963a83f50a",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/stages/nomination.ts#UNIV2_STANDARD_SOURCE_NOMINATION_PROGRAM",
-      "contentSha256": "0x4f5f4322bb4227fc148e80e86652f045361bb20c99d397815601400647b920a8",
+      "contentSha256": "0x49663371d7ce70189f9b38a22a03519f0654257684b018e32fb0a015d44035d0",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "families/univ2-standard/src/stages/nomination.ts#UNIV2_STANDARD_SOURCE_PLAN_RUNTIME",
-      "contentSha256": "0x4f5f4322bb4227fc148e80e86652f045361bb20c99d397815601400647b920a8",
+      "contentSha256": "0x49663371d7ce70189f9b38a22a03519f0654257684b018e32fb0a015d44035d0",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "strategies/route-cycle/src/index.ts#ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER",
-      "contentSha256": "0x6eac2829c8d6b502d9e1739e4c117a09bc32128fd05929e4c5b1b04bd2c0c14c",
+      "contentSha256": "0x6eba9fb034b90b5c557a1e2dc82b66444c752aabb779fd510cecb7ce74e05af6",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "strategies/route-cycle/src/index.ts#ROUTE_CYCLE_STRATEGY",
-      "contentSha256": "0xe4b6feca48f29b15bf85ba11f130f6a5acfccc3ec96cd4e156a69ed6517be6ab",
+      "contentSha256": "0x1ac79f77278a2ffba8c8ea8ad115032bdb51ed26595f9e1ac157653efef53eb2",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_INDEPENDENT_ORACLE_CASES_V1",
-      "contentSha256": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
+      "contentSha256": "0x63dbfc70842bd7577b650266d0464c0b6c4dfff7a0e6d8dd080309258e75f878",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_MUTATION_CORPUS_V1",
-      "contentSha256": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
+      "contentSha256": "0x63dbfc70842bd7577b650266d0464c0b6c4dfff7a0e6d8dd080309258e75f878",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_QUALIFICATION_SPEC_V1",
-      "contentSha256": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
+      "contentSha256": "0x63dbfc70842bd7577b650266d0464c0b6c4dfff7a0e6d8dd080309258e75f878",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
     {
       "logicalPath": "valuation-owners/native-equivalent/src/runtime.ts#createNativeEquivalentValuationOwnerV1",
-      "contentSha256": "0x3235630ce07e12067baa9a8c2c385d99fe8e156341b6563acd54612564da60c6",
+      "contentSha256": "0xfc3b30d8adc2dc3b67112ffe5051a05116a471ee08d361e6dfac53e9560c0245",
       "byteLength": 0,
       "sourceKind": "tracked"
     }
@@ -488,7 +488,7 @@
   "generatorRecords": [
     {
       "logicalPath": "tools/catalog-generator/src/index.ts#generateCatalogWithImpact",
-      "contentSha256": "0xdcae707544c9d5c10b784ca18f37ca42b64d92c42780d7df79c6e674b79072dd",
+      "contentSha256": "0x23fa084e47390cfd580a978f89ff27c31eb03c2d649ac2b13f541c792fc5b565",
       "byteLength": 0,
       "sourceKind": "tracked"
     }
@@ -496,49 +496,49 @@
   "outputs": [
     {
       "path": "generated/catalog-impact.receipt.json",
-      "contentSha256": "0xa9349e04a10a990d4fcf179c2795bb1c6edc52f7c982c666ecd1dfc121230fae",
+      "contentSha256": "0x69484461d1a745dabc59c39d5a3966660053a4ee215e7afdcb5b2bf6224ea1b1",
       "byteLength": 2071,
-      "catalogRoot": "0xe974c4ba93dbdbd9df0d81e6f62e31e090562cd1d5f4fbb720180a58617ab361"
+      "catalogRoot": "0x4cbce5103ba1d989b8a69b29f0e8d8450141614e2fddaaf3bcde467a835a7749"
     },
     {
       "path": "generated/catalog-impact.snapshot.json",
-      "contentSha256": "0xb466ebc413268156dc4b87042b20c3aef423c42d72e15edd1ce09fc2b77130b6",
+      "contentSha256": "0x7d9bb2498cbde75c01a087b11c6b4867329d593a5b7ed424b5745fffde882a1e",
       "byteLength": 9781,
-      "catalogRoot": "0x9a12dd6e74d05a235610040d4bd3cfbcb1df4fa0888eabe916a48f04d2fde16e"
+      "catalogRoot": "0x95eb08e3e45a4f076a3fdff4064920b3a61aa093b6a7f91baa24901109927e84"
     },
     {
       "path": "generated/family-catalog/index.ts",
-      "contentSha256": "0x0a5ab15f85ef1e3c633205de453c607c0015b451ad510c68f1c0e508db1ee401",
+      "contentSha256": "0x446a922c5c154643a029c2efb00656b54f378bb5c55dbc82bb5ef48efe822be1",
       "byteLength": 29189,
-      "catalogRoot": "0x138e4d28b21b853d7a5dfb2a5c5ff55ee38924f0291ac9adccdc4123aab97bd6"
+      "catalogRoot": "0x38a71b346ae711080e061d3ec0205eb4a9ea2f574060070dad242f921c6ef697"
     },
     {
       "path": "generated/runtime-composition/index.ts",
-      "contentSha256": "0x2da61e3f677ed9727a0af7d5ead214f9baa7a47157211c4beda744e1c92a888b",
-      "byteLength": 114041,
-      "catalogRoot": "0x4901a5c57554f412605e140fd69b07c5c7ff89a2fa5af213f42cbceda58c692e"
+      "contentSha256": "0x9da2d7e861849e468e2682d1c6dfbf14c8dec791c4bd8c4179cd0ff347ddb51a",
+      "byteLength": 113917,
+      "catalogRoot": "0xf298e33809e1031e886270c449cf8c6df21303b303636ef4de9015be7844b8d1"
     },
     {
       "path": "generated/safety-profile/index.ts",
-      "contentSha256": "0x767c6e05c4d44dccb08763e46c75df6abb31f87559c6016d04924c269deccf81",
+      "contentSha256": "0xb3aded959768f2865e9f590ad49e8fa7c9548cdf73b3b77c7a2baa4b40a221b8",
       "byteLength": 3858,
-      "catalogRoot": "0x902471fb0f5a1033e5d42b5b92faea0fe5ec8efe15c8f4d0752dea515814d425"
+      "catalogRoot": "0x357c437428b610347aa44ac0ea080c9741105f541d67986d2d784f1923364468"
     },
     {
       "path": "generated/strategy-catalog/index.ts",
-      "contentSha256": "0x0dbd41f8892c0d65793a9afc88b8982dcf90f644ab62202eb9de9650d23ffa75",
+      "contentSha256": "0x426b44371e7ae994a10270d50e488fbf2dd467ebd2f31b18be790c9aa4cf22f1",
       "byteLength": 1993,
-      "catalogRoot": "0xff2d30eed8e3d73f7fe9f72a9ebc8551f5937fbef9ec94cd26a84aa7a81aefef"
+      "catalogRoot": "0xc6931d4be4816aec576dec52d239c82474ff33f73720226e609862f99e865564"
     },
     {
       "path": "generated/valuation-owner-registry/index.ts",
-      "contentSha256": "0xe2d77a2ebc4d9c3907a862cb8fcc59aee6488780253c306fc503368d732b2130",
+      "contentSha256": "0x6320549c37e9538afea2d4902dcc2c34e5837215cf043eeb7e6e74a143342043",
       "byteLength": 4472,
-      "catalogRoot": "0x794797839aef1a87077163fc92e61c81fee56f328254d89a56f305dcc8b8e01a"
+      "catalogRoot": "0x0b1cdc81a9cf4f7dfee77c1af009446193d1c6830402bf88e8e5021c8c629568"
     }
   ],
-  "inputRoot": "0x7a63ed843401f44745f0108d7b77a3508fcc8e526dcb9b294f77e17fb8e5fd00",
-  "compilerRoot": "0x82e632e204e4a77de704550dc0c264fb46b0c9efb8c3aa214d566b3ccf6b8f43",
-  "generatorRoot": "0x7a366ca1d669beafe2a12e456541a4a46670b4537f34e1066da5fb34d435fbcf",
-  "ledgerHash": "0xd30da0ae90c57eee812aaa5b42efd38d60ceddb38ca514cfcf6a633ceb762f25"
+  "inputRoot": "0x53c137afce409b18f445760532a46f20fc3576ef71d80ed223e70ba1b2348a42",
+  "compilerRoot": "0xce36d39eec5ce17ce338523e6e5eceaf7dbe05a4087b52c76681fb7a1fcc3d2d",
+  "generatorRoot": "0xb77720cedb0653f1d392bd4209826bf8b639f8013a93fc49753886e45f9bc4bf",
+  "ledgerHash": "0x601dc65819990647d167a06342f995c96b3322f1a5cf76a13e7010be67a3e42f"
 }

@@ -4,512 +4,512 @@
       "modulePath": "families/curve-underlying/src/action.ts",
       "exportName": "CURVE_UNDERLYING_SWAP_ACTION_PORT",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/action.ts#CURVE_UNDERLYING_SWAP_ACTION_PORT",
-      "closureDigest": "0x0e901d5f298e906dc81ae5af6585898e2bc62f50800d005b1a79e52c716e764e",
-      "programInputSetRoot": "0x3b355f00af2606546aeb56ce6f7898612bf6c913c8de1e489a638d51391747fd"
+      "closureDigest": "0x6adfabcabcd3b0782e193cec816eee4427dee02e1f5ac759be1efcf6da943c03",
+      "programInputSetRoot": "0xfe41664aa027c2d4e7c3d2964ed28fcd80dce200e89c484cef00c3f499c55a88"
     },
     {
       "modulePath": "families/curve-underlying/src/nomination-qualification.ts",
       "exportName": "CURVE_UNDERLYING_NOMINATION_INDEPENDENT_ORACLE",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/nomination-qualification.ts#CURVE_UNDERLYING_NOMINATION_INDEPENDENT_ORACLE",
-      "closureDigest": "0x1b1fc51449bad676fd0e1a03826d6d8a21e27ea30df01694b123327792788bc8",
-      "programInputSetRoot": "0x7fe1980533df9d0d61cf26800c17a34d3b4e0c7b1c5123912751f59fdc8d5636"
+      "closureDigest": "0x184e060bce7e6dfd6cd1306b894f1e907adecee594b4c0938bb61f4a58f6bfa6",
+      "programInputSetRoot": "0x124bc7ec606f1b2dde63c1ab1399f4030a0a3c5ed9bcb5325d7ae52ee8c81d66"
     },
     {
       "modulePath": "families/curve-underlying/src/nomination-qualification.ts",
       "exportName": "CURVE_UNDERLYING_NOMINATION_MUTATION_CORPUS",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/nomination-qualification.ts#CURVE_UNDERLYING_NOMINATION_MUTATION_CORPUS",
-      "closureDigest": "0x1b1fc51449bad676fd0e1a03826d6d8a21e27ea30df01694b123327792788bc8",
-      "programInputSetRoot": "0x7fe1980533df9d0d61cf26800c17a34d3b4e0c7b1c5123912751f59fdc8d5636"
+      "closureDigest": "0x184e060bce7e6dfd6cd1306b894f1e907adecee594b4c0938bb61f4a58f6bfa6",
+      "programInputSetRoot": "0x124bc7ec606f1b2dde63c1ab1399f4030a0a3c5ed9bcb5325d7ae52ee8c81d66"
     },
     {
       "modulePath": "families/curve-underlying/src/public.ts",
       "exportName": "CURVE_UNDERLYING_DEFINITION",
       "entrypointId": "package-entrypoint:families/curve-underlying/package.json:.:families/curve-underlying/src/public.ts:families/curve-underlying/tsconfig.json#CURVE_UNDERLYING_DEFINITION",
-      "closureDigest": "0x2a6b0e3e90462ca47d555672200b3a0320cd96796938a17b6e5bc5047d8bfde9",
-      "programInputSetRoot": "0xb9a129b6b90720cc3d042611db35f807d72cda2d26097ca87293937167b38bac"
+      "closureDigest": "0x8ce803ac99e96fd95d415e83e62efa19da6e1a89496299e7ef5afc5d3e7977e5",
+      "programInputSetRoot": "0xf4abd3f2bcc76792a84b8c8d39b149b74158b0d0177bd9cb98ab6006d328ab35"
     },
     {
       "modulePath": "families/curve-underlying/src/runtime.ts",
       "exportName": "CURVE_IDENTITY_RUNTIME",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/runtime.ts#CURVE_IDENTITY_RUNTIME",
-      "closureDigest": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
-      "programInputSetRoot": "0x70785e9bfd61a27c79a0fc68255270d7510b2763bc508a4310c5a8ec7bc818e6"
+      "closureDigest": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
+      "programInputSetRoot": "0x0cc3438c627c0bf094db987d6673f2779d7a86844dd1a62fd49fa5a02c63e023"
     },
     {
       "modulePath": "families/curve-underlying/src/runtime.ts",
       "exportName": "CURVE_MATERIALIZATION_RUNTIME",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/runtime.ts#CURVE_MATERIALIZATION_RUNTIME",
-      "closureDigest": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
-      "programInputSetRoot": "0x70785e9bfd61a27c79a0fc68255270d7510b2763bc508a4310c5a8ec7bc818e6"
+      "closureDigest": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
+      "programInputSetRoot": "0x0cc3438c627c0bf094db987d6673f2779d7a86844dd1a62fd49fa5a02c63e023"
     },
     {
       "modulePath": "families/curve-underlying/src/runtime.ts",
       "exportName": "CURVE_NOMINATION_RUNTIME",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/runtime.ts#CURVE_NOMINATION_RUNTIME",
-      "closureDigest": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
-      "programInputSetRoot": "0x70785e9bfd61a27c79a0fc68255270d7510b2763bc508a4310c5a8ec7bc818e6"
+      "closureDigest": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
+      "programInputSetRoot": "0x0cc3438c627c0bf094db987d6673f2779d7a86844dd1a62fd49fa5a02c63e023"
     },
     {
       "modulePath": "families/curve-underlying/src/runtime.ts",
       "exportName": "CURVE_PROJECTION_RUNTIME",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/runtime.ts#CURVE_PROJECTION_RUNTIME",
-      "closureDigest": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
-      "programInputSetRoot": "0x70785e9bfd61a27c79a0fc68255270d7510b2763bc508a4310c5a8ec7bc818e6"
+      "closureDigest": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
+      "programInputSetRoot": "0x0cc3438c627c0bf094db987d6673f2779d7a86844dd1a62fd49fa5a02c63e023"
     },
     {
       "modulePath": "families/curve-underlying/src/runtime.ts",
       "exportName": "CURVE_REHYDRATION_RUNTIME",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/runtime.ts#CURVE_REHYDRATION_RUNTIME",
-      "closureDigest": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
-      "programInputSetRoot": "0x70785e9bfd61a27c79a0fc68255270d7510b2763bc508a4310c5a8ec7bc818e6"
+      "closureDigest": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
+      "programInputSetRoot": "0x0cc3438c627c0bf094db987d6673f2779d7a86844dd1a62fd49fa5a02c63e023"
     },
     {
       "modulePath": "families/curve-underlying/src/runtime.ts",
       "exportName": "CURVE_UNDERLYING_RUNTIME",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/runtime.ts#CURVE_UNDERLYING_RUNTIME",
-      "closureDigest": "0xb0c126614e34b2c2f391ff22c85af418b287666f7a3572116b29128bf7aa0585",
-      "programInputSetRoot": "0x70785e9bfd61a27c79a0fc68255270d7510b2763bc508a4310c5a8ec7bc818e6"
+      "closureDigest": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
+      "programInputSetRoot": "0x0cc3438c627c0bf094db987d6673f2779d7a86844dd1a62fd49fa5a02c63e023"
     },
     {
       "modulePath": "families/curve-underlying/src/runtime/physical-adapter.ts",
       "exportName": "CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/runtime/physical-adapter.ts#CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
-      "closureDigest": "0x14eb9e7a350255916513cbe64ede6fb075c0c1c9610ccd63d6a17d9ce6117d71",
-      "programInputSetRoot": "0x0564afc0d4a84442f2a6f38e6d431a94bb77cf3869bb2c0b274bf1853de6c733"
+      "closureDigest": "0x61c5a636ba5be79be4a27fa546d4f232b2abc0deb37f431790bb4250b3437897",
+      "programInputSetRoot": "0x296ebd02e83219a691a3953540615638074421e2d471e4221b5f67cf07909868"
     },
     {
       "modulePath": "families/curve-underlying/src/search-adapter.ts",
       "exportName": "CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/search-adapter.ts#CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY",
-      "closureDigest": "0xa205e6109541f604ed6383f64dcb99b79c0fefb24e1de5634ab4d0fe2b2834af",
-      "programInputSetRoot": "0x2da979ae785bbc053978c623345fa8a858d89f938031c71eab080e327ff68a07"
+      "closureDigest": "0x8c9566a32d81ff46ea7cb4f7b2a522513be22eb926e03308d2c2dee827c62636",
+      "programInputSetRoot": "0xfa429c5d8b74bd1f0285732aa7e4914818896ce88143bacb1559a22957b72459"
     },
     {
       "modulePath": "families/curve-underlying/src/source-plan.ts",
       "exportName": "CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/source-plan.ts#CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM",
-      "closureDigest": "0x193d48d1d96e57674e425bd016d0c7dd2903381afee8860134d96d22a8c585e0",
-      "programInputSetRoot": "0x2952510ead3b68f7f5c5d65396b1cfa7fe5aef68e50717c455a8f9c1136cdb41"
+      "closureDigest": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
+      "programInputSetRoot": "0x82e70b49938b01b172ece3ec1cc5aade5d221c2fcbf5a8db4fd843defcf389d6"
     },
     {
       "modulePath": "families/curve-underlying/src/source-plan.ts",
       "exportName": "CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/source-plan.ts#CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME",
-      "closureDigest": "0x193d48d1d96e57674e425bd016d0c7dd2903381afee8860134d96d22a8c585e0",
-      "programInputSetRoot": "0x2952510ead3b68f7f5c5d65396b1cfa7fe5aef68e50717c455a8f9c1136cdb41"
+      "closureDigest": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
+      "programInputSetRoot": "0x82e70b49938b01b172ece3ec1cc5aade5d221c2fcbf5a8db4fd843defcf389d6"
     },
     {
       "modulePath": "families/curve-underlying/src/source-plan.ts",
       "exportName": "CURVE_UNDERLYING_SOURCE_NOMINATION_PROGRAM",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/source-plan.ts#CURVE_UNDERLYING_SOURCE_NOMINATION_PROGRAM",
-      "closureDigest": "0x193d48d1d96e57674e425bd016d0c7dd2903381afee8860134d96d22a8c585e0",
-      "programInputSetRoot": "0x2952510ead3b68f7f5c5d65396b1cfa7fe5aef68e50717c455a8f9c1136cdb41"
+      "closureDigest": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
+      "programInputSetRoot": "0x82e70b49938b01b172ece3ec1cc5aade5d221c2fcbf5a8db4fd843defcf389d6"
     },
     {
       "modulePath": "families/curve-underlying/src/source-plan.ts",
       "exportName": "CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME",
       "entrypointId": "compiler-root:families/curve-underlying/tsconfig.json:families/curve-underlying/src/source-plan.ts#CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME",
-      "closureDigest": "0x193d48d1d96e57674e425bd016d0c7dd2903381afee8860134d96d22a8c585e0",
-      "programInputSetRoot": "0x2952510ead3b68f7f5c5d65396b1cfa7fe5aef68e50717c455a8f9c1136cdb41"
+      "closureDigest": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
+      "programInputSetRoot": "0x82e70b49938b01b172ece3ec1cc5aade5d221c2fcbf5a8db4fd843defcf389d6"
     },
     {
       "modulePath": "families/dodo-v2/src/action.ts",
       "exportName": "DODO_V2_SWAP_ACTION_PORT",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/action.ts#DODO_V2_SWAP_ACTION_PORT",
-      "closureDigest": "0xa8744957c21d07ed554c334c1a9795dfac44b16c21a62f9482aab4d34aaa2518",
-      "programInputSetRoot": "0x3eeef92b2f899acd525fe4ffa1ca37cd3fc82ea8d65bda8b1869c64b0f84277f"
+      "closureDigest": "0x58b08dbf3f8d3769033dcdd96bf8ff8a66e1fb535a3a36b032f0faff34e3435d",
+      "programInputSetRoot": "0xfd57d37ed3756033e6142eb22a1bf997f7afa2b6c79f8135d8b82449b61b941c"
     },
     {
       "modulePath": "families/dodo-v2/src/history-source-plan.ts",
       "exportName": "DODO_V2_HISTORY_NOMINATION_PROGRAM",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/history-source-plan.ts#DODO_V2_HISTORY_NOMINATION_PROGRAM",
-      "closureDigest": "0x3daa5ab27a8c349da72a035d7c15d47be5c3179a7531c275d215d0e7325e0fbd",
-      "programInputSetRoot": "0x8d429ddda8efdfae8c1dcfc195664d60e823a2a9e882b98bd864ec184e87a763"
+      "closureDigest": "0x20dcf54e7d1d80222e309dc216c30f95411a1561d68cc184c64118b0949c373f",
+      "programInputSetRoot": "0x2f262f0510f0b72eecf5fc6cf6a560e9c92b046242ee6d85575c2a71f8d5209d"
     },
     {
       "modulePath": "families/dodo-v2/src/history-source-plan.ts",
       "exportName": "DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/history-source-plan.ts#DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME",
-      "closureDigest": "0x3daa5ab27a8c349da72a035d7c15d47be5c3179a7531c275d215d0e7325e0fbd",
-      "programInputSetRoot": "0x8d429ddda8efdfae8c1dcfc195664d60e823a2a9e882b98bd864ec184e87a763"
+      "closureDigest": "0x20dcf54e7d1d80222e309dc216c30f95411a1561d68cc184c64118b0949c373f",
+      "programInputSetRoot": "0x2f262f0510f0b72eecf5fc6cf6a560e9c92b046242ee6d85575c2a71f8d5209d"
     },
     {
       "modulePath": "families/dodo-v2/src/nomination-qualification.ts",
       "exportName": "DODO_V2_NOMINATION_INDEPENDENT_ORACLE",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/nomination-qualification.ts#DODO_V2_NOMINATION_INDEPENDENT_ORACLE",
-      "closureDigest": "0xd0753b3c27a263f3c027b6951e5517e3eabaa331083249369f9d755f40f2fb6b",
-      "programInputSetRoot": "0xbb2132ba640aeeb0b23fd980a33dc1932304df5c024d6a16ff679564b5de4c77"
+      "closureDigest": "0xb401d9f7f3475709f3065e0f759910df3bfb036e173fc3b96331247e6a346d03",
+      "programInputSetRoot": "0xa961eab5ac76994e3a5d1e528698b6ab901fe04a9932c7329fe474124b5f4d47"
     },
     {
       "modulePath": "families/dodo-v2/src/nomination-qualification.ts",
       "exportName": "DODO_V2_NOMINATION_MUTATION_CORPUS",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/nomination-qualification.ts#DODO_V2_NOMINATION_MUTATION_CORPUS",
-      "closureDigest": "0xd0753b3c27a263f3c027b6951e5517e3eabaa331083249369f9d755f40f2fb6b",
-      "programInputSetRoot": "0xbb2132ba640aeeb0b23fd980a33dc1932304df5c024d6a16ff679564b5de4c77"
+      "closureDigest": "0xb401d9f7f3475709f3065e0f759910df3bfb036e173fc3b96331247e6a346d03",
+      "programInputSetRoot": "0xa961eab5ac76994e3a5d1e528698b6ab901fe04a9932c7329fe474124b5f4d47"
     },
     {
       "modulePath": "families/dodo-v2/src/public.ts",
       "exportName": "DODO_V2_DEFINITION",
       "entrypointId": "package-entrypoint:families/dodo-v2/package.json:.:families/dodo-v2/src/public.ts:families/dodo-v2/tsconfig.json#DODO_V2_DEFINITION",
-      "closureDigest": "0x9398db7caa996ff059c4a8e43ba89ecb87aefb0f603c6b8daad0552f2d7aae92",
-      "programInputSetRoot": "0xf3849b0d36d7cb0960397f72a8b511cee4f9c3567d551ba6d566eb08090a8324"
+      "closureDigest": "0x883d7e1135451d85e975826c922745a35cc0a14c76ad4e1e3b21c8a6cdcf63a4",
+      "programInputSetRoot": "0x8e984f933e34b02146cf507122c9ecda9c5d4243b8015f01687fac7366b234f4"
     },
     {
       "modulePath": "families/dodo-v2/src/runtime.ts",
       "exportName": "DODO_IDENTITY_RUNTIME",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/runtime.ts#DODO_IDENTITY_RUNTIME",
-      "closureDigest": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
-      "programInputSetRoot": "0x081ed2c4a1aacd806ece099f701ee47813d10fe339105deb72abe264b040c43f"
+      "closureDigest": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
+      "programInputSetRoot": "0xb6dfb13956f3fa3d7a45195a9a42236a17937987a90a3d3b9644c17b10a8c061"
     },
     {
       "modulePath": "families/dodo-v2/src/runtime.ts",
       "exportName": "DODO_MATERIALIZATION_RUNTIME",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/runtime.ts#DODO_MATERIALIZATION_RUNTIME",
-      "closureDigest": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
-      "programInputSetRoot": "0x081ed2c4a1aacd806ece099f701ee47813d10fe339105deb72abe264b040c43f"
+      "closureDigest": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
+      "programInputSetRoot": "0xb6dfb13956f3fa3d7a45195a9a42236a17937987a90a3d3b9644c17b10a8c061"
     },
     {
       "modulePath": "families/dodo-v2/src/runtime.ts",
       "exportName": "DODO_NOMINATION_RUNTIME",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/runtime.ts#DODO_NOMINATION_RUNTIME",
-      "closureDigest": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
-      "programInputSetRoot": "0x081ed2c4a1aacd806ece099f701ee47813d10fe339105deb72abe264b040c43f"
+      "closureDigest": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
+      "programInputSetRoot": "0xb6dfb13956f3fa3d7a45195a9a42236a17937987a90a3d3b9644c17b10a8c061"
     },
     {
       "modulePath": "families/dodo-v2/src/runtime.ts",
       "exportName": "DODO_PROJECTION_RUNTIME",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/runtime.ts#DODO_PROJECTION_RUNTIME",
-      "closureDigest": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
-      "programInputSetRoot": "0x081ed2c4a1aacd806ece099f701ee47813d10fe339105deb72abe264b040c43f"
+      "closureDigest": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
+      "programInputSetRoot": "0xb6dfb13956f3fa3d7a45195a9a42236a17937987a90a3d3b9644c17b10a8c061"
     },
     {
       "modulePath": "families/dodo-v2/src/runtime.ts",
       "exportName": "DODO_REHYDRATION_RUNTIME",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/runtime.ts#DODO_REHYDRATION_RUNTIME",
-      "closureDigest": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
-      "programInputSetRoot": "0x081ed2c4a1aacd806ece099f701ee47813d10fe339105deb72abe264b040c43f"
+      "closureDigest": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
+      "programInputSetRoot": "0xb6dfb13956f3fa3d7a45195a9a42236a17937987a90a3d3b9644c17b10a8c061"
     },
     {
       "modulePath": "families/dodo-v2/src/runtime.ts",
       "exportName": "DODO_V2_RUNTIME",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/runtime.ts#DODO_V2_RUNTIME",
-      "closureDigest": "0x3fc2182da619beaae1bf1493386598fd62acb102204f2ef5ebee8809bbb72c29",
-      "programInputSetRoot": "0x081ed2c4a1aacd806ece099f701ee47813d10fe339105deb72abe264b040c43f"
+      "closureDigest": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0",
+      "programInputSetRoot": "0xb6dfb13956f3fa3d7a45195a9a42236a17937987a90a3d3b9644c17b10a8c061"
     },
     {
       "modulePath": "families/dodo-v2/src/runtime/physical-adapter.ts",
       "exportName": "DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/runtime/physical-adapter.ts#DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
-      "closureDigest": "0x84684f1d7adb38dade64704e18e771eeec09446037d8aa7b47fd0d906573cc59",
-      "programInputSetRoot": "0xb5ab1419220dafb99b8bd6f9d17ec3d8ef4b6e8245c12a9e319d760563b3383c"
+      "closureDigest": "0xa0817aa9c2f27e716d49ced1f08aa7f40913e2c002fc62e4a1d59b3aa469e472",
+      "programInputSetRoot": "0x5b2f280df365d65be4bdce5c8735f020329e54beed02295d7cb6a142ea33dfc5"
     },
     {
       "modulePath": "families/dodo-v2/src/search-adapter.ts",
       "exportName": "DODO_SEARCH_RUNTIME_ADAPTER_FACTORY",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/search-adapter.ts#DODO_SEARCH_RUNTIME_ADAPTER_FACTORY",
-      "closureDigest": "0x4d53aa4c74c987f5ee685fae7e5d4419a5f5c8c45ee000cd170e58a42ced9900",
-      "programInputSetRoot": "0x533838eb04a070e41a6e89755ae6f36f4e3916e028dbaa8f517ca21ad1b059ff"
+      "closureDigest": "0xb525998cd727ad202840f4a9dd0bcd1a3460f0f8d29a9b8e5473a0a89d4af443",
+      "programInputSetRoot": "0xd9640d7aa9a0c4f6f696b09d49cbc26e27fcc8487d968ab348d4aa10727b113a"
     },
     {
       "modulePath": "families/dodo-v2/src/source-plan.ts",
       "exportName": "DODO_V2_SOURCE_NOMINATION_PROGRAM",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/source-plan.ts#DODO_V2_SOURCE_NOMINATION_PROGRAM",
-      "closureDigest": "0x871f18bbd9d2f19b5af9017b45c162cfe611220e647a6345924bc91120acd41d",
-      "programInputSetRoot": "0x4367e66e268fe501fff5f10b6d67b4cb84eebe14818fec1173ae3886169dcee7"
+      "closureDigest": "0xad691fcd5039440d9db66d8a178a86b79c74825e0dbf7773cd4003ca2970585d",
+      "programInputSetRoot": "0xd1ec4bb584c01ca30d91f1f4c1658497a6a553eae2742c012fb50a47e4538eeb"
     },
     {
       "modulePath": "families/dodo-v2/src/source-plan.ts",
       "exportName": "DODO_V2_SOURCE_PLAN_RUNTIME",
       "entrypointId": "compiler-root:families/dodo-v2/tsconfig.json:families/dodo-v2/src/source-plan.ts#DODO_V2_SOURCE_PLAN_RUNTIME",
-      "closureDigest": "0x871f18bbd9d2f19b5af9017b45c162cfe611220e647a6345924bc91120acd41d",
-      "programInputSetRoot": "0x4367e66e268fe501fff5f10b6d67b4cb84eebe14818fec1173ae3886169dcee7"
+      "closureDigest": "0xad691fcd5039440d9db66d8a178a86b79c74825e0dbf7773cd4003ca2970585d",
+      "programInputSetRoot": "0xd1ec4bb584c01ca30d91f1f4c1658497a6a553eae2742c012fb50a47e4538eeb"
     },
     {
       "modulePath": "families/fluid-dex/src/action.ts",
       "exportName": "FLUID_DEX_ACTION_PORT",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/action.ts#FLUID_DEX_ACTION_PORT",
-      "closureDigest": "0x985cc7771790595404b1f5312d6ad1848ab9f9a200892abe49acae3735c66f94",
-      "programInputSetRoot": "0x04270af1538e553b6e5c48e2ed4fe8c6fa2f0263e040a20ab41896f8b519be2e"
+      "closureDigest": "0x472bcecefb700a52d36985832845e11fc2e69d93e2116ab66bafd2405d5dfbd7",
+      "programInputSetRoot": "0x9d00438d1f89a8f73037437b0a7c1698257b8909768708079106791e69364d70"
     },
     {
       "modulePath": "families/fluid-dex/src/nomination-qualification.ts",
       "exportName": "FLUID_DEX_NOMINATION_INDEPENDENT_ORACLE",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/nomination-qualification.ts#FLUID_DEX_NOMINATION_INDEPENDENT_ORACLE",
-      "closureDigest": "0xc1428515a4879976d17431c5a86fa6b071bf2ca63d4dcd719945d9c7b7055f59",
-      "programInputSetRoot": "0x4fe99ef84de7b0fa1a288fa10c2e77d7ed9b50c2fe9bf1b21c6c247aaac24005"
+      "closureDigest": "0x9f315f8f974b145cbe29b644f931573c03da7fed91567c54a6ec1a4d0c5a4a4c",
+      "programInputSetRoot": "0x73302f4d9f42af689ec63c3b6233d2bdbc195936b50c573c07a5ba2f8b11a28b"
     },
     {
       "modulePath": "families/fluid-dex/src/nomination-qualification.ts",
       "exportName": "FLUID_DEX_NOMINATION_MUTATION_CORPUS",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/nomination-qualification.ts#FLUID_DEX_NOMINATION_MUTATION_CORPUS",
-      "closureDigest": "0xc1428515a4879976d17431c5a86fa6b071bf2ca63d4dcd719945d9c7b7055f59",
-      "programInputSetRoot": "0x4fe99ef84de7b0fa1a288fa10c2e77d7ed9b50c2fe9bf1b21c6c247aaac24005"
+      "closureDigest": "0x9f315f8f974b145cbe29b644f931573c03da7fed91567c54a6ec1a4d0c5a4a4c",
+      "programInputSetRoot": "0x73302f4d9f42af689ec63c3b6233d2bdbc195936b50c573c07a5ba2f8b11a28b"
     },
     {
       "modulePath": "families/fluid-dex/src/public.ts",
       "exportName": "FLUID_DEX_DEFINITION",
       "entrypointId": "package-entrypoint:families/fluid-dex/package.json:.:families/fluid-dex/src/public.ts:families/fluid-dex/tsconfig.json#FLUID_DEX_DEFINITION",
-      "closureDigest": "0x4e9f44d8fafa4c126660c47a09eafcf0a1249007bcd48239ceb987aca3ac2b3d",
-      "programInputSetRoot": "0x906d11f1864285f4a1ccfc62849423be357269ea39cb096c679558968d4f288c"
+      "closureDigest": "0xcacd566d30919f04de3511e4dd1836caa3b47853c23a4af3b4546e57985262a8",
+      "programInputSetRoot": "0xc6f9f1c4b0a4d8442fa664ba02f1b0e3858d01f8558ace1abd9a9d94ba2a8d0a"
     },
     {
       "modulePath": "families/fluid-dex/src/runtime.ts",
       "exportName": "FLUID_DEX_RUNTIME",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/runtime.ts#FLUID_DEX_RUNTIME",
-      "closureDigest": "0xadc77a859da56aba2f21e587bc1a8ae8bb1d4d498ea19a28130b5307e4234de2",
-      "programInputSetRoot": "0x061cd60ba9c447d34c4d5a938e33813d094410773dda0f49016bc9accb43eeff"
+      "closureDigest": "0x94778685b6423f72460f2b73bfc4ad513a665d8fa3a0568fe0a790b95ccd8088",
+      "programInputSetRoot": "0x18411f06d5fa31377452bd57d7d8cd976758c8182c96774b882b097483e3b5df"
     },
     {
       "modulePath": "families/fluid-dex/src/runtime/definitions.ts",
       "exportName": "FLUID_DEX_IDENTITY_DEFINITION",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/runtime/definitions.ts#FLUID_DEX_IDENTITY_DEFINITION",
-      "closureDigest": "0xc3e5d211e5c4e6e77009a0ed393486ca2e0b296439f49a601be8fc9f24886c48",
-      "programInputSetRoot": "0x9c2515d106812573c8856abf1872489690e154c63010ad85eda471c04807e02f"
+      "closureDigest": "0xdd85fb69cc7970af34c4262074f11da6e392ffdf7f193857fd83c3a4e7d799c8",
+      "programInputSetRoot": "0x9e352bd915887774da5832359ad33d601cacb39b2fbefba00c086a8d42d48187"
     },
     {
       "modulePath": "families/fluid-dex/src/runtime/definitions.ts",
       "exportName": "FLUID_DEX_MATERIALIZATION_DEFINITION",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/runtime/definitions.ts#FLUID_DEX_MATERIALIZATION_DEFINITION",
-      "closureDigest": "0xc3e5d211e5c4e6e77009a0ed393486ca2e0b296439f49a601be8fc9f24886c48",
-      "programInputSetRoot": "0x9c2515d106812573c8856abf1872489690e154c63010ad85eda471c04807e02f"
+      "closureDigest": "0xdd85fb69cc7970af34c4262074f11da6e392ffdf7f193857fd83c3a4e7d799c8",
+      "programInputSetRoot": "0x9e352bd915887774da5832359ad33d601cacb39b2fbefba00c086a8d42d48187"
     },
     {
       "modulePath": "families/fluid-dex/src/runtime/definitions.ts",
       "exportName": "FLUID_DEX_NOMINATION_DEFINITION",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/runtime/definitions.ts#FLUID_DEX_NOMINATION_DEFINITION",
-      "closureDigest": "0xc3e5d211e5c4e6e77009a0ed393486ca2e0b296439f49a601be8fc9f24886c48",
-      "programInputSetRoot": "0x9c2515d106812573c8856abf1872489690e154c63010ad85eda471c04807e02f"
+      "closureDigest": "0xdd85fb69cc7970af34c4262074f11da6e392ffdf7f193857fd83c3a4e7d799c8",
+      "programInputSetRoot": "0x9e352bd915887774da5832359ad33d601cacb39b2fbefba00c086a8d42d48187"
     },
     {
       "modulePath": "families/fluid-dex/src/runtime/definitions.ts",
       "exportName": "FLUID_DEX_PROJECTION_DEFINITION",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/runtime/definitions.ts#FLUID_DEX_PROJECTION_DEFINITION",
-      "closureDigest": "0xc3e5d211e5c4e6e77009a0ed393486ca2e0b296439f49a601be8fc9f24886c48",
-      "programInputSetRoot": "0x9c2515d106812573c8856abf1872489690e154c63010ad85eda471c04807e02f"
+      "closureDigest": "0xdd85fb69cc7970af34c4262074f11da6e392ffdf7f193857fd83c3a4e7d799c8",
+      "programInputSetRoot": "0x9e352bd915887774da5832359ad33d601cacb39b2fbefba00c086a8d42d48187"
     },
     {
       "modulePath": "families/fluid-dex/src/runtime/definitions.ts",
       "exportName": "FLUID_DEX_REHYDRATION_DEFINITION",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/runtime/definitions.ts#FLUID_DEX_REHYDRATION_DEFINITION",
-      "closureDigest": "0xc3e5d211e5c4e6e77009a0ed393486ca2e0b296439f49a601be8fc9f24886c48",
-      "programInputSetRoot": "0x9c2515d106812573c8856abf1872489690e154c63010ad85eda471c04807e02f"
+      "closureDigest": "0xdd85fb69cc7970af34c4262074f11da6e392ffdf7f193857fd83c3a4e7d799c8",
+      "programInputSetRoot": "0x9e352bd915887774da5832359ad33d601cacb39b2fbefba00c086a8d42d48187"
     },
     {
       "modulePath": "families/fluid-dex/src/runtime/physical-adapter.ts",
       "exportName": "FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/runtime/physical-adapter.ts#FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
-      "closureDigest": "0xc0521108c8945774e171bcf6ab8e5aca48a28fbe614ea598cf934271a38be2c7",
-      "programInputSetRoot": "0xad016fedb1eb59cd1d5207d4b34263c501a3afd3c344919ff12f674f298f02be"
+      "closureDigest": "0x85282a06671047d57318830cc46a953b64bd9921118942e8244dcdc0235acab5",
+      "programInputSetRoot": "0x677e22ebfb30c6853507f9f1e53d80c473b40e48c64ffc3d2da281690d8321a8"
     },
     {
       "modulePath": "families/fluid-dex/src/search-adapter.ts",
       "exportName": "FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/search-adapter.ts#FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY",
-      "closureDigest": "0xf548618cbf76b10923cff767d4e397d990a039056aeb85f4941ae6d3be20466e",
-      "programInputSetRoot": "0x6591d5a1992600daa607caffc2786efc0b18e9e167343f0facf8f62b04f9ec40"
+      "closureDigest": "0x4564198d855322fe91a7610c28483ae8de87ca512a26230ca47ddfc33bd283a8",
+      "programInputSetRoot": "0x7f047d74790e4ec8db45339c096782884ec75dc7aa665eb9b3c6cffbe3569b89"
     },
     {
       "modulePath": "families/fluid-dex/src/source-plan.ts",
       "exportName": "FLUID_DEX_FACTORY_NOMINATION_PROGRAM",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/source-plan.ts#FLUID_DEX_FACTORY_NOMINATION_PROGRAM",
-      "closureDigest": "0x83b88f49a5e5b818d045095d187fed0463efa181c8d352786385c0f516a31f35",
-      "programInputSetRoot": "0xa4a8b200fdca61f1f661af886a89d625d524699279244bb5caf047381c0bc9ec"
+      "closureDigest": "0x2714b82fc0d48b6fe4854abdce5e13a2e8f5a8781df22e5a84fdd58646243f5e",
+      "programInputSetRoot": "0x936a84de5b1fdb4c533d5cfa2832d7d91a68d71331bb4b616318c8153e68caff"
     },
     {
       "modulePath": "families/fluid-dex/src/source-plan.ts",
       "exportName": "FLUID_DEX_FACTORY_SOURCE_PLAN_RUNTIME",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/source-plan.ts#FLUID_DEX_FACTORY_SOURCE_PLAN_RUNTIME",
-      "closureDigest": "0x83b88f49a5e5b818d045095d187fed0463efa181c8d352786385c0f516a31f35",
-      "programInputSetRoot": "0xa4a8b200fdca61f1f661af886a89d625d524699279244bb5caf047381c0bc9ec"
+      "closureDigest": "0x2714b82fc0d48b6fe4854abdce5e13a2e8f5a8781df22e5a84fdd58646243f5e",
+      "programInputSetRoot": "0x936a84de5b1fdb4c533d5cfa2832d7d91a68d71331bb4b616318c8153e68caff"
     },
     {
       "modulePath": "families/fluid-dex/src/source-plan.ts",
       "exportName": "FLUID_DEX_SOURCE_NOMINATION_PROGRAM",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/source-plan.ts#FLUID_DEX_SOURCE_NOMINATION_PROGRAM",
-      "closureDigest": "0x83b88f49a5e5b818d045095d187fed0463efa181c8d352786385c0f516a31f35",
-      "programInputSetRoot": "0xa4a8b200fdca61f1f661af886a89d625d524699279244bb5caf047381c0bc9ec"
+      "closureDigest": "0x2714b82fc0d48b6fe4854abdce5e13a2e8f5a8781df22e5a84fdd58646243f5e",
+      "programInputSetRoot": "0x936a84de5b1fdb4c533d5cfa2832d7d91a68d71331bb4b616318c8153e68caff"
     },
     {
       "modulePath": "families/fluid-dex/src/source-plan.ts",
       "exportName": "FLUID_DEX_SOURCE_PLAN_RUNTIME",
       "entrypointId": "compiler-root:families/fluid-dex/tsconfig.json:families/fluid-dex/src/source-plan.ts#FLUID_DEX_SOURCE_PLAN_RUNTIME",
-      "closureDigest": "0x83b88f49a5e5b818d045095d187fed0463efa181c8d352786385c0f516a31f35",
-      "programInputSetRoot": "0xa4a8b200fdca61f1f661af886a89d625d524699279244bb5caf047381c0bc9ec"
+      "closureDigest": "0x2714b82fc0d48b6fe4854abdce5e13a2e8f5a8781df22e5a84fdd58646243f5e",
+      "programInputSetRoot": "0x936a84de5b1fdb4c533d5cfa2832d7d91a68d71331bb4b616318c8153e68caff"
     },
     {
       "modulePath": "families/univ2-standard/src/capabilities/action.ts",
       "exportName": "UNIV2_STANDARD_SWAP_ACTION_PORT",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/capabilities/action.ts#UNIV2_STANDARD_SWAP_ACTION_PORT",
-      "closureDigest": "0x6722825e1565e751e4ea84116881843e42f23c1016dd7f2068911e8edb579948",
-      "programInputSetRoot": "0x7f7866eac8f76ac9469e17cc1abf5cb9ea8d0c463b3040426d65201318234f7f"
+      "closureDigest": "0x3893a21ba38f506b875d3760fe69595f1210cbe95bba2e98cb39490717abda4d",
+      "programInputSetRoot": "0xc65b9d5aee3152e7c6749c327314edbb06475239b3bd76efd0eb07cd9068da69"
     },
     {
       "modulePath": "families/univ2-standard/src/capabilities/coarse.ts",
       "exportName": "UNIV2_STANDARD_COARSE_PORT",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/capabilities/coarse.ts#UNIV2_STANDARD_COARSE_PORT",
-      "closureDigest": "0x29bc24a7b8bbee0da23bc8ce6cd34e3a6ef857c5de7818e6260713e556669908",
-      "programInputSetRoot": "0x250a688d47ba702e8c11bbb3994700a2754c3d0d5958bc95c0401cc8f479885b"
+      "closureDigest": "0xce99482bbec7ae5e6584ec87b2aa409a48fa06711a29711f655059df69b1e9e2",
+      "programInputSetRoot": "0xd4cddcede4242df87e47df76f6300d59acfec11b492e24360d1b6e907dfd8078"
     },
     {
       "modulePath": "families/univ2-standard/src/capabilities/exact.ts",
       "exportName": "UNIV2_STANDARD_EXACT_PORT",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/capabilities/exact.ts#UNIV2_STANDARD_EXACT_PORT",
-      "closureDigest": "0x7d7b2fb6ea9dd262ea173eb8214797233c95e8d41c62ee06aa3fabd6f68ef7f0",
-      "programInputSetRoot": "0x52048edd914f99612f11b0814d17e278bd880209723be8b1cd3c21b1087ad964"
+      "closureDigest": "0xe375614930362a786f4f77682b57051659374b7a1e5ee854b7205a28511a5da2",
+      "programInputSetRoot": "0xb4e79258b88f8e31b82de8c1d06898d1eea0a54c629dbc46b7abe88b34dd8fa2"
     },
     {
       "modulePath": "families/univ2-standard/src/capabilities/state.ts",
       "exportName": "UNIV2_STANDARD_STATE_PORT",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/capabilities/state.ts#UNIV2_STANDARD_STATE_PORT",
-      "closureDigest": "0x4fe4d6a332262edb5e2e230f74f48a52d64fe5061acdb2a82d4f56d8da0da457",
-      "programInputSetRoot": "0x55066ba442641cae67269ef09dbb1ebc41ba3680fb3cc11e99090b8450e9bc89"
+      "closureDigest": "0x8de13f6114c66ae41a7024e5c9c8cead6c58f620b99f950689539661a5569cb5",
+      "programInputSetRoot": "0xe5244520c77b27a66bb8114af1f20e95d59993bda3f27f6e7d102558ee36d3c0"
     },
     {
       "modulePath": "families/univ2-standard/src/history-source-plan.ts",
       "exportName": "UNIV2_STANDARD_HISTORY_NOMINATION_PROGRAM",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/history-source-plan.ts#UNIV2_STANDARD_HISTORY_NOMINATION_PROGRAM",
-      "closureDigest": "0x7e557c3c24d72fbe7fc4920ae93b1404658e70593588112abba4d67b0f40728e",
-      "programInputSetRoot": "0xc20c4cb55b91def51aa2dfabc4179e67fabf91c5dd9d59132c0e7d6adabe2ca3"
+      "closureDigest": "0x14d6cfc49df66b7f93ea300bce443eef410e2e0e606c0c17997d5a0e3d347afc",
+      "programInputSetRoot": "0x98d61c2417a6d035ef2a6f397934aa688e2dcb7a6efd98c1d7781f8935e5b1d9"
     },
     {
       "modulePath": "families/univ2-standard/src/history-source-plan.ts",
       "exportName": "UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/history-source-plan.ts#UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME",
-      "closureDigest": "0x7e557c3c24d72fbe7fc4920ae93b1404658e70593588112abba4d67b0f40728e",
-      "programInputSetRoot": "0xc20c4cb55b91def51aa2dfabc4179e67fabf91c5dd9d59132c0e7d6adabe2ca3"
+      "closureDigest": "0x14d6cfc49df66b7f93ea300bce443eef410e2e0e606c0c17997d5a0e3d347afc",
+      "programInputSetRoot": "0x98d61c2417a6d035ef2a6f397934aa688e2dcb7a6efd98c1d7781f8935e5b1d9"
     },
     {
       "modulePath": "families/univ2-standard/src/nomination-qualification.ts",
       "exportName": "UNIV2_STANDARD_NOMINATION_INDEPENDENT_ORACLE",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/nomination-qualification.ts#UNIV2_STANDARD_NOMINATION_INDEPENDENT_ORACLE",
-      "closureDigest": "0x268573dc87663234f240b5bb43a1b9dc483ae83d8e4a00c336a15c216014a1c5",
-      "programInputSetRoot": "0x6af8d311f5ab3570ddd4e65571d430309aa9162201dffe77b9147b7f28f17dbf"
+      "closureDigest": "0xd452574d940eeb5ba13ae6683f27108ed70ad64ddf50beee2617da03836033f6",
+      "programInputSetRoot": "0xef2d3cfa2e34db958905883ad5809dd6ff6199cbfc1a22f5aada6cbb94686659"
     },
     {
       "modulePath": "families/univ2-standard/src/nomination-qualification.ts",
       "exportName": "UNIV2_STANDARD_NOMINATION_MUTATION_CORPUS",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/nomination-qualification.ts#UNIV2_STANDARD_NOMINATION_MUTATION_CORPUS",
-      "closureDigest": "0x268573dc87663234f240b5bb43a1b9dc483ae83d8e4a00c336a15c216014a1c5",
-      "programInputSetRoot": "0x6af8d311f5ab3570ddd4e65571d430309aa9162201dffe77b9147b7f28f17dbf"
+      "closureDigest": "0xd452574d940eeb5ba13ae6683f27108ed70ad64ddf50beee2617da03836033f6",
+      "programInputSetRoot": "0xef2d3cfa2e34db958905883ad5809dd6ff6199cbfc1a22f5aada6cbb94686659"
     },
     {
       "modulePath": "families/univ2-standard/src/public.ts",
       "exportName": "UNIV2_STANDARD_DEFINITION",
       "entrypointId": "package-entrypoint:families/univ2-standard/package.json:.:families/univ2-standard/src/public.ts:families/univ2-standard/tsconfig.json#UNIV2_STANDARD_DEFINITION",
-      "closureDigest": "0x9622875cb677d2ec21a4f179942178ec8bf19653b39d89500d35a5ecbc8aeb16",
-      "programInputSetRoot": "0x192619247a873a06ca2d3fd883e00b5fc46b542ad01f653200ad56f5866aca60"
+      "closureDigest": "0xb12a783cbf33c4cee6bf77f8ea62944e6512b478fd75cbc7032281e9535129ae",
+      "programInputSetRoot": "0x5b54e75a0ad478ca55dbc171cac15cbad74f59392388fe2ea4c954c16d3bb573"
     },
     {
       "modulePath": "families/univ2-standard/src/runtime/definitions.ts",
       "exportName": "UNIV2_STANDARD_IDENTITY_DEFINITION",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/runtime/definitions.ts#UNIV2_STANDARD_IDENTITY_DEFINITION",
-      "closureDigest": "0x6d6d0140bda8de6e4f3dbad1a11748ebf8a9faed75969228e2994053c1de5172",
-      "programInputSetRoot": "0x55840b9781b104404e8aaa5661362de1d6f5e01282d080b6c576adada8e59b6b"
+      "closureDigest": "0xd64cf6537d5eef4f69877f418dc279b61f814b0551465319c621987790d569aa",
+      "programInputSetRoot": "0xf14a20b29da8459d5566f41da76814cd64640a8a9534c8408e9a948a25f65be5"
     },
     {
       "modulePath": "families/univ2-standard/src/runtime/definitions.ts",
       "exportName": "UNIV2_STANDARD_MATERIALIZATION_DEFINITION",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/runtime/definitions.ts#UNIV2_STANDARD_MATERIALIZATION_DEFINITION",
-      "closureDigest": "0x6d6d0140bda8de6e4f3dbad1a11748ebf8a9faed75969228e2994053c1de5172",
-      "programInputSetRoot": "0x55840b9781b104404e8aaa5661362de1d6f5e01282d080b6c576adada8e59b6b"
+      "closureDigest": "0xd64cf6537d5eef4f69877f418dc279b61f814b0551465319c621987790d569aa",
+      "programInputSetRoot": "0xf14a20b29da8459d5566f41da76814cd64640a8a9534c8408e9a948a25f65be5"
     },
     {
       "modulePath": "families/univ2-standard/src/runtime/definitions.ts",
       "exportName": "UNIV2_STANDARD_NOMINATION_DEFINITION",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/runtime/definitions.ts#UNIV2_STANDARD_NOMINATION_DEFINITION",
-      "closureDigest": "0x6d6d0140bda8de6e4f3dbad1a11748ebf8a9faed75969228e2994053c1de5172",
-      "programInputSetRoot": "0x55840b9781b104404e8aaa5661362de1d6f5e01282d080b6c576adada8e59b6b"
+      "closureDigest": "0xd64cf6537d5eef4f69877f418dc279b61f814b0551465319c621987790d569aa",
+      "programInputSetRoot": "0xf14a20b29da8459d5566f41da76814cd64640a8a9534c8408e9a948a25f65be5"
     },
     {
       "modulePath": "families/univ2-standard/src/runtime/definitions.ts",
       "exportName": "UNIV2_STANDARD_PROJECTION_DEFINITION",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/runtime/definitions.ts#UNIV2_STANDARD_PROJECTION_DEFINITION",
-      "closureDigest": "0x6d6d0140bda8de6e4f3dbad1a11748ebf8a9faed75969228e2994053c1de5172",
-      "programInputSetRoot": "0x55840b9781b104404e8aaa5661362de1d6f5e01282d080b6c576adada8e59b6b"
+      "closureDigest": "0xd64cf6537d5eef4f69877f418dc279b61f814b0551465319c621987790d569aa",
+      "programInputSetRoot": "0xf14a20b29da8459d5566f41da76814cd64640a8a9534c8408e9a948a25f65be5"
     },
     {
       "modulePath": "families/univ2-standard/src/runtime/definitions.ts",
       "exportName": "UNIV2_STANDARD_REHYDRATION_DEFINITION",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/runtime/definitions.ts#UNIV2_STANDARD_REHYDRATION_DEFINITION",
-      "closureDigest": "0x6d6d0140bda8de6e4f3dbad1a11748ebf8a9faed75969228e2994053c1de5172",
-      "programInputSetRoot": "0x55840b9781b104404e8aaa5661362de1d6f5e01282d080b6c576adada8e59b6b"
+      "closureDigest": "0xd64cf6537d5eef4f69877f418dc279b61f814b0551465319c621987790d569aa",
+      "programInputSetRoot": "0xf14a20b29da8459d5566f41da76814cd64640a8a9534c8408e9a948a25f65be5"
     },
     {
       "modulePath": "families/univ2-standard/src/runtime/physical-adapter.ts",
       "exportName": "UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/runtime/physical-adapter.ts#UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
-      "closureDigest": "0xd17564174b8b7329d5f3e9e1fae36235b8f407fc95373a1b4b6a7055f9e9416e",
-      "programInputSetRoot": "0x839b1cdfe146f7cc70e53de33c8caaebb3af3d3f43f86d862edd4b7597bccb7e"
+      "closureDigest": "0x06c1ce15d155b758f6ad566811b53e732a44fd20664358c1aee524bc90fb920a",
+      "programInputSetRoot": "0x5fa9dd2b1668951f72ccedd9df127001b575c1b023a3c30b5fbc732db2688bcb"
     },
     {
       "modulePath": "families/univ2-standard/src/search/adapter.ts",
       "exportName": "UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/search/adapter.ts#UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY",
-      "closureDigest": "0x9af542126695c6b71d69142eb929251eb208b309919123f9fc71a3097e08b009",
-      "programInputSetRoot": "0x02bf71df28b23c26f6b094d02226e88e78dfb0cf9b79d8277b9cbe2ea6fa6ff3"
+      "closureDigest": "0x1afc673e4dfad96cdeedbfab7419b61a4350f86c052f6b08c90f06963a83f50a",
+      "programInputSetRoot": "0xe6861488c0bcf7a4936bf7a974283ec497a737056b82d6dac61174b74a4ebd51"
     },
     {
       "modulePath": "families/univ2-standard/src/stages/nomination.ts",
       "exportName": "UNIV2_STANDARD_SOURCE_NOMINATION_PROGRAM",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/stages/nomination.ts#UNIV2_STANDARD_SOURCE_NOMINATION_PROGRAM",
-      "closureDigest": "0x4f5f4322bb4227fc148e80e86652f045361bb20c99d397815601400647b920a8",
-      "programInputSetRoot": "0x16d40123011b94bc45097f700eff6aa56d22a9df6c37ae3672f0115c871ccac3"
+      "closureDigest": "0x49663371d7ce70189f9b38a22a03519f0654257684b018e32fb0a015d44035d0",
+      "programInputSetRoot": "0x0f9ed122e401b9adbd6c5c873b6d55e96e7fa945d9624605a75b2b27436486ae"
     },
     {
       "modulePath": "families/univ2-standard/src/stages/nomination.ts",
       "exportName": "UNIV2_STANDARD_SOURCE_PLAN_RUNTIME",
       "entrypointId": "compiler-root:families/univ2-standard/tsconfig.json:families/univ2-standard/src/stages/nomination.ts#UNIV2_STANDARD_SOURCE_PLAN_RUNTIME",
-      "closureDigest": "0x4f5f4322bb4227fc148e80e86652f045361bb20c99d397815601400647b920a8",
-      "programInputSetRoot": "0x16d40123011b94bc45097f700eff6aa56d22a9df6c37ae3672f0115c871ccac3"
+      "closureDigest": "0x49663371d7ce70189f9b38a22a03519f0654257684b018e32fb0a015d44035d0",
+      "programInputSetRoot": "0x0f9ed122e401b9adbd6c5c873b6d55e96e7fa945d9624605a75b2b27436486ae"
     },
     {
       "modulePath": "strategies/route-cycle/src/index.ts",
       "exportName": "ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER",
       "entrypointId": "compiler-root:strategies/route-cycle/tsconfig.json:strategies/route-cycle/src/index.ts#ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER",
-      "closureDigest": "0x6eac2829c8d6b502d9e1739e4c117a09bc32128fd05929e4c5b1b04bd2c0c14c",
-      "programInputSetRoot": "0xa0e15dca3c60d2ef75ed7ddb2b6e3a9ad8afcc8dd2c859b8df9a7d8f681a2cbd"
+      "closureDigest": "0x6eba9fb034b90b5c557a1e2dc82b66444c752aabb779fd510cecb7ce74e05af6",
+      "programInputSetRoot": "0x0fbab2e615a4b85b5d2aacd91454fc99e4ea46d74b552a8ef441355f487d9d36"
     },
     {
       "modulePath": "strategies/route-cycle/src/index.ts",
       "exportName": "ROUTE_CYCLE_STRATEGY",
       "entrypointId": "package-entrypoint:strategies/route-cycle/package.json:.:strategies/route-cycle/src/index.ts:strategies/route-cycle/tsconfig.json#ROUTE_CYCLE_STRATEGY",
-      "closureDigest": "0xe4b6feca48f29b15bf85ba11f130f6a5acfccc3ec96cd4e156a69ed6517be6ab",
-      "programInputSetRoot": "0xa0e15dca3c60d2ef75ed7ddb2b6e3a9ad8afcc8dd2c859b8df9a7d8f681a2cbd"
+      "closureDigest": "0x1ac79f77278a2ffba8c8ea8ad115032bdb51ed26595f9e1ac157653efef53eb2",
+      "programInputSetRoot": "0x0fbab2e615a4b85b5d2aacd91454fc99e4ea46d74b552a8ef441355f487d9d36"
     },
     {
       "modulePath": "tools/catalog-generator/src/index.ts",
       "exportName": "generateCatalogWithImpact",
       "entrypointId": "compiler-root:tools/catalog-generator/tsconfig.json:tools/catalog-generator/src/index.ts#generateCatalogWithImpact",
-      "closureDigest": "0xdcae707544c9d5c10b784ca18f37ca42b64d92c42780d7df79c6e674b79072dd",
-      "programInputSetRoot": "0x31c5d3dcb0b0cec746b1980e5ca3e6f274837601e995f7770f6371d0184175ac"
+      "closureDigest": "0x23fa084e47390cfd580a978f89ff27c31eb03c2d649ac2b13f541c792fc5b565",
+      "programInputSetRoot": "0x9dcc534013bf107622d922debef91ea50332403417f9da0c3f5e418ad67a4bc2"
     },
     {
       "modulePath": "valuation-owners/native-equivalent/src/qualification.ts",
       "exportName": "NATIVE_EQUIVALENT_VALUATION_INDEPENDENT_ORACLE_CASES_V1",
       "entrypointId": "compiler-root:valuation-owners/native-equivalent/tsconfig.json:valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_INDEPENDENT_ORACLE_CASES_V1",
-      "closureDigest": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
-      "programInputSetRoot": "0x3f6843d4795904c73acd0c7c7e2e422854534776e6a688f2500f70fd8afa27a1"
+      "closureDigest": "0x63dbfc70842bd7577b650266d0464c0b6c4dfff7a0e6d8dd080309258e75f878",
+      "programInputSetRoot": "0xbfd235c685750fe04f230bf0b2e4fe09cedb78945d7fd6839eb611e6391fc98b"
     },
     {
       "modulePath": "valuation-owners/native-equivalent/src/qualification.ts",
       "exportName": "NATIVE_EQUIVALENT_VALUATION_MUTATION_CORPUS_V1",
       "entrypointId": "compiler-root:valuation-owners/native-equivalent/tsconfig.json:valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_MUTATION_CORPUS_V1",
-      "closureDigest": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
-      "programInputSetRoot": "0x3f6843d4795904c73acd0c7c7e2e422854534776e6a688f2500f70fd8afa27a1"
+      "closureDigest": "0x63dbfc70842bd7577b650266d0464c0b6c4dfff7a0e6d8dd080309258e75f878",
+      "programInputSetRoot": "0xbfd235c685750fe04f230bf0b2e4fe09cedb78945d7fd6839eb611e6391fc98b"
     },
     {
       "modulePath": "valuation-owners/native-equivalent/src/qualification.ts",
       "exportName": "NATIVE_EQUIVALENT_VALUATION_QUALIFICATION_SPEC_V1",
       "entrypointId": "compiler-root:valuation-owners/native-equivalent/tsconfig.json:valuation-owners/native-equivalent/src/qualification.ts#NATIVE_EQUIVALENT_VALUATION_QUALIFICATION_SPEC_V1",
-      "closureDigest": "0x0cab2943f4dc0cadd1f3453811546f1a9cb2a64383c9ec938537f0ceb20f4d8d",
-      "programInputSetRoot": "0x3f6843d4795904c73acd0c7c7e2e422854534776e6a688f2500f70fd8afa27a1"
+      "closureDigest": "0x63dbfc70842bd7577b650266d0464c0b6c4dfff7a0e6d8dd080309258e75f878",
+      "programInputSetRoot": "0xbfd235c685750fe04f230bf0b2e4fe09cedb78945d7fd6839eb611e6391fc98b"
     },
     {
       "modulePath": "valuation-owners/native-equivalent/src/runtime.ts",
       "exportName": "createNativeEquivalentValuationOwnerV1",
       "entrypointId": "compiler-root:valuation-owners/native-equivalent/tsconfig.json:valuation-owners/native-equivalent/src/runtime.ts#createNativeEquivalentValuationOwnerV1",
-      "closureDigest": "0x3235630ce07e12067baa9a8c2c385d99fe8e156341b6563acd54612564da60c6",
-      "programInputSetRoot": "0xb0c6789e5c33d05e34b86ed1430e011120ce0f4e9e8ca6f8b345f0a526b91330"
+      "closureDigest": "0xfc3b30d8adc2dc3b67112ffe5051a05116a471ee08d361e6dfac53e9560c0245",
+      "programInputSetRoot": "0xd11a28deb3c35b87b44003daad8cd1b3426c39f9de978840dda8936ef8f051f1"
     }
   ],
   "proposedCapabilitySet": {
@@ -521,87 +521,87 @@
         "version": "1.0.0",
         "schemaHash": "0xd0fdf9650e8fd1cbf82fa38482a74bb149bf00c7299245d7e40bb96381537205",
         "interpreterHash": "0x52ed315a9504be9e9e087ff23d459d360c2c1ce5f55f7a43974e3520953b094b",
-        "ownerRef": "0xa91e3538406e81917219a4ca6c3fde81d50266650dc754d3f58ba26c6ace9629"
+        "ownerRef": "0x478b9951bdff3fb141d409dc96db61f5a8b5d31e14b61d1e7ffecd04add781f2"
       },
       {
         "capabilityId": "family.curve-underlying.exact",
         "version": "1.0.0",
         "schemaHash": "0xbc2c7384bfcb78b3be364e213f241f32d8ea2929f6eb2a7120d50d27caa32be2",
         "interpreterHash": "0xe5d42627eba62cbfb78b72fa58348a992359e22368399b42d9f08b414d4f8f63",
-        "ownerRef": "0x9ebba320355a97b1c6ff3bf7d2d9e2f6a83008d84a055308d4d0177c53e6e8bb"
+        "ownerRef": "0x669a1b8c77e88e0e4dd89644c492a032fabd1aa6debd6f8e9e083c4999cbfce7"
       },
       {
         "capabilityId": "family.curve-underlying.state",
         "version": "1.0.0",
         "schemaHash": "0x1a51e44914829de075debc91a33a7831e8b1ca48fc4fb288f5a3faf8907c7e5a",
         "interpreterHash": "0x94cbb5db9747b77a5a71e1e9cb9fe5bf1230b8630a4bd3c64707634f71612d9b",
-        "ownerRef": "0x013712ae9209413cae8724e6f5d91810a1dbafd807115acefff42549e93e84ec"
+        "ownerRef": "0x00031fd8b388c37b61136566803de2c8d1c778e0344ac8a9e7d9b055b2a54014"
       },
       {
         "capabilityId": "family.dodo-v2.coarse",
         "version": "1.0.0",
         "schemaHash": "0xc988d83de904d9873d538dd8929f95aa1466c34c832e297b8c06a1441d92aefa",
         "interpreterHash": "0x3658b567d0c15b905beeaf7c52d97916b0266d4b44d7540201f45277f21ff510",
-        "ownerRef": "0xcbe977c4f9aebbe98e71f05a0f841cb84d0b0427a66adeb7d68623386e76d2f9"
+        "ownerRef": "0x9b0231ccbf6b6c5b4a0c7c98b91cd05b8d2655d4010c79d7c5485bd719a02263"
       },
       {
         "capabilityId": "family.dodo-v2.exact",
         "version": "1.0.0",
         "schemaHash": "0x377bdad6777661aa1d3da2d162b63cbdd50bd55b22fadaf8808104955826dfa8",
         "interpreterHash": "0xf109a6ed9fb43482f40cece5f3a878b33bcf53138504d83cb3b4f74d7f0af8c3",
-        "ownerRef": "0x913d21f0294041bc015fa48296ee78862809beec1a860b0c4313b1e4ef640612"
+        "ownerRef": "0x280ffa6ff53b4e95481f3ad3e03af6554d0e000c6b7aba2a3bdbcd3fe6b03575"
       },
       {
         "capabilityId": "family.dodo-v2.state",
         "version": "1.0.0",
         "schemaHash": "0x1f962be6704d0532dad2284747d796b4c97e3c4d4ee0576216a4d2be537d2b49",
         "interpreterHash": "0x1a4bcd9a49f63bfb58c2f8ae11b523be5c86c5a6c59e430aa32a16b3ba8df875",
-        "ownerRef": "0x4c7509be521fd62b08d812f018cd929d61b165d7e7af2938615876f91e5a8aa7"
+        "ownerRef": "0x989f757b50ccb1127f417b45a675b8a3f304565fe5171b7c48c970c6bef3e50d"
       },
       {
         "capabilityId": "family.fluid-dex.coarse",
         "version": "1.0.0",
         "schemaHash": "0xbc6fde8b67f7f6c0eb70eae88f0d5698c29562d5cabb99df12fcf7cfef0ea059",
         "interpreterHash": "0x54f35c6b3380de32cdc26da35f64b0b48a6e910e541fafe8834f3aa97357925b",
-        "ownerRef": "0xbe972c065bffe5384aaf112f25d7770da97e83a4e27e782c13e86be26f232881"
+        "ownerRef": "0x122bd8063871c9dc4f48bd7fecf42ea7bc4d8ec6125dc543e5a060d5b9ee20a3"
       },
       {
         "capabilityId": "family.fluid-dex.exact",
         "version": "1.0.0",
         "schemaHash": "0xd91bcf90607cf4881b29aa3ae0e4b8182fe4074104176f8819a4f0e15c75d099",
         "interpreterHash": "0x5c3beee31763e8ffb974a2ddaf60cea1369877811521dc031d5b4033769d4cb1",
-        "ownerRef": "0x28c9c6908ada9f6c9f074f3644ab365ef00f2a305ae544ad038cc8b9340ee57a"
+        "ownerRef": "0xb3c685446917a09103ff11b6f9ff69f66b7d7ff2fca1440f3ca0edf3468ac9ad"
       },
       {
         "capabilityId": "family.fluid-dex.state",
         "version": "1.0.0",
         "schemaHash": "0xe45709a4ab1d30f6ab7cde439e53df05b4c9d1f65187a57af31f1efbd17a9de9",
         "interpreterHash": "0x8bc78cb560e425ce87208a5a6d8dab21804050925a655184866834e16543edaf",
-        "ownerRef": "0xb1077633c8026b687fcb68838937162e57439ed3b8552beff0e7994f87812507"
+        "ownerRef": "0xb2820015d347934a443320a22a67fd8d601f40ace130d850bf23a014f8cc32a4"
       },
       {
         "capabilityId": "family.univ2-standard.coarse",
         "version": "1.0.0",
         "schemaHash": "0xf2aae38e672bcb4399bf442d3fbe73220e13430bf8c003fd5ed69efbe8999481",
         "interpreterHash": "0x659a143806d0fa1a90bc39055b8330c4bb1004cae9a5bb436faefb6a0a3ea63e",
-        "ownerRef": "0xc3627b4d26e92de096813d75b14856e9ea78baaa8d681ca35cd7c2436f599cce"
+        "ownerRef": "0x25a14d6c52063b84e9e74daa3f59b1710c96468c029246463cf87fb84fcef027"
       },
       {
         "capabilityId": "family.univ2-standard.exact",
         "version": "1.0.0",
         "schemaHash": "0xa46323cd5995a81b5444faf94fc24ec9f4ff2457b2980c00aee97ab4a1b8c6f1",
         "interpreterHash": "0xe38bd637cc21e005f9b3010bd2c0253746917c42957266def4d0920bb6a9f5df",
-        "ownerRef": "0x187d93f7f07b813bf997470e23f5630c8f9453ec4477879c2d558bbe00c90226"
+        "ownerRef": "0x639499562aaacc129ebfc46f0216c1d20552cfc7998fe30e0bf5896c23559d26"
       },
       {
         "capabilityId": "family.univ2-standard.state",
         "version": "1.0.0",
         "schemaHash": "0x1e07e9ad84d77080f7bbdfd4c1c45043fef23d95f4150a53630a6c8fc13b7526",
         "interpreterHash": "0xa4cb10d4facee0abe85b65b5ea92912f45c599d0f41ca3a3254ff4f8003d6ab0",
-        "ownerRef": "0xd30e1b95d109a978372962f11efb00f4fcb8aebf8b248da8ab58be2ca58e8ef1"
+        "ownerRef": "0x2e5226952015005835e9ec5871929288d49023917e75b311132d3942a751b575"
       }
     ],
-    "root": "0x79b02f1541a5f30c9e2f669bc5f63ec3dce6d686be5570aa67ca0dfd60c01ffe"
+    "root": "0xa4dafbe03eb8ab2af81a88bf44193a0f1c94028cd80a04564c32e77936362332"
   },
   "priorCatalogImpact": {
     "schemaVersion": 1,

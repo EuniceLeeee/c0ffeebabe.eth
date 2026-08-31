@@ -10,7 +10,7 @@ import {
   type Hash,
 } from "../../../../packages/canonical-codec/src/index.ts";
 import type { PlannedRouteCandidateV1 } from "../../../../packages/planner/src/index.ts";
-import type { ProducerCandidateTerminalObservationV1 } from "../../../../packages/producer/src/index.ts";
+import type { CanonicalHead, ProducerCandidateTerminalObservationV1 } from "../../../../packages/producer/src/index.ts";
 import type { RouteAccountingV1 } from "../../../../packages/search-pipeline/src/index.ts";
 import type { StrategyPlanningProblemV1 } from "../../../../packages/strategy-composition/src/index.ts";
 import {
@@ -276,7 +276,7 @@ export function validateProductionResolvedRouteBindingV1(input: Readonly<{
   readonly problem: StrategyPlanningProblemV1;
   readonly generationId: string;
   readonly graphRoot: Hash;
-  readonly source: Readonly<{ readonly chainId: string; readonly number: string; readonly hash: Hash; readonly stateRoot: Hash }>;
+  readonly source: CanonicalHead;
   readonly objectiveRef: Hash;
   readonly releaseProvenanceHash: Hash;
   readonly actionOwners: readonly unknown[];
@@ -334,7 +334,12 @@ export function validateProductionResolvedRouteBindingV1(input: Readonly<{
     ownerRefs,
     generationId: input.generationId,
     graphRoot: input.graphRoot,
-    source: input.source,
+    source: Object.freeze({
+      chainId: input.source.chainId,
+      number: input.source.number,
+      hash: input.source.hash,
+      stateRoot: input.source.stateRoot,
+    }),
     objectiveRef: input.objectiveRef,
     releaseProvenanceHash: input.releaseProvenanceHash,
     legs: input.candidate.legs,

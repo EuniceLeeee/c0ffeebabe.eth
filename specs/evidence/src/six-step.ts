@@ -25,6 +25,18 @@ export const SIX_STEP_STAGE_IDS = Object.freeze([
   "current_source_exact", "execution_program", "final_simulation",
 ] as const);
 
+/** Architecture-neutral physical denominator for one persisted Six-Step
+ * lineage. A route has at most sixteen legs, stages 1/2 contribute one
+ * material per leg, and stages 3..6 contribute four more materials. The byte
+ * limits must be checked from file metadata before allocating file contents. */
+export const SIX_STEP_BOUNDARY_SNAPSHOT_LIMITS_V1 = Object.freeze({
+  maxRouteLegs: 16,
+  maxEntries: 36,
+  maxEntryBytes: 64 * 1024 * 1024,
+  maxTotalBytes: 512 * 1024 * 1024,
+  maxLedgerBytes: 64 * 1024 * 1024,
+} as const);
+
 const witnessSchema = objectSchema({ artifactRefId: hashSchema, contentRoot: hashSchema });
 const witnessContentSchema = objectSchema({
   schemaVersion: literalSchema(1), kind: literalSchema("aloha.six-step-evidence-witness"),

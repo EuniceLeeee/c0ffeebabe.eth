@@ -31,11 +31,6 @@ export type {
   RuntimeReleaseCompositionServicesV1,
   RuntimeReleaseFamilyRuntimeServiceV1,
 } from "./internal/bootstrap.ts";
-export type {
-  RuntimeReleaseObserverStoreBindingV1,
-  RuntimeReleaseObserverStoreInputV1,
-  RuntimeReleaseObserverStoreServiceV1,
-} from "./internal/observer-store-owner.ts";
 export {
   openInstalledRuntimeReleasePerformanceDeploymentPortV1,
 } from "./internal/performance-deployment-owner.ts";
