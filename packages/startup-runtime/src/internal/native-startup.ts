@@ -19,8 +19,7 @@ export function nativeStartupAuthoritiesEqual(
   right: NativeStartupAuthorityProjectionV1,
 ): boolean {
   return left.authorityClass === right.authorityClass
-    && left.runtimeInstanceId === right.runtimeInstanceId
-    && left.runtimeLineageRoot === right.runtimeLineageRoot
+    && left.authorityBindingHash === right.authorityBindingHash
     && left.implementationCommit === right.implementationCommit;
 }
 

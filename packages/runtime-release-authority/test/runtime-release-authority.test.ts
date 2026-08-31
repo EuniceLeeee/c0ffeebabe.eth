@@ -17,6 +17,7 @@ import { generatedEconomicValuationOwnerQualificationSetFixtureV1 } from "../../
 import { generatedEconomicSafetyActionOwnerQualificationFixtureV1 } from "../../../specs/release-authority/test/generated-action-owner-qualification-fixture.ts";
 import { verifyAndIssueRuntimeReleaseAuthorityV1 } from "../src/index.ts";
 import * as runtimeReleasePublic from "../src/index.ts";
+import { assertIssuedRuntimeReleaseReadyBindingPort } from "../src/internal/ready-binding-consumer.ts";
 import { issueDeploymentAttestationProofPort } from "../src/internal/attestation-proof-owner.ts";
 import { issueCandidatePartitionProofIssuerPort } from "../../../specs/candidate-partition-authority/src/internal/issuer-owner.ts";
 import type { CandidatePartitionProofIssuerPortV1 } from "../../../specs/candidate-partition-authority/src/index.ts";
@@ -360,6 +361,33 @@ test("verified runtime release authority is opaque, resolver-owned, and revocabl
   assert.deepEqual(value.authority.resolver.resolve(value.authority.capability), value.binding);
   assert.throws(() => value.authority.resolver.resolve({ ...value.authority.capability }), /not issued/);
   value.authority.revoke(); assert.throws(() => value.authority.resolver.resolve(value.authority.capability), /revoked/);
+});
+test("ready binding consumer exposes three narrow current facts and fences clone, rotation, and revoke", () => {
+  const value = issued();
+  const port = assertIssuedRuntimeReleaseReadyBindingPort(value.authority.readyGeneration);
+  assert.deepEqual(Object.keys(port), [
+    "currentProvenanceHash",
+    "currentBindingId",
+    "currentImplementationCommit",
+  ]);
+  assert.equal(port.currentProvenanceHash(), runtimeReleaseBindingProvenanceHash(value.binding));
+  assert.equal(port.currentBindingId(), value.binding.bindingId);
+  assert.equal(port.currentImplementationCommit(), value.binding.candidateReleaseCommit);
+  assert.throws(
+    () => assertIssuedRuntimeReleaseReadyBindingPort({ ...port }),
+    /not release-issued/,
+  );
+  value.authority.rotate(value.binding);
+  assert.throws(() => port.currentProvenanceHash(), /stale after rotation/);
+  assert.throws(() => port.currentBindingId(), /stale after rotation/);
+  assert.throws(() => port.currentImplementationCommit(), /stale after rotation/);
+
+  const revoked = issued();
+  const revokedPort = assertIssuedRuntimeReleaseReadyBindingPort(revoked.authority.readyGeneration);
+  revoked.authority.revoke();
+  assert.throws(() => revokedPort.currentProvenanceHash(), /revoked/);
+  assert.throws(() => revokedPort.currentBindingId(), /revoked/);
+  assert.throws(() => revokedPort.currentImplementationCommit(), /revoked/);
 });
 test("wrong deployment pin and self-consistent unknown signature cannot issue authority", () => {
   const value = issued(); const other = generateKeyPairSync("ed25519");

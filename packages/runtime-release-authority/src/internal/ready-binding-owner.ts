@@ -12,11 +12,20 @@ export function issueRuntimeReleaseReadyBindingPort(
   authorityValue: RuntimeReleaseAuthorityV1,
 ): RuntimeReleaseReadyBindingPortV1 {
   const issuedVersion = assertActiveRuntimeReleaseAuthorityState(authorityValue).version;
+  const current = () => {
+    const state = assertActiveRuntimeReleaseAuthorityState(authorityValue);
+    if (state.version !== issuedVersion) throw new TypeError("runtime release ready binding stale after rotation");
+    return state.binding;
+  };
   const port: RuntimeReleaseReadyBindingPortV1 = Object.freeze({
     currentProvenanceHash(): `0x${string}` {
-      const state = assertActiveRuntimeReleaseAuthorityState(authorityValue);
-      if (state.version !== issuedVersion) throw new TypeError("runtime release ready binding stale after rotation");
-      return runtimeReleaseBindingProvenanceHash(state.binding);
+      return runtimeReleaseBindingProvenanceHash(current());
+    },
+    currentBindingId(): `0x${string}` {
+      return current().bindingId;
+    },
+    currentImplementationCommit(): string {
+      return current().candidateReleaseCommit;
     },
   });
   issued.add(port);

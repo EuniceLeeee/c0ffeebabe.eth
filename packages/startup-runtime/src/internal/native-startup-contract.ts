@@ -1,21 +1,16 @@
 import {
   decimalStringSchema,
-  enumSchema,
-  gitSha40Schema,
   hashSchema,
   nonEmptyStringSchema,
   objectSchema,
   type Hash,
 } from "../../../canonical-codec/src/index.ts";
+import {
+  runtimeAuthorityProjectionSchemaV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../runtime-authority/src/index.ts";
 
-export type NativeStartupAuthorityClassV1 = "signed-release" | "advisory-observation";
-
-export interface NativeStartupAuthorityProjectionV1 {
-  readonly authorityClass: NativeStartupAuthorityClassV1;
-  readonly runtimeInstanceId: Hash;
-  readonly runtimeLineageRoot: Hash;
-  readonly implementationCommit: string;
-}
+export type NativeStartupAuthorityProjectionV1 = RuntimeAuthorityProjectionV1;
 
 export interface NativeStartupGenerationIdentityV1 {
   readonly generationId: string;
@@ -28,13 +23,6 @@ export interface NativeStartupGenerationIdentityV1 {
   readonly authority: NativeStartupAuthorityProjectionV1;
 }
 
-const authoritySchema = objectSchema({
-  authorityClass: enumSchema(["signed-release", "advisory-observation"] as const),
-  runtimeInstanceId: hashSchema,
-  runtimeLineageRoot: hashSchema,
-  implementationCommit: gitSha40Schema,
-});
-
 const identitySchema = objectSchema({
   generationId: nonEmptyStringSchema,
   graphRoot: hashSchema,
@@ -46,7 +34,7 @@ const identitySchema = objectSchema({
     from: decimalStringSchema,
     to: decimalStringSchema,
   }),
-  authority: authoritySchema,
+  authority: runtimeAuthorityProjectionSchemaV1,
 });
 
 /** Exact-decode and freeze the only identity shape admitted by the core. */

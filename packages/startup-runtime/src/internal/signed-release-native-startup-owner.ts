@@ -1,4 +1,9 @@
 import type { Hash } from "../../../canonical-codec/src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+  type SignedReleaseRuntimeAuthorityDescriptorV1,
+} from "../../../runtime-authority/src/index.ts";
 import type {
   CanonicalHeadObservationCapabilityV1,
   ProducerSessionV1,
@@ -119,7 +124,7 @@ class SignedReleaseNativeStartupOwner implements NativeStartupOwnerPortV1<
   readonly #generationHandles = new WeakMap<object, ReadyGenerationV1>();
   readonly #promotionRequests = new WeakMap<object, Parameters<BoundReadyPromotionPort["promote"]>[0]>();
   readonly #loadedGenerations = new WeakMap<object, ProductionLoadedGenerationV1>();
-  #runtimeLineageRoot: Hash | null = null;
+  #authorityDescriptor: SignedReleaseRuntimeAuthorityDescriptorV1 | null = null;
 
   readonly targetRefreshAgeBlocks: string;
   readonly stage12Reader: ReadyStage12EvidenceReaderPortV1;
@@ -220,9 +225,14 @@ class SignedReleaseNativeStartupOwner implements NativeStartupOwnerPortV1<
     handle: NativeStartupGenerationHandleV1,
   ): Promise<NativeStartupLoadedGenerationV1> => {
     const ready = this.#ready(handle);
-    if (this.#runtimeLineageRoot === null) {
-      this.#runtimeLineageRoot = ready.releaseProvenanceHash;
-    } else if (ready.releaseProvenanceHash !== this.#runtimeLineageRoot) {
+    if (this.#authorityDescriptor === null) {
+      this.#authorityDescriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
+        authorityClass: "signed-release",
+        runtimeBindingId: this.#runtimeBindingId,
+        releaseProvenanceHash: ready.releaseProvenanceHash,
+        implementationCommit: this.#implementationCommit,
+      });
+    } else if (ready.releaseProvenanceHash !== this.#authorityDescriptor.releaseProvenanceHash) {
       throw new Error("startup-runtime-lineage-changed");
     }
     assertStartupObservationWindow(ready.cutoff, ready.recentObservationRange);
@@ -258,12 +268,7 @@ class SignedReleaseNativeStartupOwner implements NativeStartupOwnerPortV1<
           from: ready.recentObservationRange.from,
           to: ready.recentObservationRange.to,
         }),
-        authority: Object.freeze({
-          authorityClass: "signed-release" as const,
-          runtimeInstanceId: this.#runtimeBindingId,
-          runtimeLineageRoot: this.#runtimeLineageRoot,
-          implementationCommit: this.#implementationCommit,
-        }),
+        authority: projectRuntimeAuthorityDescriptorV1(this.#authorityDescriptor),
       }),
     });
   };

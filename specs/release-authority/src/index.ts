@@ -1107,6 +1107,8 @@ export interface RuntimeReleaseResolutionPortV1 {
  */
 export interface RuntimeReleaseReadyBindingPortV1 {
   currentProvenanceHash(): Hash;
+  currentBindingId(): Hash;
+  currentImplementationCommit(): string;
 }
 
 /**

@@ -56,6 +56,11 @@ import type {
 import * as nativeContractModule from "../src/internal/native-startup-contract.ts";
 import * as signedAdapterModule from "../src/internal/signed-release-native-startup-owner.ts";
 import { registerCheckpointReadyFullFamilyEvidenceReader } from "../../checkpoint/src/internal/ready-full-family-evidence-issuer.ts";
+import {
+  createAdvisoryObservationRuntimeAuthorityDescriptorV1,
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 
 const cutoff = { number: "100" };
 
@@ -115,22 +120,39 @@ test("native startup has no owner registrar and null promotion recovery stays cl
   assert.equal(classifyNativeStartupPromotionRecovery(h("prior"), h("next"), true), "load-current");
 });
 
-test("native startup pins all four authority identity fields", () => {
-  const authority: NativeStartupAuthorityProjectionV1 = Object.freeze({
+test("native startup pins the exact generic runtime authority projection", () => {
+  const signedInput = Object.freeze({
     authorityClass: "signed-release",
-    runtimeInstanceId: h("authority-instance"),
-    runtimeLineageRoot: h("authority-lineage"),
+    runtimeBindingId: h("authority-runtime-binding"),
+    releaseProvenanceHash: h("authority-release-provenance"),
     implementationCommit: "a".repeat(40),
-  });
+  } as const);
+  const authority: NativeStartupAuthorityProjectionV1 = projectRuntimeAuthorityDescriptorV1(
+    createSignedReleaseRuntimeAuthorityDescriptorV1(signedInput),
+  );
   const pinned = pinNativeStartupAuthority(null, authority);
   assert.equal(Object.isFrozen(pinned), true);
   assert.equal(pinNativeStartupAuthority(pinned, Object.freeze({ ...authority })), pinned);
   assert.equal(nativeStartupAuthoritiesEqual(pinned, authority), true);
   const mutations: readonly NativeStartupAuthorityProjectionV1[] = [
-    Object.freeze({ ...authority, authorityClass: "advisory-observation" }),
-    Object.freeze({ ...authority, runtimeInstanceId: h("other-instance") }),
-    Object.freeze({ ...authority, runtimeLineageRoot: h("other-lineage") }),
-    Object.freeze({ ...authority, implementationCommit: "b".repeat(40) }),
+    projectRuntimeAuthorityDescriptorV1(createAdvisoryObservationRuntimeAuthorityDescriptorV1({
+      authorityClass: "advisory-observation",
+      observationInstanceId: signedInput.runtimeBindingId,
+      artifactClosureRoot: signedInput.releaseProvenanceHash,
+      implementationCommit: signedInput.implementationCommit,
+    })),
+    projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+      ...signedInput,
+      runtimeBindingId: h("other-runtime-binding"),
+    })),
+    projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+      ...signedInput,
+      releaseProvenanceHash: h("other-release-provenance"),
+    })),
+    projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+      ...signedInput,
+      implementationCommit: "b".repeat(40),
+    })),
   ];
   for (const mutation of mutations) {
     assert.equal(nativeStartupAuthoritiesEqual(pinned, mutation), false);
@@ -141,8 +163,7 @@ test("native startup pins all four authority identity fields", () => {
 test("native startup real recovery paths remain closed until close", async () => {
   const baseAuthority: NativeStartupAuthorityProjectionV1 = Object.freeze({
     authorityClass: "signed-release",
-    runtimeInstanceId: h("recovery-instance"),
-    runtimeLineageRoot: h("recovery-lineage"),
+    authorityBindingHash: h("recovery-binding"),
     implementationCommit: "c".repeat(40),
   });
   const scenarios = ["null-current", "read-error", "load-error", "authority-mutation"] as const;
@@ -194,7 +215,7 @@ test("native startup real recovery paths remain closed until close", async () =>
             cutoff: Object.freeze({ number: "100" }),
             observationRange: Object.freeze({ from: "51", to: "100" }),
             authority: next && scenario === "authority-mutation"
-              ? Object.freeze({ ...baseAuthority, runtimeInstanceId: h("mutated-runtime-instance") })
+              ? Object.freeze({ ...baseAuthority, authorityBindingHash: h("mutated-runtime-binding") })
               : baseAuthority,
           }),
         });
@@ -615,9 +636,12 @@ test("startup reuses one durable ready closure while renewing the lease per prod
   };
   const runtime = await startStartupRuntime(startupInput);
   const initialServing = runtime.readActiveGeneration();
+  assert.equal(runtime.releaseBindingId, release.bindingId);
+  assert.equal(runtime.candidateReleaseCommit, release.candidateReleaseCommit);
   assert.equal(initialServing.generationId, ready.generationId);
   assert.equal(initialServing.readyRecordHash, ready.readyRecordHash);
   assert.equal(initialServing.graphRoot, graph.graphRoot);
+  assert.equal(initialServing.releaseProvenanceHash, ready.releaseProvenanceHash);
   assert.equal(Object.isFrozen(initialServing), true);
 
   const sessionGenerations: string[] = [];
@@ -674,6 +698,7 @@ test("startup reuses one durable ready closure while renewing the lease per prod
   const refreshedServing = runtime.readActiveGeneration();
   assert.equal(refreshedServing.generationId, activeReady.generationId);
   assert.equal(refreshedServing.graphRoot, refreshedGraph.graphRoot);
+  assert.equal(refreshedServing.releaseProvenanceHash, activeReady.releaseProvenanceHash);
   assert.equal(runtime.readServingGeneration(ready.generationId), initialServing);
   assert.equal(runtime.readServingGeneration(activeReady.generationId), refreshedServing);
   assert.throws(() => runtime.readServingGeneration("unknown-generation"), /unknown/);

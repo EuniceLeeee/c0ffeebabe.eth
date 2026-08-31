@@ -185,7 +185,7 @@ function productionServingGeneration(
     readyRecordHash: generation.recordRoot,
     sourceCoverageRoot: generation.sourceCoverageRoot,
     definitionCatalogRoot: generation.definitionCatalogRoot,
-    releaseProvenanceHash: generation.authority.runtimeLineageRoot,
+    releaseProvenanceHash: ready.releaseProvenanceHash,
   });
   projections.set(generation.handle, serving);
   return serving;
