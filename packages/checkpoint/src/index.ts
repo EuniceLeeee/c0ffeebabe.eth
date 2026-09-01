@@ -4283,25 +4283,14 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     this.#assertAuthorityFenceUnchanged(authorityFence);
   }
 
-  _acquireWriterLease(owner: string): WriterLease {
-    return this.#durable.acquireWriterLease(owner);
-  }
-
-  _renewWriterLease(lease: WriterLease): WriterLease {
-    return this.#durable.renewWriterLease(lease);
-  }
-
-  _releaseWriterLease(lease: WriterLease): void {
-    this.#durable.releaseWriterLease(lease);
-  }
-
   async _flushOutcomeBatch(
     runId: string,
     writerCapability: AttestationWriterCapabilityV1,
     batch: readonly AttestationPersistenceCapabilityV1[],
-    lease: WriterLease,
+    writerId: string,
   ): Promise<void> {
     let claim: AttestationPersistenceBatchClaimV1 | undefined;
+    let lease: WriterLease | undefined;
     const authorityFence = this.#captureAuthorityFence();
     try {
       const preview = this.#loadActiveRun(runId);
@@ -4346,6 +4335,10 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           });
         }
       }
+      // The validation and artifact work above can legitimately take longer
+      // than one SQLite lease TTL. Acquire the lease only for the synchronous
+      // atomic commit it authorizes.
+      lease = this.#durable.acquireWriterLease(writerId);
       const nextRunStorageHash = this.#durable.transaction(lease, tx => {
       const currentRecord = tx.readRoot();
       if (!currentRecord) throw new CorruptDurableStoreError("checkpoint root missing");
@@ -4477,6 +4470,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       (claim as AttestationPersistenceBatchClaimV1 | undefined)?.abort();
       claim = undefined;
       throw error;
+    } finally {
+      if (lease !== undefined) this.#durable.releaseWriterLease(lease);
     }
     (claim as AttestationPersistenceBatchClaimV1 | undefined)?.commit();
   }
@@ -6652,6 +6647,7 @@ export class DurableOutcomeWriterActor {
   readonly #flushEveryItems: number;
   readonly #flushEveryMs: number;
   readonly #mailboxCapacity: number;
+  readonly #writerId: string;
   readonly #queue: AttestationPersistenceCapabilityV1[] = [];
   readonly #pending: AttestationPersistenceCapabilityV1[] = [];
   readonly #waiters: Array<{ resolve: () => void; reject: (error: unknown) => void }> = [];
@@ -6659,7 +6655,6 @@ export class DurableOutcomeWriterActor {
   #accepting = true;
   #forceFlush = false;
   #wake: (() => void) | null = null;
-  #lease: WriterLease;
   #lastFlush = performance.now();
   readonly #loop: Promise<void>;
   #done = false;
@@ -6672,10 +6667,10 @@ export class DurableOutcomeWriterActor {
     this.#flushEveryItems = options.flushEveryItems ?? 25;
     this.#flushEveryMs = options.flushEveryMs ?? 3_000;
     this.#mailboxCapacity = options.mailboxCapacity ?? 1_024;
+    this.#writerId = options.writerId ?? `checkpoint-writer/${runId}/${randomUUID()}`;
     if (!Number.isSafeInteger(this.#flushEveryItems) || this.#flushEveryItems < 1) throw new RangeError("flushEveryItems must be positive");
     if (!Number.isSafeInteger(this.#flushEveryMs) || this.#flushEveryMs < 2_000 || this.#flushEveryMs > 5_000) throw new RangeError("flushEveryMs must be 2000..5000");
     if (!Number.isSafeInteger(this.#mailboxCapacity) || this.#mailboxCapacity < 1) throw new RangeError("mailboxCapacity must be positive");
-    this.#lease = checkpoint._acquireWriterLease(options.writerId ?? `checkpoint-writer/${runId}/${randomUUID()}`);
     this.#loop = this.#run();
   }
 
@@ -6738,15 +6733,13 @@ export class DurableOutcomeWriterActor {
       throw error;
     } finally {
       this.#done = true;
-      this.#checkpoint._releaseWriterLease(this.#lease);
     }
   }
 
   async #flushPending(): Promise<void> {
-    this.#lease = this.#checkpoint._renewWriterLease(this.#lease);
     if (this.#pending.length === 0) return;
     const batch = this.#pending.splice(0, this.#pending.length);
-    await this.#checkpoint._flushOutcomeBatch(this.#runId, this.#writerCapability, batch, this.#lease);
+    await this.#checkpoint._flushOutcomeBatch(this.#runId, this.#writerCapability, batch, this.#writerId);
   }
 
   #wait(timeoutMs: number): Promise<void> {
