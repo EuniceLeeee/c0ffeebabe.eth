@@ -172,6 +172,7 @@ function requestId(
 const OWNER_REF = "recent-observation.rpc.v1";
 const REQUEST_CODEC = "ethereum-json-rpc-result.v1";
 const WORK_CLASS = "startup.rpc-fast.recent-observation.v1";
+const MAX_RECENT_POSITIVE_LOGS = 1_024;
 
 /**
  * Qualified observer mechanics for the exact recent 50-block window.  It
@@ -255,10 +256,22 @@ export class RecentObservationRpcObserver {
         .map((value, index) => logObservation(value, observed, index))
         .filter((value): value is EvmLogObservationV1 => value !== null);
     }));
+    // Recent observations nominate positive evidence only; they never supply
+    // source omission authority. Keep the newest bounded suffix so a busy
+    // 50-block window cannot turn one receipt into an unbounded pseudo-index.
+    // Complete cold-start coverage remains owned by Family rolling sources.
+    const retainedLogSets: (readonly EvmLogObservationV1[])[] = logSets.map(() => Object.freeze([]));
+    let remaining = MAX_RECENT_POSITIVE_LOGS;
+    for (let index = logSets.length - 1; index >= 0 && remaining > 0; index -= 1) {
+      const logs = logSets[index]!;
+      const count = Math.min(remaining, logs.length);
+      retainedLogSets[index] = Object.freeze(logs.slice(logs.length - count));
+      remaining -= count;
+    }
     const rawByHash = new Map<Hash, RawEvidenceLocatorContentV1>();
     const seenLogIdentities = new Set<string>();
     const blocks: ObservedBlockV1[] = headers.map((observed, blockIndex) => {
-      const evidence = logSets[blockIndex]!.map(log => {
+      const evidence = retainedLogSets[blockIndex]!.map(log => {
         const identity = `${log.blockHash}:${log.transactionHash}:${log.logIndex}`;
         if (seenLogIdentities.has(identity)) {
           throw new RecentObservationRpcError("malformed-log", "duplicate log identity in exact block observation");
