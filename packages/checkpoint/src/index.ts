@@ -2884,8 +2884,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   ): Promise<SealedRunCapabilityV1> {
     const owner = `checkpoint-seal-attestation/${runId}/${randomUUID()}`;
     const lease = this.#durable.acquireWriterLease(owner);
+    let sealedRunId: string;
     try {
-      return this.#durable.transaction(lease, tx => {
+      sealedRunId = this.#durable.transaction(lease, tx => {
         const currentRecord = tx.readRoot();
         if (!currentRecord) throw new CorruptDurableStoreError("checkpoint root missing");
         const root = rootFromRecord(currentRecord);
@@ -2967,11 +2968,14 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             false,
           ),
         );
-        return this.#issueSealedRun(nextRun.runId);
+        return nextRun.runId;
       });
     } finally {
       this.#durable.releaseWriterLease(lease);
     }
+    // Hydration validates the complete sealed closure and can be expensive;
+    // it is read-only and must not extend the SQLite writer transaction.
+    return this.#issueSealedRun(sealedRunId);
   }
 
   bindProbeStore(caller: object): ProbeStorePort {
