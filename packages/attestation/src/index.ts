@@ -2100,6 +2100,8 @@ export function assertPromotablePartition(
     ),
   });
   if (recomputedRoot !== partition.exactOutcomePartitionRoot) throw new Error("outcome-partition-root-mismatch");
-  const terminal = BigInt(expectedAccounting.verified) + BigInt(expectedAccounting.chainProvenRejected);
+  const terminal = BigInt(expectedAccounting.verified)
+    + BigInt(expectedAccounting.chainProvenRejected)
+    + BigInt(expectedAccounting.invalidProgram);
   if (terminal !== BigInt(expected.length)) throw new Error("terminal-accounting-mismatch");
 }

@@ -1712,22 +1712,30 @@ function createAttestationRunSession(
     if (outcomeHashes.length !== candidateKeys.length) throw new TypeError("attestation-session-partition-size-mismatch");
     const expected = new Set(candidateKeys);
     const selected = new Set<Hash>();
+    const finalByHash = new Map<Hash, CandidateFinalOutcomeV1>();
+    for (const outcome of finalOutcomes.values()) {
+      const outcomeHash = candidateFinalOutcomeHash(outcome);
+      if (finalByHash.has(outcomeHash)) throw new TypeError("attestation-session-outcome-hash-collision");
+      finalByHash.set(outcomeHash, outcome);
+    }
     for (const outcomeHash of outcomeHashes) {
-      const outcome = [...finalOutcomes.values()].find(value => candidateFinalOutcomeHash(value) === outcomeHash);
+      const outcome = finalByHash.get(outcomeHash);
       if (!outcome || selected.has(outcome.familyCandidateKey)) throw new TypeError("attestation-session-outcome-hash-mismatch");
       selected.add(outcome.familyCandidateKey);
     }
     if (selected.size !== expected.size || [...expected].some(key => !selected.has(key))) {
       throw new TypeError("attestation-session-partition-incomplete");
     }
-    const missingPersistence = [...finalOutcomes.values()].some(outcome => {
-      const outcomeHash = candidateFinalOutcomeHash(outcome);
-      return ![...persistenceCapabilities].some(capability => {
-        const state = persistenceStates.get(capability);
-      return state?.outcomeHash === outcomeHash
-        && (consumedPersistence.has(capability) || durableFinalKeys.has(outcome.familyCandidateKey));
-      });
-    });
+    const persistedFinalHashes = new Set<Hash>();
+    for (const capability of persistenceCapabilities) {
+      const state = persistenceStates.get(capability);
+      if (state !== undefined
+        && state.outcome !== null
+        && (consumedPersistence.has(capability) || durableFinalKeys.has(state.familyCandidateKey))) {
+        persistedFinalHashes.add(state.outcomeHash);
+      }
+    }
+    const missingPersistence = [...finalByHash.keys()].some(outcomeHash => !persistedFinalHashes.has(outcomeHash));
     if (missingPersistence) throw new TypeError("attestation-session-writer-not-drained");
     const outcomes = [...finalOutcomes.values()].sort((left, right) => compareText(left.familyCandidateKey, right.familyCandidateKey));
     const accounting = {
