@@ -177,7 +177,10 @@ import {
   type ReadyStage12EvidenceReaderPortV1,
   type ReadyStage12EvidenceSnapshotV1,
 } from "./ready-stage12-evidence.ts";
-import { decodeRuntimeAuthorityProjectionV1 } from "../../runtime-authority/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeReleaseProvenanceHashV1,
+} from "../../runtime-authority/src/index.ts";
 import { registerCheckpointReadyStage12EvidenceReader } from "./internal/ready-stage12-evidence-issuer.ts";
 import { assertCheckpointSixStepArtifactPortV1 } from "./internal/six-step-artifact-port-owner.ts";
 import type {
@@ -197,6 +200,17 @@ export type {
   ReadyFullFamilyEvidenceReaderPortV1,
   ReadyFullFamilyEvidenceSnapshotV1,
 } from "./ready-full-family-evidence.ts";
+export {
+  SIGNED_RELEASE_CHECKPOINT_DURABLE_LAYOUT_V1,
+  UNSIGNED_DRY_RUN_CHECKPOINT_DURABLE_LAYOUT_V1,
+  bindCheckpointDurableAuthorityLayoutV1,
+  checkpointDurableAuthorityLayoutV1,
+  type CheckpointDurableAuthorityLayoutV1,
+} from "./durable-authority-layout.ts";
+export {
+  UnsignedDryRunCandidatePartitionCapabilityRegistryV1,
+  type CandidatePartitionRawEvidenceSourceV1,
+} from "./candidate-partition.ts";
 
 const CHECKPOINT_ROOT_KIND = "aloha/checkpoint-root/v2";
 const RUN_KIND = "aloha/in-progress-run/v2";
@@ -4122,13 +4136,19 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       readOwnEnumerableDataProperty(rawBinding, "graphRoot", "activeReadyBinding"),
       "activeReadyBinding.graphRoot",
     );
-    const releaseProvenanceHash = assertHash(
-      readOwnEnumerableDataProperty(rawBinding, "releaseProvenanceHash", "activeReadyBinding"),
-      "activeReadyBinding.releaseProvenanceHash",
-    );
     const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(
       readOwnEnumerableDataProperty(rawBinding, "runtimeAuthority", "activeReadyBinding"),
     );
+    const rawReleaseProvenanceHash = readOwnEnumerableDataProperty(
+      rawBinding,
+      "releaseProvenanceHash",
+      "activeReadyBinding",
+    );
+    const releaseProvenanceHash: RuntimeReleaseProvenanceHashV1 = runtimeAuthority.authorityClass === "signed-release"
+      ? assertHash(rawReleaseProvenanceHash, "activeReadyBinding.releaseProvenanceHash")
+      : rawReleaseProvenanceHash === null
+        ? null
+        : (() => { throw new TypeError("unsigned active ready binding cannot carry release provenance"); })();
     const candidatePartitionProofStorageHash = assertHash(
       readOwnEnumerableDataProperty(rawBinding, "candidatePartitionProofStorageHash", "activeReadyBinding"),
       "activeReadyBinding.candidatePartitionProofStorageHash",

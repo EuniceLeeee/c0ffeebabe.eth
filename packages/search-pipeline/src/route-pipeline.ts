@@ -76,6 +76,7 @@ import {
   type IssuedCoarseRouteAssessmentV1,
   type QualifiedCoarseProjectionReceiptV1,
 } from "../../coarse-economics/src/index.ts";
+import type { RuntimeReleaseProvenanceHashV1 } from "../../runtime-authority/src/index.ts";
 import {
   issueCoarseEnumerationBindingV1,
   issueCoarseRouteBindingV1,
@@ -475,7 +476,7 @@ export interface NativeFullFamilyAuditBindingV1 {
   readonly readyRecordHash: Hash;
   readonly readyCutoff: RoutePipelineInputV1["lease"]["binding"]["cutoff"];
   readonly graphRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly actualCurrentSource: SourceViewV1;
   readonly planningProblemHash: Hash;
   readonly plannerEnumerationRoot: Hash;

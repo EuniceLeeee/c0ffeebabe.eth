@@ -35,6 +35,10 @@ import { sourcePlanIdentity, type SourcePlanRefV1 } from "../../../discovery/src
 import { assertIssuedStartupRuntime, type StartupRuntimeV1 } from "../../../startup-runtime/src/index.ts";
 import type { RuntimeReleaseAuthorityV1 } from "../index.ts";
 import { assertActiveRuntimeReleaseAuthorityState } from "./state.ts";
+import {
+  projectRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../runtime-authority/src/index.ts";
 
 export type RuntimeReleaseFullFamilyTerminalBindingCapabilityV1 = object;
 
@@ -89,6 +93,7 @@ interface ServiceStateV1 {
   readonly runtimeBindingId: Hash;
   readonly releaseProvenanceHash: Hash;
   readonly candidateReleaseCommit: string;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly generatedRuntime: RuntimeReleaseFullFamilyGeneratedMetadataV1;
   readonly consumedHeadTerminals: WeakSet<object>;
 }
@@ -163,8 +168,9 @@ function sealBinding(
   if (finalWindow.release.bindingId !== service.runtimeBindingId
     || finalWindow.release.releaseProvenanceHash !== service.releaseProvenanceHash
     || finalWindow.release.candidateReleaseCommit !== service.candidateReleaseCommit
-    || startup.releaseBindingId !== service.runtimeBindingId
-    || startup.candidateReleaseCommit !== service.candidateReleaseCommit
+    || startup.runtimeAuthority.authorityClass !== service.runtimeAuthority.authorityClass
+    || startup.runtimeAuthority.authorityBindingHash !== service.runtimeAuthority.authorityBindingHash
+    || startup.runtimeAuthority.implementationCommit !== service.runtimeAuthority.implementationCommit
     || ready.releaseProvenanceHash !== service.releaseProvenanceHash
     || ready.definitionCatalogRoot !== service.generatedRuntime.definitionCatalogRoot
     || ready.generationId !== finalWindow.serving.generationId
@@ -261,6 +267,7 @@ export function issueRuntimeReleaseFullFamilyTerminalBindingServiceV1(
     runtimeBindingId: current.binding.bindingId,
     releaseProvenanceHash: runtimeReleaseBindingProvenanceHash(current.binding),
     candidateReleaseCommit: current.binding.candidateReleaseCommit,
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(current.descriptor),
     generatedRuntime,
     consumedHeadTerminals: new WeakSet<object>(),
   });
@@ -290,6 +297,7 @@ export function issueRuntimeReleaseFullFamilyTerminalBindingServiceV1(
         runtimeBindingId: active.runtimeBindingId,
         releaseProvenanceHash: active.releaseProvenanceHash,
         candidateReleaseCommit: active.candidateReleaseCommit,
+        runtimeAuthority: active.runtimeAuthority,
         generatedRuntime: active.generatedRuntime,
         binding: sealed.binding,
         nativeAuditCapability: sealed.nativeAuditCapability,

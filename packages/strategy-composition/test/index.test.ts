@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import {
   createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 import { compileStrategy } from "../../strategy-sdk/src/index.ts";
@@ -23,6 +24,7 @@ import {
   assertGeneratedStrategyRuntimeFactory,
   createGeneratedStrategyRuntimeFactory,
   issueGeneratedStrategyRuntimeAuthorityCapability,
+  issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability,
   readGeneratedStrategyRuntimeFactoryMetadata,
 } from "../src/internal/generated-runtime-composition.ts";
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../src/internal/trigger-owner.ts";
@@ -359,4 +361,53 @@ test("issued planning capability is fenced by release rotation", () => {
     edges,
     trigger: trigger("blockscan", "stale-composition"),
   }), /release rotated/);
+});
+
+test("unsigned dry-run uses the same generated Strategy factory without release provenance", () => {
+  const factory = createGeneratedStrategyRuntimeFactory({
+    descriptor,
+    issuers: [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
+  });
+  const unsignedAuthority = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+    authorityClass: "unsigned-dry-run",
+    runtimeBindingId: h("test/strategy-composition/unsigned-runtime-binding/v1", 1),
+    implementationCommit: "b".repeat(40),
+  });
+  const capability = issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
+    factory,
+    declaredCapabilitySetRoot: descriptor.proposedCapabilitySetRoot,
+    runtimeAuthority: unsignedAuthority,
+    assertCurrent() {},
+  });
+  const composition = factory(capability);
+  const unsignedBinding: StrategyGraphBindingV1 = Object.freeze({
+    generationId: "generation-unsigned",
+    definitionCatalogRoot: descriptor.definitionCatalogRoot,
+    graphRoot: binding.graphRoot,
+    readyRecordHash: binding.readyRecordHash,
+    runtimeMembershipHash: composition.runtimeMembershipHash,
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(unsignedAuthority),
+    sourceHash: binding.sourceHash,
+  });
+  const issuedTrigger = issueStrategyPlanningTriggerCapabilityV1({
+    binding: unsignedBinding,
+    lane: "blockscan",
+    triggerRef: h("test/strategy-composition/trigger/v1", "unsigned"),
+    objectiveRef: objectiveRef("default"),
+    entryAssetRef: h("test/strategy-composition/asset/v1", "a"),
+    returnAssetRef: h("test/strategy-composition/asset/v1", "a"),
+    affectedEdgeIds: [],
+    correlationId: h("test/strategy-composition/correlation/v1", "unsigned"),
+  });
+  const [problem] = composition.issuePlanningProblems({ binding: unsignedBinding, edges, trigger: issuedTrigger });
+  assert.equal(problem?.runtimeMembershipHash, composition.runtimeMembershipHash);
+  assert.equal(problem?.runtimeAuthority.authorityClass, "unsigned-dry-run");
+  assert.equal(Object.prototype.hasOwnProperty.call(composition, "releaseProvenanceHash"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(problem!, "releaseProvenanceHash"), false);
+  assert.throws(() => issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
+    factory,
+    declaredCapabilitySetRoot: h("test/strategy-composition/foreign-capability/v1", 1),
+    runtimeAuthority: unsignedAuthority,
+    assertCurrent() {},
+  }), /declared capability set/);
 });

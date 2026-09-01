@@ -62,6 +62,19 @@ export interface RuntimeAuthorityProjectionV1 {
   readonly implementationCommit: string;
 }
 
+/** Neutral read-only fence shared by Ready/startup and both bootstrap modes. */
+export type RuntimeReleaseProvenanceHashV1 = Hash | null;
+
+export interface CurrentRuntimeAuthoritySnapshotV1 {
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  /** Present only for an externally signed release. */
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
+}
+
+export interface CurrentRuntimeAuthorityPortV1 {
+  readCurrent(): CurrentRuntimeAuthoritySnapshotV1;
+}
+
 const signedReleaseInputSchema = objectSchema({
   authorityClass: literalSchema("signed-release"),
   runtimeBindingId: hashSchema,

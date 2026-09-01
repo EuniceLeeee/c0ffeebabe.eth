@@ -3117,7 +3117,18 @@ class ProductionEvidenceOwnerStateV1 {
     assertIssuedStartupRuntime(startup);
     if (this.#ports !== null || this.#serving !== null) throw new TypeError("production evidence owner is already bound to a serving generation");
     const startupGeneration = startup.readActiveGeneration();
-    if (startup.releaseBindingId !== this.#release.bindingId || startup.candidateReleaseCommit !== this.#release.candidateReleaseCommit || startupGeneration.releaseProvenanceHash !== this.#release.releaseProvenanceHash) throw new TypeError("production evidence serving release mismatch");
+    const expectedRuntimeAuthority = projectRuntimeAuthorityDescriptorV1(
+      createSignedReleaseRuntimeAuthorityDescriptorV1({
+        authorityClass: "signed-release",
+        runtimeBindingId: this.#release.bindingId,
+        releaseProvenanceHash: this.#release.releaseProvenanceHash,
+        implementationCommit: this.#release.candidateReleaseCommit,
+      }),
+    );
+    if (startup.runtimeAuthority.authorityClass !== expectedRuntimeAuthority.authorityClass
+      || startup.runtimeAuthority.authorityBindingHash !== expectedRuntimeAuthority.authorityBindingHash
+      || startup.runtimeAuthority.implementationCommit !== expectedRuntimeAuthority.implementationCommit
+      || startupGeneration.releaseProvenanceHash !== this.#release.releaseProvenanceHash) throw new TypeError("production evidence serving release mismatch");
     const serving = servingFromStartupGeneration(startup);
     this.#startup = startup;
     this.#serving = serving;

@@ -5,6 +5,7 @@ import type { CandidateRecordV1, CanonicalCutoffV1, SourceCoverageCertificateV1 
 import type { PersistedGraphV1 } from "../../graph/src/index.ts";
 import type { ReadyGenerationV1 } from "../../ready-generation/src/index.ts";
 import type { CandidatePartitionProofV1 } from "../../../specs/candidate-partition-authority/src/index.ts";
+import type { RuntimeReleaseProvenanceHashV1 } from "../../runtime-authority/src/index.ts";
 
 export interface ReadyStage12EvidenceBindingV1 {
   readonly readyRecordHash: Hash;
@@ -17,7 +18,7 @@ export interface ReadyStage12EvidenceBindingV1 {
   readonly verifiedMemoSetRoot: Hash;
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly promotionRevision: string;
 }
 

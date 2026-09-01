@@ -17,6 +17,8 @@ import {
 } from "../../work-plane/src/internal/family-execution-port.ts";
 import {
   readGeneratedFamilyRuntimeFactoryMetadata,
+  readGeneratedFamilyRuntimeMembership,
+  readGeneratedFamilySourcePlanDeclarations,
   readGeneratedFamilySourcePlanRuntimes,
 } from "../../family-composition/src/internal/generated-runtime-composition.ts";
 import {
@@ -28,9 +30,11 @@ import { readQualifiedCoarseProjectionV1 } from "../../coarse-economics/src/inde
 import { createReleaseFamilyRuntimeComposition } from "../../../generated/runtime-composition/index.ts";
 import {
   issueRuntimeReleaseFamilyRuntimeAuthorityCapability,
+  issueUnsignedDryRunFamilyRuntimeAuthorityCapability,
 } from "../src/internal/family-runtime-owner.ts";
 import {
   issueRuntimeReleaseNominationQualificationVerifier,
+  issueUnsignedDryRunNominationProgramMembershipVerifier,
 } from "../src/internal/nomination-qualification-owner.ts";
 import { issueRuntimeReleaseCandidatePartitionProofIssuer } from "../src/internal/candidate-partition-proof-owner.ts";
 import { issueCandidatePartitionProofIssuerPort } from "../../../specs/candidate-partition-authority/src/internal/issuer-owner.ts";
@@ -44,6 +48,7 @@ import {
   runtimeAuthorityForReleaseApproval,
   rotateReleaseApproval,
 } from "../../attestation/test/authority-fixture.ts";
+import { createUnsignedDryRunRuntimeAuthorityDescriptorV1 } from "../../runtime-authority/src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/family-runtime-owner", value);
 
@@ -167,6 +172,52 @@ test("Family runtime authority is derived only from signed release, generated me
   await assert.rejects(
     () => composition.issueCoarseProjection(seam.producer, {} as never),
     /stale|rotation/,
+  );
+});
+
+test("unsigned Family owner binds exact generated declarations without qualification facts", () => {
+  const value = release();
+  const runtimeAuthority = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+    authorityClass: "unsigned-dry-run",
+    runtimeBindingId: h("unsigned-runtime-binding"),
+    implementationCommit: "b".repeat(40),
+  });
+  const capability = issueUnsignedDryRunFamilyRuntimeAuthorityCapability({
+    runtimeAuthority,
+    execution: executionFor(value.binding),
+    factory: createReleaseFamilyRuntimeComposition,
+    assertCurrent() {},
+  });
+  const membership = readGeneratedFamilyRuntimeMembership(createReleaseFamilyRuntimeComposition, capability);
+  assert.equal(membership.runtimeAuthority.authorityClass, "unsigned-dry-run");
+  assert.equal(Object.prototype.hasOwnProperty.call(membership, "releaseProvenanceHash"), false);
+  const declarations = readGeneratedFamilySourcePlanDeclarations(
+    createReleaseFamilyRuntimeComposition,
+    capability,
+  ).map(binding => Object.freeze({
+    sourcePlanIdentity: sourcePlanIdentity(binding.sourcePlanRef),
+    sourcePlanLeafDigest: binding.sourcePlanLeafDigest,
+    nominationProgramRoot: binding.nominationProgramRoot,
+    nominationProgramProposalLeafDigest: binding.nominationProgramProposalLeafDigest,
+  }));
+  const verifier = issueUnsignedDryRunNominationProgramMembershipVerifier(
+    createReleaseFamilyRuntimeComposition,
+    capability,
+  );
+  assert.doesNotThrow(() => verifier.assertDeclared(declarations));
+  assert.throws(
+    () => verifier.assertDeclared(declarations.map((binding, index) => index === 0
+      ? { ...binding, qualificationLeafDigest: h("forbidden-qualification") } as never
+      : binding)),
+    /non-exact fields/,
+  );
+  assert.throws(
+    () => issueRuntimeReleaseNominationQualificationVerifier(
+      value.authority,
+      createReleaseFamilyRuntimeComposition,
+      capability,
+    ),
+    /qualification is unavailable in unsigned dry-run/,
   );
 });
 

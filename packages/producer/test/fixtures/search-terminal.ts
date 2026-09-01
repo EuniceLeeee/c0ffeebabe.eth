@@ -312,7 +312,7 @@ export function createSearchTerminalFixture(input: {
   const runtimeAuthority = input.runtimeAuthority ?? createSignedReleaseRuntimeAuthorityDescriptorV1({
     authorityClass: "signed-release",
     runtimeBindingId: h("runtime-binding", input.generationId),
-    releaseProvenanceHash: input.releaseProvenanceHash ?? leaseBinding.releaseProvenanceHash,
+    releaseProvenanceHash: input.releaseProvenanceHash ?? leaseBinding.releaseProvenanceHash!,
     implementationCommit: "a".repeat(40),
   });
   const releaseBoundLeaseBinding = input.releaseProvenanceHash === undefined
@@ -409,7 +409,7 @@ export function createSearchTerminalFixture(input: {
         definitionCatalogRoot: releaseBoundLeaseBinding.definitionCatalogRoot,
         graphRoot: releaseBoundLeaseBinding.graphRoot,
         edges: strategyGraphEdges(edges),
-        releaseProvenanceHash: releaseBoundLeaseBinding.releaseProvenanceHash,
+        releaseProvenanceHash: releaseBoundLeaseBinding.releaseProvenanceHash!,
         readyRecordHash: releaseBoundLeaseBinding.readyRecordHash,
         sourceHash: input.head.hash,
         correlationId: triggerFacts.correlationId,

@@ -801,16 +801,19 @@ async function loadInstalledProductionDeploymentBundleV1(input: Readonly<{
   });
   const application = issueSearcherRuntimeApplicationOwnerV1({
     strategyRuntime: services.strategyRuntime,
-    performanceRuntime: services.performance,
-    fullGraphCoarseSweep: services.fullGraphCoarseSweep,
-    fullFamilyTerminalBinding: services.fullFamilyTerminalBinding,
-    sixStepTerminalBinding: services.sixStepTerminalBinding,
-    ...terminalObservations,
+    runtimeAuthority: services.economicSafety.binding().runtimeAuthority,
     economicSafety: services.economicSafety,
-    release: {
-      bindingId: services.release.bindingId,
-      releaseProvenanceHash: services.release.releaseProvenanceHash,
-      candidateReleaseCommit: services.release.candidateReleaseCommit,
+    acceptance: {
+      performanceRuntime: services.performance,
+      fullGraphCoarseSweep: services.fullGraphCoarseSweep,
+      fullFamilyTerminalBinding: services.fullFamilyTerminalBinding,
+      sixStepTerminalBinding: services.sixStepTerminalBinding,
+      ...terminalObservations,
+      release: {
+        bindingId: services.release.bindingId,
+        releaseProvenanceHash: services.release.releaseProvenanceHash,
+        candidateReleaseCommit: services.release.candidateReleaseCommit,
+      },
     },
     source: runtimeSource,
     coreInput: {
@@ -1147,13 +1150,16 @@ async function startPreReleaseRuntimeServiceV1(
   });
   const applicationOwner = issueSearcherRuntimeApplicationOwnerV1({
     strategyRuntime: core.services.strategyRuntime,
-    performanceRuntime: core.services.performance,
-    fullGraphCoarseSweep: core.services.fullGraphCoarseSweep,
-    fullFamilyTerminalBinding: core.services.fullFamilyTerminalBinding,
-    sixStepTerminalBinding: core.services.sixStepTerminalBinding,
-    ...terminalObservations,
+    runtimeAuthority: core.services.economicSafety.binding().runtimeAuthority,
     economicSafety: core.services.economicSafety,
-    release,
+    acceptance: {
+      performanceRuntime: core.services.performance,
+      fullGraphCoarseSweep: core.services.fullGraphCoarseSweep,
+      fullFamilyTerminalBinding: core.services.fullFamilyTerminalBinding,
+      sixStepTerminalBinding: core.services.sixStepTerminalBinding,
+      ...terminalObservations,
+      release,
+    },
     source: core.runtimeSource,
     coreInput: {
       amountSeed: core.runtimePolicy.amountSeed,

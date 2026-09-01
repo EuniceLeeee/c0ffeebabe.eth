@@ -74,6 +74,20 @@ function readAdmittedHead(value: unknown) {
   return value as ReturnType<typeof admittedHead>;
 }
 
+test("generic Producer admission accepts positive ordinals beyond an acceptance window", () => {
+  const value = head("101", "continuous-producer");
+  const port = issueProducerPerformancePortV1({
+    acceptEligibleHead(input) { return admittedHead(input, "101"); },
+    readEligibleHeadBinding: readAdmittedHead,
+    bindEligibleHeadSession({ eligibleHead }) { return eligibleHead; },
+    bindEligibleHeadFacts({ eligibleHead }) { return eligibleHead; },
+    sealHeadTerminal() {},
+  });
+  const admitted = port.acceptEligibleHead({ head: value, revision: "0" });
+  assert.equal(admitted instanceof Promise, false);
+  assert.equal(port.readEligibleHeadBinding(admitted as ReturnType<typeof admittedHead>).ordinal, "101");
+});
+
 function qualifiedWorkerAuthority() {
   const lease = decodeRuntimeReleaseExecutorLeaseV1({
     bindingId: h("worker-binding", 1), releaseProvenanceHash: h("worker-provenance", 1), executorAuthorityRoot: h("worker-authority", 1),

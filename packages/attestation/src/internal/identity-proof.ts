@@ -47,7 +47,10 @@ function cutoff(value: unknown, context: string) {
   });
 }
 
-function identityOrigin(value: unknown, context: string): AttestationIdentityOriginV1 {
+export function decodeAttestationIdentityOriginV1(
+  value: unknown,
+  context = "attestationIdentityOrigin",
+): AttestationIdentityOriginV1 {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${context} must be an object`);
   }
@@ -120,7 +123,10 @@ function nonZeroHash(value: unknown, context: string): Hash {
   return hash;
 }
 
-function identityObservation(value: unknown, context: string): IdentityObservation {
+export function decodeAttestationIdentityObservationV1(
+  value: unknown,
+  context = "attestationIdentityObservation",
+): IdentityObservation {
   assertExactKeys(value, [
     "kind", "familyInstanceKey", "identityMemo", "identityMemoHash", "descriptorHash", "evidenceRoot",
   ], context);
@@ -156,10 +162,10 @@ function proofCore(input: AttestationIdentityProofIssueInputV1, sequence: string
     familyDefinitionHash: nonZeroHash(input.candidate.familyDefinitionHash, "identityProof.familyDefinitionHash"),
     familyCandidateKey: nonZeroHash(input.candidate.familyCandidateKey, "identityProof.familyCandidateKey"),
     candidateSubjectHash: nonZeroHash(input.candidate.candidateSubjectHash, "identityProof.candidateSubjectHash"),
-    identityObservation: identityObservation(input.identityObservation, "identityProof.identityObservation"),
+    identityObservation: decodeAttestationIdentityObservationV1(input.identityObservation, "identityProof.identityObservation"),
     identitySubjectHash: nonZeroHash(input.identitySubjectHash, "identityProof.identitySubjectHash"),
     identitySemanticHash: nonZeroHash(input.identitySemanticHash, "identityProof.identitySemanticHash"),
-    identityOrigin: identityOrigin(input.identityOrigin, "identityProof.identityOrigin"),
+    identityOrigin: decodeAttestationIdentityOriginV1(input.identityOrigin, "identityProof.identityOrigin"),
     releaseProvenanceHash: nonZeroHash(input.releaseProvenanceHash, "identityProof.releaseProvenanceHash"),
     attestationAuthorityRoot: nonZeroHash(input.attestationAuthorityRoot, "identityProof.attestationAuthorityRoot"),
     frameworkAuthorityRoot: nonZeroHash(input.frameworkAuthorityRoot, "identityProof.frameworkAuthorityRoot"),
@@ -214,10 +220,10 @@ function proofCoreFromRecord(value: AttestationIdentityIssuerProofV1): ProofCore
     familyDefinitionHash: nonZeroHash(value.familyDefinitionHash, "identityProof.familyDefinitionHash"),
     familyCandidateKey: nonZeroHash(value.familyCandidateKey, "identityProof.familyCandidateKey"),
     candidateSubjectHash: nonZeroHash(value.candidateSubjectHash, "identityProof.candidateSubjectHash"),
-    identityObservation: identityObservation(value.identityObservation, "identityProof.identityObservation"),
+    identityObservation: decodeAttestationIdentityObservationV1(value.identityObservation, "identityProof.identityObservation"),
     identitySubjectHash: nonZeroHash(value.identitySubjectHash, "identityProof.identitySubjectHash"),
     identitySemanticHash: nonZeroHash(value.identitySemanticHash, "identityProof.identitySemanticHash"),
-    identityOrigin: identityOrigin(value.identityOrigin, "identityProof.identityOrigin"),
+    identityOrigin: decodeAttestationIdentityOriginV1(value.identityOrigin, "identityProof.identityOrigin"),
     releaseProvenanceHash: nonZeroHash(value.releaseProvenanceHash, "identityProof.releaseProvenanceHash"),
     attestationAuthorityRoot: nonZeroHash(value.attestationAuthorityRoot, "identityProof.attestationAuthorityRoot"),
     frameworkAuthorityRoot: nonZeroHash(value.frameworkAuthorityRoot, "identityProof.frameworkAuthorityRoot"),

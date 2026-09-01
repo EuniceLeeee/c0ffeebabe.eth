@@ -13,6 +13,11 @@ import {
   registerRuntimeReleaseAuthority,
   stateForRuntimeReleaseCapability,
 } from "./internal/state.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  type CurrentRuntimeAuthorityPortV1,
+} from "../../../packages/runtime-authority/src/index.ts";
+import { runtimeReleaseBindingProvenanceHash } from "../../../specs/release-authority/src/index.ts";
 import { issueRuntimeReleaseReadyBindingPort } from "./internal/ready-binding-owner.ts";
 import type { RuntimeReleaseAuthorityStateV1 } from "./internal/state.ts";
 
@@ -46,11 +51,16 @@ export type {
 
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 
-export interface RuntimeReleaseAuthorityV1 {
+export interface RuntimeAuthorityV1 {
+  readonly capability: object;
+  readonly readyGeneration: CurrentRuntimeAuthorityPortV1;
+  revoke(): void;
+}
+
+export interface RuntimeReleaseAuthorityV1 extends RuntimeAuthorityV1 {
   readonly capability: RuntimeReleaseResolutionCapabilityV1;
   readonly resolver: RuntimeReleaseResolutionPortV1;
-  readonly readyGeneration: RuntimeReleaseReadyBindingPortV1;
-  revoke(): void;
+  readonly readyGeneration: RuntimeReleaseReadyBindingPortV1 & CurrentRuntimeAuthorityPortV1;
   rotate(
     binding: RuntimeReleaseBindingV1,
   ): void;
@@ -85,6 +95,9 @@ export function verifyRuntimeReleaseBindingAuthenticityV1(
 const resolver: RuntimeReleaseResolutionPortV1 = Object.freeze({
   resolve(capability: RuntimeReleaseResolutionCapabilityV1) {
     const state = stateForRuntimeReleaseCapability(capability);
+    if (state.authorityClass !== "signed-release") {
+      throw new TypeError("runtime release resolver requires signed release authority");
+    }
     return state.binding;
   },
 });
@@ -97,6 +110,13 @@ export function verifyAndIssueRuntimeReleaseAuthorityV1(
   const verified = verifyBinding(bindingValue, deploymentPin);
   const capability = Object.freeze(Object.create(null)) as RuntimeReleaseResolutionCapabilityV1;
   const state: RuntimeReleaseAuthorityStateV1 = {
+    authorityClass: "signed-release",
+    descriptor: createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: verified.binding.bindingId,
+      releaseProvenanceHash: runtimeReleaseBindingProvenanceHash(verified.binding),
+      implementationCommit: verified.binding.candidateReleaseCommit,
+    }),
     binding: verified.binding,
     deploymentPin: verified.deploymentPin,
     active: true,

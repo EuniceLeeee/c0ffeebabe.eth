@@ -7,6 +7,7 @@ import test from "node:test";
 import { encodeCanonicalBytes, hashDomain, sha256Hex, type Hash } from "../../canonical-codec/src/index.ts";
 import {
   createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 import { createEvidenceEvent, EVIDENCE_SCHEMA_MANIFESTS } from "../../../specs/evidence/src/index.ts";
@@ -22,6 +23,8 @@ import { generatedEconomicSafetyActionOwnerQualificationFixtureV1 } from "../../
 import { verifyAndIssueRuntimeReleaseAuthorityV1 } from "../src/index.ts";
 import * as runtimeReleasePublic from "../src/index.ts";
 import { assertIssuedRuntimeReleaseReadyBindingPort } from "../src/internal/ready-binding-consumer.ts";
+import { assertIssuedCurrentRuntimeAuthorityPort } from "../src/internal/ready-binding-consumer.ts";
+import { issueUnsignedDryRunRuntimeAuthorityV1 } from "../src/internal/unsigned-authority-owner.ts";
 import { issueDeploymentAttestationProofPort } from "../src/internal/attestation-proof-owner.ts";
 import { issueCandidatePartitionProofIssuerPort } from "../../../specs/candidate-partition-authority/src/internal/issuer-owner.ts";
 import type { CandidatePartitionProofIssuerPortV1 } from "../../../specs/candidate-partition-authority/src/index.ts";
@@ -69,7 +72,9 @@ import { compileStrategy } from "../../strategy-sdk/src/index.ts";
 import { ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER, ROUTE_CYCLE_STRATEGY } from "../../../strategies/route-cycle/src/index.ts";
 import {
   assertIssuedRuntimeReleaseStrategyRuntimeService,
+  assertIssuedUnsignedDryRunStrategyRuntimeService,
   issueRuntimeReleaseStrategyRuntimeService,
+  issueUnsignedDryRunStrategyRuntimeService,
 } from "../src/internal/strategy-runtime-owner.ts";
 import { issueProducerIngressTriggerV1 } from "../../producer/src/internal/owners.ts";
 import { issueProducerBoundTriggerV1 } from "../../producer/src/index.ts";
@@ -91,6 +96,26 @@ import type { CanonicalHead } from "../../producer/src/index.ts";
 const h = (value: string): Hash => hashDomain("test/runtime-authority", value);
 const valuationQualification = generatedEconomicValuationOwnerQualificationSetFixtureV1("runtime-release-authority");
 const actionOwnerQualification = generatedEconomicSafetyActionOwnerQualificationFixtureV1("runtime-release-authority");
+
+test("unsigned dry-run lifetime exposes only neutral current authority", () => {
+  const descriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+    authorityClass: "unsigned-dry-run",
+    runtimeBindingId: h("unsigned-binding"),
+    implementationCommit: "7".repeat(40),
+  });
+  const authority = issueUnsignedDryRunRuntimeAuthorityV1(descriptor);
+  const current = assertIssuedCurrentRuntimeAuthorityPort(authority.readyGeneration).readCurrent();
+  assert.deepEqual(current, {
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(descriptor),
+    releaseProvenanceHash: null,
+  });
+  assert.throws(
+    () => assertIssuedRuntimeReleaseReadyBindingPort(authority.readyGeneration),
+    /not release-issued/,
+  );
+  authority.revoke();
+  assert.throws(() => authority.readyGeneration.readCurrent(), /revoked/);
+});
 
 test("Six-Step evidence restart derives sequence 100 from the canonical production event kind", () => {
   const boundary = createReadOnlyArtifactRef({
@@ -710,6 +735,32 @@ test("runtime-release Strategy service is generated, release-bound, and rotation
   assert.throws(() => service.issuePlanningProblem(request), /stale|rotation/);
   value.authority.revoke();
   assert.throws(() => service.readMetadata(), /revoked/);
+});
+
+test("unsigned Strategy owner exposes generated membership without release provenance", () => {
+  const value = issued();
+  const descriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+    authorityClass: "unsigned-dry-run",
+    runtimeBindingId: h("unsigned-strategy-runtime-binding"),
+    implementationCommit: value.binding.candidateReleaseCommit,
+  });
+  let current = true;
+  const service = issueUnsignedDryRunStrategyRuntimeService({
+    runtimeAuthority: descriptor,
+    factory: strategyFactoryFor(value),
+    assertCurrent() {
+      if (!current) throw new TypeError("unsigned Strategy runtime rotated");
+    },
+  });
+  assert.doesNotThrow(() => assertIssuedUnsignedDryRunStrategyRuntimeService(service));
+  const metadata = service.readMetadata();
+  const expectation = service.readEvidenceExpectation();
+  assert.equal(metadata.runtimeMembershipHash, expectation.runtimeMembershipHash);
+  assert.equal(Object.prototype.hasOwnProperty.call(metadata, "releaseProvenanceHash"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(expectation, "releaseProvenanceHash"), false);
+  current = false;
+  assert.throws(() => service.readMetadata(), /rotated/);
+  assert.throws(() => assertIssuedUnsignedDryRunStrategyRuntimeService(service), /rotated/);
 });
 
 function releaseProjection(binding: ReturnType<typeof issued>["binding"]) {

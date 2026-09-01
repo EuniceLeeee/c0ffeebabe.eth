@@ -13,6 +13,7 @@ import {
 import {
   createGeneratedStrategyRuntimeFactory,
   issueGeneratedStrategyRuntimeAuthorityCapability,
+  issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability,
 } from "../../strategy-composition/src/internal/generated-runtime-composition.ts";
 import { compileStrategy, defineStrategy } from "../../strategy-sdk/src/index.ts";
 import {
@@ -22,6 +23,7 @@ import {
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../../strategy-composition/src/internal/trigger-owner.ts";
 import {
   createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 import {
@@ -103,6 +105,48 @@ const binding: StrategyGraphBindingV1 = Object.freeze({
   runtimeAuthority,
   sourceHash: h("test/planner/source/v1", 1),
 });
+
+function unsignedProblem(edges: readonly StrategyGraphEdgeV1[]): IssuedStrategyPlanningProblemV1 {
+  const factory = createGeneratedStrategyRuntimeFactory({
+    descriptor,
+    issuers: [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
+  });
+  const unsignedAuthority = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+    authorityClass: "unsigned-dry-run",
+    runtimeBindingId: h("test/planner/unsigned-runtime-binding/v1", 1),
+    implementationCommit: "b".repeat(40),
+  });
+  const unsignedComposition = factory(issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
+    factory,
+    declaredCapabilitySetRoot: descriptor.proposedCapabilitySetRoot,
+    runtimeAuthority: unsignedAuthority,
+    assertCurrent: () => {},
+  }));
+  const unsignedBinding: StrategyGraphBindingV1 = Object.freeze({
+    generationId: "generation-unsigned-1",
+    definitionCatalogRoot: descriptor.definitionCatalogRoot,
+    graphRoot: h("test/planner/unsigned-graph/v1", 1),
+    readyRecordHash: h("test/planner/unsigned-ready/v1", 1),
+    runtimeMembershipHash: unsignedComposition.runtimeMembershipHash!,
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(unsignedAuthority),
+    sourceHash: h("test/planner/unsigned-source/v1", 1),
+  });
+  const entryAssetRef = edges[0]?.inputAssetPorts[0]?.assetRef ?? asset("missing-entry");
+  return unsignedComposition.issuePlanningProblems({
+    binding: unsignedBinding,
+    edges,
+    trigger: issueStrategyPlanningTriggerCapabilityV1({
+      binding: unsignedBinding,
+      lane: "blockscan",
+      triggerRef: h("test/planner/unsigned-trigger/v1", 1),
+      objectiveRef: planningObjectiveRef,
+      entryAssetRef,
+      returnAssetRef: entryAssetRef,
+      affectedEdgeIds: [],
+      correlationId: h("test/planner/unsigned-correlation/v1", 1),
+    }),
+  })[0]!;
+}
 
 function edge(id: string, inputs: readonly string[], outputs: readonly string[]): StrategyGraphEdgeV1 {
   return edgeWithAssetRefs(id, inputs.map(asset), outputs.map(asset));
@@ -240,6 +284,16 @@ test("enumerates one canonical directed cycle and binds exact asset ports", () =
     outputAssetRef: asset("a"),
     outputPortRef: edges[1]!.outputAssetPorts[0]!.portRef,
   });
+});
+
+test("enumerates the same generated problem under unsigned dry-run authority", () => {
+  const edges = [edge("unsigned-ab", ["a"], ["b"]), edge("unsigned-ba", ["b"], ["a"])];
+  const planningProblem = unsignedProblem(edges);
+  const result = enumerateClosedLoopPlanningProblem({ problem: planningProblem });
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.planningProblem.runtimeAuthority.authorityClass, "unsigned-dry-run");
+  assert.equal(typeof result.planningProblem.runtimeMembershipHash, "string");
+  assert.equal(Object.prototype.hasOwnProperty.call(result.planningProblem, "releaseProvenanceHash"), false);
 });
 
 test("family-independent AssetRefs close a cross-Family cycle but never cross chains", () => {

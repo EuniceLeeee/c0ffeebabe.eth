@@ -1,8 +1,4 @@
-import {
-  gitSha40Schema,
-  hashSchema,
-  type Hash,
-} from "../../canonical-codec/src/index.ts";
+import type { Hash } from "../../canonical-codec/src/index.ts";
 import type { SourceCoverageCertificateV1 } from "../../discovery/src/index.ts";
 import {
   CanonicalSource,
@@ -30,6 +26,11 @@ import type {
   ReadyGenerationV1,
   ServingValidationInputV1,
 } from "../../ready-generation/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeReleaseProvenanceHashV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../runtime-authority/src/index.ts";
 import type { InstanceCatalogV1 } from "../../catalog/src/index.ts";
 import type { FamilyRuntimeCompositionV1 } from "../../family-composition/src/index.ts";
 import type { GeneratedFamilySearchRuntimePortV1 } from "../../family-composition/src/internal/generated-runtime-composition.ts";
@@ -42,7 +43,7 @@ import { issueStartupRuntimeWithStage12Evidence } from "./internal/runtime-owner
 import type { StartupSixStepRouteParentCapabilityV1 } from "./internal/six-step-route-parent-owner.ts";
 import { createGeneratedRouteHandleIssuer } from "./internal/generated-route-handle-adapter.ts";
 import {
-  startSignedReleaseNativeStartupRuntime,
+  startRuntimeAuthorityNativeStartupRuntime,
   type SignedReleaseNativeStartupRuntimeV1,
 } from "./internal/signed-release-native-startup-owner.ts";
 import type { NativeStartupServingGenerationV1 } from "./internal/native-startup.ts";
@@ -100,7 +101,7 @@ export interface StartupProducerLeaseV1 {
 
 export type { StartupSixStepRouteParentCapabilityV1 } from "./internal/six-step-route-parent-owner.ts";
 
-export interface StartupRuntimeCompositionInputV1 {
+export interface StartupRuntimeCompositionCoreInputV1 {
   readonly policy: GenerationRefreshPolicyV1;
   readonly catalog: { loadExact(): BuilderCatalogV1 };
   readonly checkpoint: StartupCheckpointPortV1;
@@ -118,10 +119,11 @@ export interface StartupRuntimeCompositionInputV1 {
   /** Opaque search surface issued from the same generated Family authority. */
   readonly familySearchRuntime: GeneratedFamilySearchRuntimePortV1;
   readonly processEpoch: string;
-  /** Exact release identity supplied by the release authority composition. */
-  readonly releaseBindingId: Hash;
-  readonly candidateReleaseCommit: `${string}`;
+  /** Exact mode-neutral authority projection issued by the bootstrap owner. */
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
 }
+
+export type StartupRuntimeCompositionInputV1 = StartupRuntimeCompositionCoreInputV1;
 
 export interface StartupServingGenerationV1 {
   readonly ready: ReadyGenerationV1;
@@ -130,7 +132,7 @@ export interface StartupServingGenerationV1 {
   readonly readyRecordHash: Hash;
   readonly sourceCoverageRoot: Hash;
   readonly definitionCatalogRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
 }
 
 export interface StartupRuntimeV1 {
@@ -143,9 +145,8 @@ export interface StartupRuntimeV1 {
   /** The generation identity is duplicated as a stable, log-safe join key. */
   readonly generationId: string;
   readonly graphRoot: Hash;
-  /** Exact release identity copied from the owner-issued startup input. */
-  readonly releaseBindingId: Hash;
-  readonly candidateReleaseCommit: `${string}`;
+  /** Exact mode-neutral authority pinned for the lifetime of this runtime. */
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   /** Exact canonical source authority used by startup and producer intake. */
   readonly canonicalSourceAuthority: CanonicalSourceAuthorityV1;
   /** One atomic owner snapshot. Consumers must not compose separately read
@@ -209,12 +210,10 @@ export async function startStartupRuntime(
   if (typeof input.processEpoch !== "string" || input.processEpoch.length === 0) {
     throw new TypeError("startup process epoch is required");
   }
-  const releaseBindingId = hashSchema.decode(input.releaseBindingId, "startup.releaseBindingId");
-  const candidateReleaseCommit = gitSha40Schema.decode(input.candidateReleaseCommit, "startup.candidateReleaseCommit");
-  const signed = await startSignedReleaseNativeStartupRuntime({
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
+  const signed = await startRuntimeAuthorityNativeStartupRuntime({
     composition: input,
-    runtimeBindingId: releaseBindingId,
-    implementationCommit: candidateReleaseCommit,
+    runtimeAuthority,
   }, signal);
   const native = signed.native;
   const servingProjections = new WeakMap<object, StartupServingGenerationV1>();
@@ -229,8 +228,7 @@ export async function startStartupRuntime(
     familySearchRuntime: input.familySearchRuntime,
     get generationId() { return native.generationId; },
     get graphRoot() { return native.graphRoot; },
-    releaseBindingId,
-    candidateReleaseCommit,
+    runtimeAuthority,
     canonicalSourceAuthority: input.canonical.authority,
     readActiveGeneration: () => projectServing(native.readActiveGeneration()),
     readServingGeneration: (generationId: string) => projectServing(native.readServingGeneration(generationId)),

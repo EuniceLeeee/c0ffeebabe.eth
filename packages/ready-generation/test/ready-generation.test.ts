@@ -18,6 +18,11 @@ import type { SealedRunBindingV1, SealedRunCapabilityV1, SealedRunReaderPortV1, 
 import { readyBindingPortForReleaseApproval, releaseApproval } from "../../attestation/test/authority-fixture.ts";
 import { runtimeReleaseBindingProvenanceHash } from "../../../specs/release-authority/src/index.ts";
 import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
+import {
   sealNominationClosureV1,
   sealQualifiedSourcePlanNominationReceiptV1,
 } from "../../../specs/nomination-authority/src/index.ts";
@@ -55,6 +60,17 @@ const release = releaseApproval(h("framework"), h("executor"));
 const releaseBinding = release.resolver.resolve(release.capability).provenance.runtimeBinding;
 const releaseProvenanceHash = runtimeReleaseBindingProvenanceHash(releaseBinding);
 const releaseBindingPort = readyBindingPortForReleaseApproval(release);
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+  createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: releaseBindingPort.currentBindingId(),
+    releaseProvenanceHash,
+    implementationCommit: releaseBindingPort.currentImplementationCommit(),
+  }),
+);
+const runtimeAuthorityPort = Object.freeze({
+  readCurrent: () => Object.freeze({ runtimeAuthority, releaseProvenanceHash }),
+});
 const candidateRoot = hashCanonicalPartition("aloha/candidate-partition/v2", []);
 const nominationReceipt = sealQualifiedSourcePlanNominationReceiptV1({
   cutoff,
@@ -178,8 +194,8 @@ class Store implements ReadyStorePort {
 
 function makeService(reader: SealedRunReaderPortV1, store = new Store(), canonical = new Canonical()) {
   const caller = {};
-  const authority = createReadyPromotionAuthority(() => ({ definitionCatalogRoot: h("definitions"), policy }), releaseBindingPort);
-  return { caller, store, canonical, service: new ReadyGenerationServiceV1(caller, store, canonical, () => "1000", () => ({ definitionCatalogRoot: h("definitions"), declaredSourcePlans: [plan], releaseProvenanceHash }), authority, reader, releaseBindingPort) };
+  const authority = createReadyPromotionAuthority(() => ({ definitionCatalogRoot: h("definitions"), policy }), runtimeAuthorityPort);
+  return { caller, store, canonical, service: new ReadyGenerationServiceV1(caller, store, canonical, () => "1000", () => ({ definitionCatalogRoot: h("definitions"), declaredSourcePlans: [plan] }), authority, reader, runtimeAuthorityPort) };
 }
 
 const promotionInput = (sealedRun: SealedRunCapabilityV1) => ({ sealedRun, instanceCatalog, parentGenerationId: null, policy });
@@ -189,6 +205,50 @@ test("public ReadyGeneration API does not re-export the durable sealed-run snaps
   const file = source.replace(/import\s+[\s\S]*?from\s+["'][^"']+["'];?/g, "");
   assert.doesNotMatch(file, /export\s+(?:type\s+)?\{[^}]*\bSealedRunSnapshotV1\b[^}]*\}/s);
   assert.doesNotMatch(file, /export\s+(?:interface|type|class|const|function)\s+SealedRunSnapshotV1\b/);
+});
+
+test("current runtime authority is mode-neutral and unsigned cannot carry release provenance", () => {
+  const unsignedAuthority = projectRuntimeAuthorityDescriptorV1(
+    createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+      authorityClass: "unsigned-dry-run",
+      runtimeBindingId: h("unsigned-runtime-binding"),
+      implementationCommit: releaseBindingPort.currentImplementationCommit(),
+    }),
+  );
+  const unsignedPort = Object.freeze({
+    readCurrent: () => Object.freeze({ runtimeAuthority: unsignedAuthority, releaseProvenanceHash: null }),
+  });
+  const issued = issuedReader();
+  const authority = createReadyPromotionAuthority(
+    () => ({ definitionCatalogRoot: h("definitions"), policy }),
+    unsignedPort,
+  );
+  const service = new ReadyGenerationServiceV1(
+    {},
+    new Store(),
+    new Canonical(),
+    () => "1000",
+    () => ({ definitionCatalogRoot: h("definitions"), declaredSourcePlans: [plan] }),
+    authority,
+    issued.reader,
+    unsignedPort,
+  );
+  assert.doesNotThrow(() => service.assertOwnerCurrent());
+  const badPort = Object.freeze({
+    readCurrent: () => Object.freeze({ runtimeAuthority: unsignedAuthority, releaseProvenanceHash }),
+  });
+  assert.throws(
+    () => createReadyPromotionAuthority(
+      () => ({ definitionCatalogRoot: h("definitions"), policy }),
+      badPort,
+    ).assertConfiguration({
+      definitionCatalogRoot: h("definitions"),
+      generationRefreshPolicyHash: hashDomain("aloha/generation-refresh-policy/v1", policy),
+      runtimeAuthority: unsignedAuthority,
+      releaseProvenanceHash: null,
+    }),
+    /cannot carry release provenance/,
+  );
 });
 
 test("opaque sealed run promotes only through a checkpoint-issued reader", async () => {

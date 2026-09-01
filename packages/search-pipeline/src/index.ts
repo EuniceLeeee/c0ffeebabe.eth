@@ -530,7 +530,8 @@ export interface SearchPipelinePortsV1<Projection, Plan, Exact, Simulation> {
   readonly finalSimulation: FinalSimulationPortV1<Simulation>;
   readonly economicSafety: EconomicSafetyFinalizationServiceV1;
   readonly unsignedDryRun: UnsignedDryRunPortV1<Projection, Plan, Exact, Simulation>;
-  readonly sixStepArtifacts: ProductionSixStepTailEmissionPortV1;
+  /** Signed production evidence is advisory for unsigned dry-run. */
+  readonly sixStepArtifacts?: ProductionSixStepTailEmissionPortV1;
 }
 
 /** Tail ports for one route that has already passed the authoritative coarse
@@ -590,7 +591,7 @@ export interface ResolvedRouteSixStepTraceV1 {
     readonly executionProgram: SearchStageTimingFactV1;
     readonly finalSimulation: SearchStageTimingFactV1;
   }>;
-  readonly productionArtifactSetRoots: readonly [Hash, Hash, Hash, Hash];
+  readonly productionArtifactSetRoots: readonly Hash[];
   readonly traceRoot: Hash;
 }
 
@@ -1079,7 +1080,8 @@ export async function runResolvedRoutePipeline<Projection, Plan, Exact, Simulati
   let stage6Artifact: ProductionSixStepEmissionCapabilityV1 | null = null;
   try {
     assertIssuedEconomicSafetyFinalizationServiceV1(ports.economicSafety);
-    assertIssuedProductionSixStepTailEmissionPortV1(ports.sixStepArtifacts);
+    const productionSixStep = ports.sixStepArtifacts;
+    if (productionSixStep !== undefined) assertIssuedProductionSixStepTailEmissionPortV1(productionSixStep);
     const sourceSession = input.currentSource;
     const sourceView = requireSource(sourceSession);
     const bindingHash = hashDomain("aloha/search-lease-binding/v1", input.lease.binding);
@@ -1116,7 +1118,7 @@ export async function runResolvedRoutePipeline<Projection, Plan, Exact, Simulati
     });
     if (planned.kind !== "planned" || planned.routeHash !== route.routeHash || !sameSource(source(planned.source, "planned.source"), sourceView)) return failure("invalidProgram", "planner", "plan-binding-mismatch") as SearchPipelineOutcomeV1<Simulation>;
     const plannerTiming = completedStageTiming(plannerStartedMonotonicNs, plannerFinishedMonotonicNs);
-    stage3Artifact = await ports.sixStepArtifacts.emitPlanner({
+    stage3Artifact = productionSixStep === undefined ? null : await productionSixStep.emitPlanner({
       pipeline: input,
       route,
       coarse: canonicalValue(coarse, "sixStepEmission.coarse"),
@@ -1143,8 +1145,8 @@ export async function runResolvedRoutePipeline<Projection, Plan, Exact, Simulati
     });
     if (exact.kind !== "verified" || exact.routeHash !== route.routeHash || !sameSource(source(exact.source, "exact.source"), sourceView)) return failure("invalidProgram", "exact", "exact-binding-mismatch") as SearchPipelineOutcomeV1<Simulation>;
     const exactTiming = completedStageTiming(exactStartedMonotonicNs, exactFinishedMonotonicNs);
-    stage4Artifact = await ports.sixStepArtifacts.emitExact({
-      parent: stage3Artifact,
+    stage4Artifact = productionSixStep === undefined ? null : await productionSixStep.emitExact({
+      parent: stage3Artifact!,
       pipeline: input,
       route,
       exact: canonicalValue(exact, "sixStepEmission.exact"),
@@ -1199,8 +1201,8 @@ export async function runResolvedRoutePipeline<Projection, Plan, Exact, Simulati
       return failure("invalidProgram", "execution-program", "owner-evidence-missing") as SearchPipelineOutcomeV1<Simulation>;
     }
     const executionProgramTiming = completedStageTiming(executionProgramStartedMonotonicNs, executionProgramFinishedMonotonicNs);
-    stage5Artifact = await ports.sixStepArtifacts.emitExecutionProgram({
-      parent: stage4Artifact,
+    stage5Artifact = productionSixStep === undefined ? null : await productionSixStep.emitExecutionProgram({
+      parent: stage4Artifact!,
       pipeline: input,
       route,
       program,
@@ -1327,8 +1329,8 @@ export async function runResolvedRoutePipeline<Projection, Plan, Exact, Simulati
     await assertPostStageFence();
 
     const finalSimulationTiming = completedStageTiming(finalSimulationStartedMonotonicNs, finalSimulationFinishedMonotonicNs);
-    stage6Artifact = await ports.sixStepArtifacts.emitFinalSimulation({
-      parent: stage5Artifact,
+    stage6Artifact = productionSixStep === undefined ? null : await productionSixStep.emitFinalSimulation({
+      parent: stage5Artifact!,
       pipeline: input,
       route,
       program,
@@ -1381,28 +1383,32 @@ export async function runResolvedRoutePipeline<Projection, Plan, Exact, Simulati
         executionProgram: executionProgramTiming,
         finalSimulation: finalSimulationTiming,
       }),
-      productionArtifactSetRoots: Object.freeze([
-        readProductionSixStepArtifactMaterialV1(stage3Artifact).artifactSetRoot,
-        readProductionSixStepArtifactMaterialV1(stage4Artifact).artifactSetRoot,
-        readProductionSixStepArtifactMaterialV1(stage5Artifact).artifactSetRoot,
-        readProductionSixStepArtifactMaterialV1(stage6Artifact).artifactSetRoot,
-      ]),
+      productionArtifactSetRoots: productionSixStep === undefined
+        ? Object.freeze([])
+        : Object.freeze([
+            readProductionSixStepArtifactMaterialV1(stage3Artifact!).artifactSetRoot,
+            readProductionSixStepArtifactMaterialV1(stage4Artifact!).artifactSetRoot,
+            readProductionSixStepArtifactMaterialV1(stage5Artifact!).artifactSetRoot,
+            readProductionSixStepArtifactMaterialV1(stage6Artifact!).artifactSetRoot,
+          ]),
     });
     resolvedRouteSixStepTraces.set(successfulOutcome, trace);
-    const stage12 = ports.sixStepArtifacts.readStage12Parents(stage3Artifact);
-    if (stage12.stage1.length === 0
-      || stage12.stage1.length !== stage12.stage2.length
-      || stage12.stage2.length !== route.legs.length) {
-      throw new TypeError("production Six-Step Stage 1/2 route parents are incomplete");
+    if (productionSixStep !== undefined) {
+      const stage12 = productionSixStep.readStage12Parents(stage3Artifact!);
+      if (stage12.stage1.length === 0
+        || stage12.stage1.length !== stage12.stage2.length
+        || stage12.stage2.length !== route.legs.length) {
+        throw new TypeError("production Six-Step Stage 1/2 route parents are incomplete");
+      }
+      resolvedRouteSixStepArtifactCapabilities.set(successfulOutcome, Object.freeze({
+        stage1: Object.freeze([...stage12.stage1]),
+        stage2: Object.freeze([...stage12.stage2]),
+        stage3: stage3Artifact!,
+        stage4: stage4Artifact!,
+        stage5: stage5Artifact!,
+        stage6: stage6Artifact!,
+      }));
     }
-    resolvedRouteSixStepArtifactCapabilities.set(successfulOutcome, Object.freeze({
-      stage1: Object.freeze([...stage12.stage1]),
-      stage2: Object.freeze([...stage12.stage2]),
-      stage3: stage3Artifact,
-      stage4: stage4Artifact,
-      stage5: stage5Artifact,
-      stage6: stage6Artifact,
-    }));
     return retainResolvedRouteExecutionProgramEvidence(successfulOutcome, executionProgramOwnerEvidence);
   } catch (error) {
     return retainResolvedRouteExecutionProgramEvidence(

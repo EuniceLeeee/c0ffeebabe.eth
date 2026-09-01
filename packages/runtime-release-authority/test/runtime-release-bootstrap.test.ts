@@ -1727,8 +1727,12 @@ test("release-owned application submits an observed head, emits a producer termi
       familySearchRuntime: services.familyRuntime.openSearchRuntime(),
       generationId: "service-generation",
       graphRoot: h("service-graph"),
-      releaseBindingId: services.release.bindingId,
-      candidateReleaseCommit: services.release.candidateReleaseCommit,
+      runtimeAuthority: projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+        authorityClass: "signed-release",
+        runtimeBindingId: services.release.bindingId,
+        releaseProvenanceHash: services.release.releaseProvenanceHash,
+        implementationCommit: services.release.candidateReleaseCommit,
+      })),
       canonicalSourceAuthority: value.input.checkpoint.canonical.authority,
       readActiveGeneration() {
         return Object.freeze({
@@ -1835,18 +1839,21 @@ test("release-owned application submits an observed head, emits a producer termi
     });
     const applicationInput = {
       strategyRuntime: strategy,
-      performanceRuntime: services.performance,
-      fullGraphCoarseSweep: services.fullGraphCoarseSweep,
-      fullFamilyTerminalBinding: services.fullFamilyTerminalBinding,
-      sixStepTerminalBinding: services.sixStepTerminalBinding,
-      fullFamilyObservation: observations.fullFamilyObservation,
-      sixStepObservation: observations.sixStepObservation,
-      terminalPhaseObservation: observations.terminalPhaseObservation,
+      runtimeAuthority: services.economicSafety.binding().runtimeAuthority,
       economicSafety: services.economicSafety,
-      release: {
-        bindingId: services.release.bindingId,
-        releaseProvenanceHash: services.release.releaseProvenanceHash,
-        candidateReleaseCommit: services.release.candidateReleaseCommit,
+      acceptance: {
+        performanceRuntime: services.performance,
+        fullGraphCoarseSweep: services.fullGraphCoarseSweep,
+        fullFamilyTerminalBinding: services.fullFamilyTerminalBinding,
+        sixStepTerminalBinding: services.sixStepTerminalBinding,
+        fullFamilyObservation: observations.fullFamilyObservation,
+        sixStepObservation: observations.sixStepObservation,
+        terminalPhaseObservation: observations.terminalPhaseObservation,
+        release: {
+          bindingId: services.release.bindingId,
+          releaseProvenanceHash: services.release.releaseProvenanceHash,
+          candidateReleaseCommit: services.release.candidateReleaseCommit,
+        },
       },
       coreInput: {
         amountSeed: { amountIn: "1", recipient: "0x0000000000000000000000000000000000000001" },
@@ -1973,8 +1980,12 @@ function openApplicationLifecycleFixture(
     familySearchRuntime: services.familyRuntime.openSearchRuntime(),
     generationId,
     graphRoot,
-    releaseBindingId: services.release.bindingId,
-    candidateReleaseCommit: services.release.candidateReleaseCommit,
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: services.release.bindingId,
+      releaseProvenanceHash: services.release.releaseProvenanceHash,
+      implementationCommit: services.release.candidateReleaseCommit,
+    })),
     canonicalSourceAuthority: value.runtimeSource.canonicalAuthority,
     readActiveGeneration() {
       return Object.freeze({
@@ -2076,18 +2087,21 @@ function openApplicationLifecycleFixture(
   });
   const application = issueSearcherRuntimeApplicationOwnerV1({
     strategyRuntime: services.strategyRuntime,
-    performanceRuntime: services.performance,
-    fullGraphCoarseSweep: services.fullGraphCoarseSweep,
-    fullFamilyTerminalBinding: services.fullFamilyTerminalBinding,
-    sixStepTerminalBinding: services.sixStepTerminalBinding,
-    fullFamilyObservation: observations.fullFamilyObservation,
-    sixStepObservation: observations.sixStepObservation,
-    terminalPhaseObservation: observations.terminalPhaseObservation,
+    runtimeAuthority: services.economicSafety.binding().runtimeAuthority,
     economicSafety: services.economicSafety,
-    release: {
-      bindingId: services.release.bindingId,
-      releaseProvenanceHash: services.release.releaseProvenanceHash,
-      candidateReleaseCommit: services.release.candidateReleaseCommit,
+    acceptance: {
+      performanceRuntime: services.performance,
+      fullGraphCoarseSweep: services.fullGraphCoarseSweep,
+      fullFamilyTerminalBinding: services.fullFamilyTerminalBinding,
+      sixStepTerminalBinding: services.sixStepTerminalBinding,
+      fullFamilyObservation: observations.fullFamilyObservation,
+      sixStepObservation: observations.sixStepObservation,
+      terminalPhaseObservation: observations.terminalPhaseObservation,
+      release: {
+        bindingId: services.release.bindingId,
+        releaseProvenanceHash: services.release.releaseProvenanceHash,
+        candidateReleaseCommit: services.release.candidateReleaseCommit,
+      },
     },
     source: value.runtimeSource,
     coreInput: {
@@ -2659,8 +2673,12 @@ test("release-owned performance evidence closes exact 100 complete heads and rej
     familySearchRuntime: services.familyRuntime.openSearchRuntime(),
     generationId: generationAId,
     graphRoot: graphRootA,
-    releaseBindingId: services.release.bindingId,
-    candidateReleaseCommit: services.release.candidateReleaseCommit,
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: services.release.bindingId,
+      releaseProvenanceHash: services.release.releaseProvenanceHash,
+      implementationCommit: services.release.candidateReleaseCommit,
+    })),
     canonicalSourceAuthority: value.input.checkpoint.canonical.authority,
     readActiveGeneration() {
       return servingA;

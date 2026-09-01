@@ -1,9 +1,20 @@
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  decodeRuntimeAuthorityDescriptorV1,
+  decodeSignedReleaseRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityDescriptorV1,
   type SignedReleaseRuntimeAuthorityDescriptorV1,
 } from "../../../../packages/runtime-authority/src/index.ts";
-import { runtimeReleaseBindingProvenanceHash } from "../../../../specs/release-authority/src/index.ts";
-import { assertActiveRuntimeReleaseAuthorityState } from "./state.ts";
+import {
+  assertActiveRuntimeAuthorityState,
+} from "./state.ts";
+
+export function readActiveRuntimeAuthorityDescriptorV1(
+  authorityValue: unknown,
+): RuntimeAuthorityDescriptorV1 {
+  return decodeRuntimeAuthorityDescriptorV1(
+    assertActiveRuntimeAuthorityState(authorityValue).descriptor,
+  );
+}
 
 /**
  * One release-owner derivation for every neutral runtime consumer.  Callers
@@ -13,11 +24,7 @@ import { assertActiveRuntimeReleaseAuthorityState } from "./state.ts";
 export function readActiveSignedRuntimeAuthorityDescriptorV1(
   authorityValue: unknown,
 ): SignedReleaseRuntimeAuthorityDescriptorV1 {
-  const state = assertActiveRuntimeReleaseAuthorityState(authorityValue);
-  return createSignedReleaseRuntimeAuthorityDescriptorV1({
-    authorityClass: "signed-release",
-    runtimeBindingId: state.binding.bindingId,
-    releaseProvenanceHash: runtimeReleaseBindingProvenanceHash(state.binding),
-    implementationCommit: state.binding.candidateReleaseCommit,
-  });
+  return decodeSignedReleaseRuntimeAuthorityDescriptorV1(
+    readActiveRuntimeAuthorityDescriptorV1(authorityValue),
+  );
 }

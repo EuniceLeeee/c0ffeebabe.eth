@@ -39,6 +39,8 @@ import { assertIssuedStartupRuntime } from "../../../packages/startup-runtime/sr
 import {
   ProducerRuntimeV1,
   assertIssuedProducerIngressTriggerV1,
+  assertIssuedProducerPerformancePortV1,
+  assertIssuedProducerTerminalPortV1,
   issueProducerBoundTriggerV1,
   issueProducerLanePortV1,
   issueProducerSessionOwnerV1,
@@ -48,10 +50,13 @@ import {
   type ProducerLaneRunDraftV1,
   type ProducerIngressTriggerV1,
   type ProducerLaneRunInputV1,
+  type ProducerPerformancePortV1,
+  type ProducerTerminalPortV1,
 } from "../../../packages/producer/src/index.ts";
 import {
   assertIssuedRuntimeReleaseStrategyRuntimeService,
-  type RuntimeReleaseStrategyRuntimeServiceV1,
+  assertIssuedSearcherStrategyRuntimeServiceV1,
+  type SearcherStrategyRuntimeServiceV1,
 } from "../../../packages/runtime-release-authority/src/strategy-runtime-consumer.ts";
 import { readRuntimeReleaseSixStepProductionTailV1 } from "../../../packages/runtime-release-authority/src/six-step-production-consumer.ts";
 import {
@@ -64,10 +69,6 @@ import {
   type RethSearcherRuntimeSourceV1,
 } from "./internal/reth-source.ts";
 import {
-  assertIssuedSearcherProductionEvidencePortsV1,
-  type SearcherProductionEvidencePortsV1,
-} from "./production-evidence.ts";
-import {
   assertIssuedEconomicSafetyFinalizationServiceV1,
   type EconomicSafetyFinalizationServiceV1,
 } from "../../../packages/economics-safety/src/index.ts";
@@ -79,10 +80,11 @@ import {
  * No Family, pool, ABI, or production-submission type crosses this boundary.
  */
 export type SearcherRuntimePortsV1<Projection, Plan, Exact, Simulation> =
-  Omit<RoutePipelinePortsV1<Projection, Plan, Exact, Simulation>, "finalSimulation" | "economicSafety">
+  Omit<RoutePipelinePortsV1<Projection, Plan, Exact, Simulation>, "finalSimulation" | "economicSafety" | "sixStepArtifacts">
   & {
     readonly finalSimulation: QualifiedFinalSimulationPortV1<Simulation>;
     readonly economicSafety: EconomicSafetyFinalizationServiceV1;
+    readonly sixStepArtifacts?: RoutePipelinePortsV1<Projection, Plan, Exact, Simulation>["sixStepArtifacts"];
   };
 
 export interface SearcherRuntimeInputV1 {
@@ -144,8 +146,7 @@ export async function startReleaseSearcherStartup(
   const startup = await owner.startStartup(signal);
   assertIssuedStartupRuntime(startup);
   if (startup.ready.releaseProvenanceHash !== owner.release.releaseProvenanceHash
-    || startup.releaseBindingId !== owner.release.bindingId
-    || startup.candidateReleaseCommit !== owner.release.candidateReleaseCommit) {
+    || startup.runtimeAuthority.authorityClass !== "signed-release") {
     throw new TypeError("startup runtime release identity mismatch");
   }
   return startup;
@@ -224,14 +225,17 @@ async function runPipelineInSession<Projection, Plan, Exact, Simulation>(
 export interface ReleaseSearcherProducerCompositionInputV1<Simulation> {
   readonly startup: StartupRuntimeV1;
   /** Runtime-release owner service; generic Strategy builders cannot enter. */
-  readonly strategyRuntime: RuntimeReleaseStrategyRuntimeServiceV1;
+  readonly strategyRuntime: SearcherStrategyRuntimeServiceV1;
   /** Candidate-owned Reth/current-source authority; raw read factories are forbidden. */
   readonly source: RethSearcherRuntimeSourceV1;
   readonly coreInput: Omit<SearchRuntimeCoreInputV1, "familyRuntime" | "sourceRead">;
   readonly finalSimulationFactory: QualifiedFinalSimulationPortFactoryV1<Simulation>;
   readonly economicSafety: EconomicSafetyFinalizationServiceV1;
   /** One release-owned durable evidence binding; individual sinks are not caller seams. */
-  readonly evidence: SearcherProductionEvidencePortsV1;
+  readonly evidence: Readonly<{
+    readonly performance: ProducerPerformancePortV1<unknown>;
+    readonly terminal: ProducerTerminalPortV1;
+  }>;
 }
 
 function laneSearchInput(
@@ -266,18 +270,24 @@ function issueLanePlanningProblem(
   input: ProducerLaneRunInputV1<SearcherProducerSessionV1>,
   searchInput: SearcherLaneSearchInputV1,
   boundTrigger: ProducerBoundTriggerV1,
-  strategyRuntime: RuntimeReleaseStrategyRuntimeServiceV1,
+  strategyRuntime: SearcherStrategyRuntimeServiceV1,
 ): { readonly planningProblem: StrategyPlanningProblemV1; readonly strategyCompositionRoot: Hash } {
   const objectivePayload = searchInput.objective.payload as Record<string, unknown>;
   assertExactKeys(objectivePayload, ["numeraireAssetRef", "minNetGain", "maxGas", "maxValueAtRisk"], "searchObjective.payload");
   const objectiveAssetRef = assertHash(objectivePayload.numeraireAssetRef, "searchObjective.payload.numeraireAssetRef");
+  const strategyIdentity = strategyRuntime.readMetadata();
+  const strategyMembershipHash = "runtimeMembershipHash" in strategyIdentity
+    ? strategyIdentity.runtimeMembershipHash
+    : strategyIdentity.releaseProvenanceHash;
   const binding: StrategyGraphBindingV1 = {
     generationId: input.session.generationId,
     definitionCatalogRoot: input.session.lease.binding.definitionCatalogRoot,
     graphRoot: input.session.lease.binding.graphRoot,
     readyRecordHash: input.session.lease.binding.readyRecordHash,
     runtimeAuthority: input.session.lease.binding.runtimeAuthority,
-    releaseProvenanceHash: input.session.lease.binding.releaseProvenanceHash,
+    ...(input.session.lease.binding.releaseProvenanceHash === null
+      ? { runtimeMembershipHash: strategyMembershipHash }
+      : { releaseProvenanceHash: input.session.lease.binding.releaseProvenanceHash }),
     sourceHash: input.head.hash,
   };
   const issued = strategyRuntime.issuePlanningProblem({
@@ -293,10 +303,13 @@ function issueLanePlanningProblem(
   });
   const planningProblem = issued.planningProblem;
   assertIssuedStrategyPlanningProblem(planningProblem);
+  const planningMembershipHash = planningProblem.runtimeMembershipHash ?? planningProblem.releaseProvenanceHash;
+  const expectedMembershipHash = strategyMembershipHash;
   if (planningProblem.strategyCompositionRoot !== issued.strategyCompositionRoot
     || planningProblem.readyRecordHash !== binding.readyRecordHash
+    || planningMembershipHash !== expectedMembershipHash
     || planningProblem.releaseProvenanceHash !== binding.releaseProvenanceHash) {
-    throw new TypeError("strategy planning problem release binding mismatch");
+    throw new TypeError("strategy planning problem runtime binding mismatch");
   }
   return issued;
 }
@@ -304,7 +317,7 @@ function issueLanePlanningProblem(
 async function runSearcherLane<Simulation>(
   input: ProducerLaneRunInputV1<SearcherProducerSessionV1>,
   startup: StartupRuntimeV1,
-  strategyRuntime: RuntimeReleaseStrategyRuntimeServiceV1,
+  strategyRuntime: SearcherStrategyRuntimeServiceV1,
   source: RethSearcherRuntimeSourceV1,
   coreInput: ReleaseSearcherProducerCompositionInputV1<Simulation>["coreInput"],
   finalSimulationFactory: QualifiedFinalSimulationPortFactoryV1<Simulation>,
@@ -342,14 +355,21 @@ async function runSearcherLane<Simulation>(
       const finalSimulation = input.session.lease.edges.length === 0
         ? EMPTY_GRAPH_FINAL_SIMULATION_PORT
         : await finalSimulationFactory.issue(input.session.currentSourceCapability);
+      const strategyMetadata = strategyRuntime.readMetadata();
+      const sixStepArtifacts = "releaseProvenanceHash" in strategyMetadata
+        ? (() => {
+            assertIssuedRuntimeReleaseStrategyRuntimeService(strategyRuntime);
+            return readRuntimeReleaseSixStepProductionTailV1(
+              strategyRuntime,
+              input.session.lease.sixStepRouteParents,
+            );
+          })()
+        : undefined;
       const ports: SearcherRuntimePortsV1<SearchRuntimeProjectionV1, SearchRuntimePlanV1, SearchRuntimeExactV1, Simulation> = {
         ...generated,
         finalSimulation,
         economicSafety,
-        sixStepArtifacts: readRuntimeReleaseSixStepProductionTailV1(
-          strategyRuntime,
-          input.session.lease.sixStepRouteParents,
-        ),
+        ...(sixStepArtifacts === undefined ? {} : { sixStepArtifacts }),
       };
       const outcome = await runPipelineInSession(ports, searchInput, planning.planningProblem, planning.strategyCompositionRoot, input.session);
       draft = outcome.kind !== "unsigned-dry-run" && outcome.kind !== "route-set-terminal"
@@ -395,14 +415,17 @@ export function createReleaseSearcherProducer<Simulation>(
   input: ReleaseSearcherProducerCompositionInputV1<Simulation>,
 ): ProducerRuntimeV1<SearcherProducerSessionV1> {
   assertIssuedStartupRuntime(input.startup);
-  assertIssuedRuntimeReleaseStrategyRuntimeService(input.strategyRuntime);
+  assertIssuedSearcherStrategyRuntimeServiceV1(input.strategyRuntime);
   const strategyIdentity = input.strategyRuntime.readMetadata();
   const startupGeneration = input.startup.readActiveGeneration();
   if (strategyIdentity.definitionCatalogRoot !== startupGeneration.definitionCatalogRoot) {
     throw new TypeError("strategy composition definition catalog does not match startup");
   }
-  if (strategyIdentity.releaseProvenanceHash !== startupGeneration.releaseProvenanceHash) {
-    throw new TypeError("strategy composition release provenance does not match startup");
+  const strategyReleaseProvenanceHash = "releaseProvenanceHash" in strategyIdentity
+    ? strategyIdentity.releaseProvenanceHash
+    : null;
+  if (strategyReleaseProvenanceHash !== startupGeneration.releaseProvenanceHash) {
+    throw new TypeError("strategy composition authority class does not match startup");
   }
   if (input.startup.canonicalSourceAuthority !== input.source.canonicalAuthority) {
     throw new TypeError("startup canonical source authority does not match Reth source");
@@ -410,7 +433,8 @@ export function createReleaseSearcherProducer<Simulation>(
   assertIssuedQualifiedFinalSimulationPortFactory(input.finalSimulationFactory);
   assertIssuedEconomicSafetyFinalizationServiceV1(input.economicSafety);
   assertIssuedRethSearcherRuntimeSourceV1(input.source);
-  assertIssuedSearcherProductionEvidencePortsV1(input.evidence);
+  assertIssuedProducerPerformancePortV1(input.evidence.performance);
+  assertIssuedProducerTerminalPortV1(input.evidence.terminal);
   const sessionOwner = issueProducerSessionOwnerV1<SearcherProducerSessionV1>({
     withProducerSession(head, run, signal) {
       return input.startup.withProducerSession(input.source.consumeHeadObservation(head), async session => {

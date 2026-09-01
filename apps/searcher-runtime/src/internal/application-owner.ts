@@ -23,8 +23,8 @@ import {
   type RuntimeReleasePerformanceRuntimeServiceV1,
 } from "../../../../packages/runtime-release-authority/src/performance-runtime-consumer.ts";
 import {
-  assertIssuedRuntimeReleaseStrategyRuntimeService,
-  type RuntimeReleaseStrategyRuntimeServiceV1,
+  assertIssuedSearcherStrategyRuntimeServiceV1,
+  type SearcherStrategyRuntimeServiceV1,
 } from "../../../../packages/runtime-release-authority/src/strategy-runtime-consumer.ts";
 import {
   assertIssuedRuntimeReleaseFullGraphCoarseSweepServiceV1,
@@ -74,6 +74,7 @@ import {
 } from "../index.ts";
 import {
   assertIssuedSearcherProductionEvidenceOwnerV1,
+  type SearcherProductionEvidencePortsV1,
   type SearcherProductionEvidenceOwnerV1,
   type TerminalPhaseInvalidFactV1,
 } from "../production-evidence.ts";
@@ -82,6 +83,14 @@ import {
   type EconomicSafetyFinalizationServiceV1,
 } from "../../../../packages/economics-safety/src/index.ts";
 import { PERFORMANCE_TARGET_COUNT } from "../../../../specs/performance/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../../packages/runtime-authority/src/index.ts";
+import {
+  assertIssuedUnsignedDryRunObservationOwnerV1,
+  type UnsignedDryRunObservationOwnerV1,
+} from "../unsigned-dry-run-observation.ts";
 
 const FULL_GRAPH_COARSE_SWEEP_HARD_DEADLINE_MS = 300_000;
 
@@ -90,7 +99,21 @@ export interface SearcherHeadSourceV1 {
 }
 
 export interface SearcherRuntimeApplicationCompositionInputV1<Simulation> {
-  readonly strategyRuntime: RuntimeReleaseStrategyRuntimeServiceV1;
+  readonly strategyRuntime: SearcherStrategyRuntimeServiceV1;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly economicSafety: EconomicSafetyFinalizationServiceV1;
+  /** Signed-only acceptance observers. They observe the same Producer run and
+   * are absent from unsigned dry-run; none owns normal application progress. */
+  readonly acceptance?: SearcherRuntimeSignedAcceptanceV1;
+  /** Candidate-owned canonical/Reth source bundle; deployment cannot replace its parts. */
+  readonly source: RethSearcherRuntimeSourceV1;
+  readonly coreInput: Omit<SearchRuntimeCoreInputV1, "familyRuntime" | "sourceRead">;
+  readonly finalSimulationFactory: QualifiedFinalSimulationPortFactoryV1<Simulation>;
+  /** Owner-issued observation of exact Producer facts. */
+  readonly evidence: SearcherProductionEvidenceOwnerV1 | UnsignedDryRunObservationOwnerV1;
+}
+
+export interface SearcherRuntimeSignedAcceptanceV1 {
   readonly performanceRuntime: RuntimeReleasePerformanceRuntimeServiceV1;
   readonly fullGraphCoarseSweep: RuntimeReleaseFullGraphCoarseSweepServiceV1;
   readonly fullFamilyTerminalBinding: RuntimeReleaseFullFamilyTerminalBindingServiceV1;
@@ -98,19 +121,11 @@ export interface SearcherRuntimeApplicationCompositionInputV1<Simulation> {
   readonly fullFamilyObservation: ProductionFullFamilyObservationPortV1;
   readonly sixStepObservation: ProductionSixStepObservationPortV1;
   readonly terminalPhaseObservation: ProductionTerminalPhaseObservationPortV1;
-  readonly economicSafety: EconomicSafetyFinalizationServiceV1;
-  /** Exact release identity that is allowed to open this application. */
   readonly release: Readonly<{
     readonly bindingId: Hash;
     readonly releaseProvenanceHash: Hash;
     readonly candidateReleaseCommit: `${string}`;
   }>;
-  /** Candidate-owned canonical/Reth source bundle; deployment cannot replace its parts. */
-  readonly source: RethSearcherRuntimeSourceV1;
-  readonly coreInput: Omit<SearchRuntimeCoreInputV1, "familyRuntime" | "sourceRead">;
-  readonly finalSimulationFactory: QualifiedFinalSimulationPortFactoryV1<Simulation>;
-  /** Release-owned durable evidence; callers cannot inject producer sinks. */
-  readonly evidence: SearcherProductionEvidenceOwnerV1;
 }
 
 export interface SearcherRuntimeApplicationV1 {
@@ -169,33 +184,69 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
   input: SearcherRuntimeApplicationCompositionInputV1<Simulation>,
 ): SearcherRuntimeApplicationOwnerV1 {
   if (input === null || typeof input !== "object") throw new TypeError("searcher application composition is required");
-  assertExactKeys(input, [
-    "strategyRuntime", "performanceRuntime", "fullGraphCoarseSweep", "fullFamilyTerminalBinding",
-    "sixStepTerminalBinding", "fullFamilyObservation", "sixStepObservation", "terminalPhaseObservation",
-    "economicSafety", "release", "coreInput", "finalSimulationFactory", "evidence", "source",
-  ], "searcherApplication");
-  assertIssuedRuntimeReleaseStrategyRuntimeService(input.strategyRuntime);
-  assertIssuedRuntimeReleasePerformanceRuntimeService(input.performanceRuntime);
-  assertIssuedRuntimeReleaseFullGraphCoarseSweepServiceV1(input.fullGraphCoarseSweep);
-  assertIssuedRuntimeReleaseFullFamilyTerminalBindingServiceV1(input.fullFamilyTerminalBinding);
-  assertIssuedRuntimeReleaseSixStepTerminalBindingServiceV1(input.sixStepTerminalBinding);
-  assertIssuedProductionFullFamilyObservationPortV1(input.fullFamilyObservation);
-  assertIssuedProductionSixStepObservationPortV1(input.sixStepObservation);
-  assertIssuedProductionTerminalPhaseObservationPortV1(input.terminalPhaseObservation);
+  const inputKeys = [
+    "strategyRuntime", "runtimeAuthority", "economicSafety", "coreInput",
+    "finalSimulationFactory", "evidence", "source",
+  ];
+  if (Object.prototype.hasOwnProperty.call(input, "acceptance")) inputKeys.push("acceptance");
+  assertExactKeys(input, inputKeys, "searcherApplication");
+  assertIssuedSearcherStrategyRuntimeServiceV1(input.strategyRuntime);
+  const expectedRuntimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
   assertIssuedEconomicSafetyFinalizationServiceV1(input.economicSafety);
-  if (input.release === null || typeof input.release !== "object") throw new TypeError("searcher application release identity is required");
-  assertExactKeys(input.release, ["bindingId", "releaseProvenanceHash", "candidateReleaseCommit"], "searcherApplication.release");
-  const release = Object.freeze({
-    bindingId: assertHash(input.release.bindingId, "searcherApplication.release.bindingId"),
-    releaseProvenanceHash: assertHash(input.release.releaseProvenanceHash, "searcherApplication.release.releaseProvenanceHash"),
-    candidateReleaseCommit: gitSha40Schema.decode(input.release.candidateReleaseCommit, "searcherApplication.release.candidateReleaseCommit"),
-  });
+  const economicSafetyBinding = input.economicSafety.binding();
+  if (economicSafetyBinding.runtimeAuthority.authorityClass !== expectedRuntimeAuthority.authorityClass
+    || economicSafetyBinding.runtimeAuthority.authorityBindingHash !== expectedRuntimeAuthority.authorityBindingHash
+    || economicSafetyBinding.runtimeAuthority.implementationCommit !== expectedRuntimeAuthority.implementationCommit) {
+    throw new TypeError("searcher application economic-safety runtime authority mismatch");
+  }
+  let acceptance: SearcherRuntimeSignedAcceptanceV1 | null = null;
+  if (input.acceptance !== undefined) {
+    if (input.acceptance === null || typeof input.acceptance !== "object") throw new TypeError("searcher application acceptance is invalid");
+    assertExactKeys(input.acceptance, [
+      "performanceRuntime", "fullGraphCoarseSweep", "fullFamilyTerminalBinding", "sixStepTerminalBinding",
+      "fullFamilyObservation", "sixStepObservation", "terminalPhaseObservation", "release",
+    ], "searcherApplication.acceptance");
+    assertIssuedRuntimeReleasePerformanceRuntimeService(input.acceptance.performanceRuntime);
+    assertIssuedRuntimeReleaseFullGraphCoarseSweepServiceV1(input.acceptance.fullGraphCoarseSweep);
+    assertIssuedRuntimeReleaseFullFamilyTerminalBindingServiceV1(input.acceptance.fullFamilyTerminalBinding);
+    assertIssuedRuntimeReleaseSixStepTerminalBindingServiceV1(input.acceptance.sixStepTerminalBinding);
+    assertIssuedProductionFullFamilyObservationPortV1(input.acceptance.fullFamilyObservation);
+    assertIssuedProductionSixStepObservationPortV1(input.acceptance.sixStepObservation);
+    assertIssuedProductionTerminalPhaseObservationPortV1(input.acceptance.terminalPhaseObservation);
+    assertExactKeys(input.acceptance.release, ["bindingId", "releaseProvenanceHash", "candidateReleaseCommit"], "searcherApplication.acceptance.release");
+    acceptance = Object.freeze({
+      ...input.acceptance,
+      release: Object.freeze({
+        bindingId: assertHash(input.acceptance.release.bindingId, "searcherApplication.acceptance.release.bindingId"),
+        releaseProvenanceHash: assertHash(input.acceptance.release.releaseProvenanceHash, "searcherApplication.acceptance.release.releaseProvenanceHash"),
+        candidateReleaseCommit: gitSha40Schema.decode(input.acceptance.release.candidateReleaseCommit, "searcherApplication.acceptance.release.candidateReleaseCommit"),
+      }),
+    });
+  }
+  if ((expectedRuntimeAuthority.authorityClass === "signed-release") !== (acceptance !== null)
+    || (expectedRuntimeAuthority.authorityClass === "signed-release"
+      && (economicSafetyBinding.releaseProvenanceHash !== acceptance!.release.releaseProvenanceHash
+        || expectedRuntimeAuthority.implementationCommit !== acceptance!.release.candidateReleaseCommit))) {
+    throw new TypeError("searcher application authority class/acceptance mismatch");
+  }
   const strategyIdentity = input.strategyRuntime.readMetadata();
-  if (strategyIdentity.releaseProvenanceHash !== release.releaseProvenanceHash) {
-    throw new TypeError("searcher application strategy release identity mismatch");
+  if ((expectedRuntimeAuthority.authorityClass === "signed-release") !== ("releaseProvenanceHash" in strategyIdentity)
+    || ("releaseProvenanceHash" in strategyIdentity
+      && strategyIdentity.releaseProvenanceHash !== acceptance!.release.releaseProvenanceHash)) {
+    throw new TypeError("searcher application strategy runtime authority mismatch");
   }
   assertIssuedQualifiedFinalSimulationPortFactory(input.finalSimulationFactory);
-  assertIssuedSearcherProductionEvidenceOwnerV1(input.evidence);
+  let evidenceClass: "signed-release" | "unsigned-dry-run";
+  try {
+    assertIssuedSearcherProductionEvidenceOwnerV1(input.evidence);
+    evidenceClass = "signed-release";
+  } catch {
+    assertIssuedUnsignedDryRunObservationOwnerV1(input.evidence);
+    evidenceClass = "unsigned-dry-run";
+  }
+  if (evidenceClass !== expectedRuntimeAuthority.authorityClass) {
+    throw new TypeError("searcher application observation authority class mismatch");
+  }
   assertIssuedRethSearcherRuntimeSourceV1(input.source);
   if (input.coreInput === null || typeof input.coreInput !== "object") throw new TypeError("searcher core input is required");
   if (typeof input.coreInput.amountSeed !== "object" || input.coreInput.amountSeed === null) {
@@ -209,14 +260,20 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
       assertIssuedStartupRuntime(startup);
       if (claimedStartups.has(startup)) throw new TypeError("searcher startup is already bound to an application");
       const startupGeneration = startup.readActiveGeneration();
-      if (startup.releaseBindingId !== release.bindingId
-        || startup.candidateReleaseCommit !== release.candidateReleaseCommit
-        || startupGeneration.releaseProvenanceHash !== release.releaseProvenanceHash
+      if (startup.runtimeAuthority.authorityClass !== expectedRuntimeAuthority.authorityClass
+        || startup.runtimeAuthority.authorityBindingHash !== expectedRuntimeAuthority.authorityBindingHash
+        || startup.runtimeAuthority.implementationCommit !== expectedRuntimeAuthority.implementationCommit
+        || startupGeneration.releaseProvenanceHash !== (acceptance?.release.releaseProvenanceHash ?? null)
         || startup.canonicalSourceAuthority !== input.source.canonicalAuthority) {
         throw new TypeError("searcher application startup release identity mismatch");
       }
       claimedStartups.add(startup);
-      const evidence = input.evidence.bindServing(startup, input.performanceRuntime);
+      const evidence = evidenceClass === "signed-release"
+        ? (input.evidence as SearcherProductionEvidenceOwnerV1).bindServing(startup, acceptance!.performanceRuntime)
+        : (input.evidence as UnsignedDryRunObservationOwnerV1).bindServing(startup);
+      const acceptanceEvidence: SearcherProductionEvidencePortsV1 | null = evidenceClass === "signed-release"
+        ? evidence as SearcherProductionEvidencePortsV1
+        : null;
       const producer = createReleaseSearcherProducer({
         startup,
         strategyRuntime: input.strategyRuntime,
@@ -250,16 +307,19 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
       };
 
       const sealWindowAndSweep = async (signal: AbortSignal): Promise<FullGraphCoarseSweepCapabilityV1> => {
+        if (acceptance === null || acceptanceEvidence === null) {
+          throw new TypeError("signed acceptance is not configured for unsigned dry-run");
+        }
         if (fullGraphSweepPromise !== null) return fullGraphSweepPromise;
-        if (!evidence.window.isComplete()) {
+        if (!acceptanceEvidence.window.isComplete()) {
           throw new TypeError("full-Graph coarse sweep requires the exact completed performance window");
         }
         await producer.waitForIdle();
-        const finalCapability = evidence.window.readFinalDurableWindow();
+        const finalCapability = acceptanceEvidence.window.readFinalDurableWindow();
         if (finalCapability === null) {
           throw new TypeError("full-Graph coarse sweep requires the durable final Producer terminal");
         }
-        const finalWindow = evidence.window.readFinalDurableWindowBinding(finalCapability);
+        const finalWindow = acceptanceEvidence.window.readFinalDurableWindowBinding(finalCapability);
         const finalServing = startup.readServingGeneration(finalWindow.serving.generationId);
         if (finalWindow.ordinal !== PERFORMANCE_TARGET_COUNT
           || finalWindow.targetCount !== PERFORMANCE_TARGET_COUNT
@@ -273,13 +333,13 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
         const telemetryBeforeSweep = producer.telemetry();
         fullGraphSweepPromise = (async () => {
           phase = "sweeping";
-          const priorInvalid = evidence.window.readInvalid();
+          const priorInvalid = acceptanceEvidence.window.readInvalid();
           if (priorInvalid !== null) {
             await closeApplication();
             throw new TypeError(priorInvalid.reasonCode);
           }
-          if (!evidence.window.isCurrentProcessWindow(finalCapability)) {
-            await evidence.window.appendInvalid({
+          if (!acceptanceEvidence.window.isCurrentProcessWindow(finalCapability)) {
+            await acceptanceEvidence.window.appendInvalid({
               completedWindow: finalCapability,
               reasonCode: "terminal-phase-process-anchor-changed",
               observed: null,
@@ -294,7 +354,7 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
           const observed = input.source.canonical.headObservationReader.read(observation);
           const observedHead = observed.head;
           if (!sameHead(finalWindow.head, observedHead)) {
-            await evidence.window.appendInvalid({
+            await acceptanceEvidence.window.appendInvalid({
               completedWindow: finalCapability,
               reasonCode: "terminal-phase-current-source-moved",
               observed,
@@ -310,7 +370,7 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
               amountSeed: input.coreInput.amountSeed,
               execution: input.coreInput.execution,
             });
-            return input.fullGraphCoarseSweep.run(invocation, {
+            return acceptance.fullGraphCoarseSweep.run(invocation, {
               signal,
               deadlineAtMs: performance.now() + FULL_GRAPH_COARSE_SWEEP_HARD_DEADLINE_MS,
             });
@@ -320,11 +380,11 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
             throw new TypeError("full-Graph coarse sweep changed Producer/F5 accounting");
           }
           fullGraphSweepCapability = capability;
-          const finalHeadTerminal = evidence.window.readCurrentProcessHeadTerminal(finalCapability);
+          const finalHeadTerminal = acceptanceEvidence.window.readCurrentProcessHeadTerminal(finalCapability);
           if (finalHeadTerminal === null) {
             throw new TypeError("acceptance terminal requires the current-process final Producer terminal");
           }
-          const fullFamilyTerminalBinding = input.fullFamilyTerminalBinding.bindFinalHead({
+          const fullFamilyTerminalBinding = acceptance.fullFamilyTerminalBinding.bindFinalHead({
             headTerminal: finalHeadTerminal,
             finalDurableWindow: finalCapability,
             startup,
@@ -333,16 +393,16 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
             startup,
             finalWindow.serving.generationId,
           );
-          fullFamilyObservationCapability = await input.fullFamilyObservation.observe({
+          fullFamilyObservationCapability = await acceptance.fullFamilyObservation.observe({
             checkpointReader: fullFamilyEvidence.checkpointReader,
             stage12Capability: fullFamilyEvidence.stage12Capability,
             runtimeReleaseTerminalBindingCapability: fullFamilyTerminalBinding,
             fullGraphCoarseSweepCapability: capability,
           });
-          const windowSelectionCapability = evidence.sixStep.readWindowSelection(finalCapability);
+          const windowSelectionCapability = acceptanceEvidence.sixStep.readWindowSelection(finalCapability);
           const windowSelection = readSearcherProductionSixStepWindowSelectionV1(windowSelectionCapability);
           const sixStepTerminalBinding = windowSelection.status === "selected"
-            ? input.sixStepTerminalBinding.bindSuccessfulTerminal(
+            ? acceptance.sixStepTerminalBinding.bindSuccessfulTerminal(
                 readSearcherProductionSixStepCompleteAppendSearchTerminalV1(windowSelection.completeAppend),
               )
             : null;
@@ -352,12 +412,12 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
                 terminalBinding: sixStepTerminalBinding,
                 completeAppend: windowSelection.completeAppend,
               });
-          sixStepObservationCapability = await input.sixStepObservation.observe({
+          sixStepObservationCapability = await acceptance.sixStepObservation.observe({
             windowSelectionCapability,
             terminalBindingCapability: sixStepTerminalBinding,
             joinedProcessCapability,
           });
-          terminalPhaseObservationCapability = await input.terminalPhaseObservation.seal({
+          terminalPhaseObservationCapability = await acceptance.terminalPhaseObservation.seal({
             finalDurableWindowCapability: finalCapability,
             fullGraphCoarseSweepCapability: capability,
             runtimeReleaseTerminalBindingCapability: fullFamilyTerminalBinding,
@@ -377,9 +437,14 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
         waitForIdle: () => producer.waitForIdle(),
         telemetry: () => producer.telemetry(),
         readFinalDurableProducerTerminal() {
-          const finalWindow = evidence.window.readFinalDurableWindow();
+          if (acceptanceEvidence === null) {
+            const terminal = producer.terminals().at(-1);
+            if (terminal === undefined) throw new TypeError("Producer has no durable terminal");
+            return terminal;
+          }
+          const finalWindow = acceptanceEvidence.window.readFinalDurableWindow();
           if (finalWindow === null) throw new TypeError("final durable Producer window is not complete");
-          const terminal = evidence.window.readCurrentProcessHeadTerminal(finalWindow);
+          const terminal = acceptanceEvidence.window.readCurrentProcessHeadTerminal(finalWindow);
           if (terminal === null) throw new TypeError("final durable Producer terminal belongs to another process");
           return terminal;
         },
@@ -387,7 +452,7 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
           if (phase !== "ready" && phase !== "producing") {
             throw new TypeError("normal producer admission is closed before the full-Graph coarse sweep");
           }
-          if (evidence.window.isComplete()) {
+          if (acceptanceEvidence?.window.isComplete()) {
             throw new TypeError("normal producer admission is closed after the exact performance window");
           }
           const sameHeightReplacement = latestSubmitted !== null
@@ -407,38 +472,42 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
           return result;
         },
         readFullGraphCoarseSweep() {
+          if (acceptance === null) throw new TypeError("full-Graph acceptance is not configured for unsigned dry-run");
           if (phase !== "finished" || fullGraphSweepCapability === null) {
             throw new TypeError("full-Graph coarse sweep is not complete");
           }
           return fullGraphSweepCapability;
         },
         readFullFamilyObservation() {
+          if (acceptance === null) throw new TypeError("full-family acceptance is not configured for unsigned dry-run");
           if (phase !== "finished" || fullFamilyObservationCapability === null) {
             throw new TypeError("full-family terminal observation is not complete");
           }
           return fullFamilyObservationCapability;
         },
         readSixStepObservation() {
+          if (acceptance === null) throw new TypeError("Six-Step acceptance is not configured for unsigned dry-run");
           if (phase !== "finished" || sixStepObservationCapability === null) {
             throw new TypeError("Six-Step terminal observation is not complete");
           }
           return sixStepObservationCapability;
         },
         readTerminalPhaseObservation() {
+          if (acceptance === null) throw new TypeError("terminal-phase acceptance is not configured for unsigned dry-run");
           if (phase !== "finished" || terminalPhaseObservationCapability === null) {
             throw new TypeError("terminal-phase observation is not complete");
           }
           return terminalPhaseObservationCapability;
         },
         readTerminalPhaseInvalid() {
-          return evidence.window.readInvalid();
+          return acceptanceEvidence?.window.readInvalid() ?? null;
         },
         async run(signal = new AbortController().signal) {
           if (runPromise !== null) return runPromise;
           runPromise = (async () => {
             phase = "producing";
             while (!signal.aborted) {
-              if (evidence.window.isComplete()) {
+              if (acceptanceEvidence?.window.isComplete()) {
                 await sealWindowAndSweep(signal);
                 break;
               }
@@ -446,12 +515,12 @@ export function issueSearcherRuntimeApplicationOwnerV1<Simulation>(
               if (head === null) break;
               await application.submitHead(head, signal);
               await producer.waitForIdle();
-              if (evidence.window.isComplete()) {
+              if (acceptanceEvidence?.window.isComplete()) {
                 await sealWindowAndSweep(signal);
                 break;
               }
             }
-            if (!evidence.window.isComplete()) await producer.waitForIdle();
+            if (!acceptanceEvidence?.window.isComplete()) await producer.waitForIdle();
           })();
           return runPromise;
         },

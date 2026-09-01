@@ -11,6 +11,10 @@ import {
   hashDomain,
   type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../packages/runtime-authority/src/index.ts";
 
 /**
  * Candidate-partition is a frozen wire contract.  Keep the small projections
@@ -510,4 +514,177 @@ export function assertCandidatePartitionProofShape(value: unknown): void {
     "releaseProvenanceHash", "issuerKeyId", "proofVersion", "proofId",
     "payloadHash", "signatureAlgorithm", "signerKeyId", "signatureHex",
   ], "candidatePartitionProof");
+}
+
+/**
+ * Unsigned dry-run durability is deliberately a different wire protocol from
+ * the release-signed proof above.  It is a content commitment, never release
+ * qualification: there is no issuer identity, signature, release authority,
+ * or release provenance field that a production decoder could mistake for a
+ * signed fact.
+ */
+export const UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_KIND =
+  "aloha.unsigned-dry-run-candidate-partition-commitment" as const;
+export const UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_VERSION = "1" as const;
+export const UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_DOMAINS = Object.freeze({
+  payload: "aloha/unsigned-dry-run-candidate-partition-commitment/payload/v1",
+  id: "aloha/unsigned-dry-run-candidate-partition-commitment/id/v1",
+});
+
+export interface UnsignedDryRunCandidatePartitionCommitmentPayloadV1 {
+  readonly kind: typeof UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_KIND;
+  readonly version: typeof UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_VERSION;
+  readonly authorityClass: "unsigned-dry-run";
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly runId: string;
+  readonly cutoff: CanonicalCutoffV1;
+  readonly candidatePartitionRoot: Hash;
+  readonly candidatePartitionStorageHash: Hash;
+  readonly nominationClosureRoot: Hash;
+  readonly nominationClosureStorageHash: Hash;
+  readonly recordCount: string;
+  readonly candidateKeysRoot: Hash;
+  readonly recentObservationRoot: Hash;
+  readonly sourceCoverageRoot: Hash;
+  readonly checkpointRevision: string;
+}
+
+export interface UnsignedDryRunCandidatePartitionCommitmentV1
+  extends UnsignedDryRunCandidatePartitionCommitmentPayloadV1 {
+  readonly payloadHash: Hash;
+  readonly commitmentHash: Hash;
+}
+
+/** Process-local handle; the cloneable commitment is never itself authority. */
+export type UnsignedDryRunCandidatePartitionCapabilityV1 = object;
+
+export interface UnsignedDryRunCandidatePartitionReaderPortV1 {
+  binding(
+    capability: UnsignedDryRunCandidatePartitionCapabilityV1,
+  ): UnsignedDryRunCandidatePartitionCommitmentV1;
+  listKeys(capability: UnsignedDryRunCandidatePartitionCapabilityV1): readonly Hash[];
+  readCandidate(
+    capability: UnsignedDryRunCandidatePartitionCapabilityV1,
+    familyCandidateKey: Hash,
+  ): CandidateRecordV1;
+  readRawEvidence(
+    capability: UnsignedDryRunCandidatePartitionCapabilityV1,
+    familyCandidateKey: Hash,
+    rawLocatorHash: Hash,
+  ): Uint8Array;
+}
+
+function decodeUnsignedDryRunCandidatePartitionPayload(
+  value: unknown,
+): UnsignedDryRunCandidatePartitionCommitmentPayloadV1 {
+  return decodeExactObject(value, {
+    kind: (field, path) => {
+      if (field !== UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_KIND) {
+        throw new TypeError(`${path} has invalid kind`);
+      }
+      return UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_KIND;
+    },
+    version: (field, path) => {
+      if (field !== UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_VERSION) {
+        throw new TypeError(`${path} has invalid version`);
+      }
+      return UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_VERSION;
+    },
+    authorityClass: (field, path) => {
+      if (field !== "unsigned-dry-run") throw new TypeError(`${path} must be unsigned-dry-run`);
+      return "unsigned-dry-run" as const;
+    },
+    runtimeAuthority: (field, path) => {
+      const projection = decodeRuntimeAuthorityProjectionV1(field);
+      if (projection.authorityClass !== "unsigned-dry-run") {
+        throw new TypeError(`${path} must carry unsigned-dry-run authority`);
+      }
+      return projection;
+    },
+    runId: (field, path) => assertNonEmptyString(field, path),
+    cutoff: (field, path) => decodeCanonicalCutoff(field, path),
+    candidatePartitionRoot: (field, path) => nonZeroHash(field, path),
+    candidatePartitionStorageHash: (field, path) => nonZeroHash(field, path),
+    nominationClosureRoot: (field, path) => nonZeroHash(field, path),
+    nominationClosureStorageHash: (field, path) => nonZeroHash(field, path),
+    recordCount: (field, path) => decimal(field, path),
+    candidateKeysRoot: (field, path) => nonZeroHash(field, path),
+    recentObservationRoot: (field, path) => nonZeroHash(field, path),
+    sourceCoverageRoot: (field, path) => nonZeroHash(field, path),
+    checkpointRevision: (field, path) => decimal(field, path),
+  }, "unsignedDryRunCandidatePartitionCommitmentPayload");
+}
+
+export function unsignedDryRunCandidatePartitionCommitmentPayloadHashV1(
+  value: UnsignedDryRunCandidatePartitionCommitmentPayloadV1,
+): Hash {
+  return hashDomain(
+    UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_DOMAINS.payload,
+    decodeUnsignedDryRunCandidatePartitionPayload(value),
+  );
+}
+
+export function createUnsignedDryRunCandidatePartitionCommitmentV1(
+  value: UnsignedDryRunCandidatePartitionCommitmentPayloadV1,
+): UnsignedDryRunCandidatePartitionCommitmentV1 {
+  const payload = decodeUnsignedDryRunCandidatePartitionPayload(value);
+  const payloadHash = unsignedDryRunCandidatePartitionCommitmentPayloadHashV1(payload);
+  return deepFreeze({
+    ...payload,
+    payloadHash,
+    commitmentHash: hashDomain(
+      UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_DOMAINS.id,
+      { payloadHash },
+    ),
+  });
+}
+
+export function decodeUnsignedDryRunCandidatePartitionCommitmentV1(
+  value: unknown,
+): UnsignedDryRunCandidatePartitionCommitmentV1 {
+  const decoded = decodeExactObject(value, {
+    kind: field => field,
+    version: field => field,
+    authorityClass: field => field,
+    runtimeAuthority: field => field,
+    runId: field => field,
+    cutoff: field => field,
+    candidatePartitionRoot: field => field,
+    candidatePartitionStorageHash: field => field,
+    nominationClosureRoot: field => field,
+    nominationClosureStorageHash: field => field,
+    recordCount: field => field,
+    candidateKeysRoot: field => field,
+    recentObservationRoot: field => field,
+    sourceCoverageRoot: field => field,
+    checkpointRevision: field => field,
+    payloadHash: (field, path) => nonZeroHash(field, path),
+    commitmentHash: (field, path) => nonZeroHash(field, path),
+  }, "unsignedDryRunCandidatePartitionCommitment");
+  const { payloadHash, commitmentHash, ...payloadInput } = decoded;
+  const payload = decodeUnsignedDryRunCandidatePartitionPayload(payloadInput);
+  const expectedPayloadHash = unsignedDryRunCandidatePartitionCommitmentPayloadHashV1(payload);
+  if (payloadHash !== expectedPayloadHash) {
+    throw new TypeError("unsigned dry-run candidate partition payload hash mismatch");
+  }
+  const expectedCommitmentHash = hashDomain(
+    UNSIGNED_DRY_RUN_CANDIDATE_PARTITION_COMMITMENT_DOMAINS.id,
+    { payloadHash },
+  );
+  if (commitmentHash !== expectedCommitmentHash) {
+    throw new TypeError("unsigned dry-run candidate partition commitment hash mismatch");
+  }
+  return deepFreeze({ ...payload, payloadHash, commitmentHash });
+}
+
+export function encodeUnsignedDryRunCandidatePartitionCommitmentV1(
+  value: UnsignedDryRunCandidatePartitionCommitmentV1,
+): Uint8Array {
+  return encodeCanonicalBytes(decodeUnsignedDryRunCandidatePartitionCommitmentV1(value));
+}
+
+export function decodeUnsignedDryRunCandidatePartitionCommitmentBytesV1(
+  value: Uint8Array,
+): UnsignedDryRunCandidatePartitionCommitmentV1 {
+  return decodeUnsignedDryRunCandidatePartitionCommitmentV1(decodeCanonicalJson(value));
 }

@@ -1721,7 +1721,7 @@ export function issueProducerPerformancePortV1<EligibleHeadHandle>(
       const binding = objectValue(input.readEligibleHeadBinding(eligibleHead), "producer eligible head binding");
       assertExactKeys(binding, ["admissionId", "ordinal", "headHash", "revision"], "producer eligible head binding");
       const ordinal = assertDecimalString(binding.ordinal, "producerEligibleHeadBinding.ordinal");
-      if (BigInt(ordinal) < 1n || BigInt(ordinal) > 100n) throw new TypeError("producer eligible head binding ordinal is outside 1..100");
+      if (BigInt(ordinal) < 1n) throw new TypeError("producer eligible head binding ordinal must be positive");
       return Object.freeze({
         admissionId: assertHash(binding.admissionId, "producerEligibleHeadBinding.admissionId"),
         ordinal,

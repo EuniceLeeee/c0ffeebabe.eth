@@ -39,6 +39,14 @@ import {
 
 const h = (digit: string): Hash => `0x${digit.repeat(64)}` as Hash;
 const release = Object.freeze({ bindingId: h("1"), releaseProvenanceHash: h("2"), candidateReleaseCommit: "a".repeat(40) });
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+  createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: release.bindingId,
+    releaseProvenanceHash: release.releaseProvenanceHash,
+    implementationCommit: release.candidateReleaseCommit,
+  }),
+);
 const economicSafety = createContractEconomicSafetyService(release.releaseProvenanceHash, h);
 const graphRoot = h("3");
 const head: CanonicalHead = Object.freeze({ chainId: "1", number: "101", hash: h("4"), parentHash: h("5"), stateRoot: h("6") });
@@ -61,7 +69,7 @@ test("production evidence owner requires the exact owner-issued economic-safety 
       databasePath,
       release,
       runtimeAnchor: runtimeAnchor(),
-      economicSafety: createContractEconomicSafetyService(h("foreign-release"), h),
+      economicSafety: createContractEconomicSafetyService(h("9"), h),
     }),
     /economic-safety release mismatch/,
   );
@@ -595,8 +603,7 @@ function startup() {
     familySearchRuntime: Object.freeze({}) as never,
     generationId: "generation-1",
     graphRoot,
-    releaseBindingId: release.bindingId,
-    candidateReleaseCommit: release.candidateReleaseCommit,
+    runtimeAuthority,
     canonicalSourceAuthority: {} as never,
     readActiveGeneration: () => serving,
     readServingGeneration: generationId => {
@@ -668,8 +675,7 @@ test("eligible admission freezes serving only from the owner-issued session open
     familySearchRuntime: Object.freeze({}) as never,
     generationId: generationA.generationId,
     graphRoot: generationA.graphRoot,
-    releaseBindingId: release.bindingId,
-    candidateReleaseCommit: release.candidateReleaseCommit,
+    runtimeAuthority,
     canonicalSourceAuthority: {} as never,
     readActiveGeneration: () => generationA,
     readServingGeneration: generationId => {

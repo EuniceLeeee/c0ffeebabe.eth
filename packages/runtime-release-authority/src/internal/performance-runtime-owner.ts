@@ -70,6 +70,10 @@ import { runtimeReleaseBindingProvenanceHash } from "../../../../specs/release-a
 import type { RuntimeReleaseAuthorityV1 } from "../index.ts";
 import { assertActiveRuntimeReleaseAuthorityState } from "./state.ts";
 import {
+  projectRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../runtime-authority/src/index.ts";
+import {
   readRuntimeReleasePerformancePolicyPortV1,
   type RuntimeReleasePerformancePolicyPortV1,
 } from "./performance-policy-owner.ts";
@@ -163,6 +167,7 @@ interface ServiceStateV1 {
   readonly authorityVersion: bigint;
   readonly bindingId: Hash;
   readonly releaseProvenanceHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly schedulerIssuer: QualifiedExecutorAuthorityIssuer;
   readonly schedulerCapability: QualifiedExecutorAuthorityCapability;
   readonly schedulerReader: QualifiedSharedSchedulerPerformanceReaderPortV1;
@@ -416,7 +421,9 @@ export function issueRuntimeReleasePerformanceRuntimeService(input: {
       assertExactKeys(windowInput, ["startup", "commitment"], "runtimeReleasePerformanceWindow");
       assertIssuedStartupRuntime(windowInput.startup);
       if (state.window !== null) throw new TypeError("runtime-release performance window is already open");
-      if (windowInput.startup.releaseBindingId !== state.bindingId
+      if (windowInput.startup.runtimeAuthority.authorityClass !== state.runtimeAuthority.authorityClass
+        || windowInput.startup.runtimeAuthority.authorityBindingHash !== state.runtimeAuthority.authorityBindingHash
+        || windowInput.startup.runtimeAuthority.implementationCommit !== state.runtimeAuthority.implementationCommit
         || windowInput.startup.ready.releaseProvenanceHash !== state.releaseProvenanceHash) {
         throw new TypeError("performance window startup release mismatch");
       }
@@ -678,6 +685,7 @@ export function issueRuntimeReleasePerformanceRuntimeService(input: {
     authorityVersion: authorityState.version,
     bindingId: authorityState.binding.bindingId,
     releaseProvenanceHash: runtimeReleaseBindingProvenanceHash(authorityState.binding),
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(authorityState.descriptor),
     schedulerIssuer: input.schedulerIssuer,
     schedulerCapability: input.schedulerCapability,
     schedulerReader,

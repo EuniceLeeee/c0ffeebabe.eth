@@ -1,8 +1,7 @@
 import type { Hash } from "../../../canonical-codec/src/index.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
-  projectRuntimeAuthorityDescriptorV1,
-  type SignedReleaseRuntimeAuthorityDescriptorV1,
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
 } from "../../../runtime-authority/src/index.ts";
 import type {
   CanonicalHeadObservationCapabilityV1,
@@ -100,7 +99,7 @@ function producerLeaseFacade(
   return Object.freeze(facade) as StartupProducerLeaseV1;
 }
 
-export interface SignedReleaseNativeStartupRuntimeV1 {
+export interface RuntimeAuthorityNativeStartupRuntimeV1 {
   readonly native: NativeStartupRuntimeV1<
     CanonicalHeadObservationCapabilityV1,
     ProducerSessionV1<StartupProducerLeaseV1>
@@ -111,21 +110,21 @@ export interface SignedReleaseNativeStartupRuntimeV1 {
   readonly fullFamilyReader: ReadyFullFamilyEvidenceReaderPortV1;
 }
 
+export type SignedReleaseNativeStartupRuntimeV1 = RuntimeAuthorityNativeStartupRuntimeV1;
+
 /** Exact production adapter. The concrete constructor is intentionally private to this module. */
-class SignedReleaseNativeStartupOwner implements NativeStartupOwnerPortV1<
+class RuntimeAuthorityNativeStartupOwner implements NativeStartupOwnerPortV1<
   CanonicalHeadObservationCapabilityV1,
   StartupProducerLeaseV1,
   ProducerSessionV1<StartupProducerLeaseV1>
 > {
   readonly #input: StartupRuntimeCompositionInputV1;
-  readonly #runtimeBindingId: Hash;
-  readonly #implementationCommit: string;
+  readonly #runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly #routeHandleIssuer: ReturnType<typeof createGeneratedRouteHandleIssuer>;
   readonly #promotion: BoundReadyPromotionPort;
   readonly #generationHandles = new WeakMap<object, ReadyGenerationV1>();
   readonly #promotionRequests = new WeakMap<object, Parameters<BoundReadyPromotionPort["promote"]>[0]>();
   readonly #loadedGenerations = new WeakMap<object, ProductionLoadedGenerationV1>();
-  #authorityDescriptor: SignedReleaseRuntimeAuthorityDescriptorV1 | null = null;
 
   readonly targetRefreshAgeBlocks: string;
   readonly stage12Reader: ReadyStage12EvidenceReaderPortV1;
@@ -133,17 +132,15 @@ class SignedReleaseNativeStartupOwner implements NativeStartupOwnerPortV1<
 
   constructor(
     input: StartupRuntimeCompositionInputV1,
-    runtimeBindingId: Hash,
-    implementationCommit: string,
+    runtimeAuthority: RuntimeAuthorityProjectionV1,
   ) {
-    if (new.target !== SignedReleaseNativeStartupOwner) {
-      throw new TypeError("signed release native startup owner cannot be subclassed");
+    if (new.target !== RuntimeAuthorityNativeStartupOwner) {
+      throw new TypeError("runtime authority native startup owner cannot be subclassed");
     }
     assertStartupPolicy(input.policy);
     assertIssuedStartupReadyPort(input.ready);
     this.#input = input;
-    this.#runtimeBindingId = runtimeBindingId;
-    this.#implementationCommit = implementationCommit;
+    this.#runtimeAuthority = decodeRuntimeAuthorityProjectionV1(runtimeAuthority);
     this.#routeHandleIssuer = createGeneratedRouteHandleIssuer(input.familyRuntime);
     this.#promotion = startupReadyPromotionPort(input.ready);
     this.targetRefreshAgeBlocks = input.policy.targetRefreshAgeBlocks;
@@ -226,18 +223,14 @@ class SignedReleaseNativeStartupOwner implements NativeStartupOwnerPortV1<
     handle: NativeStartupGenerationHandleV1,
   ): Promise<NativeStartupLoadedGenerationV1> => {
     const ready = this.#ready(handle);
-    if (this.#authorityDescriptor === null) {
-      this.#authorityDescriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
-        authorityClass: "signed-release",
-        runtimeBindingId: this.#runtimeBindingId,
-        releaseProvenanceHash: ready.releaseProvenanceHash,
-        implementationCommit: this.#implementationCommit,
-      });
-    } else if (ready.releaseProvenanceHash !== this.#authorityDescriptor.releaseProvenanceHash) {
+    if (
+      ready.runtimeAuthority.authorityClass !== this.#runtimeAuthority.authorityClass
+      || ready.runtimeAuthority.authorityBindingHash !== this.#runtimeAuthority.authorityBindingHash
+      || ready.runtimeAuthority.implementationCommit !== this.#runtimeAuthority.implementationCommit
+    ) {
       throw new Error("startup-runtime-lineage-changed");
     }
-    const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(this.#authorityDescriptor);
-    readGeneratedFamilySearchRuntimePort(this.#input.familySearchRuntime, runtimeAuthority);
+    readGeneratedFamilySearchRuntimePort(this.#input.familySearchRuntime, this.#runtimeAuthority);
     assertStartupObservationWindow(ready.cutoff, ready.recentObservationRange);
     const catalog = this.#input.catalog.loadExact();
     if (catalog.definitionCatalogRoot !== ready.definitionCatalogRoot) {
@@ -271,7 +264,7 @@ class SignedReleaseNativeStartupOwner implements NativeStartupOwnerPortV1<
           from: ready.recentObservationRange.from,
           to: ready.recentObservationRange.to,
         }),
-        authority: runtimeAuthority,
+        authority: this.#runtimeAuthority,
       }),
     });
   };
@@ -338,18 +331,21 @@ class SignedReleaseNativeStartupOwner implements NativeStartupOwnerPortV1<
   ): ReadyStage12EvidenceCapabilityV1 => this.#loaded(handle).closure.stage12EvidenceCapability;
 }
 
-Object.freeze(SignedReleaseNativeStartupOwner.prototype);
+Object.freeze(RuntimeAuthorityNativeStartupOwner.prototype);
 
-/** The only signed-release call into the internal generic state machine. */
-export async function startSignedReleaseNativeStartupRuntime(input: {
+/**
+ * Mode-neutral owner adapter into the one native startup state machine. The
+ * caller must already hold an owner-issued projection; this function derives
+ * no release qualification and creates no alternate runner.
+ */
+export async function startRuntimeAuthorityNativeStartupRuntime(input: {
   readonly composition: StartupRuntimeCompositionInputV1;
-  readonly runtimeBindingId: Hash;
-  readonly implementationCommit: string;
-}, signal: AbortSignal): Promise<SignedReleaseNativeStartupRuntimeV1> {
-  const owner = new SignedReleaseNativeStartupOwner(
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+}, signal: AbortSignal): Promise<RuntimeAuthorityNativeStartupRuntimeV1> {
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
+  const owner = new RuntimeAuthorityNativeStartupOwner(
     input.composition,
-    input.runtimeBindingId,
-    input.implementationCommit,
+    runtimeAuthority,
   );
   const native = await runNativeStartupStateMachineForExactAdapter(owner, signal);
   return Object.freeze({
@@ -359,4 +355,19 @@ export async function startSignedReleaseNativeStartupRuntime(input: {
     stage12Reader: owner.stage12Reader,
     fullFamilyReader: owner.fullFamilyReader,
   });
+}
+
+/** The existing signed-release adapter preserves the production fail-closed class fence. */
+export async function startSignedReleaseNativeStartupRuntime(input: {
+  readonly composition: StartupRuntimeCompositionInputV1;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+}, signal: AbortSignal): Promise<SignedReleaseNativeStartupRuntimeV1> {
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
+  if (runtimeAuthority.authorityClass !== "signed-release") {
+    throw new TypeError("signed release startup requires signed-release authority");
+  }
+  return startRuntimeAuthorityNativeStartupRuntime({
+    composition: input.composition,
+    runtimeAuthority,
+  }, signal);
 }

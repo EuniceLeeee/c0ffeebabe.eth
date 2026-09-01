@@ -50,6 +50,10 @@ import type {
   SearcherProductionSixStepSchedulerJoinV1,
   SixStepRuntimeAnchorV1,
 } from "./owner.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../../runtime-authority/src/index.ts";
 
 const EVENT_KIND = "aloha.searcher-production-evidence-event";
 const PERFORMANCE_NAMESPACE = "searcher-production-evidence/performance/v1";
@@ -300,12 +304,22 @@ export async function issueSearcherProductionSixStepPerformanceAppendCapabilityV
 
   const release = record(event.release, "sixStepCompleteAppend.release");
   assertExactKeys(release, ["bindingId", "releaseProvenanceHash", "candidateReleaseCommit"], "sixStepCompleteAppend.release");
+  if (typeof release.candidateReleaseCommit !== "string") throw new TypeError("Six-Step release commit is invalid");
+  const expectedRuntimeAuthority = projectRuntimeAuthorityDescriptorV1(
+    createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: assertHash(release.bindingId, "sixStepCompleteAppend.release.bindingId"),
+      releaseProvenanceHash: assertHash(release.releaseProvenanceHash, "sixStepCompleteAppend.release.releaseProvenanceHash"),
+      implementationCommit: release.candidateReleaseCommit,
+    }),
+  );
   const runtimeAnchor = record(event.runtimeAnchor, "sixStepCompleteAppend.runtimeAnchor");
   const serving = record(event.serving, "sixStepCompleteAppend.serving");
   assertExactKeys(serving, ["generationId", "graphRoot", "readyRecordHash", "sourceCoverageRoot"], "sixStepCompleteAppend.serving");
-  if (release.bindingId !== input.startup.releaseBindingId
+  if (input.startup.runtimeAuthority.authorityClass !== expectedRuntimeAuthority.authorityClass
+    || input.startup.runtimeAuthority.authorityBindingHash !== expectedRuntimeAuthority.authorityBindingHash
+    || input.startup.runtimeAuthority.implementationCommit !== expectedRuntimeAuthority.implementationCommit
     || release.releaseProvenanceHash !== input.startup.ready.releaseProvenanceHash
-    || release.candidateReleaseCommit !== input.startup.candidateReleaseCommit
     || runtimeAnchor.bindingId !== release.bindingId
     || runtimeAnchor.releaseProvenanceHash !== release.releaseProvenanceHash
     || runtimeAnchor.candidateReleaseCommit !== release.candidateReleaseCommit

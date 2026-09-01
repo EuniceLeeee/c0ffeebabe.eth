@@ -159,7 +159,7 @@ const planningProblem = issueRouteCyclePlanningProblem({
   definitionCatalogRoot: binding.definitionCatalogRoot,
   graphRoot: binding.graphRoot,
   edges,
-  releaseProvenanceHash: binding.releaseProvenanceHash,
+  releaseProvenanceHash: binding.releaseProvenanceHash!,
   readyRecordHash: binding.readyRecordHash,
   sourceHash: h("block"),
   correlationId: h("correlation"),

@@ -23,6 +23,7 @@ import type { CanonicalLeaseGuardPort } from "../../canonical-source/src/lease-g
 import {
   decodeRuntimeAuthorityProjectionV1,
   type RuntimeAuthorityProjectionV1,
+  type RuntimeReleaseProvenanceHashV1,
 } from "../../runtime-authority/src/index.ts";
 
 export interface RehydrationRefV1 {
@@ -153,7 +154,7 @@ export interface GraphLeaseBindingV1 {
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
   readonly nominationClosureStorageHash: Hash;
@@ -452,10 +453,10 @@ export class GraphViewLeaseV1 {
   ) {
     canonicalGuard.assertViewAuthorityActive(binding.cutoff);
     const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(binding.runtimeAuthority);
-    const releaseFactsPresent = binding.releaseProvenanceHash !== null
-      && binding.candidatePartitionProofStorageHash !== null
-      && binding.nominationClosureStorageHash !== null;
-    if (runtimeAuthority.authorityClass !== "signed-release" || !releaseFactsPresent) {
+    const provenanceMatchesClass = runtimeAuthority.authorityClass === "signed-release"
+      ? binding.releaseProvenanceHash !== null
+      : binding.releaseProvenanceHash === null;
+    if (!provenanceMatchesClass) {
       throw new Error("graph-lease-authority-facts-mismatch");
     }
     const activeReadyBinding = deepFreeze({

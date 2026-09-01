@@ -31,14 +31,19 @@ import {
   createGeneratedFamilyRuntimeFactory,
   issueGeneratedFamilyLifecycleRuntimePort,
   issueGeneratedFamilyRuntimeAuthorityCapability,
+  issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability,
   issueGeneratedFamilySearchRuntimePort,
   readGeneratedFamilyRuntimeAdapterFactories,
   readGeneratedFamilyRuntimeFactoryMetadata,
+  readGeneratedFamilyRuntimeMembership,
+  readGeneratedFamilySourcePlanDeclarations,
+  readGeneratedFamilySourcePlanRuntimes,
   readGeneratedFamilyLifecycleRuntimePort,
   readGeneratedFamilySearchRuntimePort,
 } from "../src/internal/generated-runtime-composition.ts";
 import {
   createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 import {
@@ -542,6 +547,52 @@ test("signed generated Family search and lifecycle ports bind one exact factory 
   current = false;
   assert.throws(() => readGeneratedFamilyLifecycleRuntimePort(lifecyclePort), /rotated/);
   assert.throws(() => readGeneratedFamilySearchRuntimePort(searchPort), /rotated/);
+});
+
+test("unsigned dry-run opens the same generated Family factory from exact declarations without qualification", () => {
+  const value = generatedSearchFactoryFixture();
+  const descriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+    authorityClass: "unsigned-dry-run",
+    runtimeBindingId: h("unsigned-runtime-binding"),
+    implementationCommit: "b".repeat(40),
+  });
+  const capability = issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability({
+    factory: value.factory,
+    runtimeAuthority: descriptor,
+    declaredCapabilitySetRoot: value.descriptor.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: value.descriptor.nominationProgramSetRoot,
+    authorities: [value.fixture.authority],
+    assertCurrent() {},
+  });
+  const membership = readGeneratedFamilyRuntimeMembership(value.factory, capability);
+  assert.equal(membership.runtimeAuthority.authorityClass, "unsigned-dry-run");
+  assert.equal(membership.runtimeAuthority.implementationCommit, "b".repeat(40));
+  assert.equal(Object.prototype.hasOwnProperty.call(membership, "releaseProvenanceHash"), false);
+  assert.equal(readGeneratedFamilySourcePlanDeclarations(value.factory, capability).length, 1);
+  assert.throws(
+    () => readGeneratedFamilySourcePlanRuntimes(value.factory, capability),
+    /qualification is unavailable in unsigned dry-run/,
+  );
+  const lifecycle = issueGeneratedFamilyLifecycleRuntimePort(value.factory, capability);
+  const search = issueGeneratedFamilySearchRuntimePort(value.factory, capability, lifecycle);
+  assert.equal(
+    readGeneratedFamilyLifecycleRuntimePort(lifecycle, projectRuntimeAuthorityDescriptorV1(descriptor))
+      .requireStage(familyDefinitionHash, familyId, "projection").stageRef.stage,
+    "projection",
+  );
+  assert.equal(
+    readGeneratedFamilySearchRuntimePort(search, projectRuntimeAuthorityDescriptorV1(descriptor))
+      .requireAdapter(familyDefinitionHash, "search/v1"),
+    value.adapter,
+  );
+  assert.throws(() => issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability({
+    factory: value.factory,
+    runtimeAuthority: descriptor,
+    declaredCapabilitySetRoot: h("foreign-declared-set"),
+    nominationProgramSetRoot: value.descriptor.nominationProgramSetRoot,
+    authorities: [value.fixture.authority],
+    assertCurrent() {},
+  }), /declared capability set/);
 });
 
 function coarseFixture(options: Readonly<{ stateUnavailable?: boolean }> = {}) {

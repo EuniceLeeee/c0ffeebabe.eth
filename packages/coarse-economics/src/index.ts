@@ -19,6 +19,7 @@ import type { IssuedPlanningEnumerationV1 } from "../../planner/src/index.ts";
 import {
   decodeRuntimeAuthorityProjectionV1,
   type RuntimeAuthorityProjectionV1,
+  type RuntimeReleaseProvenanceHashV1,
 } from "../../runtime-authority/src/index.ts";
 
 export interface CoarseSourceV1 {
@@ -125,7 +126,7 @@ export interface CoarseRouteBindingV1 {
   readonly source: CoarseSourceV1;
   readonly objectiveRef: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly legs: readonly CoarseRouteLegBindingV1[];
 }
 
@@ -217,7 +218,7 @@ export interface CoarseEnumerationBindingV1 {
   readonly graphRoot: Hash;
   readonly source: CoarseSourceV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly objective: CoarseAdmissionObjectiveV1;
   readonly policy: CoarseAdmissionPolicyV1;
   readonly fairnessSeed: Hash;
@@ -237,7 +238,7 @@ export interface CoarseEnumerationIssueInputV1 {
   readonly generationId: string;
   readonly source: CoarseSourceV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly objective: CoarseAdmissionObjectiveV1;
   readonly policy: CoarseAdmissionPolicyV1;
   readonly candidates: readonly CoarseEnumerationCandidateV1[];
@@ -288,7 +289,7 @@ export interface CoarseAdmissionV1 {
   readonly graphRoot: Hash;
   readonly source: CoarseSourceV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly plannerEnumerationRoot: Hash;
   readonly coarseEnumerationRoot: Hash;
   readonly fairnessSeed: Hash;
@@ -666,8 +667,11 @@ export function decodeCoarseRouteBindingV1(value: CoarseRouteBindingV1): CoarseR
     if (ownerRefs[index - 1]! >= ownerRefs[index]!) throw new TypeError("coarse route owner refs are not strictly sorted");
   }
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
-  if (runtimeAuthority.authorityClass !== "signed-release") throw new TypeError("coarse route requires signed runtime authority");
-  const releaseProvenanceHash = nonZeroHash(value.releaseProvenanceHash, "coarseRouteBinding.releaseProvenanceHash");
+  const releaseProvenanceHash: RuntimeReleaseProvenanceHashV1 = runtimeAuthority.authorityClass === "signed-release"
+    ? nonZeroHash(value.releaseProvenanceHash, "coarseRouteBinding.releaseProvenanceHash")
+    : value.releaseProvenanceHash === null
+      ? null
+      : (() => { throw new TypeError("unsigned coarse route cannot carry release provenance"); })();
   return deepFreeze({
     candidateId: nonZeroHash(value.candidateId, "coarseRouteBinding.candidateId"),
     orderKey: nonZeroHash(value.orderKey, "coarseRouteBinding.orderKey"),
@@ -752,6 +756,9 @@ function computeCoarseRouteAssessmentV1(input: {
   readonly projections: readonly QualifiedCoarseProjectionV1[];
 }): CoarseRouteAssessmentV1 {
   const binding = readIssuedCoarseRouteBindingV1(input.binding);
+  if (binding.runtimeAuthority.authorityClass !== "signed-release" || binding.releaseProvenanceHash === null) {
+    throw new TypeError("qualified coarse assessment is unavailable for unsigned dry-run");
+  }
   if (!Array.isArray(input.projections) || input.projections.length !== binding.legs.length) throw new TypeError("coarse projection denominator mismatch");
   const receipts = input.projections.map((projection, index) => {
     if (projection === null || typeof projection !== "object") throw new TypeError(`qualified coarse projection ${index} is invalid`);
@@ -905,7 +912,7 @@ function enumerationRootPayload(input: {
   readonly graphRoot: Hash;
   readonly source: CoarseSourceV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly objective: CoarseAdmissionObjectiveV1;
   readonly policy: CoarseAdmissionPolicyV1;
   readonly fairnessSeed: Hash;
@@ -971,8 +978,11 @@ export function decodeCoarseEnumerationBindingV1(value: CoarseEnumerationBinding
   const graphRoot = nonZeroHash(value.graphRoot, "coarseEnumeration.graphRoot");
   const sourceView = source(value.source, "coarseEnumeration.source");
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
-  if (runtimeAuthority.authorityClass !== "signed-release") throw new TypeError("coarse enumeration requires signed runtime authority");
-  const releaseProvenanceHash = nonZeroHash(value.releaseProvenanceHash, "coarseEnumeration.releaseProvenanceHash");
+  const releaseProvenanceHash: RuntimeReleaseProvenanceHashV1 = runtimeAuthority.authorityClass === "signed-release"
+    ? nonZeroHash(value.releaseProvenanceHash, "coarseEnumeration.releaseProvenanceHash")
+    : value.releaseProvenanceHash === null
+      ? null
+      : (() => { throw new TypeError("unsigned coarse enumeration cannot carry release provenance"); })();
   const normalizedObjective = objective(value.objective, "coarseEnumeration.objective");
   const normalizedPolicy = policy(value.policy, "coarseEnumeration.policy");
   const plannerEnumerationRoot = nonZeroHash(value.plannerEnumerationRoot, "coarseEnumeration.plannerEnumerationRoot");

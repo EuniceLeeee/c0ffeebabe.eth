@@ -1232,10 +1232,15 @@ export async function observeProductionFullFamily(
     releaseProjectionObserved.set(projection.role, observed);
   }
 
+  const signedReleaseProvenanceHash = snapshot.ready.releaseProvenanceHash;
+  if (signedReleaseProvenanceHash === null) {
+    throw new TypeError("full-family release observer is unavailable for unsigned dry-run");
+  }
   const readyRecord: FullFamilyReadyRecordV1 = Object.freeze({
     ...snapshot.ready,
     generationId: snapshot.ready.generationId as Hash,
     parentGenerationId: snapshot.ready.parentGenerationId as Hash | null,
+    releaseProvenanceHash: signedReleaseProvenanceHash,
   });
   const readyObserved = await write(input.sink, observedArtifacts, "ready-record", encodeFullFamilyReadyRecord(readyRecord), schema("readyRecord"));
   const nominationObserved = await write(input.sink, observedArtifacts, "nomination-closure", encodeNominationClosureV1(snapshot.nominationClosure), schema("nominationClosure"));

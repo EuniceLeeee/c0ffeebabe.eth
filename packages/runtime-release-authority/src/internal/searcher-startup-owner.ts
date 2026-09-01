@@ -8,6 +8,10 @@ import { assertIssuedStartupReadyPort } from "../../../../packages/startup-runti
 import { runtimeReleaseBindingProvenanceHash } from "../../../../specs/release-authority/src/index.ts";
 import type { RuntimeReleaseAuthorityV1 } from "../index.ts";
 import { assertActiveRuntimeReleaseAuthorityState } from "./state.ts";
+import {
+  projectRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../runtime-authority/src/index.ts";
 
 export interface RuntimeReleaseSearcherStartupServiceV1 {
   readonly startStartup: (signal?: AbortSignal) => Promise<StartupRuntimeV1>;
@@ -24,6 +28,7 @@ interface StartupServiceStateV1 {
   readonly bindingId: Hash;
   readonly releaseProvenanceHash: Hash;
   readonly candidateReleaseCommit: `${string}`;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly ready: StartupReadyPortV1;
 }
 
@@ -56,6 +61,7 @@ export function issueRuntimeReleaseSearcherStartupService(input: {
     releaseProvenanceHash: runtimeReleaseBindingProvenanceHash(authority.binding),
     candidateReleaseCommit: authority.binding.candidateReleaseCommit,
   });
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(authority.descriptor);
   let service: RuntimeReleaseSearcherStartupServiceV1;
   service = Object.freeze({
     release,
@@ -63,9 +69,10 @@ export function issueRuntimeReleaseSearcherStartupService(input: {
       const state = current(service);
       const startup = await input.start(signal);
       assertIssuedStartupRuntime(startup);
-      if (startup.releaseBindingId !== state.bindingId
-        || startup.ready.releaseProvenanceHash !== state.releaseProvenanceHash
-        || startup.candidateReleaseCommit !== state.candidateReleaseCommit) {
+      if (startup.runtimeAuthority.authorityClass !== state.runtimeAuthority.authorityClass
+        || startup.runtimeAuthority.authorityBindingHash !== state.runtimeAuthority.authorityBindingHash
+        || startup.runtimeAuthority.implementationCommit !== state.runtimeAuthority.implementationCommit
+        || startup.ready.releaseProvenanceHash !== state.releaseProvenanceHash) {
         throw new TypeError("runtime-release startup result identity mismatch");
       }
       current(service);
@@ -78,6 +85,7 @@ export function issueRuntimeReleaseSearcherStartupService(input: {
     bindingId: release.bindingId,
     releaseProvenanceHash: release.releaseProvenanceHash,
     candidateReleaseCommit: release.candidateReleaseCommit,
+    runtimeAuthority,
     ready: input.ready,
   });
   return service;

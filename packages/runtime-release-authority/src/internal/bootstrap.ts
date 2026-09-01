@@ -824,7 +824,7 @@ export function buildRuntimeReleaseComposition<Fact>(
   const startStartup = async (signal: AbortSignal = new AbortController().signal): Promise<StartupRuntimeV1> => {
     assertRuntimeReleasePrivatePortsCurrent(ports);
     if (startupPromise === null) {
-      const startupRelease = assertActiveRuntimeReleaseAuthorityState(authority).binding;
+      const startupAuthority = assertActiveRuntimeReleaseAuthorityState(authority);
       startupPromise = startStartupRuntime({
         policy: input.ready.policy,
         catalog,
@@ -836,8 +836,7 @@ export function buildRuntimeReleaseComposition<Fact>(
         familyRuntime: ports.familyRuntime.openComposition(),
         familySearchRuntime: ports.familyRuntime.openSearchRuntime(),
         processEpoch: input.startup.processEpoch,
-        releaseBindingId: startupRelease.bindingId,
-        candidateReleaseCommit: startupRelease.candidateReleaseCommit,
+        runtimeAuthority: projectRuntimeAuthorityDescriptorV1(startupAuthority.descriptor),
       }, signal).catch(error => {
         startupPromise = null;
         throw error;

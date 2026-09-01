@@ -38,14 +38,70 @@ import {
   type PromotionFreshnessRequestV1,
 } from "../../canonical-source/src/index.ts";
 import { sourcePlanSetRoot } from "../../discovery/src/index.ts";
-import { assertIssuedRuntimeReleaseReadyBindingPort } from "../../runtime-release-authority/src/internal/ready-binding-consumer.ts";
 import type { NominationClosureV1 } from "../../../specs/nomination-authority/src/index.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
   decodeRuntimeAuthorityProjectionV1,
-  projectRuntimeAuthorityDescriptorV1,
+  type CurrentRuntimeAuthorityPortV1,
+  type RuntimeReleaseProvenanceHashV1,
   type RuntimeAuthorityProjectionV1,
 } from "../../runtime-authority/src/index.ts";
+export type {
+  CurrentRuntimeAuthorityPortV1,
+  RuntimeReleaseProvenanceHashV1,
+} from "../../runtime-authority/src/index.ts";
+
+function readCurrentRuntimeAuthority(
+  port: CurrentRuntimeAuthorityPortV1,
+): ReturnType<CurrentRuntimeAuthorityPortV1["readCurrent"]> {
+  if (port === null || typeof port !== "object" || typeof port.readCurrent !== "function") {
+    throw new TypeError("current runtime authority port is invalid");
+  }
+  const value = port.readCurrent();
+  assertPlainObject(value, "currentRuntimeAuthority");
+  assertExactKeys(value, ["runtimeAuthority", "releaseProvenanceHash"], "currentRuntimeAuthority");
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(
+    readOwnEnumerableDataProperty(value, "runtimeAuthority", "currentRuntimeAuthority"),
+  );
+  const rawReleaseProvenanceHash = readOwnEnumerableDataProperty(
+    value,
+    "releaseProvenanceHash",
+    "currentRuntimeAuthority",
+  );
+  if (runtimeAuthority.authorityClass === "signed-release") {
+    return deepFreeze({
+      runtimeAuthority,
+      releaseProvenanceHash: assertHash(
+        rawReleaseProvenanceHash,
+        "currentRuntimeAuthority.releaseProvenanceHash",
+      ),
+    });
+  }
+  if (rawReleaseProvenanceHash !== null) {
+    throw new TypeError("unsigned dry-run runtime authority cannot carry release provenance");
+  }
+  return deepFreeze({ runtimeAuthority, releaseProvenanceHash: null });
+}
+
+function runtimeAuthoritiesEqual(
+  left: RuntimeAuthorityProjectionV1,
+  right: RuntimeAuthorityProjectionV1,
+): boolean {
+  return left.authorityClass === right.authorityClass
+    && left.authorityBindingHash === right.authorityBindingHash
+    && left.implementationCommit === right.implementationCommit;
+}
+
+function decodeReleaseProvenanceHash(
+  value: unknown,
+  runtimeAuthority: RuntimeAuthorityProjectionV1,
+  path: string,
+): RuntimeReleaseProvenanceHashV1 {
+  if (runtimeAuthority.authorityClass === "unsigned-dry-run") {
+    if (value !== null) throw new TypeError(`${path} must be null for unsigned dry-run`);
+    return null;
+  }
+  return assertHash(value, path);
+}
 
 export interface GenerationRefreshPolicyV1 {
   readonly observationWindowBlocks: "50";
@@ -217,7 +273,7 @@ export interface ReadyPromotionAuthorityBindingV1 {
   readonly graphRoot: Hash;
   readonly generationRefreshPolicyHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
   readonly nominationClosureStorageHash: Hash;
@@ -240,7 +296,7 @@ export interface ReadyStageIdentityV1 {
   readonly generationRefreshPolicyHash: Hash;
   readonly definitionCatalogRoot: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
   readonly nominationClosureStorageHash: Hash;
@@ -275,8 +331,12 @@ export function validateReadyStageIdentity(value: ReadyStageIdentityV1): void {
   validateCanonicalCutoff(value.cutoff, "readyStageIdentity.cutoff");
   assertHash(value.generationRefreshPolicyHash, "readyStageIdentity.generationRefreshPolicyHash");
   assertHash(value.definitionCatalogRoot, "readyStageIdentity.definitionCatalogRoot");
-  decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
-  assertHash(value.releaseProvenanceHash, "readyStageIdentity.releaseProvenanceHash");
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
+  decodeReleaseProvenanceHash(
+    value.releaseProvenanceHash,
+    runtimeAuthority,
+    "readyStageIdentity.releaseProvenanceHash",
+  );
   assertHash(value.candidatePartitionProofStorageHash, "readyStageIdentity.candidatePartitionProofStorageHash");
   assertHash(value.nominationClosureRoot, "readyStageIdentity.nominationClosureRoot");
   assertHash(value.nominationClosureStorageHash, "readyStageIdentity.nominationClosureStorageHash");
@@ -320,7 +380,7 @@ export interface ReadyPromotionAuthorityIssueV1 {
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
   readonly nominationClosureStorageHash: Hash;
@@ -332,7 +392,7 @@ export interface ReadyPromotionAuthorityGuardPort {
     readonly definitionCatalogRoot: Hash;
     readonly generationRefreshPolicyHash: Hash;
     readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-    readonly releaseProvenanceHash: Hash;
+    readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   }): void;
   assertActive(authority: ReadyPromotionAuthorityV1): ReadyPromotionAuthorityBindingV1;
 }
@@ -364,7 +424,7 @@ export interface ReadyGenerationV1 {
   readonly nominationClosureStorageHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly exactOutcomePartitionRoot: Hash;
   readonly verifiedMemoSetRoot: Hash;
   readonly instanceCatalogRoot: Hash;
@@ -483,7 +543,7 @@ export interface ReadyStorePort {
     readonly graphRoot: Hash;
     readonly cutoff: CanonicalCutoffV1;
     readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-    readonly releaseProvenanceHash: Hash;
+    readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
     readonly candidatePartitionProofStorageHash: Hash;
     readonly nominationClosureRoot: Hash;
     readonly nominationClosureStorageHash: Hash;
@@ -506,7 +566,6 @@ export interface ServingValidationInputV1 {
 export interface CurrentDefinitionCatalogV1 {
   readonly definitionCatalogRoot: Hash;
   readonly declaredSourcePlans: readonly SourcePlanRefV1[];
-  readonly releaseProvenanceHash: Hash;
 }
 
 /**
@@ -554,44 +613,22 @@ export function sourcePlanRootForCoverage(
   })));
 }
 
-function signedRuntimeAuthorityProjection(
-  port: ReturnType<typeof assertIssuedRuntimeReleaseReadyBindingPort>,
-): RuntimeAuthorityProjectionV1 {
-  const releaseProvenanceHash = assertHash(
-    port.currentProvenanceHash(),
-    "runtimeAuthority.releaseProvenanceHash",
-  );
-  return projectRuntimeAuthorityDescriptorV1(
-    createSignedReleaseRuntimeAuthorityDescriptorV1({
-      authorityClass: "signed-release",
-      runtimeBindingId: assertHash(port.currentBindingId(), "runtimeAuthority.runtimeBindingId"),
-      releaseProvenanceHash,
-      implementationCommit: port.currentImplementationCommit(),
-    }),
-  );
-}
-
 export function createReadyPromotionAuthority(
   currentConfiguration: () => CurrentPromotionConfigurationV1,
-  releaseBindingPort: object,
+  runtimeAuthorityPort: CurrentRuntimeAuthorityPortV1,
 ): ReadyPromotionAuthorityPort {
   const issued = new WeakMap<object, ReadyPromotionAuthorityBindingV1>();
-  const currentRelease = assertIssuedRuntimeReleaseReadyBindingPort(releaseBindingPort);
 
   const current = (): {
     readonly definitionCatalogRoot: Hash;
     readonly policyHash: Hash;
     readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-    readonly releaseProvenanceHash: Hash;
+    readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   } => {
     const value = currentConfiguration();
     assertPlainObject(value, "currentPromotionConfiguration");
     assertExactKeys(value, ["definitionCatalogRoot", "policy"], "currentPromotionConfiguration");
-    const releaseProvenanceHash = assertHash(
-      currentRelease.currentProvenanceHash(),
-      "currentPromotionConfiguration.releaseProvenanceHash",
-    );
-    const runtimeAuthority = signedRuntimeAuthorityProjection(currentRelease);
+    const { runtimeAuthority, releaseProvenanceHash } = readCurrentRuntimeAuthority(runtimeAuthorityPort);
     return deepFreeze({
       definitionCatalogRoot: assertHash(
         readOwnEnumerableDataProperty(value, "definitionCatalogRoot", "currentPromotionConfiguration"),
@@ -620,7 +657,7 @@ export function createReadyPromotionAuthority(
     if (
       binding.definitionCatalogRoot !== configuration.definitionCatalogRoot
       || binding.generationRefreshPolicyHash !== configuration.policyHash
-      || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(configuration.runtimeAuthority)
+      || !runtimeAuthoritiesEqual(binding.runtimeAuthority, configuration.runtimeAuthority)
       || binding.releaseProvenanceHash !== configuration.releaseProvenanceHash
     ) {
       throw new ReadyPromotionIncompatibleError(
@@ -663,7 +700,11 @@ export function createReadyPromotionAuthority(
         instanceCatalogRoot: assertHash(input.instanceCatalogRoot, "readyPromotionIssue.instanceCatalogRoot"),
         graphRoot: assertHash(input.graphRoot, "readyPromotionIssue.graphRoot"),
         runtimeAuthority: decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority),
-        releaseProvenanceHash: assertHash(input.releaseProvenanceHash, "readyPromotionIssue.releaseProvenanceHash"),
+        releaseProvenanceHash: decodeReleaseProvenanceHash(
+          input.releaseProvenanceHash,
+          decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority),
+          "readyPromotionIssue.releaseProvenanceHash",
+        ),
         candidatePartitionProofStorageHash: assertHash(input.candidatePartitionProofStorageHash, "readyPromotionIssue.candidatePartitionProofStorageHash"),
         nominationClosureRoot: assertHash(input.nominationClosureRoot, "readyPromotionIssue.nominationClosureRoot"),
         nominationClosureStorageHash: assertHash(input.nominationClosureStorageHash, "readyPromotionIssue.nominationClosureStorageHash"),
@@ -673,7 +714,7 @@ export function createReadyPromotionAuthority(
       if (
         binding.definitionCatalogRoot !== configuration.definitionCatalogRoot
         || binding.generationRefreshPolicyHash !== configuration.policyHash
-        || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(configuration.runtimeAuthority)
+        || !runtimeAuthoritiesEqual(binding.runtimeAuthority, configuration.runtimeAuthority)
         || binding.releaseProvenanceHash !== configuration.releaseProvenanceHash
       ) {
         throw new ReadyPromotionIncompatibleError(
@@ -692,7 +733,7 @@ export function createReadyPromotionAuthority(
       readonly definitionCatalogRoot: Hash;
       readonly generationRefreshPolicyHash: Hash;
       readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-      readonly releaseProvenanceHash: Hash;
+      readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
     }) {
       assertPlainObject(binding, "readyPromotionConfiguration");
       assertExactKeys(binding, ["definitionCatalogRoot", "generationRefreshPolicyHash", "runtimeAuthority", "releaseProvenanceHash"], "readyPromotionConfiguration");
@@ -706,11 +747,14 @@ export function createReadyPromotionAuthority(
           readOwnEnumerableDataProperty(binding, "generationRefreshPolicyHash", "readyPromotionConfiguration"),
           "readyPromotionConfiguration.generationRefreshPolicyHash",
         ) !== configuration.policyHash
-        || encodeCanonicalJson(decodeRuntimeAuthorityProjectionV1(
+        || !runtimeAuthoritiesEqual(decodeRuntimeAuthorityProjectionV1(
           readOwnEnumerableDataProperty(binding, "runtimeAuthority", "readyPromotionConfiguration"),
-        )) !== encodeCanonicalJson(configuration.runtimeAuthority)
-        || assertHash(
+        ), configuration.runtimeAuthority)
+        || decodeReleaseProvenanceHash(
           readOwnEnumerableDataProperty(binding, "releaseProvenanceHash", "readyPromotionConfiguration"),
+          decodeRuntimeAuthorityProjectionV1(
+            readOwnEnumerableDataProperty(binding, "runtimeAuthority", "readyPromotionConfiguration"),
+          ),
           "readyPromotionConfiguration.releaseProvenanceHash",
         ) !== configuration.releaseProvenanceHash
       ) {
@@ -770,8 +814,12 @@ export function validateReadyGenerationBase(ready: ReadyGenerationBaseV1): void 
   assertHash(ready.generationId, "readyGenerationBase.generationId");
   if (ready.parentGenerationId !== null) assertHash(ready.parentGenerationId, "readyGenerationBase.parentGenerationId");
   assertHash(ready.generationRefreshPolicyHash, "readyGenerationBase.generationRefreshPolicyHash");
-  decodeRuntimeAuthorityProjectionV1(ready.runtimeAuthority);
-  assertHash(ready.releaseProvenanceHash, "readyGenerationBase.releaseProvenanceHash");
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(ready.runtimeAuthority);
+  decodeReleaseProvenanceHash(
+    ready.releaseProvenanceHash,
+    runtimeAuthority,
+    "readyGenerationBase.releaseProvenanceHash",
+  );
   validateCanonicalCutoff(ready.cutoff, "readyGenerationBase.cutoff");
   assertPlainObject(ready.recentObservationRange, "readyGenerationBase.recentObservationRange");
   assertExactKeys(ready.recentObservationRange, ["from", "to"], "readyGenerationBase.recentObservationRange");
@@ -942,12 +990,12 @@ function assertReadyStageResult(
     || !sameCutoff(result.stage.cutoff, run.cutoff)
     || result.stage.generationRefreshPolicyHash !== policyHash
     || result.stage.definitionCatalogRoot !== run.definitionCatalogRoot
-    || encodeCanonicalJson(result.stage.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)
+    || !runtimeAuthoritiesEqual(result.stage.runtimeAuthority, runtimeAuthority)
     || result.stage.releaseProvenanceHash !== run.releaseProvenanceHash
     || result.stage.candidatePartitionProofStorageHash !== run.candidatePartitionProofStorageHash
     || result.stage.nominationClosureRoot !== run.nominationClosureRoot
     || result.stage.nominationClosureStorageHash !== run.nominationClosureStorageHash
-    || encodeCanonicalJson(ready.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)
+    || !runtimeAuthoritiesEqual(ready.runtimeAuthority, runtimeAuthority)
     || ready.releaseProvenanceHash !== run.releaseProvenanceHash
     || ready.candidatePartitionProofStorageHash !== run.candidatePartitionProofStorageHash
     || ready.nominationClosureRoot !== run.nominationClosureRoot
@@ -979,7 +1027,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
   readonly #currentDefinitionCatalog: () => CurrentDefinitionCatalogV1;
   readonly #promotionAuthority: ReadyPromotionAuthorityPort;
   readonly #sealedRunReader: SealedRunReaderPortV1;
-  readonly #releaseBindingPort: ReturnType<typeof assertIssuedRuntimeReleaseReadyBindingPort>;
+  readonly #runtimeAuthorityPort: CurrentRuntimeAuthorityPortV1;
   readonly #servingAdmissions = new WeakMap<object, ServingValidationInputV1>();
 
   constructor(
@@ -990,7 +1038,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     currentDefinitionCatalog: () => CurrentDefinitionCatalogV1,
     promotionAuthority: ReadyPromotionAuthorityPort,
     sealedRunReader: SealedRunReaderPortV1,
-    releaseBindingPort: object,
+    runtimeAuthorityPort: CurrentRuntimeAuthorityPortV1,
   ) {
     this.#expectedCaller = expectedCaller;
     this.#store = store;
@@ -999,12 +1047,13 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     this.#currentDefinitionCatalog = currentDefinitionCatalog;
     this.#promotionAuthority = promotionAuthority;
     this.#sealedRunReader = assertCheckpointSealedRunReader(sealedRunReader);
-    this.#releaseBindingPort = assertIssuedRuntimeReleaseReadyBindingPort(releaseBindingPort);
+    readCurrentRuntimeAuthority(runtimeAuthorityPort);
+    this.#runtimeAuthorityPort = runtimeAuthorityPort;
   }
 
   /** Owner seam used by narrow release facades before decoding caller data. */
   assertOwnerCurrent(): void {
-    this.#releaseBindingPort.currentProvenanceHash();
+    readCurrentRuntimeAuthority(this.#runtimeAuthorityPort);
   }
 
   /**
@@ -1038,11 +1087,12 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     }
     if (ready === null) return null;
     validateReadyGeneration(ready);
+    const currentAuthority = readCurrentRuntimeAuthority(this.#runtimeAuthorityPort);
     if (
       ready.generationRefreshPolicyHash !== policyHash
       || ready.definitionCatalogRoot !== catalog.definitionCatalogRoot
-      || encodeCanonicalJson(ready.runtimeAuthority) !== encodeCanonicalJson(signedRuntimeAuthorityProjection(this.#releaseBindingPort))
-      || ready.releaseProvenanceHash !== currentCatalog.releaseProvenanceHash
+      || ready.releaseProvenanceHash !== currentAuthority.releaseProvenanceHash
+      || !runtimeAuthoritiesEqual(ready.runtimeAuthority, currentAuthority.runtimeAuthority)
     ) return null;
 
     try {
@@ -1072,8 +1122,9 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     const { instanceCatalog, policy } = input;
     const run = this.#sealedRunReader.readForPromotion(input.sealedRun, instanceCatalog);
     assertPromotionInput(input, run);
-    const currentReleaseProvenanceHash = this.#releaseBindingPort.currentProvenanceHash();
-    const currentRuntimeAuthority = signedRuntimeAuthorityProjection(this.#releaseBindingPort);
+    const currentAuthority = readCurrentRuntimeAuthority(this.#runtimeAuthorityPort);
+    const currentReleaseProvenanceHash = currentAuthority.releaseProvenanceHash;
+    const currentRuntimeAuthority = currentAuthority.runtimeAuthority;
     if (
       run.releaseProvenanceHash !== currentReleaseProvenanceHash
     ) {
@@ -1154,10 +1205,11 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     };
     try {
       committed = await this.#canonical.withCanonicalFence(run.cutoff, async fence => {
-      if (this.#releaseBindingPort.currentProvenanceHash() !== run.releaseProvenanceHash) {
+      const fencedAuthority = readCurrentRuntimeAuthority(this.#runtimeAuthorityPort);
+      if (fencedAuthority.releaseProvenanceHash !== run.releaseProvenanceHash) {
         throw new ReadyPromotionIncompatibleError("release-binding-changed");
       }
-      if (encodeCanonicalJson(signedRuntimeAuthorityProjection(this.#releaseBindingPort)) !== encodeCanonicalJson(currentRuntimeAuthority)) {
+      if (!runtimeAuthoritiesEqual(fencedAuthority.runtimeAuthority, currentRuntimeAuthority)) {
         throw new ReadyPromotionIncompatibleError("release-binding-changed");
       }
       const fencedCatalog = this.#currentDefinitionCatalog();
@@ -1235,9 +1287,10 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       throw new Error("ready-record-hash-mismatch");
     }
     const ready = deepFreeze({ ...readyPayload, readyRecordHash: committed.result.readyRecordHash });
+    const currentAfterCommit = readCurrentRuntimeAuthority(this.#runtimeAuthorityPort);
     if (
-      this.#releaseBindingPort.currentProvenanceHash() !== ready.releaseProvenanceHash
-      || encodeCanonicalJson(signedRuntimeAuthorityProjection(this.#releaseBindingPort)) !== encodeCanonicalJson(ready.runtimeAuthority)
+      currentAfterCommit.releaseProvenanceHash !== ready.releaseProvenanceHash
+      || !runtimeAuthoritiesEqual(currentAfterCommit.runtimeAuthority, ready.runtimeAuthority)
     ) {
       throw new ReadyPromotionIncompatibleError("release-binding-changed");
     }
@@ -1277,9 +1330,10 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
   }
 
   async assertServingBindingCurrent(binding: GraphLeaseBindingV1): Promise<void> {
+    const currentBefore = readCurrentRuntimeAuthority(this.#runtimeAuthorityPort);
     if (
-      this.#releaseBindingPort.currentProvenanceHash() !== binding.releaseProvenanceHash
-      || encodeCanonicalJson(signedRuntimeAuthorityProjection(this.#releaseBindingPort)) !== encodeCanonicalJson(binding.runtimeAuthority)
+      currentBefore.releaseProvenanceHash !== binding.releaseProvenanceHash
+      || !runtimeAuthoritiesEqual(currentBefore.runtimeAuthority, binding.runtimeAuthority)
     ) {
       throw new Error("serving-release-binding-mismatch");
     }
@@ -1292,9 +1346,10 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     await this.#canonical.assertStillCanonical(binding.cutoff);
     this.#store.assertReadyAuthorityActive(binding);
     await this.#canonical.assertStillCanonical(binding.cutoff);
+    const currentAfter = readCurrentRuntimeAuthority(this.#runtimeAuthorityPort);
     if (
-      this.#releaseBindingPort.currentProvenanceHash() !== binding.releaseProvenanceHash
-      || encodeCanonicalJson(signedRuntimeAuthorityProjection(this.#releaseBindingPort)) !== encodeCanonicalJson(binding.runtimeAuthority)
+      currentAfter.releaseProvenanceHash !== binding.releaseProvenanceHash
+      || !runtimeAuthoritiesEqual(currentAfter.runtimeAuthority, binding.runtimeAuthority)
     ) {
       throw new Error("serving-release-binding-mismatch");
     }
@@ -1313,12 +1368,12 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     if (input.ready.generationRefreshPolicyHash !== expectedPolicyHash) {
       throw new Error("serving-policy-mismatch");
     }
-    const currentReleaseProvenanceHash = this.#releaseBindingPort.currentProvenanceHash();
-    const currentRuntimeAuthority = signedRuntimeAuthorityProjection(this.#releaseBindingPort);
+    const currentAuthority = readCurrentRuntimeAuthority(this.#runtimeAuthorityPort);
+    const currentReleaseProvenanceHash = currentAuthority.releaseProvenanceHash;
+    const currentRuntimeAuthority = currentAuthority.runtimeAuthority;
     if (
-      currentCatalog.releaseProvenanceHash !== currentReleaseProvenanceHash
-      || input.ready.releaseProvenanceHash !== currentReleaseProvenanceHash
-      || encodeCanonicalJson(input.ready.runtimeAuthority) !== encodeCanonicalJson(currentRuntimeAuthority)
+      input.ready.releaseProvenanceHash !== currentReleaseProvenanceHash
+      || !runtimeAuthoritiesEqual(input.ready.runtimeAuthority, currentRuntimeAuthority)
     ) {
       throw new Error("serving-release-binding-mismatch");
     }

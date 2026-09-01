@@ -1,16 +1,25 @@
 import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import {
-  createGeneratedFamilyRuntimeComposition,
   nominationProgramProposalLeafDigest,
   nominationProgramRoot,
   nominationProgramSetRoot,
   sourcePlanLeafDigest,
   type GeneratedFamilyRuntimeDescriptorV1,
 } from "../../family-composition/src/index.ts";
-import type { FamilyStageDefinitionV1, RuntimeStageExecutorV1 } from "../../family-sdk/runtime/index.ts";
+import {
+  createGeneratedFamilyRuntimeFactory,
+  issueGeneratedFamilyRuntimeAuthorityCapability,
+  issueGeneratedFamilySearchRuntimePort,
+} from "../../family-composition/src/internal/generated-runtime-composition.ts";
+import type {
+  FamilySourcePlanNominationProgramV1,
+  FamilyStageDefinitionV1,
+  RuntimeStageExecutorV1,
+} from "../../family-sdk/runtime/index.ts";
 import type { GeneratedFamilyEntryV1, StageCapabilityRefV1 } from "../../family-sdk/runtime-refs/index.ts";
 import { asCapabilityId, asCapabilityVersion, asOwnerRef, asSchemaRef } from "../../capability-contracts/src/index.ts";
 import { asFamilyId } from "../../family-sdk/runtime-refs/index.ts";
+import type { SignedReleaseRuntimeAuthorityDescriptorV1 } from "../../runtime-authority/src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/startup-runtime", value);
 
@@ -18,7 +27,8 @@ const h = (value: string): Hash => hashDomain("test/startup-runtime", value);
 export function generatedCompositionFixture(input: Readonly<{
   readonly familyId?: string;
   readonly familyDefinitionHash?: Hash;
-}> = {}) {
+  readonly runtimeAuthority: SignedReleaseRuntimeAuthorityDescriptorV1;
+}>) {
   const familyId = asFamilyId(input.familyId ?? "startup-test-family");
   const familyDefinitionHash = input.familyDefinitionHash ?? h("startup-family-definition");
   const stages = (["nomination", "identity", "materialization", "projection", "rehydration"] as const).map((stage, index) => ({
@@ -134,12 +144,43 @@ export function generatedCompositionFixture(input: Readonly<{
     stage: stage.stage,
     executor: { async execute() { return []; } },
   }));
-  return createGeneratedFamilyRuntimeComposition({
+  const sourcePlan = Object.freeze({
+    sourcePlanId: sourcePlanDescriptor.sourcePlanId,
+    completeness: sourcePlanDescriptor.planRef.completeness,
+    historyStartBlock: sourcePlanDescriptor.planRef.historyStartBlock,
+    schemaHash: sourcePlanDescriptor.schemaHash,
+    async execute() { throw new Error("startup source plan is not used"); },
+  });
+  const nominationProgram: FamilySourcePlanNominationProgramV1 = Object.freeze({
+    kind: "aloha.family-source-plan-nomination-program",
+    version: 1,
+    schemaHash: nominationProgramProposal.program.schemaHash,
+    async evaluate() { return Object.freeze([]); },
+  });
+  const authority = { familyDefinitionHash, definitionBindingRoot: stageDefinitionRoot, binding, executors };
+  const factory = createGeneratedFamilyRuntimeFactory({
     descriptor,
-    authorities: [{ familyDefinitionHash, definitionBindingRoot: stageDefinitionRoot, binding, executors }],
     definitions: [definitions],
     extensions: [[]],
     actionOwners: [[]],
     runtimeAdapters: [[]],
+    sourcePlans: [[sourcePlan]],
+    nominationPrograms: [[nominationProgram]],
+  });
+  const capability = issueGeneratedFamilyRuntimeAuthorityCapability({
+    factory,
+    runtimeAuthority: input.runtimeAuthority,
+    qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: descriptor.nominationProgramSetRoot,
+    nominationQualifications: [{
+      proposalLeafDigest: nominationProgramProposal.proposalLeafDigest,
+      qualificationLeafDigest: h("startup-nomination-qualification"),
+    }],
+    authorities: [authority],
+    assertCurrent() {},
+  });
+  return Object.freeze({
+    familyRuntime: factory(capability),
+    familySearchRuntime: issueGeneratedFamilySearchRuntimePort(factory, capability),
   });
 }

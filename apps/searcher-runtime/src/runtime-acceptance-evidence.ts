@@ -39,6 +39,10 @@ import {
 } from "../../../tools/pre-release-restart-controller/src/receipt-reader.ts";
 import { decodeReleaseIntent } from "../../../specs/release-intent/src/index.ts";
 import { decodeProcessAnchor, hashProcessAnchor, type ProcessAnchorV1 } from "../../../specs/core-envelope/src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../../packages/runtime-authority/src/index.ts";
 import { decodeDeploymentManifestV1, type RuntimeAnchorReceiptV1 } from "./deployment.ts";
 
 const STORE_ROLE = "searcher-production-evidence";
@@ -378,9 +382,18 @@ class OwnerStateV1 {
     this.#assertOpen();
     const observed = await readStartupStage12Evidence(startup);
     const stage12 = await verifyStartupStage12Evidence(startup, observed);
+    const expectedRuntimeAuthority = projectRuntimeAuthorityDescriptorV1(
+      createSignedReleaseRuntimeAuthorityDescriptorV1({
+        authorityClass: "signed-release",
+        runtimeBindingId: this.#release.bindingId,
+        releaseProvenanceHash: this.#release.releaseProvenanceHash,
+        implementationCommit: this.#release.candidateReleaseCommit,
+      }),
+    );
     if (stage12.binding.releaseProvenanceHash !== this.#release.releaseProvenanceHash
-      || startup.releaseBindingId !== this.#release.bindingId
-      || startup.candidateReleaseCommit !== this.#release.candidateReleaseCommit
+      || startup.runtimeAuthority.authorityClass !== expectedRuntimeAuthority.authorityClass
+      || startup.runtimeAuthority.authorityBindingHash !== expectedRuntimeAuthority.authorityBindingHash
+      || startup.runtimeAuthority.implementationCommit !== expectedRuntimeAuthority.implementationCommit
       || startup.generationId !== stage12.binding.generationId
       || startup.graphRoot !== stage12.binding.graphRoot) {
       throw new TypeError("runtime process-ready Stage 1/2 binding mismatch");

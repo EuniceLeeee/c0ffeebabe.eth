@@ -32,12 +32,14 @@ export function issueCoarseEnumerationBindingV1(
 ): IssuedCoarseEnumerationBindingV1 {
   const planner = readIssuedPlanningEnumerationV1(input.plannerEnumeration);
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
-  if (runtimeAuthority.authorityClass !== "signed-release") {
-    throw new TypeError("coarse enumeration requires signed runtime authority");
+  const plannerReleaseProvenanceHash = "releaseProvenanceHash" in planner.planningProblem
+    ? planner.planningProblem.releaseProvenanceHash
+    : null;
+  if ((runtimeAuthority.authorityClass === "signed-release") !== (plannerReleaseProvenanceHash !== null)) {
+    throw new TypeError("coarse enumeration runtime authority class does not match planner provenance");
   }
   if (input.generationId !== planner.planningProblem.generationId
-    || !("releaseProvenanceHash" in planner.planningProblem)
-    || input.releaseProvenanceHash !== planner.planningProblem.releaseProvenanceHash
+    || input.releaseProvenanceHash !== plannerReleaseProvenanceHash
     || input.objective.objectiveRef !== planner.planningProblem.objectiveRef
     || input.source.hash !== planner.planningProblem.triggerHeadHash) {
     throw new TypeError("coarse enumeration does not bind the planner-issued planning problem");
@@ -56,7 +58,7 @@ export function issueCoarseEnumerationBindingV1(
       || binding.runtimeAuthority.authorityBindingHash !== runtimeAuthority.authorityBindingHash
       || binding.runtimeAuthority.authorityClass !== runtimeAuthority.authorityClass
       || binding.runtimeAuthority.implementationCommit !== runtimeAuthority.implementationCommit
-      || binding.releaseProvenanceHash !== planner.planningProblem.releaseProvenanceHash
+      || binding.releaseProvenanceHash !== plannerReleaseProvenanceHash
       || binding.objectiveRef !== planner.planningProblem.objectiveRef
       || binding.legs.length !== plannerCandidate.legs.length) {
       throw new TypeError(`coarse enumeration candidate ${index} does not match the planner-issued identity`);

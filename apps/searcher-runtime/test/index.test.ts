@@ -3,9 +3,22 @@ import test from "node:test";
 import * as runtimeModule from "../src/index.ts";
 import { createReleaseSearcherProducer } from "../src/index.ts";
 import { issueStartupRuntime } from "../../../packages/startup-runtime/src/internal/runtime-owner.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../../packages/runtime-authority/src/index.ts";
 
 const fakeReleaseHash = `0x${"0".repeat(64)}` as `0x${string}`;
 const fakeBindingHash = `0x${"4".repeat(64)}` as `0x${string}`;
+const fakeCommit = "a".repeat(40);
+const fakeRuntimeAuthority = projectRuntimeAuthorityDescriptorV1(
+  createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: fakeBindingHash,
+    releaseProvenanceHash: fakeReleaseHash,
+    implementationCommit: fakeCommit,
+  }),
+);
 
 test("searcher runtime exposes only the app-owned Producer entry", () => {
   assert.equal("runSearcherRuntime" in runtimeModule, false);
@@ -31,8 +44,7 @@ test("Producer rejects a structural or cloned runtime-release Strategy service b
     familySearchRuntime: Object.freeze({}) as never,
     generationId: "fake",
     graphRoot: fakeReleaseHash,
-    releaseBindingId: fakeBindingHash,
-    candidateReleaseCommit: "a".repeat(40),
+    runtimeAuthority: fakeRuntimeAuthority,
     canonicalSourceAuthority: {} as never,
     readActiveGeneration: () => serving,
     readServingGeneration: () => serving,
@@ -51,7 +63,7 @@ test("Producer rejects a structural or cloned runtime-release Strategy service b
       economicSafety: {} as never,
       evidence: {} as never,
     }),
-    /runtime-release Strategy runtime service is not owner-issued/,
+    /Strategy runtime service is not owner-issued/,
   );
   assert.throws(
     () => createReleaseSearcherProducer({
@@ -63,7 +75,7 @@ test("Producer rejects a structural or cloned runtime-release Strategy service b
       economicSafety: {} as never,
       evidence: {} as never,
     }),
-    /runtime-release Strategy runtime service is not owner-issued/,
+    /Strategy runtime service is not owner-issued/,
   );
 });
 

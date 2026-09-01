@@ -58,6 +58,19 @@ export type {
 } from "./internal-authority.ts";
 
 export { validateIdentityIssuerProof };
+export {
+  UNSIGNED_DRY_RUN_ATTESTATION_COMMITMENT_DOMAINS_V1,
+  createUnsignedDryRunIdentityCommitmentV1,
+  createUnsignedDryRunOutcomeCommitmentV1,
+  decodeUnsignedDryRunIdentityCommitmentV1,
+  decodeUnsignedDryRunOutcomeCommitmentV1,
+  unsignedDryRunIdentityCommitmentPayloadFromIssueInputV1,
+  unsignedDryRunOutcomeCommitmentPayloadFromIssueInputV1,
+  type UnsignedDryRunIdentityCommitmentPayloadV1,
+  type UnsignedDryRunIdentityCommitmentV1,
+  type UnsignedDryRunOutcomeCommitmentPayloadV1,
+  type UnsignedDryRunOutcomeCommitmentV1,
+} from "./unsigned-dry-run-commitment.ts";
 
 export const REJECTION_ISSUER_ID = "aloha/attestation-rejection-facts/v2" as const;
 export const REJECTION_BUNDLE_KIND = "aloha.rejection-evidence-bundle" as const;

@@ -43,9 +43,11 @@ import type { SourcePlanRefV1 } from "../../../discovery/src/index.ts";
 import {
   decodeRuntimeAuthorityProjectionV1,
   decodeSignedReleaseRuntimeAuthorityDescriptorV1,
+  decodeUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
   type RuntimeAuthorityProjectionV1,
   type SignedReleaseRuntimeAuthorityDescriptorV1,
+  type UnsignedDryRunRuntimeAuthorityDescriptorV1,
 } from "../../../runtime-authority/src/index.ts";
 import type {
   FamilySearchAdapterFactoryV1,
@@ -135,8 +137,20 @@ export interface GeneratedFamilyRuntimeFactoryMetadataV1 {
 interface GeneratedFamilyRuntimeAuthorityStateV1 {
   readonly factory: GeneratedFamilyRuntimeFactoryV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly runtimeMembershipHash: Hash;
+  readonly releaseProvenanceHash?: Hash;
   readonly authorities: readonly GeneratedFamilyRuntimeAuthorityBindingV1[];
-  readonly nominationQualifications: ReadonlyMap<Hash, Hash>;
+  readonly nominationQualifications?: ReadonlyMap<Hash, Hash>;
+  readonly assertCurrent: () => void;
+}
+
+export interface GeneratedFamilyUnsignedDryRunAuthorityRegistrationV1 {
+  readonly factory: GeneratedFamilyRuntimeFactoryV1;
+  readonly runtimeAuthority: UnsignedDryRunRuntimeAuthorityDescriptorV1;
+  /** Exact generated proposal root. This is declared membership, not qualification. */
+  readonly declaredCapabilitySetRoot: Hash;
+  readonly nominationProgramSetRoot: Hash;
+  readonly authorities: readonly GeneratedFamilyRuntimeAuthorityBindingV1[];
   readonly assertCurrent: () => void;
 }
 
@@ -340,13 +354,55 @@ export function readGeneratedFamilySourcePlanRuntimes(
   readonly nominationQualificationLeafDigest: Hash;
 }>[] {
   const authority = authorityStateFor(factory, capability);
+  if (authority.runtimeAuthority.authorityClass !== "signed-release") {
+    throw new TypeError("generated Family nomination qualification is unavailable in unsigned dry-run");
+  }
   const plans = generatedFactorySourcePlans.get(factory);
   if (plans === undefined) throw new TypeError("generated Family source plan runtime is unavailable");
   return Object.freeze(plans.map(plan => {
-    const nominationQualificationLeafDigest = authority.nominationQualifications.get(plan.nominationProgramProposalLeafDigest);
+    const nominationQualificationLeafDigest = authority.nominationQualifications?.get(plan.nominationProgramProposalLeafDigest);
     if (nominationQualificationLeafDigest === undefined) throw new TypeError("generated Family nomination qualification is unavailable");
     return Object.freeze({ ...plan, nominationQualificationLeafDigest });
   }));
+}
+
+/** Exact generated source-plan/program declarations. Unlike the signed read,
+ * this carries no qualification leaf and is valid for both authority modes. */
+export function readGeneratedFamilySourcePlanDeclarations(
+  factory: GeneratedFamilyRuntimeFactoryV1,
+  capability: GeneratedFamilyRuntimeAuthorityCapabilityV1,
+): readonly Readonly<{
+  readonly familyId: string;
+  readonly familyDefinitionHash: Hash;
+  readonly sourcePlanRef: SourcePlanRefV1;
+  readonly sourcePlanLeafDigest: Hash;
+  readonly sourcePlanSchemaHash: Hash;
+  readonly sourcePlanClosureRoot: Hash;
+  readonly runtime: FamilySourcePlanRuntimeV1;
+  readonly nominationProgram: FamilySourcePlanNominationProgramV1;
+  readonly nominationProgramRoot: Hash;
+  readonly nominationProgramProposalLeafDigest: Hash;
+}>[] {
+  authorityStateFor(factory, capability);
+  const plans = generatedFactorySourcePlans.get(factory);
+  if (plans === undefined) throw new TypeError("generated Family source plan declarations are unavailable");
+  return Object.freeze(plans.map(plan => Object.freeze({ ...plan })));
+}
+
+export function readGeneratedFamilyRuntimeMembership(
+  factory: GeneratedFamilyRuntimeFactoryV1,
+  capability: GeneratedFamilyRuntimeAuthorityCapabilityV1,
+): Readonly<{
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly runtimeMembershipHash: Hash;
+  readonly releaseProvenanceHash?: Hash;
+}> {
+  const authority = authorityStateFor(factory, capability);
+  return Object.freeze({
+    runtimeAuthority: authority.runtimeAuthority,
+    runtimeMembershipHash: authority.runtimeMembershipHash,
+    ...(authority.releaseProvenanceHash === undefined ? {} : { releaseProvenanceHash: authority.releaseProvenanceHash }),
+  });
 }
 
 function authorityStateFor(
@@ -368,10 +424,28 @@ function authoritiesFor(
   capability: GeneratedFamilyRuntimeAuthorityCapabilityV1,
 ): readonly GeneratedFamilyRuntimeAuthorityBindingV1[] {
   const state = authorityStateFor(factory, capability);
-  if (state.runtimeAuthority.authorityClass !== "signed-release") {
-    throw new TypeError("Family runtime production authority is unavailable");
-  }
   return state.authorities;
+}
+
+function unsignedRuntimeMembershipHash(
+  metadata: GeneratedFamilyRuntimeFactoryMetadataV1,
+  runtimeAuthority: RuntimeAuthorityProjectionV1,
+): Hash {
+  return hashDomain("aloha/generated-family-runtime-unsigned-membership/v1", {
+    runtimeAuthority,
+    proposedCapabilitySetRoot: metadata.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: metadata.nominationProgramSetRoot,
+    releaseIntentRoot: metadata.releaseIntentRoot,
+    definitionCatalogRoot: metadata.definitionCatalogRoot,
+    descriptorRoot: metadata.descriptorRoot,
+    families: metadata.families.map(family => ({
+      familyId: family.familyId,
+      familyDefinitionHash: family.familyDefinitionHash,
+      stageDefinitionRoot: family.stageDefinitionRoot,
+      sourcePlanRoot: family.sourcePlanRoot,
+      runtimeAdapters: family.runtimeAdapters.map(adapter => adapter.leafDigest),
+    })),
+  });
 }
 
 function snapshotAuthorities(
@@ -414,9 +488,8 @@ export function issueGeneratedFamilyRuntimeAuthorityCapability(
   const metadata = generatedFactoryMetadata.get(input.factory);
   if (metadata === undefined) throw new TypeError("Family runtime factory metadata is unavailable");
   assertHash(input.qualifiedCapabilityRefsRoot, "qualifiedCapabilityRefsRoot");
-  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
-    decodeSignedReleaseRuntimeAuthorityDescriptorV1(input.runtimeAuthority),
-  );
+  const signedAuthority = decodeSignedReleaseRuntimeAuthorityDescriptorV1(input.runtimeAuthority);
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(signedAuthority);
   if (metadata.proposedCapabilitySetRoot !== input.qualifiedCapabilityRefsRoot) {
     throw new TypeError("Family runtime factory is not bound to this release capability set");
   }
@@ -441,8 +514,46 @@ export function issueGeneratedFamilyRuntimeAuthorityCapability(
   issuedAuthorities.set(capability, Object.freeze({
     factory: input.factory,
     runtimeAuthority,
+    runtimeMembershipHash: signedAuthority.releaseProvenanceHash,
+    releaseProvenanceHash: signedAuthority.releaseProvenanceHash,
     authorities: snapshotAuthorities(input.authorities),
     nominationQualifications,
+    assertCurrent: input.assertCurrent,
+  }));
+  return capability;
+}
+
+
+/** Owner-only unsigned dry-run hand-off. The capability is bound to the exact
+ * generated declaration and program roots, but contains no qualification
+ * leaves, release approval, or signature claim. */
+export function issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability(
+  input: GeneratedFamilyUnsignedDryRunAuthorityRegistrationV1,
+): GeneratedFamilyRuntimeAuthorityCapabilityV1 {
+  if (input === null || typeof input !== "object" || typeof input.assertCurrent !== "function") {
+    throw new TypeError("Family unsigned dry-run authority is unavailable");
+  }
+  assertGeneratedFamilyRuntimeFactory(input.factory);
+  const metadata = generatedFactoryMetadata.get(input.factory);
+  if (metadata === undefined) throw new TypeError("Family runtime factory metadata is unavailable");
+  assertHash(input.declaredCapabilitySetRoot, "declaredCapabilitySetRoot");
+  if (metadata.proposedCapabilitySetRoot !== input.declaredCapabilitySetRoot) {
+    throw new TypeError("Family runtime factory is not bound to this declared capability set");
+  }
+  assertHash(input.nominationProgramSetRoot, "nominationProgramSetRoot");
+  if (metadata.nominationProgramSetRoot !== input.nominationProgramSetRoot) {
+    throw new TypeError("Family runtime factory is not bound to this nomination program set");
+  }
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+    decodeUnsignedDryRunRuntimeAuthorityDescriptorV1(input.runtimeAuthority),
+  );
+  input.assertCurrent();
+  const capability = Object.freeze(Object.create(null)) as GeneratedFamilyRuntimeAuthorityCapabilityV1;
+  issuedAuthorities.set(capability, Object.freeze({
+    factory: input.factory,
+    runtimeAuthority,
+    runtimeMembershipHash: unsignedRuntimeMembershipHash(metadata, runtimeAuthority),
+    authorities: snapshotAuthorities(input.authorities),
     assertCurrent: input.assertCurrent,
   }));
   return capability;
@@ -470,14 +581,13 @@ interface GeneratedFamilyLifecycleRuntimePortStateV1 {
 const issuedLifecycleRuntimePorts = new WeakMap<object, GeneratedFamilyLifecycleRuntimePortStateV1>();
 
 /**
- * Issue the one signed lifecycle/program port accepted by Attestation.
+ * Issue the one mode-bound lifecycle/program port accepted by Attestation.
  */
 export function issueGeneratedFamilyLifecycleRuntimePort(
   factory: GeneratedFamilyRuntimeFactoryV1,
   capability: GeneratedFamilyRuntimeAuthorityCapabilityV1,
 ): GeneratedFamilyLifecycleRuntimePortV1 {
   const authority = authorityStateFor(factory, capability);
-  if (authority.runtimeAuthority.authorityClass !== "signed-release") throw new TypeError("Family lifecycle requires signed runtime authority");
   const composition = factory(capability);
   const port = Object.freeze(Object.create(null));
   issuedLifecycleRuntimePorts.set(port, Object.freeze({
@@ -550,7 +660,7 @@ export function readGeneratedFamilyLifecycleRuntimePort(
   });
 }
 
-/** Opaque generated search seam bound to one signed runtime authority. */
+/** Opaque generated search seam bound to one exact runtime authority. */
 export type GeneratedFamilySearchRuntimePortV1 = object;
 
 interface GeneratedFamilySearchRuntimePortStateV1 {
@@ -582,7 +692,6 @@ export function issueGeneratedFamilySearchRuntimePort(
   lifecyclePort?: GeneratedFamilyLifecycleRuntimePortV1,
 ): GeneratedFamilySearchRuntimePortV1 {
   const authority = authorityStateFor(factory, capability);
-  if (authority.runtimeAuthority.authorityClass !== "signed-release") throw new TypeError("Family search requires signed runtime authority");
   let routeComposition = factory(capability);
   if (lifecyclePort !== undefined) {
     const lifecycle = requireLifecycleRuntimePortState(lifecyclePort, authority.runtimeAuthority);

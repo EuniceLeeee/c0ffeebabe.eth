@@ -1,4 +1,8 @@
 import type { Hash } from "../../../canonical-codec/src/index.ts";
+import type {
+  RuntimeAuthorityProjectionV1,
+  RuntimeReleaseProvenanceHashV1,
+} from "../../../runtime-authority/src/index.ts";
 import {
   normalizeEconomicSafetyFinalizationInputV1,
   EconomicSafetyPolicyRejectionErrorV1,
@@ -22,7 +26,8 @@ const capabilities = new WeakMap<object, {
 export function issueEconomicSafetyFinalizationServiceV1(input: {
   readonly authorityRoot: Hash;
   readonly implementationHash: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly evaluator: EconomicSafetyQualifiedEvaluatorV1;
 }): EconomicSafetyFinalizationServiceV1 {
   if (input.evaluator === null || typeof input.evaluator !== "object" || typeof input.evaluator.evaluate !== "function") {
@@ -33,16 +38,21 @@ export function issueEconomicSafetyFinalizationServiceV1(input: {
       return Object.freeze({
         authorityRoot: input.authorityRoot,
         implementationHash: input.implementationHash,
+        runtimeAuthority: input.runtimeAuthority,
         releaseProvenanceHash: input.releaseProvenanceHash,
       });
     },
     async finalize(raw: EconomicSafetyFinalizationInputV1) {
       const normalized = normalizeEconomicSafetyFinalizationInputV1(raw);
+      if (normalized.releaseProvenanceHash !== input.releaseProvenanceHash) {
+        throw new TypeError("economic safety input release provenance/runtime authority mismatch");
+      }
       let evidence: EconomicSafetyEvidenceV1 | EconomicSafetyChainRejectionV1;
       try {
         evidence = sealEconomicSafetyEvidenceV1({
           authorityRoot: input.authorityRoot,
           implementationHash: input.implementationHash,
+          runtimeAuthority: input.runtimeAuthority,
           releaseProvenanceHash: input.releaseProvenanceHash,
           input: normalized,
           decision: await input.evaluator.evaluate(normalized),
@@ -52,6 +62,7 @@ export function issueEconomicSafetyFinalizationServiceV1(input: {
         evidence = sealEconomicSafetyChainRejectionV1({
           authorityRoot: input.authorityRoot,
           implementationHash: input.implementationHash,
+          runtimeAuthority: input.runtimeAuthority,
           releaseProvenanceHash: input.releaseProvenanceHash,
           input: normalized,
           code: error.code,

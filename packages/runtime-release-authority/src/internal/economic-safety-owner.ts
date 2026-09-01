@@ -25,6 +25,7 @@ import { hashDomain, type Hash } from "../../../canonical-codec/src/index.ts";
 import { runtimeReleaseBindingProvenanceHash } from "../../../../specs/release-authority/src/index.ts";
 import type { RuntimeReleaseAuthorityV1 } from "../index.ts";
 import { assertActiveRuntimeReleaseAuthorityState } from "./state.ts";
+import { projectRuntimeAuthorityDescriptorV1 } from "../../../runtime-authority/src/index.ts";
 
 export type RuntimeReleaseEconomicSafetyEvaluatorCapabilityV1 = object;
 
@@ -312,6 +313,7 @@ export function issueRuntimeReleaseEconomicSafetyServiceV1(input: {
   const service = issueEconomicSafetyFinalizationServiceV1({
     authorityRoot: state.binding.releaseAuthorityRoot,
     implementationHash: selected.implementationHash,
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(state.descriptor),
     releaseProvenanceHash,
     evaluator: selected.evaluator,
   });

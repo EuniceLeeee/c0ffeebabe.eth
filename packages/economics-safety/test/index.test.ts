@@ -22,9 +22,21 @@ import {
   ECONOMIC_SAFETY_REVM_OBSERVATION_SCHEMA_REF_V1,
   sealSafetyProfileV1,
 } from "../../../specs/economic-safety-profile/src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 
 const h = (value: string): Hash => hashDomain("aloha/economic-safety/test/v1", value);
 const release = h("release");
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+  createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: h("runtime-binding"),
+    releaseProvenanceHash: release,
+    implementationCommit: "a".repeat(40),
+  }),
+);
 const declaration = Object.freeze({ obligationRef: h("obligation"), ownerRef: h("owner"), policy: "must-satisfy" as const });
 const obligationRoot = hashDomain("aloha/search-runtime-obligation-root/v1", [declaration.obligationRef]);
 const decisionClaim = Object.freeze({
@@ -130,6 +142,7 @@ function service() {
   return issueEconomicSafetyFinalizationServiceV1({
     authorityRoot: h("authority"),
     implementationHash: h("implementation"),
+    runtimeAuthority,
     releaseProvenanceHash: release,
     evaluator: Object.freeze({ async evaluate() { return decision(); } }),
   });
@@ -152,6 +165,7 @@ test("owner seals typed policy rejection while forged capabilities and semantic 
   const owner = issueEconomicSafetyFinalizationServiceV1({
     authorityRoot: h("authority"),
     implementationHash: h("implementation"),
+    runtimeAuthority,
     releaseProvenanceHash: release,
     evaluator: Object.freeze({ async evaluate(): Promise<never> {
       throw new EconomicSafetyPolicyRejectionErrorV1("quoted-gain-not-positive");
@@ -167,6 +181,7 @@ test("owner seals typed policy rejection while forged capabilities and semantic 
   const semanticFault = issueEconomicSafetyFinalizationServiceV1({
     authorityRoot: h("authority"),
     implementationHash: h("implementation"),
+    runtimeAuthority,
     releaseProvenanceHash: release,
     evaluator: Object.freeze({ async evaluate(): Promise<never> { throw new TypeError("worker source/program mismatch"); } }),
   });
@@ -179,15 +194,15 @@ test("economic arithmetic, release, source, owner facts and obligations fail clo
   await assert.rejects(() => service().finalize({ ...baseline, dryRun: false } as never), /dryRun/);
   await assert.rejects(() => service().finalize({ ...baseline, declaredObligations: [] }), /non-empty/);
   await assert.rejects(() => issueEconomicSafetyFinalizationServiceV1({
-    authorityRoot: h("authority"), implementationHash: h("implementation"), releaseProvenanceHash: release,
+    authorityRoot: h("authority"), implementationHash: h("implementation"), runtimeAuthority, releaseProvenanceHash: release,
     evaluator: { async evaluate() { return ({ ...decision(), economic: { ...decision().economic, gasCostNative: "1199" } }); } },
   }).finalize(baseline), /arithmetic/);
   await assert.rejects(() => issueEconomicSafetyFinalizationServiceV1({
-    authorityRoot: h("authority"), implementationHash: h("implementation"), releaseProvenanceHash: release,
+    authorityRoot: h("authority"), implementationHash: h("implementation"), runtimeAuthority, releaseProvenanceHash: release,
     evaluator: { async evaluate() { return ({ ...decision(), safety: { ...decision().safety, obligationReceipts: [] } }); } },
   }).finalize(baseline), /covered|coverage/);
   await assert.rejects(() => issueEconomicSafetyFinalizationServiceV1({
-    authorityRoot: h("authority"), implementationHash: h("implementation"), releaseProvenanceHash: release,
+    authorityRoot: h("authority"), implementationHash: h("implementation"), runtimeAuthority, releaseProvenanceHash: release,
     evaluator: { async evaluate() { return ({ ...decision(), safety: { ...decision().safety, requiredClaimSetRoot: h("splice") } }); } },
   }).finalize(baseline), /claim set root/);
 });

@@ -22,6 +22,7 @@ import type { BlockRangeV1, CanonicalCutoffV1 } from "../../discovery/src/index.
 import {
   decodeRuntimeAuthorityProjectionV1,
   type RuntimeAuthorityProjectionV1,
+  type RuntimeReleaseProvenanceHashV1,
 } from "../../runtime-authority/src/index.ts";
 import type { CanonicalLeaseGuardPort } from "./lease-guard-port.ts";
 export type { CanonicalLeaseGuardPort } from "./lease-guard-port.ts";
@@ -81,7 +82,7 @@ export interface ProducerGenerationBindingV1 {
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
+  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
   readonly nominationClosureStorageHash: Hash;
@@ -408,9 +409,12 @@ function exactProducerGenerationBinding(
     const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(
       readOwnEnumerableDataProperty(raw, "runtimeAuthority", context),
     );
-    if (runtimeAuthority.authorityClass !== "signed-release") {
-      throw new TypeError(`${context}.runtimeAuthority must be signed-release`);
-    }
+    const rawReleaseProvenanceHash = readOwnEnumerableDataProperty(raw, "releaseProvenanceHash", context);
+    const releaseProvenanceHash: RuntimeReleaseProvenanceHashV1 = runtimeAuthority.authorityClass === "signed-release"
+      ? assertHash(rawReleaseProvenanceHash, `${context}.releaseProvenanceHash`)
+      : rawReleaseProvenanceHash === null
+        ? null
+        : (() => { throw new TypeError(`${context}.unsigned runtime authority cannot carry release provenance`); })();
     return deepFreeze({
       generationId: assertNonEmptyString(
         readOwnEnumerableDataProperty(raw, "generationId", context),
@@ -441,10 +445,7 @@ function exactProducerGenerationBinding(
         `${context}.graphRoot`,
       ),
       runtimeAuthority,
-      releaseProvenanceHash: assertHash(
-        readOwnEnumerableDataProperty(raw, "releaseProvenanceHash", context),
-        `${context}.releaseProvenanceHash`,
-      ),
+      releaseProvenanceHash,
       candidatePartitionProofStorageHash: assertHash(
         readOwnEnumerableDataProperty(raw, "candidatePartitionProofStorageHash", context),
         `${context}.candidatePartitionProofStorageHash`,
