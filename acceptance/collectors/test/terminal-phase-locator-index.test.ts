@@ -31,6 +31,10 @@ import {
 } from "../../../packages/canonical-codec/src/index.ts";
 import { nativeAssetReferenceV1 } from "../../../packages/asset-ref/src/index.ts";
 import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../../packages/runtime-authority/src/index.ts";
+import {
   encodeNativeFullFamilyAuditBodyV1,
   nativeFullFamilyAuditSequenceRootV1,
 } from "../../../packages/search-pipeline/src/index.ts";
@@ -134,7 +138,7 @@ test("terminal collector independently freezes the public route-binding domain",
   assert.notEqual(acceptanceRouteBindingHash(legs), brokenProductionHelperResult);
 });
 
-test("production Graph lease binding decoder requires the exact current 11-field wire", () => {
+test("production Graph lease binding decoder requires the exact current 12-field wire", () => {
   const binding = Object.freeze({
     generationId: "generation-1",
     readyRecordHash: h("ready"),
@@ -143,6 +147,12 @@ test("production Graph lease binding decoder requires the exact current 11-field
     definitionCatalogRoot: h("definitions"),
     instanceCatalogRoot: h("instances"),
     graphRoot: h("graph"),
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: h("runtime-binding"),
+      releaseProvenanceHash: h("release"),
+      implementationCommit: "a".repeat(40),
+    })),
     releaseProvenanceHash: h("release"),
     candidatePartitionProofStorageHash: h("candidate-proof-storage"),
     nominationClosureRoot: h("nomination-closure"),
@@ -154,11 +164,19 @@ test("production Graph lease binding decoder requires the exact current 11-field
     "candidatePartitionProofStorageHash",
     "nominationClosureRoot",
     "nominationClosureStorageHash",
+    "runtimeAuthority",
   ] as const) {
     const missing = { ...binding } as Record<string, unknown>;
     delete missing[field];
     assert.throws(() => exactProductionGraphLeaseBindingV1(missing), /missing field/);
   }
+  assert.throws(
+    () => exactProductionGraphLeaseBindingV1({
+      ...binding,
+      runtimeAuthority: { ...binding.runtimeAuthority, authorityClass: "advisory-observation" },
+    }),
+    /must be signed-release/,
+  );
   assert.throws(() => exactProductionGraphLeaseBindingV1({ ...binding, legacyField: h("legacy") }), /unknown field/);
 });
 
@@ -1223,6 +1241,12 @@ test("selected process artifact remains exact in the publishing process and miss
       definitionCatalogRoot: stage12Binding.definitionCatalogRoot,
       instanceCatalogRoot: stage12Binding.instanceCatalogRoot,
       graphRoot: stage12Binding.graphRoot,
+      runtimeAuthority: projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+        authorityClass: "signed-release",
+        runtimeBindingId: h("root-owned-runtime-binding"),
+        releaseProvenanceHash: stage12Binding.releaseProvenanceHash,
+        implementationCommit: "a".repeat(40),
+      })),
       releaseProvenanceHash: stage12Binding.releaseProvenanceHash,
       candidatePartitionProofStorageHash: h("candidate-partition-proof-storage"),
       nominationClosureRoot: h("nomination-closure"),

@@ -697,14 +697,27 @@ function readQualifiedRejection(
   return receipt;
 }
 
-function mapSchedulerFailure(error: SchedulerError): FinalSimulationOutcomeV1<QualifiedFinalSimulationFactV1> {
-  if (error.code === "impossible-cost" || error.code === "caller-mismatch" || error.code === "permit-mismatch") {
-    return failure("invalidProgram", `scheduler-${error.code}`);
-  }
-  return failure("retryable", `scheduler-${error.code}`);
+type FinalSimulationKernelFailureV1 = Readonly<{
+  readonly kind: "retryable" | "invalidProgram";
+  readonly stage: "final-sim";
+  readonly code: string;
+}>;
+
+function kernelFailure(
+  kind: "retryable" | "invalidProgram",
+  code: string,
+): FinalSimulationKernelFailureV1 {
+  return Object.freeze({ kind, stage: "final-sim" as const, code });
 }
 
-function mapSimulationFailure(error: RevmSimulationError): FinalSimulationOutcomeV1<QualifiedFinalSimulationFactV1> {
+function mapSchedulerFailure(error: SchedulerError): FinalSimulationKernelFailureV1 {
+  if (error.code === "impossible-cost" || error.code === "caller-mismatch" || error.code === "permit-mismatch") {
+    return kernelFailure("invalidProgram", `scheduler-${error.code}`);
+  }
+  return kernelFailure("retryable", `scheduler-${error.code}`);
+}
+
+function mapSimulationFailure(error: RevmSimulationError): FinalSimulationKernelFailureV1 {
   const invalid: readonly string[] = [
     "invalid-response",
     "program-mismatch",
@@ -715,7 +728,7 @@ function mapSimulationFailure(error: RevmSimulationError): FinalSimulationOutcom
     "attempt-mismatch",
   ];
   const unavailable: readonly string[] = ["worker-unavailable", "worker-error", "retired"];
-  return failure(
+  return kernelFailure(
     invalid.includes(error.code) ? "invalidProgram" : "retryable",
     unavailable.includes(error.code) ? "revm-worker-unavailable" : `revm-${error.code}`,
   );
@@ -790,6 +803,192 @@ function factFromReceipt(
   });
 }
 
+interface FinalSimulationKernelInputV1 {
+  readonly binding: GraphLeaseBindingLikeV1;
+  readonly program: ExecutionProgramArtifactV1;
+  readonly source: CurrentSourceSessionV1;
+  readonly callerId: string;
+  readonly correlationId: Hash;
+  readonly deadlineAtMs: number;
+  readonly signal?: AbortSignal;
+}
+
+interface FinalSimulationKernelExecutionV1 {
+  readonly kind: "executed";
+  readonly receipt: RevmSimulationReceipt;
+  readonly program: ExecutionProgramArtifactV1;
+  readonly wire: FrozenProgramWire;
+  readonly projection: QualifiedFinalSimulationProjectionV1;
+  readonly correlationId: Hash;
+  readonly requestId: Hash;
+  readonly attemptId: Hash;
+  readonly schedulerCompletion: SchedulerWorkCompletionHandleV1;
+}
+
+type FinalSimulationKernelOutcomeV1 =
+  | FinalSimulationKernelExecutionV1
+  | FinalSimulationKernelFailureV1;
+
+function sameCanonical(left: unknown, right: unknown): boolean {
+  return encodeCanonicalJson(left) === encodeCanonicalJson(right);
+}
+
+function validateKernelExecutionReceipt(input: {
+  readonly receipt: RevmSimulationReceipt;
+  readonly program: ExecutionProgramArtifactV1;
+  readonly wire: FrozenProgramWire;
+  readonly projection: QualifiedFinalSimulationProjectionV1;
+  readonly requestId: Hash;
+  readonly attemptId: Hash;
+  readonly deadlineAtMs: number;
+}): void {
+  const receipt = input.receipt;
+  if (receipt.requestId !== input.requestId || receipt.attemptId !== input.attemptId) {
+    throw new TypeError("final simulation request binding mismatch");
+  }
+  if (receipt.generationId !== input.program.generationId
+    || receipt.ownerRef !== input.program.issuerRef
+    || receipt.programHash !== input.wire.programHash
+    || !sameSource(source(receipt.source, "finalSimulation.receipt.source"), input.program.source)) {
+    throw new TypeError("final simulation program binding mismatch");
+  }
+  if (receipt.deadlineAtMs !== input.deadlineAtMs) {
+    throw new TypeError("final simulation deadline binding mismatch");
+  }
+  if (receipt.workerEpoch !== receipt.authority.workerEpoch) {
+    throw new TypeError("final simulation worker epoch mismatch");
+  }
+  assertHash(receipt.authority.executorSessionHash, "finalSimulation.executorSessionHash");
+  assertHash(receipt.inputHash, "finalSimulation.inputHash");
+  assertHash(receipt.executionReceiptHash, "finalSimulation.executionReceiptHash");
+  assertNonEmptyString(receipt.engineBuildFingerprint, "finalSimulation.engineBuildFingerprint");
+  const caller = assertCaller(receipt.caller);
+  const observeAccounts = assertObservedAccounts(receipt.observeAccounts);
+  if (!sameCanonical(caller, input.projection.caller)
+    || !sameCanonical(observeAccounts, input.projection.observeAccounts)) {
+    throw new TypeError("final simulation projection binding mismatch");
+  }
+  if (!sameEffectTransportDeclaration(receipt.effectTransport, input.program.effectTransport)) {
+    throw new TypeError("final simulation effect transport mismatch");
+  }
+}
+
+/** The sole signed REVM execution sequence. Qualification and sealing remain
+ * in the qualified owner below. */
+async function executeFinalSimulationKernel(options: {
+  readonly scheduler: WorkScheduler;
+  readonly client: RevmSimulationClient;
+  readonly schemaHash: Hash;
+  readonly projection: QualifiedFinalSimulationProjectionPortV1;
+  readonly input: FinalSimulationKernelInputV1;
+}): Promise<FinalSimulationKernelOutcomeV1> {
+  try {
+    const input = options.input;
+    if (input === null || typeof input !== "object") return kernelFailure("invalidProgram", "input-required");
+    const inputKeys = ["binding", "program", "source", "callerId", "correlationId", "deadlineAtMs"];
+    if (Object.prototype.hasOwnProperty.call(input, "signal")) inputKeys.push("signal");
+    assertExactKeys(input, inputKeys, "finalSimulation.input");
+    const program = assertExecutionProgram(input.program);
+    if (input.binding === null || typeof input.binding !== "object"
+      || input.binding.generationId !== program.generationId) {
+      return kernelFailure("invalidProgram", "generation-binding-mismatch");
+    }
+    // The immutable Graph lease cutoff identifies the generation build.  A
+    // Producer program is intentionally evaluated at a later current source;
+    // equating the two would reject every post-startup head.  The qualified
+    // projection binds the exact cutoff to its executor-state snapshot, while
+    // `input.source` below binds the program's current execution source.
+    source(input.binding.cutoff, "finalSimulation.binding.cutoff");
+    const currentSource = input.source;
+    if (!sameSource(source(currentSource.source, "currentSource.source"), program.source)) {
+      return kernelFailure("invalidProgram", "source-program-mismatch");
+    }
+    const callerId = assertNonEmptyString(input.callerId, "callerId");
+    const correlationId = assertHash(input.correlationId, "correlationId");
+    if (typeof input.deadlineAtMs !== "number" || !Number.isFinite(input.deadlineAtMs)) {
+      return kernelFailure("invalidProgram", "deadline-invalid");
+    }
+    try {
+      await currentSource.assertCurrent();
+    } catch {
+      return kernelFailure("retryable", "source-stale");
+    }
+    const projection = projectionFor(
+      options.projection,
+      program,
+      callerId,
+      input.binding,
+    );
+    const wire = wireProgram(program, options.schemaHash);
+    const requestId = requestIdFor({ correlationId, program });
+    const attemptId = attemptIdFor(requestId);
+    let schedulerCompletion: SchedulerWorkCompletionHandleV1 | null = null;
+    const receipt = await options.scheduler.run({
+      work: {
+        workId: requestId,
+        phase: "final-sim",
+        workClassRef: "qualified-revm-final-simulation-v1",
+        ownerRef: program.issuerRef,
+        lane: "final-sim",
+        resource: "final-sim",
+        quotaKey: "final-sim",
+        deadlineAtMs: input.deadlineAtMs,
+        signal: input.signal,
+      },
+      caller: schedulerCaller(callerId),
+      execute: async (permit: SchedulerPermit): Promise<RevmSimulationReceipt> => {
+        if (schedulerCompletion !== null || permit.completion === null || typeof permit.completion !== "object") {
+          throw new TypeError("final simulation scheduler completion handle is invalid");
+        }
+        schedulerCompletion = permit.completion;
+        return options.client.simulate({
+          requestId,
+          ownerRef: program.issuerRef,
+          generationId: program.generationId,
+          attemptId,
+          source: program.source,
+          caller: projection.caller,
+          observeAccounts: projection.observeAccounts,
+          program: wire,
+          input: projection.input,
+          deadlineAtMs: input.deadlineAtMs,
+          signal: permit.signal,
+        });
+      },
+    });
+    try {
+      await currentSource.assertCurrent();
+    } catch {
+      return kernelFailure("retryable", "source-stale");
+    }
+    validateKernelExecutionReceipt({
+      receipt,
+      program,
+      wire,
+      projection,
+      requestId,
+      attemptId,
+      deadlineAtMs: input.deadlineAtMs,
+    });
+    if (schedulerCompletion === null) return kernelFailure("invalidProgram", "scheduler-completion-handle-missing");
+    return Object.freeze({
+      kind: "executed" as const,
+      receipt,
+      program,
+      wire,
+      projection,
+      correlationId,
+      requestId,
+      attemptId,
+      schedulerCompletion,
+    });
+  } catch (error) {
+    if (error instanceof SchedulerError) return mapSchedulerFailure(error);
+    if (error instanceof RevmSimulationError) return mapSimulationFailure(error);
+    return kernelFailure("invalidProgram", error instanceof Error ? `bridge-${error.message}` : "bridge-error");
+  }
+}
+
 /**
  * Compose the only final-simulation port exposed to search-pipeline.  The
  * concrete client owns qualified worker dispatch and the scheduler owns the
@@ -814,7 +1013,6 @@ export function createQualifiedFinalSimulationPort(
   if (!options.projection || typeof options.projection !== "object" || typeof options.projection.project !== "function") throw new TypeError("qualified final simulation projection is required");
   const scheduler = options.scheduler;
   const client = options.client;
-  const projection = options.projection;
   const schedulerJoinOwner = Object.freeze(Object.create(null));
   return Object.freeze({
     rejectionAuthority: Object.freeze({ read: readQualifiedRejection }),
@@ -823,77 +1021,18 @@ export function createQualifiedFinalSimulationPort(
     }),
     sixStepEvidenceAuthority: Object.freeze({ read: readQualifiedSixStepEvidence }),
     async simulate(input: Parameters<FinalSimulationPortV1<QualifiedFinalSimulationFactV1>["simulate"]>[0]): Promise<FinalSimulationOutcomeV1<QualifiedFinalSimulationFactV1>> {
+      const execution = await executeFinalSimulationKernel({
+        scheduler,
+        client,
+        schemaHash,
+        projection: options.projection,
+        input,
+      });
+      if (execution.kind !== "executed") return execution;
+      const { program, wire, projection: projected, correlationId, requestId, attemptId, schedulerCompletion } = execution;
+      const result = execution.receipt;
       try {
-        if (!input || typeof input !== "object") return failure("invalidProgram", "input-required");
-        const inputKeys = ["binding", "program", "source", "callerId", "correlationId", "deadlineAtMs"];
-        if (Object.prototype.hasOwnProperty.call(input, "signal")) inputKeys.push("signal");
-        assertExactKeys(input, inputKeys, "finalSimulation.input");
-        const program = assertExecutionProgram(input.program);
-        if (input.binding === null || typeof input.binding !== "object" || input.binding.generationId !== program.generationId) return failure("invalidProgram", "generation-binding-mismatch");
-        const currentSource = input.source;
-        const sourceView = source(currentSource.source, "currentSource.source");
-        if (!sameSource(sourceView, program.source)) return failure("invalidProgram", "source-program-mismatch");
-        const callerId = assertNonEmptyString(input.callerId, "callerId");
-        const correlationId = assertHash(input.correlationId, "correlationId");
-        if (typeof input.deadlineAtMs !== "number" || !Number.isFinite(input.deadlineAtMs)) return failure("invalidProgram", "deadline-invalid");
-        try {
-          await currentSource.assertCurrent();
-        } catch {
-          return failure("retryable", "source-stale");
-        }
-        const projected = projectionFor(projection, program, callerId, input.binding);
-        const wire = wireProgram(program, schemaHash);
-        const requestId = requestIdFor({ correlationId, program });
-        const attemptId = attemptIdFor(requestId);
-        const workCaller = schedulerCaller(callerId);
-        let schedulerCompletion: SchedulerWorkCompletionHandleV1 | null = null;
-        const result = await scheduler.run({
-          work: {
-            workId: requestId,
-            phase: "final-sim",
-            workClassRef: "qualified-revm-final-simulation-v1",
-            ownerRef: program.issuerRef,
-            lane: "final-sim",
-            resource: "final-sim",
-            quotaKey: "final-sim",
-            deadlineAtMs: input.deadlineAtMs,
-            signal: input.signal,
-          },
-          caller: workCaller,
-          execute: async (permit: SchedulerPermit): Promise<RevmSimulationReceipt> => {
-            if (schedulerCompletion !== null || permit.completion === null || typeof permit.completion !== "object") {
-              throw new TypeError("final simulation scheduler completion handle is invalid");
-            }
-            schedulerCompletion = permit.completion;
-            return client.simulate({
-              requestId,
-              ownerRef: program.issuerRef,
-              generationId: program.generationId,
-              attemptId,
-              source: program.source,
-              caller: projected.caller,
-              observeAccounts: projected.observeAccounts,
-              program: wire,
-              input: projected.input,
-              deadlineAtMs: input.deadlineAtMs,
-              signal: permit.signal,
-            });
-          },
-        });
-        try {
-          await currentSource.assertCurrent();
-        } catch {
-          return failure("retryable", "source-stale");
-        }
         if (result.status === "reverted") {
-          if (result.requestId !== requestId
-            || result.attemptId !== attemptId
-            || result.generationId !== program.generationId
-            || result.ownerRef !== program.issuerRef
-            || result.programHash !== wire.programHash
-            || !sameSource(source(result.source, "finalSimulation.rejection.source"), program.source)) {
-            return failure("invalidProgram", "rejection-receipt-binding-mismatch");
-          }
           return issueQualifiedRejection({
             program,
             correlationId,
@@ -902,9 +1041,8 @@ export function createQualifiedFinalSimulationPort(
             code: "simulation-reverted",
           });
         }
-        const simulation = factFromReceipt({ clientReceipt: result, program, wire, callerId, qualification });
+        const simulation = factFromReceipt({ clientReceipt: result, program, wire, callerId: input.callerId, qualification });
         if (simulation.requestId !== requestId || simulation.attemptId !== attemptId) return failure("invalidProgram", "request-binding-mismatch");
-        if (schedulerCompletion === null) return failure("invalidProgram", "scheduler-completion-handle-missing");
         const receipt = finalReceipt({ program, simulation });
         const facts = assertCanonical({
           kind: "aloha.qualified-final-simulation-owner-facts-v1",
@@ -961,8 +1099,6 @@ export function createQualifiedFinalSimulationPort(
         });
         return Object.freeze({ kind: "passed" as const, receipt, schedulerJoinSeed, sixStepEvidence });
       } catch (error) {
-        if (error instanceof SchedulerError) return mapSchedulerFailure(error);
-        if (error instanceof RevmSimulationError) return mapSimulationFailure(error);
         return failure("invalidProgram", error instanceof Error ? `bridge-${error.message}` : "bridge-error");
       }
     },

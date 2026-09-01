@@ -662,7 +662,6 @@ const STARTUP_RUNTIME_OWNER_PATH = "packages/startup-runtime/src/internal/runtim
 const STARTUP_SIX_STEP_ROUTE_PARENT_OWNER_PATH = "packages/startup-runtime/src/internal/six-step-route-parent-owner.ts";
 const NATIVE_STARTUP_STATE_MACHINE_PATH = "packages/startup-runtime/src/internal/native-startup.ts";
 const SIGNED_RELEASE_NATIVE_STARTUP_OWNER_PATH = "packages/startup-runtime/src/internal/signed-release-native-startup-owner.ts";
-const ADVISORY_OBSERVATION_NATIVE_STARTUP_OWNER_PATH = "packages/startup-runtime/src/internal/advisory-observation-native-startup-owner.ts";
 const PRODUCTION_RELEASE_WORKFLOW_PATH = "tools/runtime-release-packager/src/production-workflow.ts";
 const EXTERNAL_RELEASE_OWNER_PATH = "tools/runtime-release-packager/src/external-release-owner.ts";
 const QUALIFIED_RELEASE_PUBLIC_RUNNER_STATE_PATH = "tools/runtime-release-packager/src/internal/qualified-release-public-runner-state.ts";
@@ -1393,6 +1392,7 @@ const EXACT_RUNTIME_AUTHORITY_CONSUMER_IMPORTS = Object.freeze([
   { from: "packages/runtime-release-authority/src/internal/performance-policy-owner.ts", to: "packages/runtime-release-authority/src/internal/state.ts", specifier: "./state.ts", named: ["assertActiveRuntimeReleaseAuthorityState"], typeNames: [] },
   { from: "packages/runtime-release-authority/src/internal/performance-runtime-owner.ts", to: "packages/runtime-release-authority/src/internal/performance-policy-owner.ts", specifier: "./performance-policy-owner.ts", named: ["readRuntimeReleasePerformancePolicyPortV1"], typeNames: ["RuntimeReleasePerformancePolicyPortV1"] },
   { from: "packages/runtime-release-authority/src/internal/six-step-terminal-owner.ts", to: "packages/runtime-release-authority/src/internal/economic-safety-owner.ts", specifier: "./economic-safety-owner.ts", named: ["readRuntimeReleaseEconomicEvaluatorBindingV1"], typeNames: [] },
+  { from: SIGNED_RELEASE_NATIVE_STARTUP_OWNER_PATH, to: "packages/family-composition/src/internal/generated-runtime-composition.ts", specifier: "../../../family-composition/src/internal/generated-runtime-composition.ts", named: ["readGeneratedFamilySearchRuntimePort"], typeNames: [] },
   { from: "packages/search-pipeline/src/index.ts", to: "packages/search-pipeline/src/internal/six-step-tail-port-owner.ts", specifier: "./internal/six-step-tail-port-owner.ts", named: ["assertIssuedProductionSixStepTailEmissionPortV1"], typeNames: [] },
   { from: "packages/search-pipeline/src/route-pipeline.ts", to: "packages/search-pipeline/src/internal/scheduler-resource-join.ts", specifier: "./internal/scheduler-resource-join.ts", named: ["readSearchSchedulerResourceJoin"], typeNames: [] },
 ] as const);
@@ -1443,7 +1443,6 @@ const EXACT_AUTHORITY_CONSTRUCTOR_IMPORT_ROWS = Object.freeze([
   [SIGNED_RELEASE_NATIVE_STARTUP_OWNER_PATH, STARTUP_READY_OWNER_PATH, "./ready-owner.ts", ["assertIssuedStartupReadyPort", "startupReadyPromotionPort"], []],
   [SIGNED_RELEASE_NATIVE_STARTUP_OWNER_PATH, STARTUP_SIX_STEP_ROUTE_PARENT_OWNER_PATH, "./six-step-route-parent-owner.ts", ["issueStartupSixStepRouteParentCapabilityV1"], []],
   [SIGNED_RELEASE_NATIVE_STARTUP_OWNER_PATH, NATIVE_STARTUP_STATE_MACHINE_PATH, "./native-startup.ts", ["runNativeStartupStateMachineForExactAdapter"], []],
-  [ADVISORY_OBSERVATION_NATIVE_STARTUP_OWNER_PATH, NATIVE_STARTUP_STATE_MACHINE_PATH, "./native-startup.ts", ["runNativeStartupStateMachineForExactAdapter"], []],
   ["packages/runtime-release-authority/src/index.ts", "packages/runtime-release-authority/src/internal/performance-deployment-owner.ts", "./internal/performance-deployment-owner.ts", [], ["openInstalledRuntimeReleasePerformanceDeploymentPortV1"]],
   ["packages/runtime-release-authority/src/index.ts", "packages/runtime-release-authority/src/internal/performance-policy-owner.ts", "./internal/performance-policy-owner.ts", [], ["issueInstalledRuntimeReleasePerformancePolicyPortV1"]],
   ["packages/runtime-release-authority/src/internal/bootstrap.ts", "packages/runtime-release-authority/src/internal/nomination-qualification-owner.ts", "./nomination-qualification-owner.ts", ["issueRuntimeReleaseNominationQualificationVerifier"], []],

@@ -58,9 +58,7 @@ import {
   assertIssuedRuntimeReleaseSearcherStartupService,
   type RuntimeReleaseSearcherStartupServiceV1,
 } from "../../../packages/runtime-release-authority/src/searcher-startup-consumer.ts";
-import {
-  type SearcherProducerSessionV1,
-} from "./internal/ports.ts";
+import type { SearcherProducerSessionV1 } from "./internal/ports.ts";
 import {
   assertIssuedRethSearcherRuntimeSourceV1,
   type RethSearcherRuntimeSourceV1,
@@ -229,7 +227,7 @@ export interface ReleaseSearcherProducerCompositionInputV1<Simulation> {
   readonly strategyRuntime: RuntimeReleaseStrategyRuntimeServiceV1;
   /** Candidate-owned Reth/current-source authority; raw read factories are forbidden. */
   readonly source: RethSearcherRuntimeSourceV1;
-  readonly coreInput: Omit<SearchRuntimeCoreInputV1, "composition" | "sourceRead">;
+  readonly coreInput: Omit<SearchRuntimeCoreInputV1, "familyRuntime" | "sourceRead">;
   readonly finalSimulationFactory: QualifiedFinalSimulationPortFactoryV1<Simulation>;
   readonly economicSafety: EconomicSafetyFinalizationServiceV1;
   /** One release-owned durable evidence binding; individual sinks are not caller seams. */
@@ -278,6 +276,7 @@ function issueLanePlanningProblem(
     definitionCatalogRoot: input.session.lease.binding.definitionCatalogRoot,
     graphRoot: input.session.lease.binding.graphRoot,
     readyRecordHash: input.session.lease.binding.readyRecordHash,
+    runtimeAuthority: input.session.lease.binding.runtimeAuthority,
     releaseProvenanceHash: input.session.lease.binding.releaseProvenanceHash,
     sourceHash: input.head.hash,
   };
@@ -337,7 +336,7 @@ async function runSearcherLane<Simulation>(
       const planning = issueLanePlanningProblem(input, searchInput, boundTrigger, strategyRuntime);
       const generated = createGeneratedSearchRuntimePorts({
         ...coreInput,
-        composition: startup.familyRuntimeComposition,
+        familyRuntime: startup.familySearchRuntime,
         sourceRead: sourceScope,
       });
       const finalSimulation = input.session.lease.edges.length === 0

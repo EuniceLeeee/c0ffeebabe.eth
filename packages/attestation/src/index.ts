@@ -511,7 +511,7 @@ export interface AttestationProgramPort {
   ): Promise<VerifiedMemoReuseDecisionV1>;
   materializeAndProject(
     candidate: CandidateRecordV1,
-    identity: IdentityVerifiedV1,
+    identity: IdentityVerifiedObservationV1,
     cutoff: CanonicalCutoffV1,
     signal: AbortSignal,
     rawEvidence: FamilyRawEvidenceReadPortV1,
@@ -692,6 +692,11 @@ export interface AttestationFinalSessionResultV1 {
 
 export interface AttestationRunSessionV1 {
   readonly writerCapability: AttestationWriterCapabilityV1;
+  /** Resolve the exact constructor-bound candidate denominator. Callers
+   * cannot substitute a key list or materialize before this barrier. */
+  readonly resolveIdentityDenominator: (
+    signal: AbortSignal,
+  ) => Promise<readonly AttestationIdentitySessionResultV1[]>;
   readonly resolveIdentityOrReuseProofOnce: (
     familyCandidateKey: Hash,
     signal: AbortSignal,
@@ -1871,6 +1876,18 @@ export function validateCandidateFinalOutcome(
     candidatePartitionRoot: outcome.outcomeIssuerProof.candidatePartitionRoot,
     candidate,
   }, outcome);
+  if (outcome.kind === "verified") {
+    if (outcome.identityProof === null) throw new TypeError("verified-outcome-identity-proof-missing");
+    return;
+  }
+  const terminalStage = outcome.kind === "chainProvenRejected"
+    ? outcome.proof.stage
+    : outcome.failure.stage;
+  if (terminalStage === "identity") {
+    if (outcome.identityProof !== null) throw new TypeError("identity-stage-outcome-must-not-link-identity-proof");
+  } else if (outcome.identityProof === null) {
+    throw new TypeError("post-identity-outcome-identity-proof-missing");
+  }
 }
 
 export function validateAttestationPartition(

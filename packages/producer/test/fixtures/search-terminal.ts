@@ -42,6 +42,11 @@ import {
 } from "../../../strategy-composition/src/internal/generated-runtime-composition.ts";
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../../../strategy-composition/src/internal/trigger-owner.ts";
 import { compileStrategy, defineStrategy, type StrategyPlanningProblemIssuerV1 } from "../../../strategy-sdk/src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+  type SignedReleaseRuntimeAuthorityDescriptorV1,
+} from "../../../runtime-authority/src/index.ts";
 import { ROUTE_CYCLE_STRATEGY } from "../../../../strategies/route-cycle/src/index.ts";
 import type {
   CanonicalHead,
@@ -104,6 +109,7 @@ function issueTruncatedPlanningProblem(input: {
   readonly lane: "blockscan" | "backrun";
   readonly triggerRef: Hash;
   readonly affectedEdgeIds: readonly Hash[];
+  readonly runtimeAuthority: SignedReleaseRuntimeAuthorityDescriptorV1;
 }): StrategyPlanningProblemV1 {
   const entryAssetRef = input.entryAssetRef;
   const catalogEntry = compileStrategy(TRUNCATED_STRATEGY, []).entry;
@@ -141,7 +147,7 @@ function issueTruncatedPlanningProblem(input: {
   const capability = issueGeneratedStrategyRuntimeAuthorityCapability({
     factory,
     qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
-    releaseProvenanceHash: input.releaseProvenanceHash,
+    runtimeAuthority: input.runtimeAuthority,
     assertCurrent: () => {},
   });
   return factory(capability).issuePlanningProblems({
@@ -151,6 +157,7 @@ function issueTruncatedPlanningProblem(input: {
       graphRoot: input.graphRoot,
       readyRecordHash: input.readyRecordHash,
       releaseProvenanceHash: input.releaseProvenanceHash,
+      runtimeAuthority: projectRuntimeAuthorityDescriptorV1(input.runtimeAuthority),
       sourceHash: input.sourceHash,
     },
     edges: input.edges,
@@ -161,6 +168,7 @@ function issueTruncatedPlanningProblem(input: {
         graphRoot: input.graphRoot,
         readyRecordHash: input.readyRecordHash,
         releaseProvenanceHash: input.releaseProvenanceHash,
+        runtimeAuthority: projectRuntimeAuthorityDescriptorV1(input.runtimeAuthority),
         sourceHash: input.sourceHash,
       },
       lane: input.lane,
@@ -258,6 +266,15 @@ function binding(head: CanonicalHead, generationId: string, graphRoot: Hash): Gr
     hash: h("cutoff", head),
     stateRoot: h("cutoff-state", head),
   });
+  const releaseProvenanceHash = h("release", generationId);
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+    createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: h("runtime-binding", generationId),
+      releaseProvenanceHash,
+      implementationCommit: "a".repeat(40),
+    }),
+  );
   return Object.freeze({
     generationId,
     readyRecordHash: h("ready", generationId),
@@ -266,7 +283,8 @@ function binding(head: CanonicalHead, generationId: string, graphRoot: Hash): Gr
     definitionCatalogRoot: h("definitions", generationId),
     instanceCatalogRoot: h("instances", generationId),
     graphRoot,
-    releaseProvenanceHash: h("release", generationId),
+    runtimeAuthority,
+    releaseProvenanceHash,
     candidatePartitionProofStorageHash: h("partition-proof", generationId),
     nominationClosureRoot: h("nomination-closure", generationId),
     nominationClosureStorageHash: h("nomination-storage", generationId),
@@ -279,6 +297,8 @@ export function createSearchTerminalFixture(input: {
   readonly mode: SearchTerminalMode;
   /** Test-only exact runtime-release join; defaults preserve existing fixtures. */
   readonly releaseProvenanceHash?: Hash;
+  /** Test-only exact neutral authority join; production owners derive it. */
+  readonly runtimeAuthority?: SignedReleaseRuntimeAuthorityDescriptorV1;
   /** Test-only generated composition join; defaults preserve existing fixtures. */
   readonly proposedCapabilitySetRoot?: Hash;
   /** Test-only release-owned binding for terminal authority joins. */
@@ -289,9 +309,19 @@ export function createSearchTerminalFixture(input: {
   const sharedLoopEntryAssetRef = erc20AssetPortBindingV1("1", `0x${h("asset-a", "shared").slice(-40)}`).assetRef;
   const graphRoot = h("graph", edges.map(edge => edge.edgeId));
   const leaseBinding = binding(input.head, input.generationId, graphRoot);
+  const runtimeAuthority = input.runtimeAuthority ?? createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: h("runtime-binding", input.generationId),
+    releaseProvenanceHash: input.releaseProvenanceHash ?? leaseBinding.releaseProvenanceHash,
+    implementationCommit: "a".repeat(40),
+  });
   const releaseBoundLeaseBinding = input.releaseProvenanceHash === undefined
     ? leaseBinding
-    : Object.freeze({ ...leaseBinding, releaseProvenanceHash: input.releaseProvenanceHash });
+    : Object.freeze({
+        ...leaseBinding,
+        runtimeAuthority: projectRuntimeAuthorityDescriptorV1(runtimeAuthority),
+        releaseProvenanceHash: input.releaseProvenanceHash,
+      });
   const issuedHandles = new Map(edges.map(edge => [edge.edgeId, Object.freeze({ opaque: Object.freeze(Object.create(null)) }) as IssuedRouteHandle]));
   const lease = {
     binding: releaseBoundLeaseBinding,
@@ -389,6 +419,7 @@ export function createSearchTerminalFixture(input: {
         lane: triggerFacts.lane,
         triggerRef: triggerFacts.triggerRef,
         affectedEdgeIds: triggerFacts.affectedEdgeIds,
+        runtimeAuthority,
       });
       const currentSource: CurrentSourceSessionV1 = Object.freeze({
         sessionId: h("source-session", request.revision),

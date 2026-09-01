@@ -138,6 +138,9 @@ import {
   buildIdentityPairReadRequests,
   nominateUniV2,
   UNIV2_STANDARD_SOURCE_NOMINATION_PROGRAM,
+  UNIV2_STANDARD_HISTORY_NOMINATION_PROGRAM,
+  UNIV2_STANDARD_HISTORY_SOURCE_PLAN_ID,
+  UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME,
   UNIV2_STANDARD_SOURCE_PLAN_ID,
   UNIV2_STANDARD_SOURCE_PLAN_RUNTIME,
   UNIV2_SYNC_EVENT_TOPIC0,
@@ -204,11 +207,16 @@ import {
   type GeneratedFamilyRuntimeAuthorityBindingV1,
 } from "../src/index.ts";
 import {
+  createGeneratedFamilyRuntimeFactory,
+  issueGeneratedFamilyLifecycleRuntimePort,
+  issueGeneratedFamilyRuntimeAuthorityCapability,
   readGeneratedFamilyRuntimeFactoryMetadata,
+  type GeneratedFamilyLifecycleRuntimePortV1,
 } from "../src/internal/generated-runtime-composition.ts";
 import {
   issueRuntimeReleaseFamilyRuntimeAuthorityCapability,
 } from "../../runtime-release-authority/src/internal/family-runtime-owner.ts";
+import { readActiveSignedRuntimeAuthorityDescriptorV1 } from "../../runtime-release-authority/src/internal/runtime-authority-descriptor-owner.ts";
 import {
   buildRuntimeReleaseComposition,
   verifyAndIssueRuntimeReleaseAuthorityV1,
@@ -537,7 +545,7 @@ function nominationObservation() {
 }
 
 function createService(
-  composition: Parameters<typeof createAttestationProgramPortFromFamilyComposition>[0]["composition"],
+  lifecycle: GeneratedFamilyLifecycleRuntimePortV1,
   approval: ReturnType<typeof releaseApproval>,
   candidatePartitionReader: ReturnType<typeof candidatePartitionBootstrapReader>,
 ): AttestationServiceV1 {
@@ -545,7 +553,7 @@ function createService(
   const rejectionExecutor: RejectionTransportExecutorV1 = { async execute() { return { transport: [], effects: [] }; } };
   const rejectionAuthority = createRejectionExecutorAuthorityIssuer(approval);
   const rejectionRuntime = createRejectionFactRuntime(rejectionAuthority.issue(rejectionExecutor));
-  const programs = createAttestationProgramPortFromFamilyComposition({ composition });
+  const programs = createAttestationProgramPortFromFamilyComposition({ lifecycle });
   return createAttestationService({
     composition: approval,
     frameworkRuntime,
@@ -813,9 +821,55 @@ test("generated composition binds real UniV2 public definitions, then seals cata
       recentSourcePlan.nominationProgramProposal.proposalLeafDigest,
     ]),
   );
+  const generatedFactory = createGeneratedFamilyRuntimeFactory({
+    descriptor,
+    definitions: [UNIV2_STANDARD_STAGE_DEFINITIONS],
+    extensions: [family.extensions.map(extension => {
+      if (extension.exportName === "UNIV2_STANDARD_STATE_PORT") return UNIV2_STANDARD_STATE_PORT;
+      if (extension.exportName === "UNIV2_STANDARD_COARSE_PORT") return UNIV2_STANDARD_COARSE_PORT;
+      if (extension.exportName === "UNIV2_STANDARD_EXACT_PORT") return UNIV2_STANDARD_EXACT_PORT;
+      throw new Error(`unknown UniV2 extension ${extension.exportName}`);
+    })],
+    actionOwners: [[UNIV2_STANDARD_SWAP_ACTION_PORT]],
+    runtimeAdapters: [family.runtimeAdapters.map(adapter => ({
+      factory: UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY,
+      modulePath: adapter.modulePath,
+      exportName: adapter.exportName,
+      closureRoot: adapter.closureRoot,
+      leafDigest: adapter.leafDigest,
+    }))],
+    sourcePlans: [family.sourcePlans.map(plan => {
+      if (plan.sourcePlanId === UNIV2_STANDARD_SOURCE_PLAN_ID) return UNIV2_STANDARD_SOURCE_PLAN_RUNTIME;
+      if (plan.sourcePlanId === UNIV2_STANDARD_HISTORY_SOURCE_PLAN_ID) return UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME;
+      throw new Error(`unknown UniV2 source plan ${plan.sourcePlanId}`);
+    })],
+    nominationPrograms: [family.sourcePlans.map(plan => {
+      if (plan.sourcePlanId === UNIV2_STANDARD_SOURCE_PLAN_ID) return UNIV2_STANDARD_SOURCE_NOMINATION_PROGRAM;
+      if (plan.sourcePlanId === UNIV2_STANDARD_HISTORY_SOURCE_PLAN_ID) return UNIV2_STANDARD_HISTORY_NOMINATION_PROGRAM;
+      throw new Error(`unknown UniV2 nomination program ${plan.sourcePlanId}`);
+    })],
+  });
+  const qualificationSet = approval.resolver.resolve(approval.capability).provenance.runtimeBinding.nominationQualificationSet;
+  const generatedCapability = issueGeneratedFamilyRuntimeAuthorityCapability({
+    factory: generatedFactory,
+    runtimeAuthority: readActiveSignedRuntimeAuthorityDescriptorV1(runtimeAuthorityForReleaseApproval(approval)),
+    qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: descriptor.nominationProgramSetRoot,
+    nominationQualifications: family.sourcePlans.map(plan => ({
+      proposalLeafDigest: plan.nominationProgramProposal.proposalLeafDigest,
+      qualificationLeafDigest: qualificationSet.entries.find(entry =>
+        entry.proposalLeafDigest === plan.nominationProgramProposal.proposalLeafDigest,
+      )?.qualificationLeafDigest ?? h(`test-only-qualification:${plan.sourcePlanId}`),
+    })),
+    authorities,
+    assertCurrent() {
+      approval.resolver.resolve(approval.capability);
+    },
+  });
+  const lifecycle = issueGeneratedFamilyLifecycleRuntimePort(generatedFactory, generatedCapability);
   const partitionBootstrap = createCandidatePartitionBootstrap();
   const service = createService(
-    composition,
+    lifecycle,
     approval,
     candidatePartitionBootstrapReader(partitionBootstrap),
   );
@@ -897,7 +951,7 @@ test("generated composition binds real UniV2 public definitions, then seals cata
     durable = createSqliteDurableStore(filename);
     const restartedBootstrap = createCandidatePartitionBootstrap();
     const restartedService = createService(
-      composition,
+      lifecycle,
       approval,
       candidatePartitionBootstrapReader(restartedBootstrap),
     );

@@ -15,8 +15,10 @@ import {
 } from "../../checkpoint/src/candidate-partition.ts";
 import type { FamilyRawEvidenceReadPortV1 } from "../../family-sdk/runtime/index.ts";
 import {
+  EMPTY_PROBE_RECEIPT_LINEAGE_ROOT,
   assertPromotablePartition,
   identityMemoHash,
+  sealProbeReceipt,
   validateCandidateFinalOutcome,
   validateRejectionEvidenceBundle,
   verifiedIdentitySubjectHash,
@@ -34,6 +36,8 @@ import {
   type RejectionEvidenceBundleV2,
   type RejectionExecutorCapabilityV1,
   type RejectionTransportExecutorV1,
+  type ProbeStorePort,
+  type StoredRetryableProbeV1,
   type TransportFactKindV1,
 } from "../src/index.ts";
 import {
@@ -42,6 +46,7 @@ import {
   createRejectionExecutorAuthorityIssuer,
   createRejectionFactRuntime,
 } from "../src/internal/composition.ts";
+import { probeRetryableCandidate } from "../src/internal/engine.ts";
 import {
   issueCandidatePartitionFixture,
   releaseApproval,
@@ -87,7 +92,7 @@ const frameworkRuntime = (approval = defaultApproval()) => createFrameworkFailur
   classify(thrown) { return thrown; },
 });
 
-const publication = (value: CandidateRecordV1, identity: IdentityVerifiedV1) => sealInstancePublication({
+const publication = (value: CandidateRecordV1, identity: IdentityVerifiedObservationV1) => sealInstancePublication({
   familyId: value.familyId,
   familyDefinitionHash: value.familyDefinitionHash,
   familyCandidateKey: value.familyCandidateKey,
@@ -290,8 +295,10 @@ async function attestPartition(
 ) {
   const { partition, service, session } = openSession(args, programs, candidates, runId);
   const outcomeHashes: Hash[] = [];
-  for (const key of partition.reader.listKeys(partition.capability)) {
-    const identity = await session.resolveIdentityOrReuseProofOnce(key, new AbortController().signal);
+  const identities = await Promise.all(partition.reader.listKeys(partition.capability).map(
+    key => session.resolveIdentityOrReuseProofOnce(key, new AbortController().signal),
+  ));
+  for (const identity of identities) {
     if (identity.kind === "identityVerified") {
       const partialClaim = service.validationAuthority.claimWriterCapabilities(session.writerCapability, [identity.persistenceCapability]);
       partialClaim.commit();
@@ -687,6 +694,233 @@ test("collision admission requires two same-session continuations and cannot con
   const outcomes = session.issueNominationKeyCollision([firstIdentity.continuation, secondIdentity.continuation]);
   assert.deepEqual(outcomes.map(result => result.outcome.kind), ["invalidProgram", "invalidProgram"]);
   assert.equal(materializationCalls, 0);
+});
+
+test("production materialization waits for the complete identity denominator", async () => {
+  const first = candidate("barrier-a");
+  const second = candidate("barrier-b");
+  const programs: AttestationProgramPort = {
+    async attestIdentity(value) {
+      return {
+        kind: "identityVerified", familyInstanceKey: value.instanceNominationKey,
+        identityMemo: identityMemo(value.instanceNominationKey), identityMemoHash: memoHash(value.instanceNominationKey),
+        descriptorHash: h(`descriptor:${value.instanceNominationKey}`), evidenceRoot: value.candidateEvidenceRoot,
+      };
+    },
+    async materializeAndProject(value, observed) { return { kind: "verified", publication: publication(value, observed) }; },
+  };
+  const { session } = openSession(attestArgs(), programs, [first, second]);
+  const resolved = await session.resolveIdentityOrReuseProofOnce(first.familyCandidateKey, new AbortController().signal);
+  assert.equal(resolved.kind, "identityVerified");
+  if (resolved.kind !== "identityVerified") throw new Error("identity expected");
+  assert.throws(
+    () => session.materializeAndProjectOnce(resolved.continuation, new AbortController().signal),
+    /identity-phase-incomplete/,
+  );
+});
+
+test("production collision termination requires the exact three-member group", async () => {
+  const values = [candidate("collision-3a"), candidate("collision-3b"), candidate("collision-3c")];
+  let materializations = 0;
+  const programs: AttestationProgramPort = {
+    async attestIdentity(value) {
+      return {
+        kind: "identityVerified", familyInstanceKey: "same-three-member-instance",
+        identityMemo: identityMemo("same-three"), identityMemoHash: memoHash("same-three"),
+        descriptorHash: h("same-three-descriptor"), evidenceRoot: value.candidateEvidenceRoot,
+      };
+    },
+    async materializeAndProject() { materializations += 1; throw new Error("collision must not materialize"); },
+  };
+  const { session } = openSession(attestArgs(), programs, values);
+  const resolved = await Promise.all(values.map(value => session.resolveIdentityOrReuseProofOnce(value.familyCandidateKey, new AbortController().signal)));
+  assert.ok(resolved.every(value => value.kind === "identityVerified"));
+  const continuations = resolved.map(value => value.kind === "identityVerified" ? value.continuation : null).filter(value => value !== null);
+  assert.throws(() => session.issueNominationKeyCollision(continuations.slice(0, 2)), /group-not-exact/);
+  assert.throws(
+    () => session.materializeAndProjectOnce(continuations[0]!, new AbortController().signal),
+    /collision-group-must-be-terminated/,
+  );
+  const outcomes = session.issueNominationKeyCollision(continuations);
+  assert.equal(outcomes.length, 3);
+  assert.equal(materializations, 0);
+});
+
+test("retryable probe resolves the complete denominator and detects a target collision before persistence", async () => {
+  const target = candidate("probe-collision-target");
+  const peer = candidate("probe-collision-peer");
+  let phase: "initial" | "probe" = "initial";
+  const probeIdentityKeys: Hash[] = [];
+  let materializations = 0;
+  const programs: AttestationProgramPort = {
+    async attestIdentity(value) {
+      if (phase === "initial") {
+        return {
+          kind: "retryable" as const,
+          failure: {
+            stage: "identity" as const,
+            failureCode: "probe-retry",
+            attemptCount: "1",
+            candidateSubjectHash: value.candidateSubjectHash,
+            evidenceRoot: value.candidateEvidenceRoot,
+            frameworkBinding: null,
+          },
+        };
+      }
+      probeIdentityKeys.push(value.familyCandidateKey);
+      return {
+        kind: "identityVerified" as const,
+        familyInstanceKey: "probe-shared-instance",
+        identityMemo: identityMemo("probe-shared-instance"),
+        identityMemoHash: memoHash("probe-shared-instance"),
+        descriptorHash: h("probe-shared-descriptor"),
+        evidenceRoot: value.candidateEvidenceRoot,
+      };
+    },
+    async materializeAndProject(value, observed) {
+      materializations += 1;
+      return { kind: "verified" as const, publication: publication(value, observed) };
+    },
+  };
+  const args = attestArgs();
+  const partition = args.partitionFor([target, peer], "probe-collision-run");
+  const service = args.serviceFor(programs);
+  const initial = service.openRunSession({ candidatePartition: partition.capability });
+  const retryable = await initial.resolveIdentityOrReuseProofOnce(target.familyCandidateKey, new AbortController().signal);
+  assert.equal(retryable.kind, "final");
+  if (retryable.kind !== "final" || retryable.outcome.kind !== "retryable") throw new Error("retryable setup failed");
+  const probeCapability = Object.freeze({});
+  const stored: StoredRetryableProbeV1 = Object.freeze({
+    runId: "probe-collision-run",
+    cutoff,
+    checkpointRevision: partition.binding.checkpointRevision,
+    probeCapability,
+    candidatePartition: partition.capability,
+    candidatePartitionBinding: partition.binding,
+    candidateSubjectHash: target.candidateSubjectHash,
+    before: retryable.outcome,
+    beforeOutcomeHash: retryable.persistenceCapability.outcomeHash,
+  });
+  let replaceCalls = 0;
+  const store: ProbeStorePort = {
+    async loadRetryable() { return stored; },
+    async listRetryableCandidateKeys() { return [target.familyCandidateKey]; },
+    async replaceRetryableCAS() {
+      replaceCalls += 1;
+      throw new Error("collision probe must not persist a diagnostic outcome");
+    },
+  };
+  phase = "probe";
+  await assert.rejects(
+    () => probeRetryableCandidate(
+      stored.runId,
+      target.familyCandidateKey,
+      store,
+      { async assertStillCanonical() {} },
+      service,
+      new AbortController().signal,
+    ),
+    /probe-invalid-program-is-diagnostic-only/,
+  );
+  assert.deepEqual(probeIdentityKeys.sort(), [target.familyCandidateKey, peer.familyCandidateKey].sort());
+  assert.equal(materializations, 0);
+  assert.equal(replaceCalls, 0);
+});
+
+test("retryable probe crosses the full identity barrier but persists only its target", async () => {
+  const target = candidate("probe-target-only");
+  const peer = candidate("probe-denominator-peer");
+  let phase: "initial" | "probe" = "initial";
+  const probeIdentityKeys: Hash[] = [];
+  const materializedKeys: Hash[] = [];
+  const programs: AttestationProgramPort = {
+    async attestIdentity(value) {
+      if (phase === "initial") {
+        return {
+          kind: "retryable" as const,
+          failure: {
+            stage: "identity" as const,
+            failureCode: "probe-target-retry",
+            attemptCount: "1",
+            candidateSubjectHash: value.candidateSubjectHash,
+            evidenceRoot: value.candidateEvidenceRoot,
+            frameworkBinding: null,
+          },
+        };
+      }
+      probeIdentityKeys.push(value.familyCandidateKey);
+      return {
+        kind: "identityVerified" as const,
+        familyInstanceKey: `probe:${value.instanceNominationKey}`,
+        identityMemo: identityMemo(value.instanceNominationKey),
+        identityMemoHash: memoHash(value.instanceNominationKey),
+        descriptorHash: h(`probe-descriptor:${value.instanceNominationKey}`),
+        evidenceRoot: value.candidateEvidenceRoot,
+      };
+    },
+    async materializeAndProject(value, observed) {
+      materializedKeys.push(value.familyCandidateKey);
+      return { kind: "verified" as const, publication: publication(value, observed) };
+    },
+  };
+  const args = attestArgs();
+  const partition = args.partitionFor([target, peer], "probe-target-run");
+  const service = args.serviceFor(programs);
+  const initial = service.openRunSession({ candidatePartition: partition.capability });
+  const retryable = await initial.resolveIdentityOrReuseProofOnce(target.familyCandidateKey, new AbortController().signal);
+  if (retryable.kind !== "final" || retryable.outcome.kind !== "retryable") throw new Error("retryable setup failed");
+  const stored: StoredRetryableProbeV1 = Object.freeze({
+    runId: "probe-target-run",
+    cutoff,
+    checkpointRevision: partition.binding.checkpointRevision,
+    probeCapability: Object.freeze({}),
+    candidatePartition: partition.capability,
+    candidatePartitionBinding: partition.binding,
+    candidateSubjectHash: target.candidateSubjectHash,
+    before: retryable.outcome,
+    beforeOutcomeHash: retryable.persistenceCapability.outcomeHash,
+  });
+  const replacedKeys: Hash[] = [];
+  const store: ProbeStorePort = {
+    async loadRetryable() { return stored; },
+    async listRetryableCandidateKeys() { return [target.familyCandidateKey]; },
+    async replaceRetryableCAS(_claim, _writer, persistence) {
+      replacedKeys.push(persistence.familyCandidateKey);
+      return sealProbeReceipt({
+        runId: stored.runId,
+        familyCandidateKey: target.familyCandidateKey,
+        cutoff,
+        beforeOutcomeHash: stored.beforeOutcomeHash,
+        afterOutcomeHash: persistence.outcomeHash,
+        beforeKind: "retryable",
+        afterKind: "verified",
+        candidateSubjectHash: target.candidateSubjectHash,
+        evidenceRoot: stored.before.failure.evidenceRoot,
+        checkpointRevisionBefore: stored.checkpointRevision,
+        checkpointRevision: String(BigInt(stored.checkpointRevision) + 1n),
+        priorOutcomePartitionRoot: h("probe-prior-partition"),
+        activeOutcomePartitionRoot: h("probe-active-partition"),
+        canonicalJournalEpoch: "1",
+        canonicalJournalRoot: h("probe-journal"),
+        sequence: "1",
+        priorReceiptHash: null,
+        priorLineageRoot: EMPTY_PROBE_RECEIPT_LINEAGE_ROOT,
+      });
+    },
+  };
+  phase = "probe";
+  const receipt = await probeRetryableCandidate(
+    stored.runId,
+    target.familyCandidateKey,
+    store,
+    { async assertStillCanonical() {} },
+    service,
+    new AbortController().signal,
+  );
+  assert.equal(receipt.afterKind, "verified");
+  assert.deepEqual(probeIdentityKeys.sort(), [target.familyCandidateKey, peer.familyCandidateKey].sort());
+  assert.deepEqual(materializedKeys, [target.familyCandidateKey]);
+  assert.deepEqual(replacedKeys, [target.familyCandidateKey]);
 });
 
 test("session resolve and materialize are single-flight and share one continuation and final capability", async () => {

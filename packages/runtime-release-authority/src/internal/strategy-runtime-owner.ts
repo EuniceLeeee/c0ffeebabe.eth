@@ -22,6 +22,7 @@ import {
   assertActiveRuntimeReleaseAuthorityState,
 } from "./state.ts";
 import { runtimeReleaseBindingProvenanceHash } from "../../../../specs/release-authority/src/index.ts";
+import { readActiveSignedRuntimeAuthorityDescriptorV1 } from "./runtime-authority-descriptor-owner.ts";
 
 /**
  * The application receives this owner-issued service, never a raw generated
@@ -89,11 +90,12 @@ export function issueRuntimeReleaseStrategyRuntimeService(
     throw new TypeError("generated Strategy runtime factory is not bound to the signed capability set");
   }
   const releaseProvenanceHash = runtimeReleaseBindingProvenanceHash(state.binding);
+  const runtimeAuthority = readActiveSignedRuntimeAuthorityDescriptorV1(authority);
   const version = state.version;
   const capability = issueGeneratedStrategyRuntimeAuthorityCapability({
     factory,
     qualifiedCapabilityRefsRoot: state.binding.qualifiedCapabilityRefsRoot,
-    releaseProvenanceHash,
+    runtimeAuthority,
     assertCurrent: () => {
       const current = assertActiveRuntimeReleaseAuthorityState(authority);
       if (current.version !== version || current.binding.bindingId !== state.binding.bindingId) {
@@ -114,11 +116,11 @@ export function issueRuntimeReleaseStrategyRuntimeService(
   const runtimeMetadata: RuntimeReleaseStrategyRuntimeMetadataV1 = Object.freeze({
     definitionCatalogRoot: composition.definitionCatalogRoot,
     strategyCatalogRoot: factoryMetadata.strategyCatalogRoot,
-    releaseProvenanceHash: composition.releaseProvenanceHash,
+    releaseProvenanceHash,
     compositionRoot: composition.compositionRoot,
   });
   const evidenceExpectation: RuntimeReleaseStrategyEvidenceExpectationV1 = Object.freeze({
-    releaseProvenanceHash: composition.releaseProvenanceHash,
+    releaseProvenanceHash,
     definitionCatalogRoot: composition.definitionCatalogRoot,
     strategyCatalogRoot: factoryMetadata.strategyCatalogRoot,
     strategyCompositionRoot: composition.compositionRoot,
@@ -172,7 +174,7 @@ export function issueRuntimeReleaseStrategyRuntimeService(
       if (planningProblem.strategyCompositionRoot !== composition.compositionRoot
         || planningProblem.strategyIssuerClosureRoot !== composition.issuerClosureRoot
         || planningProblem.readyRecordHash !== input.binding.readyRecordHash
-        || planningProblem.releaseProvenanceHash !== composition.releaseProvenanceHash) {
+        || planningProblem.releaseProvenanceHash !== releaseProvenanceHash) {
         throw new TypeError("Strategy planning problem release binding mismatch");
       }
       assertCurrent();

@@ -32,3 +32,7 @@ export {
   requirePsmStageDefinition,
 } from "./runtime.ts";
 export const PUBLIC_ENTRY = Object.freeze({ familyId: "psm", runtime: "family-owned" });
+export {
+  PSM_SOURCE_NOMINATION_PROGRAM,
+  PSM_SOURCE_PLAN_RUNTIME,
+} from "./source-plan.ts";

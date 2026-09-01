@@ -8,11 +8,12 @@ import {
 } from "../../canonical-codec/src/index.ts";
 import { asSchemaRef } from "../../capability-contracts/src/index.ts";
 import {
-  readIssuedStrategyPlanningProblemV1,
-  type IssuedStrategyPlanningProblemV1,
+  readIssuedStrategyPlanningInputV1,
+  type IssuedStrategyPlanningInputV1,
   type StrategyGraphEdgeV1,
   type StrategyPlanningProblemV1,
 } from "../../strategy-composition/src/index.ts";
+import { decodeRuntimeAuthorityProjectionV1 } from "../../runtime-authority/src/index.ts";
 import type { LoopIntentV1, RouteLegIntentV1 } from "../../strategy-sdk/src/index.ts";
 
 export interface PlannedRouteLegV1 {
@@ -59,7 +60,7 @@ export type IssuedPlanningEnumerationV1 = PlanningEnumerationV1 & {
 
 interface IssuedPlanningEnumerationStateV1 {
   readonly enumeration: PlanningEnumerationV1;
-  readonly problemCapability: IssuedStrategyPlanningProblemV1;
+  readonly problemCapability: IssuedStrategyPlanningInputV1;
 }
 
 const issuedPlanningEnumerations = new WeakMap<object, IssuedPlanningEnumerationStateV1>();
@@ -119,14 +120,15 @@ export function planningEnumerationRootV1(value: Omit<PlanningEnumerationV1, "en
   });
 }
 
-const PROBLEM_KEYS = Object.freeze([
+const PROBLEM_CORE_KEYS = Object.freeze([
   "kind", "objectiveRef", "entryAssetRef", "returnAssetRef", "minLegs", "maxLegs", "candidateLimit", "edgeReuse",
   "requiredAnchorEdgeIds", "constraintSchemaRefs", "strategyId", "strategyDefinitionHash",
   "strategyCatalogLeafDigest", "definitionCatalogRoot", "generationId", "graphRoot",
   "triggerRef", "lane", "triggerCorrelationId", "triggerHeadHash",
   "requiredCapabilityPredicates", "strategyCompositionRoot", "strategyIssuerClosureRoot",
-  "releaseProvenanceHash", "readyRecordHash", "problemHash",
+  "readyRecordHash", "problemHash",
 ]);
+const PROBLEM_KEYS = Object.freeze([...PROBLEM_CORE_KEYS, "releaseProvenanceHash", "runtimeAuthority"]);
 
 function validateProblem(value: StrategyPlanningProblemV1): StrategyPlanningProblemV1 {
   assertExactKeys(value, PROBLEM_KEYS, "planningProblem");
@@ -146,6 +148,9 @@ function validateProblem(value: StrategyPlanningProblemV1): StrategyPlanningProb
   assertHash(value.strategyCompositionRoot, "planningProblem.strategyCompositionRoot");
   assertHash(value.strategyIssuerClosureRoot, "planningProblem.strategyIssuerClosureRoot");
   assertHash(value.releaseProvenanceHash, "planningProblem.releaseProvenanceHash");
+  if (decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority).authorityClass !== "signed-release") {
+    throw new TypeError("planner problem requires signed-release runtime authority");
+  }
   assertHash(value.readyRecordHash, "planningProblem.readyRecordHash");
   assertHash(value.problemHash, "planningProblem.problemHash");
   if (typeof value.strategyId !== "string" || value.strategyId.length === 0 || typeof value.generationId !== "string" || value.generationId.length === 0) {
@@ -249,11 +254,11 @@ function sealCandidate(problem: StrategyPlanningProblemV1, rawLegs: readonly Tra
  * enters this package.
  */
 export function enumerateClosedLoopPlanningProblem(input: {
-  readonly problem: IssuedStrategyPlanningProblemV1;
+  readonly problem: IssuedStrategyPlanningInputV1;
 }): IssuedPlanningEnumerationV1 {
   const problemCapability = input.problem;
   assertExactKeys(input, ["problem"], "planner.enumerationInput");
-  const issued = readIssuedStrategyPlanningProblemV1(problemCapability);
+  const issued = readIssuedStrategyPlanningInputV1(problemCapability);
   const problem = validateProblem(issued.problem);
   const minLegs = boundedNumber(problem.minLegs, "planner.problem.minLegs", 16);
   const maxLegs = boundedNumber(problem.maxLegs, "planner.problem.maxLegs", 16);
@@ -332,7 +337,7 @@ export function readIssuedPlanningEnumerationV1(value: unknown): PlanningEnumera
   if (state === undefined) {
     throw new TypeError("planner enumeration was not issued by the planner owner");
   }
-  const current = readIssuedStrategyPlanningProblemV1(state.problemCapability);
+  const current = readIssuedStrategyPlanningInputV1(state.problemCapability);
   if (state.enumeration !== value || state.enumeration.planningProblem !== current.problem) {
     throw new TypeError("planner enumeration owner binding is invalid");
   }

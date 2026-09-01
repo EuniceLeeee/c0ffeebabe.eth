@@ -1,6 +1,7 @@
 import type { Hash } from "../../../canonical-codec/src/index.ts";
 import type { StrategyPlanningProblemIssuerV1 } from "../../../strategy-sdk/src/index.ts";
 import type { GeneratedStrategyRuntimeDescriptorV1 } from "../index.ts";
+import type { RuntimeAuthorityProjectionV1 } from "../../../runtime-authority/src/index.ts";
 
 declare const generatedStrategyRuntimeCompositionCapabilityBrand: unique symbol;
 
@@ -15,6 +16,7 @@ export interface GeneratedStrategyRuntimeCompositionCapabilityV1 {
 export interface GeneratedStrategyRuntimeCompositionAuthorityStateV1 {
   readonly descriptor: GeneratedStrategyRuntimeDescriptorV1;
   readonly issuers: readonly StrategyPlanningProblemIssuerV1[];
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly releaseProvenanceHash: Hash;
   readonly assertCurrent: () => void;
 }
@@ -30,6 +32,7 @@ export function issueGeneratedStrategyRuntimeCompositionCapability(
   issued.set(capability, Object.freeze({
     descriptor: state.descriptor,
     issuers: Object.freeze([...state.issuers]),
+    runtimeAuthority: state.runtimeAuthority,
     releaseProvenanceHash: state.releaseProvenanceHash,
     assertCurrent: state.assertCurrent,
   }));

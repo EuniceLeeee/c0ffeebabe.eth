@@ -4905,8 +4905,7 @@ test("native startup state machine admits only exact adapter named imports", () 
       [unrelatedEdge],
     ), []);
 
-    // The future advisory adapter is reserved but absent, so it is not yet a
-    // required edge in the current production denominator.
+    // The signed release adapter is the sole native startup caller.
     assert.equal(inspect(
       signedPath,
       `import { ${runtimeExport} } from "${specifier}";\n`,
@@ -4925,18 +4924,28 @@ test("native startup production adapter retains each exact owner edge", () => {
       to: "packages/startup-runtime/src/internal/signed-release-native-startup-owner.ts",
       specifier: "./internal/signed-release-native-startup-owner.ts",
       names: ["startSignedReleaseNativeStartupRuntime"],
+      mismatchCode: "authority-named-import-mismatch",
     },
     {
       from: "packages/startup-runtime/src/internal/signed-release-native-startup-owner.ts",
       to: "packages/startup-runtime/src/internal/ready-owner.ts",
       specifier: "./ready-owner.ts",
       names: ["assertIssuedStartupReadyPort", "startupReadyPromotionPort"],
+      mismatchCode: "authority-named-import-mismatch",
     },
     {
       from: "packages/startup-runtime/src/internal/signed-release-native-startup-owner.ts",
       to: "packages/startup-runtime/src/internal/six-step-route-parent-owner.ts",
       specifier: "./six-step-route-parent-owner.ts",
       names: ["issueStartupSixStepRouteParentCapabilityV1"],
+      mismatchCode: "authority-named-import-mismatch",
+    },
+    {
+      from: "packages/startup-runtime/src/internal/signed-release-native-startup-owner.ts",
+      to: "packages/family-composition/src/internal/generated-runtime-composition.ts",
+      specifier: "../../../family-composition/src/internal/generated-runtime-composition.ts",
+      names: ["readGeneratedFamilySearchRuntimePort"],
+      mismatchCode: "narrow-port-import-mismatch",
     },
   ] as const;
   const file = (path: string): TrackedFile => ({
@@ -4963,7 +4972,7 @@ test("native startup production adapter retains each exact owner edge", () => {
       assert.ok(inspect(
         `import { ${[...item.names, "unregisteredNativeStartupAuthority"].join(", ")} } from "${item.specifier}";\n`,
         [edge],
-      ).some(diagnostic => diagnostic.code === "authority-named-import-mismatch"));
+      ).some(diagnostic => diagnostic.code === item.mismatchCode));
       assert.ok(inspect("export {};\n", []).some(
         diagnostic => diagnostic.code === "authority-consumer-edge-missing",
       ));

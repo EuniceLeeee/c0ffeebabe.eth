@@ -7,6 +7,10 @@ import { ContentAddressedObserverSinkV1 } from "../../../acceptance/collectors/s
 import { createResolverPolicy } from "../../../specs/artifact-resolution/src/index.ts";
 import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import { readProductionSixStepArtifactMaterialV1 } from "../../evidence-emitter/src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 import { issueStartupSixStepRouteParentCapabilityV1 } from "../../startup-runtime/src/internal/six-step-route-parent-owner.ts";
 import {
   issueRuntimeReleaseSixStepProductionV1,
@@ -128,6 +132,12 @@ test("production Stage 3-6 inherits the first Stage 2 instance key, not the rout
     definitionCatalogRoot: ready.definitionCatalogRoot,
     instanceCatalogRoot: ready.instanceCatalogRoot,
     graphRoot: ready.graphRoot,
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: h("runtime-binding"),
+      releaseProvenanceHash: h("release-provenance"),
+      implementationCommit: "a".repeat(40),
+    })),
     releaseProvenanceHash: h("release-provenance"),
     candidatePartitionProofStorageHash: h("candidate-partition-proof-storage"),
     nominationClosureRoot: h("nomination-closure"),

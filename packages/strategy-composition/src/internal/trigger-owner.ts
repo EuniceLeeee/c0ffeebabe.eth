@@ -1,9 +1,12 @@
 import {
+  assertExactKeys,
   assertHash,
   assertNonEmptyString,
   deepFreeze,
+  encodeCanonicalJson,
   type Hash,
 } from "../../../canonical-codec/src/index.ts";
+import { decodeRuntimeAuthorityProjectionV1 } from "../../../runtime-authority/src/index.ts";
 import type {
   StrategyGraphBindingV1,
   StrategyPlanningLaneV1,
@@ -24,21 +27,34 @@ interface IssuedTriggerRecordV1 {
 
 const issuedTriggers = new WeakMap<object, IssuedTriggerRecordV1>();
 const compare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
-
+const BINDING_KEYS = Object.freeze([
+  "generationId",
+  "definitionCatalogRoot",
+  "graphRoot",
+  "readyRecordHash",
+  "releaseProvenanceHash",
+  "runtimeAuthority",
+  "sourceHash",
+] as const);
 function binding(value: StrategyGraphBindingV1): StrategyGraphBindingV1 {
   if (value === null || typeof value !== "object") throw new TypeError("strategy trigger binding is required");
+  assertExactKeys(value, BINDING_KEYS, "strategyTrigger.binding");
   assertNonEmptyString(value.generationId, "strategyTrigger.binding.generationId");
   assertHash(value.definitionCatalogRoot, "strategyTrigger.binding.definitionCatalogRoot");
   assertHash(value.graphRoot, "strategyTrigger.binding.graphRoot");
   assertHash(value.readyRecordHash, "strategyTrigger.binding.readyRecordHash");
-  assertHash(value.releaseProvenanceHash, "strategyTrigger.binding.releaseProvenanceHash");
   assertHash(value.sourceHash, "strategyTrigger.binding.sourceHash");
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
+  if (runtimeAuthority.authorityClass !== "signed-release") {
+    throw new TypeError("strategy trigger requires signed-release runtime authority");
+  }
   return Object.freeze({
     generationId: value.generationId,
     definitionCatalogRoot: value.definitionCatalogRoot,
     graphRoot: value.graphRoot,
     readyRecordHash: value.readyRecordHash,
-    releaseProvenanceHash: value.releaseProvenanceHash,
+    releaseProvenanceHash: assertHash(value.releaseProvenanceHash, "strategyTrigger.binding.releaseProvenanceHash"),
+    runtimeAuthority,
     sourceHash: value.sourceHash,
   });
 }
@@ -55,8 +71,9 @@ function sameBinding(left: StrategyGraphBindingV1, right: StrategyGraphBindingV1
     && left.definitionCatalogRoot === right.definitionCatalogRoot
     && left.graphRoot === right.graphRoot
     && left.readyRecordHash === right.readyRecordHash
+    && left.sourceHash === right.sourceHash
     && left.releaseProvenanceHash === right.releaseProvenanceHash
-    && left.sourceHash === right.sourceHash;
+    && encodeCanonicalJson(left.runtimeAuthority) === encodeCanonicalJson(right.runtimeAuthority);
 }
 
 /** Owner-only ingress for an objective-, head-, and session-bound planning trigger. */
@@ -95,7 +112,7 @@ export function readIssuedStrategyPlanningTriggerV1(
   if (record === undefined) throw new TypeError("Strategy planning trigger is not owner-issued");
   const graphBinding = binding(expectedBinding);
   if (!sameBinding(record.binding, graphBinding)) throw new TypeError("Strategy planning trigger binding mismatch");
-  return deepFreeze({
+  const common = {
     lane: record.lane,
     triggerRef: record.triggerRef,
     objectiveRef: record.objectiveRef,
@@ -106,6 +123,10 @@ export function readIssuedStrategyPlanningTriggerV1(
     headHash: graphBinding.sourceHash,
     generationId: graphBinding.generationId,
     graphRoot: graphBinding.graphRoot,
+  };
+  return deepFreeze({
+    ...common,
     releaseProvenanceHash: graphBinding.releaseProvenanceHash,
+    runtimeAuthority: graphBinding.runtimeAuthority,
   });
 }

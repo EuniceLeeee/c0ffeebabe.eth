@@ -42,6 +42,10 @@ import { DURABLE_CONTENT_ENVELOPE_HASH_DOMAIN } from "../../../packages/durable-
 import { sealInstanceCatalog, type AssetPortV1, type InstancePublicationV1 } from "../../../packages/catalog/src/index.ts";
 import { buildPersistedGraph, type PersistedGraphEdgeV1 } from "../../../packages/graph/src/index.ts";
 import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../../packages/runtime-authority/src/index.ts";
+import {
   readGeneratedFamilyRuntimeFactoryMetadata,
 } from "../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
 import { createReleaseFamilyRuntimeComposition } from "../../../generated/runtime-composition/index.ts";
@@ -577,6 +581,14 @@ async function buildFullFamilyQualificationCorpusOnce(): Promise<FullFamilyQuali
   const runId = "qualification-full-family-run";
   const releaseBindingId = h("release-binding");
   const releaseProvenanceHash = h("release-provenance");
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+    createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: releaseBindingId,
+      releaseProvenanceHash,
+      implementationCommit: "a".repeat(40),
+    }),
+  );
   const outcomeAuthority: QualificationOutcomeAuthorityV1 = Object.freeze({
     attestationAuthorityRoot: h("attestation-authority-root"),
     releaseAuthorityRoot: h("release-authority-root"),
@@ -846,6 +858,7 @@ async function buildFullFamilyQualificationCorpusOnce(): Promise<FullFamilyQuali
     verifiedMemoSetRoot: h("verified-memo-set"),
     instanceCatalogRoot: instanceCatalog.instanceCatalogRoot,
     graphRoot: graph.graphRoot,
+    runtimeAuthority,
     edgeCount: graph.edgeCount,
     instanceCount: instanceCatalog.instanceCount,
     promotionFreshness,

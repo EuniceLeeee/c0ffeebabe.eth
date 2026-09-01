@@ -30,6 +30,10 @@ import type {
   FinalSimulationSixStepEvidenceV1,
 } from "../src/index.ts";
 import { createProductionSixStepTailFixture } from "./production-six-step-fixture.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 
 /**
  * These are contract fixtures only.  Every owner is an opaque port and no
@@ -40,6 +44,12 @@ const h = (value: string): Hash => hashDomain("test/search-pipeline", value);
 const assetIn = erc20AssetPortBindingV1("1", `0x${h("asset-in").slice(-40)}`);
 const assetMid = erc20AssetPortBindingV1("1", `0x${h("asset-mid").slice(-40)}`);
 const noRejectionAuthority = Object.freeze({ read: () => { throw new TypeError("rejection-not-issued"); } });
+const runtimeAuthorityDescriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
+  authorityClass: "signed-release",
+  runtimeBindingId: hashDomain("test/search-pipeline/runtime-binding/v1", 1),
+  releaseProvenanceHash: h("release"),
+  implementationCommit: "a".repeat(40),
+});
 
 const source: SourceViewV1 = Object.freeze({
   chainId: "1",
@@ -76,6 +86,7 @@ const binding: GraphLeaseBindingV1 = Object.freeze({
   definitionCatalogRoot: h("definitions"),
   instanceCatalogRoot: h("instances"),
   graphRoot: h("graph"),
+  runtimeAuthority: projectRuntimeAuthorityDescriptorV1(runtimeAuthorityDescriptor),
   releaseProvenanceHash: h("release"),
   candidatePartitionProofStorageHash: h("partition-proof"),
   nominationClosureRoot: nomination.closure.root,
@@ -153,6 +164,7 @@ const planningProblem = issueRouteCyclePlanningProblem({
   sourceHash: h("block"),
   correlationId: h("correlation"),
   objectiveRef,
+  runtimeAuthority: runtimeAuthorityDescriptor,
 });
 const candidate = enumerateClosedLoopPlanningProblem({ problem: planningProblem }).candidates[0]!;
 

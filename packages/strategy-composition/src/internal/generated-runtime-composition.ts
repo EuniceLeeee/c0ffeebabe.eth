@@ -7,6 +7,12 @@ import {
 } from "../index.ts";
 import type { StrategyPlanningProblemIssuerV1 } from "../../../strategy-sdk/src/index.ts";
 import { assertHash, hashDomain, type Hash } from "../../../canonical-codec/src/index.ts";
+import {
+  decodeSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityProjectionV1,
+  type SignedReleaseRuntimeAuthorityDescriptorV1,
+} from "../../../runtime-authority/src/index.ts";
 import { issueGeneratedStrategyRuntimeCompositionCapability } from "./runtime-composition-authority.ts";
 
 declare const generatedStrategyRuntimeAuthorityCapabilityBrand: unique symbol;
@@ -46,6 +52,7 @@ export interface GeneratedStrategyRuntimeFactoryMetadataV1 {
 
 interface IssuedAuthorityStateV1 {
   readonly factory: GeneratedStrategyRuntimeFactoryV1;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly releaseProvenanceHash: Hash;
   readonly assertCurrent: () => void;
 }
@@ -89,8 +96,8 @@ function authorityFor(
 export function issueGeneratedStrategyRuntimeAuthorityCapability(input: {
   readonly factory: GeneratedStrategyRuntimeFactoryV1;
   readonly qualifiedCapabilityRefsRoot: Hash;
-  /** Signed runtime-release provenance that owns this generated factory. */
-  readonly releaseProvenanceHash: Hash;
+  /** Exact descriptor supplied by the signed runtime-release owner. */
+  readonly runtimeAuthority: SignedReleaseRuntimeAuthorityDescriptorV1;
   readonly assertCurrent: () => void;
 }): GeneratedStrategyRuntimeAuthorityCapabilityV1 {
   if (input === null || typeof input !== "object" || typeof input.assertCurrent !== "function") {
@@ -100,7 +107,8 @@ export function issueGeneratedStrategyRuntimeAuthorityCapability(input: {
   const metadata = generatedFactoryMetadata.get(input.factory);
   if (metadata === undefined) throw new TypeError("generated Strategy runtime factory metadata is unavailable");
   assertHash(input.qualifiedCapabilityRefsRoot, "qualifiedCapabilityRefsRoot");
-  assertHash(input.releaseProvenanceHash, "releaseProvenanceHash");
+  const signedAuthority = decodeSignedReleaseRuntimeAuthorityDescriptorV1(input.runtimeAuthority);
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(signedAuthority);
   if (metadata.proposedCapabilitySetRoot !== input.qualifiedCapabilityRefsRoot) {
     throw new TypeError("Strategy runtime factory is not bound to this release capability set");
   }
@@ -108,7 +116,8 @@ export function issueGeneratedStrategyRuntimeAuthorityCapability(input: {
   const capability = Object.freeze(Object.create(null)) as GeneratedStrategyRuntimeAuthorityCapabilityV1;
   issuedAuthorities.set(capability, Object.freeze({
     factory: input.factory,
-    releaseProvenanceHash: input.releaseProvenanceHash,
+    runtimeAuthority,
+    releaseProvenanceHash: signedAuthority.releaseProvenanceHash,
     assertCurrent: input.assertCurrent,
   }));
   return capability;
@@ -161,6 +170,7 @@ export function createGeneratedStrategyRuntimeFactory(
     const compositionCapability = issueGeneratedStrategyRuntimeCompositionCapability({
       descriptor,
       issuers,
+      runtimeAuthority: authority.runtimeAuthority,
       releaseProvenanceHash: authority.releaseProvenanceHash,
       assertCurrent: authority.assertCurrent,
     });

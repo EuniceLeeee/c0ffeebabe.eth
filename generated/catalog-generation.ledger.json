@@ -12,13 +12,13 @@
   "inputRecords": [
     {
       "path": "input/capability-index",
-      "contentSha256": "0x82e6042a9b61c8fb8d33ba917a87b369f05e7c47d066573e656b87243573357a",
-      "byteLength": 4432
+      "contentSha256": "0xb981e820416f45a7a89e7abcc530fa81364486757e6c16ec5b74c5903ae67703",
+      "byteLength": 16506
     },
     {
       "path": "input/compiler-closures",
-      "contentSha256": "0x84116049bbfa03a89ee76c44795832e5c839a83c6adf33f7da110011ec44e62d",
-      "byteLength": 31797
+      "contentSha256": "0xd361b1bedd5a5c1bc4b6484e6db9d574eec48dddec09e3785284861a363d04e8",
+      "byteLength": 131606
     },
     {
       "path": "input/prior-catalog-impact-identity",
@@ -37,13 +37,13 @@
     },
     {
       "path": "input/proposed-capability-set",
-      "contentSha256": "0xc0037bc1794cd38bf72fdd82d29327a1d767b5fea1282c31a9a42cc4bd07e668",
-      "byteLength": 3828
+      "contentSha256": "0xcf6c77e52c77d5d3d9f9c3682b684291dd881f703232b19b65cf66e6b42f2d8d",
+      "byteLength": 14704
     },
     {
       "path": "input/release-intent",
-      "contentSha256": "0x60e0568e5dbe8619fe5ae397b8d88b94d9f8c85da413966b3272cc53f6821cf2",
-      "byteLength": 1138
+      "contentSha256": "0x8db923b35d75de43b3e7f0545495ba69993d38ed4f6887d8ab505cbee2985654",
+      "byteLength": 4341
     },
     {
       "path": "input/valuation-owners",
@@ -52,6 +52,204 @@
     }
   ],
   "compilerRecords": [
+    {
+      "logicalPath": "families/angstrom-v4/src/action.ts#ANGSTROM_V4_ACTION_PORT",
+      "contentSha256": "0x0536df578584bb03aa108ea5a2fd133169a0855a3cb23fc588142539da12f729",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/history-source-plan.ts#ANGSTROM_V4_HISTORY_NOMINATION_PROGRAM",
+      "contentSha256": "0x4e31ad7f66a9bd81d47d0057ad9248979bb4073be8731fcdfe2d18bdbfd7f6b6",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/history-source-plan.ts#ANGSTROM_V4_HISTORY_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x4e31ad7f66a9bd81d47d0057ad9248979bb4073be8731fcdfe2d18bdbfd7f6b6",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/nomination-qualification.ts#ANGSTROM_V4_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0xe2ef5c2ae2a3709e5f14ae3e80c9633d54da81dc4e6ce180b343ec77608b50d0",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/nomination-qualification.ts#ANGSTROM_V4_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0xe2ef5c2ae2a3709e5f14ae3e80c9633d54da81dc4e6ce180b343ec77608b50d0",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/public.ts#ANGSTROM_V4_DEFINITION",
+      "contentSha256": "0xcd1caf6ae97c9d9a48dae7344833ff0d6f6b861d48d49c8951cab43562db1b56",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/runtime.ts#ANGSTROM_V4_IDENTITY_RUNTIME",
+      "contentSha256": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/runtime.ts#ANGSTROM_V4_MATERIALIZATION_RUNTIME",
+      "contentSha256": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/runtime.ts#ANGSTROM_V4_NOMINATION_RUNTIME",
+      "contentSha256": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/runtime.ts#ANGSTROM_V4_PROJECTION_RUNTIME",
+      "contentSha256": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/runtime.ts#ANGSTROM_V4_REHYDRATION_RUNTIME",
+      "contentSha256": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/runtime.ts#ANGSTROM_V4_RUNTIME",
+      "contentSha256": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/runtime/physical-adapter.ts#ANGSTROM_V4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+      "contentSha256": "0xb0c03857e8d918b999fb434a5b107af24dc05fdecb64f8d5e9bd56050195c7d6",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/search-adapter.ts#ANGSTROM_V4_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x1d63c20fb2fc929719d65138ec88f773e109cd5ea50af85593e4682bff51a02f",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/source-plan.ts#ANGSTROM_V4_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0x7a2ab78d3f39653b153caae9c7c97c17c2dc6d52eff42bef3a064c628ab3ac54",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/angstrom-v4/src/source-plan.ts#ANGSTROM_V4_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x7a2ab78d3f39653b153caae9c7c97c17c2dc6d52eff42bef3a064c628ab3ac54",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/action.ts#ASTRA_ACTION_OWNER",
+      "contentSha256": "0x3044f2c373d517c114a5b30ad782cd45630689f2a1a754b14bcb31f73e344064",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/history-source-plan.ts#ASTRA_HISTORY_NOMINATION_PROGRAM",
+      "contentSha256": "0x372c8e1daa0fca61a1cfa2f3039c5ec661698265b33e492ae2dff4da11b3737e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/history-source-plan.ts#ASTRA_HISTORY_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x372c8e1daa0fca61a1cfa2f3039c5ec661698265b33e492ae2dff4da11b3737e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/nomination-qualification.ts#ASTRA_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0x06cf89bcb8c9b021fadfc0710f75756ab0c06cc8155440c57c93b62539167b69",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/nomination-qualification.ts#ASTRA_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0x06cf89bcb8c9b021fadfc0710f75756ab0c06cc8155440c57c93b62539167b69",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/public.ts#ASTRA_DEFINITION",
+      "contentSha256": "0x7f8d1ba65dd1b971a726a740379a74be4c983bd2303acc4351c39532efccdec6",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/runtime.ts#ASTRA_COARSE_DEFINITION",
+      "contentSha256": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/runtime.ts#ASTRA_EXACT_DEFINITION",
+      "contentSha256": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/runtime.ts#ASTRA_STATE_DEFINITION",
+      "contentSha256": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/runtime/definitions.ts#ASTRA_IDENTITY_DEFINITION",
+      "contentSha256": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/runtime/definitions.ts#ASTRA_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/runtime/definitions.ts#ASTRA_NOMINATION_DEFINITION",
+      "contentSha256": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/runtime/definitions.ts#ASTRA_PROJECTION_DEFINITION",
+      "contentSha256": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/runtime/definitions.ts#ASTRA_REHYDRATION_DEFINITION",
+      "contentSha256": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/search-adapter.ts#ASTRA_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x1626a3bfffd7373a039a592bda45f2fc081105573bacaf1661521b1047e263f1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/source-plan-runtime.ts#ASTRA_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0x5f52665bdb959e8f8b8b0ebd7da9bbd72d04b7cf1c3193e8457dac7c6713a7f4",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/astra-multitoken/src/source-plan-runtime.ts#ASTRA_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x5f52665bdb959e8f8b8b0ebd7da9bbd72d04b7cf1c3193e8457dac7c6713a7f4",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
     {
       "logicalPath": "families/curve-underlying/src/action.ts#CURVE_UNDERLYING_SWAP_ACTION_PORT",
       "contentSha256": "0x6adfabcabcd3b0782e193cec816eee4427dee02e1f5ac759be1efcf6da943c03",
@@ -245,6 +443,456 @@
       "sourceKind": "tracked"
     },
     {
+      "logicalPath": "families/eigenpie/src/action.ts#EIGENPIE_PROTOCOL_ACTION_PORT",
+      "contentSha256": "0x5f10d2527790fc3e23fe093be8c302db2076b59d5c1d137434126e3a9a660a7d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/history-source-plan.ts#EIGENPIE_HISTORY_NOMINATION_PROGRAM",
+      "contentSha256": "0xa55e55905cf8808dbab660fc3b3381bb781b372d4eb79f925fd2a290fcd8774d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/history-source-plan.ts#EIGENPIE_HISTORY_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0xa55e55905cf8808dbab660fc3b3381bb781b372d4eb79f925fd2a290fcd8774d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/nomination-qualification.ts#EIGENPIE_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0xadc7dc89c550bae4809c9c596bd971def804b9abc4dc43e242c902429195d6e8",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/nomination-qualification.ts#EIGENPIE_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0xadc7dc89c550bae4809c9c596bd971def804b9abc4dc43e242c902429195d6e8",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/public.ts#EIGENPIE_DEFINITION",
+      "contentSha256": "0xac5ada92a9fc10f6b9b21c829d67d2b34522a318618174fe0d7067cac7195c90",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/runtime.ts#EIGENPIE_RUNTIME",
+      "contentSha256": "0x6c216f59471e18d61d364b51baa105bc6360ae2f0cf53ff6f5507c93f69bb79b",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/runtime.ts#EIGENPIE_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x6c216f59471e18d61d364b51baa105bc6360ae2f0cf53ff6f5507c93f69bb79b",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/runtime/definitions.ts#EIGENPIE_IDENTITY_DEFINITION",
+      "contentSha256": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/runtime/definitions.ts#EIGENPIE_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/runtime/definitions.ts#EIGENPIE_NOMINATION_DEFINITION",
+      "contentSha256": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/runtime/definitions.ts#EIGENPIE_PROJECTION_DEFINITION",
+      "contentSha256": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/runtime/definitions.ts#EIGENPIE_REHYDRATION_DEFINITION",
+      "contentSha256": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/source-plan.ts#EIGENPIE_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0x44d7c57425388b613d3f49507e58694009c60df5540c34ded66128fbc03bae4e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/eigenpie/src/source-plan.ts#EIGENPIE_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x44d7c57425388b613d3f49507e58694009c60df5540c34ded66128fbc03bae4e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/action.ts#ERC4626_SILO_REDEEM_ACTION_PORT",
+      "contentSha256": "0xfad0c3ce6aded2806bf391aa48455eec271e6e8879811e9630721e1b67e1ff71",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/history-source-plan.ts#ERC4626_SILO_REDEEM_HISTORY_NOMINATION_PROGRAM",
+      "contentSha256": "0x84832d3ac0486219fe62b5abf49242b6c634a38ffd5842ddc7ec9329b2d52ab0",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/history-source-plan.ts#ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x84832d3ac0486219fe62b5abf49242b6c634a38ffd5842ddc7ec9329b2d52ab0",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/nomination-qualification.ts#ERC4626_SILO_REDEEM_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0xe817477ec3f76d9788a1636b0a1aec731be3d0ac5dec45050aedee76d968b69d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/nomination-qualification.ts#ERC4626_SILO_REDEEM_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0xe817477ec3f76d9788a1636b0a1aec731be3d0ac5dec45050aedee76d968b69d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/public.ts#ERC4626_SILO_REDEEM_DEFINITION",
+      "contentSha256": "0xa88105df3314e07a724f057433eda5c4083ed36bc50a0c4fe1d6ca6c8b33ccfc",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/runtime.ts#ERC4626_SILO_REDEEM_RUNTIME",
+      "contentSha256": "0xda47cbee006fadb9f9781f2d8e326543d0b7a811f3bc11fc193a0ee760eb882d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/runtime.ts#ERC4626_SILO_REDEEM_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0xda47cbee006fadb9f9781f2d8e326543d0b7a811f3bc11fc193a0ee760eb882d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/runtime/definitions.ts#ERC4626_SILO_REDEEM_IDENTITY_DEFINITION",
+      "contentSha256": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/runtime/definitions.ts#ERC4626_SILO_REDEEM_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/runtime/definitions.ts#ERC4626_SILO_REDEEM_NOMINATION_DEFINITION",
+      "contentSha256": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/runtime/definitions.ts#ERC4626_SILO_REDEEM_PROJECTION_DEFINITION",
+      "contentSha256": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/runtime/definitions.ts#ERC4626_SILO_REDEEM_REHYDRATION_DEFINITION",
+      "contentSha256": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/source-plan.ts#ERC4626_SILO_REDEEM_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0xd0ae4a74b70e376a61d75d33ae7bdd60fa3257ff8abbb2034228315ad576e32a",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626-silo-redeem/src/source-plan.ts#ERC4626_SILO_REDEEM_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0xd0ae4a74b70e376a61d75d33ae7bdd60fa3257ff8abbb2034228315ad576e32a",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/action.ts#ERC4626_VAULT_ACTION_PORT",
+      "contentSha256": "0xc4fa497a1029f1a9bc4d14baade74a0771f21f947e6adb4cec7a0745ddcb42db",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/history-source-plan.ts#ERC4626_HISTORY_NOMINATION_PROGRAM",
+      "contentSha256": "0xa6b3cf5fcdefb4d796bca5f783d744b50467f99d8847812e6fec674ced94181a",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/history-source-plan.ts#ERC4626_HISTORY_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0xa6b3cf5fcdefb4d796bca5f783d744b50467f99d8847812e6fec674ced94181a",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/nomination-qualification.ts#ERC4626_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0x727414f7fdb25910020b58f461395bf10203182ca78bac1ac43912c2562260f0",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/nomination-qualification.ts#ERC4626_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0x727414f7fdb25910020b58f461395bf10203182ca78bac1ac43912c2562260f0",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/public.ts#ERC4626_DEFINITION",
+      "contentSha256": "0x2f0aa443961054c9784b52d5b7bd3dd265f4d71148c71eef00cff0df820e72ef",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/runtime.ts#ERC4626_RUNTIME",
+      "contentSha256": "0xd20557f00e62c1ae0ce70de1a2e7f7436c07ee817575a035f45095ab7fb459f5",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/runtime.ts#ERC4626_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0xd20557f00e62c1ae0ce70de1a2e7f7436c07ee817575a035f45095ab7fb459f5",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/runtime/definitions.ts#ERC4626_IDENTITY_DEFINITION",
+      "contentSha256": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/runtime/definitions.ts#ERC4626_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/runtime/definitions.ts#ERC4626_NOMINATION_DEFINITION",
+      "contentSha256": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/runtime/definitions.ts#ERC4626_PROJECTION_DEFINITION",
+      "contentSha256": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/runtime/definitions.ts#ERC4626_REHYDRATION_DEFINITION",
+      "contentSha256": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/source-plan.ts#ERC4626_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0xd834740e082979ca706f34002fec60e389e345a08d119ef5951400819ad69df1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/erc4626/src/source-plan.ts#ERC4626_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0xd834740e082979ca706f34002fec60e389e345a08d119ef5951400819ad69df1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/action.ts#ETHERTOKEN_NATIVE_REDEEM_ACTION_PORT",
+      "contentSha256": "0x9abfd7a61aee0d2e768458f29b42684de601d5a43c5809541d90949cfab55853",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/history-source-plan.ts#ETHERTOKEN_NATIVE_REDEEM_HISTORY_NOMINATION_PROGRAM",
+      "contentSha256": "0xbefe1acbb6a135ebd10f7daa06388d3adc4e52c7ad4d3ff3bef6c583ec542c98",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/history-source-plan.ts#ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0xbefe1acbb6a135ebd10f7daa06388d3adc4e52c7ad4d3ff3bef6c583ec542c98",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/nomination-qualification.ts#ETHERTOKEN_NATIVE_REDEEM_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0xc2cc04b0f5180603d6a431b60ae1b7b7aabbf752d5d21600319790e16c2263a8",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/nomination-qualification.ts#ETHERTOKEN_NATIVE_REDEEM_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0xc2cc04b0f5180603d6a431b60ae1b7b7aabbf752d5d21600319790e16c2263a8",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/public.ts#ETHERTOKEN_NATIVE_REDEEM_DEFINITION",
+      "contentSha256": "0x3e72306b0c1d4391aab43122f82b722746b30ba8b6c4f53d59953b79c1bfedfe",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/runtime.ts#ETHERTOKEN_NATIVE_REDEEM_RUNTIME",
+      "contentSha256": "0xb02fcdf68b528984354046bf252165b531cba0e37fc7b4d041ba74b9dacb5f3b",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/runtime.ts#ETHERTOKEN_NATIVE_REDEEM_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0xb02fcdf68b528984354046bf252165b531cba0e37fc7b4d041ba74b9dacb5f3b",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/runtime/definitions.ts#ETHERTOKEN_NATIVE_REDEEM_IDENTITY_DEFINITION",
+      "contentSha256": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/runtime/definitions.ts#ETHERTOKEN_NATIVE_REDEEM_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/runtime/definitions.ts#ETHERTOKEN_NATIVE_REDEEM_NOMINATION_DEFINITION",
+      "contentSha256": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/runtime/definitions.ts#ETHERTOKEN_NATIVE_REDEEM_PROJECTION_DEFINITION",
+      "contentSha256": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/runtime/definitions.ts#ETHERTOKEN_NATIVE_REDEEM_REHYDRATION_DEFINITION",
+      "contentSha256": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/source-plan.ts#ETHERTOKEN_NATIVE_REDEEM_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0x18c5ad781b1ced957b19491db671c899709d6d7bbe8a8ce88982c332a67066b7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/ethertoken-native-redeem/src/source-plan.ts#ETHERTOKEN_NATIVE_REDEEM_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x18c5ad781b1ced957b19491db671c899709d6d7bbe8a8ce88982c332a67066b7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/action.ts#FLUID_CREDIT_ACTION_PORT",
+      "contentSha256": "0x3dc36f00d9d2831d9c5aa77958fec11a453c298b09cc475abbe12a2bc547fa8d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/nomination-qualification.ts#FLUID_CREDIT_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0xbd0e4cf404e606128b1e05073006cdbd03d949df69d0699f09c7db91acc90459",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/nomination-qualification.ts#FLUID_CREDIT_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0xbd0e4cf404e606128b1e05073006cdbd03d949df69d0699f09c7db91acc90459",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/public.ts#FLUID_CREDIT_DEFINITION",
+      "contentSha256": "0x1e031c8677691485db25da59ed42baed10eeca1b57716e00343cccf6ebf06d76",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/runtime.ts#FLUID_CREDIT_RUNTIME",
+      "contentSha256": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/runtime/definitions.ts#FLUID_CREDIT_IDENTITY_DEFINITION",
+      "contentSha256": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/runtime/definitions.ts#FLUID_CREDIT_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/runtime/definitions.ts#FLUID_CREDIT_NOMINATION_DEFINITION",
+      "contentSha256": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/runtime/definitions.ts#FLUID_CREDIT_PROJECTION_DEFINITION",
+      "contentSha256": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/runtime/definitions.ts#FLUID_CREDIT_REHYDRATION_DEFINITION",
+      "contentSha256": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/search-adapter.ts#FLUID_CREDIT_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x060d7058d17021bfcb4ec22c66bad155beea8d3091b93e779b5a0c59e97c3f2b",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/source-plan.ts#FLUID_CREDIT_FACTORY_NOMINATION_PROGRAM",
+      "contentSha256": "0xb822bfa62da2fe7104ff60ba05d6ab5916c09c5ce3f7b82d957712ee4982e668",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/source-plan.ts#FLUID_CREDIT_FACTORY_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0xb822bfa62da2fe7104ff60ba05d6ab5916c09c5ce3f7b82d957712ee4982e668",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/source-plan.ts#FLUID_CREDIT_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0xb822bfa62da2fe7104ff60ba05d6ab5916c09c5ce3f7b82d957712ee4982e668",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/fluid-credit/src/source-plan.ts#FLUID_CREDIT_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0xb822bfa62da2fe7104ff60ba05d6ab5916c09c5ce3f7b82d957712ee4982e668",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
       "logicalPath": "families/fluid-dex/src/action.ts#FLUID_DEX_ACTION_PORT",
       "contentSha256": "0x472bcecefb700a52d36985832845e11fc2e69d93e2116ab66bafd2405d5dfbd7",
       "byteLength": 0,
@@ -337,6 +985,474 @@
     {
       "logicalPath": "families/fluid-dex/src/source-plan.ts#FLUID_DEX_SOURCE_PLAN_RUNTIME",
       "contentSha256": "0x2714b82fc0d48b6fe4854abdce5e13a2e8f5a8781df22e5a84fdd58646243f5e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/action.ts#GOLDX_SWAP_ACTION_PORT",
+      "contentSha256": "0xf28fab1e2bbbf850a1a17362bd0d435b52e99c8c03bdcf853dc5219bdca1dc3b",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/nomination-qualification.ts#GOLDX_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0x9ca0b948638319c901143630dd7c9270347362166f6b86732578e3cc1aafe233",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/nomination-qualification.ts#GOLDX_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0x9ca0b948638319c901143630dd7c9270347362166f6b86732578e3cc1aafe233",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/public.ts#GOLDX_DEFINITION",
+      "contentSha256": "0xae01dc523f0eaaecfdc06e5a4b0a0d655f6762ecaebf109de9e4d3b8c6c29ee0",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/runtime.ts#GOLDX_RUNTIME",
+      "contentSha256": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/runtime.ts#GOLDX_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/runtime/definitions.ts#GOLDX_IDENTITY_DEFINITION",
+      "contentSha256": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/runtime/definitions.ts#GOLDX_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/runtime/definitions.ts#GOLDX_NOMINATION_DEFINITION",
+      "contentSha256": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/runtime/definitions.ts#GOLDX_PROJECTION_DEFINITION",
+      "contentSha256": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/runtime/definitions.ts#GOLDX_REHYDRATION_DEFINITION",
+      "contentSha256": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/source-plan.ts#GOLDX_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0x15358db0a8fc007c224784ad964b7779fafdb9b53a7690c65746258056144220",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/goldx/src/source-plan.ts#GOLDX_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x15358db0a8fc007c224784ad964b7779fafdb9b53a7690c65746258056144220",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/action.ts#METRONOME_HGUSDC_ACTION_PORT",
+      "contentSha256": "0x6fcc81d11303ab9fde6021a1527d08b158dedd55c57287a316a681dd499a5a20",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/nomination-qualification.ts#METRONOME_HGUSDC_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0xe018d91c8f17f8dad068931486c093d217edad0537c617888d4317d6451baa46",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/nomination-qualification.ts#METRONOME_HGUSDC_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0xe018d91c8f17f8dad068931486c093d217edad0537c617888d4317d6451baa46",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/public.ts#METRONOME_HGUSDC_DEFINITION",
+      "contentSha256": "0x4025b6ac801bf1e14bb685cf4415631b690485d1004e2118471271b6842a24c8",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/runtime.ts#METRONOME_HGUSDC_IDENTITY_RUNTIME",
+      "contentSha256": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/runtime.ts#METRONOME_HGUSDC_MATERIALIZATION_RUNTIME",
+      "contentSha256": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/runtime.ts#METRONOME_HGUSDC_NOMINATION_RUNTIME",
+      "contentSha256": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/runtime.ts#METRONOME_HGUSDC_PROJECTION_RUNTIME",
+      "contentSha256": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/runtime.ts#METRONOME_HGUSDC_REHYDRATION_RUNTIME",
+      "contentSha256": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/runtime.ts#METRONOME_HGUSDC_RUNTIME",
+      "contentSha256": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/runtime.ts#METRONOME_HGUSDC_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/source-plan.ts#METRONOME_HGUSDC_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0xf67dc3765d7f937c91711da4a460f1703803f7ecb7c9c6c253fd5d05601de31d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-hgusdc/src/source-plan.ts#METRONOME_HGUSDC_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0xf67dc3765d7f937c91711da4a460f1703803f7ecb7c9c6c253fd5d05601de31d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/action.ts#METRONOME_SYNTH_ACTION_PORT",
+      "contentSha256": "0x8f7fed19ea30389de8ab783abb4c2affcc906973c50bc50743f0b5868db9b376",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/nomination-qualification.ts#METRONOME_SYNTH_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0xd6e80132bc0de75963f187691f3c0f4f6ad040052c161b6ce1e3880da6ff47c9",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/nomination-qualification.ts#METRONOME_SYNTH_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0xd6e80132bc0de75963f187691f3c0f4f6ad040052c161b6ce1e3880da6ff47c9",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/public.ts#METRONOME_SYNTH_DEFINITION",
+      "contentSha256": "0x053be50821223ed8abefd22106ed4a4e68750421c6875e7289af3b15d9b5f548",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/runtime.ts#METRONOME_SYNTH_IDENTITY_RUNTIME",
+      "contentSha256": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/runtime.ts#METRONOME_SYNTH_MATERIALIZATION_RUNTIME",
+      "contentSha256": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/runtime.ts#METRONOME_SYNTH_NOMINATION_RUNTIME",
+      "contentSha256": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/runtime.ts#METRONOME_SYNTH_PROJECTION_RUNTIME",
+      "contentSha256": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/runtime.ts#METRONOME_SYNTH_REHYDRATION_RUNTIME",
+      "contentSha256": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/runtime.ts#METRONOME_SYNTH_RUNTIME",
+      "contentSha256": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/runtime.ts#METRONOME_SYNTH_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/source-plan.ts#METRONOME_SYNTH_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0x558bb005457bff4cb36941a900481fc30d2e6b7d5fdc93e5201545c361d21ff7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/metronome-synth/src/source-plan.ts#METRONOME_SYNTH_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x558bb005457bff4cb36941a900481fc30d2e6b7d5fdc93e5201545c361d21ff7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/action.ts#PSM_SWAP_ACTION_PORT",
+      "contentSha256": "0x428c1e3d75791943361100b9161286daa7ed93886e5027af87c168225c17fc8e",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/nomination-qualification.ts#PSM_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0xf3d8405cbbced02f71d3e72dd3063cf8ce2c08ac16a208a3e680490c82acc7e1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/nomination-qualification.ts#PSM_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0xf3d8405cbbced02f71d3e72dd3063cf8ce2c08ac16a208a3e680490c82acc7e1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/public.ts#PSM_DEFINITION",
+      "contentSha256": "0x2e04b605bc0f4e4913884938ff28b211f4eb159d2adc479cf9ae4254289d7835",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/runtime.ts#PSM_IDENTITY_RUNTIME",
+      "contentSha256": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/runtime.ts#PSM_MATERIALIZATION_RUNTIME",
+      "contentSha256": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/runtime.ts#PSM_NOMINATION_RUNTIME",
+      "contentSha256": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/runtime.ts#PSM_PROJECTION_RUNTIME",
+      "contentSha256": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/runtime.ts#PSM_REHYDRATION_RUNTIME",
+      "contentSha256": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/runtime.ts#PSM_RUNTIME",
+      "contentSha256": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/runtime.ts#PSM_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/source-plan.ts#PSM_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0x8366017b2b3bc990f2c9df266dc42fa8998b539dc9f9431d8b9b681acf3fccb0",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/psm/src/source-plan.ts#PSM_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x8366017b2b3bc990f2c9df266dc42fa8998b539dc9f9431d8b9b681acf3fccb0",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/action.ts#ROCKSOLID_ACTION_PORT",
+      "contentSha256": "0xb2d38349a6ce6fea1b92c729fdd19fd64489834eba0cadb124ffeb8fbcf37709",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/nomination-qualification.ts#ROCKSOLID_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0x72a5c71d85f0dd3a27448b5eb385c5c32116522e09f1c205b6778c6897456832",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/nomination-qualification.ts#ROCKSOLID_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0x72a5c71d85f0dd3a27448b5eb385c5c32116522e09f1c205b6778c6897456832",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/public.ts#ROCKSOLID_DEFINITION",
+      "contentSha256": "0x79bbd76816e5254acdc0b570c19b1db69a2b3b37a675b4c258fca2bfd0a34249",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/runtime.ts#ROCKSOLID_RUNTIME",
+      "contentSha256": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/runtime.ts#ROCKSOLID_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/runtime/definitions.ts#ROCKSOLID_IDENTITY_DEFINITION",
+      "contentSha256": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/runtime/definitions.ts#ROCKSOLID_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/runtime/definitions.ts#ROCKSOLID_NOMINATION_DEFINITION",
+      "contentSha256": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/runtime/definitions.ts#ROCKSOLID_PROJECTION_DEFINITION",
+      "contentSha256": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/runtime/definitions.ts#ROCKSOLID_REHYDRATION_DEFINITION",
+      "contentSha256": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/source-plan.ts#ROCKSOLID_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0x772d3870f6ffbf6a067246491f638bd844d7ec8f0e41df09d186950f454404a8",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/rocksolid/src/source-plan.ts#ROCKSOLID_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x772d3870f6ffbf6a067246491f638bd844d7ec8f0e41df09d186950f454404a8",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/action.ts#SELF_BURN_NATIVE_ACTION_PORT",
+      "contentSha256": "0x909b3b1e383bc577e782996a20e6a3c12c3397d9e8ce40b9d11ec6f4d09994be",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/nomination-qualification.ts#SELF_BURN_NATIVE_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0x7a16f83e34c9be191093931ec4ad68c10c1b06572e3a00ef4c5be45c6421bd42",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/nomination-qualification.ts#SELF_BURN_NATIVE_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0x7a16f83e34c9be191093931ec4ad68c10c1b06572e3a00ef4c5be45c6421bd42",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/public.ts#SELF_BURN_NATIVE_DEFINITION",
+      "contentSha256": "0x4ed152447cce9cacb7c0fb19f2d9778bb78b74f9918563abd618de7c4e2a7045",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/runtime.ts#SELF_BURN_NATIVE_RUNTIME",
+      "contentSha256": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/runtime.ts#SELF_BURN_NATIVE_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/runtime/definitions.ts#SELF_BURN_NATIVE_IDENTITY_DEFINITION",
+      "contentSha256": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/runtime/definitions.ts#SELF_BURN_NATIVE_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/runtime/definitions.ts#SELF_BURN_NATIVE_NOMINATION_DEFINITION",
+      "contentSha256": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/runtime/definitions.ts#SELF_BURN_NATIVE_PROJECTION_DEFINITION",
+      "contentSha256": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/runtime/definitions.ts#SELF_BURN_NATIVE_REHYDRATION_DEFINITION",
+      "contentSha256": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/source-plan.ts#SELF_BURN_NATIVE_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0xcd709a2933327c405d189611d7005e54f76a34a3566383456432c5cca2cc9c46",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/self-burn-native/src/source-plan.ts#SELF_BURN_NATIVE_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0xcd709a2933327c405d189611d7005e54f76a34a3566383456432c5cca2cc9c46",
       "byteLength": 0,
       "sourceKind": "tracked"
     },
@@ -449,6 +1565,276 @@
       "sourceKind": "tracked"
     },
     {
+      "logicalPath": "families/univ3-standard/src/action.ts#UNIV3_STANDARD_SWAP_ACTION_PORT",
+      "contentSha256": "0xb7689a0b1ad029237ad4e1b471dc4e7cae8c38cf27b21bc06cef0922da3023f9",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/nomination-qualification.ts#UNIV3_STANDARD_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0x8c2e9ca4bda2796949f2e2b8e3287e16959224cde93cc33f3e43aee1cf1cd5b1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/nomination-qualification.ts#UNIV3_STANDARD_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0x8c2e9ca4bda2796949f2e2b8e3287e16959224cde93cc33f3e43aee1cf1cd5b1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/public.ts#UNIV3_STANDARD_DEFINITION",
+      "contentSha256": "0xa85cbde43f24b011662060711458637a5d5b9c01b0ca6379c0bf3005031a733b",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/runtime.ts#UNIV3_IDENTITY_RUNTIME",
+      "contentSha256": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/runtime.ts#UNIV3_MATERIALIZATION_RUNTIME",
+      "contentSha256": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/runtime.ts#UNIV3_NOMINATION_RUNTIME",
+      "contentSha256": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/runtime.ts#UNIV3_PROJECTION_RUNTIME",
+      "contentSha256": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/runtime.ts#UNIV3_REHYDRATION_RUNTIME",
+      "contentSha256": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/runtime.ts#UNIV3_STANDARD_RUNTIME",
+      "contentSha256": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/runtime/physical-adapter.ts#UNIV3_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+      "contentSha256": "0xdad0d1c2f97af7b49859f59e2591ebd7accbb7cda4cb2e8cebc61c559ba3e973",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/search-adapter.ts#UNIV3_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x6b81fc27031767483db08d50038a8f0208f038af3286227fdf0100db8d996ed1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/source-plan.ts#UNIV3_STANDARD_HISTORY_NOMINATION_PROGRAM",
+      "contentSha256": "0x31d4ac92ab56727402c4f24637cc8036ba610c50f8542875326c638c3fa5d738",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/source-plan.ts#UNIV3_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x31d4ac92ab56727402c4f24637cc8036ba610c50f8542875326c638c3fa5d738",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/source-plan.ts#UNIV3_STANDARD_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0x31d4ac92ab56727402c4f24637cc8036ba610c50f8542875326c638c3fa5d738",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ3-standard/src/source-plan.ts#UNIV3_STANDARD_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x31d4ac92ab56727402c4f24637cc8036ba610c50f8542875326c638c3fa5d738",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/action.ts#UNIV4_ACTION_PORT",
+      "contentSha256": "0xe5c0faeccedfb03248da48cd665866b5203a56dd8a40f2f3af7d2c6cf3401ce8",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/history-source-plan.ts#UNIV4_HISTORY_NOMINATION_PROGRAM",
+      "contentSha256": "0x5d6db4068d443dd920c5af34620805f20efc6b616f04b03029799f78512c93a1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/history-source-plan.ts#UNIV4_HISTORY_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x5d6db4068d443dd920c5af34620805f20efc6b616f04b03029799f78512c93a1",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/nomination-qualification.ts#UNIV4_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0x95fd8df1fbe254ce889e2c37ae832ca6706781e28515761018d38366481f4461",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/nomination-qualification.ts#UNIV4_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0x95fd8df1fbe254ce889e2c37ae832ca6706781e28515761018d38366481f4461",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/public.ts#UNIV4_DEFINITION",
+      "contentSha256": "0x18bcd33b240d4c2f1e1c5f6430f7ac5d91729f9838397f98f14156fb55824a35",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/runtime.ts#UNIV4_RUNTIME",
+      "contentSha256": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/runtime/definitions.ts#UNIV4_IDENTITY_DEFINITION",
+      "contentSha256": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/runtime/definitions.ts#UNIV4_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/runtime/definitions.ts#UNIV4_NOMINATION_DEFINITION",
+      "contentSha256": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/runtime/definitions.ts#UNIV4_PROJECTION_DEFINITION",
+      "contentSha256": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/runtime/definitions.ts#UNIV4_REHYDRATION_DEFINITION",
+      "contentSha256": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/runtime/physical-adapter.ts#UNIV4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+      "contentSha256": "0x0cb94845cf7a19b7d6f0822033a3857550f83f9187b43a157ca988192fb45674",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/search-adapter.ts#UNIV4_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x825b7b044e1b3780fe2f1c46b498e6c559ce879f8e6ef590c88bbf720ed7c3d7",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/source-plan.ts#UNIV4_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0x28afeb328f54b1615ea2b36c80492800c332eebb4624e777dd8087ec13d443b5",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/univ4/src/source-plan.ts#UNIV4_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0x28afeb328f54b1615ea2b36c80492800c332eebb4624e777dd8087ec13d443b5",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/action.ts#WSTETH_ACTION_PORT",
+      "contentSha256": "0xa5eaa463da2260a45956e241e7efa73cd5703317d283da5e5f067857ad479b41",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/nomination-qualification.ts#WSTETH_NOMINATION_INDEPENDENT_ORACLE",
+      "contentSha256": "0xd3a5a8dc90caa0a505b9e52879ccc784279c615254ef480aa34ab76d88ecc897",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/nomination-qualification.ts#WSTETH_NOMINATION_MUTATION_CORPUS",
+      "contentSha256": "0xd3a5a8dc90caa0a505b9e52879ccc784279c615254ef480aa34ab76d88ecc897",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/public.ts#WSTETH_DEFINITION",
+      "contentSha256": "0x0149286c035778fb52a9656fd70ecb87de1536f583bb2f94a89e1d871ffee209",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/runtime.ts#WSTETH_RUNTIME",
+      "contentSha256": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/runtime.ts#WSTETH_SEARCH_RUNTIME_ADAPTER_FACTORY",
+      "contentSha256": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/runtime/definitions.ts#WSTETH_IDENTITY_DEFINITION",
+      "contentSha256": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/runtime/definitions.ts#WSTETH_MATERIALIZATION_DEFINITION",
+      "contentSha256": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/runtime/definitions.ts#WSTETH_NOMINATION_DEFINITION",
+      "contentSha256": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/runtime/definitions.ts#WSTETH_PROJECTION_DEFINITION",
+      "contentSha256": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/runtime/definitions.ts#WSTETH_REHYDRATION_DEFINITION",
+      "contentSha256": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/source-plan.ts#WSTETH_SOURCE_NOMINATION_PROGRAM",
+      "contentSha256": "0xcb6e565067d450a5cae60059b644de18ef29867bf4d7e2887052de8b497146b9",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
+      "logicalPath": "families/wsteth/src/source-plan.ts#WSTETH_SOURCE_PLAN_RUNTIME",
+      "contentSha256": "0xcb6e565067d450a5cae60059b644de18ef29867bf4d7e2887052de8b497146b9",
+      "byteLength": 0,
+      "sourceKind": "tracked"
+    },
+    {
       "logicalPath": "strategies/route-cycle/src/index.ts#ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER",
       "contentSha256": "0x6eba9fb034b90b5c557a1e2dc82b66444c752aabb779fd510cecb7ce74e05af6",
       "byteLength": 0,
@@ -488,7 +1874,7 @@
   "generatorRecords": [
     {
       "logicalPath": "tools/catalog-generator/src/index.ts#generateCatalogWithImpact",
-      "contentSha256": "0x23fa084e47390cfd580a978f89ff27c31eb03c2d649ac2b13f541c792fc5b565",
+      "contentSha256": "0x31bb5cc71357f4b47916c134f2099ace930077b12b824598af5d2f47b5ee72ef",
       "byteLength": 0,
       "sourceKind": "tracked"
     }
@@ -496,37 +1882,37 @@
   "outputs": [
     {
       "path": "generated/catalog-impact.receipt.json",
-      "contentSha256": "0x69484461d1a745dabc59c39d5a3966660053a4ee215e7afdcb5b2bf6224ea1b1",
-      "byteLength": 2071,
-      "catalogRoot": "0x4cbce5103ba1d989b8a69b29f0e8d8450141614e2fddaaf3bcde467a835a7749"
+      "contentSha256": "0x037ff367cdcc0c36c37fc6628f06323c4416b8aa8ece1862ced45b09fe580176",
+      "byteLength": 5339,
+      "catalogRoot": "0x939c0838e386526a3d2db690acca12c34ad962c1f17b19853e39d720a5a29caf"
     },
     {
       "path": "generated/catalog-impact.snapshot.json",
-      "contentSha256": "0x7d9bb2498cbde75c01a087b11c6b4867329d593a5b7ed424b5745fffde882a1e",
-      "byteLength": 9781,
-      "catalogRoot": "0x95eb08e3e45a4f076a3fdff4064920b3a61aa093b6a7f91baa24901109927e84"
+      "contentSha256": "0x6385d38839ac9be847cc8d04fb7e69f8836a38bbba5eda9fad51ef5adc084299",
+      "byteLength": 37570,
+      "catalogRoot": "0x00308d58c5426d8d3edd458ae38233d81aa10e0a9e85b900e31caf8347a18a10"
     },
     {
       "path": "generated/family-catalog/index.ts",
-      "contentSha256": "0x446a922c5c154643a029c2efb00656b54f378bb5c55dbc82bb5ef48efe822be1",
-      "byteLength": 29189,
-      "catalogRoot": "0x38a71b346ae711080e061d3ec0205eb4a9ea2f574060070dad242f921c6ef697"
+      "contentSha256": "0xca3d3ad9dfe0ad914316b845deff7d8bd23021c2b931452bc870bc7090a35275",
+      "byteLength": 133778,
+      "catalogRoot": "0x884310088e4873dbbbe82cc7fb99c452647b6c4de67e61e3ddd66a9208d713b7"
     },
     {
       "path": "generated/runtime-composition/index.ts",
-      "contentSha256": "0x9da2d7e861849e468e2682d1c6dfbf14c8dec791c4bd8c4179cd0ff347ddb51a",
-      "byteLength": 113917,
-      "catalogRoot": "0xf298e33809e1031e886270c449cf8c6df21303b303636ef4de9015be7844b8d1"
+      "contentSha256": "0xe46684aa190235cfde0c801139583c00cc2b8c419d96856f61972288fc367916",
+      "byteLength": 488332,
+      "catalogRoot": "0x079cd06080d06f1eda37e326c08784d113127300bcb9f170ea9302eb8281ba7f"
     },
     {
       "path": "generated/safety-profile/index.ts",
-      "contentSha256": "0xb3aded959768f2865e9f590ad49e8fa7c9548cdf73b3b77c7a2baa4b40a221b8",
-      "byteLength": 3858,
-      "catalogRoot": "0x357c437428b610347aa44ac0ea080c9741105f541d67986d2d784f1923364468"
+      "contentSha256": "0xd64187ec8da1687a966d45a1839c96d26b953eb692ecad755f7479a195d54599",
+      "byteLength": 14732,
+      "catalogRoot": "0xecf537745aca2f00abc8f1fe6f441e140fe2a3777ff50ee4f65876025973aaac"
     },
     {
       "path": "generated/strategy-catalog/index.ts",
-      "contentSha256": "0x426b44371e7ae994a10270d50e488fbf2dd467ebd2f31b18be790c9aa4cf22f1",
+      "contentSha256": "0xeb39503e305ae9cedb8136753dbef2c9a5a120a4578110483a537488c87da042",
       "byteLength": 1993,
       "catalogRoot": "0xc6931d4be4816aec576dec52d239c82474ff33f73720226e609862f99e865564"
     },
@@ -537,8 +1923,8 @@
       "catalogRoot": "0x0b1cdc81a9cf4f7dfee77c1af009446193d1c6830402bf88e8e5021c8c629568"
     }
   ],
-  "inputRoot": "0x53c137afce409b18f445760532a46f20fc3576ef71d80ed223e70ba1b2348a42",
-  "compilerRoot": "0xce36d39eec5ce17ce338523e6e5eceaf7dbe05a4087b52c76681fb7a1fcc3d2d",
-  "generatorRoot": "0xb77720cedb0653f1d392bd4209826bf8b639f8013a93fc49753886e45f9bc4bf",
-  "ledgerHash": "0x601dc65819990647d167a06342f995c96b3322f1a5cf76a13e7010be67a3e42f"
+  "inputRoot": "0x10d598050f7d55202fdb53399555daa17e30d89f9725df9c5a3cbc87e6d0481d",
+  "compilerRoot": "0x7f4e87a324dbe356a0eee9cc68805a1a23b15ee3547c50a9274ed96bdb0f9f21",
+  "generatorRoot": "0x7191f30bb3658eee0ace35bb22165b3a75ad58cb5c0ba8bb01f4e36ad972ffd7",
+  "ledgerHash": "0xb53ac685d22034fcec11d00175a3d523909900801cdedbb6ac3ebf9a217bbaca"
 }

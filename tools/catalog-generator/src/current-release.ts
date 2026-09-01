@@ -33,17 +33,65 @@ import {
   type FamilyReleaseIntentEntryV1,
 } from "../../../specs/release-intent/src/index.ts";
 import {
+  ANGSTROM_V4_DEFINITION,
+} from "../../../families/angstrom-v4/src/family-definition.ts";
+import {
+  ASTRA_DEFINITION,
+} from "../../../families/astra-multitoken/src/family-definition.ts";
+import {
   CURVE_UNDERLYING_DEFINITION,
 } from "../../../families/curve-underlying/src/family-definition.ts";
 import {
   DODO_V2_DEFINITION,
 } from "../../../families/dodo-v2/src/family-definition.ts";
 import {
+  EIGENPIE_DEFINITION,
+} from "../../../families/eigenpie/src/family-definition.ts";
+import {
+  ERC4626_DEFINITION,
+} from "../../../families/erc4626/src/family-definition.ts";
+import {
+  ERC4626_SILO_REDEEM_DEFINITION,
+} from "../../../families/erc4626-silo-redeem/src/family-definition.ts";
+import {
+  ETHERTOKEN_NATIVE_REDEEM_DEFINITION,
+} from "../../../families/ethertoken-native-redeem/src/family-definition.ts";
+import {
+  FLUID_CREDIT_DEFINITION,
+} from "../../../families/fluid-credit/src/family-definition.ts";
+import {
   FLUID_DEX_DEFINITION,
 } from "../../../families/fluid-dex/src/family-definition.ts";
 import {
+  GOLDX_DEFINITION,
+} from "../../../families/goldx/src/family-definition.ts";
+import {
+  METRONOME_HGUSDC_DEFINITION,
+} from "../../../families/metronome-hgusdc/src/family-definition.ts";
+import {
+  METRONOME_SYNTH_DEFINITION,
+} from "../../../families/metronome-synth/src/family-definition.ts";
+import {
+  PSM_DEFINITION,
+} from "../../../families/psm/src/family-definition.ts";
+import {
+  ROCKSOLID_DEFINITION,
+} from "../../../families/rocksolid/src/family-definition.ts";
+import {
+  SELF_BURN_NATIVE_DEFINITION,
+} from "../../../families/self-burn-native/src/family-definition.ts";
+import {
   UNIV2_STANDARD_DEFINITION,
 } from "../../../families/univ2-standard/src/family-definition.ts";
+import {
+  UNIV3_STANDARD_DEFINITION,
+} from "../../../families/univ3-standard/src/family-definition.ts";
+import {
+  UNIV4_DEFINITION,
+} from "../../../families/univ4/src/family-definition.ts";
+import {
+  WSTETH_DEFINITION,
+} from "../../../families/wsteth/src/family-definition.ts";
 import {
   ROUTE_CYCLE_STRATEGY,
 } from "../../../strategies/route-cycle/src/index.ts";
@@ -67,16 +115,7 @@ interface CurrentReleaseFamilySourceV1 {
 }
 
 export type CurrentReleaseFamilyExclusionReasonV1 =
-  | "source-nomination-only"
-  | "complete-source-evidence-not-consumed-by-stage-runtime"
-  | "exact-capability-absent"
-  | "exact-effect-observation-absent"
-  | "qualified-state-authority-absent"
-  | "qualified-funding-authority-absent"
-  | "qualified-credit-authority-absent"
-  | "execution-program-blocked"
-  | "final-simulation-blocked"
-  | "optional-instance-without-complete-source-partition";
+  | "funding-capability-outside-route-catalog";
 
 export interface CurrentReleaseFamilyDecisionV1 {
   readonly familyId: string;
@@ -129,54 +168,34 @@ export function selectCatalogCompilerClosureCandidates(
   );
 }
 
-/**
- * The production release compiler imports only included Families. Excluded
- * packages are deliberately absent from this module's dependency closure so
- * an unrelated Family (including a future LP Family) cannot invalidate or
- * force requalification of this release.
- */
+/** The production route/mid catalog. Funding capabilities have a separate owner. */
 const CURRENT_RELEASE_FAMILY_SOURCES: readonly CurrentReleaseFamilySourceV1[] = Object.freeze([
+  Object.freeze({ definition: ANGSTROM_V4_DEFINITION, modulePath: "families/angstrom-v4/src/public.ts", exportName: "ANGSTROM_V4_DEFINITION" }),
+  Object.freeze({ definition: ASTRA_DEFINITION, modulePath: "families/astra-multitoken/src/public.ts", exportName: "ASTRA_DEFINITION" }),
   Object.freeze({ definition: CURVE_UNDERLYING_DEFINITION, modulePath: "families/curve-underlying/src/public.ts", exportName: "CURVE_UNDERLYING_DEFINITION" }),
   Object.freeze({ definition: DODO_V2_DEFINITION, modulePath: "families/dodo-v2/src/public.ts", exportName: "DODO_V2_DEFINITION" }),
+  Object.freeze({ definition: EIGENPIE_DEFINITION, modulePath: "families/eigenpie/src/public.ts", exportName: "EIGENPIE_DEFINITION" }),
+  Object.freeze({ definition: ERC4626_DEFINITION, modulePath: "families/erc4626/src/public.ts", exportName: "ERC4626_DEFINITION" }),
+  Object.freeze({ definition: ERC4626_SILO_REDEEM_DEFINITION, modulePath: "families/erc4626-silo-redeem/src/public.ts", exportName: "ERC4626_SILO_REDEEM_DEFINITION" }),
+  Object.freeze({ definition: ETHERTOKEN_NATIVE_REDEEM_DEFINITION, modulePath: "families/ethertoken-native-redeem/src/public.ts", exportName: "ETHERTOKEN_NATIVE_REDEEM_DEFINITION" }),
+  Object.freeze({ definition: FLUID_CREDIT_DEFINITION, modulePath: "families/fluid-credit/src/public.ts", exportName: "FLUID_CREDIT_DEFINITION" }),
   Object.freeze({ definition: FLUID_DEX_DEFINITION, modulePath: "families/fluid-dex/src/public.ts", exportName: "FLUID_DEX_DEFINITION" }),
+  Object.freeze({ definition: GOLDX_DEFINITION, modulePath: "families/goldx/src/public.ts", exportName: "GOLDX_DEFINITION" }),
+  Object.freeze({ definition: METRONOME_HGUSDC_DEFINITION, modulePath: "families/metronome-hgusdc/src/public.ts", exportName: "METRONOME_HGUSDC_DEFINITION" }),
+  Object.freeze({ definition: METRONOME_SYNTH_DEFINITION, modulePath: "families/metronome-synth/src/public.ts", exportName: "METRONOME_SYNTH_DEFINITION" }),
+  Object.freeze({ definition: PSM_DEFINITION, modulePath: "families/psm/src/public.ts", exportName: "PSM_DEFINITION" }),
+  Object.freeze({ definition: ROCKSOLID_DEFINITION, modulePath: "families/rocksolid/src/public.ts", exportName: "ROCKSOLID_DEFINITION" }),
+  Object.freeze({ definition: SELF_BURN_NATIVE_DEFINITION, modulePath: "families/self-burn-native/src/public.ts", exportName: "SELF_BURN_NATIVE_DEFINITION" }),
   Object.freeze({ definition: UNIV2_STANDARD_DEFINITION, modulePath: "families/univ2-standard/src/public.ts", exportName: "UNIV2_STANDARD_DEFINITION" }),
+  Object.freeze({ definition: UNIV3_STANDARD_DEFINITION, modulePath: "families/univ3-standard/src/public.ts", exportName: "UNIV3_STANDARD_DEFINITION" }),
+  Object.freeze({ definition: UNIV4_DEFINITION, modulePath: "families/univ4/src/public.ts", exportName: "UNIV4_DEFINITION" }),
+  Object.freeze({ definition: WSTETH_DEFINITION, modulePath: "families/wsteth/src/public.ts", exportName: "WSTETH_DEFINITION" }),
 ]);
 
 const CURRENT_RELEASE_EXCLUSIONS: readonly CurrentReleaseFamilyDecisionV1[] = Object.freeze([
-  Object.freeze({ familyId: "angstrom-v4", decision: "exclude", exclusionReasons: Object.freeze(["execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "astra-multitoken", decision: "exclude", exclusionReasons: Object.freeze(["exact-effect-observation-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "balancer-flash", decision: "exclude", exclusionReasons: Object.freeze(["qualified-funding-authority-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "eigenpie", decision: "exclude", exclusionReasons: Object.freeze(["qualified-state-authority-absent", "exact-effect-observation-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "erc4626", decision: "exclude", exclusionReasons: Object.freeze(["exact-capability-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "erc4626-silo-redeem", decision: "exclude", exclusionReasons: Object.freeze(["exact-effect-observation-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "ethertoken-native-redeem", decision: "exclude", exclusionReasons: Object.freeze(["exact-effect-observation-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "fluid-credit", decision: "exclude", exclusionReasons: Object.freeze(["qualified-credit-authority-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "goldx", decision: "exclude", exclusionReasons: Object.freeze(["source-nomination-only"] as const) }),
-  Object.freeze({ familyId: "metronome-hgusdc", decision: "exclude", exclusionReasons: Object.freeze(["source-nomination-only", "exact-capability-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "metronome-synth", decision: "exclude", exclusionReasons: Object.freeze(["source-nomination-only", "exact-capability-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "morpho-flash", decision: "exclude", exclusionReasons: Object.freeze(["qualified-funding-authority-absent", "execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "psm", decision: "exclude", exclusionReasons: Object.freeze(["source-nomination-only"] as const) }),
-  Object.freeze({ familyId: "rocksolid", decision: "exclude", exclusionReasons: Object.freeze(["source-nomination-only"] as const) }),
-  Object.freeze({ familyId: "self-burn-native", decision: "exclude", exclusionReasons: Object.freeze(["source-nomination-only"] as const) }),
-  Object.freeze({ familyId: "wsteth", decision: "exclude", exclusionReasons: Object.freeze(["source-nomination-only"] as const) }),
-  Object.freeze({ familyId: "univ3-standard", decision: "exclude", exclusionReasons: Object.freeze(["execution-program-blocked", "final-simulation-blocked"] as const) }),
-  Object.freeze({ familyId: "univ4", decision: "exclude", exclusionReasons: Object.freeze(["execution-program-blocked", "final-simulation-blocked"] as const) }),
+  Object.freeze({ familyId: "balancer-flash", decision: "exclude", exclusionReasons: Object.freeze(["funding-capability-outside-route-catalog"] as const) }),
+  Object.freeze({ familyId: "morpho-flash", decision: "exclude", exclusionReasons: Object.freeze(["funding-capability-outside-route-catalog"] as const) }),
 ]);
-
-function validateIncludedFamily(source: CurrentReleaseFamilySourceV1): void {
-  const definition = normalizeFamilyDefinition(source.definition);
-  if (!definition.manifest.sourcePlans.some(plan => plan.completeness !== "nomination-only")) {
-    throw new TypeError(`included Family lacks a complete source ${definition.manifest.familyId}`);
-  }
-  const exact = definition.extensions[`family.${definition.manifest.familyId}.exact`];
-  if (exact?.kind !== "present") throw new TypeError(`included Family lacks exact capability ${definition.manifest.familyId}`);
-  const actionOwnerIds = new Set(definition.actionOwners.map(owner => owner.ownerId));
-  const adapterActionOwnerIds = new Set(Object.values(definition.runtimeAdapters ?? {}).flatMap(adapter => Object.values(adapter.actionOwnerIds)));
-  if (actionOwnerIds.size === 0 || [...actionOwnerIds].some(ownerId => !adapterActionOwnerIds.has(ownerId))) {
-    throw new TypeError(`included Family lacks execution ownership ${definition.manifest.familyId}`);
-  }
-}
-for (const source of CURRENT_RELEASE_FAMILY_SOURCES) validateIncludedFamily(source);
 
 const CURRENT_RELEASE_FAMILY_DECISIONS: readonly CurrentReleaseFamilyDecisionV1[] = Object.freeze([
   ...CURRENT_RELEASE_FAMILY_SOURCES.map(source => Object.freeze({

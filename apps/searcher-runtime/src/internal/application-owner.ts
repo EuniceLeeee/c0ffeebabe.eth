@@ -107,7 +107,7 @@ export interface SearcherRuntimeApplicationCompositionInputV1<Simulation> {
   }>;
   /** Candidate-owned canonical/Reth source bundle; deployment cannot replace its parts. */
   readonly source: RethSearcherRuntimeSourceV1;
-  readonly coreInput: Omit<SearchRuntimeCoreInputV1, "composition" | "sourceRead">;
+  readonly coreInput: Omit<SearchRuntimeCoreInputV1, "familyRuntime" | "sourceRead">;
   readonly finalSimulationFactory: QualifiedFinalSimulationPortFactoryV1<Simulation>;
   /** Release-owned durable evidence; callers cannot inject producer sinks. */
   readonly evidence: SearcherProductionEvidenceOwnerV1;

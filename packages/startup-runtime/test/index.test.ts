@@ -57,7 +57,6 @@ import * as nativeContractModule from "../src/internal/native-startup-contract.t
 import * as signedAdapterModule from "../src/internal/signed-release-native-startup-owner.ts";
 import { registerCheckpointReadyFullFamilyEvidenceReader } from "../../checkpoint/src/internal/ready-full-family-evidence-issuer.ts";
 import {
-  createAdvisoryObservationRuntimeAuthorityDescriptorV1,
   createSignedReleaseRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
@@ -135,12 +134,6 @@ test("native startup pins the exact generic runtime authority projection", () =>
   assert.equal(pinNativeStartupAuthority(pinned, Object.freeze({ ...authority })), pinned);
   assert.equal(nativeStartupAuthoritiesEqual(pinned, authority), true);
   const mutations: readonly NativeStartupAuthorityProjectionV1[] = [
-    projectRuntimeAuthorityDescriptorV1(createAdvisoryObservationRuntimeAuthorityDescriptorV1({
-      authorityClass: "advisory-observation",
-      observationInstanceId: signedInput.runtimeBindingId,
-      artifactClosureRoot: signedInput.releaseProvenanceHash,
-      implementationCommit: signedInput.implementationCommit,
-    })),
     projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
       ...signedInput,
       runtimeBindingId: h("other-runtime-binding"),
@@ -326,6 +319,12 @@ test("startup reuses one durable ready closure while renewing the lease per prod
   const releaseBindingPort = readyBindingPortForReleaseApproval(approval);
   const release = approval.resolver.resolve(approval.capability).provenance.runtimeBinding;
   const releaseProvenanceHash = runtimeReleaseBindingProvenanceHash(release);
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: release.bindingId,
+    releaseProvenanceHash,
+    implementationCommit: release.candidateReleaseCommit,
+  }));
   const policyHash = generationRefreshPolicyHash(readyPolicy);
   const freshnessPayload = {
     cutoff: readyCutoff,
@@ -352,6 +351,7 @@ test("startup reuses one durable ready closure while renewing the lease per prod
     candidatePartitionProofStorageHash: h("startup-candidate-proof"),
     nominationClosureRoot: nomination.closure.root,
     nominationClosureStorageHash: nomination.storageHash,
+    runtimeAuthority,
     releaseProvenanceHash,
     exactOutcomePartitionRoot: h("startup-outcomes"),
     verifiedMemoSetRoot: h("startup-memos"),
@@ -508,6 +508,7 @@ test("startup reuses one durable ready closure while renewing the lease per prod
           cutoff: value.ready.cutoff,
           generationRefreshPolicyHash: value.ready.generationRefreshPolicyHash,
           definitionCatalogRoot: value.ready.definitionCatalogRoot,
+          runtimeAuthority: value.ready.runtimeAuthority,
           releaseProvenanceHash: value.ready.releaseProvenanceHash,
           candidatePartitionProofStorageHash: value.ready.candidatePartitionProofStorageHash,
           nominationClosureRoot: value.ready.nominationClosureRoot,
@@ -600,6 +601,7 @@ test("startup reuses one durable ready closure while renewing the lease per prod
           cutoff: refreshedBinding.cutoff,
           generationRefreshPolicyHash: generationRefreshPolicyHash(readyPolicy),
           definitionCatalogRoot: refreshedBinding.definitionCatalogRoot,
+          runtimeAuthority,
           releaseProvenanceHash: refreshedBinding.releaseProvenanceHash,
           candidatePartitionProofStorageHash: refreshedBinding.candidatePartitionProofStorageHash,
           nominationClosureRoot: refreshedBinding.nominationClosureRoot,
@@ -630,6 +632,7 @@ test("startup reuses one durable ready closure while renewing the lease per prod
     attestation: { async attestAndPersistDifference() { throw new Error("startup test must reuse ready"); } },
     ready: readyPort,
     familyRuntime: generatedCompositionFixture(),
+    familySearchRuntime: Object.freeze({}) as never,
     processEpoch: "startup-test-process",
     releaseBindingId: release.bindingId,
     candidateReleaseCommit: release.candidateReleaseCommit,

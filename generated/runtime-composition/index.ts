@@ -3,66 +3,266 @@ import { createGeneratedFamilyRuntimeFactory, type GeneratedFamilyRuntimeFactory
 import type { GeneratedFamilyRuntimeDescriptorV1 } from "../../packages/family-composition/src/index.ts";
 import { createGeneratedStrategyRuntimeFactory, type GeneratedStrategyRuntimeFactoryV1 } from "../../packages/strategy-composition/src/internal/generated-runtime-composition.ts";
 import type { GeneratedStrategyRuntimeDescriptorV1 } from "../../packages/strategy-composition/src/index.ts";
-import { CURVE_IDENTITY_RUNTIME as FAMILY_0_IDENTITY_DEFINITION } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_MATERIALIZATION_RUNTIME as FAMILY_0_MATERIALIZATION_DEFINITION } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_NOMINATION_RUNTIME as FAMILY_0_NOMINATION_DEFINITION } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_PROJECTION_RUNTIME as FAMILY_0_PROJECTION_DEFINITION } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_REHYDRATION_RUNTIME as FAMILY_0_REHYDRATION_DEFINITION } from "../../families/curve-underlying/src/public.ts";
-import { DODO_IDENTITY_RUNTIME as FAMILY_1_IDENTITY_DEFINITION } from "../../families/dodo-v2/src/public.ts";
-import { DODO_MATERIALIZATION_RUNTIME as FAMILY_1_MATERIALIZATION_DEFINITION } from "../../families/dodo-v2/src/public.ts";
-import { DODO_NOMINATION_RUNTIME as FAMILY_1_NOMINATION_DEFINITION } from "../../families/dodo-v2/src/public.ts";
-import { DODO_PROJECTION_RUNTIME as FAMILY_1_PROJECTION_DEFINITION } from "../../families/dodo-v2/src/public.ts";
-import { DODO_REHYDRATION_RUNTIME as FAMILY_1_REHYDRATION_DEFINITION } from "../../families/dodo-v2/src/public.ts";
-import { FLUID_DEX_IDENTITY_DEFINITION as FAMILY_2_IDENTITY_DEFINITION } from "../../families/fluid-dex/src/public.ts";
-import { FLUID_DEX_MATERIALIZATION_DEFINITION as FAMILY_2_MATERIALIZATION_DEFINITION } from "../../families/fluid-dex/src/public.ts";
-import { FLUID_DEX_NOMINATION_DEFINITION as FAMILY_2_NOMINATION_DEFINITION } from "../../families/fluid-dex/src/public.ts";
-import { FLUID_DEX_PROJECTION_DEFINITION as FAMILY_2_PROJECTION_DEFINITION } from "../../families/fluid-dex/src/public.ts";
-import { FLUID_DEX_REHYDRATION_DEFINITION as FAMILY_2_REHYDRATION_DEFINITION } from "../../families/fluid-dex/src/public.ts";
-import { UNIV2_STANDARD_IDENTITY_DEFINITION as FAMILY_3_IDENTITY_DEFINITION } from "../../families/univ2-standard/src/public.ts";
-import { UNIV2_STANDARD_MATERIALIZATION_DEFINITION as FAMILY_3_MATERIALIZATION_DEFINITION } from "../../families/univ2-standard/src/public.ts";
-import { UNIV2_STANDARD_NOMINATION_DEFINITION as FAMILY_3_NOMINATION_DEFINITION } from "../../families/univ2-standard/src/public.ts";
-import { UNIV2_STANDARD_PROJECTION_DEFINITION as FAMILY_3_PROJECTION_DEFINITION } from "../../families/univ2-standard/src/public.ts";
-import { UNIV2_STANDARD_REHYDRATION_DEFINITION as FAMILY_3_REHYDRATION_DEFINITION } from "../../families/univ2-standard/src/public.ts";
-import { CURVE_UNDERLYING_RUNTIME as FAMILY_0_EXTENSION_0 } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_UNDERLYING_RUNTIME as FAMILY_0_EXTENSION_1 } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_UNDERLYING_RUNTIME as FAMILY_0_EXTENSION_2 } from "../../families/curve-underlying/src/public.ts";
-import { DODO_V2_RUNTIME as FAMILY_1_EXTENSION_0 } from "../../families/dodo-v2/src/public.ts";
-import { DODO_V2_RUNTIME as FAMILY_1_EXTENSION_1 } from "../../families/dodo-v2/src/public.ts";
-import { DODO_V2_RUNTIME as FAMILY_1_EXTENSION_2 } from "../../families/dodo-v2/src/public.ts";
-import { FLUID_DEX_RUNTIME as FAMILY_2_EXTENSION_0 } from "../../families/fluid-dex/src/public.ts";
-import { FLUID_DEX_RUNTIME as FAMILY_2_EXTENSION_1 } from "../../families/fluid-dex/src/public.ts";
-import { FLUID_DEX_RUNTIME as FAMILY_2_EXTENSION_2 } from "../../families/fluid-dex/src/public.ts";
-import { UNIV2_STANDARD_COARSE_PORT as FAMILY_3_EXTENSION_0 } from "../../families/univ2-standard/src/public.ts";
-import { UNIV2_STANDARD_EXACT_PORT as FAMILY_3_EXTENSION_1 } from "../../families/univ2-standard/src/public.ts";
-import { UNIV2_STANDARD_STATE_PORT as FAMILY_3_EXTENSION_2 } from "../../families/univ2-standard/src/public.ts";
-import { CURVE_UNDERLYING_SWAP_ACTION_PORT as FAMILY_0_ACTION_0 } from "../../families/curve-underlying/src/public.ts";
-import { DODO_V2_SWAP_ACTION_PORT as FAMILY_1_ACTION_0 } from "../../families/dodo-v2/src/public.ts";
-import { FLUID_DEX_ACTION_PORT as FAMILY_2_ACTION_0 } from "../../families/fluid-dex/src/public.ts";
-import { UNIV2_STANDARD_SWAP_ACTION_PORT as FAMILY_3_ACTION_0 } from "../../families/univ2-standard/src/public.ts";
-import { CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_0_RUNTIME_ADAPTER_0 } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_0_RUNTIME_ADAPTER_1 } from "../../families/curve-underlying/src/public.ts";
-import { DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_1_RUNTIME_ADAPTER_0 } from "../../families/dodo-v2/src/public.ts";
-import { DODO_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_1_RUNTIME_ADAPTER_1 } from "../../families/dodo-v2/src/public.ts";
-import { FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_2_RUNTIME_ADAPTER_0 } from "../../families/fluid-dex/src/public.ts";
-import { FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_2_RUNTIME_ADAPTER_1 } from "../../families/fluid-dex/src/public.ts";
-import { UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_3_RUNTIME_ADAPTER_0 } from "../../families/univ2-standard/src/public.ts";
-import { UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY as FAMILY_3_RUNTIME_ADAPTER_1 } from "../../families/univ2-standard/src/public.ts";
-import { CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME as FAMILY_0_SOURCE_PLAN_0 } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME as FAMILY_0_SOURCE_PLAN_1 } from "../../families/curve-underlying/src/public.ts";
-import { DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_1_SOURCE_PLAN_0 } from "../../families/dodo-v2/src/public.ts";
-import { DODO_V2_SOURCE_PLAN_RUNTIME as FAMILY_1_SOURCE_PLAN_1 } from "../../families/dodo-v2/src/public.ts";
-import { FLUID_DEX_FACTORY_SOURCE_PLAN_RUNTIME as FAMILY_2_SOURCE_PLAN_0 } from "../../families/fluid-dex/src/public.ts";
-import { FLUID_DEX_SOURCE_PLAN_RUNTIME as FAMILY_2_SOURCE_PLAN_1 } from "../../families/fluid-dex/src/public.ts";
-import { UNIV2_STANDARD_SOURCE_PLAN_RUNTIME as FAMILY_3_SOURCE_PLAN_0 } from "../../families/univ2-standard/src/public.ts";
-import { UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_3_SOURCE_PLAN_1 } from "../../families/univ2-standard/src/public.ts";
-import { CURVE_UNDERLYING_SOURCE_NOMINATION_PROGRAM as FAMILY_0_NOMINATION_PROGRAM_0 } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM as FAMILY_0_NOMINATION_PROGRAM_1 } from "../../families/curve-underlying/src/public.ts";
-import { DODO_V2_HISTORY_NOMINATION_PROGRAM as FAMILY_1_NOMINATION_PROGRAM_0 } from "../../families/dodo-v2/src/public.ts";
-import { DODO_V2_SOURCE_NOMINATION_PROGRAM as FAMILY_1_NOMINATION_PROGRAM_1 } from "../../families/dodo-v2/src/public.ts";
-import { FLUID_DEX_FACTORY_NOMINATION_PROGRAM as FAMILY_2_NOMINATION_PROGRAM_0 } from "../../families/fluid-dex/src/public.ts";
-import { FLUID_DEX_SOURCE_NOMINATION_PROGRAM as FAMILY_2_NOMINATION_PROGRAM_1 } from "../../families/fluid-dex/src/public.ts";
-import { UNIV2_STANDARD_SOURCE_NOMINATION_PROGRAM as FAMILY_3_NOMINATION_PROGRAM_0 } from "../../families/univ2-standard/src/public.ts";
-import { UNIV2_STANDARD_HISTORY_NOMINATION_PROGRAM as FAMILY_3_NOMINATION_PROGRAM_1 } from "../../families/univ2-standard/src/public.ts";
+import { ANGSTROM_V4_IDENTITY_RUNTIME as FAMILY_0_IDENTITY_DEFINITION } from "../../families/angstrom-v4/src/public.ts";
+import { ANGSTROM_V4_MATERIALIZATION_RUNTIME as FAMILY_0_MATERIALIZATION_DEFINITION } from "../../families/angstrom-v4/src/public.ts";
+import { ANGSTROM_V4_NOMINATION_RUNTIME as FAMILY_0_NOMINATION_DEFINITION } from "../../families/angstrom-v4/src/public.ts";
+import { ANGSTROM_V4_PROJECTION_RUNTIME as FAMILY_0_PROJECTION_DEFINITION } from "../../families/angstrom-v4/src/public.ts";
+import { ANGSTROM_V4_REHYDRATION_RUNTIME as FAMILY_0_REHYDRATION_DEFINITION } from "../../families/angstrom-v4/src/public.ts";
+import { ASTRA_IDENTITY_DEFINITION as FAMILY_1_IDENTITY_DEFINITION } from "../../families/astra-multitoken/src/public.ts";
+import { ASTRA_MATERIALIZATION_DEFINITION as FAMILY_1_MATERIALIZATION_DEFINITION } from "../../families/astra-multitoken/src/public.ts";
+import { ASTRA_NOMINATION_DEFINITION as FAMILY_1_NOMINATION_DEFINITION } from "../../families/astra-multitoken/src/public.ts";
+import { ASTRA_PROJECTION_DEFINITION as FAMILY_1_PROJECTION_DEFINITION } from "../../families/astra-multitoken/src/public.ts";
+import { ASTRA_REHYDRATION_DEFINITION as FAMILY_1_REHYDRATION_DEFINITION } from "../../families/astra-multitoken/src/public.ts";
+import { CURVE_IDENTITY_RUNTIME as FAMILY_2_IDENTITY_DEFINITION } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_MATERIALIZATION_RUNTIME as FAMILY_2_MATERIALIZATION_DEFINITION } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_NOMINATION_RUNTIME as FAMILY_2_NOMINATION_DEFINITION } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_PROJECTION_RUNTIME as FAMILY_2_PROJECTION_DEFINITION } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_REHYDRATION_RUNTIME as FAMILY_2_REHYDRATION_DEFINITION } from "../../families/curve-underlying/src/public.ts";
+import { DODO_IDENTITY_RUNTIME as FAMILY_3_IDENTITY_DEFINITION } from "../../families/dodo-v2/src/public.ts";
+import { DODO_MATERIALIZATION_RUNTIME as FAMILY_3_MATERIALIZATION_DEFINITION } from "../../families/dodo-v2/src/public.ts";
+import { DODO_NOMINATION_RUNTIME as FAMILY_3_NOMINATION_DEFINITION } from "../../families/dodo-v2/src/public.ts";
+import { DODO_PROJECTION_RUNTIME as FAMILY_3_PROJECTION_DEFINITION } from "../../families/dodo-v2/src/public.ts";
+import { DODO_REHYDRATION_RUNTIME as FAMILY_3_REHYDRATION_DEFINITION } from "../../families/dodo-v2/src/public.ts";
+import { EIGENPIE_IDENTITY_DEFINITION as FAMILY_4_IDENTITY_DEFINITION } from "../../families/eigenpie/src/public.ts";
+import { EIGENPIE_MATERIALIZATION_DEFINITION as FAMILY_4_MATERIALIZATION_DEFINITION } from "../../families/eigenpie/src/public.ts";
+import { EIGENPIE_NOMINATION_DEFINITION as FAMILY_4_NOMINATION_DEFINITION } from "../../families/eigenpie/src/public.ts";
+import { EIGENPIE_PROJECTION_DEFINITION as FAMILY_4_PROJECTION_DEFINITION } from "../../families/eigenpie/src/public.ts";
+import { EIGENPIE_REHYDRATION_DEFINITION as FAMILY_4_REHYDRATION_DEFINITION } from "../../families/eigenpie/src/public.ts";
+import { ERC4626_IDENTITY_DEFINITION as FAMILY_5_IDENTITY_DEFINITION } from "../../families/erc4626/src/public.ts";
+import { ERC4626_MATERIALIZATION_DEFINITION as FAMILY_5_MATERIALIZATION_DEFINITION } from "../../families/erc4626/src/public.ts";
+import { ERC4626_NOMINATION_DEFINITION as FAMILY_5_NOMINATION_DEFINITION } from "../../families/erc4626/src/public.ts";
+import { ERC4626_PROJECTION_DEFINITION as FAMILY_5_PROJECTION_DEFINITION } from "../../families/erc4626/src/public.ts";
+import { ERC4626_REHYDRATION_DEFINITION as FAMILY_5_REHYDRATION_DEFINITION } from "../../families/erc4626/src/public.ts";
+import { ERC4626_SILO_REDEEM_IDENTITY_DEFINITION as FAMILY_6_IDENTITY_DEFINITION } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ERC4626_SILO_REDEEM_MATERIALIZATION_DEFINITION as FAMILY_6_MATERIALIZATION_DEFINITION } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ERC4626_SILO_REDEEM_NOMINATION_DEFINITION as FAMILY_6_NOMINATION_DEFINITION } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ERC4626_SILO_REDEEM_PROJECTION_DEFINITION as FAMILY_6_PROJECTION_DEFINITION } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ERC4626_SILO_REDEEM_REHYDRATION_DEFINITION as FAMILY_6_REHYDRATION_DEFINITION } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_IDENTITY_DEFINITION as FAMILY_7_IDENTITY_DEFINITION } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_MATERIALIZATION_DEFINITION as FAMILY_7_MATERIALIZATION_DEFINITION } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_NOMINATION_DEFINITION as FAMILY_7_NOMINATION_DEFINITION } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_PROJECTION_DEFINITION as FAMILY_7_PROJECTION_DEFINITION } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_REHYDRATION_DEFINITION as FAMILY_7_REHYDRATION_DEFINITION } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { FLUID_CREDIT_IDENTITY_DEFINITION as FAMILY_8_IDENTITY_DEFINITION } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_CREDIT_MATERIALIZATION_DEFINITION as FAMILY_8_MATERIALIZATION_DEFINITION } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_CREDIT_NOMINATION_DEFINITION as FAMILY_8_NOMINATION_DEFINITION } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_CREDIT_PROJECTION_DEFINITION as FAMILY_8_PROJECTION_DEFINITION } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_CREDIT_REHYDRATION_DEFINITION as FAMILY_8_REHYDRATION_DEFINITION } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_DEX_IDENTITY_DEFINITION as FAMILY_9_IDENTITY_DEFINITION } from "../../families/fluid-dex/src/public.ts";
+import { FLUID_DEX_MATERIALIZATION_DEFINITION as FAMILY_9_MATERIALIZATION_DEFINITION } from "../../families/fluid-dex/src/public.ts";
+import { FLUID_DEX_NOMINATION_DEFINITION as FAMILY_9_NOMINATION_DEFINITION } from "../../families/fluid-dex/src/public.ts";
+import { FLUID_DEX_PROJECTION_DEFINITION as FAMILY_9_PROJECTION_DEFINITION } from "../../families/fluid-dex/src/public.ts";
+import { FLUID_DEX_REHYDRATION_DEFINITION as FAMILY_9_REHYDRATION_DEFINITION } from "../../families/fluid-dex/src/public.ts";
+import { GOLDX_IDENTITY_DEFINITION as FAMILY_10_IDENTITY_DEFINITION } from "../../families/goldx/src/public.ts";
+import { GOLDX_MATERIALIZATION_DEFINITION as FAMILY_10_MATERIALIZATION_DEFINITION } from "../../families/goldx/src/public.ts";
+import { GOLDX_NOMINATION_DEFINITION as FAMILY_10_NOMINATION_DEFINITION } from "../../families/goldx/src/public.ts";
+import { GOLDX_PROJECTION_DEFINITION as FAMILY_10_PROJECTION_DEFINITION } from "../../families/goldx/src/public.ts";
+import { GOLDX_REHYDRATION_DEFINITION as FAMILY_10_REHYDRATION_DEFINITION } from "../../families/goldx/src/public.ts";
+import { METRONOME_HGUSDC_IDENTITY_RUNTIME as FAMILY_11_IDENTITY_DEFINITION } from "../../families/metronome-hgusdc/src/public.ts";
+import { METRONOME_HGUSDC_MATERIALIZATION_RUNTIME as FAMILY_11_MATERIALIZATION_DEFINITION } from "../../families/metronome-hgusdc/src/public.ts";
+import { METRONOME_HGUSDC_NOMINATION_RUNTIME as FAMILY_11_NOMINATION_DEFINITION } from "../../families/metronome-hgusdc/src/public.ts";
+import { METRONOME_HGUSDC_PROJECTION_RUNTIME as FAMILY_11_PROJECTION_DEFINITION } from "../../families/metronome-hgusdc/src/public.ts";
+import { METRONOME_HGUSDC_REHYDRATION_RUNTIME as FAMILY_11_REHYDRATION_DEFINITION } from "../../families/metronome-hgusdc/src/public.ts";
+import { METRONOME_SYNTH_IDENTITY_RUNTIME as FAMILY_12_IDENTITY_DEFINITION } from "../../families/metronome-synth/src/public.ts";
+import { METRONOME_SYNTH_MATERIALIZATION_RUNTIME as FAMILY_12_MATERIALIZATION_DEFINITION } from "../../families/metronome-synth/src/public.ts";
+import { METRONOME_SYNTH_NOMINATION_RUNTIME as FAMILY_12_NOMINATION_DEFINITION } from "../../families/metronome-synth/src/public.ts";
+import { METRONOME_SYNTH_PROJECTION_RUNTIME as FAMILY_12_PROJECTION_DEFINITION } from "../../families/metronome-synth/src/public.ts";
+import { METRONOME_SYNTH_REHYDRATION_RUNTIME as FAMILY_12_REHYDRATION_DEFINITION } from "../../families/metronome-synth/src/public.ts";
+import { PSM_IDENTITY_RUNTIME as FAMILY_13_IDENTITY_DEFINITION } from "../../families/psm/src/public.ts";
+import { PSM_MATERIALIZATION_RUNTIME as FAMILY_13_MATERIALIZATION_DEFINITION } from "../../families/psm/src/public.ts";
+import { PSM_NOMINATION_RUNTIME as FAMILY_13_NOMINATION_DEFINITION } from "../../families/psm/src/public.ts";
+import { PSM_PROJECTION_RUNTIME as FAMILY_13_PROJECTION_DEFINITION } from "../../families/psm/src/public.ts";
+import { PSM_REHYDRATION_RUNTIME as FAMILY_13_REHYDRATION_DEFINITION } from "../../families/psm/src/public.ts";
+import { ROCKSOLID_IDENTITY_DEFINITION as FAMILY_14_IDENTITY_DEFINITION } from "../../families/rocksolid/src/public.ts";
+import { ROCKSOLID_MATERIALIZATION_DEFINITION as FAMILY_14_MATERIALIZATION_DEFINITION } from "../../families/rocksolid/src/public.ts";
+import { ROCKSOLID_NOMINATION_DEFINITION as FAMILY_14_NOMINATION_DEFINITION } from "../../families/rocksolid/src/public.ts";
+import { ROCKSOLID_PROJECTION_DEFINITION as FAMILY_14_PROJECTION_DEFINITION } from "../../families/rocksolid/src/public.ts";
+import { ROCKSOLID_REHYDRATION_DEFINITION as FAMILY_14_REHYDRATION_DEFINITION } from "../../families/rocksolid/src/public.ts";
+import { SELF_BURN_NATIVE_IDENTITY_DEFINITION as FAMILY_15_IDENTITY_DEFINITION } from "../../families/self-burn-native/src/public.ts";
+import { SELF_BURN_NATIVE_MATERIALIZATION_DEFINITION as FAMILY_15_MATERIALIZATION_DEFINITION } from "../../families/self-burn-native/src/public.ts";
+import { SELF_BURN_NATIVE_NOMINATION_DEFINITION as FAMILY_15_NOMINATION_DEFINITION } from "../../families/self-burn-native/src/public.ts";
+import { SELF_BURN_NATIVE_PROJECTION_DEFINITION as FAMILY_15_PROJECTION_DEFINITION } from "../../families/self-burn-native/src/public.ts";
+import { SELF_BURN_NATIVE_REHYDRATION_DEFINITION as FAMILY_15_REHYDRATION_DEFINITION } from "../../families/self-burn-native/src/public.ts";
+import { UNIV2_STANDARD_IDENTITY_DEFINITION as FAMILY_16_IDENTITY_DEFINITION } from "../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_MATERIALIZATION_DEFINITION as FAMILY_16_MATERIALIZATION_DEFINITION } from "../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_NOMINATION_DEFINITION as FAMILY_16_NOMINATION_DEFINITION } from "../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_PROJECTION_DEFINITION as FAMILY_16_PROJECTION_DEFINITION } from "../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_REHYDRATION_DEFINITION as FAMILY_16_REHYDRATION_DEFINITION } from "../../families/univ2-standard/src/public.ts";
+import { UNIV3_IDENTITY_RUNTIME as FAMILY_17_IDENTITY_DEFINITION } from "../../families/univ3-standard/src/public.ts";
+import { UNIV3_MATERIALIZATION_RUNTIME as FAMILY_17_MATERIALIZATION_DEFINITION } from "../../families/univ3-standard/src/public.ts";
+import { UNIV3_NOMINATION_RUNTIME as FAMILY_17_NOMINATION_DEFINITION } from "../../families/univ3-standard/src/public.ts";
+import { UNIV3_PROJECTION_RUNTIME as FAMILY_17_PROJECTION_DEFINITION } from "../../families/univ3-standard/src/public.ts";
+import { UNIV3_REHYDRATION_RUNTIME as FAMILY_17_REHYDRATION_DEFINITION } from "../../families/univ3-standard/src/public.ts";
+import { UNIV4_IDENTITY_DEFINITION as FAMILY_18_IDENTITY_DEFINITION } from "../../families/univ4/src/public.ts";
+import { UNIV4_MATERIALIZATION_DEFINITION as FAMILY_18_MATERIALIZATION_DEFINITION } from "../../families/univ4/src/public.ts";
+import { UNIV4_NOMINATION_DEFINITION as FAMILY_18_NOMINATION_DEFINITION } from "../../families/univ4/src/public.ts";
+import { UNIV4_PROJECTION_DEFINITION as FAMILY_18_PROJECTION_DEFINITION } from "../../families/univ4/src/public.ts";
+import { UNIV4_REHYDRATION_DEFINITION as FAMILY_18_REHYDRATION_DEFINITION } from "../../families/univ4/src/public.ts";
+import { WSTETH_IDENTITY_DEFINITION as FAMILY_19_IDENTITY_DEFINITION } from "../../families/wsteth/src/public.ts";
+import { WSTETH_MATERIALIZATION_DEFINITION as FAMILY_19_MATERIALIZATION_DEFINITION } from "../../families/wsteth/src/public.ts";
+import { WSTETH_NOMINATION_DEFINITION as FAMILY_19_NOMINATION_DEFINITION } from "../../families/wsteth/src/public.ts";
+import { WSTETH_PROJECTION_DEFINITION as FAMILY_19_PROJECTION_DEFINITION } from "../../families/wsteth/src/public.ts";
+import { WSTETH_REHYDRATION_DEFINITION as FAMILY_19_REHYDRATION_DEFINITION } from "../../families/wsteth/src/public.ts";
+import { ANGSTROM_V4_RUNTIME as FAMILY_0_EXTENSION_0 } from "../../families/angstrom-v4/src/public.ts";
+import { ANGSTROM_V4_RUNTIME as FAMILY_0_EXTENSION_1 } from "../../families/angstrom-v4/src/public.ts";
+import { ANGSTROM_V4_RUNTIME as FAMILY_0_EXTENSION_2 } from "../../families/angstrom-v4/src/public.ts";
+import { ASTRA_COARSE_DEFINITION as FAMILY_1_EXTENSION_0 } from "../../families/astra-multitoken/src/public.ts";
+import { ASTRA_EXACT_DEFINITION as FAMILY_1_EXTENSION_1 } from "../../families/astra-multitoken/src/public.ts";
+import { ASTRA_STATE_DEFINITION as FAMILY_1_EXTENSION_2 } from "../../families/astra-multitoken/src/public.ts";
+import { CURVE_UNDERLYING_RUNTIME as FAMILY_2_EXTENSION_0 } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_UNDERLYING_RUNTIME as FAMILY_2_EXTENSION_1 } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_UNDERLYING_RUNTIME as FAMILY_2_EXTENSION_2 } from "../../families/curve-underlying/src/public.ts";
+import { DODO_V2_RUNTIME as FAMILY_3_EXTENSION_0 } from "../../families/dodo-v2/src/public.ts";
+import { DODO_V2_RUNTIME as FAMILY_3_EXTENSION_1 } from "../../families/dodo-v2/src/public.ts";
+import { DODO_V2_RUNTIME as FAMILY_3_EXTENSION_2 } from "../../families/dodo-v2/src/public.ts";
+import { EIGENPIE_RUNTIME as FAMILY_4_EXTENSION_0 } from "../../families/eigenpie/src/public.ts";
+import { ERC4626_RUNTIME as FAMILY_5_EXTENSION_0 } from "../../families/erc4626/src/public.ts";
+import { ERC4626_SILO_REDEEM_RUNTIME as FAMILY_6_EXTENSION_0 } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_RUNTIME as FAMILY_7_EXTENSION_0 } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { FLUID_CREDIT_RUNTIME as FAMILY_8_EXTENSION_0 } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_CREDIT_RUNTIME as FAMILY_8_EXTENSION_1 } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_CREDIT_RUNTIME as FAMILY_8_EXTENSION_2 } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_DEX_RUNTIME as FAMILY_9_EXTENSION_0 } from "../../families/fluid-dex/src/public.ts";
+import { FLUID_DEX_RUNTIME as FAMILY_9_EXTENSION_1 } from "../../families/fluid-dex/src/public.ts";
+import { FLUID_DEX_RUNTIME as FAMILY_9_EXTENSION_2 } from "../../families/fluid-dex/src/public.ts";
+import { GOLDX_RUNTIME as FAMILY_10_EXTENSION_0 } from "../../families/goldx/src/public.ts";
+import { GOLDX_RUNTIME as FAMILY_10_EXTENSION_1 } from "../../families/goldx/src/public.ts";
+import { GOLDX_RUNTIME as FAMILY_10_EXTENSION_2 } from "../../families/goldx/src/public.ts";
+import { METRONOME_HGUSDC_RUNTIME as FAMILY_11_EXTENSION_0 } from "../../families/metronome-hgusdc/src/public.ts";
+import { METRONOME_SYNTH_RUNTIME as FAMILY_12_EXTENSION_0 } from "../../families/metronome-synth/src/public.ts";
+import { PSM_RUNTIME as FAMILY_13_EXTENSION_0 } from "../../families/psm/src/public.ts";
+import { PSM_RUNTIME as FAMILY_13_EXTENSION_1 } from "../../families/psm/src/public.ts";
+import { PSM_RUNTIME as FAMILY_13_EXTENSION_2 } from "../../families/psm/src/public.ts";
+import { ROCKSOLID_RUNTIME as FAMILY_14_EXTENSION_0 } from "../../families/rocksolid/src/public.ts";
+import { ROCKSOLID_RUNTIME as FAMILY_14_EXTENSION_1 } from "../../families/rocksolid/src/public.ts";
+import { ROCKSOLID_RUNTIME as FAMILY_14_EXTENSION_2 } from "../../families/rocksolid/src/public.ts";
+import { SELF_BURN_NATIVE_RUNTIME as FAMILY_15_EXTENSION_0 } from "../../families/self-burn-native/src/public.ts";
+import { SELF_BURN_NATIVE_RUNTIME as FAMILY_15_EXTENSION_1 } from "../../families/self-burn-native/src/public.ts";
+import { UNIV2_STANDARD_COARSE_PORT as FAMILY_16_EXTENSION_0 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_EXACT_PORT as FAMILY_16_EXTENSION_1 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_STATE_PORT as FAMILY_16_EXTENSION_2 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV3_STANDARD_RUNTIME as FAMILY_17_EXTENSION_0 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV3_STANDARD_RUNTIME as FAMILY_17_EXTENSION_1 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV3_STANDARD_RUNTIME as FAMILY_17_EXTENSION_2 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV4_RUNTIME as FAMILY_18_EXTENSION_0 } from "../../families/univ4/src/public.ts";
+import { UNIV4_RUNTIME as FAMILY_18_EXTENSION_1 } from "../../families/univ4/src/public.ts";
+import { UNIV4_RUNTIME as FAMILY_18_EXTENSION_2 } from "../../families/univ4/src/public.ts";
+import { WSTETH_RUNTIME as FAMILY_19_EXTENSION_0 } from "../../families/wsteth/src/public.ts";
+import { WSTETH_RUNTIME as FAMILY_19_EXTENSION_1 } from "../../families/wsteth/src/public.ts";
+import { WSTETH_RUNTIME as FAMILY_19_EXTENSION_2 } from "../../families/wsteth/src/public.ts";
+import { ANGSTROM_V4_ACTION_PORT as FAMILY_0_ACTION_0 } from "../../families/angstrom-v4/src/public.ts";
+import { ASTRA_ACTION_OWNER as FAMILY_1_ACTION_0 } from "../../families/astra-multitoken/src/public.ts";
+import { CURVE_UNDERLYING_SWAP_ACTION_PORT as FAMILY_2_ACTION_0 } from "../../families/curve-underlying/src/public.ts";
+import { DODO_V2_SWAP_ACTION_PORT as FAMILY_3_ACTION_0 } from "../../families/dodo-v2/src/public.ts";
+import { EIGENPIE_PROTOCOL_ACTION_PORT as FAMILY_4_ACTION_0 } from "../../families/eigenpie/src/public.ts";
+import { ERC4626_VAULT_ACTION_PORT as FAMILY_5_ACTION_0 } from "../../families/erc4626/src/public.ts";
+import { ERC4626_SILO_REDEEM_ACTION_PORT as FAMILY_6_ACTION_0 } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_ACTION_PORT as FAMILY_7_ACTION_0 } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { FLUID_CREDIT_ACTION_PORT as FAMILY_8_ACTION_0 } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_DEX_ACTION_PORT as FAMILY_9_ACTION_0 } from "../../families/fluid-dex/src/public.ts";
+import { GOLDX_SWAP_ACTION_PORT as FAMILY_10_ACTION_0 } from "../../families/goldx/src/public.ts";
+import { METRONOME_HGUSDC_ACTION_PORT as FAMILY_11_ACTION_0 } from "../../families/metronome-hgusdc/src/public.ts";
+import { METRONOME_SYNTH_ACTION_PORT as FAMILY_12_ACTION_0 } from "../../families/metronome-synth/src/public.ts";
+import { PSM_SWAP_ACTION_PORT as FAMILY_13_ACTION_0 } from "../../families/psm/src/public.ts";
+import { ROCKSOLID_ACTION_PORT as FAMILY_14_ACTION_0 } from "../../families/rocksolid/src/public.ts";
+import { SELF_BURN_NATIVE_ACTION_PORT as FAMILY_15_ACTION_0 } from "../../families/self-burn-native/src/public.ts";
+import { UNIV2_STANDARD_SWAP_ACTION_PORT as FAMILY_16_ACTION_0 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV3_STANDARD_SWAP_ACTION_PORT as FAMILY_17_ACTION_0 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV4_ACTION_PORT as FAMILY_18_ACTION_0 } from "../../families/univ4/src/public.ts";
+import { WSTETH_ACTION_PORT as FAMILY_19_ACTION_0 } from "../../families/wsteth/src/public.ts";
+import { ANGSTROM_V4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_0_RUNTIME_ADAPTER_0 } from "../../families/angstrom-v4/src/public.ts";
+import { ANGSTROM_V4_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_0_RUNTIME_ADAPTER_1 } from "../../families/angstrom-v4/src/public.ts";
+import { ASTRA_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_1_RUNTIME_ADAPTER_0 } from "../../families/astra-multitoken/src/public.ts";
+import { CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_2_RUNTIME_ADAPTER_0 } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_2_RUNTIME_ADAPTER_1 } from "../../families/curve-underlying/src/public.ts";
+import { DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_3_RUNTIME_ADAPTER_0 } from "../../families/dodo-v2/src/public.ts";
+import { DODO_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_3_RUNTIME_ADAPTER_1 } from "../../families/dodo-v2/src/public.ts";
+import { EIGENPIE_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_4_RUNTIME_ADAPTER_0 } from "../../families/eigenpie/src/public.ts";
+import { ERC4626_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_5_RUNTIME_ADAPTER_0 } from "../../families/erc4626/src/public.ts";
+import { ERC4626_SILO_REDEEM_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_6_RUNTIME_ADAPTER_0 } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_7_RUNTIME_ADAPTER_0 } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { FLUID_CREDIT_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_8_RUNTIME_ADAPTER_0 } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_9_RUNTIME_ADAPTER_0 } from "../../families/fluid-dex/src/public.ts";
+import { FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_9_RUNTIME_ADAPTER_1 } from "../../families/fluid-dex/src/public.ts";
+import { GOLDX_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_10_RUNTIME_ADAPTER_0 } from "../../families/goldx/src/public.ts";
+import { METRONOME_HGUSDC_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_11_RUNTIME_ADAPTER_0 } from "../../families/metronome-hgusdc/src/public.ts";
+import { METRONOME_SYNTH_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_12_RUNTIME_ADAPTER_0 } from "../../families/metronome-synth/src/public.ts";
+import { PSM_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_13_RUNTIME_ADAPTER_0 } from "../../families/psm/src/public.ts";
+import { ROCKSOLID_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_14_RUNTIME_ADAPTER_0 } from "../../families/rocksolid/src/public.ts";
+import { SELF_BURN_NATIVE_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_15_RUNTIME_ADAPTER_0 } from "../../families/self-burn-native/src/public.ts";
+import { UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_16_RUNTIME_ADAPTER_0 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY as FAMILY_16_RUNTIME_ADAPTER_1 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV3_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_17_RUNTIME_ADAPTER_0 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV3_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_17_RUNTIME_ADAPTER_1 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY as FAMILY_18_RUNTIME_ADAPTER_0 } from "../../families/univ4/src/public.ts";
+import { UNIV4_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_18_RUNTIME_ADAPTER_1 } from "../../families/univ4/src/public.ts";
+import { WSTETH_SEARCH_RUNTIME_ADAPTER_FACTORY as FAMILY_19_RUNTIME_ADAPTER_0 } from "../../families/wsteth/src/public.ts";
+import { ANGSTROM_V4_SOURCE_PLAN_RUNTIME as FAMILY_0_SOURCE_PLAN_0 } from "../../families/angstrom-v4/src/public.ts";
+import { ANGSTROM_V4_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_0_SOURCE_PLAN_1 } from "../../families/angstrom-v4/src/public.ts";
+import { ASTRA_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_1_SOURCE_PLAN_0 } from "../../families/astra-multitoken/src/public.ts";
+import { ASTRA_SOURCE_PLAN_RUNTIME as FAMILY_1_SOURCE_PLAN_1 } from "../../families/astra-multitoken/src/public.ts";
+import { CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME as FAMILY_2_SOURCE_PLAN_0 } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME as FAMILY_2_SOURCE_PLAN_1 } from "../../families/curve-underlying/src/public.ts";
+import { DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_3_SOURCE_PLAN_0 } from "../../families/dodo-v2/src/public.ts";
+import { DODO_V2_SOURCE_PLAN_RUNTIME as FAMILY_3_SOURCE_PLAN_1 } from "../../families/dodo-v2/src/public.ts";
+import { EIGENPIE_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_4_SOURCE_PLAN_0 } from "../../families/eigenpie/src/public.ts";
+import { EIGENPIE_SOURCE_PLAN_RUNTIME as FAMILY_4_SOURCE_PLAN_1 } from "../../families/eigenpie/src/public.ts";
+import { ERC4626_SOURCE_PLAN_RUNTIME as FAMILY_5_SOURCE_PLAN_0 } from "../../families/erc4626/src/public.ts";
+import { ERC4626_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_5_SOURCE_PLAN_1 } from "../../families/erc4626/src/public.ts";
+import { ERC4626_SILO_REDEEM_SOURCE_PLAN_RUNTIME as FAMILY_6_SOURCE_PLAN_0 } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_6_SOURCE_PLAN_1 } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_7_SOURCE_PLAN_0 } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_SOURCE_PLAN_RUNTIME as FAMILY_7_SOURCE_PLAN_1 } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { FLUID_CREDIT_SOURCE_PLAN_RUNTIME as FAMILY_8_SOURCE_PLAN_0 } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_CREDIT_FACTORY_SOURCE_PLAN_RUNTIME as FAMILY_8_SOURCE_PLAN_1 } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_DEX_FACTORY_SOURCE_PLAN_RUNTIME as FAMILY_9_SOURCE_PLAN_0 } from "../../families/fluid-dex/src/public.ts";
+import { FLUID_DEX_SOURCE_PLAN_RUNTIME as FAMILY_9_SOURCE_PLAN_1 } from "../../families/fluid-dex/src/public.ts";
+import { GOLDX_SOURCE_PLAN_RUNTIME as FAMILY_10_SOURCE_PLAN_0 } from "../../families/goldx/src/public.ts";
+import { METRONOME_HGUSDC_SOURCE_PLAN_RUNTIME as FAMILY_11_SOURCE_PLAN_0 } from "../../families/metronome-hgusdc/src/public.ts";
+import { METRONOME_SYNTH_SOURCE_PLAN_RUNTIME as FAMILY_12_SOURCE_PLAN_0 } from "../../families/metronome-synth/src/public.ts";
+import { PSM_SOURCE_PLAN_RUNTIME as FAMILY_13_SOURCE_PLAN_0 } from "../../families/psm/src/public.ts";
+import { ROCKSOLID_SOURCE_PLAN_RUNTIME as FAMILY_14_SOURCE_PLAN_0 } from "../../families/rocksolid/src/public.ts";
+import { SELF_BURN_NATIVE_SOURCE_PLAN_RUNTIME as FAMILY_15_SOURCE_PLAN_0 } from "../../families/self-burn-native/src/public.ts";
+import { UNIV2_STANDARD_SOURCE_PLAN_RUNTIME as FAMILY_16_SOURCE_PLAN_0 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_16_SOURCE_PLAN_1 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV3_STANDARD_SOURCE_PLAN_RUNTIME as FAMILY_17_SOURCE_PLAN_0 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV3_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_17_SOURCE_PLAN_1 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV4_SOURCE_PLAN_RUNTIME as FAMILY_18_SOURCE_PLAN_0 } from "../../families/univ4/src/public.ts";
+import { UNIV4_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_18_SOURCE_PLAN_1 } from "../../families/univ4/src/public.ts";
+import { WSTETH_SOURCE_PLAN_RUNTIME as FAMILY_19_SOURCE_PLAN_0 } from "../../families/wsteth/src/public.ts";
+import { ANGSTROM_V4_SOURCE_NOMINATION_PROGRAM as FAMILY_0_NOMINATION_PROGRAM_0 } from "../../families/angstrom-v4/src/public.ts";
+import { ANGSTROM_V4_HISTORY_NOMINATION_PROGRAM as FAMILY_0_NOMINATION_PROGRAM_1 } from "../../families/angstrom-v4/src/public.ts";
+import { ASTRA_HISTORY_NOMINATION_PROGRAM as FAMILY_1_NOMINATION_PROGRAM_0 } from "../../families/astra-multitoken/src/public.ts";
+import { ASTRA_SOURCE_NOMINATION_PROGRAM as FAMILY_1_NOMINATION_PROGRAM_1 } from "../../families/astra-multitoken/src/public.ts";
+import { CURVE_UNDERLYING_SOURCE_NOMINATION_PROGRAM as FAMILY_2_NOMINATION_PROGRAM_0 } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM as FAMILY_2_NOMINATION_PROGRAM_1 } from "../../families/curve-underlying/src/public.ts";
+import { DODO_V2_HISTORY_NOMINATION_PROGRAM as FAMILY_3_NOMINATION_PROGRAM_0 } from "../../families/dodo-v2/src/public.ts";
+import { DODO_V2_SOURCE_NOMINATION_PROGRAM as FAMILY_3_NOMINATION_PROGRAM_1 } from "../../families/dodo-v2/src/public.ts";
+import { EIGENPIE_HISTORY_NOMINATION_PROGRAM as FAMILY_4_NOMINATION_PROGRAM_0 } from "../../families/eigenpie/src/public.ts";
+import { EIGENPIE_SOURCE_NOMINATION_PROGRAM as FAMILY_4_NOMINATION_PROGRAM_1 } from "../../families/eigenpie/src/public.ts";
+import { ERC4626_SOURCE_NOMINATION_PROGRAM as FAMILY_5_NOMINATION_PROGRAM_0 } from "../../families/erc4626/src/public.ts";
+import { ERC4626_HISTORY_NOMINATION_PROGRAM as FAMILY_5_NOMINATION_PROGRAM_1 } from "../../families/erc4626/src/public.ts";
+import { ERC4626_SILO_REDEEM_SOURCE_NOMINATION_PROGRAM as FAMILY_6_NOMINATION_PROGRAM_0 } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ERC4626_SILO_REDEEM_HISTORY_NOMINATION_PROGRAM as FAMILY_6_NOMINATION_PROGRAM_1 } from "../../families/erc4626-silo-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_HISTORY_NOMINATION_PROGRAM as FAMILY_7_NOMINATION_PROGRAM_0 } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { ETHERTOKEN_NATIVE_REDEEM_SOURCE_NOMINATION_PROGRAM as FAMILY_7_NOMINATION_PROGRAM_1 } from "../../families/ethertoken-native-redeem/src/public.ts";
+import { FLUID_CREDIT_SOURCE_NOMINATION_PROGRAM as FAMILY_8_NOMINATION_PROGRAM_0 } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_CREDIT_FACTORY_NOMINATION_PROGRAM as FAMILY_8_NOMINATION_PROGRAM_1 } from "../../families/fluid-credit/src/public.ts";
+import { FLUID_DEX_FACTORY_NOMINATION_PROGRAM as FAMILY_9_NOMINATION_PROGRAM_0 } from "../../families/fluid-dex/src/public.ts";
+import { FLUID_DEX_SOURCE_NOMINATION_PROGRAM as FAMILY_9_NOMINATION_PROGRAM_1 } from "../../families/fluid-dex/src/public.ts";
+import { GOLDX_SOURCE_NOMINATION_PROGRAM as FAMILY_10_NOMINATION_PROGRAM_0 } from "../../families/goldx/src/public.ts";
+import { METRONOME_HGUSDC_SOURCE_NOMINATION_PROGRAM as FAMILY_11_NOMINATION_PROGRAM_0 } from "../../families/metronome-hgusdc/src/public.ts";
+import { METRONOME_SYNTH_SOURCE_NOMINATION_PROGRAM as FAMILY_12_NOMINATION_PROGRAM_0 } from "../../families/metronome-synth/src/public.ts";
+import { PSM_SOURCE_NOMINATION_PROGRAM as FAMILY_13_NOMINATION_PROGRAM_0 } from "../../families/psm/src/public.ts";
+import { ROCKSOLID_SOURCE_NOMINATION_PROGRAM as FAMILY_14_NOMINATION_PROGRAM_0 } from "../../families/rocksolid/src/public.ts";
+import { SELF_BURN_NATIVE_SOURCE_NOMINATION_PROGRAM as FAMILY_15_NOMINATION_PROGRAM_0 } from "../../families/self-burn-native/src/public.ts";
+import { UNIV2_STANDARD_SOURCE_NOMINATION_PROGRAM as FAMILY_16_NOMINATION_PROGRAM_0 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV2_STANDARD_HISTORY_NOMINATION_PROGRAM as FAMILY_16_NOMINATION_PROGRAM_1 } from "../../families/univ2-standard/src/public.ts";
+import { UNIV3_STANDARD_SOURCE_NOMINATION_PROGRAM as FAMILY_17_NOMINATION_PROGRAM_0 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV3_STANDARD_HISTORY_NOMINATION_PROGRAM as FAMILY_17_NOMINATION_PROGRAM_1 } from "../../families/univ3-standard/src/public.ts";
+import { UNIV4_SOURCE_NOMINATION_PROGRAM as FAMILY_18_NOMINATION_PROGRAM_0 } from "../../families/univ4/src/public.ts";
+import { UNIV4_HISTORY_NOMINATION_PROGRAM as FAMILY_18_NOMINATION_PROGRAM_1 } from "../../families/univ4/src/public.ts";
+import { WSTETH_SOURCE_NOMINATION_PROGRAM as FAMILY_19_NOMINATION_PROGRAM_0 } from "../../families/wsteth/src/public.ts";
 import { ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER as STRATEGY_0_PLANNING_PROBLEM_ISSUER } from "../../strategies/route-cycle/src/index.ts";
 
 const FAMILY_RUNTIME_DEFINITIONS_0 = Object.freeze([
@@ -97,24 +297,219 @@ const FAMILY_RUNTIME_DEFINITIONS_3 = Object.freeze([
   FAMILY_3_REHYDRATION_DEFINITION,
 ]);
 
+const FAMILY_RUNTIME_DEFINITIONS_4 = Object.freeze([
+  FAMILY_4_IDENTITY_DEFINITION,
+  FAMILY_4_MATERIALIZATION_DEFINITION,
+  FAMILY_4_NOMINATION_DEFINITION,
+  FAMILY_4_PROJECTION_DEFINITION,
+  FAMILY_4_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_5 = Object.freeze([
+  FAMILY_5_IDENTITY_DEFINITION,
+  FAMILY_5_MATERIALIZATION_DEFINITION,
+  FAMILY_5_NOMINATION_DEFINITION,
+  FAMILY_5_PROJECTION_DEFINITION,
+  FAMILY_5_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_6 = Object.freeze([
+  FAMILY_6_IDENTITY_DEFINITION,
+  FAMILY_6_MATERIALIZATION_DEFINITION,
+  FAMILY_6_NOMINATION_DEFINITION,
+  FAMILY_6_PROJECTION_DEFINITION,
+  FAMILY_6_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_7 = Object.freeze([
+  FAMILY_7_IDENTITY_DEFINITION,
+  FAMILY_7_MATERIALIZATION_DEFINITION,
+  FAMILY_7_NOMINATION_DEFINITION,
+  FAMILY_7_PROJECTION_DEFINITION,
+  FAMILY_7_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_8 = Object.freeze([
+  FAMILY_8_IDENTITY_DEFINITION,
+  FAMILY_8_MATERIALIZATION_DEFINITION,
+  FAMILY_8_NOMINATION_DEFINITION,
+  FAMILY_8_PROJECTION_DEFINITION,
+  FAMILY_8_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_9 = Object.freeze([
+  FAMILY_9_IDENTITY_DEFINITION,
+  FAMILY_9_MATERIALIZATION_DEFINITION,
+  FAMILY_9_NOMINATION_DEFINITION,
+  FAMILY_9_PROJECTION_DEFINITION,
+  FAMILY_9_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_10 = Object.freeze([
+  FAMILY_10_IDENTITY_DEFINITION,
+  FAMILY_10_MATERIALIZATION_DEFINITION,
+  FAMILY_10_NOMINATION_DEFINITION,
+  FAMILY_10_PROJECTION_DEFINITION,
+  FAMILY_10_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_11 = Object.freeze([
+  FAMILY_11_IDENTITY_DEFINITION,
+  FAMILY_11_MATERIALIZATION_DEFINITION,
+  FAMILY_11_NOMINATION_DEFINITION,
+  FAMILY_11_PROJECTION_DEFINITION,
+  FAMILY_11_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_12 = Object.freeze([
+  FAMILY_12_IDENTITY_DEFINITION,
+  FAMILY_12_MATERIALIZATION_DEFINITION,
+  FAMILY_12_NOMINATION_DEFINITION,
+  FAMILY_12_PROJECTION_DEFINITION,
+  FAMILY_12_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_13 = Object.freeze([
+  FAMILY_13_IDENTITY_DEFINITION,
+  FAMILY_13_MATERIALIZATION_DEFINITION,
+  FAMILY_13_NOMINATION_DEFINITION,
+  FAMILY_13_PROJECTION_DEFINITION,
+  FAMILY_13_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_14 = Object.freeze([
+  FAMILY_14_IDENTITY_DEFINITION,
+  FAMILY_14_MATERIALIZATION_DEFINITION,
+  FAMILY_14_NOMINATION_DEFINITION,
+  FAMILY_14_PROJECTION_DEFINITION,
+  FAMILY_14_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_15 = Object.freeze([
+  FAMILY_15_IDENTITY_DEFINITION,
+  FAMILY_15_MATERIALIZATION_DEFINITION,
+  FAMILY_15_NOMINATION_DEFINITION,
+  FAMILY_15_PROJECTION_DEFINITION,
+  FAMILY_15_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_16 = Object.freeze([
+  FAMILY_16_IDENTITY_DEFINITION,
+  FAMILY_16_MATERIALIZATION_DEFINITION,
+  FAMILY_16_NOMINATION_DEFINITION,
+  FAMILY_16_PROJECTION_DEFINITION,
+  FAMILY_16_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_17 = Object.freeze([
+  FAMILY_17_IDENTITY_DEFINITION,
+  FAMILY_17_MATERIALIZATION_DEFINITION,
+  FAMILY_17_NOMINATION_DEFINITION,
+  FAMILY_17_PROJECTION_DEFINITION,
+  FAMILY_17_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_18 = Object.freeze([
+  FAMILY_18_IDENTITY_DEFINITION,
+  FAMILY_18_MATERIALIZATION_DEFINITION,
+  FAMILY_18_NOMINATION_DEFINITION,
+  FAMILY_18_PROJECTION_DEFINITION,
+  FAMILY_18_REHYDRATION_DEFINITION,
+]);
+
+const FAMILY_RUNTIME_DEFINITIONS_19 = Object.freeze([
+  FAMILY_19_IDENTITY_DEFINITION,
+  FAMILY_19_MATERIALIZATION_DEFINITION,
+  FAMILY_19_NOMINATION_DEFINITION,
+  FAMILY_19_PROJECTION_DEFINITION,
+  FAMILY_19_REHYDRATION_DEFINITION,
+]);
+
 const FAMILY_RUNTIME_ADAPTERS_0 = Object.freeze([
-  Object.freeze({ factory: FAMILY_0_RUNTIME_ADAPTER_0, modulePath: "families/curve-underlying/src/runtime/physical-adapter.ts", exportName: "CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x61c5a636ba5be79be4a27fa546d4f232b2abc0deb37f431790bb4250b3437897", leafDigest: "0x32e15486375002daba7021de79ca0d26bdbfd28b0dc82fc74f516169d8ae0c32" }),
-  Object.freeze({ factory: FAMILY_0_RUNTIME_ADAPTER_1, modulePath: "families/curve-underlying/src/search-adapter.ts", exportName: "CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x8c9566a32d81ff46ea7cb4f7b2a522513be22eb926e03308d2c2dee827c62636", leafDigest: "0x54ee87dc93f4ec286bd214aad7f4e22ce0b210b4c529468103b2f35a3a1b1e7a" }),
+  Object.freeze({ factory: FAMILY_0_RUNTIME_ADAPTER_0, modulePath: "families/angstrom-v4/src/runtime/physical-adapter.ts", exportName: "ANGSTROM_V4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0xb0c03857e8d918b999fb434a5b107af24dc05fdecb64f8d5e9bd56050195c7d6", leafDigest: "0x33bdc09c6b0ad47f5b96b039d5dc6fe7d06d44753808c634b8962d5240deed61" }),
+  Object.freeze({ factory: FAMILY_0_RUNTIME_ADAPTER_1, modulePath: "families/angstrom-v4/src/search-adapter.ts", exportName: "ANGSTROM_V4_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x1d63c20fb2fc929719d65138ec88f773e109cd5ea50af85593e4682bff51a02f", leafDigest: "0x283529f483dd4d4f67f17d081193735d7effb5b468abae47f29a5f195e37279e" }),
 ]);
 
 const FAMILY_RUNTIME_ADAPTERS_1 = Object.freeze([
-  Object.freeze({ factory: FAMILY_1_RUNTIME_ADAPTER_0, modulePath: "families/dodo-v2/src/runtime/physical-adapter.ts", exportName: "DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0xa0817aa9c2f27e716d49ced1f08aa7f40913e2c002fc62e4a1d59b3aa469e472", leafDigest: "0x31ab72c9b1eb8263f6a5143d3400a55923b0c1a5d5b498590a66f165d19c5b64" }),
-  Object.freeze({ factory: FAMILY_1_RUNTIME_ADAPTER_1, modulePath: "families/dodo-v2/src/search-adapter.ts", exportName: "DODO_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0xb525998cd727ad202840f4a9dd0bcd1a3460f0f8d29a9b8e5473a0a89d4af443", leafDigest: "0x7a8c8710babc03e22ac4a01a10722adf8ceb6a8b188e0f224b15ee1d610c98fc" }),
+  Object.freeze({ factory: FAMILY_1_RUNTIME_ADAPTER_0, modulePath: "families/astra-multitoken/src/search-adapter.ts", exportName: "ASTRA_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x1626a3bfffd7373a039a592bda45f2fc081105573bacaf1661521b1047e263f1", leafDigest: "0x1539276b3383124f8592215f86a999ba319beae124d2152b9de691224e88188f" }),
 ]);
 
 const FAMILY_RUNTIME_ADAPTERS_2 = Object.freeze([
-  Object.freeze({ factory: FAMILY_2_RUNTIME_ADAPTER_0, modulePath: "families/fluid-dex/src/runtime/physical-adapter.ts", exportName: "FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x85282a06671047d57318830cc46a953b64bd9921118942e8244dcdc0235acab5", leafDigest: "0x98b49d93a88371f9fd8fd33e86babe492d4e581059660694e7b7903dae7d6bcf" }),
-  Object.freeze({ factory: FAMILY_2_RUNTIME_ADAPTER_1, modulePath: "families/fluid-dex/src/search-adapter.ts", exportName: "FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x4564198d855322fe91a7610c28483ae8de87ca512a26230ca47ddfc33bd283a8", leafDigest: "0xdedf91fc6dd319c5a25cb338aa9f9caab8471f3d7d46400feb14eb9f0ab7341c" }),
+  Object.freeze({ factory: FAMILY_2_RUNTIME_ADAPTER_0, modulePath: "families/curve-underlying/src/runtime/physical-adapter.ts", exportName: "CURVE_UNDERLYING_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x61c5a636ba5be79be4a27fa546d4f232b2abc0deb37f431790bb4250b3437897", leafDigest: "0x32e15486375002daba7021de79ca0d26bdbfd28b0dc82fc74f516169d8ae0c32" }),
+  Object.freeze({ factory: FAMILY_2_RUNTIME_ADAPTER_1, modulePath: "families/curve-underlying/src/search-adapter.ts", exportName: "CURVE_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x8c9566a32d81ff46ea7cb4f7b2a522513be22eb926e03308d2c2dee827c62636", leafDigest: "0x54ee87dc93f4ec286bd214aad7f4e22ce0b210b4c529468103b2f35a3a1b1e7a" }),
 ]);
 
 const FAMILY_RUNTIME_ADAPTERS_3 = Object.freeze([
-  Object.freeze({ factory: FAMILY_3_RUNTIME_ADAPTER_0, modulePath: "families/univ2-standard/src/runtime/physical-adapter.ts", exportName: "UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x06c1ce15d155b758f6ad566811b53e732a44fd20664358c1aee524bc90fb920a", leafDigest: "0xd9a9110e6cea172ca6ca33617738b9dde1be2b4276e764630d59cdb38c7ed879" }),
-  Object.freeze({ factory: FAMILY_3_RUNTIME_ADAPTER_1, modulePath: "families/univ2-standard/src/search/adapter.ts", exportName: "UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY", closureRoot: "0x1afc673e4dfad96cdeedbfab7419b61a4350f86c052f6b08c90f06963a83f50a", leafDigest: "0xdd12a9e0bf4f8bb27fcea43ce7e387be13fb7f5d1a6d0611eae89689f5007c9d" }),
+  Object.freeze({ factory: FAMILY_3_RUNTIME_ADAPTER_0, modulePath: "families/dodo-v2/src/runtime/physical-adapter.ts", exportName: "DODO_V2_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0xa0817aa9c2f27e716d49ced1f08aa7f40913e2c002fc62e4a1d59b3aa469e472", leafDigest: "0x31ab72c9b1eb8263f6a5143d3400a55923b0c1a5d5b498590a66f165d19c5b64" }),
+  Object.freeze({ factory: FAMILY_3_RUNTIME_ADAPTER_1, modulePath: "families/dodo-v2/src/search-adapter.ts", exportName: "DODO_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0xb525998cd727ad202840f4a9dd0bcd1a3460f0f8d29a9b8e5473a0a89d4af443", leafDigest: "0x7a8c8710babc03e22ac4a01a10722adf8ceb6a8b188e0f224b15ee1d610c98fc" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_4 = Object.freeze([
+  Object.freeze({ factory: FAMILY_4_RUNTIME_ADAPTER_0, modulePath: "families/eigenpie/src/runtime.ts", exportName: "EIGENPIE_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x6c216f59471e18d61d364b51baa105bc6360ae2f0cf53ff6f5507c93f69bb79b", leafDigest: "0x3847f3e8b8e74ae5ecb8044ad377c311b53ebf6672e67c48a92aa61ba8e0fa86" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_5 = Object.freeze([
+  Object.freeze({ factory: FAMILY_5_RUNTIME_ADAPTER_0, modulePath: "families/erc4626/src/runtime.ts", exportName: "ERC4626_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0xd20557f00e62c1ae0ce70de1a2e7f7436c07ee817575a035f45095ab7fb459f5", leafDigest: "0x5257e9922f74a5aaa704a17c4352b22e08e6dec023ab33be51e0adf53058c25c" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_6 = Object.freeze([
+  Object.freeze({ factory: FAMILY_6_RUNTIME_ADAPTER_0, modulePath: "families/erc4626-silo-redeem/src/runtime.ts", exportName: "ERC4626_SILO_REDEEM_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0xda47cbee006fadb9f9781f2d8e326543d0b7a811f3bc11fc193a0ee760eb882d", leafDigest: "0x05cbba98168ed2f34ab2dc760df4ae78fc540303d2a55272462c7c7dde2e669c" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_7 = Object.freeze([
+  Object.freeze({ factory: FAMILY_7_RUNTIME_ADAPTER_0, modulePath: "families/ethertoken-native-redeem/src/runtime.ts", exportName: "ETHERTOKEN_NATIVE_REDEEM_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0xb02fcdf68b528984354046bf252165b531cba0e37fc7b4d041ba74b9dacb5f3b", leafDigest: "0x16dacae091dd2bd3d811bc9b9f4b24842635091fd1547199385fed1925ec6038" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_8 = Object.freeze([
+  Object.freeze({ factory: FAMILY_8_RUNTIME_ADAPTER_0, modulePath: "families/fluid-credit/src/search-adapter.ts", exportName: "FLUID_CREDIT_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x060d7058d17021bfcb4ec22c66bad155beea8d3091b93e779b5a0c59e97c3f2b", leafDigest: "0x9ebe360fe0057db66761506a4fae4d3aaec860ba96cb11ab943ec86669a167ae" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_9 = Object.freeze([
+  Object.freeze({ factory: FAMILY_9_RUNTIME_ADAPTER_0, modulePath: "families/fluid-dex/src/runtime/physical-adapter.ts", exportName: "FLUID_DEX_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x85282a06671047d57318830cc46a953b64bd9921118942e8244dcdc0235acab5", leafDigest: "0x98b49d93a88371f9fd8fd33e86babe492d4e581059660694e7b7903dae7d6bcf" }),
+  Object.freeze({ factory: FAMILY_9_RUNTIME_ADAPTER_1, modulePath: "families/fluid-dex/src/search-adapter.ts", exportName: "FLUID_DEX_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x4564198d855322fe91a7610c28483ae8de87ca512a26230ca47ddfc33bd283a8", leafDigest: "0xdedf91fc6dd319c5a25cb338aa9f9caab8471f3d7d46400feb14eb9f0ab7341c" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_10 = Object.freeze([
+  Object.freeze({ factory: FAMILY_10_RUNTIME_ADAPTER_0, modulePath: "families/goldx/src/runtime.ts", exportName: "GOLDX_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f", leafDigest: "0xa847737d4e833ec607e83fade55515a7c28a819b5966d06196dded485adb116d" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_11 = Object.freeze([
+  Object.freeze({ factory: FAMILY_11_RUNTIME_ADAPTER_0, modulePath: "families/metronome-hgusdc/src/runtime.ts", exportName: "METRONOME_HGUSDC_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1", leafDigest: "0x03e51a2aa212d4155b8b3569d7f6c03ee5cfcbc9c35aca37687984a4651087b6" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_12 = Object.freeze([
+  Object.freeze({ factory: FAMILY_12_RUNTIME_ADAPTER_0, modulePath: "families/metronome-synth/src/runtime.ts", exportName: "METRONOME_SYNTH_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7", leafDigest: "0x363723123666f55e778784be67ed55668591dfab7e1994b86c0e2e5260729cc8" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_13 = Object.freeze([
+  Object.freeze({ factory: FAMILY_13_RUNTIME_ADAPTER_0, modulePath: "families/psm/src/runtime.ts", exportName: "PSM_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea", leafDigest: "0x4b31389afa92eb4611854d08aa455a93a139f88658778dcac4a6bb0a16aa7af8" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_14 = Object.freeze([
+  Object.freeze({ factory: FAMILY_14_RUNTIME_ADAPTER_0, modulePath: "families/rocksolid/src/runtime.ts", exportName: "ROCKSOLID_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158", leafDigest: "0xc3a498fc8015b95852d28ef14307a424186269c1c2ffca74d2f0d2ac09b2eafd" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_15 = Object.freeze([
+  Object.freeze({ factory: FAMILY_15_RUNTIME_ADAPTER_0, modulePath: "families/self-burn-native/src/runtime.ts", exportName: "SELF_BURN_NATIVE_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052", leafDigest: "0xe01a43393e9325133d81a7d0706ed3184b0888dae7788996c6b92539c0e4cc43" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_16 = Object.freeze([
+  Object.freeze({ factory: FAMILY_16_RUNTIME_ADAPTER_0, modulePath: "families/univ2-standard/src/runtime/physical-adapter.ts", exportName: "UNIV2_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x06c1ce15d155b758f6ad566811b53e732a44fd20664358c1aee524bc90fb920a", leafDigest: "0xd9a9110e6cea172ca6ca33617738b9dde1be2b4276e764630d59cdb38c7ed879" }),
+  Object.freeze({ factory: FAMILY_16_RUNTIME_ADAPTER_1, modulePath: "families/univ2-standard/src/search/adapter.ts", exportName: "UNIV2_STANDARD_SEARCH_ADAPTER_FACTORY", closureRoot: "0x1afc673e4dfad96cdeedbfab7419b61a4350f86c052f6b08c90f06963a83f50a", leafDigest: "0xdd12a9e0bf4f8bb27fcea43ce7e387be13fb7f5d1a6d0611eae89689f5007c9d" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_17 = Object.freeze([
+  Object.freeze({ factory: FAMILY_17_RUNTIME_ADAPTER_0, modulePath: "families/univ3-standard/src/runtime/physical-adapter.ts", exportName: "UNIV3_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0xdad0d1c2f97af7b49859f59e2591ebd7accbb7cda4cb2e8cebc61c559ba3e973", leafDigest: "0xadb7b961b652af29514062d6538458b250f0f078376a67df569bba10c7df281c" }),
+  Object.freeze({ factory: FAMILY_17_RUNTIME_ADAPTER_1, modulePath: "families/univ3-standard/src/search-adapter.ts", exportName: "UNIV3_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x6b81fc27031767483db08d50038a8f0208f038af3286227fdf0100db8d996ed1", leafDigest: "0xff5ed67cb868fd1601e4a87a7165e7b8c10247f9d877bc26cea8e3c654be6d72" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_18 = Object.freeze([
+  Object.freeze({ factory: FAMILY_18_RUNTIME_ADAPTER_0, modulePath: "families/univ4/src/runtime/physical-adapter.ts", exportName: "UNIV4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY", closureRoot: "0x0cb94845cf7a19b7d6f0822033a3857550f83f9187b43a157ca988192fb45674", leafDigest: "0xba1f879a37951aec56d4ffbef68555f72d4132911979e80b8742bf06f461c432" }),
+  Object.freeze({ factory: FAMILY_18_RUNTIME_ADAPTER_1, modulePath: "families/univ4/src/search-adapter.ts", exportName: "UNIV4_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x825b7b044e1b3780fe2f1c46b498e6c559ce879f8e6ef590c88bbf720ed7c3d7", leafDigest: "0x89ee421c04853d380e0e9077f4980d0278d453ec5151049ea7a4ccbb6730a6f4" }),
+]);
+
+const FAMILY_RUNTIME_ADAPTERS_19 = Object.freeze([
+  Object.freeze({ factory: FAMILY_19_RUNTIME_ADAPTER_0, modulePath: "families/wsteth/src/runtime.ts", exportName: "WSTETH_SEARCH_RUNTIME_ADAPTER_FACTORY", closureRoot: "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537", leafDigest: "0xeb4501f140c0bfbbdd988d193885ef3d96339f87744d1fae8c606d210463eab5" }),
 ]);
 
 const FAMILY_NOMINATION_PROGRAMS_0 = Object.freeze([
@@ -137,6 +532,79 @@ const FAMILY_NOMINATION_PROGRAMS_3 = Object.freeze([
   FAMILY_3_NOMINATION_PROGRAM_1,
 ]);
 
+const FAMILY_NOMINATION_PROGRAMS_4 = Object.freeze([
+  FAMILY_4_NOMINATION_PROGRAM_0,
+  FAMILY_4_NOMINATION_PROGRAM_1,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_5 = Object.freeze([
+  FAMILY_5_NOMINATION_PROGRAM_0,
+  FAMILY_5_NOMINATION_PROGRAM_1,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_6 = Object.freeze([
+  FAMILY_6_NOMINATION_PROGRAM_0,
+  FAMILY_6_NOMINATION_PROGRAM_1,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_7 = Object.freeze([
+  FAMILY_7_NOMINATION_PROGRAM_0,
+  FAMILY_7_NOMINATION_PROGRAM_1,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_8 = Object.freeze([
+  FAMILY_8_NOMINATION_PROGRAM_0,
+  FAMILY_8_NOMINATION_PROGRAM_1,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_9 = Object.freeze([
+  FAMILY_9_NOMINATION_PROGRAM_0,
+  FAMILY_9_NOMINATION_PROGRAM_1,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_10 = Object.freeze([
+  FAMILY_10_NOMINATION_PROGRAM_0,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_11 = Object.freeze([
+  FAMILY_11_NOMINATION_PROGRAM_0,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_12 = Object.freeze([
+  FAMILY_12_NOMINATION_PROGRAM_0,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_13 = Object.freeze([
+  FAMILY_13_NOMINATION_PROGRAM_0,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_14 = Object.freeze([
+  FAMILY_14_NOMINATION_PROGRAM_0,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_15 = Object.freeze([
+  FAMILY_15_NOMINATION_PROGRAM_0,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_16 = Object.freeze([
+  FAMILY_16_NOMINATION_PROGRAM_0,
+  FAMILY_16_NOMINATION_PROGRAM_1,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_17 = Object.freeze([
+  FAMILY_17_NOMINATION_PROGRAM_0,
+  FAMILY_17_NOMINATION_PROGRAM_1,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_18 = Object.freeze([
+  FAMILY_18_NOMINATION_PROGRAM_0,
+  FAMILY_18_NOMINATION_PROGRAM_1,
+]);
+
+const FAMILY_NOMINATION_PROGRAMS_19 = Object.freeze([
+  FAMILY_19_NOMINATION_PROGRAM_0,
+]);
+
 const FAMILY_SOURCE_PLANS_0 = Object.freeze([
   FAMILY_0_SOURCE_PLAN_0,
   FAMILY_0_SOURCE_PLAN_1,
@@ -157,14 +625,902 @@ const FAMILY_SOURCE_PLANS_3 = Object.freeze([
   FAMILY_3_SOURCE_PLAN_1,
 ]);
 
+const FAMILY_SOURCE_PLANS_4 = Object.freeze([
+  FAMILY_4_SOURCE_PLAN_0,
+  FAMILY_4_SOURCE_PLAN_1,
+]);
+
+const FAMILY_SOURCE_PLANS_5 = Object.freeze([
+  FAMILY_5_SOURCE_PLAN_0,
+  FAMILY_5_SOURCE_PLAN_1,
+]);
+
+const FAMILY_SOURCE_PLANS_6 = Object.freeze([
+  FAMILY_6_SOURCE_PLAN_0,
+  FAMILY_6_SOURCE_PLAN_1,
+]);
+
+const FAMILY_SOURCE_PLANS_7 = Object.freeze([
+  FAMILY_7_SOURCE_PLAN_0,
+  FAMILY_7_SOURCE_PLAN_1,
+]);
+
+const FAMILY_SOURCE_PLANS_8 = Object.freeze([
+  FAMILY_8_SOURCE_PLAN_0,
+  FAMILY_8_SOURCE_PLAN_1,
+]);
+
+const FAMILY_SOURCE_PLANS_9 = Object.freeze([
+  FAMILY_9_SOURCE_PLAN_0,
+  FAMILY_9_SOURCE_PLAN_1,
+]);
+
+const FAMILY_SOURCE_PLANS_10 = Object.freeze([
+  FAMILY_10_SOURCE_PLAN_0,
+]);
+
+const FAMILY_SOURCE_PLANS_11 = Object.freeze([
+  FAMILY_11_SOURCE_PLAN_0,
+]);
+
+const FAMILY_SOURCE_PLANS_12 = Object.freeze([
+  FAMILY_12_SOURCE_PLAN_0,
+]);
+
+const FAMILY_SOURCE_PLANS_13 = Object.freeze([
+  FAMILY_13_SOURCE_PLAN_0,
+]);
+
+const FAMILY_SOURCE_PLANS_14 = Object.freeze([
+  FAMILY_14_SOURCE_PLAN_0,
+]);
+
+const FAMILY_SOURCE_PLANS_15 = Object.freeze([
+  FAMILY_15_SOURCE_PLAN_0,
+]);
+
+const FAMILY_SOURCE_PLANS_16 = Object.freeze([
+  FAMILY_16_SOURCE_PLAN_0,
+  FAMILY_16_SOURCE_PLAN_1,
+]);
+
+const FAMILY_SOURCE_PLANS_17 = Object.freeze([
+  FAMILY_17_SOURCE_PLAN_0,
+  FAMILY_17_SOURCE_PLAN_1,
+]);
+
+const FAMILY_SOURCE_PLANS_18 = Object.freeze([
+  FAMILY_18_SOURCE_PLAN_0,
+  FAMILY_18_SOURCE_PLAN_1,
+]);
+
+const FAMILY_SOURCE_PLANS_19 = Object.freeze([
+  FAMILY_19_SOURCE_PLAN_0,
+]);
+
 const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
 {
   "schemaVersion": 1,
-  "releaseIntentRoot": "0x57d210c88459dbb63710c8aae573c3a0543e259e4ab848043bea787f2f3ae244",
-  "definitionCatalogRoot": "0xc751ffd9ce2b06b21391e2b304605bca7b99a9012781754c3f90344c7bfe2248",
-  "proposedCapabilitySetRoot": "0xa4dafbe03eb8ab2af81a88bf44193a0f1c94028cd80a04564c32e77936362332",
-  "nominationProgramSetRoot": "0x8dcab119dc9b1e13cdcdce07ce5b89e08a6300e2fa52aa997ddb7fb85e5f9ce5",
+  "releaseIntentRoot": "0x1aa7cc4b42b25945b29d8d42dc30a00df2bfb3f6a515cdcee7937781806796bf",
+  "definitionCatalogRoot": "0xee829db9ac08d68a1880e500fd6bd4756d83eacd1199642edad4e126040f696e",
+  "proposedCapabilitySetRoot": "0x6e233c30225c34fae8b780236c196afc062f11bb4772478726b51fa3ec69c3e2",
+  "nominationProgramSetRoot": "0xf4d845e274d9e873bc0ba06f71cd7094a6a1932149ae05dadd11de661bd91588",
   "families": [
+    {
+      "entry": {
+        "familyId": "angstrom-v4",
+        "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+        "issuerRef": "0x04dfe6f4e8144c009097cb4674262448729e5b0fee3a069a0ee6340a7641c8d3",
+        "authorityRef": "0xa3bff3fcf4fd5fa576921458220ed77d1b9ea2e095f1f3860eae2fe5afcaaf1b",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "nomination",
+            "capabilityId": "family.angstrom-v4.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xc14bf1f7e2bb5c3e88dcd7b2601c98c788589db49c860e0210a2b04f2865ff3f",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x7e958932bdb255721512e6d077616d1451717cbd33391158c8425574b049df7f"
+          },
+          "identity": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "identity",
+            "capabilityId": "family.angstrom-v4.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xbdd6d6a5ba16b7d5f1418884ab6c21a750d08af63361ada6ff32b8f3bc340ef1",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x05f7b875bed71ee021788788e972bd596a8a72743103c635b1d77e24dab89fe3"
+          },
+          "materialization": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "materialization",
+            "capabilityId": "family.angstrom-v4.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x990fdc4498f6047197d502853abe4154e51030bf60e068bddb53909c4412f268",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x296a16332db2ef0f815845c53799d6602743fd9d6fd077fdbdc4d051f5ac9d6f"
+          },
+          "projection": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "projection",
+            "capabilityId": "family.angstrom-v4.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xc5a5661f136995116f1946f20600a8cdc24392afdc54e8ea343d1ca80fdc18ea",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x33ab40acc7310034e7778697584d8cd5bbfbb040e839daaeb868b56950d814dc"
+          },
+          "rehydration": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "rehydration",
+            "capabilityId": "family.angstrom-v4.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x6c32109167ae31b7f8bf410f35241846eb538ed29fde9a4cf6646519b05543f3",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x9d8ffbe63be537046397317e2322bba04190a9d0fc01842f4351e111064345c9"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "capability",
+            "capabilityId": "family.angstrom-v4.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x944ab136cdcc9a1387032f36da595618c12f8b8e89196fb552aa5059361d39eb",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0xce05895e10b5acf8515340ef86233b98dd774d70626e617dffd1cc2f395309bc"
+          },
+          {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "capability",
+            "capabilityId": "family.angstrom-v4.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x169b1909e08e2eb3b2980a02634655f18b66b3a09356f740ba2474e437ecdf08",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0xad249e2b869298bca1a8bcde64ef3a1fc443f74c974200098b389a3f14b3b0db"
+          },
+          {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "capability",
+            "capabilityId": "family.angstrom-v4.state",
+            "version": "1.0.0",
+            "schemaHash": "0x9ff7fa0a934cfece7dca6bf4f94e6658096b413db18632cc19c9faa4cb6fb7fd",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x19481550beb5769212fde1453a9622303c5ee58dba27ca1ac55941be7b86a560"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x22bc7f60f22faf8a2c3cd9f052889fad055a4a5b997793aafc9e06415f46d30e"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.angstrom-v4.complete-identity-history",
+            "version": "1.0.0",
+            "schemaHash": "0xb21d57e42333e731aae90be4211f877a33283118c02c461e439f3e888c4b507e"
+          },
+          {
+            "factContractId": "family.angstrom-v4.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0x93dbabb33d3e715dc0a6c04ec8f18b8aafd57428564d4de7c0b2e2a07def7d4c"
+          },
+          {
+            "factContractId": "family.angstrom-v4.pattern-evidence",
+            "version": "1.0.0",
+            "schemaHash": "0x579daf53d5f67d417e637c6020e7beb9ab56418b280ad8196faf7f915bb77d2a"
+          },
+          {
+            "factContractId": "family.angstrom-v4.state-observation",
+            "version": "1.0.0",
+            "schemaHash": "0x88a85859c0414e1ce9205d72bc171490c99f970b25cc6b8ec7dc22a0114c4949"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0xb44ad65e36a8a655d421794efde7bdd81d0eadeebc09e7c13526bb88613bc230",
+            "sourcePlanRef": "0xd2d22c6573f0c01b3a0c31c932fec8dcadd01259073b0edb64e63fb4f827b9c8",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          {
+            "ownerRef": "0xde6f300e02b33855db3486b0bb7d8c90fbaffd75095ec53e59a14ed19464842f",
+            "sourcePlanRef": "0xeda32361e87d262cb59131a31f46be6d3847c03669f9bd2f6082e5aaf5eab583",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0xe002ddff1283b09d62d9b8711cf41f8bcacf887525c0b301d84155ef3d3fff6e",
+        "capabilityCatalogRoot": "0x5a4e80f0911e186b8fb96cef6724309480d1d33d0c5b7963ac3a1ea739fbcbd2"
+      },
+      "publicEntry": {
+        "modulePath": "families/angstrom-v4/src/public.ts",
+        "exportName": "ANGSTROM_V4_DEFINITION",
+        "closureRoot": "0xcd1caf6ae97c9d9a48dae7344833ff0d6f6b861d48d49c8951cab43562db1b56"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/angstrom-v4/src/runtime.ts",
+          "exportName": "ANGSTROM_V4_IDENTITY_RUNTIME",
+          "closureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+          "stageRef": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "identity",
+            "capabilityId": "family.angstrom-v4.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xbdd6d6a5ba16b7d5f1418884ab6c21a750d08af63361ada6ff32b8f3bc340ef1",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x05f7b875bed71ee021788788e972bd596a8a72743103c635b1d77e24dab89fe3"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/angstrom-v4/src/runtime.ts",
+          "exportName": "ANGSTROM_V4_MATERIALIZATION_RUNTIME",
+          "closureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+          "stageRef": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "materialization",
+            "capabilityId": "family.angstrom-v4.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x990fdc4498f6047197d502853abe4154e51030bf60e068bddb53909c4412f268",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x296a16332db2ef0f815845c53799d6602743fd9d6fd077fdbdc4d051f5ac9d6f"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/angstrom-v4/src/runtime.ts",
+          "exportName": "ANGSTROM_V4_NOMINATION_RUNTIME",
+          "closureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+          "stageRef": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "nomination",
+            "capabilityId": "family.angstrom-v4.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xc14bf1f7e2bb5c3e88dcd7b2601c98c788589db49c860e0210a2b04f2865ff3f",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x7e958932bdb255721512e6d077616d1451717cbd33391158c8425574b049df7f"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/angstrom-v4/src/runtime.ts",
+          "exportName": "ANGSTROM_V4_PROJECTION_RUNTIME",
+          "closureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+          "stageRef": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "projection",
+            "capabilityId": "family.angstrom-v4.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xc5a5661f136995116f1946f20600a8cdc24392afdc54e8ea343d1ca80fdc18ea",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x33ab40acc7310034e7778697584d8cd5bbfbb040e839daaeb868b56950d814dc"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/angstrom-v4/src/runtime.ts",
+          "exportName": "ANGSTROM_V4_REHYDRATION_RUNTIME",
+          "closureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+          "stageRef": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "rehydration",
+            "capabilityId": "family.angstrom-v4.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x6c32109167ae31b7f8bf410f35241846eb538ed29fde9a4cf6646519b05543f3",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x9d8ffbe63be537046397317e2322bba04190a9d0fc01842f4351e111064345c9"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "angstrom-v4.fixed-cutoff-50-block",
+          "modulePath": "families/angstrom-v4/src/source-plan.ts",
+          "exportName": "ANGSTROM_V4_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x7a2ab78d3f39653b153caae9c7c97c17c2dc6d52eff42bef3a064c628ab3ac54",
+          "schemaHash": "0x0b3cb589decd6edffe6c6708db4e597038d5393b8984ef377b3975cdaa166729",
+          "planRef": {
+            "ownerRef": "0xde6f300e02b33855db3486b0bb7d8c90fbaffd75095ec53e59a14ed19464842f",
+            "sourcePlanRef": "0xeda32361e87d262cb59131a31f46be6d3847c03669f9bd2f6082e5aaf5eab583",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x6246bfc8d3959c8b54e794b75d3ca448dcbc3b95ef80a75c480b1392298dc0b0",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/angstrom-v4/src/source-plan.ts",
+              "exportName": "ANGSTROM_V4_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0x7a2ab78d3f39653b153caae9c7c97c17c2dc6d52eff42bef3a064c628ab3ac54",
+              "schemaHash": "0x0b3cb589decd6edffe6c6708db4e597038d5393b8984ef377b3975cdaa166729"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/angstrom-v4/src/nomination-qualification.ts",
+              "exportName": "ANGSTROM_V4_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xe2ef5c2ae2a3709e5f14ae3e80c9633d54da81dc4e6ce180b343ec77608b50d0"
+            },
+            "independentOracle": {
+              "modulePath": "families/angstrom-v4/src/nomination-qualification.ts",
+              "exportName": "ANGSTROM_V4_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xe2ef5c2ae2a3709e5f14ae3e80c9633d54da81dc4e6ce180b343ec77608b50d0"
+            },
+            "nominationProgramRoot": "0x2c4410da886c9629424f2a1d468acd689bbdc45110cffc90957f5db8371d39b4",
+            "proposalLeafDigest": "0x7ad43aad7b54a6a7cac219aa1c266144d08c187aa5869a30a54872c745875f97"
+          }
+        },
+        {
+          "sourcePlanId": "angstrom-v4.pool-manager-initialize-history",
+          "modulePath": "families/angstrom-v4/src/history-source-plan.ts",
+          "exportName": "ANGSTROM_V4_HISTORY_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x4e31ad7f66a9bd81d47d0057ad9248979bb4073be8731fcdfe2d18bdbfd7f6b6",
+          "schemaHash": "0xb21d57e42333e731aae90be4211f877a33283118c02c461e439f3e888c4b507e",
+          "planRef": {
+            "ownerRef": "0xb44ad65e36a8a655d421794efde7bdd81d0eadeebc09e7c13526bb88613bc230",
+            "sourcePlanRef": "0xd2d22c6573f0c01b3a0c31c932fec8dcadd01259073b0edb64e63fb4f827b9c8",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          "leafDigest": "0x52c7433e1aa12f20ae9dda2402e4353bc0ca60bc08f78f95551c0d02e1802a74",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/angstrom-v4/src/history-source-plan.ts",
+              "exportName": "ANGSTROM_V4_HISTORY_NOMINATION_PROGRAM",
+              "closureRoot": "0x4e31ad7f66a9bd81d47d0057ad9248979bb4073be8731fcdfe2d18bdbfd7f6b6",
+              "schemaHash": "0xb21d57e42333e731aae90be4211f877a33283118c02c461e439f3e888c4b507e"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/angstrom-v4/src/nomination-qualification.ts",
+              "exportName": "ANGSTROM_V4_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xe2ef5c2ae2a3709e5f14ae3e80c9633d54da81dc4e6ce180b343ec77608b50d0"
+            },
+            "independentOracle": {
+              "modulePath": "families/angstrom-v4/src/nomination-qualification.ts",
+              "exportName": "ANGSTROM_V4_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xe2ef5c2ae2a3709e5f14ae3e80c9633d54da81dc4e6ce180b343ec77608b50d0"
+            },
+            "nominationProgramRoot": "0x63506e2ac6245bde595c1b851567f6d352d69cca82698a3f8b9cd875d231f803",
+            "proposalLeafDigest": "0xf43f98941eb32a0547fd79c8f2216abdaed5742a96fb192e5f7622cbfe94cebf"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/angstrom-v4/src/runtime.ts",
+          "exportName": "ANGSTROM_V4_RUNTIME",
+          "closureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+          "capabilityRef": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "capability",
+            "capabilityId": "family.angstrom-v4.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x944ab136cdcc9a1387032f36da595618c12f8b8e89196fb552aa5059361d39eb",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0xce05895e10b5acf8515340ef86233b98dd774d70626e617dffd1cc2f395309bc"
+          }
+        },
+        {
+          "modulePath": "families/angstrom-v4/src/runtime.ts",
+          "exportName": "ANGSTROM_V4_RUNTIME",
+          "closureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+          "capabilityRef": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "capability",
+            "capabilityId": "family.angstrom-v4.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x169b1909e08e2eb3b2980a02634655f18b66b3a09356f740ba2474e437ecdf08",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0xad249e2b869298bca1a8bcde64ef3a1fc443f74c974200098b389a3f14b3b0db"
+          }
+        },
+        {
+          "modulePath": "families/angstrom-v4/src/runtime.ts",
+          "exportName": "ANGSTROM_V4_RUNTIME",
+          "closureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+          "capabilityRef": {
+            "familyId": "angstrom-v4",
+            "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+            "stage": "capability",
+            "capabilityId": "family.angstrom-v4.state",
+            "version": "1.0.0",
+            "schemaHash": "0x9ff7fa0a934cfece7dca6bf4f94e6658096b413db18632cc19c9faa4cb6fb7fd",
+            "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+            "ownerRef": "0x19481550beb5769212fde1453a9622303c5ee58dba27ca1ac55941be7b86a560"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/angstrom-v4/src/action.ts",
+          "exportName": "ANGSTROM_V4_ACTION_PORT",
+          "closureRoot": "0x0536df578584bb03aa108ea5a2fd133169a0855a3cb23fc588142539da12f729",
+          "ownerRef": "0x22bc7f60f22faf8a2c3cd9f052889fad055a4a5b997793aafc9e06415f46d30e",
+          "ownerId": "family.angstrom-v4.swap-action",
+          "version": "1.0.0",
+          "schemaHash": "0xa02285be485d0f9cbdec07ffb4243b8b0e21dc366f47afff9ba6193795f8e3fd",
+          "implementationHash": "0xe7120977ec837d705de399654411414265f866b21ba76547d756889f76eeeaa5",
+          "actionKinds": [
+            "swap"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "physical-lifecycle/v1",
+          "modulePath": "families/angstrom-v4/src/runtime/physical-adapter.ts",
+          "exportName": "ANGSTROM_V4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+          "closureRoot": "0xb0c03857e8d918b999fb434a5b107af24dc05fdecb64f8d5e9bd56050195c7d6",
+          "capabilityRefs": {},
+          "actionOwnerRefs": {},
+          "leafDigest": "0x33bdc09c6b0ad47f5b96b039d5dc6fe7d06d44753808c634b8962d5240deed61"
+        },
+        {
+          "role": "search/v1",
+          "modulePath": "families/angstrom-v4/src/search-adapter.ts",
+          "exportName": "ANGSTROM_V4_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x1d63c20fb2fc929719d65138ec88f773e109cd5ea50af85593e4682bff51a02f",
+          "capabilityRefs": {
+            "coarse": {
+              "familyId": "angstrom-v4",
+              "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+              "stage": "capability",
+              "capabilityId": "family.angstrom-v4.coarse",
+              "version": "1.0.0",
+              "schemaHash": "0x944ab136cdcc9a1387032f36da595618c12f8b8e89196fb552aa5059361d39eb",
+              "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+              "ownerRef": "0xce05895e10b5acf8515340ef86233b98dd774d70626e617dffd1cc2f395309bc"
+            },
+            "exact": {
+              "familyId": "angstrom-v4",
+              "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+              "stage": "capability",
+              "capabilityId": "family.angstrom-v4.exact",
+              "version": "1.0.0",
+              "schemaHash": "0x169b1909e08e2eb3b2980a02634655f18b66b3a09356f740ba2474e437ecdf08",
+              "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+              "ownerRef": "0xad249e2b869298bca1a8bcde64ef3a1fc443f74c974200098b389a3f14b3b0db"
+            },
+            "state": {
+              "familyId": "angstrom-v4",
+              "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+              "stage": "capability",
+              "capabilityId": "family.angstrom-v4.state",
+              "version": "1.0.0",
+              "schemaHash": "0x9ff7fa0a934cfece7dca6bf4f94e6658096b413db18632cc19c9faa4cb6fb7fd",
+              "interpreterHash": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf",
+              "ownerRef": "0x19481550beb5769212fde1453a9622303c5ee58dba27ca1ac55941be7b86a560"
+            }
+          },
+          "actionOwnerRefs": {
+            "action": "0x22bc7f60f22faf8a2c3cd9f052889fad055a4a5b997793aafc9e06415f46d30e"
+          },
+          "leafDigest": "0x283529f483dd4d4f67f17d081193735d7effb5b468abae47f29a5f195e37279e"
+        }
+      ],
+      "runtimeAdapterRoot": "0xd763a0905eea67aa781856f8e1c713c2259ee02be68177b0b9046c56529446d7",
+      "sourcePlanRoot": "0x9812e7bab100cab41cacd38d74e8241341d2619b887df49000ef895b5b85a2b4",
+      "stageDefinitionRoot": "0x3be48fa5e04475fc5228c92ced525a0f7bd7136e637ea6a75f0ab3ea5a472042"
+    },
+    {
+      "entry": {
+        "familyId": "astra-multitoken",
+        "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+        "issuerRef": "0xf302b20baaa5ec10d0adef597decb5919511c7b783f67877da62522e336981db",
+        "authorityRef": "0xbbe4cbcb2da7bfbee0c241eab329d38a02ed22ee290ec1e2647da3143aaeb701",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "nomination",
+            "capabilityId": "family.astra-multitoken.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xbae23fb37674e73f77a7395150600b7f81e1f1f7ef1376aefe9d3e30564f5ec8",
+            "interpreterHash": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+            "ownerRef": "0xa8caf9a5050edb25ee3551d4ad1112d81be90bab6bbd8123ae27980b26869137"
+          },
+          "identity": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "identity",
+            "capabilityId": "family.astra-multitoken.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xce8efebe2b4ff5e7037f1c8664c256032133369739b3c97e113517bde7f8ea12",
+            "interpreterHash": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+            "ownerRef": "0x43bb4e962290bf033c41db25ea11cf5649bb83fcb32ba75f3090fdecb1e00626"
+          },
+          "materialization": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "materialization",
+            "capabilityId": "family.astra-multitoken.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x7338d5e2bc4d857a49a8472af0bae2061905a1cf1fc7d5003f53f2a8ac5a5f2e",
+            "interpreterHash": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+            "ownerRef": "0x12d983ed8e21f6dacfa3ac9d0d142e2ff8831d96fd9cec36ffa708b9da8f14ca"
+          },
+          "projection": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "projection",
+            "capabilityId": "family.astra-multitoken.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x43cfdd314899b62d2123182487fac85c6129433a64053967731ae3123fe9d2de",
+            "interpreterHash": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+            "ownerRef": "0xb2619dc5302484313fea9285e0728b6276cb426e8669b9c333c4dd006df84ebe"
+          },
+          "rehydration": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "rehydration",
+            "capabilityId": "family.astra-multitoken.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xb116c317a91c2f25665f0fb064d38b089553ca4b481fbaa1cc4e588584033d6c",
+            "interpreterHash": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+            "ownerRef": "0x442844f2d7ebcb95863e63cd28ce5ce3726cb3d3e7c834022825e305e14144da"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "capability",
+            "capabilityId": "family.astra-multitoken.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x39febe9292b3426a2110a84980cc23fbc7fabe136378e0e1594e8e1dfe8772b2",
+            "interpreterHash": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+            "ownerRef": "0x1e86f128432993646ed984699faa079be3f190cd979a0da586fa632723c08afd"
+          },
+          {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "capability",
+            "capabilityId": "family.astra-multitoken.exact",
+            "version": "1.0.0",
+            "schemaHash": "0xd141b189e983918f54f4ac7051a90820fb5beea51b10f30a909fb94d996fe470",
+            "interpreterHash": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+            "ownerRef": "0xa4a0ea7d9d4103c5df36d3ff31c8ee4e2fd650905f2e83d141305c6c911732db"
+          },
+          {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "capability",
+            "capabilityId": "family.astra-multitoken.state",
+            "version": "1.0.0",
+            "schemaHash": "0xfc2ecd72a852381ec8fa9905f02820f82ccea605b557af9c3bec5d53724c1783",
+            "interpreterHash": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+            "ownerRef": "0x786d3c023393fdaae176c3e06730130607d9ccb688479e1341b588f51a2a5d1a"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x96c37372b96c9f65710c43afd24d756415b0ca4dd362c4255cde21510bfd3681"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.astra-multitoken.active-effect-observation",
+            "version": "1.0.0",
+            "schemaHash": "0xad236b74f1fc7d43cd7cfd8da1b5b11430d7b6add7c65ef385529f4ce525621e"
+          },
+          {
+            "factContractId": "family.astra-multitoken.exact-effect-observation",
+            "version": "1.0.0",
+            "schemaHash": "0x9cec9de174d26c18c44885bf6dd9a9d1a74a94ce55cf7d13c4032284072b7894"
+          },
+          {
+            "factContractId": "family.astra-multitoken.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0x25e6c4d25a54369bc650dd12e92318b90aea2d876ea13a672255190ee0048073"
+          },
+          {
+            "factContractId": "family.astra-multitoken.source-completeness",
+            "version": "1.0.0",
+            "schemaHash": "0x74737fc47943a5412ea81751470213267b91de7af35f6c87b7aaae56e2501547"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x628bdd24659dbe33650c28f1f8f22ec65dcd7ed2d147447ec07ec1ca5539f29a",
+            "sourcePlanRef": "0x809c31312a40a442408b8f2c973de5d3278590dea3065d4206bdbbfcc2f1e2be",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          {
+            "ownerRef": "0xcb155a009807cbe8af8c713c695ece374cb9c68cbb2580ce11555f9aa3261e18",
+            "sourcePlanRef": "0xe7854444906e99e277a39a3cac57570ab5012030654fafb6f47efae2ee80caf8",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          }
+        ],
+        "definitionCatalogLeafDigest": "0x7a46a29434a75ae34ecebe2f3cab91d9dc912ac95f64735378df4ecd567409f2",
+        "capabilityCatalogRoot": "0xb25d69842299679ce69c99f43bfdc16ad84482cc3528a678ebc9a7cfa958cfd5"
+      },
+      "publicEntry": {
+        "modulePath": "families/astra-multitoken/src/public.ts",
+        "exportName": "ASTRA_DEFINITION",
+        "closureRoot": "0x7f8d1ba65dd1b971a726a740379a74be4c983bd2303acc4351c39532efccdec6"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/astra-multitoken/src/runtime/definitions.ts",
+          "exportName": "ASTRA_IDENTITY_DEFINITION",
+          "closureRoot": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+          "stageRef": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "identity",
+            "capabilityId": "family.astra-multitoken.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xce8efebe2b4ff5e7037f1c8664c256032133369739b3c97e113517bde7f8ea12",
+            "interpreterHash": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+            "ownerRef": "0x43bb4e962290bf033c41db25ea11cf5649bb83fcb32ba75f3090fdecb1e00626"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/astra-multitoken/src/runtime/definitions.ts",
+          "exportName": "ASTRA_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+          "stageRef": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "materialization",
+            "capabilityId": "family.astra-multitoken.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x7338d5e2bc4d857a49a8472af0bae2061905a1cf1fc7d5003f53f2a8ac5a5f2e",
+            "interpreterHash": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+            "ownerRef": "0x12d983ed8e21f6dacfa3ac9d0d142e2ff8831d96fd9cec36ffa708b9da8f14ca"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/astra-multitoken/src/runtime/definitions.ts",
+          "exportName": "ASTRA_NOMINATION_DEFINITION",
+          "closureRoot": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+          "stageRef": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "nomination",
+            "capabilityId": "family.astra-multitoken.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xbae23fb37674e73f77a7395150600b7f81e1f1f7ef1376aefe9d3e30564f5ec8",
+            "interpreterHash": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+            "ownerRef": "0xa8caf9a5050edb25ee3551d4ad1112d81be90bab6bbd8123ae27980b26869137"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/astra-multitoken/src/runtime/definitions.ts",
+          "exportName": "ASTRA_PROJECTION_DEFINITION",
+          "closureRoot": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+          "stageRef": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "projection",
+            "capabilityId": "family.astra-multitoken.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x43cfdd314899b62d2123182487fac85c6129433a64053967731ae3123fe9d2de",
+            "interpreterHash": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+            "ownerRef": "0xb2619dc5302484313fea9285e0728b6276cb426e8669b9c333c4dd006df84ebe"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/astra-multitoken/src/runtime/definitions.ts",
+          "exportName": "ASTRA_REHYDRATION_DEFINITION",
+          "closureRoot": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+          "stageRef": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "rehydration",
+            "capabilityId": "family.astra-multitoken.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xb116c317a91c2f25665f0fb064d38b089553ca4b481fbaa1cc4e588584033d6c",
+            "interpreterHash": "0xc5c70938578c269f87b6aae0fcf182c3840e4a17b05d13e05fa81740f0789490",
+            "ownerRef": "0x442844f2d7ebcb95863e63cd28ce5ce3726cb3d3e7c834022825e305e14144da"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "astra-multitoken.change-history",
+          "modulePath": "families/astra-multitoken/src/history-source-plan.ts",
+          "exportName": "ASTRA_HISTORY_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x372c8e1daa0fca61a1cfa2f3039c5ec661698265b33e492ae2dff4da11b3737e",
+          "schemaHash": "0x894c59a0b9125f99df76ffe00f6cef3f0dd642dad9a9bfb3244b1606a8f83867",
+          "planRef": {
+            "ownerRef": "0xcb155a009807cbe8af8c713c695ece374cb9c68cbb2580ce11555f9aa3261e18",
+            "sourcePlanRef": "0xe7854444906e99e277a39a3cac57570ab5012030654fafb6f47efae2ee80caf8",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          "leafDigest": "0x9852a6b30d6035ade0900834c7a061280848837f5f2f7edf8b87bc025df38ac3",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/astra-multitoken/src/history-source-plan.ts",
+              "exportName": "ASTRA_HISTORY_NOMINATION_PROGRAM",
+              "closureRoot": "0x372c8e1daa0fca61a1cfa2f3039c5ec661698265b33e492ae2dff4da11b3737e",
+              "schemaHash": "0x894c59a0b9125f99df76ffe00f6cef3f0dd642dad9a9bfb3244b1606a8f83867"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/astra-multitoken/src/nomination-qualification.ts",
+              "exportName": "ASTRA_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x06cf89bcb8c9b021fadfc0710f75756ab0c06cc8155440c57c93b62539167b69"
+            },
+            "independentOracle": {
+              "modulePath": "families/astra-multitoken/src/nomination-qualification.ts",
+              "exportName": "ASTRA_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x06cf89bcb8c9b021fadfc0710f75756ab0c06cc8155440c57c93b62539167b69"
+            },
+            "nominationProgramRoot": "0x1ee2f6b8ec3f4ec61bc6b982452bad8a03d581c95e1168fec7ebed3c2fdb531d",
+            "proposalLeafDigest": "0x1f153d368bd75d67d5de0dcabcc383c209ac3ee69cb7f83e9435cd43f7d5769b"
+          }
+        },
+        {
+          "sourcePlanId": "astra-multitoken.fixed-cutoff-50-block",
+          "modulePath": "families/astra-multitoken/src/source-plan-runtime.ts",
+          "exportName": "ASTRA_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x5f52665bdb959e8f8b8b0ebd7da9bbd72d04b7cf1c3193e8457dac7c6713a7f4",
+          "schemaHash": "0x00171eac26d1ba192abbdb282de27512cee76032b6059f4c9983c46d456f8143",
+          "planRef": {
+            "ownerRef": "0x628bdd24659dbe33650c28f1f8f22ec65dcd7ed2d147447ec07ec1ca5539f29a",
+            "sourcePlanRef": "0x809c31312a40a442408b8f2c973de5d3278590dea3065d4206bdbbfcc2f1e2be",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x6451407299b2ba2adb8817d84122b70178d98cb01725ae8016577f053dcd44d2",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/astra-multitoken/src/source-plan-runtime.ts",
+              "exportName": "ASTRA_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0x5f52665bdb959e8f8b8b0ebd7da9bbd72d04b7cf1c3193e8457dac7c6713a7f4",
+              "schemaHash": "0x00171eac26d1ba192abbdb282de27512cee76032b6059f4c9983c46d456f8143"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/astra-multitoken/src/nomination-qualification.ts",
+              "exportName": "ASTRA_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x06cf89bcb8c9b021fadfc0710f75756ab0c06cc8155440c57c93b62539167b69"
+            },
+            "independentOracle": {
+              "modulePath": "families/astra-multitoken/src/nomination-qualification.ts",
+              "exportName": "ASTRA_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x06cf89bcb8c9b021fadfc0710f75756ab0c06cc8155440c57c93b62539167b69"
+            },
+            "nominationProgramRoot": "0x44a61e04aa4281643f436cfa7e7bd12599c7f4bc708aa40f2880c39901aee431",
+            "proposalLeafDigest": "0x310406d203de793dc069a5e2b9e0f6156603e04305a01a07609e74ca1060a722"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/astra-multitoken/src/runtime.ts",
+          "exportName": "ASTRA_COARSE_DEFINITION",
+          "closureRoot": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+          "capabilityRef": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "capability",
+            "capabilityId": "family.astra-multitoken.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x39febe9292b3426a2110a84980cc23fbc7fabe136378e0e1594e8e1dfe8772b2",
+            "interpreterHash": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+            "ownerRef": "0x1e86f128432993646ed984699faa079be3f190cd979a0da586fa632723c08afd"
+          }
+        },
+        {
+          "modulePath": "families/astra-multitoken/src/runtime.ts",
+          "exportName": "ASTRA_EXACT_DEFINITION",
+          "closureRoot": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+          "capabilityRef": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "capability",
+            "capabilityId": "family.astra-multitoken.exact",
+            "version": "1.0.0",
+            "schemaHash": "0xd141b189e983918f54f4ac7051a90820fb5beea51b10f30a909fb94d996fe470",
+            "interpreterHash": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+            "ownerRef": "0xa4a0ea7d9d4103c5df36d3ff31c8ee4e2fd650905f2e83d141305c6c911732db"
+          }
+        },
+        {
+          "modulePath": "families/astra-multitoken/src/runtime.ts",
+          "exportName": "ASTRA_STATE_DEFINITION",
+          "closureRoot": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+          "capabilityRef": {
+            "familyId": "astra-multitoken",
+            "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+            "stage": "capability",
+            "capabilityId": "family.astra-multitoken.state",
+            "version": "1.0.0",
+            "schemaHash": "0xfc2ecd72a852381ec8fa9905f02820f82ccea605b557af9c3bec5d53724c1783",
+            "interpreterHash": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+            "ownerRef": "0x786d3c023393fdaae176c3e06730130607d9ccb688479e1341b588f51a2a5d1a"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/astra-multitoken/src/action.ts",
+          "exportName": "ASTRA_ACTION_OWNER",
+          "closureRoot": "0x3044f2c373d517c114a5b30ad782cd45630689f2a1a754b14bcb31f73e344064",
+          "ownerRef": "0x96c37372b96c9f65710c43afd24d756415b0ca4dd362c4255cde21510bfd3681",
+          "ownerId": "family.astra-multitoken.convert-action",
+          "version": "1.0.0",
+          "schemaHash": "0x722ae0d0e5339487015ba10002712f310fa3ac840d8b5f4d109bb965c39d50aa",
+          "implementationHash": "0x368663452d82d8a176ecc401fcbb0d891971dbe93c29424487460df91fb18eec",
+          "actionKinds": [
+            "protocol-convert"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/astra-multitoken/src/search-adapter.ts",
+          "exportName": "ASTRA_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x1626a3bfffd7373a039a592bda45f2fc081105573bacaf1661521b1047e263f1",
+          "capabilityRefs": {
+            "coarse": {
+              "familyId": "astra-multitoken",
+              "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+              "stage": "capability",
+              "capabilityId": "family.astra-multitoken.coarse",
+              "version": "1.0.0",
+              "schemaHash": "0x39febe9292b3426a2110a84980cc23fbc7fabe136378e0e1594e8e1dfe8772b2",
+              "interpreterHash": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+              "ownerRef": "0x1e86f128432993646ed984699faa079be3f190cd979a0da586fa632723c08afd"
+            },
+            "exact": {
+              "familyId": "astra-multitoken",
+              "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+              "stage": "capability",
+              "capabilityId": "family.astra-multitoken.exact",
+              "version": "1.0.0",
+              "schemaHash": "0xd141b189e983918f54f4ac7051a90820fb5beea51b10f30a909fb94d996fe470",
+              "interpreterHash": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+              "ownerRef": "0xa4a0ea7d9d4103c5df36d3ff31c8ee4e2fd650905f2e83d141305c6c911732db"
+            },
+            "state": {
+              "familyId": "astra-multitoken",
+              "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+              "stage": "capability",
+              "capabilityId": "family.astra-multitoken.state",
+              "version": "1.0.0",
+              "schemaHash": "0xfc2ecd72a852381ec8fa9905f02820f82ccea605b557af9c3bec5d53724c1783",
+              "interpreterHash": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f",
+              "ownerRef": "0x786d3c023393fdaae176c3e06730130607d9ccb688479e1341b588f51a2a5d1a"
+            }
+          },
+          "actionOwnerRefs": {
+            "protocol": "0x96c37372b96c9f65710c43afd24d756415b0ca4dd362c4255cde21510bfd3681"
+          },
+          "leafDigest": "0x1539276b3383124f8592215f86a999ba319beae124d2152b9de691224e88188f"
+        }
+      ],
+      "runtimeAdapterRoot": "0x43c6d7ce9ea3909c8ca6adcc7cc2a13ca05bc6a2e377400c07c240aa70765bb0",
+      "sourcePlanRoot": "0x7c668935b68b6ea34b78c2fda648f7b78298e969f2768953d20e9396156a86a9",
+      "stageDefinitionRoot": "0xa66f9787716417af884aa37a150faff3350e479c061a7e47f7cb06b0633aaef3"
+    },
     {
       "entry": {
         "familyId": "curve-underlying",
@@ -971,6 +2327,1701 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
     },
     {
       "entry": {
+        "familyId": "eigenpie",
+        "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+        "issuerRef": "0x507221388469713505990c6220bf0f6eed4f06643816b9c9738c32ebcff7202b",
+        "authorityRef": "0x0f8916686d6a3c076bd5617d32e9d6d12381127b7c2d93b958e323f52f580b7f",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "nomination",
+            "capabilityId": "family.eigenpie.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x55f663d3bfd361260fe3cc966e0d8e4eb0d5ef11a65e7614cefeaf52f7cee30b",
+            "interpreterHash": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+            "ownerRef": "0x99798111b045f6e0ebe78aa84f0be7e34fb0d6a64fae33782eca3752c73a1252"
+          },
+          "identity": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "identity",
+            "capabilityId": "family.eigenpie.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x75759732f8d0da7889a1240d0eb9aa854caad613f4d00cfd43fad79e0bc694b4",
+            "interpreterHash": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+            "ownerRef": "0x4ab0b928062ee921d1595850a042950c8f7e46f7cbf1cfec446e48beef5102c3"
+          },
+          "materialization": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "materialization",
+            "capabilityId": "family.eigenpie.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x846c8d57f0b89da5e93579e68f0798de966dbabbb35530881942e8e424c84d99",
+            "interpreterHash": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+            "ownerRef": "0x128d39d61d1291528385153f31e70f3965d54f2bf6e341057ba918482f128d27"
+          },
+          "projection": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "projection",
+            "capabilityId": "family.eigenpie.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x9fdc6879457d66cce38b0574c836679bf7eb3b9c043bd9a50466d9e7f7fb453f",
+            "interpreterHash": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+            "ownerRef": "0x8c81f52de24e03977b6936b1993720aa5e590b290c3e36bc3f17bbd3cf99101d"
+          },
+          "rehydration": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "rehydration",
+            "capabilityId": "family.eigenpie.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x49e37a87fdcf9116ac1a21824acef35604f903b1a88b5ce4aa1ed0cce5cc0af3",
+            "interpreterHash": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+            "ownerRef": "0x1160c00c5beb244324cc4f18cd773c61fd7ac7d9b36c4e6c8c73f6ba31a08662"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "capability",
+            "capabilityId": "family.eigenpie.exact",
+            "version": "1.0.0",
+            "schemaHash": "0xe5941cce8e0ad15648bce59a107d64c2d18c4510be56ce4cf01eeb17e5994785",
+            "interpreterHash": "0x6c216f59471e18d61d364b51baa105bc6360ae2f0cf53ff6f5507c93f69bb79b",
+            "ownerRef": "0xfb36bfe87a7fb409a5039bcf98d7f9c44cac8a36ed768e197c29c0d7ed778cd0"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x77280916ba92f07d30f6ddb336b526e3d581ff9520031457fb5bd458847a26d2"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.eigenpie.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0x0400b0c18f8a4995838bc74cd751c4a5c218a12be122e80ffceda06845da3f95"
+          },
+          {
+            "factContractId": "family.eigenpie.quote-return",
+            "version": "1.0.0",
+            "schemaHash": "0x1dea933bafbf911ac0b69cf7dcb55167416d4604d80b0ae535cf2c33791f3afd"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x5a084899f5d88cfba9d0b6766c185ab0fc5f7d4913d9c1eddb69c1262f06025d",
+            "sourcePlanRef": "0x58094619563157a2ad51598b99ff376ca480df9a01f964ddd0d0de02500dce71",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          {
+            "ownerRef": "0xd3fd7a23112c7bfcafb10b911240c19592513df748e192e1a68f711e3041f683",
+            "sourcePlanRef": "0x6e5b1f4b56c0800319f851b599deb3471fd4056551c8d93313eda858181da803",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          }
+        ],
+        "definitionCatalogLeafDigest": "0x210c1f14cbf5dd5e98c6fa28f57da934e75663d3214edd651aa685da0602c410",
+        "capabilityCatalogRoot": "0x14f9c7902e0a335990794ca0243f0a9a69e1e36607d3e2da0273ac3b24ee12b5"
+      },
+      "publicEntry": {
+        "modulePath": "families/eigenpie/src/public.ts",
+        "exportName": "EIGENPIE_DEFINITION",
+        "closureRoot": "0xac5ada92a9fc10f6b9b21c829d67d2b34522a318618174fe0d7067cac7195c90"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/eigenpie/src/runtime/definitions.ts",
+          "exportName": "EIGENPIE_IDENTITY_DEFINITION",
+          "closureRoot": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+          "stageRef": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "identity",
+            "capabilityId": "family.eigenpie.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x75759732f8d0da7889a1240d0eb9aa854caad613f4d00cfd43fad79e0bc694b4",
+            "interpreterHash": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+            "ownerRef": "0x4ab0b928062ee921d1595850a042950c8f7e46f7cbf1cfec446e48beef5102c3"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/eigenpie/src/runtime/definitions.ts",
+          "exportName": "EIGENPIE_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+          "stageRef": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "materialization",
+            "capabilityId": "family.eigenpie.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x846c8d57f0b89da5e93579e68f0798de966dbabbb35530881942e8e424c84d99",
+            "interpreterHash": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+            "ownerRef": "0x128d39d61d1291528385153f31e70f3965d54f2bf6e341057ba918482f128d27"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/eigenpie/src/runtime/definitions.ts",
+          "exportName": "EIGENPIE_NOMINATION_DEFINITION",
+          "closureRoot": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+          "stageRef": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "nomination",
+            "capabilityId": "family.eigenpie.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x55f663d3bfd361260fe3cc966e0d8e4eb0d5ef11a65e7614cefeaf52f7cee30b",
+            "interpreterHash": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+            "ownerRef": "0x99798111b045f6e0ebe78aa84f0be7e34fb0d6a64fae33782eca3752c73a1252"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/eigenpie/src/runtime/definitions.ts",
+          "exportName": "EIGENPIE_PROJECTION_DEFINITION",
+          "closureRoot": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+          "stageRef": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "projection",
+            "capabilityId": "family.eigenpie.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x9fdc6879457d66cce38b0574c836679bf7eb3b9c043bd9a50466d9e7f7fb453f",
+            "interpreterHash": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+            "ownerRef": "0x8c81f52de24e03977b6936b1993720aa5e590b290c3e36bc3f17bbd3cf99101d"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/eigenpie/src/runtime/definitions.ts",
+          "exportName": "EIGENPIE_REHYDRATION_DEFINITION",
+          "closureRoot": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+          "stageRef": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "rehydration",
+            "capabilityId": "family.eigenpie.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x49e37a87fdcf9116ac1a21824acef35604f903b1a88b5ce4aa1ed0cce5cc0af3",
+            "interpreterHash": "0x1900197887aa7ae56eefe2b5d426adcf2339dafe7dc135db50fc4906445b2bc6",
+            "ownerRef": "0x1160c00c5beb244324cc4f18cd773c61fd7ac7d9b36c4e6c8c73f6ba31a08662"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "eigenpie.asset-deposit-contiguous-history",
+          "modulePath": "families/eigenpie/src/history-source-plan.ts",
+          "exportName": "EIGENPIE_HISTORY_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0xa55e55905cf8808dbab660fc3b3381bb781b372d4eb79f925fd2a290fcd8774d",
+          "schemaHash": "0x8ffa857b56d3704eb5e858766c435cd26e6357e4602dc4bb40597350aa16a0b7",
+          "planRef": {
+            "ownerRef": "0xd3fd7a23112c7bfcafb10b911240c19592513df748e192e1a68f711e3041f683",
+            "sourcePlanRef": "0x6e5b1f4b56c0800319f851b599deb3471fd4056551c8d93313eda858181da803",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          "leafDigest": "0x5ffcb07e7b4c0cb31cf00f47407c899eddb347d0cbd5e18b86ac5fd788cfe923",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/eigenpie/src/history-source-plan.ts",
+              "exportName": "EIGENPIE_HISTORY_NOMINATION_PROGRAM",
+              "closureRoot": "0xa55e55905cf8808dbab660fc3b3381bb781b372d4eb79f925fd2a290fcd8774d",
+              "schemaHash": "0x8ffa857b56d3704eb5e858766c435cd26e6357e4602dc4bb40597350aa16a0b7"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/eigenpie/src/nomination-qualification.ts",
+              "exportName": "EIGENPIE_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xadc7dc89c550bae4809c9c596bd971def804b9abc4dc43e242c902429195d6e8"
+            },
+            "independentOracle": {
+              "modulePath": "families/eigenpie/src/nomination-qualification.ts",
+              "exportName": "EIGENPIE_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xadc7dc89c550bae4809c9c596bd971def804b9abc4dc43e242c902429195d6e8"
+            },
+            "nominationProgramRoot": "0xa6d70387b8569620398f42da915e0cb4abdd5ad958845f50c4d5d2e413553759",
+            "proposalLeafDigest": "0x3589ba0a7c43f1e53ad2b4528582a90f4560b360414ed6a3eab5011de94328bf"
+          }
+        },
+        {
+          "sourcePlanId": "eigenpie.fixed-cutoff-50-block",
+          "modulePath": "families/eigenpie/src/source-plan.ts",
+          "exportName": "EIGENPIE_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x44d7c57425388b613d3f49507e58694009c60df5540c34ded66128fbc03bae4e",
+          "schemaHash": "0xbea4447df1a852a2bb9052836117aae31a81e982e4128577b8e57c594fb4814f",
+          "planRef": {
+            "ownerRef": "0x5a084899f5d88cfba9d0b6766c185ab0fc5f7d4913d9c1eddb69c1262f06025d",
+            "sourcePlanRef": "0x58094619563157a2ad51598b99ff376ca480df9a01f964ddd0d0de02500dce71",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0xdad028db9f1cb396e3b2d08420fb79cd0f8dd075e66b52f5d06ab04a92b5d4d1",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/eigenpie/src/source-plan.ts",
+              "exportName": "EIGENPIE_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0x44d7c57425388b613d3f49507e58694009c60df5540c34ded66128fbc03bae4e",
+              "schemaHash": "0xbea4447df1a852a2bb9052836117aae31a81e982e4128577b8e57c594fb4814f"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/eigenpie/src/nomination-qualification.ts",
+              "exportName": "EIGENPIE_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xadc7dc89c550bae4809c9c596bd971def804b9abc4dc43e242c902429195d6e8"
+            },
+            "independentOracle": {
+              "modulePath": "families/eigenpie/src/nomination-qualification.ts",
+              "exportName": "EIGENPIE_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xadc7dc89c550bae4809c9c596bd971def804b9abc4dc43e242c902429195d6e8"
+            },
+            "nominationProgramRoot": "0x3db77025c32b1e2138e5e363e8d256d07b0d96237e31edd44141e6802f03265d",
+            "proposalLeafDigest": "0xc27d0447389ea6576920d6eeae6ce7cfc8ee90b14827d06d96d017dcc41fac89"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/eigenpie/src/runtime.ts",
+          "exportName": "EIGENPIE_RUNTIME",
+          "closureRoot": "0x6c216f59471e18d61d364b51baa105bc6360ae2f0cf53ff6f5507c93f69bb79b",
+          "capabilityRef": {
+            "familyId": "eigenpie",
+            "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+            "stage": "capability",
+            "capabilityId": "family.eigenpie.exact",
+            "version": "1.0.0",
+            "schemaHash": "0xe5941cce8e0ad15648bce59a107d64c2d18c4510be56ce4cf01eeb17e5994785",
+            "interpreterHash": "0x6c216f59471e18d61d364b51baa105bc6360ae2f0cf53ff6f5507c93f69bb79b",
+            "ownerRef": "0xfb36bfe87a7fb409a5039bcf98d7f9c44cac8a36ed768e197c29c0d7ed778cd0"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/eigenpie/src/action.ts",
+          "exportName": "EIGENPIE_PROTOCOL_ACTION_PORT",
+          "closureRoot": "0x5f10d2527790fc3e23fe093be8c302db2076b59d5c1d137434126e3a9a660a7d",
+          "ownerRef": "0x77280916ba92f07d30f6ddb336b526e3d581ff9520031457fb5bd458847a26d2",
+          "ownerId": "family.eigenpie.protocol-action",
+          "version": "1.0.0",
+          "schemaHash": "0x79d901887d6c3b06f7af49ac3d56bb8370ec4f433aa87646d031c383d4afe7a9",
+          "implementationHash": "0x04261d98ee0b7da20c96fae6dab0b7dbf1737bb7369bc99a4fc44d044d023111",
+          "actionKinds": [
+            "protocol-call"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/eigenpie/src/runtime.ts",
+          "exportName": "EIGENPIE_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x6c216f59471e18d61d364b51baa105bc6360ae2f0cf53ff6f5507c93f69bb79b",
+          "capabilityRefs": {
+            "exact": {
+              "familyId": "eigenpie",
+              "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+              "stage": "capability",
+              "capabilityId": "family.eigenpie.exact",
+              "version": "1.0.0",
+              "schemaHash": "0xe5941cce8e0ad15648bce59a107d64c2d18c4510be56ce4cf01eeb17e5994785",
+              "interpreterHash": "0x6c216f59471e18d61d364b51baa105bc6360ae2f0cf53ff6f5507c93f69bb79b",
+              "ownerRef": "0xfb36bfe87a7fb409a5039bcf98d7f9c44cac8a36ed768e197c29c0d7ed778cd0"
+            }
+          },
+          "actionOwnerRefs": {
+            "protocol": "0x77280916ba92f07d30f6ddb336b526e3d581ff9520031457fb5bd458847a26d2"
+          },
+          "leafDigest": "0x3847f3e8b8e74ae5ecb8044ad377c311b53ebf6672e67c48a92aa61ba8e0fa86"
+        }
+      ],
+      "runtimeAdapterRoot": "0xcfa55f9f5e51d982c80d579a5fcac4ec0237a2616a819311a2f28201a6758c55",
+      "sourcePlanRoot": "0xb0d44a076f8b5bebd7cca14a2c13e0c7401f6141533996f5b6548aaa9921e94c",
+      "stageDefinitionRoot": "0xbd915da56887bc4c1c679ea5ef467e4b038220a30bacda85ebb965f337e1d8e4"
+    },
+    {
+      "entry": {
+        "familyId": "erc4626",
+        "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+        "issuerRef": "0xfd83441e5e277101f1d820629366661d7928a99357e697dcbd0854478ba013de",
+        "authorityRef": "0x7d57426873f255bbbce88c431381df1c4446b4248131d9f5986db517ab78eb00",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "nomination",
+            "capabilityId": "family.erc4626.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xa39fe168ee70d3a3013fc89f3d4aa456dd9d61966e62a942d1426de899ab3924",
+            "interpreterHash": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+            "ownerRef": "0xf20f923367a6fa904efb1cdd3afdbcf1c7e024d622d71a0af31f21ca6cc10179"
+          },
+          "identity": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "identity",
+            "capabilityId": "family.erc4626.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xbd66a8e893afb1b5e98a0ec9dac2ca4081b79948cd098cdc25982718e068bdac",
+            "interpreterHash": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+            "ownerRef": "0x487bd095f4dee938aa06b0f8a57270f2fdecf33420d1dc3c44675797a10dddd0"
+          },
+          "materialization": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "materialization",
+            "capabilityId": "family.erc4626.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x9fcda9388c9d215dc1fcdbca87cfaa71880595a8acc0159b54bf90f9c36a1972",
+            "interpreterHash": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+            "ownerRef": "0x5243b60049c7c331a7eb9e7929857273082a0c51c5d3b11bd3caa73b20061fb4"
+          },
+          "projection": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "projection",
+            "capabilityId": "family.erc4626.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x789471a2b341a7950eabedccac3fe16976cc92a244a0e8c2d4aeeceed230326b",
+            "interpreterHash": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+            "ownerRef": "0xb451bd440424551756849b342d53cf5353573be6f158ef1bcf038ca2ed20085c"
+          },
+          "rehydration": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "rehydration",
+            "capabilityId": "family.erc4626.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xff92d8d096dc41b722190b6ad3b3e7be562e67ec9767ec8bb57c73fd2c8dbf4a",
+            "interpreterHash": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+            "ownerRef": "0x2df7cae5fd70770dc7fe8d2dbab7a76c9460735717fa53a4017ed725d2126d0a"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "capability",
+            "capabilityId": "family.erc4626.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x452950481831a777063c66cb7a08aeb5e8688ac6dbc15d1b0493662c9240bcf1",
+            "interpreterHash": "0xd20557f00e62c1ae0ce70de1a2e7f7436c07ee817575a035f45095ab7fb459f5",
+            "ownerRef": "0xdc224d0b14a9243b8ae94cec96a27a1679bebff176bdfe03a7750836156a6ba3"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x5f270dabf1a1f361fc129a96f941eb9bcd3cb3d48230b3841516cf254996b044"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.erc4626.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0xa624b3a2081bded298328a20ecaa288f9abc6bfc131b0f2102659e0d577c9829"
+          },
+          {
+            "factContractId": "family.erc4626.rounding-observation",
+            "version": "1.0.0",
+            "schemaHash": "0x4a8f9daeaa7e72f084d277c49a4dadb4613852ef6c668f9a74fadecb5b314fb3"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0xac5ca8763395b4a712fce060850561a7d18bd5ff840425d69f877b474652bc14",
+            "sourcePlanRef": "0x78183790987fa6b76a9516b05a0b14ad85ea90d1b1fc0fe1635dddf2cf3e785e",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          {
+            "ownerRef": "0xf8e3e54652f95bca0981e4402de876ba5f312e73ebe3621c352dfe378d54b8da",
+            "sourcePlanRef": "0xdce22ecad4d45d1f2d1165bb9cd56d8af9639c0eb147c4ecdd9f84f4e3ba38a0",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          }
+        ],
+        "definitionCatalogLeafDigest": "0x943873903edc2181b79bbaa461628e6c16571fe971a8b389b650cb2fb938f009",
+        "capabilityCatalogRoot": "0x587ed73fbcc7c0e38fd7a8479aecb41c63460ee122eabb9219fff3dee98e3683"
+      },
+      "publicEntry": {
+        "modulePath": "families/erc4626/src/public.ts",
+        "exportName": "ERC4626_DEFINITION",
+        "closureRoot": "0x2f0aa443961054c9784b52d5b7bd3dd265f4d71148c71eef00cff0df820e72ef"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/erc4626/src/runtime/definitions.ts",
+          "exportName": "ERC4626_IDENTITY_DEFINITION",
+          "closureRoot": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+          "stageRef": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "identity",
+            "capabilityId": "family.erc4626.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xbd66a8e893afb1b5e98a0ec9dac2ca4081b79948cd098cdc25982718e068bdac",
+            "interpreterHash": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+            "ownerRef": "0x487bd095f4dee938aa06b0f8a57270f2fdecf33420d1dc3c44675797a10dddd0"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/erc4626/src/runtime/definitions.ts",
+          "exportName": "ERC4626_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+          "stageRef": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "materialization",
+            "capabilityId": "family.erc4626.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x9fcda9388c9d215dc1fcdbca87cfaa71880595a8acc0159b54bf90f9c36a1972",
+            "interpreterHash": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+            "ownerRef": "0x5243b60049c7c331a7eb9e7929857273082a0c51c5d3b11bd3caa73b20061fb4"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/erc4626/src/runtime/definitions.ts",
+          "exportName": "ERC4626_NOMINATION_DEFINITION",
+          "closureRoot": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+          "stageRef": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "nomination",
+            "capabilityId": "family.erc4626.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xa39fe168ee70d3a3013fc89f3d4aa456dd9d61966e62a942d1426de899ab3924",
+            "interpreterHash": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+            "ownerRef": "0xf20f923367a6fa904efb1cdd3afdbcf1c7e024d622d71a0af31f21ca6cc10179"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/erc4626/src/runtime/definitions.ts",
+          "exportName": "ERC4626_PROJECTION_DEFINITION",
+          "closureRoot": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+          "stageRef": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "projection",
+            "capabilityId": "family.erc4626.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x789471a2b341a7950eabedccac3fe16976cc92a244a0e8c2d4aeeceed230326b",
+            "interpreterHash": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+            "ownerRef": "0xb451bd440424551756849b342d53cf5353573be6f158ef1bcf038ca2ed20085c"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/erc4626/src/runtime/definitions.ts",
+          "exportName": "ERC4626_REHYDRATION_DEFINITION",
+          "closureRoot": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+          "stageRef": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "rehydration",
+            "capabilityId": "family.erc4626.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xff92d8d096dc41b722190b6ad3b3e7be562e67ec9767ec8bb57c73fd2c8dbf4a",
+            "interpreterHash": "0x3f5e620933498688be9f4854c6a9b677142f3dc16611c2afb287751d947eb0fb",
+            "ownerRef": "0x2df7cae5fd70770dc7fe8d2dbab7a76c9460735717fa53a4017ed725d2126d0a"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "erc4626.fixed-cutoff-50-block",
+          "modulePath": "families/erc4626/src/source-plan.ts",
+          "exportName": "ERC4626_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0xd834740e082979ca706f34002fec60e389e345a08d119ef5951400819ad69df1",
+          "schemaHash": "0xc7689de3df75a74ee1d4c28482a25619c5403ae3778e8b1c4e9df068f07b4cdc",
+          "planRef": {
+            "ownerRef": "0xac5ca8763395b4a712fce060850561a7d18bd5ff840425d69f877b474652bc14",
+            "sourcePlanRef": "0x78183790987fa6b76a9516b05a0b14ad85ea90d1b1fc0fe1635dddf2cf3e785e",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x8fd5bb6bc8bd84aeda8b8926af194c6a4afc35e91bc3b474114fe130b037e589",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/erc4626/src/source-plan.ts",
+              "exportName": "ERC4626_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0xd834740e082979ca706f34002fec60e389e345a08d119ef5951400819ad69df1",
+              "schemaHash": "0xc7689de3df75a74ee1d4c28482a25619c5403ae3778e8b1c4e9df068f07b4cdc"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/erc4626/src/nomination-qualification.ts",
+              "exportName": "ERC4626_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x727414f7fdb25910020b58f461395bf10203182ca78bac1ac43912c2562260f0"
+            },
+            "independentOracle": {
+              "modulePath": "families/erc4626/src/nomination-qualification.ts",
+              "exportName": "ERC4626_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x727414f7fdb25910020b58f461395bf10203182ca78bac1ac43912c2562260f0"
+            },
+            "nominationProgramRoot": "0x58834f6d7de61b0d980f64dc117484555e94c9d1eb3a05748c7ec0455c1e931c",
+            "proposalLeafDigest": "0xdac996651b27b514124171f4a2aa2390cd57c4486d108eb3ec5d209ba1f201bb"
+          }
+        },
+        {
+          "sourcePlanId": "erc4626.withdraw-contiguous-history",
+          "modulePath": "families/erc4626/src/history-source-plan.ts",
+          "exportName": "ERC4626_HISTORY_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0xa6b3cf5fcdefb4d796bca5f783d744b50467f99d8847812e6fec674ced94181a",
+          "schemaHash": "0x0d6cdde934313c6493cc3e52cce4f38b442f317ba5390679cc11fc06caef8211",
+          "planRef": {
+            "ownerRef": "0xf8e3e54652f95bca0981e4402de876ba5f312e73ebe3621c352dfe378d54b8da",
+            "sourcePlanRef": "0xdce22ecad4d45d1f2d1165bb9cd56d8af9639c0eb147c4ecdd9f84f4e3ba38a0",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          "leafDigest": "0xf52a61995dbd998f1a2c9114a2dac946bda39ac3e29eb456f24d2a30bb86751b",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/erc4626/src/history-source-plan.ts",
+              "exportName": "ERC4626_HISTORY_NOMINATION_PROGRAM",
+              "closureRoot": "0xa6b3cf5fcdefb4d796bca5f783d744b50467f99d8847812e6fec674ced94181a",
+              "schemaHash": "0x0d6cdde934313c6493cc3e52cce4f38b442f317ba5390679cc11fc06caef8211"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/erc4626/src/nomination-qualification.ts",
+              "exportName": "ERC4626_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x727414f7fdb25910020b58f461395bf10203182ca78bac1ac43912c2562260f0"
+            },
+            "independentOracle": {
+              "modulePath": "families/erc4626/src/nomination-qualification.ts",
+              "exportName": "ERC4626_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x727414f7fdb25910020b58f461395bf10203182ca78bac1ac43912c2562260f0"
+            },
+            "nominationProgramRoot": "0xa8b81bca210627c1c3f3ecd0768284e920fce99fafe3daeebeb7f7c3587e48c6",
+            "proposalLeafDigest": "0x6c9d122d03cff65f543c6c704e45999cf763c697ccf8bcb16c8611782e84af5e"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/erc4626/src/runtime.ts",
+          "exportName": "ERC4626_RUNTIME",
+          "closureRoot": "0xd20557f00e62c1ae0ce70de1a2e7f7436c07ee817575a035f45095ab7fb459f5",
+          "capabilityRef": {
+            "familyId": "erc4626",
+            "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+            "stage": "capability",
+            "capabilityId": "family.erc4626.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x452950481831a777063c66cb7a08aeb5e8688ac6dbc15d1b0493662c9240bcf1",
+            "interpreterHash": "0xd20557f00e62c1ae0ce70de1a2e7f7436c07ee817575a035f45095ab7fb459f5",
+            "ownerRef": "0xdc224d0b14a9243b8ae94cec96a27a1679bebff176bdfe03a7750836156a6ba3"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/erc4626/src/action.ts",
+          "exportName": "ERC4626_VAULT_ACTION_PORT",
+          "closureRoot": "0xc4fa497a1029f1a9bc4d14baade74a0771f21f947e6adb4cec7a0745ddcb42db",
+          "ownerRef": "0x5f270dabf1a1f361fc129a96f941eb9bcd3cb3d48230b3841516cf254996b044",
+          "ownerId": "family.erc4626.vault-action",
+          "version": "1.0.0",
+          "schemaHash": "0x71b6f5de6bbe3899089dc3bdf1051bcd1e7f387f7ee5e2194b61c471205067b7",
+          "implementationHash": "0x1b5a481b955ba58a9339c3121ccc882f4442edfd9e8f464cd17941bb1ea28a78",
+          "actionKinds": [
+            "vault-call"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/erc4626/src/runtime.ts",
+          "exportName": "ERC4626_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0xd20557f00e62c1ae0ce70de1a2e7f7436c07ee817575a035f45095ab7fb459f5",
+          "capabilityRefs": {
+            "coarse": {
+              "familyId": "erc4626",
+              "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+              "stage": "capability",
+              "capabilityId": "family.erc4626.coarse",
+              "version": "1.0.0",
+              "schemaHash": "0x452950481831a777063c66cb7a08aeb5e8688ac6dbc15d1b0493662c9240bcf1",
+              "interpreterHash": "0xd20557f00e62c1ae0ce70de1a2e7f7436c07ee817575a035f45095ab7fb459f5",
+              "ownerRef": "0xdc224d0b14a9243b8ae94cec96a27a1679bebff176bdfe03a7750836156a6ba3"
+            }
+          },
+          "actionOwnerRefs": {
+            "vault": "0x5f270dabf1a1f361fc129a96f941eb9bcd3cb3d48230b3841516cf254996b044"
+          },
+          "leafDigest": "0x5257e9922f74a5aaa704a17c4352b22e08e6dec023ab33be51e0adf53058c25c"
+        }
+      ],
+      "runtimeAdapterRoot": "0x9e75fdf1307c11d100654fb537aa765c32f31a12f1d3b6c83133d91857d8fff3",
+      "sourcePlanRoot": "0xf88414d39a88a1aebfb68b474888f2deabfa9869175499d1d65f6479b452a81e",
+      "stageDefinitionRoot": "0x11550b14396e4309a05bd656eb10336e58d38cb79e5754b05cfc6fb1a27de320"
+    },
+    {
+      "entry": {
+        "familyId": "erc4626-silo-redeem",
+        "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+        "issuerRef": "0x2e9e764017e219dbc4b17fbeaa30ef79539970074bf5d3048c1695f2b61c0b71",
+        "authorityRef": "0x147635d79bea6ff172ba3fb21637b0510069de7bff9496bb8a47b589f6fa4052",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "nomination",
+            "capabilityId": "family.erc4626-silo-redeem.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xe1109f7493956a57ba28be686dd256db218485fc324cc7c83a12b1aeef4cac8f",
+            "interpreterHash": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+            "ownerRef": "0x9f3a385e190e4495888e26dcd6dd8fffef72f86d00f5d710e6205fd12000fa98"
+          },
+          "identity": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "identity",
+            "capabilityId": "family.erc4626-silo-redeem.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x9b43c43aa72d2e070230077d2736e3b99505cd28a90aa8d70e0e31b813c7c81a",
+            "interpreterHash": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+            "ownerRef": "0x55694455842849f8b019214c4c6d6829ad2094a3f01da729fbf2f7bcad7db203"
+          },
+          "materialization": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "materialization",
+            "capabilityId": "family.erc4626-silo-redeem.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0xc6d0fae955821d377062d59bcb8608887a860a9dd3dd809bb6becbdcc2eb9dcd",
+            "interpreterHash": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+            "ownerRef": "0x4b4b493444add51da3f8717851b1a10f327b97c87ffad6aecfbe1a4c19235e3f"
+          },
+          "projection": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "projection",
+            "capabilityId": "family.erc4626-silo-redeem.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x50cd7ca312798f025dc2b2a3fb4d4a9219e5326d5a95154f3599875be238c6dd",
+            "interpreterHash": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+            "ownerRef": "0x1d0cbbf75b9dbc15a868ad2faed7c9559e8207618830bb1db733c072da54e33f"
+          },
+          "rehydration": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "rehydration",
+            "capabilityId": "family.erc4626-silo-redeem.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x829ef6122542de2651a81325c265d80437d0fb0cac28b24bdf08ff8b7061edb8",
+            "interpreterHash": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+            "ownerRef": "0xca52f7ef88b7311f83822932738b2603fc55ad598995a3987b953cf2001f6144"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "capability",
+            "capabilityId": "family.erc4626-silo-redeem.exact",
+            "version": "1.0.0",
+            "schemaHash": "0xb8b337d3cd29bda7f2f09b8cf99240e113be4f2daab55694256e376fb7b8ed0c",
+            "interpreterHash": "0xda47cbee006fadb9f9781f2d8e326543d0b7a811f3bc11fc193a0ee760eb882d",
+            "ownerRef": "0xf335731bd86a81a7a69564e159a2786d387d850312d4b83de8798dcf277b1702"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x97eefba8daf82cc988fbf116cdfb720e9eb55731effe889f1203d7bfcee90982"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.erc4626-silo-redeem.effect-observation",
+            "version": "1.0.0",
+            "schemaHash": "0x76e52d45cb8b58bb238d72b1798a563f5996a45fd8f5af23ce02275c6d6e8d9b"
+          },
+          {
+            "factContractId": "family.erc4626-silo-redeem.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0xe56fdd1d3382fb67c98f55e42e45302bc484b9c31ecd4799aee72a284df00529"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0xe0729b683f24a0e4760ad9ef958c9b89156acc19b9edb18398dc42cefa7c872e",
+            "sourcePlanRef": "0x501f9dacca1aa41110dc0e902edac6ce0f65f28fdc6e0a8ea1424406d95e2953",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          {
+            "ownerRef": "0xd959229b146fbc20fb0cbdbcfcc433dc8086f4e2ec2a619aef50ab2db2bbf737",
+            "sourcePlanRef": "0x744845d0a415d94dd29dd9f1f58ef5506343db5987160f1e35a9741d45857727",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0xe96a1d40dbbd7aacc48ae1c1788b7587c3efbbfb7d660719ff79a20cdfa40cd0",
+        "capabilityCatalogRoot": "0xfd868bf504695c2817387b2d6be5c9169b22be13764e68179dd32aef856d5d2d"
+      },
+      "publicEntry": {
+        "modulePath": "families/erc4626-silo-redeem/src/public.ts",
+        "exportName": "ERC4626_SILO_REDEEM_DEFINITION",
+        "closureRoot": "0xa88105df3314e07a724f057433eda5c4083ed36bc50a0c4fe1d6ca6c8b33ccfc"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/erc4626-silo-redeem/src/runtime/definitions.ts",
+          "exportName": "ERC4626_SILO_REDEEM_IDENTITY_DEFINITION",
+          "closureRoot": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+          "stageRef": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "identity",
+            "capabilityId": "family.erc4626-silo-redeem.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x9b43c43aa72d2e070230077d2736e3b99505cd28a90aa8d70e0e31b813c7c81a",
+            "interpreterHash": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+            "ownerRef": "0x55694455842849f8b019214c4c6d6829ad2094a3f01da729fbf2f7bcad7db203"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/erc4626-silo-redeem/src/runtime/definitions.ts",
+          "exportName": "ERC4626_SILO_REDEEM_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+          "stageRef": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "materialization",
+            "capabilityId": "family.erc4626-silo-redeem.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0xc6d0fae955821d377062d59bcb8608887a860a9dd3dd809bb6becbdcc2eb9dcd",
+            "interpreterHash": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+            "ownerRef": "0x4b4b493444add51da3f8717851b1a10f327b97c87ffad6aecfbe1a4c19235e3f"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/erc4626-silo-redeem/src/runtime/definitions.ts",
+          "exportName": "ERC4626_SILO_REDEEM_NOMINATION_DEFINITION",
+          "closureRoot": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+          "stageRef": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "nomination",
+            "capabilityId": "family.erc4626-silo-redeem.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xe1109f7493956a57ba28be686dd256db218485fc324cc7c83a12b1aeef4cac8f",
+            "interpreterHash": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+            "ownerRef": "0x9f3a385e190e4495888e26dcd6dd8fffef72f86d00f5d710e6205fd12000fa98"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/erc4626-silo-redeem/src/runtime/definitions.ts",
+          "exportName": "ERC4626_SILO_REDEEM_PROJECTION_DEFINITION",
+          "closureRoot": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+          "stageRef": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "projection",
+            "capabilityId": "family.erc4626-silo-redeem.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x50cd7ca312798f025dc2b2a3fb4d4a9219e5326d5a95154f3599875be238c6dd",
+            "interpreterHash": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+            "ownerRef": "0x1d0cbbf75b9dbc15a868ad2faed7c9559e8207618830bb1db733c072da54e33f"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/erc4626-silo-redeem/src/runtime/definitions.ts",
+          "exportName": "ERC4626_SILO_REDEEM_REHYDRATION_DEFINITION",
+          "closureRoot": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+          "stageRef": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "rehydration",
+            "capabilityId": "family.erc4626-silo-redeem.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x829ef6122542de2651a81325c265d80437d0fb0cac28b24bdf08ff8b7061edb8",
+            "interpreterHash": "0xfc80638698537431208f50de592879a012c2e5abf28cdb1c7083cf80809bc46e",
+            "ownerRef": "0xca52f7ef88b7311f83822932738b2603fc55ad598995a3987b953cf2001f6144"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "erc4626-silo-redeem.fixed-cutoff-50-block",
+          "modulePath": "families/erc4626-silo-redeem/src/source-plan.ts",
+          "exportName": "ERC4626_SILO_REDEEM_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0xd0ae4a74b70e376a61d75d33ae7bdd60fa3257ff8abbb2034228315ad576e32a",
+          "schemaHash": "0xdae6dc0ebde2061a7ab0ae1dc285bc0bd26ea3b8097e8dbdfec026206df3093d",
+          "planRef": {
+            "ownerRef": "0xd959229b146fbc20fb0cbdbcfcc433dc8086f4e2ec2a619aef50ab2db2bbf737",
+            "sourcePlanRef": "0x744845d0a415d94dd29dd9f1f58ef5506343db5987160f1e35a9741d45857727",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x19928b982041acf46212e436da41bb34798ff82520db8154ccc29f6e479abfc8",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/erc4626-silo-redeem/src/source-plan.ts",
+              "exportName": "ERC4626_SILO_REDEEM_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0xd0ae4a74b70e376a61d75d33ae7bdd60fa3257ff8abbb2034228315ad576e32a",
+              "schemaHash": "0xdae6dc0ebde2061a7ab0ae1dc285bc0bd26ea3b8097e8dbdfec026206df3093d"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/erc4626-silo-redeem/src/nomination-qualification.ts",
+              "exportName": "ERC4626_SILO_REDEEM_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xe817477ec3f76d9788a1636b0a1aec731be3d0ac5dec45050aedee76d968b69d"
+            },
+            "independentOracle": {
+              "modulePath": "families/erc4626-silo-redeem/src/nomination-qualification.ts",
+              "exportName": "ERC4626_SILO_REDEEM_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xe817477ec3f76d9788a1636b0a1aec731be3d0ac5dec45050aedee76d968b69d"
+            },
+            "nominationProgramRoot": "0x756e0e543bec257055150ad46e81df73bb4b714a51ac4f227301551ad6fd354d",
+            "proposalLeafDigest": "0x7354d0dd4a6203de9c7d6c3556fb52b5e369bde50b74ed0632c59f0bd92fe9b0"
+          }
+        },
+        {
+          "sourcePlanId": "erc4626-silo-redeem.withdraw-contiguous-history",
+          "modulePath": "families/erc4626-silo-redeem/src/history-source-plan.ts",
+          "exportName": "ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x84832d3ac0486219fe62b5abf49242b6c634a38ffd5842ddc7ec9329b2d52ab0",
+          "schemaHash": "0x5001c6c2b4aa36570945e54df068dcd6408298ab253dba8543dcd8c275192e43",
+          "planRef": {
+            "ownerRef": "0xe0729b683f24a0e4760ad9ef958c9b89156acc19b9edb18398dc42cefa7c872e",
+            "sourcePlanRef": "0x501f9dacca1aa41110dc0e902edac6ce0f65f28fdc6e0a8ea1424406d95e2953",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          "leafDigest": "0xc87e73d89e73d32a8cd7c96e83cace92232fa962bf07889079b8ff130dc25b25",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/erc4626-silo-redeem/src/history-source-plan.ts",
+              "exportName": "ERC4626_SILO_REDEEM_HISTORY_NOMINATION_PROGRAM",
+              "closureRoot": "0x84832d3ac0486219fe62b5abf49242b6c634a38ffd5842ddc7ec9329b2d52ab0",
+              "schemaHash": "0x5001c6c2b4aa36570945e54df068dcd6408298ab253dba8543dcd8c275192e43"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/erc4626-silo-redeem/src/nomination-qualification.ts",
+              "exportName": "ERC4626_SILO_REDEEM_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xe817477ec3f76d9788a1636b0a1aec731be3d0ac5dec45050aedee76d968b69d"
+            },
+            "independentOracle": {
+              "modulePath": "families/erc4626-silo-redeem/src/nomination-qualification.ts",
+              "exportName": "ERC4626_SILO_REDEEM_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xe817477ec3f76d9788a1636b0a1aec731be3d0ac5dec45050aedee76d968b69d"
+            },
+            "nominationProgramRoot": "0x54053472dcb0c46a424701befb46324b7144fd3cf144d7ee54799697f0cb0450",
+            "proposalLeafDigest": "0x3a00e60c783c0ac2bdd3593af727df55580fc82e5601a2638c813c59a0ade6fb"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/erc4626-silo-redeem/src/runtime.ts",
+          "exportName": "ERC4626_SILO_REDEEM_RUNTIME",
+          "closureRoot": "0xda47cbee006fadb9f9781f2d8e326543d0b7a811f3bc11fc193a0ee760eb882d",
+          "capabilityRef": {
+            "familyId": "erc4626-silo-redeem",
+            "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+            "stage": "capability",
+            "capabilityId": "family.erc4626-silo-redeem.exact",
+            "version": "1.0.0",
+            "schemaHash": "0xb8b337d3cd29bda7f2f09b8cf99240e113be4f2daab55694256e376fb7b8ed0c",
+            "interpreterHash": "0xda47cbee006fadb9f9781f2d8e326543d0b7a811f3bc11fc193a0ee760eb882d",
+            "ownerRef": "0xf335731bd86a81a7a69564e159a2786d387d850312d4b83de8798dcf277b1702"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/erc4626-silo-redeem/src/action.ts",
+          "exportName": "ERC4626_SILO_REDEEM_ACTION_PORT",
+          "closureRoot": "0xfad0c3ce6aded2806bf391aa48455eec271e6e8879811e9630721e1b67e1ff71",
+          "ownerRef": "0x97eefba8daf82cc988fbf116cdfb720e9eb55731effe889f1203d7bfcee90982",
+          "ownerId": "family.erc4626-silo-redeem.redeem-action",
+          "version": "1.0.0",
+          "schemaHash": "0x849276710a564547aa74d8331b1ec506c32d86a31987ac10a479c7c288fb2814",
+          "implementationHash": "0x6ecaf18407367302ca29629b424e294e867612ee90457cd6757af88d3d018b58",
+          "actionKinds": [
+            "redeem"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/erc4626-silo-redeem/src/runtime.ts",
+          "exportName": "ERC4626_SILO_REDEEM_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0xda47cbee006fadb9f9781f2d8e326543d0b7a811f3bc11fc193a0ee760eb882d",
+          "capabilityRefs": {
+            "exact": {
+              "familyId": "erc4626-silo-redeem",
+              "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+              "stage": "capability",
+              "capabilityId": "family.erc4626-silo-redeem.exact",
+              "version": "1.0.0",
+              "schemaHash": "0xb8b337d3cd29bda7f2f09b8cf99240e113be4f2daab55694256e376fb7b8ed0c",
+              "interpreterHash": "0xda47cbee006fadb9f9781f2d8e326543d0b7a811f3bc11fc193a0ee760eb882d",
+              "ownerRef": "0xf335731bd86a81a7a69564e159a2786d387d850312d4b83de8798dcf277b1702"
+            }
+          },
+          "actionOwnerRefs": {
+            "redeem": "0x97eefba8daf82cc988fbf116cdfb720e9eb55731effe889f1203d7bfcee90982"
+          },
+          "leafDigest": "0x05cbba98168ed2f34ab2dc760df4ae78fc540303d2a55272462c7c7dde2e669c"
+        }
+      ],
+      "runtimeAdapterRoot": "0xbf0c60e619e101c59130792fc6526a4b7f0c20efcafd1650239a36a2687260b4",
+      "sourcePlanRoot": "0x9908ab252d54532fbd9fab8e53d89bff0315fdef17896e4eb4288da68d89a7f2",
+      "stageDefinitionRoot": "0xbc4031861838f3c9dc0c6cfdef0724b28c0feb4cf7671575687c18fbde60b2d6"
+    },
+    {
+      "entry": {
+        "familyId": "ethertoken-native-redeem",
+        "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+        "issuerRef": "0x995f3219c38cbd80b02512259e122d5e7a4fc1944a70d3fb4c0e0585372c512a",
+        "authorityRef": "0x48a84b6702d17812745410badf81842d37950027f9d34422b7e60821ebd1d6f8",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "nomination",
+            "capabilityId": "family.ethertoken-native-redeem.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x85b83f92e552ff0d083aabc0b8f4e8b4e4e18f11ca774e7d7626693228f17181",
+            "interpreterHash": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+            "ownerRef": "0xec2c20177b5f12742185ef8cd595e875db22cae3fcfef96b6e68c32de3917cba"
+          },
+          "identity": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "identity",
+            "capabilityId": "family.ethertoken-native-redeem.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x514a551fe9ccaa448c927dadd2784583e2a90b39d5165fbf41d777b071ab9cea",
+            "interpreterHash": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+            "ownerRef": "0xe25c487d62d6002a6409856ab33c38b03e534f4ddfe12c80e0d0d6f6ca1e366a"
+          },
+          "materialization": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "materialization",
+            "capabilityId": "family.ethertoken-native-redeem.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0xd5f6b08639faa949033f6e050a60e6fc657b052f066f3e75900679f0bab9aabd",
+            "interpreterHash": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+            "ownerRef": "0x92d82b7245df30cc91e52fdda05a6447907d5c223103fb4d3b96d995f1f434ac"
+          },
+          "projection": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "projection",
+            "capabilityId": "family.ethertoken-native-redeem.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x8436accbe5d09c299fa70fdf5b30034e8775d8e49aabf0fec9357064f4724182",
+            "interpreterHash": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+            "ownerRef": "0xe315ff3ea8a8990c9be05f32817234770ad45bc5f2b591d6d7f38546dad96120"
+          },
+          "rehydration": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "rehydration",
+            "capabilityId": "family.ethertoken-native-redeem.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x8686e87aae403e8c99ec8543255ed683e46411022efbc7158e29c3e2c8c98c71",
+            "interpreterHash": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+            "ownerRef": "0xdb9219b300db284e3bb2786d00e3cec535baa638f6a1ec5da4362f3b32a0bbe9"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "capability",
+            "capabilityId": "family.ethertoken-native-redeem.exact",
+            "version": "1.0.0",
+            "schemaHash": "0xc85f8aec5f56d41c42704e7f2a732c29e86a0e7f0d4b2cf82579fdc0481ebcea",
+            "interpreterHash": "0xb02fcdf68b528984354046bf252165b531cba0e37fc7b4d041ba74b9dacb5f3b",
+            "ownerRef": "0x68f0b740eb1a7d11c7f51372436e10d6f6c8cb42bafecf55eae7725dde2ac3e3"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x70cd25471e9c488fa228a9c85f1569e9f4a4d7771a421d951f2bd2806620f529"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.ethertoken-native-redeem.effect-observation",
+            "version": "1.0.0",
+            "schemaHash": "0x415236db4cbf79e9ec47bc03c5775bfd51d954499da862d46dbe5a9d21123a8e"
+          },
+          {
+            "factContractId": "family.ethertoken-native-redeem.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0xfce145b834935c8bbb80b1eedce79ae07cdc235dd2af97ca5418553a60e08075"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x513a9f573269d068fe8b3c080b793cef291f0aff148dc0405b2aa2be59bad940",
+            "sourcePlanRef": "0x8977dc35377a33fc33cb51e8fe6e3f407d3988d7190caa69f033a36464cfb9f3",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          {
+            "ownerRef": "0xf625f629769a270a906d58dca58d686bd9c15ffb179a362a16f6457098944d78",
+            "sourcePlanRef": "0xd7b60faee1f4da6efcdf2a5a6067a77c60854758763d811f83d3520d7262d280",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          }
+        ],
+        "definitionCatalogLeafDigest": "0x15cae8e141a4a320d72ba9a3536418dccd7daeaadf8387737763f0dfddbae445",
+        "capabilityCatalogRoot": "0x4c544bf9a6c8cc46e8d3bdf284262c8eefccbecedc53f603c94494171de48709"
+      },
+      "publicEntry": {
+        "modulePath": "families/ethertoken-native-redeem/src/public.ts",
+        "exportName": "ETHERTOKEN_NATIVE_REDEEM_DEFINITION",
+        "closureRoot": "0x3e72306b0c1d4391aab43122f82b722746b30ba8b6c4f53d59953b79c1bfedfe"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/ethertoken-native-redeem/src/runtime/definitions.ts",
+          "exportName": "ETHERTOKEN_NATIVE_REDEEM_IDENTITY_DEFINITION",
+          "closureRoot": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+          "stageRef": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "identity",
+            "capabilityId": "family.ethertoken-native-redeem.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x514a551fe9ccaa448c927dadd2784583e2a90b39d5165fbf41d777b071ab9cea",
+            "interpreterHash": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+            "ownerRef": "0xe25c487d62d6002a6409856ab33c38b03e534f4ddfe12c80e0d0d6f6ca1e366a"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/ethertoken-native-redeem/src/runtime/definitions.ts",
+          "exportName": "ETHERTOKEN_NATIVE_REDEEM_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+          "stageRef": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "materialization",
+            "capabilityId": "family.ethertoken-native-redeem.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0xd5f6b08639faa949033f6e050a60e6fc657b052f066f3e75900679f0bab9aabd",
+            "interpreterHash": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+            "ownerRef": "0x92d82b7245df30cc91e52fdda05a6447907d5c223103fb4d3b96d995f1f434ac"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/ethertoken-native-redeem/src/runtime/definitions.ts",
+          "exportName": "ETHERTOKEN_NATIVE_REDEEM_NOMINATION_DEFINITION",
+          "closureRoot": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+          "stageRef": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "nomination",
+            "capabilityId": "family.ethertoken-native-redeem.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x85b83f92e552ff0d083aabc0b8f4e8b4e4e18f11ca774e7d7626693228f17181",
+            "interpreterHash": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+            "ownerRef": "0xec2c20177b5f12742185ef8cd595e875db22cae3fcfef96b6e68c32de3917cba"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/ethertoken-native-redeem/src/runtime/definitions.ts",
+          "exportName": "ETHERTOKEN_NATIVE_REDEEM_PROJECTION_DEFINITION",
+          "closureRoot": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+          "stageRef": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "projection",
+            "capabilityId": "family.ethertoken-native-redeem.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x8436accbe5d09c299fa70fdf5b30034e8775d8e49aabf0fec9357064f4724182",
+            "interpreterHash": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+            "ownerRef": "0xe315ff3ea8a8990c9be05f32817234770ad45bc5f2b591d6d7f38546dad96120"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/ethertoken-native-redeem/src/runtime/definitions.ts",
+          "exportName": "ETHERTOKEN_NATIVE_REDEEM_REHYDRATION_DEFINITION",
+          "closureRoot": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+          "stageRef": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "rehydration",
+            "capabilityId": "family.ethertoken-native-redeem.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x8686e87aae403e8c99ec8543255ed683e46411022efbc7158e29c3e2c8c98c71",
+            "interpreterHash": "0xf783fec87224aa70144160d1c24178ee2ae568893ccd4b7c6fab9db1a3ecd409",
+            "ownerRef": "0xdb9219b300db284e3bb2786d00e3cec535baa638f6a1ec5da4362f3b32a0bbe9"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "ethertoken-native-redeem.destruction-contiguous-history",
+          "modulePath": "families/ethertoken-native-redeem/src/history-source-plan.ts",
+          "exportName": "ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0xbefe1acbb6a135ebd10f7daa06388d3adc4e52c7ad4d3ff3bef6c583ec542c98",
+          "schemaHash": "0x00e6ce5b6b795b29f216f6aee7704e52a1c49384d26f707df8e923c6354b0ffe",
+          "planRef": {
+            "ownerRef": "0xf625f629769a270a906d58dca58d686bd9c15ffb179a362a16f6457098944d78",
+            "sourcePlanRef": "0xd7b60faee1f4da6efcdf2a5a6067a77c60854758763d811f83d3520d7262d280",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          "leafDigest": "0x5e7d64a5ae2ac56b3852ef02cb64eae1f3336d47c691d7bdc088b4de9b062687",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/ethertoken-native-redeem/src/history-source-plan.ts",
+              "exportName": "ETHERTOKEN_NATIVE_REDEEM_HISTORY_NOMINATION_PROGRAM",
+              "closureRoot": "0xbefe1acbb6a135ebd10f7daa06388d3adc4e52c7ad4d3ff3bef6c583ec542c98",
+              "schemaHash": "0x00e6ce5b6b795b29f216f6aee7704e52a1c49384d26f707df8e923c6354b0ffe"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/ethertoken-native-redeem/src/nomination-qualification.ts",
+              "exportName": "ETHERTOKEN_NATIVE_REDEEM_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xc2cc04b0f5180603d6a431b60ae1b7b7aabbf752d5d21600319790e16c2263a8"
+            },
+            "independentOracle": {
+              "modulePath": "families/ethertoken-native-redeem/src/nomination-qualification.ts",
+              "exportName": "ETHERTOKEN_NATIVE_REDEEM_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xc2cc04b0f5180603d6a431b60ae1b7b7aabbf752d5d21600319790e16c2263a8"
+            },
+            "nominationProgramRoot": "0xa3357481b3d6ecaeb2dc2d3a5f0fb05303277b859315766cea62aabf4054f0ad",
+            "proposalLeafDigest": "0x7b3ee17813796bb9c3a94faea3e747a1884b5f67ce3da91bd71ed4cbb46d5d16"
+          }
+        },
+        {
+          "sourcePlanId": "ethertoken-native-redeem.fixed-cutoff-50-block",
+          "modulePath": "families/ethertoken-native-redeem/src/source-plan.ts",
+          "exportName": "ETHERTOKEN_NATIVE_REDEEM_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x18c5ad781b1ced957b19491db671c899709d6d7bbe8a8ce88982c332a67066b7",
+          "schemaHash": "0xb46ea3aa3f7c389cceaff7a4d2caea4c6053eccc9ef3980321d972548b62fde4",
+          "planRef": {
+            "ownerRef": "0x513a9f573269d068fe8b3c080b793cef291f0aff148dc0405b2aa2be59bad940",
+            "sourcePlanRef": "0x8977dc35377a33fc33cb51e8fe6e3f407d3988d7190caa69f033a36464cfb9f3",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x8c170221319f10a119da892b223ebf1b2aa90d760c3878b8113c828e0304d33d",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/ethertoken-native-redeem/src/source-plan.ts",
+              "exportName": "ETHERTOKEN_NATIVE_REDEEM_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0x18c5ad781b1ced957b19491db671c899709d6d7bbe8a8ce88982c332a67066b7",
+              "schemaHash": "0xb46ea3aa3f7c389cceaff7a4d2caea4c6053eccc9ef3980321d972548b62fde4"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/ethertoken-native-redeem/src/nomination-qualification.ts",
+              "exportName": "ETHERTOKEN_NATIVE_REDEEM_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xc2cc04b0f5180603d6a431b60ae1b7b7aabbf752d5d21600319790e16c2263a8"
+            },
+            "independentOracle": {
+              "modulePath": "families/ethertoken-native-redeem/src/nomination-qualification.ts",
+              "exportName": "ETHERTOKEN_NATIVE_REDEEM_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xc2cc04b0f5180603d6a431b60ae1b7b7aabbf752d5d21600319790e16c2263a8"
+            },
+            "nominationProgramRoot": "0xd65b5a2be4f444148e1fda8aaf755190694a0b9ba6bd8c135e5b2a24483ff7b5",
+            "proposalLeafDigest": "0x598ff011523ea9fe4f22d6dcc5aec873dfeeb2626cdd47c5582a3f0c3713a6e9"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/ethertoken-native-redeem/src/runtime.ts",
+          "exportName": "ETHERTOKEN_NATIVE_REDEEM_RUNTIME",
+          "closureRoot": "0xb02fcdf68b528984354046bf252165b531cba0e37fc7b4d041ba74b9dacb5f3b",
+          "capabilityRef": {
+            "familyId": "ethertoken-native-redeem",
+            "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+            "stage": "capability",
+            "capabilityId": "family.ethertoken-native-redeem.exact",
+            "version": "1.0.0",
+            "schemaHash": "0xc85f8aec5f56d41c42704e7f2a732c29e86a0e7f0d4b2cf82579fdc0481ebcea",
+            "interpreterHash": "0xb02fcdf68b528984354046bf252165b531cba0e37fc7b4d041ba74b9dacb5f3b",
+            "ownerRef": "0x68f0b740eb1a7d11c7f51372436e10d6f6c8cb42bafecf55eae7725dde2ac3e3"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/ethertoken-native-redeem/src/action.ts",
+          "exportName": "ETHERTOKEN_NATIVE_REDEEM_ACTION_PORT",
+          "closureRoot": "0x9abfd7a61aee0d2e768458f29b42684de601d5a43c5809541d90949cfab55853",
+          "ownerRef": "0x70cd25471e9c488fa228a9c85f1569e9f4a4d7771a421d951f2bd2806620f529",
+          "ownerId": "family.ethertoken-native-redeem.redeem-action",
+          "version": "1.0.0",
+          "schemaHash": "0x1e3b6fea8c82614bde251294f56d35b8a12ce28ecb0b63b880b503403e2cece1",
+          "implementationHash": "0xafb0f9fdba9214e33e501d50a394b1ff08bc5e908e8c3d33b7f4e9e61e8174fc",
+          "actionKinds": [
+            "redeem"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/ethertoken-native-redeem/src/runtime.ts",
+          "exportName": "ETHERTOKEN_NATIVE_REDEEM_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0xb02fcdf68b528984354046bf252165b531cba0e37fc7b4d041ba74b9dacb5f3b",
+          "capabilityRefs": {
+            "exact": {
+              "familyId": "ethertoken-native-redeem",
+              "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+              "stage": "capability",
+              "capabilityId": "family.ethertoken-native-redeem.exact",
+              "version": "1.0.0",
+              "schemaHash": "0xc85f8aec5f56d41c42704e7f2a732c29e86a0e7f0d4b2cf82579fdc0481ebcea",
+              "interpreterHash": "0xb02fcdf68b528984354046bf252165b531cba0e37fc7b4d041ba74b9dacb5f3b",
+              "ownerRef": "0x68f0b740eb1a7d11c7f51372436e10d6f6c8cb42bafecf55eae7725dde2ac3e3"
+            }
+          },
+          "actionOwnerRefs": {
+            "redeem": "0x70cd25471e9c488fa228a9c85f1569e9f4a4d7771a421d951f2bd2806620f529"
+          },
+          "leafDigest": "0x16dacae091dd2bd3d811bc9b9f4b24842635091fd1547199385fed1925ec6038"
+        }
+      ],
+      "runtimeAdapterRoot": "0x70a21bee41a32f88b61c202c42865cd3a8e627ed87a7adcd9737b9ef330028e0",
+      "sourcePlanRoot": "0xeaef7955e99af6765605701b7b5c1823a8569dec400e7496f377ba5f5ab6a756",
+      "stageDefinitionRoot": "0x14cc274fc6a370124b3e3ce70faa636636ead1c65f540b2ee2878c429cc06685"
+    },
+    {
+      "entry": {
+        "familyId": "fluid-credit",
+        "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+        "issuerRef": "0xb9ef0f94edd09732db00f0f75088ec95d07204e2f74157f7bdf961789a654497",
+        "authorityRef": "0xc4ed457ac2ab3acd3bf0f95c56a2bc70eb1c40b449dfdf14340f5c12928a06e7",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "nomination",
+            "capabilityId": "family.fluid-credit.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xa8f8990ab126040876d6dc4ee21f504eeae060d56fcb5d08ad9041dc80882012",
+            "interpreterHash": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+            "ownerRef": "0x543bfa5123bf6222f48283db17a28f96ca805ac8d5f06b779c75b6e722880185"
+          },
+          "identity": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "identity",
+            "capabilityId": "family.fluid-credit.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x9a5957d2c7c08fc6b780dceeb6ea7a6130a5a85da0dde3af71d103107e1753ae",
+            "interpreterHash": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+            "ownerRef": "0x483d32f7c140efe8ebffdf79965d4230628c7b12178a6df054369f3c675a4037"
+          },
+          "materialization": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "materialization",
+            "capabilityId": "family.fluid-credit.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x6f94c73feeadf09c7e72d6ce8cdf3b6ef4db44770b343ca359c2ff7ffe98d719",
+            "interpreterHash": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+            "ownerRef": "0x6d37b26f140151c44c9a6a4b3c2c99c5513d495bef3cd598f1dd39253bd2a41b"
+          },
+          "projection": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "projection",
+            "capabilityId": "family.fluid-credit.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x1b9770614c777fb00a29deb9ecbbf917f162e3c7c0d632dda46477329c2370d8",
+            "interpreterHash": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+            "ownerRef": "0xfd07a07eec88aeb5788640fdb75d0a4a4bf7d42aad8537a2de2cece633f06f3b"
+          },
+          "rehydration": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "rehydration",
+            "capabilityId": "family.fluid-credit.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xbfebea90a13c2a547792ddf7fce729b0d22b58d2a93d5ec8e16db9d1497f784c",
+            "interpreterHash": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+            "ownerRef": "0x5ac6acd4d81746883c664dd3a144da3ff045a9e64842c9ff3c2942378a55b313"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "capability",
+            "capabilityId": "family.fluid-credit.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0xcd9317fe0e7f6acf12dc4ce038dfb9d0a37a966b6ae71472aaacfe2e9e9aaad9",
+            "interpreterHash": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+            "ownerRef": "0x76d2e89b5d06488865e3eacf0f69e85fd3dc48348340738a5e12c344daa70260"
+          },
+          {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "capability",
+            "capabilityId": "family.fluid-credit.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x9d2077a96ab2d1f0930f88ec353135ffea4ebdabc3918b14a80fc151751514df",
+            "interpreterHash": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+            "ownerRef": "0xea50efcf730f4d868b4101b4338c15cc5e59987c979529e1a802f74fce22c763"
+          },
+          {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "capability",
+            "capabilityId": "family.fluid-credit.state",
+            "version": "1.0.0",
+            "schemaHash": "0x7a63b336de7c0227c01c573931c034ed9e6d68b8632c790b05a1d7f7e1a69914",
+            "interpreterHash": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+            "ownerRef": "0x56e305161d76079fb9098ff1d3b12d959a40a191fe20805ebd1b2c8d5f74555e"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x0594ae5f401d4f9b9106bc2fee89facd84328b25c249d5ccdc6186226e6eccd0"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.fluid-credit.credit-obligation",
+            "version": "1.0.0",
+            "schemaHash": "0x90ebbd623279e8f4199613f1da12e2531122d24baebc5993d61d2c362f3a2fdf"
+          },
+          {
+            "factContractId": "family.fluid-credit.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0x181ad4fadf32b256c2e0eed2b97f7d0030585edb7645f3379a83b6c15ba34e2e"
+          },
+          {
+            "factContractId": "family.fluid-credit.optional-instance-partition",
+            "version": "1.0.0",
+            "schemaHash": "0x7528463af673e98d32bf388284b2215ba67abac940647ad809e9b23ccd84c9a1"
+          },
+          {
+            "factContractId": "family.fluid-credit.state-observation",
+            "version": "1.0.0",
+            "schemaHash": "0x9799645bc3e4bb7abcc03d7ad45db7323d6449f4a3b074d09251b805bb1c5ccf"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0xfb36b9e835e95973ecaed463579a60299ed0a6b8963e259b0716fdd102593a0f",
+            "sourcePlanRef": "0x2c8b000c11afdc91a3101f611a85c02751342838f3774ca02e723a9036a1fdbc",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "completeness": "complete-snapshot",
+            "historyStartBlock": null
+          },
+          {
+            "ownerRef": "0xa8bb3ced5d58210b2429f3b204baa7b7d7a36e03f0a38e18afebe5749da1006a",
+            "sourcePlanRef": "0x7d0b77f77605c4d5e6b2c8d4eee383720c2beb57544310951467bce0be1616f6",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0x70033bd18a57eb156994acecc5cfaba30687bf12d8ad5fd5ae8becd912d2d3c1",
+        "capabilityCatalogRoot": "0x98f4db7bdcd5917e7f4db87b01acf26ebf2e3f4c5eadd6c2aa7414ee2ba6cc51"
+      },
+      "publicEntry": {
+        "modulePath": "families/fluid-credit/src/public.ts",
+        "exportName": "FLUID_CREDIT_DEFINITION",
+        "closureRoot": "0x1e031c8677691485db25da59ed42baed10eeca1b57716e00343cccf6ebf06d76"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/fluid-credit/src/runtime/definitions.ts",
+          "exportName": "FLUID_CREDIT_IDENTITY_DEFINITION",
+          "closureRoot": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+          "stageRef": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "identity",
+            "capabilityId": "family.fluid-credit.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x9a5957d2c7c08fc6b780dceeb6ea7a6130a5a85da0dde3af71d103107e1753ae",
+            "interpreterHash": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+            "ownerRef": "0x483d32f7c140efe8ebffdf79965d4230628c7b12178a6df054369f3c675a4037"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/fluid-credit/src/runtime/definitions.ts",
+          "exportName": "FLUID_CREDIT_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+          "stageRef": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "materialization",
+            "capabilityId": "family.fluid-credit.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x6f94c73feeadf09c7e72d6ce8cdf3b6ef4db44770b343ca359c2ff7ffe98d719",
+            "interpreterHash": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+            "ownerRef": "0x6d37b26f140151c44c9a6a4b3c2c99c5513d495bef3cd598f1dd39253bd2a41b"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/fluid-credit/src/runtime/definitions.ts",
+          "exportName": "FLUID_CREDIT_NOMINATION_DEFINITION",
+          "closureRoot": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+          "stageRef": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "nomination",
+            "capabilityId": "family.fluid-credit.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xa8f8990ab126040876d6dc4ee21f504eeae060d56fcb5d08ad9041dc80882012",
+            "interpreterHash": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+            "ownerRef": "0x543bfa5123bf6222f48283db17a28f96ca805ac8d5f06b779c75b6e722880185"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/fluid-credit/src/runtime/definitions.ts",
+          "exportName": "FLUID_CREDIT_PROJECTION_DEFINITION",
+          "closureRoot": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+          "stageRef": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "projection",
+            "capabilityId": "family.fluid-credit.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x1b9770614c777fb00a29deb9ecbbf917f162e3c7c0d632dda46477329c2370d8",
+            "interpreterHash": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+            "ownerRef": "0xfd07a07eec88aeb5788640fdb75d0a4a4bf7d42aad8537a2de2cece633f06f3b"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/fluid-credit/src/runtime/definitions.ts",
+          "exportName": "FLUID_CREDIT_REHYDRATION_DEFINITION",
+          "closureRoot": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+          "stageRef": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "rehydration",
+            "capabilityId": "family.fluid-credit.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xbfebea90a13c2a547792ddf7fce729b0d22b58d2a93d5ec8e16db9d1497f784c",
+            "interpreterHash": "0xfa1a3d5b16a697427271bce4ed141f205b3ea537bd98672d57f10b6f66b03a2c",
+            "ownerRef": "0x5ac6acd4d81746883c664dd3a144da3ff045a9e64842c9ff3c2942378a55b313"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "fluid-credit.fixed-cutoff-50-block",
+          "modulePath": "families/fluid-credit/src/source-plan.ts",
+          "exportName": "FLUID_CREDIT_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0xb822bfa62da2fe7104ff60ba05d6ab5916c09c5ce3f7b82d957712ee4982e668",
+          "schemaHash": "0xed35a1fa89a7ebd1c86456e85897fd9b19dea68580c4d59a767492d22724a900",
+          "planRef": {
+            "ownerRef": "0xa8bb3ced5d58210b2429f3b204baa7b7d7a36e03f0a38e18afebe5749da1006a",
+            "sourcePlanRef": "0x7d0b77f77605c4d5e6b2c8d4eee383720c2beb57544310951467bce0be1616f6",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x7215e05d91cb1032dadf63701b428f4ae21e05a5be7b370f08bf299dad404474",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/fluid-credit/src/source-plan.ts",
+              "exportName": "FLUID_CREDIT_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0xb822bfa62da2fe7104ff60ba05d6ab5916c09c5ce3f7b82d957712ee4982e668",
+              "schemaHash": "0xed35a1fa89a7ebd1c86456e85897fd9b19dea68580c4d59a767492d22724a900"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/fluid-credit/src/nomination-qualification.ts",
+              "exportName": "FLUID_CREDIT_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xbd0e4cf404e606128b1e05073006cdbd03d949df69d0699f09c7db91acc90459"
+            },
+            "independentOracle": {
+              "modulePath": "families/fluid-credit/src/nomination-qualification.ts",
+              "exportName": "FLUID_CREDIT_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xbd0e4cf404e606128b1e05073006cdbd03d949df69d0699f09c7db91acc90459"
+            },
+            "nominationProgramRoot": "0xc050e88a0a265066a25345b2e6877bf60e8c2856182949e663c2aa326e327b06",
+            "proposalLeafDigest": "0xa0eac486303986dd4ecfe4fbd38784f099b2af3f695c030f2c19986cd637545b"
+          }
+        },
+        {
+          "sourcePlanId": "fluid-credit.vault-factory-complete-snapshot",
+          "modulePath": "families/fluid-credit/src/source-plan.ts",
+          "exportName": "FLUID_CREDIT_FACTORY_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0xb822bfa62da2fe7104ff60ba05d6ab5916c09c5ce3f7b82d957712ee4982e668",
+          "schemaHash": "0xba606b0454aa4864a5219cb601d8a5054386e90c240a519c599f681353abdc60",
+          "planRef": {
+            "ownerRef": "0xfb36b9e835e95973ecaed463579a60299ed0a6b8963e259b0716fdd102593a0f",
+            "sourcePlanRef": "0x2c8b000c11afdc91a3101f611a85c02751342838f3774ca02e723a9036a1fdbc",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "completeness": "complete-snapshot",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x9a3429ff7e86ee528700bfcea2afcfb7a32def0ed5065056a538859760171917",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/fluid-credit/src/source-plan.ts",
+              "exportName": "FLUID_CREDIT_FACTORY_NOMINATION_PROGRAM",
+              "closureRoot": "0xb822bfa62da2fe7104ff60ba05d6ab5916c09c5ce3f7b82d957712ee4982e668",
+              "schemaHash": "0xba606b0454aa4864a5219cb601d8a5054386e90c240a519c599f681353abdc60"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/fluid-credit/src/nomination-qualification.ts",
+              "exportName": "FLUID_CREDIT_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xbd0e4cf404e606128b1e05073006cdbd03d949df69d0699f09c7db91acc90459"
+            },
+            "independentOracle": {
+              "modulePath": "families/fluid-credit/src/nomination-qualification.ts",
+              "exportName": "FLUID_CREDIT_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xbd0e4cf404e606128b1e05073006cdbd03d949df69d0699f09c7db91acc90459"
+            },
+            "nominationProgramRoot": "0x46684cdf98c5d041c2b1dd9d95852223377f2a36394f27c41ed5b40444a91df2",
+            "proposalLeafDigest": "0x76c8d7ef7d298a78112dab653af0d056dfa0c8b43b0bf2613bf3445e180fa7a6"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/fluid-credit/src/runtime.ts",
+          "exportName": "FLUID_CREDIT_RUNTIME",
+          "closureRoot": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+          "capabilityRef": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "capability",
+            "capabilityId": "family.fluid-credit.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0xcd9317fe0e7f6acf12dc4ce038dfb9d0a37a966b6ae71472aaacfe2e9e9aaad9",
+            "interpreterHash": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+            "ownerRef": "0x76d2e89b5d06488865e3eacf0f69e85fd3dc48348340738a5e12c344daa70260"
+          }
+        },
+        {
+          "modulePath": "families/fluid-credit/src/runtime.ts",
+          "exportName": "FLUID_CREDIT_RUNTIME",
+          "closureRoot": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+          "capabilityRef": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "capability",
+            "capabilityId": "family.fluid-credit.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x9d2077a96ab2d1f0930f88ec353135ffea4ebdabc3918b14a80fc151751514df",
+            "interpreterHash": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+            "ownerRef": "0xea50efcf730f4d868b4101b4338c15cc5e59987c979529e1a802f74fce22c763"
+          }
+        },
+        {
+          "modulePath": "families/fluid-credit/src/runtime.ts",
+          "exportName": "FLUID_CREDIT_RUNTIME",
+          "closureRoot": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+          "capabilityRef": {
+            "familyId": "fluid-credit",
+            "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+            "stage": "capability",
+            "capabilityId": "family.fluid-credit.state",
+            "version": "1.0.0",
+            "schemaHash": "0x7a63b336de7c0227c01c573931c034ed9e6d68b8632c790b05a1d7f7e1a69914",
+            "interpreterHash": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+            "ownerRef": "0x56e305161d76079fb9098ff1d3b12d959a40a191fe20805ebd1b2c8d5f74555e"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/fluid-credit/src/action.ts",
+          "exportName": "FLUID_CREDIT_ACTION_PORT",
+          "closureRoot": "0x3dc36f00d9d2831d9c5aa77958fec11a453c298b09cc475abbe12a2bc547fa8d",
+          "ownerRef": "0x0594ae5f401d4f9b9106bc2fee89facd84328b25c249d5ccdc6186226e6eccd0",
+          "ownerId": "family.fluid-credit.vault-action",
+          "version": "1.0.0",
+          "schemaHash": "0x5ab3f689b3792b4e167d8445178f0efeb08ad980c651898b63dc17b02374659f",
+          "implementationHash": "0xb842a02d02479c5af7b1d560791af5537933facf216db6f749f525ce29b7cc3f",
+          "actionKinds": [
+            "credit-borrow"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/fluid-credit/src/search-adapter.ts",
+          "exportName": "FLUID_CREDIT_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x060d7058d17021bfcb4ec22c66bad155beea8d3091b93e779b5a0c59e97c3f2b",
+          "capabilityRefs": {
+            "coarse": {
+              "familyId": "fluid-credit",
+              "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+              "stage": "capability",
+              "capabilityId": "family.fluid-credit.coarse",
+              "version": "1.0.0",
+              "schemaHash": "0xcd9317fe0e7f6acf12dc4ce038dfb9d0a37a966b6ae71472aaacfe2e9e9aaad9",
+              "interpreterHash": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+              "ownerRef": "0x76d2e89b5d06488865e3eacf0f69e85fd3dc48348340738a5e12c344daa70260"
+            },
+            "exact": {
+              "familyId": "fluid-credit",
+              "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+              "stage": "capability",
+              "capabilityId": "family.fluid-credit.exact",
+              "version": "1.0.0",
+              "schemaHash": "0x9d2077a96ab2d1f0930f88ec353135ffea4ebdabc3918b14a80fc151751514df",
+              "interpreterHash": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+              "ownerRef": "0xea50efcf730f4d868b4101b4338c15cc5e59987c979529e1a802f74fce22c763"
+            },
+            "state": {
+              "familyId": "fluid-credit",
+              "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+              "stage": "capability",
+              "capabilityId": "family.fluid-credit.state",
+              "version": "1.0.0",
+              "schemaHash": "0x7a63b336de7c0227c01c573931c034ed9e6d68b8632c790b05a1d7f7e1a69914",
+              "interpreterHash": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47",
+              "ownerRef": "0x56e305161d76079fb9098ff1d3b12d959a40a191fe20805ebd1b2c8d5f74555e"
+            }
+          },
+          "actionOwnerRefs": {
+            "action": "0x0594ae5f401d4f9b9106bc2fee89facd84328b25c249d5ccdc6186226e6eccd0"
+          },
+          "leafDigest": "0x9ebe360fe0057db66761506a4fae4d3aaec860ba96cb11ab943ec86669a167ae"
+        }
+      ],
+      "runtimeAdapterRoot": "0x2cf3616fde1b6f597432d4f6cf0dc33a863207bbbe43968fb4c671f86f83842e",
+      "sourcePlanRoot": "0x85657c0233bb7efa2231b78ef7d71ed8b254693a5a91f02d56232cba118f10ec",
+      "stageDefinitionRoot": "0x9e18b2ab29aa88401cde8cf8d15e489011650eaf2ee0d5c8c98e51f730e2b2f6"
+    },
+    {
+      "entry": {
         "familyId": "fluid-dex",
         "familyDefinitionHash": "0xbde1f0f7fa7dbc82e4153b3b13f55c40a971a152c612f52a835312033c656002",
         "issuerRef": "0xcf9a686ccbe510a962fb85e9eeeca716f30911eeec88e72003d35b6283dca928",
@@ -1378,6 +4429,1937 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
     },
     {
       "entry": {
+        "familyId": "goldx",
+        "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+        "issuerRef": "0x14836d487bb392a9844d66721663a908a387bb69c7287cd7e65d460f4dcf141c",
+        "authorityRef": "0xbd213bc5e4eb884b60baa78eb8785a997da361c1a8f833eb636e4e8f9592f431",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "nomination",
+            "capabilityId": "family.goldx.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x37aae4f86f4d8ef4ad63ed13fe62f85c0c159691c4fc283c50abf1d28c071384",
+            "interpreterHash": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+            "ownerRef": "0x70e237606bc00f084e8ec790a28b7dde70eeaa065fbdc2a0de9aa0bf2ac942a5"
+          },
+          "identity": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "identity",
+            "capabilityId": "family.goldx.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xfacc4ad1cd49bedd21d221e674ef7039d6d630ece9d5b7f3255508927c017d05",
+            "interpreterHash": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+            "ownerRef": "0xc701689cfe93f1f57cf18c5cbe6b69c5f0625e4a51a94dda3aab11efa2dd13fb"
+          },
+          "materialization": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "materialization",
+            "capabilityId": "family.goldx.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x6a73bf725181fc70aaafa526238119016fe9f57082299072f406b39abc7a72c3",
+            "interpreterHash": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+            "ownerRef": "0x946889fa48818366369d679740cbade14c8d633e5d075b8df6c3ed8ed027025d"
+          },
+          "projection": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "projection",
+            "capabilityId": "family.goldx.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xde9d18eedd3ce72f292e69b91c4180a9b25a4f6b48f3ab7f40fb67cd56f8d59f",
+            "interpreterHash": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+            "ownerRef": "0xaf74391360620b4b1aad9755055e236a38810083ef5a5a1c9973afb831cf4a2a"
+          },
+          "rehydration": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "rehydration",
+            "capabilityId": "family.goldx.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xa0281fe2374a1f6f2c49b74f0ea5f25b38c0a0be1d6ab4d35758814cbb55437d",
+            "interpreterHash": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+            "ownerRef": "0xcaf18b1a66b4e1f56fd1a08c69ccb67c77388480b825a6a5ec97723b5e42f677"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "capability",
+            "capabilityId": "family.goldx.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x196c20c6e16eb01b2112bdec1b5b55671087ae66e726aad008ec46f8f89e7875",
+            "interpreterHash": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+            "ownerRef": "0x3bde833f1041128d2dbee17b9d5a8f4f1a0dad1e0439350da78c3faf6663eb54"
+          },
+          {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "capability",
+            "capabilityId": "family.goldx.exact",
+            "version": "1.0.0",
+            "schemaHash": "0xd34d97201b495840fe01574de093733b40ae425abd08c684ec340946c79a8381",
+            "interpreterHash": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+            "ownerRef": "0x9297754c22657e77831b3fb8820d9939a0f7f093ba55ba0ff0373967042a2faa"
+          },
+          {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "capability",
+            "capabilityId": "family.goldx.state",
+            "version": "1.0.0",
+            "schemaHash": "0x6e8ec33a22efe3030682097eaa313c910ee2f4e60ff6efcc599d4316d81f1181",
+            "interpreterHash": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+            "ownerRef": "0x87e273b662d9bf30b813fadbbb86329ff8da5e5459fc82118d0566dc60b965c4"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x7c4db78813e17c6fbf03541e7baeb35ae3d7accbc6cb6345883a283e6265a836"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.goldx.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0x34ee5cdd175b1fe704b1d1c5e6418046067e3c90ad546998b277981f8c184b6f"
+          },
+          {
+            "factContractId": "family.goldx.unit-wad-state",
+            "version": "1.0.0",
+            "schemaHash": "0x29dcd19dfd2c69382d8e91f17f8f2123d1de35443334aacabcf56637a6d1f6d1"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x51ada88c51b3d33bba29ff1dd78f03392a2f3d9ae5ea2c3d23826a54de6c47b1",
+            "sourcePlanRef": "0x4ce6141a66e020adb8bbc8d712457f2a7f82937b5a0c512380ed1b0cc8a085b7",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0xb5cfbb748449e725145a20383677d3fbcbcefed7b2614262c3ef38d46a493532",
+        "capabilityCatalogRoot": "0xc8927b2e1408c5e8fb111263c1bef3d8783a857767e99874f14bf4f8e29f5b2a"
+      },
+      "publicEntry": {
+        "modulePath": "families/goldx/src/public.ts",
+        "exportName": "GOLDX_DEFINITION",
+        "closureRoot": "0xae01dc523f0eaaecfdc06e5a4b0a0d655f6762ecaebf109de9e4d3b8c6c29ee0"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/goldx/src/runtime/definitions.ts",
+          "exportName": "GOLDX_IDENTITY_DEFINITION",
+          "closureRoot": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+          "stageRef": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "identity",
+            "capabilityId": "family.goldx.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xfacc4ad1cd49bedd21d221e674ef7039d6d630ece9d5b7f3255508927c017d05",
+            "interpreterHash": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+            "ownerRef": "0xc701689cfe93f1f57cf18c5cbe6b69c5f0625e4a51a94dda3aab11efa2dd13fb"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/goldx/src/runtime/definitions.ts",
+          "exportName": "GOLDX_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+          "stageRef": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "materialization",
+            "capabilityId": "family.goldx.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x6a73bf725181fc70aaafa526238119016fe9f57082299072f406b39abc7a72c3",
+            "interpreterHash": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+            "ownerRef": "0x946889fa48818366369d679740cbade14c8d633e5d075b8df6c3ed8ed027025d"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/goldx/src/runtime/definitions.ts",
+          "exportName": "GOLDX_NOMINATION_DEFINITION",
+          "closureRoot": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+          "stageRef": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "nomination",
+            "capabilityId": "family.goldx.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x37aae4f86f4d8ef4ad63ed13fe62f85c0c159691c4fc283c50abf1d28c071384",
+            "interpreterHash": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+            "ownerRef": "0x70e237606bc00f084e8ec790a28b7dde70eeaa065fbdc2a0de9aa0bf2ac942a5"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/goldx/src/runtime/definitions.ts",
+          "exportName": "GOLDX_PROJECTION_DEFINITION",
+          "closureRoot": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+          "stageRef": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "projection",
+            "capabilityId": "family.goldx.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xde9d18eedd3ce72f292e69b91c4180a9b25a4f6b48f3ab7f40fb67cd56f8d59f",
+            "interpreterHash": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+            "ownerRef": "0xaf74391360620b4b1aad9755055e236a38810083ef5a5a1c9973afb831cf4a2a"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/goldx/src/runtime/definitions.ts",
+          "exportName": "GOLDX_REHYDRATION_DEFINITION",
+          "closureRoot": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+          "stageRef": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "rehydration",
+            "capabilityId": "family.goldx.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xa0281fe2374a1f6f2c49b74f0ea5f25b38c0a0be1d6ab4d35758814cbb55437d",
+            "interpreterHash": "0xfe390e0d52baf3be1160e7d7eb12a9c31d2f5a62ab9c68a859e6e78d4cb268e2",
+            "ownerRef": "0xcaf18b1a66b4e1f56fd1a08c69ccb67c77388480b825a6a5ec97723b5e42f677"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "goldx.fixed-cutoff-50-block",
+          "modulePath": "families/goldx/src/source-plan.ts",
+          "exportName": "GOLDX_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x15358db0a8fc007c224784ad964b7779fafdb9b53a7690c65746258056144220",
+          "schemaHash": "0x931c63e3bcaa22d8ed4ce07dd6474bf10a9260a9061495712020fd8679e5d627",
+          "planRef": {
+            "ownerRef": "0x51ada88c51b3d33bba29ff1dd78f03392a2f3d9ae5ea2c3d23826a54de6c47b1",
+            "sourcePlanRef": "0x4ce6141a66e020adb8bbc8d712457f2a7f82937b5a0c512380ed1b0cc8a085b7",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x44c0c56733067c996f538f18294751c1fcedcb14ec93253a11eb403561b5bb76",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/goldx/src/source-plan.ts",
+              "exportName": "GOLDX_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0x15358db0a8fc007c224784ad964b7779fafdb9b53a7690c65746258056144220",
+              "schemaHash": "0x931c63e3bcaa22d8ed4ce07dd6474bf10a9260a9061495712020fd8679e5d627"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/goldx/src/nomination-qualification.ts",
+              "exportName": "GOLDX_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x9ca0b948638319c901143630dd7c9270347362166f6b86732578e3cc1aafe233"
+            },
+            "independentOracle": {
+              "modulePath": "families/goldx/src/nomination-qualification.ts",
+              "exportName": "GOLDX_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x9ca0b948638319c901143630dd7c9270347362166f6b86732578e3cc1aafe233"
+            },
+            "nominationProgramRoot": "0xa12edef8a9eec2a10424fae4a3a4364302231154906d5decc566bd14974ad2e8",
+            "proposalLeafDigest": "0x158ce2a9a58baca080c5da5980ebcd0d64bf7546fbb6ba0673dfdacaacd57c19"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/goldx/src/runtime.ts",
+          "exportName": "GOLDX_RUNTIME",
+          "closureRoot": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+          "capabilityRef": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "capability",
+            "capabilityId": "family.goldx.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x196c20c6e16eb01b2112bdec1b5b55671087ae66e726aad008ec46f8f89e7875",
+            "interpreterHash": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+            "ownerRef": "0x3bde833f1041128d2dbee17b9d5a8f4f1a0dad1e0439350da78c3faf6663eb54"
+          }
+        },
+        {
+          "modulePath": "families/goldx/src/runtime.ts",
+          "exportName": "GOLDX_RUNTIME",
+          "closureRoot": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+          "capabilityRef": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "capability",
+            "capabilityId": "family.goldx.exact",
+            "version": "1.0.0",
+            "schemaHash": "0xd34d97201b495840fe01574de093733b40ae425abd08c684ec340946c79a8381",
+            "interpreterHash": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+            "ownerRef": "0x9297754c22657e77831b3fb8820d9939a0f7f093ba55ba0ff0373967042a2faa"
+          }
+        },
+        {
+          "modulePath": "families/goldx/src/runtime.ts",
+          "exportName": "GOLDX_RUNTIME",
+          "closureRoot": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+          "capabilityRef": {
+            "familyId": "goldx",
+            "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+            "stage": "capability",
+            "capabilityId": "family.goldx.state",
+            "version": "1.0.0",
+            "schemaHash": "0x6e8ec33a22efe3030682097eaa313c910ee2f4e60ff6efcc599d4316d81f1181",
+            "interpreterHash": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+            "ownerRef": "0x87e273b662d9bf30b813fadbbb86329ff8da5e5459fc82118d0566dc60b965c4"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/goldx/src/action.ts",
+          "exportName": "GOLDX_SWAP_ACTION_PORT",
+          "closureRoot": "0xf28fab1e2bbbf850a1a17362bd0d435b52e99c8c03bdcf853dc5219bdca1dc3b",
+          "ownerRef": "0x7c4db78813e17c6fbf03541e7baeb35ae3d7accbc6cb6345883a283e6265a836",
+          "ownerId": "family.goldx.swap-action",
+          "version": "1.0.0",
+          "schemaHash": "0x29ba1b531bd6ca32bc59026bf7a5d426be1801860b9fb16cffa5683ba6591a45",
+          "implementationHash": "0x41ed277a6f3ea89f404efea52f83b18518bd0e7273f2faa3b741bf488dd7b629",
+          "actionKinds": [
+            "swap"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/goldx/src/runtime.ts",
+          "exportName": "GOLDX_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+          "capabilityRefs": {
+            "coarse": {
+              "familyId": "goldx",
+              "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+              "stage": "capability",
+              "capabilityId": "family.goldx.coarse",
+              "version": "1.0.0",
+              "schemaHash": "0x196c20c6e16eb01b2112bdec1b5b55671087ae66e726aad008ec46f8f89e7875",
+              "interpreterHash": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+              "ownerRef": "0x3bde833f1041128d2dbee17b9d5a8f4f1a0dad1e0439350da78c3faf6663eb54"
+            },
+            "exact": {
+              "familyId": "goldx",
+              "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+              "stage": "capability",
+              "capabilityId": "family.goldx.exact",
+              "version": "1.0.0",
+              "schemaHash": "0xd34d97201b495840fe01574de093733b40ae425abd08c684ec340946c79a8381",
+              "interpreterHash": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+              "ownerRef": "0x9297754c22657e77831b3fb8820d9939a0f7f093ba55ba0ff0373967042a2faa"
+            },
+            "state": {
+              "familyId": "goldx",
+              "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+              "stage": "capability",
+              "capabilityId": "family.goldx.state",
+              "version": "1.0.0",
+              "schemaHash": "0x6e8ec33a22efe3030682097eaa313c910ee2f4e60ff6efcc599d4316d81f1181",
+              "interpreterHash": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f",
+              "ownerRef": "0x87e273b662d9bf30b813fadbbb86329ff8da5e5459fc82118d0566dc60b965c4"
+            }
+          },
+          "actionOwnerRefs": {
+            "swap": "0x7c4db78813e17c6fbf03541e7baeb35ae3d7accbc6cb6345883a283e6265a836"
+          },
+          "leafDigest": "0xa847737d4e833ec607e83fade55515a7c28a819b5966d06196dded485adb116d"
+        }
+      ],
+      "runtimeAdapterRoot": "0x12cc5e4e6f2b52d147a2e098a4b5af8d6b45a82b83e048c9c37c32f1ffcb0f05",
+      "sourcePlanRoot": "0xd08b36cd208405e43d7d8e4ee691df796b8d50d5a7d9f4b1572af0ca3bdf6cc8",
+      "stageDefinitionRoot": "0xf160ea222891390c6a733eaba84a7e409d17851e6c32ead2638e80608a81bae9"
+    },
+    {
+      "entry": {
+        "familyId": "metronome-hgusdc",
+        "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+        "issuerRef": "0x8f41814f3a696420dd185fa1c8df61165900318a035136a660d9813c10b19f37",
+        "authorityRef": "0xabc9d8d94f9ba2990af76fc21c895e8cfd195b296b3cd75c2f9061bd9a48dbc6",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "nomination",
+            "capabilityId": "family.metronome-hgusdc.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x05fb87463b1346d004bc746e0b7863278a4b67b5502bf394b62e05bd9cb6688b",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0x2f4f6c590d9aebe926675c0e90cd092db110d3d456877f994b4f27ba92d1d946"
+          },
+          "identity": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "identity",
+            "capabilityId": "family.metronome-hgusdc.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x3bca9ac303bb79681c3c4a4551071167540a865e1d7289c4aa9ce9a0168e7aff",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0x6a23b8247f4285c2c9092d91bb03febc9b1dfc0aec7b418216fc0dd91b981d4e"
+          },
+          "materialization": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "materialization",
+            "capabilityId": "family.metronome-hgusdc.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x9160425f2544e37537e10fa4f46ac4e479945fc6b86e060f2238fd7575f44f06",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0xac689b274172c816f588e3438b1ee8578b9ea4d0c19f68f00bf5613eeaa2dc7e"
+          },
+          "projection": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "projection",
+            "capabilityId": "family.metronome-hgusdc.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x68942455b46ef0184e6855de3cdc3b3e3ab759061156bead80b67c564d0b00cd",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0x73d03f34664999dcc0fd485dc9f808a0ef573997bedc1d82d4b1cad2912c9e37"
+          },
+          "rehydration": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "rehydration",
+            "capabilityId": "family.metronome-hgusdc.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xed8dfef36de30bdbddea417c33241e0de8f7bffda4a884203d7bc837eb003fe8",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0x40edbbab39e8d88ebe07ca4c9ffc727a7d33cf5ba7105704f569f365292e982e"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "capability",
+            "capabilityId": "family.metronome-hgusdc.state",
+            "version": "1.0.0",
+            "schemaHash": "0x080f21ecc68ea250033e86b9483b2e365c7b5cf9ee82bc86cb782956e3c1b9a6",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0x456c7e9a162fc5128c0529ada98f500620812ff3e9e6070b372fe1a54edd9a8a"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0xad9919845fda18f9f7e36cace7e48bde48ebaa119ba2087c770f7b4f4f2d0409"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.metronome-hgusdc.dependent-quote",
+            "version": "1.0.0",
+            "schemaHash": "0x95dcc189f283ea55a867c2b37038961faea913b272226d8dfb8d474af946c45a"
+          },
+          {
+            "factContractId": "family.metronome-hgusdc.path-identity",
+            "version": "1.0.0",
+            "schemaHash": "0x4810983a24ef9580ae401a589055aba6b58511debce73517c05b735eb763dc3f"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x9e14d2aaec570b9ac4bc345ebc39b40c7a252c39e1a2187b04b1ac086663cffc",
+            "sourcePlanRef": "0x8126621ce3f8f283a12e5559ff27256bfd06cc80086a4fbf3ae9ad960a6e7b85",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0x36ade6fa344e3dfbf318405d6332cdf50b9de57ed82d24e206e61260041f827d",
+        "capabilityCatalogRoot": "0xc9d5114496d6680ea4bb41787640a849b77af391a85a6810ce34557ee9c0d3b5"
+      },
+      "publicEntry": {
+        "modulePath": "families/metronome-hgusdc/src/public.ts",
+        "exportName": "METRONOME_HGUSDC_DEFINITION",
+        "closureRoot": "0x4025b6ac801bf1e14bb685cf4415631b690485d1004e2118471271b6842a24c8"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/metronome-hgusdc/src/runtime.ts",
+          "exportName": "METRONOME_HGUSDC_IDENTITY_RUNTIME",
+          "closureRoot": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+          "stageRef": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "identity",
+            "capabilityId": "family.metronome-hgusdc.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x3bca9ac303bb79681c3c4a4551071167540a865e1d7289c4aa9ce9a0168e7aff",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0x6a23b8247f4285c2c9092d91bb03febc9b1dfc0aec7b418216fc0dd91b981d4e"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/metronome-hgusdc/src/runtime.ts",
+          "exportName": "METRONOME_HGUSDC_MATERIALIZATION_RUNTIME",
+          "closureRoot": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+          "stageRef": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "materialization",
+            "capabilityId": "family.metronome-hgusdc.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x9160425f2544e37537e10fa4f46ac4e479945fc6b86e060f2238fd7575f44f06",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0xac689b274172c816f588e3438b1ee8578b9ea4d0c19f68f00bf5613eeaa2dc7e"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/metronome-hgusdc/src/runtime.ts",
+          "exportName": "METRONOME_HGUSDC_NOMINATION_RUNTIME",
+          "closureRoot": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+          "stageRef": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "nomination",
+            "capabilityId": "family.metronome-hgusdc.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x05fb87463b1346d004bc746e0b7863278a4b67b5502bf394b62e05bd9cb6688b",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0x2f4f6c590d9aebe926675c0e90cd092db110d3d456877f994b4f27ba92d1d946"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/metronome-hgusdc/src/runtime.ts",
+          "exportName": "METRONOME_HGUSDC_PROJECTION_RUNTIME",
+          "closureRoot": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+          "stageRef": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "projection",
+            "capabilityId": "family.metronome-hgusdc.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x68942455b46ef0184e6855de3cdc3b3e3ab759061156bead80b67c564d0b00cd",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0x73d03f34664999dcc0fd485dc9f808a0ef573997bedc1d82d4b1cad2912c9e37"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/metronome-hgusdc/src/runtime.ts",
+          "exportName": "METRONOME_HGUSDC_REHYDRATION_RUNTIME",
+          "closureRoot": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+          "stageRef": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "rehydration",
+            "capabilityId": "family.metronome-hgusdc.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xed8dfef36de30bdbddea417c33241e0de8f7bffda4a884203d7bc837eb003fe8",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0x40edbbab39e8d88ebe07ca4c9ffc727a7d33cf5ba7105704f569f365292e982e"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "metronome-hgusdc.fixed-cutoff-50-block",
+          "modulePath": "families/metronome-hgusdc/src/source-plan.ts",
+          "exportName": "METRONOME_HGUSDC_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0xf67dc3765d7f937c91711da4a460f1703803f7ecb7c9c6c253fd5d05601de31d",
+          "schemaHash": "0x847102c57a6600a6cc6feff7685fbb8943f59fa0f9d019fcc8ffb16f212364a9",
+          "planRef": {
+            "ownerRef": "0x9e14d2aaec570b9ac4bc345ebc39b40c7a252c39e1a2187b04b1ac086663cffc",
+            "sourcePlanRef": "0x8126621ce3f8f283a12e5559ff27256bfd06cc80086a4fbf3ae9ad960a6e7b85",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0xbfb6325a0c51c81d53f3c2dcbf5b243f00502c1b4ec80b43bc1ae73e62b78339",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/metronome-hgusdc/src/source-plan.ts",
+              "exportName": "METRONOME_HGUSDC_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0xf67dc3765d7f937c91711da4a460f1703803f7ecb7c9c6c253fd5d05601de31d",
+              "schemaHash": "0x847102c57a6600a6cc6feff7685fbb8943f59fa0f9d019fcc8ffb16f212364a9"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/metronome-hgusdc/src/nomination-qualification.ts",
+              "exportName": "METRONOME_HGUSDC_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xe018d91c8f17f8dad068931486c093d217edad0537c617888d4317d6451baa46"
+            },
+            "independentOracle": {
+              "modulePath": "families/metronome-hgusdc/src/nomination-qualification.ts",
+              "exportName": "METRONOME_HGUSDC_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xe018d91c8f17f8dad068931486c093d217edad0537c617888d4317d6451baa46"
+            },
+            "nominationProgramRoot": "0x1fd3782a43cb2a10f22ce156cc5afe7e02af1ce89bc97f716f1a9d8930e56cbc",
+            "proposalLeafDigest": "0x6c7ef3d1dfd337f1b26de0eca1b2af283e7971e2c6dc0dd11be842cb21c7c3ca"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/metronome-hgusdc/src/runtime.ts",
+          "exportName": "METRONOME_HGUSDC_RUNTIME",
+          "closureRoot": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+          "capabilityRef": {
+            "familyId": "metronome-hgusdc",
+            "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+            "stage": "capability",
+            "capabilityId": "family.metronome-hgusdc.state",
+            "version": "1.0.0",
+            "schemaHash": "0x080f21ecc68ea250033e86b9483b2e365c7b5cf9ee82bc86cb782956e3c1b9a6",
+            "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+            "ownerRef": "0x456c7e9a162fc5128c0529ada98f500620812ff3e9e6070b372fe1a54edd9a8a"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/metronome-hgusdc/src/action.ts",
+          "exportName": "METRONOME_HGUSDC_ACTION_PORT",
+          "closureRoot": "0x6fcc81d11303ab9fde6021a1527d08b158dedd55c57287a316a681dd499a5a20",
+          "ownerRef": "0xad9919845fda18f9f7e36cace7e48bde48ebaa119ba2087c770f7b4f4f2d0409",
+          "ownerId": "family.metronome-hgusdc.exit-action",
+          "version": "1.0.0",
+          "schemaHash": "0x53fe1db9571850c7fba90a037dabdf04e18ab37f9cf500c664f6af172db2f1c5",
+          "implementationHash": "0x5636a0556f02f09ceffb527c7db9c7b8b6bf348f826c17a8461ba5b6838f4ed9",
+          "actionKinds": [
+            "exit"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/metronome-hgusdc/src/runtime.ts",
+          "exportName": "METRONOME_HGUSDC_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+          "capabilityRefs": {
+            "state": {
+              "familyId": "metronome-hgusdc",
+              "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+              "stage": "capability",
+              "capabilityId": "family.metronome-hgusdc.state",
+              "version": "1.0.0",
+              "schemaHash": "0x080f21ecc68ea250033e86b9483b2e365c7b5cf9ee82bc86cb782956e3c1b9a6",
+              "interpreterHash": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1",
+              "ownerRef": "0x456c7e9a162fc5128c0529ada98f500620812ff3e9e6070b372fe1a54edd9a8a"
+            }
+          },
+          "actionOwnerRefs": {
+            "exit": "0xad9919845fda18f9f7e36cace7e48bde48ebaa119ba2087c770f7b4f4f2d0409"
+          },
+          "leafDigest": "0x03e51a2aa212d4155b8b3569d7f6c03ee5cfcbc9c35aca37687984a4651087b6"
+        }
+      ],
+      "runtimeAdapterRoot": "0x93f0e4e4c51cee6d7a8a23f214c117a28d93ab3bdda7aaf1fa2e1e1b9f5b301f",
+      "sourcePlanRoot": "0x9be78a4d2b78c0987c7fc6abd9c3226bd4447032966cbbf7efca16f82a70dec1",
+      "stageDefinitionRoot": "0x9be45d384b7121203797d5364e7fa6e272209279b96c8da64c959585992a7055"
+    },
+    {
+      "entry": {
+        "familyId": "metronome-synth",
+        "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+        "issuerRef": "0xb11b62ac1eb93fe61c5c81520978a958b0c6a687bb708fe315a2e9e836d6d787",
+        "authorityRef": "0xddf5dfc52c4bc8c90c270a8745f48dddbce0556d22c81cfe1b0db22226d0cff3",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "nomination",
+            "capabilityId": "family.metronome-synth.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xd6b30d9c6a177c9ee2448e837d0c09db55f9ae7aa668bd8a7b99dddb1ed3dfb4",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0xa55a334b18f14d1f890dfd7b0d875861ba174fc2c8c5b7eb6466c2e566f48207"
+          },
+          "identity": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "identity",
+            "capabilityId": "family.metronome-synth.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x4ea31bebea703c67311180daa22b10d3d90398fb001b3388ce86c73540dfa7bd",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0x48e592cc25144679fb050e100d4bed45546f8f4986679105a978518eb9baf5ef"
+          },
+          "materialization": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "materialization",
+            "capabilityId": "family.metronome-synth.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x22d4bab48abd37a29a832e86d5ee7a87df9594af9e8214076bbacf4091b9a534",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0xe4c5baf8d6a132b9052176f0c7f7fdba08a9a4f45bafc0a6612afb8904b38033"
+          },
+          "projection": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "projection",
+            "capabilityId": "family.metronome-synth.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xb533635ed9b4516163ccadaadcb950f9438703aa97ffc3d7881e86428cfa1d39",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0x74946bf294d89a6686a97c0a1e41e889650263df611567b4cb56afb560f6e7e3"
+          },
+          "rehydration": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "rehydration",
+            "capabilityId": "family.metronome-synth.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x743e9abf4f3bb472c87f59e11ad18d2688e5919532ad738d3c243d02c60e960c",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0x67b49ed46285e511c3398510f57bdfd62844e995ee558d5b3ce4e865e80055a8"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "capability",
+            "capabilityId": "family.metronome-synth.state",
+            "version": "1.0.0",
+            "schemaHash": "0x097d40feb7f9a5c685f2c091469299240cb4b6d0603f18b2282d040470a24120",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0xf5eb44b8da9ac254b57e8b4f55d48e8559fe8a1f59112f0efa986070ebdb39b8"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x1e6566b5fbe9f7c00f952d66b625f2100e81abf6fed94569491eaae1516640ae"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.metronome-synth.direction-projection",
+            "version": "1.0.0",
+            "schemaHash": "0xad87064c1e93406825983e2fd6973f11ff4fc0966eadd6a096f5266cb389eda2"
+          },
+          {
+            "factContractId": "family.metronome-synth.pool-identity",
+            "version": "1.0.0",
+            "schemaHash": "0x24406c85ed8c3bf1d4ace0d7a10e19ca426223e67dd3beaa6f61eccb68ab38c9"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x3004c5261b5be2a14623bcf834b71df62c81c94f906e2d007af0dfc1e0ab3374",
+            "sourcePlanRef": "0x5af470f762882d3808261ccc50eece0df3aa4c4a0243aec4d6fe688c024374a8",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0xc7d4ceaa837eb7974f2c58696f1a54a3a476d212f028a57aca01a341b640cf75",
+        "capabilityCatalogRoot": "0xa2dababdcf034af53aac97f7f9ac0d0a977787d237531068264c80edbeaf7d28"
+      },
+      "publicEntry": {
+        "modulePath": "families/metronome-synth/src/public.ts",
+        "exportName": "METRONOME_SYNTH_DEFINITION",
+        "closureRoot": "0x053be50821223ed8abefd22106ed4a4e68750421c6875e7289af3b15d9b5f548"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/metronome-synth/src/runtime.ts",
+          "exportName": "METRONOME_SYNTH_IDENTITY_RUNTIME",
+          "closureRoot": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+          "stageRef": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "identity",
+            "capabilityId": "family.metronome-synth.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x4ea31bebea703c67311180daa22b10d3d90398fb001b3388ce86c73540dfa7bd",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0x48e592cc25144679fb050e100d4bed45546f8f4986679105a978518eb9baf5ef"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/metronome-synth/src/runtime.ts",
+          "exportName": "METRONOME_SYNTH_MATERIALIZATION_RUNTIME",
+          "closureRoot": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+          "stageRef": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "materialization",
+            "capabilityId": "family.metronome-synth.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x22d4bab48abd37a29a832e86d5ee7a87df9594af9e8214076bbacf4091b9a534",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0xe4c5baf8d6a132b9052176f0c7f7fdba08a9a4f45bafc0a6612afb8904b38033"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/metronome-synth/src/runtime.ts",
+          "exportName": "METRONOME_SYNTH_NOMINATION_RUNTIME",
+          "closureRoot": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+          "stageRef": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "nomination",
+            "capabilityId": "family.metronome-synth.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xd6b30d9c6a177c9ee2448e837d0c09db55f9ae7aa668bd8a7b99dddb1ed3dfb4",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0xa55a334b18f14d1f890dfd7b0d875861ba174fc2c8c5b7eb6466c2e566f48207"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/metronome-synth/src/runtime.ts",
+          "exportName": "METRONOME_SYNTH_PROJECTION_RUNTIME",
+          "closureRoot": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+          "stageRef": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "projection",
+            "capabilityId": "family.metronome-synth.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xb533635ed9b4516163ccadaadcb950f9438703aa97ffc3d7881e86428cfa1d39",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0x74946bf294d89a6686a97c0a1e41e889650263df611567b4cb56afb560f6e7e3"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/metronome-synth/src/runtime.ts",
+          "exportName": "METRONOME_SYNTH_REHYDRATION_RUNTIME",
+          "closureRoot": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+          "stageRef": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "rehydration",
+            "capabilityId": "family.metronome-synth.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x743e9abf4f3bb472c87f59e11ad18d2688e5919532ad738d3c243d02c60e960c",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0x67b49ed46285e511c3398510f57bdfd62844e995ee558d5b3ce4e865e80055a8"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "metronome-synth.fixed-cutoff-50-block",
+          "modulePath": "families/metronome-synth/src/source-plan.ts",
+          "exportName": "METRONOME_SYNTH_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x558bb005457bff4cb36941a900481fc30d2e6b7d5fdc93e5201545c361d21ff7",
+          "schemaHash": "0x4a7620548f1e23d3b01bdfca374d8ef2c49f1b92b055a8b647c7c4b459b71462",
+          "planRef": {
+            "ownerRef": "0x3004c5261b5be2a14623bcf834b71df62c81c94f906e2d007af0dfc1e0ab3374",
+            "sourcePlanRef": "0x5af470f762882d3808261ccc50eece0df3aa4c4a0243aec4d6fe688c024374a8",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x0d01a732cd4b14cfd57dcc97cf18e57fdc6f61d0739e3dc1a7cb2f97c79b3803",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/metronome-synth/src/source-plan.ts",
+              "exportName": "METRONOME_SYNTH_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0x558bb005457bff4cb36941a900481fc30d2e6b7d5fdc93e5201545c361d21ff7",
+              "schemaHash": "0x4a7620548f1e23d3b01bdfca374d8ef2c49f1b92b055a8b647c7c4b459b71462"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/metronome-synth/src/nomination-qualification.ts",
+              "exportName": "METRONOME_SYNTH_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xd6e80132bc0de75963f187691f3c0f4f6ad040052c161b6ce1e3880da6ff47c9"
+            },
+            "independentOracle": {
+              "modulePath": "families/metronome-synth/src/nomination-qualification.ts",
+              "exportName": "METRONOME_SYNTH_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xd6e80132bc0de75963f187691f3c0f4f6ad040052c161b6ce1e3880da6ff47c9"
+            },
+            "nominationProgramRoot": "0x66c9c0ee430601c71da9e236f43ec3a63ff4c9a2dbc5f1bdcbdb7ac7c51836b5",
+            "proposalLeafDigest": "0x6268a63f47d26f0cfe9bec2cee4f87ab0daf73e3e4f15558f213a53674c4e2db"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/metronome-synth/src/runtime.ts",
+          "exportName": "METRONOME_SYNTH_RUNTIME",
+          "closureRoot": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+          "capabilityRef": {
+            "familyId": "metronome-synth",
+            "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+            "stage": "capability",
+            "capabilityId": "family.metronome-synth.state",
+            "version": "1.0.0",
+            "schemaHash": "0x097d40feb7f9a5c685f2c091469299240cb4b6d0603f18b2282d040470a24120",
+            "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+            "ownerRef": "0xf5eb44b8da9ac254b57e8b4f55d48e8559fe8a1f59112f0efa986070ebdb39b8"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/metronome-synth/src/action.ts",
+          "exportName": "METRONOME_SYNTH_ACTION_PORT",
+          "closureRoot": "0x8f7fed19ea30389de8ab783abb4c2affcc906973c50bc50743f0b5868db9b376",
+          "ownerRef": "0x1e6566b5fbe9f7c00f952d66b625f2100e81abf6fed94569491eaae1516640ae",
+          "ownerId": "family.metronome-synth.swap-action",
+          "version": "1.0.0",
+          "schemaHash": "0xb9f3c3814327721ebacbca909a5641d1019febd587dd7cd17f20a64c084e4ed8",
+          "implementationHash": "0x4b3ddbf93f49269f9fac67edec7c1bec7ae29dd77e291394e4c253738fde8335",
+          "actionKinds": [
+            "swap"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/metronome-synth/src/runtime.ts",
+          "exportName": "METRONOME_SYNTH_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+          "capabilityRefs": {
+            "state": {
+              "familyId": "metronome-synth",
+              "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+              "stage": "capability",
+              "capabilityId": "family.metronome-synth.state",
+              "version": "1.0.0",
+              "schemaHash": "0x097d40feb7f9a5c685f2c091469299240cb4b6d0603f18b2282d040470a24120",
+              "interpreterHash": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7",
+              "ownerRef": "0xf5eb44b8da9ac254b57e8b4f55d48e8559fe8a1f59112f0efa986070ebdb39b8"
+            }
+          },
+          "actionOwnerRefs": {
+            "swap": "0x1e6566b5fbe9f7c00f952d66b625f2100e81abf6fed94569491eaae1516640ae"
+          },
+          "leafDigest": "0x363723123666f55e778784be67ed55668591dfab7e1994b86c0e2e5260729cc8"
+        }
+      ],
+      "runtimeAdapterRoot": "0x64bb982f014c31dc1e902c36f5ecca8af8d8fd040bd2260cb0be04b4ce6223d2",
+      "sourcePlanRoot": "0xc5459a9420fe4bcb294fbd85a04aa32db66352e32d89ad97b9f00601648bdde6",
+      "stageDefinitionRoot": "0x4c0d7c60211970aba5dbbd7f9e8920b538ae274e80228aad5c41a4fe122176cb"
+    },
+    {
+      "entry": {
+        "familyId": "psm",
+        "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+        "issuerRef": "0x69fb44edc6e07d85cba2ea12b447dae77be2066aba1b5613e480c20af49e794a",
+        "authorityRef": "0xe2afe1dfd895663a4f5e4fb30408d6333b7d16e4a21780d0690073463166e828",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "nomination",
+            "capabilityId": "family.psm.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x1e5c5dc077e0f435e29d6631ae7914f9b9f755990331be3578ce57056c9d5c38",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0xee6dacd469adfa8f48f314c621ace07185e5cf226e7d4aab0b369cd9186cb45a"
+          },
+          "identity": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "identity",
+            "capabilityId": "family.psm.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xd9df112749bbe09edf2c37ee083672f5eab55fc365c597b7a8f2897d5e9f41db",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0x4657541ff30ab0aa7b1653d471c9aa2272a91f42c828d1589ceacd7465496c2e"
+          },
+          "materialization": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "materialization",
+            "capabilityId": "family.psm.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x1fd9ca8713de4dcf858039b7bb5882077c5df1ce13340160345973ec2c8f1b60",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0xe9dec8c804ad65a8dfcb51dd3ca09ea100c7fb421ab2e00f7c65a327df8943c6"
+          },
+          "projection": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "projection",
+            "capabilityId": "family.psm.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x7571aae431c6c172a0d721fa92e34ca81e628f459fc7e9d89b3df4685f467cc7",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0x9eef9f6fd583e943a2b54a18df2df137e04416e2ff30086e9536a42e1bbe609e"
+          },
+          "rehydration": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "rehydration",
+            "capabilityId": "family.psm.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x0e24f26cb08262f2497eb0316039075088a8458c13f66f139e87f298f98d6311",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0x282016b56a76d736b517d2ee95b9fd992249cdb0c12123f7faf8fb20aefd654b"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "capability",
+            "capabilityId": "family.psm.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0xb174d9311a345246361c85a4a1f625cfede58c7ecc144c495b304be46bb5ac03",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0xfb73ee61e1630497ecc6a0230f4b07b32e52a67d2f14552ae737cdf05adc933d"
+          },
+          {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "capability",
+            "capabilityId": "family.psm.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x6bcb370b21b147a01f56454c003005c66307ecc7df1f80b09ccd0c44d8231ad0",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0x7800877a3c51e31dc8e9c873c94c9f3edf9d68cb4bc0c44aafa3a7484380049a"
+          },
+          {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "capability",
+            "capabilityId": "family.psm.state",
+            "version": "1.0.0",
+            "schemaHash": "0x3309e3de9d15afe995e40b90906bd8baff4468d1ecc5147ac819049f5f5eda09",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0x725feb9d5d836a3d5aaf140d6251b66299ecd3b753c26bf9416759c65e570dee"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x4ad1669750e5c8ecf43d27a438fd18550cfa3d90cf36c008df67729bdeafb04b"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.psm.fee-state",
+            "version": "1.0.0",
+            "schemaHash": "0xa4aa4695772adc16183f1ee57d19460f03ea1d71ef98156f61eeea150f6c624e"
+          },
+          {
+            "factContractId": "family.psm.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0xea32656cd0ffe106e07e76666a274e1b096e304d7e350ada0ee63b898a999275"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x24fd879e95cf3d3f6f491246d853589bd4b5ce08dc23e19fc4187618d2e843d3",
+            "sourcePlanRef": "0x88abe5aebf616d2bd324d2e6e7a44a97139d0f4aa4089eef50335bf350ac9e55",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0xf883e6705c98c2bbd17fe82e2d2d8a744b00e6d37ab37028a5cf9bed738343d1",
+        "capabilityCatalogRoot": "0x41cbd5513b35354bde712333f6f6f1052abd5508cca4cb1f125a8ffa9a02f3fa"
+      },
+      "publicEntry": {
+        "modulePath": "families/psm/src/public.ts",
+        "exportName": "PSM_DEFINITION",
+        "closureRoot": "0x2e04b605bc0f4e4913884938ff28b211f4eb159d2adc479cf9ae4254289d7835"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/psm/src/runtime.ts",
+          "exportName": "PSM_IDENTITY_RUNTIME",
+          "closureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+          "stageRef": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "identity",
+            "capabilityId": "family.psm.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xd9df112749bbe09edf2c37ee083672f5eab55fc365c597b7a8f2897d5e9f41db",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0x4657541ff30ab0aa7b1653d471c9aa2272a91f42c828d1589ceacd7465496c2e"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/psm/src/runtime.ts",
+          "exportName": "PSM_MATERIALIZATION_RUNTIME",
+          "closureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+          "stageRef": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "materialization",
+            "capabilityId": "family.psm.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x1fd9ca8713de4dcf858039b7bb5882077c5df1ce13340160345973ec2c8f1b60",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0xe9dec8c804ad65a8dfcb51dd3ca09ea100c7fb421ab2e00f7c65a327df8943c6"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/psm/src/runtime.ts",
+          "exportName": "PSM_NOMINATION_RUNTIME",
+          "closureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+          "stageRef": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "nomination",
+            "capabilityId": "family.psm.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x1e5c5dc077e0f435e29d6631ae7914f9b9f755990331be3578ce57056c9d5c38",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0xee6dacd469adfa8f48f314c621ace07185e5cf226e7d4aab0b369cd9186cb45a"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/psm/src/runtime.ts",
+          "exportName": "PSM_PROJECTION_RUNTIME",
+          "closureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+          "stageRef": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "projection",
+            "capabilityId": "family.psm.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x7571aae431c6c172a0d721fa92e34ca81e628f459fc7e9d89b3df4685f467cc7",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0x9eef9f6fd583e943a2b54a18df2df137e04416e2ff30086e9536a42e1bbe609e"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/psm/src/runtime.ts",
+          "exportName": "PSM_REHYDRATION_RUNTIME",
+          "closureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+          "stageRef": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "rehydration",
+            "capabilityId": "family.psm.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x0e24f26cb08262f2497eb0316039075088a8458c13f66f139e87f298f98d6311",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0x282016b56a76d736b517d2ee95b9fd992249cdb0c12123f7faf8fb20aefd654b"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "psm.fixed-cutoff-50-block",
+          "modulePath": "families/psm/src/source-plan.ts",
+          "exportName": "PSM_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x8366017b2b3bc990f2c9df266dc42fa8998b539dc9f9431d8b9b681acf3fccb0",
+          "schemaHash": "0xb13753a9bae78207cd9fb1d3d197ac099c05a81af0590240ffb577635b8e2564",
+          "planRef": {
+            "ownerRef": "0x24fd879e95cf3d3f6f491246d853589bd4b5ce08dc23e19fc4187618d2e843d3",
+            "sourcePlanRef": "0x88abe5aebf616d2bd324d2e6e7a44a97139d0f4aa4089eef50335bf350ac9e55",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0xb00ff578027d70064a51794ed70aea9e68e0004cd91c1275018a6c0bf385795c",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/psm/src/source-plan.ts",
+              "exportName": "PSM_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0x8366017b2b3bc990f2c9df266dc42fa8998b539dc9f9431d8b9b681acf3fccb0",
+              "schemaHash": "0xb13753a9bae78207cd9fb1d3d197ac099c05a81af0590240ffb577635b8e2564"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/psm/src/nomination-qualification.ts",
+              "exportName": "PSM_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xf3d8405cbbced02f71d3e72dd3063cf8ce2c08ac16a208a3e680490c82acc7e1"
+            },
+            "independentOracle": {
+              "modulePath": "families/psm/src/nomination-qualification.ts",
+              "exportName": "PSM_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xf3d8405cbbced02f71d3e72dd3063cf8ce2c08ac16a208a3e680490c82acc7e1"
+            },
+            "nominationProgramRoot": "0xea732e822cc77e6a9e17d01b6b309cfa6affec6ba4fc61133d040b760730f620",
+            "proposalLeafDigest": "0xff18f27278745a2386e3cb1b2eac21304152e0207f66c81e3b60b428578ff42c"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/psm/src/runtime.ts",
+          "exportName": "PSM_RUNTIME",
+          "closureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+          "capabilityRef": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "capability",
+            "capabilityId": "family.psm.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0xb174d9311a345246361c85a4a1f625cfede58c7ecc144c495b304be46bb5ac03",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0xfb73ee61e1630497ecc6a0230f4b07b32e52a67d2f14552ae737cdf05adc933d"
+          }
+        },
+        {
+          "modulePath": "families/psm/src/runtime.ts",
+          "exportName": "PSM_RUNTIME",
+          "closureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+          "capabilityRef": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "capability",
+            "capabilityId": "family.psm.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x6bcb370b21b147a01f56454c003005c66307ecc7df1f80b09ccd0c44d8231ad0",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0x7800877a3c51e31dc8e9c873c94c9f3edf9d68cb4bc0c44aafa3a7484380049a"
+          }
+        },
+        {
+          "modulePath": "families/psm/src/runtime.ts",
+          "exportName": "PSM_RUNTIME",
+          "closureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+          "capabilityRef": {
+            "familyId": "psm",
+            "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+            "stage": "capability",
+            "capabilityId": "family.psm.state",
+            "version": "1.0.0",
+            "schemaHash": "0x3309e3de9d15afe995e40b90906bd8baff4468d1ecc5147ac819049f5f5eda09",
+            "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+            "ownerRef": "0x725feb9d5d836a3d5aaf140d6251b66299ecd3b753c26bf9416759c65e570dee"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/psm/src/action.ts",
+          "exportName": "PSM_SWAP_ACTION_PORT",
+          "closureRoot": "0x428c1e3d75791943361100b9161286daa7ed93886e5027af87c168225c17fc8e",
+          "ownerRef": "0x4ad1669750e5c8ecf43d27a438fd18550cfa3d90cf36c008df67729bdeafb04b",
+          "ownerId": "family.psm.swap-action",
+          "version": "1.0.0",
+          "schemaHash": "0xd3f130f4b8c895e7f1f51bdec9124e15734b833d03e57c4c53a5d237b73d6369",
+          "implementationHash": "0x4cbdf2c48642db52e0736b35a932d8a6253eacfa6b1a02b78918475382088440",
+          "actionKinds": [
+            "swap"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/psm/src/runtime.ts",
+          "exportName": "PSM_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+          "capabilityRefs": {
+            "coarse": {
+              "familyId": "psm",
+              "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+              "stage": "capability",
+              "capabilityId": "family.psm.coarse",
+              "version": "1.0.0",
+              "schemaHash": "0xb174d9311a345246361c85a4a1f625cfede58c7ecc144c495b304be46bb5ac03",
+              "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+              "ownerRef": "0xfb73ee61e1630497ecc6a0230f4b07b32e52a67d2f14552ae737cdf05adc933d"
+            },
+            "exact": {
+              "familyId": "psm",
+              "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+              "stage": "capability",
+              "capabilityId": "family.psm.exact",
+              "version": "1.0.0",
+              "schemaHash": "0x6bcb370b21b147a01f56454c003005c66307ecc7df1f80b09ccd0c44d8231ad0",
+              "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+              "ownerRef": "0x7800877a3c51e31dc8e9c873c94c9f3edf9d68cb4bc0c44aafa3a7484380049a"
+            },
+            "state": {
+              "familyId": "psm",
+              "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+              "stage": "capability",
+              "capabilityId": "family.psm.state",
+              "version": "1.0.0",
+              "schemaHash": "0x3309e3de9d15afe995e40b90906bd8baff4468d1ecc5147ac819049f5f5eda09",
+              "interpreterHash": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea",
+              "ownerRef": "0x725feb9d5d836a3d5aaf140d6251b66299ecd3b753c26bf9416759c65e570dee"
+            }
+          },
+          "actionOwnerRefs": {
+            "swap": "0x4ad1669750e5c8ecf43d27a438fd18550cfa3d90cf36c008df67729bdeafb04b"
+          },
+          "leafDigest": "0x4b31389afa92eb4611854d08aa455a93a139f88658778dcac4a6bb0a16aa7af8"
+        }
+      ],
+      "runtimeAdapterRoot": "0xdbf70adec1b4b8458f68f9ede6a1bcc7e04b671ecff57a735c41c3deef5133a2",
+      "sourcePlanRoot": "0xb9be4c31ebde4e6b0593c8b4e818117b20f3ab327117f39cc84786dc5ce469d3",
+      "stageDefinitionRoot": "0x63d3d93e266c5c2d6034c1dabe1f4abaab15aef27f48de538fe45af66e20f4d3"
+    },
+    {
+      "entry": {
+        "familyId": "rocksolid",
+        "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+        "issuerRef": "0xe1f330e1623dbe329aef9b187dfd75661a170bf8277f040e4b1b138ffb345a83",
+        "authorityRef": "0x6e6dc75753745a40a40ccf0a414cfff901269187c8541386f44da7db21600224",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "nomination",
+            "capabilityId": "family.rocksolid.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xf06faea3dade5f037964e8207ab93b61e6aa4c3564eae2ec7b6c7f6e86b541b6",
+            "interpreterHash": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+            "ownerRef": "0xdb422c6b1b96ec2a6993240236c860af55559041e9f4f590f06c6661ba065e9f"
+          },
+          "identity": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "identity",
+            "capabilityId": "family.rocksolid.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xc8bb5298d49964d1e7343d80056657b2808a9bdc2d1acd8a9b988839c1b6a353",
+            "interpreterHash": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+            "ownerRef": "0xedcdc5d560bf5ca974a3027e73763dfa2980c8d50cc8753809472d8843ec8bd0"
+          },
+          "materialization": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "materialization",
+            "capabilityId": "family.rocksolid.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x4cd3cad51ecdf1b65755cb09bccae28c1c304a8216107affa4a2f33390bd5c59",
+            "interpreterHash": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+            "ownerRef": "0xfd775ba9d42075b70af08e555588d3cffc9672323d9f3370f93f1e8350726fb4"
+          },
+          "projection": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "projection",
+            "capabilityId": "family.rocksolid.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xfa4a5ceb13d6059013ba772058fc0519b052f527f920a9defdb30f69412229d8",
+            "interpreterHash": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+            "ownerRef": "0x85490dc652227317b55b5cbfc9d5b508adcea5c9160f79fc5da7caa6c8d6c30b"
+          },
+          "rehydration": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "rehydration",
+            "capabilityId": "family.rocksolid.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x20231fa990b58b0def520915ba279ecb6e78741ce55a6eee7d2fb312a9697039",
+            "interpreterHash": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+            "ownerRef": "0x541c7a706f78cd9be9d795df25e0b5cd1f872fc9cc7b6e66ad5ff25fe078106a"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "capability",
+            "capabilityId": "family.rocksolid.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x04918030e68ceec17f1ceed7eb556919df6baf025da27081a1cc2a0befea2431",
+            "interpreterHash": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+            "ownerRef": "0x22613c740ae9f50f1b050e11564d221e88939cf6421a0c5e20cd9a9616ef620c"
+          },
+          {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "capability",
+            "capabilityId": "family.rocksolid.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x639c838afaf1adc11ca79ca5529a52c3686d8d09cb106e2ebf555ff744c8f0cf",
+            "interpreterHash": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+            "ownerRef": "0xf77eeba639359fe981ddf3da746157d3647d7f93992882f78d47109d26f37b3d"
+          },
+          {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "capability",
+            "capabilityId": "family.rocksolid.state",
+            "version": "1.0.0",
+            "schemaHash": "0x58031034d141a96ac38698145824771953882f04478da992672a8390aa59c2aa",
+            "interpreterHash": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+            "ownerRef": "0x98ee8a397537ae7d01d26b588437b1362e8c01b5ffe539ea3f049cd270a7b7b1"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x7ca57a9a314553e3519dc2c36b56deea218a5fafd4fd4dc627c9f299af5a5fff"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.rocksolid.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xe3e9d4e5d3830eb094c5159d15e0cf7afa9f21cd3b689a5e2d563b2f7983d036"
+          },
+          {
+            "factContractId": "family.rocksolid.quote",
+            "version": "1.0.0",
+            "schemaHash": "0x4898a092e94678a5281e044b122fba015f885dbc895afd208705ca6dd4cb5224"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x4cd3151777bd536c75a0686557f360df977dfc1283d0c36305b0f2c5c928bd6c",
+            "sourcePlanRef": "0x2d893707c5741429a0d109455816a2bc97032a996dc0922d407a3cfa85aa1e1a",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0xef60402040cfb65fd6c38724fd4a114783d23e879a7938d4dd9cbf7a779e1e75",
+        "capabilityCatalogRoot": "0x7d0bd86dd18ba5a3ae5fc6478fcf04041cc1984bc5148bff8e5366a4bd74b9ec"
+      },
+      "publicEntry": {
+        "modulePath": "families/rocksolid/src/public.ts",
+        "exportName": "ROCKSOLID_DEFINITION",
+        "closureRoot": "0x79bbd76816e5254acdc0b570c19b1db69a2b3b37a675b4c258fca2bfd0a34249"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/rocksolid/src/runtime/definitions.ts",
+          "exportName": "ROCKSOLID_IDENTITY_DEFINITION",
+          "closureRoot": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+          "stageRef": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "identity",
+            "capabilityId": "family.rocksolid.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xc8bb5298d49964d1e7343d80056657b2808a9bdc2d1acd8a9b988839c1b6a353",
+            "interpreterHash": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+            "ownerRef": "0xedcdc5d560bf5ca974a3027e73763dfa2980c8d50cc8753809472d8843ec8bd0"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/rocksolid/src/runtime/definitions.ts",
+          "exportName": "ROCKSOLID_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+          "stageRef": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "materialization",
+            "capabilityId": "family.rocksolid.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x4cd3cad51ecdf1b65755cb09bccae28c1c304a8216107affa4a2f33390bd5c59",
+            "interpreterHash": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+            "ownerRef": "0xfd775ba9d42075b70af08e555588d3cffc9672323d9f3370f93f1e8350726fb4"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/rocksolid/src/runtime/definitions.ts",
+          "exportName": "ROCKSOLID_NOMINATION_DEFINITION",
+          "closureRoot": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+          "stageRef": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "nomination",
+            "capabilityId": "family.rocksolid.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xf06faea3dade5f037964e8207ab93b61e6aa4c3564eae2ec7b6c7f6e86b541b6",
+            "interpreterHash": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+            "ownerRef": "0xdb422c6b1b96ec2a6993240236c860af55559041e9f4f590f06c6661ba065e9f"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/rocksolid/src/runtime/definitions.ts",
+          "exportName": "ROCKSOLID_PROJECTION_DEFINITION",
+          "closureRoot": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+          "stageRef": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "projection",
+            "capabilityId": "family.rocksolid.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xfa4a5ceb13d6059013ba772058fc0519b052f527f920a9defdb30f69412229d8",
+            "interpreterHash": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+            "ownerRef": "0x85490dc652227317b55b5cbfc9d5b508adcea5c9160f79fc5da7caa6c8d6c30b"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/rocksolid/src/runtime/definitions.ts",
+          "exportName": "ROCKSOLID_REHYDRATION_DEFINITION",
+          "closureRoot": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+          "stageRef": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "rehydration",
+            "capabilityId": "family.rocksolid.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x20231fa990b58b0def520915ba279ecb6e78741ce55a6eee7d2fb312a9697039",
+            "interpreterHash": "0xa67d9b37693529322712400fd186106c421c5ad3f3d81eb06c38e6f74f400747",
+            "ownerRef": "0x541c7a706f78cd9be9d795df25e0b5cd1f872fc9cc7b6e66ad5ff25fe078106a"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "rocksolid.fixed-cutoff-50-block",
+          "modulePath": "families/rocksolid/src/source-plan.ts",
+          "exportName": "ROCKSOLID_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x772d3870f6ffbf6a067246491f638bd844d7ec8f0e41df09d186950f454404a8",
+          "schemaHash": "0x6c3bba1041934459ce48f37913d987981bfc5b8cc52989685e53dc603f61c114",
+          "planRef": {
+            "ownerRef": "0x4cd3151777bd536c75a0686557f360df977dfc1283d0c36305b0f2c5c928bd6c",
+            "sourcePlanRef": "0x2d893707c5741429a0d109455816a2bc97032a996dc0922d407a3cfa85aa1e1a",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x0d14581e541ccf05d750624ddd76742ce7f50f0a629e3e7c0d8a6e95f1f8a468",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/rocksolid/src/source-plan.ts",
+              "exportName": "ROCKSOLID_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0x772d3870f6ffbf6a067246491f638bd844d7ec8f0e41df09d186950f454404a8",
+              "schemaHash": "0x6c3bba1041934459ce48f37913d987981bfc5b8cc52989685e53dc603f61c114"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/rocksolid/src/nomination-qualification.ts",
+              "exportName": "ROCKSOLID_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x72a5c71d85f0dd3a27448b5eb385c5c32116522e09f1c205b6778c6897456832"
+            },
+            "independentOracle": {
+              "modulePath": "families/rocksolid/src/nomination-qualification.ts",
+              "exportName": "ROCKSOLID_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x72a5c71d85f0dd3a27448b5eb385c5c32116522e09f1c205b6778c6897456832"
+            },
+            "nominationProgramRoot": "0x67fcebdf9e8a2784c31ec25671c96d0ea46c0593990a05bd76103af4896eced0",
+            "proposalLeafDigest": "0x131a612aac5293a6f04298aecb8dc0db8d5d9ab9ed1eec1a8f7c834cd6a3ded8"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/rocksolid/src/runtime.ts",
+          "exportName": "ROCKSOLID_RUNTIME",
+          "closureRoot": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+          "capabilityRef": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "capability",
+            "capabilityId": "family.rocksolid.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x04918030e68ceec17f1ceed7eb556919df6baf025da27081a1cc2a0befea2431",
+            "interpreterHash": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+            "ownerRef": "0x22613c740ae9f50f1b050e11564d221e88939cf6421a0c5e20cd9a9616ef620c"
+          }
+        },
+        {
+          "modulePath": "families/rocksolid/src/runtime.ts",
+          "exportName": "ROCKSOLID_RUNTIME",
+          "closureRoot": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+          "capabilityRef": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "capability",
+            "capabilityId": "family.rocksolid.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x639c838afaf1adc11ca79ca5529a52c3686d8d09cb106e2ebf555ff744c8f0cf",
+            "interpreterHash": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+            "ownerRef": "0xf77eeba639359fe981ddf3da746157d3647d7f93992882f78d47109d26f37b3d"
+          }
+        },
+        {
+          "modulePath": "families/rocksolid/src/runtime.ts",
+          "exportName": "ROCKSOLID_RUNTIME",
+          "closureRoot": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+          "capabilityRef": {
+            "familyId": "rocksolid",
+            "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+            "stage": "capability",
+            "capabilityId": "family.rocksolid.state",
+            "version": "1.0.0",
+            "schemaHash": "0x58031034d141a96ac38698145824771953882f04478da992672a8390aa59c2aa",
+            "interpreterHash": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+            "ownerRef": "0x98ee8a397537ae7d01d26b588437b1362e8c01b5ffe539ea3f049cd270a7b7b1"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/rocksolid/src/action.ts",
+          "exportName": "ROCKSOLID_ACTION_PORT",
+          "closureRoot": "0xb2d38349a6ce6fea1b92c729fdd19fd64489834eba0cadb124ffeb8fbcf37709",
+          "ownerRef": "0x7ca57a9a314553e3519dc2c36b56deea218a5fafd4fd4dc627c9f299af5a5fff",
+          "ownerId": "family.rocksolid.sync-deposit",
+          "version": "1.0.0",
+          "schemaHash": "0x163fe7508d9059ef3bf3ced28887823617b2386069dd607c4a7580bc297807af",
+          "implementationHash": "0x8928926bd5c565963acbbd9a949b04cdaf2323f3d8cc08272e0bd463ce581cf8",
+          "actionKinds": [
+            "sync-deposit"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/rocksolid/src/runtime.ts",
+          "exportName": "ROCKSOLID_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+          "capabilityRefs": {
+            "coarse": {
+              "familyId": "rocksolid",
+              "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+              "stage": "capability",
+              "capabilityId": "family.rocksolid.coarse",
+              "version": "1.0.0",
+              "schemaHash": "0x04918030e68ceec17f1ceed7eb556919df6baf025da27081a1cc2a0befea2431",
+              "interpreterHash": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+              "ownerRef": "0x22613c740ae9f50f1b050e11564d221e88939cf6421a0c5e20cd9a9616ef620c"
+            },
+            "exact": {
+              "familyId": "rocksolid",
+              "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+              "stage": "capability",
+              "capabilityId": "family.rocksolid.exact",
+              "version": "1.0.0",
+              "schemaHash": "0x639c838afaf1adc11ca79ca5529a52c3686d8d09cb106e2ebf555ff744c8f0cf",
+              "interpreterHash": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+              "ownerRef": "0xf77eeba639359fe981ddf3da746157d3647d7f93992882f78d47109d26f37b3d"
+            },
+            "state": {
+              "familyId": "rocksolid",
+              "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+              "stage": "capability",
+              "capabilityId": "family.rocksolid.state",
+              "version": "1.0.0",
+              "schemaHash": "0x58031034d141a96ac38698145824771953882f04478da992672a8390aa59c2aa",
+              "interpreterHash": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158",
+              "ownerRef": "0x98ee8a397537ae7d01d26b588437b1362e8c01b5ffe539ea3f049cd270a7b7b1"
+            }
+          },
+          "actionOwnerRefs": {
+            "sync-deposit": "0x7ca57a9a314553e3519dc2c36b56deea218a5fafd4fd4dc627c9f299af5a5fff"
+          },
+          "leafDigest": "0xc3a498fc8015b95852d28ef14307a424186269c1c2ffca74d2f0d2ac09b2eafd"
+        }
+      ],
+      "runtimeAdapterRoot": "0x7e661b1ded652521b0a055a5405a52b1af30aec30aa5f11e4509015ec7ee961d",
+      "sourcePlanRoot": "0x2071855265f5cbadd3846e86ebc690e8997e043931f5144973f8675fff961cd2",
+      "stageDefinitionRoot": "0x4b101176926560fef7a85ebed247462a83703649f71a1f8228a291d3ee3c6ee9"
+    },
+    {
+      "entry": {
+        "familyId": "self-burn-native",
+        "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+        "issuerRef": "0x8319670525bf64452e67d1edfff66c9ff838d5ef291d3323683471ec2daf6be5",
+        "authorityRef": "0xccdfc7f889259f2d21e07bf22ce69606225eeec608c82c94a1d23b300e0df1f7",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "nomination",
+            "capabilityId": "family.self-burn-native.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xe403adee5ac65a1eb045b152deb2638d7a807b744f5b73177864045e3640521e",
+            "interpreterHash": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+            "ownerRef": "0xf3e5c856c3f98b5fb30d22808fbbc77a92fe26a1788980fa1e817d4efb663c3e"
+          },
+          "identity": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "identity",
+            "capabilityId": "family.self-burn-native.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x09664e622ea8ced4591c15b9fe4bbcc5e5f2cb3abcd94886486319c5b9db09b3",
+            "interpreterHash": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+            "ownerRef": "0xbd36bdda7747afea91e69af53087bbceb7943c0d2cad6b1e5cdbbe0d73c3c894"
+          },
+          "materialization": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "materialization",
+            "capabilityId": "family.self-burn-native.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x3588f0a2ee5f367afd06de8d5f209b0289ee0ea0deca7cd37caacfbee1ea9eb8",
+            "interpreterHash": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+            "ownerRef": "0xebce716c680c04bf4d994d15582ba9e77c8487f89d8abf356c10d64ef35d440d"
+          },
+          "projection": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "projection",
+            "capabilityId": "family.self-burn-native.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xe823da4f2253e77ad0fdcb1fbf36abc716a7617bf9931a76e749af93f93743a2",
+            "interpreterHash": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+            "ownerRef": "0xe87e2eae5d6de05723b435f88af2ce98f43a1c779a32a88125d2a88ed6b128ed"
+          },
+          "rehydration": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "rehydration",
+            "capabilityId": "family.self-burn-native.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xc955c2834f6c7f2cc66be09309baf5452a789cd8a8f3a459ed636989164f7c87",
+            "interpreterHash": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+            "ownerRef": "0xcde391ed5e24a801cfc9c8c0414c2e304be04dc4131a3b6b66208c3b2bbc6014"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "capability",
+            "capabilityId": "family.self-burn-native.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x38179666a523e9e09941316d0b3ceaebd6cdaeb61d2c2e748bc17535a73fb690",
+            "interpreterHash": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+            "ownerRef": "0xdff50e76653b468a95ff3f79d718cebac7f0710137341d7e8b80334681e0bff9"
+          },
+          {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "capability",
+            "capabilityId": "family.self-burn-native.trigger",
+            "version": "1.0.0",
+            "schemaHash": "0xd971ca622230078a46ab2a9709aa63e3112be6f08475b79da21fa840a03a8b01",
+            "interpreterHash": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+            "ownerRef": "0x4bcc943b4a077f6d2a2cf41af9f34ea463f2fbba8cae3c9f06caaf66c94ed8c6"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0xbb5c99d8db1f4bdee6bec6b7b9ede86da367413f34fb36b865f074744fe46838"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.self-burn-native.effects",
+            "version": "1.0.0",
+            "schemaHash": "0x89935050d796ce83e7ecfa2577b4ee396b1ae48d55604a5809c4f79735323110"
+          },
+          {
+            "factContractId": "family.self-burn-native.identity",
+            "version": "1.0.0",
+            "schemaHash": "0xff7f5b88c0c0c4d7e0ee5398dbe6cc392c4017760337e025080659c44ce991a3"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x55cbbcfed3ad85c6b71b94909c49d79b1faf41128fa384daf51474bc2285be5c",
+            "sourcePlanRef": "0x046851428290621c5b37680652b3608235c4eaa0d935081eb1cac04ce403e584",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0x944b312c188ef5557dac7bf3652ed2b874f725fff50e3c5ec32acd7034e3f5ce",
+        "capabilityCatalogRoot": "0x338b64e8036b2a7ef65797661c9652c79d930d197cdb19d64b99b02ac5f7a855"
+      },
+      "publicEntry": {
+        "modulePath": "families/self-burn-native/src/public.ts",
+        "exportName": "SELF_BURN_NATIVE_DEFINITION",
+        "closureRoot": "0x4ed152447cce9cacb7c0fb19f2d9778bb78b74f9918563abd618de7c4e2a7045"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/self-burn-native/src/runtime/definitions.ts",
+          "exportName": "SELF_BURN_NATIVE_IDENTITY_DEFINITION",
+          "closureRoot": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+          "stageRef": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "identity",
+            "capabilityId": "family.self-burn-native.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x09664e622ea8ced4591c15b9fe4bbcc5e5f2cb3abcd94886486319c5b9db09b3",
+            "interpreterHash": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+            "ownerRef": "0xbd36bdda7747afea91e69af53087bbceb7943c0d2cad6b1e5cdbbe0d73c3c894"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/self-burn-native/src/runtime/definitions.ts",
+          "exportName": "SELF_BURN_NATIVE_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+          "stageRef": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "materialization",
+            "capabilityId": "family.self-burn-native.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x3588f0a2ee5f367afd06de8d5f209b0289ee0ea0deca7cd37caacfbee1ea9eb8",
+            "interpreterHash": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+            "ownerRef": "0xebce716c680c04bf4d994d15582ba9e77c8487f89d8abf356c10d64ef35d440d"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/self-burn-native/src/runtime/definitions.ts",
+          "exportName": "SELF_BURN_NATIVE_NOMINATION_DEFINITION",
+          "closureRoot": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+          "stageRef": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "nomination",
+            "capabilityId": "family.self-burn-native.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xe403adee5ac65a1eb045b152deb2638d7a807b744f5b73177864045e3640521e",
+            "interpreterHash": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+            "ownerRef": "0xf3e5c856c3f98b5fb30d22808fbbc77a92fe26a1788980fa1e817d4efb663c3e"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/self-burn-native/src/runtime/definitions.ts",
+          "exportName": "SELF_BURN_NATIVE_PROJECTION_DEFINITION",
+          "closureRoot": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+          "stageRef": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "projection",
+            "capabilityId": "family.self-burn-native.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xe823da4f2253e77ad0fdcb1fbf36abc716a7617bf9931a76e749af93f93743a2",
+            "interpreterHash": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+            "ownerRef": "0xe87e2eae5d6de05723b435f88af2ce98f43a1c779a32a88125d2a88ed6b128ed"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/self-burn-native/src/runtime/definitions.ts",
+          "exportName": "SELF_BURN_NATIVE_REHYDRATION_DEFINITION",
+          "closureRoot": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+          "stageRef": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "rehydration",
+            "capabilityId": "family.self-burn-native.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0xc955c2834f6c7f2cc66be09309baf5452a789cd8a8f3a459ed636989164f7c87",
+            "interpreterHash": "0xc000df2d62efe575d98217ada3a0b34bc0450a295c3cefe724e83ac4a4065688",
+            "ownerRef": "0xcde391ed5e24a801cfc9c8c0414c2e304be04dc4131a3b6b66208c3b2bbc6014"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "self-burn-native.fixed-cutoff-50-block",
+          "modulePath": "families/self-burn-native/src/source-plan.ts",
+          "exportName": "SELF_BURN_NATIVE_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0xcd709a2933327c405d189611d7005e54f76a34a3566383456432c5cca2cc9c46",
+          "schemaHash": "0x3fee265ce869287a4b8a1b613765d2129f2a8d02b10b5e1e6c756627d7cae30f",
+          "planRef": {
+            "ownerRef": "0x55cbbcfed3ad85c6b71b94909c49d79b1faf41128fa384daf51474bc2285be5c",
+            "sourcePlanRef": "0x046851428290621c5b37680652b3608235c4eaa0d935081eb1cac04ce403e584",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0xcc912a2293430cc2f0ff578977f9e83ed3f105eaac2a67790ee409d42763a9b0",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/self-burn-native/src/source-plan.ts",
+              "exportName": "SELF_BURN_NATIVE_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0xcd709a2933327c405d189611d7005e54f76a34a3566383456432c5cca2cc9c46",
+              "schemaHash": "0x3fee265ce869287a4b8a1b613765d2129f2a8d02b10b5e1e6c756627d7cae30f"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/self-burn-native/src/nomination-qualification.ts",
+              "exportName": "SELF_BURN_NATIVE_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x7a16f83e34c9be191093931ec4ad68c10c1b06572e3a00ef4c5be45c6421bd42"
+            },
+            "independentOracle": {
+              "modulePath": "families/self-burn-native/src/nomination-qualification.ts",
+              "exportName": "SELF_BURN_NATIVE_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x7a16f83e34c9be191093931ec4ad68c10c1b06572e3a00ef4c5be45c6421bd42"
+            },
+            "nominationProgramRoot": "0x7a48994dc0e8049685e5099caa19a6d8a9c21f0100be15adc271b84d190c6f02",
+            "proposalLeafDigest": "0x3049f64ec9c3a0195c10e621d3dbf6f5708a6eca744e77f1e9d95006fe20a42f"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/self-burn-native/src/runtime.ts",
+          "exportName": "SELF_BURN_NATIVE_RUNTIME",
+          "closureRoot": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+          "capabilityRef": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "capability",
+            "capabilityId": "family.self-burn-native.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x38179666a523e9e09941316d0b3ceaebd6cdaeb61d2c2e748bc17535a73fb690",
+            "interpreterHash": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+            "ownerRef": "0xdff50e76653b468a95ff3f79d718cebac7f0710137341d7e8b80334681e0bff9"
+          }
+        },
+        {
+          "modulePath": "families/self-burn-native/src/runtime.ts",
+          "exportName": "SELF_BURN_NATIVE_RUNTIME",
+          "closureRoot": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+          "capabilityRef": {
+            "familyId": "self-burn-native",
+            "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+            "stage": "capability",
+            "capabilityId": "family.self-burn-native.trigger",
+            "version": "1.0.0",
+            "schemaHash": "0xd971ca622230078a46ab2a9709aa63e3112be6f08475b79da21fa840a03a8b01",
+            "interpreterHash": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+            "ownerRef": "0x4bcc943b4a077f6d2a2cf41af9f34ea463f2fbba8cae3c9f06caaf66c94ed8c6"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/self-burn-native/src/action.ts",
+          "exportName": "SELF_BURN_NATIVE_ACTION_PORT",
+          "closureRoot": "0x909b3b1e383bc577e782996a20e6a3c12c3397d9e8ce40b9d11ec6f4d09994be",
+          "ownerRef": "0xbb5c99d8db1f4bdee6bec6b7b9ede86da367413f34fb36b865f074744fe46838",
+          "ownerId": "family.self-burn-native.redeem-action",
+          "version": "1.0.0",
+          "schemaHash": "0x082e0055979a18038d19880e833c00a2a98e52b261d552246ec669cd714c6cb3",
+          "implementationHash": "0x2385ddcbdab318da46910210f69715f97c1e81762b79594a4d63d36ce535d105",
+          "actionKinds": [
+            "redeem"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/self-burn-native/src/runtime.ts",
+          "exportName": "SELF_BURN_NATIVE_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+          "capabilityRefs": {
+            "exact": {
+              "familyId": "self-burn-native",
+              "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+              "stage": "capability",
+              "capabilityId": "family.self-burn-native.exact",
+              "version": "1.0.0",
+              "schemaHash": "0x38179666a523e9e09941316d0b3ceaebd6cdaeb61d2c2e748bc17535a73fb690",
+              "interpreterHash": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+              "ownerRef": "0xdff50e76653b468a95ff3f79d718cebac7f0710137341d7e8b80334681e0bff9"
+            },
+            "trigger": {
+              "familyId": "self-burn-native",
+              "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+              "stage": "capability",
+              "capabilityId": "family.self-burn-native.trigger",
+              "version": "1.0.0",
+              "schemaHash": "0xd971ca622230078a46ab2a9709aa63e3112be6f08475b79da21fa840a03a8b01",
+              "interpreterHash": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052",
+              "ownerRef": "0x4bcc943b4a077f6d2a2cf41af9f34ea463f2fbba8cae3c9f06caaf66c94ed8c6"
+            }
+          },
+          "actionOwnerRefs": {
+            "redeem": "0xbb5c99d8db1f4bdee6bec6b7b9ede86da367413f34fb36b865f074744fe46838"
+          },
+          "leafDigest": "0xe01a43393e9325133d81a7d0706ed3184b0888dae7788996c6b92539c0e4cc43"
+        }
+      ],
+      "runtimeAdapterRoot": "0x8a5dcc874527ef973f5b9d0ccaa83252dd1a371be16adcefa997cdb87f09ad5e",
+      "sourcePlanRoot": "0x293175732d8a6e5b4377b6ea8c0235617760ac3408ec436c6a0a0a4bfb148411",
+      "stageDefinitionRoot": "0xb7ff80a37b927e5b306acf1e2cbb5c0d0d1b40fe3b11bfd6bf16ef82310ffc13"
+    },
+    {
+      "entry": {
         "familyId": "univ2-standard",
         "familyDefinitionHash": "0x16d329f5ce1ee438ac2e52c9f2904a85cb0bb611021a95218c702fa78f956e5b",
         "issuerRef": "0xe8b1c7e1e1e67ac3b8c91c3c6db728f72d3fafa1de28757fd1ef8f659c95fb8b",
@@ -1777,17 +6759,1183 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
       "runtimeAdapterRoot": "0x21d5e4198b388721382d8898c17a7b9cf22aac71487a7ad75d773f0db719e9a3",
       "sourcePlanRoot": "0x74799854250bb8285c8bbba4e518cd3c3de81e7b352a96fbde33e5740d13db8a",
       "stageDefinitionRoot": "0xd97fd47fcfc1a6859f5de600c236f36cc6ebc45cc6177e7bfe2063a25c7d3385"
+    },
+    {
+      "entry": {
+        "familyId": "univ3-standard",
+        "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+        "issuerRef": "0xf77c15baee8ed0ca22e22f1cbec0cd0e283523ec342a55267a5185436de639cc",
+        "authorityRef": "0xf830c146820ba531e1d48d12bb0184d28a34ec78168c12e9683ecea02d37f88d",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "nomination",
+            "capabilityId": "family.univ3-standard.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xb030b7fe4e81bff814e0b67a37e9e2c2b3cbc1f78e7388800482005a28e20c7e",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0xfb8dc994f46b89f710f4d7e20a914365928389d8c69275ca776d9046c29faee7"
+          },
+          "identity": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "identity",
+            "capabilityId": "family.univ3-standard.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x86f8709652520f5a1ffd3168651fb7c7d6d63ebf09cc1d2b772e18c29a832a4c",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0xafa3dc933a1c4b967acfb65e645c7edddbcd8592f75fe2f6d827732dc4c72594"
+          },
+          "materialization": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "materialization",
+            "capabilityId": "family.univ3-standard.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0xcecd30c348027923b2f5c993aa059cd6f541226c1d76696d704ab9604942fa13",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0x90f27b7caeb79a833b4240132792e71c4ff6035d8d7700522de33ceaca5d7669"
+          },
+          "projection": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "projection",
+            "capabilityId": "family.univ3-standard.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x7d5abd72bcddcc7aa3c8faa25849e6cfc956d86ccc31288ff0bbee74c7c45394",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0x95b01a8fd663370c9c3bb29cba2b8ab2cca98567673fe7ad4f5c14351f85ff8d"
+          },
+          "rehydration": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "rehydration",
+            "capabilityId": "family.univ3-standard.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x132febc603e8fcc5de4d0b3437e6ecbfc0dc90af08e16af4f67ff02e0808df5e",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0x7081bc3ccd9f89568a97ccd8f08589a0d41d71d78851c43ef987d09c6f2af2f5"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "capability",
+            "capabilityId": "family.univ3-standard.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x9a3e44d19e8a24413cb9fac945a07d48911700f290e6ef4761c2d2cd82a44eb7",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0x618c65b7714d5427402938a21c2c03e054b4b2ef21dc2847bcf8ab956a9fa5df"
+          },
+          {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "capability",
+            "capabilityId": "family.univ3-standard.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x2099589db353b2af7d799dfadbf25396d2f74901f8fcb062dd0097fe4a99206b",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0xcae07fe4b07099ae8a80b02b54b87a643d88067ef5751b138bf0490a462a64ac"
+          },
+          {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "capability",
+            "capabilityId": "family.univ3-standard.state",
+            "version": "1.0.0",
+            "schemaHash": "0x269b2e2d536bca46fcde799c408e704a94d64b407952b8bb6b36780031dacda0",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0x0ba13b03a3adf49e52cc95d86bee107828652e8ed8c87896ed77140d50f7998f"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x3c5fa9e1aaadf67ef5dab7c4b174e25992891bfd14290499c3cc2472a545846e"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.univ3-standard.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0xa19320ff19f1a70553a983886153751e2411dd510617555fda050e2ce9a1490b"
+          },
+          {
+            "factContractId": "family.univ3-standard.state-reads",
+            "version": "1.0.0",
+            "schemaHash": "0xf59b4de7f797b0cffac7fa14cad691281379f4aad0029ea23e871fed7b74ac47"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x72f03cc5217985a643391448b1c9cd7e8ab9f9b48f58fb96b19617aa004f4c84",
+            "sourcePlanRef": "0x4eb59a3f00f525c404ddc7e34572315f1b75f590969ac9b50fb99d29f9340fef",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          {
+            "ownerRef": "0xc926c680f44667ebd6f379d1316a381b61aa2270b40cf1751b513614b1d85a81",
+            "sourcePlanRef": "0x75ae7aef87ad6324d850ff3c848adbb91c109abcfe97e691b18be6b56a21f43e",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0xeab302478114774d9abdd7376d096c710a2eaed6d56307197a00d75b88192a06",
+        "capabilityCatalogRoot": "0x9887b728f4c8aaaec7542ac61fdf205f006839f4b24a39ca9b67497bfbb4f89e"
+      },
+      "publicEntry": {
+        "modulePath": "families/univ3-standard/src/public.ts",
+        "exportName": "UNIV3_STANDARD_DEFINITION",
+        "closureRoot": "0xa85cbde43f24b011662060711458637a5d5b9c01b0ca6379c0bf3005031a733b"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/univ3-standard/src/runtime.ts",
+          "exportName": "UNIV3_IDENTITY_RUNTIME",
+          "closureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+          "stageRef": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "identity",
+            "capabilityId": "family.univ3-standard.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x86f8709652520f5a1ffd3168651fb7c7d6d63ebf09cc1d2b772e18c29a832a4c",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0xafa3dc933a1c4b967acfb65e645c7edddbcd8592f75fe2f6d827732dc4c72594"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/univ3-standard/src/runtime.ts",
+          "exportName": "UNIV3_MATERIALIZATION_RUNTIME",
+          "closureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+          "stageRef": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "materialization",
+            "capabilityId": "family.univ3-standard.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0xcecd30c348027923b2f5c993aa059cd6f541226c1d76696d704ab9604942fa13",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0x90f27b7caeb79a833b4240132792e71c4ff6035d8d7700522de33ceaca5d7669"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/univ3-standard/src/runtime.ts",
+          "exportName": "UNIV3_NOMINATION_RUNTIME",
+          "closureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+          "stageRef": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "nomination",
+            "capabilityId": "family.univ3-standard.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0xb030b7fe4e81bff814e0b67a37e9e2c2b3cbc1f78e7388800482005a28e20c7e",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0xfb8dc994f46b89f710f4d7e20a914365928389d8c69275ca776d9046c29faee7"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/univ3-standard/src/runtime.ts",
+          "exportName": "UNIV3_PROJECTION_RUNTIME",
+          "closureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+          "stageRef": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "projection",
+            "capabilityId": "family.univ3-standard.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x7d5abd72bcddcc7aa3c8faa25849e6cfc956d86ccc31288ff0bbee74c7c45394",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0x95b01a8fd663370c9c3bb29cba2b8ab2cca98567673fe7ad4f5c14351f85ff8d"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/univ3-standard/src/runtime.ts",
+          "exportName": "UNIV3_REHYDRATION_RUNTIME",
+          "closureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+          "stageRef": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "rehydration",
+            "capabilityId": "family.univ3-standard.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x132febc603e8fcc5de4d0b3437e6ecbfc0dc90af08e16af4f67ff02e0808df5e",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0x7081bc3ccd9f89568a97ccd8f08589a0d41d71d78851c43ef987d09c6f2af2f5"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "univ3-standard.fixed-cutoff-50-block",
+          "modulePath": "families/univ3-standard/src/source-plan.ts",
+          "exportName": "UNIV3_STANDARD_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x31d4ac92ab56727402c4f24637cc8036ba610c50f8542875326c638c3fa5d738",
+          "schemaHash": "0x23979dd1a0aa541ccb5ed63fa73df5e88bf8eebcbb3764fac7c2572429c325f5",
+          "planRef": {
+            "ownerRef": "0xc926c680f44667ebd6f379d1316a381b61aa2270b40cf1751b513614b1d85a81",
+            "sourcePlanRef": "0x75ae7aef87ad6324d850ff3c848adbb91c109abcfe97e691b18be6b56a21f43e",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0xe45d397d93e49e1d57e5a2cc3f2b882ece971b1625c33ecae4037c5b86c964a0",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/univ3-standard/src/source-plan.ts",
+              "exportName": "UNIV3_STANDARD_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0x31d4ac92ab56727402c4f24637cc8036ba610c50f8542875326c638c3fa5d738",
+              "schemaHash": "0x23979dd1a0aa541ccb5ed63fa73df5e88bf8eebcbb3764fac7c2572429c325f5"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/univ3-standard/src/nomination-qualification.ts",
+              "exportName": "UNIV3_STANDARD_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x8c2e9ca4bda2796949f2e2b8e3287e16959224cde93cc33f3e43aee1cf1cd5b1"
+            },
+            "independentOracle": {
+              "modulePath": "families/univ3-standard/src/nomination-qualification.ts",
+              "exportName": "UNIV3_STANDARD_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x8c2e9ca4bda2796949f2e2b8e3287e16959224cde93cc33f3e43aee1cf1cd5b1"
+            },
+            "nominationProgramRoot": "0x7d5fe59fdb402e5a05c9f090111d3e68d3caba57718af52d86cdbfc02f90afd3",
+            "proposalLeafDigest": "0x7b5109804a2a65db9504f025df8610bd8ff23b6f116517941a5eefeec5adcce0"
+          }
+        },
+        {
+          "sourcePlanId": "univ3-standard.pool-created-contiguous-history",
+          "modulePath": "families/univ3-standard/src/source-plan.ts",
+          "exportName": "UNIV3_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x31d4ac92ab56727402c4f24637cc8036ba610c50f8542875326c638c3fa5d738",
+          "schemaHash": "0x2055e40cec5dd1d617c1545e6b5bd1725bf65402ace7fe8b735d335035372479",
+          "planRef": {
+            "ownerRef": "0x72f03cc5217985a643391448b1c9cd7e8ab9f9b48f58fb96b19617aa004f4c84",
+            "sourcePlanRef": "0x4eb59a3f00f525c404ddc7e34572315f1b75f590969ac9b50fb99d29f9340fef",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          "leafDigest": "0x919554f143d1e95c6519f4e83587ec77e7a189c4d2b45dbc0cf0875bf1e50a83",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/univ3-standard/src/source-plan.ts",
+              "exportName": "UNIV3_STANDARD_HISTORY_NOMINATION_PROGRAM",
+              "closureRoot": "0x31d4ac92ab56727402c4f24637cc8036ba610c50f8542875326c638c3fa5d738",
+              "schemaHash": "0x2055e40cec5dd1d617c1545e6b5bd1725bf65402ace7fe8b735d335035372479"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/univ3-standard/src/nomination-qualification.ts",
+              "exportName": "UNIV3_STANDARD_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x8c2e9ca4bda2796949f2e2b8e3287e16959224cde93cc33f3e43aee1cf1cd5b1"
+            },
+            "independentOracle": {
+              "modulePath": "families/univ3-standard/src/nomination-qualification.ts",
+              "exportName": "UNIV3_STANDARD_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x8c2e9ca4bda2796949f2e2b8e3287e16959224cde93cc33f3e43aee1cf1cd5b1"
+            },
+            "nominationProgramRoot": "0xd7f20117cf50dcf74350e90fda32636f5a233d67e8d5db296d2cd2f4dbd23d21",
+            "proposalLeafDigest": "0xe51d4efe0063a674b1a6c90ff60219401521e61415c3d25e9acfce934dbfed77"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/univ3-standard/src/runtime.ts",
+          "exportName": "UNIV3_STANDARD_RUNTIME",
+          "closureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+          "capabilityRef": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "capability",
+            "capabilityId": "family.univ3-standard.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x9a3e44d19e8a24413cb9fac945a07d48911700f290e6ef4761c2d2cd82a44eb7",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0x618c65b7714d5427402938a21c2c03e054b4b2ef21dc2847bcf8ab956a9fa5df"
+          }
+        },
+        {
+          "modulePath": "families/univ3-standard/src/runtime.ts",
+          "exportName": "UNIV3_STANDARD_RUNTIME",
+          "closureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+          "capabilityRef": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "capability",
+            "capabilityId": "family.univ3-standard.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x2099589db353b2af7d799dfadbf25396d2f74901f8fcb062dd0097fe4a99206b",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0xcae07fe4b07099ae8a80b02b54b87a643d88067ef5751b138bf0490a462a64ac"
+          }
+        },
+        {
+          "modulePath": "families/univ3-standard/src/runtime.ts",
+          "exportName": "UNIV3_STANDARD_RUNTIME",
+          "closureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+          "capabilityRef": {
+            "familyId": "univ3-standard",
+            "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+            "stage": "capability",
+            "capabilityId": "family.univ3-standard.state",
+            "version": "1.0.0",
+            "schemaHash": "0x269b2e2d536bca46fcde799c408e704a94d64b407952b8bb6b36780031dacda0",
+            "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+            "ownerRef": "0x0ba13b03a3adf49e52cc95d86bee107828652e8ed8c87896ed77140d50f7998f"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/univ3-standard/src/action.ts",
+          "exportName": "UNIV3_STANDARD_SWAP_ACTION_PORT",
+          "closureRoot": "0xb7689a0b1ad029237ad4e1b471dc4e7cae8c38cf27b21bc06cef0922da3023f9",
+          "ownerRef": "0x3c5fa9e1aaadf67ef5dab7c4b174e25992891bfd14290499c3cc2472a545846e",
+          "ownerId": "family.univ3-standard.swap-action",
+          "version": "1.0.0",
+          "schemaHash": "0x5b5262eaa27285bfe734b224899003fc4254499b57bd7478a7623c6665cd8528",
+          "implementationHash": "0x19483dae48e4bd2c29a458e41c01e5df0699b68209e6c8e95cfc1bec8685ec39",
+          "actionKinds": [
+            "swap"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "physical-lifecycle/v1",
+          "modulePath": "families/univ3-standard/src/runtime/physical-adapter.ts",
+          "exportName": "UNIV3_STANDARD_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+          "closureRoot": "0xdad0d1c2f97af7b49859f59e2591ebd7accbb7cda4cb2e8cebc61c559ba3e973",
+          "capabilityRefs": {},
+          "actionOwnerRefs": {},
+          "leafDigest": "0xadb7b961b652af29514062d6538458b250f0f078376a67df569bba10c7df281c"
+        },
+        {
+          "role": "search/v1",
+          "modulePath": "families/univ3-standard/src/search-adapter.ts",
+          "exportName": "UNIV3_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x6b81fc27031767483db08d50038a8f0208f038af3286227fdf0100db8d996ed1",
+          "capabilityRefs": {
+            "coarse": {
+              "familyId": "univ3-standard",
+              "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+              "stage": "capability",
+              "capabilityId": "family.univ3-standard.coarse",
+              "version": "1.0.0",
+              "schemaHash": "0x9a3e44d19e8a24413cb9fac945a07d48911700f290e6ef4761c2d2cd82a44eb7",
+              "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+              "ownerRef": "0x618c65b7714d5427402938a21c2c03e054b4b2ef21dc2847bcf8ab956a9fa5df"
+            },
+            "exact": {
+              "familyId": "univ3-standard",
+              "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+              "stage": "capability",
+              "capabilityId": "family.univ3-standard.exact",
+              "version": "1.0.0",
+              "schemaHash": "0x2099589db353b2af7d799dfadbf25396d2f74901f8fcb062dd0097fe4a99206b",
+              "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+              "ownerRef": "0xcae07fe4b07099ae8a80b02b54b87a643d88067ef5751b138bf0490a462a64ac"
+            },
+            "state": {
+              "familyId": "univ3-standard",
+              "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+              "stage": "capability",
+              "capabilityId": "family.univ3-standard.state",
+              "version": "1.0.0",
+              "schemaHash": "0x269b2e2d536bca46fcde799c408e704a94d64b407952b8bb6b36780031dacda0",
+              "interpreterHash": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d",
+              "ownerRef": "0x0ba13b03a3adf49e52cc95d86bee107828652e8ed8c87896ed77140d50f7998f"
+            }
+          },
+          "actionOwnerRefs": {
+            "swap": "0x3c5fa9e1aaadf67ef5dab7c4b174e25992891bfd14290499c3cc2472a545846e"
+          },
+          "leafDigest": "0xff5ed67cb868fd1601e4a87a7165e7b8c10247f9d877bc26cea8e3c654be6d72"
+        }
+      ],
+      "runtimeAdapterRoot": "0xa89d5c3441dbcfbd85ebd6ffecfafedea812a716f7c621762878fe96fe229c97",
+      "sourcePlanRoot": "0x7f7bfe44ed6279b2debaf95a5e43f03a6f06a2c7ea001869f21f011e5c77892f",
+      "stageDefinitionRoot": "0x8cf2c1b0ec5a3ba835fdfdb0a3e45d4f599eb11bc899a7178206e9545fd833e8"
+    },
+    {
+      "entry": {
+        "familyId": "univ4",
+        "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+        "issuerRef": "0x80e14eeb3c5f3d58de97a7c6d6dc61b08f1575ffe1dc352dc5599a74cbb0f67b",
+        "authorityRef": "0x0c879925fbb61c7dd73fa5e46c52cbc3789b7c9c62f28ca08ae028984b6b33dc",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "nomination",
+            "capabilityId": "family.univ4.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x73fe3354e221a5d6f42463419881667518203e03c2bffd94b2886fd1f93e1ace",
+            "interpreterHash": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+            "ownerRef": "0xd18326eafa0da40c2d12dbbaa2e4fd3d62da98bafa5af07f4497acd66d64de0c"
+          },
+          "identity": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "identity",
+            "capabilityId": "family.univ4.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x1e9ce334b8c997cabd030638c9dcef9c96b2fecf1bcde6856b86d93f621d1401",
+            "interpreterHash": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+            "ownerRef": "0x624a87ddb5842bd1e4bafef2e12d3ba6479062c2bb90ad99f9603f205ea737ad"
+          },
+          "materialization": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "materialization",
+            "capabilityId": "family.univ4.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x0311ce14d7983d7175e0e3ceaf785f4c4f746aae0b7586fbe3fd7a7db64d8b37",
+            "interpreterHash": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+            "ownerRef": "0x945fe354a8cca528d1d2567bf2a9d216363e9da142f54286fc40d1b8572f4633"
+          },
+          "projection": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "projection",
+            "capabilityId": "family.univ4.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x7aac016223e0603cea91ee42431126990033760386bdbaa6c26f35b56c956ab6",
+            "interpreterHash": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+            "ownerRef": "0x030289cfa76799b2af7eb26bf1da1e8c1871b3b91db2833e746e8e16e9b170a1"
+          },
+          "rehydration": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "rehydration",
+            "capabilityId": "family.univ4.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x7ce17acdf983b39fbd74d8966999a543f2ab9e5d94240cb46c89c881077a2479",
+            "interpreterHash": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+            "ownerRef": "0x48869d6fe959429e345d28b0f3dd5dc96d70a0e3d3c5efab0db44eb240cdd0a8"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "capability",
+            "capabilityId": "family.univ4.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x2d244619372a34b051ccdfc6bfe629166da816b992ffa01524436b318f3ea410",
+            "interpreterHash": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+            "ownerRef": "0x3e2687d6f7bbe9a55ef58db8c22d6837f9185bdb8b5d4c0ca2b2d8c31215e764"
+          },
+          {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "capability",
+            "capabilityId": "family.univ4.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x7c31eed9d2a03b97199c8ca9c5046bfe0681cca5efaa7343d173893298df8c85",
+            "interpreterHash": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+            "ownerRef": "0x43e30dddc35c602d1ccfdc5c57eb43fc63545d2f0b757752b447bd2cd792507a"
+          },
+          {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "capability",
+            "capabilityId": "family.univ4.state",
+            "version": "1.0.0",
+            "schemaHash": "0x9122c96b6f91ac61f48f03c43b73fc025b25e0b246e50713590878bf35baf5f7",
+            "interpreterHash": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+            "ownerRef": "0xe7965002fd92d05389ebe6735182d920c3abff38ddf4fdb5627402102bc59b8e"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0x728550fbd6a53208d57344d7cb092bbc77ab1787141443655cd76b3cf65e9a15"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.univ4.complete-identity-history",
+            "version": "1.0.0",
+            "schemaHash": "0x3fba70dabb3977eca352fd55c543afd24bb255c8ee6fbe79962b4a627cc272a0"
+          },
+          {
+            "factContractId": "family.univ4.identity-reads",
+            "version": "1.0.0",
+            "schemaHash": "0xd14e0ffaf1688e140a3f931b7933f9afff9d2f47f178016107b5f7b29aed1c6f"
+          },
+          {
+            "factContractId": "family.univ4.pattern-evidence",
+            "version": "1.0.0",
+            "schemaHash": "0x8dc0b8933b9df371c395700f4913591ca2f468a23cedb602062dab07179911c2"
+          },
+          {
+            "factContractId": "family.univ4.state-observation",
+            "version": "1.0.0",
+            "schemaHash": "0x60ffc5a3f08911388eaeb56c5024df6da551bd7f1441d4751d96bb09d8f47d9f"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x474d105676ea62ab3625727223305b0594a5a65f94276a8eb540e76d40183bf5",
+            "sourcePlanRef": "0xc1ef5ca38dc21b78d6e50b78665eedc590feb564fe25f6a1fa2ceb607cd2e7fe",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          {
+            "ownerRef": "0x0a2ca2c3a423021ab1446fe03aafc8be9ad9021c9b4210fddf2b84b1182d842d",
+            "sourcePlanRef": "0xe26fca3adbd2e5ce6ec519cdf6be81dafda04afe6c4aed8e0790197cd2345598",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0x05690e196a2c3a268e2698fa43e12d1291b70cc2693acd71502c1c7527420bf0",
+        "capabilityCatalogRoot": "0x7ceb8888018d77c0bd1498934995090180255d2cc1f88ddb287b7b62b5584dd2"
+      },
+      "publicEntry": {
+        "modulePath": "families/univ4/src/public.ts",
+        "exportName": "UNIV4_DEFINITION",
+        "closureRoot": "0x18bcd33b240d4c2f1e1c5f6430f7ac5d91729f9838397f98f14156fb55824a35"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/univ4/src/runtime/definitions.ts",
+          "exportName": "UNIV4_IDENTITY_DEFINITION",
+          "closureRoot": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+          "stageRef": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "identity",
+            "capabilityId": "family.univ4.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x1e9ce334b8c997cabd030638c9dcef9c96b2fecf1bcde6856b86d93f621d1401",
+            "interpreterHash": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+            "ownerRef": "0x624a87ddb5842bd1e4bafef2e12d3ba6479062c2bb90ad99f9603f205ea737ad"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/univ4/src/runtime/definitions.ts",
+          "exportName": "UNIV4_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+          "stageRef": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "materialization",
+            "capabilityId": "family.univ4.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x0311ce14d7983d7175e0e3ceaf785f4c4f746aae0b7586fbe3fd7a7db64d8b37",
+            "interpreterHash": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+            "ownerRef": "0x945fe354a8cca528d1d2567bf2a9d216363e9da142f54286fc40d1b8572f4633"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/univ4/src/runtime/definitions.ts",
+          "exportName": "UNIV4_NOMINATION_DEFINITION",
+          "closureRoot": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+          "stageRef": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "nomination",
+            "capabilityId": "family.univ4.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x73fe3354e221a5d6f42463419881667518203e03c2bffd94b2886fd1f93e1ace",
+            "interpreterHash": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+            "ownerRef": "0xd18326eafa0da40c2d12dbbaa2e4fd3d62da98bafa5af07f4497acd66d64de0c"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/univ4/src/runtime/definitions.ts",
+          "exportName": "UNIV4_PROJECTION_DEFINITION",
+          "closureRoot": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+          "stageRef": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "projection",
+            "capabilityId": "family.univ4.projection",
+            "version": "1.0.0",
+            "schemaHash": "0x7aac016223e0603cea91ee42431126990033760386bdbaa6c26f35b56c956ab6",
+            "interpreterHash": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+            "ownerRef": "0x030289cfa76799b2af7eb26bf1da1e8c1871b3b91db2833e746e8e16e9b170a1"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/univ4/src/runtime/definitions.ts",
+          "exportName": "UNIV4_REHYDRATION_DEFINITION",
+          "closureRoot": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+          "stageRef": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "rehydration",
+            "capabilityId": "family.univ4.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x7ce17acdf983b39fbd74d8966999a543f2ab9e5d94240cb46c89c881077a2479",
+            "interpreterHash": "0xf5a33a0ea0b77d60f410257c0b9a6c410869285b466a9104e437d300a2d50b36",
+            "ownerRef": "0x48869d6fe959429e345d28b0f3dd5dc96d70a0e3d3c5efab0db44eb240cdd0a8"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "univ4.fixed-cutoff-50-block",
+          "modulePath": "families/univ4/src/source-plan.ts",
+          "exportName": "UNIV4_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x28afeb328f54b1615ea2b36c80492800c332eebb4624e777dd8087ec13d443b5",
+          "schemaHash": "0x0fd1d5a86922c6c2fb763716db032031465569a4d8f5411799cd020ceef780da",
+          "planRef": {
+            "ownerRef": "0x0a2ca2c3a423021ab1446fe03aafc8be9ad9021c9b4210fddf2b84b1182d842d",
+            "sourcePlanRef": "0xe26fca3adbd2e5ce6ec519cdf6be81dafda04afe6c4aed8e0790197cd2345598",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x6ba2186c360bb70be35dd1847d7025d46fcc7575f27085ac7521d02294f69978",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/univ4/src/source-plan.ts",
+              "exportName": "UNIV4_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0x28afeb328f54b1615ea2b36c80492800c332eebb4624e777dd8087ec13d443b5",
+              "schemaHash": "0x0fd1d5a86922c6c2fb763716db032031465569a4d8f5411799cd020ceef780da"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/univ4/src/nomination-qualification.ts",
+              "exportName": "UNIV4_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x95fd8df1fbe254ce889e2c37ae832ca6706781e28515761018d38366481f4461"
+            },
+            "independentOracle": {
+              "modulePath": "families/univ4/src/nomination-qualification.ts",
+              "exportName": "UNIV4_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x95fd8df1fbe254ce889e2c37ae832ca6706781e28515761018d38366481f4461"
+            },
+            "nominationProgramRoot": "0x684ff695aaa8a8da8e858001366f0a006fec8e8db3593170ca1f4c7ccb60d152",
+            "proposalLeafDigest": "0xe39b224043c968cbc844240401e2a40b40de8f3fe4a172e533a4f5850155f7ab"
+          }
+        },
+        {
+          "sourcePlanId": "univ4.pool-manager-initialize-history",
+          "modulePath": "families/univ4/src/history-source-plan.ts",
+          "exportName": "UNIV4_HISTORY_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x5d6db4068d443dd920c5af34620805f20efc6b616f04b03029799f78512c93a1",
+          "schemaHash": "0x3fba70dabb3977eca352fd55c543afd24bb255c8ee6fbe79962b4a627cc272a0",
+          "planRef": {
+            "ownerRef": "0x474d105676ea62ab3625727223305b0594a5a65f94276a8eb540e76d40183bf5",
+            "sourcePlanRef": "0xc1ef5ca38dc21b78d6e50b78665eedc590feb564fe25f6a1fa2ceb607cd2e7fe",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "completeness": "contiguous-history",
+            "historyStartBlock": "0"
+          },
+          "leafDigest": "0x32eff2fdaf40f45fc5dc60d588ee7443ccedcdb561df08ecd4870ba4489d2fdc",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/univ4/src/history-source-plan.ts",
+              "exportName": "UNIV4_HISTORY_NOMINATION_PROGRAM",
+              "closureRoot": "0x5d6db4068d443dd920c5af34620805f20efc6b616f04b03029799f78512c93a1",
+              "schemaHash": "0x3fba70dabb3977eca352fd55c543afd24bb255c8ee6fbe79962b4a627cc272a0"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/univ4/src/nomination-qualification.ts",
+              "exportName": "UNIV4_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x95fd8df1fbe254ce889e2c37ae832ca6706781e28515761018d38366481f4461"
+            },
+            "independentOracle": {
+              "modulePath": "families/univ4/src/nomination-qualification.ts",
+              "exportName": "UNIV4_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x95fd8df1fbe254ce889e2c37ae832ca6706781e28515761018d38366481f4461"
+            },
+            "nominationProgramRoot": "0xc28d90c51ca1118e8d3034a884457cdabbd59d8e74ec60637b6c2d7fd71b57f7",
+            "proposalLeafDigest": "0x2e565343b11a6b3de44087dbb9c76584858ba33c92992c6dd90cf88d3352c30b"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/univ4/src/runtime.ts",
+          "exportName": "UNIV4_RUNTIME",
+          "closureRoot": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+          "capabilityRef": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "capability",
+            "capabilityId": "family.univ4.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x2d244619372a34b051ccdfc6bfe629166da816b992ffa01524436b318f3ea410",
+            "interpreterHash": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+            "ownerRef": "0x3e2687d6f7bbe9a55ef58db8c22d6837f9185bdb8b5d4c0ca2b2d8c31215e764"
+          }
+        },
+        {
+          "modulePath": "families/univ4/src/runtime.ts",
+          "exportName": "UNIV4_RUNTIME",
+          "closureRoot": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+          "capabilityRef": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "capability",
+            "capabilityId": "family.univ4.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x7c31eed9d2a03b97199c8ca9c5046bfe0681cca5efaa7343d173893298df8c85",
+            "interpreterHash": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+            "ownerRef": "0x43e30dddc35c602d1ccfdc5c57eb43fc63545d2f0b757752b447bd2cd792507a"
+          }
+        },
+        {
+          "modulePath": "families/univ4/src/runtime.ts",
+          "exportName": "UNIV4_RUNTIME",
+          "closureRoot": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+          "capabilityRef": {
+            "familyId": "univ4",
+            "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+            "stage": "capability",
+            "capabilityId": "family.univ4.state",
+            "version": "1.0.0",
+            "schemaHash": "0x9122c96b6f91ac61f48f03c43b73fc025b25e0b246e50713590878bf35baf5f7",
+            "interpreterHash": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+            "ownerRef": "0xe7965002fd92d05389ebe6735182d920c3abff38ddf4fdb5627402102bc59b8e"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/univ4/src/action.ts",
+          "exportName": "UNIV4_ACTION_PORT",
+          "closureRoot": "0xe5c0faeccedfb03248da48cd665866b5203a56dd8a40f2f3af7d2c6cf3401ce8",
+          "ownerRef": "0x728550fbd6a53208d57344d7cb092bbc77ab1787141443655cd76b3cf65e9a15",
+          "ownerId": "family.univ4.swap-action",
+          "version": "1.0.0",
+          "schemaHash": "0x9c4f696118cdaef51550e1c109d8576888d50342a6bb2cb711177ad509b20123",
+          "implementationHash": "0x5da69f5fc12e79f6eec204ac6461b0a785a57f44b25b265c2c8dc06a57e60625",
+          "actionKinds": [
+            "swap"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "physical-lifecycle/v1",
+          "modulePath": "families/univ4/src/runtime/physical-adapter.ts",
+          "exportName": "UNIV4_PHYSICAL_LIFECYCLE_ADAPTER_FACTORY",
+          "closureRoot": "0x0cb94845cf7a19b7d6f0822033a3857550f83f9187b43a157ca988192fb45674",
+          "capabilityRefs": {},
+          "actionOwnerRefs": {},
+          "leafDigest": "0xba1f879a37951aec56d4ffbef68555f72d4132911979e80b8742bf06f461c432"
+        },
+        {
+          "role": "search/v1",
+          "modulePath": "families/univ4/src/search-adapter.ts",
+          "exportName": "UNIV4_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x825b7b044e1b3780fe2f1c46b498e6c559ce879f8e6ef590c88bbf720ed7c3d7",
+          "capabilityRefs": {
+            "coarse": {
+              "familyId": "univ4",
+              "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+              "stage": "capability",
+              "capabilityId": "family.univ4.coarse",
+              "version": "1.0.0",
+              "schemaHash": "0x2d244619372a34b051ccdfc6bfe629166da816b992ffa01524436b318f3ea410",
+              "interpreterHash": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+              "ownerRef": "0x3e2687d6f7bbe9a55ef58db8c22d6837f9185bdb8b5d4c0ca2b2d8c31215e764"
+            },
+            "exact": {
+              "familyId": "univ4",
+              "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+              "stage": "capability",
+              "capabilityId": "family.univ4.exact",
+              "version": "1.0.0",
+              "schemaHash": "0x7c31eed9d2a03b97199c8ca9c5046bfe0681cca5efaa7343d173893298df8c85",
+              "interpreterHash": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+              "ownerRef": "0x43e30dddc35c602d1ccfdc5c57eb43fc63545d2f0b757752b447bd2cd792507a"
+            },
+            "state": {
+              "familyId": "univ4",
+              "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+              "stage": "capability",
+              "capabilityId": "family.univ4.state",
+              "version": "1.0.0",
+              "schemaHash": "0x9122c96b6f91ac61f48f03c43b73fc025b25e0b246e50713590878bf35baf5f7",
+              "interpreterHash": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd",
+              "ownerRef": "0xe7965002fd92d05389ebe6735182d920c3abff38ddf4fdb5627402102bc59b8e"
+            }
+          },
+          "actionOwnerRefs": {
+            "action": "0x728550fbd6a53208d57344d7cb092bbc77ab1787141443655cd76b3cf65e9a15"
+          },
+          "leafDigest": "0x89ee421c04853d380e0e9077f4980d0278d453ec5151049ea7a4ccbb6730a6f4"
+        }
+      ],
+      "runtimeAdapterRoot": "0x808ca4bf990a9e1de9fc452c6f3b8c4cd72441c59e1f2b4c0a22530adf8d7af7",
+      "sourcePlanRoot": "0xb933602d03d856f54798a7586fd0104b4d049e547cabdbd6b5626bf68454bca5",
+      "stageDefinitionRoot": "0xc9c10193bae943e56ef378a1c14ba4a723bd72425f6c4c7f4c31eb65f64ba7c8"
+    },
+    {
+      "entry": {
+        "familyId": "wsteth",
+        "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+        "issuerRef": "0x4bcc3066aafe4452f40ab163fd9911184aaa2d583ee1bcdb18a7bf2ca1da55ff",
+        "authorityRef": "0x2ad3ec225a6703f60ca6cdf5e53d6c460b81942fe27f3cf67beece57c0a1f02b",
+        "lifecycleRefs": {
+          "nomination": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "nomination",
+            "capabilityId": "family.wsteth.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x8d8ef30c8981ed37b68d8e823dfa132224faa5593b56f0aa6c7d50cb198c9d2a",
+            "interpreterHash": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+            "ownerRef": "0xccfebb036b6a660e8f0f99741df8e21f9f85f5c8dadf928a6bb963276c9e11d0"
+          },
+          "identity": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "identity",
+            "capabilityId": "family.wsteth.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x3a1d0c3c4f5805f7295fc55764a67f2a8719c2f3db83386f187f701db0dab2b8",
+            "interpreterHash": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+            "ownerRef": "0x5365cceb07755e34675d66ab066d016f822d29a24829623ac1414021c1f64d87"
+          },
+          "materialization": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "materialization",
+            "capabilityId": "family.wsteth.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x7eba4b5f46619913ef423e9458bb3d5b2d8b98fc46fb1f1d6bf6d2ea7a488957",
+            "interpreterHash": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+            "ownerRef": "0xb751ad1bf5e61ca8ddf16bd134c972a2d614194cb93f4d51f4c1d785c10cae8e"
+          },
+          "projection": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "projection",
+            "capabilityId": "family.wsteth.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xae1b32c3c684823267c9528a3f9e2d16c01c83229d2e4dc26c94e1b88677df5b",
+            "interpreterHash": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+            "ownerRef": "0x677f444322de6e238a0205c2d0bd4ea5b8c8def558312637bca4548efa01f71e"
+          },
+          "rehydration": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "rehydration",
+            "capabilityId": "family.wsteth.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x545ed3b401e8d33e3f7f2718cfe36e14293b4803a03f40c22027db6e080cff0f",
+            "interpreterHash": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+            "ownerRef": "0xfd360d01acd6ce7dda83c87e8edc9b27effc420e6b1531d58ad733edc42c5211"
+          }
+        },
+        "extensionRefs": [
+          {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "capability",
+            "capabilityId": "family.wsteth.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x361b572acc7eb1a52c861ded1d78d915bc427db7231f376e0a82605d8f99ee1c",
+            "interpreterHash": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+            "ownerRef": "0x6b71ba48e7f4ccfab43283deaa2dd858cbf3cd0d206cfcd6e0bc24214d405004"
+          },
+          {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "capability",
+            "capabilityId": "family.wsteth.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x2b8d9c0c9836aa8ad97c0d33505dd8acafa8e5918af09ca1e5e598cc03fb4b47",
+            "interpreterHash": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+            "ownerRef": "0x7c36b7df6647471c71881a63d8ff00e41eb24db5ca7bf193f437e26f1aa18cfd"
+          },
+          {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "capability",
+            "capabilityId": "family.wsteth.state",
+            "version": "1.0.0",
+            "schemaHash": "0xe8ad0c273387d209138203c6b3a9594b3c9251f07c50054cfb78a9a33825b20e",
+            "interpreterHash": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+            "ownerRef": "0xab85b283c7ed8281f9820dd0890cae9b66a3a1c846d774f22bccdbfd0989fbf7"
+          }
+        ],
+        "actionOwnerRefs": [
+          "0xba0ba6e3fe1f211ad8dfaacfe0266ea5fe59c4a36bf80924c75bd1f2c529257d"
+        ],
+        "factContractRefs": [
+          {
+            "factContractId": "family.wsteth.conversion-quote",
+            "version": "1.0.0",
+            "schemaHash": "0x50dad8b7fc4a90379ae952e6a80a556183d9ab52dac8248840a7be315916a0e7"
+          },
+          {
+            "factContractId": "family.wsteth.token-identity",
+            "version": "1.0.0",
+            "schemaHash": "0xf764bb011c061ba1b64196c5fbce194ba6699b6273c02a0e990df5f137b1cfcb"
+          }
+        ],
+        "sourcePlanRefs": [
+          {
+            "ownerRef": "0x7ebdcdaae4274f46bb7fbe6789720e498b789712a006c080e423d90281f671d1",
+            "sourcePlanRef": "0x67808274c7f70c1acaa3ea3b666b890fd5bc5b175d1473ad877ea1717f92760d",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          }
+        ],
+        "definitionCatalogLeafDigest": "0x1c3405fa5a6fff9b13c51cf9533ac92dd51b4e5c67ecf7d205c132e7be747d2d",
+        "capabilityCatalogRoot": "0x553b4e5693e32ade9a4473595bdacc2fdb71a82f9f50d1b64156d1639e8c025e"
+      },
+      "publicEntry": {
+        "modulePath": "families/wsteth/src/public.ts",
+        "exportName": "WSTETH_DEFINITION",
+        "closureRoot": "0x0149286c035778fb52a9656fd70ecb87de1536f583bb2f94a89e1d871ffee209"
+      },
+      "stages": [
+        {
+          "stage": "identity",
+          "modulePath": "families/wsteth/src/runtime/definitions.ts",
+          "exportName": "WSTETH_IDENTITY_DEFINITION",
+          "closureRoot": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+          "stageRef": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "identity",
+            "capabilityId": "family.wsteth.identity",
+            "version": "1.0.0",
+            "schemaHash": "0x3a1d0c3c4f5805f7295fc55764a67f2a8719c2f3db83386f187f701db0dab2b8",
+            "interpreterHash": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+            "ownerRef": "0x5365cceb07755e34675d66ab066d016f822d29a24829623ac1414021c1f64d87"
+          }
+        },
+        {
+          "stage": "materialization",
+          "modulePath": "families/wsteth/src/runtime/definitions.ts",
+          "exportName": "WSTETH_MATERIALIZATION_DEFINITION",
+          "closureRoot": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+          "stageRef": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "materialization",
+            "capabilityId": "family.wsteth.materialization",
+            "version": "1.0.0",
+            "schemaHash": "0x7eba4b5f46619913ef423e9458bb3d5b2d8b98fc46fb1f1d6bf6d2ea7a488957",
+            "interpreterHash": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+            "ownerRef": "0xb751ad1bf5e61ca8ddf16bd134c972a2d614194cb93f4d51f4c1d785c10cae8e"
+          }
+        },
+        {
+          "stage": "nomination",
+          "modulePath": "families/wsteth/src/runtime/definitions.ts",
+          "exportName": "WSTETH_NOMINATION_DEFINITION",
+          "closureRoot": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+          "stageRef": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "nomination",
+            "capabilityId": "family.wsteth.nomination",
+            "version": "1.0.0",
+            "schemaHash": "0x8d8ef30c8981ed37b68d8e823dfa132224faa5593b56f0aa6c7d50cb198c9d2a",
+            "interpreterHash": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+            "ownerRef": "0xccfebb036b6a660e8f0f99741df8e21f9f85f5c8dadf928a6bb963276c9e11d0"
+          }
+        },
+        {
+          "stage": "projection",
+          "modulePath": "families/wsteth/src/runtime/definitions.ts",
+          "exportName": "WSTETH_PROJECTION_DEFINITION",
+          "closureRoot": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+          "stageRef": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "projection",
+            "capabilityId": "family.wsteth.projection",
+            "version": "1.0.0",
+            "schemaHash": "0xae1b32c3c684823267c9528a3f9e2d16c01c83229d2e4dc26c94e1b88677df5b",
+            "interpreterHash": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+            "ownerRef": "0x677f444322de6e238a0205c2d0bd4ea5b8c8def558312637bca4548efa01f71e"
+          }
+        },
+        {
+          "stage": "rehydration",
+          "modulePath": "families/wsteth/src/runtime/definitions.ts",
+          "exportName": "WSTETH_REHYDRATION_DEFINITION",
+          "closureRoot": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+          "stageRef": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "rehydration",
+            "capabilityId": "family.wsteth.rehydration",
+            "version": "1.0.0",
+            "schemaHash": "0x545ed3b401e8d33e3f7f2718cfe36e14293b4803a03f40c22027db6e080cff0f",
+            "interpreterHash": "0x568a2b3ab2a8d64cabd253231990bac4d3ba7a522dad2484119194be7a18a265",
+            "ownerRef": "0xfd360d01acd6ce7dda83c87e8edc9b27effc420e6b1531d58ad733edc42c5211"
+          }
+        }
+      ],
+      "sourcePlans": [
+        {
+          "sourcePlanId": "wsteth.fixed-cutoff-50-block",
+          "modulePath": "families/wsteth/src/source-plan.ts",
+          "exportName": "WSTETH_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0xcb6e565067d450a5cae60059b644de18ef29867bf4d7e2887052de8b497146b9",
+          "schemaHash": "0x35b38ce42aa82718633321837575a810e911c861bcd47c6612b9ec023ccf3a1d",
+          "planRef": {
+            "ownerRef": "0x7ebdcdaae4274f46bb7fbe6789720e498b789712a006c080e423d90281f671d1",
+            "sourcePlanRef": "0x67808274c7f70c1acaa3ea3b666b890fd5bc5b175d1473ad877ea1717f92760d",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0xe30e59cc9bcbfaf5bb9743c56ccf4f87affa0f50164f88542d76ba32ddcd2ba4",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/wsteth/src/source-plan.ts",
+              "exportName": "WSTETH_SOURCE_NOMINATION_PROGRAM",
+              "closureRoot": "0xcb6e565067d450a5cae60059b644de18ef29867bf4d7e2887052de8b497146b9",
+              "schemaHash": "0x35b38ce42aa82718633321837575a810e911c861bcd47c6612b9ec023ccf3a1d"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/wsteth/src/nomination-qualification.ts",
+              "exportName": "WSTETH_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0xd3a5a8dc90caa0a505b9e52879ccc784279c615254ef480aa34ab76d88ecc897"
+            },
+            "independentOracle": {
+              "modulePath": "families/wsteth/src/nomination-qualification.ts",
+              "exportName": "WSTETH_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0xd3a5a8dc90caa0a505b9e52879ccc784279c615254ef480aa34ab76d88ecc897"
+            },
+            "nominationProgramRoot": "0x9a8eb1459eeac5a0bdbfdefce506f0a237d22911b3699e0bb6a8e58167516742",
+            "proposalLeafDigest": "0x072be8183c0f05c388af69d676f23b4fbcbd0300bd66e42a4f3dd37aaf33c226"
+          }
+        }
+      ],
+      "extensions": [
+        {
+          "modulePath": "families/wsteth/src/runtime.ts",
+          "exportName": "WSTETH_RUNTIME",
+          "closureRoot": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+          "capabilityRef": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "capability",
+            "capabilityId": "family.wsteth.coarse",
+            "version": "1.0.0",
+            "schemaHash": "0x361b572acc7eb1a52c861ded1d78d915bc427db7231f376e0a82605d8f99ee1c",
+            "interpreterHash": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+            "ownerRef": "0x6b71ba48e7f4ccfab43283deaa2dd858cbf3cd0d206cfcd6e0bc24214d405004"
+          }
+        },
+        {
+          "modulePath": "families/wsteth/src/runtime.ts",
+          "exportName": "WSTETH_RUNTIME",
+          "closureRoot": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+          "capabilityRef": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "capability",
+            "capabilityId": "family.wsteth.exact",
+            "version": "1.0.0",
+            "schemaHash": "0x2b8d9c0c9836aa8ad97c0d33505dd8acafa8e5918af09ca1e5e598cc03fb4b47",
+            "interpreterHash": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+            "ownerRef": "0x7c36b7df6647471c71881a63d8ff00e41eb24db5ca7bf193f437e26f1aa18cfd"
+          }
+        },
+        {
+          "modulePath": "families/wsteth/src/runtime.ts",
+          "exportName": "WSTETH_RUNTIME",
+          "closureRoot": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+          "capabilityRef": {
+            "familyId": "wsteth",
+            "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+            "stage": "capability",
+            "capabilityId": "family.wsteth.state",
+            "version": "1.0.0",
+            "schemaHash": "0xe8ad0c273387d209138203c6b3a9594b3c9251f07c50054cfb78a9a33825b20e",
+            "interpreterHash": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+            "ownerRef": "0xab85b283c7ed8281f9820dd0890cae9b66a3a1c846d774f22bccdbfd0989fbf7"
+          }
+        }
+      ],
+      "actionOwners": [
+        {
+          "modulePath": "families/wsteth/src/action.ts",
+          "exportName": "WSTETH_ACTION_PORT",
+          "closureRoot": "0xa5eaa463da2260a45956e241e7efa73cd5703317d283da5e5f067857ad479b41",
+          "ownerRef": "0xba0ba6e3fe1f211ad8dfaacfe0266ea5fe59c4a36bf80924c75bd1f2c529257d",
+          "ownerId": "family.wsteth.wrap-unwrap",
+          "version": "1.0.0",
+          "schemaHash": "0x858216bd37c389658c2ffea9171f01ac47882b36c982c76a7f393e24bdc60eb2",
+          "implementationHash": "0x38112b3c1f25f1aed84e08d745b5ec01e47f3e0db31c69737a2479ff59df73f4",
+          "actionKinds": [
+            "unwrap",
+            "wrap"
+          ]
+        }
+      ],
+      "runtimeAdapters": [
+        {
+          "role": "search/v1",
+          "modulePath": "families/wsteth/src/runtime.ts",
+          "exportName": "WSTETH_SEARCH_RUNTIME_ADAPTER_FACTORY",
+          "closureRoot": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+          "capabilityRefs": {
+            "coarse": {
+              "familyId": "wsteth",
+              "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+              "stage": "capability",
+              "capabilityId": "family.wsteth.coarse",
+              "version": "1.0.0",
+              "schemaHash": "0x361b572acc7eb1a52c861ded1d78d915bc427db7231f376e0a82605d8f99ee1c",
+              "interpreterHash": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+              "ownerRef": "0x6b71ba48e7f4ccfab43283deaa2dd858cbf3cd0d206cfcd6e0bc24214d405004"
+            },
+            "exact": {
+              "familyId": "wsteth",
+              "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+              "stage": "capability",
+              "capabilityId": "family.wsteth.exact",
+              "version": "1.0.0",
+              "schemaHash": "0x2b8d9c0c9836aa8ad97c0d33505dd8acafa8e5918af09ca1e5e598cc03fb4b47",
+              "interpreterHash": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+              "ownerRef": "0x7c36b7df6647471c71881a63d8ff00e41eb24db5ca7bf193f437e26f1aa18cfd"
+            },
+            "state": {
+              "familyId": "wsteth",
+              "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+              "stage": "capability",
+              "capabilityId": "family.wsteth.state",
+              "version": "1.0.0",
+              "schemaHash": "0xe8ad0c273387d209138203c6b3a9594b3c9251f07c50054cfb78a9a33825b20e",
+              "interpreterHash": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537",
+              "ownerRef": "0xab85b283c7ed8281f9820dd0890cae9b66a3a1c846d774f22bccdbfd0989fbf7"
+            }
+          },
+          "actionOwnerRefs": {
+            "wrap-unwrap": "0xba0ba6e3fe1f211ad8dfaacfe0266ea5fe59c4a36bf80924c75bd1f2c529257d"
+          },
+          "leafDigest": "0xeb4501f140c0bfbbdd988d193885ef3d96339f87744d1fae8c606d210463eab5"
+        }
+      ],
+      "runtimeAdapterRoot": "0xfd7d43f2270e12955f4eec7f66952b41d84219e7dc4f018298b0bfa78a96dccd",
+      "sourcePlanRoot": "0xfd4bd8bf7ca2c02e2bb3db506b791e75168d604c8185d57897f2e4a0d576a28d",
+      "stageDefinitionRoot": "0xc707aec3f2b2e49f924cb77bb1ba4af132977788b708123157fab00384031d58"
     }
   ],
-  "descriptorRoot": "0xf298e33809e1031e886270c449cf8c6df21303b303636ef4de9015be7844b8d1"
+  "descriptorRoot": "0x079cd06080d06f1eda37e326c08784d113127300bcb9f170ea9302eb8281ba7f"
 }
 ) as unknown as GeneratedFamilyRuntimeDescriptorV1;
 const STRATEGY_RUNTIME_DESCRIPTOR = Object.freeze(
 {
   "schemaVersion": 1,
-  "releaseIntentRoot": "0x57d210c88459dbb63710c8aae573c3a0543e259e4ab848043bea787f2f3ae244",
-  "definitionCatalogRoot": "0xc751ffd9ce2b06b21391e2b304605bca7b99a9012781754c3f90344c7bfe2248",
-  "proposedCapabilitySetRoot": "0xa4dafbe03eb8ab2af81a88bf44193a0f1c94028cd80a04564c32e77936362332",
+  "releaseIntentRoot": "0x1aa7cc4b42b25945b29d8d42dc30a00df2bfb3f6a515cdcee7937781806796bf",
+  "definitionCatalogRoot": "0xee829db9ac08d68a1880e500fd6bd4756d83eacd1199642edad4e126040f696e",
+  "proposedCapabilitySetRoot": "0x6e233c30225c34fae8b780236c196afc062f11bb4772478726b51fa3ec69c3e2",
   "strategies": [
     {
       "catalogEntry": {
@@ -1825,7 +7973,7 @@ const STRATEGY_RUNTIME_DESCRIPTOR = Object.freeze(
       "leafDigest": "0xbbe4ad24163729ebab34eab8cd23d840aef98bc0cb01e7ce4c17f58bb420cb54"
     }
   ],
-  "descriptorRoot": "0x07b7de35ccc58852f2c6f6782200708bf606e382ab1451fb08880edaca165efc"
+  "descriptorRoot": "0xf4a94c45e7b8352ca9722f713f0c544e2c846f0ff3826225f057920709d6bc0c"
 }
 ) as unknown as GeneratedStrategyRuntimeDescriptorV1;
 
@@ -1836,36 +7984,132 @@ export const createReleaseFamilyRuntimeComposition: GeneratedFamilyRuntimeFactor
     FAMILY_RUNTIME_DEFINITIONS_1,
     FAMILY_RUNTIME_DEFINITIONS_2,
     FAMILY_RUNTIME_DEFINITIONS_3,
+    FAMILY_RUNTIME_DEFINITIONS_4,
+    FAMILY_RUNTIME_DEFINITIONS_5,
+    FAMILY_RUNTIME_DEFINITIONS_6,
+    FAMILY_RUNTIME_DEFINITIONS_7,
+    FAMILY_RUNTIME_DEFINITIONS_8,
+    FAMILY_RUNTIME_DEFINITIONS_9,
+    FAMILY_RUNTIME_DEFINITIONS_10,
+    FAMILY_RUNTIME_DEFINITIONS_11,
+    FAMILY_RUNTIME_DEFINITIONS_12,
+    FAMILY_RUNTIME_DEFINITIONS_13,
+    FAMILY_RUNTIME_DEFINITIONS_14,
+    FAMILY_RUNTIME_DEFINITIONS_15,
+    FAMILY_RUNTIME_DEFINITIONS_16,
+    FAMILY_RUNTIME_DEFINITIONS_17,
+    FAMILY_RUNTIME_DEFINITIONS_18,
+    FAMILY_RUNTIME_DEFINITIONS_19,
   ],
   extensions: [
     Object.freeze([FAMILY_0_EXTENSION_0, FAMILY_0_EXTENSION_1, FAMILY_0_EXTENSION_2]),
     Object.freeze([FAMILY_1_EXTENSION_0, FAMILY_1_EXTENSION_1, FAMILY_1_EXTENSION_2]),
     Object.freeze([FAMILY_2_EXTENSION_0, FAMILY_2_EXTENSION_1, FAMILY_2_EXTENSION_2]),
     Object.freeze([FAMILY_3_EXTENSION_0, FAMILY_3_EXTENSION_1, FAMILY_3_EXTENSION_2]),
+    Object.freeze([FAMILY_4_EXTENSION_0]),
+    Object.freeze([FAMILY_5_EXTENSION_0]),
+    Object.freeze([FAMILY_6_EXTENSION_0]),
+    Object.freeze([FAMILY_7_EXTENSION_0]),
+    Object.freeze([FAMILY_8_EXTENSION_0, FAMILY_8_EXTENSION_1, FAMILY_8_EXTENSION_2]),
+    Object.freeze([FAMILY_9_EXTENSION_0, FAMILY_9_EXTENSION_1, FAMILY_9_EXTENSION_2]),
+    Object.freeze([FAMILY_10_EXTENSION_0, FAMILY_10_EXTENSION_1, FAMILY_10_EXTENSION_2]),
+    Object.freeze([FAMILY_11_EXTENSION_0]),
+    Object.freeze([FAMILY_12_EXTENSION_0]),
+    Object.freeze([FAMILY_13_EXTENSION_0, FAMILY_13_EXTENSION_1, FAMILY_13_EXTENSION_2]),
+    Object.freeze([FAMILY_14_EXTENSION_0, FAMILY_14_EXTENSION_1, FAMILY_14_EXTENSION_2]),
+    Object.freeze([FAMILY_15_EXTENSION_0, FAMILY_15_EXTENSION_1]),
+    Object.freeze([FAMILY_16_EXTENSION_0, FAMILY_16_EXTENSION_1, FAMILY_16_EXTENSION_2]),
+    Object.freeze([FAMILY_17_EXTENSION_0, FAMILY_17_EXTENSION_1, FAMILY_17_EXTENSION_2]),
+    Object.freeze([FAMILY_18_EXTENSION_0, FAMILY_18_EXTENSION_1, FAMILY_18_EXTENSION_2]),
+    Object.freeze([FAMILY_19_EXTENSION_0, FAMILY_19_EXTENSION_1, FAMILY_19_EXTENSION_2]),
   ],
   actionOwners: [
     Object.freeze([FAMILY_0_ACTION_0]),
     Object.freeze([FAMILY_1_ACTION_0]),
     Object.freeze([FAMILY_2_ACTION_0]),
     Object.freeze([FAMILY_3_ACTION_0]),
+    Object.freeze([FAMILY_4_ACTION_0]),
+    Object.freeze([FAMILY_5_ACTION_0]),
+    Object.freeze([FAMILY_6_ACTION_0]),
+    Object.freeze([FAMILY_7_ACTION_0]),
+    Object.freeze([FAMILY_8_ACTION_0]),
+    Object.freeze([FAMILY_9_ACTION_0]),
+    Object.freeze([FAMILY_10_ACTION_0]),
+    Object.freeze([FAMILY_11_ACTION_0]),
+    Object.freeze([FAMILY_12_ACTION_0]),
+    Object.freeze([FAMILY_13_ACTION_0]),
+    Object.freeze([FAMILY_14_ACTION_0]),
+    Object.freeze([FAMILY_15_ACTION_0]),
+    Object.freeze([FAMILY_16_ACTION_0]),
+    Object.freeze([FAMILY_17_ACTION_0]),
+    Object.freeze([FAMILY_18_ACTION_0]),
+    Object.freeze([FAMILY_19_ACTION_0]),
   ],
   runtimeAdapters: [
     FAMILY_RUNTIME_ADAPTERS_0,
     FAMILY_RUNTIME_ADAPTERS_1,
     FAMILY_RUNTIME_ADAPTERS_2,
     FAMILY_RUNTIME_ADAPTERS_3,
+    FAMILY_RUNTIME_ADAPTERS_4,
+    FAMILY_RUNTIME_ADAPTERS_5,
+    FAMILY_RUNTIME_ADAPTERS_6,
+    FAMILY_RUNTIME_ADAPTERS_7,
+    FAMILY_RUNTIME_ADAPTERS_8,
+    FAMILY_RUNTIME_ADAPTERS_9,
+    FAMILY_RUNTIME_ADAPTERS_10,
+    FAMILY_RUNTIME_ADAPTERS_11,
+    FAMILY_RUNTIME_ADAPTERS_12,
+    FAMILY_RUNTIME_ADAPTERS_13,
+    FAMILY_RUNTIME_ADAPTERS_14,
+    FAMILY_RUNTIME_ADAPTERS_15,
+    FAMILY_RUNTIME_ADAPTERS_16,
+    FAMILY_RUNTIME_ADAPTERS_17,
+    FAMILY_RUNTIME_ADAPTERS_18,
+    FAMILY_RUNTIME_ADAPTERS_19,
   ],
   sourcePlans: [
     FAMILY_SOURCE_PLANS_0,
     FAMILY_SOURCE_PLANS_1,
     FAMILY_SOURCE_PLANS_2,
     FAMILY_SOURCE_PLANS_3,
+    FAMILY_SOURCE_PLANS_4,
+    FAMILY_SOURCE_PLANS_5,
+    FAMILY_SOURCE_PLANS_6,
+    FAMILY_SOURCE_PLANS_7,
+    FAMILY_SOURCE_PLANS_8,
+    FAMILY_SOURCE_PLANS_9,
+    FAMILY_SOURCE_PLANS_10,
+    FAMILY_SOURCE_PLANS_11,
+    FAMILY_SOURCE_PLANS_12,
+    FAMILY_SOURCE_PLANS_13,
+    FAMILY_SOURCE_PLANS_14,
+    FAMILY_SOURCE_PLANS_15,
+    FAMILY_SOURCE_PLANS_16,
+    FAMILY_SOURCE_PLANS_17,
+    FAMILY_SOURCE_PLANS_18,
+    FAMILY_SOURCE_PLANS_19,
   ],
   nominationPrograms: [
     FAMILY_NOMINATION_PROGRAMS_0,
     FAMILY_NOMINATION_PROGRAMS_1,
     FAMILY_NOMINATION_PROGRAMS_2,
     FAMILY_NOMINATION_PROGRAMS_3,
+    FAMILY_NOMINATION_PROGRAMS_4,
+    FAMILY_NOMINATION_PROGRAMS_5,
+    FAMILY_NOMINATION_PROGRAMS_6,
+    FAMILY_NOMINATION_PROGRAMS_7,
+    FAMILY_NOMINATION_PROGRAMS_8,
+    FAMILY_NOMINATION_PROGRAMS_9,
+    FAMILY_NOMINATION_PROGRAMS_10,
+    FAMILY_NOMINATION_PROGRAMS_11,
+    FAMILY_NOMINATION_PROGRAMS_12,
+    FAMILY_NOMINATION_PROGRAMS_13,
+    FAMILY_NOMINATION_PROGRAMS_14,
+    FAMILY_NOMINATION_PROGRAMS_15,
+    FAMILY_NOMINATION_PROGRAMS_16,
+    FAMILY_NOMINATION_PROGRAMS_17,
+    FAMILY_NOMINATION_PROGRAMS_18,
+    FAMILY_NOMINATION_PROGRAMS_19,
   ],
 });
 

@@ -21,6 +21,10 @@ import {
 } from "../../../strategies/route-cycle/src/index.ts";
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../../strategy-composition/src/internal/trigger-owner.ts";
 import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
+import {
   enumerateClosedLoopPlanningProblem,
   planningEnumerationRootV1,
   readIssuedPlanningEnumerationV1,
@@ -59,6 +63,12 @@ const descriptor = sealGeneratedStrategyRuntimeDescriptor({
   strategies: [entry],
 });
 const releaseProvenanceHash = h("test/planner/release-provenance/v1", 1);
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+  authorityClass: "signed-release",
+  runtimeBindingId: h("test/planner/runtime-binding/v1", 1),
+  releaseProvenanceHash,
+  implementationCommit: "a".repeat(40),
+}));
 
 function openComposition(
   runtimeDescriptor = descriptor,
@@ -72,7 +82,12 @@ function openComposition(
   const capability = issueGeneratedStrategyRuntimeAuthorityCapability({
     factory,
     qualifiedCapabilityRefsRoot: runtimeDescriptor.proposedCapabilitySetRoot,
-    releaseProvenanceHash,
+    runtimeAuthority: createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: h("test/planner/runtime-binding/v1", 1),
+      releaseProvenanceHash,
+      implementationCommit: "a".repeat(40),
+    }),
     assertCurrent,
   });
   return factory(capability);
@@ -85,6 +100,7 @@ const binding: StrategyGraphBindingV1 = Object.freeze({
   graphRoot: h("test/planner/graph/v1", 1),
   readyRecordHash: h("test/planner/ready/v1", 1),
   releaseProvenanceHash,
+  runtimeAuthority,
   sourceHash: h("test/planner/source/v1", 1),
 });
 

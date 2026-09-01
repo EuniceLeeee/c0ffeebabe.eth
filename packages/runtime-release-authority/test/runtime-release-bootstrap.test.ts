@@ -34,6 +34,10 @@ import {
 } from "../../../specs/release-authority/src/index.ts";
 import { decodeReleaseQualifiedCapabilitySetV1 } from "../../../specs/capability-index/src/index.ts";
 import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
+import {
   buildRuntimeReleaseComposition,
   type RuntimeReleaseCompositionInputV1,
 } from "../src/index.ts";
@@ -1315,6 +1319,12 @@ test("release-owned full-Graph sweep preserves all 2x2 missing transitions and r
         definitionCatalogRoot: services.catalog.loadExact().definitionCatalogRoot,
         instanceCatalogRoot,
         graphRoot,
+        runtimeAuthority: projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+          authorityClass: "signed-release",
+          runtimeBindingId: services.release.bindingId,
+          releaseProvenanceHash: services.release.releaseProvenanceHash,
+          implementationCommit: services.release.candidateReleaseCommit,
+        })),
         releaseProvenanceHash: services.release.releaseProvenanceHash,
         candidatePartitionProofStorageHash: h("full-graph-sweep-partition"),
         nominationClosureRoot: h("full-graph-sweep-nomination"),
@@ -1714,6 +1724,7 @@ test("release-owned application submits an observed head, emits a producer termi
         sourceCoverageRoot: h("service-source-coverage"),
       } as never,
       familyRuntimeComposition: services.familyRuntime.openComposition(),
+      familySearchRuntime: services.familyRuntime.openSearchRuntime(),
       generationId: "service-generation",
       graphRoot: h("service-graph"),
       releaseBindingId: services.release.bindingId,
@@ -1752,6 +1763,12 @@ test("release-owned application submits an observed head, emits a producer termi
           definitionCatalogRoot: catalog.definitionCatalogRoot,
           instanceCatalogRoot: h("service-instance-catalog"),
           graphRoot: h("service-graph"),
+          runtimeAuthority: projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+            authorityClass: "signed-release",
+            runtimeBindingId: services.release.bindingId,
+            releaseProvenanceHash: services.release.releaseProvenanceHash,
+            implementationCommit: services.release.candidateReleaseCommit,
+          })),
           releaseProvenanceHash: services.release.releaseProvenanceHash,
           candidatePartitionProofStorageHash: h("service-candidate-partition"),
           nominationClosureRoot: h("service-nomination-closure"),
@@ -1953,6 +1970,7 @@ function openApplicationLifecycleFixture(
       sourceCoverageRoot: h("application-lifecycle-source-coverage"),
     } as never,
     familyRuntimeComposition: services.familyRuntime.openComposition(),
+    familySearchRuntime: services.familyRuntime.openSearchRuntime(),
     generationId,
     graphRoot,
     releaseBindingId: services.release.bindingId,
@@ -1991,6 +2009,12 @@ function openApplicationLifecycleFixture(
         definitionCatalogRoot: catalog.definitionCatalogRoot,
         instanceCatalogRoot: h("application-lifecycle-instance-catalog"),
         graphRoot,
+        runtimeAuthority: projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+          authorityClass: "signed-release",
+          runtimeBindingId: services.release.bindingId,
+          releaseProvenanceHash: services.release.releaseProvenanceHash,
+          implementationCommit: services.release.candidateReleaseCommit,
+        })),
         releaseProvenanceHash: services.release.releaseProvenanceHash,
         candidatePartitionProofStorageHash: h("application-lifecycle-candidate-partition"),
         nominationClosureRoot: h("application-lifecycle-nomination-closure"),
@@ -2632,6 +2656,7 @@ test("release-owned performance evidence closes exact 100 complete heads and rej
   const startup = issueStartupRuntime({
     ready: servingA.ready,
     familyRuntimeComposition: services.familyRuntime.openComposition(),
+    familySearchRuntime: services.familyRuntime.openSearchRuntime(),
     generationId: generationAId,
     graphRoot: graphRootA,
     releaseBindingId: services.release.bindingId,

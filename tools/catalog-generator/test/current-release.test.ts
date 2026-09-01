@@ -176,7 +176,7 @@ test("current release BOM contains no LP authoring asset", () => {
   assert.throws(() => assertLpZero([...identities, "family.lp.position"]));
 });
 
-test("current release records exclusions without importing them into the production BOM", () => {
+test("current route catalog includes every non-Funding Family and keeps Funding separate", () => {
   const decisions = currentReleaseFamilyDecisions();
   assert.deepEqual(decisions.map(item => item.familyId), [
     "angstrom-v4",
@@ -203,38 +203,62 @@ test("current release records exclusions without importing them into the product
     "wsteth",
   ]);
   assert.deepEqual(decisions.filter(item => item.decision === "include").map(item => item.familyId), [
+    "angstrom-v4",
+    "astra-multitoken",
     "curve-underlying",
     "dodo-v2",
+    "eigenpie",
+    "erc4626",
+    "erc4626-silo-redeem",
+    "ethertoken-native-redeem",
+    "fluid-credit",
     "fluid-dex",
+    "goldx",
+    "metronome-hgusdc",
+    "metronome-synth",
+    "psm",
+    "rocksolid",
+    "self-burn-native",
     "univ2-standard",
+    "univ3-standard",
+    "univ4",
+    "wsteth",
   ]);
   assert.deepEqual(releaseInput().families.map(item => item.definition.manifest.familyId), [
+    "angstrom-v4",
+    "astra-multitoken",
     "curve-underlying",
     "dodo-v2",
+    "eigenpie",
+    "erc4626",
+    "erc4626-silo-redeem",
+    "ethertoken-native-redeem",
+    "fluid-credit",
     "fluid-dex",
+    "goldx",
+    "metronome-hgusdc",
+    "metronome-synth",
+    "psm",
+    "rocksolid",
+    "self-burn-native",
     "univ2-standard",
+    "univ3-standard",
+    "univ4",
+    "wsteth",
   ]);
   for (const item of decisions.filter(candidate => candidate.decision === "include")) assert.deepEqual(item.exclusionReasons, []);
-  for (const item of decisions.filter(candidate => candidate.decision === "exclude")) assert.ok(item.exclusionReasons.length > 0);
-  for (const familyId of ["erc4626", "metronome-hgusdc", "metronome-synth"]) {
-    assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("exact-capability-absent"));
-  }
-  for (const familyId of ["erc4626-silo-redeem", "ethertoken-native-redeem"]) {
-    assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("exact-effect-observation-absent"));
-    assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("execution-program-blocked"));
-  }
-  for (const familyId of ["astra-multitoken", "eigenpie"]) {
-    assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("exact-effect-observation-absent"));
-    assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("final-simulation-blocked"));
-  }
-  for (const familyId of ["balancer-flash", "morpho-flash"]) {
-    assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("qualified-funding-authority-absent"));
-  }
-  for (const familyId of ["angstrom-v4", "univ3-standard", "univ4"]) {
-    assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("execution-program-blocked"));
-    assert.ok(decisions.find(item => item.familyId === familyId)?.exclusionReasons.includes("final-simulation-blocked"));
-  }
-  assert.ok(decisions.find(item => item.familyId === "fluid-credit")?.exclusionReasons.includes("qualified-credit-authority-absent"));
+  assert.deepEqual(decisions.filter(candidate => candidate.decision === "exclude"), [
+    {
+      familyId: "balancer-flash",
+      decision: "exclude",
+      exclusionReasons: ["funding-capability-outside-route-catalog"],
+    },
+    {
+      familyId: "morpho-flash",
+      decision: "exclude",
+      exclusionReasons: ["funding-capability-outside-route-catalog"],
+    },
+  ]);
 });
 
 test("a self-consistent proposed set with changed semantics or an extra capability fails closed", () => {
@@ -280,13 +304,6 @@ test("compiler entrypoint BOM is derived from every included public definition a
   assert.equal(specs.find(spec => spec.exportName === "UNIV2_STANDARD_SOURCE_PLAN_RUNTIME")?.preferredKind, "compiler-root");
   assert.equal(specs.find(spec => spec.exportName === "ROUTE_CYCLE_STRATEGY")?.preferredKind, "package-entrypoint");
   assert.equal(specs.find(spec => spec.exportName === "ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER")?.preferredKind, "compiler-root");
-});
-
-test("execution-incomplete Families are absent from the release compiler import closure", () => {
-  const source = readFileSync(resolve(repositoryRoot, "tools/catalog-generator/src/current-release.ts"), "utf8");
-  for (const familyId of ["angstrom-v4", "univ3-standard", "univ4"]) {
-    assert.doesNotMatch(source, new RegExp(`from [^\\n]*families/${familyId}/`));
-  }
 });
 
 test("every current release compiler entrypoint directly exports its declared symbol", () => {

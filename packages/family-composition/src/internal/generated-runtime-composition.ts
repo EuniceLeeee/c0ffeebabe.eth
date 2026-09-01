@@ -1,7 +1,12 @@
 import {
   assertGeneratedFamilyRuntimeComposition,
   createGeneratedFamilyRuntimeComposition,
+  familyCoarseRouteOwnerRefV1,
+  generatedFamilyCoarseProjectionDescriptorV1,
+  validateGeneratedFamilyRuntimeDescriptorV1,
   type FamilyRuntimeCompositionV1,
+  type FamilyRehydrationSessionV1,
+  type FamilyRuntimeCoarseProjectionRequestV1,
   type GeneratedFamilyRuntimeActionOwnerV1,
   type GeneratedFamilyRuntimeAuthorityBindingV1,
   type GeneratedFamilyRuntimeDescriptorV1,
@@ -16,16 +21,52 @@ import {
   type FamilyPhysicalLifecycleAdapterV1,
   type FamilyPhysicalLifecyclePortsV1,
   type FamilyPhysicalTransportResultV1,
+  type FamilyIssuedRouteHandleV1,
+  type FamilyRouteHandleBindingV1,
   type FamilySourcePlanNominationProgramV1,
   type FamilySourcePlanRuntimeV1,
   type FamilyStageDefinitionV1,
+  type FamilyStageRuntimePortV1,
 } from "../../../family-sdk/runtime/index.ts";
 import {
   assertStageCapabilityRef,
   type StageCapabilityRefV1,
 } from "../../../family-sdk/runtime-refs/index.ts";
-import { assertHash, type Hash } from "../../../canonical-codec/src/index.ts";
+import {
+  assertHash,
+  encodeCanonicalJson,
+  hashDomain,
+  type CanonicalJson,
+  type Hash,
+} from "../../../canonical-codec/src/index.ts";
 import type { SourcePlanRefV1 } from "../../../discovery/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  decodeSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityProjectionV1,
+  type SignedReleaseRuntimeAuthorityDescriptorV1,
+} from "../../../runtime-authority/src/index.ts";
+import type {
+  FamilySearchAdapterFactoryV1,
+  FamilySearchAdapterV1,
+  FamilySearchCompositionResolverV1,
+} from "../../../family-sdk/search-runtime/index.ts";
+import {
+  familySearchAmount,
+  familySearchExecutionContext,
+  familySearchObjective,
+  familySearchRouteBindingHash,
+  familySearchSource,
+} from "../../../family-sdk/search-runtime/index.ts";
+import {
+  readIssuedCoarseRouteBindingV1,
+  readQualifiedCoarseProjectionReceiptV1,
+  readQualifiedCoarseProjectionV1,
+  type CoarseEdgeProjectionV1,
+  type IssuedCoarseRouteBindingV1,
+  type QualifiedCoarseProjectionV1,
+} from "../../../coarse-economics/src/index.ts";
 
 /**
  * A release-owned Family runtime capability is intentionally opaque.  The
@@ -93,6 +134,7 @@ export interface GeneratedFamilyRuntimeFactoryMetadataV1 {
  */
 interface GeneratedFamilyRuntimeAuthorityStateV1 {
   readonly factory: GeneratedFamilyRuntimeFactoryV1;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly authorities: readonly GeneratedFamilyRuntimeAuthorityBindingV1[];
   readonly nominationQualifications: ReadonlyMap<Hash, Hash>;
   readonly assertCurrent: () => void;
@@ -108,6 +150,7 @@ interface GeneratedFamilyRuntimeAuthorityStateV1 {
  */
 export interface GeneratedFamilyRuntimeAuthorityRegistrationV1 {
   readonly factory: GeneratedFamilyRuntimeFactoryV1;
+  readonly runtimeAuthority: SignedReleaseRuntimeAuthorityDescriptorV1;
   /** Root carried by the signed runtime binding and exact-joined to the generated descriptor. */
   readonly qualifiedCapabilityRefsRoot: Hash;
   readonly nominationProgramSetRoot: Hash;
@@ -168,6 +211,12 @@ const generatedFactorySourcePlans = new WeakMap<object, readonly Readonly<{
   readonly nominationProgramRoot: Hash;
   readonly nominationProgramProposalLeafDigest: Hash;
 }>[]>();
+interface GeneratedFamilySearchAssemblyStateV1 {
+  readonly descriptor: GeneratedFamilyRuntimeDescriptorV1;
+  readonly extensions: readonly (readonly object[])[];
+  readonly actionOwners: readonly (readonly object[])[];
+}
+const generatedFactorySearchAssemblies = new WeakMap<object, GeneratedFamilySearchAssemblyStateV1>();
 
 export function assertGeneratedFamilyRuntimeFactory(
   value: unknown,
@@ -318,7 +367,11 @@ function authoritiesFor(
   factory: GeneratedFamilyRuntimeFactoryV1,
   capability: GeneratedFamilyRuntimeAuthorityCapabilityV1,
 ): readonly GeneratedFamilyRuntimeAuthorityBindingV1[] {
-  return authorityStateFor(factory, capability).authorities;
+  const state = authorityStateFor(factory, capability);
+  if (state.runtimeAuthority.authorityClass !== "signed-release") {
+    throw new TypeError("Family runtime production authority is unavailable");
+  }
+  return state.authorities;
 }
 
 function snapshotAuthorities(
@@ -361,6 +414,9 @@ export function issueGeneratedFamilyRuntimeAuthorityCapability(
   const metadata = generatedFactoryMetadata.get(input.factory);
   if (metadata === undefined) throw new TypeError("Family runtime factory metadata is unavailable");
   assertHash(input.qualifiedCapabilityRefsRoot, "qualifiedCapabilityRefsRoot");
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+    decodeSignedReleaseRuntimeAuthorityDescriptorV1(input.runtimeAuthority),
+  );
   if (metadata.proposedCapabilitySetRoot !== input.qualifiedCapabilityRefsRoot) {
     throw new TypeError("Family runtime factory is not bound to this release capability set");
   }
@@ -384,11 +440,389 @@ export function issueGeneratedFamilyRuntimeAuthorityCapability(
   const capability = Object.freeze(Object.create(null)) as GeneratedFamilyRuntimeAuthorityCapabilityV1;
   issuedAuthorities.set(capability, Object.freeze({
     factory: input.factory,
+    runtimeAuthority,
     authorities: snapshotAuthorities(input.authorities),
     nominationQualifications,
     assertCurrent: input.assertCurrent,
   }));
   return capability;
+}
+
+const GENERATED_LIFECYCLE_STAGES = Object.freeze([
+  "nomination",
+  "identity",
+  "materialization",
+  "projection",
+  "rehydration",
+] as const);
+
+/** Opaque generated lifecycle seam.  Attestation receives this value rather
+ * than a structural FamilyRuntimeCompositionV1. */
+export type GeneratedFamilyLifecycleRuntimePortV1 = object;
+
+interface GeneratedFamilyLifecycleRuntimePortStateV1 {
+  readonly factory: GeneratedFamilyRuntimeFactoryV1;
+  readonly capability: GeneratedFamilyRuntimeAuthorityCapabilityV1;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly composition: FamilyRuntimeCompositionV1;
+}
+
+const issuedLifecycleRuntimePorts = new WeakMap<object, GeneratedFamilyLifecycleRuntimePortStateV1>();
+
+/**
+ * Issue the one signed lifecycle/program port accepted by Attestation.
+ */
+export function issueGeneratedFamilyLifecycleRuntimePort(
+  factory: GeneratedFamilyRuntimeFactoryV1,
+  capability: GeneratedFamilyRuntimeAuthorityCapabilityV1,
+): GeneratedFamilyLifecycleRuntimePortV1 {
+  const authority = authorityStateFor(factory, capability);
+  if (authority.runtimeAuthority.authorityClass !== "signed-release") throw new TypeError("Family lifecycle requires signed runtime authority");
+  const composition = factory(capability);
+  const port = Object.freeze(Object.create(null));
+  issuedLifecycleRuntimePorts.set(port, Object.freeze({
+    factory,
+    capability,
+    runtimeAuthority: authority.runtimeAuthority,
+    composition,
+  }));
+  return port;
+}
+
+function requireLifecycleRuntimePortState(
+  value: unknown,
+  expectedAuthority?: RuntimeAuthorityProjectionV1,
+): GeneratedFamilyLifecycleRuntimePortStateV1 {
+  if (value === null || typeof value !== "object") {
+    throw new TypeError("Family lifecycle runtime port is not owner-issued");
+  }
+  const state = issuedLifecycleRuntimePorts.get(value);
+  if (state === undefined) throw new TypeError("Family lifecycle runtime port is not owner-issued");
+  const authority = authorityStateFor(state.factory, state.capability);
+  if (!sameRuntimeAuthorityProjection(authority.runtimeAuthority, state.runtimeAuthority)) {
+    throw new TypeError("Family lifecycle runtime authority changed");
+  }
+  if (expectedAuthority !== undefined) {
+    const expected = decodeRuntimeAuthorityProjectionV1(expectedAuthority);
+    if (!sameRuntimeAuthorityProjection(state.runtimeAuthority, expected)) {
+      throw new TypeError("Family lifecycle runtime class or binding mismatch");
+    }
+  }
+  return state;
+}
+
+export function readGeneratedFamilyLifecycleRuntimePort(
+  value: GeneratedFamilyLifecycleRuntimePortV1,
+  expectedAuthority?: RuntimeAuthorityProjectionV1,
+): Readonly<{
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly requireStage: (
+    familyDefinitionHash: Hash,
+    familyId: string,
+    stage: (typeof GENERATED_LIFECYCLE_STAGES)[number],
+  ) => FamilyStageRuntimePortV1;
+}> {
+  const state = requireLifecycleRuntimePortState(value, expectedAuthority);
+  return Object.freeze({
+    runtimeAuthority: state.runtimeAuthority,
+    requireStage(familyDefinitionHashInput, familyId, stage) {
+      requireLifecycleRuntimePortState(value, state.runtimeAuthority);
+      const familyDefinitionHash = assertHash(familyDefinitionHashInput, "familyDefinitionHash");
+      if (typeof familyId !== "string" || familyId.length === 0) {
+        throw new TypeError("Family lifecycle familyId is required");
+      }
+      if (!GENERATED_LIFECYCLE_STAGES.includes(stage)) {
+        throw new TypeError("Family lifecycle stage is invalid");
+      }
+      const metadata = generatedFactoryMetadata.get(state.factory);
+      const family = metadata?.families.find(candidate =>
+        candidate.familyDefinitionHash === familyDefinitionHash && candidate.familyId === familyId,
+      );
+      if (family === undefined) throw new TypeError("Family lifecycle definition is not generated");
+      const expectedRef = family.lifecycleRefs[stage];
+      const binding = state.composition.require(familyDefinitionHash, familyId);
+      const resolved = binding.owner.port.getStage(expectedRef);
+      if (!sameStageRef(resolved.stageRef, expectedRef)) {
+        throw new TypeError("Family lifecycle stage substitution detected");
+      }
+      return resolved;
+    },
+  });
+}
+
+/** Opaque generated search seam bound to one signed runtime authority. */
+export type GeneratedFamilySearchRuntimePortV1 = object;
+
+interface GeneratedFamilySearchRuntimePortStateV1 {
+  readonly factory: GeneratedFamilyRuntimeFactoryV1;
+  readonly capability: GeneratedFamilyRuntimeAuthorityCapabilityV1;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly routeComposition: FamilyRuntimeCompositionV1;
+  readonly rehydrationSessions: Map<Hash, FamilyRehydrationSessionV1>;
+  readonly adapters: Map<string, FamilySearchAdapterV1>;
+  readonly coarseEvidence: WeakMap<object, Readonly<{
+    readonly projection: CoarseEdgeProjectionV1;
+    readonly qualified: QualifiedCoarseProjectionV1;
+    readonly observation: CanonicalJson;
+  }>>;
+}
+
+const issuedSearchRuntimePorts = new WeakMap<object, GeneratedFamilySearchRuntimePortStateV1>();
+
+function sameRuntimeAuthorityProjection(
+  left: RuntimeAuthorityProjectionV1,
+  right: RuntimeAuthorityProjectionV1,
+): boolean {
+  return encodeCanonicalJson(left) === encodeCanonicalJson(right);
+}
+
+export function issueGeneratedFamilySearchRuntimePort(
+  factory: GeneratedFamilyRuntimeFactoryV1,
+  capability: GeneratedFamilyRuntimeAuthorityCapabilityV1,
+  lifecyclePort?: GeneratedFamilyLifecycleRuntimePortV1,
+): GeneratedFamilySearchRuntimePortV1 {
+  const authority = authorityStateFor(factory, capability);
+  if (authority.runtimeAuthority.authorityClass !== "signed-release") throw new TypeError("Family search requires signed runtime authority");
+  let routeComposition = factory(capability);
+  if (lifecyclePort !== undefined) {
+    const lifecycle = requireLifecycleRuntimePortState(lifecyclePort, authority.runtimeAuthority);
+    if (lifecycle.factory !== factory || lifecycle.capability !== capability) {
+      throw new TypeError("Family search/lifecycle runtime binding mismatch");
+    }
+    routeComposition = lifecycle.composition;
+  }
+  const port = Object.freeze(Object.create(null));
+  issuedSearchRuntimePorts.set(port, {
+    factory,
+    capability,
+    runtimeAuthority: authority.runtimeAuthority,
+    routeComposition,
+    rehydrationSessions: new Map(),
+    adapters: new Map(),
+    coarseEvidence: new WeakMap(),
+  });
+  return port;
+}
+
+function requireSearchRuntimePortState(
+  value: unknown,
+  expectedAuthority?: RuntimeAuthorityProjectionV1,
+): GeneratedFamilySearchRuntimePortStateV1 {
+  if (value === null || typeof value !== "object") {
+    throw new TypeError("Family search runtime port is not owner-issued");
+  }
+  const state = issuedSearchRuntimePorts.get(value);
+  if (state === undefined) throw new TypeError("Family search runtime port is not owner-issued");
+  const authority = authorityStateFor(state.factory, state.capability);
+  if (!sameRuntimeAuthorityProjection(authority.runtimeAuthority, state.runtimeAuthority)) {
+    throw new TypeError("Family search runtime authority changed");
+  }
+  if (expectedAuthority !== undefined) {
+    const expected = decodeRuntimeAuthorityProjectionV1(expectedAuthority);
+    if (!sameRuntimeAuthorityProjection(state.runtimeAuthority, expected)) {
+      throw new TypeError("Family search runtime class or binding mismatch");
+    }
+  }
+  return state;
+}
+
+function requireGeneratedSearchAdapter(
+  state: GeneratedFamilySearchRuntimePortStateV1,
+  familyDefinitionHashInput: Hash,
+  roleInput: string,
+): FamilySearchAdapterV1 {
+  const familyDefinitionHash = assertHash(familyDefinitionHashInput, "familyDefinitionHash");
+  if (typeof roleInput !== "string" || !roleInput.startsWith("search/")) {
+    throw new TypeError("Family search runtime adapter role is not supported");
+  }
+  const role = roleInput;
+  const key = `${familyDefinitionHash}\u0000${role}`;
+  const cached = state.adapters.get(key);
+  if (cached !== undefined) return cached;
+  const assembly = generatedFactorySearchAssemblies.get(state.factory);
+  if (assembly === undefined) throw new TypeError("generated Family search assembly is unavailable");
+  const familyIndex = assembly.descriptor.families.findIndex(
+    family => family.entry.familyDefinitionHash === familyDefinitionHash,
+  );
+  const family = assembly.descriptor.families[familyIndex];
+  if (family === undefined) throw new TypeError("Family search runtime definition is not generated");
+  const descriptor = family.runtimeAdapters.find(adapter => adapter.role === role);
+  if (descriptor === undefined) throw new TypeError("Family search runtime adapter role is not generated");
+  const binding = generatedFactoryRuntimeAdapters.get(state.factory)?.find(candidate =>
+    candidate.familyDefinitionHash === familyDefinitionHash && candidate.descriptor.role === role,
+  );
+  if (binding === undefined || typeof binding.actualFactory !== "function") {
+    throw new TypeError("Family search runtime adapter factory is unavailable");
+  }
+  const extensions = assembly.extensions[familyIndex];
+  const actionOwners = assembly.actionOwners[familyIndex];
+  if (!Array.isArray(extensions) || extensions.length !== family.extensions.length
+    || !Array.isArray(actionOwners) || actionOwners.length !== family.actionOwners.length) {
+    throw new TypeError("generated Family search resolver imports are incomplete");
+  }
+  const resolver: FamilySearchCompositionResolverV1 = Object.freeze({
+    resolveCapability(definitionHash: Hash, capabilityRef: StageCapabilityRefV1): object {
+      if (definitionHash !== familyDefinitionHash || capabilityRef.familyDefinitionHash !== familyDefinitionHash) {
+        throw new TypeError("Family search capability binding mismatch");
+      }
+      const index = family.extensions.findIndex(extension =>
+        encodeCanonicalJson(extension.capabilityRef) === encodeCanonicalJson(capabilityRef),
+      );
+      const port = index < 0 ? undefined : extensions[index];
+      if (port === null || (typeof port !== "object" && typeof port !== "function")) {
+        throw new TypeError("Family search capability is not generated");
+      }
+      return port as object;
+    },
+    resolveActionOwner(definitionHash: Hash, ownerRef: Hash): object {
+      if (definitionHash !== familyDefinitionHash) throw new TypeError("Family search action owner binding mismatch");
+      const index = family.actionOwners.findIndex(action => action.ownerRef === ownerRef);
+      const port = index < 0 ? undefined : actionOwners[index];
+      if (port === null || (typeof port !== "object" && typeof port !== "function")) {
+        throw new TypeError("Family search action owner is not generated");
+      }
+      return port as object;
+    },
+  });
+  const adapter = (binding.actualFactory as FamilySearchAdapterFactoryV1)({
+    composition: resolver,
+    familyDefinitionHash,
+    capabilityRefs: descriptor.capabilityRefs,
+    actionOwnerRefs: descriptor.actionOwnerRefs,
+  });
+  if (adapter === null || typeof adapter !== "object") {
+    throw new TypeError("Family search runtime adapter factory returned an invalid adapter");
+  }
+  for (const method of ["readState", "projectCoarse", "evaluateExact", "buildAction", "run"] as const) {
+    if (typeof adapter[method] !== "function") throw new TypeError("Family search runtime adapter is incomplete");
+  }
+  state.adapters.set(key, adapter);
+  return adapter;
+}
+
+/** Opaque result of one Family projection. The caller can only read it back
+ * through the exact generated search port that issued it. */
+export type GeneratedFamilyCoarseEvidenceCapabilityV1 = object;
+
+async function issueGeneratedSearchCoarseEvidence(
+  port: GeneratedFamilySearchRuntimePortV1,
+  state: GeneratedFamilySearchRuntimePortStateV1,
+  request: FamilyRuntimeCoarseProjectionRequestV1 & Readonly<{ readonly familyDefinitionHash: Hash }>,
+): Promise<GeneratedFamilyCoarseEvidenceCapabilityV1> {
+  requireSearchRuntimePortState(port, state.runtimeAuthority);
+  const binding = readIssuedCoarseRouteBindingV1(request.binding);
+  if (!sameRuntimeAuthorityProjection(binding.runtimeAuthority, state.runtimeAuthority)) {
+    throw new TypeError("Family coarse runtime authority binding mismatch");
+  }
+  if (!Number.isInteger(request.legIndex) || request.legIndex < 0 || request.legIndex >= binding.legs.length) {
+    throw new TypeError("Family coarse leg index is invalid");
+  }
+  const leg = binding.legs[request.legIndex]!;
+  const assembly = generatedFactorySearchAssemblies.get(state.factory);
+  const familyDefinitionHash = assertHash(request.familyDefinitionHash, "generatedSearchCoarse.familyDefinitionHash");
+  const route = state.routeComposition.resolveRouteHandle(
+    request.issuedHandle,
+    familyDefinitionHash,
+  );
+  const descriptorFamily = assembly?.descriptor.families.find(candidate =>
+    candidate.entry.familyDefinitionHash === route.familyDefinitionHash,
+  );
+  if (descriptorFamily === undefined || route.familyId !== descriptorFamily.entry.familyId) {
+    throw new TypeError("Family coarse route handle is not generated");
+  }
+  const descriptor = generatedFamilyCoarseProjectionDescriptorV1(descriptorFamily);
+  if (descriptor === null) throw new TypeError("Family coarse capability is not generated");
+  const routeBindingHash = familySearchRouteBindingHash(route);
+  if (!binding.ownerRefs.includes(familyCoarseRouteOwnerRefV1(descriptor.familyDefinitionHash, routeBindingHash))) {
+    throw new TypeError("Family coarse route owner mismatch");
+  }
+  const source = familySearchSource(request.currentSource.source, "generatedSearchCoarse.currentSource.source");
+  if (source.chainId !== binding.source.chainId || source.number !== binding.source.number
+    || source.hash !== binding.source.hash || source.stateRoot !== binding.source.stateRoot) {
+    throw new TypeError("Family coarse current source mismatch");
+  }
+  const objective = familySearchObjective(request.objective);
+  if (objective.objectiveRef !== binding.objectiveRef) throw new TypeError("Family coarse objective mismatch");
+  const amount = familySearchAmount(request.amount);
+  const execution = familySearchExecutionContext(request.execution, "generatedSearchCoarse.execution");
+  if (execution.executorAddress !== amount.recipient) throw new TypeError("Family coarse executor/recipient mismatch");
+  if (amount.inputAssetRef !== leg.inputAssetRef || amount.outputAssetRef !== leg.outputAssetRef) {
+    throw new TypeError("Family coarse route asset mismatch");
+  }
+  if (request.sourceRead === null || typeof request.sourceRead !== "object" || typeof request.sourceRead.read !== "function") {
+    throw new TypeError("Family coarse current-source read port is required");
+  }
+
+  const seam = state.routeComposition.resolveCoarseProjection(descriptor.familyDefinitionHash);
+  if (seam === null) throw new TypeError("Family signed coarse owner is unavailable");
+  const rawCapability = await state.routeComposition.issueCoarseProjection(seam.producer, request);
+  const familyObservation = state.routeComposition.readCoarseProjectionObservation(seam.producer, rawCapability);
+  const qualified = readQualifiedCoarseProjectionV1({ service: seam.service, capability: rawCapability });
+  const receipt = readQualifiedCoarseProjectionReceiptV1(qualified);
+  const projection = receipt.projection;
+  const observation = familyObservation as unknown as CanonicalJson;
+  const capability = Object.freeze(Object.create(null)) as GeneratedFamilyCoarseEvidenceCapabilityV1;
+  state.coarseEvidence.set(capability, Object.freeze({ projection, qualified, observation }));
+  return capability;
+}
+
+export function readGeneratedFamilySearchRuntimePort(
+  value: unknown,
+  expectedAuthority?: RuntimeAuthorityProjectionV1,
+): Readonly<{
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly resolveRouteHandle: (
+    handle: FamilyIssuedRouteHandleV1,
+    familyDefinitionHash: Hash,
+  ) => FamilyRouteHandleBindingV1;
+  /** Graph-owner-only use: issue from the same generated composition later
+   * used by this port to resolve the handle. No rehydration session escapes. */
+  readonly issueRouteHandle: (
+    publication: Parameters<FamilyRuntimeCompositionV1["rehydrateRouteHandle"]>[1],
+    projection: Parameters<FamilyRuntimeCompositionV1["rehydrateRouteHandle"]>[2],
+    ref: Parameters<FamilyRuntimeCompositionV1["rehydrateRouteHandle"]>[3],
+  ) => FamilyIssuedRouteHandleV1;
+  readonly requireAdapter: (familyDefinitionHash: Hash, role: string) => FamilySearchAdapterV1;
+  readonly issueCoarseEvidence: (
+    request: FamilyRuntimeCoarseProjectionRequestV1 & Readonly<{ readonly familyDefinitionHash: Hash }>,
+  ) => Promise<GeneratedFamilyCoarseEvidenceCapabilityV1>;
+  readonly readCoarseEvidence: (capability: GeneratedFamilyCoarseEvidenceCapabilityV1) => Readonly<{
+    readonly projection: CoarseEdgeProjectionV1;
+    readonly qualified: QualifiedCoarseProjectionV1;
+    readonly observation: CanonicalJson;
+  }>;
+}> {
+  const state = requireSearchRuntimePortState(value, expectedAuthority);
+  return Object.freeze({
+    runtimeAuthority: state.runtimeAuthority,
+    resolveRouteHandle: (handle, familyDefinitionHash) => {
+      requireSearchRuntimePortState(value, state.runtimeAuthority);
+      return state.routeComposition.resolveRouteHandle(handle, familyDefinitionHash);
+    },
+    issueRouteHandle: (publication, projection, ref) => {
+      requireSearchRuntimePortState(value, state.runtimeAuthority);
+      let session = state.rehydrationSessions.get(publication.familyDefinitionHash);
+      if (session === undefined) {
+        session = state.routeComposition.openRehydrationSession(publication.familyDefinitionHash);
+        state.rehydrationSessions.set(publication.familyDefinitionHash, session);
+      }
+      return state.routeComposition.rehydrateRouteHandle(session, publication, projection, ref);
+    },
+    requireAdapter: (familyDefinitionHash: Hash, role: string) => {
+      requireSearchRuntimePortState(value, state.runtimeAuthority);
+      return requireGeneratedSearchAdapter(state, familyDefinitionHash, role);
+    },
+    issueCoarseEvidence: request => issueGeneratedSearchCoarseEvidence(value as GeneratedFamilySearchRuntimePortV1, state, request),
+    readCoarseEvidence: capability => {
+      requireSearchRuntimePortState(value, state.runtimeAuthority);
+      if (capability === null || typeof capability !== "object" || Reflect.ownKeys(capability).length !== 0) {
+        throw new TypeError("Family coarse evidence capability is invalid");
+      }
+      const result = state.coarseEvidence.get(capability);
+      if (result === undefined) throw new TypeError("Family coarse evidence capability was not issued by this runtime");
+      return result;
+    },
+  });
 }
 
 /**
@@ -399,15 +833,19 @@ export function issueGeneratedFamilyRuntimeAuthorityCapability(
 export function createGeneratedFamilyRuntimeFactory(
   assembly: GeneratedFamilyRuntimeAssemblyV1,
 ): GeneratedFamilyRuntimeFactoryV1 {
+  if (assembly === null || typeof assembly !== "object") {
+    throw new TypeError("generated Family runtime assembly is required");
+  }
+  const descriptor = validateGeneratedFamilyRuntimeDescriptorV1(assembly.descriptor);
   if (!Array.isArray(assembly.runtimeAdapters)
-    || assembly.runtimeAdapters.length !== assembly.descriptor.families.length) {
+    || assembly.runtimeAdapters.length !== descriptor.families.length) {
     throw new TypeError("generated Family runtime adapter imports are incomplete");
   }
-  if (!Array.isArray(assembly.sourcePlans) || assembly.sourcePlans.length !== assembly.descriptor.families.length) {
+  if (!Array.isArray(assembly.sourcePlans) || assembly.sourcePlans.length !== descriptor.families.length) {
     throw new TypeError("generated Family source plan imports are incomplete");
   }
   const nominationProgramSets = assembly.nominationPrograms;
-  if (!Array.isArray(nominationProgramSets) || nominationProgramSets.length !== assembly.descriptor.families.length) {
+  if (!Array.isArray(nominationProgramSets) || nominationProgramSets.length !== descriptor.families.length) {
     throw new TypeError("generated Family nomination program imports are incomplete");
   }
   const sourcePlanBindings: Array<Readonly<{
@@ -422,7 +860,7 @@ export function createGeneratedFamilyRuntimeFactory(
     readonly nominationProgramRoot: Hash;
     readonly nominationProgramProposalLeafDigest: Hash;
   }>> = [];
-  for (const [familyIndex, family] of assembly.descriptor.families.entries()) {
+  for (const [familyIndex, family] of descriptor.families.entries()) {
     const imports = assembly.sourcePlans[familyIndex];
     const nominationPrograms = nominationProgramSets[familyIndex];
     if (!Array.isArray(imports) || imports.length !== family.sourcePlans.length) {
@@ -461,7 +899,7 @@ export function createGeneratedFamilyRuntimeFactory(
   }
   const runtimeAdapterBindings: Array<Readonly<GeneratedFamilyRuntimeAdapterFactoryBindingV1>> = [];
   const physicalBindings: Array<Readonly<GeneratedFamilyPhysicalLifecycleFactoryBindingV1>> = [];
-  for (const [familyIndex, family] of assembly.descriptor.families.entries()) {
+  for (const [familyIndex, family] of descriptor.families.entries()) {
     const suppliedAdapters = assembly.runtimeAdapters[familyIndex];
     if (!Array.isArray(suppliedAdapters) || suppliedAdapters.length !== family.runtimeAdapters.length) {
       throw new TypeError(`generated Family runtime adapter imports are incomplete ${family.entry.familyId}`);
@@ -517,7 +955,7 @@ export function createGeneratedFamilyRuntimeFactory(
     const existing = compositions.get(capability as object);
     if (existing !== undefined) return existing;
     const composition = createGeneratedFamilyRuntimeComposition({
-      descriptor: assembly.descriptor,
+      descriptor,
       authorities,
       definitions: assembly.definitions,
       extensions: assembly.extensions,
@@ -532,15 +970,20 @@ export function createGeneratedFamilyRuntimeFactory(
   generatedFactoryRuntimeAdapters.set(factory, Object.freeze(runtimeAdapterBindings));
   generatedFactoryPhysicalAdapters.set(factory, Object.freeze(physicalBindings));
   generatedFactorySourcePlans.set(factory, Object.freeze(sourcePlanBindings));
+  generatedFactorySearchAssemblies.set(factory, Object.freeze({
+    descriptor,
+    extensions: Object.freeze(assembly.extensions.map(ports => Object.freeze([...ports]))),
+    actionOwners: Object.freeze(assembly.actionOwners.map(ports => Object.freeze([...ports]))),
+  }));
   generatedFactoryMetadata.set(factory, Object.freeze({
-    proposedCapabilitySetRoot: assembly.descriptor.proposedCapabilitySetRoot,
-    nominationProgramSetRoot: assembly.descriptor.nominationProgramSetRoot,
-    nominationProgramProposalLeafDigests: Object.freeze(assembly.descriptor.families.flatMap(family =>
+    proposedCapabilitySetRoot: descriptor.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: descriptor.nominationProgramSetRoot,
+    nominationProgramProposalLeafDigests: Object.freeze(descriptor.families.flatMap(family =>
       family.sourcePlans.map(plan => plan.nominationProgramProposal.proposalLeafDigest)).sort()),
-    releaseIntentRoot: assembly.descriptor.releaseIntentRoot,
-    definitionCatalogRoot: assembly.descriptor.definitionCatalogRoot,
-    descriptorRoot: assembly.descriptor.descriptorRoot,
-    families: Object.freeze(assembly.descriptor.families.map(family => Object.freeze({
+    releaseIntentRoot: descriptor.releaseIntentRoot,
+    definitionCatalogRoot: descriptor.definitionCatalogRoot,
+    descriptorRoot: descriptor.descriptorRoot,
+    families: Object.freeze(descriptor.families.map(family => Object.freeze({
       familyId: family.entry.familyId,
       familyDefinitionHash: family.entry.familyDefinitionHash,
       lifecycleRefs: Object.freeze({ ...family.entry.lifecycleRefs }),

@@ -167,6 +167,11 @@ import {
   validateProductionStage2EdgeMembershipV1,
   validateProductionStrategyQualificationV1,
 } from "./internal/production-evidence-validation.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  decodeRuntimeAuthorityProjectionV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../../packages/runtime-authority/src/index.ts";
 
 export type {
   TerminalPhaseInvalidFactV1,
@@ -2056,6 +2061,15 @@ function validateJoinedSixStepContext(input: {
     graphRoot: binding.graphRoot,
     source: input.head,
     objectiveRef: planningProblem.objectiveRef,
+    runtimeAuthority: decodeRuntimeAuthorityProjectionV1(resolvedBinding.runtimeAuthority),
+    expectedRuntimeAuthority: projectRuntimeAuthorityDescriptorV1(
+      createSignedReleaseRuntimeAuthorityDescriptorV1({
+        authorityClass: "signed-release",
+        runtimeBindingId: input.release.bindingId,
+        releaseProvenanceHash: input.release.releaseProvenanceHash,
+        implementationCommit: input.release.candidateReleaseCommit,
+      }),
+    ),
     releaseProvenanceHash: input.release.releaseProvenanceHash,
     actionOwners: executionOwnerFacts.actionOwners,
     path: "productionEvidence.sixStep.stage36.routeBinding",

@@ -7,6 +7,7 @@ import {
   decodeCanonicalJson,
   deepFreeze,
   encodeCanonicalBytes,
+  encodeCanonicalJson,
   hashDomain,
   readOwnEnumerableDataProperty,
   type Hash,
@@ -39,6 +40,12 @@ import {
 import { sourcePlanSetRoot } from "../../discovery/src/index.ts";
 import { assertIssuedRuntimeReleaseReadyBindingPort } from "../../runtime-release-authority/src/internal/ready-binding-consumer.ts";
 import type { NominationClosureV1 } from "../../../specs/nomination-authority/src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  decodeRuntimeAuthorityProjectionV1,
+  projectRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../runtime-authority/src/index.ts";
 
 export interface GenerationRefreshPolicyV1 {
   readonly observationWindowBlocks: "50";
@@ -209,6 +216,7 @@ export interface ReadyPromotionAuthorityBindingV1 {
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
   readonly generationRefreshPolicyHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly releaseProvenanceHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
@@ -231,6 +239,7 @@ export interface ReadyStageIdentityV1 {
   readonly cutoff: CanonicalCutoffV1;
   readonly generationRefreshPolicyHash: Hash;
   readonly definitionCatalogRoot: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly releaseProvenanceHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
@@ -250,6 +259,7 @@ export function validateReadyStageIdentity(value: ReadyStageIdentityV1): void {
     "cutoff",
     "generationRefreshPolicyHash",
     "definitionCatalogRoot",
+    "runtimeAuthority",
     "releaseProvenanceHash",
     "candidatePartitionProofStorageHash",
     "nominationClosureRoot",
@@ -265,6 +275,7 @@ export function validateReadyStageIdentity(value: ReadyStageIdentityV1): void {
   validateCanonicalCutoff(value.cutoff, "readyStageIdentity.cutoff");
   assertHash(value.generationRefreshPolicyHash, "readyStageIdentity.generationRefreshPolicyHash");
   assertHash(value.definitionCatalogRoot, "readyStageIdentity.definitionCatalogRoot");
+  decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
   assertHash(value.releaseProvenanceHash, "readyStageIdentity.releaseProvenanceHash");
   assertHash(value.candidatePartitionProofStorageHash, "readyStageIdentity.candidatePartitionProofStorageHash");
   assertHash(value.nominationClosureRoot, "readyStageIdentity.nominationClosureRoot");
@@ -308,6 +319,7 @@ export interface ReadyPromotionAuthorityIssueV1 {
   readonly definitionCatalogRoot: Hash;
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly releaseProvenanceHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
@@ -319,6 +331,7 @@ export interface ReadyPromotionAuthorityGuardPort {
   assertConfiguration(binding: {
     readonly definitionCatalogRoot: Hash;
     readonly generationRefreshPolicyHash: Hash;
+    readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
     readonly releaseProvenanceHash: Hash;
   }): void;
   assertActive(authority: ReadyPromotionAuthorityV1): ReadyPromotionAuthorityBindingV1;
@@ -350,6 +363,7 @@ export interface ReadyGenerationV1 {
   readonly nominationClosureRoot: Hash;
   readonly nominationClosureStorageHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly releaseProvenanceHash: Hash;
   readonly exactOutcomePartitionRoot: Hash;
   readonly verifiedMemoSetRoot: Hash;
@@ -468,6 +482,7 @@ export interface ReadyStorePort {
     readonly instanceCatalogRoot: Hash;
     readonly graphRoot: Hash;
     readonly cutoff: CanonicalCutoffV1;
+    readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
     readonly releaseProvenanceHash: Hash;
     readonly candidatePartitionProofStorageHash: Hash;
     readonly nominationClosureRoot: Hash;
@@ -539,6 +554,23 @@ export function sourcePlanRootForCoverage(
   })));
 }
 
+function signedRuntimeAuthorityProjection(
+  port: ReturnType<typeof assertIssuedRuntimeReleaseReadyBindingPort>,
+): RuntimeAuthorityProjectionV1 {
+  const releaseProvenanceHash = assertHash(
+    port.currentProvenanceHash(),
+    "runtimeAuthority.releaseProvenanceHash",
+  );
+  return projectRuntimeAuthorityDescriptorV1(
+    createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: assertHash(port.currentBindingId(), "runtimeAuthority.runtimeBindingId"),
+      releaseProvenanceHash,
+      implementationCommit: port.currentImplementationCommit(),
+    }),
+  );
+}
+
 export function createReadyPromotionAuthority(
   currentConfiguration: () => CurrentPromotionConfigurationV1,
   releaseBindingPort: object,
@@ -546,10 +578,20 @@ export function createReadyPromotionAuthority(
   const issued = new WeakMap<object, ReadyPromotionAuthorityBindingV1>();
   const currentRelease = assertIssuedRuntimeReleaseReadyBindingPort(releaseBindingPort);
 
-  const current = (): { readonly definitionCatalogRoot: Hash; readonly policyHash: Hash; readonly releaseProvenanceHash: Hash } => {
+  const current = (): {
+    readonly definitionCatalogRoot: Hash;
+    readonly policyHash: Hash;
+    readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+    readonly releaseProvenanceHash: Hash;
+  } => {
     const value = currentConfiguration();
     assertPlainObject(value, "currentPromotionConfiguration");
     assertExactKeys(value, ["definitionCatalogRoot", "policy"], "currentPromotionConfiguration");
+    const releaseProvenanceHash = assertHash(
+      currentRelease.currentProvenanceHash(),
+      "currentPromotionConfiguration.releaseProvenanceHash",
+    );
+    const runtimeAuthority = signedRuntimeAuthorityProjection(currentRelease);
     return deepFreeze({
       definitionCatalogRoot: assertHash(
         readOwnEnumerableDataProperty(value, "definitionCatalogRoot", "currentPromotionConfiguration"),
@@ -558,7 +600,8 @@ export function createReadyPromotionAuthority(
       policyHash: generationRefreshPolicyHash(
         readOwnEnumerableDataProperty(value, "policy", "currentPromotionConfiguration") as GenerationRefreshPolicyV1,
       ),
-      releaseProvenanceHash: assertHash(currentRelease.currentProvenanceHash(), "currentPromotionConfiguration.releaseProvenanceHash"),
+      runtimeAuthority,
+      releaseProvenanceHash,
     });
   };
 
@@ -577,6 +620,7 @@ export function createReadyPromotionAuthority(
     if (
       binding.definitionCatalogRoot !== configuration.definitionCatalogRoot
       || binding.generationRefreshPolicyHash !== configuration.policyHash
+      || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(configuration.runtimeAuthority)
       || binding.releaseProvenanceHash !== configuration.releaseProvenanceHash
     ) {
       throw new ReadyPromotionIncompatibleError(
@@ -599,6 +643,7 @@ export function createReadyPromotionAuthority(
         "definitionCatalogRoot",
         "instanceCatalogRoot",
         "graphRoot",
+        "runtimeAuthority",
         "releaseProvenanceHash",
         "candidatePartitionProofStorageHash",
         "nominationClosureRoot",
@@ -617,6 +662,7 @@ export function createReadyPromotionAuthority(
         definitionCatalogRoot: assertHash(input.definitionCatalogRoot, "readyPromotionIssue.definitionCatalogRoot"),
         instanceCatalogRoot: assertHash(input.instanceCatalogRoot, "readyPromotionIssue.instanceCatalogRoot"),
         graphRoot: assertHash(input.graphRoot, "readyPromotionIssue.graphRoot"),
+        runtimeAuthority: decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority),
         releaseProvenanceHash: assertHash(input.releaseProvenanceHash, "readyPromotionIssue.releaseProvenanceHash"),
         candidatePartitionProofStorageHash: assertHash(input.candidatePartitionProofStorageHash, "readyPromotionIssue.candidatePartitionProofStorageHash"),
         nominationClosureRoot: assertHash(input.nominationClosureRoot, "readyPromotionIssue.nominationClosureRoot"),
@@ -627,6 +673,7 @@ export function createReadyPromotionAuthority(
       if (
         binding.definitionCatalogRoot !== configuration.definitionCatalogRoot
         || binding.generationRefreshPolicyHash !== configuration.policyHash
+        || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(configuration.runtimeAuthority)
         || binding.releaseProvenanceHash !== configuration.releaseProvenanceHash
       ) {
         throw new ReadyPromotionIncompatibleError(
@@ -641,9 +688,14 @@ export function createReadyPromotionAuthority(
       issued.set(opaque, binding);
       return Object.freeze({ opaque });
     },
-    assertConfiguration(binding: { readonly definitionCatalogRoot: Hash; readonly generationRefreshPolicyHash: Hash }) {
+    assertConfiguration(binding: {
+      readonly definitionCatalogRoot: Hash;
+      readonly generationRefreshPolicyHash: Hash;
+      readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+      readonly releaseProvenanceHash: Hash;
+    }) {
       assertPlainObject(binding, "readyPromotionConfiguration");
-      assertExactKeys(binding, ["definitionCatalogRoot", "generationRefreshPolicyHash", "releaseProvenanceHash"], "readyPromotionConfiguration");
+      assertExactKeys(binding, ["definitionCatalogRoot", "generationRefreshPolicyHash", "runtimeAuthority", "releaseProvenanceHash"], "readyPromotionConfiguration");
       const configuration = current();
       if (
         assertHash(
@@ -654,6 +706,9 @@ export function createReadyPromotionAuthority(
           readOwnEnumerableDataProperty(binding, "generationRefreshPolicyHash", "readyPromotionConfiguration"),
           "readyPromotionConfiguration.generationRefreshPolicyHash",
         ) !== configuration.policyHash
+        || encodeCanonicalJson(decodeRuntimeAuthorityProjectionV1(
+          readOwnEnumerableDataProperty(binding, "runtimeAuthority", "readyPromotionConfiguration"),
+        )) !== encodeCanonicalJson(configuration.runtimeAuthority)
         || assertHash(
           readOwnEnumerableDataProperty(binding, "releaseProvenanceHash", "readyPromotionConfiguration"),
           "readyPromotionConfiguration.releaseProvenanceHash",
@@ -703,6 +758,7 @@ export function validateReadyGenerationBase(ready: ReadyGenerationBaseV1): void 
     "nominationClosureRoot",
     "nominationClosureStorageHash",
     "candidatePartitionProofStorageHash",
+    "runtimeAuthority",
     "releaseProvenanceHash",
     "exactOutcomePartitionRoot",
     "verifiedMemoSetRoot",
@@ -714,6 +770,7 @@ export function validateReadyGenerationBase(ready: ReadyGenerationBaseV1): void 
   assertHash(ready.generationId, "readyGenerationBase.generationId");
   if (ready.parentGenerationId !== null) assertHash(ready.parentGenerationId, "readyGenerationBase.parentGenerationId");
   assertHash(ready.generationRefreshPolicyHash, "readyGenerationBase.generationRefreshPolicyHash");
+  decodeRuntimeAuthorityProjectionV1(ready.runtimeAuthority);
   assertHash(ready.releaseProvenanceHash, "readyGenerationBase.releaseProvenanceHash");
   validateCanonicalCutoff(ready.cutoff, "readyGenerationBase.cutoff");
   assertPlainObject(ready.recentObservationRange, "readyGenerationBase.recentObservationRange");
@@ -728,7 +785,6 @@ export function validateReadyGenerationBase(ready: ReadyGenerationBaseV1): void 
     ["nominationClosureRoot", ready.nominationClosureRoot],
     ["nominationClosureStorageHash", ready.nominationClosureStorageHash],
     ["candidatePartitionProofStorageHash", ready.candidatePartitionProofStorageHash],
-    ["releaseProvenanceHash", ready.releaseProvenanceHash],
     ["exactOutcomePartitionRoot", ready.exactOutcomePartitionRoot],
     ["verifiedMemoSetRoot", ready.verifiedMemoSetRoot],
     ["instanceCatalogRoot", ready.instanceCatalogRoot],
@@ -754,6 +810,7 @@ export function validateReadyGeneration(ready: ReadyGenerationV1): void {
     "nominationClosureRoot",
     "nominationClosureStorageHash",
     "candidatePartitionProofStorageHash",
+    "runtimeAuthority",
     "releaseProvenanceHash",
     "exactOutcomePartitionRoot",
     "verifiedMemoSetRoot",
@@ -778,6 +835,7 @@ export function validateReadyGeneration(ready: ReadyGenerationV1): void {
     nominationClosureRoot: ready.nominationClosureRoot,
     nominationClosureStorageHash: ready.nominationClosureStorageHash,
     candidatePartitionProofStorageHash: ready.candidatePartitionProofStorageHash,
+    runtimeAuthority: ready.runtimeAuthority,
     releaseProvenanceHash: ready.releaseProvenanceHash,
     exactOutcomePartitionRoot: ready.exactOutcomePartitionRoot,
     verifiedMemoSetRoot: ready.verifiedMemoSetRoot,
@@ -807,6 +865,7 @@ export function validateReadyGeneration(ready: ReadyGenerationV1): void {
     nominationClosureRoot: ready.nominationClosureRoot,
     nominationClosureStorageHash: ready.nominationClosureStorageHash,
     candidatePartitionProofStorageHash: ready.candidatePartitionProofStorageHash,
+    runtimeAuthority: ready.runtimeAuthority,
     releaseProvenanceHash: ready.releaseProvenanceHash,
     exactOutcomePartitionRoot: ready.exactOutcomePartitionRoot,
     verifiedMemoSetRoot: ready.verifiedMemoSetRoot,
@@ -871,6 +930,7 @@ function assertReadyStageResult(
   instanceCatalog: InstanceCatalogV1,
   ready: ReadyGenerationBaseV1,
   policyHash: Hash,
+  runtimeAuthority: RuntimeAuthorityProjectionV1,
 ): void {
   validateReadyStageIdentity(result.stage);
   if (
@@ -882,10 +942,12 @@ function assertReadyStageResult(
     || !sameCutoff(result.stage.cutoff, run.cutoff)
     || result.stage.generationRefreshPolicyHash !== policyHash
     || result.stage.definitionCatalogRoot !== run.definitionCatalogRoot
+    || encodeCanonicalJson(result.stage.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)
     || result.stage.releaseProvenanceHash !== run.releaseProvenanceHash
     || result.stage.candidatePartitionProofStorageHash !== run.candidatePartitionProofStorageHash
     || result.stage.nominationClosureRoot !== run.nominationClosureRoot
     || result.stage.nominationClosureStorageHash !== run.nominationClosureStorageHash
+    || encodeCanonicalJson(ready.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)
     || ready.releaseProvenanceHash !== run.releaseProvenanceHash
     || ready.candidatePartitionProofStorageHash !== run.candidatePartitionProofStorageHash
     || ready.nominationClosureRoot !== run.nominationClosureRoot
@@ -979,6 +1041,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     if (
       ready.generationRefreshPolicyHash !== policyHash
       || ready.definitionCatalogRoot !== catalog.definitionCatalogRoot
+      || encodeCanonicalJson(ready.runtimeAuthority) !== encodeCanonicalJson(signedRuntimeAuthorityProjection(this.#releaseBindingPort))
       || ready.releaseProvenanceHash !== currentCatalog.releaseProvenanceHash
     ) return null;
 
@@ -1010,7 +1073,10 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     const run = this.#sealedRunReader.readForPromotion(input.sealedRun, instanceCatalog);
     assertPromotionInput(input, run);
     const currentReleaseProvenanceHash = this.#releaseBindingPort.currentProvenanceHash();
-    if (run.releaseProvenanceHash !== currentReleaseProvenanceHash) {
+    const currentRuntimeAuthority = signedRuntimeAuthorityProjection(this.#releaseBindingPort);
+    if (
+      run.releaseProvenanceHash !== currentReleaseProvenanceHash
+    ) {
       throw new ReadyPromotionIncompatibleError("release-binding-changed");
     }
     const currentCatalog = this.#currentDefinitionCatalog();
@@ -1023,6 +1089,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     this.#promotionAuthority.assertConfiguration({
       definitionCatalogRoot: run.definitionCatalogRoot,
       generationRefreshPolicyHash: generationRefreshPolicyHash(policy),
+      runtimeAuthority: currentRuntimeAuthority,
       releaseProvenanceHash: run.releaseProvenanceHash,
     });
     validateSourceCoverageCertificate(run.sourceCoverage, currentCatalog.declaredSourcePlans);
@@ -1052,6 +1119,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       instanceCatalogRoot: instanceCatalog.instanceCatalogRoot,
       graphRoot: graph.graphRoot,
       policyHash,
+      runtimeAuthority: currentRuntimeAuthority,
       releaseProvenanceHash: run.releaseProvenanceHash,
       candidatePartitionProofStorageHash: run.candidatePartitionProofStorageHash,
       nominationClosureRoot: run.nominationClosureRoot,
@@ -1069,6 +1137,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       nominationClosureRoot: run.nominationClosureRoot,
       nominationClosureStorageHash: run.nominationClosureStorageHash,
       candidatePartitionProofStorageHash: run.candidatePartitionProofStorageHash,
+      runtimeAuthority: currentRuntimeAuthority,
       releaseProvenanceHash: run.releaseProvenanceHash,
       exactOutcomePartitionRoot: run.partition.exactOutcomePartitionRoot,
       verifiedMemoSetRoot: run.verifiedMemoSetRoot,
@@ -1088,6 +1157,9 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       if (this.#releaseBindingPort.currentProvenanceHash() !== run.releaseProvenanceHash) {
         throw new ReadyPromotionIncompatibleError("release-binding-changed");
       }
+      if (encodeCanonicalJson(signedRuntimeAuthorityProjection(this.#releaseBindingPort)) !== encodeCanonicalJson(currentRuntimeAuthority)) {
+        throw new ReadyPromotionIncompatibleError("release-binding-changed");
+      }
       const fencedCatalog = this.#currentDefinitionCatalog();
       if (run.definitionCatalogRoot !== fencedCatalog.definitionCatalogRoot) {
         throw new ReadyPromotionIncompatibleError("definition-catalog-changed");
@@ -1103,6 +1175,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
         definitionCatalogRoot: run.definitionCatalogRoot,
         instanceCatalogRoot: instanceCatalog.instanceCatalogRoot,
         graphRoot: graph.graphRoot,
+        runtimeAuthority: currentRuntimeAuthority,
         releaseProvenanceHash: run.releaseProvenanceHash,
         candidatePartitionProofStorageHash: run.candidatePartitionProofStorageHash,
         nominationClosureRoot: run.nominationClosureRoot,
@@ -1123,7 +1196,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
           instanceCatalog,
           ready: readyBase,
         });
-        assertReadyStageResult(stage, run, instanceCatalog, readyBase, policyHash);
+        assertReadyStageResult(stage, run, instanceCatalog, readyBase, policyHash, currentRuntimeAuthority);
         const freshness = await this.#canonical.observePromotionFreshness(fence, {
           cutoff: run.cutoff,
           maxPromotionAgeBlocks: latest.toString(),
@@ -1162,7 +1235,10 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       throw new Error("ready-record-hash-mismatch");
     }
     const ready = deepFreeze({ ...readyPayload, readyRecordHash: committed.result.readyRecordHash });
-    if (this.#releaseBindingPort.currentProvenanceHash() !== ready.releaseProvenanceHash) {
+    if (
+      this.#releaseBindingPort.currentProvenanceHash() !== ready.releaseProvenanceHash
+      || encodeCanonicalJson(signedRuntimeAuthorityProjection(this.#releaseBindingPort)) !== encodeCanonicalJson(ready.runtimeAuthority)
+    ) {
       throw new ReadyPromotionIncompatibleError("release-binding-changed");
     }
     await this.#assertPromotionCanonical(run.cutoff);
@@ -1174,6 +1250,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       definitionCatalogRoot: ready.definitionCatalogRoot,
       instanceCatalogRoot: ready.instanceCatalogRoot,
       graphRoot: ready.graphRoot,
+      runtimeAuthority: ready.runtimeAuthority,
       releaseProvenanceHash: ready.releaseProvenanceHash,
       candidatePartitionProofStorageHash: ready.candidatePartitionProofStorageHash,
       nominationClosureRoot: ready.nominationClosureRoot,
@@ -1200,18 +1277,25 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
   }
 
   async assertServingBindingCurrent(binding: GraphLeaseBindingV1): Promise<void> {
-    if (this.#releaseBindingPort.currentProvenanceHash() !== binding.releaseProvenanceHash) {
+    if (
+      this.#releaseBindingPort.currentProvenanceHash() !== binding.releaseProvenanceHash
+      || encodeCanonicalJson(signedRuntimeAuthorityProjection(this.#releaseBindingPort)) !== encodeCanonicalJson(binding.runtimeAuthority)
+    ) {
       throw new Error("serving-release-binding-mismatch");
     }
     this.#promotionAuthority.assertConfiguration({
       definitionCatalogRoot: binding.definitionCatalogRoot,
       generationRefreshPolicyHash: binding.generationRefreshPolicyHash,
+      runtimeAuthority: binding.runtimeAuthority,
       releaseProvenanceHash: binding.releaseProvenanceHash,
     });
     await this.#canonical.assertStillCanonical(binding.cutoff);
     this.#store.assertReadyAuthorityActive(binding);
     await this.#canonical.assertStillCanonical(binding.cutoff);
-    if (this.#releaseBindingPort.currentProvenanceHash() !== binding.releaseProvenanceHash) {
+    if (
+      this.#releaseBindingPort.currentProvenanceHash() !== binding.releaseProvenanceHash
+      || encodeCanonicalJson(signedRuntimeAuthorityProjection(this.#releaseBindingPort)) !== encodeCanonicalJson(binding.runtimeAuthority)
+    ) {
       throw new Error("serving-release-binding-mismatch");
     }
   }
@@ -1230,15 +1314,18 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       throw new Error("serving-policy-mismatch");
     }
     const currentReleaseProvenanceHash = this.#releaseBindingPort.currentProvenanceHash();
+    const currentRuntimeAuthority = signedRuntimeAuthorityProjection(this.#releaseBindingPort);
     if (
       currentCatalog.releaseProvenanceHash !== currentReleaseProvenanceHash
       || input.ready.releaseProvenanceHash !== currentReleaseProvenanceHash
+      || encodeCanonicalJson(input.ready.runtimeAuthority) !== encodeCanonicalJson(currentRuntimeAuthority)
     ) {
       throw new Error("serving-release-binding-mismatch");
     }
     this.#promotionAuthority.assertConfiguration({
       definitionCatalogRoot: input.ready.definitionCatalogRoot,
       generationRefreshPolicyHash: input.ready.generationRefreshPolicyHash,
+      runtimeAuthority: input.ready.runtimeAuthority,
       releaseProvenanceHash: input.ready.releaseProvenanceHash,
     });
     await this.#canonical.assertStillCanonical(input.ready.cutoff);
@@ -1258,6 +1345,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       nominationClosureRoot: input.ready.nominationClosureRoot,
       nominationClosureStorageHash: input.ready.nominationClosureStorageHash,
       candidatePartitionProofStorageHash: input.ready.candidatePartitionProofStorageHash,
+      runtimeAuthority: input.ready.runtimeAuthority,
       releaseProvenanceHash: input.ready.releaseProvenanceHash,
       exactOutcomePartitionRoot: input.ready.exactOutcomePartitionRoot,
       verifiedMemoSetRoot: input.ready.verifiedMemoSetRoot,
@@ -1300,6 +1388,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       instanceCatalogRoot: input.ready.instanceCatalogRoot,
       graphRoot: input.ready.graphRoot,
       cutoff: input.ready.cutoff,
+      runtimeAuthority: input.ready.runtimeAuthority,
       releaseProvenanceHash: input.ready.releaseProvenanceHash,
       candidatePartitionProofStorageHash: input.ready.candidatePartitionProofStorageHash,
       nominationClosureRoot: input.ready.nominationClosureRoot,
@@ -1313,6 +1402,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
       definitionCatalogRoot: input.ready.definitionCatalogRoot,
       instanceCatalogRoot: input.ready.instanceCatalogRoot,
       graphRoot: input.ready.graphRoot,
+      runtimeAuthority: input.ready.runtimeAuthority,
       releaseProvenanceHash: input.ready.releaseProvenanceHash,
       candidatePartitionProofStorageHash: input.ready.candidatePartitionProofStorageHash,
       nominationClosureRoot: input.ready.nominationClosureRoot,

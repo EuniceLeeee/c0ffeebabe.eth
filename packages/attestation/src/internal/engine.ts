@@ -58,9 +58,9 @@ import {
   assertNativeBytes,
   validateEvidenceBundle,
   validateIdentityObservation,
+  validateVerifiedPublication,
   validateCutoff,
   validateProbeReceipt,
-  validateVerifiedPublication,
   verifiedIdentitySubjectHash,
   type AttestationFinalSessionResultV1,
   type AttestationIdentityContinuationV1,
@@ -168,6 +168,108 @@ interface RejectionFactRuntimeStateV1 {
   ) => RejectionEvidenceBundleV2;
 }
 const rejectionRuntimeStates = new WeakMap<object, RejectionFactRuntimeStateV1>();
+
+async function observeIdentity(
+  programs: AttestationProgramPort,
+  candidate: CandidateRecordV1,
+  cutoff: CanonicalCutoffV1,
+  signal: AbortSignal,
+  rawEvidence: FamilyRawEvidenceReadPortV1,
+): Promise<IdentityDecisionV1> {
+  const decision = await programs.attestIdentity(candidate, cutoff, signal, rawEvidence);
+  return decision.kind === "identityVerified"
+    ? validateIdentityObservation(decision, "attestation.identity")
+    : decision;
+}
+
+async function observeInstance(
+  runId: string,
+  programs: AttestationProgramPort,
+  instanceLifecycle: InstanceLifecycleSingleFlightPort,
+  candidate: CandidateRecordV1,
+  identity: IdentityVerifiedObservationV1,
+  cutoff: CanonicalCutoffV1,
+  signal: AbortSignal,
+  rawEvidence: FamilyRawEvidenceReadPortV1,
+): Promise<InstanceDecisionV1> {
+  const programIdentity = validateIdentityObservation({
+    kind: identity.kind,
+    familyInstanceKey: identity.familyInstanceKey,
+    identityMemo: identity.identityMemo,
+    identityMemoHash: identity.identityMemoHash,
+    descriptorHash: identity.descriptorHash,
+    evidenceRoot: identity.evidenceRoot,
+  }, "attestation.materializationIdentity");
+  const decision = await instanceLifecycle.getOrBuild(
+    hashDomain("aloha/instance-lifecycle-work/v1", {
+      runId,
+      familyDefinitionHash: candidate.familyDefinitionHash,
+      familyInstanceKey: programIdentity.familyInstanceKey,
+      cutoff,
+    }),
+    () => programs.materializeAndProject(candidate, programIdentity, cutoff, signal, rawEvidence),
+  );
+  if (decision.kind === "verified") {
+    validateVerifiedPublication(candidate, programIdentity, cutoff, decision.publication);
+  }
+  return decision;
+}
+
+interface IdentityGroupMemberV1<T> {
+  readonly familyDefinitionHash: Hash;
+  readonly familyCandidateKey: Hash;
+  readonly familyInstanceKey: string;
+  readonly value: T;
+}
+
+interface IdentityGroupV1<T> {
+  readonly groupKey: Hash;
+  readonly members: readonly IdentityGroupMemberV1<T>[];
+}
+
+function assertIdentityBarrier(
+  expectedCandidateKeys: readonly Hash[],
+  resolvedCandidateKeys: readonly Hash[],
+): void {
+  const expected = [...expectedCandidateKeys].sort();
+  const resolved = [...resolvedCandidateKeys].sort();
+  if (
+    new Set(expected).size !== expected.length
+    || new Set(resolved).size !== resolved.length
+    || expected.length !== resolved.length
+    || expected.some((key, index) => key !== resolved[index])
+  ) throw new TypeError("attestation-identity-phase-incomplete");
+}
+
+function groupVerifiedIdentities<T>(
+  members: readonly IdentityGroupMemberV1<T>[],
+): readonly IdentityGroupV1<T>[] {
+  const groups = new Map<Hash, IdentityGroupMemberV1<T>[]>();
+  for (const member of members) {
+    const groupKey = hashDomain("aloha/attestation-identity-group/v1", {
+      familyDefinitionHash: member.familyDefinitionHash,
+      familyInstanceKey: member.familyInstanceKey,
+    });
+    const group = groups.get(groupKey) ?? [];
+    group.push(member);
+    groups.set(groupKey, group);
+  }
+  return Object.freeze([...groups.entries()]
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([groupKey, group]) => Object.freeze({
+      groupKey,
+      members: Object.freeze(group.sort((left, right) => compareText(left.familyCandidateKey, right.familyCandidateKey))
+        .map(member => Object.freeze({ ...member }))),
+    })));
+}
+
+function collisionEvidenceRoot<T>(group: IdentityGroupV1<T>): Hash {
+  if (group.members.length < 2) throw new TypeError("attestation-collision-group-too-small");
+  return hashDomain("aloha/nomination-key-collision/v1", group.members.map(member => ({
+    familyCandidateKey: member.familyCandidateKey,
+    familyInstanceKey: member.familyInstanceKey,
+  })));
+}
 
 function capabilityLeaseIsActive(state: ExecutorCapabilityStateV1): boolean {
   return state.lease.active
@@ -1011,6 +1113,7 @@ function createAttestationRunSession(
   const identityCandidateSnapshots = new Map<Hash, Hash>();
   const identityInFlight = new Map<Hash, Promise<AttestationIdentitySessionResultV1>>();
   const continuationStates = new WeakMap<object, AttestationIdentityContinuationStateV1>();
+  const continuationByCandidate = new Map<Hash, AttestationIdentityContinuationStateV1>();
   const finalOutcomes = new Map<Hash, AttestationOutcomeCapabilityV1>();
   const durableFinalKeys = new Set<Hash>();
 
@@ -1047,7 +1150,7 @@ function createAttestationRunSession(
     identity: IdentityVerifiedV1,
   ): AttestationIdentityContinuationV1 => {
     const continuation = Object.freeze({}) as AttestationIdentityContinuationV1;
-    continuationStates.set(continuation, {
+    const state: AttestationIdentityContinuationStateV1 = {
       runId,
       candidatePartitionRoot,
       familyCandidateKey: candidate.familyCandidateKey,
@@ -1056,8 +1159,28 @@ function createAttestationRunSession(
       identity,
       status: "pending",
       materializationPromise: null,
-    });
+    };
+    continuationStates.set(continuation, state);
+    continuationByCandidate.set(candidate.familyCandidateKey, state);
     return continuation;
+  };
+
+  const resolvedIdentityGroups = (): readonly IdentityGroupV1<AttestationIdentityContinuationStateV1>[] => {
+    assertIdentityBarrier(candidateKeys, [...identityResults.keys()]);
+    return groupVerifiedIdentities([...continuationByCandidate.values()].map(state => ({
+      familyDefinitionHash: state.candidate.familyDefinitionHash,
+      familyCandidateKey: state.familyCandidateKey,
+      familyInstanceKey: state.identity.familyInstanceKey,
+      value: state,
+    })));
+  };
+
+  const resolvedGroupFor = (
+    state: AttestationIdentityContinuationStateV1,
+  ): IdentityGroupV1<AttestationIdentityContinuationStateV1> => {
+    const group = resolvedIdentityGroups().find(value => value.members.some(member => member.familyCandidateKey === state.familyCandidateKey));
+    if (!group) throw new TypeError("attestation-identity-group-missing");
+    return group;
   };
 
   const continuationState = (
@@ -1302,7 +1425,13 @@ function createAttestationRunSession(
         }
       }
       try {
-        const decision = await programs.attestIdentity(candidate, cutoff, signal, rawEvidenceFor(candidate));
+        const decision = await observeIdentity(
+          programs,
+          candidate,
+          cutoff,
+          signal,
+          rawEvidenceFor(candidate),
+        );
         if (decision.kind === "identityVerified") {
           const normalizedIdentity = issueIdentityWithProof(
             runId,
@@ -1356,11 +1485,27 @@ function createAttestationRunSession(
     return tracked;
   };
 
+  const resolveIdentityDenominator = async (
+    signal: AbortSignal,
+  ): Promise<readonly AttestationIdentitySessionResultV1[]> => {
+    const results = await Promise.all(candidateKeys.map(
+      key => resolveIdentityOrReuseProofOnce(key, signal),
+    ));
+    assertIdentityBarrier(candidateKeys, results.map(result => result.kind === "identityVerified"
+      ? result.candidate.familyCandidateKey
+      : result.outcome.familyCandidateKey));
+    return Object.freeze(results);
+  };
+
   const materializeAndProjectOnce = (
     suppliedContinuation: AttestationIdentityContinuationV1,
     signal: AbortSignal,
   ): Promise<AttestationFinalSessionResultV1> => {
     const state = continuationState(suppliedContinuation);
+    const identityGroup = resolvedGroupFor(state);
+    if (identityGroup.members.length !== 1) {
+      throw new TypeError("attestation-collision-group-must-be-terminated-before-materialization");
+    }
     if (state.status === "completed" || state.status === "materializing") {
       if (!state.materializationPromise) throw new TypeError("attestation-identity-continuation-state-invalid");
       return state.materializationPromise;
@@ -1373,17 +1518,16 @@ function createAttestationRunSession(
       const identity = state.identity;
       const expectedIdentitySubjectHash = verifiedIdentitySubjectHash(candidate, identity);
       try {
-        const workKey = hashDomain("aloha/instance-lifecycle-work/v1", {
+        const decision = await observeInstance(
           runId,
-          familyDefinitionHash: candidate.familyDefinitionHash,
-          familyInstanceKey: identity.familyInstanceKey,
+          programs,
+          instanceLifecycle,
+          candidate,
+          identity,
           cutoff,
-        });
-        const decision = await instanceLifecycle.getOrBuild(
-          workKey,
-          () => programs.materializeAndProject(candidate, identity, cutoff, signal, rawEvidenceFor(candidate)),
+          signal,
+          rawEvidenceFor(candidate),
         );
-        if (decision.kind === "verified") validateVerifiedPublication(candidate, identity, cutoff, decision.publication);
         const result = issueFinal(candidate, decision, "materialization", expectedIdentitySubjectHash, identity.issuerProof);
         state.status = "completed";
         return result;
@@ -1430,11 +1574,16 @@ function createAttestationRunSession(
         || state.identity.familyInstanceKey !== first.identity.familyInstanceKey
       ) throw new TypeError("attestation-session-collision-group-mismatch");
     }
+    const expectedGroup = resolvedGroupFor(first);
+    const suppliedKeys = [...keys].sort(compareText);
+    const expectedKeys = expectedGroup.members.map(member => member.familyCandidateKey);
+    if (
+      expectedGroup.members.length < 2
+      || suppliedKeys.length !== expectedKeys.length
+      || suppliedKeys.some((key, index) => key !== expectedKeys[index])
+    ) throw new TypeError("attestation-session-collision-group-not-exact");
     const normalized = states.map(state => ({ candidate: state.candidate, identity: state.identity }));
-    const evidenceRoot = hashDomain("aloha/nomination-key-collision/v1", normalized.map(item => ({
-      familyCandidateKey: item.candidate.familyCandidateKey,
-      familyInstanceKey: item.identity.familyInstanceKey,
-    })).sort((left, right) => compareText(left.familyCandidateKey, right.familyCandidateKey)));
+    const evidenceRoot = collisionEvidenceRoot(expectedGroup);
     // Build and validate the whole collision outcome set before changing any
     // continuation state or registering a final capability. This keeps a
     // malformed group from partially terminating its members.
@@ -1448,7 +1597,7 @@ function createAttestationRunSession(
         evidenceRoot,
         frameworkBinding: null,
       },
-    }, frameworkRuntime, rejectionValidator, "identity", null, item.identity.issuerProof));
+    }, frameworkRuntime, rejectionValidator, "identity", null, null));
     const outcomes = bodies.map((body, index) => bindOutcomeAuthority(body, authority, {
       runId,
       cutoff,
@@ -1585,6 +1734,7 @@ function createAttestationRunSession(
 
   return Object.freeze({
     writerCapability,
+    resolveIdentityDenominator,
     resolveIdentityOrReuseProofOnce,
     materializeAndProjectOnce,
     issueNominationKeyCollision,
@@ -1613,10 +1763,29 @@ export async function probeRetryableCandidate(
   const session = service.openRunSession({
     candidatePartition: stored.candidatePartition,
   });
-  const identity = await session.resolveIdentityOrReuseProofOnce(familyCandidateKey, signal);
-  const final = identity.kind === "identityVerified"
-    ? await session.materializeAndProjectOnce(identity.continuation, signal)
-    : identity;
+  const identities = await session.resolveIdentityDenominator(signal);
+  const identity = identities.find(result => (result.kind === "identityVerified"
+    ? result.candidate.familyCandidateKey
+    : result.outcome.familyCandidateKey) === familyCandidateKey);
+  if (identity === undefined) throw new Error("probe-target-absent-from-identity-denominator");
+  let final: AttestationFinalSessionResultV1;
+  if (identity.kind === "identityVerified") {
+    const collisionGroup = identities.filter((result): result is Extract<AttestationIdentitySessionResultV1, { readonly kind: "identityVerified" }> =>
+      result.kind === "identityVerified"
+      && result.candidate.familyDefinitionHash === identity.candidate.familyDefinitionHash
+      && result.identity.familyInstanceKey === identity.identity.familyInstanceKey,
+    );
+    if (collisionGroup.length > 1) {
+      const collisionResults = session.issueNominationKeyCollision(collisionGroup.map(result => result.continuation));
+      const target = collisionResults.find(result => result.outcome.familyCandidateKey === familyCandidateKey);
+      if (target === undefined) throw new Error("probe-target-absent-from-collision-outcomes");
+      final = target;
+    } else {
+      final = await session.materializeAndProjectOnce(identity.continuation, signal);
+    }
+  } else {
+    final = identity;
+  }
   const after = final.outcome;
   if (after.kind === "invalidProgram") {
     throw new Error("probe-invalid-program-is-diagnostic-only");

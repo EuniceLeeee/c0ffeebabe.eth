@@ -25,3 +25,11 @@ export const ASTRA_PUBLIC_ENTRY = Object.freeze({
   actionOwner: "ASTRA_ACTION_OWNER",
   runtimeAdapter: "ASTRA_SEARCH_RUNTIME_ADAPTER_FACTORY",
 });
+export {
+  ASTRA_SOURCE_NOMINATION_PROGRAM,
+  ASTRA_SOURCE_PLAN_RUNTIME,
+} from "./source-plan-runtime.ts";
+export {
+  ASTRA_HISTORY_NOMINATION_PROGRAM,
+  ASTRA_HISTORY_SOURCE_PLAN_RUNTIME,
+} from "./history-source-plan.ts";

@@ -20,6 +20,10 @@ import type {
 import { validateInstanceCatalog } from "../../catalog/src/index.ts";
 import { decodeCanonicalCutoff, type CanonicalCutoffV1 } from "../../discovery/src/index.ts";
 import type { CanonicalLeaseGuardPort } from "../../canonical-source/src/lease-guard-port.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../runtime-authority/src/index.ts";
 
 export interface RehydrationRefV1 {
   readonly familyDefinitionHash: Hash;
@@ -148,6 +152,7 @@ export interface GraphLeaseBindingV1 {
   readonly definitionCatalogRoot: Hash;
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly releaseProvenanceHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
@@ -446,6 +451,13 @@ export class GraphViewLeaseV1 {
     onRelease: () => void = () => {},
   ) {
     canonicalGuard.assertViewAuthorityActive(binding.cutoff);
+    const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(binding.runtimeAuthority);
+    const releaseFactsPresent = binding.releaseProvenanceHash !== null
+      && binding.candidatePartitionProofStorageHash !== null
+      && binding.nominationClosureStorageHash !== null;
+    if (runtimeAuthority.authorityClass !== "signed-release" || !releaseFactsPresent) {
+      throw new Error("graph-lease-authority-facts-mismatch");
+    }
     const activeReadyBinding = deepFreeze({
       generationId: binding.generationId,
       readyRecordHash: binding.readyRecordHash,
@@ -454,6 +466,7 @@ export class GraphViewLeaseV1 {
       definitionCatalogRoot: binding.definitionCatalogRoot,
       instanceCatalogRoot: binding.instanceCatalogRoot,
       graphRoot: binding.graphRoot,
+      runtimeAuthority,
       releaseProvenanceHash: binding.releaseProvenanceHash,
       candidatePartitionProofStorageHash: binding.candidatePartitionProofStorageHash,
       nominationClosureRoot: binding.nominationClosureRoot,
@@ -497,7 +510,11 @@ export class GraphViewLeaseV1 {
       });
       return deepFreeze({ ...edge, routeHandle });
     });
-    this.binding = deepFreeze({ ...binding, cutoff: deepFreeze({ ...binding.cutoff }) });
+    this.binding = deepFreeze({
+      ...binding,
+      cutoff: deepFreeze({ ...binding.cutoff }),
+      runtimeAuthority,
+    });
     this.leaseId = hashDomain("aloha/graph-view-lease/v1", {
       generationId: binding.generationId,
       readyRecordHash: binding.readyRecordHash,
@@ -506,6 +523,7 @@ export class GraphViewLeaseV1 {
       definitionCatalogRoot: binding.definitionCatalogRoot,
       instanceCatalogRoot: binding.instanceCatalogRoot,
       graphRoot: binding.graphRoot,
+      runtimeAuthority,
       releaseProvenanceHash: binding.releaseProvenanceHash,
       candidatePartitionProofStorageHash: binding.candidatePartitionProofStorageHash,
       nominationClosureRoot: binding.nominationClosureRoot,

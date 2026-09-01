@@ -13,6 +13,10 @@ import {
 } from "../../../packages/producer/src/internal/owners.ts";
 import { issueStartupRuntime } from "../../../packages/startup-runtime/src/internal/runtime-owner.ts";
 import { createContractEconomicSafetyService } from "../../../packages/search-pipeline/test/economic-safety-fixture.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../../packages/runtime-authority/src/index.ts";
 import type { RuntimeAnchorReceiptV1 } from "../src/deployment.ts";
 import {
   assertIssuedSearcherProductionEvidenceOwnerV1,
@@ -478,6 +482,22 @@ test("production resolved route exact-binds planner legs to execution action own
     graphRoot: h("3"),
     source: Object.freeze({ ...coarseSource, parentHash: h("canonical-parent") }),
     objectiveRef: h("6"),
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(
+      createSignedReleaseRuntimeAuthorityDescriptorV1({
+        authorityClass: "signed-release",
+        runtimeBindingId: release.bindingId,
+        releaseProvenanceHash: release.releaseProvenanceHash,
+        implementationCommit: release.candidateReleaseCommit,
+      }),
+    ),
+    expectedRuntimeAuthority: projectRuntimeAuthorityDescriptorV1(
+      createSignedReleaseRuntimeAuthorityDescriptorV1({
+        authorityClass: "signed-release",
+        runtimeBindingId: release.bindingId,
+        releaseProvenanceHash: release.releaseProvenanceHash,
+        implementationCommit: release.candidateReleaseCommit,
+      }),
+    ),
     releaseProvenanceHash: h("7"),
     actionOwners,
     path: "routeBinding",
@@ -488,6 +508,21 @@ test("production resolved route exact-binds planner legs to execution action own
   });
   assert.deepEqual(projected.source, coarseSource);
   assert.equal("parentHash" in projected.source, false);
+  assert.throws(
+    () => validateProductionResolvedRouteBindingV1({
+      value: routeBinding,
+      ...context,
+      runtimeAuthority: projectRuntimeAuthorityDescriptorV1(
+        createSignedReleaseRuntimeAuthorityDescriptorV1({
+          authorityClass: "signed-release",
+          runtimeBindingId: h("8"),
+          releaseProvenanceHash: h("9"),
+          implementationCommit: release.candidateReleaseCommit,
+        }),
+      ),
+    }),
+    /expected signed-release authority/,
+  );
 
   const routeBLegs = Object.freeze([
     Object.freeze({ ...routeLegs[0], ownerRef: h("d") }),
@@ -557,6 +592,7 @@ function startup() {
   return issueStartupRuntime({
     ready,
     familyRuntimeComposition: {} as never,
+    familySearchRuntime: Object.freeze({}) as never,
     generationId: "generation-1",
     graphRoot,
     releaseBindingId: release.bindingId,
@@ -629,6 +665,7 @@ test("eligible admission freezes serving only from the owner-issued session open
   const promotedStartup = issueStartupRuntime({
     ready: generationA.ready,
     familyRuntimeComposition: {} as never,
+    familySearchRuntime: Object.freeze({}) as never,
     generationId: generationA.generationId,
     graphRoot: generationA.graphRoot,
     releaseBindingId: release.bindingId,

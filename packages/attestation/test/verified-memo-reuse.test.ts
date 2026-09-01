@@ -202,6 +202,7 @@ test("verified memo reuse skips unchanged identity and attests only the differen
     verifiedMemoReuseCapabilities: memoCapabilities,
   });
   const origins: string[] = [];
+  const resolvedIdentities = [];
   for (const value of candidates) {
     const identity = await session.resolveIdentityOrReuseProofOnce(value.familyCandidateKey, new AbortController().signal);
     assert.equal(identity.kind, "identityVerified");
@@ -213,6 +214,9 @@ test("verified memo reuse skips unchanged identity and attests only the differen
       assert.equal(identity.identity.issuerProof.identityOrigin.verifiedMemoSetRoot, h("prior-memo-set"));
       assert.equal(identity.identity.issuerProof.identityOrigin.proof.familyCandidateKey, value.familyCandidateKey);
     }
+    resolvedIdentities.push(identity);
+  }
+  for (const identity of resolvedIdentities) {
     const final = await session.materializeAndProjectOnce(identity.continuation, new AbortController().signal);
     assert.equal(final.outcome.kind, "verified");
   }

@@ -25,3 +25,11 @@ export {
   EIGENPIE_REHYDRATION_DEFINITION as EIGENPIE_REHYDRATION_RUNTIME,
 } from "./runtime/definitions.ts";
 export const PUBLIC_ENTRY = Object.freeze({ familyId: "eigenpie", runtime: "family-owned" });
+export {
+  EIGENPIE_SOURCE_NOMINATION_PROGRAM,
+  EIGENPIE_SOURCE_PLAN_RUNTIME,
+} from "./source-plan.ts";
+export {
+  EIGENPIE_HISTORY_NOMINATION_PROGRAM,
+  EIGENPIE_HISTORY_SOURCE_PLAN_RUNTIME,
+} from "./history-source-plan.ts";

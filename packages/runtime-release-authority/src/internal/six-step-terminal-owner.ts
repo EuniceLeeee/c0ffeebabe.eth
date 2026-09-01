@@ -31,6 +31,11 @@ import type {
 } from "../../../economics-safety/src/index.ts";
 import type { EconomicSafetyExecutorQualificationV1 } from "../../../economics-safety/src/evaluator.ts";
 import type { SafetyProfileV1 } from "../../../../specs/economic-safety-profile/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../../runtime-authority/src/index.ts";
+import { readActiveSignedRuntimeAuthorityDescriptorV1 } from "./runtime-authority-descriptor-owner.ts";
 
 export type RuntimeReleaseSixStepTerminalBindingCapabilityV1 = object;
 
@@ -200,10 +205,15 @@ function sealBinding(
   const routeCandidate = canonicalRecord(trace.routeCandidate, "sixStepTerminal.trace.routeCandidate");
   assertExactKeys(leaseBinding, [
     "generationId", "readyRecordHash", "generationRefreshPolicyHash", "cutoff",
-    "definitionCatalogRoot", "instanceCatalogRoot", "graphRoot", "releaseProvenanceHash",
+    "definitionCatalogRoot", "instanceCatalogRoot", "graphRoot", "runtimeAuthority", "releaseProvenanceHash",
     "candidatePartitionProofStorageHash", "nominationClosureRoot", "nominationClosureStorageHash",
   ], "sixStepTerminal.trace.resolved.binding");
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(leaseBinding.runtimeAuthority);
+  const expectedRuntimeAuthority = projectRuntimeAuthorityDescriptorV1(
+    readActiveSignedRuntimeAuthorityDescriptorV1(state.authority),
+  );
   if (leaseBinding.releaseProvenanceHash !== state.releaseProvenanceHash
+    || encodeCanonicalJson(runtimeAuthority) !== encodeCanonicalJson(expectedRuntimeAuthority)
     || leaseBinding.definitionCatalogRoot !== state.definitionCatalogRoot
     || leaseBinding.generationId !== terminal.receipt.generationId
     || leaseBinding.readyRecordHash !== terminal.receipt.readyRecordHash

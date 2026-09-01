@@ -10,6 +10,10 @@ import {
   consumeFullGraphCoarseSweepInvocationCapabilityV1,
   issueFullGraphCoarseSweepInvocationCapabilityV1,
 } from "../../../packages/full-graph-coarse-sweep/src/internal/invocation-owner.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../../packages/runtime-authority/src/index.ts";
 
 const hash = (digit: string) => `0x${digit.repeat(64)}` as `0x${string}`;
 
@@ -157,6 +161,14 @@ test("Reth source owns one physical transport per session and rejects cross-sess
     candidatePartitionProofStorageHash: hash("2"),
     nominationClosureRoot: hash("3"),
     nominationClosureStorageHash: hash("4"),
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(
+      createSignedReleaseRuntimeAuthorityDescriptorV1({
+        authorityClass: "signed-release",
+        runtimeBindingId: hash("5"),
+        releaseProvenanceHash: hash("1"),
+        implementationCommit: "a".repeat(40),
+      }),
+    ),
   });
   const lease = Object.freeze({ binding, assertActive() {} });
   const sessionA = await runtimeSource.canonical.openHeadSession(

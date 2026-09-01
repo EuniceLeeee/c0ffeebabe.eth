@@ -5,7 +5,10 @@ import type {
   InstanceLifecycleSingleFlightPort,
   RejectionTransportExecutorV1,
 } from "../../../../packages/attestation/src/index.ts";
-import { createAttestationProgramPortFromFamilyComposition } from "../../../../packages/attestation/src/internal/family-program-adapter.ts";
+import {
+  assertIssuedAttestationProgramPort,
+  createAttestationProgramPortFromFamilyComposition,
+} from "../../../../packages/attestation/src/internal/family-program-adapter.ts";
 import {
   createAttestationService,
   createFrameworkFailureRuntime,
@@ -63,13 +66,19 @@ import {
   createReleaseFamilyRuntimeComposition,
   createReleaseStrategyRuntimeComposition,
 } from "../../../../generated/runtime-composition/index.ts";
+import { projectRuntimeAuthorityDescriptorV1 } from "../../../../packages/runtime-authority/src/index.ts";
 import {
+  issueGeneratedFamilyLifecycleRuntimePort,
+  issueGeneratedFamilySearchRuntimePort,
   readGeneratedFamilyRuntimeFactoryMetadata,
   readGeneratedFamilySourcePlanRuntimes,
+  type GeneratedFamilyLifecycleRuntimePortV1,
+  type GeneratedFamilySearchRuntimePortV1,
 } from "../../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
 import {
   issueRuntimeReleaseFamilyRuntimeAuthorityCapability,
 } from "./family-runtime-owner.ts";
+import { readActiveSignedRuntimeAuthorityDescriptorV1 } from "./runtime-authority-descriptor-owner.ts";
 import type { RuntimeReleaseAttestationProofPortV1 } from "./attestation-proof-owner.ts";
 import { issueRuntimeReleaseAttestationComposition } from "./attestation-composition-owner.ts";
 import { issueRuntimeReleaseAttestationProofPort } from "./attestation-proof-owner.ts";
@@ -332,6 +341,8 @@ export interface RuntimeReleaseCompositionServicesV1<Fact> {
 export interface RuntimeReleaseFamilyRuntimeServiceV1 {
   /** The only production Family composition entry; it is release-guarded and memoized by generated code. */
   readonly openComposition: () => FamilyRuntimeCompositionV1;
+  /** Opaque search entry bound to the same generated factory/capability. */
+  readonly openSearchRuntime: () => GeneratedFamilySearchRuntimePortV1;
 }
 
 interface RuntimeReleasePrivatePortsV1 {
@@ -340,6 +351,9 @@ interface RuntimeReleasePrivatePortsV1 {
   readonly schedulerIssuer: QualifiedExecutorAuthorityIssuer;
   readonly scheduler: WorkScheduler;
   readonly familyExecution: FamilyFrozenProgramExecutionPort<unknown>;
+  /** Release-owner-issued lifecycle capability consumed only by Attestation. */
+  readonly familyLifecycle: GeneratedFamilyLifecycleRuntimePortV1;
+  readonly familySearch: GeneratedFamilySearchRuntimePortV1;
   readonly readyBinding: RuntimeReleaseReadyBindingPortV1;
   readonly familyRuntime: RuntimeReleaseFamilyRuntimeServiceV1;
   /** Private generated source-plan runtimes; only the release-owned discovery port consumes them. */
@@ -391,6 +405,15 @@ function composeRuntimeReleasePrivatePorts<Fact>(input: {
     familyExecutionInternal,
     createReleaseFamilyRuntimeComposition,
   );
+  const familyLifecycle = issueGeneratedFamilyLifecycleRuntimePort(
+    createReleaseFamilyRuntimeComposition,
+    familyRuntimeCapability,
+  );
+  const familySearch = issueGeneratedFamilySearchRuntimePort(
+    createReleaseFamilyRuntimeComposition,
+    familyRuntimeCapability,
+    familyLifecycle,
+  );
   const sourcePlans = readGeneratedFamilySourcePlanRuntimes(
     createReleaseFamilyRuntimeComposition,
     familyRuntimeCapability,
@@ -406,6 +429,10 @@ function composeRuntimeReleasePrivatePorts<Fact>(input: {
       assertRuntimeReleasePrivatePortsCurrent(ports);
       return createReleaseFamilyRuntimeComposition(familyRuntimeCapability);
     },
+    openSearchRuntime(): GeneratedFamilySearchRuntimePortV1 {
+      assertRuntimeReleasePrivatePortsCurrent(ports);
+      return familySearch;
+    },
   });
   ports = Object.freeze({
     attestationComposition: issueRuntimeReleaseAttestationComposition(input.authority, proofCapability),
@@ -417,6 +444,8 @@ function composeRuntimeReleasePrivatePorts<Fact>(input: {
     schedulerIssuer,
     scheduler,
     familyExecution: familyExecutionInternal as FamilyFrozenProgramExecutionPort<unknown>,
+    familyLifecycle,
+    familySearch,
     readyBinding: input.authority.readyGeneration,
     familyRuntime,
     sourcePlans,
@@ -639,9 +668,10 @@ export function buildRuntimeReleaseComposition<Fact>(
   // composition joined above.  It must never arrive through the caller's
   // framework callback, even if a structural object happens to contain a
   // property named `programs`.
-  const attestationPrograms = createAttestationProgramPortFromFamilyComposition({
-    composition: ports.familyRuntime.openComposition(),
-  });
+  const attestationPrograms = assertIssuedAttestationProgramPort(
+    createAttestationProgramPortFromFamilyComposition({ lifecycle: ports.familyLifecycle }),
+    projectRuntimeAuthorityDescriptorV1(readActiveSignedRuntimeAuthorityDescriptorV1(authority)),
+  );
   const attestationInternal = createAttestationService({
     frameworkRuntime,
     rejectionRuntime: createRejectionFactRuntime(rejectionIssuer.issue(FAIL_CLOSED_REJECTION_EXECUTOR)),
@@ -804,6 +834,7 @@ export function buildRuntimeReleaseComposition<Fact>(
         attestation: persistedAttestation,
         ready,
         familyRuntime: ports.familyRuntime.openComposition(),
+        familySearchRuntime: ports.familyRuntime.openSearchRuntime(),
         processEpoch: input.startup.processEpoch,
         releaseBindingId: startupRelease.bindingId,
         candidateReleaseCommit: startupRelease.candidateReleaseCommit,

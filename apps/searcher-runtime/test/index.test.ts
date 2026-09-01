@@ -28,6 +28,7 @@ test("Producer rejects a structural or cloned runtime-release Strategy service b
   const startup = issueStartupRuntime({
     ready: serving.ready,
     familyRuntimeComposition: {} as never,
+    familySearchRuntime: Object.freeze({}) as never,
     generationId: "fake",
     graphRoot: fakeReleaseHash,
     releaseBindingId: fakeBindingHash,

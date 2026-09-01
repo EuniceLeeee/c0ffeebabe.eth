@@ -19,6 +19,10 @@ import {
 } from "../../../../packages/coarse-economics/src/index.ts";
 import { familyCoarseRouteOwnerRefV1 } from "../../../../packages/family-composition/src/index.ts";
 import type { RuntimeReleaseStrategyEvidenceExpectationV1 } from "../../../../packages/runtime-release-authority/src/internal/strategy-runtime-owner.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../../packages/runtime-authority/src/index.ts";
 
 const PLANNING_PROBLEM_KEYS = Object.freeze([
   "kind", "objectiveRef", "entryAssetRef", "returnAssetRef", "minLegs", "maxLegs", "candidateLimit", "edgeReuse",
@@ -278,6 +282,8 @@ export function validateProductionResolvedRouteBindingV1(input: Readonly<{
   readonly graphRoot: Hash;
   readonly source: CanonicalHead;
   readonly objectiveRef: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly expectedRuntimeAuthority: RuntimeAuthorityProjectionV1;
   readonly releaseProvenanceHash: Hash;
   readonly actionOwners: readonly unknown[];
   readonly path: string;
@@ -324,6 +330,13 @@ export function validateProductionResolvedRouteBindingV1(input: Readonly<{
   });
   if (routeHash !== expectedRouteHash) throw new TypeError(`${input.path}.routeHash mismatch`);
   const ownerRefs = Object.freeze([...new Set(routeLegs.map(leg => leg.ownerRef))].sort());
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
+  const expectedRuntimeAuthority = decodeRuntimeAuthorityProjectionV1(input.expectedRuntimeAuthority);
+  if (runtimeAuthority.authorityClass !== "signed-release"
+    || expectedRuntimeAuthority.authorityClass !== "signed-release"
+    || !sameCanonical(runtimeAuthority, expectedRuntimeAuthority)) {
+    throw new TypeError(`${input.path}.runtimeAuthority does not match the expected signed-release authority`);
+  }
   return decodeCoarseRouteBindingV1(Object.freeze({
     candidateId: input.candidate.candidateId,
     orderKey: input.candidate.orderKey,
@@ -341,6 +354,7 @@ export function validateProductionResolvedRouteBindingV1(input: Readonly<{
       stateRoot: input.source.stateRoot,
     }),
     objectiveRef: input.objectiveRef,
+    runtimeAuthority,
     releaseProvenanceHash: input.releaseProvenanceHash,
     legs: input.candidate.legs,
   }));

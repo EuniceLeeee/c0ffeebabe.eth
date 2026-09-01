@@ -4,6 +4,10 @@ import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import { createCanonicalSource, type CanonicalJournalStorePort, type ProducerSessionV1 } from "../../canonical-source/src/index.ts";
 import type { CanonicalCutoffV1 } from "../../discovery/src/index.ts";
 import { encodeExecutorExecuteCalldata, encodePackedCallProgram } from "../../execution-program/src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 import { createTestRevmAuthorityIssuer } from "../../../runtime/revm-workers/test/qualified-authority.ts";
 import { sealEmptyNominationClosureFixture } from "../../../specs/nomination-authority/test/fixture.ts";
 import {
@@ -37,6 +41,14 @@ const callerAddress = "0x1111111111111111111111111111111111111111";
 const tokenAddress = "0x3333333333333333333333333333333333333333";
 const storageSlot = `0x${"00".repeat(31)}01`;
 const executorCode = "0x600054600101600055600054602060005260206000f3";
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+  createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: h("runtime-binding"),
+    releaseProvenanceHash: h("release"),
+    implementationCommit: "a".repeat(40),
+  }),
+);
 
 function program(): ExecutionProgramArtifactV1 {
   const programBytes = encodeExecutorExecuteCalldata(encodePackedCallProgram([{ target: tokenAddress, value: "0", calldata: "0x" }]));
@@ -86,6 +98,7 @@ async function sessionFixture(): Promise<{ readonly session: ProducerSessionV1; 
       definitionCatalogRoot: h("definition"),
       instanceCatalogRoot: h("instance"),
       graphRoot: h("graph"),
+      runtimeAuthority,
       releaseProvenanceHash: h("release"),
       candidatePartitionProofStorageHash: h("partition"),
       nominationClosureRoot: nomination.closure.root,

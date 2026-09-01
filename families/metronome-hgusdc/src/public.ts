@@ -32,3 +32,7 @@ export {
   requireMetronomeHgUsdcStageDefinition,
 } from "./runtime.ts";
 export const PUBLIC_ENTRY = Object.freeze({ familyId: "metronome-hgusdc", runtime: "family-owned" });
+export {
+  METRONOME_HGUSDC_SOURCE_NOMINATION_PROGRAM,
+  METRONOME_HGUSDC_SOURCE_PLAN_RUNTIME,
+} from "./source-plan.ts";

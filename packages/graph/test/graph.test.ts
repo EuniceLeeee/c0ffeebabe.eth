@@ -4,6 +4,10 @@ import { decodeCanonicalBytes, encodeCanonicalBytes, hashDomain, type Hash } fro
 import { erc20AssetPortBindingV1, type AssetPortBindingV1 } from "../../asset-ref/src/index.ts";
 import { sealInstanceCatalog, sealInstancePublication } from "../../catalog/src/index.ts";
 import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
+import {
   buildPersistedGraph,
   decodePersistedGraphV1,
   encodePersistedGraphV1,
@@ -14,6 +18,14 @@ import {
 const h = (value: string): Hash => hashDomain("test/graph", value);
 const cutoff = { chainId: "1", number: "10", hash: h("block"), stateRoot: h("state") };
 const releaseProvenanceHash = h("release-provenance");
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+  createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: h("runtime-binding"),
+    releaseProvenanceHash,
+    implementationCommit: "a".repeat(40),
+  }),
+);
 const candidatePartitionProofStorageHash = h("candidate-proof-storage");
 const nominationClosureRoot = h("nomination-closure");
 const nominationClosureStorageHash = h("nomination-closure-storage");
@@ -98,6 +110,7 @@ test("route handle authority is lease-owned and cannot alter persisted graph roo
     definitionCatalogRoot: h("definitions"),
     instanceCatalogRoot: catalog.instanceCatalogRoot,
     graphRoot: graph.graphRoot,
+    runtimeAuthority,
     releaseProvenanceHash,
     candidatePartitionProofStorageHash,
     nominationClosureRoot,
@@ -139,11 +152,29 @@ test("route handle authority is lease-owned and cannot alter persisted graph roo
     "definitionCatalogRoot",
     "instanceCatalogRoot",
     "graphRoot",
+    "runtimeAuthority",
     "releaseProvenanceHash",
     "candidatePartitionProofStorageHash",
     "nominationClosureRoot",
     "nominationClosureStorageHash",
   ].sort());
+  await assert.rejects(() => GraphViewLeaseV1.open(
+    admission,
+    graph,
+    catalog,
+    { issueRouteHandle: () => ({ opaque: {} }) },
+    "epoch-invalid-authority",
+    canonicalGuard,
+    {
+      async assertServingBindingCurrent() {},
+      async consumeServingAdmission() {
+        return {
+          ...binding,
+          runtimeAuthority: { ...runtimeAuthority, releaseProvenanceHash },
+        };
+      },
+    },
+  ), /unknown field/);
   assert.equal(graph.graphRoot, buildPersistedGraph(catalog).graphRoot);
   assert.equal("issuedRouteHandle" in graph.edges[0]!, false);
   assert.equal("issuedRouteHandle" in first.edges[0]!, false);
@@ -190,6 +221,7 @@ test("a publication/root mismatch cannot open a GraphView", async () => {
     definitionCatalogRoot: h("definitions"),
     instanceCatalogRoot: h("wrong"),
     graphRoot: graph.graphRoot,
+    runtimeAuthority,
     releaseProvenanceHash,
     candidatePartitionProofStorageHash,
     nominationClosureRoot,
@@ -231,6 +263,7 @@ test("evidence-root mutation changes publication/Graph identity before any route
     definitionCatalogRoot: h("definitions"),
     instanceCatalogRoot: catalog.instanceCatalogRoot,
     graphRoot: graph.graphRoot,
+    runtimeAuthority,
     releaseProvenanceHash,
     candidatePartitionProofStorageHash,
     nominationClosureRoot,
@@ -261,6 +294,7 @@ test("a revoked cutoff cannot construct or continue a GraphView lease", async ()
     definitionCatalogRoot: h("definitions"),
     instanceCatalogRoot: catalog.instanceCatalogRoot,
     graphRoot: graph.graphRoot,
+    runtimeAuthority,
     releaseProvenanceHash,
     candidatePartitionProofStorageHash,
     nominationClosureRoot,

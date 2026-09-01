@@ -52,6 +52,10 @@ import type { ExecutionProgramSixStepEvidenceV1, FinalSimulationSixStepEvidenceV
 import { createRouteCoarseAttemptEvidenceOwnerV1 } from "../src/internal/coarse-attempt-evidence-owner.ts";
 import { createProductionSixStepTailFixture } from "./production-six-step-fixture.ts";
 import { readProductionSixStepArtifactMaterialV1 } from "../../evidence-emitter/src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/route-pipeline", value);
 const asset = (value: string) => erc20AssetPortBindingV1("1", `0x${h(`asset-${value}`).slice(-40)}`);
@@ -59,6 +63,12 @@ const noRejectionAuthority = Object.freeze({ read: () => { throw new TypeError("
 
 const source: SourceViewV1 = Object.freeze({ chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") });
 const releaseMembershipRoot = h("release-membership");
+const runtimeAuthorityDescriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
+  authorityClass: "signed-release",
+  runtimeBindingId: hashDomain("test/search-pipeline/runtime-binding/v1", 1),
+  releaseProvenanceHash: h("release"),
+  implementationCommit: "a".repeat(40),
+});
 const nomination = sealEmptyNominationClosureFixture({
   cutoff: Object.freeze({ chainId: "1", number: "99", hash: h("cutoff"), stateRoot: h("cutoff-state") }),
   familyId: "route-pipeline-fixture-family",
@@ -82,6 +92,7 @@ const binding: GraphLeaseBindingV1 = Object.freeze({
   definitionCatalogRoot: h("definitions"),
   instanceCatalogRoot: h("instances"),
   graphRoot: h("graph"),
+  runtimeAuthority: projectRuntimeAuthorityDescriptorV1(runtimeAuthorityDescriptor),
   releaseProvenanceHash: h("release"),
   candidatePartitionProofStorageHash: h("partition-proof"),
   nominationClosureRoot: nomination.closure.root,
@@ -198,6 +209,7 @@ const planningProblem = issueRouteCyclePlanningProblem({
   correlationId: h("correlation"),
   objectiveRef,
   entryAssetRef: objectivePayload.numeraireAssetRef,
+  runtimeAuthority: runtimeAuthorityDescriptor,
 });
 const candidates = enumerateClosedLoopPlanningProblem({ problem: planningProblem }).candidates;
 assert.equal(candidates.length, 4);
@@ -244,6 +256,8 @@ function ownerIssuedProjections(
   options: Readonly<{ readonly limit?: number; readonly unavailableIndex?: number }> = {},
 ): readonly QualifiedCoarseProjectionV1[] {
   const route = readIssuedCoarseRouteBindingV1(capability);
+  if (route.releaseProvenanceHash === null) throw new TypeError("qualified coarse fixture requires signed release provenance");
+  const releaseProvenanceHash = route.releaseProvenanceHash;
   return route.legs.slice(0, options.limit ?? route.legs.length).map((leg, index) => {
     const ownerRef = h(`${route.routeHash}:coarse-owner:${index}`);
     const finalAmount = prune ? "100" : "110";
@@ -276,7 +290,7 @@ function ownerIssuedProjections(
     const projectionCapability = Object.freeze(Object.create(null)) as CoarseProjectionCapabilityV1;
     const proofCapability = Object.freeze(Object.create(null));
     const owner = issueQualifiedCoarseProjectionOwnerCapabilityV1({
-      releaseProvenanceHash: route.releaseProvenanceHash,
+      releaseProvenanceHash,
       releaseMembershipRoot,
       descriptor: Object.freeze({
         ownerRef,
@@ -857,6 +871,7 @@ test("only a genuinely empty non-truncated planner denominator is complete-no-ca
     correlationId: h("correlation"),
     objectiveRef,
     entryAssetRef: objectivePayload.numeraireAssetRef,
+    runtimeAuthority: runtimeAuthorityDescriptor,
   });
   const emptyLease = { ...lease(), edges: Object.freeze([]) } as unknown as RoutePipelineInputV1["lease"];
   const result = await runSearchPipeline(ports(), {
@@ -883,6 +898,7 @@ test("an empty denominator cannot become complete-no-candidate after the source 
     correlationId: h("correlation"),
     objectiveRef,
     entryAssetRef: objectivePayload.numeraireAssetRef,
+    runtimeAuthority: runtimeAuthorityDescriptor,
   });
   let fenceCount = 0;
   const currentSource = Object.freeze({

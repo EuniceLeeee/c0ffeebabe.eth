@@ -21,3 +21,7 @@ export {
   METRONOME_SYNTH_STAGE_DEFINITIONS,
   requireMetronomeSynthStageDefinition,
 } from "./runtime.ts";
+export {
+  METRONOME_SYNTH_SOURCE_NOMINATION_PROGRAM,
+  METRONOME_SYNTH_SOURCE_PLAN_RUNTIME,
+} from "./source-plan.ts";

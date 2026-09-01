@@ -1,9 +1,61 @@
 {
   "schemaVersion": 1,
   "kind": "aloha.catalog-impact-snapshot",
-  "definitionCatalogRoot": "0xc751ffd9ce2b06b21391e2b304605bca7b99a9012781754c3f90344c7bfe2248",
-  "capabilityCatalogRoot": "0x749dbeb334bae592427d1968b9aae1bf4f006305d54e09c7ab05802e85d4c251",
+  "definitionCatalogRoot": "0xee829db9ac08d68a1880e500fd6bd4756d83eacd1199642edad4e126040f696e",
+  "capabilityCatalogRoot": "0x3aecefd7a892ba09caf4e7f35b9aa2ce544c262d9b2ac244e2a8f08040a450d4",
   "capabilities": [
+    {
+      "id": "family.angstrom-v4.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x944ab136cdcc9a1387032f36da595618c12f8b8e89196fb552aa5059361d39eb",
+      "interpreterHash": "0xf63f1c5b5bc75b1fb7b7a2451cf483a5b9aad948df5cfae55c0e73babbbe0d58",
+      "dependencyIds": [
+        "family.angstrom-v4.state"
+      ],
+      "implementationClosureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf"
+    },
+    {
+      "id": "family.angstrom-v4.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x169b1909e08e2eb3b2980a02634655f18b66b3a09356f740ba2474e437ecdf08",
+      "interpreterHash": "0x3f76772724985bf5d8979b8fdd4cd44cce48d50a908595677ea427134ba7dae6",
+      "dependencyIds": [
+        "family.angstrom-v4.state"
+      ],
+      "implementationClosureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf"
+    },
+    {
+      "id": "family.angstrom-v4.state",
+      "version": "1.0.0",
+      "schemaHash": "0x9ff7fa0a934cfece7dca6bf4f94e6658096b413db18632cc19c9faa4cb6fb7fd",
+      "interpreterHash": "0xbd91c2e3e33eda0073363051b86a83d968c05a0d1593677bc3cf9c59cf312835",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x3caac1d48732cd8dce7a29cd4faae2f02f9448c301d3dea51b44098aafceadaf"
+    },
+    {
+      "id": "family.astra-multitoken.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x39febe9292b3426a2110a84980cc23fbc7fabe136378e0e1594e8e1dfe8772b2",
+      "interpreterHash": "0x6c3b6b6bfe9228c2a856bc7011636d8f4ab4888b4270a49c20b270e7a9e720a0",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f"
+    },
+    {
+      "id": "family.astra-multitoken.exact",
+      "version": "1.0.0",
+      "schemaHash": "0xd141b189e983918f54f4ac7051a90820fb5beea51b10f30a909fb94d996fe470",
+      "interpreterHash": "0x9205b22bd4aaca63cbb99cab8b1c180234cef063fbd2e895e29f0c2d7cee165f",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f"
+    },
+    {
+      "id": "family.astra-multitoken.state",
+      "version": "1.0.0",
+      "schemaHash": "0xfc2ecd72a852381ec8fa9905f02820f82ccea605b557af9c3bec5d53724c1783",
+      "interpreterHash": "0x92098c5b62190fb00a0ee843fbcd606460b164e3bc3c05d28d46f495f8adf390",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0xb4228e86315ba0b406079a31701b30e4247924970e27b0913f839828566f4b5f"
+    },
     {
       "id": "family.curve-underlying.coarse",
       "version": "1.0.0",
@@ -61,6 +113,66 @@
       "implementationClosureRoot": "0x9f7772fee8de86b9254779f5aa7a9b119be54dd315f082514f2a7e42b50016d0"
     },
     {
+      "id": "family.eigenpie.exact",
+      "version": "1.0.0",
+      "schemaHash": "0xe5941cce8e0ad15648bce59a107d64c2d18c4510be56ce4cf01eeb17e5994785",
+      "interpreterHash": "0x8ba66ba2dc200b1c711efc4f5f126b566435ccdce6d565d45d1de34d63a93250",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x6c216f59471e18d61d364b51baa105bc6360ae2f0cf53ff6f5507c93f69bb79b"
+    },
+    {
+      "id": "family.erc4626-silo-redeem.exact",
+      "version": "1.0.0",
+      "schemaHash": "0xb8b337d3cd29bda7f2f09b8cf99240e113be4f2daab55694256e376fb7b8ed0c",
+      "interpreterHash": "0x8b674e71a2b7fe54299dedcabd4005eb3df6865399b57096589fec77cebce819",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0xda47cbee006fadb9f9781f2d8e326543d0b7a811f3bc11fc193a0ee760eb882d"
+    },
+    {
+      "id": "family.erc4626.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x452950481831a777063c66cb7a08aeb5e8688ac6dbc15d1b0493662c9240bcf1",
+      "interpreterHash": "0x75271132b0500409d8cc55e0bd3275ad71ebf86cd796425063b3f5ca10f438c7",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0xd20557f00e62c1ae0ce70de1a2e7f7436c07ee817575a035f45095ab7fb459f5"
+    },
+    {
+      "id": "family.ethertoken-native-redeem.exact",
+      "version": "1.0.0",
+      "schemaHash": "0xc85f8aec5f56d41c42704e7f2a732c29e86a0e7f0d4b2cf82579fdc0481ebcea",
+      "interpreterHash": "0x46d6a76cb49ce8a241ac72cf3937b45f5d7ef41f9e944fc9de6da7afb2a74ac6",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0xb02fcdf68b528984354046bf252165b531cba0e37fc7b4d041ba74b9dacb5f3b"
+    },
+    {
+      "id": "family.fluid-credit.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0xcd9317fe0e7f6acf12dc4ce038dfb9d0a37a966b6ae71472aaacfe2e9e9aaad9",
+      "interpreterHash": "0xb5bce955db731ffd1578de0998785a644afc6a7114d5fa1d1957ea311a6672e9",
+      "dependencyIds": [
+        "family.fluid-credit.state"
+      ],
+      "implementationClosureRoot": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47"
+    },
+    {
+      "id": "family.fluid-credit.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x9d2077a96ab2d1f0930f88ec353135ffea4ebdabc3918b14a80fc151751514df",
+      "interpreterHash": "0x2fe3fa576ab975f069e85480ffbb216827db62178bf590d9513802c7c27a5917",
+      "dependencyIds": [
+        "family.fluid-credit.state"
+      ],
+      "implementationClosureRoot": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47"
+    },
+    {
+      "id": "family.fluid-credit.state",
+      "version": "1.0.0",
+      "schemaHash": "0x7a63b336de7c0227c01c573931c034ed9e6d68b8632c790b05a1d7f7e1a69914",
+      "interpreterHash": "0x5cc1dc292a0a72e48982b42ed564536547697791ec7d8ff63ac1dd4d0a3d5637",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0xbe2362fd1543560261c7eacbc1c99736fce25b414dd6dedccc92c4e34a68ed47"
+    },
+    {
       "id": "family.fluid-dex.coarse",
       "version": "1.0.0",
       "schemaHash": "0xbc6fde8b67f7f6c0eb70eae88f0d5698c29562d5cabb99df12fcf7cfef0ea059",
@@ -89,6 +201,122 @@
       "implementationClosureRoot": "0x94778685b6423f72460f2b73bfc4ad513a665d8fa3a0568fe0a790b95ccd8088"
     },
     {
+      "id": "family.goldx.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x196c20c6e16eb01b2112bdec1b5b55671087ae66e726aad008ec46f8f89e7875",
+      "interpreterHash": "0x29574948f434e9c8fcfd7449ebbe3fd72c9850b84c12280c25cf21b86e3017b2",
+      "dependencyIds": [
+        "family.goldx.state"
+      ],
+      "implementationClosureRoot": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f"
+    },
+    {
+      "id": "family.goldx.exact",
+      "version": "1.0.0",
+      "schemaHash": "0xd34d97201b495840fe01574de093733b40ae425abd08c684ec340946c79a8381",
+      "interpreterHash": "0x76715866ec6c9922594fd6d8b35c72878cb6b9dbdd383818a4309abf9df8119a",
+      "dependencyIds": [
+        "family.goldx.state"
+      ],
+      "implementationClosureRoot": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f"
+    },
+    {
+      "id": "family.goldx.state",
+      "version": "1.0.0",
+      "schemaHash": "0x6e8ec33a22efe3030682097eaa313c910ee2f4e60ff6efcc599d4316d81f1181",
+      "interpreterHash": "0xd7cb0aa0a8a272dee63d1773ef0196c6cb745bbfae5ec9b1f6cbd40d9303fb36",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0xdd7ef7e9ae2c519a98526e42075f38e6c73384baf4b679b313fc68182f009f6f"
+    },
+    {
+      "id": "family.metronome-hgusdc.state",
+      "version": "1.0.0",
+      "schemaHash": "0x080f21ecc68ea250033e86b9483b2e365c7b5cf9ee82bc86cb782956e3c1b9a6",
+      "interpreterHash": "0x57b8f16c288aab7b17df150a1d20d72be767a08cb8321440e51696de012f2376",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x401071d57caaca4413b2017e6c2d1fc59c4b3f1ba9b97e40f49e59a1817777a1"
+    },
+    {
+      "id": "family.metronome-synth.state",
+      "version": "1.0.0",
+      "schemaHash": "0x097d40feb7f9a5c685f2c091469299240cb4b6d0603f18b2282d040470a24120",
+      "interpreterHash": "0x3d0e2a81503b3acc70f3b9ae3e983f5458fb874b17b3a4c981f62644f0543399",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x73d99244acc9f4b584ce799d41506690b323ba8c4b0eb55a84b4d6e8b0c5a8f7"
+    },
+    {
+      "id": "family.psm.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0xb174d9311a345246361c85a4a1f625cfede58c7ecc144c495b304be46bb5ac03",
+      "interpreterHash": "0x59df706a5b62f731f5bc921398fc01d659912781fee3edd3fcae2cff90a48a6c",
+      "dependencyIds": [
+        "family.psm.state"
+      ],
+      "implementationClosureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea"
+    },
+    {
+      "id": "family.psm.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x6bcb370b21b147a01f56454c003005c66307ecc7df1f80b09ccd0c44d8231ad0",
+      "interpreterHash": "0xcbc1c22464923abc94f7107b37e66977c4495cf14417adf539c81a39c3117b73",
+      "dependencyIds": [
+        "family.psm.state"
+      ],
+      "implementationClosureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea"
+    },
+    {
+      "id": "family.psm.state",
+      "version": "1.0.0",
+      "schemaHash": "0x3309e3de9d15afe995e40b90906bd8baff4468d1ecc5147ac819049f5f5eda09",
+      "interpreterHash": "0x56e00bf5bed472e35011f26345c77bcdfe654820c040a099eb2577c3cad14a44",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x5556d6f4b86c221dd25157330051683bb4c5567b4acf559fd6eae43ff6bce3ea"
+    },
+    {
+      "id": "family.rocksolid.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x04918030e68ceec17f1ceed7eb556919df6baf025da27081a1cc2a0befea2431",
+      "interpreterHash": "0x53462571fd9ea28ae59022a09990f3046bb4bb7f6f9cadb999d0d14da1c6efd1",
+      "dependencyIds": [
+        "family.rocksolid.state"
+      ],
+      "implementationClosureRoot": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158"
+    },
+    {
+      "id": "family.rocksolid.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x639c838afaf1adc11ca79ca5529a52c3686d8d09cb106e2ebf555ff744c8f0cf",
+      "interpreterHash": "0x2c64a8a7d7c45043989020cf82aa33f01e21e3a739ccc04d7385e45853805947",
+      "dependencyIds": [
+        "family.rocksolid.state"
+      ],
+      "implementationClosureRoot": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158"
+    },
+    {
+      "id": "family.rocksolid.state",
+      "version": "1.0.0",
+      "schemaHash": "0x58031034d141a96ac38698145824771953882f04478da992672a8390aa59c2aa",
+      "interpreterHash": "0x488aa481a95a6f7e6de2b47f1dca654fdd145200703fa14f03ab3faaaabb9bc0",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x396857013cedae2093fb74719bd6a397409abd0afb46470bd5ee19575c8ae158"
+    },
+    {
+      "id": "family.self-burn-native.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x38179666a523e9e09941316d0b3ceaebd6cdaeb61d2c2e748bc17535a73fb690",
+      "interpreterHash": "0x31e49f7ddefb08e51eac7c24be986c75a4953b934cba58beab3b00625bf7de62",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052"
+    },
+    {
+      "id": "family.self-burn-native.trigger",
+      "version": "1.0.0",
+      "schemaHash": "0xd971ca622230078a46ab2a9709aa63e3112be6f08475b79da21fa840a03a8b01",
+      "interpreterHash": "0xacb90f22361b273f5341ecc7c0490e0d73070382e855adf0b1f3d265c11451fe",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x9f8609672e089d3b7c0cecb0d78ce31c512e4e93ac03c537e78efbe46548d052"
+    },
+    {
       "id": "family.univ2-standard.coarse",
       "version": "1.0.0",
       "schemaHash": "0xf2aae38e672bcb4399bf442d3fbe73220e13430bf8c003fd5ed69efbe8999481",
@@ -115,9 +343,127 @@
       "interpreterHash": "0xa4cb10d4facee0abe85b65b5ea92912f45c599d0f41ca3a3254ff4f8003d6ab0",
       "dependencyIds": [],
       "implementationClosureRoot": "0x8de13f6114c66ae41a7024e5c9c8cead6c58f620b99f950689539661a5569cb5"
+    },
+    {
+      "id": "family.univ3-standard.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x9a3e44d19e8a24413cb9fac945a07d48911700f290e6ef4761c2d2cd82a44eb7",
+      "interpreterHash": "0x82e8f0b2118d6a34bb2caa42f1d7f525b5d1697f977a3fcc85ef7192b3ec6c25",
+      "dependencyIds": [
+        "family.univ3-standard.state"
+      ],
+      "implementationClosureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d"
+    },
+    {
+      "id": "family.univ3-standard.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x2099589db353b2af7d799dfadbf25396d2f74901f8fcb062dd0097fe4a99206b",
+      "interpreterHash": "0x2a3e2d6155c0476d7fde10b0b60da3a830942dd1bd5adcadfa575158c2c00bbe",
+      "dependencyIds": [
+        "family.univ3-standard.state"
+      ],
+      "implementationClosureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d"
+    },
+    {
+      "id": "family.univ3-standard.state",
+      "version": "1.0.0",
+      "schemaHash": "0x269b2e2d536bca46fcde799c408e704a94d64b407952b8bb6b36780031dacda0",
+      "interpreterHash": "0xf3b5e6c3a86633d08f020b6bdc436efd369ef28f2ff1ea176dbec321c2d755d0",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x6a44e717c1143733029fa7e3bb7c062c937beb02b7206966e86287079a4c7a3d"
+    },
+    {
+      "id": "family.univ4.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x2d244619372a34b051ccdfc6bfe629166da816b992ffa01524436b318f3ea410",
+      "interpreterHash": "0x248e0bf17554a8d1675405b74e6f1d219ffbf2b54837059662a8e65bc72671bd",
+      "dependencyIds": [
+        "family.univ4.state"
+      ],
+      "implementationClosureRoot": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd"
+    },
+    {
+      "id": "family.univ4.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x7c31eed9d2a03b97199c8ca9c5046bfe0681cca5efaa7343d173893298df8c85",
+      "interpreterHash": "0x55508f9eecce1129f208a216045d2f4ac6ab189988bd32cb6a95322c64cc5e6d",
+      "dependencyIds": [
+        "family.univ4.state"
+      ],
+      "implementationClosureRoot": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd"
+    },
+    {
+      "id": "family.univ4.state",
+      "version": "1.0.0",
+      "schemaHash": "0x9122c96b6f91ac61f48f03c43b73fc025b25e0b246e50713590878bf35baf5f7",
+      "interpreterHash": "0x344de912c2481c7fde23bf6ecca5d74478db113aeab90a7bb4647bf4a4b06876",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x93b5e87888317fe85d4b91bcb5ec0eb068afc34fe49561c831f5612c90e578dd"
+    },
+    {
+      "id": "family.wsteth.coarse",
+      "version": "1.0.0",
+      "schemaHash": "0x361b572acc7eb1a52c861ded1d78d915bc427db7231f376e0a82605d8f99ee1c",
+      "interpreterHash": "0xbcdb122592c269091dcec7c720ab32d9101a4298a25ff47d4810fde102223990",
+      "dependencyIds": [
+        "family.wsteth.state"
+      ],
+      "implementationClosureRoot": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537"
+    },
+    {
+      "id": "family.wsteth.exact",
+      "version": "1.0.0",
+      "schemaHash": "0x2b8d9c0c9836aa8ad97c0d33505dd8acafa8e5918af09ca1e5e598cc03fb4b47",
+      "interpreterHash": "0xda674cd4b92ca5c8e5d426e09fabf5c793e261ec0c6f4da684a3342c90ed596b",
+      "dependencyIds": [
+        "family.wsteth.state"
+      ],
+      "implementationClosureRoot": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537"
+    },
+    {
+      "id": "family.wsteth.state",
+      "version": "1.0.0",
+      "schemaHash": "0xe8ad0c273387d209138203c6b3a9594b3c9251f07c50054cfb78a9a33825b20e",
+      "interpreterHash": "0xc30efd7bc2183c818dd8ad14171ce6359c7db40dc631dd8ed5ba8f7ee810f76b",
+      "dependencyIds": [],
+      "implementationClosureRoot": "0x332b7411f2fc18b95c11e371cc7dc377c4122f536704bf709c8aeb011a693537"
     }
   ],
   "artifacts": [
+    {
+      "artifactId": "family:angstrom-v4",
+      "artifactKind": "family",
+      "familyId": "angstrom-v4",
+      "definitionCatalogLeafDigest": "0xe002ddff1283b09d62d9b8711cf41f8bcacf887525c0b301d84155ef3d3fff6e",
+      "requestedDependencyClosure": [
+        "family.angstrom-v4.coarse",
+        "family.angstrom-v4.exact",
+        "family.angstrom-v4.state"
+      ],
+      "requestedDependencyRoot": "0x5a4e80f0911e186b8fb96cef6724309480d1d33d0c5b7963ac3a1ea739fbcbd2",
+      "memoRoot": "0x379f47a77217b2c70cb39d196b47bce7829e4f273c81c80dec38772e7e3e9159",
+      "nominationProposalLeafDigests": [
+        "0x7ad43aad7b54a6a7cac219aa1c266144d08c187aa5869a30a54872c745875f97",
+        "0xf43f98941eb32a0547fd79c8f2216abdaed5742a96fb192e5f7622cbfe94cebf"
+      ]
+    },
+    {
+      "artifactId": "family:astra-multitoken",
+      "artifactKind": "family",
+      "familyId": "astra-multitoken",
+      "definitionCatalogLeafDigest": "0x7a46a29434a75ae34ecebe2f3cab91d9dc912ac95f64735378df4ecd567409f2",
+      "requestedDependencyClosure": [
+        "family.astra-multitoken.coarse",
+        "family.astra-multitoken.exact",
+        "family.astra-multitoken.state"
+      ],
+      "requestedDependencyRoot": "0xb25d69842299679ce69c99f43bfdc16ad84482cc3528a678ebc9a7cfa958cfd5",
+      "memoRoot": "0xe578fe7e87378d3ae17429ece69d2d0bdda517b08a0095cfd47de3af322edba2",
+      "nominationProposalLeafDigests": [
+        "0x1f153d368bd75d67d5de0dcabcc383c209ac3ee69cb7f83e9435cd43f7d5769b",
+        "0x310406d203de793dc069a5e2b9e0f6156603e04305a01a07609e74ca1060a722"
+      ]
+    },
     {
       "artifactId": "family:curve-underlying",
       "artifactKind": "family",
@@ -153,6 +499,83 @@
       ]
     },
     {
+      "artifactId": "family:eigenpie",
+      "artifactKind": "family",
+      "familyId": "eigenpie",
+      "definitionCatalogLeafDigest": "0x210c1f14cbf5dd5e98c6fa28f57da934e75663d3214edd651aa685da0602c410",
+      "requestedDependencyClosure": [
+        "family.eigenpie.exact"
+      ],
+      "requestedDependencyRoot": "0x14f9c7902e0a335990794ca0243f0a9a69e1e36607d3e2da0273ac3b24ee12b5",
+      "memoRoot": "0xdef252e0350c9f3d7a29fb1b8f203f32dbdf1c4c5207ed559ce0f29d22e6f786",
+      "nominationProposalLeafDigests": [
+        "0x3589ba0a7c43f1e53ad2b4528582a90f4560b360414ed6a3eab5011de94328bf",
+        "0xc27d0447389ea6576920d6eeae6ce7cfc8ee90b14827d06d96d017dcc41fac89"
+      ]
+    },
+    {
+      "artifactId": "family:erc4626",
+      "artifactKind": "family",
+      "familyId": "erc4626",
+      "definitionCatalogLeafDigest": "0x943873903edc2181b79bbaa461628e6c16571fe971a8b389b650cb2fb938f009",
+      "requestedDependencyClosure": [
+        "family.erc4626.coarse"
+      ],
+      "requestedDependencyRoot": "0x587ed73fbcc7c0e38fd7a8479aecb41c63460ee122eabb9219fff3dee98e3683",
+      "memoRoot": "0xd5d4e1a5f4e853fb7ce0925619560e32a5c3dc8518975c433cd0d40c51fda70f",
+      "nominationProposalLeafDigests": [
+        "0x6c9d122d03cff65f543c6c704e45999cf763c697ccf8bcb16c8611782e84af5e",
+        "0xdac996651b27b514124171f4a2aa2390cd57c4486d108eb3ec5d209ba1f201bb"
+      ]
+    },
+    {
+      "artifactId": "family:erc4626-silo-redeem",
+      "artifactKind": "family",
+      "familyId": "erc4626-silo-redeem",
+      "definitionCatalogLeafDigest": "0xe96a1d40dbbd7aacc48ae1c1788b7587c3efbbfb7d660719ff79a20cdfa40cd0",
+      "requestedDependencyClosure": [
+        "family.erc4626-silo-redeem.exact"
+      ],
+      "requestedDependencyRoot": "0xfd868bf504695c2817387b2d6be5c9169b22be13764e68179dd32aef856d5d2d",
+      "memoRoot": "0xe7474ec7c47853e40973bbd22bff4baa6468105910846099196340b1fe31932f",
+      "nominationProposalLeafDigests": [
+        "0x3a00e60c783c0ac2bdd3593af727df55580fc82e5601a2638c813c59a0ade6fb",
+        "0x7354d0dd4a6203de9c7d6c3556fb52b5e369bde50b74ed0632c59f0bd92fe9b0"
+      ]
+    },
+    {
+      "artifactId": "family:ethertoken-native-redeem",
+      "artifactKind": "family",
+      "familyId": "ethertoken-native-redeem",
+      "definitionCatalogLeafDigest": "0x15cae8e141a4a320d72ba9a3536418dccd7daeaadf8387737763f0dfddbae445",
+      "requestedDependencyClosure": [
+        "family.ethertoken-native-redeem.exact"
+      ],
+      "requestedDependencyRoot": "0x4c544bf9a6c8cc46e8d3bdf284262c8eefccbecedc53f603c94494171de48709",
+      "memoRoot": "0x0000ed061b52eee18c706ef98a96a27bbebb17380a4ccdf553d92e01252da1fa",
+      "nominationProposalLeafDigests": [
+        "0x598ff011523ea9fe4f22d6dcc5aec873dfeeb2626cdd47c5582a3f0c3713a6e9",
+        "0x7b3ee17813796bb9c3a94faea3e747a1884b5f67ce3da91bd71ed4cbb46d5d16"
+      ]
+    },
+    {
+      "artifactId": "family:fluid-credit",
+      "artifactKind": "family",
+      "familyId": "fluid-credit",
+      "definitionCatalogLeafDigest": "0x70033bd18a57eb156994acecc5cfaba30687bf12d8ad5fd5ae8becd912d2d3c1",
+      "requestedDependencyClosure": [
+        "family.fluid-credit.coarse",
+        "family.fluid-credit.exact",
+        "family.fluid-credit.state"
+      ],
+      "requestedDependencyRoot": "0x98f4db7bdcd5917e7f4db87b01acf26ebf2e3f4c5eadd6c2aa7414ee2ba6cc51",
+      "memoRoot": "0x6c5322f8318971339f942d7590ea55e348c568c3d2651a35584de7bbcc020c4a",
+      "nominationProposalLeafDigests": [
+        "0x76c8d7ef7d298a78112dab653af0d056dfa0c8b43b0bf2613bf3445e180fa7a6",
+        "0xa0eac486303986dd4ecfe4fbd38784f099b2af3f695c030f2c19986cd637545b"
+      ]
+    },
+    {
       "artifactId": "family:fluid-dex",
       "artifactKind": "family",
       "familyId": "fluid-dex",
@@ -167,6 +590,97 @@
       "nominationProposalLeafDigests": [
         "0x7dc44a2190f10e206fc20f1d20dc4546e41019e3138b3e2c2e082369a28ec00f",
         "0x9da1e330baea18efe34675a66197805e94b4c37ba6f75e3214e094f5bb008c03"
+      ]
+    },
+    {
+      "artifactId": "family:goldx",
+      "artifactKind": "family",
+      "familyId": "goldx",
+      "definitionCatalogLeafDigest": "0xb5cfbb748449e725145a20383677d3fbcbcefed7b2614262c3ef38d46a493532",
+      "requestedDependencyClosure": [
+        "family.goldx.coarse",
+        "family.goldx.exact",
+        "family.goldx.state"
+      ],
+      "requestedDependencyRoot": "0xc8927b2e1408c5e8fb111263c1bef3d8783a857767e99874f14bf4f8e29f5b2a",
+      "memoRoot": "0xbc6412421095a6730ed6899584724ec3a5c57a51af66f17c42d8f00c79b53ef1",
+      "nominationProposalLeafDigests": [
+        "0x158ce2a9a58baca080c5da5980ebcd0d64bf7546fbb6ba0673dfdacaacd57c19"
+      ]
+    },
+    {
+      "artifactId": "family:metronome-hgusdc",
+      "artifactKind": "family",
+      "familyId": "metronome-hgusdc",
+      "definitionCatalogLeafDigest": "0x36ade6fa344e3dfbf318405d6332cdf50b9de57ed82d24e206e61260041f827d",
+      "requestedDependencyClosure": [
+        "family.metronome-hgusdc.state"
+      ],
+      "requestedDependencyRoot": "0xc9d5114496d6680ea4bb41787640a849b77af391a85a6810ce34557ee9c0d3b5",
+      "memoRoot": "0xcaef1e3103d4d0cedf54234dd92040bc426fe92ca9c1b89fe22c8a293458f3bf",
+      "nominationProposalLeafDigests": [
+        "0x6c7ef3d1dfd337f1b26de0eca1b2af283e7971e2c6dc0dd11be842cb21c7c3ca"
+      ]
+    },
+    {
+      "artifactId": "family:metronome-synth",
+      "artifactKind": "family",
+      "familyId": "metronome-synth",
+      "definitionCatalogLeafDigest": "0xc7d4ceaa837eb7974f2c58696f1a54a3a476d212f028a57aca01a341b640cf75",
+      "requestedDependencyClosure": [
+        "family.metronome-synth.state"
+      ],
+      "requestedDependencyRoot": "0xa2dababdcf034af53aac97f7f9ac0d0a977787d237531068264c80edbeaf7d28",
+      "memoRoot": "0x24e7439fe99d9fd3b35b12b542d3d7f767b6d3f2b77eaf6c8a5722dd79a1ac1a",
+      "nominationProposalLeafDigests": [
+        "0x6268a63f47d26f0cfe9bec2cee4f87ab0daf73e3e4f15558f213a53674c4e2db"
+      ]
+    },
+    {
+      "artifactId": "family:psm",
+      "artifactKind": "family",
+      "familyId": "psm",
+      "definitionCatalogLeafDigest": "0xf883e6705c98c2bbd17fe82e2d2d8a744b00e6d37ab37028a5cf9bed738343d1",
+      "requestedDependencyClosure": [
+        "family.psm.coarse",
+        "family.psm.exact",
+        "family.psm.state"
+      ],
+      "requestedDependencyRoot": "0x41cbd5513b35354bde712333f6f6f1052abd5508cca4cb1f125a8ffa9a02f3fa",
+      "memoRoot": "0x403dddc102c2f820b36b066fa65383f2c42858cec4b9893999f9d081efb2b453",
+      "nominationProposalLeafDigests": [
+        "0xff18f27278745a2386e3cb1b2eac21304152e0207f66c81e3b60b428578ff42c"
+      ]
+    },
+    {
+      "artifactId": "family:rocksolid",
+      "artifactKind": "family",
+      "familyId": "rocksolid",
+      "definitionCatalogLeafDigest": "0xef60402040cfb65fd6c38724fd4a114783d23e879a7938d4dd9cbf7a779e1e75",
+      "requestedDependencyClosure": [
+        "family.rocksolid.coarse",
+        "family.rocksolid.exact",
+        "family.rocksolid.state"
+      ],
+      "requestedDependencyRoot": "0x7d0bd86dd18ba5a3ae5fc6478fcf04041cc1984bc5148bff8e5366a4bd74b9ec",
+      "memoRoot": "0xdcb657faf9a4be5504e4bd43e91a6af7ca0ac81a68a57d44381f92dafe3d3c3d",
+      "nominationProposalLeafDigests": [
+        "0x131a612aac5293a6f04298aecb8dc0db8d5d9ab9ed1eec1a8f7c834cd6a3ded8"
+      ]
+    },
+    {
+      "artifactId": "family:self-burn-native",
+      "artifactKind": "family",
+      "familyId": "self-burn-native",
+      "definitionCatalogLeafDigest": "0x944b312c188ef5557dac7bf3652ed2b874f725fff50e3c5ec32acd7034e3f5ce",
+      "requestedDependencyClosure": [
+        "family.self-burn-native.exact",
+        "family.self-burn-native.trigger"
+      ],
+      "requestedDependencyRoot": "0x338b64e8036b2a7ef65797661c9652c79d930d197cdb19d64b99b02ac5f7a855",
+      "memoRoot": "0x7cb00fb142cbaa87fcf570a0259ccb45839aa44ad26141c0934d8105e92e87d6",
+      "nominationProposalLeafDigests": [
+        "0x3049f64ec9c3a0195c10e621d3dbf6f5708a6eca744e77f1e9d95006fe20a42f"
       ]
     },
     {
@@ -187,6 +701,56 @@
       ]
     },
     {
+      "artifactId": "family:univ3-standard",
+      "artifactKind": "family",
+      "familyId": "univ3-standard",
+      "definitionCatalogLeafDigest": "0xeab302478114774d9abdd7376d096c710a2eaed6d56307197a00d75b88192a06",
+      "requestedDependencyClosure": [
+        "family.univ3-standard.coarse",
+        "family.univ3-standard.exact",
+        "family.univ3-standard.state"
+      ],
+      "requestedDependencyRoot": "0x9887b728f4c8aaaec7542ac61fdf205f006839f4b24a39ca9b67497bfbb4f89e",
+      "memoRoot": "0x83abf5e2f8ed7b9fdd4fd5b3431bff83f63248e9e686302a96ebaecd0552ee09",
+      "nominationProposalLeafDigests": [
+        "0x7b5109804a2a65db9504f025df8610bd8ff23b6f116517941a5eefeec5adcce0",
+        "0xe51d4efe0063a674b1a6c90ff60219401521e61415c3d25e9acfce934dbfed77"
+      ]
+    },
+    {
+      "artifactId": "family:univ4",
+      "artifactKind": "family",
+      "familyId": "univ4",
+      "definitionCatalogLeafDigest": "0x05690e196a2c3a268e2698fa43e12d1291b70cc2693acd71502c1c7527420bf0",
+      "requestedDependencyClosure": [
+        "family.univ4.coarse",
+        "family.univ4.exact",
+        "family.univ4.state"
+      ],
+      "requestedDependencyRoot": "0x7ceb8888018d77c0bd1498934995090180255d2cc1f88ddb287b7b62b5584dd2",
+      "memoRoot": "0x60fc63360732d04c2f04f068ceeabfc9e1f935647ba88908bd58218f6f7029db",
+      "nominationProposalLeafDigests": [
+        "0x2e565343b11a6b3de44087dbb9c76584858ba33c92992c6dd90cf88d3352c30b",
+        "0xe39b224043c968cbc844240401e2a40b40de8f3fe4a172e533a4f5850155f7ab"
+      ]
+    },
+    {
+      "artifactId": "family:wsteth",
+      "artifactKind": "family",
+      "familyId": "wsteth",
+      "definitionCatalogLeafDigest": "0x1c3405fa5a6fff9b13c51cf9533ac92dd51b4e5c67ecf7d205c132e7be747d2d",
+      "requestedDependencyClosure": [
+        "family.wsteth.coarse",
+        "family.wsteth.exact",
+        "family.wsteth.state"
+      ],
+      "requestedDependencyRoot": "0x553b4e5693e32ade9a4473595bdacc2fdb71a82f9f50d1b64156d1639e8c025e",
+      "memoRoot": "0xfea580e08bef297a012885467c505a526f5427aead10d6f298c1de697f8d6aff",
+      "nominationProposalLeafDigests": [
+        "0x072be8183c0f05c388af69d676f23b4fbcbd0300bd66e42a4f3dd37aaf33c226"
+      ]
+    },
+    {
       "artifactId": "strategy:route-cycle",
       "artifactKind": "strategy",
       "familyId": null,
@@ -197,5 +761,5 @@
       "nominationProposalLeafDigests": []
     }
   ],
-  "snapshotRoot": "0x95eb08e3e45a4f076a3fdff4064920b3a61aa093b6a7f91baa24901109927e84"
+  "snapshotRoot": "0x00308d58c5426d8d3edd458ae38233d81aa10e0a9e85b900e31caf8347a18a10"
 }

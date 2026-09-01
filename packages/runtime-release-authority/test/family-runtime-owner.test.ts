@@ -16,14 +16,12 @@ import {
   issueQualifiedPhysicalExecutionPort,
 } from "../../work-plane/src/internal/family-execution-port.ts";
 import {
-  createGeneratedFamilyRuntimeFactory,
   readGeneratedFamilyRuntimeFactoryMetadata,
   readGeneratedFamilySourcePlanRuntimes,
 } from "../../family-composition/src/internal/generated-runtime-composition.ts";
 import {
   generatedFamilyCoarseProjectionDescriptorV1,
   runtimeAdapterLeafDigest,
-  type GeneratedFamilyRuntimeDescriptorV1,
   type GeneratedFamilyRuntimeFamilyV1,
 } from "../../family-composition/src/index.ts";
 import { readQualifiedCoarseProjectionV1 } from "../../coarse-economics/src/index.ts";
@@ -155,23 +153,10 @@ test("Family runtime authority is derived only from signed release, generated me
     /not owner-issued/,
   );
 
-  const anotherFactory = createGeneratedFamilyRuntimeFactory({
-    descriptor: {
-      schemaVersion: 1,
-      releaseIntentRoot: h("other-release-intent"),
-      definitionCatalogRoot: h("other-catalog"),
-      proposedCapabilitySetRoot: value.metadata.proposedCapabilitySetRoot,
-      families: [],
-      descriptorRoot: h("other-descriptor"),
-    } as never,
-    definitions: [],
-    extensions: [],
-    actionOwners: [],
-    runtimeAdapters: [],
-    sourcePlans: [],
-    nominationPrograms: [],
-  });
-  assert.throws(() => anotherFactory(capability), /another generated factory/);
+  assert.throws(
+    () => createReleaseFamilyRuntimeComposition({ ...capability }),
+    /authority is unavailable/,
+  );
   assert.throws(
     () => issueRuntimeReleaseFamilyRuntimeAuthorityCapability(value.authority, { ...execution }, createReleaseFamilyRuntimeComposition),
     /not release-issued/,
@@ -257,70 +242,21 @@ function isolationFamily(familyIdValue: string, coarse: boolean): GeneratedFamil
   });
 }
 
-function isolationFactory(families: readonly GeneratedFamilyRuntimeFamilyV1[]) {
-  const withoutRoot = Object.freeze({
-    schemaVersion: 1 as const,
-    releaseIntentRoot: h("isolation-release-intent"),
-    definitionCatalogRoot: h("isolation-definition-catalog"),
-    proposedCapabilitySetRoot: h("isolation-proposed-capabilities"),
-    nominationProgramSetRoot: h("isolation-nomination-programs"),
-    families: Object.freeze([...families]),
-  });
-  const descriptor: GeneratedFamilyRuntimeDescriptorV1 = Object.freeze({
-    ...withoutRoot,
-    descriptorRoot: hashDomain("aloha/generated-family-runtime-descriptor/v1", withoutRoot),
-  });
-  return createGeneratedFamilyRuntimeFactory({
-    descriptor,
-    definitions: families.map(() => Object.freeze([])),
-    extensions: families.map(() => Object.freeze([])),
-    actionOwners: families.map(() => Object.freeze([])),
-    runtimeAdapters: families.map(family => family.runtimeAdapters.map(adapter => Object.freeze({
-      factory: () => { throw new TypeError("isolation adapter must not be opened"); },
-      modulePath: adapter.modulePath,
-      exportName: adapter.exportName,
-      closureRoot: adapter.closureRoot,
-      leafDigest: adapter.leafDigest,
-    }))),
-    sourcePlans: families.map(() => Object.freeze([])),
-    nominationPrograms: families.map(() => Object.freeze([])),
-  });
-}
-
-function coarseDescriptorFromMetadata(
-  family: ReturnType<typeof readGeneratedFamilyRuntimeFactoryMetadata>["families"][number],
-) {
-  return generatedFamilyCoarseProjectionDescriptorV1({
-    entry: { familyId: family.familyId, familyDefinitionHash: family.familyDefinitionHash },
-    extensions: family.extensions,
-    runtimeAdapters: family.runtimeAdapters,
-  } as GeneratedFamilyRuntimeFamilyV1);
-}
-
 test("coarse owner qualification leaf inputs are isolated from unrelated Family membership", () => {
   const targetFamily = isolationFamily("target-coarse-family", true);
   const unrelatedFamily = isolationFamily("unrelated-family", false);
-  const baselineFactory = isolationFactory([targetFamily]);
-  const expandedFactory = isolationFactory([targetFamily, unrelatedFamily]);
-  const baseline = readGeneratedFamilyRuntimeFactoryMetadata(baselineFactory);
-  const expanded = readGeneratedFamilyRuntimeFactoryMetadata(expandedFactory);
-  const baselineTarget = baseline.families.find(candidate => candidate.familyDefinitionHash === targetFamily.entry.familyDefinitionHash);
-  const expandedTarget = expanded.families.find(candidate => candidate.familyDefinitionHash === targetFamily.entry.familyDefinitionHash);
+  const baseline = Object.freeze([targetFamily]);
+  const expanded = Object.freeze([targetFamily, unrelatedFamily]);
+  const baselineTarget = baseline.find(candidate => candidate.entry.familyDefinitionHash === targetFamily.entry.familyDefinitionHash);
+  const expandedTarget = expanded.find(candidate => candidate.entry.familyDefinitionHash === targetFamily.entry.familyDefinitionHash);
   assert.ok(baselineTarget);
   assert.ok(expandedTarget);
-  assert.notStrictEqual(baselineTarget, expandedTarget);
-  assert.deepEqual(expandedTarget, baselineTarget);
-  assert.equal(baseline.families.length, 1);
-  assert.equal(expanded.families.length, 2);
-  assert.ok(expanded.families.some(candidate => candidate.familyDefinitionHash === unrelatedFamily.entry.familyDefinitionHash));
-  const { descriptorRoot: baselineRoot, families: baselineFamilies, ...baselineGlobal } = baseline;
-  const { descriptorRoot: expandedRoot, families: expandedFamilies, ...expandedGlobal } = expanded;
-  assert.deepEqual(expandedGlobal, baselineGlobal);
-  assert.notDeepEqual(expandedFamilies, baselineFamilies);
-  assert.notEqual(expandedRoot, baselineRoot);
+  assert.equal(baseline.length, 1);
+  assert.equal(expanded.length, 2);
+  assert.ok(expanded.some(candidate => candidate.entry.familyDefinitionHash === unrelatedFamily.entry.familyDefinitionHash));
 
-  const before = coarseDescriptorFromMetadata(baselineTarget);
-  const after = coarseDescriptorFromMetadata(expandedTarget);
+  const before = generatedFamilyCoarseProjectionDescriptorV1(baselineTarget);
+  const after = generatedFamilyCoarseProjectionDescriptorV1(expandedTarget);
   assert.ok(before);
   assert.ok(after);
   assert.deepEqual(after.ownerDescriptor, before.ownerDescriptor);

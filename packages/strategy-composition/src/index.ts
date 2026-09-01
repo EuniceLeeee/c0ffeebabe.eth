@@ -16,6 +16,10 @@ import type {
   StrategyPlanningProblemIssuerV1,
 } from "../../strategy-sdk/src/index.ts";
 import { strategyPlanningTemplateHash } from "../../strategy-sdk/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../runtime-authority/src/index.ts";
 import { readIssuedStrategyPlanningTriggerV1 } from "./internal/trigger-owner.ts";
 import {
   readGeneratedStrategyRuntimeCompositionCapability,
@@ -34,6 +38,7 @@ export interface StrategyGraphBindingV1 {
   readonly readyRecordHash: Hash;
   /** Active release provenance is mandatory for production strategy issuance. */
   readonly releaseProvenanceHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   /** Current producer-head hash; a trigger cannot be replayed on another head. */
   readonly sourceHash: Hash;
 }
@@ -68,9 +73,10 @@ export interface StrategyPlanningTriggerV1 {
   readonly generationId: string;
   readonly graphRoot: Hash;
   readonly releaseProvenanceHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
 }
 
-export interface StrategyPlanningProblemV1 extends ClosedLoopPlanningProblemDraftV1 {
+export interface StrategyPlanningProblemCoreV1 extends ClosedLoopPlanningProblemDraftV1 {
   readonly strategyId: string;
   readonly strategyDefinitionHash: Hash;
   readonly strategyCatalogLeafDigest: Hash;
@@ -86,22 +92,30 @@ export interface StrategyPlanningProblemV1 extends ClosedLoopPlanningProblemDraf
   readonly strategyCompositionRoot: Hash;
   /** Exact closure of the named issuer(s) used by the generated composition. */
   readonly strategyIssuerClosureRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
   /** Exact Ready record used to issue this problem. */
   readonly readyRecordHash: Hash;
   readonly problemHash: Hash;
 }
+
+export interface StrategyPlanningProblemV1 extends StrategyPlanningProblemCoreV1 {
+  readonly releaseProvenanceHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+}
+
+export type StrategyPlanningInputV1 = StrategyPlanningProblemV1;
 
 /** The visible evidence body is carried by a process-local owner capability. */
 export type IssuedStrategyPlanningProblemV1 = StrategyPlanningProblemV1 & {
   readonly __issuedStrategyPlanningProblemV1?: never;
 };
 
+export type IssuedStrategyPlanningInputV1 = IssuedStrategyPlanningProblemV1;
+
 /** Process-local authenticity fence for issued planning problems. A caller
  * cannot replace an issued problem with a structurally identical object whose
  * hash was recomputed outside this composition. */
 interface IssuedPlanningProblemStateV1 {
-  readonly problem: StrategyPlanningProblemV1;
+  readonly problem: StrategyPlanningInputV1;
   readonly edges: readonly StrategyGraphEdgeV1[];
   readonly composition: StrategyRuntimeCompositionV1;
   readonly assertCurrent: () => void;
@@ -109,6 +123,12 @@ interface IssuedPlanningProblemStateV1 {
 
 export interface IssuedStrategyPlanningProblemOwnerViewV1 {
   readonly problem: StrategyPlanningProblemV1;
+  /** Exact Graph denominator snapshotted by the issuing composition. */
+  readonly edges: readonly StrategyGraphEdgeV1[];
+}
+
+export interface IssuedStrategyPlanningInputOwnerViewV1 {
+  readonly problem: StrategyPlanningInputV1;
   /** Exact Graph denominator snapshotted by the issuing composition. */
   readonly edges: readonly StrategyGraphEdgeV1[];
 }
@@ -137,6 +157,7 @@ export interface GeneratedStrategyRuntimeDescriptorV1 {
 export interface StrategyRuntimeCompositionV1 {
   readonly definitionCatalogRoot: Hash;
   readonly releaseProvenanceHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly compositionRoot: Hash;
   readonly issuerClosureRoot: Hash;
   readonly strategyIds: readonly string[];
@@ -278,6 +299,7 @@ function normalizeTrigger(
     generationId: issued.generationId,
     graphRoot: issued.graphRoot,
     releaseProvenanceHash: issued.releaseProvenanceHash,
+    runtimeAuthority: issued.runtimeAuthority,
   });
 }
 
@@ -338,7 +360,11 @@ export function createGeneratedStrategyRuntimeComposition(
     strategies: input.descriptor.strategies,
   });
   if (descriptor.descriptorRoot !== input.descriptor.descriptorRoot) throw new TypeError("generated Strategy runtime descriptor root mismatch");
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
   const releaseProvenanceHash = assertHash(input.releaseProvenanceHash, "strategyRuntime.releaseProvenanceHash");
+  if (runtimeAuthority.authorityClass !== "signed-release") {
+    throw new TypeError("Strategy runtime authority class/provenance mismatch");
+  }
   if (!Array.isArray(input.issuers) || input.issuers.length !== descriptor.strategies.length) {
     throw new TypeError("generated Strategy issuer set is incomplete");
   }
@@ -356,16 +382,31 @@ export function createGeneratedStrategyRuntimeComposition(
   });
   const compositionRoot = hashDomain("aloha/generated-strategy-runtime-composition/v1", {
     descriptorRoot: descriptor.descriptorRoot,
-    releaseProvenanceHash,
+    runtimeAuthority,
     leaves: bindings.map(binding => binding.entry.leafDigest),
   });
   const issuerClosureRoot = hashDomain("aloha/generated-strategy-runtime-issuer-closure/v1", {
     descriptorRoot: descriptor.descriptorRoot,
     issuers: bindings.map(binding => binding.entry.issuerClosureRoot),
   });
-  const composition: StrategyRuntimeCompositionV1 = Object.freeze({
+  const issueDrafts = (
+    binding: StrategyGraphBindingV1,
+    normalizedEdges: readonly StrategyGraphEdgeV1[],
+    normalizedTrigger: StrategyPlanningTriggerV1,
+  ) => Object.freeze(bindings.map(({ entry, issuer }) => Object.freeze({
+    entry,
+    draft: validateDraft(issuer.issue({
+      template: entry.catalogEntry.planningTemplate,
+      binding,
+      edges: normalizedEdges,
+      trigger: normalizedTrigger,
+    }), entry.catalogEntry.planningTemplate, normalizedTrigger),
+  })));
+  let composition!: StrategyRuntimeCompositionV1;
+  const compositionValue = {
     definitionCatalogRoot: descriptor.definitionCatalogRoot,
     releaseProvenanceHash,
+    runtimeAuthority,
     compositionRoot,
     issuerClosureRoot,
     strategyIds: Object.freeze(bindings.map(binding => binding.entry.catalogEntry.strategyId)),
@@ -382,18 +423,20 @@ export function createGeneratedStrategyRuntimeComposition(
       if (binding.definitionCatalogRoot !== descriptor.definitionCatalogRoot) {
         throw new TypeError("Strategy runtime definition catalog binding mismatch");
       }
-      if (binding.releaseProvenanceHash !== releaseProvenanceHash) {
+      if (runtimeAuthority.authorityClass !== "signed-release") {
+        throw new TypeError("Strategy production planning requires signed-release authority");
+      }
+      if (assertHash(binding.releaseProvenanceHash, "strategyRuntime.binding.releaseProvenanceHash") !== releaseProvenanceHash) {
         throw new TypeError("Strategy runtime release provenance binding mismatch");
+      }
+      const bindingAuthority = decodeRuntimeAuthorityProjectionV1(binding.runtimeAuthority);
+      if (bindingAuthority.authorityClass !== "signed-release"
+        || encodeCanonicalJson(bindingAuthority) !== encodeCanonicalJson(runtimeAuthority)) {
+        throw new TypeError("Strategy runtime authority binding mismatch");
       }
       const normalizedEdges = normalizeGraphEdges(edges);
       const normalizedTrigger = normalizeTrigger(trigger, binding, normalizedEdges);
-      return Object.freeze(bindings.map(({ entry, issuer }) => {
-        const draft = validateDraft(issuer.issue({
-          template: entry.catalogEntry.planningTemplate,
-          binding,
-          edges: normalizedEdges,
-          trigger: normalizedTrigger,
-        }), entry.catalogEntry.planningTemplate, normalizedTrigger);
+      return Object.freeze(issueDrafts(binding, normalizedEdges, normalizedTrigger).map(({ entry, draft }) => {
         const body = {
           ...draft,
           strategyId: entry.catalogEntry.strategyId,
@@ -405,6 +448,7 @@ export function createGeneratedStrategyRuntimeComposition(
           strategyCompositionRoot: compositionRoot,
           strategyIssuerClosureRoot: issuerClosureRoot,
           releaseProvenanceHash,
+          runtimeAuthority,
           readyRecordHash: binding.readyRecordHash,
           triggerRef: normalizedTrigger.triggerRef,
           lane: normalizedTrigger.lane,
@@ -429,7 +473,8 @@ export function createGeneratedStrategyRuntimeComposition(
         return problem;
       }));
     },
-  });
+  };
+  composition = Object.freeze(compositionValue) as StrategyRuntimeCompositionV1;
   generatedCompositionStates.set(composition, input.assertCurrent);
   return composition;
 }
@@ -440,21 +485,35 @@ export function assertIssuedStrategyPlanningProblem(
   readIssuedStrategyPlanningProblemV1(value);
 }
 
+export function assertIssuedStrategyPlanningInput(
+  value: unknown,
+): asserts value is IssuedStrategyPlanningInputV1 {
+  readIssuedStrategyPlanningInputV1(value);
+}
+
+/** Planner-only owner read of the signed Strategy/Graph denominator. */
+export function readIssuedStrategyPlanningInputV1(
+  value: unknown,
+): IssuedStrategyPlanningInputOwnerViewV1 {
+  if (value === null || typeof value !== "object") {
+    throw new TypeError("Strategy planning input was not issued by the active Strategy composition");
+  }
+  const state = issuedPlanningProblems.get(value);
+  if (state === undefined) {
+    throw new TypeError("Strategy planning input was not issued by the active Strategy composition");
+  }
+  state.assertCurrent();
+  if (state.problem !== value || generatedCompositionStates.get(state.composition) !== state.assertCurrent) {
+    throw new TypeError("Strategy planning input owner state is invalid");
+  }
+  return Object.freeze({ problem: state.problem, edges: state.edges });
+}
+
 /** Planner-only owner read. It re-fences release rotation on every use. */
 export function readIssuedStrategyPlanningProblemV1(
   value: unknown,
 ): IssuedStrategyPlanningProblemOwnerViewV1 {
-  if (value === null || typeof value !== "object") {
-    throw new TypeError("Strategy planning problem was not issued by the active Strategy composition");
-  }
-  const state = issuedPlanningProblems.get(value);
-  if (state === undefined) {
-    throw new TypeError("Strategy planning problem was not issued by the active Strategy composition");
-  }
-  state.assertCurrent();
-  if (state.problem !== value || generatedCompositionStates.get(state.composition) !== state.assertCurrent) {
-    throw new TypeError("Strategy planning problem owner state is invalid");
-  }
+  const state = readIssuedStrategyPlanningInputV1(value);
   return Object.freeze({ problem: state.problem, edges: state.edges });
 }
 

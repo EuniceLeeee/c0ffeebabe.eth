@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 import { compileStrategy } from "../../strategy-sdk/src/index.ts";
 import {
   assertGeneratedStrategyRuntimeComposition,
+  assertIssuedStrategyPlanningInput,
   assertIssuedStrategyPlanningProblem,
   createGeneratedStrategyRuntimeComposition,
+  readIssuedStrategyPlanningInputV1,
   readIssuedStrategyPlanningProblemV1,
   sealGeneratedStrategyRuntimeDescriptor,
   strategyPlanningTemplateHash,
@@ -26,6 +32,14 @@ import {
 } from "../../../strategies/route-cycle/src/index.ts";
 
 const h = (domain: string, value: unknown): Hash => hashDomain(domain, value);
+const implementationCommit = "a".repeat(40);
+const signedRuntimeAuthority = createSignedReleaseRuntimeAuthorityDescriptorV1({
+  authorityClass: "signed-release",
+  runtimeBindingId: h("test/strategy-composition/runtime-binding/v1", 1),
+  releaseProvenanceHash: h("test/strategy-composition/release-provenance/v1", 1),
+  implementationCommit,
+});
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(signedRuntimeAuthority);
 
 const catalogEntry = compileStrategy(ROUTE_CYCLE_STRATEGY, []).entry;
 const issuerClosureRoot = h("test/strategy-composition/issuer-closure/v1", "route-cycle");
@@ -62,7 +76,8 @@ const binding: StrategyGraphBindingV1 = Object.freeze({
   definitionCatalogRoot: descriptor.definitionCatalogRoot,
   graphRoot: h("test/strategy-composition/graph/v1", 1),
   readyRecordHash: h("test/strategy-composition/ready/v1", 1),
-  releaseProvenanceHash: h("test/strategy-composition/release-provenance/v1", 1),
+  releaseProvenanceHash: signedRuntimeAuthority.releaseProvenanceHash,
+  runtimeAuthority,
   sourceHash: h("test/strategy-composition/head/v1", 1),
 });
 
@@ -96,7 +111,6 @@ const edges = Object.freeze([edge("a", "base", "quote"), edge("b", "quote", "bas
 function openTestComposition(input: {
   readonly descriptor?: typeof descriptor;
   readonly issuers?: readonly typeof ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER[];
-  readonly releaseProvenanceHash?: Hash;
   readonly assertCurrent?: () => void;
 } = {}) {
   const selectedDescriptor = input.descriptor ?? descriptor;
@@ -107,7 +121,7 @@ function openTestComposition(input: {
   const capability = issueGeneratedStrategyRuntimeAuthorityCapability({
     factory,
     qualifiedCapabilityRefsRoot: selectedDescriptor.proposedCapabilitySetRoot,
-    releaseProvenanceHash: input.releaseProvenanceHash ?? binding.releaseProvenanceHash,
+    runtimeAuthority: signedRuntimeAuthority,
     assertCurrent: input.assertCurrent ?? (() => {}),
   });
   return Object.freeze({ factory, capability, composition: factory(capability) });
@@ -122,6 +136,8 @@ test("generated Strategy issues a Graph-bound blockscan problem without fixture 
   });
   assert.equal(problems.length, 1);
   assert.equal(problems[0]!.kind, "closed-loop");
+  assert.equal(problems[0]!.releaseProvenanceHash, signedRuntimeAuthority.releaseProvenanceHash);
+  assert.deepEqual(problems[0]!.runtimeAuthority, runtimeAuthority);
   assert.equal(problems[0]!.generationId, binding.generationId);
   assert.equal(problems[0]!.graphRoot, binding.graphRoot);
   assert.equal(problems[0]!.objectiveRef, objectiveRef("default"));

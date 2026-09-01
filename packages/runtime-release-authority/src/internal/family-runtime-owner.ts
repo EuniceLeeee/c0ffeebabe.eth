@@ -32,6 +32,7 @@ import {
 import type { RuntimeReleaseAuthorityV1 } from "../index.ts";
 import { assertActiveRuntimeReleaseAuthorityState } from "./state.ts";
 import { runtimeReleaseBindingProvenanceHash } from "../../../../specs/release-authority/src/index.ts";
+import { readActiveSignedRuntimeAuthorityDescriptorV1 } from "./runtime-authority-descriptor-owner.ts";
 
 /**
  * The Family runtime owner has one physical execution edge. The old
@@ -144,6 +145,7 @@ export function issueRuntimeReleaseFamilyRuntimeAuthorityCapability(
   };
   const capability = issueGeneratedFamilyRuntimeAuthorityCapability({
     factory,
+    runtimeAuthority: readActiveSignedRuntimeAuthorityDescriptorV1(authority),
     qualifiedCapabilityRefsRoot: state.binding.qualifiedCapabilityRefsRoot,
     nominationProgramSetRoot: state.binding.nominationProgramSetRoot,
     nominationQualifications: state.binding.nominationQualificationSet.entries.map(entry => ({

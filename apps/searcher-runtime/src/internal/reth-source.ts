@@ -19,8 +19,10 @@ import {
   createRethProducerIngressPortV1,
   type RethProducerIngressConfigV1,
 } from "../../../../packages/producer/src/internal/reth-intake.ts";
-import type { ProducerIngressPortV1 } from "../../../../packages/producer/src/index.ts";
-import type { ProducerCurrentSourceHeadPortV1 } from "../../../../packages/producer/src/index.ts";
+import type {
+  ProducerCurrentSourceHeadPortV1,
+  ProducerIngressPortV1,
+} from "../../../../packages/producer/src/index.ts";
 import { issueProducerCurrentSourceHeadPortV1 } from "../../../../packages/producer/src/internal/owners.ts";
 import {
   CurrentSourceRpcReadTransport,

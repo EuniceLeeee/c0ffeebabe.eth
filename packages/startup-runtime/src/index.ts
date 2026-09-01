@@ -32,6 +32,7 @@ import type {
 } from "../../ready-generation/src/index.ts";
 import type { InstanceCatalogV1 } from "../../catalog/src/index.ts";
 import type { FamilyRuntimeCompositionV1 } from "../../family-composition/src/index.ts";
+import type { GeneratedFamilySearchRuntimePortV1 } from "../../family-composition/src/internal/generated-runtime-composition.ts";
 import type {
   ReadyStage12EvidenceCapabilityV1,
   ReadyStage12EvidenceReaderPortV1,
@@ -114,6 +115,8 @@ export interface StartupRuntimeCompositionInputV1 {
   readonly ready: StartupReadyPortV1;
   /** Branded generated composition issued by the release bootstrap. */
   readonly familyRuntime: FamilyRuntimeCompositionV1;
+  /** Opaque search surface issued from the same generated Family authority. */
+  readonly familySearchRuntime: GeneratedFamilySearchRuntimePortV1;
   readonly processEpoch: string;
   /** Exact release identity supplied by the release authority composition. */
   readonly releaseBindingId: Hash;
@@ -135,6 +138,8 @@ export interface StartupRuntimeV1 {
   readonly ready: ReadyGenerationV1;
   /** The exact generated composition used to issue every route handle. */
   readonly familyRuntimeComposition: FamilyRuntimeCompositionV1;
+  /** The exact generated search port resolving those route handles. */
+  readonly familySearchRuntime: GeneratedFamilySearchRuntimePortV1;
   /** The generation identity is duplicated as a stable, log-safe join key. */
   readonly generationId: string;
   readonly graphRoot: Hash;
@@ -221,6 +226,7 @@ export async function startStartupRuntime(
   const runtime = Object.freeze({
     get ready() { return signed.readyFor(native.activeGeneration.handle); },
     familyRuntimeComposition: input.familyRuntime,
+    familySearchRuntime: input.familySearchRuntime,
     get generationId() { return native.generationId; },
     get graphRoot() { return native.graphRoot; },
     releaseBindingId,

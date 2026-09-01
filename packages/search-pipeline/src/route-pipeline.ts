@@ -1865,6 +1865,7 @@ function issueRouteCoarseBinding(
       stateRoot: assertHash(sourceView.stateRoot, "coarse.source.stateRoot"),
     },
     objectiveRef: input.objective.objectiveRef,
+    runtimeAuthority: input.lease.binding.runtimeAuthority,
     releaseProvenanceHash: input.lease.binding.releaseProvenanceHash,
     legs: Object.freeze(candidate.legs.map((leg, index) => Object.freeze({
       edgeId: leg.edgeId,
@@ -2273,6 +2274,7 @@ export async function runSearchPipeline<Projection, Plan, Exact, Simulation>(
         hash: assertHash(sourceView.hash, "coarse.source.hash"),
         stateRoot: assertHash(sourceView.stateRoot, "coarse.source.stateRoot"),
       },
+      runtimeAuthority: input.lease.binding.runtimeAuthority,
       releaseProvenanceHash: input.lease.binding.releaseProvenanceHash,
       objective: admissionObjective,
       policy: {

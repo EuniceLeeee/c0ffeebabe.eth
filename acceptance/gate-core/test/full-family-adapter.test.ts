@@ -44,6 +44,10 @@ import {
   sealInstancePublication,
 } from "../../../packages/catalog/src/index.ts";
 import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../../packages/runtime-authority/src/index.ts";
+import {
   createFullFamilyFactLocator,
   decodeFullFamilyOutcomeArtifact,
   deriveFullFamilyOutcomeSummary,
@@ -733,6 +737,14 @@ function buildFixture(
   const runId = "full-family-qualification-run";
   const releaseBindingId = h("release-binding");
   const releaseProvenanceHash = h("release-provenance");
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+    createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: releaseBindingId,
+      releaseProvenanceHash,
+      implementationCommit: candidateReleaseCommit,
+    }),
+  );
   const outcomeAuthority: QualificationOutcomeAuthorityV1 = Object.freeze({
     attestationAuthorityRoot: h("attestation-authority-root"),
     releaseAuthorityRoot: h("release-authority-root"),
@@ -860,6 +872,7 @@ function buildFixture(
     verifiedMemoSetRoot: h("verified-memo-set"),
     instanceCatalogRoot,
     graphRoot,
+    runtimeAuthority,
     edgeCount: "1",
     instanceCount: "1",
     promotionFreshness,

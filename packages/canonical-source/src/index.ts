@@ -19,6 +19,10 @@ import type {
   CanonicalFencePort,
 } from "../../ready-generation/src/index.ts";
 import type { BlockRangeV1, CanonicalCutoffV1 } from "../../discovery/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../runtime-authority/src/index.ts";
 import type { CanonicalLeaseGuardPort } from "./lease-guard-port.ts";
 export type { CanonicalLeaseGuardPort } from "./lease-guard-port.ts";
 
@@ -76,6 +80,7 @@ export interface ProducerGenerationBindingV1 {
   readonly definitionCatalogRoot: Hash;
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly releaseProvenanceHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
@@ -394,11 +399,18 @@ function exactProducerGenerationBinding(
       "definitionCatalogRoot",
       "instanceCatalogRoot",
       "graphRoot",
+      "runtimeAuthority",
       "releaseProvenanceHash",
       "candidatePartitionProofStorageHash",
       "nominationClosureRoot",
       "nominationClosureStorageHash",
     ], context);
+    const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(
+      readOwnEnumerableDataProperty(raw, "runtimeAuthority", context),
+    );
+    if (runtimeAuthority.authorityClass !== "signed-release") {
+      throw new TypeError(`${context}.runtimeAuthority must be signed-release`);
+    }
     return deepFreeze({
       generationId: assertNonEmptyString(
         readOwnEnumerableDataProperty(raw, "generationId", context),
@@ -428,6 +440,7 @@ function exactProducerGenerationBinding(
         readOwnEnumerableDataProperty(raw, "graphRoot", context),
         `${context}.graphRoot`,
       ),
+      runtimeAuthority,
       releaseProvenanceHash: assertHash(
         readOwnEnumerableDataProperty(raw, "releaseProvenanceHash", context),
         `${context}.releaseProvenanceHash`,
@@ -466,6 +479,9 @@ function sameProducerGenerationBinding(
     && left.definitionCatalogRoot === right.definitionCatalogRoot
     && left.instanceCatalogRoot === right.instanceCatalogRoot
     && left.graphRoot === right.graphRoot
+    && left.runtimeAuthority.authorityClass === right.runtimeAuthority.authorityClass
+    && left.runtimeAuthority.authorityBindingHash === right.runtimeAuthority.authorityBindingHash
+    && left.runtimeAuthority.implementationCommit === right.runtimeAuthority.implementationCommit
     && left.releaseProvenanceHash === right.releaseProvenanceHash
     && left.candidatePartitionProofStorageHash === right.candidatePartitionProofStorageHash
     && left.nominationClosureRoot === right.nominationClosureRoot

@@ -86,22 +86,34 @@ function positiveConcurrency(value: number | undefined, fallback: number, contex
   return resolved;
 }
 
-async function mapLimit<T, R>(
+export async function mapLimitReaped<T, R>(
   values: readonly T[],
   limit: number,
   run: (value: T) => Promise<R>,
 ): Promise<readonly R[]> {
   const results = new Array<R>(values.length);
   let next = 0;
+  let stopped = false;
+  let failed = false;
+  let primaryError: unknown;
   const worker = async (): Promise<void> => {
-    while (true) {
+    while (!stopped) {
       const index = next;
       next += 1;
       if (index >= values.length) return;
-      results[index] = await run(values[index]!);
+      try {
+        results[index] = await run(values[index]!);
+      } catch (error) {
+        stopped = true;
+        if (!failed) {
+          failed = true;
+          primaryError = error;
+        }
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, Math.max(values.length, 1)) }, () => worker()));
+  if (failed) throw primaryError;
   return results;
 }
 
@@ -199,7 +211,7 @@ class PersistedAttestationOwnerV1 implements PersistedAttestationPort {
       const retryableResults: AttestationFinalSessionResultV1[] = [];
       let primaryError: unknown = null;
       try {
-        const identityResults = await mapLimit(candidateKeys, this.#options.identityConcurrency, async key => {
+        const identityResults = await mapLimitReaped(candidateKeys, this.#options.identityConcurrency, async key => {
           if (signal.aborted) throw signal.reason;
           return session.resolveIdentityOrReuseProofOnce(key, signal);
         });
@@ -230,7 +242,7 @@ class PersistedAttestationOwnerV1 implements PersistedAttestationPort {
           else groups.set(key, [item]);
         }
         const groupValues = [...groups.values()];
-        const materialized = await mapLimit(groupValues, this.#options.materializationConcurrency, async group => {
+        const materialized = await mapLimitReaped(groupValues, this.#options.materializationConcurrency, async group => {
           if (signal.aborted) throw signal.reason;
           if (group.length > 1) {
             return session.issueNominationKeyCollision(group.map(item => item.result.continuation));

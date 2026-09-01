@@ -14,12 +14,14 @@ import {
   encodeExecutorExecuteCalldata,
   normalizeEffectTransportDeclaration,
 } from "../../execution-program/src/index.ts";
-import type { IssuedRouteHandle } from "../../graph/src/index.ts";
+import type { GraphLeaseBindingV1, IssuedRouteHandle } from "../../graph/src/index.ts";
 import {
-  assertGeneratedFamilyRuntimeComposition,
   familyCoarseRouteOwnerRefV1,
-  type FamilyRuntimeCompositionV1,
 } from "../../family-composition/src/index.ts";
+import {
+  readGeneratedFamilySearchRuntimePort,
+  type GeneratedFamilySearchRuntimePortV1,
+} from "../../family-composition/src/internal/generated-runtime-composition.ts";
 import type { LoopIntentV1 } from "../../strategy-sdk/src/index.ts";
 import type {
   FamilySearchAdapterV1,
@@ -46,8 +48,6 @@ import {
 import {
   issueCoarseRouteAssessmentV1,
   readIssuedCoarseRouteBindingV1,
-  readQualifiedCoarseProjectionReceiptV1,
-  readQualifiedCoarseProjectionV1,
   validateCoarseRouteAssessmentV1,
   type CoarseRouteAssessmentV1,
   type IssuedCoarseRouteAssessmentV1,
@@ -81,7 +81,8 @@ import { createRouteCoarseAttemptEvidenceOwnerV1 } from "../../search-pipeline/s
  * This package never branches on familyId or protocol identity.
  */
 export interface SearchRuntimeCoreInputV1 {
-  readonly composition: FamilyRuntimeCompositionV1;
+  /** Owner-issued generated Family search surface bound to the signed release. */
+  readonly familyRuntime: GeneratedFamilySearchRuntimePortV1;
   readonly sourceRead: FamilySearchSourceReadPortV1;
   /** Generic sizing seed. Concrete assets come only from the planned Graph ports. */
   readonly amountSeed: Readonly<{
@@ -325,8 +326,11 @@ function makeRoutePorts(
 ): Omit<RoutePipelinePortsV1<SearchRuntimeProjectionV1, SearchRuntimePlanV1, SearchRuntimeExactV1, unknown>, "finalSimulation" | "economicSafety" | "sixStepArtifacts"> {
   const contextByRoute = new Map<Hash, RouteContextV1>();
   const adapterByFamily = new Map<Hash, FamilySearchAdapterV1>();
+  const familyRuntime = readGeneratedFamilySearchRuntimePort(input.familyRuntime);
+  if (familyRuntime.runtimeAuthority.authorityClass !== "signed-release") {
+    throw new TypeError("search runtime requires signed Family authority");
+  }
   const coarseAttemptEvidenceOwner = createRouteCoarseAttemptEvidenceOwnerV1();
-  assertGeneratedFamilyRuntimeComposition(input.composition);
   assertExactKeys(input.amountSeed, ["amountIn", "recipient"], "searchRuntime.amountSeed");
   assertDecimalString(input.amountSeed.amountIn, "searchRuntime.amountSeed.amountIn");
   assertNonEmptyString(input.amountSeed.recipient, "searchRuntime.amountSeed.recipient");
@@ -344,11 +348,11 @@ function makeRoutePorts(
     resolve: ({ candidate, selections }) => {
       const legs: ResolvedRouteLegV1[] = selections.map((selection: RouteSelectionV1) => {
         const familyDefinitionHash = selection.ownerDefinitionRef;
-        const routeBinding = input.composition.resolveRouteHandle(selection.issuedHandle, familyDefinitionHash);
+        const routeBinding = familyRuntime.resolveRouteHandle(selection.issuedHandle, familyDefinitionHash);
         const normalizedRoute = familySearchRouteBindingHash(routeBinding);
         let adapter = adapterByFamily.get(familyDefinitionHash);
         if (adapter === undefined) {
-          adapter = input.composition.requireAdapter(familyDefinitionHash, FAMILY_SEARCH_RUNTIME_ADAPTER_ROLE_V1);
+          adapter = familyRuntime.requireAdapter(familyDefinitionHash, FAMILY_SEARCH_RUNTIME_ADAPTER_ROLE_V1);
           if (adapter === null || typeof adapter !== "object") throw new TypeError("generated-search-adapter-missing");
           adapterByFamily.set(familyDefinitionHash, adapter);
         }
@@ -431,9 +435,8 @@ function makeRoutePorts(
             || boundLeg.outputAssetRef !== leg.outputAssetRef
             || amount.inputAssetRef !== leg.inputAssetRef
             || amount.outputAssetRef !== leg.outputAssetRef) return null;
-          const seam = input.composition.resolveCoarseProjection(leg.familyDefinitionHash);
-          if (seam === null) return null;
-          const capability = await input.composition.issueCoarseProjection(seam.producer, {
+          const capability = await familyRuntime.issueCoarseEvidence({
+            familyDefinitionHash: leg.familyDefinitionHash,
             binding: request.binding,
             legIndex: index,
             issuedHandle: leg.issuedHandle,
@@ -445,15 +448,13 @@ function makeRoutePorts(
             deadlineAtMs: request.deadlineAtMs,
             signal: request.signal,
           });
-          const familyObservation = input.composition.readCoarseProjectionObservation(seam.producer, capability);
-          const qualified = readQualifiedCoarseProjectionV1({ service: seam.service, capability });
+          const coarseEvidence = familyRuntime.readCoarseEvidence(capability);
           coarseAttemptEvidenceOwner.observe(
             request.binding,
-            qualified,
-            familyObservation as unknown as CanonicalJson,
+            coarseEvidence.qualified,
+            coarseEvidence.observation,
           );
-          const receipt = readQualifiedCoarseProjectionReceiptV1(qualified);
-          const projection = receipt.projection;
+          const projection = coarseEvidence.projection;
           if (projection.edgeId !== leg.edgeId
             || projection.transitionRef !== leg.transitionRef
             || projection.routeBindingHash !== binding.routeBindingHash
@@ -465,7 +466,7 @@ function makeRoutePorts(
           if (projection.sampleInput.assetRef !== amount.inputAssetRef
             || projection.sampleInput.amount !== amount.amountIn
             || projection.estimatedOutput.assetRef !== expectedOutput) return null;
-          projections.push(qualified);
+          projections.push(coarseEvidence.qualified);
           if (index < routeContext.legs.length - 1) {
             amount = familySearchAmount({
               inputAssetRef: projection.estimatedOutput.assetRef,
@@ -485,7 +486,7 @@ function makeRoutePorts(
 
   const planner = {
     rejectionAuthority: noStageRejectionAuthority,
-    plan: ({ route, coarse: inputCoarse, objective }: { readonly route: import("../../search-pipeline/src/index.ts").RouteCapabilityV1; readonly coarse: CoarseRankableV1<SearchRuntimeProjectionV1> | CoarseBoundedUnrankedV1; readonly strategy: LoopIntentV1; readonly objective: SearchObjectiveV1; readonly binding: import("../../graph/src/index.ts").GraphLeaseBindingV1; readonly correlationId: Hash }): PlannedRouteV1<SearchRuntimePlanV1> | StageFailureV1 => {
+    plan: ({ route, coarse: inputCoarse, objective }: { readonly route: import("../../search-pipeline/src/index.ts").RouteCapabilityV1; readonly coarse: CoarseRankableV1<SearchRuntimeProjectionV1> | CoarseBoundedUnrankedV1; readonly strategy: LoopIntentV1; readonly objective: SearchObjectiveV1; readonly binding: GraphLeaseBindingV1; readonly correlationId: Hash }): PlannedRouteV1<SearchRuntimePlanV1> | StageFailureV1 => {
       try {
         const routeContext = contextByRoute.get(route.routeHash);
         const normalizedObjective = familySearchObjective(objective);
@@ -619,7 +620,7 @@ function makeRoutePorts(
 
   const executionProgram = {
     rejectionAuthority: noStageRejectionAuthority,
-    compile: async ({ binding, plan, planHash, exact: exactValue, exactHash, route, source: currentSource, correlationId }: { readonly binding: import("../../graph/src/index.ts").GraphLeaseBindingV1; readonly plan: SearchRuntimePlanV1; readonly planHash: Hash; readonly exact: SearchRuntimeExactV1; readonly exactHash: Hash; readonly route: import("../../search-pipeline/src/index.ts").RouteCapabilityV1; readonly source: import("../../search-pipeline/src/index.ts").CurrentSourceSessionV1; readonly correlationId: Hash; readonly deadlineAtMs: number }): Promise<ExecutionProgramOutcomeV1> => {
+    compile: async ({ binding, plan, planHash, exact: exactValue, exactHash, route, source: currentSource, correlationId }: { readonly binding: GraphLeaseBindingV1; readonly plan: SearchRuntimePlanV1; readonly planHash: Hash; readonly exact: SearchRuntimeExactV1; readonly exactHash: Hash; readonly route: import("../../search-pipeline/src/index.ts").RouteCapabilityV1; readonly source: import("../../search-pipeline/src/index.ts").CurrentSourceSessionV1; readonly correlationId: Hash; readonly deadlineAtMs: number }): Promise<ExecutionProgramOutcomeV1> => {
       const context = contextByRoute.get(route.routeHash);
       const { planHash: embeddedPlanHash, ...planBody } = plan;
       const { exactHash: embeddedExactHash, ...exactBody } = exactValue;

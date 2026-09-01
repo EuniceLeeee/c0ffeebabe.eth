@@ -21,7 +21,14 @@ import type {
   FamilyStageRuntimePortV1,
   FamilyStageProgramV1,
 } from "../../../family-sdk/runtime/index.ts";
-import type { FamilyRuntimeCompositionV1 } from "../../../family-composition/src/index.ts";
+import {
+  readGeneratedFamilyLifecycleRuntimePort,
+  type GeneratedFamilyLifecycleRuntimePortV1,
+} from "../../../family-composition/src/internal/generated-runtime-composition.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../runtime-authority/src/index.ts";
 import {
   validateFailure,
   validateIdentityObservation,
@@ -29,7 +36,6 @@ import {
   type AttestationProgramPort,
   type IdentityDecisionV1,
   type IdentityVerifiedObservationV1,
-  type IdentityVerifiedV1,
   type InstanceDecisionV1,
   type OutcomeFailureV1,
   type VerifiedMemoReuseDecisionV1,
@@ -52,7 +58,32 @@ export interface FamilyIdentityStageOutputV1 {
 }
 
 export interface FamilyProgramAdapterInputV1 {
-  readonly composition: FamilyRuntimeCompositionV1;
+  readonly lifecycle: GeneratedFamilyLifecycleRuntimePortV1;
+}
+
+const issuedAttestationProgramPorts = new WeakMap<object, RuntimeAuthorityProjectionV1>();
+
+export function assertIssuedAttestationProgramPort(
+  value: unknown,
+  expectedAuthority?: RuntimeAuthorityProjectionV1,
+): AttestationProgramPort {
+  if (value === null || typeof value !== "object") {
+    throw new TypeError("attestation-program-port-not-issued-by-family-adapter");
+  }
+  const authority = issuedAttestationProgramPorts.get(value);
+  if (authority === undefined) throw new TypeError("attestation-program-port-not-issued-by-family-adapter");
+  if (
+    expectedAuthority !== undefined
+    && encodeCanonicalJson(authority) !== encodeCanonicalJson(decodeRuntimeAuthorityProjectionV1(expectedAuthority))
+  ) throw new TypeError("attestation-program-port-runtime-authority-mismatch");
+  return value as AttestationProgramPort;
+}
+
+export function readIssuedAttestationProgramRuntimeAuthority(
+  value: unknown,
+): RuntimeAuthorityProjectionV1 {
+  assertIssuedAttestationProgramPort(value);
+  return issuedAttestationProgramPorts.get(value as object)!;
 }
 
 function source(cutoff: CanonicalCutoffV1) {
@@ -165,15 +196,14 @@ function publicationValue(value: unknown, path: string): InstancePublicationV1 {
 }
 
 /**
- * Adapt one generated Family composition to the fixed AttestationProgramPort.
+ * Adapt one generated Family lifecycle port to the fixed AttestationProgramPort.
  * The only central decisions here are stage order and common lifecycle
  * envelopes; identity/publication meaning remains plugin-owned output.
  */
 export function createAttestationProgramPortFromFamilyComposition(
   input: FamilyProgramAdapterInputV1,
 ): AttestationProgramPort {
-  const composition = input.composition;
-  if (composition === null || typeof composition !== "object") throw new TypeError("family composition is required");
+  const lifecycle = readGeneratedFamilyLifecycleRuntimePort(input.lifecycle);
 
   const issue = (
     candidate: CandidateRecordV1,
@@ -184,10 +214,12 @@ export function createAttestationProgramPortFromFamilyComposition(
     instanceKey: string | null,
     reusePublication: InstancePublicationV1 | null,
   ): { readonly stage: FamilyStageRuntimePortV1; readonly program: FamilyStageProgramV1 } => {
-    const family = composition.require(candidate.familyDefinitionHash, candidate.familyId);
-    const stageRef = family.lifecycleRefs[stageName];
-    const stage = family.owner.port.getStage(stageRef);
-    if (stage.stageRef.familyDefinitionHash !== candidate.familyDefinitionHash || stage.stageRef.stage !== stageName) {
+    const stage = lifecycle.requireStage(candidate.familyDefinitionHash, candidate.familyId, stageName);
+    if (
+      stage.stageRef.familyDefinitionHash !== candidate.familyDefinitionHash
+      || stage.stageRef.familyId !== candidate.familyId
+      || stage.stageRef.stage !== stageName
+    ) {
       throw new TypeError("family-stage-ref-not-bound");
     }
     const program = stage.issue({
@@ -341,7 +373,7 @@ export function createAttestationProgramPortFromFamilyComposition(
 
   const materializeAndProject = async (
     candidate: CandidateRecordV1,
-    identityResult: IdentityVerifiedV1,
+    identityResult: IdentityVerifiedObservationV1,
     cutoff: CanonicalCutoffV1,
     signal: AbortSignal,
     rawEvidence: FamilyRawEvidenceReadPortV1,
@@ -390,7 +422,7 @@ export function createAttestationProgramPortFromFamilyComposition(
     }
   };
 
-  return Object.freeze({ attestIdentity: identity, reuseVerifiedMemo, materializeAndProject });
+  const port = Object.freeze({ attestIdentity: identity, reuseVerifiedMemo, materializeAndProject });
+  issuedAttestationProgramPorts.set(port, decodeRuntimeAuthorityProjectionV1(lifecycle.runtimeAuthority));
+  return port;
 }
-
-export type { FamilyRuntimeCompositionV1 } from "../../../family-composition/src/index.ts";

@@ -9,6 +9,7 @@ import {
   type IssuedCoarseRouteBindingV1,
 } from "../index.ts";
 import { hashDomain } from "../../../canonical-codec/src/index.ts";
+import { decodeRuntimeAuthorityProjectionV1 } from "../../../runtime-authority/src/index.ts";
 import { readIssuedPlanningEnumerationV1 } from "../../../planner/src/index.ts";
 import {
   readCoarseRouteBindingV1,
@@ -30,7 +31,12 @@ export function issueCoarseEnumerationBindingV1(
   input: CoarseEnumerationIssueInputV1,
 ): IssuedCoarseEnumerationBindingV1 {
   const planner = readIssuedPlanningEnumerationV1(input.plannerEnumeration);
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
+  if (runtimeAuthority.authorityClass !== "signed-release") {
+    throw new TypeError("coarse enumeration requires signed runtime authority");
+  }
   if (input.generationId !== planner.planningProblem.generationId
+    || !("releaseProvenanceHash" in planner.planningProblem)
     || input.releaseProvenanceHash !== planner.planningProblem.releaseProvenanceHash
     || input.objective.objectiveRef !== planner.planningProblem.objectiveRef
     || input.source.hash !== planner.planningProblem.triggerHeadHash) {
@@ -47,6 +53,9 @@ export function issueCoarseEnumerationBindingV1(
       || binding.planningProblemHash !== planner.planningProblemHash
       || binding.graphRoot !== planner.graphRoot
       || binding.generationId !== planner.planningProblem.generationId
+      || binding.runtimeAuthority.authorityBindingHash !== runtimeAuthority.authorityBindingHash
+      || binding.runtimeAuthority.authorityClass !== runtimeAuthority.authorityClass
+      || binding.runtimeAuthority.implementationCommit !== runtimeAuthority.implementationCommit
       || binding.releaseProvenanceHash !== planner.planningProblem.releaseProvenanceHash
       || binding.objectiveRef !== planner.planningProblem.objectiveRef
       || binding.legs.length !== plannerCandidate.legs.length) {
@@ -66,6 +75,7 @@ export function issueCoarseEnumerationBindingV1(
   }
   const fairnessSeed = hashDomain("aloha/coarse-fairness-seed/v1", {
     generationId: input.generationId,
+    runtimeAuthority,
     releaseProvenanceHash: input.releaseProvenanceHash,
     source: input.source,
     plannerEnumerationRoot: planner.enumerationRoot,
@@ -74,6 +84,7 @@ export function issueCoarseEnumerationBindingV1(
     generationId: input.generationId,
     graphRoot: planner.graphRoot,
     source: input.source,
+    runtimeAuthority,
     releaseProvenanceHash: input.releaseProvenanceHash,
     objective: input.objective,
     policy: input.policy,

@@ -40,6 +40,10 @@ import {
   type SealedRunCapabilityV1,
 } from "../../ready-generation/src/index.ts";
 import { GenerationBuilderV1, type BeginRunInputV1, type GenerationBuilderDependencies, type InProgressBuilderRunV1 } from "../src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/builder", value);
 const cutoff: CanonicalCutoffV1 = { chainId: "1", number: "49", hash: h("block"), stateRoot: h("state") };
@@ -50,6 +54,14 @@ const policy = {
   minPromotionMarginBlocks: "2",
   maxInProgressRuns: "1" as const,
 };
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
+  createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: h("runtime-binding"),
+    releaseProvenanceHash: h("release-provenance"),
+    implementationCommit: "a".repeat(40),
+  }),
+);
 
 function blocks() {
   const values = [];
@@ -381,6 +393,7 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
             nominationClosureStorageHash: sealedRunBinding.nominationClosureStorageHash,
             candidatePartitionProofStorageHash: sealedRunBinding.candidatePartitionProofStorageHash,
             exactOutcomePartitionRoot: sealedRunBinding.exactOutcomePartitionRoot,
+            runtimeAuthority,
             releaseProvenanceHash: sealedRunBinding.releaseProvenanceHash,
             verifiedMemoSetRoot: sealedRunBinding.verifiedMemoSetRoot,
             instanceCatalogRoot: input.instanceCatalog.instanceCatalogRoot,
@@ -406,10 +419,20 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
 }
 
 function issuedDefinitionChangedError(): unknown {
+  const release = releaseApproval(h("framework"), h("executor"));
+  const releasePort = readyBindingPortForReleaseApproval(release);
+  const currentRuntimeAuthority = projectRuntimeAuthorityDescriptorV1(
+    createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: releasePort.currentBindingId(),
+      releaseProvenanceHash: releasePort.currentProvenanceHash(),
+      implementationCommit: releasePort.currentImplementationCommit(),
+    }),
+  );
   const authority = createReadyPromotionAuthority(() => ({
     definitionCatalogRoot: h("current-definitions"),
     policy,
-  }), readyBindingPortForReleaseApproval(releaseApproval(h("framework"), h("executor"))));
+  }), releasePort);
   try {
     authority.issue({
       expectedRevision: "1",
@@ -418,6 +441,7 @@ function issuedDefinitionChangedError(): unknown {
       definitionCatalogRoot: h("old-definitions"),
       instanceCatalogRoot: h("instances"),
       graphRoot: h("graph"),
+      runtimeAuthority: currentRuntimeAuthority,
       releaseProvenanceHash: h("release-provenance"),
       candidatePartitionProofStorageHash: h("candidate-proof-storage"),
       nominationClosureRoot: h("nomination-closure"),
@@ -456,6 +480,7 @@ async function stagedFixture(firstPromotionError: unknown, options: StagedFixtur
     cutoff: run!.cutoff,
     generationRefreshPolicyHash: generationRefreshPolicyHash(policy),
     definitionCatalogRoot: run!.definitionCatalogRoot,
+    runtimeAuthority,
     releaseProvenanceHash: staged.sealedRunBinding.releaseProvenanceHash,
     candidatePartitionProofStorageHash: staged.sealedRunBinding.candidatePartitionProofStorageHash,
     nominationClosureRoot: staged.sealedRunBinding.nominationClosureRoot,
@@ -560,6 +585,7 @@ async function firstPromotionAmbiguousFixture() {
           cutoff: binding.cutoff,
           generationRefreshPolicyHash: generationRefreshPolicyHash(policy),
           definitionCatalogRoot: binding.definitionCatalogRoot,
+          runtimeAuthority,
           releaseProvenanceHash: binding.releaseProvenanceHash,
           candidatePartitionProofStorageHash: binding.candidatePartitionProofStorageHash,
           nominationClosureRoot: binding.nominationClosureRoot,

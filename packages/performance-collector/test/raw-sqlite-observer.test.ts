@@ -108,6 +108,7 @@ function startup() {
   return issueStartupRuntime({
     ready,
     familyRuntimeComposition: {} as never,
+    familySearchRuntime: {} as never,
     generationId: "generation-1",
     graphRoot: h("c"),
     releaseBindingId: release.bindingId,
@@ -279,6 +280,7 @@ async function productionDatabaseWithRouteDenominator(
   const fixtureStartup = issueStartupRuntime({
     ready,
     familyRuntimeComposition: {} as never,
+    familySearchRuntime: {} as never,
     generationId: serving.generationId,
     graphRoot: serving.graphRoot,
     releaseBindingId: release.bindingId,

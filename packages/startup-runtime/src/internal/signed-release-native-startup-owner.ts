@@ -9,6 +9,7 @@ import type {
   ProducerSessionV1,
 } from "../../../canonical-source/src/index.ts";
 import { GraphViewLeaseV1 } from "../../../graph/src/index.ts";
+import { readGeneratedFamilySearchRuntimePort } from "../../../family-composition/src/internal/generated-runtime-composition.ts";
 import {
   GenerationBuilderV1,
   type BoundReadyPromotionPort,
@@ -235,6 +236,8 @@ class SignedReleaseNativeStartupOwner implements NativeStartupOwnerPortV1<
     } else if (ready.releaseProvenanceHash !== this.#authorityDescriptor.releaseProvenanceHash) {
       throw new Error("startup-runtime-lineage-changed");
     }
+    const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(this.#authorityDescriptor);
+    readGeneratedFamilySearchRuntimePort(this.#input.familySearchRuntime, runtimeAuthority);
     assertStartupObservationWindow(ready.cutoff, ready.recentObservationRange);
     const catalog = this.#input.catalog.loadExact();
     if (catalog.definitionCatalogRoot !== ready.definitionCatalogRoot) {
@@ -268,7 +271,7 @@ class SignedReleaseNativeStartupOwner implements NativeStartupOwnerPortV1<
           from: ready.recentObservationRange.from,
           to: ready.recentObservationRange.to,
         }),
-        authority: projectRuntimeAuthorityDescriptorV1(this.#authorityDescriptor),
+        authority: runtimeAuthority,
       }),
     });
   };

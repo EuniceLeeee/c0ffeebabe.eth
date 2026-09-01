@@ -67,6 +67,7 @@ import {
   registerGeneratedFamilyCoarseProjectionInstallerV1,
   registerGeneratedFamilyCoarseProjectionResultV1,
 } from "./internal/coarse-runtime-owner.ts";
+import { projectFamilyCoarseV1 } from "./internal/coarse-projection-kernel.ts";
 
 const STAGES = ["nomination", "identity", "materialization", "projection", "rehydration"] as const;
 type FamilyStageNameV1 = (typeof STAGES)[number];
@@ -457,14 +458,6 @@ function exactStageRef(left: StageCapabilityRefV1, right: StageCapabilityRefV1):
   return encodeCanonicalJson(left) === encodeCanonicalJson(right);
 }
 
-function canonicalObservationValue(value: unknown, path: string): CanonicalJson {
-  try {
-    return deepFreeze(decodeCanonicalJson(encodeCanonicalJson(value)));
-  } catch (error) {
-    throw new TypeError(`${path} is not canonical: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
 function stageRefs(entry: GeneratedFamilyEntryV1): readonly StageCapabilityRefV1[] {
   return STAGES.map(stage => entry.lifecycleRefs[stage]);
 }
@@ -620,7 +613,7 @@ function sourcePlanRoot(plans: readonly GeneratedFamilyRuntimeSourcePlanV1[]): H
   return hashDomain("aloha/family-source-plan-set/v1", plans.map(plan => plan.leafDigest).sort());
 }
 
-function validateGeneratedDescriptor(
+export function validateGeneratedFamilyRuntimeDescriptorV1(
   descriptor: GeneratedFamilyRuntimeDescriptorV1,
 ): GeneratedFamilyRuntimeDescriptorV1 {
   if (descriptor === null || typeof descriptor !== "object") throw new TypeError("generated Family runtime descriptor is required");
@@ -835,7 +828,7 @@ export function createGeneratedFamilyRuntimeComposition(
   input: GeneratedFamilyRuntimeCompositionInputV1,
 ): FamilyRuntimeCompositionV1 {
   if (input === null || typeof input !== "object") throw new TypeError("generated Family runtime composition input is required");
-  const descriptor = validateGeneratedDescriptor(input.descriptor);
+  const descriptor = validateGeneratedFamilyRuntimeDescriptorV1(input.descriptor);
   if (!Array.isArray(input.authorities) || input.authorities.length !== descriptor.families.length) {
     throw new TypeError("generated Family runtime authority set is incomplete");
   }
@@ -1090,9 +1083,6 @@ export function createGeneratedFamilyRuntimeComposition(
       const adapter = resolveAdapter(descriptor.familyDefinitionHash, descriptor.adapter.role);
       await request.currentSource.assertCurrent();
       producerState.assertCurrent();
-      let projection: CoarseEdgeProjectionV1;
-      let stateOutcomeSnapshot: CanonicalJson | null = null;
-      let coarseOutcomeSnapshot: CanonicalJson | null = null;
       const common = {
         edgeId: leg.edgeId,
         transitionRef: leg.transitionRef,
@@ -1112,74 +1102,27 @@ export function createGeneratedFamilyRuntimeComposition(
         }),
         sampleInput: { assetRef: amount.inputAssetRef, amount: amount.amountIn },
       };
+      let coarseResult;
       try {
-        const rawStateOutcome = await adapter.readState({
+        coarseResult = await projectFamilyCoarseV1({
+          adapter,
           route,
+          routeBindingHash,
           currentSource: adapterCurrentSource,
+          sourceRead: request.sourceRead,
           objective,
           amount,
           execution,
-          readPort: request.sourceRead,
+          common,
           ...(request.deadlineAtMs === undefined ? {} : { deadlineAtMs: request.deadlineAtMs }),
           ...(request.signal === undefined ? {} : { signal: request.signal }),
+          path: "generated Family coarse",
         });
-        stateOutcomeSnapshot = canonicalObservationValue(rawStateOutcome, "generatedCoarse.stateOutcome");
-        const stateOutcome = stateOutcomeSnapshot as unknown as Awaited<ReturnType<FamilySearchAdapterV1["readState"]>>;
-        if (stateOutcome.kind === "invalidProgram") throw new TypeError(`generated Family coarse state invalid: ${stateOutcome.code}`);
-        if (stateOutcome.kind === "unavailable") {
-          projection = sealCoarseEdgeProjectionV1({
-            ...common,
-            stateFactsRoot: stateOutcome.evidenceHash,
-            estimatedOutput: null,
-            conservativeOutputUpperBound: null,
-            inputCapacityUpperBound: null,
-            status: "unavailable",
-            reasonCode: `state:${stateOutcome.reasonCode}`,
-          });
-        } else {
-          if (stateOutcome.kind !== "verified") throw new TypeError("generated Family coarse state outcome kind is invalid");
-          if (stateOutcome.artifact.routeBindingHash !== routeBindingHash) throw new TypeError("generated Family coarse state route binding mismatch");
-          const rawCoarseOutcome = adapter.projectCoarse({ route, currentSource: adapterCurrentSource, objective, amount, execution, state: stateOutcome.artifact });
-          coarseOutcomeSnapshot = canonicalObservationValue(rawCoarseOutcome, "generatedCoarse.coarseOutcome");
-          const coarseOutcome = coarseOutcomeSnapshot as unknown as ReturnType<FamilySearchAdapterV1["projectCoarse"]>;
-          if (coarseOutcome.kind === "invalidProgram") throw new TypeError(`generated Family coarse projection invalid: ${coarseOutcome.code}`);
-          if (coarseOutcome.kind === "unavailable") {
-            projection = sealCoarseEdgeProjectionV1({
-              ...common,
-              stateFactsRoot: stateOutcome.artifact.factsRoot,
-              estimatedOutput: null,
-              conservativeOutputUpperBound: null,
-              inputCapacityUpperBound: null,
-              status: "unavailable",
-              reasonCode: `coarse:${coarseOutcome.reasonCode}`,
-            });
-          } else {
-            if (coarseOutcome.kind !== "verified") throw new TypeError("generated Family coarse projection outcome kind is invalid");
-            const artifact = coarseOutcome.artifact;
-            if (artifact.routeBindingHash !== routeBindingHash || artifact.objectiveRef !== objective.objectiveRef
-              || artifact.source.chainId !== source.chainId || artifact.source.number !== source.number
-              || artifact.source.hash !== source.hash || artifact.source.stateRoot !== source.stateRoot
-              || artifact.input.assetRef !== amount.inputAssetRef || artifact.input.amount !== amount.amountIn) {
-              throw new TypeError("generated Family coarse artifact binding mismatch");
-            }
-            if (artifact.status === "rankable" && artifact.output === null) throw new TypeError("generated Family coarse rankable output is missing");
-            projection = sealCoarseEdgeProjectionV1({
-              ...common,
-              stateFactsRoot: artifact.stateFactsRoot,
-              estimatedOutput: artifact.status === "rankable" ? artifact.output : null,
-              // Rank-only until an independent bound verifier is release-qualified.
-              conservativeOutputUpperBound: null,
-              inputCapacityUpperBound: null,
-              status: artifact.status,
-              reasonCode: artifact.status === "rankable" ? null : (artifact.reasonCode ?? "coarse-unavailable"),
-            });
-          }
-        }
       } finally {
         await request.currentSource.assertCurrent();
         producerState.assertCurrent();
       }
-      if (stateOutcomeSnapshot === null) throw new TypeError("generated Family coarse state observation is missing");
+      const { projection, stateOutcome: stateOutcomeSnapshot, coarseOutcome: coarseOutcomeSnapshot } = coarseResult;
       const capability = Object.freeze(Object.create(null)) as CoarseProjectionCapabilityV1;
       const observationBody = deepFreeze({
         schemaVersion: 1 as const,
@@ -1260,9 +1203,6 @@ export function createGeneratedFamilyRuntimeComposition(
       const adapter = resolveAdapter(descriptor.familyDefinitionHash, descriptor.adapter.role);
       await request.currentSource.assertCurrent();
       producerState.assertCurrent();
-      let projection: CoarseEdgeProjectionV1;
-      let stateOutcomeSnapshot: CanonicalJson | null = null;
-      let coarseOutcomeSnapshot: CanonicalJson | null = null;
       const common = {
         edgeId: binding.edgeId,
         transitionRef: binding.transitionRef,
@@ -1282,73 +1222,27 @@ export function createGeneratedFamilyRuntimeComposition(
         }),
         sampleInput: { assetRef: amount.inputAssetRef, amount: amount.amountIn },
       };
+      let coarseResult;
       try {
-        const rawStateOutcome = await adapter.readState({
+        coarseResult = await projectFamilyCoarseV1({
+          adapter,
           route,
+          routeBindingHash,
           currentSource: adapterCurrentSource,
+          sourceRead: request.sourceRead,
           objective,
           amount,
           execution,
-          readPort: request.sourceRead,
+          common,
           ...(request.deadlineAtMs === undefined ? {} : { deadlineAtMs: request.deadlineAtMs }),
           ...(request.signal === undefined ? {} : { signal: request.signal }),
+          path: "generated Family coarse edge sweep",
         });
-        stateOutcomeSnapshot = canonicalObservationValue(rawStateOutcome, "generatedCoarseEdgeSweep.stateOutcome");
-        const stateOutcome = stateOutcomeSnapshot as unknown as Awaited<ReturnType<FamilySearchAdapterV1["readState"]>>;
-        if (stateOutcome.kind === "invalidProgram") throw new TypeError(`generated Family coarse edge sweep state invalid: ${stateOutcome.code}`);
-        if (stateOutcome.kind === "unavailable") {
-          projection = sealCoarseEdgeProjectionV1({
-            ...common,
-            stateFactsRoot: stateOutcome.evidenceHash,
-            estimatedOutput: null,
-            conservativeOutputUpperBound: null,
-            inputCapacityUpperBound: null,
-            status: "unavailable",
-            reasonCode: `state:${stateOutcome.reasonCode}`,
-          });
-        } else {
-          if (stateOutcome.kind !== "verified") throw new TypeError("generated Family coarse edge sweep state outcome kind is invalid");
-          if (stateOutcome.artifact.routeBindingHash !== routeBindingHash) throw new TypeError("generated Family coarse edge sweep state route binding mismatch");
-          const rawCoarseOutcome = adapter.projectCoarse({ route, currentSource: adapterCurrentSource, objective, amount, execution, state: stateOutcome.artifact });
-          coarseOutcomeSnapshot = canonicalObservationValue(rawCoarseOutcome, "generatedCoarseEdgeSweep.coarseOutcome");
-          const coarseOutcome = coarseOutcomeSnapshot as unknown as ReturnType<FamilySearchAdapterV1["projectCoarse"]>;
-          if (coarseOutcome.kind === "invalidProgram") throw new TypeError(`generated Family coarse edge sweep projection invalid: ${coarseOutcome.code}`);
-          if (coarseOutcome.kind === "unavailable") {
-            projection = sealCoarseEdgeProjectionV1({
-              ...common,
-              stateFactsRoot: stateOutcome.artifact.factsRoot,
-              estimatedOutput: null,
-              conservativeOutputUpperBound: null,
-              inputCapacityUpperBound: null,
-              status: "unavailable",
-              reasonCode: `coarse:${coarseOutcome.reasonCode}`,
-            });
-          } else {
-            if (coarseOutcome.kind !== "verified") throw new TypeError("generated Family coarse edge sweep projection outcome kind is invalid");
-            const artifact = coarseOutcome.artifact;
-            if (artifact.routeBindingHash !== routeBindingHash || artifact.objectiveRef !== objective.objectiveRef
-              || artifact.source.chainId !== source.chainId || artifact.source.number !== source.number
-              || artifact.source.hash !== source.hash || artifact.source.stateRoot !== source.stateRoot
-              || artifact.input.assetRef !== amount.inputAssetRef || artifact.input.amount !== amount.amountIn) {
-              throw new TypeError("generated Family coarse edge sweep artifact binding mismatch");
-            }
-            if (artifact.status === "rankable" && artifact.output === null) throw new TypeError("generated Family coarse edge sweep rankable output is missing");
-            projection = sealCoarseEdgeProjectionV1({
-              ...common,
-              stateFactsRoot: artifact.stateFactsRoot,
-              estimatedOutput: artifact.status === "rankable" ? artifact.output : null,
-              conservativeOutputUpperBound: null,
-              inputCapacityUpperBound: null,
-              status: artifact.status,
-              reasonCode: artifact.status === "rankable" ? null : (artifact.reasonCode ?? "coarse-unavailable"),
-            });
-          }
-        }
       } finally {
         await request.currentSource.assertCurrent();
         producerState.assertCurrent();
       }
-      if (stateOutcomeSnapshot === null) throw new TypeError("generated Family coarse edge sweep state observation is missing");
+      const { projection, stateOutcome: stateOutcomeSnapshot, coarseOutcome: coarseOutcomeSnapshot } = coarseResult;
       const capability = Object.freeze(Object.create(null)) as CoarseProjectionCapabilityV1;
       const observationBody = deepFreeze({
         schemaVersion: 1 as const,

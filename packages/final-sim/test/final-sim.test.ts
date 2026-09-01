@@ -22,6 +22,16 @@ import {
 } from "../../search-pipeline/src/index.ts";
 import { createProductionSixStepTailFixture } from "../../search-pipeline/test/production-six-step-fixture.ts";
 import { WorkScheduler } from "../../scheduler/src/index.ts";
+import {
+  bindSchedulerPerformanceJournal,
+  issueSchedulerPerformanceReaderPort,
+  readSchedulerWorkCompletionCapability,
+  readSchedulerWorkCompletionHandle,
+} from "../../scheduler/src/internal/performance-state.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 import { issueEconomicSafetyFinalizationServiceV1 } from "../../economics-safety/src/internal/owner.ts";
 import { encodeExecutorExecuteCalldata, encodePackedCallProgram } from "../../execution-program/src/index.ts";
 import { createTestRevmAuthorityIssuer } from "../../../runtime/revm-workers/test/qualified-authority.ts";
@@ -302,9 +312,34 @@ test("final simulation fails closed when no qualified worker pool is present", a
   assert.equal(scheduler.snapshot().accounting.permitsReleased, 1);
 });
 
+test("generation cutoff remains distinct from the later current execution source", async () => {
+  const scheduler = new WorkScheduler();
+  const port = createQualifiedFinalSimulationPort({ scheduler, client: createFailClosedRevmClient(), qualification, schemaHash, projection: projection() });
+  const value = input();
+  assert.deepEqual(
+    await port.simulate({
+      ...value,
+      binding: {
+        ...value.binding,
+        cutoff: { ...source, number: "99", hash: h("generation-cutoff"), stateRoot: h("generation-cutoff-state") },
+      },
+    }),
+    { kind: "retryable", stage: "final-sim", code: "revm-worker-unavailable" },
+  );
+  assert.equal(scheduler.snapshot().accounting.permitsIssued, 1);
+});
+
 test("qualified worker receipt is converted to a search-pipeline-compatible final fact", async () => {
   const pool = new RevmWorkerPool({ factory: fakeFactory(), authority: authority(), qualification: workerQualification, maxWorkers: 1, timeoutMs: 100 });
   const scheduler = new WorkScheduler();
+  bindSchedulerPerformanceJournal(scheduler, {
+    qualifiedExecutorRegistryRoot: h("scheduler-registry"),
+    executorAuthorityRoot: h("scheduler-authority"),
+    workerEpoch: "scheduler-worker-epoch",
+    executorSession: h("scheduler-executor-session"),
+    authorityVersion: "1",
+  });
+  const performanceReader = issueSchedulerPerformanceReaderPort(scheduler);
   const client = new RevmSimulationClient({ pool });
   const port = createQualifiedFinalSimulationPort({ scheduler, client, qualification, schemaHash, projection: projection() });
   const result = await port.simulate(input());
@@ -335,6 +370,26 @@ test("qualified worker receipt is converted to a search-pipeline-compatible fina
     assert.equal(join.programHash, program().programHash);
     assert.equal(join.finalSimulationReceiptHash, result.receipt.receiptHash);
     assert.equal(typeof join.schedulerCompletion, "object");
+    const schedulerCompletion = readSchedulerWorkCompletionCapability(
+      performanceReader,
+      readSchedulerWorkCompletionHandle(performanceReader, join.schedulerCompletion),
+    );
+    assert.equal(schedulerCompletion.outcome, "completed");
+    assert.deepEqual(schedulerCompletion.work, {
+      workId: hashDomain("aloha/qualified-revm-final-simulation-request/v1", {
+        correlationId: h("correlation"),
+        generationId: program().generationId,
+        routeHash: program().routeHash,
+        artifactProgramHash: program().programHash,
+      }),
+      phase: "final-sim",
+      workClassRef: "qualified-revm-final-simulation-v1",
+      ownerRef: program().issuerRef,
+      lane: "final-sim",
+      resource: "final-sim",
+      cost: "1",
+      quotaKey: "final-sim",
+    });
     assert.equal(Object.prototype.hasOwnProperty.call(result.receipt, "schedulerCompletion"), false);
     assert.equal(JSON.stringify(result.receipt).includes("schedulerCompletion"), false);
     assert.throws(() => port.schedulerJoinAuthority!.read({ ...result.schedulerJoinSeed! }), /was not issued/);
@@ -390,11 +445,17 @@ test("search pipeline accepts only the exact qualified final-sim rejection capab
     definitionCatalogRoot: h("pipeline-definitions"),
     instanceCatalogRoot: h("pipeline-instances"),
     graphRoot: h("pipeline-graph"),
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+      authorityClass: "signed-release",
+      runtimeBindingId: h("pipeline-runtime-binding"),
+      releaseProvenanceHash: h("pipeline-release"),
+      implementationCommit: "a".repeat(40),
+    })),
     releaseProvenanceHash: h("pipeline-release"),
     candidatePartitionProofStorageHash: h("pipeline-partition-proof"),
     nominationClosureRoot: h("pipeline-nomination-closure"),
     nominationClosureStorageHash: h("pipeline-nomination-closure-storage"),
-  }) as never;
+  });
   const lease = Object.freeze({
     binding,
     edges: Object.freeze([]),

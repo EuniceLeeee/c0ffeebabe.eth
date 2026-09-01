@@ -23,11 +23,11 @@ import {
   readIssuedNativeFullFamilyAuditV1,
   readIssuedSearchTerminalNativeFullFamilyAuditCapabilityV1,
   runSearchPipeline,
+  sealUnsignedDryRunReceipt,
   type CurrentSourceSessionV1,
   type RoutePipelineInputV1,
 } from "../../search-pipeline/src/index.ts";
 import {
-  createGeneratedFamilyRuntimeComposition,
   generatedFamilyCoarseProjectionDescriptorV1,
   nominationProgramProposalLeafDigest,
   nominationProgramRoot,
@@ -36,6 +36,13 @@ import {
   sourcePlanLeafDigest,
   type GeneratedFamilyRuntimeDescriptorV1,
 } from "../../family-composition/src/index.ts";
+import {
+  createGeneratedFamilyRuntimeFactory,
+  issueGeneratedFamilyLifecycleRuntimePort,
+  issueGeneratedFamilyRuntimeAuthorityCapability,
+  issueGeneratedFamilySearchRuntimePort,
+  type GeneratedFamilySearchRuntimePortV1,
+} from "../../family-composition/src/internal/generated-runtime-composition.ts";
 import {
   installGeneratedFamilyCoarseProjectionOwnerV1,
   readGeneratedFamilyCoarseProjectionCapabilityV1,
@@ -64,6 +71,10 @@ import { createGeneratedSearchRuntimePorts } from "../src/index.ts";
 import { sealEmptyNominationClosureFixture } from "../../../specs/nomination-authority/test/fixture.ts";
 import { createContractEconomicSafetyService } from "../../search-pipeline/test/economic-safety-fixture.ts";
 import { createProductionSixStepTailFixture } from "../../search-pipeline/test/production-six-step-fixture.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/search-runtime-core", value);
 const source = Object.freeze({ chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") });
@@ -82,6 +93,12 @@ const nomination = sealEmptyNominationClosureFixture({
   persistedExecutionRoot: h("nomination-persisted-execution"),
   resultPartitionRoot: h("nomination-result-partition"),
 });
+const signedRuntimeAuthority = createSignedReleaseRuntimeAuthorityDescriptorV1({
+  authorityClass: "signed-release",
+  runtimeBindingId: h("runtime-binding"),
+  releaseProvenanceHash: h("release"),
+  implementationCommit: "a".repeat(40),
+});
 const binding: GraphLeaseBindingV1 = Object.freeze({
   generationId: "generation-core-test",
   readyRecordHash: h("ready"),
@@ -90,6 +107,7 @@ const binding: GraphLeaseBindingV1 = Object.freeze({
   definitionCatalogRoot: h("definitions"),
   instanceCatalogRoot: h("instances"),
   graphRoot: h("graph"),
+  runtimeAuthority: projectRuntimeAuthorityDescriptorV1(signedRuntimeAuthority),
   releaseProvenanceHash: h("release"),
   candidatePartitionProofStorageHash: h("partition-proof"),
   nominationClosureRoot: nomination.closure.root,
@@ -213,7 +231,7 @@ function issuePlanningProblem() {
   const capability = issueGeneratedStrategyRuntimeAuthorityCapability({
     factory,
     qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
-    releaseProvenanceHash: binding.releaseProvenanceHash,
+    runtimeAuthority: signedRuntimeAuthority,
     assertCurrent: () => {},
   });
   const composition = factory(capability);
@@ -223,6 +241,7 @@ function issuePlanningProblem() {
     graphRoot: binding.graphRoot,
     readyRecordHash: binding.readyRecordHash,
     releaseProvenanceHash: binding.releaseProvenanceHash,
+    runtimeAuthority: binding.runtimeAuthority,
     sourceHash: h("block"),
   } as const;
   const strategyEdges: readonly StrategyGraphEdgeV1[] = Object.freeze(edges.map(edge => Object.freeze({
@@ -403,7 +422,7 @@ const stages = ["nomination", "identity", "materialization", "projection", "rehy
 function generatedComposition(
   onExact?: (instanceKey: string, amountIn: string) => void,
   onAction?: (instanceKey: string, amountIn: string) => void,
-): ReturnType<typeof createGeneratedFamilyRuntimeComposition> {
+): GeneratedFamilySearchRuntimePortV1 {
   const lifecycleRefs = Object.fromEntries(stages.map((stage, index) => [stage, {
     familyId,
     familyDefinitionHash,
@@ -581,17 +600,39 @@ function generatedComposition(
       },
     })),
   };
-  const composition = createGeneratedFamilyRuntimeComposition({
+  const adapterImport = {
+    factory: (({ composition: _composition }) => {
+      void _composition;
+      return adapter(onExact, onAction);
+    }) satisfies FamilySearchAdapterFactoryV1,
+    modulePath: adapterDeclaration.modulePath,
+    exportName: adapterDeclaration.exportName,
+    closureRoot: adapterDeclaration.closureRoot,
+    leafDigest: adapterLeafDigest,
+  };
+  const factory = createGeneratedFamilyRuntimeFactory({
     descriptor,
-    authorities: [authority],
     definitions: [definitions],
     extensions: [[Object.freeze({})]],
     actionOwners: [[]],
-    runtimeAdapters: [[(({ composition: _composition }) => {
-      void _composition;
-      return adapter(onExact, onAction);
-    }) satisfies FamilySearchAdapterFactoryV1]],
+    runtimeAdapters: [[adapterImport]],
+    sourcePlans: [[sourcePlan]],
+    nominationPrograms: [[nominationProgram]],
   });
+  const capability = issueGeneratedFamilyRuntimeAuthorityCapability({
+    factory,
+    runtimeAuthority: signedRuntimeAuthority,
+    qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: descriptor.nominationProgramSetRoot,
+    nominationQualifications: [{
+      proposalLeafDigest: nominationProgramProposal.proposalLeafDigest,
+      qualificationLeafDigest: h("nomination-qualification-leaf"),
+    }],
+    authorities: [authority],
+    assertCurrent: () => {},
+  });
+  const lifecycle = issueGeneratedFamilyLifecycleRuntimePort(factory, capability);
+  const composition = factory(capability);
   const coarseDescriptor = generatedFamilyCoarseProjectionDescriptorV1(descriptor.families[0]!);
   if (coarseDescriptor === null) throw new TypeError("fixture generated coarse descriptor is missing");
   const releaseMembershipRoot = h("coarse-release-membership");
@@ -636,7 +677,7 @@ function generatedComposition(
     );
   });
   issuedHandles = handles as unknown as IssuedRouteHandle[];
-  return composition;
+  return issueGeneratedFamilySearchRuntimePort(factory, capability, lifecycle);
 }
 
 test("generated search ports consume exact non-first Graph ports and compose ordered opaque actions", async () => {
@@ -647,7 +688,7 @@ test("generated search ports consume exact non-first Graph ports and compose ord
   const exactCalls: Array<readonly [string, string]> = [];
   const actionCalls: Array<readonly [string, string]> = [];
   const core = createGeneratedSearchRuntimePorts({
-    composition: generatedComposition((instanceKey, amountIn) => exactCalls.push([instanceKey, amountIn]), (instanceKey, amountIn) => actionCalls.push([instanceKey, amountIn])),
+    familyRuntime: generatedComposition((instanceKey, amountIn) => exactCalls.push([instanceKey, amountIn]), (instanceKey, amountIn) => actionCalls.push([instanceKey, amountIn])),
     sourceRead: {
       read: ({ request }) => {
         readCount += 1;
@@ -703,6 +744,7 @@ test("generated search ports consume exact non-first Graph ports and compose ord
     finalSimulation,
     economicSafety: createContractEconomicSafetyService(binding.releaseProvenanceHash, h),
     sixStepArtifacts: createProductionSixStepTailFixture([]),
+    unsignedDryRun: { issue: sealUnsignedDryRunReceipt },
   } as never;
   const result = await runSearchPipeline(ports, {
     lease: lease(),
@@ -812,7 +854,7 @@ test("generated search ports consume exact non-first Graph ports and compose ord
 test("native audit retains the raw unavailable state outcome and leaves later coarse legs missing", async () => {
   let readCount = 0;
   const core = createGeneratedSearchRuntimePorts({
-    composition: generatedComposition(),
+    familyRuntime: generatedComposition(),
     sourceRead: {
       read: ({ request }) => {
         readCount += 1;
@@ -830,6 +872,9 @@ test("native audit retains the raw unavailable state outcome and leaves later co
   const result = await runSearchPipeline({
     ...core,
     finalSimulation: { simulate: () => { throw new Error("must not reach final simulation"); } },
+    economicSafety: createContractEconomicSafetyService(binding.releaseProvenanceHash, h),
+    sixStepArtifacts: createProductionSixStepTailFixture([]),
+    unsignedDryRun: { issue: sealUnsignedDryRunReceipt },
   } as never, {
     lease: lease(),
     planningProblem,
@@ -865,10 +910,13 @@ test("native audit retains the raw unavailable state outcome and leaves later co
 });
 
 test("caller-recomputed planning problems fail before route admission", async () => {
-  const core = createGeneratedSearchRuntimePorts({ composition: generatedComposition(), sourceRead: { read: () => { throw new Error("not reached"); } }, amountSeed, execution });
+  const core = createGeneratedSearchRuntimePorts({ familyRuntime: generatedComposition(), sourceRead: { read: () => { throw new Error("not reached"); } }, amountSeed, execution });
   const result = await runSearchPipeline({
     ...core,
     finalSimulation: { simulate: () => { throw new Error("not reached"); } },
+    economicSafety: createContractEconomicSafetyService(binding.releaseProvenanceHash, h),
+    sixStepArtifacts: createProductionSixStepTailFixture([]),
+    unsignedDryRun: { issue: sealUnsignedDryRunReceipt },
   } as never, {
     lease: lease(),
     planningProblem: { ...planningProblem },
@@ -885,7 +933,7 @@ test("caller-recomputed planning problems fail before route admission", async ()
 
 test("runtime amount seed rejects removed callback and every unknown field", () => {
   assert.throws(() => createGeneratedSearchRuntimePorts({
-    composition: generatedComposition(),
+    familyRuntime: generatedComposition(),
     sourceRead: { read: () => { throw new Error("not reached"); } },
     amountSeed: { ...amountSeed, callbackDataHex: "0x1234" } as never,
     execution,

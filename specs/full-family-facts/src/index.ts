@@ -41,6 +41,10 @@ import {
   type NominationClosureV1,
 } from "../../nomination-authority/src/index.ts";
 import type { CandidateFinalOutcomeWireV1 } from "../../candidate-final-outcome/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../packages/runtime-authority/src/index.ts";
 export type { CandidateFinalOutcomeWireV1 } from "../../candidate-final-outcome/src/index.ts";
 export * from "./source-wire.ts";
 export * from "./runtime-wire.ts";
@@ -349,6 +353,7 @@ export interface FullFamilyReadyRecordV1 {
   readonly verifiedMemoSetRoot: Hash;
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly edgeCount: string;
   readonly instanceCount: string;
   readonly promotionFreshness: FullFamilyPromotionFreshnessReceiptV1;
@@ -1070,6 +1075,7 @@ export function decodeFullFamilyReadyRecord(value: FullFamilyFactsCodecInput): F
     verifiedMemoSetRoot: (field, path) => positiveHash(field, path),
     instanceCatalogRoot: (field, path) => positiveHash(field, path),
     graphRoot: (field, path) => positiveHash(field, path),
+    runtimeAuthority: (field) => decodeRuntimeAuthorityProjectionV1(field),
     edgeCount: (field, path) => assertDecimalString(field, path),
     instanceCount: (field, path) => assertDecimalString(field, path),
     promotionFreshness: (field, path) => decodePromotionFreshness(field, path),
@@ -1102,6 +1108,7 @@ export function decodeFullFamilyReadyRecord(value: FullFamilyFactsCodecInput): F
     verifiedMemoSetRoot: decoded.verifiedMemoSetRoot,
     instanceCatalogRoot: decoded.instanceCatalogRoot,
     graphRoot: decoded.graphRoot,
+    runtimeAuthority: decoded.runtimeAuthority,
     edgeCount: decoded.edgeCount,
     instanceCount: decoded.instanceCount,
     promotionFreshness: decoded.promotionFreshness,

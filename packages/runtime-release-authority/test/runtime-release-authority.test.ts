@@ -5,6 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { encodeCanonicalBytes, hashDomain, sha256Hex, type Hash } from "../../canonical-codec/src/index.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 import { createEvidenceEvent, EVIDENCE_SCHEMA_MANIFESTS } from "../../../specs/evidence/src/index.ts";
 import { createReadOnlyArtifactRef } from "../../../specs/core-envelope/src/index.ts";
 import {
@@ -618,6 +622,14 @@ function strategyPlanningFixture(value: ReturnType<typeof issued>) {
     graphRoot: h("strategy-graph"),
     readyRecordHash: h("strategy-ready"),
     releaseProvenanceHash: runtimeReleaseBindingProvenanceHash(value.binding),
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(
+      createSignedReleaseRuntimeAuthorityDescriptorV1({
+        authorityClass: "signed-release",
+        runtimeBindingId: value.binding.bindingId,
+        releaseProvenanceHash: runtimeReleaseBindingProvenanceHash(value.binding),
+        implementationCommit: value.binding.candidateReleaseCommit,
+      }),
+    ),
     sourceHash: head.hash,
   });
   const ingress = issueProducerIngressTriggerV1({

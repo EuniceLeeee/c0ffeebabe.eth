@@ -177,6 +177,7 @@ import {
   type ReadyStage12EvidenceReaderPortV1,
   type ReadyStage12EvidenceSnapshotV1,
 } from "./ready-stage12-evidence.ts";
+import { decodeRuntimeAuthorityProjectionV1 } from "../../runtime-authority/src/index.ts";
 import { registerCheckpointReadyStage12EvidenceReader } from "./internal/ready-stage12-evidence-issuer.ts";
 import { assertCheckpointSixStepArtifactPortV1 } from "./internal/six-step-artifact-port-owner.ts";
 import type {
@@ -3056,6 +3057,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         || binding.instanceCatalogRoot !== input.instanceCatalog.instanceCatalogRoot
         || binding.graphRoot !== input.graph.graphRoot
         || binding.generationRefreshPolicyHash !== policyHash
+        || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(input.ready.runtimeAuthority)
         || binding.releaseProvenanceHash !== input.ready.releaseProvenanceHash
         || binding.candidatePartitionProofStorageHash !== input.ready.candidatePartitionProofStorageHash
         || binding.nominationClosureRoot !== input.ready.nominationClosureRoot
@@ -3096,6 +3098,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           if (
             existing.readyBase.definitionCatalogRoot !== input.ready.definitionCatalogRoot
             || existing.readyBase.generationRefreshPolicyHash !== policyHash
+            || encodeCanonicalJson(existing.readyBase.runtimeAuthority) !== encodeCanonicalJson(input.ready.runtimeAuthority)
           ) {
             // Only the promotion authority may turn an exact configuration
             // change into abandon authority.  Every other stage mismatch is
@@ -3103,6 +3106,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             this.#promotionAuthority.assertConfiguration({
               definitionCatalogRoot: existing.readyBase.definitionCatalogRoot,
               generationRefreshPolicyHash: existing.readyBase.generationRefreshPolicyHash,
+              runtimeAuthority: existing.readyBase.runtimeAuthority,
               releaseProvenanceHash: existing.readyBase.releaseProvenanceHash,
             });
             throw new ReadyPromotionFatalError("ready-promotion-stage-mismatch");
@@ -3260,6 +3264,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         || binding.expectedInProgressRunId !== input.expectedInProgressRunId
         || !sameCutoff(binding.cutoff, input.fence.cutoff)
         || binding.generationRefreshPolicyHash !== policyHash
+        || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(input.stage.runtimeAuthority)
         || binding.releaseProvenanceHash !== input.stage.releaseProvenanceHash
         || binding.candidatePartitionProofStorageHash !== input.stage.candidatePartitionProofStorageHash
         || binding.nominationClosureRoot !== input.stage.nominationClosureRoot
@@ -3269,6 +3274,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         binding.definitionCatalogRoot !== stage.readyBase.definitionCatalogRoot
         || binding.instanceCatalogRoot !== stage.readyBase.instanceCatalogRoot
         || binding.graphRoot !== stage.readyBase.graphRoot
+        || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(stage.readyBase.runtimeAuthority)
         || binding.releaseProvenanceHash !== stage.readyBase.releaseProvenanceHash
         || binding.candidatePartitionProofStorageHash !== stage.readyBase.candidatePartitionProofStorageHash
         || binding.nominationClosureRoot !== stage.readyBase.nominationClosureRoot
@@ -3313,6 +3319,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           || !sameCutoff(stage.readyBase.cutoff, input.stage.cutoff)
           || stage.readyBase.generationRefreshPolicyHash !== input.stage.generationRefreshPolicyHash
           || stage.readyBase.definitionCatalogRoot !== input.stage.definitionCatalogRoot
+          || encodeCanonicalJson(stage.readyBase.runtimeAuthority) !== encodeCanonicalJson(input.stage.runtimeAuthority)
           || stage.readyBase.releaseProvenanceHash !== input.stage.releaseProvenanceHash
           || stage.readyBase.candidatePartitionProofStorageHash !== input.stage.candidatePartitionProofStorageHash
           || stage.readyBase.nominationClosureRoot !== input.stage.nominationClosureRoot
@@ -4095,6 +4102,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         "definitionCatalogRoot",
         "instanceCatalogRoot",
         "graphRoot",
+        "runtimeAuthority",
         "releaseProvenanceHash",
         "candidatePartitionProofStorageHash",
         "nominationClosureRoot",
@@ -4117,6 +4125,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     const releaseProvenanceHash = assertHash(
       readOwnEnumerableDataProperty(rawBinding, "releaseProvenanceHash", "activeReadyBinding"),
       "activeReadyBinding.releaseProvenanceHash",
+    );
+    const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(
+      readOwnEnumerableDataProperty(rawBinding, "runtimeAuthority", "activeReadyBinding"),
     );
     const candidatePartitionProofStorageHash = assertHash(
       readOwnEnumerableDataProperty(rawBinding, "candidatePartitionProofStorageHash", "activeReadyBinding"),
@@ -4163,6 +4174,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || closure.ready.definitionCatalogRoot !== definitionCatalogRoot
       || closure.ready.instanceCatalogRoot !== instanceCatalogRoot
       || closure.ready.graphRoot !== graphRoot
+      || encodeCanonicalJson(closure.ready.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)
       || closure.ready.releaseProvenanceHash !== releaseProvenanceHash
       || closure.ready.candidatePartitionProofStorageHash !== candidatePartitionProofStorageHash
       || closure.ready.nominationClosureRoot !== nominationClosureRoot
@@ -5854,6 +5866,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       cutoff: stage.readyBase.cutoff,
       generationRefreshPolicyHash: stage.readyBase.generationRefreshPolicyHash,
       definitionCatalogRoot: stage.readyBase.definitionCatalogRoot,
+      runtimeAuthority: stage.readyBase.runtimeAuthority,
       releaseProvenanceHash: stage.readyBase.releaseProvenanceHash,
       candidatePartitionProofStorageHash: stage.readyBase.candidatePartitionProofStorageHash,
       nominationClosureRoot: stage.readyBase.nominationClosureRoot,
@@ -6123,6 +6136,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             instanceCatalogRoot: closure.ready.instanceCatalogRoot,
             graphRoot: closure.ready.graphRoot,
             policyHash: closure.ready.generationRefreshPolicyHash,
+            runtimeAuthority: closure.ready.runtimeAuthority,
             releaseProvenanceHash: closure.ready.releaseProvenanceHash,
             candidatePartitionProofStorageHash: closure.ready.candidatePartitionProofStorageHash,
             nominationClosureRoot: closure.ready.nominationClosureRoot,
@@ -6172,6 +6186,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
               graphRoot: closure.ready.graphRoot,
               edgeCount: closure.ready.edgeCount,
               instanceCount: closure.ready.instanceCount,
+              runtimeAuthority: closure.ready.runtimeAuthority,
               releaseProvenanceHash: closure.ready.releaseProvenanceHash,
               candidatePartitionProofStorageHash: closure.ready.candidatePartitionProofStorageHash,
             })

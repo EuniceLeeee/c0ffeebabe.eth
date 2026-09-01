@@ -29,9 +29,18 @@ import {
 } from "../src/index.ts";
 import {
   createGeneratedFamilyRuntimeFactory,
+  issueGeneratedFamilyLifecycleRuntimePort,
+  issueGeneratedFamilyRuntimeAuthorityCapability,
+  issueGeneratedFamilySearchRuntimePort,
   readGeneratedFamilyRuntimeAdapterFactories,
   readGeneratedFamilyRuntimeFactoryMetadata,
+  readGeneratedFamilyLifecycleRuntimePort,
+  readGeneratedFamilySearchRuntimePort,
 } from "../src/internal/generated-runtime-composition.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 import {
   installGeneratedFamilyCoarseProjectionOwnerV1,
   readGeneratedFamilyCoarseProjectionCapabilityV1,
@@ -430,6 +439,111 @@ test("generated factory exact-binds every runtime adapter import descriptor and 
   );
 });
 
+function generatedSearchFactoryFixture() {
+  const fixture = generatedFixture();
+  const adapterBase = Object.freeze({
+    role: "search/v1",
+    modulePath: "families/composition-family/search-adapter.ts",
+    exportName: "SEARCH_ADAPTER_FACTORY",
+    closureRoot: h("neutral-search-adapter-closure"),
+    capabilityRefs: Object.freeze({}),
+    actionOwnerRefs: Object.freeze({}),
+  });
+  const adapterDescriptor = Object.freeze({
+    ...adapterBase,
+    leafDigest: runtimeAdapterLeafDigest(adapterBase),
+  });
+  const family = fixture.descriptor.families[0]!;
+  const changedFamily = Object.freeze({
+    ...family,
+    runtimeAdapters: Object.freeze([adapterDescriptor]),
+    runtimeAdapterRoot: hashDomain("aloha/family-runtime-adapter-set/v1", [adapterDescriptor.leafDigest]),
+  });
+  const withoutRoot = Object.freeze({
+    schemaVersion: fixture.descriptor.schemaVersion,
+    releaseIntentRoot: fixture.descriptor.releaseIntentRoot,
+    definitionCatalogRoot: fixture.descriptor.definitionCatalogRoot,
+    proposedCapabilitySetRoot: fixture.descriptor.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: fixture.descriptor.nominationProgramSetRoot,
+    families: Object.freeze([changedFamily]),
+  });
+  const descriptor: GeneratedFamilyRuntimeDescriptorV1 = Object.freeze({
+    ...withoutRoot,
+    descriptorRoot: hashDomain("aloha/generated-family-runtime-descriptor/v1", withoutRoot),
+  });
+  const adapter = Object.freeze({
+    async readState() { return Object.freeze({ kind: "unavailable", stage: "state", reasonCode: "unused", evidenceHash: h("state") }); },
+    projectCoarse() { return Object.freeze({ kind: "unavailable", stage: "coarse", reasonCode: "test-only", evidenceHash: h("coarse") }); },
+    evaluateExact() { return Object.freeze({ kind: "unavailable", stage: "exact", reasonCode: "unused", evidenceHash: h("exact") }); },
+    buildAction() { return Object.freeze({ kind: "unavailable", stage: "action", reasonCode: "unused", evidenceHash: h("action") }); },
+    async run() { return Object.freeze({ kind: "unavailable", stage: "state", reasonCode: "unused", evidenceHash: h("run") }); },
+  });
+  const actualFactory: FamilySearchAdapterFactoryV1 = () => adapter;
+  const factory = createGeneratedFamilyRuntimeFactory({
+    descriptor,
+    definitions: [fixture.definitions],
+    extensions: [[]],
+    actionOwners: [[]],
+    runtimeAdapters: [[Object.freeze({
+      factory: actualFactory,
+      modulePath: adapterDescriptor.modulePath,
+      exportName: adapterDescriptor.exportName,
+      closureRoot: adapterDescriptor.closureRoot,
+      leafDigest: adapterDescriptor.leafDigest,
+    })]],
+    sourcePlans: [[fixture.sourcePlan]],
+    nominationPrograms: [[fixture.nominationProgram]],
+  });
+  return { fixture, descriptor, adapter, factory };
+}
+
+test("signed generated Family search and lifecycle ports bind one exact factory and authority", () => {
+  const first = generatedSearchFactoryFixture();
+  const second = generatedSearchFactoryFixture();
+  const descriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: h("signed-runtime-binding"),
+    releaseProvenanceHash: h("signed-runtime-provenance"),
+    implementationCommit: "a".repeat(40),
+  });
+  let current = true;
+  const assertCurrent = () => { if (!current) throw new TypeError("Family runtime rotated"); };
+  const proposal = first.descriptor.families[0]!.sourcePlans[0]!.nominationProgramProposal.proposalLeafDigest;
+  const capability = issueGeneratedFamilyRuntimeAuthorityCapability({
+    factory: first.factory,
+    runtimeAuthority: descriptor,
+    qualifiedCapabilityRefsRoot: first.descriptor.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: first.descriptor.nominationProgramSetRoot,
+    nominationQualifications: [{ proposalLeafDigest: proposal, qualificationLeafDigest: h("nomination-qualified") }],
+    authorities: [first.fixture.authority],
+    assertCurrent,
+  });
+  const lifecyclePort = issueGeneratedFamilyLifecycleRuntimePort(first.factory, capability);
+  const lifecycle = readGeneratedFamilyLifecycleRuntimePort(
+    lifecyclePort,
+    projectRuntimeAuthorityDescriptorV1(descriptor),
+  );
+  assert.equal(
+    lifecycle.requireStage(familyDefinitionHash, familyId, "projection").stageRef.stage,
+    "projection",
+  );
+  const searchPort = issueGeneratedFamilySearchRuntimePort(first.factory, capability, lifecyclePort);
+  const search = readGeneratedFamilySearchRuntimePort(
+    searchPort,
+    projectRuntimeAuthorityDescriptorV1(descriptor),
+  );
+  assert.equal(search.requireAdapter(familyDefinitionHash, "search/v1"), first.adapter);
+  assert.throws(() => readGeneratedFamilyLifecycleRuntimePort({ ...lifecyclePort }), /not owner-issued/);
+  assert.throws(() => readGeneratedFamilySearchRuntimePort({ ...searchPort }), /not owner-issued/);
+  assert.throws(
+    () => issueGeneratedFamilySearchRuntimePort(second.factory, capability),
+    /another generated factory/,
+  );
+  current = false;
+  assert.throws(() => readGeneratedFamilyLifecycleRuntimePort(lifecyclePort), /rotated/);
+  assert.throws(() => readGeneratedFamilySearchRuntimePort(searchPort), /rotated/);
+});
+
 function coarseFixture(options: Readonly<{ stateUnavailable?: boolean }> = {}) {
   const fixture = generatedFixture();
   const capabilityRef: StageCapabilityRefV1 = Object.freeze({
@@ -553,6 +667,12 @@ function coarseFixture(options: Readonly<{ stateUnavailable?: boolean }> = {}) {
   assert.ok(coarseDescriptor);
   const releaseProvenanceHash = h("coarse-release-provenance");
   const releaseMembershipRoot = h("coarse-release-membership");
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: h("coarse-runtime-binding"),
+    releaseProvenanceHash,
+    implementationCommit: "a".repeat(40),
+  }));
   let releaseCurrent = true;
   const assertCurrent = () => { if (!releaseCurrent) throw new TypeError("coarse release stale"); };
   const owner = issueQualifiedCoarseProjectionOwnerCapabilityV1({
@@ -614,6 +734,7 @@ function coarseFixture(options: Readonly<{ stateUnavailable?: boolean }> = {}) {
     graphRoot: h("graph"),
     source,
     objectiveRef: objective.objectiveRef,
+    runtimeAuthority,
     releaseProvenanceHash,
     legs: Object.freeze([
       { edgeId: h("edge"), transitionRef: h("transition"), inputAssetRef: amount.inputAssetRef, inputPortRef: h("port-in"), outputAssetRef: amount.outputAssetRef, outputPortRef: h("port-out") },

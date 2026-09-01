@@ -8,6 +8,42 @@ const ACTION_OWNER_REGISTRY = Object.freeze(
   "kind": "aloha.generated-economic-safety-action-owner-registry",
   "entries": [
     {
+      "familyDefinitionHash": "0x657b34587743d801691ac9eeb5f23b4ddbaeb9b4428c6385f2cdcd9cdc8ed9cb",
+      "ownerId": "family.fluid-credit.vault-action",
+      "ownerRef": "0x0594ae5f401d4f9b9106bc2fee89facd84328b25c249d5ccdc6186226e6eccd0",
+      "implementationHash": "0xb842a02d02479c5af7b1d560791af5537933facf216db6f749f525ce29b7cc3f",
+      "schemaRef": "0x5ab3f689b3792b4e167d8445178f0efeb08ad980c651898b63dc17b02374659f",
+      "implementationClosureRoot": "0x3dc36f00d9d2831d9c5aa77958fec11a453c298b09cc475abbe12a2bc547fa8d",
+      "proposalLeafDigest": "0xa9119f167e08a1c5db77f5d9747ab731426409b2752141337c41856d78d56203"
+    },
+    {
+      "familyDefinitionHash": "0x2928a652ee7065950bba3695d0d21adfa7e7ca143d4a0f229f6f86cb58f54f25",
+      "ownerId": "family.metronome-synth.swap-action",
+      "ownerRef": "0x1e6566b5fbe9f7c00f952d66b625f2100e81abf6fed94569491eaae1516640ae",
+      "implementationHash": "0x4b3ddbf93f49269f9fac67edec7c1bec7ae29dd77e291394e4c253738fde8335",
+      "schemaRef": "0xb9f3c3814327721ebacbca909a5641d1019febd587dd7cd17f20a64c084e4ed8",
+      "implementationClosureRoot": "0x8f7fed19ea30389de8ab783abb4c2affcc906973c50bc50743f0b5868db9b376",
+      "proposalLeafDigest": "0xc74f5684de4fd0a0b057ffa870880da9ca9935b81925c970bf825799d88ee4fc"
+    },
+    {
+      "familyDefinitionHash": "0xb1ec91a33dc9a9fb334a5f3da0b2f9698ed3a4f3acf7f6efcdb46e2a534ec83f",
+      "ownerId": "family.angstrom-v4.swap-action",
+      "ownerRef": "0x22bc7f60f22faf8a2c3cd9f052889fad055a4a5b997793aafc9e06415f46d30e",
+      "implementationHash": "0xe7120977ec837d705de399654411414265f866b21ba76547d756889f76eeeaa5",
+      "schemaRef": "0xa02285be485d0f9cbdec07ffb4243b8b0e21dc366f47afff9ba6193795f8e3fd",
+      "implementationClosureRoot": "0x0536df578584bb03aa108ea5a2fd133169a0855a3cb23fc588142539da12f729",
+      "proposalLeafDigest": "0xaa5eb9b08dad052944d17252f638d55b6590cdf7c83f9f49de10efd4c6fc999a"
+    },
+    {
+      "familyDefinitionHash": "0x4d0c760cb7cad27b47da34ffb56340877f10c40fa23c47fcf1f77865684ef860",
+      "ownerId": "family.univ3-standard.swap-action",
+      "ownerRef": "0x3c5fa9e1aaadf67ef5dab7c4b174e25992891bfd14290499c3cc2472a545846e",
+      "implementationHash": "0x19483dae48e4bd2c29a458e41c01e5df0699b68209e6c8e95cfc1bec8685ec39",
+      "schemaRef": "0x5b5262eaa27285bfe734b224899003fc4254499b57bd7478a7623c6665cd8528",
+      "implementationClosureRoot": "0xb7689a0b1ad029237ad4e1b471dc4e7cae8c38cf27b21bc06cef0922da3023f9",
+      "proposalLeafDigest": "0x7f3339ea5d8596b599caeffc46af5286e75254010b5a7f77a5265a6cc181095d"
+    },
+    {
       "familyDefinitionHash": "0x793a0cc3840dc9cfcbee1e00989b20ff8823619e81a030f5210d2eceb81b8844",
       "ownerId": "family.dodo-v2.swap-action",
       "ownerRef": "0x3ff1d4fff70ee3675ca8a26ca6c890943db310cd0ac22a5a1bdb7e50eeaa9b4e",
@@ -17,6 +53,69 @@ const ACTION_OWNER_REGISTRY = Object.freeze(
       "proposalLeafDigest": "0xc9b452a874dab190b7655028bf142c2f76328a14e2825dc90445365b10885d39"
     },
     {
+      "familyDefinitionHash": "0xecb03ec56cb31bee783f6d910335356d1f6b289410a3fb2e3afe0914cc31e47d",
+      "ownerId": "family.psm.swap-action",
+      "ownerRef": "0x4ad1669750e5c8ecf43d27a438fd18550cfa3d90cf36c008df67729bdeafb04b",
+      "implementationHash": "0x4cbdf2c48642db52e0736b35a932d8a6253eacfa6b1a02b78918475382088440",
+      "schemaRef": "0xd3f130f4b8c895e7f1f51bdec9124e15734b833d03e57c4c53a5d237b73d6369",
+      "implementationClosureRoot": "0x428c1e3d75791943361100b9161286daa7ed93886e5027af87c168225c17fc8e",
+      "proposalLeafDigest": "0x6bec68351b87ef14799fedb908788d7273dda4ade2481a0f1260559babfdfc78"
+    },
+    {
+      "familyDefinitionHash": "0x25cf8eb1ced2d091b0f4a164d56de66933a38bf5c043c92906896c3265ba3b30",
+      "ownerId": "family.erc4626.vault-action",
+      "ownerRef": "0x5f270dabf1a1f361fc129a96f941eb9bcd3cb3d48230b3841516cf254996b044",
+      "implementationHash": "0x1b5a481b955ba58a9339c3121ccc882f4442edfd9e8f464cd17941bb1ea28a78",
+      "schemaRef": "0x71b6f5de6bbe3899089dc3bdf1051bcd1e7f387f7ee5e2194b61c471205067b7",
+      "implementationClosureRoot": "0xc4fa497a1029f1a9bc4d14baade74a0771f21f947e6adb4cec7a0745ddcb42db",
+      "proposalLeafDigest": "0xd25f64e6a5c8d29b1c97fc7cd493ec329dfc9ecb1df5a6985e59c49304647b68"
+    },
+    {
+      "familyDefinitionHash": "0x5de7a7b752106a7f8dfa1a940b215ad8cb98b697818035abe24c063cd061db21",
+      "ownerId": "family.ethertoken-native-redeem.redeem-action",
+      "ownerRef": "0x70cd25471e9c488fa228a9c85f1569e9f4a4d7771a421d951f2bd2806620f529",
+      "implementationHash": "0xafb0f9fdba9214e33e501d50a394b1ff08bc5e908e8c3d33b7f4e9e61e8174fc",
+      "schemaRef": "0x1e3b6fea8c82614bde251294f56d35b8a12ce28ecb0b63b880b503403e2cece1",
+      "implementationClosureRoot": "0x9abfd7a61aee0d2e768458f29b42684de601d5a43c5809541d90949cfab55853",
+      "proposalLeafDigest": "0x2fab33537093248c4cd119a9b3cc0a92b0170788b2aef0721b057bda4dc21f4a"
+    },
+    {
+      "familyDefinitionHash": "0xa6d14d720b5af25c957f4f48c9c97881c8c129a24633f2d5db7eb3abf84f9b6f",
+      "ownerId": "family.univ4.swap-action",
+      "ownerRef": "0x728550fbd6a53208d57344d7cb092bbc77ab1787141443655cd76b3cf65e9a15",
+      "implementationHash": "0x5da69f5fc12e79f6eec204ac6461b0a785a57f44b25b265c2c8dc06a57e60625",
+      "schemaRef": "0x9c4f696118cdaef51550e1c109d8576888d50342a6bb2cb711177ad509b20123",
+      "implementationClosureRoot": "0xe5c0faeccedfb03248da48cd665866b5203a56dd8a40f2f3af7d2c6cf3401ce8",
+      "proposalLeafDigest": "0xeeacb633f62a5e3c8b0104be2e2695045ee359ff05298676fa85a9c35e229a1d"
+    },
+    {
+      "familyDefinitionHash": "0xa6ea2d95dbf8a57bbb3efdda3791b7c0add58b8cb34a9472971bc49b15bae98b",
+      "ownerId": "family.eigenpie.protocol-action",
+      "ownerRef": "0x77280916ba92f07d30f6ddb336b526e3d581ff9520031457fb5bd458847a26d2",
+      "implementationHash": "0x04261d98ee0b7da20c96fae6dab0b7dbf1737bb7369bc99a4fc44d044d023111",
+      "schemaRef": "0x79d901887d6c3b06f7af49ac3d56bb8370ec4f433aa87646d031c383d4afe7a9",
+      "implementationClosureRoot": "0x5f10d2527790fc3e23fe093be8c302db2076b59d5c1d137434126e3a9a660a7d",
+      "proposalLeafDigest": "0xced71b5eece5bac906596eec77eb5a77afb5c586a4463b99981c5502ee8126a7"
+    },
+    {
+      "familyDefinitionHash": "0x9248e831a111053b73a13af9dc022bf2d8842dcb3becd95f59c213058a8a353d",
+      "ownerId": "family.goldx.swap-action",
+      "ownerRef": "0x7c4db78813e17c6fbf03541e7baeb35ae3d7accbc6cb6345883a283e6265a836",
+      "implementationHash": "0x41ed277a6f3ea89f404efea52f83b18518bd0e7273f2faa3b741bf488dd7b629",
+      "schemaRef": "0x29ba1b531bd6ca32bc59026bf7a5d426be1801860b9fb16cffa5683ba6591a45",
+      "implementationClosureRoot": "0xf28fab1e2bbbf850a1a17362bd0d435b52e99c8c03bdcf853dc5219bdca1dc3b",
+      "proposalLeafDigest": "0x4f07cd054a325e7114f83f1aac1dc2e8158012d1abd2abf4efca4d7e5ba873ac"
+    },
+    {
+      "familyDefinitionHash": "0x0e3de4be7606470f08eed77d212f123a81ca74ec6b156ebdbf57e944ca8f8ca8",
+      "ownerId": "family.rocksolid.sync-deposit",
+      "ownerRef": "0x7ca57a9a314553e3519dc2c36b56deea218a5fafd4fd4dc627c9f299af5a5fff",
+      "implementationHash": "0x8928926bd5c565963acbbd9a949b04cdaf2323f3d8cc08272e0bd463ce581cf8",
+      "schemaRef": "0x163fe7508d9059ef3bf3ced28887823617b2386069dd607c4a7580bc297807af",
+      "implementationClosureRoot": "0xb2d38349a6ce6fea1b92c729fdd19fd64489834eba0cadb124ffeb8fbcf37709",
+      "proposalLeafDigest": "0xb94862465ba82e0e36a11300b41e3a256809c09a82668038ac45dbe7a279e0e8"
+    },
+    {
       "familyDefinitionHash": "0xbde1f0f7fa7dbc82e4153b3b13f55c40a971a152c612f52a835312033c656002",
       "ownerId": "family.fluid-dex.swap-action",
       "ownerRef": "0x82a3ba0aad041073e25143e0248e4b3618d9a5d3d4bdf4f6e54e3f0dce47886d",
@@ -24,6 +123,33 @@ const ACTION_OWNER_REGISTRY = Object.freeze(
       "schemaRef": "0xfabc0eb4431f8fd1c1cf8ecf65aefa027b15ec8ab31f54ea413f148c6d75d989",
       "implementationClosureRoot": "0x472bcecefb700a52d36985832845e11fc2e69d93e2116ab66bafd2405d5dfbd7",
       "proposalLeafDigest": "0xa62ade7e867b117327654110cec06f31a6ac409cb5db141fd2867fef023f6090"
+    },
+    {
+      "familyDefinitionHash": "0x11291829649a797032c331bfe72354191d69473bccd9727052103823fcad8212",
+      "ownerId": "family.astra-multitoken.convert-action",
+      "ownerRef": "0x96c37372b96c9f65710c43afd24d756415b0ca4dd362c4255cde21510bfd3681",
+      "implementationHash": "0x368663452d82d8a176ecc401fcbb0d891971dbe93c29424487460df91fb18eec",
+      "schemaRef": "0x722ae0d0e5339487015ba10002712f310fa3ac840d8b5f4d109bb965c39d50aa",
+      "implementationClosureRoot": "0x3044f2c373d517c114a5b30ad782cd45630689f2a1a754b14bcb31f73e344064",
+      "proposalLeafDigest": "0x529dcde6ebfdb23c4ed6ab417b115215937e6e8e0bfc39b7d159dcf68acb7dad"
+    },
+    {
+      "familyDefinitionHash": "0x070d1d3d80de367d41cde95393630296ef0206daec6079104433ab2265b0d77d",
+      "ownerId": "family.erc4626-silo-redeem.redeem-action",
+      "ownerRef": "0x97eefba8daf82cc988fbf116cdfb720e9eb55731effe889f1203d7bfcee90982",
+      "implementationHash": "0x6ecaf18407367302ca29629b424e294e867612ee90457cd6757af88d3d018b58",
+      "schemaRef": "0x849276710a564547aa74d8331b1ec506c32d86a31987ac10a479c7c288fb2814",
+      "implementationClosureRoot": "0xfad0c3ce6aded2806bf391aa48455eec271e6e8879811e9630721e1b67e1ff71",
+      "proposalLeafDigest": "0x906d2d1fd0f5e3f3494d58049aedafe2b4b9e90ecf56cdb688e652b08bc949ad"
+    },
+    {
+      "familyDefinitionHash": "0x5547457f84b102de6d30da6287a7fe7d2475950ed244082ec6bb28511cffd5aa",
+      "ownerId": "family.metronome-hgusdc.exit-action",
+      "ownerRef": "0xad9919845fda18f9f7e36cace7e48bde48ebaa119ba2087c770f7b4f4f2d0409",
+      "implementationHash": "0x5636a0556f02f09ceffb527c7db9c7b8b6bf348f826c17a8461ba5b6838f4ed9",
+      "schemaRef": "0x53fe1db9571850c7fba90a037dabdf04e18ab37f9cf500c664f6af172db2f1c5",
+      "implementationClosureRoot": "0x6fcc81d11303ab9fde6021a1527d08b158dedd55c57287a316a681dd499a5a20",
+      "proposalLeafDigest": "0x4a42986c72ab67017e310fb5cf49f042a156db250f3cf73e6650a3937d5628a1"
     },
     {
       "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
@@ -42,9 +168,27 @@ const ACTION_OWNER_REGISTRY = Object.freeze(
       "schemaRef": "0x5baea426a6761534cd45990b4db0d9a42061da62b960fccf21f482d480c7d9fb",
       "implementationClosureRoot": "0x3893a21ba38f506b875d3760fe69595f1210cbe95bba2e98cb39490717abda4d",
       "proposalLeafDigest": "0x620b257f805e52b2c3e55497fc0b6397967bc5d7d480db006a519ac04befdd88"
+    },
+    {
+      "familyDefinitionHash": "0x7a62f31e72a8f525b2d72ba60251cbfe9e42c85b2ecfe03bb4b6bc9466b25065",
+      "ownerId": "family.wsteth.wrap-unwrap",
+      "ownerRef": "0xba0ba6e3fe1f211ad8dfaacfe0266ea5fe59c4a36bf80924c75bd1f2c529257d",
+      "implementationHash": "0x38112b3c1f25f1aed84e08d745b5ec01e47f3e0db31c69737a2479ff59df73f4",
+      "schemaRef": "0x858216bd37c389658c2ffea9171f01ac47882b36c982c76a7f393e24bdc60eb2",
+      "implementationClosureRoot": "0xa5eaa463da2260a45956e241e7efa73cd5703317d283da5e5f067857ad479b41",
+      "proposalLeafDigest": "0xb1b484780534f13648de4e769397cfe2d4d5b2240fa1a8c5c684407396b35c88"
+    },
+    {
+      "familyDefinitionHash": "0x17012a8031772edae7d5482839d60274eefeafe241e3a48191bceef1ee5fa7fb",
+      "ownerId": "family.self-burn-native.redeem-action",
+      "ownerRef": "0xbb5c99d8db1f4bdee6bec6b7b9ede86da367413f34fb36b865f074744fe46838",
+      "implementationHash": "0x2385ddcbdab318da46910210f69715f97c1e81762b79594a4d63d36ce535d105",
+      "schemaRef": "0x082e0055979a18038d19880e833c00a2a98e52b261d552246ec669cd714c6cb3",
+      "implementationClosureRoot": "0x909b3b1e383bc577e782996a20e6a3c12c3397d9e8ce40b9d11ec6f4d09994be",
+      "proposalLeafDigest": "0x4549938c666268c13890dc53ae95afac82da6c67846c3492b798f7b2a63026c4"
     }
   ],
-  "actionOwnerRegistryRoot": "0x357c437428b610347aa44ac0ea080c9741105f541d67986d2d784f1923364468"
+  "actionOwnerRegistryRoot": "0xecf537745aca2f00abc8f1fe6f441e140fe2a3777ff50ee4f65876025973aaac"
 }
 ) as unknown as GeneratedEconomicSafetyActionOwnerRegistryV1;
 

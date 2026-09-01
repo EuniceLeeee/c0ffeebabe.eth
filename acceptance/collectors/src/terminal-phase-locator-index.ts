@@ -43,6 +43,10 @@ import {
   type ProductionSixStepArtifactMaterialV1,
 } from "../../../packages/evidence-emitter/src/index.ts";
 import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../packages/runtime-authority/src/index.ts";
+import {
   decodeSixStepNativeBoundaryRecord,
   decodeSixStepStageInput,
   decodeSixStepStageFacts,
@@ -1545,6 +1549,7 @@ export function exactProductionGraphLeaseBindingV1(value: unknown): Readonly<{
   readonly definitionCatalogRoot: Hash;
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly releaseProvenanceHash: Hash;
   readonly candidatePartitionProofStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
@@ -1554,11 +1559,15 @@ export function exactProductionGraphLeaseBindingV1(value: unknown): Readonly<{
   const binding = record(value, path);
   assertExactKeys(binding, [
     "generationId", "readyRecordHash", "generationRefreshPolicyHash", "cutoff",
-    "definitionCatalogRoot", "instanceCatalogRoot", "graphRoot", "releaseProvenanceHash",
+    "definitionCatalogRoot", "instanceCatalogRoot", "graphRoot", "runtimeAuthority", "releaseProvenanceHash",
     "candidatePartitionProofStorageHash", "nominationClosureRoot", "nominationClosureStorageHash",
   ], path);
   const cutoff = record(binding.cutoff, `${path}.cutoff`);
   assertExactKeys(cutoff, ["chainId", "number", "hash", "stateRoot"], `${path}.cutoff`);
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(binding.runtimeAuthority);
+  if (runtimeAuthority.authorityClass !== "signed-release") {
+    throw new TypeError(`${path}.runtimeAuthority must be signed-release`);
+  }
   return Object.freeze({
     generationId: exactNonEmptyString(binding.generationId, `${path}.generationId`),
     readyRecordHash: assertHash(binding.readyRecordHash, `${path}.readyRecordHash`),
@@ -1572,6 +1581,7 @@ export function exactProductionGraphLeaseBindingV1(value: unknown): Readonly<{
     definitionCatalogRoot: assertHash(binding.definitionCatalogRoot, `${path}.definitionCatalogRoot`),
     instanceCatalogRoot: assertHash(binding.instanceCatalogRoot, `${path}.instanceCatalogRoot`),
     graphRoot: assertHash(binding.graphRoot, `${path}.graphRoot`),
+    runtimeAuthority,
     releaseProvenanceHash: assertHash(binding.releaseProvenanceHash, `${path}.releaseProvenanceHash`),
     candidatePartitionProofStorageHash: assertHash(binding.candidatePartitionProofStorageHash, `${path}.candidatePartitionProofStorageHash`),
     nominationClosureRoot: assertHash(binding.nominationClosureRoot, `${path}.nominationClosureRoot`),

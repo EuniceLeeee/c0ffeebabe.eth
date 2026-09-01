@@ -13,6 +13,11 @@ import {
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../../strategy-composition/src/internal/trigger-owner.ts";
 import { compileStrategy } from "../../strategy-sdk/src/index.ts";
 import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+  type SignedReleaseRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
+import {
   ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER,
   ROUTE_CYCLE_STRATEGY,
 } from "../../../strategies/route-cycle/src/index.ts";
@@ -31,6 +36,7 @@ export function issueRouteCyclePlanningProblem(input: {
   readonly objectiveRef?: Hash;
   readonly entryAssetRef?: Hash;
   readonly proposedCapabilitySetRoot?: Hash;
+  readonly runtimeAuthority?: SignedReleaseRuntimeAuthorityDescriptorV1;
   readonly lane?: "blockscan" | "backrun";
   readonly triggerRef?: Hash;
   readonly affectedEdgeIds?: readonly Hash[];
@@ -68,6 +74,13 @@ export function issueRouteCyclePlanningProblem(input: {
   const sourceHash = input.sourceHash ?? h("test/search-pipeline/block", 1);
   const correlationId = input.correlationId ?? h("test/search-pipeline/correlation", 1);
   const entryAssetRef = input.entryAssetRef ?? input.edges[0]?.inputAssetPorts[0]?.assetRef ?? h("test/search-pipeline/asset", "empty");
+  const runtimeAuthorityDescriptor = input.runtimeAuthority ?? createSignedReleaseRuntimeAuthorityDescriptorV1({
+    authorityClass: "signed-release",
+    runtimeBindingId: h("test/search-pipeline/runtime-binding/v1", 1),
+    releaseProvenanceHash,
+    implementationCommit: "a".repeat(40),
+  });
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(runtimeAuthorityDescriptor);
   const factory = createGeneratedStrategyRuntimeFactory({
     descriptor,
     issuers: [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
@@ -75,7 +88,7 @@ export function issueRouteCyclePlanningProblem(input: {
   const composition = factory(issueGeneratedStrategyRuntimeAuthorityCapability({
     factory,
     qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
-    releaseProvenanceHash,
+    runtimeAuthority: runtimeAuthorityDescriptor,
     assertCurrent: () => {},
   }));
   return composition.issuePlanningProblems({
@@ -84,6 +97,7 @@ export function issueRouteCyclePlanningProblem(input: {
       definitionCatalogRoot: input.definitionCatalogRoot,
       graphRoot: input.graphRoot,
       readyRecordHash,
+      runtimeAuthority,
       releaseProvenanceHash,
       sourceHash,
     },
@@ -107,6 +121,7 @@ export function issueRouteCyclePlanningProblem(input: {
         definitionCatalogRoot: input.definitionCatalogRoot,
         graphRoot: input.graphRoot,
         readyRecordHash,
+        runtimeAuthority,
         releaseProvenanceHash,
         sourceHash,
       },

@@ -577,6 +577,21 @@ test("promotion freshness preserves an exact five-field canonical observed head"
   for (const mutation of mutations) {
     assert.throws(() => decodeFullFamilyReadyRecord(mutation.mutated as object), mutation.id);
   }
+  const { runtimeAuthority: _runtimeAuthority, ...withoutRuntimeAuthority } = ready;
+  assert.throws(
+    () => decodeFullFamilyReadyRecord(withoutRuntimeAuthority),
+    /runtimeAuthority|missing field/,
+  );
+  assert.throws(
+    () => decodeFullFamilyReadyRecord({
+      ...ready,
+      runtimeAuthority: {
+        ...ready.runtimeAuthority,
+        authorityBindingHash: hashDomain("test/full-family/wrong-ready-runtime-authority/v1", 1),
+      },
+    }),
+    /ready record hash mismatch/,
+  );
 });
 
 test("nomination-only and point-lookup plans neither authorize nor veto exact zero", () => {

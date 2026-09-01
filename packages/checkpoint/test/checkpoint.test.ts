@@ -202,7 +202,7 @@ function lifecycle(): InstanceLifecycleSingleFlightPort {
 
 function makePublication(
   value: CandidateRecordV1,
-  identity: IdentityVerifiedV1,
+  identity: IdentityVerifiedObservationV1,
   dependencySuffix = "",
   transitionCount = 1,
 ) {
@@ -321,7 +321,7 @@ function makeAttestationService(
     },
   };
   const rejectionRuntime = createRejectionFactRuntime(executorAuthority.issue(executor));
-  const programs: AttestationProgramPort = {
+  const behaviorPrograms: AttestationProgramPort = {
     async attestIdentity(value, _currentCutoff, signal) {
       calls.identity += 1;
       if (behavior.rejectIdentity?.(value) === true) {
@@ -360,7 +360,7 @@ function makeAttestationService(
         identityMemo: identityMemo(value.familyCandidateKey),
         identityMemoHash: identityMemoHash(identityMemo(value.familyCandidateKey)),
         descriptorHash: h("descriptor"),
-        evidenceRoot: h(`evidence:${value.familyCandidateKey}`),
+        evidenceRoot: value.candidateEvidenceRoot,
       };
     },
     async reuseVerifiedMemo(value, publication, currentCutoff) {
@@ -419,7 +419,7 @@ function makeAttestationService(
     composition: approval,
     frameworkRuntime,
     rejectionRuntime,
-    programs,
+    programs: behaviorPrograms,
     instanceLifecycle: lifecycle(),
     candidatePartitionReader: candidatePartitionReader!,
   });
@@ -735,13 +735,16 @@ async function openSession(value: Harness): Promise<SessionFixture> {
   });
   const persistenceCapabilities: AttestationPersistenceCapabilityV1[] = [];
   const finalResults: AttestationFinalSessionResultV1[] = [];
-  for (const candidateValue of value.candidates) {
-    const identityResult = await session.resolveIdentityOrReuseProofOnce(candidateValue.familyCandidateKey, new AbortController().signal);
+  const verifiedIdentities = [];
+  for (const identityResult of await session.resolveIdentityDenominator(new AbortController().signal)) {
     persistenceCapabilities.push(identityResult.persistenceCapability);
     if (identityResult.kind === "final") {
       finalResults.push(identityResult);
       continue;
     }
+    verifiedIdentities.push(identityResult);
+  }
+  for (const identityResult of verifiedIdentities) {
     const finalResult = await session.materializeAndProjectOnce(identityResult.continuation, new AbortController().signal);
     persistenceCapabilities.push(finalResult.persistenceCapability);
     finalResults.push(finalResult);
@@ -959,13 +962,13 @@ async function persistRuntimeRestartSuccessor(
     verifiedMemoReuseCapabilities: resume.memoReuse,
   });
   const capabilities: AttestationPersistenceCapabilityV1[] = [];
-  for (const candidateValue of value.candidates) {
-    const identity = await session.resolveIdentityOrReuseProofOnce(
-      candidateValue.familyCandidateKey,
-      new AbortController().signal,
-    );
+  const identities = [];
+  for (const identity of await session.resolveIdentityDenominator(new AbortController().signal)) {
     if (identity.kind !== "identityVerified") throw new Error("runtime restart successor identity was not verified");
     capabilities.push(identity.persistenceCapability);
+    identities.push(identity);
+  }
+  for (const identity of identities) {
     const final = await session.materializeAndProjectOnce(identity.continuation, new AbortController().signal);
     capabilities.push(final.persistenceCapability);
   }
@@ -983,10 +986,10 @@ async function persistRuntimeRestartSuccessor(
   const before = await probe.loadRetryable(value.run.runId, target.familyCandidateKey);
   state.phase = "probe";
   const replacementSession = openSessionFor(value, before.candidatePartition);
-  const identity = await replacementSession.resolveIdentityOrReuseProofOnce(
-    target.familyCandidateKey,
-    new AbortController().signal,
-  );
+  const probeIdentities = await replacementSession.resolveIdentityDenominator(new AbortController().signal);
+  const identity = probeIdentities.find(result => result.kind === "identityVerified"
+    && result.candidate.familyCandidateKey === target.familyCandidateKey);
+  if (identity === undefined) throw new Error("runtime restart probe identity was not resolved");
   if (identity.kind !== "identityVerified") throw new Error("runtime restart probe identity was not verified");
   const replacement = await replacementSession.materializeAndProjectOnce(
     identity.continuation,
@@ -1035,6 +1038,7 @@ async function startRuntimeRestartFixture(
     attestation: { async attestAndPersistDifference() { throw new Error("runtime restart must not rebuild while reopening"); } },
     ready: issueStartupReadyPort({ service: readyService, promotionCaller: readyCaller }),
     familyRuntime: generatedCompositionFixture({ familyId: "family-a", familyDefinitionHash: h("definition") }),
+    familySearchRuntime: Object.freeze({}) as never,
     processEpoch: `runtime-restart-${process.pid}`,
     releaseBindingId: binding.bindingId,
     candidateReleaseCommit: binding.candidateReleaseCommit,
@@ -2384,6 +2388,8 @@ test("partial identity rehydrates an opaque capability across a new service and 
     const resumedIdentity = await resumedSession.resolveIdentityOrReuseProofOnce(value.candidates[0]!.familyCandidateKey, new AbortController().signal);
     assert.equal(resumedIdentity.kind, "identityVerified");
     assert.equal(restartCalls.identity, 0);
+    await resumedSession.resolveIdentityDenominator(new AbortController().signal);
+    assert.equal(restartCalls.identity, 1);
     const resumedFinal = await resumedSession.materializeAndProjectOnce(
       resumedIdentity.continuation,
       new AbortController().signal,
@@ -2540,7 +2546,9 @@ async function commitVerifiedProbe(
   const before = await probe.loadRetryable(value.run.runId, candidate.familyCandidateKey);
   behavior.materialization = "verified";
   const session = openSessionFor(value, before.candidatePartition);
-  const identity = await session.resolveIdentityOrReuseProofOnce(candidate.familyCandidateKey, new AbortController().signal);
+  const identity = (await session.resolveIdentityDenominator(new AbortController().signal))
+    .find(result => result.kind === "identityVerified" && result.candidate.familyCandidateKey === candidate.familyCandidateKey);
+  if (identity === undefined) throw new Error("probe fixture did not resolve target identity");
   if (identity.kind !== "identityVerified") throw new Error("probe fixture did not produce identity");
   const replacement = await session.materializeAndProjectOnce(identity.continuation, new AbortController().signal);
   if (replacement.outcome.kind !== "verified") throw new Error("probe fixture did not produce a verified outcome");
@@ -2570,7 +2578,9 @@ test("probe replacement carries the full active candidate partition and leaves t
 
     behavior.materialization = "verified";
     const replacementSession = openSessionFor(value, first.candidatePartition);
-    const replacementIdentity = await replacementSession.resolveIdentityOrReuseProofOnce(first.before.familyCandidateKey, new AbortController().signal);
+    const replacementIdentity = (await replacementSession.resolveIdentityDenominator(new AbortController().signal))
+      .find(result => result.kind === "identityVerified" && result.candidate.familyCandidateKey === first.before.familyCandidateKey);
+    if (replacementIdentity === undefined) throw new Error("replacement fixture did not resolve target identity");
     assert.equal(replacementIdentity.kind, "identityVerified");
     const replacement = await replacementSession.materializeAndProjectOnce(
       replacementIdentity.continuation,
@@ -3279,6 +3289,7 @@ test("30k Ready graph persists as exact chunks, survives fresh reopen, and opens
             definitionCatalogRoot: ready.definitionCatalogRoot,
             instanceCatalogRoot: ready.instanceCatalogRoot,
             graphRoot: ready.graphRoot,
+            runtimeAuthority: ready.runtimeAuthority,
             releaseProvenanceHash: ready.releaseProvenanceHash,
             candidatePartitionProofStorageHash: ready.candidatePartitionProofStorageHash,
             nominationClosureRoot: ready.nominationClosureRoot,
@@ -3735,10 +3746,9 @@ test("probe capability is one-shot and rejects a stale revision and a cross-run 
 
     behavior.materialization = "verified";
     const replacementSession = openSessionFor(value, before.candidatePartition);
-    const replacementIdentity = await replacementSession.resolveIdentityOrReuseProofOnce(
-      before.before.familyCandidateKey,
-      new AbortController().signal,
-    );
+    const replacementIdentity = (await replacementSession.resolveIdentityDenominator(new AbortController().signal))
+      .find(result => result.kind === "identityVerified" && result.candidate.familyCandidateKey === before.before.familyCandidateKey);
+    if (replacementIdentity === undefined) throw new Error("replacement fixture did not resolve target identity");
     if (replacementIdentity.kind !== "identityVerified") throw new Error("replacement fixture did not produce identity");
     const replacementFinal = await replacementSession.materializeAndProjectOnce(
       replacementIdentity.continuation,

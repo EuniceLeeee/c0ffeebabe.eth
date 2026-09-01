@@ -58,6 +58,11 @@ function graph(cutoff: CanonicalSourceView, generationId = "generation-a") {
     definitionCatalogRoot: hash("3"),
     instanceCatalogRoot: hash("4"),
     graphRoot: hash("5"),
+    runtimeAuthority: Object.freeze({
+      authorityClass: "signed-release" as const,
+      authorityBindingHash: hash("a"),
+      implementationCommit: "a".repeat(40),
+    }),
     releaseProvenanceHash: hash("6"),
     candidatePartitionProofStorageHash: hash("7"),
     nominationClosureRoot: hash("8"),
@@ -199,6 +204,35 @@ test("generation and topology mutations fail closed", async () => {
   await assert.rejects(
     () => session.assertCurrent(),
     (error: unknown) => error instanceof CanonicalSourceError && error.code === "generation-mismatch",
+  );
+});
+
+test("producer session rejects an advisory runtime binding before opening", async () => {
+  const current = head("101", "3");
+  const fixture = sourceFixture(current);
+  const observation = await fixture.source.observeCurrentHead();
+  const signed = graph(cutoffView(head("100", "1")));
+  const advisory = {
+    ...signed,
+    binding: {
+      ...signed.binding,
+      runtimeAuthority: {
+        authorityClass: "advisory-observation",
+        authorityBindingHash: hash("b"),
+        implementationCommit: "b".repeat(40),
+      },
+      releaseProvenanceHash: null,
+      candidatePartitionProofStorageHash: null,
+      nominationClosureStorageHash: null,
+    },
+  };
+
+  await assert.rejects(
+    () => fixture.source.openHeadSession(
+      observation,
+      advisory as never,
+    ),
+    /runtimeAuthority must be signed-release/,
   );
 });
 

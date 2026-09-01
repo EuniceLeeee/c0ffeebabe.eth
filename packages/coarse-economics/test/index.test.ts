@@ -46,6 +46,10 @@ import {
   type CoarseProjectionOwnerDescriptorV1,
 } from "../src/internal/qualification-owner.ts";
 import { issueCoarseEnumerationBindingV1, issueCoarseRouteBindingV1 } from "../src/internal/search-owner.ts";
+import {
+  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  projectRuntimeAuthorityDescriptorV1,
+} from "../../runtime-authority/src/index.ts";
 
 const h = (label: string): Hash => hashDomain("test/coarse-economics/v3", label);
 const source = Object.freeze({ chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") });
@@ -53,6 +57,13 @@ const assetA = h("asset-a");
 const assetB = h("asset-b");
 const releaseProvenanceHash = h("release-provenance");
 const releaseMembershipRoot = h("release-membership");
+const signedRuntimeAuthorityDescriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
+  authorityClass: "signed-release",
+  runtimeBindingId: h("runtime-binding"),
+  releaseProvenanceHash,
+  implementationCommit: "a".repeat(40),
+});
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(signedRuntimeAuthorityDescriptor);
 const objectiveBody = Object.freeze({ numeraireAssetRef: assetA, minNetGain: "0", maxGas: "1000000", maxValueAtRisk: "1000000000" });
 const objective: CoarseAdmissionObjectiveV1 = Object.freeze({ objectiveRef: hashDomain("aloha/search-objective/v1", objectiveBody), ...objectiveBody });
 
@@ -91,7 +102,7 @@ const strategyFactory = createGeneratedStrategyRuntimeFactory({
 const strategyComposition = strategyFactory(issueGeneratedStrategyRuntimeAuthorityCapability({
   factory: strategyFactory,
   qualifiedCapabilityRefsRoot: strategyDescriptor.proposedCapabilitySetRoot,
-  releaseProvenanceHash,
+  runtimeAuthority: signedRuntimeAuthorityDescriptor,
   assertCurrent: () => {},
 }));
 
@@ -110,6 +121,7 @@ function planningProblem(graphRoot: Hash, edges: readonly StrategyGraphEdgeV1[],
     definitionCatalogRoot: strategyDescriptor.definitionCatalogRoot,
     graphRoot,
     readyRecordHash: h("ready"),
+    runtimeAuthority,
     releaseProvenanceHash,
     sourceHash: source.hash,
   });
@@ -182,7 +194,7 @@ function highCardinalityPlannerEnumeration(): IssuedPlanningEnumerationV1 {
   const composition = factory(issueGeneratedStrategyRuntimeAuthorityCapability({
     factory,
     qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
-    releaseProvenanceHash,
+    runtimeAuthority: signedRuntimeAuthorityDescriptor,
     assertCurrent: () => {},
   }));
   const graphRoot = h("graph-high-cardinality");
@@ -191,6 +203,7 @@ function highCardinalityPlannerEnumeration(): IssuedPlanningEnumerationV1 {
     definitionCatalogRoot: descriptor.definitionCatalogRoot,
     graphRoot,
     readyRecordHash: h("ready"),
+    runtimeAuthority,
     releaseProvenanceHash,
     sourceHash: source.hash,
   });
@@ -241,6 +254,7 @@ function route(candidate: PlannedRouteCandidateV1, graphRoot: Hash, ownerRef: Ha
     graphRoot,
     source,
     objectiveRef: objectiveValue.objectiveRef,
+    runtimeAuthority,
     releaseProvenanceHash,
     legs: Object.freeze(legs),
   });
@@ -288,6 +302,13 @@ function qualify(
 }
 
 function assessment(binding: RouteFixture, options: { unavailable?: boolean; finalAmount?: string; bounded?: boolean; spliceTransition?: boolean; spliceMembership?: boolean } = {}): IssuedCoarseRouteAssessmentV1 {
+  return issueCoarseRouteAssessmentV1({ binding: binding.capability, projections: projectionEvidence(binding, options) });
+}
+
+function projectionEvidence(
+  binding: RouteFixture,
+  options: { unavailable?: boolean; finalAmount?: string; bounded?: boolean; spliceTransition?: boolean; spliceMembership?: boolean } = {},
+): readonly QualifiedCoarseProjectionV1[] {
   const finalAmount = options.finalAmount ?? "110";
   const projections = binding.value.legs.map((leg, index) => {
     const unavailable = options.unavailable === true && index === binding.value.legs.length - 1;
@@ -322,7 +343,7 @@ function assessment(binding: RouteFixture, options: { unavailable?: boolean; fin
       membershipRoot: options.spliceMembership === true && index === binding.value.legs.length - 1 ? h("spliced-membership-root") : undefined,
     });
   });
-  return issueCoarseRouteAssessmentV1({ binding: binding.capability, projections });
+  return Object.freeze(projections);
 }
 
 function enumeration(
@@ -336,6 +357,7 @@ function enumeration(
     plannerEnumeration: planner,
     generationId: "generation-1",
     source,
+    runtimeAuthority,
     releaseProvenanceHash,
     objective: objectiveValue,
     policy,
