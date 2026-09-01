@@ -6,7 +6,7 @@ import { UNIV2_STANDARD_FAMILY_DEFINITION_HASH, UNIV2_STANDARD_FAMILY_ID } from 
 import { UNIV2_PAIR_CREATED_TOPIC0, UNIV2_STANDARD_HISTORY_SOURCE_PLAN_DEFINITION, UNIV2_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH } from "./source-plan.ts";
 import { canonicalAddress } from "./kernel/codec.ts";
 
-const CHUNK_BLOCKS = 10_000n;
+const CHUNK_BLOCKS = 500n;
 type Entry = { readonly factory: string; readonly pair: string; readonly blockNumber: string; readonly blockHash: Hash; readonly txHash: Hash; readonly logIndex: string };
 const blockTag = (value: string) => `0x${BigInt(value).toString(16)}`;
 const decimal = (value: bigint) => value.toString(10);

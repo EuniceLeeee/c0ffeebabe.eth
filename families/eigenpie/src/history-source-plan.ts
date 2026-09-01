@@ -32,7 +32,7 @@ import {
 import { EIGENPIE_HISTORY_SOURCE_PLAN } from "./source-plan.ts";
 import { canonicalAddress } from "./types.ts";
 
-const CHUNK_BLOCKS = 10_000n;
+const CHUNK_BLOCKS = 500n;
 
 export interface EigenpieAssetDepositHistoryEntryV1 {
   readonly target: string;

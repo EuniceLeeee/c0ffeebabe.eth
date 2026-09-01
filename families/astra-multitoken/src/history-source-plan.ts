@@ -32,7 +32,7 @@ import { ASTRA_HISTORY_SOURCE_PLAN } from "./source-plan.ts";
 import { decodeAstraCandidate } from "./discovery.ts";
 import type { Address, AstraObservationV1 } from "./types.ts";
 
-const CHUNK_BLOCKS = 10_000n;
+const CHUNK_BLOCKS = 500n;
 export type AstraHistoryEntryV1 = {
   readonly target: Address;
   readonly actor: Address;

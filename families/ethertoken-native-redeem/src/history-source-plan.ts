@@ -32,7 +32,7 @@ import {
 import { ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN } from "./source-plan.ts";
 import { canonicalAddress } from "./types.ts";
 
-const CHUNK_BLOCKS = 10_000n;
+const CHUNK_BLOCKS = 500n;
 
 export interface EtherTokenNativeRedeemDestructionHistoryEntryV1 {
   readonly target: string;

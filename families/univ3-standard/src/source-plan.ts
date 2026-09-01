@@ -162,7 +162,7 @@ type PoolCreatedEntry = {
   readonly txHash: Hash;
   readonly logIndex: string;
 };
-const HISTORY_CHUNK_BLOCKS = 10_000n;
+const HISTORY_CHUNK_BLOCKS = 500n;
 
 function quantity(value: string, path: string): bigint {
   if (!/^0x(?:0|[1-9a-f][0-9a-f]*)$/.test(value)) throw new TypeError(`${path} must be a canonical JSON-RPC quantity`);

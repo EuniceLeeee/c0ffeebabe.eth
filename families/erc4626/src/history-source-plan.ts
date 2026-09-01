@@ -32,7 +32,7 @@ import {
 import { ERC4626_HISTORY_SOURCE_PLAN } from "./source-plan.ts";
 import { canonicalAddress } from "./types.ts";
 
-const CHUNK_BLOCKS = 10_000n;
+const CHUNK_BLOCKS = 500n;
 
 export type Erc4626WithdrawHistoryEntryV1 = {
   readonly target: string;

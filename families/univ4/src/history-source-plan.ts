@@ -7,7 +7,7 @@ import { UNIV4_FAMILY_DEFINITION_HASH } from "./family-definition.ts";
 import { UNIV4_CONTRACT_EVIDENCE_TOPIC, UNIV4_FAMILY_ID, UNIV4_HISTORY_SOURCE_PLAN_SCHEMA_HASH } from "./manifest.ts";
 import { UNIV4_HISTORY_SOURCE_PLAN } from "./source-plan.ts";
 
-const CHUNK_BLOCKS = 10_000n;
+const CHUNK_BLOCKS = 500n;
 const MANAGER = UNIV4_POOL_MANAGER.toLowerCase();
 type Entry = { readonly poolId: Hash; readonly blockNumber: string; readonly blockHash: Hash; readonly txHash: Hash; readonly logIndex: string };
 

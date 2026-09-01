@@ -31,7 +31,7 @@ import {
 import { DODO_V2_HISTORY_SOURCE_PLAN } from "./source-plan.ts";
 import { canonicalAddress } from "./types.ts";
 
-const CHUNK_BLOCKS = 10_000n;
+const CHUNK_BLOCKS = 500n;
 type FactoryDeclaration = (typeof DODO_V2_FACTORIES)[number];
 
 export type DodoCreationHistoryEntryV1 = {
