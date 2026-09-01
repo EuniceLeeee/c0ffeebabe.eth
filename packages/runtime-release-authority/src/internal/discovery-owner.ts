@@ -148,6 +148,21 @@ function canonicalJson(value: unknown, path: string): CanonicalJson {
   }
 }
 
+/** Reth augments eth_getLogs entries with blockTimestamp. Family programs
+ * consume the standard Ethereum log shape, so remove only that provider
+ * extension at the physical boundary. Other unexpected fields remain visible
+ * to the Family's exact decoder. */
+function canonicalSourcePlanResponse(method: string, value: unknown): CanonicalJson {
+  if (method !== "eth_getLogs" || !Array.isArray(value)) {
+    return canonicalJson(value, "source plan physical response");
+  }
+  return canonicalJson(value.map(item => {
+    if (item === null || typeof item !== "object" || Array.isArray(item)
+      || !Object.prototype.hasOwnProperty.call(item, "blockTimestamp")) return item;
+    return Object.fromEntries(Object.entries(item).filter(([key]) => key !== "blockTimestamp"));
+  }), "source plan physical response");
+}
+
 function runtimeDiscoveryBinding(
   value: RuntimeDiscoveryBindingV1,
 ): RuntimeDiscoveryBindingV1 {
@@ -557,7 +572,7 @@ export function createRuntimeDiscoveryPort(input: {
             });
             if (physicalRequestIds.has(requestId)) throw new TypeError("duplicate source plan physical request");
             physicalRequestIds.add(requestId);
-            const response = canonicalJson(await transport.request({
+            const response = canonicalSourcePlanResponse(request.request.method, await transport.request({
               requestId,
               provider,
               source: canonicalCutoff,
@@ -573,7 +588,7 @@ export function createRuntimeDiscoveryPort(input: {
               workClassRef: "source-plan-rpc",
               ownerRef: request.plan.ownerRef,
               signal: requestSignal,
-            }), "source plan physical response");
+            }));
             input.assertCurrent();
             const observation: FamilySourcePlanPhysicalObservationV1 = deepFreeze({
               kind: "family-source-plan-physical-observation",
