@@ -6664,9 +6664,9 @@ export class DurableOutcomeWriterActor {
     this.#checkpoint = checkpoint;
     this.#runId = runId;
     this.#writerCapability = options.writerCapability;
-    this.#flushEveryItems = options.flushEveryItems ?? 25;
-    this.#flushEveryMs = options.flushEveryMs ?? 3_000;
     this.#mailboxCapacity = options.mailboxCapacity ?? 1_024;
+    this.#flushEveryItems = options.flushEveryItems ?? this.#mailboxCapacity;
+    this.#flushEveryMs = options.flushEveryMs ?? 3_000;
     this.#writerId = options.writerId ?? `checkpoint-writer/${runId}/${randomUUID()}`;
     if (!Number.isSafeInteger(this.#flushEveryItems) || this.#flushEveryItems < 1) throw new RangeError("flushEveryItems must be positive");
     if (!Number.isSafeInteger(this.#flushEveryMs) || this.#flushEveryMs < 2_000 || this.#flushEveryMs > 5_000) throw new RangeError("flushEveryMs must be 2000..5000");
