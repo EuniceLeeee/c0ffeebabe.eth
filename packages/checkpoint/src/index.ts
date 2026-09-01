@@ -1315,7 +1315,7 @@ function validateNominationClosureAgainstRun(input: {
     candidates: input.candidates,
     candidatePartitionRoot: input.candidatePartitionRoot,
   });
-  if (encodeCanonicalJson(rebuilt) !== encodeCanonicalJson(closure)) {
+  if (rebuilt.root !== closure.root) {
     throw new CheckpointRunStateError("nomination closure recomputation mismatch");
   }
   return closure;
