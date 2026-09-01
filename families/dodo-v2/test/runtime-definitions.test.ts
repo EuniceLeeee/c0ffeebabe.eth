@@ -102,10 +102,10 @@ function interpret(definition: FamilyStageDefinitionV1, payload: CanonicalJson, 
 }
 
 function historyFixture(evidenceOwner: Hash, physicalOwner: Hash = evidenceOwner) {
-  const plan = Object.freeze({ ownerRef: physicalOwner, sourcePlanRef: h("history-plan"), familyDefinitionHash: DODO_V2_FAMILY_AUTHORING_HASH, completeness: "contiguous-history" as const, historyStartBlock: "0" });
+  const plan = Object.freeze({ ownerRef: physicalOwner, sourcePlanRef: h("history-plan"), familyDefinitionHash: DODO_V2_FAMILY_AUTHORING_HASH, completeness: "rolling-observation" as const, historyStartBlock: null });
   const response = Object.freeze([Object.freeze({ address: factory.address, blockHash: h("creation-block"), blockNumber: "0x1", data: `0x${addressWord(baseToken)}${addressWord(quoteToken)}${addressWord(creator)}${addressWord(pool)}`, logIndex: "0x0", removed: false, topics: Object.freeze([factory.creationTopic]), transactionHash: h("creation-tx"), transactionIndex: "0x0" })]);
   const filter = Object.freeze({ address: factory.address, fromBlock: "0x0", toBlock: "0x64", topics: Object.freeze([factory.creationTopic]) });
-  const rawBytes = encodeCanonicalBytes({ kind: "family-source-plan-physical-observation", version: 1, requestId: h("history-request"), releaseBindingId: h("release-binding"), releaseProvenanceHash: h("release-provenance"), sourceAuthorityRoot: h("source-authority"), sourceAnchorRoot: h("source-anchor"), provider: "reth", backendEpoch: "1", familyDefinitionHash: DODO_V2_FAMILY_AUTHORING_HASH, plan, cutoff: source, requestSchemaHash: DODO_V2_HISTORY_SOURCE_PLAN_SCHEMA_HASH, request: { kind: "family-source-plan-rpc", version: 1, method: "eth_getLogs", params: [filter], target: factory.address, manager: factory.address, topic: factory.creationTopic, lookback: { from: "0", through: "100" }, chunk: { maxBlocks: "10000" } }, response });
+  const rawBytes = encodeCanonicalBytes({ kind: "family-source-plan-physical-observation", version: 1, requestId: h("history-request"), runtimeAuthority: { authorityBindingHash: h("runtime-authority"), implementationCommit: "a".repeat(40) }, sourceAuthorityRoot: h("source-authority"), sourceAnchorRoot: h("source-anchor"), provider: "reth", backendEpoch: "1", familyDefinitionHash: DODO_V2_FAMILY_AUTHORING_HASH, plan, cutoff: source, requestSchemaHash: DODO_V2_HISTORY_SOURCE_PLAN_SCHEMA_HASH, request: { kind: "family-source-plan-rpc", version: 1, method: "eth_getLogs", params: [filter], target: factory.address, manager: factory.address, topic: factory.creationTopic, lookback: { from: "0", through: "100" }, chunk: { maxBlocks: "500" } }, response });
   const evidence: SourcePlanEvidenceRefV1 = Object.freeze({ kind: "source-plan", version: 1, ownerRef: evidenceOwner, sourcePlanRef: plan.sourcePlanRef, evidenceRef: h("history-evidence"), rawLocatorHash: sha256Hex(rawBytes) });
   const candidateValue = candidate(evidence);
   return Object.freeze({ candidate: candidateValue, rawBytes, fact: identityFact(candidateValue, rawBytes) });
@@ -149,10 +149,11 @@ test("DODO strict identity rejects malformed Swap evidence and a foreign token p
   }
 });
 
-test("DODO strict identity consumes complete-history bytes and rejects forged lineage or a removed pool", () => {
+test("DODO strict identity consumes rolling-history bytes and rejects forged lineage or a removed pool", () => {
   const valid = historyFixture(h("history-owner"));
   const prepared = prepare(DODO_V2_IDENTITY_DEFINITION, { stage: "identity", candidate: valid.candidate, cutoff: source, identityMemo: null, materializationOutput: null });
-  assert.equal(interpret(DODO_V2_IDENTITY_DEFINITION, prepared.payload, prepared.requestId, valid.fact, "history-valid").kind, "verified");
+  const verified = interpret(DODO_V2_IDENTITY_DEFINITION, prepared.payload, prepared.requestId, valid.fact, "history-valid");
+  assert.equal(verified.kind, "verified", JSON.stringify(verified));
   assert.equal(interpret(DODO_V2_IDENTITY_DEFINITION, prepared.payload, prepared.requestId, { ...valid.fact, candidateEvidenceBytesHex: `${valid.fact.candidateEvidenceBytesHex}00` }, "history-raw-forged").kind, "invalidProgram");
   const forgedOwner = historyFixture(h("evidence-owner"), h("physical-owner"));
   const forgedPrepared = prepare(DODO_V2_IDENTITY_DEFINITION, { stage: "identity", candidate: forgedOwner.candidate, cutoff: source, identityMemo: null, materializationOutput: null });

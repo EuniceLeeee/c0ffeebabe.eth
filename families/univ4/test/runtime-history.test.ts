@@ -114,21 +114,20 @@ function interpret(prepared: unknown, requestIds: readonly Hash[], bytes: Uint8A
   });
 }
 
-test("UniV4 contiguous-history source evidence reaches strict identity", () => {
+test("UniV4 rolling-history source evidence reaches strict identity", () => {
   const plan = Object.freeze({
     ownerRef: h("history-owner"),
     sourcePlanRef: h("history-plan"),
     familyDefinitionHash: UNIV4_FAMILY_DEFINITION_HASH,
-    completeness: "contiguous-history" as const,
-    historyStartBlock: "0",
+    completeness: "rolling-observation" as const,
+    historyStartBlock: null,
   });
   const filter = Object.freeze({ address: target, fromBlock: "0x0", toBlock: "0x64", topics: Object.freeze([UNIV4_CONTRACT_EVIDENCE_TOPIC]) });
   const observation = Object.freeze({
     kind: "family-source-plan-physical-observation" as const,
     version: 1 as const,
     requestId: h("history-request"),
-    releaseBindingId: h("release-binding"),
-    releaseProvenanceHash: h("release-provenance"),
+    runtimeAuthority: Object.freeze({ authorityBindingHash: h("runtime-authority"), implementationCommit: "a".repeat(40) }),
     sourceAuthorityRoot: h("source-authority"),
     sourceAnchorRoot: h("source-anchor"),
     provider: "reth",
@@ -146,7 +145,7 @@ test("UniV4 contiguous-history source evidence reaches strict identity", () => {
       manager: target,
       topic: UNIV4_CONTRACT_EVIDENCE_TOPIC,
       lookback: Object.freeze({ from: "0", through: "100" }),
-      chunk: Object.freeze({ maxBlocks: "10000" }),
+      chunk: Object.freeze({ maxBlocks: "500" }),
     }),
     response: Object.freeze([initializeLog]),
   });
@@ -175,7 +174,7 @@ test("UniV4 contiguous-history source evidence reaches strict identity", () => {
   const requestIds = payload.requestIds as readonly Hash[];
   const fingerprint = h("history-program");
   const outcome = interpret(prepared, requestIds, bytes, fingerprint);
-  assert.equal(outcome.kind, "verified");
+  assert.equal(outcome.kind, "verified", JSON.stringify(outcome));
   if (outcome.kind !== "verified") throw new Error("UniV4 history identity failed");
   const output = UNIV4_IDENTITY_RUNTIME.outputCodec.decodeExact(outcome.output) as Record<string, unknown>;
   assert.equal(output.evidenceRoot, candidate.candidateEvidenceRoot);

@@ -808,7 +808,7 @@ function sourcePlanLogCandidate(
   if (lookback === null || typeof lookback !== "object" || Array.isArray(lookback) || chunk === null || typeof chunk !== "object" || Array.isArray(chunk)) throw new TypeError("univ4 history evidence range malformed");
   const range = decodeExactObject(lookback, { from: (item, itemPath) => assertDecimalString(item, itemPath), through: (item, itemPath) => assertDecimalString(item, itemPath) }, "univ4.history.lookback");
   const chunkBinding = decodeExactObject(chunk, { maxBlocks: (item, itemPath) => assertDecimalString(item, itemPath) }, "univ4.history.chunk");
-  if (chunkBinding.maxBlocks !== "10000" || BigInt(range.from) > BigInt(range.through) || BigInt(range.through) > BigInt(cutoffValue.number)) throw new TypeError("univ4 history evidence range mismatch");
+  if (chunkBinding.maxBlocks !== "500" || BigInt(range.from) > BigInt(range.through) || BigInt(range.through) > BigInt(cutoffValue.number)) throw new TypeError("univ4 history evidence range mismatch");
   const expectedFilter = Object.freeze({ address: canonicalAddress(UNIV4_POOL_MANAGER), fromBlock: blockTag(range.from), toBlock: blockTag(range.through), topics: Object.freeze([UNIV4_CONTRACT_EVIDENCE_TOPIC]) });
   if (encodeCanonicalJson(observed.request.params) !== encodeCanonicalJson([expectedFilter])) throw new TypeError("univ4 history evidence filter mismatch");
   if (!Array.isArray(observed.response)) throw new TypeError("univ4 history evidence response must be logs");
