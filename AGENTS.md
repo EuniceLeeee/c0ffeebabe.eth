@@ -33,6 +33,12 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
   path; they must not recreate its orchestration, search loop, composition,
   state transitions, candidate construction, or verdict logic in a parallel
   pipeline.
+- A claim about live behavior must come from the exact live entrypoint,
+  executable, composition, ports, configuration, and emitted facts being
+  claimed. A unit test or offline substitute may prove only its local contract;
+  it cannot be promoted into evidence about live behavior. A parallel
+  acceptance implementation validates itself, not the live system, even when
+  its types and expected outputs look equivalent.
 - Independent verification means independently reading raw artifacts and
   recomputing facts such as hashes, counts, sets, and lineage joins. It does
   **not** mean implementing the product behavior a second time. If an observer
@@ -47,8 +53,10 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
   boundary. If nothing unique is lost, the step is duplication.
 - Do not perform a rehearsal and then repeat the same safe, authorized
   end-to-end operation unless the rehearsal proves a distinct property that
-  the real operation cannot prove. Time-sensitive evidence must be collected
-  from one source/window/lineage, not from duplicated runs that can drift.
+  the real operation cannot prove. If both operations claim the same fact,
+  keep the canonical end-to-end operation and delete the duplicate. Facts used
+  to judge live correctness must be emitted by and joined back to that exact
+  run; never substitute facts produced by an "equivalent" implementation.
 - Runtime modes share the same core pipeline and may differ only at genuinely
   necessary boundaries such as bootstrap, external authority, evidence
   sealing, or submission. A temporary, shadow, acceptance-only, or
