@@ -17,7 +17,7 @@ import { decodeEvmLogObservationBytes } from "../../../packages/observation/src/
 import { ANGSTROM_V4_FAMILY_ID, ANGSTROM_V4_SOURCE_PLAN_ID, ANGSTROM_V4_HISTORY_SOURCE_PLAN_ID, ANGSTROM_V4_HISTORY_SOURCE_PLAN_SCHEMA_HASH, ANGSTROM_V4_CONTRACT_EVIDENCE_TOPIC } from "./manifest.ts";
 import { ANGSTROM_V4_AUTHORING_HASH, ANGSTROM_V4_SOURCE_PLAN_SCHEMA_HASH } from "./metadata.ts";
 import { ANGSTROM_V4_CONTRACT_PATTERN, decodeAngstromV4Candidate, nominateAngstromV4 } from "./stages.ts";
-import { decodeAngstromV4InitializeLog } from "./abi.ts";
+import { ANGSTROM_MAINNET_HOOK, decodeAngstromV4InitializeHook, decodeAngstromV4InitializeLog } from "./abi.ts";
 
 function sameCutoff(left: { readonly chainId: string; readonly number: string; readonly hash: Hash; readonly stateRoot: Hash }, right: typeof left): boolean {
   return left.chainId === right.chainId && left.number === right.number && left.hash === right.hash && left.stateRoot === right.stateRoot;
@@ -72,6 +72,7 @@ export const ANGSTROM_V4_SOURCE_NOMINATION_PROGRAM: FamilySourcePlanNominationPr
       const rawBytes = input.rawEvidence.read(evidence.rawLocatorHash);
       const raw = decodeEvmLogObservationBytes(rawBytes, "angstrom-v4.rawEvidence");
       if (sha256Hex(rawBytes) !== evidence.rawLocatorHash || raw.address !== evidence.address || raw.topics[0] !== evidence.topic || raw.blockNumber !== evidence.blockNumber || raw.blockHash !== evidence.blockHash || raw.transactionHash !== evidence.txHash || raw.logIndex !== evidence.logIndex) throw new TypeError("angstrom-v4 raw evidence/recent evidence mismatch");
+      if (decodeAngstromV4InitializeHook(raw.data) !== ANGSTROM_MAINNET_HOOK.toLowerCase()) continue;
       const { poolId } = decodeAngstromV4InitializeLog(raw, evidence.topic);
       const seed = decodeAngstromV4Candidate({ kind: "log", target: raw.address, topic: evidence.topic, cutoff: input.recent.cutoff, blockNumber: raw.blockNumber, blockHash: raw.blockHash, txHash: raw.transactionHash, logIndex: raw.logIndex, rawLocatorHash: evidence.rawLocatorHash }, ANGSTROM_V4_CONTRACT_PATTERN);
       if (seed === null) continue;

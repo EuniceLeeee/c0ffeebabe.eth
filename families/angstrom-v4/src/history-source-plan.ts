@@ -2,7 +2,7 @@ import { encodeCanonicalJson, hashDomain, sha256Hex, type CanonicalJson, type Ha
 import { sourcePlanEvidenceRoot, sourcePlanExecutionRoot, type CandidateNominationV1, type CanonicalCutoffV1, type SourcePlanEvidenceRefV1 } from "../../../packages/discovery/src/index.ts";
 import { decodeFamilySourcePlanPhysicalObservation, type FamilySourcePlanExecutionInputV1, type FamilySourcePlanNominationInputV1, type FamilySourcePlanNominationProgramV1, type FamilySourcePlanPhysicalPortV1, type FamilySourcePlanPhysicalResultV1, type FamilySourcePlanRuntimeV1 } from "../../../packages/family-sdk/runtime/index.ts";
 import { familyRollingObservationRangeV1 } from "../../../packages/family-sdk/runtime/index.ts";
-import { ANGSTROM_MAINNET_HOOK, ANGSTROM_V4_POOL_MANAGER, decodeAngstromV4InitializeLog } from "./abi.ts";
+import { ANGSTROM_MAINNET_HOOK, ANGSTROM_V4_POOL_MANAGER, decodeAngstromV4InitializeHook, decodeAngstromV4InitializeLog } from "./abi.ts";
 import { ANGSTROM_V4_FAMILY_DEFINITION_HASH } from "./family-definition.ts";
 import { ANGSTROM_V4_CONTRACT_EVIDENCE_TOPIC, ANGSTROM_V4_FAMILY_ID, ANGSTROM_V4_HISTORY_SOURCE_PLAN_SCHEMA_HASH } from "./manifest.ts";
 import { ANGSTROM_V4_HISTORY_SOURCE_PLAN } from "./source-plan.ts";
@@ -38,7 +38,7 @@ function decodeEntries(value: CanonicalJson, from: bigint, through: bigint): rea
     if (block < from || block > through) throw new TypeError("angstrom-v4 history log is outside the requested range");
     if (previous && (block < previous.block || block === previous.block && logIndex <= previous.index)) throw new TypeError("angstrom-v4 history logs are not in strict chain order"); previous = { block, index: logIndex };
     if (!/^0x(?:[0-9a-f]{64}){5}$/.test(log.data)) throw new TypeError(`angstrom-v4 history log[${index}] has malformed Initialize data`);
-    const hook = `0x${BigInt(`0x${log.data.slice(2 + 2 * 64, 2 + 3 * 64)}`).toString(16).padStart(40, "0")}`;
+    const hook = decodeAngstromV4InitializeHook(log.data);
     if (hook !== ANGSTROM_MAINNET_HOOK.toLowerCase()) return Object.freeze([]);
     const { poolId } = decodeAngstromV4InitializeLog({ address: log.address, topics: log.topics as readonly Hash[], data: log.data }, ANGSTROM_V4_CONTRACT_EVIDENCE_TOPIC);
     return Object.freeze([Object.freeze({ poolId, blockNumber: decimal(block), blockHash: log.blockHash as Hash, txHash: log.transactionHash as Hash, logIndex: decimal(logIndex) })]);

@@ -132,7 +132,7 @@ export function decodeAngstromV4InitializeLog(raw: AngstromV4InitializeLogV1, ex
   ) throw new TypeError("angstrom-v4 Initialize log binding mismatch");
   const fee = abiUint(raw.data, 0, 24, "angstrom-v4.Initialize.fee");
   const tickSpacing = abiInt(raw.data, 1, 24, "angstrom-v4.Initialize.tickSpacing");
-  const hooks = abiUint(raw.data, 2, 160, "angstrom-v4.Initialize.hooks");
+  const hooks = decodeAngstromV4InitializeHook(raw.data);
   const sqrtPriceX96 = abiUint(raw.data, 3, 160, "angstrom-v4.Initialize.sqrtPriceX96");
   abiInt(raw.data, 4, 24, "angstrom-v4.Initialize.tick");
   if (sqrtPriceX96 === 0n) throw new TypeError("angstrom-v4 Initialize sqrtPriceX96 is zero");
@@ -141,12 +141,19 @@ export function decodeAngstromV4InitializeLog(raw: AngstromV4InitializeLogV1, ex
     currency1: `0x${raw.topics[3]!.slice(-40)}`,
     fee: fee.toString(),
     tickSpacing: tickSpacing.toString(),
-    hooks: `0x${hooks.toString(16).padStart(40, "0")}`,
+    hooks,
   }, "angstrom-v4.Initialize.poolKey");
   if (poolKey.hooks !== ANGSTROM_MAINNET_HOOK.toLowerCase()) throw new TypeError("angstrom-v4 Initialize hook binding mismatch");
   const poolId = bytes32(raw.topics[1], "angstrom-v4.Initialize.poolId");
   if (poolIdForKey(poolKey) !== poolId) throw new TypeError("angstrom-v4 Initialize PoolKey reverse binding mismatch");
   return Object.freeze({ poolId, poolKey });
+}
+
+export function decodeAngstromV4InitializeHook(data: string): string {
+  if (!/^0x(?:[0-9a-f]{64}){5}$/.test(data)) {
+    throw new TypeError("angstrom-v4 Initialize log binding mismatch");
+  }
+  return `0x${abiUint(data, 2, 160, "angstrom-v4.Initialize.hooks").toString(16).padStart(40, "0")}`;
 }
 
 function keccak256Hex(input: Uint8Array): Hash {

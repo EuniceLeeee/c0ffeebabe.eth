@@ -66,6 +66,7 @@ import {
   ANGSTROM_V4_QUOTER,
   ANGSTROM_V4_STATE_VIEW,
   assertPoolKey,
+  decodeAngstromV4InitializeHook,
   decodeAngstromV4InitializeLog,
   poolIdForKey,
 } from "../abi.ts";
@@ -810,7 +811,7 @@ function sourcePlanLogCandidate(
   if (lookback === null || typeof lookback !== "object" || Array.isArray(lookback) || chunk === null || typeof chunk !== "object" || Array.isArray(chunk)) throw new TypeError("angstrom-v4 history evidence range malformed");
   const range = decodeExactObject(lookback, { from: (item, itemPath) => assertDecimalString(item, itemPath), through: (item, itemPath) => assertDecimalString(item, itemPath) }, "angstrom-v4.history.lookback");
   const chunkBinding = decodeExactObject(chunk, { maxBlocks: (item, itemPath) => assertDecimalString(item, itemPath) }, "angstrom-v4.history.chunk");
-  if (chunkBinding.maxBlocks !== "10000" || BigInt(range.from) > BigInt(range.through) || BigInt(range.through) > BigInt(cutoffValue.number)) throw new TypeError("angstrom-v4 history evidence range mismatch");
+  if (chunkBinding.maxBlocks !== "500" || BigInt(range.from) > BigInt(range.through) || BigInt(range.through) > BigInt(cutoffValue.number)) throw new TypeError("angstrom-v4 history evidence range mismatch");
   const expectedFilter = Object.freeze({ address: canonicalAddress(ANGSTROM_V4_POOL_MANAGER), fromBlock: blockTag(range.from), toBlock: blockTag(range.through), topics: Object.freeze([ANGSTROM_V4_CONTRACT_EVIDENCE_TOPIC]) });
   if (encodeCanonicalJson(observed.request.params) !== encodeCanonicalJson([expectedFilter])) throw new TypeError("angstrom-v4 history evidence filter mismatch");
   if (!Array.isArray(observed.response)) throw new TypeError("angstrom-v4 history evidence response must be logs");
@@ -830,6 +831,7 @@ function sourcePlanLogCandidate(
     ) throw new TypeError(`angstrom-v4 history log[${index}] malformed`);
     const topics = log.topics as readonly Hash[];
     if (topics[0] !== ANGSTROM_V4_CONTRACT_EVIDENCE_TOPIC) continue;
+    if (decodeAngstromV4InitializeHook(log.data) !== ANGSTROM_MAINNET_HOOK.toLowerCase()) continue;
     const initialize = decodeAngstromV4InitializeLog({ address: log.address, topics, data: log.data }, ANGSTROM_V4_CONTRACT_EVIDENCE_TOPIC);
     if (initialize.poolId !== binding.instanceNominationKey) continue;
     const blockNumber = rpcQuantity(log.blockNumber, `angstrom-v4 history log[${index}].blockNumber`);

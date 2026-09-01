@@ -17,8 +17,8 @@ export const ANGSTROM_V4_CONTRACT_EVIDENCE_TOPIC: Hash = "0xdd466e674ea557f56295
 export const ANGSTROM_V4_HISTORY_SOURCE_PLAN_SCHEMA_HASH = hashDomain("aloha/angstrom-v4/history-source-plan-schema/v1", ANGSTROM_V4_HISTORY_SOURCE_PLAN_ID);
 export const ANGSTROM_V4_SOURCE_CONTRACT = Object.freeze({
   identityAuthority: "pool-manager-initialize-history-plus-hook-binding" as const,
-  historyRange: "genesis-through-cutoff" as const,
-  historyChunkBlocks: 10_000 as const,
+  historyRange: "latest-14400-blocks" as const,
+  historyChunkBlocks: 500 as const,
   recentBehaviorWindowBlocks: 50 as const,
   recentBehaviorContributesOmissionAuthority: false as const,
 });
