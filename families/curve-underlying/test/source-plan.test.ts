@@ -21,6 +21,7 @@ import {
 
 const h = (value: string): Hash => hashDomain("test/curve-source-plan", value);
 const cutoff = Object.freeze({ chainId: "1", number: "100", hash: h("block-100"), stateRoot: h("state-100") });
+const runtimeAuthority = Object.freeze({ authorityBindingHash: h("runtime-authority"), implementationCommit: "a".repeat(40) });
 const plan: SourcePlanRefV1 = Object.freeze({ ownerRef: h("owner"), sourcePlanRef: h("plan"), familyDefinitionHash: CURVE_UNDERLYING_FAMILY_AUTHORING_HASH, completeness: "complete-snapshot", historyStartBlock: null });
 const word = (value: bigint) => `0x${value.toString(16).padStart(64, "0")}`;
 const address = (digit: string) => `0x${digit.repeat(40)}`;
@@ -46,8 +47,7 @@ function physical(responses: readonly CanonicalJson[], mutate?: (value: Record<s
         kind: "family-source-plan-physical-observation",
         version: 1,
         requestId: h(`request-${index}`),
-        releaseBindingId: h("release-binding"),
-        releaseProvenanceHash: h("release-provenance"),
+        runtimeAuthority,
         sourceAuthorityRoot: h("source-authority"),
         sourceAnchorRoot: h("source-anchor"),
         provider: "reth",
@@ -279,13 +279,18 @@ test("Curve MetaRegistry rejects malformed ABI, manager mismatch, cutoff mismatc
   await assert.rejects(() => CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME.execute({ plan, cutoff, previousAppliedThrough: null }, physical(["0x01"]), new AbortController().signal), /one ABI uint256 word/);
   await assert.rejects(() => CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME.execute({ plan, cutoff, previousAppliedThrough: null }, physical([word(0n)], (observation, request) => { observation.request = { ...request.request, manager: address("9") }; }), new AbortController().signal), /binding mismatch/);
   await assert.rejects(() => CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME.execute({ plan, cutoff, previousAppliedThrough: null }, physical([word(0n)], observation => { observation.cutoff = { ...cutoff, number: "99" }; }), new AbortController().signal), /binding mismatch/);
-  const forged: FamilySourcePlanPhysicalPortV1 = { async request(request) { const bytes = encodeCanonicalBytes({ kind: "family-source-plan-physical-observation", version: 1, requestId: h("forged"), releaseBindingId: h("release-binding"), releaseProvenanceHash: h("release-provenance"), sourceAuthorityRoot: h("source-authority"), sourceAnchorRoot: h("source-anchor"), provider: "reth", backendEpoch: "epoch", familyDefinitionHash: request.familyDefinitionHash, plan: request.plan, cutoff: request.cutoff, requestSchemaHash: request.requestSchemaHash, request: request.request, response: word(0n) }); return { response: word(0n), rawLocatorHash: h("wrong"), evidenceRef: h("evidence"), rawEvidenceLocator: { kind: "raw-evidence-locator", version: 1, rawLocatorHash: h("wrong"), bytes } }; } };
+  const forged: FamilySourcePlanPhysicalPortV1 = { async request(request) { const bytes = encodeCanonicalBytes({ kind: "family-source-plan-physical-observation", version: 1, requestId: h("forged"), runtimeAuthority, sourceAuthorityRoot: h("source-authority"), sourceAnchorRoot: h("source-anchor"), provider: "reth", backendEpoch: "epoch", familyDefinitionHash: request.familyDefinitionHash, plan: request.plan, cutoff: request.cutoff, requestSchemaHash: request.requestSchemaHash, request: request.request, response: word(0n) }); return { response: word(0n), rawLocatorHash: h("wrong"), evidenceRef: h("evidence"), rawEvidenceLocator: { kind: "raw-evidence-locator", version: 1, rawLocatorHash: h("wrong"), bytes } }; } };
   await assert.rejects(() => CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME.execute({ plan, cutoff, previousAppliedThrough: null }, forged, new AbortController().signal), /raw observation hash mismatch/);
 });
 
-test("Curve MetaRegistry rejects a duplicate or zero pool", async () => {
+test("Curve MetaRegistry deduplicates registry aliases and rejects a zero pool", async () => {
   const pool = address("1");
-  await assert.rejects(() => CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME.execute({ plan, cutoff, previousAppliedThrough: null }, physical([word(2n), addressResult(pool), addressResult(pool)]), new AbortController().signal), /duplicate pools/);
+  const result = await CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME.execute({ plan, cutoff, previousAppliedThrough: null }, physical([word(2n), addressResult(pool), addressResult(pool)]), new AbortController().signal);
+  assert.deepEqual((result.execution.opaqueResult as { readonly pools: readonly string[] }).pools, [pool]);
+  assert.equal(result.rawEvidenceLocators.length, 3);
+  const raw = new Map(result.rawEvidenceLocators.map(value => [value.rawLocatorHash, value.bytes]));
+  const nominations = await CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM.evaluate({ execution: result.execution, sourceEvidence: result.sourceEvidence, recent: recent(), rawEvidence: { read(hash) { const value = raw.get(hash); if (!value) throw new Error("missing raw evidence"); return value; } } }, new AbortController().signal);
+  assert.deepEqual(nominations.map(value => value.instanceNominationKey), [pool]);
   await assert.rejects(() => CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME.execute({ plan, cutoff, previousAppliedThrough: null }, physical([word(1n), word(0n)]), new AbortController().signal), /zero address/);
 });
 

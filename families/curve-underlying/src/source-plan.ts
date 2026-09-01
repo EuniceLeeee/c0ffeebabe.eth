@@ -79,35 +79,42 @@ function registryObservation(
 
 function registryPoolEvidence(
   input: FamilySourcePlanNominationInputV1,
-  poolCount: bigint,
+  registryEntryCount: bigint,
   pools: readonly string[],
-): ReadonlyMap<bigint, SourcePlanEvidenceRefV1> {
-  if (input.sourceEvidence.refs.length !== pools.length + 1) throw new TypeError("curve registry evidence cardinality mismatch");
+): ReadonlyMap<string, SourcePlanEvidenceRefV1> {
+  if (registryEntryCount > BigInt(Number.MAX_SAFE_INTEGER) || input.sourceEvidence.refs.length !== Number(registryEntryCount) + 1) throw new TypeError("curve registry evidence cardinality mismatch");
   let countSeen = false;
-  const byIndex = new Map<bigint, SourcePlanEvidenceRefV1>();
+  const byIndex = new Map<bigint, { readonly pool: string; readonly ref: SourcePlanEvidenceRefV1 }>();
   for (const ref of input.sourceEvidence.refs) {
     const observation = registryObservation(input, ref);
     if (observation.data === POOL_COUNT_SELECTOR) {
       if (countSeen) throw new TypeError("curve registry duplicate pool count evidence");
       countSeen = true;
-      if (decodeUintResult(observation.response, "curve.metaregistry.pool_count evidence") !== poolCount) throw new TypeError("curve registry pool count evidence mismatch");
+      if (decodeUintResult(observation.response, "curve.metaregistry.pool_count evidence") !== registryEntryCount) throw new TypeError("curve registry pool count evidence mismatch");
       continue;
     }
     if (!observation.data.startsWith(POOL_LIST_SELECTOR) || observation.data.length !== POOL_LIST_SELECTOR.length + 64) throw new TypeError("curve registry unexpected pool evidence request");
     const indexWord = observation.data.slice(POOL_LIST_SELECTOR.length);
     if (!/^[0-9a-fA-F]{64}$/.test(indexWord)) throw new TypeError("curve registry pool evidence index is malformed");
     const index = BigInt(`0x${indexWord}`);
-    if (index >= poolCount) throw new TypeError("curve registry extra pool evidence index");
+    if (index >= registryEntryCount) throw new TypeError("curve registry extra pool evidence index");
     if (byIndex.has(index)) throw new TypeError("curve registry duplicate pool evidence index");
     const pool = decodeAddressResult(observation.response, `curve.metaregistry.pool_list[${index}] evidence`);
-    if (pool !== pools[Number(index)]) throw new TypeError("curve registry pool evidence value mismatch");
-    byIndex.set(index, ref);
+    byIndex.set(index, Object.freeze({ pool, ref }));
   }
   if (!countSeen) throw new TypeError("curve registry pool count evidence is missing");
-  for (let index = 0n; index < poolCount; index += 1n) {
+  const firstEvidenceByPool = new Map<string, SourcePlanEvidenceRefV1>();
+  const derivedPools: string[] = [];
+  for (let index = 0n; index < registryEntryCount; index += 1n) {
     if (!byIndex.has(index)) throw new TypeError("curve registry pool evidence index is missing");
+    const entry = byIndex.get(index)!;
+    if (!firstEvidenceByPool.has(entry.pool)) {
+      firstEvidenceByPool.set(entry.pool, entry.ref);
+      derivedPools.push(entry.pool);
+    }
   }
-  return byIndex;
+  if (encodeCanonicalJson(derivedPools) !== encodeCanonicalJson(pools)) throw new TypeError("curve registry pool evidence value mismatch");
+  return firstEvidenceByPool;
 }
 
 function recentNominations(input: FamilySourcePlanNominationInputV1): readonly CandidateNominationV1[] {
@@ -145,9 +152,9 @@ export const CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRunt
     const count = decodeUintResult(countRead.response, "curve.metaregistry.pool_count");
     if (count > BigInt(Number.MAX_SAFE_INTEGER)) throw new TypeError("curve registry pool count is too large");
     const observations = [countRead.result];
-    const pools: string[] = [];
-    for (let index = 0n; index < count; index += 1n) { const read = await registryRead(input, physical, `${POOL_LIST_SELECTOR}${uintWord(index)}`, signal); observations.push(read.result); pools.push(decodeAddressResult(read.response, `curve.metaregistry.pool_list[${index}]`)); }
-    if (new Set(pools).size !== pools.length) throw new TypeError("curve registry returned duplicate pools");
+    const registryPools: string[] = [];
+    for (let index = 0n; index < count; index += 1n) { const read = await registryRead(input, physical, `${POOL_LIST_SELECTOR}${uintWord(index)}`, signal); observations.push(read.result); registryPools.push(decodeAddressResult(read.response, `curve.metaregistry.pool_list[${index}]`)); }
+    const pools = [...new Set(registryPools)];
     const refs = observations.map(value => sourceRef(input, value)).sort((left, right) => refKey(left).localeCompare(refKey(right)));
     const rawEvidenceLocators = observations.map(value => value.rawEvidenceLocator).sort((left, right) => left.rawLocatorHash.localeCompare(right.rawLocatorHash));
     const rawLocatorHashes = rawEvidenceLocators.map(value => value.rawLocatorHash);
@@ -171,10 +178,9 @@ export const CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM: FamilySourcePlanNomin
     const opaque = input.execution.opaqueResult as { readonly kind?: unknown; readonly version?: unknown; readonly manager?: unknown; readonly poolCount?: unknown; readonly pools?: unknown };
     if (opaque.kind !== "curve-metaregistry-complete-snapshot" || opaque.version !== 1 || opaque.manager !== CURVE_METAREGISTRY || typeof opaque.poolCount !== "string" || !/^(0|[1-9][0-9]*)$/.test(opaque.poolCount) || !Array.isArray(opaque.pools)) throw new TypeError("curve registry opaque result is malformed");
     const poolCount = BigInt(opaque.poolCount);
-    if (poolCount !== BigInt(opaque.pools.length)) throw new TypeError("curve registry opaque result is malformed");
     const pools = Object.freeze(opaque.pools.map(value => canonicalAddress(String(value))));
     if (new Set(pools).size !== pools.length) throw new TypeError("curve registry opaque result has duplicate pools");
     const poolEvidence = registryPoolEvidence(input, poolCount, pools);
-    return Object.freeze(pools.map((target, index) => Object.freeze({ kind: "aloha.candidate-nomination" as const, version: "2" as const, familyId: CURVE_UNDERLYING_FAMILY_ID, familyDefinitionHash: CURVE_UNDERLYING_FAMILY_AUTHORING_HASH, instanceNominationKey: target, evidence: poolEvidence.get(BigInt(index))! })));
+    return Object.freeze(pools.map(target => Object.freeze({ kind: "aloha.candidate-nomination" as const, version: "2" as const, familyId: CURVE_UNDERLYING_FAMILY_ID, familyDefinitionHash: CURVE_UNDERLYING_FAMILY_AUTHORING_HASH, instanceNominationKey: target, evidence: poolEvidence.get(target)! })));
   },
 });
