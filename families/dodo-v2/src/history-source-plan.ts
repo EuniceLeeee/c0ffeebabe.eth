@@ -191,7 +191,7 @@ export const DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntimeV1 = Ob
     const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes });
     const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
     const entries = Object.freeze(observations.flatMap(item => item.entries));
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "dodo-v2-creation-rolling-observation", version: 1, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), factories: DODO_V2_FACTORIES, entries });
+    const opaqueResult: CanonicalJson = Object.freeze({ kind: "dodo-v2-creation-rolling-observation", version: 1, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), factories: DODO_V2_FACTORIES, entryCount: String(entries.length) });
     const resultPartitionRoot = hashDomain("aloha/dodo-v2/history-source-partition/v1", opaqueResult);
     const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
     return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators });
@@ -247,7 +247,7 @@ export const DODO_V2_HISTORY_NOMINATION_PROGRAM: FamilySourcePlanNominationProgr
     }
     if (expectedFrom !== BigInt(input.execution.through) + 1n) throw new TypeError("DODO history chunk cutoff mismatch");
     const entries = ordered.flatMap(item => item.entries);
-    const expected = { kind: "dodo-v2-creation-rolling-observation", version: 1, from: input.execution.from, through: input.execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), factories: DODO_V2_FACTORIES, entries };
+    const expected = { kind: "dodo-v2-creation-rolling-observation", version: 1, from: input.execution.from, through: input.execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), factories: DODO_V2_FACTORIES, entryCount: String(entries.length) };
     if (encodeCanonicalJson(expected) !== encodeCanonicalJson(input.execution.opaqueResult)) throw new TypeError("DODO history result/raw mismatch");
     return Object.freeze(ordered.flatMap(item => item.entries.map(entry => Object.freeze({ kind: "aloha.candidate-nomination" as const, version: "2" as const, familyId: DODO_V2_FAMILY_ID, familyDefinitionHash: DODO_V2_FAMILY_AUTHORING_HASH, instanceNominationKey: entry.pool, evidence: item.evidence }))));
   },

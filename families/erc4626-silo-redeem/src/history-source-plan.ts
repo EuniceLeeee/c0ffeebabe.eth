@@ -250,7 +250,7 @@ function decodeHistory(
   }
   if (expectedFrom !== BigInt(execution.through) + 1n) throw new TypeError("erc4626-silo-redeem history chunk cutoff mismatch");
   const entries = chunks.flatMap(chunk => chunk.entries);
-  const expected = { kind: "erc4626-silo-redeem-withdraw-rolling-observation", version: 1, topic: ERC4626_SILO_REDEEM_WITHDRAW_TOPIC, from: execution.from, through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries };
+  const expected = { kind: "erc4626-silo-redeem-withdraw-rolling-observation", version: 1, topic: ERC4626_SILO_REDEEM_WITHDRAW_TOPIC, from: execution.from, through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entryCount: String(entries.length) };
   if (encodeCanonicalJson(expected) !== encodeCanonicalJson(execution.opaqueResult)) throw new TypeError("erc4626-silo-redeem history result/raw mismatch");
   return Object.freeze(chunks);
 }
@@ -277,12 +277,7 @@ export const ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRu
     const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes });
     const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
     const entries = Object.freeze(chunks.flatMap(chunk => chunk.entries));
-    const canonicalEntries = Object.freeze(entries.map(entry => Object.freeze({
-      target: entry.target, sender: entry.sender, receiver: entry.receiver, owner: entry.owner,
-      assets: entry.assets, shares: entry.shares, blockNumber: entry.blockNumber,
-      blockHash: entry.blockHash, txHash: entry.txHash, logIndex: entry.logIndex,
-    })));
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "erc4626-silo-redeem-withdraw-rolling-observation", version: 1, topic: ERC4626_SILO_REDEEM_WITHDRAW_TOPIC, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries: canonicalEntries });
+    const opaqueResult: CanonicalJson = Object.freeze({ kind: "erc4626-silo-redeem-withdraw-rolling-observation", version: 1, topic: ERC4626_SILO_REDEEM_WITHDRAW_TOPIC, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entryCount: String(entries.length) });
     const resultPartitionRoot = hashDomain("aloha/erc4626-silo-redeem/history-source-partition/v1", opaqueResult);
     const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
     return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators });

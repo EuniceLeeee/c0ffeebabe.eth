@@ -170,7 +170,7 @@ function decodeHistory(execution: FamilySourcePlanNominationInputV1["execution"]
   let expectedFrom = BigInt(execution.from);
   for (const chunk of chunks) { if (BigInt(chunk.from) !== expectedFrom || BigInt(chunk.through) < expectedFrom || BigInt(chunk.through) - expectedFrom + 1n > CHUNK_BLOCKS) throw new TypeError("eigenpie history chunk coverage gap"); expectedFrom = BigInt(chunk.through) + 1n; }
   if (expectedFrom !== BigInt(execution.through) + 1n) throw new TypeError("eigenpie history chunk cutoff mismatch");
-  const expected = { kind: "eigenpie-asset-deposit-rolling-observation", version: 1, topic: EIGENPIE_ASSET_DEPOSIT_TOPIC, from: execution.from, through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries: chunks.flatMap(chunk => chunk.entries) };
+  const expected = { kind: "eigenpie-asset-deposit-rolling-observation", version: 1, topic: EIGENPIE_ASSET_DEPOSIT_TOPIC, from: execution.from, through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entryCount: String(chunks.reduce((count, chunk) => count + chunk.entries.length, 0)) };
   if (encodeCanonicalJson(expected) !== encodeCanonicalJson(execution.opaqueResult)) throw new TypeError("eigenpie history result/raw mismatch");
   return Object.freeze(chunks);
 }
@@ -197,12 +197,7 @@ export const EIGENPIE_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntimeV1 = O
     const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes });
     const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
     const entries = Object.freeze(chunks.flatMap(chunk => chunk.entries));
-    const canonicalEntries = Object.freeze(entries.map(entry => Object.freeze({
-      target: entry.target, depositor: entry.depositor, asset: entry.asset, referral: entry.referral,
-      depositAmount: entry.depositAmount, mintedAmount: entry.mintedAmount, blockNumber: entry.blockNumber,
-      blockHash: entry.blockHash, txHash: entry.txHash, logIndex: entry.logIndex,
-    })));
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "eigenpie-asset-deposit-rolling-observation", version: 1, topic: EIGENPIE_ASSET_DEPOSIT_TOPIC, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries: canonicalEntries });
+    const opaqueResult: CanonicalJson = Object.freeze({ kind: "eigenpie-asset-deposit-rolling-observation", version: 1, topic: EIGENPIE_ASSET_DEPOSIT_TOPIC, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entryCount: String(entries.length) });
     const resultPartitionRoot = hashDomain("aloha/eigenpie/history-source-partition/v1", opaqueResult);
     const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
     return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators });

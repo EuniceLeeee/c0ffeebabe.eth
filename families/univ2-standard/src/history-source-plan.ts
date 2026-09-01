@@ -86,7 +86,7 @@ function decodeHistory(
   if (expectedFrom !== BigInt(execution.through) + 1n) throw new TypeError("univ2 history chunk cutoff mismatch");
   const entries = chunks.flatMap(value => value.entries);
   if (new Set(entries.map(value => value.pair)).size !== entries.length) throw new TypeError("univ2 history returned duplicate pairs across chunks");
-  const expected = { kind: "univ2-pair-created-rolling-observation", version: 1, topic: UNIV2_PAIR_CREATED_TOPIC0, from: execution.from, through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries };
+  const expected = { kind: "univ2-pair-created-rolling-observation", version: 1, topic: UNIV2_PAIR_CREATED_TOPIC0, from: execution.from, through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entryCount: String(entries.length) };
   if (encodeCanonicalJson(expected) !== encodeCanonicalJson(execution.opaqueResult)) throw new TypeError("univ2 history result/raw mismatch");
   return Object.freeze(chunks);
 }
@@ -103,7 +103,7 @@ export const UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntime
     const entries = chunks.flatMap(value => value.entries); if (new Set(entries.map(value => value.pair)).size !== entries.length) throw new TypeError("univ2 history returned duplicate pairs across executions");
     const refs = Object.freeze(chunks.map(value => ref(input, value.result)).sort((a, b) => refKey(a).localeCompare(refKey(b))));
     const rawEvidenceLocators = Object.freeze(chunks.map(value => value.result.rawEvidenceLocator).sort((a, b) => a.rawLocatorHash.localeCompare(b.rawLocatorHash))); const rawLocatorHashes = Object.freeze(rawEvidenceLocators.map(value => value.rawLocatorHash)); const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes }); const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "univ2-pair-created-rolling-observation", version: 1, topic: UNIV2_PAIR_CREATED_TOPIC0, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries: Object.freeze(entries) }); const resultPartitionRoot = hashDomain("aloha/univ2-standard/history-source-partition/v1", opaqueResult); const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
+    const opaqueResult: CanonicalJson = Object.freeze({ kind: "univ2-pair-created-rolling-observation", version: 1, topic: UNIV2_PAIR_CREATED_TOPIC0, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entryCount: String(entries.length) }); const resultPartitionRoot = hashDomain("aloha/univ2-standard/history-source-partition/v1", opaqueResult); const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
     return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators });
   },
 });

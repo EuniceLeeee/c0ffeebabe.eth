@@ -254,7 +254,7 @@ function decodeHistory(
   if (expectedFrom !== BigInt(execution.through) + 1n) throw new TypeError("univ3 history chunk coverage cutoff mismatch");
   const entries = chunks.flatMap(value => value.entries);
   if (new Set(entries.map(value => value.pool)).size !== entries.length) throw new TypeError("univ3 history returned a duplicate pool across chunks");
-  const expected = { kind: "univ3-pool-created-rolling-observation", version: 1, topic: UNIV3_POOL_CREATED_TOPIC, from: execution.from, through: execution.through, chunkBlocks: HISTORY_CHUNK_BLOCKS.toString(), entries };
+  const expected = { kind: "univ3-pool-created-rolling-observation", version: 1, topic: UNIV3_POOL_CREATED_TOPIC, from: execution.from, through: execution.through, chunkBlocks: HISTORY_CHUNK_BLOCKS.toString(), entryCount: String(entries.length) };
   if (encodeCanonicalJson(execution.opaqueResult) !== encodeCanonicalJson(expected)) throw new TypeError("univ3 history result/raw observation mismatch");
   return Object.freeze(chunks);
 }
@@ -281,7 +281,7 @@ export const UNIV3_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntime
     const rawLocatorHashes = Object.freeze(rawEvidenceLocators.map(value => value.rawLocatorHash));
     const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes });
     const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "univ3-pool-created-rolling-observation", version: 1, topic: UNIV3_POOL_CREATED_TOPIC, from, through: input.cutoff.number, chunkBlocks: HISTORY_CHUNK_BLOCKS.toString(), entries: Object.freeze(allEntries) });
+    const opaqueResult: CanonicalJson = Object.freeze({ kind: "univ3-pool-created-rolling-observation", version: 1, topic: UNIV3_POOL_CREATED_TOPIC, from, through: input.cutoff.number, chunkBlocks: HISTORY_CHUNK_BLOCKS.toString(), entryCount: String(allEntries.length) });
     const resultPartitionRoot = hashDomain("aloha/univ3-standard/history-source-partition/v1", opaqueResult);
     const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
     return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators });
