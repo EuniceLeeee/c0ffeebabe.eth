@@ -26,7 +26,17 @@ async function main(): Promise<void> {
   }
 }
 
+function formatError(error: unknown): string {
+  if (error instanceof AggregateError) {
+    return [
+      error.message,
+      ...error.errors.map((nested, index) => `[${index + 1}] ${formatError(nested)}`),
+    ].join("\n");
+  }
+  return error instanceof Error ? (error.stack ?? error.message) : String(error);
+}
+
 main().catch(error => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.stderr.write(`${formatError(error)}\n`);
   process.exitCode = 1;
 });
