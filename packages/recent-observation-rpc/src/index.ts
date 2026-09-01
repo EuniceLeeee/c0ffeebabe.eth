@@ -76,9 +76,8 @@ function record(value: unknown, path: string): Readonly<Record<string, Canonical
 }
 
 function array(value: unknown, path: string): readonly CanonicalJson[] {
-  const decoded = canonical(value);
-  if (!Array.isArray(decoded)) throw new TypeError(`${path} must be an array`);
-  return decoded;
+  if (!Array.isArray(value)) throw new TypeError(`${path} must be an array`);
+  return value as readonly CanonicalJson[];
 }
 
 function quantity(value: unknown, path: string): string {

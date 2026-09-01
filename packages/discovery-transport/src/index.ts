@@ -5,7 +5,6 @@ import {
 import {
   assertExactKeys,
   decodeCanonicalJson,
-  decodeJson,
   encodeCanonicalJson,
 } from "../../../packages/canonical-codec/src/index.ts";
 import {
@@ -78,6 +77,15 @@ export class HttpJsonRpcDiscoveryError extends Error {
   }
 }
 
+const MAX_DISCOVERY_HTTP_RESPONSE_BYTES = 32 * 1024 * 1024;
+
+function decodeDiscoveryHttpResponse(text: string): unknown {
+  if (new TextEncoder().encode(text).length > MAX_DISCOVERY_HTTP_RESPONSE_BYTES) {
+    throw new TypeError("discovery RPC response exceeds transport byte policy");
+  }
+  return JSON.parse(text) as unknown;
+}
+
 function endpointUrl(value: string | URL): string {
   let endpoint: URL;
   try {
@@ -132,7 +140,7 @@ export class HttpJsonRpcDiscoveryPort implements DiscoveryTransportPort {
     }
     let decoded: unknown;
     try {
-      decoded = decodeJson(await response.text());
+      decoded = decodeDiscoveryHttpResponse(await response.text());
       if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) {
         throw new TypeError("response must be an object");
       }
