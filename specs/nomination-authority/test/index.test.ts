@@ -9,7 +9,9 @@ import {
   type CandidateRecordV1,
 } from "../../../packages/discovery/src/index.ts";
 import {
+  decodePersistedNominationClosureV1,
   decodeNominationClosureV1,
+  encodePersistedNominationClosureV1,
   nominationClaimRoot,
   nominationEvidenceRefHash,
   sealNominationClosureV1,
@@ -265,4 +267,53 @@ test("nomination-only recent receipts never grant omission authority", async () 
     claims: [],
   });
   assert.equal(nominationPlanGrantsOmissionAuthority(receipt), false);
+});
+
+test("3k nomination facts use bounded linked chunks without truncating the materialized closure", () => {
+  const sourcePlanIdentity = h("large-plan-identity");
+  const sourcePlanRef = h("large-source-plan");
+  const candidates = Array.from({ length: 3_000 }, (_, index) => candidate(`large:${index}`, sourcePlanRef));
+  const receipt = sealQualifiedSourcePlanNominationReceiptV1({
+    cutoff,
+    familyId: "family.alpha",
+    familyDefinitionHash: h("family-definition"),
+    sourcePlanIdentity,
+    sourcePlanLeafDigest: h("large-plan-leaf"),
+    nominationProgramRoot: h("large-nomination-program"),
+    nominationProgramProposalLeafDigest: h("large-nomination-program-proposal"),
+    qualificationRoot: h("large-qualification"),
+    denominator: {
+      kind: "complete-source-result",
+      persistedExecutionRoot: h("large-persisted-execution"),
+      resultPartitionRoot: h("large-result-partition"),
+    },
+    claims: candidates.map(value => ({
+      sourcePlanIdentity,
+      familyCandidateKey: value.familyCandidateKey,
+      instanceNominationKey: value.instanceNominationKey,
+      evidenceRefHash: nominationEvidenceRefHash(value.evidence[0]!),
+    })),
+  });
+  const closure = sealNominationClosureV1({
+    cutoff,
+    recentObservationRoot: h("large-recent"),
+    sourceExecutionSetRoot: h("large-execution-set"),
+    sourceCoverageRoot: h("large-coverage"),
+    sourcePlanIdentities: [sourcePlanIdentity],
+    receipts: [receipt],
+    candidates,
+    candidatePartitionRoot: candidatePartitionRoot(candidates),
+  });
+  const encoded = encodePersistedNominationClosureV1(closure);
+  const chunks = new Map(encoded.chunks.map(chunk => [chunk.ref.contentSha256, chunk.bytes]));
+  const reopened = decodePersistedNominationClosureV1(encoded.manifestBytes, ref => {
+    const bytes = chunks.get(ref.contentSha256);
+    if (!bytes) throw new Error("missing test claim chunk");
+    return bytes;
+  });
+  assert.equal(encoded.manifestBytes.byteLength < 500_000, true);
+  assert.equal(encoded.chunks.length > 1, true);
+  assert.equal(reopened.rawClaimCount, "3000");
+  assert.equal(reopened.candidateCount, "3000");
+  assert.equal(reopened.root, closure.root);
 });

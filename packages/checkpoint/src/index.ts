@@ -64,11 +64,12 @@ import {
   type CandidatePartitionReaderPortV1,
 } from "../../../specs/candidate-partition-authority/src/index.ts";
 import {
-  decodeNominationClosureBytesV1,
   decodeNominationClosureV1,
-  encodeNominationClosureV1,
+  decodePersistedNominationClosureV1,
+  encodePersistedNominationClosureV1,
   nominationEvidenceRefHash,
   sealNominationClosureV1,
+  type NominationClaimChunkRefV1,
   type NominationClosureV1,
 } from "../../../specs/nomination-authority/src/index.ts";
 import {
@@ -226,6 +227,7 @@ const SOURCE_COVERAGE_KIND = "aloha/source-coverage/v1";
 const SOURCE_EXECUTION_SET_KIND = "aloha/persisted-source-plan-execution-set/v1";
 const SOURCE_PLAN_EVIDENCE_KIND = "aloha/source-plan-evidence/v1";
 const NOMINATION_CLOSURE_KIND = "aloha/nomination-closure/v1";
+const NOMINATION_CLAIM_CHUNK_KIND = "aloha/nomination-claim-chunk/v1";
 const VERIFIED_MEMO_SET_KIND = "aloha/verified-memo-set/v1";
 const INSTANCE_CATALOG_KIND = "aloha/instance-catalog-manifest/v1";
 const INSTANCE_CATALOG_CHUNK_KIND = "aloha/instance-catalog-publication-chunk/v1";
@@ -297,7 +299,8 @@ export const CHECKPOINT_SCHEMA_MANIFEST = deepFreeze({
     { kind: SOURCE_COVERAGE_KIND, fields: ["cutoff", "entries", "sourceCoverageRoot"], codecAuthority: "discovery.validateSourceCoverageCertificate", referenceContract: "none" },
     { kind: SOURCE_EXECUTION_SET_KIND, fields: ["kind", "version", "cutoff", "executions", "executionSetRoot"], codecAuthority: "discovery.decodePersistedSourcePlanExecutionSet", referenceContract: "all and only raw locator physical envelopes named by the exact persisted executions; predecessor roots resolve through the active parent ready closure" },
     { kind: SOURCE_PLAN_EVIDENCE_KIND, wire: "canonical-array", codecAuthority: "discovery.decodeSourcePlanEvidenceReceipt", referenceContract: "all and only raw locator physical envelopes named by source-plan evidence receipts" },
-    { kind: NOMINATION_CLOSURE_KIND, codecAuthority: "nomination-authority.decodeNominationClosureV1", referenceContract: "exact recent observation + source coverage + persisted source execution set + source-plan evidence + candidate manifest", semanticHashDomain: "aloha/nomination-closure/v1" },
+    { kind: NOMINATION_CLOSURE_KIND, codecAuthority: "nomination-authority.decodePersistedNominationClosureV1", referenceContract: "all and only linked claim chunks + exact recent observation + source coverage + persisted source execution set + source-plan evidence + candidate manifest", semanticHashDomain: "aloha/nomination-closure/v1" },
+    { kind: NOMINATION_CLAIM_CHUNK_KIND, fields: ["schemaVersion", "kind", "sourcePlanIdentity", "claims", "nextClaimChunkRef"], codecAuthority: "nomination-authority.decodePersistedNominationClosureV1", referenceContract: "none" },
     { kind: VERIFIED_MEMO_SET_KIND, fields: VERIFIED_MEMO_SET_FIELDS, codecAuthority: "checkpoint.decodeMemoSetRecordWith+catalog.decodeInstanceCatalogV1", referenceContract: "exact memo catalog manifest/chunks plus all and only retained raw locator physical envelopes", semanticHashDomain: "aloha/verified-memo-set/v3" },
     { kind: INSTANCE_CATALOG_KIND, fields: ["schemaVersion", "kind", "cutoff", "instanceCount", "publicationSequenceRoot", "publicationChunkCount", "firstPublicationChunkRef", "instanceCatalogRoot"], codecAuthority: "catalog.decodeInstanceCatalogV1", referenceContract: "all and only linked publication chunks" },
     { kind: INSTANCE_CATALOG_CHUNK_KIND, fields: ["schemaVersion", "kind", "publications", "nextPublicationChunkRef"], codecAuthority: "catalog.decodeInstanceCatalogV1", referenceContract: "none" },
@@ -1034,6 +1037,47 @@ function decodeInstanceCatalogRecordWith(
     const catalog = decodeInstanceCatalogV1(record.bytes, chunks.readChunk);
     chunks.assertComplete();
     return catalog;
+  } catch (error) {
+    if (error instanceof CorruptDurableStoreError) throw error;
+    throw new CorruptDurableStoreError(
+      `${context} validation failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function decodeNominationClosureRecordWith(
+  read: DurableContentReader,
+  storageHash: Hash,
+  context: string,
+): Readonly<{
+  closure: NominationClosureV1;
+  dependencyReferences: readonly Hash[];
+}> {
+  const record = read(storageHash);
+  if (!record || record.kind !== NOMINATION_CLOSURE_KIND) {
+    throw new CorruptDurableStoreError(`${context} manifest kind or content is missing`);
+  }
+  const chunkReferences: Hash[] = [];
+  const dependencyReferences: Hash[] = [];
+  for (const reference of record.references) {
+    const child = read(reference);
+    if (!child) throw new CorruptDurableStoreError(`${context} references missing content`);
+    if (child.kind === NOMINATION_CLAIM_CHUNK_KIND) chunkReferences.push(reference);
+    else dependencyReferences.push(reference);
+  }
+  try {
+    const chunks = linkedChunkReader<NominationClaimChunkRefV1>(
+      read,
+      Object.freeze({ ...record, references: Object.freeze(chunkReferences) }),
+      NOMINATION_CLAIM_CHUNK_KIND,
+      context,
+    );
+    const closure = decodePersistedNominationClosureV1(record.bytes, chunks.readChunk);
+    chunks.assertComplete();
+    return Object.freeze({
+      closure,
+      dependencyReferences: Object.freeze([...dependencyReferences].sort(compareText)),
+    });
   } catch (error) {
     if (error instanceof CorruptDurableStoreError) throw error;
     throw new CorruptDurableStoreError(
@@ -2667,10 +2711,22 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           candidateEntries.push({ key: candidate.familyCandidateKey, storageHash });
         }
         const candidateManifestHash = putPartition(tx, runId, "candidate", candidateEntries);
+        const encodedNominationClosure = encodePersistedNominationClosureV1(nominationClosure);
+        const nominationClaimChunkStorageHashes = encodedNominationClosure.chunks.map(chunk => tx.putImmutable(
+          NOMINATION_CLAIM_CHUNK_KIND,
+          chunk.bytes,
+        ));
         const nominationClosureStorageHash = tx.putImmutable(
           NOMINATION_CLOSURE_KIND,
-          encodeNominationClosureV1(nominationClosure),
-          [recentStorageHash, coverageStorageHash, sourceExecutionSetStorageHash, sourcePlanEvidenceStorageHash, candidateManifestHash],
+          encodedNominationClosure.manifestBytes,
+          [
+            recentStorageHash,
+            coverageStorageHash,
+            sourceExecutionSetStorageHash,
+            sourcePlanEvidenceStorageHash,
+            candidateManifestHash,
+            ...nominationClaimChunkStorageHashes,
+          ],
         );
         const outcomeManifestHash = putPartition(tx, runId, "outcome", []);
         const memoStorageHash = this.#findMemoStorageHash(tx, currentRecord.references, root.verifiedMemoRoot);
@@ -3570,12 +3626,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     const closure = this.#findReadyClosure(rootRecord.references, ready.readyRecordHash);
     if (encodeCanonicalJson(closure.ready) !== encodeCanonicalJson(ready)) throw new CorruptDurableStoreError("ready closure record mismatch");
     const sourceCoverage = cloneCanonical<SourceCoverageCertificateV1>(decodeCanonicalJson(readContentStore(this.#durable, closure.sourceCoverageStorageHash, SOURCE_COVERAGE_KIND, "source coverage")));
-    const nominationClosure = decodeNominationClosureBytesV1(readContentStore(
-      this.#durable,
+    const nominationClosure = decodeNominationClosureRecordWith(
+      hash => this.#durable.readContent(hash),
       closure.nominationClosureStorageHash,
-      NOMINATION_CLOSURE_KIND,
       "nomination closure",
-    ));
+    ).closure;
     if (
       nominationClosure.root !== closure.nominationClosureRoot
       || nominationClosure.root !== ready.nominationClosureRoot
@@ -3971,8 +4026,13 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     if (!nominationRecord || nominationRecord.kind !== NOMINATION_CLOSURE_KIND) {
       throw new CorruptDurableStoreError("ready full-Family nomination closure is missing");
     }
-    const nominationClosure = decodeNominationClosureBytesV1(nominationRecord.bytes);
-    const recentReferences = nominationRecord.references.filter(reference => (
+    const decodedNomination = decodeNominationClosureRecordWith(
+      read,
+      closure.nominationClosureStorageHash,
+      "ready full-Family nomination closure",
+    );
+    const nominationClosure = decodedNomination.closure;
+    const recentReferences = decodedNomination.dependencyReferences.filter(reference => (
       read(reference)?.kind === RECENT_OBSERVATION_KIND
     ));
     if (recentReferences.length !== 1) {
@@ -5047,11 +5107,16 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       envelope.sourcePlanEvidenceStorageHash,
       envelope.candidatePartitionStorageHash,
     ].sort(compareText);
-    if (encodeCanonicalJson([...nominationRecord.references].sort(compareText)) !== encodeCanonicalJson(expectedNominationReferences)) {
+    const decodedNomination = decodeNominationClosureRecordWith(
+      readRecord,
+      envelope.nominationClosureStorageHash,
+      "nomination closure",
+    );
+    if (encodeCanonicalJson(decodedNomination.dependencyReferences) !== encodeCanonicalJson(expectedNominationReferences)) {
       throw new CorruptDurableStoreError("nomination closure physical reference set mismatch");
     }
     const nominationClosure = validateNominationClosureAgainstRun({
-      closure: decodeNominationClosureBytesV1(nominationRecord.bytes),
+      closure: decodedNomination.closure,
       cutoff: envelope.cutoff,
       recentObservation,
       sourceCoverage,
@@ -5527,23 +5592,22 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     if (!nominationRecord || nominationRecord.kind !== NOMINATION_CLOSURE_KIND) {
       throw new CorruptDurableStoreError("nomination closure is missing");
     }
-    const nominationClosure = decodeNominationClosureBytesV1(nominationRecord.bytes);
+    const decodedNomination = decodeNominationClosureRecordWith(
+      read,
+      loaded.envelope.nominationClosureStorageHash,
+      "nomination closure",
+    );
+    const nominationClosure = decodedNomination.closure;
     if (nominationClosure.root !== loaded.envelope.nominationClosureRoot) {
       throw new CorruptDurableStoreError("nomination closure root mismatch");
     }
-    this.#assertRecordReferencesWith(
-      read,
-      loaded.envelope.nominationClosureStorageHash,
-      NOMINATION_CLOSURE_KIND,
-      [
+    if (encodeCanonicalJson(decodedNomination.dependencyReferences) !== encodeCanonicalJson([
         loaded.envelope.recentObservationStorageHash,
         loaded.envelope.sourceCoverageStorageHash,
         loaded.envelope.sourceExecutionSetStorageHash,
         loaded.envelope.sourcePlanEvidenceStorageHash,
         loaded.envelope.candidatePartitionStorageHash,
-      ],
-      "nomination closure",
-    );
+      ].sort(compareText))) throw new CorruptDurableStoreError("nomination closure physical references mismatch");
     const recentLocators = loaded.builderRun.recentObservation.evidence.map(value => value.rawLocatorHash);
     const recentRecord = read(loaded.envelope.recentObservationStorageHash);
     if (!recentRecord || recentRecord.kind !== RECENT_OBSERVATION_KIND) {
@@ -6223,7 +6287,12 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           if (!nominationRecord || nominationRecord.kind !== NOMINATION_CLOSURE_KIND) {
             throw new CorruptDurableStoreError("ready nomination closure is missing");
           }
-          const recentReferences = nominationRecord.references.filter(reference => (
+          const decodedNomination = decodeNominationClosureRecordWith(
+            read,
+            closure.nominationClosureStorageHash,
+            "ready nomination closure",
+          );
+          const recentReferences = decodedNomination.dependencyReferences.filter(reference => (
             read(reference)?.kind === RECENT_OBSERVATION_KIND
           ));
           if (recentReferences.length !== 1) {
@@ -6236,7 +6305,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             closure.sourcePlanEvidenceStorageHash,
             closure.candidatePartitionStorageHash,
           ].sort(compareText);
-          if (encodeCanonicalJson(nominationRecord.references) !== encodeCanonicalJson(expectedNominationReferences)) {
+          if (encodeCanonicalJson(decodedNomination.dependencyReferences) !== encodeCanonicalJson(expectedNominationReferences)) {
             throw new CorruptDurableStoreError("ready nomination closure physical references mismatch");
           }
           const recentRecord = read(recentReferences[0]!);
@@ -6259,7 +6328,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           let nominationClosure: NominationClosureV1;
           try {
             nominationClosure = validateNominationClosureAgainstRun({
-              closure: decodeNominationClosureBytesV1(nominationRecord.bytes),
+              closure: decodedNomination.closure,
               cutoff: closure.ready.cutoff,
               recentObservation,
               sourceCoverage,

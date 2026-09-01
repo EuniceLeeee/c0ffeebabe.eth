@@ -1,3 +1,4 @@
+import { types as nodeTypes } from "node:util";
 import {
   assertDecimalString,
   assertHash,
@@ -10,6 +11,7 @@ import {
   hashCanonicalPartition,
   hashDomain,
   readOwnEnumerableDataProperty,
+  sha256Hex,
   type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
 import {
@@ -138,8 +140,58 @@ export interface NominationClosureV1 {
   readonly root: Hash;
 }
 
+export interface NominationClaimChunkRefV1 {
+  readonly contentSha256: Hash;
+}
+
+export interface NominationClaimChunkV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.nomination-claim-chunk-v1";
+  readonly sourcePlanIdentity: Hash;
+  readonly claims: readonly PlanQualifiedNominationClaimV1[];
+  readonly nextClaimChunkRef: NominationClaimChunkRefV1 | null;
+}
+
+export interface EncodedNominationClosureV1 {
+  readonly manifestBytes: Uint8Array;
+  readonly chunks: readonly Readonly<{
+    readonly ref: NominationClaimChunkRefV1;
+    readonly bytes: Uint8Array;
+  }>[];
+}
+
+const NOMINATION_CLAIM_CHUNK_MAX_ITEMS = 128;
+const NOMINATION_WIRE_MAX_BYTES = 500_000;
+
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/** Large materialized partitions are not themselves wire values. Their
+ * durable representation is the bounded linked-chunk codec below. */
+function materializedArray<T>(
+  value: unknown,
+  item: (value: unknown, path: string) => T,
+  path: string,
+): readonly T[] {
+  if (!Array.isArray(value)) throw new TypeError(`expected array at ${path}`);
+  if (nodeTypes.isProxy(value)) throw new TypeError(`Proxy arrays are not accepted at ${path}`);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key === "symbol"
+      || (key !== "length" && (!/^\d+$/.test(key) || Number(key) >= value.length))) {
+      throw new TypeError(`array has extra property at ${path}.${String(key)}`);
+    }
+  }
+  const output: T[] = new Array(value.length);
+  for (let index = 0; index < value.length; index += 1) {
+    const itemPath = `${path}[${index}]`;
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+      throw new TypeError(`sparse or accessor array item at ${itemPath}`);
+    }
+    output[index] = item(descriptor.value, itemPath);
+  }
+  return deepFreeze(output);
 }
 
 function expectedFamilyCandidateKey(familyDefinitionHash: Hash, instanceNominationKey: string): Hash {
@@ -164,6 +216,14 @@ function sameCutoff(left: CanonicalCutoffV1, right: CanonicalCutoffV1): boolean 
 
 function exactSortedUniqueHashes(value: unknown, path: string): readonly Hash[] {
   const hashes = fieldArray(value, (field, fieldPath) => assertHash(field, fieldPath), path);
+  if (new Set(hashes).size !== hashes.length) throw new TypeError(`${path} contains duplicates`);
+  const sorted = [...hashes].sort(compareText);
+  if (hashes.some((hash, index) => hash !== sorted[index])) throw new TypeError(`${path} is not canonical order`);
+  return hashes;
+}
+
+function materializedSortedUniqueHashes(value: unknown, path: string): readonly Hash[] {
+  const hashes = materializedArray(value, (field, fieldPath) => assertHash(field, fieldPath), path);
   if (new Set(hashes).size !== hashes.length) throw new TypeError(`${path} contains duplicates`);
   const sorted = [...hashes].sort(compareText);
   if (hashes.some((hash, index) => hash !== sorted[index])) throw new TypeError(`${path} is not canonical order`);
@@ -263,7 +323,8 @@ function uniqueNomination(value: unknown, path: string): UniqueNominationV1 {
 }
 
 function receiptPayload(value: Omit<QualifiedSourcePlanNominationReceiptV1, "receiptRoot">) {
-  return value;
+  const { claims: _claims, uniqueNominations: _uniqueNominations, ...commitment } = value;
+  return commitment;
 }
 
 export function qualifiedSourcePlanNominationReceiptRoot(
@@ -294,10 +355,10 @@ export function decodeQualifiedSourcePlanNominationReceiptV1(
     nominationProgramProposalLeafDigest: (field, fieldPath) => assertHash(field, fieldPath),
     qualificationRoot: (field, fieldPath) => assertHash(field, fieldPath),
     denominator,
-    claims: (field, fieldPath) => fieldArray(field, claim, fieldPath),
+    claims: (field, fieldPath) => materializedArray(field, claim, fieldPath),
     rawClaimRoot: (field, fieldPath) => assertHash(field, fieldPath),
     rawClaimCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
-    uniqueNominations: (field, fieldPath) => fieldArray(field, uniqueNomination, fieldPath),
+    uniqueNominations: (field, fieldPath) => materializedArray(field, uniqueNomination, fieldPath),
     uniqueNominationRoot: (field, fieldPath) => assertHash(field, fieldPath),
     uniqueNominationCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
     receiptRoot: (field, fieldPath) => assertHash(field, fieldPath),
@@ -409,7 +470,7 @@ function familyPartition(value: unknown, path: string): FamilyNominationPartitio
   const decoded = decodeExactObject(value, {
     familyId: (field, fieldPath) => assertNonEmptyString(field, fieldPath),
     familyDefinitionHash: (field, fieldPath) => assertHash(field, fieldPath),
-    familyCandidateKeys: exactSortedUniqueHashes,
+    familyCandidateKeys: materializedSortedUniqueHashes,
     candidateSetRoot: (field, fieldPath) => assertHash(field, fieldPath),
     candidateCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
   }, path);
@@ -420,8 +481,30 @@ function familyPartition(value: unknown, path: string): FamilyNominationPartitio
   return decoded;
 }
 
+function familyPartitionCommitment(value: FamilyNominationPartitionV1) {
+  return {
+    familyId: value.familyId,
+    familyDefinitionHash: value.familyDefinitionHash,
+    candidateSetRoot: value.candidateSetRoot,
+    candidateCount: value.candidateCount,
+  };
+}
+
+function familySetRoot(values: readonly FamilyNominationPartitionV1[]): Hash {
+  return hashCanonicalPartition(
+    NOMINATION_AUTHORITY_DOMAINS.familySet,
+    values.map(familyPartitionCommitment),
+  );
+}
+
 function closurePayload(value: Omit<NominationClosureV1, "root">) {
-  return value;
+  const {
+    sourcePlanIdentities: _sourcePlanIdentities,
+    receipts: _receipts,
+    families: _families,
+    ...commitment
+  } = value;
+  return commitment;
 }
 
 export function nominationClosureRoot(value: Omit<NominationClosureV1, "root">): Hash {
@@ -473,7 +556,10 @@ export function decodeNominationClosureV1(value: unknown, path = "nominationClos
     throw new TypeError(`${path}.source plan denominator mismatch`);
   }
   if (decoded.receiptCount !== String(decoded.receipts.length)
-    || decoded.receiptSetRoot !== hashCanonicalPartition(NOMINATION_AUTHORITY_DOMAINS.receiptSet, decoded.receipts)) {
+    || decoded.receiptSetRoot !== hashCanonicalPartition(
+      NOMINATION_AUTHORITY_DOMAINS.receiptSet,
+      decoded.receipts.map(receipt => receipt.receiptRoot),
+    )) {
     throw new TypeError(`${path}.receipt set mismatch`);
   }
   const claims = decoded.receipts.flatMap(receipt => receipt.claims);
@@ -499,7 +585,7 @@ export function decodeNominationClosureV1(value: unknown, path = "nominationClos
     throw new TypeError(`${path}.families is not strict canonical order`);
   }
   if (decoded.familyCount !== String(decoded.families.length)
-    || decoded.familySetRoot !== hashCanonicalPartition(NOMINATION_AUTHORITY_DOMAINS.familySet, decoded.families)) {
+    || decoded.familySetRoot !== familySetRoot(decoded.families)) {
     throw new TypeError(`${path}.family partition mismatch`);
   }
   const expectedFamilies = familyPartitionsFromReceipts(decoded.receipts);
@@ -570,14 +656,17 @@ export function sealNominationClosureV1(input: {
     sourcePlanSetRoot: hashCanonicalPartition(NOMINATION_AUTHORITY_DOMAINS.sourcePlanSet, sourcePlanIdentities),
     sourcePlanCount: String(sourcePlanIdentities.length),
     receipts,
-    receiptSetRoot: hashCanonicalPartition(NOMINATION_AUTHORITY_DOMAINS.receiptSet, receipts),
+    receiptSetRoot: hashCanonicalPartition(
+      NOMINATION_AUTHORITY_DOMAINS.receiptSet,
+      receipts.map(receipt => receipt.receiptRoot),
+    ),
     receiptCount: String(receipts.length),
     rawClaimRoot: hashCanonicalPartition(NOMINATION_AUTHORITY_DOMAINS.rawClaims, [...claims].sort((left, right) => compareText(left.claimRoot, right.claimRoot))),
     rawClaimCount: String(claims.length),
     uniqueNominationRoot: hashCanonicalPartition(NOMINATION_AUTHORITY_DOMAINS.uniqueNominations, unique),
     uniqueNominationCount: String(unique.length),
     families,
-    familySetRoot: hashCanonicalPartition(NOMINATION_AUTHORITY_DOMAINS.familySet, families),
+    familySetRoot: familySetRoot(families),
     familyCount: String(families.length),
     candidatePartitionRoot: input.candidatePartitionRoot,
     candidateCount: String(candidates.length),
@@ -632,12 +721,240 @@ function familyPartitionsFromReceipts(
   }));
 }
 
+interface PersistedNominationReceiptManifestV1 extends Omit<
+  QualifiedSourcePlanNominationReceiptV1,
+  "claims" | "uniqueNominations"
+> {
+  readonly claimChunkCount: string;
+  readonly firstClaimChunkRef: NominationClaimChunkRefV1 | null;
+}
+
+interface NominationClosureManifestV1 extends Omit<
+  NominationClosureV1,
+  "kind" | "version" | "receipts" | "families"
+> {
+  readonly schemaVersion: 1;
+  readonly kind: "aloha.nomination-closure-manifest-v1";
+  readonly receiptManifests: readonly PersistedNominationReceiptManifestV1[];
+}
+
+function claimChunkRef(value: unknown, path: string): NominationClaimChunkRefV1 {
+  return decodeExactObject(value, {
+    contentSha256: (field, fieldPath) => assertHash(field, fieldPath),
+  }, path);
+}
+
+function persistedReceiptManifest(
+  value: unknown,
+  path: string,
+): PersistedNominationReceiptManifestV1 {
+  return decodeExactObject(value, {
+    kind: (field, fieldPath) => {
+      if (field !== "aloha.qualified-source-plan-nomination-receipt") throw new TypeError(`${fieldPath} is invalid`);
+      return "aloha.qualified-source-plan-nomination-receipt" as const;
+    },
+    version: (field, fieldPath) => {
+      if (field !== VERSION) throw new TypeError(`${fieldPath} is invalid`);
+      return VERSION;
+    },
+    cutoff,
+    familyId: (field, fieldPath) => assertNonEmptyString(field, fieldPath),
+    familyDefinitionHash: (field, fieldPath) => assertHash(field, fieldPath),
+    sourcePlanIdentity: (field, fieldPath) => assertHash(field, fieldPath),
+    sourcePlanLeafDigest: (field, fieldPath) => assertHash(field, fieldPath),
+    nominationProgramRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    nominationProgramProposalLeafDigest: (field, fieldPath) => assertHash(field, fieldPath),
+    qualificationRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    denominator,
+    rawClaimRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    rawClaimCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
+    uniqueNominationRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    uniqueNominationCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
+    receiptRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    claimChunkCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
+    firstClaimChunkRef: (field, fieldPath) => field === null ? null : claimChunkRef(field, fieldPath),
+  }, path);
+}
+
+function buildClaimChunks(
+  receipt: QualifiedSourcePlanNominationReceiptV1,
+): readonly Readonly<{ readonly ref: NominationClaimChunkRefV1; readonly bytes: Uint8Array }>[] {
+  const groups = Array.from(
+    { length: Math.ceil(receipt.claims.length / NOMINATION_CLAIM_CHUNK_MAX_ITEMS) },
+    (_, index) => receipt.claims.slice(
+      index * NOMINATION_CLAIM_CHUNK_MAX_ITEMS,
+      (index + 1) * NOMINATION_CLAIM_CHUNK_MAX_ITEMS,
+    ),
+  );
+  const output: Array<Readonly<{ readonly ref: NominationClaimChunkRefV1; readonly bytes: Uint8Array }>> = new Array(groups.length);
+  let nextClaimChunkRef: NominationClaimChunkRefV1 | null = null;
+  for (let index = groups.length - 1; index >= 0; index -= 1) {
+    const chunk: NominationClaimChunkV1 = deepFreeze({
+      schemaVersion: 1 as const,
+      kind: "aloha.nomination-claim-chunk-v1" as const,
+      sourcePlanIdentity: receipt.sourcePlanIdentity,
+      claims: groups[index]!,
+      nextClaimChunkRef,
+    });
+    const bytes = encodeCanonicalBytes(chunk);
+    if (bytes.byteLength > NOMINATION_WIRE_MAX_BYTES) {
+      throw new TypeError("nomination claim chunk exceeds durable byte cap");
+    }
+    const ref = deepFreeze({ contentSha256: sha256Hex(bytes) });
+    output[index] = Object.freeze({ ref, bytes: bytes.slice() });
+    nextClaimChunkRef = ref;
+  }
+  return Object.freeze(output);
+}
+
 export function encodeNominationClosureV1(value: NominationClosureV1): Uint8Array {
   return encodeCanonicalBytes(decodeNominationClosureV1(value));
 }
 
 export function decodeNominationClosureBytesV1(value: Uint8Array): NominationClosureV1 {
   return decodeNominationClosureV1(decodeCanonicalJson(value));
+}
+
+export function encodePersistedNominationClosureV1(value: NominationClosureV1): EncodedNominationClosureV1 {
+  const closure = decodeNominationClosureV1(value);
+  const chunks: Array<Readonly<{ readonly ref: NominationClaimChunkRefV1; readonly bytes: Uint8Array }>> = [];
+  const receiptManifests = closure.receipts.map(receipt => {
+    const receiptChunks = buildClaimChunks(receipt);
+    chunks.push(...receiptChunks);
+    const { claims: _claims, uniqueNominations: _uniqueNominations, ...persisted } = receipt;
+    return deepFreeze({
+      ...persisted,
+      claimChunkCount: String(receiptChunks.length),
+      firstClaimChunkRef: receiptChunks[0]?.ref ?? null,
+    });
+  });
+  const { receipts: _receipts, families: _families, kind: _kind, version: _version, ...persistedClosure } = closure;
+  const manifest: NominationClosureManifestV1 = deepFreeze({
+    schemaVersion: 1 as const,
+    kind: "aloha.nomination-closure-manifest-v1" as const,
+    ...persistedClosure,
+    receiptManifests,
+  });
+  const manifestBytes = encodeCanonicalBytes(manifest);
+  if (manifestBytes.byteLength > NOMINATION_WIRE_MAX_BYTES) {
+    throw new TypeError("nomination closure manifest exceeds durable byte cap");
+  }
+  return Object.freeze({ manifestBytes: manifestBytes.slice(), chunks: Object.freeze(chunks) });
+}
+
+function decodeClaimChunk(
+  value: Uint8Array,
+  expectedRef: NominationClaimChunkRefV1,
+  path: string,
+): NominationClaimChunkV1 {
+  if (value.byteLength > NOMINATION_WIRE_MAX_BYTES || sha256Hex(value) !== expectedRef.contentSha256) {
+    throw new TypeError(`${path} content mismatch`);
+  }
+  return decodeExactObject(decodeCanonicalJson(value), {
+    schemaVersion: field => {
+      if (field !== 1) throw new TypeError(`${path}.schemaVersion is invalid`);
+      return 1 as const;
+    },
+    kind: field => {
+      if (field !== "aloha.nomination-claim-chunk-v1") throw new TypeError(`${path}.kind is invalid`);
+      return "aloha.nomination-claim-chunk-v1" as const;
+    },
+    sourcePlanIdentity: (field, fieldPath) => assertHash(field, fieldPath),
+    claims: (field, fieldPath) => fieldArray(field, claim, fieldPath),
+    nextClaimChunkRef: (field, fieldPath) => field === null ? null : claimChunkRef(field, fieldPath),
+  }, path);
+}
+
+export function decodePersistedNominationClosureV1(
+  manifestBytes: Uint8Array,
+  readChunk: (ref: NominationClaimChunkRefV1) => Uint8Array,
+): NominationClosureV1 {
+  if (manifestBytes.byteLength > NOMINATION_WIRE_MAX_BYTES) {
+    throw new TypeError("nomination closure manifest exceeds durable byte cap");
+  }
+  const manifest: NominationClosureManifestV1 = decodeExactObject(decodeCanonicalJson(manifestBytes), {
+    schemaVersion: field => {
+      if (field !== 1) throw new TypeError("nomination closure manifest schema version mismatch");
+      return 1 as const;
+    },
+    kind: field => {
+      if (field !== "aloha.nomination-closure-manifest-v1") throw new TypeError("nomination closure manifest kind mismatch");
+      return "aloha.nomination-closure-manifest-v1" as const;
+    },
+    cutoff,
+    recentObservationRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    sourceExecutionSetRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    sourceCoverageRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    sourcePlanIdentities: exactSortedUniqueHashes,
+    sourcePlanSetRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    sourcePlanCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
+    receiptManifests: (field, fieldPath) => fieldArray(field, persistedReceiptManifest, fieldPath),
+    receiptSetRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    receiptCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
+    rawClaimRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    rawClaimCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
+    uniqueNominationRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    uniqueNominationCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
+    familySetRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    familyCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
+    candidatePartitionRoot: (field, fieldPath) => assertHash(field, fieldPath),
+    candidateCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
+    root: (field, fieldPath) => assertHash(field, fieldPath),
+  }, "nominationClosureManifest");
+  const receipts = manifest.receiptManifests.map((receiptManifest, receiptIndex) => {
+    const claims: PlanQualifiedNominationClaimV1[] = [];
+    const seen = new Set<Hash>();
+    let ref = receiptManifest.firstClaimChunkRef;
+    while (ref !== null) {
+      if (BigInt(seen.size) >= BigInt(receiptManifest.claimChunkCount)) {
+        throw new TypeError(`nomination receipt ${receiptIndex} claim chunk range mismatch`);
+      }
+      if (seen.has(ref.contentSha256)) throw new TypeError(`nomination receipt ${receiptIndex} claim chunk cycle`);
+      seen.add(ref.contentSha256);
+      const chunk = decodeClaimChunk(readChunk(ref), ref, `nominationClaimChunk[${receiptIndex}:${seen.size - 1}]`);
+      if (chunk.sourcePlanIdentity !== receiptManifest.sourcePlanIdentity
+        || chunk.claims.length === 0
+        || chunk.claims.length > NOMINATION_CLAIM_CHUNK_MAX_ITEMS) {
+        throw new TypeError(`nomination receipt ${receiptIndex} claim chunk binding mismatch`);
+      }
+      claims.push(...chunk.claims);
+      ref = chunk.nextClaimChunkRef;
+    }
+    if (receiptManifest.claimChunkCount !== String(seen.size)
+      || (receiptManifest.rawClaimCount === "0") !== (receiptManifest.firstClaimChunkRef === null)) {
+      throw new TypeError(`nomination receipt ${receiptIndex} claim chunk denominator mismatch`);
+    }
+    const {
+      rawClaimRoot,
+      rawClaimCount,
+      uniqueNominationRoot,
+      uniqueNominationCount,
+      receiptRoot,
+      claimChunkCount: _claimChunkCount,
+      firstClaimChunkRef: _firstClaimChunkRef,
+      kind: _receiptKind,
+      version: _receiptVersion,
+      ...receiptInput
+    } = receiptManifest;
+    const receipt = sealQualifiedSourcePlanNominationReceiptV1({ ...receiptInput, claims });
+    if (receipt.rawClaimRoot !== rawClaimRoot
+      || receipt.rawClaimCount !== rawClaimCount
+      || receipt.uniqueNominationRoot !== uniqueNominationRoot
+      || receipt.uniqueNominationCount !== uniqueNominationCount
+      || receipt.receiptRoot !== receiptRoot) {
+      throw new TypeError(`nomination receipt ${receiptIndex} manifest binding mismatch`);
+    }
+    return receipt;
+  });
+  const families = familyPartitionsFromReceipts(receipts);
+  const { schemaVersion: _schemaVersion, kind: _manifestKind, receiptManifests: _receiptManifests, ...closureFields } = manifest;
+  return decodeNominationClosureV1({
+    kind: "aloha.nomination-closure",
+    version: VERSION,
+    ...closureFields,
+    receipts,
+    families,
+  });
 }
 
 export function nominationPlanGrantsOmissionAuthority(
