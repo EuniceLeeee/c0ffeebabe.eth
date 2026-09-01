@@ -149,8 +149,8 @@ const input: FamilyAuthoringDefinitionV1 = {
       nominationProgram: { kind: "present", program: { modulePath: `${moduleRoot}/source-plan.ts`, exportName: "ANGSTROM_V4_SOURCE_NOMINATION_PROGRAM", schemaHash: ANGSTROM_V4_SOURCE_PLAN_SCHEMA_HASH, mutationCorpus: { modulePath: `${moduleRoot}/nomination-qualification.ts`, exportName: "ANGSTROM_V4_NOMINATION_MUTATION_CORPUS" }, independentOracle: { modulePath: `${moduleRoot}/nomination-qualification.ts`, exportName: "ANGSTROM_V4_NOMINATION_INDEPENDENT_ORACLE" } } },
     }, {
       sourcePlanId: ANGSTROM_V4_HISTORY_SOURCE_PLAN_ID,
-      completeness: "contiguous-history",
-      historyStartBlock: "0",
+      completeness: "rolling-observation",
+      historyStartBlock: null,
       schemaHash: asSchemaRef(ANGSTROM_V4_HISTORY_SOURCE_PLAN_SCHEMA_HASH),
       modulePath: `${moduleRoot}/history-source-plan.ts`,
       exportName: "ANGSTROM_V4_HISTORY_SOURCE_PLAN_RUNTIME",

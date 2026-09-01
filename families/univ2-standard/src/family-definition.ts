@@ -251,8 +251,8 @@ const definitionInput: FamilyAuthoringDefinitionV1 = {
       } },
     }, {
       sourcePlanId: UNIV2_STANDARD_HISTORY_SOURCE_PLAN_ID,
-      completeness: "contiguous-history",
-      historyStartBlock: "0",
+      completeness: "rolling-observation",
+      historyStartBlock: null,
       schemaHash: UNIV2_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH,
       modulePath: "families/univ2-standard/src/history-source-plan.ts",
       exportName: "UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME",

@@ -28,8 +28,8 @@ export const ERC4626_SILO_REDEEM_SOURCE_PLAN = defineFamilySourcePlan({
 
 export const ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({
   sourcePlanId: ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_ID,
-  completeness: "contiguous-history",
-  historyStartBlock: "0",
+  completeness: "rolling-observation",
+  historyStartBlock: null,
   schemaHash: ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_SCHEMA_HASH,
 });
 

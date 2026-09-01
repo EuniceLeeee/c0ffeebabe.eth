@@ -33,7 +33,7 @@ export const UNIV4_MANIFEST = Object.freeze({
     evidenceChannel: "nominate" as const,
   }, {
     id: UNIV4_HISTORY_SOURCE_PLAN_ID,
-    historyStartBlock: "0" as const,
+    historyStartBlock: null,
     evidenceChannel: "complete-history" as const,
   }]),
   core: Object.freeze(["nomination", "identity", "materialization", "projection", "rehydration"] as const),

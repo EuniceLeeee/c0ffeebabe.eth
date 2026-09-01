@@ -1,6 +1,7 @@
 import { encodeCanonicalJson, hashDomain, sha256Hex, type CanonicalJson, type Hash } from "../../../packages/canonical-codec/src/index.ts";
 import { sourcePlanEvidenceRoot, sourcePlanExecutionRoot, type CandidateNominationV1, type CanonicalCutoffV1, type SourcePlanEvidenceRefV1 } from "../../../packages/discovery/src/index.ts";
 import { decodeFamilySourcePlanPhysicalObservation, type FamilyRawEvidenceReadPortV1, type FamilySourcePlanExecutionInputV1, type FamilySourcePlanNominationInputV1, type FamilySourcePlanNominationProgramV1, type FamilySourcePlanPhysicalPortV1, type FamilySourcePlanPhysicalResultV1, type FamilySourcePlanRuntimeV1 } from "../../../packages/family-sdk/runtime/index.ts";
+import { familyRollingObservationRangeV1 } from "../../../packages/family-sdk/runtime/index.ts";
 import { UNIV2_STANDARD_FAMILY_DEFINITION_HASH, UNIV2_STANDARD_FAMILY_ID } from "./family-definition.ts";
 import { UNIV2_PAIR_CREATED_TOPIC0, UNIV2_STANDARD_HISTORY_SOURCE_PLAN_DEFINITION, UNIV2_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH } from "./source-plan.ts";
 import { canonicalAddress } from "./kernel/codec.ts";
@@ -85,7 +86,7 @@ function decodeHistory(
   if (expectedFrom !== BigInt(execution.through) + 1n) throw new TypeError("univ2 history chunk cutoff mismatch");
   const entries = chunks.flatMap(value => value.entries);
   if (new Set(entries.map(value => value.pair)).size !== entries.length) throw new TypeError("univ2 history returned duplicate pairs across chunks");
-  const expected = { kind: "univ2-pair-created-contiguous-history", version: 1, topic: UNIV2_PAIR_CREATED_TOPIC0, from: "0", through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries };
+  const expected = { kind: "univ2-pair-created-rolling-observation", version: 1, topic: UNIV2_PAIR_CREATED_TOPIC0, from: execution.from, through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries };
   if (encodeCanonicalJson(expected) !== encodeCanonicalJson(execution.opaqueResult)) throw new TypeError("univ2 history result/raw mismatch");
   return Object.freeze(chunks);
 }
@@ -94,25 +95,15 @@ export const UNIV2_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntime
   ...UNIV2_STANDARD_HISTORY_SOURCE_PLAN_DEFINITION,
   async execute(input: FamilySourcePlanExecutionInputV1, physical: FamilySourcePlanPhysicalPortV1, signal: AbortSignal) {
     if (signal.aborted) throw signal.reason;
-    if (input.plan.familyDefinitionHash !== UNIV2_STANDARD_FAMILY_DEFINITION_HASH || input.plan.completeness !== "contiguous-history" || input.plan.historyStartBlock !== "0") throw new TypeError("univ2 history source plan binding mismatch");
-    const predecessor = input.predecessor ?? null;
-    if ((input.previousAppliedThrough === null) !== (predecessor === null)) throw new TypeError("univ2 history durable predecessor mismatch");
-    if (predecessor !== null && (
-      predecessor.execution.through !== input.previousAppliedThrough
-      || predecessor.execution.outcome !== "complete"
-      || encodeCanonicalJson(predecessor.execution.plan) !== encodeCanonicalJson(input.plan)
-    )) throw new TypeError("univ2 history predecessor lineage mismatch");
-    const predecessorChunks = predecessor === null
-      ? Object.freeze([] as HistoryChunk[])
-      : decodeHistory(predecessor.execution, predecessor.sourceEvidence, predecessor.rawEvidence);
-    const from = input.previousAppliedThrough === null ? "0" : decimal(BigInt(input.previousAppliedThrough) + 1n); if (BigInt(from) > BigInt(input.cutoff.number)) throw new TypeError("univ2 history cursor beyond cutoff");
+    if (input.plan.familyDefinitionHash !== UNIV2_STANDARD_FAMILY_DEFINITION_HASH || input.plan.completeness !== "rolling-observation" || input.plan.historyStartBlock !== null) throw new TypeError("univ2 history source plan binding mismatch");
+    if (input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("univ2 rolling observation cannot bind a predecessor");
+    const { from } = familyRollingObservationRangeV1(input.cutoff.number);
     const chunks: { from: string; through: string; result: FamilySourcePlanPhysicalResultV1; entries: readonly Entry[] }[] = [];
     for (let start = BigInt(from); start <= BigInt(input.cutoff.number); start += CHUNK_BLOCKS) { const end = start + CHUNK_BLOCKS - 1n > BigInt(input.cutoff.number) ? BigInt(input.cutoff.number) : start + CHUNK_BLOCKS - 1n; const range = { from: decimal(start), through: decimal(end) }; const filter = Object.freeze({ fromBlock: blockTag(range.from), toBlock: blockTag(range.through), topics: Object.freeze([UNIV2_PAIR_CREATED_TOPIC0]) }); const raw = await physical.request({ familyDefinitionHash: UNIV2_STANDARD_FAMILY_DEFINITION_HASH, plan: input.plan, cutoff: input.cutoff, requestSchemaHash: UNIV2_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH, request: { kind: "family-source-plan-rpc", version: 1, method: "eth_getLogs", params: Object.freeze([filter]), target: null, manager: null, topic: UNIV2_PAIR_CREATED_TOPIC0, lookback: Object.freeze(range), chunk: Object.freeze({ maxBlocks: CHUNK_BLOCKS.toString() }) } }, signal); chunks.push({ ...range, ...observation(raw, input, range.from, range.through) }); }
-    const entries = [...predecessorChunks.flatMap(value => value.entries), ...chunks.flatMap(value => value.entries)]; if (new Set(entries.map(value => value.pair)).size !== entries.length) throw new TypeError("univ2 history returned duplicate pairs across executions");
-    const refs = Object.freeze([...predecessorChunks.map(value => value.evidence), ...chunks.map(value => ref(input, value.result))].sort((a, b) => refKey(a).localeCompare(refKey(b))));
-    const predecessorLocators = predecessor === null ? [] : predecessor.sourceEvidence.rawLocatorHashes.map(rawLocatorHash => Object.freeze({ kind: "raw-evidence-locator" as const, version: 1 as const, rawLocatorHash, bytes: predecessor.rawEvidence.read(rawLocatorHash) }));
-    const rawEvidenceLocators = Object.freeze([...predecessorLocators, ...chunks.map(value => value.result.rawEvidenceLocator)].sort((a, b) => a.rawLocatorHash.localeCompare(b.rawLocatorHash))); const rawLocatorHashes = Object.freeze(rawEvidenceLocators.map(value => value.rawLocatorHash)); const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes }); const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "univ2-pair-created-contiguous-history", version: 1, topic: UNIV2_PAIR_CREATED_TOPIC0, from: "0", through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries: Object.freeze(entries) }); const resultPartitionRoot = hashDomain("aloha/univ2-standard/history-source-partition/v1", opaqueResult); const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: input.previousAppliedThrough, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
+    const entries = chunks.flatMap(value => value.entries); if (new Set(entries.map(value => value.pair)).size !== entries.length) throw new TypeError("univ2 history returned duplicate pairs across executions");
+    const refs = Object.freeze(chunks.map(value => ref(input, value.result)).sort((a, b) => refKey(a).localeCompare(refKey(b))));
+    const rawEvidenceLocators = Object.freeze(chunks.map(value => value.result.rawEvidenceLocator).sort((a, b) => a.rawLocatorHash.localeCompare(b.rawLocatorHash))); const rawLocatorHashes = Object.freeze(rawEvidenceLocators.map(value => value.rawLocatorHash)); const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes }); const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
+    const opaqueResult: CanonicalJson = Object.freeze({ kind: "univ2-pair-created-rolling-observation", version: 1, topic: UNIV2_PAIR_CREATED_TOPIC0, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries: Object.freeze(entries) }); const resultPartitionRoot = hashDomain("aloha/univ2-standard/history-source-partition/v1", opaqueResult); const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
     return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators });
   },
 });
@@ -123,7 +114,7 @@ export const UNIV2_STANDARD_HISTORY_NOMINATION_PROGRAM: FamilySourcePlanNominati
   schemaHash: UNIV2_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH,
   async evaluate(input: FamilySourcePlanNominationInputV1, signal: AbortSignal): Promise<readonly CandidateNominationV1[]> {
     if (signal.aborted) throw signal.reason;
-    if (input.execution.plan.familyDefinitionHash !== UNIV2_STANDARD_FAMILY_DEFINITION_HASH || input.execution.plan.completeness !== "contiguous-history" || input.execution.outcome !== "complete" || encodeCanonicalJson(input.execution.plan) !== encodeCanonicalJson(input.sourceEvidence.plan) || input.execution.sourceEvidenceRoot !== input.sourceEvidence.evidenceRoot || input.sourceEvidence.refs.length === 0 || !sameCutoff(input.execution.cutoff, input.recent.cutoff)) throw new TypeError("univ2 history nomination binding mismatch");
+    if (input.execution.plan.familyDefinitionHash !== UNIV2_STANDARD_FAMILY_DEFINITION_HASH || input.execution.plan.completeness !== "rolling-observation" || input.execution.outcome !== "complete" || encodeCanonicalJson(input.execution.plan) !== encodeCanonicalJson(input.sourceEvidence.plan) || input.execution.sourceEvidenceRoot !== input.sourceEvidence.evidenceRoot || input.sourceEvidence.refs.length === 0 || !sameCutoff(input.execution.cutoff, input.recent.cutoff)) throw new TypeError("univ2 history nomination binding mismatch");
     const chunks = decodeHistory(input.execution, input.sourceEvidence, input.rawEvidence);
     return Object.freeze(chunks.flatMap(chunk => chunk.entries.map(entry => Object.freeze({ kind: "aloha.candidate-nomination" as const, version: "2" as const, familyId: UNIV2_STANDARD_FAMILY_ID, familyDefinitionHash: UNIV2_STANDARD_FAMILY_DEFINITION_HASH, instanceNominationKey: entry.pair, evidence: chunk.evidence }))));
   },

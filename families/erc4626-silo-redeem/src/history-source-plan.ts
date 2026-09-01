@@ -14,6 +14,7 @@ import {
 } from "../../../packages/discovery/src/index.ts";
 import {
   decodeFamilySourcePlanPhysicalObservation,
+  familyRollingObservationRangeV1,
   type FamilyRawEvidenceReadPortV1,
   type FamilySourcePlanExecutionInputV1,
   type FamilySourcePlanNominationInputV1,
@@ -183,7 +184,8 @@ function decodeHistory(
     || encodeCanonicalJson(execution.sourceEvidenceRefs) !== encodeCanonicalJson(sourceEvidence.refs)
     || encodeCanonicalJson(execution.rawLocatorHashes) !== encodeCanonicalJson(sourceEvidence.rawLocatorHashes)
     || execution.through !== execution.cutoff.number
-    || execution.from !== (execution.previousAppliedThrough === null ? "0" : decimal(BigInt(execution.previousAppliedThrough) + 1n))
+    || execution.previousAppliedThrough !== null
+    || execution.from !== familyRollingObservationRangeV1(execution.cutoff.number).from
   ) throw new TypeError("erc4626-silo-redeem history execution/evidence mismatch");
 
   const keys = sourceEvidence.refs.map(refKey);
@@ -219,10 +221,10 @@ function decodeHistory(
       || encodeCanonicalJson(observation.plan) !== encodeCanonicalJson(execution.plan)
       || observation.plan.ownerRef !== evidence.ownerRef
       || observation.plan.sourcePlanRef !== evidence.sourcePlanRef
-      || observation.plan.completeness !== "contiguous-history"
-      || observation.plan.historyStartBlock !== "0"
+      || observation.plan.completeness !== "rolling-observation"
+      || observation.plan.historyStartBlock !== null
       || observation.cutoff.chainId !== execution.cutoff.chainId
-      || BigInt(observation.cutoff.number) > BigInt(execution.cutoff.number)
+      || !sameCutoff(observation.cutoff, execution.cutoff)
       || observation.requestSchemaHash !== ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_SCHEMA_HASH
       || observation.request.kind !== "family-source-plan-rpc"
       || observation.request.version !== 1
@@ -238,21 +240,17 @@ function decodeHistory(
     return Object.freeze({ evidence, from: range.from, through: range.through, cutoff: observation.cutoff, entries: decodeErc4626SiloRedeemWithdrawHistoryEntries(observation.response, from, through) });
   }).sort((left, right) => BigInt(left.from) < BigInt(right.from) ? -1 : BigInt(left.from) > BigInt(right.from) ? 1 : 0);
 
-  let expectedFrom = 0n;
-  let epochCutoff: CanonicalCutoffV1 | null = null;
+  let expectedFrom = BigInt(execution.from);
   for (const chunk of chunks) {
     if (BigInt(chunk.from) !== expectedFrom) throw new TypeError("erc4626-silo-redeem history chunk coverage gap");
-    if (epochCutoff === null || !sameCutoff(chunk.cutoff, epochCutoff)) {
-      if (epochCutoff !== null && expectedFrom !== BigInt(epochCutoff.number) + 1n) throw new TypeError("erc4626-silo-redeem history epoch splice");
-      epochCutoff = chunk.cutoff;
-    }
-    const expectedThrough = expectedFrom + CHUNK_BLOCKS - 1n > BigInt(epochCutoff.number) ? BigInt(epochCutoff.number) : expectedFrom + CHUNK_BLOCKS - 1n;
+    if (!sameCutoff(chunk.cutoff, execution.cutoff)) throw new TypeError("erc4626-silo-redeem history chunk cutoff mismatch");
+    const expectedThrough = expectedFrom + CHUNK_BLOCKS - 1n > BigInt(execution.through) ? BigInt(execution.through) : expectedFrom + CHUNK_BLOCKS - 1n;
     if (BigInt(chunk.through) !== expectedThrough) throw new TypeError("erc4626-silo-redeem history chunk grid mismatch");
     expectedFrom = expectedThrough + 1n;
   }
-  if (epochCutoff === null || !sameCutoff(epochCutoff, execution.cutoff) || expectedFrom !== BigInt(execution.through) + 1n) throw new TypeError("erc4626-silo-redeem history chunk cutoff mismatch");
+  if (expectedFrom !== BigInt(execution.through) + 1n) throw new TypeError("erc4626-silo-redeem history chunk cutoff mismatch");
   const entries = chunks.flatMap(chunk => chunk.entries);
-  const expected = { kind: "erc4626-silo-redeem-withdraw-contiguous-history", version: 1, topic: ERC4626_SILO_REDEEM_WITHDRAW_TOPIC, from: "0", through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries };
+  const expected = { kind: "erc4626-silo-redeem-withdraw-rolling-observation", version: 1, topic: ERC4626_SILO_REDEEM_WITHDRAW_TOPIC, from: execution.from, through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries };
   if (encodeCanonicalJson(expected) !== encodeCanonicalJson(execution.opaqueResult)) throw new TypeError("erc4626-silo-redeem history result/raw mismatch");
   return Object.freeze(chunks);
 }
@@ -261,19 +259,9 @@ export const ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRu
   ...ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN,
   async execute(input: FamilySourcePlanExecutionInputV1, physical: FamilySourcePlanPhysicalPortV1, signal: AbortSignal) {
     if (signal.aborted) throw signal.reason;
-    if (input.plan.familyDefinitionHash !== ERC4626_SILO_REDEEM_FAMILY_AUTHORING_HASH || input.plan.completeness !== "contiguous-history" || input.plan.historyStartBlock !== "0") throw new TypeError("erc4626-silo-redeem history source plan binding mismatch");
-    const predecessor = input.predecessor ?? null;
-    if ((input.previousAppliedThrough === null) !== (predecessor === null)) throw new TypeError("erc4626-silo-redeem history durable predecessor mismatch");
-    if (predecessor !== null && (
-      !/^0x[0-9a-f]{64}$/.test(predecessor.persistedExecutionRoot)
-      || predecessor.execution.through !== input.previousAppliedThrough
-      || predecessor.execution.outcome !== "complete"
-      || encodeCanonicalJson(predecessor.execution.plan) !== encodeCanonicalJson(input.plan)
-    )) throw new TypeError("erc4626-silo-redeem history predecessor lineage mismatch");
-    const predecessorChunks = predecessor === null
-      ? Object.freeze([] as HistoryChunkV1[])
-      : decodeHistory(predecessor.execution, predecessor.sourceEvidence, predecessor.rawEvidence);
-    const from = input.previousAppliedThrough === null ? "0" : decimal(BigInt(input.previousAppliedThrough) + 1n);
+    if (input.plan.familyDefinitionHash !== ERC4626_SILO_REDEEM_FAMILY_AUTHORING_HASH || input.plan.completeness !== "rolling-observation" || input.plan.historyStartBlock !== null) throw new TypeError("erc4626-silo-redeem history source plan binding mismatch");
+    if (input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("erc4626-silo-redeem rolling observation cannot bind a predecessor");
+    const { from } = familyRollingObservationRangeV1(input.cutoff.number);
     if (BigInt(from) > BigInt(input.cutoff.number)) throw new TypeError("erc4626-silo-redeem history cursor beyond cutoff");
     const chunks: { readonly from: string; readonly through: string; readonly result: FamilySourcePlanPhysicalResultV1; readonly entries: readonly Erc4626SiloRedeemWithdrawHistoryEntryV1[] }[] = [];
     for (let start = BigInt(from); start <= BigInt(input.cutoff.number); start += CHUNK_BLOCKS) {
@@ -283,21 +271,20 @@ export const ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRu
       const raw = await physical.request({ familyDefinitionHash: ERC4626_SILO_REDEEM_FAMILY_AUTHORING_HASH, plan: input.plan, cutoff: input.cutoff, requestSchemaHash: ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_SCHEMA_HASH, request: { kind: "family-source-plan-rpc", version: 1, method: "eth_getLogs", params: Object.freeze([filter]), target: null, manager: null, topic: ERC4626_SILO_REDEEM_WITHDRAW_TOPIC, lookback: range, chunk: Object.freeze({ maxBlocks: CHUNK_BLOCKS.toString() }) } }, signal);
       chunks.push({ ...range, ...observe(raw, input, range.from, range.through) });
     }
-    const refs = Object.freeze([...predecessorChunks.map(chunk => chunk.evidence), ...chunks.map(chunk => evidenceRef(input, chunk.result))].sort((left, right) => refKey(left).localeCompare(refKey(right))));
-    const predecessorLocators = predecessor === null ? [] : predecessor.sourceEvidence.rawLocatorHashes.map(rawLocatorHash => Object.freeze({ kind: "raw-evidence-locator" as const, version: 1 as const, rawLocatorHash, bytes: predecessor.rawEvidence.read(rawLocatorHash) }));
-    const rawEvidenceLocators = Object.freeze([...predecessorLocators, ...chunks.map(chunk => chunk.result.rawEvidenceLocator)].sort((left, right) => left.rawLocatorHash.localeCompare(right.rawLocatorHash)));
+    const refs = Object.freeze(chunks.map(chunk => evidenceRef(input, chunk.result)).sort((left, right) => refKey(left).localeCompare(refKey(right))));
+    const rawEvidenceLocators = Object.freeze(chunks.map(chunk => chunk.result.rawEvidenceLocator).sort((left, right) => left.rawLocatorHash.localeCompare(right.rawLocatorHash)));
     const rawLocatorHashes = Object.freeze(rawEvidenceLocators.map(locator => locator.rawLocatorHash));
     const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes });
     const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
-    const entries = Object.freeze([...predecessorChunks.flatMap(chunk => chunk.entries), ...chunks.flatMap(chunk => chunk.entries)]);
+    const entries = Object.freeze(chunks.flatMap(chunk => chunk.entries));
     const canonicalEntries = Object.freeze(entries.map(entry => Object.freeze({
       target: entry.target, sender: entry.sender, receiver: entry.receiver, owner: entry.owner,
       assets: entry.assets, shares: entry.shares, blockNumber: entry.blockNumber,
       blockHash: entry.blockHash, txHash: entry.txHash, logIndex: entry.logIndex,
     })));
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "erc4626-silo-redeem-withdraw-contiguous-history", version: 1, topic: ERC4626_SILO_REDEEM_WITHDRAW_TOPIC, from: "0", through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries: canonicalEntries });
+    const opaqueResult: CanonicalJson = Object.freeze({ kind: "erc4626-silo-redeem-withdraw-rolling-observation", version: 1, topic: ERC4626_SILO_REDEEM_WITHDRAW_TOPIC, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries: canonicalEntries });
     const resultPartitionRoot = hashDomain("aloha/erc4626-silo-redeem/history-source-partition/v1", opaqueResult);
-    const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: input.previousAppliedThrough, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
+    const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
     return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators });
   },
 });
@@ -312,7 +299,7 @@ export const ERC4626_SILO_REDEEM_HISTORY_NOMINATION_PROGRAM: FamilySourcePlanNom
     const expectedEvidenceRoot = sourcePlanEvidenceRoot({ plan: input.sourceEvidence.plan, cutoff: input.sourceEvidence.cutoff, refs: input.sourceEvidence.refs, rawLocatorHashes: input.sourceEvidence.rawLocatorHashes });
     if (
       input.execution.plan.familyDefinitionHash !== ERC4626_SILO_REDEEM_FAMILY_AUTHORING_HASH
-      || input.execution.plan.completeness !== "contiguous-history"
+      || input.execution.plan.completeness !== "rolling-observation"
       || input.execution.outcome !== "complete"
       || encodeCanonicalJson(input.execution.plan) !== encodeCanonicalJson(input.sourceEvidence.plan)
       || executionRoot !== sourcePlanExecutionRoot(executionWithoutRoot)

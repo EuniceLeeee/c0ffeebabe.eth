@@ -6,7 +6,7 @@ export const UNIV3_STANDARD_FAMILY_VERSION = "1.0.0" as const;
 export const UNIV3_STANDARD_SOURCE_WINDOW_BLOCKS = 50 as const;
 export const UNIV3_STANDARD_SOURCE_PLAN_ID = "univ3-standard.fixed-cutoff-50-block" as const;
 export const UNIV3_STANDARD_SOURCE_PLAN_SCHEMA_HASH = asSchemaRef(hashDomain("aloha/univ3-standard/source-plan-schema/v1", UNIV3_STANDARD_SOURCE_PLAN_ID));
-export const UNIV3_STANDARD_HISTORY_SOURCE_PLAN_ID = "univ3-standard.pool-created-contiguous-history" as const;
+export const UNIV3_STANDARD_HISTORY_SOURCE_PLAN_ID = "univ3-standard.pool-created-rolling-observation" as const;
 export const UNIV3_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH = asSchemaRef(hashDomain("aloha/univ3-standard/history-source-plan-schema/v1", UNIV3_STANDARD_HISTORY_SOURCE_PLAN_ID));
 
 export const UNIV3_SWAP_SELECTOR = "0x128acb08" as const;

@@ -43,7 +43,7 @@ export const UNIV4_SOURCE_PLAN = defineFamilySourcePlan({
   historyStartBlock: null,
   schemaHash: UNIV4_SOURCE_PLAN_SCHEMA_HASH,
 });
-export const UNIV4_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({ sourcePlanId: UNIV4_HISTORY_SOURCE_PLAN_ID, completeness: "contiguous-history", historyStartBlock: "0", schemaHash: asSchemaRef(UNIV4_HISTORY_SOURCE_PLAN_SCHEMA_HASH) });
+export const UNIV4_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({ sourcePlanId: UNIV4_HISTORY_SOURCE_PLAN_ID, completeness: "rolling-observation", historyStartBlock: null, schemaHash: asSchemaRef(UNIV4_HISTORY_SOURCE_PLAN_SCHEMA_HASH) });
 
 export const UNIV4_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntimeV1 = Object.freeze({
   ...UNIV4_SOURCE_PLAN,

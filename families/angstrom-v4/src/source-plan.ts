@@ -43,7 +43,7 @@ export const ANGSTROM_V4_SOURCE_PLAN = defineFamilySourcePlan({
   historyStartBlock: null,
   schemaHash: ANGSTROM_V4_SOURCE_PLAN_SCHEMA_HASH,
 });
-export const ANGSTROM_V4_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({ sourcePlanId: ANGSTROM_V4_HISTORY_SOURCE_PLAN_ID, completeness: "contiguous-history", historyStartBlock: "0", schemaHash: asSchemaRef(ANGSTROM_V4_HISTORY_SOURCE_PLAN_SCHEMA_HASH) });
+export const ANGSTROM_V4_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({ sourcePlanId: ANGSTROM_V4_HISTORY_SOURCE_PLAN_ID, completeness: "rolling-observation", historyStartBlock: null, schemaHash: asSchemaRef(ANGSTROM_V4_HISTORY_SOURCE_PLAN_SCHEMA_HASH) });
 
 export const ANGSTROM_V4_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntimeV1 = Object.freeze({
   ...ANGSTROM_V4_SOURCE_PLAN,

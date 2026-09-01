@@ -23,7 +23,7 @@ export const ASTRA_SOURCE_PLAN = defineFamilySourcePlan({
 /** Complete event denominator: every Astra Change log through the cutoff. */
 export const ASTRA_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({
   sourcePlanId: ASTRA_HISTORY_SOURCE_PLAN_ID,
-  completeness: "contiguous-history",
-  historyStartBlock: "0",
+  completeness: "rolling-observation",
+  historyStartBlock: null,
   schemaHash: asSchemaRef(ASTRA_HISTORY_SOURCE_PLAN_SCHEMA_HASH),
 });

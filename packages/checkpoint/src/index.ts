@@ -1233,6 +1233,12 @@ function validateNominationClosureAgainstRun(input: {
         || receipt.denominator.resultPartitionRoot !== execution.execution.resultPartitionRoot) {
         throw new CheckpointRunStateError("point-lookup nomination denominator mismatch");
       }
+    } else if (receipt.denominator.kind === "rolling-observation") {
+      if (plan.completeness !== "rolling-observation"
+        || receipt.denominator.persistedExecutionRoot !== execution.persistedExecutionRoot
+        || receipt.denominator.resultPartitionRoot !== execution.execution.resultPartitionRoot) {
+        throw new CheckpointRunStateError("rolling observation nomination denominator mismatch");
+      }
     } else {
       if (plan.completeness !== "nomination-only"
         || receipt.denominator.recentObservationRoot !== input.recentObservation.observationRoot

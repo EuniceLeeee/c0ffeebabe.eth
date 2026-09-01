@@ -28,8 +28,8 @@ export const ETHERTOKEN_NATIVE_REDEEM_SOURCE_PLAN = defineFamilySourcePlan({
 
 export const ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({
   sourcePlanId: ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_ID,
-  completeness: "contiguous-history",
-  historyStartBlock: "0",
+  completeness: "rolling-observation",
+  historyStartBlock: null,
   schemaHash: ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_SCHEMA_HASH,
 });
 

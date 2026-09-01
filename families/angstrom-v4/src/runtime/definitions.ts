@@ -794,8 +794,8 @@ function sourcePlanLogCandidate(
     || observed.plan.ownerRef !== evidence.ownerRef
     || observed.plan.sourcePlanRef !== evidence.sourcePlanRef
     || observed.plan.familyDefinitionHash !== ANGSTROM_V4_FAMILY_DEFINITION_HASH
-    || observed.plan.completeness !== "contiguous-history"
-    || observed.plan.historyStartBlock !== "0"
+    || observed.plan.completeness !== "rolling-observation"
+    || observed.plan.historyStartBlock !== null
     || !sameCutoff(observed.cutoff, cutoffValue)
     || observed.requestSchemaHash !== ANGSTROM_V4_HISTORY_SOURCE_PLAN_SCHEMA_HASH
     || observed.request.kind !== "family-source-plan-rpc"

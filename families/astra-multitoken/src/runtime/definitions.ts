@@ -808,8 +808,8 @@ function candidateFromHistoryEvidence(
     || observed.plan.familyDefinitionHash !== ASTRA_FAMILY_DEFINITION_HASH
     || observed.plan.ownerRef !== evidence.ownerRef
     || observed.plan.sourcePlanRef !== evidence.sourcePlanRef
-    || observed.plan.completeness !== "contiguous-history"
-    || observed.plan.historyStartBlock !== "0"
+    || observed.plan.completeness !== "rolling-observation"
+    || observed.plan.historyStartBlock !== null
     || !sameCutoff(observed.cutoff, payload.cutoff)
     || observed.requestSchemaHash !== ASTRA_HISTORY_SOURCE_PLAN_SCHEMA_HASH
     || observed.request.kind !== "family-source-plan-rpc"

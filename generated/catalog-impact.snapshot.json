@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "aloha.catalog-impact-snapshot",
-  "definitionCatalogRoot": "0xee829db9ac08d68a1880e500fd6bd4756d83eacd1199642edad4e126040f696e",
+  "definitionCatalogRoot": "0x11042cd29bdba7311e9dc98aa9a61d9a9ec3a4f031ea8e0bc1fe2ddf489405ad",
   "capabilityCatalogRoot": "0x3aecefd7a892ba09caf4e7f35b9aa2ce544c262d9b2ac244e2a8f08040a450d4",
   "capabilities": [
     {
@@ -434,34 +434,34 @@
       "artifactId": "family:angstrom-v4",
       "artifactKind": "family",
       "familyId": "angstrom-v4",
-      "definitionCatalogLeafDigest": "0xe002ddff1283b09d62d9b8711cf41f8bcacf887525c0b301d84155ef3d3fff6e",
+      "definitionCatalogLeafDigest": "0xf20a1bdc8d7ffcec97d5ebc4d89c651136495c93ec78d688eafd622c421b8838",
       "requestedDependencyClosure": [
         "family.angstrom-v4.coarse",
         "family.angstrom-v4.exact",
         "family.angstrom-v4.state"
       ],
       "requestedDependencyRoot": "0x5a4e80f0911e186b8fb96cef6724309480d1d33d0c5b7963ac3a1ea739fbcbd2",
-      "memoRoot": "0x379f47a77217b2c70cb39d196b47bce7829e4f273c81c80dec38772e7e3e9159",
+      "memoRoot": "0x01e6c822a6fe775783936c5fec0eafc1e2e98af36d90d3640415442a4221d24e",
       "nominationProposalLeafDigests": [
         "0x7ad43aad7b54a6a7cac219aa1c266144d08c187aa5869a30a54872c745875f97",
-        "0xf43f98941eb32a0547fd79c8f2216abdaed5742a96fb192e5f7622cbfe94cebf"
+        "0x93f4b0134fb5bc1041e197c35cf1cd14f9a882fcf2d8f522ed7629d7dcc5ff69"
       ]
     },
     {
       "artifactId": "family:astra-multitoken",
       "artifactKind": "family",
       "familyId": "astra-multitoken",
-      "definitionCatalogLeafDigest": "0x7a46a29434a75ae34ecebe2f3cab91d9dc912ac95f64735378df4ecd567409f2",
+      "definitionCatalogLeafDigest": "0xd0cf2e18bc6fdfd316291f72aab1c4b9756334b97ac966c4bd4c734ee9f06a41",
       "requestedDependencyClosure": [
         "family.astra-multitoken.coarse",
         "family.astra-multitoken.exact",
         "family.astra-multitoken.state"
       ],
       "requestedDependencyRoot": "0xb25d69842299679ce69c99f43bfdc16ad84482cc3528a678ebc9a7cfa958cfd5",
-      "memoRoot": "0xe578fe7e87378d3ae17429ece69d2d0bdda517b08a0095cfd47de3af322edba2",
+      "memoRoot": "0x5928c4effd5eef5b43d7fc7ec718300ab8be4caf13cc4ef6e346a3694252828e",
       "nominationProposalLeafDigests": [
-        "0x1f153d368bd75d67d5de0dcabcc383c209ac3ee69cb7f83e9435cd43f7d5769b",
-        "0x310406d203de793dc069a5e2b9e0f6156603e04305a01a07609e74ca1060a722"
+        "0x310406d203de793dc069a5e2b9e0f6156603e04305a01a07609e74ca1060a722",
+        "0xd52581d30e0118690ceab1618d3fea8cfff21f7d07a16ef42dae676fdfd7d12c"
       ]
     },
     {
@@ -485,31 +485,31 @@
       "artifactId": "family:dodo-v2",
       "artifactKind": "family",
       "familyId": "dodo-v2",
-      "definitionCatalogLeafDigest": "0xbf6d950ddad639335ac27033f6cdf3565f08d71c915f91b58446226a57cff965",
+      "definitionCatalogLeafDigest": "0x01251fd74f729eda38376899d611adb5d319ad65901509becbcf5d460d7e0614",
       "requestedDependencyClosure": [
         "family.dodo-v2.coarse",
         "family.dodo-v2.exact",
         "family.dodo-v2.state"
       ],
       "requestedDependencyRoot": "0x82d151f9ec3c099aa97fef1eb0512e01aea1ce36f0380ff1b3ca953364521296",
-      "memoRoot": "0x1a388a50cdf9287dcb7a1044143a9cd5af1a41d703e529b9da13f774ce25cd57",
+      "memoRoot": "0xc32083d2e8956d2bdb8fcc1efb83f2a07b9e5b572c6b05d622afd888d7bbfb5d",
       "nominationProposalLeafDigests": [
         "0xa9bf8e9e36bcedee7ba2226e88ad13ff9e2fe1f05ce0fd27269349c8bc6e2f3c",
-        "0xc6b3929d7c385a7d89b5b982bf40a4b289a2dadb0cb13d1b80e671cd3e72ef51"
+        "0xd80b2ad4317eb17bade301593a5201ca624cea2c6519973db3388df9a419a89b"
       ]
     },
     {
       "artifactId": "family:eigenpie",
       "artifactKind": "family",
       "familyId": "eigenpie",
-      "definitionCatalogLeafDigest": "0x210c1f14cbf5dd5e98c6fa28f57da934e75663d3214edd651aa685da0602c410",
+      "definitionCatalogLeafDigest": "0x96e0bd24fe0fb535e11cacb3104950422e7dccc309b3b29921b16d3f63311af4",
       "requestedDependencyClosure": [
         "family.eigenpie.exact"
       ],
       "requestedDependencyRoot": "0x14f9c7902e0a335990794ca0243f0a9a69e1e36607d3e2da0273ac3b24ee12b5",
-      "memoRoot": "0xdef252e0350c9f3d7a29fb1b8f203f32dbdf1c4c5207ed559ce0f29d22e6f786",
+      "memoRoot": "0x56b121bc8e3fc67fc2f2f0ecf6e43264e869e28292cb60331093dc9d2237a1f6",
       "nominationProposalLeafDigests": [
-        "0x3589ba0a7c43f1e53ad2b4528582a90f4560b360414ed6a3eab5011de94328bf",
+        "0xb30bf2b0db73efecd8d581adc010a53b86ea3913dd882d65d0ce1982f694b132",
         "0xc27d0447389ea6576920d6eeae6ce7cfc8ee90b14827d06d96d017dcc41fac89"
       ]
     },
@@ -517,14 +517,14 @@
       "artifactId": "family:erc4626",
       "artifactKind": "family",
       "familyId": "erc4626",
-      "definitionCatalogLeafDigest": "0x943873903edc2181b79bbaa461628e6c16571fe971a8b389b650cb2fb938f009",
+      "definitionCatalogLeafDigest": "0x55cdf22b4a8d2bf8ff45edd5b1ae0ffc8b1f27e11393c728919b120a9ea2c043",
       "requestedDependencyClosure": [
         "family.erc4626.coarse"
       ],
       "requestedDependencyRoot": "0x587ed73fbcc7c0e38fd7a8479aecb41c63460ee122eabb9219fff3dee98e3683",
-      "memoRoot": "0xd5d4e1a5f4e853fb7ce0925619560e32a5c3dc8518975c433cd0d40c51fda70f",
+      "memoRoot": "0xecb20e313b72611d1581e9746aaf38886c52eb22765a98ea38e1e88b27988dce",
       "nominationProposalLeafDigests": [
-        "0x6c9d122d03cff65f543c6c704e45999cf763c697ccf8bcb16c8611782e84af5e",
+        "0x3e34da4ea3bcd603ec15fe4c353f74b346e53727dfac1757ab57dc50b4fe7b83",
         "0xdac996651b27b514124171f4a2aa2390cd57c4486d108eb3ec5d209ba1f201bb"
       ]
     },
@@ -532,30 +532,30 @@
       "artifactId": "family:erc4626-silo-redeem",
       "artifactKind": "family",
       "familyId": "erc4626-silo-redeem",
-      "definitionCatalogLeafDigest": "0xe96a1d40dbbd7aacc48ae1c1788b7587c3efbbfb7d660719ff79a20cdfa40cd0",
+      "definitionCatalogLeafDigest": "0x33d566259e982ceebf662bd7c9d98c1b36f2f2596e273e10da24dd9abbb1da17",
       "requestedDependencyClosure": [
         "family.erc4626-silo-redeem.exact"
       ],
       "requestedDependencyRoot": "0xfd868bf504695c2817387b2d6be5c9169b22be13764e68179dd32aef856d5d2d",
-      "memoRoot": "0xe7474ec7c47853e40973bbd22bff4baa6468105910846099196340b1fe31932f",
+      "memoRoot": "0x496b99efa7a7706c5956e8b8a327a97f78d30e66ae45d6f65f3c34108b22d5f9",
       "nominationProposalLeafDigests": [
-        "0x3a00e60c783c0ac2bdd3593af727df55580fc82e5601a2638c813c59a0ade6fb",
-        "0x7354d0dd4a6203de9c7d6c3556fb52b5e369bde50b74ed0632c59f0bd92fe9b0"
+        "0x7354d0dd4a6203de9c7d6c3556fb52b5e369bde50b74ed0632c59f0bd92fe9b0",
+        "0xda2e26c88c6bce3a47f2eebf3673277af048788d86e85d3fc3fd501962d01360"
       ]
     },
     {
       "artifactId": "family:ethertoken-native-redeem",
       "artifactKind": "family",
       "familyId": "ethertoken-native-redeem",
-      "definitionCatalogLeafDigest": "0x15cae8e141a4a320d72ba9a3536418dccd7daeaadf8387737763f0dfddbae445",
+      "definitionCatalogLeafDigest": "0x378e8e26924e1d3861227c8719b6b3060a7c1bbd6eea86f5bbb06c9b324ce08e",
       "requestedDependencyClosure": [
         "family.ethertoken-native-redeem.exact"
       ],
       "requestedDependencyRoot": "0x4c544bf9a6c8cc46e8d3bdf284262c8eefccbecedc53f603c94494171de48709",
-      "memoRoot": "0x0000ed061b52eee18c706ef98a96a27bbebb17380a4ccdf553d92e01252da1fa",
+      "memoRoot": "0x85c9ab7ff811ebf520f679c79d4f1fdb4c7d28ced375d17f6281070cbec99523",
       "nominationProposalLeafDigests": [
-        "0x598ff011523ea9fe4f22d6dcc5aec873dfeeb2626cdd47c5582a3f0c3713a6e9",
-        "0x7b3ee17813796bb9c3a94faea3e747a1884b5f67ce3da91bd71ed4cbb46d5d16"
+        "0x2cc9395a3ca669f051dc9f4a2c549618ea8746e7b51f826ea28e30b6e3deea98",
+        "0x598ff011523ea9fe4f22d6dcc5aec873dfeeb2626cdd47c5582a3f0c3713a6e9"
       ]
     },
     {
@@ -687,50 +687,50 @@
       "artifactId": "family:univ2-standard",
       "artifactKind": "family",
       "familyId": "univ2-standard",
-      "definitionCatalogLeafDigest": "0xc2396c622d493698bb58475c457d854967b1feae274a8cde571ba3d824db9c27",
+      "definitionCatalogLeafDigest": "0x97bd18f8eb9981e48e5d7a05948198e4649a14777f46d228deea0228202b0b51",
       "requestedDependencyClosure": [
         "family.univ2-standard.coarse",
         "family.univ2-standard.exact",
         "family.univ2-standard.state"
       ],
       "requestedDependencyRoot": "0x228c902f99678e837f034d00e2a43b38a71a54d848996002f1bedd18e09d4943",
-      "memoRoot": "0x198319561528d2c9c68474ccf3ecb78c652a81500ba824cc315ef2a523b5162b",
+      "memoRoot": "0xd3947c141d6a7f5de1898fa94b42b9bf4ef90cfa8886bfe4042f4ffb47122e07",
       "nominationProposalLeafDigests": [
-        "0x5d1e03fbc4f829f223849f89248f59b483f08805a154c1bc012cf32a19bbeade",
-        "0x9cd07ba577b264a447d19ee3c3ffc12c009beec1d6d08fa60168307b9cb072cd"
+        "0x19735a85670debb538472ad2b590fe07f3944eeb1174e7e0d0c04a9e5b626898",
+        "0x5d1e03fbc4f829f223849f89248f59b483f08805a154c1bc012cf32a19bbeade"
       ]
     },
     {
       "artifactId": "family:univ3-standard",
       "artifactKind": "family",
       "familyId": "univ3-standard",
-      "definitionCatalogLeafDigest": "0xeab302478114774d9abdd7376d096c710a2eaed6d56307197a00d75b88192a06",
+      "definitionCatalogLeafDigest": "0x755328988043152ee16e20a8397cf781ca19c7727c17dac6c7796e0a078fcee6",
       "requestedDependencyClosure": [
         "family.univ3-standard.coarse",
         "family.univ3-standard.exact",
         "family.univ3-standard.state"
       ],
       "requestedDependencyRoot": "0x9887b728f4c8aaaec7542ac61fdf205f006839f4b24a39ca9b67497bfbb4f89e",
-      "memoRoot": "0x83abf5e2f8ed7b9fdd4fd5b3431bff83f63248e9e686302a96ebaecd0552ee09",
+      "memoRoot": "0x2dc33e37a567d711a35e1b091d8fba96644084549071cb8d3d3f2427171dc993",
       "nominationProposalLeafDigests": [
         "0x7b5109804a2a65db9504f025df8610bd8ff23b6f116517941a5eefeec5adcce0",
-        "0xe51d4efe0063a674b1a6c90ff60219401521e61415c3d25e9acfce934dbfed77"
+        "0xd4600527a55abac7beb494fc5ad3f65488d8d971f0b0c34ed9dbdc9394f55b85"
       ]
     },
     {
       "artifactId": "family:univ4",
       "artifactKind": "family",
       "familyId": "univ4",
-      "definitionCatalogLeafDigest": "0x05690e196a2c3a268e2698fa43e12d1291b70cc2693acd71502c1c7527420bf0",
+      "definitionCatalogLeafDigest": "0x551e5d815b28e60423ad8aab894c72ca0fd5ec447ca40b3063b10ce37b404ca7",
       "requestedDependencyClosure": [
         "family.univ4.coarse",
         "family.univ4.exact",
         "family.univ4.state"
       ],
       "requestedDependencyRoot": "0x7ceb8888018d77c0bd1498934995090180255d2cc1f88ddb287b7b62b5584dd2",
-      "memoRoot": "0x60fc63360732d04c2f04f068ceeabfc9e1f935647ba88908bd58218f6f7029db",
+      "memoRoot": "0xa6deb30a63545de361c7de2de18f38ccca0cd3b2d849b66242fee5b853c15fc1",
       "nominationProposalLeafDigests": [
-        "0x2e565343b11a6b3de44087dbb9c76584858ba33c92992c6dd90cf88d3352c30b",
+        "0xa4233de68b874ead83fec6b0c0ab9358a4a566e51ea4920ba80693a8bd4af727",
         "0xe39b224043c968cbc844240401e2a40b40de8f3fe4a172e533a4f5850155f7ab"
       ]
     },
@@ -761,5 +761,5 @@
       "nominationProposalLeafDigests": []
     }
   ],
-  "snapshotRoot": "0x00308d58c5426d8d3edd458ae38233d81aa10e0a9e85b900e31caf8347a18a10"
+  "snapshotRoot": "0x78047ebba59e1f8c4e821e8a3c4209ff449e02bb5f18fc62e9ee5fea76dc6a19"
 }

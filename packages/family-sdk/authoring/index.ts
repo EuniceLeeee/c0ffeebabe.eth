@@ -209,6 +209,7 @@ function sourceCompleteness(value: unknown, path: string): SourceCompleteness {
   if (
     value !== "complete-snapshot"
     && value !== "contiguous-history"
+    && value !== "rolling-observation"
     && value !== "point-lookup"
     && value !== "nomination-only"
   ) throw new TypeError(`invalid source completeness at ${path}`);

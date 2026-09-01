@@ -356,8 +356,8 @@ function candidateFromEvidence(
     || observation.plan.familyDefinitionHash !== ERC4626_FAMILY_AUTHORING_HASH
     || observation.plan.ownerRef !== payload.evidence.ownerRef
     || observation.plan.sourcePlanRef !== payload.evidence.sourcePlanRef
-    || observation.plan.completeness !== "contiguous-history"
-    || observation.plan.historyStartBlock !== "0"
+    || observation.plan.completeness !== "rolling-observation"
+    || observation.plan.historyStartBlock !== null
     || observation.cutoff.chainId !== payload.cutoff.chainId
     || observationCutoffNumber > cutoffNumber
     || observation.requestSchemaHash !== ERC4626_HISTORY_SOURCE_PLAN_SCHEMA_HASH

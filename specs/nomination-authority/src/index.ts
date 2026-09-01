@@ -54,10 +54,20 @@ export interface PointLookupDenominatorV1 {
   readonly resultPartitionRoot: Hash;
 }
 
+/** A source-backed positive denominator over one exact rolling range. It may
+ * nominate observed candidates but never proves that an unobserved instance
+ * does not exist. */
+export interface RollingObservationDenominatorV1 {
+  readonly kind: "rolling-observation";
+  readonly persistedExecutionRoot: Hash;
+  readonly resultPartitionRoot: Hash;
+}
+
 export type NominationDenominatorV1 =
   | CompleteSourceResultDenominatorV1
   | RecentObservationDenominatorV1
-  | PointLookupDenominatorV1;
+  | PointLookupDenominatorV1
+  | RollingObservationDenominatorV1;
 
 export interface PlanQualifiedNominationClaimV1 {
   readonly sourcePlanIdentity: Hash;
@@ -162,7 +172,7 @@ function exactSortedUniqueHashes(value: unknown, path: string): readonly Hash[] 
 
 function denominator(value: unknown, path: string): NominationDenominatorV1 {
   const kind = readOwnEnumerableDataProperty(value, "kind", path);
-  if (kind === "complete-source-result" || kind === "point-lookup") {
+  if (kind === "complete-source-result" || kind === "point-lookup" || kind === "rolling-observation") {
     const decoded = decodeExactObject(value, {
       kind: (field, fieldPath) => {
         if (field !== kind) throw new TypeError(`${fieldPath} is invalid`);

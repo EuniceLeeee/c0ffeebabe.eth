@@ -21,6 +21,7 @@ import {
   type FamilySourcePlanPhysicalResultV1,
   type FamilySourcePlanRuntimeV1,
 } from "../../../packages/family-sdk/runtime/index.ts";
+import { familyRollingObservationRangeV1 } from "../../../packages/family-sdk/runtime/index.ts";
 import { ASTRA_FAMILY_DEFINITION_HASH } from "./family-definition.ts";
 import {
   ASTRA_CHANGE_TOPIC,
@@ -120,8 +121,9 @@ export const ASTRA_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntimeV1 = Obje
   ...ASTRA_HISTORY_SOURCE_PLAN,
   async execute(input: FamilySourcePlanExecutionInputV1, physical: FamilySourcePlanPhysicalPortV1, signal: AbortSignal) {
     if (signal.aborted) throw signal.reason;
-    if (input.plan.familyDefinitionHash !== ASTRA_FAMILY_DEFINITION_HASH || input.plan.completeness !== "contiguous-history" || input.plan.historyStartBlock !== "0") throw new TypeError("Astra history source plan binding mismatch");
-    const from = input.previousAppliedThrough === null ? "0" : decimal(BigInt(input.previousAppliedThrough) + 1n);
+    if (input.plan.familyDefinitionHash !== ASTRA_FAMILY_DEFINITION_HASH || input.plan.completeness !== "rolling-observation" || input.plan.historyStartBlock !== null) throw new TypeError("Astra history source plan binding mismatch");
+    if (input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("Astra rolling observation cannot bind a predecessor");
+    const { from } = familyRollingObservationRangeV1(input.cutoff.number);
     if (BigInt(from) > BigInt(input.cutoff.number)) throw new TypeError("Astra history cursor beyond cutoff");
     const chunks: { readonly from: string; readonly through: string; readonly result: FamilySourcePlanPhysicalResultV1; readonly entries: readonly AstraHistoryEntryV1[] }[] = [];
     for (let start = BigInt(from); start <= BigInt(input.cutoff.number); start += CHUNK_BLOCKS) {
@@ -137,9 +139,9 @@ export const ASTRA_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntimeV1 = Obje
     const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes });
     const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
     const entries = Object.freeze(chunks.flatMap(chunk => chunk.entries));
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "astra-change-contiguous-history", version: 1, topic: ASTRA_CHANGE_TOPIC, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries });
+    const opaqueResult: CanonicalJson = Object.freeze({ kind: "astra-change-rolling-observation", version: 1, topic: ASTRA_CHANGE_TOPIC, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries });
     const resultPartitionRoot = hashDomain("aloha/astra-multitoken/history-source-partition/v1", opaqueResult);
-    const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: input.previousAppliedThrough, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
+    const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
     return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators });
   },
 });
@@ -150,7 +152,7 @@ export const ASTRA_HISTORY_NOMINATION_PROGRAM: FamilySourcePlanNominationProgram
   schemaHash: ASTRA_HISTORY_SOURCE_PLAN_SCHEMA_HASH,
   async evaluate(input: FamilySourcePlanNominationInputV1, signal: AbortSignal): Promise<readonly CandidateNominationV1[]> {
     if (signal.aborted) throw signal.reason;
-    if (input.execution.plan.familyDefinitionHash !== ASTRA_FAMILY_DEFINITION_HASH || input.execution.plan.completeness !== "contiguous-history" || input.execution.outcome !== "complete" || encodeCanonicalJson(input.execution.plan) !== encodeCanonicalJson(input.sourceEvidence.plan) || input.execution.sourceEvidenceRoot !== input.sourceEvidence.evidenceRoot || input.sourceEvidence.refs.length === 0 || !sameCutoff(input.execution.cutoff, input.recent.cutoff)) throw new TypeError("Astra history nomination binding mismatch");
+    if (input.execution.plan.familyDefinitionHash !== ASTRA_FAMILY_DEFINITION_HASH || input.execution.plan.completeness !== "rolling-observation" || input.execution.outcome !== "complete" || encodeCanonicalJson(input.execution.plan) !== encodeCanonicalJson(input.sourceEvidence.plan) || input.execution.sourceEvidenceRoot !== input.sourceEvidence.evidenceRoot || input.sourceEvidence.refs.length === 0 || !sameCutoff(input.execution.cutoff, input.recent.cutoff)) throw new TypeError("Astra history nomination binding mismatch");
     const chunks = input.sourceEvidence.refs.map(evidence => {
       const bytes = input.rawEvidence.read(evidence.rawLocatorHash);
       if (sha256Hex(bytes) !== evidence.rawLocatorHash) throw new TypeError("Astra history raw hash mismatch");
@@ -166,7 +168,7 @@ export const ASTRA_HISTORY_NOMINATION_PROGRAM: FamilySourcePlanNominationProgram
     }
     if (expectedFrom !== BigInt(input.execution.through) + 1n) throw new TypeError("Astra history chunk cutoff mismatch");
     const entries = chunks.flatMap(chunk => chunk.entries);
-    const expected = { kind: "astra-change-contiguous-history", version: 1, topic: ASTRA_CHANGE_TOPIC, from: input.execution.from, through: input.execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries };
+    const expected = { kind: "astra-change-rolling-observation", version: 1, topic: ASTRA_CHANGE_TOPIC, from: input.execution.from, through: input.execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries };
     if (encodeCanonicalJson(expected) !== encodeCanonicalJson(input.execution.opaqueResult)) throw new TypeError("Astra history result/raw mismatch");
     return Object.freeze(chunks.flatMap(chunk => {
       const targets = [...new Set(chunk.entries.map(entry => entry.target))].sort();

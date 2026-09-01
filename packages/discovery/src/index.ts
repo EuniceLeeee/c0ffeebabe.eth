@@ -36,6 +36,7 @@ export interface BlockRangeV1 {
 export type SourceCompleteness =
   | "complete-snapshot"
   | "contiguous-history"
+  | "rolling-observation"
   | "point-lookup"
   | "nomination-only";
 
@@ -45,9 +46,9 @@ export interface SourcePlanRefV1 {
   readonly familyDefinitionHash: Hash;
   readonly completeness: SourceCompleteness;
   /**
-   * The immutable lower bound of a contiguous-history source. Other source
-   * kinds must carry null so a plan cannot silently acquire history authority
-   * by being reinterpreted at validation time.
+   * The immutable lower bound of a contiguous-history source. A rolling
+   * observation is deliberately not omission authority and therefore carries
+   * null; its exact range is bound by the physical request evidence.
    */
   readonly historyStartBlock: string | null;
 }
@@ -281,6 +282,7 @@ const sourceCompleteness = (value: unknown, path: string): SourceCompleteness =>
   if (
     value !== "complete-snapshot"
     && value !== "contiguous-history"
+    && value !== "rolling-observation"
     && value !== "point-lookup"
     && value !== "nomination-only"
   ) throw new TypeError(`${path} has an invalid source completeness`);
@@ -1044,6 +1046,15 @@ function coverageEntry(execution: unknown): SourceCoverageEntryV1 {
       contributesOmissionAuthority = true;
       break;
     }
+    case "rolling-observation":
+      if (plan.historyStartBlock !== null || decoded.previousAppliedThrough !== null) {
+        throw new Error("rolling-observation-history-anchor-invalid");
+      }
+      if (decoded.outcome !== "positive-only" && decoded.outcome !== "complete") {
+        throw new Error("rolling-observation-incomplete");
+      }
+      if (through !== cutoffNumber) throw new Error("rolling-observation-cutoff-mismatch");
+      break;
     case "point-lookup":
       if (plan.historyStartBlock !== null || decoded.previousAppliedThrough !== null) {
         throw new Error("point-lookup-history-anchor-invalid");
@@ -1208,6 +1219,8 @@ export function validateSourceCoverageCertificate(
       ? from === cutoffNumber && appliedThrough === cutoffNumber
       : plan.completeness === "contiguous-history"
         ? appliedThrough === cutoffNumber
+        : plan.completeness === "rolling-observation"
+          ? appliedThrough === cutoffNumber
         : plan.completeness === "point-lookup"
           ? from === appliedThrough
           : true;

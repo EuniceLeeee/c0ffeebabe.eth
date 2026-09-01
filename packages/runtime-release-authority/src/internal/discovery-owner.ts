@@ -813,7 +813,9 @@ export function createRuntimeDiscoveryPort(input: {
             return Object.freeze({
               kind: execution.plan.completeness === "point-lookup"
                 ? "point-lookup" as const
-                : "complete-source-result" as const,
+                : execution.plan.completeness === "rolling-observation"
+                  ? "rolling-observation" as const
+                  : "complete-source-result" as const,
               persistedExecutionRoot: persisted.persistedExecutionRoot,
               resultPartitionRoot: execution.resultPartitionRoot,
             });

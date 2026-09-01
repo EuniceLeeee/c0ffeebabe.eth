@@ -14,6 +14,7 @@ import {
 } from "../../../packages/discovery/src/index.ts";
 import {
   decodeFamilySourcePlanPhysicalObservation,
+  familyRollingObservationRangeV1,
   type FamilyRawEvidenceReadPortV1,
   type FamilySourcePlanExecutionInputV1,
   type FamilySourcePlanNominationInputV1,
@@ -154,21 +155,21 @@ function observe(value: FamilySourcePlanPhysicalResultV1, input: FamilySourcePla
 type HistoryChunkV1 = { readonly evidence: SourcePlanEvidenceRefV1; readonly from: string; readonly through: string; readonly entries: readonly EtherTokenNativeRedeemDestructionHistoryEntryV1[] };
 
 function decodeHistory(execution: FamilySourcePlanNominationInputV1["execution"], sourceEvidence: FamilySourcePlanNominationInputV1["sourceEvidence"], rawEvidence: FamilyRawEvidenceReadPortV1): readonly HistoryChunkV1[] {
-  if (encodeCanonicalJson(execution.plan) !== encodeCanonicalJson(sourceEvidence.plan) || execution.sourceEvidenceRoot !== sourceEvidence.evidenceRoot || encodeCanonicalJson(execution.sourceEvidenceRefs) !== encodeCanonicalJson(sourceEvidence.refs) || encodeCanonicalJson(execution.rawLocatorHashes) !== encodeCanonicalJson(sourceEvidence.rawLocatorHashes)) throw new TypeError("ethertoken-native-redeem history execution/evidence mismatch");
+  if (encodeCanonicalJson(execution.plan) !== encodeCanonicalJson(sourceEvidence.plan) || execution.sourceEvidenceRoot !== sourceEvidence.evidenceRoot || encodeCanonicalJson(execution.sourceEvidenceRefs) !== encodeCanonicalJson(sourceEvidence.refs) || encodeCanonicalJson(execution.rawLocatorHashes) !== encodeCanonicalJson(sourceEvidence.rawLocatorHashes) || execution.previousAppliedThrough !== null || execution.from !== familyRollingObservationRangeV1(execution.cutoff.number).from || execution.through !== execution.cutoff.number) throw new TypeError("ethertoken-native-redeem history execution/evidence mismatch");
   const chunks = sourceEvidence.refs.map(evidence => {
     const bytes = rawEvidence.read(evidence.rawLocatorHash);
     if (sha256Hex(bytes) !== evidence.rawLocatorHash) throw new TypeError("ethertoken-native-redeem history raw hash mismatch");
     const observed = decodeFamilySourcePlanPhysicalObservation(bytes);
     const range = observed.request.lookback as { readonly from?: unknown; readonly through?: unknown };
-    if (typeof range.from !== "string" || typeof range.through !== "string" || observed.familyDefinitionHash !== ETHERTOKEN_NATIVE_REDEEM_FAMILY_AUTHORING_HASH || observed.plan.familyDefinitionHash !== ETHERTOKEN_NATIVE_REDEEM_FAMILY_AUTHORING_HASH || observed.plan.ownerRef !== evidence.ownerRef || observed.plan.sourcePlanRef !== evidence.sourcePlanRef || observed.plan.completeness !== "contiguous-history" || observed.plan.historyStartBlock !== "0" || observed.requestSchemaHash !== ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_SCHEMA_HASH || observed.request.kind !== "family-source-plan-rpc" || observed.request.version !== 1 || observed.request.method !== "eth_getLogs" || observed.request.target !== null || observed.request.manager !== null || observed.request.topic !== ETHERTOKEN_NATIVE_REDEEM_DESTRUCTION_TOPIC || observed.cutoff.chainId !== execution.cutoff.chainId || BigInt(observed.cutoff.number) > BigInt(execution.cutoff.number)) throw new TypeError("ethertoken-native-redeem history predecessor chunk binding mismatch");
+    if (typeof range.from !== "string" || typeof range.through !== "string" || observed.familyDefinitionHash !== ETHERTOKEN_NATIVE_REDEEM_FAMILY_AUTHORING_HASH || observed.plan.familyDefinitionHash !== ETHERTOKEN_NATIVE_REDEEM_FAMILY_AUTHORING_HASH || observed.plan.ownerRef !== evidence.ownerRef || observed.plan.sourcePlanRef !== evidence.sourcePlanRef || observed.plan.completeness !== "rolling-observation" || observed.plan.historyStartBlock !== null || observed.requestSchemaHash !== ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_SCHEMA_HASH || observed.request.kind !== "family-source-plan-rpc" || observed.request.version !== 1 || observed.request.method !== "eth_getLogs" || observed.request.target !== null || observed.request.manager !== null || observed.request.topic !== ETHERTOKEN_NATIVE_REDEEM_DESTRUCTION_TOPIC || !sameCutoff(observed.cutoff, execution.cutoff)) throw new TypeError("ethertoken-native-redeem history chunk binding mismatch");
     const filter = Object.freeze({ fromBlock: blockTag(range.from), toBlock: blockTag(range.through), topics: Object.freeze([ETHERTOKEN_NATIVE_REDEEM_DESTRUCTION_TOPIC]) });
     if (encodeCanonicalJson(observed.request.params) !== encodeCanonicalJson([filter]) || encodeCanonicalJson(observed.request.chunk) !== encodeCanonicalJson({ maxBlocks: CHUNK_BLOCKS.toString() })) throw new TypeError("ethertoken-native-redeem history predecessor request mismatch");
     return Object.freeze({ evidence, from: range.from, through: range.through, entries: decodeEtherTokenNativeRedeemDestructionHistoryEntries(observed.response, BigInt(range.from), BigInt(range.through)) });
   }).sort((left, right) => BigInt(left.from) < BigInt(right.from) ? -1 : BigInt(left.from) > BigInt(right.from) ? 1 : 0);
-  let expectedFrom = 0n;
+  let expectedFrom = BigInt(execution.from);
   for (const chunk of chunks) { if (BigInt(chunk.from) !== expectedFrom || BigInt(chunk.through) < expectedFrom || BigInt(chunk.through) - expectedFrom + 1n > CHUNK_BLOCKS) throw new TypeError("ethertoken-native-redeem history chunk coverage gap"); expectedFrom = BigInt(chunk.through) + 1n; }
   if (expectedFrom !== BigInt(execution.through) + 1n) throw new TypeError("ethertoken-native-redeem history chunk cutoff mismatch");
-  const expected = { kind: "ethertoken-native-redeem-destruction-contiguous-history", version: 1, topic: ETHERTOKEN_NATIVE_REDEEM_DESTRUCTION_TOPIC, from: "0", through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries: chunks.flatMap(chunk => chunk.entries) };
+  const expected = { kind: "ethertoken-native-redeem-destruction-rolling-observation", version: 1, topic: ETHERTOKEN_NATIVE_REDEEM_DESTRUCTION_TOPIC, from: execution.from, through: execution.through, chunkBlocks: CHUNK_BLOCKS.toString(), entries: chunks.flatMap(chunk => chunk.entries) };
   if (encodeCanonicalJson(expected) !== encodeCanonicalJson(execution.opaqueResult)) throw new TypeError("ethertoken-native-redeem history result/raw mismatch");
   return Object.freeze(chunks);
 }
@@ -177,12 +178,9 @@ export const ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourceP
   ...ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN,
   async execute(input: FamilySourcePlanExecutionInputV1, physical: FamilySourcePlanPhysicalPortV1, signal: AbortSignal) {
     if (signal.aborted) throw signal.reason;
-    if (input.plan.familyDefinitionHash !== ETHERTOKEN_NATIVE_REDEEM_FAMILY_AUTHORING_HASH || input.plan.completeness !== "contiguous-history" || input.plan.historyStartBlock !== "0") throw new TypeError("ethertoken-native-redeem history source plan binding mismatch");
-    const predecessor = input.predecessor ?? null;
-    if ((input.previousAppliedThrough === null) !== (predecessor === null)) throw new TypeError("ethertoken-native-redeem history durable predecessor mismatch");
-    if (predecessor !== null && (predecessor.execution.through !== input.previousAppliedThrough || predecessor.execution.outcome !== "complete" || encodeCanonicalJson(predecessor.execution.plan) !== encodeCanonicalJson(input.plan))) throw new TypeError("ethertoken-native-redeem history predecessor lineage mismatch");
-    const predecessorChunks = predecessor === null ? Object.freeze([] as HistoryChunkV1[]) : decodeHistory(predecessor.execution, predecessor.sourceEvidence, predecessor.rawEvidence);
-    const from = input.previousAppliedThrough === null ? "0" : decimal(BigInt(input.previousAppliedThrough) + 1n);
+    if (input.plan.familyDefinitionHash !== ETHERTOKEN_NATIVE_REDEEM_FAMILY_AUTHORING_HASH || input.plan.completeness !== "rolling-observation" || input.plan.historyStartBlock !== null) throw new TypeError("ethertoken-native-redeem history source plan binding mismatch");
+    if (input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("ethertoken-native-redeem rolling observation cannot bind a predecessor");
+    const { from } = familyRollingObservationRangeV1(input.cutoff.number);
     if (BigInt(from) > BigInt(input.cutoff.number)) throw new TypeError("ethertoken-native-redeem history cursor beyond cutoff");
     const chunks: { readonly from: string; readonly through: string; readonly result: FamilySourcePlanPhysicalResultV1; readonly entries: readonly EtherTokenNativeRedeemDestructionHistoryEntryV1[] }[] = [];
     for (let start = BigInt(from); start <= BigInt(input.cutoff.number); start += CHUNK_BLOCKS) {
@@ -192,20 +190,19 @@ export const ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourceP
       const raw = await physical.request({ familyDefinitionHash: ETHERTOKEN_NATIVE_REDEEM_FAMILY_AUTHORING_HASH, plan: input.plan, cutoff: input.cutoff, requestSchemaHash: ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_SCHEMA_HASH, request: { kind: "family-source-plan-rpc", version: 1, method: "eth_getLogs", params: Object.freeze([filter]), target: null, manager: null, topic: ETHERTOKEN_NATIVE_REDEEM_DESTRUCTION_TOPIC, lookback: range, chunk: Object.freeze({ maxBlocks: CHUNK_BLOCKS.toString() }) } }, signal);
       chunks.push({ ...range, ...observe(raw, input, range.from, range.through) });
     }
-    const refs = Object.freeze([...predecessorChunks.map(chunk => chunk.evidence), ...chunks.map(chunk => evidenceRef(input, chunk.result))].sort((left, right) => refKey(left).localeCompare(refKey(right))));
-    const predecessorLocators = predecessor === null ? [] : predecessor.sourceEvidence.rawLocatorHashes.map(rawLocatorHash => Object.freeze({ kind: "raw-evidence-locator" as const, version: 1 as const, rawLocatorHash, bytes: predecessor.rawEvidence.read(rawLocatorHash) }));
-    const rawEvidenceLocators = Object.freeze([...predecessorLocators, ...chunks.map(chunk => chunk.result.rawEvidenceLocator)].sort((left, right) => left.rawLocatorHash.localeCompare(right.rawLocatorHash)));
+    const refs = Object.freeze(chunks.map(chunk => evidenceRef(input, chunk.result)).sort((left, right) => refKey(left).localeCompare(refKey(right))));
+    const rawEvidenceLocators = Object.freeze(chunks.map(chunk => chunk.result.rawEvidenceLocator).sort((left, right) => left.rawLocatorHash.localeCompare(right.rawLocatorHash)));
     const rawLocatorHashes = Object.freeze(rawEvidenceLocators.map(locator => locator.rawLocatorHash));
     const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes });
     const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
-    const entries = Object.freeze([...predecessorChunks.flatMap(chunk => chunk.entries), ...chunks.flatMap(chunk => chunk.entries)]);
+    const entries = Object.freeze(chunks.flatMap(chunk => chunk.entries));
     const canonicalEntries = Object.freeze(entries.map(entry => Object.freeze({
       target: entry.target, actor: entry.actor, amount: entry.amount, blockNumber: entry.blockNumber,
       blockHash: entry.blockHash, txHash: entry.txHash, logIndex: entry.logIndex,
     })));
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "ethertoken-native-redeem-destruction-contiguous-history", version: 1, topic: ETHERTOKEN_NATIVE_REDEEM_DESTRUCTION_TOPIC, from: "0", through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries: canonicalEntries });
+    const opaqueResult: CanonicalJson = Object.freeze({ kind: "ethertoken-native-redeem-destruction-rolling-observation", version: 1, topic: ETHERTOKEN_NATIVE_REDEEM_DESTRUCTION_TOPIC, from, through: input.cutoff.number, chunkBlocks: CHUNK_BLOCKS.toString(), entries: canonicalEntries });
     const resultPartitionRoot = hashDomain("aloha/ethertoken-native-redeem/history-source-partition/v1", opaqueResult);
-    const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from: "0", through: input.cutoff.number, previousAppliedThrough: input.previousAppliedThrough, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
+    const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
     return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators });
   },
 });
@@ -220,7 +217,7 @@ export const ETHERTOKEN_NATIVE_REDEEM_HISTORY_NOMINATION_PROGRAM: FamilySourcePl
     const expectedEvidenceRoot = sourcePlanEvidenceRoot({ plan: input.sourceEvidence.plan, cutoff: input.sourceEvidence.cutoff, refs: input.sourceEvidence.refs, rawLocatorHashes: input.sourceEvidence.rawLocatorHashes });
     if (
       input.execution.plan.familyDefinitionHash !== ETHERTOKEN_NATIVE_REDEEM_FAMILY_AUTHORING_HASH
-      || input.execution.plan.completeness !== "contiguous-history"
+      || input.execution.plan.completeness !== "rolling-observation"
       || input.execution.outcome !== "complete"
       || encodeCanonicalJson(input.execution.plan) !== encodeCanonicalJson(input.sourceEvidence.plan)
       || executionRoot !== sourcePlanExecutionRoot(executionWithoutRoot)

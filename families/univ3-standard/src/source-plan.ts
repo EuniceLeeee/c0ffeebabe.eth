@@ -18,6 +18,7 @@ import {
   type FamilySourcePlanPhysicalResultV1,
   type FamilySourcePlanRuntimeV1,
 } from "../../../packages/family-sdk/runtime/index.ts";
+import { familyRollingObservationRangeV1 } from "../../../packages/family-sdk/runtime/index.ts";
 import { decodeEvmLogObservationBytes } from "../../../packages/observation/src/index.ts";
 
 import { UNIV3_STANDARD_FAMILY_ID, UNIV3_STANDARD_HISTORY_SOURCE_PLAN_ID, UNIV3_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH, UNIV3_STANDARD_SOURCE_PLAN_ID, UNIV3_STANDARD_SOURCE_PLAN_SCHEMA_HASH, UNIV3_SWAP_TOPIC, UNIV3_POOL_CREATED_TOPIC } from "./manifest.ts";
@@ -32,7 +33,7 @@ export const UNIV3_STANDARD_SOURCE_PLAN = defineFamilySourcePlan({
   schemaHash: UNIV3_STANDARD_SOURCE_PLAN_SCHEMA_HASH,
 });
 
-export const UNIV3_STANDARD_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({ sourcePlanId: UNIV3_STANDARD_HISTORY_SOURCE_PLAN_ID, completeness: "contiguous-history", historyStartBlock: "0", schemaHash: UNIV3_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH });
+export const UNIV3_STANDARD_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({ sourcePlanId: UNIV3_STANDARD_HISTORY_SOURCE_PLAN_ID, completeness: "rolling-observation", historyStartBlock: null, schemaHash: UNIV3_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH });
 
 function sameCutoff(left: { readonly chainId: string; readonly number: string; readonly hash: Hash; readonly stateRoot: Hash }, right: typeof left): boolean {
   return left.chainId === right.chainId && left.number === right.number && left.hash === right.hash && left.stateRoot === right.stateRoot;
@@ -253,7 +254,7 @@ function decodeHistory(
   if (expectedFrom !== BigInt(execution.through) + 1n) throw new TypeError("univ3 history chunk coverage cutoff mismatch");
   const entries = chunks.flatMap(value => value.entries);
   if (new Set(entries.map(value => value.pool)).size !== entries.length) throw new TypeError("univ3 history returned a duplicate pool across chunks");
-  const expected = { kind: "univ3-pool-created-contiguous-history", version: 1, topic: UNIV3_POOL_CREATED_TOPIC, from: "0", through: execution.through, chunkBlocks: HISTORY_CHUNK_BLOCKS.toString(), entries };
+  const expected = { kind: "univ3-pool-created-rolling-observation", version: 1, topic: UNIV3_POOL_CREATED_TOPIC, from: execution.from, through: execution.through, chunkBlocks: HISTORY_CHUNK_BLOCKS.toString(), entries };
   if (encodeCanonicalJson(execution.opaqueResult) !== encodeCanonicalJson(expected)) throw new TypeError("univ3 history result/raw observation mismatch");
   return Object.freeze(chunks);
 }
@@ -262,19 +263,9 @@ export const UNIV3_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntime
   ...UNIV3_STANDARD_HISTORY_SOURCE_PLAN,
   async execute(input: FamilySourcePlanExecutionInputV1, physical: FamilySourcePlanPhysicalPortV1, signal: AbortSignal) {
     if (signal.aborted) throw signal.reason;
-    if (input.plan.familyDefinitionHash !== UNIV3_STANDARD_FAMILY_AUTHORING_HASH || input.plan.completeness !== "contiguous-history" || input.plan.historyStartBlock !== "0") throw new TypeError("univ3 history source plan binding mismatch");
-    const predecessor = input.predecessor ?? null;
-    if ((input.previousAppliedThrough === null) !== (predecessor === null)) throw new TypeError("univ3 history durable predecessor mismatch");
-    if (predecessor !== null && (
-      predecessor.execution.through !== input.previousAppliedThrough
-      || predecessor.execution.outcome !== "complete"
-      || encodeCanonicalJson(predecessor.execution.plan) !== encodeCanonicalJson(input.plan)
-    )) throw new TypeError("univ3 history predecessor lineage mismatch");
-    const predecessorChunks = predecessor === null
-      ? Object.freeze([] as HistoryChunk[])
-      : decodeHistory(predecessor.execution, predecessor.sourceEvidence, predecessor.rawEvidence);
-    const from = input.previousAppliedThrough === null ? "0" : decimal(BigInt(input.previousAppliedThrough) + 1n);
-    if (BigInt(from) > BigInt(input.cutoff.number)) throw new TypeError("univ3 history cursor is beyond cutoff");
+    if (input.plan.familyDefinitionHash !== UNIV3_STANDARD_FAMILY_AUTHORING_HASH || input.plan.completeness !== "rolling-observation" || input.plan.historyStartBlock !== null) throw new TypeError("univ3 history source plan binding mismatch");
+    if (input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("univ3 rolling observation cannot bind a predecessor");
+    const { from } = familyRollingObservationRangeV1(input.cutoff.number);
     const observedChunks: { readonly from: string; readonly through: string; readonly result: FamilySourcePlanPhysicalResultV1; readonly entries: readonly PoolCreatedEntry[] }[] = [];
     for (let chunkFrom = BigInt(from); chunkFrom <= BigInt(input.cutoff.number); chunkFrom += HISTORY_CHUNK_BLOCKS) {
       const chunkThrough = chunkFrom + HISTORY_CHUNK_BLOCKS - 1n > BigInt(input.cutoff.number) ? BigInt(input.cutoff.number) : chunkFrom + HISTORY_CHUNK_BLOCKS - 1n;
@@ -283,17 +274,16 @@ export const UNIV3_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntime
       const physicalResult = await physical.request({ familyDefinitionHash: UNIV3_STANDARD_FAMILY_AUTHORING_HASH, plan: input.plan, cutoff: input.cutoff, requestSchemaHash: UNIV3_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH, request: { kind: "family-source-plan-rpc", version: 1, method: "eth_getLogs", params: Object.freeze([filter]), target: null, manager: null, topic: UNIV3_POOL_CREATED_TOPIC, lookback: Object.freeze(range), chunk: Object.freeze({ maxBlocks: HISTORY_CHUNK_BLOCKS.toString() }) } }, signal);
       observedChunks.push(Object.freeze({ ...range, ...exactHistoryObservation(physicalResult, input, range.from, range.through) }));
     }
-    const allEntries = [...predecessorChunks.flatMap(value => value.entries), ...observedChunks.flatMap(value => value.entries)];
+    const allEntries = observedChunks.flatMap(value => value.entries);
     if (new Set(allEntries.map(value => value.pool)).size !== allEntries.length) throw new TypeError("univ3 history returned a duplicate pool across chunks or executions");
-    const refs = Object.freeze([...predecessorChunks.map(value => value.evidence), ...observedChunks.map(value => sourceRef(input, value.result))].sort((left, right) => sourceRefKey(left).localeCompare(sourceRefKey(right))));
-    const predecessorLocators = predecessor === null ? [] : predecessor.sourceEvidence.rawLocatorHashes.map(rawLocatorHash => Object.freeze({ kind: "raw-evidence-locator" as const, version: 1 as const, rawLocatorHash, bytes: predecessor.rawEvidence.read(rawLocatorHash) }));
-    const rawEvidenceLocators = Object.freeze([...predecessorLocators, ...observedChunks.map(value => value.result.rawEvidenceLocator)].sort((left, right) => left.rawLocatorHash.localeCompare(right.rawLocatorHash)));
+    const refs = Object.freeze(observedChunks.map(value => sourceRef(input, value.result)).sort((left, right) => sourceRefKey(left).localeCompare(sourceRefKey(right))));
+    const rawEvidenceLocators = Object.freeze(observedChunks.map(value => value.result.rawEvidenceLocator).sort((left, right) => left.rawLocatorHash.localeCompare(right.rawLocatorHash)));
     const rawLocatorHashes = Object.freeze(rawEvidenceLocators.map(value => value.rawLocatorHash));
     const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes });
     const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes, evidenceRoot });
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "univ3-pool-created-contiguous-history", version: 1, topic: UNIV3_POOL_CREATED_TOPIC, from: "0", through: input.cutoff.number, chunkBlocks: HISTORY_CHUNK_BLOCKS.toString(), entries: Object.freeze(allEntries) });
+    const opaqueResult: CanonicalJson = Object.freeze({ kind: "univ3-pool-created-rolling-observation", version: 1, topic: UNIV3_POOL_CREATED_TOPIC, from, through: input.cutoff.number, chunkBlocks: HISTORY_CHUNK_BLOCKS.toString(), entries: Object.freeze(allEntries) });
     const resultPartitionRoot = hashDomain("aloha/univ3-standard/history-source-partition/v1", opaqueResult);
-    const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: input.previousAppliedThrough, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
+    const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: refs, rawLocatorHashes, sourceEvidenceRoot: evidenceRoot };
     return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators });
   },
 });
@@ -304,7 +294,7 @@ export const UNIV3_STANDARD_HISTORY_NOMINATION_PROGRAM: FamilySourcePlanNominati
   schemaHash: UNIV3_STANDARD_HISTORY_SOURCE_PLAN_SCHEMA_HASH,
   async evaluate(input: FamilySourcePlanNominationInputV1, signal: AbortSignal) {
     if (signal.aborted) throw signal.reason;
-    if (input.execution.plan.familyDefinitionHash !== UNIV3_STANDARD_FAMILY_AUTHORING_HASH || input.execution.plan.completeness !== "contiguous-history" || input.execution.outcome !== "complete" || encodeCanonicalJson(input.execution.plan) !== encodeCanonicalJson(input.sourceEvidence.plan) || input.execution.sourceEvidenceRoot !== input.sourceEvidence.evidenceRoot || input.sourceEvidence.refs.length === 0 || !sameCutoff(input.execution.cutoff, input.recent.cutoff)) throw new TypeError("univ3 history nomination binding mismatch");
+    if (input.execution.plan.familyDefinitionHash !== UNIV3_STANDARD_FAMILY_AUTHORING_HASH || input.execution.plan.completeness !== "rolling-observation" || input.execution.outcome !== "complete" || encodeCanonicalJson(input.execution.plan) !== encodeCanonicalJson(input.sourceEvidence.plan) || input.execution.sourceEvidenceRoot !== input.sourceEvidence.evidenceRoot || input.sourceEvidence.refs.length === 0 || !sameCutoff(input.execution.cutoff, input.recent.cutoff)) throw new TypeError("univ3 history nomination binding mismatch");
     const chunks = decodeHistory(input.execution, input.sourceEvidence, input.rawEvidence);
     return Object.freeze(chunks.flatMap(chunk => chunk.entries.map(entry => Object.freeze({ kind: "aloha.candidate-nomination" as const, version: "2" as const, familyId: UNIV3_STANDARD_FAMILY_ID, familyDefinitionHash: UNIV3_STANDARD_FAMILY_AUTHORING_HASH, instanceNominationKey: entry.pool, evidence: chunk.evidence }))));
   },

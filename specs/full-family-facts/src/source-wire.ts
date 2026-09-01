@@ -19,7 +19,7 @@ export interface CanonicalCutoffV1 {
   readonly stateRoot: Hash;
 }
 
-export type SourceCompletenessV1 = "complete-snapshot" | "contiguous-history" | "point-lookup" | "nomination-only";
+export type SourceCompletenessV1 = "complete-snapshot" | "contiguous-history" | "rolling-observation" | "point-lookup" | "nomination-only";
 
 export interface SourcePlanRefV1 {
   readonly ownerRef: Hash;
@@ -90,7 +90,7 @@ const compareText = (left: string, right: string): number => left < right ? -1 :
 const decimal = (value: string, path: string): bigint => BigInt(assertDecimalString(value, path));
 
 function sourceCompleteness(value: unknown, path: string): SourceCompletenessV1 {
-  if (value !== "complete-snapshot" && value !== "contiguous-history"
+  if (value !== "complete-snapshot" && value !== "contiguous-history" && value !== "rolling-observation"
     && value !== "point-lookup" && value !== "nomination-only") {
     throw new TypeError(`${path} has an invalid source completeness`);
   }
@@ -243,6 +243,13 @@ function coverageEntry(execution: SourcePlanExecutionV1): SourceCoverageEntryV1 
       contributesOmissionAuthority = true;
       break;
     }
+    case "rolling-observation":
+      if (execution.plan.historyStartBlock !== null || execution.previousAppliedThrough !== null
+        || through !== cutoffNumber
+        || (execution.outcome !== "complete" && execution.outcome !== "positive-only")) {
+        throw new TypeError("invalid rolling observation coverage");
+      }
+      break;
     case "point-lookup":
       if (execution.plan.historyStartBlock !== null || execution.previousAppliedThrough !== null
         || execution.outcome !== "complete" || from !== through) throw new TypeError("invalid point lookup coverage");
@@ -338,7 +345,7 @@ export function validateFullFamilySourceCoverage(
     const authoritative = plan.completeness === "complete-snapshot" || plan.completeness === "contiguous-history";
     const rangeMatches = plan.completeness === "complete-snapshot"
       ? from === cutoffNumber && through === cutoffNumber
-      : plan.completeness === "contiguous-history" ? through === cutoffNumber
+      : plan.completeness === "contiguous-history" || plan.completeness === "rolling-observation" ? through === cutoffNumber
         : plan.completeness === "point-lookup" ? from === through : true;
     if (from > through || through > cutoffNumber || entry.familyDefinitionHash !== plan.familyDefinitionHash
       || entry.completeness !== plan.completeness || entry.historyStartBlock !== plan.historyStartBlock

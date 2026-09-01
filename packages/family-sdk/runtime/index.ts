@@ -69,6 +69,25 @@ export const FAMILY_RUNTIME_STAGES = Object.freeze([
 
 export type FamilyRuntimeStageV1 = (typeof FAMILY_RUNTIME_STAGES)[number];
 
+/** The production cold-start observation horizon used by every Family source
+ * that derives candidates from recent chain activity. This range supplies
+ * positive observations only; it never proves older instances absent. */
+export const FAMILY_ROLLING_OBSERVATION_BLOCKS_V1 = 14_400n;
+
+export function familyRollingObservationRangeV1(cutoffNumber: string): Readonly<{
+  readonly from: string;
+  readonly through: string;
+}> {
+  if (!/^(0|[1-9][0-9]*)$/.test(cutoffNumber)) {
+    throw new TypeError("Family rolling observation cutoff must be a decimal block number");
+  }
+  const through = BigInt(cutoffNumber);
+  const from = through + 1n > FAMILY_ROLLING_OBSERVATION_BLOCKS_V1
+    ? through - FAMILY_ROLLING_OBSERVATION_BLOCKS_V1 + 1n
+    : 0n;
+  return Object.freeze({ from: from.toString(10), through: through.toString(10) });
+}
+
 /** Source-less request owned by one Family lifecycle adapter.  The runtime
  * supplies only a neutral RPC transport; target/data selection remains in
  * the Family closure. */
@@ -807,7 +826,7 @@ export function assertFamilySourcePlanRuntime(
     throw new TypeError(`${path} has non-exact keys`);
   }
   assertNonEmptyString(record.sourcePlanId, `${path}.sourcePlanId`);
-  if (!["complete-snapshot", "contiguous-history", "point-lookup", "nomination-only"].includes(record.completeness as string)) {
+  if (!["complete-snapshot", "contiguous-history", "rolling-observation", "point-lookup", "nomination-only"].includes(record.completeness as string)) {
     throw new TypeError(`${path}.completeness is invalid`);
   }
   if (record.historyStartBlock !== null && (typeof record.historyStartBlock !== "string" || !/^(0|[1-9][0-9]*)$/.test(record.historyStartBlock))) {

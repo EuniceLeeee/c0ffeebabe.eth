@@ -84,8 +84,8 @@ export const DODO_V2_SOURCE_PLAN = defineFamilySourcePlan({
 
 export const DODO_V2_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({
   sourcePlanId: DODO_V2_HISTORY_SOURCE_PLAN_ID,
-  completeness: "contiguous-history",
-  historyStartBlock: "0",
+  completeness: "rolling-observation",
+  historyStartBlock: null,
   schemaHash: DODO_V2_HISTORY_SOURCE_PLAN_SCHEMA_HASH,
 });
 

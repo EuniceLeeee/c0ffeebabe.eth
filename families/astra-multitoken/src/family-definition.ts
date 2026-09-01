@@ -21,8 +21,8 @@ const sourcePlan = Object.freeze({
 });
 const historySourcePlan = Object.freeze({
   sourcePlanId: ASTRA_HISTORY_SOURCE_PLAN_ID,
-  completeness: "contiguous-history" as const,
-  historyStartBlock: "0",
+  completeness: "rolling-observation" as const,
+  historyStartBlock: null,
   schemaHash: asSchemaRef(ASTRA_HISTORY_SOURCE_PLAN_SCHEMA_HASH),
   modulePath: `${moduleRoot}/history-source-plan.ts`,
   exportName: "ASTRA_HISTORY_SOURCE_PLAN_RUNTIME",

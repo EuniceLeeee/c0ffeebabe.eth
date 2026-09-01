@@ -28,8 +28,8 @@ export const EIGENPIE_SOURCE_PLAN = defineFamilySourcePlan({
 
 export const EIGENPIE_HISTORY_SOURCE_PLAN = defineFamilySourcePlan({
   sourcePlanId: EIGENPIE_HISTORY_SOURCE_PLAN_ID,
-  completeness: "contiguous-history",
-  historyStartBlock: "0",
+  completeness: "rolling-observation",
+  historyStartBlock: null,
   schemaHash: EIGENPIE_HISTORY_SOURCE_PLAN_SCHEMA_HASH,
 });
 
