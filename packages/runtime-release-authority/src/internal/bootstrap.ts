@@ -349,7 +349,14 @@ export function buildRuntimeComposition(
     familyRuntimeFactory: createReleaseFamilyRuntimeComposition,
     familyRuntimeComposition: familyRuntime,
     objectiveTemplates: input.objectiveTemplates,
-    executorQualification: infrastructure.executorQualification,
+    executorQualification: Object.freeze({
+      executorKind: infrastructure.executorQualification.executorKind,
+      engineBuildFingerprint: infrastructure.executorQualification.engineBuildFingerprint,
+      executableFingerprint: infrastructure.executorQualification.executableFingerprint,
+      qualifiedExecutorRegistryRoot: infrastructure.executorQualification.qualifiedExecutorRegistryRoot,
+      selectedExecutorLeafHash: infrastructure.executorQualification.selectedExecutorLeafHash,
+      releaseRoleManifestRoot: infrastructure.executorQualification.releaseRoleManifestRoot,
+    }),
     assertCurrent,
   });
 
