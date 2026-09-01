@@ -76,7 +76,7 @@ function decodeHistory(
     ) throw new TypeError("univ2 history predecessor chunk binding mismatch");
     return Object.freeze({ evidence, from: range.from, through: range.through, entries: decodeEntries(observed.response, BigInt(range.from), BigInt(range.through)) });
   }).sort((left, right) => BigInt(left.from) < BigInt(right.from) ? -1 : 1);
-  let expectedFrom = 0n;
+  let expectedFrom = BigInt(execution.from);
   for (const chunk of chunks) {
     if (BigInt(chunk.from) !== expectedFrom || BigInt(chunk.through) < expectedFrom || BigInt(chunk.through) - expectedFrom + 1n > CHUNK_BLOCKS) {
       throw new TypeError("univ2 history chunk coverage gap");
