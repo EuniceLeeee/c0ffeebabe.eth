@@ -1,18 +1,21 @@
 import {
   encodeCanonicalBytes,
+  enumSchema,
   gitSha40Schema,
   hashDomain,
   hashSchema,
   literalSchema,
   objectSchema,
+  readOwnEnumerableDataProperty,
   type Hash,
 } from "../../canonical-codec/src/index.ts";
 
 export const RUNTIME_AUTHORITY_BINDING_DOMAINS_V1 = Object.freeze({
   signedRelease: "aloha/runtime-authority/signed-release-binding/v1",
+  unsignedDryRun: "aloha/runtime-authority/unsigned-dry-run-binding/v1",
 } as const);
 
-export type RuntimeAuthorityClassV1 = "signed-release";
+export type RuntimeAuthorityClassV1 = "signed-release" | "unsigned-dry-run";
 
 export interface SignedReleaseRuntimeAuthorityInputV1 {
   readonly authorityClass: "signed-release";
@@ -26,9 +29,24 @@ export interface SignedReleaseRuntimeAuthorityDescriptorV1
   readonly authorityBindingHash: Hash;
 }
 
-export type RuntimeAuthorityInputV1 = SignedReleaseRuntimeAuthorityInputV1;
+export interface UnsignedDryRunRuntimeAuthorityInputV1 {
+  readonly authorityClass: "unsigned-dry-run";
+  readonly runtimeBindingId: Hash;
+  readonly implementationCommit: string;
+}
 
-export type RuntimeAuthorityDescriptorV1 = SignedReleaseRuntimeAuthorityDescriptorV1;
+export interface UnsignedDryRunRuntimeAuthorityDescriptorV1
+  extends UnsignedDryRunRuntimeAuthorityInputV1 {
+  readonly authorityBindingHash: Hash;
+}
+
+export type RuntimeAuthorityInputV1 =
+  | SignedReleaseRuntimeAuthorityInputV1
+  | UnsignedDryRunRuntimeAuthorityInputV1;
+
+export type RuntimeAuthorityDescriptorV1 =
+  | SignedReleaseRuntimeAuthorityDescriptorV1
+  | UnsignedDryRunRuntimeAuthorityDescriptorV1;
 
 /*
  * These descriptors are deliberately plain, cloneable facts. They carry no
@@ -39,7 +57,7 @@ export type RuntimeAuthorityDescriptorV1 = SignedReleaseRuntimeAuthorityDescript
 
 /** The only authority fact visible to the shared startup state machine. */
 export interface RuntimeAuthorityProjectionV1 {
-  readonly authorityClass: "signed-release";
+  readonly authorityClass: RuntimeAuthorityClassV1;
   readonly authorityBindingHash: Hash;
   readonly implementationCommit: string;
 }
@@ -59,18 +77,44 @@ const signedReleaseDescriptorSchema = objectSchema({
   authorityBindingHash: hashSchema,
 });
 
+const unsignedDryRunInputSchema = objectSchema({
+  authorityClass: literalSchema("unsigned-dry-run"),
+  runtimeBindingId: hashSchema,
+  implementationCommit: gitSha40Schema,
+});
+
+const unsignedDryRunDescriptorSchema = objectSchema({
+  authorityClass: literalSchema("unsigned-dry-run"),
+  runtimeBindingId: hashSchema,
+  implementationCommit: gitSha40Schema,
+  authorityBindingHash: hashSchema,
+});
+
+const runtimeAuthorityClassSchema = enumSchema(["signed-release", "unsigned-dry-run"] as const);
+
 export const runtimeAuthorityProjectionSchemaV1 = objectSchema({
-  authorityClass: literalSchema("signed-release"),
+  authorityClass: runtimeAuthorityClassSchema,
   authorityBindingHash: hashSchema,
   implementationCommit: gitSha40Schema,
 });
 
+function authorityClass(value: unknown, path: string): RuntimeAuthorityClassV1 {
+  return runtimeAuthorityClassSchema.decode(
+    readOwnEnumerableDataProperty(value, "authorityClass", path),
+    `${path}.authorityClass`,
+  );
+}
+
 function decodeInput(value: unknown, path: string): RuntimeAuthorityInputV1 {
-  return Object.freeze(signedReleaseInputSchema.decode(value, path));
+  return authorityClass(value, path) === "signed-release"
+    ? Object.freeze(signedReleaseInputSchema.decode(value, path))
+    : Object.freeze(unsignedDryRunInputSchema.decode(value, path));
 }
 
 function bindingHash(input: RuntimeAuthorityInputV1): Hash {
-  return hashDomain(RUNTIME_AUTHORITY_BINDING_DOMAINS_V1.signedRelease, input);
+  return input.authorityClass === "signed-release"
+    ? hashDomain(RUNTIME_AUTHORITY_BINDING_DOMAINS_V1.signedRelease, input)
+    : hashDomain(RUNTIME_AUTHORITY_BINDING_DOMAINS_V1.unsignedDryRun, input);
 }
 
 /** Hash an exact descriptor input under its authority-class-specific domain. */
@@ -88,9 +132,21 @@ export function createSignedReleaseRuntimeAuthorityDescriptorV1(
   }));
 }
 
-/** Exact-decode and verify the signed authority binding hash. */
+export function createUnsignedDryRunRuntimeAuthorityDescriptorV1(
+  value: UnsignedDryRunRuntimeAuthorityInputV1,
+): UnsignedDryRunRuntimeAuthorityDescriptorV1 {
+  const input = unsignedDryRunInputSchema.decode(value, "runtimeAuthority.unsignedDryRun");
+  return Object.freeze(unsignedDryRunDescriptorSchema.decode({
+    ...input,
+    authorityBindingHash: bindingHash(input),
+  }));
+}
+
+/** Exact-decode and verify the class-specific authority binding hash. */
 export function decodeRuntimeAuthorityDescriptorV1(value: unknown): RuntimeAuthorityDescriptorV1 {
-  const decoded = signedReleaseDescriptorSchema.decode(value, "runtimeAuthority.descriptor");
+  const decoded = authorityClass(value, "runtimeAuthority.descriptor") === "signed-release"
+    ? signedReleaseDescriptorSchema.decode(value, "runtimeAuthority.descriptor")
+    : unsignedDryRunDescriptorSchema.decode(value, "runtimeAuthority.descriptor");
   const { authorityBindingHash, ...input } = decoded;
   if (authorityBindingHash !== bindingHash(input)) {
     throw new TypeError("runtime authority binding hash mismatch");
@@ -101,7 +157,21 @@ export function decodeRuntimeAuthorityDescriptorV1(value: unknown): RuntimeAutho
 export function decodeSignedReleaseRuntimeAuthorityDescriptorV1(
   value: unknown,
 ): SignedReleaseRuntimeAuthorityDescriptorV1 {
-  return decodeRuntimeAuthorityDescriptorV1(value);
+  const descriptor = decodeRuntimeAuthorityDescriptorV1(value);
+  if (descriptor.authorityClass !== "signed-release") {
+    throw new TypeError("runtime authority descriptor is not signed-release");
+  }
+  return descriptor;
+}
+
+export function decodeUnsignedDryRunRuntimeAuthorityDescriptorV1(
+  value: unknown,
+): UnsignedDryRunRuntimeAuthorityDescriptorV1 {
+  const descriptor = decodeRuntimeAuthorityDescriptorV1(value);
+  if (descriptor.authorityClass !== "unsigned-dry-run") {
+    throw new TypeError("runtime authority descriptor is not unsigned-dry-run");
+  }
+  return descriptor;
 }
 
 export function encodeRuntimeAuthorityDescriptorV1(
