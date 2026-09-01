@@ -637,12 +637,18 @@ export function createRuntimeDiscoveryPort(input: {
             });
           },
         });
-        const raw = await binding.runtime.execute({
-          plan: binding.sourcePlanRef,
-          cutoff: canonicalCutoff,
-          previousAppliedThrough: predecessor?.runtime.execution.through ?? null,
-          predecessor: predecessor?.runtime ?? null,
-        }, physical, signal);
+        let raw;
+        try {
+          raw = await binding.runtime.execute({
+            plan: binding.sourcePlanRef,
+            cutoff: canonicalCutoff,
+            previousAppliedThrough: predecessor?.runtime.execution.through ?? null,
+            predecessor: predecessor?.runtime ?? null,
+          }, physical, signal);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new TypeError(`source plan runtime failed ${binding.familyId}/${binding.runtime.sourcePlanId}: ${message}`, { cause: error });
+        }
         input.assertCurrent();
         if (raw === null || typeof raw !== "object") throw new TypeError("source plan runtime returned an invalid result");
         const execution = decodeSourcePlanExecution(raw.execution, "sourcePlanRuntime.execution");
