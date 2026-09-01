@@ -12,7 +12,6 @@ import {
 } from "../../strategy-composition/src/index.ts";
 import {
   createGeneratedStrategyRuntimeFactory,
-  issueGeneratedStrategyRuntimeAuthorityCapability,
   issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability,
 } from "../../strategy-composition/src/internal/generated-runtime-composition.ts";
 import { compileStrategy, defineStrategy } from "../../strategy-sdk/src/index.ts";
@@ -22,7 +21,6 @@ import {
 } from "../../../strategies/route-cycle/src/index.ts";
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../../strategy-composition/src/internal/trigger-owner.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
   createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
@@ -64,13 +62,12 @@ const descriptor = sealGeneratedStrategyRuntimeDescriptor({
   proposedCapabilitySetRoot: h("test/planner/capabilities/v1", []),
   strategies: [entry],
 });
-const releaseProvenanceHash = h("test/planner/release-provenance/v1", 1);
-const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
-  authorityClass: "signed-release",
+const runtimeAuthorityDescriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+  authorityClass: "dry-run",
   runtimeBindingId: h("test/planner/runtime-binding/v1", 1),
-  releaseProvenanceHash,
   implementationCommit: "a".repeat(40),
-}));
+});
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(runtimeAuthorityDescriptor);
 
 function openComposition(
   runtimeDescriptor = descriptor,
@@ -81,15 +78,10 @@ function openComposition(
     descriptor: runtimeDescriptor,
     issuers: [issuer],
   });
-  const capability = issueGeneratedStrategyRuntimeAuthorityCapability({
+  const capability = issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
     factory,
-    qualifiedCapabilityRefsRoot: runtimeDescriptor.proposedCapabilitySetRoot,
-    runtimeAuthority: createSignedReleaseRuntimeAuthorityDescriptorV1({
-      authorityClass: "signed-release",
-      runtimeBindingId: h("test/planner/runtime-binding/v1", 1),
-      releaseProvenanceHash,
-      implementationCommit: "a".repeat(40),
-    }),
+    declaredCapabilitySetRoot: runtimeDescriptor.proposedCapabilitySetRoot,
+    runtimeAuthority: runtimeAuthorityDescriptor,
     assertCurrent,
   });
   return factory(capability);
@@ -101,52 +93,10 @@ const binding: StrategyGraphBindingV1 = Object.freeze({
   definitionCatalogRoot: descriptor.definitionCatalogRoot,
   graphRoot: h("test/planner/graph/v1", 1),
   readyRecordHash: h("test/planner/ready/v1", 1),
-  releaseProvenanceHash,
+  runtimeMembershipHash: composition.runtimeMembershipHash,
   runtimeAuthority,
   sourceHash: h("test/planner/source/v1", 1),
 });
-
-function unsignedProblem(edges: readonly StrategyGraphEdgeV1[]): IssuedStrategyPlanningProblemV1 {
-  const factory = createGeneratedStrategyRuntimeFactory({
-    descriptor,
-    issuers: [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
-  });
-  const unsignedAuthority = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
-    authorityClass: "unsigned-dry-run",
-    runtimeBindingId: h("test/planner/unsigned-runtime-binding/v1", 1),
-    implementationCommit: "b".repeat(40),
-  });
-  const unsignedComposition = factory(issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
-    factory,
-    declaredCapabilitySetRoot: descriptor.proposedCapabilitySetRoot,
-    runtimeAuthority: unsignedAuthority,
-    assertCurrent: () => {},
-  }));
-  const unsignedBinding: StrategyGraphBindingV1 = Object.freeze({
-    generationId: "generation-unsigned-1",
-    definitionCatalogRoot: descriptor.definitionCatalogRoot,
-    graphRoot: h("test/planner/unsigned-graph/v1", 1),
-    readyRecordHash: h("test/planner/unsigned-ready/v1", 1),
-    runtimeMembershipHash: unsignedComposition.runtimeMembershipHash!,
-    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(unsignedAuthority),
-    sourceHash: h("test/planner/unsigned-source/v1", 1),
-  });
-  const entryAssetRef = edges[0]?.inputAssetPorts[0]?.assetRef ?? asset("missing-entry");
-  return unsignedComposition.issuePlanningProblems({
-    binding: unsignedBinding,
-    edges,
-    trigger: issueStrategyPlanningTriggerCapabilityV1({
-      binding: unsignedBinding,
-      lane: "blockscan",
-      triggerRef: h("test/planner/unsigned-trigger/v1", 1),
-      objectiveRef: planningObjectiveRef,
-      entryAssetRef,
-      returnAssetRef: entryAssetRef,
-      affectedEdgeIds: [],
-      correlationId: h("test/planner/unsigned-correlation/v1", 1),
-    }),
-  })[0]!;
-}
 
 function edge(id: string, inputs: readonly string[], outputs: readonly string[]): StrategyGraphEdgeV1 {
   return edgeWithAssetRefs(id, inputs.map(asset), outputs.map(asset));
@@ -235,11 +185,16 @@ function problemWithCandidateLimit(
     ...ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER,
     planningTemplateHash,
   });
-  return openComposition(limitedDescriptor, limitedIssuer).issuePlanningProblems({
-    binding,
+  const limitedComposition = openComposition(limitedDescriptor, limitedIssuer);
+  const limitedBinding = Object.freeze({
+    ...binding,
+    runtimeMembershipHash: limitedComposition.runtimeMembershipHash,
+  });
+  return limitedComposition.issuePlanningProblems({
+    binding: limitedBinding,
     edges,
     trigger: issueStrategyPlanningTriggerCapabilityV1({
-      binding,
+      binding: limitedBinding,
       lane: "blockscan",
       triggerRef: h("test/planner/trigger/v1", `limit:${candidateLimit}`),
       objectiveRef: planningObjectiveRef,
@@ -286,12 +241,12 @@ test("enumerates one canonical directed cycle and binds exact asset ports", () =
   });
 });
 
-test("enumerates the same generated problem under unsigned dry-run authority", () => {
+test("enumerates the generated problem under unsigned dry-run authority", () => {
   const edges = [edge("unsigned-ab", ["a"], ["b"]), edge("unsigned-ba", ["b"], ["a"])];
-  const planningProblem = unsignedProblem(edges);
+  const planningProblem = problem(edges);
   const result = enumerateClosedLoopPlanningProblem({ problem: planningProblem });
   assert.equal(result.candidates.length, 1);
-  assert.equal(result.planningProblem.runtimeAuthority.authorityClass, "unsigned-dry-run");
+  assert.equal(result.planningProblem.runtimeAuthority.authorityClass, "dry-run");
   assert.equal(typeof result.planningProblem.runtimeMembershipHash, "string");
   assert.equal(Object.prototype.hasOwnProperty.call(result.planningProblem, "releaseProvenanceHash"), false);
 });
@@ -373,7 +328,7 @@ test("enumeration retains the complete owner-issued Strategy binding for downstr
   assert.equal(enumeration.planningProblem, planningProblem);
   assert.deepEqual({
     generationId: enumeration.planningProblem.generationId,
-    releaseProvenanceHash: enumeration.planningProblem.releaseProvenanceHash,
+    runtimeMembershipHash: enumeration.planningProblem.runtimeMembershipHash,
     objectiveRef: enumeration.planningProblem.objectiveRef,
     readyRecordHash: enumeration.planningProblem.readyRecordHash,
     strategyCompositionRoot: enumeration.planningProblem.strategyCompositionRoot,
@@ -381,7 +336,7 @@ test("enumeration retains the complete owner-issued Strategy binding for downstr
     triggerHeadHash: enumeration.planningProblem.triggerHeadHash,
   }, {
     generationId: binding.generationId,
-    releaseProvenanceHash: binding.releaseProvenanceHash,
+    runtimeMembershipHash: binding.runtimeMembershipHash,
     objectiveRef: planningObjectiveRef,
     readyRecordHash: binding.readyRecordHash,
     strategyCompositionRoot: composition.compositionRoot,

@@ -147,7 +147,7 @@ export class RethCanonicalHeaderProviderV1 implements CanonicalHeaderProvider {
   async #readBlock(tag: string, signal?: AbortSignal): Promise<CanonicalHeader | null> {
     const chainIdHex = await this.#rpc("eth_chainId", [], signal);
     const chainId = quantity(chainIdHex, "Reth eth_chainId");
-    if (chainId !== this.#config.chainId) throw new Error("Reth chain id does not match release configuration");
+    if (chainId !== this.#config.chainId) throw new Error("Reth chain id does not match runtime configuration");
     const result = await this.#rpc("eth_getBlockByNumber", [tag, false], signal);
     const decoded = exactHeader(result, tag === "latest" ? null : BigInt(tag).toString());
     if (decoded === null) return null;

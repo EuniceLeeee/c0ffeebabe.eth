@@ -1,27 +1,21 @@
 import {
-  decodeUnsignedDryRunRuntimeAuthorityDescriptorV1,
-  type UnsignedDryRunRuntimeAuthorityDescriptorV1,
+  decodeRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityDescriptorV1,
 } from "../../../runtime-authority/src/index.ts";
 import type { RuntimeAuthorityV1 } from "../index.ts";
 import {
   registerRuntimeReleaseAuthority,
-  type UnsignedDryRunRuntimeAuthorityStateV1,
+  type RuntimeAuthorityStateV1,
 } from "./state.ts";
 import { issueCurrentRuntimeAuthorityPort } from "./ready-binding-owner.ts";
 
-/**
- * Private bootstrap edge for a zero-signature dry-run.  The caller must have
- * derived the descriptor from the exact admitted deployment payload.  This
- * function issues only a process-local lifetime fence; it cannot resolve,
- * rotate, or upgrade into a signed release.
- */
-export function issueUnsignedDryRunRuntimeAuthorityV1(
-  descriptorValue: UnsignedDryRunRuntimeAuthorityDescriptorV1,
+/** Issue the process-local lifetime fence for one exact runtime. */
+export function issueRuntimeAuthorityInternalV1(
+  descriptorValue: RuntimeAuthorityDescriptorV1,
 ): RuntimeAuthorityV1 {
-  const descriptor = decodeUnsignedDryRunRuntimeAuthorityDescriptorV1(descriptorValue);
+  const descriptor = decodeRuntimeAuthorityDescriptorV1(descriptorValue);
   const capability = Object.freeze(Object.create(null));
-  const state: UnsignedDryRunRuntimeAuthorityStateV1 = {
-    authorityClass: "unsigned-dry-run",
+  const state: RuntimeAuthorityStateV1 = {
     descriptor,
     active: true,
     version: 0n,

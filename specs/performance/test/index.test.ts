@@ -236,7 +236,7 @@ test("candidate terminal schema binds head and correlation and forbids false six
     headRecordId: h("2"),
     candidateId: h("3"),
     correlationRoot: h("4"),
-    mode: "unsigned-dry-run" as const,
+    mode: "dry-run" as const,
     evidenceRoot: h("7"),
   };
   const completed = createCandidateTerminalReceipt({
@@ -278,13 +278,13 @@ test("candidate terminal schema binds head and correlation and forbids false six
     ...notRun,
     outcome: "policy-rejected",
     sixStepCompleted: true,
-    sixStepMode: "unsigned-dry-run",
+    sixStepMode: "dry-run",
     sixStepEvidenceRoot: h("7"),
     sixStepCompletionRoot: h("7"),
   } as never), /only verified candidates/);
   assert.throws(() => createCandidateTerminalReceipt({
     ...notRun,
-    sixStepMode: "unsigned-dry-run",
+    sixStepMode: "dry-run",
     sixStepEvidenceRoot: h("7"),
     sixStepCompletionRoot: h("7"),
   } as never));

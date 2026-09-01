@@ -285,7 +285,7 @@ export async function issueSearcherProductionSixStepPerformanceAppendCapabilityV
   const retainedTerminal = retained[0]!;
   const searchTerminalCapability = retainedTerminal.terminal;
   const searchTerminal = readIssuedSearchTerminalCapabilityV1(searchTerminalCapability);
-  if (searchTerminal.kind !== "unsigned-dry-run") throw new TypeError("Six-Step complete append requires the successful search terminal");
+  if (searchTerminal.kind !== "dry-run") throw new TypeError("Six-Step complete append requires the successful search terminal");
 
   const observedRuntimeFacts = input.performanceRuntime.readClaim(input.performanceClaim);
   const claimBinding = input.performanceRuntime.readClaimBinding(input.performanceClaim);

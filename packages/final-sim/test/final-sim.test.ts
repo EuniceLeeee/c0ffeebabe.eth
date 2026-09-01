@@ -530,7 +530,7 @@ test("search pipeline accepts only the exact qualified final-sim rejection capab
     finalSimulation,
     economicSafety,
     sixStepArtifacts: createProductionSixStepTailFixture([]),
-    unsignedDryRun: { issue: () => { throw new Error("qualified rejection must not issue dry-run"); } },
+    dryRun: { issue: () => { throw new Error("qualified rejection must not issue dry-run"); } },
   };
   const resolvedInput = {
     lease: lease as never,

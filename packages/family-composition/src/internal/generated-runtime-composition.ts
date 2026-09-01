@@ -42,12 +42,10 @@ import {
 import type { SourcePlanRefV1 } from "../../../discovery/src/index.ts";
 import {
   decodeRuntimeAuthorityProjectionV1,
-  decodeSignedReleaseRuntimeAuthorityDescriptorV1,
-  decodeUnsignedDryRunRuntimeAuthorityDescriptorV1,
+  decodeRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityDescriptorV1,
   type RuntimeAuthorityProjectionV1,
-  type SignedReleaseRuntimeAuthorityDescriptorV1,
-  type UnsignedDryRunRuntimeAuthorityDescriptorV1,
 } from "../../../runtime-authority/src/index.ts";
 import type {
   FamilySearchAdapterFactoryV1,
@@ -71,9 +69,8 @@ import {
 } from "../../../coarse-economics/src/index.ts";
 
 /**
- * A release-owned Family runtime capability is intentionally opaque.  The
- * candidate tree has no minting path for this value while the release
- * authority is unqualified; a generated composition therefore cannot be
+ * A runtime-owned Family capability is intentionally opaque. A generated
+ * composition therefore cannot be
  * opened with a hand-written array of authority bindings.
  *
  * The non-exported symbol is a type-level extra guard.  Runtime validation is
@@ -105,8 +102,8 @@ export type GeneratedFamilyRuntimeFactoryV1 = (
  * Internal release-owner metadata for one generated factory.  It is kept in
  * a WeakMap keyed by the branded factory, never on the public function
  * object, so an application cannot replace a root by copying fields.  The
- * final runtime release must exact-join `proposedCapabilitySetRoot` to its
- * signed binding; these values are descriptors only and grant no authority.
+ * runtime owner exact-joins `proposedCapabilitySetRoot` to its implementation
+ * binding; these values are descriptors only and grant no authority.
  */
 export interface GeneratedFamilyRuntimeFactoryMetadataV1 {
   readonly proposedCapabilitySetRoot: Hash;
@@ -138,15 +135,13 @@ interface GeneratedFamilyRuntimeAuthorityStateV1 {
   readonly factory: GeneratedFamilyRuntimeFactoryV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly runtimeMembershipHash: Hash;
-  readonly releaseProvenanceHash?: Hash;
   readonly authorities: readonly GeneratedFamilyRuntimeAuthorityBindingV1[];
-  readonly nominationQualifications?: ReadonlyMap<Hash, Hash>;
   readonly assertCurrent: () => void;
 }
 
-export interface GeneratedFamilyUnsignedDryRunAuthorityRegistrationV1 {
+export interface GeneratedFamilyRuntimeAuthorityRegistrationV1 {
   readonly factory: GeneratedFamilyRuntimeFactoryV1;
-  readonly runtimeAuthority: UnsignedDryRunRuntimeAuthorityDescriptorV1;
+  readonly runtimeAuthority: RuntimeAuthorityDescriptorV1;
   /** Exact generated proposal root. This is declared membership, not qualification. */
   readonly declaredCapabilitySetRoot: Hash;
   readonly nominationProgramSetRoot: Hash;
@@ -157,25 +152,11 @@ export interface GeneratedFamilyUnsignedDryRunAuthorityRegistrationV1 {
 /**
  * This is an owner-only hand-off from runtime-release-authority.  The
  * generated Family module never accepts a descriptor, authority array, or
- * caller supplied release root from the application.  The owner has already
- * joined those facts to the externally signed runtime binding before calling
- * this function; the callback keeps the capability fenced after rotation or
+ * caller supplied authority root from the application. The owner joins those
+ * facts to the runtime binding before calling this function; the callback
+ * keeps the capability fenced after rotation or
  * revoke.
  */
-export interface GeneratedFamilyRuntimeAuthorityRegistrationV1 {
-  readonly factory: GeneratedFamilyRuntimeFactoryV1;
-  readonly runtimeAuthority: SignedReleaseRuntimeAuthorityDescriptorV1;
-  /** Root carried by the signed runtime binding and exact-joined to the generated descriptor. */
-  readonly qualifiedCapabilityRefsRoot: Hash;
-  readonly nominationProgramSetRoot: Hash;
-  readonly nominationQualifications: readonly Readonly<{
-    readonly proposalLeafDigest: Hash;
-    readonly qualificationLeafDigest: Hash;
-  }>[];
-  readonly authorities: readonly GeneratedFamilyRuntimeAuthorityBindingV1[];
-  readonly assertCurrent: () => void;
-}
-
 const issuedAuthorities = new WeakMap<object, GeneratedFamilyRuntimeAuthorityStateV1>();
 const generatedFactories = new WeakSet<object>();
 const generatedFactoryMetadata = new WeakMap<object, GeneratedFamilyRuntimeFactoryMetadataV1>();
@@ -262,7 +243,7 @@ export function readGeneratedFamilyRuntimeAdapterFactories(
 
 /** Exact generated physical denominator.  It is read only by the deployment
  * runtime owner, which supplies the neutral RPC transport and stamps the
- * returned source-less facts with scheduler/release authority. */
+ * returned source-less facts with scheduler/runtime authority. */
 export function readGeneratedFamilyPhysicalLifecycleAdapters(
   value: unknown,
 ): readonly Readonly<GeneratedFamilyPhysicalLifecycleBindingV1>[] {
@@ -335,39 +316,9 @@ export async function executeGeneratedFamilyPhysicalLifecycle(
 
 /**
  * Owner-only runtime read. A source-plan callback is available only after the
- * same generated factory and opaque release capability have been joined.
+ * same generated factory and opaque runtime capability have been joined.
  */
-export function readGeneratedFamilySourcePlanRuntimes(
-  factory: GeneratedFamilyRuntimeFactoryV1,
-  capability: GeneratedFamilyRuntimeAuthorityCapabilityV1,
-): readonly Readonly<{
-  readonly familyId: string;
-  readonly familyDefinitionHash: Hash;
-  readonly sourcePlanRef: SourcePlanRefV1;
-  readonly sourcePlanLeafDigest: Hash;
-  readonly sourcePlanSchemaHash: Hash;
-  readonly sourcePlanClosureRoot: Hash;
-  readonly runtime: FamilySourcePlanRuntimeV1;
-  readonly nominationProgram: FamilySourcePlanNominationProgramV1;
-  readonly nominationProgramRoot: Hash;
-  readonly nominationProgramProposalLeafDigest: Hash;
-  readonly nominationQualificationLeafDigest: Hash;
-}>[] {
-  const authority = authorityStateFor(factory, capability);
-  if (authority.runtimeAuthority.authorityClass !== "signed-release") {
-    throw new TypeError("generated Family nomination qualification is unavailable in unsigned dry-run");
-  }
-  const plans = generatedFactorySourcePlans.get(factory);
-  if (plans === undefined) throw new TypeError("generated Family source plan runtime is unavailable");
-  return Object.freeze(plans.map(plan => {
-    const nominationQualificationLeafDigest = authority.nominationQualifications?.get(plan.nominationProgramProposalLeafDigest);
-    if (nominationQualificationLeafDigest === undefined) throw new TypeError("generated Family nomination qualification is unavailable");
-    return Object.freeze({ ...plan, nominationQualificationLeafDigest });
-  }));
-}
-
-/** Exact generated source-plan/program declarations. Unlike the signed read,
- * this carries no qualification leaf and is valid for both authority modes. */
+/** Exact generated source-plan/program declarations for the runtime. */
 export function readGeneratedFamilySourcePlanDeclarations(
   factory: GeneratedFamilyRuntimeFactoryV1,
   capability: GeneratedFamilyRuntimeAuthorityCapabilityV1,
@@ -395,13 +346,11 @@ export function readGeneratedFamilyRuntimeMembership(
 ): Readonly<{
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly runtimeMembershipHash: Hash;
-  readonly releaseProvenanceHash?: Hash;
 }> {
   const authority = authorityStateFor(factory, capability);
   return Object.freeze({
     runtimeAuthority: authority.runtimeAuthority,
     runtimeMembershipHash: authority.runtimeMembershipHash,
-    ...(authority.releaseProvenanceHash === undefined ? {} : { releaseProvenanceHash: authority.releaseProvenanceHash }),
   });
 }
 
@@ -427,11 +376,11 @@ function authoritiesFor(
   return state.authorities;
 }
 
-function unsignedRuntimeMembershipHash(
+function runtimeMembershipHash(
   metadata: GeneratedFamilyRuntimeFactoryMetadataV1,
   runtimeAuthority: RuntimeAuthorityProjectionV1,
 ): Hash {
-  return hashDomain("aloha/generated-family-runtime-unsigned-membership/v1", {
+  return hashDomain("aloha/generated-family-runtime-membership/v1", {
     runtimeAuthority,
     proposedCapabilitySetRoot: metadata.proposedCapabilitySetRoot,
     nominationProgramSetRoot: metadata.nominationProgramSetRoot,
@@ -478,60 +427,13 @@ function snapshotAuthorities(
  * kept out of the package root: application code can only consume the
  * already-issued opaque capability through the generated factory.
  */
+/** Owner-only hand-off. The capability is bound to the exact generated
+ * declaration and program roots. */
 export function issueGeneratedFamilyRuntimeAuthorityCapability(
   input: GeneratedFamilyRuntimeAuthorityRegistrationV1,
 ): GeneratedFamilyRuntimeAuthorityCapabilityV1 {
   if (input === null || typeof input !== "object" || typeof input.assertCurrent !== "function") {
-    throw new TypeError("Family runtime production authority is unavailable");
-  }
-  assertGeneratedFamilyRuntimeFactory(input.factory);
-  const metadata = generatedFactoryMetadata.get(input.factory);
-  if (metadata === undefined) throw new TypeError("Family runtime factory metadata is unavailable");
-  assertHash(input.qualifiedCapabilityRefsRoot, "qualifiedCapabilityRefsRoot");
-  const signedAuthority = decodeSignedReleaseRuntimeAuthorityDescriptorV1(input.runtimeAuthority);
-  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(signedAuthority);
-  if (metadata.proposedCapabilitySetRoot !== input.qualifiedCapabilityRefsRoot) {
-    throw new TypeError("Family runtime factory is not bound to this release capability set");
-  }
-  assertHash(input.nominationProgramSetRoot, "nominationProgramSetRoot");
-  if (metadata.nominationProgramSetRoot !== input.nominationProgramSetRoot) {
-    throw new TypeError("Family runtime factory is not bound to this nomination program set");
-  }
-  if (!Array.isArray(input.nominationQualifications)) throw new TypeError("nomination qualifications are required");
-  const proposalLeaves = generatedFactorySourcePlans.get(input.factory)?.map(plan => plan.nominationProgramProposalLeafDigest) ?? [];
-  const nominationQualifications = new Map<Hash, Hash>();
-  for (const [index, entry] of input.nominationQualifications.entries()) {
-    assertHash(entry.proposalLeafDigest, `nominationQualifications[${index}].proposalLeafDigest`);
-    assertHash(entry.qualificationLeafDigest, `nominationQualifications[${index}].qualificationLeafDigest`);
-    if (nominationQualifications.has(entry.proposalLeafDigest)) throw new TypeError("duplicate nomination qualification proposal");
-    nominationQualifications.set(entry.proposalLeafDigest, entry.qualificationLeafDigest);
-  }
-  if (proposalLeaves.length !== nominationQualifications.size || proposalLeaves.some(leaf => !nominationQualifications.has(leaf))) {
-    throw new TypeError("nomination qualification set does not cover the generated program set");
-  }
-  input.assertCurrent();
-  const capability = Object.freeze(Object.create(null)) as GeneratedFamilyRuntimeAuthorityCapabilityV1;
-  issuedAuthorities.set(capability, Object.freeze({
-    factory: input.factory,
-    runtimeAuthority,
-    runtimeMembershipHash: signedAuthority.releaseProvenanceHash,
-    releaseProvenanceHash: signedAuthority.releaseProvenanceHash,
-    authorities: snapshotAuthorities(input.authorities),
-    nominationQualifications,
-    assertCurrent: input.assertCurrent,
-  }));
-  return capability;
-}
-
-
-/** Owner-only unsigned dry-run hand-off. The capability is bound to the exact
- * generated declaration and program roots, but contains no qualification
- * leaves, release approval, or signature claim. */
-export function issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability(
-  input: GeneratedFamilyUnsignedDryRunAuthorityRegistrationV1,
-): GeneratedFamilyRuntimeAuthorityCapabilityV1 {
-  if (input === null || typeof input !== "object" || typeof input.assertCurrent !== "function") {
-    throw new TypeError("Family unsigned dry-run authority is unavailable");
+    throw new TypeError("Family runtime authority is unavailable");
   }
   assertGeneratedFamilyRuntimeFactory(input.factory);
   const metadata = generatedFactoryMetadata.get(input.factory);
@@ -545,14 +447,14 @@ export function issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability(
     throw new TypeError("Family runtime factory is not bound to this nomination program set");
   }
   const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
-    decodeUnsignedDryRunRuntimeAuthorityDescriptorV1(input.runtimeAuthority),
+    decodeRuntimeAuthorityDescriptorV1(input.runtimeAuthority),
   );
   input.assertCurrent();
   const capability = Object.freeze(Object.create(null)) as GeneratedFamilyRuntimeAuthorityCapabilityV1;
   issuedAuthorities.set(capability, Object.freeze({
     factory: input.factory,
     runtimeAuthority,
-    runtimeMembershipHash: unsignedRuntimeMembershipHash(metadata, runtimeAuthority),
+    runtimeMembershipHash: runtimeMembershipHash(metadata, runtimeAuthority),
     authorities: snapshotAuthorities(input.authorities),
     assertCurrent: input.assertCurrent,
   }));
@@ -863,7 +765,7 @@ async function issueGeneratedSearchCoarseEvidence(
   }
 
   const seam = state.routeComposition.resolveCoarseProjection(descriptor.familyDefinitionHash);
-  if (seam === null) throw new TypeError("Family signed coarse owner is unavailable");
+  if (seam === null) throw new TypeError("Family coarse owner is unavailable");
   const rawCapability = await state.routeComposition.issueCoarseProjection(seam.producer, request);
   const familyObservation = state.routeComposition.readCoarseProjectionObservation(seam.producer, rawCapability);
   const qualified = readQualifiedCoarseProjectionV1({ service: seam.service, capability: rawCapability });
@@ -937,7 +839,7 @@ export function readGeneratedFamilySearchRuntimePort(
 /**
  * Called only by generated runtime output.  The descriptor and all named
  * imports are closed over here; callers receive only the generated factory
- * and an opaque release capability.
+ * and an opaque runtime capability.
  */
 export function createGeneratedFamilyRuntimeFactory(
   assembly: GeneratedFamilyRuntimeAssemblyV1,

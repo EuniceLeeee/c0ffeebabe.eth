@@ -29,7 +29,6 @@ import type { EconomicSafetyPolicyRejectionCodeV1 } from "./policy-rejection.ts"
 import {
   decodeRuntimeAuthorityProjectionV1,
   type RuntimeAuthorityProjectionV1,
-  type RuntimeReleaseProvenanceHashV1,
 } from "../../runtime-authority/src/index.ts";
 
 export type { EconomicValuationFactV1 } from "../../../specs/economic-valuation-owner/src/index.ts";
@@ -37,7 +36,6 @@ export type { EconomicValuationFactV1 } from "../../../specs/economic-valuation-
 export interface EconomicSafetySourceV1 extends EconomicValuationSourceV1 {}
 
 export interface EconomicSafetyFinalizationInputV1 {
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly correlationId: Hash;
   readonly generationId: string;
   readonly source: EconomicSafetySourceV1;
@@ -119,7 +117,6 @@ export interface EconomicSafetyEvidenceV1 {
   readonly authorityRoot: Hash;
   readonly implementationHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly correlationId: Hash;
   readonly generationId: string;
   readonly source: EconomicSafetySourceV1;
@@ -152,7 +149,6 @@ export interface EconomicSafetyChainRejectionV1 {
   readonly authorityRoot: Hash;
   readonly implementationHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly correlationId: Hash;
   readonly generationId: string;
   readonly source: EconomicSafetySourceV1;
@@ -187,7 +183,6 @@ export interface EconomicSafetyEvidenceAuthorityExpectationV1 {
   readonly authorityRoot: Hash;
   readonly implementationHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
 }
 
 export interface EconomicSafetyDecisionV1 {
@@ -225,27 +220,10 @@ function positiveHash(value: unknown, path: string): Hash {
   return result;
 }
 
-function releaseProvenanceHash(
-  value: unknown,
-  path: string,
-): RuntimeReleaseProvenanceHashV1 {
-  return value === null ? null : positiveHash(value, path);
-}
-
 function runtimeAuthorityBinding(
   runtimeValue: unknown,
-  provenanceValue: unknown,
-  path: string,
-): Readonly<{
-  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
-}> {
-  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(runtimeValue);
-  const provenance = releaseProvenanceHash(provenanceValue, `${path}.releaseProvenanceHash`);
-  if ((runtimeAuthority.authorityClass === "signed-release") !== (provenance !== null)) {
-    throw new TypeError(`${path} runtime authority class/provenance mismatch`);
-  }
-  return deepFreeze({ runtimeAuthority, releaseProvenanceHash: provenance });
+): RuntimeAuthorityProjectionV1 {
+  return decodeRuntimeAuthorityProjectionV1(runtimeValue);
 }
 
 function source(value: unknown, path: string): EconomicSafetySourceV1 {
@@ -289,7 +267,7 @@ function declaredObligations(value: unknown): readonly EconomicSafetyDeclaredObl
 
 export function normalizeEconomicSafetyFinalizationInputV1(value: unknown): EconomicSafetyFinalizationInputV1 {
   assertPlainObject(value, "economicSafety.input");
-  assertExactKeys(value, ["releaseProvenanceHash", "correlationId", "generationId", "source", "objectiveRef", "exactHash", "programHash", "obligationRoot", "finalSimulationReceiptHash", "effectsHash", "executionOwnerEvidenceRoot", "finalSimulationOwnerEvidenceRoot", "dryRun", "executionOwnerFacts", "finalSimulationOwnerFacts", "declaredObligations"], "economicSafety.input");
+  assertExactKeys(value, ["correlationId", "generationId", "source", "objectiveRef", "exactHash", "programHash", "obligationRoot", "finalSimulationReceiptHash", "effectsHash", "executionOwnerEvidenceRoot", "finalSimulationOwnerEvidenceRoot", "dryRun", "executionOwnerFacts", "finalSimulationOwnerFacts", "declaredObligations"], "economicSafety.input");
   const record = value as Record<string, unknown>;
   if (record.dryRun !== true) throw new TypeError("economicSafety.input.dryRun must be true");
   const normalizedDeclarations = declaredObligations(record.declaredObligations);
@@ -298,7 +276,6 @@ export function normalizeEconomicSafetyFinalizationInputV1(value: unknown): Econ
     throw new TypeError("economicSafety.input declared obligations do not close the program obligation root");
   }
   return deepFreeze({
-    releaseProvenanceHash: releaseProvenanceHash(record.releaseProvenanceHash, "economicSafety.input.releaseProvenanceHash"),
     correlationId: positiveHash(record.correlationId, "economicSafety.input.correlationId"),
     generationId: assertNonEmptyString(record.generationId, "economicSafety.input.generationId"),
     source: source(record.source, "economicSafety.input.source"),
@@ -472,20 +449,15 @@ export function validateEconomicSafetyEvidenceV1(
   authority?: EconomicSafetyEvidenceAuthorityExpectationV1,
 ): EconomicSafetyEvidenceV1 {
   assertPlainObject(value, "economicSafety.evidence");
-  assertExactKeys(value, ["schemaVersion", "kind", "authorityRoot", "implementationHash", "runtimeAuthority", "releaseProvenanceHash", "correlationId", "generationId", "source", "objectiveRef", "exactHash", "programHash", "obligationRoot", "finalSimulationReceiptHash", "effectsHash", "executionOwnerEvidenceRoot", "finalSimulationOwnerEvidenceRoot", "executionOwnerFacts", "executionOwnerFactsRoot", "finalSimulationOwnerFacts", "finalSimulationOwnerFactsRoot", "declaredObligations", "declaredObligationSetRoot", "economic", "safety", "dryRun", "evidenceRoot"], "economicSafety.evidence");
+  assertExactKeys(value, ["schemaVersion", "kind", "authorityRoot", "implementationHash", "runtimeAuthority", "correlationId", "generationId", "source", "objectiveRef", "exactHash", "programHash", "obligationRoot", "finalSimulationReceiptHash", "effectsHash", "executionOwnerEvidenceRoot", "finalSimulationOwnerEvidenceRoot", "executionOwnerFacts", "executionOwnerFactsRoot", "finalSimulationOwnerFacts", "finalSimulationOwnerFactsRoot", "declaredObligations", "declaredObligationSetRoot", "economic", "safety", "dryRun", "evidenceRoot"], "economicSafety.evidence");
   if (value.schemaVersion !== 1 || value.kind !== "aloha.economic-safety-finalization-evidence-v1" || value.dryRun !== true) throw new TypeError("economic safety evidence kind/version/dryRun mismatch");
   const normalizedInput = normalizeEconomicSafetyFinalizationInputV1(expected);
-  const evidenceAuthority = runtimeAuthorityBinding(
-    value.runtimeAuthority,
-    value.releaseProvenanceHash,
-    "economicSafety.evidence",
-  );
+  const evidenceAuthority = runtimeAuthorityBinding(value.runtimeAuthority);
   if (authority !== undefined && (
     value.authorityRoot !== positiveHash(authority.authorityRoot, "economicSafety.expected.authorityRoot")
     || value.implementationHash !== positiveHash(authority.implementationHash, "economicSafety.expected.implementationHash")
-    || encodeCanonicalJson(evidenceAuthority.runtimeAuthority) !== encodeCanonicalJson(authority.runtimeAuthority)
-    || evidenceAuthority.releaseProvenanceHash !== authority.releaseProvenanceHash
-  )) throw new TypeError("economic safety evidence release authority binding mismatch");
+    || encodeCanonicalJson(evidenceAuthority) !== encodeCanonicalJson(authority.runtimeAuthority)
+  )) throw new TypeError("economic safety evidence runtime authority binding mismatch");
   const { receiptRoot: suppliedEconomicReceiptRoot, ...economicDecision } = value.economic;
   const normalizedEconomic = economic(economicDecision);
   if (normalizedEconomic.profitAsset.identity.chainId !== normalizedInput.source.chainId) throw new TypeError("economic safety profit asset chain mismatch");
@@ -515,8 +487,7 @@ export function validateEconomicSafetyEvidenceV1(
     kind: "aloha.economic-safety-finalization-evidence-v1" as const,
     authorityRoot: positiveHash(value.authorityRoot, "economicSafety.evidence.authorityRoot"),
     implementationHash: positiveHash(value.implementationHash, "economicSafety.evidence.implementationHash"),
-    runtimeAuthority: evidenceAuthority.runtimeAuthority,
-    releaseProvenanceHash: evidenceAuthority.releaseProvenanceHash,
+    runtimeAuthority: evidenceAuthority,
     correlationId: positiveHash(value.correlationId, "economicSafety.evidence.correlationId"),
     generationId: assertNonEmptyString(value.generationId, "economicSafety.evidence.generationId"),
     source: source(value.source, "economicSafety.evidence.source"),
@@ -538,7 +509,7 @@ export function validateEconomicSafetyEvidenceV1(
     safety: normalizedSafety,
     dryRun: true as const,
   };
-  for (const key of ["releaseProvenanceHash", "correlationId", "generationId", "objectiveRef", "exactHash", "programHash", "obligationRoot", "finalSimulationReceiptHash", "effectsHash", "executionOwnerEvidenceRoot", "finalSimulationOwnerEvidenceRoot"] as const) if (body[key] !== normalizedInput[key]) throw new TypeError(`economic safety evidence ${key} mismatch`);
+  for (const key of ["correlationId", "generationId", "objectiveRef", "exactHash", "programHash", "obligationRoot", "finalSimulationReceiptHash", "effectsHash", "executionOwnerEvidenceRoot", "finalSimulationOwnerEvidenceRoot"] as const) if (body[key] !== normalizedInput[key]) throw new TypeError(`economic safety evidence ${key} mismatch`);
   if (JSON.stringify(body.source) !== JSON.stringify(normalizedInput.source)) throw new TypeError("economic safety evidence source mismatch");
   if (JSON.stringify(body.executionOwnerFacts) !== JSON.stringify(normalizedInput.executionOwnerFacts)
     || JSON.stringify(body.finalSimulationOwnerFacts) !== JSON.stringify(normalizedInput.finalSimulationOwnerFacts)
@@ -563,25 +534,18 @@ function economicSafetyChainRejectionBody(
     readonly authorityRoot: Hash;
     readonly implementationHash: Hash;
     readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-    readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
     readonly input: EconomicSafetyFinalizationInputV1;
     readonly code: EconomicSafetyPolicyRejectionCodeV1;
   },
 ): Omit<EconomicSafetyChainRejectionV1, "evidenceRoot"> {
   const normalized = normalizeEconomicSafetyFinalizationInputV1(inputValue.input);
-  if (normalized.releaseProvenanceHash !== inputValue.releaseProvenanceHash) throw new TypeError("economic safety rejection release provenance mismatch");
-  const authority = runtimeAuthorityBinding(
-    inputValue.runtimeAuthority,
-    inputValue.releaseProvenanceHash,
-    "economicSafety.rejectionAuthority",
-  );
+  const authority = runtimeAuthorityBinding(inputValue.runtimeAuthority);
   return deepFreeze({
     schemaVersion: 1 as const,
     kind: "aloha.economic-safety-chain-rejection-v1" as const,
     authorityRoot: positiveHash(inputValue.authorityRoot, "economicSafety.rejection.authorityRoot"),
     implementationHash: positiveHash(inputValue.implementationHash, "economicSafety.rejection.implementationHash"),
-    runtimeAuthority: authority.runtimeAuthority,
-    releaseProvenanceHash: authority.releaseProvenanceHash,
+    runtimeAuthority: authority,
     correlationId: normalized.correlationId,
     generationId: normalized.generationId,
     source: normalized.source,
@@ -604,7 +568,6 @@ export function sealEconomicSafetyChainRejectionV1(inputValue: {
   readonly authorityRoot: Hash;
   readonly implementationHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly input: EconomicSafetyFinalizationInputV1;
   readonly code: EconomicSafetyPolicyRejectionCodeV1;
 }): EconomicSafetyChainRejectionV1 {
@@ -619,7 +582,7 @@ export function validateEconomicSafetyChainRejectionV1(
 ): EconomicSafetyChainRejectionV1 {
   assertPlainObject(value, "economicSafety.rejection");
   assertExactKeys(value, [
-    "schemaVersion", "kind", "authorityRoot", "implementationHash", "runtimeAuthority", "releaseProvenanceHash", "correlationId",
+    "schemaVersion", "kind", "authorityRoot", "implementationHash", "runtimeAuthority", "correlationId",
     "generationId", "source", "objectiveRef", "exactHash", "programHash", "obligationRoot", "finalSimulationReceiptHash",
     "effectsHash", "executionOwnerEvidenceRoot", "finalSimulationOwnerEvidenceRoot", "executionOwnerFactsRoot",
     "finalSimulationOwnerFactsRoot", "declaredObligationSetRoot", "code", "evidenceRoot",
@@ -629,13 +592,11 @@ export function validateEconomicSafetyChainRejectionV1(
     authorityRoot: positiveHash(value.authorityRoot, "economicSafety.rejection.authorityRoot"),
     implementationHash: positiveHash(value.implementationHash, "economicSafety.rejection.implementationHash"),
     runtimeAuthority: decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority),
-    releaseProvenanceHash: releaseProvenanceHash(value.releaseProvenanceHash, "economicSafety.rejection.releaseProvenanceHash"),
     input: expected,
     code: policyRejectionCode(value.code, "economicSafety.rejection.code"),
   });
   if (body.authorityRoot !== authority.authorityRoot || body.implementationHash !== authority.implementationHash
-    || encodeCanonicalJson(body.runtimeAuthority) !== encodeCanonicalJson(authority.runtimeAuthority)
-    || body.releaseProvenanceHash !== authority.releaseProvenanceHash) throw new TypeError("economic safety rejection authority binding mismatch");
+    || encodeCanonicalJson(body.runtimeAuthority) !== encodeCanonicalJson(authority.runtimeAuthority)) throw new TypeError("economic safety rejection authority binding mismatch");
   for (const key of Object.keys(body) as (keyof typeof body)[]) {
     if (encodeCanonicalJson(value[key] as CanonicalJson) !== encodeCanonicalJson(body[key] as CanonicalJson)) {
       throw new TypeError(`economic safety rejection ${String(key)} mismatch`);
@@ -655,24 +616,17 @@ export function sealEconomicSafetyEvidenceV1(inputValue: {
   readonly authorityRoot: Hash;
   readonly implementationHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly input: EconomicSafetyFinalizationInputV1;
   readonly decision: EconomicSafetyDecisionV1;
 }): EconomicSafetyEvidenceV1 {
   const normalized = normalizeEconomicSafetyFinalizationInputV1(inputValue.input);
-  if (normalized.releaseProvenanceHash !== inputValue.releaseProvenanceHash) throw new TypeError("economic safety release provenance mismatch");
-  const authority = runtimeAuthorityBinding(
-    inputValue.runtimeAuthority,
-    inputValue.releaseProvenanceHash,
-    "economicSafety.owner",
-  );
+  const authority = runtimeAuthorityBinding(inputValue.runtimeAuthority);
   const body = {
     schemaVersion: 1 as const,
     kind: "aloha.economic-safety-finalization-evidence-v1" as const,
     authorityRoot: positiveHash(inputValue.authorityRoot, "economicSafety.owner.authorityRoot"),
     implementationHash: positiveHash(inputValue.implementationHash, "economicSafety.owner.implementationHash"),
-    runtimeAuthority: authority.runtimeAuthority,
-    releaseProvenanceHash: authority.releaseProvenanceHash,
+    runtimeAuthority: authority,
     correlationId: normalized.correlationId,
     generationId: normalized.generationId,
     source: normalized.source,

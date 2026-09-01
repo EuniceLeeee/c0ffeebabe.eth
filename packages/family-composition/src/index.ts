@@ -73,7 +73,7 @@ const STAGES = ["nomination", "identity", "materialization", "projection", "rehy
 type FamilyStageNameV1 = (typeof STAGES)[number];
 type CoarseProjectionOwnerDescriptorV1 = QualifiedCoarseProjectionReceiptV1["ownerDescriptor"];
 
-// The generated composition is a release-owned capability.  A structural
+// The generated composition is a runtime-owned capability. A structural
 // object with the same methods is not an equivalent authority and must not be
 // accepted by production runtime consumers.
 const generatedCompositionBrands = new WeakSet<object>();
@@ -197,7 +197,6 @@ export interface GeneratedFamilyCoarseProjectionOwnerInstallationV1 {
   readonly familyDefinitionHash: Hash;
   readonly ownerDescriptor: CoarseProjectionOwnerDescriptorV1;
   readonly service: CoarseProjectionServiceV1;
-  readonly releaseProvenanceHash: Hash;
   readonly releaseMembershipRoot: Hash;
   readonly assertCurrent: () => void;
 }
@@ -967,7 +966,6 @@ export function createGeneratedFamilyRuntimeComposition(
   const coarseProducerStates = new WeakMap<object, Readonly<{
     readonly descriptor: GeneratedFamilyCoarseProjectionDescriptorV1;
     readonly service: CoarseProjectionServiceV1;
-    readonly releaseProvenanceHash: Hash;
     readonly releaseMembershipRoot: Hash;
     readonly assertCurrent: () => void;
   }>>();
@@ -1048,9 +1046,6 @@ export function createGeneratedFamilyRuntimeComposition(
       }
       const leg = binding.legs[request.legIndex]!;
       const descriptor = producerState.descriptor;
-      if (binding.releaseProvenanceHash !== producerState.releaseProvenanceHash) {
-        throw new TypeError("generated Family coarse release provenance mismatch");
-      }
       const route = generated.resolveRouteHandle(request.issuedHandle, descriptor.familyDefinitionHash);
       if (route.familyDefinitionHash !== descriptor.familyDefinitionHash || route.familyId !== descriptor.familyId) {
         throw new TypeError("generated Family coarse route handle mismatch");
@@ -1167,9 +1162,6 @@ export function createGeneratedFamilyRuntimeComposition(
       if (binding.familyId !== descriptor.familyId
         || binding.familyDefinitionHash !== descriptor.familyDefinitionHash) {
         throw new TypeError("generated Family coarse edge sweep Family mismatch");
-      }
-      if (binding.releaseProvenanceHash !== producerState.releaseProvenanceHash) {
-        throw new TypeError("generated Family coarse edge sweep release provenance mismatch");
       }
       const route = generated.resolveRouteHandle(request.issuedHandle, descriptor.familyDefinitionHash);
       if (route.familyDefinitionHash !== descriptor.familyDefinitionHash || route.familyId !== descriptor.familyId) {
@@ -1311,8 +1303,6 @@ export function createGeneratedFamilyRuntimeComposition(
     if (encodeCanonicalJson(value.ownerDescriptor) !== encodeCanonicalJson(descriptor.ownerDescriptor)) {
       throw new TypeError("generated Family coarse owner descriptor mismatch");
     }
-    if (value.releaseProvenanceHash === value.releaseMembershipRoot) throw new TypeError("generated Family coarse release roots are not independently bound");
-    assertHash(value.releaseProvenanceHash, "coarseOwner.releaseProvenanceHash");
     assertHash(value.releaseMembershipRoot, "coarseOwner.releaseMembershipRoot");
     if (typeof value.assertCurrent !== "function") throw new TypeError("generated Family coarse release fence is required");
     if (coarseSeams.has(familyDefinitionHash)) throw new TypeError("generated Family coarse owner is already installed");
@@ -1321,7 +1311,6 @@ export function createGeneratedFamilyRuntimeComposition(
     coarseProducerStates.set(producer, Object.freeze({
       descriptor,
       service: value.service,
-      releaseProvenanceHash: value.releaseProvenanceHash,
       releaseMembershipRoot: value.releaseMembershipRoot,
       assertCurrent: value.assertCurrent,
     }));

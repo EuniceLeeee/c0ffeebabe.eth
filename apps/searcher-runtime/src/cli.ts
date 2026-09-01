@@ -1,6 +1,5 @@
 import {
-  assertDirectCliNonProductionV1,
-  startDryRunServiceV1,
+  startRuntimeServiceV1,
 } from "./deployment.ts";
 
 function required(name: string): string {
@@ -10,15 +9,12 @@ function required(name: string): string {
 }
 
 async function main(): Promise<void> {
-  if (process.env.SEARCHER_DRY_RUN !== "1") throw new TypeError("runtime dry-run guard requires SEARCHER_DRY_RUN=1");
-  if (process.env.PRIVATE_KEY !== undefined || process.env.OWNER_PRIVATE_KEY !== undefined) {
-    throw new TypeError("credential environment is not accepted");
-  }
-  const manifestPath = required("SEARCHER_RUNTIME_MANIFEST_PATH");
-  if (!manifestPath.startsWith("/")) throw new TypeError("deployment manifest path must be absolute");
-  const loaderPath = required("SEARCHER_RUNTIME_BUNDLE_MODULE");
-  assertDirectCliNonProductionV1({ manifestPath, bundleModulePath: loaderPath });
-  const service = await startDryRunServiceV1({ manifestPath, bundleModulePath: loaderPath });
+  const service = await startRuntimeServiceV1({
+    sourceConfigPath: required("SEARCHER_RUNTIME_SOURCE_CONFIG_PATH"),
+    policyPath: required("SEARCHER_RUNTIME_POLICY_PATH"),
+    revmWorkerExecutablePath: required("SEARCHER_REVM_WORKER_PATH"),
+    rpcEndpoint: required("MAINNET_RPC_URL"),
+  });
   const stop = () => { void service.stop(); };
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);

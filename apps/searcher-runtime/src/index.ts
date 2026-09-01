@@ -54,11 +54,9 @@ import {
   type ProducerTerminalPortV1,
 } from "../../../packages/producer/src/index.ts";
 import {
-  assertIssuedRuntimeReleaseStrategyRuntimeService,
   assertIssuedSearcherStrategyRuntimeServiceV1,
   type SearcherStrategyRuntimeServiceV1,
 } from "../../../packages/runtime-release-authority/src/strategy-runtime-consumer.ts";
-import { readRuntimeReleaseSixStepProductionTailV1 } from "../../../packages/runtime-release-authority/src/six-step-production-consumer.ts";
 import {
   assertIssuedRuntimeReleaseSearcherStartupService,
   type RuntimeReleaseSearcherStartupServiceV1,
@@ -123,9 +121,9 @@ const EMPTY_GRAPH_FINAL_SIMULATION_PORT: FinalSimulationPortV1<never> = Object.f
 
 /**
  * The public runtime result is exactly the search pipeline's terminal result
- * space.  In particular, it contains either route accounting or an unsigned
- * dry-run receipt; this entry has no credential, submission, or caller-provided
- * production-success input.
+ * space.  In particular, it contains either route accounting or the terminal
+ * no-broadcast receipt; this entry has no credential, submission, or
+ * caller-provided success input.
  */
 export type SearcherRuntimeOutcomeV1<Simulation> = RoutePipelineOutcomeV1<Simulation>;
 
@@ -145,9 +143,9 @@ export async function startReleaseSearcherStartup(
   assertIssuedRuntimeReleaseSearcherStartupService(owner);
   const startup = await owner.startStartup(signal);
   assertIssuedStartupRuntime(startup);
-  if (startup.ready.releaseProvenanceHash !== owner.release.releaseProvenanceHash
-    || startup.runtimeAuthority.authorityClass !== "signed-release") {
-    throw new TypeError("startup runtime release identity mismatch");
+  if (startup.runtimeAuthority.authorityBindingHash !== owner.runtimeAuthority.authorityBindingHash
+    || startup.runtimeAuthority.implementationCommit !== owner.runtimeAuthority.implementationCommit) {
+    throw new TypeError("startup runtime authority mismatch");
   }
   return startup;
 }
@@ -180,7 +178,7 @@ function pipelinePorts<Projection, Plan, Exact, Simulation>(
       simulate: input => ports.finalSimulation.simulate(input),
     },
     economicSafety: ports.economicSafety,
-    unsignedDryRun: ports.unsignedDryRun,
+    dryRun: ports.dryRun,
     sixStepArtifacts: ports.sixStepArtifacts,
   };
 }
@@ -276,18 +274,14 @@ function issueLanePlanningProblem(
   assertExactKeys(objectivePayload, ["numeraireAssetRef", "minNetGain", "maxGas", "maxValueAtRisk"], "searchObjective.payload");
   const objectiveAssetRef = assertHash(objectivePayload.numeraireAssetRef, "searchObjective.payload.numeraireAssetRef");
   const strategyIdentity = strategyRuntime.readMetadata();
-  const strategyMembershipHash = "runtimeMembershipHash" in strategyIdentity
-    ? strategyIdentity.runtimeMembershipHash
-    : strategyIdentity.releaseProvenanceHash;
+  const strategyMembershipHash = strategyIdentity.runtimeMembershipHash;
   const binding: StrategyGraphBindingV1 = {
     generationId: input.session.generationId,
     definitionCatalogRoot: input.session.lease.binding.definitionCatalogRoot,
     graphRoot: input.session.lease.binding.graphRoot,
     readyRecordHash: input.session.lease.binding.readyRecordHash,
     runtimeAuthority: input.session.lease.binding.runtimeAuthority,
-    ...(input.session.lease.binding.releaseProvenanceHash === null
-      ? { runtimeMembershipHash: strategyMembershipHash }
-      : { releaseProvenanceHash: input.session.lease.binding.releaseProvenanceHash }),
+    runtimeMembershipHash: strategyMembershipHash,
     sourceHash: input.head.hash,
   };
   const issued = strategyRuntime.issuePlanningProblem({
@@ -303,12 +297,10 @@ function issueLanePlanningProblem(
   });
   const planningProblem = issued.planningProblem;
   assertIssuedStrategyPlanningProblem(planningProblem);
-  const planningMembershipHash = planningProblem.runtimeMembershipHash ?? planningProblem.releaseProvenanceHash;
   const expectedMembershipHash = strategyMembershipHash;
   if (planningProblem.strategyCompositionRoot !== issued.strategyCompositionRoot
     || planningProblem.readyRecordHash !== binding.readyRecordHash
-    || planningMembershipHash !== expectedMembershipHash
-    || planningProblem.releaseProvenanceHash !== binding.releaseProvenanceHash) {
+    || planningProblem.runtimeMembershipHash !== expectedMembershipHash) {
     throw new TypeError("strategy planning problem runtime binding mismatch");
   }
   return issued;
@@ -355,24 +347,13 @@ async function runSearcherLane<Simulation>(
       const finalSimulation = input.session.lease.edges.length === 0
         ? EMPTY_GRAPH_FINAL_SIMULATION_PORT
         : await finalSimulationFactory.issue(input.session.currentSourceCapability);
-      const strategyMetadata = strategyRuntime.readMetadata();
-      const sixStepArtifacts = "releaseProvenanceHash" in strategyMetadata
-        ? (() => {
-            assertIssuedRuntimeReleaseStrategyRuntimeService(strategyRuntime);
-            return readRuntimeReleaseSixStepProductionTailV1(
-              strategyRuntime,
-              input.session.lease.sixStepRouteParents,
-            );
-          })()
-        : undefined;
       const ports: SearcherRuntimePortsV1<SearchRuntimeProjectionV1, SearchRuntimePlanV1, SearchRuntimeExactV1, Simulation> = {
         ...generated,
         finalSimulation,
         economicSafety,
-        ...(sixStepArtifacts === undefined ? {} : { sixStepArtifacts }),
       };
       const outcome = await runPipelineInSession(ports, searchInput, planning.planningProblem, planning.strategyCompositionRoot, input.session);
-      draft = outcome.kind !== "unsigned-dry-run" && outcome.kind !== "route-set-terminal"
+      draft = outcome.kind !== "dry-run" && outcome.kind !== "route-set-terminal"
         ? Object.freeze({ kind: outcome.kind === "retryable" ? "retryable" as const : "failed" as const, reasonCode: `${outcome.stage}:${outcome.code}` })
         : Object.freeze({
           kind: "terminal" as const,
@@ -421,12 +402,6 @@ export function createReleaseSearcherProducer<Simulation>(
   if (strategyIdentity.definitionCatalogRoot !== startupGeneration.definitionCatalogRoot) {
     throw new TypeError("strategy composition definition catalog does not match startup");
   }
-  const strategyReleaseProvenanceHash = "releaseProvenanceHash" in strategyIdentity
-    ? strategyIdentity.releaseProvenanceHash
-    : null;
-  if (strategyReleaseProvenanceHash !== startupGeneration.releaseProvenanceHash) {
-    throw new TypeError("strategy composition authority class does not match startup");
-  }
   if (input.startup.canonicalSourceAuthority !== input.source.canonicalAuthority) {
     throw new TypeError("startup canonical source authority does not match Reth source");
   }
@@ -465,39 +440,9 @@ export function createReleaseSearcherProducer<Simulation>(
 }
 
 export {
-  assertDirectCliNonProductionV1,
-  assertRuntimeAnchorsV1,
-  assertDeploymentRuntimeBundleV1,
-  assertDeploymentBundleIdentityV1,
-  decodeDeploymentManifestV1,
-  deploymentManifestHashV1,
-  encodeDeploymentManifestV1,
-  encodeRuntimeAnchorReceiptV1,
-  runtimeAnchorReceiptV1,
-  sha256FileV1,
-  startDryRunServiceV1,
-  systemRuntimeAnchorObserverV1,
+  startRuntimeServiceV1,
 } from "./deployment.ts";
 export type {
-  DeploymentBundleLoaderV1,
-  DeploymentBundleReleaseIdentityV1,
-  DeploymentManifestV1,
-  DeploymentRuntimeBundleV1,
-  DryRunServiceHandleV1,
-  RuntimeAnchorObservationV1,
-  RuntimeAnchorObserverV1,
-  RuntimeAnchorReceiptV1,
+  RuntimeServiceHandleV1,
+  RuntimeStartInputV1,
 } from "./deployment.ts";
-export {
-  assertIssuedSearcherProductionEvidenceOwnerV1,
-  issueSearcherProductionEvidenceOwnerV1,
-  missingExternalRuntimeAnchorEvidenceV1,
-} from "./production-evidence.ts";
-export type {
-  MissingExternalRuntimeAnchorEvidenceV1,
-  MissingPerformanceFactReasonV1,
-  SearcherProductionEvidenceOwnerInputV1,
-  SearcherProductionEvidenceOwnerV1,
-  SearcherProductionEvidenceReplayV1,
-  SearcherProductionEvidenceReleaseV1,
-} from "./production-evidence.ts";

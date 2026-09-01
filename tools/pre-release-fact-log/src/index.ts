@@ -1103,7 +1103,7 @@ function readFullFamilyTerminalBinding(
       "searchTerminalHash", "terminalLineageHash", "readyRecordHash", "graphRoot",
     ] as const) hash(value[field], `fullFamilyTerminalBinding.${field}`);
     const terminalKind = value.terminalKind;
-    if (terminalKind !== "unsigned-dry-run" && terminalKind !== "route-set-terminal") {
+    if (terminalKind !== "dry-run" && terminalKind !== "route-set-terminal") {
       throw new TypeError("Full-Family terminal binding terminalKind mismatch");
     }
     nonEmptyString(value.generationId, "fullFamilyTerminalBinding.generationId");
@@ -1678,7 +1678,7 @@ function sixStepPartitionReasons(observation: RawPerformanceObservationV1): read
       const join = ownRecord(runtimeFacts.producerSchedulerJoin, `sixStepPartition[${event.sequence}].producerSchedulerJoin`);
       observedCandidates.push(Object.freeze({
         admissionId: hash(payload.admissionId, "sixStepPartition.admissionId"),
-        candidateId: hash(join.unsignedDryRunCandidateId, "sixStepPartition.candidateId"),
+        candidateId: hash(join.dryRunCandidateId, "sixStepPartition.candidateId"),
       }));
     }
   }
@@ -1849,15 +1849,15 @@ function selectedExecutionTelemetryReasons(observation: RawPerformanceObservatio
       const executionOwner = ownRecord(resolved.executionProgramOwnerEvidence, `executionTelemetry[${event.sequence}].executionOwner`);
       const finalSimulation = ownRecord(resolved.finalSimulation, `executionTelemetry[${event.sequence}].finalSimulation`);
       const finalOwner = ownRecord(resolved.finalSimulationOwnerEvidence, `executionTelemetry[${event.sequence}].finalOwner`);
-      const unsignedDryRun = ownRecord(resolved.unsignedDryRun, `executionTelemetry[${event.sequence}].unsignedDryRun`);
-      if (join.unsignedDryRunCandidateId !== terminal.candidateId
-        || join.unsignedDryRunLineageHash !== terminal.terminalLineageHash
+      const dryRun = ownRecord(resolved.dryRun, `executionTelemetry[${event.sequence}].dryRun`);
+      if (join.dryRunCandidateId !== terminal.candidateId
+        || join.dryRunLineageHash !== terminal.terminalLineageHash
         || sixStep.stage36Root !== terminal.sixStepEvidenceRoot
         || resolved.routeCandidateId !== terminal.candidateId
         || executionProgram.programHash !== join.programHash
         || finalSimulation.receiptHash !== join.finalSimulationReceiptHash
-        || unsignedDryRun.candidateId !== terminal.candidateId
-        || unsignedDryRun.lineageHash !== terminal.terminalLineageHash
+        || dryRun.candidateId !== terminal.candidateId
+        || dryRun.lineageHash !== terminal.terminalLineageHash
         || typeof executionOwner.evidenceRoot !== "string"
         || typeof finalOwner.evidenceRoot !== "string") {
         reasons.push("passed-candidate-selected-execution-lineage-mismatch");
@@ -1919,7 +1919,7 @@ function selectedTerminalOutcome(
 
 interface FullFamilyTerminalBindingObservationV1 {
   readonly bindingRoot: Hash;
-  readonly terminalKind: "unsigned-dry-run" | "route-set-terminal";
+  readonly terminalKind: "dry-run" | "route-set-terminal";
   readonly terminalLineageHash: Hash;
   readonly audit: NativeFullFamilyAuditV1;
 }
@@ -1945,7 +1945,7 @@ function appendSixStepLineageFacts(
       ? null
       : ownRecord(payload.sixStepFacts, `performance[${event.sequence}].payload.sixStepFacts`);
     if (join === null || sixStep === null) continue;
-    const selectedId = hash(join.unsignedDryRunCandidateId, `performance[${event.sequence}].producerSchedulerJoin.unsignedDryRunCandidateId`);
+    const selectedId = hash(join.dryRunCandidateId, `performance[${event.sequence}].producerSchedulerJoin.dryRunCandidateId`);
     const terminal = candidates.get(admissionId)?.candidateTerminalObservations.find(candidate => (
       candidate.candidateId === selectedId && candidate.terminalKind === "passed"
     )) as (Readonly<Record<string, unknown>> & { readonly candidateId: Hash }) | undefined;
@@ -1956,15 +1956,15 @@ function appendSixStepLineageFacts(
     const executionOwner = ownRecord(resolved.executionProgramOwnerEvidence, `performance[${event.sequence}].stage36.resolved.executionProgramOwnerEvidence`);
     const finalSimulation = ownRecord(resolved.finalSimulation, `performance[${event.sequence}].stage36.resolved.finalSimulation`);
     const finalOwner = ownRecord(resolved.finalSimulationOwnerEvidence, `performance[${event.sequence}].stage36.resolved.finalSimulationOwnerEvidence`);
-    const unsignedDryRun = ownRecord(resolved.unsignedDryRun, `performance[${event.sequence}].stage36.resolved.unsignedDryRun`);
+    const dryRun = ownRecord(resolved.dryRun, `performance[${event.sequence}].stage36.resolved.dryRun`);
     if (terminal.disposition !== "selected"
-      || terminal.terminalLineageHash !== join.unsignedDryRunLineageHash
+      || terminal.terminalLineageHash !== join.dryRunLineageHash
       || terminal.sixStepEvidenceRoot !== sixStep.stage36Root
       || resolved.routeCandidateId !== selectedId
       || executionProgram.programHash !== join.programHash
       || finalSimulation.receiptHash !== join.finalSimulationReceiptHash
-      || unsignedDryRun.candidateId !== selectedId
-      || unsignedDryRun.lineageHash !== join.unsignedDryRunLineageHash) {
+      || dryRun.candidateId !== selectedId
+      || dryRun.lineageHash !== join.dryRunLineageHash) {
       continue;
     }
     records.push(record("aloha.pre-release-six-step-selected-lineage-v1", {
@@ -2000,7 +2000,7 @@ function appendSixStepLineageFacts(
       finalSimulationOwnerEvidenceRoot: hash(finalOwner.evidenceRoot, "sixStep.finalSimulationOwnerEvidenceRoot"),
       finalSimulation: finalSimulation as CanonicalJson,
       finalSimulationOwnerEvidence: finalOwner as CanonicalJson,
-      unsignedDryRun: unsignedDryRun as CanonicalJson,
+      dryRun: dryRun as CanonicalJson,
     }));
   }
 }

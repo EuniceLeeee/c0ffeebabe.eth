@@ -38,10 +38,10 @@ export interface RevmWorkerQualification {
   readonly executableFingerprint: string;
 }
 
-/** Narrow release-composition edge.  The issuer owns the opaque capability
+/** Narrow runtime-composition edge. The issuer owns the opaque capability
  * and must mint a fresh, epoch-bound binding for every replacement worker. */
 export interface RevmWorkerAuthorityIssuer {
-  /** Owner chooses the epoch from the release composition; the pool never invents one. */
+  /** Owner chooses the epoch from runtime composition; the pool never invents one. */
   issue(): RevmWorkerAuthorityBindingV1;
   assertCurrent(binding: RevmWorkerAuthorityBindingV1): void;
 }
@@ -295,7 +295,7 @@ export class RevmWorkerController {
       void this.retire("invalid-response");
       return;
     }
-    // The request may have crossed a release-rotation boundary while the
+    // The request may have crossed a runtime-authority rotation boundary while the
     // physical worker was executing.  The pre-dispatch check is not enough:
     // never settle a response under an authority that is no longer current.
     // Retiring the worker also prevents a late response from being reused by

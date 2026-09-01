@@ -8,14 +8,14 @@ import {
 } from "../../strategy-composition/src/index.ts";
 import {
   createGeneratedStrategyRuntimeFactory,
-  issueGeneratedStrategyRuntimeAuthorityCapability,
+  issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability,
 } from "../../strategy-composition/src/internal/generated-runtime-composition.ts";
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../../strategy-composition/src/internal/trigger-owner.ts";
 import { compileStrategy } from "../../strategy-sdk/src/index.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
-  type SignedReleaseRuntimeAuthorityDescriptorV1,
+  type UnsignedDryRunRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 import {
   ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER,
@@ -29,14 +29,13 @@ export function issueRouteCyclePlanningProblem(input: {
   readonly definitionCatalogRoot: Hash;
   readonly graphRoot: Hash;
   readonly edges: readonly StrategyGraphEdgeV1[];
-  readonly releaseProvenanceHash?: Hash;
   readonly readyRecordHash?: Hash;
   readonly sourceHash?: Hash;
   readonly correlationId?: Hash;
   readonly objectiveRef?: Hash;
   readonly entryAssetRef?: Hash;
   readonly proposedCapabilitySetRoot?: Hash;
-  readonly runtimeAuthority?: SignedReleaseRuntimeAuthorityDescriptorV1;
+  readonly runtimeAuthority?: UnsignedDryRunRuntimeAuthorityDescriptorV1;
   readonly lane?: "blockscan" | "backrun";
   readonly triggerRef?: Hash;
   readonly affectedEdgeIds?: readonly Hash[];
@@ -69,15 +68,13 @@ export function issueRouteCyclePlanningProblem(input: {
     proposedCapabilitySetRoot: input.proposedCapabilitySetRoot ?? h("test/search-pipeline/capabilities/v1", []),
     strategies: [entry],
   });
-  const releaseProvenanceHash = input.releaseProvenanceHash ?? h("test/search-pipeline/release", 1);
   const readyRecordHash = input.readyRecordHash ?? h("test/search-pipeline/ready", 1);
   const sourceHash = input.sourceHash ?? h("test/search-pipeline/block", 1);
   const correlationId = input.correlationId ?? h("test/search-pipeline/correlation", 1);
   const entryAssetRef = input.entryAssetRef ?? input.edges[0]?.inputAssetPorts[0]?.assetRef ?? h("test/search-pipeline/asset", "empty");
-  const runtimeAuthorityDescriptor = input.runtimeAuthority ?? createSignedReleaseRuntimeAuthorityDescriptorV1({
-    authorityClass: "signed-release",
+  const runtimeAuthorityDescriptor = input.runtimeAuthority ?? createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+    authorityClass: "dry-run",
     runtimeBindingId: h("test/search-pipeline/runtime-binding/v1", 1),
-    releaseProvenanceHash,
     implementationCommit: "a".repeat(40),
   });
   const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(runtimeAuthorityDescriptor);
@@ -85,9 +82,9 @@ export function issueRouteCyclePlanningProblem(input: {
     descriptor,
     issuers: [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
   });
-  const composition = factory(issueGeneratedStrategyRuntimeAuthorityCapability({
+  const composition = factory(issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
     factory,
-    qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
+    declaredCapabilitySetRoot: descriptor.proposedCapabilitySetRoot,
     runtimeAuthority: runtimeAuthorityDescriptor,
     assertCurrent: () => {},
   }));
@@ -98,7 +95,7 @@ export function issueRouteCyclePlanningProblem(input: {
       graphRoot: input.graphRoot,
       readyRecordHash,
       runtimeAuthority,
-      releaseProvenanceHash,
+      runtimeMembershipHash: composition.runtimeMembershipHash,
       sourceHash,
     },
     edges: Object.freeze(input.edges.map(edge => Object.freeze({
@@ -122,7 +119,7 @@ export function issueRouteCyclePlanningProblem(input: {
         graphRoot: input.graphRoot,
         readyRecordHash,
         runtimeAuthority,
-        releaseProvenanceHash,
+        runtimeMembershipHash: composition.runtimeMembershipHash,
         sourceHash,
       },
       lane: input.lane ?? "blockscan",

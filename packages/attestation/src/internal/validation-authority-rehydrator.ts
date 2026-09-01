@@ -7,6 +7,7 @@ import type {
   AttestationVerifiedMemoReuseCapabilityV1,
   AttestationVerifiedMemoReuseInputV1,
 } from "../index.ts";
+import { encodeCanonicalJson } from "../../../canonical-codec/src/index.ts";
 import { assertAttestationValidationAuthority } from "./validation-authority-verifier.ts";
 import {
   issueAttestationIdentityResumeCapability,
@@ -36,6 +37,7 @@ export function rehydrateIdentityResumeCapabilityForCheckpoint(
   const binding = input.candidatePartitionReader.binding(input.candidatePartition);
   if (
     input.runId !== binding.runId
+    || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(state.runtimeAuthority)
     || input.cutoff.chainId !== binding.cutoff.chainId
     || input.cutoff.number !== binding.cutoff.number
     || input.cutoff.hash !== binding.cutoff.hash
@@ -72,6 +74,7 @@ export function rehydrateVerifiedMemoReuseCapabilityForCheckpoint(
   const binding = input.candidatePartitionReader.binding(input.candidatePartition);
   if (
     input.runId !== binding.runId
+    || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(state.runtimeAuthority)
     || input.cutoff.chainId !== binding.cutoff.chainId
     || input.cutoff.number !== binding.cutoff.number
     || input.cutoff.hash !== binding.cutoff.hash
@@ -89,8 +92,8 @@ export function rehydrateVerifiedMemoReuseCapabilityForCheckpoint(
  * Rehydrate a process-local final-outcome handle from checkpoint-owned bytes.
  * The outcome is never accepted from the caller as an authority claim: the
  * checkpoint has already decoded the exact durable record, while this bridge
- * rechecks its signature/root binding against the current release authority
- * before issuing the one-shot handle.
+ * rechecks its exact content/root binding against the current runtime
+ * authority before issuing the one-shot handle.
  */
 export function rehydrateOutcomeResumeCapabilityForCheckpoint(
   authority: AttestationValidationAuthorityV1,
@@ -106,6 +109,7 @@ export function rehydrateOutcomeResumeCapabilityForCheckpoint(
   const binding = input.candidatePartitionReader.binding(input.candidatePartition);
   if (
     input.runId !== binding.runId
+    || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(state.runtimeAuthority)
     || input.cutoff.chainId !== binding.cutoff.chainId
     || input.cutoff.number !== binding.cutoff.number
     || input.cutoff.hash !== binding.cutoff.hash

@@ -110,9 +110,7 @@ export interface RuntimeAuthorityNativeStartupRuntimeV1 {
   readonly fullFamilyReader: ReadyFullFamilyEvidenceReaderPortV1;
 }
 
-export type SignedReleaseNativeStartupRuntimeV1 = RuntimeAuthorityNativeStartupRuntimeV1;
-
-/** Exact production adapter. The concrete constructor is intentionally private to this module. */
+/** Exact runtime adapter. The concrete constructor is intentionally private to this module. */
 class RuntimeAuthorityNativeStartupOwner implements NativeStartupOwnerPortV1<
   CanonicalHeadObservationCapabilityV1,
   StartupProducerLeaseV1,
@@ -224,8 +222,7 @@ class RuntimeAuthorityNativeStartupOwner implements NativeStartupOwnerPortV1<
   ): Promise<NativeStartupLoadedGenerationV1> => {
     const ready = this.#ready(handle);
     if (
-      ready.runtimeAuthority.authorityClass !== this.#runtimeAuthority.authorityClass
-      || ready.runtimeAuthority.authorityBindingHash !== this.#runtimeAuthority.authorityBindingHash
+      ready.runtimeAuthority.authorityBindingHash !== this.#runtimeAuthority.authorityBindingHash
       || ready.runtimeAuthority.implementationCommit !== this.#runtimeAuthority.implementationCommit
     ) {
       throw new Error("startup-runtime-lineage-changed");
@@ -336,7 +333,7 @@ Object.freeze(RuntimeAuthorityNativeStartupOwner.prototype);
 /**
  * Mode-neutral owner adapter into the one native startup state machine. The
  * caller must already hold an owner-issued projection; this function derives
- * no release qualification and creates no alternate runner.
+ * no alternate qualification and creates no alternate runner.
  */
 export async function startRuntimeAuthorityNativeStartupRuntime(input: {
   readonly composition: StartupRuntimeCompositionInputV1;
@@ -355,19 +352,4 @@ export async function startRuntimeAuthorityNativeStartupRuntime(input: {
     stage12Reader: owner.stage12Reader,
     fullFamilyReader: owner.fullFamilyReader,
   });
-}
-
-/** The existing signed-release adapter preserves the production fail-closed class fence. */
-export async function startSignedReleaseNativeStartupRuntime(input: {
-  readonly composition: StartupRuntimeCompositionInputV1;
-  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-}, signal: AbortSignal): Promise<SignedReleaseNativeStartupRuntimeV1> {
-  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
-  if (runtimeAuthority.authorityClass !== "signed-release") {
-    throw new TypeError("signed release startup requires signed-release authority");
-  }
-  return startRuntimeAuthorityNativeStartupRuntime({
-    composition: input.composition,
-    runtimeAuthority,
-  }, signal);
 }

@@ -36,11 +36,8 @@ export interface StrategyGraphBindingV1 {
   readonly graphRoot: Hash;
   /** Exact active Ready lease; planning never runs from an unready Graph. */
   readonly readyRecordHash: Hash;
-  /** Neutral exact generated-set membership. Signed callers may omit it for
-   * compatibility; it is then exactly the release provenance hash. */
-  readonly runtimeMembershipHash?: Hash;
-  /** Present only for signed-release. Unsigned dry-run must omit it. */
-  readonly releaseProvenanceHash?: Hash;
+  /** Exact generated-set membership for the active runtime. */
+  readonly runtimeMembershipHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   /** Current producer-head hash; a trigger cannot be replayed on another head. */
   readonly sourceHash: Hash;
@@ -75,8 +72,7 @@ export interface StrategyPlanningTriggerV1 {
   readonly headHash: Hash;
   readonly generationId: string;
   readonly graphRoot: Hash;
-  readonly runtimeMembershipHash?: Hash;
-  readonly releaseProvenanceHash?: Hash;
+  readonly runtimeMembershipHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
 }
 
@@ -102,8 +98,7 @@ export interface StrategyPlanningProblemCoreV1 extends ClosedLoopPlanningProblem
 }
 
 export interface StrategyPlanningProblemV1 extends StrategyPlanningProblemCoreV1 {
-  readonly runtimeMembershipHash?: Hash;
-  readonly releaseProvenanceHash?: Hash;
+  readonly runtimeMembershipHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
 }
 
@@ -161,8 +156,7 @@ export interface GeneratedStrategyRuntimeDescriptorV1 {
 
 export interface StrategyRuntimeCompositionV1 {
   readonly definitionCatalogRoot: Hash;
-  readonly runtimeMembershipHash?: Hash;
-  readonly releaseProvenanceHash?: Hash;
+  readonly runtimeMembershipHash: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly compositionRoot: Hash;
   readonly issuerClosureRoot: Hash;
@@ -304,8 +298,7 @@ function normalizeTrigger(
     headHash: issued.headHash,
     generationId: issued.generationId,
     graphRoot: issued.graphRoot,
-    ...(issued.runtimeMembershipHash === undefined ? {} : { runtimeMembershipHash: issued.runtimeMembershipHash }),
-    ...(issued.releaseProvenanceHash === undefined ? {} : { releaseProvenanceHash: issued.releaseProvenanceHash }),
+    runtimeMembershipHash: issued.runtimeMembershipHash,
     runtimeAuthority: issued.runtimeAuthority,
   });
 }
@@ -352,7 +345,7 @@ function validateDraft(
 
 /**
  * Public construction consumes only the generated factory's opaque,
- * release-owned capability.  Descriptor data, callable issuers and release
+ * runtime-owned capability. Descriptor data and callable issuers
  * provenance are never caller-supplied at this boundary.
  */
 export function createGeneratedStrategyRuntimeComposition(
@@ -369,15 +362,6 @@ export function createGeneratedStrategyRuntimeComposition(
   if (descriptor.descriptorRoot !== input.descriptor.descriptorRoot) throw new TypeError("generated Strategy runtime descriptor root mismatch");
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
   const runtimeMembershipHash = assertHash(input.runtimeMembershipHash, "strategyRuntime.runtimeMembershipHash");
-  const releaseProvenanceHash = input.releaseProvenanceHash === undefined
-    ? undefined
-    : assertHash(input.releaseProvenanceHash, "strategyRuntime.releaseProvenanceHash");
-  if ((runtimeAuthority.authorityClass === "signed-release") !== (releaseProvenanceHash !== undefined)) {
-    throw new TypeError("Strategy runtime authority class/membership mismatch");
-  }
-  if (releaseProvenanceHash !== undefined && runtimeMembershipHash !== releaseProvenanceHash) {
-    throw new TypeError("signed Strategy runtime membership must equal release provenance");
-  }
   if (!Array.isArray(input.issuers) || input.issuers.length !== descriptor.strategies.length) {
     throw new TypeError("generated Strategy issuer set is incomplete");
   }
@@ -393,18 +377,12 @@ export function createGeneratedStrategyRuntimeComposition(
     ) throw new TypeError("generated Strategy issuer identity mismatch");
     return Object.freeze({ entry, issuer });
   });
-  const compositionRoot = hashDomain("aloha/generated-strategy-runtime-composition/v1", runtimeAuthority.authorityClass === "signed-release"
-    ? {
-      descriptorRoot: descriptor.descriptorRoot,
-      runtimeAuthority,
-      leaves: bindings.map(binding => binding.entry.leafDigest),
-    }
-    : {
-      descriptorRoot: descriptor.descriptorRoot,
-      runtimeAuthority,
-      runtimeMembershipHash,
-      leaves: bindings.map(binding => binding.entry.leafDigest),
-    });
+  const compositionRoot = hashDomain("aloha/generated-strategy-runtime-composition/v1", {
+    descriptorRoot: descriptor.descriptorRoot,
+    runtimeAuthority,
+    runtimeMembershipHash,
+    leaves: bindings.map(binding => binding.entry.leafDigest),
+  });
   const issuerClosureRoot = hashDomain("aloha/generated-strategy-runtime-issuer-closure/v1", {
     descriptorRoot: descriptor.descriptorRoot,
     issuers: bindings.map(binding => binding.entry.issuerClosureRoot),
@@ -425,8 +403,7 @@ export function createGeneratedStrategyRuntimeComposition(
   let composition!: StrategyRuntimeCompositionV1;
   const compositionValue = {
     definitionCatalogRoot: descriptor.definitionCatalogRoot,
-    ...(runtimeAuthority.authorityClass === "unsigned-dry-run" ? { runtimeMembershipHash } : {}),
-    ...(releaseProvenanceHash === undefined ? {} : { releaseProvenanceHash }),
+    runtimeMembershipHash,
     runtimeAuthority,
     compositionRoot,
     issuerClosureRoot,
@@ -444,18 +421,8 @@ export function createGeneratedStrategyRuntimeComposition(
       if (binding.definitionCatalogRoot !== descriptor.definitionCatalogRoot) {
         throw new TypeError("Strategy runtime definition catalog binding mismatch");
       }
-      const bindingMembershipHash = binding.runtimeMembershipHash === undefined
-        ? binding.releaseProvenanceHash
-        : binding.runtimeMembershipHash;
-      if (assertHash(bindingMembershipHash, "strategyRuntime.binding.runtimeMembershipHash") !== runtimeMembershipHash) {
+      if (assertHash(binding.runtimeMembershipHash, "strategyRuntime.binding.runtimeMembershipHash") !== runtimeMembershipHash) {
         throw new TypeError("Strategy runtime membership binding mismatch");
-      }
-      if (runtimeAuthority.authorityClass === "signed-release") {
-        if (assertHash(binding.releaseProvenanceHash, "strategyRuntime.binding.releaseProvenanceHash") !== releaseProvenanceHash) {
-          throw new TypeError("Strategy runtime release provenance binding mismatch");
-        }
-      } else if (Object.prototype.hasOwnProperty.call(binding, "releaseProvenanceHash")) {
-        throw new TypeError("unsigned Strategy runtime cannot carry release provenance");
       }
       const bindingAuthority = decodeRuntimeAuthorityProjectionV1(binding.runtimeAuthority);
       if (encodeCanonicalJson(bindingAuthority) !== encodeCanonicalJson(runtimeAuthority)) {
@@ -474,8 +441,7 @@ export function createGeneratedStrategyRuntimeComposition(
           graphRoot: binding.graphRoot,
           strategyCompositionRoot: compositionRoot,
           strategyIssuerClosureRoot: issuerClosureRoot,
-          ...(runtimeAuthority.authorityClass === "unsigned-dry-run" ? { runtimeMembershipHash } : {}),
-          ...(releaseProvenanceHash === undefined ? {} : { releaseProvenanceHash }),
+          runtimeMembershipHash,
           runtimeAuthority,
           readyRecordHash: binding.readyRecordHash,
           triggerRef: normalizedTrigger.triggerRef,
@@ -519,7 +485,7 @@ export function assertIssuedStrategyPlanningInput(
   readIssuedStrategyPlanningInputV1(value);
 }
 
-/** Planner-only owner read of the signed Strategy/Graph denominator. */
+/** Planner-only owner read of the Strategy/Graph denominator. */
 export function readIssuedStrategyPlanningInputV1(
   value: unknown,
 ): IssuedStrategyPlanningInputOwnerViewV1 {

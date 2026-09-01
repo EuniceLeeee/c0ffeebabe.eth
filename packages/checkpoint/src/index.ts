@@ -25,12 +25,13 @@ import {
   sealProbeReceipt,
   validateAttestationPartition,
   validateCandidateFinalOutcome,
-  validateIdentityIssuerProof,
+  decodeAttestationIdentityCommitmentV1,
   attestationPartialIdentitySemanticHash,
   validateRejectionEvidenceBundle,
   validateIdentityObservation,
   type AttestationOutcomeCapabilityV1,
   type AttestationValidationAuthorityV1,
+  type AttestationEvidenceAuthoritySnapshotV1,
   type AttestationPartitionCapabilityV1,
   type AttestationWriterCapabilityV1,
   type AttestationPersistenceCapabilityV1,
@@ -56,19 +57,12 @@ import {
   rehydrateVerifiedMemoReuseCapabilityForCheckpoint,
 } from "../../attestation/src/internal/validation-authority-rehydrator.ts";
 import {
-  candidatePartitionProofPayloadHash,
-  candidatePartitionBindingFromProof,
   candidatePartitionKeysRoot,
-  decodeCandidatePartitionProofBytes,
-  makeCandidatePartitionProofPayload,
-  validateCandidatePartitionProof,
-  type CandidatePartitionBindingV1,
+  createCandidatePartitionCommitmentV1,
+  decodeCandidatePartitionCommitmentBytesV1,
   type CandidatePartitionCapabilityV1,
-  type CandidatePartitionProofIssuerPortV1,
   type CandidatePartitionReaderPortV1,
-  type CandidateNominationQualificationBindingV1,
 } from "../../../specs/candidate-partition-authority/src/index.ts";
-import { assertIssuedCandidatePartitionProofIssuer } from "../../../specs/candidate-partition-authority/src/internal/issuer-consumer.ts";
 import {
   decodeNominationClosureBytesV1,
   decodeNominationClosureV1,
@@ -83,6 +77,7 @@ import {
   createCandidatePartitionBootstrap,
   type CandidatePartitionBootstrapV1,
 } from "./candidate-partition.ts";
+import { bindCheckpointDurableAuthorityLayoutV1 } from "./durable-authority-layout.ts";
 import {
   decodeInstanceCatalogV1,
   encodeInstanceCatalogV1,
@@ -179,7 +174,6 @@ import {
 } from "./ready-stage12-evidence.ts";
 import {
   decodeRuntimeAuthorityProjectionV1,
-  type RuntimeReleaseProvenanceHashV1,
 } from "../../runtime-authority/src/index.ts";
 import { registerCheckpointReadyStage12EvidenceReader } from "./internal/ready-stage12-evidence-issuer.ts";
 import { assertCheckpointSixStepArtifactPortV1 } from "./internal/six-step-artifact-port-owner.ts";
@@ -201,22 +195,21 @@ export type {
   ReadyFullFamilyEvidenceSnapshotV1,
 } from "./ready-full-family-evidence.ts";
 export {
-  SIGNED_RELEASE_CHECKPOINT_DURABLE_LAYOUT_V1,
-  UNSIGNED_DRY_RUN_CHECKPOINT_DURABLE_LAYOUT_V1,
+  CHECKPOINT_DURABLE_LAYOUT_V1,
   bindCheckpointDurableAuthorityLayoutV1,
   checkpointDurableAuthorityLayoutV1,
   type CheckpointDurableAuthorityLayoutV1,
 } from "./durable-authority-layout.ts";
 export {
-  UnsignedDryRunCandidatePartitionCapabilityRegistryV1,
+  CandidatePartitionCapabilityRegistryV1,
   type CandidatePartitionRawEvidenceSourceV1,
 } from "./candidate-partition.ts";
 
-const CHECKPOINT_ROOT_KIND = "aloha/checkpoint-root/v2";
-const RUN_KIND = "aloha/in-progress-run/v2";
+const CHECKPOINT_ROOT_KIND = "aloha/checkpoint-root/v1";
+const RUN_KIND = "aloha/in-progress-run/v1";
 const CANDIDATE_KIND = "aloha/candidate-record/v2";
 const CANDIDATE_PARTITION_COMMITMENT_KIND = "aloha/candidate-partition-commitment/v2";
-const CANDIDATE_PARTITION_PROOF_KIND = "aloha/candidate-partition-proof/v2";
+const CANDIDATE_PARTITION_AUTHORITY_KIND = "aloha/candidate-partition-commitment/v1";
 const OUTCOME_KIND = "aloha/candidate-final-outcome/v1";
 const PARTIAL_OUTCOME_KIND = "aloha/attestation-partial-outcome/v1";
 const REJECTION_BUNDLE_KIND = "aloha/rejection-evidence-bundle/v2";
@@ -247,7 +240,7 @@ const EMPTY_MEMO_SEED_LINEAGE_ROOT = hashDomain("aloha/memo-seed-lineage-empty/v
 
 /**
  * Process-local identity for the checkpoint owner.  A structural object with
- * the same public methods must never be accepted as the release-owned
+ * the same public methods must never be accepted as the runtime-owned
  * persisted-attestation checkpoint edge.
  */
 const checkpointStoreInstances = new WeakSet<object>();
@@ -255,12 +248,12 @@ const checkpointStoreInstances = new WeakSet<object>();
 type DurableContentReader = (hash: Hash) => DurableContentRecord | null;
 
 const ROOT_FIELDS = ["revision", "verifiedMemoRoot", "inProgressRunId", "stagedReadyStorageHash", "latestMemoSeedReceiptHash", "memoSeedSequence", "memoSeedLineageRoot", "latestProbeReceiptHash", "probeReceiptSequence", "probeReceiptLineageRoot", "readyGenerationId", "readyGenerationRecordHash", "schemaHash"] as const;
-const RUN_FIELDS = ["runId", "parentGenerationId", "checkpointRevision", "candidatePartitionRevision", "cutoff", "recentObservationRoot", "recentObservationStorageHash", "definitionCatalogRoot", "sourceCoverageRoot", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidatePartitionRoot", "candidatePartitionStorageHash", "candidatePartitionProofStorageHash", "candidateRecordCount", "outcomePartitionRoot", "outcomePartitionStorageHash", "partialOutcomePartitionStorageHash", "attestationPartitionStorageHash", "verifiedMemoSetRoot", "verifiedMemoSetStorageHash", "accounting"] as const;
+const RUN_FIELDS = ["runId", "parentGenerationId", "checkpointRevision", "candidatePartitionRevision", "cutoff", "recentObservationRoot", "recentObservationStorageHash", "definitionCatalogRoot", "sourceCoverageRoot", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidatePartitionRoot", "candidatePartitionStorageHash", "candidatePartitionCommitmentStorageHash", "candidateRecordCount", "outcomePartitionRoot", "outcomePartitionStorageHash", "partialOutcomePartitionStorageHash", "attestationPartitionStorageHash", "verifiedMemoSetRoot", "verifiedMemoSetStorageHash", "accounting"] as const;
 const PARTITION_MANIFEST_FIELDS = ["runId", "partitionKind", "count", "pageStorageHashes"] as const;
 const PARTITION_PAGE_FIELDS = ["runId", "partitionKind", "pageIndex", "entries"] as const;
 const VERIFIED_MEMO_SET_FIELDS = ["schemaVersion", "kind", "memoCount", "memoCatalogRoot", "retainedRawLocatorCount", "retainedRawLocatorSequenceRoot", "verifiedMemoSetRoot"] as const;
-const CANDIDATE_PARTITION_COMMITMENT_FIELDS = ["readyRecordHash", "runId", "cutoff", "candidatePartitionRoot", "candidatePartitionStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidateRecordCount", "candidateKeysRoot", "recentObservationRoot", "sourceCoverageRoot", "checkpointRevision", "candidatePartitionProofStorageHash", "exactOutcomePartitionRoot", "sealedRevision", "stageRevision", "stageRecordHash", "readyBaseHash"] as const;
-const READY_CLOSURE_FIELDS = ["ready", "candidatePartitionStorageHash", "outcomePartitionStorageHash", "attestationPartitionStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidateRecordCount", "candidateKeysRoot", "recentObservationRoot", "sourceCoverageRoot", "candidatePartitionRevision", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "candidatePartitionCommitmentStorageHash", "candidatePartitionProofStorageHash", "verifiedMemoSetStorageHash", "instanceCatalogStorageHash", "graphStorageHash"] as const;
+const CANDIDATE_PARTITION_COMMITMENT_FIELDS = ["readyRecordHash", "runId", "cutoff", "candidatePartitionRoot", "candidatePartitionStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidateRecordCount", "candidateKeysRoot", "recentObservationRoot", "sourceCoverageRoot", "checkpointRevision", "candidatePartitionCommitmentStorageHash", "exactOutcomePartitionRoot", "sealedRevision", "stageRevision", "stageRecordHash", "readyBaseHash"] as const;
+const READY_CLOSURE_FIELDS = ["ready", "candidatePartitionStorageHash", "outcomePartitionStorageHash", "attestationPartitionStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "candidateRecordCount", "candidateKeysRoot", "recentObservationRoot", "sourceCoverageRoot", "candidatePartitionRevision", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "candidatePartitionReadyCommitmentStorageHash", "candidatePartitionCommitmentStorageHash", "verifiedMemoSetStorageHash", "instanceCatalogStorageHash", "graphStorageHash"] as const;
 const READY_STAGE_FIELDS = ["stageRevision", "stageRecordHash", "expectedRevision", "runId", "readyBase", "readyBaseHash", "sourceCoverageStorageHash", "sourceExecutionSetRoot", "sourceExecutionSetStorageHash", "sourcePlanEvidenceStorageHash", "nominationClosureRoot", "nominationClosureStorageHash", "verifiedMemoSetStorageHash", "instanceCatalogStorageHash", "graphStorageHash", "sealedRevision"] as const;
 const MEMO_SEED_RECEIPT_FIELDS = ["runId", "cutoff", "reason", "sealedRevision", "definitionCatalogRoot", "checkpointSchemaHash", "candidatePartitionRoot", "sourceCoverageRoot", "exactOutcomePartitionRoot", "verifiedMemoRoot", "canonicalJournalEpoch", "canonicalJournalRoot", "sequence", "priorReceiptHash", "priorLineageRoot", "receiptLineageRoot"] as const;
 const STORED_PROBE_RECEIPT_FIELDS = ["receipt", "candidatePartitionStorageHash", "priorOutcomePartitionStorageHash", "activeOutcomePartitionStorageHash"] as const;
@@ -282,21 +275,21 @@ export const CHECKPOINT_SCHEMA_MANIFEST = deepFreeze({
     { kind: CHECKPOINT_ROOT_KIND, fields: ROOT_FIELDS, codecAuthority: "checkpoint.decodeRoot", referenceContract: "exact active memo + optional active run + optional active ready closure + optional latest memo-seed receipt; no extra physical references" },
     { kind: RUN_KIND, fields: RUN_FIELDS, codecAuthority: "checkpoint.decodeRun", referenceContract: "exact run closure including source-plan evidence and its raw locator envelopes" },
     { kind: CANDIDATE_KIND, fields: ["kind", "version", "familyId", "familyDefinitionHash", "instanceNominationKey", "familyCandidateKey", "candidateSubjectHash", "candidateEvidenceRoot", "evidence"], codecAuthority: "discovery.CandidateRecordV1", referenceContract: "all and only raw locator physical envelopes named by evidence" },
-    { kind: CANDIDATE_PARTITION_COMMITMENT_KIND, fields: CANDIDATE_PARTITION_COMMITMENT_FIELDS, codecAuthority: "checkpoint.decodeCandidatePartitionCommitment", referenceContract: "exact signed candidate partition proof + candidate manifest/record closure" },
-    { kind: CANDIDATE_PARTITION_PROOF_KIND, codecAuthority: "candidate-partition-authority.decodeCandidatePartitionProofV1", referenceContract: "exact signed candidate partition proof for the active run" },
+    { kind: CANDIDATE_PARTITION_COMMITMENT_KIND, fields: CANDIDATE_PARTITION_COMMITMENT_FIELDS, codecAuthority: "checkpoint.decodeCandidatePartitionCommitment", referenceContract: "exact candidate partition content commitment + candidate manifest/record closure" },
+    { kind: CANDIDATE_PARTITION_AUTHORITY_KIND, codecAuthority: "candidate-partition-authority.decodeCandidatePartitionCommitmentV1", referenceContract: "exact content commitment for the active run" },
     { kind: OUTCOME_KIND, variants: {
-      verified: ["kind", "runCandidateKey", "familyCandidateKey", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "instanceKey", "publication", "identityProof", "outcomeIssuerProof"],
-      chainProvenRejected: ["kind", "runCandidateKey", "familyCandidateKey", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "proof", "rejectionEvidence", "identityProof", "outcomeIssuerProof"],
-      retryable: ["kind", "runCandidateKey", "familyCandidateKey", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "failure", "identityProof", "outcomeIssuerProof"],
-      invalidProgram: ["kind", "runCandidateKey", "familyCandidateKey", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "failure", "identityProof", "outcomeIssuerProof"],
+      verified: ["kind", "runCandidateKey", "familyCandidateKey", "runtimeAuthority", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot", "instanceKey", "publication", "identityCommitment", "outcomeCommitment"],
+      chainProvenRejected: ["kind", "runCandidateKey", "familyCandidateKey", "runtimeAuthority", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot", "proof", "rejectionEvidence", "identityCommitment", "outcomeCommitment"],
+      retryable: ["kind", "runCandidateKey", "familyCandidateKey", "runtimeAuthority", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot", "failure", "identityCommitment", "outcomeCommitment"],
+      invalidProgram: ["kind", "runCandidateKey", "familyCandidateKey", "runtimeAuthority", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot", "failure", "identityCommitment", "outcomeCommitment"],
     }, codecAuthority: "attestation.validateCandidateFinalOutcome", referenceContract: "chainProvenRejected: exactly one rejection evidence bundle; all other variants: no physical references", semanticHashDomain: "aloha/candidate-final-outcome/v1" },
-    { kind: PARTIAL_OUTCOME_KIND, fields: ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "kind", "identity", "outcome"], codecAuthority: "attestation.AttestationPersistedOutcomeV1", referenceContract: "exact partial identity event; no physical references" },
+    { kind: PARTIAL_OUTCOME_KIND, fields: ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "runtimeAuthority", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot", "kind", "identity", "outcome"], codecAuthority: "attestation.AttestationPersistedOutcomeV1", referenceContract: "exact partial identity commitment; no physical references" },
     { kind: REJECTION_BUNDLE_KIND, fields: ["kind", "version", "issuerId", "runId", "chainId", "cutoffNumber", "cutoffHash", "cutoffStateRoot", "stage", "familyDefinitionHash", "familyCandidateKey", "candidateSubjectHash", "identitySubjectHash", "instanceNominationKey", "executorAuthorityRoot", "workerEpoch", "executorSessionHash", "executionSessionHash", "request", "transportFacts", "effectObservations", "decisionCode", "decisionBytesHex", "requestFingerprint", "orderedTransportFactsRoot", "effectObservationRoot", "decisionBytesHash", "evidenceBundleRoot"], codecAuthority: "attestation.validateRejectionEvidenceBundle", referenceContract: "exactly one request raw + ordered transport raw + ordered effect raw + one decision raw; no extras" },
     { kind: REJECTION_REQUEST_RAW_KIND, wire: "opaque-bytes", codecAuthority: "attestation RejectionEvidenceBundle.request.canonicalBytesHex", referenceContract: "none" },
     { kind: REJECTION_TRANSPORT_RAW_KIND, wire: "opaque-bytes", codecAuthority: "attestation RejectionEvidenceBundle.transportFacts[*].canonicalBytesHex", referenceContract: "none" },
     { kind: REJECTION_EFFECT_RAW_KIND, wire: "opaque-bytes", codecAuthority: "attestation RejectionEvidenceBundle.effectObservations[*].canonicalBytesHex", referenceContract: "none" },
     { kind: REJECTION_DECISION_RAW_KIND, wire: "opaque-bytes", codecAuthority: "attestation RejectionEvidenceBundle.decisionBytesHex", referenceContract: "none" },
-    { kind: ATTESTATION_PARTITION_KIND, fields: ["schemaVersion", "kind", "runId", "cutoff", "candidatePartitionRoot", "outcomeCount", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "accounting", "exactOutcomePartitionRoot"], codecAuthority: "checkpoint.decodeAttestationPartitionRecordWith+attestation.validateAttestationPartition", referenceContract: "exact outcome partition manifest" },
+    { kind: ATTESTATION_PARTITION_KIND, fields: ["schemaVersion", "kind", "runId", "cutoff", "candidatePartitionRoot", "outcomeCount", "runtimeAuthority", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot", "accounting", "exactOutcomePartitionRoot"], codecAuthority: "checkpoint.decodeAttestationPartitionRecordWith+attestation.validateAttestationPartition", referenceContract: "exact outcome partition manifest" },
     { kind: RAW_EVIDENCE_LOCATOR_KIND, wire: "opaque-bytes", codecAuthority: "sha256(raw locator bytes)", referenceContract: "none" },
     { kind: PARTITION_PAGE_KIND, fields: PARTITION_PAGE_FIELDS, codecAuthority: "checkpoint.loadPartition", referenceContract: "exact ordered entry storage envelopes" },
     { kind: PARTITION_MANIFEST_KIND, fields: PARTITION_MANIFEST_FIELDS, codecAuthority: "checkpoint.loadPartition", referenceContract: "exact ordered page storage envelopes" },
@@ -310,7 +303,7 @@ export const CHECKPOINT_SCHEMA_MANIFEST = deepFreeze({
     { kind: INSTANCE_CATALOG_CHUNK_KIND, fields: ["schemaVersion", "kind", "publications", "nextPublicationChunkRef"], codecAuthority: "catalog.decodeInstanceCatalogV1", referenceContract: "none" },
     { kind: GRAPH_KIND, fields: ["schemaVersion", "kind", "cutoff", "instanceCatalogRoot", "edgeCount", "edgeSequenceRoot", "edgeChunkCount", "firstEdgeChunkRef", "graphRoot"], codecAuthority: "graph.decodePersistedGraphV1", referenceContract: "all and only linked edge chunks", semanticHashDomain: "aloha/persisted-graph/v2" },
     { kind: GRAPH_CHUNK_KIND, fields: ["schemaVersion", "kind", "edges", "nextEdgeChunkRef"], codecAuthority: "graph.decodePersistedGraphV1", referenceContract: "none" },
-    { kind: READY_CLOSURE_KIND, fields: READY_CLOSURE_FIELDS, codecAuthority: "checkpoint.decodeReadyClosure", referenceContract: "exact source coverage + candidate manifest/records + outcome manifest/records + attestation partition + candidate partition commitment + candidate partition proof + verified memo + instance catalog + graph", semanticHashDomain: "aloha/ready-generation/v1" },
+    { kind: READY_CLOSURE_KIND, fields: READY_CLOSURE_FIELDS, codecAuthority: "checkpoint.decodeReadyClosure", referenceContract: "exact source coverage + candidate manifest/records + outcome manifest/records + attestation partition + ready commitment + candidate partition commitment + verified memo + instance catalog + graph", semanticHashDomain: "aloha/ready-generation/v1" },
     { kind: READY_STAGE_KIND, fields: READY_STAGE_FIELDS, codecAuthority: "checkpoint.decodeReadyStage", referenceContract: "exact source coverage + verified memo + instance catalog + graph; staged is never a serving authority", semanticHashDomain: "aloha/ready-stage/v1" },
     { kind: DIAGNOSTIC_KIND, fields: MEMO_SEED_RECEIPT_FIELDS, codecAuthority: "checkpoint.decodeMemoSeedReceipt", referenceContract: "exact prior memo-seed receipt when sequence is greater than one" },
     { kind: PROBE_RECEIPT_KIND, fields: STORED_PROBE_RECEIPT_FIELDS, codecAuthority: "checkpoint.decodeStoredProbeReceipt+attestation.validateProbeReceipt", referenceContract: "exact prior probe receipt plus the immutable candidate and before/after outcome partitions", semanticHashDomain: "aloha/single-instance-probe-receipt/v2" },
@@ -354,9 +347,9 @@ interface AttestationPartitionManifestV1 {
   readonly cutoff: CanonicalCutoffV1;
   readonly candidatePartitionRoot: Hash;
   readonly outcomeCount: string;
+  readonly runtimeAuthority: import("../../runtime-authority/src/index.ts").RuntimeAuthorityProjectionV1;
   readonly attestationAuthorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly frameworkAuthorityRoot: Hash;
   readonly executorAuthorityRoot: Hash;
   readonly accounting: RunAccountingV1;
   readonly exactOutcomePartitionRoot: Hash;
@@ -366,7 +359,7 @@ interface StoredRunEnvelopeV2 {
   readonly runId: string;
   readonly parentGenerationId: string | null;
   readonly checkpointRevision: string;
-  /** Immutable revision at which the signed candidate partition was created. */
+  /** Immutable revision at which the candidate partition commitment was created. */
   readonly candidatePartitionRevision: string;
   readonly cutoff: CandidateRecordV1 extends never ? never : BeginRunInputV1["cutoff"];
   readonly recentObservationRoot: Hash;
@@ -381,7 +374,7 @@ interface StoredRunEnvelopeV2 {
   readonly nominationClosureStorageHash: Hash;
   readonly candidatePartitionRoot: Hash;
   readonly candidatePartitionStorageHash: Hash;
-  readonly candidatePartitionProofStorageHash: Hash;
+  readonly candidatePartitionCommitmentStorageHash: Hash;
   readonly candidateRecordCount: string;
   readonly outcomePartitionRoot: Hash;
   readonly outcomePartitionStorageHash: Hash;
@@ -400,7 +393,7 @@ function runContentReferences(run: StoredRunEnvelopeV2): readonly Hash[] {
     run.sourcePlanEvidenceStorageHash,
     run.nominationClosureStorageHash,
     run.candidatePartitionStorageHash,
-    run.candidatePartitionProofStorageHash,
+    run.candidatePartitionCommitmentStorageHash,
     run.outcomePartitionStorageHash,
     ...(run.partialOutcomePartitionStorageHash === null ? [] : [run.partialOutcomePartitionStorageHash]),
     ...(run.attestationPartitionStorageHash === null ? [] : [run.attestationPartitionStorageHash]),
@@ -409,7 +402,9 @@ function runContentReferences(run: StoredRunEnvelopeV2): readonly Hash[] {
 }
 
 /** Internal hydration view; raw candidates never cross the checkpoint port. */
-type InternalBuilderRunV1 = InProgressBuilderRunV1 & {
+type InternalBuilderRunV1 = Omit<InProgressBuilderRunV1, "candidatePartition" | "candidatePartitionBinding"> & {
+  readonly candidatePartition: CandidatePartitionCapabilityV1;
+  readonly candidatePartitionBinding: import("../../../specs/candidate-partition-authority/src/index.ts").CandidatePartitionCommitmentV1;
   readonly candidates: readonly CandidateRecordV1[];
 };
 
@@ -419,7 +414,7 @@ interface RetryableProbeCapabilityStateV1 {
   readonly expectedOutcomeHash: Hash;
   readonly checkpointRevision: string;
   readonly candidateSubjectHash: Hash;
-  readonly candidatePartitionBinding: CandidatePartitionBindingV1;
+  readonly candidatePartitionBinding: import("../../../specs/candidate-partition-authority/src/index.ts").CandidatePartitionCommitmentV1;
   readonly candidatePartition: CandidatePartitionCapabilityV1;
   used: boolean;
 }
@@ -539,14 +534,14 @@ interface ReadyClosureV1 {
   readonly candidateKeysRoot: Hash;
   readonly recentObservationRoot: Hash;
   readonly sourceCoverageRoot: Hash;
-  /** The proof's checkpointRevision (equal to the immutable candidatePartitionRevision). */
+  /** The commitment's checkpointRevision (equal to the immutable candidatePartitionRevision). */
   readonly candidatePartitionRevision: string;
   readonly sourceCoverageStorageHash: Hash;
   readonly sourceExecutionSetRoot: Hash;
   readonly sourceExecutionSetStorageHash: Hash;
   readonly sourcePlanEvidenceStorageHash: Hash;
+  readonly candidatePartitionReadyCommitmentStorageHash: Hash;
   readonly candidatePartitionCommitmentStorageHash: Hash;
-  readonly candidatePartitionProofStorageHash: Hash;
   readonly verifiedMemoSetStorageHash: Hash;
   readonly instanceCatalogStorageHash: Hash;
   readonly graphStorageHash: Hash;
@@ -585,7 +580,7 @@ export interface CheckpointSixStepReadyEdgeInputV1 {
 }
 
 /** Producer-native Stage 1/2 append authority. Its issuer lives behind the
- * internal runtime-release composition boundary. */
+ * internal runtime composition boundary. */
 export interface CheckpointSixStepArtifactPortV1 {
   readonly emitVerifiedOutcome: (
     input: CheckpointSixStepVerifiedOutcomeInputV1,
@@ -626,9 +621,9 @@ interface CandidatePartitionCommitmentV1 {
   readonly candidateKeysRoot: Hash;
   readonly recentObservationRoot: Hash;
   readonly sourceCoverageRoot: Hash;
-  /** The immutable candidate partition revision, named checkpointRevision in the signed proof. */
+  /** The immutable candidate partition revision bound by the content commitment. */
   readonly checkpointRevision: string;
-  readonly candidatePartitionProofStorageHash: Hash;
+  readonly candidatePartitionCommitmentStorageHash: Hash;
   readonly exactOutcomePartitionRoot: Hash;
   readonly sealedRevision: string;
   readonly stageRevision: string;
@@ -660,7 +655,7 @@ export interface OutcomeWriterOptions {
   readonly mailboxCapacity?: number;
 }
 
-/** Exact active-run difference used by the release-owned attestation
+/** Exact active-run difference used by the runtime-owned attestation
  * coordinator. Both sets are issued atomically from the current durable
  * closure; neither contains raw DTO authority. */
 export interface AttestationResumeCapabilitiesV1 {
@@ -844,18 +839,6 @@ function validateSourcePlanEvidenceExecutionJoin(
   }
 }
 
-function nominationQualificationBindings(
-  closure: NominationClosureV1,
-): readonly CandidateNominationQualificationBindingV1[] {
-  return deepFreeze(closure.receipts.map(receipt => ({
-    sourcePlanIdentity: receipt.sourcePlanIdentity,
-    sourcePlanLeafDigest: receipt.sourcePlanLeafDigest,
-    nominationProgramRoot: receipt.nominationProgramRoot,
-    nominationProgramProposalLeafDigest: receipt.nominationProgramProposalLeafDigest,
-    qualificationLeafDigest: receipt.qualificationRoot,
-  })));
-}
-
 function sameCutoff(left: BeginRunInputV1["cutoff"], right: BeginRunInputV1["cutoff"]): boolean {
   return left.chainId === right.chainId && left.number === right.number
     && left.hash === right.hash && left.stateRoot === right.stateRoot;
@@ -913,7 +896,7 @@ function decodeRun(bytes: Uint8Array): StoredRunEnvelopeV2 {
     nominationClosureStorageHash: assertHash(value.nominationClosureStorageHash, "storedRun.nominationClosureStorageHash"),
     candidatePartitionRoot: assertHash(value.candidatePartitionRoot, "storedRun.candidatePartitionRoot"),
     candidatePartitionStorageHash: assertHash(value.candidatePartitionStorageHash, "storedRun.candidatePartitionStorageHash"),
-    candidatePartitionProofStorageHash: assertHash(value.candidatePartitionProofStorageHash, "storedRun.candidatePartitionProofStorageHash"),
+    candidatePartitionCommitmentStorageHash: assertHash(value.candidatePartitionCommitmentStorageHash, "storedRun.candidatePartitionCommitmentStorageHash"),
     candidateRecordCount: decimal(value.candidateRecordCount, "storedRun.candidateRecordCount"),
     outcomePartitionRoot: assertHash(value.outcomePartitionRoot, "storedRun.outcomePartitionRoot"),
     outcomePartitionStorageHash: assertHash(value.outcomePartitionStorageHash, "storedRun.outcomePartitionStorageHash"),
@@ -932,7 +915,7 @@ function decodeRun(bytes: Uint8Array): StoredRunEnvelopeV2 {
 }
 
 function decodePersistedIdentity(value: unknown, context: string): IdentityVerifiedV1 {
-  const raw = exactObject(value, ["kind", "familyInstanceKey", "identityMemo", "identityMemoHash", "descriptorHash", "evidenceRoot", "issuerProof"], context);
+  const raw = exactObject(value, ["kind", "familyInstanceKey", "identityMemo", "identityMemoHash", "descriptorHash", "evidenceRoot", "identityCommitment"], context);
   if (raw.kind !== "identityVerified") throw new CorruptDurableStoreError(`${context}.kind is invalid`);
   const observation = validateIdentityObservation({
     kind: raw.kind,
@@ -944,14 +927,14 @@ function decodePersistedIdentity(value: unknown, context: string): IdentityVerif
   }, context);
   return deepFreeze({
     ...observation,
-    issuerProof: validateIdentityIssuerProof(raw.issuerProof),
+    identityCommitment: decodeAttestationIdentityCommitmentV1(raw.identityCommitment),
   });
 }
 
 function decodePartialOutcome(bytes: Uint8Array, context: string): AttestationPersistedOutcomeV1 {
   const raw = exactObject(
     decodeCanonicalJson(bytes),
-    ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "kind", "identity", "outcome"],
+    ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "runtimeAuthority", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot", "kind", "identity", "outcome"],
     context,
   );
   if (raw.kind !== "partial-identity" || raw.outcome !== null || raw.identity === null) {
@@ -962,9 +945,9 @@ function decodePartialOutcome(bytes: Uint8Array, context: string): AttestationPe
     candidatePartitionRoot: assertHash(raw.candidatePartitionRoot, `${context}.candidatePartitionRoot`),
     familyCandidateKey: assertHash(raw.familyCandidateKey, `${context}.familyCandidateKey`),
     outcomeHash: assertHash(raw.outcomeHash, `${context}.outcomeHash`),
+    runtimeAuthority: decodeRuntimeAuthorityProjectionV1(raw.runtimeAuthority),
     attestationAuthorityRoot: assertHash(raw.attestationAuthorityRoot, `${context}.attestationAuthorityRoot`),
-    releaseAuthorityRoot: assertHash(raw.releaseAuthorityRoot, `${context}.releaseAuthorityRoot`),
-    releaseProvenanceHash: assertHash(raw.releaseProvenanceHash, `${context}.releaseProvenanceHash`),
+    frameworkAuthorityRoot: assertHash(raw.frameworkAuthorityRoot, `${context}.frameworkAuthorityRoot`),
     executorAuthorityRoot: assertHash(raw.executorAuthorityRoot, `${context}.executorAuthorityRoot`),
     kind: "partial-identity" as const,
     identity: decodePersistedIdentity(raw.identity, `${context}.identity`),
@@ -1489,9 +1472,9 @@ function attestationPartitionManifestBytes(partition: AttestationPartitionV1): U
     cutoff: partition.cutoff,
     candidatePartitionRoot: partition.candidatePartitionRoot,
     outcomeCount: String(partition.outcomes.length),
+    runtimeAuthority: partition.runtimeAuthority,
     attestationAuthorityRoot: partition.attestationAuthorityRoot,
-    releaseAuthorityRoot: partition.releaseAuthorityRoot,
-    releaseProvenanceHash: partition.releaseProvenanceHash,
+    frameworkAuthorityRoot: partition.frameworkAuthorityRoot,
     executorAuthorityRoot: partition.executorAuthorityRoot,
     accounting: partition.accounting,
     exactOutcomePartitionRoot: partition.exactOutcomePartitionRoot,
@@ -1549,9 +1532,9 @@ function decodeAttestationPartitionRecordWith(
       cutoff: (field, path) => decodeCanonicalCutoff(field, path),
       candidatePartitionRoot: (field, path) => assertHash(field, path),
       outcomeCount: (field, path) => assertDecimalString(field, path),
+      runtimeAuthority: field => decodeRuntimeAuthorityProjectionV1(field),
       attestationAuthorityRoot: (field, path) => assertHash(field, path),
-      releaseAuthorityRoot: (field, path) => assertHash(field, path),
-      releaseProvenanceHash: (field, path) => assertHash(field, path),
+      frameworkAuthorityRoot: (field, path) => assertHash(field, path),
       executorAuthorityRoot: (field, path) => assertHash(field, path),
       accounting: (field, path) => decodeExactObject(field, {
         pending: (value, valuePath) => assertDecimalString(value, valuePath),
@@ -1571,9 +1554,9 @@ function decodeAttestationPartitionRecordWith(
     runId: manifest.runId,
     cutoff: manifest.cutoff,
     candidatePartitionRoot: manifest.candidatePartitionRoot,
+    runtimeAuthority: manifest.runtimeAuthority,
     attestationAuthorityRoot: manifest.attestationAuthorityRoot,
-    releaseAuthorityRoot: manifest.releaseAuthorityRoot,
-    releaseProvenanceHash: manifest.releaseProvenanceHash,
+    frameworkAuthorityRoot: manifest.frameworkAuthorityRoot,
     executorAuthorityRoot: manifest.executorAuthorityRoot,
     outcomesRoot: hashCanonicalPartition("aloha/candidate-outcomes/v1", outcomes),
   });
@@ -1593,9 +1576,9 @@ function decodeAttestationPartitionRecordWith(
     cutoff: manifest.cutoff,
     candidatePartitionRoot: manifest.candidatePartitionRoot,
     outcomes,
+    runtimeAuthority: manifest.runtimeAuthority,
     attestationAuthorityRoot: manifest.attestationAuthorityRoot,
-    releaseAuthorityRoot: manifest.releaseAuthorityRoot,
-    releaseProvenanceHash: manifest.releaseProvenanceHash,
+    frameworkAuthorityRoot: manifest.frameworkAuthorityRoot,
     executorAuthorityRoot: manifest.executorAuthorityRoot,
     accounting: manifest.accounting,
     exactOutcomePartitionRoot: manifest.exactOutcomePartitionRoot,
@@ -1791,7 +1774,7 @@ function decodeCandidatePartitionCommitment(bytes: Uint8Array): CandidatePartiti
     recentObservationRoot: assertHash(value.recentObservationRoot, "candidatePartitionCommitment.recentObservationRoot"),
     sourceCoverageRoot: assertHash(value.sourceCoverageRoot, "candidatePartitionCommitment.sourceCoverageRoot"),
     checkpointRevision: decimal(value.checkpointRevision, "candidatePartitionCommitment.checkpointRevision"),
-    candidatePartitionProofStorageHash: assertHash(value.candidatePartitionProofStorageHash, "candidatePartitionCommitment.candidatePartitionProofStorageHash"),
+    candidatePartitionCommitmentStorageHash: assertHash(value.candidatePartitionCommitmentStorageHash, "candidatePartitionCommitment.candidatePartitionCommitmentStorageHash"),
     exactOutcomePartitionRoot: assertHash(value.exactOutcomePartitionRoot, "candidatePartitionCommitment.exactOutcomePartitionRoot"),
     sealedRevision: decimal(value.sealedRevision, "candidatePartitionCommitment.sealedRevision"),
     stageRevision: decimal(value.stageRevision, "candidatePartitionCommitment.stageRevision"),
@@ -1820,8 +1803,8 @@ function decodeReadyClosure(bytes: Uint8Array): ReadyClosureV1 {
     sourceExecutionSetRoot: assertHash(value.sourceExecutionSetRoot, "readyClosure.sourceExecutionSetRoot"),
     sourceExecutionSetStorageHash: assertHash(value.sourceExecutionSetStorageHash, "readyClosure.sourceExecutionSetStorageHash"),
     sourcePlanEvidenceStorageHash: assertHash(value.sourcePlanEvidenceStorageHash, "readyClosure.sourcePlanEvidenceStorageHash"),
+    candidatePartitionReadyCommitmentStorageHash: assertHash(value.candidatePartitionReadyCommitmentStorageHash, "readyClosure.candidatePartitionReadyCommitmentStorageHash"),
     candidatePartitionCommitmentStorageHash: assertHash(value.candidatePartitionCommitmentStorageHash, "readyClosure.candidatePartitionCommitmentStorageHash"),
-    candidatePartitionProofStorageHash: assertHash(value.candidatePartitionProofStorageHash, "readyClosure.candidatePartitionProofStorageHash"),
     verifiedMemoSetStorageHash: assertHash(value.verifiedMemoSetStorageHash, "readyClosure.verifiedMemoSetStorageHash"),
     instanceCatalogStorageHash: assertHash(value.instanceCatalogStorageHash, "readyClosure.instanceCatalogStorageHash"),
     graphStorageHash: assertHash(value.graphStorageHash, "readyClosure.graphStorageHash"),
@@ -1966,7 +1949,6 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   readonly #probeCaller: object;
   readonly #promotionAuthority: ReadyPromotionAuthorityGuardPort;
   readonly #attestationAuthority: AttestationValidationAuthorityV1;
-  readonly #candidatePartitionProofIssuer: CandidatePartitionProofIssuerPortV1;
   readonly #candidatePartitionCapabilities: CandidatePartitionCapabilityRegistryV1;
   readonly #candidatePartitionReader: CandidatePartitionReaderPortV1;
   readonly #sixStepArtifacts: CheckpointSixStepArtifactPortV1;
@@ -1996,25 +1978,13 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     probeCaller: object,
     promotionAuthority: ReadyPromotionAuthorityGuardPort,
     attestationAuthority: AttestationValidationAuthorityV1,
-    candidatePartitionProofIssuer: CandidatePartitionProofIssuerPortV1,
     sixStepArtifacts: CheckpointSixStepArtifactPortV1,
     candidatePartitionBootstrap: CandidatePartitionBootstrapV1 = createCandidatePartitionBootstrap(),
   ) {
-    durable.bindStoreRole("checkpoint");
     checkpointStoreInstances.add(this);
     this.#durable = durable;
     this.#canonical = canonical;
     this.#probeCaller = probeCaller;
-    try {
-      this.#candidatePartitionProofIssuer = assertIssuedCandidatePartitionProofIssuer(candidatePartitionProofIssuer);
-    } catch (error) {
-      throw new CheckpointError("candidate-partition-proof-issuer-invalid", error instanceof Error ? error.message : "candidate partition proof issuer is required");
-    }
-    this.#candidatePartitionCapabilities = consumeCandidatePartitionBootstrap(candidatePartitionBootstrap);
-    this.#candidatePartitionReader = this.#candidatePartitionCapabilities.reader;
-    assertCheckpointSixStepArtifactPortV1(sixStepArtifacts);
-    this.#sixStepArtifacts = sixStepArtifacts;
-    this.#promotionAuthority = assertIssuedReadyPromotionAuthorityPort(promotionAuthority);
     try {
       this.#attestationAuthority = assertAttestationValidationAuthority(attestationAuthority);
     } catch (error) {
@@ -2023,6 +1993,12 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         error instanceof Error ? error.message : "attestation validation authority is not issued",
       );
     }
+    bindCheckpointDurableAuthorityLayoutV1(durable, this.#captureAuthorityFence().runtimeAuthority);
+    this.#candidatePartitionCapabilities = consumeCandidatePartitionBootstrap(candidatePartitionBootstrap);
+    this.#candidatePartitionReader = this.#candidatePartitionCapabilities.reader;
+    assertCheckpointSixStepArtifactPortV1(sixStepArtifacts);
+    this.#sixStepArtifacts = sixStepArtifacts;
+    this.#promotionAuthority = assertIssuedReadyPromotionAuthorityPort(promotionAuthority);
     this.#readyStage12EvidenceReader = Object.freeze({
       binding: (capability: ReadyStage12EvidenceCapabilityV1) => this.#readyStage12EvidenceBinding(capability),
       read: (capability: ReadyStage12EvidenceCapabilityV1) => this.#readReadyStage12Evidence(capability),
@@ -2079,20 +2055,21 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   }
 
   /**
-   * Checkpoint's public authority methods own their release fence.  The
+   * Checkpoint's public authority methods own their runtime-authority fence. The
    * bootstrap facade is only an outer convenience guard; it must not be the
-   * sole protection against a release rotation during an async read.
+   * sole protection against a runtime-authority rotation during an async read.
    */
-  #captureReleaseFence(): ReturnType<CandidatePartitionProofIssuerPortV1["currentRelease"]> {
-    return deepFreeze({ ...this.#candidatePartitionProofIssuer.currentRelease() });
+  #captureAuthorityFence(): AttestationEvidenceAuthoritySnapshotV1 {
+    const snapshot = this.#attestationAuthority.readEvidenceAuthority();
+    return deepFreeze(structuredClone(snapshot));
   }
 
-  #assertReleaseFenceUnchanged(
-    before: ReturnType<CandidatePartitionProofIssuerPortV1["currentRelease"]>,
+  #assertAuthorityFenceUnchanged(
+    before: AttestationEvidenceAuthoritySnapshotV1,
   ): void {
-    const after = this.#candidatePartitionProofIssuer.currentRelease();
+    const after = this.#captureAuthorityFence();
     if (encodeCanonicalJson(after) !== encodeCanonicalJson(before)) {
-      throw new CheckpointRunStateError("checkpoint release rotated during public authority read");
+      throw new CheckpointRunStateError("checkpoint runtime authority changed during public authority read");
     }
   }
 
@@ -2162,7 +2139,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
    * candidate, or either side of the outcome transition.
    */
   loadLatestProbeEvidence(): CheckpointProbeEvidenceV1 | null {
-    const releaseFence = this.#captureReleaseFence();
+    const authorityFence = this.#captureAuthorityFence();
     const record = this.#durable.readRoot();
     if (!record) return null;
     const root = rootFromRecord(record);
@@ -2181,7 +2158,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || finalRoot.latestProbeReceiptHash !== root.latestProbeReceiptHash
       || finalRoot.probeReceiptLineageRoot !== root.probeReceiptLineageRoot
     ) throw new CheckpointRunStateError("probe evidence changed during durable load");
-    this.#assertReleaseFenceUnchanged(releaseFence);
+    this.#assertAuthorityFenceUnchanged(authorityFence);
     return evidence;
   }
 
@@ -2207,7 +2184,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
    * SQLite closure instead of trusting this semantic projection by itself.
    */
   async loadRuntimeRestartSnapshot(): Promise<CheckpointRuntimeRestartSnapshotV1> {
-    const releaseFence = this.#captureReleaseFence();
+    const authorityFence = this.#captureAuthorityFence();
     const rootRecord = this.#durable.readRoot();
     if (!rootRecord) throw new CheckpointRunStateError("runtime restart snapshot requires a checkpoint root");
     const root = rootFromRecord(rootRecord);
@@ -2234,7 +2211,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || finalRoot.latestProbeReceiptHash !== root.latestProbeReceiptHash) {
       throw new CheckpointRunStateError("runtime restart snapshot changed during durable load");
     }
-    this.#assertReleaseFenceUnchanged(releaseFence);
+    this.#assertAuthorityFenceUnchanged(authorityFence);
     return deepFreeze({
       checkpointStore: this.loadRuntimeStoreAnchor(),
       checkpointRevision: root.revision,
@@ -2254,11 +2231,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   /**
    * Read the active ready record from the checkpoint root, never from a
    * caller-provided object. The closure decoder and root-reference validator
-   * prove the durable identity; the canonical and release fences prove that
+   * prove the durable identity; the canonical and runtime-authority fences prove that
    * the record is still eligible to be considered by ReadyGeneration.
    */
   async loadActiveReady(): Promise<ReadyGenerationV1 | null> {
-    const releaseFence = this.#captureReleaseFence();
+    const authorityFence = this.#captureAuthorityFence();
     const record = this.#durable.readRoot();
     if (!record) return null;
     const root = rootFromRecord(record);
@@ -2280,11 +2257,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || finalRoot.readyGenerationRecordHash !== root.readyGenerationRecordHash
     ) throw new CheckpointRunStateError("active ready generation changed during active ready load");
     // Fence the asynchronous durable read against canonical drift as well as
-    // release rotation. Release mismatch is deliberately returned to
+    // runtime-authority rotation. Authority mismatch is deliberately returned to
     // ReadyGeneration, which classifies it as non-reusable under the current
-    // release instead of hiding the exact stale binding here.
+    // the runtime owner instead of hiding the exact stale binding here.
     await this.#canonical.assertStillCanonical(ready.cutoff);
-    this.#assertReleaseFenceUnchanged(releaseFence);
+    this.#assertAuthorityFenceUnchanged(authorityFence);
     return ready;
   }
 
@@ -2313,8 +2290,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       if (partial.identity === null) throw new CorruptDurableStoreError("partial identity is missing its identity record");
       const candidate = candidates.get(partial.familyCandidateKey);
       if (!candidate) throw new CorruptDurableStoreError("partial identity candidate is absent");
-      const proofHash = partial.identity.issuerProof.proofHash;
-      const claimKey = `${loaded.envelope.runId}:${partial.familyCandidateKey}:${proofHash}`;
+      const commitmentHash = partial.identity.identityCommitment.commitmentHash;
+      const claimKey = `${loaded.envelope.runId}:${partial.familyCandidateKey}:${commitmentHash}`;
       if (this.#issuedResumeClaims.has(claimKey) || this.#pendingResumeClaimKeys.has(claimKey)) {
         throw new CheckpointRunStateError("durable partial resume capability already claimed");
       }
@@ -2329,9 +2306,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         familyCandidateKey: partial.familyCandidateKey,
         identity: partial.identity,
         outcomeHash: partial.outcomeHash,
+        runtimeAuthority: partial.runtimeAuthority,
         attestationAuthorityRoot: partial.attestationAuthorityRoot,
-        releaseAuthorityRoot: partial.releaseAuthorityRoot,
-        releaseProvenanceHash: partial.releaseProvenanceHash,
+        frameworkAuthorityRoot: partial.frameworkAuthorityRoot,
         executorAuthorityRoot: partial.executorAuthorityRoot,
       }));
       identityClaims.push(claimKey);
@@ -2367,9 +2344,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         candidate,
         outcome,
         outcomeHash,
+        runtimeAuthority: outcome.runtimeAuthority,
         attestationAuthorityRoot: outcome.attestationAuthorityRoot,
-        releaseAuthorityRoot: outcome.releaseAuthorityRoot,
-        releaseProvenanceHash: outcome.releaseProvenanceHash,
+        frameworkAuthorityRoot: outcome.frameworkAuthorityRoot,
         executorAuthorityRoot: outcome.executorAuthorityRoot,
       }));
       finalClaims.push(claimKey);
@@ -2503,8 +2480,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || sealedRunSnapshot.runId !== stage.runId
       || sealedRunSnapshot.verifiedMemoSetRoot !== stage.readyBase.verifiedMemoSetRoot
       || sealedRunSnapshot.partition.exactOutcomePartitionRoot !== stage.readyBase.exactOutcomePartitionRoot
-      || sealedRunSnapshot.releaseProvenanceHash !== stage.readyBase.releaseProvenanceHash
-      || sealedRunSnapshot.candidatePartitionProofStorageHash !== stage.readyBase.candidatePartitionProofStorageHash
+      || sealedRunSnapshot.candidatePartitionCommitmentStorageHash !== stage.readyBase.candidatePartitionCommitmentStorageHash
     ) throw new CorruptDurableStoreError("staged promotion lineage mismatch");
     return deepFreeze({
       sealedRun,
@@ -2588,6 +2564,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       }
     }
     const runId = randomUUID();
+    const authorityFence = this.#captureAuthorityFence();
     const owner = `checkpoint-begin/${runId}/${randomUUID()}`;
     const lease = this.#durable.acquireWriterLease(owner);
     try {
@@ -2692,36 +2669,27 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         const outcomeManifestHash = putPartition(tx, runId, "outcome", []);
         const memoStorageHash = this.#findMemoStorageHash(tx, currentRecord.references, root.verifiedMemoRoot);
         const nextRevision = (BigInt(root.revision) + 1n).toString();
-        this.#candidatePartitionProofIssuer.assertNominationQualificationsQualified(
-          nominationQualificationBindings(nominationClosure),
-        );
-        const release = this.#candidatePartitionProofIssuer.currentRelease();
-        const releaseProvenanceHash = release.releaseProvenanceHash;
-        const proofPayload = makeCandidatePartitionProofPayload({
+        const commitment = createCandidatePartitionCommitmentV1({
+          kind: "aloha.candidate-partition-commitment",
+          version: "1",
+          runtimeAuthority: authorityFence.runtimeAuthority,
           runId,
           cutoff,
           candidatePartitionRoot: computedCandidatePartitionRoot,
           candidatePartitionStorageHash: candidateManifestHash,
           nominationClosureRoot: nominationClosure.root,
           nominationClosureStorageHash,
-          candidates: input.candidates,
+          recordCount: String(input.candidates.length),
+          candidateKeysRoot: candidatePartitionKeysRoot(
+            input.candidates.map(candidate => candidate.familyCandidateKey),
+          ),
           recentObservationRoot: input.recentObservation.observationRoot,
           sourceCoverageRoot: input.sourceCoverage.sourceCoverageRoot,
           checkpointRevision: nextRevision,
-          releaseProvenanceHash,
-          issuerKeyId: release.candidatePartitionProofIssuerKeyId,
         });
-        if (candidatePartitionProofPayloadHash(proofPayload) === `0x${"0".repeat(64)}`) {
-          throw new CheckpointRunStateError("candidate partition proof payload is empty");
-        }
-        const issuedProof = this.#candidatePartitionProofIssuer.issue(proofPayload);
-        const proof = this.#candidatePartitionProofIssuer.verify(issuedProof, {
-          binding: candidatePartitionBindingFromProof(issuedProof),
-          release,
-        });
-        const proofStorageHash = tx.putImmutable(
-          CANDIDATE_PARTITION_PROOF_KIND,
-          encodeCanonicalBytes(proof),
+        const commitmentStorageHash = tx.putImmutable(
+          CANDIDATE_PARTITION_AUTHORITY_KIND,
+          encodeCanonicalBytes(commitment),
         );
         const run: StoredRunEnvelopeV2 = deepFreeze({
           runId,
@@ -2741,7 +2709,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           nominationClosureStorageHash,
           candidatePartitionRoot: computedCandidatePartitionRoot,
           candidatePartitionStorageHash: candidateManifestHash,
-          candidatePartitionProofStorageHash: proofStorageHash,
+          candidatePartitionCommitmentStorageHash: commitmentStorageHash,
           candidateRecordCount: String(input.candidates.length),
           outcomePartitionRoot: outcomePartitionRoot(runId, []),
           outcomePartitionStorageHash: outcomeManifestHash,
@@ -2955,7 +2923,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   }
 
   /**
-   * Internal release-owner retry edge. It is deliberately not part of the
+   * Internal runtime-owner retry edge. It is deliberately not part of the
    * public ProbeStorePort: the owner re-executes a durable retryable outcome
    * and then performs the same checkpoint CAS/receipt transition. If the
    * transaction fails before commit, the one-shot probe claim is released so
@@ -3072,8 +3040,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         || binding.graphRoot !== input.graph.graphRoot
         || binding.generationRefreshPolicyHash !== policyHash
         || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(input.ready.runtimeAuthority)
-        || binding.releaseProvenanceHash !== input.ready.releaseProvenanceHash
-        || binding.candidatePartitionProofStorageHash !== input.ready.candidatePartitionProofStorageHash
+        || binding.candidatePartitionCommitmentStorageHash !== input.ready.candidatePartitionCommitmentStorageHash
         || binding.nominationClosureRoot !== input.ready.nominationClosureRoot
         || binding.nominationClosureStorageHash !== input.ready.nominationClosureStorageHash
       ) throw new CheckpointRunStateError("ready promotion authority binding mismatch");
@@ -3121,7 +3088,6 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
               definitionCatalogRoot: existing.readyBase.definitionCatalogRoot,
               generationRefreshPolicyHash: existing.readyBase.generationRefreshPolicyHash,
               runtimeAuthority: existing.readyBase.runtimeAuthority,
-              releaseProvenanceHash: existing.readyBase.releaseProvenanceHash,
             });
             throw new ReadyPromotionFatalError("ready-promotion-stage-mismatch");
           }
@@ -3279,8 +3245,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         || !sameCutoff(binding.cutoff, input.fence.cutoff)
         || binding.generationRefreshPolicyHash !== policyHash
         || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(input.stage.runtimeAuthority)
-        || binding.releaseProvenanceHash !== input.stage.releaseProvenanceHash
-        || binding.candidatePartitionProofStorageHash !== input.stage.candidatePartitionProofStorageHash
+        || binding.candidatePartitionCommitmentStorageHash !== input.stage.candidatePartitionCommitmentStorageHash
         || binding.nominationClosureRoot !== input.stage.nominationClosureRoot
         || binding.nominationClosureStorageHash !== input.stage.nominationClosureStorageHash
       ) throw new CheckpointRunStateError("ready activation authority binding mismatch");
@@ -3289,8 +3254,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         || binding.instanceCatalogRoot !== stage.readyBase.instanceCatalogRoot
         || binding.graphRoot !== stage.readyBase.graphRoot
         || encodeCanonicalJson(binding.runtimeAuthority) !== encodeCanonicalJson(stage.readyBase.runtimeAuthority)
-        || binding.releaseProvenanceHash !== stage.readyBase.releaseProvenanceHash
-        || binding.candidatePartitionProofStorageHash !== stage.readyBase.candidatePartitionProofStorageHash
+        || binding.candidatePartitionCommitmentStorageHash !== stage.readyBase.candidatePartitionCommitmentStorageHash
         || binding.nominationClosureRoot !== stage.readyBase.nominationClosureRoot
         || binding.nominationClosureStorageHash !== stage.readyBase.nominationClosureStorageHash
       )) throw new CheckpointRunStateError("ready activation authority closure mismatch");
@@ -3334,8 +3298,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           || stage.readyBase.generationRefreshPolicyHash !== input.stage.generationRefreshPolicyHash
           || stage.readyBase.definitionCatalogRoot !== input.stage.definitionCatalogRoot
           || encodeCanonicalJson(stage.readyBase.runtimeAuthority) !== encodeCanonicalJson(input.stage.runtimeAuthority)
-          || stage.readyBase.releaseProvenanceHash !== input.stage.releaseProvenanceHash
-          || stage.readyBase.candidatePartitionProofStorageHash !== input.stage.candidatePartitionProofStorageHash
+          || stage.readyBase.candidatePartitionCommitmentStorageHash !== input.stage.candidatePartitionCommitmentStorageHash
           || stage.readyBase.nominationClosureRoot !== input.stage.nominationClosureRoot
           || stage.readyBase.nominationClosureStorageHash !== input.stage.nominationClosureStorageHash
         ) throw new CheckpointRunStateError("ready activation stage binding mismatch");
@@ -3384,18 +3347,18 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           recentObservationRoot: loaded.envelope.recentObservationRoot,
           sourceCoverageRoot: loaded.envelope.sourceCoverageRoot,
           checkpointRevision: loaded.envelope.candidatePartitionRevision,
-          candidatePartitionProofStorageHash: stage.readyBase.candidatePartitionProofStorageHash,
+          candidatePartitionCommitmentStorageHash: stage.readyBase.candidatePartitionCommitmentStorageHash,
           exactOutcomePartitionRoot: stage.readyBase.exactOutcomePartitionRoot,
           sealedRevision: stage.sealedRevision,
           stageRevision: stage.stageRevision,
           stageRecordHash: stage.stageRecordHash,
           readyBaseHash: stage.readyBaseHash,
         });
-        const candidatePartitionCommitmentStorageHash = tx.putImmutable(
+        const candidatePartitionReadyCommitmentStorageHash = tx.putImmutable(
           CANDIDATE_PARTITION_COMMITMENT_KIND,
           encodeCanonicalBytes(candidatePartitionCommitment),
           [
-            candidatePartitionCommitment.candidatePartitionProofStorageHash,
+            candidatePartitionCommitment.candidatePartitionCommitmentStorageHash,
             candidatePartitionCommitment.candidatePartitionStorageHash,
             candidatePartitionCommitment.nominationClosureStorageHash,
           ],
@@ -3416,8 +3379,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           sourceExecutionSetRoot: stage.sourceExecutionSetRoot,
           sourceExecutionSetStorageHash: stage.sourceExecutionSetStorageHash,
           sourcePlanEvidenceStorageHash: stage.sourcePlanEvidenceStorageHash,
-          candidatePartitionCommitmentStorageHash,
-          candidatePartitionProofStorageHash: stage.readyBase.candidatePartitionProofStorageHash,
+          candidatePartitionReadyCommitmentStorageHash,
+          candidatePartitionCommitmentStorageHash: stage.readyBase.candidatePartitionCommitmentStorageHash,
           verifiedMemoSetStorageHash: stage.verifiedMemoSetStorageHash,
           instanceCatalogStorageHash: stage.instanceCatalogStorageHash,
           graphStorageHash: stage.graphStorageHash,
@@ -3430,8 +3393,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           closure.candidatePartitionStorageHash,
           closure.outcomePartitionStorageHash,
           closure.attestationPartitionStorageHash,
+          closure.candidatePartitionReadyCommitmentStorageHash,
           closure.candidatePartitionCommitmentStorageHash,
-          closure.candidatePartitionProofStorageHash,
           closure.verifiedMemoSetStorageHash,
           closure.instanceCatalogStorageHash,
           closure.graphStorageHash,
@@ -3589,7 +3552,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     readonly graph: PersistedGraphV1;
     readonly stage12EvidenceCapability: ReadyStage12EvidenceCapabilityV1;
   }> {
-    const releaseFence = this.#captureReleaseFence();
+    const authorityFence = this.#captureAuthorityFence();
     await this.#canonical.assertStillCanonical(ready.cutoff);
     const rootRecord = this.#durable.readRoot();
     if (!rootRecord) throw new CorruptDurableStoreError("checkpoint root missing");
@@ -3635,7 +3598,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || finalRoot.readyGenerationId !== ready.generationId
       || finalRoot.readyGenerationRecordHash !== ready.readyRecordHash
     ) throw new CheckpointRunStateError("active ready generation changed during closure loading");
-    this.#assertReleaseFenceUnchanged(releaseFence);
+    this.#assertAuthorityFenceUnchanged(authorityFence);
     await this.#reopenReadyStage12Artifacts(closure, sourceCoverage, instanceCatalog, graph);
     const stage12EvidenceCapability = this.#issueReadyStage12Evidence(closure.ready);
     return deepFreeze({ sourceCoverage, nominationClosure, instanceCatalog, graph, stage12EvidenceCapability });
@@ -3650,7 +3613,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     if (this.#readyStage12ArtifactsByReady.has(closure.ready.readyRecordHash)) return;
     const commitment = decodeCandidatePartitionCommitment(readContentStore(
       this.#durable,
-      closure.candidatePartitionCommitmentStorageHash,
+      closure.candidatePartitionReadyCommitmentStorageHash,
       CANDIDATE_PARTITION_COMMITMENT_KIND,
       "ready Stage 1/2 candidate partition commitment",
     ));
@@ -3733,7 +3696,6 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       verifiedMemoSetRoot: ready.verifiedMemoSetRoot,
       instanceCatalogRoot: ready.instanceCatalogRoot,
       graphRoot: ready.graphRoot,
-      releaseProvenanceHash: ready.releaseProvenanceHash,
       promotionRevision: ready.promotionRevision,
     });
   }
@@ -3772,7 +3734,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   ): Promise<ReadyStage12EvidenceSnapshotV1> {
     const state = this.#readyStage12EvidenceStates.get(capability);
     if (!state) throw new TypeError("ready stage1/2 evidence capability is not checkpoint-issued");
-    const releaseFence = this.#captureReleaseFence();
+    const authorityFence = this.#captureAuthorityFence();
     const closureView = await this.loadReadyClosure(state.ready);
     if (closureView.stage12EvidenceCapability !== capability) {
       throw new CheckpointRunStateError("ready stage1/2 evidence capability was reissued");
@@ -3791,7 +3753,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     }
     const commitment = decodeCandidatePartitionCommitment(readContentStore(
       this.#durable,
-      closure.candidatePartitionCommitmentStorageHash,
+      closure.candidatePartitionReadyCommitmentStorageHash,
       CANDIDATE_PARTITION_COMMITMENT_KIND,
       "ready stage1/2 candidate partition commitment",
     ));
@@ -3856,18 +3818,15 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         candidateFinalOutcomeHash(outcome) !== candidateFinalOutcomeHash(outcomes[index]!)
       ))
     ) throw new CorruptDurableStoreError("ready stage1/2 outcome partition mismatch");
-    const candidatePartitionProof = decodeCandidatePartitionProofBytes(readContentStore(
+    const candidatePartitionCommitment = decodeCandidatePartitionCommitmentBytesV1(readContentStore(
       this.#durable,
-      closure.candidatePartitionProofStorageHash,
-      CANDIDATE_PARTITION_PROOF_KIND,
-      "ready stage1/2 candidate partition proof",
+      closure.candidatePartitionCommitmentStorageHash,
+      CANDIDATE_PARTITION_AUTHORITY_KIND,
+      "ready stage1/2 candidate partition commitment",
     ));
-    const verifiedCandidatePartitionProof = this.#candidatePartitionProofIssuer.verify(candidatePartitionProof, {
-      binding: candidatePartitionBindingFromProof(candidatePartitionProof),
-      release: this.#candidatePartitionProofIssuer.currentRelease(),
-    });
-    if (encodeCanonicalJson(candidatePartitionProof) !== encodeCanonicalJson(verifiedCandidatePartitionProof)) {
-      throw new CorruptDurableStoreError("ready stage1/2 candidate partition proof bytes changed");
+    if (encodeCanonicalJson(candidatePartitionCommitment.runtimeAuthority)
+      !== encodeCanonicalJson(authorityFence.runtimeAuthority)) {
+      throw new CorruptDurableStoreError("ready stage1/2 candidate partition runtime authority mismatch");
     }
     const verifiedOutcomes = outcomes.filter(
       (outcome): outcome is Extract<CandidateFinalOutcomeV1, { readonly kind: "verified" }> => outcome.kind === "verified",
@@ -3897,8 +3856,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         candidate,
         outcome,
         publication,
-        identityProof: outcome.identityProof,
-        attestationOrigin: outcome.identityProof.identityOrigin,
+        identityCommitment: outcome.identityCommitment,
+        attestationOrigin: outcome.identityCommitment.identityOrigin,
         edges: deepFreeze([...edges]),
       });
     });
@@ -3911,13 +3870,13 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     if (!postCanonicalRoot || postCanonicalRoot.envelopeHash !== rootRecord.envelopeHash) {
       throw new CheckpointRunStateError("ready stage1/2 evidence root changed during canonical fence");
     }
-    this.#assertReleaseFenceUnchanged(releaseFence);
+    this.#assertAuthorityFenceUnchanged(authorityFence);
     return deepFreeze({
       binding: state.binding,
       runId: commitment.runId,
       candidates: deepFreeze(candidates),
       outcomes: deepFreeze(outcomes),
-      candidatePartitionProof: verifiedCandidatePartitionProof,
+      candidatePartitionCommitment,
       sourceCoverage: closureView.sourceCoverage,
       verifiedInstances: deepFreeze(verifiedInstances),
       instanceCatalog: closureView.instanceCatalog,
@@ -3941,7 +3900,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     const state = this.#readyStage12EvidenceStates.get(capability);
     if (!state) throw new TypeError("ready stage1/2 evidence capability is not checkpoint-issued");
 
-    const releaseFence = this.#captureReleaseFence();
+    const authorityFence = this.#captureAuthorityFence();
     await this.#canonical.assertStillCanonical(state.binding.cutoff);
 
     const rootRecord = this.#durable.readRoot();
@@ -4081,7 +4040,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     if (!postCanonicalRoot || postCanonicalRoot.envelopeHash !== rootRecord.envelopeHash) {
       throw new CheckpointRunStateError("ready full-Family evidence root changed during canonical fence");
     }
-    this.#assertReleaseFenceUnchanged(releaseFence);
+    this.#assertAuthorityFenceUnchanged(authorityFence);
 
     // Raw locator bytes are defensive copies of durable content. Typed arrays
     // are deliberately outside canonical JSON and cannot be deepFreeze'd;
@@ -4099,12 +4058,12 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       sourcePlanEvidenceStorageHash: closure.sourcePlanEvidenceStorageHash,
       nominationClosureStorageHash: closure.nominationClosureStorageHash,
       candidatePartitionStorageHash: closure.candidatePartitionStorageHash,
-      candidatePartitionProofStorageHash: closure.candidatePartitionProofStorageHash,
+      candidatePartitionCommitmentStorageHash: closure.candidatePartitionCommitmentStorageHash,
     });
   }
 
   assertReadyAuthorityActive(rawBinding: ActiveReadyAuthorityBindingV1): void {
-    const releaseFence = this.#captureReleaseFence();
+    const authorityFence = this.#captureAuthorityFence();
     assertPlainObject(rawBinding, "activeReadyBinding");
     assertExactKeys(
       rawBinding,
@@ -4117,8 +4076,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         "instanceCatalogRoot",
         "graphRoot",
         "runtimeAuthority",
-        "releaseProvenanceHash",
-        "candidatePartitionProofStorageHash",
+        "candidatePartitionCommitmentStorageHash",
         "nominationClosureRoot",
         "nominationClosureStorageHash",
       ],
@@ -4139,19 +4097,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(
       readOwnEnumerableDataProperty(rawBinding, "runtimeAuthority", "activeReadyBinding"),
     );
-    const rawReleaseProvenanceHash = readOwnEnumerableDataProperty(
-      rawBinding,
-      "releaseProvenanceHash",
-      "activeReadyBinding",
-    );
-    const releaseProvenanceHash: RuntimeReleaseProvenanceHashV1 = runtimeAuthority.authorityClass === "signed-release"
-      ? assertHash(rawReleaseProvenanceHash, "activeReadyBinding.releaseProvenanceHash")
-      : rawReleaseProvenanceHash === null
-        ? null
-        : (() => { throw new TypeError("unsigned active ready binding cannot carry release provenance"); })();
-    const candidatePartitionProofStorageHash = assertHash(
-      readOwnEnumerableDataProperty(rawBinding, "candidatePartitionProofStorageHash", "activeReadyBinding"),
-      "activeReadyBinding.candidatePartitionProofStorageHash",
+    const candidatePartitionCommitmentStorageHash = assertHash(
+      readOwnEnumerableDataProperty(rawBinding, "candidatePartitionCommitmentStorageHash", "activeReadyBinding"),
+      "activeReadyBinding.candidatePartitionCommitmentStorageHash",
     );
     const nominationClosureRoot = assertHash(
       readOwnEnumerableDataProperty(rawBinding, "nominationClosureRoot", "activeReadyBinding"),
@@ -4186,17 +4134,15 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     ) throw new CheckpointRunStateError("ready authority is not active");
     const closure = this.#findReadyClosure(record.references, readyRecordHash);
     if (
-      releaseFence.releaseProvenanceHash !== closure.ready.releaseProvenanceHash
-      ||
-      closure.ready.generationId !== generationId
+      encodeCanonicalJson(authorityFence.runtimeAuthority) !== encodeCanonicalJson(closure.ready.runtimeAuthority)
+      || closure.ready.generationId !== generationId
       || closure.ready.readyRecordHash !== readyRecordHash
       || closure.ready.generationRefreshPolicyHash !== generationRefreshPolicyHash
       || closure.ready.definitionCatalogRoot !== definitionCatalogRoot
       || closure.ready.instanceCatalogRoot !== instanceCatalogRoot
       || closure.ready.graphRoot !== graphRoot
       || encodeCanonicalJson(closure.ready.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)
-      || closure.ready.releaseProvenanceHash !== releaseProvenanceHash
-      || closure.ready.candidatePartitionProofStorageHash !== candidatePartitionProofStorageHash
+      || closure.ready.candidatePartitionCommitmentStorageHash !== candidatePartitionCommitmentStorageHash
       || closure.ready.nominationClosureRoot !== nominationClosureRoot
       || closure.ready.nominationClosureStorageHash !== nominationClosureStorageHash
       || !sameCutoff(closure.ready.cutoff, cutoff)
@@ -4210,11 +4156,11 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || finalRoot.readyGenerationId !== generationId
       || finalRoot.readyGenerationRecordHash !== readyRecordHash
     ) throw new CheckpointRunStateError("active ready generation changed during authority validation");
-    this.#assertReleaseFenceUnchanged(releaseFence);
+    this.#assertAuthorityFenceUnchanged(authorityFence);
   }
 
   async assertContentRoot(kind: "candidate-partition" | "verified-memo-set", root: Hash): Promise<void> {
-    const releaseFence = this.#captureReleaseFence();
+    const authorityFence = this.#captureAuthorityFence();
     const record = this.#durable.readRoot();
     if (!record) throw new CorruptDurableStoreError("checkpoint root missing");
     const checkpointRoot = rootFromRecord(record);
@@ -4222,23 +4168,23 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     if (kind === "verified-memo-set" && checkpointRoot.verifiedMemoRoot !== root) throw new CorruptDurableStoreError("verified memo root is not active");
     if (!checkpointRoot.readyGenerationRecordHash) throw new CorruptDurableStoreError("ready generation is absent");
     const closure = this.#findReadyClosure(record.references, checkpointRoot.readyGenerationRecordHash);
-    if (releaseFence.releaseProvenanceHash !== closure.ready.releaseProvenanceHash) {
-      throw new CheckpointRunStateError("active ready release binding is stale");
+    if (encodeCanonicalJson(authorityFence.runtimeAuthority) !== encodeCanonicalJson(closure.ready.runtimeAuthority)) {
+      throw new CheckpointRunStateError("active ready runtime authority is stale");
     }
     await this.#canonical.assertStillCanonical(closure.ready.cutoff);
     if (kind === "candidate-partition") {
-      const record = this.#durable.readContent(closure.candidatePartitionCommitmentStorageHash);
+      const record = this.#durable.readContent(closure.candidatePartitionReadyCommitmentStorageHash);
       if (!record || record.kind !== CANDIDATE_PARTITION_COMMITMENT_KIND) {
         throw new CorruptDurableStoreError("candidate partition commitment is missing or has references");
       }
       const commitment = decodeCandidatePartitionCommitment(record.bytes);
       if (
         encodeCanonicalJson(record.references) !== encodeCanonicalJson([
-          closure.candidatePartitionProofStorageHash,
+          closure.candidatePartitionCommitmentStorageHash,
           closure.candidatePartitionStorageHash,
           closure.nominationClosureStorageHash,
         ].sort(compareText))
-        || commitment.candidatePartitionProofStorageHash !== closure.candidatePartitionProofStorageHash
+        || commitment.candidatePartitionCommitmentStorageHash !== closure.candidatePartitionCommitmentStorageHash
         || commitment.candidatePartitionStorageHash !== closure.candidatePartitionStorageHash
         || commitment.nominationClosureRoot !== closure.nominationClosureRoot
         || commitment.nominationClosureStorageHash !== closure.nominationClosureStorageHash
@@ -4265,7 +4211,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || finalRoot.readyGenerationId !== checkpointRoot.readyGenerationId
       || finalRoot.readyGenerationRecordHash !== checkpointRoot.readyGenerationRecordHash
     ) throw new CheckpointRunStateError("active ready generation changed during content-root validation");
-    this.#assertReleaseFenceUnchanged(releaseFence);
+    this.#assertAuthorityFenceUnchanged(authorityFence);
   }
 
   _acquireWriterLease(owner: string): WriterLease {
@@ -4287,6 +4233,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     lease: WriterLease,
   ): Promise<void> {
     let claim: AttestationPersistenceBatchClaimV1 | undefined;
+    const authorityFence = this.#captureAuthorityFence();
     try {
       const preview = this.#loadActiveRun(runId);
       const previewCandidates = new Map(preview.builderRun.candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
@@ -4295,7 +4242,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       for (const persisted of claimed.entries) {
         const record = exactObject(
           persisted,
-          ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "kind", "identity", "outcome"],
+          ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "runtimeAuthority", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot", "kind", "identity", "outcome"],
           "attestation persisted outcome preview",
         ) as unknown as AttestationPersistedOutcomeV1;
         if (record.kind !== "final" || record.outcome === null) continue;
@@ -4313,9 +4260,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         });
         const outcome = cloneCanonical<CandidateFinalOutcomeV1>(record.outcome);
         if (candidateFinalOutcomeHash(outcome) !== assertHash(record.outcomeHash, "attestation persisted outcome preview.outcomeHash")
+          || encodeCanonicalJson(outcome.runtimeAuthority) !== encodeCanonicalJson(decodeRuntimeAuthorityProjectionV1(record.runtimeAuthority))
           || outcome.attestationAuthorityRoot !== assertHash(record.attestationAuthorityRoot, "attestation persisted outcome preview.attestationAuthorityRoot")
-          || outcome.releaseAuthorityRoot !== assertHash(record.releaseAuthorityRoot, "attestation persisted outcome preview.releaseAuthorityRoot")
-          || outcome.releaseProvenanceHash !== assertHash(record.releaseProvenanceHash, "attestation persisted outcome preview.releaseProvenanceHash")
+          || outcome.frameworkAuthorityRoot !== assertHash(record.frameworkAuthorityRoot, "attestation persisted outcome preview.frameworkAuthorityRoot")
           || outcome.executorAuthorityRoot !== assertHash(record.executorAuthorityRoot, "attestation persisted outcome preview.executorAuthorityRoot")) {
           throw new CheckpointRunStateError("attestation persisted outcome preview authority mismatch");
         }
@@ -4341,16 +4288,16 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       for (const persisted of claimed.entries) {
         const persistedObject = exactObject(
           persisted,
-          ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "kind", "identity", "outcome"],
+          ["runId", "candidatePartitionRoot", "familyCandidateKey", "outcomeHash", "runtimeAuthority", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot", "kind", "identity", "outcome"],
           "attestation persisted outcome",
         ) as unknown as AttestationPersistedOutcomeV1;
         const persistedRunId = assertNonEmptyString(persistedObject.runId, "attestation persisted outcome.runId");
         const persistedCandidatePartitionRoot = assertHash(persistedObject.candidatePartitionRoot, "attestation persisted outcome.candidatePartitionRoot");
         const persistedCandidateKey = assertHash(persistedObject.familyCandidateKey, "attestation persisted outcome.familyCandidateKey");
         const persistedOutcomeHash = assertHash(persistedObject.outcomeHash, "attestation persisted outcome.outcomeHash");
+        const persistedRuntimeAuthority = decodeRuntimeAuthorityProjectionV1(persistedObject.runtimeAuthority);
         const persistedAttestationAuthorityRoot = assertHash(persistedObject.attestationAuthorityRoot, "attestation persisted outcome.attestationAuthorityRoot");
-        const persistedReleaseAuthorityRoot = assertHash(persistedObject.releaseAuthorityRoot, "attestation persisted outcome.releaseAuthorityRoot");
-        const persistedReleaseProvenanceHash = assertHash(persistedObject.releaseProvenanceHash, "attestation persisted outcome.releaseProvenanceHash");
+        const persistedFrameworkAuthorityRoot = assertHash(persistedObject.frameworkAuthorityRoot, "attestation persisted outcome.frameworkAuthorityRoot");
         const persistedExecutorAuthorityRoot = assertHash(persistedObject.executorAuthorityRoot, "attestation persisted outcome.executorAuthorityRoot");
         if (
           persistedRunId !== runId
@@ -4364,10 +4311,10 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           }
           const partial = decodePartialOutcome(encodeCanonicalBytes(persistedObject), "attestation persisted partial outcome");
           if (
-            persistedAttestationAuthorityRoot !== this.#attestationAuthority.authorityRoot
-            || persistedReleaseAuthorityRoot !== this.#attestationAuthority.releaseAuthorityRoot
-            || persistedReleaseProvenanceHash !== this.#attestationAuthority.releaseProvenanceHash
-            || persistedExecutorAuthorityRoot !== this.#attestationAuthority.executorAuthorityRoot
+            encodeCanonicalJson(persistedRuntimeAuthority) !== encodeCanonicalJson(authorityFence.runtimeAuthority)
+            || persistedAttestationAuthorityRoot !== authorityFence.attestationAuthorityRoot
+            || persistedFrameworkAuthorityRoot !== authorityFence.frameworkAuthorityRoot
+            || persistedExecutorAuthorityRoot !== authorityFence.executorAuthorityRoot
           ) throw new CheckpointRunStateError("partial identity authority binding mismatch");
           if (partial.identity === null) throw new CheckpointRunStateError("partial identity is missing its identity record");
           const expectedPartialHash = attestationPartialIdentitySemanticHash({
@@ -4376,9 +4323,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             candidatePartitionRoot: loaded.envelope.candidatePartitionRoot,
             candidate,
             identity: partial.identity,
-            releaseProvenanceHash: persistedReleaseProvenanceHash,
+            runtimeAuthority: persistedRuntimeAuthority,
             attestationAuthorityRoot: persistedAttestationAuthorityRoot,
-            releaseAuthorityRoot: persistedReleaseAuthorityRoot,
+            frameworkAuthorityRoot: persistedFrameworkAuthorityRoot,
             executorAuthorityRoot: persistedExecutorAuthorityRoot,
           });
           if (partial.outcomeHash !== expectedPartialHash || persistedOutcomeHash !== expectedPartialHash) throw new CheckpointRunStateError("partial identity outcome hash mismatch");
@@ -4403,9 +4350,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         });
         const outcome = cloneCanonical<CandidateFinalOutcomeV1>(persistedObject.outcome);
         if (
-          persistedAttestationAuthorityRoot !== outcome.attestationAuthorityRoot
-          || persistedReleaseAuthorityRoot !== outcome.releaseAuthorityRoot
-          || persistedReleaseProvenanceHash !== outcome.releaseProvenanceHash
+          encodeCanonicalJson(persistedRuntimeAuthority) !== encodeCanonicalJson(outcome.runtimeAuthority)
+          || persistedAttestationAuthorityRoot !== outcome.attestationAuthorityRoot
+          || persistedFrameworkAuthorityRoot !== outcome.frameworkAuthorityRoot
           || persistedExecutorAuthorityRoot !== outcome.executorAuthorityRoot
         ) throw new CheckpointRunStateError("final persisted outcome authority binding mismatch");
         if (candidateFinalOutcomeHash(outcome) !== persistedOutcomeHash) {
@@ -4455,6 +4402,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       );
       return nextRunHash;
       });
+      this.#assertAuthorityFenceUnchanged(authorityFence);
       this.#validatedRunStorageHashes.add(nextRunStorageHash);
     } catch (error) {
       (claim as AttestationPersistenceBatchClaimV1 | undefined)?.abort();
@@ -5108,9 +5056,6 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     if (nominationClosure.root !== envelope.nominationClosureRoot) {
       throw new CorruptDurableStoreError("nomination closure root mismatch");
     }
-    this.#candidatePartitionProofIssuer.assertNominationQualificationsQualified(
-      nominationQualificationBindings(nominationClosure),
-    );
     const candidatesByKey = new Map(candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
     const partials = envelope.partialOutcomePartitionStorageHash === null
       ? []
@@ -5130,9 +5075,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           candidatePartitionRoot: envelope.candidatePartitionRoot,
           candidate,
           identity: partial.identity,
-          releaseProvenanceHash: partial.releaseProvenanceHash,
+          runtimeAuthority: partial.runtimeAuthority,
           attestationAuthorityRoot: partial.attestationAuthorityRoot,
-          releaseAuthorityRoot: partial.releaseAuthorityRoot,
+          frameworkAuthorityRoot: partial.frameworkAuthorityRoot,
           executorAuthorityRoot: partial.executorAuthorityRoot,
         });
         if (partial.outcomeHash !== expectedPartialHash) throw new CorruptDurableStoreError("partial outcome hash mismatch");
@@ -5193,9 +5138,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           runId: envelope.runId,
           cutoff: envelope.cutoff,
           candidatePartitionRoot: partition.candidatePartitionRoot,
+          runtimeAuthority: partition.runtimeAuthority,
           attestationAuthorityRoot: partition.attestationAuthorityRoot,
-          releaseAuthorityRoot: partition.releaseAuthorityRoot,
-          releaseProvenanceHash: partition.releaseProvenanceHash,
+          frameworkAuthorityRoot: partition.frameworkAuthorityRoot,
           executorAuthorityRoot: partition.executorAuthorityRoot,
           outcomesRoot: hashCanonicalPartition("aloha/candidate-outcomes/v1", outcomes),
         })
@@ -5205,36 +5150,30 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         ))
       ) throw new CorruptDurableStoreError("sealed attestation partition does not match durable outcomes");
     }
-    const proofBytes = read(
-      envelope.candidatePartitionProofStorageHash,
-      CANDIDATE_PARTITION_PROOF_KIND,
-      "candidate partition proof",
+    const commitmentBytes = read(
+      envelope.candidatePartitionCommitmentStorageHash,
+      CANDIDATE_PARTITION_AUTHORITY_KIND,
+      "candidate partition commitment",
     );
-    const storedProof = decodeCandidatePartitionProofBytes(proofBytes);
-    const release = this.#candidatePartitionProofIssuer.currentRelease();
-    const verifiedProof = this.#candidatePartitionProofIssuer.verify(storedProof, {
-      binding: candidatePartitionBindingFromProof(storedProof),
-      release,
-    });
-    if (encodeCanonicalJson(verifiedProof) !== encodeCanonicalJson(storedProof)) {
-      throw new CorruptDurableStoreError("candidate partition proof verifier changed the durable proof");
-    }
-    const proofBinding = candidatePartitionBindingFromProof(verifiedProof);
+    const commitment = decodeCandidatePartitionCommitmentBytesV1(commitmentBytes);
+    const authority = this.#captureAuthorityFence();
     if (
-      proofBinding.runId !== envelope.runId
-      || !sameCutoff(proofBinding.cutoff, envelope.cutoff)
-      || proofBinding.candidatePartitionRoot !== envelope.candidatePartitionRoot
-      || proofBinding.candidatePartitionStorageHash !== envelope.candidatePartitionStorageHash
-      || proofBinding.nominationClosureRoot !== envelope.nominationClosureRoot
-      || proofBinding.nominationClosureStorageHash !== envelope.nominationClosureStorageHash
-      || proofBinding.recordCount !== envelope.candidateRecordCount
-      || proofBinding.recentObservationRoot !== envelope.recentObservationRoot
-      || proofBinding.sourceCoverageRoot !== envelope.sourceCoverageRoot
-      || proofBinding.checkpointRevision !== envelope.candidatePartitionRevision
-    ) throw new CorruptDurableStoreError("candidate partition proof does not bind the active run");
+      encodeCanonicalJson(commitment.runtimeAuthority) !== encodeCanonicalJson(authority.runtimeAuthority)
+      || commitment.runId !== envelope.runId
+      || !sameCutoff(commitment.cutoff, envelope.cutoff)
+      || commitment.candidatePartitionRoot !== envelope.candidatePartitionRoot
+      || commitment.candidatePartitionStorageHash !== envelope.candidatePartitionStorageHash
+      || commitment.nominationClosureRoot !== envelope.nominationClosureRoot
+      || commitment.nominationClosureStorageHash !== envelope.nominationClosureStorageHash
+      || commitment.recordCount !== envelope.candidateRecordCount
+      || commitment.candidateKeysRoot !== candidatePartitionKeysRoot(candidates.map(candidate => candidate.familyCandidateKey))
+      || commitment.recentObservationRoot !== envelope.recentObservationRoot
+      || commitment.sourceCoverageRoot !== envelope.sourceCoverageRoot
+      || commitment.checkpointRevision !== envelope.candidatePartitionRevision
+    ) throw new CorruptDurableStoreError("candidate partition commitment does not bind the active run");
     const durable = this.#durable;
-    const candidatePartition = this.#candidatePartitionCapabilities.registerVerifiedProof(
-      verifiedProof,
+    const candidatePartition = this.#candidatePartitionCapabilities.registerVerifiedCommitment(
+      commitment,
       candidates,
       Object.freeze({
         read(familyCandidateKey: Hash, rawLocatorHash: Hash): Uint8Array {
@@ -5272,7 +5211,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       nominationClosure,
       sourceCoverageRoot: sourceCoverage.sourceCoverageRoot,
       candidatePartition: candidatePartition,
-      candidatePartitionBinding: proofBinding,
+      candidatePartitionBinding: commitment,
       candidates,
     });
     return deepFreeze({ envelope, storageHash, builderRun, sourceCoverage });
@@ -5390,7 +5329,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       sourceCoverageRoot: sourceCoverage.sourceCoverageRoot,
       candidatePartitionRoot: run.candidatePartitionRoot,
       candidatePartitionStorageHash: run.candidatePartitionStorageHash,
-      candidatePartitionProofStorageHash: run.candidatePartitionProofStorageHash,
+      candidatePartitionCommitmentStorageHash: run.candidatePartitionCommitmentStorageHash,
       nominationClosureRoot: run.nominationClosureRoot,
       nominationClosureStorageHash: run.nominationClosureStorageHash,
       candidateKeys: candidates.map(candidate => candidate.familyCandidateKey).sort(compareText),
@@ -5398,9 +5337,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       exactOutcomePartitionRoot: partition.exactOutcomePartitionRoot,
       checkpointRevision: run.checkpointRevision,
       partition,
+      runtimeAuthority: partition.runtimeAuthority,
       attestationAuthorityRoot: partition.attestationAuthorityRoot,
-      releaseAuthorityRoot: partition.releaseAuthorityRoot,
-      releaseProvenanceHash: partition.releaseProvenanceHash,
+      frameworkAuthorityRoot: partition.frameworkAuthorityRoot,
       executorAuthorityRoot: partition.executorAuthorityRoot,
     });
   }
@@ -5568,12 +5507,16 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
   ): void {
     const runReferences = runContentReferences(loaded.envelope);
     this.#assertRecordReferencesWith(read, loaded.storageHash, RUN_KIND, runReferences, "active run");
-    const proofRecord = read(loaded.envelope.candidatePartitionProofStorageHash);
-    if (!proofRecord || proofRecord.kind !== CANDIDATE_PARTITION_PROOF_KIND) {
-      throw new CorruptDurableStoreError("candidate partition proof is missing");
+    const commitmentRecord = read(loaded.envelope.candidatePartitionCommitmentStorageHash);
+    if (!commitmentRecord || commitmentRecord.kind !== CANDIDATE_PARTITION_AUTHORITY_KIND) {
+      throw new CorruptDurableStoreError("candidate partition commitment is missing");
     }
-    decodeCandidatePartitionProofBytes(proofRecord.bytes);
-    this.#assertRecordReferencesWith(read, loaded.envelope.candidatePartitionProofStorageHash, CANDIDATE_PARTITION_PROOF_KIND, [], "candidate partition proof");
+    const candidatePartitionCommitment = decodeCandidatePartitionCommitmentBytesV1(commitmentRecord.bytes);
+    if (encodeCanonicalJson(candidatePartitionCommitment.runtimeAuthority)
+      !== encodeCanonicalJson(this.#captureAuthorityFence().runtimeAuthority)) {
+      throw new CorruptDurableStoreError("candidate partition commitment runtime authority mismatch");
+    }
+    this.#assertRecordReferencesWith(read, loaded.envelope.candidatePartitionCommitmentStorageHash, CANDIDATE_PARTITION_AUTHORITY_KIND, [], "candidate partition commitment");
     const nominationRecord = read(loaded.envelope.nominationClosureStorageHash);
     if (!nominationRecord || nominationRecord.kind !== NOMINATION_CLOSURE_KIND) {
       throw new CorruptDurableStoreError("nomination closure is missing");
@@ -5704,9 +5647,9 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           );
           this.#attestationAuthority.validateDurablePartition(durablePartition, loaded.builderRun.candidates);
           if (durablePartition.exactOutcomePartitionRoot !== memoSeed.partition.exactOutcomePartitionRoot
+            || encodeCanonicalJson(durablePartition.runtimeAuthority) !== encodeCanonicalJson(memoSeed.partition.runtimeAuthority)
             || durablePartition.attestationAuthorityRoot !== memoSeed.partition.attestationAuthorityRoot
-            || durablePartition.releaseAuthorityRoot !== memoSeed.partition.releaseAuthorityRoot
-            || durablePartition.releaseProvenanceHash !== memoSeed.partition.releaseProvenanceHash
+            || durablePartition.frameworkAuthorityRoot !== memoSeed.partition.frameworkAuthorityRoot
             || durablePartition.executorAuthorityRoot !== memoSeed.partition.executorAuthorityRoot
             || encodeCanonicalJson(durablePartition.accounting) !== encodeCanonicalJson(memoSeed.partition.accounting)) {
             throw new CheckpointRunStateError("memo seed attestation authority mismatch");
@@ -5887,8 +5830,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       generationRefreshPolicyHash: stage.readyBase.generationRefreshPolicyHash,
       definitionCatalogRoot: stage.readyBase.definitionCatalogRoot,
       runtimeAuthority: stage.readyBase.runtimeAuthority,
-      releaseProvenanceHash: stage.readyBase.releaseProvenanceHash,
-      candidatePartitionProofStorageHash: stage.readyBase.candidatePartitionProofStorageHash,
+      candidatePartitionCommitmentStorageHash: stage.readyBase.candidatePartitionCommitmentStorageHash,
       nominationClosureRoot: stage.readyBase.nominationClosureRoot,
       nominationClosureStorageHash: stage.readyBase.nominationClosureStorageHash,
     });
@@ -5909,7 +5851,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         true,
       );
       activeReady = found.closure.ready;
-      const commitmentRecord = read(found.closure.candidatePartitionCommitmentStorageHash);
+      const commitmentRecord = read(found.closure.candidatePartitionReadyCommitmentStorageHash);
       if (!commitmentRecord || commitmentRecord.kind !== CANDIDATE_PARTITION_COMMITMENT_KIND) {
         throw new CorruptDurableStoreError("candidate partition commitment is missing");
       }
@@ -5968,8 +5910,8 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         closure.candidatePartitionStorageHash,
         closure.outcomePartitionStorageHash,
         closure.attestationPartitionStorageHash,
+        closure.candidatePartitionReadyCommitmentStorageHash,
         closure.candidatePartitionCommitmentStorageHash,
-        closure.candidatePartitionProofStorageHash,
         closure.verifiedMemoSetStorageHash,
         closure.instanceCatalogStorageHash,
         closure.graphStorageHash,
@@ -5979,16 +5921,16 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       }
       if (closure.ready.readyRecordHash === readyRecordHash) {
         if (!allowValidatedCache || !this.#validatedReadyClosureStorageHashes.has(hash)) {
-          const commitmentRecord = read(closure.candidatePartitionCommitmentStorageHash);
+          const commitmentRecord = read(closure.candidatePartitionReadyCommitmentStorageHash);
           if (!commitmentRecord || commitmentRecord.kind !== CANDIDATE_PARTITION_COMMITMENT_KIND) {
             throw new CorruptDurableStoreError("candidate partition commitment is missing");
           }
           this.#assertRecordReferencesWith(
             read,
-            closure.candidatePartitionCommitmentStorageHash,
+            closure.candidatePartitionReadyCommitmentStorageHash,
             CANDIDATE_PARTITION_COMMITMENT_KIND,
             [
-              closure.candidatePartitionProofStorageHash,
+              closure.candidatePartitionCommitmentStorageHash,
               closure.candidatePartitionStorageHash,
               closure.nominationClosureStorageHash,
             ],
@@ -6129,25 +6071,19 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
               candidateFinalOutcomeHash(outcome) !== candidateFinalOutcomeHash(outcomes[index]!)
             ))
           ) throw new CorruptDurableStoreError("ready attestation partition lineage mismatch");
-          const proofRecord = read(closure.candidatePartitionProofStorageHash);
-          if (!proofRecord || proofRecord.kind !== CANDIDATE_PARTITION_PROOF_KIND) {
-            throw new CorruptDurableStoreError("ready candidate partition proof is missing");
+          const authorityCommitmentRecord = read(closure.candidatePartitionCommitmentStorageHash);
+          if (!authorityCommitmentRecord || authorityCommitmentRecord.kind !== CANDIDATE_PARTITION_AUTHORITY_KIND) {
+            throw new CorruptDurableStoreError("ready candidate partition commitment is missing");
           }
           this.#assertRecordReferencesWith(
             read,
-            closure.candidatePartitionProofStorageHash,
-            CANDIDATE_PARTITION_PROOF_KIND,
+            closure.candidatePartitionCommitmentStorageHash,
+            CANDIDATE_PARTITION_AUTHORITY_KIND,
             [],
-            "ready candidate partition proof",
+            "ready candidate partition commitment",
           );
-          const storedProof = decodeCandidatePartitionProofBytes(proofRecord.bytes);
-          const verifiedProof = this.#candidatePartitionProofIssuer.verify(storedProof, {
-            binding: candidatePartitionBindingFromProof(storedProof),
-            release: this.#candidatePartitionProofIssuer.currentRelease(),
-          });
-          if (encodeCanonicalJson(verifiedProof) !== encodeCanonicalJson(storedProof)) {
-            throw new CorruptDurableStoreError("ready candidate partition proof verifier changed durable bytes");
-          }
+          const candidatePartitionAuthority = decodeCandidatePartitionCommitmentBytesV1(authorityCommitmentRecord.bytes);
+          const evidenceAuthority = this.#captureAuthorityFence();
           const expectedGenerationId = hashDomain("aloha/ready-generation-id/v1", {
             parentGenerationId: closure.ready.parentGenerationId,
             runId: commitment.runId,
@@ -6157,27 +6093,26 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             graphRoot: closure.ready.graphRoot,
             policyHash: closure.ready.generationRefreshPolicyHash,
             runtimeAuthority: closure.ready.runtimeAuthority,
-            releaseProvenanceHash: closure.ready.releaseProvenanceHash,
-            candidatePartitionProofStorageHash: closure.ready.candidatePartitionProofStorageHash,
+            candidatePartitionCommitmentStorageHash: closure.ready.candidatePartitionCommitmentStorageHash,
             nominationClosureRoot: closure.ready.nominationClosureRoot,
             nominationClosureStorageHash: closure.ready.nominationClosureStorageHash,
           });
           if (
             commitment.readyRecordHash !== closure.ready.readyRecordHash
-            || commitment.candidatePartitionProofStorageHash !== closure.candidatePartitionProofStorageHash
-            || closure.ready.candidatePartitionProofStorageHash !== closure.candidatePartitionProofStorageHash
-            || verifiedProof.releaseProvenanceHash !== closure.ready.releaseProvenanceHash
-            || verifiedProof.runId !== commitment.runId
-            || verifiedProof.candidatePartitionRoot !== closure.ready.candidatePartitionRoot
-            || verifiedProof.candidatePartitionStorageHash !== closure.candidatePartitionStorageHash
-            || verifiedProof.nominationClosureRoot !== closure.nominationClosureRoot
-            || verifiedProof.nominationClosureStorageHash !== closure.nominationClosureStorageHash
-            || verifiedProof.recordCount !== closure.candidateRecordCount
-            || verifiedProof.candidateKeysRoot !== closure.candidateKeysRoot
-            || verifiedProof.recentObservationRoot !== closure.recentObservationRoot
-            || verifiedProof.sourceCoverageRoot !== closure.sourceCoverageRoot
-            || verifiedProof.checkpointRevision !== closure.candidatePartitionRevision
-            || !sameCutoff(verifiedProof.cutoff, closure.ready.cutoff)
+            || commitment.candidatePartitionCommitmentStorageHash !== closure.candidatePartitionCommitmentStorageHash
+            || closure.ready.candidatePartitionCommitmentStorageHash !== closure.candidatePartitionCommitmentStorageHash
+            || encodeCanonicalJson(candidatePartitionAuthority.runtimeAuthority) !== encodeCanonicalJson(evidenceAuthority.runtimeAuthority)
+            || candidatePartitionAuthority.runId !== commitment.runId
+            || candidatePartitionAuthority.candidatePartitionRoot !== closure.ready.candidatePartitionRoot
+            || candidatePartitionAuthority.candidatePartitionStorageHash !== closure.candidatePartitionStorageHash
+            || candidatePartitionAuthority.nominationClosureRoot !== closure.nominationClosureRoot
+            || candidatePartitionAuthority.nominationClosureStorageHash !== closure.nominationClosureStorageHash
+            || candidatePartitionAuthority.recordCount !== closure.candidateRecordCount
+            || candidatePartitionAuthority.candidateKeysRoot !== closure.candidateKeysRoot
+            || candidatePartitionAuthority.recentObservationRoot !== closure.recentObservationRoot
+            || candidatePartitionAuthority.sourceCoverageRoot !== closure.sourceCoverageRoot
+            || candidatePartitionAuthority.checkpointRevision !== closure.candidatePartitionRevision
+            || !sameCutoff(candidatePartitionAuthority.cutoff, closure.ready.cutoff)
             || !sameCutoff(commitment.cutoff, closure.ready.cutoff)
             || commitment.candidatePartitionRoot !== closure.ready.candidatePartitionRoot
             || commitment.candidatePartitionStorageHash !== closure.candidatePartitionStorageHash
@@ -6207,8 +6142,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
               edgeCount: closure.ready.edgeCount,
               instanceCount: closure.ready.instanceCount,
               runtimeAuthority: closure.ready.runtimeAuthority,
-              releaseProvenanceHash: closure.ready.releaseProvenanceHash,
-              candidatePartitionProofStorageHash: closure.ready.candidatePartitionProofStorageHash,
+              candidatePartitionCommitmentStorageHash: closure.ready.candidatePartitionCommitmentStorageHash,
             })
             || BigInt(commitment.sealedRevision) + 1n !== BigInt(commitment.stageRevision)
             || BigInt(commitment.stageRevision) + 1n !== BigInt(closure.ready.promotionRevision)
@@ -6337,10 +6271,6 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
             || nominationClosure.root !== closure.ready.nominationClosureRoot
             || closure.nominationClosureStorageHash !== closure.ready.nominationClosureStorageHash
           ) throw new CorruptDurableStoreError("ready nomination closure lineage mismatch");
-          this.#candidatePartitionProofIssuer.assertNominationQualificationsQualified(
-            nominationQualificationBindings(nominationClosure),
-          );
-
           const catalog = decodeInstanceCatalogRecordWith(
             read,
             closure.instanceCatalogStorageHash,
@@ -6628,7 +6558,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
 }
 
 /** Internal owner seam; callers cannot forge this with a shape-compatible
- * checkpoint facade.  The release owner narrows the returned instance to the
+ * checkpoint facade. The runtime owner narrows the returned instance to the
  * exact methods it needs and keeps the class itself private to the join. */
 export function assertIssuedCheckpointStore(value: unknown): CheckpointStore {
   if (value === null || typeof value !== "object" || !checkpointStoreInstances.has(value)) {
@@ -6770,9 +6700,8 @@ export function createCheckpointStore(
   probeCaller: object,
   promotionAuthority: ReadyPromotionAuthorityGuardPort,
   attestationAuthority: AttestationValidationAuthorityV1,
-  candidatePartitionProofIssuer: CandidatePartitionProofIssuerPortV1,
   sixStepArtifacts: CheckpointSixStepArtifactPortV1,
   candidatePartitionBootstrap?: CandidatePartitionBootstrapV1,
 ): CheckpointStore {
-  return new CheckpointStore(durable, canonical, probeCaller, promotionAuthority, attestationAuthority, candidatePartitionProofIssuer, sixStepArtifacts, candidatePartitionBootstrap);
+  return new CheckpointStore(durable, canonical, probeCaller, promotionAuthority, attestationAuthority, sixStepArtifacts, candidatePartitionBootstrap);
 }

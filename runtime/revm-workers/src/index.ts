@@ -80,7 +80,7 @@ export class RevmSimulationError extends Error {
 }
 
 export interface RevmSimulationClientOptions {
-  /** The release bootstrap may expose a narrow, authority-guarded pool port. */
+  /** Runtime bootstrap may expose a narrow, authority-guarded pool port. */
   readonly pool?: Pick<RevmWorkerPool, "submit" | "snapshot">;
 }
 

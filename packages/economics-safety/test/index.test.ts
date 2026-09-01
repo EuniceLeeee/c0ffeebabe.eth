@@ -23,17 +23,16 @@ import {
   sealSafetyProfileV1,
 } from "../../../specs/economic-safety-profile/src/index.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 
 const h = (value: string): Hash => hashDomain("aloha/economic-safety/test/v1", value);
-const release = h("release");
+const release = null;
 const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
-  createSignedReleaseRuntimeAuthorityDescriptorV1({
-    authorityClass: "signed-release",
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+    authorityClass: "dry-run",
     runtimeBindingId: h("runtime-binding"),
-    releaseProvenanceHash: release,
     implementationCommit: "a".repeat(40),
   }),
 );
@@ -190,7 +189,7 @@ test("owner seals typed policy rejection while forged capabilities and semantic 
 
 test("economic arithmetic, release, source, owner facts and obligations fail closed", async () => {
   const baseline = input();
-  await assert.rejects(() => service().finalize({ ...baseline, releaseProvenanceHash: h("foreign") }), /release provenance/);
+  await assert.rejects(() => service().finalize({ ...baseline, releaseProvenanceHash: h("foreign") as never }), /must be null/);
   await assert.rejects(() => service().finalize({ ...baseline, dryRun: false } as never), /dryRun/);
   await assert.rejects(() => service().finalize({ ...baseline, declaredObligations: [] }), /non-empty/);
   await assert.rejects(() => issueEconomicSafetyFinalizationServiceV1({

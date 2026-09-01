@@ -28,7 +28,7 @@ export interface ReadyFullFamilyEvidenceSnapshotV1 {
   readonly sourcePlanEvidenceStorageHash: Hash;
   readonly nominationClosureStorageHash: Hash;
   readonly candidatePartitionStorageHash: Hash;
-  readonly candidatePartitionProofStorageHash: Hash;
+  readonly candidatePartitionCommitmentStorageHash: Hash;
 }
 
 export interface ReadyFullFamilyEvidenceReaderPortV1 {

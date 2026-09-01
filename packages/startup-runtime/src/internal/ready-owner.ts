@@ -9,13 +9,13 @@ const issued = new WeakSet<object>();
 const promotionPorts = new WeakMap<object, BoundReadyPromotionPort>();
 
 /**
- * Owner-only bridge used by runtime-release bootstrap.  A caller must hand
+ * Owner-only bridge used by runtime bootstrap. A caller must hand
  * in the actual ReadyGenerationServiceV1 instance; a copied/proxy-shaped
  * object is rejected before it can become a startup authority.
  */
 export function issueStartupReadyPort(input: {
   readonly service: ReadyGenerationServiceV1;
-  /** The exact caller token captured by the release-owned Ready service. */
+  /** The exact caller token captured by the owner-issued Ready service. */
   readonly promotionCaller: object;
 }): StartupReadyPortV1 {
   if (!(input?.service instanceof ReadyGenerationServiceV1)) {

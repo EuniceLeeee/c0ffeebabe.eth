@@ -192,7 +192,7 @@ export function createProductionSixStepTailFixture(
         readonly verifiedMemoSetRoot: Hash;
         readonly instanceCatalogRoot: Hash;
         readonly graphRoot: Hash;
-        readonly releaseProvenanceHash: Hash;
+        readonly releaseProvenanceHash: null;
         readonly promotionRevision: string;
       }>;
       readonly selectedGraphLegs: readonly Readonly<{

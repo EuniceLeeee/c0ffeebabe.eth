@@ -28,8 +28,6 @@ import {
 } from "../../ready-generation/src/index.ts";
 import type { SealedRunBindingV1, SealedRunCapabilityV1, SealedRunSnapshotV1 } from "../../sealed-run-runtime/src/contract.ts";
 import { issueCheckpointSealedRunReader } from "../../sealed-run-runtime/src/internal/reader-issuer.ts";
-import { readyBindingPortForReleaseApproval, releaseApproval } from "../../attestation/test/authority-fixture.ts";
-import { runtimeReleaseBindingProvenanceHash } from "../../../specs/release-authority/src/index.ts";
 import {
   issueStartupReadyPort,
   startupReadyPromotionPort,
@@ -54,11 +52,10 @@ import type {
   NativeStartupPromotionRequestV1,
 } from "../src/internal/native-startup-contract.ts";
 import * as nativeContractModule from "../src/internal/native-startup-contract.ts";
-import * as signedAdapterModule from "../src/internal/signed-release-native-startup-owner.ts";
+import * as runtimeAuthorityAdapterModule from "../src/internal/runtime-authority-native-startup-owner.ts";
 import { registerCheckpointReadyFullFamilyEvidenceReader } from "../../checkpoint/src/internal/ready-full-family-evidence-issuer.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
-  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
+  createRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 
@@ -113,9 +110,8 @@ test("startup rejects structural Family composition fakes and clones", () => {
 
 test("native startup has no owner registrar and null promotion recovery stays closed", () => {
   assert.deepEqual(Object.keys(nativeContractModule), ["decodeNativeStartupGenerationIdentityV1"]);
-  assert.deepEqual(Object.keys(signedAdapterModule), [
+  assert.deepEqual(Object.keys(runtimeAuthorityAdapterModule), [
     "startRuntimeAuthorityNativeStartupRuntime",
-    "startSignedReleaseNativeStartupRuntime",
   ]);
   assert.equal(classifyNativeStartupPromotionRecovery(h("prior"), null, true), "keep-closed");
   assert.equal(classifyNativeStartupPromotionRecovery(h("prior"), h("prior"), true), "reopen-current");
@@ -124,36 +120,25 @@ test("native startup has no owner registrar and null promotion recovery stays cl
 });
 
 test("native startup pins the exact generic runtime authority projection", () => {
-  const signedInput = Object.freeze({
-    authorityClass: "signed-release",
+  const authorityInput = Object.freeze({
     runtimeBindingId: h("authority-runtime-binding"),
-    releaseProvenanceHash: h("authority-release-provenance"),
     implementationCommit: "a".repeat(40),
   } as const);
   const authority: NativeStartupAuthorityProjectionV1 = projectRuntimeAuthorityDescriptorV1(
-    createSignedReleaseRuntimeAuthorityDescriptorV1(signedInput),
+    createRuntimeAuthorityDescriptorV1(authorityInput),
   );
   const pinned = pinNativeStartupAuthority(null, authority);
   assert.equal(Object.isFrozen(pinned), true);
   assert.equal(pinNativeStartupAuthority(pinned, Object.freeze({ ...authority })), pinned);
   assert.equal(nativeStartupAuthoritiesEqual(pinned, authority), true);
   const mutations: readonly NativeStartupAuthorityProjectionV1[] = [
-    projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
-      ...signedInput,
+    projectRuntimeAuthorityDescriptorV1(createRuntimeAuthorityDescriptorV1({
+      ...authorityInput,
       runtimeBindingId: h("other-runtime-binding"),
     })),
-    projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
-      ...signedInput,
-      releaseProvenanceHash: h("other-release-provenance"),
-    })),
-    projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
-      ...signedInput,
+    projectRuntimeAuthorityDescriptorV1(createRuntimeAuthorityDescriptorV1({
+      ...authorityInput,
       implementationCommit: "b".repeat(40),
-    })),
-    projectRuntimeAuthorityDescriptorV1(createUnsignedDryRunRuntimeAuthorityDescriptorV1({
-      authorityClass: "unsigned-dry-run",
-      runtimeBindingId: signedInput.runtimeBindingId,
-      implementationCommit: signedInput.implementationCommit,
     })),
   ];
   for (const mutation of mutations) {
@@ -164,7 +149,6 @@ test("native startup pins the exact generic runtime authority projection", () =>
 
 test("native startup real recovery paths remain closed until close", async () => {
   const baseAuthority: NativeStartupAuthorityProjectionV1 = Object.freeze({
-    authorityClass: "signed-release",
     authorityBindingHash: h("recovery-binding"),
     implementationCommit: "c".repeat(40),
   });
@@ -324,19 +308,13 @@ test("startup reuses one durable ready closure while renewing the lease per prod
   });
   const instanceCatalog = sealInstanceCatalog(readyCutoff, []);
   const graph = buildPersistedGraph(instanceCatalog);
-  const approval = releaseApproval(h("startup-framework"), h("startup-executor"));
-  const releaseBindingPort = readyBindingPortForReleaseApproval(approval);
-  const release = approval.resolver.resolve(approval.capability).provenance.runtimeBinding;
-  const releaseProvenanceHash = runtimeReleaseBindingProvenanceHash(release);
-  const runtimeAuthorityDescriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
-    authorityClass: "signed-release",
-    runtimeBindingId: release.bindingId,
-    releaseProvenanceHash,
-    implementationCommit: release.candidateReleaseCommit,
+  const runtimeAuthorityDescriptor = createRuntimeAuthorityDescriptorV1({
+    runtimeBindingId: h("startup-runtime-binding"),
+    implementationCommit: "a".repeat(40),
   });
   const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(runtimeAuthorityDescriptor);
   const runtimeAuthorityPort = Object.freeze({
-    readCurrent: () => Object.freeze({ runtimeAuthority, releaseProvenanceHash }),
+    readCurrent: () => Object.freeze({ runtimeAuthority }),
   });
   const policyHash = generationRefreshPolicyHash(readyPolicy);
   const freshnessPayload = {
@@ -361,11 +339,10 @@ test("startup reuses one durable ready closure while renewing the lease per prod
     definitionCatalogRoot: h("startup-definitions"),
     sourceCoverageRoot: coverage.sourceCoverageRoot,
     candidatePartitionRoot: nomination.closure.candidatePartitionRoot,
-    candidatePartitionProofStorageHash: h("startup-candidate-proof"),
+    candidatePartitionCommitmentStorageHash: h("startup-candidate-commitment"),
     nominationClosureRoot: nomination.closure.root,
     nominationClosureStorageHash: nomination.storageHash,
     runtimeAuthority,
-    releaseProvenanceHash,
     exactOutcomePartitionRoot: h("startup-outcomes"),
     verifiedMemoSetRoot: h("startup-memos"),
     instanceCatalogRoot: instanceCatalog.instanceCatalogRoot,
@@ -435,21 +412,21 @@ test("startup reuses one durable ready closure while renewing the lease per prod
     candidatePartitionStorageHash: h("startup-refreshed-candidate-storage"),
     nominationClosureRoot: refreshedNomination.closure.root,
     nominationClosureStorageHash: refreshedNomination.storageHash,
-    candidatePartitionProofStorageHash: h("startup-refreshed-candidate-proof"),
+    candidatePartitionCommitmentStorageHash: h("startup-refreshed-candidate-commitment"),
     verifiedMemoSetRoot: h("startup-refreshed-memos"),
     checkpointRevision: "4",
+    runtimeAuthority,
     attestationAuthorityRoot: h("startup-refreshed-attestation-authority"),
-    releaseAuthorityRoot: h("startup-refreshed-release-authority"),
-    releaseProvenanceHash,
+    frameworkAuthorityRoot: h("startup-refreshed-framework-authority"),
     executorAuthorityRoot: h("startup-refreshed-executor-authority"),
   });
   const refreshedExactOutcomePartitionRoot = hashDomain("aloha/exact-outcome-partition/v1", {
     runId: refreshedBindingBase.runId,
     cutoff: refreshedBindingBase.cutoff,
     candidatePartitionRoot: refreshedBindingBase.candidatePartitionRoot,
+    runtimeAuthority: refreshedBindingBase.runtimeAuthority,
     attestationAuthorityRoot: refreshedBindingBase.attestationAuthorityRoot,
-    releaseAuthorityRoot: refreshedBindingBase.releaseAuthorityRoot,
-    releaseProvenanceHash: refreshedBindingBase.releaseProvenanceHash,
+    frameworkAuthorityRoot: refreshedBindingBase.frameworkAuthorityRoot,
     executorAuthorityRoot: refreshedBindingBase.executorAuthorityRoot,
     outcomesRoot: hashCanonicalPartition("aloha/candidate-outcomes/v1", []),
   });
@@ -466,9 +443,9 @@ test("startup reuses one durable ready closure while renewing the lease per prod
       cutoff: refreshedCutoff,
       candidatePartitionRoot: refreshedBinding.candidatePartitionRoot,
       outcomes: Object.freeze([]),
+      runtimeAuthority: refreshedBinding.runtimeAuthority,
       attestationAuthorityRoot: refreshedBinding.attestationAuthorityRoot,
-      releaseAuthorityRoot: refreshedBinding.releaseAuthorityRoot,
-      releaseProvenanceHash: refreshedBinding.releaseProvenanceHash,
+      frameworkAuthorityRoot: refreshedBinding.frameworkAuthorityRoot,
       executorAuthorityRoot: refreshedBinding.executorAuthorityRoot,
       accounting: Object.freeze({ pending: "0", verified: "0", chainProvenRejected: "0", retryable: "0", invalidProgram: "0" }),
       exactOutcomePartitionRoot: refreshedExactOutcomePartitionRoot,
@@ -522,8 +499,7 @@ test("startup reuses one durable ready closure while renewing the lease per prod
           generationRefreshPolicyHash: value.ready.generationRefreshPolicyHash,
           definitionCatalogRoot: value.ready.definitionCatalogRoot,
           runtimeAuthority: value.ready.runtimeAuthority,
-          releaseProvenanceHash: value.ready.releaseProvenanceHash,
-          candidatePartitionProofStorageHash: value.ready.candidatePartitionProofStorageHash,
+          candidatePartitionCommitmentStorageHash: value.ready.candidatePartitionCommitmentStorageHash,
           nominationClosureRoot: value.ready.nominationClosureRoot,
           nominationClosureStorageHash: value.ready.nominationClosureStorageHash,
         },
@@ -614,8 +590,7 @@ test("startup reuses one durable ready closure while renewing the lease per prod
           generationRefreshPolicyHash: generationRefreshPolicyHash(readyPolicy),
           definitionCatalogRoot: refreshedBinding.definitionCatalogRoot,
           runtimeAuthority,
-          releaseProvenanceHash: refreshedBinding.releaseProvenanceHash,
-          candidatePartitionProofStorageHash: refreshedBinding.candidatePartitionProofStorageHash,
+          candidatePartitionCommitmentStorageHash: refreshedBinding.candidatePartitionCommitmentStorageHash,
           nominationClosureRoot: refreshedBinding.nominationClosureRoot,
           nominationClosureStorageHash: refreshedBinding.nominationClosureStorageHash,
         },
@@ -655,7 +630,6 @@ test("startup reuses one durable ready closure while renewing the lease per prod
   assert.equal(initialServing.generationId, ready.generationId);
   assert.equal(initialServing.readyRecordHash, ready.readyRecordHash);
   assert.equal(initialServing.graphRoot, graph.graphRoot);
-  assert.equal(initialServing.releaseProvenanceHash, ready.releaseProvenanceHash);
   assert.equal(Object.isFrozen(initialServing), true);
 
   const sessionGenerations: string[] = [];
@@ -712,7 +686,6 @@ test("startup reuses one durable ready closure while renewing the lease per prod
   const refreshedServing = runtime.readActiveGeneration();
   assert.equal(refreshedServing.generationId, activeReady.generationId);
   assert.equal(refreshedServing.graphRoot, refreshedGraph.graphRoot);
-  assert.equal(refreshedServing.releaseProvenanceHash, activeReady.releaseProvenanceHash);
   assert.equal(runtime.readServingGeneration(ready.generationId), initialServing);
   assert.equal(runtime.readServingGeneration(activeReady.generationId), refreshedServing);
   assert.throws(() => runtime.readServingGeneration("unknown-generation"), /unknown/);

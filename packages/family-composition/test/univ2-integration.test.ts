@@ -2275,7 +2275,7 @@ test("offline structural UniV2 path carries owner-issued Six-Step evidence throu
   const rawStage12 = rawSixStep.stage12 as Record<string, unknown>;
   const rawStage36 = rawSixStep.stage36 as Record<string, unknown>;
   const resolvedSixStep = rawStage36.resolved as Record<string, unknown>;
-  const receipt = resolvedSixStep.unsignedDryRun as unknown as UnsignedDryRunReceiptV1;
+  const receipt = resolvedSixStep.dryRun as unknown as UnsignedDryRunReceiptV1;
   validateUnsignedDryRunReceiptValue(receipt);
   assert.equal(receipt.signer, null);
   assert.equal(receipt.transactionHash, null);

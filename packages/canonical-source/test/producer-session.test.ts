@@ -59,12 +59,10 @@ function graph(cutoff: CanonicalSourceView, generationId = "generation-a") {
     instanceCatalogRoot: hash("4"),
     graphRoot: hash("5"),
     runtimeAuthority: Object.freeze({
-      authorityClass: "signed-release" as const,
       authorityBindingHash: hash("a"),
       implementationCommit: "a".repeat(40),
     }),
-    releaseProvenanceHash: hash("6"),
-    candidatePartitionProofStorageHash: hash("7"),
+    candidatePartitionCommitmentStorageHash: hash("7"),
     nominationClosureRoot: hash("8"),
     nominationClosureStorageHash: hash("9"),
   };
@@ -207,22 +205,21 @@ test("generation and topology mutations fail closed", async () => {
   );
 });
 
-test("producer session rejects an advisory runtime binding before opening", async () => {
+test("producer session rejects a non-projection runtime authority before opening", async () => {
   const current = head("101", "3");
   const fixture = sourceFixture(current);
   const observation = await fixture.source.observeCurrentHead();
-  const signed = graph(cutoffView(head("100", "1")));
+  const active = graph(cutoffView(head("100", "1")));
   const advisory = {
-    ...signed,
+    ...active,
     binding: {
-      ...signed.binding,
+      ...active.binding,
       runtimeAuthority: {
-        authorityClass: "advisory-observation",
         authorityBindingHash: hash("b"),
         implementationCommit: "b".repeat(40),
+        runtimeBindingId: hash("c"),
       },
-      releaseProvenanceHash: null,
-      candidatePartitionProofStorageHash: null,
+      candidatePartitionCommitmentStorageHash: null,
       nominationClosureStorageHash: null,
     },
   };
@@ -232,7 +229,7 @@ test("producer session rejects an advisory runtime binding before opening", asyn
       observation,
       advisory as never,
     ),
-    /runtimeAuthority must be signed-release/,
+    /unknown field/,
   );
 });
 

@@ -560,7 +560,7 @@ export function createSearchTerminalFixture(input: {
           value => h("economic-safety", value),
           input.economicSafetyAuthority,
         ),
-        unsignedDryRun: { issue: value => sealUnsignedDryRunReceipt(value) },
+        dryRun: { issue: value => sealUnsignedDryRunReceipt(value) },
       };
       const pipelineInput: RoutePipelineInputV1 = {
         lease: lease as never,
@@ -577,7 +577,7 @@ export function createSearchTerminalFixture(input: {
         signal: request.signal,
       };
       const outcome = await runSearchPipeline(ports, pipelineInput);
-      if (outcome.kind !== "route-set-terminal" && outcome.kind !== "unsigned-dry-run") {
+      if (outcome.kind !== "route-set-terminal" && outcome.kind !== "dry-run") {
         throw new TypeError(`fixture pipeline did not issue terminal: ${outcome.kind}:${"code" in outcome ? outcome.code : "unknown"}`);
       }
       const draft: Extract<ProducerLaneRunDraftV1, { readonly kind: "terminal" }> = Object.freeze({

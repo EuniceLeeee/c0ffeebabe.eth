@@ -39,7 +39,7 @@ import {
 import {
   createGeneratedFamilyRuntimeFactory,
   issueGeneratedFamilyLifecycleRuntimePort,
-  issueGeneratedFamilyRuntimeAuthorityCapability,
+  issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability,
   issueGeneratedFamilySearchRuntimePort,
   type GeneratedFamilySearchRuntimePortV1,
 } from "../../family-composition/src/internal/generated-runtime-composition.ts";
@@ -58,7 +58,7 @@ import {
 } from "../../strategy-composition/src/index.ts";
 import {
   createGeneratedStrategyRuntimeFactory,
-  issueGeneratedStrategyRuntimeAuthorityCapability,
+  issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability,
 } from "../../strategy-composition/src/internal/generated-runtime-composition.ts";
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../../strategy-composition/src/internal/trigger-owner.ts";
 import { compileStrategy } from "../../strategy-sdk/src/index.ts";
@@ -72,7 +72,7 @@ import { sealEmptyNominationClosureFixture } from "../../../specs/nomination-aut
 import { createContractEconomicSafetyService } from "../../search-pipeline/test/economic-safety-fixture.ts";
 import { createProductionSixStepTailFixture } from "../../search-pipeline/test/production-six-step-fixture.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 
@@ -93,10 +93,9 @@ const nomination = sealEmptyNominationClosureFixture({
   persistedExecutionRoot: h("nomination-persisted-execution"),
   resultPartitionRoot: h("nomination-result-partition"),
 });
-const signedRuntimeAuthority = createSignedReleaseRuntimeAuthorityDescriptorV1({
-  authorityClass: "signed-release",
+const runtimeAuthorityDescriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+  authorityClass: "dry-run",
   runtimeBindingId: h("runtime-binding"),
-  releaseProvenanceHash: h("release"),
   implementationCommit: "a".repeat(40),
 });
 const binding: GraphLeaseBindingV1 = Object.freeze({
@@ -107,9 +106,9 @@ const binding: GraphLeaseBindingV1 = Object.freeze({
   definitionCatalogRoot: h("definitions"),
   instanceCatalogRoot: h("instances"),
   graphRoot: h("graph"),
-  runtimeAuthority: projectRuntimeAuthorityDescriptorV1(signedRuntimeAuthority),
-  releaseProvenanceHash: h("release"),
-  candidatePartitionProofStorageHash: h("partition-proof"),
+  runtimeAuthority: projectRuntimeAuthorityDescriptorV1(runtimeAuthorityDescriptor),
+  releaseProvenanceHash: null,
+  candidatePartitionCommitmentStorageHash: h("partition-commitment"),
   nominationClosureRoot: nomination.closure.root,
   nominationClosureStorageHash: nomination.storageHash,
 });
@@ -228,10 +227,10 @@ function issuePlanningProblem() {
     descriptor,
     issuers: [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
   });
-  const capability = issueGeneratedStrategyRuntimeAuthorityCapability({
+  const capability = issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
     factory,
-    qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
-    runtimeAuthority: signedRuntimeAuthority,
+    declaredCapabilitySetRoot: descriptor.proposedCapabilitySetRoot,
+    runtimeAuthority: runtimeAuthorityDescriptor,
     assertCurrent: () => {},
   });
   const composition = factory(capability);
@@ -240,7 +239,7 @@ function issuePlanningProblem() {
     definitionCatalogRoot: binding.definitionCatalogRoot,
     graphRoot: binding.graphRoot,
     readyRecordHash: binding.readyRecordHash,
-    releaseProvenanceHash: binding.releaseProvenanceHash,
+    runtimeMembershipHash: composition.runtimeMembershipHash,
     runtimeAuthority: binding.runtimeAuthority,
     sourceHash: h("block"),
   } as const;
@@ -619,15 +618,11 @@ function generatedComposition(
     sourcePlans: [[sourcePlan]],
     nominationPrograms: [[nominationProgram]],
   });
-  const capability = issueGeneratedFamilyRuntimeAuthorityCapability({
+  const capability = issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability({
     factory,
-    runtimeAuthority: signedRuntimeAuthority,
-    qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
+    runtimeAuthority: runtimeAuthorityDescriptor,
+    declaredCapabilitySetRoot: descriptor.proposedCapabilitySetRoot,
     nominationProgramSetRoot: descriptor.nominationProgramSetRoot,
-    nominationQualifications: [{
-      proposalLeafDigest: nominationProgramProposal.proposalLeafDigest,
-      qualificationLeafDigest: h("nomination-qualification-leaf"),
-    }],
     authorities: [authority],
     assertCurrent: () => {},
   });
@@ -637,7 +632,6 @@ function generatedComposition(
   if (coarseDescriptor === null) throw new TypeError("fixture generated coarse descriptor is missing");
   const releaseMembershipRoot = h("coarse-release-membership");
   const coarseOwner = issueQualifiedCoarseProjectionOwnerCapabilityV1({
-    releaseProvenanceHash: binding.releaseProvenanceHash,
     releaseMembershipRoot,
     descriptor: coarseDescriptor.ownerDescriptor,
     port: Object.freeze({
@@ -649,7 +643,6 @@ function generatedComposition(
     familyDefinitionHash,
     ownerDescriptor: coarseDescriptor.ownerDescriptor,
     service: issueCoarseProjectionServiceV1({ owner: coarseOwner }),
-    releaseProvenanceHash: binding.releaseProvenanceHash,
     releaseMembershipRoot,
     assertCurrent: () => {},
   });
@@ -744,7 +737,7 @@ test("generated search ports consume exact non-first Graph ports and compose ord
     finalSimulation,
     economicSafety: createContractEconomicSafetyService(binding.releaseProvenanceHash, h),
     sixStepArtifacts: createProductionSixStepTailFixture([]),
-    unsignedDryRun: { issue: sealUnsignedDryRunReceipt },
+    dryRun: { issue: sealUnsignedDryRunReceipt },
   } as never;
   const result = await runSearchPipeline(ports, {
     lease: lease(),
@@ -874,7 +867,7 @@ test("native audit retains the raw unavailable state outcome and leaves later co
     finalSimulation: { simulate: () => { throw new Error("must not reach final simulation"); } },
     economicSafety: createContractEconomicSafetyService(binding.releaseProvenanceHash, h),
     sixStepArtifacts: createProductionSixStepTailFixture([]),
-    unsignedDryRun: { issue: sealUnsignedDryRunReceipt },
+    dryRun: { issue: sealUnsignedDryRunReceipt },
   } as never, {
     lease: lease(),
     planningProblem,
@@ -916,7 +909,7 @@ test("caller-recomputed planning problems fail before route admission", async ()
     finalSimulation: { simulate: () => { throw new Error("not reached"); } },
     economicSafety: createContractEconomicSafetyService(binding.releaseProvenanceHash, h),
     sixStepArtifacts: createProductionSixStepTailFixture([]),
-    unsignedDryRun: { issue: sealUnsignedDryRunReceipt },
+    dryRun: { issue: sealUnsignedDryRunReceipt },
   } as never, {
     lease: lease(),
     planningProblem: { ...planningProblem },

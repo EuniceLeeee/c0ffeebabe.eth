@@ -504,7 +504,7 @@ function fullFamilyTerminalBindingFixture(projection: ProductionTerminalPhaseFul
     producerTerminalBindingRoot: projection.producerTerminalBindingRoot,
     laneTerminalSetRoot: projection.laneTerminalSetRoot,
     searchTerminalHash: h(`search-terminal:${projection.finalDurableWindowId}`),
-    terminalKind: "unsigned-dry-run" as const,
+    terminalKind: "dry-run" as const,
     terminalLineageHash: h(`terminal-lineage:${projection.finalDurableWindowId}`),
     readyRecordHash: projection.readyRecordHash,
     generationId: sweep.binding.generationId,
@@ -1631,7 +1631,7 @@ test("selected process artifact remains exact in the publishing process and miss
       finalSimulation: simulation,
       finalSimulationOwnerEvidence: finalOwnerEvidence,
       economicSafety,
-      unsignedDryRun: Object.freeze({}),
+      dryRun: Object.freeze({}),
       timings: Object.freeze({ planner: timing, exact: timing, executionProgram: timing, finalSimulation: timing }),
       productionArtifactSetRoots: Object.freeze(stageArtifacts.slice(-4).map(value => value.artifactSetRoot)),
     });
@@ -1829,8 +1829,8 @@ test("selected process artifact remains exact in the publishing process and miss
       source: currentSource,
       programHash: terminalBinding.programHash,
       finalSimulationReceiptHash: terminalBinding.finalSimulationReceiptHash,
-      unsignedDryRunCandidateId: h("unsigned-dry-run-candidate"),
-      unsignedDryRunLineageHash: h("unsigned-dry-run-lineage"),
+      dryRunCandidateId: h("dry-run-candidate"),
+      dryRunLineageHash: h("dry-run-lineage"),
     });
     const processPayload = Object.freeze({
       schemaVersion: 1 as const,

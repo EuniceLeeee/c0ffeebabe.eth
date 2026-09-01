@@ -53,7 +53,7 @@ import { createRouteCoarseAttemptEvidenceOwnerV1 } from "../src/internal/coarse-
 import { createProductionSixStepTailFixture } from "./production-six-step-fixture.ts";
 import { readProductionSixStepArtifactMaterialV1 } from "../../evidence-emitter/src/index.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 
@@ -63,10 +63,9 @@ const noRejectionAuthority = Object.freeze({ read: () => { throw new TypeError("
 
 const source: SourceViewV1 = Object.freeze({ chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") });
 const releaseMembershipRoot = h("release-membership");
-const runtimeAuthorityDescriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
-  authorityClass: "signed-release",
+const runtimeAuthorityDescriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+  authorityClass: "dry-run",
   runtimeBindingId: hashDomain("test/search-pipeline/runtime-binding/v1", 1),
-  releaseProvenanceHash: h("release"),
   implementationCommit: "a".repeat(40),
 });
 const nomination = sealEmptyNominationClosureFixture({
@@ -93,8 +92,8 @@ const binding: GraphLeaseBindingV1 = Object.freeze({
   instanceCatalogRoot: h("instances"),
   graphRoot: h("graph"),
   runtimeAuthority: projectRuntimeAuthorityDescriptorV1(runtimeAuthorityDescriptor),
-  releaseProvenanceHash: h("release"),
-  candidatePartitionProofStorageHash: h("partition-proof"),
+  releaseProvenanceHash: null,
+  candidatePartitionCommitmentStorageHash: h("partition-commitment"),
   nominationClosureRoot: nomination.closure.root,
   nominationClosureStorageHash: nomination.storageHash,
 });
@@ -203,7 +202,6 @@ const planningProblem = issueRouteCyclePlanningProblem({
   definitionCatalogRoot: binding.definitionCatalogRoot,
   graphRoot: binding.graphRoot,
   edges,
-  releaseProvenanceHash: binding.releaseProvenanceHash!,
   readyRecordHash: binding.readyRecordHash,
   sourceHash: h("block"),
   correlationId: h("correlation"),
@@ -256,8 +254,6 @@ function ownerIssuedProjections(
   options: Readonly<{ readonly limit?: number; readonly unavailableIndex?: number }> = {},
 ): readonly QualifiedCoarseProjectionV1[] {
   const route = readIssuedCoarseRouteBindingV1(capability);
-  if (route.releaseProvenanceHash === null) throw new TypeError("qualified coarse fixture requires signed release provenance");
-  const releaseProvenanceHash = route.releaseProvenanceHash;
   return route.legs.slice(0, options.limit ?? route.legs.length).map((leg, index) => {
     const ownerRef = h(`${route.routeHash}:coarse-owner:${index}`);
     const finalAmount = prune ? "100" : "110";
@@ -290,7 +286,6 @@ function ownerIssuedProjections(
     const projectionCapability = Object.freeze(Object.create(null)) as CoarseProjectionCapabilityV1;
     const proofCapability = Object.freeze(Object.create(null));
     const owner = issueQualifiedCoarseProjectionOwnerCapabilityV1({
-      releaseProvenanceHash,
       releaseMembershipRoot,
       descriptor: Object.freeze({
         ownerRef,
@@ -391,7 +386,7 @@ function ports(): RoutePipelinePortsV1<object, object, object, object> {
     finalSimulation: { rejectionAuthority: noRejectionAuthority, simulate: () => { throw new Error("must not reach simulation"); } },
     economicSafety: createContractEconomicSafetyService(binding.releaseProvenanceHash, h),
     sixStepArtifacts: createProductionSixStepTailFixture([]),
-    unsignedDryRun: { issue: () => { throw new Error("must not issue"); } },
+    dryRun: { issue: () => { throw new Error("must not issue"); } },
   };
 }
 
@@ -477,7 +472,7 @@ function successfulPortsWithSchedulerJoin(_preferredCandidateId: Hash): Readonly
           };
         },
       },
-      unsignedDryRun: { issue: sealUnsignedDryRunReceipt },
+      dryRun: { issue: sealUnsignedDryRunReceipt },
     },
   });
 }
@@ -865,7 +860,6 @@ test("only a genuinely empty non-truncated planner denominator is complete-no-ca
     definitionCatalogRoot: binding.definitionCatalogRoot,
     graphRoot: binding.graphRoot,
     edges: [],
-    releaseProvenanceHash: binding.releaseProvenanceHash!,
     readyRecordHash: binding.readyRecordHash,
     sourceHash: h("block"),
     correlationId: h("correlation"),
@@ -892,7 +886,6 @@ test("an empty denominator cannot become complete-no-candidate after the source 
     definitionCatalogRoot: binding.definitionCatalogRoot,
     graphRoot: binding.graphRoot,
     edges: [],
-    releaseProvenanceHash: binding.releaseProvenanceHash!,
     readyRecordHash: binding.readyRecordHash,
     sourceHash: h("block"),
     correlationId: h("correlation"),
@@ -970,7 +963,7 @@ test("terminal authority survives no DTO rewrite and rejects structural capabili
 test("successful terminal retains the exact semantic-to-scheduler join without changing canonical receipts", async () => {
   const firstFixture = successfulPortsWithSchedulerJoin(rankableCandidate!.candidateId);
   const first = await runSearchPipeline(firstFixture.ports, { ...input(), admission: { topK: 0, boundedUnrankedBudget: 1 } });
-  assert.equal(first.kind, "unsigned-dry-run");
+  assert.equal(first.kind, "dry-run");
   assert.ok(first.schedulerResourceJoin);
   const firstJoin = readIssuedSearchTerminalSchedulerResourceJoinV1(first.terminalCapability);
   assert.notEqual(firstJoin, null);
@@ -979,8 +972,8 @@ test("successful terminal retains the exact semantic-to-scheduler join without c
   assert.deepEqual(firstJoin!.source, first.receipt.source);
   assert.equal(firstJoin!.programHash, first.receipt.programHash);
   assert.equal(firstJoin!.finalSimulationReceiptHash, first.receipt.finalSimulationReceiptHash);
-  assert.equal(firstJoin!.unsignedDryRunCandidateId, first.receipt.candidateId);
-  assert.equal(firstJoin!.unsignedDryRunLineageHash, first.receipt.lineageHash);
+  assert.equal(firstJoin!.dryRunCandidateId, first.receipt.candidateId);
+  assert.equal(firstJoin!.dryRunLineageHash, first.receipt.lineageHash);
   assert.strictEqual(firstJoin!.schedulerCompletion, firstFixture.handles[0]);
   const firstTrace = readIssuedSearchTerminalSixStepTraceV1(first.terminalCapability);
   const firstArtifacts = readIssuedSearchTerminalSixStepArtifactCapabilitiesV1(first.terminalCapability);
@@ -1161,9 +1154,9 @@ test("a later dry-run success retains an earlier admitted retryable candidate", 
         }, sixStepEvidence: issueFinalEvidence(program.programHash, receiptHash) };
       },
     },
-    unsignedDryRun: { issue: sealUnsignedDryRunReceipt },
+    dryRun: { issue: sealUnsignedDryRunReceipt },
   }, { ...input(), admission: { topK: 0, boundedUnrankedBudget: 2 } });
-  assert.equal(result.kind, "unsigned-dry-run");
+  assert.equal(result.kind, "dry-run");
   assert.equal(result.accounting.selected, 2);
   assert.equal(result.accounting.entries.filter(entry => entry.terminalKind === "retryable").length, 1);
   const passed = result.accounting.entries.filter(entry => entry.terminalKind === "passed");
@@ -1216,9 +1209,9 @@ test("first-eligible short-circuit issues a winner-bound post-success policy ter
         }, sixStepEvidence: issueFinalEvidence(program.programHash, receiptHash) };
       },
     },
-    unsignedDryRun: { issue: sealUnsignedDryRunReceipt },
+    dryRun: { issue: sealUnsignedDryRunReceipt },
   }, { ...input(), admission: { topK: 0, boundedUnrankedBudget: 2 } });
-  assert.equal(result.kind, "unsigned-dry-run");
+  assert.equal(result.kind, "dry-run");
   const remaining = result.accounting.entries.filter(entry => entry.reasonCode === "post-success:first-eligible");
   assert.equal(remaining.length, 1);
   assert.equal(remaining[0]?.terminalKind, "policyRejected");
@@ -1228,7 +1221,7 @@ test("first-eligible short-circuit issues a winner-bound post-success policy ter
   assert.equal(remaining[0].policyTerminal.winnerTerminalLineageHash, result.receipt.lineageHash);
   assert.equal(remaining[0].evidenceHash, remaining[0].policyTerminal.receiptHash);
   const authoritative = readIssuedSearchTerminalCapabilityV1(result.terminalCapability);
-  assert.equal(authoritative.kind, "unsigned-dry-run");
+  assert.equal(authoritative.kind, "dry-run");
   assert.equal(authoritative.accounting.entries.some(entry => entry.terminalKind === "not-run"), false);
 });
 

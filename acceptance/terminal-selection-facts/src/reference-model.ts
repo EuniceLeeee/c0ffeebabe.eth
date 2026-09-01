@@ -659,7 +659,7 @@ function decodeCanonicalHead(value: unknown, path: string) {
 function decodeProducerSchedulerJoin(value: unknown, path: string) {
   const record = exactDataRecord(value, [
     "correlationId", "generationId", "source", "programHash", "finalSimulationReceiptHash",
-    "unsignedDryRunCandidateId", "unsignedDryRunLineageHash",
+    "dryRunCandidateId", "dryRunLineageHash",
   ], path);
   return Object.freeze({
     correlationId: oracleHash(dataField(record, "correlationId", path), `${path}.correlationId`),
@@ -667,8 +667,8 @@ function decodeProducerSchedulerJoin(value: unknown, path: string) {
     source: decodeCurrentSource(dataField(record, "source", path), `${path}.source`),
     programHash: oracleHash(dataField(record, "programHash", path), `${path}.programHash`),
     finalSimulationReceiptHash: oracleHash(dataField(record, "finalSimulationReceiptHash", path), `${path}.finalSimulationReceiptHash`),
-    unsignedDryRunCandidateId: oracleHash(dataField(record, "unsignedDryRunCandidateId", path), `${path}.unsignedDryRunCandidateId`),
-    unsignedDryRunLineageHash: oracleHash(dataField(record, "unsignedDryRunLineageHash", path), `${path}.unsignedDryRunLineageHash`),
+    dryRunCandidateId: oracleHash(dataField(record, "dryRunCandidateId", path), `${path}.dryRunCandidateId`),
+    dryRunLineageHash: oracleHash(dataField(record, "dryRunLineageHash", path), `${path}.dryRunLineageHash`),
   });
 }
 

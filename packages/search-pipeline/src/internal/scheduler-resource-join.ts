@@ -6,15 +6,15 @@ import type {
   FinalSimulationSchedulerJoinSeedV1,
   SearchSchedulerResourceJoinCapabilityV1,
   SearchSchedulerResourceJoinV1,
-  UnsignedDryRunReceiptV1,
+  DryRunReceiptV1,
 } from "../index.ts";
 
 const issued = new WeakMap<object, SearchSchedulerResourceJoinV1>();
 
-/** Search-pipeline owner only: issue after the unsigned lineage was validated. */
+/** Search-pipeline owner only: issue after the dry-run lineage was validated. */
 export function issueSearchSchedulerResourceJoin(
   seed: FinalSimulationSchedulerJoinSeedV1,
-  receipt: UnsignedDryRunReceiptV1,
+  receipt: DryRunReceiptV1,
 ): SearchSchedulerResourceJoinCapabilityV1 {
   if (seed.schedulerCompletion === null || typeof seed.schedulerCompletion !== "object") {
     throw new TypeError("final simulation scheduler completion handle is invalid");
@@ -25,8 +25,8 @@ export function issueSearchSchedulerResourceJoin(
     source: Object.freeze({ ...seed.source }),
     programHash: assertHash(seed.programHash, "schedulerResourceJoin.programHash"),
     finalSimulationReceiptHash: assertHash(seed.finalSimulationReceiptHash, "schedulerResourceJoin.finalSimulationReceiptHash"),
-    unsignedDryRunCandidateId: assertHash(receipt.candidateId, "schedulerResourceJoin.unsignedDryRunCandidateId"),
-    unsignedDryRunLineageHash: assertHash(receipt.lineageHash, "schedulerResourceJoin.unsignedDryRunLineageHash"),
+    dryRunCandidateId: assertHash(receipt.candidateId, "schedulerResourceJoin.dryRunCandidateId"),
+    dryRunLineageHash: assertHash(receipt.lineageHash, "schedulerResourceJoin.dryRunLineageHash"),
     schedulerCompletion: seed.schedulerCompletion,
   });
   const capability = Object.freeze(Object.create(null)) as SearchSchedulerResourceJoinCapabilityV1;

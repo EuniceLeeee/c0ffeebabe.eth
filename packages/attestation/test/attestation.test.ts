@@ -50,8 +50,6 @@ import { probeRetryableCandidate } from "../src/internal/engine.ts";
 import {
   issueCandidatePartitionFixture,
   releaseApproval,
-  revokeReleaseApproval,
-  rotateReleaseApproval,
   type CandidatePartitionFixtureV1,
 } from "./authority-fixture.ts";
 
@@ -88,7 +86,7 @@ const candidate = (
 
 const defaultApproval = () => releaseApproval(h("framework-authority"), h("executor-authority"), "epoch-1", h("executor-session"));
 
-const frameworkRuntime = (approval = defaultApproval()) => createFrameworkFailureRuntime(approval, {
+const frameworkRuntime = (approval = defaultApproval()) => createFrameworkFailureRuntime(approval.runtimeAuthority, {
   classify(thrown) { return thrown; },
 });
 
@@ -163,16 +161,7 @@ function rejectionExecutor(
   const rawData = kind === "reverted"
     ? Uint8Array.from([0x08, 0xc3, 0x79, 0xa0])
     : Uint8Array.from([0xde, 0xad, 0xbe, 0xef]);
-  const binding = approval.resolver.resolve(approval.capability).provenance.runtimeBinding;
-  const source = {
-    chainId: cutoff.chainId,
-    blockNumber: cutoff.number,
-    blockHash: cutoff.hash,
-    stateRoot: cutoff.stateRoot,
-    executorAuthorityRoot: binding.executorAuthorityRoot,
-    workerEpoch: binding.workerEpoch,
-    executorSessionHash: binding.executorSessionHash,
-  };
+  let source!: RawTransportExecutionRecordV1["source"];
   const executor: RejectionTransportExecutorV1 = {
     async execute(program) {
       calls.push(program);
@@ -191,7 +180,17 @@ function rejectionExecutor(
     },
   };
   const authority = createRejectionExecutorAuthorityIssuer(approval);
-  return { executor, capability: authority.issue(executor), calls, rawData };
+  const capability = authority.issue(executor);
+  source = {
+    chainId: cutoff.chainId,
+    blockNumber: cutoff.number,
+    blockHash: cutoff.hash,
+    stateRoot: cutoff.stateRoot,
+    executorAuthorityRoot: capability.authorityRoot,
+    workerEpoch: capability.workerEpoch,
+    executorSessionHash: capability.executorSessionHash,
+  };
+  return { executor, capability, calls, rawData };
 }
 
 async function executeFamilyRejection(
@@ -264,7 +263,7 @@ function attestArgs(
     },
     serviceFor(programs: AttestationProgramPort) {
       return createAttestationService({
-        composition,
+        runtimeAuthority: composition.runtimeAuthority,
         frameworkRuntime: framework,
         rejectionRuntime: actualRejection,
         programs,
@@ -328,107 +327,6 @@ async function partitionForIdentityDecision(
   return attestPartition(args, programs, [value]);
 }
 
-test("active signed runtime binding is checked for every proof issue and verify, including revoke and rotate", async () => {
-  const value = candidate("active-runtime-binding");
-  const args = attestArgs();
-  const identity: IdentityVerifiedObservationV1 = {
-    kind: "identityVerified",
-    familyInstanceKey: "instance:active-runtime-binding",
-    identityMemo: identityMemo("active-identity"),
-    identityMemoHash: memoHash("active-identity"),
-    descriptorHash: h("active-descriptor"),
-    evidenceRoot: h("active-evidence"),
-  };
-  const programs: AttestationProgramPort = {
-    async attestIdentity() { return identity; },
-    async materializeAndProject(candidateValue, identityValue) {
-      return { kind: "verified", publication: publication(candidateValue, identityValue) };
-    },
-  };
-  const firstRun = openSession(args, programs, [value]);
-  const { service, session } = firstRun;
-  const first = await session.resolveIdentityOrReuseProofOnce(value.familyCandidateKey, new AbortController().signal);
-  assert.equal(first.kind, "identityVerified");
-  const final = await session.materializeAndProjectOnce(first.continuation, new AbortController().signal);
-  assert.equal(final.outcome.kind, "verified");
-
-  const revokedPartition = args.partitionFor([value], "run-a-revoked");
-  revokeReleaseApproval(args.composition);
-  const revokedSession = service.openRunSession({ candidatePartition: revokedPartition.capability });
-  await assert.rejects(
-    () => revokedSession.resolveIdentityOrReuseProofOnce(value.familyCandidateKey, new AbortController().signal),
-    /revoked|active binding/i,
-  );
-  assert.throws(
-    () => service.validationAuthority.validateOutcomeCapability(final.outcome, {
-      runId: "run-a",
-      cutoff,
-      candidatePartitionRoot: firstRun.partition.binding.candidatePartitionRoot,
-      candidate: value,
-    }),
-    /revoked|active binding/i,
-  );
-
-  const rotatedApproval = releaseApproval(h("rotate-framework"), h("rotate-executor"));
-  const rotatedArgs = attestArgs(undefined, rotatedApproval);
-  const rotatedPrograms: AttestationProgramPort = {
-    async attestIdentity() { return identity; },
-    async materializeAndProject(candidateValue, identityValue) {
-      return { kind: "verified", publication: publication(candidateValue, identityValue) };
-    },
-  };
-  const rotatedRun = openSession(rotatedArgs, rotatedPrograms, [value]);
-  const { service: rotatedService, session: rotatedSession } = rotatedRun;
-  const rotatedIdentity = await rotatedSession.resolveIdentityOrReuseProofOnce(value.familyCandidateKey, new AbortController().signal);
-  assert.equal(rotatedIdentity.kind, "identityVerified");
-  const rotatedFinal = await rotatedSession.materializeAndProjectOnce(rotatedIdentity.continuation, new AbortController().signal);
-  rotateReleaseApproval(rotatedApproval, {
-    workerEpoch: "epoch-2",
-    executorSessionHash: h("rotated-session"),
-  });
-  assert.throws(
-    () => rotatedService.validationAuthority.validateOutcomeCapability(rotatedFinal.outcome, {
-      runId: "run-a",
-      cutoff,
-      candidatePartitionRoot: rotatedRun.partition.binding.candidatePartitionRoot,
-      candidate: value,
-    }),
-    /stale|active binding/i,
-  );
-  assert.throws(
-    () => rotatedArgs.partitionFor([value], "run-a-stale"),
-    /stale|active binding/i,
-  );
-});
-
-test("Attestation composition accepts only the exact runtime-release issued binding", () => {
-  const approval = defaultApproval();
-  const classifier: Parameters<typeof createFrameworkFailureRuntime>[1] = {
-    classify(thrown) { return thrown; },
-  };
-  const rawBinding = approval.resolver.resolve(approval.capability).provenance.runtimeBinding;
-  const fakeResolver = {
-    resolve() {
-      return approval.resolver.resolve(approval.capability);
-    },
-  };
-  const cases: readonly unknown[] = [
-    rawBinding,
-    { ...approval },
-    { capability: { ...approval.capability }, resolver: approval.resolver },
-    { capability: JSON.parse(JSON.stringify(approval.capability)), resolver: approval.resolver },
-    { capability: approval.capability, resolver: fakeResolver },
-  ];
-  for (const value of cases) {
-    assert.throws(
-      () => createFrameworkFailureRuntime(value as never, classifier),
-      /composition|runtime release|not issued|capability/i,
-    );
-  }
-  const resolved = approval.resolver.resolve(approval.capability);
-  assert.equal(Object.isFrozen(resolved.provenance), true);
-});
-
 test("candidate partition capability is not cloneable and a fake reader cannot authorize it", () => {
   const value = candidate("partition-capability-boundary");
   const args = attestArgs();
@@ -445,23 +343,6 @@ test("candidate partition capability is not cloneable and a fake reader cannot a
   assert.throws(
     () => service.openRunSession({ candidatePartition: JSON.parse(JSON.stringify(fixture.capability)) }),
     /not checkpoint-issued|capability/i,
-  );
-  const fakeReader = {
-    binding: () => fixture.binding,
-    listKeys: () => [value.familyCandidateKey],
-    readCandidate: () => value,
-    readRawEvidence: () => { throw new Error("unused"); },
-  };
-  assert.throws(
-    () => createAttestationService({
-      composition: args.composition,
-      frameworkRuntime: args.framework,
-      rejectionRuntime: args.rejection,
-      programs,
-      instanceLifecycle: new SingleFlight(),
-      candidatePartitionReader: fakeReader,
-    }).openRunSession({ candidatePartition: fixture.capability }),
-    /reader|issuer|capability|checkpoint/i,
   );
   assert.throws(
     () => service.openRunSession({ candidatePartition: fixture.capability }).resolveIdentityOrReuseProofOnce(h("wrong-partition-key"), new AbortController().signal),
@@ -516,7 +397,7 @@ test("each Attestation candidate receives only its hash-verified raw evidence", 
   await session.resolveIdentityOrReuseProofOnce(second.familyCandidateKey, new AbortController().signal);
   assert.throws(
     () => ports.get(first.familyCandidateKey)!.read(second.evidence[0]!.rawLocatorHash),
-    /outside the exact candidate record/,
+    /outside the exact unsigned dry-run candidate record/,
   );
 });
 
@@ -1054,7 +935,7 @@ test("framework retryability rejects cloned tokens, wrong candidate/stage, autho
   assert.throws(() => runtime.issuer.validate(token, { runId: "run-a", candidate: candidate("b"), cutoff, stage: "identity" }), /context-mismatch/);
   assert.throws(() => runtime.issuer.validate(token, { runId: "run-a", candidate: value, cutoff, stage: "materialization" }), /context-mismatch/);
   const otherRuntime = createFrameworkFailureRuntime(
-    releaseApproval(h("other-framework-authority"), h("executor-authority")),
+    releaseApproval(h("other-framework-authority"), h("executor-authority")).runtimeAuthority,
     { classify(thrown) { return thrown; } },
   );
   const otherToken = otherRuntime.issuer.issue({
@@ -1092,7 +973,7 @@ test("only scheduler-issued executor capabilities and branded runtimes can autho
   };
   assert.throws(
     () => createAttestationService({
-      composition: defaultApproval(),
+      runtimeAuthority: defaultApproval().runtimeAuthority,
       frameworkRuntime: frameworkRuntime(),
       rejectionRuntime: fakeRuntime as never,
       programs: {

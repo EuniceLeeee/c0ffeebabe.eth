@@ -296,8 +296,7 @@ function physicalEvidenceRef(
   rawLocatorHash: Hash,
 ): Hash {
   return hashDomain("aloha/source-plan-physical-evidence/v1", {
-    releaseBindingId: observation.releaseBindingId,
-    releaseProvenanceHash: observation.releaseProvenanceHash,
+    runtimeAuthority: observation.runtimeAuthority,
     sourceAuthorityRoot: observation.sourceAuthorityRoot,
     sourceAnchorRoot: observation.sourceAnchorRoot,
     requestId: observation.requestId,

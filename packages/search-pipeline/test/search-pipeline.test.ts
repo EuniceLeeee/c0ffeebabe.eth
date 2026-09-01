@@ -31,7 +31,7 @@ import type {
 } from "../src/index.ts";
 import { createProductionSixStepTailFixture } from "./production-six-step-fixture.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 
@@ -44,10 +44,9 @@ const h = (value: string): Hash => hashDomain("test/search-pipeline", value);
 const assetIn = erc20AssetPortBindingV1("1", `0x${h("asset-in").slice(-40)}`);
 const assetMid = erc20AssetPortBindingV1("1", `0x${h("asset-mid").slice(-40)}`);
 const noRejectionAuthority = Object.freeze({ read: () => { throw new TypeError("rejection-not-issued"); } });
-const runtimeAuthorityDescriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
-  authorityClass: "signed-release",
+const runtimeAuthorityDescriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+  authorityClass: "dry-run",
   runtimeBindingId: hashDomain("test/search-pipeline/runtime-binding/v1", 1),
-  releaseProvenanceHash: h("release"),
   implementationCommit: "a".repeat(40),
 });
 
@@ -87,8 +86,8 @@ const binding: GraphLeaseBindingV1 = Object.freeze({
   instanceCatalogRoot: h("instances"),
   graphRoot: h("graph"),
   runtimeAuthority: projectRuntimeAuthorityDescriptorV1(runtimeAuthorityDescriptor),
-  releaseProvenanceHash: h("release"),
-  candidatePartitionProofStorageHash: h("partition-proof"),
+  releaseProvenanceHash: null,
+  candidatePartitionCommitmentStorageHash: h("partition-commitment"),
   nominationClosureRoot: nomination.closure.root,
   nominationClosureStorageHash: nomination.storageHash,
 });
@@ -159,7 +158,6 @@ const planningProblem = issueRouteCyclePlanningProblem({
   definitionCatalogRoot: binding.definitionCatalogRoot,
   graphRoot: binding.graphRoot,
   edges,
-  releaseProvenanceHash: binding.releaseProvenanceHash!,
   readyRecordHash: binding.readyRecordHash,
   sourceHash: h("block"),
   correlationId: h("correlation"),
@@ -400,9 +398,9 @@ function makePorts(
     },
     economicSafety: createContractEconomicSafetyService(binding.releaseProvenanceHash, h),
     sixStepArtifacts: createProductionSixStepTailFixture(events),
-    unsignedDryRun: {
+    dryRun: {
       issue: input => {
-        events.push("unsigned-dry-run");
+        events.push("dry-run");
         return sealUnsignedDryRunReceipt(input);
       },
     },
@@ -424,9 +422,9 @@ function terminalEntry(result: RoutePipelineOutcomeV1<object>) {
 
 test("runSearchPipeline completes the opaque contract chain to an unsigned dry-run", async () => {
   const { result, events } = await run("success");
-  assert.equal(result.kind, "unsigned-dry-run", `${JSON.stringify(result)} events=${events.join("|")}`);
-  assert.deepEqual(events, ["route", "coarse", "planner", "six-step-3", "exact", "six-step-4", "execution-program", "six-step-5", "final-sim", "six-step-6", "unsigned-dry-run"]);
-  assert.equal(result.receipt.kind, "aloha.unsigned-dry-run-v1");
+  assert.equal(result.kind, "dry-run", `${JSON.stringify(result)} events=${events.join("|")}`);
+  assert.deepEqual(events, ["route", "coarse", "planner", "six-step-3", "exact", "six-step-4", "execution-program", "six-step-5", "final-sim", "six-step-6", "dry-run"]);
+  assert.equal(result.receipt.kind, "aloha.dry-run-v1");
   assert.equal(result.receipt.signer, null);
   assert.equal(result.receipt.transactionHash, null);
   assert.equal(result.schedulerResourceJoin, null);
@@ -531,7 +529,7 @@ test("source and generation mutations are fail-closed before unsigned issuance",
 
   const simulationSourceResult = await run("simulation-source-mutation");
   assert.equal(terminalEntry(simulationSourceResult.result).reasonCode, "final-sim:simulation-binding-mismatch");
-  assert.equal(simulationSourceResult.events.includes("unsigned-dry-run"), false);
+  assert.equal(simulationSourceResult.events.includes("dry-run"), false);
 
   const generationResult = await run("generation-mutation");
   assert.equal(terminalEntry(generationResult.result).reasonCode, "execution-program:program-binding-mismatch");

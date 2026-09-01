@@ -42,7 +42,7 @@ import {
   validateRouteCapability,
   validateSearchObjective,
   validateSourceView,
-  validateUnsignedDryRunReceiptValue,
+  validateDryRunReceiptValue,
   type CoarseBoundedUnrankedV1,
   type CoarseRankableV1,
   type CurrentSourceSessionV1,
@@ -59,7 +59,7 @@ import {
   type SearchSchedulerResourceJoinV1,
   type StageTerminalFailureV1,
   type SourceViewV1,
-  type UnsignedDryRunReceiptV1,
+  type DryRunReceiptV1,
 } from "./index.ts";
 import { readSearchSchedulerResourceJoin } from "./internal/scheduler-resource-join.ts";
 import { routeCoarseAttemptEvidenceReaderV1 } from "./internal/coarse-attempt-evidence-state.ts";
@@ -76,7 +76,6 @@ import {
   type IssuedCoarseRouteAssessmentV1,
   type QualifiedCoarseProjectionReceiptV1,
 } from "../../coarse-economics/src/index.ts";
-import type { RuntimeReleaseProvenanceHashV1 } from "../../runtime-authority/src/index.ts";
 import {
   issueCoarseEnumerationBindingV1,
   issueCoarseRouteBindingV1,
@@ -166,7 +165,7 @@ export interface RoutePipelinePortsV1<Projection, Plan, Exact, Simulation> {
   readonly executionProgram: ResolvedRoutePipelinePortsV1<Projection, Plan, Exact, Simulation>["executionProgram"];
   readonly finalSimulation: ResolvedRoutePipelinePortsV1<Projection, Plan, Exact, Simulation>["finalSimulation"];
   readonly economicSafety: ResolvedRoutePipelinePortsV1<Projection, Plan, Exact, Simulation>["economicSafety"];
-  readonly unsignedDryRun: ResolvedRoutePipelinePortsV1<Projection, Plan, Exact, Simulation>["unsignedDryRun"];
+  readonly dryRun: ResolvedRoutePipelinePortsV1<Projection, Plan, Exact, Simulation>["dryRun"];
   readonly sixStepArtifacts: ResolvedRoutePipelinePortsV1<Projection, Plan, Exact, Simulation>["sixStepArtifacts"];
 }
 
@@ -315,8 +314,8 @@ export function routeSetTerminalLineageHashV2(
  * accounting denominator via per-entry hashes before projecting only its
  * bounded identity into the terminal hash. */
 export function searchTerminalEvidenceHashV2(terminal: IssuedSearchTerminalV1): Hash {
-  if (terminal.kind === "unsigned-dry-run") {
-    validateUnsignedDryRunReceiptValue(terminal.receipt);
+  if (terminal.kind === "dry-run") {
+    validateDryRunReceiptValue(terminal.receipt);
     return hashDomain("aloha/search-terminal-evidence/v2", {
       kind: terminal.kind,
       receipt: terminal.receipt,
@@ -378,8 +377,6 @@ export interface RouteSetTerminalReceiptV1 {
   readonly source: SourceViewV1;
   readonly accounting: RouteAccountingV1;
   readonly accountingRoot: Hash;
-  readonly signer: null;
-  readonly transactionHash: null;
   readonly lineageHash: Hash;
 }
 
@@ -404,8 +401,8 @@ export interface RouteCoarseTimingFactsV1 {
 
 export type IssuedSearchTerminalV1 =
   | Readonly<{
-    readonly kind: "unsigned-dry-run";
-    readonly receipt: UnsignedDryRunReceiptV1;
+    readonly kind: "dry-run";
+    readonly receipt: DryRunReceiptV1;
     readonly accounting: RouteAccountingV1;
   }>
   | Readonly<{
@@ -415,8 +412,8 @@ export type IssuedSearchTerminalV1 =
 
 export type RoutePipelineOutcomeV1<Simulation> =
   | {
-    readonly kind: "unsigned-dry-run";
-    readonly receipt: UnsignedDryRunReceiptV1;
+    readonly kind: "dry-run";
+    readonly receipt: DryRunReceiptV1;
     readonly accounting: RouteAccountingV1;
     readonly terminalCapability: SearchTerminalCapabilityV1;
     readonly schedulerResourceJoin: SearchSchedulerResourceJoinCapabilityV1 | null;
@@ -476,7 +473,6 @@ export interface NativeFullFamilyAuditBindingV1 {
   readonly readyRecordHash: Hash;
   readonly readyCutoff: RoutePipelineInputV1["lease"]["binding"]["cutoff"];
   readonly graphRoot: Hash;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly actualCurrentSource: SourceViewV1;
   readonly planningProblemHash: Hash;
   readonly plannerEnumerationRoot: Hash;
@@ -946,11 +942,11 @@ function issueSearchTerminalCapability(
   candidateTerminalTimings: readonly RouteCandidateTerminalTimingFactsV1[],
   nativeFullFamilyAudit: NativeFullFamilyAuditCapabilityV1,
 ): SearchTerminalCapabilityV1 {
-  if (value.kind === "unsigned-dry-run") {
+  if (value.kind === "dry-run") {
     if (sixStepTrace === null) throw new TypeError("search terminal six-step trace is missing");
-    if (sixStepArtifacts === null
-      || sixStepArtifacts.stage1.length === 0
-      || sixStepArtifacts.stage1.length !== sixStepArtifacts.stage2.length) {
+    if (sixStepArtifacts !== null
+      && (sixStepArtifacts.stage1.length === 0
+      || sixStepArtifacts.stage1.length !== sixStepArtifacts.stage2.length)) {
       throw new TypeError("search terminal production Six-Step artifacts are missing");
     }
     assertSearchTerminalSixStepTrace(sixStepTrace, value.receipt);
@@ -958,7 +954,7 @@ function issueSearchTerminalCapability(
     throw new TypeError("non-success search terminal cannot carry a six-step trace");
   }
   const binding = value.receipt;
-  const accounting = value.kind === "unsigned-dry-run" ? value.accounting : value.receipt.accounting;
+  const accounting = value.kind === "dry-run" ? value.accounting : value.receipt.accounting;
   const enumeration = readIssuedPlanningEnumerationV1(plannerEnumeration);
   const enumeratedById = new Map(enumeration.candidates.map(candidate => [candidate.candidateId, candidate] as const));
   if (enumeration.planningProblemHash !== accounting.planningProblemHash
@@ -1084,7 +1080,7 @@ function sealSearchTerminalSixStepTrace(
 
 function assertSearchTerminalSixStepTrace(
   trace: SearchTerminalSixStepTraceV1,
-  receipt: UnsignedDryRunReceiptV1,
+  receipt: DryRunReceiptV1,
 ): void {
   const { traceRoot: _traceRoot, ...payload } = trace;
   if (trace.traceRoot !== hashDomain("aloha/search-terminal-six-step-trace/v1", searchTerminalSixStepTracePayload(payload))) {
@@ -1094,7 +1090,7 @@ function assertSearchTerminalSixStepTrace(
     || trace.resolved.correlationId !== receipt.correlationId
     || trace.resolved.source.hash !== receipt.source.hash
     || trace.resolved.traceRoot.length === 0
-    || encodeCanonicalJson(trace.resolved.unsignedDryRun) !== encodeCanonicalJson(receipt)) {
+    || encodeCanonicalJson(trace.resolved.dryRun) !== encodeCanonicalJson(receipt)) {
     throw new TypeError("search terminal six-step trace receipt mismatch");
   }
 }
@@ -1148,7 +1144,7 @@ export function readIssuedSearchTerminalPlannerEnumerationV1(
   const state = issuedSearchTerminals.get(terminalCapability);
   if (state === undefined) throw new TypeError("search terminal capability was not issued");
   const enumeration = readIssuedPlanningEnumerationV1(state.plannerEnumeration);
-  const accounting = state.terminal.kind === "unsigned-dry-run"
+  const accounting = state.terminal.kind === "dry-run"
     ? state.terminal.accounting
     : state.terminal.receipt.accounting;
   if (enumeration.enumerationRoot !== accounting.enumerationRoot
@@ -1486,7 +1482,7 @@ export function readIssuedSearchTerminalSixStepTraceV1(
   }
   assertExactKeys(terminalCapability, [], "searchTerminalCapability");
   const state = issuedSearchTerminals.get(terminalCapability);
-  if (state === undefined || state.terminal.kind !== "unsigned-dry-run" || state.sixStepTrace === null) {
+  if (state === undefined || state.terminal.kind !== "dry-run" || state.sixStepTrace === null) {
     throw new TypeError("search terminal six-step trace was not issued");
   }
   assertSearchTerminalSixStepTrace(state.sixStepTrace, state.terminal.receipt);
@@ -1517,7 +1513,7 @@ export function readIssuedSearchTerminalSchedulerResourceJoinV1(
   }
   const state = issuedSearchTerminals.get(terminalCapability);
   if (state === undefined) throw new TypeError("search terminal capability was not issued");
-  if (state.terminal.kind !== "unsigned-dry-run" || state.schedulerResourceJoin === null) {
+  if (state.terminal.kind !== "dry-run" || state.schedulerResourceJoin === null) {
     return null;
   }
   const join = readSearchSchedulerResourceJoin(state.schedulerResourceJoin);
@@ -1529,8 +1525,8 @@ export function readIssuedSearchTerminalSchedulerResourceJoinV1(
     || join.source.stateRoot !== state.terminal.receipt.source.stateRoot
     || join.programHash !== state.terminal.receipt.programHash
     || join.finalSimulationReceiptHash !== state.terminal.receipt.finalSimulationReceiptHash
-    || join.unsignedDryRunCandidateId !== state.terminal.receipt.candidateId
-    || join.unsignedDryRunLineageHash !== state.terminal.receipt.lineageHash) {
+    || join.dryRunCandidateId !== state.terminal.receipt.candidateId
+    || join.dryRunLineageHash !== state.terminal.receipt.lineageHash) {
     throw new TypeError("scheduler resource join no longer binds its search terminal");
   }
   return join;
@@ -1812,8 +1808,6 @@ function sealRouteSetTerminalReceipt(
     source,
     accounting,
     accountingRoot: accounting.root,
-    signer: null,
-    transactionHash: null,
   };
   return deepFreeze({ ...body, lineageHash: routeSetTerminalLineageHashV2(body) });
 }
@@ -1867,7 +1861,6 @@ function issueRouteCoarseBinding(
     },
     objectiveRef: input.objective.objectiveRef,
     runtimeAuthority: input.lease.binding.runtimeAuthority,
-    releaseProvenanceHash: input.lease.binding.releaseProvenanceHash,
     legs: Object.freeze(candidate.legs.map((leg, index) => Object.freeze({
       edgeId: leg.edgeId,
       transitionRef: assertHash(selections[index]!.opaqueTransitionRef, `coarse.route.legs[${index}].transitionRef`),
@@ -1931,8 +1924,7 @@ function validateCoarseAttemptEvidence(
       throw new TypeError(`coarse attempt receipt ${index} root mismatch`);
     }
     const projection = receipt.projection;
-    if (receipt.releaseProvenanceHash !== binding.releaseProvenanceHash
-      || projection.edgeId !== leg.edgeId
+    if (projection.edgeId !== leg.edgeId
       || projection.transitionRef !== leg.transitionRef
       || projection.routeBindingHash !== binding.routeBindingHash
       || projection.generationId !== binding.generationId
@@ -1970,7 +1962,6 @@ function buildNativeFullFamilyAudit(
     readyRecordHash: input.lease.binding.readyRecordHash,
     readyCutoff: input.lease.binding.cutoff,
     graphRoot: input.lease.binding.graphRoot,
-    releaseProvenanceHash: input.lease.binding.releaseProvenanceHash,
     actualCurrentSource: sourceView,
     planningProblemHash: enumeration.planningProblemHash,
     plannerEnumerationRoot: enumeration.enumerationRoot,
@@ -2073,7 +2064,7 @@ function buildNativeFullFamilyAudit(
     });
     return deepFreeze({ ...routeBody, routeFactRoot: nativeFullFamilyCoarseRouteFactRootV1(routeBody) });
   });
-  const successfulTerminal = terminal.kind === "unsigned-dry-run" ? terminal : null;
+  const successfulTerminal = terminal.kind === "dry-run" ? terminal : null;
   if (successfulTerminal !== null && !actionExpectedCandidateIds.has(successfulTerminal.receipt.candidateId)) {
     throw new TypeError("native full-family successful action denominator mismatch");
   }
@@ -2211,7 +2202,7 @@ export async function runSearchPipeline<Projection, Plan, Exact, Simulation>(
       || input.planningProblem.definitionCatalogRoot !== input.lease.binding.definitionCatalogRoot
       || input.planningProblem.graphRoot !== input.lease.binding.graphRoot
       || input.planningProblem.readyRecordHash !== input.lease.binding.readyRecordHash
-      || input.planningProblem.releaseProvenanceHash !== input.lease.binding.releaseProvenanceHash
+      || encodeCanonicalJson(input.planningProblem.runtimeAuthority) !== encodeCanonicalJson(input.lease.binding.runtimeAuthority)
       || input.planningProblem.strategyCompositionRoot !== input.strategyCompositionRoot
       || input.planningProblem.triggerCorrelationId !== input.correlationId
       || input.planningProblem.triggerHeadHash !== sourceView.hash
@@ -2276,7 +2267,6 @@ export async function runSearchPipeline<Projection, Plan, Exact, Simulation>(
         stateRoot: assertHash(sourceView.stateRoot, "coarse.source.stateRoot"),
       },
       runtimeAuthority: input.lease.binding.runtimeAuthority,
-      releaseProvenanceHash: input.lease.binding.releaseProvenanceHash,
       objective: admissionObjective,
       policy: {
         rankedLimit: input.admission.topK,
@@ -2331,7 +2321,7 @@ export async function runSearchPipeline<Projection, Plan, Exact, Simulation>(
       executionProgram: ports.executionProgram,
       finalSimulation: ports.finalSimulation,
       economicSafety: ports.economicSafety,
-      unsignedDryRun: ports.unsignedDryRun,
+      dryRun: ports.dryRun,
       sixStepArtifacts: ports.sixStepArtifacts,
     };
     const actionExpectedCandidateIds = new Set<Hash>();
@@ -2349,10 +2339,10 @@ export async function runSearchPipeline<Projection, Plan, Exact, Simulation>(
         callerId: input.callerId,
         signal: input.signal,
       }, item.route, item.coarse);
-      if (result.kind === "unsigned-dry-run" || (isStageFailure(result) && (
+      if (result.kind === "dry-run" || (isStageFailure(result) && (
         result.stage === "final-sim"
         || result.stage === "economics-safety"
-        || result.stage === "unsigned-dry-run"
+        || result.stage === "dry-run"
       ))) {
         actionExpectedCandidateIds.add(item.candidate.candidateId);
       }
@@ -2367,9 +2357,11 @@ export async function runSearchPipeline<Projection, Plan, Exact, Simulation>(
         }
       }
       const candidateFinishedMonotonicNs = process.hrtime.bigint();
-      if (result.kind === "unsigned-dry-run") {
+      if (result.kind === "dry-run") {
         const resolvedTrace = readIssuedResolvedRouteSixStepTraceV1(result);
-        const resolvedArtifacts = readIssuedResolvedRouteSixStepArtifactCapabilitiesV1(result);
+        const resolvedArtifacts = ports.sixStepArtifacts === undefined
+          ? null
+          : readIssuedResolvedRouteSixStepArtifactCapabilitiesV1(result);
         const passedRecord = records.find(record => record.candidate.candidateId === item.candidate.candidateId)!;
         passedRecord.finishedMonotonicNs = candidateFinishedMonotonicNs;
         passedRecord.terminalKind = "passed";
@@ -2394,7 +2386,7 @@ export async function runSearchPipeline<Projection, Plan, Exact, Simulation>(
           remainingRecord.policyTerminal = policyTerminal;
         }
         const accounting = makeAccounting(records, enumeration, input.admission);
-        const terminal = deepFreeze({ kind: "unsigned-dry-run" as const, receipt: result.receipt, accounting });
+        const terminal = deepFreeze({ kind: "dry-run" as const, receipt: result.receipt, accounting });
         const sixStepTrace = sealSearchTerminalSixStepTrace({
           schemaVersion: 1,
           kind: "aloha.search-terminal-six-step-trace-v1",

@@ -178,7 +178,7 @@ test("Family runtime authority is derived only from signed release, generated me
 test("unsigned Family owner binds exact generated declarations without qualification facts", () => {
   const value = release();
   const runtimeAuthority = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
-    authorityClass: "unsigned-dry-run",
+    authorityClass: "dry-run",
     runtimeBindingId: h("unsigned-runtime-binding"),
     implementationCommit: "b".repeat(40),
   });
@@ -189,7 +189,7 @@ test("unsigned Family owner binds exact generated declarations without qualifica
     assertCurrent() {},
   });
   const membership = readGeneratedFamilyRuntimeMembership(createReleaseFamilyRuntimeComposition, capability);
-  assert.equal(membership.runtimeAuthority.authorityClass, "unsigned-dry-run");
+  assert.equal(membership.runtimeAuthority.authorityClass, "dry-run");
   assert.equal(Object.prototype.hasOwnProperty.call(membership, "releaseProvenanceHash"), false);
   const declarations = readGeneratedFamilySourcePlanDeclarations(
     createReleaseFamilyRuntimeComposition,

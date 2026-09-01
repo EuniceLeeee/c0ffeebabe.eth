@@ -186,7 +186,7 @@ test("production passed candidate exact-joins the selected Six-Step lineage", ()
     admissionPolicyHash: h("5"),
     accountingRoot: h("6"),
     routeHash: h("7"),
-    unsignedDryRunLineageHash: h("8"),
+    dryRunLineageHash: h("8"),
     stage36Root: h("9"),
   });
   const candidate = Object.freeze({
@@ -198,7 +198,7 @@ test("production passed candidate exact-joins the selected Six-Step lineage", ()
     enumerationRoot: sixStep.enumerationRoot,
     admissionPolicyHash: sixStep.admissionPolicyHash,
     routeHash: sixStep.routeHash,
-    terminalLineageHash: sixStep.unsignedDryRunLineageHash,
+    terminalLineageHash: sixStep.dryRunLineageHash,
     sixStepEvidenceRoot: sixStep.stage36Root,
   });
   assert.doesNotThrow(() => validateProductionPassedCandidateSixStepJoinV1({ candidate, accountingRoot: sixStep.accountingRoot, sixStep }));

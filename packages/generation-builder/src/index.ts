@@ -1,6 +1,6 @@
 import type { Hash } from "../../canonical-codec/src/index.ts";
 import type {
-  CandidatePartitionBindingV1,
+  CandidatePartitionCommitmentV1,
   CandidatePartitionCapabilityV1,
 } from "../../../specs/candidate-partition-authority/src/index.ts";
 import {
@@ -73,7 +73,7 @@ export interface InProgressBuilderRunV1 {
   readonly nominationClosure: NominationClosureV1;
   /** The only candidate authority exposed after checkpoint persistence. */
   readonly candidatePartition: CandidatePartitionCapabilityV1;
-  readonly candidatePartitionBinding: CandidatePartitionBindingV1;
+  readonly candidatePartitionBinding: CandidatePartitionCommitmentV1;
 }
 
 export interface BeginRunInputV1 {
@@ -210,9 +210,8 @@ function readyMatchesPromotionInput(
     && ready.definitionCatalogRoot === binding.definitionCatalogRoot
     && ready.sourceCoverageRoot === binding.sourceCoverageRoot
     && ready.candidatePartitionRoot === binding.candidatePartitionRoot
-    && ready.candidatePartitionProofStorageHash === binding.candidatePartitionProofStorageHash
+    && ready.candidatePartitionCommitmentStorageHash === binding.candidatePartitionCommitmentStorageHash
     && ready.exactOutcomePartitionRoot === binding.exactOutcomePartitionRoot
-    && ready.releaseProvenanceHash === binding.releaseProvenanceHash
     && ready.verifiedMemoSetRoot === binding.verifiedMemoSetRoot
     && ready.instanceCatalogRoot === input.instanceCatalog.instanceCatalogRoot;
 }
@@ -239,8 +238,7 @@ function assertStagedPromotionBinding(
     || staged.stage.sealedRevision !== staged.sealedRunBinding.checkpointRevision
     || !sameCutoff(staged.stage.cutoff, staged.sealedRunBinding.cutoff)
     || staged.stage.definitionCatalogRoot !== staged.sealedRunBinding.definitionCatalogRoot
-    || staged.stage.releaseProvenanceHash !== staged.sealedRunBinding.releaseProvenanceHash
-    || staged.stage.candidatePartitionProofStorageHash !== staged.sealedRunBinding.candidatePartitionProofStorageHash
+    || staged.stage.candidatePartitionCommitmentStorageHash !== staged.sealedRunBinding.candidatePartitionCommitmentStorageHash
   ) {
     throw new Error("ready-promotion-stage-input-mismatch");
   }

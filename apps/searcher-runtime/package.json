@@ -3,8 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./release-runtime": "./src/release-runtime.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "start": "node --experimental-strip-types src/cli.ts",

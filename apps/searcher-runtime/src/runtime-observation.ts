@@ -48,17 +48,17 @@ import {
   type StartupRuntimeV1,
 } from "../../../packages/startup-runtime/src/index.ts";
 
-const STORE_ROLE = "searcher-unsigned-dry-run-observation-v1";
-const STARTUP_NAMESPACE = "unsigned-dry-run/startup/v1";
-const HEAD_NAMESPACE = "unsigned-dry-run/head/v1";
-const AUDIT_CHUNK_NAMESPACE = "unsigned-dry-run/native-audit-chunk/v1";
+const STORE_ROLE = "searcher-runtime-observation-v1";
+const STARTUP_NAMESPACE = "runtime/startup/v1";
+const HEAD_NAMESPACE = "runtime/head/v1";
+const AUDIT_CHUNK_NAMESPACE = "runtime/native-audit-chunk/v1";
 
 type ProducerObservationPortsV1 = Readonly<{
   readonly performance: ProducerPerformancePortV1<unknown>;
   readonly terminal: ProducerTerminalPortV1;
 }>;
 
-export interface UnsignedDryRunObservationOwnerV1 {
+export interface RuntimeObservationOwnerV1 {
   readonly bindServing: (startup: StartupRuntimeV1) => ProducerObservationPortsV1;
   readonly close: () => void;
 }
@@ -80,8 +80,7 @@ function sameRuntimeAuthority(
   left: RuntimeAuthorityProjectionV1,
   right: RuntimeAuthorityProjectionV1,
 ): boolean {
-  return left.authorityClass === right.authorityClass
-    && left.authorityBindingHash === right.authorityBindingHash
+  return left.authorityBindingHash === right.authorityBindingHash
     && left.implementationCommit === right.implementationCommit;
 }
 
@@ -129,7 +128,7 @@ function appendAuditChunks(
       store.appendFsyncMonotonicCapability({
         namespace: AUDIT_CHUNK_NAMESPACE,
         sequence: sequence.toString(),
-        eventId: hashDomain("aloha/unsigned-dry-run-native-audit-chunk-observation/v1", {
+        eventId: hashDomain("aloha/runtime-native-audit-chunk-observation/v1", {
           auditRoot: manifest.auditRoot,
           section: section.section,
           contentSha256: ref.contentSha256,
@@ -141,11 +140,11 @@ function appendAuditChunks(
       ref = chunk.nextChunkRef;
       count += 1n;
       if (count > BigInt(section.chunkCount)) {
-        throw new TypeError("unsigned dry-run native audit chunk chain exceeds its manifest");
+        throw new TypeError("runtime native audit chunk chain exceeds its manifest");
       }
     }
     if (count !== BigInt(section.chunkCount)) {
-      throw new TypeError("unsigned dry-run native audit chunk count mismatch");
+      throw new TypeError("runtime native audit chunk count mismatch");
     }
   }
 }
@@ -156,17 +155,14 @@ function appendAuditChunks(
  * that invocation; it never reruns discovery, pricing, planning, exact, or
  * final simulation and cannot issue a qualification/pass verdict.
  */
-export function issueUnsignedDryRunObservationOwnerV1(input: Readonly<{
+export function issueRuntimeObservationOwnerV1(input: Readonly<{
   readonly databasePath: string;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-}>): UnsignedDryRunObservationOwnerV1 {
+}>): RuntimeObservationOwnerV1 {
   if (typeof input.databasePath !== "string" || !input.databasePath.startsWith("/")) {
-    throw new TypeError("unsigned dry-run observation database path must be absolute");
+    throw new TypeError("runtime observation database path must be absolute");
   }
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
-  if (runtimeAuthority.authorityClass !== "unsigned-dry-run") {
-    throw new TypeError("unsigned dry-run observation requires unsigned authority");
-  }
   const store = createSqliteDurableStore(input.databasePath);
   store.bindStoreRole(STORE_ROLE);
   const sequences = new Map<string, bigint>();
@@ -177,21 +173,20 @@ export function issueUnsignedDryRunObservationOwnerV1(input: Readonly<{
   const admissionsById = new Map<Hash, AdmissionStateV1>();
 
   const assertOpen = (): void => {
-    if (closed) throw new TypeError("unsigned dry-run observation owner is closed");
+    if (closed) throw new TypeError("runtime observation owner is closed");
   };
 
-  const owner: UnsignedDryRunObservationOwnerV1 = Object.freeze({
+  const owner: RuntimeObservationOwnerV1 = Object.freeze({
     bindServing(startup: StartupRuntimeV1): ProducerObservationPortsV1 {
       assertOpen();
       assertIssuedStartupRuntime(startup);
-      if (bound) throw new TypeError("unsigned dry-run observation owner is already bound");
-      if (!sameRuntimeAuthority(startup.runtimeAuthority, runtimeAuthority)
-        || startup.readActiveGeneration().releaseProvenanceHash !== null) {
-        throw new TypeError("unsigned dry-run observation startup authority mismatch");
+      if (bound) throw new TypeError("runtime observation owner is already bound");
+      if (!sameRuntimeAuthority(startup.runtimeAuthority, runtimeAuthority)) {
+        throw new TypeError("runtime observation startup authority mismatch");
       }
       bound = true;
-      appendCanonical(store, sequences, STARTUP_NAMESPACE, "aloha/unsigned-dry-run-startup-observation/v1", deepFreeze({
-        kind: "aloha.unsigned-dry-run-startup-observation-v1",
+      appendCanonical(store, sequences, STARTUP_NAMESPACE, "aloha/runtime-startup-observation/v1", deepFreeze({
+        kind: "aloha.runtime-startup-observation-v1",
         runtimeAuthority,
         ready: startup.ready,
       }) as unknown as CanonicalJson);
@@ -200,7 +195,7 @@ export function issueUnsignedDryRunObservationOwnerV1(input: Readonly<{
         acceptEligibleHead(headInput: ProducerEligibleHeadInputV1) {
           assertOpen();
           ordinal += 1n;
-          const admissionId = hashDomain("aloha/unsigned-dry-run-producer-admission-observation/v1", {
+          const admissionId = hashDomain("aloha/runtime-producer-admission-observation/v1", {
             runtimeAuthority,
             ordinal: ordinal.toString(),
             head: headInput.head,
@@ -223,7 +218,7 @@ export function issueUnsignedDryRunObservationOwnerV1(input: Readonly<{
         },
         readEligibleHeadBinding(handle: unknown) {
           const state = handle !== null && typeof handle === "object" ? admissions.get(handle) : undefined;
-          if (state === undefined) throw new TypeError("unsigned dry-run admitted head is not owner-issued");
+          if (state === undefined) throw new TypeError("runtime admitted head is not owner-issued");
           return Object.freeze({
             admissionId: state.admissionId,
             ordinal: state.ordinal,
@@ -233,31 +228,30 @@ export function issueUnsignedDryRunObservationOwnerV1(input: Readonly<{
         },
         bindEligibleHeadSession({ eligibleHead, session }: { readonly eligibleHead: unknown; readonly session: ProducerSessionV1 }) {
           const state = eligibleHead !== null && typeof eligibleHead === "object" ? admissions.get(eligibleHead) : undefined;
-          if (state === undefined) throw new TypeError("unsigned dry-run admitted head is not owner-issued");
+          if (state === undefined) throw new TypeError("runtime admitted head is not owner-issued");
           const serving = startup.readProducerSessionGeneration(session);
-          if (serving.releaseProvenanceHash !== null) throw new TypeError("unsigned dry-run session has signed provenance");
           state.generationId = serving.generationId;
           return eligibleHead;
         },
         bindEligibleHeadFacts({ eligibleHead, facts }: { readonly eligibleHead: unknown; readonly facts: ProducerHeadFactsCapabilityV1 }) {
           const state = eligibleHead !== null && typeof eligibleHead === "object" ? admissions.get(eligibleHead) : undefined;
-          if (state === undefined) throw new TypeError("unsigned dry-run admitted head is not owner-issued");
+          if (state === undefined) throw new TypeError("runtime admitted head is not owner-issued");
           const observed = readIssuedProducerHeadFactsCapabilityV1(facts);
           if (observed.headHash !== state.head.hash || observed.generationId !== state.generationId) {
-            throw new TypeError("unsigned dry-run head facts admission mismatch");
+            throw new TypeError("runtime head facts admission mismatch");
           }
           state.facts = facts;
           return eligibleHead;
         },
         sealHeadTerminal({ eligibleHead, terminal }: { readonly eligibleHead: unknown; readonly terminal: ProducerHeadTerminalCapabilityV1 }) {
           const state = eligibleHead !== null && typeof eligibleHead === "object" ? admissions.get(eligibleHead) : undefined;
-          if (state === undefined) throw new TypeError("unsigned dry-run admitted head is not owner-issued");
+          if (state === undefined) throw new TypeError("runtime admitted head is not owner-issued");
           const evidence = readIssuedProducerHeadTerminalCapabilityV1(terminal);
           if (evidence.terminal.acceptedId !== state.admissionId
             || evidence.terminal.ordinal !== state.ordinal
             || evidence.terminal.head.hash !== state.head.hash
             || evidence.terminal.revision !== state.revision) {
-            throw new TypeError("unsigned dry-run terminal admission mismatch");
+            throw new TypeError("runtime terminal admission mismatch");
           }
           state.terminal = terminal;
         },
@@ -269,10 +263,10 @@ export function issueUnsignedDryRunObservationOwnerV1(input: Readonly<{
           const evidence = readIssuedProducerHeadTerminalCapabilityV1(terminalCapability);
           const state = admissionsById.get(evidence.terminal.acceptedId);
           if (state === undefined || state.appended) {
-            throw new TypeError("unsigned dry-run terminal admission is missing or already appended");
+            throw new TypeError("runtime terminal admission is missing or already appended");
           }
           if (state.terminal !== null && state.terminal !== terminalCapability) {
-            throw new TypeError("unsigned dry-run terminal capability changed after seal");
+            throw new TypeError("runtime terminal capability changed after seal");
           }
           const facts = evidence.facts === null
             ? null
@@ -301,13 +295,13 @@ export function issueUnsignedDryRunObservationOwnerV1(input: Readonly<{
               candidates: readIssuedProducerLaneCandidateTerminalObservationsV1(lane),
               searchTerminal,
               nativeAuditManifest,
-              successTrace: searchTerminal.kind === "unsigned-dry-run"
+              successTrace: searchTerminal.kind === "dry-run"
                 ? readIssuedSearchTerminalSixStepTraceV1(terminalCapability)
                 : null,
             });
           }) ?? [];
-          appendCanonical(store, sequences, HEAD_NAMESPACE, "aloha/unsigned-dry-run-head-observation/v1", deepFreeze({
-            kind: "aloha.unsigned-dry-run-head-observation-v1",
+          appendCanonical(store, sequences, HEAD_NAMESPACE, "aloha/runtime-head-observation/v1", deepFreeze({
+            kind: "aloha.runtime-head-observation-v1",
             runtimeAuthority,
             terminal: evidence.terminal,
             headFacts: facts === null ? null : {
@@ -338,10 +332,10 @@ export function issueUnsignedDryRunObservationOwnerV1(input: Readonly<{
   return owner;
 }
 
-export function assertIssuedUnsignedDryRunObservationOwnerV1(
+export function assertIssuedRuntimeObservationOwnerV1(
   value: unknown,
-): asserts value is UnsignedDryRunObservationOwnerV1 {
+): asserts value is RuntimeObservationOwnerV1 {
   if (value === null || typeof value !== "object" || !issuedOwners.has(value)) {
-    throw new TypeError("unsigned dry-run observation owner is not owner-issued");
+    throw new TypeError("runtime observation owner is not owner-issued");
   }
 }

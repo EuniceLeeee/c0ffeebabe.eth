@@ -96,7 +96,7 @@ async function buildBundle(options: BuildBundleOptionsV1 = {}): Promise<Performa
       outcome: hasSuccessfulDryRun ? "complete-candidates-terminal" : "complete-no-candidate",
       candidatePathDurationUs: hasSuccessfulDryRun ? "500" : null,
       sourceCoarseDurationUs: "100", coarseDurationUs: options.coarseDurationUs ?? "90", plannerExactProgramDurationUs: hasSuccessfulDryRun ? "200" : "0", finalSimulationQueueWaitUs: hasSuccessfulDryRun ? options.finalSimulationQueueWaitUs ?? "10" : "0", finalSimulationServiceUs: hasSuccessfulDryRun ? options.finalSimulationServiceUs ?? "100" : "0", overheadDurationUs: "10",
-      candidateTerminals: hasSuccessfulDryRun ? [{ candidateId, outcome: "verified", timingUs: "500", evidenceRoot: h("2"), sixStepCompletion: { mode: "unsigned-dry-run", evidenceRoot: h("5") } }] : [],
+      candidateTerminals: hasSuccessfulDryRun ? [{ candidateId, outcome: "verified", timingUs: "500", evidenceRoot: h("2"), sixStepCompletion: { mode: "dry-run", evidenceRoot: h("5") } }] : [],
       workReceiptRoot: h("3"),
       queueTelemetry: [{ lane: "producer-critical", resource: "rpc", current: "0", max: "4", oldestAgeUs: "0", accepted: "1", rejected: "0", cancelled: "0" }],
       permitAccounting: [{ ownerRef: "producer", lane: "producer-critical", resource: "rpc", issued: "1", released: "1", active: "0" }],

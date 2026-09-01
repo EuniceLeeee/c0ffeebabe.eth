@@ -18,8 +18,7 @@ export function nativeStartupAuthoritiesEqual(
   left: NativeStartupAuthorityProjectionV1,
   right: NativeStartupAuthorityProjectionV1,
 ): boolean {
-  return left.authorityClass === right.authorityClass
-    && left.authorityBindingHash === right.authorityBindingHash
+  return left.authorityBindingHash === right.authorityBindingHash
     && left.implementationCommit === right.implementationCommit;
 }
 

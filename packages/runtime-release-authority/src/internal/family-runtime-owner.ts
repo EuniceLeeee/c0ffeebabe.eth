@@ -1,117 +1,50 @@
-import {
-  assertHash,
-  hashDomain,
-  type Hash,
-} from "../../../../packages/canonical-codec/src/index.ts";
+import { assertHash, hashDomain } from "../../../canonical-codec/src/index.ts";
 import {
   assertGeneratedFamilyRuntimeFactory,
   issueGeneratedFamilyRuntimeAuthorityCapability,
-  issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability,
   readGeneratedFamilyRuntimeFactoryMetadata,
-  type GeneratedFamilyRuntimeFactoryV1,
   type GeneratedFamilyRuntimeAuthorityCapabilityV1,
-} from "../../../../packages/family-composition/src/internal/generated-runtime-composition.ts";
+  type GeneratedFamilyRuntimeFactoryV1,
+} from "../../../family-composition/src/internal/generated-runtime-composition.ts";
 import {
   generatedFamilyCoarseProjectionDescriptorV1,
   type GeneratedFamilyRuntimeAuthorityBindingV1,
   type GeneratedFamilyRuntimeFamilyV1,
-} from "../../../../packages/family-composition/src/index.ts";
+} from "../../../family-composition/src/index.ts";
 import {
   installGeneratedFamilyCoarseProjectionOwnerV1,
   readGeneratedFamilyCoarseProjectionCapabilityV1,
-} from "../../../../packages/family-composition/src/internal/coarse-runtime-owner.ts";
-import { issueCoarseProjectionServiceV1 } from "../../../../packages/coarse-economics/src/internal/owner.ts";
-import { issueQualifiedCoarseProjectionOwnerCapabilityV1 } from "../../../../packages/coarse-economics/src/internal/qualification-owner.ts";
-import type { CoarseProjectionCapabilityV1 } from "../../../../packages/coarse-economics/src/index.ts";
-import type { FamilyRuntimeAuthorityBindingV1 } from "../../../../packages/family-sdk/runtime/index.ts";
-import type { FamilyFrozenProgramExecutionPort } from "../../../../packages/work-plane/src/index.ts";
+} from "../../../family-composition/src/internal/coarse-runtime-owner.ts";
+import { issueCoarseProjectionServiceV1 } from "../../../coarse-economics/src/internal/owner.ts";
+import { issueQualifiedCoarseProjectionOwnerCapabilityV1 } from "../../../coarse-economics/src/internal/qualification-owner.ts";
+import type { CoarseProjectionCapabilityV1 } from "../../../coarse-economics/src/index.ts";
+import type { FamilyRuntimeAuthorityBindingV1 } from "../../../family-sdk/runtime/index.ts";
+import type { FamilyFrozenProgramExecutionPort } from "../../../work-plane/src/index.ts";
 import {
   assertIssuedFamilyFrozenProgramExecutionPort,
   createFamilyRuntimeStageExecutors,
   readIssuedFamilyFrozenProgramExecutionBinding,
-} from "../../../../packages/work-plane/src/internal/family-execution-port.ts";
-import type { RuntimeReleaseAuthorityV1 } from "../index.ts";
-import { assertActiveRuntimeReleaseAuthorityState } from "./state.ts";
-import { runtimeReleaseBindingProvenanceHash } from "../../../../specs/release-authority/src/index.ts";
-import { readActiveSignedRuntimeAuthorityDescriptorV1 } from "./runtime-authority-descriptor-owner.ts";
+} from "../../../work-plane/src/internal/family-execution-port.ts";
 import {
-  decodeUnsignedDryRunRuntimeAuthorityDescriptorV1,
+  decodeRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
-  type UnsignedDryRunRuntimeAuthorityDescriptorV1,
-} from "../../../../packages/runtime-authority/src/index.ts";
+  type RuntimeAuthorityDescriptorV1,
+} from "../../../runtime-authority/src/index.ts";
 
-/**
- * The Family runtime owner has one physical execution edge. The old
- * deployment-owned authority array and five callback surface deliberately do
- * not exist: release metadata and the single frozen-program execution port
- * are the only inputs from which the five stage executors are derived.
- */
-export type RuntimeReleaseFamilyRuntimeDeploymentPortV1 = never;
-
-function familyProgramAuthorityHash(
-  release: ReturnType<typeof assertActiveRuntimeReleaseAuthorityState>["binding"],
-  metadata: ReturnType<typeof readGeneratedFamilyRuntimeFactoryMetadata>,
-  family: ReturnType<typeof readGeneratedFamilyRuntimeFactoryMetadata>["families"][number],
-): Hash {
-  return hashDomain("aloha/family-runtime-program-authority/v2", {
-    signedRuntimeBinding: {
-      bindingId: release.bindingId,
-      releaseProvenanceHash: runtimeReleaseBindingProvenanceHash(release),
-      releaseAuthorityRoot: release.releaseAuthorityRoot,
-      executorAuthorityRoot: release.executorAuthorityRoot,
-      workerEpoch: release.workerEpoch,
-      executorSessionHash: release.executorSessionHash,
-      qualifiedCapabilityRefsRoot: release.qualifiedCapabilityRefsRoot,
-      nominationProgramSetRoot: release.nominationProgramSetRoot,
-      nominationQualificationSetRoot: release.nominationQualificationSetRoot,
-    },
-    generatedFactory: {
-      proposedCapabilitySetRoot: metadata.proposedCapabilitySetRoot,
-      nominationProgramSetRoot: metadata.nominationProgramSetRoot,
-      releaseIntentRoot: metadata.releaseIntentRoot,
-      definitionCatalogRoot: metadata.definitionCatalogRoot,
-      descriptorRoot: metadata.descriptorRoot,
-      familyId: family.familyId,
-      familyDefinitionHash: family.familyDefinitionHash,
-      stageDefinitionRoot: family.stageDefinitionRoot,
-    },
-  });
+export interface FamilyRuntimeAuthorityInputV1 {
+  readonly runtimeAuthority: RuntimeAuthorityDescriptorV1;
+  readonly execution: FamilyFrozenProgramExecutionPort<unknown>;
+  readonly factory: GeneratedFamilyRuntimeFactoryV1;
+  readonly assertCurrent: () => void;
 }
 
 function deriveAuthorityBindings(
-  release: ReturnType<typeof assertActiveRuntimeReleaseAuthorityState>["binding"],
-  factory: GeneratedFamilyRuntimeFactoryV1,
-  execution: FamilyFrozenProgramExecutionPort<unknown>,
-): readonly GeneratedFamilyRuntimeAuthorityBindingV1[] {
-  const metadata = readGeneratedFamilyRuntimeFactoryMetadata(factory);
-  const executors = createFamilyRuntimeStageExecutors({ execution });
-  if (executors.length !== 5) throw new TypeError("Family runtime stage executor derivation is incomplete");
-  return Object.freeze(metadata.families.map((family) => {
-    const binding: FamilyRuntimeAuthorityBindingV1 = Object.freeze({
-      familyId: family.familyId as FamilyRuntimeAuthorityBindingV1["familyId"],
-      familyDefinitionHash: family.familyDefinitionHash,
-      releaseAuthorityRoot: release.releaseAuthorityRoot,
-      programAuthorityHash: familyProgramAuthorityHash(release, metadata, family),
-      executorAuthorityRoot: release.executorAuthorityRoot,
-      workerEpoch: release.workerEpoch,
-      executorSessionHash: release.executorSessionHash,
-    });
-    return Object.freeze({
-      familyDefinitionHash: family.familyDefinitionHash,
-      definitionBindingRoot: family.stageDefinitionRoot,
-      binding,
-      executors,
-    });
-  }));
-}
-
-function deriveUnsignedDryRunAuthorityBindings(
-  runtimeAuthorityValue: UnsignedDryRunRuntimeAuthorityDescriptorV1,
+  runtimeAuthorityValue: RuntimeAuthorityDescriptorV1,
   factory: GeneratedFamilyRuntimeFactoryV1,
   execution: FamilyFrozenProgramExecutionPort<unknown>,
 ): readonly GeneratedFamilyRuntimeAuthorityBindingV1[] {
   const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
-    decodeUnsignedDryRunRuntimeAuthorityDescriptorV1(runtimeAuthorityValue),
+    decodeRuntimeAuthorityDescriptorV1(runtimeAuthorityValue),
   );
   const metadata = readGeneratedFamilyRuntimeFactoryMetadata(factory);
   const executionBinding = readIssuedFamilyFrozenProgramExecutionBinding(execution);
@@ -122,7 +55,7 @@ function deriveUnsignedDryRunAuthorityBindings(
       familyId: family.familyId as FamilyRuntimeAuthorityBindingV1["familyId"],
       familyDefinitionHash: family.familyDefinitionHash,
       releaseAuthorityRoot: runtimeAuthority.authorityBindingHash,
-      programAuthorityHash: hashDomain("aloha/family-runtime-unsigned-dry-run-program-authority/v1", {
+      programAuthorityHash: hashDomain("aloha/family-runtime-program-authority/v1", {
         runtimeAuthority,
         proposedCapabilitySetRoot: metadata.proposedCapabilitySetRoot,
         nominationProgramSetRoot: metadata.nominationProgramSetRoot,
@@ -135,9 +68,9 @@ function deriveUnsignedDryRunAuthorityBindings(
         workerEpoch: executionBinding.workerEpoch,
         executorSessionHash: executionBinding.executorSession,
       }),
-      executorAuthorityRoot: assertHash(executionBinding.authorityRoot, "unsignedFamilyRuntime.executorAuthorityRoot"),
+      executorAuthorityRoot: assertHash(executionBinding.authorityRoot, "familyRuntime.executorAuthorityRoot"),
       workerEpoch: executionBinding.workerEpoch,
-      executorSessionHash: assertHash(executionBinding.executorSession, "unsignedFamilyRuntime.executorSessionHash"),
+      executorSessionHash: assertHash(executionBinding.executorSession, "familyRuntime.executorSessionHash"),
     });
     return Object.freeze({
       familyDefinitionHash: family.familyDefinitionHash,
@@ -148,64 +81,35 @@ function deriveUnsignedDryRunAuthorityBindings(
   }));
 }
 
-/**
- * Join verified release material, generated descriptor metadata, and the one
- * owner-issued work-plane port. All roots are derived here; callers cannot
- * provide a Family binding, program authority hash, executor list, or stage
- * callback. The generated capability remains fenced on rotation/revoke.
- */
-export function issueRuntimeReleaseFamilyRuntimeAuthorityCapability(
-  authorityValue: unknown,
-  executionValue: unknown,
-  generatedFactoryValue: unknown,
+/** Bind the exact generated Family set to the process runtime and one physical
+ * execution port. No signer, release approval, or caller-supplied Family list
+ * crosses this owner. */
+export function issueFamilyRuntimeAuthorityCapability(
+  input: FamilyRuntimeAuthorityInputV1,
 ): GeneratedFamilyRuntimeAuthorityCapabilityV1 {
-  const authority = authorityValue as RuntimeReleaseAuthorityV1;
-  const state = assertActiveRuntimeReleaseAuthorityState(authorityValue);
-  assertGeneratedFamilyRuntimeFactory(generatedFactoryValue);
-  assertIssuedFamilyFrozenProgramExecutionPort(executionValue);
-  const executionBinding = readIssuedFamilyFrozenProgramExecutionBinding(executionValue);
-  if (
-    executionBinding.authorityRoot !== state.binding.executorAuthorityRoot
-    || executionBinding.workerEpoch !== state.binding.workerEpoch
-    || executionBinding.executorSession !== state.binding.executorSessionHash
-  ) {
-    throw new TypeError("Family execution port is not bound to the signed runtime executor");
+  if (input === null || typeof input !== "object" || typeof input.assertCurrent !== "function") {
+    throw new TypeError("Family runtime authority is unavailable");
   }
-  const factory = generatedFactoryValue as GeneratedFamilyRuntimeFactoryV1;
-  const metadata = readGeneratedFamilyRuntimeFactoryMetadata(factory);
-  assertHash(metadata.proposedCapabilitySetRoot, "generatedFamilyRuntime.proposedCapabilitySetRoot");
-  if (metadata.proposedCapabilitySetRoot !== state.binding.qualifiedCapabilityRefsRoot) {
-    throw new TypeError("generated Family runtime factory is not bound to the signed capability set");
-  }
-  if (metadata.nominationProgramSetRoot !== state.binding.nominationProgramSetRoot) {
-    throw new TypeError("generated Family runtime factory is not bound to the signed nomination program set");
-  }
-  const authorities = deriveAuthorityBindings(
-    state.binding,
-    factory,
-    executionValue as FamilyFrozenProgramExecutionPort<unknown>,
-  );
-  const version = state.version;
-  const assertCurrent = (): void => {
-    const current = assertActiveRuntimeReleaseAuthorityState(authority);
-    if (current.version !== version || current.binding.bindingId !== state.binding.bindingId) {
-      throw new TypeError("generated Family runtime authority stale after runtime release rotation");
-    }
-  };
+  assertGeneratedFamilyRuntimeFactory(input.factory);
+  assertIssuedFamilyFrozenProgramExecutionPort(input.execution);
+  const runtimeAuthority = decodeRuntimeAuthorityDescriptorV1(input.runtimeAuthority);
+  const metadata = readGeneratedFamilyRuntimeFactoryMetadata(input.factory);
+  input.assertCurrent();
   const capability = issueGeneratedFamilyRuntimeAuthorityCapability({
-    factory,
-    runtimeAuthority: readActiveSignedRuntimeAuthorityDescriptorV1(authority),
-    qualifiedCapabilityRefsRoot: state.binding.qualifiedCapabilityRefsRoot,
-    nominationProgramSetRoot: state.binding.nominationProgramSetRoot,
-    nominationQualifications: state.binding.nominationQualificationSet.entries.map(entry => ({
-      proposalLeafDigest: entry.proposalLeafDigest,
-      qualificationLeafDigest: entry.qualificationLeafDigest,
-    })),
-    authorities,
-    assertCurrent,
+    factory: input.factory,
+    runtimeAuthority,
+    declaredCapabilitySetRoot: metadata.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: metadata.nominationProgramSetRoot,
+    authorities: deriveAuthorityBindings(runtimeAuthority, input.factory, input.execution),
+    assertCurrent: input.assertCurrent,
   });
-  const composition = factory(capability);
-  const releaseProvenanceHash = runtimeReleaseBindingProvenanceHash(state.binding);
+  const composition = input.factory(capability);
+  const runtimeMembershipRoot = hashDomain("aloha/family-runtime-membership-root/v1", {
+    runtimeAuthority: projectRuntimeAuthorityDescriptorV1(runtimeAuthority),
+    proposedCapabilitySetRoot: metadata.proposedCapabilitySetRoot,
+    nominationProgramSetRoot: metadata.nominationProgramSetRoot,
+    descriptorRoot: metadata.descriptorRoot,
+  });
   for (const family of metadata.families) {
     const descriptor = generatedFamilyCoarseProjectionDescriptorV1({
       entry: {
@@ -217,58 +121,23 @@ export function issueRuntimeReleaseFamilyRuntimeAuthorityCapability(
     } as GeneratedFamilyRuntimeFamilyV1);
     if (descriptor === null) continue;
     const owner = issueQualifiedCoarseProjectionOwnerCapabilityV1({
-      releaseProvenanceHash,
-      releaseMembershipRoot: state.binding.qualifiedCapabilityRefsRoot,
+      releaseMembershipRoot: runtimeMembershipRoot,
       descriptor: descriptor.ownerDescriptor,
       port: Object.freeze({
-        read: (projectionCapability: CoarseProjectionCapabilityV1) => readGeneratedFamilyCoarseProjectionCapabilityV1(composition, projectionCapability),
+        read: (projectionCapability: CoarseProjectionCapabilityV1) =>
+          readGeneratedFamilyCoarseProjectionCapabilityV1(composition, projectionCapability),
         verifyConservativeBound: () => {
-          throw new TypeError("generated Family coarse hard-prune verifier is not qualified");
+          throw new TypeError("generated Family coarse hard-prune verifier is unavailable");
         },
       }),
     });
-    const service = issueCoarseProjectionServiceV1({ owner });
     installGeneratedFamilyCoarseProjectionOwnerV1(composition, {
       familyDefinitionHash: family.familyDefinitionHash,
       ownerDescriptor: descriptor.ownerDescriptor,
-      service,
-      releaseProvenanceHash,
-      releaseMembershipRoot: state.binding.qualifiedCapabilityRefsRoot,
-      assertCurrent,
+      service: issueCoarseProjectionServiceV1({ owner }),
+      releaseMembershipRoot: runtimeMembershipRoot,
+      assertCurrent: input.assertCurrent,
     });
   }
-  return capability;
-}
-
-export interface UnsignedDryRunFamilyRuntimeAuthorityInputV1 {
-  readonly runtimeAuthority: UnsignedDryRunRuntimeAuthorityDescriptorV1;
-  readonly execution: FamilyFrozenProgramExecutionPort<unknown>;
-  readonly factory: GeneratedFamilyRuntimeFactoryV1;
-  readonly assertCurrent: () => void;
-}
-
-/** Unsigned bootstrap adapter into the same generated Family factory. It
- * binds declarations and executable metadata only; it never accepts a
- * qualification leaf, release approval, or signer fact. */
-export function issueUnsignedDryRunFamilyRuntimeAuthorityCapability(
-  input: UnsignedDryRunFamilyRuntimeAuthorityInputV1,
-): GeneratedFamilyRuntimeAuthorityCapabilityV1 {
-  if (input === null || typeof input !== "object" || typeof input.assertCurrent !== "function") {
-    throw new TypeError("unsigned dry-run Family runtime authority is unavailable");
-  }
-  assertGeneratedFamilyRuntimeFactory(input.factory);
-  assertIssuedFamilyFrozenProgramExecutionPort(input.execution);
-  const runtimeAuthority = decodeUnsignedDryRunRuntimeAuthorityDescriptorV1(input.runtimeAuthority);
-  const metadata = readGeneratedFamilyRuntimeFactoryMetadata(input.factory);
-  input.assertCurrent();
-  const capability = issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability({
-    factory: input.factory,
-    runtimeAuthority,
-    declaredCapabilitySetRoot: metadata.proposedCapabilitySetRoot,
-    nominationProgramSetRoot: metadata.nominationProgramSetRoot,
-    authorities: deriveUnsignedDryRunAuthorityBindings(runtimeAuthority, input.factory, input.execution),
-    assertCurrent: input.assertCurrent,
-  });
-  input.factory(capability);
   return capability;
 }

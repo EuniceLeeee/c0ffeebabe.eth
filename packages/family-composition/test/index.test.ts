@@ -30,19 +30,16 @@ import {
 import {
   createGeneratedFamilyRuntimeFactory,
   issueGeneratedFamilyLifecycleRuntimePort,
-  issueGeneratedFamilyRuntimeAuthorityCapability,
   issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability,
   issueGeneratedFamilySearchRuntimePort,
   readGeneratedFamilyRuntimeAdapterFactories,
   readGeneratedFamilyRuntimeFactoryMetadata,
   readGeneratedFamilyRuntimeMembership,
   readGeneratedFamilySourcePlanDeclarations,
-  readGeneratedFamilySourcePlanRuntimes,
   readGeneratedFamilyLifecycleRuntimePort,
   readGeneratedFamilySearchRuntimePort,
 } from "../src/internal/generated-runtime-composition.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
   createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
@@ -502,27 +499,29 @@ function generatedSearchFactoryFixture() {
   return { fixture, descriptor, adapter, factory };
 }
 
-test("signed generated Family search and lifecycle ports bind one exact factory and authority", () => {
+test("unsigned dry-run generated Family ports bind one exact factory and runtime authority", () => {
   const first = generatedSearchFactoryFixture();
   const second = generatedSearchFactoryFixture();
-  const descriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
-    authorityClass: "signed-release",
-    runtimeBindingId: h("signed-runtime-binding"),
-    releaseProvenanceHash: h("signed-runtime-provenance"),
+  const descriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+    authorityClass: "dry-run",
+    runtimeBindingId: h("unsigned-runtime-binding"),
     implementationCommit: "a".repeat(40),
   });
   let current = true;
   const assertCurrent = () => { if (!current) throw new TypeError("Family runtime rotated"); };
-  const proposal = first.descriptor.families[0]!.sourcePlans[0]!.nominationProgramProposal.proposalLeafDigest;
-  const capability = issueGeneratedFamilyRuntimeAuthorityCapability({
+  const capability = issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability({
     factory: first.factory,
     runtimeAuthority: descriptor,
-    qualifiedCapabilityRefsRoot: first.descriptor.proposedCapabilitySetRoot,
+    declaredCapabilitySetRoot: first.descriptor.proposedCapabilitySetRoot,
     nominationProgramSetRoot: first.descriptor.nominationProgramSetRoot,
-    nominationQualifications: [{ proposalLeafDigest: proposal, qualificationLeafDigest: h("nomination-qualified") }],
     authorities: [first.fixture.authority],
     assertCurrent,
   });
+  const membership = readGeneratedFamilyRuntimeMembership(first.factory, capability);
+  assert.equal(membership.runtimeAuthority.authorityClass, "dry-run");
+  assert.equal(membership.runtimeAuthority.implementationCommit, "a".repeat(40));
+  assert.equal(Object.prototype.hasOwnProperty.call(membership, "releaseProvenanceHash"), false);
+  assert.equal(readGeneratedFamilySourcePlanDeclarations(first.factory, capability).length, 1);
   const lifecyclePort = issueGeneratedFamilyLifecycleRuntimePort(first.factory, capability);
   const lifecycle = readGeneratedFamilyLifecycleRuntimePort(
     lifecyclePort,
@@ -547,50 +546,12 @@ test("signed generated Family search and lifecycle ports bind one exact factory 
   current = false;
   assert.throws(() => readGeneratedFamilyLifecycleRuntimePort(lifecyclePort), /rotated/);
   assert.throws(() => readGeneratedFamilySearchRuntimePort(searchPort), /rotated/);
-});
-
-test("unsigned dry-run opens the same generated Family factory from exact declarations without qualification", () => {
-  const value = generatedSearchFactoryFixture();
-  const descriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
-    authorityClass: "unsigned-dry-run",
-    runtimeBindingId: h("unsigned-runtime-binding"),
-    implementationCommit: "b".repeat(40),
-  });
-  const capability = issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability({
-    factory: value.factory,
-    runtimeAuthority: descriptor,
-    declaredCapabilitySetRoot: value.descriptor.proposedCapabilitySetRoot,
-    nominationProgramSetRoot: value.descriptor.nominationProgramSetRoot,
-    authorities: [value.fixture.authority],
-    assertCurrent() {},
-  });
-  const membership = readGeneratedFamilyRuntimeMembership(value.factory, capability);
-  assert.equal(membership.runtimeAuthority.authorityClass, "unsigned-dry-run");
-  assert.equal(membership.runtimeAuthority.implementationCommit, "b".repeat(40));
-  assert.equal(Object.prototype.hasOwnProperty.call(membership, "releaseProvenanceHash"), false);
-  assert.equal(readGeneratedFamilySourcePlanDeclarations(value.factory, capability).length, 1);
-  assert.throws(
-    () => readGeneratedFamilySourcePlanRuntimes(value.factory, capability),
-    /qualification is unavailable in unsigned dry-run/,
-  );
-  const lifecycle = issueGeneratedFamilyLifecycleRuntimePort(value.factory, capability);
-  const search = issueGeneratedFamilySearchRuntimePort(value.factory, capability, lifecycle);
-  assert.equal(
-    readGeneratedFamilyLifecycleRuntimePort(lifecycle, projectRuntimeAuthorityDescriptorV1(descriptor))
-      .requireStage(familyDefinitionHash, familyId, "projection").stageRef.stage,
-    "projection",
-  );
-  assert.equal(
-    readGeneratedFamilySearchRuntimePort(search, projectRuntimeAuthorityDescriptorV1(descriptor))
-      .requireAdapter(familyDefinitionHash, "search/v1"),
-    value.adapter,
-  );
   assert.throws(() => issueGeneratedUnsignedDryRunFamilyRuntimeAuthorityCapability({
-    factory: value.factory,
+    factory: first.factory,
     runtimeAuthority: descriptor,
     declaredCapabilitySetRoot: h("foreign-declared-set"),
-    nominationProgramSetRoot: value.descriptor.nominationProgramSetRoot,
-    authorities: [value.fixture.authority],
+    nominationProgramSetRoot: first.descriptor.nominationProgramSetRoot,
+    authorities: [first.fixture.authority],
     assertCurrent() {},
   }), /declared capability set/);
 });
@@ -716,18 +677,16 @@ function coarseFixture(options: Readonly<{ stateUnavailable?: boolean }> = {}) {
   });
   const coarseDescriptor = generatedFamilyCoarseProjectionDescriptorV1(descriptor.families[0]!);
   assert.ok(coarseDescriptor);
-  const releaseProvenanceHash = h("coarse-release-provenance");
+  const releaseProvenanceHash = null;
   const releaseMembershipRoot = h("coarse-release-membership");
-  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
-    authorityClass: "signed-release",
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+    authorityClass: "dry-run",
     runtimeBindingId: h("coarse-runtime-binding"),
-    releaseProvenanceHash,
     implementationCommit: "a".repeat(40),
   }));
   let releaseCurrent = true;
   const assertCurrent = () => { if (!releaseCurrent) throw new TypeError("coarse release stale"); };
   const owner = issueQualifiedCoarseProjectionOwnerCapabilityV1({
-    releaseProvenanceHash,
     releaseMembershipRoot,
     descriptor: coarseDescriptor.ownerDescriptor,
     port: Object.freeze({
@@ -740,7 +699,6 @@ function coarseFixture(options: Readonly<{ stateUnavailable?: boolean }> = {}) {
     familyDefinitionHash,
     ownerDescriptor: coarseDescriptor.ownerDescriptor,
     service,
-    releaseProvenanceHash,
     releaseMembershipRoot,
     assertCurrent,
   });
@@ -809,7 +767,7 @@ function coarseFixture(options: Readonly<{ stateUnavailable?: boolean }> = {}) {
   };
 }
 
-test("generated coarse seam binds release, route, transition, source and objective without trusting raw bounds", async () => {
+test("generated coarse seam binds runtime membership, route, transition, source and objective without trusting raw bounds", async () => {
   const fixture = coarseFixture();
   let fences = 0;
   const currentSource = Object.freeze({ source: fixture.source, assertCurrent: () => { fences += 1; } });
@@ -825,7 +783,7 @@ test("generated coarse seam binds release, route, transition, source and objecti
   });
   assert.equal(fences, 2);
   const receipt = readQualifiedCoarseProjectionReceiptV1(readQualifiedCoarseProjectionV1({ service: fixture.seam.service, capability }));
-  assert.equal(receipt.releaseProvenanceHash, fixture.bindingValue.releaseProvenanceHash);
+  assert.equal(receipt.releaseMembershipRoot, h("coarse-release-membership"));
   assert.equal(receipt.projection.transitionRef, fixture.bindingValue.legs[0]!.transitionRef);
   assert.equal(receipt.projection.objectiveRef, fixture.objective.objectiveRef);
   assert.equal(receipt.projection.status, "rankable");
@@ -902,13 +860,9 @@ test("generated coarse seam binds release, route, transition, source and objecti
     }),
     /route owner mismatch/,
   );
-  const wrongRelease = issueCoarseRouteBindingV1({ ...fixture.bindingValue, releaseProvenanceHash: h("wrong-release") });
-  await assert.rejects(
-    () => fixture.composition.issueCoarseProjection(fixture.seam.producer, {
-      binding: wrongRelease, legIndex: 0, issuedHandle: fixture.issuedHandle,
-      currentSource, sourceRead: fixture.sourceRead, objective: fixture.objective, amount: fixture.amount, execution: fixture.execution,
-    }),
-    /release provenance mismatch/,
+  assert.throws(
+    () => issueCoarseRouteBindingV1({ ...fixture.bindingValue, releaseProvenanceHash: h("wrong-release") } as never),
+    /cannot carry release provenance/,
   );
   let reorgFences = 0;
   await assert.rejects(

@@ -353,8 +353,8 @@ interface ObservedProducerSchedulerJoinV1 {
   readonly source: Readonly<{ readonly chainId: string; readonly number: string; readonly hash: Hash; readonly stateRoot: Hash }>;
   readonly programHash: Hash;
   readonly finalSimulationReceiptHash: Hash;
-  readonly unsignedDryRunCandidateId: Hash;
-  readonly unsignedDryRunLineageHash: Hash;
+  readonly dryRunCandidateId: Hash;
+  readonly dryRunLineageHash: Hash;
 }
 
 interface ObservedRuntimePerformanceFactsV1 {
@@ -1642,7 +1642,7 @@ function exactProducerSchedulerJoin(value: unknown, path: string): ObservedProdu
   assertPlainObject(value, path);
   assertExactKeys(value, [
     "correlationId", "generationId", "source", "programHash", "finalSimulationReceiptHash",
-    "unsignedDryRunCandidateId", "unsignedDryRunLineageHash",
+    "dryRunCandidateId", "dryRunLineageHash",
   ], path);
   const record = value as Record<string, unknown>;
   assertPlainObject(record.source, `${path}.source`);
@@ -1665,8 +1665,8 @@ function exactProducerSchedulerJoin(value: unknown, path: string): ObservedProdu
     }),
     programHash: nonZeroHash(record.programHash, `${path}.programHash`),
     finalSimulationReceiptHash: nonZeroHash(record.finalSimulationReceiptHash, `${path}.finalSimulationReceiptHash`),
-    unsignedDryRunCandidateId: nonZeroHash(record.unsignedDryRunCandidateId, `${path}.unsignedDryRunCandidateId`),
-    unsignedDryRunLineageHash: nonZeroHash(record.unsignedDryRunLineageHash, `${path}.unsignedDryRunLineageHash`),
+    dryRunCandidateId: nonZeroHash(record.dryRunCandidateId, `${path}.dryRunCandidateId`),
+    dryRunLineageHash: nonZeroHash(record.dryRunLineageHash, `${path}.dryRunLineageHash`),
   });
 }
 
@@ -2664,8 +2664,8 @@ function projectPerformanceBundle(
         if (performance.sixStepFacts === null
           || performance.sixStepFacts.stage36Root !== observation.sixStepEvidenceRoot
           || performance.runtimeFacts.producerSchedulerJoin?.correlationId !== observation.correlationId
-          || performance.runtimeFacts.producerSchedulerJoin.unsignedDryRunCandidateId !== observation.candidateId
-          || performance.runtimeFacts.producerSchedulerJoin.unsignedDryRunLineageHash !== observation.terminalLineageHash) {
+          || performance.runtimeFacts.producerSchedulerJoin.dryRunCandidateId !== observation.candidateId
+          || performance.runtimeFacts.producerSchedulerJoin.dryRunLineageHash !== observation.terminalLineageHash) {
           throw new TypeError(`performance bundle head ${ordinal} verified candidate lacks exact six-step lineage`);
         }
       }
@@ -2677,14 +2677,14 @@ function projectPerformanceBundle(
         outcome: observation.performanceOutcome,
         correlationRoot: observation.correlationId,
         sixStepCompleted,
-        sixStepMode: sixStepCompleted ? "unsigned-dry-run" : null,
+        sixStepMode: sixStepCompleted ? "dry-run" : null,
         sixStepEvidenceRoot: sixStepCompleted ? observation.sixStepEvidenceRoot : null,
         sixStepCompletionRoot: sixStepCompleted ? hashPerformanceSixStepCompletionLineage({
           windowId: commitment.windowId,
           headRecordId: head.headRecordId,
           candidateId: observation.performanceCandidateRef,
           correlationRoot: observation.correlationId,
-          mode: "unsigned-dry-run",
+          mode: "dry-run",
           evidenceRoot: observation.sixStepEvidenceRoot!,
         }) : null,
         timingUs: observation.timingUs,

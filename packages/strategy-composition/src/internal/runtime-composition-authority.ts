@@ -18,7 +18,6 @@ export interface GeneratedStrategyRuntimeCompositionAuthorityStateV1 {
   readonly issuers: readonly StrategyPlanningProblemIssuerV1[];
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly runtimeMembershipHash: Hash;
-  readonly releaseProvenanceHash?: Hash;
   readonly assertCurrent: () => void;
 }
 
@@ -35,7 +34,6 @@ export function issueGeneratedStrategyRuntimeCompositionCapability(
     issuers: Object.freeze([...state.issuers]),
     runtimeAuthority: state.runtimeAuthority,
     runtimeMembershipHash: state.runtimeMembershipHash,
-    ...(state.releaseProvenanceHash === undefined ? {} : { releaseProvenanceHash: state.releaseProvenanceHash }),
     assertCurrent: state.assertCurrent,
   }));
   return capability;

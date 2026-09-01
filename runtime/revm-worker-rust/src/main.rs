@@ -1,6 +1,6 @@
 //! A resident, single-flight REVM worker for the Aloha JSONL protocol.
 //!
-//! The TypeScript side owns release/worker authority.  This process only
+//! The TypeScript side owns runtime/worker authority.  This process only
 //! executes a validated request and echoes those authority facts into the
 //! result.  It deliberately has no fixture, legacy, or prepared-cache mode.
 
@@ -319,13 +319,13 @@ fn validate_request(request: &Request) -> Result<(), String> {
     require_number(object, "deadlineAtMs")?;
     let authority = require_object(object, "authority")?;
     validate_authority_projection(authority)?;
-    let release = require_object(authority, "release")?;
-    if get_string(authority, "workerEpoch") != get_string(release, "workerEpoch")
+    let runtime = require_object(authority, "runtime")?;
+    if get_string(authority, "workerEpoch") != get_string(runtime, "workerEpoch")
         || get_string(authority, "executorSessionHash")
-            != get_string(release, "executorSessionHash")
-        || get_string(authority, "authorityRoot") != get_string(release, "executorAuthorityRoot")
+            != get_string(runtime, "executorSessionHash")
+        || get_string(authority, "authorityRoot") != get_string(runtime, "executorAuthorityRoot")
     {
-        return Err("authority binding does not match release projection".to_string());
+        return Err("authority binding does not match runtime lease".to_string());
     }
     if get_string(object, "workerEpoch") != get_string(authority, "workerEpoch") {
         return Err("request worker epoch does not match authority".to_string());
@@ -445,7 +445,7 @@ fn validate_authority_projection(authority: &Map<String, Value>) -> Result<(), S
     exact_keys(
         authority,
         &[
-            "release",
+            "runtime",
             "authorityRoot",
             "workerEpoch",
             "executorSessionHash",
@@ -454,22 +454,21 @@ fn validate_authority_projection(authority: &Map<String, Value>) -> Result<(), S
     require_string(authority, "authorityRoot")?;
     require_string(authority, "workerEpoch")?;
     require_string(authority, "executorSessionHash")?;
-    let release = require_object(authority, "release")?;
-    validate_release_lease(release)?;
-    if get_string(authority, "workerEpoch") != get_string(release, "workerEpoch")
+    let runtime = require_object(authority, "runtime")?;
+    validate_runtime_lease(runtime)?;
+    if get_string(authority, "workerEpoch") != get_string(runtime, "workerEpoch")
         || get_string(authority, "executorSessionHash")
-            != get_string(release, "executorSessionHash")
-        || get_string(authority, "authorityRoot") != get_string(release, "executorAuthorityRoot")
+            != get_string(runtime, "executorSessionHash")
+        || get_string(authority, "authorityRoot") != get_string(runtime, "executorAuthorityRoot")
     {
-        return Err("authority binding does not match release projection".to_string());
+        return Err("authority binding does not match runtime lease".to_string());
     }
     Ok(())
 }
 
-fn validate_release_lease(release: &Map<String, Value>) -> Result<(), String> {
+fn validate_runtime_lease(runtime: &Map<String, Value>) -> Result<(), String> {
     const FIELDS: &[&str] = &[
-        "bindingId",
-        "releaseProvenanceHash",
+        "runtimeAuthority",
         "executorAuthorityRoot",
         "qualifiedExecutorRegistryRoot",
         "selectedExecutorLeafHash",
@@ -479,24 +478,26 @@ fn validate_release_lease(release: &Map<String, Value>) -> Result<(), String> {
         "closureFingerprint",
         "protocolFingerprint",
         "schemaFingerprint",
-        "releaseRoleManifestRoot",
-        "candidateReleaseCommit",
-        "qualificationEpoch",
-        "predicateCompositionRootDigest",
-        "gateCoreRuntimeClosureDigest",
-        "gateCoreImplementationClosureDigest",
-        "frameworkAuthorityRoot",
-        "releaseAuthorityRoot",
         "workerEpoch",
         "executorSessionHash",
     ];
-    exact_keys(release, FIELDS)?;
-    for key in FIELDS {
-        require_string(release, key)?;
+    exact_keys(runtime, FIELDS)?;
+    let runtime_authority = require_object(runtime, "runtimeAuthority")?;
+    exact_keys(
+        runtime_authority,
+        &["authorityBindingHash", "implementationCommit"],
+    )?;
+    for key in ["authorityBindingHash", "implementationCommit"] {
+        require_string(runtime_authority, key)?;
+    }
+    for key in FIELDS
+        .iter()
+        .copied()
+        .filter(|key| *key != "runtimeAuthority")
+    {
+        require_string(runtime, key)?;
     }
     for key in [
-        "bindingId",
-        "releaseProvenanceHash",
         "executorAuthorityRoot",
         "qualifiedExecutorRegistryRoot",
         "selectedExecutorLeafHash",
@@ -505,24 +506,19 @@ fn validate_release_lease(release: &Map<String, Value>) -> Result<(), String> {
         "closureFingerprint",
         "protocolFingerprint",
         "schemaFingerprint",
-        "releaseRoleManifestRoot",
-        "predicateCompositionRootDigest",
-        "gateCoreRuntimeClosureDigest",
-        "gateCoreImplementationClosureDigest",
-        "frameworkAuthorityRoot",
-        "releaseAuthorityRoot",
         "executorSessionHash",
     ] {
-        require_hash(release, key)?;
+        require_hash(runtime, key)?;
     }
-    let commit = get_string(release, "candidateReleaseCommit").unwrap_or_default();
+    require_hash(runtime_authority, "authorityBindingHash")?;
+    let commit = get_string(runtime_authority, "implementationCommit").unwrap_or_default();
     if commit.len() != 40
         || !commit
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
     {
         return Err(
-            "release.candidateReleaseCommit must be 40 lowercase hexadecimal characters"
+            "runtimeAuthority.implementationCommit must be 40 lowercase hexadecimal characters"
                 .to_string(),
         );
     }
@@ -739,7 +735,7 @@ fn error_response(request: &Request, code: &str, message: String) -> Value {
         "generationId": o.get("generationId").cloned().unwrap_or(Value::String("invalid-request".to_string())),
         "attemptId": o.get("attemptId").cloned().unwrap_or(Value::String("invalid-request".to_string())),
         "authority": o.get("authority").cloned().unwrap_or(json!({
-            "release": {}, "authorityRoot": "invalid-request", "workerEpoch": "invalid-request", "executorSessionHash": "invalid-request"
+            "runtime": {}, "authorityRoot": "invalid-request", "workerEpoch": "invalid-request", "executorSessionHash": "invalid-request"
         })),
         "inputHash": o.get("inputHash").cloned().unwrap_or(Value::String("invalid-request".to_string())),
         "deadlineAtMs": o.get("deadlineAtMs").cloned().unwrap_or_else(|| Value::Number(Number::from(0))),
@@ -1635,6 +1631,41 @@ fn canonical_number(value: &Number) -> Result<String, WorkerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn runtime_lease() -> Value {
+        let hash = format!("0x{}", "11".repeat(32));
+        json!({
+            "runtimeAuthority": {
+                "authorityBindingHash": hash,
+                "implementationCommit": "0123456789abcdef0123456789abcdef01234567",
+            },
+            "executorAuthorityRoot": hash,
+            "qualifiedExecutorRegistryRoot": hash,
+            "selectedExecutorLeafHash": hash,
+            "executorKind": "revm",
+            "engineBuildFingerprint": hash,
+            "executableFingerprint": hash,
+            "closureFingerprint": hash,
+            "protocolFingerprint": hash,
+            "schemaFingerprint": hash,
+            "workerEpoch": "epoch-1",
+            "executorSessionHash": hash,
+        })
+    }
+
+    #[test]
+    fn runtime_authority_projection_has_exact_neutral_keys() {
+        let valid = runtime_lease();
+        assert!(validate_runtime_lease(valid.as_object().unwrap()).is_ok());
+
+        let mut tagged = valid.clone();
+        tagged["runtimeAuthority"]["authorityClass"] = json!("dry-run");
+        assert!(validate_runtime_lease(tagged.as_object().unwrap()).is_err());
+
+        let mut release_bound = valid;
+        release_bound["releaseProvenanceHash"] = json!(format!("0x{}", "22".repeat(32)));
+        assert!(validate_runtime_lease(release_bound.as_object().unwrap()).is_err());
+    }
 
     #[test]
     fn canonical_objects_sort_keys() {

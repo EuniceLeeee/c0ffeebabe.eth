@@ -8,18 +8,16 @@ import {
 import type { StrategyPlanningProblemIssuerV1 } from "../../../strategy-sdk/src/index.ts";
 import { assertHash, hashDomain, type Hash } from "../../../canonical-codec/src/index.ts";
 import {
-  decodeUnsignedDryRunRuntimeAuthorityDescriptorV1,
-  decodeSignedReleaseRuntimeAuthorityDescriptorV1,
+  decodeRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityDescriptorV1,
   type RuntimeAuthorityProjectionV1,
-  type SignedReleaseRuntimeAuthorityDescriptorV1,
-  type UnsignedDryRunRuntimeAuthorityDescriptorV1,
 } from "../../../runtime-authority/src/index.ts";
 import { issueGeneratedStrategyRuntimeCompositionCapability } from "./runtime-composition-authority.ts";
 
 declare const generatedStrategyRuntimeAuthorityCapabilityBrand: unique symbol;
 
-/** A release-owned capability; callers cannot construct an equivalent value. */
+/** A runtime-owned capability; callers cannot construct an equivalent value. */
 export interface GeneratedStrategyRuntimeAuthorityCapabilityV1 {
   readonly [generatedStrategyRuntimeAuthorityCapabilityBrand]: never;
 }
@@ -56,15 +54,14 @@ interface IssuedAuthorityStateV1 {
   readonly factory: GeneratedStrategyRuntimeFactoryV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly runtimeMembershipHash: Hash;
-  readonly releaseProvenanceHash?: Hash;
   readonly assertCurrent: () => void;
 }
 
-function unsignedRuntimeMembershipHash(
+function runtimeMembershipHash(
   metadata: GeneratedStrategyRuntimeFactoryMetadataV1,
   runtimeAuthority: RuntimeAuthorityProjectionV1,
 ): Hash {
-  return hashDomain("aloha/generated-strategy-runtime-unsigned-membership/v1", {
+  return hashDomain("aloha/generated-strategy-runtime-membership/v1", {
     runtimeAuthority,
     proposedCapabilitySetRoot: metadata.proposedCapabilitySetRoot,
     releaseIntentRoot: metadata.releaseIntentRoot,
@@ -116,48 +113,15 @@ function authorityFor(
   return state;
 }
 
-/** Owner-only hand-off from runtime-release-authority. */
+/** Owner-only hand-off for the exact generated set. */
 export function issueGeneratedStrategyRuntimeAuthorityCapability(input: {
   readonly factory: GeneratedStrategyRuntimeFactoryV1;
-  readonly qualifiedCapabilityRefsRoot: Hash;
-  /** Exact descriptor supplied by the signed runtime-release owner. */
-  readonly runtimeAuthority: SignedReleaseRuntimeAuthorityDescriptorV1;
-  readonly assertCurrent: () => void;
-}): GeneratedStrategyRuntimeAuthorityCapabilityV1 {
-  if (input === null || typeof input !== "object" || typeof input.assertCurrent !== "function") {
-    throw new TypeError("Strategy runtime production authority is unavailable");
-  }
-  assertGeneratedStrategyRuntimeFactory(input.factory);
-  const metadata = generatedFactoryMetadata.get(input.factory);
-  if (metadata === undefined) throw new TypeError("generated Strategy runtime factory metadata is unavailable");
-  assertHash(input.qualifiedCapabilityRefsRoot, "qualifiedCapabilityRefsRoot");
-  const signedAuthority = decodeSignedReleaseRuntimeAuthorityDescriptorV1(input.runtimeAuthority);
-  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(signedAuthority);
-  if (metadata.proposedCapabilitySetRoot !== input.qualifiedCapabilityRefsRoot) {
-    throw new TypeError("Strategy runtime factory is not bound to this release capability set");
-  }
-  input.assertCurrent();
-  const capability = Object.freeze(Object.create(null)) as GeneratedStrategyRuntimeAuthorityCapabilityV1;
-  issuedAuthorities.set(capability, Object.freeze({
-    factory: input.factory,
-    runtimeAuthority,
-    runtimeMembershipHash: signedAuthority.releaseProvenanceHash,
-    releaseProvenanceHash: signedAuthority.releaseProvenanceHash,
-    assertCurrent: input.assertCurrent,
-  }));
-  return capability;
-}
-
-/** Owner-only unsigned dry-run hand-off. It admits the exact generated set,
- * but carries no release approval, signature, or qualification claim. */
-export function issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability(input: {
-  readonly factory: GeneratedStrategyRuntimeFactoryV1;
   readonly declaredCapabilitySetRoot: Hash;
-  readonly runtimeAuthority: UnsignedDryRunRuntimeAuthorityDescriptorV1;
+  readonly runtimeAuthority: RuntimeAuthorityDescriptorV1;
   readonly assertCurrent: () => void;
 }): GeneratedStrategyRuntimeAuthorityCapabilityV1 {
   if (input === null || typeof input !== "object" || typeof input.assertCurrent !== "function") {
-    throw new TypeError("Strategy unsigned dry-run authority is unavailable");
+    throw new TypeError("Strategy runtime authority is unavailable");
   }
   assertGeneratedStrategyRuntimeFactory(input.factory);
   const metadata = generatedFactoryMetadata.get(input.factory);
@@ -167,14 +131,14 @@ export function issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability(i
     throw new TypeError("Strategy runtime factory is not bound to this declared capability set");
   }
   const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
-    decodeUnsignedDryRunRuntimeAuthorityDescriptorV1(input.runtimeAuthority),
+    decodeRuntimeAuthorityDescriptorV1(input.runtimeAuthority),
   );
   input.assertCurrent();
   const capability = Object.freeze(Object.create(null)) as GeneratedStrategyRuntimeAuthorityCapabilityV1;
   issuedAuthorities.set(capability, Object.freeze({
     factory: input.factory,
     runtimeAuthority,
-    runtimeMembershipHash: unsignedRuntimeMembershipHash(metadata, runtimeAuthority),
+    runtimeMembershipHash: runtimeMembershipHash(metadata, runtimeAuthority),
     assertCurrent: input.assertCurrent,
   }));
   return capability;
@@ -183,7 +147,7 @@ export function issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability(i
 /**
  * Called only by generated runtime output. The descriptor and exact issuer
  * imports are closed over here; application consumers receive only the
- * generated factory and an opaque release capability.
+ * generated factory and an opaque runtime capability.
  */
 export function createGeneratedStrategyRuntimeFactory(
   assembly: GeneratedStrategyRuntimeAssemblyV1,
@@ -229,7 +193,6 @@ export function createGeneratedStrategyRuntimeFactory(
       issuers,
       runtimeAuthority: authority.runtimeAuthority,
       runtimeMembershipHash: authority.runtimeMembershipHash,
-      releaseProvenanceHash: authority.releaseProvenanceHash,
       assertCurrent: authority.assertCurrent,
     });
     const composition = createGeneratedStrategyRuntimeComposition(compositionCapability);

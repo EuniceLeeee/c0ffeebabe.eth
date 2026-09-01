@@ -20,57 +20,46 @@ import { validateInstancePublication, type InstancePublicationV1 } from "../../c
 import { candidatePartitionRoot, runCandidateKey, type CandidateRecordV1, type CanonicalCutoffV1 } from "../../discovery/src/index.ts";
 import type { FamilyRawEvidenceReadPortV1 } from "../../family-sdk/runtime/index.ts";
 import type {
-  AttestationCompositionBindingV1,
   AttestationIdentityOriginV1,
-  AttestationIdentityIssuerProofV1,
-  AttestationOutcomeIssuerProofV1,
-  AttestationIdentityProofVerificationContextV1,
+  AttestationCompositionResolvedV1,
 } from "./internal-authority.ts";
-import { validateIdentityIssuerProof } from "./internal/identity-proof.ts";
-import { validateOutcomeIssuerProof } from "./internal/outcome-proof.ts";
 import { ATTESTATION_VALIDATION_AUTHORITY_BRAND } from "./authority-brand.ts";
 import type {
   CandidatePartitionCapabilityV1,
-  CandidatePartitionBindingV1,
+  CandidatePartitionCommitmentV1,
   CandidatePartitionReaderPortV1,
 } from "../../../specs/candidate-partition-authority/src/index.ts";
+import type { RuntimeAuthorityProjectionV1 } from "../../runtime-authority/src/index.ts";
+import { decodeRuntimeAuthorityProjectionV1 } from "../../runtime-authority/src/index.ts";
 import {
-  candidateFinalOutcomeBodyHash as candidateFinalOutcomeBodyHashWire,
-  candidateFinalOutcomeHash as candidateFinalOutcomeHashWire,
-  exactOutcomePartitionRootV1,
-  validateCandidateFinalOutcomeV1 as validateCandidateFinalOutcomeWireV1,
-  type CandidateFinalOutcomeWireV1,
-} from "../../../specs/candidate-final-outcome/src/index.ts";
+  decodeAttestationIdentityCommitmentV1,
+  decodeAttestationOutcomeCommitmentV1,
+} from "./commitment.ts";
 
 export type {
-  AttestationCompositionCapabilityV1,
-  AttestationCompositionBindingV1,
-  AttestationCompositionResolutionPortV1,
-  AttestationCompositionResolvedV2,
-  AttestationIdentityIssuerProofV1,
-  AttestationOutcomeIssuerProofV1,
-  AttestationProofIssuerVerifierPortV1,
-  AttestationIdentityProofIssueInputV1,
-  AttestationIdentityProofVerificationContextV1,
-  AttestationReleaseProvenanceV2,
+  AttestationCompositionResolvedV1,
   AttestationIdentityOriginV1,
   VerifiedMemoReuseProofV1,
 } from "./internal-authority.ts";
-
-export { validateIdentityIssuerProof };
 export {
-  UNSIGNED_DRY_RUN_ATTESTATION_COMMITMENT_DOMAINS_V1,
-  createUnsignedDryRunIdentityCommitmentV1,
-  createUnsignedDryRunOutcomeCommitmentV1,
-  decodeUnsignedDryRunIdentityCommitmentV1,
-  decodeUnsignedDryRunOutcomeCommitmentV1,
-  unsignedDryRunIdentityCommitmentPayloadFromIssueInputV1,
-  unsignedDryRunOutcomeCommitmentPayloadFromIssueInputV1,
-  type UnsignedDryRunIdentityCommitmentPayloadV1,
-  type UnsignedDryRunIdentityCommitmentV1,
-  type UnsignedDryRunOutcomeCommitmentPayloadV1,
-  type UnsignedDryRunOutcomeCommitmentV1,
-} from "./unsigned-dry-run-commitment.ts";
+  ATTESTATION_COMMITMENT_DOMAINS_V1,
+  createAttestationIdentityCommitmentV1,
+  createAttestationOutcomeCommitmentV1,
+  decodeAttestationIdentityCommitmentV1,
+  decodeAttestationOutcomeCommitmentV1,
+  attestationIdentityCommitmentPayloadFromIssueInputV1,
+  attestationOutcomeCommitmentPayloadFromIssueInputV1,
+  type AttestationIdentityCommitmentPayloadV1,
+  type AttestationIdentityCommitmentV1,
+  type AttestationOutcomeCommitmentPayloadV1,
+  type AttestationOutcomeCommitmentV1,
+  type AttestationIdentityCommitmentIssueInputV1,
+  type AttestationOutcomeCommitmentIssueInputV1,
+} from "./commitment.ts";
+import type {
+  AttestationIdentityCommitmentV1,
+  AttestationOutcomeCommitmentV1,
+} from "./commitment.ts";
 
 export const REJECTION_ISSUER_ID = "aloha/attestation-rejection-facts/v2" as const;
 export const REJECTION_BUNDLE_KIND = "aloha.rejection-evidence-bundle" as const;
@@ -405,9 +394,9 @@ export interface RejectionProofBindingV2 {
 }
 
 export interface AttestationOutcomeAuthorityBindingV1 {
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly attestationAuthorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly frameworkAuthorityRoot: Hash;
   readonly executorAuthorityRoot: Hash;
 }
 
@@ -421,29 +410,29 @@ export type CandidateFinalOutcomeBodyV1 =
     readonly kind: "verified";
     readonly instanceKey: string;
     readonly publication: InstancePublicationV1;
-    readonly identityProof: AttestationIdentityIssuerProofV1;
+    readonly identityCommitment: AttestationIdentityCommitmentV1;
   })
   | (CandidateFinalOutcomeFieldsV1 & {
     readonly kind: "chainProvenRejected";
     readonly proof: RejectionProofBindingV2;
     /** Exact child records needed by checkpoint/restart, not only roots. */
     readonly rejectionEvidence: RejectionEvidenceBundleV2;
-    readonly identityProof: AttestationIdentityIssuerProofV1 | null;
+    readonly identityCommitment: AttestationIdentityCommitmentV1 | null;
   })
   | (CandidateFinalOutcomeFieldsV1 & {
     readonly kind: "retryable";
     readonly failure: OutcomeFailureV1;
-    readonly identityProof: AttestationIdentityIssuerProofV1 | null;
+    readonly identityCommitment: AttestationIdentityCommitmentV1 | null;
   })
   | (CandidateFinalOutcomeFieldsV1 & {
     readonly kind: "invalidProgram";
     readonly failure: OutcomeFailureV1;
-    readonly identityProof: AttestationIdentityIssuerProofV1 | null;
+    readonly identityCommitment: AttestationIdentityCommitmentV1 | null;
   });
 
 export type CandidateFinalOutcomeV1 = CandidateFinalOutcomeBodyV1
   & AttestationOutcomeAuthorityBindingV1
-  & { readonly outcomeIssuerProof: AttestationOutcomeIssuerProofV1 };
+  & { readonly outcomeCommitment: AttestationOutcomeCommitmentV1 };
 
 export type AttestationOutcomeCapabilityV1 = CandidateFinalOutcomeV1;
 
@@ -464,8 +453,8 @@ export interface IdentityVerifiedObservationV1 {
 }
 
 export interface IdentityVerifiedV1 extends IdentityVerifiedObservationV1 {
-  /** Release-bound proof; identity cannot enter any downstream stage without it. */
-  readonly issuerProof: AttestationIdentityIssuerProofV1;
+  /** Exact content commitment bound to this runtime/candidate identity. */
+  readonly identityCommitment: AttestationIdentityCommitmentV1;
 }
 
 export interface PluginRetryableDecisionV1 {
@@ -579,9 +568,9 @@ export interface AttestationIdentityResumeInputV1 {
   readonly familyCandidateKey: Hash;
   readonly identity: IdentityVerifiedV1;
   readonly outcomeHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly attestationAuthorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly frameworkAuthorityRoot: Hash;
   readonly executorAuthorityRoot: Hash;
 }
 
@@ -594,9 +583,9 @@ export interface AttestationOutcomeResumeInputV1 {
   readonly candidate: CandidateRecordV1;
   readonly outcome: AttestationOutcomeCapabilityV1;
   readonly outcomeHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly attestationAuthorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly frameworkAuthorityRoot: Hash;
   readonly executorAuthorityRoot: Hash;
 }
 
@@ -630,9 +619,9 @@ export interface AttestationPersistedOutcomeV1 {
   readonly candidatePartitionRoot: Hash;
   readonly familyCandidateKey: Hash;
   readonly outcomeHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly attestationAuthorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly frameworkAuthorityRoot: Hash;
   readonly executorAuthorityRoot: Hash;
   readonly kind: "partial-identity" | "final";
   readonly identity: IdentityVerifiedV1 | null;
@@ -650,9 +639,9 @@ export function attestationPartialIdentitySemanticHash(
     | "candidatePartitionRoot"
     | "candidate"
     | "identity"
-    | "releaseProvenanceHash"
+    | "runtimeAuthority"
     | "attestationAuthorityRoot"
-    | "releaseAuthorityRoot"
+    | "frameworkAuthorityRoot"
     | "executorAuthorityRoot"
   >,
 ): Hash {
@@ -662,10 +651,10 @@ export function attestationPartialIdentitySemanticHash(
     candidatePartitionRoot: input.candidatePartitionRoot,
     candidate: input.candidate,
     identity: input.identity,
-    identityProofHash: input.identity.issuerProof.proofHash,
-    releaseProvenanceHash: input.releaseProvenanceHash,
+    identityCommitmentHash: input.identity.identityCommitment.commitmentHash,
+    runtimeAuthority: input.runtimeAuthority,
     attestationAuthorityRoot: input.attestationAuthorityRoot,
-    releaseAuthorityRoot: input.releaseAuthorityRoot,
+    frameworkAuthorityRoot: input.frameworkAuthorityRoot,
     executorAuthorityRoot: input.executorAuthorityRoot,
   });
 }
@@ -737,8 +726,7 @@ export interface AttestationServiceV1 {
 }
 
 export interface AttestationServiceConstructorV1 {
-  /** Issued only by the release composition or isolated test-support module. */
-  readonly composition: AttestationCompositionBindingV1;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly frameworkRuntime: FrameworkFailureRuntimePort;
   readonly rejectionRuntime: RejectionFactRuntimePort;
   readonly programs: AttestationProgramPort;
@@ -756,11 +744,11 @@ export interface AttestationOutcomeValidationContextV1 {
 
 export interface AttestationValidationAuthorityV1 {
   readonly [ATTESTATION_VALIDATION_AUTHORITY_BRAND]: true;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly authorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
   readonly frameworkAuthorityRoot: Hash;
   readonly executorAuthorityRoot: Hash;
+  readEvidenceAuthority(): AttestationEvidenceAuthoritySnapshotV1;
   claimWriterCapabilities(
     writerCapability: AttestationWriterCapabilityV1,
     persistenceCapabilities: readonly AttestationPersistenceCapabilityV1[],
@@ -783,14 +771,21 @@ export interface AttestationValidationAuthorityV1 {
   ): AttestationPartitionV1;
 }
 
+export interface AttestationEvidenceAuthoritySnapshotV1 {
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly attestationAuthorityRoot: Hash;
+  readonly frameworkAuthorityRoot: Hash;
+  readonly executorAuthorityRoot: Hash;
+}
+
 export interface AttestationPartitionV1 {
   readonly runId: string;
   readonly cutoff: CanonicalCutoffV1;
   readonly candidatePartitionRoot: Hash;
   readonly outcomes: readonly CandidateFinalOutcomeV1[];
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly attestationAuthorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly frameworkAuthorityRoot: Hash;
   readonly executorAuthorityRoot: Hash;
   readonly accounting: {
     readonly pending: string;
@@ -808,7 +803,7 @@ export interface StoredRetryableProbeV1 {
   readonly checkpointRevision: string;
   readonly probeCapability: RetryableProbeCapabilityV1;
   readonly candidatePartition: CandidatePartitionCapabilityV1;
-  readonly candidatePartitionBinding: CandidatePartitionBindingV1;
+  readonly candidatePartitionBinding: CandidatePartitionCommitmentV1;
   readonly candidateSubjectHash: Hash;
   readonly before: Extract<CandidateFinalOutcomeV1, { readonly kind: "retryable" }>;
   readonly beforeOutcomeHash: Hash;
@@ -1632,17 +1627,17 @@ export function validateProbeReceipt(raw: ProbeReceiptV1): ProbeReceiptV1 {
   return sealed;
 }
 export function candidateFinalOutcomeHash(outcome: CandidateFinalOutcomeV1): Hash {
-  return candidateFinalOutcomeHashWire(outcome as unknown as CandidateFinalOutcomeWireV1);
+  return hashDomain("aloha/candidate-final-outcome/v1", outcome);
 }
 
-/** Hash of the exact final outcome body before the release-bound outcome proof.
- * The proof is intentionally excluded to avoid a signing cycle; every other
- * field, including authority roots and identity/rejection evidence, remains
- * committed by this hash. */
+/** Hash of the exact final outcome body before its content commitment. The
+ * commitment is excluded to avoid a hash cycle; every authority and evidence
+ * field remains committed by this hash. */
 export function candidateFinalOutcomeBodyHash(
-  outcome: CandidateFinalOutcomeV1 | Omit<CandidateFinalOutcomeV1, "outcomeIssuerProof">,
+  outcome: CandidateFinalOutcomeV1 | Omit<CandidateFinalOutcomeV1, "outcomeCommitment">,
 ): Hash {
-  return candidateFinalOutcomeBodyHashWire(outcome as unknown as CandidateFinalOutcomeWireV1);
+  const { outcomeCommitment: _commitment, ...body } = outcome as CandidateFinalOutcomeV1;
+  return hashDomain("aloha/candidate-final-outcome-body/v1", body);
 }
 
 export const compareText = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
@@ -1797,12 +1792,10 @@ export function validateIdentityObservation(
 }
 
 export interface AttestationIdentitySemanticAuthorityV1 {
-  readonly releaseProvenanceHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly attestationAuthorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
   readonly frameworkAuthorityRoot: Hash;
   readonly executorAuthorityRoot: Hash;
-  readonly attestationProofIssuerKeyId: Hash;
 }
 
 export function identityObservationSemanticHash(
@@ -1821,9 +1814,8 @@ export function identityObservationSemanticHash(
     candidate,
     identity,
     identityOrigin,
-    releaseProvenanceHash: authority.releaseProvenanceHash,
+    runtimeAuthority: authority.runtimeAuthority,
     attestationAuthorityRoot: authority.attestationAuthorityRoot,
-    releaseAuthorityRoot: authority.releaseAuthorityRoot,
     frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
     executorAuthorityRoot: authority.executorAuthorityRoot,
   });
@@ -1842,7 +1834,7 @@ export function verifiedIdentitySubjectHash(
   });
 }
 
-export function identityProofVerificationContext(
+export function identityCommitmentIssueInput(
   runId: string,
   cutoff: CanonicalCutoffV1,
   candidatePartitionRoot: Hash,
@@ -1850,12 +1842,12 @@ export function identityProofVerificationContext(
   identity: IdentityVerifiedObservationV1,
   identityOrigin: AttestationIdentityOriginV1,
   authority: AttestationIdentitySemanticAuthorityV1,
-): AttestationIdentityProofVerificationContextV1 {
+): import("./commitment.ts").AttestationIdentityCommitmentIssueInputV1 {
   const identityObservation = validateIdentityObservation(identity, "attestation.identityObservation");
   return deepFreeze({
-    runId: assertNonEmptyString(runId, "identityProof.runId"),
-    cutoff: validateCutoff(cutoff, "identityProof.cutoff"),
-    candidatePartitionRoot: assertHash(candidatePartitionRoot, "identityProof.candidatePartitionRoot"),
+    runId: assertNonEmptyString(runId, "identityCommitment.runId"),
+    cutoff: validateCutoff(cutoff, "identityCommitment.cutoff"),
+    candidatePartitionRoot: assertHash(candidatePartitionRoot, "identityCommitment.candidatePartitionRoot"),
     candidate,
     identityObservation,
     identityOrigin,
@@ -1869,12 +1861,9 @@ export function identityProofVerificationContext(
       identityOrigin,
       authority,
     ),
-    releaseProvenanceHash: authority.releaseProvenanceHash,
     attestationAuthorityRoot: authority.attestationAuthorityRoot,
     frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
     executorAuthorityRoot: authority.executorAuthorityRoot,
-    releaseAuthorityRoot: authority.releaseAuthorityRoot,
-    attestationProofIssuerKeyId: authority.attestationProofIssuerKeyId,
   });
 }
 export function validateCandidateFinalOutcome(
@@ -1883,23 +1872,123 @@ export function validateCandidateFinalOutcome(
   candidate: CandidateRecordV1,
   outcome: CandidateFinalOutcomeV1,
 ): void {
-  validateCandidateFinalOutcomeWireV1({
-    runId,
-    cutoff,
-    candidatePartitionRoot: outcome.outcomeIssuerProof.candidatePartitionRoot,
-    candidate,
-  }, outcome);
+  const kind = outcome.kind;
+  const commonKeys = [
+    "kind", "runCandidateKey", "familyCandidateKey", "runtimeAuthority",
+    "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot",
+    "identityCommitment", "outcomeCommitment",
+  ];
+  const variantKeys = kind === "verified"
+    ? ["instanceKey", "publication"]
+    : kind === "chainProvenRejected"
+      ? ["proof", "rejectionEvidence"]
+      : ["failure"];
+  exactObject(outcome, [...commonKeys, ...variantKeys], "candidateFinalOutcome");
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(outcome.runtimeAuthority);
+  const expectedRunKey = runCandidateKey(runId, candidate.familyCandidateKey);
+  if (outcome.runCandidateKey !== expectedRunKey
+    || outcome.familyCandidateKey !== candidate.familyCandidateKey) {
+    throw new TypeError("candidate outcome candidate/run mismatch");
+  }
+  assertHash(outcome.attestationAuthorityRoot, "candidateFinalOutcome.attestationAuthorityRoot");
+  assertHash(outcome.frameworkAuthorityRoot, "candidateFinalOutcome.frameworkAuthorityRoot");
+  assertHash(outcome.executorAuthorityRoot, "candidateFinalOutcome.executorAuthorityRoot");
+  const outcomeCommitment = decodeAttestationOutcomeCommitmentV1(outcome.outcomeCommitment);
+  const candidatePartitionRoot = outcomeCommitment.candidatePartitionRoot;
+  if (outcomeCommitment.runId !== runId
+    || encodeCanonicalJson(outcomeCommitment.cutoff) !== encodeCanonicalJson(cutoff)
+    || outcomeCommitment.familyDefinitionHash !== candidate.familyDefinitionHash
+    || outcomeCommitment.familyCandidateKey !== candidate.familyCandidateKey
+    || outcomeCommitment.candidateSubjectHash !== candidate.candidateSubjectHash
+    || encodeCanonicalJson(outcomeCommitment.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)
+    || outcomeCommitment.attestationAuthorityRoot !== outcome.attestationAuthorityRoot
+    || outcomeCommitment.frameworkAuthorityRoot !== outcome.frameworkAuthorityRoot
+    || outcomeCommitment.executorAuthorityRoot !== outcome.executorAuthorityRoot) {
+    throw new TypeError("candidate outcome commitment context mismatch");
+  }
+  let identityObservation: IdentityVerifiedObservationV1 | null = null;
+  if (outcome.identityCommitment !== null) {
+    const identityCommitment = decodeAttestationIdentityCommitmentV1(outcome.identityCommitment);
+    identityObservation = validateIdentityObservation(
+      identityCommitment.identityObservation,
+      "candidateFinalOutcome.identityCommitment.identityObservation",
+    );
+    const semanticAuthority = {
+      runtimeAuthority,
+      attestationAuthorityRoot: outcome.attestationAuthorityRoot,
+      frameworkAuthorityRoot: outcome.frameworkAuthorityRoot,
+      executorAuthorityRoot: outcome.executorAuthorityRoot,
+    };
+    if (identityCommitment.runId !== runId
+      || encodeCanonicalJson(identityCommitment.cutoff) !== encodeCanonicalJson(cutoff)
+      || identityCommitment.candidatePartitionRoot !== candidatePartitionRoot
+      || identityCommitment.familyDefinitionHash !== candidate.familyDefinitionHash
+      || identityCommitment.familyCandidateKey !== candidate.familyCandidateKey
+      || identityCommitment.candidateSubjectHash !== candidate.candidateSubjectHash
+      || identityCommitment.identitySubjectHash !== verifiedIdentitySubjectHash(candidate, identityObservation)
+      || identityCommitment.identitySemanticHash !== identityObservationSemanticHash(
+        runId,
+        cutoff,
+        candidatePartitionRoot,
+        candidate,
+        identityObservation,
+        identityCommitment.identityOrigin,
+        semanticAuthority,
+      )
+      || encodeCanonicalJson(identityCommitment.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)
+      || identityCommitment.attestationAuthorityRoot !== outcome.attestationAuthorityRoot
+      || identityCommitment.frameworkAuthorityRoot !== outcome.frameworkAuthorityRoot
+      || identityCommitment.executorAuthorityRoot !== outcome.executorAuthorityRoot) {
+      throw new TypeError("candidate identity commitment context mismatch");
+    }
+  }
+  if (outcomeCommitment.outcomeBodyHash !== candidateFinalOutcomeBodyHash(outcome)) {
+    throw new TypeError("candidate outcome commitment body hash mismatch");
+  }
   if (outcome.kind === "verified") {
-    if (outcome.identityProof === null) throw new TypeError("verified-outcome-identity-proof-missing");
+    if (outcome.identityCommitment === null) throw new TypeError("verified-outcome-identity-commitment-missing");
+    if (identityObservation === null) throw new TypeError("verified identity observation missing");
+    validateVerifiedPublication(candidate, identityObservation, cutoff, outcome.publication);
+    if (outcome.instanceKey !== outcome.publication.instanceKey) {
+      throw new TypeError("verified outcome instance key mismatch");
+    }
     return;
   }
   const terminalStage = outcome.kind === "chainProvenRejected"
     ? outcome.proof.stage
     : outcome.failure.stage;
   if (terminalStage === "identity") {
-    if (outcome.identityProof !== null) throw new TypeError("identity-stage-outcome-must-not-link-identity-proof");
-  } else if (outcome.identityProof === null) {
-    throw new TypeError("post-identity-outcome-identity-proof-missing");
+    if (outcome.identityCommitment !== null) throw new TypeError("identity-stage-outcome-must-not-link-identity-commitment");
+  } else if (outcome.identityCommitment === null) {
+    throw new TypeError("post-identity-outcome-identity-commitment-missing");
+  }
+  if (outcome.kind === "chainProvenRejected") {
+    const evidence = validateRejectionEvidenceBundle(outcome.rejectionEvidence);
+    const proof = validateDerivedRejectionProof(outcome.proof, evidence, "candidateFinalOutcome.proof");
+    if (evidence.runId !== runId
+      || evidence.chainId !== cutoff.chainId
+      || evidence.cutoffNumber !== cutoff.number
+      || evidence.cutoffHash !== cutoff.hash
+      || evidence.cutoffStateRoot !== cutoff.stateRoot
+      || evidence.familyDefinitionHash !== candidate.familyDefinitionHash
+      || evidence.familyCandidateKey !== candidate.familyCandidateKey
+      || evidence.candidateSubjectHash !== candidate.candidateSubjectHash
+      || evidence.executorAuthorityRoot !== outcome.executorAuthorityRoot
+      || proof.executorAuthorityRoot !== outcome.executorAuthorityRoot
+      || (evidence.stage === "identity") !== (identityObservation === null)
+      || (identityObservation !== null
+        && evidence.identitySubjectHash !== verifiedIdentitySubjectHash(candidate, identityObservation))) {
+      throw new TypeError("candidate rejection context mismatch");
+    }
+    return;
+  }
+  const failure = validateFailure(outcome.failure, "candidateFinalOutcome.failure", outcome.kind);
+  if (failure.candidateSubjectHash !== candidate.candidateSubjectHash) {
+    throw new TypeError("candidate failure subject mismatch");
+  }
+  if (failure.frameworkBinding !== null
+    && failure.frameworkBinding.authorityRoot !== outcome.frameworkAuthorityRoot) {
+    throw new TypeError("candidate failure framework authority mismatch");
   }
 }
 
@@ -1907,16 +1996,18 @@ export function validateAttestationPartition(
   partition: AttestationPartitionV1,
   candidates: readonly CandidateRecordV1[],
 ): void {
-  const exact = exactObject(partition, ["runId", "cutoff", "candidatePartitionRoot", "outcomes", "attestationAuthorityRoot", "releaseAuthorityRoot", "releaseProvenanceHash", "executorAuthorityRoot", "accounting", "exactOutcomePartitionRoot"], "attestationPartition");
+  const exact = exactObject(partition, ["runId", "cutoff", "candidatePartitionRoot", "outcomes", "runtimeAuthority", "attestationAuthorityRoot", "frameworkAuthorityRoot", "executorAuthorityRoot", "accounting", "exactOutcomePartitionRoot"], "attestationPartition");
   assertNonEmptyString(exact.runId, "attestationPartition.runId");
   validateCutoff(exact.cutoff, "attestationPartition.cutoff");
   assertHash(exact.candidatePartitionRoot, "attestationPartition.candidatePartitionRoot");
   if (exact.candidatePartitionRoot !== candidatePartitionRoot(candidates)) {
     throw new Error("attestation-partition-candidate-root-mismatch");
   }
+  if (encodeCanonicalJson(exact.runtimeAuthority) !== encodeCanonicalJson(partition.runtimeAuthority)) {
+    throw new TypeError("attestationPartition.runtimeAuthority is invalid");
+  }
   assertHash(exact.attestationAuthorityRoot, "attestationPartition.attestationAuthorityRoot");
-  assertHash(exact.releaseAuthorityRoot, "attestationPartition.releaseAuthorityRoot");
-  assertHash(exact.releaseProvenanceHash, "attestationPartition.releaseProvenanceHash");
+  assertHash(exact.frameworkAuthorityRoot, "attestationPartition.frameworkAuthorityRoot");
   assertHash(exact.executorAuthorityRoot, "attestationPartition.executorAuthorityRoot");
   if (!Array.isArray(exact.outcomes)) throw new TypeError("attestationPartition.outcomes must be an array");
   const accounting = exactObject(exact.accounting, ["pending", "verified", "chainProvenRejected", "retryable", "invalidProgram"], "attestationPartition.accounting");
@@ -1937,8 +2028,8 @@ export function validateAttestationPartition(
     if (!candidate) throw new Error("candidate-outcome-partition-mismatch");
     if (
       outcome.attestationAuthorityRoot !== partition.attestationAuthorityRoot
-      || outcome.releaseAuthorityRoot !== partition.releaseAuthorityRoot
-      || outcome.releaseProvenanceHash !== partition.releaseProvenanceHash
+      || encodeCanonicalJson(outcome.runtimeAuthority) !== encodeCanonicalJson(partition.runtimeAuthority)
+      || outcome.frameworkAuthorityRoot !== partition.frameworkAuthorityRoot
       || outcome.executorAuthorityRoot !== partition.executorAuthorityRoot
     ) throw new Error("outcome-partition-authority-mismatch");
     validateCandidateFinalOutcome(partition.runId, partition.cutoff, candidate, outcome);
@@ -1953,15 +2044,15 @@ export function validateAttestationPartition(
   if (encodeCanonicalJson(expectedAccounting) !== encodeCanonicalJson(partition.accounting)) {
     throw new Error("outcome-accounting-mismatch");
   }
-  const recomputedRoot = exactOutcomePartitionRootV1({
+  const recomputedRoot = hashDomain("aloha/exact-outcome-partition/v1", {
     runId: partition.runId,
     cutoff: partition.cutoff,
     candidatePartitionRoot: partition.candidatePartitionRoot,
+    runtimeAuthority: partition.runtimeAuthority,
     attestationAuthorityRoot: partition.attestationAuthorityRoot,
-    releaseAuthorityRoot: partition.releaseAuthorityRoot,
-    releaseProvenanceHash: partition.releaseProvenanceHash,
+    frameworkAuthorityRoot: partition.frameworkAuthorityRoot,
     executorAuthorityRoot: partition.executorAuthorityRoot,
-    outcomes: sorted as unknown as readonly CandidateFinalOutcomeWireV1[],
+    outcomesRoot: hashCanonicalPartition("aloha/candidate-outcomes/v1", sorted),
   });
   if (recomputedRoot !== partition.exactOutcomePartitionRoot) throw new Error("outcome-partition-root-mismatch");
 }
@@ -2000,9 +2091,9 @@ export function assertPromotablePartition(
     runId: partition.runId,
     cutoff: partition.cutoff,
     candidatePartitionRoot: partition.candidatePartitionRoot,
+    runtimeAuthority: partition.runtimeAuthority,
     attestationAuthorityRoot: partition.attestationAuthorityRoot,
-    releaseAuthorityRoot: partition.releaseAuthorityRoot,
-    releaseProvenanceHash: partition.releaseProvenanceHash,
+    frameworkAuthorityRoot: partition.frameworkAuthorityRoot,
     executorAuthorityRoot: partition.executorAuthorityRoot,
     outcomesRoot: hashCanonicalPartition(
       "aloha/candidate-outcomes/v1",

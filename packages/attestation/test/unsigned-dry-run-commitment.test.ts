@@ -3,7 +3,6 @@ import test from "node:test";
 import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import {
   createUnsignedDryRunRuntimeAuthorityDescriptorV1,
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 import {
@@ -13,17 +12,17 @@ import {
   decodeUnsignedDryRunOutcomeCommitmentV1,
 } from "../src/index.ts";
 import {
-  createUnsignedDryRunCandidatePartitionCommitmentV1,
+  createCandidatePartitionCommitmentV1,
   candidatePartitionKeysRoot,
-  decodeUnsignedDryRunCandidatePartitionCommitmentV1,
+  decodeCandidatePartitionCommitmentV1,
 } from "../../../specs/candidate-partition-authority/src/index.ts";
 import { candidatePartitionRoot, mergeAndDedupeNominations } from "../../discovery/src/index.ts";
-import { UnsignedDryRunCandidatePartitionCapabilityRegistryV1 } from "../../checkpoint/src/index.ts";
+import { CandidatePartitionCapabilityRegistryV1 } from "../../checkpoint/src/candidate-partition.ts";
 
-const h = (label: string): Hash => hashDomain("test/unsigned-dry-run-commitment", label);
+const h = (label: string): Hash => hashDomain("test/dry-run-commitment", label);
 const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
   createUnsignedDryRunRuntimeAuthorityDescriptorV1({
-    authorityClass: "unsigned-dry-run",
+    authorityClass: "dry-run",
     runtimeBindingId: h("runtime-binding"),
     implementationCommit: "1".repeat(40),
   }),
@@ -33,9 +32,9 @@ const identityMemo = Object.freeze({ factory: "0x1234" });
 
 test("unsigned dry-run identity/outcome commitments exact-bind runtime and bodies without signed fields", () => {
   const identity = createUnsignedDryRunIdentityCommitmentV1({
-    kind: "aloha.unsigned-dry-run-attestation-identity-commitment",
+    kind: "aloha.dry-run-attestation-identity-commitment",
     version: "1",
-    authorityClass: "unsigned-dry-run",
+    authorityClass: "dry-run",
     runtimeAuthority,
     runId: "run-1",
     cutoff,
@@ -70,11 +69,16 @@ test("unsigned dry-run identity/outcome commitments exact-bind runtime and bodie
     ...identityClone,
     identitySemanticHash: h("tampered"),
   }), /hash mismatch/);
+  assert.throws(() => decodeUnsignedDryRunIdentityCommitmentV1({
+    ...identityClone,
+    issuerKeyId: h("forbidden-issuer"),
+    signatureHex: `0x${"0".repeat(128)}`,
+  }), /unknown field/);
 
   const outcome = createUnsignedDryRunOutcomeCommitmentV1({
-    kind: "aloha.unsigned-dry-run-attestation-outcome-commitment",
+    kind: "aloha.dry-run-attestation-outcome-commitment",
     version: "1",
-    authorityClass: "unsigned-dry-run",
+    authorityClass: "dry-run",
     runtimeAuthority,
     runId: "run-1",
     cutoff,
@@ -93,13 +97,17 @@ test("unsigned dry-run identity/outcome commitments exact-bind runtime and bodie
     ...outcome,
     outcomeBodyHash: h("tampered-outcome"),
   }), /hash mismatch/);
+  assert.throws(() => decodeUnsignedDryRunOutcomeCommitmentV1({
+    ...outcome,
+    releaseAuthorityRoot: h("forbidden-release-authority"),
+  }), /unknown field/);
 });
 
 test("unsigned candidate partition commitment has a distinct exact wire class", () => {
-  const commitment = createUnsignedDryRunCandidatePartitionCommitmentV1({
-    kind: "aloha.unsigned-dry-run-candidate-partition-commitment",
+  const commitment = createCandidatePartitionCommitmentV1({
+    kind: "aloha.candidate-partition-commitment",
     version: "1",
-    authorityClass: "unsigned-dry-run",
+    authorityClass: "dry-run",
     runtimeAuthority,
     runId: "run-1",
     cutoff,
@@ -114,28 +122,27 @@ test("unsigned candidate partition commitment has a distinct exact wire class", 
     checkpointRevision: "4",
   });
   assert.deepEqual(
-    decodeUnsignedDryRunCandidatePartitionCommitmentV1(JSON.parse(JSON.stringify(commitment))),
+    decodeCandidatePartitionCommitmentV1(JSON.parse(JSON.stringify(commitment))),
     commitment,
   );
   assert.equal("issuerKeyId" in commitment, false);
   assert.equal("releaseProvenanceHash" in commitment, false);
-  assert.throws(() => decodeUnsignedDryRunCandidatePartitionCommitmentV1({
+  assert.throws(() => decodeCandidatePartitionCommitmentV1({
     ...commitment,
     candidatePartitionStorageHash: h("tampered-storage"),
   }), /hash mismatch/);
 });
 
 test("signed runtime authority is rejected by every unsigned commitment", () => {
-  const signed = projectRuntimeAuthorityDescriptorV1(createSignedReleaseRuntimeAuthorityDescriptorV1({
+  const signed = {
     authorityClass: "signed-release",
-    runtimeBindingId: h("signed-binding"),
-    releaseProvenanceHash: h("release"),
+    authorityBindingHash: h("signed-binding"),
     implementationCommit: "2".repeat(40),
-  }));
+  } as never;
   assert.throws(() => createUnsignedDryRunOutcomeCommitmentV1({
-    kind: "aloha.unsigned-dry-run-attestation-outcome-commitment",
+    kind: "aloha.dry-run-attestation-outcome-commitment",
     version: "1",
-    authorityClass: "unsigned-dry-run",
+    authorityClass: "dry-run",
     runtimeAuthority: signed,
     runId: "run-1",
     cutoff,
@@ -148,7 +155,7 @@ test("signed runtime authority is rejected by every unsigned commitment", () => 
     frameworkAuthorityRoot: h("framework"),
     executorAuthorityRoot: h("executor"),
     sequence: "1",
-  }), /unsigned-dry-run authority/);
+  }), /dry-run/);
 });
 
 test("cloneable unsigned commitment data does not forge a candidate capability", () => {
@@ -167,10 +174,10 @@ test("cloneable unsigned commitment data does not forge a candidate capability",
       rawLocatorHash: h("raw"),
     },
   }])[0]!;
-  const commitment = createUnsignedDryRunCandidatePartitionCommitmentV1({
-    kind: "aloha.unsigned-dry-run-candidate-partition-commitment",
+  const commitment = createCandidatePartitionCommitmentV1({
+    kind: "aloha.candidate-partition-commitment",
     version: "1",
-    authorityClass: "unsigned-dry-run",
+    authorityClass: "dry-run",
     runtimeAuthority,
     runId: "run-capability",
     cutoff,
@@ -184,7 +191,7 @@ test("cloneable unsigned commitment data does not forge a candidate capability",
     sourceCoverageRoot: h("coverage"),
     checkpointRevision: "1",
   });
-  const registry = new UnsignedDryRunCandidatePartitionCapabilityRegistryV1();
+  const registry = new CandidatePartitionCapabilityRegistryV1();
   const capability = registry.registerVerifiedCommitment(commitment, [candidate], { read: () => new Uint8Array() });
   assert.equal(registry.reader.binding(capability).commitmentHash, commitment.commitmentHash);
   assert.throws(() => registry.reader.binding({ ...capability }), /not checkpoint-issued/);

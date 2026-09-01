@@ -1,41 +1,33 @@
+import type { InstancePublicationV1 } from "../../../catalog/src/index.ts";
+import type { Hash } from "../../../canonical-codec/src/index.ts";
+import type { CandidateRecordV1, CanonicalCutoffV1 } from "../../../discovery/src/index.ts";
+import type { RuntimeAuthorityProjectionV1 } from "../../../runtime-authority/src/index.ts";
 import type {
+  AttestationIdentityResumeInputV1,
   AttestationOutcomeCapabilityV1,
+  AttestationOutcomeResumeInputV1,
   AttestationPartitionCapabilityV1,
   AttestationPersistenceBatchClaimV1,
   AttestationPersistenceCapabilityV1,
-  AttestationWriterCapabilityV1,
-  AttestationIdentityResumeInputV1,
-  IdentityVerifiedV1,
-  AttestationOutcomeResumeInputV1,
-  AttestationOutcomeResumeCapabilityV1,
   AttestationVerifiedMemoReuseInputV1,
+  AttestationWriterCapabilityV1,
+  IdentityVerifiedV1,
 } from "../index.ts";
-import type { CandidateRecordV1 } from "../../../discovery/src/index.ts";
-import type { InstancePublicationV1 } from "../../../catalog/src/index.ts";
 
 export type AttestationIdentityResumeResolvedInputV1 = AttestationIdentityResumeInputV1 & {
   readonly candidatePartitionRoot: Hash;
   readonly candidate: CandidateRecordV1;
 };
-import type { AttestationProofIssuerVerifierPortV1 } from "../internal-authority.ts";
-import type { Hash } from "../../../canonical-codec/src/index.ts";
-import type { CanonicalCutoffV1 } from "../../../discovery/src/index.ts";
 
-/**
- * Process-local authority state.  This module deliberately contains only
- * opaque membership state; it does not import the attestation engine or any
- * validator.  The issuer and verifier are the only modules allowed to
- * interpret these maps.
- */
-
+/** Process-local authority state. Cloneable durable facts are content
+ * commitments; only capability membership and the monotonic sequence remain
+ * process-local. */
 export interface AttestationAuthorityStateV1 {
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly authorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
   readonly frameworkAuthorityRoot: Hash;
   readonly executorAuthorityRoot: Hash;
-  readonly attestationProof: AttestationProofIssuerVerifierPortV1;
-  readonly attestationProofIssuerKeyId: Hash;
+  nextCommitmentSequence: bigint;
   readonly outcomeCapabilities: WeakSet<object>;
   readonly partitionCapabilities: WeakSet<object>;
   readonly resumeCapabilities: WeakSet<object>;
@@ -51,14 +43,18 @@ export interface AttestationWriterConsumerV1 {
 }
 
 export const attestationAuthorityStates = new WeakMap<object, AttestationAuthorityStateV1>();
-/** Process-local identity of an engine-issued service.  The release owner
- * uses this to reject a shape-compatible service whose openRunSession method
- * could be deployment-injected. */
 export const attestationServiceStates = new WeakMap<object, AttestationAuthorityStateV1>();
 export const attestationOutcomeStates = new WeakMap<object, AttestationAuthorityStateV1>();
 export const attestationPartitionStates = new WeakMap<object, AttestationAuthorityStateV1>();
 
-export interface AttestationIdentityResumeStateV1 {
+interface ResumeAuthorityFactsV1 {
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly attestationAuthorityRoot: Hash;
+  readonly frameworkAuthorityRoot: Hash;
+  readonly executorAuthorityRoot: Hash;
+}
+
+export interface AttestationIdentityResumeStateV1 extends ResumeAuthorityFactsV1 {
   readonly runId: string;
   readonly cutoff: CanonicalCutoffV1;
   readonly candidatePartitionRoot: Hash;
@@ -66,13 +62,9 @@ export interface AttestationIdentityResumeStateV1 {
   readonly candidateSubjectHash: Hash;
   readonly identity: IdentityVerifiedV1;
   readonly outcomeHash: Hash;
-  readonly attestationAuthorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
-  readonly executorAuthorityRoot: Hash;
 }
 
-export interface AttestationOutcomeResumeStateV1 {
+export interface AttestationOutcomeResumeStateV1 extends ResumeAuthorityFactsV1 {
   readonly runId: string;
   readonly cutoff: CanonicalCutoffV1;
   readonly candidatePartitionRoot: Hash;
@@ -80,13 +72,9 @@ export interface AttestationOutcomeResumeStateV1 {
   readonly candidateSubjectHash: Hash;
   readonly outcome: AttestationOutcomeCapabilityV1;
   readonly outcomeHash: Hash;
-  readonly attestationAuthorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
-  readonly executorAuthorityRoot: Hash;
 }
 
-export interface AttestationVerifiedMemoReuseStateV1 {
+export interface AttestationVerifiedMemoReuseStateV1 extends ResumeAuthorityFactsV1 {
   readonly runId: string;
   readonly cutoff: CanonicalCutoffV1;
   readonly candidatePartitionRoot: Hash;
@@ -94,9 +82,6 @@ export interface AttestationVerifiedMemoReuseStateV1 {
   readonly candidateSubjectHash: Hash;
   readonly publication: InstancePublicationV1;
   readonly verifiedMemoSetRoot: Hash;
-  readonly authorityRoot: Hash;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
 }
 
 export const attestationIdentityResumeStates = new WeakMap<object, AttestationIdentityResumeStateV1>();
@@ -106,32 +91,29 @@ export const consumedAttestationOutcomeResumeCapabilities = new WeakSet<object>(
 export const attestationVerifiedMemoReuseStates = new WeakMap<object, AttestationVerifiedMemoReuseStateV1>();
 export const consumedAttestationVerifiedMemoReuseCapabilities = new WeakSet<object>();
 
-export function registerAttestationValidationAuthority(
-  authority: object,
-  state: AttestationAuthorityStateV1,
-): void {
+function authorityFacts(state: AttestationAuthorityStateV1): ResumeAuthorityFactsV1 {
+  return {
+    runtimeAuthority: state.runtimeAuthority,
+    attestationAuthorityRoot: state.authorityRoot,
+    frameworkAuthorityRoot: state.frameworkAuthorityRoot,
+    executorAuthorityRoot: state.executorAuthorityRoot,
+  };
+}
+
+export function registerAttestationValidationAuthority(authority: object, state: AttestationAuthorityStateV1): void {
   attestationAuthorityStates.set(authority, state);
 }
 
-export function registerAttestationService(
-  service: object,
-  state: AttestationAuthorityStateV1,
-): void {
+export function registerAttestationService(service: object, state: AttestationAuthorityStateV1): void {
   attestationServiceStates.set(service, state);
 }
 
-export function registerAttestationOutcomeCapability(
-  outcome: AttestationOutcomeCapabilityV1,
-  state: AttestationAuthorityStateV1,
-): void {
+export function registerAttestationOutcomeCapability(outcome: AttestationOutcomeCapabilityV1, state: AttestationAuthorityStateV1): void {
   state.outcomeCapabilities.add(outcome);
   attestationOutcomeStates.set(outcome, state);
 }
 
-export function registerAttestationPartitionCapability(
-  partition: AttestationPartitionCapabilityV1,
-  state: AttestationAuthorityStateV1,
-): void {
+export function registerAttestationPartitionCapability(partition: AttestationPartitionCapabilityV1, state: AttestationAuthorityStateV1): void {
   state.partitionCapabilities.add(partition);
   attestationPartitionStates.set(partition, state);
 }
@@ -150,10 +132,7 @@ export function registerAttestationIdentityResumeCapability(
     candidateSubjectHash: input.candidate.candidateSubjectHash,
     identity: input.identity,
     outcomeHash: input.outcomeHash,
-    attestationAuthorityRoot: input.attestationAuthorityRoot,
-    releaseAuthorityRoot: input.releaseAuthorityRoot,
-    releaseProvenanceHash: input.releaseProvenanceHash,
-    executorAuthorityRoot: input.executorAuthorityRoot,
+    ...authorityFacts(state),
   });
 }
 
@@ -171,10 +150,7 @@ export function registerAttestationOutcomeResumeCapability(
     candidateSubjectHash: input.candidate.candidateSubjectHash,
     outcome: input.outcome,
     outcomeHash: input.outcomeHash,
-    attestationAuthorityRoot: input.attestationAuthorityRoot,
-    releaseAuthorityRoot: input.releaseAuthorityRoot,
-    releaseProvenanceHash: input.releaseProvenanceHash,
-    executorAuthorityRoot: input.executorAuthorityRoot,
+    ...authorityFacts(state),
   });
 }
 
@@ -195,8 +171,6 @@ export function registerAttestationVerifiedMemoReuseCapability(
     candidateSubjectHash: input.candidate.candidateSubjectHash,
     publication: input.publication,
     verifiedMemoSetRoot: input.verifiedMemoSetRoot,
-    authorityRoot: state.authorityRoot,
-    releaseAuthorityRoot: state.releaseAuthorityRoot,
-    releaseProvenanceHash: state.releaseProvenanceHash,
+    ...authorityFacts(state),
   });
 }

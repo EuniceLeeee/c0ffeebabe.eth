@@ -128,16 +128,11 @@ const PROBLEM_CORE_KEYS = Object.freeze([
   "requiredCapabilityPredicates", "strategyCompositionRoot", "strategyIssuerClosureRoot",
   "readyRecordHash", "problemHash",
 ]);
-const SIGNED_PROBLEM_KEYS = Object.freeze([...PROBLEM_CORE_KEYS, "releaseProvenanceHash", "runtimeAuthority"]);
 const UNSIGNED_PROBLEM_KEYS = Object.freeze([...PROBLEM_CORE_KEYS, "runtimeMembershipHash", "runtimeAuthority"]);
 
 function validateProblem(value: StrategyPlanningProblemV1): StrategyPlanningProblemV1 {
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
-  assertExactKeys(
-    value,
-    runtimeAuthority.authorityClass === "signed-release" ? SIGNED_PROBLEM_KEYS : UNSIGNED_PROBLEM_KEYS,
-    "planningProblem",
-  );
+  assertExactKeys(value, UNSIGNED_PROBLEM_KEYS, "planningProblem");
   if (value.kind !== "closed-loop" || value.edgeReuse !== "forbid") throw new TypeError("planner received an unsupported planning problem");
   if (value.lane !== "blockscan" && value.lane !== "backrun") throw new TypeError("planner problem has an unsupported lane");
   assertHash(value.objectiveRef, "planningProblem.objectiveRef");
@@ -153,11 +148,7 @@ function validateProblem(value: StrategyPlanningProblemV1): StrategyPlanningProb
   assertHash(value.triggerHeadHash, "planningProblem.triggerHeadHash");
   assertHash(value.strategyCompositionRoot, "planningProblem.strategyCompositionRoot");
   assertHash(value.strategyIssuerClosureRoot, "planningProblem.strategyIssuerClosureRoot");
-  if (runtimeAuthority.authorityClass === "signed-release") {
-    assertHash(value.releaseProvenanceHash, "planningProblem.releaseProvenanceHash");
-  } else {
-    assertHash(value.runtimeMembershipHash, "planningProblem.runtimeMembershipHash");
-  }
+  assertHash(value.runtimeMembershipHash, "planningProblem.runtimeMembershipHash");
   assertHash(value.readyRecordHash, "planningProblem.readyRecordHash");
   assertHash(value.problemHash, "planningProblem.problemHash");
   if (typeof value.strategyId !== "string" || value.strategyId.length === 0 || typeof value.generationId !== "string" || value.generationId.length === 0) {

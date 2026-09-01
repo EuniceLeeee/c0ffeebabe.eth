@@ -2,14 +2,16 @@ import {
   decodeCanonicalJson,
   encodeCanonicalJson,
   assertExactKeys,
+  assertHash,
+  assertNonEmptyString,
   hashDomain,
   type CanonicalJson,
   type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
 import {
-  decodeRuntimeReleaseExecutorLeaseV1,
-  type RuntimeReleaseExecutorLeaseV1,
-} from "../../../specs/release-authority/src/index.ts";
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../packages/runtime-authority/src/index.ts";
 import {
   normalizeEffectTransportDeclaration,
   type EffectTransportDeclarationV1,
@@ -19,14 +21,29 @@ export const REVM_WIRE_VERSION = 1 as const;
 export type RevmCallerMode = "top-level" | "impersonated-call-frame";
 
 /**
- * The worker wire carries the already verified release binding as an opaque
- * provenance fact.  It is deliberately a complete, schema-owned binding
+ * The worker wire carries the current runtime binding as an opaque identity
+ * fact. It is deliberately a complete, schema-owned binding
  * rather than a family name or an engine/executable pair.  The process-local
  * authority stamps it; a worker is never allowed to invent these fields.
  */
+export interface RevmWorkerRuntimeLeaseV1 {
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+  readonly executorAuthorityRoot: Hash;
+  readonly qualifiedExecutorRegistryRoot: Hash;
+  readonly selectedExecutorLeafHash: Hash;
+  readonly executorKind: string;
+  readonly engineBuildFingerprint: Hash;
+  readonly executableFingerprint: Hash;
+  readonly closureFingerprint: Hash;
+  readonly protocolFingerprint: Hash;
+  readonly schemaFingerprint: Hash;
+  readonly workerEpoch: string;
+  readonly executorSessionHash: Hash;
+}
+
 export interface RevmWorkerAuthorityBindingV1 {
-  /** Exact projection issued from a verified release; no full certificate crosses into REVM. */
-  readonly release: RuntimeReleaseExecutorLeaseV1;
+  /** Exact runtime and executable facts for this worker. */
+  readonly runtime: RevmWorkerRuntimeLeaseV1;
   readonly authorityRoot: Hash;
   readonly workerEpoch: string;
   readonly executorSessionHash: Hash;
@@ -193,15 +210,36 @@ function parseSource(value: unknown): RevmSourceAnchor {
 
 function parseAuthority(value: unknown): RevmWorkerAuthorityBindingV1 {
   if (!isRecord(value)) throw new TypeError("authority must be an object");
-  assertExactKeys(value, ["release", "authorityRoot", "workerEpoch", "executorSessionHash"]);
-  const release = decodeRuntimeReleaseExecutorLeaseV1(value.release as object);
-  const authorityRoot = requireString(value.authorityRoot, "authority.authorityRoot");
-  const workerEpoch = requireString(value.workerEpoch, "authority.workerEpoch");
-  const executorSessionHash = requireString(value.executorSessionHash, "authority.executorSessionHash");
-  if (release.workerEpoch !== workerEpoch) throw new TypeError("authority worker epoch does not match release projection");
-  if (release.executorSessionHash !== executorSessionHash) throw new TypeError("authority executor session does not match release projection");
-  if (release.executorAuthorityRoot !== authorityRoot) throw new TypeError("authority root does not match release projection");
-  return Object.freeze({ release, authorityRoot: authorityRoot as Hash, workerEpoch, executorSessionHash: executorSessionHash as Hash });
+  assertExactKeys(value, ["runtime", "authorityRoot", "workerEpoch", "executorSessionHash"]);
+  const raw = value.runtime;
+  if (!isRecord(raw)) throw new TypeError("authority.runtime must be an object");
+  assertExactKeys(raw, [
+    "runtimeAuthority", "executorAuthorityRoot", "qualifiedExecutorRegistryRoot",
+    "selectedExecutorLeafHash", "executorKind", "engineBuildFingerprint",
+    "executableFingerprint", "closureFingerprint", "protocolFingerprint",
+    "schemaFingerprint", "workerEpoch", "executorSessionHash",
+  ]);
+  const runtime: RevmWorkerRuntimeLeaseV1 = Object.freeze({
+    runtimeAuthority: decodeRuntimeAuthorityProjectionV1(raw.runtimeAuthority),
+    executorAuthorityRoot: assertHash(raw.executorAuthorityRoot, "authority.runtime.executorAuthorityRoot"),
+    qualifiedExecutorRegistryRoot: assertHash(raw.qualifiedExecutorRegistryRoot, "authority.runtime.qualifiedExecutorRegistryRoot"),
+    selectedExecutorLeafHash: assertHash(raw.selectedExecutorLeafHash, "authority.runtime.selectedExecutorLeafHash"),
+    executorKind: assertNonEmptyString(raw.executorKind, "authority.runtime.executorKind"),
+    engineBuildFingerprint: assertHash(raw.engineBuildFingerprint, "authority.runtime.engineBuildFingerprint"),
+    executableFingerprint: assertHash(raw.executableFingerprint, "authority.runtime.executableFingerprint"),
+    closureFingerprint: assertHash(raw.closureFingerprint, "authority.runtime.closureFingerprint"),
+    protocolFingerprint: assertHash(raw.protocolFingerprint, "authority.runtime.protocolFingerprint"),
+    schemaFingerprint: assertHash(raw.schemaFingerprint, "authority.runtime.schemaFingerprint"),
+    workerEpoch: assertNonEmptyString(raw.workerEpoch, "authority.runtime.workerEpoch"),
+    executorSessionHash: assertHash(raw.executorSessionHash, "authority.runtime.executorSessionHash"),
+  });
+  const authorityRoot = assertHash(value.authorityRoot, "authority.authorityRoot");
+  const workerEpoch = assertNonEmptyString(value.workerEpoch, "authority.workerEpoch");
+  const executorSessionHash = assertHash(value.executorSessionHash, "authority.executorSessionHash");
+  if (runtime.workerEpoch !== workerEpoch) throw new TypeError("authority worker epoch does not match runtime lease");
+  if (runtime.executorSessionHash !== executorSessionHash) throw new TypeError("authority executor session does not match runtime lease");
+  if (runtime.executorAuthorityRoot !== authorityRoot) throw new TypeError("authority root does not match runtime lease");
+  return Object.freeze({ runtime, authorityRoot, workerEpoch, executorSessionHash });
 }
 
 export function assertAuthorityBinding(value: RevmWorkerAuthorityBindingV1): void {

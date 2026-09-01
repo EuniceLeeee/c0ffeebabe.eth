@@ -2,27 +2,19 @@ import {
   assertDecimalString,
   assertExactKeys,
   assertHash,
-  assertNonEmptyString,
   assertPlainObject,
   decodeCanonicalJson,
   encodeCanonicalBytes,
-  gitSha40Schema,
   type CanonicalJson,
   type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
 import {
-  decodeRuntimeReleaseBindingV1,
-  runtimeReleaseBindingProvenanceHash,
-  type RuntimeReleaseBindingV1,
-} from "../../../specs/release-authority/src/index.ts";
-import {
   decodeAssetReferenceV1,
   type AssetReferenceV1,
 } from "../../../packages/asset-ref/src/index.ts";
+import type { GenerationRefreshPolicyV1 } from "../../../packages/ready-generation/src/index.ts";
 
-/** Release-packaged limits and owner selection only.  Asset-denominator,
- * action-owner and valuation facts remain current-generation/runtime facts. */
-export interface DeploymentEconomicSafetyTemplateV1 {
+export interface RuntimeEconomicSafetyPolicyV1 {
   readonly profitAsset: AssetReferenceV1;
   readonly profitAccount: string;
   readonly priorityFeePerGas: string;
@@ -30,39 +22,44 @@ export interface DeploymentEconomicSafetyTemplateV1 {
   readonly valuationOwnerRef: Hash;
 }
 
-export interface DeploymentRuntimePolicyV1 {
+export interface RuntimePolicyV1 {
   readonly schemaVersion: 1;
-  readonly kind: "aloha.deployment-runtime-policy-v1";
-  readonly bindingId: Hash;
-  readonly releaseProvenanceHash: Hash;
-  readonly frameworkAuthorityRoot: Hash;
-  readonly candidateReleaseCommit: string;
+  readonly kind: "aloha.runtime-policy-v1";
   readonly pending: "disabled" | "public-pending-v1";
+  readonly generation: GenerationRefreshPolicyV1;
   readonly objective: Readonly<{
     readonly numeraireAssetRef: Hash;
     readonly minNetGain: string;
     readonly maxGas: string;
     readonly maxValueAtRisk: string;
   }>;
-  readonly economicSafety: DeploymentEconomicSafetyTemplateV1;
+  readonly economicSafety: RuntimeEconomicSafetyPolicyV1;
   readonly callerId: string;
   readonly deadlineMs: number;
-  readonly admission: Readonly<{ readonly topK: number; readonly boundedUnrankedBudget: number }>;
-  readonly amountSeed: Readonly<{ readonly amountIn: string; readonly recipient: string }>;
-}
-
-export interface DeploymentExecutorStateDescriptorV1 {
-  readonly schemaVersion: 1;
-  readonly kind: "aloha.deployment-executor-state-v1";
-  readonly bindingId: Hash;
-  readonly releaseProvenanceHash: Hash;
-  readonly executorAuthorityRoot: Hash;
-  readonly selectedExecutorLeafHash: Hash;
-  readonly executorAddress: string;
-  readonly callerAddress: string;
-  readonly qualifiedExecutorCodeHash: Hash;
-  readonly executorConfig: CanonicalJson;
-  readonly accounts: readonly Readonly<{ readonly address: string; readonly storageSlots: readonly string[] }>[];
+  readonly admission: Readonly<{
+    readonly topK: number;
+    readonly boundedUnrankedBudget: number;
+  }>;
+  readonly amountSeed: Readonly<{
+    readonly amountIn: string;
+    readonly recipient: string;
+  }>;
+  readonly executor: Readonly<{
+    readonly address: string;
+    readonly callerAddress: string;
+    readonly codeHash: Hash;
+    readonly config: CanonicalJson;
+    readonly accounts: readonly Readonly<{
+      readonly address: string;
+      readonly storageSlots: readonly string[];
+    }>[];
+  }>;
+  readonly revm: Readonly<{
+    readonly maxWorkers: number;
+    readonly queueCap: number;
+    readonly timeoutMs: number;
+    readonly perOwnerConcurrency: number;
+  }>;
 }
 
 function address(value: unknown, path: string): string {
@@ -80,160 +77,177 @@ function slot(value: unknown, path: string): string {
 }
 
 function boundedInteger(value: unknown, path: string, minimum: number, maximum: number): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)
+    || value < minimum || value > maximum) {
     throw new TypeError(`${path} must be an integer in [${minimum}, ${maximum}]`);
   }
   return value;
 }
 
 function canonicalObject(value: unknown, path: string): CanonicalJson {
-  const bytes = encodeCanonicalBytes(value);
-  const decoded = decodeCanonicalJson(bytes) as CanonicalJson;
+  const decoded = decodeCanonicalJson(encodeCanonicalBytes(value)) as CanonicalJson;
   if (decoded === null || typeof decoded !== "object" || Array.isArray(decoded)) {
     throw new TypeError(`${path} must be a canonical object`);
   }
   return decoded;
 }
 
-export function decodeDeploymentRuntimePolicyV1(value: unknown): DeploymentRuntimePolicyV1 {
-  assertPlainObject(value, "deploymentRuntimePolicy");
+function generationPolicy(value: unknown): GenerationRefreshPolicyV1 {
+  assertPlainObject(value, "runtimePolicy.generation");
   assertExactKeys(value, [
-    "schemaVersion", "kind", "bindingId", "releaseProvenanceHash", "frameworkAuthorityRoot",
-    "candidateReleaseCommit", "pending", "objective", "economicSafety", "callerId", "deadlineMs", "admission", "amountSeed",
-  ], "deploymentRuntimePolicy");
-  if (value.schemaVersion !== 1 || value.kind !== "aloha.deployment-runtime-policy-v1") {
-    throw new TypeError("deploymentRuntimePolicy kind/version mismatch");
-  }
-  if (value.pending !== "disabled" && value.pending !== "public-pending-v1") {
-    throw new TypeError("deploymentRuntimePolicy pending profile is invalid");
-  }
-  assertPlainObject(value.objective, "deploymentRuntimePolicy.objective");
-  assertExactKeys(value.objective, ["numeraireAssetRef", "minNetGain", "maxGas", "maxValueAtRisk"], "deploymentRuntimePolicy.objective");
-  assertPlainObject(value.economicSafety, "deploymentRuntimePolicy.economicSafety");
-  assertExactKeys(value.economicSafety, [
-    "profitAsset", "profitAccount", "priorityFeePerGas", "bidCostNative", "valuationOwnerRef",
-  ], "deploymentRuntimePolicy.economicSafety");
-  assertPlainObject(value.admission, "deploymentRuntimePolicy.admission");
-  assertExactKeys(value.admission, ["topK", "boundedUnrankedBudget"], "deploymentRuntimePolicy.admission");
-  assertPlainObject(value.amountSeed, "deploymentRuntimePolicy.amountSeed");
-  assertExactKeys(value.amountSeed, ["amountIn", "recipient"], "deploymentRuntimePolicy.amountSeed");
-  const objective = Object.freeze({
-    numeraireAssetRef: assertHash(value.objective.numeraireAssetRef, "deploymentRuntimePolicy.objective.numeraireAssetRef"),
-    minNetGain: assertDecimalString(value.objective.minNetGain, "deploymentRuntimePolicy.objective.minNetGain"),
-    maxGas: assertDecimalString(value.objective.maxGas, "deploymentRuntimePolicy.objective.maxGas"),
-    maxValueAtRisk: assertDecimalString(value.objective.maxValueAtRisk, "deploymentRuntimePolicy.objective.maxValueAtRisk"),
-  });
-  const economicSafety = Object.freeze({
-    profitAsset: decodeAssetReferenceV1(value.economicSafety.profitAsset, "deploymentRuntimePolicy.economicSafety.profitAsset"),
-    profitAccount: address(value.economicSafety.profitAccount, "deploymentRuntimePolicy.economicSafety.profitAccount"),
-    priorityFeePerGas: assertDecimalString(value.economicSafety.priorityFeePerGas, "deploymentRuntimePolicy.economicSafety.priorityFeePerGas"),
-    bidCostNative: assertDecimalString(value.economicSafety.bidCostNative, "deploymentRuntimePolicy.economicSafety.bidCostNative"),
-    valuationOwnerRef: assertHash(value.economicSafety.valuationOwnerRef, "deploymentRuntimePolicy.economicSafety.valuationOwnerRef"),
-  });
-  if (/^0x0{64}$/.test(economicSafety.valuationOwnerRef)) {
-    throw new TypeError("deploymentRuntimePolicy economic valuation owner ref must be non-zero");
-  }
-  if (economicSafety.profitAsset.assetRef !== objective.numeraireAssetRef) {
-    throw new TypeError("deploymentRuntimePolicy economic profit asset does not match the objective numeraire");
+    "observationWindowBlocks",
+    "targetRefreshAgeBlocks",
+    "maxServingAgeBlocks",
+    "minPromotionMarginBlocks",
+    "maxInProgressRuns",
+  ], "runtimePolicy.generation");
+  const observationWindowBlocks = assertDecimalString(value.observationWindowBlocks, "runtimePolicy.generation.observationWindowBlocks");
+  const maxInProgressRuns = assertDecimalString(value.maxInProgressRuns, "runtimePolicy.generation.maxInProgressRuns");
+  if (observationWindowBlocks !== "50" || maxInProgressRuns !== "1") {
+    throw new TypeError("runtimePolicy generation denominator must use 50 blocks and one in-progress run");
   }
   return Object.freeze({
-    schemaVersion: 1 as const,
-    kind: "aloha.deployment-runtime-policy-v1" as const,
-    bindingId: assertHash(value.bindingId, "deploymentRuntimePolicy.bindingId"),
-    releaseProvenanceHash: assertHash(value.releaseProvenanceHash, "deploymentRuntimePolicy.releaseProvenanceHash"),
-    frameworkAuthorityRoot: assertHash(value.frameworkAuthorityRoot, "deploymentRuntimePolicy.frameworkAuthorityRoot"),
-    candidateReleaseCommit: gitSha40Schema.decode(value.candidateReleaseCommit, "deploymentRuntimePolicy.candidateReleaseCommit"),
-    pending: value.pending,
-    objective,
-    economicSafety,
-    callerId: assertNonEmptyString(value.callerId, "deploymentRuntimePolicy.callerId"),
-    deadlineMs: boundedInteger(value.deadlineMs, "deploymentRuntimePolicy.deadlineMs", 1, 60_000),
-    admission: Object.freeze({
-      topK: boundedInteger(value.admission.topK, "deploymentRuntimePolicy.admission.topK", 1, 10_000),
-      boundedUnrankedBudget: boundedInteger(value.admission.boundedUnrankedBudget, "deploymentRuntimePolicy.admission.boundedUnrankedBudget", 0, 10_000),
-    }),
-    amountSeed: Object.freeze({
-      amountIn: assertDecimalString(value.amountSeed.amountIn, "deploymentRuntimePolicy.amountSeed.amountIn"),
-      recipient: address(value.amountSeed.recipient, "deploymentRuntimePolicy.amountSeed.recipient"),
-    }),
+    observationWindowBlocks,
+    targetRefreshAgeBlocks: assertDecimalString(value.targetRefreshAgeBlocks, "runtimePolicy.generation.targetRefreshAgeBlocks"),
+    maxServingAgeBlocks: assertDecimalString(value.maxServingAgeBlocks, "runtimePolicy.generation.maxServingAgeBlocks"),
+    minPromotionMarginBlocks: assertDecimalString(value.minPromotionMarginBlocks, "runtimePolicy.generation.minPromotionMarginBlocks"),
+    maxInProgressRuns,
   });
 }
 
-export function decodeDeploymentExecutorStateDescriptorV1(value: unknown): DeploymentExecutorStateDescriptorV1 {
-  assertPlainObject(value, "deploymentExecutorState");
-  assertExactKeys(value, [
-    "schemaVersion", "kind", "bindingId", "releaseProvenanceHash", "executorAuthorityRoot",
-    "selectedExecutorLeafHash", "executorAddress", "callerAddress", "qualifiedExecutorCodeHash",
-    "executorConfig", "accounts",
-  ], "deploymentExecutorState");
-  if (value.schemaVersion !== 1 || value.kind !== "aloha.deployment-executor-state-v1") {
-    throw new TypeError("deploymentExecutorState kind/version mismatch");
-  }
-  if (!Array.isArray(value.accounts)) throw new TypeError("deploymentExecutorState.accounts must be an array");
-  const accounts = value.accounts.map((entry, index) => {
-    assertPlainObject(entry, `deploymentExecutorState.accounts[${index}]`);
-    assertExactKeys(entry, ["address", "storageSlots"], `deploymentExecutorState.accounts[${index}]`);
-    if (!Array.isArray(entry.storageSlots)) throw new TypeError(`deploymentExecutorState.accounts[${index}].storageSlots must be an array`);
-    const storageSlots = entry.storageSlots.map((item, slotIndex) => slot(item, `deploymentExecutorState.accounts[${index}].storageSlots[${slotIndex}]`));
-    if (new Set(storageSlots).size !== storageSlots.length || [...storageSlots].sort().some((item, itemIndex) => item !== storageSlots[itemIndex])) {
-      throw new TypeError("deploymentExecutorState storage slots must be sorted and unique");
+function executorAccounts(value: unknown): RuntimePolicyV1["executor"]["accounts"] {
+  if (!Array.isArray(value)) throw new TypeError("runtimePolicy.executor.accounts must be an array");
+  const accounts = value.map((entry, index) => {
+    assertPlainObject(entry, `runtimePolicy.executor.accounts[${index}]`);
+    assertExactKeys(entry, ["address", "storageSlots"], `runtimePolicy.executor.accounts[${index}]`);
+    if (!Array.isArray(entry.storageSlots)) {
+      throw new TypeError(`runtimePolicy.executor.accounts[${index}].storageSlots must be an array`);
     }
-    return Object.freeze({ address: address(entry.address, `deploymentExecutorState.accounts[${index}].address`), storageSlots: Object.freeze(storageSlots) });
+    const storageSlots = entry.storageSlots.map((item, slotIndex) =>
+      slot(item, `runtimePolicy.executor.accounts[${index}].storageSlots[${slotIndex}]`));
+    if (new Set(storageSlots).size !== storageSlots.length
+      || [...storageSlots].sort().some((item, itemIndex) => item !== storageSlots[itemIndex])) {
+      throw new TypeError("runtimePolicy executor storage slots must be sorted and unique");
+    }
+    return Object.freeze({
+      address: address(entry.address, `runtimePolicy.executor.accounts[${index}].address`),
+      storageSlots: Object.freeze(storageSlots),
+    });
   });
   if (new Set(accounts.map(entry => entry.address)).size !== accounts.length
-    || [...accounts].sort((left, right) => left.address.localeCompare(right.address)).some((entry, index) => entry.address !== accounts[index]!.address)) {
-    throw new TypeError("deploymentExecutorState accounts must be sorted and unique");
+    || [...accounts].sort((left, right) => left.address.localeCompare(right.address))
+      .some((entry, index) => entry.address !== accounts[index]!.address)) {
+    throw new TypeError("runtimePolicy executor accounts must be sorted and unique");
   }
+  return Object.freeze(accounts);
+}
+
+export function decodeRuntimePolicyV1(value: unknown): RuntimePolicyV1 {
+  assertPlainObject(value, "runtimePolicy");
+  assertExactKeys(value, [
+    "schemaVersion",
+    "kind",
+    "pending",
+    "generation",
+    "objective",
+    "economicSafety",
+    "callerId",
+    "deadlineMs",
+    "admission",
+    "amountSeed",
+    "executor",
+    "revm",
+  ], "runtimePolicy");
+  if (value.schemaVersion !== 1 || value.kind !== "aloha.runtime-policy-v1") {
+    throw new TypeError("runtimePolicy kind/version mismatch");
+  }
+  if (value.pending !== "disabled" && value.pending !== "public-pending-v1") {
+    throw new TypeError("runtimePolicy pending profile is invalid");
+  }
+  assertPlainObject(value.objective, "runtimePolicy.objective");
+  assertExactKeys(value.objective, [
+    "numeraireAssetRef", "minNetGain", "maxGas", "maxValueAtRisk",
+  ], "runtimePolicy.objective");
+  assertPlainObject(value.economicSafety, "runtimePolicy.economicSafety");
+  assertExactKeys(value.economicSafety, [
+    "profitAsset", "profitAccount", "priorityFeePerGas", "bidCostNative", "valuationOwnerRef",
+  ], "runtimePolicy.economicSafety");
+  assertPlainObject(value.admission, "runtimePolicy.admission");
+  assertExactKeys(value.admission, ["topK", "boundedUnrankedBudget"], "runtimePolicy.admission");
+  assertPlainObject(value.amountSeed, "runtimePolicy.amountSeed");
+  assertExactKeys(value.amountSeed, ["amountIn", "recipient"], "runtimePolicy.amountSeed");
+  assertPlainObject(value.executor, "runtimePolicy.executor");
+  assertExactKeys(value.executor, [
+    "address", "callerAddress", "codeHash", "config", "accounts",
+  ], "runtimePolicy.executor");
+  assertPlainObject(value.revm, "runtimePolicy.revm");
+  assertExactKeys(value.revm, [
+    "maxWorkers", "queueCap", "timeoutMs", "perOwnerConcurrency",
+  ], "runtimePolicy.revm");
+
+  const objective = Object.freeze({
+    numeraireAssetRef: assertHash(value.objective.numeraireAssetRef, "runtimePolicy.objective.numeraireAssetRef"),
+    minNetGain: assertDecimalString(value.objective.minNetGain, "runtimePolicy.objective.minNetGain"),
+    maxGas: assertDecimalString(value.objective.maxGas, "runtimePolicy.objective.maxGas"),
+    maxValueAtRisk: assertDecimalString(value.objective.maxValueAtRisk, "runtimePolicy.objective.maxValueAtRisk"),
+  });
+  const economicSafety = Object.freeze({
+    profitAsset: decodeAssetReferenceV1(value.economicSafety.profitAsset, "runtimePolicy.economicSafety.profitAsset"),
+    profitAccount: address(value.economicSafety.profitAccount, "runtimePolicy.economicSafety.profitAccount"),
+    priorityFeePerGas: assertDecimalString(value.economicSafety.priorityFeePerGas, "runtimePolicy.economicSafety.priorityFeePerGas"),
+    bidCostNative: assertDecimalString(value.economicSafety.bidCostNative, "runtimePolicy.economicSafety.bidCostNative"),
+    valuationOwnerRef: assertHash(value.economicSafety.valuationOwnerRef, "runtimePolicy.economicSafety.valuationOwnerRef"),
+  });
+  if (economicSafety.profitAsset.assetRef !== objective.numeraireAssetRef) {
+    throw new TypeError("runtimePolicy profit asset does not match the objective numeraire");
+  }
+  const callerId = address(value.callerId, "runtimePolicy.callerId");
+  const amountSeed = Object.freeze({
+    amountIn: assertDecimalString(value.amountSeed.amountIn, "runtimePolicy.amountSeed.amountIn"),
+    recipient: address(value.amountSeed.recipient, "runtimePolicy.amountSeed.recipient"),
+  });
+  const executor = Object.freeze({
+    address: address(value.executor.address, "runtimePolicy.executor.address"),
+    callerAddress: address(value.executor.callerAddress, "runtimePolicy.executor.callerAddress"),
+    codeHash: assertHash(value.executor.codeHash, "runtimePolicy.executor.codeHash"),
+    config: canonicalObject(value.executor.config, "runtimePolicy.executor.config"),
+    accounts: executorAccounts(value.executor.accounts),
+  });
+  if (callerId !== executor.callerAddress
+    || amountSeed.recipient !== executor.address
+    || economicSafety.profitAccount !== executor.address) {
+    throw new TypeError("runtimePolicy caller, recipient, profit account and executor do not join");
+  }
+
   return Object.freeze({
     schemaVersion: 1 as const,
-    kind: "aloha.deployment-executor-state-v1" as const,
-    bindingId: assertHash(value.bindingId, "deploymentExecutorState.bindingId"),
-    releaseProvenanceHash: assertHash(value.releaseProvenanceHash, "deploymentExecutorState.releaseProvenanceHash"),
-    executorAuthorityRoot: assertHash(value.executorAuthorityRoot, "deploymentExecutorState.executorAuthorityRoot"),
-    selectedExecutorLeafHash: assertHash(value.selectedExecutorLeafHash, "deploymentExecutorState.selectedExecutorLeafHash"),
-    executorAddress: address(value.executorAddress, "deploymentExecutorState.executorAddress"),
-    callerAddress: address(value.callerAddress, "deploymentExecutorState.callerAddress"),
-    qualifiedExecutorCodeHash: assertHash(value.qualifiedExecutorCodeHash, "deploymentExecutorState.qualifiedExecutorCodeHash"),
-    executorConfig: canonicalObject(value.executorConfig, "deploymentExecutorState.executorConfig"),
-    accounts: Object.freeze(accounts),
+    kind: "aloha.runtime-policy-v1" as const,
+    pending: value.pending,
+    generation: generationPolicy(value.generation),
+    objective,
+    economicSafety,
+    callerId,
+    deadlineMs: boundedInteger(value.deadlineMs, "runtimePolicy.deadlineMs", 1, 60_000),
+    admission: Object.freeze({
+      topK: boundedInteger(value.admission.topK, "runtimePolicy.admission.topK", 1, 10_000),
+      boundedUnrankedBudget: boundedInteger(value.admission.boundedUnrankedBudget, "runtimePolicy.admission.boundedUnrankedBudget", 0, 10_000),
+    }),
+    amountSeed,
+    executor,
+    revm: Object.freeze({
+      maxWorkers: boundedInteger(value.revm.maxWorkers, "runtimePolicy.revm.maxWorkers", 1, 256),
+      queueCap: boundedInteger(value.revm.queueCap, "runtimePolicy.revm.queueCap", 1, 100_000),
+      timeoutMs: boundedInteger(value.revm.timeoutMs, "runtimePolicy.revm.timeoutMs", 1, 60_000),
+      perOwnerConcurrency: boundedInteger(value.revm.perOwnerConcurrency, "runtimePolicy.revm.perOwnerConcurrency", 1, 256),
+    }),
   });
 }
 
-function exactBytes<T>(bytes: Uint8Array, decode: (value: unknown) => T, label: string): T {
-  if (!(bytes instanceof Uint8Array)) throw new TypeError(`${label} bytes are required`);
-  const decoded = decode(decodeCanonicalJson(bytes));
+export function decodeRuntimePolicyBytesV1(bytes: Uint8Array): RuntimePolicyV1 {
+  if (!(bytes instanceof Uint8Array)) throw new TypeError("runtime policy bytes are required");
+  const decoded = decodeRuntimePolicyV1(decodeCanonicalJson(bytes));
   if (!Buffer.from(bytes).equals(Buffer.from(encodeCanonicalBytes(decoded)))) {
-    throw new TypeError(`${label} is not canonical exact bytes`);
+    throw new TypeError("runtime policy is not canonical exact bytes");
   }
   return decoded;
-}
-
-export const decodeDeploymentRuntimePolicyBytesV1 = (bytes: Uint8Array): DeploymentRuntimePolicyV1 =>
-  exactBytes(bytes, decodeDeploymentRuntimePolicyV1, "deployment runtime policy");
-
-export const decodeDeploymentExecutorStateDescriptorBytesV1 = (bytes: Uint8Array): DeploymentExecutorStateDescriptorV1 =>
-  exactBytes(bytes, decodeDeploymentExecutorStateDescriptorV1, "deployment executor state");
-
-export function assertDeploymentRuntimeArtifactsJoinReleaseV1(
-  policyValue: DeploymentRuntimePolicyV1,
-  executorValue: DeploymentExecutorStateDescriptorV1,
-  bindingValue: RuntimeReleaseBindingV1,
-): void {
-  const policy = decodeDeploymentRuntimePolicyV1(policyValue);
-  const executor = decodeDeploymentExecutorStateDescriptorV1(executorValue);
-  const binding = decodeRuntimeReleaseBindingV1(bindingValue);
-  const provenance = runtimeReleaseBindingProvenanceHash(binding);
-  if (policy.bindingId !== binding.bindingId
-    || policy.releaseProvenanceHash !== provenance
-    || policy.frameworkAuthorityRoot !== binding.frameworkAuthorityRoot
-    || policy.candidateReleaseCommit !== binding.candidateReleaseCommit
-    || executor.bindingId !== binding.bindingId
-    || executor.releaseProvenanceHash !== provenance
-    || executor.executorAuthorityRoot !== binding.executorAuthorityRoot
-    || executor.selectedExecutorLeafHash !== binding.selectedExecutorLeafHash
-    || policy.callerId !== executor.callerAddress
-    || policy.economicSafety.profitAccount !== executor.executorAddress
-    || policy.amountSeed.recipient !== executor.executorAddress) {
-    throw new TypeError("deployment runtime artifacts do not join the signed release");
-  }
 }

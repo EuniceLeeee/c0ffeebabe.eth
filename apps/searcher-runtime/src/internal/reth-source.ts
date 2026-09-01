@@ -32,8 +32,6 @@ import {
   type CurrentSourceRpcPhysicalFactsV1,
 } from "../../../../packages/current-source-rpc/src/index.ts";
 import type { SearcherProducerSessionV1 } from "./ports.ts";
-import type { FullGraphCoarseSweepSourceReadCapabilityV1 } from "../../../../packages/full-graph-coarse-sweep/src/index.ts";
-import { issueFullGraphCoarseSweepSourceReadCapabilityV1 } from "../../../../packages/full-graph-coarse-sweep/src/internal/source-read-owner.ts";
 
 export interface RethSearcherRuntimeSourceConfigV1 {
   readonly canonical: RethCanonicalHeaderProviderConfigV1 & {
@@ -68,11 +66,6 @@ export interface RethSearcherRuntimeSourceV1 {
   closeCurrentSourceReadHead(
     session: ProducerCurrentSourceSessionCapabilityV1,
   ): Promise<CurrentSourceRpcPhysicalFactsV1>;
-  /** Acceptance-only physical transport. It is separate from the two lane
-   * scopes, so a full-Graph sweep cannot inflate normal F5 lane facts. */
-  issueFullGraphCoarseSweepSourceRead(
-    session: ProducerCurrentSourceSessionCapabilityV1,
-  ): FullGraphCoarseSweepSourceReadCapabilityV1;
   close(): void;
 }
 
@@ -257,31 +250,6 @@ export function createRethSearcherRuntimeSourceV1(
     },
     closeCurrentSourceReadHead(session: ProducerCurrentSourceSessionCapabilityV1) {
       return sourceRead(session).closePhysicalFacts();
-    },
-    issueFullGraphCoarseSweepSourceRead(sessionCapability: ProducerCurrentSourceSessionCapabilityV1) {
-      if (closed) throw new TypeError("Reth searcher runtime source is closed");
-      const session = readIssuedProducerCurrentSourceSessionCapabilityV1(sessionCapability);
-      if (session.canonicalSourceAuthority !== canonical.authority) {
-        throw new TypeError("full-Graph sweep session belongs to another canonical source");
-      }
-      const currentSource = Object.freeze({
-        source: Object.freeze({
-          chainId: session.source.chainId,
-          number: session.source.number,
-          hash: session.source.hash,
-          stateRoot: session.source.stateRoot,
-        }),
-        assertCurrent: () => session.assertCurrent(),
-      });
-      const transport = new CurrentSourceRpcReadTransport({
-        endpoint: config.canonical.endpoint,
-        currentSource,
-        ...(config.canonical.timeoutMs === undefined ? {} : { timeoutMs: config.canonical.timeoutMs }),
-      });
-      return issueFullGraphCoarseSweepSourceReadCapabilityV1({
-        sessionId: session.sessionId,
-        source: currentSource.source,
-      }, transport);
     },
     close() {
       if (closed) return;

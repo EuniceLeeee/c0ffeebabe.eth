@@ -1616,7 +1616,7 @@ function exactTerminalResolvedSixStep(
     "schemaVersion", "kind", "binding", "routeCandidateId", "orderedEdgeIds", "routeBinding",
     "strategy", "objective", "source", "correlationId", "coarse", "planner", "exact",
     "executionProgram", "executionProgramOwnerEvidence", "finalSimulation", "finalSimulationOwnerEvidence",
-    "economicSafety", "unsignedDryRun", "timings", "productionArtifactSetRoots", "traceRoot",
+    "economicSafety", "dryRun", "timings", "productionArtifactSetRoots", "traceRoot",
   ], "terminalPhaseSixStepTerminalBinding.trace.resolved");
   if (resolved.schemaVersion !== 1 || resolved.kind !== "aloha.resolved-route-six-step-trace-v1") {
     throw new TypeError("terminal-phase Six-Step resolved trace kind/version mismatch");

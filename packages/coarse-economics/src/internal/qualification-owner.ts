@@ -40,7 +40,6 @@ export interface CoarseProjectionOwnerExecutionPortV1 {
 }
 
 export interface QualifiedCoarseProjectionOwnerStateV1 {
-  readonly releaseProvenanceHash: Hash;
   readonly releaseMembershipRoot: Hash;
   readonly descriptor: CoarseProjectionOwnerDescriptorV1;
   readonly qualificationLeafDigest: Hash;
@@ -59,7 +58,6 @@ function qualifiedHash(value: unknown, path: string): Hash {
 /** Release-owner-only qualification. The leaf depends only on this owner and
  * its verifier implementation, never on unrelated Family membership. */
 export function issueQualifiedCoarseProjectionOwnerCapabilityV1(input: {
-  readonly releaseProvenanceHash: Hash;
   readonly releaseMembershipRoot: Hash;
   readonly descriptor: CoarseProjectionOwnerDescriptorV1;
   readonly port: CoarseProjectionOwnerExecutionPortV1;
@@ -69,7 +67,6 @@ export function issueQualifiedCoarseProjectionOwnerCapabilityV1(input: {
     "ownerRef", "capabilityId", "capabilityVersion", "schemaRef", "interpreterHash",
     "implementationHash", "boundVerifierHash",
   ], "coarseOwner.descriptor");
-  const releaseProvenanceHash = qualifiedHash(input.releaseProvenanceHash, "coarseOwner.releaseProvenanceHash");
   const releaseMembershipRoot = qualifiedHash(input.releaseMembershipRoot, "coarseOwner.releaseMembershipRoot");
   const descriptor = Object.freeze({
     ownerRef: qualifiedHash(input.descriptor.ownerRef, "coarseOwner.ownerRef"),
@@ -89,7 +86,7 @@ export function issueQualifiedCoarseProjectionOwnerCapabilityV1(input: {
   });
   const qualificationLeafDigest = hashDomain("aloha/coarse-owner-qualification-leaf/v1", descriptor);
   const capability = Object.freeze(Object.create(null)) as QualifiedCoarseProjectionOwnerCapabilityV1;
-  owners.set(capability, Object.freeze({ releaseProvenanceHash, releaseMembershipRoot, descriptor, qualificationLeafDigest, port }));
+  owners.set(capability, Object.freeze({ releaseMembershipRoot, descriptor, qualificationLeafDigest, port }));
   return capability;
 }
 

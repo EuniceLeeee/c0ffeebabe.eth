@@ -28,7 +28,6 @@ import type {
 } from "../../ready-generation/src/index.ts";
 import {
   decodeRuntimeAuthorityProjectionV1,
-  type RuntimeReleaseProvenanceHashV1,
   type RuntimeAuthorityProjectionV1,
 } from "../../runtime-authority/src/index.ts";
 import type { InstanceCatalogV1 } from "../../catalog/src/index.ts";
@@ -44,8 +43,8 @@ import type { StartupSixStepRouteParentCapabilityV1 } from "./internal/six-step-
 import { createGeneratedRouteHandleIssuer } from "./internal/generated-route-handle-adapter.ts";
 import {
   startRuntimeAuthorityNativeStartupRuntime,
-  type SignedReleaseNativeStartupRuntimeV1,
-} from "./internal/signed-release-native-startup-owner.ts";
+  type RuntimeAuthorityNativeStartupRuntimeV1,
+} from "./internal/runtime-authority-native-startup-owner.ts";
 import type { NativeStartupServingGenerationV1 } from "./internal/native-startup.ts";
 import {
   assertStartupObservationWindow,
@@ -78,7 +77,7 @@ export interface StartupCheckpointPortV1 extends BuilderCheckpointPort {
 }
 
 /**
- * A release-owned ready service exposes only the two narrow ports needed by
+ * An owner-issued ready service exposes only the two narrow ports needed by
  * startup.  In particular, the caller token is created by this package and
  * bound by the ready owner; raw promotion authority is never accepted.
  */
@@ -114,7 +113,7 @@ export interface StartupRuntimeCompositionCoreInputV1 {
    */
   readonly attestation: PersistedAttestationPort;
   readonly ready: StartupReadyPortV1;
-  /** Branded generated composition issued by the release bootstrap. */
+  /** Branded generated composition issued by the runtime bootstrap. */
   readonly familyRuntime: FamilyRuntimeCompositionV1;
   /** Opaque search surface issued from the same generated Family authority. */
   readonly familySearchRuntime: GeneratedFamilySearchRuntimePortV1;
@@ -132,7 +131,6 @@ export interface StartupServingGenerationV1 {
   readonly readyRecordHash: Hash;
   readonly sourceCoverageRoot: Hash;
   readonly definitionCatalogRoot: Hash;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
 }
 
 export interface StartupRuntimeV1 {
@@ -177,13 +175,13 @@ export interface StartupRuntimeV1 {
 }
 
 function productionServingGeneration(
-  signed: SignedReleaseNativeStartupRuntimeV1,
+  adapter: RuntimeAuthorityNativeStartupRuntimeV1,
   generation: NativeStartupServingGenerationV1,
   projections: WeakMap<object, StartupServingGenerationV1>,
 ): StartupServingGenerationV1 {
   const existing = projections.get(generation.handle);
   if (existing !== undefined) return existing;
-  const ready = signed.readyFor(generation.handle);
+  const ready = adapter.readyFor(generation.handle);
   const serving = Object.freeze({
     ready,
     generationId: generation.generationId,
@@ -191,16 +189,14 @@ function productionServingGeneration(
     readyRecordHash: generation.recordRoot,
     sourceCoverageRoot: generation.sourceCoverageRoot,
     definitionCatalogRoot: generation.definitionCatalogRoot,
-    releaseProvenanceHash: ready.releaseProvenanceHash,
   });
   projections.set(generation.handle, serving);
   return serving;
 }
 
 /**
- * The sole production startup join. The public shape remains release-specific;
- * the native session/promotion/refresh/close state machine is shared behind
- * owner-issued narrow adapters.
+ * The sole startup join. The native session/promotion/refresh/close state
+ * machine remains behind one owner-issued narrow adapter.
  */
 export async function startStartupRuntime(
   input: StartupRuntimeCompositionInputV1,
@@ -211,19 +207,19 @@ export async function startStartupRuntime(
     throw new TypeError("startup process epoch is required");
   }
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
-  const signed = await startRuntimeAuthorityNativeStartupRuntime({
+  const adapter = await startRuntimeAuthorityNativeStartupRuntime({
     composition: input,
     runtimeAuthority,
   }, signal);
-  const native = signed.native;
+  const native = adapter.native;
   const servingProjections = new WeakMap<object, StartupServingGenerationV1>();
   const projectServing = (generation: NativeStartupServingGenerationV1) => productionServingGeneration(
-    signed,
+    adapter,
     generation,
     servingProjections,
   );
   const runtime = Object.freeze({
-    get ready() { return signed.readyFor(native.activeGeneration.handle); },
+    get ready() { return adapter.readyFor(native.activeGeneration.handle); },
     familyRuntimeComposition: input.familyRuntime,
     familySearchRuntime: input.familySearchRuntime,
     get generationId() { return native.generationId; },
@@ -255,9 +251,9 @@ export async function startStartupRuntime(
           throw new Error("startup-stage12-generation-unknown");
         }
       }
-      return signed.stage12CapabilityFor(generation.handle);
+      return adapter.stage12CapabilityFor(generation.handle);
     },
-    reader: signed.stage12Reader,
-    fullFamilyReader: signed.fullFamilyReader,
+    reader: adapter.stage12Reader,
+    fullFamilyReader: adapter.fullFamilyReader,
   });
 }

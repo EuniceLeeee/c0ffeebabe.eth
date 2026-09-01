@@ -19,7 +19,6 @@ import type { IssuedPlanningEnumerationV1 } from "../../planner/src/index.ts";
 import {
   decodeRuntimeAuthorityProjectionV1,
   type RuntimeAuthorityProjectionV1,
-  type RuntimeReleaseProvenanceHashV1,
 } from "../../runtime-authority/src/index.ts";
 
 export interface CoarseSourceV1 {
@@ -76,7 +75,6 @@ export type QualifiedCoarseProjectionV1 = object;
 export interface QualifiedCoarseProjectionReceiptV1 {
   readonly schemaVersion: 1;
   readonly kind: "aloha.qualified-coarse-projection-receipt-v1";
-  readonly releaseProvenanceHash: Hash;
   readonly releaseMembershipRoot: Hash;
   readonly ownerQualificationLeafDigest: Hash;
   readonly ownerDescriptor: CoarseProjectionOwnerDescriptorV1;
@@ -126,7 +124,6 @@ export interface CoarseRouteBindingV1 {
   readonly source: CoarseSourceV1;
   readonly objectiveRef: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly legs: readonly CoarseRouteLegBindingV1[];
 }
 
@@ -157,7 +154,6 @@ export interface CoarseEdgeSweepBindingV1 {
   readonly readyCutoff: CoarseSourceV1;
   readonly source: CoarseSourceV1;
   readonly objectiveRef: Hash;
-  readonly releaseProvenanceHash: Hash;
   readonly bindingRoot: Hash;
 }
 
@@ -180,7 +176,6 @@ export interface CoarseRouteAssessmentV1 {
   readonly source: CoarseSourceV1;
   readonly objectiveRef: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: Hash;
   readonly releaseMembershipRoot: Hash;
   readonly orderedProjectionIds: readonly Hash[];
   readonly orderedProjectionReceiptRoots: readonly Hash[];
@@ -218,7 +213,6 @@ export interface CoarseEnumerationBindingV1 {
   readonly graphRoot: Hash;
   readonly source: CoarseSourceV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly objective: CoarseAdmissionObjectiveV1;
   readonly policy: CoarseAdmissionPolicyV1;
   readonly fairnessSeed: Hash;
@@ -238,7 +232,6 @@ export interface CoarseEnumerationIssueInputV1 {
   readonly generationId: string;
   readonly source: CoarseSourceV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly objective: CoarseAdmissionObjectiveV1;
   readonly policy: CoarseAdmissionPolicyV1;
   readonly candidates: readonly CoarseEnumerationCandidateV1[];
@@ -289,7 +282,6 @@ export interface CoarseAdmissionV1 {
   readonly graphRoot: Hash;
   readonly source: CoarseSourceV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly plannerEnumerationRoot: Hash;
   readonly coarseEnumerationRoot: Hash;
   readonly fairnessSeed: Hash;
@@ -584,7 +576,7 @@ export function decodeQualifiedCoarseProjectionReceiptV1(
   path = "qualifiedCoarseProjection",
 ): QualifiedCoarseProjectionReceiptV1 {
   assertPlainObject(value, path);
-  assertExactKeys(value, ["schemaVersion", "kind", "releaseProvenanceHash", "releaseMembershipRoot", "ownerQualificationLeafDigest", "ownerDescriptor", "projection", "boundVerification", "receiptRoot"], path);
+  assertExactKeys(value, ["schemaVersion", "kind", "releaseMembershipRoot", "ownerQualificationLeafDigest", "ownerDescriptor", "projection", "boundVerification", "receiptRoot"], path);
   const record = value as Record<string, unknown>;
   if (record.schemaVersion !== 1 || record.kind !== "aloha.qualified-coarse-projection-receipt-v1") {
     throw new TypeError(`${path} kind/version mismatch`);
@@ -593,7 +585,6 @@ export function decodeQualifiedCoarseProjectionReceiptV1(
   const body = deepFreeze({
     schemaVersion: 1 as const,
     kind: "aloha.qualified-coarse-projection-receipt-v1" as const,
-    releaseProvenanceHash: nonZeroHash(record.releaseProvenanceHash, `${path}.releaseProvenanceHash`),
     releaseMembershipRoot: nonZeroHash(record.releaseMembershipRoot, `${path}.releaseMembershipRoot`),
     ownerQualificationLeafDigest: nonZeroHash(record.ownerQualificationLeafDigest, `${path}.ownerQualificationLeafDigest`),
     ownerDescriptor: ownerDescriptor(record.ownerDescriptor, `${path}.ownerDescriptor`),
@@ -642,7 +633,7 @@ export function readQualifiedCoarseProjectionReceiptV1(value: QualifiedCoarsePro
 
 export function decodeCoarseRouteBindingV1(value: CoarseRouteBindingV1): CoarseRouteBindingV1 {
   assertPlainObject(value, "coarseRouteBinding");
-  assertExactKeys(value, ["candidateId", "orderKey", "planningProblemHash", "routeHash", "routeBindingHash", "dependencySetRef", "ownerRefs", "generationId", "graphRoot", "source", "objectiveRef", "runtimeAuthority", "releaseProvenanceHash", "legs"], "coarseRouteBinding");
+  assertExactKeys(value, ["candidateId", "orderKey", "planningProblemHash", "routeHash", "routeBindingHash", "dependencySetRef", "ownerRefs", "generationId", "graphRoot", "source", "objectiveRef", "runtimeAuthority", "legs"], "coarseRouteBinding");
   if (!Array.isArray(value.legs) || value.legs.length === 0) throw new TypeError("coarse route has no legs");
   const legs: CoarseRouteLegBindingV1[] = value.legs.map((leg, index) => {
     assertPlainObject(leg, `coarseRouteBinding.legs[${index}]`);
@@ -667,11 +658,6 @@ export function decodeCoarseRouteBindingV1(value: CoarseRouteBindingV1): CoarseR
     if (ownerRefs[index - 1]! >= ownerRefs[index]!) throw new TypeError("coarse route owner refs are not strictly sorted");
   }
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
-  const releaseProvenanceHash: RuntimeReleaseProvenanceHashV1 = runtimeAuthority.authorityClass === "signed-release"
-    ? nonZeroHash(value.releaseProvenanceHash, "coarseRouteBinding.releaseProvenanceHash")
-    : value.releaseProvenanceHash === null
-      ? null
-      : (() => { throw new TypeError("unsigned coarse route cannot carry release provenance"); })();
   return deepFreeze({
     candidateId: nonZeroHash(value.candidateId, "coarseRouteBinding.candidateId"),
     orderKey: nonZeroHash(value.orderKey, "coarseRouteBinding.orderKey"),
@@ -685,7 +671,6 @@ export function decodeCoarseRouteBindingV1(value: CoarseRouteBindingV1): CoarseR
     source: source(value.source, "coarseRouteBinding.source"),
     objectiveRef: nonZeroHash(value.objectiveRef, "coarseRouteBinding.objectiveRef"),
     runtimeAuthority,
-    releaseProvenanceHash,
     legs: deepFreeze(legs),
   });
 }
@@ -712,7 +697,7 @@ export function decodeCoarseEdgeSweepBindingV1(
     "schemaVersion", "kind", "familyId", "familyDefinitionHash", "edgeId", "transitionRef",
     "inputAssetRef", "inputPortRef", "outputAssetRef", "outputPortRef", "routeBindingHash", "routeOwnerRef",
     "generationId", "readyRecordHash", "graphRoot", "readyCutoff", "source", "objectiveRef",
-    "releaseProvenanceHash", "bindingRoot",
+    "bindingRoot",
   ], path);
   if (value.schemaVersion !== 1 || value.kind !== "aloha.coarse-edge-sweep-binding-v1") {
     throw new TypeError(`${path} kind/version mismatch`);
@@ -736,7 +721,6 @@ export function decodeCoarseEdgeSweepBindingV1(
     readyCutoff: source(value.readyCutoff, `${path}.readyCutoff`),
     source: source(value.source, `${path}.source`),
     objectiveRef: nonZeroHash(value.objectiveRef, `${path}.objectiveRef`),
-    releaseProvenanceHash: nonZeroHash(value.releaseProvenanceHash, `${path}.releaseProvenanceHash`),
   });
   if (value.inputAssetRef === value.outputAssetRef) throw new TypeError(`${path} direction assets must differ`);
   if (body.readyCutoff.chainId !== body.source.chainId || BigInt(body.source.number) < BigInt(body.readyCutoff.number)) {
@@ -756,9 +740,6 @@ function computeCoarseRouteAssessmentV1(input: {
   readonly projections: readonly QualifiedCoarseProjectionV1[];
 }): CoarseRouteAssessmentV1 {
   const binding = readIssuedCoarseRouteBindingV1(input.binding);
-  if (binding.runtimeAuthority.authorityClass !== "signed-release" || binding.releaseProvenanceHash === null) {
-    throw new TypeError("qualified coarse assessment is unavailable for unsigned dry-run");
-  }
   if (!Array.isArray(input.projections) || input.projections.length !== binding.legs.length) throw new TypeError("coarse projection denominator mismatch");
   const receipts = input.projections.map((projection, index) => {
     if (projection === null || typeof projection !== "object") throw new TypeError(`qualified coarse projection ${index} is invalid`);
@@ -769,8 +750,7 @@ function computeCoarseRouteAssessmentV1(input: {
   const projections = receipts.map((receipt, index) => {
     const projection = decodeCoarseEdgeProjectionV1(receipt.projection, `coarseRoute.projections[${index}]`);
     const leg = binding.legs[index]!;
-    if (receipt.releaseProvenanceHash !== binding.releaseProvenanceHash
-      || projection.edgeId !== leg.edgeId
+    if (projection.edgeId !== leg.edgeId
       || projection.transitionRef !== leg.transitionRef
       || projection.routeBindingHash !== binding.routeBindingHash
       || projection.generationId !== binding.generationId
@@ -812,7 +792,6 @@ function computeCoarseRouteAssessmentV1(input: {
     source: binding.source,
     objectiveRef: binding.objectiveRef,
     runtimeAuthority: binding.runtimeAuthority,
-    releaseProvenanceHash: binding.releaseProvenanceHash,
     releaseMembershipRoot,
     orderedProjectionIds,
     orderedProjectionReceiptRoots,
@@ -858,12 +837,10 @@ export function readIssuedCoarseRouteAssessmentV1(value: unknown): CoarseRouteAs
 export function validateCoarseRouteAssessmentV1(value: CoarseRouteAssessmentV1): void {
   assertExactKeys(value, [
     "schemaVersion", "kind", "routeHash", "routeBindingHash", "generationId", "graphRoot", "source",
-    "objectiveRef", "runtimeAuthority", "releaseProvenanceHash", "releaseMembershipRoot", "orderedProjectionIds", "orderedProjectionReceiptRoots", "projectionRoot", "status", "rankAssetRef",
+    "objectiveRef", "runtimeAuthority", "releaseMembershipRoot", "orderedProjectionIds", "orderedProjectionReceiptRoots", "projectionRoot", "status", "rankAssetRef",
     "rankScore", "profitUpperBound", "reasonCodes", "assessmentId",
   ], "coarseRouteAssessment");
-  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
-  if (runtimeAuthority.authorityClass !== "signed-release") throw new TypeError("coarse route assessment requires signed runtime authority");
-  nonZeroHash(value.releaseProvenanceHash, "coarseRouteAssessment.releaseProvenanceHash");
+  decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
   nonZeroHash(value.releaseMembershipRoot, "coarseRouteAssessment.releaseMembershipRoot");
   const { assessmentId, ...body } = value;
   if (assessmentId !== hashDomain("aloha/coarse-route-assessment/v1", assessmentPayload(body))) throw new TypeError("coarse route assessment id mismatch");
@@ -912,7 +889,6 @@ function enumerationRootPayload(input: {
   readonly graphRoot: Hash;
   readonly source: CoarseSourceV1;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly objective: CoarseAdmissionObjectiveV1;
   readonly policy: CoarseAdmissionPolicyV1;
   readonly fairnessSeed: Hash;
@@ -958,7 +934,6 @@ function enumerationRootPayload(input: {
     graphRoot: input.graphRoot,
     source: input.source,
     runtimeAuthority: input.runtimeAuthority,
-    releaseProvenanceHash: input.releaseProvenanceHash,
     objective: input.objective,
     policy: input.policy,
     fairnessSeed: input.fairnessSeed,
@@ -973,16 +948,11 @@ function enumerationRootPayload(input: {
 
 export function decodeCoarseEnumerationBindingV1(value: CoarseEnumerationBindingV1): CoarseEnumerationBindingV1 {
   assertPlainObject(value, "coarseEnumeration");
-  assertExactKeys(value, ["generationId", "graphRoot", "source", "runtimeAuthority", "releaseProvenanceHash", "objective", "policy", "fairnessSeed", "planningProblemHash", "plannerEnumerationRoot", "enumerationTruncated", "observedUniqueCountLowerBound", "candidates", "coarseEnumerationRoot"], "coarseEnumeration");
+  assertExactKeys(value, ["generationId", "graphRoot", "source", "runtimeAuthority", "objective", "policy", "fairnessSeed", "planningProblemHash", "plannerEnumerationRoot", "enumerationTruncated", "observedUniqueCountLowerBound", "candidates", "coarseEnumerationRoot"], "coarseEnumeration");
   const generationId = assertNonEmptyString(value.generationId, "coarseEnumeration.generationId");
   const graphRoot = nonZeroHash(value.graphRoot, "coarseEnumeration.graphRoot");
   const sourceView = source(value.source, "coarseEnumeration.source");
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
-  const releaseProvenanceHash: RuntimeReleaseProvenanceHashV1 = runtimeAuthority.authorityClass === "signed-release"
-    ? nonZeroHash(value.releaseProvenanceHash, "coarseEnumeration.releaseProvenanceHash")
-    : value.releaseProvenanceHash === null
-      ? null
-      : (() => { throw new TypeError("unsigned coarse enumeration cannot carry release provenance"); })();
   const normalizedObjective = objective(value.objective, "coarseEnumeration.objective");
   const normalizedPolicy = policy(value.policy, "coarseEnumeration.policy");
   const plannerEnumerationRoot = nonZeroHash(value.plannerEnumerationRoot, "coarseEnumeration.plannerEnumerationRoot");
@@ -990,7 +960,7 @@ export function decodeCoarseEnumerationBindingV1(value: CoarseEnumerationBinding
   if (typeof value.enumerationTruncated !== "boolean") throw new TypeError("coarseEnumeration.enumerationTruncated is invalid");
   const observedUniqueCountLowerBound = assertDecimalString(value.observedUniqueCountLowerBound, "coarseEnumeration.observedUniqueCountLowerBound");
   const fairnessSeed = nonZeroHash(value.fairnessSeed, "coarseEnumeration.fairnessSeed");
-  const expectedFairnessSeed = hashDomain("aloha/coarse-fairness-seed/v1", { generationId, runtimeAuthority, releaseProvenanceHash, source: sourceView, plannerEnumerationRoot });
+  const expectedFairnessSeed = hashDomain("aloha/coarse-fairness-seed/v1", { generationId, runtimeAuthority, source: sourceView, plannerEnumerationRoot });
   if (fairnessSeed !== expectedFairnessSeed) throw new TypeError("coarseEnumeration.fairnessSeed mismatch");
   if (!Array.isArray(value.candidates)) throw new TypeError("coarseEnumeration.candidates is invalid");
   const normalizedCandidates: readonly NormalizedEnumerationCandidateV1[] = deepFreeze(value.candidates.map((candidate, index) => {
@@ -1003,7 +973,6 @@ export function decodeCoarseEnumerationBindingV1(value: CoarseEnumerationBinding
     const binding = readIssuedCoarseRouteBindingV1(bindingCapability);
     if (binding.generationId !== generationId || binding.graphRoot !== graphRoot || !sameSource(binding.source, sourceView)
       || !sameRuntimeAuthority(binding.runtimeAuthority, runtimeAuthority)
-      || binding.releaseProvenanceHash !== releaseProvenanceHash
       || binding.objectiveRef !== normalizedObjective.objectiveRef) {
       throw new TypeError(`coarseEnumeration.candidates[${index}] binding mismatch`);
     }
@@ -1018,7 +987,7 @@ export function decodeCoarseEnumerationBindingV1(value: CoarseEnumerationBinding
   for (let index = 1; index < normalizedCandidates.length; index += 1) {
     if (normalizedCandidates[index - 1]!.binding.orderKey >= normalizedCandidates[index]!.binding.orderKey) throw new TypeError("coarseEnumeration candidate order is not strict");
   }
-  const rootInput = { generationId, graphRoot, source: sourceView, runtimeAuthority, releaseProvenanceHash, objective: normalizedObjective, policy: normalizedPolicy, fairnessSeed, planningProblemHash, plannerEnumerationRoot, enumerationTruncated: value.enumerationTruncated, observedUniqueCountLowerBound, candidates: normalizedCandidates };
+  const rootInput = { generationId, graphRoot, source: sourceView, runtimeAuthority, objective: normalizedObjective, policy: normalizedPolicy, fairnessSeed, planningProblemHash, plannerEnumerationRoot, enumerationTruncated: value.enumerationTruncated, observedUniqueCountLowerBound, candidates: normalizedCandidates };
   const coarseEnumerationRoot = nonZeroHash(value.coarseEnumerationRoot, "coarseEnumeration.coarseEnumerationRoot");
   if (coarseEnumerationRoot !== hashDomain("aloha/coarse-enumeration/v1", enumerationRootPayload(rootInput))) throw new TypeError("coarseEnumeration.coarseEnumerationRoot mismatch");
   return deepFreeze({
@@ -1026,7 +995,6 @@ export function decodeCoarseEnumerationBindingV1(value: CoarseEnumerationBinding
     graphRoot,
     source: sourceView,
     runtimeAuthority,
-    releaseProvenanceHash,
     objective: normalizedObjective,
     policy: normalizedPolicy,
     fairnessSeed,
@@ -1134,7 +1102,6 @@ export function coarseAdmissionAccountingRootV1(value: Omit<CoarseAdmissionV1, "
     graphRoot: value.graphRoot,
     source: value.source,
     runtimeAuthority: value.runtimeAuthority,
-    releaseProvenanceHash: value.releaseProvenanceHash,
     planningProblemHash: value.planningProblemHash,
     plannerEnumerationRoot: value.plannerEnumerationRoot,
     enumerationTruncated: value.enumerationTruncated,
@@ -1264,7 +1231,6 @@ export function admitCoarseRoutesV1(input: { readonly enumeration: IssuedCoarseE
         || assessment.graphRoot !== enumeration.graphRoot
         || !sameSource(assessment.source, enumeration.source)
         || !sameRuntimeAuthority(assessment.runtimeAuthority, enumeration.runtimeAuthority)
-        || assessment.releaseProvenanceHash !== enumeration.releaseProvenanceHash
         || assessment.objectiveRef !== enumeration.objective.objectiveRef) throw new TypeError("assessment-binding-mismatch");
     } catch (error) {
       unranked.push({ binding: candidate.binding, assessment: null, reasonCode: error instanceof Error ? `invalid-assessment:${error.message}` : "invalid-assessment" });
@@ -1290,7 +1256,6 @@ export function admitCoarseRoutesV1(input: { readonly enumeration: IssuedCoarseE
     generationId: enumeration.generationId,
     graphRoot: enumeration.graphRoot,
     runtimeAuthority: enumeration.runtimeAuthority,
-    releaseProvenanceHash: enumeration.releaseProvenanceHash,
   });
   const rankedSelected: Array<{ readonly binding: CoarseRouteBindingV1; readonly assessment: CoarseRouteAssessmentV1 }> = [];
   for (let index = 0; index < rankable.length && rankedSelected.length < enumeration.policy.rankedLimit;) {
@@ -1346,7 +1311,6 @@ export function admitCoarseRoutesV1(input: { readonly enumeration: IssuedCoarseE
     graphRoot: enumeration.graphRoot,
     source: enumeration.source,
     runtimeAuthority: enumeration.runtimeAuthority,
-    releaseProvenanceHash: enumeration.releaseProvenanceHash,
     planningProblemHash: enumeration.planningProblemHash,
     plannerEnumerationRoot: enumeration.plannerEnumerationRoot,
     enumerationTruncated: enumeration.enumerationTruncated,

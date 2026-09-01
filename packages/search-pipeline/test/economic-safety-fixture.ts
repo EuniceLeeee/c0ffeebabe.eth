@@ -7,7 +7,7 @@ import type {
 import { issueEconomicSafetyFinalizationServiceV1 } from "../../economics-safety/src/internal/owner.ts";
 import { ECONOMIC_SAFETY_REVM_OBSERVATION_SCHEMA_REF_V1 } from "../../../specs/economic-safety-profile/src/index.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
   type RuntimeReleaseProvenanceHashV1,
 } from "../../runtime-authority/src/index.ts";
@@ -17,7 +17,6 @@ export function createContractEconomicSafetyService(
   hash: (value: string) => Hash,
   authority?: EconomicSafetyEvidenceAuthorityExpectationV1,
 ) {
-  if (releaseProvenanceHash === null) throw new TypeError("signed test economic-safety provenance is required");
   if (authority !== undefined && authority.releaseProvenanceHash !== releaseProvenanceHash) {
     throw new TypeError("test economic-safety authority release mismatch");
   }
@@ -25,12 +24,11 @@ export function createContractEconomicSafetyService(
     authorityRoot: authority?.authorityRoot ?? hash("economic-safety-authority"),
     implementationHash: authority?.implementationHash ?? hash("economic-safety-implementation"),
     runtimeAuthority: authority?.runtimeAuthority ?? projectRuntimeAuthorityDescriptorV1(
-      createSignedReleaseRuntimeAuthorityDescriptorV1({
-        authorityClass: "signed-release",
+      createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+        authorityClass: "dry-run",
         runtimeBindingId: hashDomain("aloha/search-pipeline/test-economic-safety-runtime-binding/v1", {
-          releaseProvenanceHash,
+          mode: "dry-run",
         }),
-        releaseProvenanceHash,
         implementationCommit: "a".repeat(40),
       }),
     ),

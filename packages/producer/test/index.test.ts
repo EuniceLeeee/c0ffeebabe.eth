@@ -501,7 +501,7 @@ test("a qualified REVM rejection remains selected and is a healthy complete term
 test("an unsigned success cannot erase an earlier admitted retryable candidate", async () => {
   const { facts, terminal } = await runHeadFacts("unsigned-with-earlier-retryable");
   const blockscan = facts.laneFacts[0]!;
-  assert.equal(blockscan.terminalKind, "unsigned-dry-run");
+  assert.equal(blockscan.terminalKind, "dry-run");
   assert.equal(blockscan.outcome, "retryable");
   assert.equal(blockscan.complete, false);
   assert.equal(blockscan.accounting?.entries.some(entry => entry.terminalKind === "retryable"), true);

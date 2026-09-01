@@ -832,7 +832,7 @@ export interface PerformanceSixStepCompletionLineageV1 {
   readonly headRecordId: Hash;
   readonly candidateId: Hash;
   readonly correlationRoot: Hash;
-  readonly mode: "unsigned-dry-run";
+  readonly mode: "dry-run";
   readonly evidenceRoot: Hash;
 }
 
@@ -842,7 +842,7 @@ export function hashPerformanceSixStepCompletionLineage(
   for (const [name, value] of [["windowId", input.windowId], ["headRecordId", input.headRecordId], ["candidateId", input.candidateId], ["correlationRoot", input.correlationRoot], ["evidenceRoot", input.evidenceRoot]] as const) {
     positiveHash(value, `performanceSixStepCompletion.${name}`);
   }
-  if (input.mode !== "unsigned-dry-run") throw new TypeError("performance six-step completion mode must be unsigned-dry-run");
+  if (input.mode !== "dry-run") throw new TypeError("performance six-step completion mode must be dry-run");
   return hashDomain("aloha/performance-six-step-completion-lineage/v1", input);
 }
 
@@ -857,7 +857,7 @@ const candidateTerminalStructuralSchema = objectSchema({
   outcome: candidateTerminalOutcomeSchema,
   correlationRoot: hashSchema,
   sixStepCompleted: literalSchema(true),
-  sixStepMode: literalSchema("unsigned-dry-run"),
+  sixStepMode: literalSchema("dry-run"),
   sixStepEvidenceRoot: hashSchema,
   sixStepCompletionRoot: hashSchema,
   timingUs: decimalStringSchema,
@@ -918,7 +918,7 @@ const candidateTerminalSchema = refineSchema(
       : candidateTerminalNoSixStepSchema.decode(value, path);
   }),
   "aloha.performance-candidate-terminal.refinement.v1",
-  hashDomain("aloha/schema-refinement-spec/v1", { id: "aloha.performance-candidate-terminal.refinement.v1", version: "2.0.0", rules: ["terminal-id", "ordinal-range", "head-window-candidate-correlation-lineage-root", "verified-unsigned-dry-run-only"] }),
+  hashDomain("aloha/schema-refinement-spec/v1", { id: "aloha.performance-candidate-terminal.refinement.v1", version: "2.0.0", rules: ["terminal-id", "ordinal-range", "head-window-candidate-correlation-lineage-root", "verified-dry-run-only"] }),
   checkCandidateTerminal,
 );
 

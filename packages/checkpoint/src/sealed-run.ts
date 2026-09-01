@@ -88,13 +88,13 @@ export function sealedRunBinding(snapshot: SealedRunSnapshotV1): SealedRunBindin
     candidatePartitionStorageHash: snapshot.candidatePartitionStorageHash,
     nominationClosureRoot: snapshot.nominationClosureRoot,
     nominationClosureStorageHash: snapshot.nominationClosureStorageHash,
-    candidatePartitionProofStorageHash: snapshot.candidatePartitionProofStorageHash,
+    candidatePartitionCommitmentStorageHash: snapshot.candidatePartitionCommitmentStorageHash,
     exactOutcomePartitionRoot: snapshot.partition.exactOutcomePartitionRoot,
     verifiedMemoSetRoot: snapshot.verifiedMemoSetRoot,
     checkpointRevision: snapshot.checkpointRevision,
+    runtimeAuthority: snapshot.runtimeAuthority,
     attestationAuthorityRoot: snapshot.attestationAuthorityRoot,
-    releaseAuthorityRoot: snapshot.releaseAuthorityRoot,
-    releaseProvenanceHash: snapshot.releaseProvenanceHash,
+    frameworkAuthorityRoot: snapshot.frameworkAuthorityRoot,
     executorAuthorityRoot: snapshot.executorAuthorityRoot,
   });
 }

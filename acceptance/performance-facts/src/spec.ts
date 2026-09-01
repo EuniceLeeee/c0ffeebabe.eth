@@ -109,7 +109,7 @@ const verifierQualificationSpecDigest = hashDomain("aloha/performance/verifier-q
     "require-exact-100-denominator",
     "require-nearest-rank-no-interpolation",
     "require-all-declared-budgets-and-hard-deadlines",
-    "require-exactly-one-verified-unsigned-dry-run-candidate",
+    "require-exactly-one-verified-dry-run-candidate",
     "derive-verdict-from-facts",
   ],
 });

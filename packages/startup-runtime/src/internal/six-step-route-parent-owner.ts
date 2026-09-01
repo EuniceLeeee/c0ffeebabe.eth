@@ -46,8 +46,7 @@ function exactReadyPipelineBinding(ready: GraphLeaseBindingV1, pipeline: GraphLe
     && encodeCanonicalJson(ready.cutoff) === encodeCanonicalJson(pipeline.cutoff)
     && ready.definitionCatalogRoot === pipeline.definitionCatalogRoot
     && ready.instanceCatalogRoot === pipeline.instanceCatalogRoot
-    && ready.graphRoot === pipeline.graphRoot
-    && ready.releaseProvenanceHash === pipeline.releaseProvenanceHash;
+    && ready.graphRoot === pipeline.graphRoot;
 }
 
 /** One exact route invocation consumes the retained Checkpoint reader and
@@ -83,7 +82,7 @@ export function issueStartupSixStepRouteParentInvocationV1(
   return invocation;
 }
 
-/** Runtime-release owner-only consumer for one exact invocation. */
+/** Runtime owner-only consumer for one exact invocation. */
 export function readStartupSixStepRouteParentInvocationMaterialV1(
   capability: StartupSixStepRouteParentInvocationCapabilityV1,
 ): StartupSixStepRouteParentInvocationMaterialV1 {

@@ -179,7 +179,7 @@ function exactProgramRoute(intent: CapabilityWorkIntentV1) {
 }
 
 /** Candidate-owned production physical transport. The caller supplies only
- * the already release-qualified endpoint and scheduler authority; generated
+ * the already runtime-qualified endpoint and scheduler authority; generated
  * Family adapters retain all target, calldata and lifecycle semantics. */
 export function issueRuntimeReleaseHttpFamilyPhysicalExecutionPortV1(input: Readonly<{
   readonly issuer: QualifiedExecutorAuthorityIssuer;

@@ -4,12 +4,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./production-runtime-owner": "./src/production-runtime-owner.ts",
-    "./full-graph-coarse-sweep-consumer": "./src/full-graph-coarse-sweep-consumer.ts",
-    "./full-family-terminal-consumer": "./src/full-family-terminal-consumer.ts",
-    "./six-step-terminal-consumer": "./src/six-step-terminal-consumer.ts",
-    "./six-step-production-consumer": "./src/six-step-production-consumer.ts",
-    "./performance-runtime-consumer": "./src/performance-runtime-consumer.ts",
     "./searcher-startup-consumer": "./src/searcher-startup-consumer.ts",
     "./strategy-runtime-consumer": "./src/strategy-runtime-consumer.ts"
   },

@@ -17,13 +17,10 @@ import {
 } from "../../../discovery/src/index.ts";
 import type { FamilyRawEvidenceReadPortV1 } from "../../../family-sdk/runtime/index.ts";
 import type {
-  CandidatePartitionCapabilityV1,
   CandidatePartitionReaderPortV1,
 } from "../../../../specs/candidate-partition-authority/src/index.ts";
 import { candidatePartitionKeysRoot } from "../../../../specs/candidate-partition-authority/src/index.ts";
 import {
-  type AttestationCompositionResolvedV2,
-  type AttestationIdentityIssuerProofV1,
   type AttestationIdentityOriginV1,
 } from "../internal-authority.ts";
 import {
@@ -48,7 +45,6 @@ import {
   freezeRawTransportRecord,
   freezeRejectionContext,
   freezeRequestRecord,
-  identityProofVerificationContext,
   orderedTransportFactsRoot,
   rejectionContextValues,
   rejectionProgramId,
@@ -112,6 +108,7 @@ import {
 } from "../index.ts";
 import {
   bindOutcomeAuthority,
+  bindIdentityAuthority,
   bindPartitionAuthority,
   issueAttestationValidationAuthority,
   verifyOutcomeForAuthority,
@@ -132,10 +129,11 @@ import {
   type AttestationVerifiedMemoReuseStateV1,
   type AttestationWriterConsumerV1,
 } from "./validation-authority-state.ts";
-import { validateIdentityIssuerProof } from "./identity-proof.ts";
+import type { RuntimeAuthorityProjectionV1 } from "../../../runtime-authority/src/index.ts";
+import { decodeRuntimeAuthorityProjectionV1 } from "../../../runtime-authority/src/index.ts";
 
 interface ExecutorAuthorityLeaseV1 {
-  readonly authorityRoot: Hash;
+  authorityRoot: Hash;
   workerEpoch: string;
   executorSessionHash: Hash;
   version: bigint;
@@ -145,6 +143,7 @@ interface ExecutorAuthorityLeaseV1 {
 interface ExecutorCapabilityStateV1 {
   readonly executor: RejectionTransportExecutorV1;
   readonly authority: ExecutorAuthoritySnapshotV1;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly lease: ExecutorAuthorityLeaseV1;
   readonly leaseVersion: bigint;
 }
@@ -155,9 +154,13 @@ interface ExecutorCapabilityStateV1 {
 const executorCapabilityStates = new WeakMap<object, ExecutorCapabilityStateV1>();
 const rejectionRuntimeBrands = new WeakSet<object>();
 const frameworkRuntimeBrands = new WeakSet<object>();
-const frameworkRuntimeStates = new WeakMap<object, { readonly authorityRoot: Hash }>();
+const frameworkRuntimeStates = new WeakMap<object, {
+  readonly authorityRoot: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+}>();
 interface RejectionFactRuntimeStateV1 {
   readonly executorAuthority: ExecutorAuthoritySnapshotV1;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly validateDecision: (
     decision: {
       readonly rejectionFacts: RejectionFactTokenV1;
@@ -298,13 +301,21 @@ function normalizeExecutorAuthority(
  * through composition and never receives this issuer.
  */
 export function createRejectionExecutorAuthorityIssuerInternal(
-  seed: AttestationCompositionResolvedV2,
+  input: {
+    readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
+    readonly workerEpoch: string;
+    readonly executorSessionHash: Hash;
+  },
 ): RejectionExecutorAuthorityIssuerV1 {
-  const approval = seed.provenance.runtimeBinding;
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
   const initial = normalizeExecutorAuthority({
-    authorityRoot: approval.executorAuthorityRoot,
-    workerEpoch: approval.workerEpoch,
-    executorSessionHash: approval.executorSessionHash,
+    authorityRoot: hashDomain("aloha/attestation-executor-authority/v1", {
+      runtimeAuthority,
+      workerEpoch: input.workerEpoch,
+      executorSessionHash: input.executorSessionHash,
+    }),
+    workerEpoch: input.workerEpoch,
+    executorSessionHash: input.executorSessionHash,
   }, "rejectionExecutorAuthority");
   const lease: ExecutorAuthorityLeaseV1 = {
     authorityRoot: initial.authorityRoot,
@@ -337,6 +348,7 @@ export function createRejectionExecutorAuthorityIssuerInternal(
       executorCapabilityStates.set(capability, {
         executor,
         authority: snapshot,
+        runtimeAuthority,
         lease,
         leaseVersion: lease.version,
       });
@@ -349,6 +361,11 @@ export function createRejectionExecutorAuthorityIssuerInternal(
       if (!lease.active) throw new TypeError("rejection-executor-authority-revoked");
       lease.workerEpoch = assertNonEmptyString(next.workerEpoch, "rejectionExecutorAuthority.workerEpoch");
       lease.executorSessionHash = assertHash(next.executorSessionHash, "rejectionExecutorAuthority.executorSessionHash");
+      lease.authorityRoot = hashDomain("aloha/attestation-executor-authority/v1", {
+        runtimeAuthority,
+        workerEpoch: lease.workerEpoch,
+        executorSessionHash: lease.executorSessionHash,
+      });
       lease.version += 1n;
     },
   } satisfies RejectionExecutorAuthorityIssuerV1;
@@ -606,7 +623,11 @@ export function createRejectionFactRuntimeInternal(
     workPlane: Object.freeze({ builder: Object.freeze(builder), executeAndInterpret }),
   });
   rejectionRuntimeBrands.add(runtime);
-  rejectionRuntimeStates.set(runtime, { validateDecision, executorAuthority: authority });
+  rejectionRuntimeStates.set(runtime, {
+    validateDecision,
+    executorAuthority: authority,
+    runtimeAuthority: capabilityState.runtimeAuthority,
+  });
   return runtime;
 }
 
@@ -616,10 +637,11 @@ export function createRejectionFactRuntimeInternal(
  * the content-addressed binding remains available in the durable outcome.
  */
 export function createFrameworkFailureRuntimeInternal(
-  seed: AttestationCompositionResolvedV2,
+  runtimeAuthorityInput: RuntimeAuthorityProjectionV1,
   classifier: FrameworkFailureClassifierPort,
 ): FrameworkFailureRuntimePort {
-  const issuerRoot = seed.provenance.runtimeBinding.frameworkAuthorityRoot;
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(runtimeAuthorityInput);
+  const issuerRoot = hashDomain("aloha/attestation-framework-authority/v1", { runtimeAuthority });
   const issuedTokens = new WeakSet<object>();
   const issuer: FrameworkFailureIssuerPort = {
     issue(input) {
@@ -659,7 +681,7 @@ export function createFrameworkFailureRuntimeInternal(
   };
   const runtime = Object.freeze({ issuer, classifier });
   frameworkRuntimeBrands.add(runtime);
-  frameworkRuntimeStates.set(runtime, { authorityRoot: issuerRoot });
+  frameworkRuntimeStates.set(runtime, { authorityRoot: issuerRoot, runtimeAuthority });
   return runtime;
 }
 
@@ -672,19 +694,19 @@ const outcomeFor = (
   rejectionValidator: RejectionFactRuntimeStateV1["validateDecision"] | null,
   expectedStage: Exclude<AttestationStageV1, "framework">,
   expectedIdentitySubjectHash: Hash | null,
-  identityProof: AttestationIdentityIssuerProofV1 | null,
+  identityCommitment: IdentityVerifiedV1["identityCommitment"] | null,
 ): CandidateFinalOutcomeBodyV1 => {
   const key = runCandidateKey(runId, candidate.familyCandidateKey);
   switch (decision.kind) {
     case "verified":
-      if (identityProof === null) throw new TypeError("verified-outcome-identity-proof-missing");
+      if (identityCommitment === null) throw new TypeError("verified-outcome-identity-commitment-missing");
       return deepFreeze({
         kind: "verified",
         runCandidateKey: key,
         familyCandidateKey: candidate.familyCandidateKey,
         instanceKey: decision.publication.instanceKey,
         publication: decision.publication,
-        identityProof,
+        identityCommitment,
       });
     case "chainProvenRejected":
       {
@@ -717,7 +739,7 @@ const outcomeFor = (
           familyCandidateKey: candidate.familyCandidateKey,
           proof,
           rejectionEvidence,
-          identityProof,
+          identityCommitment,
         });
       }
     case "retryable":
@@ -743,13 +765,13 @@ const outcomeFor = (
           runCandidateKey: key,
           familyCandidateKey: candidate.familyCandidateKey,
           failure: deepFreeze({ ...decision.failure, frameworkBinding: binding }),
-          identityProof,
+          identityCommitment,
         });
       }
       if (decision.failure.frameworkBinding !== null) {
         throw new Error("plugin-framework-binding-without-issuer-token");
       }
-      return deepFreeze({ kind: decision.kind, runCandidateKey: key, familyCandidateKey: candidate.familyCandidateKey, failure: decision.failure, identityProof });
+      return deepFreeze({ kind: decision.kind, runCandidateKey: key, familyCandidateKey: candidate.familyCandidateKey, failure: decision.failure, identityCommitment });
     case "invalidProgram":
       if (
         decision.failure.stage !== expectedStage
@@ -759,7 +781,7 @@ const outcomeFor = (
         || decision.failure.evidenceRoot.length === 0
         || decision.failure.frameworkBinding !== null
       ) throw new Error("failure-lineage-mismatch");
-      return deepFreeze({ kind: decision.kind, runCandidateKey: key, familyCandidateKey: candidate.familyCandidateKey, failure: decision.failure, identityProof });
+      return deepFreeze({ kind: decision.kind, runCandidateKey: key, familyCandidateKey: candidate.familyCandidateKey, failure: decision.failure, identityCommitment });
   }
 };
 
@@ -770,7 +792,7 @@ const frameworkFailure = (
   stage: Exclude<AttestationStageV1, "framework">,
   frameworkRuntime: FrameworkFailureRuntimePort,
   rejectionValidator: RejectionFactRuntimeStateV1["validateDecision"] | null,
-  identityProof: AttestationIdentityIssuerProofV1 | null,
+  identityCommitment: IdentityVerifiedV1["identityCommitment"] | null,
   thrown: unknown,
 ): CandidateFinalOutcomeBodyV1 => {
   const context: FrameworkFailureContextV1 = { runId, candidate, cutoff, stage };
@@ -794,7 +816,7 @@ const frameworkFailure = (
           frameworkBinding: binding,
         },
         frameworkFailureToken: classified as FrameworkFailureTokenV1,
-      }, frameworkRuntime, rejectionValidator, stage, null, identityProof);
+      }, frameworkRuntime, rejectionValidator, stage, null, identityCommitment);
     } catch {
       // A classifier result without the issuer's exact authority is a
       // program defect, never a retryable transport result.
@@ -810,7 +832,7 @@ const frameworkFailure = (
       evidenceRoot: candidate.candidateEvidenceRoot,
       frameworkBinding: null,
     },
-  }, frameworkRuntime, rejectionValidator, stage, null, identityProof);
+  }, frameworkRuntime, rejectionValidator, stage, null, identityCommitment);
 };
 
 function resolveRejectionTerminalValidator(
@@ -852,15 +874,17 @@ function resolveFrameworkAuthorityRoot(
   return state.authorityRoot;
 }
 
-function deriveAttestationAuthorityRoot(composition: AttestationCompositionResolvedV2): Hash {
-  const binding = composition.provenance.runtimeBinding;
+function deriveAttestationAuthorityRoot(
+  runtimeAuthority: RuntimeAuthorityProjectionV1,
+  frameworkAuthorityRoot: Hash,
+  executorAuthority: ExecutorAuthoritySnapshotV1,
+): Hash {
   return hashDomain("aloha/attestation-authority/v3", {
-    releaseProvenanceHash: composition.provenance.releaseProvenanceHash,
-    releaseAuthorityRoot: binding.releaseAuthorityRoot,
-    frameworkAuthorityRoot: binding.frameworkAuthorityRoot,
-    executorAuthorityRoot: binding.executorAuthorityRoot,
-    workerEpoch: binding.workerEpoch,
-    executorSessionHash: binding.executorSessionHash,
+    runtimeAuthority,
+    frameworkAuthorityRoot,
+    executorAuthorityRoot: executorAuthority.authorityRoot,
+    workerEpoch: executorAuthority.workerEpoch,
+    executorSessionHash: executorAuthority.executorSessionHash,
   });
 }
 
@@ -870,10 +894,7 @@ function deriveAttestationAuthorityRoot(composition: AttestationCompositionResol
  * validator or executor authority by passing a different object per call.
  */
 export function createAttestationServiceInternal(
-  input: Omit<AttestationServiceConstructorV1, "composition"> & {
-      readonly composition: AttestationCompositionResolvedV2;
-    readonly candidatePartitionReader: CandidatePartitionReaderPortV1;
-  },
+  input: AttestationServiceConstructorV1,
 ): AttestationServiceV1 {
   if (input === null || typeof input !== "object") {
     throw new TypeError("attestation-service-constructor-invalid");
@@ -883,25 +904,22 @@ export function createAttestationServiceInternal(
   if (frameworkRuntime === null || typeof frameworkRuntime !== "object") {
     throw new TypeError("attestation-service-framework-runtime-invalid");
   }
-  const composition = input.composition;
-  const provenance = composition.provenance;
-  const releaseBinding = provenance.runtimeBinding;
+  const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
   const frameworkAuthorityRoot = resolveFrameworkAuthorityRoot(frameworkRuntime);
   const executorAuthority = resolveRejectionAuthority(input.rejectionRuntime);
-  if (
-    releaseBinding.frameworkAuthorityRoot !== frameworkAuthorityRoot
-    || releaseBinding.executorAuthorityRoot !== executorAuthority.authorityRoot
-    || releaseBinding.workerEpoch !== executorAuthority.workerEpoch
-    || releaseBinding.executorSessionHash !== executorAuthority.executorSessionHash
-  ) throw new TypeError("attestation-composition-authority-mismatch");
+  const frameworkState = frameworkRuntimeStates.get(frameworkRuntime as object);
+  const rejectionState = rejectionRuntimeStates.get(input.rejectionRuntime as object);
+  if (!frameworkState || !rejectionState
+    || encodeCanonicalJson(frameworkState.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)
+    || encodeCanonicalJson(rejectionState.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)) {
+    throw new TypeError("attestation-runtime-authority-mismatch");
+  }
   const authorityState: AttestationAuthorityStateV1 = {
-    authorityRoot: deriveAttestationAuthorityRoot(composition),
-    releaseAuthorityRoot: releaseBinding.releaseAuthorityRoot,
-    releaseProvenanceHash: provenance.releaseProvenanceHash,
+    runtimeAuthority,
+    authorityRoot: deriveAttestationAuthorityRoot(runtimeAuthority, frameworkAuthorityRoot, executorAuthority),
     frameworkAuthorityRoot,
     executorAuthorityRoot: executorAuthority.authorityRoot,
-    attestationProof: provenance.attestationProof,
-    attestationProofIssuerKeyId: releaseBinding.attestationProofIssuerKeyId,
+    nextCommitmentSequence: 1n,
     outcomeCapabilities: new WeakSet<object>(),
     partitionCapabilities: new WeakSet<object>(),
     resumeCapabilities: new WeakSet<object>(),
@@ -949,7 +967,7 @@ interface AttestationIdentityContinuationStateV1 {
   materializationPromise: Promise<AttestationFinalSessionResultV1> | null;
 }
 
-function issueIdentityWithProof(
+function issueIdentityWithCommitment(
   runId: string,
   cutoff: CanonicalCutoffV1,
   candidatePartitionRoot: Hash,
@@ -958,29 +976,15 @@ function issueIdentityWithProof(
   identityOrigin: AttestationIdentityOriginV1,
   authority: AttestationAuthorityStateV1,
 ): IdentityVerifiedV1 {
-  const normalizedObservation = validateIdentityObservation(observation, "attestation.identityVerified");
-  const proofInput = identityProofVerificationContext(
+  return bindIdentityAuthority(
     runId,
     cutoff,
     candidatePartitionRoot,
     candidate,
-    normalizedObservation,
+    observation,
     identityOrigin,
-    {
-      releaseProvenanceHash: authority.releaseProvenanceHash,
-      attestationAuthorityRoot: authority.authorityRoot,
-      releaseAuthorityRoot: authority.releaseAuthorityRoot,
-      frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
-      executorAuthorityRoot: authority.executorAuthorityRoot,
-      attestationProofIssuerKeyId: authority.attestationProofIssuerKeyId,
-    },
+    authority,
   );
-  const issued = authority.attestationProof.issueIdentity(proofInput);
-  const normalizedProof = validateIdentityIssuerProof(issued, proofInput);
-  const verified = authority.attestationProof.verifyIdentity(normalizedProof, proofInput);
-  const exactVerified = validateIdentityIssuerProof(verified, proofInput);
-  if (exactVerified.proofHash !== normalizedProof.proofHash) throw new TypeError("identity-proof-issuer-result-mismatch");
-  return deepFreeze({ ...normalizedObservation, issuerProof: exactVerified });
 }
 
 /**
@@ -1001,6 +1005,9 @@ function createAttestationRunSession(
     throw new TypeError("attestationSession.candidatePartition must be an opaque capability");
   }
   const partitionBinding = candidatePartitionReader.binding(input.candidatePartition);
+  if (encodeCanonicalJson(partitionBinding.runtimeAuthority) !== encodeCanonicalJson(authority.runtimeAuthority)) {
+    throw new TypeError("attestation-session-runtime-authority-mismatch");
+  }
   const runId = assertNonEmptyString(partitionBinding.runId, "attestationSession.partition.runId");
   const cutoff = validateCutoff(partitionBinding.cutoff, "attestationSession.partition.cutoff");
   const candidatePartitionRoot = assertHash(partitionBinding.candidatePartitionRoot, "attestationSession.partition.candidatePartitionRoot");
@@ -1031,8 +1038,8 @@ function createAttestationRunSession(
       || resumeState.candidatePartitionRoot !== candidatePartitionRoot
       || encodeCanonicalJson(resumeState.cutoff) !== encodeCanonicalJson(cutoff)
       || resumeState.attestationAuthorityRoot !== authority.authorityRoot
-      || resumeState.releaseAuthorityRoot !== authority.releaseAuthorityRoot
-      || resumeState.releaseProvenanceHash !== authority.releaseProvenanceHash
+      || encodeCanonicalJson(resumeState.runtimeAuthority) !== encodeCanonicalJson(authority.runtimeAuthority)
+      || resumeState.frameworkAuthorityRoot !== authority.frameworkAuthorityRoot
       || resumeState.executorAuthorityRoot !== authority.executorAuthorityRoot
       || !candidateKeySet.has(resumeState.familyCandidateKey)
     ) throw new TypeError("attestation-identity-resume-capability-lineage-mismatch");
@@ -1060,8 +1067,8 @@ function createAttestationRunSession(
       || resumeState.candidatePartitionRoot !== candidatePartitionRoot
       || encodeCanonicalJson(resumeState.cutoff) !== encodeCanonicalJson(cutoff)
       || resumeState.attestationAuthorityRoot !== authority.authorityRoot
-      || resumeState.releaseAuthorityRoot !== authority.releaseAuthorityRoot
-      || resumeState.releaseProvenanceHash !== authority.releaseProvenanceHash
+      || encodeCanonicalJson(resumeState.runtimeAuthority) !== encodeCanonicalJson(authority.runtimeAuthority)
+      || resumeState.frameworkAuthorityRoot !== authority.frameworkAuthorityRoot
       || resumeState.executorAuthorityRoot !== authority.executorAuthorityRoot
       || !candidateKeySet.has(resumeState.familyCandidateKey)
     ) throw new TypeError("attestation-outcome-resume-capability-lineage-mismatch");
@@ -1091,9 +1098,10 @@ function createAttestationRunSession(
       reuseState.runId !== runId
       || reuseState.candidatePartitionRoot !== candidatePartitionRoot
       || encodeCanonicalJson(reuseState.cutoff) !== encodeCanonicalJson(cutoff)
-      || reuseState.authorityRoot !== authority.authorityRoot
-      || reuseState.releaseAuthorityRoot !== authority.releaseAuthorityRoot
-      || reuseState.releaseProvenanceHash !== authority.releaseProvenanceHash
+      || reuseState.attestationAuthorityRoot !== authority.authorityRoot
+      || encodeCanonicalJson(reuseState.runtimeAuthority) !== encodeCanonicalJson(authority.runtimeAuthority)
+      || reuseState.frameworkAuthorityRoot !== authority.frameworkAuthorityRoot
+      || reuseState.executorAuthorityRoot !== authority.executorAuthorityRoot
       || !candidateKeySet.has(reuseState.familyCandidateKey)
     ) throw new TypeError("attestation-memo-reuse-capability-lineage-mismatch");
     if (
@@ -1219,9 +1227,9 @@ function createAttestationRunSession(
         candidatePartitionRoot,
         candidate,
         identity,
-        releaseProvenanceHash: authority.releaseProvenanceHash,
+        runtimeAuthority: authority.runtimeAuthority,
         attestationAuthorityRoot: authority.authorityRoot,
-        releaseAuthorityRoot: authority.releaseAuthorityRoot,
+        frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
         executorAuthorityRoot: authority.executorAuthorityRoot,
       });
     }
@@ -1267,7 +1275,7 @@ function createAttestationRunSession(
     decision: Exclude<IdentityDecisionV1, IdentityVerifiedObservationV1> | InstanceDecisionV1,
     expectedStage: Exclude<AttestationStageV1, "framework">,
     expectedIdentitySubjectHash: Hash | null,
-    identityProof: AttestationIdentityIssuerProofV1 | null,
+    identityCommitment: IdentityVerifiedV1["identityCommitment"] | null,
   ): AttestationFinalSessionResultV1 => {
     const body = outcomeFor(
       runId,
@@ -1278,7 +1286,7 @@ function createAttestationRunSession(
       rejectionValidator,
       expectedStage,
       expectedIdentitySubjectHash,
-      identityProof,
+      identityCommitment,
     );
     const outcome = bindOutcomeAuthority(body, authority, {
       runId,
@@ -1335,10 +1343,10 @@ function createAttestationRunSession(
           cutoff,
           candidate,
           identity: resume.state.identity,
-          releaseProvenanceHash: authority.releaseProvenanceHash,
           candidatePartitionRoot,
+          runtimeAuthority: authority.runtimeAuthority,
           attestationAuthorityRoot: authority.authorityRoot,
-          releaseAuthorityRoot: authority.releaseAuthorityRoot,
+          frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
           executorAuthorityRoot: authority.executorAuthorityRoot,
         });
         if (expectedOutcomeHash !== resume.state.outcomeHash) {
@@ -1403,7 +1411,7 @@ function createAttestationRunSession(
             verifiedMemoSetRoot: memoReuse.state.verifiedMemoSetRoot,
             proof: reuseProof,
           });
-          const normalizedIdentity = issueIdentityWithProof(
+          const normalizedIdentity = issueIdentityWithCommitment(
             runId,
             cutoff,
             candidatePartitionRoot,
@@ -1433,7 +1441,7 @@ function createAttestationRunSession(
           rawEvidenceFor(candidate),
         );
         if (decision.kind === "identityVerified") {
-          const normalizedIdentity = issueIdentityWithProof(
+          const normalizedIdentity = issueIdentityWithCommitment(
             runId,
             cutoff,
             candidatePartitionRoot,
@@ -1528,7 +1536,7 @@ function createAttestationRunSession(
           signal,
           rawEvidenceFor(candidate),
         );
-        const result = issueFinal(candidate, decision, "materialization", expectedIdentitySubjectHash, identity.issuerProof);
+        const result = issueFinal(candidate, decision, "materialization", expectedIdentitySubjectHash, identity.identityCommitment);
         state.status = "completed";
         return result;
       } catch (error) {
@@ -1544,7 +1552,7 @@ function createAttestationRunSession(
           "materialization",
           frameworkRuntime,
           rejectionValidator,
-          identity.issuerProof,
+          identity.identityCommitment,
           error,
         );
         const result = resultFromOutcome(candidate, bindOutcomeAuthority(failure, authority, {
@@ -1669,9 +1677,9 @@ function createAttestationRunSession(
       candidatePartitionRoot: state.candidatePartitionRoot,
       familyCandidateKey: state.familyCandidateKey,
       outcomeHash: state.outcomeHash,
+      runtimeAuthority: authority.runtimeAuthority,
       attestationAuthorityRoot: authority.authorityRoot,
-      releaseAuthorityRoot: authority.releaseAuthorityRoot,
-      releaseProvenanceHash: authority.releaseProvenanceHash,
+      frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
       executorAuthorityRoot: authority.executorAuthorityRoot,
       kind: state.outcome ? "final" as const : "partial-identity" as const,
       identity: state.identity,
@@ -1754,7 +1762,7 @@ export async function probeRetryableCandidate(
   if (
     stored.runId !== runId
     || stored.candidatePartitionBinding.runId !== runId
-    || stored.candidatePartitionBinding.candidatePartitionRoot !== stored.before.outcomeIssuerProof.candidatePartitionRoot
+    || stored.candidatePartitionBinding.candidatePartitionRoot !== stored.before.outcomeCommitment.candidatePartitionRoot
     || stored.before.familyCandidateKey !== familyCandidateKey
     || stored.before.runCandidateKey !== runCandidateKey(runId, familyCandidateKey)
     || stored.before.failure.candidateSubjectHash !== stored.candidateSubjectHash

@@ -10,15 +10,15 @@ const deploymentPorts = new WeakMap<object, RevmWorkerDeploymentStateV1>();
 /**
  * The worker pool must not receive a structural factory/qualification pair.
  * Deployment packaging issues this process-local capability after it has
- * selected the executor implementation.  Runtime-release-authority performs
- * the second, signed-binding join before the port reaches bootstrap.
+ * selected the executor implementation. Runtime composition performs the
+ * second authority join before the port reaches bootstrap.
  */
 export type RevmWorkerDeploymentPortV1 = object;
 
 export type RevmWorkerDeploymentHashV1 = `0x${string}`;
 
-/** Structural data held behind the opaque port; the signed exact join lives
- * in runtime-release-authority, not in this worker transport package. */
+/** Structural data held behind the opaque port; the exact authority join lives
+ * outside this worker transport package. */
 export interface RevmWorkerDeploymentSelectedExecutorV1 {
   readonly executorKind: string;
   readonly engineBuildFingerprint: RevmWorkerDeploymentHashV1;
@@ -54,7 +54,7 @@ function assertQualification(value: unknown): asserts value is RevmWorkerQualifi
   }
 }
 
-/** Issue the low-level opaque deployment capability used by release packaging. */
+/** Issue the low-level opaque deployment capability used by runtime packaging. */
 export function issueRevmWorkerDeploymentPort(input: {
   readonly factory: RevmWorkerFactory;
   readonly qualification: RevmWorkerQualification;
@@ -85,7 +85,7 @@ export function readIssuedRevmWorkerDeploymentPort(value: unknown): RevmWorkerDe
   return state;
 }
 
-/** Runtime-release composition registers the narrow owner edge once. */
+/** Runtime composition registers the narrow owner edge once. */
 export function issueRevmWorkerAuthorityIssuer(value: RevmWorkerAuthorityIssuer): RevmWorkerAuthorityIssuer {
   if (value === null || typeof value !== "object" || typeof value.issue !== "function" || typeof value.assertCurrent !== "function") {
     throw new TypeError("REVM worker authority issuer is invalid");
@@ -95,6 +95,6 @@ export function issueRevmWorkerAuthorityIssuer(value: RevmWorkerAuthorityIssuer)
 }
 
 export function assertIssuedRevmWorkerAuthorityIssuer(value: unknown): RevmWorkerAuthorityIssuer {
-  if (value === null || typeof value !== "object" || !issued.has(value)) throw new TypeError("REVM worker authority issuer is not release-issued");
+  if (value === null || typeof value !== "object" || !issued.has(value)) throw new TypeError("REVM worker authority issuer is not runtime-issued");
   return value as RevmWorkerAuthorityIssuer;
 }

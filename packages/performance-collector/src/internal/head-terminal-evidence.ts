@@ -23,7 +23,7 @@ export interface PerformanceHeadTerminalEvidenceCapabilityV1 {
 }
 
 export interface PerformanceSixStepCompletionEvidenceV1 {
-  readonly mode: "unsigned-dry-run";
+  readonly mode: "dry-run";
   readonly evidenceRoot: Hash;
 }
 
@@ -129,7 +129,7 @@ function validateDraft(value: PerformanceHeadTerminalEvidenceDraftV1): Performan
     positiveHash(candidate.evidenceRoot, `performanceHeadTerminalEvidence.candidateTerminals[${index}].evidenceRoot`);
     if (candidate.sixStepCompletion !== null) {
       assertExactKeys(candidate.sixStepCompletion, SIX_STEP_COMPLETION_KEYS, `performanceHeadTerminalEvidence.candidateTerminals[${index}].sixStepCompletion`);
-      if (candidate.sixStepCompletion.mode !== "unsigned-dry-run") throw new TypeError("six-step completion must be an unsigned dry run");
+      if (candidate.sixStepCompletion.mode !== "dry-run") throw new TypeError("six-step completion must be an unsigned dry run");
       positiveHash(candidate.sixStepCompletion.evidenceRoot, `performanceHeadTerminalEvidence.candidateTerminals[${index}].sixStepCompletion.evidenceRoot`);
       if (candidate.outcome !== "verified") throw new TypeError("only a verified candidate may carry six-step completion evidence");
     }

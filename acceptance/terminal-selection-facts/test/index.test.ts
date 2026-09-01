@@ -126,8 +126,8 @@ function processEvidence(): TerminalSelectionProcessEvidenceV1 {
     source: Object.freeze({ chainId: "1", number: "100", hash: h("head"), stateRoot: h("state") }),
     programHash: h("program"),
     finalSimulationReceiptHash: h("final-sim"),
-    unsignedDryRunCandidateId: h("dry-run-candidate"),
-    unsignedDryRunLineageHash: h("dry-run-lineage"),
+    dryRunCandidateId: h("dry-run-candidate"),
+    dryRunLineageHash: h("dry-run-lineage"),
   });
   const stage12Root = hashDomain("aloha/searcher-production-evidence-stage12/v1", stage12 as unknown as CanonicalJson);
   const traceRoot = h("trace");

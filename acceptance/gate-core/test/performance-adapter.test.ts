@@ -113,7 +113,7 @@ async function buildBundle(unhealthy = false): Promise<CollectedPerformanceV1> {
       outcome: unhealthy && index === 50 ? "timeout" : index === 0 ? "complete-candidates-terminal" : "complete-no-candidate",
       candidatePathDurationUs: index === 0 ? "500" : null,
       sourceCoarseDurationUs: "100", coarseDurationUs: "90", plannerExactProgramDurationUs: index === 0 ? "200" : "0", finalSimulationQueueWaitUs: index === 0 ? "10" : "0", finalSimulationServiceUs: index === 0 ? "100" : "0", overheadDurationUs: "10",
-      candidateTerminals: index === 0 ? [{ candidateId: h("1"), outcome: "verified", timingUs: "500", evidenceRoot: h("2"), sixStepCompletion: { mode: "unsigned-dry-run", evidenceRoot: h("5") } }] : [],
+      candidateTerminals: index === 0 ? [{ candidateId: h("1"), outcome: "verified", timingUs: "500", evidenceRoot: h("2"), sixStepCompletion: { mode: "dry-run", evidenceRoot: h("5") } }] : [],
       workReceiptRoot: h("3"),
       queueTelemetry: [{ lane: "producer-critical", resource: "rpc", current: "0", max: "4", oldestAgeUs: "0", accepted: "1", rejected: "0", cancelled: "0" }],
       permitAccounting: [{ ownerRef: "producer", lane: "producer-critical", resource: "rpc", issued: "1", released: "1", active: "0" }],

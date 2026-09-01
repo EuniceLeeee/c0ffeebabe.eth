@@ -30,7 +30,7 @@ const manifestPath = fileURLToPath(new URL("../../revm-worker-rust/Cargo.toml", 
 const binaryPath = fileURLToPath(new URL("../../revm-worker-rust/target/debug/aloha-revm-worker", import.meta.url));
 
 const qualification: RevmWorkerQualification = Object.freeze({
-  // Keep the test-only release fixture and the actual executable's hello
+  // Keep the test-only runtime fixture and the actual executable's hello
   // projection joined on the same selected-executor fingerprints.
   engineBuildFingerprint: h("engine"),
   executableFingerprint: h("executable"),

@@ -54,6 +54,10 @@ import {
   validateRawEvidenceLocatorContents,
 } from "../../discovery/src/index.ts";
 import type { RecentObservationReceiptV1 } from "../../observation/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../runtime-authority/src/index.ts";
 
 export const FAMILY_RUNTIME_STAGES = Object.freeze([
   "nomination",
@@ -239,7 +243,7 @@ export interface RuntimeStageExecutorV1 {
 
 /**
  * Family-owned definition. It contains no generated owner/interpreter ref,
- * executor, issuer, or process authority. The release composition supplies
+ * executor, issuer, or process authority. The runtime composition supplies
  * the exact StageCapabilityRefV1 separately.
  */
 export interface FamilyStageDefinitionV1 {
@@ -519,7 +523,7 @@ export interface FamilySourcePlanPhysicalRequestV1 {
 
 /**
  * Exact transport-neutral JSON-RPC envelope emitted by generated Family
- * source semantics.  The release owner supplies provider/source/authority
+ * source semantics.  The runtime owner supplies provider/source/authority
  * fields and records the returned bytes; a Family can never provide those
  * fields itself.
  */
@@ -541,8 +545,7 @@ export interface FamilySourcePlanPhysicalObservationV1 {
   readonly kind: "family-source-plan-physical-observation";
   readonly version: 1;
   readonly requestId: Hash;
-  readonly releaseBindingId: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly sourceAuthorityRoot: Hash;
   readonly sourceAnchorRoot: Hash;
   readonly provider: string;
@@ -557,7 +560,7 @@ export interface FamilySourcePlanPhysicalObservationV1 {
 
 /**
  * A successful physical read returns its canonical response and an immutable
- * copy of the owner-recorded raw locator. The release owner retains the
+ * copy of the owner-recorded raw locator. The runtime owner retains the
  * authoritative copy and exact-compares it after Family interpretation.
  */
 export interface FamilySourcePlanPhysicalResultV1 {
@@ -620,8 +623,7 @@ export function decodeFamilySourcePlanPhysicalObservation(
       ? field
       : (() => { throw new TypeError(`${itemPath} is invalid`); })(),
     requestId: (field, itemPath) => assertHash(field, itemPath),
-    releaseBindingId: (field, itemPath) => assertHash(field, itemPath),
-    releaseProvenanceHash: (field, itemPath) => assertHash(field, itemPath),
+    runtimeAuthority: field => decodeRuntimeAuthorityProjectionV1(field),
     sourceAuthorityRoot: (field, itemPath) => assertHash(field, itemPath),
     sourceAnchorRoot: (field, itemPath) => assertHash(field, itemPath),
     provider: (field, itemPath) => assertNonEmptyString(field, itemPath),
@@ -735,7 +737,7 @@ export interface FamilySourcePlanNominationInputV1 {
 
 /**
  * The exact Family-owned semantic program imported by generated composition.
- * It emits claims only; the release discovery owner derives denominators,
+ * It emits claims only; the runtime discovery owner derives denominators,
  * qualification bindings and the final receipt/closure mechanically.
  */
 export interface FamilySourcePlanNominationProgramV1 {
@@ -774,7 +776,7 @@ export function assertFamilySourcePlanNominationProgram(
 }
 
 /**
- * Generated static import for one Family source plan. The release owner picks
+ * Generated static import for one Family source plan. The runtime owner picks
  * the exact plan set; the Family owns physical request projection and
  * nomination meaning.
  */

@@ -16,7 +16,7 @@ import {
 } from "../../strategy-composition/src/index.ts";
 import {
   createGeneratedStrategyRuntimeFactory,
-  issueGeneratedStrategyRuntimeAuthorityCapability,
+  issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability,
 } from "../../strategy-composition/src/internal/generated-runtime-composition.ts";
 import { issueStrategyPlanningTriggerCapabilityV1 } from "../../strategy-composition/src/internal/trigger-owner.ts";
 import { compileStrategy, defineStrategy } from "../../strategy-sdk/src/index.ts";
@@ -47,7 +47,7 @@ import {
 } from "../src/internal/qualification-owner.ts";
 import { issueCoarseEnumerationBindingV1, issueCoarseRouteBindingV1 } from "../src/internal/search-owner.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 
@@ -55,15 +55,14 @@ const h = (label: string): Hash => hashDomain("test/coarse-economics/v3", label)
 const source = Object.freeze({ chainId: "1", number: "100", hash: h("block"), stateRoot: h("state") });
 const assetA = h("asset-a");
 const assetB = h("asset-b");
-const releaseProvenanceHash = h("release-provenance");
+const releaseProvenanceHash = null;
 const releaseMembershipRoot = h("release-membership");
-const signedRuntimeAuthorityDescriptor = createSignedReleaseRuntimeAuthorityDescriptorV1({
-  authorityClass: "signed-release",
+const runtimeAuthorityDescriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+  authorityClass: "dry-run",
   runtimeBindingId: h("runtime-binding"),
-  releaseProvenanceHash,
   implementationCommit: "a".repeat(40),
 });
-const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(signedRuntimeAuthorityDescriptor);
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(runtimeAuthorityDescriptor);
 const objectiveBody = Object.freeze({ numeraireAssetRef: assetA, minNetGain: "0", maxGas: "1000000", maxValueAtRisk: "1000000000" });
 const objective: CoarseAdmissionObjectiveV1 = Object.freeze({ objectiveRef: hashDomain("aloha/search-objective/v1", objectiveBody), ...objectiveBody });
 
@@ -99,10 +98,10 @@ const strategyFactory = createGeneratedStrategyRuntimeFactory({
   descriptor: strategyDescriptor,
   issuers: [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
 });
-const strategyComposition = strategyFactory(issueGeneratedStrategyRuntimeAuthorityCapability({
+const strategyComposition = strategyFactory(issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
   factory: strategyFactory,
-  qualifiedCapabilityRefsRoot: strategyDescriptor.proposedCapabilitySetRoot,
-  runtimeAuthority: signedRuntimeAuthorityDescriptor,
+  declaredCapabilitySetRoot: strategyDescriptor.proposedCapabilitySetRoot,
+  runtimeAuthority: runtimeAuthorityDescriptor,
   assertCurrent: () => {},
 }));
 
@@ -122,7 +121,7 @@ function planningProblem(graphRoot: Hash, edges: readonly StrategyGraphEdgeV1[],
     graphRoot,
     readyRecordHash: h("ready"),
     runtimeAuthority,
-    releaseProvenanceHash,
+    runtimeMembershipHash: strategyComposition.runtimeMembershipHash,
     sourceHash: source.hash,
   });
   return strategyComposition.issuePlanningProblems({
@@ -191,10 +190,10 @@ function highCardinalityPlannerEnumeration(): IssuedPlanningEnumerationV1 {
   });
   const issuer = Object.freeze({ ...ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER, planningTemplateHash: planningHash });
   const factory = createGeneratedStrategyRuntimeFactory({ descriptor, issuers: [issuer] });
-  const composition = factory(issueGeneratedStrategyRuntimeAuthorityCapability({
+  const composition = factory(issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
     factory,
-    qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
-    runtimeAuthority: signedRuntimeAuthorityDescriptor,
+    declaredCapabilitySetRoot: descriptor.proposedCapabilitySetRoot,
+    runtimeAuthority: runtimeAuthorityDescriptor,
     assertCurrent: () => {},
   }));
   const graphRoot = h("graph-high-cardinality");
@@ -204,7 +203,7 @@ function highCardinalityPlannerEnumeration(): IssuedPlanningEnumerationV1 {
     graphRoot,
     readyRecordHash: h("ready"),
     runtimeAuthority,
-    releaseProvenanceHash,
+    runtimeMembershipHash: composition.runtimeMembershipHash,
     sourceHash: source.hash,
   });
   const edges = [
@@ -281,7 +280,6 @@ function qualify(
   const capability = Object.freeze(Object.create(null)) as CoarseProjectionCapabilityV1;
   const proofCapability = Object.freeze(Object.create(null));
   const owner = issueQualifiedCoarseProjectionOwnerCapabilityV1({
-    releaseProvenanceHash,
     releaseMembershipRoot: options.membershipRoot ?? releaseMembershipRoot,
     descriptor: descriptor(options.wrongOwner ? h(`${label}:wrong-owner`) : projection.ownerRef, label),
     port: {
@@ -390,7 +388,6 @@ test("release-qualified opaque owner rejects fake callbacks, shape clones, wrong
   });
   assert.throws(() => issueCoarseProjectionServiceV1({ owner: { read: () => projection } }), /not issued/);
   const qualifiedOwner = issueQualifiedCoarseProjectionOwnerCapabilityV1({
-    releaseProvenanceHash,
     releaseMembershipRoot,
     descriptor: descriptor(projection.ownerRef, "clone-owner"),
     port: {

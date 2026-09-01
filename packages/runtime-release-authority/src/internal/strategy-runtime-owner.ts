@@ -1,7 +1,6 @@
 import {
   assertGeneratedStrategyRuntimeFactory,
   issueGeneratedStrategyRuntimeAuthorityCapability,
-  issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability,
   readGeneratedStrategyRuntimeFactoryMetadata,
   type GeneratedStrategyRuntimeFactoryV1,
 } from "../../../../packages/strategy-composition/src/internal/generated-runtime-composition.ts";
@@ -18,40 +17,18 @@ import {
   type ProducerBoundTriggerV1,
 } from "../../../../packages/producer/src/index.ts";
 import { assertHash, type Hash } from "../../../../packages/canonical-codec/src/index.ts";
-import type { RuntimeReleaseAuthorityV1 } from "../index.ts";
 import {
-  assertActiveRuntimeReleaseAuthorityState,
-} from "./state.ts";
-import { runtimeReleaseBindingProvenanceHash } from "../../../../specs/release-authority/src/index.ts";
-import { readActiveSignedRuntimeAuthorityDescriptorV1 } from "./runtime-authority-descriptor-owner.ts";
-import {
-  decodeUnsignedDryRunRuntimeAuthorityDescriptorV1,
-  type UnsignedDryRunRuntimeAuthorityDescriptorV1,
+  decodeRuntimeAuthorityDescriptorV1,
+  type RuntimeAuthorityDescriptorV1,
 } from "../../../../packages/runtime-authority/src/index.ts";
 
 /**
  * The application receives this owner-issued service, never a raw generated
  * factory, structural StrategyRuntimeComposition, or Strategy trigger issuer.
  * The service consumes the Producer owner's opaque trigger and closes the
- * generated factory over the verified runtime-release capability.
+ * generated factory over the exact runtime capability.
  */
-export interface RuntimeReleaseStrategyRuntimeMetadataV1 {
-  readonly definitionCatalogRoot: Hash;
-  readonly strategyCatalogRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
-  readonly compositionRoot: Hash;
-}
-
-export interface RuntimeReleaseStrategyEvidenceExpectationV1 {
-  readonly releaseProvenanceHash: Hash;
-  readonly definitionCatalogRoot: Hash;
-  readonly strategyCatalogRoot: Hash;
-  readonly strategyCompositionRoot: Hash;
-  readonly strategyIssuerClosureRoot: Hash;
-  readonly entries: ReturnType<typeof readGeneratedStrategyRuntimeFactoryMetadata>["strategies"];
-}
-
-export interface RuntimeReleaseStrategyPlanningRequestV1 {
+export interface StrategyRuntimePlanningRequestV1 {
   readonly trigger: ProducerBoundTriggerV1;
   readonly binding: StrategyGraphBindingV1;
   readonly edges: readonly StrategyGraphEdgeV1[];
@@ -63,26 +40,17 @@ export interface RuntimeReleaseStrategyPlanningRequestV1 {
   readonly expectedHeadHash: Hash;
 }
 
-export interface RuntimeReleaseStrategyPlanningResultV1 {
+export interface StrategyRuntimePlanningResultV1 {
   readonly planningProblem: IssuedStrategyPlanningProblemV1;
   readonly strategyCompositionRoot: Hash;
-}
-
-export interface RuntimeReleaseStrategyRuntimeServiceV1 {
-  readonly readMetadata: () => RuntimeReleaseStrategyRuntimeMetadataV1;
-  readonly readEvidenceExpectation: () => RuntimeReleaseStrategyEvidenceExpectationV1;
-  readonly issuePlanningProblem: (
-    input: RuntimeReleaseStrategyPlanningRequestV1,
-  ) => RuntimeReleaseStrategyPlanningResultV1;
 }
 
 function issuePlanningProblemFromComposition(
   composition: ReturnType<GeneratedStrategyRuntimeFactoryV1>,
   assertCurrent: () => void,
-  input: RuntimeReleaseStrategyPlanningRequestV1,
+  input: StrategyRuntimePlanningRequestV1,
   runtimeMembershipHash: Hash,
-  releaseProvenanceHash?: Hash,
-): RuntimeReleaseStrategyPlanningResultV1 {
+): StrategyRuntimePlanningResultV1 {
   assertCurrent();
   const producerTrigger = readIssuedProducerBoundTriggerV1(input.trigger);
   const expectedHeadHash = assertHash(input.expectedHeadHash, "strategyRuntime.expectedHeadHash");
@@ -120,105 +88,23 @@ function issuePlanningProblemFromComposition(
   if (planningProblem.strategyCompositionRoot !== composition.compositionRoot
     || planningProblem.strategyIssuerClosureRoot !== composition.issuerClosureRoot
     || planningProblem.readyRecordHash !== input.binding.readyRecordHash
-    || (planningProblem.runtimeMembershipHash ?? planningProblem.releaseProvenanceHash) !== runtimeMembershipHash
-    || (releaseProvenanceHash === undefined
-      ? Object.prototype.hasOwnProperty.call(planningProblem, "releaseProvenanceHash")
-      : planningProblem.releaseProvenanceHash !== releaseProvenanceHash)) {
+    || planningProblem.runtimeMembershipHash !== runtimeMembershipHash) {
     throw new TypeError("Strategy planning problem runtime membership mismatch");
   }
   assertCurrent();
   return Object.freeze({ planningProblem, strategyCompositionRoot: composition.compositionRoot });
 }
 
-const issued = new WeakMap<object, {
-  readonly authority: RuntimeReleaseAuthorityV1;
-  readonly version: bigint;
-  readonly bindingId: string;
-}>();
+const issued = new WeakMap<object, { readonly assertCurrent: () => void }>();
 
-const unsignedIssued = new WeakMap<object, { readonly assertCurrent: () => void }>();
-
-export function issueRuntimeReleaseStrategyRuntimeService(
-  authorityValue: unknown,
-  factoryValue: unknown,
-): RuntimeReleaseStrategyRuntimeServiceV1 {
-  const authority = authorityValue as RuntimeReleaseAuthorityV1;
-  const state = assertActiveRuntimeReleaseAuthorityState(authorityValue);
-  assertGeneratedStrategyRuntimeFactory(factoryValue);
-  const factory = factoryValue as GeneratedStrategyRuntimeFactoryV1;
-  const factoryMetadata = readGeneratedStrategyRuntimeFactoryMetadata(factory);
-  if (factoryMetadata.proposedCapabilitySetRoot !== state.binding.qualifiedCapabilityRefsRoot) {
-    throw new TypeError("generated Strategy runtime factory is not bound to the signed capability set");
-  }
-  const releaseProvenanceHash = runtimeReleaseBindingProvenanceHash(state.binding);
-  const runtimeAuthority = readActiveSignedRuntimeAuthorityDescriptorV1(authority);
-  const version = state.version;
-  const capability = issueGeneratedStrategyRuntimeAuthorityCapability({
-    factory,
-    qualifiedCapabilityRefsRoot: state.binding.qualifiedCapabilityRefsRoot,
-    runtimeAuthority,
-    assertCurrent: () => {
-      const current = assertActiveRuntimeReleaseAuthorityState(authority);
-      if (current.version !== version || current.binding.bindingId !== state.binding.bindingId) {
-        throw new TypeError("generated Strategy runtime authority stale after runtime release rotation");
-      }
-    },
-  });
-  const assertCurrent = () => {
-    const current = assertActiveRuntimeReleaseAuthorityState(authority);
-    if (current.version !== version || current.binding.bindingId !== state.binding.bindingId) {
-      throw new TypeError("generated Strategy runtime authority stale after runtime release rotation");
-    }
-  };
-  const composition = factory(capability);
-  if (typeof composition.definitionCatalogRoot !== "string") {
-    throw new TypeError("generated Strategy runtime composition is invalid");
-  }
-  const runtimeMetadata: RuntimeReleaseStrategyRuntimeMetadataV1 = Object.freeze({
-    definitionCatalogRoot: composition.definitionCatalogRoot,
-    strategyCatalogRoot: factoryMetadata.strategyCatalogRoot,
-    releaseProvenanceHash,
-    compositionRoot: composition.compositionRoot,
-  });
-  const evidenceExpectation: RuntimeReleaseStrategyEvidenceExpectationV1 = Object.freeze({
-    releaseProvenanceHash,
-    definitionCatalogRoot: composition.definitionCatalogRoot,
-    strategyCatalogRoot: factoryMetadata.strategyCatalogRoot,
-    strategyCompositionRoot: composition.compositionRoot,
-    strategyIssuerClosureRoot: composition.issuerClosureRoot,
-    entries: factoryMetadata.strategies,
-  });
-  const service: RuntimeReleaseStrategyRuntimeServiceV1 = Object.freeze({
-    readMetadata() {
-      assertCurrent();
-      return runtimeMetadata;
-    },
-    readEvidenceExpectation() {
-      assertCurrent();
-      return evidenceExpectation;
-    },
-    issuePlanningProblem(input: RuntimeReleaseStrategyPlanningRequestV1) {
-      return issuePlanningProblemFromComposition(
-        composition,
-        assertCurrent,
-        input,
-        releaseProvenanceHash,
-        releaseProvenanceHash,
-      );
-    },
-  });
-  issued.set(service, Object.freeze({ authority, version, bindingId: state.binding.bindingId }));
-  return service;
-}
-
-export interface UnsignedDryRunStrategyRuntimeMetadataV1 {
+export interface StrategyRuntimeMetadataV1 {
   readonly definitionCatalogRoot: Hash;
   readonly strategyCatalogRoot: Hash;
   readonly runtimeMembershipHash: Hash;
   readonly compositionRoot: Hash;
 }
 
-export interface UnsignedDryRunStrategyEvidenceExpectationV1 {
+export interface StrategyEvidenceExpectationV1 {
   readonly runtimeMembershipHash: Hash;
   readonly definitionCatalogRoot: Hash;
   readonly strategyCatalogRoot: Hash;
@@ -227,24 +113,26 @@ export interface UnsignedDryRunStrategyEvidenceExpectationV1 {
   readonly entries: ReturnType<typeof readGeneratedStrategyRuntimeFactoryMetadata>["strategies"];
 }
 
-export interface UnsignedDryRunStrategyRuntimeServiceV1 {
-  readonly readMetadata: () => UnsignedDryRunStrategyRuntimeMetadataV1;
-  readonly readEvidenceExpectation: () => UnsignedDryRunStrategyEvidenceExpectationV1;
-  readonly issuePlanningProblem: RuntimeReleaseStrategyRuntimeServiceV1["issuePlanningProblem"];
+export interface StrategyRuntimeServiceV1 {
+  readonly readMetadata: () => StrategyRuntimeMetadataV1;
+  readonly readEvidenceExpectation: () => StrategyEvidenceExpectationV1;
+  readonly issuePlanningProblem: (
+    input: StrategyRuntimePlanningRequestV1,
+  ) => StrategyRuntimePlanningResultV1;
 }
 
-export function issueUnsignedDryRunStrategyRuntimeService(input: {
-  readonly runtimeAuthority: UnsignedDryRunRuntimeAuthorityDescriptorV1;
+export function issueStrategyRuntimeService(input: {
+  readonly runtimeAuthority: RuntimeAuthorityDescriptorV1;
   readonly factory: GeneratedStrategyRuntimeFactoryV1;
   readonly assertCurrent: () => void;
-}): UnsignedDryRunStrategyRuntimeServiceV1 {
+}): StrategyRuntimeServiceV1 {
   if (input === null || typeof input !== "object" || typeof input.assertCurrent !== "function") {
-    throw new TypeError("unsigned dry-run Strategy runtime authority is unavailable");
+    throw new TypeError("Runtime Strategy runtime authority is unavailable");
   }
-  const runtimeAuthority = decodeUnsignedDryRunRuntimeAuthorityDescriptorV1(input.runtimeAuthority);
+  const runtimeAuthority = decodeRuntimeAuthorityDescriptorV1(input.runtimeAuthority);
   assertGeneratedStrategyRuntimeFactory(input.factory);
   const factoryMetadata = readGeneratedStrategyRuntimeFactoryMetadata(input.factory);
-  const capability = issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
+  const capability = issueGeneratedStrategyRuntimeAuthorityCapability({
     factory: input.factory,
     declaredCapabilitySetRoot: factoryMetadata.proposedCapabilitySetRoot,
     runtimeAuthority,
@@ -253,7 +141,7 @@ export function issueUnsignedDryRunStrategyRuntimeService(input: {
   const composition = input.factory(capability);
   const runtimeMembershipHash = assertHash(
     composition.runtimeMembershipHash,
-    "unsignedStrategyRuntime.runtimeMembershipHash",
+    "strategyRuntime.runtimeMembershipHash",
   );
   const metadata = Object.freeze({
     definitionCatalogRoot: composition.definitionCatalogRoot,
@@ -269,7 +157,7 @@ export function issueUnsignedDryRunStrategyRuntimeService(input: {
     strategyIssuerClosureRoot: composition.issuerClosureRoot,
     entries: factoryMetadata.strategies,
   });
-  const service: UnsignedDryRunStrategyRuntimeServiceV1 = Object.freeze({
+  const service: StrategyRuntimeServiceV1 = Object.freeze({
     readMetadata() {
       input.assertCurrent();
       return metadata;
@@ -278,7 +166,7 @@ export function issueUnsignedDryRunStrategyRuntimeService(input: {
       input.assertCurrent();
       return expectation;
     },
-    issuePlanningProblem(request: RuntimeReleaseStrategyPlanningRequestV1) {
+    issuePlanningProblem(request: StrategyRuntimePlanningRequestV1) {
       return issuePlanningProblemFromComposition(
         composition,
         input.assertCurrent,
@@ -287,28 +175,15 @@ export function issueUnsignedDryRunStrategyRuntimeService(input: {
       );
     },
   });
-  unsignedIssued.set(service, Object.freeze({ assertCurrent: input.assertCurrent }));
+  issued.set(service, Object.freeze({ assertCurrent: input.assertCurrent }));
   return service;
 }
 
-export function assertIssuedUnsignedDryRunStrategyRuntimeService(
+export function assertIssuedStrategyRuntimeService(
   value: unknown,
-): asserts value is UnsignedDryRunStrategyRuntimeServiceV1 {
-  if (value === null || typeof value !== "object") throw new TypeError("unsigned dry-run Strategy runtime service is not owner-issued");
-  const state = unsignedIssued.get(value);
-  if (state === undefined) throw new TypeError("unsigned dry-run Strategy runtime service is not owner-issued");
+): asserts value is StrategyRuntimeServiceV1 {
+  if (value === null || typeof value !== "object") throw new TypeError("Runtime Strategy runtime service is not owner-issued");
+  const state = issued.get(value);
+  if (state === undefined) throw new TypeError("Runtime Strategy runtime service is not owner-issued");
   state.assertCurrent();
-}
-
-export function assertIssuedRuntimeReleaseStrategyRuntimeService(
-  value: unknown,
-): asserts value is RuntimeReleaseStrategyRuntimeServiceV1 {
-  if (value === null || typeof value !== "object" || !issued.has(value)) {
-    throw new TypeError("runtime-release Strategy runtime service is not owner-issued");
-  }
-  const state = issued.get(value)!;
-  const current = assertActiveRuntimeReleaseAuthorityState(state.authority);
-  if (current.version !== state.version || current.binding.bindingId !== state.bindingId) {
-    throw new TypeError("runtime-release Strategy runtime service is stale");
-  }
 }

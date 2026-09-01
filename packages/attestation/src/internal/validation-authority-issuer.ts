@@ -1,57 +1,125 @@
 import {
   deepFreeze,
+  encodeCanonicalJson,
   hashCanonicalPartition,
   hashDomain,
   type Hash,
 } from "../../../canonical-codec/src/index.ts";
+import { validateInstancePublication } from "../../../catalog/src/index.ts";
+import type { CandidateRecordV1, CanonicalCutoffV1 } from "../../../discovery/src/index.ts";
+import { ATTESTATION_VALIDATION_AUTHORITY_BRAND } from "../authority-brand.ts";
 import {
   attestationPartialIdentitySemanticHash,
-  candidateFinalOutcomeHash,
   candidateFinalOutcomeBodyHash,
-  identityProofVerificationContext,
-  validateIdentityObservation,
+  candidateFinalOutcomeHash,
+  identityCommitmentIssueInput,
+  identityObservationSemanticHash,
   validateAttestationPartition,
   validateCandidateFinalOutcome,
-  type AttestationIdentityResumeInputV1,
+  validateIdentityObservation,
+  verifiedIdentitySubjectHash,
   type AttestationIdentityResumeCapabilityV1,
-  type AttestationOutcomeResumeInputV1,
-  type AttestationOutcomeResumeCapabilityV1,
+  type AttestationOutcomeBindingContextV1,
   type AttestationOutcomeCapabilityV1,
+  type AttestationOutcomeResumeCapabilityV1,
+  type AttestationOutcomeResumeInputV1,
   type AttestationOutcomeValidationContextV1,
   type AttestationPartitionCapabilityV1,
   type AttestationPartitionV1,
   type AttestationPersistenceBatchClaimV1,
   type AttestationPersistenceCapabilityV1,
-  type AttestationWriterCapabilityV1,
-  type CandidateFinalOutcomeV1,
-  type AttestationOutcomeBindingContextV1,
   type AttestationValidationAuthorityV1,
-  type IdentityVerifiedV1,
   type AttestationVerifiedMemoReuseCapabilityV1,
   type AttestationVerifiedMemoReuseInputV1,
+  type AttestationWriterCapabilityV1,
+  type CandidateFinalOutcomeBodyV1,
+  type CandidateFinalOutcomeV1,
+  type IdentityVerifiedObservationV1,
+  type IdentityVerifiedV1,
 } from "../index.ts";
-import { validateOutcomeIssuerProof } from "./outcome-proof.ts";
-import { validateIdentityIssuerProof } from "./identity-proof.ts";
-import type { CandidateRecordV1, CanonicalCutoffV1 } from "../../../discovery/src/index.ts";
-import { ATTESTATION_VALIDATION_AUTHORITY_BRAND } from "../authority-brand.ts";
+import {
+  createAttestationIdentityCommitmentV1,
+  createAttestationOutcomeCommitmentV1,
+  decodeAttestationIdentityCommitmentV1,
+  attestationIdentityCommitmentPayloadFromIssueInputV1,
+  attestationOutcomeCommitmentPayloadFromIssueInputV1,
+} from "../commitment.ts";
 import {
   attestationOutcomeStates,
   attestationPartitionStates,
-  type AttestationAuthorityStateV1,
-  registerAttestationOutcomeCapability,
-  registerAttestationPartitionCapability,
   registerAttestationIdentityResumeCapability,
+  registerAttestationOutcomeCapability,
   registerAttestationOutcomeResumeCapability,
+  registerAttestationPartitionCapability,
   registerAttestationValidationAuthority,
   registerAttestationVerifiedMemoReuseCapability,
+  type AttestationAuthorityStateV1,
   type AttestationIdentityResumeResolvedInputV1,
 } from "./validation-authority-state.ts";
-import { validateInstancePublication } from "../../../catalog/src/index.ts";
 
-type AttestationOutcomeBodyV1 = Omit<
-  AttestationOutcomeCapabilityV1,
-  "attestationAuthorityRoot" | "releaseAuthorityRoot" | "releaseProvenanceHash" | "executorAuthorityRoot" | "outcomeIssuerProof"
->;
+type AttestationOutcomeBodyV1 = CandidateFinalOutcomeBodyV1;
+
+function sameCanonical(left: unknown, right: unknown): boolean {
+  return encodeCanonicalJson(left) === encodeCanonicalJson(right);
+}
+
+function nextSequence(state: AttestationAuthorityStateV1): string {
+  const value = state.nextCommitmentSequence;
+  state.nextCommitmentSequence += 1n;
+  return String(value);
+}
+
+function assertAuthorityFacts(
+  value: {
+    readonly runtimeAuthority: unknown;
+    readonly attestationAuthorityRoot: Hash;
+    readonly frameworkAuthorityRoot: Hash;
+    readonly executorAuthorityRoot: Hash;
+  },
+  state: AttestationAuthorityStateV1,
+  label: string,
+): void {
+  if (
+    !sameCanonical(value.runtimeAuthority, state.runtimeAuthority)
+    || value.attestationAuthorityRoot !== state.authorityRoot
+    || value.frameworkAuthorityRoot !== state.frameworkAuthorityRoot
+    || value.executorAuthorityRoot !== state.executorAuthorityRoot
+  ) throw new TypeError(`${label} authority mismatch`);
+}
+
+export function bindIdentityAuthority(
+  runId: string,
+  cutoff: CanonicalCutoffV1,
+  candidatePartitionRoot: Hash,
+  candidate: CandidateRecordV1,
+  observation: IdentityVerifiedObservationV1,
+  identityOrigin: import("../internal-authority.ts").AttestationIdentityOriginV1,
+  authority: AttestationAuthorityStateV1,
+): IdentityVerifiedV1 {
+  const normalized = validateIdentityObservation(observation, "attestation.identityVerified");
+  const input = identityCommitmentIssueInput(
+    runId,
+    cutoff,
+    candidatePartitionRoot,
+    candidate,
+    normalized,
+    identityOrigin,
+    {
+      runtimeAuthority: authority.runtimeAuthority,
+      attestationAuthorityRoot: authority.authorityRoot,
+      frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
+      executorAuthorityRoot: authority.executorAuthorityRoot,
+    },
+  );
+  const identityCommitment = createAttestationIdentityCommitmentV1(
+    attestationIdentityCommitmentPayloadFromIssueInputV1(
+      authority.runtimeAuthority,
+      input,
+      nextSequence(authority),
+    ),
+  );
+  return deepFreeze({ ...normalized, identityCommitment });
+}
 
 export function verifyIdentityForAuthority(
   identity: IdentityVerifiedV1,
@@ -65,28 +133,36 @@ export function verifyIdentityForAuthority(
     identityMemoHash: identity.identityMemoHash,
     descriptorHash: identity.descriptorHash,
     evidenceRoot: identity.evidenceRoot,
-  }, "attestation.identityProof.observation");
-  const proofContext = identityProofVerificationContext(
-    context.runId,
-    context.cutoff,
-    context.candidatePartitionRoot,
-    context.candidate,
-    observation,
-    identity.issuerProof.identityOrigin,
-    {
-      releaseProvenanceHash: authority.releaseProvenanceHash,
-      attestationAuthorityRoot: authority.authorityRoot,
-      releaseAuthorityRoot: authority.releaseAuthorityRoot,
-      frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
-      executorAuthorityRoot: authority.executorAuthorityRoot,
-      attestationProofIssuerKeyId: authority.attestationProofIssuerKeyId,
-    },
+  }, "attestation.identityCommitment.observation");
+  const commitment = decodeAttestationIdentityCommitmentV1(identity.identityCommitment);
+  assertAuthorityFacts(commitment, authority, "attestation identity commitment");
+  const committedObservation = validateIdentityObservation(
+    commitment.identityObservation,
+    "attestation.identityCommitment.identityObservation",
   );
-  const proof = validateIdentityIssuerProof(identity.issuerProof, proofContext);
-  const verified = authority.attestationProof.verifyIdentity(proof, proofContext);
-  const exact = validateIdentityIssuerProof(verified, proofContext);
-  if (exact.proofHash !== proof.proofHash) throw new TypeError("attestation identity proof verifier mismatch");
-  return deepFreeze({ ...observation, issuerProof: exact });
+  if (!sameCanonical(observation, committedObservation)
+    || commitment.runId !== context.runId
+    || !sameCanonical(commitment.cutoff, context.cutoff)
+    || commitment.candidatePartitionRoot !== context.candidatePartitionRoot
+    || commitment.familyDefinitionHash !== context.candidate.familyDefinitionHash
+    || commitment.familyCandidateKey !== context.candidate.familyCandidateKey
+    || commitment.candidateSubjectHash !== context.candidate.candidateSubjectHash
+    || commitment.identitySubjectHash !== verifiedIdentitySubjectHash(context.candidate, observation)
+    || commitment.identitySemanticHash !== identityObservationSemanticHash(
+      context.runId,
+      context.cutoff,
+      context.candidatePartitionRoot,
+      context.candidate,
+      observation,
+      commitment.identityOrigin,
+      {
+        runtimeAuthority: authority.runtimeAuthority,
+        attestationAuthorityRoot: authority.authorityRoot,
+        frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
+        executorAuthorityRoot: authority.executorAuthorityRoot,
+      },
+    )) throw new TypeError("attestation identity commitment lineage mismatch");
+  return deepFreeze({ ...observation, identityCommitment: commitment });
 }
 
 export function assertOutcomeAuthorityBinding(
@@ -95,47 +171,18 @@ export function assertOutcomeAuthorityBinding(
   context: AttestationOutcomeBindingContextV1,
   label: string,
 ): void {
-  if (
-    outcome.attestationAuthorityRoot !== authority.authorityRoot
-    || outcome.releaseAuthorityRoot !== authority.releaseAuthorityRoot
-    || outcome.executorAuthorityRoot !== authority.executorAuthorityRoot
-    || outcome.releaseProvenanceHash !== authority.releaseProvenanceHash
-  ) throw new TypeError(`${label} authority root mismatch`);
-  if (outcome.kind === "chainProvenRejected" && outcome.proof.executorAuthorityRoot !== authority.executorAuthorityRoot) {
-    throw new TypeError(`${label} executor authority root mismatch`);
+  assertAuthorityFacts(outcome, authority, label);
+  if (outcome.outcomeCommitment.candidatePartitionRoot !== context.candidatePartitionRoot) {
+    throw new TypeError(`${label} candidate partition mismatch`);
   }
-  if (outcome.identityProof !== null) {
-    const verifiedIdentity = verifyIdentityForAuthority({
-      ...outcome.identityProof.identityObservation,
-      issuerProof: outcome.identityProof,
+  if (outcome.identityCommitment !== null) {
+    verifyIdentityForAuthority({
+      ...outcome.identityCommitment.identityObservation,
+      identityCommitment: outcome.identityCommitment,
     }, authority, context);
-    if (verifiedIdentity.issuerProof.proofHash !== outcome.identityProof.proofHash) {
-      throw new TypeError(`${label} identity proof verifier mismatch`);
-    }
   }
-  const proofContext = {
-    runId: context.runId,
-    cutoff: context.cutoff,
-    candidatePartitionRoot: context.candidatePartitionRoot,
-    candidate: context.candidate,
-    outcomeBodyHash: candidateFinalOutcomeBodyHash(outcome),
-    releaseProvenanceHash: authority.releaseProvenanceHash,
-    attestationAuthorityRoot: authority.authorityRoot,
-    frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
-    executorAuthorityRoot: authority.executorAuthorityRoot,
-    releaseAuthorityRoot: authority.releaseAuthorityRoot,
-    attestationProofIssuerKeyId: authority.attestationProofIssuerKeyId,
-  } as const;
-  const outcomeProof = validateOutcomeIssuerProof(outcome.outcomeIssuerProof, proofContext);
-  const verifiedOutcomeProof = authority.attestationProof.verifyOutcome(outcomeProof, proofContext);
-  const exactOutcomeProof = validateOutcomeIssuerProof(verifiedOutcomeProof, proofContext);
-  if (exactOutcomeProof.proofHash !== outcomeProof.proofHash) throw new TypeError(`${label} outcome proof verifier mismatch`);
 }
 
-/** Verify a durable final outcome against the current constructor-bound
- * authority. This is intentionally separate from validateOutcomeCapability:
- * durable bytes are not process-local capabilities and may only enter this
- * path after the checkpoint has proved their exact storage closure. */
 export function verifyOutcomeForAuthority(
   outcome: CandidateFinalOutcomeV1,
   authority: AttestationAuthorityStateV1,
@@ -152,19 +199,18 @@ function assertPartitionAuthorityBinding(
   authority: AttestationAuthorityStateV1,
   label: string,
 ): void {
-  if (
-    partition.attestationAuthorityRoot !== authority.authorityRoot
-    || partition.releaseAuthorityRoot !== authority.releaseAuthorityRoot
-    || partition.executorAuthorityRoot !== authority.executorAuthorityRoot
-    || partition.releaseProvenanceHash !== authority.releaseProvenanceHash
-  ) throw new TypeError(`${label} authority root mismatch`);
+  assertAuthorityFacts(partition, authority, label);
   const byKey = new Map(candidates.map(candidate => [candidate.familyCandidateKey, candidate]));
-  for (const outcome of partition.outcomes) assertOutcomeAuthorityBinding(outcome, authority, {
-    runId: partition.runId,
-    cutoff: partition.cutoff,
-    candidatePartitionRoot: partition.candidatePartitionRoot,
-    candidate: byKey.get(outcome.familyCandidateKey)!,
-  }, `${label}.outcome`);
+  for (const outcome of partition.outcomes) {
+    const candidate = byKey.get(outcome.familyCandidateKey);
+    if (!candidate) throw new TypeError(`${label} candidate missing`);
+    assertOutcomeAuthorityBinding(outcome, authority, {
+      runId: partition.runId,
+      cutoff: partition.cutoff,
+      candidatePartitionRoot: partition.candidatePartitionRoot,
+      candidate,
+    }, `${label}.outcome`);
+  }
 }
 
 export function bindOutcomeAuthority(
@@ -172,32 +218,31 @@ export function bindOutcomeAuthority(
   authority: AttestationAuthorityStateV1,
   context: AttestationOutcomeBindingContextV1,
 ): AttestationOutcomeCapabilityV1 {
-  const boundWithoutProof = deepFreeze({
+  const boundBody = deepFreeze({
     ...outcome,
-    attestationAuthorityRoot: authority.authorityRoot,
-    releaseAuthorityRoot: authority.releaseAuthorityRoot,
-    releaseProvenanceHash: authority.releaseProvenanceHash,
-    executorAuthorityRoot: authority.executorAuthorityRoot,
-  }) as unknown as Omit<AttestationOutcomeCapabilityV1, "outcomeIssuerProof">;
-  const proofInput = {
-    runId: context.runId,
-    cutoff: context.cutoff,
-    candidatePartitionRoot: context.candidatePartitionRoot,
-    candidate: context.candidate,
-    outcomeBodyHash: candidateFinalOutcomeBodyHash(boundWithoutProof),
-    releaseProvenanceHash: authority.releaseProvenanceHash,
+    runtimeAuthority: authority.runtimeAuthority,
     attestationAuthorityRoot: authority.authorityRoot,
     frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
     executorAuthorityRoot: authority.executorAuthorityRoot,
-    releaseAuthorityRoot: authority.releaseAuthorityRoot,
-    attestationProofIssuerKeyId: authority.attestationProofIssuerKeyId,
-  } as const;
-  const issued = authority.attestationProof.issueOutcome(proofInput);
-  const normalized = validateOutcomeIssuerProof(issued, proofInput);
-  const verified = authority.attestationProof.verifyOutcome(normalized, proofInput);
-  const exact = validateOutcomeIssuerProof(verified, proofInput);
-  if (exact.proofHash !== normalized.proofHash) throw new TypeError("attestation-outcome-proof-issuer-result-mismatch");
-  const bound = deepFreeze({ ...boundWithoutProof, outcomeIssuerProof: exact }) as unknown as AttestationOutcomeCapabilityV1;
+  });
+  const outcomeCommitment = createAttestationOutcomeCommitmentV1(
+    attestationOutcomeCommitmentPayloadFromIssueInputV1(
+      authority.runtimeAuthority,
+      {
+        runId: context.runId,
+        cutoff: context.cutoff,
+        candidatePartitionRoot: context.candidatePartitionRoot,
+        candidate: context.candidate,
+        outcomeBodyHash: candidateFinalOutcomeBodyHash(boundBody),
+        attestationAuthorityRoot: authority.authorityRoot,
+        frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
+        executorAuthorityRoot: authority.executorAuthorityRoot,
+      },
+      nextSequence(authority),
+    ),
+  );
+  const bound = deepFreeze({ ...boundBody, outcomeCommitment }) as AttestationOutcomeCapabilityV1;
+  validateCandidateFinalOutcome(context.runId, context.cutoff, context.candidate, bound);
   registerAttestationOutcomeCapability(bound, authority);
   return bound;
 }
@@ -215,22 +260,22 @@ export function bindPartitionAuthority(
     cutoff,
     candidatePartitionRoot,
     outcomes,
+    runtimeAuthority: authority.runtimeAuthority,
     attestationAuthorityRoot: authority.authorityRoot,
-    releaseAuthorityRoot: authority.releaseAuthorityRoot,
-    releaseProvenanceHash: authority.releaseProvenanceHash,
+    frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
     executorAuthorityRoot: authority.executorAuthorityRoot,
     accounting,
     exactOutcomePartitionRoot: hashDomain("aloha/exact-outcome-partition/v1", {
       runId,
       cutoff,
       candidatePartitionRoot,
+      runtimeAuthority: authority.runtimeAuthority,
       attestationAuthorityRoot: authority.authorityRoot,
-      releaseAuthorityRoot: authority.releaseAuthorityRoot,
-      releaseProvenanceHash: authority.releaseProvenanceHash,
+      frameworkAuthorityRoot: authority.frameworkAuthorityRoot,
       executorAuthorityRoot: authority.executorAuthorityRoot,
       outcomesRoot: hashCanonicalPartition("aloha/candidate-outcomes/v1", outcomes),
     }),
-  }) as unknown as AttestationPartitionCapabilityV1;
+  }) as AttestationPartitionCapabilityV1;
   registerAttestationPartitionCapability(partition, authority);
   return partition;
 }
@@ -240,14 +285,16 @@ export function issueAttestationIdentityResumeCapability(
   input: AttestationIdentityResumeResolvedInputV1,
 ): AttestationIdentityResumeCapabilityV1 {
   if (input === null || typeof input !== "object") throw new TypeError("attestation-identity-resume-input-invalid");
-  if (
-    input.attestationAuthorityRoot !== state.authorityRoot
-    || input.releaseAuthorityRoot !== state.releaseAuthorityRoot
-    || input.releaseProvenanceHash !== state.releaseProvenanceHash
-    || input.executorAuthorityRoot !== state.executorAuthorityRoot
-  ) throw new TypeError("attestation-identity-resume-authority-mismatch");
-  const outcomeHash = attestationPartialIdentitySemanticHash(input);
-  if (outcomeHash !== input.outcomeHash) throw new TypeError("attestation-identity-resume-hash-mismatch");
+  assertAuthorityFacts(input, state, "attestation identity resume");
+  verifyIdentityForAuthority(input.identity, state, {
+    runId: input.runId,
+    cutoff: input.cutoff,
+    candidatePartitionRoot: input.candidatePartitionRoot,
+    candidate: input.candidate,
+  });
+  if (attestationPartialIdentitySemanticHash(input) !== input.outcomeHash) {
+    throw new TypeError("attestation-identity-resume-hash-mismatch");
+  }
   const capability = Object.freeze({}) as AttestationIdentityResumeCapabilityV1;
   registerAttestationIdentityResumeCapability(capability, input, state);
   return capability;
@@ -258,22 +305,16 @@ export function issueAttestationOutcomeResumeCapability(
   input: AttestationOutcomeResumeInputV1 & { readonly candidatePartitionRoot: Hash },
 ): AttestationOutcomeResumeCapabilityV1 {
   if (input === null || typeof input !== "object") throw new TypeError("attestation-outcome-resume-input-invalid");
-  if (
-    input.attestationAuthorityRoot !== state.authorityRoot
-    || input.releaseAuthorityRoot !== state.releaseAuthorityRoot
-    || input.releaseProvenanceHash !== state.releaseProvenanceHash
-    || input.executorAuthorityRoot !== state.executorAuthorityRoot
-  ) throw new TypeError("attestation-outcome-resume-authority-mismatch");
+  assertAuthorityFacts(input, state, "attestation outcome resume");
   if (candidateFinalOutcomeHash(input.outcome) !== input.outcomeHash) {
     throw new TypeError("attestation-outcome-resume-hash-mismatch");
   }
-  validateCandidateFinalOutcome(input.runId, input.cutoff, input.candidate, input.outcome);
-  assertOutcomeAuthorityBinding(input.outcome, state, {
+  verifyOutcomeForAuthority(input.outcome, state, {
     runId: input.runId,
     cutoff: input.cutoff,
     candidatePartitionRoot: input.candidatePartitionRoot,
     candidate: input.candidate,
-  }, "attestation outcome resume");
+  });
   const capability = Object.freeze({}) as AttestationOutcomeResumeCapabilityV1;
   registerAttestationOutcomeResumeCapability(capability, input, state);
   return capability;
@@ -288,10 +329,10 @@ export function issueAttestationVerifiedMemoReuseCapability(
 ): AttestationVerifiedMemoReuseCapabilityV1 {
   if (input === null || typeof input !== "object") throw new TypeError("attestation-memo-reuse-input-invalid");
   validateInstancePublication(input.publication);
-  if (
-    input.publication.familyId !== input.candidate.familyId
-    || input.publication.instanceKey !== input.candidate.instanceNominationKey
-  ) throw new TypeError("attestation-memo-reuse-candidate-binding-mismatch");
+  if (input.publication.familyId !== input.candidate.familyId
+    || input.publication.instanceKey !== input.candidate.instanceNominationKey) {
+    throw new TypeError("attestation-memo-reuse-candidate-binding-mismatch");
+  }
   const capability = Object.freeze({}) as AttestationVerifiedMemoReuseCapabilityV1;
   registerAttestationVerifiedMemoReuseCapability(capability, input, state);
   return capability;
@@ -300,13 +341,20 @@ export function issueAttestationVerifiedMemoReuseCapability(
 export function issueAttestationValidationAuthority(
   state: AttestationAuthorityStateV1,
 ): AttestationValidationAuthorityV1 {
-  const authority = {
-    [ATTESTATION_VALIDATION_AUTHORITY_BRAND]: true as const,
-    authorityRoot: state.authorityRoot,
-    releaseAuthorityRoot: state.releaseAuthorityRoot,
-    releaseProvenanceHash: state.releaseProvenanceHash,
+  const evidenceSnapshot = deepFreeze({
+    runtimeAuthority: state.runtimeAuthority,
+    attestationAuthorityRoot: state.authorityRoot,
     frameworkAuthorityRoot: state.frameworkAuthorityRoot,
     executorAuthorityRoot: state.executorAuthorityRoot,
+  });
+  const sameOwner = (owner: AttestationAuthorityStateV1 | undefined): boolean => owner === state;
+  const authority = {
+    [ATTESTATION_VALIDATION_AUTHORITY_BRAND]: true as const,
+    runtimeAuthority: state.runtimeAuthority,
+    authorityRoot: state.authorityRoot,
+    frameworkAuthorityRoot: state.frameworkAuthorityRoot,
+    executorAuthorityRoot: state.executorAuthorityRoot,
+    readEvidenceAuthority: () => evidenceSnapshot,
     claimWriterCapabilities(
       writerCapability: AttestationWriterCapabilityV1,
       persistenceCapabilities: readonly AttestationPersistenceCapabilityV1[],
@@ -320,54 +368,28 @@ export function issueAttestationValidationAuthority(
       return consumer.claim(writerCapability, persistenceCapabilities);
     },
     validateOutcomeCapability(value: unknown, context: AttestationOutcomeValidationContextV1): CandidateFinalOutcomeV1 {
-      if (value === null || typeof value !== "object" || !state.outcomeCapabilities.has(value)) {
+      if (value === null || typeof value !== "object" || !state.outcomeCapabilities.has(value)
+        || !sameOwner(attestationOutcomeStates.get(value))) {
         throw new TypeError("attestation-outcome-capability-not-issued");
       }
-      const owner = attestationOutcomeStates.get(value);
-      if (
-        !owner
-        || owner.authorityRoot !== state.authorityRoot
-        || owner.releaseAuthorityRoot !== state.releaseAuthorityRoot
-        || owner.executorAuthorityRoot !== state.executorAuthorityRoot
-      ) throw new TypeError("attestation-outcome-capability-authority-mismatch");
-      const outcome = value as CandidateFinalOutcomeV1;
-      validateCandidateFinalOutcome(context.runId, context.cutoff, context.candidate, outcome);
-      assertOutcomeAuthorityBinding(outcome, state, context, "attestation outcome");
-      return outcome;
+      return verifyOutcomeForAuthority(value as CandidateFinalOutcomeV1, state, context);
     },
     validatePartitionCapability(value: unknown, candidates: readonly CandidateRecordV1[]): AttestationPartitionV1 {
-      if (value === null || typeof value !== "object" || !state.partitionCapabilities.has(value)) {
+      if (value === null || typeof value !== "object" || !state.partitionCapabilities.has(value)
+        || !sameOwner(attestationPartitionStates.get(value))) {
         throw new TypeError("attestation-partition-capability-not-issued");
       }
-      const owner = attestationPartitionStates.get(value);
-      if (
-        !owner
-        || owner.authorityRoot !== state.authorityRoot
-        || owner.releaseAuthorityRoot !== state.releaseAuthorityRoot
-        || owner.executorAuthorityRoot !== state.executorAuthorityRoot
-      ) throw new TypeError("attestation-partition-capability-authority-mismatch");
       const partition = value as AttestationPartitionV1;
       validateAttestationPartition(partition, candidates);
       assertPartitionAuthorityBinding(partition, candidates, state, "attestation partition");
-      for (const outcome of partition.outcomes) {
-        const outcomeOwner = attestationOutcomeStates.get(outcome);
-        if (
-          !outcomeOwner
-          || outcomeOwner.authorityRoot !== state.authorityRoot
-          || outcomeOwner.releaseAuthorityRoot !== state.releaseAuthorityRoot
-          || outcomeOwner.executorAuthorityRoot !== state.executorAuthorityRoot
-        ) {
-          throw new TypeError("attestation-partition-outcome-capability-mismatch");
-        }
+      if (partition.outcomes.some(outcome => !sameOwner(attestationOutcomeStates.get(outcome)))) {
+        throw new TypeError("attestation-partition-outcome-capability-mismatch");
       }
       return partition;
     },
     validateDurableOutcome(value: unknown, context: AttestationOutcomeValidationContextV1): CandidateFinalOutcomeV1 {
       if (value === null || typeof value !== "object") throw new TypeError("attestation-outcome-invalid");
-      const outcome = value as CandidateFinalOutcomeV1;
-      validateCandidateFinalOutcome(context.runId, context.cutoff, context.candidate, outcome);
-      assertOutcomeAuthorityBinding(outcome, state, context, "durable attestation outcome");
-      return outcome;
+      return verifyOutcomeForAuthority(value as CandidateFinalOutcomeV1, state, context);
     },
     validateDurablePartition(value: unknown, candidates: readonly CandidateRecordV1[]): AttestationPartitionV1 {
       if (value === null || typeof value !== "object") throw new TypeError("attestation-partition-invalid");

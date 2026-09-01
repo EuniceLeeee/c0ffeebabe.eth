@@ -144,6 +144,10 @@ test("wire round-trip preserves caller mode, verified actors, and every observed
   const decoded = decodeWorkerLine(encodeWorkerLine(request));
   assert.equal(decoded.kind, "request");
   if (decoded.kind === "request") {
+    assert.deepEqual(
+      Object.keys(decoded.authority.runtime.runtimeAuthority).sort(),
+      ["authorityBindingHash", "implementationCommit"],
+    );
     assert.equal(decoded.caller.mode, "impersonated-call-frame");
     assert.deepEqual(decoded.caller.verifiedActors, { evidence: "verified-actor" });
     assert.deepEqual(decoded.observeAccounts, ["account-a", "account-b"]);
@@ -151,6 +155,31 @@ test("wire round-trip preserves caller mode, verified actors, and every observed
     assert.equal(decoded.program.programHash, request.program.programHash);
     assert.deepEqual(decoded.program.effectTransport, request.program.effectTransport);
   }
+});
+
+test("wire rejects runtime mode tags and release-shaped authority bindings", () => {
+  assert.throws(() => decodeWorkerLine(encodeWorkerLine({
+    ...request,
+    authority: {
+      ...request.authority,
+      runtime: {
+        ...request.authority.runtime,
+        runtimeAuthority: {
+          ...request.authority.runtime.runtimeAuthority,
+          authorityClass: "dry-run",
+        },
+      },
+    },
+  } as never)), /authorityClass/);
+  assert.throws(() => decodeWorkerLine(encodeWorkerLine({
+    ...request,
+    authority: {
+      release: request.authority.runtime,
+      authorityRoot: request.authority.authorityRoot,
+      workerEpoch: request.authority.workerEpoch,
+      executorSessionHash: request.authority.executorSessionHash,
+    },
+  } as never)), /release/);
 });
 
 test("node channel retains an eager worker hello until the controller subscribes", async () => {
@@ -231,7 +260,7 @@ test("pool rejects a structural authority issuer instead of accepting a self-con
       qualification,
       maxWorkers: 1,
     }),
-    /not release-issued/,
+    /not runtime-issued/,
   );
 });
 
@@ -250,7 +279,7 @@ test("authority loss before bind retires the stale worker and counts its replace
   const authority = issueRevmWorkerAuthorityIssuer({
     issue: () => bindings[active]!,
     assertCurrent: (binding) => {
-      if (binding !== bindings[active]) throw new Error("runtime release rotated before bind");
+      if (binding !== bindings[active]) throw new Error("runtime authority rotated before bind");
     },
   });
   const pool = new RevmWorkerPool({ factory: fakeFactory(), authority, qualification, maxWorkers: 1, timeoutMs: 50 });
@@ -294,7 +323,7 @@ test("rotation while a response is in flight rejects it before settlement and re
     qualification,
     authority,
     assertAuthorityCurrent: () => {
-      if (!current) throw new Error("runtime release rotated");
+      if (!current) throw new Error("runtime authority rotated");
     },
     timeoutMs: 50,
   });

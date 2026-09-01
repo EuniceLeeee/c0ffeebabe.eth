@@ -299,7 +299,7 @@ function checkCandidatesAndMetrics(
         || candidate.ordinal !== metric.ordinal
         || head === undefined
         || candidate.headRecordId !== head.headRecordId
-        || (candidate.sixStepCompleted && (candidate.outcome !== "verified" || candidate.sixStepMode !== "unsigned-dry-run" || candidate.sixStepEvidenceRoot === null || candidate.sixStepCompletionRoot === null))
+        || (candidate.sixStepCompleted && (candidate.outcome !== "verified" || candidate.sixStepMode !== "dry-run" || candidate.sixStepEvidenceRoot === null || candidate.sixStepCompletionRoot === null))
         || (!candidate.sixStepCompleted && (candidate.sixStepMode !== null || candidate.sixStepEvidenceRoot !== null || candidate.sixStepCompletionRoot !== null))
       ) add(reasons, "candidate-terminal-mismatch", `$.candidateTerminals[${metric.ordinal}]`);
     }

@@ -60,7 +60,7 @@ function candidate(runKey: string): CandidateRecordV1 {
 
 function makeHarness() {
   const approval = releaseApproval(h("framework"), h("executor"), "epoch-1", h("session"));
-  const framework = createFrameworkFailureRuntime(approval, { classify() { return null; } });
+  const framework = createFrameworkFailureRuntime(approval.runtimeAuthority, { classify() { return null; } });
   const executorAuthority = createRejectionExecutorAuthorityIssuer(approval);
   const rejection = createRejectionFactRuntime(executorAuthority.issue({
     async execute() { return { transport: [], effects: [] }; },
@@ -113,7 +113,7 @@ function makeHarness() {
       runId,
     );
     const service = createAttestationService({
-      composition: approval,
+      runtimeAuthority: approval.runtimeAuthority,
       frameworkRuntime: framework,
       rejectionRuntime: rejection,
       programs,
@@ -144,9 +144,9 @@ test("durable final outcome resume skips both program phases", async () => {
     candidate: first.value,
     outcome: final.outcome,
     outcomeHash: final.persistenceCapability.outcomeHash,
+    runtimeAuthority: state.runtimeAuthority,
     attestationAuthorityRoot: state.authorityRoot,
-    releaseAuthorityRoot: state.releaseAuthorityRoot,
-    releaseProvenanceHash: state.releaseProvenanceHash,
+    frameworkAuthorityRoot: state.frameworkAuthorityRoot,
     executorAuthorityRoot: state.executorAuthorityRoot,
   });
   const resumedSession = first.service.openRunSession({
@@ -156,7 +156,7 @@ test("durable final outcome resume skips both program phases", async () => {
   const resumed = await resumedSession.resolveIdentityOrReuseProofOnce(first.value.familyCandidateKey, new AbortController().signal);
   assert.equal(resumed.kind, "final");
   assert.equal(resumed.durability, "durable");
-  assert.equal(resumed.outcome.outcomeIssuerProof.proofHash, final.outcome.outcomeIssuerProof.proofHash);
+  assert.equal(resumed.outcome.outcomeCommitment.commitmentHash, final.outcome.outcomeCommitment.commitmentHash);
   assert.equal(harness.identityCalls, 1);
   assert.equal(harness.materializationCalls, 1);
   const partition = resumedSession.sealExactPartition([resumed.persistenceCapability.outcomeHash]);
@@ -182,9 +182,9 @@ test("final resume capability rejects clone and cross-run reuse", async () => {
     candidate: first.value,
     outcome: final.outcome,
     outcomeHash: final.persistenceCapability.outcomeHash,
+    runtimeAuthority: state.runtimeAuthority,
     attestationAuthorityRoot: state.authorityRoot,
-    releaseAuthorityRoot: state.releaseAuthorityRoot,
-    releaseProvenanceHash: state.releaseProvenanceHash,
+    frameworkAuthorityRoot: state.frameworkAuthorityRoot,
     executorAuthorityRoot: state.executorAuthorityRoot,
   });
   assert.throws(

@@ -99,7 +99,7 @@ const actionOwnerQualification = generatedEconomicSafetyActionOwnerQualification
 
 test("unsigned dry-run lifetime exposes only neutral current authority", () => {
   const descriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
-    authorityClass: "unsigned-dry-run",
+    authorityClass: "dry-run",
     runtimeBindingId: h("unsigned-binding"),
     implementationCommit: "7".repeat(40),
   });
@@ -368,7 +368,7 @@ async function terminalForRelease(releaseProvenanceHash: Hash, label: string) {
     input: envelope.blockscanInput,
     signal: new AbortController().signal,
   });
-  if (result.outcome.kind !== "route-set-terminal" && result.outcome.kind !== "unsigned-dry-run") {
+  if (result.outcome.kind !== "route-set-terminal" && result.outcome.kind !== "dry-run") {
     throw new TypeError("terminal fixture did not issue a search terminal");
   }
   return result.outcome.terminalCapability;
@@ -740,7 +740,7 @@ test("runtime-release Strategy service is generated, release-bound, and rotation
 test("unsigned Strategy owner exposes generated membership without release provenance", () => {
   const value = issued();
   const descriptor = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
-    authorityClass: "unsigned-dry-run",
+    authorityClass: "dry-run",
     runtimeBindingId: h("unsigned-strategy-runtime-binding"),
     implementationCommit: value.binding.candidateReleaseCommit,
   });

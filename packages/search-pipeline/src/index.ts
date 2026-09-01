@@ -54,7 +54,7 @@ export type SearchStageV1 =
   | "execution-program"
   | "final-sim"
   | "economics-safety"
-  | "unsigned-dry-run";
+  | "dry-run";
 
 export type SourceViewV1 = Readonly<{
   readonly chainId: string;
@@ -247,7 +247,7 @@ export interface QualifiedStageRejectionCapabilityV1 {
 
 export interface QualifiedStageRejectionReceiptV1 {
   readonly kind: "aloha.qualified-stage-rejection-v1";
-  readonly stage: Exclude<SearchStageV1, "input" | "route" | "coarse" | "unsigned-dry-run">;
+  readonly stage: Exclude<SearchStageV1, "input" | "route" | "coarse" | "dry-run">;
   readonly routeHash: Hash;
   readonly source: SourceViewV1;
   readonly correlationId: Hash;
@@ -447,8 +447,8 @@ export interface SearchSchedulerResourceJoinV1 {
   readonly source: SourceViewV1;
   readonly programHash: Hash;
   readonly finalSimulationReceiptHash: Hash;
-  readonly unsignedDryRunCandidateId: Hash;
-  readonly unsignedDryRunLineageHash: Hash;
+  readonly dryRunCandidateId: Hash;
+  readonly dryRunLineageHash: Hash;
   readonly schedulerCompletion: object;
 }
 
@@ -477,8 +477,8 @@ export interface FinalSimulationPortV1<Simulation> {
   readonly sixStepEvidenceAuthority?: FinalSimulationSixStepEvidenceAuthorityV1;
 }
 
-export interface UnsignedDryRunReceiptV1 {
-  readonly kind: "aloha.unsigned-dry-run-v1";
+export interface DryRunReceiptV1 {
+  readonly kind: "aloha.dry-run-v1";
   readonly correlationId: Hash;
   readonly generationId: string;
   readonly readyRecordHash: Hash;
@@ -498,11 +498,9 @@ export interface UnsignedDryRunReceiptV1 {
   readonly finalSimulationReceiptHash: Hash;
   readonly safetyRoot: Hash;
   readonly lineageHash: Hash;
-  readonly signer: null;
-  readonly transactionHash: null;
 }
 
-export interface UnsignedDryRunInputV1<Projection, Plan, Exact, Simulation> {
+export interface DryRunInputV1<Projection, Plan, Exact, Simulation> {
   readonly binding: GraphLeaseBindingV1;
   readonly candidateId: Hash;
   readonly orderedEdgeIds: readonly Hash[];
@@ -517,10 +515,10 @@ export interface UnsignedDryRunInputV1<Projection, Plan, Exact, Simulation> {
   readonly correlationId: Hash;
 }
 
-export interface UnsignedDryRunPortV1<Projection, Plan, Exact, Simulation> {
+export interface DryRunPortV1<Projection, Plan, Exact, Simulation> {
   readonly issue: (
-    input: UnsignedDryRunInputV1<Projection, Plan, Exact, Simulation>,
-  ) => UnsignedDryRunReceiptV1;
+    input: DryRunInputV1<Projection, Plan, Exact, Simulation>,
+  ) => DryRunReceiptV1;
 }
 
 export interface SearchPipelinePortsV1<Projection, Plan, Exact, Simulation> {
@@ -529,8 +527,8 @@ export interface SearchPipelinePortsV1<Projection, Plan, Exact, Simulation> {
   readonly executionProgram: ExecutionProgramPortV1<Plan, Exact>;
   readonly finalSimulation: FinalSimulationPortV1<Simulation>;
   readonly economicSafety: EconomicSafetyFinalizationServiceV1;
-  readonly unsignedDryRun: UnsignedDryRunPortV1<Projection, Plan, Exact, Simulation>;
-  /** Signed production evidence is advisory for unsigned dry-run. */
+  readonly dryRun: DryRunPortV1<Projection, Plan, Exact, Simulation>;
+  /** Runtime observations are emitted by the same canonical invocation. */
   readonly sixStepArtifacts?: ProductionSixStepTailEmissionPortV1;
 }
 
@@ -542,8 +540,8 @@ export type ResolvedRoutePipelinePortsV1<Projection, Plan, Exact, Simulation> =
 
 export type SearchPipelineOutcomeV1<Simulation> =
   | {
-    readonly kind: "unsigned-dry-run";
-    readonly receipt: UnsignedDryRunReceiptV1;
+    readonly kind: "dry-run";
+    readonly receipt: DryRunReceiptV1;
     readonly schedulerResourceJoin: SearchSchedulerResourceJoinCapabilityV1 | null;
   }
   | { readonly kind: "retryable"; readonly stage: SearchStageV1; readonly code: string }
@@ -584,7 +582,7 @@ export interface ResolvedRouteSixStepTraceV1 {
   readonly finalSimulation: CanonicalJson;
   readonly finalSimulationOwnerEvidence: FinalSimulationSixStepEvidenceV1 | null;
   readonly economicSafety: EconomicSafetyEvidenceV1;
-  readonly unsignedDryRun: CanonicalJson;
+  readonly dryRun: CanonicalJson;
   readonly timings: Readonly<{
     readonly planner: SearchStageTimingFactV1;
     readonly exact: SearchStageTimingFactV1;
@@ -860,29 +858,29 @@ function sealProgram(value: ExecutionProgramArtifactV1): ExecutionProgramArtifac
   return deepFreeze({ ...body, programHash });
 }
 
-function lineageHash(input: Omit<UnsignedDryRunReceiptV1, "lineageHash">): Hash {
-  return hashDomain("aloha/unsigned-dry-run-lineage/v1", input);
+function lineageHash(input: Omit<DryRunReceiptV1, "lineageHash">): Hash {
+  return hashDomain("aloha/dry-run-lineage/v1", input);
 }
 
 function orderedEdgeIdsRoot(edgeIds: readonly Hash[]): Hash {
   return hashDomain("aloha/ordered-route-edge-ids/v1", edgeIds.map((edgeId, index) => assertHash(edgeId, `orderedEdgeIds[${index}]`)));
 }
 
-function validateUnsignedDryRunReceipt(
-  receipt: UnsignedDryRunReceiptV1,
-  input: UnsignedDryRunInputV1<unknown, unknown, unknown, unknown>,
+function validateDryRunReceipt(
+  receipt: DryRunReceiptV1,
+  input: DryRunInputV1<unknown, unknown, unknown, unknown>,
 ): void {
   assertExactKeys(receipt, [
-    "kind", "correlationId", "generationId", "readyRecordHash", "cutoff", "graphRoot", "candidateId", "orderedEdgeIds", "orderedEdgeIdsRoot", "routeHash", "routeBindingHash", "objectiveRef", "source", "coarseKind", "planHash", "exactHash", "programHash", "finalSimulationReceiptHash", "safetyRoot", "lineageHash", "signer", "transactionHash",
-  ], "unsignedDryRunReceipt");
-  if (receipt.kind !== "aloha.unsigned-dry-run-v1" || receipt.signer !== null || receipt.transactionHash !== null) throw new TypeError("unsigned dry-run receipt is not unsigned");
-  if (receipt.correlationId !== input.correlationId || receipt.generationId !== input.binding.generationId || receipt.readyRecordHash !== input.binding.readyRecordHash || receipt.graphRoot !== input.binding.graphRoot || receipt.candidateId !== input.candidateId || receipt.routeHash !== input.route.routeHash || receipt.routeBindingHash !== input.route.routeBindingHash || receipt.objectiveRef !== input.objectiveRef || receipt.source.hash !== input.program.source.hash || receipt.programHash !== input.program.programHash || receipt.finalSimulationReceiptHash !== input.simulation.receiptHash || receipt.planHash !== input.plan.planHash || receipt.exactHash !== input.exact.exactHash || receipt.safetyRoot !== input.economicSafety.evidenceRoot) throw new TypeError("unsigned dry-run lineage mismatch");
-  if (!Array.isArray(receipt.orderedEdgeIds) || receipt.orderedEdgeIds.length !== input.orderedEdgeIds.length || receipt.orderedEdgeIds.some((edgeId, index) => edgeId !== input.orderedEdgeIds[index])) throw new TypeError("unsigned dry-run route-edge lineage mismatch");
-  if (receipt.orderedEdgeIdsRoot !== orderedEdgeIdsRoot(input.orderedEdgeIds)) throw new TypeError("unsigned dry-run route-edge root mismatch");
-  if (receipt.coarseKind !== input.coarse.kind) throw new TypeError("unsigned dry-run coarse lineage mismatch");
-  if (!sameSource(source(receipt.source, "unsignedDryRunReceipt.source"), input.program.source)) throw new TypeError("unsigned dry-run source mismatch");
+    "kind", "correlationId", "generationId", "readyRecordHash", "cutoff", "graphRoot", "candidateId", "orderedEdgeIds", "orderedEdgeIdsRoot", "routeHash", "routeBindingHash", "objectiveRef", "source", "coarseKind", "planHash", "exactHash", "programHash", "finalSimulationReceiptHash", "safetyRoot", "lineageHash",
+  ], "dryRunReceipt");
+  if (receipt.kind !== "aloha.dry-run-v1") throw new TypeError("dry-run receipt kind mismatch");
+  if (receipt.correlationId !== input.correlationId || receipt.generationId !== input.binding.generationId || receipt.readyRecordHash !== input.binding.readyRecordHash || receipt.graphRoot !== input.binding.graphRoot || receipt.candidateId !== input.candidateId || receipt.routeHash !== input.route.routeHash || receipt.routeBindingHash !== input.route.routeBindingHash || receipt.objectiveRef !== input.objectiveRef || receipt.source.hash !== input.program.source.hash || receipt.programHash !== input.program.programHash || receipt.finalSimulationReceiptHash !== input.simulation.receiptHash || receipt.planHash !== input.plan.planHash || receipt.exactHash !== input.exact.exactHash || receipt.safetyRoot !== input.economicSafety.evidenceRoot) throw new TypeError("dry-run lineage mismatch");
+  if (!Array.isArray(receipt.orderedEdgeIds) || receipt.orderedEdgeIds.length !== input.orderedEdgeIds.length || receipt.orderedEdgeIds.some((edgeId, index) => edgeId !== input.orderedEdgeIds[index])) throw new TypeError("dry-run route-edge lineage mismatch");
+  if (receipt.orderedEdgeIdsRoot !== orderedEdgeIdsRoot(input.orderedEdgeIds)) throw new TypeError("dry-run route-edge root mismatch");
+  if (receipt.coarseKind !== input.coarse.kind) throw new TypeError("dry-run coarse lineage mismatch");
+  if (!sameSource(source(receipt.source, "dryRunReceipt.source"), input.program.source)) throw new TypeError("dry-run source mismatch");
   const { lineageHash: ignored, ...body } = receipt;
-  if (lineageHash(body) !== receipt.lineageHash) throw new TypeError("unsigned dry-run lineage hash mismatch");
+  if (lineageHash(body) !== receipt.lineageHash) throw new TypeError("dry-run lineage hash mismatch");
 }
 
 async function fence(
@@ -1286,7 +1284,6 @@ export async function runResolvedRoutePipeline<Projection, Plan, Exact, Simulati
     let economicSafety: EconomicSafetyEvidenceV1;
     try {
       const finalizationInput: EconomicSafetyFinalizationInputV1 = {
-        releaseProvenanceHash: input.lease.binding.releaseProvenanceHash,
         correlationId: input.correlationId,
         generationId: input.lease.binding.generationId,
         source: Object.freeze({
@@ -1340,19 +1337,19 @@ export async function runResolvedRoutePipeline<Projection, Plan, Exact, Simulati
       timing: finalSimulationTiming,
     });
 
-    stage = "unsigned-dry-run";
+    stage = "dry-run";
     const receipt = await (async () => {
       try {
-        return ports.unsignedDryRun.issue({ binding: input.lease.binding, candidateId: input.routeCandidateId, orderedEdgeIds, route, coarse, plan: planned, exact, program, simulation: simReceipt, economicSafety, objectiveRef: objective.objectiveRef, correlationId: input.correlationId });
+        return ports.dryRun.issue({ binding: input.lease.binding, candidateId: input.routeCandidateId, orderedEdgeIds, route, coarse, plan: planned, exact, program, simulation: simReceipt, economicSafety, objectiveRef: objective.objectiveRef, correlationId: input.correlationId });
       } finally {
         await assertPostStageFence();
       }
     })();
-    validateUnsignedDryRunReceipt(receipt, { binding: input.lease.binding, candidateId: input.routeCandidateId, orderedEdgeIds, route, coarse, plan: planned, exact, program, simulation: simReceipt, economicSafety, objectiveRef: objective.objectiveRef, correlationId: input.correlationId });
+    validateDryRunReceipt(receipt, { binding: input.lease.binding, candidateId: input.routeCandidateId, orderedEdgeIds, route, coarse, plan: planned, exact, program, simulation: simReceipt, economicSafety, objectiveRef: objective.objectiveRef, correlationId: input.correlationId });
     const schedulerResourceJoin = schedulerJoinSeed === null
       ? null
       : issueSearchSchedulerResourceJoin(schedulerJoinSeed, receipt);
-    const successfulOutcome = Object.freeze({ kind: "unsigned-dry-run" as const, receipt, schedulerResourceJoin });
+    const successfulOutcome = Object.freeze({ kind: "dry-run" as const, receipt, schedulerResourceJoin });
     const trace = sealResolvedRouteSixStepTrace({
       schemaVersion: 1,
       kind: "aloha.resolved-route-six-step-trace-v1",
@@ -1376,7 +1373,7 @@ export async function runResolvedRoutePipeline<Projection, Plan, Exact, Simulati
       finalSimulation: canonicalValue(simReceipt, "sixStepTrace.finalSimulation"),
       finalSimulationOwnerEvidence,
       economicSafety,
-      unsignedDryRun: canonicalValue(receipt, "sixStepTrace.unsignedDryRun"),
+      dryRun: canonicalValue(receipt, "sixStepTrace.dryRun"),
       timings: Object.freeze({
         planner: plannerTiming,
         exact: exactTiming,
@@ -1437,15 +1434,15 @@ export function sealExecutionProgram(
   return deepFreeze({ ...body, programHash: hashDomain("aloha/execution-program-artifact/v1", body) });
 }
 
-export function sealUnsignedDryRunReceipt<Projection, Plan, Exact, Simulation>(
-  input: UnsignedDryRunInputV1<Projection, Plan, Exact, Simulation>,
-): UnsignedDryRunReceiptV1 {
+export function sealDryRunReceipt<Projection, Plan, Exact, Simulation>(
+  input: DryRunInputV1<Projection, Plan, Exact, Simulation>,
+): DryRunReceiptV1 {
   validateRouteCapability(input.route, input.orderedEdgeIds, input.route.legs.map(leg => leg.issuedHandle));
   const program = sealProgram(input.program);
-  if (program.programHash !== input.program.programHash) throw new TypeError("unsigned dry-run program was not sealed");
-  if (input.simulation.programHash !== program.programHash) throw new TypeError("unsigned dry-run simulation program mismatch");
+  if (program.programHash !== input.program.programHash) throw new TypeError("dry-run program was not sealed");
+  if (input.simulation.programHash !== program.programHash) throw new TypeError("dry-run simulation program mismatch");
   const body = {
-    kind: "aloha.unsigned-dry-run-v1" as const,
+    kind: "aloha.dry-run-v1" as const,
     correlationId: nonEmptyHash(input.correlationId, "correlationId"),
     generationId: input.binding.generationId,
     readyRecordHash: input.binding.readyRecordHash,
@@ -1464,24 +1461,22 @@ export function sealUnsignedDryRunReceipt<Projection, Plan, Exact, Simulation>(
     programHash: program.programHash,
     finalSimulationReceiptHash: input.simulation.receiptHash,
     safetyRoot: input.economicSafety.evidenceRoot,
-    signer: null,
-    transactionHash: null,
   };
   return deepFreeze({ ...body, lineageHash: lineageHash(body) });
 }
 
-export function validateUnsignedDryRunReceiptValue(value: UnsignedDryRunReceiptV1): void {
+export function validateDryRunReceiptValue(value: DryRunReceiptV1): void {
   assertExactKeys(value, [
-    "kind", "correlationId", "generationId", "readyRecordHash", "cutoff", "graphRoot", "candidateId", "orderedEdgeIds", "orderedEdgeIdsRoot", "routeHash", "routeBindingHash", "objectiveRef", "source", "coarseKind", "planHash", "exactHash", "programHash", "finalSimulationReceiptHash", "safetyRoot", "lineageHash", "signer", "transactionHash",
-  ], "unsignedDryRunReceipt");
-  if (value.kind !== "aloha.unsigned-dry-run-v1" || value.signer !== null || value.transactionHash !== null) throw new TypeError("receipt is not unsigned");
-  nonEmptyHash(value.candidateId, "unsignedDryRunReceipt.candidateId");
-  if (!Array.isArray(value.orderedEdgeIds) || value.orderedEdgeIds.length === 0) throw new TypeError("unsignedDryRunReceipt.orderedEdgeIds is empty");
-  if (value.orderedEdgeIdsRoot !== orderedEdgeIdsRoot(value.orderedEdgeIds)) throw new TypeError("unsignedDryRunReceipt.orderedEdgeIdsRoot mismatch");
-  nonEmptyHash(value.routeBindingHash, "unsignedDryRunReceipt.routeBindingHash");
-  nonEmptyHash(value.lineageHash, "unsignedDryRunReceipt.lineageHash");
+    "kind", "correlationId", "generationId", "readyRecordHash", "cutoff", "graphRoot", "candidateId", "orderedEdgeIds", "orderedEdgeIdsRoot", "routeHash", "routeBindingHash", "objectiveRef", "source", "coarseKind", "planHash", "exactHash", "programHash", "finalSimulationReceiptHash", "safetyRoot", "lineageHash",
+  ], "dryRunReceipt");
+  if (value.kind !== "aloha.dry-run-v1") throw new TypeError("dry-run receipt kind mismatch");
+  nonEmptyHash(value.candidateId, "dryRunReceipt.candidateId");
+  if (!Array.isArray(value.orderedEdgeIds) || value.orderedEdgeIds.length === 0) throw new TypeError("dryRunReceipt.orderedEdgeIds is empty");
+  if (value.orderedEdgeIdsRoot !== orderedEdgeIdsRoot(value.orderedEdgeIds)) throw new TypeError("dryRunReceipt.orderedEdgeIdsRoot mismatch");
+  nonEmptyHash(value.routeBindingHash, "dryRunReceipt.routeBindingHash");
+  nonEmptyHash(value.lineageHash, "dryRunReceipt.lineageHash");
   const { lineageHash: ignored, ...body } = value;
-  if (lineageHash(body) !== value.lineageHash) throw new TypeError("unsigned dry-run receipt lineage hash mismatch");
+  if (lineageHash(body) !== value.lineageHash) throw new TypeError("dry-run receipt lineage hash mismatch");
 }
 
 // The multi-route coordinator is kept in a separate module so the per-route

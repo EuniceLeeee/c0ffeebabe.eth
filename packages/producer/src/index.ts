@@ -320,7 +320,7 @@ export interface ProducerLanePortV1<Session extends ProducerSessionV1 = Producer
 }
 
 export type ProducerLaneTerminalKindV1 =
-  | "unsigned-dry-run"
+  | "dry-run"
   | "route-set-terminal"
   | "no-input"
   | "retryable"

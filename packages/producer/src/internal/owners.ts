@@ -52,7 +52,7 @@ import {
   readIssuedSearchTerminalSixStepTraceV1,
   routeAccountingRootV1,
   routeSetTerminalLineageHashV2,
-  validateUnsignedDryRunReceiptValue,
+  validateDryRunReceiptValue,
   type IssuedSearchTerminalV1,
   type SearchSchedulerResourceJoinV1,
   type RouteCoarseTimingFactsV1,
@@ -717,7 +717,7 @@ function issueProducerLaneFactsV1(input: Omit<ProducerLaneFactsV1, "complete"> &
   const outcome = record.outcome;
   if (outcome !== "completed" && outcome !== "no-input" && outcome !== "retryable" && outcome !== "failed" && outcome !== "cancelled") throw new TypeError("producer lane facts outcome is invalid");
   const terminalKind = record.terminalKind;
-  if (terminalKind !== "unsigned-dry-run" && terminalKind !== "route-set-terminal" && terminalKind !== "no-input" && terminalKind !== "retryable" && terminalKind !== "invalidProgram" && terminalKind !== "chainProvenRejected") throw new TypeError("producer lane facts terminal kind is invalid");
+  if (terminalKind !== "dry-run" && terminalKind !== "route-set-terminal" && terminalKind !== "no-input" && terminalKind !== "retryable" && terminalKind !== "invalidProgram" && terminalKind !== "chainProvenRejected") throw new TypeError("producer lane facts terminal kind is invalid");
   if (typeof record.complete !== "boolean") throw new TypeError("producer lane facts completeness flag is invalid");
   const headHash = nonZeroHash(record.headHash, "producerLaneFacts.headHash");
   const generationId = assertNonEmptyString(record.generationId, "producerLaneFacts.generationId");
@@ -740,11 +740,11 @@ function issueProducerLaneFactsV1(input: Omit<ProducerLaneFactsV1, "complete"> &
   const candidateIds = exactCandidateIds(record.candidateIds);
   const currentSource = currentSourceLogicalFacts(record.currentSource);
   const terminalLineageHash = nonZeroHash(record.terminalLineageHash, "producerLaneFacts.terminalLineageHash");
-  if (terminalKind === "unsigned-dry-run" || terminalKind === "route-set-terminal") {
+  if (terminalKind === "dry-run" || terminalKind === "route-set-terminal") {
     if (terminalRecord.kind !== terminalKind) throw new TypeError("producer lane terminal kind does not match terminal evidence");
     const receipt = objectValue(terminalRecord.receipt, "producerLaneFacts.terminalOutcome.receipt");
     if (receipt.lineageHash !== terminalLineageHash) throw new TypeError("producer lane terminal lineage does not match terminal evidence");
-    if (terminalKind === "unsigned-dry-run" && !candidateIds.includes(assertHash(receipt.candidateId, "producerLaneFacts.terminalOutcome.receipt.candidateId"))) {
+    if (terminalKind === "dry-run" && !candidateIds.includes(assertHash(receipt.candidateId, "producerLaneFacts.terminalOutcome.receipt.candidateId"))) {
       throw new TypeError("producer lane terminal candidate does not match candidate set");
     }
     if (terminalKind === "route-set-terminal" && accounting !== null && receipt.accountingRoot !== accounting.root) throw new TypeError("producer lane route-set accounting root mismatch");
@@ -794,12 +794,12 @@ function issueProducerLaneFactsV1(input: Omit<ProducerLaneFactsV1, "complete"> &
   if (coverageRoot !== expectedCoverageRoot) throw new TypeError("producer lane coverage root mismatch");
   const selectedIds = accounting?.entries.filter(entry => entry.disposition === "selected").map(entry => entry.candidateId) ?? [];
   if (!sameHashes(candidateIds, selectedIds)) throw new TypeError("producer lane candidate ids do not match selected accounting entries");
-  if (terminalKind === "unsigned-dry-run") {
-    if (accounting === null || selectedIds.length === 0) throw new TypeError("unsigned lane fact is not bound to selected candidates");
+  if (terminalKind === "dry-run") {
+    if (accounting === null || selectedIds.length === 0) throw new TypeError("lane fact is not bound to selected candidates");
     const receipt = objectValue(terminalRecord.receipt, "producerLaneFacts.terminalOutcome.receipt");
     const passedIds = accounting.entries.filter(entry => entry.disposition === "selected" && entry.terminalKind === "passed").map(entry => entry.candidateId);
     if (passedIds.length !== 1 || receipt.candidateId !== passedIds[0] || !selectedIds.includes(passedIds[0]!)) {
-      throw new TypeError("unsigned lane fact is not bound to its passed candidate");
+      throw new TypeError("lane fact is not bound to its passed candidate");
     }
     const terminalKinds = accounting.entries.map(entry => entry.terminalKind);
     const expectedLaneOutcome = terminalKinds.includes("invalidProgram")
@@ -807,7 +807,7 @@ function issueProducerLaneFactsV1(input: Omit<ProducerLaneFactsV1, "complete"> &
       : terminalKinds.includes("retryable") || terminalKinds.includes("not-run") || hasUnresolvedPolicyTerminal(accounting)
         ? "retryable"
         : "completed";
-    if (outcome !== expectedLaneOutcome) throw new TypeError("unsigned lane outcome classification mismatch");
+    if (outcome !== expectedLaneOutcome) throw new TypeError("lane outcome classification mismatch");
   }
   if (terminalKind === "route-set-terminal") {
     if (accounting === null) throw new TypeError("route-set lane fact requires accounting");
@@ -825,13 +825,13 @@ function issueProducerLaneFactsV1(input: Omit<ProducerLaneFactsV1, "complete"> &
     if (outcome !== expectedLaneOutcome) throw new TypeError("route-set lane outcome classification mismatch");
   }
   if (terminalKind === "no-input" && (outcome !== "no-input" || accounting !== null || candidateIds.length !== 0)) throw new TypeError("no-input lane fact is not empty");
-  if (terminalKind !== "unsigned-dry-run" && terminalKind !== "route-set-terminal" && terminalKind !== "no-input" && accounting !== null) throw new TypeError("failed lane fact cannot claim route accounting");
+  if (terminalKind !== "dry-run" && terminalKind !== "route-set-terminal" && terminalKind !== "no-input" && accounting !== null) throw new TypeError("failed lane fact cannot claim route accounting");
   const complete = terminalKind === "no-input"
     ? outcome === "no-input" && accounting === null && candidateIds.length === 0
     : outcome === "completed"
       && accounting !== null
       && !accounting.enumerationTruncated
-      && (terminalKind === "unsigned-dry-run" || terminalKind === "route-set-terminal");
+      && (terminalKind === "dry-run" || terminalKind === "route-set-terminal");
   if (record.complete !== complete) throw new TypeError("producer lane completeness flag is not supported by its evidence");
   const normalized: ProducerLaneFactsV1 = {
     kind: "aloha.producer-lane-facts-v1",
@@ -1032,8 +1032,8 @@ export function readIssuedProducerLaneSixStepTraceV1(
   const terminalCapability = laneSearchTerminals.get(value as object);
   if (terminalCapability === undefined) return null;
   const terminal = readIssuedSearchTerminalCapabilityV1(terminalCapability);
-  const terminalSucceeded = terminal.kind === "unsigned-dry-run";
-  const laneSucceeded = lane.terminalKind === "unsigned-dry-run";
+  const terminalSucceeded = terminal.kind === "dry-run";
+  const laneSucceeded = lane.terminalKind === "dry-run";
   if (terminalSucceeded !== laneSucceeded) {
     throw new TypeError("producer lane retained a six-step trace for a non-success terminal");
   }
@@ -1068,7 +1068,7 @@ export function readIssuedProducerLaneSearchTerminalCapabilityV1(
   const terminalCapability = laneSearchTerminals.get(value as object);
   if (terminalCapability === undefined) return null;
   const terminal = readIssuedSearchTerminalCapabilityV1(terminalCapability);
-  if ((terminal.kind === "unsigned-dry-run") !== (lane.terminalKind === "unsigned-dry-run")
+  if ((terminal.kind === "dry-run") !== (lane.terminalKind === "dry-run")
     || terminal.receipt.correlationId !== lane.correlationId
     || terminal.receipt.generationId !== lane.generationId
     || terminal.receipt.graphRoot !== lane.graphRoot
@@ -1208,7 +1208,7 @@ function assertTerminalBinding(
   request: ProducerLaneRunInputV1<ProducerSessionV1>,
   trigger: ProducerBoundTriggerFactsV1,
 ): ProducerLaneAccountingV1 {
-  const accounting = normalizeAccounting(terminal.kind === "unsigned-dry-run" ? terminal.accounting : terminal.receipt.accounting);
+  const accounting = normalizeAccounting(terminal.kind === "dry-run" ? terminal.accounting : terminal.receipt.accounting);
   const receipt = terminal.receipt;
   if (receipt.generationId !== request.generationId || receipt.graphRoot !== request.graphRoot || receipt.correlationId !== trigger.correlationId) {
     throw new TypeError("search terminal generation/Graph/trigger binding mismatch");
@@ -1217,15 +1217,15 @@ function assertTerminalBinding(
   if (receipt.readyRecordHash !== request.session.lease.binding.readyRecordHash || !sameSourceView(receipt.cutoff, request.session.lease.binding.cutoff)) {
     throw new TypeError("search terminal ready/cutoff binding mismatch");
   }
-  if (terminal.kind === "unsigned-dry-run") {
-    validateUnsignedDryRunReceiptValue(terminal.receipt);
-    if (terminal.accounting.root !== accounting.root) throw new TypeError("unsigned terminal accounting changed after issuance");
+  if (terminal.kind === "dry-run") {
+    validateDryRunReceiptValue(terminal.receipt);
+    if (terminal.accounting.root !== accounting.root) throw new TypeError("dry-run terminal accounting changed after issuance");
   } else {
     assertExactKeys(receipt, [
       "kind", "outcome", "correlationId", "generationId", "readyRecordHash", "cutoff", "graphRoot",
-      "objectiveRef", "source", "accounting", "accountingRoot", "signer", "transactionHash", "lineageHash",
+      "objectiveRef", "source", "accounting", "accountingRoot", "lineageHash",
     ], "producerLaneFacts.routeSetReceipt");
-    if (receipt.kind !== "aloha.route-set-terminal-v1" || receipt.signer !== null || receipt.transactionHash !== null) throw new TypeError("route-set terminal receipt is invalid");
+    if (receipt.kind !== "aloha.route-set-terminal-v1") throw new TypeError("route-set terminal receipt is invalid");
     if (receipt.accountingRoot !== accounting.root || receipt.accounting.root !== accounting.root) throw new TypeError("route-set terminal accounting mismatch");
     const { lineageHash, ...body } = receipt;
     if (lineageHash !== routeSetTerminalLineageHashV2(body)) throw new TypeError("route-set terminal lineage mismatch");
@@ -1272,7 +1272,7 @@ function issueTerminalLaneFacts(
         ? "retryable"
         : "completed";
   const terminalLineageHash = terminal.receipt.lineageHash;
-  const terminalCandidateId = terminal.kind === "unsigned-dry-run" ? terminal.receipt.candidateId : null;
+  const terminalCandidateId = terminal.kind === "dry-run" ? terminal.receipt.candidateId : null;
   for (const entry of accounting.entries) {
     if (entry.policyTerminal?.kind === "aloha.route-post-success-policy-terminal-v1"
       && (entry.policyTerminal.winnerCandidateId !== terminalCandidateId
@@ -1588,16 +1588,16 @@ export function readIssuedProducerHeadSchedulerCompletionV1(
     const lane = readIssuedProducerLaneFactsV1(laneCapability);
     const join = readIssuedProducerLaneSchedulerResourceJoinV1(laneCapability);
     if (join === null) continue;
-    if (lane.terminalKind !== "unsigned-dry-run"
+    if (lane.terminalKind !== "dry-run"
       || join.correlationId !== lane.correlationId
       || join.generationId !== lane.generationId
       || join.source.chainId !== lane.currentSource.source.chainId
       || join.source.number !== lane.currentSource.source.number
       || join.source.hash !== lane.currentSource.source.hash
       || join.source.stateRoot !== lane.currentSource.source.stateRoot
-      || join.unsignedDryRunLineageHash !== lane.terminalLineageHash
-      || !lane.candidateIds.includes(join.unsignedDryRunCandidateId)
-      || !facts.candidateRefs.includes(performanceLaneCandidateRefV1(lane.lane, join.unsignedDryRunCandidateId))) {
+      || join.dryRunLineageHash !== lane.terminalLineageHash
+      || !lane.candidateIds.includes(join.dryRunCandidateId)
+      || !facts.candidateRefs.includes(performanceLaneCandidateRefV1(lane.lane, join.dryRunCandidateId))) {
       throw new TypeError("producer head scheduler completion lineage mismatch");
     }
     completions.push(join.schedulerCompletion);
@@ -1694,7 +1694,7 @@ export function readIssuedProducerFinalFullFamilyTerminalSetV1(
   }
   const blockscanSearchTerminalCapability = readIssuedProducerLaneSearchTerminalCapabilityV1(blockscan.capability);
   if (blockscanSearchTerminalCapability === null
-    || (blockscan.facts.terminalKind !== "route-set-terminal" && blockscan.facts.terminalKind !== "unsigned-dry-run")) {
+    || (blockscan.facts.terminalKind !== "route-set-terminal" && blockscan.facts.terminalKind !== "dry-run")) {
     throw new TypeError("full-family terminal set lacks the blockscan route terminal");
   }
   const blockscanTerminal = readIssuedSearchTerminalCapabilityV1(blockscanSearchTerminalCapability);

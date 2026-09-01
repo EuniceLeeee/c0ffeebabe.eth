@@ -32,14 +32,7 @@ export function issueCoarseEnumerationBindingV1(
 ): IssuedCoarseEnumerationBindingV1 {
   const planner = readIssuedPlanningEnumerationV1(input.plannerEnumeration);
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
-  const plannerReleaseProvenanceHash = "releaseProvenanceHash" in planner.planningProblem
-    ? planner.planningProblem.releaseProvenanceHash
-    : null;
-  if ((runtimeAuthority.authorityClass === "signed-release") !== (plannerReleaseProvenanceHash !== null)) {
-    throw new TypeError("coarse enumeration runtime authority class does not match planner provenance");
-  }
   if (input.generationId !== planner.planningProblem.generationId
-    || input.releaseProvenanceHash !== plannerReleaseProvenanceHash
     || input.objective.objectiveRef !== planner.planningProblem.objectiveRef
     || input.source.hash !== planner.planningProblem.triggerHeadHash) {
     throw new TypeError("coarse enumeration does not bind the planner-issued planning problem");
@@ -56,9 +49,7 @@ export function issueCoarseEnumerationBindingV1(
       || binding.graphRoot !== planner.graphRoot
       || binding.generationId !== planner.planningProblem.generationId
       || binding.runtimeAuthority.authorityBindingHash !== runtimeAuthority.authorityBindingHash
-      || binding.runtimeAuthority.authorityClass !== runtimeAuthority.authorityClass
       || binding.runtimeAuthority.implementationCommit !== runtimeAuthority.implementationCommit
-      || binding.releaseProvenanceHash !== plannerReleaseProvenanceHash
       || binding.objectiveRef !== planner.planningProblem.objectiveRef
       || binding.legs.length !== plannerCandidate.legs.length) {
       throw new TypeError(`coarse enumeration candidate ${index} does not match the planner-issued identity`);
@@ -78,7 +69,6 @@ export function issueCoarseEnumerationBindingV1(
   const fairnessSeed = hashDomain("aloha/coarse-fairness-seed/v1", {
     generationId: input.generationId,
     runtimeAuthority,
-    releaseProvenanceHash: input.releaseProvenanceHash,
     source: input.source,
     plannerEnumerationRoot: planner.enumerationRoot,
   });
@@ -87,7 +77,6 @@ export function issueCoarseEnumerationBindingV1(
     graphRoot: planner.graphRoot,
     source: input.source,
     runtimeAuthority,
-    releaseProvenanceHash: input.releaseProvenanceHash,
     objective: input.objective,
     policy: input.policy,
     fairnessSeed,

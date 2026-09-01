@@ -56,7 +56,7 @@ import {
 import {
   routeBindingHash,
   sealExecutionProgram,
-  sealUnsignedDryRunReceipt,
+  sealDryRunReceipt,
   type CoarseBoundedUnrankedV1,
   type CoarseRankableV1,
   type ExecutionProgramOutcomeV1,
@@ -68,7 +68,7 @@ import {
   type RouteSelectionV1,
   type SearchObjectiveV1,
   type StageFailureV1,
-  type UnsignedDryRunInputV1,
+  type DryRunInputV1,
 } from "../../search-pipeline/src/index.ts";
 import type {
   RouteResolutionPortV1,
@@ -77,11 +77,11 @@ import type { AssetReferenceV1 } from "../../asset-ref/src/index.ts";
 import { createRouteCoarseAttemptEvidenceOwnerV1 } from "../../search-pipeline/src/internal/coarse-attempt-evidence-owner.ts";
 
 /**
- * Generated production composition resolves the opaque Family capabilities.
+ * Generated runtime composition resolves the opaque Family capabilities.
  * This package never branches on familyId or protocol identity.
  */
 export interface SearchRuntimeCoreInputV1 {
-  /** Owner-issued generated Family search surface bound to the signed release. */
+  /** Owner-issued generated Family search surface bound to the active runtime. */
   readonly familyRuntime: GeneratedFamilySearchRuntimePortV1;
   readonly sourceRead: FamilySearchSourceReadPortV1;
   /** Generic sizing seed. Concrete assets come only from the planned Graph ports. */
@@ -327,9 +327,6 @@ function makeRoutePorts(
   const contextByRoute = new Map<Hash, RouteContextV1>();
   const adapterByFamily = new Map<Hash, FamilySearchAdapterV1>();
   const familyRuntime = readGeneratedFamilySearchRuntimePort(input.familyRuntime);
-  if (familyRuntime.runtimeAuthority.authorityClass !== "signed-release") {
-    throw new TypeError("search runtime requires signed Family authority");
-  }
   const coarseAttemptEvidenceOwner = createRouteCoarseAttemptEvidenceOwnerV1();
   assertExactKeys(input.amountSeed, ["amountIn", "recipient"], "searchRuntime.amountSeed");
   assertDecimalString(input.amountSeed.amountIn, "searchRuntime.amountSeed.amountIn");
@@ -730,8 +727,8 @@ function makeRoutePorts(
     },
   };
 
-  const unsignedDryRun = {
-    issue: (value: UnsignedDryRunInputV1<SearchRuntimeProjectionV1, SearchRuntimePlanV1, SearchRuntimeExactV1, unknown>) => sealUnsignedDryRunReceipt(value),
+  const dryRun = {
+    issue: (value: DryRunInputV1<SearchRuntimeProjectionV1, SearchRuntimePlanV1, SearchRuntimeExactV1, unknown>) => sealDryRunReceipt(value),
   };
 
   return {
@@ -743,7 +740,7 @@ function makeRoutePorts(
       ...executionProgram,
       sixStepEvidenceAuthority: Object.freeze({ read: readExecutionProgramSixStepEvidence }),
     }),
-    unsignedDryRun,
+    dryRun,
   };
 
 }

@@ -27,9 +27,13 @@ import {
   sealQualifiedSourcePlanNominationReceiptV1,
   type NominationClosureV1,
 } from "../../../specs/nomination-authority/src/index.ts";
-import { readyBindingPortForReleaseApproval, releaseApproval } from "../../attestation/test/authority-fixture.ts";
-import { issueCandidatePartitionCapabilityFixture } from "../../checkpoint/test/candidate-partition-authority-fixture.ts";
-import type { CandidatePartitionCapabilityV1, CandidatePartitionBindingV1 } from "../../../specs/candidate-partition-authority/src/index.ts";
+import { CandidatePartitionCapabilityRegistryV1 } from "../../checkpoint/src/candidate-partition.ts";
+import {
+  candidatePartitionKeysRoot,
+  createCandidatePartitionCommitmentV1,
+  type CandidatePartitionCapabilityV1,
+  type CandidatePartitionCommitmentV1,
+} from "../../../specs/candidate-partition-authority/src/index.ts";
 import {
   createReadyPromotionAuthority,
   generationRefreshPolicyHash,
@@ -41,7 +45,7 @@ import {
 } from "../../ready-generation/src/index.ts";
 import { GenerationBuilderV1, type BeginRunInputV1, type GenerationBuilderDependencies, type InProgressBuilderRunV1 } from "../src/index.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
+  createRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 
@@ -55,10 +59,8 @@ const policy = {
   maxInProgressRuns: "1" as const,
 };
 const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
-  createSignedReleaseRuntimeAuthorityDescriptorV1({
-    authorityClass: "signed-release",
+  createRuntimeAuthorityDescriptorV1({
     runtimeBindingId: h("runtime-binding"),
-    releaseProvenanceHash: h("release-provenance"),
     implementationCommit: "a".repeat(40),
   }),
 );
@@ -129,8 +131,7 @@ function sourceExecutionSet(value: SourcePlanExecutionV1) {
     sourcePlanSchemaHash: h("plan-schema"),
     sourcePlanClosureRoot: h("plan-closure"),
     sourceAuthorityRoot: h("source-authority"),
-    releaseBindingId: h("release-binding"),
-    releaseProvenanceHash: h("release-provenance"),
+    runtimeAuthority,
     sourceAnchorRoot: h("source-anchor"),
     previousExecutionRoot: null,
   })]);
@@ -145,6 +146,34 @@ function candidate(execution: SourcePlanExecutionV1): CandidateRecordV1 {
     instanceNominationKey: "instance-a",
     evidence: execution.sourceEvidenceRefs[0]!,
   }])[0]!;
+}
+
+function issueCandidatePartitionFixture(
+  registry: CandidatePartitionCapabilityRegistryV1,
+  candidates: readonly CandidateRecordV1[],
+  runId: string,
+  checkpointRevision: string,
+) {
+  const binding = createCandidatePartitionCommitmentV1({
+    kind: "aloha.candidate-partition-commitment",
+    version: "1",
+    runtimeAuthority,
+    runId,
+    cutoff,
+    candidatePartitionRoot: candidatePartitionRoot(candidates),
+    candidatePartitionStorageHash: h(`candidate-storage:${runId}:${checkpointRevision}`),
+    nominationClosureRoot: h(`candidate-nomination:${runId}:${checkpointRevision}`),
+    nominationClosureStorageHash: h(`candidate-nomination-storage:${runId}:${checkpointRevision}`),
+    recordCount: String(candidates.length),
+    candidateKeysRoot: candidatePartitionKeysRoot(candidates.map(value => value.familyCandidateKey)),
+    recentObservationRoot: h(`candidate-observation:${runId}:${checkpointRevision}`),
+    sourceCoverageRoot: h(`candidate-coverage:${runId}:${checkpointRevision}`),
+    checkpointRevision,
+  });
+  const capability = registry.registerVerifiedCommitment(binding, candidates, Object.freeze({
+    read(): Uint8Array { throw new TypeError("test candidate raw evidence is unavailable"); },
+  }));
+  return Object.freeze({ capability, binding });
 }
 
 function nominationClosure(
@@ -215,17 +244,14 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
     readonly candidates: readonly CandidateRecordV1[];
     readonly nominationClosure: NominationClosureV1;
   }>();
-  const approval = releaseApproval(h("framework"), h("executor"), "epoch-1", h("executor-session"));
-  const releaseBinding = approval.resolver.resolve(approval.capability).provenance.runtimeBinding;
-  const partitionFixture = issueCandidatePartitionCapabilityFixture({
-    binding: releaseBinding,
-    candidates: [candidateValue],
-    cutoff,
-    runId: existing?.runId ?? "run-new",
-    checkpointRevision: existing?.checkpointRevision ?? "2",
-  });
+  const partitionFixture = issueCandidatePartitionFixture(
+    new CandidatePartitionCapabilityRegistryV1(),
+    [candidateValue],
+    existing?.runId ?? "run-new",
+    existing?.checkpointRevision ?? "2",
+  );
   const candidatePartition: CandidatePartitionCapabilityV1 = existing?.candidatePartition ?? partitionFixture.capability;
-  const candidatePartitionBinding: CandidatePartitionBindingV1 = existing?.candidatePartitionBinding ?? partitionFixture.binding;
+  const candidatePartitionBinding: CandidatePartitionCommitmentV1 = existing?.candidatePartitionBinding ?? partitionFixture.binding;
   const sealedRun = Object.freeze({}) as SealedRunCapabilityV1;
   const sealedRunBinding: SealedRunBindingV1 = {
     runId: existing?.runId ?? "run-new",
@@ -238,13 +264,13 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
     candidatePartitionStorageHash: candidatePartitionBinding.candidatePartitionStorageHash,
     nominationClosureRoot: nominationClosureValue.root,
     nominationClosureStorageHash,
-    candidatePartitionProofStorageHash: h("candidate-proof-storage"),
+    candidatePartitionCommitmentStorageHash: h("candidate-commitment-storage"),
     exactOutcomePartitionRoot: h("outcomes"),
     verifiedMemoSetRoot: h("memos"),
     checkpointRevision: existing?.checkpointRevision ?? "2",
+    runtimeAuthority,
     attestationAuthorityRoot: h("attestation-authority"),
-    releaseAuthorityRoot: h("release-authority"),
-    releaseProvenanceHash: h("release-provenance"),
+    frameworkAuthorityRoot: h("framework-authority"),
     executorAuthorityRoot: h("executor-authority"),
   };
   const deps: GenerationBuilderDependencies = {
@@ -391,10 +417,9 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
             candidatePartitionRoot: sealedRunBinding.candidatePartitionRoot,
             nominationClosureRoot: sealedRunBinding.nominationClosureRoot,
             nominationClosureStorageHash: sealedRunBinding.nominationClosureStorageHash,
-            candidatePartitionProofStorageHash: sealedRunBinding.candidatePartitionProofStorageHash,
+            candidatePartitionCommitmentStorageHash: sealedRunBinding.candidatePartitionCommitmentStorageHash,
             exactOutcomePartitionRoot: sealedRunBinding.exactOutcomePartitionRoot,
             runtimeAuthority,
-            releaseProvenanceHash: sealedRunBinding.releaseProvenanceHash,
             verifiedMemoSetRoot: sealedRunBinding.verifiedMemoSetRoot,
             instanceCatalogRoot: input.instanceCatalog.instanceCatalogRoot,
             graphRoot: h("graph"), edgeCount: "0", instanceCount: "0",
@@ -419,20 +444,19 @@ function fixture(existing: InProgressBuilderRunV1 | null = null) {
 }
 
 function issuedDefinitionChangedError(): unknown {
-  const release = releaseApproval(h("framework"), h("executor"));
-  const releasePort = readyBindingPortForReleaseApproval(release);
   const currentRuntimeAuthority = projectRuntimeAuthorityDescriptorV1(
-    createSignedReleaseRuntimeAuthorityDescriptorV1({
-      authorityClass: "signed-release",
-      runtimeBindingId: releasePort.currentBindingId(),
-      releaseProvenanceHash: releasePort.currentProvenanceHash(),
-      implementationCommit: releasePort.currentImplementationCommit(),
+    createRuntimeAuthorityDescriptorV1({
+      runtimeBindingId: h("definition-change-runtime"),
+      implementationCommit: "a".repeat(40),
     }),
   );
+  const authorityPort = Object.freeze({
+    readCurrent: () => Object.freeze({ runtimeAuthority: currentRuntimeAuthority }),
+  });
   const authority = createReadyPromotionAuthority(() => ({
     definitionCatalogRoot: h("current-definitions"),
     policy,
-  }), releasePort);
+  }), authorityPort);
   try {
     authority.issue({
       expectedRevision: "1",
@@ -442,8 +466,7 @@ function issuedDefinitionChangedError(): unknown {
       instanceCatalogRoot: h("instances"),
       graphRoot: h("graph"),
       runtimeAuthority: currentRuntimeAuthority,
-      releaseProvenanceHash: h("release-provenance"),
-      candidatePartitionProofStorageHash: h("candidate-proof-storage"),
+      candidatePartitionCommitmentStorageHash: h("candidate-commitment-storage"),
       nominationClosureRoot: h("nomination-closure"),
       nominationClosureStorageHash: h("nomination-closure-storage"),
       policy,
@@ -481,8 +504,7 @@ async function stagedFixture(firstPromotionError: unknown, options: StagedFixtur
     generationRefreshPolicyHash: generationRefreshPolicyHash(policy),
     definitionCatalogRoot: run!.definitionCatalogRoot,
     runtimeAuthority,
-    releaseProvenanceHash: staged.sealedRunBinding.releaseProvenanceHash,
-    candidatePartitionProofStorageHash: staged.sealedRunBinding.candidatePartitionProofStorageHash,
+    candidatePartitionCommitmentStorageHash: staged.sealedRunBinding.candidatePartitionCommitmentStorageHash,
     nominationClosureRoot: staged.sealedRunBinding.nominationClosureRoot,
     nominationClosureStorageHash: staged.sealedRunBinding.nominationClosureStorageHash,
   };
@@ -586,8 +608,7 @@ async function firstPromotionAmbiguousFixture() {
           generationRefreshPolicyHash: generationRefreshPolicyHash(policy),
           definitionCatalogRoot: binding.definitionCatalogRoot,
           runtimeAuthority,
-          releaseProvenanceHash: binding.releaseProvenanceHash,
-          candidatePartitionProofStorageHash: binding.candidatePartitionProofStorageHash,
+          candidatePartitionCommitmentStorageHash: binding.candidatePartitionCommitmentStorageHash,
           nominationClosureRoot: binding.nominationClosureRoot,
           nominationClosureStorageHash: binding.nominationClosureStorageHash,
         };

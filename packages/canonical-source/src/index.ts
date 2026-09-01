@@ -22,7 +22,6 @@ import type { BlockRangeV1, CanonicalCutoffV1 } from "../../discovery/src/index.
 import {
   decodeRuntimeAuthorityProjectionV1,
   type RuntimeAuthorityProjectionV1,
-  type RuntimeReleaseProvenanceHashV1,
 } from "../../runtime-authority/src/index.ts";
 import type { CanonicalLeaseGuardPort } from "./lease-guard-port.ts";
 export type { CanonicalLeaseGuardPort } from "./lease-guard-port.ts";
@@ -82,8 +81,7 @@ export interface ProducerGenerationBindingV1 {
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
   readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
-  readonly candidatePartitionProofStorageHash: Hash;
+  readonly candidatePartitionCommitmentStorageHash: Hash;
   readonly nominationClosureRoot: Hash;
   readonly nominationClosureStorageHash: Hash;
 }
@@ -401,20 +399,13 @@ function exactProducerGenerationBinding(
       "instanceCatalogRoot",
       "graphRoot",
       "runtimeAuthority",
-      "releaseProvenanceHash",
-      "candidatePartitionProofStorageHash",
+      "candidatePartitionCommitmentStorageHash",
       "nominationClosureRoot",
       "nominationClosureStorageHash",
     ], context);
     const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(
       readOwnEnumerableDataProperty(raw, "runtimeAuthority", context),
     );
-    const rawReleaseProvenanceHash = readOwnEnumerableDataProperty(raw, "releaseProvenanceHash", context);
-    const releaseProvenanceHash: RuntimeReleaseProvenanceHashV1 = runtimeAuthority.authorityClass === "signed-release"
-      ? assertHash(rawReleaseProvenanceHash, `${context}.releaseProvenanceHash`)
-      : rawReleaseProvenanceHash === null
-        ? null
-        : (() => { throw new TypeError(`${context}.unsigned runtime authority cannot carry release provenance`); })();
     return deepFreeze({
       generationId: assertNonEmptyString(
         readOwnEnumerableDataProperty(raw, "generationId", context),
@@ -445,10 +436,9 @@ function exactProducerGenerationBinding(
         `${context}.graphRoot`,
       ),
       runtimeAuthority,
-      releaseProvenanceHash,
-      candidatePartitionProofStorageHash: assertHash(
-        readOwnEnumerableDataProperty(raw, "candidatePartitionProofStorageHash", context),
-        `${context}.candidatePartitionProofStorageHash`,
+      candidatePartitionCommitmentStorageHash: assertHash(
+        readOwnEnumerableDataProperty(raw, "candidatePartitionCommitmentStorageHash", context),
+        `${context}.candidatePartitionCommitmentStorageHash`,
       ),
       nominationClosureRoot: assertHash(
         readOwnEnumerableDataProperty(raw, "nominationClosureRoot", context),
@@ -480,11 +470,9 @@ function sameProducerGenerationBinding(
     && left.definitionCatalogRoot === right.definitionCatalogRoot
     && left.instanceCatalogRoot === right.instanceCatalogRoot
     && left.graphRoot === right.graphRoot
-    && left.runtimeAuthority.authorityClass === right.runtimeAuthority.authorityClass
     && left.runtimeAuthority.authorityBindingHash === right.runtimeAuthority.authorityBindingHash
     && left.runtimeAuthority.implementationCommit === right.runtimeAuthority.implementationCommit
-    && left.releaseProvenanceHash === right.releaseProvenanceHash
-    && left.candidatePartitionProofStorageHash === right.candidatePartitionProofStorageHash
+    && left.candidatePartitionCommitmentStorageHash === right.candidatePartitionCommitmentStorageHash
     && left.nominationClosureRoot === right.nominationClosureRoot
     && left.nominationClosureStorageHash === right.nominationClosureStorageHash;
 }

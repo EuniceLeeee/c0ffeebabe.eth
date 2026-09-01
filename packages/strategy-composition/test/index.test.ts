@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hashDomain, type Hash } from "../../canonical-codec/src/index.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
   createUnsignedDryRunRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
@@ -23,7 +22,6 @@ import {
 import {
   assertGeneratedStrategyRuntimeFactory,
   createGeneratedStrategyRuntimeFactory,
-  issueGeneratedStrategyRuntimeAuthorityCapability,
   issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability,
   readGeneratedStrategyRuntimeFactoryMetadata,
 } from "../src/internal/generated-runtime-composition.ts";
@@ -35,13 +33,12 @@ import {
 
 const h = (domain: string, value: unknown): Hash => hashDomain(domain, value);
 const implementationCommit = "a".repeat(40);
-const signedRuntimeAuthority = createSignedReleaseRuntimeAuthorityDescriptorV1({
-  authorityClass: "signed-release",
+const unsignedRuntimeAuthority = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
+  authorityClass: "dry-run",
   runtimeBindingId: h("test/strategy-composition/runtime-binding/v1", 1),
-  releaseProvenanceHash: h("test/strategy-composition/release-provenance/v1", 1),
   implementationCommit,
 });
-const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(signedRuntimeAuthority);
+const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(unsignedRuntimeAuthority);
 
 const catalogEntry = compileStrategy(ROUTE_CYCLE_STRATEGY, []).entry;
 const issuerClosureRoot = h("test/strategy-composition/issuer-closure/v1", "route-cycle");
@@ -71,16 +68,6 @@ const descriptor = sealGeneratedStrategyRuntimeDescriptor({
   definitionCatalogRoot: h("test/strategy-composition/catalog/v1", "global"),
   proposedCapabilitySetRoot: h("test/strategy-composition/capabilities/v1", []),
   strategies: [runtimeEntry],
-});
-
-const binding: StrategyGraphBindingV1 = Object.freeze({
-  generationId: "generation-1",
-  definitionCatalogRoot: descriptor.definitionCatalogRoot,
-  graphRoot: h("test/strategy-composition/graph/v1", 1),
-  readyRecordHash: h("test/strategy-composition/ready/v1", 1),
-  releaseProvenanceHash: signedRuntimeAuthority.releaseProvenanceHash,
-  runtimeAuthority,
-  sourceHash: h("test/strategy-composition/head/v1", 1),
 });
 
 const objectiveRef = (id: string): Hash => h("aloha/search-objective/v1", { id });
@@ -120,14 +107,24 @@ function openTestComposition(input: {
     descriptor: selectedDescriptor,
     issuers: input.issuers ?? [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
   });
-  const capability = issueGeneratedStrategyRuntimeAuthorityCapability({
+  const capability = issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({
     factory,
-    qualifiedCapabilityRefsRoot: selectedDescriptor.proposedCapabilitySetRoot,
-    runtimeAuthority: signedRuntimeAuthority,
+    declaredCapabilitySetRoot: selectedDescriptor.proposedCapabilitySetRoot,
+    runtimeAuthority: unsignedRuntimeAuthority,
     assertCurrent: input.assertCurrent ?? (() => {}),
   });
   return Object.freeze({ factory, capability, composition: factory(capability) });
 }
+
+const binding: StrategyGraphBindingV1 = Object.freeze({
+  generationId: "generation-1",
+  definitionCatalogRoot: descriptor.definitionCatalogRoot,
+  graphRoot: h("test/strategy-composition/graph/v1", 1),
+  readyRecordHash: h("test/strategy-composition/ready/v1", 1),
+  runtimeMembershipHash: openTestComposition().composition.runtimeMembershipHash,
+  runtimeAuthority,
+  sourceHash: h("test/strategy-composition/head/v1", 1),
+});
 
 test("generated Strategy issues a Graph-bound blockscan problem without fixture assets", () => {
   const { composition } = openTestComposition();
@@ -138,7 +135,7 @@ test("generated Strategy issues a Graph-bound blockscan problem without fixture 
   });
   assert.equal(problems.length, 1);
   assert.equal(problems[0]!.kind, "closed-loop");
-  assert.equal(problems[0]!.releaseProvenanceHash, signedRuntimeAuthority.releaseProvenanceHash);
+  assert.equal(problems[0]!.runtimeMembershipHash, binding.runtimeMembershipHash);
   assert.deepEqual(problems[0]!.runtimeAuthority, runtimeAuthority);
   assert.equal(problems[0]!.generationId, binding.generationId);
   assert.equal(problems[0]!.graphRoot, binding.graphRoot);
@@ -323,7 +320,7 @@ test("generated Strategy factory closes exact issuer imports and fails closed wi
   assert.throws(() => createGeneratedStrategyRuntimeComposition({
     descriptor,
     issuers: [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
-    releaseProvenanceHash: binding.releaseProvenanceHash,
+    runtimeMembershipHash: binding.runtimeMembershipHash,
   } as never), /production authority is unavailable/);
   const first = openTestComposition();
   const secondFactory = createGeneratedStrategyRuntimeFactory({
@@ -363,13 +360,13 @@ test("issued planning capability is fenced by release rotation", () => {
   }), /release rotated/);
 });
 
-test("unsigned dry-run uses the same generated Strategy factory without release provenance", () => {
+test("unsigned dry-run binds the exact generated Strategy membership", () => {
   const factory = createGeneratedStrategyRuntimeFactory({
     descriptor,
     issuers: [ROUTE_CYCLE_PLANNING_PROBLEM_ISSUER],
   });
   const unsignedAuthority = createUnsignedDryRunRuntimeAuthorityDescriptorV1({
-    authorityClass: "unsigned-dry-run",
+    authorityClass: "dry-run",
     runtimeBindingId: h("test/strategy-composition/unsigned-runtime-binding/v1", 1),
     implementationCommit: "b".repeat(40),
   });
@@ -401,7 +398,7 @@ test("unsigned dry-run uses the same generated Strategy factory without release 
   });
   const [problem] = composition.issuePlanningProblems({ binding: unsignedBinding, edges, trigger: issuedTrigger });
   assert.equal(problem?.runtimeMembershipHash, composition.runtimeMembershipHash);
-  assert.equal(problem?.runtimeAuthority.authorityClass, "unsigned-dry-run");
+  assert.equal(problem?.runtimeAuthority.authorityClass, "dry-run");
   assert.equal(Object.prototype.hasOwnProperty.call(composition, "releaseProvenanceHash"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(problem!, "releaseProvenanceHash"), false);
   assert.throws(() => issueGeneratedUnsignedDryRunStrategyRuntimeAuthorityCapability({

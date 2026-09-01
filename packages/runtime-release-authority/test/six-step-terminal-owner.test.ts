@@ -325,7 +325,7 @@ async function successfulTerminal(
     input: envelope.blockscanInput,
     signal: new AbortController().signal,
   });
-  if (result.outcome.kind !== "unsigned-dry-run") throw new TypeError("Six-Step terminal fixture did not pass");
+  if (result.outcome.kind !== "dry-run") throw new TypeError("Six-Step terminal fixture did not pass");
   return result.outcome.terminalCapability;
 }
 

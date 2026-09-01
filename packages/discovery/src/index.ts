@@ -16,6 +16,10 @@ import {
   type CanonicalJson,
   type Hash,
 } from "../../canonical-codec/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../runtime-authority/src/index.ts";
 
 export interface CanonicalCutoffV1 {
   readonly chainId: string;
@@ -99,7 +103,7 @@ export interface SourcePlanEvidenceReceiptV1 {
 
 /**
  * Static Family-owned source semantics imported by generated composition.
- * Execution ports are joined separately by the release owner; this value is
+ * Execution ports are joined separately by the runtime owner; this value is
  * data only and therefore cannot mint coverage or candidate authority.
  */
 export interface FamilySourcePlanDefinitionV1 {
@@ -132,8 +136,8 @@ export interface SourcePlanExecutionV1 {
  * Checkpoint-owned durable binding for one Family-produced logical execution.
  *
  * The Family owns the opaque partition semantics above, but it cannot mint a
- * reusable cursor.  Only the release discovery owner can join that execution
- * to the exact generated plan leaf, physical source authority/release anchor,
+ * reusable cursor.  Only the runtime discovery owner can join that execution
+ * to the exact generated plan leaf, physical source authority/runtime anchor,
  * and a root-reachable predecessor execution.
  */
 export interface PersistedSourcePlanExecutionV1 {
@@ -144,8 +148,7 @@ export interface PersistedSourcePlanExecutionV1 {
   readonly sourcePlanSchemaHash: Hash;
   readonly sourcePlanClosureRoot: Hash;
   readonly sourceAuthorityRoot: Hash;
-  readonly releaseBindingId: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly sourceAnchorRoot: Hash;
   readonly previousExecutionRoot: Hash | null;
   readonly persistedExecutionRoot: Hash;
@@ -690,8 +693,7 @@ function persistedExecutionRootPayload(
     sourcePlanSchemaHash: value.sourcePlanSchemaHash,
     sourcePlanClosureRoot: value.sourcePlanClosureRoot,
     sourceAuthorityRoot: value.sourceAuthorityRoot,
-    releaseBindingId: value.releaseBindingId,
-    releaseProvenanceHash: value.releaseProvenanceHash,
+    runtimeAuthority: value.runtimeAuthority,
     sourceAnchorRoot: value.sourceAnchorRoot,
     previousExecutionRoot: value.previousExecutionRoot,
   };
@@ -723,8 +725,7 @@ export function sealPersistedSourcePlanExecution(
     sourcePlanSchemaHash: assertHash(input.sourcePlanSchemaHash, "persistedSourcePlanExecution.sourcePlanSchemaHash"),
     sourcePlanClosureRoot: assertHash(input.sourcePlanClosureRoot, "persistedSourcePlanExecution.sourcePlanClosureRoot"),
     sourceAuthorityRoot: assertHash(input.sourceAuthorityRoot, "persistedSourcePlanExecution.sourceAuthorityRoot"),
-    releaseBindingId: assertHash(input.releaseBindingId, "persistedSourcePlanExecution.releaseBindingId"),
-    releaseProvenanceHash: assertHash(input.releaseProvenanceHash, "persistedSourcePlanExecution.releaseProvenanceHash"),
+    runtimeAuthority: decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority),
     sourceAnchorRoot: assertHash(input.sourceAnchorRoot, "persistedSourcePlanExecution.sourceAnchorRoot"),
     previousExecutionRoot,
   });
@@ -746,8 +747,7 @@ export function decodePersistedSourcePlanExecution(
     sourcePlanSchemaHash: (field, path) => assertHash(field, path),
     sourcePlanClosureRoot: (field, path) => assertHash(field, path),
     sourceAuthorityRoot: (field, path) => assertHash(field, path),
-    releaseBindingId: (field, path) => assertHash(field, path),
-    releaseProvenanceHash: (field, path) => assertHash(field, path),
+    runtimeAuthority: (field) => decodeRuntimeAuthorityProjectionV1(field),
     sourceAnchorRoot: (field, path) => assertHash(field, path),
     previousExecutionRoot: nullableHash,
     persistedExecutionRoot: (field, path) => assertHash(field, path),

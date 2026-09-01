@@ -19,7 +19,7 @@ import type {
 import type { GeneratedFamilyEntryV1, StageCapabilityRefV1 } from "../../family-sdk/runtime-refs/index.ts";
 import { asCapabilityId, asCapabilityVersion, asOwnerRef, asSchemaRef } from "../../capability-contracts/src/index.ts";
 import { asFamilyId } from "../../family-sdk/runtime-refs/index.ts";
-import type { SignedReleaseRuntimeAuthorityDescriptorV1 } from "../../runtime-authority/src/index.ts";
+import type { RuntimeAuthorityDescriptorV1 } from "../../runtime-authority/src/index.ts";
 
 const h = (value: string): Hash => hashDomain("test/startup-runtime", value);
 
@@ -27,7 +27,7 @@ const h = (value: string): Hash => hashDomain("test/startup-runtime", value);
 export function generatedCompositionFixture(input: Readonly<{
   readonly familyId?: string;
   readonly familyDefinitionHash?: Hash;
-  readonly runtimeAuthority: SignedReleaseRuntimeAuthorityDescriptorV1;
+  readonly runtimeAuthority: RuntimeAuthorityDescriptorV1;
 }>) {
   const familyId = asFamilyId(input.familyId ?? "startup-test-family");
   const familyDefinitionHash = input.familyDefinitionHash ?? h("startup-family-definition");
@@ -170,12 +170,8 @@ export function generatedCompositionFixture(input: Readonly<{
   const capability = issueGeneratedFamilyRuntimeAuthorityCapability({
     factory,
     runtimeAuthority: input.runtimeAuthority,
-    qualifiedCapabilityRefsRoot: descriptor.proposedCapabilitySetRoot,
+    declaredCapabilitySetRoot: descriptor.proposedCapabilitySetRoot,
     nominationProgramSetRoot: descriptor.nominationProgramSetRoot,
-    nominationQualifications: [{
-      proposalLeafDigest: nominationProgramProposal.proposalLeafDigest,
-      qualificationLeafDigest: h("startup-nomination-qualification"),
-    }],
     authorities: [authority],
     assertCurrent() {},
   });

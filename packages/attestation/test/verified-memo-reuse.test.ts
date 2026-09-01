@@ -125,7 +125,7 @@ function harness(options: {
   readonly registry?: CandidatePartitionCapabilityRegistryV1;
 } = {}) {
   const approval = options.approval ?? releaseApproval(h("framework"), h("executor"), "epoch-1", h("session"));
-  const framework = createFrameworkFailureRuntime(approval, { classify() { return null; } });
+  const framework = createFrameworkFailureRuntime(approval.runtimeAuthority, { classify() { return null; } });
   const rejectionAuthority = createRejectionExecutorAuthorityIssuer(approval);
   const rejection = createRejectionFactRuntime(rejectionAuthority.issue({
     async execute() { return { transport: [], effects: [] }; },
@@ -171,7 +171,7 @@ function harness(options: {
     async getOrBuild(_key, build) { return build(); },
   };
   const service = createAttestationService({
-    composition: approval,
+    runtimeAuthority: approval.runtimeAuthority,
     frameworkRuntime: framework,
     rejectionRuntime: rejection,
     programs,
@@ -207,12 +207,12 @@ test("verified memo reuse skips unchanged identity and attests only the differen
     const identity = await session.resolveIdentityOrReuseProofOnce(value.familyCandidateKey, new AbortController().signal);
     assert.equal(identity.kind, "identityVerified");
     if (identity.kind !== "identityVerified") throw new Error("expected verified identity");
-    origins.push(identity.identity.issuerProof.identityOrigin.kind);
+    origins.push(identity.identity.identityCommitment.identityOrigin.kind);
     if (value.instanceNominationKey === "unchanged") {
-      assert.equal(identity.identity.issuerProof.identityOrigin.kind, "verified-memo-reuse");
-      if (identity.identity.issuerProof.identityOrigin.kind !== "verified-memo-reuse") throw new Error("expected memo origin");
-      assert.equal(identity.identity.issuerProof.identityOrigin.verifiedMemoSetRoot, h("prior-memo-set"));
-      assert.equal(identity.identity.issuerProof.identityOrigin.proof.familyCandidateKey, value.familyCandidateKey);
+      assert.equal(identity.identity.identityCommitment.identityOrigin.kind, "verified-memo-reuse");
+      if (identity.identity.identityCommitment.identityOrigin.kind !== "verified-memo-reuse") throw new Error("expected memo origin");
+      assert.equal(identity.identity.identityCommitment.identityOrigin.verifiedMemoSetRoot, h("prior-memo-set"));
+      assert.equal(identity.identity.identityCommitment.identityOrigin.proof.familyCandidateKey, value.familyCandidateKey);
     }
     resolvedIdentities.push(identity);
   }
@@ -226,7 +226,7 @@ test("verified memo reuse skips unchanged identity and attests only the differen
   assert.deepEqual(origins, ["verified-memo-reuse", "fresh", "fresh"]);
 });
 
-test("signed memo-reuse origin survives durable round-trip and restart; clone, splice, and stale release fail", async () => {
+test("unsigned memo-reuse origin survives durable round-trip and restart; clone, splice, and stale authority fail", async () => {
   const fixture = harness();
   const value = candidate("durable-reuse");
   const partition = issueCandidatePartitionFixture(fixture.approval, fixture.registry, [value], cutoff, "run-current");
@@ -256,7 +256,7 @@ test("signed memo-reuse origin survives durable round-trip and restart; clone, s
   const durableIdentity = decodeCanonicalJson(
     encodeCanonicalBytes(persisted.identity),
   ) as unknown as NonNullable<typeof persisted.identity>;
-  assert.equal(durableIdentity.issuerProof.identityOrigin.kind, "verified-memo-reuse");
+  assert.equal(durableIdentity.identityCommitment.identityOrigin.kind, "verified-memo-reuse");
 
   const restarted = harness({ approval: fixture.approval, registry: fixture.registry });
   const resume = rehydrateIdentityResumeCapabilityForCheckpoint(restarted.service.validationAuthority, {
@@ -267,9 +267,9 @@ test("signed memo-reuse origin survives durable round-trip and restart; clone, s
     familyCandidateKey: value.familyCandidateKey,
     identity: durableIdentity,
     outcomeHash: persisted.outcomeHash,
+    runtimeAuthority: persisted.runtimeAuthority,
     attestationAuthorityRoot: persisted.attestationAuthorityRoot,
-    releaseAuthorityRoot: persisted.releaseAuthorityRoot,
-    releaseProvenanceHash: persisted.releaseProvenanceHash,
+    frameworkAuthorityRoot: persisted.frameworkAuthorityRoot,
     executorAuthorityRoot: persisted.executorAuthorityRoot,
   });
   const resumed = restarted.service.openRunSession({
@@ -278,7 +278,7 @@ test("signed memo-reuse origin survives durable round-trip and restart; clone, s
   });
   const restartedIdentity = await resumed.resolveIdentityOrReuseProofOnce(value.familyCandidateKey, new AbortController().signal);
   if (restartedIdentity.kind !== "identityVerified") throw new Error("expected restarted identity");
-  assert.deepEqual(restartedIdentity.identity.issuerProof.identityOrigin, durableIdentity.issuerProof.identityOrigin);
+  assert.deepEqual(restartedIdentity.identity.identityCommitment.identityOrigin, durableIdentity.identityCommitment.identityOrigin);
 
   assert.throws(() => rehydrateIdentityResumeCapabilityForCheckpoint(restarted.service.validationAuthority, {
     runId: "run-current",
@@ -288,14 +288,14 @@ test("signed memo-reuse origin survives durable round-trip and restart; clone, s
     familyCandidateKey: value.familyCandidateKey,
     identity: {
       ...durableIdentity,
-      issuerProof: { ...durableIdentity.issuerProof, identityOrigin: { kind: "fresh" } },
+      identityCommitment: { ...durableIdentity.identityCommitment, identityOrigin: { kind: "fresh" } },
     },
     outcomeHash: persisted.outcomeHash,
+    runtimeAuthority: persisted.runtimeAuthority,
     attestationAuthorityRoot: persisted.attestationAuthorityRoot,
-    releaseAuthorityRoot: persisted.releaseAuthorityRoot,
-    releaseProvenanceHash: persisted.releaseProvenanceHash,
+    frameworkAuthorityRoot: persisted.frameworkAuthorityRoot,
     executorAuthorityRoot: persisted.executorAuthorityRoot,
-  }), /proof|hash|signature|context|origin/i);
+  }), /commitment|hash|context|origin/i);
 
   const stale = harness({
     registry: fixture.registry,
@@ -309,11 +309,11 @@ test("signed memo-reuse origin survives durable round-trip and restart; clone, s
     familyCandidateKey: value.familyCandidateKey,
     identity: durableIdentity,
     outcomeHash: persisted.outcomeHash,
+    runtimeAuthority: persisted.runtimeAuthority,
     attestationAuthorityRoot: persisted.attestationAuthorityRoot,
-    releaseAuthorityRoot: persisted.releaseAuthorityRoot,
-    releaseProvenanceHash: persisted.releaseProvenanceHash,
+    frameworkAuthorityRoot: persisted.frameworkAuthorityRoot,
     executorAuthorityRoot: persisted.executorAuthorityRoot,
-  }), /proof|authority|release|context|mismatch/i);
+  }), /authority|runtime|context|mismatch/i);
 });
 
 test("verified memo reuse handles are opaque, lineage-bound, and globally one-shot", async () => {

@@ -32,7 +32,6 @@ const BINDING_KEYS = Object.freeze([
   "definitionCatalogRoot",
   "graphRoot",
   "readyRecordHash",
-  "releaseProvenanceHash",
   "runtimeMembershipHash",
   "runtimeAuthority",
   "sourceHash",
@@ -40,32 +39,19 @@ const BINDING_KEYS = Object.freeze([
 function binding(value: StrategyGraphBindingV1): StrategyGraphBindingV1 {
   if (value === null || typeof value !== "object") throw new TypeError("strategy trigger binding is required");
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority);
-  const expectedKeys = runtimeAuthority.authorityClass === "signed-release"
-    ? BINDING_KEYS.filter(key => key !== "runtimeMembershipHash" || Object.prototype.hasOwnProperty.call(value, key))
-    : BINDING_KEYS.filter(key => key !== "releaseProvenanceHash");
-  assertExactKeys(value, expectedKeys, "strategyTrigger.binding");
+  assertExactKeys(value, BINDING_KEYS, "strategyTrigger.binding");
   assertNonEmptyString(value.generationId, "strategyTrigger.binding.generationId");
   assertHash(value.definitionCatalogRoot, "strategyTrigger.binding.definitionCatalogRoot");
   assertHash(value.graphRoot, "strategyTrigger.binding.graphRoot");
   assertHash(value.readyRecordHash, "strategyTrigger.binding.readyRecordHash");
   assertHash(value.sourceHash, "strategyTrigger.binding.sourceHash");
-  const releaseProvenanceHash = runtimeAuthority.authorityClass === "signed-release"
-    ? assertHash(value.releaseProvenanceHash, "strategyTrigger.binding.releaseProvenanceHash")
-    : undefined;
-  const runtimeMembershipHash = assertHash(
-    value.runtimeMembershipHash ?? releaseProvenanceHash,
-    "strategyTrigger.binding.runtimeMembershipHash",
-  );
-  if (releaseProvenanceHash !== undefined && runtimeMembershipHash !== releaseProvenanceHash) {
-    throw new TypeError("signed strategy trigger membership must equal release provenance");
-  }
+  const runtimeMembershipHash = assertHash(value.runtimeMembershipHash, "strategyTrigger.binding.runtimeMembershipHash");
   return Object.freeze({
     generationId: value.generationId,
     definitionCatalogRoot: value.definitionCatalogRoot,
     graphRoot: value.graphRoot,
     readyRecordHash: value.readyRecordHash,
-    ...(runtimeAuthority.authorityClass === "unsigned-dry-run" ? { runtimeMembershipHash } : {}),
-    ...(releaseProvenanceHash === undefined ? {} : { releaseProvenanceHash }),
+    runtimeMembershipHash,
     runtimeAuthority,
     sourceHash: value.sourceHash,
   });
@@ -84,9 +70,7 @@ function sameBinding(left: StrategyGraphBindingV1, right: StrategyGraphBindingV1
     && left.graphRoot === right.graphRoot
     && left.readyRecordHash === right.readyRecordHash
     && left.sourceHash === right.sourceHash
-    && (left.runtimeMembershipHash ?? left.releaseProvenanceHash)
-      === (right.runtimeMembershipHash ?? right.releaseProvenanceHash)
-    && left.releaseProvenanceHash === right.releaseProvenanceHash
+    && left.runtimeMembershipHash === right.runtimeMembershipHash
     && encodeCanonicalJson(left.runtimeAuthority) === encodeCanonicalJson(right.runtimeAuthority);
 }
 
@@ -140,8 +124,7 @@ export function readIssuedStrategyPlanningTriggerV1(
   };
   return deepFreeze({
     ...common,
-    ...(graphBinding.runtimeMembershipHash === undefined ? {} : { runtimeMembershipHash: graphBinding.runtimeMembershipHash }),
-    ...(graphBinding.releaseProvenanceHash === undefined ? {} : { releaseProvenanceHash: graphBinding.releaseProvenanceHash }),
+    runtimeMembershipHash: graphBinding.runtimeMembershipHash,
     runtimeAuthority: graphBinding.runtimeAuthority,
   });
 }

@@ -66,7 +66,6 @@ export function issueCoarseProjectionServiceV1(input: {
     const body = deepFreeze({
       schemaVersion: 1 as const,
       kind: "aloha.qualified-coarse-projection-receipt-v1" as const,
-      releaseProvenanceHash: owner.releaseProvenanceHash,
       releaseMembershipRoot: owner.releaseMembershipRoot,
       ownerQualificationLeafDigest: owner.qualificationLeafDigest,
       ownerDescriptor: owner.descriptor,

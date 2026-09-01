@@ -156,7 +156,7 @@ export function evaluatePerformanceReferenceModel(input: PerformancePredicateInp
       || candidate.windowId !== commitment.windowId
       || candidate.ordinal !== head.ordinal
       || candidate.headRecordId !== head.headRecordId
-      || candidate.sixStepCompleted && (candidate.outcome !== "verified" || candidate.sixStepMode !== "unsigned-dry-run" || candidate.sixStepEvidenceRoot === null || candidate.sixStepCompletionRoot === null)
+      || candidate.sixStepCompleted && (candidate.outcome !== "verified" || candidate.sixStepMode !== "dry-run" || candidate.sixStepEvidenceRoot === null || candidate.sixStepCompletionRoot === null)
       || !candidate.sixStepCompleted && (candidate.sixStepMode !== null || candidate.sixStepEvidenceRoot !== null || candidate.sixStepCompletionRoot !== null)
     )) add(reasons, "candidate-terminal-lineage");
     if (terminal.outcome === "complete-candidates-terminal" && (candidateIds.size === 0 || terminalCandidateIds.size !== candidateIds.size || [...candidateIds].some((candidateId) => !terminalCandidateIds.has(candidateId)))) add(reasons, "candidate-terminal-lineage");

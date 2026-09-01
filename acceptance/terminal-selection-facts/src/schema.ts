@@ -77,8 +77,8 @@ const producerSchedulerJoinSchema = objectSchema({
   source: currentSourceSchema,
   programHash: hashSchema,
   finalSimulationReceiptHash: hashSchema,
-  unsignedDryRunCandidateId: hashSchema,
-  unsignedDryRunLineageHash: hashSchema,
+  dryRunCandidateId: hashSchema,
+  dryRunLineageHash: hashSchema,
 });
 
 const manifestFullFamilySchema = objectSchema({

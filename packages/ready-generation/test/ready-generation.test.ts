@@ -15,11 +15,8 @@ import {
 import { buildPersistedGraph } from "../../graph/src/index.ts";
 import { issueCheckpointSealedRunReader } from "../../sealed-run-runtime/src/internal/reader-issuer.ts";
 import type { SealedRunBindingV1, SealedRunCapabilityV1, SealedRunReaderPortV1, SealedRunSnapshotV1 } from "../../sealed-run-runtime/src/contract.ts";
-import { readyBindingPortForReleaseApproval, releaseApproval } from "../../attestation/test/authority-fixture.ts";
-import { runtimeReleaseBindingProvenanceHash } from "../../../specs/release-authority/src/index.ts";
 import {
-  createSignedReleaseRuntimeAuthorityDescriptorV1,
-  createUnsignedDryRunRuntimeAuthorityDescriptorV1,
+  createRuntimeAuthorityDescriptorV1,
   projectRuntimeAuthorityDescriptorV1,
 } from "../../runtime-authority/src/index.ts";
 import {
@@ -56,20 +53,14 @@ const coverage = sealSourceCoverage(cutoff, [plan], [{
 }]);
 const instanceCatalog = sealInstanceCatalog(cutoff, []);
 const graph = buildPersistedGraph(instanceCatalog);
-const release = releaseApproval(h("framework"), h("executor"));
-const releaseBinding = release.resolver.resolve(release.capability).provenance.runtimeBinding;
-const releaseProvenanceHash = runtimeReleaseBindingProvenanceHash(releaseBinding);
-const releaseBindingPort = readyBindingPortForReleaseApproval(release);
 const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(
-  createSignedReleaseRuntimeAuthorityDescriptorV1({
-    authorityClass: "signed-release",
-    runtimeBindingId: releaseBindingPort.currentBindingId(),
-    releaseProvenanceHash,
-    implementationCommit: releaseBindingPort.currentImplementationCommit(),
+  createRuntimeAuthorityDescriptorV1({
+    runtimeBindingId: h("runtime-binding"),
+    implementationCommit: "a".repeat(40),
   }),
 );
 const runtimeAuthorityPort = Object.freeze({
-  readCurrent: () => Object.freeze({ runtimeAuthority, releaseProvenanceHash }),
+  readCurrent: () => Object.freeze({ runtimeAuthority }),
 });
 const candidateRoot = hashCanonicalPartition("aloha/candidate-partition/v2", []);
 const nominationReceipt = sealQualifiedSourcePlanNominationReceiptV1({
@@ -104,16 +95,19 @@ function binding(): SealedRunBindingV1 {
     runId: "run-a", parentGenerationId: null, cutoff, recentObservationRange: recentObservationRange(cutoff.number),
     definitionCatalogRoot: h("definitions"), sourceCoverageRoot: coverage.sourceCoverageRoot,
     candidatePartitionRoot: candidateRoot, candidatePartitionStorageHash: h("candidate-storage"),
-    candidatePartitionProofStorageHash: h("candidate-proof"),
+    candidatePartitionCommitmentStorageHash: h("candidate-commitment"),
     nominationClosureRoot: nominationClosure.root,
     nominationClosureStorageHash: h("nomination-storage"),
-    verifiedMemoSetRoot: h("memos"), checkpointRevision: "7", attestationAuthorityRoot: h("attestation"),
-    releaseAuthorityRoot: h("release"), releaseProvenanceHash, executorAuthorityRoot: h("executor"),
+    verifiedMemoSetRoot: h("memos"), checkpointRevision: "7", runtimeAuthority,
+    attestationAuthorityRoot: h("attestation"), frameworkAuthorityRoot: h("framework"),
+    executorAuthorityRoot: h("executor"),
   };
   const exactOutcomePartitionRoot = hashDomain("aloha/exact-outcome-partition/v1", {
     runId: base.runId, cutoff: base.cutoff, candidatePartitionRoot: base.candidatePartitionRoot,
-    attestationAuthorityRoot: base.attestationAuthorityRoot, releaseAuthorityRoot: base.releaseAuthorityRoot,
-    releaseProvenanceHash: base.releaseProvenanceHash, executorAuthorityRoot: base.executorAuthorityRoot,
+    runtimeAuthority: base.runtimeAuthority,
+    attestationAuthorityRoot: base.attestationAuthorityRoot,
+    frameworkAuthorityRoot: base.frameworkAuthorityRoot,
+    executorAuthorityRoot: base.executorAuthorityRoot,
     outcomesRoot: hashCanonicalPartition("aloha/candidate-outcomes/v1", []),
   });
   return { ...base, exactOutcomePartitionRoot };
@@ -122,8 +116,10 @@ function binding(): SealedRunBindingV1 {
 function snapshot(value = binding()): SealedRunSnapshotV1 {
   return { ...value, sourceCoverage: coverage, candidateKeys: [], partition: {
     runId: value.runId, cutoff: value.cutoff, candidatePartitionRoot: value.candidatePartitionRoot, outcomes: [],
-    attestationAuthorityRoot: value.attestationAuthorityRoot, releaseAuthorityRoot: value.releaseAuthorityRoot,
-    releaseProvenanceHash: value.releaseProvenanceHash, executorAuthorityRoot: value.executorAuthorityRoot,
+    runtimeAuthority: value.runtimeAuthority,
+    attestationAuthorityRoot: value.attestationAuthorityRoot,
+    frameworkAuthorityRoot: value.frameworkAuthorityRoot,
+    executorAuthorityRoot: value.executorAuthorityRoot,
     accounting: { pending: "0", verified: "0", chainProvenRejected: "0", retryable: "0", invalidProgram: "0" },
     exactOutcomePartitionRoot: value.exactOutcomePartitionRoot,
   } };
@@ -178,7 +174,7 @@ class Store implements ReadyStorePort {
   async putContentAndFsync(kind: "instance-catalog" | "persisted-graph", value: object): Promise<Hash> { return kind === "instance-catalog" ? (value as typeof instanceCatalog).instanceCatalogRoot : (value as typeof graph).graphRoot; }
   async stageReadyCAS(value: ReadyStageInputV1) {
     this.events.push("stage"); this.staged = value;
-    return { stage: { stageStorageHash: h("stage-storage"), runId: value.expectedInProgressRunId, expectedRevision: value.expectedRevision, sealedRevision: value.expectedRevision, stageRevision: (BigInt(value.expectedRevision) + 1n).toString(), stageRecordHash: h("stage"), readyBaseHash: readyGenerationBaseHash(value.ready), cutoff: value.ready.cutoff, generationRefreshPolicyHash: value.ready.generationRefreshPolicyHash, definitionCatalogRoot: value.ready.definitionCatalogRoot, runtimeAuthority: value.ready.runtimeAuthority, releaseProvenanceHash: value.ready.releaseProvenanceHash, candidatePartitionProofStorageHash: value.ready.candidatePartitionProofStorageHash, nominationClosureRoot: value.ready.nominationClosureRoot, nominationClosureStorageHash: value.ready.nominationClosureStorageHash }, stageRevision: "8", stageRecordHash: h("stage") };
+    return { stage: { stageStorageHash: h("stage-storage"), runId: value.expectedInProgressRunId, expectedRevision: value.expectedRevision, sealedRevision: value.expectedRevision, stageRevision: (BigInt(value.expectedRevision) + 1n).toString(), stageRecordHash: h("stage"), readyBaseHash: readyGenerationBaseHash(value.ready), cutoff: value.ready.cutoff, generationRefreshPolicyHash: value.ready.generationRefreshPolicyHash, definitionCatalogRoot: value.ready.definitionCatalogRoot, runtimeAuthority: value.ready.runtimeAuthority, candidatePartitionCommitmentStorageHash: value.ready.candidatePartitionCommitmentStorageHash, nominationClosureRoot: value.ready.nominationClosureRoot, nominationClosureStorageHash: value.ready.nominationClosureStorageHash }, stageRevision: "8", stageRecordHash: h("stage") };
   }
   async activateReadyCAS(value: ReadyActivationInputV1) {
     this.activated = value; const promotionRevision = "9";
@@ -207,21 +203,20 @@ test("public ReadyGeneration API does not re-export the durable sealed-run snaps
   assert.doesNotMatch(file, /export\s+(?:interface|type|class|const|function)\s+SealedRunSnapshotV1\b/);
 });
 
-test("current runtime authority is mode-neutral and unsigned cannot carry release provenance", () => {
-  const unsignedAuthority = projectRuntimeAuthorityDescriptorV1(
-    createUnsignedDryRunRuntimeAuthorityDescriptorV1({
-      authorityClass: "unsigned-dry-run",
-      runtimeBindingId: h("unsigned-runtime-binding"),
-      implementationCommit: releaseBindingPort.currentImplementationCommit(),
+test("current runtime authority accepts one exact implementation projection", () => {
+  const exactAuthority = projectRuntimeAuthorityDescriptorV1(
+    createRuntimeAuthorityDescriptorV1({
+      runtimeBindingId: h("exact-runtime-binding"),
+      implementationCommit: "a".repeat(40),
     }),
   );
-  const unsignedPort = Object.freeze({
-    readCurrent: () => Object.freeze({ runtimeAuthority: unsignedAuthority, releaseProvenanceHash: null }),
+  const exactPort = Object.freeze({
+    readCurrent: () => Object.freeze({ runtimeAuthority: exactAuthority }),
   });
   const issued = issuedReader();
   const authority = createReadyPromotionAuthority(
     () => ({ definitionCatalogRoot: h("definitions"), policy }),
-    unsignedPort,
+    exactPort,
   );
   const service = new ReadyGenerationServiceV1(
     {},
@@ -231,23 +226,22 @@ test("current runtime authority is mode-neutral and unsigned cannot carry releas
     () => ({ definitionCatalogRoot: h("definitions"), declaredSourcePlans: [plan] }),
     authority,
     issued.reader,
-    unsignedPort,
+    exactPort,
   );
   assert.doesNotThrow(() => service.assertOwnerCurrent());
   const badPort = Object.freeze({
-    readCurrent: () => Object.freeze({ runtimeAuthority: unsignedAuthority, releaseProvenanceHash }),
+    readCurrent: () => Object.freeze({ runtimeAuthority: exactAuthority, unexpectedMode: "legacy" }),
   });
   assert.throws(
     () => createReadyPromotionAuthority(
       () => ({ definitionCatalogRoot: h("definitions"), policy }),
-      badPort,
+      badPort as never,
     ).assertConfiguration({
       definitionCatalogRoot: h("definitions"),
       generationRefreshPolicyHash: hashDomain("aloha/generation-refresh-policy/v1", policy),
-      runtimeAuthority: unsignedAuthority,
-      releaseProvenanceHash: null,
+      runtimeAuthority: exactAuthority,
     }),
-    /cannot carry release provenance/,
+    /unknown field/,
   );
 });
 

@@ -63,8 +63,8 @@ export interface SearcherProductionSixStepSchedulerJoinV1 {
   readonly source: RuntimeReleaseSixStepTerminalBindingV1["currentSource"];
   readonly programHash: Hash;
   readonly finalSimulationReceiptHash: Hash;
-  readonly unsignedDryRunCandidateId: Hash;
-  readonly unsignedDryRunLineageHash: Hash;
+  readonly dryRunCandidateId: Hash;
+  readonly dryRunLineageHash: Hash;
 }
 
 export interface SearcherProductionSixStepProcessEvidenceV1 {
@@ -234,8 +234,8 @@ function selectedSchedulerJoin(
     || !sameSource(join.source, terminal.currentSource)
     || join.programHash !== terminal.programHash
     || join.finalSimulationReceiptHash !== terminal.finalSimulationReceiptHash
-    || join.unsignedDryRunCandidateId !== terminal.routeCandidateId
-    || join.unsignedDryRunLineageHash !== terminal.terminalLineageHash) {
+    || join.dryRunCandidateId !== terminal.routeCandidateId
+    || join.dryRunLineageHash !== terminal.terminalLineageHash) {
     throw new TypeError("Six-Step process scheduler/terminal join mismatch");
   }
 }

@@ -18,6 +18,6 @@ export function assertCheckpointSixStepArtifactPortV1(
   value: unknown,
 ): asserts value is CheckpointSixStepArtifactPortV1 {
   if (value === null || typeof value !== "object" || !issued.has(value)) {
-    throw new TypeError("checkpoint Six-Step artifact port is not release-owner-issued");
+    throw new TypeError("checkpoint Six-Step artifact port is not runtime-owner-issued");
   }
 }

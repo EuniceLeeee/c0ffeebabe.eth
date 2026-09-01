@@ -4,36 +4,25 @@
  * owner-issued service assertion and its data-only view.
  */
 import {
-  assertIssuedRuntimeReleaseStrategyRuntimeService,
-  assertIssuedUnsignedDryRunStrategyRuntimeService,
-  type RuntimeReleaseStrategyRuntimeServiceV1,
-  type UnsignedDryRunStrategyRuntimeServiceV1,
+  assertIssuedStrategyRuntimeService,
+  type StrategyRuntimeServiceV1,
 } from "./internal/strategy-runtime-owner.ts";
 
-export type SearcherStrategyRuntimeServiceV1 =
-  | RuntimeReleaseStrategyRuntimeServiceV1
-  | UnsignedDryRunStrategyRuntimeServiceV1;
+export type SearcherStrategyRuntimeServiceV1 = StrategyRuntimeServiceV1;
 
 export function assertIssuedSearcherStrategyRuntimeServiceV1(
   value: unknown,
 ): asserts value is SearcherStrategyRuntimeServiceV1 {
-  try {
-    assertIssuedRuntimeReleaseStrategyRuntimeService(value);
-  } catch {
-    assertIssuedUnsignedDryRunStrategyRuntimeService(value);
-  }
+  assertIssuedStrategyRuntimeService(value);
 }
 
 export {
-  assertIssuedRuntimeReleaseStrategyRuntimeService,
-  assertIssuedUnsignedDryRunStrategyRuntimeService,
+  assertIssuedStrategyRuntimeService,
 };
 export type {
-  RuntimeReleaseStrategyEvidenceExpectationV1,
-  RuntimeReleaseStrategyPlanningRequestV1,
-  RuntimeReleaseStrategyPlanningResultV1,
-  RuntimeReleaseStrategyRuntimeMetadataV1,
-  RuntimeReleaseStrategyRuntimeServiceV1,
-  UnsignedDryRunStrategyRuntimeMetadataV1,
-  UnsignedDryRunStrategyRuntimeServiceV1,
+  StrategyRuntimePlanningRequestV1,
+  StrategyRuntimePlanningResultV1,
+  StrategyEvidenceExpectationV1,
+  StrategyRuntimeMetadataV1,
+  StrategyRuntimeServiceV1,
 } from "./internal/strategy-runtime-owner.ts";

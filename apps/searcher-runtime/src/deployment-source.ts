@@ -5,18 +5,14 @@ import {
   assertPlainObject,
   decodeCanonicalJson,
   encodeCanonicalBytes,
+  hashDomain,
+  type Hash,
 } from "../../../packages/canonical-codec/src/index.ts";
-import {
-  decodeRuntimeReleaseBindingV1,
-  hashRuntimeReleaseDiscoveryEndpointLocatorV1,
-  type RuntimeReleaseBindingV1,
-} from "../../../specs/release-authority/src/index.ts";
 
-export interface DeploymentSourceConfigV1 {
+export interface RuntimeSourceConfigV1 {
   readonly schemaVersion: 1;
-  readonly kind: "aloha.deployment-source-config-v1";
+  readonly kind: "aloha.runtime-source-config-v1";
   readonly profile: "reth-json-rpc-v1";
-  readonly endpoint: string;
   readonly chainId: string;
   readonly providerIdentity: string;
   readonly backendEpoch: string;
@@ -24,9 +20,7 @@ export interface DeploymentSourceConfigV1 {
   readonly headPollIntervalMs: number;
   readonly canonicalJournalPath: string;
   readonly checkpointDatabasePath: string;
-  readonly productionEvidenceDatabasePath: string;
-  readonly observerContentDirectory: string;
-  readonly terminalLocatorDirectory: string;
+  readonly observationDatabasePath: string;
 }
 
 function absolutePath(value: unknown, path: string): string {
@@ -35,82 +29,54 @@ function absolutePath(value: unknown, path: string): string {
   return decoded;
 }
 
-function boundedMs(value: unknown, path: string, maximum: number): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1 || value > maximum) {
-    throw new TypeError(`${path} must be an integer in [1, ${maximum}]`);
+function boundedMs(value: unknown, path: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1 || value > 60_000) {
+    throw new TypeError(`${path} must be an integer in [1, 60000]`);
   }
   return value;
 }
 
-function endpoint(value: unknown): string {
-  const raw = assertNonEmptyString(value, "deploymentSource.endpoint");
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw new TypeError("deploymentSource.endpoint must be a URL");
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new TypeError("deploymentSource.endpoint must use HTTP(S)");
-  }
-  if (parsed.username.length !== 0 || parsed.password.length !== 0) {
-    throw new TypeError("deploymentSource.endpoint must not contain credentials");
-  }
-  return parsed.href;
-}
-
-export function decodeDeploymentSourceConfigV1(value: unknown): DeploymentSourceConfigV1 {
-  assertPlainObject(value, "deploymentSource");
+export function decodeRuntimeSourceConfigV1(value: unknown): RuntimeSourceConfigV1 {
+  assertPlainObject(value, "runtimeSource");
   assertExactKeys(value, [
-    "schemaVersion", "kind", "profile", "endpoint", "chainId", "providerIdentity", "backendEpoch",
+    "schemaVersion", "kind", "profile", "chainId", "providerIdentity", "backendEpoch",
     "timeoutMs", "headPollIntervalMs", "canonicalJournalPath", "checkpointDatabasePath",
-    "productionEvidenceDatabasePath", "observerContentDirectory", "terminalLocatorDirectory",
-  ], "deploymentSource");
-  if (value.schemaVersion !== 1 || value.kind !== "aloha.deployment-source-config-v1") {
-    throw new TypeError("deploymentSource kind/version mismatch");
+    "observationDatabasePath",
+  ], "runtimeSource");
+  if (value.schemaVersion !== 1 || value.kind !== "aloha.runtime-source-config-v1") {
+    throw new TypeError("runtimeSource kind/version mismatch");
   }
-  if (value.profile !== "reth-json-rpc-v1") throw new TypeError("deploymentSource profile mismatch");
+  if (value.profile !== "reth-json-rpc-v1") throw new TypeError("runtimeSource profile mismatch");
   return Object.freeze({
     schemaVersion: 1 as const,
-    kind: "aloha.deployment-source-config-v1" as const,
+    kind: "aloha.runtime-source-config-v1" as const,
     profile: "reth-json-rpc-v1" as const,
-    endpoint: endpoint(value.endpoint),
-    chainId: assertDecimalString(value.chainId, "deploymentSource.chainId"),
-    providerIdentity: assertNonEmptyString(value.providerIdentity, "deploymentSource.providerIdentity"),
-    backendEpoch: assertNonEmptyString(value.backendEpoch, "deploymentSource.backendEpoch"),
-    timeoutMs: boundedMs(value.timeoutMs, "deploymentSource.timeoutMs", 60_000),
-    headPollIntervalMs: boundedMs(value.headPollIntervalMs, "deploymentSource.headPollIntervalMs", 60_000),
-    canonicalJournalPath: absolutePath(value.canonicalJournalPath, "deploymentSource.canonicalJournalPath"),
-    checkpointDatabasePath: absolutePath(value.checkpointDatabasePath, "deploymentSource.checkpointDatabasePath"),
-    productionEvidenceDatabasePath: absolutePath(value.productionEvidenceDatabasePath, "deploymentSource.productionEvidenceDatabasePath"),
-    observerContentDirectory: absolutePath(value.observerContentDirectory, "deploymentSource.observerContentDirectory"),
-    terminalLocatorDirectory: absolutePath(value.terminalLocatorDirectory, "deploymentSource.terminalLocatorDirectory"),
+    chainId: assertDecimalString(value.chainId, "runtimeSource.chainId"),
+    providerIdentity: assertNonEmptyString(value.providerIdentity, "runtimeSource.providerIdentity"),
+    backendEpoch: assertNonEmptyString(value.backendEpoch, "runtimeSource.backendEpoch"),
+    timeoutMs: boundedMs(value.timeoutMs, "runtimeSource.timeoutMs"),
+    headPollIntervalMs: boundedMs(value.headPollIntervalMs, "runtimeSource.headPollIntervalMs"),
+    canonicalJournalPath: absolutePath(value.canonicalJournalPath, "runtimeSource.canonicalJournalPath"),
+    checkpointDatabasePath: absolutePath(value.checkpointDatabasePath, "runtimeSource.checkpointDatabasePath"),
+    observationDatabasePath: absolutePath(value.observationDatabasePath, "runtimeSource.observationDatabasePath"),
   });
 }
 
-export function decodeDeploymentSourceConfigBytesV1(bytes: Uint8Array): DeploymentSourceConfigV1 {
-  if (!(bytes instanceof Uint8Array)) throw new TypeError("deployment source config bytes are required");
-  const decoded = decodeDeploymentSourceConfigV1(decodeCanonicalJson(bytes));
+export function decodeRuntimeSourceConfigBytesV1(bytes: Uint8Array): RuntimeSourceConfigV1 {
+  if (!(bytes instanceof Uint8Array)) throw new TypeError("runtime source config bytes are required");
+  const decoded = decodeRuntimeSourceConfigV1(decodeCanonicalJson(bytes));
   if (!Buffer.from(bytes).equals(Buffer.from(encodeCanonicalBytes(decoded)))) {
-    throw new TypeError("deployment source config is not canonical exact bytes");
+    throw new TypeError("runtime source config is not canonical exact bytes");
   }
   return decoded;
 }
 
-/** Join inert package data to the independently verified signed release. */
-export function assertDeploymentSourceJoinsReleaseV1(
-  configValue: DeploymentSourceConfigV1,
-  bindingValue: RuntimeReleaseBindingV1,
-): DeploymentSourceConfigV1 {
-  const config = decodeDeploymentSourceConfigV1(configValue);
-  const binding = decodeRuntimeReleaseBindingV1(bindingValue);
-  const qualification = binding.discoverySourceQualification;
-  if (config.profile !== qualification.profile
-    || config.chainId !== qualification.chainId
-    || config.providerIdentity !== qualification.providerIdentity
-    || config.backendEpoch !== qualification.backendEpoch
-    || hashRuntimeReleaseDiscoveryEndpointLocatorV1(config.endpoint) !== qualification.endpointLocatorHash) {
-    throw new TypeError("deployment source config does not join the signed release");
-  }
-  return config;
+export function runtimeSourceAuthorityRootV1(configValue: RuntimeSourceConfigV1): Hash {
+  const config = decodeRuntimeSourceConfigV1(configValue);
+  return hashDomain("aloha/runtime-source-authority/v1", {
+    profile: config.profile,
+    chainId: config.chainId,
+    providerIdentity: config.providerIdentity,
+    backendEpoch: config.backendEpoch,
+  });
 }

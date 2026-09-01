@@ -4,8 +4,7 @@ import type { InstanceCatalogV1, InstancePublicationV1 } from "../../catalog/src
 import type { CandidateRecordV1, CanonicalCutoffV1, SourceCoverageCertificateV1 } from "../../discovery/src/index.ts";
 import type { PersistedGraphV1 } from "../../graph/src/index.ts";
 import type { ReadyGenerationV1 } from "../../ready-generation/src/index.ts";
-import type { CandidatePartitionProofV1 } from "../../../specs/candidate-partition-authority/src/index.ts";
-import type { RuntimeReleaseProvenanceHashV1 } from "../../runtime-authority/src/index.ts";
+import type { CandidatePartitionCommitmentV1 } from "../../../specs/candidate-partition-authority/src/index.ts";
 
 export interface ReadyStage12EvidenceBindingV1 {
   readonly readyRecordHash: Hash;
@@ -18,7 +17,6 @@ export interface ReadyStage12EvidenceBindingV1 {
   readonly verifiedMemoSetRoot: Hash;
   readonly instanceCatalogRoot: Hash;
   readonly graphRoot: Hash;
-  readonly releaseProvenanceHash: RuntimeReleaseProvenanceHashV1;
   readonly promotionRevision: string;
 }
 
@@ -28,7 +26,7 @@ export interface ReadyStage12VerifiedInstanceV1 {
   readonly candidate: CandidateRecordV1;
   readonly outcome: Extract<CandidateFinalOutcomeV1, { readonly kind: "verified" }>;
   readonly publication: InstancePublicationV1;
-  readonly identityProof: Extract<CandidateFinalOutcomeV1, { readonly kind: "verified" }>["identityProof"];
+  readonly identityCommitment: Extract<CandidateFinalOutcomeV1, { readonly kind: "verified" }>["identityCommitment"];
   readonly attestationOrigin: AttestationIdentityOriginV1;
   readonly edges: PersistedGraphV1["edges"];
 }
@@ -38,7 +36,7 @@ export interface ReadyStage12EvidenceSnapshotV1 {
   readonly runId: string;
   readonly candidates: readonly CandidateRecordV1[];
   readonly outcomes: readonly CandidateFinalOutcomeV1[];
-  readonly candidatePartitionProof: CandidatePartitionProofV1;
+  readonly candidatePartitionCommitment: CandidatePartitionCommitmentV1;
   readonly sourceCoverage: SourceCoverageCertificateV1;
   readonly verifiedInstances: readonly ReadyStage12VerifiedInstanceV1[];
   readonly instanceCatalog: InstanceCatalogV1;

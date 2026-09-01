@@ -53,6 +53,10 @@ import {
   createHttpJsonRpcDiscoveryPort,
   type DiscoveryProviderRef,
 } from "../../../../packages/discovery-transport/src/index.ts";
+import {
+  decodeRuntimeAuthorityProjectionV1,
+  type RuntimeAuthorityProjectionV1,
+} from "../../../../packages/runtime-authority/src/index.ts";
 import type { WorkScheduler } from "../../../../packages/scheduler/src/index.ts";
 import type {
   BuilderCatalogV1,
@@ -65,10 +69,6 @@ import type {
 } from "../../../../packages/observation/src/index.ts";
 import { RecentObservationRpcObserver } from "../../../../packages/recent-observation-rpc/src/index.ts";
 import {
-  assertRuntimeReleaseQualifiedDiscoverySourceState,
-  type RuntimeReleaseQualifiedDiscoverySourceStateV1,
-} from "./discovery-source-authority-owner.ts";
-import {
   nominationEvidenceRefHash,
   sealNominationClosureV1,
   sealQualifiedSourcePlanNominationReceiptV1,
@@ -76,7 +76,7 @@ import {
   type NominationClosureV1,
 } from "../../../../specs/nomination-authority/src/index.ts";
 
-export interface RuntimeReleaseSourcePlanBindingV1 {
+export interface RuntimeSourcePlanBindingV1 {
   readonly familyId: string;
   readonly familyDefinitionHash: `0x${string}`;
   readonly sourcePlanRef: SourcePlanRefV1;
@@ -87,7 +87,6 @@ export interface RuntimeReleaseSourcePlanBindingV1 {
   readonly nominationProgram: FamilySourcePlanNominationProgramV1;
   readonly nominationProgramRoot: Hash;
   readonly nominationProgramProposalLeafDigest: Hash;
-  readonly nominationQualificationLeafDigest: Hash;
 }
 
 interface IssuedSourceResultV1 {
@@ -101,7 +100,6 @@ interface IssuedSourceResultV1 {
   readonly nominationProgram: FamilySourcePlanNominationProgramV1;
   readonly nominationProgramRoot: Hash;
   readonly nominationProgramProposalLeafDigest: Hash;
-  readonly nominationQualificationLeafDigest: Hash;
   readonly rawEvidenceLocators: readonly RawEvidenceLocatorContentV1[];
 }
 
@@ -111,10 +109,18 @@ interface SelectedPredecessorV1 {
   readonly rawEvidenceLocators: readonly RawEvidenceLocatorContentV1[];
 }
 
-export interface RuntimeReleaseDiscoveryReleaseBindingV1 {
-  readonly bindingId: Hash;
-  readonly releaseProvenanceHash: Hash;
+export interface RuntimeDiscoveryBindingV1 {
+  readonly runtimeAuthority: RuntimeAuthorityProjectionV1;
   readonly processEpoch: string;
+}
+
+export interface RuntimeDiscoverySourceV1 {
+  readonly profile: "reth-json-rpc-v1";
+  readonly endpoint: string;
+  readonly chainId: string;
+  readonly timeoutMs: number;
+  readonly provider: DiscoveryProviderRef;
+  readonly sourceAuthorityRoot: Hash;
 }
 
 interface PhysicalLedgerEntryV1 {
@@ -142,30 +148,71 @@ function canonicalJson(value: unknown, path: string): CanonicalJson {
   }
 }
 
-function releaseDiscoveryBinding(
-  value: RuntimeReleaseDiscoveryReleaseBindingV1,
-): RuntimeReleaseDiscoveryReleaseBindingV1 {
+function runtimeDiscoveryBinding(
+  value: RuntimeDiscoveryBindingV1,
+): RuntimeDiscoveryBindingV1 {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new TypeError("runtime release discovery binding is required");
+    throw new TypeError("runtime discovery binding is required");
   }
   const keys = Reflect.ownKeys(value).map(key => {
-    if (typeof key !== "string") throw new TypeError("runtime release discovery binding has a symbol field");
+    if (typeof key !== "string") throw new TypeError("runtime discovery binding has a symbol field");
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (descriptor === undefined || !("value" in descriptor)) {
-      throw new TypeError(`runtime release discovery binding has an accessor field ${key}`);
+      throw new TypeError(`runtime discovery binding has an accessor field ${key}`);
     }
     return key;
   }).sort();
-  if (keys.length !== 3 || keys[0] !== "bindingId" || keys[1] !== "processEpoch" || keys[2] !== "releaseProvenanceHash") {
-    throw new TypeError("runtime release discovery binding has non-exact fields");
-  }
-  if (!/^0x[0-9a-f]{64}$/.test(value.bindingId) || !/^0x[0-9a-f]{64}$/.test(value.releaseProvenanceHash)) {
-    throw new TypeError("runtime release discovery binding hashes are invalid");
+  if (keys.length !== 2 || keys[0] !== "processEpoch" || keys[1] !== "runtimeAuthority") {
+    throw new TypeError("runtime discovery binding has non-exact fields");
   }
   if (typeof value.processEpoch !== "string" || value.processEpoch.length === 0) {
-    throw new TypeError("runtime release discovery process epoch is required");
+    throw new TypeError("runtime discovery process epoch is required");
   }
-  return Object.freeze({ ...value });
+  return Object.freeze({
+    runtimeAuthority: decodeRuntimeAuthorityProjectionV1(value.runtimeAuthority),
+    processEpoch: value.processEpoch,
+  });
+}
+
+function runtimeDiscoverySource(value: RuntimeDiscoverySourceV1): RuntimeDiscoverySourceV1 {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("runtime discovery source is required");
+  }
+  const keys = Reflect.ownKeys(value).map(key => {
+    if (typeof key !== "string") throw new TypeError("runtime discovery source has a symbol field");
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !("value" in descriptor)) {
+      throw new TypeError(`runtime discovery source has an accessor field ${key}`);
+    }
+    return key;
+  }).sort();
+  const expected = ["chainId", "endpoint", "profile", "provider", "sourceAuthorityRoot", "timeoutMs"].sort();
+  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
+    throw new TypeError("runtime discovery source has non-exact fields");
+  }
+  if (value.profile !== "reth-json-rpc-v1") throw new TypeError("runtime discovery source profile is invalid");
+  let endpoint: URL;
+  try { endpoint = new URL(value.endpoint); } catch { throw new TypeError("runtime discovery endpoint must be a URL"); }
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
+    throw new TypeError("runtime discovery endpoint must use HTTP(S)");
+  }
+  if (!/^(0|[1-9][0-9]*)$/.test(value.chainId)) throw new TypeError("runtime discovery chainId is invalid");
+  if (!Number.isSafeInteger(value.timeoutMs) || value.timeoutMs < 1 || value.timeoutMs > 60_000) {
+    throw new TypeError("runtime discovery timeoutMs is invalid");
+  }
+  if (value.provider === null || typeof value.provider !== "object"
+    || typeof value.provider.provider !== "string" || value.provider.provider.length === 0
+    || typeof value.provider.backendEpoch !== "string" || value.provider.backendEpoch.length === 0) {
+    throw new TypeError("runtime discovery provider is invalid");
+  }
+  return Object.freeze({
+    profile: value.profile,
+    endpoint: endpoint.href,
+    chainId: value.chainId,
+    timeoutMs: value.timeoutMs,
+    provider: Object.freeze({ ...value.provider }),
+    sourceAuthorityRoot: value.sourceAuthorityRoot,
+  });
 }
 
 function assertExactPhysicalLedger(
@@ -233,7 +280,7 @@ function assertSameCutoff(left: CanonicalCutoffV1, right: CanonicalCutoffV1): vo
 
 function assertExactCatalogPlans(
   catalog: BuilderCatalogV1,
-  bindings: readonly RuntimeReleaseSourcePlanBindingV1[],
+  bindings: readonly RuntimeSourcePlanBindingV1[],
 ): void {
   if (!Array.isArray(catalog.declaredSourcePlans)) throw new TypeError("generated source plan catalog is required");
   const actual = catalog.declaredSourcePlans.map((plan, index) =>
@@ -271,30 +318,24 @@ async function boundedMap<T, R>(
  * plans and Family interpreters; deployment supplies only physical chain
  * reads and the qualified recent observer.
  */
-export function createRuntimeReleaseDiscoveryPort(input: {
-  readonly bindings: readonly RuntimeReleaseSourcePlanBindingV1[];
-  readonly source: RuntimeReleaseQualifiedDiscoverySourceStateV1;
+export function createRuntimeDiscoveryPort(input: {
+  readonly bindings: readonly RuntimeSourcePlanBindingV1[];
+  readonly source: RuntimeDiscoverySourceV1;
   readonly scheduler: WorkScheduler;
-  readonly release: RuntimeReleaseDiscoveryReleaseBindingV1;
+  readonly runtime: RuntimeDiscoveryBindingV1;
   readonly assertCurrent: () => void;
 }): BuilderDiscoveryPort {
   if (!Array.isArray(input.bindings) || input.bindings.length === 0) throw new TypeError("generated source plan bindings are required");
-  assertRuntimeReleaseQualifiedDiscoverySourceState(input.source);
-  const source = input.source;
-  const release = releaseDiscoveryBinding(input.release);
-  if (
-    source.release.bindingId !== release.bindingId
-    || source.release.releaseProvenanceHash !== release.releaseProvenanceHash
-  ) throw new TypeError("qualified discovery source is not bound to this runtime release");
-  if (typeof input.assertCurrent !== "function") throw new TypeError("release fence is required");
+  const source = runtimeDiscoverySource(input.source);
+  const runtime = runtimeDiscoveryBinding(input.runtime);
+  if (typeof input.assertCurrent !== "function") throw new TypeError("runtime fence is required");
 
   const sourceAuthorityRoot = source.sourceAuthorityRoot;
   const provider: DiscoveryProviderRef = source.provider;
-  const qualificationRoot = source.qualification.qualificationRoot;
   const transport = createDiscoveryTransport({
     scheduler: input.scheduler,
     caller: Object.freeze({
-      callerId: `runtime-release-discovery:${release.bindingId}`,
+      callerId: `runtime-discovery:${runtime.runtimeAuthority.authorityBindingHash}`,
       authorityToken: sourceAuthorityRoot,
     }),
     port: createHttpJsonRpcDiscoveryPort({ endpoint: source.endpoint }),
@@ -306,11 +347,9 @@ export function createRuntimeReleaseDiscoveryPort(input: {
     signal: AbortSignal,
   ): Promise<Hash> => {
     const request = async (method: string, params: CanonicalJson): Promise<CanonicalJson> => {
-      const requestId = hashDomain("aloha/runtime-release-discovery-source-anchor-request/v1", {
-        releaseBindingId: release.bindingId,
-        releaseProvenanceHash: release.releaseProvenanceHash,
+      const requestId = hashDomain("aloha/runtime-discovery-source-anchor-request/v1", {
+        runtimeAuthority: runtime.runtimeAuthority,
         sourceAuthorityRoot,
-        qualificationRoot,
         cutoff,
         method,
         params,
@@ -329,20 +368,20 @@ export function createRuntimeReleaseDiscoveryPort(input: {
         chunk: null,
         phase: "source-anchor",
         workClassRef: "source-anchor-rpc",
-        ownerRef: "runtime-release.discovery-source.v1",
+        ownerRef: "runtime.discovery-source.v1",
         signal,
-      }), "runtime release discovery source anchor response");
+      }), "runtime discovery source anchor response");
     };
     const chainIdResult = await request("eth_chainId", Object.freeze([]));
     if (
       typeof chainIdResult !== "string"
       || !/^0x(?:0|[1-9a-f][0-9a-f]*)$/.test(chainIdResult)
       || BigInt(chainIdResult).toString() !== cutoff.chainId
-    ) throw new TypeError("runtime release discovery source chain id mismatch");
+    ) throw new TypeError("runtime discovery source chain id mismatch");
     const blockTag = `0x${BigInt(cutoff.number).toString(16)}`;
     const headerResult = await request("eth_getBlockByNumber", Object.freeze([blockTag, false]));
     if (headerResult === null || typeof headerResult !== "object" || Array.isArray(headerResult)) {
-      throw new TypeError("runtime release discovery cutoff header is unavailable");
+      throw new TypeError("runtime discovery cutoff header is unavailable");
     }
     const header = headerResult as Readonly<Record<string, CanonicalJson>>;
     if (
@@ -351,12 +390,10 @@ export function createRuntimeReleaseDiscoveryPort(input: {
       || BigInt(header.number).toString() !== cutoff.number
       || header.hash !== cutoff.hash
       || header.stateRoot !== cutoff.stateRoot
-    ) throw new TypeError("runtime release discovery cutoff header mismatch");
-    return hashDomain("aloha/runtime-release-discovery-source-anchor/v1", {
-      releaseBindingId: release.bindingId,
-      releaseProvenanceHash: release.releaseProvenanceHash,
+    ) throw new TypeError("runtime discovery cutoff header mismatch");
+    return hashDomain("aloha/runtime-discovery-source-anchor/v1", {
+      runtimeAuthority: runtime.runtimeAuthority,
       sourceAuthorityRoot,
-      qualificationRoot,
       cutoff,
       chainIdResult,
       block: Object.freeze({ number: header.number, hash: header.hash, stateRoot: header.stateRoot }),
@@ -374,7 +411,6 @@ export function createRuntimeReleaseDiscoveryPort(input: {
       || !/^0x[0-9a-f]{64}$/.test(binding.sourcePlanClosureRoot)
       || !/^0x[0-9a-f]{64}$/.test(binding.nominationProgramRoot)
       || !/^0x[0-9a-f]{64}$/.test(binding.nominationProgramProposalLeafDigest)
-      || !/^0x[0-9a-f]{64}$/.test(binding.nominationQualificationLeafDigest)
       || binding.runtime.sourcePlanId.length === 0
       || binding.runtime.completeness !== sourcePlanRef.completeness
       || binding.runtime.historyStartBlock !== sourcePlanRef.historyStartBlock
@@ -446,8 +482,7 @@ export function createRuntimeReleaseDiscoveryPort(input: {
         if (sameCanonical(observation.cutoff, persisted.execution.cutoff)) {
           latestPhysicalCount += 1;
           if (
-            observation.releaseBindingId !== persisted.releaseBindingId
-            || observation.releaseProvenanceHash !== persisted.releaseProvenanceHash
+            !sameCanonical(observation.runtimeAuthority, persisted.runtimeAuthority)
             || observation.sourceAnchorRoot !== persisted.sourceAnchorRoot
           ) throw new TypeError("source plan predecessor latest physical observation lineage mismatch");
         }
@@ -491,7 +526,7 @@ export function createRuntimeReleaseDiscoveryPort(input: {
       input.assertCurrent();
       assertExactCatalogPlans(catalog, bindings);
       const canonicalCutoff = decodeCanonicalCutoff(cutoff);
-      if (canonicalCutoff.chainId !== source.chainId) throw new TypeError("runtime release discovery chain mismatch");
+      if (canonicalCutoff.chainId !== source.chainId) throw new TypeError("runtime discovery chain mismatch");
       const sourceAnchorRoot = await observeSourceAnchor(canonicalCutoff, signal);
       input.assertCurrent();
       const results = await boundedMap(bindings, 8, async binding => {
@@ -511,8 +546,7 @@ export function createRuntimeReleaseDiscoveryPort(input: {
               || request.requestSchemaHash !== binding.runtime.schemaHash
             ) throw new TypeError("source plan physical request binding mismatch");
             const requestId = hashDomain("aloha/source-plan-physical-request/v1", {
-              releaseBindingId: release.bindingId,
-              releaseProvenanceHash: release.releaseProvenanceHash,
+              runtimeAuthority: runtime.runtimeAuthority,
               sourceAuthorityRoot,
               sourceAnchorRoot,
               familyDefinitionHash: request.familyDefinitionHash,
@@ -545,8 +579,7 @@ export function createRuntimeReleaseDiscoveryPort(input: {
               kind: "family-source-plan-physical-observation",
               version: 1,
               requestId,
-              releaseBindingId: release.bindingId,
-              releaseProvenanceHash: release.releaseProvenanceHash,
+              runtimeAuthority: runtime.runtimeAuthority,
               sourceAuthorityRoot,
               sourceAnchorRoot,
               provider: provider.provider,
@@ -561,8 +594,7 @@ export function createRuntimeReleaseDiscoveryPort(input: {
             const bytes = encodeCanonicalBytes(observation);
             const rawLocatorHash = sha256Hex(bytes);
             const evidenceRef = hashDomain("aloha/source-plan-physical-evidence/v1", {
-              releaseBindingId: release.bindingId,
-              releaseProvenanceHash: release.releaseProvenanceHash,
+              runtimeAuthority: runtime.runtimeAuthority,
               sourceAuthorityRoot,
               sourceAnchorRoot,
               requestId,
@@ -625,8 +657,7 @@ export function createRuntimeReleaseDiscoveryPort(input: {
           sourcePlanSchemaHash: binding.sourcePlanSchemaHash,
           sourcePlanClosureRoot: binding.sourcePlanClosureRoot,
           sourceAuthorityRoot,
-          releaseBindingId: release.bindingId,
-          releaseProvenanceHash: release.releaseProvenanceHash,
+          runtimeAuthority: runtime.runtimeAuthority,
           sourceAnchorRoot,
           previousExecutionRoot: predecessor?.persisted.persistedExecutionRoot ?? null,
         });
@@ -641,7 +672,6 @@ export function createRuntimeReleaseDiscoveryPort(input: {
           nominationProgram: binding.nominationProgram,
           nominationProgramRoot: binding.nominationProgramRoot,
           nominationProgramProposalLeafDigest: binding.nominationProgramProposalLeafDigest,
-          nominationQualificationLeafDigest: binding.nominationQualificationLeafDigest,
           rawEvidenceLocators,
         });
       });
@@ -680,7 +710,7 @@ export function createRuntimeReleaseDiscoveryPort(input: {
     async scanRecentBlocks(cutoff: CanonicalCutoffV1, signal: AbortSignal) {
       input.assertCurrent();
       const canonicalCutoff = decodeCanonicalCutoff(cutoff);
-      if (canonicalCutoff.chainId !== source.chainId) throw new TypeError("runtime release discovery chain mismatch");
+      if (canonicalCutoff.chainId !== source.chainId) throw new TypeError("runtime discovery chain mismatch");
       const scan = await recent.scan(canonicalCutoff, signal);
       input.assertCurrent();
       return scan;
@@ -725,16 +755,16 @@ export function createRuntimeReleaseDiscoveryPort(input: {
         const identity = sourcePlanIdentity(execution.plan);
         const result = issuedForRun.get(identity);
         if (result === undefined || !sameCanonical(result.execution, execution)) {
-          throw new TypeError("source plan execution was not issued by this release run");
+          throw new TypeError("source plan execution was not issued by this runtime");
         }
         const persisted = sourceExecutionSet.executions.find(value =>
           sourcePlanIdentity(value.execution.plan) === identity);
         if (persisted === undefined || !sameCanonical(persisted, result.persistedExecution)) {
-          throw new TypeError("persisted source plan execution was not issued by this release run");
+          throw new TypeError("persisted source plan execution was not issued by this runtime");
         }
         const receipt = sourceEvidenceByPlan.get(identity);
         if (receipt === undefined || !sameCanonical(receipt, result.sourceEvidence)) {
-          throw new TypeError("source plan evidence was not issued by this release run");
+          throw new TypeError("source plan evidence was not issued by this runtime");
         }
         assertSameCutoff(execution.cutoff, canonicalCutoff);
         const expectedHashes = new Set([...recent.rawLocatorHashes, ...receipt.rawLocatorHashes]);
@@ -815,7 +845,11 @@ export function createRuntimeReleaseDiscoveryPort(input: {
           sourcePlanLeafDigest: result.sourcePlanLeafDigest,
           nominationProgramRoot: result.nominationProgramRoot,
           nominationProgramProposalLeafDigest: result.nominationProgramProposalLeafDigest,
-          qualificationRoot: result.nominationQualificationLeafDigest,
+          qualificationRoot: hashDomain("aloha/runtime-nomination-program/v1", {
+            runtimeAuthority: runtime.runtimeAuthority,
+            nominationProgramRoot: result.nominationProgramRoot,
+            nominationProgramProposalLeafDigest: result.nominationProgramProposalLeafDigest,
+          }),
           denominator,
           claims,
         });

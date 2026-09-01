@@ -46,7 +46,7 @@ function canonicalObservation(value: unknown, path: string): CanonicalJson {
 }
 
 /**
- * The sole Family state -> coarse projection algorithm used by the signed
+ * The sole Family state -> coarse projection algorithm used by the runtime
  * production owner.
  */
 export async function projectFamilyCoarseV1(input: {

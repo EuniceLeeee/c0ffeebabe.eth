@@ -24,11 +24,11 @@ import type {
   InProgressBuilderRunV1,
   PersistedAttestationPort,
 } from "../../../../packages/generation-builder/src/index.ts";
-import type { RuntimeReleaseAuthorityV1 } from "../index.ts";
+import type { RuntimeAuthorityV1 } from "../index.ts";
 import {
-  assertActiveRuntimeReleaseAuthorityState,
+  assertActiveRuntimeAuthorityState,
 } from "./state.ts";
-import { runtimeReleaseBindingProvenanceHash } from "../../../../specs/release-authority/src/index.ts";
+import { projectRuntimeAuthorityDescriptorV1 } from "../../../../packages/runtime-authority/src/index.ts";
 
 export interface PersistedAttestationCheckpointPortV1 {
   readonly candidatePartitionReader: CandidatePartitionReaderPortV1;
@@ -312,26 +312,24 @@ class PersistedAttestationOwnerV1 implements PersistedAttestationPort {
   }
 }
 
-interface RuntimeReleasePersistedAttestationPortStateV1 {
-  readonly authority: RuntimeReleaseAuthorityV1;
+interface RuntimePersistedAttestationPortStateV1 {
+  readonly authority: RuntimeAuthorityV1;
   readonly implementation: PersistedAttestationOwnerV1;
   readonly version: bigint;
-  readonly releaseAuthorityRoot: Hash;
-  readonly releaseProvenanceHash: Hash;
+  readonly authorityBindingHash: Hash;
 }
 
-const runtimeReleasePersistedAttestationPortStates = new WeakMap<object, RuntimeReleasePersistedAttestationPortStateV1>();
+const runtimePersistedAttestationPortStates = new WeakMap<object, RuntimePersistedAttestationPortStateV1>();
 
 function assertPersistedAttestationPortCurrent(
-  state: RuntimeReleasePersistedAttestationPortStateV1,
+  state: RuntimePersistedAttestationPortStateV1,
 ): void {
-  const current = assertActiveRuntimeReleaseAuthorityState(state.authority);
+  const current = assertActiveRuntimeAuthorityState(state.authority);
   if (
     current.version !== state.version
-    || current.binding.releaseAuthorityRoot !== state.releaseAuthorityRoot
-    || runtimeReleaseBindingProvenanceHash(current.binding) !== state.releaseProvenanceHash
+    || current.descriptor.authorityBindingHash !== state.authorityBindingHash
     || state.implementation === null
-  ) throw new TypeError("persisted attestation port is stale after runtime release rotation");
+  ) throw new TypeError("persisted attestation port is stale after runtime rotation");
 }
 
 /**
@@ -340,24 +338,21 @@ function assertPersistedAttestationPortCurrent(
  * the returned public port contains neither object nor authority fields and a
  * structural clone cannot pass the owner registry.
  */
-export function issueRuntimeReleasePersistedAttestationPort(
+export function issueRuntimePersistedAttestationPort(
   authorityValue: unknown,
   attestationValue: unknown,
   checkpointValue: unknown,
   options?: PersistedAttestationOwnerOptionsV1,
 ): PersistedAttestationPort {
-  const authority = authorityValue as RuntimeReleaseAuthorityV1;
-  const release = assertActiveRuntimeReleaseAuthorityState(authority);
+  const authority = authorityValue as RuntimeAuthorityV1;
+  const runtime = assertActiveRuntimeAuthorityState(authority);
   const attestation = assertIssuedAttestationService(attestationValue);
   const checkpoint = assertIssuedCheckpointStore(checkpointValue);
   const validation = attestation.validationAuthority;
-  const releaseProvenanceHash = runtimeReleaseBindingProvenanceHash(release.binding);
-  if (
-    validation.releaseAuthorityRoot !== release.binding.releaseAuthorityRoot
-    || validation.releaseProvenanceHash !== releaseProvenanceHash
-    || validation.frameworkAuthorityRoot !== release.binding.frameworkAuthorityRoot
-    || validation.executorAuthorityRoot !== release.binding.executorAuthorityRoot
-  ) throw new TypeError("attestation service is not bound to the current runtime release");
+  const runtimeAuthority = projectRuntimeAuthorityDescriptorV1(runtime.descriptor);
+  if (encodeCanonicalJson(validation.runtimeAuthority) !== encodeCanonicalJson(runtimeAuthority)) {
+    throw new TypeError("attestation service is not bound to the current runtime");
+  }
   const checkpointPort: PersistedAttestationCheckpointPortV1 = Object.freeze({
     candidatePartitionReader: checkpoint.candidatePartitionReader,
     sealedRunReader: checkpoint.sealedRunReader,
@@ -373,12 +368,11 @@ export function issueRuntimeReleasePersistedAttestationPort(
     ) => checkpoint._replaceRetryableOutcomeForOwner(runId, familyCandidateKey, writerCapability, persistenceCapability),
   });
   const implementation = new PersistedAttestationOwnerV1(attestation, checkpointPort, options);
-  const state: RuntimeReleasePersistedAttestationPortStateV1 = {
+  const state: RuntimePersistedAttestationPortStateV1 = {
     authority,
     implementation,
-    version: release.version,
-    releaseAuthorityRoot: release.binding.releaseAuthorityRoot,
-    releaseProvenanceHash,
+    version: runtime.version,
+    authorityBindingHash: runtime.descriptor.authorityBindingHash,
   };
   const port: PersistedAttestationPort = Object.freeze({
     attestAndPersistDifference(run: InProgressBuilderRunV1, signal: AbortSignal) {
@@ -386,16 +380,16 @@ export function issueRuntimeReleasePersistedAttestationPort(
       return implementation.attestAndPersistDifference(run, signal);
     },
   });
-  runtimeReleasePersistedAttestationPortStates.set(port, state);
+  runtimePersistedAttestationPortStates.set(port, state);
   return port;
 }
 
-export function assertIssuedRuntimeReleasePersistedAttestationPort(
+export function assertIssuedRuntimePersistedAttestationPort(
   value: unknown,
   authorityValue: unknown,
 ): PersistedAttestationPort {
   if (value === null || typeof value !== "object") throw new TypeError("persisted attestation port is not issued");
-  const state = runtimeReleasePersistedAttestationPortStates.get(value);
+  const state = runtimePersistedAttestationPortStates.get(value);
   if (!state || state.authority !== authorityValue) throw new TypeError("persisted attestation port is not issued");
   assertPersistedAttestationPortCurrent(state);
   return value as PersistedAttestationPort;
