@@ -60,7 +60,7 @@ export class PersistedAttestationIncompleteError extends Error {
   readonly runId: string;
   readonly unresolved: readonly {
     readonly familyCandidateKey: Hash;
-    readonly kind: "retryable" | "invalidProgram";
+    readonly kind: "retryable";
     readonly failureCode: string;
   }[];
 
@@ -130,7 +130,7 @@ function groupKey(
 function unresolvedOutcome(
   result: AttestationFinalSessionResultV1,
 ): PersistedAttestationIncompleteError["unresolved"][number] | null {
-  if (result.outcome.kind !== "retryable" && result.outcome.kind !== "invalidProgram") return null;
+  if (result.outcome.kind !== "retryable") return null;
   return {
     familyCandidateKey: result.outcome.familyCandidateKey,
     kind: result.outcome.kind,

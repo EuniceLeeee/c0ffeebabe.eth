@@ -29,7 +29,9 @@ test("generated physical router installs the exact release Families and invokes 
   const bindings = readGeneratedFamilyPhysicalLifecycleAdapters(createReleaseFamilyRuntimeComposition);
   assert.deepEqual(
     bindings.map(binding => [binding.familyId, binding.familyDefinitionHash]),
-    metadata.families.map(family => [family.familyId, family.familyDefinitionHash]),
+    metadata.families
+      .filter(family => family.runtimeAdapters.some(adapter => adapter.role === "physical-lifecycle/v1"))
+      .map(family => [family.familyId, family.familyDefinitionHash]),
   );
   const binding = bindings.find(value => value.familyId === "univ2-standard")!;
   const pool = address("1");

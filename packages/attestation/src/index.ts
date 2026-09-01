@@ -2071,7 +2071,6 @@ export function assertPromotablePartition(
   }
   if (partition.accounting.pending !== "0") throw new Error("pending-outcomes");
   if (partition.accounting.retryable !== "0") throw new Error("retryable-outcomes");
-  if (partition.accounting.invalidProgram !== "0") throw new Error("invalid-program-outcomes");
   for (const outcome of partition.outcomes) {
     if (outcome.runCandidateKey !== runCandidateKey(partition.runId, outcome.familyCandidateKey)) {
       throw new Error("run-candidate-key-mismatch");

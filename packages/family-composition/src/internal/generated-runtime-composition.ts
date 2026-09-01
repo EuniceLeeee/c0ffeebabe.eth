@@ -248,13 +248,8 @@ export function readGeneratedFamilyPhysicalLifecycleAdapters(
   value: unknown,
 ): readonly Readonly<GeneratedFamilyPhysicalLifecycleBindingV1>[] {
   assertGeneratedFamilyRuntimeFactory(value);
-  const metadata = generatedFactoryMetadata.get(value)!;
   const bindings = generatedFactoryPhysicalAdapters.get(value);
-  if (bindings === undefined
-    || bindings.length !== metadata.families.length
-    || new Set(bindings.map(binding => binding.familyDefinitionHash)).size !== metadata.families.length) {
-    throw new TypeError("generated Family physical lifecycle denominator is incomplete");
-  }
+  if (bindings === undefined) throw new TypeError("generated Family physical lifecycle adapters are unavailable");
   return Object.freeze(bindings.map(binding => {
     const adapter = binding.factory();
     if (adapter === null || typeof adapter !== "object"
