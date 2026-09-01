@@ -6655,6 +6655,7 @@ export class DurableOutcomeWriterActor {
   readonly #queue: AttestationPersistenceCapabilityV1[] = [];
   readonly #pending: AttestationPersistenceCapabilityV1[] = [];
   readonly #waiters: Array<{ resolve: () => void; reject: (error: unknown) => void }> = [];
+  readonly #spaceWaiters: Array<{ resolve: () => void; reject: (error: unknown) => void }> = [];
   #accepting = true;
   #forceFlush = false;
   #wake: (() => void) | null = null;
@@ -6662,6 +6663,7 @@ export class DurableOutcomeWriterActor {
   #lastFlush = performance.now();
   readonly #loop: Promise<void>;
   #done = false;
+  #failure: unknown = null;
 
   constructor(checkpoint: CheckpointStore, runId: string, options: OutcomeWriterOptions) {
     this.#checkpoint = checkpoint;
@@ -6677,15 +6679,19 @@ export class DurableOutcomeWriterActor {
     this.#loop = this.#run();
   }
 
-  enqueue(raw: AttestationPersistenceCapabilityV1): Promise<void> {
-    if (!this.#accepting) return Promise.reject(new OutcomeWriterClosedError());
-    if (this.#queue.length >= this.#mailboxCapacity) return Promise.reject(new CheckpointError("writer-mailbox-full", "checkpoint writer mailbox is full"));
+  async enqueue(raw: AttestationPersistenceCapabilityV1): Promise<void> {
+    while (this.#queue.length >= this.#mailboxCapacity) {
+      if (this.#failure !== null) throw this.#failure;
+      if (!this.#accepting) throw new OutcomeWriterClosedError();
+      await new Promise<void>((resolve, reject) => this.#spaceWaiters.push({ resolve, reject }));
+    }
+    if (this.#failure !== null) throw this.#failure;
+    if (!this.#accepting) throw new OutcomeWriterClosedError();
     // Keep the issuer object intact until the single writer validates it. A
     // canonical clone would deliberately erase its process-local capability.
     this.#queue.push(raw);
     this.#wake?.();
     this.#wake = null;
-    return Promise.resolve();
   }
 
   flush(): Promise<void> {
@@ -6698,6 +6704,8 @@ export class DurableOutcomeWriterActor {
 
   async closeAfterAllProducersAndFlush(): Promise<void> {
     this.#accepting = false;
+    const closed = new OutcomeWriterClosedError();
+    while (this.#spaceWaiters.length > 0) this.#spaceWaiters.shift()!.reject(closed);
     this.#wake?.();
     this.#wake = null;
     await this.#loop;
@@ -6708,6 +6716,7 @@ export class DurableOutcomeWriterActor {
       while (this.#accepting || this.#queue.length > 0 || this.#pending.length > 0) {
         if (this.#queue.length > 0) {
           const persistenceCapability = this.#queue.shift()!;
+          this.#spaceWaiters.shift()?.resolve();
           this.#pending.push(persistenceCapability);
         } else if (this.#accepting && !this.#forceFlush) {
           await this.#wait(Math.max(0, this.#flushEveryMs - (performance.now() - this.#lastFlush)));
@@ -6722,7 +6731,10 @@ export class DurableOutcomeWriterActor {
       await this.#flushPending();
       this.#resolveWaiters();
     } catch (error) {
+      this.#failure = error;
+      this.#accepting = false;
       while (this.#waiters.length > 0) this.#waiters.shift()!.reject(error);
+      while (this.#spaceWaiters.length > 0) this.#spaceWaiters.shift()!.reject(error);
       throw error;
     } finally {
       this.#done = true;
@@ -6731,8 +6743,8 @@ export class DurableOutcomeWriterActor {
   }
 
   async #flushPending(): Promise<void> {
-    if (this.#pending.length === 0) return;
     this.#lease = this.#checkpoint._renewWriterLease(this.#lease);
+    if (this.#pending.length === 0) return;
     const batch = this.#pending.splice(0, this.#pending.length);
     await this.#checkpoint._flushOutcomeBatch(this.#runId, this.#writerCapability, batch, this.#lease);
   }
