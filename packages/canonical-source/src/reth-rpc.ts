@@ -20,7 +20,7 @@ const allowedBlockKeys = new Set([
   "number", "hash", "parentHash", "stateRoot", "transactions", "baseFeePerGas", "difficulty",
   "extraData", "gasLimit", "gasUsed", "logsBloom", "miner", "mixHash", "nonce", "receiptsRoot",
   "sha3Uncles", "size", "transactionsRoot", "uncles", "withdrawalsRoot", "withdrawals",
-  "blobGasUsed", "excessBlobGas", "parentBeaconBlockRoot", "requestsHash", "author", "totalDifficulty",
+  "blobGasUsed", "excessBlobGas", "parentBeaconBlockRoot", "requestsHash", "timestamp", "author", "totalDifficulty",
 ]);
 
 export interface RethCanonicalHeaderProviderConfigV1 {
