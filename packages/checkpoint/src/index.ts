@@ -2445,7 +2445,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
    */
   async loadStagedPromotion(): Promise<{ readonly sealedRun: SealedRunCapabilityV1; readonly sealedRunBinding: import("../../sealed-run-runtime/src/contract.ts").SealedRunBindingV1; readonly instanceCatalog: InstanceCatalogV1; readonly stage: ReadyStageIdentityV1 } | null> {
     const record = this.#durable.readRoot();
-    if (!record) throw new CorruptDurableStoreError("checkpoint root missing");
+    if (!record) return null;
     const root = rootFromRecord(record);
     this.#validateRootReferenceSet(record, root);
     if (root.stagedReadyStorageHash === null) return null;
