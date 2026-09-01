@@ -3123,6 +3123,168 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     } catch {
       throw new CheckpointError("graph-closure-mismatch", "ready graph is not derived from the instance catalog");
     }
+
+    // Validate the immutable run/catalog/graph closure before taking the
+    // writer lease. Large production partitions make this walk expensive,
+    // but the root revision below still fences the short publishing CAS.
+    const previewRecord = this.#durable.readRoot();
+    if (!previewRecord) throw new CorruptDurableStoreError("checkpoint root missing");
+    const previewRoot = rootFromRecord(previewRecord);
+    if (previewRoot.stagedReadyStorageHash !== null) {
+      if (previewRoot.inProgressRunId !== input.expectedInProgressRunId) {
+        throw new CheckpointRunStateError("staged ready run is not active");
+      }
+      this.#validateRootReferenceSet(previewRecord, previewRoot);
+      this.#validatedReadyStageStorageHashes.add(previewRoot.stagedReadyStorageHash);
+      const existing = this.#findReadyStageRecordWith(
+        hash => this.#durable.readContent(hash),
+        previewRecord.references,
+        previewRoot.stagedReadyStorageHash,
+        true,
+      );
+      if (
+        existing.readyBase.definitionCatalogRoot !== input.ready.definitionCatalogRoot
+        || existing.readyBase.generationRefreshPolicyHash !== policyHash
+        || encodeCanonicalJson(existing.readyBase.runtimeAuthority) !== encodeCanonicalJson(input.ready.runtimeAuthority)
+      ) {
+        this.#promotionAuthority.assertConfiguration({
+          definitionCatalogRoot: existing.readyBase.definitionCatalogRoot,
+          generationRefreshPolicyHash: existing.readyBase.generationRefreshPolicyHash,
+          runtimeAuthority: existing.readyBase.runtimeAuthority,
+        });
+        throw new ReadyPromotionFatalError("ready-promotion-stage-mismatch");
+      }
+      if (
+        existing.expectedRevision !== input.expectedRevision
+        || existing.runId !== input.expectedInProgressRunId
+        || existing.readyBaseHash !== readyGenerationBaseHash(input.ready)
+        || encodeCanonicalJson(existing.readyBase) !== encodeCanonicalJson(input.ready)
+      ) throw new CheckpointRunStateError("staged ready input mismatch");
+      assertPromotionAuthority();
+      this.#canonical.assertActiveFence(input.fence);
+      return deepFreeze({
+        stage: this.#readyStageIdentity(existing, previewRoot.stagedReadyStorageHash),
+        stageRevision: existing.stageRevision,
+        stageRecordHash: existing.stageRecordHash,
+      });
+    }
+    if (previewRoot.revision !== input.expectedRevision) {
+      throw new CASConflictError(input.expectedRevision, previewRoot.revision);
+    }
+    if (previewRoot.inProgressRunId !== input.expectedInProgressRunId) {
+      throw new CheckpointRunStateError("ready stage run is not active");
+    }
+
+    const loaded = this.#loadActiveRun(input.expectedInProgressRunId);
+    if (!loaded.envelope.attestationPartitionStorageHash) {
+      throw new CheckpointRunStateError("run is not sealed for promotion");
+    }
+    const read = (hash: Hash) => this.#durable.readContent(hash);
+    const partition = decodeAttestationPartitionRecordWith(
+      read,
+      loaded.envelope.attestationPartitionStorageHash,
+      loaded.envelope.outcomePartitionStorageHash,
+      loaded.envelope.runId,
+      "attestation partition",
+    );
+    this.#attestationAuthority.validateDurablePartition(partition, loaded.builderRun.candidates);
+    assertPromotablePartition(partition, loaded.builderRun.candidates.map(candidate => candidate.familyCandidateKey));
+    const memo = decodeMemoSetRecordWith(
+      read,
+      loaded.envelope.verifiedMemoSetStorageHash,
+      "verified memo set",
+    );
+    assertVerifiedPublicationCatalog(memo.memos, input.instanceCatalog);
+    const ready = input.ready;
+    if (
+      !sameCutoff(ready.cutoff, loaded.envelope.cutoff)
+      || !sameCutoff(input.fence.cutoff, loaded.envelope.cutoff)
+      || ready.parentGenerationId !== loaded.envelope.parentGenerationId
+      || ready.recentObservationRange.from !== loaded.builderRun.recentObservation.range.from
+      || ready.recentObservationRange.to !== loaded.builderRun.recentObservation.range.to
+      || ready.definitionCatalogRoot !== loaded.envelope.definitionCatalogRoot
+      || ready.sourceCoverageRoot !== loaded.envelope.sourceCoverageRoot
+      || ready.candidatePartitionRoot !== loaded.envelope.candidatePartitionRoot
+      || ready.nominationClosureRoot !== loaded.envelope.nominationClosureRoot
+      || ready.nominationClosureStorageHash !== loaded.envelope.nominationClosureStorageHash
+      || ready.exactOutcomePartitionRoot !== partition.exactOutcomePartitionRoot
+      || ready.verifiedMemoSetRoot !== memo.verifiedMemoSetRoot
+      || ready.instanceCatalogRoot !== input.instanceCatalog.instanceCatalogRoot
+      || ready.graphRoot !== input.graph.graphRoot
+      || ready.edgeCount !== input.graph.edgeCount
+      || ready.instanceCount !== input.instanceCatalog.instanceCount
+      || ready.generationRefreshPolicyHash !== policyHash
+    ) throw new CheckpointRunStateError("ready payload does not match the sealed run closure");
+
+    const semanticStorageHash = (namespace: string, key: string): Hash | null => (
+      this.#durable.listIndex(namespace).find(entry => entry.key === key)?.contentHash ?? null
+    );
+    const catalogStorageHash = semanticStorageHash("semantic/instance-catalog", input.instanceCatalog.instanceCatalogRoot);
+    const graphStorageHash = semanticStorageHash("semantic/persisted-graph", input.graph.graphRoot);
+    if (!catalogStorageHash || !graphStorageHash) {
+      throw new CorruptDurableStoreError("ready content was not fsynced before stage CAS");
+    }
+    const storedCatalog = decodeInstanceCatalogRecordWith(read, catalogStorageHash, "instance catalog");
+    if (storedCatalog.instanceCatalogRoot !== input.instanceCatalog.instanceCatalogRoot
+      || storedCatalog.instanceCount !== input.instanceCatalog.instanceCount
+      || !sameCutoff(storedCatalog.cutoff, input.instanceCatalog.cutoff)) {
+      throw new CorruptDurableStoreError("instance catalog bytes mismatch");
+    }
+    const storedGraph = decodePersistedGraphRecordWith(read, graphStorageHash, storedCatalog, "graph");
+    if (storedGraph.graphRoot !== input.graph.graphRoot
+      || storedGraph.edgeCount !== input.graph.edgeCount
+      || !sameCutoff(storedGraph.cutoff, input.graph.cutoff)) {
+      throw new CorruptDurableStoreError("graph bytes mismatch");
+    }
+    const stageRevision = (BigInt(previewRoot.revision) + 1n).toString();
+    const stageWithoutHash: Omit<ReadyStageV1, "stageRecordHash"> = deepFreeze({
+      stageRevision,
+      expectedRevision: input.expectedRevision,
+      runId: loaded.envelope.runId,
+      readyBase: ready,
+      readyBaseHash: readyGenerationBaseHash(ready),
+      sourceCoverageStorageHash: loaded.envelope.sourceCoverageStorageHash,
+      sourceExecutionSetRoot: loaded.envelope.sourceExecutionSetRoot,
+      sourceExecutionSetStorageHash: loaded.envelope.sourceExecutionSetStorageHash,
+      sourcePlanEvidenceStorageHash: loaded.envelope.sourcePlanEvidenceStorageHash,
+      nominationClosureRoot: loaded.envelope.nominationClosureRoot,
+      nominationClosureStorageHash: loaded.envelope.nominationClosureStorageHash,
+      verifiedMemoSetStorageHash: loaded.envelope.verifiedMemoSetStorageHash,
+      instanceCatalogStorageHash: catalogStorageHash,
+      graphStorageHash,
+      sealedRevision: loaded.envelope.checkpointRevision,
+    });
+    const stage: ReadyStageV1 = deepFreeze({
+      ...stageWithoutHash,
+      stageRecordHash: hashDomain("aloha/ready-stage/v1", readyStagePayload(stageWithoutHash)),
+    });
+    const stageReferences = [
+      stage.sourceCoverageStorageHash,
+      stage.sourceExecutionSetStorageHash,
+      stage.sourcePlanEvidenceStorageHash,
+      stage.nominationClosureStorageHash,
+      stage.verifiedMemoSetStorageHash,
+      stage.instanceCatalogStorageHash,
+      stage.graphStorageHash,
+    ];
+    const stageStorageHash = this.#durable.putImmutableContent(
+      READY_STAGE_KIND,
+      encodeCanonicalBytes(stage),
+      stageReferences,
+    );
+    this.#validatedReadyStageStorageHashes.add(stageStorageHash);
+    const nextRoot: CheckpointRootV1 = deepFreeze({
+      ...previewRoot,
+      revision: stageRevision,
+      stagedReadyStorageHash: stageStorageHash,
+    });
+    const nextReferences = this.#rootReferencesFor(
+      read,
+      [...previewRecord.references, stageStorageHash],
+      nextRoot,
+      true,
+    );
+
     const owner = `checkpoint-stage/${input.expectedInProgressRunId}/${randomUUID()}`;
     const lease = this.#durable.acquireWriterLease(owner);
     try {
@@ -3136,159 +3298,19 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
         const currentRecord = tx.readRoot();
         if (!currentRecord) throw new CorruptDurableStoreError("checkpoint root missing");
         const root = rootFromRecord(currentRecord);
-        if (root.stagedReadyStorageHash !== null) {
-          if (root.inProgressRunId !== input.expectedInProgressRunId) throw new CheckpointRunStateError("staged ready run is not active");
-          this.#validateRootReferenceSetTx(tx, currentRecord, root, true);
-          const existing = this.#findReadyStageRecordWith(
-            tx.readContent.bind(tx),
-            currentRecord.references,
-            root.stagedReadyStorageHash,
-            true,
-          );
-          if (
-            existing.readyBase.definitionCatalogRoot !== input.ready.definitionCatalogRoot
-            || existing.readyBase.generationRefreshPolicyHash !== policyHash
-            || encodeCanonicalJson(existing.readyBase.runtimeAuthority) !== encodeCanonicalJson(input.ready.runtimeAuthority)
-          ) {
-            // Only the promotion authority may turn an exact configuration
-            // change into abandon authority.  Every other stage mismatch is
-            // integrity failure and remains fatal below.
-            this.#promotionAuthority.assertConfiguration({
-              definitionCatalogRoot: existing.readyBase.definitionCatalogRoot,
-              generationRefreshPolicyHash: existing.readyBase.generationRefreshPolicyHash,
-              runtimeAuthority: existing.readyBase.runtimeAuthority,
-            });
-            throw new ReadyPromotionFatalError("ready-promotion-stage-mismatch");
-          }
-          if (
-            existing.expectedRevision !== input.expectedRevision
-            || existing.runId !== input.expectedInProgressRunId
-            || existing.readyBaseHash !== readyGenerationBaseHash(input.ready)
-            || encodeCanonicalJson(existing.readyBase) !== encodeCanonicalJson(input.ready)
-          ) throw new CheckpointRunStateError("staged ready input mismatch");
-          return deepFreeze({
-            stage: this.#readyStageIdentity(existing, root.stagedReadyStorageHash),
-            stageRevision: existing.stageRevision,
-            stageRecordHash: existing.stageRecordHash,
-          });
-        }
         if (root.revision !== input.expectedRevision) throw new CASConflictError(input.expectedRevision, root.revision);
         if (root.inProgressRunId !== input.expectedInProgressRunId) throw new CheckpointRunStateError("ready stage run is not active");
-        // Promotion is the expensive closure-validation boundary.  Cache the
-        // exact immutable active-ready closure here, before freshness is
-        // observed, so activation performs only compact root/stage checks.
-        const loaded = this.#loadActiveRunTx(
-          tx,
-          currentRecord,
-          root,
-          input.expectedInProgressRunId,
-          true,
-        );
-        if (!loaded.envelope.attestationPartitionStorageHash) throw new CheckpointRunStateError("run is not sealed for promotion");
-        const partition = decodeAttestationPartitionRecordWith(
-          tx.readContent.bind(tx),
-          loaded.envelope.attestationPartitionStorageHash,
-          loaded.envelope.outcomePartitionStorageHash,
-          loaded.envelope.runId,
-          "attestation partition",
-        );
-        this.#attestationAuthority.validateDurablePartition(partition, loaded.builderRun.candidates);
-        assertPromotablePartition(partition, loaded.builderRun.candidates.map(candidate => candidate.familyCandidateKey));
-        const memo = decodeMemoSetRecordWith(
-          tx.readContent.bind(tx),
-          loaded.envelope.verifiedMemoSetStorageHash,
-          "verified memo set",
-        );
-        assertVerifiedPublicationCatalog(memo.memos, input.instanceCatalog);
-        const ready = input.ready;
-        if (
-          !sameCutoff(ready.cutoff, loaded.envelope.cutoff)
-          || !sameCutoff(input.fence.cutoff, loaded.envelope.cutoff)
-          || ready.parentGenerationId !== loaded.envelope.parentGenerationId
-          || ready.recentObservationRange.from !== loaded.builderRun.recentObservation.range.from
-          || ready.recentObservationRange.to !== loaded.builderRun.recentObservation.range.to
-          || ready.definitionCatalogRoot !== loaded.envelope.definitionCatalogRoot
-          || ready.sourceCoverageRoot !== loaded.envelope.sourceCoverageRoot
-          || ready.candidatePartitionRoot !== loaded.envelope.candidatePartitionRoot
-          || ready.nominationClosureRoot !== loaded.envelope.nominationClosureRoot
-          || ready.nominationClosureStorageHash !== loaded.envelope.nominationClosureStorageHash
-          || ready.exactOutcomePartitionRoot !== partition.exactOutcomePartitionRoot
-          || ready.verifiedMemoSetRoot !== memo.verifiedMemoSetRoot
-          || ready.instanceCatalogRoot !== input.instanceCatalog.instanceCatalogRoot
-          || ready.graphRoot !== input.graph.graphRoot
-          || ready.edgeCount !== input.graph.edgeCount
-          || ready.instanceCount !== input.instanceCatalog.instanceCount
-          || ready.generationRefreshPolicyHash !== policyHash
-        ) throw new CheckpointRunStateError("ready payload does not match the sealed run closure");
-        const catalogStorageHash = tx.getIndex("semantic/instance-catalog", input.instanceCatalog.instanceCatalogRoot);
-        const graphStorageHash = tx.getIndex("semantic/persisted-graph", input.graph.graphRoot);
-        if (!catalogStorageHash || !graphStorageHash) throw new CorruptDurableStoreError("ready content was not fsynced before stage CAS");
-        const storedCatalog = decodeInstanceCatalogRecordWith(
-          tx.readContent.bind(tx),
-          catalogStorageHash,
-          "instance catalog",
-        );
-        if (storedCatalog.instanceCatalogRoot !== input.instanceCatalog.instanceCatalogRoot
-          || storedCatalog.instanceCount !== input.instanceCatalog.instanceCount
-          || !sameCutoff(storedCatalog.cutoff, input.instanceCatalog.cutoff)) {
-          throw new CorruptDurableStoreError("instance catalog bytes mismatch");
+        if (root.stagedReadyStorageHash !== null
+          || currentRecord.envelopeHash !== previewRecord.envelopeHash
+          || encodeCanonicalJson(currentRecord.references) !== encodeCanonicalJson(previewRecord.references)
+          || tx.getIndex("semantic/instance-catalog", input.instanceCatalog.instanceCatalogRoot) !== catalogStorageHash
+          || tx.getIndex("semantic/persisted-graph", input.graph.graphRoot) !== graphStorageHash) {
+          throw new CASConflictError(input.expectedRevision, root.revision);
         }
-        const storedGraph = decodePersistedGraphRecordWith(
-          tx.readContent.bind(tx),
-          graphStorageHash,
-          storedCatalog,
-          "graph",
-        );
-        if (storedGraph.graphRoot !== input.graph.graphRoot
-          || storedGraph.edgeCount !== input.graph.edgeCount
-          || !sameCutoff(storedGraph.cutoff, input.graph.cutoff)) {
-          throw new CorruptDurableStoreError("graph bytes mismatch");
-        }
-        const stageRevision = (BigInt(root.revision) + 1n).toString();
-        const stageWithoutHash: Omit<ReadyStageV1, "stageRecordHash"> = deepFreeze({
-          stageRevision,
-          expectedRevision: input.expectedRevision,
-          runId: loaded.envelope.runId,
-          readyBase: ready,
-          readyBaseHash: readyGenerationBaseHash(ready),
-          sourceCoverageStorageHash: loaded.envelope.sourceCoverageStorageHash,
-          sourceExecutionSetRoot: loaded.envelope.sourceExecutionSetRoot,
-          sourceExecutionSetStorageHash: loaded.envelope.sourceExecutionSetStorageHash,
-          sourcePlanEvidenceStorageHash: loaded.envelope.sourcePlanEvidenceStorageHash,
-          nominationClosureRoot: loaded.envelope.nominationClosureRoot,
-          nominationClosureStorageHash: loaded.envelope.nominationClosureStorageHash,
-          verifiedMemoSetStorageHash: loaded.envelope.verifiedMemoSetStorageHash,
-          instanceCatalogStorageHash: catalogStorageHash,
-          graphStorageHash,
-          sealedRevision: loaded.envelope.checkpointRevision,
-        });
-        const stage: ReadyStageV1 = deepFreeze({
-          ...stageWithoutHash,
-          stageRecordHash: hashDomain("aloha/ready-stage/v1", readyStagePayload(stageWithoutHash)),
-        });
-        const stageStorageHash = tx.putImmutable(READY_STAGE_KIND, encodeCanonicalBytes(stage), [
-          stage.sourceCoverageStorageHash,
-          stage.sourceExecutionSetStorageHash,
-          stage.sourcePlanEvidenceStorageHash,
-          stage.nominationClosureStorageHash,
-          stage.verifiedMemoSetStorageHash,
-          stage.instanceCatalogStorageHash,
-          stage.graphStorageHash,
-        ]);
-        const nextRoot: CheckpointRootV1 = deepFreeze({
-          ...root,
-          revision: stageRevision,
-          stagedReadyStorageHash: stageStorageHash,
-        });
         tx.compareAndSwapRoot(
           root.revision,
           encodeCanonicalBytes(nextRoot),
-          this.#rootReferencesFor(
-            hash => tx.readContent(hash),
-            [...currentRecord.references, stageStorageHash],
-            nextRoot,
-            true,
-          ),
+          nextReferences,
         );
         return deepFreeze({
           stage: this.#readyStageIdentity(stage, stageStorageHash),
@@ -3333,6 +3355,10 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
     this.#canonical.assertPromotionFreshness(input.fence, input.freshness);
     decimal(input.promotedAtMonotonicNs, "promotedAtMonotonicNs");
     await this.#emitReadyStage12BeforeActivation(input);
+    // Stage 1/2 already validates this immutable sealed run. Rehydrate it
+    // outside the writer transaction; the staged root revision and hashes
+    // below fence the compact activation CAS against concurrent replacement.
+    const preparedLoaded = this.#loadActiveRun(input.stage.runId);
     const owner = `checkpoint-activate/${input.expectedInProgressRunId}/${randomUUID()}`;
     const lease = this.#durable.acquireWriterLease(owner);
     try {
@@ -3382,7 +3408,7 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
           || input.freshness.receipt.generationRefreshPolicyHash !== policyHash
           || input.freshness.receipt.maxPromotionAgeBlocks !== maxPromotionAgeBlocks
         ) throw new CheckpointRunStateError("ready activation freshness binding mismatch");
-        const loaded = this.#loadActiveRunTx(tx, currentRecord, root, stage.runId, true);
+        const loaded = preparedLoaded;
         // The transaction's own root CAS is the durable state guard.  Capture
         // the already validated immutable stage here and recheck only the
         // process-local authorities at the last synchronous point before
