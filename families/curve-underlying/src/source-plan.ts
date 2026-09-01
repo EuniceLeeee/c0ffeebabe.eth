@@ -13,7 +13,7 @@ const POOL_LIST_SELECTOR = "0x3a1d5d8e";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 export const CURVE_UNDERLYING_SOURCE_PLAN = defineFamilySourcePlan({ sourcePlanId: CURVE_UNDERLYING_SOURCE_PLAN_ID, completeness: "nomination-only", historyStartBlock: null, schemaHash: CURVE_UNDERLYING_SOURCE_PLAN_SCHEMA_HASH });
-export const CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN = defineFamilySourcePlan({ sourcePlanId: CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_ID, completeness: "complete-snapshot", historyStartBlock: null, schemaHash: CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_SCHEMA_HASH });
+export const CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN = defineFamilySourcePlan({ sourcePlanId: CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_ID, completeness: "nomination-only", historyStartBlock: null, schemaHash: CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_SCHEMA_HASH });
 
 function sameCutoff(left: { readonly chainId: string; readonly number: string; readonly hash: Hash; readonly stateRoot: Hash }, right: typeof left): boolean { return left.chainId === right.chainId && left.number === right.number && left.hash === right.hash && left.stateRoot === right.stateRoot; }
 function blockTag(number: string): string { return `0x${BigInt(number).toString(16)}`; }
@@ -145,25 +145,10 @@ export const CURVE_UNDERLYING_SOURCE_NOMINATION_PROGRAM: FamilySourcePlanNominat
 
 export const CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntimeV1 = Object.freeze({
   ...CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN,
-  async execute(input: FamilySourcePlanExecutionInputV1, physical: FamilySourcePlanPhysicalPortV1, signal: AbortSignal) {
+  async execute(input: FamilySourcePlanExecutionInputV1, _physical: FamilySourcePlanPhysicalPortV1, signal: AbortSignal) {
     if (signal.aborted) throw signal.reason;
-    if (input.cutoff.chainId !== "1" || input.plan.familyDefinitionHash !== CURVE_UNDERLYING_FAMILY_AUTHORING_HASH || input.plan.completeness !== "complete-snapshot" || input.plan.historyStartBlock !== null || input.previousAppliedThrough !== null) throw new TypeError("curve registry source plan binding mismatch");
-    const countRead = await registryRead(input, physical, POOL_COUNT_SELECTOR, signal);
-    const count = decodeUintResult(countRead.response, "curve.metaregistry.pool_count");
-    if (count > BigInt(Number.MAX_SAFE_INTEGER)) throw new TypeError("curve registry pool count is too large");
-    const observations = [countRead.result];
-    const registryPools: string[] = [];
-    for (let index = 0n; index < count; index += 1n) { const read = await registryRead(input, physical, `${POOL_LIST_SELECTOR}${uintWord(index)}`, signal); observations.push(read.result); registryPools.push(decodeAddressResult(read.response, `curve.metaregistry.pool_list[${index}]`)); }
-    const pools = [...new Set(registryPools)];
-    const refs = observations.map(value => sourceRef(input, value)).sort((left, right) => refKey(left).localeCompare(refKey(right)));
-    const rawEvidenceLocators = observations.map(value => value.rawEvidenceLocator).sort((left, right) => left.rawLocatorHash.localeCompare(right.rawLocatorHash));
-    const rawLocatorHashes = rawEvidenceLocators.map(value => value.rawLocatorHash);
-    const evidenceRoot = sourcePlanEvidenceRoot({ plan: input.plan, cutoff: input.cutoff, refs, rawLocatorHashes });
-    const sourceEvidence = Object.freeze({ kind: "source-plan-evidence" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, refs: Object.freeze(refs), rawLocatorHashes: Object.freeze(rawLocatorHashes), evidenceRoot });
-    const opaqueResult: CanonicalJson = Object.freeze({ kind: "curve-metaregistry-complete-snapshot", version: 1, manager: CURVE_METAREGISTRY, poolCount: count.toString(), pools: Object.freeze(pools) });
-    const resultPartitionRoot = hashDomain("aloha/curve-underlying/registry-source-partition/v1", opaqueResult);
-    const withoutRoot = { kind: "source-plan-execution" as const, version: 1 as const, plan: input.plan, cutoff: input.cutoff, outcome: "complete" as const, from: input.cutoff.number, through: input.cutoff.number, previousAppliedThrough: null, resultPartitionRoot, opaqueResult, sourceEvidenceRefs: Object.freeze(refs), rawLocatorHashes: Object.freeze(rawLocatorHashes), sourceEvidenceRoot: evidenceRoot };
-    return Object.freeze({ execution: Object.freeze({ ...withoutRoot, executionRoot: sourcePlanExecutionRoot(withoutRoot) }), sourceEvidence, rawEvidenceLocators: Object.freeze(rawEvidenceLocators) });
+    if (input.plan.familyDefinitionHash !== CURVE_UNDERLYING_FAMILY_AUTHORING_HASH || input.plan.completeness !== "nomination-only" || input.plan.historyStartBlock !== null || input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("curve degraded recent source plan binding mismatch");
+    return sealNominationOnlySourceExecution(input);
   },
 });
 
@@ -174,13 +159,7 @@ export const CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM: FamilySourcePlanNomin
   async evaluate(input: FamilySourcePlanNominationInputV1, signal: AbortSignal) {
     if (signal.aborted) throw signal.reason;
     assertNominationBinding(input);
-    if (input.execution.plan.completeness !== "complete-snapshot" || input.execution.outcome !== "complete" || input.execution.from !== input.recent.cutoff.number || input.execution.through !== input.recent.cutoff.number) throw new TypeError("curve registry execution is not a complete cutoff snapshot");
-    const opaque = input.execution.opaqueResult as { readonly kind?: unknown; readonly version?: unknown; readonly manager?: unknown; readonly poolCount?: unknown; readonly pools?: unknown };
-    if (opaque.kind !== "curve-metaregistry-complete-snapshot" || opaque.version !== 1 || opaque.manager !== CURVE_METAREGISTRY || typeof opaque.poolCount !== "string" || !/^(0|[1-9][0-9]*)$/.test(opaque.poolCount) || !Array.isArray(opaque.pools)) throw new TypeError("curve registry opaque result is malformed");
-    const poolCount = BigInt(opaque.poolCount);
-    const pools = Object.freeze(opaque.pools.map(value => canonicalAddress(String(value))));
-    if (new Set(pools).size !== pools.length) throw new TypeError("curve registry opaque result has duplicate pools");
-    const poolEvidence = registryPoolEvidence(input, poolCount, pools);
-    return Object.freeze(pools.map(target => Object.freeze({ kind: "aloha.candidate-nomination" as const, version: "2" as const, familyId: CURVE_UNDERLYING_FAMILY_ID, familyDefinitionHash: CURVE_UNDERLYING_FAMILY_AUTHORING_HASH, instanceNominationKey: target, evidence: poolEvidence.get(target)! })));
+    if (input.execution.plan.completeness !== "nomination-only" || input.execution.sourceEvidenceRefs.length !== 0 || input.execution.rawLocatorHashes.length !== 0) throw new TypeError("curve degraded recent execution binding mismatch");
+    return recentNominations(input);
   },
 });

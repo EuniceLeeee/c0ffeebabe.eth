@@ -201,8 +201,8 @@ import { ANGSTROM_V4_SOURCE_PLAN_RUNTIME as FAMILY_0_SOURCE_PLAN_0 } from "../..
 import { ANGSTROM_V4_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_0_SOURCE_PLAN_1 } from "../../families/angstrom-v4/src/public.ts";
 import { ASTRA_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_1_SOURCE_PLAN_0 } from "../../families/astra-multitoken/src/public.ts";
 import { ASTRA_SOURCE_PLAN_RUNTIME as FAMILY_1_SOURCE_PLAN_1 } from "../../families/astra-multitoken/src/public.ts";
-import { CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME as FAMILY_2_SOURCE_PLAN_0 } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME as FAMILY_2_SOURCE_PLAN_1 } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME as FAMILY_2_SOURCE_PLAN_0 } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME as FAMILY_2_SOURCE_PLAN_1 } from "../../families/curve-underlying/src/public.ts";
 import { DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_3_SOURCE_PLAN_0 } from "../../families/dodo-v2/src/public.ts";
 import { DODO_V2_SOURCE_PLAN_RUNTIME as FAMILY_3_SOURCE_PLAN_1 } from "../../families/dodo-v2/src/public.ts";
 import { EIGENPIE_HISTORY_SOURCE_PLAN_RUNTIME as FAMILY_4_SOURCE_PLAN_0 } from "../../families/eigenpie/src/public.ts";
@@ -234,8 +234,8 @@ import { ANGSTROM_V4_SOURCE_NOMINATION_PROGRAM as FAMILY_0_NOMINATION_PROGRAM_0 
 import { ANGSTROM_V4_HISTORY_NOMINATION_PROGRAM as FAMILY_0_NOMINATION_PROGRAM_1 } from "../../families/angstrom-v4/src/public.ts";
 import { ASTRA_HISTORY_NOMINATION_PROGRAM as FAMILY_1_NOMINATION_PROGRAM_0 } from "../../families/astra-multitoken/src/public.ts";
 import { ASTRA_SOURCE_NOMINATION_PROGRAM as FAMILY_1_NOMINATION_PROGRAM_1 } from "../../families/astra-multitoken/src/public.ts";
-import { CURVE_UNDERLYING_SOURCE_NOMINATION_PROGRAM as FAMILY_2_NOMINATION_PROGRAM_0 } from "../../families/curve-underlying/src/public.ts";
-import { CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM as FAMILY_2_NOMINATION_PROGRAM_1 } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM as FAMILY_2_NOMINATION_PROGRAM_0 } from "../../families/curve-underlying/src/public.ts";
+import { CURVE_UNDERLYING_SOURCE_NOMINATION_PROGRAM as FAMILY_2_NOMINATION_PROGRAM_1 } from "../../families/curve-underlying/src/public.ts";
 import { DODO_V2_HISTORY_NOMINATION_PROGRAM as FAMILY_3_NOMINATION_PROGRAM_0 } from "../../families/dodo-v2/src/public.ts";
 import { DODO_V2_SOURCE_NOMINATION_PROGRAM as FAMILY_3_NOMINATION_PROGRAM_1 } from "../../families/dodo-v2/src/public.ts";
 import { EIGENPIE_HISTORY_NOMINATION_PROGRAM as FAMILY_4_NOMINATION_PROGRAM_0 } from "../../families/eigenpie/src/public.ts";
@@ -701,10 +701,10 @@ const FAMILY_SOURCE_PLANS_19 = Object.freeze([
 const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
 {
   "schemaVersion": 1,
-  "releaseIntentRoot": "0xa3c846c55d650618a4ad906113fc8e032d098cdb3a17b59ada49c24bc4be24f7",
-  "definitionCatalogRoot": "0x11042cd29bdba7311e9dc98aa9a61d9a9ec3a4f031ea8e0bc1fe2ddf489405ad",
+  "releaseIntentRoot": "0x8b0daca7349a5d5d522d9dfbad98c7fa0df5702408cba9122fee392cd9212b04",
+  "definitionCatalogRoot": "0x6fff4964039b510f9eec218ffe88f6b32b1ad4ca35dd10e5b021ab7881f79158",
   "proposedCapabilitySetRoot": "0x6e233c30225c34fae8b780236c196afc062f11bb4772478726b51fa3ec69c3e2",
-  "nominationProgramSetRoot": "0xc7a2c4a5f0a1ca2d9b0c34bf0be0da957a535227e4c41c953e2580467a32d7b9",
+  "nominationProgramSetRoot": "0xd1d3843660868196790b0ec1863333f7823b107611b2231868f0c7162292a0e7",
   "families": [
     {
       "entry": {
@@ -1524,23 +1524,23 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
     {
       "entry": {
         "familyId": "curve-underlying",
-        "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
-        "issuerRef": "0xa09b7014ac5022f3224286e6efaebb771862f98827fd50569b878f03e6d3ff70",
+        "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
+        "issuerRef": "0x795351f7a2f5a34612e5596be380b581c0a12d36e326b8c5003fe9c8b2909958",
         "authorityRef": "0x886485bac74bd8309615d1ddf846266851ced8fc3f043c6119e17c9dc445d02b",
         "lifecycleRefs": {
           "nomination": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "nomination",
             "capabilityId": "family.curve-underlying.nomination",
             "version": "1.0.0",
             "schemaHash": "0x6fe3febbe355a5ab29d549e241cc633a7ff61d2da7bef0a832ac3d93334e1bba",
             "interpreterHash": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
-            "ownerRef": "0xab79ab66be6bc1a9475f296e9bc2d4c2f5a01bb4924c22024f409df68235cdd5"
+            "ownerRef": "0x5bd50492263c6040ebc5f79328539d570da56d0f35d61715046a9ba765d0d86b"
           },
           "identity": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "identity",
             "capabilityId": "family.curve-underlying.identity",
             "version": "1.0.0",
@@ -1550,7 +1550,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           },
           "materialization": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "materialization",
             "capabilityId": "family.curve-underlying.materialization",
             "version": "1.0.0",
@@ -1560,7 +1560,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           },
           "projection": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "projection",
             "capabilityId": "family.curve-underlying.projection",
             "version": "1.0.0",
@@ -1570,7 +1570,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           },
           "rehydration": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "rehydration",
             "capabilityId": "family.curve-underlying.rehydration",
             "version": "1.0.0",
@@ -1582,7 +1582,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         "extensionRefs": [
           {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.coarse",
             "version": "1.0.0",
@@ -1592,7 +1592,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           },
           {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.exact",
             "version": "1.0.0",
@@ -1602,7 +1602,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           },
           {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.state",
             "version": "1.0.0",
@@ -1630,19 +1630,19 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           {
             "ownerRef": "0xa879caf970d3706c7d53f8b0e3b6887cb3e9c80f9b97c568bb0baccf805d1e9d",
             "sourcePlanRef": "0x6c92031f2c5b482f6f2274e0a006048a4d7bf2c269a72a878e349d5d434d66e8",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "completeness": "nomination-only",
             "historyStartBlock": null
           },
           {
-            "ownerRef": "0xaf1c74405c3caa701ad0fa21f38c2dafb4e85f33607246591e6037a210d8ecec",
-            "sourcePlanRef": "0xc854357c918f2f22c6f00ea61c809724058ceab27a7638443249319d2307a0ab",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
-            "completeness": "complete-snapshot",
+            "ownerRef": "0xbdf26b96cd79c3312392435eaad8fdb117e5a8bcb05bdb6de7f711496c3a614e",
+            "sourcePlanRef": "0xfbd6a52c199f23e5c864f08f00b6def703d31ade4ebd02e9d24df21c053bf4fe",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
+            "completeness": "nomination-only",
             "historyStartBlock": null
           }
         ],
-        "definitionCatalogLeafDigest": "0x7aa6f1ecba7081a505c792aaefa68981980a5e86cbefa489a2c7bdf32b3188eb",
+        "definitionCatalogLeafDigest": "0xc32452d60e16468a9b3ee6603bf7510a2862d08d694ec4ecf20a92931216a016",
         "capabilityCatalogRoot": "0x5227e5e2cfd6bce403f4210d6760f7e6ca1211bcad94c7da59a77266421ef9b7"
       },
       "publicEntry": {
@@ -1658,7 +1658,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "closureRoot": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
           "stageRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "identity",
             "capabilityId": "family.curve-underlying.identity",
             "version": "1.0.0",
@@ -1674,7 +1674,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "closureRoot": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
           "stageRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "materialization",
             "capabilityId": "family.curve-underlying.materialization",
             "version": "1.0.0",
@@ -1690,13 +1690,13 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "closureRoot": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
           "stageRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "nomination",
             "capabilityId": "family.curve-underlying.nomination",
             "version": "1.0.0",
             "schemaHash": "0x6fe3febbe355a5ab29d549e241cc633a7ff61d2da7bef0a832ac3d93334e1bba",
             "interpreterHash": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
-            "ownerRef": "0xab79ab66be6bc1a9475f296e9bc2d4c2f5a01bb4924c22024f409df68235cdd5"
+            "ownerRef": "0x5bd50492263c6040ebc5f79328539d570da56d0f35d61715046a9ba765d0d86b"
           }
         },
         {
@@ -1706,7 +1706,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "closureRoot": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
           "stageRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "projection",
             "capabilityId": "family.curve-underlying.projection",
             "version": "1.0.0",
@@ -1722,7 +1722,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "closureRoot": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
           "stageRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "rehydration",
             "capabilityId": "family.curve-underlying.rehydration",
             "version": "1.0.0",
@@ -1734,6 +1734,41 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
       ],
       "sourcePlans": [
         {
+          "sourcePlanId": "curve-underlying.degraded-recent-observation",
+          "modulePath": "families/curve-underlying/src/source-plan.ts",
+          "exportName": "CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME",
+          "closureRoot": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
+          "schemaHash": "0xa872454c2289172478831341b953a6f92e2de340e4fac222fb90af61b81e2117",
+          "planRef": {
+            "ownerRef": "0xbdf26b96cd79c3312392435eaad8fdb117e5a8bcb05bdb6de7f711496c3a614e",
+            "sourcePlanRef": "0xfbd6a52c199f23e5c864f08f00b6def703d31ade4ebd02e9d24df21c053bf4fe",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
+            "completeness": "nomination-only",
+            "historyStartBlock": null
+          },
+          "leafDigest": "0x6ae24720fa0a47d6b16d66bc6f00cb40e02422362e05cda38925ea798269c31c",
+          "nominationProgramProposal": {
+            "program": {
+              "modulePath": "families/curve-underlying/src/source-plan.ts",
+              "exportName": "CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM",
+              "closureRoot": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
+              "schemaHash": "0xa872454c2289172478831341b953a6f92e2de340e4fac222fb90af61b81e2117"
+            },
+            "mutationCorpus": {
+              "modulePath": "families/curve-underlying/src/nomination-qualification.ts",
+              "exportName": "CURVE_UNDERLYING_NOMINATION_MUTATION_CORPUS",
+              "closureRoot": "0x184e060bce7e6dfd6cd1306b894f1e907adecee594b4c0938bb61f4a58f6bfa6"
+            },
+            "independentOracle": {
+              "modulePath": "families/curve-underlying/src/nomination-qualification.ts",
+              "exportName": "CURVE_UNDERLYING_NOMINATION_INDEPENDENT_ORACLE",
+              "closureRoot": "0x184e060bce7e6dfd6cd1306b894f1e907adecee594b4c0938bb61f4a58f6bfa6"
+            },
+            "nominationProgramRoot": "0x950dd77468b844607b607885d5b25f6705d12704a8a2255a8e8f1688b44dab60",
+            "proposalLeafDigest": "0xe87cdebf13c5fe3e6662229fa7594b8286afa5b5245fd9515e8d89344dad1bec"
+          }
+        },
+        {
           "sourcePlanId": "curve-underlying.fixed-cutoff-50-block",
           "modulePath": "families/curve-underlying/src/source-plan.ts",
           "exportName": "CURVE_UNDERLYING_SOURCE_PLAN_RUNTIME",
@@ -1742,7 +1777,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "planRef": {
             "ownerRef": "0xa879caf970d3706c7d53f8b0e3b6887cb3e9c80f9b97c568bb0baccf805d1e9d",
             "sourcePlanRef": "0x6c92031f2c5b482f6f2274e0a006048a4d7bf2c269a72a878e349d5d434d66e8",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "completeness": "nomination-only",
             "historyStartBlock": null
           },
@@ -1767,41 +1802,6 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
             "nominationProgramRoot": "0x7d6b6a5bf8cdf9318006246067e3c4a0e0d3fcce74aca7dde9fd150fac9bf3a4",
             "proposalLeafDigest": "0x28e59ceee1d5f45dd7a90b4e54de4b6bbe25f04a61457519f4ceb440b359b63a"
           }
-        },
-        {
-          "sourcePlanId": "curve-underlying.metaregistry-complete-snapshot",
-          "modulePath": "families/curve-underlying/src/source-plan.ts",
-          "exportName": "CURVE_UNDERLYING_REGISTRY_SOURCE_PLAN_RUNTIME",
-          "closureRoot": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
-          "schemaHash": "0x4fd17c7eff6c48b7d1e091550192e3bb2c920297e9fc716b66a76a11b4ef7f1a",
-          "planRef": {
-            "ownerRef": "0xaf1c74405c3caa701ad0fa21f38c2dafb4e85f33607246591e6037a210d8ecec",
-            "sourcePlanRef": "0xc854357c918f2f22c6f00ea61c809724058ceab27a7638443249319d2307a0ab",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
-            "completeness": "complete-snapshot",
-            "historyStartBlock": null
-          },
-          "leafDigest": "0x030050844b5239fee2b8fa96daa4cf60ae7ae24c7aa67a4de43fc10e08018019",
-          "nominationProgramProposal": {
-            "program": {
-              "modulePath": "families/curve-underlying/src/source-plan.ts",
-              "exportName": "CURVE_UNDERLYING_REGISTRY_NOMINATION_PROGRAM",
-              "closureRoot": "0x32043d5eebb56809473365784012c277aaa860309637a5df305bdfd41463fdce",
-              "schemaHash": "0x4fd17c7eff6c48b7d1e091550192e3bb2c920297e9fc716b66a76a11b4ef7f1a"
-            },
-            "mutationCorpus": {
-              "modulePath": "families/curve-underlying/src/nomination-qualification.ts",
-              "exportName": "CURVE_UNDERLYING_NOMINATION_MUTATION_CORPUS",
-              "closureRoot": "0x184e060bce7e6dfd6cd1306b894f1e907adecee594b4c0938bb61f4a58f6bfa6"
-            },
-            "independentOracle": {
-              "modulePath": "families/curve-underlying/src/nomination-qualification.ts",
-              "exportName": "CURVE_UNDERLYING_NOMINATION_INDEPENDENT_ORACLE",
-              "closureRoot": "0x184e060bce7e6dfd6cd1306b894f1e907adecee594b4c0938bb61f4a58f6bfa6"
-            },
-            "nominationProgramRoot": "0x1e4f23e6e92db60cea7e7b6d471ae38dbd6aaeb6502e2104d8a65c555f7251d2",
-            "proposalLeafDigest": "0xc163ba727bf146ab8fde6e3511acce8041c594f98216d6fc2f5d22514058d9cd"
-          }
         }
       ],
       "extensions": [
@@ -1811,7 +1811,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "closureRoot": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
           "capabilityRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.coarse",
             "version": "1.0.0",
@@ -1826,7 +1826,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "closureRoot": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
           "capabilityRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.exact",
             "version": "1.0.0",
@@ -1841,7 +1841,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "closureRoot": "0xd9ff2cf1a784b8a7f56162c6f20d81362eb33c731c05923a19a45cb171e46bf6",
           "capabilityRef": {
             "familyId": "curve-underlying",
-            "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+            "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
             "stage": "capability",
             "capabilityId": "family.curve-underlying.state",
             "version": "1.0.0",
@@ -1884,7 +1884,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
           "capabilityRefs": {
             "coarse": {
               "familyId": "curve-underlying",
-              "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+              "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
               "stage": "capability",
               "capabilityId": "family.curve-underlying.coarse",
               "version": "1.0.0",
@@ -1894,7 +1894,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
             },
             "exact": {
               "familyId": "curve-underlying",
-              "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+              "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
               "stage": "capability",
               "capabilityId": "family.curve-underlying.exact",
               "version": "1.0.0",
@@ -1904,7 +1904,7 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
             },
             "state": {
               "familyId": "curve-underlying",
-              "familyDefinitionHash": "0xe2e09da4c55879a0bd4c342b205620481fc488943b52d73a3b82a79b154470bd",
+              "familyDefinitionHash": "0x84077e510c2a1b5cb8b06cef4bfc96af1864949610bd61cf85016c3ee8099bc6",
               "stage": "capability",
               "capabilityId": "family.curve-underlying.state",
               "version": "1.0.0",
@@ -1920,8 +1920,8 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
         }
       ],
       "runtimeAdapterRoot": "0xda1f11e09a2c03c43efbb5f5ebe462406b3ae1b78fe82ff194fde9e6eabcf0c9",
-      "sourcePlanRoot": "0x1a9936a57d912a822a393abd4cf231f1fbe537b0b811624fc076e70a757030a7",
-      "stageDefinitionRoot": "0x04740c071a7e8ec1198687dbfb4790e9d5da3787eed7cc789199e70ac6aeed19"
+      "sourcePlanRoot": "0xe9a6bd4d98d9f3d0a23f84e78a303f6365bfe37b608e43d35adf13c296eb8e3d",
+      "stageDefinitionRoot": "0x759cadd60889e53406ffd4e5cb7436d116a25a37f95ab6a9aaa1a8fdd5af517e"
     },
     {
       "entry": {
@@ -7927,14 +7927,14 @@ const FAMILY_RUNTIME_DESCRIPTOR = Object.freeze(
       "stageDefinitionRoot": "0xc707aec3f2b2e49f924cb77bb1ba4af132977788b708123157fab00384031d58"
     }
   ],
-  "descriptorRoot": "0xd44751cdb8e335f939bab9d2295ea9a252aabd2638242b1923dc1b30b3deea56"
+  "descriptorRoot": "0x4cd50cfed9ab56277b7444622a68c9eef8d8d3f9b6aa600b17147e007e593528"
 }
 ) as unknown as GeneratedFamilyRuntimeDescriptorV1;
 const STRATEGY_RUNTIME_DESCRIPTOR = Object.freeze(
 {
   "schemaVersion": 1,
-  "releaseIntentRoot": "0xa3c846c55d650618a4ad906113fc8e032d098cdb3a17b59ada49c24bc4be24f7",
-  "definitionCatalogRoot": "0x11042cd29bdba7311e9dc98aa9a61d9a9ec3a4f031ea8e0bc1fe2ddf489405ad",
+  "releaseIntentRoot": "0x8b0daca7349a5d5d522d9dfbad98c7fa0df5702408cba9122fee392cd9212b04",
+  "definitionCatalogRoot": "0x6fff4964039b510f9eec218ffe88f6b32b1ad4ca35dd10e5b021ab7881f79158",
   "proposedCapabilitySetRoot": "0x6e233c30225c34fae8b780236c196afc062f11bb4772478726b51fa3ec69c3e2",
   "strategies": [
     {
@@ -7973,7 +7973,7 @@ const STRATEGY_RUNTIME_DESCRIPTOR = Object.freeze(
       "leafDigest": "0xbbe4ad24163729ebab34eab8cd23d840aef98bc0cb01e7ce4c17f58bb420cb54"
     }
   ],
-  "descriptorRoot": "0x2020ab9e1d7969a305b02241f1b5103ed2ee6ffdcf30f97d8df5c887591f2a18"
+  "descriptorRoot": "0xc042254310f337e0b8b1a86775e8dc9af16d2cd477024732257c2faad6a3a9db"
 }
 ) as unknown as GeneratedStrategyRuntimeDescriptorV1;
 

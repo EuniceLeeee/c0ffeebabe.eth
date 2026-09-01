@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "kind": "aloha.catalog-impact-receipt",
   "beforeSnapshotRoot": "0x0405f705a90d3fa70d22e105b749ebfbb7c4b0d584b9ed6c7c862aba5adca204",
-  "afterSnapshotRoot": "0x78047ebba59e1f8c4e821e8a3c4209ff449e02bb5f18fc62e9ee5fea76dc6a19",
+  "afterSnapshotRoot": "0x9d4e23882acf8f1b8b3e2ea9c5fbdc80bf8565447aff1b6eb358a2049322db89",
   "beforeDefinitionCatalogRoot": "0xc1ec5f78f872a882db64a3227f2c90573c1073e22a9dba19e5c7adf1529775dc",
-  "afterDefinitionCatalogRoot": "0x11042cd29bdba7311e9dc98aa9a61d9a9ec3a4f031ea8e0bc1fe2ddf489405ad",
+  "afterDefinitionCatalogRoot": "0x6fff4964039b510f9eec218ffe88f6b32b1ad4ca35dd10e5b021ab7881f79158",
   "beforeCapabilityCatalogRoot": "0x12948d85524eff81b03b2f8decf47950aac5a240fe43332241f775575039dbcf",
   "afterCapabilityCatalogRoot": "0x3aecefd7a892ba09caf4e7f35b9aa2ce544c262d9b2ac244e2a8f08040a450d4",
   "changedCapabilityIds": [
@@ -151,5 +151,5 @@
     "wsteth"
   ],
   "reusableArtifacts": [],
-  "receiptRoot": "0x0cd9fa6a48fae10d6a47e215715dde63217b9f6f053a5d12cf8b22bcc8e331da"
+  "receiptRoot": "0x5e9f48ddc560f780a85576e32eda882aac1a53b8aae1ca0b2ca40aa4ac91fd27"
 }

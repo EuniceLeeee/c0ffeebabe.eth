@@ -42,7 +42,7 @@
     },
     {
       "path": "input/release-intent",
-      "contentSha256": "0xadd815bd203e079aa38221123161490cb668b58cca6718e3a2ba792d0602563b",
+      "contentSha256": "0x45026e31d13f5c7a5ae6241c081e21dddf492f593c50a112fa32b180e2246d77",
       "byteLength": 4341
     },
     {
@@ -1882,37 +1882,37 @@
   "outputs": [
     {
       "path": "generated/catalog-impact.receipt.json",
-      "contentSha256": "0x6f76df547ce49d17ca4a280a48f0aa4c8103298c3f125bb695eb6267f6e607ef",
+      "contentSha256": "0xfcc83a25dd53b6cb186dad4a300e955c1fdc5437a833edf7430a54e4bc5f7233",
       "byteLength": 5339,
-      "catalogRoot": "0x0cd9fa6a48fae10d6a47e215715dde63217b9f6f053a5d12cf8b22bcc8e331da"
+      "catalogRoot": "0x5e9f48ddc560f780a85576e32eda882aac1a53b8aae1ca0b2ca40aa4ac91fd27"
     },
     {
       "path": "generated/catalog-impact.snapshot.json",
-      "contentSha256": "0x96e8c6b82345c6cb4bc9a2f4dc251369a24e8ea4a4f81aef302d7e5c4b6dc14b",
+      "contentSha256": "0xe3d1095e24a4810a985c86046c25b68bf2f86dfcc59601670d863994281d867a",
       "byteLength": 37570,
-      "catalogRoot": "0x78047ebba59e1f8c4e821e8a3c4209ff449e02bb5f18fc62e9ee5fea76dc6a19"
+      "catalogRoot": "0x9d4e23882acf8f1b8b3e2ea9c5fbdc80bf8565447aff1b6eb358a2049322db89"
     },
     {
       "path": "generated/family-catalog/index.ts",
-      "contentSha256": "0xe369fad81f11b56962a2b45f72795ab1f5ed3c0509b8ac836f275c1c626a02c2",
-      "byteLength": 133778,
-      "catalogRoot": "0x7b453e8f6ad2c43405095583dd4f3a1596e5a4f906863170991df5b1f10fdcdc"
+      "contentSha256": "0x7726361163e6143aaa1e4ac444aeee609e718439d671229af6d74aa2ce06700f",
+      "byteLength": 133776,
+      "catalogRoot": "0x9ae5152e44fc61c664492bacec87d9a3cce9f102482c6730d335ce94e86801d3"
     },
     {
       "path": "generated/runtime-composition/index.ts",
-      "contentSha256": "0x51c0db52f302f1ff0fde86483a5e992fedd7036db2471dc97971d305b89a4604",
-      "byteLength": 488339,
-      "catalogRoot": "0xd44751cdb8e335f939bab9d2295ea9a252aabd2638242b1923dc1b30b3deea56"
+      "contentSha256": "0x9a6d075c2aae92a4261f105a7a5154d77abe504f9c965c3d06c2bc75f601c75d",
+      "byteLength": 488332,
+      "catalogRoot": "0x4cd50cfed9ab56277b7444622a68c9eef8d8d3f9b6aa600b17147e007e593528"
     },
     {
       "path": "generated/safety-profile/index.ts",
-      "contentSha256": "0x948848a140b619c278d27c029ce7510f9daf4a79d6993fa61c4e72f50e5ab636",
+      "contentSha256": "0xe91103a2dd886ad8a2b8bf7c52f100b8230d972e27f466ec514c63fc4c1902e5",
       "byteLength": 14732,
-      "catalogRoot": "0x0cac7255b1579f9a6ddb5565f7d31e7e542804b5cdee46581fc18e17484686e8"
+      "catalogRoot": "0x4dfe011e673226a7840b692d024a20c8082be003c40eecc478f05cdbb41d2ba4"
     },
     {
       "path": "generated/strategy-catalog/index.ts",
-      "contentSha256": "0xc4c513efdf5437aea4215571faa886a8dbbe879cec4f8f5d53544e3fb0c0e489",
+      "contentSha256": "0xfa3f47be636feb231e444a2f39b0315beb2e6a8524fd2013aa1832c57a6cedcd",
       "byteLength": 1993,
       "catalogRoot": "0xc6931d4be4816aec576dec52d239c82474ff33f73720226e609862f99e865564"
     },
@@ -1923,8 +1923,8 @@
       "catalogRoot": "0x0b1cdc81a9cf4f7dfee77c1af009446193d1c6830402bf88e8e5021c8c629568"
     }
   ],
-  "inputRoot": "0x9b2d43f49b22b4a1df1e9391eb2c07d11dc63d00c09cc927a232cee705cab88f",
+  "inputRoot": "0xc16551c4efd136d43e871599af219ff70da13b2ba3422a11279ef11bebc89544",
   "compilerRoot": "0x7f4e87a324dbe356a0eee9cc68805a1a23b15ee3547c50a9274ed96bdb0f9f21",
   "generatorRoot": "0x7191f30bb3658eee0ace35bb22165b3a75ad58cb5c0ba8bb01f4e36ad972ffd7",
-  "ledgerHash": "0x4c39f610a5a8d680cfeb4c8ec7c1565926f9da86088b84c189f94a895a50f6e0"
+  "ledgerHash": "0x5c0e6f321534755cb975357d91ae3cf6384635929f4d87e874f900a953c3f9d3"
 }

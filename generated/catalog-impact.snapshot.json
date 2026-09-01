@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "kind": "aloha.catalog-impact-snapshot",
-  "definitionCatalogRoot": "0x11042cd29bdba7311e9dc98aa9a61d9a9ec3a4f031ea8e0bc1fe2ddf489405ad",
+  "definitionCatalogRoot": "0x6fff4964039b510f9eec218ffe88f6b32b1ad4ca35dd10e5b021ab7881f79158",
   "capabilityCatalogRoot": "0x3aecefd7a892ba09caf4e7f35b9aa2ce544c262d9b2ac244e2a8f08040a450d4",
   "capabilities": [
     {
@@ -468,17 +468,17 @@
       "artifactId": "family:curve-underlying",
       "artifactKind": "family",
       "familyId": "curve-underlying",
-      "definitionCatalogLeafDigest": "0x7aa6f1ecba7081a505c792aaefa68981980a5e86cbefa489a2c7bdf32b3188eb",
+      "definitionCatalogLeafDigest": "0xc32452d60e16468a9b3ee6603bf7510a2862d08d694ec4ecf20a92931216a016",
       "requestedDependencyClosure": [
         "family.curve-underlying.coarse",
         "family.curve-underlying.exact",
         "family.curve-underlying.state"
       ],
       "requestedDependencyRoot": "0x5227e5e2cfd6bce403f4210d6760f7e6ca1211bcad94c7da59a77266421ef9b7",
-      "memoRoot": "0x1372ca6b76281db36a16843f37c0683ea443a86eee0a032f8f033ae349bc7553",
+      "memoRoot": "0xd2b3e0f1c0d2e11e9128885d1f98a3b0e8a4cfceee3bcecadea76d35284910f3",
       "nominationProposalLeafDigests": [
         "0x28e59ceee1d5f45dd7a90b4e54de4b6bbe25f04a61457519f4ceb440b359b63a",
-        "0xc163ba727bf146ab8fde6e3511acce8041c594f98216d6fc2f5d22514058d9cd"
+        "0xe87cdebf13c5fe3e6662229fa7594b8286afa5b5245fd9515e8d89344dad1bec"
       ]
     },
     {
@@ -761,5 +761,5 @@
       "nominationProposalLeafDigests": []
     }
   ],
-  "snapshotRoot": "0x78047ebba59e1f8c4e821e8a3c4209ff449e02bb5f18fc62e9ee5fea76dc6a19"
+  "snapshotRoot": "0x9d4e23882acf8f1b8b3e2ea9c5fbdc80bf8565447aff1b6eb358a2049322db89"
 }
