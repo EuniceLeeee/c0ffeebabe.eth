@@ -28,6 +28,13 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
 
 ### One canonical path; every stage needs a unique job
 
+- Start with the shortest safe vertical path through the actual product toward
+  the user's current outcome. A preflight, rehearsal, shadow implementation,
+  generalized framework, optimization, or extra gate is allowed only when a
+  failure observed on that canonical path or a hard safety boundary proves it
+  necessary. Do not postpone an authorized dry-run or other canonical
+  end-to-end operation to build a substitute that is meant to predict the same
+  result.
 - There is one implementation of the product behavior. Tests, acceptance,
   diagnostics, dry-runs, and observers must invoke or observe that canonical
   path; they must not recreate its orchestration, search loop, composition,
@@ -39,6 +46,18 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
   it cannot be promoted into evidence about live behavior. A parallel
   acceptance implementation validates itself, not the live system, even when
   its types and expected outputs look equivalent.
+- The forbidden drift is **implementation-path drift**, not merely stale time
+  or stale data. Even at the same commit and head, a validator that constructs
+  different objects, uses different wiring, replays different transitions, or
+  calls a parallel entrypoint can disagree with the actual live code. Evidence
+  about live behavior must therefore be a read-only projection of facts emitted
+  by the exact live execution, never facts produced by a look-alike execution.
+- Never build a pseudo-live pipeline for testing or acceptance. Its own passing
+  result proves only the duplicate, while its differences introduce an
+  unbounded new source of bugs. Exercise the production entrypoint with safe
+  dry-run/test boundary ports, or observe facts it emitted. If the real path is
+  hard to test, improve that path's seams and observability; do not copy its
+  business behavior into a test-only orchestrator.
 - Independent verification means independently reading raw artifacts and
   recomputing facts such as hashes, counts, sets, and lineage joins. It does
   **not** mean implementing the product behavior a second time. If an observer
@@ -46,8 +65,11 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
   from the real path instead.
 - Before adding a component, abstraction, stage, preflight, rehearsal, test
   harness, or gate, name the one production responsibility, independent fact,
-  or safety boundary that no existing step owns. If there is no such unique
-  job, do not add it: reuse, merge, or delete.
+  or safety boundary that no existing step owns, plus its concrete input,
+  output, and real downstream consumer. If there is no such unique job or its
+  output exists only to justify another validator, do not add it: reuse, merge,
+  or delete. Two steps must never own, derive, or claim the same fact; retain
+  the canonical owner and make every other step a consumer of its emitted fact.
 - Apply the deletion test before coding: removing the proposed step must remove
   a user-visible capability, a uniquely observable fact, or a necessary safety
   boundary. If nothing unique is lost, the step is duplication.
@@ -62,10 +84,23 @@ Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, sim
   sealing, or submission. A temporary, shadow, acceptance-only, or
   "offline-equivalent" business pipeline is still a second pipeline and is
   forbidden unless the user explicitly authorizes it for a named unique fact.
+- A dry-run is the live product path with signing, broadcast, and other external
+  side effects disabled or replaced only at their final boundary. It must use
+  the same live entrypoint, composition, discovery, state transitions,
+  candidate construction, ranking, and simulation. Do not create dry-run-only
+  bootstrap, orchestration, or business authorities to imitate those stages;
+  missing production credentials must fail closed at the external authority
+  boundary, not cause an upstream pseudo-live fork. A dry-run CLI may parse
+  configuration, inject the final no-sign/no-broadcast adapter, invoke the
+  canonical live entrypoint, and render facts from that invocation; it must not
+  own or reconstruct product composition.
 - If an ordinary implementation change repeatedly requires matching changes
   to a gate, boundary checker, fixture, or mirror implementation without a
   contract change, treat that coupling as evidence of duplication. Simplify
-  the checker or expose stable facts; do not expand both sides.
+  the checker or expose stable facts; do not expand both sides. A boundary
+  encodes a stable invariant and should normally rerun unchanged. Change the
+  boundary only when the invariant itself intentionally changes, never merely
+  to teach it the current implementation shape.
 - Safety gates for signing, broadcasting, secrets, or external authority keep
   their independent role, but they observe or constrain the canonical path;
   they never justify duplicating the business pipeline.
