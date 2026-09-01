@@ -149,6 +149,7 @@ export interface NominationClaimChunkV1 {
   readonly kind: "aloha.nomination-claim-chunk-v1";
   readonly sourcePlanIdentity: Hash;
   readonly claims: readonly PlanQualifiedNominationClaimV1[];
+  readonly relevantEvidenceRefHashes: readonly Hash[];
   readonly nextClaimChunkRef: NominationClaimChunkRefV1 | null;
 }
 
@@ -713,10 +714,16 @@ function familyPartitionsFromReceipts(
   }));
 }
 
+type PersistedNominationDenominatorV1 = Exclude<
+  NominationDenominatorV1,
+  RecentObservationDenominatorV1
+> | Omit<RecentObservationDenominatorV1, "relevantEvidenceRefHashes">;
+
 interface PersistedNominationReceiptManifestV1 extends Omit<
   QualifiedSourcePlanNominationReceiptV1,
-  "claims" | "uniqueNominations"
+  "claims" | "uniqueNominations" | "denominator"
 > {
+  readonly denominator: PersistedNominationDenominatorV1;
   readonly claimChunkCount: string;
   readonly firstClaimChunkRef: NominationClaimChunkRefV1 | null;
 }
@@ -757,7 +764,19 @@ function persistedReceiptManifest(
     nominationProgramRoot: (field, fieldPath) => assertHash(field, fieldPath),
     nominationProgramProposalLeafDigest: (field, fieldPath) => assertHash(field, fieldPath),
     qualificationRoot: (field, fieldPath) => assertHash(field, fieldPath),
-    denominator,
+    denominator: (field, fieldPath): PersistedNominationDenominatorV1 => {
+      const kind = readOwnEnumerableDataProperty(field, "kind", fieldPath);
+      if (kind !== "recent-observation") return denominator(field, fieldPath) as PersistedNominationDenominatorV1;
+      return decodeExactObject(field, {
+        kind: value => {
+          if (value !== "recent-observation") throw new TypeError(`${fieldPath}.kind is invalid`);
+          return "recent-observation" as const;
+        },
+        recentObservationRoot: (value, path) => assertHash(value, path),
+        relevantEvidenceRoot: (value, path) => assertHash(value, path),
+        relevantEvidenceCount: (value, path) => assertDecimalString(value, path),
+      }, fieldPath);
+    },
     rawClaimRoot: (field, fieldPath) => assertHash(field, fieldPath),
     rawClaimCount: (field, fieldPath) => assertDecimalString(field, fieldPath),
     uniqueNominationRoot: (field, fieldPath) => assertHash(field, fieldPath),
@@ -771,12 +790,21 @@ function persistedReceiptManifest(
 function buildClaimChunks(
   receipt: QualifiedSourcePlanNominationReceiptV1,
 ): readonly Readonly<{ readonly ref: NominationClaimChunkRefV1; readonly bytes: Uint8Array }>[] {
+  const relevantEvidenceRefHashes = receipt.denominator.kind === "recent-observation"
+    ? receipt.denominator.relevantEvidenceRefHashes
+    : [];
   const groups = Array.from(
-    { length: Math.ceil(receipt.claims.length / NOMINATION_CLAIM_CHUNK_MAX_ITEMS) },
-    (_, index) => receipt.claims.slice(
-      index * NOMINATION_CLAIM_CHUNK_MAX_ITEMS,
-      (index + 1) * NOMINATION_CLAIM_CHUNK_MAX_ITEMS,
-    ),
+    { length: Math.ceil(Math.max(receipt.claims.length, relevantEvidenceRefHashes.length) / NOMINATION_CLAIM_CHUNK_MAX_ITEMS) },
+    (_, index) => Object.freeze({
+      claims: receipt.claims.slice(
+        index * NOMINATION_CLAIM_CHUNK_MAX_ITEMS,
+        (index + 1) * NOMINATION_CLAIM_CHUNK_MAX_ITEMS,
+      ),
+      relevantEvidenceRefHashes: relevantEvidenceRefHashes.slice(
+        index * NOMINATION_CLAIM_CHUNK_MAX_ITEMS,
+        (index + 1) * NOMINATION_CLAIM_CHUNK_MAX_ITEMS,
+      ),
+    }),
   );
   const output: Array<Readonly<{ readonly ref: NominationClaimChunkRefV1; readonly bytes: Uint8Array }>> = new Array(groups.length);
   let nextClaimChunkRef: NominationClaimChunkRefV1 | null = null;
@@ -785,7 +813,8 @@ function buildClaimChunks(
       schemaVersion: 1 as const,
       kind: "aloha.nomination-claim-chunk-v1" as const,
       sourcePlanIdentity: receipt.sourcePlanIdentity,
-      claims: groups[index]!,
+      claims: groups[index]!.claims,
+      relevantEvidenceRefHashes: groups[index]!.relevantEvidenceRefHashes,
       nextClaimChunkRef,
     });
     const bytes = encodeCanonicalBytes(chunk);
@@ -813,9 +842,18 @@ export function encodePersistedNominationClosureV1(value: NominationClosureV1): 
   const receiptManifests = closure.receipts.map(receipt => {
     const receiptChunks = buildClaimChunks(receipt);
     chunks.push(...receiptChunks);
-    const { claims: _claims, uniqueNominations: _uniqueNominations, ...persisted } = receipt;
+    const { claims: _claims, uniqueNominations: _uniqueNominations, denominator: fullDenominator, ...persisted } = receipt;
+    const persistedDenominator: PersistedNominationDenominatorV1 = fullDenominator.kind === "recent-observation"
+      ? deepFreeze({
+        kind: fullDenominator.kind,
+        recentObservationRoot: fullDenominator.recentObservationRoot,
+        relevantEvidenceRoot: fullDenominator.relevantEvidenceRoot,
+        relevantEvidenceCount: fullDenominator.relevantEvidenceCount,
+      })
+      : fullDenominator;
     return deepFreeze({
       ...persisted,
+      denominator: persistedDenominator,
       claimChunkCount: String(receiptChunks.length),
       firstClaimChunkRef: receiptChunks[0]?.ref ?? null,
     });
@@ -853,6 +891,7 @@ function decodeClaimChunk(
     },
     sourcePlanIdentity: (field, fieldPath) => assertHash(field, fieldPath),
     claims: (field, fieldPath) => fieldArray(field, claim, fieldPath),
+    relevantEvidenceRefHashes: exactSortedUniqueHashes,
     nextClaimChunkRef: (field, fieldPath) => field === null ? null : claimChunkRef(field, fieldPath),
   }, path);
 }
@@ -895,6 +934,7 @@ export function decodePersistedNominationClosureV1(
   }, "nominationClosureManifest");
   const receipts = manifest.receiptManifests.map((receiptManifest, receiptIndex) => {
     const claims: PlanQualifiedNominationClaimV1[] = [];
+    const relevantEvidenceRefHashes: Hash[] = [];
     const seen = new Set<Hash>();
     let ref = receiptManifest.firstClaimChunkRef;
     while (ref !== null) {
@@ -905,15 +945,21 @@ export function decodePersistedNominationClosureV1(
       seen.add(ref.contentSha256);
       const chunk = decodeClaimChunk(readChunk(ref), ref, `nominationClaimChunk[${receiptIndex}:${seen.size - 1}]`);
       if (chunk.sourcePlanIdentity !== receiptManifest.sourcePlanIdentity
-        || chunk.claims.length === 0
-        || chunk.claims.length > NOMINATION_CLAIM_CHUNK_MAX_ITEMS) {
+        || (chunk.claims.length === 0 && chunk.relevantEvidenceRefHashes.length === 0)
+        || chunk.claims.length > NOMINATION_CLAIM_CHUNK_MAX_ITEMS
+        || chunk.relevantEvidenceRefHashes.length > NOMINATION_CLAIM_CHUNK_MAX_ITEMS) {
         throw new TypeError(`nomination receipt ${receiptIndex} claim chunk binding mismatch`);
       }
       claims.push(...chunk.claims);
+      relevantEvidenceRefHashes.push(...chunk.relevantEvidenceRefHashes);
       ref = chunk.nextClaimChunkRef;
     }
+    const partitionItemCount = BigInt(receiptManifest.rawClaimCount)
+      + (receiptManifest.denominator.kind === "recent-observation"
+        ? BigInt(receiptManifest.denominator.relevantEvidenceCount)
+        : 0n);
     if (receiptManifest.claimChunkCount !== String(seen.size)
-      || (receiptManifest.rawClaimCount === "0") !== (receiptManifest.firstClaimChunkRef === null)) {
+      || (partitionItemCount === 0n) !== (receiptManifest.firstClaimChunkRef === null)) {
       throw new TypeError(`nomination receipt ${receiptIndex} claim chunk denominator mismatch`);
     }
     const {
@@ -928,7 +974,17 @@ export function decodePersistedNominationClosureV1(
       version: _receiptVersion,
       ...receiptInput
     } = receiptManifest;
-    const receipt = sealQualifiedSourcePlanNominationReceiptV1({ ...receiptInput, claims });
+    const restoredDenominator: NominationDenominatorV1 = receiptInput.denominator.kind === "recent-observation"
+      ? deepFreeze({ ...receiptInput.denominator, relevantEvidenceRefHashes })
+      : receiptInput.denominator;
+    if (receiptInput.denominator.kind !== "recent-observation" && relevantEvidenceRefHashes.length !== 0) {
+      throw new TypeError(`nomination receipt ${receiptIndex} carries unexpected recent evidence`);
+    }
+    const receipt = sealQualifiedSourcePlanNominationReceiptV1({
+      ...receiptInput,
+      denominator: restoredDenominator,
+      claims,
+    });
     if (receipt.rawClaimRoot !== rawClaimRoot
       || receipt.rawClaimCount !== rawClaimCount
       || receipt.uniqueNominationRoot !== uniqueNominationRoot

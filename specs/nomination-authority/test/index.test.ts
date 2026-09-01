@@ -364,3 +364,51 @@ test("3k nomination facts use bounded linked chunks without truncating the mater
   assert.equal(reopened.candidateCount, "3000");
   assert.equal(reopened.root, closure.root);
 });
+
+test("3k recent evidence denominator hashes are chunked out of the closure manifest", () => {
+  const sourcePlanIdentity = h("large-recent-plan");
+  const relevantEvidenceRefHashes = Array.from(
+    { length: 3_000 },
+    (_, index) => h(`large-recent-evidence:${index}`),
+  ).sort();
+  const receipt = sealQualifiedSourcePlanNominationReceiptV1({
+    cutoff,
+    familyId: "family.recent",
+    familyDefinitionHash: h("large-recent-family"),
+    sourcePlanIdentity,
+    sourcePlanLeafDigest: h("large-recent-leaf"),
+    nominationProgramRoot: h("large-recent-program"),
+    nominationProgramProposalLeafDigest: h("large-recent-proposal"),
+    qualificationRoot: h("large-recent-qualification"),
+    denominator: {
+      kind: "recent-observation",
+      recentObservationRoot: h("large-recent-observation"),
+      relevantEvidenceRefHashes,
+      relevantEvidenceRoot: hashCanonicalPartition(
+        "aloha/relevant-nomination-evidence/v1",
+        relevantEvidenceRefHashes,
+      ),
+      relevantEvidenceCount: String(relevantEvidenceRefHashes.length),
+    },
+    claims: [],
+  });
+  const closure = sealNominationClosureV1({
+    cutoff,
+    recentObservationRoot: receipt.denominator.kind === "recent-observation"
+      ? receipt.denominator.recentObservationRoot
+      : h("unreachable"),
+    sourceExecutionSetRoot: h("large-recent-execution-set"),
+    sourceCoverageRoot: h("large-recent-coverage"),
+    sourcePlanIdentities: [sourcePlanIdentity],
+    receipts: [receipt],
+    candidates: [],
+    candidatePartitionRoot: candidatePartitionRoot([]),
+  });
+  const encoded = encodePersistedNominationClosureV1(closure);
+  const chunks = new Map(encoded.chunks.map(chunk => [chunk.ref.contentSha256, chunk.bytes]));
+  const reopened = decodePersistedNominationClosureV1(encoded.manifestBytes, ref => chunks.get(ref.contentSha256)!);
+  assert.equal(encoded.manifestBytes.byteLength < 500_000, true);
+  assert.equal(encoded.chunks.length > 1, true);
+  assert.equal(reopened.receipts[0]!.denominator.kind, "recent-observation");
+  assert.equal((reopened.receipts[0]!.denominator as { readonly relevantEvidenceRefHashes: readonly Hash[] }).relevantEvidenceRefHashes.length, 3_000);
+});
