@@ -26,6 +26,42 @@ Before implementing:
 
 Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
 
+### One canonical path; every stage needs a unique job
+
+- There is one implementation of the product behavior. Tests, acceptance,
+  diagnostics, dry-runs, and observers must invoke or observe that canonical
+  path; they must not recreate its orchestration, search loop, composition,
+  state transitions, candidate construction, or verdict logic in a parallel
+  pipeline.
+- Independent verification means independently reading raw artifacts and
+  recomputing facts such as hashes, counts, sets, and lineage joins. It does
+  **not** mean implementing the product behavior a second time. If an observer
+  cannot judge the real path without duplicating it, expose better raw facts
+  from the real path instead.
+- Before adding a component, abstraction, stage, preflight, rehearsal, test
+  harness, or gate, name the one production responsibility, independent fact,
+  or safety boundary that no existing step owns. If there is no such unique
+  job, do not add it: reuse, merge, or delete.
+- Apply the deletion test before coding: removing the proposed step must remove
+  a user-visible capability, a uniquely observable fact, or a necessary safety
+  boundary. If nothing unique is lost, the step is duplication.
+- Do not perform a rehearsal and then repeat the same safe, authorized
+  end-to-end operation unless the rehearsal proves a distinct property that
+  the real operation cannot prove. Time-sensitive evidence must be collected
+  from one source/window/lineage, not from duplicated runs that can drift.
+- Runtime modes share the same core pipeline and may differ only at genuinely
+  necessary boundaries such as bootstrap, external authority, evidence
+  sealing, or submission. A temporary, shadow, acceptance-only, or
+  "offline-equivalent" business pipeline is still a second pipeline and is
+  forbidden unless the user explicitly authorizes it for a named unique fact.
+- If an ordinary implementation change repeatedly requires matching changes
+  to a gate, boundary checker, fixture, or mirror implementation without a
+  contract change, treat that coupling as evidence of duplication. Simplify
+  the checker or expose stable facts; do not expand both sides.
+- Safety gates for signing, broadcasting, secrets, or external authority keep
+  their independent role, but they observe or constrain the canonical path;
+  they never justify duplicating the business pipeline.
+
 ## 3. Surgical Changes
 
 **Touch only what you must. Clean up only your own mess.**
