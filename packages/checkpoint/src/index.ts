@@ -1252,7 +1252,10 @@ function validateNominationClosureAgainstRun(input: {
         throw new CheckpointRunStateError("candidate evidence is outside the exact observation/source-plan execution evidence");
       }
       const evidenceHash = nominationEvidenceRefHash(evidence);
-      if (evidenceByHash.has(evidenceHash)) throw new CheckpointRunStateError("candidate evidence is duplicated across candidates");
+      const existing = evidenceByHash.get(evidenceHash);
+      if (existing !== undefined && encodeCanonicalJson(existing) !== encodeCanonicalJson(evidence)) {
+        throw new CheckpointRunStateError("candidate evidence hash aliases different evidence");
+      }
       evidenceByHash.set(evidenceHash, evidence);
     }
   }

@@ -564,14 +564,6 @@ export function decodeNominationClosureV1(value: unknown, path = "nominationClos
   }
   const claims = decoded.receipts.flatMap(receipt => receipt.claims);
   if (new Set(claims.map(entry => entry.claimRoot)).size !== claims.length) throw new TypeError(`${path}.duplicate raw claim`);
-  const evidenceOwners = new Map<Hash, Hash>();
-  for (const entry of claims) {
-    const existing = evidenceOwners.get(entry.evidenceRefHash);
-    if (existing !== undefined && existing !== entry.familyCandidateKey) {
-      throw new TypeError(`${path}.same evidence maps to two candidate keys`);
-    }
-    evidenceOwners.set(entry.evidenceRefHash, entry.familyCandidateKey);
-  }
   if (decoded.rawClaimCount !== String(claims.length)
     || decoded.rawClaimRoot !== hashCanonicalPartition(NOMINATION_AUTHORITY_DOMAINS.rawClaims, [...claims].sort((left, right) => compareText(left.claimRoot, right.claimRoot)))) {
     throw new TypeError(`${path}.aggregate raw claim partition mismatch`);

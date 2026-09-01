@@ -220,7 +220,7 @@ test("missing candidate cannot be hidden by recomputing ordinary closure roots",
   }), /claim candidate binding mismatch/);
 });
 
-test("duplicate raw claims and one evidence mapped to two candidates fail closed", () => {
+test("duplicate raw claims and unrerooted claim mutations fail closed", () => {
   const { receipt, closure } = build();
   const duplicate = { ...receipt, claims: [receipt.claims[0], receipt.claims[0]] };
   assert.throws(() => decodeNominationClosureV1({ ...closure, receipts: [duplicate] }), /duplicates|mismatch|canonical order/);
@@ -234,6 +234,53 @@ test("duplicate raw claims and one evidence mapped to two candidates fail closed
     ...closure,
     receipts: [{ ...receipt, claims: [receipt.claims[0], forged].sort((a, b) => a.claimRoot.localeCompare(b.claimRoot)) }],
   }), /mismatch|two candidate keys/);
+});
+
+test("one exact source chunk may nominate multiple candidates", () => {
+  const sourcePlanIdentity = h("shared-chunk-plan");
+  const sourcePlanRef = h("shared-chunk-source");
+  const first = candidate("shared:A", sourcePlanRef);
+  const sharedEvidence = first.evidence[0]!;
+  const secondBase = candidate("shared:B", sourcePlanRef);
+  const second: CandidateRecordV1 = Object.freeze({
+    ...secondBase,
+    evidence: Object.freeze([sharedEvidence]),
+    candidateEvidenceRoot: candidateEvidenceRoot([sharedEvidence]),
+  });
+  const candidates = [first, second];
+  const receipt = sealQualifiedSourcePlanNominationReceiptV1({
+    cutoff,
+    familyId: "family.alpha",
+    familyDefinitionHash: h("family-definition"),
+    sourcePlanIdentity,
+    sourcePlanLeafDigest: h("shared-chunk-leaf"),
+    nominationProgramRoot: h("shared-chunk-program"),
+    nominationProgramProposalLeafDigest: h("shared-chunk-proposal"),
+    qualificationRoot: h("shared-chunk-qualification"),
+    denominator: {
+      kind: "rolling-observation",
+      persistedExecutionRoot: h("shared-chunk-execution"),
+      resultPartitionRoot: h("shared-chunk-results"),
+    },
+    claims: candidates.map(value => ({
+      sourcePlanIdentity,
+      familyCandidateKey: value.familyCandidateKey,
+      instanceNominationKey: value.instanceNominationKey,
+      evidenceRefHash: nominationEvidenceRefHash(sharedEvidence),
+    })),
+  });
+  const closure = sealNominationClosureV1({
+    cutoff,
+    recentObservationRoot: h("shared-chunk-recent"),
+    sourceExecutionSetRoot: h("shared-chunk-execution-set"),
+    sourceCoverageRoot: h("shared-chunk-coverage"),
+    sourcePlanIdentities: [sourcePlanIdentity],
+    receipts: [receipt],
+    candidates,
+    candidatePartitionRoot: candidatePartitionRoot(candidates),
+  });
+  assert.equal(closure.candidateCount, "2");
+  assert.equal(closure.rawClaimCount, "2");
 });
 
 test("accessors and proxies are rejected by exact codecs", () => {
