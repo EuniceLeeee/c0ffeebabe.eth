@@ -309,10 +309,8 @@ export function createRejectionExecutorAuthorityIssuerInternal(
 ): RejectionExecutorAuthorityIssuerV1 {
   const runtimeAuthority = decodeRuntimeAuthorityProjectionV1(input.runtimeAuthority);
   const initial = normalizeExecutorAuthority({
-    authorityRoot: hashDomain("aloha/attestation-executor-authority/v1", {
+    authorityRoot: hashDomain("aloha/attestation-executor-authority/v2", {
       runtimeAuthority,
-      workerEpoch: input.workerEpoch,
-      executorSessionHash: input.executorSessionHash,
     }),
     workerEpoch: input.workerEpoch,
     executorSessionHash: input.executorSessionHash,
@@ -361,11 +359,6 @@ export function createRejectionExecutorAuthorityIssuerInternal(
       if (!lease.active) throw new TypeError("rejection-executor-authority-revoked");
       lease.workerEpoch = assertNonEmptyString(next.workerEpoch, "rejectionExecutorAuthority.workerEpoch");
       lease.executorSessionHash = assertHash(next.executorSessionHash, "rejectionExecutorAuthority.executorSessionHash");
-      lease.authorityRoot = hashDomain("aloha/attestation-executor-authority/v1", {
-        runtimeAuthority,
-        workerEpoch: lease.workerEpoch,
-        executorSessionHash: lease.executorSessionHash,
-      });
       lease.version += 1n;
     },
   } satisfies RejectionExecutorAuthorityIssuerV1;
@@ -879,12 +872,10 @@ function deriveAttestationAuthorityRoot(
   frameworkAuthorityRoot: Hash,
   executorAuthority: ExecutorAuthoritySnapshotV1,
 ): Hash {
-  return hashDomain("aloha/attestation-authority/v3", {
+  return hashDomain("aloha/attestation-authority/v4", {
     runtimeAuthority,
     frameworkAuthorityRoot,
     executorAuthorityRoot: executorAuthority.authorityRoot,
-    workerEpoch: executorAuthority.workerEpoch,
-    executorSessionHash: executorAuthority.executorSessionHash,
   });
 }
 
