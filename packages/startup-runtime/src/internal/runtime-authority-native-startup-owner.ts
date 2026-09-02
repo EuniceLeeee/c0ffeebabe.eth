@@ -7,7 +7,7 @@ import type {
   CanonicalHeadObservationCapabilityV1,
   ProducerSessionV1,
 } from "../../../canonical-source/src/index.ts";
-import { GraphViewLeaseV1 } from "../../../graph/src/index.ts";
+import { GraphViewLeaseV1, type GraphLeaseBindingV1 } from "../../../graph/src/index.ts";
 import { readGeneratedFamilySearchRuntimePort } from "../../../family-composition/src/internal/generated-runtime-composition.ts";
 import {
   GenerationBuilderV1,
@@ -54,6 +54,7 @@ interface ProductionLoadedGenerationV1 {
   readonly ready: ReadyGenerationV1;
   readonly catalog: ReturnType<StartupRuntimeCompositionInputV1["catalog"]["loadExact"]>;
   readonly closure: ReadyClosureV1;
+  readonly binding: GraphLeaseBindingV1;
 }
 
 function builderDependencies(
@@ -238,14 +239,14 @@ class RuntimeAuthorityNativeStartupOwner implements NativeStartupOwnerPortV1<
       expectedDefinitionCatalogRoot: catalog.definitionCatalogRoot,
       policy: this.#input.policy,
     });
-    await this.#input.ready.consumeServingAdmission(admission);
+    const binding = await this.#input.ready.consumeServingAdmission(admission);
     const closure = await this.#input.checkpoint.loadReadyClosure(ready);
     if (closure.graph.graphRoot !== ready.graphRoot
       || closure.instanceCatalog.instanceCatalogRoot !== ready.instanceCatalogRoot
       || closure.sourceCoverage.sourceCoverageRoot !== ready.sourceCoverageRoot) {
       throw new Error("startup-ready-closure-mismatch");
     }
-    const loaded = Object.freeze({ ready, catalog, closure });
+    const loaded = Object.freeze({ ready, catalog, closure, binding });
     const loadedHandle = Object.freeze({});
     this.#loadedGenerations.set(loadedHandle, loaded);
     return Object.freeze({
@@ -278,13 +279,8 @@ class RuntimeAuthorityNativeStartupOwner implements NativeStartupOwnerPortV1<
     handle: NativeStartupGenerationHandleV1,
   ): Promise<StartupProducerLeaseV1> => {
     const generation = this.#loaded(handle);
-    const admission = await this.#input.ready.validateServing({
-      ready: generation.ready,
-      expectedDefinitionCatalogRoot: generation.catalog.definitionCatalogRoot,
-      policy: this.#input.policy,
-    });
-    const lease = await GraphViewLeaseV1.open(
-      admission,
+    const lease = await GraphViewLeaseV1.openCurrent(
+      generation.binding,
       generation.closure.graph,
       generation.closure.instanceCatalog,
       this.#routeHandleIssuer,

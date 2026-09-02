@@ -539,6 +539,31 @@ export class GraphViewLeaseV1 {
     onRelease: () => void = () => {},
   ): Promise<GraphViewLeaseV1> {
     const binding = await servingAdmissionGuard.consumeServingAdmission(admission);
+    return GraphViewLeaseV1.openCurrent(
+      binding,
+      graph,
+      catalog,
+      issuer,
+      processEpoch,
+      canonicalGuard,
+      servingAdmissionGuard,
+      onRelease,
+    );
+  }
+
+  /** Open another head-scoped lease from the binding already fully validated
+   * and consumed by startup. Current ready/canonical authority is re-fenced;
+   * the durable Ready closure is not loaded and validated a second time. */
+  static async openCurrent(
+    binding: GraphLeaseBindingV1,
+    graph: PersistedGraphV1,
+    catalog: InstanceCatalogV1,
+    issuer: RouteHandleIssuerPort,
+    processEpoch: string,
+    canonicalGuard: CanonicalLeaseGuardPort,
+    servingAdmissionGuard: GraphServingAdmissionGuardPort,
+    onRelease: () => void = () => {},
+  ): Promise<GraphViewLeaseV1> {
     await servingAdmissionGuard.assertServingBindingCurrent(binding);
     return new GraphViewLeaseV1(
       binding,
