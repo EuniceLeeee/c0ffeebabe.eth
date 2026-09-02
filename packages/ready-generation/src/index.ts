@@ -958,7 +958,7 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
   readonly #promotionAuthority: ReadyPromotionAuthorityPort;
   readonly #sealedRunReader: SealedRunReaderPortV1;
   readonly #runtimeAuthorityPort: CurrentRuntimeAuthorityPortV1;
-  readonly #servingAdmissions = new WeakMap<object, ServingValidationInputV1>();
+  readonly #servingAdmissions = new WeakMap<object, GraphLeaseBindingV1>();
 
   constructor(
     expectedCaller: object,
@@ -1235,9 +1235,9 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
 
   async validateServing(rawInput: ServingValidationInputV1): Promise<GraphServingAdmissionV1> {
     const input = decodeCanonicalJson(encodeCanonicalBytes(rawInput)) as unknown as ServingValidationInputV1;
-    await this.#validateServingBinding(input);
+    const binding = await this.#validateServingBinding(input);
     const opaque = Object.freeze({});
-    this.#servingAdmissions.set(opaque, deepFreeze(input));
+    this.#servingAdmissions.set(opaque, binding);
     return Object.freeze({ opaque });
   }
 
@@ -1370,9 +1370,9 @@ export class ReadyGenerationServiceV1 implements GraphServingAdmissionGuardPort 
     if (typeof opaque !== "object" || opaque === null) {
       throw new TypeError("graphServingAdmission.opaque is invalid");
     }
-    const input = this.#servingAdmissions.get(opaque);
-    if (!input) throw new Error("graph-serving-admission-not-issued");
+    const binding = this.#servingAdmissions.get(opaque);
+    if (!binding) throw new Error("graph-serving-admission-not-issued");
     this.#servingAdmissions.delete(opaque);
-    return this.#validateServingBinding(input);
+    return binding;
   }
 }
