@@ -1226,6 +1226,9 @@ Exact refinement has a separate logical candidate limit,
 `SEARCHER_BLOCKSCAN_EXACT_CONCURRENCY` (default 128). This limit fills the existing source-hash-pinned
 JSON-RPC batches; it does not create one HTTP request per candidate or raise the physical transport cap.
 The same path is used for local reth and for a remote EIP-1898-capable RPC, with no provider-specific branch.
+The accepted exact transport defaults are 64 items per physical batch and at most 16 exact batches in
+flight. These limits are independent of the producer-bulk limit above and do not change block/pass/planner
+scheduling.
 The legacy `SEARCHER_BLOCKSCAN_MID_CONCURRENCY` name is accepted only as a compatibility input when the
 explicit exact setting is absent. Runtime telemetry records the configured limit, the active limit and the
 peak concurrent probe count alongside physical batch statistics, so logical fan-out and RPC pressure are
@@ -1600,6 +1603,25 @@ instances and projected 1906-1926 required routes, with zero missing-edge reject
 The measured blocks then hit the independent exact-refinement deadline before planner/final-sim, so this
 window accepts coarse continuity and coarse-to-exact scope coupling only; it is not a six-stage
 `production_gap_fixed` or broadcast acceptance claim.
+
+A later RPC/revm live-submit window on the final 64-item exact transport tree (all four broadcast entrances
+still disabled) recorded 25 consecutive steady N-1 blocks, 25889819 through 25889843. Exact refinement was
+3.853s p50 / 5.335s p95 and the whole pass was 12.684s p50 / 13.378s p95; 4/25 passes were below 10s. The
+coarse-state KPI accepted 26/27 non-warm periodic passes, with the remaining startup pass excluded because
+enumeration did not run; no pass that ran enumeration had low or missing coarse coverage. A controlled
+128-item comparison over 27 consecutive steady blocks reduced physical request count but regressed exact to
+4.914s p50 / 5.685s p95 and whole-pass latency to 12.826s p50 / 15.347s p95, with zero batch failure or
+single-call fallback. Commit `3837dac5` therefore restores the accepted 64-item default. The final tree for
+the three reverted exact-batch files is byte-identical to the 64-item live tree. This is transport and coarse
+continuity acceptance; the measured pass latency does not satisfy a sustained sub-10-second claim.
+
+The same live startup reused the existing durable universe checkpoint. `resumed=false` means the prior
+fixed-cutoff run had already promoted and no unfinished run remained; it is not a cache miss. The same line's
+`retained=15982` records cross-run retained candidates. The next promotion produced Ready generation 8 at
+cutoff 25889940 with all 17538 candidates accounted: 16133 verified, 1288 terminal-rejected and 117
+retryable. A post-run read of the durable checkpoint reported revision 8134, 16133 verified memos,
+`inProgressRun: none`, and the same 16133 active Ready instances. A future startup may freeze a new rolling
+cutoff while reusing these memos; only an interrupted fixed run reports `resumed=true`.
 
 ## 17. Role of tests and tools
 
