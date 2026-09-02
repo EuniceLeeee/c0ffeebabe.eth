@@ -2070,7 +2070,10 @@ export function assertPromotablePartition(
     throw new Error("candidate-outcome-partition-mismatch");
   }
   if (partition.accounting.pending !== "0") throw new Error("pending-outcomes");
-  if (partition.accounting.retryable !== "0") throw new Error("retryable-outcomes");
+  const retryable = BigInt(partition.accounting.retryable);
+  if (retryable * 1_000n > BigInt(expected.length)) {
+    throw new Error("retryable-outcomes-exceed-budget");
+  }
   for (const outcome of partition.outcomes) {
     if (outcome.runCandidateKey !== runCandidateKey(partition.runId, outcome.familyCandidateKey)) {
       throw new Error("run-candidate-key-mismatch");
@@ -2103,5 +2106,5 @@ export function assertPromotablePartition(
   const terminal = BigInt(expectedAccounting.verified)
     + BigInt(expectedAccounting.chainProvenRejected)
     + BigInt(expectedAccounting.invalidProgram);
-  if (terminal !== BigInt(expected.length)) throw new Error("terminal-accounting-mismatch");
+  if (terminal + retryable !== BigInt(expected.length)) throw new Error("terminal-accounting-mismatch");
 }

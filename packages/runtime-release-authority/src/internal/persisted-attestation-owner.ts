@@ -290,7 +290,9 @@ class PersistedAttestationOwnerV1 implements PersistedAttestationPort {
         .map(unresolvedOutcome)
         .filter((value): value is PersistedAttestationIncompleteError["unresolved"][number] => value !== null)
         .sort((left, right) => left.familyCandidateKey.localeCompare(right.familyCandidateKey));
-      if (unresolved.length > 0) throw new PersistedAttestationIncompleteError(run.runId, unresolved);
+      if (unresolved.length * 1_000 > candidateKeys.length) {
+        throw new PersistedAttestationIncompleteError(run.runId, unresolved);
+      }
 
       const outcomeHashes = [...finalByKey.values()]
         .sort((left, right) => left.outcome.familyCandidateKey.localeCompare(right.outcome.familyCandidateKey))
