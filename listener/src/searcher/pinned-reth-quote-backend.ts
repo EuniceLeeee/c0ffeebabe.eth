@@ -439,6 +439,9 @@ export class PinnedRethQuoteBackend
     lane: "producer-bulk" | "exact";
     scopeLabel: string;
     allowSingleCallFallback: boolean;
+    maxBatchSize: number;
+    maxConcurrentBatches: number;
+    currentConcurrentBatchLimit: number;
     totalCalls: number;
     memoHits: number;
     batchesSent: number;
@@ -466,6 +469,15 @@ export class PinnedRethQuoteBackend
       lane: this.transportLane,
       scopeLabel: this.scopeLabel,
       allowSingleCallFallback: this.allowSingleCallFallback,
+      maxBatchSize: this.maxBatchSize,
+      maxConcurrentBatches: this.maxConcurrentBatches,
+      currentConcurrentBatchLimit: Math.max(
+        1,
+        Math.floor(
+          this.maxConcurrentBatchesProvider?.() ??
+            this.maxConcurrentBatches,
+        ),
+      ),
       totalCalls: this.totalCalls,
       memoHits: this.memoHits,
       batchesSent: this.batchesSent,
@@ -553,7 +565,12 @@ export class PinnedRethQuoteBackend
     }
     signal?.addEventListener("abort", onCallerAbort, { once: true });
     this.pending.push(item);
-    this.scheduleFlush();
+    // A full logical batch is ready now; dispatch it immediately instead of
+    // waiting for the setImmediate tail flush. This keeps wide exact fan-out
+    // from fragmenting into many half-filled HTTP batches while preserving a
+    // zero-delay flush for the final partial batch.
+    if (this.pending.length >= this.maxBatchSize) this.pump();
+    else this.scheduleFlush();
   }
 
   private resolveItem(item: PendingQuoteItem, value: unknown): void {

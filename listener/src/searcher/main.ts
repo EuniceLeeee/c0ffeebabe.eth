@@ -995,12 +995,33 @@ async function main(): Promise<void> {
   const blockScanRefineCandidates = Number.isFinite(blockScanRefineCandidatesRaw)
     ? Math.max(blockScanCfg?.maxCandidates ?? 0, Math.floor(blockScanRefineCandidatesRaw))
     : 512;
-  const blockScanMidConcurrencyRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_MID_CONCURRENCY ?? "24",
+  const blockScanExactRefineHardBudgetRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_EXACT_REFINE_HARD_BUDGET_MS ?? "4000",
   );
-  const blockScanMidConcurrency = Number.isFinite(blockScanMidConcurrencyRaw)
-    ? Math.max(1, Math.floor(blockScanMidConcurrencyRaw))
-    : 24;
+  const blockScanExactRefineHardBudgetMs =
+    Number.isFinite(blockScanExactRefineHardBudgetRaw) &&
+      blockScanExactRefineHardBudgetRaw > 0
+      ? Math.max(1_000, Math.floor(blockScanExactRefineHardBudgetRaw))
+      : 4_000;
+  const blockScanExactConcurrencyRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_EXACT_CONCURRENCY ??
+      // Backward-compatible read only. Exact now has its own explicit name.
+      process.env.SEARCHER_BLOCKSCAN_MID_CONCURRENCY ??
+      "128",
+  );
+  const blockScanExactConcurrency = Number.isFinite(
+      blockScanExactConcurrencyRaw,
+    ) && blockScanExactConcurrencyRaw > 0
+    ? Math.max(1, Math.floor(blockScanExactConcurrencyRaw))
+    : 128;
+  const blockScanExactProbeTimeoutRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_EXACT_PROBE_TIMEOUT_MS ?? "4000",
+  );
+  const blockScanExactProbeTimeoutMs = Number.isFinite(
+      blockScanExactProbeTimeoutRaw,
+    ) && blockScanExactProbeTimeoutRaw > 0
+    ? Math.max(100, Math.floor(blockScanExactProbeTimeoutRaw))
+    : 4_000;
   let blockScanRethTransportScheduler: RethTransportScheduler | undefined;
   if (enableBlockScan) {
     const blockScanAnvilPort = Number(process.env.SEARCHER_BLOCKSCAN_ANVIL_PORT ?? "8556");
@@ -1233,6 +1254,9 @@ async function main(): Promise<void> {
       `largeGraphBudgetMs=${blockScanLargeGraphPassBudgetMs} ` +
       `largeGraphEdges=${blockScanLargeGraphEdgeThreshold} ` +
       `solveReserveMs=${blockScanSolveReserveMs} ` +
+      `exactRefineHardBudgetMs=${blockScanExactRefineHardBudgetMs} ` +
+      `exactConcurrency=${blockScanExactConcurrency} ` +
+      `exactProbeTimeoutMs=${blockScanExactProbeTimeoutMs} ` +
       `pricingSource=${blockScanPricingSource.mode} ` +
       `pricingSourceSelection=${blockScanPricingSource.source} ` +
       `nMinusOneFallback=${blockScanNMinusOneFallback ? "on" : "off"} ` +
@@ -2038,6 +2062,7 @@ async function main(): Promise<void> {
       preparedArtifacts: () => preparedBlindArtifacts,
       dynamicResetNonce: () => preparedBlindDynamicResetNonce,
     },
+    exactRefineHardBudgetMs: blockScanExactRefineHardBudgetMs,
     exactProducerLagYieldMs: Math.max(
       0,
       Number(
@@ -2065,7 +2090,8 @@ async function main(): Promise<void> {
     runtimePublicationReserveMs: blockScanRuntimePublicationReserveMs,
     refineCandidates: blockScanRefineCandidates,
     solveReserveMs: blockScanSolveReserveMs,
-    midConcurrency: blockScanMidConcurrency,
+    exactConcurrency: blockScanExactConcurrency,
+    exactProbeTimeoutMs: blockScanExactProbeTimeoutMs,
     executorAddress: config.botvmAddress,
     // Physical venue identities touched by the block's own logs: pool
     // address for pair venues, poolId for the singleton-manager venues.
@@ -2218,7 +2244,8 @@ async function main(): Promise<void> {
       core: blockScanCfg,
       largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
       largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
-      midConcurrency: blockScanMidConcurrency,
+      exactConcurrency: blockScanExactConcurrency,
+      exactProbeTimeoutMs: blockScanExactProbeTimeoutMs,
       passBudgetMs: blockScanPassBudgetMs,
       refineCandidates: blockScanRefineCandidates,
       solveConcurrency: blockScanSolveConcurrency,

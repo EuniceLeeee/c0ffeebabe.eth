@@ -616,7 +616,15 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly runtimePublicationReserveMs?: number;
   readonly refineCandidates: number;
   readonly solveReserveMs: number;
-  readonly midConcurrency: number;
+  /**
+   * Logical candidate fan-out for exact refinement. The source-pinned quote
+   * backend still owns the much smaller physical HTTP batch/concurrency caps,
+   * so this fills those batches without turning candidates into individual
+   * transport requests.
+  */
+  readonly exactConcurrency: number;
+  /** Per-candidate exact deadline inside the pass-wide exact deadline. */
+  readonly exactProbeTimeoutMs: number;
   /** BotVM execution contract supplied to generic route quote contexts. */
   readonly executorAddress: string;
   /**
@@ -2787,7 +2795,7 @@ export class BlockScanRuntimeLoop {
               });
             }
           : undefined,
-        this.deps.midConcurrency,
+        this.deps.exactConcurrency,
         {
           executor: this.deps.executorAddress,
           strictSession,
@@ -2798,6 +2806,7 @@ export class BlockScanRuntimeLoop {
             blockScanCfg.minSpreadBps,
           minCapitalFraction:
             blockScanCfg.minCapitalFraction ?? 0,
+          probeTimeoutMs: this.deps.exactProbeTimeoutMs,
         },
       );
       if (refinement.shadow) {
@@ -2813,6 +2822,9 @@ export class BlockScanRuntimeLoop {
         console.log(
           `[searcher/blockscan-exact-quote-stats] ${JSON.stringify({
             block: blockNumber,
+            logicalConcurrency: this.deps.exactConcurrency,
+            activeConcurrencyLimit: refinement.concurrencyLimit,
+            peakConcurrentProbes: refinement.peakConcurrentProbes,
             ...exactQuoteState.stats(),
           })}`,
         );

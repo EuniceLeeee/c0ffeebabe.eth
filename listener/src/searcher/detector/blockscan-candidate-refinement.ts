@@ -24,6 +24,8 @@ const DEFAULT_PROBE_TIMEOUT_MS = 1_500;
 
 export interface BlockScanRefinementResult {
   opportunities: BlockScanOpportunity[];
+  concurrencyLimit: number;
+  peakConcurrentProbes: number;
   attempted: number;
   positive: number;
   negative: number;
@@ -330,6 +332,7 @@ export async function refineBlockScanCandidates(
     : undefined;
   const pending = [...work];
   const active = new Set<Promise<void>>();
+  let peakConcurrentProbes = 0;
   const routeFamilies = (opportunity: BlockScanOpportunity): readonly string[] => {
     const familyIds = blockScanRouteFamilyIds(opportunity.seedEdges);
     return familyIds.length > 0 ? familyIds : ["<unowned-family>"];
@@ -598,6 +601,10 @@ export async function refineBlockScanCandidates(
         const familyIds = routeFamilies(item.opportunity);
         const task = probeOne(item, familyIds);
         active.add(task);
+        peakConcurrentProbes = Math.max(
+          peakConcurrentProbes,
+          active.size,
+        );
         void task.then(
           () => active.delete(task),
           () => active.delete(task),
@@ -645,6 +652,8 @@ export async function refineBlockScanCandidates(
   ];
   return {
     opportunities: selected,
+    concurrencyLimit: workerCount,
+    peakConcurrentProbes,
     attempted,
     positive: eligibleRanked.length,
     negative,

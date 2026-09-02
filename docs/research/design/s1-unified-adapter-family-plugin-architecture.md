@@ -1222,6 +1222,19 @@ are published. Exact refinement uses a separate exact-scoped backend and retains
 policy. Producer batch count, item count, batch latency, scheduler queue wait, batch failures, and fallback
 count are diagnostic telemetry only and cannot relax a deadline, coverage, or final fail-closed gate.
 
+Exact refinement has a separate logical candidate limit,
+`SEARCHER_BLOCKSCAN_EXACT_CONCURRENCY` (default 128). This limit fills the existing source-hash-pinned
+JSON-RPC batches; it does not create one HTTP request per candidate or raise the physical transport cap.
+The same path is used for local reth and for a remote EIP-1898-capable RPC, with no provider-specific branch.
+The legacy `SEARCHER_BLOCKSCAN_MID_CONCURRENCY` name is accepted only as a compatibility input when the
+explicit exact setting is absent. Runtime telemetry records the configured limit, the active limit and the
+peak concurrent probe count alongside physical batch statistics, so logical fan-out and RPC pressure are
+measured independently.
+The per-candidate bound is independently configured by
+`SEARCHER_BLOCKSCAN_EXACT_PROBE_TIMEOUT_MS` (default 4,000ms) and is always clipped by the pass-wide exact
+deadline. A full pending batch is dispatched immediately; only the final partial batch waits for the
+zero-delay coalescing flush. These scheduling rules change neither exact decoding nor fail-closed outcomes.
+
 ## 12. Physical deletion closure
 
 The strict-only source closure must not contain any of the following authorities, even under a new name:

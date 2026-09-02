@@ -780,6 +780,12 @@ async function globalProbeQueueUsesGlobalSlots(): Promise<void> {
   );
   assert.equal(result.deadlineHit, false);
   assert.equal(result.attempted, 3);
+  assert.equal(result.concurrencyLimit, 2);
+  assert.equal(
+    result.peakConcurrentProbes,
+    2,
+    "exact telemetry must report the logical fan-out actually exercised",
+  );
 }
 
 async function neverSettlingFamilyUsesLocalBudget(): Promise<void> {
