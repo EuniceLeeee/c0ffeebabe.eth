@@ -104,40 +104,57 @@ function rpcPort(endpoint: string, timeoutMs: number, sourceHash: Hash): FamilyP
         controller.abort(new Error("Family physical RPC deadline"));
       }, timeoutMs);
       try {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: Object.freeze({ "content-type": "application/json" }),
-          body: JSON.stringify(Object.freeze({
-            jsonrpc: "2.0",
-            id: input.requestId,
-            method: input.method,
-            params: input.params,
-          })),
-          signal: controller.signal,
-        });
-        if (!response.ok) return Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
-        const value = record(await response.json(), "familyPhysical.response");
-        if (value.jsonrpc !== "2.0" || value.id !== input.requestId) {
-          return Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: Object.freeze({ "content-type": "application/json" }),
+              body: JSON.stringify(Object.freeze({
+                jsonrpc: "2.0",
+                id: input.requestId,
+                method: input.method,
+                params: input.params,
+              })),
+              signal: controller.signal,
+            });
+            let completion: FamilyPhysicalRpcCompletionV1;
+            if (!response.ok) {
+              completion = Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
+            } else {
+              const value = record(await response.json(), "familyPhysical.response");
+              if (value.jsonrpc !== "2.0" || value.id !== input.requestId) {
+                completion = Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
+              } else {
+                const hasResult = Object.prototype.hasOwnProperty.call(value, "result");
+                const hasError = Object.prototype.hasOwnProperty.call(value, "error");
+                if (hasResult === hasError) {
+                  completion = Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
+                } else if (hasResult) {
+                  completion = canonicalHex(value.result)
+                    ? Object.freeze({ kind: "returned", dataHex: value.result })
+                    : Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
+                } else {
+                  const error = record(value.error, "familyPhysical.response.error");
+                  const revertData = executionRevertData(error);
+                  completion = revertData !== null
+                    ? Object.freeze({ kind: "reverted", dataHex: revertData })
+                    : Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
+                }
+              }
+            }
+            if (completion.kind !== "transportFailure" || completion.failureCode !== "rpc" || attempt === 1) {
+              return completion;
+            }
+          } catch {
+            if (signal.aborted || deadline || attempt === 1) {
+              return Object.freeze({
+                kind: "transportFailure",
+                failureCode: signal.aborted ? "abort" : deadline ? "deadline" : "rpc",
+              });
+            }
+          }
         }
-        const hasResult = Object.prototype.hasOwnProperty.call(value, "result");
-        const hasError = Object.prototype.hasOwnProperty.call(value, "error");
-        if (hasResult === hasError) return Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
-        if (hasResult) {
-          return canonicalHex(value.result)
-            ? Object.freeze({ kind: "returned", dataHex: value.result })
-            : Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
-        }
-        const error = record(value.error, "familyPhysical.response.error");
-        const revertData = executionRevertData(error);
-        return revertData !== null
-          ? Object.freeze({ kind: "reverted", dataHex: revertData })
-          : Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
-      } catch {
-        return Object.freeze({
-          kind: "transportFailure",
-          failureCode: signal.aborted ? "abort" : deadline ? "deadline" : "rpc",
-        });
+        return Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
       } finally {
         clearTimeout(timer);
         signal.removeEventListener("abort", abort);
