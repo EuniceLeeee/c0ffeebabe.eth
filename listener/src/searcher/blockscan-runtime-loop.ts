@@ -29,8 +29,11 @@ import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
 import { emitEvent } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
 import { type TokenEdge } from "./planner/token-graph.js";
-import type { ResolvedPlan } from "./solver/solver.js";
-import type { AnvilSolver } from "./solver/solver.js";
+import type {
+  AnvilSolver,
+  ResolvedPlan,
+  SolverTiming,
+} from "./solver/solver.js";
 import type { StrictProductionRuntimeSession } from
   "./strict-production-runtime-session.js";
 import type {
@@ -447,6 +450,7 @@ export interface BlockScanAtomicExecutionInput {
   readonly passDeadlineAtMs: number;
   readonly sourceBlockHash: string;
   readonly signal: AbortSignal;
+  readonly onFinalSimStart?: (startedAtMs: number) => void;
 }
 
 interface PlannedBlockScanSolve {
@@ -602,6 +606,10 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly runtimePublicationReserveMs?: number;
   readonly refineCandidates: number;
   readonly solveReserveMs: number;
+  /** Block-scan-only amount search width; generic/offline solver defaults stay unchanged. */
+  readonly solverGridHalfWidth: number;
+  /** Block-scan-only golden-section exact-evaluation cap. */
+  readonly solverGssMaxTries: number;
   /**
    * Logical candidate fan-out for exact refinement. The source-pinned quote
    * backend still owns the much smaller physical HTTP batch/concurrency caps,
@@ -1699,6 +1707,15 @@ export class BlockScanRuntimeLoop {
     let plannedCount = 0;
     let quotePositive = 0;
     let bestNet: bigint | null = null;
+    let plannerBuildMs = 0;
+    let solverWallMs = 0;
+    let solverQuoteMs = 0;
+    let solverPlanBuildMs = 0;
+    let solverPlans = 0;
+    let solverAmountPoints = 0;
+    let solverHopExactCalls = 0;
+    let solverGssPoints = 0;
+    let firstFinalSimStartedAtMs: number | null = null;
     let enumerationFinished = false;
     const atomicResults: BlockScanAtomicResult[] = [];
     const workerResetTimings: Array<{
@@ -1785,6 +1802,9 @@ export class BlockScanRuntimeLoop {
 
     const recordPass = (): void => {
       const totalMs = Math.max(0, performance.now() - passStarted);
+      const preSimMs = firstFinalSimStartedAtMs === null
+        ? null
+        : Math.max(0, firstFinalSimStartedAtMs - passStartedAtMs);
       const passDecision = atomicResults.at(-1)?.decision ??
         skippedReason ??
         (quotePositive > 0
@@ -1830,6 +1850,19 @@ export class BlockScanRuntimeLoop {
           submitted: result.submitted,
         })),
         exact_transport_drain_ms: exactTransportDrainMs,
+        planner_solver_detail: {
+          plannerBuildMs,
+          solverWallMs,
+          solverQuoteMs,
+          solverPlanBuildMs,
+          solverPlans,
+          solverAmountPoints,
+          solverHopExactCalls,
+          solverGssPoints,
+          preSimMs,
+          finalSimMs: stageBoundaries.final_sim.stage_ms,
+          totalMs,
+        },
         total_ms: totalMs,
       };
       emitEvent({
@@ -2886,6 +2919,7 @@ export class BlockScanRuntimeLoop {
       const planned: PlannedBlockScanSolve[] = [];
       const plannerFamilyBudget = new BlockScanFamilyStageBudget();
       const plannerQueue = exactOpportunities;
+      const plannerStartedAt = performance.now();
       for (const opp of plannerQueue) {
         if (planned.length >= blockScanCfg.maxCandidates) break;
         if (plannerFamilyBudget.blocks(opp.seedEdges)) continue;
@@ -2961,6 +2995,7 @@ export class BlockScanRuntimeLoop {
           );
         }
       }
+      plannerBuildMs = Math.max(0, performance.now() - plannerStartedAt);
       plannedCount = planned.length;
 
       const solverFamilyBudget = new BlockScanFamilyStageBudget();
@@ -3019,9 +3054,18 @@ export class BlockScanRuntimeLoop {
           ) return;
           const { item, index } = queued;
           if (solverFamilyBudget.blocks(item.opp.seedEdges)) continue;
+          const solverTiming: SolverTiming = {
+            quoteMs: 0,
+            planBuildMs: 0,
+            simMs: 0,
+            amountPoints: 0,
+            gssPoints: 0,
+            hopExactCalls: 0,
+          };
           try {
             let deferredCandidates: readonly ResolvedPlan[] = [];
             recordSolver(item.opp);
+            solverPlans++;
             const solved = await worker.solver.solve(
               item.plan,
               // Phase-1 quotes are current-N view reads; run them through the
@@ -3034,12 +3078,14 @@ export class BlockScanRuntimeLoop {
                 deadlineAtMs: passDeadlineAtMs,
                 deferPhase2Sim: true,
                 finalSimTopN: 3,
-                gssMaxTries: 8,
+                gridHalfWidth: this.deps.solverGridHalfWidth,
+                gssMaxTries: this.deps.solverGssMaxTries,
                 quoteProfitFloorBps: 0n,
                 quoteSafetyBps: 10000n,
                 strictSession,
                 runtimeEvidence,
                 signal: passSignal,
+                timing: solverTiming,
                 onDeferredCandidates: (resolved) => {
                   deferredCandidates = resolved;
                 },
@@ -3111,10 +3157,21 @@ export class BlockScanRuntimeLoop {
               `[searcher/blockscan-family] block=${blockNumber} solve_failed ` +
                 `ring=${item.ring} error=${blockScanErrorMessage(error)}`,
             );
+          } finally {
+            solverQuoteMs += solverTiming.quoteMs;
+            solverPlanBuildMs += solverTiming.planBuildMs;
+            solverAmountPoints += solverTiming.amountPoints;
+            solverHopExactCalls += solverTiming.hopExactCalls;
+            solverGssPoints += solverTiming.gssPoints;
           }
         }
       };
-      await Promise.all(blockScanExecutionWorkers.map(workerLoop));
+      const solverStartedAt = performance.now();
+      try {
+        await Promise.all(blockScanExecutionWorkers.map(workerLoop));
+      } finally {
+        solverWallMs = Math.max(0, performance.now() - solverStartedAt);
+      }
       if (passSignal.aborted) throw passSignal.reason;
       finishStage("planner_solver");
       timing.plannerSolverMs = stageBoundaries.planner_solver.stage_ms;
@@ -3210,6 +3267,14 @@ export class BlockScanRuntimeLoop {
             passDeadlineAtMs,
             sourceBlockHash,
             signal: passSignal,
+            onFinalSimStart: (startedAtMs) => {
+              if (
+                firstFinalSimStartedAtMs === null ||
+                startedAtMs < firstFinalSimStartedAtMs
+              ) {
+                firstFinalSimStartedAtMs = startedAtMs;
+              }
+            },
           });
           atomicResults.push(atomic);
           const auditEvidence = auditOpportunities?.get(

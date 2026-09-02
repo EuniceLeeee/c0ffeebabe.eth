@@ -7,7 +7,11 @@
  */
 
 import { geometricGrid, goldenSectionMaximize, bidAmount } from "../solver/amount-bounds.js";
-import { AnvilSolver, resolveSearchCenter } from "../solver/solver.js";
+import {
+  AnvilSolver,
+  resolveSearchCenter,
+  type SolverTiming,
+} from "../solver/solver.js";
 import { propagateAmounts } from "../solver/amount-propagation.js";
 import type {
   StateBackend,
@@ -919,6 +923,48 @@ async function testDeferredPhasePreservesTopNFallbacks(): Promise<void> {
   console.log("[amtsearch] deferred phase preserves top-N final-sim fallbacks: PASS");
 }
 
+async function testBlockScanSearchBudgetTelemetry(): Promise<void> {
+  const plan = deadlineRegressionPlan("blockscan-budget-telemetry");
+  const timing: SolverTiming = {
+    quoteMs: 0,
+    planBuildMs: 0,
+    simMs: 0,
+    amountPoints: 0,
+    gssPoints: 0,
+    hopExactCalls: 0,
+  };
+
+  await new AnvilSolver().solve(
+    plan,
+    {} as StateBackend,
+    {
+      executor: TEST_EXECUTOR,
+      simulate: async () => ({ success: false, netProfit: 0n }),
+    },
+    {
+      deferPhase2Sim: true,
+      finalSimTopN: 3,
+      gridHalfWidth: 2,
+      gssMaxTries: 4,
+      quoteSafetyBps: 10000n,
+      strictSession: testStrictSession(
+        plan,
+        async (request) => request.amountIn * 2n,
+      ),
+      timing,
+      onDeferredCandidates: () => undefined,
+    },
+  );
+
+  assert(timing.amountPoints === 9, `solver amount points ${timing.amountPoints}`);
+  assert(timing.gssPoints === 4, `solver GSS points ${timing.gssPoints}`);
+  assert(timing.hopExactCalls === 24, `solver hop exact calls ${timing.hopExactCalls}`);
+  assert(timing.quoteMs >= 0, `solver quote ms ${timing.quoteMs}`);
+  assert(timing.planBuildMs >= 0, `solver plan build ms ${timing.planBuildMs}`);
+  assert(timing.simMs === 0, `deferred solver sim ms ${timing.simMs}`);
+  console.log("[amtsearch] block-scan 5+4 search budget telemetry: PASS");
+}
+
 async function testSolverPreservesTypedLegOwner(): Promise<void> {
   const tokenA = "0x0000000000000000000000000000000000000a01";
   const tokenB = "0x0000000000000000000000000000000000000a02";
@@ -1159,10 +1205,11 @@ async function main(): Promise<void> {
   await testSolverUsesUnifiedDefaultSafety();
   await testQuoteProfitFloorAdmitsNearMiss();
   await testDeferredPhasePreservesTopNFallbacks();
+  await testBlockScanSearchBudgetTelemetry();
   await testSolverPreservesTypedLegOwner();
   await testSolverAbsoluteDeadlineAbortsNeverSettlingStrictExact();
   await testSolverCallerAbortStopsNeverSettlingStrictFundingRoot();
-  console.log("amount-search PASS (20/20)");
+  console.log("amount-search PASS (21/21)");
 }
 
 main().catch((err) => {

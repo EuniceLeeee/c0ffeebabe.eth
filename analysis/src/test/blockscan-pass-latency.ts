@@ -50,6 +50,52 @@ test("pass latency window qualifies a contiguous fast run", () => {
   assert.equal(report.qualifyingRuns[0]?.count, 120);
 });
 
+test("pass latency window summarizes detailed solver telemetry", () => {
+  const detail = {
+    plannerBuildMs: 12,
+    solverWallMs: 2_500,
+    solverQuoteMs: 8_000,
+    solverPlanBuildMs: 40,
+    solverPlans: 100,
+    solverAmountPoints: 900,
+    solverHopExactCalls: 2_400,
+    solverGssPoints: 400,
+    preSimMs: 8_900,
+    finalSimMs: 600,
+    totalMs: 9_700,
+  };
+  const report = analyzePassLatency([
+    PROCESS,
+    COMMIT,
+    passRecord(1_000, 9_700, {
+      stage_timing_ms: {
+        state: 200,
+        enumeration: 300,
+        exact_refine: 3_000,
+        planner_solver: 2_512,
+        final_sim: 600,
+      },
+      planner_solver_detail: detail,
+    }),
+  ].join("\n") + "\n", {
+    startLine: 1,
+    minRun: 1,
+    thresholdMs: 10_000,
+  });
+
+  assert.deepEqual(report.metrics.solverAmountPoints, {
+    samples: 1,
+    p50: 900,
+    p95: 900,
+    max: 900,
+  });
+  assert.equal(report.metrics.plannerBuildMs.p50, 12);
+  assert.equal(report.metrics.solverWallMs.p95, 2_500);
+  assert.equal(report.metrics.solverQuoteMs.max, 8_000);
+  assert.equal(report.metrics.preSimMs.p50, 8_900);
+  assert.equal(report.metrics.finalSimMs.p50, 600);
+});
+
 test("over-threshold pass breaks the run and is counted", () => {
   const lines = [PROCESS, COMMIT];
   for (let block = 1_000; block < 1_050; block++) {

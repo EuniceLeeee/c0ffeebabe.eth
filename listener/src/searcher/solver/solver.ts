@@ -56,8 +56,16 @@ export interface ResolvedPlan {
 export interface SolverTiming {
   /** Phase-1 quote-search work: center resolution plus grid/GSS quote evaluation. */
   quoteMs: number;
-  /** Phase-2 validation work: top-N propagation, plan build, and final simulate. */
+  /** Resolved-plan construction work, excluding exact quote propagation. */
+  planBuildMs: number;
+  /** Phase-2 final simulation work when it is not deferred to the caller. */
   simMs: number;
+  /** Number of phase-1 amount points actually evaluated. */
+  amountPoints: number;
+  /** Subset of amountPoints evaluated by golden-section refinement. */
+  gssPoints: number;
+  /** Strict per-leg exact calls issued by search and finalist propagation. */
+  hopExactCalls: number;
   otherMs?: number;
 }
 
@@ -240,11 +248,15 @@ export class AnvilSolver implements Solver {
     const timing = opts.timing;
     if (timing) {
       timing.quoteMs = 0;
+      timing.planBuildMs = 0;
       timing.simMs = 0;
+      timing.amountPoints = 0;
+      timing.gssPoints = 0;
+      timing.hopExactCalls = 0;
       if (timing.otherMs !== undefined) timing.otherMs = 0;
     }
     const timed = async <T>(
-      bucket: "quoteMs" | "simMs",
+      bucket: "quoteMs" | "planBuildMs" | "simMs",
       label: string,
       fn: () => Promise<T>,
     ): Promise<T> => {
@@ -256,6 +268,9 @@ export class AnvilSolver implements Solver {
       }
     };
     const v4QuoteStats = debugQuotes ? newV4QuotePathStats() : undefined;
+    const recordExactCall = (): void => {
+      if (timing) timing.hopExactCalls++;
+    };
     let v4QuoteStatsLogged = false;
     const logV4QuoteStatsOnce = (outcome: string): void => {
       if (!debugQuotes || !v4QuoteStats || v4QuoteStatsLogged || v4QuoteStatsTotal(v4QuoteStats) === 0) return;
@@ -282,6 +297,7 @@ export class AnvilSolver implements Solver {
         runtimeEvidence: opts.runtimeEvidence,
         adapterWorkControl,
         shouldStop: pastDeadline,
+        onExactCall: recordExactCall,
       }),
     );
     const maxFlashAmount = normalizedMaxFlashAmount(plan);
@@ -303,6 +319,7 @@ export class AnvilSolver implements Solver {
     const quoteFailures = newFailureAttribution();
     let completedQuote = false;
     let quoteCount = 0;
+    let evaluatingGss = false;
     let lastFailure = "quotes completed but no profitable amount";
     let bestObserved: { flashAmount: bigint; fluidDebtBps: bigint; profit: bigint; amounts: bigint[] } | null = null;
 
@@ -310,6 +327,10 @@ export class AnvilSolver implements Solver {
       if (flashAmount <= 0n) return FAIL_SCORE;
       if (maxFlashAmount !== null && flashAmount > maxFlashAmount) return FAIL_SCORE;
       quoteCount++;
+      if (timing) {
+        timing.amountPoints++;
+        if (evaluatingGss) timing.gssPoints++;
+      }
       let amounts: bigint[];
       try {
         amounts = await timed("quoteMs", "amount quote propagation", () =>
@@ -323,6 +344,7 @@ export class AnvilSolver implements Solver {
             adapterWorkControl,
             safetyBps: quoteSafetyBps,
             shouldStop: pastDeadline,
+            onExactCall: recordExactCall,
           }),
         );
       } catch (err) {
@@ -370,15 +392,20 @@ export class AnvilSolver implements Solver {
       // below is only a phase-2 admission policy; letting negative grid points
       // trigger GSS can burn the live TTL on quotes before sim gets a chance.
       if (bestVal > 0n && !pastDeadline()) {
-        await goldenSectionMaximize(
-          bestX > 1n ? bestX / 2n : 1n,
-          clampToMax(bestX * 2n, maxFlashAmount),
-          (x) => quoteProfit(x, fluidDebtBps),
-          {
-            maxTries: gssMaxTries,
-            shouldStop: pastDeadline,
-          },
-        );
+        evaluatingGss = true;
+        try {
+          await goldenSectionMaximize(
+            bestX > 1n ? bestX / 2n : 1n,
+            clampToMax(bestX * 2n, maxFlashAmount),
+            (x) => quoteProfit(x, fluidDebtBps),
+            {
+              maxTries: gssMaxTries,
+              shouldStop: pastDeadline,
+            },
+          );
+        } finally {
+          evaluatingGss = false;
+        }
       }
     }
 
@@ -452,7 +479,7 @@ export class AnvilSolver implements Solver {
         typeof propagateAmountsWithRawOutputs
       >>["exactHandles"];
       try {
-        const propagated = await timed("simMs", "final amount propagation", () =>
+        const propagated = await timed("quoteMs", "final amount propagation", () =>
           propagateAmountsWithRawOutputs(plan.tokenPath, cand.flashAmount, controlledState, {
             executor,
             fluidDebtBps: cand.fluidDebtBps,
@@ -462,6 +489,7 @@ export class AnvilSolver implements Solver {
             adapterWorkControl,
             safetyBps: quoteSafetyBps,
             shouldStop: pastDeadline,
+            onExactCall: recordExactCall,
           }),
         );
         amounts = propagated.amounts;
@@ -496,7 +524,7 @@ export class AnvilSolver implements Solver {
 
         let resolvedNode: ResolvedPlanNode;
         try {
-          resolvedNode = await timed("simMs", "family plan build", () =>
+          resolvedNode = await timed("planBuildMs", "family plan build", () =>
             buildResolvedPlanFromPath(
               plan.tokenPath,
               flashToken,
@@ -785,6 +813,7 @@ export async function resolveSearchCenter(
     runtimeEvidence?: readonly RuntimeEvidence[];
     adapterWorkControl?: AdapterWorkControl;
     shouldStop?: () => boolean;
+    onExactCall?: () => void;
   },
 ): Promise<bigint> {
   // Block-scan (no source swap): the scanner already sized the loop; use its
@@ -890,6 +919,7 @@ async function quoteImpactOutput(
     runtimeEvidence?: readonly RuntimeEvidence[];
     adapterWorkControl?: AdapterWorkControl;
     shouldStop?: () => boolean;
+    onExactCall?: () => void;
   },
   v4PoolKey?: V4PoolKey,
 ): Promise<bigint> {
@@ -909,6 +939,7 @@ async function quoteImpactOutput(
   if (edge === undefined || options.executor === undefined) {
     throw new Error("strict session has no victim-impact quote edge");
   }
+  options.onExactCall?.();
   const exact = await options.strictSession.issueExact({
     edge,
     amountIn: victimAmount,
@@ -935,6 +966,7 @@ async function approximatePrefixInputForOutput(
     runtimeEvidence?: readonly RuntimeEvidence[];
     adapterWorkControl?: AdapterWorkControl;
     shouldStop?: () => boolean;
+    onExactCall?: () => void;
   },
 ): Promise<bigint> {
   if (desiredOutput <= 0n) return 1n;
@@ -957,6 +989,7 @@ async function approximatePrefixInputForOutput(
         runtimeEvidence: options.runtimeEvidence,
         adapterWorkControl: options.adapterWorkControl,
         shouldStop: options.shouldStop,
+        onExactCall: options.onExactCall,
       });
       return amounts[amounts.length - 1] ?? 0n;
     } catch (error) {

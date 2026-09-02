@@ -47,6 +47,8 @@ export async function propagateAmounts(
     runtimeEvidence?: readonly RuntimeEvidence[];
     adapterWorkControl?: AdapterWorkControl;
     safetyBps?: bigint;
+    /** Counts strict per-leg exact issuance without changing quote behavior. */
+    onExactCall?: () => void;
     /** Abort between hops when the solver deadline passes, so a single cold
      *  quote point doesn't run past the TTL uninterrupted. */
     shouldStop?: () => boolean;
@@ -68,6 +70,8 @@ export async function propagateAmountsWithRawOutputs(
     runtimeEvidence?: readonly RuntimeEvidence[];
     adapterWorkControl?: AdapterWorkControl;
     safetyBps?: bigint;
+    /** Counts strict per-leg exact issuance without changing quote behavior. */
+    onExactCall?: () => void;
     /** Abort between hops when the solver deadline passes, so a single cold
      *  quote point doesn't run past the TTL uninterrupted. */
     shouldStop?: () => boolean;
@@ -87,6 +91,7 @@ export async function propagateAmountsWithRawOutputs(
       if (options.strictSession === undefined || options.executor === undefined) {
         throw new Error("amount propagation requires a strict current-source session");
       }
+      options.onExactCall?.();
       const exact = await options.strictSession.issueExact({
         edge,
         amountIn: cur,

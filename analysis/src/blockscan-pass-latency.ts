@@ -23,9 +23,29 @@ export interface PassLatencyRecord {
   readonly outcome: string | null;
   readonly totalMs: number | null;
   readonly stateMs: number | null;
+  readonly enumerationMs: number | null;
+  readonly exactRefineMs: number | null;
+  readonly plannerSolverMs: number | null;
+  readonly plannerBuildMs: number | null;
+  readonly solverWallMs: number | null;
+  readonly solverQuoteMs: number | null;
+  readonly solverPlanBuildMs: number | null;
+  readonly solverPlans: number | null;
+  readonly solverAmountPoints: number | null;
+  readonly solverHopExactCalls: number | null;
+  readonly solverGssPoints: number | null;
+  readonly preSimMs: number | null;
+  readonly finalSimMs: number | null;
   readonly sourceHeadSeenAtMs: number | null;
   readonly fast: boolean;
   readonly invalidReason: string | null;
+}
+
+export interface PassLatencyMetricSummary {
+  readonly samples: number;
+  readonly p50: number | null;
+  readonly p95: number | null;
+  readonly max: number | null;
 }
 
 export interface PassLatencyRunStats {
@@ -70,6 +90,24 @@ export interface PassLatencyReport {
     readonly fast: number;
     readonly missingTotalMs: number;
     readonly overThreshold: number;
+  };
+  readonly metrics: {
+    readonly totalMs: PassLatencyMetricSummary;
+    readonly stateMs: PassLatencyMetricSummary;
+    readonly enumerationMs: PassLatencyMetricSummary;
+    readonly exactRefineMs: PassLatencyMetricSummary;
+    readonly plannerSolverMs: PassLatencyMetricSummary;
+    readonly plannerBuildMs: PassLatencyMetricSummary;
+    readonly solverWallMs: PassLatencyMetricSummary;
+    /** Aggregate worker quote time; solverWallMs is the concurrent wall clock. */
+    readonly solverQuoteMs: PassLatencyMetricSummary;
+    readonly solverPlanBuildMs: PassLatencyMetricSummary;
+    readonly solverPlans: PassLatencyMetricSummary;
+    readonly solverAmountPoints: PassLatencyMetricSummary;
+    readonly solverHopExactCalls: PassLatencyMetricSummary;
+    readonly solverGssPoints: PassLatencyMetricSummary;
+    readonly preSimMs: PassLatencyMetricSummary;
+    readonly finalSimMs: PassLatencyMetricSummary;
   };
   readonly invalidByReason: Record<string, number>;
   readonly continuityBreaks: Record<string, number>;
@@ -167,6 +205,36 @@ export function analyzePassLatency(
       outcome: typeof timing.outcome === "string" ? timing.outcome : null,
       totalMs,
       stateMs: numberOrNull(nestedNumber(timing, "stage_timing_ms", "state")),
+      enumerationMs: nestedNumber(timing, "stage_timing_ms", "enumeration"),
+      exactRefineMs: nestedNumber(timing, "stage_timing_ms", "exact_refine"),
+      plannerSolverMs: nestedNumber(timing, "stage_timing_ms", "planner_solver"),
+      plannerBuildMs: nestedNumber(timing, "planner_solver_detail", "plannerBuildMs"),
+      solverWallMs: nestedNumber(timing, "planner_solver_detail", "solverWallMs"),
+      solverQuoteMs: nestedNumber(timing, "planner_solver_detail", "solverQuoteMs"),
+      solverPlanBuildMs: nestedNumber(
+        timing,
+        "planner_solver_detail",
+        "solverPlanBuildMs",
+      ),
+      solverPlans: nestedNumber(timing, "planner_solver_detail", "solverPlans"),
+      solverAmountPoints: nestedNumber(
+        timing,
+        "planner_solver_detail",
+        "solverAmountPoints",
+      ),
+      solverHopExactCalls: nestedNumber(
+        timing,
+        "planner_solver_detail",
+        "solverHopExactCalls",
+      ),
+      solverGssPoints: nestedNumber(
+        timing,
+        "planner_solver_detail",
+        "solverGssPoints",
+      ),
+      preSimMs: nestedNumber(timing, "planner_solver_detail", "preSimMs"),
+      finalSimMs: nestedNumber(timing, "planner_solver_detail", "finalSimMs") ??
+        nestedNumber(timing, "stage_timing_ms", "final_sim"),
       sourceHeadSeenAtMs: nonNegativeInteger(timing.source_head_seen_at_ms),
       fast: invalidReason === null,
       invalidReason,
@@ -236,6 +304,7 @@ export function analyzePassLatency(
       missingTotalMs,
       overThreshold,
     },
+    metrics: summarizeMetrics(records),
     invalidByReason: Object.fromEntries(invalidByReason),
     continuityBreaks: runAnalysis.continuityBreaks,
     longestRun:
@@ -243,6 +312,48 @@ export function analyzePassLatency(
         ? null
         : runStats(records.slice(longestRun.startIndex, longestRun.endIndex + 1)),
     qualifyingRuns,
+  };
+}
+
+function summarizeMetrics(
+  records: readonly PassLatencyRecord[],
+): PassLatencyReport["metrics"] {
+  return {
+    totalMs: metricSummary(records.map((record) => record.totalMs)),
+    stateMs: metricSummary(records.map((record) => record.stateMs)),
+    enumerationMs: metricSummary(records.map((record) => record.enumerationMs)),
+    exactRefineMs: metricSummary(records.map((record) => record.exactRefineMs)),
+    plannerSolverMs: metricSummary(records.map((record) => record.plannerSolverMs)),
+    plannerBuildMs: metricSummary(records.map((record) => record.plannerBuildMs)),
+    solverWallMs: metricSummary(records.map((record) => record.solverWallMs)),
+    solverQuoteMs: metricSummary(records.map((record) => record.solverQuoteMs)),
+    solverPlanBuildMs: metricSummary(
+      records.map((record) => record.solverPlanBuildMs),
+    ),
+    solverPlans: metricSummary(records.map((record) => record.solverPlans)),
+    solverAmountPoints: metricSummary(
+      records.map((record) => record.solverAmountPoints),
+    ),
+    solverHopExactCalls: metricSummary(
+      records.map((record) => record.solverHopExactCalls),
+    ),
+    solverGssPoints: metricSummary(
+      records.map((record) => record.solverGssPoints),
+    ),
+    preSimMs: metricSummary(records.map((record) => record.preSimMs)),
+    finalSimMs: metricSummary(records.map((record) => record.finalSimMs)),
+  };
+}
+
+function metricSummary(
+  values: readonly (number | null)[],
+): PassLatencyMetricSummary {
+  const present = values.filter((value): value is number => value !== null);
+  return {
+    samples: present.length,
+    p50: percentile(present, 0.5),
+    p95: percentile(present, 0.95),
+    max: present.length === 0 ? null : Math.max(...present),
   };
 }
 

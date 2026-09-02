@@ -22,6 +22,9 @@ import {
   resolveBlockScanPricingSourceMode,
 } from "./blockscan-pricing-source-mode.js";
 import {
+  resolveBlockScanSolverSearchConfig,
+} from "./blockscan-solver-search-config.js";
+import {
   initBlockScanEnumerationSolverTelemetry,
 } from "./blockscan-enumeration-solver-telemetry.js";
 import { blockScanRouteId } from "./blockscan-route-identity.js";
@@ -981,6 +984,7 @@ async function main(): Promise<void> {
   const blockScanSolveConcurrency = Number.isFinite(blockScanSolveConcurrencyRaw)
     ? Math.max(1, Math.floor(blockScanSolveConcurrencyRaw))
     : 4;
+  const blockScanSolverSearch = resolveBlockScanSolverSearchConfig();
   const blockScanFinalSimulationConcurrencyRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_FINAL_SIM_CONCURRENCY ?? "1",
   );
@@ -1266,6 +1270,8 @@ async function main(): Promise<void> {
     `[searcher/blockscan] enabled=${enableBlockScan ? "on" : "off"} ` +
       `submit=${config.blockScanSubmit ? "on" : "off"} ` +
       `solveConcurrency=${blockScanSolveConcurrency} ` +
+      `solverGridHalfWidth=${blockScanSolverSearch.gridHalfWidth} ` +
+      `solverGssMaxTries=${blockScanSolverSearch.gssMaxTries} ` +
       `refineCandidates=${blockScanRefineCandidates} ` +
       `passBudgetMs=${blockScanPassBudgetMs} ` +
       `largeGraphBudgetMs=${blockScanLargeGraphPassBudgetMs} ` +
@@ -2095,6 +2101,8 @@ async function main(): Promise<void> {
     runtimePublicationReserveMs: blockScanRuntimePublicationReserveMs,
     refineCandidates: blockScanRefineCandidates,
     solveReserveMs: blockScanSolveReserveMs,
+    solverGridHalfWidth: blockScanSolverSearch.gridHalfWidth,
+    solverGssMaxTries: blockScanSolverSearch.gssMaxTries,
     exactConcurrency: blockScanExactConcurrency,
     exactProbeTimeoutMs: blockScanExactProbeTimeoutMs,
     exactRpcBatchSize: blockScanExactRpcBatchSize,
@@ -2259,6 +2267,8 @@ async function main(): Promise<void> {
       refineCandidates: blockScanRefineCandidates,
       solveConcurrency: blockScanSolveConcurrency,
       solveReserveMs: blockScanSolveReserveMs,
+      solverGridHalfWidth: blockScanSolverSearch.gridHalfWidth,
+      solverGssMaxTries: blockScanSolverSearch.gssMaxTries,
       nMinusOneFallback: blockScanNMinusOneFallback,
       nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
       nMinusOneMaxGraphLagBlocks: blockScanNMinusOneMaxGraphLagBlocks,
@@ -4332,6 +4342,7 @@ async function maybeSubmitBlockScanAtomic(params: {
   profitTokenValuation: ProfitTokenValuation;
   sourceBlockHash: string;
   signal: AbortSignal;
+  onFinalSimStart?: (startedAtMs: number) => void;
   collectBlindAudit: boolean;
   strategyVersions: {
     strategy_view_version: string;
@@ -4513,6 +4524,7 @@ async function maybeSubmitBlockScanAtomic(params: {
       return finish("blockscan_stale_state");
     }
     timing.finalSimStartedAtMs = Date.now();
+    params.onFinalSimStart?.(timing.finalSimStartedAtMs);
     finalSimStatus = "failed";
     const finalSimStarted = performance.now();
     const sim = await executeFinalSimulationWork({
