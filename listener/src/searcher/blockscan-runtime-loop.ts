@@ -2704,7 +2704,7 @@ export class BlockScanRuntimeLoop {
         sourceBlockHash: exactSourceBlockHash,
         signal: passSignal,
         deadlineAtMs: passDeadlineAtMs,
-        maxBatchSize: this.deps.exactRpcBatchSize ?? 64,
+        maxBatchSize: this.deps.exactRpcBatchSize ?? 128,
         maxConcurrentBatches:
           this.deps.exactRpcBatchConcurrency ?? 16,
         transportScheduler: exactTransportScheduler,

@@ -1023,13 +1023,13 @@ async function main(): Promise<void> {
     ? Math.max(100, Math.floor(blockScanExactProbeTimeoutRaw))
     : 4_000;
   const blockScanExactRpcBatchSizeRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_SIZE ?? "64",
+    process.env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_SIZE ?? "128",
   );
   const blockScanExactRpcBatchSize = Number.isFinite(
       blockScanExactRpcBatchSizeRaw,
     ) && blockScanExactRpcBatchSizeRaw > 0
     ? Math.max(1, Math.floor(blockScanExactRpcBatchSizeRaw))
-    : 64;
+    : 128;
   const blockScanExactRpcBatchConcurrencyRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_CONCURRENCY ?? "16",
   );
