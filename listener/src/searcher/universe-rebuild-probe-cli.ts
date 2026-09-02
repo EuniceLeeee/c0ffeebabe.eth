@@ -142,31 +142,46 @@ async function main(): Promise<void> {
     Math.min(16, Number(process.env.SEARCHER_PROBE_CONCURRENCY ?? "4")),
   );
   let nextTarget = 0;
+  let probeErrors = 0;
   await Promise.all(Array.from({ length: concurrency }, async () => {
     while (true) {
       const index = nextTarget++;
       if (index >= targets.length) return;
       const target = targets[index];
-      const next = await probeOneFailure({
-        store,
-        runId: args.runId,
-        familyCandidateKey: target.familyCandidateKey,
-        attestFamilyInstanceOnce: wiring.attestFamilyInstanceOnce,
-        sealDurableVerifiedMemo: wiring.sealDurableVerifiedMemo,
-        assertCanonicalHead: wiring.assertCanonicalHead,
-        decodeCandidateSnapshot: wiring.decodeCandidateSnapshot,
-      });
-      console.log(
-        "universe-rebuild-probe " + target.familyCandidateKey + " -> " +
-          next.status +
-          (next.status === "retryable"
-            ? " attempt=" + next.attemptCount + " reason=" + next.reasonCode
-            : next.status === "verified"
-              ? " memo=" + next.memoFingerprint
-              : " reason=" + next.reasonCode),
-      );
+      try {
+        const next = await probeOneFailure({
+          store,
+          runId: args.runId,
+          familyCandidateKey: target.familyCandidateKey,
+          attestFamilyInstanceOnce: wiring.attestFamilyInstanceOnce,
+          sealDurableVerifiedMemo: wiring.sealDurableVerifiedMemo,
+          assertCanonicalHead: wiring.assertCanonicalHead,
+          decodeCandidateSnapshot: wiring.decodeCandidateSnapshot,
+        });
+        console.log(
+          "universe-rebuild-probe " + target.familyCandidateKey + " -> " +
+            next.status +
+            (next.status === "retryable"
+              ? " attempt=" + next.attemptCount + " reason=" + next.reasonCode
+              : next.status === "verified"
+                ? " memo=" + next.memoFingerprint
+                : " reason=" + next.reasonCode),
+        );
+      } catch (error) {
+        probeErrors += 1;
+        console.error(
+          "universe-rebuild-probe " + target.familyCandidateKey +
+            " -> error reason=" +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      }
     }
   }));
+  if (probeErrors > 0) {
+    throw new Error(
+      `${probeErrors} target probe(s) failed before producing an outcome`,
+    );
+  }
 }
 
 /**

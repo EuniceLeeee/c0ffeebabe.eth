@@ -835,10 +835,14 @@ export function createProbeWiring(
   // daemon across workers deadlocks them. Each runtime gets its own
   // RevmSimClient (its own daemon process): per-key isolation means one slow
   // key can never block siblings.
+  interface ProbeRuntimeHandle {
+    readonly runtime: CentralAdapterRuntime;
+    dispose(): void;
+  }
   const runtimeFor = (
     cutoff: CanonicalSource,
     observedSender?: string,
-  ): CentralAdapterRuntime => {
+  ): ProbeRuntimeHandle => {
     const revmClient = revmBin !== undefined && revmBin.trim() !== "" &&
         executor !== undefined && executor.trim() !== ""
       ? new RevmSimClient({
@@ -873,7 +877,12 @@ export function createProbeWiring(
             verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
           }),
         });
-    return runtime;
+    return Object.freeze({
+      runtime,
+      dispose(): void {
+        revmClient?.stop();
+      },
+    });
   };
   const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 
@@ -938,13 +947,14 @@ export function createProbeWiring(
             }),
           });
         }
+        const runtimeHandle = runtimeFor(attestInput.cutoff);
         try {
           const funding = await executeFundingFamilyLiquidity({
             family: candidateFamily,
             assets: Object.freeze([ethers.getAddress(asset)]),
             source: attestInput.cutoff,
             generation: attestInput.cutoff.generation,
-            runtime: runtimeFor(attestInput.cutoff),
+            runtime: runtimeHandle.runtime,
             publisher: Object.freeze({ publish() {} }),
           });
           const outcome = funding.outcomes[0];
@@ -1000,6 +1010,8 @@ export function createProbeWiring(
               ? {}
               : { evidenceRef: attestInput.evidenceRef }),
           });
+        } finally {
+          runtimeHandle.dispose();
         }
       }
       const pool = attestationPoolFromCandidate(candidate);
@@ -1019,6 +1031,7 @@ export function createProbeWiring(
       let result: Awaited<ReturnType<typeof attestPoolIdentitiesStrict>>;
       let authorityFingerprint: string;
       let observedSender: string | undefined;
+      let runtimeHandle: ProbeRuntimeHandle | undefined;
       try {
         if (candidate.actor !== undefined) {
           const evidence = attestInput.evidenceRef;
@@ -1087,10 +1100,11 @@ export function createProbeWiring(
           code,
           implementationWord,
         });
+        runtimeHandle = runtimeFor(attestInput.cutoff, observedSender);
         result = await attestPoolIdentitiesStrict({
           catalog,
           provider: strictProvider,
-          runtime: runtimeFor(attestInput.cutoff, observedSender),
+          runtime: runtimeHandle.runtime,
           source: attestInput.cutoff,
           pools: Object.freeze([pool]),
           channelOrder: "reverse-binding-first",
@@ -1125,6 +1139,8 @@ export function createProbeWiring(
             ? {}
             : { evidenceRef: attestInput.evidenceRef }),
         });
+      } finally {
+        runtimeHandle?.dispose();
       }
       const accepted = result.accepted[0];
       if (accepted === undefined) {

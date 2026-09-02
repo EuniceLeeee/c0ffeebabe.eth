@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   UniverseRebuildCheckpointStore,
   type DurableSourceReceipt,
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
       completedChunks: Object.freeze([Object.freeze({
         fromBlock,
         toBlock: SOURCE.number,
-        resultCount: 1,
+        resultCount: 3,
         resultHash: "3".repeat(64),
       })]),
       observationSetHash: "4".repeat(64),
@@ -56,26 +56,30 @@ async function main(): Promise<void> {
       fromBlock,
       universeHash: "u1",
       candidateSetHash: "c1",
-      candidateCount: 1,
+      candidateCount: 3,
       candidatesByKey: Object.freeze({
         "cand:a": Object.freeze({ address: "0x" + "11".repeat(20) }),
+        "cand:b": Object.freeze({ address: "0x" + "22".repeat(20) }),
+        "cand:c": Object.freeze({ address: "0x" + "33".repeat(20) }),
       }),
       observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
       sourceReceipts: receipts,
     });
     const withReceipts = await store.casMergeRunOutcomes(
       "run-1",
-      Object.freeze([Object.freeze({
-        status: "retryable",
-        familyCandidateKey: "cand:a",
+      Object.freeze(["a", "b", "c"].map((suffix, index) => Object.freeze({
+        status: "retryable" as const,
+        familyCandidateKey: `cand:${suffix}`,
         familyId: "univ2",
-        candidateSnapshot: Object.freeze({ address: "0x" + "11".repeat(20) }),
-        stage: "identity",
+        candidateSnapshot: Object.freeze({
+          address: "0x" + String(index + 1).repeat(40),
+        }),
+        stage: "identity" as const,
         failureCode: "rpc",
         reasonCode: "factory-child-reverse-binding:rpc",
         attemptCount: 1,
         lastAttemptAt: "2026-08-17T00:00:00.000Z",
-      })]),
+      }))),
     );
     const graphSnapshot = Object.freeze({ edges: Object.freeze([]) });
     const catalogSnapshot = Object.freeze({ instances: Object.freeze([]) });
@@ -91,10 +95,10 @@ async function main(): Promise<void> {
         activeInstanceKeys: Object.freeze([]),
         publicationSetHash: hashReadyPublicationSet(catalogSnapshot),
         candidateAccounting: Object.freeze({
-          total: 1,
+          total: 3,
           verified: 0,
           terminalRejected: 0,
-          retryable: 1,
+          retryable: 3,
           remainingUnaccounted: 0 as const,
         }),
         observedThrough: Object.freeze({ number: SOURCE.number, hash: SOURCE.hash }),
@@ -123,16 +127,19 @@ async function main(): Promise<void> {
       "const digest = (s) => createHash('sha256').update(s).digest('hex');",
       "export function createProbeWiring() {",
       "  return Object.freeze({",
-      "    attestFamilyInstanceOnce: async (input) => Object.freeze({",
+      "    attestFamilyInstanceOnce: async (input) => {",
+      "      if (input.candidate.address === '0x' + '2'.repeat(40)) throw new Error('isolated transport failure');",
+      "      return Object.freeze({",
       "      status: 'verified',",
       "      result: Object.freeze({ identity: 'a' }),",
-      "    }),",
+      "      });",
+      "    },",
       "    sealDurableVerifiedMemo: (input) => Object.freeze({",
       "      familyCandidateKey: input.familyCandidateKey,",
-      "      familyInstanceKey: 'inst:a',",
+      "      familyInstanceKey: 'inst:' + input.familyCandidateKey,",
       "      familyId: 'univ2',",
       "      candidateKey: 'a',",
-      "      instanceKey: 'inst:a',",
+      "      instanceKey: 'inst:' + input.familyCandidateKey,",
       "      candidateFingerprint: 'cf',",
       "      familyDefinitionHash: 'fdh',",
       "      validity: Object.freeze({ policy: 'immutable-code', authorityFingerprint: 'auth', proofSource: Object.freeze({ number: input.proofSource.number, hash: input.proofSource.hash }) }),",
@@ -140,7 +147,7 @@ async function main(): Promise<void> {
       "      compiledDescriptor: Object.freeze({}),",
       "      staticProjection: Object.freeze({}),",
       "      evidenceFingerprint: 'ef',",
-      "      memoFingerprint: digest('memo:a'),",
+      "      memoFingerprint: digest('memo:' + input.familyCandidateKey),",
       "    }),",
       "    assertCanonicalHead: async () => undefined,",
       "    decodeCandidateSnapshot: (snapshot) => snapshot,",
@@ -168,8 +175,46 @@ async function main(): Promise<void> {
     );
     assert.equal(
       after?.verifiedMemos["cand:a"]?.familyInstanceKey,
-      "inst:a",
+      "inst:cand:a",
       "probe success must persist the verified memo",
+    );
+
+    // One target transport exception is isolated: the worker continues to
+    // the next key, persists its outcome, and reports the batch error only
+    // after every selected target has had a chance to run.
+    const isolated = spawnSync(
+      "node",
+      ["--import", "tsx", "src/searcher/universe-rebuild-probe-cli.ts",
+        "--checkpoint", checkpoint, "--run-id", "run-1",
+        "--failure-code", "rpc", "--limit", "2"],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          SEARCHER_UNIVERSE_REBUILD_WIRING_PATH: wiring,
+          SEARCHER_PROBE_CONCURRENCY: "1",
+        },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(isolated.status, 1, isolated.stderr);
+    assert.match(isolated.stderr, /cand:b -> error reason=isolated transport failure/);
+    assert.match(isolated.stderr, /1 target probe\(s\) failed before producing an outcome/);
+    assert.match(isolated.stdout, /cand:c -> verified/, isolated.stdout);
+    const afterIsolation = await store.load();
+    assert.equal(
+      afterIsolation?.retryableAttemptsByCandidateKey["cand:b"]?.status,
+      "retryable",
+      "an exception leaves the original target safely queued",
+    );
+    assert.equal(
+      afterIsolation?.retryableAttemptsByCandidateKey["cand:c"],
+      undefined,
+      "a later target still commits after an earlier transport exception",
+    );
+    assert.equal(
+      afterIsolation?.verifiedMemos["cand:c"]?.familyInstanceKey,
+      "inst:cand:c",
     );
   } finally {
     await rm(dir, { recursive: true, force: true });

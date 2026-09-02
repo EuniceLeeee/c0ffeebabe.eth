@@ -1470,6 +1470,9 @@ After a controlled systemd restart:
 - only newly discovered and invalidated candidates execute fresh lifecycle work; an unchanged queued retryable is
   inherited as accounted and retried only by the independent single-candidate probe;
 - an original-cutoff single-pool probe updates only its FamilyCandidateKey;
+- every probe target owns and releases its resident simulation client in `finally`; a target-level transport
+  exception leaves that key queued, does not terminate sibling workers, and makes the batch report failure only
+  after all other selected targets have had a chance to commit their outcomes;
 - source/candidate/Graph cursors never advance ahead of durable facts;
 - topology remains frozen after producer creation.
 
@@ -1554,6 +1557,36 @@ remains historical evidence for that SHA only and is not acceptance evidence for
 Current acceptance requires the catalog FlashLoan observation -> Family/token candidate -> positive
 current-cutoff attestation -> Funding Ready lineage from the same rebuild; pass prepare and blind prewarm
 consume that Ready projection, never an external JSON or the routing graph's token set.
+
+### 16.9 Coarse-pricing continuity acceptance (2026-09-02 RPC producer)
+
+The current coarse-pricing contract is sparse read plus dense publication. The touched/activity set selects
+only the instances refreshed at the new source; every compatible clean edge inherits its last validated mid
+and provenance from the previous safe base. Each expected edge is exactly one of refreshed, carried,
+behavior-proven unavailable, or genuinely unresolved, and the producer enforces
+`expected = refreshed + carried + unavailable + unresolved` before publication. The first generation with no
+previous base is the sole full bootstrap. Exact execution takes the complete canonical edge closure of the
+coarse candidates through `requiredEdgeIds`; a missing required edge fails closed.
+
+A local mainnet-RPC/revm producer run on 2026-09-02 (broadcast disabled: block-scan submit, backrun, mempool,
+and MEV-Share all off) produced Ready generation 2 at cutoff 25889041 from a 14400-block scan: 17090
+candidates partitioned into 15674 verified, 1300 terminal-rejected, and 116 residual retryable outcomes. The
+route projection contained 15602 route instances and 31067 canonical edges; terminal and retryable outcomes
+remained outside the Graph and did not block Ready publication.
+
+The no-baseline bootstrap at source 25889095 selected all 15602 route instances, projected all 31067 edges,
+and published 28839 priced edges. It took 99.689s and was not repeated. Catch-up and steady generations
+25889096 through 25889110 selected only 6-49 touched instances per generation and skipped 15553-15596 clean
+instances; observed strict coarse-session time was 171-606ms after bootstrap (generation wall time was
+887-2808ms in the recorded catch-up slice), while every recorded generation continued to report
+`priced=28839`, `expected=31067`, and zero producer issues.
+
+For current heads 25889104 through 25889110, adjacent N-1 coarse snapshots naturally enumerated 465-470
+candidates per block. Their current-N exact sessions selected the candidates' full closure of 926-936
+instances and projected 1906-1926 required routes, with zero missing-edge rejection at session creation.
+The measured blocks then hit the independent exact-refinement deadline before planner/final-sim, so this
+window accepts coarse continuity and coarse-to-exact scope coupling only; it is not a six-stage
+`production_gap_fixed` or broadcast acceptance claim.
 
 ## 17. Role of tests and tools
 
