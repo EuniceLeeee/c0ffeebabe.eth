@@ -4902,12 +4902,21 @@ export class CheckpointStore implements BuilderCheckpointPort, ReadyStorePort {
       || candidateFinalOutcomeHash(afterTarget) !== receipt.afterOutcomeHash
     ) throw new CorruptDurableStoreError("probe target outcome transition mismatch");
 
-    const evidenceRoot = hashDomain("aloha/checkpoint-probe-evidence/v1", {
+    const evidenceRoot = hashDomain("aloha/checkpoint-probe-evidence/v2", {
       envelope,
       candidatePartitionRoot: partitionRoot,
-      candidateEntries,
-      priorOutcomeEntries: before.entries,
-      activeOutcomeEntries: after.entries,
+      candidateEntriesRoot: hashCanonicalPartition(
+        "aloha/checkpoint-probe-candidate-entries/v1",
+        candidateEntries,
+      ),
+      priorOutcomeEntriesRoot: hashCanonicalPartition(
+        "aloha/checkpoint-probe-prior-outcome-entries/v1",
+        before.entries,
+      ),
+      activeOutcomeEntriesRoot: hashCanonicalPartition(
+        "aloha/checkpoint-probe-active-outcome-entries/v1",
+        after.entries,
+      ),
     });
     return deepFreeze({
       receipt,
