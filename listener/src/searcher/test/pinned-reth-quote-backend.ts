@@ -36,6 +36,7 @@ const RESULT = "0x" + "11".padStart(64, "0");
 interface StubState {
   batches: Array<Array<Record<string, unknown>>>;
   singles: Array<Record<string, unknown>>;
+  requestSockets: object[];
   failNextBatch: boolean;
   failAllBatches: boolean;
   holdResponses: boolean;
@@ -47,6 +48,7 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
   const state: StubState = {
     batches: [],
     singles: [],
+    requestSockets: [],
     failNextBatch: false,
     failAllBatches: false,
     holdResponses: false,
@@ -54,6 +56,7 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
     maxActiveBatches: 0,
   };
   const server = createServer((req, res) => {
+    state.requestSockets.push(req.socket);
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
     req.on("end", () => {
@@ -201,6 +204,27 @@ async function run(): Promise<void> {
 
     {
       const backend = new PinnedRethQuoteBackend(rpcUrl, HASH);
+      const socketsBefore = state.requestSockets.length;
+      await backend.call({ to: OK_A, data: "0x11" });
+      await backend.call({ to: OK_A, data: "0x12" });
+      await backend.closeAndDrain();
+      const sockets = state.requestSockets.slice(socketsBefore);
+      assert(sockets.length === 2, "keep-alive test issued two requests");
+      assert(
+        sockets[0] === sockets[1],
+        "sequential JSON-RPC batches reuse one transport socket",
+      );
+      const stats = backend.stats();
+      assert(
+        stats.batchesOnReusedSocket >= 1 &&
+          stats.batchesOnNewSocket + stats.batchesOnReusedSocket === 2,
+        "keep-alive telemetry counts new and reused sockets",
+      );
+      console.log("[pinned-reth-quote-backend] transport keep-alive: PASS");
+    }
+
+    {
+      const backend = new PinnedRethQuoteBackend(rpcUrl, HASH);
       let error: unknown = null;
       await backend.call(
         { to: OK_A, data: "0x01" },
@@ -232,6 +256,7 @@ async function run(): Promise<void> {
       });
       state.holdResponses = true;
       const singlesBefore = state.singles.length;
+      const socketsBefore = state.requestSockets.length;
       const pending = backend
         .call({ to: OK_A, data: "0x01" })
         .catch((error) => error);
@@ -258,6 +283,17 @@ async function run(): Promise<void> {
       );
       assert(stats.abortedBatches >= 1, "aborted batch must be counted");
       state.holdResponses = false;
+      const abortedSocket = state.requestSockets[socketsBefore];
+      const recovery = new PinnedRethQuoteBackend(rpcUrl, HASH);
+      assert(
+        await recovery.call({ to: OK_A, data: "0x21" }) === RESULT,
+        "request after abort recovers",
+      );
+      await recovery.closeAndDrain();
+      assert(
+        state.requestSockets.at(-1) !== abortedSocket,
+        "aborted transport socket is not returned to the keep-alive pool",
+      );
       console.log("[pinned-reth-quote-backend] pass abort + drain: PASS");
     }
 

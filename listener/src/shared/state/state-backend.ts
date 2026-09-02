@@ -1,10 +1,14 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import {
+  Agent as HttpAgent,
   request as requestHttp,
   type ClientRequest,
   type IncomingMessage,
 } from "node:http";
-import { request as requestHttps } from "node:https";
+import {
+  Agent as HttpsAgent,
+  request as requestHttps,
+} from "node:https";
 import { createServer as createNetServer } from "node:net";
 import { ethers, type JsonRpcError, type JsonRpcPayload } from "ethers";
 
@@ -1227,7 +1231,18 @@ export interface JsonRpcHttpResponse {
   statusCode: number;
   statusMessage: string;
   body: unknown;
+  /** True when Node reused an existing keep-alive socket for this request. */
+  reusedSocket: boolean;
 }
+
+/*
+ * Reuse transport sockets across source-pinned JSON-RPC batches. Agents still
+ * keep separate pools per origin, while the caller-owned AbortSignal destroys
+ * an interrupted request/socket so it cannot return to the free pool.
+ * Request concurrency remains owned by the existing schedulers.
+ */
+const JSON_RPC_HTTP_AGENT = new HttpAgent({ keepAlive: true });
+const JSON_RPC_HTTPS_AGENT = new HttpsAgent({ keepAlive: true });
 
 /**
  * Send one JSON-RPC request on a transport whose socket we own. Node's fetch
@@ -1250,6 +1265,9 @@ export function postJsonRpc(
     : url.protocol === "http:"
       ? requestHttp
       : null;
+  const agent = url.protocol === "https:"
+    ? JSON_RPC_HTTPS_AGENT
+    : JSON_RPC_HTTP_AGENT;
   if (requestFn === null) {
     return Promise.reject(new Error(`unsupported JSON-RPC protocol ${url.protocol}`));
   }
@@ -1281,8 +1299,9 @@ export function postJsonRpc(
       headers: {
         "content-type": "application/json",
         "content-length": String(encoded.length),
-        connection: "close",
+        connection: "keep-alive",
       },
+      agent,
     }, (incoming) => {
       response = incoming;
       const chunks: Buffer[] = [];
@@ -1300,6 +1319,7 @@ export function postJsonRpc(
             statusCode: incoming.statusCode ?? 0,
             statusMessage: incoming.statusMessage ?? "",
             body,
+            reusedSocket: request.reusedSocket,
           });
         } catch (error) {
           rejectOnce(error);

@@ -130,6 +130,8 @@ export class PinnedRethQuoteBackend
   private peakSchedulerLaneActive = 0;
   private batchFailures = 0;
   private singleCallFallbacks = 0;
+  private batchesOnNewSocket = 0;
+  private batchesOnReusedSocket = 0;
   private lastDrainMs = 0;
 
   private readonly blockSpecifier: {
@@ -454,6 +456,8 @@ export class PinnedRethQuoteBackend
     peakSchedulerLaneActive: number;
     batchFailures: number;
     singleCallFallbacks: number;
+    batchesOnNewSocket: number;
+    batchesOnReusedSocket: number;
     drainMs: number;
     persistentCacheContentSha256: string | null;
     persistentCacheConfigured: boolean;
@@ -489,6 +493,8 @@ export class PinnedRethQuoteBackend
       peakSchedulerLaneActive: this.peakSchedulerLaneActive,
       batchFailures: this.batchFailures,
       singleCallFallbacks: this.singleCallFallbacks,
+      batchesOnNewSocket: this.batchesOnNewSocket,
+      batchesOnReusedSocket: this.batchesOnReusedSocket,
       drainMs: this.lastDrainMs,
       persistentCacheContentSha256:
         persistent?.contentSha256 ?? null,
@@ -835,6 +841,9 @@ export class PinnedRethQuoteBackend
         onScopeAbort,
       );
     }
+
+    if (response.reusedSocket) this.batchesOnReusedSocket++;
+    else this.batchesOnNewSocket++;
 
     if (this.scopeController.signal.aborted || this.closed) {
       this.completedAfterScopeAbort++;
