@@ -344,7 +344,7 @@ async function run(): Promise<void> {
 
     {
       const backend = new PinnedRethQuoteBackend(rpcUrl, HASH, {
-        maxBatchSize: 128,
+        maxBatchSize: 64,
         maxConcurrentBatches: 16,
         transportLane: "exact",
         scopeLabel: "wide exact test",
@@ -365,14 +365,14 @@ async function run(): Promise<void> {
       const batches = state.batches.slice(batchesBefore);
       const stats = backend.stats();
       assert(
-        batches.length === 4 &&
-          batches.every((batch) => batch.length === 128),
-        "wide exact uses four full 128-item batches",
+        batches.length === 8 &&
+          batches.every((batch) => batch.length === 64),
+        "wide exact uses eight full 64-item batches",
       );
       assert(
-        state.maxActiveBatches === 4 &&
-          stats.peakInFlightBatches === 4 &&
-          stats.maxBatchItemsSent === 128,
+        state.maxActiveBatches === 8 &&
+          stats.peakInFlightBatches === 8 &&
+          stats.maxBatchItemsSent === 64,
         "wide exact telemetry reports actual physical fan-out",
       );
       await backend.closeAndDrain();
