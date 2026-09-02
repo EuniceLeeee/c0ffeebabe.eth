@@ -167,13 +167,13 @@ export const DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntimeV1 = Ob
     if (signal.aborted) throw signal.reason;
     if (input.plan.familyDefinitionHash !== DODO_V2_FAMILY_AUTHORING_HASH || input.plan.completeness !== "rolling-observation" || input.plan.historyStartBlock !== null) throw new TypeError("DODO history source plan binding mismatch");
     if (input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("DODO rolling observation cannot bind a predecessor");
-    const { from } = familyRollingObservationRangeV1(input.cutoff.number);
+    const { from } = familyRollingObservationRangeV1(input.cutoff.number, input.rollingObservationRange);
     if (BigInt(from) > BigInt(input.cutoff.number)) throw new TypeError("DODO history cursor beyond cutoff");
     const observations: { readonly from: string; readonly through: string; readonly declaration: FactoryDeclaration; readonly result: FamilySourcePlanPhysicalResultV1; readonly entries: readonly DodoCreationHistoryEntryV1[] }[] = [];
     for (let start = BigInt(from); start <= BigInt(input.cutoff.number); start += CHUNK_BLOCKS) {
       const end = start + CHUNK_BLOCKS - 1n > BigInt(input.cutoff.number) ? BigInt(input.cutoff.number) : start + CHUNK_BLOCKS - 1n;
       const range = Object.freeze({ from: decimal(start), through: decimal(end) });
-      for (const declaration of DODO_V2_FACTORIES) {
+      const rangeObservations = await Promise.all(DODO_V2_FACTORIES.map(async declaration => {
         const filter = Object.freeze({ address: declaration.address, fromBlock: blockTag(range.from), toBlock: blockTag(range.through), topics: Object.freeze([declaration.creationTopic]) });
         const raw = await physical.request({
           familyDefinitionHash: DODO_V2_FAMILY_AUTHORING_HASH,
@@ -182,8 +182,9 @@ export const DODO_V2_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntimeV1 = Ob
           requestSchemaHash: DODO_V2_HISTORY_SOURCE_PLAN_SCHEMA_HASH,
           request: { kind: "family-source-plan-rpc", version: 1, method: "eth_getLogs", params: Object.freeze([filter]), target: declaration.address, manager: declaration.address, topic: declaration.creationTopic, lookback: range, chunk: Object.freeze({ maxBlocks: CHUNK_BLOCKS.toString() }) },
         }, signal);
-        observations.push({ ...range, declaration, ...observe(raw, input, declaration, range.from, range.through) });
-      }
+        return Object.freeze({ ...range, declaration, ...observe(raw, input, declaration, range.from, range.through) });
+      }));
+      observations.push(...rangeObservations);
     }
     const refs = Object.freeze(observations.map(item => evidenceRef(input, item.result)).sort((left, right) => refKey(left).localeCompare(refKey(right))));
     const rawEvidenceLocators = Object.freeze(observations.map(item => item.result.rawEvidenceLocator).sort((left, right) => left.rawLocatorHash.localeCompare(right.rawLocatorHash)));

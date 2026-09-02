@@ -51,6 +51,8 @@ import { issueFamilyRawEvidenceReadPort } from "../../../../packages/family-sdk/
 import {
   createDiscoveryTransport,
   createHttpJsonRpcDiscoveryPort,
+  DiscoveryTransportError,
+  type DiscoveryTransport,
   type DiscoveryProviderRef,
 } from "../../../../packages/discovery-transport/src/index.ts";
 import {
@@ -328,6 +330,447 @@ async function boundedMap<T, R>(
   return Object.freeze(output);
 }
 
+/*
+ * History is one source in production, even though each Family still owns
+ * the decoder for its own event.  A Family may describe the logical filter it
+ * needs, but it never gets a network client: the owner below batches all
+ * filters for the same block slice into one eth_getLogs read, then projects
+ * that result back into the exact logical response the Family requested.
+ *
+ * The constants intentionally live in the runtime owner.  They are source
+ * policy, not Family semantics: changing a Family decoder cannot silently
+ * change the cold-start window or chunking policy.
+ */
+const HISTORY_CHUNK_BLOCKS_V1 = 500n;
+const HISTORY_MIN_CHUNK_BLOCKS_V1 = 64n;
+const HISTORY_SCAN_CONCURRENCY_V1 = 4;
+const HISTORY_ROLLING_OBSERVATION_BLOCKS_V1 = 14_400n;
+
+type HistoryLogRecordV1 = Readonly<Record<string, CanonicalJson>>;
+
+interface HistoryFilterV1 {
+  readonly address?: CanonicalJson;
+  readonly fromBlock: string;
+  readonly toBlock: string;
+  readonly topics?: CanonicalJson;
+}
+
+interface HistoryBatchV1 {
+  readonly logs: readonly HistoryLogRecordV1[];
+  readonly filters: readonly HistoryFilterV1[];
+}
+
+interface HistoryScanDomainV1 {
+  readonly from: bigint;
+  readonly through: bigint;
+}
+
+function centralHistoryWindow(cutoffNumber: string): { readonly from: bigint; readonly through: bigint } {
+  const through = BigInt(cutoffNumber);
+  return Object.freeze({
+    from: through + 1n > HISTORY_ROLLING_OBSERVATION_BLOCKS_V1
+      ? through - HISTORY_ROLLING_OBSERVATION_BLOCKS_V1 + 1n
+      : 0n,
+    through,
+  });
+}
+
+function quantity(value: unknown, path: string): bigint {
+  if (typeof value !== "string" || !/^0x(?:0|[1-9a-f][0-9a-f]*)$/.test(value)) {
+    throw new TypeError(`${path} must be a canonical JSON-RPC quantity`);
+  }
+  return BigInt(value);
+}
+
+function historyAbortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new Error("central history scan aborted");
+}
+
+function historyRecord(value: unknown, path: string): HistoryLogRecordV1 {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`${path} must be a log object`);
+  }
+  const record = value as Record<string, CanonicalJson>;
+  for (const key of Reflect.ownKeys(record)) {
+    if (typeof key !== "string") throw new TypeError(`${path} has a symbol key`);
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    if (descriptor === undefined || !("value" in descriptor)) {
+      throw new TypeError(`${path}.${key} must be a data property`);
+    }
+  }
+  return record;
+}
+
+function historyLogIdentity(log: HistoryLogRecordV1): string {
+  return encodeCanonicalJson({
+    address: log.address ?? null,
+    topics: log.topics ?? null,
+    blockNumber: log.blockNumber ?? null,
+    blockHash: log.blockHash ?? null,
+    transactionHash: log.transactionHash ?? null,
+    transactionIndex: log.transactionIndex ?? null,
+    logIndex: log.logIndex ?? null,
+  });
+}
+
+function logAddressMatches(log: HistoryLogRecordV1, expected: CanonicalJson | undefined): boolean {
+  if (expected === undefined) return true;
+  const actual = typeof log.address === "string" ? log.address.toLowerCase() : null;
+  if (actual === null) return false;
+  const values = Array.isArray(expected) ? expected : [expected];
+  return values.some(value => typeof value === "string" && actual === value.toLowerCase());
+}
+
+function logTopicMatches(actual: CanonicalJson, expected: CanonicalJson): boolean {
+  if (expected === null) return true;
+  const actualTopic = typeof actual === "string" ? actual.toLowerCase() : null;
+  if (actualTopic === null) return false;
+  const values = Array.isArray(expected) ? expected : [expected];
+  return values.some(value => typeof value === "string" && actualTopic === value.toLowerCase());
+}
+
+function logMatchesHistoryFilter(log: HistoryLogRecordV1, filter: HistoryFilterV1): boolean {
+  if (!logAddressMatches(log, filter.address)) return false;
+  const block = quantity(log.blockNumber, "history log.blockNumber");
+  if (block < quantity(filter.fromBlock, "history filter.fromBlock") || block > quantity(filter.toBlock, "history filter.toBlock")) return false;
+  if (filter.topics === undefined) return true;
+  if (!Array.isArray(filter.topics)) throw new TypeError("history filter.topics must be an array");
+  if (!Array.isArray(log.topics)) return false;
+  for (let index = 0; index < filter.topics.length; index += 1) {
+    const expected = filter.topics[index];
+    const actual = log.topics[index];
+    if (actual === undefined) return false;
+    if (expected === null) continue;
+    if (!logTopicMatches(actual, expected)) return false;
+  }
+  return true;
+}
+
+function historyFilterFromRequest(request: FamilySourcePlanPhysicalRequestV1): HistoryFilterV1 | null {
+  if (request.request.method !== "eth_getLogs") return null;
+  if (!Array.isArray(request.request.params) || request.request.params.length !== 1) {
+    throw new TypeError("history eth_getLogs params must contain one filter");
+  }
+  const value = request.request.params[0];
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("history eth_getLogs filter must be an object");
+  }
+  const record = value as Record<string, CanonicalJson>;
+  const fromBlock = record.fromBlock;
+  const toBlock = record.toBlock;
+  // A non-range log query (for example a blockHash lookup) is not part of the
+  // rolling history source. Keep it on the ordinary physical path rather than
+  // making the central range policy reinterpret it.
+  if (fromBlock === undefined && toBlock === undefined) return null;
+  if (fromBlock === undefined || toBlock === undefined) {
+    throw new TypeError("history filter must provide both fromBlock and toBlock");
+  }
+  if (typeof fromBlock !== "string" || typeof toBlock !== "string") {
+    throw new TypeError("history filter range must use canonical quantities");
+  }
+  quantity(fromBlock, "history filter.fromBlock");
+  quantity(toBlock, "history filter.toBlock");
+  if (quantity(fromBlock, "history filter.fromBlock") > quantity(toBlock, "history filter.toBlock")) {
+    throw new TypeError("history filter range is reversed");
+  }
+  if (record.address !== undefined && record.address !== null
+    && typeof record.address !== "string" && !Array.isArray(record.address)) {
+    throw new TypeError("history filter.address is invalid");
+  }
+  if (record.topics !== undefined && !Array.isArray(record.topics)) {
+    throw new TypeError("history filter.topics is invalid");
+  }
+  return Object.freeze({
+    ...(record.address === undefined || record.address === null ? {} : { address: record.address }),
+    fromBlock,
+    toBlock,
+    ...(record.topics === undefined ? {} : { topics: record.topics }),
+  });
+}
+
+function assertCentralHistoryWindow(request: FamilySourcePlanPhysicalRequestV1, filter: HistoryFilterV1): void {
+  if (request.plan.completeness !== "rolling-observation") return;
+  const window = centralHistoryWindow(request.cutoff.number);
+  const from = quantity(filter.fromBlock, "history filter.fromBlock");
+  const to = quantity(filter.toBlock, "history filter.toBlock");
+  if (from < window.from || to > window.through) {
+    throw new TypeError("rolling Family source requested blocks outside the central cold-start window");
+  }
+  if (to - from + 1n > HISTORY_CHUNK_BLOCKS_V1) {
+    throw new TypeError("rolling Family source requested a chunk larger than the central policy");
+  }
+  if (typeof request.request.lookback !== "object" || request.request.lookback === null || Array.isArray(request.request.lookback)) {
+    throw new TypeError("rolling Family source lookback is required");
+  }
+  const lookback = request.request.lookback as Record<string, CanonicalJson>;
+  if (lookback.from !== from.toString(10) || lookback.through !== to.toString(10)) {
+    throw new TypeError("rolling Family source lookback does not match its central range");
+  }
+}
+
+function sameHistorySelector(left: HistoryFilterV1, right: HistoryFilterV1): boolean {
+  return sameCanonical(left.address ?? null, right.address ?? null)
+    && sameCanonical(left.topics ?? null, right.topics ?? null);
+}
+
+function historyScanDomain(
+  cutoff: CanonicalCutoffV1,
+  request: FamilySourcePlanPhysicalRequestV1,
+): HistoryScanDomainV1 {
+  if (request.plan.completeness !== "rolling-observation") {
+    throw new TypeError("central history reader only serves rolling Family sources");
+  }
+  return Object.freeze(centralHistoryWindow(cutoff.number));
+}
+
+function unionHistoryFilter(filters: readonly HistoryFilterV1[], fromBlock: string, toBlock: string): HistoryFilterV1 {
+  if (filters.length === 0) throw new TypeError("history filter union is empty");
+  const addresses: string[] = [];
+  let addressWildcard = false;
+  for (const filter of filters) {
+    if (filter.address === undefined) {
+      addressWildcard = true;
+      continue;
+    }
+    const values = Array.isArray(filter.address) ? filter.address : [filter.address];
+    for (const value of values) {
+      if (typeof value !== "string") throw new TypeError("history filter address must be a string");
+      addresses.push(value.toLowerCase());
+    }
+  }
+  const topicLists = filters.map(filter => Array.isArray(filter.topics) ? filter.topics : []);
+  const maxTopics = Math.max(0, ...topicLists.map(value => value.length));
+  const topics: CanonicalJson[] = [];
+  for (let index = 0; index < maxTopics; index += 1) {
+    const values: string[] = [];
+    let wildcard = false;
+    for (const list of topicLists) {
+      const value = list[index];
+      if (value === undefined || value === null) {
+        wildcard = true;
+        break;
+      }
+      const candidates = Array.isArray(value) ? value : [value];
+      for (const candidate of candidates) {
+        if (typeof candidate !== "string") throw new TypeError("history filter topic must be a string");
+        values.push(candidate.toLowerCase());
+      }
+    }
+    topics.push(wildcard ? null : Object.freeze([...new Set(values)].sort()));
+  }
+  return Object.freeze({
+    ...(addressWildcard || addresses.length === 0 ? {} : { address: Object.freeze([...new Set(addresses)].sort()) }),
+    fromBlock,
+    toBlock,
+    ...(topics.length === 0 ? {} : { topics: Object.freeze(topics) }),
+  });
+}
+
+function canonicalHistoryLogs(value: unknown, fromBlock: string, toBlock: string): readonly HistoryLogRecordV1[] {
+  const decoded = canonicalSourcePlanResponse("eth_getLogs", value);
+  if (!Array.isArray(decoded)) throw new TypeError("history eth_getLogs result must be an array");
+  const seen = new Map<string, HistoryLogRecordV1>();
+  const from = quantity(fromBlock, "history range.fromBlock");
+  const to = quantity(toBlock, "history range.toBlock");
+  const logs: HistoryLogRecordV1[] = [];
+  for (const [index, item] of decoded.entries()) {
+    const log = historyRecord(item, `history log[${index}]`);
+    const block = quantity(log.blockNumber, `history log[${index}].blockNumber`);
+    if (block < from || block > to) throw new TypeError("history log is outside its requested range");
+    const identity = historyLogIdentity(log);
+    const prior = seen.get(identity);
+    if (prior !== undefined) {
+      if (!sameCanonical(prior, log)) throw new TypeError("history eth_getLogs returned conflicting log identity");
+      continue;
+    }
+    seen.set(identity, log);
+    logs.push(log);
+  }
+  return Object.freeze(logs);
+}
+
+function centralHistoryKey(cutoff: CanonicalCutoffV1, domain: HistoryScanDomainV1): string {
+  return encodeCanonicalJson({
+    cutoff,
+    fromBlock: domain.from.toString(10),
+    through: domain.through.toString(10),
+  });
+}
+
+function historyRanges(domain: HistoryScanDomainV1): readonly Readonly<{ from: bigint; through: bigint }>[] {
+  const ranges: Array<Readonly<{ from: bigint; through: bigint }>> = [];
+  for (let from = domain.from; from <= domain.through; from += HISTORY_CHUNK_BLOCKS_V1) {
+    ranges.push(Object.freeze({
+      from,
+      through: from + HISTORY_CHUNK_BLOCKS_V1 - 1n > domain.through
+        ? domain.through
+        : from + HISTORY_CHUNK_BLOCKS_V1 - 1n,
+    }));
+  }
+  return Object.freeze(ranges);
+}
+
+export function createCentralHistoryReader(input: {
+  readonly cutoff: CanonicalCutoffV1;
+  readonly sourceAnchorRoot: Hash;
+  readonly runtime: RuntimeDiscoveryBindingV1;
+  readonly sourceAuthorityRoot: Hash;
+  readonly provider: DiscoveryProviderRef;
+  readonly transport: DiscoveryTransport;
+}): { read(request: FamilySourcePlanPhysicalRequestV1, signal: AbortSignal): Promise<CanonicalJson> } {
+  const completed = new Map<string, HistoryBatchV1>();
+  const pending = new Map<string, {
+    readonly filters: HistoryFilterV1[];
+    readonly waiters: Array<{ readonly filter: HistoryFilterV1; readonly resolve: (value: CanonicalJson) => void; readonly reject: (reason?: unknown) => void }>;
+    readonly signal: AbortSignal;
+    readonly domain: HistoryScanDomainV1;
+    scheduled: boolean;
+  }>();
+
+  const scanChunk = async (
+    filters: readonly HistoryFilterV1[],
+    range: Readonly<{ from: bigint; through: bigint }>,
+    signal: AbortSignal,
+  ): Promise<readonly HistoryLogRecordV1[]> => {
+    const allLogs: HistoryLogRecordV1[] = [];
+    let start = range.from;
+    let chunkSize = HISTORY_CHUNK_BLOCKS_V1;
+    while (start <= range.through) {
+      const end = start + chunkSize - 1n > range.through ? range.through : start + chunkSize - 1n;
+      const union = unionHistoryFilter(filters, `0x${start.toString(16)}`, `0x${end.toString(16)}`);
+      const requestId = hashDomain("aloha/runtime-discovery-history-union-request/v1", {
+        runtimeAuthority: input.runtime.runtimeAuthority,
+        sourceAuthorityRoot: input.sourceAuthorityRoot,
+        sourceAnchorRoot: input.sourceAnchorRoot,
+        cutoff: input.cutoff,
+        filter: union,
+      });
+      let response: CanonicalJson;
+      try {
+        response = await input.transport.request<CanonicalJson>({
+          requestId,
+          provider: input.provider,
+          source: input.cutoff,
+          method: "eth_getLogs",
+          params: Object.freeze([union]),
+          requestCodec: "ethereum-json-rpc-result.v1",
+          target: null,
+          manager: null,
+          topic: union.topics ?? null,
+          lookback: Object.freeze({ from: start.toString(10), through: end.toString(10) }),
+          chunk: Object.freeze({ maxBlocks: chunkSize.toString(10) }),
+          phase: "source-plan-history-union",
+          workClassRef: "source-plan-history-union-rpc",
+          ownerRef: "runtime-discovery.history-union.v1",
+          signal,
+        });
+      } catch (error) {
+        if (signal.aborted) throw historyAbortReason(signal);
+        if (error instanceof DiscoveryTransportError
+          && (error.code === "abort" || error.code === "deadline" || error.code === "queue-full")) {
+          throw error;
+        }
+        if (chunkSize <= HISTORY_MIN_CHUNK_BLOCKS_V1) throw error;
+        chunkSize = chunkSize / 2n < HISTORY_MIN_CHUNK_BLOCKS_V1 ? HISTORY_MIN_CHUNK_BLOCKS_V1 : chunkSize / 2n;
+        continue;
+      }
+      if (signal.aborted) throw historyAbortReason(signal);
+      // Decode outside the transport retry block: malformed or conflicting
+      // provider data is a correctness failure, not a reason to rescan a
+      // smaller range.
+      allLogs.push(...canonicalHistoryLogs(response, `0x${start.toString(16)}`, `0x${end.toString(16)}`));
+      start = end + 1n;
+      chunkSize = HISTORY_CHUNK_BLOCKS_V1;
+    }
+    return Object.freeze(allLogs);
+  };
+
+  const scan = async (
+    filters: readonly HistoryFilterV1[],
+    domain: HistoryScanDomainV1,
+    signal: AbortSignal,
+  ): Promise<HistoryBatchV1> => {
+    const slices = await boundedMap(historyRanges(domain), HISTORY_SCAN_CONCURRENCY_V1, range =>
+      scanChunk(filters, range, signal));
+    const logs: HistoryLogRecordV1[] = [];
+    const logsByIdentity = new Map<string, HistoryLogRecordV1>();
+    for (const slice of slices) {
+      for (const log of slice) {
+        const identity = historyLogIdentity(log);
+        const prior = logsByIdentity.get(identity);
+        if (prior !== undefined) {
+          if (!sameCanonical(prior, log)) throw new TypeError("history union returned conflicting log identity");
+          continue;
+        }
+        logsByIdentity.set(identity, log);
+        logs.push(log);
+      }
+    }
+    return Object.freeze({ logs: Object.freeze(logs), filters: Object.freeze(filters.slice()) });
+  };
+
+  const flush = (key: string): void => {
+    const entry = pending.get(key);
+    if (entry === undefined) return;
+    pending.delete(key);
+    if (entry.filters.length === 0) return;
+    if (entry.signal.aborted) {
+      for (const waiter of entry.waiters) waiter.reject(historyAbortReason(entry.signal));
+      return;
+    }
+    void scan(entry.filters, entry.domain, entry.signal).then(batch => {
+      completed.set(key, batch);
+      for (const waiter of entry.waiters) {
+        try {
+          waiter.resolve(Object.freeze(batch.logs.filter(log => logMatchesHistoryFilter(log, waiter.filter))));
+        } catch (error) {
+          waiter.reject(error);
+        }
+      }
+      }, error => {
+      for (const waiter of entry.waiters) waiter.reject(error);
+    });
+  };
+
+  return Object.freeze({
+    read(request: FamilySourcePlanPhysicalRequestV1, signal: AbortSignal): Promise<CanonicalJson> {
+      const filter = historyFilterFromRequest(request);
+      if (filter === null) throw new TypeError("central history reader received a non-log request");
+      if (request.plan.completeness !== "rolling-observation") {
+        throw new TypeError("central history reader only serves rolling Family sources");
+      }
+      assertSameCutoff(request.cutoff, input.cutoff);
+      assertCentralHistoryWindow(request, filter);
+      if (signal.aborted) return Promise.reject(historyAbortReason(signal));
+      const domain = historyScanDomain(input.cutoff, request);
+      const key = centralHistoryKey(input.cutoff, domain);
+      const cached = completed.get(key);
+      if (cached !== undefined && cached.filters.some(value => sameHistorySelector(value, filter))) {
+        return Promise.resolve(Object.freeze(cached.logs.filter(log => logMatchesHistoryFilter(log, filter))));
+      }
+      return new Promise<CanonicalJson>((resolve, reject) => {
+        let entry = pending.get(key);
+        if (entry === undefined) {
+          entry = {
+            filters: cached === undefined ? [] : [...cached.filters],
+            waiters: [],
+            signal,
+            domain,
+            scheduled: false,
+          };
+          pending.set(key, entry);
+        }
+        if (!entry.filters.some(value => sameHistorySelector(value, filter))) entry.filters.push(filter);
+        entry.waiters.push({ filter, resolve, reject });
+        if (!entry.scheduled) {
+          entry.scheduled = true;
+          queueMicrotask(() => flush(key));
+        }
+      });
+    },
+  });
+}
+
 /**
  * Release-owned generic orchestration. Generated bindings choose the exact
  * plans and Family interpreters; deployment supplies only physical chain
@@ -544,7 +987,18 @@ export function createRuntimeDiscoveryPort(input: {
       if (canonicalCutoff.chainId !== source.chainId) throw new TypeError("runtime discovery chain mismatch");
       const sourceAnchorRoot = await observeSourceAnchor(canonicalCutoff, signal);
       input.assertCurrent();
-      const results = await boundedMap(bindings, 8, async binding => {
+      const centralHistory = createCentralHistoryReader({
+        cutoff: canonicalCutoff,
+        sourceAnchorRoot,
+        runtime,
+        sourceAuthorityRoot,
+        provider,
+        transport,
+      });
+      // Start every declared source plan together so the first history slice
+      // is assembled into one central union.  The scheduler still owns the
+      // physical concurrency limit; this fan-out is only logical admission.
+      const results = await boundedMap(bindings, bindings.length, async binding => {
         if (signal.aborted) throw signal.reason;
         const predecessor = selectPredecessor(binding, predecessorClosure, canonicalCutoff);
         const physicalLedger = new Map<Hash, PhysicalLedgerEntryV1>();
@@ -572,23 +1026,29 @@ export function createRuntimeDiscoveryPort(input: {
             });
             if (physicalRequestIds.has(requestId)) throw new TypeError("duplicate source plan physical request");
             physicalRequestIds.add(requestId);
-            const response = canonicalSourcePlanResponse(request.request.method, await transport.request({
-              requestId,
-              provider,
-              source: canonicalCutoff,
-              method: request.request.method,
-              params: request.request.params,
-              requestCodec: request.requestSchemaHash,
-              target: request.request.target,
-              manager: request.request.manager,
-              topic: request.request.topic,
-              lookback: request.request.lookback,
-              chunk: request.request.chunk,
-              phase: "source-plan",
-              workClassRef: "source-plan-rpc",
-              ownerRef: request.plan.ownerRef,
-              signal: requestSignal,
-            }));
+            const historyFilter = request.plan.completeness === "rolling-observation"
+              && request.request.method === "eth_getLogs"
+              ? historyFilterFromRequest(request)
+              : null;
+            const response = historyFilter !== null
+              ? await centralHistory.read(request, requestSignal)
+              : canonicalSourcePlanResponse(request.request.method, await transport.request({
+                requestId,
+                provider,
+                source: canonicalCutoff,
+                method: request.request.method,
+                params: request.request.params,
+                requestCodec: request.requestSchemaHash,
+                target: request.request.target,
+                manager: request.request.manager,
+                topic: request.request.topic,
+                lookback: request.request.lookback,
+                chunk: request.request.chunk,
+                phase: "source-plan",
+                workClassRef: "source-plan-rpc",
+                ownerRef: request.plan.ownerRef,
+                signal: requestSignal,
+              }));
             input.assertCurrent();
             const observation: FamilySourcePlanPhysicalObservationV1 = deepFreeze({
               kind: "family-source-plan-physical-observation",
@@ -639,10 +1099,19 @@ export function createRuntimeDiscoveryPort(input: {
         });
         let raw;
         try {
+          const rollingWindow = binding.sourcePlanRef.completeness === "rolling-observation"
+            ? centralHistoryWindow(canonicalCutoff.number)
+            : null;
           raw = await binding.runtime.execute({
             plan: binding.sourcePlanRef,
             cutoff: canonicalCutoff,
             previousAppliedThrough: predecessor?.runtime.execution.through ?? null,
+            ...(rollingWindow === null ? {} : {
+              rollingObservationRange: Object.freeze({
+                from: rollingWindow.from.toString(10),
+                through: rollingWindow.through.toString(10),
+              }),
+            }),
             predecessor: predecessor?.runtime ?? null,
           }, physical, signal);
         } catch (error) {

@@ -123,7 +123,7 @@ export const ASTRA_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntimeV1 = Obje
     if (signal.aborted) throw signal.reason;
     if (input.plan.familyDefinitionHash !== ASTRA_FAMILY_DEFINITION_HASH || input.plan.completeness !== "rolling-observation" || input.plan.historyStartBlock !== null) throw new TypeError("Astra history source plan binding mismatch");
     if (input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("Astra rolling observation cannot bind a predecessor");
-    const { from } = familyRollingObservationRangeV1(input.cutoff.number);
+    const { from } = familyRollingObservationRangeV1(input.cutoff.number, input.rollingObservationRange);
     if (BigInt(from) > BigInt(input.cutoff.number)) throw new TypeError("Astra history cursor beyond cutoff");
     const chunks: { readonly from: string; readonly through: string; readonly result: FamilySourcePlanPhysicalResultV1; readonly entries: readonly AstraHistoryEntryV1[] }[] = [];
     for (let start = BigInt(from); start <= BigInt(input.cutoff.number); start += CHUNK_BLOCKS) {

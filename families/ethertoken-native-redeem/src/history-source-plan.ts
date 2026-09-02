@@ -180,7 +180,7 @@ export const ETHERTOKEN_NATIVE_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourceP
     if (signal.aborted) throw signal.reason;
     if (input.plan.familyDefinitionHash !== ETHERTOKEN_NATIVE_REDEEM_FAMILY_AUTHORING_HASH || input.plan.completeness !== "rolling-observation" || input.plan.historyStartBlock !== null) throw new TypeError("ethertoken-native-redeem history source plan binding mismatch");
     if (input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("ethertoken-native-redeem rolling observation cannot bind a predecessor");
-    const { from } = familyRollingObservationRangeV1(input.cutoff.number);
+    const { from } = familyRollingObservationRangeV1(input.cutoff.number, input.rollingObservationRange);
     if (BigInt(from) > BigInt(input.cutoff.number)) throw new TypeError("ethertoken-native-redeem history cursor beyond cutoff");
     const chunks: { readonly from: string; readonly through: string; readonly result: FamilySourcePlanPhysicalResultV1; readonly entries: readonly EtherTokenNativeRedeemDestructionHistoryEntryV1[] }[] = [];
     for (let start = BigInt(from); start <= BigInt(input.cutoff.number); start += CHUNK_BLOCKS) {

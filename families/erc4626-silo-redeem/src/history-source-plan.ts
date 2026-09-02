@@ -261,7 +261,7 @@ export const ERC4626_SILO_REDEEM_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRu
     if (signal.aborted) throw signal.reason;
     if (input.plan.familyDefinitionHash !== ERC4626_SILO_REDEEM_FAMILY_AUTHORING_HASH || input.plan.completeness !== "rolling-observation" || input.plan.historyStartBlock !== null) throw new TypeError("erc4626-silo-redeem history source plan binding mismatch");
     if (input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("erc4626-silo-redeem rolling observation cannot bind a predecessor");
-    const { from } = familyRollingObservationRangeV1(input.cutoff.number);
+    const { from } = familyRollingObservationRangeV1(input.cutoff.number, input.rollingObservationRange);
     if (BigInt(from) > BigInt(input.cutoff.number)) throw new TypeError("erc4626-silo-redeem history cursor beyond cutoff");
     const chunks: { readonly from: string; readonly through: string; readonly result: FamilySourcePlanPhysicalResultV1; readonly entries: readonly Erc4626SiloRedeemWithdrawHistoryEntryV1[] }[] = [];
     for (let start = BigInt(from); start <= BigInt(input.cutoff.number); start += CHUNK_BLOCKS) {

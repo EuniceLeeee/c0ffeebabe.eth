@@ -265,7 +265,7 @@ export const UNIV3_STANDARD_HISTORY_SOURCE_PLAN_RUNTIME: FamilySourcePlanRuntime
     if (signal.aborted) throw signal.reason;
     if (input.plan.familyDefinitionHash !== UNIV3_STANDARD_FAMILY_AUTHORING_HASH || input.plan.completeness !== "rolling-observation" || input.plan.historyStartBlock !== null) throw new TypeError("univ3 history source plan binding mismatch");
     if (input.previousAppliedThrough !== null || (input.predecessor ?? null) !== null) throw new TypeError("univ3 rolling observation cannot bind a predecessor");
-    const { from } = familyRollingObservationRangeV1(input.cutoff.number);
+    const { from } = familyRollingObservationRangeV1(input.cutoff.number, input.rollingObservationRange);
     const observedChunks: { readonly from: string; readonly through: string; readonly result: FamilySourcePlanPhysicalResultV1; readonly entries: readonly PoolCreatedEntry[] }[] = [];
     for (let chunkFrom = BigInt(from); chunkFrom <= BigInt(input.cutoff.number); chunkFrom += HISTORY_CHUNK_BLOCKS) {
       const chunkThrough = chunkFrom + HISTORY_CHUNK_BLOCKS - 1n > BigInt(input.cutoff.number) ? BigInt(input.cutoff.number) : chunkFrom + HISTORY_CHUNK_BLOCKS - 1n;

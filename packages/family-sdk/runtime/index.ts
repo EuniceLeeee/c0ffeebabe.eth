@@ -74,7 +74,10 @@ export type FamilyRuntimeStageV1 = (typeof FAMILY_RUNTIME_STAGES)[number];
  * positive observations only; it never proves older instances absent. */
 export const FAMILY_ROLLING_OBSERVATION_BLOCKS_V1 = 14_400n;
 
-export function familyRollingObservationRangeV1(cutoffNumber: string): Readonly<{
+export function familyRollingObservationRangeV1(
+  cutoffNumber: string,
+  ownerRange?: Readonly<{ readonly from: string; readonly through: string }>,
+): Readonly<{
   readonly from: string;
   readonly through: string;
 }> {
@@ -85,7 +88,17 @@ export function familyRollingObservationRangeV1(cutoffNumber: string): Readonly<
   const from = through + 1n > FAMILY_ROLLING_OBSERVATION_BLOCKS_V1
     ? through - FAMILY_ROLLING_OBSERVATION_BLOCKS_V1 + 1n
     : 0n;
-  return Object.freeze({ from: from.toString(10), through: through.toString(10) });
+  const derived = Object.freeze({ from: from.toString(10), through: through.toString(10) });
+  if (ownerRange === undefined) return derived;
+  if (
+    typeof ownerRange.from !== "string"
+    || typeof ownerRange.through !== "string"
+    || !/^(0|[1-9][0-9]*)$/.test(ownerRange.from)
+    || !/^(0|[1-9][0-9]*)$/.test(ownerRange.through)
+    || ownerRange.from !== derived.from
+    || ownerRange.through !== derived.through
+  ) throw new TypeError("Family rolling observation range is not owner-issued for this cutoff");
+  return Object.freeze({ from: ownerRange.from, through: ownerRange.through });
 }
 
 /** Source-less request owned by one Family lifecycle adapter.  The runtime
@@ -684,6 +697,13 @@ export interface FamilySourcePlanExecutionInputV1 {
   readonly plan: SourcePlanRefV1;
   readonly cutoff: CanonicalCutoffV1;
   readonly previousAppliedThrough: string | null;
+  /** Production owner supplies this once for rolling sources. The optional
+   * shape keeps direct Family contract tests source-compatible; production
+   * runtime owners must never rely on the local cutoff fallback. */
+  readonly rollingObservationRange?: Readonly<{
+    readonly from: string;
+    readonly through: string;
+  }>;
   /** Release-owner-issued durable predecessor; absent is equivalent to null only for direct Family unit tests. */
   readonly predecessor?: FamilySourcePlanExecutionPredecessorV1 | null;
 }
