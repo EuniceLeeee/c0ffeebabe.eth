@@ -1528,7 +1528,7 @@ export class CanonicalSource implements CanonicalFencePort {
       throw new CanonicalSourceError(
         "fence-invalid",
         "canonical journal changed during the provider observation",
-        false,
+        true,
       );
     }
   }

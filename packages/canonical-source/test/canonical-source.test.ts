@@ -400,7 +400,9 @@ test("a journal update during an asynchronous provider read invalidates the obse
   releaseRead();
   await assert.rejects(
     () => pending,
-    (error: unknown) => error instanceof CanonicalSourceError && error.code === "fence-invalid",
+    (error: unknown) => error instanceof CanonicalSourceError
+      && error.code === "fence-invalid"
+      && error.retryable,
   );
   peer.close();
 });
