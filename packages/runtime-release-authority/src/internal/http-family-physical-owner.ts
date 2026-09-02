@@ -63,6 +63,13 @@ function canonicalHex(value: unknown): value is string {
   return typeof value === "string" && /^0x(?:[0-9a-f]{2})*$/.test(value);
 }
 
+function executionRevertData(error: RecordValue): string | null {
+  if (canonicalHex(error.data)) return error.data;
+  return typeof error.message === "string" && error.message.toLowerCase().includes("revert")
+    ? "0x"
+    : null;
+}
+
 function assertRequestAtSource(request: FamilyPhysicalRpcRequestV1, sourceHash: Hash): void {
   assertExactKeys(request, ["requestId", "method", "params"], "familyPhysical.request");
   assertHash(request.requestId, "familyPhysical.request.requestId");
@@ -122,8 +129,9 @@ function rpcPort(endpoint: string, timeoutMs: number, sourceHash: Hash): FamilyP
             : Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
         }
         const error = record(value.error, "familyPhysical.response.error");
-        return canonicalHex(error.data)
-          ? Object.freeze({ kind: "reverted", dataHex: error.data })
+        const revertData = executionRevertData(error);
+        return revertData !== null
+          ? Object.freeze({ kind: "reverted", dataHex: revertData })
           : Object.freeze({ kind: "transportFailure", failureCode: "rpc" });
       } catch {
         return Object.freeze({

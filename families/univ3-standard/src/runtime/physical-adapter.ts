@@ -44,6 +44,8 @@ const IDENTITY_SELECTORS = Object.freeze({
   getPool: "0x1698ee82",
 });
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 function record(value: unknown, path: string): RecordValue {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${path} must be an object`);
@@ -162,16 +164,20 @@ async function identity(
   const factory = decodeAddressWord(returnedData(base[2]!, "univ3 physical factory"));
   const fee = decodeUniV3Fee(returnedData(base[3]!, "univ3 physical fee"));
   const tickSpacing = decodeUniV3TickSpacing(returnedData(base[4]!, "univ3 physical tick spacing"));
+  const [tokenA, tokenB] = token0 < token1 ? [token0, token1] : [token1, token0];
   const reverse = await call(
     rpc,
     requestId,
     "factory-get-pool",
     factory,
-    `${IDENTITY_SELECTORS.getPool}${addressWord(token0)}${addressWord(token1)}${word(fee)}`,
+    `${IDENTITY_SELECTORS.getPool}${addressWord(tokenA)}${addressWord(tokenB)}${word(fee)}`,
     cutoff.hash,
     signal,
   );
-  if (reverse.kind !== "returned") return Object.freeze([outward(requestId, reverse)]);
+  if (reverse.kind === "transportFailure") return Object.freeze([outward(requestId, reverse)]);
+  const reversePool = reverse.kind === "reverted"
+    ? ZERO_ADDRESS
+    : decodeAddressWord(bytes(reverse.dataHex, "univ3 physical reverse pool"));
   return Object.freeze([returned(requestId, {
     kind: "univ3-identity-facts",
     version: 1,
@@ -184,7 +190,7 @@ async function identity(
       token1,
       fee: fee.toString(),
       tickSpacing,
-      reversePool: decodeAddressWord(bytes(reverse.dataHex, "univ3 physical reverse pool")),
+      reversePool,
     },
   })]);
 }
