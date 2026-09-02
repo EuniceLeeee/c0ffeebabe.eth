@@ -308,6 +308,44 @@ async function run(): Promise<void> {
 
     {
       const backend = new PinnedRethQuoteBackend(rpcUrl, HASH, {
+        maxBatchSize: 64,
+        maxConcurrentBatches: 16,
+        transportLane: "exact",
+        scopeLabel: "wide exact test",
+      });
+      const batchesBefore = state.batches.length;
+      state.maxActiveBatches = 0;
+      state.holdResponses = true;
+      const results = await Promise.all(Array.from({ length: 512 }, (_, index) =>
+        backend.call({
+          to: OK_A,
+          data: `0x${(index + 1).toString(16).padStart(4, "0")}`,
+        })
+      ));
+      assert(
+        results.every((result) => result === RESULT),
+        "wide exact concurrent batch results",
+      );
+      const batches = state.batches.slice(batchesBefore);
+      const stats = backend.stats();
+      assert(
+        batches.length === 8 &&
+          batches.every((batch) => batch.length === 64),
+        "wide exact uses eight full 64-item batches",
+      );
+      assert(
+        state.maxActiveBatches === 8 &&
+          stats.peakInFlightBatches === 8 &&
+          stats.maxBatchItemsSent === 64,
+        "wide exact telemetry reports actual physical fan-out",
+      );
+      await backend.closeAndDrain();
+      state.holdResponses = false;
+      console.log("[pinned-reth-quote-backend] wide exact batching: PASS");
+    }
+
+    {
+      const backend = new PinnedRethQuoteBackend(rpcUrl, HASH, {
         maxBatchSize: 128,
         maxConcurrentBatches: 4,
         transportLane: "producer-bulk",

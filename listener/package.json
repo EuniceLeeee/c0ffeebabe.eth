@@ -47,7 +47,7 @@
     "searcher:erc4626-quote": "node --import tsx src/searcher/test/erc4626-quote.ts",
     "searcher:metronome-synth-quote": "node --import tsx src/searcher/test/metronome-synth-quote.ts",
     "searcher:self-burn-native-family": "node --import tsx src/searcher/test/self-burn-native-family.ts",
-    "searcher:exact-producer-yield": "node --import tsx src/searcher/test/exact-producer-yield.ts",
+    "searcher:exact-refine-deadline": "node --import tsx src/searcher/test/exact-refine-deadline.ts",
     "searcher:pool-universe-parse": "node --import tsx src/searcher/test/pool-universe-parse.ts",
     "searcher:discovery-dex-cursor": "node --import tsx src/searcher/test/discovery-dex-cursor.ts",
     "searcher:coalescing-async-writer": "node --import tsx src/searcher/test/coalescing-async-writer.ts",

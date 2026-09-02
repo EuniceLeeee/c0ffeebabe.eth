@@ -1007,13 +1007,13 @@ async function main(): Promise<void> {
     process.env.SEARCHER_BLOCKSCAN_EXACT_CONCURRENCY ??
       // Backward-compatible read only. Exact now has its own explicit name.
       process.env.SEARCHER_BLOCKSCAN_MID_CONCURRENCY ??
-      "128",
+      String(blockScanRefineCandidates),
   );
   const blockScanExactConcurrency = Number.isFinite(
       blockScanExactConcurrencyRaw,
     ) && blockScanExactConcurrencyRaw > 0
     ? Math.max(1, Math.floor(blockScanExactConcurrencyRaw))
-    : 128;
+    : blockScanRefineCandidates;
   const blockScanExactProbeTimeoutRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_EXACT_PROBE_TIMEOUT_MS ?? "4000",
   );
@@ -1022,6 +1022,22 @@ async function main(): Promise<void> {
     ) && blockScanExactProbeTimeoutRaw > 0
     ? Math.max(100, Math.floor(blockScanExactProbeTimeoutRaw))
     : 4_000;
+  const blockScanExactRpcBatchSizeRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_SIZE ?? "64",
+  );
+  const blockScanExactRpcBatchSize = Number.isFinite(
+      blockScanExactRpcBatchSizeRaw,
+    ) && blockScanExactRpcBatchSizeRaw > 0
+    ? Math.max(1, Math.floor(blockScanExactRpcBatchSizeRaw))
+    : 64;
+  const blockScanExactRpcBatchConcurrencyRaw = Number(
+    process.env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_CONCURRENCY ?? "16",
+  );
+  const blockScanExactRpcBatchConcurrency = Number.isFinite(
+      blockScanExactRpcBatchConcurrencyRaw,
+    ) && blockScanExactRpcBatchConcurrencyRaw > 0
+    ? Math.max(1, Math.floor(blockScanExactRpcBatchConcurrencyRaw))
+    : 16;
   let blockScanRethTransportScheduler: RethTransportScheduler | undefined;
   if (enableBlockScan) {
     const blockScanAnvilPort = Number(process.env.SEARCHER_BLOCKSCAN_ANVIL_PORT ?? "8556");
@@ -1114,7 +1130,8 @@ async function main(): Promise<void> {
       ),
     );
     blockScanRethTransportScheduler = new RethTransportScheduler({
-      capacity: blockScanStateRpcConcurrency * 2,
+      capacity:
+        blockScanStateRpcConcurrency + blockScanExactRpcBatchConcurrency,
       producerReserved: blockScanStateRpcConcurrency,
     });
     const familyStateReads = new JsonRpcBlockScanStateReadBackend(config.rpcUrl, {
@@ -1257,6 +1274,8 @@ async function main(): Promise<void> {
       `exactRefineHardBudgetMs=${blockScanExactRefineHardBudgetMs} ` +
       `exactConcurrency=${blockScanExactConcurrency} ` +
       `exactProbeTimeoutMs=${blockScanExactProbeTimeoutMs} ` +
+      `exactRpcBatchSize=${blockScanExactRpcBatchSize} ` +
+      `exactRpcBatchConcurrency=${blockScanExactRpcBatchConcurrency} ` +
       `pricingSource=${blockScanPricingSource.mode} ` +
       `pricingSourceSelection=${blockScanPricingSource.source} ` +
       `nMinusOneFallback=${blockScanNMinusOneFallback ? "on" : "off"} ` +
@@ -2063,20 +2082,6 @@ async function main(): Promise<void> {
       dynamicResetNonce: () => preparedBlindDynamicResetNonce,
     },
     exactRefineHardBudgetMs: blockScanExactRefineHardBudgetMs,
-    exactProducerLagYieldMs: Math.max(
-      0,
-      Number(
-        process.env.SEARCHER_BLOCKSCAN_EXACT_PRODUCER_LAG_YIELD_MS ??
-          "5000",
-      ),
-    ),
-    exactProducerLagYieldBudgetMs: Math.max(
-      0,
-      Number(
-        process.env.SEARCHER_BLOCKSCAN_EXACT_PRODUCER_LAG_YIELD_BUDGET_MS ??
-          "10000",
-      ),
-    ),
     largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
     largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
     passBudgetMs: blockScanPassBudgetMs,
@@ -2092,6 +2097,8 @@ async function main(): Promise<void> {
     solveReserveMs: blockScanSolveReserveMs,
     exactConcurrency: blockScanExactConcurrency,
     exactProbeTimeoutMs: blockScanExactProbeTimeoutMs,
+    exactRpcBatchSize: blockScanExactRpcBatchSize,
+    exactRpcBatchConcurrency: blockScanExactRpcBatchConcurrency,
     executorAddress: config.botvmAddress,
     // Physical venue identities touched by the block's own logs: pool
     // address for pair venues, poolId for the singleton-manager venues.
@@ -2246,6 +2253,8 @@ async function main(): Promise<void> {
       largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
       exactConcurrency: blockScanExactConcurrency,
       exactProbeTimeoutMs: blockScanExactProbeTimeoutMs,
+      exactRpcBatchSize: blockScanExactRpcBatchSize,
+      exactRpcBatchConcurrency: blockScanExactRpcBatchConcurrency,
       passBudgetMs: blockScanPassBudgetMs,
       refineCandidates: blockScanRefineCandidates,
       solveConcurrency: blockScanSolveConcurrency,

@@ -519,6 +519,8 @@ export interface ExactQuoteStateFactoryInput {
   readonly sourceBlockHash: string;
   readonly signal: AbortSignal;
   readonly deadlineAtMs: number;
+  readonly maxBatchSize: number;
+  readonly maxConcurrentBatches: number;
   readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
 }
 
@@ -557,22 +559,6 @@ export interface BlockScanRuntimeLoopDependencies {
    * head cadence even after enumeration has completed successfully.
    */
   readonly exactRefineHardBudgetMs?: number;
-  /**
-   * When the background N-1 producer is behind the newest scheduled head,
-   * exact probes yield the shared reth transport for up to this many
-   * milliseconds per batch. Heavy candidate blocks (900+ probes) can occupy
-   * reth for 15-20s and push the producer's N-1 publication past the next
-   * head cadence; this gate gives the producer the transport it needs to
-   * close the gap while keeping exact work bounded.
-   */
-  readonly exactProducerLagYieldMs?: number;
-  /**
-   * Total wall-clock budget for exact probe yielding to the producer within
-   * one pass. The per-batch yield gives the producer a short reth window;
-   * this bounds how much of the pass budget exact may donate overall so a
-   * persistently lagging producer cannot starve exact forever.
-   */
-  readonly exactProducerLagYieldBudgetMs?: number;
   readonly routeTelemetry?: BlockScanEnumerationSolverTelemetrySink;
   readonly largeGraphEdgeThreshold: number;
   readonly largeGraphPassBudgetMs: number;
@@ -625,6 +611,10 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly exactConcurrency: number;
   /** Per-candidate exact deadline inside the pass-wide exact deadline. */
   readonly exactProbeTimeoutMs: number;
+  /** Maximum source-pinned eth_call items in one exact HTTP batch. */
+  readonly exactRpcBatchSize?: number;
+  /** Physical exact HTTP batches allowed alongside the producer reserve. */
+  readonly exactRpcBatchConcurrency?: number;
   /** BotVM execution contract supplied to generic route quote contexts. */
   readonly executorAddress: string;
   /**
@@ -2685,24 +2675,12 @@ export class BlockScanRuntimeLoop {
           " -> source=" + exactSource.number + ":" +
           exactSource.generation,
       );
-      const producerLagBlocks = (): number => {
-        const snapshot = currentRuntimeCoordinator.latestPricingSnapshot();
-        const producerSource = snapshot?.sourceBlock ?? -1;
-        const newestHead = this.latestScheduledHead ?? blockNumber;
-        return Math.max(0, newestHead - producerSource);
-      };
       /*
-       * The exact probe transport rides the shared reth permit scheduler
-       * directly.  The shared drain order already serves producer-critical
-       * and producer-bulk lanes before exact, and the producer reserve is
-       * carved out of the same permit pool, so exact batches can never starve
-       * the N-1 producer.  A producer-lag yield gate was removed because it
-       * starved exact instead: the N-1 producer's critical flag covers the
-       * whole 7-8s generation (header + state prep), so every exact batch
-       * yielded past the 1.5s probe budget and 32/32 probes failed with
-       * batchesSent=0.  Exact loads are 16-32 calls per block (one HTTP
-       * batch, ~50ms against local reth); direct permit acquisition is both
-       * safe and the only way exact can meet its probe deadline.
+       * Exact rides the shared source-pinned transport scheduler. Its physical
+       * slots are independent from logical candidate fan-out, while the
+       * scheduler permanently reserves producer capacity and drains producer
+       * lanes first. Exact may therefore use all configured residual slots
+       * without a second producer-lag throttle serializing its batches.
        */
       const exactTransportScheduler: Pick<
         RethTransportScheduler,
@@ -2726,6 +2704,9 @@ export class BlockScanRuntimeLoop {
         sourceBlockHash: exactSourceBlockHash,
         signal: passSignal,
         deadlineAtMs: passDeadlineAtMs,
+        maxBatchSize: this.deps.exactRpcBatchSize ?? 64,
+        maxConcurrentBatches:
+          this.deps.exactRpcBatchConcurrency ?? 16,
         transportScheduler: exactTransportScheduler,
       };
       exactQuoteState = this.deps.exactQuoteStateFactory
@@ -2736,12 +2717,9 @@ export class BlockScanRuntimeLoop {
             {
               signal: passSignal,
               deadlineAtMs: passDeadlineAtMs,
-              maxBatchSize: 32,
-              maxConcurrentBatches: 8,
-              maxConcurrentBatchesProvider: () =>
-                this.producerCriticalActive || producerLagBlocks() >= 2
-                  ? 2
-                  : 8,
+              maxBatchSize: exactFactoryInput.maxBatchSize,
+              maxConcurrentBatches:
+                exactFactoryInput.maxConcurrentBatches,
               transportScheduler: exactTransportScheduler,
             },
           );
@@ -3550,41 +3528,6 @@ async function waitForTaskUntil(
       (error) => finish(undefined, error),
     );
   });
-}
-
-/**
- * Exact-probe producer-yield predicate. The N pass's exact_refine batches and
- * the background N-1 producer's canonical-activity read both hit reth; when
- * they overlap, the producer generation stretches to 12-18s, its sequential
- * publication chain delays the next passes' state stage past the head cadence,
- * and enumeration_not_ran follows. Exact yields while the producer generation
- * is in progress (event-driven, not only when the producer is >=2 blocks
- * behind) so the coarse chain keeps its 2-5s cadence.
- */
-export function exactProducerYieldShouldWait(input: {
-  readonly producerCriticalActive: boolean;
-  readonly producerLagBlocks: number;
-}): boolean {
-  return input.producerCriticalActive || input.producerLagBlocks >= 2;
-}
-
-export class ExactProbeProducerBusyError extends Error {
-  readonly code = "exact_probe_producer_busy" as const;
-
-  constructor() {
-    super("exact probe skipped: blockscan producer critical");
-    this.name = "ExactProbeProducerBusyError";
-  }
-}
-
-/** Fail closed instead of issuing another exact batch after its yield cap. */
-export function assertExactProbeProducerAvailable(input: {
-  readonly producerCriticalActive: boolean;
-  readonly producerLagBlocks: number;
-}): void {
-  if (exactProducerYieldShouldWait(input)) {
-    throw new ExactProbeProducerBusyError();
-  }
 }
 
 /** Resolve the exact-stage deadline without extending the outer pass budget. */

@@ -68,13 +68,6 @@ export function isPassScopedExactStateBackend(
 export interface PinnedRethQuoteBackendOptions {
   readonly maxBatchSize?: number;
   readonly maxConcurrentBatches?: number;
-  /**
-   * Dynamic concurrency limit consulted on every flush. While the N-1
-   * producer lags the head, the runtime supplies a low limit (1-2) so exact
-   * batches cannot saturate reth; once the producer catches up it returns
-   * the normal limit. When absent the static maxConcurrentBatches applies.
-   */
-  readonly maxConcurrentBatchesProvider?: () => number;
   /** Physical lane used when acquiring the shared reth transport permit. */
   readonly transportLane?: "producer-bulk" | "exact";
   /** Human-readable scope included in diagnostics and abort errors. */
@@ -100,9 +93,6 @@ export class PinnedRethQuoteBackend
 {
   private readonly maxBatchSize: number;
   private readonly maxConcurrentBatches: number;
-  private readonly maxConcurrentBatchesProvider:
-    | (() => number)
-    | undefined;
   private readonly transportLane: "producer-bulk" | "exact";
   private readonly scopeLabel: string;
   private readonly allowSingleCallFallback: boolean;
@@ -130,9 +120,14 @@ export class PinnedRethQuoteBackend
   private batchesSent = 0;
   private batchedItems = 0;
   private batchLatencyMs = 0;
+  private maxBatchItemsSent = 0;
+  private peakInFlightBatches = 0;
   private abortedBatches = 0;
   private completedAfterScopeAbort = 0;
   private transportQueueWaitMs = 0;
+  private maxTransportQueueWaitMs = 0;
+  private peakSchedulerActiveTotal = 0;
+  private peakSchedulerLaneActive = 0;
   private batchFailures = 0;
   private singleCallFallbacks = 0;
   private lastDrainMs = 0;
@@ -154,8 +149,6 @@ export class PinnedRethQuoteBackend
      */
     this.maxBatchSize = options.maxBatchSize ?? 32;
     this.maxConcurrentBatches = options.maxConcurrentBatches ?? 8;
-    this.maxConcurrentBatchesProvider =
-      options.maxConcurrentBatchesProvider;
     this.transportLane = options.transportLane ?? "exact";
     this.scopeLabel = options.scopeLabel ?? "exact quote";
     this.allowSingleCallFallback = options.allowSingleCallFallback ??
@@ -447,13 +440,18 @@ export class PinnedRethQuoteBackend
     batchesSent: number;
     batchedItems: number;
     batchLatencyMs: number;
+    maxBatchItemsSent: number;
     pendingItems: number;
     liveItems: number;
     inFlightBatches: number;
+    peakInFlightBatches: number;
     activeTransports: number;
     abortedBatches: number;
     completedAfterScopeAbort: number;
     transportQueueWaitMs: number;
+    maxTransportQueueWaitMs: number;
+    peakSchedulerActiveTotal: number;
+    peakSchedulerLaneActive: number;
     batchFailures: number;
     singleCallFallbacks: number;
     drainMs: number;
@@ -471,25 +469,24 @@ export class PinnedRethQuoteBackend
       allowSingleCallFallback: this.allowSingleCallFallback,
       maxBatchSize: this.maxBatchSize,
       maxConcurrentBatches: this.maxConcurrentBatches,
-      currentConcurrentBatchLimit: Math.max(
-        1,
-        Math.floor(
-          this.maxConcurrentBatchesProvider?.() ??
-            this.maxConcurrentBatches,
-        ),
-      ),
+      currentConcurrentBatchLimit: this.maxConcurrentBatches,
       totalCalls: this.totalCalls,
       memoHits: this.memoHits,
       batchesSent: this.batchesSent,
       batchedItems: this.batchedItems,
       batchLatencyMs: this.batchLatencyMs,
+      maxBatchItemsSent: this.maxBatchItemsSent,
       pendingItems: this.pending.length,
       liveItems: this.liveItems.size,
       inFlightBatches: this.inFlightBatches,
+      peakInFlightBatches: this.peakInFlightBatches,
       activeTransports: this.activeTransports.size,
       abortedBatches: this.abortedBatches,
       completedAfterScopeAbort: this.completedAfterScopeAbort,
       transportQueueWaitMs: this.transportQueueWaitMs,
+      maxTransportQueueWaitMs: this.maxTransportQueueWaitMs,
+      peakSchedulerActiveTotal: this.peakSchedulerActiveTotal,
+      peakSchedulerLaneActive: this.peakSchedulerLaneActive,
       batchFailures: this.batchFailures,
       singleCallFallbacks: this.singleCallFallbacks,
       drainMs: this.lastDrainMs,
@@ -627,13 +624,7 @@ export class PinnedRethQuoteBackend
   }
 
   private pump(): void {
-    const concurrencyLimit = Math.max(
-      1,
-      Math.floor(
-        this.maxConcurrentBatchesProvider?.() ??
-        this.maxConcurrentBatches,
-      ),
-    );
+    const concurrencyLimit = this.maxConcurrentBatches;
     while (
       !this.closed &&
       this.pending.length > 0 &&
@@ -670,6 +661,10 @@ export class PinnedRethQuoteBackend
       if (alive.length === 0) continue;
 
       this.inFlightBatches++;
+      this.peakInFlightBatches = Math.max(
+        this.peakInFlightBatches,
+        this.inFlightBatches,
+      );
       const task = this.flushBatch(alive).finally(() => {
         this.inFlightBatches--;
         this.activeFlushes.delete(task);
@@ -704,8 +699,20 @@ export class PinnedRethQuoteBackend
       ? this.options.transportScheduler.run(
           this.transportLane,
           signal,
-          async ({ queueWaitMs }) => {
+          async ({ queueWaitMs, activeTotal, activeByLane }) => {
             this.transportQueueWaitMs += queueWaitMs;
+            this.maxTransportQueueWaitMs = Math.max(
+              this.maxTransportQueueWaitMs,
+              queueWaitMs,
+            );
+            this.peakSchedulerActiveTotal = Math.max(
+              this.peakSchedulerActiveTotal,
+              activeTotal,
+            );
+            this.peakSchedulerLaneActive = Math.max(
+              this.peakSchedulerLaneActive,
+              activeByLane[this.transportLane],
+            );
             return work();
           },
         )
@@ -795,6 +802,10 @@ export class PinnedRethQuoteBackend
       response = await this.runTransport(controller.signal, () => {
         this.batchesSent++;
         this.batchedItems += items.length;
+        this.maxBatchItemsSent = Math.max(
+          this.maxBatchItemsSent,
+          items.length,
+        );
         return postJsonRpc(this.rpcUrl, payloads as never, controller.signal);
       });
     } catch (transportError) {
