@@ -170,7 +170,7 @@ export function issueRuntimeObservationOwnerV1(input: Readonly<{
   let bound = false;
   let ordinal = BigInt(store.readAppendLog(HEAD_NAMESPACE).length);
   const admissions = new WeakMap<object, AdmissionStateV1>();
-  const admissionsById = new Map<Hash, AdmissionStateV1>();
+  const sealedTerminals = new WeakMap<object, AdmissionStateV1>();
 
   const assertOpen = (): void => {
     if (closed) throw new TypeError("runtime observation owner is closed");
@@ -213,7 +213,6 @@ export function issueRuntimeObservationOwnerV1(input: Readonly<{
           };
           const handle = Object.freeze(Object.create(null));
           admissions.set(handle, state);
-          admissionsById.set(admissionId, state);
           return handle;
         },
         readEligibleHeadBinding(handle: unknown) {
@@ -247,13 +246,16 @@ export function issueRuntimeObservationOwnerV1(input: Readonly<{
           const state = eligibleHead !== null && typeof eligibleHead === "object" ? admissions.get(eligibleHead) : undefined;
           if (state === undefined) throw new TypeError("runtime admitted head is not owner-issued");
           const evidence = readIssuedProducerHeadTerminalCapabilityV1(terminal);
-          if (evidence.terminal.acceptedId !== state.admissionId
-            || evidence.terminal.ordinal !== state.ordinal
+          if (evidence.terminal.ordinal !== state.ordinal
             || evidence.terminal.head.hash !== state.head.hash
             || evidence.terminal.revision !== state.revision) {
             throw new TypeError("runtime terminal admission mismatch");
           }
+          if (state.terminal !== null && state.terminal !== terminal) {
+            throw new TypeError("runtime terminal capability changed after seal");
+          }
           state.terminal = terminal;
+          sealedTerminals.set(terminal, state);
         },
       });
 
@@ -261,12 +263,9 @@ export function issueRuntimeObservationOwnerV1(input: Readonly<{
         appendTerminal({ terminal: terminalCapability }) {
           assertOpen();
           const evidence = readIssuedProducerHeadTerminalCapabilityV1(terminalCapability);
-          const state = admissionsById.get(evidence.terminal.acceptedId);
-          if (state === undefined || state.appended) {
+          const state = sealedTerminals.get(terminalCapability);
+          if (state === undefined || state.terminal !== terminalCapability || state.appended) {
             throw new TypeError("runtime terminal admission is missing or already appended");
-          }
-          if (state.terminal !== null && state.terminal !== terminalCapability) {
-            throw new TypeError("runtime terminal capability changed after seal");
           }
           const facts = evidence.facts === null
             ? null
