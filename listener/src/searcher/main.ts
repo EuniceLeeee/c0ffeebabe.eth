@@ -1270,6 +1270,7 @@ async function main(): Promise<void> {
     `[searcher/blockscan] enabled=${enableBlockScan ? "on" : "off"} ` +
       `submit=${config.blockScanSubmit ? "on" : "off"} ` +
       `solveConcurrency=${blockScanSolveConcurrency} ` +
+      `solverQuoteConcurrency=${blockScanSolverSearch.quoteConcurrency} ` +
       `solverGridHalfWidth=${blockScanSolverSearch.gridHalfWidth} ` +
       `solverGssMaxTries=${blockScanSolverSearch.gssMaxTries} ` +
       `refineCandidates=${blockScanRefineCandidates} ` +
@@ -2103,6 +2104,7 @@ async function main(): Promise<void> {
     solveReserveMs: blockScanSolveReserveMs,
     solverGridHalfWidth: blockScanSolverSearch.gridHalfWidth,
     solverGssMaxTries: blockScanSolverSearch.gssMaxTries,
+    solverQuoteConcurrency: blockScanSolverSearch.quoteConcurrency,
     exactConcurrency: blockScanExactConcurrency,
     exactProbeTimeoutMs: blockScanExactProbeTimeoutMs,
     exactRpcBatchSize: blockScanExactRpcBatchSize,
@@ -2267,6 +2269,7 @@ async function main(): Promise<void> {
       refineCandidates: blockScanRefineCandidates,
       solveConcurrency: blockScanSolveConcurrency,
       solveReserveMs: blockScanSolveReserveMs,
+      solverQuoteConcurrency: blockScanSolverSearch.quoteConcurrency,
       solverGridHalfWidth: blockScanSolverSearch.gridHalfWidth,
       solverGssMaxTries: blockScanSolverSearch.gssMaxTries,
       nMinusOneFallback: blockScanNMinusOneFallback,

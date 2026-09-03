@@ -1,10 +1,12 @@
 export interface BlockScanSolverSearchConfig {
   readonly gridHalfWidth: number;
   readonly gssMaxTries: number;
+  readonly quoteConcurrency: number;
 }
 
 const DEFAULT_GRID_HALF_WIDTH = 2;
 const DEFAULT_GSS_MAX_TRIES = 4;
+const DEFAULT_QUOTE_CONCURRENCY = 16;
 
 /**
  * Block-scan has a smaller search budget than the generic/offline solver.
@@ -27,6 +29,13 @@ export function resolveBlockScanSolverSearchConfig(
       DEFAULT_GSS_MAX_TRIES,
       "SEARCHER_BLOCKSCAN_SOLVER_GSS_MAX_TRIES",
       2,
+      64,
+    ),
+    quoteConcurrency: readInteger(
+      env.SEARCHER_BLOCKSCAN_SOLVER_QUOTE_CONCURRENCY,
+      DEFAULT_QUOTE_CONCURRENCY,
+      "SEARCHER_BLOCKSCAN_SOLVER_QUOTE_CONCURRENCY",
+      1,
       64,
     ),
   });

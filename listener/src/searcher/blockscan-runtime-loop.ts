@@ -29,10 +29,11 @@ import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
 import { emitEvent } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
 import { type TokenEdge } from "./planner/token-graph.js";
-import type {
+import {
   AnvilSolver,
-  ResolvedPlan,
-  SolverTiming,
+  type ResolvedPlan,
+  type SolverProbe,
+  type SolverTiming,
 } from "./solver/solver.js";
 import type { StrictProductionRuntimeSession } from
   "./strict-production-runtime-session.js";
@@ -610,6 +611,11 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly solverGridHalfWidth: number;
   /** Block-scan-only golden-section exact-evaluation cap. */
   readonly solverGssMaxTries: number;
+  /**
+   * Logical plan concurrency for quote-only Phase 1. These workers share the
+   * source-pinned exact backend and do not allocate or fork Anvil resources.
+   */
+  readonly solverQuoteConcurrency: number;
   /**
    * Logical candidate fan-out for exact refinement. The source-pinned quote
    * backend still owns the much smaller physical HTTP batch/concurrency caps,
@@ -1712,6 +1718,7 @@ export class BlockScanRuntimeLoop {
     let solverQuoteMs = 0;
     let solverPlanBuildMs = 0;
     let solverPlans = 0;
+    let solverQuoteWorkers = 0;
     let solverAmountPoints = 0;
     let solverHopExactCalls = 0;
     let solverGssPoints = 0;
@@ -1856,6 +1863,8 @@ export class BlockScanRuntimeLoop {
           solverQuoteMs,
           solverPlanBuildMs,
           solverPlans,
+          solverQuoteConcurrency: this.deps.solverQuoteConcurrency,
+          solverQuoteWorkers,
           solverAmountPoints,
           solverHopExactCalls,
           solverGssPoints,
@@ -3018,6 +3027,22 @@ export class BlockScanRuntimeLoop {
         item: PlannedBlockScanSolve;
         resolved: ResolvedPlan;
       }> = [];
+      const quoteOnlyProbe: SolverProbe = Object.freeze({
+        executor: this.deps.executorAddress,
+        async simulate() {
+          throw new Error(
+            "quote-only block-scan solver must not invoke phase-2 simulation",
+          );
+        },
+      });
+      solverQuoteWorkers = Math.min(
+        solverQueue.length,
+        Math.max(1, Math.floor(this.deps.solverQuoteConcurrency)),
+      );
+      const quoteSolvers = Array.from(
+        { length: solverQuoteWorkers },
+        () => new AnvilSolver(),
+      );
       const forkedStates = new Set<AnvilStateBackend>();
       const ensureExecutionWorkerForked = async (
         worker: BlockScanExecutionWorker,
@@ -3041,8 +3066,8 @@ export class BlockScanRuntimeLoop {
           },
         );
       };
-      const workerLoop = async (
-        worker: BlockScanExecutionWorker,
+      const quoteWorkerLoop = async (
+        solver: AnvilSolver,
       ): Promise<void> => {
         for (;;) {
           const queued = solverQueue[cursor++];
@@ -3066,13 +3091,13 @@ export class BlockScanRuntimeLoop {
             let deferredCandidates: readonly ResolvedPlan[] = [];
             recordSolver(item.opp);
             solverPlans++;
-            const solved = await worker.solver.solve(
+            const solved = await solver.solve(
               item.plan,
               // Phase-1 quotes are current-N view reads; run them through the
               // same pinned reth batch backend as refinement so Anvil is only
               // forked right before final simulation.
               exactQuoteStateRef,
-              worker.simulator,
+              quoteOnlyProbe,
               {
                 deadlineMs: Math.max(1, passDeadlineAtMs - Date.now()),
                 deadlineAtMs: passDeadlineAtMs,
@@ -3168,7 +3193,7 @@ export class BlockScanRuntimeLoop {
       };
       const solverStartedAt = performance.now();
       try {
-        await Promise.all(blockScanExecutionWorkers.map(workerLoop));
+        await Promise.all(quoteSolvers.map(quoteWorkerLoop));
       } finally {
         solverWallMs = Math.max(0, performance.now() - solverStartedAt);
       }
