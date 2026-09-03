@@ -228,6 +228,8 @@
     "searcher:latest-head-scheduler": "node --import tsx src/searcher/test/latest-head-scheduler.ts",
     "searcher:blockscan-route-telemetry": "node --import tsx --test src/searcher/test/blockscan-enumeration-solver-telemetry.ts",
     "searcher:blockscan-route-telemetry-performance": "node --import tsx src/searcher/test/blockscan-enumeration-solver-telemetry-performance.ts",
+    "searcher:blockscan-mid-history": "node --import tsx --test src/searcher/test/blockscan-mid-history.ts",
+    "searcher:blockscan-mid-history-performance": "node --import tsx src/searcher/test/blockscan-mid-history-performance.ts",
     "searcher:blockscan-pending-evidence": "node --import tsx src/searcher/test/blockscan-pending-evidence-contract.ts",
     "searcher:blockscan-frozen-topology": "node --import tsx src/searcher/test/blockscan-frozen-topology.ts",
     "searcher:blockscan-pricing-source-mode": "node --import tsx src/searcher/test/blockscan-pricing-source-mode.ts",

@@ -1216,18 +1216,37 @@ async function main(): Promise<void> {
     );
   }
   const eventContext = initEvents();
+  const blockScanRouteEventsPath = enableBlockScan && !blindProductionAudit
+    ? process.env.SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH ?? ""
+    : "";
+  const configuredMidHistoryPath =
+    process.env.SEARCHER_BLOCKSCAN_MID_HISTORY_PATH;
+  const blockScanMidHistoryPath = enableBlockScan && !blindProductionAudit
+    ? configuredMidHistoryPath === undefined
+      ? blockScanRouteEventsPath.endsWith(".jsonl")
+        ? `${blockScanRouteEventsPath.slice(0, -6)}.mids.jsonl`
+        : blockScanRouteEventsPath
+          ? `${blockScanRouteEventsPath}.mids.jsonl`
+          : ""
+      : configuredMidHistoryPath
+    : "";
   const blockScanRouteTelemetry =
     await initBlockScanEnumerationSolverTelemetry({
-      path: enableBlockScan && !blindProductionAudit
-        ? process.env.SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH
-        : "",
+      path: blockScanRouteEventsPath,
+      midHistoryPath: blockScanMidHistoryPath,
       eventsPath: eventContext.path,
       runId: eventContext.runId,
     });
   if (blockScanRouteTelemetry.enabled) {
     console.log(
       `[searcher/live] block-scan route events emit → ` +
-        `${process.env.SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH}`,
+        blockScanRouteEventsPath,
+    );
+  }
+  if (blockScanRouteTelemetry.enabled && blockScanMidHistoryPath) {
+    console.log(
+      `[searcher/live] block-scan mid history emit → ` +
+        blockScanMidHistoryPath,
     );
   }
   console.log(`[searcher/live] runtime_commit=${process.env.SEARCHER_RUNTIME_COMMIT ?? "unavailable"}`);
@@ -1883,6 +1902,7 @@ async function main(): Promise<void> {
   currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
     strictSessionFor,
     () => strictSessionCache.clear(),
+    (publication) => blockScanRouteTelemetry.recordPricing(publication),
   );
 
   // The ready envelope is the only startup catalog/Graph lineage. Rehydrated

@@ -15,9 +15,12 @@ import type { BlockScanRouteLocator } from "./blockscan-route-identity.js";
 
 interface WorkerOptions {
   readonly routePath: string;
+  readonly midHistoryPath: string;
   readonly eventsPath: string;
   readonly runId: string;
   readonly maxFileBytes: number;
+  readonly maxMidFileBytes: number;
+  readonly maxMidRecordBytes: number;
   readonly maxCatalogEntries: number;
   readonly minFreeBytes: number;
   readonly epochMs: number;
@@ -33,6 +36,7 @@ interface RouteGap {
 type CompactExactValue = number | null;
 
 interface RawRouteBatch {
+  readonly kind: "route";
   readonly sequence: number;
   readonly sourceBlock: number;
   readonly sourceBlockHash: string | null;
@@ -52,10 +56,65 @@ interface RawRouteBatch {
   readonly gapBefore: RouteGap | null;
 }
 
+interface CompactRouteVenueMid {
+  readonly kind: string;
+  readonly mid: number;
+  readonly fee_bps: number;
+  readonly reserve_a?: string;
+  readonly reserve_b?: string;
+  readonly sqrt_ab_x96?: string;
+  readonly liquidity?: string;
+  readonly depth_proxy: number;
+}
+
+interface MidHistoryAnchor {
+  readonly generation: number;
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+  readonly graphFingerprint: string;
+}
+
+interface MidHistoryGap {
+  readonly droppedPublications: number;
+  readonly firstDroppedBlock: number;
+  readonly lastDroppedBlock: number;
+}
+
+type RawMidBatch =
+  | (MidHistoryAnchor & {
+      readonly kind: "mid-baseline";
+      readonly sequence: number;
+      readonly mids: readonly (readonly [string, CompactRouteVenueMid])[];
+      readonly gapBefore: MidHistoryGap | null;
+    })
+  | (MidHistoryAnchor & {
+      readonly kind: "mid-delta";
+      readonly sequence: number;
+      readonly previousGeneration: number;
+      readonly previousSourceBlock: number;
+      readonly previousSourceBlockHash: string;
+      readonly updates: readonly (readonly [string, CompactRouteVenueMid])[];
+      readonly removals: readonly string[];
+      readonly gapBefore: null;
+    });
+
+type RawTelemetryBatch = RawRouteBatch | RawMidBatch;
+
 interface CatalogEntry {
   readonly ref: number;
   readonly locatorKey: string;
 }
+
+const MAX_MID_ENTRIES = 100_000;
+const MID_KINDS = new Set([
+  "v2",
+  "v3",
+  "v4",
+  "curve",
+  "curve-underlying",
+  "external-swap",
+  "protocol",
+]);
 
 const options = workerData as WorkerOptions;
 if (!parentPort) {
@@ -64,13 +123,19 @@ if (!parentPort) {
 const port = parentPort;
 
 let routeFile: Awaited<ReturnType<typeof open>> | null = null;
+let midFile: Awaited<ReturnType<typeof open>> | null = null;
 let lockFile: Awaited<ReturnType<typeof open>> | null = null;
+let midLockFile: Awaited<ReturnType<typeof open>> | null = null;
 let lockPath = "";
+let midLockPath = "";
 let lockNonce = "";
+let midLockNonce = "";
 let canonicalParent = "";
+let canonicalMidParent = "";
 let epoch = 1;
 let epochStartedAtMs = Date.now();
 let fileBytes = 0;
+let midFileBytes = 0;
 let nextRouteRef = 1;
 let failed = false;
 const catalog = new Map<string, CatalogEntry>();
@@ -92,7 +157,7 @@ port.on("message", (input: unknown) => {
   if (!isRecord(input)) return;
   if (input.type === "batch") {
     if (failed) return;
-    void handleBatch(input.batch as RawRouteBatch).catch((error) => {
+    void handleBatch(input.batch as RawTelemetryBatch).catch((error) => {
       failed = true;
       const sequence = isRecord(input.batch) &&
           typeof input.batch.sequence === "number"
@@ -103,6 +168,7 @@ port.on("message", (input: unknown) => {
         sequence,
         ok: false,
         bytesWritten: fileBytes,
+        midBytesWritten: midFileBytes,
         reason: message(error),
       });
     });
@@ -120,21 +186,49 @@ async function initialize(): Promise<void> {
   assertOptions(options);
   const routePath = resolve(options.routePath);
   const eventsPath = resolve(options.eventsPath);
-  if (routePath === eventsPath) {
-    throw new Error("route sidecar path equals formal events path");
+  const configuredMidPath = options.midHistoryPath.trim();
+  const midHistoryPath = configuredMidPath ? resolve(configuredMidPath) : null;
+  if (
+    routePath === eventsPath ||
+    midHistoryPath === routePath ||
+    midHistoryPath === eventsPath
+  ) {
+    throw new Error("route, mid history, and formal events paths must differ");
   }
   await mkdir(dirname(routePath), { recursive: true });
+  if (midHistoryPath) {
+    await mkdir(dirname(midHistoryPath), { recursive: true });
+  }
   canonicalParent = await realpath(dirname(routePath));
   const canonicalRoutePath = join(canonicalParent, basename(routePath));
   const eventsParent = await realpath(dirname(eventsPath));
   const canonicalEventsPath = join(eventsParent, basename(eventsPath));
-  if (canonicalRoutePath === canonicalEventsPath) {
-    throw new Error("route sidecar canonical path equals formal events path");
+  let canonicalMidPath: string | null = null;
+  if (midHistoryPath) {
+    canonicalMidParent = await realpath(dirname(midHistoryPath));
+    canonicalMidPath = join(canonicalMidParent, basename(midHistoryPath));
+  }
+  if (
+    canonicalRoutePath === canonicalEventsPath ||
+    canonicalMidPath === canonicalRoutePath ||
+    canonicalMidPath === canonicalEventsPath
+  ) {
+    throw new Error("route, mid history, and formal events canonical paths must differ");
   }
 
   lockPath = `${canonicalRoutePath}.lock`;
   lockNonce = `${process.pid}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-  lockFile = await acquireLock(lockPath, lockNonce);
+  lockFile = await acquireLock(lockPath, lockNonce, "route telemetry lock");
+  if (canonicalMidPath) {
+    midLockPath = `${canonicalMidPath}.lock`;
+    midLockNonce =
+      `${process.pid}:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+    midLockFile = await acquireLock(
+      midLockPath,
+      midLockNonce,
+      "mid history lock",
+    );
+  }
 
   const eventsFile = await open(
     canonicalEventsPath,
@@ -150,20 +244,44 @@ async function initialize(): Promise<void> {
     );
     const routeStat = await routeFile.stat();
     assertRegularOwnedSingleLink(routeStat, "route sidecar");
-    if (
-      routeStat.dev === eventsStat.dev &&
-      routeStat.ino === eventsStat.ino
-    ) {
+    if (sameInode(routeStat, eventsStat)) {
       throw new Error("route sidecar aliases formal events inode");
+    }
+    if (canonicalMidPath) {
+      midFile = await open(
+        canonicalMidPath,
+        constants.O_CREAT | constants.O_WRONLY | constants.O_NOFOLLOW,
+        0o600,
+      );
+      const midStat = await midFile.stat();
+      assertRegularOwnedSingleLink(midStat, "mid history file");
+      if (sameInode(midStat, eventsStat)) {
+        throw new Error("mid history file aliases formal events inode");
+      }
+      if (sameInode(midStat, routeStat)) {
+        throw new Error("mid history file aliases route sidecar inode");
+      }
     }
     await routeFile.truncate(0);
     await routeFile.sync();
+    if (midFile) {
+      await midFile.truncate(0);
+      await midFile.sync();
+    }
   } finally {
     await eventsFile.close();
   }
 }
 
-async function handleBatch(batch: RawRouteBatch): Promise<void> {
+async function handleBatch(batch: RawTelemetryBatch): Promise<void> {
+  if (batch.kind === "route") {
+    await handleRouteBatch(batch);
+    return;
+  }
+  await handleMidBatch(batch);
+}
+
+async function handleRouteBatch(batch: RawRouteBatch): Promise<void> {
   if (!routeFile) throw new Error("route sidecar is not ready");
   validateBatch(batch);
   const now = Date.now();
@@ -201,6 +319,7 @@ async function handleBatch(batch: RawRouteBatch): Promise<void> {
       catalog_epoch: epoch,
       route_ref: entry.ref,
       route_id: routeId,
+      edge_ids: locator.edgeIds,
       token_ring: locator.tokenRing,
       venue_path: locator.venuePath,
       flash_token: locator.flashToken,
@@ -263,6 +382,73 @@ async function handleBatch(batch: RawRouteBatch): Promise<void> {
     sequence: batch.sequence,
     ok: true,
     bytesWritten: fileBytes,
+    midBytesWritten: midFileBytes,
+  });
+}
+
+async function handleMidBatch(batch: RawMidBatch): Promise<void> {
+  if (!midFile) throw new Error("mid history file is not ready");
+  validateMidBatch(batch);
+  const record = batch.kind === "mid-baseline"
+    ? {
+        type: "block_scan_mid_baseline",
+        schema_version: 1,
+        run_id: options.runId,
+        sequence: batch.sequence,
+        source_block: batch.sourceBlock,
+        source_block_hash: batch.sourceBlockHash,
+        generation: batch.generation,
+        graph_fingerprint: batch.graphFingerprint,
+        mid_count: batch.mids.length,
+        mids: batch.mids,
+        ...(batch.gapBefore === null
+          ? {}
+          : {
+              dropped_publications_before:
+                batch.gapBefore.droppedPublications,
+              first_dropped_block: batch.gapBefore.firstDroppedBlock,
+              last_dropped_block: batch.gapBefore.lastDroppedBlock,
+            }),
+      }
+    : {
+        type: "block_scan_mid_delta",
+        schema_version: 1,
+        run_id: options.runId,
+        sequence: batch.sequence,
+        source_block: batch.sourceBlock,
+        source_block_hash: batch.sourceBlockHash,
+        generation: batch.generation,
+        graph_fingerprint: batch.graphFingerprint,
+        previous_source_block: batch.previousSourceBlock,
+        previous_source_block_hash: batch.previousSourceBlockHash,
+        previous_generation: batch.previousGeneration,
+        update_count: batch.updates.length,
+        removal_count: batch.removals.length,
+        updates: batch.updates,
+        removals: batch.removals,
+      };
+  const payload = `${JSON.stringify(record)}\n`;
+  const payloadBytes = Buffer.byteLength(payload);
+  if (payloadBytes > options.maxMidRecordBytes) {
+    throw new Error(`mid history record exceeds encoded cap ${payloadBytes}`);
+  }
+  if (midFileBytes + payloadBytes > options.maxMidFileBytes) {
+    throw new Error("mid history file byte cap reached");
+  }
+  const fsStats = await statfs(canonicalMidParent);
+  const freeBytes = Number(fsStats.bavail) * Number(fsStats.bsize);
+  if (!Number.isFinite(freeBytes) || freeBytes < options.minFreeBytes) {
+    throw new Error("mid history disk reserve reached");
+  }
+  await writeAll(midFile, Buffer.from(payload), midFileBytes);
+  await midFile.sync();
+  midFileBytes += payloadBytes;
+  port.postMessage({
+    type: "ack",
+    sequence: batch.sequence,
+    ok: true,
+    bytesWritten: fileBytes,
+    midBytesWritten: midFileBytes,
   });
 }
 
@@ -302,6 +488,7 @@ function encodeCountedPayload(
 async function acquireLock(
   path: string,
   nonce: string,
+  label: string,
 ): Promise<Awaited<ReturnType<typeof open>>> {
   const flags =
     constants.O_CREAT |
@@ -325,7 +512,7 @@ async function acquireLock(
   let parsed: { readonly pid?: unknown };
   try {
     existing = await existingHandle.stat();
-    assertRegularOwnedSingleLink(existing, "route telemetry lock");
+    assertRegularOwnedSingleLink(existing, label);
     parsed = JSON.parse(await existingHandle.readFile("utf8")) as {
       readonly pid?: unknown;
     };
@@ -337,15 +524,15 @@ async function acquireLock(
     !Number.isSafeInteger(parsed.pid) ||
     parsed.pid <= 0
   ) {
-    throw new Error("route telemetry lock has invalid owner pid");
+    throw new Error(`${label} has invalid owner pid`);
   }
   if (pidAlive(parsed.pid)) {
-    throw new Error(`route telemetry lock is held by live pid ${parsed.pid}`);
+    throw new Error(`${label} is held by live pid ${parsed.pid}`);
   }
   const current = await lstat(path);
-  assertRegularOwnedSingleLink(current, "route telemetry lock");
+  assertRegularOwnedSingleLink(current, label);
   if (current.dev !== existing.dev || current.ino !== existing.ino) {
-    throw new Error("route telemetry lock changed during stale-lock validation");
+    throw new Error(`${label} changed during stale-lock validation`);
   }
   await unlink(path);
   const handle = await open(path, flags, 0o600);
@@ -368,16 +555,18 @@ async function writeAll(
       position + written,
     );
     if (result.bytesWritten <= 0) {
-      throw new Error("route telemetry write made no progress");
+      throw new Error("telemetry write made no progress");
     }
     written += result.bytesWritten;
   }
 }
 
 async function cleanup(): Promise<void> {
-  const file = routeFile;
+  const files = [routeFile, midFile];
   routeFile = null;
-  if (file) {
+  midFile = null;
+  for (const file of files) {
+    if (!file) continue;
     try {
       await file.sync();
     } catch {}
@@ -385,24 +574,33 @@ async function cleanup(): Promise<void> {
       await file.close();
     } catch {}
   }
-  const lock = lockFile;
+  const locks = [lockFile, midLockFile];
   lockFile = null;
-  if (lock) {
+  midLockFile = null;
+  for (const lock of locks) {
+    if (!lock) continue;
     try {
       await lock.close();
     } catch {}
   }
-  if (lockPath && lockNonce) {
+  for (const [path, nonce] of [
+    [lockPath, lockNonce],
+    [midLockPath, midLockNonce],
+  ] as const) {
+    if (!path || !nonce) continue;
     try {
-      const parsed = JSON.parse(await readFile(lockPath, "utf8")) as {
+      const parsed = JSON.parse(await readFile(path, "utf8")) as {
         readonly nonce?: unknown;
       };
-      if (parsed.nonce === lockNonce) await unlink(lockPath);
+      if (parsed.nonce === nonce) await unlink(path);
     } catch {}
   }
 }
 
 function validateBatch(batch: RawRouteBatch): void {
+  if (batch.kind !== "route") {
+    throw new Error("invalid route telemetry kind");
+  }
   if (!Number.isSafeInteger(batch.sequence) || batch.sequence <= 0) {
     throw new Error("invalid route telemetry sequence");
   }
@@ -443,6 +641,100 @@ function validateBatch(batch: RawRouteBatch): void {
   }
 }
 
+function validateMidBatch(batch: RawMidBatch): void {
+  if (!Number.isSafeInteger(batch.sequence) || batch.sequence <= 0) {
+    throw new Error("invalid mid history sequence");
+  }
+  if (
+    !Number.isSafeInteger(batch.sourceBlock) || batch.sourceBlock < 0 ||
+    !Number.isSafeInteger(batch.generation) || batch.generation < 0 ||
+    !validText(batch.sourceBlockHash, 128) ||
+    !validText(batch.graphFingerprint, 512)
+  ) {
+    throw new Error("invalid mid history source anchor");
+  }
+  if (batch.kind === "mid-baseline") {
+    if (!Array.isArray(batch.mids) || batch.mids.length > MAX_MID_ENTRIES) {
+      throw new Error("invalid mid history baseline size");
+    }
+    validateMidEntries(batch.mids);
+    if (batch.gapBefore !== null && (
+      !Number.isSafeInteger(batch.gapBefore.droppedPublications) ||
+      batch.gapBefore.droppedPublications <= 0 ||
+      !Number.isSafeInteger(batch.gapBefore.firstDroppedBlock) ||
+      !Number.isSafeInteger(batch.gapBefore.lastDroppedBlock) ||
+      batch.gapBefore.firstDroppedBlock < 0 ||
+      batch.gapBefore.lastDroppedBlock < batch.gapBefore.firstDroppedBlock
+    )) {
+      throw new Error("invalid mid history writer gap");
+    }
+    return;
+  }
+  if (batch.kind !== "mid-delta") {
+    throw new Error("invalid mid history kind");
+  }
+  if (
+    !Number.isSafeInteger(batch.previousSourceBlock) ||
+    batch.previousSourceBlock < 0 ||
+    !Number.isSafeInteger(batch.previousGeneration) ||
+    batch.previousGeneration < 0 ||
+    !validText(batch.previousSourceBlockHash, 128) ||
+    !Array.isArray(batch.updates) ||
+    !Array.isArray(batch.removals) ||
+    batch.updates.length + batch.removals.length > MAX_MID_ENTRIES
+  ) {
+    throw new Error("invalid mid history delta");
+  }
+  validateMidEntries(batch.updates);
+  const updateKeys = new Set(batch.updates.map(([edgeKey]) => edgeKey));
+  const removalKeys = new Set<string>();
+  for (const edgeKey of batch.removals) {
+    if (
+      !validText(edgeKey, 1_024) ||
+      removalKeys.has(edgeKey) ||
+      updateKeys.has(edgeKey)
+    ) {
+      throw new Error("invalid mid history removal");
+    }
+    removalKeys.add(edgeKey);
+  }
+}
+
+function validateMidEntries(
+  entries: readonly (readonly [string, CompactRouteVenueMid])[],
+): void {
+  const keys = new Set<string>();
+  for (const entry of entries) {
+    if (!Array.isArray(entry) || entry.length !== 2) {
+      throw new Error("invalid mid history entry");
+    }
+    const [edgeKey, mid] = entry;
+    if (!validText(edgeKey, 1_024) || keys.has(edgeKey) || !validMid(mid)) {
+      throw new Error("invalid mid history entry");
+    }
+    keys.add(edgeKey);
+  }
+}
+
+function validMid(mid: CompactRouteVenueMid): boolean {
+  if (!isRecord(mid)) return false;
+  return typeof mid.kind === "string" && MID_KINDS.has(mid.kind) &&
+    typeof mid.mid === "number" && Number.isFinite(mid.mid) && mid.mid > 0 &&
+    typeof mid.fee_bps === "number" && Number.isFinite(mid.fee_bps) &&
+    mid.fee_bps >= 0 &&
+    typeof mid.depth_proxy === "number" &&
+    Number.isFinite(mid.depth_proxy) && mid.depth_proxy >= 0 &&
+    validOptionalIntegerString(mid.reserve_a) &&
+    validOptionalIntegerString(mid.reserve_b) &&
+    validOptionalIntegerString(mid.sqrt_ab_x96) &&
+    validOptionalIntegerString(mid.liquidity);
+}
+
+function validOptionalIntegerString(value: unknown): boolean {
+  return value === undefined ||
+    (typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value));
+}
+
 function validCompactExactDiagnostics(
   values: readonly CompactExactValue[],
 ): boolean {
@@ -465,6 +757,7 @@ function validCompactExactDiagnostics(
 
 function locatorKey(locator: BlockScanRouteLocator): string {
   return JSON.stringify([
+    locator.edgeIds,
     locator.tokenRing,
     locator.venuePath,
     locator.flashToken,
@@ -482,9 +775,26 @@ function assertRegularOwnedSingleLink(
   }
 }
 
+function sameInode(
+  left: Awaited<ReturnType<typeof stat>>,
+  right: Awaited<ReturnType<typeof stat>>,
+): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
 function assertOptions(value: WorkerOptions): void {
+  if (
+    !validText(value.routePath, 4_096) ||
+    typeof value.midHistoryPath !== "string" ||
+    !validText(value.eventsPath, 4_096) ||
+    !validText(value.runId, 256)
+  ) {
+    throw new Error("invalid route telemetry worker identity");
+  }
   for (const [label, numeric] of [
     ["maxFileBytes", value.maxFileBytes],
+    ["maxMidFileBytes", value.maxMidFileBytes],
+    ["maxMidRecordBytes", value.maxMidRecordBytes],
     ["maxCatalogEntries", value.maxCatalogEntries],
     ["minFreeBytes", value.minFreeBytes],
     ["epochMs", value.epochMs],
@@ -494,6 +804,11 @@ function assertOptions(value: WorkerOptions): void {
       throw new Error(`invalid route telemetry ${label}`);
     }
   }
+}
+
+function validText(value: unknown, maxLength: number): value is string {
+  return typeof value === "string" && value.length > 0 &&
+    value.length <= maxLength;
 }
 
 function pidAlive(pid: number): boolean {

@@ -7,6 +7,7 @@ const ROUTE_ID_DOMAIN = "blockscan-route-v1";
 
 export interface BlockScanRouteLocator {
   readonly routeId: string;
+  readonly edgeIds: readonly string[];
   readonly tokenRing: readonly string[];
   readonly venuePath: readonly (readonly [adapterId: string, venueId: string])[];
   readonly flashToken: string;
@@ -48,6 +49,7 @@ export function blockScanRouteLocator(
       ];
   return Object.freeze({
     routeId: blockScanRouteId(edges),
+    edgeIds: Object.freeze(edges.map(blockScanEdgeKey)),
     tokenRing: Object.freeze(tokenRing),
     venuePath: Object.freeze(
       edges.map((edge) =>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -164,6 +164,7 @@ test("block-activity renders every schema-v2 route through exact, planner, solve
       catalog_epoch: 1,
       route_ref: index + 1,
       route_id: routeId,
+      edge_ids: [`edge-${index + 1}`],
       token_ring: [WETH, USDC, WETH],
       venue_path: [["univ3-swap", `0xpool-${index + 1}`]],
       flash_token: WETH,
@@ -209,7 +210,7 @@ test("block-activity renders every schema-v2 route through exact, planner, solve
     );
     assert.match(
       stdout,
-      /rank=1 ref=1 route_id=sha256:v2-route-1 .*exact_status=positive exact_attempted=true exact_margin_bps=125 exact_reason=null planner_entered=true .*selected_for_solver=true final_sim_status=pass final_sim_profit=42 ev_decision=reject ev_reason=below_ev_gate net_ev_wei=-7/,
+      /rank=1 ref=1 route_id=sha256:v2-route-1 .*edge_ids=\["edge-1"\] exact_status=positive exact_attempted=true exact_margin_bps=125 exact_reason=null planner_entered=true .*selected_for_solver=true final_sim_status=pass final_sim_profit=42 ev_decision=reject ev_reason=below_ev_gate net_ev_wei=-7/,
     );
     assert.match(
       stdout,
@@ -224,6 +225,114 @@ test("block-activity renders every schema-v2 route through exact, planner, solve
       stdout,
       /rank=22 ref=22 route_id=sha256:v2-route-22 .*selected_for_solver=false/,
     );
+  });
+});
+
+test("block-activity reconstructs the route mid table from baseline, updates, and removals", async () => {
+  await withFixture(async ({ root, eventsPath, logPath, routeEventsPath }) => {
+    const historyPath = join(root, "mids.jsonl");
+    const midOutPath = join(root, "mid-table.json");
+    await writeFile(routeEventsPath, [
+      routeCatalogWithEdges(1, ROUTE_A, ["edge-a", "edge-c"]),
+      routeLifecycleWithMid(99, 98, [1]),
+    ].join("\n"));
+    await writeFile(historyPath, [
+      midBaseline(1, 97, [
+        ["edge-a", compactMid(2)],
+        ["edge-b", compactMid(3)],
+        ["edge-c", compactMid(4)],
+      ]),
+      midDelta(2, 97, 98, [["edge-a", compactMid(2.5)]], ["edge-b"]),
+    ].join("\n") + "\n");
+
+    const stdout = await runBlockActivity(
+      eventsPath,
+      logPath,
+      routeEventsPath,
+      historyPath,
+      midOutPath,
+    );
+
+    assert.match(
+      stdout,
+      /Mid table: status=complete source_block=98 .*mids=2 baseline=97 deltas=1/,
+    );
+    assert.match(
+      stdout,
+      /edge_ids=\["edge-a","edge-c"\] edge_mids=\[\["edge-a",2.5\],\["edge-c",4\]\]/,
+    );
+    const output = JSON.parse(await readFile(midOutPath, "utf8")) as
+      Record<string, unknown>;
+    assert.equal(output.source_block, 98);
+    assert.equal(output.baseline_source_block, 97);
+    assert.equal(output.applied_deltas, 1);
+    assert.equal(output.mid_count, 2);
+    assert.deepEqual(output.mids, [
+      ["edge-a", compactMid(2.5)],
+      ["edge-c", compactMid(4)],
+    ]);
+  });
+});
+
+test("block-activity fails closed when its required mid block falls in a writer gap", async () => {
+  await withFixture(async ({ root, eventsPath, logPath, routeEventsPath }) => {
+    const historyPath = join(root, "mids.jsonl");
+    await writeFile(routeEventsPath, [
+      routeCatalogWithEdges(1, ROUTE_A, ["edge-a"]),
+      routeLifecycleWithMid(99, 98, [1]),
+    ].join("\n"));
+    await writeFile(historyPath, [
+      midBaseline(1, 97, [["edge-a", compactMid(2)]]),
+      midBaseline(2, 100, [["edge-z", compactMid(9)]], {
+        dropped: 2,
+        first: 98,
+        last: 99,
+      }),
+    ].join("\n") + "\n");
+
+    const stdout = await runBlockActivity(
+      eventsPath,
+      logPath,
+      routeEventsPath,
+      historyPath,
+    );
+
+    assert.match(stdout, /Mid table: status=unknown_not_reconstructable/);
+    assert.match(stdout, /reason=block 98 is not reconstructable/);
+    assert.match(stdout, /edge_mids=unknown_mid_table/);
+  });
+});
+
+test("block-activity accepts a post-gap baseline as a new mid epoch", async () => {
+  await withFixture(async ({ root, eventsPath, logPath, routeEventsPath }) => {
+    const historyPath = join(root, "mids.jsonl");
+    await writeFile(routeEventsPath, [
+      routeCatalogWithEdges(1, ROUTE_A, ["edge-z"]),
+      routeLifecycleWithMid(101, 100, [1]),
+    ].join("\n"));
+    await writeFile(historyPath, [
+      midBaseline(1, 97, [["edge-a", compactMid(2)]]),
+      midBaseline(2, 100, [["edge-z", compactMid(9)]], {
+        dropped: 2,
+        first: 98,
+        last: 99,
+      }),
+    ].join("\n") + "\n");
+
+    const stdout = await runBlockActivity(
+      eventsPath,
+      logPath,
+      routeEventsPath,
+      historyPath,
+      undefined,
+      102,
+    );
+
+    assert.match(
+      stdout,
+      /Mid table: status=complete source_block=100 .*mids=1 baseline=100 deltas=0/,
+    );
+    assert.match(stdout, /edge_mids=\[\["edge-z",9\]\]/);
   });
 });
 
@@ -556,13 +665,16 @@ async function runBlockActivity(
   eventsPath: string,
   logPath: string,
   routeEventsPath?: string,
+  midHistoryPath?: string,
+  midOutPath?: string,
+  block = 100,
 ): Promise<string> {
   const args = [
     "--import",
     "tsx",
     cliPath,
     "--block",
-    "100",
+    String(block),
     "--events",
     eventsPath,
     "--blockscan-log",
@@ -570,6 +682,12 @@ async function runBlockActivity(
   ];
   if (routeEventsPath !== undefined) {
     args.push("--route-events", routeEventsPath);
+  }
+  if (midHistoryPath !== undefined) {
+    args.push("--mid-history", midHistoryPath);
+  }
+  if (midOutPath !== undefined) {
+    args.push("--mid-out", midOutPath);
   }
   const result = await execFileAsync(process.execPath, args, {
     cwd: analysisRoot,
@@ -626,6 +744,120 @@ function routeCatalog(
     venue_path: venuePath,
     flash_token: tokenRing[0],
   });
+}
+
+function routeCatalogWithEdges(
+  routeRef: number,
+  routeId: string,
+  edgeIds: string[],
+): string {
+  return JSON.stringify({
+    type: "block_scan_route_catalog",
+    schema_version: 2,
+    run_id: "run-a",
+    catalog_epoch: 1,
+    route_ref: routeRef,
+    route_id: routeId,
+    edge_ids: edgeIds,
+    token_ring: [WETH, ...edgeIds.map(() => USDC)],
+    venue_path: edgeIds.map((_, index) => [
+      "univ3-swap",
+      `0xpool-${index + 1}`,
+    ]),
+    flash_token: WETH,
+  });
+}
+
+function routeLifecycleWithMid(
+  sourceBlock: number,
+  midSourceBlock: number,
+  routeRefs: number[],
+): string {
+  return JSON.stringify({
+    type: "block_scan_enumeration_solver",
+    schema_version: 2,
+    run_id: "run-a",
+    catalog_epoch: 1,
+    source_block: sourceBlock,
+    source_block_hash: blockHash(sourceBlock),
+    mid_source_block: midSourceBlock,
+    mid_source_block_hash: blockHash(midSourceBlock),
+    pricing_mode: "n_minus_one_coarse_current_n_exact",
+    pass_outcome: "ran",
+    pass_reason: null,
+    enumeration: routeRefs,
+    exact: routeRefs.flatMap(() => [1, 1, 25, 0]),
+    planner: routeRefs,
+    solver: routeRefs,
+  });
+}
+
+function midBaseline(
+  sequence: number,
+  block: number,
+  mids: Array<[string, Record<string, unknown>]>,
+  gap?: { readonly dropped: number; readonly first: number; readonly last: number },
+): string {
+  return JSON.stringify({
+    type: "block_scan_mid_baseline",
+    schema_version: 1,
+    run_id: "run-a",
+    sequence,
+    source_block: block,
+    source_block_hash: blockHash(block),
+    generation: block,
+    graph_fingerprint: block >= 100 ? "graph-v2" : "graph-v1",
+    mid_count: mids.length,
+    mids,
+    ...(gap === undefined
+      ? {}
+      : {
+          dropped_publications_before: gap.dropped,
+          first_dropped_block: gap.first,
+          last_dropped_block: gap.last,
+        }),
+  });
+}
+
+function midDelta(
+  sequence: number,
+  previousBlock: number,
+  block: number,
+  updates: Array<[string, Record<string, unknown>]>,
+  removals: string[],
+): string {
+  return JSON.stringify({
+    type: "block_scan_mid_delta",
+    schema_version: 1,
+    run_id: "run-a",
+    sequence,
+    source_block: block,
+    source_block_hash: blockHash(block),
+    generation: block,
+    graph_fingerprint: "graph-v1",
+    previous_source_block: previousBlock,
+    previous_source_block_hash: blockHash(previousBlock),
+    previous_generation: previousBlock,
+    update_count: updates.length,
+    removal_count: removals.length,
+    updates,
+    removals,
+  });
+}
+
+function compactMid(mid: number): Record<string, unknown> {
+  return {
+    kind: "v2",
+    mid,
+    fee_bps: 30,
+    reserve_a: "1000",
+    reserve_b: "2000",
+    depth_proxy: 1000,
+  };
+}
+
+function blockHash(block: number): string {
+  return `0x${block.toString(16).padStart(64, "0")}`;
 }
 
 function escapeRegex(value: string): string {

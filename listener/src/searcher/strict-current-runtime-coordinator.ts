@@ -67,6 +67,28 @@ export interface StrictCanonicalActivityProof {
   readonly complete: true;
 }
 
+export type StrictPricingPublication =
+  | {
+      readonly kind: "baseline";
+      readonly graphFingerprint: string;
+      readonly snapshot: BlockScanStateSnapshot;
+    }
+  | {
+      readonly kind: "delta";
+      readonly graphFingerprint: string;
+      readonly previousGeneration: number;
+      readonly previousSourceBlock: number;
+      readonly previousSourceBlockHash: string;
+      readonly updates: readonly (readonly [string, RouteVenueMid])[];
+      readonly removals: readonly string[];
+      readonly snapshot: BlockScanStateSnapshot;
+    };
+
+interface StrictPricingBuildResult {
+  readonly snapshot: BlockScanStateSnapshot;
+  readonly publication: StrictPricingPublication;
+}
+
 type StrictPricingProvenance =
   | "refreshed"
   | "carried"
@@ -85,6 +107,9 @@ export class StrictCurrentRuntimeCoordinator
   constructor(
     private readonly sessionFor: StrictSessionProvider,
     private readonly resetSessions: () => void,
+    private readonly onPricingPublication?: (
+      publication: StrictPricingPublication,
+    ) => void,
   ) {}
 
   latestPricingSnapshot(): BlockScanStateSnapshot | null {
@@ -124,12 +149,12 @@ export class StrictCurrentRuntimeCoordinator
         : { touchedPools: input.touchedPools }),
     });
     assertWorkOpen(settleDeadlineAtMs, input.signal);
-    const pricing = buildStrictPricingSnapshot(session, input.graph, {
+    const built = buildStrictPricingSnapshot(session, input.graph, {
       previous,
       canonicalActivity: input.canonicalActivity,
     });
-    this.publishedPricing = pricing;
-    return completePricingResult(pricing);
+    this.publishPricing(built);
+    return completePricingResult(built.snapshot);
   }
 
   async prepare(
@@ -170,10 +195,11 @@ export class StrictCurrentRuntimeCoordinator
     const executionMs = Math.max(0, Date.now() - executionStartedAtMs);
     assertWorkOpen(input.deadlineAtMs, input.signal);
     const pricingStartedAtMs = Date.now();
-    const pricing = buildStrictPricingSnapshot(session, input.graph, {
+    const built = buildStrictPricingSnapshot(session, input.graph, {
       previous,
       canonicalActivity: input.canonicalActivity,
     });
+    const pricing = built.snapshot;
     const pricingMs = Math.max(0, Date.now() - pricingStartedAtMs) +
       Math.max(0, pricingStartedAtMs - sessionStartedAtMs);
     const funding = buildStrictFundingSnapshot(
@@ -194,7 +220,7 @@ export class StrictCurrentRuntimeCoordinator
       pricing,
       funding,
     });
-    this.publishedPricing = pricing;
+    this.publishPricing(built);
     const finishedAtMs = Date.now();
     const timing: AdapterRuntimePrepareTiming = Object.freeze({
       startedAtMs,
@@ -213,6 +239,15 @@ export class StrictCurrentRuntimeCoordinator
       issues: Object.freeze([]),
       timing,
     });
+  }
+
+  private publishPricing(built: StrictPricingBuildResult): void {
+    this.publishedPricing = built.snapshot;
+    try {
+      this.onPricingPublication?.(built.publication);
+    } catch {
+      // Historical evidence is fail-open and cannot suppress pricing.
+    }
   }
 
   async prepareCurrentNExactExecutionContext(
@@ -284,7 +319,7 @@ function buildStrictPricingSnapshot(
     readonly previous: BlockScanStateSnapshot | null;
     readonly canonicalActivity?: StrictCanonicalActivityProof;
   },
-): BlockScanStateSnapshot {
+): StrictPricingBuildResult {
   assertSessionGraphSource(session, graph);
   const sessionCoveredEdgeIds = new Set(session.edges.map(blockScanEdgeKey));
   const pricingIndex = session.pricingIndex();
@@ -324,7 +359,7 @@ function buildStrictPricingSnapshot(
     previous.pricingFamilyIdByEdgeKey.size === graph.scannerEdgeCount;
   const previousForDelta = canDeltaPublish ? previous : null;
   const fullMids = canDeltaPublish ? null : new Map<string, RouteVenueMid>();
-  const midUpdates: [string, RouteVenueMid][] = [];
+  const midUpdates: (readonly [string, RouteVenueMid])[] = [];
   const midRemovals: string[] = [];
   const fullCoverageByEdgeKey = canDeltaPublish
     ? null
@@ -371,7 +406,7 @@ function buildStrictPricingSnapshot(
   const recordMid = (edgeKey: string, mid: RouteVenueMid): void => {
     if (canDeltaPublish) {
       if (previousForDelta!.mids.get(edgeKey) !== mid) {
-        midUpdates.push([edgeKey, mid]);
+        midUpdates.push(Object.freeze([edgeKey, mid] as const));
       }
       return;
     }
@@ -580,7 +615,7 @@ function buildStrictPricingSnapshot(
     refreshedEdgeKeyHash: exactSetHash(refreshedEdgeKeys),
     carriedEdgeKeyHash: exactSetHash(carriedEdgeKeys),
   });
-  return Object.freeze({
+  const snapshot: BlockScanStateSnapshot = Object.freeze({
     generation: graph.generation,
     sourceBlock: graph.sourceBlock,
     sourceBlockHash: graph.sourceBlockHash,
@@ -605,6 +640,23 @@ function buildStrictPricingSnapshot(
     laneTelemetry: Object.freeze([]),
     familyTelemetry: Object.freeze([]),
   });
+  const publication: StrictPricingPublication = canDeltaPublish
+    ? Object.freeze({
+        kind: "delta" as const,
+        graphFingerprint,
+        previousGeneration: previousForDelta!.generation,
+        previousSourceBlock: previousForDelta!.sourceBlock,
+        previousSourceBlockHash: previousForDelta!.sourceBlockHash,
+        updates: Object.freeze(midUpdates),
+        removals: Object.freeze(midRemovals),
+        snapshot,
+      })
+    : Object.freeze({
+        kind: "baseline" as const,
+        graphFingerprint,
+        snapshot,
+      });
+  return Object.freeze({ snapshot, publication });
 }
 
 function completePricingResult(

@@ -8,11 +8,17 @@ import {
   blockScanRouteLocatorCacheKey,
   type BlockScanRouteLocator,
 } from "./blockscan-route-identity.js";
+import type {
+  StrictPricingPublication,
+} from "./strict-current-runtime-coordinator.js";
+import type { RouteVenueMid } from "./venues/mid-readers.js";
 
 const DEFAULT_QUEUE_CREDITS = 5;
-const DEFAULT_MAX_BATCH_BYTES = 512 * 1024;
+const DEFAULT_MAX_BATCH_BYTES = 1024 * 1024;
 const DEFAULT_MAX_ROUTES = 512;
 const DEFAULT_MAX_LEGS = 8;
+const DEFAULT_MAX_MID_FILE_BYTES = 2 * 1024 * 1024 * 1024;
+const DEFAULT_MAX_MID_RECORD_BYTES = 128 * 1024 * 1024;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 2_000;
 const ROUTE_LOCATOR_CACHE_ENTRIES = 2_048;
 
@@ -53,6 +59,7 @@ export interface BlockScanRouteTelemetrySink {
       | "scheduler_coalesced"
       | "shutdown_pending_dropped";
   }): void;
+  recordPricing(publication: StrictPricingPublication): void;
   shutdown(timeoutMs?: number): Promise<void>;
   telemetry(): BlockScanRouteWriterTelemetry;
 }
@@ -68,10 +75,15 @@ export interface BlockScanRouteWriterTelemetry {
   readonly acknowledged: number;
   readonly droppedBatches: number;
   readonly bytesWritten: number;
+  readonly midBaselines: number;
+  readonly midDeltas: number;
+  readonly droppedMidPublications: number;
+  readonly midBytesWritten: number;
 }
 
 export interface InitBlockScanRouteTelemetryOptions {
   readonly path?: string;
+  readonly midHistoryPath?: string;
   readonly eventsPath: string;
   readonly runId: string;
   readonly queueCredits?: number;
@@ -79,6 +91,8 @@ export interface InitBlockScanRouteTelemetryOptions {
   readonly maxRoutes?: number;
   readonly maxLegs?: number;
   readonly maxFileBytes?: number;
+  readonly maxMidFileBytes?: number;
+  readonly maxMidRecordBytes?: number;
   readonly maxCatalogEntries?: number;
   readonly minFreeBytes?: number;
   readonly epochMs?: number;
@@ -88,6 +102,7 @@ export interface InitBlockScanRouteTelemetryOptions {
 }
 
 interface RawRouteBatch {
+  readonly kind: "route";
   readonly sequence: number;
   readonly sourceBlock: number;
   readonly sourceBlockHash: string | null;
@@ -103,6 +118,50 @@ interface RawRouteBatch {
   readonly solver: readonly number[];
   readonly gapBefore: RouteGap | null;
 }
+
+interface CompactRouteVenueMid {
+  readonly kind: RouteVenueMid["kind"];
+  readonly mid: number;
+  readonly fee_bps: number;
+  readonly reserve_a?: string;
+  readonly reserve_b?: string;
+  readonly sqrt_ab_x96?: string;
+  readonly liquidity?: string;
+  readonly depth_proxy: number;
+}
+
+interface MidHistoryAnchor {
+  readonly generation: number;
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+  readonly graphFingerprint: string;
+}
+
+interface MidHistoryGap {
+  readonly droppedPublications: number;
+  readonly firstDroppedBlock: number;
+  readonly lastDroppedBlock: number;
+}
+
+type RawMidBatch =
+  | (MidHistoryAnchor & {
+      readonly kind: "mid-baseline";
+      readonly sequence: number;
+      readonly mids: readonly (readonly [string, CompactRouteVenueMid])[];
+      readonly gapBefore: MidHistoryGap | null;
+    })
+  | (MidHistoryAnchor & {
+      readonly kind: "mid-delta";
+      readonly sequence: number;
+      readonly previousGeneration: number;
+      readonly previousSourceBlock: number;
+      readonly previousSourceBlockHash: string;
+      readonly updates: readonly (readonly [string, CompactRouteVenueMid])[];
+      readonly removals: readonly string[];
+      readonly gapBefore: null;
+    });
+
+type RawTelemetryBatch = RawRouteBatch | RawMidBatch;
 
 interface RouteGap {
   readonly droppedBatches: number;
@@ -121,6 +180,7 @@ type WorkerReply =
       readonly sequence: number;
       readonly ok: boolean;
       readonly bytesWritten: number;
+      readonly midBytesWritten: number;
       readonly reason?: string;
     }
   | { readonly type: "shutdown-complete" };
@@ -133,6 +193,8 @@ class DisabledBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
   }
 
   recordNotStarted(_input: Parameters<BlockScanRouteTelemetrySink["recordNotStarted"]>[0]): void {}
+
+  recordPricing(_publication: StrictPricingPublication): void {}
 
   async shutdown(_timeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS): Promise<void> {}
 
@@ -148,6 +210,10 @@ class DisabledBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
       acknowledged: 0,
       droppedBatches: 0,
       bytesWritten: 0,
+      midBaselines: 0,
+      midDeltas: 0,
+      droppedMidPublications: 0,
+      midBytesWritten: 0,
     });
   }
 }
@@ -314,16 +380,19 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
   private failed = false;
   private nextSequence = 1;
   private reserved = 0;
-  private readonly queue: RawRouteBatch[] = [];
-  private outstanding: {
-    readonly batch: RawRouteBatch;
-    readonly gap: RouteGap | null;
-  } | null = null;
+  private readonly queue: RawTelemetryBatch[] = [];
+  private outstanding: RawTelemetryBatch | null = null;
   private pendingGap: RouteGap | null = null;
+  private pendingMidGap: MidHistoryGap | null = null;
+  private midAnchor: MidHistoryAnchor | null = null;
   private scheduled = 0;
   private acknowledged = 0;
   private droppedBatches = 0;
   private bytesWritten = 0;
+  private midBaselines = 0;
+  private midDeltas = 0;
+  private droppedMidPublications = 0;
+  private midBytesWritten = 0;
   private warned = false;
   private shutdownResolve: (() => void) | null = null;
   private shutdownTask: Promise<void> | null = null;
@@ -335,6 +404,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
     private readonly maxBatchBytes: number,
     private readonly maxRoutes: number,
     private readonly maxLegs: number,
+    private readonly midEnabled: boolean,
     private readonly onWarning: (message: string) => void,
   ) {
     worker.on("message", (message: WorkerReply) => this.onMessage(message));
@@ -352,7 +422,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
   }
 
   beginPass(sourceBlock: number): BlockScanRouteTelemetryPass | null {
-    if (!this.reserve(sourceBlock)) return null;
+    if (!this.reserve(sourceBlock, "route")) return null;
     return new RoutePass(
       sourceBlock,
       this.maxRoutes,
@@ -378,6 +448,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
           return;
         }
         this.enqueueReserved({
+          kind: "route",
           sequence: this.nextSequence++,
           sourceBlock: block,
           sourceBlockHash: input.sourceBlockHash,
@@ -402,8 +473,9 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
   recordNotStarted(
     input: Parameters<BlockScanRouteTelemetrySink["recordNotStarted"]>[0],
   ): void {
-    if (!this.reserve(input.sourceBlock)) return;
+    if (!this.reserve(input.sourceBlock, "route")) return;
     this.enqueueReserved({
+      kind: "route",
       sequence: this.nextSequence++,
       sourceBlock: input.sourceBlock,
       sourceBlockHash: null,
@@ -419,6 +491,58 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
       solver: Object.freeze([]),
       gapBefore: null,
     });
+  }
+
+  recordPricing(publication: StrictPricingPublication): void {
+    if (!this.midEnabled) return;
+    const sourceBlock = publication.snapshot.sourceBlock;
+    if (!this.reserve(sourceBlock, "mid")) return;
+    try {
+      const anchor: MidHistoryAnchor = Object.freeze({
+        generation: publication.snapshot.generation,
+        sourceBlock,
+        sourceBlockHash: publication.snapshot.sourceBlockHash,
+        graphFingerprint: publication.graphFingerprint,
+      });
+      const writeDelta = publication.kind === "delta" &&
+        this.midAnchor !== null &&
+        publication.previousGeneration === this.midAnchor.generation &&
+        publication.previousSourceBlock === this.midAnchor.sourceBlock &&
+        publication.previousSourceBlockHash.toLowerCase() ===
+          this.midAnchor.sourceBlockHash.toLowerCase() &&
+        publication.graphFingerprint === this.midAnchor.graphFingerprint &&
+        this.pendingMidGap === null;
+      const batch: RawMidBatch = writeDelta
+        ? Object.freeze({
+            kind: "mid-delta" as const,
+            sequence: this.nextSequence++,
+            ...anchor,
+            previousGeneration: publication.previousGeneration,
+            previousSourceBlock: publication.previousSourceBlock,
+            previousSourceBlockHash: publication.previousSourceBlockHash,
+            updates: compactMids(publication.updates),
+            removals: Object.freeze([...publication.removals]),
+            gapBefore: null,
+          })
+        : Object.freeze({
+            kind: "mid-baseline" as const,
+            sequence: this.nextSequence++,
+            ...anchor,
+            mids: compactMids(publication.snapshot.mids),
+            gapBefore: this.pendingMidGap,
+          });
+      this.pendingMidGap = null;
+      this.midAnchor = anchor;
+      if (batch.kind === "mid-baseline") this.midBaselines++;
+      else this.midDeltas++;
+      this.enqueueReserved(batch);
+    } catch (error) {
+      this.releaseReserved();
+      this.recordMidDrop(sourceBlock);
+      this.warnOnce(
+        `mid publication rejected: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   shutdown(timeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS): Promise<void> {
@@ -483,12 +607,17 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
       acknowledged: this.acknowledged,
       droppedBatches: this.droppedBatches,
       bytesWritten: this.bytesWritten,
+      midBaselines: this.midBaselines,
+      midDeltas: this.midDeltas,
+      droppedMidPublications: this.droppedMidPublications,
+      midBytesWritten: this.midBytesWritten,
     });
   }
 
-  private reserve(sourceBlock: number): boolean {
+  private reserve(sourceBlock: number, kind: "route" | "mid"): boolean {
     if (!this.accepting || this.failed || this.reserved >= this.queueCredits) {
-      this.recordDrop(sourceBlock);
+      if (kind === "route") this.recordDrop(sourceBlock);
+      else this.recordMidDrop(sourceBlock);
       return false;
     }
     this.reserved++;
@@ -499,10 +628,10 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
     this.reserved = Math.max(0, this.reserved - 1);
   }
 
-  private enqueueReserved(batch: RawRouteBatch): void {
+  private enqueueReserved(batch: RawTelemetryBatch): void {
     if (!this.accepting || this.failed) {
       this.releaseReserved();
-      this.recordDrop(batch.sourceBlock);
+      this.recordBatchDrop(batch);
       return;
     }
     this.scheduled++;
@@ -513,12 +642,12 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
   private drain(): void {
     if (this.failed || this.outstanding !== null || this.queue.length === 0) return;
     const batch = this.queue.shift()!;
-    const gap = this.pendingGap;
-    this.pendingGap = null;
-    const messageBatch = Object.freeze({ ...batch, gapBefore: gap });
-    this.outstanding = { batch: messageBatch, gap };
+    const messageBatch = batch.kind === "route"
+      ? Object.freeze({ ...batch, gapBefore: this.takeRouteGap() })
+      : batch;
+    this.outstanding = messageBatch;
     setImmediate(() => {
-      if (this.failed || this.outstanding?.batch.sequence !== messageBatch.sequence) return;
+      if (this.failed || this.outstanding?.sequence !== messageBatch.sequence) return;
       try {
         this.worker.postMessage({ type: "batch", batch: messageBatch });
       } catch (error) {
@@ -539,19 +668,20 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
     }
     if (message.type !== "ack") return;
     const outstanding = this.outstanding;
-    if (!outstanding || outstanding.batch.sequence !== message.sequence) {
+    if (!outstanding || outstanding.sequence !== message.sequence) {
       this.fail(`route telemetry ack sequence mismatch ${message.sequence}`);
       return;
     }
     this.outstanding = null;
     this.releaseReserved();
     if (!message.ok) {
-      this.recordDrop(outstanding.batch.sourceBlock);
+      this.recordBatchDrop(outstanding);
       this.fail(`route telemetry write failed: ${message.reason ?? "unknown"}`);
       return;
     }
     this.acknowledged++;
     this.bytesWritten = message.bytesWritten;
+    this.midBytesWritten = message.midBytesWritten;
     this.drain();
   }
 
@@ -582,13 +712,19 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
       if (
         route.routeId.length > 80 ||
         route.flashToken.length > 80 ||
+        route.edgeIds.length > this.maxLegs ||
         route.tokenRing.length > this.maxLegs + 1 ||
-        route.venuePath.length > this.maxLegs
+        route.venuePath.length > this.maxLegs ||
+        route.edgeIds.length !== route.venuePath.length
       ) return false;
       estimated += route.routeId.length + route.flashToken.length + 64;
       for (const token of route.tokenRing) {
         if (token.length > 80) return false;
         estimated += token.length;
+      }
+      for (const edgeId of route.edgeIds) {
+        if (edgeId.length === 0 || edgeId.length > 512) return false;
+        estimated += edgeId.length + 4;
       }
       for (const [adapterId, venueId] of route.venuePath) {
         if (adapterId.length > 160 || venueId.length > 96) return false;
@@ -614,15 +750,43 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
         };
   }
 
+  private recordMidDrop(sourceBlock: number): void {
+    this.midAnchor = null;
+    this.droppedMidPublications++;
+    const previous = this.pendingMidGap;
+    this.pendingMidGap = previous
+      ? {
+          droppedPublications: previous.droppedPublications + 1,
+          firstDroppedBlock: Math.min(previous.firstDroppedBlock, sourceBlock),
+          lastDroppedBlock: Math.max(previous.lastDroppedBlock, sourceBlock),
+        }
+      : {
+          droppedPublications: 1,
+          firstDroppedBlock: sourceBlock,
+          lastDroppedBlock: sourceBlock,
+        };
+  }
+
+  private recordBatchDrop(batch: RawTelemetryBatch): void {
+    if (batch.kind === "route") this.recordDrop(batch.sourceBlock);
+    else this.recordMidDrop(batch.sourceBlock);
+  }
+
+  private takeRouteGap(): RouteGap | null {
+    const gap = this.pendingGap;
+    this.pendingGap = null;
+    return gap;
+  }
+
   private fail(message: string): void {
     if (this.failed) return;
     this.failed = true;
     this.accepting = false;
     if (this.outstanding) {
-      this.recordDrop(this.outstanding.batch.sourceBlock);
+      this.recordBatchDrop(this.outstanding);
     }
     for (const batch of this.queue) {
-      this.recordDrop(batch.sourceBlock);
+      this.recordBatchDrop(batch);
     }
     this.outstanding = null;
     this.queue.length = 0;
@@ -641,6 +805,7 @@ export async function initBlockScanEnumerationSolverTelemetry(
   options: InitBlockScanRouteTelemetryOptions,
 ): Promise<BlockScanRouteTelemetrySink> {
   const routePath = (options.path ?? "").trim();
+  const midHistoryPath = (options.midHistoryPath ?? "").trim();
   const eventsPath = options.eventsPath.trim();
   if (!routePath) return new DisabledBlockScanRouteTelemetry();
   const warn = options.onWarning ?? ((message: string) =>
@@ -651,6 +816,16 @@ export async function initBlockScanEnumerationSolverTelemetry(
   }
   if (resolve(routePath) === resolve(eventsPath)) {
     warn("disabled: route sidecar path equals SEARCHER_EVENTS_PATH");
+    return new DisabledBlockScanRouteTelemetry();
+  }
+  if (
+    midHistoryPath &&
+    (
+      resolve(midHistoryPath) === resolve(routePath) ||
+      resolve(midHistoryPath) === resolve(eventsPath)
+    )
+  ) {
+    warn("disabled: mid history path equals another telemetry path");
     return new DisabledBlockScanRouteTelemetry();
   }
   const isSource = import.meta.url.endsWith(".ts");
@@ -682,9 +857,14 @@ export async function initBlockScanEnumerationSolverTelemetry(
       execArgv: [...workerExecArgv],
       workerData: {
         routePath,
+        midHistoryPath,
         eventsPath,
         runId: options.runId,
         maxFileBytes: options.maxFileBytes ?? 100 * 1024 * 1024,
+        maxMidFileBytes: options.maxMidFileBytes ??
+          DEFAULT_MAX_MID_FILE_BYTES,
+        maxMidRecordBytes: options.maxMidRecordBytes ??
+          DEFAULT_MAX_MID_RECORD_BYTES,
         maxCatalogEntries: options.maxCatalogEntries ?? 50_000,
         minFreeBytes: options.minFreeBytes ?? 1024 * 1024 * 1024,
         epochMs: options.epochMs ?? 24 * 60 * 60 * 1000,
@@ -701,6 +881,7 @@ export async function initBlockScanEnumerationSolverTelemetry(
       maxBatchBytes,
       maxRoutes,
       maxLegs,
+      midHistoryPath.length > 0,
       warn,
     );
   } catch (error) {
@@ -829,6 +1010,46 @@ function validCompactExactDiagnostics(
     ) return false;
   }
   return true;
+}
+
+function compactMids(
+  entries: ReadonlyMap<string, RouteVenueMid> |
+    readonly (readonly [string, RouteVenueMid])[],
+): readonly (readonly [string, CompactRouteVenueMid])[] {
+  const compact: (readonly [string, CompactRouteVenueMid])[] = [];
+  const edgeKeys = new Set<string>();
+  for (const [edgeKey, mid] of entries) {
+    if (!edgeKey || edgeKey.length > 1_024 || edgeKeys.has(edgeKey)) {
+      throw new Error("invalid canonical edge key");
+    }
+    edgeKeys.add(edgeKey);
+    compact.push(Object.freeze([edgeKey, compactMid(mid)] as const));
+  }
+  return Object.freeze(compact);
+}
+
+function compactMid(mid: RouteVenueMid): CompactRouteVenueMid {
+  if (
+    !Number.isFinite(mid.mid) || mid.mid <= 0 ||
+    !Number.isFinite(mid.feeBps) || mid.feeBps < 0 ||
+    !Number.isFinite(mid.depthProxy) || mid.depthProxy < 0
+  ) {
+    throw new Error("invalid resolved mid");
+  }
+  return Object.freeze({
+    kind: mid.kind,
+    mid: mid.mid,
+    fee_bps: mid.feeBps,
+    ...(mid.reserveA === undefined ? {} : { reserve_a: mid.reserveA.toString() }),
+    ...(mid.reserveB === undefined ? {} : { reserve_b: mid.reserveB.toString() }),
+    ...(mid.sqrtABX96 === undefined
+      ? {}
+      : { sqrt_ab_x96: mid.sqrtABX96.toString() }),
+    ...(mid.liquidity === undefined
+      ? {}
+      : { liquidity: mid.liquidity.toString() }),
+    depth_proxy: mid.depthProxy,
+  });
 }
 
 function validFinish(input: BlockScanRouteTelemetryFinish): boolean {

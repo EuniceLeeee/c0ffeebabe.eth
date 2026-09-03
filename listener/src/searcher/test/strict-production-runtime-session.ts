@@ -20,6 +20,7 @@ import { StrictProductionRuntimeSession } from
   "../strict-production-runtime-session.js";
 import {
   StrictCurrentRuntimeCoordinator,
+  type StrictPricingPublication,
   type StrictSessionRequest,
 } from
   "../strict-current-runtime-coordinator.js";
@@ -473,6 +474,7 @@ const producerPricingBackend = Object.freeze({
   },
 });
 let sparseCarrySession: StrictProductionRuntimeSession | null = null;
+const pricingHistoryPublications: StrictPricingPublication[] = [];
 const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
   async (request: StrictSessionRequest) => {
     assert.equal(request.purpose, "coarse-pricing");
@@ -517,6 +519,7 @@ const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
     return created;
   },
   () => {},
+  (pricingPublication) => pricingHistoryPublications.push(pricingPublication),
 );
 const carryBase = await carryBaseCoordinator.prepareCoarsePricing({
   graph: carryBaseGraph,
@@ -524,6 +527,13 @@ const carryBase = await carryBaseCoordinator.prepareCoarsePricing({
   deadlineAtMs: Date.now() + 10_000,
 });
 assert.equal(carryBase.status, "complete");
+assert.equal(pricingHistoryPublications.length, 1);
+assert.equal(pricingHistoryPublications[0]!.kind, "baseline");
+assert.strictEqual(
+  pricingHistoryPublications[0]!.snapshot,
+  carryBase.snapshot,
+  "the history baseline reuses the published full snapshot",
+);
 const bootstrapCoordinator = new StrictCurrentRuntimeCoordinator(
   async (request: StrictSessionRequest) => {
     assert.equal(request.purpose, "coarse-pricing");
@@ -583,6 +593,26 @@ assert.equal(carriedPricing.coverage.carriedEdgeKeys?.length, 38);
 assert.equal(carriedPricing.coverage.unresolvedEdgeKeys.length, 0);
 assert.ok(carriedPricing.mids.has(edgeA.canonicalEdgeId!));
 assert.ok(carriedPricing.mids.has(edgeB.canonicalEdgeId!));
+const carryDelta = pricingHistoryPublications[1]!;
+assert.equal(carryDelta.kind, "delta");
+if (carryDelta.kind === "delta") {
+  assert.equal(carryDelta.previousSourceBlock, carryBase.snapshot.sourceBlock);
+  assert.deepEqual(carryDelta.removals, []);
+  assert.equal(
+    carryDelta.updates.length,
+    carriedPricing.coverage.refreshedEdgeKeys?.length,
+  );
+  const touchedEdgeKeys = new Set<string>(carryNextGraph.edges
+    .filter((candidate) =>
+      candidate.instanceKey?.toLowerCase() === firstParallelTarget
+    )
+    .map((candidate) => String(candidate.canonicalEdgeId!)));
+  assert.ok(carryDelta.updates.every(([edgeKey]) => touchedEdgeKeys.has(edgeKey)));
+  assert.ok(
+    !carryDelta.updates.some(([edgeKey]) => edgeKey === edgeB.canonicalEdgeId),
+    "the carried clean edge is inherited by baseline reconstruction, not re-emitted",
+  );
+}
 
 const carryThirdSource: CanonicalSource = Object.freeze({
   number: carryNextSource.number + 1,
@@ -655,6 +685,7 @@ const fullRebuild = await carryBaseCoordinator.prepareCoarsePricing({
   deadlineAtMs: Date.now() + 10_000,
 });
 assert.equal(fullRebuild.status, "complete");
+assert.equal(pricingHistoryPublications.at(-1)?.kind, "baseline");
 assert.deepEqual(
   [...fullRebuild.snapshot.coverageByEdgeKey.entries()],
   [...carriedAgain.snapshot.coverageByEdgeKey.entries()],

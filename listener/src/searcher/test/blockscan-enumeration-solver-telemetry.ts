@@ -132,6 +132,8 @@ test(
           { ref: 2, routeId: blockScanRouteId(routeB.seedEdges) },
         ],
       );
+      assert.deepEqual(catalogs[0]!.edge_ids, blockScanRouteLocator(routeA).edgeIds);
+      assert.deepEqual(catalogs[1]!.edge_ids, blockScanRouteLocator(routeB).edgeIds);
       assert.deepEqual(blocks[0], {
         type: "block_scan_enumeration_solver",
         schema_version: 2,

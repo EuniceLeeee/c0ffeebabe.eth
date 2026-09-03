@@ -6,11 +6,14 @@
 // path so it runs there directly; point --events at a fetched slice to run locally.
 //
 // Usage: npm run block-activity -- --block <N> [--events <path>] [--blockscan-log <path>]
-//   [--route-events <path>]
+//   [--route-events <path>] [--mid-history <path>] [--mid-out <path>]
 //   [--venues <id,id,...>]
 //   default --events /var/log/mev/events/searcher-live.jsonl (the live node path; the OLD
 //   analysis/events + /tmp/mev-live-*.log defaults are stale — the node moved to /var/log/mev).
-import { existsSync, readFileSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { createInterface } from "node:readline";
 import {
   blockScanActivityAtBlock,
   blockScanSourceBlockForTarget,
@@ -20,12 +23,29 @@ const DEFAULT_EVENTS = "/var/log/mev/events/searcher-live.jsonl";
 const DEFAULT_BLOCKSCAN_LOG = "/var/log/mev-live.log";
 
 type JsonRecord = Record<string, unknown>;
+type CompactMid = Record<string, string | number>;
+
+interface MidAnchor {
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+  readonly generation: number;
+  readonly graphFingerprint: string;
+}
+
+interface ReconstructedMidTable extends MidAnchor {
+  readonly schemaVersion: 1;
+  readonly runId: string;
+  readonly baselineSourceBlock: number;
+  readonly appliedDeltas: number;
+  readonly mids: readonly (readonly [string, CompactMid])[];
+}
 
 interface RouteCatalogEntry {
   runId: string;
   catalogEpoch: number;
   routeRef: number;
   routeId: string;
+  edgeIds: string[] | null;
   tokenRing: string[];
   venuePath: Array<[string, string]>;
   flashToken: string;
@@ -86,12 +106,13 @@ function arg(name: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const blockStr = arg("--block");
   if (!blockStr) {
     console.error(
       "usage: npm run block-activity -- --block <N> [--events <path>] " +
-        "[--route-events <path>] [--blockscan-log <path>] [--venues <id,...>]",
+        "[--route-events <path>] [--mid-history <path>] [--mid-out <path>] " +
+        "[--blockscan-log <path>] [--venues <id,...>]",
     );
     process.exit(1);
   }
@@ -99,6 +120,15 @@ function main(): void {
   const eventsPath = arg("--events") ?? DEFAULT_EVENTS;
   const blockScanLogPath = arg("--blockscan-log") ?? DEFAULT_BLOCKSCAN_LOG;
   const routeEventsPath = arg("--route-events");
+  const midHistoryPath = arg("--mid-history");
+  const midOutPath = arg("--mid-out");
+  if (
+    (midHistoryPath !== undefined && routeEventsPath === undefined) ||
+    (midOutPath !== undefined && midHistoryPath === undefined)
+  ) {
+    console.error("--mid-history requires --route-events; --mid-out requires --mid-history");
+    process.exit(1);
+  }
   const venues = (arg("--venues") ?? "").split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
   if (!existsSync(eventsPath)) {
     console.error(`events file not found: ${eventsPath} (on the node it is ${DEFAULT_EVENTS}; fetch a slice or run on the node)`);
@@ -159,10 +189,12 @@ function main(): void {
 
   const sourceBlock = blockScanSourceBlockForTarget(block);
   if (routeEventsPath !== undefined) {
-    printStructuredRouteActivity({
+    await printStructuredRouteActivity({
       targetBlock: block,
       sourceBlock,
       routeEventsPath,
+      midHistoryPath,
+      midOutPath,
       formalEvents,
       malformedEventLines,
     });
@@ -189,13 +221,15 @@ function main(): void {
   console.log(`      solve_ring_tokens: ${tokens.length}${tokens.length > 0 ? ` ${tokens.join(",")}` : ""}`);
 }
 
-function printStructuredRouteActivity(input: {
+async function printStructuredRouteActivity(input: {
   targetBlock: number;
   sourceBlock: number;
   routeEventsPath: string;
+  midHistoryPath?: string;
+  midOutPath?: string;
   formalEvents: JsonRecord[];
   malformedEventLines: number;
-}): void {
+}): Promise<void> {
   const { targetBlock, sourceBlock, routeEventsPath } = input;
   let routeEventsText: string;
   try {
@@ -313,7 +347,6 @@ function printStructuredRouteActivity(input: {
           : lifecycle.droppedBatches > 0
             ? "complete_with_writer_gap"
             : "complete";
-
   console.log(
     `  blockscan-routes: target_block=${targetBlock} source_block=${sourceBlock} ` +
       `status=${evidenceStatus} route_events=${routeEventsPath}`,
@@ -332,6 +365,12 @@ function printStructuredRouteActivity(input: {
       `pass_outcome=${bounded(lifecycle.passOutcome)} ` +
       `pass_reason=${lifecycle.passReason === null ? "null" : bounded(lifecycle.passReason)}`,
   );
+  const midTable = await loadMidTable(input, lifecycle);
+  const midLookup = input.midHistoryPath === undefined
+    ? undefined
+    : midTable === null
+      ? null
+      : new Map(midTable.mids);
   if (lifecycle.droppedBatches > 0) printWriterGap(lifecycle);
   if (unresolvedRefs.length > 0) {
     console.log(`      unresolved_route_refs: ${unresolvedRefs.join(",")}`);
@@ -382,7 +421,7 @@ function printStructuredRouteActivity(input: {
     );
     console.log(
       `          rank=${index + 1} ref=${routeRef} ` +
-        `${formatRoute(route)} ${formatExact(lifecycle, exact)} ` +
+        `${formatRoute(route, midLookup)} ${formatExact(lifecycle, exact)} ` +
         `planner_entered=${
           lifecycle.schemaVersion === 1 ? "unknown_schema_v1" : plannerCall >= 0
         } planner_call=${plannerCall >= 0 ? plannerCall + 1 : "null"} ` +
@@ -429,6 +468,76 @@ function printStructuredRouteActivity(input: {
   });
 
   printFinalEventJoins(input, lifecycle, parsed, scopedFinal);
+}
+
+async function loadMidTable(
+  input: {
+    readonly midHistoryPath?: string;
+    readonly midOutPath?: string;
+  },
+  lifecycle: RouteLifecycle,
+): Promise<ReconstructedMidTable | null> {
+  if (input.midHistoryPath === undefined) return null;
+  if (
+    lifecycle.schemaVersion !== 2 ||
+    lifecycle.midSourceBlock === null ||
+    lifecycle.midSourceBlockHash === null
+  ) {
+    console.log(
+      `      Mid table: status=unknown_source_anchor history=${input.midHistoryPath}`,
+    );
+    return null;
+  }
+  try {
+    const table = await reconstructMidHistory(
+      resolve(input.midHistoryPath),
+      lifecycle.midSourceBlock,
+    );
+    if (
+      table.runId !== lifecycle.runId ||
+      table.sourceBlockHash.toLowerCase() !==
+        lifecycle.midSourceBlockHash.toLowerCase()
+    ) {
+      throw new Error("mid history anchor does not match route lifecycle");
+    }
+    if (input.midOutPath !== undefined) {
+      await writeFile(
+        resolve(input.midOutPath),
+        `${JSON.stringify(midTableRecord(table))}\n`,
+        { mode: 0o600 },
+      );
+    }
+    console.log(
+      `      Mid table: status=complete source_block=${table.sourceBlock} ` +
+        `source_block_hash=${table.sourceBlockHash} mids=${table.mids.length} ` +
+        `baseline=${table.baselineSourceBlock} deltas=${table.appliedDeltas}` +
+        (input.midOutPath === undefined
+          ? ""
+          : ` out=${resolve(input.midOutPath)}`),
+    );
+    return table;
+  } catch (error) {
+    console.log(
+      `      Mid table: status=unknown_not_reconstructable ` +
+        `history=${input.midHistoryPath} reason=${bounded(message(error))}`,
+    );
+    return null;
+  }
+}
+
+function midTableRecord(table: ReconstructedMidTable): JsonRecord {
+  return {
+    schema_version: table.schemaVersion,
+    run_id: table.runId,
+    source_block: table.sourceBlock,
+    source_block_hash: table.sourceBlockHash,
+    generation: table.generation,
+    graph_fingerprint: table.graphFingerprint,
+    baseline_source_block: table.baselineSourceBlock,
+    applied_deltas: table.appliedDeltas,
+    mid_count: table.mids.length,
+    mids: table.mids,
+  };
 }
 
 function collectScopedFinalEvents(
@@ -698,6 +807,8 @@ function parseCatalog(value: JsonRecord): RouteCatalogEntry | null {
   const catalogEpoch = nonnegativeInteger(value.catalog_epoch);
   const routeRef = nonnegativeInteger(value.route_ref);
   const routeId = stringValue(value.route_id);
+  const hasEdgeIds = Object.hasOwn(value, "edge_ids");
+  const edgeIds = hasEdgeIds ? stringArray(value.edge_ids) : null;
   const flashToken = stringValue(value.flash_token);
   const tokenRing = stringArray(value.token_ring);
   const venuePath = venuePathValue(value.venue_path);
@@ -709,9 +820,11 @@ function parseCatalog(value: JsonRecord): RouteCatalogEntry | null {
     routeRef === null ||
     routeRef <= 0 ||
     routeId === null ||
+    (hasEdgeIds && edgeIds === null) ||
     flashToken === null ||
     tokenRing === null ||
-    venuePath === null
+    venuePath === null ||
+    (edgeIds !== null && edgeIds.length !== venuePath.length)
   ) {
     return null;
   }
@@ -720,6 +833,7 @@ function parseCatalog(value: JsonRecord): RouteCatalogEntry | null {
     catalogEpoch,
     routeRef,
     routeId,
+    edgeIds,
     tokenRing,
     venuePath,
     flashToken,
@@ -899,7 +1013,10 @@ function catalogRouteKey(
   return JSON.stringify([runId, catalogEpoch, routeId]);
 }
 
-function formatRoute(route: RouteCatalogEntry | null): string {
+function formatRoute(
+  route: RouteCatalogEntry | null,
+  mids?: ReadonlyMap<string, CompactMid> | null,
+): string {
   if (!route) return "route=unknown";
   const ring = route.tokenRing.map(bounded).join("->");
   const venues = route.venuePath
@@ -907,8 +1024,27 @@ function formatRoute(route: RouteCatalogEntry | null): string {
     .join(">");
   return (
     `route_id=${bounded(route.routeId)} ring=${ring} ` +
-    `venues=${venues} flash=${bounded(route.flashToken)}`
+    `venues=${venues} flash=${bounded(route.flashToken)} ` +
+    `edge_ids=${route.edgeIds === null ? "unknown" : JSON.stringify(route.edgeIds)}` +
+    formatRouteMids(route, mids)
   );
+}
+
+function formatRouteMids(
+  route: RouteCatalogEntry,
+  mids?: ReadonlyMap<string, CompactMid> | null,
+): string {
+  if (mids === undefined) return "";
+  if (mids === null) return " edge_mids=unknown_mid_table";
+  if (route.edgeIds === null) return " edge_mids=unknown_catalog_schema";
+  const missing = route.edgeIds.filter((edgeId) => !mids.has(edgeId));
+  if (missing.length > 0) {
+    return ` edge_mids=missing:${JSON.stringify(missing)}`;
+  }
+  return ` edge_mids=${JSON.stringify(route.edgeIds.map((edgeId) => [
+    edgeId,
+    mids.get(edgeId)!.mid,
+  ]))}`;
 }
 
 function formatFormalEvent(event: JsonRecord): string {
@@ -1015,8 +1151,254 @@ function venuePathValue(value: unknown): Array<[string, string]> | null {
   return result;
 }
 
+async function reconstructMidHistory(
+  historyPath: string,
+  targetBlock: number,
+): Promise<ReconstructedMidTable> {
+  const lines = createInterface({
+    input: createReadStream(historyPath, { encoding: "utf8" }),
+    crlfDelay: Infinity,
+  });
+  let runId: string | null = null;
+  let anchor: MidAnchor | null = null;
+  let mids: Map<string, CompactMid> | null = null;
+  let baselineSourceBlock: number | null = null;
+  let appliedDeltas = 0;
+  let previousSequence = 0;
+  let lineNumber = 0;
+  for await (const line of lines) {
+    lineNumber++;
+    if (!line) continue;
+    let record: JsonRecord;
+    try {
+      const parsed: unknown = JSON.parse(line);
+      if (!isRecord(parsed)) throw new Error("record is not an object");
+      record = parsed;
+    } catch (error) {
+      throw new Error(
+        `invalid mid history JSON at line ${lineNumber}: ${message(error)}`,
+      );
+    }
+    if (
+      record.type !== "block_scan_mid_baseline" &&
+      record.type !== "block_scan_mid_delta"
+    ) continue;
+    const common = parseMidCommon(record, lineNumber);
+    if (runId === null) runId = common.runId;
+    if (common.runId !== runId) {
+      throw new Error(`mid history changes run_id at line ${lineNumber}`);
+    }
+    if (common.sequence <= previousSequence) {
+      throw new Error(`mid history sequence is not increasing at line ${lineNumber}`);
+    }
+    previousSequence = common.sequence;
+    if (common.sourceBlock > targetBlock) continue;
+    if (record.type === "block_scan_mid_baseline") {
+      const entries = parseMidEntries(record.mids, "mids", lineNumber);
+      const declaredCount = requiredInteger(
+        record.mid_count,
+        "mid_count",
+        lineNumber,
+      );
+      if (declaredCount !== entries.length) {
+        throw new Error(`mid_count mismatch at line ${lineNumber}`);
+      }
+      mids = new Map(entries);
+      anchor = common;
+      baselineSourceBlock = common.sourceBlock;
+      appliedDeltas = 0;
+      continue;
+    }
+    if (anchor === null || mids === null || baselineSourceBlock === null) {
+      continue;
+    }
+    const previousSourceBlock = requiredInteger(
+      record.previous_source_block,
+      "previous_source_block",
+      lineNumber,
+    );
+    const previousGeneration = requiredInteger(
+      record.previous_generation,
+      "previous_generation",
+      lineNumber,
+    );
+    const previousSourceBlockHash = requiredText(
+      record.previous_source_block_hash,
+      "previous_source_block_hash",
+      lineNumber,
+    );
+    if (
+      previousSourceBlock !== anchor.sourceBlock ||
+      previousGeneration !== anchor.generation ||
+      previousSourceBlockHash.toLowerCase() !==
+        anchor.sourceBlockHash.toLowerCase() ||
+      common.graphFingerprint !== anchor.graphFingerprint
+    ) {
+      anchor = null;
+      mids = null;
+      baselineSourceBlock = null;
+      appliedDeltas = 0;
+      continue;
+    }
+    const updates = parseMidEntries(record.updates, "updates", lineNumber);
+    const removals = parseMidStringArray(
+      record.removals,
+      "removals",
+      lineNumber,
+    );
+    if (
+      requiredInteger(record.update_count, "update_count", lineNumber) !==
+        updates.length ||
+      requiredInteger(record.removal_count, "removal_count", lineNumber) !==
+        removals.length
+    ) {
+      throw new Error(`delta count mismatch at line ${lineNumber}`);
+    }
+    const updateKeys = new Set(updates.map(([edgeKey]) => edgeKey));
+    if (removals.some((edgeKey) => updateKeys.has(edgeKey))) {
+      throw new Error(`delta update/removal overlap at line ${lineNumber}`);
+    }
+    for (const [edgeKey, mid] of updates) mids.set(edgeKey, mid);
+    for (const edgeKey of removals) mids.delete(edgeKey);
+    anchor = common;
+    appliedDeltas++;
+  }
+  if (
+    runId === null ||
+    anchor === null ||
+    mids === null ||
+    baselineSourceBlock === null ||
+    anchor.sourceBlock !== targetBlock
+  ) {
+    throw new Error(`block ${targetBlock} is not reconstructable`);
+  }
+  const sortedMids = Object.freeze(
+    [...mids.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([edgeKey, mid]) => Object.freeze([edgeKey, mid] as const)),
+  );
+  return Object.freeze({
+    schemaVersion: 1 as const,
+    runId,
+    ...anchor,
+    baselineSourceBlock,
+    appliedDeltas,
+    mids: sortedMids,
+  });
+}
+
+function parseMidCommon(
+  record: JsonRecord,
+  lineNumber: number,
+): MidAnchor & { readonly runId: string; readonly sequence: number } {
+  if (record.schema_version !== 1) {
+    throw new Error(`unsupported mid history schema at line ${lineNumber}`);
+  }
+  return Object.freeze({
+    runId: requiredText(record.run_id, "run_id", lineNumber),
+    sequence: requiredInteger(record.sequence, "sequence", lineNumber),
+    sourceBlock: requiredInteger(
+      record.source_block,
+      "source_block",
+      lineNumber,
+    ),
+    sourceBlockHash: requiredText(
+      record.source_block_hash,
+      "source_block_hash",
+      lineNumber,
+    ),
+    generation: requiredInteger(record.generation, "generation", lineNumber),
+    graphFingerprint: requiredText(
+      record.graph_fingerprint,
+      "graph_fingerprint",
+      lineNumber,
+    ),
+  });
+}
+
+function parseMidEntries(
+  value: unknown,
+  label: string,
+  lineNumber: number,
+): Array<readonly [string, CompactMid]> {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} is not an array at line ${lineNumber}`);
+  }
+  const entries: Array<readonly [string, CompactMid]> = [];
+  const keys = new Set<string>();
+  for (const entry of value) {
+    if (!Array.isArray(entry) || entry.length !== 2) {
+      throw new Error(`invalid ${label} entry at line ${lineNumber}`);
+    }
+    const edgeKey = requiredText(entry[0], `${label}.edge_key`, lineNumber);
+    if (keys.has(edgeKey) || !isCompactMid(entry[1])) {
+      throw new Error(`invalid ${label} entry at line ${lineNumber}`);
+    }
+    keys.add(edgeKey);
+    entries.push(Object.freeze([edgeKey, Object.freeze({ ...entry[1] })]));
+  }
+  return entries;
+}
+
+function isCompactMid(value: unknown): value is CompactMid {
+  return isRecord(value) &&
+    typeof value.kind === "string" &&
+    typeof value.mid === "number" && Number.isFinite(value.mid) &&
+    typeof value.fee_bps === "number" && Number.isFinite(value.fee_bps) &&
+    typeof value.depth_proxy === "number" &&
+    Number.isFinite(value.depth_proxy);
+}
+
+function parseMidStringArray(
+  value: unknown,
+  label: string,
+  lineNumber: number,
+): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} is not an array at line ${lineNumber}`);
+  }
+  const result = value.map((entry) =>
+    requiredText(entry, label, lineNumber)
+  );
+  if (new Set(result).size !== result.length) {
+    throw new Error(`${label} contains duplicates at line ${lineNumber}`);
+  }
+  return result;
+}
+
+function requiredInteger(
+  value: unknown,
+  label: string,
+  lineNumber: number,
+): number {
+  const parsed = nonnegativeInteger(value);
+  if (parsed === null) {
+    throw new Error(`invalid ${label} at line ${lineNumber}`);
+  }
+  return parsed;
+}
+
+function requiredText(
+  value: unknown,
+  label: string,
+  lineNumber: number,
+): string {
+  const parsed = stringValue(value);
+  if (parsed === null) {
+    throw new Error(`invalid ${label} at line ${lineNumber}`);
+  }
+  return parsed;
+}
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function bounded(value: string): string {
   return value.replace(/\s+/g, " ").slice(0, 240);
 }
 
-main();
+void main().catch((error) => {
+  console.error(`[block-activity] ${message(error)}`);
+  process.exitCode = 1;
+});
