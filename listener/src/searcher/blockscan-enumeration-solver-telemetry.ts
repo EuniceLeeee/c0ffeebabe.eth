@@ -1,6 +1,8 @@
 import { Worker } from "node:worker_threads";
 import { resolve } from "node:path";
 import type { BlockScanOpportunity } from "./detector/detector.js";
+import type { BlockScanProbeDiagnostic } from
+  "./detector/blockscan-candidate-refinement.js";
 import {
   blockScanRouteLocator,
   blockScanRouteLocatorCacheKey,
@@ -14,8 +16,12 @@ const DEFAULT_MAX_LEGS = 8;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 2_000;
 const ROUTE_LOCATOR_CACHE_ENTRIES = 2_048;
 
+type CompactExactValue = number | null;
+
 export interface BlockScanRouteTelemetryFinish {
   readonly sourceBlockHash: string | null;
+  readonly midSourceBlock: number | null;
+  readonly midSourceBlockHash: string | null;
   readonly pricingMode:
     | "source_n"
     | "n_minus_one_coarse_current_n_exact"
@@ -26,6 +32,11 @@ export interface BlockScanRouteTelemetryFinish {
 
 export interface BlockScanRouteTelemetryPass {
   recordEnumeration(opportunities: readonly BlockScanOpportunity[]): void;
+  recordExact(
+    opportunity: BlockScanOpportunity,
+    diagnostic: BlockScanProbeDiagnostic,
+  ): void;
+  recordPlanner(opportunity: BlockScanOpportunity): void;
   recordSolver(opportunity: BlockScanOpportunity): void;
   finish(input: BlockScanRouteTelemetryFinish): void;
 }
@@ -80,11 +91,15 @@ interface RawRouteBatch {
   readonly sequence: number;
   readonly sourceBlock: number;
   readonly sourceBlockHash: string | null;
+  readonly midSourceBlock: number | null;
+  readonly midSourceBlockHash: string | null;
   readonly pricingMode: BlockScanRouteTelemetryFinish["pricingMode"];
   readonly passOutcome: string;
   readonly passReason: string | null;
   readonly routes: readonly BlockScanRouteLocator[];
   readonly enumeration: readonly number[];
+  readonly exact: readonly CompactExactValue[] | null;
+  readonly planner: readonly number[];
   readonly solver: readonly number[];
   readonly gapBefore: RouteGap | null;
 }
@@ -158,6 +173,11 @@ class RoutePass implements BlockScanRouteTelemetryPass {
   private readonly indexByOpportunity =
     new WeakMap<BlockScanOpportunity, number>();
   private readonly enumeration: number[] = [];
+  private readonly enumerationRouteIndexes = new Set<number>();
+  private readonly enumerationOpportunities: BlockScanOpportunity[] = [];
+  private readonly exact: Array<CompactExactValue | undefined> = [];
+  private exactCount = 0;
+  private readonly planner: number[] = [];
   private readonly solver: number[] = [];
   private enumerationRecorded = false;
   private finished = false;
@@ -174,6 +194,8 @@ class RoutePass implements BlockScanRouteTelemetryPass {
       sourceBlock: number,
       routes: readonly BlockScanRouteLocator[],
       enumeration: readonly number[],
+      exact: readonly CompactExactValue[] | null,
+      planner: readonly number[],
       solver: readonly number[],
       input: BlockScanRouteTelemetryFinish,
       invalid: boolean,
@@ -188,22 +210,77 @@ class RoutePass implements BlockScanRouteTelemetryPass {
       return;
     }
     for (const opportunity of opportunities) {
-      this.enumeration.push(this.routeIndex(opportunity));
+      const index = this.routeIndex(opportunity);
+      this.enumeration.push(index);
+      this.enumerationRouteIndexes.add(index);
+      this.enumerationOpportunities.push(opportunity);
     }
+    this.exact.length = opportunities.length * 4;
+  }
+
+  recordExact(
+    opportunity: BlockScanOpportunity,
+    diagnostic: BlockScanProbeDiagnostic,
+  ): void {
+    if (this.finished || this.invalid) return;
+    const rankIndex = diagnostic.index;
+    const exactOffset = rankIndex * 4;
+    if (
+      !this.enumerationRecorded ||
+      !Number.isSafeInteger(rankIndex) ||
+      rankIndex < 0 ||
+      rankIndex >= this.enumeration.length ||
+      this.exact[exactOffset] !== undefined ||
+      this.enumerationOpportunities[rankIndex] !== opportunity
+    ) {
+      this.invalid = true;
+      return;
+    }
+    if (!writeCompactExactDiagnostic(this.exact, exactOffset, diagnostic)) {
+      this.invalid = true;
+      return;
+    }
+    this.exactCount++;
+  }
+
+  recordPlanner(opportunity: BlockScanOpportunity): void {
+    if (this.finished || this.invalid) return;
+    const index = this.routeIndex(opportunity);
+    if (!this.enumerationRouteIndexes.has(index)) {
+      this.invalid = true;
+      return;
+    }
+    this.planner.push(index);
   }
 
   recordSolver(opportunity: BlockScanOpportunity): void {
     if (this.finished || this.invalid) return;
-    this.solver.push(this.routeIndex(opportunity));
+    const index = this.routeIndex(opportunity);
+    if (!this.enumerationRouteIndexes.has(index)) {
+      this.invalid = true;
+      return;
+    }
+    this.solver.push(index);
   }
 
   finish(input: BlockScanRouteTelemetryFinish): void {
     if (this.finished) return;
     this.finished = true;
+    let exact: readonly CompactExactValue[] | null =
+      this.enumeration.length === 0 ? Object.freeze([]) : null;
+    if (this.exactCount > 0) {
+      if (this.exactCount !== this.enumeration.length) {
+        this.invalid = true;
+      } else {
+        exact = Object.freeze(this.exact) as readonly CompactExactValue[];
+      }
+    }
     this.finishReserved(
       this.sourceBlock,
       this.routes,
       this.enumeration,
+      exact,
+      this.planner,
       this.solver,
       input,
       this.invalid,
@@ -285,11 +362,17 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
         block,
         routes,
         enumeration,
+        exact,
+        planner,
         solver,
         input,
         invalid,
       ) => {
-        if (invalid || !this.validBatch(routes, enumeration, solver)) {
+        if (
+          invalid ||
+          !this.validBatch(routes, enumeration, exact, planner, solver) ||
+          !validFinish(input)
+        ) {
           this.releaseReserved();
           this.recordDrop(block);
           return;
@@ -298,6 +381,8 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
           sequence: this.nextSequence++,
           sourceBlock: block,
           sourceBlockHash: input.sourceBlockHash,
+          midSourceBlock: input.midSourceBlock,
+          midSourceBlockHash: input.midSourceBlockHash,
           pricingMode: input.pricingMode,
           passOutcome: bounded(input.passOutcome, 80),
           passReason: input.passReason === null
@@ -305,6 +390,8 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
             : bounded(input.passReason, 160),
           routes: Object.freeze([...routes]),
           enumeration: Object.freeze([...enumeration]),
+          exact,
+          planner: Object.freeze([...planner]),
           solver: Object.freeze([...solver]),
           gapBefore: null,
         });
@@ -320,11 +407,15 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
       sequence: this.nextSequence++,
       sourceBlock: input.sourceBlock,
       sourceBlockHash: null,
+      midSourceBlock: null,
+      midSourceBlockHash: null,
       pricingMode: null,
       passOutcome: input.passOutcome,
       passReason: input.passReason,
       routes: Object.freeze([]),
       enumeration: Object.freeze([]),
+      exact: Object.freeze([]),
+      planner: Object.freeze([]),
       solver: Object.freeze([]),
       gapBefore: null,
     });
@@ -467,13 +558,26 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
   private validBatch(
     routes: readonly BlockScanRouteLocator[],
     enumeration: readonly number[],
+    exact: readonly CompactExactValue[] | null,
+    planner: readonly number[],
     solver: readonly number[],
   ): boolean {
     if (routes.length > this.maxRoutes) return false;
     const validIndex = (index: number): boolean =>
       Number.isSafeInteger(index) && index >= 0 && index < routes.length;
-    if (!enumeration.every(validIndex) || !solver.every(validIndex)) return false;
-    let estimated = 512 + (enumeration.length + solver.length) * 8;
+    if (
+      !enumeration.every(validIndex) ||
+      !planner.every(validIndex) ||
+      !solver.every(validIndex) ||
+      (exact !== null &&
+        (
+          exact.length !== enumeration.length * 4 ||
+          !validCompactExactDiagnostics(exact)
+        ))
+    ) return false;
+    let estimated = 640 +
+      (enumeration.length + planner.length + solver.length) * 8 +
+      (exact?.length ?? 0) * 10;
     for (const route of routes) {
       if (
         route.routeId.length > 80 ||
@@ -651,4 +755,90 @@ function positiveInteger(value: number, label: string): number {
 
 function bounded(value: string, max: number): string {
   return value.replace(/\s+/g, " ").slice(0, max);
+}
+
+function writeCompactExactDiagnostic(
+  target: Array<CompactExactValue | undefined>,
+  offset: number,
+  diagnostic: BlockScanProbeDiagnostic,
+): boolean {
+  const status = diagnostic.status === "positive"
+    ? 1
+    : diagnostic.status === "negative"
+      ? 2
+      : diagnostic.status === "failed"
+        ? 3
+        : 4;
+  const reason = diagnostic.failure?.reason;
+  const failure = reason === undefined
+    ? 0
+    : reason === "exact_not_admitted"
+      ? 1
+      : reason === "family_circuit_open"
+        ? 2
+        : reason === "instance_circuit_open"
+          ? 3
+          : reason === "composite_circuit_open"
+            ? 4
+            : reason === "probe_timeout"
+              ? 5
+              : reason === "global_deadline"
+                ? 6
+                : reason === "quote_error"
+                  ? 7
+                  : -1;
+  if (
+    failure < 0 ||
+    (
+      diagnostic.marginBps !== null &&
+      !Number.isFinite(diagnostic.marginBps)
+    ) ||
+    (
+      (diagnostic.status === "positive" ||
+        diagnostic.status === "negative") !==
+      (diagnostic.failure === null)
+    )
+  ) return false;
+  target[offset] = status;
+  target[offset + 1] = diagnostic.attempted ? 1 : 0;
+  target[offset + 2] = diagnostic.marginBps;
+  target[offset + 3] = failure;
+  return true;
+}
+
+function validCompactExactDiagnostics(
+  diagnostics: readonly CompactExactValue[],
+): boolean {
+  for (let offset = 0; offset < diagnostics.length; offset += 4) {
+    const status = diagnostics[offset];
+    const attempted = diagnostics[offset + 1];
+    const margin = diagnostics[offset + 2];
+    const failure = diagnostics[offset + 3];
+    if (
+      status === null ||
+      !Number.isSafeInteger(status) ||
+      status < 1 ||
+      status > 4 ||
+      (attempted !== 0 && attempted !== 1) ||
+      (margin !== null && (margin === undefined || !Number.isFinite(margin))) ||
+      failure === null ||
+      failure === undefined ||
+      !Number.isSafeInteger(failure) ||
+      failure < 0 ||
+      failure > 7
+    ) return false;
+  }
+  return true;
+}
+
+function validFinish(input: BlockScanRouteTelemetryFinish): boolean {
+  const validNullableHash = (value: string | null): boolean =>
+    value === null || (value.length > 0 && value.length <= 128);
+  return validNullableHash(input.sourceBlockHash) &&
+    validNullableHash(input.midSourceBlockHash) &&
+    (
+      input.midSourceBlock === null ||
+      (Number.isSafeInteger(input.midSourceBlock) && input.midSourceBlock >= 0)
+    ) &&
+    ((input.midSourceBlock === null) === (input.midSourceBlockHash === null));
 }

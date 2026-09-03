@@ -65,10 +65,36 @@ test(
       const pass = first.beginPass(100);
       assert.ok(pass);
       pass.recordEnumeration([routeA, routeB]);
-      pass.recordSolver(routeB);
+      pass.recordExact(routeB, {
+        index: 1,
+        status: "failed",
+        marginBps: null,
+        attempted: false,
+        failure: {
+          reason: "instance_circuit_open",
+          familyIds: ["adapter-c"],
+          attributedFamilyId: "adapter-c",
+          attributedInstanceCircuitKey: "adapter-c:0xpool",
+          blockingCircuitScope: "instance",
+          stage: null,
+          causeName: null,
+          causeCode: null,
+          causeKind: null,
+        },
+      });
+      pass.recordExact(routeA, {
+        index: 0,
+        status: "positive",
+        marginBps: 125,
+        attempted: true,
+        failure: null,
+      });
+      pass.recordPlanner(routeA);
       pass.recordSolver(routeA);
       pass.finish({
         sourceBlockHash: `0x${"ab".repeat(32)}`,
+        midSourceBlock: 99,
+        midSourceBlockHash: `0x${"cd".repeat(32)}`,
         pricingMode: "n_minus_one_coarse_current_n_exact",
         passOutcome: "completed",
         passReason: null,
@@ -95,6 +121,7 @@ test(
       );
       assert.equal(catalogs.length, 2);
       assert.equal(blocks.length, 2);
+      assert.ok(catalogs.every((row) => row.schema_version === 2));
       assert.deepEqual(
         catalogs.map((row) => ({
           ref: row.route_ref,
@@ -107,16 +134,20 @@ test(
       );
       assert.deepEqual(blocks[0], {
         type: "block_scan_enumeration_solver",
-        schema_version: 1,
+        schema_version: 2,
         run_id: "run-functional",
         catalog_epoch: 1,
         source_block: 100,
         source_block_hash: `0x${"ab".repeat(32)}`,
+        mid_source_block: 99,
+        mid_source_block_hash: `0x${"cd".repeat(32)}`,
         pricing_mode: "n_minus_one_coarse_current_n_exact",
         pass_outcome: "completed",
         pass_reason: null,
         enumeration: [1, 2],
-        solver: [2, 1],
+        exact: [1, 1, 125, 0, 3, 0, null, 3],
+        planner: [1],
+        solver: [1],
         encoded_bytes: blocks[0]!.encoded_bytes,
       });
       assert.equal(typeof blocks[0]!.encoded_bytes, "number");
@@ -128,15 +159,19 @@ test(
       );
       assert.deepEqual(blocks[1], {
         type: "block_scan_enumeration_solver",
-        schema_version: 1,
+        schema_version: 2,
         run_id: "run-functional",
         catalog_epoch: 1,
         source_block: 101,
         source_block_hash: null,
+        mid_source_block: null,
+        mid_source_block_hash: null,
         pricing_mode: null,
         pass_outcome: "not_started",
         pass_reason: "scheduler_coalesced",
         enumeration: [],
+        exact: [],
+        planner: [],
         solver: [],
         encoded_bytes: blocks[1]!.encoded_bytes,
       });
@@ -209,6 +244,59 @@ test(
     );
   },
 );
+
+test("partial exact evidence drops the whole pass and persists a writer gap", async () => {
+  await withTempDir(async (dir) => {
+    const eventsPath = join(dir, "events.jsonl");
+    const routePath = join(dir, "blockscan-routes.jsonl");
+    await writeFile(eventsPath, '{"type":"searcher_start"}\n');
+    const sink = await initBlockScanEnumerationSolverTelemetry({
+      path: routePath,
+      eventsPath,
+      runId: "run-partial-exact",
+      minFreeBytes: 1,
+    });
+    const routeA = opportunity(200, [
+      edge("adapter-a", address(301), address(1), address(2)),
+    ]);
+    const routeB = opportunity(200, [
+      edge("adapter-b", address(302), address(2), address(1)),
+    ]);
+    const pass = sink.beginPass(200);
+    assert.ok(pass);
+    pass.recordEnumeration([routeA, routeB]);
+    pass.recordExact(routeA, {
+      index: 0,
+      status: "positive",
+      marginBps: 10,
+      attempted: true,
+      failure: null,
+    });
+    pass.finish({
+      sourceBlockHash: `0x${"12".repeat(32)}`,
+      midSourceBlock: 199,
+      midSourceBlockHash: `0x${"34".repeat(32)}`,
+      pricingMode: "n_minus_one_coarse_current_n_exact",
+      passOutcome: "ran",
+      passReason: null,
+    });
+    sink.recordNotStarted({
+      sourceBlock: 201,
+      sourceBlockHash: null,
+      pricingMode: null,
+      passOutcome: "not_started",
+      passReason: "scheduler_coalesced",
+    });
+    await sink.shutdown(5_000);
+
+    const records = await readJsonl(routePath);
+    assert.equal(records.length, 1, "invalid pass must persist no partial catalog");
+    assert.equal(records[0]!.source_block, 201);
+    assert.equal(records[0]!.dropped_batches, 1);
+    assert.equal(records[0]!.first_dropped_block, 200);
+    assert.equal(records[0]!.last_dropped_block, 200);
+  });
+});
 
 test(
   "same-path and hardlink aliases disable without truncating formal events",

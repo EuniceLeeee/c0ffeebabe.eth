@@ -32,18 +32,44 @@ interface RouteCatalogEntry {
 }
 
 interface RouteLifecycle {
+  schemaVersion: 1 | 2;
   runId: string;
   catalogEpoch: number;
   sourceBlock: number;
   sourceBlockHash: string | null;
+  midSourceBlock: number | null;
+  midSourceBlockHash: string | null;
   pricingMode: string | null;
   passOutcome: string;
   passReason: string | null;
   enumeration: number[];
+  exact: RouteExactDiagnostic[] | null;
+  planner: number[] | null;
   solver: number[];
   droppedBatches: number;
   firstDroppedBlock: number | null;
   lastDroppedBlock: number | null;
+}
+
+interface RouteExactDiagnostic {
+  routeRef: number;
+  status: "positive" | "negative" | "failed" | "unprobed";
+  attempted: boolean;
+  marginBps: number | null;
+  reason:
+    | "exact_not_admitted"
+    | "family_circuit_open"
+    | "instance_circuit_open"
+    | "composite_circuit_open"
+    | "probe_timeout"
+    | "global_deadline"
+    | "quote_error"
+    | null;
+}
+
+interface ScopedFinalEvents {
+  withRouteId: JsonRecord[];
+  missingRouteId: number;
 }
 
 interface ParsedRouteEvents {
@@ -234,7 +260,12 @@ function printStructuredRouteActivity(input: {
   }
 
   const lifecycle = matching[0]!;
-  const refs = [...lifecycle.enumeration, ...lifecycle.solver];
+  const plannerRefs = lifecycle.planner ?? [];
+  const refs = [
+    ...lifecycle.enumeration,
+    ...plannerRefs,
+    ...lifecycle.solver,
+  ];
   const unresolvedRefs = [...new Set(refs)].filter(
     (routeRef) =>
       !parsed.catalogs.has(
@@ -244,13 +275,38 @@ function printStructuredRouteActivity(input: {
   const enumerationSet = new Set(lifecycle.enumeration);
   const duplicateEnumeration =
     enumerationSet.size !== lifecycle.enumeration.length;
-  const solverOutsideEnumeration = lifecycle.solver.filter(
+  const plannerSet = new Set(plannerRefs);
+  const duplicatePlanner = plannerSet.size !== plannerRefs.length;
+  const plannerOutsideEnumeration = plannerRefs.filter(
     (routeRef) => !enumerationSet.has(routeRef),
   );
+  const solverOutsideParent = lifecycle.solver.filter(
+    (routeRef) =>
+      !(lifecycle.schemaVersion === 2 ? plannerSet : enumerationSet).has(
+        routeRef,
+      ),
+  );
+  const exactByRouteRef = new Map(
+    (lifecycle.exact ?? []).map((diagnostic) => [
+      diagnostic.routeRef,
+      diagnostic,
+    ]),
+  );
+  const plannerWithoutPositiveExact = lifecycle.schemaVersion === 2
+    ? plannerRefs.filter(
+        (routeRef) => exactByRouteRef.get(routeRef)?.status !== "positive",
+      )
+    : [];
+  const lifecycleInvariant =
+    duplicateEnumeration ||
+    duplicatePlanner ||
+    plannerOutsideEnumeration.length > 0 ||
+    solverOutsideParent.length > 0 ||
+    plannerWithoutPositiveExact.length > 0;
   const evidenceStatus =
     unresolvedRefs.length > 0
       ? "unknown_catalog_reference"
-      : duplicateEnumeration || solverOutsideEnumeration.length > 0
+      : lifecycleInvariant
         ? "unknown_lifecycle_invariant"
         : lifecycle.passOutcome === "not_started"
           ? "not_started"
@@ -267,8 +323,11 @@ function printStructuredRouteActivity(input: {
   }
   console.log(
     `      run_id=${bounded(lifecycle.runId)} ` +
+      `schema_version=${lifecycle.schemaVersion} ` +
       `catalog_epoch=${lifecycle.catalogEpoch} ` +
       `source_block_hash=${lifecycle.sourceBlockHash ?? "null"} ` +
+      `mid_source_block=${formatMidSource(lifecycle)} ` +
+      `mid_source_block_hash=${formatMidSourceHash(lifecycle)} ` +
       `pricing_mode=${lifecycle.pricingMode === null ? "null" : bounded(lifecycle.pricingMode)} ` +
       `pass_outcome=${bounded(lifecycle.passOutcome)} ` +
       `pass_reason=${lifecycle.passReason === null ? "null" : bounded(lifecycle.passReason)}`,
@@ -280,19 +339,74 @@ function printStructuredRouteActivity(input: {
   if (duplicateEnumeration) {
     console.log("      invariant: duplicate_enumeration_refs");
   }
-  if (solverOutsideEnumeration.length > 0) {
+  if (duplicatePlanner) {
+    console.log("      invariant: duplicate_planner_refs");
+  }
+  if (plannerOutsideEnumeration.length > 0) {
     console.log(
-      `      invariant: solver_refs_outside_enumeration=${solverOutsideEnumeration.join(",")}`,
+      `      invariant: planner_refs_outside_enumeration=${plannerOutsideEnumeration.join(",")}`,
     );
+  }
+  if (solverOutsideParent.length > 0) {
+    console.log(
+      `      invariant: solver_refs_outside_${
+        lifecycle.schemaVersion === 2 ? "planner" : "enumeration"
+      }=${solverOutsideParent.join(",")}`,
+    );
+  }
+  if (plannerWithoutPositiveExact.length > 0) {
+    console.log(
+      `      invariant: planner_refs_without_positive_exact=${
+        plannerWithoutPositiveExact.join(",")
+      }`,
+    );
+  }
+
+  const scopedFinal = collectScopedFinalEvents(input, lifecycle);
+  const finalEventsByRouteId = new Map<string, JsonRecord[]>();
+  for (const event of scopedFinal.withRouteId) {
+    const routeId = String(event.route_id);
+    const events = finalEventsByRouteId.get(routeId) ?? [];
+    events.push(event);
+    finalEventsByRouteId.set(routeId, events);
   }
 
   console.log(`      Enumeration: ${lifecycle.enumeration.length}`);
   lifecycle.enumeration.forEach((routeRef, index) => {
+    const route = resolveCatalog(parsed, lifecycle, routeRef);
+    const exact = lifecycle.exact?.[index] ?? null;
+    const plannerCall = lifecycle.planner?.indexOf(routeRef) ?? -1;
+    const solverCall = lifecycle.solver.indexOf(routeRef);
+    const final = summarizeFinalEvents(
+      route === null ? [] : finalEventsByRouteId.get(route.routeId) ?? [],
+    );
     console.log(
       `          rank=${index + 1} ref=${routeRef} ` +
-        formatRoute(resolveCatalog(parsed, lifecycle, routeRef)),
+        `${formatRoute(route)} ${formatExact(lifecycle, exact)} ` +
+        `planner_entered=${
+          lifecycle.schemaVersion === 1 ? "unknown_schema_v1" : plannerCall >= 0
+        } planner_call=${plannerCall >= 0 ? plannerCall + 1 : "null"} ` +
+        `solver_entered=${solverCall >= 0} ` +
+        `solver_call=${solverCall >= 0 ? solverCall + 1 : "null"} ` +
+        `selected_for_solver=${solverCall >= 0} ` +
+        `final_sim_status=${final.finalSimStatus} ` +
+        `final_sim_profit=${final.finalSimProfit} ` +
+        `ev_decision=${final.evDecision} ` +
+        `ev_reason=${final.evReason} net_ev_wei=${final.netEvWei}`,
     );
   });
+
+  if (lifecycle.schemaVersion === 1) {
+    console.log("      Planner entered: unknown_schema_v1");
+  } else {
+    console.log(`      Planner entered: ${plannerRefs.length}`);
+    plannerRefs.forEach((routeRef, index) => {
+      console.log(
+        `          call=${index + 1} ref=${routeRef} ` +
+          formatRoute(resolveCatalog(parsed, lifecycle, routeRef)),
+      );
+    });
+  }
 
   console.log(`      Solver entered: ${lifecycle.solver.length}`);
   lifecycle.solver.forEach((routeRef, index) => {
@@ -314,19 +428,17 @@ function printStructuredRouteActivity(input: {
     );
   });
 
-  printFinalEventJoins(input, lifecycle, parsed);
+  printFinalEventJoins(input, lifecycle, parsed, scopedFinal);
 }
 
-function printFinalEventJoins(
+function collectScopedFinalEvents(
   input: {
     targetBlock: number;
     sourceBlock: number;
     formalEvents: JsonRecord[];
-    malformedEventLines: number;
   },
   lifecycle: RouteLifecycle,
-  parsed: ParsedRouteEvents,
-): void {
+): ScopedFinalEvents {
   const finalTypes = new Set([
     "simulation_result",
     "pipeline_dropped",
@@ -343,7 +455,115 @@ function printFinalEventJoins(
   const withRouteId = scoped.filter(
     (event) => typeof event.route_id === "string" && event.route_id.length > 0,
   );
-  const missingRouteId = scoped.length - withRouteId.length;
+  return {
+    withRouteId,
+    missingRouteId: scoped.length - withRouteId.length,
+  };
+}
+
+function formatMidSource(lifecycle: RouteLifecycle): string {
+  return lifecycle.schemaVersion === 1
+    ? "unknown_schema_v1"
+    : String(lifecycle.midSourceBlock ?? "null");
+}
+
+function formatMidSourceHash(lifecycle: RouteLifecycle): string {
+  return lifecycle.schemaVersion === 1
+    ? "unknown_schema_v1"
+    : lifecycle.midSourceBlockHash ?? "null";
+}
+
+function formatExact(
+  lifecycle: RouteLifecycle,
+  diagnostic: RouteExactDiagnostic | null,
+): string {
+  if (lifecycle.schemaVersion === 1) {
+    return (
+      "exact_status=unknown_schema_v1 exact_attempted=unknown " +
+      "exact_margin_bps=null exact_reason=unknown_schema_v1"
+    );
+  }
+  if (lifecycle.exact === null) {
+    return (
+      "exact_status=not_reached exact_attempted=false " +
+      "exact_margin_bps=null exact_reason=null"
+    );
+  }
+  if (diagnostic === null) {
+    return (
+      "exact_status=unknown_missing exact_attempted=unknown " +
+      "exact_margin_bps=null exact_reason=unknown_missing"
+    );
+  }
+  return (
+    `exact_status=${diagnostic.status} ` +
+    `exact_attempted=${diagnostic.attempted} ` +
+    `exact_margin_bps=${diagnostic.marginBps ?? "null"} ` +
+    `exact_reason=${diagnostic.reason ?? "null"}`
+  );
+}
+
+function summarizeFinalEvents(events: readonly JsonRecord[]): {
+  finalSimStatus: string;
+  finalSimProfit: string;
+  evDecision: string;
+  evReason: string;
+  netEvWei: string;
+} {
+  const simulations = events.filter(
+    (event) => event.type === "simulation_result",
+  );
+  const simOutcomes = simulations.map((event) => event.ok);
+  const finalSimStatus = simOutcomes.length === 0
+    ? "not_recorded"
+    : simOutcomes.every((value) => value === true)
+      ? "pass"
+      : simOutcomes.every((value) => value === false)
+        ? "fail"
+        : "mixed_or_unknown";
+  const profits = simulations
+    .map((event) => printableEventValue(event.simulated_profit))
+    .filter((value): value is string => value !== null);
+  const submitted = [...events].reverse().find(
+    (event) => event.type === "bundle_submitted",
+  );
+  const rejected = [...events].reverse().find(
+    (event) =>
+      event.type === "pipeline_dropped" &&
+      printableEventValue(event.net_ev_wei) !== null,
+  );
+  const evEvent = submitted ?? rejected;
+  return {
+    finalSimStatus,
+    finalSimProfit: profits.length > 0 ? profits.map(bounded).join("|") : "null",
+    evDecision: submitted ? "allow" : rejected ? "reject" : "not_recorded",
+    evReason: submitted
+      ? "bundle_submitted"
+      : rejected
+        ? bounded(String(rejected.reason ?? "unknown"))
+        : "null",
+    netEvWei: printableEventValue(evEvent?.net_ev_wei) ?? "null",
+  };
+}
+
+function printableEventValue(value: unknown): string | null {
+  return typeof value === "string" || typeof value === "number"
+    ? String(value)
+    : null;
+}
+
+function printFinalEventJoins(
+  input: {
+    targetBlock: number;
+    sourceBlock: number;
+    formalEvents: JsonRecord[];
+    malformedEventLines: number;
+  },
+  lifecycle: RouteLifecycle,
+  parsed: ParsedRouteEvents,
+  scopedFinal: ScopedFinalEvents,
+): void {
+  const { withRouteId, missingRouteId } = scopedFinal;
   const routeIds = new Set<string>();
   for (const routeRef of lifecycle.enumeration) {
     const catalog = resolveCatalog(parsed, lifecycle, routeRef);
@@ -482,7 +702,7 @@ function parseCatalog(value: JsonRecord): RouteCatalogEntry | null {
   const tokenRing = stringArray(value.token_ring);
   const venuePath = venuePathValue(value.venue_path);
   if (
-    schemaVersion !== 1 ||
+    (schemaVersion !== 1 && schemaVersion !== 2) ||
     runId === null ||
     catalogEpoch === null ||
     catalogEpoch <= 0 ||
@@ -507,7 +727,9 @@ function parseCatalog(value: JsonRecord): RouteCatalogEntry | null {
 }
 
 function parseLifecycle(value: JsonRecord): RouteLifecycle | null {
-  const schemaVersion = nonnegativeInteger(value.schema_version);
+  const rawSchemaVersion = nonnegativeInteger(value.schema_version);
+  if (rawSchemaVersion !== 1 && rawSchemaVersion !== 2) return null;
+  const schemaVersion = rawSchemaVersion as 1 | 2;
   const runId = stringValue(value.run_id);
   const catalogEpoch = nonnegativeInteger(value.catalog_epoch);
   const sourceBlock = nonnegativeInteger(value.source_block);
@@ -516,6 +738,22 @@ function parseLifecycle(value: JsonRecord): RouteLifecycle | null {
   const passOutcome = stringValue(value.pass_outcome);
   const passReason = nullableStringValue(value.pass_reason);
   const enumeration = integerArray(value.enumeration);
+  const midSourceBlock = schemaVersion === 2 &&
+      Object.hasOwn(value, "mid_source_block")
+    ? nullableNonnegativeInteger(value.mid_source_block)
+    : schemaVersion === 1
+      ? null
+      : undefined;
+  const midSourceBlockHash = schemaVersion === 2 &&
+      Object.hasOwn(value, "mid_source_block_hash")
+    ? nullableStringValue(value.mid_source_block_hash)
+    : schemaVersion === 1
+      ? null
+      : undefined;
+  const exact = schemaVersion === 2
+    ? parseExactDiagnostics(value.exact, enumeration ?? [])
+    : null;
+  const planner = schemaVersion === 2 ? integerArray(value.planner) : null;
   const solver = integerArray(value.solver);
   const droppedBatches =
     value.dropped_batches === undefined
@@ -526,7 +764,6 @@ function parseLifecycle(value: JsonRecord): RouteLifecycle | null {
   );
   const lastDroppedBlock = nullableNonnegativeInteger(value.last_dropped_block);
   if (
-    schemaVersion !== 1 ||
     runId === null ||
     catalogEpoch === null ||
     catalogEpoch <= 0 ||
@@ -536,6 +773,11 @@ function parseLifecycle(value: JsonRecord): RouteLifecycle | null {
     passOutcome === null ||
     passReason === undefined ||
     enumeration === null ||
+    midSourceBlock === undefined ||
+    midSourceBlockHash === undefined ||
+    ((midSourceBlock === null) !== (midSourceBlockHash === null)) ||
+    exact === undefined ||
+    (schemaVersion === 2 && planner === null) ||
     solver === null ||
     droppedBatches === null ||
     firstDroppedBlock === undefined ||
@@ -556,19 +798,83 @@ function parseLifecycle(value: JsonRecord): RouteLifecycle | null {
     return null;
   }
   return {
+    schemaVersion,
     runId,
     catalogEpoch,
     sourceBlock,
     sourceBlockHash,
+    midSourceBlock,
+    midSourceBlockHash,
     pricingMode,
     passOutcome,
     passReason,
     enumeration,
+    exact,
+    planner,
     solver,
     droppedBatches,
     firstDroppedBlock,
     lastDroppedBlock,
   };
+}
+
+function parseExactDiagnostics(
+  value: unknown,
+  enumeration: readonly number[],
+): RouteExactDiagnostic[] | null | undefined {
+  if (value === null) return null;
+  if (!Array.isArray(value) || value.length !== enumeration.length * 4) {
+    return undefined;
+  }
+  const statuses = ["positive", "negative", "failed", "unprobed"] as const;
+  const reasons = [
+    null,
+    "exact_not_admitted",
+    "family_circuit_open",
+    "instance_circuit_open",
+    "composite_circuit_open",
+    "probe_timeout",
+    "global_deadline",
+    "quote_error",
+  ] as const;
+  const result: RouteExactDiagnostic[] = [];
+  for (let index = 0; index < enumeration.length; index++) {
+    const offset = index * 4;
+    const statusCode = nonnegativeInteger(value[offset]);
+    const attemptedCode = nonnegativeInteger(value[offset + 1]);
+    const marginBps = value[offset + 2] === null
+      ? null
+      : typeof value[offset + 2] === "number" &&
+          Number.isFinite(value[offset + 2])
+        ? value[offset + 2] as number
+        : undefined;
+    const reasonCode = nonnegativeInteger(value[offset + 3]);
+    if (
+      statusCode === null ||
+      statusCode < 1 ||
+      statusCode > statuses.length ||
+      (attemptedCode !== 0 && attemptedCode !== 1) ||
+      marginBps === undefined ||
+      reasonCode === null ||
+      reasonCode >= reasons.length
+    ) return undefined;
+    const status = statuses[statusCode - 1]!;
+    const reason = reasons[reasonCode]!;
+    if (
+      ((status === "positive" || status === "negative") &&
+        (attemptedCode !== 1 || marginBps === null || reason !== null)) ||
+      ((status === "failed" || status === "unprobed") &&
+        (marginBps !== null || reason === null))
+    ) return undefined;
+    result.push({
+      routeRef: enumeration[index]!,
+      status,
+      attempted: attemptedCode === 1,
+      marginBps,
+      reason,
+    });
+  }
+  return result;
 }
 
 function resolveCatalog(

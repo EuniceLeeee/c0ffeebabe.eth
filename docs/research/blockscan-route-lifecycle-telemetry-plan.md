@@ -1,28 +1,37 @@
-# Block-scan Enumeration / Solver 异步日志方案
+# Block-scan Route Lifecycle 异步日志合同
 
-状态：`implemented_not_deployed`。离线构建、功能、故障、parser、
-`tool-index/tool-run` 以及已声明的主线程微基准已通过；完整生产影响性能门
-证据不足。尚未部署 live，因此不是 `fixed`。
+状态：`implemented_not_deployed`。schema v2 的离线构建、功能、故障、parser、
+`tool-index/tool-run` 和主线程微基准已通过。尚未部署 live，因此不是 `fixed`，
+也没有生产 scanner 自发样本。
 
-## 1. 只回答两个问题
+## 1. 最终范围
 
-每个已观察 source block 只回答：
+每个已观察 source block 保存以下原始生命周期事实：
 
-1. `Enumeration`：scanner 自发枚举出了哪些具体闭环；
-2. `Solver`：哪些具体闭环实际进入了 solver。
+1. `Enumeration`：scanner 自发枚举出的完整有序闭环集合；数组位置就是
+   coarse rank，因此不另存 rank 对象；
+2. `Exact`：每条 Enumeration route 的 exact 状态、是否真正尝试、margin 和
+   有界失败码；admission 前过滤的 route 明确记为
+   `unprobed/exact_not_admitted`；
+3. `Planner`：哪些具体闭环真正调用了
+   `planBlockScanFromSeedEdges()`；
+4. `Solver`：哪些具体闭环真正调用了 `solver.solve()`。
 
-不新增以下逐 route 日志：
+每块同时保存 mid snapshot 的 source block/hash。它只用于说明 coarse rank
+来自哪一代价格，不展开完整 edge→mid 价格表；完整 mid 价格表属于独立的离线
+分析工具。
+
+sidecar 不新增以下重数据：
 
 - edge state / metadata；
-- mid、reserve、fee 或 quote；
-- exact-refine 明细；
-- planner 明细；
+- 完整 mid、reserve、fee、逐 leg exact amount/output；
+- planner plan tree；
 - DFS 中间节点；
 - calldata、余额或 RPC 原文。
 
-需要 edge 或 quote 时，以日志中的 source block 和闭环定位符实时查询。现有
-block-scan pass 聚合日志继续负责说明 state / exact / planner 等阶段整体是否
-运行；本方案不复制它们。
+final sim / EV 不在 sidecar 重复生产；`block-activity` 以
+`run_id + source_block + route_id` join 现有正式事件。生产热路径不做策略分析，
+不新增 RPC、quote、simulate、排序或同步写盘。
 
 ## 2. “具体闭环”的最小表示
 
@@ -54,7 +63,7 @@ blockScanRouteId(seedEdges): sha256(
 - venue、pool、direction 或 adapter 不同则不同；
 - 不使用只含 token ring 且带 source block 的 `cycleFingerprint` 代替。
 
-## 3. 文件格式：业务上只有两组数据
+## 3. schema v2 文件格式
 
 专用 sidecar 每次 live 启动先截断旧文件：
 
@@ -63,7 +72,7 @@ SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH=
   /var/log/mev/events/searcher-live.blockscan-routes.jsonl
 ```
 
-文件中有两种物理记录，但业务数据仍只有 Enumeration / Solver：
+文件中有两种物理记录：静态 route catalog 和逐块 lifecycle：
 
 ### 3.1 route catalog（仅用于压缩）
 
@@ -72,6 +81,7 @@ SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH=
 ```json
 {
   "type": "block_scan_route_catalog",
+  "schema_version": 2,
   "run_id": "...",
   "catalog_epoch": 1,
   "route_ref": 17,
@@ -85,35 +95,68 @@ SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH=
 }
 ```
 
-`route_ref` 是本 run 内的整数压缩编号。catalog 不是第三类生产信息，也不记录
-edge；它只是避免每个区块重复完整闭环字符串。
+`route_ref` 是本 run 内的整数压缩编号。catalog 只负责静态 locator 压缩，不
+记录 edge 状态或价格；worker 在成功 append 后才提交 ref 映射。
 
 ### 3.2 每块 lifecycle
 
 ```json
 {
   "type": "block_scan_enumeration_solver",
+  "schema_version": 2,
   "run_id": "...",
   "catalog_epoch": 1,
   "source_block": 0,
-  "source_block_hash": null,
+  "source_block_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "mid_source_block": 0,
+  "mid_source_block_hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "pricing_mode": "source_n|n_minus_one_coarse_current_n_exact|null",
   "pass_outcome": "ran|degraded|not_started|...",
   "pass_reason": null,
   "enumeration": [17, 4, 9],
-  "solver": [17, 4]
+  "exact": [1, 1, 125, 0, 2, 1, 0, 0, 4, 0, null, 1],
+  "planner": [17],
+  "solver": [17]
 }
 ```
+
+`exact` 按 Enumeration 顺序每条占四个原始值：
+
+```text
+[status, attempted, margin_bps, failure]
+
+status:
+  1 positive
+  2 negative
+  3 failed
+  4 unprobed
+
+failure:
+  0 none
+  1 exact_not_admitted
+  2 family_circuit_open
+  3 instance_circuit_open
+  4 composite_circuit_open
+  5 probe_timeout
+  6 global_deadline
+  7 quote_error
+```
+
+候选存在但 exact 阶段未到达时 `exact=null`；零候选时 `exact=[]`。一旦本块
+开始收到 exact 结果，就必须覆盖全部 Enumeration route；不完整时整块
+telemetry drop，下一条成功记录写 writer gap，不能把部分数据伪装成完整总集。
 
 规则：
 
 - `enumeration` 按 scanner 最终 rank 顺序保存全部候选；
+- `exact` 与 `enumeration` 一一按位置对应，包含 Top 20 以下的全部候选；
+- `planner` 按真实 planner 调用顺序；
 - `solver` 按真实调用顺序，只包含实际调用 `solver.solve` 的闭环；
 - route 在调用前登记，所以 solver 返回、报错或 deadline 都不会把
   “曾进入 solver”这个事实抹掉；
-- `enumeration - solver` 就是“枚举到但没有进入 solver”的闭环；
-- 不为这些差集逐 route 记录 exact/planner 原因；需要时结合现有 pass
-  aggregate stage / reason；
+- `enumeration - solver` 就是“枚举到但没有真正进入 solver”的闭环；
+- `selected_for_solver` 在 analysis 中表示真实进入 `solver.solve()`，不是仅仅
+  排名入围；
 - solver 的具体结果、final sim / EV 仍以现有聚合/正式事件为准，正式
   block-scan 事件补同一个 `route_id` 以便 join。
 
@@ -121,6 +164,8 @@ edge；它只是避免每个区块重复完整闭环字符串。
 
 ```text
 enumeration=[]
+exact=[]
+planner=[]
 solver=[]
 pass_outcome / pass_reason 明确为 not-run 原因
 ```
@@ -165,13 +210,16 @@ solver.solve
 mandatory final sim / EV
 ```
 
-只接两个点：
+只接四个既有生产边界：
 
 1. `coarse.opportunities` 确定后，按原顺序登记 Enumeration；
-2. 每次调用 `solver.solve` 前，登记 Solver entered。
+2. exact refinement 已有 diagnostic callback 返回时登记 Exact；
+3. 调用 `planBlockScanFromSeedEdges()` 前登记 Planner entered；
+4. 调用 `solver.solve()` 前登记 Solver entered。
 
-不得为日志新增 RPC、quote、simulate、图枚举或 planner 调用。N-1 coarse 到
-current-N exact promotion 必须保持同一 `route_id`。
+不得为日志新增 RPC、quote、simulate、图枚举、planner、solver 或排序调用。
+N-1 coarse 到 current-N exact promotion 必须保持同一 `route_id`。telemetry
+enabled/disabled 不得改变 production 输出、顺序、候选 admission 或调度。
 
 ## 6. 异步与背压
 
@@ -255,8 +303,8 @@ route writer 初始化失败返回 noop sink，不能阻止 searcher 启动。
 约束：
 
 - 完整闭环 locator 每个 run 只写一次；
-- 每块只写 Enumeration / Solver 两个整数 ref 数组；
-- 不写 edge / quote / exact / planner 明细；
+- 每块只写 Enumeration / Planner / Solver 的整数 ref 数组和扁平 exact 数值；
+- 不写 edge state、完整 quote、逐 leg amount 或 plan tree；
 - error 只写有限 status，不写长 error message；
 - 每条 batch 记录 encoded byte 数，analysis 可以投影 24 小时数据量。
 
@@ -277,7 +325,8 @@ gap；scanner / solver 继续运行。只有下一次安全 live 重启才恢复
 进程内静默重启 worker、抽样或只保留 top routes。
 
 验收同时做正常生产投影和 adversarial churn。正常投影按 7200 块、最大
-Enumeration / Solver 以及已观察的 route churn，须 `<= 100 MiB / 24h`。
+Enumeration / Exact / Planner / Solver 以及已观察的 route churn，须
+`<= 100 MiB / 24h`。
 adversarial 全新-route churn 不允许突破 100 MiB 硬帽；它应触发明确 gap 并停止
 本 epoch telemetry。此后 analysis 必须显示证据缺口，不能声称仍覆盖每块。
 
@@ -295,10 +344,11 @@ npm run block-activity -- \
 输出：
 
 - target block 对应的 block-scan source block；
-- Enumeration 的每条具体闭环；
-- Solver 实际进入的每条具体闭环；
+- mid price snapshot 的 source block/hash（不是完整 mid 价格表）；
+- Enumeration 的每条具体闭环、coarse rank 和 compact exact 结果；
+- Planner / Solver 实际进入的每条具体闭环及调用顺序；
 - 枚举但未进入 solver 的闭环；
-- 已有关联的 final sim / EV；
+- 已有关联的 final sim / EV；没有正式事件时明确显示 `not_recorded`；
 - scheduler coalesce、writer gap 或 unknown。
 
 工具不得：
@@ -315,12 +365,18 @@ npm run block-activity -- \
 1. telemetry disabled / enabled 下 scanner 输出、顺序、planner input、
    solver input、final sim input 和决策完全相同。
 2. 每个进入 `coarse.opportunities` 的候选恰好出现在 Enumeration 一次。
-3. 每次真实 `solver.solve` 调用恰好产生一条 Solver 记录；未调用的 route
+3. exact 阶段到达时，每条 Enumeration route 恰有一个 compact 结果；
+   admission 前过滤也保留为 `unprobed/exact_not_admitted`，部分 exact 证据
+   必须整块 drop。
+4. 每次真实 planner 调用恰好产生一条 Planner 记录；未调用的 route 不能
+   进入 Planner 数组。
+5. 每次真实 `solver.solve` 调用恰好产生一条 Solver 记录；未调用的 route
    不能进入 Solver 数组。
-4. N 与 N-1 模式都通过；N-1 promotion 保持 route identity。
-5. route id 对 block 稳定，对 venue / pool / direction / adapter 敏感。
-6. scheduler 被替换和 shutdown 丢弃的已观察 head 有明确 not-started 记录。
-7. final sim / EV 事件能以 `run_id + source_block + route_id` join。
+6. N 与 N-1 模式都通过；N-1 promotion 保持 route identity，并保存实际
+   mid source block/hash。
+7. route id 对 block 稳定，对 venue / pool / direction / adapter 敏感。
+8. scheduler 被替换和 shutdown 丢弃的已观察 head 有明确 not-started 记录。
+9. final sim / EV 事件能以 `run_id + source_block + route_id` join。
 
 ### 9.2 故障
 
@@ -350,7 +406,7 @@ npm run block-activity -- \
 正常性能 verdict 还必须满足：
 
 - worker healthy，所有 batch ack，zero drop / zero gap；
-- 输出可解析，Enumeration / Solver 数量逐项相等；
+- 输出可解析，Enumeration / Exact / Planner / Solver 数量与输入逐项相等；
 - `run_count >= 20`，固定 seed，disabled / enabled 交错 paired samples；
 - 预先冻结精确 run count；计算 matched-pair delta 并保留所有 timeout /
   failed samples；
@@ -361,20 +417,15 @@ npm run block-activity -- \
 
 blocked-worker / writer-failure 只验证 fail-open，不能贡献正常性能过门样本。
 
-本分支在加入 2,048-entry 有界 route-locator cache 后，连续执行三次互相独立、
-每次 20 组的冻结交错离线样本；三次结果全部通过，且全部保留：
+schema v2 在最新 impl 基线 `d207bed3` 上隔离执行冻结交错离线样本：
 
-- fixture：512 条四跳闭环，100 条进入 Solver；
-- 源码 worker 主线程 matched-pair p95：
-  `2.335ms / 2.433ms / 3.390ms`；
-- 源码 worker 主线程 matched-pair p99：
-  `2.458ms / 2.571ms / 3.940ms`；
-- 源码 worker blocked enqueue p99：
-  `0.014ms / 0.016ms / 0.017ms`；
-- 编译后 Node worker 独立复跑：p95 `2.246ms`、p99 `2.263ms`、
-  blocked p99 `0.055ms`；
-- 重复 512-route、Solver=100 这一窄场景的 24 小时投影：
-  `18,867,284 bytes`（约 `18.0 MiB`）；
+- fixture：512 条四跳闭环，512 条 compact exact，100 条进入 Planner 和
+  Solver；
+- 源码 worker 主线程 matched-pair p95 `3.737ms`、p99 `3.832ms`、
+  blocked enqueue p99 `0.024ms`；
+- 编译后 Node worker 独立复跑：p95 `3.434ms`、p99 `3.865ms`、
+  blocked enqueue p99 `0.024ms`；
+- 重复 route 场景的 24 小时投影：`58,085,684 bytes`；
 - hard cap：`104,857,600 bytes`；
 - healthy worker：全部 ack，zero drop / zero gap。
 
@@ -404,24 +455,23 @@ npm run tool-run -- --manifest <manifest> \
   --route-events <fixture-route-events>
 ```
 
-`tool-run` 必须在 fixture JSONL 输出 Enumeration / Solver 两组闭环及 join
-结果。离线门只允许称 `implemented`；没有生产 scanner 自发枚举和 mandatory
-final sim live 证据，不能称 `fixed`。
+`tool-run` 必须在 fixture JSONL 输出 Enumeration / Exact / Planner / Solver
+生命周期及 final-event join 结果。离线门只允许称 `implemented`；没有生产
+scanner 自发枚举和 mandatory final sim live 证据，不能称 `fixed`。
 
 本分支实际执行结果：
 
 ```text
 listener build / build:live                         PASS
-route telemetry source worker                      4/4 PASS
-route telemetry compiled worker                    4/4 PASS
-latest-head scheduler                              PASS
-blockscan runtime startup/N-1 + nonzero solver    26/26 PASS
-blockscan pricing source mode                      8/8 PASS
-blockscan production boundary                      PASS
-analysis block-activity                           11/11 PASS
-analysis targeted deploy boundaries               73/73 PASS
-analysis full suite                              290/290 PASS
-tool-index --check                                 PASS (250 tools)
+route telemetry source worker                      5/5 PASS
+route telemetry compiled worker                    5/5 PASS
+blockscan candidate refinement                      PASS
+latest-head scheduler                               PASS
+blockscan pricing source mode                     8/8 PASS
+blockscan production boundary                       PASS
+analysis build                                      PASS
+analysis block-activity                           14/14 PASS
+tool-index --check                                 PASS (333 tools)
 ```
 
 实际 tool selection：
@@ -432,13 +482,15 @@ requested capabilities:
 recommended:
   analysis:block-activity
 manifest:
-  /tmp/blockscan-route-tool-manifest.json
+  /tmp/blockscan-route-v2-tool-manifest.json
 final manifest sha256:
-  0dd626767d52f742e2bdce9726ece9233a45e3ef410c9c95a58b7dc28377e607
+  7b48331089d44a3cbf8c9329476b6de6cf17d8258e2887284c7c6c8d57496c3c
 tool-run:
   exit=0
   Enumeration=2
-  Solver entered=2
+  Exact=1 positive + 1 unprobed/exact_not_admitted
+  Planner entered=1
+  Solver entered=1
   Final events joined=2
 ```
 

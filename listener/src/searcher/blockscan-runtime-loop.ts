@@ -18,7 +18,10 @@ import type {
   BlockScanCoreConfig,
   BlockScanOutcome,
 } from "./detector/blockscan-scanner-core.js";
-import { refineBlockScanCandidates } from "./detector/blockscan-candidate-refinement.js";
+import {
+  refineBlockScanCandidates,
+  type BlockScanProbeDiagnostic,
+} from "./detector/blockscan-candidate-refinement.js";
 import {
   enumerateNMinusOneCoarseCandidates,
   promoteNMinusOneExactCandidates,
@@ -497,9 +500,16 @@ interface BlockScanBlindDependencies {
 
 export interface BlockScanEnumerationSolverPass {
   recordEnumeration(opportunities: readonly BlockScanOpportunity[]): void;
+  recordExact(
+    opportunity: BlockScanOpportunity,
+    diagnostic: BlockScanProbeDiagnostic,
+  ): void;
+  recordPlanner(opportunity: BlockScanOpportunity): void;
   recordSolver(opportunity: BlockScanOpportunity): void;
   finish(input: {
     readonly sourceBlockHash: string | null;
+    readonly midSourceBlock: number | null;
+    readonly midSourceBlockHash: string | null;
     readonly pricingMode:
       | "source_n"
       | "n_minus_one_coarse_current_n_exact"
@@ -1585,6 +1595,23 @@ export class BlockScanRuntimeLoop {
         // Route evidence is fail-open and cannot alter solver admission.
       }
     };
+    const recordExact = (
+      opportunity: BlockScanOpportunity,
+      diagnostic: BlockScanProbeDiagnostic,
+    ): void => {
+      try {
+        routeTelemetryPass?.recordExact(opportunity, diagnostic);
+      } catch {
+        // Route evidence is fail-open and cannot alter exact refinement.
+      }
+    };
+    const recordPlanner = (opportunity: BlockScanOpportunity): void => {
+      try {
+        routeTelemetryPass?.recordPlanner(opportunity);
+      } catch {
+        // Route evidence is fail-open and cannot alter planner admission.
+      }
+    };
     const blockScanGraph = this.deps.blockScanGraph();
     const blockScanCfg = this.deps.blockScanConfig;
     const blockScanPlanner = this.deps.blockScanPlanner();
@@ -1613,6 +1640,8 @@ export class BlockScanRuntimeLoop {
       try {
         routeTelemetryPass?.finish({
           sourceBlockHash: null,
+          midSourceBlock: null,
+          midSourceBlockHash: null,
           pricingMode: null,
           passOutcome: "disabled",
           passReason: this.deps.isShuttingDown()
@@ -1901,6 +1930,9 @@ export class BlockScanRuntimeLoop {
       try {
         routeTelemetryPass?.finish({
           sourceBlockHash: observedSourceBlockHash,
+          midSourceBlock: coarseSourceBlock ?? runtimeSourceBlock,
+          midSourceBlockHash: coarseSourceBlockHash ??
+            (pricingMode === "source_n" ? exactSourceBlockHash : null),
           pricingMode,
           passOutcome: outcome,
           passReason: skippedReason ?? null,
@@ -2795,10 +2827,12 @@ export class BlockScanRuntimeLoop {
         blockScanCfg.maxCandidates,
         refineDeadline,
         blockScanCfg.pricedTokens,
-        this.deps.blind.enabled
+        routeTelemetryPass !== null || this.deps.blind.enabled
           ? (diagnostic) => {
               const opportunity = coarse.opportunities[diagnostic.index];
               if (!opportunity) return;
+              recordExact(opportunity, diagnostic);
+              if (!this.deps.blind.enabled) return;
               const key = blindOpportunityEvidenceKey(opportunity);
               const evidence = auditOpportunities?.get(key);
               if (!evidence) return;
@@ -2946,6 +2980,7 @@ export class BlockScanRuntimeLoop {
         );
         try {
           blockScanPlanner.setGraph(opp.seedEdges);
+          recordPlanner(opp);
           const plans = await blockScanPlanner.planBlockScanFromSeedEdges(
             opp,
             [FLASH_SWAP_REPAY],

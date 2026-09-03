@@ -46,6 +46,8 @@ try {
         orderSeed: `0x${ORDER_SEED.toString(16)}`,
         routeCount: ROUTE_COUNT,
         routeLegs: ROUTE_LEGS,
+        exactCount: ROUTE_COUNT,
+        plannerCount: SOLVER_COUNT,
         p95DeltaMs: rounded(healthy.p95DeltaMs),
         p99DeltaMs: rounded(healthy.p99DeltaMs),
         blockedP99Ms: rounded(blocked.p99Ms),
@@ -145,6 +147,8 @@ async function healthyBenchmark(
     assert.equal(lifecycle.length, WARMUP_COUNT + RUN_COUNT);
     for (const record of lifecycle) {
       assert.equal((record.enumeration as unknown[]).length, ROUTE_COUNT);
+      assert.equal((record.exact as unknown[]).length, ROUTE_COUNT * 4);
+      assert.equal((record.planner as unknown[]).length, SOLVER_COUNT);
       assert.equal((record.solver as unknown[]).length, SOLVER_COUNT);
       assert.equal("writer_gap_before" in record, false);
     }
@@ -341,11 +345,23 @@ async function measuredPass(
   const pass = sink.beginPass(sourceBlock);
   if (pass) {
     pass.recordEnumeration(fixture);
+    for (let index = 0; index < fixture.length; index++) {
+      pass.recordExact(fixture[index]!, {
+        index,
+        status: "positive",
+        marginBps: index + 1,
+        attempted: true,
+        failure: null,
+      });
+    }
     for (let index = 0; index < SOLVER_COUNT; index++) {
+      pass.recordPlanner(fixture[index]!);
       pass.recordSolver(fixture[index]!);
     }
     pass.finish({
       sourceBlockHash: blockHash(sourceBlock),
+      midSourceBlock: sourceBlock,
+      midSourceBlockHash: blockHash(sourceBlock),
       pricingMode: "source_n",
       passOutcome: "ran",
       passReason: null,
@@ -375,11 +391,23 @@ function enqueuePass(
   const pass = sink.beginPass(sourceBlock);
   assert(pass, `expected queue credit for block ${sourceBlock}`);
   pass.recordEnumeration(fixture);
+  for (let index = 0; index < fixture.length; index++) {
+    pass.recordExact(fixture[index]!, {
+      index,
+      status: "positive",
+      marginBps: index + 1,
+      attempted: true,
+      failure: null,
+    });
+  }
   for (let index = 0; index < SOLVER_COUNT; index++) {
+    pass.recordPlanner(fixture[index]!);
     pass.recordSolver(fixture[index]!);
   }
   pass.finish({
     sourceBlockHash: blockHash(sourceBlock),
+    midSourceBlock: sourceBlock,
+    midSourceBlockHash: blockHash(sourceBlock),
     pricingMode: "source_n",
     passOutcome: "ran",
     passReason: null,

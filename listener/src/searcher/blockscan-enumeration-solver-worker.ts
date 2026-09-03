@@ -30,10 +30,14 @@ interface RouteGap {
   readonly lastDroppedBlock: number;
 }
 
+type CompactExactValue = number | null;
+
 interface RawRouteBatch {
   readonly sequence: number;
   readonly sourceBlock: number;
   readonly sourceBlockHash: string | null;
+  readonly midSourceBlock: number | null;
+  readonly midSourceBlockHash: string | null;
   readonly pricingMode:
     | "source_n"
     | "n_minus_one_coarse_current_n_exact"
@@ -42,6 +46,8 @@ interface RawRouteBatch {
   readonly passReason: string | null;
   readonly routes: readonly BlockScanRouteLocator[];
   readonly enumeration: readonly number[];
+  readonly exact: readonly CompactExactValue[] | null;
+  readonly planner: readonly number[];
   readonly solver: readonly number[];
   readonly gapBefore: RouteGap | null;
 }
@@ -190,7 +196,7 @@ async function handleBatch(batch: RawRouteBatch): Promise<void> {
     if (!locator) throw new Error("staged route locator disappeared");
     catalogLines.push(JSON.stringify({
       type: "block_scan_route_catalog",
-      schema_version: 1,
+      schema_version: 2,
       run_id: options.runId,
       catalog_epoch: epoch,
       route_ref: entry.ref,
@@ -207,15 +213,19 @@ async function handleBatch(batch: RawRouteBatch): Promise<void> {
   };
   const blockRecord: Record<string, unknown> = {
     type: "block_scan_enumeration_solver",
-    schema_version: 1,
+    schema_version: 2,
     run_id: options.runId,
     catalog_epoch: epoch,
     source_block: batch.sourceBlock,
     source_block_hash: batch.sourceBlockHash,
+    mid_source_block: batch.midSourceBlock,
+    mid_source_block_hash: batch.midSourceBlockHash,
     pricing_mode: batch.pricingMode,
     pass_outcome: batch.passOutcome,
     pass_reason: batch.passReason,
     enumeration: batch.enumeration.map(lookup),
+    exact: batch.exact,
+    planner: batch.planner.map(lookup),
     solver: batch.solver.map(lookup),
     ...(batch.gapBefore
       ? {
@@ -400,14 +410,57 @@ function validateBatch(batch: RawRouteBatch): void {
     throw new Error("invalid route telemetry source block");
   }
   if (!Array.isArray(batch.routes) || !Array.isArray(batch.enumeration) ||
-      !Array.isArray(batch.solver)) {
+      !Array.isArray(batch.planner) || !Array.isArray(batch.solver) ||
+      (batch.exact !== null && !Array.isArray(batch.exact))) {
     throw new Error("invalid route telemetry batch arrays");
   }
   const validIndex = (index: number): boolean =>
     Number.isSafeInteger(index) && index >= 0 && index < batch.routes.length;
-  if (!batch.enumeration.every(validIndex) || !batch.solver.every(validIndex)) {
+  if (
+    !batch.enumeration.every(validIndex) ||
+    !batch.planner.every(validIndex) ||
+    !batch.solver.every(validIndex) ||
+    (
+      batch.exact !== null &&
+      (
+        batch.exact.length !== batch.enumeration.length * 4 ||
+        !validCompactExactDiagnostics(batch.exact)
+      )
+    )
+  ) {
     throw new Error("route telemetry batch has invalid route index");
   }
+  if (
+    batch.midSourceBlock !== null &&
+    (!Number.isSafeInteger(batch.midSourceBlock) || batch.midSourceBlock < 0)
+  ) {
+    throw new Error("invalid route telemetry mid source block");
+  }
+  if (
+    (batch.midSourceBlock === null) !== (batch.midSourceBlockHash === null)
+  ) {
+    throw new Error("route telemetry mid source anchor is incomplete");
+  }
+}
+
+function validCompactExactDiagnostics(
+  values: readonly CompactExactValue[],
+): boolean {
+  for (let offset = 0; offset < values.length; offset += 4) {
+    const status = values[offset];
+    const attempted = values[offset + 1];
+    const margin = values[offset + 2];
+    const failure = values[offset + 3];
+    if (
+      status === null || status === undefined ||
+      !Number.isSafeInteger(status) || status < 1 || status > 4 ||
+      (attempted !== 0 && attempted !== 1) ||
+      (margin !== null && (margin === undefined || !Number.isFinite(margin))) ||
+      failure === null || failure === undefined ||
+      !Number.isSafeInteger(failure) || failure < 0 || failure > 7
+    ) return false;
+  }
+  return true;
 }
 
 function locatorKey(locator: BlockScanRouteLocator): string {

@@ -1306,13 +1306,14 @@ async function admissionFloorSkipsLowSpreadProbes(): Promise<void> {
       seedEdges: [thinEdge],
     },
   ];
+  const diagnostics = new Map<number, BlockScanProbeDiagnostic>();
   const result = await refineBlockScanCandidates(
     state,
     opportunities,
     opportunities.length,
     Date.now() + 2_000,
     pricedTokens,
-    undefined,
+    (diagnostic) => diagnostics.set(diagnostic.index, diagnostic),
     1,
     {
       probeTimeoutMs: 500,
@@ -1325,6 +1326,13 @@ async function admissionFloorSkipsLowSpreadProbes(): Promise<void> {
   assert.equal(result.shadow?.admitted.positive, 1);
   assert.equal(result.shadow?.notAdmitted.total, 1);
   assert.equal(result.shadow?.wouldRejectCapital.total, 0);
+  assert.equal(diagnostics.get(0)?.status, "positive");
+  assert.equal(diagnostics.get(1)?.status, "unprobed");
+  assert.equal(diagnostics.get(1)?.attempted, false);
+  assert.equal(
+    diagnostics.get(1)?.failure?.reason,
+    "exact_not_admitted",
+  );
   assert.equal(
     result.shadow?.familyOutcomes["admission-family"]?.positive,
     1,

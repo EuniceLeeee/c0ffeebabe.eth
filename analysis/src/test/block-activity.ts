@@ -128,6 +128,105 @@ test("block-activity resolves catalog refs and joins structured final events wit
   });
 });
 
+test("block-activity renders every schema-v2 route through exact, planner, solver, final sim, and EV", async () => {
+  await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
+    const routeIds = Array.from(
+      { length: 22 },
+      (_, index) => `sha256:v2-route-${index + 1}`,
+    );
+    await writeFile(eventsPath, [
+      JSON.stringify({
+        type: "simulation_result",
+        run_id: "run-v2",
+        target_block: 100,
+        source_block: 99,
+        opportunity_kind: "block-scan-arb",
+        route_id: routeIds[0],
+        ok: true,
+        simulated_profit: "42",
+      }),
+      JSON.stringify({
+        type: "pipeline_dropped",
+        run_id: "run-v2",
+        target_block: 100,
+        source_block: 99,
+        opportunity_kind: "block-scan-arb",
+        route_id: routeIds[0],
+        stage: "submit_gate",
+        reason: "below_ev_gate",
+        net_ev_wei: "-7",
+      }),
+    ].join("\n"));
+    const catalogs = routeIds.map((routeId, index) => JSON.stringify({
+      type: "block_scan_route_catalog",
+      schema_version: 2,
+      run_id: "run-v2",
+      catalog_epoch: 1,
+      route_ref: index + 1,
+      route_id: routeId,
+      token_ring: [WETH, USDC, WETH],
+      venue_path: [["univ3-swap", `0xpool-${index + 1}`]],
+      flash_token: WETH,
+    }));
+    const exact = routeIds.flatMap((_, index) =>
+      index === 0
+        ? [1, 1, 125, 0]
+        : index === 1
+          ? [2, 1, 0, 0]
+          : [4, 0, null, 1]
+    );
+    await writeFile(routeEventsPath, [
+      ...catalogs,
+      JSON.stringify({
+        type: "block_scan_enumeration_solver",
+        schema_version: 2,
+        run_id: "run-v2",
+        catalog_epoch: 1,
+        source_block: 99,
+        source_block_hash: "0xsource99",
+        mid_source_block: 98,
+        mid_source_block_hash: "0xmid98",
+        pricing_mode: "n_minus_one_coarse_current_n_exact",
+        pass_outcome: "ran",
+        pass_reason: null,
+        enumeration: routeIds.map((_, index) => index + 1),
+        exact,
+        planner: [1],
+        solver: [1],
+      }),
+    ].join("\n"));
+
+    const stdout = await runBlockActivity(
+      eventsPath,
+      logPath,
+      routeEventsPath,
+    );
+
+    assert.match(stdout, /status=complete/);
+    assert.match(
+      stdout,
+      /schema_version=2 .*mid_source_block=98 mid_source_block_hash=0xmid98/,
+    );
+    assert.match(
+      stdout,
+      /rank=1 ref=1 route_id=sha256:v2-route-1 .*exact_status=positive exact_attempted=true exact_margin_bps=125 exact_reason=null planner_entered=true .*selected_for_solver=true final_sim_status=pass final_sim_profit=42 ev_decision=reject ev_reason=below_ev_gate net_ev_wei=-7/,
+    );
+    assert.match(
+      stdout,
+      /rank=2 ref=2 route_id=sha256:v2-route-2 .*exact_status=negative exact_attempted=true exact_margin_bps=0 exact_reason=null planner_entered=false/,
+    );
+    assert.match(
+      stdout,
+      /rank=3 ref=3 route_id=sha256:v2-route-3 .*exact_status=unprobed exact_attempted=false exact_margin_bps=null exact_reason=exact_not_admitted/,
+    );
+    assert.match(stdout, /Planner entered: 1/);
+    assert.match(
+      stdout,
+      /rank=22 ref=22 route_id=sha256:v2-route-22 .*selected_for_solver=false/,
+    );
+  });
+});
+
 test("block-activity scopes route refs by catalog epoch", async () => {
   await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
     await writeFile(routeEventsPath, [
@@ -261,6 +360,79 @@ test("block-activity fails closed when a lifecycle references an absent catalog 
   });
 });
 
+test("block-activity fails closed on incomplete schema-v2 exact coverage", async () => {
+  await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
+    await writeFile(routeEventsPath, [
+      routeCatalog(1, ROUTE_A, [WETH, USDC, WETH], [
+        ["univ3-swap", "0xpool-a"],
+      ], 1, 2),
+      JSON.stringify({
+        type: "block_scan_enumeration_solver",
+        schema_version: 2,
+        run_id: "run-a",
+        catalog_epoch: 1,
+        source_block: 99,
+        source_block_hash: "0xsource99",
+        mid_source_block: 98,
+        mid_source_block_hash: "0xmid98",
+        pricing_mode: "n_minus_one_coarse_current_n_exact",
+        pass_outcome: "ran",
+        pass_reason: null,
+        enumeration: [1],
+        exact: [],
+        planner: [],
+        solver: [],
+      }),
+    ].join("\n"));
+
+    const stdout = await runBlockActivity(
+      eventsPath,
+      logPath,
+      routeEventsPath,
+    );
+
+    assert.match(stdout, /status=unknown_invalid_route_events/);
+    assert.match(stdout, /invalid_records=1/);
+  });
+});
+
+test("block-activity fails closed when schema-v2 planner references no catalog route", async () => {
+  await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
+    await writeFile(routeEventsPath, [
+      routeCatalog(1, ROUTE_A, [WETH, USDC, WETH], [
+        ["univ3-swap", "0xpool-a"],
+      ], 1, 2),
+      JSON.stringify({
+        type: "block_scan_enumeration_solver",
+        schema_version: 2,
+        run_id: "run-a",
+        catalog_epoch: 1,
+        source_block: 99,
+        source_block_hash: "0xsource99",
+        mid_source_block: 98,
+        mid_source_block_hash: "0xmid98",
+        pricing_mode: "n_minus_one_coarse_current_n_exact",
+        pass_outcome: "ran",
+        pass_reason: null,
+        enumeration: [1],
+        exact: [1, 1, 25, 0],
+        planner: [2],
+        solver: [],
+      }),
+    ].join("\n"));
+
+    const stdout = await runBlockActivity(
+      eventsPath,
+      logPath,
+      routeEventsPath,
+    );
+
+    assert.match(stdout, /status=unknown_catalog_reference/);
+    assert.match(stdout, /unresolved_route_refs: 2/);
+    assert.match(stdout, /planner_refs_outside_enumeration=2/);
+  });
+});
+
 test("block-activity never falls back to legacy stdout when requested route evidence is unavailable", async () => {
   await withFixture(async ({ root, eventsPath, logPath }) => {
     const missingRouteEvents = join(root, "missing-route-events.jsonl");
@@ -281,7 +453,7 @@ test("block-activity rejects missing and wrong route-event schema", async () => 
     await writeFile(routeEventsPath, [
       JSON.stringify({
         type: "block_scan_route_catalog",
-        schema_version: 2,
+        schema_version: 3,
         run_id: "run-a",
         catalog_epoch: 1,
         route_ref: 1,
@@ -441,10 +613,11 @@ function routeCatalog(
   tokenRing: string[],
   venuePath: Array<[string, string]>,
   catalogEpoch = 1,
+  schemaVersion = 1,
 ): string {
   return JSON.stringify({
     type: "block_scan_route_catalog",
-    schema_version: 1,
+    schema_version: schemaVersion,
     run_id: "run-a",
     catalog_epoch: catalogEpoch,
     route_ref: routeRef,

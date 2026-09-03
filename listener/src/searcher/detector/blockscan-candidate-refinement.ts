@@ -73,6 +73,7 @@ export interface BlockScanProbeDiagnostic {
 
 export interface BlockScanProbeFailureDiagnostic {
   readonly reason:
+    | "exact_not_admitted"
     | "family_circuit_open"
     | "instance_circuit_open"
     | "composite_circuit_open"
@@ -159,6 +160,12 @@ export async function refineBlockScanCandidates(
   // opaque attribution data only; they must not create separate queues or
   // concurrency quotas.
   let work = opportunities.map((opportunity, index) => ({ opportunity, index }));
+  const routeFamilyIds = (
+    opportunity: BlockScanOpportunity,
+  ): readonly string[] => {
+    const ids = blockScanRouteFamilyIds(opportunity.seedEdges);
+    return ids.length > 0 ? ids : ["<unowned-family>"];
+  };
   const ranked: RankedProbe[] = [];
   const fallback: Array<{ opportunity: BlockScanOpportunity; index: number }> = [];
   const stageBudget = new BlockScanFamilyStageBudget();
@@ -189,18 +196,22 @@ export async function refineBlockScanCandidates(
       if (typeof spread === "number" && spread < shadow.admissionSpreadBps) {
         // exact_not_admitted: keep the funnel count, never execute a quote.
         shadow.notAdmitted.total++;
+        onProbe?.({
+          index: item.index,
+          status: "unprobed",
+          marginBps: null,
+          attempted: false,
+          failure: probeFailureDiagnostic(
+            "exact_not_admitted",
+            routeFamilyIds(item.opportunity),
+          ),
+        });
       } else {
         admitted.push(item);
       }
     }
     work = admitted;
   }
-  const routeFamilyIds = (
-    opportunity: BlockScanOpportunity,
-  ): readonly string[] => {
-    const ids = blockScanRouteFamilyIds(opportunity.seedEdges);
-    return ids.length > 0 ? ids : ["<unowned-family>"];
-  };
   const familyBand = (familyId: string): BlockScanShadowBand => {
     let band = shadow!.familyOutcomes[familyId];
     if (!band) {
@@ -333,10 +344,6 @@ export async function refineBlockScanCandidates(
   const pending = [...work];
   const active = new Set<Promise<void>>();
   let peakConcurrentProbes = 0;
-  const routeFamilies = (opportunity: BlockScanOpportunity): readonly string[] => {
-    const familyIds = blockScanRouteFamilyIds(opportunity.seedEdges);
-    return familyIds.length > 0 ? familyIds : ["<unowned-family>"];
-  };
   const claimNext = (): typeof work[number] | null => {
     for (let index = 0; index < pending.length;) {
       const item = pending[index];
@@ -379,7 +386,7 @@ export async function refineBlockScanCandidates(
         attempted: false,
         failure: probeCircuitDiagnostic(
           blocking,
-          routeFamilies(item.opportunity),
+          routeFamilyIds(item.opportunity),
         ),
       });
     }
@@ -586,7 +593,7 @@ export async function refineBlockScanCandidates(
             attempted: false,
             failure: probeFailureDiagnostic(
               "global_deadline",
-              routeFamilies(item.opportunity),
+              routeFamilyIds(item.opportunity),
             ),
           });
         }
@@ -598,7 +605,7 @@ export async function refineBlockScanCandidates(
       ) {
         const item = claimNext();
         if (!item) break;
-        const familyIds = routeFamilies(item.opportunity);
+        const familyIds = routeFamilyIds(item.opportunity);
         const task = probeOne(item, familyIds);
         active.add(task);
         peakConcurrentProbes = Math.max(
