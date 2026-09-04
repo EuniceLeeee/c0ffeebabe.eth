@@ -23,6 +23,9 @@ if (rpcUrl === undefined || rpcUrl.length === 0) {
 const provider = new ethers.JsonRpcProvider(rpcUrl);
 const POOL_ID =
   "0x789916d8a8b4ebf881fe58cab68a47455c994e22b3cc536055e497ef2238b62e";
+const SWAP_BLOCK = 25_811_499;
+const SWAP_TX =
+  "0x65d0517289a6de7ad8c813799011907fadbb6b2bf6e5e8f8cf1ff872f93725f6";
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const INIT_TOPIC = ethers.id(
@@ -44,11 +47,13 @@ async function findEvidence() {
   const swaps = await provider.getLogs({
     address: ADDR.UNISWAP_V4_POOL_MANAGER,
     topics: [SWAP_TOPIC, POOL_ID],
-    fromBlock: 25_810_000,
-    toBlock: 25_811_500,
+    fromBlock: SWAP_BLOCK,
+    toBlock: SWAP_BLOCK,
   });
-  assert.ok(swaps.length > 0, "at least one Swap log in the window");
-  const swap = swaps[swaps.length - 1]!;
+  const swap = swaps.find(
+    (log) => log.transactionHash.toLowerCase() === SWAP_TX,
+  );
+  assert(swap !== undefined, "the retained fee-hook Swap must exist");
   return { init, swap };
 }
 
@@ -190,10 +195,15 @@ const decodedSwap = UNIV4_POOL_MANAGER_INTERFACE.decodeEventLog(
 const amount0 = BigInt(decodedSwap.amount0);
 const amount1 = BigInt(decodedSwap.amount1);
 const zeroForOne = amount0 < 0n && amount1 > 0n;
+assert(
+  zeroForOne || (amount1 < 0n && amount0 > 0n),
+  "retained Swap must have exactly one input side",
+);
 const route = routes.find((item) =>
   item.direction === (zeroForOne ? "zero-for-one" : "one-for-zero"),
 )!;
-const amountIn = zeroForOne ? 1_000_000_000_000n : 500_000_000_000_000_000n;
+const amountIn = zeroForOne ? -amount0 : -amount1;
+assert(amountIn > 0n, "retained Swap input must be positive");
 const exactInput = {
   descriptor,
   route,
@@ -210,40 +220,21 @@ const program = method.program;
 const exactRequests = (program as { buildRequests(input: unknown): readonly unknown[] })
   .buildRequests({ descriptor, route, amountIn, source });
 assert.equal(exactRequests.length, 1);
-// The pinned quoter (0x52F0E24D...) rejects quotes for this pool with its own
-// custom error (0x7a5ed734 + poolId, present in the quoter's bytecode, absent
-// from the hook's). This is a live finding for the exact path (affects the
-// standard univ4 family equally); the mandatory final simulation remains the
-// fail-closed gate. Report the outcome instead of failing the adaptation
-// probe.
-let quoteOutcome = "n/a";
-try {
-  const quoteResults = Object.freeze(await Promise.all(exactRequests.map((request) =>
-    runRequest(request as never, source, swap.blockNumber),
-  )));
-  const quote = (program as {
-    decode(input: { programInput: unknown; initialResults: readonly unknown[] }): unknown;
-  }).decode({ programInput: { descriptor, route, amountIn, source }, initialResults: quoteResults });
-  const quoteRecord = quote as { amountOut: bigint; evidence: { amountOut: bigint; poolId: string } };
-  assert.equal(
-    quoteRecord.evidence.poolId.toLowerCase(), POOL_ID.toLowerCase(),
-  );
-  quoteOutcome = quoteRecord.amountOut > 0n
-    ? "ok amountOut=" + quoteRecord.amountOut
-    : "zero amountOut";
-  console.log(
-    "exact: " + (zeroForOne ? "USDC" : "WETH") + " " + amountIn + " -> amountOut=" +
-      quoteRecord.amountOut + " evidenceKind=" +
-      (quoteRecord.evidence as { kind?: string }).kind,
-  );
-} catch (error) {
-  quoteOutcome = "reverted: " + ((error as { shortMessage?: string }).shortMessage ?? String(error)).slice(0, 80);
-  console.log(
-    "exact finding: pinned quoter " + ADDR.UNISWAP_V4_QUOTER +
-      " rejected the quote for the fee-hook pool at block " + swap.blockNumber +
-      " (" + quoteOutcome + "); exact handles for this pool are unavailable " +
-      "until the quoter path is fixed",
-  );
-}
+const quoteResults = Object.freeze(await Promise.all(exactRequests.map((request) =>
+  runRequest(request as never, source, swap.blockNumber),
+)));
+const quote = (program as {
+  decode(input: { programInput: unknown; initialResults: readonly unknown[] }): unknown;
+}).decode({ programInput: { descriptor, route, amountIn, source }, initialResults: quoteResults });
+const quoteRecord = quote as { amountOut: bigint; evidence: { amountOut: bigint; poolId: string } };
+assert.equal(
+  quoteRecord.evidence.poolId.toLowerCase(), POOL_ID.toLowerCase(),
+);
+assert(quoteRecord.amountOut > 0n, "retained Swap amount must quote positively");
+console.log(
+  "exact: " + (zeroForOne ? "USDC" : "WETH") + " " + amountIn + " -> amountOut=" +
+    quoteRecord.amountOut + " evidenceKind=" +
+    (quoteRecord.evidence as { kind?: string }).kind,
+);
 
-console.log("univ4-fee-hook live probe PASS (adaptation verified; exact quote finding above)");
+console.log("univ4-fee-hook live probe PASS (adaptation and retained exact quote verified)");
