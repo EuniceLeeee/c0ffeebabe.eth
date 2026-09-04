@@ -531,6 +531,34 @@
       },
       "created_at": "2026-08-25T02:35:54Z",
       "updated_at": "2026-08-25T02:35:54Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260904-univ4-fee-hook-oversized-probe",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "fee_hook_probe_confused_oversized_quote_with_adapter_failure",
+      "evidence": {
+        "manual": "the retained fee-hook swap at block 25811499 used 525284461 raw USDC and quotes successfully at that source block, while only the probe's fixed 1000000000000 raw USDC amount exceeds available liquidity",
+        "canonical_before": "listener:searcher:univ4-fee-hook-live-probe caught any oversized quote failure and reported that exact handles for the whole pool were unavailable",
+        "reviewer": "fresh non-author review confirmed production passes the solver-selected amount to quoteExactInputSingle and needs no adapter change",
+        "regression": "the probe now pins the retained transaction, derives amountIn from its Swap event, requires a positive exact quote, and passes with amountOut 217904807560113086"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:univ4-fee-hook-live-probe",
+        "issue": "an oversized fixed probe amount was generalized into a pool-wide exact-adapter failure",
+        "evidence": "at block 25811499 the retained 525284461 raw USDC input quotes successfully; the prior 1000000000000 input fails only because it exceeds pool liquidity",
+        "codify_target": "pin the retained transaction and derive the exact probe input from its Swap event before asserting quote availability",
+        "codify_commit": "39eeb93c013bc1ae20da2817a32192d2cc9e8b07",
+        "status": "codified"
+      },
+      "created_at": "2026-09-04T10:24:17Z",
+      "updated_at": "2026-09-04T10:24:17Z"
     }
   ]
 }
