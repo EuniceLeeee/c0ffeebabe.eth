@@ -1801,6 +1801,24 @@ live full-pipeline latency or a six-stage production pass. Existing scanner, pro
 strict production session, blockscan contract, Exact deadline, pricing-source, historical-live replay
 contract, frozen-topology and bundle-router safety suites, plus the listener build, passed.
 
+Runtime commit `c57ba6bfd55ae3331f04f852ee4dab46b2f89381` was independently reviewed. The review
+identified excessive dense allocation for many touched anchors; the final implementation uses the
+bounded dense/sparse contract above. The reviewer independently verified 140,000 dense/sparse bound
+comparisons, a profitable sparse-fallback route and 6,763,008 dense bytes per scan in the resource control.
+The final test asserts the memory limit separately for each candidate scan and rejects the reviewed
+11,271,680-byte regression. Final three-file code/test patch SHA-256:
+`740afdd9bf56b51deedf2bb9f687a39bef8340d066cb16f7fd6b43fae57f755e`.
+
+The previous real-head process had already exited on an unhandled HTTP ClientRequest cancellation error;
+its logs were preserved and this scanner patch does not claim to fix that transport issue. The first
+restart failed before Ready loading because Anvil's system-proxy tunnel could not connect. A read-only
+mainnet chain-ID request succeeded directly. A second restart excluded only loopback and the configured
+RPC host from proxies for that process (no global proxy change) and reached Ready generation 12, cutoff
+`25922795`, with the same 28,113 admitted instances and unchanged concurrency/deadline banner. Its local
+evidence directory is `logs/scanner-index-ready12-c57ba6bf-attempt2/`; submission remains off. No Universe
+rebuild or instance reattestation ran. Checkpoint SHA-256 remained
+`ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da` before restart.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
