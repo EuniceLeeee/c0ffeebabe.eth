@@ -534,12 +534,17 @@ export class StrictProductionRuntimeRoot {
     ));
     const fundingBindings: FundingBinding[] = [];
     const fundingOutcomes: FundingInstanceOutcome[] = [];
-    for (const family of this.#catalog.listAll()) {
-      if (family.plugin.manifest.domain !== "funding") continue;
+    // Families read independent, source-pinned liquidity. Dispatch together so
+    // the existing transport can batch across providers; retain catalog order
+    // when publishing, and settle every sibling before propagating a failure.
+    const fundingWork = this.#catalog.listAll().flatMap((family) => {
+      if (family.plugin.manifest.domain !== "funding") return [];
       const assets = (this.#readyFundingAssetsByFamily.get(
         family.plugin.manifest.familyId,
       ) ?? []).filter((asset) => requestedFundingAssets.has(asset));
-      if (assets.length === 0) continue;
+      return assets.length === 0 ? [] : [{ family, assets }];
+    });
+    const fundingSettled = await Promise.allSettled(fundingWork.map(async ({ family, assets }) => {
       const result = await executeFundingFamilyLiquidity({
         family,
         assets,
@@ -549,6 +554,15 @@ export class StrictProductionRuntimeRoot {
         ...(input.control === undefined ? {} : { control: input.control }),
         publisher: Object.freeze({ publish() {} }),
       });
+      return { family, result };
+    }));
+    const fundingFailure = fundingSettled.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (fundingFailure !== undefined) throw fundingFailure.reason;
+    for (const settled of fundingSettled) {
+      if (settled.status !== "fulfilled") continue;
+      const { family, result } = settled.value;
       fundingOutcomes.push(...result.outcomes);
       fundingBindings.push(...result.offers.map((offer) => Object.freeze({
         family,

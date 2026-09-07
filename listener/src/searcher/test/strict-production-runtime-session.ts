@@ -125,7 +125,7 @@ function runtime(
     readonly onCurrentPricingRead?: () => void;
     readonly onCurrentPricingReadStart?: (target: string) => void;
     readonly onCurrentPricingReadEnd?: (target: string) => void;
-    readonly onFundingRead?: () => void;
+    readonly onFundingRead?: (data: string) => void | Promise<void>;
     readonly isCurrent?: () => boolean;
     readonly currentPricingDelayMs?: number | ((target: string) => number);
     readonly failCurrentPricing?: boolean;
@@ -181,7 +181,7 @@ function runtime(
         if (options.failFunding === true) {
           throw new Error("current Funding transport failed");
         }
-        options.onFundingRead?.();
+        await options.onFundingRead?.(request.data);
         return ERC20_BALANCE.encodeFunctionResult(
           "balanceOf",
           [options.fundingBalance ?? 10n ** 24n],
@@ -421,6 +421,8 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     const fundingCalls = wire.filter(({ call }) => call.params[0].data.startsWith(balanceSelector));
     assert.equal(fundingCalls.length, 4, "pricing reads two providers for each of two assets");
     assert.equal(pricingWireCount, 5, "pricing also reads the pool reserves once");
+    assert.equal(producer.stats().batchesSent, 2, "one pricing batch plus one shared Funding batch, not one per Family");
+    assert.equal(producer.stats().maxBatchItemsSent, 4);
     assert.equal(pricing.fundingProjection().sources.size, 2);
     const refined = await twoTokenFundingRoot.createSession({
       source: CURRENT, kind: "exact", fundingAssets: [UNIV2_FIXTURE_TOKEN0],
@@ -1136,6 +1138,89 @@ assert.deepEqual(
   session.fundingActionIds(UNIV2_FIXTURE_TOKEN0),
   ["morpho-flash", "balancer-flash"],
 );
+
+// Both real Funding plugins must enter transport before either is released.
+// This tests the removed dependency, not a machine-speed threshold.
+for (const mode of ["success", "failed-provider", "stale", "aborted"] as const) {
+  const releases: Array<() => void> = [];
+  const heldByCall = new Map<string, Promise<void>>();
+  let markAllStarted!: () => void;
+  const allStarted = new Promise<void>((resolve) => { markAllStarted = resolve; });
+  let active = 0;
+  let current = true;
+  let completed = false;
+  let failedCall: string | undefined;
+  const controller = new AbortController();
+  const pendingSession = root.createSession({
+    source: CURRENT,
+    kind: "exact",
+    fundingAssets: [UNIV2_FIXTURE_TOKEN0],
+    control: { signal: controller.signal },
+    runtime: runtime(CURRENT, {
+      isCurrent: () => current,
+      async onFundingRead(data) {
+        let held = heldByCall.get(data);
+        if (held === undefined) {
+          if (heldByCall.size === 0) failedCall = data;
+          held = new Promise<void>((resolve) => { releases.push(resolve); });
+          heldByCall.set(data, held);
+          if (heldByCall.size === readyFundingAssets.length) markAllStarted();
+        }
+        active++;
+        try {
+          await held;
+          if (mode === "failed-provider" && data === failedCall) {
+            throw new Error("one Funding provider failed");
+          }
+        } finally {
+          active--;
+        }
+      },
+    }),
+  }).finally(() => { completed = true; });
+  let guard: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      allStarted,
+      new Promise<never>((_, reject) => {
+        guard = setTimeout(() => reject(new Error("Funding families still serialize")), 1_000);
+      }),
+    ]);
+    assert.equal(active, readyFundingAssets.length);
+    assert.equal(completed, false);
+    if (mode === "stale") current = false;
+    if (mode === "aborted") controller.abort(new Error("test head changed"));
+    // Complete the later catalog entry first; no partial session may escape.
+    releases.at(-1)!();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (mode !== "aborted") assert.equal(completed, false);
+  } finally {
+    if (guard !== undefined) clearTimeout(guard);
+    releases.forEach((release) => release());
+  }
+  const funded = await pendingSession;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(active, 0, "all sibling provider work must settle");
+  const projection = funded.fundingProjection();
+  assert.deepEqual(
+    projection.outcomes.map((item) => item.fundingId),
+    session.fundingProjection().outcomes.map((item) => item.fundingId),
+    "completion order must not change catalog/asset publication order",
+  );
+  if (mode === "success") {
+    assert.deepEqual(funded.fundingActionIds(UNIV2_FIXTURE_TOKEN0), session.fundingActionIds(UNIV2_FIXTURE_TOKEN0));
+    for (const actionAdapterId of funded.fundingActionIds(UNIV2_FIXTURE_TOKEN0)) {
+      const input = { actionAdapterId, asset: UNIV2_FIXTURE_TOKEN0, amount: 1_000_000n, minProfit: 1n, children: [] };
+      assert.deepEqual(funded.buildFundingRoot(input), session.buildFundingRoot(input));
+    }
+  } else if (mode === "failed-provider") {
+    assert.equal(funded.fundingActionIds(UNIV2_FIXTURE_TOKEN0).length, 1);
+    assert.equal(projection.outcomes.filter((item) => item.status === "verified").length, 1);
+  } else {
+    assert.deepEqual(funded.fundingActionIds(UNIV2_FIXTURE_TOKEN0), []);
+    assert.ok(projection.outcomes.every((item) => item.status !== "verified"));
+  }
+}
 const fundingRoot = session.buildFundingRoot({
   actionAdapterId: "morpho-flash",
   asset: UNIV2_FIXTURE_TOKEN0,

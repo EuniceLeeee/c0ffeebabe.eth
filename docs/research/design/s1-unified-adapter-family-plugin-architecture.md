@@ -2190,10 +2190,51 @@ successes. Activity target25925623 joins source25925622: 39,982 mids, 512 enumer
 and 85 Solver entries, no final events. Manifest `/tmp/funding-reuse-first50-tools.json` SHA-256:
 `2a468987515bca8df308bab9f67b2bb955d260889b07f396b55e13cc7785f648`.
 
-Next structural investigation: repeated whole-definition validation/sorting/hashing on each exact
-invocation of an already defined/frozen Family. Any fast path must preserve forged-object rejection,
-dynamic source/generation/amount/evidence checks, and the existing behavior for definitions whose
-immutability cannot be established. No numerical experiment or additional live has started for it.
+The subsequent definition-cache investigation was deferred without a runtime change. The actual
+23-plugin catalog took 429ms wall / 482ms process CPU for 11,500 warmed assertions. Independent
+adversarial inspection found accessor/prototype/post-wrap lineage cases that a simple frozen-object
+shortcut would stop rejecting. This microbenchmark does not justify adding a new immutability
+validation framework. Repeated execution-body construction was also deferred: the real strict
+two-leg fixture measured approximately 0.20ms duplicate CPU per solve (three finalists, two Funding
+alternatives), not the seconds suggested by summed asynchronous `planBuildMs`.
+
+### 16.18 Independent Funding Family reads share the existing transport wave
+
+Baseline is `806c2534a42cfb22fba3365da36bd4b1eee5f49a` (runtime §16.17). The only production change is
+the Funding loop in `StrictProductionRuntimeRoot.createSession`: discover the same nonempty
+Family/asset work in catalog order, dispatch independent source-pinned reads together, await all
+settlements, then assemble offers/outcomes in the original order. A rejected Family work promise is
+propagated in catalog order only after sibling work settles. The existing central per-source failure
+isolation, generation/control checks and fresh Funding authority remain unchanged. Physical
+transport cancellation/drain continues to belong to the pass backend; settling a Family promise
+is not a substitute for transport drain.
+
+Pricing still finishes before Funding. No block/head/solver scheduling, candidate/ranking/amount
+scope, numerical configuration, retry policy, exact cache-miss path or final sim/EV gate changes.
+This removes a dependency between independent Family reads; it does not add a provider-specific
+API or bypass the existing batch/transport limits. Actual live effect remains to be measured.
+
+The existing strict-session regression now holds both real Funding plugins at transport and releases
+them in reverse order, checking unchanged offer order and roots, one-provider failure isolation,
+stale generation, abort, and settlement. Against the unchanged baseline session implementation the
+same overlap assertion fails (`Funding families still serialize`); the candidate passes. Its local
+HTTP fixture retains all five physical items (one reserve, four Funding) but now sends two batches
+(one pricing, one shared Funding), rather than three serialized Family-separated batches. This is
+deterministic dependency/resource evidence, not a live ten-second verdict.
+
+`build`, `build:live`, strict production/central sessions, Funding runtime, adapter work, pinned quote
+backend, pass deadline, production scanner boundary, strict solver consumer, solver quote-concurrency,
+amount search (22/22), final-simulation runtime, bundle-router safety (6/6), and historical-live
+production-replay contract pass. The next live uses the unchanged Ready12 checkpoint SHA
+`ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da`, first fifty consecutive
+non-bootstrap source blocks, EV enabled and signing/broadcast disabled. Cancelled/missing/stale
+passes remain failures in the fixed denominator; confirmed Alchemy429 stops task RPC.
+
+Non-author review approved after independently running strict-session, central/Funding/backend
+tests, TypeScript and diff checks, including a held-transport control confirming that explicit drain
+is still required. Reviewed two-listener-file `git diff --binary` SHA-256:
+`2699fb62fe03d30f86e4e3bafcc0a482bd33cc95be5f0653a3f1fdd5a983fbe2`
+(`--full-index`: `c23c154517d4c31aeeef8881490516d9ede96f1eb23c1f1e36025d23e33823a3`).
 
 ## 17. Role of tests and tools
 
