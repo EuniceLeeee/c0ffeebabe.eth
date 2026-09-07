@@ -1819,7 +1819,8 @@ async function main(): Promise<void> {
     // coalescing cache. Even ordinary sessions are removed after settlement;
     // this map is an in-flight de-duplication guard, not a history cache.
     const cacheable = request.exactCallBackend === undefined &&
-      request.pricingCallBackend === undefined;
+      request.pricingCallBackend === undefined &&
+      request.pricingCallCache === undefined;
     const incumbent = cacheable ? strictSessionCache.get(key) : undefined;
     if (incumbent !== undefined) {
       console.log(
@@ -1857,6 +1858,9 @@ async function main(): Promise<void> {
       ...(request.pricingCallBackend === undefined
         ? {}
         : { producerCallBackend: request.pricingCallBackend }),
+      ...(request.pricingCallCache === undefined
+        ? {}
+        : { producerCallCache: request.pricingCallCache }),
       // Shared physical-transport permit scheduler: exact/discovery share the
       // residual capacity after the N-1 producer reserve, so exact probes can
       // never starve the producer chain (same contract as the legacy runtime).

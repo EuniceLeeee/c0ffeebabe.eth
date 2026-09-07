@@ -197,6 +197,108 @@ async function pendingCallTests(): Promise<void> {
     catch (error) { failures.push(error); console.error(`[pinned-reth-quote-backend] ${args[0]}: FAIL`, error); }
   };
   const request = { to: OK_A, data: "0xcafe" };
+  for (const count of [1, 5]) {
+    await testCase(`non-closing drain settles ${count} queued calls and preserves phase reuse`,
+      async ({ state, backend, items, release }) => {
+        state.pauseResponses = true;
+        const client = backend({ transportLane: "producer-bulk", maxBatchSize: 4, maxConcurrentBatches: 1 });
+        const requests = Array.from({ length: count }, (_, index) => ({ ...request, data: `0x${index.toString(16).padStart(2, "0")}` }));
+        check.equal(client.callCached(requests[0]!), undefined, "cold cache lookup must not issue a request");
+        check.equal(client.stats().totalCalls, 0);
+        const calls = requests.map((req) => observe(client.call(req)));
+        check.equal(client.stats().pendingItems, 1, "fixture must leave a partial batch before setImmediate");
+        const pendingStats = client.stats();
+        check.equal(client.callCached(requests[0]!), undefined, "cache-only lookup must not join pending work");
+        check.deepEqual(client.stats(), pendingStats);
+        let drained = false;
+        const draining = client.drain().then(() => { drained = true; });
+        for (let batch = 0; batch < Math.ceil(count / 4); batch++) {
+          await until(() => state.heldResponses.length === 1, "phase transport held");
+          check.ok(client.stats().activeTransports > 0);
+          await nextTurn();
+          check.equal(drained, false, "drain returned before the held transport settled");
+          release();
+        }
+        await draining;
+        check.deepEqual(await Promise.all(calls), requests.map(() => ({ status: "fulfilled", value: RESULT })));
+        const idle = (): void => {
+          const stats = client.stats();
+          check.deepEqual([stats.pendingItems, stats.liveItems, stats.inFlightBatches, stats.activeTransports], [0, 0, 0, 0]);
+          check.equal(stats.lane, "producer-bulk");
+        };
+        idle();
+        state.pauseResponses = false;
+        const beforeCacheHits = client.stats();
+        check.deepEqual(await Promise.all(requests.map((req) => client.callCached(req))), requests.map(() => RESULT));
+        check.equal(client.stats().memoHits, beforeCacheHits.memoHits + count);
+        check.equal(client.stats().totalCalls, beforeCacheHits.totalCalls, "memo-only hits must not issue logical calls");
+        check.deepEqual(await Promise.all(requests.map((req) => client.call(req))), requests.map(() => RESULT));
+        check.equal(items().length, count, "second-phase successes must use the original memo");
+        for (const miss of [{ ...request, data: "0xbeef" }, { ...requests[0]!, to: OK_B }, { ...requests[0]!, from: OK_A }]) {
+          check.equal(client.callCached(miss), undefined, "cache-only identity mismatch must remain a miss");
+        }
+        check.equal(await client.call({ ...request, data: "0xbeef" }), RESULT);
+        await client.drain();
+        check.equal(items().length, count + 1, "second-phase distinct key must reach transport");
+        idle();
+        state.pauseResponses = true;
+        const closing = observe(client.call({ ...request, data: "0xdead" }));
+        await until(() => state.heldResponses.length === 1, "final pass transport held");
+        await client.closeAndDrain();
+        aborted(await closing);
+        idle();
+        aborted(await observe(client.call(requests[0]!)));
+        aborted(await observe(client.callCached(requests[0]!)!));
+      });
+  }
+
+  for (const mode of ["signal", "deadline"] as const) {
+    await testCase(`phase ${mode} cancellation drains without memoizing late replies`,
+      async ({ state, backend, items, release }) => {
+        const client = backend();
+        check.equal(await client.call(request), RESULT);
+        await client.drain();
+        state.pauseResponses = true;
+        const caller = new AbortController();
+        const req = { ...request, to: OK_B };
+        const control = mode === "signal" ? { signal: caller.signal } : { deadlineAtMs: Date.now() + 100 };
+        const cancelled = observe(client.call(req, control));
+        await until(() => state.heldResponses.length === 1, "cancelled phase transport");
+        if (mode === "signal") caller.abort(new Error("phase ended"));
+        aborted(await cancelled, mode);
+        await client.drain();
+        const stats = client.stats();
+        check.deepEqual([stats.pendingItems, stats.liveItems, stats.inFlightBatches, stats.activeTransports], [0, 0, 0, 0]);
+        await until(state.heldResponses[0]!.closed, "cancelled phase HTTP envelope closed");
+        release(); // A noncooperative late success must not become the next phase's memo.
+        state.pauseResponses = false;
+        check.equal(client.callCached(req), undefined, "cancelled phase installed a cache-only hit");
+        aborted(await observe(client.callCached(req, control)!), mode);
+        check.equal(await client.call(request), RESULT);
+        aborted(await observe(client.call(req, control)), mode);
+        check.equal(items().length, 2, "invalid old phase controls launched new work");
+        check.equal(await client.call(req, { deadlineAtMs: Date.now() + 1000 }), RESULT);
+        await client.drain();
+        check.equal(items().length, 3, "cancelled result was memoized or original success was lost");
+      });
+  }
+
+  await testCase("drained memo cannot cross a new source hash", async ({ backend, items }) => {
+    const original = backend();
+    check.equal(await original.call(request), RESULT);
+    await original.drain();
+    const newHash = `0x${"cd".repeat(32)}`;
+    const next = backend({}, newHash);
+    check.equal(next.callCached(request), undefined, "new source must not see the drained memo");
+    check.equal(await next.call(request), RESULT);
+    await next.drain();
+    check.equal(await original.call(request), RESULT);
+    check.equal(items().length, 2);
+    check.deepEqual(items().map((item) => (item.params as unknown[])[1]), [
+      { blockHash: HASH, requireCanonical: true }, { blockHash: newHash, requireCanonical: true },
+    ]);
+  });
+
   await testCase("five cold duplicates share one physical item", async ({ state, backend, items, release }) => {
     state.pauseResponses = true;
     const client = backend();
@@ -306,7 +408,10 @@ async function pendingCallTests(): Promise<void> {
           if (!transportFailure && result.status === "rejected") check.equal(result.reason.data, REVERT_DATA);
         }
         check.equal(items().length, 1, "failure did not share a physical item");
+        await client.drain();
+        check.equal(client.callCached(req), undefined, "failed phase must not create a cache-only hit");
         const retried = await Promise.all([observe(client.call(req)), observe(client.call(req))]);
+        await client.drain();
         check.ok(retried.every((result) => result.status === (transportFailure ? "fulfilled" : "rejected")));
         check.equal(items().length, 2, "failure was memoized or retry duplicated");
         check.equal(state.singles.length, 0, "failure test unexpectedly used fallback");
@@ -338,11 +443,13 @@ async function pendingCallTests(): Promise<void> {
       const client = backend({ signal: parent.signal });
       check.equal(await client.call(request), RESULT);
       check.equal(await client.call(request), RESULT);
+      await client.drain();
       if (mode === "close") await client.closeAndDrain();
-      if (mode === "scope-abort") parent.abort(new Error("scope ended"));
+      if (mode === "scope-abort") parent.abort(new Error("new head superseded the drained source"));
       if (mode === "caller-abort") caller.abort(new Error("caller ended"));
       const control = mode === "caller-deadline" ? { deadlineAtMs: Date.now() - 1 }
         : { signal: caller.signal };
+      aborted(await observe(client.callCached(request, control)!), mode === "caller-deadline" ? "deadline" : "signal");
       aborted(await observe(client.call(request, control)), mode === "caller-deadline" ? "deadline" : "signal");
       if (mode.startsWith("caller-")) check.equal(await client.call(request), RESULT, "caller cancelled a healthy memo");
       check.equal(items().length, 1, "memo rejection launched a new transport");

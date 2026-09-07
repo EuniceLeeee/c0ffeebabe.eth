@@ -2097,6 +2097,57 @@ There is no quote32 live window or performance verdict. Subsequent work investig
 same-state reads and unnecessary waits while preserving the Ready12 universe, complete search/admission
 contract, final-sim/EV gates and fixed first50 denominator. Confirmed Alchemy429 remains a hard stop.
 
+### 16.17 Same-pass Source-N Funding read reuse (2026-09-07)
+
+The Source-N producer transport now lives through its own pass. Preparation still uses the existing
+per-work settlement deadline and drains all queued/active requests before enumeration, but does not
+close the transport's successful `eth_call` memo at that boundary. The exact session receives a
+cache-only view after equality of source number, block hash and generation is checked.
+It freshly issues Funding receipts/offers and exact route authority; it does not reuse an old session,
+opaque handle or cross-block dynamic state. Exact quotes retain their separate exact transport.
+
+This removes an observed duplicate dependency: the Source-N pricing session prepared 91 Funding
+assets, then the exact session reread its candidate subset of four. In source blocks 25925422/25925423
+of §16.15, the latter Funding preparation took 455/633ms. Those samples identify existing repeated
+work, not a predicted or measured candidate speedup. Successful identical requests can hit the existing
+memo; missing, reverted and cancelled results are not promoted to successful cached reads. Cache misses
+retain the prior direct provider, retry and scheduling path, rather than entering producer batching.
+
+The producer lane and batching limits remain unchanged. Preparation failure aborts and drains the
+backend immediately; every pass exit closes/drains both backends before terminal timing is recorded.
+Parent cancellation, caller deadlines and final-sim/EV checks remain active. The backend's outer
+lifetime covers the pass, while each preparation request retains the prior phase deadline. Startup
+keeps its existing independently bounded runtime deadline; N-1 has no reuse path into current-N.
+One final aggregate producer-transport record exposes memo hits and zero-in-flight cleanup; no
+per-route heavy telemetry or additional diagnostic RPC is introduced.
+
+This is a structural duplicate-read removal, not a concurrency/configuration experiment. Ready12,
+candidate/search scope, ordering and block scheduling stay fixed. Its live result must be recorded
+separately over the next first50 source-block window; it is not yet a full-pipeline timing verdict.
+
+Offline verification: the existing backend suite passed all 33 named checks, including non-closing
+partial-batch/active-transport drain, successful cache-only lookup, pending/missing/failed isolation,
+phase deadlines, new-head cancellation and final cleanup. The existing strict-session suite exercised
+real central issuance against a local HTTP stub: pricing read four Funding balances plus one reserve;
+the exact subset made zero Funding RPC items and issued fresh equivalent offers/roots; its exact quote
+made one call on the separate exact backend. Empty/reverted cache entries kept two direct provider
+reads each. These are local equivalence/resource assertions, not on-chain performance evidence.
+
+`npm run build`, `npm run build:live`, `tsc --noEmit`, strict production session/central runtime,
+Funding runtime, adapter work intent/exact cache, amount search, solver quote concurrency/config,
+state-call/fork/pass deadlines, final-simulation runtime, exact refinement deadline, scanner production
+boundary, pricing-source mode, blockscan contract, strict solver/execution consumers, Family runtime,
+bundle-router safety and historical-live-production-replay contract checks passed. No numerical
+configuration, instance validation, checkpoint or broadcast setting changed.
+
+Independent non-author review approved the seven-file listener patch against
+`45789d4f1455cdd4d756783e7b2a1403b2330d3a`, excluding this document. Binary/full-index patch SHA-256:
+`ce8736e8409ea571f987e5d294d6e58d6a39d3199c06a86e8d1b2b07bacbcaec`.
+The reviewer reran backend, strict-session/central, pass-deadline, live build and TypeScript gates,
+plus held-permit miss/retry/mixed-request and lifecycle controls. The initial whole-backend injection
+was rejected because it changed cache-miss scheduling; the final cache-only interface resolves that
+finding. Approval is offline scope/equivalence approval only.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.

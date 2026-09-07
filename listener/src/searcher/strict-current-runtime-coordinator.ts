@@ -33,6 +33,7 @@ import {
 } from "./venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
 import type { StateBackend } from "../shared/state/state-backend.js";
+import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 
 export type StrictSessionPurpose =
   | "coarse-pricing"
@@ -51,6 +52,8 @@ export interface StrictSessionRequest {
   readonly touchedPools?: ReadonlySet<string>;
   readonly exactCallBackend?: Pick<StateBackend, "call">;
   readonly pricingCallBackend?: Pick<StateBackend, "call">;
+  /** Same-pass successful reads only; misses keep the ordinary provider path. */
+  readonly pricingCallCache?: Pick<PinnedRethQuoteBackend, "callCached">;
   /** Required for exact-execution; inherited from coarse candidate closure. */
   readonly requiredEdgeIds?: ReadonlySet<string>;
 }

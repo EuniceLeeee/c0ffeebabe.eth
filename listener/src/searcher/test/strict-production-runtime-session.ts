@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import { createServer } from "node:http";
 import { ethers } from "ethers";
 import {
   buildFamilyRouteGraphView,
@@ -14,6 +16,7 @@ import {
 } from "../architecture-migration-fixture-replay.js";
 import { createStrictCentralAdapterRuntime } from
   "../strict-central-adapter-runtime.js";
+import { PinnedRethQuoteBackend } from "../pinned-reth-quote-backend.js";
 import { StrictProductionRuntimeRoot } from
   "../strict-production-runtime-session.js";
 import { StrictProductionRuntimeSession } from
@@ -129,6 +132,9 @@ function runtime(
     readonly failCurrentPricingTarget?: string;
     readonly failFunding?: boolean;
     readonly fundingBalance?: bigint;
+    readonly producerCallBackend?: PinnedRethQuoteBackend;
+    readonly producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">;
+    readonly exactCallBackend?: PinnedRethQuoteBackend;
   } = {},
 ) {
   const reserves = options.reserves ?? pool.reserves;
@@ -185,6 +191,9 @@ function runtime(
       getStorage: async () => `0x${"00".repeat(32)}`,
     },
     executor: EXECUTOR,
+    ...(options.producerCallBackend === undefined ? {} : { producerCallBackend: options.producerCallBackend }),
+    ...(options.producerCallCache === undefined ? {} : { producerCallCache: options.producerCallCache }),
+    ...(options.exactCallBackend === undefined ? {} : { exactCallBackend: options.exactCallBackend }),
     generationFence: Object.freeze({
       assertCurrent(generation: number, candidate: CanonicalSource) {
         if (
@@ -339,6 +348,168 @@ assert.equal(
   "Funding outcomes partition every dynamically cataloged provider/token source",
 );
 assert.equal(twoTokenFundingProjection.sources.size, 2);
+
+// Real central issuance/decoding and strict Funding authority; only the HTTP
+// endpoint is synthetic. The exact session may reuse bytes, not Funding offers.
+{
+  type WireCall = {
+    id: number;
+    method: string;
+    params: [{ to: string; data: string; from?: string }, { blockHash: string; requireCanonical: boolean }];
+  };
+  const wire: Array<{ lane: string; call: WireCall }> = [];
+  const stubErrors: unknown[] = [];
+  const balanceSelector = ERC20_BALANCE.getFunction("balanceOf")!.selector;
+  const reservesSelector = UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector;
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as WireCall | WireCall[];
+        const reply = (call: WireCall) => {
+          wire.push({ lane: req.url!, call });
+          assert.equal(call.method, "eth_call");
+          assert.deepEqual(call.params[1], { blockHash: CURRENT.hash, requireCanonical: true });
+          const selector = call.params[0].data.slice(0, 10);
+          assert.ok(selector === balanceSelector || selector === reservesSelector, "unexpected local fixture call");
+          if (req.url === "/failed") return {
+            jsonrpc: "2.0", id: call.id, error: { code: 3, message: "execution reverted", data: "0xdeadbeef" },
+          };
+          const result = selector === balanceSelector
+            ? ERC20_BALANCE.encodeFunctionResult("balanceOf", [10n ** 24n])
+            : UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves", [
+              pool.reserves.reserve0, pool.reserves.reserve1, pool.reserves.blockTimestampLast,
+            ]);
+          return { jsonrpc: "2.0", id: call.id, result };
+        };
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(Array.isArray(body) ? body.map(reply) : reply(body)));
+      } catch (error) {
+        stubErrors.push(error);
+        res.end(JSON.stringify({ error: "unexpected fixture request" }));
+      }
+    });
+  });
+  const backends: PinnedRethQuoteBackend[] = [];
+  try {
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const backend = (lane: string, transportLane: "producer-bulk" | "exact") => {
+      const client = new PinnedRethQuoteBackend(`http://127.0.0.1:${address.port}/${lane}`, CURRENT.hash, {
+        transportLane, deadlineAtMs: Date.now() + 5000, allowSingleCallFallback: false,
+      });
+      backends.push(client);
+      return client;
+    };
+    const producer = backend("producer", "producer-bulk");
+    const exactBackend = backend("exact", "exact");
+    const failedCache = backend("failed", "producer-bulk");
+    let directReads = 0;
+    const unexpectedDirectRead = () => { directReads++; };
+    const pricing = await twoTokenFundingRoot.createSession({
+      source: CURRENT, kind: "pricing", fundingAssets: [UNIV2_FIXTURE_TOKEN0, UNIV2_FIXTURE_TOKEN1],
+      runtime: runtime(CURRENT, {
+        producerCallBackend: producer,
+        onFundingRead: unexpectedDirectRead, onCurrentPricingRead: unexpectedDirectRead,
+      }),
+    });
+    await producer.drain();
+    const pricingWireCount = wire.length;
+    const fundingCalls = wire.filter(({ call }) => call.params[0].data.startsWith(balanceSelector));
+    assert.equal(fundingCalls.length, 4, "pricing reads two providers for each of two assets");
+    assert.equal(pricingWireCount, 5, "pricing also reads the pool reserves once");
+    assert.equal(pricing.fundingProjection().sources.size, 2);
+    const refined = await twoTokenFundingRoot.createSession({
+      source: CURRENT, kind: "exact", fundingAssets: [UNIV2_FIXTURE_TOKEN0],
+      control: { deadlineAtMs: Date.now() + 2000 },
+      runtime: runtime(CURRENT, {
+        producerCallCache: producer, exactCallBackend: exactBackend,
+        onFundingRead: unexpectedDirectRead, onCurrentPricingRead: unexpectedDirectRead,
+      }),
+    });
+    await producer.drain();
+    assert.equal(wire.length, pricingWireCount, "second-phase Funding must issue zero physical RPC items");
+    assert.equal(directReads, 0, "warm Funding unexpectedly fell back to the raw provider");
+    assert.equal(producer.stats().memoHits, 2);
+    assert.equal(producer.stats().lane, "producer-bulk");
+    assert.equal(exactBackend.stats().totalCalls, 0, "Funding must not enter the exact backend");
+    let baselineFundingReads = 0;
+    const baseline = await twoTokenFundingRoot.createSession({
+      source: CURRENT, kind: "exact", fundingAssets: [UNIV2_FIXTURE_TOKEN0],
+      runtime: runtime(CURRENT, { onFundingRead() { baselineFundingReads++; } }),
+    });
+    assert.equal(baselineFundingReads, 2);
+    const comparableFunding = (current: StrictProductionRuntimeSession) => {
+      const projection = current.fundingProjection();
+      return { ...projection, outcomes: projection.outcomes.map((outcome) => {
+        if (!outcome.workReceipt) return outcome;
+        // Only clock-dependent receipt timing differs; retain attempts and all
+        // schedule/source/evidence/failure/offer fields in the comparison.
+        const { timing, ...receipt } = outcome.workReceipt;
+        return { ...outcome, workReceipt: { ...receipt, timing: { attempts: timing.attempts } } };
+      }) };
+    };
+    const projection = refined.fundingProjection();
+    assert.deepEqual(comparableFunding(refined), comparableFunding(baseline));
+    for (const outcome of projection.outcomes) {
+      assert.deepEqual(outcome.source, CURRENT);
+      assert.equal(outcome.status, "verified");
+      assert.notStrictEqual(outcome, pricing.fundingProjection().outcomes.find((old) => old.fundingId === outcome.fundingId));
+    }
+    const actions = refined.fundingActionIds(UNIV2_FIXTURE_TOKEN0, 1_000_000n);
+    assert.deepEqual(actions, ["morpho-flash", "balancer-flash"]);
+    assert.deepEqual(actions, baseline.fundingActionIds(UNIV2_FIXTURE_TOKEN0, 1_000_000n));
+    for (const actionAdapterId of actions) {
+      const input = { actionAdapterId, asset: UNIV2_FIXTURE_TOKEN0, amount: 1_000_000n, minProfit: 1n, children: [] };
+      assert.deepEqual(refined.buildFundingRoot(input), baseline.buildFundingRoot(input));
+    }
+    const edge = refined.edges[0]!;
+    const quote = await refined.issueExact({ edge, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [] });
+    assert.ok(quote.amountOut > 0n);
+    assert.deepEqual(quote.source, CURRENT);
+    assert.equal(refined.buildExecution({ edge, exact: quote, minAmountOut: quote.amountOut - 1n, executor: EXECUTOR }).status, "resolved");
+    await exactBackend.drain();
+    assert.equal(wire.length, pricingWireCount + 1);
+    assert.equal(wire.at(-1)!.lane, "/exact", "exact quote must use its own cold backend despite warm producer reserves");
+    assert.equal(wire.at(-1)!.call.params[0].data, reservesSelector);
+    assert.equal(directReads, 0);
+
+    // A missing or failed cache entry must retain the old direct-provider path,
+    // never enqueue/join producer transport. Fresh offers still decode normally.
+    for (const priorFailure of [false, true]) {
+      if (priorFailure) {
+        const request = fundingCalls.find(({ call }) => call.params[0].to.toLowerCase() === UNIV2_FIXTURE_TOKEN0.toLowerCase())!.call.params[0];
+        await assert.rejects(failedCache.call(request), /revert/i);
+        await failedCache.drain();
+      }
+      const before: number = wire.length;
+      let fallbackReads = 0;
+      const fallback = await twoTokenFundingRoot.createSession({
+        source: CURRENT, kind: "exact", fundingAssets: [UNIV2_FIXTURE_TOKEN0],
+        runtime: runtime(CURRENT, { producerCallCache: failedCache, onFundingRead() { fallbackReads++; } }),
+      });
+      await failedCache.drain();
+      assert.equal(fallbackReads, 2, "cache miss/failure must use the original direct provider");
+      assert.equal(wire.length, before, "cache lookup changed the miss path to producer batching");
+      assert.deepEqual(comparableFunding(fallback), comparableFunding(refined));
+      assert.deepEqual(fallback.fundingActionIds(UNIV2_FIXTURE_TOKEN0), actions);
+    }
+    assert.deepEqual(stubErrors, []);
+    console.log("strict Funding phase reuse: PASS (pricing 4 Funding + 1 reserve; exact Funding 0; exact quote 1 separate; miss/revert fallback 2 direct each)");
+  } finally {
+    const closed = await Promise.allSettled(backends.map((client) => client.closeAndDrain()));
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    assert.ok(closed.every((result) => result.status === "fulfilled"));
+    for (const client of backends) {
+      const stats = client.stats();
+      assert.deepEqual([stats.pendingItems, stats.liveItems, stats.inFlightBatches, stats.activeTransports], [0, 0, 0, 0]);
+    }
+  }
+}
 
 // Performance contract: independent ready instances refresh under the
 // bounded pool, each exactly once, while the resulting strict topology keeps

@@ -297,6 +297,18 @@ export class PinnedRethQuoteBackend
     return this.waitForSharedCall(memoKey, shared, control, req.to);
   }
 
+  /** Successful bytes only: a miss neither joins pending work nor issues I/O. */
+  callCached(
+    req: { to: string; data: string; from?: string },
+    control: StateCallControl = {},
+  ): Promise<string> | undefined {
+    const error = this.callControlError(control, req.to);
+    if (error) return Promise.reject(error);
+    const cached = this.callMemo.get(persistentCallIdentity(this.sourceBlockHash, req).key);
+    if (cached !== undefined) this.memoHits++;
+    return cached;
+  }
+
   private callControlError(control: StateCallControl, label: string): StateCallAbortedError | null {
     if (this.closed || this.scopeController.signal.aborted) return this.scopeAbortError(label);
     if (control.signal?.aborted) {
@@ -483,15 +495,7 @@ export class PinnedRethQuoteBackend
   ): Promise<number> {
     const startedAtMs = Date.now();
     this.abort(reason);
-
-    for (;;) {
-      const active = [
-        ...this.activeFlushes,
-        ...this.activeTransports,
-      ];
-      if (active.length === 0) break;
-      await Promise.allSettled(active);
-    }
+    await this.drain();
 
     await this.persistentCallCache?.closeAndDrain();
 
@@ -503,6 +507,18 @@ export class PinnedRethQuoteBackend
 
     this.lastDrainMs = Math.max(0, Date.now() - startedAtMs);
     return this.lastDrainMs;
+  }
+
+  /** Settle a completed phase without discarding this source-pinned call memo. */
+  async drain(): Promise<void> {
+    for (;;) {
+      // Include the partial batch whose setImmediate flush has not run yet.
+      // Callers stop issuing phase work before awaiting this boundary.
+      this.pump();
+      const active = [...this.activeFlushes, ...this.activeTransports];
+      if (active.length === 0) return;
+      await Promise.allSettled(active);
+    }
   }
 
   stats(): Readonly<{

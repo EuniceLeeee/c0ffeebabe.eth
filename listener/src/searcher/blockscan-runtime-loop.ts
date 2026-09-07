@@ -2062,6 +2062,10 @@ export class BlockScanRuntimeLoop {
       atPerf: passStarted,
     });
     let exactQuoteState: StateBackend | null = null;
+    let sourcePricingCalls: {
+      readonly source: CanonicalSource;
+      readonly backend: PinnedRethQuoteBackend;
+    } | null = null;
     let exactTransportDrainMs = 0;
     // One venue-touch scope for the whole pass: the direct session prepare,
     // the N-1 exact refinement and the exact execution context all re-issue
@@ -2300,8 +2304,10 @@ export class BlockScanRuntimeLoop {
          * this pass-scoped backend the central runtime falls back to one RPC
          * request per logical quote even though the N-1 path is batched.
          * Funding and pricing preparation share the session, so the backend
-         * remains open through the preparation-settle boundary and is drained
-         * before state publication can hand control to exact work.
+         * is drained at the preparation-settle boundary, then reused by the
+         * same-source exact session for Funding reads. Only successful call
+         * bytes are memoized; the new session still issues its own authority.
+         * The backend keeps its producer lane and closes with this pass.
          */
         const sourcePricingStartedAtMs = Date.now();
         const sourcePricingBackend = new PinnedRethQuoteBackend(
@@ -2309,7 +2315,7 @@ export class BlockScanRuntimeLoop {
           graphView.sourceBlockHash,
           {
             signal: passSignal,
-            deadlineAtMs: preparationSettleDeadlineAtMs,
+            deadlineAtMs: runtimeDeadlineAtMs,
             maxBatchSize: 128,
             maxConcurrentBatches: 4,
             transportLane: "producer-bulk",
@@ -2322,6 +2328,14 @@ export class BlockScanRuntimeLoop {
               : { transportScheduler: this.deps.rethTransportScheduler }),
           },
         );
+        sourcePricingCalls = {
+          source: Object.freeze({
+            number: graphView.sourceBlock,
+            hash: graphView.sourceBlockHash,
+            generation: graphView.generation,
+          }),
+          backend: sourcePricingBackend,
+        };
         let runtime: AdapterRuntimePrepareResult;
         try {
           runtime = await currentRuntimeCoordinator.prepare({
@@ -2343,14 +2357,12 @@ export class BlockScanRuntimeLoop {
             canonicalActivity,
             pricingCallBackend: sourcePricingBackend,
           });
+        } catch (error) {
+          sourcePricingBackend.abort(error);
+          throw error;
         } finally {
           try {
-            await sourcePricingBackend.closeAndDrain(
-              passSignal.reason ??
-                new Error(
-                  `block-scan source-N pricing generation ${generation} completed`,
-                ),
-            );
+            await sourcePricingBackend.drain();
           } finally {
             console.log(
               `[searcher/blockscan-source-n-call-stats] ${JSON.stringify({
@@ -2854,8 +2866,16 @@ export class BlockScanRuntimeLoop {
        * the producer's pricing session.  The pass-scoped quote backend is
        * created first so every exact eth_call issued by this session uses the
        * same source-pinned batch transport; the producer session remains the
-       * only pricing authority.
+       * only pricing authority. Funding can reuse successful reads from that
+       * producer transport, never a prior block or a different generation.
        */
+      if (sourcePricingCalls !== null && (
+        sourcePricingCalls.source.number !== exactSource.number ||
+        sourcePricingCalls.source.hash.toLowerCase() !== exactSource.hash.toLowerCase() ||
+        sourcePricingCalls.source.generation !== exactSource.generation
+      )) {
+        throw new Error("exact Funding source differs from the pass pricing source");
+      }
       const strictSession = await this.deps.strictSession({
         purpose: "exact-execution",
         source: exactSource,
@@ -2865,6 +2885,9 @@ export class BlockScanRuntimeLoop {
         }),
         fundingAssets: exactFundingTokens,
         exactCallBackend: exactQuoteState,
+        ...(sourcePricingCalls === null
+          ? {}
+          : { pricingCallCache: sourcePricingCalls.backend }),
         requiredEdgeIds,
       });
       const runtimeEvidence = strictSession
@@ -3489,11 +3512,26 @@ export class BlockScanRuntimeLoop {
           );
           if (failure) throw failure.reason;
         } finally {
-          if (isPassScopedExactStateBackend(exactQuoteState)) {
-            exactTransportDrainMs = await exactQuoteState.closeAndDrain(
-              passSignal.reason ??
-                new Error(`block-scan pass ${blockNumber} completed`),
-            );
+          try {
+            if (isPassScopedExactStateBackend(exactQuoteState)) {
+              exactTransportDrainMs = await exactQuoteState.closeAndDrain(
+                passSignal.reason ??
+                  new Error(`block-scan pass ${blockNumber} completed`),
+              );
+            }
+          } finally {
+            if (sourcePricingCalls !== null) {
+              await sourcePricingCalls.backend.closeAndDrain(
+                passSignal.reason ?? new Error(`block-scan pass ${blockNumber} completed`),
+              );
+              console.log(
+                `[searcher/blockscan-source-n-call-stats-final] ${JSON.stringify({
+                  sourceBlock: sourcePricingCalls.source.number,
+                  generation: sourcePricingCalls.source.generation,
+                  ...sourcePricingCalls.backend.stats(),
+                })}`,
+              );
+            }
           }
         }
         if (exactQuoteState instanceof PinnedRethQuoteBackend) {

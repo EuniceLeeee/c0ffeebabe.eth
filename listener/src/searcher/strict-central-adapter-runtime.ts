@@ -23,6 +23,7 @@ import {
   type CanonicalValue,
 } from "./venues/canonical-value.js";
 import type { StateBackend } from "../shared/state/state-backend.js";
+import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 
 interface StrictProvider {
   call(
@@ -129,6 +130,8 @@ export function createStrictCentralAdapterRuntime(input: {
    * scheduling, decoding, publication and generation authority.
    */
   readonly producerCallBackend?: Pick<StateBackend, "call">;
+  /** Successful same-source reads only; transport/retry on misses is unchanged. */
+  readonly producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">;
   /** Upper bound on requests admitted per work batch; default 512. */
   readonly maxRequestsPerBatch?: number;
   /**
@@ -190,6 +193,9 @@ export function createStrictCentralAdapterRuntime(input: {
             execution.source,
             issueInput.control,
             callBackend,
+            rethLane === "producer-bulk" || rethLane === "producer-critical"
+              ? input.producerCallCache
+              : undefined,
           );
           const rethBound = execution.requests.filter((request) =>
             request.kind !== "state-override-simulation" &&
@@ -375,13 +381,20 @@ async function executeRequest(
   source: CanonicalSource,
   control?: AdapterWorkControl,
   exactCallBackend?: Pick<StateBackend, "call">,
+  producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">,
 ): Promise<AdapterRequestResult> {
   assertTransportControl(control);
   try {
     if (request.kind === "eth-call") {
       const outcome = await withRpcRetry(async () => {
         try {
-          const data = exactCallBackend === undefined
+          const cached = producerCallCache?.callCached({
+            to: request.to,
+            data: request.data,
+          }, control);
+          const data = cached !== undefined
+            ? await cached
+            : exactCallBackend === undefined
             ? await provider.call({
                 to: request.to,
                 data: request.data,
