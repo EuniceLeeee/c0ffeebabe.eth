@@ -1944,6 +1944,43 @@ its 15 `fast` terminated lifetimes are not full EV completions. The single-block
 `/tmp/solver-grid-first50-tools.json` SHA-256 after execution:
 `f35e3ac64efb70baf6614b030c19d58c21908b760c4e1dcfb3e71bcdefb8a9ee`.
 
+An independent raw-event/source review reproduced both fixed-window timing/outcome distributions.
+It also qualified the coverage denominator: all second-window snapshots were degraded, with
+44,634–44,761 resolved prices out of 55,765 catalog edges; identical Ready12 does not establish
+identical effective priced coverage. Raw enumeration was budget-censored in both 50-block windows.
+The outer `ran`/`full_coverage` fields do not certify exhaustive enumeration or completed ranking.
+These qualifiers prevent speed/coverage claims; they do not authorize reducing scope or loosening gates.
+The review found zero recorded final-sim fork wait in all 100 passes; the remaining critical path is
+quote search followed by the all-worker join and final simulation, not an upfront fork barrier.
+Blockscan-only evidence says nothing about disabled mempool/backrun intake or market exhaustion.
+
+### 16.14 Independent initial GSS pair (2026-09-07)
+
+`goldenSectionMaximize` accepts an optional `evaluateInitialPair(c, d)` callback that returns scores
+in original c/d order. The default evaluator remains serial for stateful callers. Solver alone opts
+in with two independent pinned-session amount quotes and records their observations in c/d order after
+both settle. Later GSS points remain dependent and serial, as do debt-BPS groups and finalist propagation.
+Grid fan-out remains capped at eight; search brackets, evaluation counts, tolerances, ties, failure
+attribution, ranking, candidate limits and final-sim/EV gates are unchanged. This removes one initial
+dependency wave, not a search point. Existing nested deadlines/cancellation and same-key pending-read
+sharing also cover this pair.
+
+Against both the old serial solver (`b13f7200`) and the grid-parallel/GSS-serial solver (`beaf9f48`),
+the existing concurrency regression passed 15 ordered-output cases and 12 grid/GSS cancellation cases.
+Two-hop GSS dependency waves changed from eight to six with the same four search points. Negative
+cold/warm transport counts stayed 2/0; the positive control with cold GSS keys stayed 4/0. The amount
+search suite passed 22/22, including 13 default-serial/opt-in comparisons covering duplicate integer
+probes, bounds, budgets, tolerance and stopping. Complete build/live typecheck, strict runtime/session,
+exact cache, work-intent, state/fork cancellation, final-sim runtime, deadline, scanner-production,
+pricing-source, search-config, blockscan/bundle safety and historical-live replay contract suites passed.
+
+Independent non-author review approved the unchanged four-file code/test patch, SHA-256
+`4bd9712f0558bc0b2035c801d53162e67f6922e8ca81341cc02708b61976f1ba` against
+`6675a8ed3298449d024eeb2ae21d46c82e4fc728` (documentation excluded). The reviewer reran both baseline
+modes, amount search, typechecks and relevant runtime/transport gates, plus 14,400 helper comparisons,
+162 solver comparisons and four partial-pair cancellation controls. This is offline equivalence/resource
+evidence, not a live latency win or a production six-stage result.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.

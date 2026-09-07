@@ -6,6 +6,7 @@
  *   AC-3a.2  bid = profit * bps / 10000, capped below profit, 0 when profit<=0.
  */
 
+import strictAssert from "node:assert/strict";
 import { geometricGrid, goldenSectionMaximize, bidAmount } from "../solver/amount-bounds.js";
 import {
   AnvilSolver,
@@ -214,6 +215,85 @@ async function testGssShouldStop(): Promise<void> {
   assert(res.evals <= 4, `gss/stop: expected early stop (<=4 evals), got ${res.evals}`);
   assert(calls === res.evals, `gss/stop: eval count mismatch (${calls} vs ${res.evals})`);
   console.log(`[amtsearch] AC-3a.3 GSS shouldStop (deadline): PASS (evals=${res.evals})`);
+}
+
+// The opt-in may overlap only c,d. Pin legacy integer/budget/stop contracts as
+// well as comparing values: default and opt-in share the same implementation.
+async function testGssInitialPair(): Promise<void> {
+  const cases: Array<{
+    name: string; lo: bigint; hi: bigint; maxTries?: number; tolerance?: bigint;
+    stopAfter?: number; score?: "ties" | "negative"; evals: number; points?: bigint[];
+  }> = [
+    { name: "defaults", lo: 125n, hi: 16000n, evals: 12 },
+    { name: "reversed", lo: 16000n, hi: 125n, evals: 12 },
+    { name: "ties", lo: 125n, hi: 16000n, score: "ties", maxTries: 6, evals: 6 },
+    { name: "negative", lo: 125n, hi: 16000n, score: "negative", maxTries: 4, evals: 4 },
+    { name: "equal-bounds", lo: 5n, hi: 5n, evals: 2, points: [5n, 5n] },
+    { name: "duplicate-integer-probe", lo: 10n, hi: 12n, evals: 3, points: [11n, 11n, 11n] },
+    { name: "integer-crossed-pair", lo: 10n, hi: 11n, evals: 2, points: [11n, 10n] },
+    ...[0, 1, 2].map((maxTries) => ({
+      name: `maxTries-${maxTries}`, lo: 125n, hi: 16000n, maxTries, evals: 2,
+    })),
+    { name: "tolerance", lo: 125n, hi: 16000n, tolerance: 15875n, evals: 2 },
+    { name: "already-stopped", lo: 125n, hi: 16000n, stopAfter: 0, evals: 2 },
+    { name: "stop-after-step", lo: 125n, hi: 16000n, stopAfter: 3, evals: 3 },
+  ];
+  let forward: { points: bigint[]; result: { x: bigint; value: bigint; evals: number } } | undefined;
+  for (const test of cases) {
+    const run = async (parallel: boolean) => {
+      const points: bigint[] = [];
+      const receipts: number[] = [];
+      let active = 0;
+      let peak = 0;
+      let waves = 0;
+      let pairCalls = 0;
+      let replies: Array<() => void> = [];
+      const evaluate = async (x: bigint): Promise<bigint> => {
+        const index = points.length;
+        strictAssert.equal(active, parallel && index === 1 ? 1 : 0,
+          `${test.name}: default/later evaluations must be serial`);
+        points.push(x);
+        peak = Math.max(peak, ++active);
+        await new Promise<void>((done) => {
+          replies.push(done);
+          if (replies.length === 1) setImmediate(() => {
+            const batch = replies;
+            replies = [];
+            waves++;
+            batch.reverse().forEach((reply) => reply());
+          });
+        });
+        active--;
+        receipts.push(index);
+        return test.score === "ties" ? 7n : test.score === "negative" ? -x : 1_000_000n - abs(x - 5000n);
+      };
+      const result = await goldenSectionMaximize(test.lo, test.hi, evaluate, {
+        maxTries: test.maxTries, tolerance: test.tolerance,
+        shouldStop: test.stopAfter === undefined ? undefined : () => points.length >= test.stopAfter!,
+        ...(parallel ? { evaluateInitialPair: async (c: bigint, d: bigint) => {
+          pairCalls++;
+          strictAssert.equal(points.length, 0, "pair hook must run once, before any later probe");
+          return Promise.all([evaluate(c), evaluate(d)]);
+        } } : {}),
+      });
+      strictAssert.equal(active, 0);
+      strictAssert.equal(pairCalls, parallel ? 1 : 0);
+      strictAssert.equal(peak, parallel ? 2 : 1);
+      strictAssert.equal(result.evals, test.evals, `${test.name}: legacy evaluation contract`);
+      strictAssert.equal(points.length, result.evals);
+      strictAssert.equal(waves, points.length - (parallel ? 1 : 0), "exactly one dependency wave saved");
+      strictAssert.deepEqual(receipts, parallel
+        ? [1, 0, ...points.slice(2).map((_, i) => i + 2)] : points.map((_, i) => i));
+      if (test.points) strictAssert.deepEqual(points, test.points);
+      if (test.score === "ties") strictAssert.equal(result.x, points[0], "ties retain initial c");
+      return { points, result };
+    };
+    const serial = await run(false);
+    strictAssert.deepEqual(await run(true), serial, `${test.name}: opt-in changed probes/result`);
+    if (test.name === "defaults") forward = serial;
+    if (test.name === "reversed") strictAssert.deepEqual(serial, forward, "reversed bounds contract");
+  }
+  console.log(`[amtsearch] GSS initial pair: PASS (${cases.length} serial/opt-in contracts, one wave saved each)`);
 }
 
 // ── AC-3a.2: bid math ────────────────────────────────────────────
@@ -1192,6 +1272,7 @@ async function main(): Promise<void> {
   await testGss();
   await testGridThenGss();
   await testGssShouldStop();
+  await testGssInitialPair();
   testBid();
   await testSearchCenterTokenNormalization();
   await testUnboundedReverseImpactCenter();
@@ -1209,7 +1290,7 @@ async function main(): Promise<void> {
   await testSolverPreservesTypedLegOwner();
   await testSolverAbsoluteDeadlineAbortsNeverSettlingStrictExact();
   await testSolverCallerAbortStopsNeverSettlingStrictFundingRoot();
-  console.log("amount-search PASS (21/21)");
+  console.log("amount-search PASS (22/22)");
 }
 
 main().catch((err) => {

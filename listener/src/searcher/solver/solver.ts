@@ -425,6 +425,16 @@ export class AnvilSolver implements Solver {
             {
               maxTries: gssMaxTries,
               shouldStop: pastDeadline,
+              evaluateInitialPair: async (c, d) => {
+                const results = await Promise.all([
+                  quoteAmount(c, fluidDebtBps),
+                  quoteAmount(d, fluidDebtBps),
+                ]);
+                return [
+                  recordQuote(c, fluidDebtBps, results[0]),
+                  recordQuote(d, fluidDebtBps, results[1]),
+                ];
+              },
             },
           );
         } finally {

@@ -29,7 +29,13 @@ export async function goldenSectionMaximize(
   lo: bigint,
   hi: bigint,
   evaluate: (x: bigint) => Promise<bigint>,
-  opts: { maxTries?: number; tolerance?: bigint; shouldStop?: () => boolean } = {},
+  opts: {
+    maxTries?: number;
+    tolerance?: bigint;
+    shouldStop?: () => boolean;
+    /** Opt in only for independent reads; return scores in c, d order. */
+    evaluateInitialPair?: (c: bigint, d: bigint) => Promise<readonly [bigint, bigint]>;
+  } = {},
 ): Promise<{ x: bigint; value: bigint; evals: number }> {
   const maxTries = opts.maxTries ?? 12;
   const tolerance = opts.tolerance ?? 1n;
@@ -44,8 +50,11 @@ export async function goldenSectionMaximize(
   let a = lo, b = hi;
   let c = probe(a, b, true); // closer to a
   let d = probe(a, b, false); // closer to b
-  let fc = await evaluate(c);
-  let fd = await evaluate(d);
+  // Only the first pair is independent. Stateful evaluators keep the serial
+  // default; every later point depends on the previous comparison.
+  let [fc, fd] = opts.evaluateInitialPair
+    ? await opts.evaluateInitialPair(c, d)
+    : [await evaluate(c), await evaluate(d)];
   let evals = 2;
   let best = fc >= fd ? { x: c, value: fc } : { x: d, value: fd };
 
