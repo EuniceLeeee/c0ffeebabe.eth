@@ -1904,6 +1904,46 @@ includes missing, cancelled, busy and timeout samples; a confirmed Alchemy 429/C
 RPC observation rather than triggering retry-through-throttling. EV-gate enablement is a separately
 disclosed safety configuration difference, not a latency improvement attributable to this patch.
 
+Runtime `beaf9f488fa9f76e41e98c5757433074db0c24a1` reused Ready12 with unchanged checkpoint
+SHA-256 `ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da`. Its frozen
+first 50 non-bootstrap source heights are `25925071..25925120`, with 50 terminal timing and
+lifecycle records and no missing/duplicate heights. Startup source `25925064` took 104.048 seconds
+and is reported separately. Evidence is in `logs/solver-grid-ready12-beaf9f48/`, run ID
+`a4be68ce-2ce2-4948-9796-62f93ae4640b`; the measured log ends at line 148,154.
+
+| Stage | Entered / 50 | p50 seconds | p90 seconds | p95 seconds | Max seconds |
+|---|---:|---:|---:|---:|---:|
+| Activity + pricing/Funding state | 50 | 2.434 | 4.214 | 4.567 | 9.279 |
+| Enumeration | 50 | 1.670 | 1.849 | 1.927 | 2.054 |
+| Exact refinement | 50 | 2.536 | 3.494 | 4.005 | 4.087 |
+| Planner/Solver | 46 | 6.148 | 7.291 | 7.442 | 11.898 |
+| Final simulation | 1 | 6.734 | 6.734 | 6.734 | 6.734 |
+| EV | 0 | not reached | not reached | not reached | not reached |
+
+Exact completed in 46 passes and failed in four. Four passes completed the Solver stage; the other
+42 entered Solver stages failed. Decisions were 43 `source_head_superseded`, four
+`exact_refinement_deadline` and three `blockscan_stale_state`. Terminal lifetime was p50 12.584 /
+p90 13.882 / p95 14.276 / max 25.626 seconds; these mostly cancelled lifetimes are not successful
+pipeline durations. Actual Solver starts were p50 61 / max 100; enumeration retained 512 and Planner
+admitted 100 per entered pass. Full completion through EV under ten seconds remains **0/50**.
+
+The one actual final simulation belongs to source `25925116`, hash
+`0xb253493b986f24a6219065d3cf938612d4d3d4c3d1376fcd4d35a977ec6db616`, target `25925117`.
+Route `0xb799f4c368c311410b876709d85f97abeb8087f8d60a26cc26f88d2114219cb4` returned
+`simulation_result.ok=false` and `pipeline_dropped=final_verify:sim_revert`, then the pass became
+stale. A final-sim `ran` marker therefore does not establish success or EV. Signing/submission stayed
+off, the task-owned Node/Anvil stopped normally after the window, and no confirmed Alchemy 429 was
+found. No rebuild or instance reattestation ran. Different blocks/network conditions and the separately
+disclosed EV setting prevent a causal live speedup claim against the preceding window.
+
+Manual analysis was reconciled with current `latency,single-block,production-events,state-coverage`
+selection and successful `analysis:blockscan-pass-latency` / `analysis:block-activity` executions.
+The latency report binds process-banner lines `6..148154` and contains startup plus 50 passes;
+its 15 `fast` terminated lifetimes are not full EV completions. The single-block report at target
+`25925117` joins 44,746 mids, 512 enumerated routes and the failed simulation above. Manifest
+`/tmp/solver-grid-first50-tools.json` SHA-256 after execution:
+`f35e3ac64efb70baf6614b030c19d58c21908b760c4e1dcfb3e71bcdefb8a9ee`.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
