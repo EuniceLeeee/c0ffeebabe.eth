@@ -2121,12 +2121,17 @@ async function callsFromTraceBlock(input: {
     if (
       rawTransaction === null || typeof rawTransaction !== "object" ||
       Array.isArray(rawTransaction)
-    ) continue;
+    ) throw new Error("catalog debug trace contains a malformed transaction");
     const transaction = rawTransaction as Readonly<Record<string, unknown>>;
+    if (transaction.error !== undefined && transaction.error !== null) {
+      throw new Error("catalog debug trace transaction failed");
+    }
     const txHash = string32(transaction.txHash ?? transaction.transactionHash);
-    if (txHash === null) continue;
+    if (txHash === null) {
+      throw new Error("catalog debug trace transaction hash is missing");
+    }
     collectDebugCallFrames({
-      raw: transaction.result ?? transaction,
+      raw: transaction.result,
       txHash,
       blockNumber: input.blockNumber,
       selectors: input.selectors,
@@ -2203,13 +2208,24 @@ function collectDebugCallFrames(input: {
   readonly out: Omit<RebuildCallObservation, "blockHash">[];
 }): void {
   if (input.raw === null || typeof input.raw !== "object" ||
-      Array.isArray(input.raw)) return;
+      Array.isArray(input.raw)) {
+    throw new Error("catalog debug trace contains a malformed call frame");
+  }
   const frame = input.raw as Readonly<Record<string, unknown>>;
   const target = address(frame.to);
   const data = callData(frame.input);
   const callType = typeof frame.type === "string"
     ? frame.type.toLowerCase()
     : "call";
+  if (
+    target === null &&
+    (frame.to !== undefined || (callType !== "create" && callType !== "create2"))
+  ) {
+    throw new Error("catalog debug trace contains a malformed call target");
+  }
+  if (frame.input !== undefined && !ethers.isHexString(frame.input)) {
+    throw new Error("catalog debug trace contains malformed call data");
+  }
   if (
     target !== null && data !== null &&
     callType !== "delegatecall" && callType !== "callcode" &&
@@ -2226,7 +2242,10 @@ function collectDebugCallFrames(input: {
       traceAddress: Object.freeze([...input.traceAddress]),
     }));
   }
-  if (!Array.isArray(frame.calls)) return;
+  if (frame.calls === undefined) return;
+  if (!Array.isArray(frame.calls)) {
+    throw new Error("catalog debug trace contains malformed nested calls");
+  }
   frame.calls.forEach((child, index) => collectDebugCallFrames({
     ...input,
     raw: child,

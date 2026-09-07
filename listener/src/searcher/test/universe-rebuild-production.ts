@@ -946,6 +946,7 @@ async function main(): Promise<void> {
   let blockTraceFailureAtRead: number | null = null;
   let maxBlockTraceBatchSize = 0;
   let blockTraceAvailable = true;
+  let debugBlockTrace: readonly unknown[] | null = null;
   let fundingBalance = 1_000_000n;
   const memoProofHash = "0x" + "b2".repeat(32);
   let memoProofHashReads = 0;
@@ -1113,6 +1114,14 @@ async function main(): Promise<void> {
           case "eth_getLogs": {
             historicalLogReads++;
             return respond([]);
+          }
+          case "debug_traceBlockByNumber": {
+            if (debugBlockTrace !== null) return respond(debugBlockTrace);
+            return Object.freeze({
+              jsonrpc: "2.0",
+              id: rpcRequest.id,
+              error: { code: -32601, message: "debug trace unavailable" },
+            });
           }
           case "trace_block": {
             blockTraceReads++;
@@ -1569,6 +1578,48 @@ async function main(): Promise<void> {
       blockTraceFailureAtRead = null;
 
       blockTraceAvailable = false;
+      debugBlockTrace = [wstethCall, psmCall].map((call) => ({
+        txHash: call.transactionHash,
+        result: {
+          type: "CALL",
+          to: call.target,
+          input: call.data,
+          from: call.sender,
+        },
+      }));
+      const debugScan = await wired.scanSwapWindow({
+        fromBlock: SOURCE.number,
+        cutoff: SOURCE,
+      });
+      assert.equal(
+        wired.dedupeFamilyCandidates(debugScan.observations).length,
+        2,
+        "debug fallback retains both declared calls",
+      );
+      const preservedReady = (await rollingStore.load())!.readyGeneration;
+      for (const malformed of [
+        { txHash: wstethCall.transactionHash, error: "execution timeout" },
+        { txHash: wstethCall.transactionHash, result: null },
+        { result: { to: wstethCall.target, input: wstethCall.data } },
+        {
+          txHash: wstethCall.transactionHash,
+          result: { to: wstethCall.target, calls: [null] },
+        },
+      ]) {
+        debugBlockTrace = [malformed];
+        await assert.rejects(rebuildUniverse({
+          ...wired,
+          store: rollingStore,
+          runId: "call-scan-broken-debug",
+          observationWindowBlocks: 1,
+        }), /catalog debug trace/);
+        assert.deepEqual(
+          (await rollingStore.load())!.readyGeneration,
+          preservedReady,
+          "partial debug trace cannot replace an existing Ready",
+        );
+      }
+      debugBlockTrace = null;
       const failedStore = new UniverseRebuildCheckpointStore({
         path: join(callScanDir, "trace-unavailable-checkpoint.json"),
       });
