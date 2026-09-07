@@ -88,6 +88,12 @@ export interface PinnedRethQuoteBackendOptions {
   readonly persistentEthCallCachePath?: string;
 }
 
+interface SharedPendingCall {
+  readonly controller: AbortController;
+  readonly promise: Promise<string>;
+  waiters: number;
+}
+
 export class PinnedRethQuoteBackend
   implements PassScopedExactStateBackend
 {
@@ -111,6 +117,7 @@ export class PinnedRethQuoteBackend
 
   private readonly balanceSlotMemo = new Map<string, string>();
   private readonly callMemo = new Map<string, Promise<string>>();
+  private readonly pendingCalls = new Map<string, SharedPendingCall>();
   private readonly persistentCallCache:
     | PersistentPinnedEthCallCache
     | undefined;
@@ -227,6 +234,8 @@ export class PinnedRethQuoteBackend
     req: { to: string; data: string; from?: string },
     control: StateCallControl = {},
   ): Promise<string> {
+    const controlError = this.callControlError(control, req.to);
+    if (controlError) return Promise.reject(controlError);
     const identity = persistentCallIdentity(
       this.blockSpecifier.blockHash,
       req,
@@ -243,6 +252,14 @@ export class PinnedRethQuoteBackend
       this.callMemo.set(memoKey, result);
       return result;
     }
+    const pending = this.pendingCalls.get(memoKey);
+    if (pending !== undefined) {
+      this.memoHits++;
+      return this.waitForSharedCall(memoKey, pending, control, req.to);
+    }
+    // One physical read, independently cancellable waiters. No caller owns
+    // another caller's transport lifetime; the last departing waiter aborts it.
+    const controller = new AbortController();
     this.totalCalls++;
     const promise = new Promise<string>((resolve, reject) => {
       const item: PendingQuoteItem = {
@@ -253,7 +270,7 @@ export class PinnedRethQuoteBackend
           data: req.data,
           ...(req.from ? { from: req.from } : {}),
         },
-        control,
+        control: { signal: controller.signal },
         settled: false,
         detachControl: () => {},
         resolve: (value: unknown) => resolve(value as string),
@@ -262,16 +279,74 @@ export class PinnedRethQuoteBackend
       this.enqueue(item);
     }).then(
       (result) => {
-        const settled = Promise.resolve(result);
-        this.callMemo.set(memoKey, settled);
+        if (this.pendingCalls.get(memoKey) === shared) {
+          this.pendingCalls.delete(memoKey);
+          if (!this.closed && !controller.signal.aborted) {
+            this.callMemo.set(memoKey, Promise.resolve(result));
+          }
+        }
         return result;
       },
       (error) => {
-        this.callMemo.delete(memoKey);
+        if (this.pendingCalls.get(memoKey) === shared) this.pendingCalls.delete(memoKey);
         throw error;
       },
     );
-    return promise;
+    const shared: SharedPendingCall = { controller, promise, waiters: 0 };
+    this.pendingCalls.set(memoKey, shared);
+    return this.waitForSharedCall(memoKey, shared, control, req.to);
+  }
+
+  private callControlError(control: StateCallControl, label: string): StateCallAbortedError | null {
+    if (this.closed || this.scopeController.signal.aborted) return this.scopeAbortError(label);
+    if (control.signal?.aborted) {
+      return new StateCallAbortedError(`eth_call ${label} aborted: caller signal aborted`, "signal", control.signal.reason);
+    }
+    if (control.deadlineAtMs !== undefined && control.deadlineAtMs <= Date.now()) {
+      return new StateCallAbortedError(`eth_call ${label} aborted: absolute deadline reached`, "deadline");
+    }
+    return null;
+  }
+
+  private waitForSharedCall(
+    key: string,
+    shared: SharedPendingCall,
+    control: StateCallControl,
+    label: string,
+  ): Promise<string> {
+    shared.waiters++;
+    return new Promise<string>((resolve, reject) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = (error: unknown, value?: string): void => {
+        if (settled) return;
+        settled = true;
+        if (timer !== undefined) clearTimeout(timer);
+        control.signal?.removeEventListener("abort", onAbort);
+        shared.waiters--;
+        if (shared.waiters === 0 && this.pendingCalls.get(key) === shared) {
+          this.pendingCalls.delete(key);
+          shared.controller.abort(error ?? new Error("shared call has no remaining waiters"));
+        }
+        if (error !== null) reject(error);
+        else resolve(value!);
+      };
+      const onAbort = (): void => finish(this.callControlError(control, label));
+      control.signal?.addEventListener("abort", onAbort, { once: true });
+      // Attach both handlers even for an already-cancelled waiter so a late
+      // shared rejection is observed and cannot escape as unhandled.
+      void shared.promise.then(
+        (value) => finish(this.callControlError(control, label), value),
+        (error) => finish(error),
+      );
+      const error = this.callControlError(control, label);
+      if (error) { finish(error); return; }
+      if (control.deadlineAtMs !== undefined) {
+        timer = setTimeout(() => finish(new StateCallAbortedError(
+          `eth_call ${label} aborted: absolute deadline reached`, "deadline",
+        )), Math.max(1, control.deadlineAtMs - Date.now()));
+      }
+    });
   }
 
   async simulateTokenToNativeDelta(
@@ -784,6 +859,21 @@ export class PinnedRethQuoteBackend
       { once: true },
     );
 
+    // A shared eth_call can lose its final waiter while its HTTP batch is in
+    // flight. Cancel the envelope only when no sibling item still needs it.
+    const itemSignals = new Set(items.flatMap((item) =>
+      item.control.signal === undefined ? [] : [item.control.signal]
+    ));
+    const abortIfUnused = (): void => {
+      if (items.every((item) => item.settled) && !controller.signal.aborted) {
+        controller.abort(new StateCallAbortedError(
+          `JSON-RPC batch ${method} has no remaining waiters`, "signal",
+        ));
+      }
+    };
+    for (const signal of itemSignals) signal.addEventListener("abort", abortIfUnused);
+    abortIfUnused();
+
     const remainingScopeMs = Math.min(
       30_000,
       Math.max(
@@ -805,6 +895,7 @@ export class PinnedRethQuoteBackend
     const batchStartedAtMs = Date.now();
     let response: JsonRpcHttpResponse;
     try {
+      if (controller.signal.aborted) throw controller.signal.reason;
       response = await this.runTransport(controller.signal, () => {
         this.batchesSent++;
         this.batchedItems += items.length;
@@ -840,6 +931,7 @@ export class PinnedRethQuoteBackend
         "abort",
         onScopeAbort,
       );
+      for (const signal of itemSignals) signal.removeEventListener("abort", abortIfUnused);
     }
 
     if (response.reusedSocket) this.batchesOnReusedSocket++;

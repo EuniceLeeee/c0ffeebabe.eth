@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   AnvilSolver,
   type ResolvedPlan,
@@ -11,7 +13,7 @@ import type { StrictProductionRuntimeSession } from
   "../strict-production-runtime-session.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 
-const EXECUTOR = "0x00000000000000000000000000000000000000ee";
+export const EXECUTOR = "0x00000000000000000000000000000000000000ee";
 const TOKEN_A = "0x00000000000000000000000000000000000000a1";
 const TOKEN_B = "0x00000000000000000000000000000000000000b1";
 const PLAN_COUNT = 24;
@@ -20,6 +22,14 @@ const EXPECTED_EXACT_CALLS_PER_PLAN = 24;
 interface ExactBinding {
   readonly edge: TokenEdge;
   readonly amountIn: bigint;
+  readonly creditDebtBps: bigint;
+}
+
+export type FixtureExactInput = Parameters<StrictProductionRuntimeSession["issueExact"]>[0];
+interface SessionOptions {
+  readonly debtBps?: readonly bigint[];
+  readonly quote?: (input: FixtureExactInput, leg: number) => Promise<bigint>;
+  readonly onBuild?: () => void;
 }
 
 interface SharedSessionFixture {
@@ -40,7 +50,7 @@ function address(value: number): string {
   return `0x${value.toString(16).padStart(40, "0")}`;
 }
 
-function makePlans(count: number): CandidatePlan[] {
+export function makePlans(count: number): CandidatePlan[] {
   return Array.from({ length: count }, (_, index) => {
     const first: TokenEdge = {
       adapterId: "univ2-swap",
@@ -90,7 +100,10 @@ function makePlans(count: number): CandidatePlan[] {
   });
 }
 
-function sharedSession(plans: readonly CandidatePlan[]): SharedSessionFixture {
+export function sharedSession(
+  plans: readonly CandidatePlan[],
+  options: SessionOptions = {},
+): SharedSessionFixture {
   type ExactInput = Parameters<
     StrictProductionRuntimeSession["issueExact"]
   >[0];
@@ -109,45 +122,61 @@ function sharedSession(plans: readonly CandidatePlan[]): SharedSessionFixture {
   }
 
   const issued = new WeakMap<object, ExactBinding>();
-  const activeByPlan = new Set<number>();
+  const activeByPlan = new Map<number, number>();
+  // A second hop must consume an output already returned by its first hop.
+  // Distinct amount probes in the same plan may progress independently.
+  const completedOutputs = new Map<string, number>();
   const stats = { calls: 0, peakActivePlans: 0 };
   const session = Object.freeze({
     edges: Object.freeze(plans.flatMap((plan) => plan.tokenPath.edges)),
-    blocksPrefixInversion: () => false,
-    creditDebtBpsCandidates: () => Object.freeze([0n]),
+    blocksPrefixInversion: () => options.debtBps !== undefined,
+    creditDebtBpsCandidates: () => options.debtBps ?? Object.freeze([0n]),
     fundingActionIds: () => Object.freeze(["morpho-flash"]),
     async issueExact(input: ExactInput): Promise<ExactHandle> {
       const location = planByTarget.get(input.edge.target.toLowerCase());
       assert.ok(location, `unknown exact target ${input.edge.target}`);
-      assert.equal(
-        activeByPlan.has(location.planIndex),
-        false,
-        `plan ${location.planIndex} issued concurrent dependent hops`,
-      );
-      activeByPlan.add(location.planIndex);
+      const outputKey = (amount: bigint): string =>
+        `${location.planIndex}:${input.creditDebtBps ?? 0n}:${amount}`;
+      if (location.leg > 0) {
+        const key = outputKey(input.amountIn);
+        const available = completedOutputs.get(key) ?? 0;
+        assert.ok(available > 0,
+          `plan ${location.planIndex} issued a dependent hop before its input was returned`);
+        completedOutputs.set(key, available - 1);
+      }
+      activeByPlan.set(location.planIndex, (activeByPlan.get(location.planIndex) ?? 0) + 1);
       stats.calls++;
       stats.peakActivePlans = Math.max(
         stats.peakActivePlans,
         activeByPlan.size,
       );
       try {
-        await new Promise<void>((resolve) => setImmediate(resolve));
-        const amountOut = location.leg === 0
-          ? input.amountIn * 2n
-          : (input.amountIn * 3n) / 5n;
+        const amountOut = options.quote
+          ? await options.quote(input, location.leg)
+          : await new Promise<bigint>((resolve) => setImmediate(() => resolve(
+              location.leg === 0 ? input.amountIn * 2n : (input.amountIn * 3n) / 5n,
+            )));
+        if (location.leg === 0) {
+          const key = outputKey(amountOut);
+          completedOutputs.set(key, (completedOutputs.get(key) ?? 0) + 1);
+        }
         const handle = Object.freeze({ amountOut }) as ExactHandle;
         issued.set(handle as object, {
           edge: input.edge,
           amountIn: input.amountIn,
+          creditDebtBps: input.creditDebtBps ?? 0n,
         });
         return handle;
       } finally {
-        activeByPlan.delete(location.planIndex);
+        const remaining = activeByPlan.get(location.planIndex)! - 1;
+        if (remaining === 0) activeByPlan.delete(location.planIndex);
+        else activeByPlan.set(location.planIndex, remaining);
       }
     },
     buildExecution(input: Parameters<
       StrictProductionRuntimeSession["buildExecution"]
     >[0]) {
+      options.onBuild?.();
       const binding = issued.get(input.exact as object);
       assert.ok(binding, "execution used a foreign exact handle");
       assert.equal(binding.edge, input.edge, "execution changed the quoted edge");
@@ -161,7 +190,10 @@ function sharedSession(plans: readonly CandidatePlan[]): SharedSessionFixture {
             tokenIn: input.edge.tokenIn,
             tokenOut: input.edge.tokenOut,
             amount: binding.amountIn,
-            params: Object.freeze({ minAmountOut: input.minAmountOut }),
+            params: Object.freeze({
+              minAmountOut: input.minAmountOut,
+              creditDebtBps: binding.creditDebtBps,
+            }),
             children: Object.freeze([]),
           })]),
         }),
@@ -170,6 +202,7 @@ function sharedSession(plans: readonly CandidatePlan[]): SharedSessionFixture {
     buildFundingRoot(input: Parameters<
       StrictProductionRuntimeSession["buildFundingRoot"]
     >[0]) {
+      options.onBuild?.();
       return Object.freeze({
         adapterId: input.actionAdapterId,
         target: input.asset,
@@ -268,7 +301,7 @@ async function solveWithConcurrency(
   };
 }
 
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item) =>
     typeof item === "bigint" ? `${item}n` : item
   );
@@ -306,7 +339,9 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

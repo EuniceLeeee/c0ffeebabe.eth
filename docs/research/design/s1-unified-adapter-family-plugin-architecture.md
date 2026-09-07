@@ -1819,6 +1819,91 @@ evidence directory is `logs/scanner-index-ready12-c57ba6bf-attempt2/`; submissio
 rebuild or instance reattestation ran. Checkpoint SHA-256 remained
 `ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da` before restart.
 
+The first 50 non-bootstrap source heights were frozen as `25924888..25924937`, not the first
+50 successful passes. All 50 have terminal timing and route-lifecycle records, with no missing or duplicate
+source height. Startup at `25924875` took 150.941 seconds and is separate. The measured log ends at
+line 144,018; later blocks and graceful shutdown are retained but not substituted into this window.
+
+| Stage | Entered / 50 | p50 seconds | p90 seconds | p95 seconds | Max seconds |
+|---|---:|---:|---:|---:|---:|
+| Activity + pricing/Funding state | 50 | 2.045 | 3.059 | 3.985 | 6.762 |
+| Enumeration | 50 | 1.581 | 1.783 | 1.898 | 2.113 |
+| Exact refinement | 50 | 1.823 | 2.829 | 3.138 | 4.006 |
+| Planner/Solver | 49 | 6.688 | 7.915 | 7.924 | 8.142 |
+| Final simulation | 0 | not reached | not reached | not reached | not reached |
+| EV | 0 | not reached | not reached | not reached | not reached |
+
+49 passes ended at `source_head_superseded`, one at `exact_refinement_deadline`. Terminal lifetime was
+p50 12.427 / p90 13.215 / p95 13.251 / max 13.955 seconds. Nine terminated under ten seconds;
+none completed to EV, so the full-pipeline success rate is **0/50**, not 9/50. Planner admitted 100
+per entered pass; actual Solver starts across the fixed window were p50 62 / max 100. The live enumeration
+remained budget-censored near 1.5 seconds despite the synthetic speedup, so no live enumeration-latency
+improvement is claimed from this window.
+
+The offline source artifact is `logs/scanner-index-ready12-c57ba6bf-attempt2/first50-summary.json`.
+Manual analysis was reconciled through current `latency,single-block,production-events,state-coverage`
+selection and successful `analysis:blockscan-pass-latency` / `analysis:block-activity` executions.
+The latency tool requires the process banner: slicing from the first timing record deliberately produced
+no anchored records; rerunning lines `6..144018` bound runtime `c57ba6bf` and included bootstrap plus
+50 passes. Its 51-record lifetime aggregate is distinct from the entered-stage table above, and its
+`fast` property is not EV completion. `block-activity` at target `25924938` joined source `25924937`:
+49,508 mids, 512 enumerated routes, 100 Planner entries, 100 Solver entries, zero final events.
+Manifest `/tmp/scanner-index-first50-tools.json` after those executions has SHA-256
+`8abc988272f555540beaa5e39a3965ada66829438ac7b9c90753c03a59a936e7`.
+The task-owned Node/Anvil processes exited normally after SIGTERM; no confirmed HTTP 429 was found and
+the checkpoint hash remained unchanged. These are unpaired observational results, not a Hermes A/B win.
+This run retained the old `evGate=off` setting; it cannot establish a production EV-policy pass.
+
+### 16.13 Bounded independent Solver grid probes (2026-09-07)
+
+`solver.ts` evaluates independent grid amounts in batches of at most eight against the same pinned
+strict session. The current five-point block-scan grid can therefore issue five amount probes concurrently
+within each of the existing 16 quote workers; transport batch size/concurrency limits are unchanged.
+Each amount's dependent leg propagation remains sequential. Results are committed in original grid order,
+not reply order, preserving equal-profit tie breaking, failure attribution, best-observed amount, scored
+candidate order and final-simulation fallbacks. Debt-BPS groups, GSS probes and finalist propagation/
+plan construction remain sequential and unchanged. Wider and oracle grids retain every original point,
+using further bounded batches. Abort/deadline controls remain attached to every nested quote; cancelled
+work cannot launch another batch, dependent hop, plan build or deferred-candidate callback.
+
+The pass-scoped pinned backend shares identical pending `eth_call` reads by its existing canonical
+source-hash/to/data/from identity. Each waiter retains its own deadline and cancellation; one cancelled
+waiter cannot reject a healthy peer. The last waiter removes the pending entry and aborts its logical
+item. An in-flight HTTP envelope is aborted only when every sibling item is settled; no cancellation
+falls back to new single calls. Failed/abandoned reads are not cached, and an older completion cannot
+remove a replacement entry. Completed/durable cache hits check caller and scope controls first.
+`eth_simulateV1` execution requests are not deduplicated by this change.
+
+Independent review found that grid concurrency without pending-read sharing amplified a cold two-hop
+control from two to ten RPC items despite identical results. The final regression uses the real solver
+and backend queue/memo with only terminal transport mocked and requires both solvers to use two cold
+items and zero warm items. A separate local HTTP suite verifies five duplicates share one physical item,
+identity isolation, independent initiating/joining cancellation and deadlines, queued/in-flight last-waiter
+abort and immediate retry, error non-caching, scope close/drain and cancelled/expired cache hits.
+
+The local baseline is the unmodified solver from `b13f7200695b61fa856306c07208dfc09e13d3be`.
+`searcher:solver-grid-quote-concurrency -- --baseline-solver <baseline-module>` passed 11 ordered-output
+comparisons with forced out-of-order replies: ties, positive/negative/floor-admitted amounts, mixed and
+first-/second-hop domain failures, multiple debt-BPS groups, capped/wide/oracle grids. Both implementations
+also passed abort and absolute-deadline controls with non-cooperative late success/rejection. Amounts,
+probe counts, exact-call counts, resolved plans, failure attribution and fallback ordering matched.
+The existing 24-plan, 1/4/16-worker regression retained 72 deferred candidates and 576 exact calls.
+The complete listener build, amount-search (21/21), strict production session, Exact deadline (4/4),
+pass deadline (4/4), blockscan contract (8/8), bundle-router safety (6/6), search configuration (7/7),
+and historical-live-production replay contract passed. These are deterministic local regressions,
+not evidence that a live pass reached EV or met the ten-second goal.
+
+The second independent non-author review cleared the cold-read amplification finding and executed the
+solver/transport regressions, build/typecheck and strict runtime/cache/work-intent gates. Additional
+independent controls verified scheduler-permit release, fallback cancellation and ignored abandoned late
+completion. Reviewed code/package/test patch SHA-256:
+`3b010de983a07d7b374e08159979da4eea420b087e222efa10c346f1d82690f2` (documentation excluded).
+The user-directed iteration contract retains Ready12 and all search/transport limits, enables the existing
+EV-policy gate for genuine EV decisions, and keeps signing/submission off. A fixed 50-source-block window
+includes missing, cancelled, busy and timeout samples; a confirmed Alchemy 429/CU-throughput limit ends
+RPC observation rather than triggering retry-through-throttling. EV-gate enablement is a separately
+disclosed safety configuration difference, not a latency improvement attributable to this patch.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.

@@ -323,9 +323,13 @@ export class AnvilSolver implements Solver {
     let lastFailure = "quotes completed but no profitable amount";
     let bestObserved: { flashAmount: bigint; fluidDebtBps: bigint; profit: bigint; amounts: bigint[] } | null = null;
 
-    const quoteProfit = async (flashAmount: bigint, fluidDebtBps: bigint): Promise<bigint> => {
-      if (flashAmount <= 0n) return FAIL_SCORE;
-      if (maxFlashAmount !== null && flashAmount > maxFlashAmount) return FAIL_SCORE;
+    type AmountQuote =
+      | { readonly status: "skipped" }
+      | { readonly status: "failed"; readonly error: unknown }
+      | { readonly status: "resolved"; readonly amounts: bigint[] };
+    const quoteAmount = async (flashAmount: bigint, fluidDebtBps: bigint): Promise<AmountQuote> => {
+      if (flashAmount <= 0n) return { status: "skipped" };
+      if (maxFlashAmount !== null && flashAmount > maxFlashAmount) return { status: "skipped" };
       quoteCount++;
       if (timing) {
         timing.amountPoints++;
@@ -348,10 +352,20 @@ export class AnvilSolver implements Solver {
           }),
         );
       } catch (err) {
-        recordFailureAttribution(quoteFailures, err);
-        lastFailure = `quote failed: ${err instanceof Error ? err.message : String(err)}`;
+        return { status: "failed", error: err };
+      }
+      return { status: "resolved", amounts };
+    };
+    // Commit observations in search order, never RPC completion order. Equal
+    // profits, failure attribution and phase-2 fallback ordering stay stable.
+    const recordQuote = (flashAmount: bigint, fluidDebtBps: bigint, result: AmountQuote): bigint => {
+      if (result.status === "skipped") return FAIL_SCORE;
+      if (result.status === "failed") {
+        recordFailureAttribution(quoteFailures, result.error);
+        lastFailure = `quote failed: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
         return FAIL_SCORE;
       }
+      const { amounts } = result;
       completedQuote = true;
       const profit = amounts[amounts.length - 1] - flashAmount;
       if (!bestObserved || profit > bestObserved.profit) {
@@ -362,6 +376,8 @@ export class AnvilSolver implements Solver {
       }
       return profit;
     };
+    const quoteProfit = async (flashAmount: bigint, fluidDebtBps: bigint): Promise<bigint> =>
+      recordQuote(flashAmount, fluidDebtBps, await quoteAmount(flashAmount, fluidDebtBps));
 
     for (const fluidDebtBps of strictSession.creditDebtBpsCandidates(
       plan.tokenPath,
@@ -377,15 +393,23 @@ export class AnvilSolver implements Solver {
         : capGrid(geometricGrid(center, gridHalfWidth), maxFlashAmount);
       let bestX = grid[0] ?? center;
       let bestVal = FAIL_SCORE;
-      for (const x of grid) {
+      // Independent amounts share a pinned session; each amount's dependent
+      // hops remain serial. Bound fan-out even for a wide offline/oracle grid.
+      const gridQuoteConcurrency = 8;
+      for (let offset = 0; offset < grid.length; offset += gridQuoteConcurrency) {
         if (pastDeadline()) {
           lastFailure = `deadline ${deadlineMs}ms reached during quote search`;
           break;
         }
-        const v = await quoteProfit(x, fluidDebtBps);
-        if (v > bestVal) {
-          bestVal = v;
-          bestX = x;
+        const batch = grid.slice(offset, offset + gridQuoteConcurrency);
+        const results = await Promise.all(batch.map((x) => quoteAmount(x, fluidDebtBps)));
+        for (let index = 0; index < batch.length; index++) {
+          const x = batch[index]!;
+          const v = recordQuote(x, fluidDebtBps, results[index]!);
+          if (v > bestVal) {
+            bestVal = v;
+            bestX = x;
+          }
         }
       }
       // Refine pass: only around a profitable grid point. The near-miss floor

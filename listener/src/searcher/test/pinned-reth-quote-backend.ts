@@ -5,6 +5,7 @@
  */
 
 import { createHash } from "node:crypto";
+import check from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { once } from "node:events";
 import {
@@ -19,7 +20,10 @@ import { join } from "node:path";
 import {
   isStateCallAbortedError,
 } from "../../shared/state/state-backend.js";
-import { PinnedRethQuoteBackend } from "../pinned-reth-quote-backend.js";
+import {
+  PinnedRethQuoteBackend,
+  type PinnedRethQuoteBackendOptions,
+} from "../pinned-reth-quote-backend.js";
 
 function assert(cond: boolean, msg: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -40,6 +44,8 @@ interface StubState {
   failNextBatch: boolean;
   failAllBatches: boolean;
   holdResponses: boolean;
+  pauseResponses: boolean;
+  heldResponses: Array<{ send: () => void; closed: () => boolean }>;
   activeBatches: number;
   maxActiveBatches: number;
 }
@@ -52,6 +58,8 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
     failNextBatch: false,
     failAllBatches: false,
     holdResponses: false,
+    pauseResponses: false,
+    heldResponses: [],
     activeBatches: 0,
     maxActiveBatches: 0,
   };
@@ -70,7 +78,9 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
         }
       };
       const maybeHold = (send: () => void): void => {
-        if (state.holdResponses) {
+        if (state.pauseResponses) {
+          state.heldResponses.push({ send, closed: () => res.destroyed });
+        } else if (state.holdResponses) {
           setTimeout(send, 250);
         } else {
           send();
@@ -127,6 +137,237 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
       resolve({ server, state, port: address.port });
     });
   });
+}
+
+const nextTurn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+const observe = <T>(promise: Promise<T>): Promise<PromiseSettledResult<T>> => promise.then(
+  (value) => ({ status: "fulfilled", value }),
+  (reason) => ({ status: "rejected", reason }),
+);
+async function until(predicate: () => boolean, label: string): Promise<void> {
+  const deadline = Date.now() + 2000;
+  while (!predicate()) {
+    assert(Date.now() < deadline, `timed out: ${label}`);
+    await nextTurn();
+  }
+}
+function aborted(result: PromiseSettledResult<string>, kind?: string): void {
+  check.equal(result.status, "rejected", "cancelled caller received a result");
+  if (result.status !== "rejected") return;
+  check.ok(isStateCallAbortedError(result.reason), "cancellation lost its typed error");
+  if (kind) check.equal(result.reason.kind, kind);
+}
+
+/** Isolated local transport for each case, including failure-safe backend/socket cleanup. */
+async function pendingCase(name: string, test: (fixture: {
+  state: StubState;
+  items: () => Array<Record<string, unknown>>;
+  backend: (options?: PinnedRethQuoteBackendOptions, hash?: string) => PinnedRethQuoteBackend;
+  release: () => void;
+}) => Promise<void>): Promise<void> {
+  const { server, state, port } = await startStub();
+  const backends: PinnedRethQuoteBackend[] = [];
+  const release = (): void => state.heldResponses.splice(0).forEach(({ send }) => send());
+  try {
+    await test({
+      state,
+      items: () => [...state.batches.flat(), ...state.singles],
+      backend(options = {}, hash = HASH) {
+        const backend = new PinnedRethQuoteBackend(`http://127.0.0.1:${port}`, hash, {
+          deadlineAtMs: Date.now() + 4000, allowSingleCallFallback: false, ...options,
+        });
+        backends.push(backend);
+        return backend;
+      },
+      release,
+    });
+    console.log(`[pinned-reth-quote-backend] ${name}: PASS`);
+  } finally {
+    await Promise.allSettled(backends.map((backend) => backend.closeAndDrain()));
+    release();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+async function pendingCallTests(): Promise<void> {
+  const failures: unknown[] = [];
+  const testCase = async (...args: Parameters<typeof pendingCase>): Promise<void> => {
+    try { await pendingCase(...args); }
+    catch (error) { failures.push(error); console.error(`[pinned-reth-quote-backend] ${args[0]}: FAIL`, error); }
+  };
+  const request = { to: OK_A, data: "0xcafe" };
+  await testCase("five cold duplicates share one physical item", async ({ state, backend, items, release }) => {
+    state.pauseResponses = true;
+    const client = backend();
+    const calls = [observe(client.call(request)), observe(client.call(request))];
+    await until(() => state.heldResponses.length === 1, "first duplicate transport");
+    calls.push(...Array.from({ length: 3 }, () => observe(client.call(request))));
+    await nextTurn();
+    release();
+    check.deepEqual(await Promise.all(calls), Array.from({ length: 5 }, () => ({ status: "fulfilled", value: RESULT })));
+    check.equal(items().length, 1, "cold/in-flight duplicate eth_call amplification");
+    check.equal(items()[0]!.method, "eth_call");
+  });
+
+  await testCase("canonical target/data/from/hash identity isolation", async ({ state, backend, items, release }) => {
+    state.pauseResponses = true;
+    const client = backend();
+    const otherHash = `0x${"cd".repeat(32)}`;
+    const requests = [request, { ...request, to: OK_B }, { ...request, data: "0xbeef" },
+      { ...request, from: OK_A }, { ...request, from: OK_B }];
+    const calls = requests.map((req) => observe(client.call(req)));
+    calls.push(observe(backend({}, otherHash).call(request)));
+    await until(() => state.heldResponses.length === 2, "two pinned scopes");
+    release();
+    check.ok((await Promise.all(calls)).every((result) => result.status === "fulfilled"));
+    const wireIdentities = items().map((item) => {
+      const [tx, pin] = item.params as [{ to: string; data: string; from?: string },
+        { blockHash: string; requireCanonical: boolean }];
+      check.equal(pin.requireCanonical, true);
+      return JSON.stringify([tx.to, tx.data, tx.from ?? null, pin.blockHash]);
+    });
+    check.deepEqual(wireIdentities.sort(), [
+      ...requests.map((req) => JSON.stringify([req.to, req.data, "from" in req ? req.from : null, HASH])),
+      JSON.stringify([request.to, request.data, null, otherHash]),
+    ].sort());
+  });
+
+  for (const mode of ["abort", "deadline"] as const) {
+    for (const first of [true, false]) {
+      await testCase(`${mode} of ${first ? "initiating" : "joining"} waiter is isolated`,
+        async ({ state, backend, items, release }) => {
+          state.pauseResponses = true;
+          const client = backend();
+          const controller = new AbortController();
+          const control = mode === "abort" ? { signal: controller.signal }
+            : { deadlineAtMs: Date.now() + 80 };
+          let healthySettled = false;
+          const healthy = () => observe(client.call(request)).then((result) => {
+            healthySettled = true;
+            return result;
+          });
+          const short = () => observe(client.call(request, control));
+          const [shortResult, healthyResult] = first ? [short(), healthy()] : (() => {
+            const survivor = healthy();
+            return [short(), survivor];
+          })();
+          await until(() => state.heldResponses.length === 1, "shared waiter transport");
+          if (mode === "abort") controller.abort(new Error("one caller stopped"));
+          aborted(await shortResult!, mode === "abort" ? "signal" : "deadline");
+          check.equal(healthySettled, false, "short waiter settled the healthy waiter");
+          check.equal(state.heldResponses[0]!.closed(), false, "one waiter aborted shared transport");
+          release();
+          check.deepEqual(await healthyResult, { status: "fulfilled", value: RESULT });
+          check.equal(items().length, 1, "independent healthy waiter used a duplicate item");
+          check.equal(await client.call(request), RESULT, "healthy completion was not memoized");
+          check.equal(items().length, 1);
+        });
+    }
+  }
+
+  for (const inFlight of [false, true]) {
+    await testCase(`all waiters abort ${inFlight ? "in flight" : "before dispatch"}; immediate retry survives`,
+      async ({ state, backend, items, release }) => {
+        state.pauseResponses = true;
+        const client = backend();
+        const controllers = [new AbortController(), new AbortController()];
+        const abandoned = controllers.map((controller) => observe(client.call(request, { signal: controller.signal })));
+        if (inFlight) await until(() => state.heldResponses.length === 1, "abandoned transport");
+        const oldReply = state.heldResponses[0];
+        controllers.forEach((controller) => controller.abort(new Error("all callers stopped")));
+        // Launch before the old request's rejection handlers run. They must not
+        // remove the replacement group or install an abandoned memo result.
+        const replacement = observe(client.call(request));
+        (await Promise.all(abandoned)).forEach((result) => aborted(result, "signal"));
+        await until(() => items().length >= (inFlight ? 2 : 1), "fresh same-key retry");
+        if (oldReply) await until(oldReply.closed, "abandoned transport actually aborted");
+        const follower = observe(client.call(request));
+        await nextTurn();
+        release();
+        check.deepEqual(await Promise.all([replacement, follower]), [
+          { status: "fulfilled", value: RESULT }, { status: "fulfilled", value: RESULT },
+        ]);
+        check.equal(items().length, inFlight ? 2 : 1, "old failure erased replacement or prevented joining it");
+        check.equal(await client.call(request), RESULT);
+        check.equal(items().length, inFlight ? 2 : 1, "replacement memo was lost");
+      });
+  }
+
+  for (const transportFailure of [false, true]) {
+    await testCase(`${transportFailure ? "transport" : "domain"} failure is shared but never memoized`,
+      async ({ state, backend, items }) => {
+        const client = backend();
+        const req = transportFailure ? request : { ...request, to: REVERT };
+        state.failNextBatch = transportFailure;
+        const failed = await Promise.all([observe(client.call(req)), observe(client.call(req))]);
+        for (const result of failed) {
+          check.equal(result.status, "rejected");
+          if (!transportFailure && result.status === "rejected") check.equal(result.reason.data, REVERT_DATA);
+        }
+        check.equal(items().length, 1, "failure did not share a physical item");
+        const retried = await Promise.all([observe(client.call(req)), observe(client.call(req))]);
+        check.ok(retried.every((result) => result.status === (transportFailure ? "fulfilled" : "rejected")));
+        check.equal(items().length, 2, "failure was memoized or retry duplicated");
+        check.equal(state.singles.length, 0, "failure test unexpectedly used fallback");
+      });
+  }
+
+  for (const mode of ["close", "scope-abort"] as const) {
+    await testCase(`${mode} rejects all shared waiters and drains`, async ({ state, backend, items }) => {
+      state.pauseResponses = true;
+      const controller = new AbortController();
+      const client = backend({ signal: controller.signal });
+      const pending = Array.from({ length: 5 }, () => observe(client.call(request)));
+      await until(() => state.heldResponses.length === 1, "scope-owned group");
+      if (mode === "scope-abort") controller.abort(new Error("scope ended"));
+      else await client.closeAndDrain();
+      (await Promise.all(pending)).forEach((result) => aborted(result));
+      await client.closeAndDrain();
+      const stats = client.stats();
+      check.deepEqual([stats.liveItems, stats.pendingItems, stats.inFlightBatches, stats.activeTransports], [0, 0, 0, 0]);
+      check.equal(items().length, 1);
+      aborted(await observe(client.call(request)));
+    });
+  }
+
+  for (const mode of ["close", "scope-abort", "caller-abort", "caller-deadline"] as const) {
+    await testCase(`warm memo respects ${mode}`, async ({ backend, items }) => {
+      const parent = new AbortController();
+      const caller = new AbortController();
+      const client = backend({ signal: parent.signal });
+      check.equal(await client.call(request), RESULT);
+      check.equal(await client.call(request), RESULT);
+      if (mode === "close") await client.closeAndDrain();
+      if (mode === "scope-abort") parent.abort(new Error("scope ended"));
+      if (mode === "caller-abort") caller.abort(new Error("caller ended"));
+      const control = mode === "caller-deadline" ? { deadlineAtMs: Date.now() - 1 }
+        : { signal: caller.signal };
+      aborted(await observe(client.call(request, control)), mode === "caller-deadline" ? "deadline" : "signal");
+      if (mode.startsWith("caller-")) check.equal(await client.call(request), RESULT, "caller cancelled a healthy memo");
+      check.equal(items().length, 1, "memo rejection launched a new transport");
+    });
+  }
+  await testCase("abandoned key does not cancel another key in the same batch", async ({ state, backend, items, release }) => {
+    state.pauseResponses = true;
+    const client = backend();
+    const controller = new AbortController();
+    const abandoned = [observe(client.call(request, { signal: controller.signal })),
+      observe(client.call(request, { signal: controller.signal }))];
+    const healthy = observe(client.call({ ...request, to: OK_B }));
+    await until(() => state.heldResponses.length === 1, "mixed-key batch");
+    controller.abort(new Error("one key no longer needed"));
+    (await Promise.all(abandoned)).forEach((result) => aborted(result));
+    await nextTurn();
+    check.equal(state.heldResponses[0]!.closed(), false, "cancelled key destroyed healthy batch sibling");
+    release();
+    check.deepEqual(await healthy, { status: "fulfilled", value: RESULT });
+    check.equal(items().length, 2);
+    state.pauseResponses = false;
+    check.equal(await client.call(request), RESULT);
+    check.equal(items().length, 3, "abandoned item's late success was memoized");
+  });
+  if (failures.length) throw new AggregateError(failures, "pending-call coalescing regressions");
 }
 
 async function run(): Promise<void> {
@@ -553,6 +794,7 @@ async function run(): Promise<void> {
         "[pinned-reth-quote-backend] persistent replay cache: PASS",
       );
     }
+    await pendingCallTests();
   } finally {
     server.close();
     await once(server, "close").catch(() => undefined);
