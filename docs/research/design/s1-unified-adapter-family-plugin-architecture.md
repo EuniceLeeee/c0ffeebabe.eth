@@ -1734,6 +1734,43 @@ The existing dry-run Ready shortcut was used only to disable submission and reus
 price/Exact/Solver inputs still came from actual current mainnet heads. Backrun, mempool and MEV-Share
 remained disabled. The original detached worktree's 70 pre-existing dirty/untracked entries were untouched.
 
+The user's interim timing check froze log lines through 69,796 in
+`logs/background-final-fork-ba30eff6/live.log`, run `8cae2b9a-45af-4079-b6af-ce6ee694dcd6`.
+Startup source `25924609` took 136.253 seconds and is separate from the 21 consecutive non-bootstrap
+passes `25924620..25924640`; the first post-bootstrap transition and every interrupted pass remain included.
+Of these 21 passes, 17 entered Planner/Solver, versus 18/74 in the earlier fixed baseline window
+`25924221..25924294` at `4c2d4bd1`. Source blocks differ: this is an early observational comparison,
+not paired A/B evidence or completion of the longer 100-pass observation.
+
+| Stage | Entered passes | Median seconds | Nearest-rank p95 seconds |
+|---|---:|---:|---:|
+| State preparation (activity + pricing/Funding) | 21 | 2.730 | 7.194 |
+| Enumeration | 21 | 1.607 | 1.659 |
+| Exact refinement | 21 | 2.802 | 4.001 |
+| Planner/Solver | 17 | 6.139 | 10.097 |
+| Final simulation | 0 | not reached | not reached |
+| EV | 0 | not reached | not reached |
+
+Stage timings include cancellation; the 17 Solver passes all ended at a new-head fence, while four passes
+ended at Exact refinement. None completed all six stages. Pass lifetime to termination was median
+12.617 seconds/p95 15.705 seconds, not successful end-to-end completion time. Actual Solver starts among
+entered passes had median 58/max 92, with 100 planned candidates per entered pass. Background fork
+preparation had median 3.849 seconds/p95 4.646 seconds; pass cleanup had median 4 ms/p95 9 ms.
+All 21 passes prepared only worker 4; source-state preparation no longer waited for its completion.
+The earlier fixed window's state-preparation median was 8.349 seconds.
+
+After independent raw-log analysis, the current capability query
+`single-block,production-events,state-coverage,latency` selected and executed
+`analysis:blockscan-pass-latency` and `analysis:block-activity` through `tool-run` (both exit 0).
+Manifest `/tmp/background-final-fork-current-tools.json` has SHA-256
+`12f0721c434bc6f2d5c06687f1d197da883d7482a389801fd776f57c7d9773fc`.
+The latency tool's all-record aggregate includes the bootstrap and unentered-stage zeros; the table above
+uses the explicit non-bootstrap/entered-stage denominators instead. The activity join at target `25924641`
+confirmed source `25924640` with 49,506 reconstructed mids, 512 enumerated routes, 100 Planner entries,
+60 Solver entries and no final-sim event. Analysis was offline and made no extra RPC calls. The exact
+runtime remained running with broadcasting disabled after this interim check; no six-stage or 10-second
+acceptance claim is made.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
