@@ -2516,6 +2516,42 @@ storage reads. It was not wired into strict exact calls. A source-hash-bound, ca
 isolated quote transport with independent final simulation and current-RPC parity would be
 a broader implementation, not a parameter switch or an already demonstrated speedup.
 
+#### Remaining narrow transport hypotheses at `7a3493df`
+
+Extending same-pass successful producer-call reuse beyond Funding can avoid some cold
+reserve reads, but the existing mid-change history is not a producer request ledger.
+Unchanged refresh results are omitted. It cannot prove a full blocking quote wave would
+disappear, and ordinary exact already shares same-source calls across amount probes.
+No production extension or performance claim was made from that incomplete overlap evidence.
+
+The existing scheduler's `queueWaitMs` includes Promise-resumption delay after a permit
+has already been granted. A single loopback experiment tested a candidate that synchronously
+starts work only with an available permit and empty queues; production source was unchanged.
+The real pinned backend and HTTP sender served512 identical calls in eight64-item batches,
+with16 batch concurrency and20/4 transport capacity/reserve. Four alternating pairs each
+used fresh and reused sockets. A separate child measured complete request-body receipt;
+cross-process monotonic clocks were bracket-checked. All16 measured samples (8192 items,
+plus4096 warm-up items) passed request/result identity, cap and zero-pending/transport checks.
+
+Neither variant delivered any body before the uninterrupted80ms client CPU burst ended.
+The candidate reduced reported queue waits from approximately85–89ms to near zero, but
+did not overlap that CPU interval with actual request delivery. Paired first-body differences
+after the burst were0.354–1.835ms for fresh sockets and0.216–0.408ms for reused sockets;
+these are loopback observations, not an80ms or production latency saving. This measures
+complete bodies, not first-byte activity, and does not prove zero smaller savings. Non-author
+review verified the saved source hashes, sample identity and timing/drain evidence. The
+fastpath was not merged into production. There was one execution, no added samples, no mainnet RPC and no
+new live window; child processes exited. Result artifact
+`logs/transport-dispatch-causal-7a3493df.result.json` SHA-256:
+`2c1fe0efbc00e0729ff1b0909f7b447a85c785f315ad0e9150cca5c8d90f314a`.
+
+Canonical reconciliation reran the same preceding fixed50 window with the current337-tool
+inventory and both `analysis:blockscan-pass-latency` / `analysis:block-activity` (exit0).
+Manifest `/tmp/remaining-latency-audit-7a3493df-tools.json` SHA-256:
+`e2250226f34dd3fd4e7979f502920af179128539b7d071e1527dbb7f42d95260`.
+It is not a new performance sample. The larger strict local-quote transport remains an
+unimplemented scope decision; signing/broadcast remain off and the ten-second Goal is open.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
