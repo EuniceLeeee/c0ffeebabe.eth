@@ -2148,6 +2148,53 @@ plus held-permit miss/retry/mixed-request and lifecycle controls. The initial wh
 was rejected because it changed cache-miss scheduling; the final cache-only interface resolves that
 finding. Approval is offline scope/equivalence approval only.
 
+**Ready12 fixed50 observation.** Runtime `0c1e2d098f51dd57d6ef802fdb458be8b2375385`, run
+`a7a6cf65-cc84-43d4-b06b-f84de58cdefb`, source window **25925573..25925622**, frozen end line
+165497 of `logs/funding-reuse-ready12-0c1e2d09/live.log`. Bootstrap source 25925565 took 93.010s
+and is separate. The window has 50 timing and 50 lifecycle records, no missing/duplicate blocks.
+Ready12 checkpoint SHA remains `ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da`;
+Graph/catalog hashes and configured work limits are unchanged. EV was on; signing/submission off.
+
+| Stage | Entered / completed | p50 s | p90 s | p95 s | max s |
+|---|---:|---:|---:|---:|---:|
+| State/activity + pricing/Funding | 50 / 50 | 2.332 | 3.307 | 4.195 | 8.702 |
+| Enumeration | 50 / 50 | 1.571 | 1.654 | 1.802 | 2.031 |
+| Exact | 50 / 48 | 1.533 | 2.320 | 2.452 | 3.064 |
+| Planner/Solver | 48 / 18 | 6.708 | 7.419 | 7.608 | 7.974 |
+| Actual final sim | 0 / 0 | — | — | — | — |
+| Production EV | 0 / 0 | — | — | — | — |
+
+Stage distributions include every entered stage, including failure/cancellation; a completed outer
+enumeration stage is not a claim of exhaustive uncensored search. Solver-start count p50/p90/p95/max
+was 100. Terminal lifetime p50/p90/p95/max was 12.544/14.027/14.658/18.503s. Twelve shorter cancelled
+lifetimes were below ten seconds; **complete EV passes and complete EV passes under ten seconds both
+remain 0/50**. Decisions: 35 `source_head_superseded`, 13 `blockscan_stale_state`, two Exact deadlines.
+The stale pre-sim guard verifies the uncached current head/hash; it is not a simulated revert.
+
+All 50 exact sessions spent 2ms p50, 4ms p95 and 5ms max in Funding; each pass recorded eight added
+successful memo hits, zero additional producer RPC items and zero pending/live/in-flight transports
+after cleanup. The previous §16.15 window's 49 exact sessions spent 279/671/999ms in Funding at those
+percentiles. Exact-session total p50/p95 changed from 1087/1859ms to 270/376ms. These are unpaired
+observations, not a claim that memo reuse caused every elapsed-time difference. Likewise the observed
+45→48 Solver-entered and 2→18 Solver-completed block counts are not a paired A/B win: the current
+priced coverage was 39,806..39,982 of 55,765 edges, versus approximately 49.5k in §16.15. No configured
+Graph/Family/candidate scope was reduced, but actual resolved coverage was not equivalent.
+
+The first50 guard normally stopped Node29738 at 1788785871902; Node29738 and its Anvil29765 exited,
+both live/guard sessions returned zero, and no confirmed Alchemy429 occurred. The immediately following
+shutdown record is outside the frozen denominator. Logs/checkpoint were retained, not committed.
+Canonical offline reconciliation ran `analysis:blockscan-pass-latency` and `analysis:block-activity`,
+both exit0, selected using `latency,single-block,production-events,state-coverage`. The latency tool's
+process-bound view includes bootstrap plus fifty (51 records); its twelve `fast` terminals are not EV
+successes. Activity target25925623 joins source25925622: 39,982 mids, 512 enumerated routes, 100 Planner
+and 85 Solver entries, no final events. Manifest `/tmp/funding-reuse-first50-tools.json` SHA-256:
+`2a468987515bca8df308bab9f67b2bb955d260889b07f396b55e13cc7785f648`.
+
+Next structural investigation: repeated whole-definition validation/sorting/hashing on each exact
+invocation of an already defined/frozen Family. Any fast path must preserve forged-object rejection,
+dynamic source/generation/amount/evidence checks, and the existing behavior for definitions whose
+immutability cannot be established. No numerical experiment or additional live has started for it.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
