@@ -2466,6 +2466,56 @@ target25926266 joins source25926265:49,493/55,765 mids,512 enumerated,100 Planne
 26 Solver entries,0final events. Manifest `/tmp/pricing-funding-overlap-first50-tools.json` SHA-256:
 `e0a74b980d1da939751fe168ba627538670d43534de215cee33d2d1f48aaca86`.
 
+### 16.21 Structural latency review and scanner test identity correction
+
+At baseline `01ce85993acfd4d35359036b59b18a830637ab6e`, all49 entered enumeration
+stages in the preceding fixed50 window emitted `budget_exceeded`. Their1500ms production
+search budget and10240 general-ring cap remain unchanged. The isolated reverse-bound
+measurement on Ready12 sources25925839/25925840 found approximately0.75s of full DP work,
+67 changed log rates and21,785 changed cells out of11,288,970. It used the declared Ready
+Funding-anchor superset (90 anchors drawn from91 assets), after one excluded warm-up per
+source, not observed successful per-block Funding/admission sets. It does
+not prove that removing DP work would shorten enumeration: best-first search can consume
+the recovered budget. Incremental DP and its proposed retained cache are therefore **not
+implemented** in this iteration; reduced overrun or earlier search completion is unproven.
+
+Running the existing scanner-index suite without its external-baseline option exposed a
+test-only input mismatch. Its fallback cloned edges but retained an identity-based
+`edgeEligible` callback over original objects. At seed1, the original input admitted19
+edges while the copied input admitted20; this produced5 versus6 skipped venues and12
+versus15 selected routes. It was not a production static-index mismatch. The fallback now
+maps cloned edges back to originals for both edge and route callbacks, preserving path
+order and repetitions. Focused identity assertions and107 full comparisons pass both
+without an external baseline and against the unchanged pre-index scanner from `d7a12e7c`.
+The55,384-edge control retains output SHA-256
+`4501460d7210688e5b06ba8e39ef20d21b01030d3a764cbbcb635c2b126edbe0`;
+both dense allocation checks remain6,763,008 bytes under the existing8MiB per-scan limit.
+
+Build, live typecheck, blockscan contract8/8 and historical-live replay contract pass.
+Non-author review independently ran the no-baseline suite and diff check, approving the
+single test-file full-index patch SHA-256
+`bf85b809e6483e2ae6724e65e6b17508881d2cd18230417044c48541377e3077`.
+This is a validation correction, not a production latency improvement. No new RPC/live
+run, rebuild, revalidation, numerical configuration or production code change occurred.
+
+Offline manual analysis was reconciled through the current337-tool inventory for
+`latency,single-block,production-events,state-coverage`, executing
+`analysis:blockscan-pass-latency` and `analysis:block-activity`, both exit0. They reuse
+the preceding frozen window, not a new sample: target25926266 joins source25926265,
+49,493 mids,512 selected enumeration entries,100 Planner and26 Solver entries, with
+no final events. Manifest `/tmp/structural-latency-review-01ce8599-tools.json` SHA-256:
+`3c4bb05816e9f430e987ad218fee47f938ea37ae0cc4d00de227a407e2678b94`.
+The Goal remains unachieved; no short cancelled pass is reclassified as an EV completion.
+
+Read-only review also found no validated drop-in local quote replacement. The existing
+UniV3 quoter-less math path can report missing bitmap coverage as zero and does not reproduce
+all Quoter execution/evidence semantics; it was not promoted to quoter-bound pools. Resident
+REVM has reusable shared read caches under private execution overlays, but its existing
+`Quote` API consumes prepared daemon state, with height-based warm identity and blocking
+storage reads. It was not wired into strict exact calls. A source-hash-bound, cancellable,
+isolated quote transport with independent final simulation and current-RPC parity would be
+a broader implementation, not a parameter switch or an already demonstrated speedup.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.

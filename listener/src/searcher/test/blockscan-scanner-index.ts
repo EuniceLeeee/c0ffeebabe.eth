@@ -54,7 +54,49 @@ function inputFor(edges: TokenEdge[], seed = 1): Input {
 }
 
 function mutableCopy(input: Input): Input {
-  return { ...input, edges: input.edges.map(value => ({ ...value })) };
+  const edges = input.edges.map(value => ({ ...value }));
+  const { edgeEligible, routeEligible } = input;
+  if (edgeEligible === undefined && routeEligible === undefined) return { ...input, edges };
+  // Copying the topology must not change identity-based callback decisions.
+  const originals = new Map(edges.map((copy, index) => [copy, input.edges[index]]));
+  const original = (copy: TokenEdge): TokenEdge => {
+    const value = originals.get(copy);
+    assert(value, "fallback callback received an edge outside the copied topology");
+    return value;
+  };
+  return {
+    ...input, edges,
+    ...(edgeEligible === undefined ? {} : {
+      edgeEligible: (value: TokenEdge) => edgeEligible(original(value)),
+    }),
+    ...(routeEligible === undefined ? {} : {
+      routeEligible: (path: readonly TokenEdge[]) => routeEligible(path.map(original)),
+    }),
+  };
+}
+
+// The callbacks see original identities, preserving route order and repeats.
+{
+  const first = Object.freeze(edge(WETH, USDC, 900));
+  const second = Object.freeze(edge(USDC, WETH, 901));
+  const seenEdges: TokenEdge[] = [];
+  const routes: TokenEdge[][] = [];
+  const copied = mutableCopy({
+    ...inputFor([first, second]),
+    edgeEligible: value => { seenEdges.push(value); return value !== first; },
+    routeEligible: path => { routes.push([...path]); return path[0] === first; },
+  });
+  assert.notStrictEqual(copied.edges[0], first);
+  assert.deepEqual(copied.edges.map(value => copied.edgeEligible!(value)), [false, true]);
+  assert.strictEqual(seenEdges[0], first);
+  assert.strictEqual(seenEdges[1], second);
+  assert.equal(copied.routeEligible!([copied.edges[0], copied.edges[1], copied.edges[0]]), true);
+  assert.equal(copied.routeEligible!([copied.edges[1], copied.edges[0]]), false);
+  for (const [index, expected] of [first, second, first].entries()) {
+    assert.strictEqual(routes[0][index], expected);
+  }
+  assert.strictEqual(routes[1][0], second);
+  assert.strictEqual(routes[1][1], first);
 }
 
 let comparisons = 0;
@@ -86,6 +128,7 @@ for (let seed = 0; seed < 12; seed++) {
   check({ ...input, swapTouched: new Set([edges[seed % edges.length].target]) });
   check({ ...input, edgeEligible: value => value !== edges[seed % edges.length] });
   check({ ...input, routeEligible: path => path.length !== 3 });
+  check({ ...input, routeEligible: path => !path.includes(edges[seed % edges.length]) });
   const mids = new Map(input.mids);
   const key = blockScanEdgeKey(edges[0]);
   mids.set(key, { ...mids.get(key)!, mid: 1.5, feeBps: 37 });
