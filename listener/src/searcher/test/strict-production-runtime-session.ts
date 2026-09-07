@@ -123,6 +123,7 @@ function runtime(
     readonly onCurrentPricingReadStart?: (target: string) => void;
     readonly onCurrentPricingReadEnd?: (target: string) => void;
     readonly onFundingRead?: () => void;
+    readonly isCurrent?: () => boolean;
     readonly currentPricingDelayMs?: number | ((target: string) => number);
     readonly failCurrentPricing?: boolean;
     readonly failCurrentPricingTarget?: string;
@@ -187,6 +188,7 @@ function runtime(
     generationFence: Object.freeze({
       assertCurrent(generation: number, candidate: CanonicalSource) {
         if (
+          options.isCurrent?.() === false ||
           generation !== source.generation ||
           candidate.number !== source.number ||
           candidate.hash.toLowerCase() !== source.hash.toLowerCase() ||
@@ -200,7 +202,9 @@ function runtime(
 }
 
 let currentPricingReads = 0;
+let currentGenerationActive = true;
 const strictRuntime = runtime(CURRENT, {
+  isCurrent: () => currentGenerationActive,
   reserves: Object.freeze({
     reserve0: pool.reserves.reserve0 * 3n,
     reserve1: pool.reserves.reserve1,
@@ -1316,6 +1320,28 @@ const execution = session.buildExecution({
   executor: EXECUTOR,
 });
 assert.equal(execution.status, "resolved");
+
+// A searched handle may be consumed again in its own current session without
+// another quote, but retaining it must not retain authority after retirement.
+const readsBeforeReuse = currentPricingReads;
+assert.deepEqual(session.buildExecution({
+  edge,
+  exact,
+  minAmountOut: exact.amountOut - 1n,
+  executor: EXECUTOR,
+}), execution);
+assert.equal(currentPricingReads, readsBeforeReuse);
+currentGenerationActive = false;
+try {
+  assert.throws(() => session.buildExecution({
+    edge,
+    exact,
+    minAmountOut: exact.amountOut - 1n,
+    executor: EXECUTOR,
+  }), /generation fence rejected stale source/);
+} finally {
+  currentGenerationActive = true;
+}
 
 assert.throws(
   () => session.buildExecution({

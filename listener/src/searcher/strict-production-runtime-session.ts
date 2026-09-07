@@ -1182,6 +1182,10 @@ export class StrictProductionRuntimeSession {
     readonly minAmountOut: bigint;
     readonly executor: string;
   }): StrictProductionExecutionOutcome {
+    this.#runtime.generationFence.assertCurrent(
+      this.source.generation,
+      this.source,
+    );
     const route = this.#resolve(input.edge);
     const exactBinding = this.#exactBindings.get(input.exact);
     if (

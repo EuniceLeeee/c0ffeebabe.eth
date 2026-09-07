@@ -17,7 +17,7 @@ export const EXECUTOR = "0x00000000000000000000000000000000000000ee";
 const TOKEN_A = "0x00000000000000000000000000000000000000a1";
 const TOKEN_B = "0x00000000000000000000000000000000000000b1";
 const PLAN_COUNT = 24;
-const EXPECTED_EXACT_CALLS_PER_PLAN = 24;
+const EXPECTED_EXACT_CALLS_PER_PLAN = 18; // 5 grid + 4 GSS, two hops; no finalist reissuance.
 
 interface ExactBinding {
   readonly edge: TokenEdge;
@@ -26,10 +26,14 @@ interface ExactBinding {
 }
 
 export type FixtureExactInput = Parameters<StrictProductionRuntimeSession["issueExact"]>[0];
+export type FixtureExactHandle = Awaited<ReturnType<StrictProductionRuntimeSession["issueExact"]>>;
 interface SessionOptions {
   readonly debtBps?: readonly bigint[];
+  readonly safetyBps?: bigint;
   readonly quote?: (input: FixtureExactInput, leg: number) => Promise<bigint>;
   readonly onBuild?: () => void;
+  readonly onExact?: (input: FixtureExactInput, handle: FixtureExactHandle) => void;
+  readonly onBuildExecution?: (input: Parameters<StrictProductionRuntimeSession["buildExecution"]>[0]) => void;
 }
 
 interface SharedSessionFixture {
@@ -157,7 +161,7 @@ export function sharedSession(
               location.leg === 0 ? input.amountIn * 2n : (input.amountIn * 3n) / 5n,
             )));
         if (location.leg === 0) {
-          const key = outputKey(amountOut);
+          const key = outputKey(amountOut * (options.safetyBps ?? 10000n) / 10000n);
           completedOutputs.set(key, (completedOutputs.get(key) ?? 0) + 1);
         }
         const handle = Object.freeze({ amountOut }) as ExactHandle;
@@ -166,6 +170,7 @@ export function sharedSession(
           amountIn: input.amountIn,
           creditDebtBps: input.creditDebtBps ?? 0n,
         });
+        options.onExact?.(input, handle);
         return handle;
       } finally {
         const remaining = activeByPlan.get(location.planIndex)! - 1;
@@ -180,6 +185,7 @@ export function sharedSession(
       const binding = issued.get(input.exact as object);
       assert.ok(binding, "execution used a foreign exact handle");
       assert.equal(binding.edge, input.edge, "execution changed the quoted edge");
+      options.onBuildExecution?.(input);
       return Object.freeze({
         status: "resolved" as const,
         fragment: Object.freeze({

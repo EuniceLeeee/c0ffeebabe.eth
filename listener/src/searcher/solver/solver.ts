@@ -40,6 +40,7 @@ import { geometricGrid, goldenSectionMaximize } from "./amount-bounds.js";
 import {
   propagateAmounts,
   propagateAmountsWithRawOutputs,
+  type PropagatedAmounts,
 } from "./amount-propagation.js";
 import { buildResolvedPlanFromPath } from "./plan-builder.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
@@ -139,6 +140,7 @@ interface QuoteCandidate {
   flashAmount: bigint;
   fluidDebtBps: bigint;
   quoteProfit: bigint;
+  propagated: PropagatedAmounts;
 }
 
 interface FailureAttribution {
@@ -326,7 +328,7 @@ export class AnvilSolver implements Solver {
     type AmountQuote =
       | { readonly status: "skipped" }
       | { readonly status: "failed"; readonly error: unknown }
-      | { readonly status: "resolved"; readonly amounts: bigint[] };
+      | { readonly status: "resolved"; readonly propagated: PropagatedAmounts };
     const quoteAmount = async (flashAmount: bigint, fluidDebtBps: bigint): Promise<AmountQuote> => {
       if (flashAmount <= 0n) return { status: "skipped" };
       if (maxFlashAmount !== null && flashAmount > maxFlashAmount) return { status: "skipped" };
@@ -335,10 +337,10 @@ export class AnvilSolver implements Solver {
         timing.amountPoints++;
         if (evaluatingGss) timing.gssPoints++;
       }
-      let amounts: bigint[];
+      let propagated: PropagatedAmounts;
       try {
-        amounts = await timed("quoteMs", "amount quote propagation", () =>
-          propagateAmounts(plan.tokenPath, flashAmount, controlledState, {
+        propagated = await timed("quoteMs", "amount quote propagation", () =>
+          propagateAmountsWithRawOutputs(plan.tokenPath, flashAmount, controlledState, {
             executor,
             fluidDebtBps,
             cache: opts.cache,
@@ -354,7 +356,7 @@ export class AnvilSolver implements Solver {
       } catch (err) {
         return { status: "failed", error: err };
       }
-      return { status: "resolved", amounts };
+      return { status: "resolved", propagated };
     };
     // Commit observations in search order, never RPC completion order. Equal
     // profits, failure attribution and phase-2 fallback ordering stay stable.
@@ -365,14 +367,14 @@ export class AnvilSolver implements Solver {
         lastFailure = `quote failed: ${result.error instanceof Error ? result.error.message : String(result.error)}`;
         return FAIL_SCORE;
       }
-      const { amounts } = result;
+      const { amounts } = result.propagated;
       completedQuote = true;
       const profit = amounts[amounts.length - 1] - flashAmount;
       if (!bestObserved || profit > bestObserved.profit) {
         bestObserved = { flashAmount, fluidDebtBps, profit, amounts };
       }
       if (shouldAdmitQuoteCandidate(profit, flashAmount, quoteProfitFloorBps)) {
-        scored.push({ flashAmount, fluidDebtBps, quoteProfit: profit });
+        scored.push({ flashAmount, fluidDebtBps, quoteProfit: profit, propagated: result.propagated });
       }
       return profit;
     };
@@ -507,34 +509,10 @@ export class AnvilSolver implements Solver {
         lastFailure = `deadline ${deadlineMs}ms reached before sim`;
         break;
       }
-      let amounts: bigint[];
-      let rawOutputs: bigint[];
-      let exactHandles: Awaited<ReturnType<
-        typeof propagateAmountsWithRawOutputs
-      >>["exactHandles"];
-      try {
-        const propagated = await timed("quoteMs", "final amount propagation", () =>
-          propagateAmountsWithRawOutputs(plan.tokenPath, cand.flashAmount, controlledState, {
-            executor,
-            fluidDebtBps: cand.fluidDebtBps,
-            cache: opts.cache,
-            strictSession,
-            runtimeEvidence: opts.runtimeEvidence,
-            adapterWorkControl,
-            safetyBps: quoteSafetyBps,
-            shouldStop: pastDeadline,
-            onExactCall: recordExactCall,
-          }),
-        );
-        amounts = propagated.amounts;
-        rawOutputs = propagated.rawOutputs;
-        exactHandles = propagated.exactHandles;
-      } catch (err) {
-        recordFailureAttribution(phase2Failures, err);
-        lastFailure = `propagation failed: ${err instanceof Error ? err.message : String(err)}`;
-        console.log(`[searcher/ac3] solver:   propagation ${lastFailure.slice(0, 200)}`);
-        continue;
-      }
+      // These are the same solve/session's searched amounts and sealed exact
+      // authorities, not a second quote or a cross-block cache. buildExecution
+      // rechecks the current generation before consuming each handle.
+      const { amounts, rawOutputs, exactHandles } = cand.propagated;
 
       const adapters = strictSession.fundingActionIds(
         flashToken,

@@ -2017,6 +2017,43 @@ success. Target `25925246` joins source `25925245`, 49,487 mids, 512 routes, 100
 entries and one failed simulation. Manifest `/tmp/solver-gss-first50-tools.json` final SHA-256:
 `0a64bf6be2887ea23ad111b32b574326c887d81ac89f19ee891917cf7d00358a`.
 
+### 16.15 Reuse searched exact authority for finalist construction (2026-09-07)
+
+Each scored Solver amount retains its existing `PropagatedAmounts`: spendable amounts, raw outputs and
+session-issued sealed exact handles. Finalist construction consumes that same solve/session's result
+instead of issuing the identical leg quotes again. There is no cross-solve or cross-block cache and
+no reduction of grid/GSS points, candidate ranks, debt-BPS groups, funding alternatives or mandatory
+final simulations. `StrictProductionRuntimeSession.buildExecution` checks its runtime generation fence
+before consuming a retained handle, preserving the current-source check previously supplied by the
+repeated `issueExact`; existing same-session/route/executor/evidence authority checks remain enforced.
+
+The removed operations are duplicate exact issuance, not search coverage. RPC caches already absorb
+some duplicate calls, so lower logical exact-call counts alone do not establish an equal reduction in
+physical RPC traffic or live wall time.
+
+The frozen pre-change solver is `c1f475d6`; older `b13f7200` and `beaf9f48` comparisons also pass.
+The existing regression now verifies 17 ordered-output cases, 16 cancellation cases, three actual
+solver final-simulation/funding-fallback cases, and isolation when the same solver/session is used for
+another solve. Three two-hop finalists retain all nine searched amounts while exact issuance decreases
+24→18. The 24-plan concurrency control retains 72 candidates at 1/4/16 workers and decreases duplicate
+issuance from 576 to 432. Search-issued handle identity, safety-haircut amounts, all funding alternatives,
+plan outputs and fallback order are checked; no finalist reissuance or late build/publication is allowed.
+The real strict-session regression verifies identical execution output without another pricing read,
+rejection after generation retirement, and unchanged forged/foreign-handle rejection.
+
+The complete build/live typecheck, amount search (22/22), strict runtime/session/cache/work-intent,
+transport, state/fork cancellation, final-sim runtime, Exact/pass deadlines, blockscan/bundle safety,
+scanner-production, pricing-source, search configuration and historical-live replay contract suites
+passed. These remain local equivalence/resource/safety checks, not full-pipeline live acceptance.
+
+Independent non-author review approved six-file code/test patch SHA-256
+`38c3a7077e6c6bf1629b31e83b4573ac7f398a69e05cc8c77c257ca83ae6cc36` against
+`4d73a4ec8124700648c0e4f130fab7417178d492` (documentation excluded), after independently executing
+all three baseline modes, amount/concurrency/strict-session tests, typechecks and strict consumer,
+execution-projection, family and credit-runtime controls. Its separate GC control found all 648 issued
+test handles collectible after solve completion. Retention is proportional to admitted search points
+times hops during a solve; it is not claimed to be free, constant-memory or a persistent result cache.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
