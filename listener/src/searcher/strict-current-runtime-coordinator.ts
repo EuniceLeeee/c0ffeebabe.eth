@@ -192,7 +192,9 @@ export class StrictCurrentRuntimeCoordinator
           signal: input.signal ?? new AbortController().signal,
         });
     const [session] = await Promise.all([sessionPromise, executionPromise]);
-    const executionMs = Math.max(0, Date.now() - executionStartedAtMs);
+    const executionMs = input.prepareExecution === undefined
+      ? 0
+      : Math.max(0, Date.now() - executionStartedAtMs);
     assertWorkOpen(input.deadlineAtMs, input.signal);
     const pricingStartedAtMs = Date.now();
     const built = buildStrictPricingSnapshot(session, input.graph, {

@@ -1120,6 +1120,7 @@ const currentRuntime = await currentCoordinator.prepare({
   deadlineAtMs: Date.now() + 10_000,
 });
 assert.equal(currentRuntime.status, "complete");
+assert.equal(currentRuntime.timing?.executionMs, 0, "no execution barrier means zero execution wait");
 assert.equal(currentRuntime.snapshot.graph, currentGraph);
 const currentFunding = currentRuntime.snapshot.funding;
 assert.equal(

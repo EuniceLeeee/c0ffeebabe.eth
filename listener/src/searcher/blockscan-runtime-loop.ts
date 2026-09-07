@@ -439,6 +439,65 @@ export async function prepareBlockScanExecutionWorkerFork(input: {
   }
 }
 
+/** Pass-owned speculative work: quotes never wait; final sim must wait. */
+export function startBlockScanBackgroundFork(input: {
+  readonly signal: AbortSignal;
+  readonly prepare: (signal: AbortSignal) => Promise<void>;
+  readonly stopAndWait: () => Promise<void>;
+}) {
+  const controller = new AbortController();
+  const detach = linkAbortController(input.signal, controller);
+  let outcome: PromiseSettledResult<void> | undefined;
+  let closed = false;
+  let closing: Promise<void> | undefined;
+  // Install the rejection handler at launch, including for synchronous errors.
+  const ready = Promise.resolve().then(() => {
+    if (controller.signal.aborted) throw controller.signal.reason;
+    return input.prepare(controller.signal);
+  }).then(
+    (): PromiseSettledResult<void> =>
+      outcome = { status: "fulfilled", value: undefined },
+    (reason): PromiseSettledResult<void> =>
+      outcome = { status: "rejected", reason },
+  );
+  return {
+    cancel(reason: unknown): void {
+      controller.abort(reason);
+    },
+    async wait(signal: AbortSignal, deadlineAtMs: number): Promise<void> {
+      const result = await awaitBlockScanDeadline(
+        ready,
+        deadlineAtMs,
+        "final-sim fork preparation",
+        () => controller.abort(signal.reason ?? new Error("fork wait expired")),
+        signal,
+      );
+      if (closed || controller.signal.aborted) {
+        throw controller.signal.reason ?? new Error("fork preparation closed");
+      }
+      if (signal.aborted) throw signal.reason;
+      if (result.status === "rejected") throw result.reason;
+    },
+    close(reason: unknown): Promise<void> {
+      if (closing !== undefined) return closing;
+      closed = true;
+      const mustReap = outcome?.status !== "fulfilled" || controller.signal.aborted;
+      controller.abort(reason);
+      closing = (async () => {
+        try {
+          await ready;
+          // Retain healthy completed forks for anvil_reset reuse. Interrupted
+          // or failed work is drained/reaped before the next pass owns workers.
+          if (mustReap) await input.stopAndWait();
+        } finally {
+          detach();
+        }
+      })();
+      return closing;
+    },
+  };
+}
+
 export interface BlockScanAtomicExecutionInput {
   readonly finalSimulationRuntime: FinalSimulationWorkRuntime<
     ResolvedPlan,
@@ -1760,6 +1819,12 @@ export class BlockScanRuntimeLoop {
       readonly wallMs: number;
       readonly status: "complete" | "failed";
     }> = [];
+    const backgroundFinalSimForks = new Map<
+      BlockScanExecutionWorker,
+      ReturnType<typeof startBlockScanBackgroundFork>
+    >();
+    let finalSimForkWaitMs = 0;
+    let finalSimForkCleanupMs = 0;
     let auditRuntime: AdapterRuntimeSnapshot | null = null;
     let auditGraphView: VerifiedGraphView | null = null;
     let auditPricingCoverage: BlindProductionPricingCoverageSource | null =
@@ -1887,6 +1952,12 @@ export class BlockScanRuntimeLoop {
           submitted: result.submitted,
         })),
         exact_transport_drain_ms: exactTransportDrainMs,
+        execution_fork_detail: {
+          backgroundWorkers: backgroundFinalSimForks.size,
+          waitMs: finalSimForkWaitMs,
+          cleanupMs: finalSimForkCleanupMs,
+          workerResets: [...workerResetTimings].sort((a, b) => a.worker - b.worker),
+        },
         planner_solver_detail: {
           plannerBuildMs,
           solverWallMs,
@@ -2189,52 +2260,30 @@ export class BlockScanRuntimeLoop {
           }));
         }
       };
-      const prepareExecution = async (
-        input: {
-          readonly sourceBlock: number;
-          readonly sourceBlockHash: string;
-          readonly signal: AbortSignal;
-        },
-      ): Promise<void> => {
-        const settled = await Promise.allSettled(
-          allExecutionWorkers.map((worker, workerIndex) =>
-            forkExecutionWorker(worker, workerIndex, {
-              sourceBlock: input.sourceBlock,
-              sourceBlockHash: input.sourceBlockHash,
-              deadlineAtMs: preparationSettleDeadlineAtMs,
-              signal: input.signal,
-            }),
-          ),
-        );
-        const { signal } = input;
-        const failure = settled.find(
-          (result): result is PromiseRejectedResult =>
-            result.status === "rejected",
-        );
-        if (
-          failure ||
-          this.deps.isShuttingDown() ||
-          signal.aborted
-        ) {
-          // Promise cancellation does not stop an in-flight anvil_reset.
-          // Settle every worker first, then reap every process before this
-          // generation releases the coordinator's reuse barrier.
-          await Promise.all(
-            allExecutionWorkers.map((worker) =>
-              worker.state.stopAndWait()
-            ),
-          );
-          throw failure?.reason ??
-            signal.reason ??
-            new Error("block-scan runtime shutting down");
-        }
-      };
       let coarse: BlockScanOutcome;
       let fallbackEnvelopes: readonly NMinusOneCoarseCandidate[] | null = null;
       let exactRefineStarted = false;
       let exactFundingTokens: readonly string[] = [];
       if (!useNMinusOneFallback) {
         this.passStageLabel = "state:prepare";
+        if (!startupWarmAttempt) {
+          for (const worker of blockScanFinalSimulationWorkers) {
+            backgroundFinalSimForks.set(worker, startBlockScanBackgroundFork({
+              signal: passSignal,
+              prepare: (signal) => forkExecutionWorker(
+                worker,
+                allExecutionWorkers.indexOf(worker),
+                {
+                  sourceBlock: graphView.sourceBlock,
+                  sourceBlockHash: graphView.sourceBlockHash,
+                  deadlineAtMs: preparationSettleDeadlineAtMs,
+                  signal,
+                },
+              ),
+              stopAndWait: () => worker.state.stopAndWait(),
+            }));
+          }
+        }
         const touchedPools = passTouchedPools;
         const canonicalActivity: StrictCanonicalActivityProof = Object.freeze({
           source: Object.freeze({
@@ -2250,7 +2299,7 @@ export class BlockScanRuntimeLoop {
          * the same source-hash-pinned producer-bulk transport as N-1; without
          * this pass-scoped backend the central runtime falls back to one RPC
          * request per logical quote even though the N-1 path is batched.
-         * Funding and execution preparation share the session, so the backend
+         * Funding and pricing preparation share the session, so the backend
          * remains open through the preparation-settle boundary and is drained
          * before state publication can hand control to exact work.
          */
@@ -2290,7 +2339,6 @@ export class BlockScanRuntimeLoop {
               : "proof-scoped",
             cacheMode: startupWarmAttempt ? "warm" : "hot",
             signal: passSignal,
-            prepareExecution,
             touchedPools,
             canonicalActivity,
             pricingCallBackend: sourcePricingBackend,
@@ -3130,8 +3178,8 @@ export class BlockScanRuntimeLoop {
             const solved = await solver.solve(
               item.plan,
               // Phase-1 quotes are current-N view reads; run them through the
-              // same pinned reth batch backend as refinement so Anvil is only
-              // forked right before final simulation.
+              // same pinned reth batch backend as refinement. Only final
+              // simulation consumes the prepared Anvil fork.
               exactQuoteStateRef,
               quoteOnlyProbe,
               {
@@ -3251,6 +3299,22 @@ export class BlockScanRuntimeLoop {
       }
       const blockScanWorkerRunner =
         createBlockScanWorkerFinalSimulationRunner<BlockScanExecutionWorker>();
+      const assertFinalSimulationSource = (
+        candidateGeneration: number,
+        candidateSource: CanonicalSource,
+      ): void => {
+        if (
+          candidateGeneration !== generation ||
+          candidateSource.generation !== generation ||
+          candidateSource.number !== blockNumber ||
+          candidateSource.hash.toLowerCase() !== sourceBlockHash ||
+          passSignal.aborted ||
+          this.deps.isShuttingDown()
+        ) {
+          throw passSignal.reason ??
+            new Error("block-scan final simulation generation is stale");
+        }
+      };
       const finalSimulationRuntime = createFinalSimulationWorkRuntime({
         reservedResources: blockScanFinalSimulationWorkers.map(
           (worker, index) => Object.freeze({
@@ -3265,29 +3329,36 @@ export class BlockScanRuntimeLoop {
           >) {
             if (useNMinusOneFallback) {
               await ensureExecutionWorkerForked(input.resource);
+            } else {
+              const preparation = backgroundFinalSimForks.get(input.resource);
+              if (preparation === undefined) {
+                throw new Error("final simulation worker has no source-N preparation");
+              }
+              const waitStartedAtMs = Date.now();
+              try {
+                await preparation.wait(input.signal, input.schedule.deadlineAtMs);
+              } finally {
+                finalSimForkWaitMs += Math.max(0, Date.now() - waitStartedAtMs);
+              }
+            }
+            // Waiting is asynchronous: recheck the fence before any execution,
+            // not only after the final-sim runtime receives the eventual result.
+            assertFinalSimulationSource(input.generation, input.source);
+            if (input.signal.aborted) throw input.signal.reason;
+            if (Date.now() >= input.schedule.deadlineAtMs) {
+              throw new Error("final simulation deadline elapsed during fork preparation");
             }
             return blockScanWorkerRunner.simulate(input);
           },
           terminate(input: Parameters<NonNullable<
             typeof blockScanWorkerRunner.terminate
           >>[0]) {
+            backgroundFinalSimForks.get(input.resource)?.cancel(input.reason);
             blockScanWorkerRunner.terminate?.(input);
           },
         }),
         generationFence: {
-          assertCurrent: (candidateGeneration, candidateSource) => {
-            if (
-              candidateGeneration !== generation ||
-              candidateSource.generation !== generation ||
-              candidateSource.number !== blockNumber ||
-              candidateSource.hash.toLowerCase() !== sourceBlockHash ||
-              passSignal.aborted ||
-              this.deps.isShuttingDown()
-            ) {
-              throw passSignal.reason ??
-                new Error("block-scan final simulation generation is stale");
-            }
-          },
+          assertCurrent: assertFinalSimulationSource,
         },
         planIdentity: finalSimulationPlanIdentity,
         timeoutMs: Math.max(1, passDeadlineAtMs - Date.now()),
@@ -3404,11 +3475,26 @@ export class BlockScanRuntimeLoop {
       throw error;
     } finally {
       try {
-        if (isPassScopedExactStateBackend(exactQuoteState)) {
-          exactTransportDrainMs = await exactQuoteState.closeAndDrain(
-            passSignal.reason ??
-              new Error(`block-scan pass ${blockNumber} completed`),
+        try {
+          const cleanupStartedAtMs = Date.now();
+          const settled = await Promise.allSettled(
+            [...backgroundFinalSimForks.values()].map((preparation) =>
+              preparation.close(passSignal.reason ??
+                new Error(`block-scan pass ${blockNumber} completed`)),
+            ),
           );
+          finalSimForkCleanupMs = Math.max(0, Date.now() - cleanupStartedAtMs);
+          const failure = settled.find(
+            (result): result is PromiseRejectedResult => result.status === "rejected",
+          );
+          if (failure) throw failure.reason;
+        } finally {
+          if (isPassScopedExactStateBackend(exactQuoteState)) {
+            exactTransportDrainMs = await exactQuoteState.closeAndDrain(
+              passSignal.reason ??
+                new Error(`block-scan pass ${blockNumber} completed`),
+            );
+          }
         }
         if (exactQuoteState instanceof PinnedRethQuoteBackend) {
           console.log(

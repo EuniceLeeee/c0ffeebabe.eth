@@ -18,6 +18,7 @@ import {
 } from "../../shared/executor/botvm-executor.js";
 import {
   prepareBlockScanExecutionWorkerFork,
+  startBlockScanBackgroundFork,
   type BlockScanExecutionWorker,
 } from "../blockscan-runtime-loop.js";
 import type { StartupCheckpointEnvelope } from
@@ -152,6 +153,110 @@ await prepareBlockScanExecutionWorkerFork({
   },
 });
 assert.deepEqual(forkOrder, ["fork", "hash", "prepare"]);
+forkOrder.length = 0;
+await assert.rejects(prepareBlockScanExecutionWorkerFork({
+  worker,
+  sourceBlock: 20,
+  sourceBlockHash: HASH,
+  deadlineAtMs: Date.now() + 10_000,
+  signal: new AbortController().signal,
+  async readBlockHash() { return `0x${"2".repeat(64)}`; },
+}), /worker fork hash mismatch/);
+assert.deepEqual(forkOrder, ["fork"], "install must not run on a wrong fork");
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+const foreground = new AbortController();
+const forkReady = deferred();
+let starts = 0;
+let stops = 0;
+const background = startBlockScanBackgroundFork({
+  signal: foreground.signal,
+  async prepare() { starts++; await forkReady.promise; },
+  async stopAndWait() { stops++; },
+});
+await Promise.resolve();
+assert.equal(starts, 1);
+let simReady = false;
+const wait = background.wait(foreground.signal, Date.now() + 10_000)
+  .then(() => { simReady = true; });
+await Promise.resolve();
+assert.equal(simReady, false, "foreground progresses while fork/final sim wait");
+forkReady.resolve();
+await wait;
+await background.wait(foreground.signal, Date.now() + 10_000);
+assert.equal(starts, 1, "one preparation reused by all final sim intents");
+await background.close(new Error("pass complete"));
+await background.close(new Error("idempotent cleanup"));
+assert.equal(stops, 0, "healthy completed fork retained for anvil_reset");
+await assert.rejects(background.wait(foreground.signal, Date.now() + 10_000));
+
+const failed = startBlockScanBackgroundFork({
+  signal: foreground.signal,
+  async prepare() { throw new Error("fork failed in background"); },
+  async stopAndWait() { stops++; },
+});
+// Leave a full turn before waiting: early rejection must already be handled.
+await new Promise<void>((resolve) => setImmediate(resolve));
+await assert.rejects(
+  failed.wait(foreground.signal, Date.now() + 10_000),
+  /fork failed in background/,
+);
+await failed.close(new Error("failed pass"));
+assert.equal(stops, 1);
+
+for (const mode of ["new-head", "deadline", "early-exit", "terminate"] as const) {
+  const pass = new AbortController();
+  const prepareSettled = deferred();
+  let preparationSignal!: AbortSignal;
+  let reaped = false;
+  let executed = false;
+  const job = startBlockScanBackgroundFork({
+    signal: pass.signal,
+    async prepare(signal) {
+      preparationSignal = signal;
+      await prepareSettled.promise;
+    },
+    async stopAndWait() { reaped = true; },
+  });
+  await Promise.resolve();
+  let finalWait: Promise<void> | undefined;
+  if (mode !== "early-exit") {
+    finalWait = job.wait(pass.signal, Date.now() + (mode === "deadline" ? 10 : 10_000))
+      .then(() => { executed = true; });
+    const rejected = assert.rejects(finalWait);
+    if (mode === "new-head") pass.abort(new Error("new head"));
+    if (mode === "terminate") {
+      job.cancel(new Error("retired final sim worker"));
+      prepareSettled.resolve();
+    }
+    await rejected;
+  }
+  const closing = job.close(new Error("pass exited"));
+  assert.equal(preparationSignal.aborted, true);
+  if (mode !== "terminate") {
+    await Promise.resolve();
+    assert.equal(reaped, false, "cleanup drains pending work before worker reuse");
+  }
+  prepareSettled.resolve();
+  await closing;
+  assert.equal(reaped, true);
+  assert.equal(executed, false, "no late simulation after cancellation/deadline/exit");
+}
+
+const runtimeLoopSource = readFileSync(
+  resolve(listenerRoot, "src/searcher/blockscan-runtime-loop.ts"), "utf8",
+);
+assert.doesNotMatch(runtimeLoopSource, /prepareExecution[,\s:]/);
+assert.match(runtimeLoopSource,
+  /if \(!startupWarmAttempt\) \{\s*for \(const worker of blockScanFinalSimulationWorkers\)/);
+assert.match(runtimeLoopSource,
+  /await preparation\.wait\(input\.signal, input\.schedule\.deadlineAtMs\)/);
+assert.match(runtimeLoopSource,
+  /assertFinalSimulationSource\(input\.generation, input\.source\);[\s\S]*?input\.signal\.aborted[\s\S]*?Date\.now\(\) >= input\.schedule\.deadlineAtMs[\s\S]*?return blockScanWorkerRunner\.simulate\(input\)/);
 
 const checkpoint = checkpointFixture(20);
 const evidence = historicalCheckpointEvidence(checkpoint, 20);
