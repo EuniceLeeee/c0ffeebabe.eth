@@ -1326,7 +1326,7 @@ export function createProbeWiring(
 
 /**
  * Full rebuild wiring (audit §5): freeze the canonical head, scan the
- * strict-catalog Swap window, dedupe by full log identity into family-aware
+ * strict-catalog activity window, dedupe by full observation identity into family-aware
  * candidates, reuse verified memos across windows, rehydrate instances from
  * memos, aggregate once per family and build the canonical graph snapshot.
  * All reads are pinned to the run cutoff hash.
@@ -1340,6 +1340,27 @@ export interface RebuildScanObservation {
   readonly blockNumber?: number;
   readonly blockHash?: string;
   readonly logIndex?: number;
+}
+
+export interface RebuildCallObservation {
+  readonly kind: "call";
+  readonly target: string;
+  readonly data: string;
+  readonly sender?: string;
+  readonly transactionHash: string;
+  readonly blockNumber: number;
+  readonly blockHash: string;
+  readonly traceAddress: readonly number[];
+}
+
+interface StrictCatalogCallPattern {
+  readonly familyId: string;
+  readonly id: string;
+  readonly selector: string;
+  readonly candidateAddress: Readonly<
+    | { readonly from: "call-target" }
+    | { readonly from: "argument"; readonly index: number }
+  >;
 }
 
 export function strictCatalogLogTopics(): readonly string[] {
@@ -1356,12 +1377,32 @@ export function strictCatalogLogTopics(): readonly string[] {
   return [...topics].sort();
 }
 
+export function strictCatalogCallPatterns(): readonly StrictCatalogCallPattern[] {
+  const patterns: StrictCatalogCallPattern[] = [];
+  for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .listAll()) {
+    if (!("discovery" in family.plugin)) continue;
+    for (const pattern of family.plugin.discovery.callPatterns ?? []) {
+      patterns.push(Object.freeze({
+        familyId: family.plugin.manifest.familyId,
+        id: pattern.id,
+        selector: pattern.selector.toLowerCase(),
+        candidateAddress: Object.freeze({ ...pattern.candidateAddress }),
+      }));
+    }
+  }
+  return Object.freeze(patterns.sort((left, right) =>
+    (left.familyId + "\u0000" + left.id + "\u0000" + left.selector)
+      .localeCompare(right.familyId + "\u0000" + right.id + "\u0000" + right.selector)
+  ));
+}
+
 export function strictCatalogSourceCoverageKeys(): {
   readonly startup: readonly string[];
-  readonly events: readonly string[];
+  readonly activity: readonly string[];
 } {
   const startup: string[] = [];
-  const events: string[] = [];
+  const activity: string[] = [];
   for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
     .listAll()) {
     const familyId = family.plugin.manifest.familyId;
@@ -1375,19 +1416,37 @@ export function strictCatalogSourceCoverageKeys(): {
       ? family.plugin.discovery
       : null;
     for (const pattern of discovery?.logPatterns ?? []) {
-      events.push(familyId + "|event:" + pattern.id);
+      activity.push(familyId + "|event:" + pattern.id);
+    }
+    for (const pattern of discovery?.callPatterns ?? []) {
+      activity.push(familyId + "|call:" + pattern.id);
     }
   }
   return Object.freeze({
     startup: Object.freeze([...new Set(startup)].sort()),
-    events: Object.freeze([...new Set(events)].sort()),
+    activity: Object.freeze([...new Set(activity)].sort()),
   });
 }
 
-/** Source scan chunk policy; bound into the event plan fingerprint. */
+/** The sole catalog-issued historical activity plan consumed by the scanner. */
+export function strictCatalogActivityPlan(): Readonly<{
+  readonly logTopics: readonly string[];
+  readonly callPatterns: readonly StrictCatalogCallPattern[];
+  readonly coverageKeys: readonly string[];
+}> {
+  return Object.freeze({
+    logTopics: strictCatalogLogTopics(),
+    callPatterns: strictCatalogCallPatterns(),
+    coverageKeys: strictCatalogSourceCoverageKeys().activity,
+  });
+}
+
+/** Physical read policy bound into the unified activity-plan fingerprint. */
 export const SOURCE_SCAN_BATCH_BLOCKS = 500;
 export const SOURCE_MIN_CHUNK_BLOCKS = 64;
 export const SOURCE_SCAN_CONCURRENCY = 4;
+export const SOURCE_TRACE_SCAN_CONCURRENCY = 16;
+export const SOURCE_TRACE_SCAN_MAX_ATTEMPTS = 3;
 export const REVERSE_BINDING_CONCURRENCY = 24;
 
 /**
@@ -1437,43 +1496,52 @@ export function startupSourcePlanFingerprint(input: {
 }
 
 /**
- * Plan identity of the catalog event scan source. Binds the exact topic
- * union, the covered event keys and the family code identity, plus the
- * chunk policy the scanner promises. topic/emitter/decoder changes all
- * move the fingerprint, so a durable event receipt sealed by an older
- * source plan can never be accepted by a newer catalog.
+ * One source-plan identity for the complete catalog activity scan. Logs and
+ * calls may use different RPC transports, but they share one range, one
+ * candidate feed and one atomic completion receipt. A change to either
+ * Family-declared surface moves this fingerprint and forces a same-range
+ * rescan before the run may publish Ready.
  */
-export function catalogEventSourcePlanFingerprint(input: {
+export function catalogActivitySourcePlanFingerprint(input: {
   readonly topics: readonly string[];
+  readonly callPatterns: readonly StrictCatalogCallPattern[];
   readonly coverageKeys: readonly string[];
   readonly familyDefinitionHashes: readonly string[];
 }): string {
   return digest("source-plan-v1:" + canonicalJson({
-    sourceKind: "catalog-event-union",
+    sourceKind: "catalog-activity-union",
     topics: input.topics,
+    callPatterns: input.callPatterns,
     coverageKeys: input.coverageKeys,
     familyDefinitionHashes: input.familyDefinitionHashes,
-    initialChunkBlocks: SOURCE_SCAN_BATCH_BLOCKS,
-    minimumChunkBlocks: SOURCE_MIN_CHUNK_BLOCKS,
-    maxConcurrentChunks: SOURCE_SCAN_CONCURRENCY,
+    logReadMethod: "eth_getLogs",
+    initialLogChunkBlocks: SOURCE_SCAN_BATCH_BLOCKS,
+    minimumLogChunkBlocks: SOURCE_MIN_CHUNK_BLOCKS,
+    maxConcurrentLogChunks: SOURCE_SCAN_CONCURRENCY,
+    traceMethods: ["trace_block", "debug_traceBlockByNumber"],
+    traceRpcBatchMaxCount: 1,
+    maxConcurrentTraceBlocks: SOURCE_TRACE_SCAN_CONCURRENCY,
+    maxTraceAttemptsPerBlock: SOURCE_TRACE_SCAN_MAX_ATTEMPTS,
   }));
 }
 
-/** Current expected plan fingerprints for both required sources. */
+/** Current expected plan fingerprints for nomination and unified activity. */
 export function expectedSourcePlanFingerprints(): {
   readonly startup: string;
-  readonly events: string;
+  readonly activity: string;
 } {
   const coverageKeys = strictCatalogSourceCoverageKeys();
+  const activityPlan = strictCatalogActivityPlan();
   const familyDefinitionHashes = strictFamilyDiscoveryDefinitionHashes();
   return Object.freeze({
     startup: startupSourcePlanFingerprint({
       coverageKeys: coverageKeys.startup,
       familyDefinitionHashes,
     }),
-    events: catalogEventSourcePlanFingerprint({
-      topics: strictCatalogLogTopics(),
-      coverageKeys: coverageKeys.events,
+    activity: catalogActivitySourcePlanFingerprint({
+      topics: activityPlan.logTopics,
+      callPatterns: activityPlan.callPatterns,
+      coverageKeys: activityPlan.coverageKeys,
       familyDefinitionHashes,
     }),
   });
@@ -1613,6 +1681,80 @@ export function candidateFromLog(
     address: log.address.toLowerCase(),
     familyId: "unknown-family",
   });
+}
+
+function candidateForFamilyCallObservation(
+  call: RebuildCallObservation,
+  familyId: string,
+  patternId: string,
+): Readonly<Record<string, unknown>> | null {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .forStrictFamily(familyId as never);
+  if (!("discovery" in family.plugin)) return null;
+  const discovery = family.plugin.discovery;
+  const decoded = discovery.decodeCandidate({
+    observation: Object.freeze({
+      kind: "call" as const,
+      source: Object.freeze({
+        number: call.blockNumber,
+        hash: call.blockHash,
+        generation: call.blockNumber,
+      }),
+      target: call.target,
+      data: call.data,
+      ...(call.sender === undefined ? {} : { sender: call.sender }),
+      transactionHash: call.transactionHash,
+    }) as never,
+    matchedPatternId: patternId,
+  });
+  if (decoded === null) return null;
+  const decodedRecord = typeof decoded === "object" && decoded !== null
+    ? decoded as Readonly<Record<string, unknown>>
+    : Object.freeze({ opaqueCandidate: decoded });
+  return Object.freeze({
+    ...decodedRecord,
+    address: call.target.toLowerCase(),
+    pluginCandidateKey: discovery.candidateKey(decoded as never),
+    familyId,
+    adapter: adapterLabelForFamily(familyId),
+    transactionHash: call.transactionHash.toLowerCase(),
+    blockNumber: call.blockNumber,
+    blockHash: call.blockHash.toLowerCase(),
+  });
+}
+
+export function candidatesFromCall(
+  call: RebuildCallObservation,
+): readonly Readonly<Record<string, unknown>>[] {
+  const matches = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.matches(
+    Object.freeze({
+      kind: "call" as const,
+      source: Object.freeze({
+        number: call.blockNumber,
+        hash: call.blockHash,
+        generation: call.blockNumber,
+      }),
+      target: call.target,
+      data: call.data,
+      ...(call.sender === undefined ? {} : { sender: call.sender }),
+      transactionHash: call.transactionHash,
+    }) as never,
+  );
+  return Object.freeze(matches.flatMap((match) => {
+    const candidate = candidateForFamilyCallObservation(
+      call,
+      match.familyId,
+      match.patternId,
+    );
+    return candidate === null ? [] : [candidate];
+  }));
+}
+
+export function fullCallIdentityKey(call: RebuildCallObservation): string {
+  return "call:" + call.blockNumber + ":" + call.blockHash.toLowerCase() +
+    ":" + call.transactionHash.toLowerCase() + ":" +
+    call.traceAddress.join(".") + ":" + call.target.toLowerCase() + ":" +
+    call.data.slice(0, 10).toLowerCase();
 }
 
 function adapterLabelForFamily(familyId: string | null): string | undefined {
@@ -1757,6 +1899,570 @@ export function canReuseMemo(input: {
     input.currentAuthorityFingerprint;
 }
 
+type CatalogCallTraceMethod =
+  | "trace_block"
+  | "debug_traceBlockByNumber";
+
+async function selectCatalogCallTraceMethod(
+  provider: ethers.JsonRpcProvider,
+  blockNumber: number,
+): Promise<CatalogCallTraceMethod> {
+  const failures: string[] = [];
+  for (const method of [
+    "trace_block",
+    "debug_traceBlockByNumber",
+  ] as const) {
+    try {
+      const raw = await requestCallTraceBlock(provider, method, blockNumber);
+      if (!Array.isArray(raw)) {
+        throw new Error("returned a non-array result");
+      }
+      return method;
+    } catch (error) {
+      failures.push(
+        method + ":" + (error instanceof Error ? error.message : String(error)),
+      );
+    }
+  }
+  throw new Error(
+    "catalog observed-call scan requires trace_block or " +
+      "debug_traceBlockByNumber: " + failures.join(" | "),
+  );
+}
+
+async function requestCallTraceBlock(
+  provider: ethers.JsonRpcProvider,
+  method: CatalogCallTraceMethod,
+  blockNumber: number,
+): Promise<unknown> {
+  const tag = ethers.toQuantity(blockNumber);
+  return method === "trace_block"
+    ? provider.send(method, [tag])
+    : provider.send(method, [tag, Object.freeze({ tracer: "callTracer" })]);
+}
+
+async function requestCallTraceBlockWithRetry(
+  provider: ethers.JsonRpcProvider,
+  method: CatalogCallTraceMethod,
+  blockNumber: number,
+): Promise<unknown> {
+  let lastCode = "unknown";
+  for (
+    let attempt = 1;
+    attempt <= SOURCE_TRACE_SCAN_MAX_ATTEMPTS;
+    attempt++
+  ) {
+    try {
+      return await requestCallTraceBlock(provider, method, blockNumber);
+    } catch (error) {
+      lastCode = catalogTraceErrorCode(error);
+      if (attempt === SOURCE_TRACE_SCAN_MAX_ATTEMPTS) break;
+      console.log(
+        "[universe-rebuild/activity-scan] transport=trace retry block=" +
+          blockNumber + " attempt=" + (attempt + 1) + "/" +
+          SOURCE_TRACE_SCAN_MAX_ATTEMPTS + " code=" + lastCode,
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, attempt * 250));
+    }
+  }
+  throw new Error(
+    "catalog call trace failed method=" + method + " block=" + blockNumber +
+      " attempts=" + SOURCE_TRACE_SCAN_MAX_ATTEMPTS + " code=" + lastCode,
+  );
+}
+
+function catalogTraceErrorCode(error: unknown): string {
+  if (error !== null && typeof error === "object") {
+    const code = (error as { readonly code?: unknown }).code;
+    if (typeof code === "string" || typeof code === "number") {
+      return String(code).slice(0, 40);
+    }
+  }
+  return "unknown";
+}
+
+/** Physical trace reader used only inside the unified activity scan. */
+async function readDeclaredCallActivity(input: {
+  readonly provider: ethers.JsonRpcProvider;
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  readonly selectors: ReadonlySet<string>;
+  readonly logs: readonly RebuildScanObservation[];
+}): Promise<{
+  readonly calls: readonly RebuildCallObservation[];
+  readonly method: CatalogCallTraceMethod;
+  readonly observedCallCount: number;
+  readonly observationSetHash: string;
+  readonly completedChunks: readonly DurableSourceChunkReceipt[];
+}> {
+  const method = await selectCatalogCallTraceMethod(
+    input.provider,
+    input.toBlock,
+  );
+  console.log(
+    "[universe-rebuild/activity-scan] transport=trace method=" + method +
+      " range=" +
+      input.fromBlock + "-" + input.toBlock,
+  );
+  const digestState = beginCatalogActivityDigest({
+    fromBlock: input.fromBlock,
+    toBlock: input.toBlock,
+    logs: input.logs,
+  });
+  const representativeByCandidate = new Map<string, {
+    readonly call: RebuildCallObservation;
+    readonly candidate: Readonly<Record<string, unknown>>;
+  }>();
+  const totalBlocks = input.toBlock - input.fromBlock + 1;
+  let completedBlocks = 0;
+  let observedCallCount = 0;
+  let chunkIndex = 0;
+  for (
+    let chunkFrom = input.fromBlock;
+    chunkFrom <= input.toBlock;
+    chunkFrom += SOURCE_SCAN_BATCH_BLOCKS
+  ) {
+    const chunkTo = Math.min(
+      input.toBlock,
+      chunkFrom + SOURCE_SCAN_BATCH_BLOCKS - 1,
+    );
+    const chunkStartedAtMs = Date.now();
+    for (
+      let groupFrom = chunkFrom;
+      groupFrom <= chunkTo;
+      groupFrom += SOURCE_TRACE_SCAN_CONCURRENCY
+    ) {
+      const groupTo = Math.min(
+        chunkTo,
+        groupFrom + SOURCE_TRACE_SCAN_CONCURRENCY - 1,
+      );
+      const group = await Promise.all(Array.from(
+        { length: groupTo - groupFrom + 1 },
+        async (_value, index) => {
+          const blockNumber = groupFrom + index;
+          const raw = await requestCallTraceBlockWithRetry(
+            input.provider,
+            method,
+            blockNumber,
+          );
+          return callsFromTraceBlock({
+            provider: input.provider,
+            method,
+            raw,
+            blockNumber,
+            selectors: input.selectors,
+          });
+        },
+      ));
+      for (const blockCalls of group) {
+        const orderedCalls = [...blockCalls].sort(compareRebuildCalls);
+        for (const call of orderedCalls) {
+          appendCatalogActivityCall(digestState, chunkIndex, call);
+          observedCallCount++;
+          for (const candidate of candidatesFromCall(call)) {
+            const key = rebuildFamilyInstanceDedupeKey(candidate);
+            const incumbent = representativeByCandidate.get(key);
+            if (
+              incumbent === undefined ||
+              preferCandidateRepresentative(incumbent.candidate, candidate)
+            ) {
+              representativeByCandidate.set(key, Object.freeze({
+                call,
+                candidate,
+              }));
+            }
+          }
+        }
+      }
+    }
+    completedBlocks += chunkTo - chunkFrom + 1;
+    console.log(
+      "[universe-rebuild/activity-scan] transport=trace completed=" +
+        completedBlocks + "/" +
+        totalBlocks + " observedCalls=" + observedCallCount +
+        " retainedCandidates=" + representativeByCandidate.size +
+        " elapsedMs=" +
+        (Date.now() - chunkStartedAtMs),
+    );
+    chunkIndex++;
+  }
+  const retainedCalls = new Map<string, RebuildCallObservation>();
+  for (const { call } of representativeByCandidate.values()) {
+    retainedCalls.set(fullCallIdentityKey(call), call);
+  }
+  const calls = [...retainedCalls.values()].sort(compareRebuildCalls);
+  const digests = finishCatalogActivityDigest(digestState);
+  return Object.freeze({
+    calls: Object.freeze(calls),
+    method,
+    observedCallCount,
+    observationSetHash: digests.observationSetHash,
+    completedChunks: digests.completedChunks,
+  });
+}
+
+async function callsFromTraceBlock(input: {
+  readonly provider: ethers.JsonRpcProvider;
+  readonly method: CatalogCallTraceMethod;
+  readonly raw: unknown;
+  readonly blockNumber: number;
+  readonly selectors: ReadonlySet<string>;
+}): Promise<readonly RebuildCallObservation[]> {
+  if (!Array.isArray(input.raw)) {
+    throw new Error(
+      input.method + " returned a non-array at block " + input.blockNumber,
+    );
+  }
+  if (input.method === "trace_block") {
+    return callsFromParityTrace(input.raw, input.blockNumber, input.selectors);
+  }
+  const pending: Omit<RebuildCallObservation, "blockHash">[] = [];
+  for (const rawTransaction of input.raw) {
+    if (
+      rawTransaction === null || typeof rawTransaction !== "object" ||
+      Array.isArray(rawTransaction)
+    ) continue;
+    const transaction = rawTransaction as Readonly<Record<string, unknown>>;
+    const txHash = string32(transaction.txHash ?? transaction.transactionHash);
+    if (txHash === null) continue;
+    collectDebugCallFrames({
+      raw: transaction.result ?? transaction,
+      txHash,
+      blockNumber: input.blockNumber,
+      selectors: input.selectors,
+      traceAddress: Object.freeze([]),
+      out: pending,
+    });
+  }
+  if (pending.length === 0) return Object.freeze([]);
+  const block = await input.provider.getBlock(input.blockNumber);
+  if (block === null || block.hash === null || block.number !== input.blockNumber) {
+    throw new Error(
+      "catalog call scan cannot bind block hash " + input.blockNumber,
+    );
+  }
+  const blockHash = block.hash.toLowerCase();
+  return Object.freeze(pending.map((call) => Object.freeze({
+    ...call,
+    blockHash,
+  })));
+}
+
+function callsFromParityTrace(
+  raw: readonly unknown[],
+  expectedBlockNumber: number,
+  selectors: ReadonlySet<string>,
+): readonly RebuildCallObservation[] {
+  const calls: RebuildCallObservation[] = [];
+  for (const entry of raw) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const record = entry as Readonly<Record<string, unknown>>;
+    if (record.type !== "call") continue;
+    const action = record.action;
+    if (action === null || typeof action !== "object" || Array.isArray(action)) {
+      continue;
+    }
+    const call = action as Readonly<Record<string, unknown>>;
+    const callType = typeof call.callType === "string"
+      ? call.callType.toLowerCase()
+      : "call";
+    if (callType === "delegatecall" || callType === "callcode") continue;
+    const target = address(call.to);
+    const data = callData(call.input);
+    const transactionHash = string32(record.transactionHash);
+    const blockHash = string32(record.blockHash);
+    const blockNumber = rpcNumber(record.blockNumber);
+    if (
+      target === null || data === null ||
+      !selectors.has(data.slice(0, 10).toLowerCase()) ||
+      transactionHash === null || blockHash === null ||
+      blockNumber !== expectedBlockNumber
+    ) continue;
+    calls.push(Object.freeze({
+      kind: "call" as const,
+      target,
+      data,
+      ...(address(call.from) === null ? {} : { sender: address(call.from)! }),
+      transactionHash,
+      blockNumber,
+      blockHash,
+      traceAddress: traceAddress(record.traceAddress),
+    }));
+  }
+  return Object.freeze(calls);
+}
+
+function collectDebugCallFrames(input: {
+  readonly raw: unknown;
+  readonly txHash: string;
+  readonly blockNumber: number;
+  readonly selectors: ReadonlySet<string>;
+  readonly traceAddress: readonly number[];
+  readonly out: Omit<RebuildCallObservation, "blockHash">[];
+}): void {
+  if (input.raw === null || typeof input.raw !== "object" ||
+      Array.isArray(input.raw)) return;
+  const frame = input.raw as Readonly<Record<string, unknown>>;
+  const target = address(frame.to);
+  const data = callData(frame.input);
+  const callType = typeof frame.type === "string"
+    ? frame.type.toLowerCase()
+    : "call";
+  if (
+    target !== null && data !== null &&
+    callType !== "delegatecall" && callType !== "callcode" &&
+    input.selectors.has(data.slice(0, 10).toLowerCase())
+  ) {
+    const sender = address(frame.from);
+    input.out.push(Object.freeze({
+      kind: "call" as const,
+      target,
+      data,
+      ...(sender === null ? {} : { sender }),
+      transactionHash: input.txHash,
+      blockNumber: input.blockNumber,
+      traceAddress: Object.freeze([...input.traceAddress]),
+    }));
+  }
+  if (!Array.isArray(frame.calls)) return;
+  frame.calls.forEach((child, index) => collectDebugCallFrames({
+    ...input,
+    raw: child,
+    traceAddress: Object.freeze([...input.traceAddress, index]),
+  }));
+}
+
+function address(value: unknown): string | null {
+  return typeof value === "string" && ethers.isAddress(value)
+    ? ethers.getAddress(value).toLowerCase()
+    : null;
+}
+
+function callData(value: unknown): string | null {
+  return typeof value === "string" && ethers.isHexString(value) &&
+      value.length >= 10
+    ? value.toLowerCase()
+    : null;
+}
+
+function string32(value: unknown): string | null {
+  return typeof value === "string" && ethers.isHexString(value, 32)
+    ? value.toLowerCase()
+    : null;
+}
+
+function rpcNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]+$/.test(value)) {
+    return null;
+  }
+  const parsed = Number(BigInt(value));
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function traceAddress(value: unknown): readonly number[] {
+  if (!Array.isArray(value)) return Object.freeze([]);
+  if (value.some((item) => !Number.isSafeInteger(item) || Number(item) < 0)) {
+    return Object.freeze([]);
+  }
+  return Object.freeze(value.map(Number));
+}
+
+function compareRebuildCalls(
+  left: RebuildCallObservation,
+  right: RebuildCallObservation,
+): number {
+  return left.blockNumber - right.blockNumber ||
+    left.transactionHash.localeCompare(right.transactionHash) ||
+    left.traceAddress.join(".").localeCompare(right.traceAddress.join(".")) ||
+    left.target.localeCompare(right.target) ||
+    left.data.localeCompare(right.data);
+}
+
+function normalizedActivityLog(
+  log: RebuildScanObservation,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    kind: "log",
+    address: log.address.toLowerCase(),
+    topics: Object.freeze(log.topics.map((topic) => topic.toLowerCase())),
+    data: log.data.toLowerCase(),
+    transactionHash: log.transactionHash?.toLowerCase() ?? null,
+    blockNumber: log.blockNumber ?? null,
+    blockHash: log.blockHash?.toLowerCase() ?? null,
+    logIndex: log.logIndex ?? null,
+  });
+}
+
+function updateActivityDigest(
+  hash: ReturnType<typeof createHash>,
+  observation: RebuildScanObservation | RebuildCallObservation,
+): void {
+  const call = (observation as { readonly kind?: unknown }).kind === "call";
+  hash.update(canonicalJson(
+    call
+      ? observation as RebuildCallObservation
+      : normalizedActivityLog(observation as RebuildScanObservation),
+  ));
+  hash.update(String.fromCharCode(0));
+}
+
+interface CatalogActivityChunkDigestState {
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  readonly hash: ReturnType<typeof createHash>;
+  resultCount: number;
+}
+
+interface CatalogActivityDigestState {
+  readonly observationHash: ReturnType<typeof createHash>;
+  readonly chunks: readonly CatalogActivityChunkDigestState[];
+}
+
+function beginCatalogActivityDigest(input: {
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  readonly logs: readonly RebuildScanObservation[];
+}): CatalogActivityDigestState {
+  const observationHash = createHash("sha256");
+  observationHash.update("catalog-activity-observations-v1:");
+  for (const log of input.logs) updateActivityDigest(observationHash, log);
+
+  const chunks: CatalogActivityChunkDigestState[] = [];
+  let logIndex = 0;
+  for (
+    let fromBlock = input.fromBlock;
+    fromBlock <= input.toBlock;
+    fromBlock += SOURCE_SCAN_BATCH_BLOCKS
+  ) {
+    const toBlock = Math.min(
+      input.toBlock,
+      fromBlock + SOURCE_SCAN_BATCH_BLOCKS - 1,
+    );
+    const hash = createHash("sha256");
+    hash.update("catalog-activity-chunk-v1:");
+    let resultCount = 0;
+    while (logIndex < input.logs.length) {
+      const log = input.logs[logIndex];
+      if (!Number.isSafeInteger(log.blockNumber)) {
+        throw new Error("catalog activity log has no canonical block number");
+      }
+      if (log.blockNumber! > toBlock) break;
+      if (log.blockNumber! < fromBlock) {
+        throw new Error("catalog activity logs are outside ordered scan range");
+      }
+      updateActivityDigest(hash, log);
+      resultCount++;
+      logIndex++;
+    }
+    chunks.push({ fromBlock, toBlock, hash, resultCount });
+  }
+  if (logIndex !== input.logs.length) {
+    throw new Error("catalog activity logs escaped the scan range");
+  }
+  return { observationHash, chunks };
+}
+
+function appendCatalogActivityCall(
+  state: CatalogActivityDigestState,
+  chunkIndex: number,
+  call: RebuildCallObservation,
+): void {
+  const chunk = state.chunks[chunkIndex];
+  if (
+    chunk === undefined || call.blockNumber < chunk.fromBlock ||
+    call.blockNumber > chunk.toBlock
+  ) {
+    throw new Error("catalog activity call escaped the scan range");
+  }
+  updateActivityDigest(state.observationHash, call);
+  updateActivityDigest(chunk.hash, call);
+  chunk.resultCount++;
+}
+
+function finishCatalogActivityDigest(
+  state: CatalogActivityDigestState,
+): Readonly<{
+  readonly observationSetHash: string;
+  readonly completedChunks: readonly DurableSourceChunkReceipt[];
+}> {
+  return Object.freeze({
+    observationSetHash: state.observationHash.digest("hex"),
+    completedChunks: Object.freeze(state.chunks.map((chunk) => Object.freeze({
+      fromBlock: chunk.fromBlock,
+      toBlock: chunk.toBlock,
+      resultCount: chunk.resultCount,
+      resultHash: chunk.hash.digest("hex"),
+    }))),
+  });
+}
+
+function catalogActivityObservationHash(
+  logs: readonly RebuildScanObservation[],
+  calls: readonly RebuildCallObservation[],
+): string {
+  const hash = createHash("sha256");
+  hash.update("catalog-activity-observations-v1:");
+  for (const log of logs) updateActivityDigest(hash, log);
+  for (const call of calls) updateActivityDigest(hash, call);
+  return hash.digest("hex");
+}
+
+function catalogActivityChunks(input: {
+  readonly ranges: readonly {
+    readonly fromBlock: number;
+    readonly toBlock: number;
+  }[];
+  readonly logs: readonly RebuildScanObservation[];
+  readonly calls: readonly RebuildCallObservation[];
+}): readonly DurableSourceChunkReceipt[] {
+  let logIndex = 0;
+  let callIndex = 0;
+  const chunks: DurableSourceChunkReceipt[] = [];
+  for (const range of input.ranges) {
+    const hash = createHash("sha256");
+    hash.update("catalog-activity-chunk-v1:");
+    let resultCount = 0;
+    while (logIndex < input.logs.length) {
+      const log = input.logs[logIndex];
+      if (!Number.isSafeInteger(log.blockNumber)) {
+        throw new Error("catalog activity log has no canonical block number");
+      }
+      if (log.blockNumber! > range.toBlock) break;
+      if (log.blockNumber! < range.fromBlock) {
+        throw new Error("catalog activity logs are outside ordered scan range");
+      }
+      updateActivityDigest(hash, log);
+      resultCount++;
+      logIndex++;
+    }
+    while (callIndex < input.calls.length) {
+      const call = input.calls[callIndex];
+      if (call.blockNumber > range.toBlock) break;
+      if (call.blockNumber < range.fromBlock) {
+        throw new Error("catalog activity calls are outside ordered scan range");
+      }
+      updateActivityDigest(hash, call);
+      resultCount++;
+      callIndex++;
+    }
+    chunks.push(Object.freeze({
+      fromBlock: range.fromBlock,
+      toBlock: range.toBlock,
+      resultCount,
+      resultHash: hash.digest("hex"),
+    }));
+  }
+  if (logIndex !== input.logs.length || callIndex !== input.calls.length) {
+    throw new Error("catalog activity observations escaped the scan range");
+  }
+  return Object.freeze(chunks);
+}
+
 export function createRebuildWiring(input?: {
   readonly rpcUrl?: string;
   readonly startupCandidates?: readonly Readonly<Record<string, unknown>>[];
@@ -1771,6 +2477,18 @@ export function createRebuildWiring(input?: {
     );
   }
   const provider = new ethers.JsonRpcProvider(rpcUrl);
+  // A trace response is already large. Ethers batches concurrent send()
+  // calls by default, which couples sixteen block traces to one HTTP timeout.
+  // Keep concurrency, but transport each block independently so one long tail
+  // retries only that block.
+  const traceProvider = new ethers.JsonRpcProvider(
+    rpcUrl,
+    ethers.Network.from(1),
+    {
+      staticNetwork: ethers.Network.from(1),
+      batchMaxCount: 1,
+    },
+  );
   // Cross-run memo revalidation usually checks tens of thousands of
   // instances sealed at one shared proof source. The proof-source block hash
   // is a property of the fixed canonical chain, not of an individual
@@ -1797,13 +2515,17 @@ export function createRebuildWiring(input?: {
     proofHashByFixedRun.set(key, pending);
     return pending;
   };
-  const topics = strictCatalogLogTopics();
+  const activityPlan = strictCatalogActivityPlan();
+  const topics = activityPlan.logTopics;
+  const callPatterns = activityPlan.callPatterns;
+  const callSelectors = new Set(callPatterns.map((pattern) => pattern.selector));
   const sourceCoverageKeys = strictCatalogSourceCoverageKeys();
   // reth caps eth_getLogs at 20000 results; the strict-topic union is
   // high-volume, so start small and halve on the max-results error. The
   // chunk policy is a plan-bound constant (SOURCE_SCAN_BATCH_BLOCKS /
   // SOURCE_MIN_CHUNK_BLOCKS): changing it moves the event plan fingerprint
-  // and fails closed on resume.
+  // and fails closed on resume. Call tracing is another physical transport
+  // inside this same catalog activity plan, not a second discovery source.
   const probe = createProbeWiring({ rpcUrl });
 
   const wiring: UniverseRebuildDependencies = {
@@ -1814,16 +2536,20 @@ export function createRebuildWiring(input?: {
     upgradeLegacyVerifiedMemo,
     requiredSourceCoverageKeys: () => Object.freeze([
       ...sourceCoverageKeys.startup,
-      ...sourceCoverageKeys.events,
+      ...activityPlan.coverageKeys,
     ]),
     // Current source-plan identity. Every durable receipt sealed by this
     // wiring carries queryFingerprint == plan fingerprint; resume rejects
     // receipts sealed by any other code version (audit P0-STOP-1).
     expectedSourcePlanFingerprints: () => expectedSourcePlanFingerprints(),
-    freezeCanonicalHead: async () => {
-      const block = await provider.getBlock("latest");
+    freezeCanonicalHead: async (requestedBlock) => {
+      const block = await provider.getBlock(requestedBlock ?? "latest");
       if (block === null || block.hash === null) {
-        throw new Error("canonical head unavailable");
+        throw new Error(
+          requestedBlock === undefined
+            ? "canonical head unavailable"
+            : "canonical cutoff unavailable: " + requestedBlock,
+        );
       }
       return Object.freeze({
         number: block.number,
@@ -1833,7 +2559,6 @@ export function createRebuildWiring(input?: {
     },
     scanSwapWindow: async (scanInput) => {
       const logs: RebuildScanObservation[] = [];
-      const eventChunks: DurableSourceChunkReceipt[] = [];
       const totalBlocks = scanInput.cutoff.number - scanInput.fromBlock + 1;
       let completedBlocks = 0;
       const ranges: Array<{ readonly fromBlock: number; readonly toBlock: number }> = [];
@@ -1852,20 +2577,20 @@ export function createRebuildWiring(input?: {
       }
       const topicFilter: Array<null | string | Array<string>> =
         topics.length === 1 ? [topics[0]] : [[...topics]];
-      // Keep at most four local-reth reads in flight, then merge completed
-      // slices in block order. Parallel completion can never reorder the
-      // observation digest or durable source chunks.
-      for (
-        let groupStart = 0;
-        groupStart < ranges.length;
-        groupStart += SOURCE_SCAN_CONCURRENCY
-      ) {
-        const slices = await Promise.all(
-          ranges.slice(groupStart, groupStart + SOURCE_SCAN_CONCURRENCY).map(
-            async (range, groupIndex) => {
+      if (topics.length > 0) {
+        // Keep at most four provider reads in flight, then merge completed
+        // slices in block order. Parallel completion can never reorder the
+        // unified activity digest.
+        for (
+          let groupStart = 0;
+          groupStart < ranges.length;
+          groupStart += SOURCE_SCAN_CONCURRENCY
+        ) {
+          const slices = await Promise.all(
+            ranges.slice(groupStart, groupStart + SOURCE_SCAN_CONCURRENCY).map(
+              async (range, groupIndex) => {
               const slice = groupStart + groupIndex + 1;
               const sliceLogs: RebuildScanObservation[] = [];
-              const sliceChunks: DurableSourceChunkReceipt[] = [];
               let batchSize = range.toBlock - range.fromBlock + 1;
               let from = range.fromBlock;
               let attempt = 0;
@@ -1889,26 +2614,6 @@ export function createRebuildWiring(input?: {
                     fromBlock: from,
                     toBlock: to,
                   });
-                  const normalizedBatch = batch.map((log) => Object.freeze({
-                    address: log.address.toLowerCase(),
-                    topics: Object.freeze([...log.topics].map((topic) =>
-                      topic.toLowerCase()
-                    )),
-                    data: log.data.toLowerCase(),
-                    transactionHash:
-                      log.transactionHash?.toLowerCase() ?? null,
-                    blockNumber: log.blockNumber,
-                    blockHash: log.blockHash?.toLowerCase() ?? null,
-                    logIndex: log.index ?? null,
-                  }));
-                  sliceChunks.push(Object.freeze({
-                    fromBlock: from,
-                    toBlock: to,
-                    resultCount: normalizedBatch.length,
-                    resultHash: digest(
-                      "source-chunk-v1:" + canonicalJson(normalizedBatch),
-                    ),
-                  }));
                   for (const log of batch) {
                     sliceLogs.push(Object.freeze({
                       address: log.address.toLowerCase(),
@@ -1970,31 +2675,44 @@ export function createRebuildWiring(input?: {
               return Object.freeze({
                 range,
                 logs: Object.freeze(sliceLogs),
-                chunks: Object.freeze(sliceChunks),
               });
-            },
-          ),
-        );
-        for (const slice of slices) {
-          logs.push(...slice.logs);
-          eventChunks.push(...slice.chunks);
-          completedBlocks += slice.range.toBlock - slice.range.fromBlock + 1;
+              },
+            ),
+          );
+          for (const slice of slices) {
+            for (const log of slice.logs) logs.push(log);
+            completedBlocks += slice.range.toBlock - slice.range.fromBlock + 1;
+          }
+          console.log(
+            "[universe-rebuild/scan] mergedSlices=" +
+              Math.min(groupStart + slices.length, ranges.length) +
+              "/" + ranges.length +
+              " completedBlocks=" + completedBlocks + "/" + totalBlocks +
+              " cumulativeLogs=" + logs.length,
+          );
         }
-        console.log(
-          "[universe-rebuild/scan] mergedSlices=" +
-            Math.min(groupStart + slices.length, ranges.length) +
-            "/" + ranges.length +
-            " completedBlocks=" + completedBlocks + "/" + totalBlocks +
-            " cumulativeLogs=" + logs.length,
-        );
       }
-      const observations = Object.freeze([
-        ...(input?.startupCandidates ?? []).map((candidate) => Object.freeze({
+      const callScan = callPatterns.length === 0
+        ? null
+        : await readDeclaredCallActivity({
+            provider: traceProvider,
+            fromBlock: scanInput.fromBlock,
+            toBlock: scanInput.cutoff.number,
+            selectors: callSelectors,
+            logs,
+          });
+      const mutableObservations: unknown[] = [];
+      for (const candidate of input?.startupCandidates ?? []) {
+        mutableObservations.push(Object.freeze({
           kind: "startup-candidate",
           candidate,
-        })),
-        ...logs,
-      ]);
+        }));
+      }
+      for (const log of logs) mutableObservations.push(log);
+      for (const call of callScan?.calls ?? []) {
+        mutableObservations.push(call);
+      }
+      const observations = Object.freeze(mutableObservations);
       const providerIdentity = digest("provider-v1:" + rpcUrl.trim());
       const startupSnapshot = Object.freeze(
         (input?.startupCandidates ?? []).map((candidate) =>
@@ -2047,46 +2765,39 @@ export function createRebuildWiring(input?: {
         retryableCount: 0 as const,
         status: "complete" as const,
       })];
-      if (sourceCoverageKeys.events.length > 0) {
-        // Same source-plan identity the runner compares on resume: binds
-        // topic union, coverage keys, family code identity and chunk policy.
-        const eventQueryFingerprint = catalogEventSourcePlanFingerprint({
+      if (activityPlan.coverageKeys.length > 0) {
+        // One source plan and one receipt cover every Family-declared log and
+        // call pattern over this exact range. Neither physical transport can
+        // independently grant source coverage.
+        const activityQueryFingerprint = catalogActivitySourcePlanFingerprint({
           topics,
-          coverageKeys: sourceCoverageKeys.events,
+          callPatterns,
+          coverageKeys: activityPlan.coverageKeys,
           familyDefinitionHashes: strictFamilyDiscoveryDefinitionHashes(),
         });
-        // Stream each log into the digest instead of canonicalJson(logs):
-        // a widened window (e.g. 14400 blocks) can hold hundreds of
-        // thousands of logs and one giant concatenated string exceeds V8's
-        // string limit ("Invalid string length" crash). The incremental hash
-        // is order-sensitive and covers every log exactly like the old
-        // canonical form.
-        const eventHash = createHash("sha256");
-        eventHash.update("catalog-event-observations-v1:");
-        for (const log of logs) {
-          eventHash.update(canonicalJson(log));
-          eventHash.update(String.fromCharCode(0));
-        }
-        const eventObservationHash = eventHash.digest("hex");
+        const calls = callScan?.calls ?? Object.freeze([]);
+        const activityObservationHash = callScan?.observationSetHash ??
+          catalogActivityObservationHash(logs, calls);
         receipts.push(Object.freeze({
           sourceKey: digest("source-key-v1:" + canonicalJson({
-            sourceKind: "catalog-event-union",
+            sourceKind: "catalog-activity-union",
             providerIdentity,
-            queryFingerprint: eventQueryFingerprint,
+            queryFingerprint: activityQueryFingerprint,
             fromBlock: scanInput.fromBlock,
             toBlock: scanInput.cutoff.number,
             cutoffHash: scanInput.cutoff.hash,
           })),
-          sourceKind: "catalog-event-union" as const,
+          sourceKind: "catalog-activity-union" as const,
           providerIdentity,
-          queryFingerprint: eventQueryFingerprint,
+          queryFingerprint: activityQueryFingerprint,
           fromBlock: scanInput.fromBlock,
           toBlock: scanInput.cutoff.number,
           cutoffNumber: scanInput.cutoff.number,
           cutoffHash: scanInput.cutoff.hash,
-          coverageKeys: sourceCoverageKeys.events,
-          completedChunks: Object.freeze(eventChunks),
-          observationSetHash: eventObservationHash,
+          coverageKeys: activityPlan.coverageKeys,
+          completedChunks: callScan?.completedChunks ??
+            catalogActivityChunks({ ranges, logs, calls }),
+          observationSetHash: activityObservationHash,
           observedThrough: Object.freeze({
             number: scanInput.cutoff.number,
             hash: scanInput.cutoff.hash,
@@ -2115,6 +2826,7 @@ export function createRebuildWiring(input?: {
       // P0.6) still governs the observation feed; here the newest log per
       // pool becomes the representative candidate + evidence ref.
       const seenLogs = new Set<string>();
+      const seenCalls = new Set<string>();
       const byKey = new Map<string, Readonly<Record<string, unknown>>>();
       for (const observation of observations) {
         if (
@@ -2134,6 +2846,26 @@ export function createRebuildWiring(input?: {
             preferCandidateRepresentative(existing, candidate)
           ) {
             byKey.set(key, candidate);
+          }
+          continue;
+        }
+        if (
+          typeof observation === "object" && observation !== null &&
+          (observation as { kind?: unknown }).kind === "call"
+        ) {
+          const call = observation as RebuildCallObservation;
+          const callKey = fullCallIdentityKey(call);
+          if (seenCalls.has(callKey)) continue;
+          seenCalls.add(callKey);
+          for (const candidate of candidatesFromCall(call)) {
+            const key = rebuildFamilyInstanceDedupeKey(candidate);
+            const existing = byKey.get(key);
+            if (
+              existing === undefined ||
+              preferCandidateRepresentative(existing, candidate)
+            ) {
+              byKey.set(key, candidate);
+            }
           }
           continue;
         }
@@ -2209,7 +2941,8 @@ export function createRebuildWiring(input?: {
       for (const raw of reverseInput.observations) {
         if (
           typeof raw === "object" && raw !== null &&
-          (raw as { kind?: unknown }).kind === "startup-candidate"
+          ((raw as { kind?: unknown }).kind === "startup-candidate" ||
+            (raw as { kind?: unknown }).kind === "call")
         ) {
           continue;
         }
@@ -2398,7 +3131,7 @@ export function createRebuildWiring(input?: {
         },
       ));
       for (const observations of resolved) {
-        verified.push(...observations);
+        for (const observation of observations) verified.push(observation);
       }
       const byKey = new Map<string, Readonly<Record<string, unknown>>>();
       for (const observation of verified) {

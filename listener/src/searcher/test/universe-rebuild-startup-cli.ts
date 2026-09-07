@@ -53,7 +53,7 @@ const wiringSource = [
   "    ]), sourceReceipts: Object.freeze([Object.freeze({ sourceKey: '1'.repeat(64), sourceKind: 'startup-candidate-union', providerIdentity: 'fixture', queryFingerprint: '2'.repeat(64), fromBlock: scan.fromBlock, toBlock: scan.cutoff.number, cutoffNumber: scan.cutoff.number, cutoffHash: scan.cutoff.hash, coverageKeys: Object.freeze(['univ2-standard|startup-universe']), completedChunks: Object.freeze([Object.freeze({ fromBlock: scan.fromBlock, toBlock: scan.cutoff.number, resultCount: 2, resultHash: '3'.repeat(64) })]), observationSetHash: '4'.repeat(64), observedThrough: Object.freeze({ number: scan.cutoff.number, hash: scan.cutoff.hash }), appliedThrough: Object.freeze({ number: scan.cutoff.number, hash: scan.cutoff.hash }), retryableCount: 0, status: 'complete' })]) }),",
   "    familyCandidateKey: (c) => 'cand:' + String(c.address ?? '') + ':' + String(c.logIndex ?? ''),",
   "    requiredSourceCoverageKeys: () => Object.freeze(['univ2-standard|startup-universe']),",
-  "    expectedSourcePlanFingerprints: () => Object.freeze({ startup: '2'.repeat(64), events: '5'.repeat(64) }),",
+  "    expectedSourcePlanFingerprints: () => Object.freeze({ startup: '2'.repeat(64), activity: '5'.repeat(64) }),",
   "    dedupeFamilyCandidates: (obs) => Object.freeze([Object.freeze({ address: '0x' + '11'.repeat(20), logIndex: 0, familyId: 'univ2-standard' }), Object.freeze({ address: '0x' + '11'.repeat(20), logIndex: 1, familyId: 'univ2-standard' })]),",
   "    findReusableMemo: async () => null,",
   "    attestFamilyInstanceOnce: async (input) => Object.freeze({ status: 'verified', result: Object.freeze({ identity: String(input.candidate.logIndex) }) }),",
@@ -122,6 +122,31 @@ async function main(): Promise<void> {
       Object.keys(envelope?.verifiedMemos ?? {}).length,
       2,
       "both candidates verified with memos",
+    );
+
+    const explicitCheckpoint = join(dir, "explicit-checkpoint.json");
+    const explicitFrom = SOURCE.number - 24;
+    const explicitOut = execFileSync(
+      "node",
+      ["--import", "tsx", "src/searcher/universe-rebuild-startup-cli.ts",
+        "--checkpoint", explicitCheckpoint,
+        "--run-id", "run-explicit",
+        "--from-block", String(explicitFrom),
+        "--to-block", String(SOURCE.number)],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, SEARCHER_UNIVERSE_REBUILD_WIRING_PATH: wiring },
+        encoding: "utf8",
+      },
+    );
+    assert.match(explicitOut, /READY generation=1/);
+    const explicitEnvelope = await new UniverseRebuildCheckpointStore({
+      path: explicitCheckpoint,
+    }).load();
+    assert.deepEqual(
+      explicitEnvelope?.readyGeneration?.universeRange,
+      { fromBlock: explicitFrom, toBlock: SOURCE.number },
+      "CLI explicit range must bind the exact historical interval",
     );
 
     // The production range is code-owned. Former lookback/from flags must

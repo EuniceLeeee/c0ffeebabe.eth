@@ -117,7 +117,7 @@ function makeFixture(
       Object.freeze(["univ2|startup-universe"]),
     expectedSourcePlanFingerprints: () => Object.freeze({
       startup: "2".repeat(64),
-      events: "5".repeat(64),
+      activity: "5".repeat(64),
     }),
     dedupeFamilyCandidates: (obs) =>
       candidates(
@@ -323,6 +323,44 @@ async function main(): Promise<void> {
       retryable: 1,
       remainingUnaccounted: 0,
     });
+
+    const explicitDir = join(dir, "explicit-range");
+    const explicit = makeFixture(explicitDir);
+    const explicitFrom = SOURCE.number - 99;
+    const explicitReady = await rebuildUniverse(Object.freeze({
+      ...explicit.input,
+      observationRange: Object.freeze({
+        fromBlock: explicitFrom,
+        toBlock: SOURCE.number,
+      }),
+    }));
+    assert.deepEqual(
+      explicitReady.universeRange,
+      { fromBlock: explicitFrom, toBlock: SOURCE.number },
+      "an explicit range feeds the same rebuild pipeline unchanged",
+    );
+    await assert.rejects(
+      rebuildUniverse(Object.freeze({
+        ...explicit.input,
+        observationWindowBlocks: 100,
+        observationRange: Object.freeze({
+          fromBlock: explicitFrom,
+          toBlock: SOURCE.number,
+        }),
+      })),
+      /mutually exclusive/,
+    );
+    await assert.rejects(
+      rebuildUniverse(Object.freeze({
+        ...explicit.input,
+        runId: "run-explicit-too-wide",
+        observationRange: Object.freeze({
+          fromBlock: SOURCE.number - 14_400,
+          toBlock: SOURCE.number,
+        }),
+      })),
+      /integer in \[1, 14400\]/,
+    );
 
     // A new rolling run scans a fresh partition, reuses verified memos, and
     // inherits the independent retryable without re-attesting it on startup.
@@ -608,7 +646,7 @@ async function main(): Promise<void> {
         ...staleSourcePlan.input,
         expectedSourcePlanFingerprints: () => Object.freeze({
           startup: "9".repeat(64),
-          events: "5".repeat(64),
+          activity: "5".repeat(64),
         }),
       })),
       /does not match the current source plan/,
@@ -626,7 +664,7 @@ async function main(): Promise<void> {
         })]),
         Object.freeze({
           startup: "2".repeat(64),
-          events: "5".repeat(64),
+          activity: "5".repeat(64),
         }),
       ),
       /source receipt kind is not bound/,
@@ -682,7 +720,7 @@ async function main(): Promise<void> {
     await rebuildUniverse(Object.freeze({
       ...matchingPlan.input,
       expectedSourcePlanFingerprints: () =>
-        Object.freeze({ startup: "9".repeat(64), events: "9".repeat(64) }),
+        Object.freeze({ startup: "9".repeat(64), activity: "9".repeat(64) }),
     }));
     assert.equal(
       (await matchingPlan.store.load())?.readyGeneration?.generation,
@@ -694,7 +732,7 @@ async function main(): Promise<void> {
       () => rebuildUniverse(Object.freeze({
         ...stalePlan.input,
         expectedSourcePlanFingerprints: () =>
-          Object.freeze({ startup: "b".repeat(64), events: "b".repeat(64) }),
+          Object.freeze({ startup: "b".repeat(64), activity: "b".repeat(64) }),
       })),
       /does not match the current source plan/,
       "stale topic/capability plan must fail closed",
@@ -710,7 +748,7 @@ async function main(): Promise<void> {
     const resumeDrift = planReceiptFixture(join(dir, "resume-drift"), "c".repeat(64));
     const planC = () => Object.freeze({
       startup: "c".repeat(64),
-      events: "c".repeat(64),
+      activity: "c".repeat(64),
     });
     await rebuildUniverse(Object.freeze({
       ...resumeDrift.input,
@@ -732,7 +770,7 @@ async function main(): Promise<void> {
         })]),
       }),
       expectedSourcePlanFingerprints: () =>
-        Object.freeze({ startup: "d".repeat(64), events: "d".repeat(64) }),
+        Object.freeze({ startup: "d".repeat(64), activity: "d".repeat(64) }),
     });
     const readopted = await rebuildUniverse(driftReadopt.input);
     assert.equal(

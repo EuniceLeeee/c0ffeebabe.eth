@@ -50,12 +50,14 @@ export class UniverseRunIncomplete extends Error {
 }
 
 export interface UniverseRebuildDependencies {
-  /** Freeze the canonical head (number + hash) this run is fixed to. */
-  readonly freezeCanonicalHead: () => Promise<CanonicalSource>;
+  /** Freeze the canonical head, or one explicitly requested historical cutoff. */
+  readonly freezeCanonicalHead: (
+    requestedBlock?: number,
+  ) => Promise<CanonicalSource>;
   /**
-   * Scan the swap window [fromBlock..cutoff.number] at the frozen cutoff
-   * hash. Returns raw observed logs; deduplication happens in the runner
-   * via the supplied candidate key function.
+   * Scan Family-declared activity over [fromBlock..cutoff.number] at the
+   * frozen cutoff hash. Log and call observations share this one result and
+   * source-completion boundary; deduplication happens in the runner.
    */
   readonly scanSwapWindow: (input: {
     readonly fromBlock: number;
@@ -107,13 +109,13 @@ export interface UniverseRebuildDependencies {
    * stale receipt can no longer prove the source complete and the run
    * fails closed instead of promoting ready. The plan fingerprints bind
    * code identity only (catalog capability hashes + pattern declarations
-   * + chunk policy) and never the input snapshot: a startup-universe key
+   * + transport policy) and never the input snapshot: a startup-universe key
    * proves the nomination partition was consumed, not that no chain
    * instance exists outside it.
    */
   readonly expectedSourcePlanFingerprints: () => {
     readonly startup: string;
-    readonly events: string;
+    readonly activity: string;
   };
   /** Compact evidence pointer retained for a first-attempt retryable. */
   readonly candidateEvidenceRef?: (candidate: unknown) => {
@@ -209,6 +211,14 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
    * Omit for the canonical 14,400-block rebuild; values may never widen it.
    */
   readonly observationWindowBlocks?: number;
+  /**
+   * Explicit historical source range. This selects the time range only; it
+   * feeds the same scan/dedupe/attest/Graph pipeline as the rolling window.
+   */
+  readonly observationRange?: {
+    readonly fromBlock: number;
+    readonly toBlock: number;
+  };
   /** Bounded identity/materialization workers; defaults to 24. */
   readonly attestationConcurrency?: number;
   /** Optional progress logging. */
@@ -219,6 +229,17 @@ export async function rebuildUniverse(
   input: RebuildUniverseInput,
 ): Promise<ReadyUniverseGeneration> {
   const log = input.log ?? ((): void => undefined);
+  if (
+    input.observationRange !== undefined &&
+    input.observationWindowBlocks !== undefined
+  ) {
+    throw new Error(
+      "universe rebuild: explicit range and rolling window are mutually exclusive",
+    );
+  }
+  const explicitRange = input.observationRange === undefined
+    ? null
+    : validateExplicitObservationRange(input.observationRange);
   const encodeCandidate = input.encodeCandidateSnapshot ?? ((value) => value);
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
   let checkpoint = await input.store.load() ?? null;
@@ -302,6 +323,18 @@ export async function rebuildUniverse(
           incumbentRun.runId + ")",
       );
     }
+    if (
+      explicitRange !== null &&
+      (incumbentRun.fromBlock !== explicitRange.fromBlock ||
+        incumbentRun.cutoff.number !== explicitRange.toBlock)
+    ) {
+      throw new Error(
+        "universe rebuild checkpoint: in-progress fixed range " +
+          incumbentRun.fromBlock + ".." + incumbentRun.cutoff.number +
+          " differs from requested range " + explicitRange.fromBlock +
+          ".." + explicitRange.toBlock,
+      );
+    }
     // ★ The unfinished run's time world never changes.
     cutoff = incumbentRun.cutoff;
     fromBlock = incumbentRun.fromBlock;
@@ -367,8 +400,17 @@ export async function rebuildUniverse(
     }
   } else {
     // ★ Only with no unfinished run do we create a new time world.
-    cutoff = await input.freezeCanonicalHead();
-    fromBlock = strictEdgeCollectionFromBlock(
+    cutoff = await input.freezeCanonicalHead(explicitRange?.toBlock);
+    if (
+      explicitRange !== null &&
+      cutoff.number !== explicitRange.toBlock
+    ) {
+      throw new Error(
+        "universe rebuild: requested cutoff " + explicitRange.toBlock +
+          " resolved to block " + cutoff.number,
+      );
+    }
+    fromBlock = explicitRange?.fromBlock ?? strictEdgeCollectionFromBlock(
       cutoff.number,
       input.observationWindowBlocks,
     );
@@ -894,6 +936,28 @@ export async function rebuildUniverse(
   return ready;
 }
 
+function validateExplicitObservationRange(input: {
+  readonly fromBlock: number;
+  readonly toBlock: number;
+}): { readonly fromBlock: number; readonly toBlock: number } {
+  if (
+    !Number.isSafeInteger(input.fromBlock) ||
+    !Number.isSafeInteger(input.toBlock) ||
+    input.fromBlock < 0 ||
+    input.toBlock < input.fromBlock
+  ) {
+    throw new Error("universe rebuild: explicit range is invalid");
+  }
+  const span = input.toBlock - input.fromBlock + 1;
+  // Reuse the sole production bound; an explicit range changes the anchor,
+  // never the maximum amount of historical authority collected in one run.
+  strictEdgeCollectionFromBlock(input.toBlock, span);
+  return Object.freeze({
+    fromBlock: input.fromBlock,
+    toBlock: input.toBlock,
+  });
+}
+
 /**
  * Audit P0-STOP-1: every durable receipt must have been sealed by the same
  * source/query implementation the current catalog declares. queryFingerprint
@@ -904,7 +968,10 @@ export async function rebuildUniverse(
 /** Non-throwing plan match probe used by the layered runner. */
 export function receiptsMatchCurrentSourcePlan(
   receipts: readonly DurableSourceReceipt[],
-  plan: { readonly startup: string; readonly events: string },
+  plan: {
+    readonly startup: string;
+    readonly activity: string;
+  },
 ): boolean {
   try {
     assertReceiptsMatchCurrentSourcePlan(receipts, plan);
@@ -916,13 +983,16 @@ export function receiptsMatchCurrentSourcePlan(
 
 export function assertReceiptsMatchCurrentSourcePlan(
   receipts: readonly DurableSourceReceipt[],
-  plan: { readonly startup: string; readonly events: string },
+  plan: {
+    readonly startup: string;
+    readonly activity: string;
+  },
 ): void {
   for (const receipt of receipts) {
     const expected = receipt.sourceKind === "startup-candidate-union"
       ? plan.startup
-      : receipt.sourceKind === "catalog-event-union"
-        ? plan.events
+      : receipt.sourceKind === "catalog-activity-union"
+        ? plan.activity
         : null;
     if (expected === null) {
       throw new Error(

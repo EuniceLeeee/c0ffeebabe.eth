@@ -12,7 +12,8 @@ import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
  * incomplete (exit code 2) until probed.
  *
  *   npm run searcher:universe-rebuild-startup -- \
- *     --checkpoint <path> [--rpc-url <url>] [--run-id <id>]
+ *     --checkpoint <path> [--rpc-url <url>] [--run-id <id>] \
+ *     [--window-blocks <n> | --from-block <n> --to-block <n>]
  */
 
 interface Args {
@@ -20,6 +21,10 @@ interface Args {
   readonly rpcUrl?: string;
   readonly runId: string;
   readonly windowBlocks?: number;
+  readonly observationRange?: {
+    readonly fromBlock: number;
+    readonly toBlock: number;
+  };
 }
 
 function parseArgs(argv: readonly string[]): Args {
@@ -27,6 +32,8 @@ function parseArgs(argv: readonly string[]): Args {
   let rpcUrl: string | undefined;
   let runId = "startup-rebuild";
   let windowBlocks: number | undefined;
+  let fromBlock: number | undefined;
+  let toBlock: number | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const next = (): string => {
@@ -39,12 +46,24 @@ function parseArgs(argv: readonly string[]): Args {
     else if (arg === "--rpc-url") rpcUrl = next();
     else if (arg === "--run-id") runId = next();
     else if (arg === "--window-blocks") windowBlocks = Number(next());
+    else if (arg === "--from-block") fromBlock = Number(next());
+    else if (arg === "--to-block") toBlock = Number(next());
     else throw new Error("unknown argument " + arg);
   }
   if (checkpoint.trim().length === 0) {
     throw new Error(
       "usage: searcher:universe-rebuild-startup --checkpoint <path> " +
-        "[--rpc-url <url>] [--run-id <id>] [--window-blocks <1..14400>]",
+        "[--rpc-url <url>] [--run-id <id>] " +
+        "[--window-blocks <1..14400> | " +
+        "--from-block <n> --to-block <n>]",
+    );
+  }
+  if ((fromBlock === undefined) !== (toBlock === undefined)) {
+    throw new Error("--from-block and --to-block must be provided together");
+  }
+  if (windowBlocks !== undefined && fromBlock !== undefined) {
+    throw new Error(
+      "--window-blocks cannot be combined with --from-block/--to-block",
     );
   }
   return {
@@ -52,6 +71,11 @@ function parseArgs(argv: readonly string[]): Args {
     rpcUrl,
     runId,
     windowBlocks,
+    ...(fromBlock === undefined || toBlock === undefined
+      ? {}
+      : {
+          observationRange: Object.freeze({ fromBlock, toBlock }),
+        }),
   };
 }
 
@@ -84,6 +108,9 @@ async function main(): Promise<void> {
       ...(args.windowBlocks === undefined
         ? {}
         : { observationWindowBlocks: args.windowBlocks }),
+      ...(args.observationRange === undefined
+        ? {}
+        : { observationRange: args.observationRange }),
       log: (message) => console.log("[universe-rebuild] " + message),
     });
     console.log(

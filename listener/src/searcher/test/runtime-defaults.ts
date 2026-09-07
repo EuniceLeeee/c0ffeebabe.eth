@@ -64,6 +64,13 @@ console.log("[runtime-defaults] deploy preserves block-scan multicall mode: PASS
 
 const searcherMain = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
 assert(
+  searcherMain.includes("SEARCHER_DRY_RUN_USE_READY_GENERATION") &&
+    searcherMain.includes("requires SEARCHER_DRY_RUN=1") &&
+    searcherMain.includes("blindUseIncumbentReady || dryRunUseReadyGeneration"),
+  "local live observation may reuse completed Ready only in dry-run",
+);
+console.log("[runtime-defaults] local Ready reuse is dry-run-only: PASS");
+assert(
   searcherMain.includes("SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE") &&
     searcherMain.includes("SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY") &&
     /STATE_RPC_BATCH_SIZE[\s\S]{0,120}(?:\?\? \"500\"|,\s*500,)/.test(searcherMain) &&

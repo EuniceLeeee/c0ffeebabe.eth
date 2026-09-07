@@ -741,6 +741,17 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   };
 }
 
+function dryRunOnlyFlag(
+  name: string,
+  value: string | undefined,
+  dryRun: boolean,
+): boolean {
+  if (value === undefined || value === "0") return false;
+  if (value !== "1") throw new Error(`${name} must be 0 or 1`);
+  if (!dryRun) throw new Error(`${name}=1 requires SEARCHER_DRY_RUN=1`);
+  return true;
+}
+
 async function main(): Promise<void> {
   // Blind acceptance must be enabled by the process supervisor. Letting .env
   // turn it on would make the nominal production process execute audit-only
@@ -773,6 +784,11 @@ async function main(): Promise<void> {
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
+  const dryRunUseReadyGeneration = dryRunOnlyFlag(
+    "SEARCHER_DRY_RUN_USE_READY_GENERATION",
+    process.env.SEARCHER_DRY_RUN_USE_READY_GENERATION,
+    config.dryRun,
+  );
   const blindForkBotVmFlag = process.env.SEARCHER_BLIND_INSTALL_FORK_BOTVM;
   const blindInstallForkBotVm = forkBotVmInstallationEnabled(
     blindProductionAudit,
@@ -1449,19 +1465,22 @@ async function main(): Promise<void> {
   });
   let rebuildEnvelope = await rebuildStore.load();
   let readyUniverse;
-  if (blindUseIncumbentReady) {
+  if (blindUseIncumbentReady || dryRunUseReadyGeneration) {
     if (
       rebuildEnvelope === null ||
       rebuildEnvelope.readyGeneration === null ||
       rebuildEnvelope.inProgressRun !== null
     ) {
       throw new Error(
-        "blind incumbent-ready replay requires one complete Ready checkpoint",
+        (blindUseIncumbentReady ? "blind replay" : "dry-run live observation") +
+          " requires one complete Ready checkpoint",
       );
     }
     readyUniverse = rebuildEnvelope.readyGeneration;
     console.log(
-      "[searcher/startup] blind replay uses incumbent readyGeneration=" +
+      "[searcher/startup] " +
+        (blindUseIncumbentReady ? "blind replay" : "dry-run live observation") +
+        " uses incumbent readyGeneration=" +
         readyUniverse.generation + " cutoff=" + readyUniverse.cutoff.number +
         " activeInstances=" + readyUniverse.activeInstanceKeys.length +
         " retryableQueue=" +

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import http from "node:http";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ethers } from "ethers";
 import {
   UNIV4_POOL_MANAGER_INTERFACE,
@@ -10,11 +13,13 @@ import {
   attestationPoolFromCandidate,
   canReuseMemo,
   candidateFingerprint,
+  candidatesFromCall,
   candidateFromLog,
   candidatesFromLog,
   createProbeWiring,
   createRebuildWiring,
   familyDefinitionHash,
+  fullCallIdentityKey,
   fullLogIdentityKey,
   isChainProvenTerminalReason,
   memoAuthorityFingerprint,
@@ -24,15 +29,22 @@ import {
   validateObservedSenderEvidence,
   type RebuildScanObservation,
 } from "../universe-rebuild-production.js";
+import { rebuildUniverse } from "../universe-rebuild-runner.js";
 import type {
   DurableSourceReceipt,
   DurableVerifiedMemo,
   LegacyDurableVerifiedMemo,
 } from "../universe-rebuild-checkpoint.js";
+import { UniverseRebuildCheckpointStore } from
+  "../universe-rebuild-checkpoint.js";
 import { durableVerifiedMemoFingerprint } from
   "../universe-rebuild-checkpoint.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
+import { WSTETH_INTERFACE } from
+  "../venues/protocols/wsteth-family/codec.js";
+import { PSM_INTERFACE } from
+  "../venues/protocols/psm-family/codec.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_750_000,
@@ -180,6 +192,44 @@ async function main(): Promise<void> {
     fullLogIdentityKey(log({ blockHash: "0x" + "99".repeat(32) })),
     "full log identity binds the canonical block hash",
   );
+
+  const wstethCallData = WSTETH_INTERFACE.encodeFunctionData("wrap", [1n]);
+  const wstethCall = Object.freeze({
+    kind: "call" as const,
+    target: ADDR.WSTETH.toLowerCase(),
+    data: wstethCallData,
+    sender: "0x" + "ab".repeat(20),
+    transactionHash: "0x" + "cd".repeat(32),
+    blockNumber: SOURCE.number,
+    blockHash: SOURCE.hash,
+    traceAddress: Object.freeze([0, 1]),
+  });
+  const wstethCandidates = candidatesFromCall(wstethCall);
+  assert.equal(wstethCandidates.length, 1);
+  assert.equal(wstethCandidates[0].familyId, "protocol:wsteth");
+  assert.equal(wstethCandidates[0].address, ADDR.WSTETH.toLowerCase());
+  assert.match(fullCallIdentityKey(wstethCall), /^call:25750000:/);
+  const psmCall = Object.freeze({
+    kind: "call" as const,
+    target: ADDR.SKY_PSM_LITE.toLowerCase(),
+    data: PSM_INTERFACE.encodeFunctionData("sellGem", [
+      wstethCall.sender,
+      1n,
+    ]),
+    sender: wstethCall.sender,
+    transactionHash: "0x" + "ce".repeat(32),
+    blockNumber: SOURCE.number,
+    blockHash: SOURCE.hash,
+    traceAddress: Object.freeze([0, 2]),
+  });
+  const psmCandidates = candidatesFromCall(psmCall);
+  assert.equal(psmCandidates.length, 1);
+  assert.equal(psmCandidates[0].familyId, "protocol:psm");
+  assert.equal(psmCandidates[0].address, ADDR.SKY_PSM_LITE.toLowerCase());
+  assert.equal(candidatesFromCall(Object.freeze({
+    ...psmCall,
+    data: "0xdeadbeef",
+  })).length, 0, "an undeclared selector cannot nominate a candidate");
 
   // Observed-sender authority is recovered only from the exact canonical
   // transaction/log and a catalog-plugin re-decode of that same log. The
@@ -782,7 +832,7 @@ async function main(): Promise<void> {
   );
   const coverageReceipt: DurableSourceReceipt = Object.freeze({
     sourceKey: "1".repeat(64),
-    sourceKind: "catalog-event-union",
+    sourceKind: "catalog-activity-union",
     providerIdentity: "fixture",
     queryFingerprint: "2".repeat(64),
     fromBlock: SOURCE.number - 14_399,
@@ -892,6 +942,10 @@ async function main(): Promise<void> {
   let positionManagerReads = 0;
   const tracedTransactions: string[] = [];
   let historicalLogReads = 0;
+  let blockTraceReads = 0;
+  let blockTraceFailureAtRead: number | null = null;
+  let maxBlockTraceBatchSize = 0;
+  let blockTraceAvailable = true;
   let fundingBalance = 1_000_000n;
   const memoProofHash = "0x" + "b2".repeat(32);
   let memoProofHashReads = 0;
@@ -912,6 +966,11 @@ async function main(): Promise<void> {
           readonly params?: readonly unknown[];
         }[];
       const batch = Array.isArray(parsed) ? parsed : [parsed];
+      maxBlockTraceBatchSize = Math.max(
+        maxBlockTraceBatchSize,
+        batch.filter((rpcRequest) => rpcRequest.method === "trace_block")
+          .length,
+      );
       const results = batch.map((rpcRequest) => {
         const respond = (result: unknown) => Object.freeze({
           jsonrpc: "2.0",
@@ -929,7 +988,10 @@ async function main(): Promise<void> {
           case "eth_getStorageAt":
             return respond("0x" + "00".repeat(32));
           case "eth_getBlockByNumber": {
-            const number = Number(BigInt(String(rpcRequest.params?.[0])));
+            const tag = String(rpcRequest.params?.[0]);
+            const number = tag === "latest"
+              ? SOURCE.number
+              : Number(BigInt(tag));
             if (number === SOURCE.number - 1) memoProofHashReads += 1;
             return respond(rpcBlockFixture(
               number,
@@ -941,6 +1003,62 @@ async function main(): Promise<void> {
               | { readonly to?: string; readonly data?: string }
               | undefined;
             const data = transaction?.data ?? "0x";
+            if (
+              transaction?.to?.toLowerCase() === ADDR.WSTETH.toLowerCase()
+            ) {
+              const selector = data.slice(0, 10).toLowerCase();
+              if (
+                selector === WSTETH_INTERFACE.getFunction("stETH")!.selector
+                  .toLowerCase()
+              ) {
+                return respond(WSTETH_INTERFACE.encodeFunctionResult(
+                  "stETH",
+                  [ADDR.STETH],
+                ));
+              }
+              if (
+                selector === WSTETH_INTERFACE
+                  .getFunction("getWstETHByStETH")!.selector.toLowerCase()
+              ) {
+                return respond(WSTETH_INTERFACE.encodeFunctionResult(
+                  "getWstETHByStETH",
+                  [8n * 10n ** 17n],
+                ));
+              }
+              if (
+                selector === WSTETH_INTERFACE
+                  .getFunction("getStETHByWstETH")!.selector.toLowerCase()
+              ) {
+                return respond(WSTETH_INTERFACE.encodeFunctionResult(
+                  "getStETHByWstETH",
+                  [12n * 10n ** 17n],
+                ));
+              }
+            }
+            if (
+              transaction?.to?.toLowerCase() ===
+                ADDR.SKY_PSM_LITE.toLowerCase()
+            ) {
+              const selector = data.slice(0, 10).toLowerCase();
+              if (selector === PSM_INTERFACE.getFunction("gem")!.selector) {
+                return respond(PSM_INTERFACE.encodeFunctionResult(
+                  "gem",
+                  [ADDR.USDC],
+                ));
+              }
+              if (selector === PSM_INTERFACE.getFunction("dai")!.selector) {
+                return respond(PSM_INTERFACE.encodeFunctionResult(
+                  "dai",
+                  [ADDR.DAI],
+                ));
+              }
+              if (selector === PSM_INTERFACE.getFunction("tin")!.selector) {
+                return respond(PSM_INTERFACE.encodeFunctionResult("tin", [0n]));
+              }
+              if (selector === PSM_INTERFACE.getFunction("tout")!.selector) {
+                return respond(PSM_INTERFACE.encodeFunctionResult("tout", [0n]));
+              }
+            }
             if (
               data.slice(0, 10).toLowerCase() ===
                 ERC20_BALANCE.getFunction("balanceOf")!.selector.toLowerCase()
@@ -995,6 +1113,64 @@ async function main(): Promise<void> {
           case "eth_getLogs": {
             historicalLogReads++;
             return respond([]);
+          }
+          case "trace_block": {
+            blockTraceReads++;
+            if (blockTraceReads === blockTraceFailureAtRead) {
+              return Object.freeze({
+                jsonrpc: "2.0",
+                id: rpcRequest.id,
+                error: { code: -32000, message: "transient trace failure" },
+              });
+            }
+            if (!blockTraceAvailable) {
+              return Object.freeze({
+                jsonrpc: "2.0",
+                id: rpcRequest.id,
+                error: { code: -32601, message: "trace unavailable" },
+              });
+            }
+            const blockNumber = Number(BigInt(String(rpcRequest.params?.[0])));
+            if (blockNumber !== SOURCE.number) return respond([]);
+            return respond([
+              Object.freeze({
+                type: "call",
+                action: Object.freeze({
+                  from: wstethCall.sender,
+                  to: wstethCall.target,
+                  input: wstethCall.data,
+                }),
+                blockNumber: ethers.toQuantity(SOURCE.number),
+                blockHash: SOURCE.hash,
+                transactionHash: wstethCall.transactionHash,
+                traceAddress: Object.freeze([0, 1]),
+              }),
+              Object.freeze({
+                type: "call",
+                action: Object.freeze({
+                  from: psmCall.sender,
+                  to: psmCall.target,
+                  input: psmCall.data,
+                }),
+                blockNumber: ethers.toQuantity(SOURCE.number),
+                blockHash: SOURCE.hash,
+                transactionHash: psmCall.transactionHash,
+                traceAddress: Object.freeze([0, 2]),
+              }),
+              Object.freeze({
+                type: "call",
+                action: Object.freeze({
+                  callType: "delegatecall",
+                  from: psmCall.target,
+                  to: `0x${"d1".repeat(20)}`,
+                  input: psmCall.data,
+                }),
+                blockNumber: ethers.toQuantity(SOURCE.number),
+                blockHash: SOURCE.hash,
+                transactionHash: psmCall.transactionHash,
+                traceAddress: Object.freeze([0, 2, 0]),
+              }),
+            ]);
           }
           default:
             return Object.freeze({
@@ -1300,6 +1476,124 @@ async function main(): Promise<void> {
       knownCandidates: noKnownCandidates,
     });
     assert.equal(unrelated.length, 0, "no reverse binding without a declared seed");
+
+    // Both rolling and explicit historical ranges use this exact production
+    // scan. A catalog-declared observed call must flow through strict
+    // identity/materialization into the ready Graph; it is not a diagnostic
+    // side channel or a static Graph injection.
+    traceAvailable = true;
+    const callScanDir = await mkdtemp(join(tmpdir(), "rebuild-call-scan-"));
+    try {
+      const callStore = new UniverseRebuildCheckpointStore({
+        path: join(callScanDir, "checkpoint.json"),
+      });
+      let sourceReceipts: readonly DurableSourceReceipt[] = Object.freeze([]);
+      const callReady = await rebuildUniverse({
+        ...wired,
+        scanSwapWindow: async (scanInput) => {
+          const scanned = await wired.scanSwapWindow(scanInput);
+          sourceReceipts = scanned.sourceReceipts;
+          return scanned;
+        },
+        store: callStore,
+        runId: "call-scan",
+        observationRange: Object.freeze({
+          fromBlock: SOURCE.number,
+          toBlock: SOURCE.number,
+        }),
+      });
+      const graph = callReady.graphSnapshot as {
+        readonly format: string;
+        readonly edges: readonly { readonly adapterId?: string }[];
+      };
+      assert.equal(graph.format, "strict-rebuild-graph-v1");
+      assert.deepEqual(
+        graph.edges.map((edge) => edge.adapterId).sort(),
+        ["psm", "wsteth-unwrap", "wsteth-wrap"],
+        "Family-declared calls must publish verified PSM and wstETH Graph legs",
+      );
+      assert.equal(callReady.candidateAccounting.verified, 2);
+      assert.equal(
+        callReady.candidateAccounting.total,
+        2,
+        "delegatecall implementation frames are not separate candidates",
+      );
+      assert(callReady.sourceCoverage.some((row) =>
+        row.familyId === "protocol:wsteth" &&
+        row.sourceId === "call:wsteth-wrap-call"
+      ));
+      assert(callReady.sourceCoverage.some((row) =>
+        row.familyId === "protocol:psm" &&
+        row.sourceId === "call:psm-sellgem-call"
+      ));
+      assert.deepEqual(
+        sourceReceipts.map((receipt) => receipt.sourceKind),
+        ["startup-candidate-union", "catalog-activity-union"],
+        "logs and calls must share one atomic catalog activity receipt",
+      );
+      assert.equal(
+        callReady.universeRange.fromBlock,
+        SOURCE.number,
+        "the explicit one-block range is preserved by the unified scan",
+      );
+      assert.equal(blockTraceReads, 2, "one method probe plus one block scan");
+
+      const rollingStore = new UniverseRebuildCheckpointStore({
+        path: join(callScanDir, "rolling-checkpoint.json"),
+      });
+      const traceReadsBeforeRolling = blockTraceReads;
+      blockTraceFailureAtRead = blockTraceReads + 2;
+      const rollingReady = await rebuildUniverse({
+        ...wired,
+        store: rollingStore,
+        runId: "call-scan-rolling",
+        observationWindowBlocks: 1,
+      });
+      assert.deepEqual(
+        (rollingReady.graphSnapshot as { readonly edges: readonly {
+          readonly adapterId?: string;
+        }[] }).edges.map((edge) => edge.adapterId).sort(),
+        ["psm", "wsteth-unwrap", "wsteth-wrap"],
+        "rolling and explicit ranges must use the same activity scanner",
+      );
+      assert.equal(
+        blockTraceReads - traceReadsBeforeRolling,
+        3,
+        "one transient block-trace failure retries only that block",
+      );
+      assert.equal(
+        maxBlockTraceBatchSize,
+        1,
+        "large block traces must use independent HTTP requests",
+      );
+      blockTraceFailureAtRead = null;
+
+      blockTraceAvailable = false;
+      const failedStore = new UniverseRebuildCheckpointStore({
+        path: join(callScanDir, "trace-unavailable-checkpoint.json"),
+      });
+      await assert.rejects(
+        rebuildUniverse({
+          ...wired,
+          store: failedStore,
+          runId: "call-scan-trace-unavailable",
+          observationRange: Object.freeze({
+            fromBlock: SOURCE.number,
+            toBlock: SOURCE.number,
+          }),
+        }),
+        /requires trace_block or debug_traceBlockByNumber/,
+        "missing required call transport must fail the unified activity scan",
+      );
+      assert.equal(
+        await failedStore.load(),
+        null,
+        "a partial log-only result must never create a durable run",
+      );
+      blockTraceAvailable = true;
+    } finally {
+      await rm(callScanDir, { recursive: true, force: true });
+    }
   } finally {
     // The JSON-RPC client keeps connections alive; force them closed so the
     // server can actually stop.

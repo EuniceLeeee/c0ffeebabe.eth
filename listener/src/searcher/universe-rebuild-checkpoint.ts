@@ -126,14 +126,18 @@ export interface DurableSourceChunkReceipt {
 }
 
 /**
- * Durable proof that one exact startup source query completed at the fixed
- * cutoff. A receipt may grant several Family x source coverage keys when one
- * catalog-issued topic-union query covers them atomically, but it must name
- * that exact set and every completed range chunk.
+ * Durable proof that one exact source plan completed at the fixed cutoff.
+ * The current catalog activity receipt atomically covers its declared log
+ * and call surfaces; neither physical RPC transport can grant coverage by
+ * itself. Every receipt names the exact key set and completed range chunks.
  */
 export interface DurableSourceReceipt {
   readonly sourceKey: string;
-  readonly sourceKind: "startup-candidate-union" | "catalog-event-union";
+  readonly sourceKind:
+    | "startup-candidate-union"
+    | "catalog-activity-union"
+    /** Read compatibility only; the current source plan always rescans it. */
+    | "catalog-event-union";
   readonly providerIdentity: string;
   readonly queryFingerprint: string;
   readonly fromBlock: number;
