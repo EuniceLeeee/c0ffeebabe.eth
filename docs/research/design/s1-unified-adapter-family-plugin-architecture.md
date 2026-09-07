@@ -1771,6 +1771,36 @@ confirmed source `25924640` with 49,506 reconstructed mids, 512 enumerated route
 runtime remained running with broadcasting disabled after this interim check; no six-stage or 10-second
 acceptance claim is made.
 
+### 16.12 Scanner local-compute reuse (2026-09-07)
+
+The scanner retains at most one static topology index: pair membership, normalized edge identities,
+stable edge order and numeric token IDs. Reuse requires the exact same ordered edge objects after the
+existing per-pass coverage/eligibility filtering. Every retained edge, optional route binding and optional
+V4 key must be frozen. Changed membership/order/object identity rebuilds the index; mutable inputs use
+an uncached index. The index contains no mid, depth, eligibility decision, funding amount or return bound.
+
+Each scan rebuilds priced edges and reverse-return bounds from its current resolved mids. Reverse bounds
+use Float64 arrays with negative infinity for unreachable tokens, bounded to 8 MiB per scan; additional
+anchors use sparse numeric maps without search pruning. Both retain the same stable edge order,
+arithmetic and absorbing anchor. Outgoing lists inherit that order without a second sort. Open-path
+validation checks the appended token against parent links, retaining the existing single non-funded
+repeated-token/protocol-segment rule; full paths are materialized for completed rings. Candidate caps,
+six-hop search, ranking, sizing, deadlines, scheduling, Exact, Solver and final-simulation/EV gates are
+unchanged. No Exact result is written into mid.
+
+`searcher:blockscan-scanner-index` compared 95 inputs against the pre-change scanner from
+`d7a12e7c97c1c712558647fdcb8fba0b7d993443`, including current-price changes/removals, edge/route
+eligibility, touched searches, reordered/mutable inputs and repeated-token/protocol controls. A
+20,128-edge/128-touched-anchor control counted typed-array allocations, including row copies, and
+verified the 8 MiB per-scan dense bound with unchanged output. Ordered
+outputs, sizing seeds and counts matched. A 55,384-edge synthetic graph additionally matched all outputs
+over 12 alternating before/after timing pairs. The recorded output hash is
+`4501460d7210688e5b06ba8e39ef20d21b01030d3a764cbbcb635c2b126edbe0`.
+Local artifacts remain under `logs/scanner-index-*`; these synthetic CPU results do not establish
+live full-pipeline latency or a six-stage production pass. Existing scanner, production boundary,
+strict production session, blockscan contract, Exact deadline, pricing-source, historical-live replay
+contract, frozen-topology and bundle-router safety suites, plus the listener build, passed.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.

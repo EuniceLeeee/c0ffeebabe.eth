@@ -81,6 +81,7 @@
     "searcher:state-call-deadline": "node --import tsx src/searcher/test/state-backend-call-deadline.ts",
     "searcher:state-fork-cancellation": "node --import tsx src/searcher/test/state-backend-fork-cancellation.ts",
     "searcher:blockscan-scanner": "node --import tsx src/searcher/test/blockscan-scanner.ts",
+    "searcher:blockscan-scanner-index": "node --import tsx src/searcher/test/blockscan-scanner-index.ts",
     "searcher:blockscan-metronome-mid": "node --import tsx src/searcher/test/blockscan-metronome-mid.ts",
     "searcher:blockscan-a0": "node --import tsx src/searcher/test/blockscan-a0-replay.ts",
     "searcher:poolcache": "tsx src/searcher/test/pool-state-cache.ts",

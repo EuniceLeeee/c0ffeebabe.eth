@@ -162,14 +162,50 @@ interface RankedOpportunity {
   estSpreadBps: number;
 }
 
-interface PricedSearchEdge {
+interface SearchEdgeIndex {
   readonly edge: TokenEdge;
   readonly tokenIn: string;
   readonly tokenOut: string;
-  readonly logRate: number;
-  readonly inputDepth: number;
+  readonly tokenInId: number;
+  readonly tokenOutId: number;
   readonly stableKey: string;
   readonly activityTieBreak: number;
+}
+
+interface PricedSearchEdge extends SearchEdgeIndex {
+  readonly logRate: number;
+  readonly inputDepth: number;
+}
+
+interface ScannerTopologyIndex {
+  readonly edges: readonly TokenEdge[];
+  readonly groups: ReadonlyMap<string, PairGroup>;
+  readonly tokenIds: Map<string, number>;
+  searchEdges?: readonly SearchEdgeIndex[];
+}
+
+type ReverseReturnBounds = readonly (Float64Array | ReadonlyMap<number, number>)[];
+const MAX_DENSE_RETURN_BOUND_BYTES = 8 * 1024 * 1024;
+
+// One bounded static index, never prices/eligibility/bounds. Production creates
+// new filtered arrays each pass, so compare their ordered immutable edge objects.
+let previousScannerTopology: ScannerTopologyIndex | null = null;
+
+function scannerTopologyFor(edges: readonly TokenEdge[]): ScannerTopologyIndex {
+  const previous = previousScannerTopology;
+  if (previous && previous.edges.length === edges.length &&
+    edges.every((edge, index) => edge === previous.edges[index])) return previous;
+  const topology: ScannerTopologyIndex = {
+    edges: [...edges],
+    groups: groupPairs(edges),
+    tokenIds: new Map(),
+  };
+  previousScannerTopology = edges.every((edge) => Object.isFrozen(edge) &&
+      (edge.routeBinding === undefined || Object.isFrozen(edge.routeBinding)) &&
+      (edge.v4PoolKey === undefined || Object.isFrozen(edge.v4PoolKey)))
+    ? topology
+    : null;
+  return topology;
 }
 
 interface PriceSearchNode {
@@ -184,6 +220,8 @@ interface PriceSearchNode {
   readonly upperBoundRank: number;
   readonly activityTieBreak: number;
   readonly sequence: number;
+  /** At most one non-funded token may have appeared twice in an open path. */
+  readonly repeatedToken: string | null;
 }
 
 interface PriceRankedRingSearchResult {
@@ -221,7 +259,8 @@ export function scanBlockStateFromResolvedMids(input: {
   const eligibleEdges = input.edgeEligible
     ? input.edges.filter(input.edgeEligible)
     : input.edges;
-  const groups = groupPairs(eligibleEdges);
+  const topology = scannerTopologyFor(eligibleEdges);
+  const groups = topology.groups;
   const ranked: RankedOpportunity[] = [];
   let scannedPairs = 0;
   let skippedVenues = 0;
@@ -456,7 +495,7 @@ export function scanBlockStateFromResolvedMids(input: {
 
   enterPhase("general");
   const priceSearch = enumeratePriceRankedRings({
-    edges: eligibleEdges,
+    topology,
     mids: input.mids,
     pricedTokens: input.cfg.pricedTokens,
     touched,
@@ -486,7 +525,7 @@ export function scanBlockStateFromResolvedMids(input: {
  * Family or protocol identity.
  */
 function enumeratePriceRankedRings(input: {
-  readonly edges: readonly TokenEdge[];
+  readonly topology: ScannerTopologyIndex;
   readonly mids: ReadonlyMap<string, ResolvedBlockScanMid>;
   readonly pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>;
   readonly touched: ReadonlySet<string> | null;
@@ -507,31 +546,35 @@ function enumeratePriceRankedRings(input: {
     throw new Error(`invalid block-scan spread floor ${input.minSpreadBps}`);
   }
 
-  const pricedEdges = buildPricedSearchEdges(input.edges, input.mids);
+  const pricedEdges = buildPricedSearchEdges(input.topology, input.mids);
   const outgoing = new Map<string, PricedSearchEdge[]>();
   for (const priced of pricedEdges) {
     const entries = outgoing.get(priced.tokenIn);
     if (entries) entries.push(priced);
     else outgoing.set(priced.tokenIn, [priced]);
   }
-  for (const entries of outgoing.values()) {
-    entries.sort((a, b) => a.stableKey.localeCompare(b.stableKey));
-  }
+  // Filtering the globally stable-sorted index already preserves outgoing order.
 
   const boundsByAnchor = new Map<
     string,
-    readonly ReadonlyMap<string, number>[]
+    ReverseReturnBounds
   >();
+  let denseBoundBytes = 0;
   const boundsFor = (
     anchorToken: string,
-  ): readonly ReadonlyMap<string, number>[] => {
+  ): ReverseReturnBounds => {
     const anchor = anchorToken.toLowerCase();
     const cached = boundsByAnchor.get(anchor);
     if (cached) return cached;
+    const bytes = (input.maxHops + 1) * input.topology.tokenIds.size * 8;
+    const dense = denseBoundBytes + bytes <= MAX_DENSE_RETURN_BOUND_BYTES;
+    if (dense) denseBoundBytes += bytes;
     const bounds = buildReverseReturnBounds(
       pricedEdges,
-      anchor,
+      input.topology.tokenIds.get(anchor),
+      input.topology.tokenIds.size,
       input.maxHops,
+      dense,
     );
     boundsByAnchor.set(anchor, bounds);
     return bounds;
@@ -545,10 +588,8 @@ function enumeratePriceRankedRings(input: {
   ): void => {
     const anchor = anchorToken.toLowerCase();
     if (priced.tokenIn !== anchor || priced.tokenOut === anchor) return;
-    const tailBound = boundsFor(anchor)[input.maxHops - 1]?.get(
-      priced.tokenOut,
-    );
-    if (tailBound === undefined) return;
+    const tailBound = returnBoundAt(boundsFor(anchor), input.maxHops - 1, priced.tokenOutId);
+    if (tailBound === -Infinity) return;
     const upperBoundLogReturn = priced.logRate + tailBound;
     if (!(upperBoundLogReturn > minLogReturn)) return;
     const maxBorrow = input.pricedTokens.get(anchor)?.maxBorrow ?? null;
@@ -568,6 +609,7 @@ function enumeratePriceRankedRings(input: {
       ),
       activityTieBreak: priced.activityTieBreak,
       sequence: sequence++,
+      repeatedToken: null,
     }));
   };
 
@@ -632,8 +674,8 @@ function enumeratePriceRankedRings(input: {
       const closes = next.tokenOut === node.anchorToken;
       const tailBound = closes
         ? 0
-        : bounds[remainingAfterNext]?.get(next.tokenOut);
-      if (tailBound === undefined) continue;
+        : returnBoundAt(bounds, remainingAfterNext, next.tokenOutId);
+      if (tailBound === -Infinity) continue;
       const cumulativeMidBeforeNext = Math.exp(node.cumulativeLogReturn);
       if (
         !Number.isFinite(cumulativeMidBeforeNext) ||
@@ -645,6 +687,10 @@ function enumeratePriceRankedRings(input: {
       const cumulativeLogReturn = node.cumulativeLogReturn + next.logRate;
       const upperBoundLogReturn = cumulativeLogReturn + tailBound;
       if (!(upperBoundLogReturn > minLogReturn)) continue;
+      const repeatedToken = closes
+        ? node.repeatedToken
+        : extendedPathRepeatedToken(node, next, input.pricedTokens);
+      if (repeatedToken === false) continue;
       const child: PriceSearchNode = Object.freeze({
         anchorToken: node.anchorToken,
         token: next.tokenOut,
@@ -661,14 +707,8 @@ function enumeratePriceRankedRings(input: {
         ),
         activityTieBreak: node.activityTieBreak + next.activityTieBreak,
         sequence: sequence++,
+        repeatedToken,
       });
-      if (
-        !closes &&
-        !partialRingShapeCanStillPass(
-          materializePriceSearchPath(child),
-          input.pricedTokens,
-        )
-      ) continue;
       queue.push(child);
     }
   }
@@ -679,16 +719,36 @@ function enumeratePriceRankedRings(input: {
 }
 
 function buildPricedSearchEdges(
-  edges: readonly TokenEdge[],
+  topology: ScannerTopologyIndex,
   mids: ReadonlyMap<string, ResolvedBlockScanMid>,
 ): PricedSearchEdge[] {
+  if (topology.searchEdges === undefined) {
+    const tokenId = (token: string): number => {
+      const existing = topology.tokenIds.get(token);
+      if (existing !== undefined) return existing;
+      const id = topology.tokenIds.size;
+      topology.tokenIds.set(token, id);
+      return id;
+    };
+    const entries: SearchEdgeIndex[] = [];
+    for (const edge of topology.edges) {
+      if (edge.leavesStandingPosition) continue;
+      const tokenIn = edge.tokenIn.toLowerCase();
+      const tokenOut = edge.tokenOut.toLowerCase();
+      if (tokenIn === tokenOut) continue;
+      entries.push({
+        edge, tokenIn, tokenOut,
+        tokenInId: tokenId(tokenIn), tokenOutId: tokenId(tokenOut),
+        stableKey: blockScanEdgeKey(edge),
+        activityTieBreak: typeof edge.score === "number" && Number.isFinite(edge.score)
+          ? Math.max(0, edge.score) : 0,
+      });
+    }
+    topology.searchEdges = entries.sort((a, b) => a.stableKey.localeCompare(b.stableKey));
+  }
   const priced: PricedSearchEdge[] = [];
-  for (const edge of edges) {
-    if (edge.leavesStandingPosition) continue;
-    const tokenIn = edge.tokenIn.toLowerCase();
-    const tokenOut = edge.tokenOut.toLowerCase();
-    if (tokenIn === tokenOut) continue;
-    const venue = mids.get(blockScanEdgeKey(edge));
+  for (const entry of topology.searchEdges) {
+    const venue = mids.get(entry.stableKey);
     if (!venue || venue.feeBps < 0 || venue.feeBps >= 10_000) continue;
     const inputDepth = venue.reserveA ?? venue.liquidity;
     if (inputDepth === undefined || inputDepth <= 0n) continue;
@@ -699,47 +759,70 @@ function buildPricedSearchEdges(
     const logRate = Math.log(adjustedMid);
     if (!Number.isFinite(logRate)) continue;
     priced.push(Object.freeze({
-      edge,
-      tokenIn,
-      tokenOut,
+      ...entry,
       logRate,
       inputDepth: inputDepthNumber,
-      stableKey: blockScanEdgeKey(edge),
-      activityTieBreak:
-        typeof edge.score === "number" && Number.isFinite(edge.score)
-          ? Math.max(0, edge.score)
-          : 0,
     }));
   }
-  return priced.sort((a, b) => a.stableKey.localeCompare(b.stableKey));
+  return priced;
 }
 
 function buildReverseReturnBounds(
   edges: readonly PricedSearchEdge[],
-  anchorToken: string,
+  anchorTokenId: number | undefined,
+  tokenCount: number,
   maxHops: number,
-): readonly ReadonlyMap<string, number>[] {
-  const bounds: Map<string, number>[] = [
-    new Map([[anchorToken.toLowerCase(), 0]]),
-  ];
+  dense: boolean,
+): ReverseReturnBounds {
+  // Touched searches can have many non-funded anchors. Do not allocate a
+  // whole-graph dense matrix for each: retain the sparse representation once
+  // the per-scan dense-memory allowance is used, without pruning any search.
+  if (!dense) {
+    const bounds: Map<number, number>[] = [new Map(
+      anchorTokenId === undefined ? [] : [[anchorTokenId, 0]],
+    )];
+    for (let hops = 1; hops <= maxHops; hops++) {
+      const previous = bounds[hops - 1];
+      const current = new Map(previous);
+      for (const edge of edges) {
+        if (edge.tokenInId === anchorTokenId) continue;
+        const tail = previous.get(edge.tokenOutId);
+        if (tail === undefined) continue;
+        const candidate = edge.logRate + tail;
+        if (candidate > (current.get(edge.tokenInId) ?? -Infinity)) {
+          current.set(edge.tokenInId, candidate);
+        }
+      }
+      bounds.push(current);
+    }
+    return bounds;
+  }
+  const initial = new Float64Array(tokenCount).fill(-Infinity);
+  if (anchorTokenId !== undefined) initial[anchorTokenId] = 0;
+  const bounds = [initial];
   for (let hops = 1; hops <= maxHops; hops++) {
     const previous = bounds[hops - 1];
-    const current = new Map(previous);
+    const current = previous.slice();
     for (const edge of edges) {
       // Reaching the anchor ends a production route. Keeping it absorbing
       // makes this a tight bound instead of pretending the route may leave
       // the funding token for another cycle after it has already closed.
-      if (edge.tokenIn === anchorToken) continue;
-      const tail = previous.get(edge.tokenOut);
-      if (tail === undefined) continue;
+      if (edge.tokenInId === anchorTokenId) continue;
+      const tail = previous[edge.tokenOutId];
+      if (tail === -Infinity) continue;
       const candidate = edge.logRate + tail;
-      if (candidate > (current.get(edge.tokenIn) ?? -Infinity)) {
-        current.set(edge.tokenIn, candidate);
+      if (candidate > current[edge.tokenInId]) {
+        current[edge.tokenInId] = candidate;
       }
     }
     bounds.push(current);
   }
   return bounds;
+}
+
+function returnBoundAt(bounds: ReverseReturnBounds, hops: number, tokenId: number): number {
+  const row = bounds[hops];
+  return row instanceof Float64Array ? row[tokenId] : row.get(tokenId) ?? -Infinity;
 }
 
 function materializePriceSearchPath(node: PriceSearchNode): TokenEdge[] {
@@ -765,30 +848,26 @@ function priceSearchPathUsesEdge(
   return false;
 }
 
-function partialRingShapeCanStillPass(
-  edges: readonly TokenEdge[],
+function extendedPathRepeatedToken(
+  node: PriceSearchNode,
+  next: PricedSearchEdge,
   pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
-): boolean {
-  if (edges.length === 0) return true;
-  const tokens = [
-    edges[0].tokenIn.toLowerCase(),
-    ...edges.map((edge) => edge.tokenOut.toLowerCase()),
-  ];
-  const positions = new Map<string, number[]>();
-  for (let index = 0; index < tokens.length; index++) {
-    const prior = positions.get(tokens[index]);
-    if (prior) prior.push(index);
-    else positions.set(tokens[index], [index]);
+): string | null | false {
+  // The parent already passed the shape check. Only the appended token can
+  // introduce a violation; inspect parent links without materializing a path.
+  let hasProtocol = next.edge.slotKind === "protocol";
+  let cursor: PriceSearchNode | null = node;
+  while (cursor) {
+    if (cursor.token === next.tokenOut) {
+      return node.repeatedToken === null && hasProtocol &&
+          !pricedTokens.has(next.tokenOut)
+        ? next.tokenOut : false;
+    }
+    hasProtocol ||= cursor.edge.edge.slotKind === "protocol";
+    cursor = cursor.parent;
   }
-  const repeated = [...positions.entries()].filter(
-    ([, indexes]) => indexes.length > 1,
-  );
-  if (repeated.length === 0) return true;
-  if (repeated.length !== 1) return false;
-  const [token, indexes] = repeated[0];
-  if (indexes.length !== 2 || pricedTokens.has(token)) return false;
-  const [start, end] = indexes;
-  return edges.slice(start, end).some((edge) => edge.slotKind === "protocol");
+  // Returning to the anchor is handled by the complete-ring validator.
+  return node.repeatedToken;
 }
 
 class PriceSearchMaxHeap {
@@ -879,7 +958,7 @@ function optimisticSearchRank(
   return spreadBps * Math.min(1, capacityShare);
 }
 
-function groupPairs(edges: TokenEdge[]): Map<string, PairGroup> {
+function groupPairs(edges: readonly TokenEdge[]): Map<string, PairGroup> {
   const groups = new Map<string, PairGroup>();
   for (const edge of edges) {
     if (edge.slotKind !== "swap" && (edge.slotKind !== "protocol" || edge.leavesStandingPosition)) continue;
