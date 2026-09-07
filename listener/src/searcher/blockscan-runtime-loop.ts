@@ -675,7 +675,8 @@ export interface BlockScanRuntimeLoopDependencies {
    * Physical venue identities touched by the block's transactions (pool
    * address for pair venues, poolId for singleton-manager venues): the
    * scanner's touched filter and the strict session's current-pricing
-   * refresh scope. Victim-independent: built from the block's own logs.
+   * refresh scope. Victim-independent: built from the block's logs and call
+   * trace.
    */
   readBlockSwapTouched(blockNumber: number): Promise<ReadonlySet<string>>;
   formatRouteKey(opportunity: Pick<BlockScanOpportunity, "seedEdges">): string;

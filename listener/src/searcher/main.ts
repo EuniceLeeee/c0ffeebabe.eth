@@ -24,6 +24,7 @@ import {
 import {
   resolveBlockScanSolverSearchConfig,
 } from "./blockscan-solver-search-config.js";
+import { readBlockTouchedStateKeys } from "./blockscan-touched-state.js";
 import {
   initBlockScanEnumerationSolverTelemetry,
 } from "./blockscan-enumeration-solver-telemetry.js";
@@ -2130,27 +2131,14 @@ async function main(): Promise<void> {
     exactRpcBatchSize: blockScanExactRpcBatchSize,
     exactRpcBatchConcurrency: blockScanExactRpcBatchConcurrency,
     executorAddress: config.botvmAddress,
-    // Physical venue identities touched by the block's own logs: pool
-    // address for pair venues, poolId for the singleton-manager venues.
-    // Victim-independent; the scanner's touched filter and the strict
-    // session's current-pricing refresh scope consume it.
-    readBlockSwapTouched: async (blockNumber) => {
-      const logs = await provider.getLogs({
-        fromBlock: blockNumber,
-        toBlock: blockNumber,
-      });
-      const touched = new Set<string>();
-      const manager = ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase();
-      for (const log of logs) {
-        if (log.address.toLowerCase() === manager) {
-          const poolId = log.topics[1];
-          if (poolId !== undefined) touched.add(poolId.toLowerCase());
-        } else {
-          touched.add(log.address.toLowerCase());
-        }
-      }
-      return touched;
-    },
+    // One refresh set: log identities retain singleton poolIds while the
+    // call trace adds contracts reached through top-level or internal calls.
+    readBlockSwapTouched: (blockNumber) =>
+      readBlockTouchedStateKeys(
+        provider,
+        blockNumber,
+        ADDR.UNISWAP_V4_POOL_MANAGER,
+      ),
     currentHeadEvidenceFamilyForEdge(edgeAdapterId) {
       return PRODUCTION_STRICT_FAMILY_DECLARATIONS
         .currentHeadEvidenceFamilyForEdge(
