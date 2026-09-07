@@ -1981,6 +1981,42 @@ modes, amount search, typechecks and relevant runtime/transport gates, plus 14,4
 162 solver comparisons and four partial-pair cancellation controls. This is offline equivalence/resource
 evidence, not a live latency win or a production six-stage result.
 
+Runtime `c1f475d6a478665ee308d42acd687490610e872e` then reused Ready12 without rebuild or
+reattestation. The checkpoint SHA-256 stayed
+`ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da` before/after the run.
+Startup source `25925217` took 144.657 seconds and is separate from the fixed first50
+`25925229..25925278`. All 50 heights have one timing/lifecycle record, no missing/duplicate heights;
+log boundary is line 148,793. Artifacts: `logs/solver-gss-ready12-c1f475d6/`, run ID
+`cc4c33fd-e9c4-4845-bcde-0a20b29e9412`.
+
+| Stage | Entered / 50 | p50 seconds | p90 seconds | p95 seconds | Max seconds |
+|---|---:|---:|---:|---:|---:|
+| Activity + pricing/Funding state | 50 | 2.516 | 3.634 | 5.813 | 8.554 |
+| Enumeration | 49 | 1.566 | 1.676 | 1.784 | 2.096 |
+| Exact refinement | 49 | 2.519 | 3.780 | 4.001 | 4.007 |
+| Planner/Solver | 46 | 5.671 | 7.336 | 7.439 | 10.416 |
+| Final simulation | 1 | 6.398 | 6.398 | 6.398 | 6.398 |
+| EV | 0 | not reached | not reached | not reached | not reached |
+
+One state stage failed; Exact completed 46 and failed three; Solver completed two and failed 44.
+Actual Solver starts were p50 55 / p95 and max 100, with the same 512 enumeration / 100 Planner
+limits. Completed Solver sources were `25925230` (9.061s Solver, 17.206s terminal) and `25925245`
+(7.336s Solver, 20.923s terminal). Only the latter entered final sim, which reverted; no EV occurred.
+Timing decisions were 45 `source_head_superseded`, one `blockscan_stale_state`, one `sim_revert`
+and three `exact_refinement_deadline`. Terminal lifetime was p50 12.673 / p90 13.992 / p95 17.028 /
+max 20.923 seconds. The 16 sub-ten-second lifetimes are failures, not complete passes: full EV
+completion remains **0/50**. Local GSS equivalence does not imply a live systemic speedup; the windows
+have different blocks, pricing completeness and interruption points.
+
+The task-owned Node/Anvil stopped normally at the fixed boundary, with no confirmed Alchemy 429.
+EV stayed on; signing/submission stayed off; no feature or configuration scope was reduced. Offline
+manual analysis was reconciled through current `latency,single-block,production-events,state-coverage`
+selection and successful `analysis:blockscan-pass-latency` / `analysis:block-activity` executions.
+The latency tool binds process-banner lines `6..148793` (startup plus 50); its `fast` flag is not EV
+success. Target `25925246` joins source `25925245`, 49,487 mids, 512 routes, 100 Planner and Solver
+entries and one failed simulation. Manifest `/tmp/solver-gss-first50-tools.json` final SHA-256:
+`0a64bf6be2887ea23ad111b32b574326c887d81ac89f19ee891917cf7d00358a`.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
