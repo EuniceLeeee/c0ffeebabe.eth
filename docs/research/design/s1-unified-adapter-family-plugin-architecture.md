@@ -2087,17 +2087,15 @@ Target `25925424` joins source `25925423`, 49,485 mids, 512 routes, 100 Planner 
 and no final event. Manifest `/tmp/solver-reuse-first50-tools.json` final SHA-256:
 `7a0b7123079d934414e3e5b2ae571a8785578ab90b9ba590890d8adaac54e9ac`.
 
-### 16.16 Existing 32-worker quote configuration experiment (2026-09-07)
+### 16.16 Cancelled 32-worker quote configuration experiment (2026-09-07)
 
-The next single variable is process-local `SEARCHER_BLOCKSCAN_SOLVER_QUOTE_CONCURRENCY=32`,
-using the existing validated 1..64 setting. The production default stays 16; no global environment,
-runtime scheduling, Family, search/rank/admission or final-sim/EV code changes. The 100-plan queue,
-five grid plus four GSS points, three finalist fallbacks, Exact limits and transport 64-item/16-batch
-limits stay fixed. Ready12 and the first50 denominator are unchanged. The hypothesis is fewer quote
-worker turnovers with the same work, not lower coverage or cheaper individual RPC calls. More work
-may overlap and increase instantaneous RPC/CU pressure; a confirmed Alchemy429 ends the run immediately,
-without retries or provider/key switching. This is a configuration experiment, not a new production
-algorithm or a guaranteed ten-second result.
+The proposed process-local `SEARCHER_BLOCKSCAN_SOLVER_QUOTE_CONCURRENCY=32` experiment was cancelled
+before live execution after the user prioritized structural optimization over numeric tuning. No
+configuration, default or global environment was changed; quote concurrency remains 16. The two
+uncommitted experiment-only test changes were preserved under ignored logs and removed from the worktree.
+There is no quote32 live window or performance verdict. Subsequent work investigates repeated computation,
+same-state reads and unnecessary waits while preserving the Ready12 universe, complete search/admission
+contract, final-sim/EV gates and fixed first50 denominator. Confirmed Alchemy429 remains a hard stop.
 
 ## 17. Role of tests and tools
 
