@@ -2419,6 +2419,53 @@ non-bootstrap source blocks including failures. Signing/broadcast stay disabled 
 Alchemy429 stops task RPC. Offline batch consolidation is not a live latency or EV-completion
 verdict; the ten-second Goal remains unachieved.
 
+#### Ready12 fixed50 observation at `0fc76eec`
+
+Frozen runtime `0fc76eecee98c1c4c7e25eb880ee8a6649df9490`, run
+`4dd6e180-52fa-48ca-a1f0-519883a9d98c`, ignored artifacts under
+`logs/pricing-funding-overlap-ready12-0fc76eec/`. Fixed source window
+**25926216..25926265**, ending at line111509, contains50 timing and50 lifecycle records,
+without missing/duplicate source blocks. Source25926194 bootstrap completed in274.714s,
+separately from steady timing. Ready12 checkpoint SHA, graph/catalog/startup-manifest identities
+and every numerical configuration remain unchanged; no rebuild/revalidation.
+
+| Stage | Entered/completed blocks | p50 s | p90 s | p95 s | max s |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| State/activity + pricing/Funding | 50/49 | 3.633 | 6.084 | 10.933 | 14.926 |
+| Enumeration | 49/49 | 1.572 | 1.800 | 1.826 | 2.224 |
+| Exact | 49/22 | 3.760 | 4.015 | 4.016 | 4.018 |
+| Planner/Solver | 22/0 | 2.164 | 5.804 | 6.044 | 6.054 |
+| Actual final sim | 0/0 | — | — | — | — |
+| Production EV | 0/0 | — | — | — | — |
+
+All22 entered Solver stages were interrupted; started-plan counts p50/p90/p95/max were
+26/60/60/61. Terminal lifetime was10.228/14.062/14.482/14.926s. The21 terminals below10s
+are not full-pipeline successes. Decisions:23 `source_head_superseded` (including the first
+state-stage interruption),27 `exact_refinement_deadline`.
+**EV-complete and EV-complete-under10s remain0/50.** Enumeration completion describes the
+budgeted production stage, not exhaustive Graph traversal.
+
+The49 recorded Source-N sessions show pricing p50/p95=1244/2327ms, Funding1256/2745ms,
+projection29/54ms and total1297/2796ms. Overlap is real: source25926219 measured pricing799ms
+and Funding791ms inside total828ms. The prior unpaired window's session-total p50 was1759ms,
+but individual branch durations/network conditions and effective mids differ; this is not a paired
+end-to-end performance win. Exact-session Funding reuse remains2/2ms (max3ms). Five producer
+sessions sent one batch,43 sent two, and source25926229 sent three with one batch failure;
+producer peak in-flight batches is two under the unchanged cap of four. No single-call fallback
+occurred. All49 producer and49 exact final cleanup records have zero pending/live items,
+in-flight batches and active transports. The failure counter alone does not identify an HTTP code;
+no confirmed Alchemy429 was observed.
+
+Guard normally stopped Node89926 at1788793623671; Anvil89952 also exited. Both process/guard
+sessions returned zero. Checkpoint SHA is unchanged after stopping; unrelated processes and the
+original1511 worktree remain untouched. Canonical reconciliation queried
+`latency,single-block,production-events,state-coverage` (337 indexed tools) and executed
+`analysis:blockscan-pass-latency` plus `analysis:block-activity`, both exit0. The latency view
+has one bootstrap plus50=51 records; its21 `fast` terminals are not EV successes. Activity
+target25926266 joins source25926265:49,493/55,765 mids,512 enumerated,100 Planner entries,
+26 Solver entries,0final events. Manifest `/tmp/pricing-funding-overlap-first50-tools.json` SHA-256:
+`e0a74b980d1da939751fe168ba627538670d43534de215cee33d2d1f48aaca86`.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
