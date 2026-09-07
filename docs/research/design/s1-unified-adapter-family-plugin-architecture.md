@@ -2236,6 +2236,54 @@ is still required. Reviewed two-listener-file `git diff --binary` SHA-256:
 `2699fb62fe03d30f86e4e3bafcc0a482bd33cc95be5f0653a3f1fdd5a983fbe2`
 (`--full-index`: `c23c154517d4c31aeeef8881490516d9ede96f1eb23c1f1e36025d23e33823a3`).
 
+#### Ready12 fixed50 observation at `ec37fff8`
+
+Frozen runtime `ec37fff85a195c4d185dcf2be4caaab7b013c4a1`; artifacts are retained under ignored
+`logs/funding-overlap-ready12-ec37fff8/`. The first non-bootstrap window is **25925838..25925887**,
+ending at log line143372: fifty timing records and fifty lifecycle records, no missing/duplicate
+source blocks. Initialization is separate and includes both attempts: source25925790 failed its
+existing runtime deadline after304.731s; source25925814 completed warm after292.570s. Neither is a
+successful steady pass. Ready12 checkpoint SHA is unchanged before/after; no rebuild/revalidation.
+
+| Stage | Entered/completed blocks | p50 s | p90 s | p95 s | max s |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| State/activity + pricing/Funding | 50/47 | 3.183 | 5.486 | 9.642 | 28.874 |
+| Enumeration | 47/47 | 1.570 | 1.583 | 1.589 | 1.821 |
+| Exact | 46/30 | 3.275 | 4.006 | 4.010 | 4.015 |
+| Planner/Solver | 30/0 | 3.653 | 6.362 | 6.495 | 6.547 |
+| Actual final sim | 0/0 | — | — | — | — |
+| Production EV | 0/0 | — | — | — | — |
+
+Percentiles include failed entered stages, not zero-filled stages that never ran. Enumeration
+completion still describes the budgeted production stage, not exhaustive route coverage. All thirty
+Solver stages were interrupted; their shorter times are not completed solves. Solver-entry counts
+p50/p90/p95/max were27/59/59/59. Terminal lifetime p50/p90/p95/max was
+9.645/14.094/14.682/30.444s. Twenty-five short terminal lifetimes do not count as successes:
+**EV-complete and EV-complete-under10s are both0/50**. Decisions:33 `source_head_superseded`,
+16 `exact_refinement_deadline`, one `scanner_deadline`. The latter source25925878 spent28.874s in
+state, then1.570s enumerating: its label does not prove a30-second enumeration. Its pricing refresh
+spent26.673s and all43 selected instances failed; it issued no Funding offers.
+
+All48 recorded producer sessions used two batches instead of the previous window's three; physical
+limits and request scope remained unchanged. Funding p50/p95 was844/1409ms, and exact-session
+Funding remained2/4ms over46 sessions (max7ms). Every recorded producer/exact cleanup had no pending
+or active transports. This confirms batch consolidation, **not a paired wall-time win**: network
+waits and effective resolved coverage differ materially. The final reconstructed mid snapshot contains
+49,445 prices, versus39,982 at the end of §16.17, with the same configured55,765-edge Graph. Exact
+p50 increased from1.533s to3.275s across those unpaired windows; this round does not establish that
+the Funding change caused that increase or improved end-to-end latency.
+
+The guard normally stopped Node46496 at1788789082866; its Anvil46522 also exited, and both live and
+guard sessions returned zero. No confirmed Alchemy429 occurred. Existing unrelated July Anvil
+processes on8600..8602 and seventy pre-existing entries in the original1511 worktree were untouched.
+Canonical reconciliation selected `latency,single-block,production-events,state-coverage` from the
+337-entry generated inventory and executed `analysis:blockscan-pass-latency` and
+`analysis:block-activity`, both exit0. The process-bound latency view contains two bootstrap records
+plus the fifty (52 total); its25 `fast` terminals are not EV successes. Activity target25925888
+joins source25925887:49,445 mids,512 enumerated, no Planner/Solver after its Exact deadline, no
+final events. Manifest `/tmp/funding-overlap-first50-tools.json` SHA-256:
+`22f9d680377ea25f93ec94e78551cfe3520a659ab32d86a2527a97b041b71cfb`.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
