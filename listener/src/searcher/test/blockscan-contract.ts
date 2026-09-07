@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { rejects } from "node:assert/strict";
 import { readBlockTouchedStateKeys } from "../blockscan-touched-state.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import { emitEvent, makeBlockScanOpportunityId } from "../events.js";
@@ -199,6 +200,52 @@ const tests: TestCase[] = [
     },
   },
 ];
+
+tests.push({
+  name: "malformed or failed trace never authorizes clean carry",
+  run: async () => {
+    for (const traces of [
+      null,
+      [{}],
+      [{ result: null }],
+      [{ result: {} }],
+      [{ result: { to: "0xinvalid" } }],
+      [{ result: { to: POOL_A, calls: null } }],
+      [{ result: { to: POOL_A, calls: [null] } }],
+      [{ result: { to: POOL_A }, error: "trace failed" }],
+    ]) {
+      await rejects(readBlockTouchedStateKeys({
+        getLogs: async () => [{ address: POOL_B, topics: [] }],
+        send: async () => traces,
+      }, SOURCE_BLOCK, POOL_B), /block trace|debug_traceBlockByNumber/);
+    }
+    await rejects(readBlockTouchedStateKeys({
+      getLogs: async () => [],
+      send: async () => { throw new Error("trace transport failure"); },
+    }, SOURCE_BLOCK, POOL_B), /trace transport failure/);
+  },
+});
+tests.push({
+  name: "empty block and failed creation remain valid trace shapes",
+  run: async () => {
+    const empty = await readBlockTouchedStateKeys({
+      getLogs: async () => [],
+      send: async () => [],
+    }, SOURCE_BLOCK, POOL_B);
+    assert(empty.size === 0, "empty successful trace is complete");
+    const creation = await readBlockTouchedStateKeys({
+      getLogs: async () => [],
+      send: async () => [{
+        result: {
+          type: "CREATE",
+          error: "execution reverted",
+          calls: [{ type: "CALL", to: POOL_A }],
+        },
+      }],
+    }, SOURCE_BLOCK, POOL_B);
+    assert(creation.has(POOL_A.toLowerCase()), "creation nested activity retained");
+  },
+});
 
 let passed = 0;
 for (const test of tests) {

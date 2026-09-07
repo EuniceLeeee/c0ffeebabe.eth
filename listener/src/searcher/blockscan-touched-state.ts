@@ -59,11 +59,23 @@ export async function readBlockTouchedStateKeys(
 }
 
 function addCallTargets(frame: unknown, touched: Set<string>): void {
-  if (!isRecord(frame)) return;
+  if (!isRecord(frame)) {
+    throw new Error("block trace contains a malformed call frame");
+  }
   if (typeof frame.to === "string" && ADDRESS_RE.test(frame.to)) {
     touched.add(frame.to.toLowerCase());
+  } else if (
+    frame.to !== undefined ||
+    (frame.type !== "CREATE" && frame.type !== "CREATE2")
+  ) {
+    throw new Error("block trace contains a malformed call target");
   }
-  if (!Array.isArray(frame.calls)) return;
+  // A failed creation may not have a destination yet, but its nested calls
+  // still contribute activity. Malformed responses never prove clean state.
+  if (frame.calls === undefined) return;
+  if (!Array.isArray(frame.calls)) {
+    throw new Error("block trace contains malformed nested calls");
+  }
   for (const child of frame.calls) addCallTargets(child, touched);
 }
 
