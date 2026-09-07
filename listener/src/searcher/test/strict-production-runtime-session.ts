@@ -123,9 +123,10 @@ function runtime(
       readonly blockTimestampLast: number;
     }>>;
     readonly onCurrentPricingRead?: () => void;
-    readonly onCurrentPricingReadStart?: (target: string) => void;
+    readonly onCurrentPricingReadStart?: (target: string) => void | Promise<void>;
     readonly onCurrentPricingReadEnd?: (target: string) => void;
     readonly onFundingRead?: (data: string) => void | Promise<void>;
+    readonly onFundingReadEnd?: () => void;
     readonly isCurrent?: () => boolean;
     readonly currentPricingDelayMs?: number | ((target: string) => number);
     readonly failCurrentPricing?: boolean;
@@ -146,8 +147,8 @@ function runtime(
             UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector.toLowerCase()
         ) {
           const target = request.to.toLowerCase();
-          options.onCurrentPricingReadStart?.(target);
           try {
+            await options.onCurrentPricingReadStart?.(target);
             const pricingDelayMs = typeof options.currentPricingDelayMs ===
                 "function"
               ? options.currentPricingDelayMs(target)
@@ -181,7 +182,11 @@ function runtime(
         if (options.failFunding === true) {
           throw new Error("current Funding transport failed");
         }
-        await options.onFundingRead?.(request.data);
+        try {
+          await options.onFundingRead?.(request.data);
+        } finally {
+          options.onFundingReadEnd?.();
+        }
         return ERC20_BALANCE.encodeFunctionResult(
           "balanceOf",
           [options.fundingBalance ?? 10n ** 24n],
@@ -237,6 +242,163 @@ const session = await root.createSession({
   runtime: strictRuntime,
   fundingAssets: Object.freeze([UNIV2_FIXTURE_TOKEN0]),
 });
+
+function preparationGate() {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => { release = resolve; });
+  return { promise, release };
+}
+
+async function awaitPreparationGate(promise: Promise<unknown>, label: string) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(label)), 1_000);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+// Use the real central issuer and both production Funding plugins. Held reads
+// prove dispatch overlap and settlement, not a machine-dependent speedup.
+{
+  const reference = await root.createSession({
+    source: CURRENT, runtime: runtime(CURRENT), fundingAssets: [UNIV2_FIXTURE_TOKEN0],
+  });
+  const comparableFunding = (value: StrictProductionRuntimeSession) => {
+    const projection = value.fundingProjection();
+    return { ...projection, outcomes: projection.outcomes.map((outcome) => {
+      if (outcome.workReceipt === null) return outcome;
+      const { timing, ...receipt } = outcome.workReceipt;
+      return { ...outcome, workReceipt: { ...receipt, timing: { attempts: timing.attempts } } };
+    }) };
+  };
+  for (const mode of [
+    "funding-first", "pricing-first", "provider-failure",
+    "late-abort", "late-retire", "late-deadline",
+  ] as const) {
+    const pricingStarted = preparationGate();
+    const fundingStarted = preparationGate();
+    const pricingRelease = preparationGate();
+    const fundingRelease = preparationGate();
+    const pricingEnded = preparationGate();
+    const fundingEnded = preparationGate();
+    const controller = new AbortController();
+    // Expire the caller deadline deterministically after Funding has finished;
+    // every work item retains this same control object.
+    const control = { signal: controller.signal, deadlineAtMs: Date.now() + 10_000 };
+    let current = true;
+    let completed = false;
+    let pricingActive = 0;
+    let fundingActive = 0;
+    let pricingCalls = 0;
+    let fundingCompletions = 0;
+    const fundingCalls = new Set<string>();
+    let failedCall: string | undefined;
+    const pending = root.createSession({
+      source: CURRENT, kind: "pricing", fundingAssets: [UNIV2_FIXTURE_TOKEN0], control,
+      runtime: runtime(CURRENT, {
+        isCurrent: () => current,
+        async onCurrentPricingReadStart() {
+          pricingCalls++;
+          pricingActive++;
+          pricingStarted.release();
+          await pricingRelease.promise;
+        },
+        onCurrentPricingReadEnd() {
+          pricingActive--;
+          pricingEnded.release();
+        },
+        async onFundingRead(data) {
+          fundingActive++;
+          fundingCalls.add(data);
+          failedCall ??= data;
+          if (fundingCalls.size === readyFundingAssets.length) fundingStarted.release();
+          await fundingRelease.promise;
+          if (mode === "provider-failure" && data === failedCall) {
+            throw new Error("one overlapped Funding provider failed");
+          }
+        },
+        onFundingReadEnd() {
+          fundingActive--;
+          if (++fundingCompletions >= readyFundingAssets.length) fundingEnded.release();
+        },
+      }),
+    }).finally(() => { completed = true; });
+    // Observe rejection even if the dispatch assertion fails on a serial baseline.
+    const observed = Promise.allSettled([pending]);
+    try {
+      await awaitPreparationGate(
+        Promise.all([pricingStarted.promise, fundingStarted.promise]),
+        `pricing still blocks Funding dispatch (${mode})`,
+      );
+      assert.equal(pricingActive, 1);
+      assert.equal(fundingActive, readyFundingAssets.length);
+      if (mode === "pricing-first") {
+        pricingRelease.release();
+        await pricingEnded.promise;
+      } else {
+        fundingRelease.release();
+        await fundingEnded.promise;
+      }
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal(completed, false, "one finished branch cannot publish a session");
+      if (mode === "late-abort") controller.abort(new Error("test late head cancellation"));
+      if (mode === "late-retire") current = false;
+      if (mode === "late-deadline") control.deadlineAtMs = Date.now() - 1;
+    } finally {
+      pricingRelease.release();
+      fundingRelease.release();
+      await observed;
+    }
+    const created = await pending;
+    assert.equal(pricingActive, 0);
+    assert.equal(fundingActive, 0);
+    assert.equal(pricingCalls, 1);
+    assert.equal(fundingCalls.size, readyFundingAssets.length);
+    assert.deepEqual(created.edges, reference.edges);
+    const projection = created.fundingProjection();
+    assert.deepEqual(projection.outcomes.map((outcome) => outcome.fundingId),
+      reference.fundingProjection().outcomes.map((outcome) => outcome.fundingId));
+    if (mode.startsWith("late-")) {
+      assert.deepEqual(created.fundingActionIds(UNIV2_FIXTURE_TOKEN0), []);
+      assert.equal(projection.sources.size, 0);
+      assert.ok(projection.outcomes.every((outcome) => outcome.status === "unresolved"));
+      assert.ok(projection.outcomes.every((outcome) => outcome.reasonCode.startsWith("funding-publication:")),
+        "Funding completed successfully first; the join must invalidate its earlier offers");
+      assert.throws(() => created.buildFundingRoot({
+        actionAdapterId: "morpho-flash", asset: UNIV2_FIXTURE_TOKEN0,
+        amount: 1n, minProfit: 1n, children: [],
+      }), /no Funding offer/);
+    } else if (mode === "provider-failure") {
+      assert.equal(projection.outcomes.filter((outcome) => outcome.status === "verified").length, 1);
+      assert.equal(created.fundingActionIds(UNIV2_FIXTURE_TOKEN0).length, 1);
+      assert.equal(created.currentPricingForEdge(created.edges[0]!)?.status, "priced");
+    } else {
+      assert.deepEqual(comparableFunding(created), comparableFunding(reference));
+      for (const actionAdapterId of reference.fundingActionIds(UNIV2_FIXTURE_TOKEN0)) {
+        const input = { actionAdapterId, asset: UNIV2_FIXTURE_TOKEN0, amount: 1_000_000n, minProfit: 1n, children: [] };
+        assert.deepEqual(created.buildFundingRoot(input), reference.buildFundingRoot(input));
+      }
+      for (const edge of created.edges) {
+        assert.deepEqual(created.currentPricingForEdge(edge), reference.currentPricingForEdge(edge));
+      }
+    }
+    console.log(`strict pricing/Funding overlap: PASS ${mode}`);
+  }
+  // Early Funding validation rejection must be observed, yet projection keeps
+  // its original error priority. Exact sessions retain the same serial order.
+  for (const kind of ["pricing", "exact"] as const) {
+    await assert.rejects(root.createSession({
+      source: CURRENT, kind, runtime: runtime(CURRENT), fundingAssets: ["invalid-address"],
+      touchedPools: new Set(), requiredEdgeIds: new Set([startupView.edges[0]!.canonicalEdgeId!]),
+    }), kind === "pricing" ? /missing required edge ids/ : /invalid address/);
+  }
+}
 
 // A single physical Fluid DEX instance owns one pricing state per direction.
 // The strict session must preserve those route-local state identities instead
@@ -359,6 +521,9 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
   };
   const wire: Array<{ lane: string; call: WireCall }> = [];
   const stubErrors: unknown[] = [];
+  const mixedBatches: WireCall[][] = [];
+  const projectionBatchStarted = preparationGate();
+  let releaseProjectionBatch: (() => void) | undefined;
   const balanceSelector = ERC20_BALANCE.getFunction("balanceOf")!.selector;
   const reservesSelector = UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector;
   const server = createServer((req, res) => {
@@ -367,6 +532,7 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     req.on("end", () => {
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as WireCall | WireCall[];
+        if (req.url === "/mixed-failure") mixedBatches.push(Array.isArray(body) ? body : [body]);
         const reply = (call: WireCall) => {
           wire.push({ lane: req.url!, call });
           assert.equal(call.method, "eth_call");
@@ -376,6 +542,9 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
           if (req.url === "/failed") return {
             jsonrpc: "2.0", id: call.id, error: { code: 3, message: "execution reverted", data: "0xdeadbeef" },
           };
+          if (req.url === "/mixed-failure") return {
+            jsonrpc: "2.0", id: call.id, error: { code: -32000, message: "mixed batch transport failure" },
+          };
           const result = selector === balanceSelector
             ? ERC20_BALANCE.encodeFunctionResult("balanceOf", [10n ** 24n])
             : UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves", [
@@ -383,8 +552,15 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
             ]);
           return { jsonrpc: "2.0", id: call.id, result };
         };
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify(Array.isArray(body) ? body.map(reply) : reply(body)));
+        const response = Array.isArray(body) ? body.map(reply) : reply(body);
+        const send = () => {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify(response));
+        };
+        if (req.url === "/projection-failure") {
+          releaseProjectionBatch = send;
+          projectionBatchStarted.release();
+        } else send();
       } catch (error) {
         stubErrors.push(error);
         res.end(JSON.stringify({ error: "unexpected fixture request" }));
@@ -400,6 +576,7 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     const backend = (lane: string, transportLane: "producer-bulk" | "exact") => {
       const client = new PinnedRethQuoteBackend(`http://127.0.0.1:${address.port}/${lane}`, CURRENT.hash, {
         transportLane, deadlineAtMs: Date.now() + 5000, allowSingleCallFallback: false,
+        maxBatchSize: 128, maxConcurrentBatches: 4,
       });
       backends.push(client);
       return client;
@@ -421,8 +598,8 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     const fundingCalls = wire.filter(({ call }) => call.params[0].data.startsWith(balanceSelector));
     assert.equal(fundingCalls.length, 4, "pricing reads two providers for each of two assets");
     assert.equal(pricingWireCount, 5, "pricing also reads the pool reserves once");
-    assert.equal(producer.stats().batchesSent, 2, "one pricing batch plus one shared Funding batch, not one per Family");
-    assert.equal(producer.stats().maxBatchItemsSent, 4);
+    assert.equal(producer.stats().batchesSent, 1, "pricing and both Funding Families share one batch");
+    assert.equal(producer.stats().maxBatchItemsSent, 5);
     assert.equal(pricing.fundingProjection().sources.size, 2);
     const refined = await twoTokenFundingRoot.createSession({
       source: CURRENT, kind: "exact", fundingAssets: [UNIV2_FIXTURE_TOKEN0],
@@ -499,8 +676,61 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
       assert.deepEqual(comparableFunding(fallback), comparableFunding(refined));
       assert.deepEqual(fallback.fundingActionIds(UNIV2_FIXTURE_TOKEN0), actions);
     }
+
+    // Shared batch failure must keep both pricing and Funding unresolved without
+    // inventing a fallback lane, suppressing outcomes or leaving HTTP work alive.
+    const mixedBackend = backend("mixed-failure", "producer-bulk");
+    const mixed = await twoTokenFundingRoot.createSession({
+      source: CURRENT, kind: "pricing", fundingAssets: [UNIV2_FIXTURE_TOKEN0, UNIV2_FIXTURE_TOKEN1],
+      runtime: runtime(CURRENT, {
+        producerCallBackend: mixedBackend,
+        onFundingRead: unexpectedDirectRead, onCurrentPricingRead: unexpectedDirectRead,
+      }),
+    });
+    await mixedBackend.drain();
+    assert.equal(mixedBatches[0]!.length, 5);
+    assert.deepEqual(new Set(mixedBatches[0]!.map((call) => call.params[0].data.slice(0, 10))),
+      new Set([balanceSelector, reservesSelector]), "failure must cover an actual mixed pricing/Funding envelope");
+    assert.equal(mixed.fundingProjection().outcomes.length, 4);
+    assert.ok(mixed.fundingProjection().outcomes.every((outcome) => outcome.status === "unresolved"));
+    assert.equal(mixed.fundingProjection().sources.size, 0);
+    assert.ok(mixed.edges.every((edge) => mixed.currentPricingForEdge(edge)?.status === "unresolved"));
+    assert.equal(directReads, 0);
+    assert.equal(mixedBackend.stats().singleCallFallbacks, 0);
+    assert.ok(mixedBackend.stats().peakInFlightBatches <= 4);
+    assert.equal(mixedBackend.stats().activeTransports, 0);
+
+    // Deliberate changed failure-path scope: an invalid required projection now
+    // issues the same two Funding reads before it fails. The failure must wait
+    // for that work; the caller still owns physical drain/close.
+    const projectionBackend = backend("projection-failure", "producer-bulk");
+    let projectionSettled = false;
+    const projectionPending = root.createSession({
+      source: CURRENT, kind: "pricing", fundingAssets: [UNIV2_FIXTURE_TOKEN0],
+      touchedPools: new Set(), requiredEdgeIds: new Set([startupView.edges[0]!.canonicalEdgeId!]),
+      runtime: runtime(CURRENT, {
+        producerCallBackend: projectionBackend,
+        onFundingRead: unexpectedDirectRead, onCurrentPricingRead: unexpectedDirectRead,
+      }),
+    }).finally(() => { projectionSettled = true; });
+    const projectionObserved = Promise.allSettled([projectionPending]);
+    try {
+      await awaitPreparationGate(projectionBatchStarted.promise, "projection failure did not dispatch Funding");
+      assert.equal(projectionSettled, false);
+      assert.equal(projectionBackend.stats().activeTransports, 1);
+      assert.equal(wire.filter((entry) => entry.lane === "/projection-failure").length, 2);
+    } finally {
+      releaseProjectionBatch?.();
+      await projectionObserved;
+      await projectionBackend.drain();
+    }
+    await assert.rejects(projectionPending, /missing required edge ids/);
+    assert.equal(projectionBackend.stats().activeTransports, 0);
+    assert.equal(projectionBackend.stats().liveItems, 0);
+    assert.equal(directReads, 0);
     assert.deepEqual(stubErrors, []);
     console.log("strict Funding phase reuse: PASS (pricing 4 Funding + 1 reserve; exact Funding 0; exact quote 1 separate; miss/revert fallback 2 direct each)");
+    console.log("strict pricing/Funding transport: PASS (one mixed batch; mixed failure unresolved; projection failure waits; caller drains)");
   } finally {
     const closed = await Promise.allSettled(backends.map((client) => client.closeAndDrain()));
     server.closeAllConnections();

@@ -338,6 +338,51 @@ export class StrictProductionRuntimeRoot {
     let failedInstanceCount = 0;
     let pricingMs = 0;
 
+    const prepareFunding = async () => {
+      const startedAtMs = Date.now();
+      const requestedAssets = new Set(input.fundingAssets.map((asset) =>
+        ethers.getAddress(asset).toLowerCase()
+      ));
+      const work = this.#catalog.listAll().flatMap((family) => {
+        if (family.plugin.manifest.domain !== "funding") return [];
+        const assets = (this.#readyFundingAssetsByFamily.get(
+          family.plugin.manifest.familyId,
+        ) ?? []).filter((asset) => requestedAssets.has(asset));
+        return assets.length === 0 ? [] : [{ family, assets }];
+      });
+      // Independent source-pinned reads; settlement and publication retain
+      // catalog order, including the first rejected Family.
+      const settled = await Promise.allSettled(work.map(async ({ family, assets }) => {
+        const result = await executeFundingFamilyLiquidity({
+          family,
+          assets,
+          source: input.source,
+          generation: input.source.generation,
+          runtime: input.runtime,
+          ...(input.control === undefined ? {} : { control: input.control }),
+          publisher: Object.freeze({ publish() {} }),
+        });
+        return { family, result };
+      }));
+      const failure = settled.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      if (failure !== undefined) throw failure.reason;
+      const bindings: FundingBinding[] = [];
+      const outcomes: FundingInstanceOutcome[] = [];
+      for (const entry of settled) {
+        if (entry.status !== "fulfilled") continue;
+        const { family, result } = entry.value;
+        outcomes.push(...result.outcomes);
+        bindings.push(...result.offers.map((offer) => Object.freeze({ family, offer })));
+      }
+      return {
+        bindings, outcomes, requestedAssetCount: requestedAssets.size,
+        fundingMs: Math.max(0, Date.now() - startedAtMs),
+      };
+    };
+    let earlyFunding: PromiseSettledResult<Awaited<ReturnType<typeof prepareFunding>>> | undefined;
+
     const pricingStartedAtMs = Date.now();
     if (kind === "pricing") {
       /*
@@ -391,12 +436,24 @@ export class StrictProductionRuntimeRoot {
       // preparation both assume the previous generation has fully quiesced;
       // Promise.all() returned on the first rejection and let those siblings
       // leak I/O into the next generation.
-      const refreshSettled = await Promise.allSettled(refreshWorkers);
+      // Funding needs no prices or route projection. Observe and settle both
+      // branches before projection, but retain pricing/projection error priority.
+      // This can issue Funding on a pass that later fails route projection.
+      // Logical settlement does not replace the caller-owned backend drain.
+      const [refreshSettled, [fundingResult]] = await Promise.all([
+        Promise.allSettled(refreshWorkers).then((results) => {
+          pricingMs = Math.max(0, Date.now() - pricingStartedAtMs);
+          return results;
+        }),
+        Promise.allSettled([prepareFunding()]),
+      ]);
+      earlyFunding = fundingResult;
       const refreshFailure = refreshSettled.find(
         (result): result is PromiseRejectedResult =>
           result.status === "rejected",
       );
       if (refreshFailure !== undefined) throw refreshFailure.reason;
+      const flattenStartedAtMs = Date.now();
       for (const index of selectedPricingInstanceIndexes) {
         const outcome = refreshedOutcomes.get(index);
         if (outcome === undefined) {
@@ -408,6 +465,7 @@ export class StrictProductionRuntimeRoot {
           pricingByHandle.set(handle, pricing);
         }
       }
+      pricingMs += Math.max(0, Date.now() - flattenStartedAtMs);
     } else {
       /*
        * Exact/solver stages already have a coarse producer snapshot. They
@@ -472,9 +530,6 @@ export class StrictProductionRuntimeRoot {
       }
     }
 
-    pricingMs = kind === "pricing"
-      ? Math.max(0, Date.now() - pricingStartedAtMs)
-      : 0;
     const routeProjectionStartedAtMs = Date.now();
     const view = buildFamilyRouteGraphView({ routes, creditRoutes });
     assertSameReadyTopology(this.#readyGraph, view.edges);
@@ -528,48 +583,34 @@ export class StrictProductionRuntimeRoot {
       0,
       Date.now() - routeProjectionStartedAtMs,
     );
-    const fundingStartedAtMs = Date.now();
-    const requestedFundingAssets = new Set(input.fundingAssets.map((asset) =>
-      ethers.getAddress(asset).toLowerCase()
-    ));
-    const fundingBindings: FundingBinding[] = [];
-    const fundingOutcomes: FundingInstanceOutcome[] = [];
-    // Families read independent, source-pinned liquidity. Dispatch together so
-    // the existing transport can batch across providers; retain catalog order
-    // when publishing, and settle every sibling before propagating a failure.
-    const fundingWork = this.#catalog.listAll().flatMap((family) => {
-      if (family.plugin.manifest.domain !== "funding") return [];
-      const assets = (this.#readyFundingAssetsByFamily.get(
-        family.plugin.manifest.familyId,
-      ) ?? []).filter((asset) => requestedFundingAssets.has(asset));
-      return assets.length === 0 ? [] : [{ family, assets }];
-    });
-    const fundingSettled = await Promise.allSettled(fundingWork.map(async ({ family, assets }) => {
-      const result = await executeFundingFamilyLiquidity({
-        family,
-        assets,
-        source: input.source,
-        generation: input.source.generation,
-        runtime: input.runtime,
-        ...(input.control === undefined ? {} : { control: input.control }),
-        publisher: Object.freeze({ publish() {} }),
-      });
-      return { family, result };
-    }));
-    const fundingFailure = fundingSettled.find(
-      (result): result is PromiseRejectedResult => result.status === "rejected",
-    );
-    if (fundingFailure !== undefined) throw fundingFailure.reason;
-    for (const settled of fundingSettled) {
-      if (settled.status !== "fulfilled") continue;
-      const { family, result } = settled.value;
-      fundingOutcomes.push(...result.outcomes);
-      fundingBindings.push(...result.offers.map((offer) => Object.freeze({
-        family,
-        offer,
-      })));
+    if (earlyFunding?.status === "rejected") throw earlyFunding.reason;
+    const funding = earlyFunding?.status === "fulfilled"
+      ? earlyFunding.value
+      : await prepareFunding();
+    let { bindings: fundingBindings, outcomes: fundingOutcomes } = funding;
+    if (kind === "pricing") {
+      // Early Funding success cannot outlive its caller or generation while
+      // pricing/projection finishes. Preserve unresolved/no-offer publication,
+      // not a new whole-session rejection on preparation settlement.
+      try {
+        if (input.control?.signal?.aborted) {
+          throw input.control.signal.reason ?? new Error("adapter work aborted");
+        }
+        if (input.control?.deadlineAtMs !== undefined && Date.now() >= input.control.deadlineAtMs) {
+          throw new Error("adapter work deadline reached");
+        }
+        input.runtime.generationFence.assertCurrent(input.source.generation, input.source);
+      } catch (error) {
+        fundingBindings = [];
+        fundingOutcomes = fundingOutcomes.map((outcome) => outcome.status === "verified"
+          ? Object.freeze({
+              ...outcome,
+              status: "unresolved" as const,
+              reasonCode: `funding-publication:${error instanceof Error ? error.message : String(error)}`,
+            })
+          : outcome);
+      }
     }
-    const fundingMs = Math.max(0, Date.now() - fundingStartedAtMs);
     const selectedInstanceCount = kind === "pricing"
       ? selectedPricingInstanceIndexes.length
       : requiredInstanceKeys === undefined
@@ -583,12 +624,12 @@ export class StrictProductionRuntimeRoot {
       refreshedInstanceCount,
       skippedCleanInstanceCount,
       failedInstanceCount,
-      requestedFundingAssetCount: requestedFundingAssets.size,
+      requestedFundingAssetCount: funding.requestedAssetCount,
       fundingOfferCount: fundingBindings.length,
       projectedRouteCount: view.routes.length,
       cleanAuthorityReissueCount: 0,
       pricingMs,
-      fundingMs,
+      fundingMs: funding.fundingMs,
       routeProjectionMs,
       totalMs: Math.max(0, Date.now() - sessionStartedAtMs),
       heapUsedBytes: process.memoryUsage().heapUsed,

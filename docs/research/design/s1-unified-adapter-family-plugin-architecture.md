@@ -2372,6 +2372,53 @@ Activity target25926092 joins source25926091:49,124 mids,512 enumerated,0Planner
 after Exact deadline,0final events. Manifest `/tmp/address-memo-first50-tools.json` SHA-256:
 `54d44204ac2aa94d013c3d06b350e9b4af486e9a0e31913f06b90379ac4fac31`.
 
+### 16.20 Pricing and Funding preparation overlap within one session
+
+Baseline is `a3fefa6a2d69100d6e62ed419bc6fa94211eac38`. Pricing sessions now dispatch
+Funding from the same ready assets/catalog/source while pricing workers run; Funding does not
+consume price results or route projection. Both branches settle before projection and publication.
+Pricing/route-projection errors retain precedence over catalog-ordered Funding rejection. Exact
+sessions retain their previous ordering and same-source successful-byte reuse. Pricing and Funding
+timers measure their own work, not the other branch's wait.
+
+Before exposing earlier Funding success, the join rechecks the caller signal, absolute deadline
+and source-generation fence. Late invalidation strips offers and changes verified outcomes to
+unresolved; it does not replace the existing degraded-session contract with a new unconditional
+throw. Every sibling settles even if another branch rejects. The caller still owns physical
+backend abort/drain; logical settlement is not transport cleanup. No request identity, asset,
+batch/concurrency cap, lane, retry, candidate, search, block/head scheduling or final-sim/EV gate
+is changed. Failure-path work is not universally identical: Funding may now issue before a later
+fatal pricing/projection failure or before late cancellation/deadline would have prevented the old
+Funding phase. Such early offers cannot survive join invalidation. Mixed batch failures can also
+affect both kinds of work; retaining all source outcomes and fail-closed cleanup is required.
+
+The existing strict-session suite checks held pricing-first/Funding-first completion, unchanged
+prices/ordered Funding roots, ordinary provider failure, late abort/retirement/deadline, per-item
+RPC failure in a mixed batch, and projection-failure settlement. Its local HTTP fixture sends
+the same five items (one reserve plus four Funding reads) in one batch rather than the baseline's
+two. Author-executed in-memory baseline imports at `a3fefa6a` fail the identical held-dispatch
+assertion (`pricing still blocks Funding dispatch (funding-first)`). A separate in-memory paired
+comparison matches pricing/exact ordered edges, prices, Funding outcomes/sources/roots and request
+multisets, excluding receipt timing only and retaining attempts. These executions are retained
+in the task transcript; no saved baseline/paired artifact or artifact hash is claimed.
+
+Build/live build, strict session/central, Funding runtime, pinned backend, pass deadline, strict
+solver, final-simulation runtime, solver config (7/7), quote concurrency, amount search (22/22),
+checkpoint rehydrator, blockscan contract (8/8), bundle safety (6/6) and historical-live replay
+contract pass. Non-author review independently executed session/backend/central suites with
+strict unhandled-rejection mode, full/live TypeScript and diff checks. Its additional in-memory
+HTTP503 gate observed a mixed one-pricing/four-Funding batch: all became unresolved, no Funding
+sources, no single-call fallback or direct-provider reads, and zero active transports/in-flight
+batches/live items after drain (two HTTP-level batch failures under the unchanged work policy).
+The frozen checked-in mixed-failure fixture is HTTP200/per-item RPC errors, not that ephemeral503
+variant. Reviewer approved exact two-file full-index patch SHA-256
+`1447d14dfabdc69729c061ead4889a56b0233cab4f71545075e70c389f9290a5`.
+
+Next observation reuses unchanged Ready12, all numerical configuration, and first50 consecutive
+non-bootstrap source blocks including failures. Signing/broadcast stay disabled and confirmed
+Alchemy429 stops task RPC. Offline batch consolidation is not a live latency or EV-completion
+verdict; the ten-second Goal remains unachieved.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
