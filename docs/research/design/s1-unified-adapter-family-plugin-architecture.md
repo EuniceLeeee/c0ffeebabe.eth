@@ -1623,6 +1623,74 @@ retryable. A post-run read of the durable checkpoint reported revision 8134, 161
 `inProgressRun: none`, and the same 16133 active Ready instances. A future startup may freeze a new rolling
 cutoff while reusing these memos; only an interrupted fixed run reports `resumed=true`.
 
+### 16.10 Unified activity discovery and refresh (2026-09-07)
+
+Commits `f97df59f`, `5377daf6`, and `5283154d` retain the coarse contract in §16.9 and establish:
+
+- A rolling window (default 14,400 blocks) and explicit `--from-block`/`--to-block` are mutually exclusive
+  range selectors for the same rebuild pipeline. Both obey the same maximum span and frozen cutoff;
+  an unfinished run cannot be silently moved to another range.
+- The catalog derives one activity plan from Family `logPatterns` and `callPatterns`. `eth_getLogs` and
+  `trace_block` (with `debug_traceBlockByNumber` fallback) feed the same nomination, deduplication,
+  identity, memo and Graph path. Both surfaces share one `catalog-activity-union` receipt. A log-only
+  receipt cannot certify required call coverage; malformed/incomplete debug traces cannot seal a receipt
+  or replace the prior Ready generation.
+- Live refresh uses the union of log identities and nested call targets; singleton pool IDs remain
+  log-derived. Trace transport/envelope/frame failures reject the read, not prove clean state. There is
+  no new family-wide fallback, scheduler change, coverage threshold, or final-gate relaxation.
+- Compatible verified memos remain reusable. Source-plan drift invalidates obsolete discovery coverage,
+  not every unchanged memo. Once all candidates have verified/terminal/retryable outcomes, Ready may
+  publish the verified partition; classified residual retryables remain outside Graph in the independent
+  queue. The optional completed-Ready startup shortcut is dry-run-only and rejects an unfinished run.
+
+The completed development rebuild `rolling-2d-unified-20260907T032835Z` covered
+25908396..25922795 and accounted for all 31376 candidates: 28113 verified, 1859 terminal-rejected, and
+1404 residual retryable. Ready generation 12 retained 28113 active instances; its pricing projection was
+28004 instances / 55765 directed edges. The existing checkpoint was reused for subsequent observations;
+no second two-day rebuild was needed. These inputs were produced by the development tree, including its
+preexisting Family identity/probe changes, which are not included in the three commits above.
+
+Development producer `82e241ff-7505-40ad-960b-9ab115315a38` (broadcast disabled) published a 49520-mid
+baseline at 25924073. Reconstructing source 25924090 through two deltas retained 49520 mids across 14 of
+20 pricing Families; that block updated 128 edges, enumerated 512 routes, entered Planner for 100 and
+started Solver for 29. Final sim and EV were not reached before head supersession. This is development
+coarse-to-exact/lifecycle evidence, not an exact-final-SHA or six-stage production-profitability verdict.
+
+The isolated impl integration passes the listener build and the blockscan contract (8/8), strict production
+runtime session (including refreshed A/carried B closed-loop enumeration and both-leg exact), strict Family
+declarations, Ready runtime, checkpoint, rehydrator, rebuild production/runner/startup CLI, runtime defaults,
+mid-history (4/4), and historical-production-replay contract tests. Independent reviews reproduced and then
+verified rejection of malformed live and historical debug traces. The integration leaves the original
+worktree's unrelated identity, simulator and queued-tail edits intact and uncommitted.
+
+Final code `5283154d` was then run locally against mainnet RPC with the same completed Ready generation,
+`SEARCHER_DRY_RUN=1`, blockscan submit off, and backrun/mempool/MEV-Share off. Its first baseline at
+25924166 refreshed all 28004 pricing instances without failures and published 49518 mids. At source
+25924181 only 31 instances were refreshed, 27973 were skipped as clean, and the history delta updated 60
+edges. Offline reconstruction at 25924186 applied nine deltas to the same baseline and still contained
+49518 mids across 14 pricing Families; that source naturally enumerated 512 routes, entered Planner for
+100 and started Solver for 29. Exact sessions used the candidates' closure (1020 instances / 2104 routes
+at 25924178), rather than the 39 refreshed instances. The mid table and route lifecycle were reconstructed
+with the indexed `analysis:block-activity`; the complete retained timing log was also processed with
+`analysis:blockscan-pass-latency`.
+
+For source 25924186 the six-stage timing was state 8.732s, enumeration 1.565s, exact refinement 2.989s,
+planner/solver 1.402s, final sim not reached, and EV not reached (14.688s total; new-head supersession).
+Other recorded passes include exact-refinement deadlines and remain in the evidence. The earlier clean-tree
+attempt at `5377daf6` failed local fork readiness and is retained as a failed attempt; it is not merged into
+the successful restart's measurements. Both processes were stopped after their bounded observations.
+These facts accept coarse continuity, required-edge scope and unified activity publication only, not a
+sub-10-second timing claim, complete six-stage profitability, or the broader S1 completion statement below.
+
+The final local artifacts are under `logs/unified-refresh-final-5283154d/` in the impl integration worktree.
+The stopped log SHA-256 is `78c90c772b05f39922018ac538f762114278121dcdec906d5456748c1cfaef3d`;
+mid-history SHA-256 is `9eb159001c2d9228a01d53e883eba552ae668d078fa425f69f4cbf1c4959276f`;
+route-history SHA-256 is `a1549f12c696113f7de54ed25abafb33841c857d618c0dd1049c777c9639cce0`.
+The diagnostic manifest `/tmp/unified-refresh-final-tools.json` records the executed tools and has
+SHA-256 `795e0479b069aca0a68a06824d4658665f51ee94d7e21f15a56fdddf9b40ac5e`. Raw logs and secrets are not
+committed. The external local revm binary used for this observation has SHA-256
+`5fc6a63cc00875cbcdc8ee07cce1e0f9a26c945e72279be1b91f98f302af8c7e`.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
