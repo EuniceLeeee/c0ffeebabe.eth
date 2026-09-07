@@ -2054,6 +2054,51 @@ execution-projection, family and credit-runtime controls. Its separate GC contro
 test handles collectible after solve completion. Retention is proportional to admitted search points
 times hops during a solve; it is not claimed to be free, constant-memory or a persistent result cache.
 
+Runtime `e982ce0becdbe19e69bb4965f66156c1f8275f91` reused Ready12 with unchanged checkpoint
+SHA-256 `ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da`. Startup
+source `25925361` took 166.435 seconds. The fixed non-bootstrap window is `25925374..25925423`,
+50 timing/lifecycle records with no missing/duplicate heights, log end line 156,676. Evidence directory
+is `logs/solver-reuse-ready12-e982ce0b/`, run ID `fee41377-7943-4ad3-9f2f-96b3431cbfbc`.
+
+| Stage | Entered / 50 | p50 seconds | p90 seconds | p95 seconds | Max seconds |
+|---|---:|---:|---:|---:|---:|
+| Activity + pricing/Funding state | 50 | 2.319 | 4.488 | 5.172 | 14.270 |
+| Enumeration | 49 | 1.655 | 1.909 | 1.938 | 2.082 |
+| Exact refinement | 49 | 2.696 | 3.744 | 4.001 | 4.090 |
+| Planner/Solver | 45 | 6.299 | 7.182 | 7.805 | 8.816 |
+| Final simulation | 0 | not reached | not reached | not reached | not reached |
+| EV | 0 | not reached | not reached | not reached | not reached |
+
+One state stage failed, Exact completed 45 and failed four, Solver completed two and failed 43.
+Actual Solver starts were p50 60 / p90, p95 and max 100. The two completed Solver stages at
+`25925398` and `25925421` took 8.236/8.816 seconds, but their passes were already stale at
+17.062/17.063 seconds. Decisions were 44 `source_head_superseded`, four
+`exact_refinement_deadline` and two `blockscan_stale_state`. Terminal lifetime was p50 12.525 /
+p90 14.249 / p95 14.433 / max 17.063 seconds. Sixteen short terminated lifetimes are not successful
+passes; full EV completion remains **0/50**. The same search/candidate/transport configuration and
+EV-on/submission-off posture were retained; no rebuild/reattestation or confirmed Alchemy429 occurred.
+The task-owned processes stopped normally after the boundary. This unpaired window does not establish
+a live latency win for the proven duplicate-work removal.
+
+Manual analysis was reconciled through current `latency,single-block,production-events,state-coverage`
+selection and successful `analysis:blockscan-pass-latency` / `analysis:block-activity` executions.
+Process-banner lines `6..156676` bind startup plus 50; `fast` still means terminal lifetime, not EV.
+Target `25925424` joins source `25925423`, 49,485 mids, 512 routes, 100 Planner / 60 Solver entries
+and no final event. Manifest `/tmp/solver-reuse-first50-tools.json` final SHA-256:
+`7a0b7123079d934414e3e5b2ae571a8785578ab90b9ba590890d8adaac54e9ac`.
+
+### 16.16 Existing 32-worker quote configuration experiment (2026-09-07)
+
+The next single variable is process-local `SEARCHER_BLOCKSCAN_SOLVER_QUOTE_CONCURRENCY=32`,
+using the existing validated 1..64 setting. The production default stays 16; no global environment,
+runtime scheduling, Family, search/rank/admission or final-sim/EV code changes. The 100-plan queue,
+five grid plus four GSS points, three finalist fallbacks, Exact limits and transport 64-item/16-batch
+limits stay fixed. Ready12 and the first50 denominator are unchanged. The hypothesis is fewer quote
+worker turnovers with the same work, not lower coverage or cheaper individual RPC calls. More work
+may overlap and increase instantaneous RPC/CU pressure; a confirmed Alchemy429 ends the run immediately,
+without retries or provider/key switching. This is a configuration experiment, not a new production
+algorithm or a guaranteed ten-second result.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
