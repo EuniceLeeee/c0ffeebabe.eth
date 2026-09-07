@@ -1691,6 +1691,49 @@ SHA-256 `795e0479b069aca0a68a06824d4658665f51ee94d7e21f15a56fdddf9b40ac5e`. Raw 
 committed. The external local revm binary used for this observation has SHA-256
 `5fc6a63cc00875cbcdc8ee07cce1e0f9a26c945e72279be1b91f98f302af8c7e`.
 
+### 16.11 Source-N background final-simulation fork contract (2026-09-07)
+
+Runtime commit `ba30eff62a6cfa68d07ff631bc2e9bd1f5c5d28d` replaces the Source-N five-worker
+execution barrier with pass-owned background preparation of the reserved final-simulation workers only.
+With the observed configuration this means one fork, not four quote workers plus one final-sim worker.
+Preparation starts alongside the source-N pricing/Funding session. Enumeration, Exact and quote-only
+Planner/Solver do not await it; mandatory final simulation awaits its own worker immediately before use.
+Startup price bootstrap starts no speculative execution forks; the N-1 path retains its existing lazy fork.
+
+`blockscan-runtime-loop.ts` retains the existing `prepareBlockScanExecutionWorkerFork` source/hash and
+optional infrastructure-install checks. Its pass-owned `startBlockScanBackgroundFork` captures failures at
+launch, propagates cancellation, and drains/reaps interrupted, pending or failed work before the next pass
+can reuse workers. Healthy completed workers remain reusable through `anvil_reset`. After the asynchronous
+final wait, source/hash/generation, shutdown, cancellation and the final-sim deadline are checked again
+before invoking the simulator. No candidate ranking, admission cap, block scheduling, deadline, Family
+contract, final-sim decision or EV policy changed.
+
+The optional coordinator `prepareExecution` API remains available to other callers. When absent,
+`StrictCurrentRuntimeCoordinator.prepare` reports `executionMs=0`; it must not label pricing/Funding wait
+as execution preparation. Terminal pass events additionally record background worker count, actual fork
+durations/status, final-sim wait and cleanup time. Cleanup remains inside end-to-end timing. Zero final-sim
+wait on a pass that never entered final simulation is not proof of a completed simulation.
+
+The complete listener build and these existing contract suites passed: historical-live-production replay
+contract, strict production runtime session, final-simulation work runtime, state-fork cancellation,
+exact-refine deadline, blockscan contract, frozen topology and runtime defaults. Added regressions cover
+nonblocking foreground progress, one preparation shared by final-sim intents, captured early rejection,
+wrong-hash rejection before installation, cancellation/deadline/early-exit/retirement cleanup, and healthy
+fork reuse. The independent non-author review ran TypeScript checking plus four of those suites and found
+no issues in patch SHA-256 `f20ccc39363d1553da7c64e979880537e8acd675b4e8c9bc9c1120dadf2a1873`.
+These tests include mocks and source-wiring assertions; they do not by themselves establish live latency
+or a six-stage production result.
+
+The local real-head RPC observation reused Ready generation 12, range `25908396..25922795`, cutoff hash
+`0xc926d91e245b774742d6e8d5faf443373afa9080874e016e4cb29e2f46814a90`, without rebuilding or reattesting
+instances. Startup retained 28,113 admitted instances, a pricing catalog of 28,004 instances/55,765 edges,
+and the same Graph hash `8cd0c2df47c866d4e1dcb2c03fd3f0ba81695b0eaa92a28ab89de7adc4914c96`.
+The checkpoint SHA-256 before and after restart was
+`ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da`.
+The existing dry-run Ready shortcut was used only to disable submission and reuse admitted instances;
+price/Exact/Solver inputs still came from actual current mainnet heads. Backrun, mempool and MEV-Share
+remained disabled. The original detached worktree's 70 pre-existing dirty/untracked entries were untouched.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
