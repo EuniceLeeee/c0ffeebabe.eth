@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
+import { cachedCanonicalAddress as canonicalAddress } from "../../shared/canonical-address.js";
 import { univ2Adapter } from "../../adapters/univ2.js";
 import type { PoolEntry } from "../planner/token-graph.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
@@ -82,6 +83,52 @@ const SOURCE: CanonicalSource = Object.freeze({
   generation: 7,
 });
 const PROVENANCE = Object.freeze({ kind: "fixture", fingerprint: "fixture-v1" });
+
+// Successful primitive-string normalization may be reused, not weakened.
+const checkedAddress = ethers.getAddress("0x8ba1f109551bd432803012645ac136ddd64dba72");
+const validAddressForms = [
+  checkedAddress, checkedAddress.toLowerCase(),
+  `0x${checkedAddress.slice(2).toUpperCase()}`, checkedAddress.slice(2),
+  ethers.getIcapAddress(checkedAddress),
+];
+for (const value of validAddressForms) {
+  assert.equal(canonicalAddress(value), ethers.getAddress(value));
+  assert.equal(canonicalAddress(value), ethers.getAddress(value));
+  assert.equal(canonicalAddress(value), canonicalAddress(checkedAddress));
+}
+const badChecksum = "0x8Ba1f109551bD432803012645Ac136ddd64DBA72";
+const invalidAddressForms: unknown[] = [
+  badChecksum, "", "0x123", "0x" + "gg".repeat(20),
+  ` ${checkedAddress}`, `${checkedAddress} `,
+  null, undefined, 42, {}, new String(checkedAddress),
+];
+function addressError(check: () => unknown) {
+  try { check(); } catch (error) {
+    const { message, code, argument, value, shortMessage } = error as Error & {
+      code: string; argument: string; value: unknown; shortMessage: string;
+    };
+    return { message, code, argument, value, shortMessage };
+  }
+  assert.fail("invalid address unexpectedly accepted");
+}
+for (const value of invalidAddressForms) {
+  const expected = addressError(() => ethers.getAddress(value as string));
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.deepEqual(addressError(() => canonicalAddress(value as string)), expected);
+  }
+}
+// Churn beyond the bounded memo, then recheck both valid forms and the warmed
+// lowercase/invalid mixed-case collision. Eviction cannot change acceptance.
+for (let index = 1; index <= 5000; index++) {
+  const value = ethers.toBeHex(index, 20);
+  assert.equal(canonicalAddress(value), ethers.getAddress(value));
+}
+for (const value of validAddressForms) assert.equal(canonicalAddress(value), ethers.getAddress(value));
+assert.deepEqual(
+  addressError(() => canonicalAddress(badChecksum)),
+  addressError(() => ethers.getAddress(badChecksum)),
+);
+console.log("univ2 canonical address memo: PASS (exact keys, native errors, ICAP, churn)");
 
 assert.equal(
   quoteV2ExactInputLegacyExport,

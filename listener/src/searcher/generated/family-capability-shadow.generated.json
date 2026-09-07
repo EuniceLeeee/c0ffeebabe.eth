@@ -6348,7 +6348,7 @@
         "familyId": "univ2-standard",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "e1ba712bd21a6d094491b5b4876b200d2a535ef0be029762882fe84e846f015e",
+        "contentHash": "b048b98d034e144a94b6870bcca92d68d0408d6493ad3d0fdded35d23a751627",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -6360,7 +6360,8 @@
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/swaps/univ2-abi.ts",
           "src/searcher/venues/swaps/univ2-family/codec.ts",
-          "src/searcher/venues/swaps/univ2-family/manifest.ts"
+          "src/searcher/venues/swaps/univ2-family/manifest.ts",
+          "src/shared/canonical-address.ts"
         ],
         "provenanceCommit": null
       },
@@ -7684,5 +7685,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "02269b7f3fda384254a0982a97ccb52d5c824b5a47c9a682c50c9a700d678e1b"
+  "artifactHash": "b9ddb58d133bc1f2dc4975bdd7d08cbd953fa245d3d42f7c5a3b30363365c601"
 }

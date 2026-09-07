@@ -2264,8 +2264,9 @@ p50/p90/p95/max were27/59/59/59. Terminal lifetime p50/p90/p95/max was
 state, then1.570s enumerating: its label does not prove a30-second enumeration. Its pricing refresh
 spent26.673s and all43 selected instances failed; it issued no Funding offers.
 
-All48 recorded producer sessions used two batches instead of the previous window's three; physical
-limits and request scope remained unchanged. Funding p50/p95 was844/1409ms, and exact-session
+Of48 recorded producer sessions,46 used two batches instead of the previous window's three;
+the failed/interrupted sources25925878 and25925880 sent only one. Physical limits and request scope
+remained unchanged. Funding p50/p95 was844/1409ms, and exact-session
 Funding remained2/4ms over46 sessions (max7ms). Every recorded producer/exact cleanup had no pending
 or active transports. This confirms batch consolidation, **not a paired wall-time win**: network
 waits and effective resolved coverage differ materially. The final reconstructed mid snapshot contains
@@ -2283,6 +2284,45 @@ plus the fifty (52 total); its25 `fast` terminals are not EV successes. Activity
 joins source25925887:49,445 mids,512 enumerated, no Planner/Solver after its Exact deadline, no
 final events. Manifest `/tmp/funding-overlap-first50-tools.json` SHA-256:
 `22f9d680377ea25f93ec94e78551cfe3520a659ab32d86a2527a97b041b71cfb`.
+
+### 16.19 Reuse successful address checks inside UniV2 Exact
+
+Baseline is `9896ae0e8440cc07ff0b23b1f6de1d8e8574acd0`. UniV2 Exact now uses a bounded
+process-local memo for successful `ethers.getAddress` normalization in its private `sameAddress`.
+The key is the original primitive string, without coercion or case folding; invalid checks and
+non-string inputs retain native ethers behavior and are never cached. FIFO capacity is4096.
+This caches syntax/checksum computation only, not state, prices, amounts, route authority or
+freshness. All route/identity/ownership and final-sim/EV checks still execute. Common UniV2 codec,
+discovery, memo validation and every numerical runtime setting are unchanged.
+
+The generated manifest was rebuilt: among253 capability records only `univ2-standard/exact`
+and the overall artifact hash change. Ready12 was inspected with the production streaming
+checkpoint reader: all12,080 active UniV2 memos match the unchanged scoped compatibility hash
+`c20b32ea13f3e002fbab193a6509f2d777ed40abe6a1db115048f21fe8bed61a` (zero mismatches).
+Checkpoint SHA remains `ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da`;
+this requires no rebuild or instance revalidation. Exact capability identity changes honestly;
+the full catalog fingerprint must not be represented as unchanged.
+
+Four fresh-process offline pairs ran in order B1,C1,C2,B2,B3,C3,C4,B4, each excluding five
+warm-ups and retaining all100 measured strict solves plus600 production compile/hash calls.
+Baseline loaded its original Exact and generated manifest;409 common loaded sources matched.
+Ordered results, request/source/amount traces, Funding and calldata matched (900 searched points,
+1,800 exact calls,600 candidates per sample). Receipt stamps differ only in the declared
+compatibility fingerprint. Mean Solver CPU fell418.82→376.00ms and wall346.21→305.17ms;
+whole workload CPU621.61→571.28ms and wall528.84→480.94ms. Compile code is unchanged, so its
+timing variation is not attributed to the memo. The warmed four-edge fixture is not a live speedup
+or ten-second verdict. Evidence: ignored `logs/canonical-address-exact-paired-9896ae0e-results.json`.
+
+Build/live build, strict production/central sessions, adapter runtime/exact cache, UniV2 plugin,
+solver config (7/7), amount search (22/22), strict solver/concurrency, Funding, final simulation,
+bundle safety and historical-live replay contracts pass. Non-author review additionally executed
+TypeScript, manifest check, checkpoint rehydrator, plugin/session tests and diff check. Its2,342
+adversarial calls preserved native output/error parity;8,192 insertions verified bounded FIFO
+eviction and that failed/non-string checks do not mutate the memo. Reviewed four-listener-file
+full-index patch SHA-256: `0c7e2551f82dc5a94ab61a99bbe2b47e46e94c62183c2d900673f16083d0ae78`.
+Next observation retains the same Ready12 and all production settings, first50 consecutive
+non-bootstrap source blocks including failures, and immediate stop on confirmed Alchemy429.
+Signing/broadcast remain disabled; actual EV completion is still unvalidated.
 
 ## 17. Role of tests and tools
 

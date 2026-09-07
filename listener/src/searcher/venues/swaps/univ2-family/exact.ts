@@ -1,4 +1,5 @@
 import { quoteV2ExactInput } from "../../../solver/v2-constant-product-math.js";
+import { cachedCanonicalAddress } from "../../../../shared/canonical-address.js";
 import {
   localZeroExactMethod,
   type ExactQuoteSemantics,
@@ -6,7 +7,6 @@ import {
 } from "../../adapter-family-plugin.js";
 import {
   decodeReservesResult,
-  sameAddress,
   UNIV2_PAIR_INTERFACE,
 } from "./codec.js";
 import type {
@@ -120,6 +120,10 @@ function assertRoute(
   ) {
     throw new Error(`univ2 exact route binding does not match ${descriptor.pool}`);
   }
+}
+
+function sameAddress(left: string, right: string): boolean {
+  return cachedCanonicalAddress(left) === cachedCanonicalAddress(right);
 }
 
 function zeroEvidence(input: {
