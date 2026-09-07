@@ -2257,7 +2257,8 @@ successful steady pass. Ready12 checkpoint SHA is unchanged before/after; no reb
 Percentiles include failed entered stages, not zero-filled stages that never ran. Enumeration
 completion still describes the budgeted production stage, not exhaustive route coverage. All thirty
 Solver stages were interrupted; their shorter times are not completed solves. Solver-entry counts
-p50/p90/p95/max were27/59/59/59. Terminal lifetime p50/p90/p95/max was
+p50/p90/p95/max over all50 blocks (including zero starts) were27/59/59/59;
+among the30 entered Solver stages they were42/59/59/59. Terminal lifetime p50/p90/p95/max was
 9.645/14.094/14.682/30.444s. Twenty-five short terminal lifetimes do not count as successes:
 **EV-complete and EV-complete-under10s are both0/50**. Decisions:33 `source_head_superseded`,
 16 `exact_refinement_deadline`, one `scanner_deadline`. The latter source25925878 spent28.874s in
@@ -2323,6 +2324,53 @@ full-index patch SHA-256: `0c7e2551f82dc5a94ab61a99bbe2b47e46e94c62183c2d900673f
 Next observation retains the same Ready12 and all production settings, first50 consecutive
 non-bootstrap source blocks including failures, and immediate stop on confirmed Alchemy429.
 Signing/broadcast remain disabled; actual EV completion is still unvalidated.
+
+#### Ready12 fixed50 observation at `7c887c6b`
+
+Frozen runtime `7c887c6b119dcd151f3c4021b79bd7385bf491ec`, run
+`a9d82e5e-e06b-444c-b9ec-1ea6292f2fac`, ignored artifacts under
+`logs/address-memo-ready12-7c887c6b/`. First non-bootstrap window
+**25926042..25926091**, ending at line118353, has50 timing records without missing/duplicates.
+Separate source25926017 initialization completed degraded in303.714s; it is not steady success.
+Ready12 checkpoint SHA remains unchanged. The startup capability-manifest fingerprint is
+`fac17bc7a616c03aec1717aaf5db35131ca4fe3c0f6a2b4f2ba4d8fd1482f1f3`; Ready graph hash and
+stored Ready catalog hash remain the §16.18 values. No rebuild/revalidation or configuration changes.
+
+| Stage | Entered/completed blocks | p50 s | p90 s | p95 s | max s |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| State/activity + pricing/Funding | 50/50 | 3.821 | 5.005 | 5.388 | 15.555 |
+| Enumeration | 50/50 | 1.572 | 1.593 | 1.711 | 1.867 |
+| Exact | 50/29 | 3.592 | 4.010 | 4.015 | 4.016 |
+| Planner/Solver | 29/0 | 2.075 | 5.863 | 6.075 | 7.438 |
+| Actual final sim | 0/0 | — | — | — | — |
+| Production EV | 0/0 | — | — | — | — |
+
+All29 entered Solver stages were interrupted. Their started-plan counts p50/p90/p95/max were
+27/43/58/58, not100 completed plans. Terminal lifetime was10.327/13.960/14.597/18.102s;
+20 terminals below10s were cancellations/deadlines, not full-pipeline successes. Decisions were
+21 `exact_refinement_deadline` and29 `source_head_superseded`.
+**EV-complete and EV-complete-under10s remain0/50.** No paired live speedup is claimed for the
+address memo: this is a different block/network window, and offline CPU savings are not remote
+quote-latency savings.
+
+All50 Source-N sessions recorded pricing p50/p95=777/1436ms, Funding921/1568ms and
+projection33/72ms. All50 exact sessions retained same-source Funding reuse at2/3ms (max5ms).
+All50 Source-N backends sent two batches. The50 producer and50 exact final cleanup records
+all show zero pending/live items, in-flight batches and active transports; no batch failures or
+single-call fallbacks. The same window contains50 lifecycle records, without missing blocks.
+Final mid reconstruction has49,124/55,765 prices. The next distinct hypothesis is overlapping
+independent pricing and Funding preparation, with fresh join validation and settled siblings;
+it is not removal of the all-Solver boundary, a numerical concurrency change, or relaxed admission.
+
+The fixed-window guard normally stopped Node69889 at1788791533725; its Anvil69915 exited too,
+and both process/guard sessions returned zero. No confirmed Alchemy429. Existing unrelated
+processes and the original1511 worktree were untouched. Canonical reconciliation queried
+`latency,single-block,production-events,state-coverage` (337 indexed tools) and ran
+`analysis:blockscan-pass-latency` plus `analysis:block-activity`, both exit0. The latency view
+includes one bootstrap plus50=51 records, and its20 `fast` records are not EV success.
+Activity target25926092 joins source25926091:49,124 mids,512 enumerated,0Planner/Solver
+after Exact deadline,0final events. Manifest `/tmp/address-memo-first50-tools.json` SHA-256:
+`54d44204ac2aa94d013c3d06b350e9b4af486e9a0e31913f06b90379ac4fac31`.
 
 ## 17. Role of tests and tools
 
