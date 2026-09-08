@@ -45,9 +45,13 @@ export class BotVMSimulator {
     this.owner = owner;
   }
 
-  async simulate(plan: ResolvedPlan): Promise<SimulationResult> {
+  /** A cancelling owner must retire the fork; no later step may use its successor. */
+  async simulate(plan: ResolvedPlan, signal?: AbortSignal): Promise<SimulationResult> {
+    signal?.throwIfAborted();
     const snap = await this.state.snapshot();
+    signal?.throwIfAborted();
     const pre = await this.state.getTokenBalance(plan.profitToken, this.executor);
+    signal?.throwIfAborted();
     let calldata = "0x";
     try {
       const script = compilePlan(plan.root, this.executor);
@@ -58,9 +62,13 @@ export class BotVMSimulator {
         data: calldata,
         gas: "0x1000000",
       });
+      signal?.throwIfAborted();
       const gasUsed = await this.state.getGasUsed(txHash);
+      signal?.throwIfAborted();
       const post = await this.state.getTokenBalance(plan.profitToken, this.executor);
+      signal?.throwIfAborted();
       await this.state.revert(snap);
+      signal?.throwIfAborted();
       const grossProfit = post - pre;
       const success = grossProfit > 0n;
       return {
@@ -73,6 +81,9 @@ export class BotVMSimulator {
         scriptHex: bytesToHex(script),
       };
     } catch (err) {
+      // The cancelling final-sim owner retires/reaps this fork. A late revert
+      // through the shared backend could otherwise roll back its successor.
+      signal?.throwIfAborted();
       await this.state.revert(snap);
       return {
         success: false,

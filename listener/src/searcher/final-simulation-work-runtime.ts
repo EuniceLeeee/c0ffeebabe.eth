@@ -1010,7 +1010,7 @@ export function createBlockScanWorkerFinalSimulationRunner<
 >(): MandatoryFinalSimulationRunner<Worker, ResolvedPlan, SimulationResult> {
   return Object.freeze({
     simulate(input: FinalSimulationRunnerInput<Worker, ResolvedPlan>) {
-      return input.resource.simulator.simulate(input.resolvedPlan);
+      return input.resource.simulator.simulate(input.resolvedPlan, input.signal);
     },
     terminate(input: { readonly resource: Worker }): void {
       input.resource.state.stop();

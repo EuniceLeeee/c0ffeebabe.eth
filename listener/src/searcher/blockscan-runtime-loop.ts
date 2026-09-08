@@ -451,7 +451,10 @@ export function startBlockScanBackgroundFork(input: {
 }) {
   const controller = new AbortController();
   const detach = linkAbortController(input.signal, controller);
-  let outcome: PromiseSettledResult<void> | undefined;
+  // Pass cancellation prevents old work from using the fork; it does not by
+  // itself damage an already prepared, idle resource. The final-sim owner
+  // explicitly calls cancel() when interrupted execution retires the worker.
+  let reusable = false;
   let closed = false;
   let closing: Promise<void> | undefined;
   // Install the rejection handler at launch, including for synchronous errors.
@@ -459,13 +462,16 @@ export function startBlockScanBackgroundFork(input: {
     if (controller.signal.aborted) throw controller.signal.reason;
     return input.prepare(controller.signal);
   }).then(
-    (): PromiseSettledResult<void> =>
-      outcome = { status: "fulfilled", value: undefined },
+    (): PromiseSettledResult<void> => {
+      reusable = !controller.signal.aborted;
+      return { status: "fulfilled", value: undefined };
+    },
     (reason): PromiseSettledResult<void> =>
-      outcome = { status: "rejected", reason },
+      ({ status: "rejected", reason }),
   );
   return {
     cancel(reason: unknown): void {
+      reusable = false;
       controller.abort(reason);
     },
     async wait(signal: AbortSignal, deadlineAtMs: number): Promise<void> {
@@ -485,14 +491,14 @@ export function startBlockScanBackgroundFork(input: {
     close(reason: unknown): Promise<void> {
       if (closing !== undefined) return closing;
       closed = true;
-      const mustReap = outcome?.status !== "fulfilled" || controller.signal.aborted;
       controller.abort(reason);
       closing = (async () => {
         try {
           await ready;
-          // Retain healthy completed forks for anvil_reset reuse. Interrupted
-          // or failed work is drained/reaped before the next pass owns workers.
-          if (mustReap) await input.stopAndWait();
+          // Read after joining preparation, so late completion after abort
+          // cannot bless the resource. Retired simulations also still reap.
+          // Retained processes must use forkAt/anvil_reset for the next source.
+          if (!reusable) await input.stopAndWait();
         } finally {
           detach();
         }

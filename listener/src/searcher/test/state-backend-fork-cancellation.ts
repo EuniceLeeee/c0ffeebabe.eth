@@ -139,6 +139,37 @@ assert.deepEqual(
   "an expired fork deadline must not start a replacement process",
 );
 
+// send() itself has multiple awaits. A late transaction response must not
+// continue mining through the backend's newly installed successor provider.
+{
+  const sent = deferred<string>();
+  const methods: string[] = [];
+  let destroyed = false;
+  const original = {
+    async getBalance() { return 10n ** 24n; },
+    async send(method: string) {
+      if (destroyed) throw new Error("old provider destroyed");
+      methods.push(method);
+      if (method === "eth_sendTransaction") return sent.promise;
+      return true;
+    },
+    destroy() { destroyed = true; },
+  };
+  const pendingBackend = new AnvilStateBackend("http://archive.invalid");
+  pendingBackend.provider.destroy();
+  pendingBackend.provider = original as unknown as typeof pendingBackend.provider;
+  const pending = pendingBackend.send({ from: `0x${"11".repeat(20)}`, to: `0x${"22".repeat(20)}`, data: "0x" });
+  await waitUntil(() => methods.includes("eth_sendTransaction"), 250);
+  original.destroy();
+  let successorCalls = 0;
+  pendingBackend.provider = {
+    async send() { successorCalls++; throw new Error("successor touched"); },
+  } as unknown as typeof pendingBackend.provider;
+  sent.resolve(`0x${"ab".repeat(32)}`);
+  await assert.rejects(pending, /old provider destroyed/);
+  assert.equal(successorCalls, 0, "late send must stay on its destroyed original provider");
+}
+
 console.log("state-backend-fork-cancellation PASS");
 
 function deferred<T>(): Deferred<T> {

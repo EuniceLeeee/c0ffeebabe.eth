@@ -194,6 +194,43 @@ await background.close(new Error("idempotent cleanup"));
 assert.equal(stops, 0, "healthy completed fork retained for anvil_reset");
 await assert.rejects(background.wait(foreground.signal, Date.now() + 10_000));
 
+for (const mode of ["new-head", "terminate"] as const) {
+  const pass = new AbortController();
+  let reaped = 0;
+  const job = startBlockScanBackgroundFork({
+    signal: pass.signal,
+    async prepare() {},
+    async stopAndWait() { reaped++; },
+  });
+  await job.wait(pass.signal, Date.now() + 10_000);
+  pass.abort(new Error("new head after preparation completed"));
+  if (mode === "terminate") job.cancel(new Error("interrupted simulation"));
+  await assert.rejects(job.wait(pass.signal, Date.now() + 10_000));
+  await job.close(new Error("pass ended"));
+  await job.close(new Error("idempotent cleanup"));
+  assert.equal(reaped, mode === "terminate" ? 1 : 0,
+    "a cancelled pass retains an idle prepared fork, but never a retired simulation worker");
+}
+
+// A non-cooperative preparation may resolve after abort, before close begins.
+// Its late fulfillment must not turn an interrupted reset into a reusable fork.
+{
+  const pass = new AbortController();
+  const release = deferred();
+  let reaped = false;
+  const job = startBlockScanBackgroundFork({
+    signal: pass.signal,
+    async prepare() { await release.promise; },
+    async stopAndWait() { reaped = true; },
+  });
+  await Promise.resolve();
+  pass.abort(new Error("new head during preparation"));
+  release.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await job.close(new Error("pass ended after late preparation"));
+  assert.equal(reaped, true, "late completion after cancellation still requires reaping");
+}
+
 const failed = startBlockScanBackgroundFork({
   signal: foreground.signal,
   async prepare() { throw new Error("fork failed in background"); },

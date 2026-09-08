@@ -1004,16 +1004,19 @@ export class AnvilStateBackend implements StateBackend {
   }
 
   async send(req: { from: string; to: string; data: string; gas?: string }): Promise<string> {
-    const from = await prepareUnlockedSender(this.provider, req.from);
+    // Keep every step on the original transport. Retirement destroys it; a
+    // delayed balance/send result must not mine or send through a new fork.
+    const provider = this.provider;
+    const from = await prepareUnlockedSender(provider, req.from);
     const hash = await withTimeout(
-      this.provider.send("eth_sendTransaction", [{ ...req, from }]),
+      provider.send("eth_sendTransaction", [{ ...req, from }]),
       45_000,
       `eth_sendTransaction ${req.to}`,
     );
-    await mineOne(this.provider, "send", 120_000);
-    const receipt = await getReceipt(this.provider, hash, "send receipt");
+    await mineOne(provider, "send", 120_000);
+    const receipt = await getReceipt(provider, hash, "send receipt");
     if (!receipt || receipt.status !== 1) {
-      const detail = await traceRevert(this.provider, hash);
+      const detail = await traceRevert(provider, hash);
       throw new TransactionRevertedError(hash, detail || undefined);
     }
     return hash;

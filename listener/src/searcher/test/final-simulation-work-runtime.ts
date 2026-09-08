@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
+import type { ChildProcess } from "node:child_process";
+import { AnvilStateBackend } from "../../shared/state/state-backend.js";
+import { BotVMSimulator } from "../simulator/botvm-simulator.js";
+import { runOrderedBlockScanPipeline } from "../blockscan-ordered-pipeline.js";
 import {
   executeFinalSimulationWork,
   type AdapterGenerationFence,
@@ -9,6 +14,7 @@ import {
 import {
   FinalSimulationWorkRuntimeError,
   createBlockScanWorkerFinalSimulationRunner,
+  createBotVmFinalSimulationPlanIdentity,
   createFinalSimulationWorkRuntime,
   type FinalSimulationRunnerInput,
   type FinalSimulationTelemetryReceipt,
@@ -570,6 +576,64 @@ async function typedTerminalFailures(): Promise<void> {
   assert.equal(resourceHarness.runtime.snapshot().healthyResources, 0);
 }
 
+async function preparedForkCancellationOwnership(): Promise<void> {
+  for (const mode of ["completed", "active"] as const) {
+    const pass = new AbortController();
+    const started = deferred();
+    const release = deferred();
+    const reapStarted = deferred();
+    const reapFinished = deferred();
+    let reaped = 0;
+    let terminal = false;
+    const preparation = startBlockScanBackgroundFork({
+      signal: pass.signal,
+      async prepare() {},
+      async stopAndWait() {
+        reaped++;
+        reapStarted.resolve();
+        await reapFinished.promise;
+      },
+    });
+    await preparation.wait(pass.signal, Date.now() + 10_000);
+    const h = harness({
+      runner: {
+        async simulate(input) {
+          await preparation.wait(input.signal, input.schedule.deadlineAtMs);
+          started.resolve();
+          if (mode === "active") await release.promise;
+          return { id: input.resolvedPlan.id, bytesHex: input.resolvedPlanBytesHex };
+        },
+        terminate(input) { preparation.cancel(input.reason); },
+      },
+    });
+    const result = executeFinalSimulationWork({
+      intent: intent(51, plan(mode, "51", pass.signal)),
+      runtime: h.runtime,
+    });
+    await started.promise;
+    if (mode === "completed") await result;
+    pass.abort(new Error("new head after fork preparation"));
+    if (mode === "active") await runtimeFailure(result, "aborted");
+    h.runtime.close(new Error("pass ended"));
+    const closing = preparation.close(new Error("pass ended")).then(() => {
+      terminal = true;
+    });
+    if (mode === "active") {
+      await reapStarted.promise;
+      assert.equal(terminal, false, "interrupted simulation still awaits worker reaping");
+      assert.equal(h.runtime.snapshot().retiredResources, 1);
+    }
+    reapFinished.resolve();
+    await closing;
+    assert.equal(reaped, mode === "active" ? 1 : 0,
+      "only the final-sim owner's retirement invalidates a completed preparation");
+    release.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(h.runtime.snapshot().completed, mode === "completed" ? 1 : 0,
+      "a late interrupted simulation cannot publish into the next generation");
+  }
+}
+
 async function existingBlockScanRunnerAdapter(): Promise<void> {
   const resolvedPlan = Object.freeze({ id: "same-plan-reference" }) as unknown as
     ResolvedPlan;
@@ -583,11 +647,13 @@ async function existingBlockScanRunnerAdapter(): Promise<void> {
     scriptHex: "0xabcd",
   };
   let received: ResolvedPlan | null = null;
+  let receivedSignal: AbortSignal | undefined;
   let stopped = 0;
   const worker = {
     simulator: {
-      async simulate(candidate: ResolvedPlan): Promise<SimulationResult> {
+      async simulate(candidate: ResolvedPlan, signal?: AbortSignal): Promise<SimulationResult> {
         received = candidate;
+        receivedSignal = signal;
         return simulation;
       },
     },
@@ -605,6 +671,7 @@ async function existingBlockScanRunnerAdapter(): Promise<void> {
     maxAttempts: 1,
     fairnessKey: "mandatory-final-sim:test",
   };
+  const signal = new AbortController().signal;
   const result = await runner.simulate({
     resource: worker,
     source: source(50),
@@ -613,10 +680,11 @@ async function existingBlockScanRunnerAdapter(): Promise<void> {
     resolvedPlanBytesHex: "0xabcd",
     resolvedPlanSha256: hashBytes("0xabcd"),
     schedule,
-    signal: new AbortController().signal,
+    signal,
   });
   assert.equal(result, simulation);
   assert.equal(received, resolvedPlan);
+  assert.equal(receivedSignal, signal, "the real simulator must receive the retiring owner's signal");
   runner.terminate?.({
     resource: worker,
     reason: new FinalSimulationWorkRuntimeError(
@@ -628,13 +696,113 @@ async function existingBlockScanRunnerAdapter(): Promise<void> {
   assert.equal(stopped, 1, "existing timeout reaper must remain the terminator");
 }
 
+async function lateSimulatorCannotMutateSuccessor(): Promise<void> {
+  class Child extends EventEmitter {
+    exitCode: number | null = null;
+    signalCode: NodeJS.Signals | null = null;
+    kill(): boolean {
+      queueMicrotask(() => { this.signalCode = "SIGTERM"; this.emit("exit"); });
+      return true;
+    }
+  }
+  const postStarted = deferred();
+  const releasePost = deferred();
+  const writes: Array<{ generation: number; method: string }> = [];
+  const providerFor = (generation: number) => ({
+    async send(method: string) {
+      writes.push({ generation, method });
+      if (method === "evm_snapshot") return "0x1";
+      if (method === "eth_sendTransaction") return `0x${"ab".repeat(32)}`;
+      return true;
+    },
+    async getBalance() { return 10n ** 24n; },
+    async getTransactionReceipt() { return { status: 1, gasUsed: 1n }; },
+    destroy() {},
+  });
+  const state = new AnvilStateBackend("http://archive.invalid", "http://127.0.0.1:65534", 65534);
+  state.provider.destroy();
+  state.provider = providerFor(100) as unknown as typeof state.provider;
+  const seam = state as unknown as {
+    proc: ChildProcess;
+    spawnForkAt(block: number): Promise<void>;
+  };
+  seam.proc = new Child() as unknown as ChildProcess;
+  seam.spawnForkAt = async (block) => {
+    state.provider = providerFor(block) as unknown as typeof state.provider;
+    seam.proc = new Child() as unknown as ChildProcess;
+  };
+  let reads = 0;
+  state.call = async () => {
+    if (++reads === 2) { postStarted.resolve(); await releasePost.promise; return "0x1"; }
+    return "0x0";
+  };
+  const executor = `0x${"11".repeat(20)}`;
+  const worker = { state, simulator: new BotVMSimulator(state, executor, executor) };
+  const pass = new AbortController();
+  const preparation = startBlockScanBackgroundFork({
+    signal: pass.signal, async prepare() {}, stopAndWait: () => state.stopAndWait(),
+  });
+  await preparation.wait(pass.signal, Date.now() + 10_000);
+  const runner = createBlockScanWorkerFinalSimulationRunner<typeof worker>();
+  const resolved = { root: { adapterId: "skip" }, profitToken: `0x${"22".repeat(20)}` } as ResolvedPlan;
+  let rawSimulation!: Promise<SimulationResult>;
+  let pipelineSignal = pass.signal;
+  const runtime = createFinalSimulationWorkRuntime({
+    reservedResources: [{ id: "real-worker", value: worker }],
+    runner: {
+      async simulate(input) {
+        await preparation.wait(input.signal, input.schedule.deadlineAtMs);
+        rawSimulation = runner.simulate(input);
+        return rawSimulation;
+      },
+      terminate(input) { preparation.cancel(input.reason); runner.terminate?.(input); },
+    },
+    generationFence: { assertCurrent() { pipelineSignal.throwIfAborted(); } },
+    planIdentity: createBotVmFinalSimulationPlanIdentity({ executor }),
+    signalForIntent: () => pipelineSignal,
+    maxQueued: 0, timeoutMs: 10_000,
+  });
+  try {
+    const pipeline = runOrderedBlockScanPipeline({
+      count: 1, workers: [0], signal: pass.signal, deadlineAtMs: Date.now() + 10_000,
+      async produce() { return resolved; },
+      async consume(_index, candidate, signal) {
+        pipelineSignal = signal;
+        await executeFinalSimulationWork({
+          intent: { stage: "fork-final-sim", source: source(1), generation: 1, resolvedPlan: candidate },
+          runtime,
+        });
+      },
+    });
+    const rejected = runtimeFailure(pipeline, "aborted");
+    await postStarted.promise;
+    pass.abort(new Error("new head"));
+    await rejected;
+    runtime.close(new Error("old pass ended"));
+    await preparation.close(new Error("old pass ended"));
+    await state.forkAt(101);
+    releasePost.resolve();
+    await assert.rejects(rawSimulation);
+    assert.deepEqual(writes.filter((write) => write.generation === 101), [],
+      "old simulator must not revert/send through the successor after retirement");
+    assert.equal(runtime.snapshot().completed, 0);
+  } finally {
+    releasePost.resolve();
+    runtime.close();
+    await preparation.close(new Error("test ended"));
+    await state.stopAndWait();
+  }
+}
+
 await scheduleAndRethIsolation();
 await boundedIngressAndNoReuse();
 await generationFences();
 await planByteIntegrity();
 await typedTerminalFailures();
 await lazyForkCancellationDrain();
+await preparedForkCancellationOwnership();
 await existingBlockScanRunnerAdapter();
+await lateSimulatorCannotMutateSuccessor();
 
 console.log(
   "final-simulation-work-runtime PASS " +
