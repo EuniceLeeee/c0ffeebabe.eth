@@ -232,6 +232,11 @@ async function pendingCallTests(): Promise<void> {
         check.deepEqual(await Promise.all(requests.map((req) => client.callCached(req))), requests.map(() => RESULT));
         check.equal(client.stats().memoHits, beforeCacheHits.memoHits + count);
         check.equal(client.stats().totalCalls, beforeCacheHits.totalCalls, "memo-only hits must not issue logical calls");
+        check.equal(client.callCached(requests[0]!, {}, `0x${"cd".repeat(32)}`), undefined,
+          "cross-stage wrong source hash must miss without RPC or a cache hit");
+        check.equal(client.stats().memoHits, beforeCacheHits.memoHits + count);
+        check.equal(await client.callCached(requests[0]!, {}, `0x${"AB".repeat(32)}`), RESULT,
+          "cross-stage source hash comparison is case normalized");
         check.deepEqual(await Promise.all(requests.map((req) => client.call(req))), requests.map(() => RESULT));
         check.equal(items().length, count, "second-phase successes must use the original memo");
         for (const miss of [{ ...request, data: "0xbeef" }, { ...requests[0]!, to: OK_B }, { ...requests[0]!, from: OK_A }]) {

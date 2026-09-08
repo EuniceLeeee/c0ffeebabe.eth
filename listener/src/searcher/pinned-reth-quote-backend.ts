@@ -297,13 +297,21 @@ export class PinnedRethQuoteBackend
     return this.waitForSharedCall(memoKey, shared, control, req.to);
   }
 
-  /** Successful bytes only: a miss neither joins pending work nor issues I/O. */
+  /**
+   * Successful bytes only: a miss neither joins pending work nor issues I/O.
+   * Cross-stage consumers supply their source hash; a different pin is a miss.
+   */
   callCached(
     req: { to: string; data: string; from?: string },
     control: StateCallControl = {},
+    expectedSourceBlockHash?: string,
   ): Promise<string> | undefined {
     const error = this.callControlError(control, req.to);
     if (error) return Promise.reject(error);
+    if (
+      expectedSourceBlockHash !== undefined &&
+      expectedSourceBlockHash.toLowerCase() !== this.blockSpecifier.blockHash
+    ) return undefined;
     const cached = this.callMemo.get(persistentCallIdentity(this.sourceBlockHash, req).key);
     if (cached !== undefined) this.memoHits++;
     return cached;

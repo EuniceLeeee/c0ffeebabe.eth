@@ -130,7 +130,10 @@ export function createStrictCentralAdapterRuntime(input: {
    * scheduling, decoding, publication and generation authority.
    */
   readonly producerCallBackend?: Pick<StateBackend, "call">;
-  /** Successful same-source reads only; transport/retry on misses is unchanged. */
+  /**
+   * Successful same-source bytes for producer/Funding and ordinary Exact.
+   * Misses retain their original transport; no handles/authority are reused.
+   */
   readonly producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">;
   /** Upper bound on requests admitted per work batch; default 512. */
   readonly maxRequestsPerBatch?: number;
@@ -193,7 +196,8 @@ export function createStrictCentralAdapterRuntime(input: {
             execution.source,
             issueInput.control,
             callBackend,
-            rethLane === "producer-bulk" || rethLane === "producer-critical"
+            rethLane === "producer-bulk" ||
+              rethLane === "producer-critical" || rethLane === "exact"
               ? input.producerCallCache
               : undefined,
           );
@@ -391,7 +395,7 @@ async function executeRequest(
           const cached = producerCallCache?.callCached({
             to: request.to,
             data: request.data,
-          }, control);
+          }, control, source.hash);
           const data = cached !== undefined
             ? await cached
             : exactCallBackend === undefined

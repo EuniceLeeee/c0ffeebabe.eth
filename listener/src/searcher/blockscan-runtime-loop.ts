@@ -2311,7 +2311,7 @@ export class BlockScanRuntimeLoop {
          * request per logical quote even though the N-1 path is batched.
          * Funding and pricing preparation share the session, so the backend
          * is drained at the preparation-settle boundary, then reused by the
-         * same-source exact session for Funding reads. Only successful call
+         * same-source exact session for Funding and ordinary Exact reads. Only successful call
          * bytes are memoized; the new session still issues its own authority.
          * The backend keeps its producer lane and closes with this pass.
          */
@@ -2872,8 +2872,9 @@ export class BlockScanRuntimeLoop {
        * the producer's pricing session.  The pass-scoped quote backend is
        * created first so every exact eth_call issued by this session uses the
        * same source-pinned batch transport; the producer session remains the
-       * only pricing authority. Funding can reuse successful reads from that
-       * producer transport, never a prior block or a different generation.
+       * only pricing authority. Funding and ordinary Exact can reuse successful
+       * bytes from that producer transport (same upstream/chain), never a prior
+       * block or a different generation. Current Exact still issues authority.
        */
       if (sourcePricingCalls !== null && (
         sourcePricingCalls.source.number !== exactSource.number ||

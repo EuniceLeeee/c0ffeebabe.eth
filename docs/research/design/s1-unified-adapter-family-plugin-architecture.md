@@ -2621,6 +2621,33 @@ recorded simulation rejection. The fixed50 summary SHA-256 is
 `6058ba3a7b0c414fb8865c16f0b1f6c343d5444fbfe5d6ac248cd9cb3299bd08`.
 This remains an unpaired live observation, not a Hermes A/B performance win.
 
+### 16.23 Same-source producer bytes reused by ordinary Exact (2026-09-08)
+
+The central ordinary Exact lane can read the existing pass-owned producer's
+successful call memo before using its original Exact backend. This reuses bytes,
+not decoded quotes, handles or execution authority. The production handoff binds
+source number/hash/generation and the same upstream/chain; the memo additionally
+checks the consumer's source hash and its existing normalized hash/to/data/from
+identity. Amount-dependent calldata remains a distinct key. Misses neither join
+pending producer work nor issue producer I/O; failed reads are never memoized.
+Control checks still reject closed, aborted and expired consumers, and the current
+session performs its own authorization, decoding and publication.
+
+Against baseline `25d90775`, the loopback production-session regression counted
+five producer RPC items in one HTTP batch (four Funding plus one reserve read),
+then zero extra items for warm Funding and ordinary Exact. Cold ordinary Exact
+still issued one item through its original backend. Exact output and compiled
+execution matched the uncached baseline. Same-height/different-hash state with
+changed reserves bypassed the old memo and produced the new quote. Memo identity,
+caller control, cancellation, failure and drain regressions passed, as did listener
+build, live typecheck, strict production session, pinned quote backend, central
+runtime, ordered pipeline, historical-live replay contract and bundle-router
+safety. A non-author reviewer independently ran the session/backend/central gates
+and seven authority/lifecycle checks without mainnet RPC and reported no blocking
+finding. Reviewed runtime/test patch SHA-256:
+`24b84e71315c3c98bc5c7772c6e22646d46ef324093925824b1ade0478a345e5`.
+These are deterministic implementation results; live benefit is not yet measured.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.

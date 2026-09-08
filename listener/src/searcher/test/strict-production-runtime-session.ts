@@ -651,10 +651,40 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     assert.deepEqual(quote.source, CURRENT);
     assert.equal(refined.buildExecution({ edge, exact: quote, minAmountOut: quote.amountOut - 1n, executor: EXECUTOR }).status, "resolved");
     await exactBackend.drain();
-    assert.equal(wire.length, pricingWireCount + 1);
-    assert.equal(wire.at(-1)!.lane, "/exact", "exact quote must use its own cold backend despite warm producer reserves");
-    assert.equal(wire.at(-1)!.call.params[0].data, reservesSelector);
+    assert.equal(wire.length, pricingWireCount, "ordinary Exact must reuse successful same-source producer reserves");
+    assert.equal(producer.stats().memoHits, 3);
+    assert.equal(exactBackend.stats().totalCalls, 0);
     assert.equal(directReads, 0);
+    const baselineQuote = await baseline.issueExact({ edge: baseline.edges[0]!, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [] });
+    assert.equal(quote.amountOut, baselineQuote.amountOut);
+    assert.deepEqual(refined.buildExecution({ edge, exact: quote, minAmountOut: quote.amountOut - 1n, executor: EXECUTOR }),
+      baseline.buildExecution({ edge: baseline.edges[0]!, exact: baselineQuote, minAmountOut: baselineQuote.amountOut - 1n, executor: EXECUTOR }));
+
+    // Reorg/same-height different hash: mint fresh authority and use the
+    // ordinary fallback, never relabel the preceding producer's bytes.
+    let reorgReads = 0;
+    const reorgReserves = { ...pool.reserves, reserve1: pool.reserves.reserve1 * 2n };
+    const reorg = await twoTokenFundingRoot.createSession({
+      source: WRONG_HASH, kind: "exact", fundingAssets: [],
+      runtime: runtime(WRONG_HASH, { producerCallCache: producer, reserves: reorgReserves, onCurrentPricingRead() { reorgReads++; } }),
+    });
+    const reorgQuote = await reorg.issueExact({ edge: reorg.edges[0]!, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [] });
+    assert.equal(reorgReads, 1);
+    assert.deepEqual(reorgQuote.source, WRONG_HASH);
+    assert.ok(reorgQuote.amountOut > quote.amountOut);
+    assert.equal(producer.stats().memoHits, 3, "wrong source must not count a successful cache hit");
+
+    // No successful producer entry: Exact keeps its own cold transport.
+    const cold = await twoTokenFundingRoot.createSession({
+      source: CURRENT, kind: "exact", fundingAssets: [],
+      runtime: runtime(CURRENT, { producerCallCache: failedCache, exactCallBackend: exactBackend }),
+    });
+    const coldQuote = await cold.issueExact({ edge: cold.edges[0]!, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [] });
+    await exactBackend.drain();
+    assert.equal(coldQuote.amountOut, quote.amountOut);
+    assert.equal(wire.length, pricingWireCount + 1);
+    assert.equal(wire.at(-1)!.lane, "/exact");
+    assert.equal(wire.at(-1)!.call.params[0].data, reservesSelector);
 
     // A missing or failed cache entry must retain the old direct-provider path,
     // never enqueue/join producer transport. Fresh offers still decode normally.
@@ -729,7 +759,7 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     assert.equal(projectionBackend.stats().liveItems, 0);
     assert.equal(directReads, 0);
     assert.deepEqual(stubErrors, []);
-    console.log("strict Funding phase reuse: PASS (pricing 4 Funding + 1 reserve; exact Funding 0; exact quote 1 separate; miss/revert fallback 2 direct each)");
+    console.log("strict same-source phase reuse: PASS (pricing 4 Funding + 1 reserve; warm exact/Funding 0 RPC; cold exact 1; reorg bypass; miss/revert Funding 2 direct each)");
     console.log("strict pricing/Funding transport: PASS (one mixed batch; mixed failure unresolved; projection failure waits; caller drains)");
   } finally {
     const closed = await Promise.allSettled(backends.map((client) => client.closeAndDrain()));
