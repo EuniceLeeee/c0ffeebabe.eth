@@ -3029,6 +3029,50 @@ or completed-to-EV improvement is claimed before its own frozen Ready12
 fixed50 observation. The other batch4 items remain separate, and batch5 is
 still deferred by the user.
 
+Runtime `de72caf38fc6d2c856947a22629a401880eb9af7` subsequently completed its
+fixed50 source window25930521–25930570. There are50 terminal records with no
+missing/duplicates.42 blocks entered Solver (all interrupted),34 entered the
+final-sim caller, none returned a final-sim stage, and none completed EV.
+Two passes stopped in state preparation and6 in Exact. No complete-to-EV
+ten-second success is present.
+
+| Fixed50 observation (nearest-rank quantiles, ms) | n | p50 | p95 | max |
+| --- | ---: | ---: | ---: | ---: |
+| State stage | 50 | 3480.243 | 7493.013 | 18462.031 |
+| Exact refinement | 48 | 2869.442 | 4003.856 | 4015.004 |
+| First Solver entry | 42 | 7806 | 10031 | 10990 |
+| First final-sim caller entry | 34 | 8056 | 10213 | 10678 |
+| Pass terminal, including cancellation/drain | 50 | 14547.912 | 16930.822 | 18462.034 |
+
+Route occurrences:24576 enumerated,24377 Exact-attempted,18818 positive,
+4200 Planner entries,2244 Solver entries. Producer has49 terminal backend
+records,8964 created non-memo read items,109 batches,482 memo hits and4
+aborted batches. Exact/Solver has48 records,61206 created read items,1599
+batches,31170 memo hits and55 aborted batches. All recorded backends drained;
+missing backend records on earlier stage exits are not zero-cost success.
+There were no reported batch failures/fallbacks or completion-after-abort,
+and no explicit429 was observed. Mid history contains1 baseline and48 deltas;
+internal writer drop/queue telemetry remains unavailable. PID83786 exited0,
+ports8555–8560 cleared, and Ready12 checkpoint SHA remained unchanged.
+Signing/broadcast stayed off and no runtime edits occurred during observation.
+
+Artifacts: `logs/exact-completion-ready12-de72caf3/`, audited summary SHA-256
+`05650366df6c0978832ae208e774cd54d8fcc6ee5e586d5cff835a67d4531aaa`.
+Raw analysis was reconciled after generated query
+`latency,single-block,production-events,state-coverage`; selected
+`analysis:blockscan-pass-latency` and `analysis:block-activity` both exited0
+through tool-run. Manifest `/tmp/exact-completion-ready12-tools.json` SHA-256
+`b606e61886de29b0d84c59d41b38d0a1cb72f88c1e8519117e929c462b10e615`.
+Latency log lines2–137600 include bootstrap (51 records,9 fast terminals),
+not9 completed EVs. Target25930547/source25930546 joins512 enumerated routes,
+100 Planner entries and49 Solver entries to a complete mid reconstruction.
+
+This unpaired window is slower than batch3 on the displayed median metrics and
+has fewer downstream entries. It does not establish that the bookkeeping
+change caused that difference, nor prove an end-to-end improvement. Retain
+the locally validated bounded-notification mechanism without a speed-win
+claim; do not tune parameters, expand batch5 or rerun until a favorable window.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
