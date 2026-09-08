@@ -42,6 +42,8 @@ export interface BlockScanOutcome {
   scannedPairs: number;
   swapTouchedPools: number;
   opportunities: BlockScanOpportunity[];
+  /** Telemetry-only pre-cap results; never an Exact admission input. */
+  coarseEnumeration?: readonly BlockScanOpportunity[];
   /**
    * Produced by the actual selection branch, not filled in by the audit
    * recorder. This makes the blind producer's "no forced candidate" claim a
@@ -248,6 +250,7 @@ export function scanBlockStateFromResolvedMids(input: {
   routeEligible?: (edges: readonly TokenEdge[]) => boolean;
   /** Per-edge execution availability applied only to this scanner pass. */
   edgeEligible?: (edge: TokenEdge) => boolean;
+  captureCoarseEnumeration?: boolean;
   /** Non-semantic timing observer; never becomes part of scanner output. */
   onTiming?: (timing: BlockScanScanTiming) => void;
 }): BlockScanOutcome {
@@ -300,6 +303,9 @@ export function scanBlockStateFromResolvedMids(input: {
       scannedPairs,
       swapTouchedPools: touched?.size ?? 0,
       opportunities: selected.map((entry) => entry.opportunity),
+      ...(input.captureCoarseEnumeration
+        ? { coarseEnumeration: deduped.map((entry) => entry.opportunity) }
+        : {}),
       selection: Object.freeze({
         mode: "natural_ranked" as const,
         enumeratedCount: deduped.length,

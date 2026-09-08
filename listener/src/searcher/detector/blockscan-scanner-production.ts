@@ -25,6 +25,7 @@ export interface ProductionBlockScanInput {
   readonly cfg: BlockScanCoreConfig;
   readonly routeEligible?: (edges: readonly TokenEdge[]) => boolean;
   readonly edgeEligible?: (edge: TokenEdge) => boolean;
+  readonly captureCoarseEnumeration?: boolean;
 }
 
 export interface ProductionBlockScanOutcome extends BlockScanOutcome {
@@ -66,6 +67,7 @@ export function detectProductionBlockScanOpportunities(
     mids: input.runtime.pricing.mids,
     routeEligible: input.routeEligible,
     edgeEligible: input.edgeEligible,
+    captureCoarseEnumeration: input.captureCoarseEnumeration,
   });
   return Object.freeze({
     ...outcome,

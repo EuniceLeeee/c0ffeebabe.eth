@@ -110,6 +110,8 @@ test("block-activity resolves catalog refs and joins structured final events wit
       /blockscan-routes: target_block=100 source_block=99 status=complete/,
     );
     assert.match(stdout, /Enumeration: 3/);
+    assert.match(stdout, /Coarse enumeration: unknown_not_recorded/);
+    assert.match(stdout, /Coarse not selected: unknown_not_recorded/);
     assert.match(
       stdout,
       new RegExp(`rank=1 ref=17 route_id=${escapeRegex(ROUTE_A)} .*univ3-swap@0xpool-a`),
@@ -225,6 +227,64 @@ test("block-activity renders every schema-v2 route through exact, planner, solve
       stdout,
       /rank=22 ref=22 route_id=sha256:v2-route-22 .*selected_for_solver=false/,
     );
+  });
+});
+
+test("block-activity lists pre-cap routes and distinguishes cap from current-edge rejection", async () => {
+  await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
+    const count = 646;
+    const catalogs = Array.from({ length: count }, (_, index) => JSON.stringify({
+      type: "block_scan_route_catalog", schema_version: 2, run_id: "run-a",
+      catalog_epoch: 1, route_ref: index + 1, route_id: `sha256:coarse-${index + 1}`,
+      edge_ids: [`edge-in-${index + 1}`, `edge-out-${index + 1}`],
+      token_ring: [WETH, USDC, WETH],
+      venue_path: [["univ3-swap", `0xpool-in-${index + 1}`], ["univ2-swap", `0xpool-out-${index + 1}`]],
+      flash_token: WETH,
+    }));
+    await writeFile(routeEventsPath, [...catalogs, JSON.stringify({
+      ...JSON.parse(routeLifecycleWithMid(99, 98, [1, 2])),
+      coarse_enumeration: Array.from({ length: count }, (_, index) => index + 1),
+      coarse_selected_count: 3,
+    })].join("\n"));
+    const stdout = await runBlockActivity(eventsPath, logPath, routeEventsPath);
+    assert.match(stdout, /blockscan-routes: target_block=100 source_block=99 status=complete/);
+    assert.match(stdout, /Coarse enumeration: 646/);
+    assert.match(stdout, /Coarse selected: 3/);
+    assert.match(stdout, /Coarse not selected: 643/);
+    assert.match(stdout, /coarse_rank=3 ref=3 .*selection_reason=not_forwarded_to_exact exact_status=not_run/);
+    assert.match(stdout, /coarse_rank=646 ref=646 route_id=sha256:coarse-646 .*ring=.*edge_ids=\["edge-in-646","edge-out-646"\] selection_reason=coarse_candidate_cap exact_status=not_run planner_entered=false solver_entered=false/);
+    assert.equal(stdout.match(/selection_reason=coarse_candidate_cap/g)?.length, 643);
+    assert.match(stdout, /Enumeration: 2/);
+    assert.match(stdout, /Solver entered: 2/);
+    assert.match(stdout, /rank=1 ref=1 .*exact_status=positive .*planner_entered=true/);
+  });
+});
+
+test("block-activity rejects malformed coarse evidence and missing excluded catalogs", async () => {
+  for (const fields of [
+    { coarse_enumeration: [1, 2], coarse_selected_count: 0 },
+    { coarse_enumeration: [1, 2], coarse_selected_count: 3 },
+    { coarse_enumeration: [1, 1], coarse_selected_count: 1 },
+    { coarse_enumeration: [2, 1], coarse_selected_count: 1 },
+    { coarse_enumeration: [1] },
+    { coarse_selected_count: 1 },
+  ]) await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
+    await writeFile(routeEventsPath, [
+      routeCatalogWithEdges(1, ROUTE_A, ["edge-a"]),
+      JSON.stringify({ ...JSON.parse(routeLifecycleWithMid(99, 98, [1])), ...fields }),
+    ].join("\n"));
+    const stdout = await runBlockActivity(eventsPath, logPath, routeEventsPath);
+    assert.match(stdout, /status=unknown_invalid_route_events/);
+  });
+  await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
+    await writeFile(routeEventsPath, [
+      routeCatalogWithEdges(1, ROUTE_A, ["edge-a"]),
+      JSON.stringify({ ...JSON.parse(routeLifecycleWithMid(99, 98, [1])),
+        coarse_enumeration: [1, 2], coarse_selected_count: 1 }),
+    ].join("\n"));
+    const stdout = await runBlockActivity(eventsPath, logPath, routeEventsPath);
+    assert.match(stdout, /status=unknown_catalog_reference/);
+    assert.match(stdout, /unresolved_route_refs: 2/);
   });
 });
 

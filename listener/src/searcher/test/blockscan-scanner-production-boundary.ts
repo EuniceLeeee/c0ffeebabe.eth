@@ -106,6 +106,24 @@ assert.deepEqual(
 console.log("[blockscan-production-boundary] legacy/current-N kernel equivalence: PASS");
 
 {
+  const uncapped = detectProductionBlockScanOpportunities({ runtime, swapTouched: null, cfg });
+  const cappedCfg = { ...cfg, maxCandidates: 0 };
+  const disabled = detectProductionBlockScanOpportunities({
+    runtime, swapTouched: null, cfg: cappedCfg,
+  });
+  const captured = detectProductionBlockScanOpportunities({
+    runtime, swapTouched: null, cfg: cappedCfg, captureCoarseEnumeration: true,
+  });
+  const { coarseEnumeration, ...unchanged } = captured;
+  assert.deepEqual(unchanged, disabled, "capture must not change ranking, caps or admission");
+  assert.equal(disabled.coarseEnumeration, undefined);
+  assert.equal(captured.opportunities.length, 0);
+  assert.equal(coarseEnumeration?.length, captured.selection.enumeratedCount);
+  assert.deepEqual(coarseEnumeration, uncapped.opportunities);
+}
+console.log("[blockscan-production-boundary] optional pre-cap evidence preserves selection: PASS");
+
+{
   const graphHashBefore = runtime.graph.orderedEdgeHash;
   const eligibleFixtureEdges = runtime.graph.edges.filter(
     (edge) => edge.target.toLowerCase() !== pool2,
@@ -557,8 +575,12 @@ console.log("[blockscan-production-boundary] atomic funding coverage: PASS");
     canonicalPredecessorHash: blockHash,
     exactGraph: changedGraph,
     cfg,
+    captureCoarseEnumeration: true,
   });
   assert(changed.rejectedRouteCount > 0);
+  assert.equal(changed.candidates.length, 0);
+  assert.deepEqual(changed.scan.coarseEnumeration, changed.scan.opportunities,
+    "pre-rebase selected routes must survive in evidence even if current edges are incompatible");
   const taxonomyChangedGraph = createVerifiedGraphView({
     id: "production-boundary-changed-taxonomy",
     generation: exactGraph.generation,

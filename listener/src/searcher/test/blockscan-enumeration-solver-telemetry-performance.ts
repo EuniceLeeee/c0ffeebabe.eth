@@ -12,7 +12,8 @@ import {
 
 const RUN_COUNT = 20;
 const WARMUP_COUNT = 3;
-const ROUTE_COUNT = 512;
+const ROUTE_COUNT = 646;
+const EXACT_COUNT = 512;
 const SOLVER_COUNT = 100;
 const ROUTE_LEGS = 4;
 const BLOCKS_PER_DAY = 7_200;
@@ -46,7 +47,7 @@ try {
         orderSeed: `0x${ORDER_SEED.toString(16)}`,
         routeCount: ROUTE_COUNT,
         routeLegs: ROUTE_LEGS,
-        exactCount: ROUTE_COUNT,
+        exactCount: EXACT_COUNT,
         plannerCount: SOLVER_COUNT,
         p95DeltaMs: rounded(healthy.p95DeltaMs),
         p99DeltaMs: rounded(healthy.p99DeltaMs),
@@ -76,7 +77,7 @@ async function healthyBenchmark(
     eventsPath,
     runId: "performance-run",
     minFreeBytes: 1,
-    onWarning: (message) => warnings.push(message),
+    onWarning: (message) => { warnings.push(message); console.error(message); },
   });
   const disabled = await initBlockScanEnumerationSolverTelemetry({
     path: "",
@@ -146,8 +147,10 @@ async function healthyBenchmark(
     assert.equal(catalog.length, ROUTE_COUNT);
     assert.equal(lifecycle.length, WARMUP_COUNT + RUN_COUNT);
     for (const record of lifecycle) {
-      assert.equal((record.enumeration as unknown[]).length, ROUTE_COUNT);
-      assert.equal((record.exact as unknown[]).length, ROUTE_COUNT * 4);
+      assert.equal((record.coarse_enumeration as unknown[]).length, ROUTE_COUNT);
+      assert.equal(record.coarse_selected_count, EXACT_COUNT);
+      assert.equal((record.enumeration as unknown[]).length, EXACT_COUNT);
+      assert.equal((record.exact as unknown[]).length, EXACT_COUNT * 4);
       assert.equal((record.planner as unknown[]).length, SOLVER_COUNT);
       assert.equal((record.solver as unknown[]).length, SOLVER_COUNT);
       assert.equal("writer_gap_before" in record, false);
@@ -344,8 +347,8 @@ async function measuredPass(
   const started = performance.now();
   const pass = sink.beginPass(sourceBlock);
   if (pass) {
-    pass.recordEnumeration(fixture);
-    for (let index = 0; index < fixture.length; index++) {
+    pass.recordEnumeration(fixture.slice(0, EXACT_COUNT), fixture, EXACT_COUNT);
+    for (let index = 0; index < EXACT_COUNT; index++) {
       pass.recordExact(fixture[index]!, {
         index,
         status: "positive",
@@ -375,9 +378,12 @@ async function measuredPass(
   const elapsed = performance.now() - started;
   if (expectEnabled) {
     assert(pass, "enabled sink must reserve one batch");
+    assert.equal(sink.telemetry().droppedBatches, before.droppedBatches,
+      `unexpected dropped batch: ${JSON.stringify(sink.telemetry())}`);
     await waitFor(
-      () => sink.telemetry().acknowledged === before.acknowledged + 1,
+      () => sink.telemetry().failed || sink.telemetry().acknowledged === before.acknowledged + 1,
     );
+    assert.equal(sink.telemetry().failed, false, "healthy writer failed");
   } else {
     assert.equal(pass, null);
   }
@@ -391,8 +397,8 @@ function enqueuePass(
 ): void {
   const pass = sink.beginPass(sourceBlock);
   assert(pass, `expected queue credit for block ${sourceBlock}`);
-  pass.recordEnumeration(fixture);
-  for (let index = 0; index < fixture.length; index++) {
+  pass.recordEnumeration(fixture.slice(0, EXACT_COUNT), fixture, EXACT_COUNT);
+  for (let index = 0; index < EXACT_COUNT; index++) {
     pass.recordExact(fixture[index]!, {
       index,
       status: "positive",

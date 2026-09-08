@@ -50,6 +50,8 @@ interface RawRouteBatch {
   readonly passReason: string | null;
   readonly routes: readonly BlockScanRouteLocator[];
   readonly enumeration: readonly number[];
+  readonly coarseEnumeration?: readonly number[];
+  readonly coarseSelectedCount?: number;
   readonly exact: readonly CompactExactValue[] | null;
   readonly exactProbeWallMs?: readonly (number | null)[];
   readonly planner: readonly number[];
@@ -344,6 +346,10 @@ async function handleRouteBatch(batch: RawRouteBatch): Promise<void> {
     pass_outcome: batch.passOutcome,
     pass_reason: batch.passReason,
     enumeration: batch.enumeration.map(lookup),
+    ...(batch.coarseEnumeration === undefined ? {} : {
+      coarse_enumeration: batch.coarseEnumeration.map(lookup),
+      coarse_selected_count: batch.coarseSelectedCount,
+    }),
     exact: batch.exact,
     ...(batch.exactProbeWallMs === undefined ? {} : { exact_probe_wall_ms: batch.exactProbeWallMs }),
     planner: batch.planner.map(lookup),
@@ -362,7 +368,13 @@ async function handleRouteBatch(batch: RawRouteBatch): Promise<void> {
     blockRecord,
   );
   if (payloadBytes > options.maxEncodedBatchBytes) {
-    throw new Error(`route batch exceeds encoded cap ${payloadBytes}`);
+    // No catalog/file mutation has happened: reject only this oversized batch.
+    port.postMessage({
+      type: "ack", sequence: batch.sequence, ok: false,
+      dropped: "route_batch_byte_cap", bytesWritten: fileBytes,
+      midBytesWritten: midFileBytes,
+    });
+    return;
   }
   if (fileBytes + payloadBytes > options.maxFileBytes) {
     throw new Error("route telemetry epoch byte cap reached");
@@ -616,6 +628,20 @@ function validateBatch(batch: RawRouteBatch): void {
   }
   const validIndex = (index: number): boolean =>
     Number.isSafeInteger(index) && index >= 0 && index < batch.routes.length;
+  if (batch.coarseEnumeration !== undefined) {
+    const count = batch.coarseSelectedCount;
+    if (!Array.isArray(batch.coarseEnumeration) ||
+        !batch.coarseEnumeration.every(validIndex) ||
+        new Set(batch.coarseEnumeration).size !== batch.coarseEnumeration.length ||
+        count === undefined || !Number.isSafeInteger(count) || count < 0 ||
+        count > batch.coarseEnumeration.length) throw new Error("invalid coarse enumeration evidence");
+    const selected = new Set(batch.coarseEnumeration.slice(0, count));
+    if (!batch.enumeration.every((index) => selected.has(index))) {
+      throw new Error("Exact input escaped coarse selection");
+    }
+  } else if (batch.coarseSelectedCount !== undefined) {
+    throw new Error("coarse selection count without enumeration");
+  }
   if (
     !batch.enumeration.every(validIndex) ||
     !batch.planner.every(validIndex) ||

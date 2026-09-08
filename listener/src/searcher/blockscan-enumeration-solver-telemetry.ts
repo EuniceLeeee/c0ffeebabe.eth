@@ -14,8 +14,11 @@ import type {
 import type { RouteVenueMid } from "./venues/mid-readers.js";
 
 const DEFAULT_QUEUE_CREDITS = 5;
-const DEFAULT_MAX_BATCH_BYTES = 1024 * 1024;
-const DEFAULT_MAX_ROUTES = 512;
+// A cold catalog for 646 four-leg routes exceeds 1 MiB. Keep a bounded
+// envelope for pre-cap evidence without changing queue credits or search caps.
+const DEFAULT_MAX_BATCH_BYTES = 2 * 1024 * 1024;
+// Evidence cap only; does not change the scanner's 512 / Solver's 100 caps.
+const DEFAULT_MAX_ROUTES = 2_048;
 const DEFAULT_MAX_LEGS = 8;
 const DEFAULT_MAX_MID_FILE_BYTES = 2 * 1024 * 1024 * 1024;
 const DEFAULT_MAX_MID_RECORD_BYTES = 128 * 1024 * 1024;
@@ -37,7 +40,11 @@ export interface BlockScanRouteTelemetryFinish {
 }
 
 export interface BlockScanRouteTelemetryPass {
-  recordEnumeration(opportunities: readonly BlockScanOpportunity[]): void;
+  recordEnumeration(
+    opportunities: readonly BlockScanOpportunity[],
+    coarseEnumeration?: readonly BlockScanOpportunity[],
+    coarseSelectedCount?: number,
+  ): void;
   recordExact(
     opportunity: BlockScanOpportunity,
     diagnostic: BlockScanProbeDiagnostic,
@@ -113,6 +120,8 @@ interface RawRouteBatch {
   readonly passReason: string | null;
   readonly routes: readonly BlockScanRouteLocator[];
   readonly enumeration: readonly number[];
+  readonly coarseEnumeration?: readonly number[];
+  readonly coarseSelectedCount?: number;
   readonly exact: readonly CompactExactValue[] | null;
   readonly exactProbeWallMs?: readonly (number | null)[];
   readonly planner: readonly number[];
@@ -180,6 +189,7 @@ type WorkerReply =
       readonly type: "ack";
       readonly sequence: number;
       readonly ok: boolean;
+      readonly dropped?: "route_batch_byte_cap";
       readonly bytesWritten: number;
       readonly midBytesWritten: number;
       readonly reason?: string;
@@ -240,6 +250,8 @@ class RoutePass implements BlockScanRouteTelemetryPass {
   private readonly indexByOpportunity =
     new WeakMap<BlockScanOpportunity, number>();
   private readonly enumeration: number[] = [];
+  private coarseEnumeration: number[] | undefined;
+  private coarseSelectedCount: number | undefined;
   private readonly enumerationRouteIndexes = new Set<number>();
   private readonly enumerationOpportunities: BlockScanOpportunity[] = [];
   private readonly exact: Array<CompactExactValue | undefined> = [];
@@ -268,13 +280,23 @@ class RoutePass implements BlockScanRouteTelemetryPass {
       input: BlockScanRouteTelemetryFinish,
       invalid: boolean,
       exactProbeWallMs?: readonly (number | null)[],
+      coarseEnumeration?: readonly number[],
+      coarseSelectedCount?: number,
     ) => void,
   ) {}
 
-  recordEnumeration(opportunities: readonly BlockScanOpportunity[]): void {
+  recordEnumeration(
+    opportunities: readonly BlockScanOpportunity[],
+    coarseEnumeration?: readonly BlockScanOpportunity[],
+    coarseSelectedCount?: number,
+  ): void {
     if (this.finished || this.enumerationRecorded) return;
     this.enumerationRecorded = true;
-    if (opportunities.length > this.maxRoutes) {
+    if (
+      opportunities.length > this.maxRoutes ||
+      (coarseEnumeration?.length ?? 0) > this.maxRoutes ||
+      (coarseEnumeration === undefined && coarseSelectedCount !== undefined)
+    ) {
       this.invalid = true;
       return;
     }
@@ -285,6 +307,22 @@ class RoutePass implements BlockScanRouteTelemetryPass {
       this.enumerationOpportunities.push(opportunity);
     }
     this.exact.length = opportunities.length * 4;
+    if (coarseEnumeration !== undefined) {
+      this.coarseEnumeration = coarseEnumeration.map(
+        (opportunity) => this.routeIndex(opportunity),
+      );
+      this.coarseSelectedCount = coarseSelectedCount ?? opportunities.length;
+      const selectedIndexes = new Set(
+        this.coarseEnumeration.slice(0, this.coarseSelectedCount),
+      );
+      if (
+        !Number.isSafeInteger(this.coarseSelectedCount) ||
+        this.coarseSelectedCount < 0 ||
+        this.coarseSelectedCount > coarseEnumeration.length ||
+        new Set(this.coarseEnumeration).size !== this.coarseEnumeration.length ||
+        !this.enumeration.every((index) => selectedIndexes.has(index))
+      ) this.invalid = true;
+    }
   }
 
   recordExact(
@@ -362,6 +400,8 @@ class RoutePass implements BlockScanRouteTelemetryPass {
       input,
       this.invalid,
       this.exactProbeWallMs === undefined ? undefined : Object.freeze(this.exactProbeWallMs),
+      this.coarseEnumeration,
+      this.coarseSelectedCount,
     );
   }
 
@@ -450,10 +490,12 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
         input,
         invalid,
         exactProbeWallMs,
+        coarseEnumeration,
+        coarseSelectedCount,
       ) => {
         if (
           invalid ||
-          !this.validBatch(routes, enumeration, exact, planner, solver, exactProbeWallMs) ||
+          !this.validBatch(routes, enumeration, exact, planner, solver, exactProbeWallMs, coarseEnumeration) ||
           !validFinish(input)
         ) {
           this.releaseReserved();
@@ -474,6 +516,10 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
             : bounded(input.passReason, 160),
           routes: Object.freeze([...routes]),
           enumeration: Object.freeze([...enumeration]),
+          ...(coarseEnumeration === undefined ? {} : {
+            coarseEnumeration: Object.freeze([...coarseEnumeration]),
+            coarseSelectedCount,
+          }),
           exact,
           ...(exactProbeWallMs === undefined ? {} : { exactProbeWallMs }),
           planner: Object.freeze([...planner]),
@@ -689,6 +735,22 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
     this.outstanding = null;
     this.releaseReserved();
     if (!message.ok) {
+      if (message.dropped === "route_batch_byte_cap" && outstanding.kind === "route") {
+        // The worker staged but persisted nothing. Restore any earlier gap
+        // carried by this batch before recording its own drop and draining.
+        const gap = outstanding.gapBefore;
+        if (gap) {
+          const pending = this.pendingGap;
+          this.pendingGap = pending ? {
+            droppedBatches: pending.droppedBatches + gap.droppedBatches,
+            firstDroppedBlock: Math.min(pending.firstDroppedBlock, gap.firstDroppedBlock),
+            lastDroppedBlock: Math.max(pending.lastDroppedBlock, gap.lastDroppedBlock),
+          } : gap;
+        }
+        this.recordBatchDrop(outstanding);
+        this.drain();
+        return;
+      }
       this.recordBatchDrop(outstanding);
       this.fail(`route telemetry write failed: ${message.reason ?? "unknown"}`);
       return;
@@ -706,12 +768,14 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
     planner: readonly number[],
     solver: readonly number[],
     exactProbeWallMs?: readonly (number | null)[],
+    coarseEnumeration?: readonly number[],
   ): boolean {
     if (routes.length > this.maxRoutes) return false;
     const validIndex = (index: number): boolean =>
       Number.isSafeInteger(index) && index >= 0 && index < routes.length;
     if (
       !enumeration.every(validIndex) ||
+      !(coarseEnumeration ?? []).every(validIndex) ||
       !planner.every(validIndex) ||
       !solver.every(validIndex) ||
       (exact !== null &&
@@ -721,7 +785,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
         ))
     ) return false;
     let estimated = 640 +
-      (enumeration.length + planner.length + solver.length) * 8 +
+      (enumeration.length + (coarseEnumeration?.length ?? 0) + planner.length + solver.length) * 8 +
       (exact?.length ?? 0) * 10 + (exactProbeWallMs?.length ?? 0) * 17;
     for (const route of routes) {
       if (

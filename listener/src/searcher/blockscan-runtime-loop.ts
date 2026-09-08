@@ -562,7 +562,11 @@ interface BlockScanBlindDependencies {
 }
 
 export interface BlockScanEnumerationSolverPass {
-  recordEnumeration(opportunities: readonly BlockScanOpportunity[]): void;
+  recordEnumeration(
+    opportunities: readonly BlockScanOpportunity[],
+    coarseEnumeration?: readonly BlockScanOpportunity[],
+    coarseSelectedCount?: number,
+  ): void;
   recordExact(
     opportunity: BlockScanOpportunity,
     diagnostic: BlockScanProbeDiagnostic,
@@ -1648,9 +1652,13 @@ export class BlockScanRuntimeLoop {
     }
     const recordEnumeration = (
       opportunities: readonly BlockScanOpportunity[],
+      coarseEnumeration?: readonly BlockScanOpportunity[],
+      coarseSelectedCount?: number,
     ): void => {
       try {
-        routeTelemetryPass?.recordEnumeration(opportunities);
+        routeTelemetryPass?.recordEnumeration(
+          opportunities, coarseEnumeration, coarseSelectedCount,
+        );
       } catch {
         // Route evidence is fail-open and cannot alter enumeration.
       }
@@ -2593,9 +2601,12 @@ export class BlockScanRuntimeLoop {
           },
           routeEligible,
           edgeEligible,
+          captureCoarseEnumeration: routeTelemetryPass !== null,
         });
         coarse = productionCoarse;
-        recordEnumeration(coarse.opportunities);
+        recordEnumeration(
+          coarse.opportunities, coarse.coarseEnumeration, coarse.selection.selectedCount,
+        );
         auditSelectionMode = productionCoarse.selectionMode;
         auditForcedSelectionCount = productionCoarse.forcedSelectionCount;
         console.log(
@@ -2685,6 +2696,7 @@ export class BlockScanRuntimeLoop {
           },
           routeEligible,
           edgeEligible,
+          captureCoarseEnumeration: routeTelemetryPass !== null,
         });
         fallbackEnvelopes = fallbackCoarse.candidates;
         coarse = Object.freeze({
@@ -2693,7 +2705,9 @@ export class BlockScanRuntimeLoop {
             (candidate) => candidate.exactProbeOpportunity,
           ),
         });
-        recordEnumeration(coarse.opportunities);
+        recordEnumeration(
+          coarse.opportunities, coarse.coarseEnumeration, coarse.selection.selectedCount,
+        );
         console.log(
           `[searcher/blockscan-nminus1] ${JSON.stringify({
             block: blockNumber,

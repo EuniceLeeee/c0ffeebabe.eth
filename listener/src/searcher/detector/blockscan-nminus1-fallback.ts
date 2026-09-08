@@ -76,6 +76,7 @@ export function enumerateNMinusOneCoarseCandidates(input: {
   readonly cfg: BlockScanCoreConfig;
   readonly routeEligible?: (edges: readonly TokenEdge[]) => boolean;
   readonly edgeEligible?: (edge: TokenEdge) => boolean;
+  readonly captureCoarseEnumeration?: boolean;
 }): NMinusOneCoarseOutcome {
   const startedAtMs = Date.now();
   const coarse = input.coarsePricing;
@@ -115,6 +116,7 @@ export function enumerateNMinusOneCoarseCandidates(input: {
     mids: coarse.mids,
     routeEligible: input.routeEligible,
     edgeEligible: input.edgeEligible,
+    captureCoarseEnumeration: input.captureCoarseEnumeration,
     onTiming: (timing) => {
       scanTimingMs = timing;
     },

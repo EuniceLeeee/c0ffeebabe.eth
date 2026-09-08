@@ -63,6 +63,8 @@ interface RouteLifecycle {
   passOutcome: string;
   passReason: string | null;
   enumeration: number[];
+  coarseEnumeration: number[] | null;
+  coarseSelectedCount: number | null;
   exact: RouteExactDiagnostic[] | null;
   planner: number[] | null;
   solver: number[];
@@ -296,6 +298,7 @@ async function printStructuredRouteActivity(input: {
   const lifecycle = matching[0]!;
   const plannerRefs = lifecycle.planner ?? [];
   const refs = [
+    ...(lifecycle.coarseEnumeration ?? []),
     ...lifecycle.enumeration,
     ...plannerRefs,
     ...lifecycle.solver,
@@ -410,6 +413,24 @@ async function printStructuredRouteActivity(input: {
     finalEventsByRouteId.set(routeId, events);
   }
 
+  if (lifecycle.coarseEnumeration === null || lifecycle.coarseSelectedCount === null) {
+    console.log("      Coarse enumeration: unknown_not_recorded");
+    console.log("      Coarse not selected: unknown_not_recorded");
+  } else {
+    console.log(`      Coarse enumeration: ${lifecycle.coarseEnumeration.length}`);
+    console.log(`      Coarse selected: ${lifecycle.coarseSelectedCount}`);
+    console.log(`      Coarse not selected: ${lifecycle.coarseEnumeration.length - lifecycle.coarseSelectedCount}`);
+    lifecycle.coarseEnumeration.forEach((routeRef, index) => {
+      if (enumerationSet.has(routeRef)) return;
+      const reason = index >= lifecycle.coarseSelectedCount!
+        ? "coarse_candidate_cap" : "not_forwarded_to_exact";
+      const route = resolveCatalog(parsed, lifecycle, routeRef);
+      console.log(
+        `          coarse_rank=${index + 1} ref=${routeRef} ${formatRoute(route, midLookup)} ` +
+        `selection_reason=${reason} exact_status=not_run planner_entered=false solver_entered=false`,
+      );
+    });
+  }
   console.log(`      Enumeration: ${lifecycle.enumeration.length}`);
   lifecycle.enumeration.forEach((routeRef, index) => {
     const route = resolveCatalog(parsed, lifecycle, routeRef);
@@ -852,6 +873,18 @@ function parseLifecycle(value: JsonRecord): RouteLifecycle | null {
   const passOutcome = stringValue(value.pass_outcome);
   const passReason = nullableStringValue(value.pass_reason);
   const enumeration = integerArray(value.enumeration);
+  const hasCoarse = Object.hasOwn(value, "coarse_enumeration") || Object.hasOwn(value, "coarse_selected_count");
+  const coarseEnumeration = hasCoarse ? integerArray(value.coarse_enumeration) : null;
+  const coarseSelectedCount = hasCoarse ? nonnegativeInteger(value.coarse_selected_count) : null;
+  if (hasCoarse) {
+    if (
+      coarseEnumeration === null || coarseSelectedCount === null ||
+      coarseSelectedCount > coarseEnumeration.length ||
+      new Set(coarseEnumeration).size !== coarseEnumeration.length
+    ) return null;
+    const selected = new Set(coarseEnumeration.slice(0, coarseSelectedCount));
+    if (!(enumeration ?? []).every((ref) => selected.has(ref))) return null;
+  }
   const midSourceBlock = schemaVersion === 2 &&
       Object.hasOwn(value, "mid_source_block")
     ? nullableNonnegativeInteger(value.mid_source_block)
@@ -923,6 +956,8 @@ function parseLifecycle(value: JsonRecord): RouteLifecycle | null {
     passOutcome,
     passReason,
     enumeration,
+    coarseEnumeration,
+    coarseSelectedCount,
     exact,
     planner,
     solver,

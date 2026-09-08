@@ -3260,6 +3260,59 @@ No candidate/amount/ranking/concurrency/deadline reduction, provider migration,
 rebuild or fifth-batch Exact/Solver architecture change was used. Further work
 requires a new scoped decision; it is not automatically added to this phase.
 
+### 16.29 Pre-cap route evidence in block-activity (2026-09-08)
+
+When the existing writer reserves a pass, Source-N and N-1 enumeration retain
+the already-ranked/deduplicated pre-cap opportunity references. Additive
+schema-v2 `coarse_enumeration` stores their ordered integer route refs and
+`coarse_selected_count` records the original selected prefix. Existing
+`enumeration` remains the forwarded Exact input; its four-value Exact array,
+Planner/Solver identities and all search/admission behavior are unchanged.
+N-1 current-edge rebasing may remove entries from that prefix without erasing
+their coarse evidence. This records routes found within the existing scan
+budget, not every possible Graph cycle; it performs no extra search or RPC.
+
+`block-activity` resolves the existing catalog to show each omitted closed loop,
+canonical edges and `coarse_candidate_cap` versus `not_forwarded_to_exact`.
+Neither is a failed/negative Exact quote. Legacy records without the optional
+fields report `unknown_not_recorded`, not zero; invalid refs/counts/duplicates
+or missing catalogs remain unknown. Old live logs cannot be backfilled.
+
+The same bounded writer does encoding and disk I/O, with no hot-path disk wait.
+Its evidence-only limits are2,048 routes and2MiB per batch; queue credits5,
+100MiB epoch disk cap and50,000 catalog entries are unchanged. Limits or queue
+pressure can still leave explicit gaps, never an apparently complete truncated
+list. Encoded route-batch overflow discards only the staged batch, restores any
+prior gap, and keeps the writer usable; disk/error boundaries still disable it.
+
+Validation: writer9/9, block-activity19/19, production scanner boundary,
+scanner22/22, Exact refinement, strict production session, listener full/live
+builds and analysis typecheck pass. Tests cover646 full routes, forwarded Exact
+alignment after N-1 rebasing, legacy compatibility, catalog failure and real
+worker overflow followed by a successful gap-bearing batch. Independent
+non-author review identified the encoded-overflow issue; its recovery is
+covered by the regression above. The reviewer independently reran writer9/9
+and closed that finding with no remaining actionable recovery issue.
+
+The existing seeded20-pair recorder benchmark now captures646 four-leg routes,
+512 Exact and100 Planner/Solver entries. The original1MiB cap failed during
+warmup at1,164,323 encoded bytes. After the bounded2MiB adjustment, p95/p99
+enabled-minus-disabled main-thread cost was4.840/5.003ms; final code measured
+3.104/3.150ms, blocked-writer p99 0.016ms. Projected stable-catalog storage is
+91,965,310 bytes/day, below the unchanged100MiB limit. Rebuild remained running;
+these are whole-recorder local measurements, not incremental-only cost,
+zero-overhead proof or live full-pipeline acceptance.
+
+Actual old source25930772 still joins512 forwarded routes,100 Planner and46
+Solver entries, while pre-cap identities remain unknown. After raw evidence
+inspection, generated query `single-block,production-events` selected
+`analysis:block-activity`, executed through tool-run with exit0 and matching
+counts. Manifest `/tmp/coarse-enumeration-tools-20260908.json` SHA-256
+`442f9a5f37a727ee2b1ddae6f4a6fa37c86191784f19e54684e3ef38602b89bb`.
+This observability change does not restart the separately running fresh14400
+rebuild, start a new producer, sign or broadcast. New capture requires the next
+producer process to load this version.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
