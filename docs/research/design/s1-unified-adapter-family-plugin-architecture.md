@@ -2590,6 +2590,37 @@ blockscan contract 8/8, strict-ready runtime, bundle-router safety 6/6, listener
 build, live TypeScript check and diff whitespace check. These are implementation
 and regression results, not proof of a full live cycle below ten seconds.
 
+The first frozen observation used runtime
+`43daff2c937a37287ae9b1fb7537bdd10981722e`, PID27142 started 2026-09-08
+11:22:17 Asia/Shanghai, and unchanged Ready12 checkpoint SHA-256
+`ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da`.
+`logs/ordered-pipeline-ready12-43daff2c/` holds the raw run and guard anchors.
+The first50 nonbootstrap source window was fixed as25929937–25929986:50
+terminal records, no missing or duplicate source blocks.49 entered Solver,
+9 finished the Solver stage,4 entered final simulation and0 reached EV.
+All four observed simulation results rejected; none represents EV success.
+Terminal lifetime including cancelled work/cleanup was p50=14025.502ms,
+p95=16480.984ms, max=17006.842ms. Two terminal records were below10000ms;
+neither completed through EV. These are not full-cycle completion percentiles.
+Source25929939 started final sim at6861ms and finished it at11535ms,
+before Solver termination at13918ms: the removed batch barrier is observable,
+but ten-second end-to-end completion remains unproven. The process exited0
+after the owned guard reached the fixed50 boundary; no429 was recorded,
+rebuild/signing/broadcast remained off and the checkpoint hash was unchanged.
+
+Manual raw-record analysis was reconciled with the generated capability query
+`latency,single-block,production-events,state-coverage`, running
+`analysis:blockscan-pass-latency` and `analysis:block-activity` through tool-run
+(both exit0). Manifest `/tmp/ordered-pipeline-ready12-tools.json` SHA-256:
+`78b417d1d7717bea07db1d5e0c63a67a6e7ba0704553f76a44e752312027102f`.
+The latency tool's process-anchored line2–165898 scope includes one109296.741ms
+bootstrap (51 records), unlike the separately declared50-block steady window;
+its fast count is terminal duration, not EV completion. Block-activity's
+target25929940 maps to source25929939 and reconstructs45848 mids with a
+recorded simulation rejection. The fixed50 summary SHA-256 is
+`6058ba3a7b0c414fb8865c16f0b1f6c343d5444fbfe5d6ac248cd9cb3299bd08`.
+This remains an unpaired live observation, not a Hermes A/B performance win.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
