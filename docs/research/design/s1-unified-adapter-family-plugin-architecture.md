@@ -3203,6 +3203,63 @@ the timing value is never execution authority or proof of an admitted Exact.
 The final frozen Ready12 fixed50 observation retains all original search work,
 signing/broadcast off and the explicit429 stop; batch5 remains deferred.
 
+Runtime `b97d01711732809b9e5b4c372e1dbd853f64473a` completed fixed50 sources
+25930771–25930820.50/50 terminal and route records are present, without missing
+or duplicate terminal blocks.42 blocks entered Solver (1 completed that stage,
+41 interrupted);32 entered the final-sim caller;4 returned simulation stages
+with4 recorded reverts. Eight stopped in Exact; no EV completed.
+
+| Fixed50 observation (nearest-rank quantiles, ms) | n | p50 | p95 | max |
+| --- | ---: | ---: | ---: | ---: |
+| State stage | 50 | 3139.601 | 6280.671 | 8736.555 |
+| Exact refinement | 50 | 2537.683 | 4002.052 | 4010.045 |
+| First Solver entry | 42 | 7181 | 8924 | 9597 |
+| First final-sim caller entry | 32 | 7973 | 10453 | 10795 |
+| Pass terminal, including cancellation/drain | 50 | 12900.136 | 16881.216 | 19350.767 |
+
+Route occurrences:25600 enumerated,25398 Exact-attempted,18757 positive,
+4170 Planner entries and2423 Solver entries.49 route records contain the new
+duration array, with21385 measured durations (all over100ms in this window),
+zero invalid/misaligned values and no missing duration for a positive/negative
+margin result. Source25930820 had no completed margin and no timing array.
+There are no `[exact-probe]` timing lines in the whole process log, while2430
+`[exact-probe-fail]` lines remain. This confirms source recording and removed
+text, not a measured seconds-level net speedup. One mid baseline plus50 deltas
+are present; internal writer queue/drop counters remain unavailable.
+
+Producer counters:9149 created non-memo read items,99 batches,455 memo hits.
+Exact/Solver:64781 created read items,1710 batches,33344 memo hits and73
+aborted batches. All50 recorded backends of each kind drained; no batch
+failures/fallbacks or completion-after-abort were reported. No explicit429 was
+observed. PID18745 exited0; its guard ended, ports8555–8560 cleared and the
+Ready12 checkpoint hash remained unchanged. No runtime edits, rebuild, signing
+or broadcast occurred during the observation. Bootstrap at25930757 took
+170351.324ms; source25930821's shutdown record is outside the fixed window.
+
+Artifacts: `logs/exact-probe-writer-ready12-b97d0171/`; audited summary SHA-256
+`dc0c414372c2d37b4eece3794e20eb8e49ada7624367055a049672bfb6301dc8`.
+After raw analysis the generated
+`latency,single-block,production-events,state-coverage` query selected
+`analysis:blockscan-pass-latency` and `analysis:block-activity`; both executed
+through tool-run with exit0. Manifest `/tmp/exact-probe-writer-ready12-tools.json`
+SHA-256`649eff8531271e0b8ab7e5f461568625d61bbd6fb8e15a59338c3c8330682149`.
+Latency scope lines2–122397 includes bootstrap (51 records,9 fast terminals),
+not9 completed EVs. Target25930797/source25930796 reconstructs49410 mids and
+joins512 routes,99 Planner entries and46 Solver entries. Existing analysis
+works with the additive timing column and agrees with raw lifecycle evidence.
+
+The finite batch3/4 implementation and prescribed observations are complete.
+Each independent runtime was built, contract-tested, non-author reviewed,
+committed/pushed and observed on the unchanged Ready12 input with fixed50
+denominators. Instance/fingerprint lookup has direct removed-work evidence;
+Funding overlap, completion notifications and logging have scoped mechanism
+evidence but no causal end-to-end speed-win proof. All four new windows have
+zero completed EVs: completing this finite phase is not the original
+every-block-under10-seconds target or six-step production-gap acceptance.
+No candidate/amount/ranking/concurrency/deadline reduction, provider migration,
+rebuild or fifth-batch Exact/Solver architecture change was used. Further work
+requires a new scoped decision; it is not automatically added to this phase.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
