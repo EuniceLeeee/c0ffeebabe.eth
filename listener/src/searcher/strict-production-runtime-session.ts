@@ -194,8 +194,9 @@ export interface StrictReadyPricingIndex {
 export class StrictProductionRuntimeRoot {
   readonly #catalog: FamilyCapabilityCatalog;
   readonly #readySource: CanonicalSource;
-  readonly #readyGraph: readonly TokenEdge[];
+  readonly #readyEdgeBindings: ReadonlyMap<CanonicalEdgeId, string>;
   readonly #readyInstances: readonly PreparedFamilyInstance[];
+  readonly #instanceIndexesByKey: ReadonlyMap<string, readonly number[]>;
   readonly #pricingIndex: StrictReadyPricingIndex;
   readonly #readyFundingAssetsByFamily: ReadonlyMap<
     FamilyId,
@@ -210,17 +211,18 @@ export class StrictProductionRuntimeRoot {
     readonly readyFundingAssets: readonly StrictReadyFundingAsset[];
   }) {
     assertCanonicalSource(input.readySource);
-    const graphIds = new Set<string>();
+    const readyEdgeBindings = new Map<CanonicalEdgeId, string>();
     for (const edge of input.readyGraph) {
       const edgeId = requiredCanonicalEdgeId(edge);
-      if (graphIds.has(edgeId)) {
+      if (readyEdgeBindings.has(edgeId)) {
         throw new Error(`strict ready Graph duplicates ${edgeId}`);
       }
-      graphIds.add(edgeId);
+      readyEdgeBindings.set(edgeId, edgeBindingFingerprint(edge));
     }
     const instanceKeys = new Set<string>();
     const stateKeyByRouteIdentity = new Map<string, string>();
     const instanceIndexesByStateKey = new Map<string, number[]>();
+    const instanceIndexesByKey = new Map<string, number[]>();
     for (let index = 0; index < input.readyInstances.length; index++) {
       const instance = input.readyInstances[index]!;
       const family = input.catalog.forStrictFamily(instance.familyId);
@@ -232,6 +234,10 @@ export class StrictProductionRuntimeRoot {
         throw new Error(`strict ready instances duplicate ${key}`);
       }
       instanceKeys.add(key);
+      const instanceKey = instanceKeyFor(instance);
+      const indexes = instanceIndexesByKey.get(instanceKey) ?? [];
+      indexes.push(index);
+      instanceIndexesByKey.set(instanceKey, indexes);
       for (const pricing of instance.pricingInstances) {
         const stateKey = String(pricing.stateKey).toLowerCase();
         const stateIndexes = instanceIndexesByStateKey.get(stateKey) ?? [];
@@ -275,8 +281,11 @@ export class StrictProductionRuntimeRoot {
     }
     this.#catalog = input.catalog;
     this.#readySource = Object.freeze({ ...input.readySource });
-    this.#readyGraph = Object.freeze([...input.readyGraph]);
+    this.#readyEdgeBindings = readyEdgeBindings;
     this.#readyInstances = Object.freeze([...input.readyInstances]);
+    this.#instanceIndexesByKey = new Map([...instanceIndexesByKey].map(
+      ([key, indexes]) => [key, Object.freeze(indexes)],
+    ));
     this.#readyFundingAssetsByFamily = new Map(
       [...fundingAssetsByFamily.entries()].map(([id, assets]) => [
         id,
@@ -330,6 +339,13 @@ export class StrictProductionRuntimeRoot {
             input.touchedPools,
           )
       : [];
+    // Preserve the old instance-key selection and Ready order, including
+    // different Families sharing a key, without scanning all Ready instances.
+    const selectedExactInstances = kind !== "pricing" && requiredInstanceKeys !== undefined
+      ? [...new Set([...requiredInstanceKeys].flatMap((key) =>
+          this.#instanceIndexesByKey.get(key) ?? []
+        ))].sort((left, right) => left - right).map((index) => this.#readyInstances[index]!)
+      : this.#readyInstances;
     let refreshedInstanceCount = 0;
     const skippedCleanInstanceCount = kind === "pricing" &&
         input.touchedPools !== undefined
@@ -474,15 +490,11 @@ export class StrictProductionRuntimeRoot {
        * local and keeps exact work on the pinned source without paying the
        * producer's 3k-instance refresh cost a second time.
        */
-      for (const readyInstance of this.#readyInstances) {
+      for (const readyInstance of selectedExactInstances) {
         const strictFamily = this.#catalog.forStrictFamily(
           readyInstance.familyId,
         );
         if (strictFamily.plugin.manifest.domain === "credit") {
-          if (
-            requiredInstanceKeys !== undefined &&
-            !requiredInstanceKeys.has(instanceKeyFor(readyInstance))
-          ) continue;
           const currentInstance = reissuePreparedInstanceAuthority({
             family: strictFamily,
             instance: readyInstance,
@@ -498,14 +510,6 @@ export class StrictProductionRuntimeRoot {
           creditRoutes.push(...publication.routes.map((route) =>
             projectCreditRouteGraph({ family: strictFamily, route })
           ));
-          continue;
-        }
-        if (
-          requiredInstanceKeys !== undefined &&
-          !requiredInstanceKeys.has(instanceKeyFor(readyInstance))
-        ) {
-          // Exact sessions re-issue the complete edge closure requested by
-          // coarse enumeration, never an independent touched-pool scope.
           continue;
         }
         const family = this.#catalog.forFamily(readyInstance.familyId);
@@ -532,7 +536,7 @@ export class StrictProductionRuntimeRoot {
 
     const routeProjectionStartedAtMs = Date.now();
     const view = buildFamilyRouteGraphView({ routes, creditRoutes });
-    assertSameReadyTopology(this.#readyGraph, view.edges);
+    assertSameReadyTopology(this.#readyEdgeBindings, view.edges);
     assertRequiredEdgeIdsPresent(view.edges, requiredEdgeIds);
     const bindings = new Map<CanonicalEdgeId, StrictRouteBinding>();
     const currentPricing = new Map<
@@ -599,11 +603,7 @@ export class StrictProductionRuntimeRoot {
     }
     const selectedInstanceCount = kind === "pricing"
       ? selectedPricingInstanceIndexes.length
-      : requiredInstanceKeys === undefined
-        ? this.#readyInstances.length
-      : this.#readyInstances.filter((instance) =>
-          requiredInstanceKeys.has(instanceKeyFor(instance))
-        ).length;
+      : selectedExactInstances.length;
     const creationTiming: StrictProductionSessionCreationTiming = Object.freeze({
       readyInstanceCount: this.#readyInstances.length,
       selectedInstanceCount,
@@ -1578,18 +1578,13 @@ function scannerConsumesPricingEdge(edge: {
 
 /**
  * The refreshed view is the current-block touched subset of the ready
- * graph: every view edge must exist in the ready graph with the same
- * binding fingerprint, while the ready graph may legitimately contain more
- * (untouched venues have no current mid this block).
+ * graph: every view edge must match the immutable startup binding. The Ready
+ * graph may contain more edges; clean mid continuity is published separately.
  */
 function assertSameReadyTopology(
-  ready: readonly TokenEdge[],
+  readyById: ReadonlyMap<CanonicalEdgeId, string>,
   current: readonly TokenEdge[],
 ): void {
-  const readyById = new Map(ready.map((edge) => [
-    requiredCanonicalEdgeId(edge),
-    edgeBindingFingerprint(edge),
-  ]));
   for (const edge of current) {
     const edgeId = requiredCanonicalEdgeId(edge);
     if (readyById.get(edgeId) !== edgeBindingFingerprint(edge)) {

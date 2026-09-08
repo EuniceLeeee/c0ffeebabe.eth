@@ -805,6 +805,88 @@ const parallelRoot = new StrictProductionRuntimeRoot({
   readyInstances: parallelReadyInstances,
   readyFundingAssets,
 });
+
+// Instrument reads around real lifecycle-issued instances/Graph edges, not
+// fabricated runtime handles. An empty Funding closure must not walk Ready.
+let indexedFamilyLookups = 0;
+let readyEdgeReads = 0;
+const indexedCatalog = new Proxy(PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG, {
+  get(target, property) {
+    const value = Reflect.get(target, property, target);
+    if (typeof value !== "function") return value;
+    return (...args: unknown[]) => {
+      if (property === "forStrictFamily") indexedFamilyLookups++;
+      return Reflect.apply(value, target, args);
+    };
+  },
+});
+const indexedRoot = new StrictProductionRuntimeRoot({
+  catalog: indexedCatalog,
+  readySource: STARTUP,
+  readyGraph: parallelStartupView.edges.map((edge) => new Proxy(edge, {
+    get(target, property) { readyEdgeReads++; return Reflect.get(target, property, target); },
+  })),
+  readyInstances: parallelReadyInstances,
+  readyFundingAssets,
+});
+indexedFamilyLookups = 0;
+readyEdgeReads = 0;
+const emptyIndexed = await indexedRoot.createSession({
+  source: CURRENT, runtime: runtime(CURRENT), fundingAssets: [],
+  kind: "exact", requiredEdgeIds: new Set(),
+});
+assert.equal(emptyIndexed.edges.length, 0);
+assert.equal(emptyIndexed.creationTiming.selectedInstanceCount, 0);
+assert.equal(indexedFamilyLookups, 0, "empty exact closure must not inspect Ready Families");
+assert.equal(readyEdgeReads, 0, "session validation must reuse startup edge bindings");
+
+const selectedReadyKeys = new Set<string>([
+  parallelReadyInstances[2]!.instanceKey, parallelReadyInstances[17]!.instanceKey,
+]);
+const selectedReadyEdges = parallelStartupView.edges.filter((edge) =>
+  selectedReadyKeys.has(edge.instanceKey!)
+);
+const indexedSubset = await indexedRoot.createSession({
+  source: CURRENT, runtime: runtime(CURRENT), fundingAssets: [], kind: "exact",
+  // Reverse closure input; two directions share each instance owner.
+  requiredEdgeIds: new Set([...selectedReadyEdges].reverse().map((edge) => edge.canonicalEdgeId!)),
+});
+assert.equal(indexedSubset.creationTiming.selectedInstanceCount, 2);
+assert.equal(indexedSubset.creationTiming.refreshedInstanceCount, 0);
+assert.deepEqual(indexedSubset.edges.map((edge) => edge.canonicalEdgeId),
+  selectedReadyEdges.map((edge) => edge.canonicalEdgeId), "preserve Ready projection order");
+assert(indexedFamilyLookups < parallelReadyInstances.length, "narrow exact must avoid all-Ready Family lookup");
+assert.equal(readyEdgeReads, 0);
+const indexedQuoteOutputs = new Map<string, bigint>();
+for (const edge of indexedSubset.edges) {
+  const quote = await indexedSubset.issueExact({
+    edge, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [],
+  });
+  assert.equal(quote.status, "resolved");
+  indexedQuoteOutputs.set(edge.canonicalEdgeId!, quote.amountOut);
+}
+const indexedAll = await indexedRoot.createSession({
+  source: CURRENT, runtime: runtime(CURRENT), fundingAssets: [], kind: "exact",
+});
+assert.equal(indexedAll.creationTiming.selectedInstanceCount, parallelReadyInstances.length);
+assert.deepEqual(indexedAll.edges.map((edge) => edge.canonicalEdgeId),
+  parallelStartupView.edges.map((edge) => edge.canonicalEdgeId));
+assert.equal(readyEdgeReads, 0);
+for (const edge of indexedAll.edges.filter((edge) => indexedQuoteOutputs.has(edge.canonicalEdgeId!))) {
+  const quote = await indexedAll.issueExact({
+    edge, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [],
+  });
+  assert.equal(quote.amountOut, indexedQuoteOutputs.get(edge.canonicalEdgeId!));
+}
+assert.throws(() => new StrictProductionRuntimeRoot({
+  catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+  readySource: STARTUP,
+  readyGraph: parallelStartupView.edges.map((edge, index) =>
+    index === 0 ? { ...edge, target: ethers.ZeroAddress } : edge
+  ),
+  readyInstances: parallelReadyInstances, readyFundingAssets,
+}), /route contract differs/, "cached bindings must not admit a mismatched startup Graph");
+
 let activePricingReads = 0;
 let maxActivePricingReads = 0;
 let totalParallelPricingReads = 0;

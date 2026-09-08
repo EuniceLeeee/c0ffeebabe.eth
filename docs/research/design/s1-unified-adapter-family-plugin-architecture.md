@@ -3073,6 +3073,41 @@ change caused that difference, nor prove an end-to-end improvement. Retain
 the locally validated bounded-notification mechanism without a speed-win
 claim; do not tune parameters, expand batch5 or rerun until a favorable window.
 
+### 16.27 Required-instance lookup and startup bindings (batch4b, 2026-09-08)
+
+The strict root builds a private instance-key→Ready-index list once at startup.
+An Exact session resolves the candidate's complete required edge closure via
+the existing edge→instance mapping, unions the corresponding indices and sorts
+them in original Ready order. It no longer scans every Ready instance for route
+issuance or again for `selectedInstanceCount`. Omitted closure still selects
+all Ready; explicit empty closure selects none, including the Funding-only
+entrance. Lists retain all owners when different Families share the same raw
+instance key, matching the previous filter semantics rather than introducing
+a new admission restriction. Credit still takes its original separate path.
+
+The same root now stores the existing Ready edge-binding fingerprints as
+private startup strings. Each projected current edge is still fingerprinted
+and checked against its startup binding; only rebuilding the full Ready map
+on every session is removed. Ready contract validation, missing required-edge
+rejection, source/generation fences and fresh per-session authorities remain.
+No new transport, cache of quotes, capability relaxation or numeric tuning.
+
+Read-count regressions use real lifecycle-issued instances and Graph edges:
+empty closure causes zero Ready Family lookups and zero Ready edge property
+reads after startup; a reversed two-owner/four-edge closure preserves Ready
+order, avoids the all-instance lookup and matches unscoped Exact amounts.
+Omitted closure preserves all edges, and a mismatched startup binding rejects.
+The existing refreshed+carried closure test still issues Exact for both legs;
+missing-edge, cancellation, reset and cross-session authority tests pass.
+Full build, live typecheck, strict session, Exact refinement, strict execution
+projection, strict central runtime, router safety6/6 and historical-live replay
+contract pass. Independent non-author review approved after executing strict
+session, full/live no-emit checks and whitespace gate; credit and same-key
+cross-Family handling were inspected, not given a new end-to-end live proof.
+These tests prove removed local work and scoped correctness, not a seconds-level
+or completed-to-EV latency win. A separate frozen Ready12 fixed50 observation
+follows; the final logging item and deferred batch5 are not mixed into it.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
