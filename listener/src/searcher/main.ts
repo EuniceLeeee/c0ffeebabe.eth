@@ -899,12 +899,12 @@ async function main(): Promise<void> {
         maxHops: blockScanMaxHops,
         minSpreadBps: blockScanMinSpreadBps,
         /*
-         * No hard performance gate at 50/100bps: enumeration floor and exact
-         * admission are the same. Shadow telemetry still buckets by spread.
+         * Keep the enumeration floor independent. Exact admission defaults
+         * to 50bps (0.5%); lower-spread candidates remain in coarse telemetry.
          */
         exactAdmissionSpreadBps: Number(
           process.env.SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS ??
-            String(blockScanMinSpreadBps),
+            "50",
         ),
         minCapitalFraction: Number(
           process.env.SEARCHER_BLOCKSCAN_MIN_CAPITAL_FRACTION ?? "0.001",

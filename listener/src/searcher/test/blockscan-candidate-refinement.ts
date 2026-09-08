@@ -1421,14 +1421,14 @@ async function admissionFloorSkipsLowSpreadProbes(): Promise<void> {
       ...opportunity(TOKEN_6, 1_024n),
       cycleId: "wide",
       cycleFingerprint: "wide",
-      coarseSpreadBps: 80,
+      coarseSpreadBps: 50, // Exactly 0.5% must be admitted.
       seedEdges: [wideEdge],
     },
     {
       ...opportunity(TOKEN_6, 1_024n),
       cycleId: "thin",
       cycleFingerprint: "thin",
-      coarseSpreadBps: 30,
+      coarseSpreadBps: 49.999, // Just below 0.5% must not issue a quote.
       seedEdges: [thinEdge],
     },
   ];
