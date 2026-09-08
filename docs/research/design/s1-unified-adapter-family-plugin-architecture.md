@@ -2646,7 +2646,59 @@ safety. A non-author reviewer independently ran the session/backend/central gate
 and seven authority/lifecycle checks without mainnet RPC and reported no blocking
 finding. Reviewed runtime/test patch SHA-256:
 `24b84e71315c3c98bc5c7772c6e22646d46ef324093925824b1ade0478a345e5`.
-These are deterministic implementation results; live benefit is not yet measured.
+These are deterministic implementation results, not a live performance verdict.
+
+The frozen Ready12 observation ran
+`74ad8d3e5b384c365411f5929b186642bb08cf4e`, PID44133 started 2026-09-08
+11:57:23 Asia/Shanghai. It retained the same checkpoint SHA-256 and Graph hash
+listed in 16.22/Ready12:28113 admitted instances and55765 pricing edges; no
+rebuild, signing, broadcast or numeric configuration change. The owned guard
+completed source25930113–25930162 and the process exited0; no429 was recorded
+and ports8555–8560 were empty afterwards. Bootstrap source25930104 took
+110998.561ms and is separate from the50-block nonbootstrap denominator.
+
+All50 source blocks have one terminal record and one route lifecycle record,
+with no missing or duplicate block.48 entered Solver;12 completed that stage,
+36 were interrupted there and2 stopped at Exact. Three source blocks
+(25930115,25930117,25930119) entered final simulation, producing four actual
+revert records; none reached EV. First Solver start was p50=6738ms,
+p95=8175ms,max=8527ms (48 samples). First final-sim start was
+p50=6985ms,p95/max=7696ms (three samples). There is no first-EV or complete-EV
+latency sample. Terminal lifetime including cancellations and cleanup was
+p50=14380.093ms,p95=16654.148ms,max=19119.347ms. Its two sub-ten-second records
+did not reach EV. Independent stage timings overlap and are not additive.
+
+Final producer counters total8070 physical RPC items in96 batches and542 memo
+hits; final Exact/Solver counters total74846 physical items in2068 batches and
+50853 memo hits. Producer preparation had zero memo hits, so the542 are later
+same-pass reuse, but this aggregate includes the pre-existing Funding reuse and
+must not be labelled entirely as new ordinary-Exact savings. Both backends had
+zero pending/live/in-flight/active transport counts at each terminal record;
+no batch failure, single-call fallback or completion after scope abort was
+recorded.54 Exact batches were aborted. The observed mids file has one baseline
+and50 deltas with no recorded gap, and all50 route records are present without
+a dropped-batch marker. Internal writer queue/drop telemetry was not printed;
+absence of a marker is not a complete internal-queue measurement.
+
+Relative to the preceding unpaired window, first Solver p50 moved6938→6738ms,
+while Exact p50 moved1613.953→1624.007ms and terminal p95 moved
+16480.984→16654.148ms. These different live inputs do not prove causal improvement
+or regression. The identical-input test proves eliminated duplicate I/O; this
+window does not establish improved end-to-end latency or six-step completion.
+
+Raw artifacts are in `logs/exact-producer-reuse-ready12-74ad8d3e/`.
+`first50-summary.json` SHA-256:
+`a14bdb8bad0be3326d4720dca575de13423abf9a8a21db42c4e7fa100183ff87`.
+Manual analysis was reconciled using the generated capability query
+`latency,single-block,production-events,state-coverage`; both
+`analysis:blockscan-pass-latency` and `analysis:block-activity` ran through
+tool-run and exited0. Manifest `/tmp/exact-producer-reuse-ready12-tools.json`
+SHA-256:`d909feee47335cb6af2419e02249dbf5557f55895cc57edeb2ae94f7a8f3d89f`.
+The latency tool's process-anchored line2–162618 window includes bootstrap
+(51 records), unlike the fixed50 summary; its fast count is not EV completion.
+Block-activity target25930116 maps to source25930115 and reconstructs48450 mids,
+512 enumerated candidates, and the recorded final-sim failure. This is a local
+unpaired implementation observation, not Hermes A/B promotion evidence.
 
 ## 17. Role of tests and tools
 
