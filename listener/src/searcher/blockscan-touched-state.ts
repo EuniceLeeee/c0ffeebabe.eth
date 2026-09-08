@@ -23,13 +23,19 @@ export async function readBlockTouchedStateKeys(
   blockNumber: number,
   uniswapV4PoolManager: string,
 ): Promise<ReadonlySet<string>> {
-  const [logs, traces] = await Promise.all([
-    provider.getLogs({ fromBlock: blockNumber, toBlock: blockNumber }),
-    provider.send("debug_traceBlockByNumber", [
+  const [logsResult, tracesResult] = await Promise.allSettled([
+    Promise.resolve().then(() => provider.getLogs({ fromBlock: blockNumber, toBlock: blockNumber })),
+    Promise.resolve().then(() => provider.send("debug_traceBlockByNumber", [
       `0x${blockNumber.toString(16)}`,
       { tracer: "callTracer", tracerConfig: { onlyTopCall: false } },
-    ]),
+    ])),
   ]);
+  // The pass owns both reads. A failed sibling must not leave activity I/O
+  // running after this generation has been settled and its Funding drained.
+  if (logsResult.status === "rejected") throw logsResult.reason;
+  if (tracesResult.status === "rejected") throw tracesResult.reason;
+  const logs = logsResult.value;
+  const traces = tracesResult.value;
   const touched = new Set<string>();
   const manager = uniswapV4PoolManager.toLowerCase();
 

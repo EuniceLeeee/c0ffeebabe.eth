@@ -5,6 +5,7 @@ import { ethers } from "ethers";
 import {
   buildFamilyRouteGraphView,
 } from "../adapter-family-graph-runtime.js";
+import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
 import {
   fluidDexFixtureRuntime,
   runUniv2Lifecycle,
@@ -133,7 +134,7 @@ function runtime(
     readonly failCurrentPricingTarget?: string;
     readonly failFunding?: boolean;
     readonly fundingBalance?: bigint;
-    readonly producerCallBackend?: PinnedRethQuoteBackend;
+    readonly producerCallBackend?: StrictSessionRequest["pricingCallBackend"];
     readonly producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">;
     readonly exactCallBackend?: PinnedRethQuoteBackend;
   } = {},
@@ -1616,6 +1617,470 @@ const currentGraph = createVerifiedGraphView({
   familyIdForEdge: () => publication.familyId,
   edges: startupView.edges,
 });
+
+// Coordinator-owned early Funding: real root, central runtime and Funding
+// plugins; only source-pinned calls and the preceding activity wait are mocked.
+{
+  const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
+  const unhandled: unknown[] = [];
+  const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+  process.on("unhandledRejection", onUnhandled);
+  const fixture = (options: {
+    fundingWait?: Promise<void>;
+    pricingWait?: Promise<void>;
+    failFunding?: boolean;
+    rejectSession?: StrictSessionRequest["purpose"];
+    fundingSource?: CanonicalSource;
+    isCurrent?: () => boolean;
+  } = {}) => {
+    const requests: StrictSessionRequest[] = [];
+    const sessions: StrictProductionRuntimeSession[] = [];
+    const fundingCalls: { to: string; data: string; from?: string }[] = [];
+    const fundingStarted = preparationGate();
+    const pricingStarted = preparationGate();
+    const pricingEnded = preparationGate();
+    let activeFunding = 0;
+    let activePricing = 0;
+    let pricingCalls = 0;
+    const backend: NonNullable<StrictSessionRequest["pricingCallBackend"]> = {
+      async call(request) {
+        if (request.data.slice(0, 10) === UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector) {
+          pricingCalls++;
+          activePricing++;
+          pricingStarted.release();
+          try {
+            await options.pricingWait;
+            return UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves", [
+              pool.reserves.reserve0, pool.reserves.reserve1, pool.reserves.blockTimestampLast,
+            ]);
+          } finally {
+            activePricing--;
+            pricingEnded.release();
+          }
+        }
+        assert.equal(request.data.slice(0, 10), ERC20_BALANCE.getFunction("balanceOf")!.selector);
+        fundingCalls.push({ ...request });
+        activeFunding++;
+        if (fundingCalls.length === readyFundingAssets.length) fundingStarted.release();
+        try {
+          await options.fundingWait;
+          if (options.failFunding) throw new Error("prefunding mock transport failed");
+          return ERC20_BALANCE.encodeFunctionResult("balanceOf", [10n ** 24n]);
+        } finally {
+          activeFunding--;
+        }
+      },
+    };
+    const coordinator = new StrictCurrentRuntimeCoordinator((request) => {
+      requests.push(request);
+      if (request.purpose === options.rejectSession) {
+        // Deliberately throw synchronously, before returning a session promise.
+        throw new Error(`injected ${request.purpose} session rejection`);
+      }
+      const source = request.purpose === "exact-execution"
+        ? options.fundingSource ?? request.source : request.source;
+      return root.createSession({
+        source,
+        kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+        fundingAssets: request.fundingAssets,
+        control: request.control,
+        touchedPools: request.touchedPools,
+        requiredEdgeIds: request.requiredEdgeIds,
+        runtime: runtime(source, {
+          producerCallBackend: request.pricingCallBackend,
+          isCurrent: options.isCurrent,
+          onCurrentPricingRead() { assert.fail("pricing escaped its pass backend"); },
+          onFundingRead() { assert.fail("Funding escaped its pass backend"); },
+        }),
+      }).then((created) => {
+        sessions.push(created);
+        return created;
+      });
+    }, () => {});
+    return {
+      coordinator, backend, requests, sessions, fundingCalls,
+      fundingStarted, pricingStarted, pricingEnded,
+      counts: () => ({ activeFunding, activePricing, pricingCalls }),
+    };
+  };
+  const scopeFor = (value: ReturnType<typeof fixture>, signal = new AbortController().signal) => ({
+    graph: currentGraph,
+    fundingTokens: [UNIV2_FIXTURE_TOKEN0],
+    deadlineAtMs: Date.now() + 10_000,
+    preparationSettleDeadlineAtMs: Date.now() + 9_000,
+    signal,
+    pricingCallBackend: value.backend,
+  });
+  // FrozenReadonlyMap stores entries privately; deepEqual on the wrapper
+  // alone cannot establish equality of actual prices, offers or provenance.
+  const comparableSnapshot = (snapshot: AdapterRuntimeSnapshot) => ({
+    ...snapshot,
+    pricing: {
+      ...snapshot.pricing,
+      mids: [...snapshot.pricing.mids],
+      coverageByReadKey: [...snapshot.pricing.coverageByReadKey],
+      coverageByEdgeKey: [...snapshot.pricing.coverageByEdgeKey],
+      freshnessByReadKey: [...snapshot.pricing.freshnessByReadKey],
+      stateByStateKey: [...snapshot.pricing.stateByStateKey],
+      pricingProvenanceByEdgeKey: [...snapshot.pricing.pricingProvenanceByEdgeKey ?? []],
+      pricingStateKeyByEdgeKey: [...snapshot.pricing.pricingStateKeyByEdgeKey ?? []],
+      pricingFamilyIdByEdgeKey: [...snapshot.pricing.pricingFamilyIdByEdgeKey ?? []],
+    },
+    funding: {
+      ...snapshot.funding,
+      sources: [...snapshot.funding.sources],
+      coverageByFundingId: [...snapshot.funding.coverageByFundingId],
+      freshnessByFundingId: [...snapshot.funding.freshnessByFundingId]
+        .map(([id, proofs]) => [id, [...proofs]]),
+    },
+  });
+  try {
+    for (const mode of ["funding-first", "pricing-first", "failed-funding"] as const) {
+      const activity = preparationGate();
+      const releaseFunding = preparationGate();
+      const releasePricing = preparationGate();
+      const tested = fixture({
+        fundingWait: releaseFunding.promise, pricingWait: releasePricing.promise,
+        failFunding: mode === "failed-funding",
+      });
+      const input = scopeFor(tested);
+      const handle = tested.coordinator.startFundingPreparation(input);
+      assert.deepEqual(Object.keys(handle), ["settle"]);
+      assert.ok(Object.isFrozen(handle));
+      let published = false;
+      const pending = (async () => {
+        await activity.promise;
+        return tested.coordinator.prepare({
+          ...input, fundingPreparation: handle,
+          touchedPools: new Set([UNIV2_FIXTURE_POOL]),
+          canonicalActivity: { source: CURRENT, touchedStateKeys: new Set([UNIV2_FIXTURE_POOL]), complete: true },
+        });
+      })().finally(() => { published = true; });
+      const observed = Promise.allSettled([pending]);
+      try {
+        await awaitPreparationGate(tested.fundingStarted.promise, `${mode}: Funding waited for activity`);
+        assert.equal(tested.requests.length, 1);
+        assert.equal(tested.requests[0]!.purpose, "exact-execution");
+        assert.deepEqual(tested.requests[0]!.requiredEdgeIds, new Set());
+        assert.deepEqual(tested.requests[0]!.fundingAssets, input.fundingTokens);
+        assert.deepEqual(tested.requests[0]!.source, CURRENT);
+        assert.equal(tested.requests[0]!.control?.signal, input.signal);
+        assert.equal(tested.requests[0]!.control?.deadlineAtMs, input.preparationSettleDeadlineAtMs);
+        assert.equal(tested.requests[0]!.pricingCallBackend, tested.backend);
+        assert.equal(tested.counts().pricingCalls, 0, "Funding-only closure must not refresh routes");
+        assert.equal(tested.coordinator.latestPricingSnapshot(), null);
+        activity.release();
+        await awaitPreparationGate(tested.pricingStarted.promise, `${mode}: pricing waited for Funding`);
+        assert.equal(tested.counts().activeFunding, readyFundingAssets.length);
+        assert.equal(tested.counts().activePricing, 1);
+        assert.equal(tested.requests.length, 2);
+        assert.equal(tested.requests[1]!.purpose, "source-n-runtime");
+        assert.deepEqual(tested.requests[1]!.fundingAssets, []);
+        assert.equal(tested.requests[1]!.pricingCallBackend, tested.backend);
+        if (mode === "pricing-first") {
+          releasePricing.release();
+          await tested.pricingEnded.promise;
+        } else {
+          releaseFunding.release();
+          await handle.settle();
+        }
+        await nextTurn();
+        assert.equal(published, false, "one settled branch cannot publish the joined snapshot");
+        assert.equal(tested.coordinator.latestPricingSnapshot(), null);
+      } finally {
+        activity.release();
+        releaseFunding.release();
+        releasePricing.release();
+        await observed;
+        await handle.settle();
+      }
+      const joined = await pending;
+      const baseline = fixture({ failFunding: mode === "failed-funding" });
+      const reference = await baseline.coordinator.prepare(scopeFor(baseline));
+      assert.ok(joined.status !== "incomplete");
+      assert.ok(reference.status !== "incomplete");
+      assert.deepEqual(comparableSnapshot(joined.snapshot), comparableSnapshot(reference.snapshot),
+        "joined pricing/Funding projections differ from unsplit baseline");
+      assert.equal(joined.status, reference.status);
+      // Compare the actual calls, including retries, not just offer counts.
+      assert.deepEqual(tested.fundingCalls, baseline.fundingCalls);
+      assert.equal(new Set(tested.fundingCalls.map((call) => `${call.to}/${call.data}/${call.from ?? ""}`)).size,
+        readyFundingAssets.length);
+      if (mode !== "failed-funding") assert.equal(tested.fundingCalls.length, readyFundingAssets.length);
+      assert.deepEqual(tested.counts(), { activeFunding: 0, activePricing: 0, pricingCalls: 1 });
+      const fundingOnly = tested.sessions.find((value) => value.creationTiming.projectedRouteCount === 0)!;
+      assert.ok(fundingOnly);
+      assert.equal(fundingOnly.creationTiming.selectedInstanceCount, 0);
+      assert.equal(fundingOnly.creationTiming.refreshedInstanceCount, 0);
+      if (mode === "failed-funding") {
+        assert.equal(joined.status, "degraded");
+        assert.equal(joined.snapshot.funding.sources.size, 0);
+        assert.equal(joined.snapshot.funding.coverage.unresolvedKeys.length, readyFundingAssets.length);
+        assert.equal(joined.snapshot.pricing.coverage.unresolvedEdgeKeys.length, 0);
+      }
+      assert.doesNotThrow(() => assertAtomicBlockScanRuntime(joined.snapshot));
+      console.log(`strict early Funding coordinator: PASS ${mode}`);
+    }
+
+    // Settlement expiry and retirement invalidate already-successful Funding
+    // at the publication join. They preserve the original degraded/no-offer
+    // result while the outer pass is open, rather than rejecting the pass.
+    for (const mode of ["settle-deadline", "generation-retired"] as const) {
+      const releasePricing = preparationGate();
+      let current = true;
+      const options = { pricingWait: releasePricing.promise, isCurrent: () => current };
+      const tested = fixture(options);
+      const baseline = fixture(options);
+      const input = scopeFor(tested);
+      const handle = tested.coordinator.startFundingPreparation(input);
+      await handle.settle();
+      const fundingOnly = tested.sessions[0]!;
+      assert.ok(fundingOnly);
+      assert.equal(fundingOnly.creationTiming.fundingOfferCount, readyFundingAssets.length);
+      assert.ok(fundingOnly.fundingProjection().outcomes.every((outcome) => outcome.status === "verified"));
+      assert.ok(fundingOnly.fundingProjection().sources.size > 0);
+      let completions = 0;
+      const pending = tested.coordinator.prepare({ ...input, fundingPreparation: handle })
+        .finally(() => { completions++; });
+      const referencePending = baseline.coordinator.prepare({ ...input, pricingCallBackend: baseline.backend })
+        .finally(() => { completions++; });
+      const observed = Promise.allSettled([pending, referencePending]);
+      const realNow = Date.now;
+      try {
+        await awaitPreparationGate(Promise.all([
+          tested.pricingStarted.promise, baseline.pricingStarted.promise, baseline.fundingStarted.promise,
+        ]), `${mode}: both pricing branches and baseline Funding must start`);
+        // All mock reads/microtasks for baseline Funding finish before the
+        // fence changes, while both real session pricing branches remain held.
+        await nextTurn();
+        assert.equal(baseline.counts().activeFunding, 0);
+        assert.equal(tested.counts().activeFunding, 0);
+        assert.equal(baseline.counts().activePricing, 1);
+        assert.equal(tested.counts().activePricing, 1);
+        assert.equal(completions, 0);
+        assert.equal(tested.coordinator.latestPricingSnapshot(), null);
+        assert.equal(baseline.coordinator.latestPricingSnapshot(), null);
+        if (mode === "settle-deadline") Date.now = () => input.preparationSettleDeadlineAtMs + 1;
+        else current = false;
+        assert.ok(Date.now() < input.deadlineAtMs, "outer pass deadline must remain open");
+        assert.equal(input.signal.aborted, false);
+        releasePricing.release();
+        await observed;
+        const joined = await pending;
+        const reference = await referencePending;
+        assert.equal(joined.status, "degraded");
+        assert.equal(reference.status, "degraded");
+        assert.deepEqual(comparableSnapshot(joined.snapshot), comparableSnapshot(reference.snapshot),
+          `${mode}: early Funding changed the original late-join result`);
+        assert.equal(joined.snapshot.funding.sources.size, 0);
+        assert.deepEqual(joined.snapshot.funding.coverage.resolvedKeys, []);
+        assert.equal(joined.snapshot.funding.coverage.unresolvedKeys.length, readyFundingAssets.length);
+        assert.equal(joined.snapshot.funding.freshnessByFundingId.size, 0);
+        const reason = mode === "settle-deadline"
+          ? "adapter work deadline reached" : "test generation fence rejected stale source";
+        for (const coverage of joined.snapshot.funding.coverageByFundingId.values()) {
+          assert.deepEqual(coverage, { status: "unresolved", reason: `unresolved:funding-publication:${reason}` });
+        }
+        assert.deepEqual(tested.fundingCalls, baseline.fundingCalls);
+        assert.equal(tested.fundingCalls.length, readyFundingAssets.length,
+          "late invalidation must neither retry nor duplicate successful Funding reads");
+        assert.equal(tested.coordinator.latestPricingSnapshot(), joined.snapshot.pricing);
+        assert.doesNotThrow(() => assertAtomicBlockScanRuntime(joined.snapshot));
+      } finally {
+        releasePricing.release();
+        await observed;
+        Date.now = realNow;
+        await handle.settle();
+      }
+      assert.equal(completions, 2);
+      assert.deepEqual(tested.counts(), { activeFunding: 0, activePricing: 0, pricingCalls: 1 });
+      assert.deepEqual(baseline.counts(), { activeFunding: 0, activePricing: 0, pricingCalls: 1 });
+      console.log(`strict early Funding coordinator: PASS late-${mode} baseline parity`);
+    }
+
+    // Handles are coordinator/pass-owned, not structurally forgeable promises.
+    const bound = fixture();
+    const scope = scopeFor(bound);
+    const owned = bound.coordinator.startFundingPreparation(scope);
+    await owned.settle();
+    const mismatches: readonly [string, Partial<typeof scope>][] = [
+      ["graph identity", { graph: Object.freeze({ ...currentGraph }) }],
+      ["source number", { graph: Object.freeze({ ...currentGraph, sourceBlock: CURRENT.number + 1 }) }],
+      ["source hash", { graph: Object.freeze({ ...currentGraph, sourceBlockHash: WRONG_HASH.hash }) }],
+      ["source generation", { graph: Object.freeze({ ...currentGraph, generation: CURRENT.generation + 1 }) }],
+      ["assets", { fundingTokens: [UNIV2_FIXTURE_TOKEN1] }],
+      ["backend", { pricingCallBackend: { call: bound.backend.call } }],
+      ["signal", { signal: new AbortController().signal }],
+      ["deadline", { deadlineAtMs: scope.deadlineAtMs + 1 }],
+      ["settle deadline", { preparationSettleDeadlineAtMs: scope.preparationSettleDeadlineAtMs + 1 }],
+    ];
+    for (const [name, change] of mismatches) {
+      await assert.rejects(bound.coordinator.prepare({ ...scope, ...change, fundingPreparation: owned }),
+        /Funding preparation differs/, name);
+      assert.equal(bound.requests.length, 1, `${name}: mismatch admitted pricing work`);
+    }
+    const other = fixture();
+    const foreign = other.coordinator.startFundingPreparation(scope);
+    await foreign.settle();
+    for (const handle of [foreign, { settle: async () => { assert.fail("foreign settle must not be invoked"); } }]) {
+      await assert.rejects(bound.coordinator.prepare({ ...scope, fundingPreparation: handle }), /Funding preparation differs/);
+    }
+    await bound.coordinator.resetDynamicStateForReplay();
+    await assert.rejects(bound.coordinator.prepare({ ...scope, fundingPreparation: owned }), /Funding preparation differs/);
+    assert.equal(bound.requests.length, 1);
+    assert.equal(bound.coordinator.latestPricingSnapshot(), null);
+    for (const source of [
+      { ...CURRENT, number: CURRENT.number + 1 }, WRONG_HASH,
+      { ...CURRENT, generation: CURRENT.generation + 1 },
+    ]) {
+      const wrongSource = fixture({ fundingSource: source });
+      const input = scopeFor(wrongSource);
+      const handle = wrongSource.coordinator.startFundingPreparation(input);
+      await handle.settle();
+      await assert.rejects(wrongSource.coordinator.prepare({ ...input, fundingPreparation: handle }),
+        /strict session source differs/);
+      assert.equal(wrongSource.coordinator.latestPricingSnapshot(), null);
+    }
+    console.log("strict early Funding coordinator: PASS handle/source/control binding");
+
+    const preAborted = fixture();
+    const earlyAbort = new AbortController();
+    const earlyInput = scopeFor(preAborted, earlyAbort.signal);
+    const earlyHandle = preAborted.coordinator.startFundingPreparation(earlyInput);
+    earlyAbort.abort(new Error("prefunding cancelled before dispatch"));
+    await earlyHandle.settle();
+    assert.equal(preAborted.requests.length, 0, "aborted launch dispatched a Funding session");
+    assert.throws(() => preAborted.coordinator.startFundingPreparation(earlyInput), /cancelled before dispatch/);
+    assert.throws(() => preAborted.coordinator.startFundingPreparation({ ...scopeFor(preAborted), deadlineAtMs: Date.now() - 1 }),
+      /deadline expired/);
+    for (const mode of ["abort", "deadline", "reset"] as const) {
+      const releasePricing = preparationGate();
+      const tested = fixture({ pricingWait: releasePricing.promise });
+      const controller = new AbortController();
+      const input = scopeFor(tested, controller.signal);
+      const handle = tested.coordinator.startFundingPreparation(input);
+      await handle.settle();
+      const pending = tested.coordinator.prepare({ ...input, fundingPreparation: handle });
+      const observed = Promise.allSettled([pending]);
+      const realNow = Date.now;
+      try {
+        await awaitPreparationGate(tested.pricingStarted.promise, `${mode}: pricing did not start`);
+        if (mode === "abort") controller.abort(new Error("prefunding late abort"));
+        // Confined to this held join, then restored even on failure; no sleeps.
+        if (mode === "deadline") Date.now = () => input.deadlineAtMs + 1;
+        if (mode === "reset") await tested.coordinator.resetDynamicStateForReplay();
+      } finally {
+        releasePricing.release();
+        await observed;
+        Date.now = realNow;
+        await handle.settle();
+      }
+      await assert.rejects(pending, mode === "abort" ? /prefunding late abort/
+        : mode === "deadline" ? /deadline expired/ : /retired during join/);
+      assert.equal(tested.coordinator.latestPricingSnapshot(), null);
+      assert.equal(tested.counts().activePricing, 0);
+      console.log(`strict early Funding coordinator: PASS late-${mode}`);
+    }
+
+    // An early rejected branch is handled at launch, but prepare must still
+    // await its delayed pricing/Funding and execution siblings before failing.
+    for (const rejected of ["exact-execution", "source-n-runtime"] as const) {
+      const release = preparationGate();
+      const execution = preparationGate();
+      const executionStarted = preparationGate();
+      const tested = fixture({
+        rejectSession: rejected,
+        ...(rejected === "exact-execution" ? { pricingWait: release.promise } : { fundingWait: release.promise }),
+      });
+      const input = scopeFor(tested);
+      const handle = tested.coordinator.startFundingPreparation(input);
+      // Deliberately do not call settle yet: the launch owns rejection handling.
+      await nextTurn();
+      let completed = false;
+      const pending = tested.coordinator.prepare({
+        ...input, fundingPreparation: handle,
+        prepareExecution: async () => { executionStarted.release(); await execution.promise; },
+      }).finally(() => { completed = true; });
+      const observed = Promise.allSettled([pending]);
+      try {
+        await awaitPreparationGate(Promise.all([
+          executionStarted.promise,
+          rejected === "exact-execution" ? tested.pricingStarted.promise : tested.fundingStarted.promise,
+        ]), `${rejected}: delayed sibling did not start`);
+        await nextTurn();
+        assert.equal(completed, false, "early rejection abandoned a live sibling");
+        release.release();
+        await nextTurn();
+        assert.equal(completed, false, "join abandoned delayed execution preparation");
+      } finally {
+        release.release();
+        execution.release();
+        await observed;
+        await handle.settle();
+      }
+      await assert.rejects(pending, new RegExp(`injected ${rejected} session rejection`));
+      assert.equal(tested.counts().activeFunding, 0);
+      assert.equal(tested.counts().activePricing, 0);
+      assert.equal(tested.coordinator.latestPricingSnapshot(), null);
+      console.log(`strict early Funding coordinator: PASS delayed sibling after ${rejected} rejection`);
+    }
+    for (const first of ["pricing", "funding"] as const) {
+      const releasePricing = preparationGate();
+      const releaseFunding = preparationGate();
+      const executionStarted = preparationGate();
+      const tested = fixture({ pricingWait: releasePricing.promise, fundingWait: releaseFunding.promise });
+      const input = scopeFor(tested);
+      const handle = tested.coordinator.startFundingPreparation(input);
+      let completed = false;
+      const pending = tested.coordinator.prepare({
+        ...input, fundingPreparation: handle,
+        prepareExecution(control) {
+          executionStarted.release();
+          assert.equal(control.signal, input.signal);
+          assert.equal(control.deadlineAtMs, input.preparationSettleDeadlineAtMs);
+          assert.equal(control.sourceBlock, CURRENT.number);
+          assert.equal(control.sourceBlockHash, CURRENT.hash);
+          assert.equal(control.generation, CURRENT.generation);
+          // Not an async function: the coordinator must capture the throw and
+          // observe/drain both already-launched session branches before exit.
+          throw new Error("injected sync execution preparation rejection");
+        },
+      }).finally(() => { completed = true; });
+      const observed = Promise.allSettled([pending]);
+      try {
+        await awaitPreparationGate(Promise.all([
+          tested.pricingStarted.promise, tested.fundingStarted.promise, executionStarted.promise,
+        ]), `sync execution rejection (${first} first): session work did not start`);
+        await nextTurn();
+        assert.equal(completed, false, "synchronous execution throw abandoned both session branches");
+        if (first === "pricing") {
+          releasePricing.release();
+          await tested.pricingEnded.promise;
+        } else {
+          releaseFunding.release();
+          await handle.settle();
+        }
+        await nextTurn();
+        assert.equal(completed, false, "synchronous execution throw abandoned the remaining session branch");
+        assert.equal(tested.coordinator.latestPricingSnapshot(), null);
+      } finally {
+        releasePricing.release();
+        releaseFunding.release();
+        await observed;
+        await handle.settle();
+      }
+      await assert.rejects(pending, /injected sync execution preparation rejection/);
+      assert.deepEqual(tested.counts(), { activeFunding: 0, activePricing: 0, pricingCalls: 1 });
+      assert.equal(tested.coordinator.latestPricingSnapshot(), null);
+      console.log(`strict early Funding coordinator: PASS sync execution throw drains ${first}-first`);
+    }
+    await nextTurn();
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.removeListener("unhandledRejection", onUnhandled);
+  }
+}
+
 let resetCount = 0;
 const currentCoordinator = new StrictCurrentRuntimeCoordinator(
   async (request: StrictSessionRequest) => {

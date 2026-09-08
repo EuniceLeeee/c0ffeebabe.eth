@@ -2730,6 +2730,11 @@ claim of behavior-equivalent latency improvement. Batch3 has not been edited
 as part of this audit. The existing finite Goal's batches1–4 remain in scope;
 batch5 follows them, with this audit completed first.
 
+Subsequent user direction explicitly deferred batch5: proceed with batches3/4
+only. The edge-level multi-amount variant raised afterwards is also discussion,
+not an authorized change in this iteration. Neither candidate admission nor
+Exact/Solver amount policy is changed by batch3 below.
+
 #### Verified current behavior and the alternatives
 
 `blockscan-candidate-refinement.ts` probes the complete ordered route at
@@ -2867,6 +2872,75 @@ Independent semantic/authority and cost/selection reviews converged on the
 multi-amount direction with the stated boundaries; the non-author document
 review approved this section with no blocking finding. No production source,
 configuration or Ready12 checkpoint changed, and no live/RPC was started.
+
+### 16.25 Source-N Funding preparation overlaps activity (2026-09-08)
+
+The steady Source-N pass starts existing block activity reads alongside header
+observation. Once the canonical source/Graph is bound, the strict coordinator
+can start Funding through an explicit `startFundingPreparation` API while
+activity remains pending. This uses the existing strict exact-session entrance
+with an empty required-edge closure: no pricing route is refreshed or granted
+to that Funding-only session. Pricing still waits for the complete log+trace
+touched union. It then requests zero Funding assets and joins the previously
+started preparation. Bootstrap retains its post-activity initialization budget;
+neither bootstrap nor N-1 starts this Funding prefetch.
+
+An opaque, coordinator-owned handle exposes only settlement, not a Funding
+projection or executable authority. Its private binding fixes the Graph object,
+asset set, backend, caller signal, deadlines and replay-reset epoch. Joined
+session sources are rechecked. Exact later keeps its own session and fresh
+Funding/route authority; only the existing same-source successful byte memo is
+shared. No second transport/cache, numeric configuration change, reduced
+candidate/amount/finalist scope or new scheduling rule is introduced.
+
+The original in-session Funding publication fence is now one shared helper.
+Consuming prefetched Funding rechecks the same preparation deadline, caller and
+generation fence. A late preparation cutoff while the outer pass remains open
+turns previously verified outcomes into unresolved/no-offer projection, matching
+the unsplit baseline; it does not silently preserve early success or introduce
+a whole-pass rejection. Outer pass expiry/cancellation and replay reset still
+reject. Pricing, execution and Funding siblings settle before coordinator
+failure is exposed, including synchronous callbacks throwing.
+
+Activity rejection handlers are installed at launch. The log+trace helper joins
+both child reads on failure, including synchronous provider throws; it retains
+the original error rather than publishing partial touched state. The existing
+provider surface has no activity abort API: cancelled/error paths wait for its
+reads to settle instead of orphaning them. The pass closes/drains its Funding
+backend and joins the handle before terminal accounting. Thus error cleanup can
+take longer than an early-rejection observation; it is not hidden from timing.
+
+Four compact `state_preparation_detail` timestamps in the existing block record
+identify activity and Funding task start/settlement. Their interval overlap is
+task-lifetime overlap, not a physical-request delivery timestamp or a measured
+critical-path saving. Existing session/transport counters remain the source for
+physical items, batches and memo hits. Funding's service time was already often
+hidden by Pricing in previous observations; no material speedup is presumed.
+
+Deterministic validation passed against the real strict root/Funding plugins
+with controlled local calls: Funding-first/Pricing-first and failed-Funding
+snapshot equality with the unsplit baseline, identical actual Funding call
+sequences, zero pricing reads from the Funding-only closure, late preparation
+expiry and generation-retirement degraded parity, foreign/mismatched handle
+rejection, abort/deadline/reset, and synchronous execution/session rejection
+with complete sibling settlement and no unhandled rejection. Existing activity
+contract passes9/9, ordered pipeline9/9, pass deadline4/4, strict central runtime,
+pinned quote backend, bundle-router safety6/6, historical-live replay contract,
+full listener build and live typecheck also pass. These are implementation and
+equivalence regressions, not full six-step production or ten-second proof.
+Independent non-author review approved after running the final strict session
+suite, activity9/9, no-emit TypeScript check and whitespace check. Complete-loop
+cancelled-head cleanup was inspected, not separately integration-tested; the
+controlled regressions cover coordinator and activity sibling settlement.
+The reviewed final runtime/test full-index patch SHA-256 is
+`8be66718d24db9cce6ee8a1b69729d3fc13b5745e26cc86a78c589a547189f72`.
+
+The next frozen observation retains Ready12 and its unchanged checkpoint
+SHA-256`ba97aec00cb62ae01e18b22b995986f82ed3dbd6dfb6a1f2274966d32f99b9da`,
+the first50 nonbootstrap source denominator, all missing/cancelled/failed work,
+and signing/broadcast off. ConfirmedAlchemy429 stops task RPC; no rebuild,
+provider/key switch or numeric tuning is part of the run. No live observation
+result is claimed in this implementation record.
 
 ## 17. Role of tests and tools
 

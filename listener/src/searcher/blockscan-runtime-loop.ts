@@ -44,6 +44,9 @@ import type { StrictProductionRuntimeSession } from
 import type {
   StrictCanonicalActivityProof,
   StrictSessionProvider,
+  StrictFundingPreparation,
+  StrictFundingPreparationInput,
+  PrepareStrictRuntimeInput,
 } from
   "./strict-current-runtime-coordinator.js";
 import type { CanonicalSource } from
@@ -762,8 +765,11 @@ export interface CurrentSourceRuntimeCoordinator {
     readonly pricingCallBackend?: Pick<StateBackend, "call">;
   }): Promise<BlockScanStatePrepareResult>;
   resetDynamicStateForReplay(): Promise<void>;
+  startFundingPreparation?(
+    input: StrictFundingPreparationInput,
+  ): StrictFundingPreparation;
   prepare(
-    input: PrepareAdapterRuntimeInput,
+    input: PrepareStrictRuntimeInput,
   ): Promise<AdapterRuntimePrepareResult>;
   prepareCurrentNExactExecutionContext(
     input: PrepareCurrentNExactExecutionContextInput,
@@ -1925,6 +1931,12 @@ export class BlockScanRuntimeLoop {
         stage_timing_model: "ordered_solver_final_sim_overlap",
         first_solver_started_at_ms: firstSolverStartedAtMs,
         first_ev_finished_at_ms: firstEvFinishedAtMs,
+        state_preparation_detail: {
+          activity_started_at_ms: activityStartedAtMs,
+          activity_finished_at_ms: activityFinishedAtMs,
+          funding_started_at_ms: fundingStartedAtMs,
+          funding_finished_at_ms: fundingFinishedAtMs,
+        },
         stage_timing_ms: {
           state: stageBoundaries.state.stage_ms,
           enumeration: stageBoundaries.enumeration.stage_ms,
@@ -2073,10 +2085,32 @@ export class BlockScanRuntimeLoop {
       readonly backend: PinnedRethQuoteBackend;
     } | null = null;
     let exactTransportDrainMs = 0;
-    // One venue-touch scope for the whole pass: the direct session prepare,
-    // the N-1 exact refinement and the exact execution context all re-issue
-    // only this block's touched instances.
-    const passTouchedPools = await this.deps.readBlockSwapTouched(blockNumber);
+    let fundingPreparation: StrictFundingPreparation | undefined;
+    let fundingSettlement: Promise<void> | undefined;
+    const activityStartedAtMs = Date.now();
+    let activityFinishedAtMs: number | null = null;
+    let fundingStartedAtMs: number | null = null;
+    let fundingFinishedAtMs: number | null = null;
+    // Activity determines pricing refresh, never exact candidate membership.
+    // Capture rejection immediately and join even if header preparation fails.
+    const activity = Promise.resolve()
+      .then(() => this.deps.readBlockSwapTouched(blockNumber))
+      .then(
+        (value): PromiseSettledResult<ReadonlySet<string>> => {
+          activityFinishedAtMs = Date.now();
+          return { status: "fulfilled", value };
+        },
+        (reason): PromiseSettledResult<ReadonlySet<string>> => {
+          activityFinishedAtMs = Date.now();
+          return { status: "rejected", reason };
+        },
+      );
+    const awaitActivity = async (): Promise<ReadonlySet<string>> => {
+      const result = await activity;
+      if (result.status === "rejected") throw result.reason;
+      if (passSignal.aborted) throw passSignal.reason;
+      return result.value;
+    };
     try {
       // The startup-ready topology is immutable for the lifetime of this
       // producer. Only the current canonical header and state are observed
@@ -2219,6 +2253,9 @@ export class BlockScanRuntimeLoop {
        * attempt abort before publication, so no incremental predecessor can
        * ever exist. Hot passes retain the single end-to-end deadline.
        */
+      // Keep bootstrap's full post-activity initialization budget and the
+      // N-1 path unchanged. Only steady Source-N starts Funding speculatively.
+      if (startupWarmAttempt || useNMinusOneFallback) await awaitActivity();
       const runtimeDeadlineAtMs = startupWarmAttempt
         ? Math.max(
             passDeadlineAtMs,
@@ -2228,6 +2265,51 @@ export class BlockScanRuntimeLoop {
       const preparationSettleDeadlineAtMs =
         runtimeDeadlineAtMs -
         Math.max(1, this.deps.runtimePublicationReserveMs ?? 1_500);
+      const fundingTokens = [...new Set(this.deps.flashTokens())];
+      const sourcePricingStartedAtMs = Date.now();
+      if (!useNMinusOneFallback) {
+        const backend = new PinnedRethQuoteBackend(
+          this.deps.rpcUrl,
+          graphView.sourceBlockHash,
+          {
+            signal: passSignal,
+            deadlineAtMs: runtimeDeadlineAtMs,
+            maxBatchSize: 128,
+            maxConcurrentBatches: 4,
+            transportLane: "producer-bulk",
+            scopeLabel:
+              `block-scan source-N pricing block ${blockNumber} ` +
+              `generation ${generation}`,
+            allowSingleCallFallback: false,
+            ...(this.deps.rethTransportScheduler === undefined
+              ? {} : { transportScheduler: this.deps.rethTransportScheduler }),
+          },
+        );
+        sourcePricingCalls = {
+          source: Object.freeze({
+            number: graphView.sourceBlock,
+            hash: graphView.sourceBlockHash,
+            generation: graphView.generation,
+          }),
+          backend,
+        };
+        if (!startupWarmAttempt) {
+          fundingStartedAtMs = currentRuntimeCoordinator.startFundingPreparation === undefined
+            ? null : Date.now();
+          fundingPreparation = currentRuntimeCoordinator.startFundingPreparation?.({
+            graph: graphView,
+            fundingTokens,
+            deadlineAtMs: runtimeDeadlineAtMs,
+            preparationSettleDeadlineAtMs,
+            signal: passSignal,
+            pricingCallBackend: backend,
+          });
+          fundingSettlement = fundingPreparation?.settle().then(() => {
+            fundingFinishedAtMs = Date.now();
+          });
+        }
+      }
+      const passTouchedPools = await awaitActivity();
       const pricingFamilySettleDeadlineAtMs = startupWarmAttempt
         ? preparationSettleDeadlineAtMs
         : Math.min(
@@ -2309,39 +2391,13 @@ export class BlockScanRuntimeLoop {
          * the same source-hash-pinned producer-bulk transport as N-1; without
          * this pass-scoped backend the central runtime falls back to one RPC
          * request per logical quote even though the N-1 path is batched.
-         * Funding and pricing preparation share the session, so the backend
+         * Funding and pricing preparation share this backend, so the backend
          * is drained at the preparation-settle boundary, then reused by the
          * same-source exact session for Funding and ordinary Exact reads. Only successful call
          * bytes are memoized; the new session still issues its own authority.
          * The backend keeps its producer lane and closes with this pass.
          */
-        const sourcePricingStartedAtMs = Date.now();
-        const sourcePricingBackend = new PinnedRethQuoteBackend(
-          this.deps.rpcUrl,
-          graphView.sourceBlockHash,
-          {
-            signal: passSignal,
-            deadlineAtMs: runtimeDeadlineAtMs,
-            maxBatchSize: 128,
-            maxConcurrentBatches: 4,
-            transportLane: "producer-bulk",
-            scopeLabel:
-              `block-scan source-N pricing block ${blockNumber} ` +
-              `generation ${generation}`,
-            allowSingleCallFallback: false,
-            ...(this.deps.rethTransportScheduler === undefined
-              ? {}
-              : { transportScheduler: this.deps.rethTransportScheduler }),
-          },
-        );
-        sourcePricingCalls = {
-          source: Object.freeze({
-            number: graphView.sourceBlock,
-            hash: graphView.sourceBlockHash,
-            generation: graphView.generation,
-          }),
-          backend: sourcePricingBackend,
-        };
+        const sourcePricingBackend = sourcePricingCalls!.backend;
         let runtime: AdapterRuntimePrepareResult;
         try {
           runtime = await currentRuntimeCoordinator.prepare({
@@ -2350,7 +2406,8 @@ export class BlockScanRuntimeLoop {
             // (provider support surface, chain-truth enumerated), never the
             // graph token set: balanceOf reads for every graph token blew the
             // block budget and tripped the generation fence.
-            fundingTokens: [...new Set(this.deps.flashTokens())],
+            fundingTokens,
+            ...(fundingPreparation === undefined ? {} : { fundingPreparation }),
             deadlineAtMs: runtimeDeadlineAtMs,
             preparationSettleDeadlineAtMs,
             pricingFamilySettleDeadlineAtMs,
@@ -3546,17 +3603,23 @@ export class BlockScanRuntimeLoop {
               );
             }
           } finally {
-            if (sourcePricingCalls !== null) {
-              await sourcePricingCalls.backend.closeAndDrain(
-                passSignal.reason ?? new Error(`block-scan pass ${blockNumber} completed`),
-              );
-              console.log(
-                `[searcher/blockscan-source-n-call-stats-final] ${JSON.stringify({
-                  sourceBlock: sourcePricingCalls.source.number,
-                  generation: sourcePricingCalls.source.generation,
-                  ...sourcePricingCalls.backend.stats(),
-                })}`,
-              );
+            try {
+              if (sourcePricingCalls !== null) {
+                await sourcePricingCalls.backend.closeAndDrain(
+                  passSignal.reason ?? new Error(`block-scan pass ${blockNumber} completed`),
+                );
+                console.log(
+                  `[searcher/blockscan-source-n-call-stats-final] ${JSON.stringify({
+                    sourceBlock: sourcePricingCalls.source.number,
+                    generation: sourcePricingCalls.source.generation,
+                    ...sourcePricingCalls.backend.stats(),
+                  })}`,
+                );
+              }
+            } finally {
+              // Existing activity I/O has no cancel API: join it even when
+              // resource cleanup fails. Funding uses the drained backend.
+              await Promise.all([activity, fundingSettlement]);
             }
           }
         }

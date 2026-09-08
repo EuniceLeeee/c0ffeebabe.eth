@@ -587,29 +587,15 @@ export class StrictProductionRuntimeRoot {
     const funding = earlyFunding?.status === "fulfilled"
       ? earlyFunding.value
       : await prepareFunding();
-    let { bindings: fundingBindings, outcomes: fundingOutcomes } = funding;
+    let fundingBindings: readonly FundingBinding[] = funding.bindings;
+    let fundingOutcomes: readonly FundingInstanceOutcome[] = funding.outcomes;
     if (kind === "pricing") {
       // Early Funding success cannot outlive its caller or generation while
       // pricing/projection finishes. Preserve unresolved/no-offer publication,
       // not a new whole-session rejection on preparation settlement.
-      try {
-        if (input.control?.signal?.aborted) {
-          throw input.control.signal.reason ?? new Error("adapter work aborted");
-        }
-        if (input.control?.deadlineAtMs !== undefined && Date.now() >= input.control.deadlineAtMs) {
-          throw new Error("adapter work deadline reached");
-        }
-        input.runtime.generationFence.assertCurrent(input.source.generation, input.source);
-      } catch (error) {
-        fundingBindings = [];
-        fundingOutcomes = fundingOutcomes.map((outcome) => outcome.status === "verified"
-          ? Object.freeze({
-              ...outcome,
-              status: "unresolved" as const,
-              reasonCode: `funding-publication:${error instanceof Error ? error.message : String(error)}`,
-            })
-          : outcome);
-      }
+      ({ bindings: fundingBindings, outcomes: fundingOutcomes } = fundingForPublication(
+        fundingBindings, fundingOutcomes, input.source, input.runtime, input.control,
+      ));
     }
     const selectedInstanceCount = kind === "pricing"
       ? selectedPricingInstanceIndexes.length
@@ -963,9 +949,13 @@ export class StrictProductionRuntimeSession {
   }
 
   /** Planner-only projection; executable Funding authority remains private. */
-  fundingProjection(): StrictFundingRuntimeProjection {
+  fundingProjection(control?: AdapterWorkControl): StrictFundingRuntimeProjection {
+    const { bindings, outcomes } = control === undefined
+      ? { bindings: this.#fundingBindings, outcomes: this.#fundingOutcomes }
+      : fundingForPublication(this.#fundingBindings, this.#fundingOutcomes,
+          this.source, this.#runtime, control);
     const outcomeByFundingId = new Map<string, FundingInstanceOutcome>();
-    for (const outcome of this.#fundingOutcomes) {
+    for (const outcome of outcomes) {
       if (
         outcome.source.number !== this.source.number ||
         outcome.source.hash.toLowerCase() !== this.source.hash.toLowerCase() ||
@@ -979,7 +969,7 @@ export class StrictProductionRuntimeSession {
       outcomeByFundingId.set(outcome.fundingId, outcome);
     }
     const bestByAsset = new Map<string, FundingBinding>();
-    for (const binding of this.#fundingBindings) {
+    for (const binding of bindings) {
       const { offer } = binding;
       const outcome = outcomeByFundingId.get(offer.fundingId);
       if (
@@ -1019,7 +1009,7 @@ export class StrictProductionRuntimeSession {
       }));
     }
     return Object.freeze({
-      outcomes: Object.freeze([...this.#fundingOutcomes]),
+      outcomes: Object.freeze([...outcomes]),
       sources: new Map(sources),
     });
   }
@@ -1290,6 +1280,37 @@ export class StrictProductionRuntimeSession {
       throw new Error(`strict session edge shell diverged at ${edgeId}`);
     }
     return binding;
+  }
+}
+
+/** One publication fence for in-session and pass-prefetched Funding alike. */
+function fundingForPublication(
+  bindings: readonly FundingBinding[],
+  outcomes: readonly FundingInstanceOutcome[],
+  source: CanonicalSource,
+  runtime: CentralAdapterRuntime,
+  control?: AdapterWorkControl,
+): { bindings: readonly FundingBinding[]; outcomes: readonly FundingInstanceOutcome[] } {
+  try {
+    if (control?.signal?.aborted) {
+      throw control.signal.reason ?? new Error("adapter work aborted");
+    }
+    if (control?.deadlineAtMs !== undefined && Date.now() >= control.deadlineAtMs) {
+      throw new Error("adapter work deadline reached");
+    }
+    runtime.generationFence.assertCurrent(source.generation, source);
+    return { bindings, outcomes };
+  } catch (error) {
+    return {
+      bindings: [],
+      outcomes: outcomes.map((outcome) => outcome.status === "verified"
+        ? Object.freeze({
+            ...outcome,
+            status: "unresolved" as const,
+            reasonCode: `funding-publication:${error instanceof Error ? error.message : String(error)}`,
+          })
+        : outcome),
+    };
   }
 }
 

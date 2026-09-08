@@ -247,6 +247,41 @@ tests.push({
   },
 });
 
+tests.push({
+  name: "activity failure joins both reads before rejecting the pass",
+  run: async () => {
+    for (const failed of ["logs", "trace"] as const) {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      let finished = false;
+      let reads = 0;
+      const activity = readBlockTouchedStateKeys({
+        getLogs: () => {
+          reads++;
+          if (failed === "logs") throw new Error("injected logs failure");
+          return held.then(() => []);
+        },
+        send: () => {
+          reads++;
+          if (failed === "trace") throw new Error("injected trace failure");
+          return held.then(() => []);
+        },
+      }, SOURCE_BLOCK, POOL_B);
+      const observed = activity.then(
+        () => { finished = true; },
+        (error: unknown) => { finished = true; return error; },
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert(reads === 2, "both reads start despite synchronous sibling failure");
+      assert(!finished, "failed activity must wait for outstanding sibling");
+      release();
+      const error = await observed;
+      assert(error instanceof Error && error.message === `injected ${failed} failure`,
+        "original failure is preserved after sibling settlement");
+    }
+  },
+});
+
 let passed = 0;
 for (const test of tests) {
   try {

@@ -62,6 +62,20 @@ export type StrictSessionProvider = (
   request: StrictSessionRequest,
 ) => Promise<StrictProductionRuntimeSession>;
 
+/** Pass-owned work handle; Funding projection/authority is not caller supplied. */
+export interface StrictFundingPreparation {
+  settle(): Promise<void>;
+}
+
+export type StrictFundingPreparationInput = Pick<PrepareAdapterRuntimeInput,
+  "graph" | "fundingTokens" | "deadlineAtMs" |
+  "preparationSettleDeadlineAtMs" | "signal" | "pricingCallBackend"
+>;
+
+export interface PrepareStrictRuntimeInput extends PrepareAdapterRuntimeInput {
+  readonly fundingPreparation?: StrictFundingPreparation;
+}
+
 const EMPTY_FUNDING_ASSETS: readonly string[] = Object.freeze([]);
 
 export interface StrictCanonicalActivityProof {
@@ -106,6 +120,13 @@ type StrictPricingProvenance =
 export class StrictCurrentRuntimeCoordinator
   implements CurrentSourceRuntimeCoordinator {
   private publishedPricing: BlockScanStateSnapshot | null = null;
+  private fundingEpoch = 0;
+  private readonly fundingPreparations = new WeakMap<StrictFundingPreparation, {
+    readonly input: StrictFundingPreparationInput;
+    readonly assetsKey: string;
+    readonly epoch: number;
+    readonly result: Promise<PromiseSettledResult<StrictProductionRuntimeSession>>;
+  }>();
 
   constructor(
     private readonly sessionFor: StrictSessionProvider,
@@ -120,8 +141,48 @@ export class StrictCurrentRuntimeCoordinator
   }
 
   async resetDynamicStateForReplay(): Promise<void> {
+    this.fundingEpoch++;
     this.publishedPricing = null;
     this.resetSessions();
+  }
+
+  startFundingPreparation(
+    request: StrictFundingPreparationInput,
+  ): StrictFundingPreparation {
+    const input = Object.freeze({
+      ...request,
+      fundingTokens: Object.freeze([...request.fundingTokens]),
+    });
+    const deadlineAtMs = Math.min(input.deadlineAtMs,
+      input.preparationSettleDeadlineAtMs ?? input.deadlineAtMs);
+    assertWorkOpen(deadlineAtMs, input.signal);
+    // Empty exact closure requests only the existing Funding preparation.
+    // Install both handlers before yielding to activity scanning.
+    const result = Promise.resolve().then(() => {
+      assertWorkOpen(deadlineAtMs, input.signal);
+      return this.sessionFor({
+        purpose: "exact-execution",
+        source: sourceFor(input.graph),
+        control: controlFor(deadlineAtMs, input.signal),
+        fundingAssets: input.fundingTokens,
+        requiredEdgeIds: new Set<string>(),
+        ...(input.pricingCallBackend === undefined
+          ? {} : { pricingCallBackend: input.pricingCallBackend }),
+      });
+    }).then(
+      (value): PromiseSettledResult<StrictProductionRuntimeSession> =>
+        ({ status: "fulfilled", value }),
+      (reason): PromiseSettledResult<StrictProductionRuntimeSession> =>
+        ({ status: "rejected", reason }),
+    );
+    const handle = Object.freeze({ settle: async () => { await result; } });
+    this.fundingPreparations.set(handle, {
+      input,
+      assetsKey: fundingAssetsKey(input.fundingTokens),
+      epoch: this.fundingEpoch,
+      result,
+    });
+    return handle;
   }
 
   async prepareCoarsePricing(input: {
@@ -161,7 +222,7 @@ export class StrictCurrentRuntimeCoordinator
   }
 
   async prepare(
-    input: PrepareAdapterRuntimeInput,
+    input: PrepareStrictRuntimeInput,
   ): Promise<AdapterRuntimePrepareResult> {
     const startedAtMs = Date.now();
     const settleDeadlineAtMs = Math.min(
@@ -170,31 +231,62 @@ export class StrictCurrentRuntimeCoordinator
     );
     assertWorkOpen(settleDeadlineAtMs, input.signal);
     const source = sourceFor(input.graph);
+    const prefunding = input.fundingPreparation === undefined
+      ? undefined : this.fundingPreparations.get(input.fundingPreparation);
+    if (input.fundingPreparation !== undefined && (
+      prefunding === undefined ||
+      prefunding.epoch !== this.fundingEpoch ||
+      prefunding.input.graph !== input.graph ||
+      prefunding.assetsKey !== fundingAssetsKey(input.fundingTokens) ||
+      prefunding.input.signal !== input.signal ||
+      prefunding.input.deadlineAtMs !== input.deadlineAtMs ||
+      prefunding.input.preparationSettleDeadlineAtMs !==
+        input.preparationSettleDeadlineAtMs ||
+      prefunding.input.pricingCallBackend !== input.pricingCallBackend
+    )) {
+      throw new Error("strict Funding preparation differs from current pass");
+    }
     const sessionStartedAtMs = Date.now();
     const previous = this.publishedPricing;
-    const sessionPromise = this.sessionFor({
+    const sessionPromise = Promise.resolve().then(() => this.sessionFor({
       purpose: "source-n-runtime",
       source,
       control: controlFor(settleDeadlineAtMs, input.signal),
-      fundingAssets: input.fundingTokens,
+      fundingAssets: prefunding === undefined
+        ? input.fundingTokens : EMPTY_FUNDING_ASSETS,
       ...(previous === null || input.touchedPools === undefined
         ? {}
         : { touchedPools: input.touchedPools }),
       ...(input.pricingCallBackend === undefined
         ? {}
         : { pricingCallBackend: input.pricingCallBackend }),
-    });
+    }));
     const executionStartedAtMs = Date.now();
     const executionPromise = input.prepareExecution === undefined
       ? Promise.resolve()
-      : input.prepareExecution({
+      : Promise.resolve().then(() => input.prepareExecution!({
           generation: source.generation,
           sourceBlock: source.number,
           sourceBlockHash: source.hash,
           deadlineAtMs: settleDeadlineAtMs,
           signal: input.signal ?? new AbortController().signal,
-        });
-    const [session] = await Promise.all([sessionPromise, executionPromise]);
+        }));
+    const [sessionResult, executionResult, fundingResult] = await Promise.allSettled([
+      sessionPromise,
+      executionPromise,
+      prefunding?.result,
+    ] as const);
+    if (sessionResult.status === "rejected") throw sessionResult.reason;
+    if (executionResult.status === "rejected") throw executionResult.reason;
+    if (fundingResult.status === "rejected") throw fundingResult.reason;
+    const preparedFunding = fundingResult.value;
+    if (preparedFunding?.status === "rejected") throw preparedFunding.reason;
+    const session = sessionResult.value;
+    const fundingSession = preparedFunding?.value ?? session;
+    if (prefunding !== undefined && prefunding.epoch !== this.fundingEpoch) {
+      throw new Error("strict Funding preparation retired during join");
+    }
+    assertSessionGraphSource(fundingSession, input.graph);
     const executionMs = input.prepareExecution === undefined
       ? 0
       : Math.max(0, Date.now() - executionStartedAtMs);
@@ -208,7 +300,8 @@ export class StrictCurrentRuntimeCoordinator
     const pricingMs = Math.max(0, Date.now() - pricingStartedAtMs) +
       Math.max(0, pricingStartedAtMs - sessionStartedAtMs);
     const funding = buildStrictFundingSnapshot(
-      session.fundingProjection(),
+      fundingSession.fundingProjection(prefunding === undefined
+        ? undefined : controlFor(settleDeadlineAtMs, input.signal)),
       input.graph,
     );
     const fundingCoverage = funding.coverage;
@@ -904,6 +997,10 @@ function buildStrictFundingSnapshot(
     freshnessByFundingId,
     sources,
   );
+}
+
+function fundingAssetsKey(assets: readonly string[]): string {
+  return [...new Set(assets.map((asset) => asset.toLowerCase()))].sort().join(",");
 }
 
 function sourceFor(graph: VerifiedGraphView): CanonicalSource {
