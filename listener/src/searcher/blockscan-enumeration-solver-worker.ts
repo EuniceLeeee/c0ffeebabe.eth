@@ -51,6 +51,7 @@ interface RawRouteBatch {
   readonly routes: readonly BlockScanRouteLocator[];
   readonly enumeration: readonly number[];
   readonly exact: readonly CompactExactValue[] | null;
+  readonly exactProbeWallMs?: readonly (number | null)[];
   readonly planner: readonly number[];
   readonly solver: readonly number[];
   readonly gapBefore: RouteGap | null;
@@ -344,6 +345,7 @@ async function handleRouteBatch(batch: RawRouteBatch): Promise<void> {
     pass_reason: batch.passReason,
     enumeration: batch.enumeration.map(lookup),
     exact: batch.exact,
+    ...(batch.exactProbeWallMs === undefined ? {} : { exact_probe_wall_ms: batch.exactProbeWallMs }),
     planner: batch.planner.map(lookup),
     solver: batch.solver.map(lookup),
     ...(batch.gapBefore
@@ -634,6 +636,13 @@ function validateBatch(batch: RawRouteBatch): void {
   ) {
     throw new Error("invalid route telemetry mid source block");
   }
+  if (batch.exactProbeWallMs !== undefined && (
+    !Array.isArray(batch.exactProbeWallMs) ||
+    batch.exactProbeWallMs.length !== batch.enumeration.length ||
+    batch.exact === null ||
+    !batch.exactProbeWallMs.every((value) => value === null ||
+      (Number.isSafeInteger(value) && value >= 0))
+  )) throw new Error("invalid exact probe timing array");
   if (
     (batch.midSourceBlock === null) !== (batch.midSourceBlockHash === null)
   ) {

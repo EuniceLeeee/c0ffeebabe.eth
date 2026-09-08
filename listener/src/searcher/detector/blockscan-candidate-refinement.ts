@@ -69,6 +69,8 @@ export interface BlockScanProbeDiagnostic {
   marginBps: number | null;
   attempted: boolean;
   failure: BlockScanProbeFailureDiagnostic | null;
+  /** Present only when the route quote settled with a margin result. */
+  wallMs?: number;
 }
 
 export interface BlockScanProbeFailureDiagnostic {
@@ -121,6 +123,8 @@ export interface BlockScanRefinementOptions {
   readonly runtimeEvidence?: readonly RuntimeEvidence[];
   /** Caller-owned pass cancellation. */
   readonly signal?: AbortSignal;
+  /** The caller persists probe timings through its existing bounded writer. */
+  readonly deferProbeTimingLog?: boolean;
 }
 
 interface RankedProbe {
@@ -432,6 +436,7 @@ export async function refineBlockScanCandidates(
     });
     attempted++;
     recordShadowTotal(opportunity);
+    let probeWallMs: number | undefined;
     try {
       const probeStartedAtMs = Date.now();
       const probe = exactProbeMarginBps(
@@ -450,8 +455,8 @@ export async function refineBlockScanCandidates(
         () => stageBudget.recordRouteSuccess(opportunity.seedEdges),
       );
       const marginBps = await probe;
-      const probeWallMs = Date.now() - probeStartedAtMs;
-      if (probeWallMs > 100) {
+      probeWallMs = Math.max(0, Date.now() - probeStartedAtMs);
+      if (probeWallMs > 100 && !(options.deferProbeTimingLog && onProbe !== undefined)) {
         console.log(
           "[exact-probe] idx=" + index +
             " wallMs=" + probeWallMs +
@@ -491,6 +496,7 @@ export async function refineBlockScanCandidates(
           index,
           status: "positive",
           marginBps,
+          wallMs: probeWallMs,
           attempted: true,
           failure: null,
         });
@@ -501,6 +507,7 @@ export async function refineBlockScanCandidates(
           index,
           status: "negative",
           marginBps,
+          wallMs: probeWallMs,
           attempted: true,
           failure: null,
         });
@@ -537,6 +544,7 @@ export async function refineBlockScanCandidates(
           status: "unprobed",
           marginBps: null,
           attempted: true,
+          wallMs: probeWallMs,
           failure: probeFailureDiagnostic(
             "global_deadline",
             familyIds,
@@ -570,6 +578,7 @@ export async function refineBlockScanCandidates(
           status: "failed",
           marginBps: null,
           attempted: true,
+          wallMs: probeWallMs,
           failure: probeFailureDiagnostic(
             localTimedOut ? "probe_timeout" : "quote_error",
             familyIds,

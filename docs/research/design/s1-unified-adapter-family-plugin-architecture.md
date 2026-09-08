@@ -3158,6 +3158,51 @@ records:52 records and3 fast terminals, not3 completed EVs. Target25930680/
 source25930679 reconstructs49412 mids and joins512 routes,98 Planner entries
 and89 Solver entries, agreeing with raw lifecycle evidence.
 
+### 16.28 Exact probe timings use the existing writer (batch4c, 2026-09-08)
+
+This item is deliberately limited to successful Exact route-probe timing text,
+not a new general telemetry platform or a rewrite of central/Solver logging.
+For scale, the4a log slice after its first steady terminal through its last
+(lines28740–137600) contains21253 `[exact-probe]` lines/1376180 bytes.
+Removing their hot-path string formatting is not presumed to save seconds.
+
+When the pass already reserved an existing route-telemetry writer slot, the
+probe forwards its completed quote duration through the existing diagnostic
+callback. The pass stores one optional numeric array aligned with enumeration;
+the same background writer encodes it as additive schema-v2
+`exact_probe_wall_ms`. Unknown/unsettled entries are null, not zero or success;
+legacy/no-timing records omit the field. The existing Exact status array keeps
+its four-value layout, route catalog/refs and analysis CLI compatibility.
+No scores, ranking analysis or extra RPC are computed for this field.
+
+The normal console timing fallback remains when there is no reserved recorder,
+and the helper also requires a diagnostic callback before suppressing text.
+Exact failures, including throttle diagnostics, and central/Solver logs remain
+unchanged. A reserved writer may still later fail/drop: existing bounded
+queue/gap semantics apply and cannot block search. There is no new queue,
+worker, output file, changed credit count, or awaited disk write in the search
+path. Size estimation includes the added scalar array; the worker validates
+dimensions/finite nonnegative integer durations and retains its encoded cap.
+
+Refinement regression preserves the same selected result with normal/deferred
+timing, records the201ms source value, retains console fallback without a
+callback and still emits a synthetic429 error. Writer6/6 proves ordered scalar
+alignment/null slots, legacy omission, exact encoded-byte accounting, invalid
+timing/partial-record drops with gaps, formal-event isolation and lock cleanup.
+Full build, live typecheck, strict production session, router safety6/6 and
+historical-live replay contract pass. The existing20-run/512-route/four-leg
+performance test now includes durations: full enabled-vs-disabled recorder
+p95/p99 main-thread delta2.225/2.618ms; blocked-writer p99 is0.015ms. This is a
+controlled whole-recorder measurement, not the incremental patch cost, zero
+overhead proof or a live end-to-end speedup.
+
+Independent non-author review approved after executing refinement, writer6/6,
+the updated performance/boundedness benchmark, full/live no-emit checks and
+whitespace gate. A measured quote can subsequently fail deadline admission;
+the timing value is never execution authority or proof of an admitted Exact.
+The final frozen Ready12 fixed50 observation retains all original search work,
+signing/broadcast off and the explicit429 stop; batch5 remains deferred.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.

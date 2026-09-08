@@ -350,6 +350,7 @@ async function measuredPass(
         index,
         status: "positive",
         marginBps: index + 1,
+        wallMs: 200 + index,
         attempted: true,
         failure: null,
       });
@@ -396,6 +397,7 @@ function enqueuePass(
       index,
       status: "positive",
       marginBps: index + 1,
+      wallMs: 200 + index,
       attempted: true,
       failure: null,
     });

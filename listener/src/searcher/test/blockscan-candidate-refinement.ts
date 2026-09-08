@@ -288,6 +288,7 @@ await executorQuoteContextReachesFamily();
 await admissionFloorSkipsLowSpreadProbes();
 await completionNotificationPreservesOrder();
 await completionNotificationDrainsOnCallbackFailure();
+await probeTimingLoggingPreservesResults();
 
 console.log("blockscan-candidate-refinement PASS");
 
@@ -1220,6 +1221,53 @@ async function executorQuoteContextReachesFamily(): Promise<void> {
     ["executor-aware-quote"],
     "executor-dependent families must survive generic exact refinement",
   );
+}
+
+async function probeTimingLoggingPreservesResults(): Promise<void> {
+  const originalNow = Date.now;
+  const originalLog = console.log;
+  let now = originalNow();
+  const lines: string[] = [];
+  const diagnostics: BlockScanProbeDiagnostic[] = [];
+  const candidates = [{ ...opportunity(TOKEN_6, 1_024n), seedEdges: [familyEdge("timing", 1)] }];
+  let fail = false;
+  const strictSession = {
+    async issueExact(input: Parameters<StrictProductionRuntimeSession["issueExact"]>[0]) {
+      now += 201;
+      if (fail) throw new Error("HTTP 429 synthetic fixture");
+      return { amountOut: input.amountIn + 1n };
+    },
+  } as unknown as StrictProductionRuntimeSession;
+  const run = (defer: boolean, observe = true) => refineBlockScanCandidatesStrict(
+    { async call(): Promise<string> { throw new Error("test oracle owns quotes"); } } as unknown as StateBackend,
+    candidates, 1, now + 2_000, pricedTokens,
+    observe ? (diagnostic) => { diagnostics.push(diagnostic); } : undefined,
+    1, { strictSession, executor: ethers.ZeroAddress, deferProbeTimingLog: defer },
+  );
+  try {
+    Date.now = () => now;
+    console.log = (...args: unknown[]) => { lines.push(args.join(" ")); };
+    const normal = await run(false);
+    assert.equal(lines.filter((line) => line.startsWith("[exact-probe]")).length, 1);
+    lines.length = 0;
+    const deferred = await run(true);
+    assert.deepEqual(deferred, normal, "moving timing output must not alter selection");
+    assert.equal(lines.length, 0);
+    assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.wallMs), [201, 201]);
+    await run(true, false);
+    assert.equal(lines.filter((line) => line.startsWith("[exact-probe]")).length, 1,
+      "without a recording callback timings remain on stdout");
+    lines.length = 0;
+    fail = true;
+    const rejected = await run(true);
+    assert.equal(rejected.failed, 1);
+    assert(lines.some((line) => line.startsWith("[exact-probe-fail]") && line.includes("429")),
+      "error/throttle diagnostics must never be suppressed");
+    assert.equal(diagnostics.at(-1)?.wallMs, undefined, "failed quote has no completed timing");
+  } finally {
+    Date.now = originalNow;
+    console.log = originalLog;
+  }
 }
 
 async function completionNotificationPreservesOrder(): Promise<void> {

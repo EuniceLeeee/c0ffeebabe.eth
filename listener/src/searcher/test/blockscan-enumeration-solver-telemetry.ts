@@ -86,6 +86,7 @@ test(
         index: 0,
         status: "positive",
         marginBps: 125,
+        wallMs: 201,
         attempted: true,
         failure: null,
       });
@@ -148,6 +149,7 @@ test(
         pass_reason: null,
         enumeration: [1, 2],
         exact: [1, 1, 125, 0, 3, 0, null, 3],
+        exact_probe_wall_ms: [201, null],
         planner: [1],
         solver: [1],
         encoded_bytes: blocks[0]!.encoded_bytes,
@@ -246,6 +248,34 @@ test(
     );
   },
 );
+
+test("invalid probe timings are dropped with the existing writer gap", async () => {
+  for (const wallMs of [-1, NaN, Infinity]) await withTempDir(async (dir) => {
+    const eventsPath = join(dir, "events.jsonl");
+    const routePath = join(dir, "routes.jsonl");
+    await writeFile(eventsPath, "");
+    const sink = await initBlockScanEnumerationSolverTelemetry({
+      path: routePath, eventsPath, runId: "invalid-timing", minFreeBytes: 1,
+    });
+    const route = opportunity(200, [edge("adapter-a", address(301), address(1), address(2))]);
+    const pass = sink.beginPass(200);
+    assert.ok(pass);
+    pass.recordEnumeration([route]);
+    pass.recordExact(route, { index: 0, status: "positive", marginBps: 10,
+      attempted: true, failure: null, wallMs });
+    pass.finish({ sourceBlockHash: `0x${"12".repeat(32)}`, midSourceBlock: 200,
+      midSourceBlockHash: `0x${"12".repeat(32)}`, pricingMode: "source_n",
+      passOutcome: "ran", passReason: null });
+    sink.recordNotStarted({ sourceBlock: 201, sourceBlockHash: null,
+      pricingMode: null, passOutcome: "not_started", passReason: "scheduler_coalesced" });
+    await sink.shutdown(5_000);
+    const rows = await readJsonl(routePath);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.source_block, 201);
+    assert.equal(rows[0]!.dropped_batches, 1);
+    assert.equal(sink.telemetry().droppedBatches, 1);
+  });
+});
 
 test("partial exact evidence drops the whole pass and persists a writer gap", async () => {
   await withTempDir(async (dir) => {

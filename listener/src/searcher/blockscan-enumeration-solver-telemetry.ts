@@ -114,6 +114,7 @@ interface RawRouteBatch {
   readonly routes: readonly BlockScanRouteLocator[];
   readonly enumeration: readonly number[];
   readonly exact: readonly CompactExactValue[] | null;
+  readonly exactProbeWallMs?: readonly (number | null)[];
   readonly planner: readonly number[];
   readonly solver: readonly number[];
   readonly gapBefore: RouteGap | null;
@@ -242,6 +243,7 @@ class RoutePass implements BlockScanRouteTelemetryPass {
   private readonly enumerationRouteIndexes = new Set<number>();
   private readonly enumerationOpportunities: BlockScanOpportunity[] = [];
   private readonly exact: Array<CompactExactValue | undefined> = [];
+  private exactProbeWallMs: Array<number | null> | undefined;
   private exactCount = 0;
   private readonly planner: number[] = [];
   private readonly solver: number[] = [];
@@ -265,6 +267,7 @@ class RoutePass implements BlockScanRouteTelemetryPass {
       solver: readonly number[],
       input: BlockScanRouteTelemetryFinish,
       invalid: boolean,
+      exactProbeWallMs?: readonly (number | null)[],
     ) => void,
   ) {}
 
@@ -305,6 +308,14 @@ class RoutePass implements BlockScanRouteTelemetryPass {
     if (!writeCompactExactDiagnostic(this.exact, exactOffset, diagnostic)) {
       this.invalid = true;
       return;
+    }
+    if (diagnostic.wallMs !== undefined) {
+      if (!Number.isSafeInteger(diagnostic.wallMs) || diagnostic.wallMs < 0) {
+        this.invalid = true;
+        return;
+      }
+      this.exactProbeWallMs ??= new Array<number | null>(this.enumeration.length).fill(null);
+      this.exactProbeWallMs[rankIndex] = diagnostic.wallMs;
     }
     this.exactCount++;
   }
@@ -350,6 +361,7 @@ class RoutePass implements BlockScanRouteTelemetryPass {
       this.solver,
       input,
       this.invalid,
+      this.exactProbeWallMs === undefined ? undefined : Object.freeze(this.exactProbeWallMs),
     );
   }
 
@@ -437,10 +449,11 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
         solver,
         input,
         invalid,
+        exactProbeWallMs,
       ) => {
         if (
           invalid ||
-          !this.validBatch(routes, enumeration, exact, planner, solver) ||
+          !this.validBatch(routes, enumeration, exact, planner, solver, exactProbeWallMs) ||
           !validFinish(input)
         ) {
           this.releaseReserved();
@@ -462,6 +475,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
           routes: Object.freeze([...routes]),
           enumeration: Object.freeze([...enumeration]),
           exact,
+          ...(exactProbeWallMs === undefined ? {} : { exactProbeWallMs }),
           planner: Object.freeze([...planner]),
           solver: Object.freeze([...solver]),
           gapBefore: null,
@@ -691,6 +705,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
     exact: readonly CompactExactValue[] | null,
     planner: readonly number[],
     solver: readonly number[],
+    exactProbeWallMs?: readonly (number | null)[],
   ): boolean {
     if (routes.length > this.maxRoutes) return false;
     const validIndex = (index: number): boolean =>
@@ -707,7 +722,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
     ) return false;
     let estimated = 640 +
       (enumeration.length + planner.length + solver.length) * 8 +
-      (exact?.length ?? 0) * 10;
+      (exact?.length ?? 0) * 10 + (exactProbeWallMs?.length ?? 0) * 17;
     for (const route of routes) {
       if (
         route.routeId.length > 80 ||

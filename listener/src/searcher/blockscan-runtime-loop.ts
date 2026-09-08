@@ -2997,6 +2997,7 @@ export class BlockScanRuntimeLoop {
           minCapitalFraction:
             blockScanCfg.minCapitalFraction ?? 0,
           probeTimeoutMs: this.deps.exactProbeTimeoutMs,
+          deferProbeTimingLog: routeTelemetryPass !== null,
         },
       );
       if (refinement.shadow) {
