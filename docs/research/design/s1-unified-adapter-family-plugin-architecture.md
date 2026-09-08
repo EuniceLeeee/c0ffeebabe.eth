@@ -2597,8 +2597,10 @@ The first frozen observation used runtime
 `logs/ordered-pipeline-ready12-43daff2c/` holds the raw run and guard anchors.
 The first50 nonbootstrap source window was fixed as25929937–25929986:50
 terminal records, no missing or duplicate source blocks.49 entered Solver,
-9 finished the Solver stage,4 entered final simulation and0 reached EV.
-All four observed simulation results rejected; none represents EV success.
+9 finished the Solver stage,48 recorded a final-sim call entry,4 returned
+simulation results and0 reached EV. The entry callback precedes resource/fork
+readiness; it does not prove worker EVM execution. All four observed simulation
+results rejected; none represents EV success.
 Terminal lifetime including cancelled work/cleanup was p50=14025.502ms,
 p95=16480.984ms, max=17006.842ms. Two terminal records were below10000ms;
 neither completed through EV. These are not full-cycle completion percentiles.
@@ -2659,11 +2661,14 @@ and ports8555–8560 were empty afterwards. Bootstrap source25930104 took
 
 All50 source blocks have one terminal record and one route lifecycle record,
 with no missing or duplicate block.48 entered Solver;12 completed that stage,
-36 were interrupted there and2 stopped at Exact. Three source blocks
-(25930115,25930117,25930119) entered final simulation, producing four actual
-revert records; none reached EV. First Solver start was p50=6738ms,
-p95=8175ms,max=8527ms (48 samples). First final-sim start was
-p50=6985ms,p95/max=7696ms (three samples). There is no first-EV or complete-EV
+36 were interrupted there and2 stopped at Exact.43 blocks recorded a final-sim
+call entry. Three source blocks (25930115,25930117,25930119) returned simulation
+results, producing four actual revert records; none reached EV. First Solver
+start was p50=6738ms,p95=8175ms,max=8527ms (48 samples). First final-sim call
+entry was p50=6953ms,p95=7785ms,max=8388ms (43 samples); this precedes resource
+acquisition and fork readiness, not necessarily worker EVM execution. The
+completed-stage subset's start was p50=6985ms,p95/max=7696ms (three samples).
+There is no first-EV or complete-EV
 latency sample. Terminal lifetime including cancellations and cleanup was
 p50=14380.093ms,p95=16654.148ms,max=19119.347ms. Its two sub-ten-second records
 did not reach EV. Independent stage timings overlap and are not additive.
@@ -2699,6 +2704,169 @@ The latency tool's process-anchored line2–162618 window includes bootstrap
 Block-activity target25930116 maps to source25930115 and reconstructs48450 mids,
 512 enumerated candidates, and the recorded final-sim failure. This is a local
 unpaired implementation observation, not Hermes A/B promotion evidence.
+
+The subsequent independent audit corrected the entry/completion distinction
+above without changing raw evidence. Cancellation can preserve
+`planner_solver_detail.preSimMs` while skipping the returned atomic-stage merge;
+`final_sim.status=not-run` alone therefore cannot count call entries. The
+task-local summary now uses that callback field and separately retains the
+completed-stage subset. The canonical latency tool already reports this field;
+no indexed-tool defect was established. Original summaries remain unchanged.
+Audited summaries are `first50-audited-summary.json` in each run directory:
+batch1 SHA-256 `a82915ea206a00d33ed57accdfef1f4d23dfb4d708690b7f5a122fdf791ebe39`,
+batch2 SHA-256 `49e6ec77a71e9eb2c3480335aae320757950b292b60448482644fa5b091ad0f6`.
+Batch1 call-entry p50/p95/max=7251/8194/8791ms (48 samples). Eight Funding
+offers per session do not by themselves establish eight memo hits: no exact
+542-hit split between Funding and ordinary Exact is claimed.
+
+### 16.24 Exact/Solver adversarial audit and fifth-batch contract (2026-09-08)
+
+This read-only production audit is anchored at `7b029f19`, before batch3.
+The user added batch5 and approved its direction: one amount-evaluation path,
+multiple amounts for every candidate actually emitted by enumeration, retention
+of positive samples and direct continuation into sizing/plan construction.
+This is a planned admission/search change, **not implemented**, and not a
+claim of behavior-equivalent latency improvement. Batch3 has not been edited
+as part of this audit. The existing finite Goal's batches1–4 remain in scope;
+batch5 follows them, with this audit completed first.
+
+#### Verified current behavior and the alternatives
+
+`blockscan-candidate-refinement.ts` probes the complete ordered route at
+`p=max(9,min(searchCenter,maxInput)/1024)`. It rejects a nonpositive return,
+then ranks positives by `marginBps * capacityShare` and applies the candidate
+cap. This return comparison has no gas/production-EV calculation and no integer
+basis-point floor. Positive candidates inherit `p` as their search center.
+The priority uses the original coarse ceiling divided by this flash asset's
+`maxBorrow`, not the newly anchored small amount. Ties break by larger probe
+margin, then earlier original enumeration index. This capacity-normalized
+heuristic is neither USD profit nor maximum attainable net EV.
+Planner may clamp it again to live Funding. `solver.ts` independently propagates
+the grid's amounts, retains raw outputs and exact handles, and refines around
+a positive grid result. With the current half-width2, the unclamped grid spans
+`p/4..4p` and GSS brackets no farther than `8p`; this is not a search of the
+entire capacity ceiling. Removing the independent stage must not accidentally
+restore the much larger coarse center and discard the old small-amount region.
+
+| Alternative | Audit disposition |
+|---|---|
+| Keep current one-point Exact unchanged | Still a real preselection/ranking stage; its one-point rejection is not proof that every amount is unprofitable. |
+| Move the same one-point rejection into Solver | Changes location, not the rejection rule or the global ranking barrier. |
+| Hand the successful one-point sample to current Solver | Can remove repeated local propagation/decoding without changing selection; it does not rescue routes already discarded by Exact. Existing same-call byte caching means another whole RPC wave cannot be credited automatically. |
+| All enumerated candidates receive multiple amount tests, then continue using retained samples | User-approved batch5 direction. This does remove the single-point veto when another tested amount is positive. It intentionally changes candidate distribution and needs resource/coverage validation. |
+| Run complete grid and GSS for every enumerated route | A fuller-search comparison, not a free latency optimization; do not silently replace the agreed continuation budget with this policy. |
+
+"All candidates" means actual enumeration output, not exhaustive graph search.
+The old single-point profitability gate and old pre-refinement spread filtering
+must not silently precede the proposed all-candidate multi-amount stage. Actual
+source/edge/Funding validity checks remain mandatory. Multiple amounts are
+independent jobs; a route's next leg still consumes the preceding leg's output.
+A quote for one pair/amount cannot be scaled or joined to a different input
+amount as exact evidence.
+
+Ordinary continuous, concave zero-origin AMM composition has nonincreasing
+output/input, so negative return at an amount rules out larger amounts under
+those assumptions, not all smaller ones. Actual integer rounding, minimum
+amount conditions and non-concave protocol behavior prevent using that as a
+universal Family contract. Fixed gas can also make small *net EV* negative while
+larger net EV is positive, but gas is not the current Exact rejection test.
+All sampled amounts being nonpositive proves only the tested points; timeout,
+abort, failed or unfinished quotes must not be relabelled as negative profit.
+No measured missed-mainnet-EV count is established by this code audit.
+
+The independent audit executed the existing `quoteV2ExactInput` helper on two
+constructed distinct pools, direction-ordered reserves100000/200000 and
+100000/53000, both30bps: input9 produced hop17/output8 (profit−1), while
+input36 produced hop71/output37 (profit+1). A five-point grid around9 includes
+36 and rescues this single-point false negative. This is an integer-math
+counterexample, not evidence of a missed real transaction or positive net EV.
+
+#### Prior fixed50 route counts, not stage-entry block percentages
+
+Counts sum candidate occurrences within each declared50-source window; the
+same route in two different blocks counts twice. `attempted` includes initiated
+work later left unfinished. Planner and Solver columns are actual lifecycle
+entries, not successful solves or EV outcomes. Exact duration includes failed
+attempts but excludes stages that never ran (n=50/49/49/50 respectively);
+not-run sources remain in the fixed50 route/completion denominator and are not
+zero-millisecond successes.
+
+| Runtime / source window | Exact attempted / positive | Positive ÷ attempted | Planner / Solver entries | Solver ÷ positive | Exact p50 / p95, seconds |
+|---|---:|---:|---:|---:|---:|
+| `7c887c6b`,25926042–25926091 | 25299 /18623 | 73.61% | 2900 /955 | 5.13% | 3.592 /4.015 |
+| `0fc76eec`,25926216–25926265 | 24731 /16742 | 67.70% | 2200 /792 | 4.73% | 3.760 /4.016 |
+| `43daff2c`,25929937–25929986 | 24843 /19776 | 79.60% | 4811 /3946 | 19.95% | 1.614 /2.156 |
+| `74ad8d3e`,25930113–25930162 | 25299 /19586 | 77.42% | 4713 /3713 | 18.96% | 1.624 /2.456 |
+
+Even with unlimited time, the unchanged Top100 policy does not send every
+positive route to Solver. The last two windows selected4900/4800 positive
+TopK occurrences, about24.78%/24.51% of their respective positive sets; actual
+Planner entries can be lower after intervening checks. More time does not
+remove this cap.
+
+The recent77–80% is positivity among attempted probes, **not** the proportion
+of Exact positives actually reaching Solver. Recent Solver/Planner-entry ratios
+are82.02%/78.78%; cap selection and later interruption are separate losses.
+These unpaired windows cannot establish causal performance changes. A high
+positive rate alone establishes neither useful ranking nor wasted work; the
+retained winning-route/amount and final-sim/EV results must also be compared.
+
+#### Batch5 implementation and acceptance boundary
+
+- Share one route-amount evaluator between initial sampling and continuation,
+  using existing strict per-leg issuance and backend memoization. Do not build
+  another quote transport, independently authoritative cache or per-pair
+  approximate-price pipeline.
+- Cover every emitted candidate with the declared multi-amount policy before
+  profitability-based rejection; any positive sample preserves that route's
+  eligibility and sample. A later shortlist/GSS allocation remains an explicit
+  separate policy, never hidden behind "all candidates". Freeze amount-domain
+  anchors, rounding/dedup, Funding caps, cross-asset ranking and tie order before
+  comparing shortlist continuation with fuller continuation. Do not silently
+  reduce the previous supported search region or downstream safety work.
+- Continue from the saved grid rather than rerunning it. Keep ordered outcomes
+  for all points, including negative scores and typed failures; positive points
+  retain amounts/rawOutputs/handles. Resume best-point/GSS/finalist state in
+  logical search order, not response-completion order. A retained point still
+  participates in scoring and finalist selection; skipping its evaluation must
+  not remove it from the search.
+- Samples are bounded, pass/session-owned, opaque evidence. Bind actual
+  source/hash/generation, ordered canonical edges, caller/executor, runtime
+  evidence, amount, safety and credit semantics. Validate the full per-leg
+  input/output/spendable chain as well as handle ownership when consumed;
+  arbitrary caller-authored arrays plus an authentic handle are insufficient.
+  Recheck cancellation/deadline/generation and live Funding caps. Discard stale
+  samples and drain retained work; never bypass final sim, repayment or EV.
+- Test small-nonpositive/other-point-positive, all-tested-nonpositive,
+  unfinished/error, Funding clamp, changed route/caller/source, forged sample,
+  tie/fallback and cancellation cases. Freeze identical input and amount policy
+  for resource comparisons. Report evaluated/unevaluated points, rescued and
+  lost routes, physical calls, memo hits, retained memory, first/full completion
+  and fixed-source final-sim/EV results. Quote positivity alone is not profit.
+- A five-point illustration costs roughly`512*5=2560` route-amount evaluations
+  before fine search, versus`512+100*5=1012` for the old two phases. This is
+  logical work arithmetic, not an RPC, CU or wall-time prediction; dedup,
+  cancellation and GSS alter actual costs. Removing a1.6s stage is not an
+  automatic1.6s net saving when its replacement does more useful work.
+
+Implementation remains separately reviewed/committed from batches3/4. Any
+authorized live observation retains Ready12, all fifty fixed sources, unchanged
+transport/worker/deadline settings and signing/broadcast off. Confirmed429 stops
+task RPC without retry-through. The fifth-batch direction does not promise all
+profitable amounts are found, all routes finish, or ten-second full EV completion.
+
+Existing zero-mainnet-RPC regressions passed: candidate refinement and amount
+search22/22. Manual observation review was reconciled through the generated
+`latency,single-block,production-events,state-coverage` selection and
+`analysis:blockscan-pass-latency` / `analysis:block-activity` (both exit0),
+reusing batch2's frozen log and target25930116, not a new live run. The latency
+tool agrees on43 final-sim call entries; its51-record scope includes bootstrap.
+Manifest `/tmp/exact-solver-adversarial-tools.json` SHA-256:
+`f626ffbb928090fdbf8efb84187091e8eb0a8d8583f2a1fd8ac5f3dd032d41a7`.
+Independent semantic/authority and cost/selection reviews converged on the
+multi-amount direction with the stated boundaries; the non-author document
+review approved this section with no blocking finding. No production source,
+configuration or Ready12 checkpoint changed, and no live/RPC was started.
 
 ## 17. Role of tests and tools
 
