@@ -343,6 +343,14 @@ export async function refineBlockScanCandidates(
     : undefined;
   const pending = [...work];
   const active = new Set<Promise<void>>();
+  let wake: (() => void) | undefined;
+  let taskFailure: { readonly reason: unknown } | undefined;
+  const completed = (task: Promise<void>) => {
+    active.delete(task);
+    const notify = wake;
+    wake = undefined;
+    notify?.();
+  };
   let peakConcurrentProbes = 0;
   const claimNext = (): typeof work[number] | null => {
     for (let index = 0; index < pending.length;) {
@@ -613,12 +621,19 @@ export async function refineBlockScanCandidates(
           active.size,
         );
         void task.then(
-          () => active.delete(task),
-          () => active.delete(task),
+          () => completed(task),
+          (reason) => {
+            taskFailure ??= { reason };
+            completed(task);
+          },
         );
       }
       if (active.size > 0) {
-        await Promise.race(active);
+        // Register each task once. Repeated races attach another reaction to
+        // every slow sibling whenever a faster probe frees one global slot.
+        // There is no await between checking active and installing this waiter.
+        await new Promise<void>((resolve) => { wake = resolve; });
+        if (taskFailure !== undefined) throw taskFailure.reason;
       } else if (pending.length > 0) {
         // With no active probe left, no future success can close a circuit.
         // Only now is a blocked pending route definitively unavailable.

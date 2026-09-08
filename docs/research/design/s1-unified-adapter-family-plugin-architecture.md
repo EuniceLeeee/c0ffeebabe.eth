@@ -3003,6 +3003,32 @@ observation does not prove an end-to-end improvement or regression caused by
 the patch, is not a Hermes A/B win, and does not justify numerical tuning or
 expanding into deferred batch5.
 
+### 16.26 Exact completion notification (batch4a, 2026-09-08)
+
+The existing global Exact queue now registers one settlement handler per probe
+and wakes a single waiting scheduler, instead of repeatedly attaching
+`Promise.race(active)` reactions to every still-pending sibling. Active-slot
+accounting, pending claim order, circuit recovery, amount calculation, stable
+ranking, Top-K, deadline fallback and final sibling settlement stay in place.
+Unexpected task rejection is retained and rethrown after the same active-task
+drain. No concurrency, deadline, scheduling or Exact/Solver policy changed.
+
+The refinement contract passes, including new controlled scheduler regressions:
+63 fast probes progress around one held probe while all64 original amounts and
+the stable Top20 are preserved; a throwing diagnostic callback stops further
+claims, preserves its error and waits for the remaining active sibling.
+Existing circuit recovery, local timeout and caller deadline regressions pass.
+These are scheduler tests, not manufactured production authority or EV proof.
+Full build, live typecheck, strict production session, ordered pipeline9/9,
+pass deadline4/4 and historical-live replay contract pass. Independent
+non-author review approved after executing refinement, live/full no-emit
+typechecks and diff check, with no blocking lost-wakeup/error/drain finding.
+
+The mechanism removes repeated promise bookkeeping; no seconds-level benefit
+or completed-to-EV improvement is claimed before its own frozen Ready12
+fixed50 observation. The other batch4 items remain separate, and batch5 is
+still deferred by the user.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.

@@ -286,6 +286,8 @@ await transientCircuitWaitsForInflightRecovery();
 await confirmedPositiveSurvivesLaterInstanceCircuit();
 await executorQuoteContextReachesFamily();
 await admissionFloorSkipsLowSpreadProbes();
+await completionNotificationPreservesOrder();
+await completionNotificationDrainsOnCallbackFailure();
 
 console.log("blockscan-candidate-refinement PASS");
 
@@ -1218,6 +1220,82 @@ async function executorQuoteContextReachesFamily(): Promise<void> {
     ["executor-aware-quote"],
     "executor-dependent families must survive generic exact refinement",
   );
+}
+
+async function completionNotificationPreservesOrder(): Promise<void> {
+  const slow = deferred<void>();
+  const candidates = Array.from({ length: 64 }, (_, index) => ({
+    ...opportunity(TOKEN_6, 1_024n),
+    cycleId: `completion-${index}`,
+    seedEdges: [familyEdge("completion-family", index)],
+  }));
+  const amounts: bigint[] = [];
+  const diagnostics: BlockScanProbeDiagnostic[] = [];
+  let started = 0;
+  const strictSession = {
+    async issueExact(input: Parameters<StrictProductionRuntimeSession["issueExact"]>[0]) {
+      const index = started++;
+      amounts.push(input.amountIn);
+      if (index === 0) await slow.promise;
+      return { amountOut: input.amountIn + 1n };
+    },
+  } as unknown as StrictProductionRuntimeSession;
+  const refinement = refineBlockScanCandidatesStrict(
+    { async call(): Promise<string> { throw new Error("scheduler oracle owns all quotes"); } } as unknown as StateBackend,
+    candidates, 20, Date.now() + 2_000, pricedTokens,
+    (diagnostic) => { diagnostics.push(diagnostic); }, 4,
+    { strictSession, executor: ethers.ZeroAddress, probeTimeoutMs: 1_500 },
+  );
+  await waitUntil(() => diagnostics.length === 63, "fast probes did not free their slots");
+  assert.equal(started, 64, "a slow first probe must not block later work");
+  assert(!diagnostics.some((diagnostic) => diagnostic.index === 0));
+  slow.resolve();
+  const result = await refinement;
+  assert.equal(result.attempted, 64);
+  assert.equal(result.positive, 64);
+  assert.equal(result.peakConcurrentProbes, 4);
+  assert.equal(result.deadlineHit, false);
+  assert.deepEqual(amounts, Array(64).fill(9n), "all original probe amounts are retained");
+  assert.equal(new Set(diagnostics.map((diagnostic) => diagnostic.index)).size, 64);
+  assert.deepEqual(result.opportunities.map((candidate) => candidate.cycleId),
+    candidates.slice(0, 20).map((candidate) => candidate.cycleId),
+    "completion order must not change stable ranking or Top-K");
+}
+
+async function completionNotificationDrainsOnCallbackFailure(): Promise<void> {
+  const calls = [deferred<void>(), deferred<void>()];
+  let started = 0;
+  let failures = 0;
+  let settled = false;
+  const failure = new Error("injected diagnostic callback failure");
+  const candidates = Array.from({ length: 3 }, (_, index) => ({
+    ...opportunity(TOKEN_6, 1_024n),
+    seedEdges: [familyEdge("callback-family", index)],
+  }));
+  const strictSession = {
+    async issueExact(input: Parameters<StrictProductionRuntimeSession["issueExact"]>[0]) {
+      const call = calls[started++];
+      assert(call !== undefined, "no pending probe may start after callback failure");
+      await call.promise;
+      return { amountOut: input.amountIn + 1n };
+    },
+  } as unknown as StrictProductionRuntimeSession;
+  const refinement = refineBlockScanCandidatesStrict(
+    { async call(): Promise<string> { throw new Error("scheduler oracle owns all quotes"); } } as unknown as StateBackend,
+    candidates, 3, Date.now() + 2_000, pricedTokens,
+    (diagnostic) => {
+      if (diagnostic.index === 0) { failures++; throw failure; }
+    }, 2, { strictSession, executor: ethers.ZeroAddress, probeTimeoutMs: 1_500 },
+  );
+  const rejected = assert.rejects(refinement, (error) => error === failure)
+    .then(() => { settled = true; });
+  calls[0].resolve();
+  await waitUntil(() => failures === 2, "callback rejection was not observed");
+  assert.equal(started, 2);
+  assert.equal(settled, false, "failure must drain the remaining active sibling");
+  calls[1].resolve();
+  await rejected;
+  assert.equal(started, 2);
 }
 
 function deferred<T>(): {
