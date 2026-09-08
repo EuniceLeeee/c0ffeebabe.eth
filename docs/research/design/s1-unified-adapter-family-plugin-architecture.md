@@ -2942,6 +2942,67 @@ and signing/broadcast off. ConfirmedAlchemy429 stops task RPC; no rebuild,
 provider/key switch or numeric tuning is part of the run. No live observation
 result is claimed in this implementation record.
 
+Frozen Ready12 observation for runtime `6686996c39f9da3b182c55f8bf62313529b4a76a`
+subsequently completed sources25930403–25930452 (50/50, no missing/duplicate
+terminal or route records). Task-owned PID67573 exited0 after the fixed boundary;
+ports8555–8560 cleared and the checkpoint hash above remained unchanged.
+Signing/broadcast stayed off. Local artifacts are under
+`logs/funding-activity-overlap-ready12-6686996c/`; the audited summary SHA-256 is
+`f6e538b04760d442d2398a057ec59f6f90dfedd4cdb510a9597ea7f2ca469d6f`.
+
+| Fixed50 observation (nearest-rank quantiles, ms) | n | p50 | p95 | max |
+| --- | ---: | ---: | ---: | ---: |
+| Activity task lifetime | 50 | 845 | 1594 | 1928 |
+| Funding task lifetime | 50 | 785 | 1519 | 1835 |
+| Activity/Funding task overlap | 50 | 69 | 116 | 154 |
+| State stage | 50 | 3454.629 | 4810.495 | 16707.415 |
+| Exact refinement | 50 | 2431.168 | 3838.290 | 4021.854 |
+| First Solver entry | 47 | 7413 | 8703 | 9911 |
+| First final-sim caller entry (`preSimMs`) | 36 | 7767 | 9130 | 10249 |
+| Pass terminal, including cancellation/drain | 50 | 12813.802 | 16781.479 | 19190.670 |
+
+47 blocks entered Solver; only1 completed that stage,46 were interrupted, and3
+stopped in Exact.36 final-sim caller entries are not proof of EVM worker entry;
+4 blocks returned final-sim stages, with4 recorded reverts. No EV completed and
+there is no complete-to-EV ten-second success. Across route occurrences there
+were25600 enumerated,25349 Exact-attempted,19742 positive,4649 Planner entries
+and2967 Solver entries. This is not a new candidate/amount policy.
+
+Producer final counters report8914 created non-memo read items (`totalCalls`),
+8914 batched items in97 batches and520 memo hits. Exact/Solver reports68513
+created non-memo read items,68492 batched items in1784
+batches,39552 memo hits,1 failed batch,64 single-call fallbacks and70 aborted
+batches. These counters must not be conflated with delivered physical requests;
+the failed-batch cause is unknown and no explicit429 was observed.
+Every recorded terminal backend has zero pending/live
+items, in-flight batches and active transports; no completion-after-abort was
+reported. These observations support backend drain, not a new integration test
+of every cancellation path. Writer internal queue/drop telemetry was not
+published, so file continuity (one baseline plus50 deltas) alone cannot prove
+zero internal drops. Independent non-author raw-versus-summary assertions
+passed for continuity, entry counts, quantiles, route/mid consistency and
+terminal backend drain; the scoped observation assessment was approved.
+
+Offline raw analysis was reconciled with the generated capability query
+`latency,single-block,production-events,state-coverage`. Both selected tools,
+`analysis:blockscan-pass-latency` and `analysis:block-activity`, executed through
+`tool-run` with exit0. The manifest `/tmp/funding-overlap-ready12-tools.json`
+SHA-256 is `576c84b0fc8094d00a802103b65cefcec4e33b8376b8109739810ef24101adb8`.
+The process-anchored latency scope (log lines2–153512) also includes bootstrap,
+so its51 records and6 fast terminal results are not the fixed50 EV completion
+denominator. Its interpolated quantiles also differ from nearest-rank values.
+For target25930431/source25930430, block-activity reconstructed49416 mids and
+joined512 routes,99 Planner entries and86 Solver entries. The timing record's
+`sim_revert` atomic decision and lifecycle's final `source_head_superseded`
+reason describe distinct outcomes in the same cancelled pass.
+
+The69ms median task overlap is modest and does not measure net critical-path
+savings. Compared with batch2's unpaired window, the terminal median is lower,
+but first Solver and Exact are slower and Solver completion is worse. Thus this
+observation does not prove an end-to-end improvement or regression caused by
+the patch, is not a Hermes A/B win, and does not justify numerical tuning or
+expanding into deferred batch5.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
