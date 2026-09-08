@@ -16,6 +16,7 @@ import {
   type MandatoryFinalSimulationRunner,
 } from "../final-simulation-work-runtime.js";
 import { RethTransportScheduler } from "../reth-transport-scheduler.js";
+import { startBlockScanBackgroundFork } from "../blockscan-runtime-loop.js";
 import type { ResolvedPlan } from "../solver/solver.js";
 import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import type { CanonicalSource } from "../venues/adapter-request-program.js";
@@ -452,6 +453,56 @@ async function planByteIntegrity(): Promise<void> {
   assert.deepEqual(queuedCalls, ["block"]);
 }
 
+async function lazyForkCancellationDrain(): Promise<void> {
+  const controller = new AbortController();
+  const started = deferred();
+  const settled = deferred();
+  const reapStarted = deferred();
+  const reapFinished = deferred();
+  let preparation: ReturnType<typeof startBlockScanBackgroundFork> | undefined;
+  let executed = false;
+  let terminal = false;
+  const h = harness({
+    runner: {
+      async simulate(input) {
+        preparation ??= startBlockScanBackgroundFork({
+          signal: input.signal,
+          async prepare() { started.resolve(); await settled.promise; },
+          async stopAndWait() { reapStarted.resolve(); await reapFinished.promise; },
+        });
+        await preparation.wait(input.signal, input.schedule.deadlineAtMs);
+        executed = true;
+        return { id: input.resolvedPlan.id, bytesHex: input.resolvedPlanBytesHex };
+      },
+      terminate(input) { preparation?.cancel(input.reason); },
+    },
+  });
+  const pass = (async () => {
+    try {
+      await runtimeFailure(executeFinalSimulationWork({
+        intent: intent(41, plan("lazy-fork", "41", controller.signal)),
+        runtime: h.runtime,
+      }), "aborted");
+    } finally {
+      h.runtime.close(new Error("pass ended"));
+      // Same pass-owned barrier as source-N and N-1 runtime cleanup.
+      await preparation?.close(new Error("pass ended"));
+      terminal = true;
+    }
+  })();
+  await started.promise;
+  controller.abort(new Error("new head"));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(terminal, false, "cancelled lazy preparation must be joined");
+  settled.resolve();
+  await reapStarted.promise;
+  assert.equal(terminal, false, "terminal timing includes process reaping");
+  reapFinished.resolve();
+  await pass;
+  assert.equal(terminal, true);
+  assert.equal(executed, false);
+}
+
 async function typedTerminalFailures(): Promise<void> {
   let timeoutTerminations = 0;
   const timeoutHarness = harness({
@@ -582,6 +633,7 @@ await boundedIngressAndNoReuse();
 await generationFences();
 await planByteIntegrity();
 await typedTerminalFailures();
+await lazyForkCancellationDrain();
 await existingBlockScanRunnerAdapter();
 
 console.log(

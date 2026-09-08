@@ -79,6 +79,7 @@
     "searcher:blockscan-candidate-refinement": "node --import tsx src/searcher/test/blockscan-candidate-refinement.ts",
     "searcher:blockscan-mid-batch": "node --import tsx src/searcher/test/blockscan-mid-batch.ts",
     "searcher:blockscan-pass-deadline": "node --import tsx src/searcher/test/blockscan-pass-deadline.ts",
+    "searcher:blockscan-ordered-pipeline": "node --import tsx --test src/searcher/test/blockscan-ordered-pipeline.ts",
     "searcher:state-call-deadline": "node --import tsx src/searcher/test/state-backend-call-deadline.ts",
     "searcher:state-fork-cancellation": "node --import tsx src/searcher/test/state-backend-fork-cancellation.ts",
     "searcher:blockscan-scanner": "node --import tsx src/searcher/test/blockscan-scanner.ts",

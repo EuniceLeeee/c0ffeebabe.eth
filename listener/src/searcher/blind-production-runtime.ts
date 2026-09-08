@@ -296,11 +296,14 @@ export function appendBlindProductionStageEvidence(input: {
   }
   const previous = input.stages.at(-1);
   const priorCumulativeMs = previous?.cumulativeMs ?? 0;
-  const stageMs = Math.max(0, input.boundary.stage_ms);
+  // Blind stages describe completion of the semantic prefix, not summed
+  // service durations. Solver/final-sim/EV may overlap; retain their raw
+  // durations in block_scan_timing, without double-counting elapsed time here.
   const cumulativeMs = Math.max(
-    priorCumulativeMs + stageMs,
+    priorCumulativeMs,
     input.boundary.cumulative_ms ?? priorCumulativeMs,
   );
+  const stageMs = cumulativeMs - priorCumulativeMs;
   const sealed = sealBlindProductionStageArtifact(
     input.name,
     previous?.artifactSha256 ?? null,

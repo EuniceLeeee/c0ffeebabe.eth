@@ -342,8 +342,37 @@ function main(): void {
     forcedSelectionCount: 0,
     stages,
   });
+  let overlappingStages: readonly BlindProductionStageEvidence[] = [];
+  const completedAt = [1, 2, 3, 1_000, 500, 600];
+  for (const [index, stage] of stages.entries()) {
+    overlappingStages = appendBlindProductionStageEvidence({
+      stages: overlappingStages,
+      name: stage.name,
+      boundary: boundary("ran", index >= 3 ? 100 : 1, completedAt[index]!),
+      semanticEvidence: semantic(),
+    });
+  }
+  assert(
+    overlappingStages[5]!.cumulativeMs === 1_000 &&
+      overlappingStages[4]!.stageMs === 0 &&
+      overlappingStages[5]!.stageMs === 0 &&
+      overlappingStages.reduce((sum, stage) => sum + stage.stageMs, 0) === 1_000,
+    "semantic prefix timing must not add early final-sim/EV service time to later solver completion",
+  );
   validateProductionPassRecordForFreeze(
     record,
+    {
+      type: "ready",
+      profile: BLIND_PRODUCTION_RAW_PROFILE,
+      attemptNonce: baseControl.attemptNonce,
+      base: baseControl.base,
+      artifacts: preparedArtifacts.receipts,
+      artifactDocuments: preparedArtifacts.documents,
+    },
+    sourceControl,
+  );
+  validateProductionPassRecordForFreeze(
+    { ...record, stages: overlappingStages },
     {
       type: "ready",
       profile: BLIND_PRODUCTION_RAW_PROFILE,

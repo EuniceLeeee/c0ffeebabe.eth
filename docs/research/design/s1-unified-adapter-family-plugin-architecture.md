@@ -2552,6 +2552,44 @@ Manifest `/tmp/remaining-latency-audit-7a3493df-tools.json` SHA-256:
 It is not a new performance sample. The larger strict local-quote transport remains an
 unimplemented scope decision; signing/broadcast remain off and the ten-second Goal is open.
 
+### 16.22 Ordered Solver to final-simulation/EV overlap (2026-09-08)
+
+The block-scan pass now publishes each complete per-plan Solver result into an
+index-addressed, pass-local buffer. A single consumer advances through the
+contiguous completed prefix in original plan order, without waiting for all
+later Solver work. Empty, rejected and Family-budget-skipped quote sets complete
+their slot. The buffer is bounded by the original plan count and released on
+consumption or pass teardown; there is no new admission or ranking policy.
+
+`blockscan-ordered-pipeline.ts` owns cancellation and producer joining.
+`blockscan-runtime-loop.ts` retains the original amount search, three-finalist
+construction, funding variants, per-stage Family failure budgets, per-quote-set
+fallback termination, final-simulation resource isolation and atomic submission
+checks. A positive result does not stop the remaining planned search. Source-N
+background and N-1 lazy fork preparation share one pass-owned cancellation/drain
+map; failed/interrupted preparation and process reaping finish before terminal
+pass timing. Source/hash/generation and sealed plan-byte checks remain mandatory.
+
+Raw `block_scan_timing` retains independent stage durations and boundaries and
+declares `stage_timing_model=ordered_solver_final_sim_overlap`. It adds actual
+`first_solver_started_at_ms` and `first_ev_finished_at_ms`; overlapping stage
+durations must not be summed into end-to-end latency. Blind semantic stage
+timing represents completion of the stage prefix: cumulative time is the maximum
+of the prior prefix completion and this boundary's completion, and stage time is
+that frontier's increment. Thus an early final-sim/EV can have a zero barrier
+increment after a later Solver finish. Raw service durations remain available;
+trusted validation, artifact/status ordering and runner-measured elapsed/p95 are
+unchanged.
+
+Deterministic validation passed: ordered pipeline 9/9 (including actual Solver
+parity on six plans, nine amount points, eighteen hop Exact calls and three
+finalists per plan), final-simulation runtime with delayed lazy-fork cleanup,
+blind-production challenger runtime including overlapping prefix timing under
+the existing pass validator, historical-live-production replay contract,
+blockscan contract 8/8, strict-ready runtime, bundle-router safety 6/6, listener
+build, live TypeScript check and diff whitespace check. These are implementation
+and regression results, not proof of a full live cycle below ten seconds.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.

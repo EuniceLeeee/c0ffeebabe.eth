@@ -25,8 +25,10 @@ export interface BlockScanStageBoundary {
 
 /**
  * Strict source-head timeline shared by ordinary and blind block-scan runs.
- * It rejects overlapping/out-of-order stages and keeps source-listener queue
- * delay inside the same end-to-end budget.
+ * Preparation/refinement stages remain ordered. Per-route atomic sim/EV
+ * measurements may overlap the active planner/solver stage; their durations
+ * are independent service totals, not additive pass wall time. Source-listener
+ * queue delay remains inside the same end-to-end budget.
  */
 export class BlockScanPassTimeline {
   readonly timing: BlockScanStageTiming = {
