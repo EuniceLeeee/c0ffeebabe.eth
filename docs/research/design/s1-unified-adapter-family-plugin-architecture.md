@@ -3108,6 +3108,56 @@ These tests prove removed local work and scoped correctness, not a seconds-level
 or completed-to-EV latency win. A separate frozen Ready12 fixed50 observation
 follows; the final logging item and deferred batch5 are not mixed into it.
 
+Runtime `ddd7018b5db1e9b1e483eacc65e4d9ff9ee694cd` completed fixed50 sources
+25930654–25930703 with50/50 terminal records, no missing/duplicates.48 blocks
+entered Solver (7 completed that stage,41 interrupted),43 entered the final-sim
+caller,4 returned simulation stages with4 recorded reverts, and0 completed EV.
+Two stopped in Exact. A caller entry remains distinct from EVM worker entry.
+
+| Fixed50 observation (nearest-rank quantiles, ms) | n | p50 | p95 | max |
+| --- | ---: | ---: | ---: | ---: |
+| State stage | 50 | 3705.520 | 4849.210 | 10983.643 |
+| Exact refinement | 50 | 1971.978 | 3219.870 | 3346.757 |
+| First Solver entry | 48 | 7240 | 8716 | 9514 |
+| First final-sim caller entry | 43 | 7643 | 9178 | 9495 |
+| Pass terminal, including cancellation/drain | 50 | 13213.049 | 17142.543 | 17531.058 |
+
+The selected session projection work has narrower local evidence. In the prior
+4a window, Funding-only projection p50/p95 was31/61ms (n49), pricing36/46ms
+(n49), and Exact77/96ms (n48). This window records0/1ms,3/6ms and53/56ms
+respectively (each n50). Exact session total p50/p95 is232/286ms versus259/318ms
+before. These nonpaired observations are consistent with the read-count tests'
+removed full-table work, but cannot assign all timing differences to the patch.
+Median terminal time and Exact are lower than4a; there is still no complete-to-EV
+ten-second success and no Hermes paired A/B speed-win claim.
+
+Route occurrences:25600 enumerated,25385 Exact-attempted,19658 positive,
+4732 Planner entries and3424 Solver entries. Producer counters:8372 created
+non-memo read items,96 batches,540 memo hits. Exact/Solver:71133 created read
+items,1933 batches,46299 memo hits and57 aborted batches. All50 recorded
+backends of each kind drained, with no batch failures, single-call fallbacks
+or completion-after-abort reported. No explicit429 was observed. Mid history
+has1 baseline and50 deltas; internal writer drop/queue telemetry is unavailable.
+PID98593 exited0, ports8555–8560 cleared, Ready12 checkpoint SHA unchanged;
+signing/broadcast stayed off. No code changed during the observation.
+
+Startup is not hidden: source25930615's bootstrap expired after302639.653ms;
+the existing initialization retry at25930640 settled degraded after176072.958ms.
+Neither is part of the fixed50. A subsequent source25930704 shutdown record is
+outside the fixed boundary, not a replacement sample. No rebuild occurred.
+
+Artifacts: `logs/exact-instance-index-ready12-ddd7018b/`; audited summary
+SHA-256`fb72dbf24b404bf6850a226bdaea8bb3903973d6e85182361a15a0a2b49f192d`.
+After raw analysis, generated query
+`latency,single-block,production-events,state-coverage` selected
+`analysis:blockscan-pass-latency` and `analysis:block-activity`; both tool-run
+executions exited0. Manifest `/tmp/exact-instance-index-ready12-tools.json`
+SHA-256`7ea55970030b5158aa066a4905aef86af50941c081fc47203819f21e48d6ac2c`.
+The process-anchored latency scope (lines2–186803) includes both bootstrap
+records:52 records and3 fast terminals, not3 completed EVs. Target25930680/
+source25930679 reconstructs49412 mids and joins512 routes,98 Planner entries
+and89 Solver entries, agreeing with raw lifecycle evidence.
+
 ## 17. Role of tests and tools
 
 No new handwritten acceptance harness is required or allowed to manufacture the result.
