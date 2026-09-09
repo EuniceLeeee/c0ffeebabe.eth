@@ -350,6 +350,63 @@ function resolvedMids(
 
 const tests: TestCase[] = [
   {
+    name: "pair and whole-ring spread gates both apply to multi-hop search",
+    run: () => {
+      const a = tokenAt(901);
+      const b = tokenAt(902);
+      const ring = [swap(WETH, a, P1), swap(a, b, P2), swap(b, WETH, P3)];
+      const comparison = swap(a, b, P4);
+      const runCase = (pairRate: number | null, returnRate: number, requirePair = true, touched: Set<string> | null = null) =>
+        scanBlockStateFromResolvedMids({
+          edges: pairRate === null ? ring : [...ring, comparison],
+          sourceBlock: BLOCK, swapTouched: touched,
+          cfg: cfg({ maxHops: 3, minSpreadBps: 500, exactAdmissionSpreadBps: 50, requireDislocatedPair: requirePair }),
+          mids: resolvedMids([
+            [ring[0], 1], [ring[1], 1], [ring[2], returnRate],
+            ...(pairRate === null ? [] : [[comparison, pairRate] as [TokenEdge, number]]),
+          ]),
+        });
+      const hasOriginalRing = (result: ReturnType<typeof runCase>) =>
+        result.opportunities.some(opp => opp.seedEdges.length === ring.length &&
+          ring.every(edge => opp.seedEdges.some(candidate => candidate.target === edge.target)));
+      assert(hasOriginalRing(runCase(null, 1.1, false)), "control: a 10% triangle is discoverable without the pair policy");
+      assert(runCase(null, 1.1).opportunities.length === 0, "profitable triangle alone cannot satisfy pair evidence");
+      assert(runCase(1.049, 1.1).opportunities.length === 0, "4.9% pair must not qualify even with a 10% ring");
+      assert(hasOriginalRing(runCase(1.051, 1.1)), "5.1% intermediate pair and 10% ring must qualify without requiring every pair to dislocate");
+      assert(!hasOriginalRing(runCase(1.051, 1.03)), "5.1% pair cannot exempt a 3% ring from its own floor");
+      assert(hasOriginalRing(runCase(1.051, 1.1, true, new Set([P1]))), "touched outside the qualifying pair must not erase pair evidence");
+      console.log("[blockscan-scanner] pair and whole-ring gates apply to multi-hop search: PASS");
+    },
+  },
+  {
+    name: "enumeration spread floor is independent of exact admission",
+    run: () => {
+      const edges = [...venueEdges(USDC, P1), ...venueEdges(USDC, P2)];
+      // Pair preselection sees a 10% dislocation. Directional mids need not
+      // be reciprocal: the actual closed-loop return is set independently.
+      const scanAtReturn = (returnRate: number, floor: number) =>
+        scanBlockStateFromResolvedMids({
+          edges, sourceBlock: BLOCK, swapTouched: null,
+          cfg: cfg({ maxHops: 2, minSpreadBps: floor, requireDislocatedPair: true, exactAdmissionSpreadBps: 50 }),
+          mids: resolvedMids([
+            [edges[0], 1], [edges[1], returnRate / 1.1],
+            [edges[2], 1.1], [edges[3], 0.9],
+          ]),
+          captureCoarseEnumeration: true,
+        });
+      const below = scanAtReturn(1.049, 500);
+      assert(below.outcome === "ran", "threshold fixture must finish");
+      assert(below.opportunities.length === 0, "4.9% closed loop must not pass 5% enumeration floor");
+      assert(below.coarseEnumeration?.length === 0, "below-floor ring must not be enumerated either");
+      const above = scanAtReturn(1.051, 500);
+      assert(above.opportunities.length === 1, "5.1% closed loop must pass");
+      assert(above.opportunities.every(opp => (opp.coarseSpreadBps ?? 0) > 500), "output must satisfy enumeration floor");
+      assert(above.selection.admittedCount === 1, "unchanged 50bps Exact guard accepts the subset");
+      assert(scanAtReturn(1.049, 50).opportunities.length === 1, "lower enumeration floor still works without changing Exact");
+      console.log("[blockscan-scanner] enumeration spread floor independent of exact admission: PASS");
+    },
+  },
+  {
     name: "resolved-ring diagnosis shares production score",
     run: () => {
       const token = tokenAt(100);

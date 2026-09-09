@@ -892,15 +892,16 @@ async function main(): Promise<void> {
     );
   }
   const blockScanMinSpreadBps = Number(
-    process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "10",
+    process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "500",
   );
   const blockScanCfg: BlockScanCoreConfig | undefined = enableBlockScan
     ? {
         maxHops: blockScanMaxHops,
         minSpreadBps: blockScanMinSpreadBps,
+        requireDislocatedPair: true,
         /*
-         * Keep the enumeration floor independent. Exact admission defaults
-         * to 50bps (0.5%); lower-spread candidates remain in coarse telemetry.
+         * Enumeration defaults to 500bps (5%). Exact keeps its independent
+         * 50bps (0.5%) admission guard and consumes the enumerated subset.
          */
         exactAdmissionSpreadBps: Number(
           process.env.SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS ??

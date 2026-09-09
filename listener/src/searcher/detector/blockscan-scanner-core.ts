@@ -17,6 +17,8 @@ import {
 export interface BlockScanCoreConfig {
   maxHops: number;
   minSpreadBps: number;
+  /** Require a ring to include a cross-venue pair above minSpreadBps too. */
+  requireDislocatedPair?: boolean;
   /**
    * Coarse spread floor for exact-refine admission. Rings above minSpreadBps
    * are still enumerated (and counted in the funnel), but only rings above
@@ -264,6 +266,12 @@ export function scanBlockStateFromResolvedMids(input: {
     : input.edges;
   const topology = scannerTopologyFor(eligibleEdges);
   const groups = topology.groups;
+  const dislocatedPairs = input.cfg.requireDislocatedPair ? new Set<string>() : null;
+  const routeEligible = (edges: readonly TokenEdge[]): boolean =>
+    (!input.routeEligible || input.routeEligible(edges)) &&
+    (dislocatedPairs === null || edges.some((edge) =>
+      dislocatedPairs.has(tokenPairKey(edge.tokenIn, edge.tokenOut))
+    ));
   const ranked: RankedOpportunity[] = [];
   let scannedPairs = 0;
   let skippedVenues = 0;
@@ -328,7 +336,8 @@ export function scanBlockStateFromResolvedMids(input: {
   for (const group of groups.values()) {
     if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
     if (group.venues.size < 2) continue;
-    if (touched && !pairTouches(group, touched)) continue;
+    const pairIsTouched = touched === null || pairTouches(group, touched);
+    if (!pairIsTouched && dislocatedPairs === null) continue;
     scannedPairs++;
 
     const venues: VenueMid[] = [];
@@ -358,6 +367,10 @@ export function scanBlockStateFromResolvedMids(input: {
       minVenue.feeBps -
       maxVenue.feeBps;
     if (!Number.isFinite(estSpreadBps) || estSpreadBps <= input.cfg.minSpreadBps) continue;
+    // Pair evidence must not require a funding anchor or a two-leg loop:
+    // multi-hop rings may reach this pair through other tokens.
+    dislocatedPairs?.add(`${group.a}|${group.b}`);
+    if (!pairIsTouched) continue;
     const flashToken = pickFlashToken(group.a, group.b, input.cfg.pricedTokens);
     if (!flashToken) continue;
     const otherToken = flashToken === group.a ? group.b : group.a;
@@ -373,7 +386,7 @@ export function scanBlockStateFromResolvedMids(input: {
 
     const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
     const routeScore = scoreRing(seedEdges, input.mids);
-    if (!routeScore) continue;
+    if (!routeScore || routeScore.estSpreadBps <= input.cfg.minSpreadBps) continue;
     const routeMaxInput = bigintFloor(routeScore.maxStartDepth / 4);
     const sizing = estimateSizing(
       cheapVenue,
@@ -426,7 +439,7 @@ export function scanBlockStateFromResolvedMids(input: {
   }
 
   const considerRing = (ringEdges: TokenEdge[]): void => {
-    if (input.routeEligible && !input.routeEligible(ringEdges)) return;
+    if (!routeEligible(ringEdges)) return;
     if (touched && !ringEdges.some((edge) => touched.has(edgeVenueIdentity(edge)))) return;
     if (pathLeavesStandingPosition(ringEdges)) return;
     if (!isAdmissibleBlockScanRingShape(ringEdges, input.cfg.pricedTokens)) return;
@@ -500,6 +513,7 @@ export function scanBlockStateFromResolvedMids(input: {
   };
 
   enterPhase("general");
+  if (dislocatedPairs?.size === 0) return finish("ran");
   const priceSearch = enumeratePriceRankedRings({
     topology,
     mids: input.mids,
@@ -509,7 +523,7 @@ export function scanBlockStateFromResolvedMids(input: {
     minSpreadBps: input.cfg.minSpreadBps,
     maxRings: Math.max(2_000, input.cfg.maxCandidates * 20),
     deadlineAtMs,
-    routeEligible: input.routeEligible,
+    routeEligible,
   });
   for (const ring of priceSearch.rings) {
     considerRing(ring);
@@ -984,6 +998,12 @@ function groupPairs(edges: readonly TokenEdge[]): Map<string, PairGroup> {
     else group.venues.set(pool, [edge]);
   }
   return groups;
+}
+
+function tokenPairKey(tokenIn: string, tokenOut: string): string {
+  const a = tokenIn.toLowerCase();
+  const b = tokenOut.toLowerCase();
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
 function pairTouches(group: PairGroup, touched: Set<string>): boolean {
