@@ -14,6 +14,7 @@ import {
 import {
   assertReceiptsMatchCurrentSourcePlan,
   UniverseRunIncomplete,
+  refreshReadyInstances,
   probeOneFailure,
   rebuildUniverse,
   type RebuildUniverseInput,
@@ -1102,6 +1103,120 @@ async function main(): Promise<void> {
     );
     assert.equal(retained.attestCalls.get("b"), bCallsAfterTerminal);
     await rm(retentionDir, { recursive: true, force: true });
+
+    const refreshDir = await mkdtemp(join(tmpdir(), "ready-instance-refresh-"));
+    try {
+      const refresh = makeFixture(refreshDir);
+      refresh.terminalKeys.add("c");
+      const priorReady = await rebuildUniverse(refresh.input);
+      const prior = (await refresh.store.load())!;
+      const scansBefore = refresh.scanCalls();
+      const noScan = async (): Promise<never> => { throw new Error("refresh must not discover"); };
+      const refreshInput = {
+        ...refresh.input,
+        freezeCanonicalHead: noScan,
+        scanSwapWindow: noScan,
+        expectedSourcePlanFingerprints: () => { throw new Error("do not relabel old discovery"); },
+      };
+      const unchanged = await refreshReadyInstances(refreshInput);
+      assert.equal(unchanged.generation, priorReady.generation);
+      assert.equal((await refresh.store.load())!.revision, prior.revision);
+      await refreshReadyInstances({
+        ...refreshInput,
+        isReadyMemoDefinitionCurrent: () => true,
+        findReusableMemo: async () => { throw new Error("same Ready must not renew unchanged dependencies"); },
+        attestFamilyInstanceOnce: async () => { throw new Error("unchanged Family cannot be re-attested"); },
+      });
+
+      refresh.invalidReusableKeys.add("a");
+      const seal = refresh.input.sealDurableVerifiedMemo;
+      const revised = await refreshReadyInstances({
+        ...refreshInput,
+        isReadyMemoDefinitionCurrent: (memo) => memo.familyCandidateKey !== "cand:a",
+        findReusableMemo: async () => { throw new Error("refresh uses the existing Family definition hash"); },
+        sealDurableVerifiedMemo: (input) => sealFixtureMemo({
+          ...seal(input),
+          compiledDescriptor: { kind: "descriptor", quoteModel: "pool-owned" },
+        }),
+      });
+      assert.equal(refresh.scanCalls(), scansBefore);
+      assert.equal(refresh.attestCalls.get("a"), 2, "only invalidated instance re-attested");
+      assert.equal(refresh.attestCalls.get("b"), 1, "unchanged instance reused");
+      assert.equal(refresh.attestCalls.get("c"), 1, "excluded candidate not retried");
+      assert.equal(revised.generation, priorReady.generation + 1);
+      assert.notEqual(revised.catalogHash, priorReady.catalogHash);
+      for (const key of ["cutoff", "universeRange", "universeHash", "sourceCoverage",
+        "activeInstanceKeys", "candidateAccounting", "observedThrough", "appliedThrough"] as const) {
+        assert.deepEqual(revised[key], priorReady[key], `${key} stays bound to original discovery`);
+      }
+      const after = (await refresh.store.load())!;
+      assert.deepEqual(after.retryableAttemptsByCandidateKey, prior.retryableAttemptsByCandidateKey);
+      assert.deepEqual(after.verifiedMemos["cand:b"], prior.verifiedMemos["cand:b"]);
+
+      // A failed attestation, source reorg or identity change cannot publish
+      // a partial/smaller Ready or overwrite its sealed memos.
+      for (const outcome of ["retryable", "terminal"] as const) {
+        const keys = outcome === "retryable" ? refresh.failKeys : refresh.terminalKeys;
+        keys.add("a");
+        await assert.rejects(refreshReadyInstances(refreshInput), /incumbent unchanged/);
+        assert.deepEqual(await refresh.store.load(), after);
+        keys.delete("a");
+      }
+      await assert.rejects(refreshReadyInstances({
+        ...refreshInput,
+        assertCanonicalHead: async () => { throw new Error("cutoff reorged"); },
+      }), /cutoff reorged/);
+      await assert.rejects(refreshReadyInstances({
+        ...refreshInput,
+        sealDurableVerifiedMemo: (input) => sealFixtureMemo({
+          ...seal(input), familyInstanceKey: "inst:replacement",
+        }),
+      }), /changed identity/);
+      assert.deepEqual(await refresh.store.load(), after);
+      let fences = 0;
+      await assert.rejects(refreshReadyInstances({
+        ...refreshInput,
+        assertCanonicalHead: async () => { if (++fences === 2) throw new Error("late reorg"); },
+      }), /late reorg/);
+      assert.deepEqual(await refresh.store.load(), after);
+      const active = [after.verifiedMemos["cand:a"]!, after.verifiedMemos["cand:b"]!];
+      const attemptedAfterFailure: string[] = [];
+      await assert.rejects(refreshReadyInstances({
+        ...refreshInput,
+        findReusableMemo: async ({ candidate }) => {
+          if ((candidate as { id: string }).id === "b") {
+            await new Promise<void>(resolve => setImmediate(resolve));
+          }
+          return null;
+        },
+        attestFamilyInstanceOnce: async ({ candidate }) => {
+          attemptedAfterFailure.push((candidate as { id: string }).id);
+          throw new Error("first worker failed");
+        },
+      }), /first worker failed/);
+      assert.deepEqual(attemptedAfterFailure, ["a"],
+        "a delayed sibling must not start attestation after the first worker failed");
+      assert.deepEqual(await refresh.store.load(), after);
+      await assert.rejects(refresh.store.casRefreshReadyInstances({
+        expectedRevision: after.revision,
+        memos: active.slice(0, 1), graphSnapshot: revised.graphSnapshot,
+      }), /cannot add or remove/);
+      await assert.rejects(refresh.store.casRefreshReadyInstances({
+        expectedRevision: after.revision,
+        memos: active.map((memo, index) => index === 0 ? sealFixtureMemo({
+          ...memo, validity: { ...memo.validity, proofSource: { number: SOURCE.number, hash: "0x" + "ff".repeat(32) } },
+        }) : memo),
+        graphSnapshot: revised.graphSnapshot,
+      }), /different proof source/);
+      await assert.rejects(refresh.store.casRefreshReadyInstances({
+        expectedRevision: after.revision - 1, memos: active,
+        graphSnapshot: revised.graphSnapshot,
+      }), /CAS conflict/);
+      assert.deepEqual(await refresh.store.load(), after);
+      console.log("ready instance refresh PASS (no scan, same set/cutoff/coverage, scoped re-attestation, atomic failure)");
+    } finally {
+      await rm(refreshDir, { recursive: true, force: true });
+    }
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

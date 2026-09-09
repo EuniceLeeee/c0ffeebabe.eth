@@ -3,6 +3,8 @@ import {
   AttestationCheckpointWriter,
   UniverseRebuildCheckpointStore,
   assertDurableVerifiedMemoFingerprint,
+  activeReadyMemos,
+  buildReadyCatalogSnapshot,
   canonicalJson,
   hasDurableCandidateSnapshot,
   type DurableVerifiedMemo,
@@ -144,6 +146,9 @@ export interface UniverseRebuildDependencies {
     readonly checkpoint: StartupCheckpointEnvelope;
     readonly cutoff: CanonicalSource;
   }) => Promise<DurableVerifiedMemo | null>;
+  /** Pure definition check for rematerializing the already-validated Ready
+   * at its unchanged cutoff. Not cross-block authority or discovery reuse. */
+  readonly isReadyMemoDefinitionCurrent?: (memo: DurableVerifiedMemo) => boolean;
   /** One full lifecycle for one candidate at the fixed cutoff. */
   readonly attestFamilyInstanceOnce: (input: {
     readonly candidate: unknown;
@@ -892,7 +897,7 @@ export async function rebuildUniverse(
   }
   const publications = input.aggregateOnceByFamily(instances);
   const graphSnapshot = input.buildGraphSnapshot(publications, cutoff);
-  const catalogSnapshot = buildCatalogSnapshot(activeMemos);
+  const catalogSnapshot = buildReadyCatalogSnapshot(activeMemos);
   const ready = Object.freeze({
     generation: (checkpoint.readyGeneration?.generation ?? 0) + 1,
     cutoff: Object.freeze({ ...cutoff }),
@@ -934,6 +939,92 @@ export async function rebuildUniverse(
   // separate queue, so the next startup freezes a new rolling cutoff instead
   // of repeatedly publishing the same completed historical run.
   return ready;
+}
+
+/** Same attestation/Graph pipeline, restricted to the existing Ready set.
+ * Never scans, invents source receipts, retries excluded candidates or moves
+ * the historical cutoff. Non-verified results cannot shrink the reused set.
+ */
+export async function refreshReadyInstances(input: UniverseRebuildDependencies & {
+  readonly store: UniverseRebuildCheckpointStore;
+  readonly attestationConcurrency?: number;
+  readonly log?: (message: string) => void;
+}): Promise<ReadyUniverseGeneration> {
+  const checkpoint = await input.store.load();
+  if (checkpoint === null) throw new Error("ready refresh checkpoint is absent");
+  const oldMemos = activeReadyMemos(checkpoint);
+  const ready = checkpoint.readyGeneration!;
+  const cutoff = ready.cutoff;
+  const concurrency = input.attestationConcurrency ?? 24;
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
+    throw new Error("ready refresh concurrency must be a positive integer");
+  }
+  const decodeCandidate = input.decodeCandidateSnapshot ?? ((value: unknown) => value);
+  await input.assertCanonicalHead(cutoff);
+  const memos = new Array<DurableVerifiedMemo>(oldMemos.length);
+  let next = 0;
+  let completed = 0;
+  let refreshed = 0;
+  let stop = false;
+  const workers = await Promise.allSettled(Array.from({
+    length: Math.min(concurrency, oldMemos.length),
+  }, async () => {
+    try {
+      for (;;) {
+      if (stop) return;
+      const index = next++;
+      if (index >= oldMemos.length) return;
+      const old = oldMemos[index]!;
+      const candidate = decodeCandidate(old.candidateSnapshot);
+      if (input.familyCandidateKey(candidate) !== old.familyCandidateKey) {
+        throw new Error("ready refresh candidate key changed");
+      }
+      // Ready already validated this exact set at this exact cutoff. Do not
+      // re-attest unrelated dependency-proof Funding when only code-defined
+      // descriptors changed; its stored proof is neither moved nor renewed.
+      const reusable = input.isReadyMemoDefinitionCurrent === undefined
+        ? await input.findReusableMemo({ candidate, checkpoint, cutoff })
+        : input.isReadyMemoDefinitionCurrent(old) ? old : null;
+      if (reusable !== null) {
+        memos[index] = reusable;
+      } else {
+        if (stop) return;
+        const result = await input.attestFamilyInstanceOnce({ candidate, cutoff });
+        if (result.status !== "verified") {
+          throw new Error(`ready refresh ${old.familyCandidateKey}: ${result.status} ${result.reasonCode}; incumbent unchanged`);
+        }
+        memos[index] = input.sealDurableVerifiedMemo({
+          candidate, result: result.result, proofSource: cutoff,
+          familyCandidateKey: old.familyCandidateKey,
+        });
+        refreshed++;
+      }
+      completed++;
+      if (completed === 1 || completed % 100 === 0 || completed === oldMemos.length) {
+        input.log?.(`ready instance refresh ${completed}/${oldMemos.length} reattested=${refreshed}`);
+      }
+      }
+    } catch (error) {
+      stop = true;
+      throw error;
+    }
+  }));
+  const failed = workers.find((worker) => worker.status === "rejected");
+  if (failed?.status === "rejected") throw failed.reason;
+  if (memos.every((memo, index) => memo.memoFingerprint === oldMemos[index]!.memoFingerprint)) {
+    await input.assertCanonicalHead(cutoff);
+    if ((await input.store.load())?.revision !== checkpoint.revision) {
+      throw new Error("ready refresh checkpoint changed during validation");
+    }
+    return ready;
+  }
+  const instances = memos.map((memo) => input.rehydrateVerifiedInstance({ memo, cutoff }));
+  const graphSnapshot = input.buildGraphSnapshot(input.aggregateOnceByFamily(instances), cutoff);
+  await input.assertCanonicalHead(cutoff);
+  const updated = await input.store.casRefreshReadyInstances({
+    expectedRevision: checkpoint.revision, memos, graphSnapshot,
+  });
+  return updated.readyGeneration!;
 }
 
 function validateExplicitObservationRange(input: {
@@ -1298,28 +1389,6 @@ export function hashReadyGraphSnapshot(graph: unknown): string {
 
 export function hashReadyCatalogSnapshot(catalog: unknown): string {
   return createDigest("catalog-v1:" + canonicalJson(catalog));
-}
-
-function buildCatalogSnapshot(
-  memos: readonly DurableVerifiedMemo[],
-): unknown {
-  return Object.freeze({
-    format: "strict-rebuild-catalog-v1",
-    instances: Object.freeze([...memos]
-      .sort((left, right) =>
-        left.familyInstanceKey.localeCompare(right.familyInstanceKey)
-      )
-      .map((memo) => Object.freeze({
-        familyCandidateKey: memo.familyCandidateKey,
-        familyInstanceKey: memo.familyInstanceKey,
-        familyId: memo.familyId,
-        instanceKey: memo.instanceKey,
-        memoFingerprint: memo.memoFingerprint,
-        compiledDescriptor: memo.compiledDescriptor,
-        staticProjection: memo.staticProjection,
-        evidenceFingerprint: memo.evidenceFingerprint,
-      }))),
-  });
 }
 
 function createDigest(seed: string): string {

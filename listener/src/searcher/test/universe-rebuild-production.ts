@@ -472,6 +472,15 @@ async function main(): Promise<void> {
   const wiring = createRebuildWiring({
     rpcUrl: "http://127.0.0.1:1",
   });
+  const readyDefinitionMemo = makeMemo(candidate);
+  assert.equal(wiring.isReadyMemoDefinitionCurrent!(readyDefinitionMemo), true);
+  assert.equal(wiring.isReadyMemoDefinitionCurrent!({
+    ...readyDefinitionMemo,
+    validity: { ...readyDefinitionMemo.validity, policy: "dependency-proof" },
+  }), true, "unchanged definition does not renew a Ready's historical dependency proof");
+  assert.equal(wiring.isReadyMemoDefinitionCurrent!({
+    ...readyDefinitionMemo, familyDefinitionHash: "old-definition",
+  }), false, "changed Family definition requires re-attestation");
   const richCandidate = Object.freeze({
     address: "0x" + "88".repeat(20),
     adapter: "univ4",

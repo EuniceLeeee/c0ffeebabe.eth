@@ -298,6 +298,61 @@ export function assertDurableVerifiedMemoFingerprint(
   }
 }
 
+export function buildReadyCatalogSnapshot(memos: readonly DurableVerifiedMemo[]): unknown {
+  return Object.freeze({
+    format: "strict-rebuild-catalog-v1",
+    instances: Object.freeze([...memos]
+      .sort((left, right) => left.familyInstanceKey.localeCompare(right.familyInstanceKey))
+      .map((memo) => Object.freeze({
+        familyCandidateKey: memo.familyCandidateKey,
+        familyInstanceKey: memo.familyInstanceKey,
+        familyId: memo.familyId,
+        instanceKey: memo.instanceKey,
+        memoFingerprint: memo.memoFingerprint,
+        compiledDescriptor: memo.compiledDescriptor,
+        staticProjection: memo.staticProjection,
+        evidenceFingerprint: memo.evidenceFingerprint,
+      }))),
+  });
+}
+
+/** Resolve exactly the memos sealed into Ready, not extra probe/legacy memos. */
+export function activeReadyMemos(envelope: StartupCheckpointEnvelope): readonly DurableVerifiedMemo[] {
+  const ready = envelope.readyGeneration;
+  if (ready === null || envelope.inProgressRun !== null) {
+    throw new Error("ready refresh requires one completed Ready checkpoint");
+  }
+  const catalog = ready.catalogSnapshot as {
+    readonly format?: string;
+    readonly instances?: readonly { readonly familyCandidateKey: string }[];
+  } | null;
+  if (catalog?.format !== "strict-rebuild-catalog-v1" || !Array.isArray(catalog.instances)) {
+    throw new Error("ready refresh requires the sealed instance catalog");
+  }
+  const memos = catalog.instances.map((entry) => {
+    const memo = envelope.verifiedMemos[entry.familyCandidateKey];
+    if (memo === undefined) throw new Error("ready refresh lost an active memo");
+    assertDurableVerifiedMemoFingerprint(memo);
+    return memo;
+  });
+  const keys = memos.map((memo) => memo.familyInstanceKey).sort();
+  if (new Set(keys).size !== keys.length ||
+    canonicalJson(keys) !== canonicalJson([...ready.activeInstanceKeys].sort()) ||
+    ready.candidateAccounting.verified !== keys.length ||
+    ready.candidateAccounting.remainingUnaccounted !== 0 ||
+    canonicalJson(buildReadyCatalogSnapshot(memos)) !== canonicalJson(ready.catalogSnapshot) ||
+    ready.graphHash !== readyRootHash("graph-v2:", ready.graphSnapshot) ||
+    ready.catalogHash !== readyRootHash("catalog-v1:", ready.catalogSnapshot) ||
+    ready.publicationSetHash !== readyRootHash("publications-v2:", ready.catalogSnapshot)) {
+    throw new Error("ready refresh input roots/active memos do not match");
+  }
+  return Object.freeze(memos);
+}
+
+function readyRootHash(prefix: string, value: unknown): string {
+  return createHash("sha256").update(prefix + canonicalJson(value)).digest("hex");
+}
+
 function retryableAttemptFromQueueEntry(
   entry: DurableRetryableQueueEntry,
 ): RetryableAttempt {
@@ -1466,6 +1521,60 @@ export class UniverseRebuildCheckpointStore {
         inProgressRun: null,
         retryableAttemptsByCandidateKey: Object.freeze(retryableQueue),
         readyGeneration: Object.freeze(input.ready),
+      });
+    });
+  }
+
+  /**
+   * Refresh only the materialization of an incumbent Ready's exact instance
+   * set. This does not claim discovery under a new source plan. The cutoff,
+   * universe, coverage, candidate accounting and retryable queue stay intact.
+   * Any rejection/missing instance must leave the old Ready untouched.
+   */
+  async casRefreshReadyInstances(input: {
+    readonly expectedRevision: number;
+    readonly memos: readonly DurableVerifiedMemo[];
+    readonly graphSnapshot: unknown;
+  }): Promise<StartupCheckpointEnvelope> {
+    return this.#cas(input.expectedRevision, (base) => {
+      if (base === null) throw new Error("ready refresh checkpoint is absent");
+      const oldMemos = activeReadyMemos(base);
+      const ready = base.readyGeneration!;
+      const priorByKey = new Map(oldMemos.map((memo) => [memo.familyCandidateKey, memo]));
+      if (input.memos.length !== oldMemos.length ||
+        new Set(input.memos.map((memo) => memo.familyCandidateKey)).size !== oldMemos.length) {
+        throw new Error("ready refresh cannot add or remove active instances");
+      }
+      const verifiedMemos = { ...base.verifiedMemos };
+      for (const memo of input.memos) {
+        assertDurableVerifiedMemoFingerprint(memo);
+        const old = priorByKey.get(memo.familyCandidateKey);
+        if (old === undefined || memo.familyInstanceKey !== old.familyInstanceKey ||
+          memo.familyId !== old.familyId || memo.instanceKey !== old.instanceKey ||
+          memo.candidateFingerprint !== old.candidateFingerprint ||
+          canonicalJson(memo.candidateSnapshot) !== canonicalJson(old.candidateSnapshot) ||
+          (memo.memoFingerprint !== old.memoFingerprint && (
+            memo.validity.proofSource.number !== ready.cutoff.number ||
+            memo.validity.proofSource.hash.toLowerCase() !== ready.cutoff.hash.toLowerCase()
+          ))) {
+          throw new Error("ready refresh changed identity/candidate or used a different proof source");
+        }
+        verifiedMemos[memo.familyCandidateKey] = Object.freeze(memo);
+      }
+      const catalogSnapshot = buildReadyCatalogSnapshot(input.memos);
+      return Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        verifiedMemos: Object.freeze(verifiedMemos),
+        readyGeneration: Object.freeze({
+          ...ready,
+          generation: ready.generation + 1,
+          graphSnapshot: input.graphSnapshot,
+          graphHash: readyRootHash("graph-v2:", input.graphSnapshot),
+          catalogSnapshot,
+          catalogHash: readyRootHash("catalog-v1:", catalogSnapshot),
+          publicationSetHash: readyRootHash("publications-v2:", catalogSnapshot),
+        }),
       });
     });
   }

@@ -3225,6 +3225,9 @@ export function createRebuildWiring(input?: {
         reasonCode: marker.reasonCode,
       });
     },
+    isReadyMemoDefinitionCurrent: (memo) =>
+      memo.familyDefinitionHash === familyDefinitionHash(memo.familyId) ||
+      memo.familyDefinitionHash === familyMemoDefinitionHash(memo.familyId),
     findReusableMemo: async (memoInput) => {
       const candidate = memoInput.candidate as
         Readonly<Record<string, unknown>>;
