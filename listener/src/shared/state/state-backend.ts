@@ -1015,7 +1015,10 @@ export class AnvilStateBackend implements StateBackend {
     );
     await mineOne(provider, "send", 120_000);
     const receipt = await getReceipt(provider, hash, "send receipt");
-    if (!receipt || receipt.status !== 1) {
+    if (!receipt || (receipt.status !== 0 && receipt.status !== 1)) {
+      throw new Error(`local-fork transaction receipt unavailable: ${hash}`);
+    }
+    if (receipt.status === 0) {
       const detail = await traceRevert(provider, hash);
       throw new TransactionRevertedError(hash, detail || undefined);
     }

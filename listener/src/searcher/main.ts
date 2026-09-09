@@ -29,6 +29,7 @@ import {
   initBlockScanEnumerationSolverTelemetry,
 } from "./blockscan-enumeration-solver-telemetry.js";
 import { blockScanRouteId } from "./blockscan-route-identity.js";
+import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import type { CanonicalSource } from
@@ -158,8 +159,6 @@ import {
   type BlockScanAtomicResult,
   type BlockScanExecutionWorker,
   type BlockScanPendingEvidenceTrigger,
-  type BlockScanRejectBlacklistEntry,
-  type BlockScanRejectBlacklistState,
 } from "./blockscan-runtime-loop.js";
 import { AnvilSolver, type ResolvedPlan } from "./solver/solver.js";
 import { defaultFinalVerifyFloorBps, shouldRunFinalVerify } from "./solver/final-verify-gate.js";
@@ -457,8 +456,6 @@ async function validateHintExecutionEvidence(
   }
   return Object.freeze([...evidence]);
 }
-
-type ActiveBlockScanRejectBlacklistEntry = BlockScanRejectBlacklistEntry & { expiryBlock: number };
 
 export { computeBidEth, valueInEth };
 
@@ -2078,18 +2075,7 @@ async function main(): Promise<void> {
     });
   }
 
-  const blockScanRejectBlacklist: BlockScanRejectBlacklistState = {
-    enabled: process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST !== "0",
-    after: Math.max(
-      1,
-      Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_AFTER ?? "2"),
-    ),
-    ttlBlocks: Math.max(
-      1,
-      Number(process.env.SEARCHER_BLOCKSCAN_REJECT_BLACKLIST_TTL_BLOCKS ?? "300"),
-    ),
-    entries: new Map(),
-  };
+  const blockScanSimRejects = new BlockScanSimRejectCache();
   let activeBlindSourceHead: BlindProductionSourceHeadControl | null = null;
   let preparedBlindBase: BlindProductionPrepareControl | null = null;
   let preparedBlindDynamicResetNonce: string | null = null;
@@ -2205,12 +2191,6 @@ async function main(): Promise<void> {
     readBlockHash,
     formatRouteKey: formatBlockScanRouteKey,
     formatRing: formatBlockScanRing,
-    isRouteBlacklisted: (routeKey, currentBlock) =>
-      activeBlockScanRejectBlacklistEntry(
-        blockScanRejectBlacklist,
-        routeKey,
-        currentBlock,
-      ) !== null,
     submitAtomic(input) {
       return maybeSubmitBlockScanAtomic({
         ...input,
@@ -2218,7 +2198,7 @@ async function main(): Promise<void> {
         provider,
         bundleRouter,
         submissionCoordinator,
-        rejectBlacklist: blockScanRejectBlacklist,
+        simRejects: blockScanSimRejects,
         strategyVersions: {
           strategy_view_version:
             strategyViews.versions.strategy_view_version,
@@ -2371,7 +2351,7 @@ async function main(): Promise<void> {
           "blind production session cannot reuse runtime state across base anchors",
         );
       }
-      blockScanRejectBlacklist.entries.clear();
+      blockScanSimRejects.clear();
     }
     // A blind attempt may target the same source N/hash as the previous
     // attempt. Clear both dynamic publishers before rebuilding N-1: the
@@ -4373,7 +4353,7 @@ async function maybeSubmitBlockScanAtomic(params: {
   protoRing: boolean;
   plans: number;
   passDeadlineAtMs: number;
-  rejectBlacklist: BlockScanRejectBlacklistState;
+  simRejects: BlockScanSimRejectCache;
   profitTokenValuation: ProfitTokenValuation;
   sourceBlockHash: string;
   signal: AbortSignal;
@@ -4461,7 +4441,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     protoRing,
     plans,
     passDeadlineAtMs,
-    rejectBlacklist,
+    simRejects,
     profitTokenValuation,
     sourceBlockHash,
     signal,
@@ -4558,6 +4538,10 @@ async function maybeSubmitBlockScanAtomic(params: {
       drop(targetBlock, "final_verify", "blockscan_stale_state", error);
       return finish("blockscan_stale_state");
     }
+    if (simRejects.has(routeId)) {
+      drop(targetBlock, "final_verify", "sim_revert_seen_this_live");
+      return finish("sim_revert_seen_this_live");
+    }
     timing.finalSimStartedAtMs = Date.now();
     params.onFinalSimStart?.(timing.finalSimStartedAtMs);
     finalSimStatus = "failed";
@@ -4637,15 +4621,14 @@ async function maybeSubmitBlockScanAtomic(params: {
         decision: "reject",
         reason: "sim_revert",
       });
-      recordBlockScanRejectStrike(rejectBlacklist, opp, sourceBlock);
+      const rememberedRevert = simRejects.record(routeId, sim);
       console.log(
         `[searcher/blockscan] block=${sourceBlock} final sim rejected ring=${ring} route=${route} ` +
           `quoteProfit=${resolved.netProfit} finalProfit=${sim.netProfit} reason=${error}`,
       );
       drop(targetBlock, "final_verify", "sim_revert", error);
-      return finish("sim_revert", false, false);
+      return finish("sim_revert", false, rememberedRevert);
     }
-    clearBlockScanRejectStrikes(rejectBlacklist, opp);
     if (sim.netProfit <= 0n) {
       const error = `non-positive final profit ${sim.netProfit}`;
       recordAuditEv({
@@ -5351,44 +5334,6 @@ function formatBlockScanRing(opp: { affectedTokens?: string[]; seedEdges: TokenE
 
 function formatBlockScanRouteKey(opp: { seedEdges: TokenEdge[] }): string {
   return blockScanRouteId(opp.seedEdges);
-}
-
-function activeBlockScanRejectBlacklistEntry(
-  state: BlockScanRejectBlacklistState,
-  routeKey: string,
-  currentBlock: number,
-): ActiveBlockScanRejectBlacklistEntry | null {
-  if (!state.enabled) return null;
-  const entry = state.entries.get(routeKey);
-  if (!entry || entry.expiryBlock === null) return null;
-  if (currentBlock >= entry.expiryBlock) {
-    state.entries.delete(routeKey);
-    return null;
-  }
-  return { strikes: entry.strikes, expiryBlock: entry.expiryBlock };
-}
-
-function recordBlockScanRejectStrike(
-  state: BlockScanRejectBlacklistState,
-  opp: { seedEdges: TokenEdge[] },
-  sourceBlock: number,
-): void {
-  if (!state.enabled) return;
-  const routeKey = formatBlockScanRouteKey(opp);
-  const entry = state.entries.get(routeKey) ?? { strikes: 0, expiryBlock: null };
-  entry.strikes += 1;
-  if (entry.strikes >= state.after) {
-    entry.expiryBlock = sourceBlock + state.ttlBlocks + 1;
-  }
-  state.entries.set(routeKey, entry);
-}
-
-function clearBlockScanRejectStrikes(
-  state: BlockScanRejectBlacklistState,
-  opp: { seedEdges: TokenEdge[] },
-): void {
-  if (!state.enabled) return;
-  state.entries.delete(formatBlockScanRouteKey(opp));
 }
 
 async function applyPostImpactOverridesToAnvil(

@@ -360,18 +360,6 @@ function sanitizeBlockScanFailureMessage(message: string): string {
     .slice(0, 240);
 }
 
-export interface BlockScanRejectBlacklistEntry {
-  strikes: number;
-  expiryBlock: number | null;
-}
-
-export interface BlockScanRejectBlacklistState {
-  enabled: boolean;
-  after: number;
-  ttlBlocks: number;
-  entries: Map<string, BlockScanRejectBlacklistEntry>;
-}
-
 export interface BlockScanAtomicResult {
   decision: string;
   submitted: boolean;
@@ -756,7 +744,6 @@ export interface BlockScanRuntimeLoopDependencies {
   formatRing(
     opportunity: Pick<BlockScanOpportunity, "seedEdges" | "affectedTokens">,
   ): string;
-  isRouteBlacklisted(routeKey: string, currentBlock: number): boolean;
   submitAtomic(input: BlockScanAtomicExecutionInput): Promise<BlockScanAtomicResult>;
 }
 
@@ -3129,8 +3116,6 @@ export class BlockScanRuntimeLoop {
           skippedReason = "planner_deadline";
           break;
         }
-        const routeKey = this.deps.formatRouteKey(opp);
-        if (this.deps.isRouteBlacklisted(routeKey, blockNumber)) continue;
         const ring = this.deps.formatRing(opp);
         const protoRing = opp.seedEdges.some(
           (edge) => edge.slotKind === "protocol",
