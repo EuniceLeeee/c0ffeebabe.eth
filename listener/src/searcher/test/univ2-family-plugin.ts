@@ -294,13 +294,16 @@ assert.deepEqual(
 );
 const currentRequests =
   univ2StrictFamilyPlugin.pricing.current.buildRequests(currentInput);
-assert.equal(currentRequests.length, 1);
+assert.equal(currentRequests.length, 3, "reserves and both balances belong to one initial request set");
 assert.equal(currentRequests[0].kind, "eth-call");
 if (currentRequests[0].kind !== "eth-call") {
   throw new Error("univ2 current request must be eth-call");
 }
 assert.equal(currentRequests[0].to, POOL);
-const currentResults = [success(currentRequests[0].id, reservesData)];
+const currentResults = [success(currentRequests[0].id, reservesData),
+  success("current-balance-0", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [RESERVE0])),
+  success("current-balance-1", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [RESERVE1])),
+];
 const snapshot = univ2StrictFamilyPlugin.pricing.current.decodeSnapshot({
   descriptor: pricingDescriptor,
   initialResults: currentResults,
@@ -311,6 +314,20 @@ const strictMids = univ2StrictFamilyPlugin.pricing.current.deriveMids({
   snapshot,
   routes,
 });
+assert.equal(strictMids.get(routes[0].routeKey)!.balanceHeadroomIn, UNIV2_MAX_RESERVE - RESERVE0);
+assert.equal(strictMids.get(routes[1].routeKey)!.balanceHeadroomIn, UNIV2_MAX_RESERVE - RESERVE1);
+const donatedMids = univ2StrictFamilyPlugin.pricing.current.deriveMids({
+  descriptor: pricingDescriptor, routes,
+  snapshot: { ...snapshot, balance0: UNIV2_MAX_RESERVE - 90n, balance1: UNIV2_MAX_RESERVE },
+});
+assert.equal(donatedMids.get(routes[0].routeKey)!.balanceHeadroomIn, 90n);
+assert.equal(donatedMids.get(routes[1].routeKey)!.balanceHeadroomIn, 0n);
+assert.equal(donatedMids.get(routes[0].routeKey)!.mid, strictMids.get(routes[0].routeKey)!.mid,
+  "capacity uses actual balances; donations do not silently rewrite the reserve price");
+assert.throws(() => univ2StrictFamilyPlugin.pricing.current.decodeSnapshot({
+  descriptor: pricingDescriptor, dependentEvidence: [],
+  initialResults: currentResults.filter(result => result.id !== "current-balance-1"),
+}), /missing/, "no reserve fallback for missing balance evidence");
 
 const controller = new AbortController();
 const legacySchema = univ2BlockScanState.compileStaticSchema({
@@ -386,7 +403,7 @@ const zeroData = UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves", [
 ]);
 const zeroSnapshot = univ2StrictFamilyPlugin.pricing.current.decodeSnapshot({
   descriptor: pricingDescriptor,
-  initialResults: [success(currentRequests[0].id, zeroData)],
+  initialResults: [success(currentRequests[0].id, zeroData), ...currentResults.slice(1)],
   dependentEvidence: [],
 });
 assert.equal(
@@ -990,6 +1007,7 @@ const stableSnapshot = univ2StrictFamilyPlugin.pricing.current.decodeSnapshot({
   descriptor: stablePricing,
   initialResults: [
     success("current-reserves", reservesData),
+    ...currentResults.slice(1),
     success("current-quote-0", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [99_998n])),
     success("current-quote-1", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [99_980_198_558_287_467n])),
   ], dependentEvidence: [],
@@ -999,6 +1017,7 @@ const stableMids = univ2StrictFamilyPlugin.pricing.current.deriveMids({
 });
 assert(Math.abs(stableMids.get(stableRoutes[0].routeKey)!.mid * 1e12 - 0.99998) < 1e-12);
 assert.equal(stableMids.get(stableRoutes[0].routeKey)!.feeBps, 0, "pool quote fees must not be charged twice");
+assert.equal(stableMids.get(stableRoutes[0].routeKey)!.balanceHeadroomIn, UNIV2_MAX_RESERVE - RESERVE0);
 assert.equal(univ2StrictFamilyPlugin.pricing.liveStateProjection!.project({
   descriptor: stablePricing, snapshot: stableSnapshot,
 }), null, "do not seed a non-xyk model into the legacy xyk state cache");
@@ -1175,6 +1194,10 @@ function lifecycleRequestResult(
       break;
     case "factory-get-pair":
       data = UNIV2_FACTORY_INTERFACE.encodeFunctionResult("getPair", [POOL]);
+      break;
+    case "current-balance-0":
+    case "current-balance-1":
+      data = UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [request.id.endsWith("0") ? RESERVE0 : RESERVE1]);
       break;
     case "model-surface-0":
     case "model-surface-1":

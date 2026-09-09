@@ -302,7 +302,7 @@ test("block-activity reconstructs the route mid table from baseline, updates, an
         ["edge-b", compactMid(3)],
         ["edge-c", compactMid(4)],
       ]),
-      midDelta(2, 97, 98, [["edge-a", compactMid(2.5)]], ["edge-b"]),
+      midDelta(2, 97, 98, [["edge-a", { ...compactMid(2.5), balance_headroom_in: "12418514181387341316211902860" }]], ["edge-b"]),
     ].join("\n") + "\n");
 
     const stdout = await runBlockActivity(
@@ -328,7 +328,7 @@ test("block-activity reconstructs the route mid table from baseline, updates, an
     assert.equal(output.applied_deltas, 1);
     assert.equal(output.mid_count, 2);
     assert.deepEqual(output.mids, [
-      ["edge-a", compactMid(2.5)],
+      ["edge-a", { ...compactMid(2.5), balance_headroom_in: "12418514181387341316211902860" }],
       ["edge-c", compactMid(4)],
     ]);
   });

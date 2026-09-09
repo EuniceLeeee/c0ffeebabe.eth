@@ -12,6 +12,9 @@ export interface BlockTouchedProvider {
 }
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const ADDRESS_TOPIC_RE = /^0x0{24}[0-9a-fA-F]{40}$/;
+const ERC20_TRANSFER_TOPIC =
+  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
 /**
  * Reads one block's log identities and call targets into the single refresh
@@ -45,6 +48,17 @@ export async function readBlockTouchedStateKeys(
       if (poolId !== undefined) touched.add(poolId.toLowerCase());
     } else {
       touched.add(log.address.toLowerCase());
+    }
+    // A direct token donation changes a pool's balance headroom without a
+    // pool call or Sync. Reuse these already-fetched logs; ERC721 Transfer
+    // has four topics and must not be interpreted as an ERC20 balance move.
+    if (log.topics.length === 3 &&
+      log.topics[0]?.toLowerCase() === ERC20_TRANSFER_TOPIC) {
+      for (const topic of [log.topics[1]!, log.topics[2]!]) {
+        if (ADDRESS_TOPIC_RE.test(topic)) {
+          touched.add(`0x${topic.slice(-40).toLowerCase()}`);
+        }
+      }
     }
   }
 

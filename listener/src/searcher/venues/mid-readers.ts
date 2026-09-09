@@ -35,6 +35,9 @@ export interface RouteVenueMid {
   feeBps: number;
   reserveA?: bigint;
   reserveB?: bigint;
+  /** Additional input-token balance allowed by the pool, in raw tokenIn units.
+   * Snapshot metadata only, not a slippage limit or current Exact authority. */
+  balanceHeadroomIn?: bigint;
   sqrtABX96?: bigint;
   liquidity?: bigint;
   depthProxy: number;

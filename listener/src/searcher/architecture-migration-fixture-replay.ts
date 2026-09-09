@@ -527,7 +527,7 @@ function successResult(
       provenance: { kind: "migration-capture-fixture", fingerprint: `fixture:${request.id}` },
       completion: "reverted-as-declared", data: "0x" });
   }
-  if (request.id === "exact-input-balance" && request.kind === "eth-call") {
+  if ((request.id === "exact-input-balance" || request.id.startsWith("current-balance-")) && request.kind === "eth-call") {
     const zeroForOne = request.to.toLowerCase() === pool.token0.toLowerCase();
     const balance = pool.reserves === undefined ? (zeroForOne ? 1_000_000n : 2_000_000n)
       : zeroForOne ? pool.reserves.reserve0 : pool.reserves.reserve1;

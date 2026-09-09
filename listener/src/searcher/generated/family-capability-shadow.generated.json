@@ -6502,7 +6502,7 @@
         "familyId": "univ2-standard",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "8c2a3afe5017d288c2ee090dc9a3d1654cf6e62d85031654961f29ba8db4e4fd",
+        "contentHash": "953a1be8be2c532b1e370cea18446b5f69485582c35e0922005b7ce4af24e8b7",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6518,7 +6518,8 @@
           "src/searcher/venues/swaps/univ2-abi.ts",
           "src/searcher/venues/swaps/univ2-family/codec.ts",
           "src/searcher/venues/swaps/univ2-family/manifest.ts",
-          "src/searcher/venues/swaps/univ2-family/pool-quote.ts"
+          "src/searcher/venues/swaps/univ2-family/pool-quote.ts",
+          "src/searcher/venues/swaps/univ2-family/reserve-capacity.ts"
         ],
         "provenanceCommit": null
       },
@@ -7693,5 +7694,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "543372a50c34c34d5176c989fd722a62a5139f363f04cbf49b1571cd63605133"
+  "artifactHash": "2306278bda3b1425e14970f86dbb53dd7f2ee6a977d36274d650c78e53587616"
 }

@@ -5,8 +5,11 @@ import type { AdapterRequestResult } from "../../adapter-request-program.js";
 import type { RouteVenueMid } from "../../mid-readers.js";
 import { directedPoolMid, quotedPoolMid } from "../blockscan-state-shared.js";
 import { decodePoolQuote, poolQuoteRequest } from "./pool-quote.js";
+import { uniV2InputCapacity } from "./reserve-capacity.js";
 import {
   decodeReservesResult,
+  requireSuccessfulResult,
+  UNIV2_TOKEN_INTERFACE,
   lowerAddress,
   sameAddress,
   UNIV2_PAIR_INTERFACE,
@@ -73,12 +76,18 @@ export const univ2Pricing = {
       to: descriptor.pool,
       data: UNIV2_PAIR_INTERFACE.encodeFunctionData("getReserves"),
       completion: "return-data" as const,
-    }), ...(descriptor.quoteModel.kind === "pool-get-amount-out" ? [
+    }), ...[descriptor.token0, descriptor.token1].map((token, index) => Object.freeze({
+      id: `current-balance-${index}`, kind: "eth-call" as const, to: token,
+      data: UNIV2_TOKEN_INTERFACE.encodeFunctionData("balanceOf", [descriptor.pool]),
+      completion: "return-data" as const,
+    })), ...(descriptor.quoteModel.kind === "pool-get-amount-out" ? [
       poolQuoteRequest("current-quote-0", descriptor.pool, descriptor.token0, descriptor.quoteModel.probe0),
       poolQuoteRequest("current-quote-1", descriptor.pool, descriptor.token1, descriptor.quoteModel.probe1),
     ] : [])],
     decodeSnapshot: ({ descriptor, initialResults }) => Object.freeze({
       ...decodeReservesResult(initialResults, CURRENT_RESERVES_REQUEST_ID),
+      balance0: decodeBalance(initialResults, "current-balance-0"),
+      balance1: decodeBalance(initialResults, "current-balance-1"),
       ...(descriptor.quoteModel.kind === "pool-get-amount-out" ? {
         quoted0: decodePoolQuote(initialResults, "current-quote-0") ?? 0n,
         quoted1: decodePoolQuote(initialResults, "current-quote-1") ?? 0n,
@@ -90,11 +99,12 @@ export const univ2Pricing = {
       const mids = new Map<UniV2Route["routeKey"], RouteVenueMid>();
       for (const route of routes) {
         const zeroForOne = route.direction === "zero-for-one";
+        const balanceHeadroomIn = uniV2InputCapacity(zeroForOne ? snapshot.balance0 : snapshot.balance1);
         if (descriptor.quoteModel.kind === "pool-get-amount-out") {
           const amountOut = zeroForOne ? snapshot.quoted0 : snapshot.quoted1;
           if (amountOut === undefined) throw new Error("univ2 pool-quote snapshot missing quote");
           if (amountOut <= 0n) continue;
-          mids.set(route.routeKey, quotedPoolMid({
+          mids.set(route.routeKey, { ...quotedPoolMid({
             kind: "v2", edge: routeEdge(descriptor, route),
             amountIn: zeroForOne ? descriptor.quoteModel.probe0 : descriptor.quoteModel.probe1,
             amountOut,
@@ -103,16 +113,16 @@ export const univ2Pricing = {
             // The pool quote already includes its current fee. Applying the
             // factory's xyk fee again would double-charge the mid.
             feeBps: 0,
-          }));
+          }), balanceHeadroomIn });
           continue;
         }
-        mids.set(route.routeKey, directedPoolMid({
+        mids.set(route.routeKey, { ...directedPoolMid({
           kind: "v2",
           edge: routeEdge(descriptor, route),
           reserveIn: zeroForOne ? snapshot.reserve0 : snapshot.reserve1,
           reserveOut: zeroForOne ? snapshot.reserve1 : snapshot.reserve0,
           feeBps: Number(descriptor.feeRule.feeBps),
-        }));
+        }), balanceHeadroomIn });
       }
       return mids;
     },
@@ -170,6 +180,12 @@ export const univ2Pricing = {
   UniV2PricingSnapshot
 >;
 
+function decodeBalance(results: readonly AdapterRequestResult[], id: string): bigint {
+  return BigInt(UNIV2_TOKEN_INTERFACE.decodeFunctionResult(
+    "balanceOf", requireSuccessfulResult(results, id).data,
+  )[0]);
+}
+
 function assertRoutesMatchDescriptor(
   descriptor: UniV2Descriptor,
   routes: readonly UniV2Route[],
@@ -225,5 +241,9 @@ function routeEdge(
 export function decodeUniV2PricingSnapshotForTest(
   results: readonly AdapterRequestResult[],
 ): UniV2PricingSnapshot {
-  return Object.freeze(decodeReservesResult(results, CURRENT_RESERVES_REQUEST_ID));
+  return Object.freeze({
+    ...decodeReservesResult(results, CURRENT_RESERVES_REQUEST_ID),
+    balance0: decodeBalance(results, "current-balance-0"),
+    balance1: decodeBalance(results, "current-balance-1"),
+  });
 }

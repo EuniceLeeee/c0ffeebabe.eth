@@ -202,6 +202,44 @@ const tests: TestCase[] = [
 ];
 
 tests.push({
+  name: "ERC20 balance transfers touch participants without a pool call or Sync",
+  run: async () => {
+    const token = "0x00000000000000000000000000000000000000C3";
+    const transfer = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    const topic = (address: string) => `0x${address.slice(2).padStart(64, "0")}`;
+    for (const [from, to] of [[POOL_A, POOL_B], [POOL_B, POOL_A]]) {
+      let reads = 0;
+      const touched = await readBlockTouchedStateKeys({
+        getLogs: async () => {
+          reads++;
+          return [{ address: token, topics: [transfer, topic(from!), topic(to!)] }];
+        },
+        send: async () => {
+          reads++;
+          return [{ result: { type: "CALL", to: token } }];
+        },
+      }, SOURCE_BLOCK, "0x00000000000000000000000000000000000000D4");
+      assert(touched.has(POOL_A.toLowerCase()), "transfer participant A touched");
+      assert(touched.has(POOL_B.toLowerCase()), "transfer participant B touched");
+      assert(reads === 2, "no additional RPC beyond existing logs and trace");
+    }
+    for (const topics of [
+      [transfer, topic(POOL_A), topic(POOL_B), topic(POOL_A)], // ERC721
+      [transfer, "0x01", "0x02"],
+      [transfer, `0x01${"00".repeat(11)}${POOL_A.slice(2)}`, "0x02"],
+      ["0xunknown", topic(POOL_A), topic(POOL_B)],
+    ]) {
+      const touched = await readBlockTouchedStateKeys({
+        getLogs: async () => [{ address: token, topics }],
+        send: async () => [],
+      }, SOURCE_BLOCK, "0x00000000000000000000000000000000000000D4");
+      assert(!touched.has(POOL_A.toLowerCase()) && !touched.has(POOL_B.toLowerCase()),
+        "non-ERC20 or malformed participant topics are not pool addresses");
+    }
+  },
+});
+
+tests.push({
   name: "malformed or failed trace never authorizes clean carry",
   run: async () => {
     for (const traces of [

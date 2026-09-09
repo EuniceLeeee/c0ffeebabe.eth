@@ -48,6 +48,7 @@ import { UNIV2_PAIR_INTERFACE } from
   "../venues/swaps/univ2-family/codec.js";
 import { scanBlockStateFromResolvedMids } from
   "../detector/blockscan-scanner-core.js";
+import { readBlockTouchedStateKeys } from "../blockscan-touched-state.js";
 
 const STARTUP: CanonicalSource = Object.freeze({
   number: 25_800_000,
@@ -123,6 +124,7 @@ function runtime(
       readonly reserve1: bigint;
       readonly blockTimestampLast: number;
     }>>;
+    readonly poolBalance?: (token: string, account: string) => bigint | undefined;
     readonly onCurrentPricingRead?: () => void;
     readonly onCurrentPricingReadStart?: (target: string) => void | Promise<void>;
     readonly onCurrentPricingReadEnd?: (target: string) => void;
@@ -179,6 +181,12 @@ function runtime(
           } finally {
             options.onCurrentPricingReadEnd?.(target);
           }
+        }
+        const balanceAccount = String(ERC20_BALANCE.decodeFunctionData("balanceOf", request.data)[0]).toLowerCase();
+        if (balanceAccount === pool.pool.toLowerCase() || options.reservesByTarget?.has(balanceAccount)) {
+          return ERC20_BALANCE.encodeFunctionResult("balanceOf", [
+            options.poolBalance?.(request.to.toLowerCase(), balanceAccount) ?? 10n ** 24n,
+          ]);
         }
         if (options.failFunding === true) {
           throw new Error("current Funding transport failed");
@@ -596,11 +604,12 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     });
     await producer.drain();
     const pricingWireCount = wire.length;
-    const fundingCalls = wire.filter(({ call }) => call.params[0].data.startsWith(balanceSelector));
+    const fundingCalls = wire.filter(({ call }) => call.params[0].data.startsWith(balanceSelector) &&
+      String(ERC20_BALANCE.decodeFunctionData("balanceOf", call.params[0].data)[0]).toLowerCase() !== pool.pool.toLowerCase());
     assert.equal(fundingCalls.length, 4, "pricing reads two providers for each of two assets");
-    assert.equal(pricingWireCount, 5, "pricing also reads the pool reserves once");
+    assert.equal(pricingWireCount, 7, "pricing reads reserves and both pool balances with four Funding reads");
     assert.equal(producer.stats().batchesSent, 1, "pricing and both Funding Families share one batch");
-    assert.equal(producer.stats().maxBatchItemsSent, 5);
+    assert.equal(producer.stats().maxBatchItemsSent, 7);
     assert.equal(pricing.fundingProjection().sources.size, 2);
     const refined = await twoTokenFundingRoot.createSession({
       source: CURRENT, kind: "exact", fundingAssets: [UNIV2_FIXTURE_TOKEN0],
@@ -652,10 +661,9 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     assert.deepEqual(quote.source, CURRENT);
     assert.equal(refined.buildExecution({ edge, exact: quote, minAmountOut: quote.amountOut - 1n, executor: EXECUTOR }).status, "resolved");
     await exactBackend.drain();
-    assert.equal(wire.length, pricingWireCount + 1, "Exact reuses producer reserves and reads the new capacity balance only");
-    assert.equal(wire.at(-1)!.call.params[0].data.slice(0, 10), balanceSelector);
-    assert.equal(producer.stats().memoHits, 3);
-    assert.equal(exactBackend.stats().totalCalls, 1);
+    assert.equal(wire.length, pricingWireCount, "Exact reuses producer reserves and capacity balance with zero extra RPC");
+    assert.equal(producer.stats().memoHits, 4);
+    assert.equal(exactBackend.stats().totalCalls, 0);
     assert.equal(directReads, 0);
     const baselineQuote = await baseline.issueExact({ edge: baseline.edges[0]!, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [] });
     assert.equal(quote.amountOut, baselineQuote.amountOut);
@@ -674,7 +682,7 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     assert.equal(reorgReads, 1);
     assert.deepEqual(reorgQuote.source, WRONG_HASH);
     assert.ok(reorgQuote.amountOut > quote.amountOut);
-    assert.equal(producer.stats().memoHits, 3, "wrong source must not count a successful cache hit");
+    assert.equal(producer.stats().memoHits, 4, "wrong source must not count a successful cache hit");
 
     // No successful producer entry: Exact keeps its own cold transport.
     const cold = await twoTokenFundingRoot.createSession({
@@ -684,9 +692,10 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     const coldQuote = await cold.issueExact({ edge: cold.edges[0]!, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [] });
     await exactBackend.drain();
     assert.equal(coldQuote.amountOut, quote.amountOut);
-    assert.equal(wire.length, pricingWireCount + 2, "cold Exact adds reserves but reuses its successful capacity balance");
+    assert.equal(wire.length, pricingWireCount + 2, "cold Exact reads both reserves and capacity after a producer miss");
     assert.equal(wire.at(-1)!.lane, "/exact");
-    assert.equal(wire.at(-1)!.call.params[0].data, reservesSelector);
+    assert.deepEqual(new Set(wire.slice(pricingWireCount).map(item => item.call.params[0].data.slice(0, 10))),
+      new Set([reservesSelector, balanceSelector]));
 
     // A missing or failed cache entry must retain the old direct-provider path,
     // never enqueue/join producer transport. Fresh offers still decode normally.
@@ -720,7 +729,7 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
       }),
     });
     await mixedBackend.drain();
-    assert.equal(mixedBatches[0]!.length, 5);
+    assert.equal(mixedBatches[0]!.length, 7);
     assert.deepEqual(new Set(mixedBatches[0]!.map((call) => call.params[0].data.slice(0, 10))),
       new Set([balanceSelector, reservesSelector]), "failure must cover an actual mixed pricing/Funding envelope");
     assert.equal(mixed.fundingProjection().outcomes.length, 4);
@@ -761,7 +770,7 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     assert.equal(projectionBackend.stats().liveItems, 0);
     assert.equal(directReads, 0);
     assert.deepEqual(stubErrors, []);
-  console.log("strict same-source phase reuse: PASS (pricing 4 Funding + 1 reserve; warm Funding 0 RPC; warm Exact reads capacity only; cold Exact adds reserves; reorg bypass; miss/revert Funding 2 direct each)");
+  console.log("strict same-source phase reuse: PASS (pricing 4 Funding + reserves + 2 balances in one batch; warm Funding/Exact 0 RPC; cold Exact 2 reads; reorg bypass; miss/revert Funding 2 direct each)");
     console.log("strict pricing/Funding transport: PASS (one mixed batch; mixed failure unresolved; projection failure waits; caller drains)");
   } finally {
     const closed = await Promise.allSettled(backends.map((client) => client.closeAndDrain()));
@@ -995,6 +1004,7 @@ const producerPricingBackend = Object.freeze({
   },
 });
 let sparseCarrySession: StrictProductionRuntimeSession | null = null;
+let donatedBalance = 0n;
 const pricingHistoryPublications: StrictPricingPublication[] = [];
 const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
   async (request: StrictSessionRequest) => {
@@ -1008,6 +1018,9 @@ const carryBaseCoordinator = new StrictCurrentRuntimeCoordinator(
     const created = parallelRoot.createSession({
       source: request.source,
       runtime: runtime(request.source, {
+        poolBalance: (token, account) =>
+          token === UNIV2_FIXTURE_TOKEN0.toLowerCase() && account === firstParallelTarget
+            ? 10n ** 24n + donatedBalance : undefined,
         reservesByTarget: new Map<string, Readonly<{
           reserve0: bigint;
           reserve1: bigint;
@@ -1218,6 +1231,67 @@ for (const candidate of [edgeA, edgeB]) {
     carriedAgain.snapshot.mids.get(candidate.canonicalEdgeId!)?.mid,
     "delta publication preserves full-rebuild mid values",
   );
+}
+
+// A donation calls only the token and emits no pool Sync. The existing
+// activity reader must still invalidate the pool's directional headroom.
+const donationSource: CanonicalSource = Object.freeze({
+  number: carryThirdSource.number + 1,
+  hash: `0x${"66".repeat(32)}`,
+  generation: carryThirdSource.generation + 1,
+});
+const donationGraph = createVerifiedGraphView({
+  ...carryThirdGraph,
+  id: "strict-carry-donation",
+  sourceBlock: donationSource.number,
+  sourceBlockHash: donationSource.hash,
+  generation: donationSource.generation,
+  completenessWatermark: donationSource.number,
+  perSourceCoverage: carryThirdGraph.perSourceCoverage.map((coverage) => ({
+    ...coverage,
+    completeThroughBlock: donationSource.number,
+    completeThroughHash: donationSource.hash,
+  })),
+  familyIdForEdge: () => publication.familyId,
+});
+const donationEdge = donationGraph.edges.find((candidate) =>
+  candidate.instanceKey?.toLowerCase() === firstParallelTarget &&
+  candidate.tokenIn.toLowerCase() === UNIV2_FIXTURE_TOKEN0.toLowerCase()
+)!;
+const donationBefore = fullRebuild.snapshot.mids.get(donationEdge.canonicalEdgeId!)!;
+assert.equal(typeof donationBefore.balanceHeadroomIn, "bigint");
+donatedBalance = 10n;
+const donationTouched = await readBlockTouchedStateKeys({
+  getLogs: async () => [{
+    address: UNIV2_FIXTURE_TOKEN0,
+    topics: [
+      ethers.id("Transfer(address,address,uint256)"),
+      ethers.zeroPadValue(EXECUTOR, 32),
+      ethers.zeroPadValue(firstParallelTarget, 32),
+    ],
+  }],
+  send: async () => [{ result: { type: "CALL", to: UNIV2_FIXTURE_TOKEN0 } }],
+}, donationSource.number, "0x00000000000000000000000000000000000000d4");
+const donationPricing = await carryBaseCoordinator.prepareCoarsePricing({
+  graph: donationGraph,
+  pricingCallBackend: producerPricingBackend,
+  touchedPools: donationTouched,
+  canonicalActivity: { source: donationSource, touchedStateKeys: donationTouched, complete: true },
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(donationPricing.status, "complete");
+const donationAfter = donationPricing.snapshot.mids.get(donationEdge.canonicalEdgeId!)!;
+assert.equal(donationAfter.mid, donationBefore.mid, "donation leaves reserves/mid unchanged");
+assert.equal(donationAfter.balanceHeadroomIn, donationBefore.balanceHeadroomIn! - donatedBalance);
+assert.equal(donationPricing.snapshot.pricingProvenanceByEdgeKey?.get(donationEdge.canonicalEdgeId!), "refreshed");
+assert.strictEqual(donationPricing.snapshot.mids.get(edgeB.canonicalEdgeId!), fullRebuild.snapshot.mids.get(edgeB.canonicalEdgeId!),
+  "unaffected pools still carry without re-reading");
+const donationDelta = pricingHistoryPublications.at(-1)!;
+assert.equal(donationDelta.kind, "delta");
+if (donationDelta.kind === "delta") {
+  assert.equal(donationDelta.previousSourceBlock, carryThirdSource.number);
+  assert.equal(donationDelta.updates.find(([key]) => key === donationEdge.canonicalEdgeId)?.[1].balanceHeadroomIn,
+    donationAfter.balanceHeadroomIn, "mid history records the changed capacity even when price is unchanged");
 }
 
 const unavailableCarryCoordinator = new StrictCurrentRuntimeCoordinator(
@@ -1742,6 +1816,9 @@ const currentGraph = createVerifiedGraphView({
           }
         }
         assert.equal(request.data.slice(0, 10), ERC20_BALANCE.getFunction("balanceOf")!.selector);
+        if (String(ERC20_BALANCE.decodeFunctionData("balanceOf", request.data)[0]).toLowerCase() === pool.pool.toLowerCase()) {
+          return ERC20_BALANCE.encodeFunctionResult("balanceOf", [10n ** 24n]);
+        }
         fundingCalls.push({ ...request });
         activeFunding++;
         if (fundingCalls.length === readyFundingAssets.length) fundingStarted.release();

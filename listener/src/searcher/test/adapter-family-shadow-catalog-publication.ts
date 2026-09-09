@@ -149,7 +149,9 @@ function successResult(
       provenance: { kind: "strict-shadow-catalog-fixture", fingerprint: `fixture:${request.id}` },
       completion: "reverted-as-declared", data: "0x" });
   }
-  const data = request.id === "pair-factory"
+  const data = request.id.startsWith("current-balance-")
+    ? `0x${(request.id.endsWith("0") ? 1_000_000n : 2_000_000n).toString(16).padStart(64, "0")}`
+    : request.id === "pair-factory"
     ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("factory", [FACTORY])
     : request.id === "pair-token0"
     ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("token0", [TOKEN0])

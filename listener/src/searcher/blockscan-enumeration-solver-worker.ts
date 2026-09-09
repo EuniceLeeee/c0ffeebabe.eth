@@ -65,6 +65,7 @@ interface CompactRouteVenueMid {
   readonly fee_bps: number;
   readonly reserve_a?: string;
   readonly reserve_b?: string;
+  readonly balance_headroom_in?: string;
   readonly sqrt_ab_x96?: string;
   readonly liquidity?: string;
   readonly depth_proxy: number;
@@ -761,6 +762,7 @@ function validMid(mid: CompactRouteVenueMid): boolean {
     Number.isFinite(mid.depth_proxy) && mid.depth_proxy >= 0 &&
     validOptionalIntegerString(mid.reserve_a) &&
     validOptionalIntegerString(mid.reserve_b) &&
+    validOptionalIntegerString(mid.balance_headroom_in) &&
     validOptionalIntegerString(mid.sqrt_ab_x96) &&
     validOptionalIntegerString(mid.liquidity);
 }

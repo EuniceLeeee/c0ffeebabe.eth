@@ -95,6 +95,8 @@ export interface UniV2PricingSnapshot {
   readonly source: CanonicalSource;
   readonly reserve0: bigint;
   readonly reserve1: bigint;
+  readonly balance0: bigint;
+  readonly balance1: bigint;
   readonly blockTimestampLast: number;
   readonly quoted0?: bigint;
   readonly quoted1?: bigint;

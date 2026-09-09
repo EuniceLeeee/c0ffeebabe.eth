@@ -135,6 +135,7 @@ interface CompactRouteVenueMid {
   readonly fee_bps: number;
   readonly reserve_a?: string;
   readonly reserve_b?: string;
+  readonly balance_headroom_in?: string;
   readonly sqrt_ab_x96?: string;
   readonly liquidity?: string;
   readonly depth_proxy: number;
@@ -1121,6 +1122,7 @@ function compactMid(mid: RouteVenueMid): CompactRouteVenueMid {
     fee_bps: mid.feeBps,
     ...(mid.reserveA === undefined ? {} : { reserve_a: mid.reserveA.toString() }),
     ...(mid.reserveB === undefined ? {} : { reserve_b: mid.reserveB.toString() }),
+    ...(mid.balanceHeadroomIn === undefined ? {} : { balance_headroom_in: mid.balanceHeadroomIn.toString() }),
     ...(mid.sqrtABX96 === undefined
       ? {}
       : { sqrt_ab_x96: mid.sqrtABX96.toString() }),

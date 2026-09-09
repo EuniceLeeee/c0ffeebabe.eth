@@ -25,7 +25,7 @@ test("writes one baseline followed by compact ordered deltas", async () => {
     });
     assert.equal(sink.enabled, true);
 
-    const midA = mid("v2", 2, 30, 1_000n, 2_000n);
+    const midA = { ...mid("v2", 2, 30, 1_000n, 2_000n), balanceHeadroomIn: 5192296858534827628530496329219095n };
     const midB = mid("v3", 3, 5, 3_000n, 9_000n);
     sink.recordPricing(baseline(100, new Map([
       ["edge-a", midA],
@@ -38,7 +38,7 @@ test("writes one baseline followed by compact ordered deltas", async () => {
       passOutcome: "not_started",
       passReason: "scheduler_coalesced",
     });
-    const refreshedA = mid("v2", 2.5, 30, 1_000n, 2_500n);
+    const refreshedA = { ...mid("v2", 2.5, 30, 1_000n, 2_500n), balanceHeadroomIn: 0n };
     sink.recordPricing(delta({
       previousBlock: 100,
       block: 101,
@@ -67,6 +67,7 @@ test("writes one baseline followed by compact ordered deltas", async () => {
           fee_bps: 30,
           reserve_a: "1000",
           reserve_b: "2000",
+          balance_headroom_in: "5192296858534827628530496329219095",
           depth_proxy: 1000,
         }],
         ["edge-b", {
@@ -99,6 +100,7 @@ test("writes one baseline followed by compact ordered deltas", async () => {
         fee_bps: 30,
         reserve_a: "1000",
         reserve_b: "2500",
+        balance_headroom_in: "0",
         depth_proxy: 1000,
       }]],
       removals: ["edge-b"],

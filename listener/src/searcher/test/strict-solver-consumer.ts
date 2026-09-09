@@ -112,7 +112,9 @@ function successResult(
       provenance: { kind: "strict-solver-consumer-fixture", fingerprint: `fixture:${request.id}` },
       completion: "reverted-as-declared", data: "0x" });
   }
-  const data = request.id === "pair-factory"
+  const data = request.id.startsWith("current-balance-")
+    ? `0x${(request.id.endsWith("0") ? 1_000_000n : 2_000_000n).toString(16).padStart(64, "0")}`
+    : request.id === "pair-factory"
     ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("factory", [`0x${"42".repeat(20)}`])
     : request.id === "pair-token0"
     ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("token0", [`0x${"43".repeat(20)}`])

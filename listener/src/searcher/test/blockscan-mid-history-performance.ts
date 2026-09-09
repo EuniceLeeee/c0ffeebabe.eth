@@ -143,6 +143,7 @@ function mid(price: number): RouteVenueMid {
     feeBps: 30,
     reserveA: 1_000_000n,
     reserveB: 2_000_000n,
+    balanceHeadroomIn: 5192296858534827628530496328219095n,
     depthProxy: 1_000_000,
   };
 }
