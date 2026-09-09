@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "artifact": "scoped-four-loop-repair-report",
+  "date": "2026-09-09",
+  "baseline_commit": "6dd1e712dd4c09432ffa6a12f54a3fc2542411f6",
+  "commits": {
+    "sim_revert_policy": "e5ca154d1a887007141a4a0513e0167b729d0aec",
+    "curve_and_capacity": "bd5746b518d16fd99c2355aafaac5fb91c6d7851"
+  },
+  "combined_patch_sha256": "4b9a95cba2c8d724e81fbe9cd01a8b64431725b368d3f929f3ea7d875b5e55ad",
+  "validation_scope": "Implementation and scoped original-state diagnostics: actual central Family lifecycle, issued Exact and Execution fragments, local-fork single-leg calls; actual BotVM mined revert for RYOSHI plus process-lifetime cache. Not complete Solver/flash repayment/EV Adapter Replay, not a deployment or adapter-merge verdict.",
+  "formal_adapter_fixed": false,
+  "formal_production_gap_fixed": false,
+  "original_source_blocks": [
+    25938350,
+    25938352,
+    25938370,
+    25938375,
+    25938376,
+    25938380,
+    25938399,
+    25938411
+  ],
+  "result": "All eight canonical source/hash records completed, assertions passed, independent diagnostic fork closed.",
+  "changes": [
+    {
+      "item": "sim-revert",
+      "scope": "framework policy, complete ordered blockscan route identity",
+      "behavior": "After first typed mined TRANSACTION_REVERTED, skip final sim for the same route for this process. No TTL/persistence/token blacklist. New process or isolated replay clears it. RPC/abort/missing receipt/non-positive profit do not poison the cache. Planner/Solver are not skipped.",
+      "evidence": "RYOSHI source 25938376 executes and reverts; source 25938380 skips the same route in the harness; fresh cache allows it again.",
+      "limitation": "Token transfer restriction is unchanged. Later amounts or prices that might succeed are intentionally not retried in this live, per user instruction."
+    },
+    {
+      "item": "reserve-capacity",
+      "scope": "UniV2 Exact/victim state, not universal swap capacity",
+      "behavior": "Amount input cannot exceed uint112 max minus actual pool input-token balance. Same-source successful balance reads use existing central reuse; smaller inputs remain allowed.",
+      "evidence": "Original XOR input after the V4 quote is 9021292102922250766283460341958 raw; V2 capacity is 12418514181387341316211902860 raw. Exact rejects the original size. Smaller V2 input 6209257090693670658105951430 returns 8348961192 wei WETH and executes at both original blocks.",
+      "limitation": "This is a storage/balance headroom constraint, not an economic liquidity/slippage limit. It is currently checked in Exact, not emitted in the mid table. V4 quote code was not changed."
+    },
+    {
+      "item": "curve-model",
+      "scope": "UniV2 instance identity, descriptor, route/pricing/exact binding, execution evidence and victim projection",
+      "behavior": "Positive pool getAmountOut/getA evidence binds pool-owned quotes. Pool-owned mids/Exact use current native quotes and embedded fees; do not seed the constant-product state/victim model.",
+      "evidence": {
+        "DAI_USDT": {
+          "sources": [
+            25938350,
+            25938352
+          ],
+          "old_human_mid": 2.716799221891932,
+          "new_human_mid": 0.99998,
+          "original_input_raw": "83464949858208244",
+          "old_roundtrip_raw": "225324705396507591",
+          "new_roundtrip_raw": "83394528236337092"
+        },
+        "USDC_USDT": {
+          "sources": [
+            25938399,
+            25938411
+          ],
+          "old_human_mid": 2.210729803273245,
+          "new_human_mid": 0.99997,
+          "original_input_raw": "10280",
+          "old_roundtrip_raw": "22586",
+          "new_roundtrip_raw": "10264"
+        },
+        "execution": "Old first-leg quotes revert Nomiswap: D; new first and second leg calls execute separately. Corrected loop quotes are negative, not forced into profitable executions."
+      },
+      "limitation": "No universal unknown-fork invariant proof: without positive model evidence the pre-existing V2 compatibility path remains. Mid probes are finite 0.1-token quotes, not infinitesimal rates."
+    }
+  ],
+  "tests_passed": [
+    "listener build/tsc",
+    "family-capability-manifest:check",
+    "searcher:family-capability-manifest",
+    "searcher:adapter-family-shadow-suite (27 suites)",
+    "searcher:univ2-family-plugin",
+    "searcher:blockscan-sim-reject-cache",
+    "searcher:state-send-receipt",
+    "searcher:state-call-deadline",
+    "searcher:strict-production-runtime-session",
+    "searcher:final-simulation-work-runtime",
+    "searcher:blockscan-ordered-pipeline (9 tests)",
+    "searcher:dodo-v2-family-plugin",
+    "searcher:dodo-v2",
+    "searcher:adapter-family-plugin",
+    "git diff --check"
+  ],
+  "reviews": [
+    {
+      "reviewer": "Ampere",
+      "agent_id": "01a08560-9bec-7233-bdd6-0184a11c531c",
+      "scope": "sim policy and receipt handling",
+      "result": "No actionable findings; direct main repeated-suppression integration test absent."
+    },
+    {
+      "reviewer": "Dirac",
+      "agent_id": "01a08567-4572-7950-8a9d-cee1d47f84b3",
+      "scope": "pool-owned model, capacity and tests",
+      "result": "Prior findings resolved; no remaining actionable findings. Historical harness results were not part of reviewer scope."
+    }
+  ],
+  "evidence_root": "logs/fresh-14400-continuous-6dd1e712.fkHOVf/analysis",
+  "supporting_artifacts": [
+    {
+      "file": "family-repairs-fixed-blocks.json",
+      "sha256": "e7ab84411b637a5af3b6f3740c995d89042d50291a62301cb4ed8237f6c70182"
+    },
+    {
+      "file": "verify-family-repairs.mts",
+      "sha256": "b6d2a6a022f2737166bf0c95768c5f75f02eb7d348d2bceec1ffcd6e25134a7a"
+    },
+    {
+      "file": "sim-window-25938348-25938413.json",
+      "sha256": "c42efbda9d93583d207311001a54272931ffedad62c1ea9123aff499595ab26a"
+    },
+    {
+      "file": "success-swaps-comparison.json",
+      "sha256": "d80d2c0e08e4135e81c3981df61cd9bdb83151c10c3b201455c87e4b82e956e7"
+    },
+    {
+      "file": "repair-validation-tools.json",
+      "sha256": "94b6c65a6e7cc3f21997832749fb4f2905f8d524014014945e5a2f1aa44578b5"
+    }
+  ],
+  "tool_reconciliation": {
+    "capabilities": [
+      "single-block",
+      "state-coverage"
+    ],
+    "selected_tools": [
+      "analysis:block-activity"
+    ],
+    "targets": [
+      25938351,
+      25938400
+    ],
+    "result": "Saved source/hash mids match the original diagnosis. Before/after differences are from the corrected Family, not an analyzer defect. Earlier same-pool success receipts/traces and tx-flow reconciliation retained in evidence_root."
+  },
+  "botvm_artifact_sha256": "864b249e2c394563db8de0ffabfacc7d9562ab031c9304a98b51247519ba2ec3",
+  "generated_family_manifest_sha256": "53cc96b4ff9cc2e2ded75c8d86bc5f77b2ecd0dc209c9632087d39e04c8d7398",
+  "deployment": {
+    "live_restarted": false,
+    "live_code": "baseline, not the new commits",
+    "full_rebuild_started": false,
+    "broadcast": false,
+    "signature": false
+  },
+  "follow_up_question": "Exposing directional capacity earlier in mid/rebuild was discussed only, not implemented. A mutable balance headroom must not be frozen at rebuild, and cannot be conflated with every swap family's executable depth."
+}
