@@ -1016,7 +1016,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "31c0637fdaeb013a9dfae9ed109388ef81d75782767a03eef374c4e566df9d18",
+        "contentHash": "097cb7bb706501eb7cf4f71c21cab8c1a7d5078720211ce47d3d3247733efbac",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -1079,7 +1079,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "e762844ca50048538e3734befd9d13cc9b3c6d9d4bcf1febc8fe524cdb04c193",
+        "contentHash": "ba73e58c84a5e7efa3df218d721a14f16e36b8718d254cee549b9f8068b54654",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -1373,7 +1373,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
-        "contentHash": "c0170c7245153f62e50e1106052fdecb20fa6ec86449660d2c46108e90dd592f",
+        "contentHash": "c398dbca05d99d5ec229d6b8434e00f954c51a13d59815c0f31ab0e22af7682c",
         "semanticDependencies": [
           "contract:adapter-family/victim@s1-victim-v2",
           "package:ethers@6.16.0",
@@ -6254,7 +6254,7 @@
         "familyId": "univ2-standard",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "bdef39a58658df1583feaef6331a7fb25144a25bbd4c5d9af3d922ff27adbb33",
+        "contentHash": "eb2101e537a97f54f831d7ce91c7b4b07f354d18d8749d939c72037aa37c58b4",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6269,6 +6269,7 @@
           "src/searcher/venues/swaps/univ2-family/discovery.ts",
           "src/searcher/venues/swaps/univ2-family/manifest.ts",
           "src/searcher/venues/swaps/univ2-family/nomination.ts",
+          "src/searcher/venues/swaps/univ2-family/reserve-capacity.ts",
           "src/searcher/venues/swaps/univ2-family/reverse-binding.ts",
           "src/searcher/venues/swaps/univ2-family/victim.ts",
           "src/searcher/venues/victim-runtime-shared.ts",
@@ -6312,7 +6313,7 @@
         "familyId": "univ2-standard",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "44f0c5184040b55b7eae63493a1806727ef867f10f2bd8027f48c2c216b7ff08",
+        "contentHash": "0494cdf6ba00a55a22c29c2a5c3e4add55e32e0b4b907e1610ba74780de168cf",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -6325,6 +6326,7 @@
           "src/searcher/venues/swaps/univ2-family/codec.ts",
           "src/searcher/venues/swaps/univ2-family/manifest.ts",
           "src/searcher/venues/swaps/univ2-family/nomination.ts",
+          "src/searcher/venues/swaps/univ2-family/reserve-capacity.ts",
           "src/searcher/venues/swaps/univ2-family/reverse-binding.ts",
           "src/searcher/venues/swaps/univ2-family/victim.ts",
           "src/searcher/venues/victim-runtime-shared.ts",
@@ -6348,7 +6350,7 @@
         "familyId": "univ2-standard",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "b048b98d034e144a94b6870bcca92d68d0408d6493ad3d0fdded35d23a751627",
+        "contentHash": "1131f3ef1c05ba71a6d1567e9926623514b5bb96d40d62e24e5b815148cfadfd",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -6361,6 +6363,8 @@
           "src/searcher/venues/swaps/univ2-abi.ts",
           "src/searcher/venues/swaps/univ2-family/codec.ts",
           "src/searcher/venues/swaps/univ2-family/manifest.ts",
+          "src/searcher/venues/swaps/univ2-family/pool-quote.ts",
+          "src/searcher/venues/swaps/univ2-family/reserve-capacity.ts",
           "src/shared/canonical-address.ts"
         ],
         "provenanceCommit": null
@@ -6381,7 +6385,7 @@
         "familyId": "univ2-standard",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "0bc859bcb6885fc66d41c5c66ca9d53d6425a455e661f937877fd60fce6f70c4",
+        "contentHash": "7c1ddeaf3ce9979798830031c2d3c04e09c9fdd6df24666cee113aa932860cbd",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -6396,6 +6400,7 @@
           "src/searcher/venues/swaps/univ2-family/action.ts",
           "src/searcher/venues/swaps/univ2-family/codec.ts",
           "src/searcher/venues/swaps/univ2-family/manifest.ts",
+          "src/searcher/venues/swaps/univ2-family/reserve-capacity.ts",
           "src/searcher/venues/swaps/univ2-family/victim.ts",
           "src/searcher/venues/victim-runtime-shared.ts",
           "src/shared/constants/addresses.ts"
@@ -6439,7 +6444,7 @@
         "familyId": "univ2-standard",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "784179f47f9eb1ec25bf9bd55b59d97a6913e14efff86df3ae6b85d44a561c0f",
+        "contentHash": "7fa1f4e3269ca6becae4852299499dd12c5d5430f07cf41ad6f49b70ac2615c5",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -6449,7 +6454,8 @@
           "src/searcher/venues/swaps/univ2-abi.ts",
           "src/searcher/venues/swaps/univ2-family/codec.ts",
           "src/searcher/venues/swaps/univ2-family/fee-rule.ts",
-          "src/searcher/venues/swaps/univ2-family/manifest.ts"
+          "src/searcher/venues/swaps/univ2-family/manifest.ts",
+          "src/searcher/venues/swaps/univ2-family/pool-quote.ts"
         ],
         "provenanceCommit": null
       },
@@ -6469,7 +6475,7 @@
         "familyId": "univ2-standard",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "6ef5d372ba496782a4cb4e9d4c486b5e17f027d57ef8177a8a257656bcb1d524",
+        "contentHash": "75f4ca4d5521401535c574114402e053acdd1e8d641b5a1f3ac84cd080ec5441",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -6496,7 +6502,7 @@
         "familyId": "univ2-standard",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "6240961b7a09bdff33634f080730429277d9a3ca6b1522e8dec8789684680a08",
+        "contentHash": "8c2a3afe5017d288c2ee090dc9a3d1654cf6e62d85031654961f29ba8db4e4fd",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -6511,7 +6517,8 @@
           "src/searcher/venues/swaps/blockscan-state-shared.ts",
           "src/searcher/venues/swaps/univ2-abi.ts",
           "src/searcher/venues/swaps/univ2-family/codec.ts",
-          "src/searcher/venues/swaps/univ2-family/manifest.ts"
+          "src/searcher/venues/swaps/univ2-family/manifest.ts",
+          "src/searcher/venues/swaps/univ2-family/pool-quote.ts"
         ],
         "provenanceCommit": null
       },
@@ -6531,7 +6538,7 @@
         "familyId": "univ2-standard",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "558bcb08a852e96c4b6f529a73e7b5858743648749cb657328fb332dc07b659a",
+        "contentHash": "a43a3fd488a3d8876e5e2f17694219429cef5300df26040ed419f97fac08d968",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -6560,7 +6567,7 @@
         "familyId": "univ2-standard",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
-        "contentHash": "c54360c79086ee6a156dd594c64bb059f7a96a53eec538da033ab5655cb22fe0",
+        "contentHash": "dad7f3518bb96ac218f5be4d7c18fbc8c55c3c1ff3c5cc637435f2f67172d945",
         "semanticDependencies": [
           "contract:adapter-family/victim@s1-victim-v2",
           "package:ethers@6.16.0",
@@ -6576,6 +6583,7 @@
           "src/searcher/venues/swaps/univ2-abi.ts",
           "src/searcher/venues/swaps/univ2-family/codec.ts",
           "src/searcher/venues/swaps/univ2-family/manifest.ts",
+          "src/searcher/venues/swaps/univ2-family/reserve-capacity.ts",
           "src/searcher/venues/swaps/univ2-family/swap.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
           "src/searcher/venues/v2-lineage.ts",
@@ -6601,7 +6609,7 @@
         "familyId": "univ3-standard",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "5b7992249769a750beee39f89eefbb52b9468b8b7be2759b6e7f1e536050aaa0",
+        "contentHash": "beed396401ad033b7b1cce4b868c3ea82c59a1c43cfb642b56f090d3f9befd67",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -6656,7 +6664,7 @@
         "familyId": "univ3-standard",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "1edaa753c84264d7194e70ae191b0bc1cf3dddfe735b6f8092e10c4898552117",
+        "contentHash": "08dc8fb4f8d82fc8a5ee92d3db791d7fb191920e9c0a7c00b073bf4d48b24a7a",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -7685,5 +7693,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "b9ddb58d133bc1f2dc4975bdd7d08cbd953fa245d3d42f7c5a3b30363365c601"
+  "artifactHash": "543372a50c34c34d5176c989fd722a62a5139f363f04cbf49b1571cd63605133"
 }

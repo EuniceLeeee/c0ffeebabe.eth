@@ -89,6 +89,7 @@ function assertExecutionEvidence(input: {
   const evidence = input.exactEvidence;
   if (
     evidence.kind !== "univ2-reserves-exact" ||
+    evidence.quoteModel !== input.descriptor.quoteModel.kind ||
     !sameAddress(evidence.pool, input.descriptor.pool) ||
     !sameAddress(evidence.tokenIn, input.route.tokenIn) ||
     !sameAddress(evidence.tokenOut, input.route.tokenOut) ||

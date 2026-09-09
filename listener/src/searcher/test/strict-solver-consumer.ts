@@ -107,6 +107,11 @@ function successResult(
   request: AdapterRequest,
   canonical: CanonicalSource,
 ): AdapterRequestResult {
+  if (request.id.startsWith("model-surface-") || request.id.startsWith("model-decimals-") || request.id === "model-amplification") {
+    return Object.freeze({ id: request.id, ok: true, source: canonical,
+      provenance: { kind: "strict-solver-consumer-fixture", fingerprint: `fixture:${request.id}` },
+      completion: "reverted-as-declared", data: "0x" });
+  }
   const data = request.id === "pair-factory"
     ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("factory", [`0x${"42".repeat(20)}`])
     : request.id === "pair-token0"

@@ -18,6 +18,18 @@ export const UNIV2_SWAP_CALL_PATTERN_ID = "univ2-pair-swap-call";
 export const UNIV2_SWAP_LOG_PATTERN_ID = "univ2-pair-swap-log";
 export const UNIV2_SYNC_LOG_PATTERN_ID = "univ2-pair-sync-log";
 
+export const UNIV2_TOKEN_INTERFACE = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+]);
+
+// Some reverse-verified V2-shaped pairs own a non-xyk curve. The argument
+// order is part of the model binding, not inferred from the V2 swap ABI.
+export const UNIV2_POOL_QUOTE_INTERFACE = new ethers.Interface([
+  "function getAmountOut(address tokenIn, uint256 amountIn) view returns (uint256)",
+  "function getA() view returns (uint256)",
+]);
+
 export function canonicalAddress(value: string): string {
   return ethers.getAddress(value);
 }

@@ -28,10 +28,18 @@ export interface UniV2Candidate extends FamilyCandidate {
 }
 
 export interface UniV2FeeRule {
-  readonly kind: "constant-bps";
+  readonly kind: "constant-bps" | "included-in-pool-quote";
   readonly feeBps: bigint;
-  readonly evidence: "measured-factory" | "standard-v2-default";
+  readonly evidence: "measured-factory" | "standard-v2-default" | "pool-quote";
 }
+
+export type UniV2QuoteModel =
+  | { readonly kind: "constant-product" }
+  | {
+      readonly kind: "pool-get-amount-out";
+      readonly probe0: bigint;
+      readonly probe1: bigint;
+    };
 
 export interface UniV2FactoryBinding {
   readonly factory: string;
@@ -39,6 +47,7 @@ export interface UniV2FactoryBinding {
 }
 
 export interface UniV2IdentityFacts {
+  readonly quoteModel: UniV2QuoteModel;
   readonly pool: string;
   readonly token0: string;
   readonly token1: string;
@@ -53,6 +62,7 @@ export interface UniV2Identity extends VerifiedIdentity {
 }
 
 export interface UniV2Descriptor extends CompiledInstanceDescriptor {
+  readonly quoteModel: UniV2QuoteModel;
   readonly familyId: FamilyId;
   readonly lineageId: LineageId;
   readonly instanceKey: InstanceKey;
@@ -72,6 +82,7 @@ export interface UniV2Route extends FamilyRouteDescriptor {
 }
 
 export interface UniV2PricingDescriptor {
+  readonly quoteModel: UniV2QuoteModel;
   readonly instanceKey: InstanceKey;
   readonly pool: string;
   readonly token0: string;
@@ -85,9 +96,12 @@ export interface UniV2PricingSnapshot {
   readonly reserve0: bigint;
   readonly reserve1: bigint;
   readonly blockTimestampLast: number;
+  readonly quoted0?: bigint;
+  readonly quoted1?: bigint;
 }
 
 export interface UniV2ExactEvidence {
+  readonly quoteModel: UniV2QuoteModel["kind"];
   readonly kind: "univ2-reserves-exact";
   readonly source: CanonicalSource;
   readonly pool: string;
@@ -98,6 +112,9 @@ export interface UniV2ExactEvidence {
   readonly reserveIn: bigint;
   readonly reserveOut: bigint;
   readonly feeBps: bigint;
+  readonly inputBalance?: bigint;
+  readonly maxAmountIn?: bigint;
+  readonly unavailableReason?: "input-reserve-capacity";
 }
 
 export type UniV2IdentityEvidence =
@@ -113,4 +130,7 @@ export type UniV2IdentityEvidence =
       readonly token0: string;
       readonly token1: string;
       readonly reversePool: string;
+      readonly quoteSurface: "pool-get-amount-out" | "no-pool-quote-witness";
+      readonly probe0: bigint;
+      readonly probe1: bigint;
     };

@@ -522,6 +522,19 @@ function successResult(
   canonical: CanonicalSource,
   pool: PoolContext,
 ): AdapterRequestResult {
+  if (request.id.startsWith("model-surface-") || request.id.startsWith("model-decimals-") || request.id === "model-amplification") {
+    return Object.freeze({ id: request.id, ok: true, source: canonical,
+      provenance: { kind: "migration-capture-fixture", fingerprint: `fixture:${request.id}` },
+      completion: "reverted-as-declared", data: "0x" });
+  }
+  if (request.id === "exact-input-balance" && request.kind === "eth-call") {
+    const zeroForOne = request.to.toLowerCase() === pool.token0.toLowerCase();
+    const balance = pool.reserves === undefined ? (zeroForOne ? 1_000_000n : 2_000_000n)
+      : zeroForOne ? pool.reserves.reserve0 : pool.reserves.reserve1;
+    return Object.freeze({ id: request.id, ok: true, source: canonical,
+      provenance: { kind: "migration-capture-fixture", fingerprint: `fixture:${request.id}` },
+      completion: "returned", data: `0x${balance.toString(16).padStart(64, "0")}` });
+  }
   const data = request.id === "pair-factory"
     ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("factory", [pool.factory])
     : request.id === "pair-token0"
@@ -11321,4 +11334,3 @@ export function createFixtureStrictSimulationTransport(input?: {
     },
   });
 }
-

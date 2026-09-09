@@ -16,6 +16,7 @@ export const univ2Instance = {
       token0: identity.facts.token0,
       token1: identity.facts.token1,
       feeRule: identity.facts.feeRule,
+      quoteModel: identity.facts.quoteModel,
       factoryBinding: identity.facts.factoryBinding,
     };
   },
@@ -25,10 +26,12 @@ export const univ2Instance = {
       provenance: Object.freeze([...draft.provenance]),
       runtimeRequirements: Object.freeze([...draft.runtimeRequirements]),
       feeRule: Object.freeze({ ...draft.feeRule }),
+      quoteModel: Object.freeze({ ...draft.quoteModel }),
       factoryBinding: Object.freeze({ ...draft.factoryBinding }),
     });
   },
   staticBindingProjection: (descriptor) => ({
+    quoteModel: descriptor.quoteModel,
     pool: descriptor.pool,
     token0: descriptor.token0,
     token1: descriptor.token1,

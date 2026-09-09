@@ -3,7 +3,8 @@ import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
 import type { AdapterRequestResult } from "../../adapter-request-program.js";
 import type { RouteVenueMid } from "../../mid-readers.js";
-import { directedPoolMid } from "../blockscan-state-shared.js";
+import { directedPoolMid, quotedPoolMid } from "../blockscan-state-shared.js";
+import { decodePoolQuote, poolQuoteRequest } from "./pool-quote.js";
 import {
   decodeReservesResult,
   lowerAddress,
@@ -23,6 +24,7 @@ const CURRENT_RESERVES_REQUEST_ID = "current-reserves";
 export const univ2Pricing = {
   stateKey: (route) => route.instanceKey,
   staticBindingProjection: ({ descriptor }) => ({
+    quoteModel: descriptor.quoteModel,
     pool: descriptor.pool,
     token0: descriptor.token0,
     token1: descriptor.token1,
@@ -37,6 +39,7 @@ export const univ2Pricing = {
     },
   }),
   snapshotCompatibilityProjection: ({ descriptor }) => ({
+    quoteModel: descriptor.quoteModel,
     pool: descriptor.pool,
     token0: descriptor.token0,
     token1: descriptor.token1,
@@ -52,12 +55,14 @@ export const univ2Pricing = {
       token0: descriptor.token0,
       token1: descriptor.token1,
       feeRule: descriptor.feeRule,
+      quoteModel: descriptor.quoteModel,
       factoryBinding: descriptor.factoryBinding,
     };
   },
   finalizePricingDescriptor: ({ draft }) => Object.freeze({
     ...draft,
     feeRule: Object.freeze({ ...draft.feeRule }),
+    quoteModel: Object.freeze({ ...draft.quoteModel }),
     factoryBinding: Object.freeze({ ...draft.factoryBinding }),
   }),
   current: {
@@ -68,16 +73,39 @@ export const univ2Pricing = {
       to: descriptor.pool,
       data: UNIV2_PAIR_INTERFACE.encodeFunctionData("getReserves"),
       completion: "return-data" as const,
-    })],
-    decodeSnapshot: ({ initialResults }) => Object.freeze(
-      decodeReservesResult(initialResults, CURRENT_RESERVES_REQUEST_ID),
-    ),
+    }), ...(descriptor.quoteModel.kind === "pool-get-amount-out" ? [
+      poolQuoteRequest("current-quote-0", descriptor.pool, descriptor.token0, descriptor.quoteModel.probe0),
+      poolQuoteRequest("current-quote-1", descriptor.pool, descriptor.token1, descriptor.quoteModel.probe1),
+    ] : [])],
+    decodeSnapshot: ({ descriptor, initialResults }) => Object.freeze({
+      ...decodeReservesResult(initialResults, CURRENT_RESERVES_REQUEST_ID),
+      ...(descriptor.quoteModel.kind === "pool-get-amount-out" ? {
+        quoted0: decodePoolQuote(initialResults, "current-quote-0") ?? 0n,
+        quoted1: decodePoolQuote(initialResults, "current-quote-1") ?? 0n,
+      } : {}),
+    }),
     deriveMids({ descriptor, snapshot, routes }) {
       assertRoutesMatchPricingDescriptor(descriptor, routes);
       if (snapshot.reserve0 === 0n || snapshot.reserve1 === 0n) return new Map();
       const mids = new Map<UniV2Route["routeKey"], RouteVenueMid>();
       for (const route of routes) {
         const zeroForOne = route.direction === "zero-for-one";
+        if (descriptor.quoteModel.kind === "pool-get-amount-out") {
+          const amountOut = zeroForOne ? snapshot.quoted0 : snapshot.quoted1;
+          if (amountOut === undefined) throw new Error("univ2 pool-quote snapshot missing quote");
+          if (amountOut <= 0n) continue;
+          mids.set(route.routeKey, quotedPoolMid({
+            kind: "v2", edge: routeEdge(descriptor, route),
+            amountIn: zeroForOne ? descriptor.quoteModel.probe0 : descriptor.quoteModel.probe1,
+            amountOut,
+            depthIn: zeroForOne ? snapshot.reserve0 : snapshot.reserve1,
+            depthOut: zeroForOne ? snapshot.reserve1 : snapshot.reserve0,
+            // The pool quote already includes its current fee. Applying the
+            // factory's xyk fee again would double-charge the mid.
+            feeBps: 0,
+          }));
+          continue;
+        }
         mids.set(route.routeKey, directedPoolMid({
           kind: "v2",
           edge: routeEdge(descriptor, route),
@@ -91,6 +119,14 @@ export const univ2Pricing = {
     classifyUnavailable({ descriptor, snapshot, routes }) {
       assertRoutesMatchPricingDescriptor(descriptor, routes);
       const unavailable = new Map<UniV2Route["routeKey"], string>();
+      if (descriptor.quoteModel.kind === "pool-get-amount-out") {
+        for (const route of routes) {
+          const quote = route.direction === "zero-for-one" ? snapshot.quoted0 : snapshot.quoted1;
+          if (quote === undefined || quote <= 0n) {
+            unavailable.set(route.routeKey, "univ2 pool-owned mid quote unavailable at current source");
+          }
+        }
+      }
       if (snapshot.reserve0 !== 0n && snapshot.reserve1 !== 0n) return unavailable;
       const reason = `univ2 pool ${descriptor.pool} has zero reserve at the current source`;
       for (const route of routes) unavailable.set(route.routeKey, reason);
@@ -115,7 +151,7 @@ export const univ2Pricing = {
     },
   },
   liveStateProjection: {
-    project: ({ descriptor, snapshot }) => ({
+    project: ({ descriptor, snapshot }) => descriptor.quoteModel.kind !== "constant-product" ? null : ({
       kind: "v2",
       pool: descriptor.pool,
       token0: descriptor.token0,

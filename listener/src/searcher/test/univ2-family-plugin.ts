@@ -54,7 +54,10 @@ import {
   UNIV2_SWAP_LOG_PATTERN_ID,
   UNIV2_SWAP_TOPIC,
   UNIV2_SYNC_LOG_PATTERN_ID,
+  UNIV2_TOKEN_INTERFACE,
+  UNIV2_POOL_QUOTE_INTERFACE,
 } from "../venues/swaps/univ2-family/codec.js";
+import { UNIV2_MAX_RESERVE } from "../venues/swaps/univ2-family/reserve-capacity.js";
 import type {
   UniV2Candidate,
   UniV2Identity,
@@ -434,12 +437,52 @@ if (exactRequestMethod.kind !== "request-program") {
   throw new Error("univ2 exact remote method is missing");
 }
 const exactRequests = exactRequestMethod.program.buildRequests(exactInput);
-assert.equal(exactRequests.length, 1);
+assert.equal(exactRequests.length, 2);
+assert.equal(exactRequests[1].kind, "eth-call");
 const strictExact = exactRequestMethod.program.decode({
   programInput: exactInput,
-  initialResults: [success(exactRequests[0].id, reservesData)],
+  initialResults: [
+    success(exactRequests[0].id, reservesData),
+    success(exactRequests[1].id, UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [RESERVE0])),
+  ],
   dependentEvidence: [],
 });
+// Capacity is directional and follows actual token balance, including donations.
+// A rejected large amount must not poison a later legal smaller quote.
+for (const route of routes) {
+  for (const donation of [0n, 10n]) {
+    const reserveIn = UNIV2_MAX_RESERVE - 100n;
+    const balanceIn = reserveIn + donation;
+    const capacity = 100n - donation;
+    const pairReserves = route.direction === "zero-for-one"
+      ? [reserveIn, UNIV2_MAX_RESERVE, TIMESTAMP]
+      : [UNIV2_MAX_RESERVE, reserveIn, TIMESTAMP];
+    for (const amountIn of [capacity + 1n, capacity, capacity / 2n]) {
+      const quoted = exactRequestMethod.program.decode({
+        programInput: { ...exactInput, route, amountIn },
+        initialResults: [
+          success("exact-reserves", UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves", pairReserves)),
+          success("exact-input-balance", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [balanceIn])),
+        ],
+        dependentEvidence: [],
+      });
+      assert.equal(quoted.evidence.maxAmountIn, capacity);
+      assert.equal(quoted.evidence.unavailableReason,
+        amountIn > capacity ? "input-reserve-capacity" : undefined);
+      assert.equal(quoted.amountOut, amountIn > capacity ? 0n :
+        quoteV2ExactInputPure(reserveIn, UNIV2_MAX_RESERVE, amountIn, 30n));
+      if (amountIn <= capacity) assert(quoted.amountOut > 0n, "smaller legal amounts stay usable");
+    }
+  }
+}
+assert.throws(() => exactRequestMethod.program.decode({
+  programInput: exactInput,
+  initialResults: [
+    success("exact-reserves", reservesData),
+    { id: "exact-input-balance", ok: false, source: SOURCE, failure: "rpc" },
+  ],
+  dependentEvidence: [],
+}), /unresolved: rpc/, "unknown balance must not become a successful quote");
 const zeroExactInput = Object.freeze({ ...exactInput, amountIn: 0n });
 assert.deepEqual(
   exactRequestMethod.program.buildRequests(zeroExactInput),
@@ -919,6 +962,87 @@ assert.match(
   /source\/generation differs from its route publication handle/,
 );
 
+// A reverse-verified pool-owned curve must never reuse the reserve-ratio mid,
+// factory's xyk fee, xyk victim overlay, or a former model's quote evidence.
+const stableDecision = runIdentityDecision(unknownFactoryCandidate, UNKNOWN_FACTORY, POOL, {
+  decimals0: 18, decimals1: 6,
+});
+assert.equal(stableDecision.status, "verified");
+if (stableDecision.status !== "verified") throw new Error("pool-owned model not verified");
+const stableDescriptor = univ2StrictFamilyPlugin.instance.finalizeDescriptor({
+  identity: stableDecision.identity,
+  draft: univ2StrictFamilyPlugin.instance.compileDraft(stableDecision.identity),
+  sharedBindings: [],
+});
+assert.equal(stableDescriptor.quoteModel.kind, "pool-get-amount-out");
+assert.equal(stableDescriptor.feeRule.kind, "included-in-pool-quote");
+const stableRoutes = univ2StrictFamilyPlugin.routes.project({ descriptor: stableDescriptor });
+assert.notEqual(stableRoutes[0].bindingRef.fingerprint, routes[0].bindingRef.fingerprint);
+assert.notEqual(stableRoutes[0].bindingRef.fingerprint,
+  univ2StrictFamilyPlugin.routes.project({descriptor: {...stableDescriptor, quoteModel: {kind: "constant-product"}}})[0].bindingRef.fingerprint,
+  "changing only the model invalidates the route binding");
+const stablePricing = univ2StrictFamilyPlugin.pricing.finalizePricingDescriptor({
+  draft: univ2StrictFamilyPlugin.pricing.compileDraft({
+    descriptor: stableDescriptor, routes: stableRoutes, stateKey: stableDescriptor.instanceKey,
+  }), sharedBindings: [],
+});
+const stableSnapshot = univ2StrictFamilyPlugin.pricing.current.decodeSnapshot({
+  descriptor: stablePricing,
+  initialResults: [
+    success("current-reserves", reservesData),
+    success("current-quote-0", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [99_998n])),
+    success("current-quote-1", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [99_980_198_558_287_467n])),
+  ], dependentEvidence: [],
+});
+const stableMids = univ2StrictFamilyPlugin.pricing.current.deriveMids({
+  descriptor: stablePricing, snapshot: stableSnapshot, routes: stableRoutes,
+});
+assert(Math.abs(stableMids.get(stableRoutes[0].routeKey)!.mid * 1e12 - 0.99998) < 1e-12);
+assert.equal(stableMids.get(stableRoutes[0].routeKey)!.feeBps, 0, "pool quote fees must not be charged twice");
+assert.equal(univ2StrictFamilyPlugin.pricing.liveStateProjection!.project({
+  descriptor: stablePricing, snapshot: stableSnapshot,
+}), null, "do not seed a non-xyk model into the legacy xyk state cache");
+assert.equal(univ2StrictFamilyPlugin.swap.replay.bind({
+  descriptor: stableDescriptor, routes: stableRoutes, impact: strictVictimImpact,
+}), null, "a stable curve cannot inherit the constant-product victim calculation");
+const stableInput = { ...exactInput, descriptor: stableDescriptor, route: stableRoutes[0] };
+const stableRequests = exactRequestMethod.program.buildRequests(stableInput);
+assert.equal(stableRequests.length, 3);
+const stableQuote = exactRequestMethod.program.decode({
+  programInput: stableInput,
+  initialResults: [
+    success("exact-reserves", reservesData),
+    success("exact-input-balance", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [RESERVE0])),
+    success("exact-pool-quote", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [999n])),
+  ], dependentEvidence: [],
+});
+assert.equal(stableQuote.amountOut, 999n, "use pool-owned quote, never an xyk substitute");
+assert.equal(univ2StrictFamilyPlugin.execution.buildFragment({
+  ...stableInput, quotedAmountOut: stableQuote.amountOut, minAmountOut: stableQuote.amountOut,
+  exactEvidence: stableQuote.evidence,
+}).nodes.length, 1, "valid stable quote produces the normal V2-shaped swap action");
+assert.throws(() => univ2StrictFamilyPlugin.execution.buildFragment({
+  ...stableInput, quotedAmountOut: stableQuote.amountOut, minAmountOut: stableQuote.amountOut,
+  exactEvidence: {...stableQuote.evidence, quoteModel: "constant-product"},
+}), /incompatible exact evidence/, "changing only evidence model fails binding");
+assert.throws(() => univ2StrictFamilyPlugin.execution.buildFragment({
+  ...stableInput, quotedAmountOut: strictExact.amountOut, minAmountOut: strictExact.amountOut,
+  exactEvidence: strictExact.evidence,
+}), /incompatible exact evidence/);
+const unavailableStable = runIdentityDecision(unknownFactoryCandidate, UNKNOWN_FACTORY, POOL, {
+  decimals0: 18, decimals1: 6, surfaceReverts: true,
+});
+assert.equal(unavailableStable.status, "verified");
+if (unavailableStable.status === "verified") assert.equal(unavailableStable.identity.facts.quoteModel.kind,
+  "pool-get-amount-out", "getA evidence forbids xyk fallback even if both tiny quotes revert");
+const oneWaySnapshot = {...stableSnapshot, quoted0: 0n};
+assert.equal(univ2StrictFamilyPlugin.pricing.current.deriveMids({
+  descriptor: stablePricing, snapshot: oneWaySnapshot, routes: stableRoutes,
+}).size, 1, "one unavailable direction must not suppress the available reverse direction");
+assert.equal(univ2StrictFamilyPlugin.pricing.current.classifyUnavailable!({
+  descriptor: stablePricing, snapshot: oneWaySnapshot, routes: stableRoutes,
+}).size, 1);
+
 console.log(
   "univ2-family-plugin PASS " +
     "(strict seven-capability parity, reverse identity, carry, victim replay, ownership)",
@@ -1052,6 +1176,12 @@ function lifecycleRequestResult(
     case "factory-get-pair":
       data = UNIV2_FACTORY_INTERFACE.encodeFunctionResult("getPair", [POOL]);
       break;
+    case "model-surface-0":
+    case "model-surface-1":
+    case "model-amplification":
+    case "model-decimals-0":
+    case "model-decimals-1":
+      return declaredRevert(request.id);
     default:
       if (request.id !== currentRequests[0].id) {
         throw new Error(`unexpected strict lifecycle request ${request.id}`);
@@ -1075,6 +1205,7 @@ function runIdentityDecision(
   candidateInput: UniV2Candidate,
   factory: string,
   reversePool: string | null,
+  ownQuote?: { decimals0: number; decimals1: number; surfaceReverts?: boolean },
 ): ReturnType<typeof identityVariant.decide> {
   const initial = { candidate: candidateInput, evidence: undefined, step: 0 };
   assert.deepEqual(identityVariant.decide(initial), { status: "continue" });
@@ -1111,7 +1242,7 @@ function runIdentityDecision(
   };
   assert.deepEqual(identityVariant.decide(reverseStep), { status: "continue" });
   const reverseRequests = identityVariant.buildRequests(reverseStep);
-  assert.equal(reverseRequests.length, 1);
+  assert.equal(reverseRequests.length, 6);
   assert.equal(reverseRequests[0].kind, "eth-call");
   if (reverseRequests[0].kind !== "eth-call") {
     throw new Error("univ2 reverse binding request must be eth-call");
@@ -1120,18 +1251,29 @@ function runIdentityDecision(
   assert.equal(reverseRequests[0].completion, "return-or-revert-data");
   const reverseEvidence = identityVariant.decode({
     step: reverseStep,
-    results: reversePool === null
-      ? [declaredRevert("factory-get-pair")]
-      : [success(
+    results: [reversePool === null
+      ? declaredRevert("factory-get-pair")
+      : success(
           "factory-get-pair",
           UNIV2_FACTORY_INTERFACE.encodeFunctionResult("getPair", [reversePool]),
-        )],
+        ),
+      ...[0, 1].map((index) => ownQuote && !ownQuote.surfaceReverts
+        ? success(`model-surface-${index}`, UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [0n]))
+        : declaredRevert(`model-surface-${index}`)),
+      ownQuote ? success("model-amplification", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getA", [850000n]))
+        : declaredRevert("model-amplification"),
+      ...[0, 1].map((index) => ownQuote
+        ? success(`model-decimals-${index}`, UNIV2_TOKEN_INTERFACE.encodeFunctionResult("decimals", [index ? ownQuote.decimals1 : ownQuote.decimals0]))
+        : declaredRevert(`model-decimals-${index}`)),
+    ],
   }) as UniV2IdentityEvidence;
-  return identityVariant.decide({
+  const modelStep = {
     candidate: candidateInput,
     evidence: reverseEvidence,
     step: 2,
-  });
+  };
+  const decision = identityVariant.decide(modelStep);
+  return decision;
 }
 
 function declaredRevert(id: string): AdapterRequestResult {

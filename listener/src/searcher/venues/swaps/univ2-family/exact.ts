@@ -7,8 +7,12 @@ import {
 } from "../../adapter-family-plugin.js";
 import {
   decodeReservesResult,
+  requireSuccessfulResult,
   UNIV2_PAIR_INTERFACE,
+  UNIV2_TOKEN_INTERFACE,
 } from "./codec.js";
+import { uniV2InputCapacity } from "./reserve-capacity.js";
+import { decodePoolQuote, poolQuoteRequest } from "./pool-quote.js";
 import type {
   UniV2Descriptor,
   UniV2ExactEvidence,
@@ -16,6 +20,7 @@ import type {
 } from "./types.js";
 
 const EXACT_RESERVES_REQUEST_ID = "exact-reserves";
+const EXACT_INPUT_BALANCE_REQUEST_ID = "exact-input-balance";
 
 const univ2RequestProgram: ExactRequestProgram<
   UniV2Descriptor,
@@ -32,7 +37,15 @@ const univ2RequestProgram: ExactRequestProgram<
       to: input.descriptor.pool,
       data: UNIV2_PAIR_INTERFACE.encodeFunctionData("getReserves"),
       completion: "return-data" as const,
-    })];
+    }), Object.freeze({
+      id: EXACT_INPUT_BALANCE_REQUEST_ID,
+      kind: "eth-call" as const,
+      to: input.route.tokenIn,
+      data: UNIV2_TOKEN_INTERFACE.encodeFunctionData("balanceOf", [input.descriptor.pool]),
+      completion: "return-data" as const,
+    }), ...(input.descriptor.quoteModel.kind === "pool-get-amount-out" ? [
+      poolQuoteRequest("exact-pool-quote", input.descriptor.pool, input.route.tokenIn, input.amountIn),
+    ] : [])];
   },
   decode({ programInput, initialResults }) {
     const results = initialResults;
@@ -50,7 +63,17 @@ const univ2RequestProgram: ExactRequestProgram<
     const zeroForOne = programInput.route.direction === "zero-for-one";
     const reserveIn = zeroForOne ? reserves.reserve0 : reserves.reserve1;
     const reserveOut = zeroForOne ? reserves.reserve1 : reserves.reserve0;
-    const amountOut = quoteV2ExactInput(
+    const balanceResult = requireSuccessfulResult(results, EXACT_INPUT_BALANCE_REQUEST_ID);
+    const inputBalance = BigInt(UNIV2_TOKEN_INTERFACE.decodeFunctionResult(
+      "balanceOf", balanceResult.data,
+    )[0]);
+    const maxAmountIn = uniV2InputCapacity(inputBalance);
+    // Zero is an unavailable amount, not a pool blacklist. The solver can
+    // still quote a smaller legal input at this same source. Read balanceOf
+    // as donations/unsynced transfers also consume uint112 headroom.
+    const capacityExceeded = programInput.amountIn > maxAmountIn;
+    const amountOut = capacityExceeded ? 0n : programInput.descriptor.quoteModel.kind === "pool-get-amount-out"
+      ? decodePoolQuote(results, "exact-pool-quote") ?? 0n : quoteV2ExactInput(
       reserveIn,
       reserveOut,
       programInput.amountIn,
@@ -60,6 +83,7 @@ const univ2RequestProgram: ExactRequestProgram<
       amountOut,
       evidence: Object.freeze({
         kind: "univ2-reserves-exact" as const,
+        quoteModel: programInput.descriptor.quoteModel.kind,
         source: reserves.source,
         pool: programInput.descriptor.pool,
         tokenIn: programInput.route.tokenIn,
@@ -69,6 +93,9 @@ const univ2RequestProgram: ExactRequestProgram<
         reserveIn,
         reserveOut,
         feeBps: programInput.descriptor.feeRule.feeBps,
+        inputBalance,
+        maxAmountIn,
+        ...(capacityExceeded ? { unavailableReason: "input-reserve-capacity" as const } : {}),
       }),
     });
   },
@@ -90,6 +117,7 @@ export const univ2Exact = {
     }),
   ]),
   cacheCompatibilityProjection: ({ descriptor, route }) => ({
+    quoteModel: descriptor.quoteModel,
     pool: descriptor.pool,
     tokenIn: route.tokenIn,
     tokenOut: route.tokenOut,
@@ -134,6 +162,7 @@ function zeroEvidence(input: {
 }): UniV2ExactEvidence {
   return Object.freeze({
     kind: "univ2-reserves-exact" as const,
+    quoteModel: input.descriptor.quoteModel.kind,
     source: input.source,
     pool: input.descriptor.pool,
     tokenIn: input.route.tokenIn,

@@ -9,6 +9,7 @@ import type {
 } from "../../adapter-family-plugin.js";
 import { buildApprovedSwapVictimOverlay } from "../../victim-runtime-shared.js";
 import { canonicalAddress, sameAddress } from "./codec.js";
+import { uniV2InputCapacity, UNIV2_MAX_RESERVE } from "./reserve-capacity.js";
 import type { UniV2Descriptor, UniV2Route } from "./types.js";
 
 export const UNIV2_ROUTER =
@@ -45,6 +46,7 @@ export interface UniV2ExactPostState {
 
 export const univ2VictimReplay = {
   bind({ descriptor, routes, impact }) {
+    if (descriptor.quoteModel.kind !== "constant-product") return null;
     if (!samePool(descriptor.pool, impact.pool)) return null;
     return routes.find((route) =>
       samePool(route.pool, descriptor.pool) &&
@@ -53,6 +55,7 @@ export const univ2VictimReplay = {
     ) ?? null;
   },
   applyLocal({ descriptor, route, preState, impact, source }) {
+    if (descriptor.quoteModel.kind !== "constant-product") return null;
     if (!routeMatches(descriptor, route, impact)) return null;
     const parsed = decodePreState(preState);
     if (
@@ -76,6 +79,7 @@ export const univ2VictimReplay = {
     });
   },
   exactPostState({ descriptor, route, impact, source }) {
+    if (descriptor.quoteModel.kind !== "constant-product") return null;
     if (
       !routeMatches(descriptor, route, impact) ||
       impact.exactPostState === undefined
@@ -98,6 +102,7 @@ export const univ2VictimReplay = {
     }) as unknown as CanonicalValue;
   },
   buildOverlay({ descriptor, route, impact, validUntil }) {
+    if (descriptor.quoteModel.kind !== "constant-product") return null;
     if (!routeMatches(descriptor, route, impact)) return null;
     return buildUniV2VictimOverlayIntent({ impact, validUntil });
   },
@@ -121,6 +126,7 @@ export function applyUniV2VictimState(input: {
   const [reserveIn, reserveOut] = zeroForOne
     ? [pre.reserve0, pre.reserve1]
     : [pre.reserve1, pre.reserve0];
+  if (impact.amountIn > uniV2InputCapacity(reserveIn)) return null;
   const amountOut = quoteV2ExactInput(
     reserveIn,
     reserveOut,
@@ -160,6 +166,8 @@ export function uniV2ExactPostImpact(input: {
   if (
     state.reserve0 < 0n ||
     state.reserve1 < 0n ||
+    state.reserve0 > UNIV2_MAX_RESERVE ||
+    state.reserve1 > UNIV2_MAX_RESERVE ||
     state.feeBps < 0n ||
     state.feeBps >= 10_000n
   ) {
