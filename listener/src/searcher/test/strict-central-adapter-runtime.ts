@@ -12,8 +12,12 @@ import {
 import {
   runStrictFamilyLifecycle,
 } from "../strict-family-lifecycle-runner.js";
-import type { AdapterRequest, CanonicalSource } from
-  "../venues/adapter-request-program.js";
+import {
+  physicalAdapterRequestFingerprint,
+  type AdapterRequest,
+  type CanonicalSource,
+} from "../venues/adapter-request-program.js";
+import { hashCanonical } from "../venues/canonical-value.js";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
@@ -836,6 +840,98 @@ for (const kind of ["state-override-simulation", "effect-delta-simulation"] as c
 }
 
 for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) {
+  for (const callerRole of ["executor", "verified-actor"] as const) {
+    for (const reverted of [false, true]) {
+      test(`${kind}: ${callerRole} ${reverted ? "revert" : "return"} provenance binds only used inner origin`, async () => {
+        const actor = `0x${"ab".repeat(20)}`;
+        const originA = `0x${"bc".repeat(20)}`;
+        const originB = `0x${"cd".repeat(20)}`;
+        const target = `0x${"de".repeat(20)}`;
+        const caller = callerRole === "executor"
+          ? { kind: "executor" as const }
+          : { kind: "verified-actor" as const, evidenceId: "actor" };
+        const raw: EffectRequest = {
+          id: "origin-provenance", kind,
+          call: { caller, executionMode: "impersonated-call-frame", to: target, data: "0x1234" },
+          overrideIntent: { caller },
+          observe: ["return-data", "revert-data", "native-delta"],
+        };
+        const completion = reverted ? "reverted-as-declared" : "returned";
+        const nativeDeltas = [{ account: actor, delta: 7n }];
+        const run = async (request: EffectRequest, transactionOrigin: string | undefined,
+          unusedActors: Readonly<Record<string, string>> = {}) => {
+          const runtime = createStrictCentralAdapterRuntime({
+            provider: {
+              call: async () => assert.fail("unexpected provider call"),
+              getCode: async () => assert.fail("unexpected code read"),
+              getStorage: async () => assert.fail("unexpected storage read"),
+            },
+            executor: actor, transactionOrigin,
+            verifiedActors: { actor, ...unusedActors },
+            generationFence: { assertCurrent(generation, source) {
+              assert.equal(generation, SOURCE.generation);
+              assert.deepEqual(source, SOURCE);
+            } },
+            simulator: { simulate: async (input) => {
+              assert.deepEqual(input.source, SOURCE);
+              assert.deepEqual(input.request, request);
+              assert.equal(physicalAdapterRequestFingerprint(input.request),
+                physicalAdapterRequestFingerprint(request));
+              assert.equal(input.callerAuthority.transactionOrigin, transactionOrigin?.toLowerCase());
+              assert.equal(input.callerAuthority.executor, actor);
+              assert.equal(input.callerAuthority.verifiedActors?.actor, actor);
+              assert(Object.isFrozen(input.callerAuthority));
+              if (reverted) throw Object.assign(new Error("execution reverted"),
+                { code: "CALL_EXCEPTION", data: "0x1234" });
+              return { data: "0x1234", effects: { nativeDeltas } };
+            } },
+          });
+          const outcome = await executeAdapterWork({ runtime, intent: {
+            stage: "runtime-evidence", familyId: "test:origin-provenance" as never,
+            source: SOURCE, generation: SOURCE.generation, programInput: undefined,
+            program: {
+              requirements: () => ({ transports: [kind], caller: callerRole, effects: raw.observe }),
+              buildRequests: () => [request], decode: ({ results }) => results,
+            },
+          } });
+          assert(outcome.status === "resolved");
+          const result = outcome.executed.evidence[0];
+          assert(result?.ok);
+          assert.equal(result.completion, completion);
+          assert.equal(result.data, "0x1234");
+          assert.deepEqual(result.source, SOURCE);
+          assert.deepEqual(result.effects?.nativeDeltas, reverted ? [] : nativeDeltas);
+          assert.equal(result.provenance.kind, "strict-simulation-transport");
+          return result.provenance.fingerprint;
+        };
+
+        // Identical declaration/source/actor/output; only sealed origin differs.
+        const a = await run(raw, originA);
+        const b = await run(raw, originB);
+        assert.notEqual(a, b, "inner-mode evidence must bind the sealed transaction origin");
+        assert.equal(await run(raw, `0x${"BC".repeat(20)}`), a);
+        assert.equal(await run(raw, originA, { unused: originB }), a,
+          "unused verified actors must not perturb provenance");
+        assert.equal(await run(raw, originA, { unused: target }), a);
+        assert.notEqual(await run(raw, undefined), await run(raw, actor),
+          "missing origin must not be inferred from the actor/executor");
+
+        for (const executionMode of [undefined, "top-level"] as const) {
+          const request: EffectRequest = { ...raw, call: { caller, to: target, data: "0x1234",
+            ...(executionMode === undefined ? {} : { executionMode }) } };
+          const originalFingerprint = hashCanonical({
+            id: request.id, requestFingerprint: physicalAdapterRequestFingerprint(request),
+            callerAddresses: [actor, actor], completion,
+            source: { number: SOURCE.number, hash: SOURCE.hash.toLowerCase(), generation: SOURCE.generation },
+          });
+          for (const origin of [undefined, originA, originB]) {
+            assert.equal(await run(request, origin), originalFingerprint,
+              "top-level provenance must retain its original hash; authority origin is unused");
+          }
+        }
+      });
+    }
+  }
   for (const reverted of [false, true]) {
     test(`${kind}: strict ${reverted ? "revert" : "success"} traversal binds effect metadata`, async () => {
       const token = `0x${"31".repeat(20)}`;

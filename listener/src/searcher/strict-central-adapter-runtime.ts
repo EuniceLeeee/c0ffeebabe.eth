@@ -565,6 +565,11 @@ async function executeRequest(
           id: request.id,
           requestFingerprint,
           callerAddresses,
+          // Inner ORIGIN is distinct from the symbolic caller. Bind only the
+          // sealed authority; never infer it from the executor or another role.
+          ...(request.call.executionMode === "impersonated-call-frame"
+            ? { transactionOrigin: callerAuthority.transactionOrigin?.toLowerCase() ?? null }
+            : {}),
           completion,
           source: { number: source.number, hash: source.hash.toLowerCase(), generation: source.generation },
         }),
