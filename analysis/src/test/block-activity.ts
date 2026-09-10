@@ -230,6 +230,53 @@ test("block-activity renders every schema-v2 route through exact, planner, solve
   });
 });
 
+test("block-activity renders amount-cap exclusions alongside healthy and legacy exact evidence", async () => {
+  await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
+    const reasons = [
+      "exact_not_admitted", "family_circuit_open", "instance_circuit_open",
+      "composite_circuit_open", "probe_timeout", "global_deadline", "quote_error",
+      "amount_reference_over_cap",
+    ];
+    const refs = Array.from({ length: reasons.length + 1 }, (_, index) => index + 1);
+    await writeFile(routeEventsPath, [
+      ...refs.map((ref) => routeCatalogWithEdges(ref, `sha256:exact-${ref}`, [`edge-${ref}`])),
+      JSON.stringify({
+        ...JSON.parse(routeLifecycleWithMid(99, 98, refs)),
+        exact: [1, 1, 25, 0, ...reasons.flatMap((_, index) => [4, 0, null, index + 1])],
+        planner: [1], solver: [1],
+      }),
+    ].join("\n"));
+    const stdout = await runBlockActivity(eventsPath, logPath, routeEventsPath);
+    assert.match(stdout, /status=complete/);
+    assert.match(stdout, /rank=1 ref=1 .*exact_status=positive exact_attempted=true exact_margin_bps=25 exact_reason=null planner_entered=true .*selected_for_solver=true/);
+    for (const [index, reason] of reasons.entries()) {
+      const ref = index + 2;
+      assert.match(stdout, new RegExp(
+        `rank=${ref} ref=${ref} .*exact_status=unprobed exact_attempted=false exact_margin_bps=null exact_reason=${reason} planner_entered=false .*selected_for_solver=false`,
+      ));
+    }
+    assert.match(stdout, /Enumeration: 9/);
+    assert.match(stdout, /Planner entered: 1/);
+    assert.match(stdout, /Solver entered: 1/);
+  });
+});
+
+test("block-activity rejects unknown compact exact reason code 9", async () => {
+  await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
+    await writeFile(routeEventsPath, [
+      routeCatalogWithEdges(1, ROUTE_A, ["edge-a"]),
+      JSON.stringify({
+        ...JSON.parse(routeLifecycleWithMid(99, 98, [1])),
+        exact: [4, 0, null, 9], planner: [], solver: [],
+      }),
+    ].join("\n"));
+    const stdout = await runBlockActivity(eventsPath, logPath, routeEventsPath);
+    assert.match(stdout, /status=unknown_invalid_route_events/);
+    assert.match(stdout, /invalid_records=1/);
+    assert.doesNotMatch(stdout, /status=complete/);
+  });
+});
+
 test("block-activity lists pre-cap routes and distinguishes cap from current-edge rejection", async () => {
   await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
     const count = 646;

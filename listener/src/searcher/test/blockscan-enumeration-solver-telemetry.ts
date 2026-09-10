@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { constants } from "node:fs";
 import {
   access,
@@ -11,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { Worker } from "node:worker_threads";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import {
@@ -218,6 +220,120 @@ test(
     });
   },
 );
+
+test("worker preserves amount-cap evidence, healthy siblings, and legacy reason codes", async () => {
+  await withTempDir(async (dir) => {
+    const eventsPath = join(dir, "events.jsonl");
+    const routePath = join(dir, "blockscan-routes.jsonl");
+    await writeFile(eventsPath, '{"type":"searcher_start"}\n');
+    const reasons = [
+      "exact_not_admitted", "family_circuit_open", "instance_circuit_open",
+      "composite_circuit_open", "probe_timeout", "global_deadline", "quote_error",
+      "amount_reference_over_cap",
+    ] as const;
+    const routes = Array.from({ length: reasons.length + 1 }, (_, index) =>
+      opportunity(100, [edge("adapter-a", address(301 + index), address(1), address(2))])
+    );
+    const sink = await initBlockScanEnumerationSolverTelemetry({
+      path: routePath, eventsPath, runId: "run-exact-reason-codes", minFreeBytes: 1,
+    });
+    try {
+      const pass = sink.beginPass(100);
+      assert.ok(pass);
+      pass.recordEnumeration(routes);
+      // Cap exclusions arrive before healthy quotes, regardless of route rank.
+      for (let index = reasons.length - 1; index >= 0; index--) {
+        pass.recordExact(routes[index + 1]!, {
+          index: index + 1, status: "unprobed", attempted: false, marginBps: null,
+          failure: {
+            reason: reasons[index]!, familyIds: [], attributedFamilyId: null,
+            attributedInstanceCircuitKey: null, blockingCircuitScope: null,
+            stage: null, causeName: null, causeCode: null, causeKind: null,
+          },
+        });
+      }
+      pass.recordExact(routes[0]!, {
+        index: 0, status: "positive", attempted: true, marginBps: 125, failure: null,
+      });
+      pass.recordPlanner(routes[0]!);
+      pass.recordSolver(routes[0]!);
+      pass.finish({
+        sourceBlockHash: "0xsource100", midSourceBlock: 99,
+        midSourceBlockHash: "0xsource99", pricingMode: "source_n",
+        passOutcome: "ran", passReason: null,
+      });
+    } finally {
+      await sink.shutdown(5_000);
+    }
+    const records = await readJsonl(routePath);
+    const catalogs = records.filter((row) => row.type === "block_scan_route_catalog");
+    const blocks = records.filter((row) => row.type === "block_scan_enumeration_solver");
+    assert.equal(catalogs.length, routes.length);
+    assert.equal(blocks.length, 1);
+    assert.deepEqual(catalogs.map((row) => row.route_id), routes.map((route) => blockScanRouteId(route.seedEdges)));
+    assert.deepEqual(blocks[0]!.enumeration, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    assert.deepEqual(blocks[0]!.exact, [
+      1, 1, 125, 0,
+      4, 0, null, 1, 4, 0, null, 2, 4, 0, null, 3, 4, 0, null, 4,
+      4, 0, null, 5, 4, 0, null, 6, 4, 0, null, 7, 4, 0, null, 8,
+    ]);
+    assert.deepEqual(blocks[0]!.planner, [1]);
+    assert.deepEqual(blocks[0]!.solver, [1]);
+    assert.equal(blocks[0]!.dropped_batches, undefined);
+    assert.equal(sink.telemetry().droppedBatches, 0);
+    assert.equal(sink.telemetry().acknowledged, 1);
+    assert.equal(sink.telemetry().failed, false);
+    await assertMissing(`${routePath}.lock`);
+  });
+});
+
+test("worker rejects unknown compact exact reason code 9 without writing route evidence", async () => {
+  await withTempDir(async (dir) => {
+    const eventsPath = join(dir, "events.jsonl");
+    const routePath = join(dir, "blockscan-routes.jsonl");
+    await writeFile(eventsPath, '{"type":"searcher_start"}\n');
+    const worker = new Worker(new URL("../blockscan-enumeration-solver-worker.ts", import.meta.url), {
+      execArgv: ["--import", "tsx"],
+      workerData: {
+        routePath, eventsPath, midHistoryPath: "", runId: "run-invalid-exact-code",
+        maxFileBytes: 1_048_576, maxMidFileBytes: 1_048_576,
+        maxMidRecordBytes: 1_048_576, maxCatalogEntries: 10,
+        minFreeBytes: 1, epochMs: 60_000, maxEncodedBatchBytes: 1_048_576,
+      },
+    });
+    const signal = AbortSignal.timeout(5_000);
+    try {
+      const [ready] = await once(worker, "message", { signal });
+      assert.deepEqual(ready, { type: "ready", enabled: true });
+      const reply = once(worker, "message", { signal });
+      worker.postMessage({
+        type: "batch",
+        batch: {
+          kind: "route", sequence: 1, sourceBlock: 100,
+          sourceBlockHash: "0xsource100", midSourceBlock: 99,
+          midSourceBlockHash: "0xsource99", pricingMode: "source_n",
+          passOutcome: "ran", passReason: null, gapBefore: null,
+          routes: [blockScanRouteLocator(opportunity(100, [
+            edge("adapter-a", address(301), address(1), address(2)),
+          ]))],
+          enumeration: [0], exact: [4, 0, null, 9], planner: [], solver: [],
+        },
+      });
+      const [ack] = await reply;
+      assert.equal(ack.type, "ack");
+      assert.equal(ack.sequence, 1);
+      assert.equal(ack.ok, false);
+      assert.match(ack.reason, /route telemetry batch has invalid route index/);
+      assert.equal(ack.bytesWritten, 0);
+      assert.equal(await readFile(routePath, "utf8"), "");
+    } finally {
+      const stopped = once(worker, "exit", { signal: AbortSignal.timeout(5_000) });
+      worker.postMessage({ type: "shutdown" });
+      await stopped;
+    }
+    await assertMissing(`${routePath}.lock`);
+  });
+});
 
 test(
   "route identity is stable and changes with venue or direction",

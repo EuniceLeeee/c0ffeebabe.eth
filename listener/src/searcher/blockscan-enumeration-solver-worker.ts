@@ -786,7 +786,7 @@ function validCompactExactDiagnostics(
       (attempted !== 0 && attempted !== 1) ||
       (margin !== null && (margin === undefined || !Number.isFinite(margin))) ||
       failure === null || failure === undefined ||
-      !Number.isSafeInteger(failure) || failure < 0 || failure > 7
+      !Number.isSafeInteger(failure) || failure < 0 || failure > 8
     ) return false;
   }
   return true;

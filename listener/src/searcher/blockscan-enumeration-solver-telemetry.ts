@@ -1047,7 +1047,9 @@ function writeCompactExactDiagnostic(
                 ? 6
                 : reason === "quote_error"
                   ? 7
-                  : -1;
+                  : reason === "amount_reference_over_cap"
+                    ? 8
+                    : -1;
   if (
     failure < 0 ||
     (
@@ -1086,7 +1088,7 @@ function validCompactExactDiagnostics(
       failure === undefined ||
       !Number.isSafeInteger(failure) ||
       failure < 0 ||
-      failure > 7
+      failure > 8
     ) return false;
   }
   return true;
