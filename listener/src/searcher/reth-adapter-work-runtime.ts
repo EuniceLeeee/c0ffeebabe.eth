@@ -1425,7 +1425,26 @@ export function materializeAdapterRequests(
           ...(request.required === undefined ? {} : { required: request.required }),
           kind: request.kind,
           ...(preCalls === undefined ? {} : { preCalls: Object.freeze(preCalls) }),
-          call: Object.freeze({ from, to: request.call.to, data: request.call.data }),
+          call: Object.freeze({
+            from,
+            ...(request.call.executionMode === undefined
+              ? {}
+              : { executionMode: request.call.executionMode }),
+            to: request.call.to,
+            data: request.call.data,
+          }),
+          ...(request.observeTokenBalances === undefined
+            ? {}
+            : {
+                observeTokenBalances: Object.freeze(request.observeTokenBalances.map((item) =>
+                  Object.freeze({
+                    token: item.token.toLowerCase(),
+                    account: typeof item.account === "string"
+                      ? item.account.toLowerCase()
+                      : resolveCallerRef(item.account, authority),
+                  })
+                )),
+              }),
           overrideIntent: Object.freeze({
             caller: overrideCaller,
             ...(request.overrideIntent.nativeBalanceWei === undefined
@@ -1433,9 +1452,11 @@ export function materializeAdapterRequests(
               : { nativeBalanceWei: request.overrideIntent.nativeBalanceWei }),
             ...(request.overrideIntent.tokenBalances === undefined
               ? {}
-              : { tokenBalances: request.overrideIntent.tokenBalances }),
+              : { tokenBalances: Object.freeze(request.overrideIntent.tokenBalances.map((item) =>
+                  Object.freeze({ token: item.token, amount: item.amount })
+                )) }),
           }),
-          observe: request.observe,
+          observe: Object.freeze([...request.observe]),
         });
       }
     }
@@ -1515,9 +1536,20 @@ function materializedAdapterRequestFingerprint(
         })),
         call: {
           from: request.call.from.toLowerCase(),
+          ...(request.call.executionMode === undefined
+            ? {}
+            : { executionMode: request.call.executionMode }),
           to: request.call.to.toLowerCase(),
           data: request.call.data.toLowerCase(),
         },
+        ...(request.observeTokenBalances === undefined
+          ? {}
+          : {
+              observeTokenBalances: request.observeTokenBalances.map((item) => ({
+                token: item.token.toLowerCase(),
+                account: item.account.toLowerCase(),
+              })),
+            }),
         overrideIntent: {
           caller: request.overrideIntent.caller.toLowerCase(),
           nativeBalanceWei: request.overrideIntent.nativeBalanceWei ?? null,

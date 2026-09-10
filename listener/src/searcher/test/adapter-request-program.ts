@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { familyId } from "../venues/adapter-family-identifiers.js";
 import {
   createBoundedRequestExecutor,
@@ -867,3 +868,128 @@ await assert.rejects(
 
 assert.equal(executeCalls, 3);
 console.log("adapter-request-program PASS (declarative source-bound execution)");
+
+type EffectRequest = Extract<AdapterRequest, {
+  kind: "state-override-simulation" | "effect-delta-simulation";
+}>;
+for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) {
+  const fixture = () => ({
+    id: "effect-scope", kind,
+    call: { caller: { kind: "verified-actor" as const, evidenceId: "actor" },
+      executionMode: "impersonated-call-frame" as const,
+      to: `0x${"11".repeat(20)}`, data: "0x1234" },
+    overrideIntent: { caller: { kind: "verified-actor" as const, evidenceId: "actor" } },
+    observe: ["token-delta" as const],
+    observeTokenBalances: [{ token: `0x${"22".repeat(20)}`,
+      account: { kind: "verified-actor" as const, evidenceId: "observer" } }],
+  });
+  const programFor = (request: EffectRequest) => ({
+    requirements: () => ({ transports: [kind], caller: "verified-actor" as const,
+      effects: ["token-delta" as const] }),
+    buildRequests: () => [request], decode: () => true,
+  });
+  test(`${kind}: declaration preserves and detaches mode and observation scope`, () => {
+    const original = fixture();
+    const declared = declareRequestProgram(programFor(original), undefined);
+    assert.deepEqual(declared.requests, [original]);
+    const frozen = declared.requests[0] as EffectRequest;
+    const fingerprint = requestSetFingerprint(declared.requests);
+    original.observeTokenBalances[0]!.token = `0x${"33".repeat(20)}`;
+    original.observeTokenBalances[0]!.account.evidenceId = "mutated";
+    original.observeTokenBalances.push(original.observeTokenBalances[0]!);
+    original.call.caller.evidenceId = "mutated-caller";
+    (original.call as { executionMode: string }).executionMode = "top-level";
+    assert.equal(frozen.call.executionMode, "impersonated-call-frame");
+    assert.equal(frozen.observeTokenBalances?.length, 1);
+    assert.equal(frozen.observeTokenBalances?.[0]?.token, `0x${"22".repeat(20)}`);
+    assert.deepEqual(frozen.observeTokenBalances?.[0]?.account,
+      { kind: "verified-actor", evidenceId: "observer" });
+    assert.equal(requestSetFingerprint(declared.requests), fingerprint);
+    for (const value of [frozen, frozen.call, frozen.observeTokenBalances,
+      frozen.observeTokenBalances?.[0], frozen.observeTokenBalances?.[0]?.account]) {
+      assert(Object.isFrozen(value));
+    }
+  });
+  test(`${kind}: symbolic fingerprints bind each explicit mode and scope`, () => {
+    const base = fixture();
+    const variants: EffectRequest[] = [base,
+      { ...base, call: { ...base.call, executionMode: "top-level" } },
+      { ...base, call: { caller: base.call.caller, to: base.call.to, data: base.call.data } },
+      { ...base, observeTokenBalances: [{ ...base.observeTokenBalances[0]!,
+        token: `0x${"33".repeat(20)}` }] },
+      { ...base, observeTokenBalances: [{ ...base.observeTokenBalances[0]!,
+        account: `0x${"44".repeat(20)}` }] },
+      { ...base, observeTokenBalances: [{ ...base.observeTokenBalances[0]!,
+        account: `0x${"55".repeat(20)}` }] },
+      { ...base, observeTokenBalances: [{ ...base.observeTokenBalances[0]!,
+        account: { kind: "verified-actor", evidenceId: "observer-2" } }] },
+      { ...base, observeTokenBalances: undefined },
+      { ...base, observeTokenBalances: [] },
+    ];
+    const declared = variants.map(request => declareRequestProgram(programFor(request), undefined));
+    assert.equal(new Set(declared.map(item => requestSetFingerprint(item.requests))).size, variants.length);
+    assert.equal(new Set(declared.map(item => physicalRequestSetFingerprint(item.requests))).size, variants.length);
+  });
+  test(`${kind}: malformed effect metadata rejects before execution and decode`, async () => {
+    let io = 0;
+    const boundary = createBoundedRequestExecutor({
+      assertSupported() {}, assertWithinBudget() {}, assertCallerBinding() {},
+      execute: async () => { io++; return []; },
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "aa".repeat(32) }),
+    });
+    const base = fixture();
+    const malformed: EffectRequest[] = [
+      ...[null, false, 1, "", "invalid", {}].map(executionMode =>
+        ({ ...base, call: { ...base.call, executionMode } }) as unknown as EffectRequest),
+      ...[null, {}, "bad", [null], [{}], [undefined], new Array(1),
+        Object.assign([...base.observeTokenBalances], { extra: true }),
+        Object.assign([...base.observeTokenBalances], { [Symbol("extra")]: true }),
+        [{ account: base.call.caller }],
+        [{ token: "bad", account: base.call.caller }],
+        [{ token: base.observeTokenBalances[0]!.token }],
+        [{ token: base.observeTokenBalances[0]!.token, account: "bad" }],
+        [{ token: base.observeTokenBalances[0]!.token, account: null }],
+        [{ token: base.observeTokenBalances[0]!.token, account: [] }],
+        [{ token: base.observeTokenBalances[0]!.token, account: { kind: "unknown" } }],
+        [{ token: base.observeTokenBalances[0]!.token, account: { kind: "none" } }],
+        [{ token: base.observeTokenBalances[0]!.token, account: { kind: "verified-actor", evidenceId: " " } }],
+        [{ token: base.observeTokenBalances[0]!.token, account: { kind: "verified-actor" } }],
+        [{ token: base.observeTokenBalances[0]!.token, account: { ...base.call.caller, extra: true } }],
+        [{ ...base.observeTokenBalances[0], extra: true }],
+      ].map(observeTokenBalances => ({ ...base, observeTokenBalances }) as unknown as EffectRequest),
+    ];
+    for (const request of malformed) {
+      await assert.rejects(runRequestProgram({ familyId: id, source, programInput: undefined,
+        executor: boundary, program: { ...programFor(request), decode: () => { io++; return true; } } }));
+    }
+    assert.equal(io, 0);
+  });
+  test(`${kind}: observation refs require homogeneous declared and bound caller authority`, async () => {
+    const checked: string[] = [];
+    let io = 0;
+    const boundary = createBoundedRequestExecutor({
+      assertSupported() {}, assertWithinBudget() {},
+      assertCallerBinding({ callerRef }) {
+        assert.equal(callerRef.kind, "verified-actor");
+        if (callerRef.kind !== "verified-actor") return;
+        checked.push(callerRef.evidenceId);
+        if (callerRef.evidenceId !== "actor") throw new Error("missing observer authority");
+      },
+      execute: async () => { io++; return []; },
+      sealStaticEvidenceReuseProof: () => ({ proofHash: "aa".repeat(32) }),
+    });
+    await assert.rejects(runRequestProgram({ familyId: id, source, programInput: undefined,
+      executor: boundary, program: programFor(fixture()) }), /missing observer authority/);
+    assert.deepEqual(checked, ["actor", "observer"]);
+    for (const account of [{ kind: "executor" }, { kind: "observed-sender" },
+      { kind: "transaction-origin" }] as const) {
+      assert.throws(() => declareRequestProgram(programFor({ ...fixture(),
+        observeTokenBalances: [{ token: `0x${"22".repeat(20)}`, account }] }), undefined),
+      /does not match|unsupported transaction-origin/);
+    }
+    assert.throws(() => declareRequestProgram({ ...programFor(fixture()),
+      requirements: () => ({ transports: [kind], effects: ["token-delta"] }) }, undefined),
+    /without a caller requirement/);
+    assert.equal(io, 0);
+  });
+}

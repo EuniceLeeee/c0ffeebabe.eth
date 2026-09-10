@@ -146,9 +146,15 @@ export type MaterializedAdapterRequest =
       }[];
       readonly call: {
         readonly from: string;
+        readonly executionMode?:
+          "top-level" | "impersonated-call-frame";
         readonly to: string;
         readonly data: string;
       };
+      readonly observeTokenBalances?: readonly {
+        readonly token: string;
+        readonly account: string;
+      }[];
       readonly overrideIntent: Omit<FundedCallerOverrideIntent, "caller"> & {
         readonly caller: string;
       };
@@ -789,9 +795,24 @@ function freezeAdapterRequest(request: AdapterRequest): AdapterRequest {
             }),
         call: Object.freeze({
           caller: freezeCallerRef(request.call.caller),
+          ...(request.call.executionMode === undefined
+            ? {}
+            : { executionMode: request.call.executionMode }),
           to: request.call.to,
           data: request.call.data,
         }),
+        ...(request.observeTokenBalances === undefined
+          ? {}
+          : {
+              observeTokenBalances: Object.freeze(request.observeTokenBalances.map((item) =>
+                Object.freeze({
+                  token: item.token,
+                  account: typeof item.account === "string"
+                    ? item.account
+                    : freezeCallerRef(item.account),
+                })
+              )),
+            }),
         overrideIntent: Object.freeze({
           caller: freezeCallerRef(request.overrideIntent.caller),
           ...(request.overrideIntent.nativeBalanceWei === undefined
@@ -1215,6 +1236,9 @@ function requestCallerRefs(request: AdapterRequest): readonly CallerRef[] {
     ...(request.preCalls ?? []).map((call) => call.caller),
     request.call.caller,
     request.overrideIntent.caller,
+    ...(request.observeTokenBalances ?? []).flatMap((item) =>
+      typeof item.account === "string" ? [] : [item.account]
+    ),
   ]);
 }
 
@@ -1271,12 +1295,32 @@ function assertRequestShape(request: AdapterRequest): void {
         ],
         `${request.id} simulation request`,
       );
-      // Origin is supported only for eth_call. Reject observation-only uses
-      // before freezeAdapterRequest can omit the observation scope.
-      if (request.observeTokenBalances?.some(item =>
-        typeof item.account !== "string" && item.account.kind === "transaction-origin"
-      )) {
-        throw new Error(`${request.id} unsupported transaction-origin token-balance observation`);
+      if (request.observeTokenBalances !== undefined) {
+        if (!Array.isArray(request.observeTokenBalances)) {
+          throw new Error(`${request.id} token-balance observations must be an array`);
+        }
+        for (const key of Reflect.ownKeys(request.observeTokenBalances)) {
+          if (key !== "length" && (typeof key !== "string" ||
+              !/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= request.observeTokenBalances.length)) {
+            throw new Error(`${request.id} token-balance observations contain unsupported field ${String(key)}`);
+          }
+        }
+        for (const item of request.observeTokenBalances) {
+          assertRecordKeys(item, ["token", "account"], `${request.id} token-balance observation`);
+          assertAddress(item.token, `${request.id} observation token`);
+          if (typeof item.account === "string") {
+            assertAddress(item.account, `${request.id} observation account`);
+          } else {
+            assertCallerRef(item.account);
+            if (item.account.kind === "none") {
+              throw new Error(`${request.id} token-balance observation requires an account`);
+            }
+            // Origin effects remain unsupported, including observation-only uses.
+            if (item.account.kind === "transaction-origin") {
+              throw new Error(`${request.id} unsupported transaction-origin token-balance observation`);
+            }
+          }
+        }
       }
       if (request.preCalls !== undefined && !Array.isArray(request.preCalls)) {
         throw new Error(`${request.id} simulation preCalls must be an array`);
@@ -1302,6 +1346,11 @@ function assertRequestShape(request: AdapterRequest): void {
         `${request.id} override intent`,
       );
       assertCallerRef(request.call.caller);
+      if (request.call.executionMode !== undefined &&
+          request.call.executionMode !== "top-level" &&
+          request.call.executionMode !== "impersonated-call-frame") {
+        throw new Error(`${request.id} unsupported simulation executionMode`);
+      }
       assertAddress(request.call.to, `${request.id} simulation target`);
       assertHex(request.call.data, `${request.id} simulation data`);
       assertCallerRef(request.overrideIntent.caller);
@@ -1800,9 +1849,22 @@ function physicalRequestCanonicalValue(request: AdapterRequest): CanonicalValue 
         })),
         call: {
           caller: callerRefCanonicalValue(request.call.caller),
+          ...(request.call.executionMode === undefined
+            ? {}
+            : { executionMode: request.call.executionMode }),
           to: request.call.to.toLowerCase(),
           data: request.call.data.toLowerCase(),
         },
+        ...(request.observeTokenBalances === undefined
+          ? {}
+          : {
+              observeTokenBalances: request.observeTokenBalances.map((item) => ({
+                token: item.token.toLowerCase(),
+                account: typeof item.account === "string"
+                  ? item.account.toLowerCase()
+                  : callerRefCanonicalValue(item.account),
+              })),
+            }),
         overrideIntent: {
           caller: callerRefCanonicalValue(request.overrideIntent.caller),
           nativeBalanceWei: request.overrideIntent.nativeBalanceWei ?? null,

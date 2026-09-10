@@ -16,6 +16,7 @@ import { createHash } from "node:crypto";
 import { ethers } from "ethers";
 import {
   createBoundedRequestExecutor,
+  physicalAdapterRequestFingerprint,
   type AdapterRequest,
   type AdapterRequestResult,
   type CanonicalSource,
@@ -502,6 +503,34 @@ async function executeRequest(
           failure: "resource-limited" as const,
         });
       }
+      const requestFingerprint = physicalAdapterRequestFingerprint(request);
+      // The symbolic request and the concrete authorities it uses are both
+      // provenance inputs. Literal observation accounts are already in the
+      // request fingerprint; unrelated authority entries do not affect it.
+      const callerAddresses = [
+        request.call.caller,
+        request.overrideIntent.caller,
+        ...(request.preCalls ?? []).map(call => call.caller),
+        ...(request.observeTokenBalances ?? []).flatMap(item =>
+          typeof item.account === "string" ? [] : [item.account]
+        ),
+      ].map(caller => {
+        const address = caller.kind === "executor" ? callerAuthority?.executor
+          : caller.kind === "observed-sender" ? callerAuthority?.observedSender
+          : caller.kind === "verified-actor" ? callerAuthority?.verifiedActors?.[caller.evidenceId]
+          : undefined;
+        return address?.toLowerCase() ?? null;
+      });
+      const simulationProvenance = (completion: "returned" | "reverted-as-declared") => Object.freeze({
+        kind: "strict-simulation-transport",
+        fingerprint: hashCanonical({
+          id: request.id,
+          requestFingerprint,
+          callerAddresses,
+          completion,
+          source: { number: source.number, hash: source.hash.toLowerCase(), generation: source.generation },
+        }),
+      });
       try {
         const simulated = await simulator.simulate({
           request,
@@ -511,34 +540,7 @@ async function executeRequest(
           id: request.id,
           ok: true as const,
           source: Object.freeze(source),
-          provenance: Object.freeze({
-            kind: "strict-simulation-transport",
-            fingerprint: createHash("sha256")
-              .update(JSON.stringify({
-                id: request.id,
-                kind: request.kind,
-                to: request.call.to,
-                data: request.call.data,
-                preCalls: (request.preCalls ?? []).map((call) => ({
-                  from: callerIdentity(call.caller),
-                  to: call.to,
-                  data: call.data,
-                })),
-                tokenBalances: (
-                  request.overrideIntent.tokenBalances ?? []
-                ).map((balance) => ({
-                  token: balance.token,
-                  amount: balance.amount.toString(),
-                })),
-                nativeBalanceWei: request.overrideIntent.nativeBalanceWei ===
-                    undefined
-                  ? null
-                  : request.overrideIntent.nativeBalanceWei.toString(),
-                observe: [...request.observe],
-                source: source.number,
-              }))
-              .digest("hex"),
-          }),
+          provenance: simulationProvenance("returned"),
           completion: "returned" as const,
           data: simulated.data,
           ...(simulated.effects === undefined
@@ -557,12 +559,7 @@ async function executeRequest(
             id: request.id,
             ok: true as const,
             source: Object.freeze(source),
-            provenance: Object.freeze({
-              kind: "strict-simulation-transport",
-              fingerprint: createHash("sha256")
-                .update(JSON.stringify({ id: request.id, revert: true }))
-                .digest("hex"),
-            }),
+            provenance: simulationProvenance("reverted-as-declared"),
             completion: "reverted-as-declared" as const,
             data: extractStrictRevertData(error) ?? "0x",
             // A revert produces no state effects; provide exactly the
@@ -713,15 +710,6 @@ function extractStrictRevertData(error: unknown): string | null {
     }
   }
   return null;
-}
-
-function callerIdentity(caller: {
-  readonly kind: string;
-  readonly evidenceId?: string;
-}): string {
-  return caller.evidenceId === undefined
-    ? caller.kind
-    : `${caller.kind}:${caller.evidenceId}`;
 }
 
 function issueResult(input: {

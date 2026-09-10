@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import {
   executeAdapterWork,
   frameworkWorkClassForAdapterStage,
@@ -8,6 +9,7 @@ import {
 import {
   centralLaneForAdapterStage,
   createRethAdapterWorkRuntime,
+  materializeAdapterRequests,
   rethLaneForAdapterStage,
   transportPoolForAdapterRequirements,
   type RethAdapterBatchBackend,
@@ -724,3 +726,107 @@ console.log(
   "reth-adapter-work-runtime PASS " +
     "(lanes/source/caller/dedupe/fairness/retry/permits/final-sim isolation)",
 );
+
+type EffectRequest = Extract<AdapterRequest, {
+  kind: "state-override-simulation" | "effect-delta-simulation";
+}>;
+for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) {
+  test(`${kind}: issued work preserves concrete effect scope and physical identity`, async () => {
+    const original = {
+      id: "scope", kind,
+      call: { caller: { kind: "verified-actor" as const, evidenceId: "actor" },
+        executionMode: "impersonated-call-frame" as const, to: TARGET, data: "0x1234" },
+      overrideIntent: { caller: { kind: "verified-actor" as const, evidenceId: "actor" },
+        tokenBalances: [{ token: TARGET, amount: 1n }] },
+      observe: ["token-delta" as const],
+      observeTokenBalances: [{ token: TARGET,
+        account: { kind: "verified-actor" as const, evidenceId: "observer" } }],
+    };
+    const variants: EffectRequest[] = [original,
+      { ...original, call: { ...original.call, executionMode: "top-level" } },
+      { ...original, call: { caller: original.call.caller, to: TARGET, data: "0x1234" } },
+      { ...original, observeTokenBalances: [{ token: TARGET, account: EXECUTOR }] },
+      { ...original, observeTokenBalances: [{ token: TARGET, account: TARGET }] },
+      { ...original, observeTokenBalances: [{ token: OTHER_CALLER,
+        account: original.observeTokenBalances[0]!.account }] },
+      { ...original, observeTokenBalances: [{ token: TARGET,
+        account: { kind: "verified-actor", evidenceId: "observer-2" } }] },
+    ];
+    const captured: MaterializedAdapterRequest[] = [];
+    const issued: AdapterRequest[] = [];
+    const authority = { verifiedActors: { actor: EXECUTOR, observer: OTHER_CALLER,
+      "observer-2": `0x${"44".repeat(20)}` } };
+    const backend: RethAdapterBatchBackend = {
+      backendId: "effect-scope-capture", supportedTransports: [kind],
+      async executePinnedBatch(input) {
+        captured.push(...input.requests);
+        await new Promise(resolve => setImmediate(resolve));
+        return input.requests.map(request => ({ id: request.id, ok: true,
+          completion: "returned", data: "0x", effects: { tokenDeltas: [] } }));
+      },
+    };
+    const runtime = createRethAdapterWorkRuntime({
+      backends: { stateRead: new RecordingBackend(), effectSim: backend },
+      transportScheduler: new RecordingScheduler(), generationFence: { assertCurrent() {} },
+      callerAuthority: { bind: () => authority },
+    });
+    const tracedRuntime = { ...runtime, scheduler: { issueExecutor(input: Parameters<typeof runtime.scheduler.issueExecutor>[0]) {
+      issued.push(...input.requests);
+      return runtime.scheduler.issueExecutor(input);
+    } } };
+    const work = (request: EffectRequest) => executeAdapterWork({ runtime: tracedRuntime,
+      intent: intent("runtime-evidence", {
+        requirements: () => ({ transports: [kind], caller: "verified-actor", effects: ["token-delta"] }),
+        buildRequests: () => [request], decode: ({ results }) => results,
+      }),
+    });
+    const outcomes = await Promise.all([...variants, original].map(work));
+    assert(outcomes.every(outcome => outcome.status === "resolved"));
+    assert.equal(captured.length, variants.length, "only identical mode and scope can coalesce");
+    assert.deepEqual(issued[0], original);
+    const materialized = captured[0];
+    assert(materialized?.kind === kind);
+    assert.equal(materialized.call.executionMode, "impersonated-call-frame");
+    assert.equal(materialized.call.from, EXECUTOR);
+    assert.deepEqual(materialized.observeTokenBalances, [{ token: TARGET, account: OTHER_CALLER }]);
+    const fingerprints = outcomes.slice(0, variants.length).map(outcome => {
+      assert(outcome.status === "resolved");
+      const result = outcome.executed.evidence[0];
+      assert(result?.ok);
+      return result.provenance.fingerprint;
+    });
+    assert.equal(new Set(fingerprints).size, variants.length,
+      "materialized result provenance binds mode, token and concrete account");
+    original.observeTokenBalances[0]!.account.evidenceId = "mutated";
+    original.observeTokenBalances[0]!.token = OTHER_CALLER;
+    original.overrideIntent.tokenBalances[0]!.amount = 2n;
+    assert.deepEqual(materialized.observeTokenBalances, [{ token: TARGET, account: OTHER_CALLER }]);
+    assert.equal(materialized.overrideIntent.tokenBalances?.[0]?.amount, 1n);
+    for (const value of [materialized.call, materialized.observeTokenBalances,
+      materialized.observeTokenBalances?.[0], materialized.overrideIntent.tokenBalances,
+      materialized.overrideIntent.tokenBalances?.[0]]) assert(Object.isFrozen(value));
+
+    const missing = await work({ ...variants[0]!, observeTokenBalances: [{ token: TARGET,
+      account: { kind: "verified-actor", evidenceId: "missing" } }] });
+    assert.equal(missing.status, "unresolved");
+    if (missing.status === "unresolved") assert.equal(missing.failure.stage, "caller-authority");
+    assert.equal(captured.length, variants.length, "missing observation authority performs zero I/O");
+  });
+  test(`${kind}: materialization detaches even a mutable source request`, () => {
+    const raw = { id: "mutable", kind,
+      call: { caller: { kind: "executor" as const },
+        executionMode: "top-level" as const, to: TARGET, data: "0x" },
+      overrideIntent: { caller: { kind: "executor" as const }, tokenBalances: [{ token: TARGET, amount: 1n }] },
+      observe: ["token-delta" as const],
+      observeTokenBalances: [{ token: TARGET, account: `0x${"AB".repeat(20)}` }],
+    };
+    const bound = materializeAdapterRequests([raw], { executor: EXECUTOR })[0];
+    assert(bound?.kind === kind);
+    raw.observeTokenBalances[0]!.token = OTHER_CALLER;
+    raw.overrideIntent.tokenBalances[0]!.amount = 2n;
+    raw.observe.length = 0;
+    assert.deepEqual(bound.observeTokenBalances, [{ token: TARGET, account: `0x${"ab".repeat(20)}` }]);
+    assert.equal(bound.overrideIntent.tokenBalances?.[0]?.amount, 1n);
+    assert.deepEqual(bound.observe, ["token-delta"]);
+  });
+}

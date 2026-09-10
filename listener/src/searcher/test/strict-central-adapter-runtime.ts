@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import {
   createStrictCentralAdapterRuntime,
 } from "../strict-central-adapter-runtime.js";
@@ -8,7 +9,7 @@ import {
 import {
   runStrictFamilyLifecycle,
 } from "../strict-family-lifecycle-runner.js";
-import type { CanonicalSource } from
+import type { AdapterRequest, CanonicalSource } from
   "../venues/adapter-request-program.js";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
@@ -96,11 +97,11 @@ async function main(): Promise<void> {
     id: "sim:effect",
     kind: "effect-delta-simulation" as const,
     call: Object.freeze({
-      caller: Object.freeze({ address: `0x${"11".repeat(20)}` }) as never,
+      caller: Object.freeze({ kind: "executor" as const }),
       to: WSTETH,
       data: "0x",
     }),
-    overrideIntent: Object.freeze({}) as never,
+    overrideIntent: Object.freeze({ caller: Object.freeze({ kind: "executor" as const }) }),
     observe: Object.freeze([] as const),
   });
   const unresolved = await issued.executor.execute({
@@ -605,3 +606,131 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+
+type EffectRequest = Extract<AdapterRequest, {
+  kind: "state-override-simulation" | "effect-delta-simulation";
+}>;
+for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) {
+  for (const reverted of [false, true]) {
+    test(`${kind}: strict ${reverted ? "revert" : "success"} traversal binds effect metadata`, async () => {
+      const token = `0x${"31".repeat(20)}`;
+      const actor = `0x${"42".repeat(20)}`;
+      const other = `0x${"53".repeat(20)}`;
+      const captured: EffectRequest[] = [];
+      const raw = { id: "scope", kind,
+        call: { caller: { kind: "verified-actor" as const, evidenceId: "actor" },
+          executionMode: "impersonated-call-frame" as const, to: token, data: "0x1234" },
+        overrideIntent: { caller: { kind: "verified-actor" as const, evidenceId: "actor" } },
+        observe: ["token-delta" as const, "return-data" as const, "revert-data" as const],
+        observeTokenBalances: [{ token, account: { kind: "verified-actor" as const, evidenceId: "observer" } }],
+      };
+      const variants: EffectRequest[] = [raw,
+        { ...raw, call: { ...raw.call, executionMode: "top-level" } },
+        { ...raw, call: { caller: raw.call.caller, to: token, data: "0x1234" } },
+        { ...raw, observeTokenBalances: [{ token: actor, account: raw.observeTokenBalances[0]!.account }] },
+        { ...raw, observeTokenBalances: [{ token, account: actor }] },
+        { ...raw, observeTokenBalances: [{ token, account: other }] },
+        { ...raw, observeTokenBalances: [{ token, account: { kind: "verified-actor", evidenceId: "observer-2" } }] },
+      ];
+      const runtime = createStrictCentralAdapterRuntime({
+        provider: { call: async () => assert.fail("simulation must not read provider"),
+          getCode: async () => assert.fail("unexpected code read"),
+          getStorage: async () => assert.fail("unexpected storage read") },
+        generationFence: { assertCurrent() {} },
+        verifiedActors: { actor, observer: other, "observer-2": other },
+        simulator: { simulate: async ({ request }) => {
+          captured.push(request);
+          if (reverted) throw Object.assign(new Error("revert"), { code: "CALL_EXCEPTION", data: "0x1234" });
+          return { data: "0x1234", effects: { tokenDeltas: [] } };
+        } },
+      });
+      const outcomes = await Promise.all(variants.map(request => executeAdapterWork({ runtime,
+        intent: { stage: "runtime-evidence", familyId: "test:effect-metadata" as never,
+          source: SOURCE, generation: SOURCE.generation, programInput: undefined,
+          program: { requirements: () => ({ transports: [kind], caller: "verified-actor", effects: raw.observe }),
+            buildRequests: () => [request], decode: ({ results }) => results } },
+      })));
+      assert(outcomes.every(outcome => outcome.status === "resolved"));
+      assert.deepEqual(captured, variants, "strict simulator receives the entire frozen declaration");
+      const fingerprints = outcomes.map(outcome => {
+        assert(outcome.status === "resolved");
+        const result = outcome.executed.evidence[0];
+        assert(result?.ok);
+        assert.equal(result.completion, reverted ? "reverted-as-declared" : "returned");
+        return result.provenance.fingerprint;
+      });
+      assert.equal(new Set(fingerprints).size, variants.length,
+        "success and revert provenance must each bind mode, scope and symbolic evidence id");
+      const rebound = await executeAdapterWork({
+        runtime: { ...runtime, callerAuthority: { bind: () => ({
+          verifiedActors: { actor, observer: token, "observer-2": other },
+        }) } },
+        intent: { stage: "runtime-evidence", familyId: "test:effect-metadata" as never,
+          source: SOURCE, generation: SOURCE.generation, programInput: undefined,
+          program: { requirements: () => ({ transports: [kind], caller: "verified-actor", effects: raw.observe }),
+            buildRequests: () => [raw], decode: ({ results }) => results } },
+      });
+      assert(rebound.status === "resolved");
+      const reboundResult = rebound.executed.evidence[0];
+      assert(reboundResult?.ok);
+      assert.notEqual(reboundResult.provenance.fingerprint, fingerprints[0],
+        "the same symbolic observer bound to another concrete account has different provenance");
+      raw.observeTokenBalances[0]!.account.evidenceId = "mutated";
+      raw.observeTokenBalances[0]!.token = other;
+      assert.deepEqual(captured[0]?.observeTokenBalances,
+        [{ token, account: { kind: "verified-actor", evidenceId: "observer" } }]);
+      assert(Object.isFrozen(captured[0]?.observeTokenBalances?.[0]?.account));
+    });
+  }
+  test(`${kind}: invalid declarations and unbound observation refs reject with zero I/O`, async () => {
+    let io = 0;
+    let decodes = 0;
+    const address = `0x${"64".repeat(20)}`;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { call: async () => { io++; return "0x"; },
+        getCode: async () => { io++; return "0x"; }, getStorage: async () => { io++; return "0x"; } },
+      generationFence: { assertCurrent() {} }, verifiedActors: { actor: address }, executor: address,
+      simulator: { simulate: async () => { io++; return { data: "0x", effects: { tokenDeltas: [] } }; } },
+    });
+    const base: EffectRequest = { id: "reject", kind,
+      call: { caller: { kind: "verified-actor", evidenceId: "actor" }, to: address, data: "0x" },
+      overrideIntent: { caller: { kind: "verified-actor", evidenceId: "actor" } },
+      observe: ["token-delta"], observeTokenBalances: [{ token: address,
+        account: { kind: "verified-actor", evidenceId: "missing" } }],
+    };
+    const cases: EffectRequest[] = [base,
+      { ...base, call: { ...base.call, executionMode: "invalid" as never } },
+      { ...base, observeTokenBalances: [{ token: address, account: { kind: "executor" } }] },
+      { ...base, observeTokenBalances: [{ token: address, account: { kind: "unknown" } as never }] },
+      { ...base, observeTokenBalances: [{ token: address, account: address, extra: true } as never] },
+    ];
+    for (const request of cases) {
+      const outcome = await executeAdapterWork({ runtime, intent: {
+        stage: "runtime-evidence", familyId: "test:effect-metadata" as never,
+        source: SOURCE, generation: SOURCE.generation, programInput: undefined,
+        program: { requirements: () => ({ transports: [kind], caller: "verified-actor", effects: ["token-delta"] }),
+          buildRequests: () => [request], decode: () => { decodes++; return true; } },
+      } });
+      assert.equal(outcome.status, "unresolved");
+      if (outcome.status === "unresolved") {
+        assert.equal(outcome.failure.stage, request === base ? "caller-authority" : "request-build");
+      }
+    }
+    assert.equal(io, 0);
+    assert.equal(decodes, 0);
+    const executorRequest: EffectRequest = { ...base,
+      call: { ...base.call, caller: { kind: "executor" }, executionMode: "top-level" },
+      overrideIntent: { caller: { kind: "executor" } },
+      observeTokenBalances: [{ token: address, account: { kind: "executor" } }],
+    };
+    const executorOutcome = await executeAdapterWork({ runtime, intent: {
+      stage: "runtime-evidence", familyId: "test:effect-metadata" as never,
+      source: SOURCE, generation: SOURCE.generation, programInput: undefined,
+      program: { requirements: () => ({ transports: [kind], caller: "executor", effects: ["token-delta"] }),
+        buildRequests: () => [executorRequest], decode: () => { decodes++; return true; } },
+    } });
+    assert.equal(executorOutcome.status, "resolved");
+    assert.equal(io, 1, "ordinary executor simulation remains supported");
+    assert.equal(decodes, 1);
+  });
+}
