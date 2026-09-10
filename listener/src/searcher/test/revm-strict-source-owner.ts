@@ -51,7 +51,14 @@ class Pipes {
     const sent = this.requests[index]!;
     const pin = sent.sourcePin as RevmSourcePin | undefined;
     this.stdout.write(JSON.stringify({ epoch: sent.epoch, requestId: sent.requestId,
-      ok: true, success: true, latencyMs: 0, output: "0x1234",
+      ok: true, latencyMs: 0,
+      ...(sent.op === "strictSimulate" && extra.ok === false
+        ? {} : { success: true, output: "0x1234" }),
+      ...(sent.op === "strictSimulate" && extra.ok !== false
+        ? { gasUsed: "0", strict: {
+          outcome: { kind: "Success", phase: "main", output: "0x1234" },
+          executionGasUsed: "0", nativeDeltas: [], tokenDeltas: [], totalSupplyDeltas: [], logs: [],
+        } } : {}),
       ...(pin && extra.ok !== false ? { sourceAttestation: {
         kind: "node-attested", chainId: pin.chainId, blockNumber: sent.blockNumber,
         blockHash: pin.blockHash, stateRoot: pin.stateRoot ?? ROOT, parentHash: PARENT,
@@ -199,14 +206,35 @@ test("pre-cancelled requests and ordinary daemon failure do not retire a healthy
   await assert.rejects(lease.strictSimulate(request(), { deadlineAtMs: Date.now() - 1 }), /deadline/);
   assert.equal(c.starts, 0); assert.equal(c.isTerminal, false);
   const ordinary = assert.rejects(lease.strictSimulate(request()), /ordinary domain error/);
-  c.pipes.reply(0, { ok: false, error: "ordinary domain error: aborted deadline" }); await ordinary;
+  c.pipes.reply(0, { ok: false, errorKind: "execution", error: "ordinary domain error: aborted deadline" }); await ordinary;
   assert.equal(c.isTerminal, false); assert.equal(c.pipes.kills, 0);
   const success = lease.strictSimulate(request()); c.pipes.reply(1); await success;
   const reverted = lease.strictSimulate(request());
-  c.pipes.reply(2, { success: false, revertReason: "revert: 0x1234" });
-  assert.equal((await reverted).success, false);
+  c.pipes.reply(2, { success: false, revertReason: "0x1234", strict: {
+    outcome: { kind: "Revert", phase: "main", output: "0x1234" },
+    executionGasUsed: "0", nativeDeltas: [], tokenDeltas: [], totalSupplyDeltas: [], logs: [],
+  } });
+  const negative = await reverted;
+  assert.equal(negative.success, false);
+  assert.deepEqual(negative.strict?.outcome, { kind: "Revert", phase: "main", output: "0x1234" });
   assert.equal(c.isTerminal, false); assert.equal(c.pipes.requests.length, 3);
 });
+
+for (const fault of ["missing-envelope", "contradictory-outcome", "missing-error-kind"] as const) {
+  test(`strict response ${fault} remains a fatal fault, never ordinary failure`, async t => {
+    const h = harness(); t.after(() => h.close());
+    const lease = await h.owner.acquire(identity()); const c = h.clients[0]!;
+    const rejected = assert.rejects(lease.strictSimulate(request()), /fatal protocol-fault/);
+    c.pipes.reply(0, fault === "missing-envelope" ? { strict: undefined }
+      : fault === "contradictory-outcome" ? { success: false }
+      : { ok: false, error: "untyped legacy error" });
+    await rejected;
+    assert.deepEqual(h.fatals, [{ kind: "protocol-fault" }]);
+    assert.equal(c.isTerminal, true);
+    await assert.rejects(h.owner.acquire(identity(2)), /fatal protocol-fault/);
+    assert.equal(h.clients.length, 1);
+  });
+}
 
 for (const cancellation of ["source", "active-request", "active-deadline", "client-timeout"] as const) {
   test(`${cancellation} retires one source; replacement waits for child AND pipes`, async t => {
