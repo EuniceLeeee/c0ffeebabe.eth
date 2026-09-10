@@ -78,6 +78,20 @@ assert.equal(ref.prepare(input).size, 0, "reverted execution is not a gas refere
 ref.recordSimulation({ opportunity: opp, source: source(1), gasUsed: 100_000n, success: true });
 const frozen = ref.prepare(input);
 assert.equal(frozen.get(opp), 10_000_001n);
+const other = { ...opportunity(), seedEdges: [edge(U, W, "other-a"), edge(W, U, "other-b")], cycleId: "other", cycleFingerprint: "other" };
+const wethOpp = { ...other, flashToken: W };
+const unpricedOpp = { ...other, flashToken: "unpriced" };
+const sharedInput = { ...input, opportunities: [opp, other, wethOpp, unpricedOpp] };
+const shared = ref.prepare(sharedInput);
+assert.equal(shared.get(other), 10_000_001n, "a new route uses the global successful gas sample");
+assert.equal(shared.get(wethOpp), 5_000_000_000_000_001n, "shared gas cost is converted to each funding token's raw units");
+assert.equal(shared.has(unpricedOpp), false, "global gas cannot invent a missing token price");
+assert.equal(ref.prepare({ ...sharedInput, pricing: null }).size, 0);
+const higherFee = new BlockScanAmountReference(W);
+higherFee.observeHeader(header(1));
+higherFee.recordSimulation({ opportunity: opp, source: source(1), gasUsed: 100_000n, success: true });
+higherFee.observeHeader({ ...header(2), baseFeePerGas: 2_000_000_000n });
+assert.equal(higherFee.prepare(sharedInput).get(other), 20_000_001n, "global units use the current block's fee, not the sample's fee");
 assert.equal(ref.prepare({ ...input, enumerationSpreadBps: 500 }).get(opp), 4_000_001n, "G follows the enumeration threshold");
 assert.equal(ref.prepare({ ...input, source: source(1) }).size, 0, "cannot borrow mismatched snapshot/header");
 assert.equal(ref.prepare({ ...input, source: { ...source(2), generation: 99 } }).size, 0);
@@ -85,6 +99,14 @@ assert.equal(ref.prepare({ ...input, pricing: pricing(1, [[forward, 5e8]]) }).si
 ref.recordSimulation({ opportunity: opp, source: source(1), gasUsed: 200_000n, success: true });
 assert.equal(frozen.get(opp), 10_000_001n, "later samples do not mutate a pass reference");
 assert.equal(ref.prepare(input).get(opp), 20_000_001n);
+ref.recordSimulation({ opportunity: other, source: source(1), gasUsed: 50_000n, success: true });
+assert.equal(ref.prepare(sharedInput).get(other), 20_000_001n, "a cheaper route in the same block cannot lower the shared estimate");
+ref.recordSimulation({ opportunity: other, source: source(2), gasUsed: 300_000n, success: true });
+assert.equal(ref.prepare(sharedInput).get(other), 20_000_001n, "a same-source simulation only informs later blocks");
+ref.observeHeader(header(3));
+assert.equal(ref.prepare({ ...sharedInput, source: source(3), pricing: pricing(3, [[forward, 5e8]]) }).get(opp), 30_000_001n,
+  "a more expensive route raises the next block's estimate for all routes");
+assert.equal(shared.get(other), 10_000_001n, "already prepared passes remain immutable");
 ref.observeHeader({ ...header(2), hash: hash(99) });
 assert.equal(ref.prepare(input).size, 0, "observed reorg clears the estimate");
 assert.equal(new BlockScanAmountReference(W).prepare(input).size, 0, "restart does not inherit old execution context");
@@ -105,6 +127,26 @@ reorgGap.recordSimulation({ opportunity: opp, source: source(3), gasUsed: 100_00
 reorgGap.observeHeader(header(4));
 assert.equal(reorgGap.prepare({ ...input, source: source(4), pricing: pricing(4, [[forward, 5e8]]) }).get(opp), 10_000_001n,
   "old unlinked high-gas sample must not suppress a new chain's lower sample");
+const bounded = new BlockScanAmountReference(W, 3);
+bounded.observeHeader(header(1));
+bounded.recordSimulation({ opportunity: opp, source: source(1), gasUsed: 300_000n, success: true });
+bounded.observeHeader(header(2));
+bounded.recordSimulation({ opportunity: other, source: source(2), gasUsed: 100_000n, success: true });
+bounded.observeHeader(header(3));
+assert.equal(bounded.prepare({ ...sharedInput, source: source(3), pricing: pricing(3, [[forward, 5e8]]) }).get(other), 10_000_001n,
+  "the previous block takes precedence even when an older block used more gas");
+bounded.recordSimulation({ opportunity: opp, source: source(1), gasUsed: 500_000n, success: true });
+assert.equal(bounded.prepare({ ...sharedInput, source: source(3), pricing: pricing(3, [[forward, 5e8]]) }).get(other), 10_000_001n,
+  "a late older-block result cannot displace the newest successful block");
+bounded.observeHeader(header(4));
+assert.equal(bounded.prepare({ ...sharedInput, source: source(4), pricing: pricing(4, [[forward, 5e8]]) }).get(opp), 10_000_001n,
+  "without a previous-block sim, use the nearest earlier successful block");
+bounded.observeHeader({ ...header(4), baseFeePerGas: 500_000_000n });
+assert.equal(bounded.prepare({ ...sharedInput, source: source(4), pricing: pricing(4, [[forward, 5e8]]) }).get(opp), 5_000_001n,
+  "a reused gas-unit sample is repriced when current network fees fall");
+bounded.observeHeader(header(5));
+assert.equal(bounded.prepare({ ...sharedInput, source: source(5), pricing: pricing(5, [[forward, 5e8]]) }).size, 0,
+  "expired provenance cannot be reused indefinitely");
 
 const refs = new Map<BlockScanOpportunity, bigint>();
 const candidates = [opportunity(), opportunity(), opportunity(), opportunity()];
@@ -156,4 +198,4 @@ for (const expired of [false, true]) {
   assert.equal(rejected.opportunities.length, 0, "over-cap must not enter deadline fallback");
   assert.equal(rejected.failed, failures.length, "cap exclusions must not inflate quote failure counts");
 }
-console.log("blockscan-amount-reference PASS: units, fees, three hops, dynamic floor, source isolation, Exact amount handoff and cap attribution");
+console.log("blockscan-amount-reference PASS: latest-block global gas, bounded ancestry, units, current fees, three hops, dynamic floor, source isolation, Exact handoff and cap attribution");

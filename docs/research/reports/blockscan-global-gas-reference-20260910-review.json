@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "reviewer": "Newton",
+  "reviewer_agent_id": "01a08a4c-8254-7b11-98b5-38db1d73dab0",
+  "non_author": true,
+  "review_pass": 2,
+  "base_commit": "86794240a4988a76560e57dd0b03527ec5344f14",
+  "patch_sha256": "a3bb43306cd3a002314aef58e6c02f48b2c09def715cfd663bfc5c03ddca0d55",
+  "patch_paths": [
+    "listener/src/searcher/blockscan-amount-reference.ts",
+    "listener/src/searcher/test/blockscan-amount-reference.ts"
+  ],
+  "launcher_path": "logs/global-gas-live.2LkA7c/launch.mjs",
+  "launcher_sha256": "27a2ca6c5e964a8935dc66188e452760a66a5cfe25f42c512ca3533feaeca8ac",
+  "approval": "approved for reviewed implementation and launcher policy",
+  "required_fixes": [],
+  "findings": [],
+  "ran_gate": [
+    "amount-reference, candidate-refinement, EV-evaluator, final-verify-gate, exact-refine-deadline suites",
+    "56000 independent nearest-block comparisons; fee, reorg, ancestry-gap and immutable-pass checks",
+    "launcher syntax/static checks and isolated mocks: no stop at50 or first sim; stop at firstSource+499 with or without sim",
+    "owned-child user/429/quota/failure handling; dry-run, submission-disabled, unsigned-router and Ready-reuse boundaries",
+    "git diff --check 86794240"
+  ],
+  "rpc_or_network_attempts": 0,
+  "cu_spent": 0,
+  "scope_limitations": "No live launches/signals, signing, broadcasts, rebuilds, edits or build by reviewer. Launcher behavior mocked, not live exercised. Not a profitability, performance or systemic-live acceptance verdict.",
+  "delegation_fallback": "Recorded mandatory CLI attempt failed due configured-model/installed-CLI version incompatibility; native review used."
+}

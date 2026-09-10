@@ -1,6 +1,5 @@
 import type { BlockScanOpportunity } from "./detector/detector.js";
 import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
-import { blockScanRouteLocatorCacheKey } from "./blockscan-route-identity.js";
 import { nextBlockBaseFee } from "./ev-evaluator.js";
 import { blockScanEdgeKey, type BlockSource } from "./venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
@@ -116,7 +115,7 @@ export function resolveExactProbe(gasMinRaw: bigint | null | undefined): bigint 
 /** One instance per configured live process; never persists across execution-config changes. */
 export class BlockScanAmountReference {
   private readonly headers = new Map<number, ReferenceHeader>();
-  private readonly samples = new Map<string, { source: BlockSource; gasUsed: bigint }>();
+  private readonly samples = new Map<number, { source: BlockSource; gasUsed: bigint }>();
 
   constructor(private readonly weth: string, private readonly capacity = 2048) {
     if (!Number.isSafeInteger(capacity) || capacity <= 0) throw new Error("invalid amount reference capacity");
@@ -157,12 +156,13 @@ export class BlockScanAmountReference {
   }): void {
     if (!input.success || input.gasUsed <= 0n ||
         this.headers.get(input.source.number)?.hash !== input.source.hash.toLowerCase()) return;
-    const key = blockScanRouteLocatorCacheKey(input.opportunity);
+    // One maximum per observed block, shared across routes. The observation
+    // contract still accepts opportunity, but route identity does not gate reuse.
+    const key = input.source.number;
     const previous = this.samples.get(key);
-    // Route-level estimate before a funding/template is selected. Preserve the
-    // largest observed gas, not an assertion that all execution plans cost this.
+    // This is an observed sizing estimate, not a bound on future execution gas.
     if (previous && previous.gasUsed >= input.gasUsed &&
-        this.ancestorHashes(input.source.number).get(previous.source.number) === previous.source.hash.toLowerCase()) return;
+        previous.source.hash.toLowerCase() === input.source.hash.toLowerCase()) return;
     this.samples.delete(key);
     this.samples.set(key, { source: { ...input.source }, gasUsed: input.gasUsed });
     while (this.samples.size > this.capacity) this.samples.delete(this.samples.keys().next().value!);
@@ -184,19 +184,28 @@ export class BlockScanAmountReference {
     const fee = nextBlockBaseFee(header);
     if (fee === null) return result;
     const ancestors = this.ancestorHashes(source.number);
-    const eligible = input.opportunities.flatMap(opportunity => {
-      const sample = this.samples.get(blockScanRouteLocatorCacheKey(opportunity));
-      return sample && sample.source.number < source.number &&
-          ancestors.get(sample.source.number) === sample.source.hash.toLowerCase()
-        ? [{ opportunity, sample }] : [];
-    });
-    if (eligible.length === 0) return result; // Cold start does not scan the graph for unused marks.
+    let gasUsed = 0n;
+    let gasSourceBlock = -1;
+    // Prefer N-1, otherwise the nearest earlier successful block. An older,
+    // higher-gas execution must not displace a newer observation. Only units
+    // are reused: the current header above supplies the target gas price.
+    for (const sample of this.samples.values()) {
+      if (sample.source.number < source.number && sample.source.number > gasSourceBlock &&
+          ancestors.get(sample.source.number) === sample.source.hash.toLowerCase()) {
+        gasSourceBlock = sample.source.number;
+        gasUsed = sample.gasUsed;
+      }
+    }
+    if (gasUsed === 0n || input.opportunities.length === 0) return result;
     const marks = tokenToWethReferences(pricing, this.weth);
-    for (const { opportunity, sample } of eligible) {
-      const mark = marks.get(opportunity.flashToken.toLowerCase());
+    const amounts = new Map<string, bigint | null>();
+    for (const opportunity of input.opportunities) {
+      const token = opportunity.flashToken.toLowerCase();
+      const mark = marks.get(token);
       if (!mark) continue;
-      const amount = gasReferenceInput(sample.gasUsed * fee, mark, input.enumerationSpreadBps);
-      if (amount !== null) result.set(opportunity, amount);
+      if (!amounts.has(token)) amounts.set(token, gasReferenceInput(gasUsed * fee, mark, input.enumerationSpreadBps));
+      const amount = amounts.get(token);
+      if (amount != null) result.set(opportunity, amount);
     }
     return result; // A pass-owned value map; later samples/headers cannot change it.
   }
