@@ -32,7 +32,9 @@ import {
 } from "../venues/protocols/ethertoken-native-redeem-family-plugin.js";
 import {
   ETHERTOKEN_NATIVE_INTERFACE,
+  etherTokenWithdrawalSimulation,
 } from "../venues/protocols/ethertoken-native-redeem-family/shared.js";
+import { etherTokenNativeRedeemExact } from "../venues/protocols/ethertoken-native-redeem-family/exact.js";
 import {
   ETHERTOKEN_NATIVE_FAMILY_ID,
   ETHERTOKEN_NATIVE_LINEAGE_ID,
@@ -98,7 +100,7 @@ assert.equal(new Set(familyIds).size, familyIds.length);
 verifyDiscoveryBoundaries();
 verifyMetronomeHgUsdcDependentExact();
 verifySelfBurnNativeEffects();
-verifyEtherTokenNativeEffects();
+await verifyEtherTokenNativeEffects();
 await verifySiloDependentCurrentAndEffects();
 verifyMetronomeSynthOracleAndQuote();
 
@@ -375,7 +377,7 @@ function verifySelfBurnNativeEffects(): void {
   }), /effect invariants/);
 }
 
-function verifyEtherTokenNativeEffects(): void {
+async function verifyEtherTokenNativeEffects(): Promise<void> {
   const identity: EtherTokenNativeRedeemIdentity = Object.freeze({
     familyId: ETHERTOKEN_NATIVE_FAMILY_ID,
     lineageId: ETHERTOKEN_NATIVE_LINEAGE_ID,
@@ -403,19 +405,78 @@ function verifyEtherTokenNativeEffects(): void {
     executor: actor,
     runtimeEvidence: Object.freeze([]),
   });
-  const etherTokenProgram = exactRequestProgram(
-    etherTokenNativeRedeemStrictFamilyPlugin.exact,
-    input,
-  );
-  for (const amountIn of [1n, 137n, 10n ** 18n]) {
-    const [request] = etherTokenProgram.buildRequests({ ...input, amountIn });
-    assert.equal(request.kind, "effect-delta-simulation");
+  const method = etherTokenNativeRedeemExact.methods().find(m => m.kind === "request-program");
+  assert(method && method.kind === "request-program");
+  assert("chainAmountQuote" in method && method.chainAmountQuote === true,
+    "EtherToken's existing effect method must explicitly declare chain amount quoting");
+  assert(!("reusePolicy" in method), "chain provenance is not a cross-block carry policy");
+  const etherTokenProgram = method.program;
+  for (const amountIn of [1n, 137n, 10n ** 18n, (1n << 128n) + 37n]) {
+    const programInput = Object.freeze({ ...input, amountIn });
+    const requests = etherTokenProgram.buildRequests(programInput);
+    assert.equal(requests.length, 1);
+    const [request] = requests;
+    assert(request.kind === "effect-delta-simulation");
     assert.equal(request.call.executionMode, "impersonated-call-frame");
     assert.deepEqual(request.call.caller, { kind: "executor" });
-    assert.equal(request.overrideIntent.tokenBalances[0].amount, amountIn);
+    assert.equal(request.call.to, tokenB);
+    assert.equal(request.overrideIntent.caller, request.call.caller);
+    assert.deepEqual(request.overrideIntent.tokenBalances, [{ token: tokenB, amount: amountIn }]);
+    assert.deepEqual(request.observeTokenBalances, [{ token: tokenB, account: request.call.caller }]);
+    assert(Object.isFrozen(request.observeTokenBalances) && request.observeTokenBalances?.every(Object.isFrozen));
+    assert.deepEqual(request.observe, ["return-data", "token-delta", "native-delta", "total-supply-delta", "logs"]);
     assert.equal(BigInt(ETHERTOKEN_NATIVE_INTERFACE.decodeFunctionData(
       "withdraw", request.call.data,
     )[0]), amountIn);
+    // withdraw has no return values: empty successful bytes are valid, but
+    // amountOut still requires all three observed effects at this exact input.
+    const effects = nativeEffects(tokenB, actor, amountIn, amountIn);
+    const result = ok("exact-withdraw", "0x", effects);
+    const decode = (item: AdapterRequestResult) => etherTokenProgram.decode({
+      programInput, initialResults: [item], dependentEvidence: [],
+    });
+    const quote = decode(result);
+    assert.equal(quote.amountOut, amountIn);
+    assert.equal(quote.evidence.amountIn, amountIn);
+    assert.equal(quote.evidence.amountOut, amountIn);
+    assert.equal(quote.evidence.executor, actor);
+    assert.deepEqual(quote.evidence.source, source);
+    const executionInput = { descriptor, route, amountIn, quotedAmountOut: amountIn,
+      minAmountOut: amountIn, exactEvidence: quote.evidence, executor: actor, runtimeEvidence: [] };
+    const fragment = etherTokenNativeRedeemStrictFamilyPlugin.execution.buildFragment(executionInput);
+    assert.deepEqual(fragment.nodes.map(node => [node.adapterId, node.target, node.amount]), [
+      ["ethertoken-native-redeem", tokenB, amountIn], ["weth-deposit-value", ADDR.WETH, amountIn],
+    ]);
+    for (const exactEvidence of [
+      { ...quote.evidence, amountIn: amountIn + 1n }, { ...quote.evidence, amountOut: amountIn + 1n },
+      { ...quote.evidence, token: tokenC }, { ...quote.evidence, executor: router },
+      { ...quote.evidence, bindingFingerprint: "wrong-binding" },
+    ]) assert.throws(() => etherTokenNativeRedeemStrictFamilyPlugin.execution.buildFragment({
+      ...executionInput, exactEvidence,
+    }), /incompatible exact evidence/);
+    const wrongEffects: ObservedEffects[] = [
+      {}, { ...effects, tokenDeltas: [] },
+      { ...effects, tokenDeltas: [{ token: tokenB, account: actor, delta: -amountIn + 1n }] },
+      { ...effects, tokenDeltas: [{ token: tokenC, account: actor, delta: -amountIn }] },
+      { ...effects, tokenDeltas: [{ token: tokenB, account: router, delta: -amountIn }] },
+      { ...effects, totalSupplyDeltas: [] },
+      { ...effects, totalSupplyDeltas: [{ token: tokenB, delta: -amountIn + 1n }] },
+      { ...effects, totalSupplyDeltas: [{ token: tokenC, delta: -amountIn }] },
+      { ...effects, nativeDeltas: [] },
+      ...[0n, -amountIn, amountIn + 1n].map(delta => ({ ...effects, nativeDeltas: [{ account: actor, delta }] })),
+      { ...effects, nativeDeltas: [{ account: router, delta: amountIn }] },
+    ];
+    for (const invalid of wrongEffects) assert.throws(() => decode({ ...result, effects: invalid }), /effect invariants/);
+    for (const changedSource of [{ ...source, number: source.number - 1 },
+      { ...source, hash: `0x${"12".repeat(32)}` }, { ...source, generation: source.generation + 1 }]) {
+      assert.throws(() => decode({ ...result, source: changedSource }), /source/);
+    }
+    assert.throws(() => decode({ ...result, completion: "reverted-as-declared" }), /did not return/);
+    assert.throws(() => decode({ ...result, data: "not-hex" }));
+    assert.throws(() => etherTokenProgram.decode({ programInput, initialResults: [], dependentEvidence: [] }), /missing/);
+    for (const failure of ["rpc", "deadline", "aborted", "resource-limited"] as const) {
+      assert.throws(() => decode({ id: "exact-withdraw", ok: false, source, failure }), /unresolved/);
+    }
   }
   const decoded = etherTokenProgram.decode({
     programInput: input,
@@ -436,6 +497,103 @@ function verifyEtherTokenNativeEffects(): void {
     )],
     dependentEvidence: [],
   }), /effect invariants/);
+
+  // The same builder is used by identity probing and Exact. Never substitute
+  // the historical probe address for the caller supplied by either path.
+  for (const callerRef of [{ kind: "executor" },
+    { kind: "verified-actor", evidenceId: "ethertoken-test-probe" }] satisfies CallerRef[]) {
+    const request = etherTokenWithdrawalSimulation({ id: "symbolic-withdraw", token: tokenB,
+      actor, callerRef, amountIn: 137n });
+    assert(request.kind === "effect-delta-simulation");
+    assert.equal(request.call.caller, callerRef); assert.equal(request.overrideIntent.caller, callerRef);
+    assert.equal(request.observeTokenBalances?.[0].account, callerRef);
+  }
+  const zero = { ...input, amountIn: 0n };
+  assert.deepEqual(etherTokenProgram.requirements(zero), { transports: [] });
+  assert.deepEqual(etherTokenProgram.buildRequests(zero), []);
+  assert.equal(etherTokenProgram.decode({ programInput: zero, initialResults: [], dependentEvidence: [] }).amountOut, 0n);
+  const local = etherTokenNativeRedeemExact.methods()[0]; assert(local.kind === "local");
+  assert.equal(local.quote(zero).status, "quoted"); assert.equal(local.quote(input).status, "not-applicable");
+  assert.throws(() => etherTokenProgram.buildRequests({ ...input, amountIn: -1n }), /negative/);
+  assert.throws(() => etherTokenProgram.buildRequests({ ...input, route: { ...route, tokenOut: tokenC } }), /incompatible/);
+
+  // Exercise central issuance and the real typed transport without RPC/child
+  // processes. Native/supply scopes derive from the declared effects, while
+  // the token/account observation is the Family's explicit sparse pair.
+  const pin = { chainId: 1, blockHash: source.hash, stateRoot: `0x${"13".repeat(32)}` };
+  const rpcUrl = "http://127.0.0.1:1/not-opened-ethertoken-test", origin = router, probe = tokenC;
+  const amountIn = (1n << 100n) + 137n;
+  for (const mode of ["success", "revert", "source-mismatch", "wrong-account", "wrong-payout",
+    "missing-origin", "cancelled", "deadline"] as const) {
+    let dispatched = 0, validatedRequests = 0, decoded = 0, fatal = 0, fallbackReads = 0;
+    const controller = new AbortController();
+    const now = Date.now;
+    let clock = now();
+    // Deterministic deadline crossing inside the async response, not a sleep.
+    const deadlineAtMs = clock + 60_000;
+    if (mode === "deadline") Date.now = () => clock;
+    try {
+      const transport = createRevmStrictSimulationTransport({ rpcUrl, executionGasLimit: 1_000_000,
+        onFatal() { fatal++; }, leaseFor: async requested => {
+          assert.deepEqual(requested, source);
+          return { source, sourcePin: pin, closeAndDrain: async () => {},
+            strictSimulate: async (request: StrictSimulateRequest, control): Promise<DaemonResponse> => {
+              dispatched++;
+              assert.equal(control?.signal, controller.signal); assert.equal(control?.deadlineAtMs, deadlineAtMs);
+              assert.equal(request.from, actor.toLowerCase()); assert.equal(request.transactionOrigin, origin.toLowerCase());
+              assert.equal(request.callerMode, "impersonated-call-frame"); assert.equal(request.rpcUrl, rpcUrl);
+              assert.equal(request.to, tokenB.toLowerCase()); assert.equal(request.blockNumber, source.number);
+              assert.equal(BigInt(ETHERTOKEN_NATIVE_INTERFACE.decodeFunctionData("withdraw", request.data)[0]), amountIn);
+              assert.deepEqual(request.tokenDeals, [{ token: tokenB.toLowerCase(), to: actor.toLowerCase(), amount: amountIn.toString() }]);
+              assert.deepEqual(request.sourcePin, pin);
+              assert.deepEqual(request.observeTokenBalances, [{ token: tokenB.toLowerCase(), account: actor.toLowerCase() }]);
+              assert.deepEqual(request.observeNativeBalances, [actor.toLowerCase()]);
+              assert.deepEqual(request.observeTotalSupply, [tokenB.toLowerCase()]);
+              validatedRequests++;
+              const output = mode === "revert" ? "0x1234" : "0x";
+              const nativeOut = mode === "wrong-payout" ? amountIn - 1n : amountIn;
+              if (mode === "cancelled") controller.abort();
+              if (mode === "deadline") clock = deadlineAtMs;
+              return { ok: true, success: mode !== "revert", latencyMs: 0, output, gasUsed: "21000",
+                ...(mode === "revert" ? { revertReason: output } : {}),
+                sourceAttestation: { kind: "node-attested", ...pin, blockNumber: source.number,
+                  stateRoot: mode === "source-mismatch" ? `0x${"14".repeat(32)}` : pin.stateRoot, parentHash: `0x${"15".repeat(32)}` },
+                strict: { outcome: { kind: mode === "revert" ? "Revert" : "Success", phase: "main", output }, executionGasUsed: "21000",
+                  logs: [], tokenDeltas: mode === "revert" ? [] : [{ token: tokenB.toLowerCase(),
+                    account: mode === "wrong-account" ? probe.toLowerCase() : actor.toLowerCase(), delta: (-amountIn).toString() }],
+                  nativeDeltas: mode === "revert" ? [] : [{ account: actor.toLowerCase(), before: "0", after: nativeOut.toString(), delta: nativeOut.toString() }],
+                  totalSupplyDeltas: mode === "revert" ? [] : [{ token: tokenB.toLowerCase(), delta: (-amountIn).toString() }] } };
+            } };
+        } });
+      const runtime = createStrictCentralAdapterRuntime({ executor: actor,
+        ...(mode === "missing-origin" ? {} : { transactionOrigin: origin }),
+        verifiedActors: { "ethertoken-test-probe": probe }, simulator: transport,
+        provider: { call: async () => { fallbackReads++; throw new Error("unexpected view fallback"); },
+          getCode: async () => { fallbackReads++; throw new Error("unexpected code read"); },
+          getStorage: async () => { fallbackReads++; throw new Error("unexpected storage read"); } },
+        generationFence: { assertCurrent(g, s) { assert.equal(g, source.generation); assert.deepEqual(s, source); } } });
+      const work = await executeAdapterWork({ runtime, control: { signal: controller.signal, deadlineAtMs }, intent: {
+        stage: "exact-refine", familyId: ETHERTOKEN_NATIVE_FAMILY_ID, instanceKey: descriptor.instanceKey, routeKey: route.routeKey,
+        source, generation: source.generation, programInput: { ...input, amountIn },
+        program: { requirements: etherTokenProgram.requirements, buildRequests: etherTokenProgram.buildRequests,
+          decode({ programInput, results }) { decoded++; return etherTokenProgram.decode({ programInput, initialResults: results, dependentEvidence: [] }); } },
+      } });
+      if (mode === "success") {
+        assert.equal(work.status, "resolved"); assert(work.status === "resolved");
+        assert.equal(work.executed.evidence.amountOut, amountIn);
+        assert.equal(work.executed.evidence.evidence.amountIn, amountIn);
+        assert.deepEqual(work.executed.evidence.evidence.source, source);
+        assert.equal(decoded, 1);
+      } else {
+        assert.equal(work.status, "unresolved", mode);
+        assert.equal(decoded, mode === "wrong-payout" ? 1 : 0, mode);
+      }
+      assert.equal(dispatched, mode === "missing-origin" ? 0 : 1, mode);
+      assert.equal(validatedRequests, dispatched, "fail-closed transport must not hide test assertion failures");
+      assert.equal(fallbackReads, 0, mode);
+      assert.equal(fatal, mode === "source-mismatch" || mode === "wrong-account" ? 1 : 0, mode);
+    } finally { Date.now = now; }
+  }
 }
 
 async function verifySiloDependentCurrentAndEffects(): Promise<void> {

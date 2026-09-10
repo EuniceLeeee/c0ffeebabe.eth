@@ -101,6 +101,7 @@ export const etherTokenNativeRedeemExact = {
     Object.freeze({
       id: "withdraw-effect-simulation",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: etherTokenNativeRedeemRequestProgram,
     }),
   ]),
