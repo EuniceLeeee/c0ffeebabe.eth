@@ -101,6 +101,7 @@ export const erc4626SiloRedeemExact = {
     Object.freeze({
       id: "active-redeem-simulation",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: erc4626SiloRedeemRequestProgram,
     }),
   ]),

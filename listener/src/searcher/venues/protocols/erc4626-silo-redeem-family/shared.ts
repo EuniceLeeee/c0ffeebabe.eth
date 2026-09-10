@@ -84,6 +84,7 @@ export function erc4626SiloRedeemSimulation(input: {
     kind: "effect-delta-simulation" as const,
     call: Object.freeze({
       caller: input.callerRef,
+      executionMode: "impersonated-call-frame" as const,
       to: canonicalAddress(input.vault),
       data: ERC4626_SILO_INTERFACE.encodeFunctionData("redeem", [
         input.payoutToken,
@@ -99,6 +100,10 @@ export function erc4626SiloRedeemSimulation(input: {
         amount: input.amountIn,
       })]),
     }),
+    observeTokenBalances: Object.freeze([
+      Object.freeze({ token: canonicalAddress(input.vault), account: input.callerRef }),
+      Object.freeze({ token: canonicalAddress(input.payoutToken), account: input.callerRef }),
+    ]),
     observe: Object.freeze([
       "return-data" as const,
       "token-delta" as const,
