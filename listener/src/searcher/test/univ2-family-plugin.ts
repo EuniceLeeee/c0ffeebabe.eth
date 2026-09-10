@@ -453,6 +453,9 @@ assert.equal(exactRequestMethod.kind, "request-program");
 if (exactRequestMethod.kind !== "request-program") {
   throw new Error("univ2 exact remote method is missing");
 }
+assert.equal("chainAmountQuote" in exactRequestMethod
+  ? exactRequestMethod.chainAmountQuote : undefined, undefined,
+"reserve reads plus local constant-product math are not a chain amount quote");
 const exactRequests = exactRequestMethod.program.buildRequests(exactInput);
 assert.equal(exactRequests.length, 2);
 assert.equal(exactRequests[1].kind, "eth-call");
@@ -1025,6 +1028,27 @@ assert.equal(univ2StrictFamilyPlugin.swap.replay.bind({
   descriptor: stableDescriptor, routes: stableRoutes, impact: strictVictimImpact,
 }), null, "a stable curve cannot inherit the constant-product victim calculation");
 const stableInput = { ...exactInput, descriptor: stableDescriptor, route: stableRoutes[0] };
+for (const route of stableRoutes) {
+  for (const amountIn of [17n, AMOUNT_IN, AMOUNT_IN * 3n]) {
+    const input = { ...stableInput, route, amountIn };
+    const method = univ2StrictFamilyPlugin.exact.methods(input)[1];
+    assert.equal(method.kind, "request-program");
+    if (method.kind !== "request-program") throw new Error("pool quote method missing");
+    assert.equal("chainAmountQuote" in method ? method.chainAmountQuote : undefined, true,
+      "only the verified pool-owned amount quote is eligible for effective pricing");
+    const request = method.program.buildRequests(input).find(r => r.id === "exact-pool-quote");
+    assert(request?.kind === "eth-call");
+    const args = UNIV2_POOL_QUOTE_INTERFACE.decodeFunctionData("getAmountOut", request.data);
+    assert.equal(String(args[0]).toLowerCase(), route.tokenIn.toLowerCase());
+    assert.equal(args[1], amountIn, "preserve the explicit effective input in both directions");
+    const result = method.program.decode({ programInput: input, initialResults: [
+      success("exact-reserves", reservesData),
+      success("exact-input-balance", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [RESERVE0])),
+      success("exact-pool-quote", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [123_457n])),
+    ], dependentEvidence: [] });
+    assert.equal(result.amountOut, 123_457n, "output comes from the pool, not a local formula");
+  }
+}
 const stableRequests = exactRequestMethod.program.buildRequests(stableInput);
 assert.equal(stableRequests.length, 3);
 const stableQuote = exactRequestMethod.program.decode({

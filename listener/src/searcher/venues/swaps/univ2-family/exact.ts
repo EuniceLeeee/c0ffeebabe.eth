@@ -102,7 +102,7 @@ const univ2RequestProgram: ExactRequestProgram<
 };
 
 export const univ2Exact = {
-  methods: () => Object.freeze([
+  methods: (input) => Object.freeze([
     localZeroExactMethod<UniV2Descriptor, UniV2Route, UniV2ExactEvidence>(
       "local-zero",
       (input) => {
@@ -113,6 +113,9 @@ export const univ2Exact = {
     Object.freeze({
       id: "pair-reserves",
       kind: "request-program" as const,
+      // Reserve-only models still calculate locally and must not opt in.
+      ...(input.descriptor.quoteModel.kind === "pool-get-amount-out"
+        ? { chainAmountQuote: true as const } : {}),
       program: univ2RequestProgram,
     }),
   ]),

@@ -825,14 +825,6 @@ async function buildUniv2CaseCapture(input: {
     { readonly amountOut: bigint; readonly evidence: UniV2ExactEvidence }
   >();
   if (reserves !== undefined) {
-    const exactMethod = univ2Exact.methods().find(
-      (method) => method.kind === "request-program" &&
-        method.id === "pair-reserves",
-    );
-    if (exactMethod === undefined || exactMethod.kind !== "request-program") {
-      throw new Error("univ2 exact request program is missing");
-    }
-    const program = exactMethod.program;
     const edgeByRouteKey = new Map(
       edges.map((edge) => {
         const value = edge.value as { readonly routeKey: string };
@@ -852,6 +844,14 @@ async function buildUniv2CaseCapture(input: {
           executor: MIGRATION_CAPTURE_EXECUTOR,
           runtimeEvidence: Object.freeze([]),
         });
+        const exactMethod = univ2Exact.methods(exactInput).find(
+          (method) => method.kind === "request-program" &&
+            method.id === "pair-reserves",
+        );
+        if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+          throw new Error("univ2 exact request program is missing");
+        }
+        const program = exactMethod.program;
         const requests = program.buildRequests(exactInput);
         const results = requests.map((request) =>
           successResult(request, input.source, pool)
