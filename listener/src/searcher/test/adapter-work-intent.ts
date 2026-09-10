@@ -530,6 +530,72 @@ async function schedulerCannotForgeExecutorIssuance(): Promise<void> {
   assert.equal(calls.decodes, 0, "forged results must never reach Adapter decode");
 }
 
+async function transactionOriginAuthority(): Promise<void> {
+  const origin = `0x${"AB".repeat(20)}`;
+  const authority = {
+    executor: CALLER, observedSender: TARGET,
+    verifiedActors: { "test-verified-actor": UNTRUSTED_CALLER },
+    transactionOrigin: origin,
+  };
+  const harness = runtimeHarness({ callerAuthority: authority });
+  const work = intent({ program: callProgram({ counter: counter(), caller: "transaction-origin" }) });
+  const result = await executeAdapterWork({ intent: work, runtime: harness.runtime });
+  assert.equal(result.status, "resolved");
+  const issued = harness.scheduler.issues[0]!;
+  assert.equal(issued.callerAuthority.transactionOrigin, origin.toLowerCase());
+  assert(Object.isFrozen(issued.callerAuthority));
+  assert.deepEqual(issued.source, work.source);
+  assert.equal(issued.generation, work.generation);
+  authority.transactionOrigin = CALLER;
+  assert.equal(issued.callerAuthority.transactionOrigin, origin.toLowerCase());
+
+  for (const invalid of [undefined, null, 42, false, "", "0x1234", "not-an-address", `0x${"00".repeat(20)}`]) {
+    const denied = runtimeHarness({ callerAuthority: {
+      executor: CALLER, observedSender: TARGET,
+      verifiedActors: { "test-verified-actor": UNTRUSTED_CALLER },
+      ...(invalid === undefined ? {} : { transactionOrigin: invalid }),
+    } as CentralCallerAuthority });
+    const outcome = await executeAdapterWork({ intent: work, runtime: denied.runtime });
+    assert.equal(outcome.status, "unresolved");
+    if (outcome.status === "unresolved") assert.equal(outcome.failure.stage, "caller-authority");
+    assert.equal(denied.scheduler.physicalExecutions, 0);
+  }
+  const forged = runtimeHarness();
+  const outcome = await executeAdapterWork({
+    intent: { ...work, transactionOrigin: origin } as typeof work,
+    runtime: forged.runtime,
+  });
+  assert.equal(outcome.status, "unresolved");
+  if (outcome.status === "unresolved") assert.equal(outcome.failure.stage, "intent");
+  assert.equal(forged.scheduler.physicalExecutions, 0);
+
+  for (const caller of ["executor", "observed-sender", "verified-actor"] as const) {
+    const zero = `0x${"00".repeat(20)}`;
+    const existing = await executeAdapterWork({
+      intent: intent({ program: callProgram({ counter: counter(), caller }) }),
+      runtime: runtimeHarness({ callerAuthority: {
+        executor: zero, observedSender: zero, verifiedActors: { "test-verified-actor": zero },
+      } }).runtime,
+    });
+    assert.equal(existing.status, "resolved", "zero exclusion must not change existing caller policy");
+  }
+
+  const sameOriginScheduler = new CoalescingScheduler();
+  await Promise.all([origin, origin.toLowerCase()].map(transactionOrigin => executeAdapterWork({
+    intent: work, runtime: runtimeHarness({ scheduler: sameOriginScheduler, callerAuthority: { transactionOrigin } }).runtime,
+  })));
+  assert.equal(sameOriginScheduler.physicalExecutions, 1, "normalized equal origins retain work sharing");
+
+  const scheduler = new CoalescingScheduler();
+  const origins = [origin, CALLER];
+  const results = await Promise.all(origins.map(transactionOrigin => executeAdapterWork({
+    intent: work, runtime: runtimeHarness({ scheduler, callerAuthority: { transactionOrigin } }).runtime,
+  })));
+  assert(results.every(item => item.status === "resolved"));
+  assert.equal(scheduler.physicalExecutions, 2, "distinct origins cannot share symbolic transaction-origin work");
+  assert.notEqual(scheduler.issues[0]!.dedupeKey, scheduler.issues[1]!.dedupeKey);
+}
+
 async function adapterCannotConsumeFinalSimulationReserve(): Promise<void> {
   const harness = runtimeHarness({
     scheduleOverride: {
@@ -822,6 +888,7 @@ await staleBeforeIoStopsAtFence();
 await staleAfterIoBlocksDecodeAndPublication();
 await centralPolicyOwnsScheduleAndAdmission();
 await centralCallerAuthorityCannotBeSelfAttested();
+await transactionOriginAuthority();
 await schedulerCannotForgeExecutorIssuance();
 await adapterCannotConsumeFinalSimulationReserve();
 await dedupeRequiresCompatibleBindings();

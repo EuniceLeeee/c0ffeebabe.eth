@@ -43,6 +43,7 @@ export interface RequestRequirements {
 export type CallerRef =
   | { readonly kind: "none" }
   | { readonly kind: "executor" }
+  | { readonly kind: "transaction-origin" }
   | { readonly kind: "observed-sender" }
   | { readonly kind: "verified-actor"; readonly evidenceId: string };
 
@@ -1270,6 +1271,13 @@ function assertRequestShape(request: AdapterRequest): void {
         ],
         `${request.id} simulation request`,
       );
+      // Origin is supported only for eth_call. Reject observation-only uses
+      // before freezeAdapterRequest can omit the observation scope.
+      if (request.observeTokenBalances?.some(item =>
+        typeof item.account !== "string" && item.account.kind === "transaction-origin"
+      )) {
+        throw new Error(`${request.id} unsupported transaction-origin token-balance observation`);
+      }
       if (request.preCalls !== undefined && !Array.isArray(request.preCalls)) {
         throw new Error(`${request.id} simulation preCalls must be an array`);
       }
@@ -1717,6 +1725,7 @@ function assertCallerRef(value: CallerRef): void {
   switch (value.kind) {
     case "none":
     case "executor":
+    case "transaction-origin":
     case "observed-sender":
       assertRecordKeys(value, ["kind"], `${value.kind} caller ref`);
       return;
@@ -1863,6 +1872,7 @@ const ADAPTER_TRANSPORTS = new Set<AdapterTransport>([
 const REQUEST_CALLERS = new Set<NonNullable<RequestRequirements["caller"]>>([
   "none",
   "executor",
+  "transaction-origin",
   "observed-sender",
   "verified-actor",
 ]);

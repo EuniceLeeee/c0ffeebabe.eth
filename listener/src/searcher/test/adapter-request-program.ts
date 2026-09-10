@@ -343,6 +343,54 @@ assert.deepEqual(callerDeclaration.requirements, {
   completions: ["return-data"],
 });
 assert.deepEqual(callerDeclaration.requests[0], callerRequest);
+const originRequest = {
+  ...callerRequest,
+  caller: { kind: "transaction-origin" as const },
+};
+const declareOrigin = (request: AdapterRequest = originRequest) => declareRequestProgram({
+  requirements: () => ({ transports: ["eth-call"], caller: "transaction-origin" }),
+  buildRequests: () => [request],
+  decode: () => "unused",
+}, undefined);
+const originDeclaration = declareOrigin();
+assert.equal(originDeclaration.requirements.caller, "transaction-origin");
+assert(Object.isFrozen(originDeclaration.requests[0]));
+assert(Object.isFrozen((originDeclaration.requests[0] as typeof originRequest).caller));
+assert.equal(requestSetFingerprint(originDeclaration.requests), requestSetFingerprint([originRequest]));
+for (const kind of ["none", "executor", "observed-sender", "verified-actor"] as const) {
+  const other = { ...callerRequest, caller: kind === "verified-actor"
+    ? { kind, evidenceId: "actor" } : { kind } };
+  assert.notEqual(requestSetFingerprint([originRequest]), requestSetFingerprint([other]));
+  assert.notEqual(physicalRequestSetFingerprint([originRequest]), physicalRequestSetFingerprint([other]));
+}
+for (const field of ["address", "from", "evidenceId", "transactionOrigin"]) {
+  assert.throws(() => declareOrigin({ ...originRequest,
+    caller: { kind: "transaction-origin", [field]: otherCaller },
+  } as never), /unsupported field/);
+}
+assert.throws(() => declareOrigin({ ...originRequest,
+  caller: { kind: "tx-origin" },
+} as never), /unsupported caller ref kind/);
+assert.throws(() => declareOrigin({ ...originRequest, from: otherCaller } as never), /unsupported field from/);
+assert.throws(() => declareOrigin(callerRequest), /does not match requirement transaction-origin/);
+assert.throws(() => declareRequestProgram({
+  requirements: () => ({ transports: ["eth-call"], caller: "transaction-origin", transactionOrigin: otherCaller } as never),
+  buildRequests: () => [originRequest], decode: () => "unused",
+}, undefined), /unsupported field transactionOrigin/);
+for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) {
+  assert.throws(() => declareRequestProgram({
+    requirements: () => ({ transports: [kind], caller: "executor", effects: ["token-delta"] }),
+    buildRequests: () => [{
+      id: "origin-observation", kind,
+      call: { caller: executorCallerRef, to: simulationTarget, data: "0x" },
+      overrideIntent: { caller: executorCallerRef },
+      observe: ["token-delta"],
+      observeTokenBalances: [{ token, account: { kind: "transaction-origin" } }],
+    }],
+    decode: () => assert.fail("unsupported origin observation cannot decode"),
+  }, undefined), /unsupported transaction-origin token-balance observation/,
+  `${kind} must reject origin observations before freezing can drop them`);
+}
 const callerExecutor = createBoundedRequestExecutor({
   ...executorHandlers,
   assertSupported() {},

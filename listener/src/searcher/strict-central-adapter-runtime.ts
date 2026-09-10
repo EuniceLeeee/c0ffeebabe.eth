@@ -7,6 +7,7 @@ import type {
   CentralAdapterPolicyInput,
   CentralCallerAuthority,
 } from "./adapter-work-intent.js";
+import { normalizeTransactionOrigin } from "./adapter-work-intent.js";
 import {
   rethLaneForAdapterStage,
 } from "./transport-schedule-policy.js";
@@ -118,6 +119,8 @@ export function createStrictCentralAdapterRuntime(input: {
    * at caller-authority.
    */
   readonly executor?: string;
+  /** Trusted outer transaction sender; never inferred from another caller role. */
+  readonly transactionOrigin?: string;
   /**
    * Pass-scoped source-pinned exact caller.  It owns only batching/transport
    * for ordinary eth_call requests; authority, decoding and execution remain
@@ -150,6 +153,9 @@ export function createStrictCentralAdapterRuntime(input: {
   let now = Date.now();
   const maxRequestsPerBatch = input.maxRequestsPerBatch ?? 512;
   const verifiedActors = Object.freeze({ ...(input.verifiedActors ?? {}) });
+  const transactionOrigin = input.transactionOrigin === undefined
+    ? undefined
+    : normalizeTransactionOrigin(input.transactionOrigin);
   const scheduler: CentralAdapterScheduler = Object.freeze({
     issueExecutor(
       issueInput: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
@@ -322,6 +328,7 @@ export function createStrictCentralAdapterRuntime(input: {
     generationFence: input.generationFence,
     callerAuthority: {
       bind: (bindingInput: { readonly callerRole?: string }) => Object.freeze({
+        ...(transactionOrigin === undefined ? {} : { transactionOrigin }),
         ...(input.executor === undefined
           ? {}
           : { executor: ethers.getAddress(input.executor).toLowerCase() }),
@@ -396,6 +403,7 @@ async function executeRequest(
       const caller = request.caller;
       const needsCaller = caller !== undefined && caller.kind !== "none";
       const from = caller?.kind === "executor" ? callerAuthority?.executor
+        : caller?.kind === "transaction-origin" ? callerAuthority?.transactionOrigin
         : caller?.kind === "observed-sender" ? callerAuthority?.observedSender
         : caller?.kind === "verified-actor" ? callerAuthority?.verifiedActors?.[caller.evidenceId]
         : undefined;
@@ -472,6 +480,16 @@ async function executeRequest(
       request.kind === "state-override-simulation" ||
       request.kind === "effect-delta-simulation"
     ) {
+      // A1 binds origin for eth_call only. Existing simulation transports do
+      // not receive this authority, so never silently resolve it as another role.
+      if (request.call.caller.kind === "transaction-origin" ||
+          request.overrideIntent.caller?.kind === "transaction-origin" ||
+          request.preCalls?.some(call => call.caller.kind === "transaction-origin") ||
+          request.observeTokenBalances?.some(item => typeof item.account !== "string" &&
+            item.account.kind === "transaction-origin")) {
+        return Object.freeze({ id: request.id, ok: false as const,
+          source: Object.freeze(source), failure: "resource-limited" as const });
+      }
       if (simulator === undefined) {
         console.warn(
           `[strict-runtime] strict simulation has no simulator: ` +

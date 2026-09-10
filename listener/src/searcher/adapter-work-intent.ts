@@ -100,6 +100,8 @@ export type FinalSimulationScheduleDecision = CentralScheduleDecision & {
 /** Framework-owned caller facts. Adapter programs can consume but never issue them. */
 export interface CentralCallerAuthority {
   readonly executor?: string;
+  /** Explicit outer transaction sender, independent of the execution contract. */
+  readonly transactionOrigin?: string;
   readonly observedSender?: string;
   readonly verifiedActors?: Readonly<Record<string, string>>;
 }
@@ -345,6 +347,7 @@ const FORBIDDEN_INTENT_SCHEDULE_FIELDS = Object.freeze([
   "schedule",
   "callerAuthority",
   "executor",
+  "transactionOrigin",
   "observedSender",
   "verifiedActor",
   "verifiedActors",
@@ -381,6 +384,7 @@ export function canonicalAdapterWorkDedupeKey(input: {
   >;
   readonly requirements: RequestRequirements;
   readonly requests: readonly AdapterRequest[];
+  readonly callerAuthority?: CentralCallerAuthority;
 }): string {
   return `adapter-work:${hashCanonical({
     source: {
@@ -396,6 +400,9 @@ export function canonicalAdapterWorkDedupeKey(input: {
       effects: [...(input.requirements.effects ?? [])].sort(),
     },
     requestSet: physicalRequestSetFingerprint(input.requests),
+    ...(input.requirements.caller === "transaction-origin"
+      ? { transactionOrigin: normalizeTransactionOrigin(input.callerAuthority?.transactionOrigin!) }
+      : {}),
   })}`;
 }
 
@@ -555,6 +562,7 @@ export async function executeAdapterWork<Input, Evidence>(input: {
           },
           requirements: declaredRequirements,
           requests,
+          callerAuthority: callerAuthority ?? EMPTY_CALLER_AUTHORITY,
         });
 
         phase = "scheduler-issue";
@@ -906,7 +914,7 @@ function freezeCallerAuthority(
   ) {
     throw new Error("central caller authority must be an object");
   }
-  const allowed = new Set(["executor", "observedSender", "verifiedActors"]);
+  const allowed = new Set(["executor", "transactionOrigin", "observedSender", "verifiedActors"]);
   for (const key of Reflect.ownKeys(authority)) {
     if (typeof key !== "string" || !allowed.has(key)) {
       throw new Error(`central caller authority has unknown field ${String(key)}`);
@@ -915,12 +923,16 @@ function freezeCallerAuthority(
   const executor = authority.executor === undefined
     ? undefined
     : normalizeAuthorityAddress(authority.executor, "executor");
+  const transactionOrigin = authority.transactionOrigin === undefined
+    ? undefined
+    : normalizeTransactionOrigin(authority.transactionOrigin);
   const observedSender = authority.observedSender === undefined
     ? undefined
     : normalizeAuthorityAddress(authority.observedSender, "observed sender");
   const verifiedActors = freezeVerifiedActors(authority.verifiedActors);
   return Object.freeze({
     ...(executor === undefined ? {} : { executor }),
+    ...(transactionOrigin === undefined ? {} : { transactionOrigin }),
     ...(observedSender === undefined ? {} : { observedSender }),
     ...(Object.keys(verifiedActors).length === 0
       ? {}
@@ -933,6 +945,11 @@ function assertCallerAuthorized(
   authority: CentralCallerAuthority,
 ): void {
   switch (binding.callerRef.kind) {
+    case "transaction-origin":
+      if (authority.transactionOrigin === undefined) {
+        throw new Error("central transaction-origin caller authority is missing");
+      }
+      return;
     case "executor":
       if (authority.executor === undefined) {
         throw new Error("central executor caller authority is missing");
@@ -987,6 +1004,15 @@ function normalizeAuthorityAddress(value: string, label: string): string {
     throw new Error(`central ${label} authority must be a 20-byte address`);
   }
   return value.toLowerCase();
+}
+
+/** Origin alone excludes zero; existing caller-address policies are unchanged. */
+export function normalizeTransactionOrigin(value: string): string {
+  const address = normalizeAuthorityAddress(value, "transaction-origin");
+  if (/^0x0{40}$/.test(address)) {
+    throw new Error("central transaction-origin authority must not be zero");
+  }
+  return address;
 }
 
 function assertIssuedExecutor(

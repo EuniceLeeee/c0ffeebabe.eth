@@ -420,39 +420,183 @@ async function main(): Promise<void> {
   const executorAddress = `0x${"12".repeat(20)}`;
   const observedAddress = `0x${"23".repeat(20)}`;
   const actorAddress = `0x${"34".repeat(20)}`;
-  for (const transport of ["provider", "batch", "cache"] as const) {
+  const originAddress = `0x${"ab".repeat(20)}`;
+  const capturedOriginReads: (string | undefined)[] = [];
+  const originOptions = {
+    provider: { ...mockProvider(), call: async (tx: { to: string; data: string; from?: string }) => {
+      capturedOriginReads.push(tx.from); return "0x";
+    } },
+    generationFence: { assertCurrent() {} },
+    transactionOrigin: `0x${"AB".repeat(20)}`,
+  };
+  const capturedOriginRuntime = createStrictCentralAdapterRuntime(originOptions);
+  originOptions.transactionOrigin = executorAddress;
+  const capturedOrigin = capturedOriginRuntime.callerAuthority.bind({} as never);
+  assert.equal(capturedOrigin.transactionOrigin, originAddress);
+  assert(Object.isFrozen(capturedOrigin));
+  assert.throws(() => { (capturedOrigin as { transactionOrigin: string }).transactionOrigin = executorAddress; });
+  for (const transactionOrigin of [null, 42, false, "", "bad", "0x1234", `0x${"00".repeat(20)}`]) {
+    assert.throws(() => createStrictCentralAdapterRuntime({
+      ...originOptions, transactionOrigin,
+    } as never), /transaction.origin/i);
+  }
+  const originProgram = {
+    requirements: () => ({ transports: ["eth-call" as const], caller: "transaction-origin" as const }),
+    buildRequests: () => [{ id: "origin", kind: "eth-call" as const, to: WSTETH, data: "0x",
+      caller: { kind: "transaction-origin" as const }, completion: "return-data" as const }],
+    decode: () => true,
+  };
+  const capturedRead = await executeAdapterWork({ runtime: capturedOriginRuntime, intent: {
+    stage: "exact-refine", familyId: "test:origin" as never, source: SOURCE,
+    generation: SOURCE.generation, programInput: {}, program: originProgram,
+  } });
+  assert.equal(capturedRead.status, "resolved");
+  assert.deepEqual(capturedOriginReads, [originAddress], "constructor mutation cannot change physical from");
+  let forbiddenReads = 0;
+  const missingOrigin = await executeAdapterWork({
+    runtime: createStrictCentralAdapterRuntime({
+      provider: { ...mockProvider(), call: async () => { forbiddenReads++; return "0x"; } },
+      exactCallBackend: { call: async () => { forbiddenReads++; return "0x"; } },
+      producerCallBackend: { call: async () => { forbiddenReads++; return "0x"; } },
+      producerCallCache: { callCached: () => { forbiddenReads++; return Promise.resolve("0x"); } },
+      generationFence: { assertCurrent() {} }, executor: executorAddress,
+      observedSender: observedAddress, verifiedActors: { actor: actorAddress },
+    }),
+    intent: { stage: "exact-refine", familyId: "test:origin" as never,
+      source: SOURCE, generation: SOURCE.generation,
+      programInput: { transactionOrigin: originAddress }, program: originProgram },
+  });
+  assert.equal(missingOrigin.status, "unresolved");
+  if (missingOrigin.status === "unresolved") assert.equal(missingOrigin.failure.stage, "caller-authority");
+  assert.equal(forbiddenReads, 0, "origin must not fall back to another caller");
+
+  const originPhysicalKeys = new Set<string>();
+  const originProvenance = new Set<string>();
+  for (const transport of ["provider", "batch", "cache", "producer", "producer-cache", "cache-provider-miss"] as const) {
     for (const [caller, expected] of [
       [{ kind: "executor" as const }, executorAddress],
       [{ kind: "observed-sender" as const }, observedAddress],
       [{ kind: "verified-actor" as const, evidenceId: "actor" }, actorAddress],
+      [{ kind: "transaction-origin" as const }, originAddress],
       [{ kind: "none" as const }, undefined],
     ] as const) {
-      const reads: { from?: string; path: string }[] = [];
+      const reads: { to: string; data: string; from?: string; path: string }[] = [];
+      const producer = transport === "producer" || transport === "producer-cache";
+      const cached = transport === "cache" || transport === "producer-cache";
+      const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+      const observe = (tx: { to: string; data: string; from?: string }, actualControl: typeof control | undefined, path: string) => {
+        assert.equal(actualControl?.signal, control.signal);
+        assert.equal(actualControl?.deadlineAtMs, control.deadlineAtMs);
+        reads.push({ ...tx, path });
+        if (caller.kind === "transaction-origin") {
+          originPhysicalKeys.add(JSON.stringify([SOURCE.hash, tx.to.toLowerCase(), tx.data, tx.from]));
+        }
+      };
       const wired = createStrictCentralAdapterRuntime({
-        provider: { ...mockProvider(), call: async tx => { reads.push({ ...tx, path: "provider" }); return "0x"; } },
+        provider: { ...mockProvider(), call: async (tx, block, actualControl) => {
+          assert.equal(block, SOURCE.number);
+          observe(tx, actualControl as typeof control, "provider"); return "0x";
+        } },
         executor: executorAddress, observedSender: observedAddress, verifiedActors: { actor: actorAddress },
-        generationFence: { assertCurrent() {} },
-        ...(transport === "provider" ? {} : {
-          exactCallBackend: { call: async (tx: { from?: string }) => { reads.push({ ...tx, path: "batch" }); return "0x"; } },
-          producerCallCache: { callCached: (tx: { from?: string }) => {
-            reads.push({ ...tx, path: "cache" });
-            return transport === "cache" ? Promise.resolve("0x") : undefined;
-          } },
-        }),
+        transactionOrigin: originAddress,
+        generationFence: { assertCurrent(generation, source) {
+          assert.equal(generation, SOURCE.generation); assert.deepEqual(source, SOURCE);
+        } },
+        ...(transport === "provider" || transport === "cache-provider-miss" ? {} : producer
+          ? { producerCallBackend: { call: async (tx, actualControl) => {
+            observe(tx, actualControl as typeof control, "producer"); return "0x";
+          } } }
+          : { exactCallBackend: { call: async (tx, actualControl) => {
+            observe(tx, actualControl as typeof control, "batch"); return "0x";
+          } } }),
+        ...(transport === "provider" ? {} : { producerCallCache: { callCached: (tx, actualControl, hash) => {
+          assert.equal(hash, SOURCE.hash);
+          observe(tx, actualControl as typeof control, "cache");
+          return cached ? Promise.resolve("0x") : undefined;
+        } } }),
       });
-      const result = await executeAdapterWork({ runtime: wired, intent: {
-        stage: "exact-refine", familyId: "test:caller" as never, source: SOURCE, generation: SOURCE.generation,
+      const result = await executeAdapterWork({ runtime: wired, control, intent: {
+        stage: producer ? "pricing-current" : "exact-refine", familyId: "test:caller" as never, source: SOURCE, generation: SOURCE.generation,
         programInput: {}, program: {
           requirements: () => ({ transports: ["eth-call"], caller: caller.kind }),
           buildRequests: () => [{ kind: "eth-call", id: "caller", to: WSTETH,
             data: "0x", caller, completion: "return-data" }],
-          decode: () => ({ ok: true }),
+          decode: ({ results }) => {
+            assert.deepEqual(results[0]!.source, SOURCE);
+            assert(Object.isFrozen(results[0]!.source));
+            if (caller.kind === "transaction-origin" && results[0]!.ok) {
+              originProvenance.add(results[0]!.provenance.fingerprint);
+            }
+            return { ok: true };
+          },
         },
       } });
       assert.equal(result.status, "resolved");
-      assert.equal(reads.at(-1)?.path, transport);
+      assert.equal(reads.at(-1)?.path, cached ? "cache" : producer ? "producer"
+        : transport === "cache-provider-miss" ? "provider" : transport);
+      assert.equal(reads.length, transport === "provider" || cached ? 1 : 2);
       assert(reads.length > 0 && reads.every(tx => tx.from === expected));
     }
+  }
+  assert.equal(originPhysicalKeys.size, 1, "all read entrances use identical source/to/data/from cache identity");
+  assert.equal(originProvenance.size, 1, "transport choice must not alter result provenance");
+
+  let simulationCalls = 0;
+  const originSimulation = await executeAdapterWork({
+    runtime: createStrictCentralAdapterRuntime({
+      ...originOptions, transactionOrigin: originAddress,
+      simulator: { simulate: async () => { simulationCalls++; return { data: "0x" }; } },
+    }),
+    intent: { stage: "exact-refine", familyId: "test:origin" as never,
+      source: SOURCE, generation: SOURCE.generation, programInput: {}, program: {
+        requirements: () => ({ transports: ["effect-delta-simulation"], caller: "transaction-origin" }),
+        buildRequests: () => [{ id: "origin-sim", kind: "effect-delta-simulation",
+          call: { caller: { kind: "transaction-origin" }, to: WSTETH, data: "0x" },
+          overrideIntent: { caller: { kind: "transaction-origin" } }, observe: [] }],
+        decode: () => assert.fail("unsupported origin simulation cannot decode"),
+      } },
+  });
+  assert.equal(originSimulation.status, "unresolved");
+  assert.equal(simulationCalls, 0, "unsupported simulation role must not reach a transport with different caller semantics");
+
+  const originObservationCases = [];
+  for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) {
+    let simulatorCalls = 0;
+    let decoderCalls = 0;
+    const outcome = await executeAdapterWork({
+      runtime: createStrictCentralAdapterRuntime({
+        provider: mockProvider(), executor: executorAddress, transactionOrigin: originAddress,
+        generationFence: { assertCurrent() {} },
+        simulator: { simulate: async () => {
+          simulatorCalls++;
+          return { data: "0x", effects: { tokenDeltas: [
+            { token: STETH, account: executorAddress, delta: 1n },
+          ] } };
+        } },
+      }),
+      intent: { stage: "exact-refine", familyId: "test:origin" as never,
+        source: SOURCE, generation: SOURCE.generation, programInput: {}, program: {
+          requirements: () => ({ transports: [kind], caller: "executor", effects: ["token-delta"] }),
+          buildRequests: () => [{ id: "origin-observation", kind,
+            call: { caller: { kind: "executor" }, to: WSTETH, data: "0x" },
+            overrideIntent: { caller: { kind: "executor" } },
+            observe: ["token-delta"],
+            observeTokenBalances: [{ token: STETH, account: { kind: "transaction-origin" } }],
+          }],
+          decode: () => { decoderCalls++; return true; },
+        } },
+    });
+    originObservationCases.push({ kind, outcome, simulatorCalls, decoderCalls });
+  }
+  assert.deepEqual(originObservationCases.map(({ kind, outcome, simulatorCalls, decoderCalls }) => ({
+    kind, status: outcome.status, simulatorCalls, decoderCalls,
+  })), ["state-override-simulation", "effect-delta-simulation"].map(kind => ({
+    kind, status: "unresolved", simulatorCalls: 0, decoderCalls: 0,
+  })), "origin-only observations must fail closed before either simulator or decoder runs");
+  for (const { outcome } of originObservationCases) {
+    assert(outcome.status === "unresolved");
+    assert.equal(outcome.failure.stage, "request-build");
+    assert.match(outcome.failure.message, /unsupported transaction-origin token-balance observation/);
   }
   console.log("strict-central-adapter-runtime PASS");
 }
