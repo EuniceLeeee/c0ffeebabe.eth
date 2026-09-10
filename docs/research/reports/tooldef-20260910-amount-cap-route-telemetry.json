@@ -1,0 +1,28 @@
+{
+  "learning_case_id": "tooldef-20260910-amount-cap-route-telemetry",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": ["swap"],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "tooling-only route evidence serialization; not a competitor or execution gap",
+  "evidence": {
+    "introduced_at": "900222fbe1cfff14823f092d08b191b0639e3e64",
+    "independent_review": "Rawls reproduced one new amount-cap diagnostic dropping the entire pass in either callback order; no live gap was observed in the frozen50-height sample.",
+    "regression": "Real worker preserves capped route [4,0,null,8], healthy siblings and old codes0..7 with zero dropped batches; both worker and decoder reject9.",
+    "executed_checks": ["listener route telemetry 11/11", "analysis block-activity 21/21", "listener and analysis noEmit typechecks", "git diff --check"],
+    "non_author_acceptance": "Parent independently reviewed the five-file patch and reran11 writer/worker and21 decoder tests.",
+    "report": "docs/research/reports/blockscan-gas-reference-live-20260910.md"
+  },
+  "tooling_defect": {
+    "tool": "blockscan route telemetry writer, worker and block-activity decoder",
+    "issue": "New Exact amount_reference_over_cap diagnostic was not represented in compact reason codes; it invalidated all sibling route evidence in the pass.",
+    "evidence": "Independent executed reproduction: droppedBatches=1 and no dispatched batch before repair; mixed-route real-worker and decoder tests pass afterward.",
+    "codify_target": "Append code8 across encoder and validators/decoder, preserve0..7 and test malformed9 rejection.",
+    "codify_commit": "6e2c8d329a9a98b6d91ebba1883c5ae1e4e51c2d",
+    "status": "codified"
+  },
+  "created_at": "2026-09-10T05:34:12.000Z",
+  "updated_at": "2026-09-10T05:34:12.000Z"
+}
