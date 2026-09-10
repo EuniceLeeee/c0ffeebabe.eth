@@ -28,9 +28,8 @@ import { attestPoolIdentitiesStrict } from "./strict-identity-attestation.js";
 import { createMinimalIdentityRuntime } from "./strict-identity-attestation.js";
 import { createStrictCentralAdapterRuntime } from
   "./strict-central-adapter-runtime.js";
-import { RevmSimClient } from "./revm-sim-client.js";
-import { createRevmStrictSimulationTransport } from
-  "./revm-strict-simulation-transport.js";
+import { RevmFatalError, RevmSimClient, type RevmFatalReason } from "./revm-sim-client.js";
+import { createRevmStrictSourceSimulation } from "./revm-strict-source-simulation.js";
 import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
   "./venues/production-verified-actors.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
@@ -435,11 +434,43 @@ export function isChainProvenTerminalReason(reason: string): boolean {
     normalized.startsWith("identity_rejected:");
 }
 
-function providerAdapter(
+class RebuildReadProvider extends ethers.JsonRpcProvider {
+  constructor(
+    private readonly read: <T>(operation: () => Promise<T>) => Promise<T>,
+    ...args: ConstructorParameters<typeof ethers.JsonRpcProvider>
+  ) {
+    super(...args);
+  }
+
+  // Both probe and outer rebuild use the same physical fence. Ethers' delayed
+  // batch flush and network detection must recheck the owning fatal latch,
+  // even when the public read entered before the sibling simulation failed.
+  override _send(...args: Parameters<ethers.JsonRpcProvider["_send"]>) {
+    return this.read(() => super._send(...args));
+  }
+  override send(...args: Parameters<ethers.JsonRpcProvider["send"]>) {
+    return this.read(() => super.send(...args));
+  }
+  override getBlock(...args: Parameters<ethers.JsonRpcProvider["getBlock"]>) {
+    return this.read(() => super.getBlock(...args));
+  }
+  override getCode(...args: Parameters<ethers.JsonRpcProvider["getCode"]>) {
+    return this.read(() => super.getCode(...args));
+  }
+  override getStorage(...args: Parameters<ethers.JsonRpcProvider["getStorage"]>) {
+    return this.read(() => super.getStorage(...args));
+  }
+  override getLogs(...args: Parameters<ethers.JsonRpcProvider["getLogs"]>) {
+    return this.read(() => super.getLogs(...args));
+  }
+}
+
+export function providerAdapter(
   provider: ethers.JsonRpcProvider,
+  assertOpen: () => void = () => {},
 ): {
   call(
-    transaction: { readonly to: string; readonly data: string },
+    transaction: { readonly to: string; readonly data: string; readonly from?: string },
     blockTag?: number,
   ): Promise<string>;
   getCode(address: string, blockTag?: number): Promise<string>;
@@ -466,10 +497,17 @@ function providerAdapter(
   } | null>;
   traceTransaction?(transactionHash: string): Promise<unknown>;
 } {
+  const guarded = async <T>(read: () => Promise<T>): Promise<T> => {
+    assertOpen();
+    const result = await read();
+    assertOpen();
+    return result;
+  };
   return {
     call: async (transaction, blockTag) =>
-      provider.send("eth_call", [
-        { to: transaction.to, data: transaction.data },
+      guarded(() => provider.send("eth_call", [
+        { to: transaction.to, data: transaction.data,
+          ...(transaction.from === undefined ? {} : { from: transaction.from }) },
         // reth requires the tag as hex; the central runtime passes a
         // decimal block number.
         blockTag === undefined
@@ -477,13 +515,13 @@ function providerAdapter(
           : typeof blockTag === "number"
             ? "0x" + blockTag.toString(16)
             : blockTag,
-      ]) as Promise<string>,
+      ])) as Promise<string>,
     getCode: async (address, blockTag) =>
-      provider.getCode(address, blockTag ?? "latest"),
+      guarded(() => provider.getCode(address, blockTag ?? "latest")),
     getStorage: async (address, slot, blockTag) =>
-      provider.getStorage(address, slot, blockTag ?? "latest"),
+      guarded(() => provider.getStorage(address, slot, blockTag ?? "latest")),
     getLogs: async (filter) =>
-      provider.getLogs({
+      guarded(() => provider.getLogs({
         ...(filter.address === undefined ? {} : { address: filter.address }),
         ...(filter.fromBlock === undefined
           ? {}
@@ -492,14 +530,14 @@ function providerAdapter(
         topics: (filter.topics ?? []).map((topic) =>
           topic === null ? [] : topic
         ),
-      }) as unknown as Promise<readonly {
+      })) as unknown as Promise<readonly {
         readonly address: string;
         readonly topics: readonly string[];
         readonly data: string;
         readonly transactionHash?: string;
       }[]>,
     getTransactionReceipt: async (transactionHash) =>
-      provider.getTransactionReceipt(transactionHash) as unknown as {
+      guarded(() => provider.getTransactionReceipt(transactionHash)) as unknown as {
         readonly blockNumber?: number;
         readonly logs: readonly {
           readonly address: string;
@@ -509,10 +547,10 @@ function providerAdapter(
         }[];
       } | null,
     traceTransaction: async (transactionHash) =>
-      provider.send("debug_traceTransaction", [
+      guarded(() => provider.send("debug_traceTransaction", [
         transactionHash,
         Object.freeze({ tracer: "callTracer" }),
-      ]),
+      ])),
   };
 }
 
@@ -810,7 +848,11 @@ export function upgradeLegacyVerifiedMemo(
 }
 
 export function createProbeWiring(
-  input?: { readonly rpcUrl?: string },
+  input?: {
+    readonly rpcUrl?: string;
+    readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
+    readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
+  },
 ): UniverseRebuildProbeWiring {
   const rpcUrl = input?.rpcUrl ??
     process.env.SEARCHER_LIVE_RPC_URL ??
@@ -821,46 +863,77 @@ export function createProbeWiring(
         "or MAINNET_RPC_URL",
     );
   }
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
-  const strictProvider = providerAdapter(provider);
-  // Simulation-dependent families (erc4626/silo/fluid-vault/self-burn) keep
-  // their identity fail-closed under the minimal runtime; when the revm
-  // simulator binary + executor are available (production), use the full
-  // runtime so those families can verify.
+  // Runtime capability is generic; each Family declares its own programs.
   const revmBin = process.env.SEARCHER_REVM_SIM_BIN;
-  const executor = process.env.BOTVM_ADDRESS;
-  // NOTE: the revm-sim daemon serves requests single-threaded over stdin; one
-  // slow request (archive prestateTracer can exceed the HTTP timeout) blocks
-  // every queued request. The probe runs concurrent workers, so sharing one
-  // daemon across workers deadlocks them. Each runtime gets its own
-  // RevmSimClient (its own daemon process): per-key isolation means one slow
-  // key can never block siblings.
+  const executionIdentity = input?.executionIdentity === undefined
+    ? undefined : Object.freeze({ ...input.executionIdentity });
+  const executor = executionIdentity?.executor ?? process.env.BOTVM_ADDRESS;
+  const timeoutMs = Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000");
+  const notifyFatal = input?.onSimulationFatal;
+  const probeController = new AbortController();
+  let fatal: RevmFatalError | undefined;
+  let chainId: Promise<number> | undefined;
+  const simulations = new Set<ReturnType<typeof createRevmStrictSourceSimulation>>();
+  const assertOpen = (): void => { if (fatal) throw fatal; };
+  const read = async <T>(operation: () => Promise<T>): Promise<T> => {
+    assertOpen();
+    const result = await operation();
+    assertOpen();
+    return result;
+  };
+  const provider = new RebuildReadProvider(read, rpcUrl);
+  const strictProvider = providerAdapter(provider, assertOpen);
+  const onFatal = (reason: RevmFatalReason): void => {
+    if (fatal) return;
+    fatal = new RevmFatalError(reason);
+    probeController.abort(fatal);
+    for (const simulation of simulations) void simulation.closeAndDrain(fatal).catch(() => {});
+    notifyFatal?.(reason);
+  };
+  // The existing concurrent candidate slots stay independent. Within a slot,
+  // one lazy strict-only client is shared by all lifecycle requests, never by
+  // a prepared/backrun overlay. Every exit joins physical daemon drainage.
   interface ProbeRuntimeHandle {
     readonly runtime: CentralAdapterRuntime;
-    dispose(): void;
+    dispose(): Promise<void>;
   }
-  const runtimeFor = (
+  const runtimeFor = async (
     cutoff: CanonicalSource,
     observedSender?: string,
-  ): ProbeRuntimeHandle => {
-    const revmClient = revmBin !== undefined && revmBin.trim() !== "" &&
-        executor !== undefined && executor.trim() !== ""
-      ? new RevmSimClient({
-          executablePath: revmBin,
-          timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
-        })
-      : null;
-    const runtime = revmClient === null || executor === undefined
+  ): Promise<ProbeRuntimeHandle> => {
+    assertOpen();
+    const source = Object.freeze({ ...cutoff });
+    const canSimulate = revmBin !== undefined && revmBin.trim() !== "" &&
+      executor !== undefined && executor.trim() !== "";
+    const networkChainId = canSimulate ? await (chainId ??= read(() => provider.getNetwork()).then(network => {
+      const id = Number(network.chainId);
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error("invalid rebuild simulation chain identity");
+      return id;
+    })) : undefined;
+    assertOpen();
+    const simulation = networkChainId === undefined ? undefined : createRevmStrictSourceSimulation({
+      identity: { source, rpcUrl, chainId: networkChainId },
+      control: { signal: probeController.signal },
+      // Preserve the engine's existing DEFAULT_GAS_LIMIT; make it explicit at
+      // the transport boundary rather than relying on an unbound wire default.
+      executionGasLimit: 0x1000000,
+      createClient: ({ onFatal }) => new RevmSimClient({ executablePath: revmBin, timeoutMs, onFatal }),
+      onFatal,
+    });
+    const runtime = simulation === undefined || executor === undefined
       ? createMinimalIdentityRuntime(strictProvider)
       : createStrictCentralAdapterRuntime({
           provider: strictProvider as never,
+          executor,
+          ...(executionIdentity === undefined ? {} : { transactionOrigin: executionIdentity.transactionOrigin }),
           generationFence: Object.freeze({
-            assertCurrent(generation: number, source: CanonicalSource) {
+            assertCurrent(generation: number, requested: CanonicalSource) {
+              assertOpen();
               if (
-                generation !== cutoff.generation ||
-                source.number !== cutoff.number ||
-                source.hash.toLowerCase() !== cutoff.hash.toLowerCase() ||
-                source.generation !== cutoff.generation
+                generation !== source.generation ||
+                requested.number !== source.number ||
+                requested.hash.toLowerCase() !== source.hash.toLowerCase() ||
+                requested.generation !== source.generation
               ) {
                 throw new Error(
                   "rebuild lifecycle escaped the fixed canonical cutoff",
@@ -870,17 +943,15 @@ export function createProbeWiring(
           }),
           verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
           ...(observedSender === undefined ? {} : { observedSender }),
-          simulator: createRevmStrictSimulationTransport({
-            client: revmClient,
-            executor,
-            ...(observedSender === undefined ? {} : { observedSender }),
-            verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
-          }),
+          simulator: simulation.transport,
         });
+    if (simulation) simulations.add(simulation);
     return Object.freeze({
       runtime,
-      dispose(): void {
-        revmClient?.stop();
+      async dispose(): Promise<void> {
+        try { await simulation?.closeAndDrain(); }
+        finally { if (simulation) simulations.delete(simulation); }
+        assertOpen();
       },
     });
   };
@@ -927,6 +998,7 @@ export function createProbeWiring(
     attestFamilyInstanceOnce: async (
       attestInput: Parameters<AttestOnce>[0],
     ): Promise<Awaited<ReturnType<AttestOnce>>> => {
+      assertOpen();
       const candidate = attestInput.candidate as Readonly<Record<string, unknown>>;
       const candidateFamilyId = typeof candidate.familyId === "string"
         ? candidate.familyId
@@ -947,7 +1019,7 @@ export function createProbeWiring(
             }),
           });
         }
-        const runtimeHandle = runtimeFor(attestInput.cutoff);
+        const runtimeHandle = await runtimeFor(attestInput.cutoff);
         try {
           const funding = await executeFundingFamilyLiquidity({
             family: candidateFamily,
@@ -1011,7 +1083,7 @@ export function createProbeWiring(
               : { evidenceRef: attestInput.evidenceRef }),
           });
         } finally {
-          runtimeHandle.dispose();
+          await runtimeHandle.dispose();
         }
       }
       const pool = attestationPoolFromCandidate(candidate);
@@ -1045,9 +1117,9 @@ export function createProbeWiring(
             );
           }
           const [canonicalBlockHash, transaction, receipt] = await Promise.all([
-            readBlockHash(provider, evidence.blockNumber),
-            provider.getTransaction(evidence.txHash),
-            provider.getTransactionReceipt(evidence.txHash),
+            read(() => readBlockHash(provider, evidence.blockNumber)),
+            read(() => provider.getTransaction(evidence.txHash!)),
+            read(() => provider.getTransactionReceipt(evidence.txHash!)),
           ]);
           const receiptLog = receipt?.logs.find((log) =>
             log.index === evidence.logIndex
@@ -1086,6 +1158,7 @@ export function createProbeWiring(
             redecodedCandidates,
           });
         }
+        assertOpen();
         const [code, implementationWord] = await Promise.all([
           strictProvider.getCode(pool.address, attestInput.cutoff.number),
           strictProvider.getStorage(
@@ -1100,7 +1173,7 @@ export function createProbeWiring(
           code,
           implementationWord,
         });
-        runtimeHandle = runtimeFor(attestInput.cutoff, observedSender);
+        runtimeHandle = await runtimeFor(attestInput.cutoff, observedSender);
         result = await attestPoolIdentitiesStrict({
           catalog,
           provider: strictProvider,
@@ -1140,7 +1213,8 @@ export function createProbeWiring(
             : { evidenceRef: attestInput.evidenceRef }),
         });
       } finally {
-        runtimeHandle?.dispose();
+        await runtimeHandle?.dispose();
+        assertOpen();
       }
       const accepted = result.accepted[0];
       if (accepted === undefined) {
@@ -1198,6 +1272,7 @@ export function createProbeWiring(
         UniverseRebuildProbeWiring["sealDurableVerifiedMemo"]
       >>[0],
     ) => {
+      assertOpen();
       const candidate = sealInput.candidate as Readonly<Record<string, unknown>>;
       const domainResult = sealInput.result as {
         readonly domain?: unknown;
@@ -1312,7 +1387,9 @@ export function createProbeWiring(
       });
     },
     assertCanonicalHead: async (cutoff: CanonicalSource) => {
-      const hash = await readBlockHash(provider, cutoff.number);
+      assertOpen();
+      const hash = await read(() => readBlockHash(provider, cutoff.number));
+      assertOpen();
       if (hash.toLowerCase() !== cutoff.hash.toLowerCase()) {
         throw new Error(
           "canonical head hash mismatch at " + cutoff.number,
@@ -2485,6 +2562,8 @@ function catalogActivityChunks(input: {
 export function createRebuildWiring(input?: {
   readonly rpcUrl?: string;
   readonly startupCandidates?: readonly Readonly<Record<string, unknown>>[];
+  readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
+  readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
 }): UniverseRebuildDependencies {
   const rpcUrl = input?.rpcUrl ??
     process.env.SEARCHER_LIVE_RPC_URL ??
@@ -2495,12 +2574,28 @@ export function createRebuildWiring(input?: {
         "or MAINNET_RPC_URL",
     );
   }
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+  // The probe, memo reuse, and discovery transports belong to one rebuild.
+  // A simulation fatal revokes all three before notifying the runtime owner.
+  let fatal: RevmFatalError | undefined;
+  const assertOpen = (): void => { if (fatal) throw fatal; };
+  const read = async <T>(operation: () => Promise<T>): Promise<T> => {
+    assertOpen();
+    const result = await operation();
+    assertOpen();
+    return result;
+  };
+  const onSimulationFatal = (reason: RevmFatalReason): void => {
+    if (fatal) return;
+    fatal = new RevmFatalError(reason);
+    input?.onSimulationFatal?.(reason);
+  };
+  const provider = new RebuildReadProvider(read, rpcUrl);
   // A trace response is already large. Ethers batches concurrent send()
   // calls by default, which couples sixteen block traces to one HTTP timeout.
   // Keep concurrency, but transport each block independently so one long tail
   // retries only that block.
-  const traceProvider = new ethers.JsonRpcProvider(
+  const traceProvider = new RebuildReadProvider(
+    read,
     rpcUrl,
     ethers.Network.from(1),
     {
@@ -2520,6 +2615,7 @@ export function createRebuildWiring(input?: {
     proofNumber: number,
     cutoff: CanonicalSource,
   ): Promise<string> => {
+    assertOpen();
     const key = cutoff.number + ":" + cutoff.hash.toLowerCase() + ":" +
       proofNumber;
     const incumbent = proofHashByFixedRun.get(key);
@@ -2545,7 +2641,8 @@ export function createRebuildWiring(input?: {
   // SOURCE_MIN_CHUNK_BLOCKS): changing it moves the event plan fingerprint
   // and fails closed on resume. Call tracing is another physical transport
   // inside this same catalog activity plan, not a second discovery source.
-  const probe = createProbeWiring({ rpcUrl });
+  const probe = createProbeWiring({ rpcUrl, executionIdentity: input?.executionIdentity,
+    onSimulationFatal });
 
   const wiring: UniverseRebuildDependencies = {
     encodeCandidateSnapshot: (candidate) =>
@@ -2577,6 +2674,7 @@ export function createRebuildWiring(input?: {
       });
     },
     scanSwapWindow: async (scanInput) => {
+      assertOpen();
       const logs: RebuildScanObservation[] = [];
       const totalBlocks = scanInput.cutoff.number - scanInput.fromBlock + 1;
       let completedBlocks = 0;
@@ -2829,6 +2927,7 @@ export function createRebuildWiring(input?: {
           status: "complete" as const,
         }));
       }
+      assertOpen();
       return Object.freeze({
         observations,
         sourceReceipts: Object.freeze(receipts),
@@ -2906,6 +3005,7 @@ export function createRebuildWiring(input?: {
       return Object.freeze([...byKey.values()]);
     },
     reverseBindOpaqueCandidates: async (reverseInput) => {
+      assertOpen();
       // Retain-channel driver (central; no protocol semantics here). Opaque
       // nominations are derived purely from plugin-declared semantics: a log
       // pattern whose emitter mode "singleton-indexed-bytes32" declares that
@@ -3149,6 +3249,7 @@ export function createRebuildWiring(input?: {
           }
         },
       ));
+      assertOpen();
       for (const observations of resolved) {
         for (const observation of observations) verified.push(observation);
       }
@@ -3229,6 +3330,7 @@ export function createRebuildWiring(input?: {
       memo.familyDefinitionHash === familyDefinitionHash(memo.familyId) ||
       memo.familyDefinitionHash === familyMemoDefinitionHash(memo.familyId),
     findReusableMemo: async (memoInput) => {
+      assertOpen();
       const candidate = memoInput.candidate as
         Readonly<Record<string, unknown>>;
       const familyId = typeof candidate.familyId === "string"
@@ -3320,6 +3422,7 @@ export function createRebuildWiring(input?: {
     attestFamilyInstanceOnce: probe.attestFamilyInstanceOnce,
     sealDurableVerifiedMemo: probe.sealDurableVerifiedMemo,
     rehydrateVerifiedInstance: (rehydrateInput) => {
+      assertOpen();
       // Rebuild the prepared instance from the memo's canonical data and
       // re-issue the process-local route handles at the memo's proof source
       // (audit §9: handles are never serialized; the central rehydrator
@@ -3390,6 +3493,7 @@ export function createRebuildWiring(input?: {
       return rehydrated;
     },
     aggregateOnceByFamily: (instances) => {
+      assertOpen();
       const byFamily = new Map<string, unknown[]>();
       for (const instance of instances) {
         const familyId = String(
@@ -3413,6 +3517,7 @@ export function createRebuildWiring(input?: {
       ));
     },
     buildGraphSnapshot: (publications, cutoff) => {
+      assertOpen();
       const edges: unknown[] = [];
       for (const publication of publications) {
         const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
@@ -3458,6 +3563,7 @@ export function createRebuildWiring(input?: {
       });
     },
     buildCoverage: (coverageInput) => {
+      assertOpen();
       const rows: ReadyUniverseGeneration["sourceCoverage"][number][] = [];
       for (const receipt of coverageInput.sourceReceipts) {
         if (

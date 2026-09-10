@@ -23,6 +23,7 @@ import {
   fullLogIdentityKey,
   isChainProvenTerminalReason,
   memoAuthorityFingerprint,
+  providerAdapter,
   rebuildFamilyCandidateKey,
   rebuildFamilyInstanceDedupeKey,
   upgradeLegacyVerifiedMemo,
@@ -41,6 +42,13 @@ import { durableVerifiedMemoFingerprint } from
   "../universe-rebuild-checkpoint.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
+import type { CallerRef } from "../venues/adapter-request-program.js";
+import { familyId } from "../venues/adapter-family-identifiers.js";
+import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
+import { executeAdapterWork } from "../adapter-work-intent.js";
+import { RevmSimClient, RevmFatalError, type RevmFatalReason } from "../revm-sim-client.js";
+import { ETHERTOKEN_NATIVE_INTERFACE } from
+  "../venues/protocols/ethertoken-native-redeem-family/shared.js";
 import { WSTETH_INTERFACE } from
   "../venues/protocols/wsteth-family/codec.js";
 import { PSM_INTERFACE } from
@@ -175,7 +183,336 @@ function rpcBlockFixture(number: number, hash: string): object {
   };
 }
 
+async function assertRebuildCallerForwarding(): Promise<void> {
+  const authority = {
+    executor: "0x" + "aa".repeat(20),
+    observedSender: "0x" + "bb".repeat(20),
+    transactionOrigin: "0x" + "cc".repeat(20),
+    verifiedActors: { actor: "0x" + "dd".repeat(20) },
+  };
+  const cases: readonly [CallerRef, string | undefined][] = [
+    [{ kind: "executor" }, authority.executor],
+    [{ kind: "transaction-origin" }, authority.transactionOrigin],
+    [{ kind: "observed-sender" }, authority.observedSender],
+    [{ kind: "verified-actor", evidenceId: "actor" }, authority.verifiedActors.actor],
+    [{ kind: "none" }, undefined],
+  ];
+  for (const [caller, expectedFrom] of cases) {
+    const sent: { method: string; params: unknown[] }[] = [];
+    const provider = providerAdapter({ async send(method: string, params: unknown[]) {
+      sent.push({ method, params }); return "0x1234";
+    } } as unknown as ethers.JsonRpcProvider);
+    const runtime = createStrictCentralAdapterRuntime({
+      provider, generationFence: { assertCurrent() {} }, ...authority,
+    });
+    const result = await executeAdapterWork({ runtime, intent: {
+      stage: "exact-refine", familyId: familyId("test:caller-authority"), source: SOURCE,
+      generation: SOURCE.generation, programInput: {}, program: {
+        requirements: () => ({ transports: ["eth-call"], caller: caller.kind }),
+        buildRequests: () => [{ id: "caller", kind: "eth-call", caller,
+          to: "0x" + "ee".repeat(20), data: "0x", completion: "return-data" }],
+        decode: ({ results }) => results[0],
+      },
+    } });
+    assert.equal(result.status, "resolved", caller.kind);
+    assert.deepEqual(sent, [{ method: "eth_call", params: [
+      { to: "0x" + "ee".repeat(20), data: "0x",
+        ...(expectedFrom === undefined ? {} : { from: expectedFrom }) },
+      "0x" + SOURCE.number.toString(16),
+    ] }], "physical rebuild calls preserve the sealed caller and fixed block");
+  }
+}
+
+async function assertRebuildFatalFencing(outer = false): Promise<void> {
+  // Exercise actual concurrent candidate nomination and the real provider adapter.
+  // No HTTP or daemon is allowed; the second receipt completes only after fatal.
+  const a = "0x" + "11".repeat(20), b = "0x" + "22".repeat(20);
+  const origin = "0x" + "44".repeat(20);
+  let stopped = false, callbacks = 0, heldReceipt = false;
+  let client: RevmSimClient | undefined;
+  let releaseReceipt: (() => void) | undefined;
+  let finishSim: ((error: Error) => void) | undefined;
+  let releaseMemo: (() => void) | undefined, holdMemoRead = false;
+  let memoPending: Promise<unknown> | undefined;
+  const memoAddress = "0x" + "55".repeat(20), proofHash = "0x" + "99".repeat(32);
+  const afterFatal: string[] = [];
+  const seen = (name: string): void => { if (stopped) afterFatal.push(name); };
+  const restorers: (() => void)[] = [];
+  function replace(target: object, key: string, value: unknown): void {
+    const original = Object.getOwnPropertyDescriptor(target, key);
+    Object.defineProperty(target, key, { configurable: true, writable: true, value });
+    restorers.push(() => {
+      if (original) Object.defineProperty(target, key, original);
+      else Reflect.deleteProperty(target, key);
+    });
+  }
+  const oldBin = process.env.SEARCHER_REVM_SIM_BIN;
+  const oldTimeout = process.env.SEARCHER_REVM_TIMEOUT_MS;
+  let pa: Promise<unknown> | undefined, pb: Promise<unknown> | undefined;
+  try {
+    process.env.SEARCHER_REVM_SIM_BIN = process.execPath;
+    process.env.SEARCHER_REVM_TIMEOUT_MS = "1000";
+    const replacements = {
+      async _send() { assert.fail("HTTP forbidden in fatal regression"); },
+      async getNetwork() { seen("getNetwork"); return ethers.Network.from(1); },
+      async getCode(address: string) {
+        seen("getCode");
+        if (holdMemoRead && address.toLowerCase() === memoAddress) {
+          await new Promise<void>(resolve => { releaseMemo = resolve; });
+        }
+        return "0x60006000";
+      },
+      async getBlock(number: number) { seen("getBlock"); return { number, hash: proofHash }; },
+      async getStorage() { seen("getStorage"); return "0x" + "00".repeat(32); },
+      async getLogs() { seen("getLogs"); return []; },
+      async getTransactionReceipt(hash: string) {
+        seen("getTransactionReceipt");
+        if (hash.endsWith("02")) {
+          heldReceipt = true;
+          await new Promise<void>(resolve => { releaseReceipt = resolve; });
+        }
+        return { blockNumber: SOURCE.number, blockHash: SOURCE.hash, logs: [] };
+      },
+      async send(method: string, params: unknown[]) {
+        seen(method);
+        if (method === "debug_traceTransaction") return {
+          to: String(params[0]).endsWith("01") ? a : b, from: origin,
+          input: ETHERTOKEN_NATIVE_INTERFACE.encodeFunctionData("withdraw", [10n ** 15n]),
+        };
+        if (method === "eth_call") {
+          const parsed = ETHERTOKEN_NATIVE_INTERFACE.parseTransaction(params[0] as { data: string });
+          assert(parsed);
+          return ETHERTOKEN_NATIVE_INTERFACE.encodeFunctionResult(parsed.name, [
+            parsed.name === "decimals" ? 18 : parsed.name === "totalSupply" ? 10n ** 24n : 0n,
+          ]);
+        }
+        assert.fail("unexpected fixture method: " + method);
+      },
+    };
+    for (const [key, value] of Object.entries(replacements)) replace(ethers.JsonRpcProvider.prototype, key, value);
+    replace(RevmSimClient.prototype, "spawnDaemon", () => { assert.fail("daemon spawn forbidden"); });
+    replace(RevmSimClient.prototype, "strictSimulate", function (this: RevmSimClient) {
+      client = this;
+      return new Promise<never>((_, reject) => { finishSim = reject; });
+    });
+    replace(RevmSimClient.prototype, "closeAndDrain", async () => {});
+    const options = { rpcUrl: "http://127.0.0.1:1",
+      executionIdentity: { executor: "0x" + "33".repeat(20), transactionOrigin: origin },
+      onSimulationFatal() { stopped = true; callbacks++; },
+    };
+    const outerWiring = outer ? createRebuildWiring(options) : undefined;
+    const wiring = outerWiring ?? createProbeWiring(options);
+    const candidate = (address: string, suffix: string) => ({
+      familyId: "protocol:ethertoken-native-redeem", adapter: "ethertoken-native-redeem",
+      address, txHash: "0x" + "00".repeat(31) + suffix,
+    });
+    const mc = candidate(memoAddress, "03"), memoKey = rebuildFamilyCandidateKey(mc);
+    const memo = makeMemo(mc, {
+      familyCandidateKey: memoKey,
+      validity: { policy: "immutable-code", authorityFingerprint: memoAuthorityFingerprint({
+        familyId: mc.familyId, address: memoAddress, code: "0x60006000",
+        implementationWord: "0x" + "00".repeat(32),
+      }), proofSource: { number: SOURCE.number - 1, hash: proofHash } },
+    });
+    const memoInput = { candidate: mc, cutoff: SOURCE,
+      checkpoint: { verifiedMemos: { [memoKey]: memo } } as never };
+    const currentMemo = makeMemo(mc, { familyCandidateKey: memoKey });
+    const cachedInput = { ...memoInput, checkpoint: { verifiedMemos: { [memoKey]: currentMemo } } as never };
+    if (outerWiring) {
+      assert.equal(await outerWiring.findReusableMemo!(memoInput), memo, "prime shared proof-hash cache");
+      assert.equal(await outerWiring.findReusableMemo!(cachedInput), currentMemo, "same-cutoff memo is valid before fatal");
+      holdMemoRead = true;
+      memoPending = outerWiring.findReusableMemo!(memoInput).catch(error => error);
+      for (let i = 0; i < 100 && !releaseMemo; i++) await new Promise<void>(resolve => setImmediate(resolve));
+      assert(releaseMemo, "outer memo must reach held authority read");
+    }
+    pa = wiring.attestFamilyInstanceOnce({ candidate: candidate(a, "01"), cutoff: SOURCE }).catch(error => error);
+    pb = wiring.attestFamilyInstanceOnce({ candidate: candidate(b, "02"), cutoff: SOURCE }).catch(error => error);
+    for (let i = 0; i < 100 && (!client || !heldReceipt); i++) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    assert(client && heldReceipt, "fixture must reach concurrent simulation and held receipt");
+    const reason: RevmFatalReason = { kind: "rpc-throttle", category: "http429", httpStatus: 429 };
+    const notify = Reflect.get(client, "onFatal") as (reason: RevmFatalReason) => void;
+    notify(reason);
+    assert.equal(callbacks, 1);
+    releaseReceipt!(); releaseMemo?.(); finishSim!(new RevmFatalError(reason));
+    const results = await Promise.all([pa, pb]);
+    assert(results.every(result => result instanceof RevmFatalError));
+    assert.deepEqual(afterFatal, [], "a held receipt cannot dispatch trace after daemon 429");
+    await assert.rejects(wiring.attestFamilyInstanceOnce({ candidate: candidate(a, "03"), cutoff: SOURCE }), RevmFatalError);
+    await assert.rejects(wiring.assertCanonicalHead!(SOURCE), RevmFatalError);
+    if (outerWiring) {
+      assert(await memoPending instanceof RevmFatalError, "in-flight authority read cannot return a memo after fatal");
+      await assert.rejects(outerWiring.findReusableMemo!(memoInput), RevmFatalError);
+      await assert.rejects(outerWiring.findReusableMemo!(cachedInput), RevmFatalError);
+      await assert.rejects(outerWiring.freezeCanonicalHead(), RevmFatalError);
+      await assert.rejects(outerWiring.scanSwapWindow({ fromBlock: SOURCE.number, cutoff: SOURCE }), RevmFatalError);
+      assert.throws(() => outerWiring.rehydrateVerifiedInstance({ memo: currentMemo, cutoff: SOURCE }), RevmFatalError);
+    }
+    assert.deepEqual(afterFatal, [], "new candidates and canonical checks remain fenced");
+  } finally {
+    releaseReceipt?.(); releaseMemo?.(); finishSim?.(new Error("fixture cleanup"));
+    await Promise.allSettled([pa, pb, memoPending]);
+    for (const restore of restorers.reverse()) restore();
+    if (oldBin === undefined) delete process.env.SEARCHER_REVM_SIM_BIN;
+    else process.env.SEARCHER_REVM_SIM_BIN = oldBin;
+    if (oldTimeout === undefined) delete process.env.SEARCHER_REVM_TIMEOUT_MS;
+    else process.env.SEARCHER_REVM_TIMEOUT_MS = oldTimeout;
+  }
+}
+
+async function assertRebuildQueuedPhysicalFencing(): Promise<void> {
+  // Keep Ethers' real methods, network detection and delayed batch queues.
+  // Only its physical transport is stubbed; this fixture never opens a socket.
+  const address = "0x" + "11".repeat(20), origin = "0x" + "44".repeat(20);
+  const txHash = "0x" + "00".repeat(31) + "01";
+  const providers = new Set<ethers.JsonRpcProvider>();
+  const physical: { provider: ethers.JsonRpcProvider; method: string; afterFatal: boolean }[] = [];
+  const queued: Promise<unknown>[] = [];
+  let stopped = false, callbacks = 0, spawnAttempts = 0;
+  let client: RevmSimClient | undefined, finishSim: ((error: Error) => void) | undefined;
+  let attestation: Promise<unknown> | undefined;
+  const restorers: (() => void)[] = [];
+  function replace(target: object, key: string, value: unknown): void {
+    const original = Object.getOwnPropertyDescriptor(target, key);
+    Object.defineProperty(target, key, { configurable: true, writable: true, value });
+    restorers.push(() => {
+      if (original) Object.defineProperty(target, key, original);
+      else Reflect.deleteProperty(target, key);
+    });
+  }
+  const oldBin = process.env.SEARCHER_REVM_SIM_BIN;
+  const oldTimeout = process.env.SEARCHER_REVM_TIMEOUT_MS;
+  try {
+    process.env.SEARCHER_REVM_SIM_BIN = process.execPath;
+    process.env.SEARCHER_REVM_TIMEOUT_MS = "1000";
+    replace(ethers.JsonRpcProvider.prototype, "_send", async function (
+      this: ethers.JsonRpcProvider,
+      payload: ethers.JsonRpcPayload | ethers.JsonRpcPayload[],
+    ) {
+      providers.add(this);
+      return (Array.isArray(payload) ? payload : [payload]).map(request => {
+        physical.push({ provider: this, method: request.method, afterFatal: stopped });
+        const params = request.params as unknown[];
+        let result: unknown;
+        switch (request.method) {
+          case "eth_chainId": result = "0x1"; break;
+          case "eth_blockNumber": result = "0x" + SOURCE.number.toString(16); break;
+          case "eth_getBlockByNumber": result = rpcBlockFixture(SOURCE.number, SOURCE.hash); break;
+          case "eth_getCode": result = "0x60006000"; break;
+          case "eth_getStorageAt": result = "0x" + "00".repeat(32); break;
+          case "eth_getTransactionReceipt": result = {
+            transactionHash: txHash, transactionIndex: "0x0", blockHash: SOURCE.hash,
+            blockNumber: "0x" + SOURCE.number.toString(16), from: origin, to: address,
+            contractAddress: null, cumulativeGasUsed: "0x1", gasUsed: "0x1",
+            effectiveGasPrice: "0x1", logs: [], logsBloom: "0x" + "00".repeat(256),
+            status: "0x1", type: "0x2",
+          }; break;
+          case "debug_traceTransaction": result = {
+            to: address, from: origin,
+            input: ETHERTOKEN_NATIVE_INTERFACE.encodeFunctionData("withdraw", [10n ** 15n]),
+          }; break;
+          case "eth_call": {
+            const transaction = params[0] as { data: string };
+            const parsed = transaction.data === "0x" ? null
+              : ETHERTOKEN_NATIVE_INTERFACE.parseTransaction(transaction);
+            result = parsed === null ? "0x"
+              : ETHERTOKEN_NATIVE_INTERFACE.encodeFunctionResult(parsed.name, [
+                parsed.name === "decimals" ? 18 : parsed.name === "totalSupply" ? 10n ** 24n : 0n,
+              ]);
+            break;
+          }
+          default: assert.fail("unexpected physical fixture method: " + request.method);
+        }
+        return { jsonrpc: "2.0", id: request.id, result };
+      });
+    });
+    replace(RevmSimClient.prototype, "spawnDaemon", () => {
+      spawnAttempts++; assert.fail("daemon spawn forbidden");
+    });
+    replace(RevmSimClient.prototype, "strictSimulate", function (this: RevmSimClient) {
+      client = this;
+      return new Promise<never>((_, reject) => { finishSim = reject; });
+    });
+    replace(RevmSimClient.prototype, "closeAndDrain", async () => {});
+    const wiring = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1",
+      executionIdentity: { executor: "0x" + "33".repeat(20), transactionOrigin: origin },
+      onSimulationFatal() { stopped = true; callbacks++; },
+    });
+    await wiring.freezeCanonicalHead(SOURCE.number);
+    assert.equal(providers.size, 1, "outer provider is reached through real canonical reads");
+    const outer = [...providers][0];
+    const candidate = { familyId: "protocol:ethertoken-native-redeem",
+      adapter: "ethertoken-native-redeem", address, txHash };
+    attestation = wiring.attestFamilyInstanceOnce({ candidate, cutoff: SOURCE }).catch(error => error);
+    for (let i = 0; i < 400 && !client; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    assert(client, "real candidate lifecycle must reach the held sibling simulation");
+    assert.equal(providers.size, 2, "both outer and probe provider transports must be exercised");
+    const probe = [...providers].find(provider => provider !== outer)!;
+    const batches = new Map<ethers.JsonRpcProvider, string[]>();
+    for (const provider of [outer, probe]) {
+      assert(physical.some(call => call.provider === provider && call.method === "eth_chainId"),
+        "each real provider must have completed initial network detection");
+      const methods: string[] = [];
+      batches.set(provider, methods);
+      await provider.on("debug", event => {
+        if (event.action !== "sendRpcPayload") return;
+        const payloads = Array.isArray(event.payload) ? event.payload : [event.payload];
+        methods.push(...payloads.map((payload: ethers.JsonRpcPayload) => payload.method));
+      });
+    }
+    const beforeQueue = physical.length;
+    for (const provider of [outer, probe]) {
+      queued.push(provider.getNetwork().catch(error => error));
+      queued.push(provider.send("eth_call", [{ to: address, from: origin, data: "0x" },
+        "0x" + SOURCE.number.toString(16)]).catch(error => error));
+    }
+    // Let the real async send/getNetwork paths enter their queues, but not the
+    // batchStallTime timer. The later debug payload proves both were enqueued.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    assert.equal(physical.length, beforeQueue, "both providers are queued, not yet physically sent");
+    const reason: RevmFatalReason = { kind: "rpc-throttle", category: "http429", httpStatus: 429 };
+    const notify = Reflect.get(client, "onFatal") as (reason: RevmFatalReason) => void;
+    notify(reason);
+    assert.equal(callbacks, 1, "sibling simulation fatal reaches the shared owner synchronously");
+    finishSim!(new RevmFatalError(reason));
+    const results = await Promise.all(queued);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    for (const provider of [outer, probe]) {
+      assert(batches.get(provider)!.includes("eth_chainId"), "real network detection was queued");
+      assert(batches.get(provider)!.includes("eth_call"), "real call was queued");
+    }
+    assert.deepEqual(physical.filter(call => call.afterFatal).map(call => ({
+      provider: call.provider === outer ? "outer" : "probe", method: call.method,
+    })), [], "neither provider may physically flush calls or chain detection after fatal");
+    assert(results.every(result => result instanceof RevmFatalError), "all queued reads reject with fatal");
+    assert(await attestation instanceof RevmFatalError);
+    for (const provider of [outer, probe]) {
+      await assert.rejects(provider.send("eth_call", [{ to: address, data: "0x" }, "latest"]), RevmFatalError);
+      await assert.rejects(provider.getCode(address, SOURCE.number), RevmFatalError);
+    }
+    await assert.rejects(wiring.freezeCanonicalHead(SOURCE.number), RevmFatalError);
+    await assert.rejects(wiring.attestFamilyInstanceOnce({ candidate, cutoff: SOURCE }), RevmFatalError);
+    assert.equal(physical.length, beforeQueue, "later reads cannot create physical dispatch");
+    assert.equal(spawnAttempts, 0);
+  } finally {
+    finishSim?.(new Error("fixture cleanup"));
+    await Promise.allSettled([...queued, attestation]);
+    for (const provider of providers) provider.destroy();
+    for (const restore of restorers.reverse()) restore();
+    if (oldBin === undefined) delete process.env.SEARCHER_REVM_SIM_BIN;
+    else process.env.SEARCHER_REVM_SIM_BIN = oldBin;
+    if (oldTimeout === undefined) delete process.env.SEARCHER_REVM_TIMEOUT_MS;
+    else process.env.SEARCHER_REVM_TIMEOUT_MS = oldTimeout;
+  }
+}
+
 async function main(): Promise<void> {
+  await assertRebuildQueuedPhysicalFencing();
+  await assertRebuildCallerForwarding();
+  await assertRebuildFatalFencing();
+  await assertRebuildFatalFencing(true);
   // Full log identity: two pools in one transaction never collapse.
   const a = log({ address: "0x" + "11".repeat(20), logIndex: 0 });
   const b = log({ address: "0x" + "44".repeat(20), logIndex: 1 });
