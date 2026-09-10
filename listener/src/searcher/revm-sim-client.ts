@@ -83,6 +83,7 @@ export interface SimulatePreparedRequest {
 }
 
 export interface DaemonResponse {
+  sourceAttestation?: RevmSourceAttestation;
   ok: boolean;
   error?: string;
   success?: boolean;
@@ -124,6 +125,7 @@ export interface DaemonResponse {
 
 export interface StrictSimulateRequest {
   blockNumber: number;
+  sourcePin?: RevmSourcePin;
   rpcUrl?: string;
   from: string;
   to: string;
@@ -173,16 +175,46 @@ export interface RevmRequestControl {
   deadlineAtMs?: number;
 }
 
+/** Node-attested selection, not header-RLP or account/storage proof verification. */
+export interface RevmSourcePin {
+  chainId: number;
+  blockHash: string;
+  stateRoot?: string;
+}
+
+export interface RevmSourceAttestation extends Readonly<RevmSourcePin> {
+  readonly kind: "node-attested";
+  readonly blockNumber: number;
+  readonly stateRoot: string;
+  readonly parentHash: string;
+}
+
+const hash32 = (value: unknown): value is string => typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value);
+
+function sourcePin(payload: Record<string, unknown>): Readonly<RevmSourcePin> | undefined {
+  if (payload.sourcePin === undefined) return undefined;
+  const pin = payload.sourcePin as RevmSourcePin;
+  // The existing VM configuration is mainnet; never attest another chain under it.
+  if (payload.op !== "strictSimulate" || !pin || typeof pin !== "object"
+    || Object.keys(pin).some(k => !["chainId", "blockHash", "stateRoot"].includes(k))
+    || pin.chainId !== 1 || !hash32(pin.blockHash)
+    || (pin.stateRoot !== undefined && !hash32(pin.stateRoot))
+    || !Number.isSafeInteger(payload.blockNumber) || (payload.blockNumber as number) < 0
+    || typeof payload.rpcUrl !== "string" || !payload.rpcUrl.trim()) throw new Error("invalid revm-sim source pin");
+  return Object.freeze({ chainId: pin.chainId, blockHash: pin.blockHash.toLowerCase(),
+    ...(pin.stateRoot === undefined ? {} : { stateRoot: pin.stateRoot.toLowerCase() }) });
+}
+
 export type RevmFatalReason = Readonly<{
   kind: "rpc-throttle";
   category: "http429" | "rpc-limit-code" | "rpc-rate-limit" | "rpc-quota";
   httpStatus?: 429;
   rpcCode?: number;
-}>;
+}> | Readonly<{ kind: "source-fault" | "protocol-fault" }>;
 
 export class RevmFatalError extends Error {
   constructor(readonly fatal: RevmFatalReason) {
-    super("revm-sim fatal rpc-throttle");
+    super(`revm-sim fatal ${fatal.kind}`);
     this.name = "RevmFatalError";
   }
 }
@@ -194,6 +226,8 @@ interface Pending {
   reject: (err: Error) => void;
   cleanup: () => void;
   expired: () => Error | undefined;
+  pin?: Readonly<RevmSourcePin>;
+  blockNumber?: number;
 }
 
 /**
@@ -269,12 +303,14 @@ export class RevmSimClient {
     });
     proc.stdout.setEncoding("utf8");
     proc.stdout.on("data", (chunk: string) => this.onData(chunk));
-    proc.on("error", () => this.fail(new Error("revm-sim daemon process failed")));
-    proc.stdin.on("error", () => this.fail(new Error("revm-sim stdin failed")));
-    proc.stdout.on("error", () => this.fail(new Error("revm-sim stdout failed")));
-    proc.stdout.on("end", () => this.fail(new Error("revm-sim stdout ended")));
-    proc.on("exit", () => this.fail(new Error("revm-sim daemon exited")));
-    proc.on("close", () => this.fail(new Error("revm-sim daemon closed")));
+    const interrupted = (message: string) => this.fail(this.buffer.trim()
+      ? new RevmFatalError(Object.freeze({ kind: "protocol-fault" })) : new Error(message));
+    proc.on("error", () => interrupted("revm-sim daemon process failed"));
+    proc.stdin.on("error", () => interrupted("revm-sim stdin failed"));
+    proc.stdout.on("error", () => interrupted("revm-sim stdout failed"));
+    proc.stdout.on("end", () => interrupted("revm-sim stdout ended"));
+    proc.on("exit", () => interrupted("revm-sim daemon exited"));
+    proc.on("close", () => interrupted("revm-sim daemon closed"));
     return proc;
   }
 
@@ -294,6 +330,10 @@ export class RevmSimClient {
           || typeof resp.ok !== "boolean") throw new Error("identity");
         if (resp.fatal !== undefined) {
           const fatal = resp.fatal;
+          if (fatal?.kind === "source-fault" || fatal?.kind === "protocol-fault") {
+            this.fail(new RevmFatalError(Object.freeze({ kind: fatal.kind })));
+            return;
+          }
           if (!fatal || fatal.kind !== "rpc-throttle"
             || !["http429", "rpc-limit-code", "rpc-rate-limit", "rpc-quota"].includes(fatal.category)
             || (fatal.category === "http429" ? fatal.httpStatus !== 429 || fatal.rpcCode !== undefined : fatal.httpStatus !== undefined)
@@ -305,8 +345,22 @@ export class RevmSimClient {
           this.fail(new RevmFatalError(reason));
           return;
         }
+        const att = resp.sourceAttestation;
+        if (pending.pin && resp.ok) {
+          if (!att || att.kind !== "node-attested" || att.chainId !== pending.pin.chainId
+            || att.blockNumber !== pending.blockNumber || !hash32(att.blockHash)
+            || att.blockHash.toLowerCase() !== pending.pin.blockHash
+            || !hash32(att.stateRoot) || !hash32(att.parentHash)
+            || (pending.pin.stateRoot !== undefined && att.stateRoot.toLowerCase() !== pending.pin.stateRoot)) {
+            this.fail(new RevmFatalError(Object.freeze({ kind: "source-fault" })));
+            return;
+          }
+          resp.sourceAttestation = Object.freeze({ kind: "node-attested", chainId: att.chainId,
+            blockNumber: att.blockNumber, blockHash: att.blockHash.toLowerCase(),
+            stateRoot: att.stateRoot.toLowerCase(), parentHash: att.parentHash.toLowerCase() });
+        } else if (att !== undefined) throw new Error("unexpected attestation");
       } catch {
-        this.fail(new Error("revm-sim response protocol violation"));
+        this.fail(new RevmFatalError(Object.freeze({ kind: "protocol-fault" })));
         return;
       }
       const expired = pending.expired();
@@ -332,7 +386,8 @@ export class RevmSimClient {
   private fail(err: Error): void {
     if (this.terminal) return;
     this.terminal = err;
-    // Surface physical throttle before promises can become domain failures.
+    // Notify the owner before source/protocol/physical faults become domain
+    // failures. Caller cancellation/deadline never enters this fatal channel.
     if (err instanceof RevmFatalError) {
       try { this.onFatal?.(err.fatal); } catch { /* Observers cannot undo the latch. */ }
     }
@@ -365,6 +420,7 @@ export class RevmSimClient {
 
   private request(payload: Record<string, unknown>, control: RevmRequestControl = {}): Promise<DaemonResponse> {
     if (this.terminal) return Promise.reject(this.terminal);
+    const pin = sourcePin(payload);
     if (control.deadlineAtMs !== undefined && !Number.isFinite(control.deadlineAtMs)) {
       return Promise.reject(new Error("invalid revm-sim deadline"));
     }
@@ -375,7 +431,7 @@ export class RevmSimClient {
     const early = expired();
     if (early) return Promise.reject(early);
     const id = (++this.nextId).toString();
-    const line = JSON.stringify({ ...payload, epoch: this.epoch, requestId: id }) + "\n";
+    const line = JSON.stringify({ ...payload, ...(pin ? { sourcePin: pin } : {}), epoch: this.epoch, requestId: id }) + "\n";
     return new Promise<DaemonResponse>((resolveP, rejectP) => {
       let timer: NodeJS.Timeout;
       const cancel = () => {
@@ -388,6 +444,7 @@ export class RevmSimClient {
       };
       const arm = () => { timer = setTimeout(cancel, Math.min(2_147_483_647, Math.max(1, deadline - Date.now()))); };
       const pending: Pending = { id, line, resolve: resolveP, reject: rejectP, expired,
+        pin, blockNumber: payload.blockNumber as number | undefined,
         cleanup: () => { clearTimeout(timer); signal?.removeEventListener("abort", cancel); } };
       this.queue.push(pending);
       signal?.addEventListener("abort", cancel, { once: true });

@@ -153,6 +153,7 @@ impl DBErrorMarker for RpcError {}
     rename_all_fields = "camelCase"
 )]
 enum FatalReason {
+    SourceFault,
     RpcThrottle {
         category: ThrottleCategory,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -173,7 +174,10 @@ enum ThrottleCategory {
 
 impl fmt::Display for FatalReason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("revm-sim fatal rpc-throttle")
+        f.write_str(match self {
+            Self::SourceFault => "revm-sim fatal source-fault",
+            Self::RpcThrottle { .. } => "revm-sim fatal rpc-throttle",
+        })
     }
 }
 impl std::error::Error for FatalReason {}
@@ -189,6 +193,7 @@ struct RpcClient {
     /// lever is keeping this number minimal while preserving batch structure.
     round_trips: std::cell::Cell<u64>,
     fatal: FatalLatch,
+    pinned: bool,
 }
 
 impl RpcClient {
@@ -198,6 +203,7 @@ impl RpcClient {
             client,
             round_trips: std::cell::Cell::new(0),
             fatal,
+            pinned: false,
         })
     }
 
@@ -216,6 +222,12 @@ impl RpcClient {
         if self.fatal.get().is_none() {
             self.fatal.set(Some(reason));
         }
+    }
+
+    fn checked_source<T>(&self, result: Result<T>) -> Result<T> {
+        if self.pinned && result.is_err() { self.latch(FatalReason::SourceFault); }
+        self.check_fatal()?;
+        result
     }
 
     fn inspect_rpc_error(&self, response: &Value) {
@@ -248,15 +260,22 @@ impl RpcClient {
             .split(|c: char| !c.is_ascii_alphanumeric())
             .filter(|word| !word.is_empty())
             .collect();
+        let explicit_revert = words.windows(2).any(|pair| pair == ["execution", "reverted"])
+            || words.first().is_some_and(|word| *word == "revert" || *word == "reverted");
+        // Source selection failures are fatal even in optional trace responses,
+        // including whole-batch and unknown-ID items scanned by send_json.
+        // Diagnostic metadata (including objects) is not revert output. Typed
+        // reverts, direct hex data (including empty 0x) and explicit revert
+        // messages remain domain outcomes, not evidence about the source.
+        if self.pinned && !hex_data && !explicit_revert
+            && matches!(code, Some(-32000 | -32001))
+            && source_selection_diagnostic(message.trim()) {
+            self.latch(FatalReason::SourceFault);
+            return;
+        }
         let category = if matches!(code, Some(429 | -32005)) {
             ThrottleCategory::RpcLimitCode
-        } else if words
-            .windows(2)
-            .any(|pair| pair == ["execution", "reverted"])
-            || words
-                .first()
-                .is_some_and(|word| *word == "revert" || *word == "reverted")
-        {
+        } else if explicit_revert {
             return;
         } else if words
             .windows(3)
@@ -329,6 +348,7 @@ impl RpcClient {
     }
 
     fn call(&self, method: &str, params: Value) -> Result<Value> {
+        let result = (|| {
         let body = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -336,22 +356,30 @@ impl RpcClient {
             "params": params,
         });
         let response = self.send_json(&body)?;
+        if self.pinned && (response.get("id") != Some(&json!(1)) || response.get("jsonrpc") != Some(&json!("2.0"))) {
+            bail!("rpc response identity mismatch");
+        }
         if let Some(error) = response.get("error") {
             bail!(
                 "rpc {method} error code {:?}",
                 error.get("code").and_then(Value::as_i64)
             );
         }
-        response
+        let value = response
             .get("result")
             .cloned()
-            .ok_or_else(|| anyhow!("rpc {method} response missing result"))
+            .ok_or_else(|| anyhow!("rpc {method} response missing result"))?;
+        if self.pinned { validate_state_value(method, &value)?; }
+        Ok(value)
+        })();
+        if method == "debug_traceCall" { result } else { self.checked_source(result) }
     }
 
     /// Many JSON-RPC calls in one HTTP round trip. Results are returned in the
     /// same order as `calls`; a per-call error becomes an `Err` entry while a
     /// transport failure fails the whole batch.
     fn batch_call(&self, calls: &[(&str, Value)]) -> Result<Vec<Result<Value>>> {
+        let result = (|| {
         self.check_fatal()?;
         if calls.is_empty() {
             return Ok(Vec::new());
@@ -370,10 +398,13 @@ impl RpcClient {
         let mut by_id: HashMap<u64, &Value> = HashMap::new();
         for item in items {
             if let Some(id) = item.get("id").and_then(Value::as_u64) {
+                if self.pinned && (id >= calls.len() as u64 || by_id.contains_key(&id)
+                    || item.get("jsonrpc") != Some(&json!("2.0"))) { bail!("rpc batch identity mismatch"); }
                 by_id.insert(id, item);
+            } else if self.pinned { bail!("rpc batch identity missing");
             }
         }
-        Ok((0..calls.len() as u64)
+        let results: Vec<Result<Value>> = (0..calls.len() as u64)
             .map(|id| match by_id.get(&id) {
                 None => Err(anyhow!("rpc batch: missing response for id {id}")),
                 Some(item) => {
@@ -383,14 +414,210 @@ impl RpcClient {
                             error.get("code").and_then(Value::as_i64)
                         ))
                     } else {
-                        item.get("result")
+                        let value = item.get("result")
                             .cloned()
-                            .ok_or_else(|| anyhow!("rpc batch: missing result for id {id}"))
+                            .ok_or_else(|| anyhow!("rpc batch: missing result for id {id}"))?;
+                        if self.pinned { validate_state_value(calls[id as usize].0, &value)?; }
+                        Ok(value)
                     }
                 }
             })
-            .collect())
+            .collect();
+        if self.pinned && calls.iter().any(|(m, _)| *m != "debug_traceCall") && results.iter().any(Result::is_err) {
+            bail!("pinned state batch incomplete");
+        }
+        Ok(results)
+        })();
+        if calls.iter().all(|(m, _)| *m == "debug_traceCall") { result } else { self.checked_source(result) }
     }
+}
+
+fn source_selection_diagnostic(message: &str) -> bool {
+    ["hash is not currently canonical", "header not found", "block not found",
+        "unknown block", "state unavailable", "state is not available", "historical state unavailable"]
+        .iter().any(|diagnostic| {
+            message == *diagnostic || message.strip_prefix(diagnostic)
+                .and_then(|suffix| suffix.strip_prefix(':'))
+                .and_then(|suffix| suffix.trim().strip_prefix("0x"))
+                .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|c| c.is_ascii_hexdigit()))
+        })
+}
+
+fn strict_hex(value: &Value, bytes: Option<usize>) -> Result<&str> {
+    let s = value.as_str().ok_or_else(|| anyhow!("invalid pinned hex"))?;
+    let digits = s.strip_prefix("0x").ok_or_else(|| anyhow!("invalid pinned hex"))?;
+    if !digits.bytes().all(|c| c.is_ascii_hexdigit()) || digits.len() % 2 != 0
+        || bytes.is_some_and(|n| digits.len() != n * 2) { bail!("invalid pinned hex width"); }
+    Ok(s)
+}
+
+fn strict_quantity(value: &Value, max_digits: usize) -> Result<&str> {
+    let s = value.as_str().ok_or_else(|| anyhow!("invalid pinned quantity"))?;
+    let d = s.strip_prefix("0x").ok_or_else(|| anyhow!("invalid pinned quantity"))?;
+    if d.is_empty() || d.len() > max_digits || (d.len() > 1 && d.starts_with('0'))
+        || !d.bytes().all(|c| c.is_ascii_hexdigit()) { bail!("invalid pinned quantity"); }
+    Ok(s)
+}
+
+fn validate_state_value(method: &str, value: &Value) -> Result<()> {
+    match method {
+        "eth_getBalance" => { strict_quantity(value, 64)?; }
+        "eth_getTransactionCount" | "eth_chainId" => { strict_quantity(value, 16)?; }
+        "eth_getStorageAt" => { strict_hex(value, Some(32))?; }
+        "eth_getCode" => {
+            let bytes = parse_hex_bytes(strict_hex(value, None)?)?;
+            Bytecode::new_raw_checked(Bytes::from(bytes)).map_err(|_| anyhow!("invalid pinned bytecode"))?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SourcePin {
+    chain_id: u64,
+    block_hash: String,
+    #[serde(default)]
+    state_root: Option<String>,
+}
+
+fn deserialize_source_pin<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<SourcePin>, D::Error> {
+    SourcePin::deserialize(d).map(Some) // Explicit null is not absence.
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SourceAttestation {
+    kind: &'static str,
+    chain_id: u64,
+    block_number: u64,
+    block_hash: B256,
+    state_root: B256,
+    parent_hash: B256,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct VerifiedSource {
+    attestation: SourceAttestation,
+    env: BlockEnv,
+    profile: MainnetProfile,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MainnetProfile {
+    spec: SpecId,
+    blob_fraction: u64,
+    max_block_blobs: u64,
+}
+
+fn mainnet_profile(timestamp: u64) -> Result<MainnetProfile> {
+    // Same reviewed mainnet schedule as shared/state/ethereum-block-activity.ts,
+    // geth 48a7c17281a617ddc0fac7bda277b3641e4c1fc0 params/config.go.
+    // BPO constants also match locally installed alloy-eips eip7892. REVM has
+    // Osaka but intentionally leaves network BPO scheduling to its caller.
+    // No future fork inference: this profile needs review on consensus upgrades.
+    if timestamp < 1_746_612_311 { bail!("unsupported pre-Prague pinned profile"); }
+    let spec = if timestamp >= 1_764_798_551 { SpecId::OSAKA } else { SpecId::PRAGUE };
+    let (blob_fraction, max_block_blobs) = if timestamp >= 1_767_747_671 {
+        (11_684_671, 21)
+    } else if timestamp >= 1_765_290_071 {
+        (8_346_193, 15)
+    } else { (5_007_716, 9) };
+    Ok(MainnetProfile { spec, blob_fraction, max_block_blobs })
+}
+
+// Same integer exponential as REVM's BlobExcessGasAndPrice::new, with checked
+// arithmetic: malformed remote quantities must reject, not overflow/panic or
+// wrap in a release binary. No custom header hashing or proof verification.
+fn pinned_blob_price(excess: u64, fraction: u64) -> Result<u128> {
+    let denominator = u128::from(fraction);
+    let mut term = denominator;
+    let mut output = 0u128;
+    let mut i = 1u128;
+    while term > 0 {
+        output = output.checked_add(term).ok_or_else(|| anyhow!("blob fee overflow"))?;
+        term = term.checked_mul(u128::from(excess)).ok_or_else(|| anyhow!("blob fee overflow"))?
+            / denominator.checked_mul(i).ok_or_else(|| anyhow!("blob fee overflow"))?;
+        i += 1;
+    }
+    Ok(output / denominator)
+}
+
+fn header_identity(header: &Value, number: u64, hash: B256) -> Result<(B256, B256)> {
+    if parse_u64(strict_quantity(&header["number"], 16)?)? != number
+        || parse_b256(strict_hex(&header["hash"], Some(32))?)? != hash {
+        bail!("pinned header identity mismatch");
+    }
+    Ok((parse_b256(strict_hex(&header["parentHash"], Some(32))?)?,
+        parse_b256(strict_hex(&header["stateRoot"], Some(32))?)?))
+}
+
+fn verified_header(header: &Value, number: u64, pin: &SourcePin) -> Result<VerifiedSource> {
+    let hash = parse_b256(strict_hex(&json!(pin.block_hash), Some(32))?)?;
+    let (parent_hash, state_root) = header_identity(header, number, hash)?;
+    if let Some(root) = &pin.state_root {
+        if parse_b256(strict_hex(&json!(root), Some(32))?)? != state_root { bail!("pinned state root mismatch"); }
+    }
+    let quantity = |key: &str| parse_u64(strict_quantity(&header[key], 16)?);
+    let mut env = BlockEnv::default();
+    env.number = U256::from(number);
+    env.timestamp = U256::from(quantity("timestamp")?);
+    let profile = mainnet_profile(quantity("timestamp")?)?;
+    env.gas_limit = quantity("gasLimit")?;
+    if env.gas_limit == 0 || quantity("gasUsed")? > env.gas_limit { bail!("invalid pinned gas limits"); }
+    env.basefee = quantity("baseFeePerGas")?;
+    env.beneficiary = parse_address(strict_hex(&header["miner"], Some(20))?)?;
+    env.prevrandao = Some(parse_b256(strict_hex(&header["mixHash"], Some(32))?)?);
+    env.difficulty = parse_u256(strict_quantity(&header["difficulty"], 64)?)?;
+    if !env.difficulty.is_zero() || strict_hex(&header["nonce"], Some(8))? != "0x0000000000000000"
+        || strict_hex(&header["sha3Uncles"], Some(32))?.to_ascii_lowercase()
+            != "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
+        || header["uncles"].as_array().is_none_or(|u| !u.is_empty()) {
+        bail!("invalid post-merge pinned header");
+    }
+    for key in ["transactionsRoot", "receiptsRoot", "withdrawalsRoot", "parentBeaconBlockRoot", "requestsHash"] {
+        strict_hex(&header[key], Some(32))?;
+    }
+    strict_hex(&header["logsBloom"], Some(256))?;
+    if strict_hex(&header["extraData"], None)?.len() > 66 { bail!("invalid pinned extraData"); }
+    let blob_used = quantity("blobGasUsed")?;
+    let excess = quantity("excessBlobGas")?;
+    if blob_used % 131_072 != 0 || blob_used > profile.max_block_blobs * 131_072 {
+        bail!("invalid pinned blob gas");
+    }
+    env.blob_excess_gas_and_price = Some(revm::context_interface::block::BlobExcessGasAndPrice {
+        excess_blob_gas: excess, blob_gasprice: pinned_blob_price(excess, profile.blob_fraction)?,
+    });
+    Ok(VerifiedSource { env, profile, attestation: SourceAttestation { kind: "node-attested",
+        chain_id: pin.chain_id, block_number: number, block_hash: hash, state_root, parent_hash } })
+}
+
+fn verify_source(rpc: &RpcClient, number: u64, pin: &SourcePin) -> Result<VerifiedSource> {
+    let result = (|| {
+        // Context::mainnet below is chain 1. Do not mislabel another chain.
+        if pin.chain_id != 1 || parse_u64(strict_quantity(&rpc.call("eth_chainId", json!([]))?, 16)?)? != pin.chain_id {
+            bail!("pinned chain mismatch");
+        }
+        let hash = strict_hex(&json!(pin.block_hash), Some(32))?.to_owned();
+        let header = rpc.call("eth_getBlockByHash", json!([hash, false]))?;
+        let source = verified_header(&header, number, pin)?;
+        verify_canonical(rpc, &source)?;
+        Ok(source)
+    })();
+    rpc.checked_source(result)
+}
+
+fn verify_canonical(rpc: &RpcClient, source: &VerifiedSource) -> Result<()> {
+    let result = (|| {
+        let att = &source.attestation;
+        let header = rpc.call("eth_getBlockByNumber", json!([hex_quantity_u64(att.block_number), false]))?;
+        let pin = SourcePin { chain_id: att.chain_id, block_hash: format!("{:#x}", att.block_hash),
+            state_root: Some(format!("{:#x}", att.state_root)) };
+        if verified_header(&header, att.block_number, &pin)? != *source { bail!("pinned canonical header changed"); }
+        Ok(())
+    })();
+    rpc.checked_source(result)
 }
 
 fn build_http_client() -> Result<Client> {
@@ -403,9 +630,9 @@ fn build_http_client() -> Result<Client> {
         .context("failed to build blocking rpc client")
 }
 
-/// Daemon-lifetime cache for block-stable state. Contract bytecode is immutable
-/// by hash and effectively immutable by address for our use; persisting it
-/// across blocks means a new block only re-fetches balances/nonces/storage.
+/// Legacy unpinned calls retain their daemon-lifetime bytecode cache. Address
+/// associations are NOT hash-stable: each pinned session owns a separate instance
+/// and drops it on any endpoint/source change, along with state and slot hints.
 #[derive(Debug, Default)]
 struct PersistentCache {
     codes_by_addr: HashMap<Address, Bytecode>,
@@ -415,7 +642,8 @@ struct PersistentCache {
 #[derive(Debug)]
 struct RemoteRevmDb {
     rpc: RpcClient,
-    block_tag: String,
+    block_tag: Value,
+    source: Option<VerifiedSource>,
     funded: HashSet<Address>,
     persist: Rc<RefCell<PersistentCache>>,
     inner: RefCell<RemoteRevmDbInner>,
@@ -427,6 +655,7 @@ struct RemoteRevmDbInner {
     codes_by_hash: HashMap<B256, Bytecode>,
     storage: HashMap<(Address, U256), U256>,
     block_hashes: HashMap<u64, B256>,
+    ancestors: HashMap<u64, (B256, B256)>,
     missing_state_keys: Vec<String>,
     stats: CacheStats,
 }
@@ -482,7 +711,8 @@ impl RemoteRevmDb {
     ) -> Result<Self> {
         Ok(Self {
             rpc: RpcClient::new(rpc_url, http, fatal)?,
-            block_tag: hex_quantity_u64(block_number),
+            block_tag: json!(hex_quantity_u64(block_number)),
+            source: None,
             funded,
             persist,
             inner: RefCell::new(RemoteRevmDbInner::default()),
@@ -645,6 +875,11 @@ impl RemoteRevmDb {
         storage: &[(Address, U256)],
         fetch_block: Option<u64>,
     ) -> Result<Option<BlockEnv>> {
+        let result = self.warm_batch_inner(accounts, storage, fetch_block);
+        self.rpc.checked_source(result)
+    }
+
+    fn warm_batch_inner(&self, accounts: &[Address], storage: &[(Address, U256)], fetch_block: Option<u64>) -> Result<Option<BlockEnv>> {
         let mut calls: Vec<(&str, Value)> = Vec::new();
         // (kind, key) parallel to `calls`, for routing results back.
         enum Slot {
@@ -657,6 +892,7 @@ impl RemoteRevmDb {
         let mut slots: Vec<Slot> = Vec::new();
 
         if let Some(block_number) = fetch_block {
+            if self.source.is_some() { bail!("numeric pinned warm header forbidden"); }
             calls.push((
                 "eth_getBlockByNumber",
                 json!([hex_quantity_u64(block_number), false]),
@@ -755,7 +991,11 @@ impl RemoteRevmDb {
             // Only seed accounts we fully resolved balance+nonce for; code may
             // come from the persistent cache instead of this batch.
             if !(has_bal && has_nonce) {
+                if self.source.is_some() { bail!("incomplete pinned account"); }
                 continue;
+            }
+            if self.source.is_some() && !has_code && !self.persist.borrow().codes_by_addr.contains_key(&address) {
+                bail!("missing pinned account code");
             }
             let code = if has_code {
                 code
@@ -772,10 +1012,12 @@ impl DatabaseRef for RemoteRevmDb {
     type Error = RpcError;
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        self.load_account(address)
+        let result = self.load_account(address).map_err(anyhow::Error::from);
+        self.rpc.checked_source(result).map_err(|e| RpcError(e.to_string()))
     }
 
     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        self.rpc.check_fatal().map_err(|e| RpcError(e.to_string()))?;
         {
             let mut inner = self.inner.borrow_mut();
             if let Some(code) = inner.codes_by_hash.get(&code_hash).cloned() {
@@ -795,10 +1037,12 @@ impl DatabaseRef for RemoteRevmDb {
             .borrow_mut()
             .missing_state_keys
             .push(format!("code_hash:{code_hash:#x}"));
+        if self.source.is_some() { self.rpc.latch(FatalReason::SourceFault); }
         Err(RpcError(format!("code not cached for hash {code_hash:#x}")))
     }
 
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        self.rpc.check_fatal().map_err(|e| RpcError(e.to_string()))?;
         {
             let mut inner = self.inner.borrow_mut();
             if let Some(value) = inner.storage.get(&(address, index)).copied() {
@@ -824,6 +1068,26 @@ impl DatabaseRef for RemoteRevmDb {
     }
 
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+        if let Some(source) = &self.source {
+            let current = source.attestation.block_number;
+            if number >= current || current - number > 256 { return Ok(B256::ZERO); }
+            let result = (|| {
+                self.rpc.check_fatal()?;
+                if let Some((hash, _)) = self.inner.borrow().ancestors.get(&number) { return Ok(*hash); }
+                let (mut height, mut parent) = self.inner.borrow().ancestors.iter()
+                    .filter(|(height, _)| **height > number).min_by_key(|(height, _)| **height)
+                    .map(|(height, (_, parent))| (*height, *parent)).expect("pinned root seeded");
+                while height > number {
+                    height -= 1;
+                    let header = self.rpc.call("eth_getBlockByHash", json!([format!("{parent:#x}"), false]))?;
+                    let (next_parent, _) = header_identity(&header, height, parent)?;
+                    self.inner.borrow_mut().ancestors.insert(height, (parent, next_parent));
+                    parent = next_parent;
+                }
+                Ok(self.inner.borrow().ancestors[&number].0)
+            })();
+            return self.rpc.checked_source(result).map_err(|e| RpcError(e.to_string()));
+        }
         {
             let mut inner = self.inner.borrow_mut();
             if let Some(hash) = inner.block_hashes.get(&number).copied() {
@@ -852,6 +1116,20 @@ impl DatabaseRef for RemoteRevmDb {
 /// while reads fall through to the shared, warm `RemoteRevmDb` cache.
 #[derive(Debug, Clone)]
 struct SharedRemote(Rc<RemoteRevmDb>);
+
+// Carry the verified profile through every nested balance/probe/preCall/main
+// execution without a global setting or changing legacy unpinned semantics.
+trait ExecutionProfile: DatabaseRef<Error = RpcError> {
+    fn execution_profile(&self) -> Option<MainnetProfile>;
+}
+
+impl ExecutionProfile for RemoteRevmDb {
+    fn execution_profile(&self) -> Option<MainnetProfile> { self.source.as_ref().map(|s| s.profile) }
+}
+
+impl ExecutionProfile for SharedRemote {
+    fn execution_profile(&self) -> Option<MainnetProfile> { self.0.execution_profile() }
+}
 
 impl SharedRemote {
     fn missing_state_keys(&self) -> Vec<String> {
@@ -1062,6 +1340,8 @@ enum DaemonRequest {
     #[serde(rename_all = "camelCase")]
     StrictSimulate {
         block_number: u64,
+        #[serde(default, deserialize_with = "deserialize_source_pin")]
+        source_pin: Option<SourcePin>,
         #[serde(default)]
         rpc_url: Option<String>,
         from: String,
@@ -1103,6 +1383,8 @@ struct DaemonResponseEnvelope {
     request_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     fatal: Option<FatalReason>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_attestation: Option<SourceAttestation>,
     #[serde(flatten)]
     response: DaemonResponse,
 }
@@ -1197,12 +1479,20 @@ struct WarmBlock {
     proactive_seeded: bool,
 }
 
+struct PinnedSession {
+    remote: Rc<RemoteRevmDb>,
+    balance_slots: HashMap<Address, u64>,
+    allowance_slots: HashMap<Address, u64>,
+}
+
 #[derive(Default)]
 struct Daemon {
     epoch: Option<String>,
     last_request_id: u64,
     // Shared by every RemoteRevmDb, including after reset/new block/cache reuse.
     fatal: FatalLatch,
+    pinned: Option<PinnedSession>,
+    last_source_attestation: Option<SourceAttestation>,
     warm: Option<WarmBlock>,
     prepared: Option<CacheDB<SharedRemote>>,
     block_env: Option<BlockEnv>,
@@ -1239,6 +1529,7 @@ fn serve() -> Result<()> {
 
 impl Daemon {
     fn handle_line(&mut self, line: &str) -> DaemonResponseEnvelope {
+        self.last_source_attestation = None;
         let started = Instant::now();
         let value = serde_json::from_str::<Value>(line).unwrap_or(Value::Null);
         let epoch = value
@@ -1264,7 +1555,11 @@ impl Daemon {
                 } else {
                     self.epoch = Some(epoch.clone());
                     self.last_request_id = id;
-                    match serde_json::from_value::<DaemonRequest>(value) {
+                    let illegal_pin = value.get("sourcePin").is_some()
+                        && (value.get("op").and_then(Value::as_str) != Some("strictSimulate")
+                            || value["sourcePin"].get("stateRoot").is_some_and(Value::is_null));
+                    match if illegal_pin { Err(serde::de::Error::custom("invalid source pin")) }
+                        else { serde_json::from_value::<DaemonRequest>(value) } {
                         Ok(req) => self.handle(req, started),
                         // Do not echo serde's untrusted field values (including URLs).
                         Err(_) => DaemonResponse::err("bad daemon request".into(), started),
@@ -1278,6 +1573,7 @@ impl Daemon {
             epoch,
             request_id,
             fatal,
+            source_attestation: if fatal.is_none() && response.ok { self.last_source_attestation.take() } else { None },
             response: match fatal {
                 Some(reason) => DaemonResponse::err(reason.to_string(), started),
                 None => response,
@@ -1327,6 +1623,7 @@ impl Daemon {
             DaemonRequest::Reset => {
                 self.prepared = None;
                 self.block_env = None;
+                self.pinned = None; // Explicitly discard pinned state AND its discovered hints.
                 Ok(ok_response(started))
             }
             DaemonRequest::Prepare {
@@ -1373,6 +1670,7 @@ impl Daemon {
             } => self.quote(from, to, data, gas_limit, started),
             DaemonRequest::StrictSimulate {
                 block_number,
+                source_pin,
                 rpc_url,
                 from,
                 to,
@@ -1388,6 +1686,7 @@ impl Daemon {
             } => self.strict_simulate(
                 block_number,
                 rpc_url,
+                source_pin,
                 from,
                 to,
                 data,
@@ -1947,6 +2246,7 @@ impl Daemon {
         &mut self,
         block_number: u64,
         rpc_url: Option<String>,
+        source_pin: Option<SourcePin>,
         from: String,
         to: String,
         data: String,
@@ -1960,13 +2260,63 @@ impl Daemon {
         caller_mode: String,
         started: Instant,
     ) -> Result<DaemonResponse> {
+        if let Some(pin) = source_pin {
+            // Admission precedes I/O; explicit endpoint, complete pin, no
+            // environment endpoint fallback or prepared/unpinned cache reuse.
+            let url = rpc_url.filter(|u| !u.trim().is_empty())
+                .ok_or_else(|| anyhow!("pinned request requires rpcUrl"))?;
+            if pin.chain_id != 1 { bail!("unsupported pinned chain"); }
+            strict_hex(&json!(pin.block_hash), Some(32))?;
+            if let Some(root) = &pin.state_root { strict_hex(&json!(root), Some(32))?; }
+            let mut rpc = RpcClient::new(url.clone(), self.http_client()?, Rc::clone(&self.fatal))?;
+            rpc.pinned = true;
+            let source = verify_source(&rpc, block_number, &pin)?;
+            let mut session = match self.pinned.take() {
+                Some(session) if session.remote.rpc.url == url
+                    && session.remote.source.as_ref() == Some(&source) => session,
+                _ => {
+                    let mut inner = RemoteRevmDbInner::default();
+                    inner.ancestors.insert(block_number,
+                        (source.attestation.block_hash, source.attestation.parent_hash));
+                    PinnedSession { remote: Rc::new(RemoteRevmDb {
+                        rpc,
+                        block_tag: json!({"blockHash": source.attestation.block_hash, "requireCanonical": true}),
+                        source: Some(source.clone()), funded: HashSet::new(),
+                        persist: Rc::new(RefCell::new(PersistentCache::default())),
+                        inner: RefCell::new(inner),
+                    }), balance_slots: HashMap::new(), allowance_slots: HashMap::new() }
+                }
+            };
+            let result = Self::strict_simulate_at(Rc::clone(&session.remote), source.env.clone(),
+                &mut session.balance_slots, &mut session.allowance_slots,
+                from, to, data, gas_limit, pre_calls, token_deals, observe_tokens,
+                observe_accounts, observe_total_supply, observe_logs, caller_mode, started);
+            // Check even reverted/domain-error execution. A swallowed source
+            // failure cannot be cleared by a later canonical membership probe.
+            verify_canonical(&session.remote.rpc, &source)?;
+            self.pinned = Some(session);
+            let response = result?;
+            self.last_source_attestation = Some(source.attestation);
+            return Ok(response);
+        }
         self.ensure_warm(block_number, rpc_url)?;
-        let remote_rc = Rc::clone(&self.warm.as_ref().expect("warm set above").remote);
+        let remote = Rc::clone(&self.warm.as_ref().expect("warm set above").remote);
+        let env = load_block_env(&remote.rpc, block_number)?;
+        Self::strict_simulate_at(remote, env, &mut self.balance_slots, &mut self.allowance_slots,
+            from, to, data, gas_limit, pre_calls, token_deals, observe_tokens,
+            observe_accounts, observe_total_supply, observe_logs, caller_mode, started)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn strict_simulate_at(
+        remote_rc: Rc<RemoteRevmDb>, block_env: BlockEnv,
+        balance_slots: &mut HashMap<Address, u64>, allowance_slots: &mut HashMap<Address, u64>,
+        from: String, to: String, data: String, gas_limit: Option<u64>,
+        pre_calls: Vec<PreCall>, token_deals: Vec<TokenDeal>, observe_tokens: Vec<String>,
+        observe_accounts: Vec<String>, observe_total_supply: Vec<String>, observe_logs: bool,
+        caller_mode: String, started: Instant,
+    ) -> Result<DaemonResponse> {
         let mut db = CacheDB::new(SharedRemote(Rc::clone(&remote_rc)));
-        let block_env = load_block_env(
-            &self.warm.as_ref().expect("warm set").remote.rpc,
-            block_number,
-        )?;
         let caller = parse_address(&from)?;
         let target = parse_address(&to)?;
         let calldata = Bytes::from(parse_hex_bytes(&data)?);
@@ -1992,7 +2342,7 @@ impl Daemon {
             &mut db,
             &block_env,
             &token_deals,
-            &mut self.balance_slots,
+            balance_slots,
             Some(remote_rc.as_ref()),
         )?;
 
@@ -2043,8 +2393,8 @@ impl Daemon {
             db.commit(pre.state);
         }
 
-        // Strict exact probes execute against the same cold remote on every
-        // block. Prefetch the touched state of the main call (plus any
+        // Each request gets a fresh overlay over its source-bound remote cache.
+        // Prefetch the touched state of the main call (plus any
         // preCalls) in ONE debug_traceCall prestateTracer round trip AND warm
         // the tokenDeals' balance slots / approve allowance slots in ONE
         // batched warm_batch, so the execution below (including
@@ -2070,7 +2420,7 @@ impl Daemon {
                 let to = parse_address(&d.to)?;
                 for idx in mapping_slot_candidates(
                     d.balance_slot,
-                    self.balance_slots.get(&token).copied(),
+                    balance_slots.get(&token).copied(),
                 ) {
                     storage.push((token, erc20_balance_slot(to, idx)));
                 }
@@ -2078,11 +2428,11 @@ impl Daemon {
             for call in &parsed_pre_calls {
                 if let Some(spender) = decode_approve_spender(&call.calldata) {
                     if let Some(slot) = call.allowance_slot {
-                        self.allowance_slots.insert(call.to, slot);
+                        allowance_slots.insert(call.to, slot);
                     }
                     for idx in mapping_slot_candidates(
                         call.allowance_slot,
-                        self.allowance_slots.get(&call.to).copied(),
+                        allowance_slots.get(&call.to).copied(),
                     ) {
                         storage.push((call.to, erc20_allowance_slot(call.from, spender, idx)));
                     }
@@ -2301,6 +2651,28 @@ fn seed_from_prestate(
     let map = prestate
         .as_object()
         .ok_or_else(|| anyhow!("prestate trace returned non-object result"))?;
+    if remote.source.is_some() {
+        // A trace is an optional access-key hint, never state attestation. Parse
+        // all keys before hydration; malformed hints simply lose the speedup.
+        let mut accounts = Vec::new();
+        let mut storage = Vec::new();
+        for (raw_address, fields) in map {
+            let address = parse_address(strict_hex(&json!(raw_address), Some(20))?)?;
+            let fields = fields.as_object().ok_or_else(|| anyhow!("invalid prestate account hint"))?;
+            accounts.push(address);
+            if let Some(slots) = fields.get("storage") {
+                for key in slots.as_object().ok_or_else(|| anyhow!("invalid prestate storage hint"))?.keys() {
+                    storage.push((address, parse_u256(strict_hex(&json!(key), Some(32))?)?));
+                }
+            }
+        }
+        let before = { let inner = remote.inner.borrow(); (inner.accounts.len(), inner.storage.len()) };
+        remote.warm_batch(&accounts, &storage, None)?;
+        let inner = remote.inner.borrow();
+        stats.seeded_accounts += inner.accounts.len() - before.0;
+        stats.seeded_slots += inner.storage.len() - before.1;
+        return Ok(());
+    }
     for (addr_str, fields) in map {
         let address = parse_address(addr_str)?;
         let local = db.cache.accounts.get(&address);
@@ -2372,7 +2744,7 @@ fn erc20_balance_of<D>(
     account: Address,
 ) -> Result<U256>
 where
-    D: DatabaseRef<Error = RpcError>,
+    D: ExecutionProfile,
 {
     let mut data = Vec::with_capacity(36);
     data.extend_from_slice(&BALANCE_OF_SELECTOR);
@@ -2403,7 +2775,7 @@ where
 
 fn erc20_total_supply<D>(db: &mut CacheDB<D>, block_env: &BlockEnv, token: Address) -> Result<U256>
 where
-    D: DatabaseRef<Error = RpcError>,
+    D: ExecutionProfile,
 {
     let output = execute_call(
         db,
@@ -2485,7 +2857,7 @@ fn apply_token_deals<D>(
     remote: Option<&RemoteRevmDb>,
 ) -> Result<()>
 where
-    D: DatabaseRef<Error = RpcError>,
+    D: ExecutionProfile,
 {
     for deal in deals {
         let token = parse_address(&deal.token)?;
@@ -2860,7 +3232,7 @@ fn execute_call<D>(
     disable_eip3607: bool,
 ) -> Result<revm::context_interface::result::ResultAndState>
 where
-    D: DatabaseRef<Error = RpcError>,
+    D: ExecutionProfile,
 {
     let mut tx = TxEnv::builder()
         .caller(caller)
@@ -2874,9 +3246,14 @@ where
         .build_fill();
     tx.nonce = 0;
 
+    let profile = db.db.execution_profile();
     let ctx = Context::mainnet()
         .modify_cfg_chained(|cfg| {
-            cfg.set_spec_and_mainnet_gas_params(SpecId::PRAGUE);
+            cfg.set_spec_and_mainnet_gas_params(profile.map_or(SpecId::PRAGUE, |p| p.spec));
+            if let Some(profile) = profile {
+                cfg.blob_base_fee_update_fraction = Some(profile.blob_fraction);
+                cfg.max_blobs_per_tx = Some(if profile.spec == SpecId::OSAKA { 6 } else { 9 });
+            }
             cfg.disable_nonce_check = true;
             cfg.tx_chain_id_check = false;
             // EIP-3607 rejects a contract address as tx.origin. The
@@ -3013,6 +3390,191 @@ fn hex_quantity_u64(value: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pinned_header() -> Value {
+        json!({"number":"0x12c", "hash":format!("0x{}", "11".repeat(32)),
+            "parentHash":format!("0x{}", "22".repeat(32)), "stateRoot":format!("0x{}", "33".repeat(32)),
+            "timestamp":"0x6b49d200", "gasLimit":"0x1c9c380", "gasUsed":"0x0", "baseFeePerGas":"0x1",
+            "miner":format!("0x{}", "44".repeat(20)), "mixHash":format!("0x{}", "55".repeat(32)),
+            "difficulty":"0x0", "nonce":"0x0000000000000000",
+            "sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347", "uncles":[],
+            "transactionsRoot":format!("0x{}", "66".repeat(32)), "receiptsRoot":format!("0x{}", "77".repeat(32)),
+            "withdrawalsRoot":format!("0x{}", "88".repeat(32)), "parentBeaconBlockRoot":format!("0x{}", "99".repeat(32)),
+            "requestsHash":format!("0x{}", "aa".repeat(32)), "logsBloom":format!("0x{}", "00".repeat(256)),
+            "extraData":"0x", "blobGasUsed":"0x0", "excessBlobGas":"0x0"})
+    }
+
+    fn test_source() -> VerifiedSource {
+        verified_header(&pinned_header(), 300, &SourcePin { chain_id: 1,
+            block_hash: format!("0x{}", "11".repeat(32)), state_root: None }).unwrap()
+    }
+
+    #[test]
+    fn pinned_profile_boundaries_and_checked_blob_arithmetic() {
+        for (time, spec, fraction, max_blobs) in [
+            (1_746_612_311, SpecId::PRAGUE, 5_007_716, 9),
+            (1_764_798_550, SpecId::PRAGUE, 5_007_716, 9),
+            (1_764_798_551, SpecId::OSAKA, 5_007_716, 9),
+            (1_765_290_070, SpecId::OSAKA, 5_007_716, 9),
+            (1_765_290_071, SpecId::OSAKA, 8_346_193, 15),
+            (1_767_747_670, SpecId::OSAKA, 8_346_193, 15),
+            (1_767_747_671, SpecId::OSAKA, 11_684_671, 21),
+        ] {
+            assert_eq!(mainnet_profile(time).unwrap(), MainnetProfile { spec, blob_fraction: fraction, max_block_blobs: max_blobs });
+            for excess in [0, 1, 131_072, 16_777_216, 50_000_000] {
+                assert_eq!(pinned_blob_price(excess, fraction).unwrap(),
+                    revm::context_interface::block::calc_blob_gasprice(excess, fraction));
+            }
+            assert!(pinned_blob_price(u64::MAX, fraction).is_err());
+        }
+        assert!(mainnet_profile(1_746_612_310).is_err());
+    }
+
+    #[test]
+    fn pinned_header_has_no_missing_or_malformed_environment_defaults() {
+        let h = pinned_header();
+        let pin = SourcePin { chain_id: 1, block_hash: h["hash"].as_str().unwrap().into(), state_root: None };
+        assert!(verified_header(&h, 300, &pin).is_ok());
+        for key in h.as_object().unwrap().keys() {
+            let mut bad = h.clone(); bad.as_object_mut().unwrap().remove(key);
+            assert!(verified_header(&bad, 300, &pin).is_err(), "missing {key}");
+        }
+        for (key, value) in [
+            ("timestamp", json!(1)), ("baseFeePerGas", json!("0x00")),
+            ("gasLimit", json!("0x0")), ("gasUsed", json!("0xffffffffffffffff")),
+            ("excessBlobGas", json!("0xffffffffffffffff")), ("stateRoot", json!("0x00")),
+            ("blobGasUsed", json!("0x1")), ("difficulty", json!("0x1")),
+            ("parentHash", json!("0xzz")), ("extraData", json!(format!("0x{}", "11".repeat(33)))),
+        ] {
+            let mut bad = h.clone(); bad[key] = value;
+            assert!(verified_header(&bad, 300, &pin).is_err(), "invalid {key}");
+        }
+    }
+
+    #[test]
+    fn malformed_pins_never_dispatch_or_use_environment_endpoint() {
+        for pin in [Value::Null, json!({}), json!({"chainId":1}),
+            json!({"blockHash":format!("0x{}", "11".repeat(32))}),
+            json!({"chainId":1,"blockHash":"0x12"}),
+            json!({"chainId":2,"blockHash":format!("0x{}", "11".repeat(32))}),
+            json!({"chainId":1,"blockHash":format!("0x{}", "11".repeat(32)),"stateRoot":null}),
+            json!({"chainId":1,"blockHash":format!("0x{}", "11".repeat(32)),"unknown":1})] {
+            let mut daemon = Daemon::default();
+            let req = json!({"op":"strictSimulate", "blockNumber":300, "rpcUrl":"http://127.0.0.1:1",
+                "from":format!("0x{}", "aa".repeat(20)), "to":format!("0x{}", "bb".repeat(20)),
+                "data":"0x", "sourcePin":pin});
+            let r = request_line(&mut daemon, 1, req);
+            assert_eq!(r["ok"], false); assert!(r.get("sourceAttestation").is_none()); assert!(daemon.http.is_none());
+        }
+        let mut daemon = Daemon::default();
+        let pin = json!({"chainId":1, "blockHash":format!("0x{}", "11".repeat(32))});
+        for (id, op) in ["health", "warm", "prepare", "quote", "simulate", "reset", "strictSimulate"].iter().enumerate() {
+            let r = request_line(&mut daemon, id as u64 + 1, json!({"op":op,"blockNumber":300,
+                "from":format!("0x{}", "aa".repeat(20)), "to":format!("0x{}", "bb".repeat(20)),"data":"0x", "sourcePin":pin}));
+            assert_eq!(r["ok"], false); assert!(daemon.http.is_none());
+        }
+    }
+
+    #[test]
+    fn trace_source_fault_scanned_before_whole_batch_or_unknown_id_selection() {
+        for message in ["hash is not currently canonical", "header not found", "state unavailable"] {
+            for shape in ["single", "whole", "unknown"] {
+                let error = json!({"jsonrpc":"2.0", "id":999, "error":{"code":-32000,"message":message}});
+                let (mut rpc, thread) = rpc_fixture(200, if shape == "unknown" { json!([error]) } else { error });
+                rpc.pinned = true;
+                if shape == "single" { let _ = rpc.call("debug_traceCall", json!([])); }
+                else { let _ = rpc.batch_call(&[("debug_traceCall", json!([]))]); }
+                assert_eq!(rpc.fatal.get(), Some(FatalReason::SourceFault));
+                // Model a swallowed optional error, followed by an otherwise
+                // successful operation: the envelope still rejects it.
+                let mut daemon = daemon_fixture(&rpc);
+                for (id, op) in ["health", "reset"].iter().enumerate() {
+                    let r = request_line(&mut daemon, id as u64 + 1, json!({"op":op}));
+                    assert_eq!(r["ok"], false); assert_eq!(r["fatal"]["kind"], "source-fault");
+                    assert!(r.get("sourceAttestation").is_none());
+                }
+                assert!(rpc.call("eth_chainId", json!([])).is_err()); assert_eq!(rpc.round_trips(), 1);
+                thread.join().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn source_diagnostic_metadata_and_hash_suffix_cannot_escape_optional_trace_latch() {
+        let hash = format!("0x{}", "12".repeat(32));
+        for error in [
+            json!({"code":-32000,"message":"hash is not currently canonical","data":{}}),
+            json!({"code":-32000,"message":"hash is not currently canonical","data":{"blockHash":hash}}),
+            json!({"code":-32001,"message":format!("header not found: {hash}")}),
+            json!({"code":-32001,"message":format!("header not found: {hash}"),"data":{"reason":"missing header"}}),
+        ] {
+            for shape in ["single", "item", "whole", "unknown-id"] {
+                let id = if shape == "single" { 1 } else if shape == "unknown-id" { 999 } else { 0 };
+                let item = json!({"jsonrpc":"2.0", "id":id, "error":error});
+                let (mut rpc, thread) = rpc_fixture(200,
+                    if shape == "single" || shape == "whole" { item } else { json!([item]) });
+                rpc.pinned = true;
+                if shape == "single" { let _ = rpc.call("debug_traceCall", json!([])); }
+                else { let _ = rpc.batch_call(&[("debug_traceCall", json!([]))]); }
+                assert_eq!(rpc.fatal.get(), Some(FatalReason::SourceFault), "{shape}: {error}");
+                let mut daemon = daemon_fixture(&rpc);
+                let result = request_line(&mut daemon, 1, json!({"op":"health"}));
+                assert_eq!(result["ok"], false);
+                assert!(result.get("sourceAttestation").is_none());
+                assert!(rpc.call("eth_chainId", json!([])).is_err());
+                assert!(rpc.batch_call(&[("debug_traceCall", json!([]))]).is_err());
+                assert_eq!(rpc.round_trips(), 1);
+                thread.join().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn optional_trace_domain_errors_do_not_become_source_faults() {
+        let qualified = format!("header not found: 0x{}", "12".repeat(32));
+        for error in [
+            json!({"code":3,"message":"hash is not currently canonical"}),
+            json!({"code":"CALL_EXCEPTION","message":"hash is not currently canonical"}),
+            json!({"code":-32000,"message":"hash is not currently canonical","data":"0xdeadbeef"}),
+            json!({"code":-32000,"message":"execution reverted: hash is not currently canonical"}),
+            json!({"code":-32601,"message":"method not supported"}),
+            json!({"code":-32602,"message":"invalid hash selector argument"}),
+            json!({"code":3,"message":"hash is not currently canonical","data":{}}),
+            json!({"code":"CALL_EXCEPTION","message":qualified,"data":{}}),
+            json!({"code":-32000,"message":"hash is not currently canonical","data":"0x"}),
+            json!({"code":-32001,"message":qualified,"data":"0x"}),
+            json!({"code":-32001,"message":qualified,"data":"0xdeadbeef"}),
+            json!({"code":-32000,"message":"execution reverted: hash is not currently canonical","data":{}}),
+            json!({"code":-32001,"message":format!("revert: {qualified}"),"data":{}}),
+            json!({"code":-32001,"message":format!("contract says {qualified}"),"data":{}}),
+            json!({"code":-32001,"message":format!("{qualified} extra text"),"data":{}}),
+            json!({"code":-32001,"message":"header not found: 0x1234","data":{}}),
+            json!({"code":-32001,"message":format!("header not found: 0x{}", "zz".repeat(32)),"data":{}}),
+        ] {
+            for batch in [false, true] {
+                let item = json!({"jsonrpc":"2.0", "id":if batch {0} else {1}, "error":error});
+                let (mut rpc, thread) = rpc_fixture(200, if batch { json!([item]) } else { item });
+                rpc.pinned = true;
+                if batch { let _ = rpc.batch_call(&[("debug_traceCall", json!([]))]); }
+                else { let _ = rpc.call("debug_traceCall", json!([])); }
+                assert_eq!(rpc.fatal.get(), None); thread.join().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_blockhash_ranges_and_reset_need_no_io() {
+        let mut remote = RemoteRevmDb::new("http://127.0.0.1:1".into(), 300, HashSet::new(),
+            Rc::new(RefCell::new(PersistentCache::default())), Client::builder().no_proxy().build().unwrap(), FatalLatch::default()).unwrap();
+        remote.source = Some(test_source()); remote.rpc.pinned = true;
+        for number in [0, 43, 300, 301, u64::MAX] { assert_eq!(remote.block_hash_ref(number).unwrap(), B256::ZERO); }
+        assert_eq!(remote.rpc.round_trips(), 0);
+        let remote = Rc::new(remote);
+        let mut daemon = Daemon { pinned: Some(PinnedSession { remote,
+            balance_slots: HashMap::from([(Address::ZERO, 7)]), allowance_slots: HashMap::from([(Address::ZERO, 8)]) }), ..Daemon::default() };
+        assert_eq!(request_line(&mut daemon, 1, json!({"op":"reset"}))["ok"], true);
+        assert!(daemon.pinned.is_none());
+    }
 
     // One deterministic loopback exchange; no external endpoints or env input.
     fn rpc_fixture(status: u16, body: Value) -> (RpcClient, std::thread::JoinHandle<()>) {
