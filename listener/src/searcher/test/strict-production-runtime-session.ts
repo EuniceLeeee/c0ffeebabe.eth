@@ -36,7 +36,7 @@ import { executeFamilyExactQuote } from
   "../venues/adapter-family-runtime.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
-import { createVerifiedGraphView } from
+import { blockScanEdgeKey, createVerifiedGraphView } from
   "../venues/blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "../venues/production-family-composition.js";
@@ -2335,6 +2335,63 @@ await assert.rejects(
   /requires requiredEdgeIds/,
   "strict exact context must receive an explicit candidate edge closure",
 );
+
+// A source-owned simulator is an opaque pass context, not a coordinator-owned
+// client. Every session/enrichment entrance must retain the very same object.
+for (const path of ["coarse", "runtime", "prefunded", "exact"] as const) {
+  for (const supplied of [false, true]) {
+    const firstTransport = Object.freeze({ simulate: async () => {
+      assert.fail("coordinator must not invoke or own the simulator");
+    } });
+    const otherTransport = Object.freeze({ simulate: firstTransport.simulate });
+    const simulationTransport = supplied ? firstTransport : undefined;
+    const requests: StrictSessionRequest[] = [];
+    let enrichments = 0;
+    const coordinated = new StrictCurrentRuntimeCoordinator(request => {
+      requests.push(request);
+      assert.equal(request.simulationTransport, simulationTransport);
+      assert.equal("simulationTransport" in request, supplied,
+        "explicit RPC-only callers must not acquire a simulator implicitly");
+      return root.createSession({ source: request.source, runtime: strictRuntime,
+        fundingAssets: request.fundingAssets,
+        kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+        requiredEdgeIds: request.requiredEdgeIds, control: request.control });
+    }, () => {}, undefined, async (pricing, control, backend, reuse, receivedTransport) => {
+      enrichments++;
+      assert.equal(receivedTransport, simulationTransport,
+        "effective enrichment must use the source work's original transport");
+      return { source: { number: pricing.sourceBlock, hash: pricing.sourceBlockHash,
+        generation: pricing.generation }, rows: new Map(), reference: "default",
+        referenceWethInput: 1_000_000_000_000_000n, complete: true, wallMs: 0 };
+    });
+    const args = { graph: currentGraph, fundingTokens: [UNIV2_FIXTURE_TOKEN0],
+      deadlineAtMs: Date.now() + 10_000, simulationTransport };
+    if (path === "prefunded") {
+      const handle = coordinated.startFundingPreparation(args);
+      // Funding captures context synchronously even before its deferred dispatch.
+      args.simulationTransport = otherTransport;
+      await handle.settle();
+      await assert.rejects(coordinated.prepare({ ...args, fundingPreparation: handle }),
+        /Funding preparation differs/);
+      assert.equal(requests.length, 1, "foreign simulator must reject before pricing dispatch");
+      args.simulationTransport = simulationTransport;
+      await coordinated.prepare({ ...args, fundingPreparation: handle });
+    } else {
+      const pending = path === "coarse" ? coordinated.prepareCoarsePricing(args)
+        : path === "runtime" ? coordinated.prepare(args)
+        : coordinated.prepareCurrentNExactExecutionContext({ ...args,
+            requiredEdgeIds: new Set(currentGraph.edges.map(blockScanEdgeKey)) });
+      // The caller cannot change the in-flight context while session work yields.
+      args.simulationTransport = otherTransport;
+      await pending;
+    }
+    assert.equal(requests.length, path === "prefunded" ? 2 : 1);
+    assert.deepEqual(requests.map(request => request.purpose), path === "prefunded"
+      ? ["exact-execution", "source-n-runtime"]
+      : [path === "coarse" ? "coarse-pricing" : path === "runtime" ? "source-n-runtime" : "exact-execution"]);
+    assert.equal(enrichments, path === "exact" ? 0 : 1);
+  }
+}
 
 // The existing warm/publication boundary awaits amount quotes atomically in
 // both producer paths. Cancellation, mismatch and partial work never replace

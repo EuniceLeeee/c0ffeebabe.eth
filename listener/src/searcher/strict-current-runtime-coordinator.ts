@@ -37,6 +37,7 @@ import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
 import type { PreparedAmountQuoteActivity } from "./amount-quote-continuity.js";
+import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 
 export type StrictSessionPurpose =
   | "coarse-pricing"
@@ -46,6 +47,8 @@ export type StrictSessionPurpose =
 export interface StrictSessionRequest {
   readonly purpose: StrictSessionPurpose;
   readonly source: CanonicalSource;
+  /** Source-owned transport, forwarded unchanged; not a per-session daemon. */
+  readonly simulationTransport?: StrictSimulationTransport;
   readonly control?: {
     readonly deadlineAtMs?: number;
     readonly signal?: AbortSignal;
@@ -72,7 +75,7 @@ export interface StrictFundingPreparation {
 
 export type StrictFundingPreparationInput = Pick<PrepareAdapterRuntimeInput,
   "graph" | "fundingTokens" | "deadlineAtMs" |
-  "preparationSettleDeadlineAtMs" | "signal" | "pricingCallBackend"
+  "preparationSettleDeadlineAtMs" | "signal" | "pricingCallBackend" | "simulationTransport"
 >;
 
 export interface PrepareStrictRuntimeInput extends PrepareAdapterRuntimeInput {
@@ -153,6 +156,7 @@ export class StrictCurrentRuntimeCoordinator
       backend?: Pick<StateBackend, "call">,
       reuse?: { readonly previous?: EffectiveMidSnapshot;
         readonly activity?: PreparedAmountQuoteActivity },
+      simulationTransport?: StrictSimulationTransport,
     ) => Promise<EffectiveMidSnapshot>,
   ) {}
 
@@ -187,6 +191,8 @@ export class StrictCurrentRuntimeCoordinator
         control: controlFor(deadlineAtMs, input.signal),
         fundingAssets: input.fundingTokens,
         requiredEdgeIds: new Set<string>(),
+        ...(input.simulationTransport === undefined
+          ? {} : { simulationTransport: input.simulationTransport }),
         ...(input.pricingCallBackend === undefined
           ? {} : { pricingCallBackend: input.pricingCallBackend }),
       });
@@ -208,6 +214,7 @@ export class StrictCurrentRuntimeCoordinator
 
   async prepareCoarsePricing(input: {
     readonly graph: VerifiedGraphView;
+    readonly simulationTransport?: StrictSimulationTransport;
     readonly deadlineAtMs: number;
     readonly familySettleDeadlineAtMs?: number;
     readonly signal?: AbortSignal;
@@ -215,6 +222,7 @@ export class StrictCurrentRuntimeCoordinator
     readonly canonicalActivity?: StrictCanonicalActivityProof;
     readonly pricingCallBackend?: Pick<StateBackend, "call">;
   }): Promise<BlockScanStatePrepareResult> {
+    const simulationTransport = input.simulationTransport;
     const settleDeadlineAtMs = Math.min(
       input.deadlineAtMs,
       input.familySettleDeadlineAtMs ?? input.deadlineAtMs,
@@ -227,6 +235,7 @@ export class StrictCurrentRuntimeCoordinator
       source: sourceFor(input.graph),
       control: controlFor(settleDeadlineAtMs, input.signal),
       fundingAssets: EMPTY_FUNDING_ASSETS,
+      ...(simulationTransport === undefined ? {} : { simulationTransport }),
       ...(input.pricingCallBackend === undefined
         ? {}
         : { pricingCallBackend: input.pricingCallBackend }),
@@ -238,7 +247,8 @@ export class StrictCurrentRuntimeCoordinator
     const built = await this.enrichPricing(buildStrictPricingSnapshot(session, input.graph, {
       previous,
       canonicalActivity: input.canonicalActivity,
-    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity);
+    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity,
+    simulationTransport);
     this.publishPricing(built, pricingEpoch);
     return completePricingResult(built.snapshot);
   }
@@ -246,6 +256,7 @@ export class StrictCurrentRuntimeCoordinator
   async prepare(
     input: PrepareStrictRuntimeInput,
   ): Promise<AdapterRuntimePrepareResult> {
+    const simulationTransport = input.simulationTransport;
     const startedAtMs = Date.now();
     const settleDeadlineAtMs = Math.min(
       input.deadlineAtMs,
@@ -264,7 +275,8 @@ export class StrictCurrentRuntimeCoordinator
       prefunding.input.deadlineAtMs !== input.deadlineAtMs ||
       prefunding.input.preparationSettleDeadlineAtMs !==
         input.preparationSettleDeadlineAtMs ||
-      prefunding.input.pricingCallBackend !== input.pricingCallBackend
+      prefunding.input.pricingCallBackend !== input.pricingCallBackend ||
+      prefunding.input.simulationTransport !== simulationTransport
     )) {
       throw new Error("strict Funding preparation differs from current pass");
     }
@@ -275,6 +287,7 @@ export class StrictCurrentRuntimeCoordinator
       purpose: "source-n-runtime",
       source,
       control: controlFor(settleDeadlineAtMs, input.signal),
+      ...(simulationTransport === undefined ? {} : { simulationTransport }),
       fundingAssets: prefunding === undefined
         ? input.fundingTokens : EMPTY_FUNDING_ASSETS,
       ...(previous === null || input.touchedPools === undefined
@@ -318,7 +331,8 @@ export class StrictCurrentRuntimeCoordinator
     const built = await this.enrichPricing(buildStrictPricingSnapshot(session, input.graph, {
       previous,
       canonicalActivity: input.canonicalActivity,
-    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity);
+    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity,
+    simulationTransport);
     const pricing = built.snapshot;
     const pricingMs = Math.max(0, Date.now() - pricingStartedAtMs) +
       Math.max(0, pricingStartedAtMs - sessionStartedAtMs);
@@ -377,12 +391,13 @@ export class StrictCurrentRuntimeCoordinator
     control: AdapterWorkControl,
     backend?: Pick<StateBackend, "call">,
     activity?: StrictCanonicalActivityProof,
+    simulationTransport?: StrictSimulationTransport,
   ): Promise<StrictPricingBuildResult> {
     if (!this.effectivePricing) return built;
     const effectiveMids = await this.effectivePricing(built.snapshot, control, backend, {
       previous: this.publishedPricing?.effectiveMids,
       activity: activity?.amountQuoteActivity,
-    });
+    }, simulationTransport);
     assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
     const source = sourceFor(built.snapshot.graph);
     if (!effectiveMids.complete || effectiveMids.source.number !== source.number ||
@@ -407,6 +422,7 @@ export class StrictCurrentRuntimeCoordinator
   async prepareCurrentNExactExecutionContext(
     input: PrepareCurrentNExactExecutionContextInput,
   ): Promise<CurrentNExactExecutionContextResult> {
+    const simulationTransport = input.simulationTransport;
     const startedAtMs = Date.now();
     const settleDeadlineAtMs = Math.min(
       input.deadlineAtMs,
@@ -425,6 +441,7 @@ export class StrictCurrentRuntimeCoordinator
       control: controlFor(settleDeadlineAtMs, input.signal),
       fundingAssets: input.fundingTokens,
       requiredEdgeIds: input.requiredEdgeIds,
+      ...(simulationTransport === undefined ? {} : { simulationTransport }),
     });
     if (input.prepareExecution !== undefined) {
       await input.prepareExecution({

@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import type { StateBackend } from "../shared/state/state-backend.js";
+import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 import {
   BlockScanStateCoordinator,
   type BlockScanLaggingTopologyRefreshMode,
@@ -175,6 +176,8 @@ export type AdapterRuntimePrepareResult =
 
 export interface PrepareAdapterRuntimeInput {
   readonly graph: VerifiedGraphView;
+  /** Already source-bound by the work-slot owner; no simulator lifecycle here. */
+  readonly simulationTransport?: StrictSimulationTransport;
   readonly fundingTokens: readonly string[];
   /** Outer generation deadline retained for the final canonical CAS. */
   readonly deadlineAtMs: number;
@@ -235,6 +238,7 @@ export interface PrepareAdapterRuntimeInput {
 
 export interface PrepareCurrentNExactExecutionContextInput {
   readonly graph: VerifiedGraphView;
+  readonly simulationTransport?: StrictSimulationTransport;
   readonly fundingTokens: readonly string[];
   readonly deadlineAtMs: number;
   readonly preparationSettleDeadlineAtMs?: number;
