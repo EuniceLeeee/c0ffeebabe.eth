@@ -89,6 +89,7 @@ export const astraMultiTokenExact = {
   }), Object.freeze({
     id: "get-return",
     kind: "request-program" as const,
+    chainAmountQuote: true as const,
     program: astraMultiTokenRequestProgram,
   })]),
   cacheCompatibilityProjection: ({ descriptor, route }) => ({

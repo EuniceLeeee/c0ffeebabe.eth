@@ -769,7 +769,7 @@ function assertIntent<Input, Evidence>(
   }
 }
 
-function assertAdapterWorkControl(control: AdapterWorkControl | undefined): void {
+export function assertAdapterWorkControl(control: AdapterWorkControl | undefined): void {
   if (control === undefined) return;
   if (control.signal?.aborted) {
     throw control.signal.reason ?? new Error("adapter work aborted");

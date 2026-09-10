@@ -14,6 +14,9 @@ import {
 } from "../venues/protocols/erc4626-family/abi.js";
 import { erc4626Identity } from
   "../venues/protocols/erc4626-family/identity.js";
+import { erc4626Instance } from "../venues/protocols/erc4626-family/instance.js";
+import { erc4626Routes } from "../venues/protocols/erc4626-family/routes.js";
+import { erc4626Exact } from "../venues/protocols/erc4626-family/exact.js";
 import type {
   Erc4626ActiveEvidence,
   Erc4626BaseEvidence,
@@ -202,7 +205,32 @@ assert.throws(
   "shared active evidence remains required",
 );
 
-console.log("erc4626-family-plugin PASS (direction-isolated active proof)");
+const fullyVerified = variant.decide({
+  candidate: CANDIDATE, evidence: decodeActive(depositSuccess(), redeemSuccess()), step: 2,
+});
+assert.equal(fullyVerified.status, "verified");
+if (fullyVerified.status !== "verified") throw new Error("fixture identity not verified");
+const descriptor = erc4626Instance.compileDraft(fullyVerified.identity);
+const quoteRoutes = erc4626Routes.project({ descriptor });
+assert.equal(quoteRoutes.length, 2);
+for (const route of quoteRoutes) {
+  for (const amountIn of [17n, 2_479_563n, 1_234_567_890_123_456_789n]) {
+    const input = { descriptor, route, amountIn, source: SOURCE,
+      executor: ERC4626_PROBE_ACTOR, runtimeEvidence: [] };
+    const method = erc4626Exact.methods().find(m => m.kind === "request-program");
+    assert(method?.kind === "request-program");
+    assert.equal(method.chainAmountQuote, true);
+    const calls = method.program.buildRequests(input);
+    assert.equal(calls.length, 1);
+    const call = calls[0]!;
+    assert.equal(call.kind, "eth-call");
+    if (call.kind !== "eth-call") throw new Error("unexpected transport");
+    const fn = route.direction === "deposit" ? "previewDeposit" : "previewRedeem";
+    assert.equal(BigInt(ERC4626_INTERFACE.decodeFunctionData(fn, call.data)[0]), amountIn,
+      "explicit raw amount must not be replaced by oneAsset / oneShare");
+  }
+}
+console.log("erc4626-family-plugin PASS (direction-isolated proof + unchanged exact amount)");
 
 function decodeActive(
   deposit: AdapterRequestResult,

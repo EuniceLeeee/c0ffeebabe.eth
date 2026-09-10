@@ -168,21 +168,12 @@ export class BlockScanAmountReference {
     while (this.samples.size > this.capacity) this.samples.delete(this.samples.keys().next().value!);
   }
 
-  prepare(input: {
-    source: BlockSource;
-    pricing: PricingReference | null;
-    enumerationSpreadBps: number;
-    opportunities: readonly BlockScanOpportunity[];
-  }): ReadonlyMap<BlockScanOpportunity, bigint> {
-    const result = new Map<BlockScanOpportunity, bigint>();
-    const { pricing, source } = input;
+  /** Freeze the latest ancestral gas-units sample at the current header price. */
+  estimateGasCost(source: BlockSource): bigint | null {
     const header = this.headers.get(source.number);
-    if (!pricing || !header || header.hash !== source.hash.toLowerCase() ||
-        pricing.sourceBlock !== source.number ||
-        pricing.sourceBlockHash.toLowerCase() !== source.hash.toLowerCase() ||
-        pricing.generation !== source.generation) return result;
+    if (!header || header.hash !== source.hash.toLowerCase()) return null;
     const fee = nextBlockBaseFee(header);
-    if (fee === null) return result;
+    if (fee === null) return null;
     const ancestors = this.ancestorHashes(source.number);
     let gasUsed = 0n;
     let gasSourceBlock = -1;
@@ -196,14 +187,29 @@ export class BlockScanAmountReference {
         gasUsed = sample.gasUsed;
       }
     }
-    if (gasUsed === 0n || input.opportunities.length === 0) return result;
+    return gasUsed > 0n && fee > 0n ? gasUsed * fee : null;
+  }
+
+  prepare(input: {
+    source: BlockSource;
+    pricing: PricingReference | null;
+    enumerationSpreadBps: number;
+    opportunities: readonly BlockScanOpportunity[];
+  }): ReadonlyMap<BlockScanOpportunity, bigint> {
+    const result = new Map<BlockScanOpportunity, bigint>();
+    const { pricing, source } = input;
+    if (!pricing || pricing.sourceBlock !== source.number ||
+        pricing.sourceBlockHash.toLowerCase() !== source.hash.toLowerCase() ||
+        pricing.generation !== source.generation) return result;
+    const gasCostWei = this.estimateGasCost(source);
+    if (gasCostWei === null || input.opportunities.length === 0) return result;
     const marks = tokenToWethReferences(pricing, this.weth);
     const amounts = new Map<string, bigint | null>();
     for (const opportunity of input.opportunities) {
       const token = opportunity.flashToken.toLowerCase();
       const mark = marks.get(token);
       if (!mark) continue;
-      if (!amounts.has(token)) amounts.set(token, gasReferenceInput(gasUsed * fee, mark, input.enumerationSpreadBps));
+      if (!amounts.has(token)) amounts.set(token, gasReferenceInput(gasCostWei, mark, input.enumerationSpreadBps));
       const amount = amounts.get(token);
       if (amount != null) result.set(opportunity, amount);
     }

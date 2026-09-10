@@ -73,6 +73,7 @@ export const curveUnderlyingExact = {
     Object.freeze({
       id: "curve-get-dy",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: curveUnderlyingRequestProgram,
     }),
   ]),

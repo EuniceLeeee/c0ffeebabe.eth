@@ -77,6 +77,7 @@ export const univ4Exact = {
     Object.freeze({
       id: "univ4-quoter",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: univ4RequestProgram,
     }),
   ]),

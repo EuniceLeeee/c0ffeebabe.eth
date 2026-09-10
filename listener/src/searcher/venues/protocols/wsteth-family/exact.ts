@@ -82,6 +82,7 @@ export const wstethExact = {
     Object.freeze({
       id: "wsteth-preview",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: wstethRequestProgram,
     }),
   ]),

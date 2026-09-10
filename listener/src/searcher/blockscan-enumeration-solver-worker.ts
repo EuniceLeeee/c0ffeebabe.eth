@@ -12,6 +12,10 @@ import {
 import { dirname, basename, join, resolve } from "node:path";
 import { parentPort, workerData } from "node:worker_threads";
 import type { BlockScanRouteLocator } from "./blockscan-route-identity.js";
+import {
+  effectiveMidPairStatistics,
+  type EffectiveMidSnapshot,
+} from "./blockscan-effective-mid.js";
 
 interface WorkerOptions {
   readonly routePath: string;
@@ -84,7 +88,7 @@ interface MidHistoryGap {
   readonly lastDroppedBlock: number;
 }
 
-type RawMidBatch =
+type RawMidBatch = { readonly effectiveMids?: EffectiveMidSnapshot } & (
   | (MidHistoryAnchor & {
       readonly kind: "mid-baseline";
       readonly sequence: number;
@@ -100,7 +104,7 @@ type RawMidBatch =
       readonly updates: readonly (readonly [string, CompactRouteVenueMid])[];
       readonly removals: readonly string[];
       readonly gapBefore: null;
-    });
+    }));
 
 type RawTelemetryBatch = RawRouteBatch | RawMidBatch;
 
@@ -442,7 +446,12 @@ async function handleMidBatch(batch: RawMidBatch): Promise<void> {
         updates: batch.updates,
         removals: batch.removals,
       };
-  const payload = `${JSON.stringify(record)}\n`;
+  const payload = `${JSON.stringify({
+    ...record,
+    ...(batch.effectiveMids === undefined ? {} : {
+      effective_mids: serializeEffectiveMids(batch.effectiveMids),
+    }),
+  })}\n`;
   const payloadBytes = Buffer.byteLength(payload);
   if (payloadBytes > options.maxMidRecordBytes) {
     throw new Error(`mid history record exceeds encoded cap ${payloadBytes}`);
@@ -465,6 +474,37 @@ async function handleMidBatch(batch: RawMidBatch): Promise<void> {
     bytesWritten: fileBytes,
     midBytesWritten: midFileBytes,
   });
+}
+
+function serializeEffectiveMids(snapshot: EffectiveMidSnapshot) {
+  // Equal-reference notional indications only; this is not a closed-loop
+  // execution quote or a final simulation/EV verdict. Compare exact amounts.
+  const summary = effectiveMidPairStatistics(snapshot, 100);
+  return {
+    source: snapshot.source,
+    reference: snapshot.reference,
+    reference_weth_input: snapshot.referenceWethInput.toString(),
+    complete: snapshot.complete,
+    wall_ms: snapshot.wallMs,
+    rows: [...snapshot.rows].map(([edgeId, row]) => [edgeId, {
+      edge_id: row.edgeId,
+      instance_key: row.instanceKey,
+      token_in: row.tokenIn,
+      token_out: row.tokenOut,
+      amount_in: row.amountIn?.toString() ?? null,
+      amount_out: row.amountOut?.toString() ?? null,
+      effective_mid: row.effectiveMid,
+      status: row.status,
+    }]),
+    summary: {
+      directions: summary.directions,
+      quoted: summary.quoted,
+      by_status: summary.byStatus,
+      comparable_pairs: summary.comparablePairs,
+      pairs_above_threshold: summary.pairsAboveThreshold,
+      threshold_bps: summary.thresholdBps,
+    },
+  };
 }
 
 async function resetEpoch(now: number): Promise<void> {

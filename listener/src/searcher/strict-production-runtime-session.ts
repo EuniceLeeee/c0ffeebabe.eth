@@ -73,6 +73,11 @@ export type StrictProductionExactHandle =
   | SealedFamilyExactQuoteHandle
   | SealedCreditRiskQuoteHandle;
 
+export class ChainAmountQuoteUnavailableError extends Error {
+  readonly code = "CHAIN_AMOUNT_QUOTE_UNAVAILABLE";
+  constructor() { super("Family has no declared chain amount quote for this route"); }
+}
+
 /**
  * A pricing session refreshes every ready instance and publishes current mids.
  * An exact session only re-issues the ready route authorities at the pinned
@@ -1173,12 +1178,16 @@ export class StrictProductionRuntimeSession {
     readonly runtimeEvidence: readonly RuntimeEvidence[];
     readonly creditDebtBps?: bigint;
     readonly control?: AdapterWorkControl;
+    readonly requireChainAmountQuote?: boolean;
   }): Promise<StrictProductionExactHandle> {
     this.#runtime.generationFence.assertCurrent(
       this.source.generation,
       this.source,
     );
     const route = this.#resolve(input.edge);
+    if (input.requireChainAmountQuote && route.kind === "credit") {
+      throw new ChainAmountQuoteUnavailableError();
+    }
     const exact = route.kind === "credit"
       ? await executeCreditRiskQuote({
           family: route.family,
@@ -1204,11 +1213,16 @@ export class StrictProductionRuntimeSession {
           generation: this.source.generation,
           runtime: this.#runtime,
           ...(input.control === undefined ? {} : { control: input.control }),
+          ...(input.requireChainAmountQuote === undefined
+            ? {} : { requireChainAmountQuote: input.requireChainAmountQuote }),
         });
     if (exact.status !== "resolved") {
       const reason = "reasonCode" in exact
         ? exact.reasonCode
         : exact.outcome.reasonCode;
+      if (reason === "exact-chain-amount-quote-unavailable") {
+        throw new ChainAmountQuoteUnavailableError();
+      }
       throw new Error(
         `strict exact unresolved for ${route.edge.canonicalEdgeId}: ${reason}`,
       );

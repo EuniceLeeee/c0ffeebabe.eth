@@ -12,6 +12,7 @@ import type {
   StrictPricingPublication,
 } from "./strict-current-runtime-coordinator.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
+import type { EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
 
 const DEFAULT_QUEUE_CREDITS = 5;
 // A cold catalog for 646 four-leg routes exceeds 1 MiB. Keep a bounded
@@ -154,7 +155,7 @@ interface MidHistoryGap {
   readonly lastDroppedBlock: number;
 }
 
-type RawMidBatch =
+type RawMidBatch = { readonly effectiveMids?: EffectiveMidSnapshot } & (
   | (MidHistoryAnchor & {
       readonly kind: "mid-baseline";
       readonly sequence: number;
@@ -170,7 +171,7 @@ type RawMidBatch =
       readonly updates: readonly (readonly [string, CompactRouteVenueMid])[];
       readonly removals: readonly string[];
       readonly gapBefore: null;
-    });
+    }));
 
 type RawTelemetryBatch = RawRouteBatch | RawMidBatch;
 
@@ -559,6 +560,12 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
     const sourceBlock = publication.snapshot.sourceBlock;
     if (!this.reserve(sourceBlock, "mid")) return;
     try {
+      const snapshot = publication.snapshot;
+      // Each source owns a fresh full snapshot, independent of raw-mid deltas.
+      // Map traversal, summaries and BigInt formatting stay in the worker.
+      const effective = snapshot.effectiveMids === undefined ? {} : {
+        effectiveMids: snapshot.effectiveMids,
+      };
       const anchor: MidHistoryAnchor = Object.freeze({
         generation: publication.snapshot.generation,
         sourceBlock,
@@ -578,6 +585,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
             kind: "mid-delta" as const,
             sequence: this.nextSequence++,
             ...anchor,
+            ...effective,
             previousGeneration: publication.previousGeneration,
             previousSourceBlock: publication.previousSourceBlock,
             previousSourceBlockHash: publication.previousSourceBlockHash,
@@ -589,6 +597,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
             kind: "mid-baseline" as const,
             sequence: this.nextSequence++,
             ...anchor,
+            ...effective,
             mids: compactMids(publication.snapshot.mids),
             gapBefore: this.pendingMidGap,
           });

@@ -142,6 +142,8 @@ interface FixtureControls {
   readonly exactDependentRounds?: number;
   readonly exactDependentNeverSettles?: boolean;
   readonly exactDecodeThrow?: boolean;
+  chainAmountQuote?: true;
+  onExactDecode?: () => void;
   readonly executionAdapterId?: string;
   readonly executionThenable?: boolean;
   readonly omitClassifyUnavailable?: boolean;
@@ -517,6 +519,7 @@ function defineFixture(name: string, controls: FixtureControls) {
         const remote = Object.freeze({
           id: "fixture-request-program",
           kind: "request-program" as const,
+          ...(controls.chainAmountQuote ? { chainAmountQuote: true as const } : {}),
           program: Object.freeze({
             requirements: () => ({ transports: ["eth-call" as const] }),
             buildRequests: ({ descriptor }: { readonly descriptor: Descriptor }) => {
@@ -594,6 +597,7 @@ function defineFixture(name: string, controls: FixtureControls) {
               readonly dependentEvidence: readonly unknown[];
             }) => {
               controls.exactDecodeCalls = (controls.exactDecodeCalls ?? 0) + 1;
+              controls.onExactDecode?.();
               if (controls.exactDecodeThrow) {
                 throw new Error("deterministic request decode bug");
               }
@@ -1531,6 +1535,80 @@ async function testCallerCannotInjectSharedBindingRefs(): Promise<void> {
   );
   assert.equal(scheduler.requestIds.length, 0);
   assert.equal(published.publications.length, 0);
+}
+
+async function testChainAmountUsesExistingExactBoundary(): Promise<void> {
+  const controls: FixtureControls = {
+    descriptorPools: [], unavailableCalls: 0, localExactNotApplicable: true,
+  };
+  const family = defineFixture("chain-amount-quote", controls);
+  const scheduler = new TestScheduler();
+  const { publications } = await run({ family, pools: [GOOD], scheduler });
+  const request = {
+    family, route: issuedRoute(publications[0].instances[0]),
+    amountIn: 123457n, executor: EXECUTOR, runtimeEvidence: [],
+    source: SOURCE, generation: SOURCE.generation, runtime: runtime(scheduler),
+  };
+  const ordinary = await executeFamilyExactQuote(request);
+  assert.equal(ordinary.status, "resolved", "ordinary Exact still accepts the original method");
+  const count = scheduler.requestIds.length;
+  const localCalls = controls.localExactCalls;
+  const unsupported = await executeFamilyExactQuote({ ...request, requireChainAmountQuote: true });
+  assert.notEqual(unsupported.status, "resolved");
+  assert.equal(unsupported.outcome.reasonCode, "exact-chain-amount-quote-unavailable");
+  assert.equal(scheduler.requestIds.length, count, "unsupported effective quote must not spend RPC");
+  assert.equal(controls.localExactCalls, localCalls, "effective must not call local fallback");
+  controls.chainAmountQuote = true;
+  const chain = await executeFamilyExactQuote({ ...request, requireChainAmountQuote: true });
+  assert.equal(chain.status, "resolved");
+  if (chain.status !== "resolved" || ordinary.status !== "resolved") throw new Error("fixture failed");
+  assert.equal(chain.amountIn, request.amountIn);
+  assert.equal(chain.methodId, ordinary.methodId, "one quote implementation, no effective method");
+  assert.notEqual(chain.methodOrderFingerprint, ordinary.methodOrderFingerprint,
+    "quote provenance participates in the method/cache identity");
+}
+
+async function testCachedExactHonorsCallerControl(): Promise<void> {
+  const controls: FixtureControls = {
+    descriptorPools: [], unavailableCalls: 0, chainAmountQuote: true,
+  };
+  const family = defineFixture("cache-caller-control", controls);
+  const scheduler = new TestScheduler();
+  const { publications } = await run({ family, pools: [GOOD], scheduler });
+  const cache = createAdapterFamilyExactQuoteCache({ capacity: 4 });
+  const request = {
+    family, route: issuedRoute(publications[0].instances[0]),
+    amountIn: 17n, executor: EXECUTOR, runtimeEvidence: [],
+    source: SOURCE, generation: SOURCE.generation,
+    runtime: runtime(scheduler, new TestFence(), [], undefined, cache),
+    requireChainAmountQuote: true,
+  };
+  assert.equal((await executeFamilyExactQuote(request)).status, "resolved");
+  const reads = scheduler.requestIds.length;
+  const decodes = controls.exactDecodeCalls;
+  const abort = new AbortController();
+  abort.abort();
+  for (const amountIn of [17n, 19n]) {
+    for (const control of [{ signal: abort.signal }, { deadlineAtMs: Date.now() - 1 }]) {
+      const result = await executeFamilyExactQuote({ ...request, amountIn, control });
+      assert.equal(result.status, "unresolved", "warm and cold requests both obey control");
+      assert.equal(result.outcome.reasonCode,
+        "signal" in control ? "exact-control:aborted" : "exact-control:deadline");
+    }
+  }
+  assert.equal(controls.exactDecodeCalls, decodes);
+  assert.equal(scheduler.requestIds.length, reads);
+  const duringDecode = new AbortController();
+  controls.onExactDecode = () => duringDecode.abort();
+  const stopped = await executeFamilyExactQuote({ ...request,
+    control: { signal: duringDecode.signal } });
+  assert.equal(stopped.status, "unresolved", "cache replay cannot issue a handle after cancellation");
+  assert.equal(stopped.outcome.reasonCode, "exact-control:aborted");
+  controls.onExactDecode = undefined;
+  const healthy = await executeFamilyExactQuote(request);
+  assert.equal(healthy.status, "resolved", "cancelled caller does not poison reusable cache");
+  assert.equal(healthy.outcome.reasonCode, "exact-cache-reused");
+  assert.equal(scheduler.requestIds.length, reads);
 }
 
 async function testRequestExactAndOwnedExecution(): Promise<void> {
@@ -2694,6 +2772,8 @@ await testSharedBindingTwoPassDriftFailsClosed();
 await testSharedBindingProjectionThenableIsUnresolved();
 await testCallerCannotInjectSharedBindingRefs();
 await testRequestExactAndOwnedExecution();
+await testChainAmountUsesExistingExactBoundary();
+await testCachedExactHonorsCallerControl();
 await testOpaquePublicationAndEvidenceAreSealed();
 await testMissingUnavailableClassifierUsesSealedEmptyMap();
 await testIssuedRouteGraphProjectionBoundary();

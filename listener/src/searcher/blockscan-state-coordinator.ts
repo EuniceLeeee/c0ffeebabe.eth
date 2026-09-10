@@ -290,6 +290,8 @@ export interface BlockScanFamilyTelemetry {
 }
 
 export interface BlockScanStateSnapshot {
+  /** Optional amount-sensitive companion. Raw pricing/carry contracts stay unchanged. */
+  readonly effectiveMids?: import("./blockscan-effective-mid.js").EffectiveMidSnapshot;
   readonly generation: number;
   readonly sourceBlock: number;
   readonly sourceBlockHash: string;

@@ -83,6 +83,7 @@ export const rocksolidExact = {
     Object.freeze({
       id: "rocksolid-quote",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: rocksolidRequestProgram,
     }),
   ]),

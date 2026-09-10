@@ -107,6 +107,7 @@ export const angstromV4Exact = {
     Object.freeze({
       id: "tx-bound-quoter",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: angstromV4RequestProgram,
     }),
   ]),

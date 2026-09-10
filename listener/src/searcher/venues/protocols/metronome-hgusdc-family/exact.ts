@@ -134,6 +134,7 @@ export const metronomeHgUsdcExact = {
     Object.freeze({
       id: "curve-then-vault",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: metronomeHgUsdcRequestProgram,
     }),
   ]),

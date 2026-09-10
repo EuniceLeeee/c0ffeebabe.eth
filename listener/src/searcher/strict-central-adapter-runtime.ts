@@ -5,6 +5,7 @@ import type {
   CentralAdapterScheduler,
   AdapterWorkControl,
   CentralAdapterPolicyInput,
+  CentralCallerAuthority,
 } from "./adapter-work-intent.js";
 import {
   rethLaneForAdapterStage,
@@ -27,7 +28,7 @@ import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 
 interface StrictProvider {
   call(
-    tx: { readonly to: string; readonly data: string },
+    tx: { readonly to: string; readonly data: string; readonly from?: string },
     block?: number,
     control?: AdapterWorkControl,
   ): Promise<string>;
@@ -200,6 +201,7 @@ export function createStrictCentralAdapterRuntime(input: {
               rethLane === "producer-critical" || rethLane === "exact"
               ? input.producerCallCache
               : undefined,
+            issueInput.callerAuthority,
           );
           const rethBound = execution.requests.filter((request) =>
             request.kind !== "state-override-simulation" &&
@@ -386,27 +388,28 @@ async function executeRequest(
   control?: AdapterWorkControl,
   exactCallBackend?: Pick<StateBackend, "call">,
   producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">,
+  callerAuthority?: CentralCallerAuthority,
 ): Promise<AdapterRequestResult> {
   assertTransportControl(control);
   try {
     if (request.kind === "eth-call") {
+      const caller = request.caller;
+      const needsCaller = caller !== undefined && caller.kind !== "none";
+      const from = caller?.kind === "executor" ? callerAuthority?.executor
+        : caller?.kind === "observed-sender" ? callerAuthority?.observedSender
+        : caller?.kind === "verified-actor" ? callerAuthority?.verifiedActors?.[caller.evidenceId]
+        : undefined;
+      if (needsCaller && !from) throw new Error("eth_call caller authority is absent");
+      const tx = { to: request.to, data: request.data,
+        ...(from === undefined ? {} : { from: ethers.getAddress(from).toLowerCase() }) };
       const outcome = await withRpcRetry(async () => {
         try {
-          const cached = producerCallCache?.callCached({
-            to: request.to,
-            data: request.data,
-          }, control, source.hash);
+          const cached = producerCallCache?.callCached(tx, control, source.hash);
           const data = cached !== undefined
             ? await cached
             : exactCallBackend === undefined
-            ? await provider.call({
-                to: request.to,
-                data: request.data,
-              }, source.number, control)
-            : await exactCallBackend.call({
-                to: request.to,
-                data: request.data,
-              }, control);
+            ? await provider.call(tx, source.number, control)
+            : await exactCallBackend.call(tx, control);
           return { completion: "returned" as const, data };
         } catch (error) {
           // An execution-layer revert is chain-proven negative evidence at

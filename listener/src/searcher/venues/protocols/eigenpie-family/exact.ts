@@ -82,6 +82,7 @@ export const eigenpieExact = {
     Object.freeze({
       id: "get-mlrt-amount-to-mint",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: eigenpieRequestProgram,
     }),
   ]),

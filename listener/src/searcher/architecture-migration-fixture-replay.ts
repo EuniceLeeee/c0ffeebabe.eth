@@ -1655,14 +1655,6 @@ async function buildUniv3CaseCapture(input: {
         order,
       }),
     }));
-  const exactMethod = univ3Exact.methods().find(
-    (method) => method.kind === "request-program" &&
-      method.id === "quoter-v2",
-  );
-  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
-    throw new Error("univ3 exact request program is missing");
-  }
-  const program = exactMethod.program;
   const exactByRouteKey = new Map<
     string,
     { readonly amountOut: bigint; readonly evidence: UniV3ExactEvidence }
@@ -1686,6 +1678,13 @@ async function buildUniv3CaseCapture(input: {
         executor: MIGRATION_CAPTURE_EXECUTOR,
         runtimeEvidence: Object.freeze([]),
       });
+      const exactMethod = univ3Exact.methods(exactInput).find(
+        (method) => method.kind === "request-program" && method.id === "quoter-v2",
+      );
+      if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+        throw new Error("univ3 exact request program is missing");
+      }
+      const program = exactMethod.program;
       const requests = program.buildRequests(exactInput);
       const results = requests.map((request) =>
         univ3SuccessResult(request, input.source, ctx)

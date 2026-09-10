@@ -2336,6 +2336,64 @@ await assert.rejects(
   "strict exact context must receive an explicit candidate edge closure",
 );
 
+// The existing warm/publication boundary awaits amount quotes atomically in
+// both producer paths. Cancellation, mismatch and partial work never replace
+// an already published raw/effective pair.
+for (const path of ["coarse", "runtime"] as const) {
+  let release!: () => void;
+  let entered!: () => void;
+  const barrier = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  let invalid: "none" | "source" | "partial" = "none";
+  let publications = 0;
+  const enriched = new StrictCurrentRuntimeCoordinator(
+    request => root.createSession({ source: request.source, runtime: strictRuntime,
+      fundingAssets: request.fundingAssets, kind: "pricing", control: request.control }),
+    () => {},
+    publication => {
+      publications++;
+      assert(publication.snapshot.effectiveMids);
+      assert.equal(publication.snapshot.effectiveMids.source.number, publication.snapshot.sourceBlock);
+    },
+    async (pricing) => {
+      entered();
+      await barrier;
+      return { source: { number: pricing.sourceBlock,
+        hash: invalid === "source" ? "0xwrong" : pricing.sourceBlockHash,
+        generation: pricing.generation },
+        rows: new Map(), reference: "default", referenceWethInput: 1_000_000_000_000_000n,
+        complete: invalid !== "partial", wallMs: 0 };
+    },
+  );
+  const controller = new AbortController();
+  const prepare = () => path === "coarse"
+    ? enriched.prepareCoarsePricing({ graph: currentGraph, deadlineAtMs: Date.now() + 10_000,
+        signal: controller.signal })
+    : enriched.prepare({ graph: currentGraph, fundingTokens: [UNIV2_FIXTURE_TOKEN0],
+        deadlineAtMs: Date.now() + 10_000, signal: controller.signal });
+  const pending = prepare();
+  await started;
+  assert.equal(publications, 0, `${path}: raw mid must not release warm before effective`);
+  assert.equal(enriched.latestPricingSnapshot(), null);
+  release();
+  await pending;
+  assert.equal(publications, 1);
+  const published = enriched.latestPricingSnapshot();
+  assert(published?.effectiveMids);
+  assert(published.mids.size > 0, "effective companion must not replace the raw mid table");
+  for (const failure of ["source", "partial"] as const) {
+    invalid = failure;
+    await assert.rejects(prepare, /effective pricing incomplete or mismatched source/);
+    assert.equal(enriched.latestPricingSnapshot(), published);
+  }
+  invalid = "none";
+  controller.abort();
+  await assert.rejects(prepare);
+  assert.equal(publications, 1);
+  await enriched.resetDynamicStateForReplay();
+  assert.equal(enriched.latestPricingSnapshot(), null);
+}
+
 const failingCoordinator = new StrictCurrentRuntimeCoordinator(
   async (request: StrictSessionRequest) => await root.createSession({
     source: request.source,
@@ -2446,6 +2504,13 @@ if (victim.status === "resolved") {
     "v2",
   );
 }
+const readsBeforeUnsupportedEffective = currentPricingReads;
+await assert.rejects(session.issueExact({
+  edge, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [],
+  requireChainAmountQuote: true,
+}), (error: unknown) => (error as { code?: string }).code === "CHAIN_AMOUNT_QUOTE_UNAVAILABLE");
+assert.equal(currentPricingReads, readsBeforeUnsupportedEffective,
+  "constant-product local amount model must not become a chain effective quote");
 const exact = await session.issueExact({
   edge,
   amountIn: 1_000_000n,

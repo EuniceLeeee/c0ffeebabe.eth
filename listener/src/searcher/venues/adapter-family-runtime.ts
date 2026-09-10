@@ -1,4 +1,5 @@
 import {
+  assertAdapterWorkControl,
   executeAdapterWork,
   type AdapterWorkOutcome,
   type AdapterWorkControl,
@@ -1101,6 +1102,8 @@ export interface FamilyExactQuoteInvocation {
   readonly control?: AdapterWorkControl;
   /** Central policy bound; Family code cannot raise this limit. */
   readonly maxDependentReadRounds?: number;
+  /** Reuse the existing quote program, without accepting local amount models. */
+  readonly requireChainAmountQuote?: boolean;
 }
 
 interface ResolvedFamilyExactQuoteInvocation
@@ -1128,6 +1131,8 @@ export async function executeFamilyExactQuote(
     ...(input.maxDependentReadRounds === undefined
       ? {}
       : { maxDependentReadRounds: input.maxDependentReadRounds }),
+    ...(input.requireChainAmountQuote === undefined
+      ? {} : { requireChainAmountQuote: input.requireChainAmountQuote }),
   });
   let invocation: ResolvedFamilyExactQuoteInvocation | undefined;
   let programInput: RuntimeExactQuoteInput;
@@ -1166,6 +1171,8 @@ export async function executeFamilyExactQuote(
         methodIndex,
         methodId: method.id,
         kind: method.kind,
+        ...(method.kind === "request-program" && method.chainAmountQuote === true
+          ? { chainAmountQuote: true } : {}),
       })),
     });
     maxDependentReadRounds = exactDependentReadRoundLimit(
@@ -1192,7 +1199,11 @@ export async function executeFamilyExactQuote(
   const evidenceRefs = [
     `exact-method-order:${methodOrderFingerprint}`,
   ];
+  const stopped = exactControlFailure(invocation, evidenceRefs);
+  if (stopped !== null) return stopped;
   for (const [methodIndex, method] of methods.entries()) {
+    if (invocation.requireChainAmountQuote === true &&
+        (method.kind !== "request-program" || method.chainAmountQuote !== true)) continue;
     const methodRef = exactMethodEvidenceRef(
       method,
       methodIndex,
@@ -1263,7 +1274,8 @@ export async function executeFamilyExactQuote(
   return terminalExact(
     invocation,
     "failed",
-    "exact-no-method-applies",
+    invocation.requireChainAmountQuote === true
+      ? "exact-chain-amount-quote-unavailable" : "exact-no-method-applies",
     evidenceRefs,
   );
 }
@@ -1709,6 +1721,9 @@ function declareExactMethods(value: unknown): readonly RuntimeExactMethod[] {
       return method as RuntimeExactMethod;
     }
     if (method.kind === "request-program") {
+      if (method.chainAmountQuote !== undefined && method.chainAmountQuote !== true) {
+        throw new Error(`request exact method ${id} has invalid chain amount declaration`);
+      }
       const program = requireObject(
         method.program,
         `request exact method ${id} program`,
@@ -1883,6 +1898,20 @@ function terminalExactFromWork(
   );
 }
 
+function exactControlFailure(
+  invocation: ResolvedFamilyExactQuoteInvocation,
+  evidenceRefs: readonly string[],
+): TerminalFamilyExactQuote | null {
+  try {
+    assertAdapterWorkControl(invocation.control);
+    return null;
+  } catch {
+    return terminalExact(invocation, "unresolved",
+      invocation.control?.signal?.aborted ? "exact-control:aborted" : "exact-control:deadline",
+      evidenceRefs);
+  }
+}
+
 function resolvedExactQuote(input: {
   readonly invocation: ResolvedFamilyExactQuoteInvocation;
   readonly quote: ExactQuoteResult<unknown>;
@@ -1892,8 +1921,12 @@ function resolvedExactQuote(input: {
   readonly compatibilityFingerprint: string;
   readonly evidenceRefs: readonly string[];
   readonly reasonCode: string;
-}): ResolvedFamilyExactQuote {
+}): FamilyExactQuoteOutcome {
   const invocation = input.invocation;
+  // Cache/local decoding can finish after the caller retires the work.
+  // A fresh handle must obey the same control as a cold transport request.
+  const stopped = exactControlFailure(invocation, input.evidenceRefs);
+  if (stopped !== null) return stopped;
   const evidenceRefs = uniqueSorted(input.evidenceRefs);
   const source = Object.freeze({ ...invocation.source });
   const runtimeEvidence = sealRuntimeEvidence(input.invocation.runtimeEvidence);

@@ -87,6 +87,7 @@ export const univ4FeeHookExact = {
     Object.freeze({
       id: "univ4-fee-hook-quoter",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: feeHookRequestProgram,
     }),
   ]),

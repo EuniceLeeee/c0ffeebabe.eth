@@ -1,4 +1,5 @@
 import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
+import { effectiveEnumerationMids } from "../blockscan-effective-mid.js";
 import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import {
@@ -64,7 +65,7 @@ export function detectProductionBlockScanOpportunities(
     sourceBlock: input.runtime.sourceBlock,
     swapTouched: input.swapTouched,
     cfg: input.cfg,
-    mids: input.runtime.pricing.mids,
+    mids: effectiveEnumerationMids(input.runtime.pricing),
     routeEligible: input.routeEligible,
     edgeEligible: input.edgeEligible,
     captureCoarseEnumeration: input.captureCoarseEnumeration,

@@ -874,6 +874,12 @@ export type ExactMethod<
   | {
       readonly id: string;
       readonly kind: "request-program";
+      /** Every successful positive-input path quotes input.amountIn through
+       * chain execution (call return/revert data or observed simulation effects).
+       * No local reserves/unit-price fallback. This declares quote provenance,
+       * NOT capacity, caller eligibility or final execution success.
+       * Absence is unknown. Declared per invocation by the owning Family. */
+      readonly chainAmountQuote?: true;
       readonly program: DependentRequestProgram<
         ExactQuoteInput<Descriptor, Route>,
         ExactQuoteResult<Evidence>

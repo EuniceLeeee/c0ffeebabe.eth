@@ -82,6 +82,7 @@ export const erc4626Exact = {
     Object.freeze({
       id: "erc4626-preview",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: erc4626RequestProgram,
     }),
   ]),

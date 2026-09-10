@@ -113,7 +113,7 @@ export function enumerateNMinusOneCoarseCandidates(input: {
     sourceBlock: coarse.sourceBlock,
     swapTouched: null,
     cfg: input.cfg,
-    mids: coarse.mids,
+    mids: effectiveEnumerationMids(coarse),
     routeEligible: input.routeEligible,
     edgeEligible: input.edgeEligible,
     captureCoarseEnumeration: input.captureCoarseEnumeration,
@@ -282,3 +282,4 @@ function scannerConsumesEdge(edge: {
   return edge.slotKind === "swap" ||
     (edge.slotKind === "protocol" && !edge.leavesStandingPosition);
 }
+import { effectiveEnumerationMids } from "../blockscan-effective-mid.js";

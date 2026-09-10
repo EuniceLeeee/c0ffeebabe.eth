@@ -31,6 +31,8 @@ import {
 import { blockScanRouteId } from "./blockscan-route-identity.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
+import { buildEffectiveMids, effectiveMidPairStatistics } from "./blockscan-effective-mid.js";
+import { guardRpcThrottle } from "./rpc-throttle-guard.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import type { CanonicalSource } from
@@ -1923,10 +1925,54 @@ async function main(): Promise<void> {
     strictSessionCache.set(key, pending);
     return pending;
   };
+  const blockScanAmountReference = new BlockScanAmountReference(ADDR.WETH);
   currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
     strictSessionFor,
     () => strictSessionCache.clear(),
     (publication) => blockScanRouteTelemetry.recordPricing(publication),
+    blockScanCfg === undefined ? undefined : async (pricing, control, pricingBackend) => {
+      const source = Object.freeze({ number: pricing.sourceBlock,
+        hash: pricing.sourceBlockHash, generation: pricing.generation });
+      // Use the existing source-pinned producer transport. The fallback is
+      // lifecycle-owned here only for callers without a supplied transport.
+      const ownedBackend = pricingBackend === undefined ? new PinnedRethQuoteBackend(
+        config.rpcUrl, source.hash, { ...control, transportLane: "producer-bulk",
+          scopeLabel: "effective mid", allowSingleCallFallback: false,
+          maxBatchSize: 128, maxConcurrentBatches: 4,
+          transportScheduler: blockScanRethTransportScheduler },
+      ) : undefined;
+      try {
+        const quoteBackend = guardRpcThrottle(pricingBackend ?? ownedBackend!, () => {
+          // Emit a credential-free stop marker for the existing live supervisor.
+          console.error("[searcher/effective-mid] RPC HTTP 429 or quota limit; stopping");
+          blockScanRuntimeAbort.abort(new Error("RPC throttle during effective pricing"));
+        });
+        const session = await strictSessionFor({ purpose: "exact-execution", source,
+          control, fundingAssets: [], requiredEdgeIds: new Set(pricing.mids.keys()),
+          exactCallBackend: quoteBackend });
+        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} mids=${pricing.mids.size}`);
+        const effective = await buildEffectiveMids({ pricing, weth: ADDR.WETH,
+          gasCostWei: blockScanAmountReference.estimateGasCost(source),
+          enumerationSpreadBps: blockScanCfg.minSpreadBps, control, concurrency: 128,
+          quote: async (request) => {
+            const quote = await session.issueExact({ ...request,
+              executor: config.botvmAddress, runtimeEvidence: [] });
+            if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
+            return quote;
+          },
+        });
+        console.log(`[searcher/effective-mid] ${JSON.stringify({
+          sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
+          rawMids: pricing.mids.size, reference: effective.reference,
+          referenceWethInput: effective.referenceWethInput.toString(),
+          complete: effective.complete, wallMs: effective.wallMs,
+          ...effectiveMidPairStatistics(effective),
+        })}`);
+        return effective;
+      } finally {
+        await ownedBackend?.closeAndDrain();
+      }
+    },
   );
 
   // The ready envelope is the only startup catalog/Graph lineage. Rehydrated
@@ -2078,7 +2124,6 @@ async function main(): Promise<void> {
   }
 
   const blockScanSimRejects = new BlockScanSimRejectCache();
-  const blockScanAmountReference = new BlockScanAmountReference(ADDR.WETH);
   let activeBlindSourceHead: BlindProductionSourceHeadControl | null = null;
   let preparedBlindBase: BlindProductionPrepareControl | null = null;
   let preparedBlindDynamicResetNonce: string | null = null;

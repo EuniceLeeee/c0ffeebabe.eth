@@ -236,7 +236,7 @@ const univ3RequestProgram: ExactRequestProgram<
 };
 
 export const univ3Exact = {
-  methods: () => Object.freeze([
+  methods: (input) => Object.freeze([
     localZeroExactMethod<UniV3Descriptor, UniV3Route, UniV3ExactEvidence>(
       "local-zero",
       (input) => {
@@ -247,6 +247,8 @@ export const univ3Exact = {
     Object.freeze({
       id: "quoter-v2",
       kind: "request-program" as const,
+      ...(input.descriptor.quoterBinding.quoter === null
+        ? {} : { chainAmountQuote: true as const }),
       program: univ3RequestProgram,
     }),
   ]),

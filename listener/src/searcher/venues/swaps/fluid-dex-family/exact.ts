@@ -81,6 +81,7 @@ export const fluidDexExact = {
     Object.freeze({
       id: "declared-revert-quote",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: fluidDexRequestProgram,
     }),
   ]),

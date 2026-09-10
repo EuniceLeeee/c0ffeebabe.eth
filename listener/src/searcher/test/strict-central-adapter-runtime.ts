@@ -414,6 +414,46 @@ async function main(): Promise<void> {
     runtime: actorRuntime,
   });
   assert.equal(accepted.status, "resolved");
+
+  // Caller-sensitive eth_call and its successful-byte cache must share the
+  // exact same from field. No implicit zero sender or cross-actor cache hit.
+  const executorAddress = `0x${"12".repeat(20)}`;
+  const observedAddress = `0x${"23".repeat(20)}`;
+  const actorAddress = `0x${"34".repeat(20)}`;
+  for (const transport of ["provider", "batch", "cache"] as const) {
+    for (const [caller, expected] of [
+      [{ kind: "executor" as const }, executorAddress],
+      [{ kind: "observed-sender" as const }, observedAddress],
+      [{ kind: "verified-actor" as const, evidenceId: "actor" }, actorAddress],
+      [{ kind: "none" as const }, undefined],
+    ] as const) {
+      const reads: { from?: string; path: string }[] = [];
+      const wired = createStrictCentralAdapterRuntime({
+        provider: { ...mockProvider(), call: async tx => { reads.push({ ...tx, path: "provider" }); return "0x"; } },
+        executor: executorAddress, observedSender: observedAddress, verifiedActors: { actor: actorAddress },
+        generationFence: { assertCurrent() {} },
+        ...(transport === "provider" ? {} : {
+          exactCallBackend: { call: async (tx: { from?: string }) => { reads.push({ ...tx, path: "batch" }); return "0x"; } },
+          producerCallCache: { callCached: (tx: { from?: string }) => {
+            reads.push({ ...tx, path: "cache" });
+            return transport === "cache" ? Promise.resolve("0x") : undefined;
+          } },
+        }),
+      });
+      const result = await executeAdapterWork({ runtime: wired, intent: {
+        stage: "exact-refine", familyId: "test:caller" as never, source: SOURCE, generation: SOURCE.generation,
+        programInput: {}, program: {
+          requirements: () => ({ transports: ["eth-call"], caller: caller.kind }),
+          buildRequests: () => [{ kind: "eth-call", id: "caller", to: WSTETH,
+            data: "0x", caller, completion: "return-data" }],
+          decode: () => ({ ok: true }),
+        },
+      } });
+      assert.equal(result.status, "resolved");
+      assert.equal(reads.at(-1)?.path, transport);
+      assert(reads.length > 0 && reads.every(tx => tx.from === expected));
+    }
+  }
   console.log("strict-central-adapter-runtime PASS");
 }
 

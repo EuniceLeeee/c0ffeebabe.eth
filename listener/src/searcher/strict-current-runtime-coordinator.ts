@@ -34,6 +34,8 @@ import {
 import type { RouteVenueMid } from "./venues/mid-readers.js";
 import type { StateBackend } from "../shared/state/state-backend.js";
 import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
+import type { AdapterWorkControl } from "./adapter-work-intent.js";
+import type { EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
 
 export type StrictSessionPurpose =
   | "coarse-pricing"
@@ -134,6 +136,11 @@ export class StrictCurrentRuntimeCoordinator
     private readonly onPricingPublication?: (
       publication: StrictPricingPublication,
     ) => void,
+    private readonly effectivePricing?: (
+      snapshot: BlockScanStateSnapshot,
+      control: AdapterWorkControl,
+      backend?: Pick<StateBackend, "call">,
+    ) => Promise<EffectiveMidSnapshot>,
   ) {}
 
   latestPricingSnapshot(): BlockScanStateSnapshot | null {
@@ -213,10 +220,10 @@ export class StrictCurrentRuntimeCoordinator
         : { touchedPools: input.touchedPools }),
     });
     assertWorkOpen(settleDeadlineAtMs, input.signal);
-    const built = buildStrictPricingSnapshot(session, input.graph, {
+    const built = await this.enrichPricing(buildStrictPricingSnapshot(session, input.graph, {
       previous,
       canonicalActivity: input.canonicalActivity,
-    });
+    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend);
     this.publishPricing(built);
     return completePricingResult(built.snapshot);
   }
@@ -292,10 +299,10 @@ export class StrictCurrentRuntimeCoordinator
       : Math.max(0, Date.now() - executionStartedAtMs);
     assertWorkOpen(input.deadlineAtMs, input.signal);
     const pricingStartedAtMs = Date.now();
-    const built = buildStrictPricingSnapshot(session, input.graph, {
+    const built = await this.enrichPricing(buildStrictPricingSnapshot(session, input.graph, {
       previous,
       canonicalActivity: input.canonicalActivity,
-    });
+    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend);
     const pricing = built.snapshot;
     const pricingMs = Math.max(0, Date.now() - pricingStartedAtMs) +
       Math.max(0, pricingStartedAtMs - sessionStartedAtMs);
@@ -337,6 +344,24 @@ export class StrictCurrentRuntimeCoordinator
       issues: Object.freeze([]),
       timing,
     });
+  }
+
+  private async enrichPricing(
+    built: StrictPricingBuildResult,
+    control: AdapterWorkControl,
+    backend?: Pick<StateBackend, "call">,
+  ): Promise<StrictPricingBuildResult> {
+    if (!this.effectivePricing) return built;
+    const effectiveMids = await this.effectivePricing(built.snapshot, control, backend);
+    assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
+    const source = sourceFor(built.snapshot.graph);
+    if (!effectiveMids.complete || effectiveMids.source.number !== source.number ||
+        effectiveMids.source.hash.toLowerCase() !== source.hash.toLowerCase() ||
+        effectiveMids.source.generation !== source.generation) {
+      throw new Error("effective pricing incomplete or mismatched source");
+    }
+    const snapshot = Object.freeze({ ...built.snapshot, effectiveMids });
+    return { snapshot, publication: Object.freeze({ ...built.publication, snapshot }) };
   }
 
   private publishPricing(built: StrictPricingBuildResult): void {

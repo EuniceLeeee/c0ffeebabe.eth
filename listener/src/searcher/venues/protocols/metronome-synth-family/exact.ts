@@ -90,6 +90,7 @@ export const metronomeSynthExact = {
     Object.freeze({
       id: "metronome-synth-quote",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: metronomeSynthRequestProgram,
     }),
   ]),

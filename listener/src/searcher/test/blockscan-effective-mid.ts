@@ -1,0 +1,690 @@
+import assert from "node:assert/strict";
+import {
+  buildEffectiveMids,
+  DEFAULT_EFFECTIVE_WETH_INPUT,
+  effectiveEnumerationMids,
+  effectiveMidPairStatistics,
+  type EffectiveMidRow,
+  type EffectiveMidSnapshot,
+  type EffectivePricingInput,
+} from "../blockscan-effective-mid.js";
+import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
+import type { TokenEdge } from "../planner/token-graph.js";
+import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
+import type { RouteVenueMid } from "../venues/mid-readers.js";
+
+// Offline behavior tests only: callbacks are fixtures, not chain-quote evidence
+// or full production acceptance. Shapes follow blockscan-amount-reference.ts.
+const W = "weth", U = "usdc";
+const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
+const SOURCE = Object.freeze({ number: 42, hash: hash(0xabcdef), generation: 7 });
+const DEFAULT_RAW = 1_000_000_000_000_000n; // 0.001 ETH in wei.
+type BuildInput = Parameters<typeof buildEffectiveMids>[0];
+type Quote = BuildInput["quote"];
+type QuoteInput = Parameters<Quote>[0];
+type QuoteResult = Awaited<ReturnType<Quote>>;
+type PriceRow = readonly [TokenEdge, number, number?];
+
+function edge(a: string, b: string, id: string, instanceKey = id): TokenEdge {
+  return {
+    tokenIn: a, tokenOut: b, adapterId: "test-swap", target: id,
+    instanceKey, executionVariantKey: id,
+    canonicalEdgeId: id as TokenEdge["canonicalEdgeId"],
+    slotKind: "swap", edgeKind: "swap", leavesStandingPosition: false,
+  };
+}
+
+function pricing(rows: readonly PriceRow[]): EffectivePricingInput {
+  return {
+    sourceBlock: SOURCE.number, sourceBlockHash: SOURCE.hash, generation: SOURCE.generation,
+    graph: { edges: rows.map(([e]) => e) },
+    coverage: { resolvedEdgeKeys: rows.map(([e]) => blockScanEdgeKey(e)) },
+    mids: new Map(rows.map(([e, mid, feeBps = 0]) => [blockScanEdgeKey(e), {
+      edges: [e], kind: "external-swap", pool: e.target, mid, feeBps, depthProxy: 1,
+    }])),
+  } as unknown as EffectivePricingInput;
+}
+
+function build(prices: EffectivePricingInput, overrides: Partial<BuildInput> = {}) {
+  return buildEffectiveMids({
+    pricing: prices, weth: W, gasCostWei: null, enumerationSpreadBps: 200,
+    control: {}, concurrency: 2,
+    quote: async ({ amountIn }) => ({ source: SOURCE, amountIn, amountOut: amountIn * 7n }),
+    ...overrides,
+  });
+}
+
+function row(snapshot: EffectiveMidSnapshot, e: TokenEdge): EffectiveMidRow {
+  const found = snapshot.rows.get(blockScanEdgeKey(e));
+  assert(found, `missing row for ${blockScanEdgeKey(e)}`);
+  return found;
+}
+
+function noQuote(r: EffectiveMidRow, status: EffectiveMidRow["status"]) {
+  assert.equal(r.status, status, r.edgeId);
+  assert.equal(r.amountOut, null, `${r.edgeId}: no fabricated output`);
+  assert.equal(r.effectiveMid, null, `${r.edgeId}: no fallback to the sizing mark`);
+}
+
+const tests: [string, () => void | Promise<void>][] = [];
+const test = (name: string, run: () => void | Promise<void>) => { tests.push([name, run]); };
+
+for (const gasCostWei of [null, 100_000_000_000_000n]) {
+  test(`${gasCostWei === null ? "default 0.001 ETH" : "gas at 200 bps"}: every input token, three hops and raw units`, async () => {
+    const rows: PriceRow[] = [
+      // Deliberately order the four-hop chain backwards to catch in-pass propagation.
+      [edge("z", "y", "z-y"), 4], [edge("y", "x", "y-x"), 3],
+      [edge("x", "USDC", "x-u"), 2], [edge("USDC", "WETH", "u-w"), 5e8],
+      [edge(W, U, "w-u"), 2e-9],
+      [edge(U, "output-only", "u-output"), 987_654_321],
+      [edge(W, "reverse-only", "w-reverse"), 1],
+      [edge("reverse-only", "output-only", "reverse-output"), 1],
+      [edge("disconnected", "output-only", "disconnected"), 1],
+      [edge("fee", W, "fee-w"), 100, 100],
+      [edge("fee2", "fee", "fee2-fee"), 2, 500],
+      [edge("third", W, "third-w"), 3],
+      [edge("large-unit", W, "large-w"), 1e16],
+      [edge("tiny-unit", W, "tiny-w"), 1e-20],
+    ];
+    // Independent expected values, not calls back into the amount-reference helper.
+    const expected = new Map<string, bigint | null>(gasCostWei === null ? [
+      [W, DEFAULT_RAW], [U, 2_000_000n], ["x", 1_000_000n], ["y", 333_334n],
+      ["fee", (DEFAULT_RAW + 98n) / 99n], ["fee2", (DEFAULT_RAW * 10n + 1880n) / 1881n],
+      ["third", 333_333_333_333_334n], ["large-unit", 1n], ["tiny-unit", 10n ** 35n],
+      ["z", null], ["reverse-only", null], ["disconnected", null],
+    ] : [
+      [W, 5_000_000_000_000_001n], [U, 10_000_001n], ["x", 5_000_001n], ["y", 1_666_667n],
+      ["fee", 5_000_000_000_000_000n / 99n + 1n],
+      ["fee2", 50_000_000_000_000_000n / 1881n + 1n],
+      ["third", 1_666_666_666_666_667n], ["large-unit", 1n], ["tiny-unit", 5n * 10n ** 35n + 1n],
+      ["z", null], ["reverse-only", null], ["disconnected", null],
+    ]);
+    const prices = pricing(rows);
+    const controller = new AbortController();
+    const control = { signal: controller.signal };
+    const calls: QuoteInput[] = [];
+    const snapshot = await build(prices, {
+      gasCostWei, control, weth: "WETH", concurrency: 3,
+      quote: async call => {
+        calls.push(call);
+        // Deliberately unrelated to each mark and its fee; only this output may be published.
+        return { source: SOURCE, amountIn: call.amountIn, amountOut: call.amountIn * 7n + 1n };
+      },
+    });
+    assert.equal(DEFAULT_EFFECTIVE_WETH_INPUT, DEFAULT_RAW);
+    assert.equal(snapshot.reference, gasCostWei === null ? "default" : "gas");
+    assert.equal(snapshot.referenceWethInput, expected.get(W));
+    assert.equal(snapshot.complete, true);
+    assert.deepEqual(snapshot.source, SOURCE);
+    assert.equal(snapshot.rows.size, rows.length);
+    assert.deepEqual([...snapshot.rows.keys()], [...prices.mids.keys()]);
+    assert(Number.isFinite(snapshot.wallMs) && snapshot.wallMs >= 0);
+    assert(Object.isFrozen(snapshot) && Object.isFrozen(snapshot.source));
+    const quotedIds = new Set<string>();
+    for (const [e] of rows) {
+      const r = row(snapshot, e);
+      const token = e.tokenIn.toLowerCase();
+      assert(expected.has(token));
+      const amount = expected.get(token)!;
+      assert.equal(r.amountIn, amount, token);
+      assert.equal(r.tokenIn, token);
+      assert.equal(r.tokenOut, e.tokenOut.toLowerCase());
+      assert.equal(r.instanceKey, e.instanceKey);
+      assert(Object.isFrozen(r));
+      if (amount === null) noQuote(r, "missing-valuation");
+      else {
+        quotedIds.add(r.edgeId);
+        assert.equal(r.status, "quoted");
+        assert.equal(r.amountOut, amount * 7n + 1n);
+        assert.equal(r.effectiveMid, Number(amount * 7n + 1n) / Number(amount));
+      }
+    }
+    assert.equal(calls.length, quotedIds.size, "one quote per valued direction");
+    assert.deepEqual(new Set(calls.map(c => blockScanEdgeKey(c.edge))), quotedIds);
+    for (const call of calls) {
+      assert.strictEqual(call.control, control);
+      assert.equal(call.requireChainAmountQuote, true);
+      assert.strictEqual(call.edge, rows.find(([e]) => e === call.edge)![0]);
+      assert.equal(call.amountIn, expected.get(call.edge.tokenIn.toLowerCase()), "explicit Exact input preserved");
+    }
+  });
+}
+
+test("gas reference replaces the default even when smaller; threshold and strict rounding apply", async () => {
+  const e = edge(W, U, "gas");
+  const prices = pricing([[e, 2e-9]]);
+  const small = await build(prices, { gasCostWei: 1n });
+  assert.equal(small.referenceWethInput, 51n);
+  assert.equal(row(small, e).amountIn, 51n);
+  const wider = await build(prices, { gasCostWei: 100_000_000_000_000n, enumerationSpreadBps: 500 });
+  assert.equal(wider.referenceWethInput, 2_000_000_000_000_001n);
+  assert.equal(row(wider, e).amountIn, 2_000_000_000_000_001n);
+});
+
+test("one immutable sizing pass; shortest paths and instance-deduplicated medians", async () => {
+  const direct = edge(U, W, "u-direct", "one");
+  const rows: PriceRow[] = [
+    [direct, 2], [edge(U, W, "u-variant", "one"), 100],
+    [edge(U, W, "u-second", "two"), 3], [edge(U, W, "u-third", "three"), 4],
+    [edge(U, "x", "longer"), 100], [edge("x", W, "x-direct"), 100],
+    [edge("linked", U, "linked-u"), 2],
+  ];
+  const prices = pricing(rows);
+  const mids = prices.mids as Map<string, RouteVenueMid>;
+  const original = mids.get(blockScanEdgeKey(direct))!;
+  const snapshot = await build(prices, {
+    concurrency: 1,
+    quote: async ({ amountIn }) => {
+      mids.set(blockScanEdgeKey(direct), { ...original, mid: 1e30 });
+      return { source: SOURCE, amountIn, amountOut: amountIn * 11n };
+    },
+  });
+  for (const [e] of rows) {
+    const expected = e.tokenIn === U ? 333_333_333_333_334n
+      : e.tokenIn === "linked" ? 166_666_666_666_667n : 10_000_000_000_000n;
+    assert.equal(row(snapshot, e).amountIn, expected, "later mid changes cannot reprice this pass");
+    assert.equal(row(snapshot, e).effectiveMid, 11);
+  }
+});
+
+test("unresolved, invalid, absent and standing-position marks cannot manufacture valuations", async () => {
+  const rows: PriceRow[] = [
+    ...[0, -1, NaN, Infinity].map((mid, i): PriceRow => [edge(`bad-mid-${i}`, W, `bad-mid-${i}`), mid]),
+    ...[-1, 10_000, NaN, Infinity].map((fee, i): PriceRow => [edge(`bad-fee-${i}`, W, `bad-fee-${i}`), 1, fee]),
+    [edge("unresolved", W, "unresolved"), 1],
+    [edge("dependent", "unresolved", "dependent"), 1],
+    [{ ...edge("standing", W, "standing"), leavesStandingPosition: true }, 1],
+    [edge("self-only", "self-only", "self-only"), 1],
+  ];
+  const absent = edge("absent", W, "absent");
+  const original = pricing([...rows, [absent, 1]]);
+  const prices: EffectivePricingInput = {
+    ...original,
+    mids: new Map([...original.mids].filter(([key]) => key !== blockScanEdgeKey(absent))),
+    coverage: {
+      ...original.coverage,
+      resolvedEdgeKeys: original.coverage.resolvedEdgeKeys.filter(key => key !== "unresolved"),
+    },
+  };
+  let calls = 0;
+  const snapshot = await build(prices, { quote: async () => { calls++; throw new Error("unexpected quote"); } });
+  assert.equal(calls, 0);
+  assert.equal(snapshot.rows.size, rows.length);
+  assert.equal(snapshot.rows.has(blockScanEdgeKey(absent)), false, "no row without a ready mid");
+  for (const r of snapshot.rows.values()) {
+    assert.equal(r.amountIn, null);
+    noQuote(r, "missing-valuation");
+  }
+  assert.equal(snapshot.complete, true, "complete means work finished, not every direction quoted");
+});
+
+test("unsupported, thrown errors and zero output stay distinct; positive coarse marks are never fake quotes", async () => {
+  const standing = { ...edge(W, U, "standing"), leavesStandingPosition: true };
+  const ids = ["unsupported", "error", "string", "null", "wrong-code", "zero", "negative", "overflow", "good"];
+  const edges = [standing, ...ids.map(id => edge(W, U, id))];
+  const calls: string[] = [];
+  const snapshot = await build(pricing(edges.map(e => [e, 999, 100])), {
+    quote: async ({ edge: e, amountIn }) => {
+      calls.push(e.target);
+      switch (e.target) {
+        case "unsupported": throw Object.assign(new Error("no chain amount quote"), { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" });
+        case "error": throw new Error("fixture failure");
+        case "string": throw "fixture string rejection";
+        case "null": throw null;
+        case "wrong-code": throw { code: "chain_amount_quote_unavailable" };
+        case "zero": return { source: SOURCE, amountIn, amountOut: 0n };
+        case "negative": return { source: SOURCE, amountIn, amountOut: -1n };
+        case "overflow": return { source: SOURCE, amountIn, amountOut: 10n ** 400n };
+        default: return { source: SOURCE, amountIn, amountOut: amountIn * 2n };
+      }
+    },
+  });
+  assert.deepEqual(new Set(calls), new Set(ids));
+  assert.equal(calls.length, ids.length);
+  for (const e of edges) {
+    const r = row(snapshot, e);
+    assert.equal(r.amountIn, DEFAULT_RAW);
+    if (e.target === "good") {
+      assert.equal(r.status, "quoted");
+      assert.equal(r.amountOut, DEFAULT_RAW * 2n);
+      assert.equal(r.effectiveMid, 2, "do not apply the coarse fee a second time");
+    } else if (e.target === "zero") {
+      assert.equal(r.status, "no-output");
+      assert.equal(r.amountOut, 0n, "a measured zero is different from unavailable output");
+      assert.equal(r.effectiveMid, null);
+    } else noQuote(r, ["standing", "unsupported"].includes(e.target) ? "unsupported" : "quote-failed");
+  }
+  assert.equal(snapshot.complete, true);
+  assert.deepEqual(effectiveMidPairStatistics(snapshot), {
+    directions: 10, quoted: 1,
+    byStatus: { unsupported: 2, "quote-failed": 6, "no-output": 1, quoted: 1 },
+    comparablePairs: 0, pairsAboveThreshold: 0, thresholdBps: 100,
+  });
+});
+
+test("returned source number, hash, generation and explicit amount must all match", async () => {
+  const variants: [string, (amount: bigint) => Partial<QuoteResult>][] = [
+    ["number", () => ({ source: { ...SOURCE, number: SOURCE.number - 1 } })],
+    ["hash", () => ({ source: { ...SOURCE, hash: hash(99) } })],
+    ["generation", () => ({ source: { ...SOURCE, generation: SOURCE.generation + 1 } })],
+    ["amount", amount => ({ amountIn: amount + 1n })],
+    ["missing-source", () => ({ source: undefined } as unknown as Partial<QuoteResult>)],
+  ];
+  const e = edge(W, U, "source");
+  for (const [label, change] of variants) {
+    let calls = 0;
+    const snapshot = await build(pricing([[e, 2]]), {
+      quote: async ({ amountIn }) => {
+        calls++;
+        return { source: SOURCE, amountIn, amountOut: amountIn * 2n, ...change(amountIn) };
+      },
+    });
+    assert.equal(calls, 1, label);
+    noQuote(row(snapshot, e), "quote-failed");
+    assert.equal(row(snapshot, e).amountIn, DEFAULT_RAW);
+    assert.deepEqual(snapshot.source, SOURCE);
+  }
+  const prices = { ...pricing([[e, 2]]), sourceBlockHash: SOURCE.hash.toUpperCase() };
+  const same = await build(prices, {
+    quote: async ({ amountIn }) => ({ source: { ...SOURCE, hash: SOURCE.hash.toUpperCase() }, amountIn, amountOut: 23n }),
+  });
+  assert.equal(row(same, e).status, "quoted", "hash casing is not a source mismatch");
+  assert.deepEqual(same.source, SOURCE);
+  const nextSource = { number: SOURCE.number + 1, hash: hash(0xfedcba), generation: SOURCE.generation + 1 };
+  const next = await build({
+    ...prices, sourceBlock: nextSource.number, sourceBlockHash: nextSource.hash, generation: nextSource.generation,
+  }, { quote: async ({ amountIn }) => ({ source: nextSource, amountIn, amountOut: 41n }) });
+  assert.equal(row(next, e).amountOut, 41n);
+  assert.deepEqual(next.source, nextSource);
+  assert.equal(row(same, e).amountOut, 23n, "later builds do not mutate earlier rows");
+  assert.deepEqual(same.source, SOURCE);
+});
+
+test("explicit raw amounts below the probe floor and above safe integers reach Exact unchanged", async () => {
+  const edges = [edge("huge-value", W, "one-raw"), edge("tiny-value", W, "big-raw")];
+  const calls: bigint[] = [];
+  const snapshot = await build(pricing([[edges[0]!, 1e16], [edges[1]!, 1e-20]]), {
+    quote: async ({ amountIn }) => {
+      calls.push(amountIn);
+      return { source: SOURCE, amountIn, amountOut: amountIn + 17n };
+    },
+  });
+  assert.deepEqual(calls, [1n, 10n ** 35n]);
+  for (let i = 0; i < edges.length; i++) {
+    const r = row(snapshot, edges[i]!);
+    assert.equal(r.status, "quoted");
+    assert.equal(r.amountIn, calls[i]);
+    assert.equal(r.amountOut, calls[i]! + 17n, "bigint output must not round through Number");
+  }
+});
+
+test("positive output with an unrepresentable effective rate fails closed; measured zero is retained", async () => {
+  const e = edge("tiny", W, "tiny");
+  for (const amountOut of [1n, 0n]) {
+    const snapshot = await build(pricing([[e, 1e-300]]), {
+      quote: async ({ amountIn }) => ({ source: SOURCE, amountIn, amountOut }),
+    });
+    assert.equal(row(snapshot, e).amountIn, 10n ** 315n);
+    if (amountOut > 0n) noQuote(row(snapshot, e), "quote-failed");
+    else {
+      assert.equal(row(snapshot, e).status, "no-output");
+      assert.equal(row(snapshot, e).amountOut, 0n);
+      assert.equal(row(snapshot, e).effectiveMid, null);
+    }
+  }
+});
+
+test("abort and deadline before work prevent every quote", async () => {
+  const originalNow = Date.now;
+  Date.now = () => 1000;
+  try {
+    const controller = new AbortController();
+    controller.abort();
+    const controls: BuildInput["control"][] = [
+      { signal: controller.signal }, { deadlineAtMs: 999 }, { deadlineAtMs: 1000 },
+    ];
+    const prices = pricing([0, 1, 2].map(i => [edge(W, U, `cancel-${i}`), 999]));
+    for (const control of controls) {
+      let calls = 0;
+      const snapshot = await build(prices, {
+        control, concurrency: 10,
+        quote: async () => { calls++; throw new Error("unexpected quote"); },
+      });
+      assert.equal(calls, 0);
+      assert.equal(snapshot.complete, false);
+      assert.equal(snapshot.wallMs, 0);
+      assert.equal(snapshot.rows.size, 3);
+      for (const r of snapshot.rows.values()) {
+        assert.equal(r.amountIn, DEFAULT_RAW);
+        noQuote(r, "cancelled");
+      }
+    }
+  } finally { Date.now = originalNow; }
+});
+
+for (const reason of ["abort", "deadline"] as const) {
+  for (const rejects of [false, true]) {
+    test(`${reason} during ${rejects ? "rejected" : "successful"} quote discards it and stops queued work`, async () => {
+      const originalNow = Date.now;
+      let now = 1000;
+      Date.now = () => now;
+      try {
+        const controller = new AbortController();
+        const control = { signal: controller.signal, deadlineAtMs: 1100 };
+        const edges = ["first", "in-flight", "queued"].map(id => edge(W, U, id));
+        const calls: QuoteInput[] = [];
+        const snapshot = await build(pricing(edges.map(e => [e, 999])), {
+          control, concurrency: 1,
+          quote: async call => {
+            calls.push(call);
+            if (call.edge === edges[1]) {
+              if (reason === "abort") controller.abort();
+              else now = 1100; // Equality is already expired.
+              if (rejects) throw { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" };
+            }
+            return { source: SOURCE, amountIn: call.amountIn, amountOut: 123n };
+          },
+        });
+        assert.deepEqual(calls.map(c => c.edge), edges.slice(0, 2));
+        for (const call of calls) assert.strictEqual(call.control, control);
+        assert.equal(row(snapshot, edges[0]!).status, "quoted");
+        assert.equal(row(snapshot, edges[0]!).amountOut, 123n);
+        noQuote(row(snapshot, edges[1]!), "cancelled");
+        noQuote(row(snapshot, edges[2]!), "cancelled");
+        assert.equal(snapshot.complete, false);
+        assert.equal(snapshot.wallMs, reason === "deadline" ? 100 : 0);
+        assert.equal(effectiveMidPairStatistics(snapshot).quoted, 1);
+      } finally { Date.now = originalNow; }
+    });
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+test("bounded concurrent quotes can finish out of order while rows retain input order", async () => {
+  const edges = [0, 1, 2, 3].map(i => edge(W, U, `concurrent-${i}`));
+  const pending = edges.map(() => deferred<QuoteResult>());
+  const started = edges.map(() => deferred<void>());
+  const calls: QuoteInput[] = [];
+  let active = 0, peak = 0;
+  const promise = build(pricing(edges.map(e => [e, 1])), {
+    concurrency: 2,
+    quote: async call => {
+      const i = edges.indexOf(call.edge);
+      calls.push(call);
+      active++;
+      peak = Math.max(peak, active);
+      started[i]!.resolve();
+      try { return await pending[i]!.promise; }
+      finally { active--; }
+    },
+  });
+  await Promise.all([started[0]!.promise, started[1]!.promise]);
+  assert.equal(calls.length, 2, "queued work cannot exceed concurrency");
+  const finish = (i: number) => pending[i]!.resolve({ source: SOURCE, amountIn: DEFAULT_RAW, amountOut: BigInt(i + 1) });
+  finish(1);
+  await started[2]!.promise;
+  finish(2);
+  await started[3]!.promise;
+  finish(3);
+  finish(0);
+  const snapshot = await promise;
+  assert.equal(peak, 2);
+  assert.equal(active, 0);
+  assert.equal(calls.length, edges.length);
+  assert.deepEqual([...snapshot.rows.keys()], edges.map(blockScanEdgeKey));
+  assert.deepEqual([...snapshot.rows.values()].map(r => r.amountOut), [1n, 2n, 3n, 4n]);
+  assert([...snapshot.rows.values()].every(r => r.status === "quoted"));
+  assert.equal(snapshot.complete, true);
+});
+
+test("abort while two quotes are pending discards both late results without starting more", async () => {
+  const controller = new AbortController();
+  const pending = deferred<QuoteResult>();
+  const edges = [0, 1, 2, 3].map(i => edge(W, U, `pending-${i}`));
+  const calls: QuoteInput[] = [];
+  const promise = build(pricing(edges.map(e => [e, 999])), {
+    concurrency: 2, control: { signal: controller.signal },
+    quote: async call => { calls.push(call); return pending.promise; },
+  });
+  assert.equal(calls.length, 2);
+  controller.abort();
+  pending.resolve({ source: SOURCE, amountIn: DEFAULT_RAW, amountOut: DEFAULT_RAW * 999n });
+  const snapshot = await promise;
+  assert.equal(calls.length, 2);
+  assert.equal(snapshot.rows.size, 4);
+  assert.equal(snapshot.complete, false);
+  for (const r of snapshot.rows.values()) noQuote(r, "cancelled");
+});
+
+function quoted(id: string, tokenIn: string, tokenOut: string, instanceKey: string,
+  amountIn: bigint, amountOut: bigint): EffectiveMidRow {
+  return { edgeId: id, instanceKey, tokenIn, tokenOut, amountIn, amountOut,
+    effectiveMid: Number(amountOut) / Number(amountIn), status: "quoted" };
+}
+
+function snapshotOf(rows: readonly EffectiveMidRow[]): EffectiveMidSnapshot {
+  return { source: SOURCE, reference: "default", referenceWethInput: DEFAULT_RAW,
+    rows: new Map(rows.map(r => [r.edgeId, r])), complete: true, wallMs: 0 };
+}
+
+test("pair >1% is strict and evaluated with bigint raw amounts, not rounded rates", () => {
+  const scale = 10n ** 35n;
+  for (const delta of [-1n, 0n, 1n]) {
+    const a = quoted("a", U, W, "venue-a", scale, scale);
+    const b = quoted("b", W, U, "venue-b", scale, scale * 101n / 100n + delta);
+    assert.equal(b.effectiveMid, 1.01, "Number cannot distinguish these boundary cases");
+    const stats = effectiveMidPairStatistics(snapshotOf([a, b]));
+    assert.equal(stats.comparablePairs, 1);
+    assert.equal(stats.pairsAboveThreshold, delta > 0n ? 1 : 0);
+    assert.equal(stats.thresholdBps, 100);
+  }
+  const equal = snapshotOf([quoted("a", U, W, "a", 100n, 100n), quoted("b", W, U, "b", 100n, 100n)]);
+  assert.equal(effectiveMidPairStatistics(equal, 0).pairsAboveThreshold, 0);
+  const above = snapshotOf([quoted("a", U, W, "a", 100n, 100n), quoted("b", W, U, "b", 100n, 101n)]);
+  assert.equal(effectiveMidPairStatistics(above, 0).pairsAboveThreshold, 1);
+  assert.equal(effectiveMidPairStatistics(above, 200).pairsAboveThreshold, 0);
+});
+
+test("pair comparison excludes the same instance and finds the next distinct venue after duplicate variants", () => {
+  const rows = [
+    quoted("a-high", U, W, "same", 10n, 30n),
+    quoted("a-variant", U, W, "same", 10n, 29n),
+    quoted("a-other", U, W, "other", 10n, 6n),
+    quoted("b-high", W, U, "same", 10n, 20n),
+  ];
+  const sameOnly = effectiveMidPairStatistics(snapshotOf([rows[0]!, rows[1]!, rows[3]!]));
+  assert.equal(sameOnly.comparablePairs, 0);
+  assert.equal(sameOnly.pairsAboveThreshold, 0);
+  for (const ordered of [rows, [...rows].reverse()]) {
+    const stats = effectiveMidPairStatistics(snapshotOf(ordered));
+    assert.equal(stats.comparablePairs, 1);
+    assert.equal(stats.pairsAboveThreshold, 1, "duplicate variants must not crowd out the distinct instance");
+  }
+  const below = [...rows];
+  below[2] = quoted("a-other", U, W, "other", 10n, 5n);
+  assert.equal(effectiveMidPairStatistics(snapshotOf(below)).pairsAboveThreshold, 0,
+    "a profitable same-instance round trip cannot create a two-venue indication");
+});
+
+test("pair counts are unordered token pairs, exclude unavailable/self/one-way rows and do not mutate snapshots", () => {
+  const rows: EffectiveMidRow[] = [
+    quoted("a1", "a", "b", "v1", 10n, 30n),
+    quoted("a2", "a", "b", "v2", 10n, 20n),
+    quoted("b1", "b", "a", "v3", 10n, 10n),
+    quoted("b2", "b", "a", "v4", 10n, 10n),
+    quoted("c", "c", "d", "v5", 100n, 100n),
+    quoted("d", "d", "c", "v6", 100n, 101n),
+    quoted("one-way", "x", "y", "v7", 1n, 100n),
+    quoted("self", "a", "a", "v8", 1n, 100n),
+    ...(["missing-valuation", "unsupported", "quote-failed", "no-output", "cancelled"] as const).map((status, i) => ({
+      edgeId: `unavailable-${i}`, instanceKey: `v${i + 9}`, tokenIn: "y", tokenOut: "x",
+      amountIn: status === "missing-valuation" ? null : 1n,
+      amountOut: status === "no-output" ? 0n : null, effectiveMid: null, status,
+    })),
+  ];
+  const snapshot = snapshotOf(rows.map(r => Object.freeze(r)));
+  const before = [...snapshot.rows.entries()];
+  assert.deepEqual(effectiveMidPairStatistics(snapshot), {
+    directions: 13, quoted: 8,
+    byStatus: { quoted: 8, "missing-valuation": 1, unsupported: 1, "quote-failed": 1, "no-output": 1, cancelled: 1 },
+    comparablePairs: 2, pairsAboveThreshold: 1, thresholdBps: 100,
+  });
+  assert.deepEqual([...snapshot.rows.entries()], before);
+});
+
+test("end-to-end raw USDC/WETH pair uses distinct instances even with a shared execution target", async () => {
+  const forward = { ...edge(U, W, "forward", "pool-a"), target: "shared-manager" };
+  const reverse = { ...edge(W, U, "reverse", "pool-b"), target: "shared-manager" };
+  const snapshot = await build(pricing([[forward, 5e8], [reverse, 2e-9]]), {
+    quote: async ({ edge: e, amountIn }) => ({ source: SOURCE, amountIn,
+      amountOut: e === forward ? 1_010_000_000_000_000n : 2_001_000n }),
+  });
+  assert.equal(row(snapshot, forward).amountIn, 2_000_000n);
+  assert.equal(row(snapshot, reverse).amountIn, DEFAULT_RAW);
+  assert.equal(row(snapshot, forward).effectiveMid, 505_000_000);
+  assert.equal(row(snapshot, reverse).effectiveMid, 2.001e-9);
+  assert.deepEqual(effectiveMidPairStatistics(snapshot), {
+    directions: 2, quoted: 2, byStatus: { quoted: 2 },
+    comparablePairs: 1, pairsAboveThreshold: 1, thresholdBps: 100,
+  });
+});
+
+test("invalid policy and a mid outside the graph reject before invoking quotes; empty input completes", async () => {
+  const e = edge(W, U, "policy");
+  const prices = pricing([[e, 1]]);
+  let calls = 0;
+  const quote: Quote = async ({ amountIn }) => { calls++; return { source: SOURCE, amountIn, amountOut: 1n }; };
+  for (const concurrency of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    await assert.rejects(build(prices, { concurrency, quote }), /invalid effective-mid work or spread policy/);
+  }
+  for (const enumerationSpreadBps of [0, -1, NaN, Infinity]) {
+    await assert.rejects(build(prices, { enumerationSpreadBps, quote }), /invalid effective-mid work or spread policy/);
+  }
+  for (const gasCostWei of [0n, -1n]) {
+    await assert.rejects(build(prices, { gasCostWei, quote }), /invalid gas cost/);
+  }
+  const outside = { ...prices, graph: { ...prices.graph, edges: [] } };
+  await assert.rejects(build(outside, { quote }), /outside the Ready Graph/);
+  assert.equal(calls, 0);
+  const empty = await build(pricing([]), { quote });
+  assert.equal(calls, 0);
+  assert.equal(empty.complete, true);
+  assert.equal(empty.rows.size, 0);
+  assert.equal(empty.referenceWethInput, DEFAULT_RAW);
+  assert.deepEqual(effectiveMidPairStatistics(empty), {
+    directions: 0, quoted: 0, byStatus: {}, comparablePairs: 0, pairsAboveThreshold: 0, thresholdBps: 100,
+  });
+  for (const threshold of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => effectiveMidPairStatistics(empty, threshold), /invalid pair threshold/);
+  }
+});
+
+// Consumer projection only; coordinator publication/integration has its own tests.
+function enumerationPricing(prices: EffectivePricingInput, effectiveMids?: EffectiveMidSnapshot): BlockScanStateSnapshot {
+  return { ...prices, ...(effectiveMids === undefined ? {} : { effectiveMids }) } as BlockScanStateSnapshot;
+}
+
+test("enumeration uses quoted effective prices with zero fee and preserves original prices, depth and metadata", async () => {
+  const e = edge(W, U, "projected");
+  const base = pricing([[e, 987, 125]]);
+  const original = Object.freeze({
+    ...base.mids.get(blockScanEdgeKey(e))!, depthProxy: 4321,
+    reserveA: 10n ** 24n, reserveB: 10n ** 12n, balanceHeadroomIn: 10n ** 18n,
+    sqrtABX96: 2n ** 96n, liquidity: 900_000n,
+  });
+  const prices = { ...base, mids: new Map([[blockScanEdgeKey(e), original]]) };
+  const effective = await build(prices, {
+    quote: async ({ amountIn }) => ({ source: SOURCE, amountIn, amountOut: amountIn * 2n }),
+  });
+  const input = enumerationPricing(prices, effective);
+  const projected = effectiveEnumerationMids(input);
+  const result = projected.get(blockScanEdgeKey(e))!;
+  assert.equal(projected.size, 1);
+  assert.notStrictEqual(projected, input.mids);
+  assert.notStrictEqual(result, original);
+  assert.deepEqual(result, { ...original, mid: 2, feeBps: 0 });
+  assert.strictEqual(result.edges, original.edges);
+  assert.strictEqual(input.mids.get(blockScanEdgeKey(e)), original);
+  assert.equal(original.mid, 987);
+  assert.equal(original.feeBps, 125);
+  assert.equal(original.depthProxy, 4321);
+  assert.equal(row(effective, e).effectiveMid, 2);
+  assert.strictEqual(input.effectiveMids, effective);
+});
+
+test("enumeration with a companion includes quoted rows only and never falls back to a missing row's spot price", () => {
+  const statuses = ["missing-valuation", "unsupported", "quote-failed", "no-output", "cancelled"] as const;
+  const edges = ["quoted", ...statuses, "missing-row"].map(id => edge(W, U, id));
+  const prices = pricing(edges.map(e => [e, 1e20, 50]));
+  const rows: EffectiveMidRow[] = [
+    quoted("quoted", W, U, "quoted", 1n, 2n),
+    ...statuses.map(status => ({
+      edgeId: status, instanceKey: status, tokenIn: W, tokenOut: U,
+      amountIn: status === "missing-valuation" ? null : 1n,
+      amountOut: status === "no-output" ? 0n : null, effectiveMid: null, status,
+    })),
+  ];
+  const projected = effectiveEnumerationMids(enumerationPricing(prices, snapshotOf(rows)));
+  assert.deepEqual([...projected.keys()], ["quoted"]);
+  assert.equal(projected.get("quoted")!.mid, 2);
+  assert.equal(projected.get("quoted")!.feeBps, 0);
+  for (const e of edges.slice(1)) assert.equal(projected.has(blockScanEdgeKey(e)), false);
+  assert.equal(prices.mids.size, edges.length, "the raw pricing map retains every original row");
+  assert.equal(effectiveEnumerationMids(enumerationPricing(prices, snapshotOf([]))).size, 0,
+    "an empty companion cannot silently restore spot prices");
+  const legacy = enumerationPricing(prices);
+  assert.strictEqual(effectiveEnumerationMids(legacy), legacy.mids, "only absence of the companion retains legacy behavior");
+});
+
+test("enumeration rejects partial and stale companions independently for block number, hash and generation", () => {
+  const e = edge(W, U, "freshness");
+  const prices = pricing([[e, 9, 100]]);
+  const effective = snapshotOf([quoted("freshness", W, U, "freshness", 1n, 2n)]);
+  const invalid: EffectiveMidSnapshot[] = [
+    { ...effective, complete: false },
+    { ...effective, source: { ...SOURCE, number: SOURCE.number - 1 } },
+    { ...effective, source: { ...SOURCE, hash: hash(0xbad) } },
+    { ...effective, source: { ...SOURCE, generation: SOURCE.generation + 1 } },
+    { ...snapshotOf([]), complete: false },
+  ];
+  for (const companion of invalid) {
+    assert.throws(() => effectiveEnumerationMids(enumerationPricing(prices, companion)),
+      /enumeration effective pricing incomplete or mismatched source/);
+  }
+  const upper = { ...effective, source: { ...SOURCE, hash: SOURCE.hash.toUpperCase() } };
+  assert.equal(effectiveEnumerationMids(enumerationPricing(prices, upper)).get("freshness")!.mid, 2);
+  const upperPricing = { ...prices, sourceBlockHash: SOURCE.hash.toUpperCase() };
+  assert.equal(effectiveEnumerationMids(enumerationPricing(upperPricing, effective)).get("freshness")!.feeBps, 0);
+  assert.equal(prices.mids.get("freshness")!.mid, 9);
+});
+
+test("enumeration rejects malformed quoted rows instead of exposing a spot fallback", () => {
+  const e = edge(W, U, "valid");
+  const prices = pricing([[e, 99, 30]]);
+  const valid = quoted("valid", W, U, "valid", 1n, 2n);
+  const invalid = [
+    ...[null, 0, -1, NaN, Infinity].map(effectiveMid => ({ ...valid, effectiveMid })),
+    { ...valid, edgeId: "different-key" },
+  ];
+  for (const r of invalid) {
+    const companion = { ...snapshotOf([]), rows: new Map([["valid", r]]) };
+    assert.throws(() => effectiveEnumerationMids(enumerationPricing(prices, companion)), /invalid effective enumeration row/);
+  }
+  const outside = snapshotOf([quoted("outside", W, U, "outside", 1n, 2n)]);
+  assert.throws(() => effectiveEnumerationMids(enumerationPricing(prices, outside)), /invalid effective enumeration row/);
+  assert.equal(prices.mids.get("valid")!.mid, 99);
+  assert.equal(prices.mids.get("valid")!.feeBps, 30);
+});
+
+let failed = 0;
+for (const [name, run] of tests) {
+  try { await run(); console.log(`PASS ${name}`); }
+  catch (error) { failed++; console.error(`FAIL ${name}`, error); }
+}
+assert.equal(failed, 0, `${failed}/${tests.length} offline effective-mid tests failed`);
+console.log(`blockscan-effective-mid PASS: ${tests.length} offline behavior tests; implemented behavior only, not full acceptance`);
