@@ -93,6 +93,8 @@ export function selfBurnNativeSimulation(input: {
     kind: "effect-delta-simulation" as const,
     call: Object.freeze({
       caller: input.callerRef,
+      // Redemption is reached through the execution actor's inner CALL.
+      executionMode: "impersonated-call-frame" as const,
       to: token,
       data: SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionData(
         "transfer",

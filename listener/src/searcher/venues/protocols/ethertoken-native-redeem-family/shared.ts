@@ -80,6 +80,8 @@ export function etherTokenWithdrawalSimulation(input: {
     kind: "effect-delta-simulation" as const,
     call: Object.freeze({
       caller: input.callerRef,
+      // Withdrawal is reached through the execution actor's inner CALL.
+      executionMode: "impersonated-call-frame" as const,
       to: token,
       data: ETHERTOKEN_NATIVE_INTERFACE.encodeFunctionData(
         "withdraw",

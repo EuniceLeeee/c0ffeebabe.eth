@@ -322,6 +322,18 @@ function verifySelfBurnNativeEffects(): void {
     selfBurnNativeStrictFamilyPlugin.exact,
     input,
   );
+  for (const amountIn of [1n, 137n, 10n ** 18n]) {
+    const [request] = selfBurnProgram.buildRequests({ ...input, amountIn });
+    assert.equal(request.kind, "effect-delta-simulation");
+    assert.equal(request.call.executionMode, "impersonated-call-frame");
+    assert.deepEqual(request.call.caller, { kind: "executor" });
+    assert.equal(request.overrideIntent.tokenBalances[0].amount, amountIn);
+    const args = SELF_BURN_NATIVE_TOKEN_INTERFACE.decodeFunctionData(
+      "transfer", request.call.data,
+    );
+    assert.equal(args[0], tokenA);
+    assert.equal(BigInt(args[1]), amountIn);
+  }
   const decoded = selfBurnProgram.decode({
     programInput: input,
     initialResults: [result],
@@ -388,6 +400,16 @@ function verifyEtherTokenNativeEffects(): void {
     etherTokenNativeRedeemStrictFamilyPlugin.exact,
     input,
   );
+  for (const amountIn of [1n, 137n, 10n ** 18n]) {
+    const [request] = etherTokenProgram.buildRequests({ ...input, amountIn });
+    assert.equal(request.kind, "effect-delta-simulation");
+    assert.equal(request.call.executionMode, "impersonated-call-frame");
+    assert.deepEqual(request.call.caller, { kind: "executor" });
+    assert.equal(request.overrideIntent.tokenBalances[0].amount, amountIn);
+    assert.equal(BigInt(ETHERTOKEN_NATIVE_INTERFACE.decodeFunctionData(
+      "withdraw", request.call.data,
+    )[0]), amountIn);
+  }
   const decoded = etherTokenProgram.decode({
     programInput: input,
     initialResults: [ok(
