@@ -37,6 +37,8 @@ import {
   buildFamilyExecutionFragment,
   executeFamilyVictimReplay,
   executeFamilyExactQuote,
+  describeFamilyAmountQuoteReuse,
+  type FamilyAmountQuoteReuseContext,
   refreshPreparedFamilyInstancePricing,
   reissuePreparedInstanceAuthority,
   reissuePreparedInstanceRouteHandles,
@@ -1169,6 +1171,24 @@ export class StrictProductionRuntimeSession {
       return Object.freeze([...risk.debtBpsCandidates]);
     }
     return Object.freeze([0n]);
+  }
+
+  /** Metadata from the current Family declaration; not another quote entry. */
+  describeAmountQuoteReuse(input: {
+    readonly edge: TokenEdge;
+    readonly amountIn: bigint;
+    readonly executor: string;
+    readonly runtimeEvidence: readonly RuntimeEvidence[];
+    readonly control?: AdapterWorkControl;
+  }): FamilyAmountQuoteReuseContext | null {
+    this.#runtime.generationFence.assertCurrent(this.source.generation, this.source);
+    const route = this.#resolve(input.edge);
+    if (route.kind !== "route") return null;
+    return describeFamilyAmountQuoteReuse({
+      ...input, family: route.family, route: route.handle,
+      source: this.source, generation: this.source.generation, runtime: this.#runtime,
+      requireChainAmountQuote: true,
+    });
   }
 
   async issueExact(input: {

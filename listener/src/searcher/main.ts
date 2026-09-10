@@ -32,7 +32,7 @@ import { blockScanRouteId } from "./blockscan-route-identity.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
 import { buildEffectiveMids, effectiveMidPairStatistics } from "./blockscan-effective-mid.js";
-import { guardRpcThrottle } from "./rpc-throttle-guard.js";
+import { parseBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import type { CanonicalSource } from
@@ -1926,34 +1926,39 @@ async function main(): Promise<void> {
     return pending;
   };
   const blockScanAmountReference = new BlockScanAmountReference(ADDR.WETH);
+  // Network identity is established once, never guessed for activity reuse.
+  const blockScanChainId = enableBlockScan ? (await provider.getNetwork()).chainId : 0n;
   currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
     strictSessionFor,
     () => strictSessionCache.clear(),
     (publication) => blockScanRouteTelemetry.recordPricing(publication),
-    blockScanCfg === undefined ? undefined : async (pricing, control, pricingBackend) => {
+    blockScanCfg === undefined ? undefined : async (pricing, control, pricingBackend, reuse) => {
+      const controller = new AbortController();
+      const effectiveControl = { ...control, signal: control.signal === undefined
+        ? controller.signal : AbortSignal.any([control.signal, controller.signal]) };
       const source = Object.freeze({ number: pricing.sourceBlock,
         hash: pricing.sourceBlockHash, generation: pricing.generation });
       // Use the existing source-pinned producer transport. The fallback is
       // lifecycle-owned here only for callers without a supplied transport.
       const ownedBackend = pricingBackend === undefined ? new PinnedRethQuoteBackend(
-        config.rpcUrl, source.hash, { ...control, transportLane: "producer-bulk",
+        config.rpcUrl, source.hash, { ...effectiveControl, transportLane: "producer-bulk",
+          onSourceUnavailable: (error) => controller.abort(error),
+          onRpcThrottle: (error) => blockScanRuntimeAbort.abort(error),
           scopeLabel: "effective mid", allowSingleCallFallback: false,
           maxBatchSize: 128, maxConcurrentBatches: 4,
           transportScheduler: blockScanRethTransportScheduler },
       ) : undefined;
       try {
-        const quoteBackend = guardRpcThrottle(pricingBackend ?? ownedBackend!, () => {
-          // Emit a credential-free stop marker for the existing live supervisor.
-          console.error("[searcher/effective-mid] RPC HTTP 429 or quota limit; stopping");
-          blockScanRuntimeAbort.abort(new Error("RPC throttle during effective pricing"));
-        });
         const session = await strictSessionFor({ purpose: "exact-execution", source,
-          control, fundingAssets: [], requiredEdgeIds: new Set(pricing.mids.keys()),
-          exactCallBackend: quoteBackend });
+          control: effectiveControl, fundingAssets: [], requiredEdgeIds: new Set(pricing.mids.keys()),
+          exactCallBackend: pricingBackend ?? ownedBackend! });
         console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} mids=${pricing.mids.size}`);
         const effective = await buildEffectiveMids({ pricing, weth: ADDR.WETH,
+          previous: reuse?.previous, activity: reuse?.activity,
+          describeReuse: request => session.describeAmountQuoteReuse({ ...request,
+            executor: config.botvmAddress, runtimeEvidence: [] }),
           gasCostWei: blockScanAmountReference.estimateGasCost(source),
-          enumerationSpreadBps: blockScanCfg.minSpreadBps, control, concurrency: 128,
+          enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 128,
           quote: async (request) => {
             const quote = await session.issueExact({ ...request,
               executor: config.botvmAddress, runtimeEvidence: [] });
@@ -1966,6 +1971,7 @@ async function main(): Promise<void> {
           rawMids: pricing.mids.size, reference: effective.reference,
           referenceWethInput: effective.referenceWethInput.toString(),
           complete: effective.complete, wallMs: effective.wallMs,
+          carried: [...effective.rows.values()].filter(row => row.carried).length,
           ...effectiveMidPairStatistics(effective),
         })}`);
         return effective;
@@ -2131,20 +2137,25 @@ async function main(): Promise<void> {
     topologyKey:
       `strict-ready:${readyUniverse.generation}:${readyUniverse.graphHash}`,
     async observeHeader(blockNumber: number) {
-      const block = await provider.getBlock(blockNumber);
-      if (
-        block === null ||
-        block.hash === null ||
-        !Number.isSafeInteger(block.number) ||
-        block.number !== blockNumber
-      ) {
-        throw new Error(`missing canonical header ${blockNumber}`);
-      }
+      const block = parseBlockScanObservedHeader(await provider.send("eth_getBlockByNumber", [
+        ethers.toQuantity(blockNumber), true,
+      ]), blockNumber, blockScanChainId);
+      // Keep the actual observed anchor, before any pricing or fork work.
+      // A later RPC rejection alone cannot explain where a source mismatch began.
+      console.log(`[searcher/source-header] ${JSON.stringify({
+        sourceBlock: block.number,
+        sourceBlockHash: block.hash.toLowerCase(),
+        parentHash: block.parentHash.toLowerCase(),
+        blockTimestamp: block.timestamp,
+        observedAtMs: Date.now(),
+      })}`);
       blockScanAmountReference.observeHeader(block);
       return Object.freeze({
         number: block.number,
         hash: block.hash.toLowerCase(),
         parentHash: block.parentHash.toLowerCase(),
+        transactionHashes: block.transactionHashes,
+        passiveTouchedAddresses: block.passiveTouchedAddresses,
       });
     },
   });
@@ -2194,11 +2205,16 @@ async function main(): Promise<void> {
     executorAddress: config.botvmAddress,
     // One refresh set: log identities retain singleton poolIds while the
     // call trace adds contracts reached through top-level or internal calls.
-    readBlockSwapTouched: (blockNumber) =>
+    readBlockSwapTouched: (blockNumber, header) =>
       readBlockTouchedStateKeys(
         provider,
         blockNumber,
         ADDR.UNISWAP_V4_POOL_MANAGER,
+        header?.transactionHashes === undefined ? undefined : {
+          hash: header.hash, parentHash: header.parentHash,
+          transactionHashes: header.transactionHashes,
+          passiveTouchedAddresses: header.passiveTouchedAddresses,
+        },
       ),
     currentHeadEvidenceFamilyForEdge(edgeAdapterId) {
       return PRODUCTION_STRICT_FAMILY_DECLARATIONS

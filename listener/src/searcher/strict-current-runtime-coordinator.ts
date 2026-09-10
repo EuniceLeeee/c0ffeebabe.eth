@@ -36,6 +36,7 @@ import type { StateBackend } from "../shared/state/state-backend.js";
 import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
+import type { PreparedAmountQuoteActivity } from "./amount-quote-continuity.js";
 
 export type StrictSessionPurpose =
   | "coarse-pricing"
@@ -76,6 +77,7 @@ export type StrictFundingPreparationInput = Pick<PrepareAdapterRuntimeInput,
 
 export interface PrepareStrictRuntimeInput extends PrepareAdapterRuntimeInput {
   readonly fundingPreparation?: StrictFundingPreparation;
+  readonly canonicalActivity?: StrictCanonicalActivityProof;
 }
 
 const EMPTY_FUNDING_ASSETS: readonly string[] = Object.freeze([]);
@@ -84,6 +86,8 @@ export interface StrictCanonicalActivityProof {
   readonly source: CanonicalSource;
   readonly touchedStateKeys: ReadonlySet<string>;
   readonly complete: true;
+  /** Stronger, hash-bound activity for amount quotes; raw carry alone is insufficient. */
+  readonly amountQuoteActivity?: PreparedAmountQuoteActivity;
 }
 
 export type StrictPricingPublication =
@@ -122,6 +126,7 @@ type StrictPricingProvenance =
 export class StrictCurrentRuntimeCoordinator
   implements CurrentSourceRuntimeCoordinator {
   private publishedPricing: BlockScanStateSnapshot | null = null;
+  private pricingEpoch = 0;
   private fundingEpoch = 0;
   private readonly fundingPreparations = new WeakMap<StrictFundingPreparation, {
     readonly input: StrictFundingPreparationInput;
@@ -140,6 +145,8 @@ export class StrictCurrentRuntimeCoordinator
       snapshot: BlockScanStateSnapshot,
       control: AdapterWorkControl,
       backend?: Pick<StateBackend, "call">,
+      reuse?: { readonly previous?: EffectiveMidSnapshot;
+        readonly activity?: PreparedAmountQuoteActivity },
     ) => Promise<EffectiveMidSnapshot>,
   ) {}
 
@@ -148,6 +155,7 @@ export class StrictCurrentRuntimeCoordinator
   }
 
   async resetDynamicStateForReplay(): Promise<void> {
+    this.pricingEpoch++;
     this.fundingEpoch++;
     this.publishedPricing = null;
     this.resetSessions();
@@ -206,6 +214,7 @@ export class StrictCurrentRuntimeCoordinator
       input.familySettleDeadlineAtMs ?? input.deadlineAtMs,
     );
     assertWorkOpen(settleDeadlineAtMs, input.signal);
+    const pricingEpoch = ++this.pricingEpoch;
     const previous = this.publishedPricing;
     const session = await this.sessionFor({
       purpose: "coarse-pricing",
@@ -223,8 +232,8 @@ export class StrictCurrentRuntimeCoordinator
     const built = await this.enrichPricing(buildStrictPricingSnapshot(session, input.graph, {
       previous,
       canonicalActivity: input.canonicalActivity,
-    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend);
-    this.publishPricing(built);
+    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity);
+    this.publishPricing(built, pricingEpoch);
     return completePricingResult(built.snapshot);
   }
 
@@ -253,6 +262,7 @@ export class StrictCurrentRuntimeCoordinator
     )) {
       throw new Error("strict Funding preparation differs from current pass");
     }
+    const pricingEpoch = ++this.pricingEpoch;
     const sessionStartedAtMs = Date.now();
     const previous = this.publishedPricing;
     const sessionPromise = Promise.resolve().then(() => this.sessionFor({
@@ -302,7 +312,7 @@ export class StrictCurrentRuntimeCoordinator
     const built = await this.enrichPricing(buildStrictPricingSnapshot(session, input.graph, {
       previous,
       canonicalActivity: input.canonicalActivity,
-    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend);
+    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity);
     const pricing = built.snapshot;
     const pricingMs = Math.max(0, Date.now() - pricingStartedAtMs) +
       Math.max(0, pricingStartedAtMs - sessionStartedAtMs);
@@ -325,7 +335,7 @@ export class StrictCurrentRuntimeCoordinator
       pricing,
       funding,
     });
-    this.publishPricing(built);
+    this.publishPricing(built, pricingEpoch);
     const finishedAtMs = Date.now();
     const timing: AdapterRuntimePrepareTiming = Object.freeze({
       startedAtMs,
@@ -350,9 +360,13 @@ export class StrictCurrentRuntimeCoordinator
     built: StrictPricingBuildResult,
     control: AdapterWorkControl,
     backend?: Pick<StateBackend, "call">,
+    activity?: StrictCanonicalActivityProof,
   ): Promise<StrictPricingBuildResult> {
     if (!this.effectivePricing) return built;
-    const effectiveMids = await this.effectivePricing(built.snapshot, control, backend);
+    const effectiveMids = await this.effectivePricing(built.snapshot, control, backend, {
+      previous: this.publishedPricing?.effectiveMids,
+      activity: activity?.amountQuoteActivity,
+    });
     assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
     const source = sourceFor(built.snapshot.graph);
     if (!effectiveMids.complete || effectiveMids.source.number !== source.number ||
@@ -364,7 +378,8 @@ export class StrictCurrentRuntimeCoordinator
     return { snapshot, publication: Object.freeze({ ...built.publication, snapshot }) };
   }
 
-  private publishPricing(built: StrictPricingBuildResult): void {
+  private publishPricing(built: StrictPricingBuildResult, pricingEpoch: number): void {
+    if (pricingEpoch !== this.pricingEpoch) throw new Error("pricing publication retired during prepare");
     this.publishedPricing = built.snapshot;
     try {
       this.onPricingPublication?.(built.publication);

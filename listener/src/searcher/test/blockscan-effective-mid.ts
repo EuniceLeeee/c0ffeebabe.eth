@@ -12,6 +12,8 @@ import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
+import { prepareAmountQuoteActivity } from "../amount-quote-continuity.js";
+import type { FamilyAmountQuoteReuseContext } from "../venues/adapter-family-runtime.js";
 
 // Offline behavior tests only: callbacks are fixtures, not chain-quote evidence
 // or full production acceptance. Shapes follow blockscan-amount-reference.ts.
@@ -679,6 +681,56 @@ test("enumeration rejects malformed quoted rows instead of exposing a spot fallb
   assert.throws(() => effectiveEnumerationMids(enumerationPricing(prices, outside)), /invalid effective enumeration row/);
   assert.equal(prices.mids.get("valid")!.mid, 99);
   assert.equal(prices.mids.get("valid")!.feeBps, 30);
+});
+
+test("effective carry rechecks current context/amount and complete consecutive activity; never carries authority", async () => {
+  const a = edge(W, U, "carry-a"), b = edge(W, U, "carry-b");
+  const depA = "0x" + "11".repeat(20), depB = "0x" + "22".repeat(20);
+  const prices = pricing([[a, 2], [b, 3]]);
+  const context = (e: TokenEdge): FamilyAmountQuoteReuseContext => ({
+    contextFingerprint: e.target, policy: { kind: "state-only", blockEnvironment: "independent",
+      dependencies: [e === a ? depA : depB] }, methodId: "chain", methodIndex: 0,
+    methodOrderFingerprint: "methods", cacheCompatibilityFingerprint: "compat", initialRequestFingerprint: "calls",
+  });
+  const fresh = await build(prices, { describeReuse: ({ edge }) => context(edge),
+    quote: async ({ edge, amountIn }) => ({ source: SOURCE, amountIn, amountOut: amountIn * 2n,
+      ...context(edge), reusePolicy: context(edge).policy, amountQuoteReuse: context(edge) }) });
+  assert.equal(row(fresh, a).quoteProvenance?.quotedAt.number, SOURCE.number);
+  const nextSource = { number: SOURCE.number + 1, hash: hash(321), generation: SOURCE.generation + 1 };
+  const nextPrices = { ...prices, sourceBlock: nextSource.number, sourceBlockHash: nextSource.hash,
+    generation: nextSource.generation };
+  const activity = prepareAmountQuoteActivity({ source: nextSource, parentHash: SOURCE.hash,
+    complete: true, touchedAddresses: new Set([depA]) });
+  const calls: string[] = [];
+  const overrides: Partial<BuildInput> = { previous: fresh, activity, describeReuse: ({ edge }) => context(edge),
+    quote: async ({ edge, amountIn }) => { calls.push(edge.target);
+      return { source: nextSource, amountIn, amountOut: amountIn * 3n,
+        ...context(edge), reusePolicy: context(edge).policy, amountQuoteReuse: context(edge) }; } };
+  const next = await build(nextPrices, overrides);
+  assert.deepEqual(calls, [a.target]);
+  assert.equal(row(next, a).effectiveMid, 3);
+  assert.equal(row(next, b).effectiveMid, 2);
+  assert.equal(row(next, b).carried, true);
+  assert.deepEqual(row(next, b).quoteProvenance?.quotedAt, SOURCE);
+  assert.deepEqual(row(next, b).quoteProvenance?.validAt, nextSource);
+  assert.equal("outcome" in row(next, b).quoteProvenance!, false, "no Exact authority or execution evidence");
+  assert.deepEqual(row(fresh, b).quoteProvenance?.validAt, SOURCE);
+  for (const invalidation of [
+    { activity: undefined },
+    { describeReuse: () => null },
+    { gasCostWei: 1n },
+    { describeReuse: ({ edge }: QuoteInput) => ({ ...context(edge), contextFingerprint: "changed" }) },
+  ] as Partial<BuildInput>[]) {
+    calls.length = 0;
+    const rebuilt = await build(nextPrices, { ...overrides, ...invalidation });
+    assert.equal(calls.length, 2, "unproven rows use fresh chain work");
+    assert([...rebuilt.rows.values()].every(r => !r.carried));
+  }
+  const controller = new AbortController();
+  const aborted = await build(nextPrices, { ...overrides, control: { signal: controller.signal },
+    describeReuse: ({ edge }) => { controller.abort(); return context(edge); } });
+  assert.equal(aborted.complete, false);
+  assert([...aborted.rows.values()].every(r => r.status === "cancelled" && !r.quoteProvenance));
 });
 
 let failed = 0;

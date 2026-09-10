@@ -89,6 +89,11 @@ import {
 import {
   type CanonicalHeader,
 } from "./canonical-header-journal.js";
+import type { BlockScanObservedHeader } from "./blockscan-observed-header.js";
+import { amountQuoteActivityForTouched } from "./blockscan-touched-state.js";
+
+type BlockScanSourceHeader = CanonicalHeader & Partial<Pick<BlockScanObservedHeader,
+  "transactionHashes" | "passiveTouchedAddresses">>;
 import type { LandedPoolDiscoveryCoverage } from "./venues/landed-pool-discovery.js";
 import type { VerifiedGraphView } from "./venues/blockscan-state-capability.js";
 import {
@@ -525,7 +530,7 @@ interface PlannedBlockScanSolve {
 
 export interface BlockScanFrozenTopologyDependencies {
   /** Canonical current-head observation; never scans or publishes topology. */
-  observeHeader(blockNumber: number): Promise<CanonicalHeader>;
+  observeHeader(blockNumber: number): Promise<BlockScanSourceHeader>;
   /** Hash/root of the startup-ready Graph/catalog generation. */
   readonly topologyKey: string;
 }
@@ -742,7 +747,7 @@ export interface BlockScanRuntimeLoopDependencies {
    * refresh scope. Victim-independent: built from the block's logs and call
    * trace.
    */
-  readBlockSwapTouched(blockNumber: number): Promise<ReadonlySet<string>>;
+  readBlockSwapTouched(blockNumber: number, header?: BlockScanSourceHeader): Promise<ReadonlySet<string>>;
   formatRouteKey(opportunity: Pick<BlockScanOpportunity, "seedEdges">): string;
   formatRing(
     opportunity: Pick<BlockScanOpportunity, "seedEdges" | "affectedTokens">,
@@ -861,7 +866,7 @@ export class BlockScanRuntimeLoop {
     );
   }
 
-  private observeTopologyHeader(blockNumber: number): Promise<CanonicalHeader> {
+  private observeTopologyHeader(blockNumber: number): Promise<BlockScanSourceHeader> {
     return this.deps.frozenTopology.observeHeader(blockNumber);
   }
 
@@ -1306,7 +1311,7 @@ export class BlockScanRuntimeLoop {
         });
         let prepared: BlockScanStatePrepareResult;
         let bootstrapEscalated = false;
-        const producerTouched = await this.deps.readBlockSwapTouched(nextBlock);
+        const producerTouched = await this.deps.readBlockSwapTouched(nextBlock, header);
         const producerActivity: StrictCanonicalActivityProof = Object.freeze({
           source: Object.freeze({
             number: anchoredGraph.sourceBlock,
@@ -1315,12 +1320,20 @@ export class BlockScanRuntimeLoop {
           }),
           touchedStateKeys: producerTouched,
           complete: true,
+          amountQuoteActivity: amountQuoteActivityForTouched(producerTouched, {
+            number: anchoredGraph.sourceBlock, hash: anchoredGraph.sourceBlockHash,
+            generation: anchoredGraph.generation,
+          }) ?? undefined,
         });
+        const producerController = new AbortController();
+        const detachProducerAbort = linkAbortController(this.deps.runtimeAbort.signal, producerController);
         const producerPricingBackend = new PinnedRethQuoteBackend(
           this.deps.rpcUrl,
           anchoredGraph.sourceBlockHash,
           {
-            signal: this.deps.runtimeAbort.signal,
+            signal: producerController.signal,
+            onSourceUnavailable: (error) => producerController.abort(error),
+            onRpcThrottle: (error) => this.deps.runtimeAbort.abort(error),
             maxBatchSize: 128,
             maxConcurrentBatches: 4,
             transportLane: "producer-bulk",
@@ -1344,7 +1357,7 @@ export class BlockScanRuntimeLoop {
             familySettleDeadlineAtMs: generationFamilySettleDeadlineAtMs,
             laggingTopologyRefreshMode: "proof-scoped",
             pricingCallBackend: producerPricingBackend,
-            signal: this.deps.runtimeAbort.signal,
+            signal: producerController.signal,
           });
           if (prepared.status === "incomplete") {
             /*
@@ -1384,7 +1397,7 @@ export class BlockScanRuntimeLoop {
               familySettleDeadlineAtMs: bootstrapFamilySettleDeadlineAtMs,
               laggingTopologyRefreshMode: "startup-bootstrap",
               canonicalActivity: producerActivity,
-              signal: this.deps.runtimeAbort.signal,
+              signal: producerController.signal,
             });
             bootstrapEscalated = true;
           }
@@ -1408,6 +1421,7 @@ export class BlockScanRuntimeLoop {
               );
             }
           } finally {
+            detachProducerAbort();
             this.producerCriticalActive = false;
           }
         }
@@ -2071,7 +2085,7 @@ export class BlockScanRuntimeLoop {
     const observeCanonicalHeader = (
       canonicalBlock: number,
       stage: string,
-    ): Promise<CanonicalHeader> =>
+    ): Promise<BlockScanSourceHeader> =>
       awaitBlockScanDeadline(
         this.observeTopologyHeader(canonicalBlock),
         passDeadlineAtMs,
@@ -2095,10 +2109,19 @@ export class BlockScanRuntimeLoop {
     let activityFinishedAtMs: number | null = null;
     let fundingStartedAtMs: number | null = null;
     let fundingFinishedAtMs: number | null = null;
+    const sourceHeaderRead = Promise.resolve().then(() =>
+      observeCanonicalHeader(blockNumber, "source canonical header")).then(
+      (value): PromiseSettledResult<BlockScanSourceHeader> => ({ status: "fulfilled", value }),
+      (reason): PromiseSettledResult<BlockScanSourceHeader> => ({ status: "rejected", reason }),
+    );
     // Activity determines pricing refresh, never exact candidate membership.
     // Capture rejection immediately and join even if header preparation fails.
     const activity = Promise.resolve()
-      .then(() => this.deps.readBlockSwapTouched(blockNumber))
+      .then(async () => {
+        const header = await sourceHeaderRead;
+        if (header.status === "rejected") throw header.reason;
+        return this.deps.readBlockSwapTouched(blockNumber, header.value);
+      })
       .then(
         (value): PromiseSettledResult<ReadonlySet<string>> => {
           activityFinishedAtMs = Date.now();
@@ -2120,10 +2143,9 @@ export class BlockScanRuntimeLoop {
       // producer. Only the current canonical header and state are observed
       // here; discovery, backfill and topology publication do not exist in
       // this loop.
-      const sourceHeader = await observeCanonicalHeader(
-        blockNumber,
-        "source canonical header",
-      );
+      const headerResult = await sourceHeaderRead;
+      if (headerResult.status === "rejected") throw headerResult.reason;
+      const sourceHeader = headerResult.value;
       this.passStageLabel = "state:header";
       observedSourceBlockHash = sourceHeader.hash;
       if (
@@ -2284,6 +2306,8 @@ export class BlockScanRuntimeLoop {
             scopeLabel:
               `block-scan source-N pricing block ${blockNumber} ` +
               `generation ${generation}`,
+            onSourceUnavailable: (error) => passController.abort(error),
+            onRpcThrottle: (error) => this.deps.runtimeAbort.abort(error),
             allowSingleCallFallback: false,
             ...(this.deps.rethTransportScheduler === undefined
               ? {} : { transportScheduler: this.deps.rethTransportScheduler }),
@@ -2390,6 +2414,10 @@ export class BlockScanRuntimeLoop {
           }),
           touchedStateKeys: touchedPools,
           complete: true,
+          amountQuoteActivity: amountQuoteActivityForTouched(touchedPools, {
+            number: graphView.sourceBlock, hash: graphView.sourceBlockHash,
+            generation: graphView.generation,
+          }) ?? undefined,
         });
         /*
          * Source-N is also a producer generation. Keep its pricing calls on
@@ -2928,6 +2956,8 @@ export class BlockScanRuntimeLoop {
             {
               signal: passSignal,
               deadlineAtMs: passDeadlineAtMs,
+              onSourceUnavailable: (error) => passController.abort(error),
+              onRpcThrottle: (error) => this.deps.runtimeAbort.abort(error),
               maxBatchSize: exactFactoryInput.maxBatchSize,
               maxConcurrentBatches:
                 exactFactoryInput.maxConcurrentBatches,

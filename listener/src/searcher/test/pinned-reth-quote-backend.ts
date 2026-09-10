@@ -19,11 +19,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   isStateCallAbortedError,
+  postJsonRpc,
 } from "../../shared/state/state-backend.js";
 import {
   PinnedRethQuoteBackend,
   type PinnedRethQuoteBackendOptions,
 } from "../pinned-reth-quote-backend.js";
+import { RethTransportScheduler } from "../reth-transport-scheduler.js";
+import { isRpcThrottleError } from "../rpc-throttle-guard.js";
 
 function assert(cond: boolean, msg: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -36,6 +39,7 @@ const OK_B = "0x00000000000000000000000000000000000000b2";
 const REVERT = "0x00000000000000000000000000000000000000c3";
 const REVERT_DATA = "0xdeadbeef";
 const RESULT = "0x" + "11".padStart(64, "0");
+const SOURCE_ERROR = { code: -32000, message: "hash is not currently canonical" };
 
 interface StubState {
   batches: Array<Array<Record<string, unknown>>>;
@@ -48,6 +52,11 @@ interface StubState {
   heldResponses: Array<{ send: () => void; closed: () => boolean }>;
   activeBatches: number;
   maxActiveBatches: number;
+  rpcError?: { code: number | string; message: string; data?: unknown };
+  rpcErrorHash?: string;
+  httpStatus?: number;
+  batchErrorEnvelope?: boolean;
+  rawResponse?: string;
 }
 
 function startStub(): Promise<{ server: Server; state: StubState; port: number }> {
@@ -71,8 +80,9 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
       const reply = (payload: unknown): void => {
         try {
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify(payload));
+          res.writeHead(state.httpStatus ?? 200, { "content-type": state.rawResponse === undefined
+            ? "application/json" : "text/plain" });
+          res.end(state.rawResponse ?? JSON.stringify(payload));
         } catch {
           // Client may abort the request mid-flight; ignore the write error.
         }
@@ -85,6 +95,13 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
         } else {
           send();
         }
+      };
+      const injectedError = (item: { params?: unknown[] }): unknown => {
+        const tx = item.params?.[0] as { to?: unknown } | undefined;
+        const pin = item.params?.[1] as { blockHash?: unknown } | undefined;
+        return tx?.to === REVERT &&
+          (state.rpcErrorHash === undefined || pin?.blockHash === state.rpcErrorHash)
+          ? state.rpcError : undefined;
       };
       if (Array.isArray(body)) {
         if (state.failNextBatch || state.failAllBatches) {
@@ -102,8 +119,14 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
         );
         maybeHold(() => {
           state.activeBatches--;
+          if (state.batchErrorEnvelope) {
+            reply({ jsonrpc: "2.0", id: null, error: state.rpcError });
+            return;
+          }
           reply(body.map((entry) => {
               const item = entry as { id?: unknown; params?: unknown[] };
+              const error = injectedError(item);
+              if (error) return { jsonrpc: "2.0", id: item.id, error };
               const tx = Array.isArray(item.params)
                 ? item.params[0] as { to?: unknown }
                 : null;
@@ -123,11 +146,13 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
         });
         return;
       }
-      const single = body as { id?: unknown };
+      const single = body as { id?: unknown; params?: unknown[] };
       state.singles.push(single);
-      maybeHold(() =>
-        reply({ jsonrpc: "2.0", id: single.id, result: RESULT }),
-      );
+      maybeHold(() => {
+        const error = injectedError(single);
+        reply(error ? { jsonrpc: "2.0", id: single.id, error }
+          : { jsonrpc: "2.0", id: single.id, result: RESULT });
+      });
     });
   });
   return new Promise((resolve) => {
@@ -161,6 +186,7 @@ function aborted(result: PromiseSettledResult<string>, kind?: string): void {
 /** Isolated local transport for each case, including failure-safe backend/socket cleanup. */
 async function pendingCase(name: string, test: (fixture: {
   state: StubState;
+  rpcUrl: string;
   items: () => Array<Record<string, unknown>>;
   backend: (options?: PinnedRethQuoteBackendOptions, hash?: string) => PinnedRethQuoteBackend;
   release: () => void;
@@ -171,6 +197,7 @@ async function pendingCase(name: string, test: (fixture: {
   try {
     await test({
       state,
+      rpcUrl: `http://127.0.0.1:${port}`,
       items: () => [...state.batches.flat(), ...state.singles],
       backend(options = {}, hash = HASH) {
         const backend = new PinnedRethQuoteBackend(`http://127.0.0.1:${port}`, hash, {
@@ -197,6 +224,262 @@ async function pendingCallTests(): Promise<void> {
     catch (error) { failures.push(error); console.error(`[pinned-reth-quote-backend] ${args[0]}: FAIL`, error); }
   };
   const request = { to: OK_A, data: "0xcafe" };
+  for (const failure of ["source", "http429", "plaintext429", "rpc429"] as const) {
+   for (const lane of ["exact", "producer-bulk"] as const) {
+    await testCase(`${lane} ${failure} cancels active and queued work once; successor survives`,
+      async ({ state, backend, items, release }) => {
+        const scheduler = new RethTransportScheduler({ capacity: 3, producerReserved: 1 });
+        const notifications: Error[] = [];
+        const throttleNotifications: Error[] = [];
+        const markers: unknown[][] = [];
+        const originalWarn = console.warn;
+        console.warn = (...args: unknown[]) => { markers.push(args); };
+        try {
+          const client = backend({
+            transportLane: lane, transportScheduler: scheduler,
+            maxBatchSize: 4, maxConcurrentBatches: 4, allowSingleCallFallback: true,
+            scopeLabel: "credential-canary-must-not-be-logged",
+            onSourceUnavailable(error) { notifications.push(error); },
+            onRpcThrottle(error) { throttleNotifications.push(error); },
+          });
+          check.equal(await client.call(request), RESULT);
+          await client.drain();
+          const batchesBefore = state.batches.length;
+          state.rpcError = failure === "rpc429" ? { code: 429, message: "RPC throttled" } : SOURCE_ERROR;
+          state.rpcErrorHash = HASH;
+          const http429 = failure === "http429" || failure === "plaintext429";
+          if (http429) state.httpStatus = 429;
+          if (failure === "plaintext429") state.rawResponse = "response-body-canary https://private.invalid/secret";
+          state.pauseResponses = true;
+          const requests = Array.from({ length: 64 }, (_, index) => ({
+            to: index % 4 >= 2 ? REVERT : OK_B,
+            data: `0x${index.toString(16).padStart(4, "0")}`,
+          }));
+          const calls = [...requests, ...requests.slice(0, 5)].map((req) => observe(client.call(req)));
+          const activeCount = lane === "exact" ? 2 : 3;
+          await until(() => state.heldResponses.length === activeCount, "source transports held");
+          check.ok(client.stats().pendingItems > 0);
+          check.ok(scheduler.snapshot().queuedByLane[lane] > 0);
+          state.heldResponses.shift()!.send(); // Success entries precede two source errors.
+          const settled = await Promise.all(calls);
+          await client.drain(); // Fatal detection itself must close the scope.
+          check.equal(notifications.length, failure === "source" ? 1 : 0);
+          check.equal(throttleNotifications.length, failure === "source" ? 0 : 1);
+          const sourceError = [...notifications, ...throttleNotifications][0]!;
+          check.equal(sourceError.message, http429 ? "JSON-RPC HTTP 429" : state.rpcError.message);
+          if (http429) {
+            check.equal((sourceError as Error & { statusCode: unknown }).statusCode, 429);
+          } else {
+            check.equal((sourceError as Error & { code: unknown }).code, state.rpcError.code);
+          }
+          for (const result of settled) {
+            aborted(result, "signal");
+            if (result.status === "rejected") check.equal(result.reason.cause, sourceError);
+          }
+          const stats = client.stats();
+          check.deepEqual([stats.pendingItems, stats.liveItems, stats.inFlightBatches, stats.activeTransports], [0, 0, 0, 0]);
+          check.equal(scheduler.snapshot().activeTotal, 0);
+          check.equal(scheduler.snapshot().queuedByLane[lane], 0);
+          check.equal(stats.batchesSent, batchesBefore + activeCount, "queued permit issued another RPC after source error");
+          check.equal(stats.singleCallFallbacks, 0);
+          check.equal(state.singles.length, 0);
+          await until(() => state.heldResponses.every(({ closed }) => closed()), "sibling sockets closed");
+          release();
+          state.pauseResponses = false;
+          const itemCount = items().length;
+          for (let retry = 0; retry < 3; retry++) {
+            aborted(await observe(client.call(requests[2]!)));
+            aborted(await observe(client.call(request)));
+            aborted(await observe(client.callCached(request)!));
+          }
+          await client.closeAndDrain();
+          await nextTurn();
+          check.equal(items().length, itemCount, "drained backend sent another transport");
+          check.equal(notifications.length + throttleNotifications.length, 1);
+          check.equal(markers.length, 1);
+          check.ok(JSON.stringify(markers).includes(failure === "source" ? "source-unavailable" : "rpc-throttle"));
+          check.equal(JSON.stringify(markers).includes("HTTP 429"), failure !== "source");
+          check.ok(!JSON.stringify(markers).includes("credential-canary"));
+          check.ok(!JSON.stringify(markers).includes("response-body-canary"));
+          check.ok(!String(sourceError).includes("response-body-canary"));
+          check.ok(!JSON.stringify(markers).includes("http"));
+          const successorHash = "0x" + "cd".repeat(32);
+          state.httpStatus = 200;
+          state.rawResponse = undefined;
+          const successor = backend({ transportScheduler: scheduler,
+            onSourceUnavailable(error) { notifications.push(error); },
+            onRpcThrottle(error) { throttleNotifications.push(error); } }, successorHash);
+          check.equal(await successor.call(request), RESULT);
+          await successor.drain();
+          check.deepEqual(state.batches.at(-1)![0]!.params, [request,
+            { blockHash: successorHash, requireCanonical: true }]);
+          check.equal(notifications.length + throttleNotifications.length, 1);
+        } finally {
+          console.warn = originalWarn;
+        }
+      });
+   }
+  }
+
+  for (const rpcError of [
+    { ...SOURCE_ERROR, code: 3, data: REVERT_DATA },
+    { ...SOURCE_ERROR, code: 3 },
+    { ...SOURCE_ERROR, data: REVERT_DATA },
+    { ...SOURCE_ERROR, data: { data: REVERT_DATA } },
+    { ...SOURCE_ERROR, code: "-32000" },
+    { ...SOURCE_ERROR, message: `execution reverted: ${SOURCE_ERROR.message}` },
+    { ...SOURCE_ERROR, message: `${SOURCE_ERROR.message} ` },
+    { code: 3, message: "execution reverted: HTTP 429 Too Many Requests rate limit", data: REVERT_DATA },
+    { code: 3, message: "HTTP 429 Too Many Requests" },
+    { code: "CALL_EXCEPTION", message: "execution reverted: HTTP 429 rate limit", data: REVERT_DATA },
+    { code: "CALL_EXCEPTION", message: "execution reverted: rate limit" },
+    { code: -32000, message: "execution reverted: rate limit", data: REVERT_DATA },
+    { code: -32000, message: "execution reverted: HTTP 429 Too Many Requests", data: "0x" },
+    { code: -32000, message: "execution reverted: value 429 is invalid", data: REVERT_DATA },
+    { code: -32000, message: "429" },
+  ]) {
+    await testCase(`non-source RPC error preserves per-item behavior: ${JSON.stringify(rpcError)}`,
+      async ({ state, backend, items }) => {
+        state.rpcError = rpcError;
+        let notifications = 0;
+        const client = backend({ allowSingleCallFallback: true,
+          onSourceUnavailable() { notifications++; }, onRpcThrottle() { notifications++; } });
+        check.equal(isRpcThrottleError(rpcError), false);
+        check.equal(isRpcThrottleError(new Error("outer", { cause: rpcError })), false);
+        const bad = { to: REVERT, data: "0xfade" };
+        for (let retry = 0; retry < 2; retry++) {
+          const [good, failed] = await Promise.all([observe(client.call(request)), observe(client.call(bad))]);
+          check.deepEqual(good, { status: "fulfilled", value: RESULT });
+          check.equal(failed.status, "rejected");
+          if (failed.status === "rejected") {
+            check.equal(isStateCallAbortedError(failed.reason), false);
+            check.equal(failed.reason.code, rpcError.code);
+            check.equal(failed.reason.message, rpcError.message);
+            check.deepEqual(failed.reason.data, "data" in rpcError ? rpcError.data : undefined);
+          }
+          await client.drain();
+          check.equal(client.callCached(bad), undefined);
+        }
+        check.equal(items().length, 3, "normal error must remain retryable and success memoized");
+        check.equal(notifications, 0);
+        check.equal(state.singles.length, 0);
+      });
+  }
+
+  for (const failure of ["source", "rpc429", "http429", "plaintext429"] as const) {
+   await testCase(`${failure} in single-call fallback aborts siblings even if callback throws`,
+    async ({ state, backend }) => {
+      state.failNextBatch = true;
+      state.rpcError = failure === "rpc429" ? { code: 429, message: "RPC throttled" } : SOURCE_ERROR;
+      if (failure === "http429" || failure === "plaintext429") state.httpStatus = 429;
+      if (failure === "plaintext429") state.rawResponse = "request rejected";
+      const notifications: Error[] = [];
+      const onFailure = (error: Error): void => { notifications.push(error); throw new Error("observer failed"); };
+      const client = backend({ maxBatchSize: 2, maxConcurrentBatches: 1,
+        allowSingleCallFallback: true,
+        onSourceUnavailable: onFailure, onRpcThrottle: onFailure });
+      const calls = Array.from({ length: 12 }, (_, index) => observe(client.call({
+        to: REVERT, data: `0x${index.toString(16).padStart(2, "0")}`,
+      })));
+      const settled = await Promise.all(calls);
+      await client.drain();
+      check.equal(notifications.length, 1);
+      for (const result of settled) {
+        aborted(result);
+        if (result.status === "rejected") check.equal(result.reason.cause, notifications[0]);
+      }
+      check.equal(state.batches.length, 1);
+      check.equal(client.stats().singleCallFallbacks, 2, "only original HTTP failure may trigger fallback");
+      check.equal(client.stats().activeTransports, 0);
+      const singles = state.singles.length;
+      aborted(await observe(client.call({ to: REVERT, data: "0xff" })));
+      await client.closeAndDrain();
+      check.equal(state.singles.length, singles);
+    });
+  }
+
+  await testCase("source failure still closes backend without an observer", async ({ state, backend }) => {
+    state.rpcError = { ...SOURCE_ERROR, data: null };
+    const client = backend();
+    const result = await observe(client.call({ to: REVERT, data: "0xfa" }));
+    aborted(result);
+    if (result.status === "rejected") check.equal(result.reason.cause.message, SOURCE_ERROR.message);
+    await client.drain();
+    check.equal(client.stats().activeTransports, 0);
+    aborted(await observe(client.call(request)));
+    check.equal(state.batches.length, 1);
+  });
+
+  await testCase("HTTP 200 whole-batch RPC 429 never falls back", async ({ state, backend }) => {
+    state.rpcError = { code: 429, message: "RPC throttled" };
+    state.batchErrorEnvelope = true;
+    const notifications: Error[] = [];
+    const client = backend({ allowSingleCallFallback: true,
+      onRpcThrottle(error) { notifications.push(error); } });
+    const settled = await Promise.all([observe(client.call(request)), observe(client.call({ ...request, to: OK_B }))]);
+    settled.forEach((result) => aborted(result));
+    await client.drain();
+    check.equal(notifications.length, 1);
+    check.equal(client.stats().singleCallFallbacks, 0);
+    check.equal(state.batches.length, 1);
+    check.equal(state.singles.length, 0);
+  });
+
+  for (const statusCode of [429, 500, 200]) {
+    await testCase(`invalid JSON HTTP ${statusCode} preserves status or rejects without body/URL`,
+      async ({ state, rpcUrl }) => {
+        state.httpStatus = statusCode;
+        state.rawResponse = "<html>response-body-canary https://private.invalid/secret</html>";
+        const response = await observe(postJsonRpc(rpcUrl + "/endpoint-canary", {
+          jsonrpc: "2.0", id: 1, method: "eth_call", params: [request],
+        }, new AbortController().signal));
+        if (statusCode === 200) {
+          check.equal(response.status, "rejected");
+          if (response.status === "rejected") {
+            check.ok(response.reason instanceof SyntaxError);
+            check.equal(response.reason.message, "JSON-RPC response contained invalid JSON");
+            check.ok(!String(response.reason.stack).includes("canary"));
+            check.equal(response.reason.cause, undefined);
+          }
+        } else {
+          check.equal(response.status, "fulfilled");
+          if (response.status === "fulfilled") {
+            check.equal(response.value.statusCode, statusCode);
+            check.equal(response.value.body, null);
+            check.ok(!JSON.stringify(response.value).includes("canary"));
+          }
+        }
+      });
+  }
+
+  for (const statusCode of [500, 200]) {
+    for (const allowSingleCallFallback of [false, true]) {
+      await testCase(`invalid JSON HTTP ${statusCode} retains ordinary fallback=${allowSingleCallFallback} policy`,
+        async ({ state, backend }) => {
+          state.httpStatus = statusCode;
+          state.rawResponse = "<html>response-body-canary https://private.invalid/secret</html>";
+          let notifications = 0;
+          const client = backend({ allowSingleCallFallback,
+            onRpcThrottle() { notifications++; }, onSourceUnavailable() { notifications++; } });
+          const result = await observe(client.call(request));
+          check.equal(result.status, "rejected");
+          if (result.status === "rejected") {
+            check.equal(isStateCallAbortedError(result.reason), false);
+            check.match(result.reason.message, statusCode === 500 ? /HTTP 500/ : /invalid JSON/);
+            check.ok(!String(result.reason.stack).includes("response-body-canary"));
+            check.ok(!String(result.reason.stack).includes("private.invalid"));
+          }
+          await client.drain();
+          check.equal(client.stats().singleCallFallbacks, allowSingleCallFallback ? 1 : 0);
+          check.equal(state.singles.length, allowSingleCallFallback ? 1 : 0);
+          check.equal(notifications, 0);
+          state.httpStatus = 200;
+          state.rawResponse = undefined;
+          check.equal(await client.call(request), RESULT, "ordinary failure must remain retryable");
+        });
+    }
+  }
+
   for (const count of [1, 5]) {
     await testCase(`non-closing drain settles ${count} queued calls and preserves phase reuse`,
       async ({ state, backend, items, release }) => {

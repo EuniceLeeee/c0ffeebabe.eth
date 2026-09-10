@@ -6,6 +6,9 @@ import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
+import { carryAmountQuote, type CompletedAmountQuote,
+  type PreparedAmountQuoteActivity } from "./amount-quote-continuity.js";
+import type { FamilyAmountQuoteReuseContext } from "./venues/adapter-family-runtime.js";
 
 export type EffectivePricingInput = Parameters<typeof tokenToWethReferences>[0];
 export const DEFAULT_EFFECTIVE_WETH_INPUT = 1_000_000_000_000_000n;
@@ -21,6 +24,9 @@ export interface EffectiveMidRow {
   readonly effectiveMid: number | null;
   readonly status: "quoted" | "missing-valuation" | "unsupported" |
     "quote-failed" | "no-output" | "cancelled";
+  /** Data, not an Exact handle. Original quote anchor is never rewritten. */
+  readonly quoteProvenance?: CompletedAmountQuote;
+  readonly carried?: true;
 }
 
 export interface EffectiveMidSnapshot {
@@ -62,7 +68,9 @@ type RouteExactResult = Extract<Awaited<ReturnType<ExactCall>>, { readonly amoun
 type EffectiveMidQuote = (
   input: Pick<Parameters<ExactCall>[0],
     "edge" | "amountIn" | "control" | "requireChainAmountQuote">,
-) => Promise<Pick<RouteExactResult, "source" | "amountIn" | "amountOut">>;
+) => Promise<Pick<RouteExactResult, "source" | "amountIn" | "amountOut"> &
+  Partial<Pick<RouteExactResult, "methodId" | "methodIndex" |
+    "methodOrderFingerprint" | "cacheCompatibilityFingerprint" | "reusePolicy" | "amountQuoteReuse">>>;
 
 /** A sizing mark is used ONLY for amountIn, never to derive amountOut.
  * All input tokens share one immutable, at-most-three-hop valuation pass. */
@@ -74,6 +82,11 @@ export async function buildEffectiveMids(input: {
   readonly quote: EffectiveMidQuote;
   readonly control: AdapterWorkControl;
   readonly concurrency: number;
+  readonly previous?: EffectiveMidSnapshot;
+  readonly activity?: PreparedAmountQuoteActivity | null;
+  /** Current declaration only; fresh output still exclusively uses quote. */
+  readonly describeReuse?: (input: Pick<Parameters<EffectiveMidQuote>[0],
+    "edge" | "amountIn" | "control">) => FamilyAmountQuoteReuseContext | null;
 }): Promise<EffectiveMidSnapshot> {
   const started = Date.now();
   const { pricing, control } = input;
@@ -114,13 +127,31 @@ export async function buildEffectiveMids(input: {
       const { edgeId, edge, amountIn } = item;
       let amountOut: bigint | null = null;
       let effectiveMid: number | null = null;
+      let quoteProvenance: CompletedAmountQuote | undefined;
+      let carried = false;
       let status: EffectiveMidRow["status"];
       if (amountIn === null) status = "missing-valuation";
       else if (edge.leavesStandingPosition) status = "unsupported";
       else if (closed()) status = "cancelled";
       else {
         try {
-          const result = await input.quote({ edge, amountIn, control, requireChainAmountQuote: true });
+          const previous = input.previous?.rows.get(edgeId);
+          const priorQuote = previous?.status === "quoted" &&
+            previous.amountIn === amountIn && previous.quoteProvenance?.validAt.number === input.previous?.source.number &&
+            previous.quoteProvenance?.validAt.hash === input.previous?.source.hash &&
+            previous.quoteProvenance?.validAt.generation === input.previous?.source.generation
+              ? previous.quoteProvenance : undefined;
+          let context = priorQuote === undefined ? null :
+            input.describeReuse?.({ edge, amountIn, control }) ?? null;
+          const reused = context === null ? null : carryAmountQuote({
+            previous: priorQuote, current: source, amountIn,
+            contextFingerprint: context.contextFingerprint, policy: context.policy,
+            activity: input.activity,
+          });
+          if (closed()) throw new Error("effective quote work retired during declaration");
+          const result = reused === null
+            ? await input.quote({ edge, amountIn, control, requireChainAmountQuote: true })
+            : { source, amountIn, amountOut: reused.amountOut };
           if (closed()) status = "cancelled";
           else {
             if (result.source.number !== source.number || result.source.hash.toLowerCase() !== source.hash ||
@@ -134,9 +165,27 @@ export async function buildEffectiveMids(input: {
             }
             status = amountOut > 0n ? "quoted" : "no-output";
             effectiveMid = amountOut > 0n ? rate : null;
+            if (reused !== null) {
+              quoteProvenance = reused;
+              carried = true;
+            } else if (status === "quoted" && "amountQuoteReuse" in result && result.amountQuoteReuse !== undefined) {
+              context = result.amountQuoteReuse;
+              // Only the method actually used may supply the cached pricing data.
+              if (context !== null && result.methodId === context.methodId &&
+                  result.methodIndex === context.methodIndex &&
+                  result.methodOrderFingerprint === context.methodOrderFingerprint &&
+                  result.cacheCompatibilityFingerprint === context.cacheCompatibilityFingerprint) {
+                quoteProvenance = Object.freeze({ complete: true, chainAmountQuote: true,
+                  quotedAt: source, validAt: source, amountIn, amountOut,
+                  contextFingerprint: context.contextFingerprint, reusePolicy: context.policy });
+              }
+            }
           }
         } catch (error) {
           amountOut = null;
+          effectiveMid = null;
+          quoteProvenance = undefined;
+          carried = false;
           status = closed() ? "cancelled" :
             (error as { code?: unknown })?.code === "CHAIN_AMOUNT_QUOTE_UNAVAILABLE"
               ? "unsupported" : "quote-failed";
@@ -144,7 +193,9 @@ export async function buildEffectiveMids(input: {
       }
       rows[index] = Object.freeze({ edgeId, instanceKey: edgeInstanceKey(edge),
         tokenIn: edge.tokenIn.toLowerCase(), tokenOut: edge.tokenOut.toLowerCase(),
-        amountIn, amountOut, effectiveMid, status });
+        amountIn, amountOut, effectiveMid, status,
+        ...(quoteProvenance === undefined ? {} : { quoteProvenance }),
+        ...(carried ? { carried: true as const } : {}) });
     }
   };
   await Promise.all(Array.from({ length: Math.min(input.concurrency, work.length) }, worker));

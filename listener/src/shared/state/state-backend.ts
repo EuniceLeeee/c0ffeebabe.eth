@@ -1318,11 +1318,21 @@ export function postJsonRpc(
         if (settled) return;
         try {
           const raw = Buffer.concat(chunks).toString("utf8");
-          const body = JSON.parse(raw) as unknown;
+          const statusCode = incoming.statusCode ?? 0;
+          let body: unknown = null;
+          try {
+            body = JSON.parse(raw) as unknown;
+          } catch {
+            // HTTP failures may be plain text/HTML. Preserve their status
+            // without exposing the response body in a JSON parse error.
+            if (statusCode >= 200 && statusCode < 300) {
+              throw new SyntaxError("JSON-RPC response contained invalid JSON");
+            }
+          }
           settled = true;
           cleanup();
           resolve({
-            statusCode: incoming.statusCode ?? 0,
+            statusCode,
             statusMessage: incoming.statusMessage ?? "",
             body,
             reusedSocket: request.reusedSocket,

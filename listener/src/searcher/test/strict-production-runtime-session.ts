@@ -2344,7 +2344,7 @@ for (const path of ["coarse", "runtime"] as const) {
   let entered!: () => void;
   const barrier = new Promise<void>(resolve => { release = resolve; });
   const started = new Promise<void>(resolve => { entered = resolve; });
-  let invalid: "none" | "source" | "partial" = "none";
+  let invalid: "none" | "source" | "partial" | "late-abort" = "none";
   let publications = 0;
   const enriched = new StrictCurrentRuntimeCoordinator(
     request => root.createSession({ source: request.source, runtime: strictRuntime,
@@ -2358,6 +2358,7 @@ for (const path of ["coarse", "runtime"] as const) {
     async (pricing) => {
       entered();
       await barrier;
+      if (invalid === "late-abort") controller.abort(new Error("canonical source unavailable"));
       return { source: { number: pricing.sourceBlock,
         hash: invalid === "source" ? "0xwrong" : pricing.sourceBlockHash,
         generation: pricing.generation },
@@ -2386,12 +2387,62 @@ for (const path of ["coarse", "runtime"] as const) {
     await assert.rejects(prepare, /effective pricing incomplete or mismatched source/);
     assert.equal(enriched.latestPricingSnapshot(), published);
   }
-  invalid = "none";
-  controller.abort();
+  invalid = "late-abort";
+  await assert.rejects(prepare);
+  assert.equal(enriched.latestPricingSnapshot(), published);
   await assert.rejects(prepare);
   assert.equal(publications, 1);
   await enriched.resetDynamicStateForReplay();
   assert.equal(enriched.latestPricingSnapshot(), null);
+}
+
+// Completion order/reset must not replace the latest raw/effective publication.
+for (const retire of ["newer-prepare", "reset"] as const) {
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let first = true;
+  const coordinated = new StrictCurrentRuntimeCoordinator(
+    request => root.createSession({ source: request.source, runtime: strictRuntime,
+      fundingAssets: [], kind: "pricing", control: request.control }),
+    () => {}, undefined,
+    async pricing => {
+      if (first) { first = false; entered(); await gate; }
+      return { source: { number: pricing.sourceBlock, hash: pricing.sourceBlockHash, generation: pricing.generation },
+        rows: new Map(), reference: "default", referenceWethInput: 1n, complete: true, wallMs: 0 };
+    },
+  );
+  const firstPrepare = coordinated.prepareCoarsePricing({ graph: currentGraph, deadlineAtMs: Date.now() + 10_000 });
+  const rejected = assert.rejects(firstPrepare, /pricing publication retired during prepare/);
+  await started;
+  if (retire === "reset") await coordinated.resetDynamicStateForReplay();
+  else await coordinated.prepareCoarsePricing({ graph: currentGraph, deadlineAtMs: Date.now() + 10_000 });
+  const retained = coordinated.latestPricingSnapshot();
+  release(); await rejected;
+  assert.equal(coordinated.latestPricingSnapshot(), retained, retire);
+}
+
+for (const path of ["coarse", "runtime"] as const) for (const rejection of ["aborted", "expired"] as const) {
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const guarded = new StrictCurrentRuntimeCoordinator(
+    request => root.createSession({ source: request.source, runtime: strictRuntime,
+      fundingAssets: [], kind: "pricing", control: request.control }), () => {}, undefined,
+    async pricing => { entered(); await gate; return {
+      source: { number: pricing.sourceBlock, hash: pricing.sourceBlockHash, generation: pricing.generation },
+      rows: new Map(), reference: "default", referenceWethInput: 1n, complete: true, wallMs: 0,
+    }; },
+  );
+  const healthy = guarded.prepareCoarsePricing({ graph: currentGraph, deadlineAtMs: Date.now() + 10_000 });
+  await started;
+  const controller = new AbortController(); if (rejection === "aborted") controller.abort();
+  const args = { graph: currentGraph, signal: controller.signal,
+    deadlineAtMs: rejection === "expired" ? Date.now() - 1 : Date.now() + 10_000 };
+  await assert.rejects(path === "coarse" ? guarded.prepareCoarsePricing(args)
+    : guarded.prepare({ ...args, fundingTokens: [] }));
+  release(); await healthy;
+  assert(guarded.latestPricingSnapshot(), `${path}/${rejection} cannot retire admitted work`);
 }
 
 const failingCoordinator = new StrictCurrentRuntimeCoordinator(

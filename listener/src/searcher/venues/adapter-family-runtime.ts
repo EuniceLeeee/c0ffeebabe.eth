@@ -65,6 +65,10 @@ import { assertIssuedLoadedFamilyBox } from "./family-capability-catalog.js";
 import type { RouteVenueMid } from "./mid-readers.js";
 import type { PlanFragment } from "./route-leg-adapter.js";
 import type { ResolvedPlanNode } from "../../types.js";
+import {
+  snapshotAmountQuoteReusePolicy,
+  type AmountQuoteReusePolicy,
+} from "../amount-quote-continuity.js";
 
 export type AdapterInstanceStage =
   | "discovery"
@@ -222,6 +226,9 @@ export interface SealedFamilyExactQuoteHandle {
   readonly methodIndex: number;
   readonly methodOrderFingerprint: string;
   readonly cacheCompatibilityFingerprint: string;
+  /** Pricing-data reuse declaration only; the handle remains source-local. */
+  readonly reusePolicy?: AmountQuoteReusePolicy;
+  readonly amountQuoteReuse?: FamilyAmountQuoteReuseContext;
   readonly evidenceRefs: readonly string[];
   readonly outcome: AdapterInstanceOutcome;
 }
@@ -1114,6 +1121,106 @@ interface ResolvedFamilyExactQuoteInvocation
   readonly route: FamilyRouteDescriptor;
 }
 
+export interface FamilyAmountQuoteReuseContext {
+  readonly contextFingerprint: string;
+  readonly policy: AmountQuoteReusePolicy;
+  readonly methodId: string;
+  readonly methodIndex: number;
+  readonly methodOrderFingerprint: string;
+  readonly cacheCompatibilityFingerprint: string;
+  readonly initialRequestFingerprint: string;
+}
+
+// Declaration-only inspection of the EXISTING exact contract. This cannot
+// produce a quote, issue authority, or run I/O. Re-read current declarations;
+// never infer current compatibility from a previous result's metadata.
+export function describeFamilyAmountQuoteReuse(
+  input: FamilyExactQuoteInvocation,
+): FamilyAmountQuoteReuseContext | null {
+  try {
+    assertAdapterWorkControl(input.control);
+    const routeRecord = resolveFamilyRouteRuntimeHandle(input.family, input.route);
+    const invocation: ResolvedFamilyExactQuoteInvocation = Object.freeze({
+      ...input, source: snapshotCanonicalSource(input.source),
+      runtimeEvidence: snapshotRuntimeEvidence(input.runtimeEvidence),
+      routeHandle: input.route, routeRecord,
+      instance: routeRecord.instance, route: routeRecord.route,
+    });
+    const declaration = declareFamilyExactQuote(invocation);
+    const { methods, programInput, methodOrderFingerprint, compatibilityFingerprint,
+      maxDependentReadRounds } = declaration;
+    const methodIndex = methods.findIndex(method =>
+      method.kind === "request-program" && method.chainAmountQuote === true);
+    const method = methods[methodIndex];
+    // A fallback method cannot claim that an earlier method still fails.
+    if (method?.kind !== "request-program" || method.reusePolicy === undefined) return null;
+    const initial = declareInitialExactRound(method.program, programInput);
+    assertNewExactRequestIds(initial.requests, new Set<string>());
+    // First slice only: no unresolved caller authority or later request rounds.
+    // Such methods keep fresh work until their full execution context can be bound.
+    if (method.program.buildDependentProgram !== undefined ||
+        (initial.requirements.caller !== undefined && initial.requirements.caller !== "none") ||
+        initial.requests.some(request => request.kind !== "eth-call" ||
+          (request.caller !== undefined && request.caller.kind !== "none"))) return null;
+    let identity = amountQuoteFamilyIdentities.get(input.family);
+    if (identity === undefined) {
+      identity = ++nextAmountQuoteFamilyIdentity;
+      amountQuoteFamilyIdentities.set(input.family, identity);
+    }
+    input.runtime.generationFence.assertCurrent(input.generation, input.source);
+    assertAdapterWorkControl(input.control);
+    return Object.freeze({
+      contextFingerprint: hashCanonical({
+        namespace: "family-amount-quote-reuse-v1", familyRuntimeIdentity: identity,
+        familyId: input.family.plugin.manifest.familyId,
+        instance: invocation.instance.staticBindingFingerprint,
+        route: invocation.route.bindingRef.fingerprint,
+        routeKey: invocation.route.routeKey,
+        capability: input.family.hashes.exact.contentHash,
+        methodOrderFingerprint, compatibilityFingerprint, methodIndex,
+        initialRequestFingerprint: initial.fingerprint, maxDependentReadRounds,
+      }),
+      policy: method.reusePolicy, methodId: method.id, methodIndex,
+      methodOrderFingerprint, cacheCompatibilityFingerprint: compatibilityFingerprint,
+      initialRequestFingerprint: initial.fingerprint,
+    });
+  } catch { return null; }
+}
+
+const amountQuoteFamilyIdentities = new WeakMap<object, number>();
+let nextAmountQuoteFamilyIdentity = 0;
+
+function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation) {
+  assertIssuedLoadedFamilyBox(invocation.family);
+  assertExactInvocation(invocation);
+  const programInput: RuntimeExactQuoteInput = Object.freeze({
+    descriptor: invocation.instance.descriptor, route: invocation.route,
+    amountIn: invocation.amountIn, source: invocation.source,
+    executor: invocation.executor.toLowerCase(), runtimeEvidence: invocation.runtimeEvidence,
+  });
+  const methods = declareExactMethods(invocation.family.plugin.exact.methods(programInput));
+  const methodOrderFingerprint = hashCanonical({
+    namespace: "adapter-family-exact-method-order-v1",
+    methods: methods.map((method, methodIndex) => ({
+      methodIndex, methodId: method.id, kind: method.kind,
+      ...(method.kind === "request-program" && method.chainAmountQuote === true
+        ? { chainAmountQuote: true } : {}),
+      ...(method.kind === "request-program" && method.reusePolicy !== undefined
+        ? { reusePolicy: { kind: method.reusePolicy.kind,
+            dependencies: [...method.reusePolicy.dependencies],
+            blockEnvironment: method.reusePolicy.blockEnvironment } } : {}),
+    })),
+  });
+  const maxDependentReadRounds = exactDependentReadRoundLimit(invocation.maxDependentReadRounds);
+  const compatibilityFingerprint = hashCanonical({
+    capability: invocation.family.hashes.exact.contentHash,
+    projection: invocation.family.plugin.exact.cacheCompatibilityProjection(programInput),
+    executor: programInput.executor,
+    runtimeEvidence: runtimeEvidenceProjection(programInput.runtimeEvidence),
+  });
+  return { programInput, methods, methodOrderFingerprint, compatibilityFingerprint, maxDependentReadRounds };
+}
+
 /** S3 exact quote boundary. Request-bearing quotes always enter central work. */
 export async function executeFamilyExactQuote(
   input: FamilyExactQuoteInvocation,
@@ -1153,39 +1260,8 @@ export async function executeFamilyExactQuote(
       instance: routeRecord.instance,
       route: routeRecord.route,
     });
-    assertExactInvocation(invocation);
-    programInput = Object.freeze({
-      descriptor: invocation.instance.descriptor,
-      route: invocation.route,
-      amountIn: invocation.amountIn,
-      source: invocation.source,
-      executor: invocation.executor.toLowerCase(),
-      runtimeEvidence: invocation.runtimeEvidence,
-    });
-    methods = declareExactMethods(
-      invocation.family.plugin.exact.methods(programInput),
-    );
-    methodOrderFingerprint = hashCanonical({
-      namespace: "adapter-family-exact-method-order-v1",
-      methods: methods.map((method, methodIndex) => ({
-        methodIndex,
-        methodId: method.id,
-        kind: method.kind,
-        ...(method.kind === "request-program" && method.chainAmountQuote === true
-          ? { chainAmountQuote: true } : {}),
-      })),
-    });
-    maxDependentReadRounds = exactDependentReadRoundLimit(
-      invocation.maxDependentReadRounds,
-    );
-    compatibilityFingerprint = hashCanonical({
-      capability: invocation.family.hashes.exact.contentHash,
-      projection: invocation.family.plugin.exact.cacheCompatibilityProjection(
-        programInput,
-      ),
-      executor: programInput.executor,
-      runtimeEvidence: runtimeEvidenceProjection(programInput.runtimeEvidence),
-    });
+    ({ programInput, methods, methodOrderFingerprint, compatibilityFingerprint,
+      maxDependentReadRounds } = declareFamilyExactQuote(invocation));
   } catch (error) {
     return terminalUnboundExact(
       captured,
@@ -1215,6 +1291,7 @@ export async function executeFamilyExactQuote(
         invocation,
         programInput,
         program: method.program,
+        ...(method.reusePolicy === undefined ? {} : { reusePolicy: method.reusePolicy }),
         methodId: method.id,
         methodIndex,
         methodOrderFingerprint,
@@ -1301,6 +1378,7 @@ interface DeclaredExactRound {
 async function executeExactRequestMethod(input: {
   readonly invocation: ResolvedFamilyExactQuoteInvocation;
   readonly programInput: RuntimeExactQuoteInput;
+  readonly reusePolicy?: AmountQuoteReusePolicy;
   readonly program: ExactRequestProgram<
     CompiledInstanceDescriptor,
     FamilyRouteDescriptor,
@@ -1328,6 +1406,15 @@ async function executeExactRequestMethod(input: {
     );
   }
   evidenceRefs.push(`exact-round:0:${initial.fingerprint}`);
+
+  const described = input.reusePolicy === undefined ? null : describeFamilyAmountQuoteReuse({
+    ...invocation, route: invocation.routeHandle,
+  });
+  const amountQuoteReuse = described !== null && described.methodId === input.methodId &&
+    described.methodIndex === input.methodIndex &&
+    described.methodOrderFingerprint === input.methodOrderFingerprint &&
+    described.cacheCompatibilityFingerprint === input.compatibilityFingerprint &&
+    described.initialRequestFingerprint === initial.fingerprint ? described : undefined;
 
   const cacheAddress: AdapterExactQuoteCacheAddress = Object.freeze({
     familyRuntimeIdentity: invocation.family,
@@ -1385,6 +1472,8 @@ async function executeExactRequestMethod(input: {
           return resolvedExactQuote({
             invocation,
             quote,
+            ...(input.reusePolicy === undefined ? {} : { reusePolicy: input.reusePolicy }),
+            ...(amountQuoteReuse === undefined ? {} : { amountQuoteReuse }),
             methodId: input.methodId,
             methodIndex: input.methodIndex,
             methodOrderFingerprint: input.methodOrderFingerprint,
@@ -1554,6 +1643,8 @@ async function executeExactRequestMethod(input: {
   return resolvedExactQuote({
     invocation,
     quote,
+    ...(input.reusePolicy === undefined ? {} : { reusePolicy: input.reusePolicy }),
+    ...(amountQuoteReuse === undefined ? {} : { amountQuoteReuse }),
     methodId: input.methodId,
     methodIndex: input.methodIndex,
     methodOrderFingerprint: input.methodOrderFingerprint,
@@ -1715,6 +1806,9 @@ function declareExactMethods(value: unknown): readonly RuntimeExactMethod[] {
     if (ids.has(id)) throw new Error(`exact methods duplicate id ${id}`);
     ids.add(id);
     if (method.kind === "local") {
+      if ("reusePolicy" in method) {
+        throw new Error(`local exact method ${id} cannot declare chain quote reuse`);
+      }
       if (typeof method.quote !== "function") {
         throw new Error(`local exact method ${id} must declare quote`);
       }
@@ -1745,7 +1839,17 @@ function declareExactMethods(value: unknown): readonly RuntimeExactMethod[] {
           `request exact method ${id} buildDependentProgram must be a function`,
         );
       }
-      return method as RuntimeExactMethod;
+      return Object.freeze({
+        ...method,
+        ...(method.reusePolicy === undefined ? {} : {
+          reusePolicy: (() => {
+            if (method.chainAmountQuote !== true) {
+              throw new Error(`request exact method ${id} reuse requires a chain amount quote`);
+            }
+            return snapshotAmountQuoteReusePolicy(method.reusePolicy);
+          })(),
+        }),
+      }) as RuntimeExactMethod;
     }
     throw new Error(`exact method ${id} has unsupported kind`);
   });
@@ -1915,6 +2019,8 @@ function exactControlFailure(
 function resolvedExactQuote(input: {
   readonly invocation: ResolvedFamilyExactQuoteInvocation;
   readonly quote: ExactQuoteResult<unknown>;
+  readonly reusePolicy?: AmountQuoteReusePolicy;
+  readonly amountQuoteReuse?: FamilyAmountQuoteReuseContext;
   readonly methodId: string;
   readonly methodIndex: number;
   readonly methodOrderFingerprint: string;
@@ -1959,6 +2065,8 @@ function resolvedExactQuote(input: {
     methodIndex: input.methodIndex,
     methodOrderFingerprint: input.methodOrderFingerprint,
     cacheCompatibilityFingerprint: input.compatibilityFingerprint,
+    ...(input.reusePolicy === undefined ? {} : { reusePolicy: input.reusePolicy }),
+    ...(input.amountQuoteReuse === undefined ? {} : { amountQuoteReuse: input.amountQuoteReuse }),
     evidenceRefs: Object.freeze(evidenceRefs),
     outcome,
   }) as unknown as SealedFamilyExactQuoteHandle;

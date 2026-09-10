@@ -21,6 +21,7 @@ import {
   buildFamilyExecutionFragment,
   executeAdapterFamilyLifecycleBatch,
   executeFamilyExactQuote,
+  describeFamilyAmountQuoteReuse,
   type AdapterFamilyPublication,
   type FamilyRouteRuntimeHandle,
   type PreparedFamilyInstance,
@@ -65,6 +66,7 @@ import {
 } from "../venues/family-capability-catalog.js";
 import { bindFamilyOwnedAction } from "../venues/family-owned-action.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
+import type { AmountQuoteReusePolicy } from "../amount-quote-continuity.js";
 
 const SELECTOR = "0x12345678" as const;
 const TOKEN0 = `0x${"31".repeat(20)}`;
@@ -138,11 +140,12 @@ interface FixtureControls {
   readonly localExactNotApplicable?: boolean;
   readonly localExactAfterRequest?: boolean;
   readonly localExactThrow?: boolean;
-  readonly exactDependent?: boolean;
+  exactDependent?: boolean;
   readonly exactDependentRounds?: number;
   readonly exactDependentNeverSettles?: boolean;
   readonly exactDecodeThrow?: boolean;
   chainAmountQuote?: true;
+  reusePolicy?: AmountQuoteReusePolicy;
   onExactDecode?: () => void;
   readonly executionAdapterId?: string;
   readonly executionThenable?: boolean;
@@ -520,6 +523,7 @@ function defineFixture(name: string, controls: FixtureControls) {
           id: "fixture-request-program",
           kind: "request-program" as const,
           ...(controls.chainAmountQuote ? { chainAmountQuote: true as const } : {}),
+          ...(controls.reusePolicy === undefined ? {} : { reusePolicy: controls.reusePolicy }),
           program: Object.freeze({
             requirements: () => ({ transports: ["eth-call" as const] }),
             buildRequests: ({ descriptor }: { readonly descriptor: Descriptor }) => {
@@ -1566,6 +1570,79 @@ async function testChainAmountUsesExistingExactBoundary(): Promise<void> {
   assert.equal(chain.methodId, ordinary.methodId, "one quote implementation, no effective method");
   assert.notEqual(chain.methodOrderFingerprint, ordinary.methodOrderFingerprint,
     "quote provenance participates in the method/cache identity");
+}
+
+async function testQuoteReuseDeclarationIsSealedAndCacheBound(): Promise<void> {
+  const dependencies = [TOKEN1.toUpperCase().replace("0X", "0x"), TOKEN0, TOKEN0];
+  const controls: FixtureControls = {
+    descriptorPools: [], unavailableCalls: 0, chainAmountQuote: true,
+    reusePolicy: { kind: "state-only", dependencies, blockEnvironment: "independent" },
+  };
+  const family = defineFixture("quote-reuse-declaration", controls);
+  const scheduler = new TestScheduler();
+  const { publications } = await run({ family, pools: [GOOD], scheduler });
+  const cache = createAdapterFamilyExactQuoteCache({ capacity: 8 });
+  const request = {
+    family, route: issuedRoute(publications[0].instances[0]),
+    amountIn: 27n, executor: EXECUTOR, runtimeEvidence: [],
+    source: SOURCE, generation: SOURCE.generation,
+    runtime: runtime(scheduler, new TestFence(), [], undefined, cache),
+    requireChainAmountQuote: true,
+  };
+  const fresh = await executeFamilyExactQuote(request);
+  assert.equal(fresh.status, "resolved");
+  if (fresh.status !== "resolved") throw new Error("fixture quote failed");
+  const declared = describeFamilyAmountQuoteReuse(request);
+  assert(declared, "current declaration supports pricing-data reuse");
+  assert.deepEqual(fresh.amountQuoteReuse, declared, "fresh metadata matches the actual request declaration");
+  assert(Object.isFrozen(declared));
+  const requestReads = scheduler.requestIds.length;
+  assert.notEqual(describeFamilyAmountQuoteReuse({ ...request, executor: OTHER })?.contextFingerprint,
+    declared.contextFingerprint, "executor/configuration change invalidates context even for no-from calls");
+  controls.exactCalldata = "0xabababab";
+  assert.notEqual(describeFamilyAmountQuoteReuse(request)?.contextFingerprint, declared.contextFingerprint);
+  controls.exactCalldata = undefined;
+  controls.exactDependent = true;
+  assert.equal(describeFamilyAmountQuoteReuse(request), null, "unbound future rounds remain fresh");
+  controls.exactDependent = false;
+  const cancelled = new AbortController(); cancelled.abort();
+  assert.equal(describeFamilyAmountQuoteReuse({ ...request, control: { signal: cancelled.signal } }), null);
+  assert.equal(scheduler.requestIds.length, requestReads, "description cannot execute chain requests");
+  assert.deepEqual(fresh.reusePolicy?.dependencies, [TOKEN0, TOKEN1]);
+  assert(Object.isFrozen(fresh.reusePolicy));
+  assert(Object.isFrozen(fresh.reusePolicy?.dependencies));
+  const reads = scheduler.requestIds.length;
+  const cached = await executeFamilyExactQuote(request);
+  assert.equal(cached.status, "resolved");
+  if (cached.status !== "resolved") throw new Error("fixture cache failed");
+  assert.equal(cached.outcome.reasonCode, "exact-cache-reused");
+  assert.deepEqual(cached.reusePolicy, fresh.reusePolicy);
+  assert.deepEqual(cached.amountQuoteReuse, fresh.amountQuoteReuse);
+  assert.equal(scheduler.requestIds.length, reads);
+  dependencies.push(OTHER);
+  assert.notEqual(describeFamilyAmountQuoteReuse(request)?.contextFingerprint, declared.contextFingerprint);
+  assert.deepEqual(fresh.reusePolicy?.dependencies, [TOKEN0, TOKEN1], "Family mutation cannot alter issued metadata");
+  const changed = await executeFamilyExactQuote(request);
+  assert.equal(changed.status, "resolved");
+  if (changed.status !== "resolved") throw new Error("fixture changed quote failed");
+  assert.notEqual(changed.methodOrderFingerprint, fresh.methodOrderFingerprint);
+  assert.notEqual(changed.outcome.reasonCode, "exact-cache-reused");
+  assert(scheduler.requestIds.length > reads, "dependency policy participates in the cache identity");
+  const afterChanged = scheduler.requestIds.length;
+  for (const policy of [
+    { kind: "state-only", dependencies: [], blockEnvironment: "independent" },
+    { kind: "state-only", dependencies: [TOKEN0], blockEnvironment: "timestamp-dependent" },
+  ]) {
+    controls.reusePolicy = policy as AmountQuoteReusePolicy;
+    const invalid = await executeFamilyExactQuote(request);
+    assert.equal(invalid.status, "failed");
+    assert(invalid.outcome.reasonCode.startsWith("exact-declaration:"));
+  }
+  controls.reusePolicy = { kind: "state-only", dependencies: [TOKEN0], blockEnvironment: "independent" };
+  controls.chainAmountQuote = undefined;
+  assert.equal((await executeFamilyExactQuote(request)).status, "failed",
+    "local/computed output cannot acquire a chain-output carry declaration");
+  assert.equal(scheduler.requestIds.length, afterChanged, "invalid declarations spend no RPC");
 }
 
 async function testCachedExactHonorsCallerControl(): Promise<void> {
@@ -2773,6 +2850,7 @@ await testSharedBindingProjectionThenableIsUnresolved();
 await testCallerCannotInjectSharedBindingRefs();
 await testRequestExactAndOwnedExecution();
 await testChainAmountUsesExistingExactBoundary();
+await testQuoteReuseDeclarationIsSealedAndCacheBound();
 await testCachedExactHonorsCallerControl();
 await testOpaquePublicationAndEvidenceAreSealed();
 await testMissingUnavailableClassifierUsesSealedEmptyMap();

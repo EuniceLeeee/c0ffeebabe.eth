@@ -29,6 +29,7 @@ import {
 import type {
   RethTransportScheduler,
 } from "./reth-transport-scheduler.js";
+import { isRpcThrottleError } from "./rpc-throttle-guard.js";
 
 /**
  * Pass-scoped source-hash pinned quote backend for block-scan producer and
@@ -80,6 +81,10 @@ export interface PinnedRethQuoteBackendOptions {
   readonly allowSingleCallFallback?: boolean;
   readonly signal?: AbortSignal;
   readonly deadlineAtMs?: number;
+  /** Notified once after a confirmed unavailable source closes this backend. */
+  readonly onSourceUnavailable?: (error: Error) => void;
+  /** Notified once after raw RPC throttling closes this backend. */
+  readonly onRpcThrottle?: (error: Error) => void;
   readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
   /**
    * Replay-only durable cache for successful deterministic eth_call results.
@@ -715,8 +720,28 @@ export class PinnedRethQuoteBackend
     return new StateCallAbortedError(
       `${this.scopeLabel} ${label} aborted: scope closed`,
       "signal",
-      reason,
+      { cause: reason },
     );
+  }
+
+  private abortForRpcFailure(error: Error): void {
+    if (this.closed) return;
+    const record = error as Error & { code?: unknown; data?: unknown };
+    const sourceUnavailable = record.code === -32000 &&
+      record.message === "hash is not currently canonical" && record.data == null;
+    if (!sourceUnavailable && !isRpcThrottleError(error)) return;
+
+    // Close before notifying: callbacks may abort parents or retry synchronously.
+    this.abort(error);
+    const marker = sourceUnavailable ? "source-unavailable" : "rpc-throttle HTTP 429";
+    console.warn(`[pinned-reth-quote-backend] ${marker} source_block_hash=${this.blockSpecifier.blockHash}`);
+    try {
+      const notify = sourceUnavailable ? this.options.onSourceUnavailable : this.options.onRpcThrottle;
+      notify?.(error);
+    } finally {
+      // Preserve the raw diagnostic even if the observer itself throws.
+      throw error;
+    }
   }
 
   private scheduleFlush(): void {
@@ -796,10 +821,31 @@ export class PinnedRethQuoteBackend
     ]);
   }
 
-  private async runTransport<T>(
+  private async runTransport(
     signal: AbortSignal,
-    work: () => Promise<T>,
-  ): Promise<T> {
+    work: () => Promise<JsonRpcHttpResponse>,
+  ): Promise<JsonRpcHttpResponse> {
+    const checkedWork = async (): Promise<JsonRpcHttpResponse> => {
+      try {
+        const response = await work();
+        if (response.statusCode === 429) {
+          const error = new Error("JSON-RPC HTTP 429");
+          (error as Error & { statusCode: number }).statusCode = 429;
+          this.abortForRpcFailure(error);
+        }
+        // Singles and whole-batch RPC rejections use an object envelope.
+        if (response.statusCode >= 200 && response.statusCode < 300 && !Array.isArray(response.body)) {
+          const body = response.body as { error?: unknown } | null;
+          if (body?.error != null) {
+            this.abortForRpcFailure(rpcItemError({ to: this.sourceBlockHash }, body.error));
+          }
+        }
+        return response;
+      } catch (error) {
+        if (error instanceof Error) this.abortForRpcFailure(error);
+        throw error;
+      }
+    };
     const operation = this.options.transportScheduler
       ? this.options.transportScheduler.run(
           this.transportLane,
@@ -818,10 +864,10 @@ export class PinnedRethQuoteBackend
               this.peakSchedulerLaneActive,
               activeByLane[this.transportLane],
             );
-            return work();
+            return checkedWork();
           },
         )
-      : work();
+      : checkedWork();
     this.activeTransports.add(operation);
     try {
       return await operation;
@@ -920,14 +966,27 @@ export class PinnedRethQuoteBackend
     let response: JsonRpcHttpResponse;
     try {
       if (controller.signal.aborted) throw controller.signal.reason;
-      response = await this.runTransport(controller.signal, () => {
+      response = await this.runTransport(controller.signal, async () => {
         this.batchesSent++;
         this.batchedItems += items.length;
         this.maxBatchItemsSent = Math.max(
           this.maxBatchItemsSent,
           items.length,
         );
-        return postJsonRpc(this.rpcUrl, payloads as never, controller.signal);
+        const response = await postJsonRpc(this.rpcUrl, payloads as never, controller.signal);
+        // Inspect before releasing the shared permit or settling any sibling.
+        // Otherwise the scheduler can dispatch queued RPCs on the dead source.
+        if (response.statusCode >= 200 && response.statusCode < 300 && Array.isArray(response.body)) {
+          for (const entry of response.body) {
+            if (!entry || typeof entry !== "object") continue;
+            const record = entry as { id?: unknown; error?: unknown };
+            const item = typeof record.id === "number" ? byId.get(record.id) : undefined;
+            if (item && record.error != null) {
+              this.abortForRpcFailure(rpcItemError({ to: item.req.to }, record.error));
+            }
+          }
+        }
+        return response;
       });
     } catch (transportError) {
       /*

@@ -25,6 +25,7 @@ import {
   type FamilyOwnedActionAdapter,
 } from "./family-owned-action.js";
 import type { SwapObservationCapability } from "./swap-observation.js";
+import type { AmountQuoteReusePolicy } from "../amount-quote-continuity.js";
 
 export type { FamilyOwnedActionAdapter } from "./family-owned-action.js";
 
@@ -880,6 +881,11 @@ export type ExactMethod<
        * NOT capacity, caller eligibility or final execution success.
        * Absence is unknown. Declared per invocation by the owning Family. */
       readonly chainAmountQuote?: true;
+      /** Optional Family guarantee for carrying an amount quote as pricing data.
+       * Covers every transitive state/code dependency and excludes block-environment
+       * dependence of method selection, requests and output. Absence means fresh
+       * cross-block work; this never carries an execution/Exact authority handle. */
+      readonly reusePolicy?: AmountQuoteReusePolicy;
       readonly program: DependentRequestProgram<
         ExactQuoteInput<Descriptor, Route>,
         ExactQuoteResult<Evidence>
