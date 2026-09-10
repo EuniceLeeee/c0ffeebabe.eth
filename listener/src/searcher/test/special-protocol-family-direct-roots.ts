@@ -5,6 +5,10 @@ import { buildFamilyCapabilityShadowArtifact } from
   "../build-family-capability-manifest.js";
 import { definedFamilyPluginContractSummary } from
   "../venues/adapter-family-plugin.js";
+import { FAMILY_CAPABILITY_NAMES } from
+  "../venues/family-capability-catalog.js";
+import type { CapabilityExactShadowRecord } from
+  "../venues/family-capability-shadow.js";
 import { plugin as erc4626SiloRedeemPlugin } from
   "../venues/production-families/erc4626-silo-redeem.production.js";
 import { plugin as etherTokenNativeRedeemPlugin } from
@@ -75,6 +79,7 @@ assert.equal(artifact.complete, true, JSON.stringify(artifact.issues));
 assert.deepEqual(artifact.issues, []);
 
 const directCapabilities = Object.freeze([
+  "capture",
   "discovery",
   "identity",
   "instance",
@@ -84,11 +89,25 @@ const directCapabilities = Object.freeze([
   "execution",
 ] as const);
 
-for (const family of families) {
-  const records = artifact.exact.filter((record) =>
-    record.identity.familyId === family.familyId
+function assertDirectRoots(
+  family: (typeof families)[number],
+  records: readonly CapabilityExactShadowRecord[],
+): void {
+  const capabilities = records.map((record) => record.identity.capability);
+  assert.equal(
+    new Set(capabilities).size,
+    records.length,
+    `${family.familyId} capability rows must be unique`,
   );
-  assert.equal(records.length, 10, `${family.familyId} capability row count`);
+  assert.deepEqual(
+    [...capabilities].sort(),
+    [...FAMILY_CAPABILITY_NAMES].sort(),
+    `${family.familyId} must have exactly the canonical capability set`,
+  );
+  for (const record of records) {
+    assert.equal(record.identity.familyId, family.familyId);
+    assert.equal(record.root.capability, record.identity.capability);
+  }
 
   const present = records.filter((record) => record.root.absence === null);
   for (const capability of directCapabilities) {
@@ -115,6 +134,9 @@ for (const family of families) {
     assert.equal(victim, undefined, `${family.familyId}/victim must be absent`);
   }
 
+  const discovery = present.find((record) =>
+    record.identity.capability === "discovery"
+  )!;
   const directRootFiles = present.map((record) => record.root.entrySourceFile!);
   for (const record of present) {
     assert(
@@ -124,10 +146,121 @@ for (const family of families) {
       `${family.familyId}/${record.identity.capability} cannot hash the compatibility assembly`,
     );
     assert(
-      directRootFiles.every((root) =>
-        !record.identity.semanticDependencies.includes(root)
-      ),
-      `${family.familyId}/${record.identity.capability} cannot depend on a sibling semantic root`,
+      record.identity.semanticDependencies.every((dependency) => {
+        const isSemanticRoot = directRootFiles.includes(dependency) || (
+          dependency.startsWith("src/searcher/venues/") &&
+          FAMILY_CAPABILITY_NAMES.some((capability) =>
+            dependency.endsWith(`-family/${capability}.ts`)
+          )
+        );
+        // Capture materialization composes the declared same-Family discovery;
+        // no other sibling or cross-Family capability root is permitted.
+        return !isSemanticRoot || (
+          record.identity.capability === "capture" &&
+          dependency === discovery.root.entrySourceFile
+        );
+      }),
+      `${family.familyId}/${record.identity.capability} cannot depend on a sibling or cross-Family semantic root except capture -> declared discovery`,
+    );
+  }
+}
+
+for (const family of families) {
+  const records = artifact.exact.filter((record) =>
+    record.identity.familyId === family.familyId
+  );
+  assertDirectRoots(family, records);
+
+  // Exercise the same assertions on corrupt records, not a separate validator.
+  for (const record of records) {
+    assert.throws(
+      () => assertDirectRoots(family, records.filter((row) => row !== record)),
+      /must have exactly the canonical capability set/,
+    );
+    assert.throws(
+      () => assertDirectRoots(family, [...records, record]),
+      /capability rows must be unique/,
+    );
+    const other = records.find((row) => row !== record)!;
+    assert.throws(
+      () => assertDirectRoots(family, records.map((row) =>
+        row === other ? record : row
+      )),
+      /capability rows must be unique/,
+    );
+  }
+
+  const capture = records.find((record) =>
+    record.identity.capability === "capture"
+  )!;
+  assert.throws(
+    () => assertDirectRoots(family, records.map((record) =>
+      record === capture
+        ? { ...record, root: { ...record.root, absence: "declared-absent" } }
+        : record
+    )),
+    /capture must be present/,
+  );
+  const otherFamily = families.find((candidate) => candidate !== family)!;
+  assert.throws(
+    () => assertDirectRoots(family, records.map((record) =>
+      record === capture
+        ? {
+          ...record,
+          root: {
+            ...record.root,
+            entrySourceFile:
+              `src/searcher/venues/protocols/${otherFamily.sourceName}-family/capture.ts`,
+          },
+        }
+        : record
+    )),
+    assert.AssertionError,
+  );
+
+  for (const record of records.filter((row) => row.root.absence === null)) {
+    for (const sourceName of [family.sourceName, otherFamily.sourceName]) {
+      for (const capability of FAMILY_CAPABILITY_NAMES) {
+        if (
+          record.identity.capability === "capture" &&
+          sourceName === family.sourceName && capability === "discovery"
+        ) continue;
+        const dependency =
+          `src/searcher/venues/protocols/${sourceName}-family/${capability}.ts`;
+        assert.throws(
+          () => assertDirectRoots(family, records.map((row) =>
+            row === record
+              ? {
+                ...row,
+                identity: {
+                  ...row.identity,
+                  semanticDependencies: [
+                    ...row.identity.semanticDependencies, dependency,
+                  ],
+                },
+              }
+              : row
+          )),
+          /cannot depend on a sibling or cross-Family semantic root/,
+        );
+      }
+    }
+    assert.throws(
+      () => assertDirectRoots(family, records.map((row) =>
+        row === record
+          ? {
+            ...row,
+            identity: {
+              ...row.identity,
+              semanticDependencies: [
+                ...row.identity.semanticDependencies,
+                `src/searcher/venues/protocols/${family.sourceName}-family-plugin.ts`,
+              ],
+            },
+          }
+          : row
+      )),
+      /cannot hash the compatibility assembly/,
     );
   }
 }
