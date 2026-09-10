@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   createStrictCentralAdapterRuntime,
+  type StrictSimulationTransport,
 } from "../strict-central-adapter-runtime.js";
 import {
   executeAdapterWork,
+  type AdapterWorkControl,
+  type CentralAdapterRuntime,
 } from "../adapter-work-intent.js";
 import {
   runStrictFamilyLifecycle,
@@ -610,6 +613,228 @@ main().catch((error) => {
 type EffectRequest = Extract<AdapterRequest, {
   kind: "state-override-simulation" | "effect-delta-simulation";
 }>;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+function bindingSimulation(kind: EffectRequest["kind"]): EffectRequest {
+  return { id: "bound-simulation", kind,
+    call: { caller: { kind: "executor" }, to: STETH, data: "0x1234" },
+    overrideIntent: { caller: { kind: "executor" } },
+    observe: ["return-data", "revert-data"],
+  };
+}
+
+function runBindingSimulation(runtime: CentralAdapterRuntime, request: EffectRequest,
+  control: AdapterWorkControl | undefined, decode: () => void) {
+  return executeAdapterWork({ runtime, control, intent: {
+    stage: "runtime-evidence", familyId: "test:simulation-binding" as never,
+    source: SOURCE, generation: SOURCE.generation, programInput: undefined,
+    program: {
+      requirements: () => ({ transports: [request.kind], caller: "executor", effects: request.observe }),
+      buildRequests: () => [request],
+      decode: ({ results }) => { decode(); return results; },
+    },
+  } });
+}
+
+for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) {
+  test(`${kind}: invocation authority/source/control reach simulation as detached snapshots`, async () => {
+    const authority = { executor: `0x${"AB".repeat(20)}`,
+      transactionOrigin: `0x${"BC".repeat(20)}`, observedSender: `0x${"CD".repeat(20)}`,
+      verifiedActors: { observer: `0x${"DE".repeat(20)}` } };
+    const expected = { executor: authority.executor.toLowerCase(),
+      transactionOrigin: authority.transactionOrigin.toLowerCase(),
+      observedSender: authority.observedSender.toLowerCase(),
+      verifiedActors: { observer: authority.verifiedActors.observer.toLowerCase() } };
+    const construction = { provider: mockProvider(), executor: `0x${"11".repeat(20)}`,
+      transactionOrigin: `0x${"22".repeat(20)}`, observedSender: `0x${"33".repeat(20)}`,
+      verifiedActors: { observer: `0x${"44".repeat(20)}` },
+      generationFence: { assertCurrent() {} },
+      simulator: { simulate: async (actual: Parameters<StrictSimulationTransport["simulate"]>[0]) => {
+        captured = actual;
+        entered.resolve();
+        await release.promise;
+        return { data: "0x1234" };
+      } },
+    };
+    let captured: Parameters<StrictSimulationTransport["simulate"]>[0] | undefined;
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const base = createStrictCentralAdapterRuntime(construction);
+    const runtime = { ...base, callerAuthority: { bind: () => authority } };
+    const controller = new AbortController();
+    const control = { signal: controller.signal, deadlineAtMs: Date.now() + 60_000 };
+    let decodes = 0;
+    const pending = runBindingSimulation(runtime, bindingSimulation(kind), control, () => { decodes++; });
+    await entered.promise;
+    authority.executor = STETH;
+    authority.transactionOrigin = STETH;
+    authority.observedSender = STETH;
+    authority.verifiedActors.observer = STETH;
+    construction.executor = STETH;
+    construction.verifiedActors.observer = STETH;
+    release.resolve();
+    assert.equal((await pending).status, "resolved");
+    assert(captured);
+    assert.deepEqual(captured.callerAuthority, expected);
+    assert.notEqual(captured.callerAuthority, authority);
+    assert.notEqual(captured.callerAuthority.verifiedActors, authority.verifiedActors);
+    assert(Object.isFrozen(captured.callerAuthority));
+    assert(Object.isFrozen(captured.callerAuthority.verifiedActors));
+    assert.deepEqual(captured.source, SOURCE);
+    assert(Object.isFrozen(captured.source));
+    assert.equal(captured.control?.signal, controller.signal);
+    assert.equal(captured.control?.deadlineAtMs, control.deadlineAtMs);
+    assert.equal(decodes, 1);
+  });
+
+  for (const direct of [false, true]) {
+    for (const reverted of [false, true]) {
+      for (const interruption of ["none", "abort", "deadline", "generation"] as const) {
+        test(`${kind}: ${direct ? "direct executor" : "work"} ${reverted ? "revert" : "return"} fences ${interruption}`, async () => {
+          const entered = deferred<void>();
+          const release = deferred<void>();
+          let current = true;
+          let calls = 0;
+          let decodes = 0;
+          const controller = new AbortController();
+          const control = { signal: controller.signal,
+            deadlineAtMs: Date.now() + (interruption === "deadline" ? 100 : 60_000) };
+          const runtime = createStrictCentralAdapterRuntime({ provider: mockProvider(), executor: STETH,
+            generationFence: { assertCurrent(generation, source) {
+              assert.equal(generation, SOURCE.generation);
+              assert.deepEqual(source, SOURCE);
+              if (!current) throw new Error("test source generation retired");
+            } },
+            simulator: { simulate: async () => {
+              calls++;
+              entered.resolve();
+              await release.promise;
+              if (reverted) throw Object.assign(new Error("execution reverted"),
+                { code: "CALL_EXCEPTION", data: "0x1234" });
+              return { data: "0x1234" };
+            } },
+          });
+          const request = bindingSimulation(kind);
+          const pending = direct
+            ? runtime.scheduler.issueExecutor({ source: SOURCE, generation: SOURCE.generation,
+                callerAuthority: { executor: STETH }, control } as never).executor.execute({
+                source: SOURCE, requests: [request] } as never)
+            : runBindingSimulation(runtime, request, control, () => { decodes++; });
+          // Attach both handlers before cancellation, including direct rejections.
+          const settled = pending.then(value => ({ ok: true as const, value }),
+            error => ({ ok: false as const, error }));
+          await entered.promise;
+          if (interruption === "abort") controller.abort(Object.assign(new Error("owner cancelled"),
+            { code: "CALL_EXCEPTION", data: "0xbeef" }));
+          if (interruption === "generation") current = false;
+          if (interruption === "deadline") {
+            await new Promise(resolve => setTimeout(resolve, Math.max(1, control.deadlineAtMs - Date.now() + 1)));
+          }
+          release.resolve();
+          const outcome = await settled;
+          assert.equal(calls, 1);
+          if (interruption === "none") {
+            assert(outcome.ok);
+            const result = "status" in outcome.value
+              ? outcome.value.status === "resolved" ? outcome.value.executed.evidence[0] : undefined
+              : outcome.value[0];
+            assert(result?.ok);
+            assert.equal(result.completion, reverted ? "reverted-as-declared" : "returned");
+            assert.equal(result.data, "0x1234");
+            assert.equal(decodes, direct ? 0 : 1);
+          } else {
+            if (direct) assert.equal(outcome.ok, false, "direct executor must not issue stale evidence");
+            else {
+              assert(outcome.ok && "status" in outcome.value);
+              assert.equal(outcome.value.status, "unresolved");
+            }
+            assert.equal(decodes, 0, "stale results never reach Family decode");
+          }
+        });
+      }
+    }
+  }
+
+  test(`${kind}: direct issuance detaches authority and control before queued work`, async () => {
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const authority = { executor: STETH, transactionOrigin: `0x${"55".repeat(20)}`,
+      verifiedActors: { observer: `0x${"66".repeat(20)}` } };
+    const expectedAuthority = { ...authority, verifiedActors: { ...authority.verifiedActors } };
+    const source = { ...SOURCE };
+    const controller = new AbortController();
+    const control = { signal: controller.signal, deadlineAtMs: Date.now() + 60_000 };
+    const deadline = control.deadlineAtMs;
+    let calls = 0;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { ...mockProvider(), getCode: async () => {
+        entered.resolve(); await release.promise; return "0x";
+      } },
+      generationFence: { assertCurrent(generation, actual) {
+        assert.equal(generation, SOURCE.generation); assert.deepEqual(actual, SOURCE);
+      } },
+      simulator: { simulate: async actual => {
+        calls++;
+        assert.deepEqual(actual.callerAuthority, expectedAuthority);
+        assert(Object.isFrozen(actual.callerAuthority.verifiedActors));
+        assert.deepEqual(actual.source, SOURCE);
+        assert.notEqual(actual.source, source);
+        assert(Object.isFrozen(actual.source));
+        assert.equal(actual.control?.signal, controller.signal);
+        assert.equal(actual.control?.deadlineAtMs, deadline);
+        return { data: "0x1234" };
+      } },
+    });
+    const issueInput = { source: { ...SOURCE }, generation: SOURCE.generation, callerAuthority: authority, control };
+    const issued = runtime.scheduler.issueExecutor(issueInput as never);
+    authority.executor = WSTETH;
+    authority.transactionOrigin = WSTETH;
+    authority.verifiedActors.observer = WSTETH;
+    const pending = issued.executor.execute({ source, requests: [
+      { id: "first-read", kind: "get-code", address: STETH }, bindingSimulation(kind),
+    ] } as never);
+    await entered.promise;
+    source.hash = `0x${"99".repeat(32)}`;
+    issueInput.source.hash = source.hash;
+    issueInput.generation++;
+    control.signal = AbortSignal.abort();
+    control.deadlineAtMs = 0;
+    release.resolve();
+    const results = await pending;
+    assert(results.every(result => result.ok));
+    assert.equal(calls, 1);
+    assert(!Object.isFrozen(source), "do not freeze the caller's source in place");
+  });
+
+  for (const interruption of ["abort", "deadline", "generation", "source"] as const) {
+    test(`${kind}: direct ${interruption} fence rejects before simulation`, async () => {
+      let calls = 0;
+      const runtime = createStrictCentralAdapterRuntime({ provider: mockProvider(),
+        generationFence: { assertCurrent() {
+          if (interruption === "generation") throw new Error("test source generation retired");
+        } },
+        simulator: { simulate: async () => { calls++; return { data: "0x" }; } },
+      });
+      const issued = runtime.scheduler.issueExecutor({ source: SOURCE, generation: SOURCE.generation,
+        callerAuthority: { executor: STETH }, control: {
+          signal: interruption === "abort" ? AbortSignal.abort() : new AbortController().signal,
+          deadlineAtMs: interruption === "deadline" ? Date.now() - 1 : Date.now() + 60_000,
+        } } as never);
+      await assert.rejects(issued.executor.execute({
+        source: interruption === "source" ? { ...SOURCE, hash: `0x${"99".repeat(32)}` } : SOURCE,
+        requests: [bindingSimulation(kind)],
+      } as never));
+      assert.equal(calls, 0);
+    });
+  }
+}
+
 for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) {
   for (const reverted of [false, true]) {
     test(`${kind}: strict ${reverted ? "revert" : "success"} traversal binds effect metadata`, async () => {

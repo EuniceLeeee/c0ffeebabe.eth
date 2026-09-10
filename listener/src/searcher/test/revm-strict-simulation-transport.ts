@@ -119,6 +119,10 @@ async function main(): Promise<void> {
       ]),
     }) as never,
     source: SOURCE,
+    callerAuthority: Object.freeze({
+      executor: EXECUTOR,
+      verifiedActors: Object.freeze({ "erc4626-probe-actor": ACTOR }),
+    }),
   });
   assert.equal(result.data, "0xbeef");
   assert.equal(calls.length, 1);
@@ -151,6 +155,7 @@ async function main(): Promise<void> {
         }),
       }) as never,
       source: SOURCE,
+      callerAuthority: Object.freeze({ executor: EXECUTOR }),
     }),
     /verified actor evidence erc4626-probe-actor is absent/,
   );
@@ -163,6 +168,7 @@ async function main(): Promise<void> {
         }),
       }) as never,
       source: SOURCE,
+      callerAuthority: Object.freeze({ executor: EXECUTOR }),
     }),
     /cannot fund native balances/,
   );
@@ -181,6 +187,7 @@ async function main(): Promise<void> {
         }),
       }) as never,
       source: SOURCE,
+      callerAuthority: Object.freeze({ executor: EXECUTOR }),
     }),
     /fixture-revert/,
   );

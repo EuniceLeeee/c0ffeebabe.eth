@@ -7,7 +7,10 @@ import type {
   CentralAdapterPolicyInput,
   CentralCallerAuthority,
 } from "./adapter-work-intent.js";
-import { normalizeTransactionOrigin } from "./adapter-work-intent.js";
+import {
+  normalizeTransactionOrigin,
+  snapshotCentralCallerAuthority,
+} from "./adapter-work-intent.js";
 import {
   rethLaneForAdapterStage,
 } from "./transport-schedule-policy.js";
@@ -58,6 +61,9 @@ export interface StrictSimulationTransport {
       }
     >;
     readonly source: CanonicalSource;
+    /** Invocation-bound facts, never simulator-construction caller hints. */
+    readonly callerAuthority: CentralCallerAuthority;
+    readonly control?: AdapterWorkControl;
   }): Promise<{
     readonly data: string;
     readonly effects?: {
@@ -162,6 +168,14 @@ export function createStrictCentralAdapterRuntime(input: {
       issueInput: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
     ) {
       const issuedAtMs = Date.now();
+      const callerAuthority = snapshotCentralCallerAuthority(issueInput.callerAuthority ?? {});
+      const control = issueInput.control === undefined ? undefined
+        : Object.freeze({ ...issueInput.control });
+      // Direct executor harnesses may omit issuance metadata; they still bind
+      // a detached execution source and receive the same generation fences.
+      const issuedSource = issueInput.source === undefined ? undefined
+        : Object.freeze({ ...issueInput.source });
+      const issuedGeneration = issueInput.generation;
       let transportWallMs = 0;
       const executor = createBoundedRequestExecutor({
         assertSupported: (requirements) => {
@@ -176,6 +190,18 @@ export function createStrictCentralAdapterRuntime(input: {
         },
         execute: async (execution) => {
           const startedAtMs = Date.now();
+          const source = Object.freeze({ ...execution.source });
+          if (issuedSource !== undefined && (
+            source.number !== issuedSource.number ||
+            source.hash.toLowerCase() !== issuedSource.hash.toLowerCase() ||
+            source.generation !== issuedSource.generation
+          )) throw new Error("strict execution escaped its issued source");
+          const assertCurrent = (): void => {
+            assertTransportControl(control);
+            input.generationFence.assertCurrent(issuedGeneration ?? source.generation, source);
+            assertTransportControl(control);
+          };
+          assertCurrent();
           // issueExecutor is the central contract entry; direct harness calls may
           // omit schedule entirely, so resolve the lane defensively.
           const rethLane = (issueInput.schedule as
@@ -195,21 +221,31 @@ export function createStrictCentralAdapterRuntime(input: {
            * exact/discovery share the residual — the same physical-transport
            * contract the legacy runtime used.
            */
-          const runRequest = (
+          const runRequest = async (
             request: AdapterRequest,
-          ): Promise<AdapterRequestResult> => executeRequest(
-            input.provider,
-            input.simulator,
-            request,
-            execution.source,
-            issueInput.control,
-            callBackend,
-            rethLane === "producer-bulk" ||
-              rethLane === "producer-critical" || rethLane === "exact"
-              ? input.producerCallCache
-              : undefined,
-            issueInput.callerAuthority,
-          );
+          ): Promise<AdapterRequestResult> => {
+            assertCurrent();
+            try {
+              return await executeRequest(
+                input.provider,
+                input.simulator,
+                request,
+                source,
+                assertCurrent,
+                callerAuthority,
+                control,
+                callBackend,
+                rethLane === "producer-bulk" ||
+                  rethLane === "producer-critical" || rethLane === "exact"
+                  ? input.producerCallCache
+                  : undefined,
+              );
+            } finally {
+              // Outside request/domain error conversion, including direct
+              // executor use without executeAdapterWork's outer fence.
+              assertCurrent();
+            }
+          };
           const rethBound = execution.requests.filter((request) =>
             request.kind !== "state-override-simulation" &&
             request.kind !== "effect-delta-simulation"
@@ -256,7 +292,7 @@ export function createStrictCentralAdapterRuntime(input: {
               ? await Promise.all(directReth.map(runRequest))
               : await transportScheduler.run(
                   rethLane,
-                  issueInput.control?.signal ??
+                  control?.signal ??
                     new AbortController().signal,
                   (lease) => {
                     queueWaitMs = Math.max(0, lease.queueWaitMs);
@@ -294,6 +330,7 @@ export function createStrictCentralAdapterRuntime(input: {
             }
             return found;
           });
+          assertCurrent();
           transportWallMs = Date.now() - startedAtMs;
           return results;
         },
@@ -393,10 +430,11 @@ async function executeRequest(
   simulator: StrictSimulationTransport | undefined,
   request: AdapterRequest,
   source: CanonicalSource,
+  assertCurrent: () => void,
+  callerAuthority: CentralCallerAuthority,
   control?: AdapterWorkControl,
   exactCallBackend?: Pick<StateBackend, "call">,
   producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">,
-  callerAuthority?: CentralCallerAuthority,
 ): Promise<AdapterRequestResult> {
   assertTransportControl(control);
   try {
@@ -481,8 +519,8 @@ async function executeRequest(
       request.kind === "state-override-simulation" ||
       request.kind === "effect-delta-simulation"
     ) {
-      // A1 binds origin for eth_call only. Existing simulation transports do
-      // not receive this authority, so never silently resolve it as another role.
+      // Origin authority is forwarded, but the simulation role remains
+      // unsupported until the transport implements its distinct semantics.
       if (request.call.caller.kind === "transaction-origin" ||
           request.overrideIntent.caller?.kind === "transaction-origin" ||
           request.preCalls?.some(call => call.caller.kind === "transaction-origin") ||
@@ -535,7 +573,10 @@ async function executeRequest(
         const simulated = await simulator.simulate({
           request,
           source,
+          callerAuthority,
+          ...(control === undefined ? {} : { control }),
         });
+        assertCurrent();
         return Object.freeze({
           id: request.id,
           ok: true as const,
@@ -548,6 +589,9 @@ async function executeRequest(
             : { effects: Object.freeze(simulated.effects) }),
         });
       } catch (error) {
+        // Cancellation may itself carry CALL_EXCEPTION. Fence before any
+        // returned/reverted evidence conversion, never classify it as a revert.
+        assertCurrent();
         // A simulated revert is chain-proven negative evidence at the fixed
         // cutoff (the revm transport marks it CALL_EXCEPTION + revert
         // payload); surface it as reverted-as-declared so family decode can
@@ -611,6 +655,7 @@ async function executeRequest(
       failure: "resource-limited" as const,
     });
   } catch (error) {
+    assertCurrent();
     const failure = transportControlFailure(control, error);
     return Object.freeze({
       id: request.id,
