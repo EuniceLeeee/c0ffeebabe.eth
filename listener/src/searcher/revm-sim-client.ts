@@ -86,6 +86,7 @@ export interface DaemonResponse {
   sourceAttestation?: RevmSourceAttestation;
   ok: boolean;
   error?: string;
+  errorKind?: "validation" | "execution" | "observation";
   success?: boolean;
   output?: string;
   profit?: string;
@@ -106,6 +107,10 @@ export interface DaemonResponse {
     roundTrips: number;
   };
   strict?: {
+    outcome: StrictExecutionOutcome;
+    /** Unrefunded execution gas; inner mode excludes outer/intrinsic gas. */
+    executionGasUsed: string;
+    nativeDeltas: { account: string; before: string; after: string; delta: string }[];
     tokenDeltas: {
       token: string;
       account: string;
@@ -123,6 +128,17 @@ export interface DaemonResponse {
   };
 }
 
+export type StrictExecutionOutcome = (
+  | { kind: "Success" | "Revert"; output: string }
+  | { kind: "Halt"; reason: string }
+) & ({ phase: "main" } | { phase: "preCall"; preCallIndex: number });
+
+export class RevmStrictError extends Error {
+  constructor(readonly kind: "validation" | "execution" | "observation", message: string) {
+    super(message); this.name = "RevmStrictError";
+  }
+}
+
 export interface StrictSimulateRequest {
   blockNumber: number;
   sourcePin?: RevmSourcePin;
@@ -131,6 +147,16 @@ export interface StrictSimulateRequest {
   to: string;
   data: string;
   gasLimit?: number;
+  /** Required for inner mode. Shared execution budget; per-call limits only cap it. */
+  executionGasLimit?: number;
+  /** Explicit ORIGIN for inner mode, never inferred from a contract actor. */
+  transactionOrigin?: string;
+  /** Exact caller balance before the envelope, not call value or profit. */
+  nativeBalanceWei?: string;
+  /** Omitted means no native probes. Explicit [] is empty. */
+  observeNativeBalances?: string[];
+  /** Exact ordered pairs. Cannot coexist with either legacy observation list. */
+  observeTokenBalances?: { token: string; account: string }[];
   preCalls?: OverlayPreCall[];
   tokenDeals?: OverlayTokenDeal[];
   observeTokens?: string[];
@@ -139,11 +165,107 @@ export interface StrictSimulateRequest {
   observeLogs?: boolean;
   /**
    * Caller execution mode: "top-level" (default, EIP-3607 enforced) or
-   * "impersonated-call-frame" (EIP-3607 disabled for this frame only; the
-   * caller acts as an inner CALL msg.sender, matching observed executor/
-   * router actors).
+   * "impersonated-call-frame" (one isolated atomic CALL envelope with a
+   * separately bound origin). This does not replay the unknown outer caller.
    */
   callerMode?: "top-level" | "impersonated-call-frame";
+}
+
+const address20 = (v: unknown): v is string => typeof v === "string" && /^0x[0-9a-fA-F]{40}$/.test(v);
+const bytesHex = (v: unknown): v is string => typeof v === "string" && /^0x(?:[0-9a-fA-F]{2})*$/.test(v);
+const uint256 = (v: unknown): v is string => typeof v === "string" && /^(0|[1-9][0-9]*)$/.test(v)
+  && v.length <= 78 && BigInt(v) < (1n << 256n);
+const gasAmount = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0;
+function strictRequest(req: StrictSimulateRequest): void {
+  const bad = () => { throw new RevmStrictError("validation", "invalid strict simulation request"); };
+  const record = (v: unknown, keys: string[]) => v !== null && typeof v === "object" && !Array.isArray(v)
+    && Object.keys(v).every(k => keys.includes(k));
+  if (!record(req, ["blockNumber", "sourcePin", "rpcUrl", "from", "to", "data", "gasLimit", "executionGasLimit",
+    "transactionOrigin", "nativeBalanceWei", "observeNativeBalances", "observeTokenBalances", "preCalls", "tokenDeals",
+    "observeTokens", "observeAccounts", "observeTotalSupply", "observeLogs", "callerMode"])
+    || !Number.isSafeInteger(req.blockNumber) || req.blockNumber < 0 || !address20(req.from) || !address20(req.to)
+    || (req.rpcUrl !== undefined && (typeof req.rpcUrl !== "string" || !req.rpcUrl.trim()))
+    || !bytesHex(req.data) || (req.gasLimit !== undefined && !gasAmount(req.gasLimit))
+    || (req.executionGasLimit !== undefined && !gasAmount(req.executionGasLimit))
+    || (req.nativeBalanceWei !== undefined && !uint256(req.nativeBalanceWei))
+    || (req.callerMode !== undefined && !["top-level", "impersonated-call-frame"].includes(req.callerMode))
+    || (req.transactionOrigin !== undefined && !address20(req.transactionOrigin))
+    || (req.observeLogs !== undefined && typeof req.observeLogs !== "boolean")) bad();
+  if (req.callerMode === "impersonated-call-frame") {
+    if (req.transactionOrigin === undefined || req.executionGasLimit === undefined) bad();
+  } else if (req.transactionOrigin !== undefined && req.transactionOrigin.toLowerCase() !== req.from.toLowerCase()) bad();
+  const uniqueAddresses = (values: unknown) => {
+    if (values === undefined) return;
+    if (!Array.isArray(values) || ![...values].every(address20)
+      || new Set(values.map(v => v.toLowerCase())).size !== values.length) bad();
+  };
+  for (const values of [req.observeNativeBalances, req.observeTokens, req.observeAccounts, req.observeTotalSupply]) uniqueAddresses(values);
+  if (req.observeTokenBalances !== undefined) {
+    if (req.observeTokens !== undefined || req.observeAccounts !== undefined || !Array.isArray(req.observeTokenBalances)) bad();
+    const seen = new Set<string>();
+    for (const pair of req.observeTokenBalances) {
+      if (!record(pair, ["token", "account"]) || !address20(pair.token) || !address20(pair.account)) bad();
+      const key = `${pair.token.toLowerCase()}:${pair.account.toLowerCase()}`;
+      if (seen.has(key)) bad(); seen.add(key);
+    }
+  }
+  if (req.preCalls !== undefined) {
+    if (!Array.isArray(req.preCalls)) bad();
+    for (const call of req.preCalls) {
+      if (!record(call, ["from", "to", "calldata", "gasLimit", "allowanceSlot"]) || !address20(call.from)
+        || call.from.toLowerCase() !== req.from.toLowerCase() || !address20(call.to) || !bytesHex(call.calldata)
+        || (call.gasLimit !== undefined && !gasAmount(call.gasLimit))
+        || (call.allowanceSlot !== undefined && (!Number.isSafeInteger(call.allowanceSlot) || call.allowanceSlot < 0))) bad();
+    }
+  }
+  if (req.tokenDeals !== undefined) {
+    if (!Array.isArray(req.tokenDeals)) bad();
+    const seen = new Set<string>();
+    for (const deal of req.tokenDeals) {
+      if (!record(deal, ["token", "to", "amount", "balanceSlot"]) || !address20(deal.token) || !address20(deal.to)
+        || deal.to.toLowerCase() !== req.from.toLowerCase() || !uint256(deal.amount)
+        || (deal.balanceSlot !== undefined && (!Number.isSafeInteger(deal.balanceSlot) || deal.balanceSlot < 0))) bad();
+      if (seen.has(deal.token.toLowerCase())) bad(); seen.add(deal.token.toLowerCase());
+    }
+  }
+}
+
+function strictResponse(resp: DaemonResponse, req: StrictSimulateRequest): void {
+  function bad(): never { throw new Error("invalid strict response"); }
+  if (!resp.ok) {
+    if (!["validation", "execution", "observation"].includes(resp.errorKind ?? "") || resp.strict !== undefined) bad();
+    return;
+  }
+  const s = resp.strict; const o = s?.outcome;
+  if (!s || !o || !["Success", "Revert", "Halt"].includes(o.kind)
+    || resp.errorKind !== undefined || resp.error !== undefined
+    || (o.phase !== "main" && o.phase !== "preCall")
+    || (o.phase === "preCall" && (!Number.isSafeInteger(o.preCallIndex) || o.preCallIndex < 0
+      || o.preCallIndex >= (req.preCalls?.length ?? 0) || o.kind === "Success"))
+    || (o.phase === "main" && "preCallIndex" in o)
+    || resp.success !== (o.kind === "Success") || !uint256(s.executionGasUsed) || resp.gasUsed !== s.executionGasUsed) bad();
+  if (o.kind === "Halt") {
+    if (typeof o.reason !== "string" || !o.reason || "output" in o || resp.output !== undefined) bad();
+  } else if (!bytesHex(o.output) || resp.output !== o.output || "reason" in o) bad();
+  if (resp.revertReason !== (o.kind === "Revert" ? o.output : undefined)) bad();
+  if (req.callerMode === "impersonated-call-frame" && BigInt(s.executionGasUsed) > BigInt(req.executionGasLimit!)) bad();
+  const pairs = req.observeTokenBalances ?? (req.observeTokens ?? []).flatMap(token =>
+    ((req.observeAccounts?.length ?? 0) > 0 ? req.observeAccounts! : [req.from]).map(account => ({ token, account })));
+  const natives = req.observeNativeBalances ?? []; const supplies = req.observeTotalSupply ?? [];
+  const signed = (v: unknown) => typeof v === "string" && /^(0|-?[1-9][0-9]*)$/.test(v) && uint256(v.replace(/^-/, ""));
+  const same = (a: unknown, b: string) => address20(a) && a.toLowerCase() === b.toLowerCase();
+  if (![s.tokenDeltas, s.nativeDeltas, s.totalSupplyDeltas, s.logs].every(Array.isArray)) bad();
+  if (o.kind !== "Success") {
+    if (s.tokenDeltas.length || s.nativeDeltas.length || s.totalSupplyDeltas.length || s.logs.length) bad();
+    return;
+  }
+  if (s.tokenDeltas.length !== pairs.length || s.nativeDeltas.length !== natives.length || s.totalSupplyDeltas.length !== supplies.length) bad();
+  s.tokenDeltas.forEach((v, i) => { if (!v || !same(v.token, pairs[i]!.token) || !same(v.account, pairs[i]!.account) || !signed(v.delta)) bad(); });
+  s.nativeDeltas.forEach((v, i) => { if (!v || !same(v.account, natives[i]!) || !uint256(v.before) || !uint256(v.after)
+    || !signed(v.delta) || BigInt(v.after) - BigInt(v.before) !== BigInt(v.delta)) bad(); });
+  s.totalSupplyDeltas.forEach((v, i) => { if (!v || !same(v.token, supplies[i]!) || !signed(v.delta)) bad(); });
+  if (!req.observeLogs && s.logs.length) bad();
+  s.logs.forEach(v => { if (!v || !address20(v.address) || !bytesHex(v.data) || !Array.isArray(v.topics) || !v.topics.every(hash32)) bad(); });
 }
 
 /** Back-compat one-shot request: a fully self-described victim+arb simulation. */
@@ -200,7 +322,7 @@ function sourcePin(payload: Record<string, unknown>): Readonly<RevmSourcePin> | 
     || pin.chainId !== 1 || !hash32(pin.blockHash)
     || (pin.stateRoot !== undefined && !hash32(pin.stateRoot))
     || !Number.isSafeInteger(payload.blockNumber) || (payload.blockNumber as number) < 0
-    || typeof payload.rpcUrl !== "string" || !payload.rpcUrl.trim()) throw new Error("invalid revm-sim source pin");
+    || typeof payload.rpcUrl !== "string" || !payload.rpcUrl.trim()) throw new RevmStrictError("validation", "invalid revm-sim source pin");
   return Object.freeze({ chainId: pin.chainId, blockHash: pin.blockHash.toLowerCase(),
     ...(pin.stateRoot === undefined ? {} : { stateRoot: pin.stateRoot.toLowerCase() }) });
 }
@@ -219,6 +341,23 @@ export class RevmFatalError extends Error {
   }
 }
 
+function normalizedFatal(fatal: RevmFatalReason | undefined): RevmFatalReason | undefined {
+  if (fatal === undefined) return undefined;
+  if (fatal?.kind === "source-fault" || fatal?.kind === "protocol-fault") {
+    if (Object.keys(fatal).some(k => k !== "kind")) throw new Error("fatal shape");
+    return Object.freeze({ kind: fatal.kind });
+  }
+  if (!fatal || fatal.kind !== "rpc-throttle"
+    || Object.keys(fatal).some(k => !["kind", "category", "httpStatus", "rpcCode"].includes(k))
+    || !["http429", "rpc-limit-code", "rpc-rate-limit", "rpc-quota"].includes(fatal.category)
+    || (fatal.category === "http429" ? fatal.httpStatus !== 429 || fatal.rpcCode !== undefined : fatal.httpStatus !== undefined)
+    || (fatal.category === "rpc-limit-code" && fatal.rpcCode !== 429 && fatal.rpcCode !== -32005)
+    || (fatal.rpcCode !== undefined && !Number.isSafeInteger(fatal.rpcCode))) throw new Error("fatal shape");
+  return Object.freeze({ kind: fatal.kind, category: fatal.category,
+    ...(fatal.httpStatus === undefined ? {} : { httpStatus: fatal.httpStatus }),
+    ...(fatal.rpcCode === undefined ? {} : { rpcCode: fatal.rpcCode }) });
+}
+
 interface Pending {
   id: string;
   line: string;
@@ -228,6 +367,7 @@ interface Pending {
   expired: () => Error | undefined;
   pin?: Readonly<RevmSourcePin>;
   blockNumber?: number;
+  strictRequest?: StrictSimulateRequest;
 }
 
 /**
@@ -248,6 +388,8 @@ export class RevmSimClient {
   private readonly epoch = randomUUID();
   private nextId = 0n;
   private terminal?: Error;
+  private retiredActiveId?: string;
+  private fatalReported = false;
   private drained: Promise<void> = Promise.resolve();
   private killTimer?: NodeJS.Timeout;
   private fullyClosed = false;
@@ -298,6 +440,8 @@ export class RevmSimClient {
       const check = () => {
         if (!childClosed || !proc.stdin.closed || !proc.stdout.closed) return;
         this.fullyClosed = true;
+        this.retiredActiveId = undefined;
+        this.buffer = "";
         clearTimeout(this.killTimer);
         resolveDrain();
       };
@@ -319,7 +463,7 @@ export class RevmSimClient {
   }
 
   private onData(chunk: string): void {
-    if (this.terminal) return;
+    if (this.terminal) { this.onRetiredData(chunk); return; }
     this.buffer += chunk;
     let idx: number;
     while ((idx = this.buffer.indexOf("\n")) >= 0) {
@@ -332,23 +476,8 @@ export class RevmSimClient {
         resp = JSON.parse(line);
         if (!resp || !pending || resp.epoch !== this.epoch || resp.requestId !== pending.id
           || typeof resp.ok !== "boolean") throw new Error("identity");
-        if (resp.fatal !== undefined) {
-          const fatal = resp.fatal;
-          if (fatal?.kind === "source-fault" || fatal?.kind === "protocol-fault") {
-            this.fail(new RevmFatalError(Object.freeze({ kind: fatal.kind })));
-            return;
-          }
-          if (!fatal || fatal.kind !== "rpc-throttle"
-            || !["http429", "rpc-limit-code", "rpc-rate-limit", "rpc-quota"].includes(fatal.category)
-            || (fatal.category === "http429" ? fatal.httpStatus !== 429 || fatal.rpcCode !== undefined : fatal.httpStatus !== undefined)
-            || (fatal.category === "rpc-limit-code" && fatal.rpcCode !== 429 && fatal.rpcCode !== -32005)
-            || (fatal.rpcCode !== undefined && !Number.isSafeInteger(fatal.rpcCode))) throw new Error("fatal");
-          const reason: RevmFatalReason = Object.freeze({ kind: "rpc-throttle", category: fatal.category,
-            ...(fatal.httpStatus === undefined ? {} : { httpStatus: fatal.httpStatus }),
-            ...(fatal.rpcCode === undefined ? {} : { rpcCode: fatal.rpcCode }) });
-          this.fail(new RevmFatalError(reason));
-          return;
-        }
+        const fatal = normalizedFatal(resp.fatal);
+        if (fatal) { this.fail(new RevmFatalError(fatal)); return; }
         const att = resp.sourceAttestation;
         if (pending.pin && resp.ok) {
           if (!att || att.kind !== "node-attested" || att.chainId !== pending.pin.chainId
@@ -363,6 +492,7 @@ export class RevmSimClient {
             blockNumber: att.blockNumber, blockHash: att.blockHash.toLowerCase(),
             stateRoot: att.stateRoot.toLowerCase(), parentHash: att.parentHash.toLowerCase() });
         } else if (att !== undefined) throw new Error("unexpected attestation");
+        if (pending.strictRequest) strictResponse(resp, pending.strictRequest);
       } catch {
         this.fail(new RevmFatalError(Object.freeze({ kind: "protocol-fault" })));
         return;
@@ -387,18 +517,50 @@ export class RevmSimClient {
     } catch { /* Already gone; close/stdio events, not kill(), establish drain. */ }
   }
 
-  private fail(err: Error): void {
-    if (this.terminal) return;
-    this.terminal = err;
-    // Notify the owner before source/protocol/physical faults become domain
-    // failures. Caller cancellation/deadline never enters this fatal channel.
-    if (err instanceof RevmFatalError) {
-      try { this.onFatal?.(err.fatal); } catch { /* Observers cannot undo the latch. */ }
+  private reportFatal(reason: RevmFatalReason): void {
+    if (this.fatalReported) return;
+    this.fatalReported = true;
+    try { this.onFatal?.(reason); } catch { /* Observers cannot undo evidence. */ }
+  }
+
+  private onRetiredData(chunk: string): void {
+    if (this.fullyClosed || this.retiredActiveId === undefined || this.fatalReported) return;
+    this.buffer += chunk;
+    let end: number;
+    while ((end = this.buffer.indexOf("\n")) >= 0) {
+      const line = this.buffer.slice(0, end).trim(); this.buffer = this.buffer.slice(end + 1);
+      if (!line) continue;
+      try {
+        const response = JSON.parse(line);
+        if (!response || response.epoch !== this.epoch || response.requestId !== this.retiredActiveId
+          || typeof response.ok !== "boolean") throw new Error("retired identity");
+        const fatal = normalizedFatal(response.fatal);
+        if (fatal) this.reportFatal(fatal);
+        // Never accept late success/attestation/effects, resolve a promise or
+        // dispatch queued work. Only already-issued physical fatal evidence
+        // survives local cancellation until the actual child/stdio drain.
+      } catch { this.reportFatal(Object.freeze({ kind: "protocol-fault" })); }
     }
+  }
+
+  private fail(err: Error): void {
+    if (this.terminal) {
+      if (err instanceof RevmFatalError && !this.fullyClosed) this.reportFatal(err.fatal);
+      return;
+    }
+    this.terminal = err;
+    this.retiredActiveId = this.active?.id;
     const pending = [...(this.active ? [this.active] : []), ...this.queue];
     this.active = undefined;
     this.queue.length = 0;
-    this.buffer = "";
+    // Terminalize and detach work before invoking an owner that may reenter
+    // request/stop/drain. Still report fatal evidence before rejecting work.
+    if (err instanceof RevmFatalError && !this.fullyClosed) this.reportFatal(err.fatal);
+    if (this.retiredActiveId === undefined || this.fatalReported) this.buffer = "";
+    // Expiry can be noticed midway through a chunk. Validate its remaining
+    // complete frames now, not on another data event or as truncation on exit.
+    // Incomplete frames retain the retired identity through child/stdio drain.
+    else this.onRetiredData("");
     for (const p of pending) { p.cleanup(); p.reject(err); }
     if (!this.proc || this.fullyClosed) return;
     this.proc.stdin.destroy();
@@ -434,6 +596,10 @@ export class RevmSimClient {
       : Date.now() >= deadline ? new Error("revm-sim request deadline timed out") : undefined;
     const early = expired();
     if (early) return Promise.reject(early);
+    if (payload.op === "strictSimulate") {
+      const { op: _, ...body } = payload;
+      strictRequest(body as unknown as StrictSimulateRequest);
+    }
     const id = (++this.nextId).toString();
     const line = JSON.stringify({ ...payload, ...(pin ? { sourcePin: pin } : {}), epoch: this.epoch, requestId: id }) + "\n";
     return new Promise<DaemonResponse>((resolveP, rejectP) => {
@@ -449,6 +615,7 @@ export class RevmSimClient {
       const arm = () => { timer = setTimeout(cancel, Math.min(2_147_483_647, Math.max(1, deadline - Date.now()))); };
       const pending: Pending = { id, line, resolve: resolveP, reject: rejectP, expired,
         pin, blockNumber: payload.blockNumber as number | undefined,
+        strictRequest: payload.op === "strictSimulate" ? JSON.parse(line) : undefined,
         cleanup: () => { clearTimeout(timer); signal?.removeEventListener("abort", cancel); } };
       this.queue.push(pending);
       signal?.addEventListener("abort", cancel, { once: true });
@@ -458,6 +625,7 @@ export class RevmSimClient {
   }
 
   private expectOk(resp: DaemonResponse): DaemonResponse {
+    if (!resp.ok && resp.errorKind) throw new RevmStrictError(resp.errorKind, resp.error ?? "strict simulation failed");
     if (!resp.ok) throw new Error(resp.error ?? "revm-sim daemon error");
     return resp;
   }

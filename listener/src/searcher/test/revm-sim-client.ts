@@ -6,8 +6,9 @@ import { createServer } from "node:http";
 import { PassThrough, Writable } from "node:stream";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { RevmFatalError, RevmSimClient, type RevmFatalReason } from "../revm-sim-client.js";
+import { RevmFatalError, RevmSimClient, RevmStrictError, type RevmFatalReason, type StrictSimulateRequest } from "../revm-sim-client.js";
 import { ETHEREUM_BLOCK_ACTIVITY_PROFILE } from "../../shared/state/ethereum-block-activity.js";
+import { RevmStrictSourceOwner } from "../revm-strict-source-owner.js";
 
 // No network, binaries, environment endpoints or filesystem fixtures. The
 // production framing/lifecycle runs against controlled pipes and child events.
@@ -32,7 +33,11 @@ class Fixture {
   reply(index = 0, changes: Record<string, unknown> = {}) {
     const { epoch, requestId } = this.requests[index]!;
     this.stdout.write(JSON.stringify({ epoch, requestId, ok: true,
-      success: true, latencyMs: 0, ...changes }) + "\n");
+      success: true, latencyMs: 0,
+      ...(this.requests[index]!.op === "strictSimulate" ? { output: "0x", gasUsed: "0", strict: {
+        outcome: { kind: "Success", phase: "main", output: "0x" }, executionGasUsed: "0",
+        nativeDeltas: [], tokenDeltas: [], totalSupplyDeltas: [], logs: [],
+      } } : {}), ...changes }) + "\n");
   }
   close() {
     this.child.emit("exit", 0, null);
@@ -60,6 +65,72 @@ const pinnedRequest = () => ({ blockNumber: 300, from: `0x${"aa".repeat(20)}`,
   sourcePin: { chainId: 1, blockHash: PIN_HASH, stateRoot: PIN_ROOT } });
 const attestation = () => ({ kind: "node-attested" as const, chainId: 1, blockNumber: 300,
   blockHash: PIN_HASH, stateRoot: PIN_ROOT, parentHash: PIN_PARENT });
+
+test("E2d: real owner plus pipe client latches matched late fixture throttle before replacement", async () => {
+  const f = new Fixture(); const reports: RevmFatalReason[] = []; let factories = 0;
+  const owner = new RevmStrictSourceOwner({ createClient: ({ onFatal }) => { factories++; return new FixtureClient(f, { onFatal }); },
+    onFatal: r => reports.push(r) });
+  const identity = { source: { number: 300, hash: PIN_HASH, generation: 1 }, chainId: 1, rpcUrl: pinnedRequest().rpcUrl, stateRoot: PIN_ROOT };
+  const abort = new AbortController();
+  const lease = await owner.acquire(identity, { signal: abort.signal });
+  const active = assert.rejects(lease.strictSimulate(pinnedRequest()), /cancel|abort/);
+  abort.abort(); await active;
+  const replacement = assert.rejects(owner.acquire({ ...identity, source: { ...identity.source, generation: 2 } }), RevmFatalError);
+  const fatal = { kind: "rpc-throttle", category: "http429", httpStatus: 429 };
+  f.reply(0, { fatal }); await replacement;
+  assert.deepEqual(reports, [fatal]); assert.equal(factories, 1); assert.equal(f.requests.length, 1);
+  f.close(); await owner.shutdown();
+  await assert.rejects(owner.acquire({ ...identity, source: { ...identity.source, generation: 3 } }), RevmFatalError);
+});
+
+test("E2d: queued exact scopes and native overrides detach nested input fields", async () => {
+  const f = new Fixture(); const c = new FixtureClient(f); const hold = c.health();
+  const a = pinnedRequest().from; const token = pinnedRequest().to;
+  const req: StrictSimulateRequest = { ...pinnedRequest(), ...{ callerMode: "impersonated-call-frame", transactionOrigin: a, executionGasLimit: 100 },
+    nativeBalanceWei: "7", observeNativeBalances: [a], observeTokenBalances: [{ token, account: a }] };
+  const result = c.strictSimulate(req);
+  req.nativeBalanceWei = "9"; req.observeNativeBalances![0] = token; req.observeTokenBalances![0]!.account = token;
+  f.reply(0); await hold; await tick();
+  assert.equal(f.requests[1]!.nativeBalanceWei, "7"); assert.equal(f.requests[1]!.observeTokenBalances[0].account, a);
+  f.reply(1, { sourceAttestation: attestation(), strict: { outcome: { kind: "Success", phase: "main", output: "0x" }, executionGasUsed: "0",
+    tokenDeltas: [{ token, account: a, delta: "0" }], nativeDeltas: [{ account: a, before: "7", after: "7", delta: "0" }], totalSupplyDeltas: [], logs: [] } });
+  assert.equal((await result).strict!.nativeDeltas[0]!.before, "7"); c.stop(); f.close(); await c.closeAndDrain();
+});
+
+test("E2d: malformed context/observations/value reject before any spawn or dispatch", async () => {
+  const f = new Fixture(); const c = new FixtureClient(f); const a = pinnedRequest().from;
+  for (const patch of [
+    { callerMode: "inner" }, { callerMode: "impersonated-call-frame" },
+    { callerMode: "impersonated-call-frame", transactionOrigin: a },
+    { callerMode: "impersonated-call-frame", transactionOrigin: "0x", executionGasLimit: 100 },
+    { transactionOrigin: pinnedRequest().to }, { executionGasLimit: 0 }, { executionGasLimit: -1 }, { gasLimit: 1.5 },
+    { nativeBalanceWei: "-1" }, { nativeBalanceWei: "01" }, { nativeBalanceWei: "0x1" }, { nativeBalanceWei: (1n << 256n).toString() },
+    { nativeBalanceWei: 1 }, { value: "1" }, { rpcUrl: null }, { observeNativeBalances: null },
+    { observeNativeBalances: [a, a.toUpperCase().replace("0X", "0x")] }, { observeNativeBalances: new Array(1) },
+    { observeTokenBalances: null }, { observeTokenBalances: [{ token: a }] },
+    { observeTokenBalances: [{ token: a, account: a, extra: true }] },
+    { observeTokenBalances: [{ token: a, account: a }, { token: a, account: a }] },
+    { observeTokenBalances: [], observeTokens: [] }, { observeTokenBalances: [], observeAccounts: [] },
+    { preCalls: [{ from: a, to: a, calldata: "0x", value: "1" }] },
+    { preCalls: [{ from: pinnedRequest().to, to: a, calldata: "0x" }] },
+    { tokenDeals: [{ token: a, to: pinnedRequest().to, amount: "1" }] },
+  ]) await assert.rejects(c.strictSimulate({ ...pinnedRequest(), ...patch } as any), RevmStrictError);
+  assert.equal(c.starts, 0); assert.equal(f.requests.length, 0); await c.closeAndDrain();
+});
+
+for (const bad of [undefined, { kind: "Nope", phase: "main" }, { kind: "Revert", phase: "main", output: "formatted reason" },
+  { kind: "Halt", phase: "main", output: "0x", reason: "OutOfGas" }, { kind: "Success", phase: "preCall", preCallIndex: 0, output: "0x" }]) {
+  test(`E2d: invalid strict outcome is owner-visible protocol fatal ${JSON.stringify(bad)}`, async () => {
+    const f = new Fixture(); const order: string[] = [];
+    const c = new FixtureClient(f, { onFatal: r => { assert.equal(r.kind, "protocol-fault"); order.push("fatal"); } });
+    const active = c.strictSimulate(pinnedRequest()).catch(e => { order.push("rejection"); return e; });
+    const queued = assert.rejects(c.health(), RevmFatalError);
+    f.reply(0, { sourceAttestation: attestation(), strict: { outcome: bad, executionGasUsed: "0", nativeDeltas: [], tokenDeltas: [], totalSupplyDeltas: [], logs: [] } });
+    assert.ok(await active instanceof RevmFatalError); await queued;
+    assert.deepEqual(order, ["fatal", "rejection"]); assert.equal(f.requests.length, 1);
+    f.close(); await c.closeAndDrain();
+  });
+}
 
 test("pinned request shape rejects before spawn, never downgrades to legacy", async () => {
   const f = new Fixture(); const c = new FixtureClient(f);
@@ -98,7 +169,7 @@ test("one physical request; IDs and detached queued payloads cover every API", a
   const req = { blockNumber: 1, prewarmCalls: [{ from: "a", to: "b", calldata: "0x" }] };
   const calls = [c.health(), c.prepare({ blockNumber: 1 }), c.warm(req),
     c.quote({ to: "b", data: "0x" }), c.simulatePrepared(prepared),
-    c.strictSimulate({ blockNumber: 1, from: "a", to: "b", data: "0x" }), c.reset()];
+    c.strictSimulate({ blockNumber: 1, from: pinnedRequest().from, to: pinnedRequest().to, data: "0x" }), c.reset()];
   req.prewarmCalls[0]!.from = "mutated";
   assert.equal(f.requests.length, 1);
   for (let i = 0; i < calls.length; i++) { f.reply(i); await calls[i]; await tick(); }
@@ -149,6 +220,156 @@ test("active timeout cannot shift its late response to queued work", async () =>
   f.close(); await c.closeAndDrain();
 });
 
+for (const fatal of [{ kind: "rpc-throttle", category: "http429", httpStatus: 429 },
+  { kind: "source-fault" }, { kind: "protocol-fault" }]) {
+  test(`E2d late fatal: matched response after cancellation before drain ${fatal.kind}`, async () => {
+    const f = new Fixture(); const reports: RevmFatalReason[] = [];
+    const c = new FixtureClient(f, { onFatal: r => reports.push(r) });
+    const abort = new AbortController();
+    const active = assert.rejects(c.health({ signal: abort.signal }), /abort/);
+    const queued = assert.rejects(c.reset(), /abort/);
+    abort.abort(); await Promise.all([active, queued]);
+    assert.equal(c.isTerminal, true); assert.equal(f.requests.length, 1);
+    f.reply(0, { fatal }); f.reply(0, { fatal });
+    assert.deepEqual(reports, [fatal], "physical fatal evidence remains owner-visible after local cancellation");
+    await assert.rejects(c.health(), /abort/); assert.equal(f.requests.length, 1);
+    f.close(); await c.closeAndDrain();
+    assert.deepEqual(reports, [fatal]);
+  });
+}
+
+for (const mode of ["success", "old-epoch", "unknown-id", "malformed-category", "fragmented", "deadline"]) {
+  test(`E2d late fatal: retired identity/framing control ${mode}`, async () => {
+    const f = new Fixture(); const reports: RevmFatalReason[] = [];
+    const c = new FixtureClient(f, { timeoutMs: mode === "deadline" ? 10 : 1000,
+      onFatal: r => { reports.push(r); if (mode === "fragmented") throw new Error("observer"); } });
+    const abort = new AbortController();
+    const active = assert.rejects(c.health({ signal: abort.signal }), mode === "deadline" ? /time/ : /abort/);
+    if (mode !== "deadline") abort.abort(); await active;
+    const request = f.requests[0]!;
+    const fatal = { kind: "rpc-throttle", category: "http429", httpStatus: 429 };
+    const response = { epoch: mode === "old-epoch" ? "old" : request.epoch,
+      requestId: mode === "unknown-id" ? "999" : request.requestId, ok: mode === "success",
+      ...(mode === "success" ? { success: true } : { fatal: mode === "malformed-category" ? { ...fatal, category: "unknown" } : fatal }) };
+    const wire = JSON.stringify(response) + "\n";
+    if (mode === "fragmented") { f.stdout.write(wire.slice(0, 19)); assert.deepEqual(reports, []); f.stdout.write(wire.slice(19)); }
+    else f.stdout.write(wire);
+    assert.deepEqual(reports, mode === "success" ? [] : [mode === "fragmented" || mode === "deadline" ? fatal : { kind: "protocol-fault" }]);
+    assert.equal(f.requests.length, 1); f.close(); await c.closeAndDrain();
+  });
+}
+
+for (const fatal of [{ kind: "rpc-throttle", category: "http429", httpStatus: 429 },
+  { kind: "source-fault" }]) {
+  for (const framing of ["same-chunk", "partial-first", "split-fatal", "truncated-fatal", "unknown-id", "old-epoch"]) {
+    test(`E2d buffered expiry: ${fatal.kind}/${framing}`, async t => {
+      const f = new Fixture(); const reports: RevmFatalReason[] = []; const order: string[] = [];
+      const c = new FixtureClient(f, { onFatal: reason => { reports.push(reason); order.push("fatal"); c.stop(); } });
+      // Advance only the expiry predicate synchronously. The real timeout
+      // cannot fire before the first response is parsed in this data event.
+      let now = Date.now();
+      const clock = t.mock.method(Date, "now", () => now);
+      const active = c.health({ deadlineAtMs: now + 100 }).catch(e => { order.push("active"); return e; });
+      const queued = c.reset().catch(e => { order.push("queued"); return e; });
+      try {
+        const { epoch, requestId } = f.requests[0]!;
+        const first = JSON.stringify({ epoch, requestId, ok: true, latencyMs: 0 }) + "\n";
+        const last = JSON.stringify({ epoch: framing === "old-epoch" ? "old" : epoch,
+          requestId: framing === "unknown-id" ? "999" : requestId, ok: false, fatal }) + "\n";
+        const expected = framing === "unknown-id" || framing === "old-epoch" || framing === "truncated-fatal"
+          ? { kind: "protocol-fault" } : fatal;
+        if (framing === "partial-first") f.stdout.write(first.slice(0, 17));
+        now += 101;
+        if (framing === "split-fatal" || framing === "truncated-fatal") {
+          f.stdout.write(first + last.slice(0, 19));
+          assert.deepEqual(reports, [], "an incomplete retired frame is not fatal evidence yet");
+          if (framing === "split-fatal") f.stdout.write(last.slice(19));
+        } else {
+          f.stdout.write((framing === "partial-first" ? first.slice(17) : first) + last);
+        }
+        clock.mock.restore();
+        assert.equal(c.isTerminal, true);
+        assert.deepEqual(reports, framing === "truncated-fatal" ? [] : [expected],
+          "complete buffered fatal must be reported in the same event, without exit or another data event");
+        assert.deepEqual(order, framing === "truncated-fatal" ? [] : ["fatal"]);
+        for (const error of await Promise.all([active, queued])) {
+          assert(error instanceof Error); assert.match(error.message, /deadline/);
+        }
+        await assert.rejects(c.health(), /deadline/);
+        assert.equal(f.requests.length, 1); assert.equal(c.starts, 1); assert.equal(f.kills, 1);
+        let drained = false; const drain = c.closeAndDrain().then(() => { drained = true; });
+        f.child.emit("exit", 0, null);
+        assert.deepEqual(reports, [expected], "partial framing remains checked during shutdown");
+        await tick(); assert.equal(drained, false, "exit is not child/stdio drain");
+        if (framing !== "truncated-fatal") f.stdout.write(last);
+        f.close(); await drain;
+        assert.deepEqual(reports, [expected]); assert.equal(f.kills, 1); assert.equal(f.requests.length, 1);
+      } finally {
+        clock.mock.restore(); f.close(); await c.closeAndDrain(); await Promise.all([active, queued]);
+      }
+    });
+  }
+}
+
+test("E2d buffered expiry: matched late successes are consumed without acceptance or a fatal", async t => {
+  const f = new Fixture(); const reports: RevmFatalReason[] = [];
+  const c = new FixtureClient(f, { onFatal: reason => reports.push(reason) });
+  let now = Date.now(); const clock = t.mock.method(Date, "now", () => now);
+  const active = assert.rejects(c.health({ deadlineAtMs: now + 100 }), /deadline/);
+  const queued = assert.rejects(c.reset(), /deadline/);
+  try {
+    const { epoch, requestId } = f.requests[0]!;
+    const success = JSON.stringify({ epoch, requestId, ok: true, latencyMs: 0 }) + "\n";
+    now += 101; f.stdout.write(success + success + success); clock.mock.restore();
+    await Promise.all([active, queued]);
+    assert.equal(c.isTerminal, true); assert.deepEqual(reports, []);
+    await assert.rejects(c.health(), /deadline/);
+    f.close(); await c.closeAndDrain();
+    assert.deepEqual(reports, [], "complete ignored successes must not become a truncation fault on exit");
+    assert.equal(f.requests.length, 1); assert.equal(c.starts, 1); assert.equal(f.kills, 1);
+  } finally {
+    clock.mock.restore(); f.close(); await c.closeAndDrain(); await Promise.all([active, queued]);
+  }
+});
+
+for (const fault of ["duplicate", "rpc-throttle", "source-fault"]) {
+  for (const reenter of ["health", "stop-and-health", "drain-and-health"]) {
+    test(`E2d terminal notification: ${fault}/${reenter}`, async () => {
+      const f = new Fixture(); const reports: RevmFatalReason[] = []; const terminal: boolean[] = [];
+      const order: string[] = []; let reentered: Promise<unknown> | undefined; let drain: Promise<void> | undefined;
+      const c = new FixtureClient(f, { onFatal: reason => {
+        reports.push(reason); terminal.push(c.isTerminal); order.push("fatal");
+        if (reenter === "stop-and-health") c.stop();
+        if (reenter === "drain-and-health") drain = c.closeAndDrain();
+        reentered = c.health().catch(e => e);
+      } });
+      const first = c.health().catch(e => e);
+      const queued = c.strictSimulate(pinnedRequest()).catch(e => { order.push("queued"); return e; });
+      const { epoch, requestId } = f.requests[0]!;
+      const success = JSON.stringify({ epoch, requestId, ok: true, latencyMs: 0 }) + "\n";
+      const fatal = fault === "rpc-throttle" ? { kind: fault, category: "http429", httpStatus: 429 } : { kind: fault };
+      try {
+        f.stdout.write(fault === "duplicate" ? success + success
+          : JSON.stringify({ epoch, requestId, ok: false, fatal }) + "\n");
+        assert.deepEqual({ terminal, physicalRequests: f.requests.length }, { terminal: [true], physicalRequests: 1 },
+          "fatal callback must observe terminal state and cannot dispatch queued work through reentry");
+        assert.deepEqual(order, ["fatal"]); assert.equal(f.requests.length, 1);
+        assert.equal(c.starts, 1); assert.equal(f.kills, 1);
+        assert.ok(await queued instanceof RevmFatalError);
+        assert.ok(await reentered instanceof RevmFatalError);
+        if (fault === "duplicate") assert.equal((await first).ok, true);
+        else assert.ok(await first instanceof RevmFatalError);
+        f.reply(0, { fatal: { kind: "source-fault" } });
+        f.close(); await c.closeAndDrain(); await drain;
+        assert.deepEqual(reports, [fault === "duplicate" ? { kind: "protocol-fault" } : fatal]);
+        assert.equal(f.requests.length, 1); assert.equal(f.kills, 1);
+      } finally {
+        f.close(); await c.closeAndDrain(); await drain; await Promise.all([first, queued, reentered]);
+      }
+    });
+  }
+}
+
 for (const bad of ["old-epoch", "unknown-id", "duplicate-id", "invalid-json"]) {
   test(`${bad} never resolves different work`, async () => {
     const f = new Fixture(); const c = new FixtureClient(f);
@@ -169,7 +390,7 @@ test("typed fatal callback fires once before conversion/rejection, even if obser
     assert.deepEqual(reason, { kind: "rpc-throttle", category: "http429", httpStatus: 429 });
     order.push("fatal"); throw new Error("observer");
   } });
-  const failed = c.strictSimulate({ blockNumber: 1, from: "a", to: "b", data: "0x" })
+  const failed = c.strictSimulate({ blockNumber: 1, from: pinnedRequest().from, to: pinnedRequest().to, data: "0x" })
     .catch(err => { order.push("catch"); assert.equal(err.fatal.kind, "rpc-throttle"); });
   f.reply(0, { ok: true, fatal: { kind: "rpc-throttle", category: "http429", httpStatus: 429 } });
   await failed; f.reply(0, { fatal: { kind: "rpc-throttle", category: "http429", httpStatus: 429 } });
@@ -387,6 +608,13 @@ const returnCode = (n: number) => `0x60${n.toString(16).padStart(2, "0")}6000526
 const storageCode = "0x60005460005260206000f3";
 const blockhashCode = "0x6000354060005260206000f3";
 const target = pinnedRequest().to;
+const originActor = `0x${"dd".repeat(20)}`;
+const innerContext = { callerMode: "impersonated-call-frame" as const, transactionOrigin: originActor, executionGasLimit: 200_000 };
+const pushAddress = (a: string) => `73${a.slice(2)}`;
+const callBytes = (a: string, value = 0, delegate = false, outSize = 0) =>
+  `60${outSize.toString(16).padStart(2, "0")}600060006000${delegate ? "" : `60${value.toString(16).padStart(2, "0")}`}${pushAddress(a)}5a${delegate ? "f4" : "f1"}`;
+const returnMemory = (size = 32) => `60${size.toString(16).padStart(2, "0")}6000f3`;
+const scopeBalanceCode = (account: string) => `0x600435${pushAddress(account)}1460215760006000fd5b602a60005260206000f3`;
 
 // Actual daemon + deterministic loopback state. A numeric state/trace selector
 // is poisoned by default, not silently made equivalent to the requested hash.
@@ -490,6 +718,187 @@ async function pinnedFixture(run: (f: PinnedRpcFixture, c: PinnedDirectClient, f
 }
 
 if (process.env.REVM_SIM_TEST_BINARY) {
+  for (const delegate of [false, true]) test(`E2d: nested ${delegate ? "DELEGATECALL" : "CALL"} uses natural real code`, async () => pinnedFixture(async (f, c) => {
+    const nested = `0x${"ee".repeat(20)}`; const actor = f.request().from;
+    f.hook = call => call.method === "eth_getCode" ? call.params[0] === nested
+      ? { result: "0x32600052336020523060405260606000f3" }
+      : call.params[0] === actor ? { result: returnCode(99) } : undefined : undefined;
+    f.codes.set(f.canonical.hash, `0x${callBytes(nested, 0, delegate, 96)}50${returnMemory(96)}`);
+    const r = await c.strictSimulate({ ...f.request(), ...innerContext });
+    assert.equal(r.output, `0x${[originActor, delegate ? actor : target, delegate ? target : nested].map(a => word(BigInt(a)).slice(2)).join("")}`);
+    assert.equal(r.strict!.outcome.kind, "Success");
+  }));
+  test("E2d: actor code remains observable and runs on native callback; real transfers only", async () => pinnedFixture(async (f, c) => {
+    const actor = f.request().from;
+    const actorCode = `0x${callBytes(originActor, 3)}5060006000f3`;
+    f.hook = call => {
+      if (call.method === "eth_getCode" && call.params[0] === actor) return { result: actorCode };
+      if (call.method === "eth_getBalance") return { result: call.params[0] === target ? "0xa" : "0x0" };
+      return undefined;
+    };
+    f.codes.set(f.canonical.hash, `0x${callBytes(actor, 5)}600052${pushAddress(actor)}3b602052${returnMemory(64)}`);
+    const r = await c.strictSimulate({ ...f.request(), ...innerContext, nativeBalanceWei: "7",
+      observeNativeBalances: [actor, originActor, target, f.canonical.miner] });
+    assert.equal(r.output, `0x${word(1).slice(2)}${word((actorCode.length - 2) / 2).slice(2)}`);
+    assert.deepEqual(r.strict!.nativeDeltas.map(x => [x.before, x.after, x.delta]),
+      [["7", "9", "2"], ["0", "3", "3"], ["10", "5", "-5"], ["0", "0", "0"]]);
+  }));
+  for (const nativeBalanceWei of [undefined, "0", ((1n << 256n) - 1n).toString()]) {
+    test(`E2d: native exact/absent boundary ${nativeBalanceWei}`, async () => pinnedFixture(async (f, c) => {
+      f.hook = call => call.method === "eth_getBalance" ? { result: "0xd" } : undefined;
+      f.codes.set(f.canonical.hash, "0x333160005260206000f3");
+      const r = await c.strictSimulate({ ...f.request(), nativeBalanceWei, observeNativeBalances: [f.request().from, `0x${"00".repeat(20)}`] });
+      assert.equal(r.output, word(BigInt(nativeBalanceWei ?? "13")));
+      assert.deepEqual(r.strict!.nativeDeltas.map(x => x.delta), ["0", "0"]);
+      assert.equal(r.strict!.nativeDeltas[1]!.before, "13", "zero account is never funded");
+    }));
+  }
+  for (const collision of ["origin", "beneficiary", "target", "insufficient", "overflow"] as const) {
+    test(`E2d: native value balance checks and identity collision ${collision}`, async () => pinnedFixture(async (f, c) => {
+      const actor = collision === "origin" ? originActor : collision === "beneficiary" ? f.canonical.miner : collision === "target" ? target : f.request().from;
+      f.hook = call => call.method === "eth_getBalance" ? { result: call.params[0] === target && collision !== "insufficient" ? "0xa" : "0x0" } : undefined;
+      f.codes.set(f.canonical.hash, collision === "target" ? "0x4760005260206000f3" : `0x${callBytes(actor, 5)}600052${returnMemory()}`);
+      const r = await c.strictSimulate({ ...f.request(), from: actor, ...innerContext,
+        ...(collision === "overflow" ? { nativeBalanceWei: ((1n << 256n) - 1n).toString() } : {}), observeNativeBalances: [actor] });
+      assert.equal(r.strict!.nativeDeltas[0]!.delta, ["insufficient", "overflow", "target"].includes(collision) ? "0" : "5");
+      if (collision === "insufficient" || collision === "overflow") assert.equal(r.output, word(0));
+    }));
+  }
+  test("E2d: exact sparse pairs avoid poisoned cross-pairs; empty is empty", async () => pinnedFixture(async (f, c) => {
+    const t1 = `0x${"e1".repeat(20)}`; const t2 = `0x${"e2".repeat(20)}`; const a = f.request().from;
+    f.hook = call => call.method === "eth_getCode" && [t1, t2].includes(call.params[0])
+      ? { result: scopeBalanceCode(call.params[0] === t1 ? a : originActor) } : undefined;
+    const pairs = [{ token: t1, account: a }, { token: t2, account: originActor }];
+    const r = await c.strictSimulate({ ...f.request(), observeTokenBalances: pairs });
+    assert.deepEqual(r.strict!.tokenDeltas, pairs.map(p => ({ ...p, delta: "0" })));
+    await assert.rejects(c.strictSimulate({ ...f.request(), observeTokens: [t1, t2], observeAccounts: [a, originActor] }),
+      e => e instanceof RevmStrictError && e.kind === "observation");
+    assert.equal((await c.strictSimulate({ ...f.request(), observeTokenBalances: [] })).strict!.tokenDeltas.length, 0);
+    assert.equal((await c.strictSimulate(f.request())).strict!.tokenDeltas.length, 0);
+    assert.equal((await c.health()).ok, true);
+  }));
+  for (const code of ["0x60006000fd", "0xfe", "0x600160005560006000f3", "0x600160005d60006000f3", "0x60006000a060006000f3", "0x00", "0x60015ff3"]) {
+    test(`E2d: static observation failure is not main Revert ${code}`, async () => pinnedFixture(async (f, c, fatal) => {
+      const token = `0x${"e1".repeat(20)}`;
+      f.hook = call => call.method === "eth_getCode" && call.params[0] === token ? { result: code } : undefined;
+      await assert.rejects(c.strictSimulate({ ...f.request(), observeTokenBalances: [{ token, account: f.request().from }] }),
+        e => e instanceof RevmStrictError && e.kind === "observation");
+      assert.equal(c.responses.at(-1)!.strict, undefined); assert.equal(c.responses.at(-1)!.sourceAttestation, undefined);
+      assert.deepEqual(fatal, []); assert.equal((await c.health()).ok, true);
+    }));
+  }
+  for (const inner of [false, true]) for (const failure of ["none", "main-revert", "main-halt", "pre-revert", "pre-halt"]) {
+    test(`E2d: atomic effects/logs inner=${inner} failure=${failure}`, async () => pinnedFixture(async (f, c) => {
+      const pre = `0x${"e1".repeat(20)}`; const actor = f.request().from;
+      f.hook = call => {
+        if (call.method === "eth_getCode" && call.params[0] === pre) return { result: failure.startsWith("pre")
+          ? (failure.endsWith("revert") ? "0x63deadbeef6000526004601cfd" : "0xfe")
+          : `0x600160005560006000a0${callBytes(actor, 2)}5000` };
+        if (call.method === "eth_getBalance" && call.params[0] === pre) return { result: "0xa" };
+        return undefined;
+      };
+      f.codes.set(f.canonical.hash, failure === "main-revert" ? "0x63deadbeef6000526004601cfd" : failure === "main-halt" ? "0xfe" : "0x60006000a000");
+      const r = await c.strictSimulate({ ...f.request(), ...(inner ? innerContext : {}), observeLogs: true,
+        observeNativeBalances: [actor], preCalls: [{ from: actor, to: pre, calldata: "0x" }] });
+      const expected = failure === "none" ? "Success" : failure.endsWith("revert") ? "Revert" : "Halt";
+      assert.equal(r.strict!.outcome.kind, expected); assert.equal(r.strict!.outcome.phase, failure.startsWith("pre") ? "preCall" : "main");
+      if (r.strict!.outcome.phase === "preCall") assert.equal(r.strict!.outcome.preCallIndex, 0);
+      if (failure.endsWith("revert")) assert.equal(r.output, "0xdeadbeef");
+      assert.equal(r.strict!.logs.length, failure === "none" ? 2 : 0);
+      assert.deepEqual(r.strict!.nativeDeltas.map(d => d.delta), failure === "none" ? ["2"] : []);
+      if (failure === "none") assert.deepEqual(r.strict!.logs.map(l => l.address), [pre, target]);
+      const clean = await c.strictSimulate({ ...f.request(), ...innerContext, observeNativeBalances: [actor] });
+      if (clean.success) assert.equal(clean.strict!.nativeDeltas[0]!.before, "0");
+    }));
+  }
+  test("E2d: shared inner budget cannot reset or be replenished by refunds", async () => pinnedFixture(async (f, c) => {
+    f.codes.set(f.canonical.hash, "0x600060005500");
+    const setup = { from: f.request().from, to: target, calldata: "0x", gasLimit: 100_000 };
+    const first = await c.strictSimulate({ ...f.request(), ...innerContext });
+    const spent = Number(first.strict!.executionGasUsed); assert.ok(spent > 0);
+    const limited = await c.strictSimulate({ ...f.request(), ...innerContext, preCalls: [setup], executionGasLimit: spent + 3 });
+    assert.equal(limited.strict!.outcome.kind, "Halt"); assert.equal(limited.strict!.outcome.phase, "main");
+    assert.ok(Number(limited.strict!.executionGasUsed) <= spent + 3); assert.deepEqual(limited.strict!.logs, []);
+    const capped = await c.strictSimulate({ ...f.request(), ...innerContext, gasLimit: 1 });
+    assert.equal(capped.strict!.outcome.kind, "Halt"); assert.equal(capped.strict!.executionGasUsed, "1");
+  }));
+  test("E2d: omitted/top-level rejects ordinary contract actor; delegated account code remains real", async () => pinnedFixture(async (f, c) => {
+    const actor = f.request().from;
+    f.hook = call => call.method === "eth_getCode" && call.params[0] === actor ? { result: returnCode(99) } : undefined;
+    for (const callerMode of [undefined, "top-level"] as const) await assert.rejects(c.strictSimulate({ ...f.request(), callerMode }),
+      e => e instanceof RevmStrictError && e.kind === "validation");
+    assert.equal((await c.strictSimulate({ ...f.request(), ...innerContext })).success, true);
+    await c.reset();
+    f.hook = call => call.method === "eth_getCode" && call.params[0] === actor ? { result: `0xef0100${target.slice(2)}` } : undefined;
+    f.codes.set(f.canonical.hash, "0x326000523060205260406000f3");
+    const delegated = await c.strictSimulate({ ...f.request(), to: actor });
+    assert.equal(delegated.output, `0x${word(BigInt(actor)).slice(2)}${word(BigInt(actor)).slice(2)}`);
+  }));
+  for (const fault of ["quota", "source"]) test(`E2d: after-main static probe ${fault} overrides success before conversion`, async () => pinnedFixture(async (f, c, fatal) => {
+    // balanceOf reads storage[storage[0]]; main changes the selected slot from
+    // pinned 7 to 1, so the after-probe makes a new physical pinned state read.
+    f.codes.set(f.canonical.hash, "0x36156011576000545460005260206000f35b600160005500");
+    f.hook = call => call.method === "eth_getStorageAt" && BigInt(call.params[1]) === 1n
+      ? { error: { code: -32000, message: fault === "quota" ? "account quota exhausted" : "hash is not currently canonical", data: {} } } : undefined;
+    const req = { ...f.request(), ...innerContext, observeTokenBalances: [{ token: target, account: f.request().from }] };
+    const active = c.strictSimulate(req).catch(e => { assert.equal(fatal.length, 1, "callback precedes rejection"); return e; });
+    const queued = assert.rejects(c.health(), RevmFatalError);
+    assert.ok(await active instanceof RevmFatalError); await queued;
+    assert.equal(fatal[0]!.kind, fault === "quota" ? "rpc-throttle" : "source-fault");
+    assert.equal(c.responses.at(-1)!.strict, undefined); assert.equal(c.responses.at(-1)!.sourceAttestation, undefined);
+    const count = f.calls.length; await assert.rejects(c.strictSimulate(req), RevmFatalError); assert.equal(f.calls.length, count);
+  }));
+  for (const outcome of ["0x00", "0x60006000fd", "0xfe"]) test(`E2d: inner canonical post-check covers ${outcome}`, async () => pinnedFixture(async (f, c, fatal) => {
+    f.codes.set(f.canonical.hash, outcome);
+    f.hook = call => { if (call.method === "debug_traceCall") f.canonical = header(300, 2); return undefined; };
+    await assert.rejects(c.strictSimulate({ ...f.request(), ...innerContext }), RevmFatalError);
+    assert.deepEqual(fatal, [{ kind: "source-fault" }]); assert.equal(c.responses.at(-1)!.sourceAttestation, undefined);
+  }));
+  for (const control of ["abort", "deadline"]) test(`E2d: inner ${control} holds one physical request and drains`, async () => pinnedFixture(async (f, c, fatal) => {
+    const abort = new AbortController(); f.holdMethod = "debug_traceCall";
+    const active = assert.rejects(c.strictSimulate({ ...f.request(), ...innerContext }, { signal: abort.signal,
+      ...(control === "deadline" ? { deadlineAtMs: Date.now() + 150 } : {}) }), /abort|time/);
+    const queued = assert.rejects(c.health(), /abort|time/);
+    if (control === "abort") {
+      while (!f.calls.some(call => call.method === "debug_traceCall")) await delay(2);
+      abort.abort();
+    }
+    await Promise.all([active, queued]); await c.closeAndDrain();
+    assert.deepEqual(fatal, []); const count = f.calls.length;
+    await assert.rejects(c.health(), /abort|time/); assert.equal(f.calls.length, count);
+    f.server.closeAllConnections();
+  }));
+  test("E2d: real inner origin differs from contract caller without replacing code", async () => pinnedFixture(async (f, c) => {
+    const actor = f.request().from; const origin = `0x${"dd".repeat(20)}`;
+    f.hook = call => call.method === "eth_getCode" && call.params[0] === actor ? { result: returnCode(99) } : undefined;
+    f.codes.set(f.canonical.hash, "0x32600052336020523460405260606000f3");
+    const result = await c.strictSimulate({ ...f.request(), callerMode: "impersonated-call-frame",
+      transactionOrigin: origin, executionGasLimit: 100_000 } as any);
+    assert.equal(result.output, `0x${word(BigInt(origin)).slice(2)}${word(BigInt(actor)).slice(2)}${word(0).slice(2)}`);
+    assert.equal((result.strict as any).outcome.kind, "Success");
+  }));
+  test("E2d: exact native override is baseline, not value or profit", async () => pinnedFixture(async (f, c) => {
+    f.codes.set(f.canonical.hash, "0x3331600052346020523a6040524860605260806000f3");
+    const result = await c.strictSimulate({ ...f.request(), nativeBalanceWei: "7", observeNativeBalances: [f.request().from] } as any);
+    assert.equal(result.output, `0x${[7, 0, 1, 1].map(n => word(n).slice(2)).join("")}`);
+    assert.deepEqual((result.strict as any).nativeDeltas, [{ account: f.request().from, before: "7", after: "7", delta: "0" }]);
+  }));
+  for (const inner of [false, true]) test(`E2d: sibling transient state inner=${inner}`, async () => pinnedFixture(async (f, c) => {
+    f.codes.set(f.canonical.hash, "0x60003515600d57600160005d005b60005c60005260206000f3");
+    const result = await c.strictSimulate({ ...f.request(), data: word(0),
+      preCalls: [{ from: f.request().from, to: target, calldata: word(1) }],
+      ...(inner ? { callerMode: "impersonated-call-frame", transactionOrigin: `0x${"dd".repeat(20)}`, executionGasLimit: 100_000 } : {}) } as any);
+    assert.equal(result.output, word(inner ? 1 : 0));
+    assert.equal((result.strict as any).outcome.kind, "Success");
+  }));
+  for (const [code, kind] of [["0x00", "Success"], ["0x60006000fd", "Revert"], ["0xfe", "Halt"]]) {
+    test(`E2d: tagged ${kind} is not conflated`, async () => pinnedFixture(async (f, c) => {
+      f.codes.set(f.canonical.hash, code!);
+      const result = await c.strictSimulate(f.request());
+      assert.equal((result.strict as any).outcome.kind, kind);
+      assert.equal((result.strict as any).outcome.phase, "main");
+    }));
+  }
   test("pinned direct: same-pin warm reuse and changed-pin bytecode never leak", async () => pinnedFixture(async (f, c) => {
     const first = await c.strictSimulate(f.request()); assert.equal(first.output, word(42));
     assert.equal(first.sourceAttestation?.blockHash, f.canonical.hash);
@@ -668,7 +1077,7 @@ if (process.env.REVM_SIM_TEST_BINARY) {
       await c.reset();
       assert.equal((await c.strictSimulate(f.request())).output, word(fee));
       const highGas = c.strictSimulate({ ...f.request(), gasLimit: 16_777_217 });
-      if (capped) await assert.rejects(highGas, /gas|Gas/); else assert.equal((await highGas).success, true);
+      if (capped) await assert.rejects(highGas, e => e instanceof RevmStrictError && e.kind === "validation"); else assert.equal((await highGas).success, true);
     }
   }));
   for (const patch of [{ timestamp: quantity(Number(ETHEREUM_BLOCK_ACTIVITY_PROFILE.pragueTime - 1n)) },

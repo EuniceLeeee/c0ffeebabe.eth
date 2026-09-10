@@ -16,11 +16,15 @@ use revm::{
     Database, DatabaseCommit, ExecuteEvm, MainBuilder, MainContext,
     bytecode::Bytecode,
     context::{BlockEnv, Context, TxEnv},
-    context_interface::result::ExecutionResult,
+    context_interface::{ContextTr, JournalTr, Transaction,
+        journaled_state::account::JournaledAccountTr,
+        result::{ExecutionResult, EVMError, HaltReason, ResultGas}},
+    handler::{Handler, EvmTr, EvmTrError, FrameTr, FrameResult, MainnetHandler},
+    interpreter::{FrameInput, InitialAndFloorGas, interpreter_action::FrameInit},
     database::{AccountState, CacheDB},
     database_interface::{DBErrorMarker, DatabaseRef},
     primitives::{Address, B256, Bytes, U256, hardfork::SpecId, keccak256},
-    state::AccountInfo,
+    state::{AccountInfo, EvmState},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -1231,6 +1235,7 @@ fn simulate(req: SimRequest, started: Instant) -> Result<SimResponse> {
         &req.token_deals,
         &mut balance_slots,
         None,
+        false,
     )?;
     for call in pre_calls {
         let pre = execute_call(
@@ -1337,33 +1342,7 @@ enum DaemonRequest {
         #[serde(default)]
         gas_limit: Option<u64>,
     },
-    #[serde(rename_all = "camelCase")]
-    StrictSimulate {
-        block_number: u64,
-        #[serde(default, deserialize_with = "deserialize_source_pin")]
-        source_pin: Option<SourcePin>,
-        #[serde(default)]
-        rpc_url: Option<String>,
-        from: String,
-        to: String,
-        data: String,
-        #[serde(default)]
-        gas_limit: Option<u64>,
-        #[serde(default)]
-        pre_calls: Vec<PreCall>,
-        #[serde(default)]
-        token_deals: Vec<TokenDeal>,
-        #[serde(default)]
-        observe_tokens: Vec<String>,
-        #[serde(default)]
-        observe_accounts: Vec<String>,
-        #[serde(default)]
-        observe_total_supply: Vec<String>,
-        #[serde(default)]
-        observe_logs: bool,
-        #[serde(default)]
-        caller_mode: String,
-    },
+    StrictSimulate(StrictRequest),
     #[serde(rename_all = "camelCase")]
     Simulate {
         owner: String,
@@ -1374,6 +1353,49 @@ enum DaemonRequest {
         gas_limit: Option<u64>,
     },
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StrictRequest {
+    block_number: u64,
+    #[serde(default, deserialize_with = "deserialize_source_pin")]
+    source_pin: Option<SourcePin>,
+    rpc_url: Option<String>,
+    from: String,
+    to: String,
+    data: String,
+    gas_limit: Option<u64>,
+    execution_gas_limit: Option<u64>,
+    transaction_origin: Option<String>,
+    native_balance_wei: Option<String>,
+    observe_token_balances: Option<Vec<ExactTokenObservation>>,
+    observe_native_balances: Option<Vec<String>>,
+    observe_tokens: Option<Vec<String>>,
+    observe_accounts: Option<Vec<String>>,
+    #[serde(default)]
+    observe_total_supply: Vec<String>,
+    #[serde(default)]
+    observe_logs: bool,
+    #[serde(default)]
+    pre_calls: Vec<PreCall>,
+    #[serde(default)]
+    token_deals: Vec<TokenDeal>,
+    caller_mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExactTokenObservation { token: String, account: String }
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum StrictFailureKind { Validation, Execution, Observation }
+#[derive(Debug)]
+struct StrictFailure(StrictFailureKind);
+impl fmt::Display for StrictFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "strict {:?} failure", self.0) }
+}
+impl std::error::Error for StrictFailure {}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1387,6 +1409,8 @@ struct DaemonResponseEnvelope {
     source_attestation: Option<SourceAttestation>,
     #[serde(flatten)]
     response: DaemonResponse,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error_kind: Option<StrictFailureKind>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1419,10 +1443,31 @@ struct DaemonResponse {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StrictSimulateEffects {
+    outcome: StrictOutcome,
+    execution_gas_used: String,
+    native_deltas: Vec<SimNativeDelta>,
     token_deltas: Vec<SimTokenDelta>,
     total_supply_deltas: Vec<SimTotalSupplyDelta>,
     logs: Vec<SimLog>,
 }
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind")]
+enum StrictOutcome {
+    Success { output: String, #[serde(flatten)] stage: StrictStage },
+    Revert { output: String, #[serde(flatten)] stage: StrictStage },
+    Halt { reason: String, #[serde(flatten)] stage: StrictStage },
+}
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(tag = "phase")]
+enum StrictStage {
+    #[serde(rename = "main")]
+    Main,
+    #[serde(rename = "preCall")]
+    PreCall { #[serde(rename = "preCallIndex")] index: usize },
+}
+#[derive(Debug, Serialize)]
+struct SimNativeDelta { account: String, before: String, after: String, delta: String }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1487,6 +1532,7 @@ struct PinnedSession {
 
 #[derive(Default)]
 struct Daemon {
+    last_strict_error: Option<StrictFailureKind>,
     epoch: Option<String>,
     last_request_id: u64,
     // Shared by every RemoteRevmDb, including after reset/new block/cache reuse.
@@ -1530,8 +1576,10 @@ fn serve() -> Result<()> {
 impl Daemon {
     fn handle_line(&mut self, line: &str) -> DaemonResponseEnvelope {
         self.last_source_attestation = None;
+        self.last_strict_error = None;
         let started = Instant::now();
-        let value = serde_json::from_str::<Value>(line).unwrap_or(Value::Null);
+        let mut value = serde_json::from_str::<Value>(line).unwrap_or(Value::Null);
+        let strict_request = value.get("op").and_then(Value::as_str) == Some("strictSimulate");
         let epoch = value
             .get("epoch")
             .and_then(Value::as_str)
@@ -1558,7 +1606,16 @@ impl Daemon {
                     let illegal_pin = value.get("sourcePin").is_some()
                         && (value.get("op").and_then(Value::as_str) != Some("strictSimulate")
                             || value["sourcePin"].get("stateRoot").is_some_and(Value::is_null));
-                    match if illegal_pin { Err(serde::de::Error::custom("invalid source pin")) }
+                    // Envelope identity is not part of the strict execution contract.
+                    let null_strict_field = strict_request && (value.as_object().is_some_and(|v| v.values().any(Value::is_null))
+                        || [("preCalls", &["from", "to", "calldata", "gasLimit", "allowanceSlot"][..]),
+                            ("tokenDeals", &["token", "to", "amount", "balanceSlot"][..])].iter().any(|(field, keys)| {
+                            value.get(field).and_then(Value::as_array).is_some_and(|items| items.iter().any(|item| {
+                                item.as_object().is_none_or(|object| object.iter().any(|(key, val)| !keys.contains(&key.as_str()) || val.is_null()))
+                            }))
+                        }));
+                    if let Some(object) = value.as_object_mut() { object.remove("epoch"); object.remove("requestId"); }
+                    match if illegal_pin || null_strict_field { Err(serde::de::Error::custom("invalid source pin")) }
                         else { serde_json::from_value::<DaemonRequest>(value) } {
                         Ok(req) => self.handle(req, started),
                         // Do not echo serde's untrusted field values (including URLs).
@@ -1572,6 +1629,9 @@ impl Daemon {
         DaemonResponseEnvelope {
             epoch,
             request_id,
+            error_kind: if strict_request && !response.ok && fatal.is_none() {
+                Some(self.last_strict_error.unwrap_or(StrictFailureKind::Validation))
+            } else { None },
             fatal,
             source_attestation: if fatal.is_none() && response.ok { self.last_source_attestation.take() } else { None },
             response: match fatal {
@@ -1600,7 +1660,10 @@ impl Daemon {
         }
         match result {
             Ok(resp) => resp,
-            Err(err) => DaemonResponse::err(err.to_string(), started),
+            Err(err) => {
+                if let Some(kind) = err.downcast_ref::<StrictFailure>().map(|e| e.0) { self.last_strict_error = Some(kind); }
+                DaemonResponse::err(err.to_string(), started)
+            },
         }
     }
 
@@ -1668,38 +1731,10 @@ impl Daemon {
                 data,
                 gas_limit,
             } => self.quote(from, to, data, gas_limit, started),
-            DaemonRequest::StrictSimulate {
-                block_number,
-                source_pin,
-                rpc_url,
-                from,
-                to,
-                data,
-                gas_limit,
-                pre_calls,
-                token_deals,
-                observe_tokens,
-                observe_accounts,
-                observe_total_supply,
-                observe_logs,
-                caller_mode,
-            } => self.strict_simulate(
-                block_number,
-                rpc_url,
-                source_pin,
-                from,
-                to,
-                data,
-                gas_limit,
-                pre_calls,
-                token_deals,
-                observe_tokens,
-                observe_accounts,
-                observe_total_supply,
-                observe_logs,
-                caller_mode,
-                started,
-            ),
+            DaemonRequest::StrictSimulate(req) => {
+                self.last_strict_error = Some(StrictFailureKind::Execution);
+                self.strict_simulate(req, started)
+            },
             DaemonRequest::Simulate {
                 owner,
                 executor,
@@ -2009,6 +2044,7 @@ impl Daemon {
             &token_deals,
             &mut self.balance_slots,
             None,
+            false,
         )?;
         phase_ms("token_deals", &mut phase);
 
@@ -2241,42 +2277,23 @@ impl Daemon {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn strict_simulate(
-        &mut self,
-        block_number: u64,
-        rpc_url: Option<String>,
-        source_pin: Option<SourcePin>,
-        from: String,
-        to: String,
-        data: String,
-        gas_limit: Option<u64>,
-        pre_calls: Vec<PreCall>,
-        token_deals: Vec<TokenDeal>,
-        observe_tokens: Vec<String>,
-        observe_accounts: Vec<String>,
-        observe_total_supply: Vec<String>,
-        observe_logs: bool,
-        caller_mode: String,
-        started: Instant,
-    ) -> Result<DaemonResponse> {
-        if let Some(pin) = source_pin {
-            // Admission precedes I/O; explicit endpoint, complete pin, no
-            // environment endpoint fallback or prepared/unpinned cache reuse.
-            let url = rpc_url.filter(|u| !u.trim().is_empty())
-                .ok_or_else(|| anyhow!("pinned request requires rpcUrl"))?;
-            if pin.chain_id != 1 { bail!("unsupported pinned chain"); }
+    fn strict_simulate(&mut self, req: StrictRequest, started: Instant) -> Result<DaemonResponse> {
+        let plan = StrictPlan::validate(&req).map_err(|_| StrictFailure(StrictFailureKind::Validation))?;
+        if let Some(pin) = &req.source_pin {
+            let url = req.rpc_url.as_ref().filter(|u| !u.trim().is_empty())
+                .ok_or(StrictFailure(StrictFailureKind::Validation))?;
+            if pin.chain_id != 1 { bail!(StrictFailure(StrictFailureKind::Validation)); }
             strict_hex(&json!(pin.block_hash), Some(32))?;
             if let Some(root) = &pin.state_root { strict_hex(&json!(root), Some(32))?; }
             let mut rpc = RpcClient::new(url.clone(), self.http_client()?, Rc::clone(&self.fatal))?;
             rpc.pinned = true;
-            let source = verify_source(&rpc, block_number, &pin)?;
+            let source = verify_source(&rpc, req.block_number, pin)?;
             let mut session = match self.pinned.take() {
-                Some(session) if session.remote.rpc.url == url
+                Some(session) if session.remote.rpc.url == *url
                     && session.remote.source.as_ref() == Some(&source) => session,
                 _ => {
                     let mut inner = RemoteRevmDbInner::default();
-                    inner.ancestors.insert(block_number,
+                    inner.ancestors.insert(req.block_number,
                         (source.attestation.block_hash, source.attestation.parent_hash));
                     PinnedSession { remote: Rc::new(RemoteRevmDb {
                         rpc,
@@ -2288,272 +2305,326 @@ impl Daemon {
                 }
             };
             let result = Self::strict_simulate_at(Rc::clone(&session.remote), source.env.clone(),
-                &mut session.balance_slots, &mut session.allowance_slots,
-                from, to, data, gas_limit, pre_calls, token_deals, observe_tokens,
-                observe_accounts, observe_total_supply, observe_logs, caller_mode, started);
-            // Check even reverted/domain-error execution. A swallowed source
-            // failure cannot be cleared by a later canonical membership probe.
+                &mut session.balance_slots, &mut session.allowance_slots, &req, &plan, started);
+            // All outcomes (including probe failure, Revert and Halt) retain the
+            // canonical post-check. Optional paths cannot clear the fatal latch.
             verify_canonical(&session.remote.rpc, &source)?;
             self.pinned = Some(session);
             let response = result?;
             self.last_source_attestation = Some(source.attestation);
             return Ok(response);
         }
-        self.ensure_warm(block_number, rpc_url)?;
+        self.ensure_warm(req.block_number, req.rpc_url.clone())?;
         let remote = Rc::clone(&self.warm.as_ref().expect("warm set above").remote);
-        let env = load_block_env(&remote.rpc, block_number)?;
-        Self::strict_simulate_at(remote, env, &mut self.balance_slots, &mut self.allowance_slots,
-            from, to, data, gas_limit, pre_calls, token_deals, observe_tokens,
-            observe_accounts, observe_total_supply, observe_logs, caller_mode, started)
+        let env = load_block_env(&remote.rpc, req.block_number)?;
+        Self::strict_simulate_at(remote, env, &mut self.balance_slots, &mut self.allowance_slots, &req, &plan, started)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn strict_simulate_at(
-        remote_rc: Rc<RemoteRevmDb>, block_env: BlockEnv,
-        balance_slots: &mut HashMap<Address, u64>, allowance_slots: &mut HashMap<Address, u64>,
-        from: String, to: String, data: String, gas_limit: Option<u64>,
-        pre_calls: Vec<PreCall>, token_deals: Vec<TokenDeal>, observe_tokens: Vec<String>,
-        observe_accounts: Vec<String>, observe_total_supply: Vec<String>, observe_logs: bool,
-        caller_mode: String, started: Instant,
+        remote: Rc<RemoteRevmDb>, env: BlockEnv, balance_slots: &mut HashMap<Address, u64>,
+        allowance_slots: &mut HashMap<Address, u64>,
+        req: &StrictRequest, plan: &StrictPlan, started: Instant,
     ) -> Result<DaemonResponse> {
-        let mut db = CacheDB::new(SharedRemote(Rc::clone(&remote_rc)));
-        let caller = parse_address(&from)?;
-        let target = parse_address(&to)?;
-        let calldata = Bytes::from(parse_hex_bytes(&data)?);
-        let parsed_pre_calls = parse_pre_calls(&pre_calls)?;
-        let gas_limit = gas_limit.unwrap_or(DEFAULT_GAS_LIMIT);
-        let mut fund_account = |address: Address| -> Result<()> {
-            let info = db
-                .basic(address)
-                .map_err(|err| anyhow!("strict fund basic {address:#x}: {err}"))?
-                .unwrap_or_default();
-            let mut funded = info;
-            funded.balance = U256::MAX;
-            db.insert_account_info(address, funded);
-            Ok(())
-        };
-        fund_account(caller)?;
-        fund_account(Address::ZERO)?;
-        for call in &parsed_pre_calls {
-            fund_account(call.from)?;
+        // No prepared overlay, invented funding or transaction-prefix state.
+        let mut db = CacheDB::new(SharedRemote(Rc::clone(&remote)));
+        if let Some(balance) = plan.native_balance {
+            let mut info = db.basic(plan.actor)?.unwrap_or_default();
+            info.balance = balance;
+            db.insert_account_info(plan.actor, info);
         }
+        apply_token_deals(&mut db, &env, &req.token_deals, balance_slots, Some(&remote), true)
+            .map_err(|_| StrictFailure(StrictFailureKind::Observation))?;
 
-        apply_token_deals(
-            &mut db,
-            &block_env,
-            &token_deals,
-            balance_slots,
-            Some(remote_rc.as_ref()),
-        )?;
-
-        let observed_accounts: Vec<Address> = if observe_accounts.is_empty() {
-            vec![caller]
-        } else {
-            observe_accounts
-                .iter()
-                .map(|raw| parse_address(raw))
-                .collect::<Result<Vec<_>>>()?
-        };
-        let mut balances_before: Vec<(Address, Address, U256)> = Vec::new();
-        for raw in &observe_tokens {
-            let token = parse_address(raw)?;
-            for account in &observed_accounts {
-                balances_before.push((
-                    token,
-                    *account,
-                    erc20_balance_of(&mut db, &block_env, token, *account)?,
-                ));
+        // Performance-only hints. Trace values never enter pinned state; every
+        // missed/unsupported hint still executes against the identical source.
+        let accounts: Vec<_> = plan.calls.iter().flat_map(|c| [c.from, c.to])
+            .chain([plan.origin]).collect();
+        let mut storage = Vec::new();
+        for deal in &req.token_deals {
+            let token = parse_address(&deal.token)?;
+            for index in mapping_slot_candidates(deal.balance_slot, balance_slots.get(&token).copied()) {
+                storage.push((token, erc20_balance_slot(plan.actor, index)));
             }
         }
-        let mut supply_tokens: Vec<Address> = Vec::new();
-        let mut supply_before: Vec<(Address, U256)> = Vec::new();
-        for raw in &observe_total_supply {
-            let token = parse_address(raw)?;
-            supply_tokens.push(token);
-            supply_before.push((token, erc20_total_supply(&mut db, &block_env, token)?));
-        }
-
-        for call in &parsed_pre_calls {
-            let pre = execute_call(
-                &mut db,
-                &block_env,
-                call.from,
-                call.to,
-                Bytes::from(call.calldata.clone()),
-                call.gas_limit,
-                true,
-                false,
-            )?;
-            if !pre.result.is_success() {
-                bail!(
-                    "strict preCall failed: {}",
-                    format_execution_result(&pre.result)
-                );
-            }
-            db.commit(pre.state);
-        }
-
-        // Each request gets a fresh overlay over its source-bound remote cache.
-        // Prefetch the touched state of the main call (plus any
-        // preCalls) in ONE debug_traceCall prestateTracer round trip AND warm
-        // the tokenDeals' balance slots / approve allowance slots in ONE
-        // batched warm_batch, so the execution below (including
-        // apply_token_deals' write-verify-restore) hits the warm shared cache
-        // instead of serial-faulting every slot to the archive RPC. Mirrors
-        // prepare's T2a warm_batch + trace_prefetch.
-        {
-            let mut accounts: Vec<Address> = vec![Address::ZERO, caller];
-            for d in &token_deals {
-                let token = parse_address(&d.token)?;
-                let to = parse_address(&d.to)?;
-                accounts.push(token);
-                accounts.push(to);
-            }
-            for call in &parsed_pre_calls {
-                accounts.push(call.from);
-                accounts.push(call.to);
-            }
-            accounts.push(target);
-            let mut storage: Vec<(Address, U256)> = Vec::new();
-            for d in &token_deals {
-                let token = parse_address(&d.token)?;
-                let to = parse_address(&d.to)?;
-                for idx in mapping_slot_candidates(
-                    d.balance_slot,
-                    balance_slots.get(&token).copied(),
-                ) {
-                    storage.push((token, erc20_balance_slot(to, idx)));
-                }
-            }
-            for call in &parsed_pre_calls {
-                if let Some(spender) = decode_approve_spender(&call.calldata) {
-                    if let Some(slot) = call.allowance_slot {
-                        allowance_slots.insert(call.to, slot);
-                    }
-                    for idx in mapping_slot_candidates(
-                        call.allowance_slot,
-                        allowance_slots.get(&call.to).copied(),
-                    ) {
-                        storage.push((call.to, erc20_allowance_slot(call.from, spender, idx)));
-                    }
-                }
-            }
-            if remote_rc
-                .warm_batch(&accounts, &storage, None)
-                .is_ok()
-            {
-                let db_for_trace = CacheDB::new(SharedRemote(Rc::clone(&remote_rc)));
-                let mut trace_calls: Vec<ParsedPreCall> = Vec::new();
-                for call in &parsed_pre_calls {
-                    trace_calls.push(call.clone());
-                }
-                trace_calls.push(ParsedPreCall {
-                    from: caller,
-                    to: target,
-                    calldata: calldata.to_vec(),
-                    gas_limit,
-                    allowance_slot: None,
-                });
-                let refs: Vec<&ParsedPreCall> = trace_calls.iter().collect();
-                match trace_prefetch(&remote_rc, &db_for_trace, &refs) {
-                    Ok(stats) => {
-                        if stats.seeded_accounts + stats.seeded_slots > 0 {
-                            eprintln!(
-                                "[revm-sim] strictSimulate prefetch seeded {} accounts + {} slots ({}ms)",
-                                stats.seeded_accounts,
-                                stats.seeded_slots,
-                                started.elapsed().as_millis(),
-                            );
-                        }
-                    }
-                    Err(err) => eprintln!(
-                        "[revm-sim] strictSimulate trace prefetch failed: {err}"
-                    ),
+        for call in &plan.calls[..plan.calls.len() - 1] {
+            if let Some(spender) = decode_approve_spender(&call.calldata) {
+                if let Some(slot) = call.allowance_slot { allowance_slots.insert(call.to, slot); }
+                for index in mapping_slot_candidates(call.allowance_slot, allowance_slots.get(&call.to).copied()) {
+                    storage.push((call.to, erc20_allowance_slot(plan.actor, spender, index)));
                 }
             }
         }
+        if remote.warm_batch(&accounts, &storage, None).is_ok() {
+            let refs: Vec<_> = plan.calls.iter().collect();
+            let _ = trace_prefetch(&remote, &db, &refs);
+        }
+        remote.rpc.check_fatal()?;
 
-        let disable_eip3607 = caller_mode == "impersonated-call-frame";
-        let main = execute_call(
-            &mut db,
-            &block_env,
-            caller,
-            target,
-            calldata,
-            gas_limit,
-            true,
-            disable_eip3607,
-        )?;
-        let success = main.result.is_success();
-        let output = main
-            .result
-            .output()
-            .map(|bytes| format!("0x{}", hex::encode(bytes.as_ref())));
-        let logs: Vec<SimLog> = if observe_logs {
-            main.result
-                .logs()
-                .iter()
-                .map(|log| SimLog {
-                    address: format!("{:#x}", log.address),
-                    topics: log
-                        .data
-                        .topics()
-                        .iter()
-                        .map(|topic| format!("{topic:#x}"))
-                        .collect(),
-                    data: format!("0x{}", hex::encode(log.data.data.as_ref())),
-                })
-                .collect()
-        } else {
-            Vec::new()
+        // All overrides precede the baseline. Static probes use their own
+        // CacheDB/context, never the execution journal or transaction warm set.
+        let before_native = plan.native.iter().map(|a| db.basic(*a).map(|v| v.unwrap_or_default().balance))
+            .collect::<Result<Vec<_>, _>>()?;
+        let before_tokens = plan.pairs.iter().map(|(t, a)| strict_balance_of(&db, &env, *t, *a))
+            .collect::<Result<Vec<_>>>()?;
+        let before_supply = plan.supply.iter().map(|t| strict_probe(&db, &env, *t, Bytes::from_static(&TOTAL_SUPPLY_SELECTOR)))
+            .collect::<Result<Vec<_>>>()?;
+
+        let (outcome, gas_used, logs) = strict_execute(&mut db, &env, req, plan)?;
+        let success = matches!(outcome, StrictOutcome::Success { .. });
+        let output = match &outcome {
+            StrictOutcome::Success { output, .. } | StrictOutcome::Revert { output, .. } => Some(output.clone()),
+            StrictOutcome::Halt { .. } => None,
         };
-        let revert_reason = if success {
-            None
-        } else {
-            Some(format_execution_result(&main.result))
-        };
+        let revert_reason = match &outcome { StrictOutcome::Revert { output, .. } => Some(output.clone()), _ => None };
+        let mut effects = StrictSimulateEffects { outcome, execution_gas_used: gas_used.to_string(),
+            native_deltas: Vec::new(), token_deltas: Vec::new(), total_supply_deltas: Vec::new(),
+            logs: if success && req.observe_logs { logs } else { Vec::new() } };
+        // A failed sibling has no accepted effects, not partial setup effects.
         if success {
-            db.commit(main.state);
+            for (i, account) in plan.native.iter().enumerate() {
+                let after = db.basic(*account)?.unwrap_or_default().balance;
+                effects.native_deltas.push(SimNativeDelta { account: format!("{account:#x}"),
+                    before: before_native[i].to_string(), after: after.to_string(), delta: signed_delta(after, before_native[i]) });
+            }
+            for (i, (token, account)) in plan.pairs.iter().enumerate() {
+                let after = strict_balance_of(&db, &env, *token, *account)?;
+                effects.token_deltas.push(SimTokenDelta { token: format!("{token:#x}"), account: format!("{account:#x}"),
+                    delta: signed_delta(after, before_tokens[i]) });
+            }
+            for (i, token) in plan.supply.iter().enumerate() {
+                let after = strict_probe(&db, &env, *token, Bytes::from_static(&TOTAL_SUPPLY_SELECTOR))?;
+                effects.total_supply_deltas.push(SimTotalSupplyDelta { token: format!("{token:#x}"),
+                    delta: signed_delta(after, before_supply[i]) });
+            }
         }
-
-        let mut token_deltas: Vec<SimTokenDelta> = Vec::new();
-        for (token, account, before) in &balances_before {
-            let after = erc20_balance_of(&mut db, &block_env, *token, *account)?;
-            token_deltas.push(SimTokenDelta {
-                token: format!("{token:#x}"),
-                account: format!("{account:#x}"),
-                delta: signed_delta(after, *before),
-            });
-        }
-        let mut total_supply_deltas: Vec<SimTotalSupplyDelta> = Vec::new();
-        for (index, (token, before)) in supply_before.iter().enumerate() {
-            let _ = &supply_tokens[index];
-            let after = erc20_total_supply(&mut db, &block_env, *token)?;
-            total_supply_deltas.push(SimTotalSupplyDelta {
-                token: format!("{token:#x}"),
-                delta: signed_delta(after, *before),
-            });
-        }
-
-        Ok(DaemonResponse {
-            ok: true,
-            error: None,
-            success: Some(success),
-            output,
-            profit: None,
-            gas_used: Some(main.result.tx_gas_used().to_string()),
-            revert_reason,
-            latency_ms: started.elapsed().as_millis(),
-            missing_state_keys: db.db.missing_state_keys(),
-            cache_stats: None,
-            seed_stats: None,
-            strict: Some(StrictSimulateEffects {
-                token_deltas,
-                total_supply_deltas,
-                logs,
-            }),
-        })
+        Ok(DaemonResponse { ok: true, error: None, success: Some(success), output, profit: None,
+            gas_used: Some(gas_used.to_string()), revert_reason, latency_ms: started.elapsed().as_millis(),
+            missing_state_keys: db.db.missing_state_keys(), cache_stats: None, seed_stats: None, strict: Some(effects) })
     }
+}
+
+struct StrictPlan {
+    actor: Address,
+    origin: Address,
+    inner: bool,
+    native_balance: Option<U256>,
+    native: Vec<Address>,
+    pairs: Vec<(Address, Address)>,
+    supply: Vec<Address>,
+    calls: Vec<ParsedPreCall>,
+}
+
+impl StrictPlan {
+    fn validate(req: &StrictRequest) -> Result<Self> {
+        let address = |s: &str| -> Result<Address> { strict_hex(&json!(s), Some(20))?; parse_address(s) };
+        let uint = |s: &str| -> Result<U256> {
+            if s.is_empty() || s.len() > 78 || !s.bytes().all(|c| c.is_ascii_digit()) || (s.len() > 1 && s.starts_with('0')) { bail!("invalid uint256"); }
+            Ok(U256::from_str(s)?)
+        };
+        let addresses = |items: &[String]| -> Result<Vec<Address>> {
+            let out = items.iter().map(|s| address(s)).collect::<Result<Vec<_>>>()?;
+            if out.iter().collect::<HashSet<_>>().len() != out.len() { bail!("duplicate observation"); }
+            Ok(out)
+        };
+        let actor = address(&req.from)?;
+        let inner = match req.caller_mode.as_deref() { None | Some("top-level") => false,
+            Some("impersonated-call-frame") => true, _ => bail!("invalid caller mode") };
+        let origin = req.transaction_origin.as_deref().map(address).transpose()?;
+        if inner && (origin.is_none() || req.execution_gas_limit.is_none()) { bail!("missing inner context"); }
+        if !inner && origin.is_some_and(|o| o != actor) { bail!("top-level origin differs"); }
+        for gas in [req.gas_limit, req.execution_gas_limit].into_iter().flatten() {
+            if gas == 0 || gas > 9_007_199_254_740_991 { bail!("invalid gas limit"); }
+        }
+        let mut calls = Vec::new();
+        for c in &req.pre_calls {
+            if address(&c.from)? != actor || c.gas_limit.is_some_and(|g| g == 0 || g > 9_007_199_254_740_991) { bail!("invalid preCall"); }
+            strict_hex(&json!(c.calldata), None)?;
+            calls.push(ParsedPreCall { from: actor, to: address(&c.to)?, calldata: parse_hex_bytes(&c.calldata)?,
+                gas_limit: c.gas_limit.unwrap_or(DEFAULT_GAS_LIMIT), allowance_slot: c.allowance_slot });
+        }
+        strict_hex(&json!(req.data), None)?;
+        calls.push(ParsedPreCall { from: actor, to: address(&req.to)?, calldata: parse_hex_bytes(&req.data)?,
+            gas_limit: req.gas_limit.unwrap_or(DEFAULT_GAS_LIMIT), allowance_slot: None });
+        let mut seen_deals = HashSet::new();
+        for d in &req.token_deals {
+            if address(&d.to)? != actor || !seen_deals.insert(address(&d.token)?) { bail!("invalid token deal"); }
+            uint(&d.amount)?;
+        }
+        let pairs = if let Some(pairs) = &req.observe_token_balances {
+            if req.observe_tokens.is_some() || req.observe_accounts.is_some() { bail!("mixed observation forms"); }
+            let out = pairs.iter().map(|p| Ok((address(&p.token)?, address(&p.account)?))).collect::<Result<Vec<_>>>()?;
+            if out.iter().collect::<HashSet<_>>().len() != out.len() { bail!("duplicate pair"); }
+            out
+        } else {
+            // Legacy API alone retains Cartesian lists; absent tokens means no
+            // observations, absent/empty accounts means the declared caller.
+            let tokens = addresses(req.observe_tokens.as_deref().unwrap_or(&[]))?;
+            let mut accounts = addresses(req.observe_accounts.as_deref().unwrap_or(&[]))?;
+            if accounts.is_empty() { accounts.push(actor); }
+            tokens.iter().flat_map(|t| accounts.iter().map(move |a| (*t, *a))).collect()
+        };
+        Ok(Self { actor, origin: origin.unwrap_or(actor), inner,
+            native_balance: req.native_balance_wei.as_deref().map(uint).transpose()?,
+            native: addresses(req.observe_native_balances.as_deref().unwrap_or(&[]))?, pairs,
+            supply: addresses(&req.observe_total_supply)?, calls })
+    }
+}
+
+/// Ordinary mainnet execution with fee bookkeeping removed, not balances
+/// restored afterward. Validation/delegated code and internal transfers remain.
+struct StrictHandler<EVM, ERROR, FRAME> {
+    entry: Option<(Address, usize, bool)>,
+    marker: std::marker::PhantomData<(EVM, ERROR, FRAME)>,
+}
+impl<EVM, ERROR, FRAME> StrictHandler<EVM, ERROR, FRAME> {
+    fn new(entry: Option<(Address, usize, bool)>) -> Self { Self { entry, marker: std::marker::PhantomData } }
+}
+impl<EVM, ERROR, FRAME> Handler for StrictHandler<EVM, ERROR, FRAME>
+where
+    EVM: EvmTr<Context: ContextTr<Journal: JournalTr<State = EvmState>>, Frame = FRAME>,
+    ERROR: EvmTrError<EVM>,
+    FRAME: FrameTr<FrameResult = FrameResult, FrameInit = FrameInit>,
+{
+    type Evm = EVM;
+    type Error = ERROR;
+    type HaltReason = HaltReason;
+    fn validate_against_state_and_deduct_caller(&self, evm: &mut EVM, _: &mut InitialAndFloorGas) -> Result<(), ERROR> {
+        let (_, tx, cfg, journal, _, _) = evm.ctx().all_mut();
+        let mut caller = journal.load_account_with_code_mut(tx.caller())?.data;
+        revm::handler::pre_execution::validate_account_nonce_and_code_with_components(&caller.account().info, tx, cfg)?;
+        // Only top-level setup/main transactions use this hook. Inner entries
+        // bypass transaction pre-execution: neither actor nor origin is bumped.
+        caller.bump_nonce();
+        Ok(())
+    }
+    fn reimburse_caller(&self, _: &mut EVM, _: &mut FrameResult) -> Result<(), ERROR> { Ok(()) }
+    fn reward_beneficiary(&self, _: &mut EVM, _: &mut FrameResult) -> Result<(), ERROR> { Ok(()) }
+    fn first_frame_input(&mut self, evm: &mut EVM, gas: u64, reservoir: u64) -> Result<FrameInit, ERROR> {
+        let mut frame = MainnetHandler::<EVM, ERROR, FRAME>::default().first_frame_input(evm, gas, reservoir)?;
+        if let Some((actor, depth, is_static)) = self.entry {
+            evm.ctx().journal_mut().load_account_with_code(actor)?;
+            let FrameInput::Call(call) = &mut frame.frame_input else { unreachable!("strict accepts CALL only") };
+            call.caller = actor;
+            call.is_static = is_static;
+            frame.depth = depth;
+            // Actual known bytecode, target/storage address, value(0), scheme
+            // and every descendant's inputs are untouched.
+        }
+        Ok(frame)
+    }
+}
+
+fn strict_cfg(cfg: &mut revm::context::CfgEnv, profile: Option<MainnetProfile>) {
+    cfg.set_spec_and_mainnet_gas_params(profile.map_or(SpecId::PRAGUE, |p| p.spec));
+    if let Some(profile) = profile {
+        cfg.blob_base_fee_update_fraction = Some(profile.blob_fraction);
+        cfg.max_blobs_per_tx = Some(if profile.spec == SpecId::OSAKA { 6 } else { 9 });
+    }
+    cfg.disable_nonce_check = false;
+    cfg.disable_eip3607 = false;
+    cfg.tx_chain_id_check = true;
+}
+
+fn strict_tx(env: &BlockEnv, caller: Address, target: Address, data: Bytes, gas: u64, nonce: u64) -> TxEnv {
+    let mut tx = TxEnv::builder().caller(caller).to(target).data(data).value(U256::ZERO)
+        .gas_limit(gas).gas_price(env.basefee as u128).gas_priority_fee(Some(0)).chain_id(Some(1)).build_fill();
+    tx.nonce = nonce;
+    tx
+}
+
+fn strict_execute<D: ExecutionProfile>(db: &mut CacheDB<D>, env: &BlockEnv, req: &StrictRequest, plan: &StrictPlan)
+    -> Result<(StrictOutcome, u64, Vec<SimLog>)> {
+    let profile = db.db.execution_profile();
+    let ctx = Context::mainnet().modify_cfg_chained(|cfg| strict_cfg(cfg, profile)).with_block(env.clone()).with_db(&mut *db);
+    let mut evm = ctx.build_mainnet();
+    let mut handler = StrictHandler::<_, EVMError<RpcError>, _>::new(if plan.inner { Some((plan.actor, 1, false)) } else { None });
+    let mut used = 0u64;
+    let mut logs = Vec::new();
+    for (index, call) in plan.calls.iter().enumerate() {
+        let stage = if index + 1 == plan.calls.len() { StrictStage::Main } else { StrictStage::PreCall { index } };
+        let cap = req.execution_gas_limit.map_or(call.gas_limit, |budget| call.gas_limit.min(budget.saturating_sub(used)));
+        if cap == 0 { return Ok((StrictOutcome::Halt { reason: "OutOfGas".into(), stage }, used, Vec::new())); }
+        let nonce = evm.ctx.journaled_state.load_account_with_code(plan.origin)?.info.nonce;
+        // TxEnv supplies opcode environment for isolated CALLs, not a signed
+        // transaction. Its unused nonce is zero; actual account nonces are never
+        // overridden. Top-level messages instead consume the current nonce.
+        evm.ctx.tx = strict_tx(env, plan.origin, call.to, Bytes::from(call.calldata.clone()), cap, if plan.inner { 0 } else { nonce });
+        let result = if plan.inner {
+            if index == 0 {
+                // Validate the whole envelope's admitted gas bound, not just
+                // the first sibling's possibly smaller individual cap.
+                evm.ctx.tx.gas_limit = req.execution_gas_limit.expect("validated inner budget");
+                handler.validate_env(&mut evm).map_err(|_| StrictFailure(StrictFailureKind::Validation))?;
+                evm.ctx.tx.gas_limit = cap;
+                let origin = &evm.ctx.journaled_state.load_account_with_code(plan.origin)?.info;
+                revm::handler::pre_execution::validate_account_nonce_and_code(origin, nonce, false, true)
+                    .map_err(|_| StrictFailure(StrictFailureKind::Validation))?;
+                handler.load_accounts(&mut evm)?;
+            }
+            let frame = handler.first_frame_input(&mut evm, cap, 0)?;
+            let mut result = handler.run_exec_loop(&mut evm, frame)?;
+            revm::context_interface::context::take_error::<EVMError<RpcError>, _>(evm.ctx.error())?;
+            // No transaction intrinsic/floor cost per sibling. Refunds never
+            // replenish the common execution budget; a Halt spends its cap.
+            if result.instruction_result().is_halt() { result.gas_mut().spend_all(); }
+            let spent = cap - result.gas().remaining();
+            result.gas_mut().set_refund(0);
+            revm::handler::post_execution::output(&mut evm.ctx, result, ResultGas::default().with_total_gas_spent(spent))
+        } else {
+            handler.run(&mut evm).map_err(|error| match error {
+                EVMError::Transaction(_) | EVMError::Header(_) => StrictFailure(StrictFailureKind::Validation),
+                _ => StrictFailure(StrictFailureKind::Execution),
+            })?
+        };
+        used = used.checked_add(result.gas().total_gas_spent()).ok_or(StrictFailure(StrictFailureKind::Execution))?;
+        let hex_output = |b: &Bytes| format!("0x{}", hex::encode(b));
+        let outcome = match &result {
+            ExecutionResult::Success { output, .. } => StrictOutcome::Success { output: hex_output(output.data()), stage },
+            ExecutionResult::Revert { output, .. } => StrictOutcome::Revert { output: hex_output(output), stage },
+            ExecutionResult::Halt { reason, .. } => StrictOutcome::Halt { reason: format!("{reason:?}"), stage },
+        };
+        if !result.is_success() { return Ok((outcome, used, Vec::new())); }
+        logs.extend(result.logs().iter().map(|log| SimLog { address: format!("{:#x}", log.address),
+            topics: log.data.topics().iter().map(|t| format!("{t:#x}")).collect(), data: hex_output(&log.data.data) }));
+        if index + 1 == plan.calls.len() {
+            // Commit only after every sibling succeeds. The db remains at its
+            // post-override baseline on any failure; even preCall logs vanish.
+            let state = evm.ctx.journaled_state.finalize();
+            drop(evm);
+            db.commit(state);
+            return Ok((outcome, used, logs));
+        }
+        // Inner: retain the same transaction journal/transient/warm set. Top
+        // level: Handler::execution_result already committed/reset tx-local
+        // state while preserving persistent state/nonce in this sandbox.
+    }
+    unreachable!("strict plan always includes main")
+}
+
+fn strict_probe<D: ExecutionProfile>(db: &CacheDB<D>, env: &BlockEnv, token: Address, data: Bytes) -> Result<U256> {
+    let probe = || -> Result<U256> {
+        let profile = db.db.execution_profile();
+        // Read-through snapshot: even observation SLOAD warmness/transient
+        // storage/logs are separate. No synthetic balance, fee or nonce writes.
+        let ctx = Context::mainnet().modify_cfg_chained(|cfg| strict_cfg(cfg, profile)).with_block(env.clone())
+            .with_db(CacheDB::new(db)).with_tx(strict_tx(env, Address::ZERO, token, data, 300_000, 0));
+        let mut evm = ctx.build_mainnet();
+        let mut handler = StrictHandler::<_, EVMError<RpcError>, _>::new(Some((Address::ZERO, 0, true)));
+        handler.load_accounts(&mut evm)?;
+        let frame = handler.first_frame_input(&mut evm, 300_000, 0)?;
+        let result = handler.run_exec_loop(&mut evm, frame)?;
+        revm::context_interface::context::take_error::<EVMError<RpcError>, _>(evm.ctx.error())?;
+        let bytes = result.output().into_data();
+        if !result.instruction_result().is_ok() || bytes.len() != 32 { bail!("invalid static observation"); }
+        Ok(U256::from_be_slice(&bytes))
+    };
+    probe().map_err(|_| StrictFailure(StrictFailureKind::Observation).into())
+}
+
+fn strict_balance_of<D: ExecutionProfile>(db: &CacheDB<D>, env: &BlockEnv, token: Address, account: Address) -> Result<U256> {
+    let mut data = BALANCE_OF_SELECTOR.to_vec();
+    data.extend_from_slice(&[0u8; 12]); data.extend_from_slice(account.as_slice());
+    strict_probe(db, env, token, Bytes::from(data))
 }
 
 /// Pre-fetch the touched-state set of `calls` in one batched `debug_traceCall`
@@ -2773,32 +2844,6 @@ where
     Ok(parse_u256_from_evm_output(bytes.as_ref()))
 }
 
-fn erc20_total_supply<D>(db: &mut CacheDB<D>, block_env: &BlockEnv, token: Address) -> Result<U256>
-where
-    D: ExecutionProfile,
-{
-    let output = execute_call(
-        db,
-        block_env,
-        Address::ZERO,
-        token,
-        Bytes::from_static(&TOTAL_SUPPLY_SELECTOR),
-        300_000,
-        false,
-        false,
-    )?;
-    if !output.result.is_success() {
-        bail!(
-            "totalSupply({token:#x}) failed: {}",
-            format_execution_result(&output.result)
-        );
-    }
-    let bytes = output
-        .result
-        .output()
-        .ok_or_else(|| anyhow!("totalSupply returned no output"))?;
-    Ok(parse_u256_from_evm_output(bytes.as_ref()))
-}
 
 fn signed_delta(post: U256, pre: U256) -> String {
     if post >= pre {
@@ -2855,6 +2900,7 @@ fn apply_token_deals<D>(
     deals: &[TokenDeal],
     balance_slots: &mut HashMap<Address, u64>,
     remote: Option<&RemoteRevmDb>,
+    strict: bool,
 ) -> Result<()>
 where
     D: ExecutionProfile,
@@ -2866,7 +2912,7 @@ where
         if amount.is_zero() {
             continue;
         }
-        if erc20_balance_of(db, block_env, token, to).unwrap_or(U256::ZERO) >= amount {
+        if deal_balance(db, block_env, token, to, strict)? >= amount {
             continue;
         }
 
@@ -2881,7 +2927,7 @@ where
             db.insert_account_storage(token, slot, amount)
                 .map_err(|err| anyhow!("failed writing deal slot {token:#x}:{slot:#x}: {err}"))?;
             mark_account_touched(db, token);
-            let balance = erc20_balance_of(db, block_env, token, to).unwrap_or(U256::ZERO);
+            let balance = deal_balance(db, block_env, token, to, strict)?;
             if balance >= amount {
                 balance_slots.insert(token, slot_index);
                 applied = true;
@@ -2920,7 +2966,7 @@ where
                         })?;
                         mark_account_touched(db, *owner);
                         let balance =
-                            erc20_balance_of(db, block_env, token, to).unwrap_or(U256::ZERO);
+                            deal_balance(db, block_env, token, to, strict)?;
                         if balance >= amount {
                             balance_slots.insert(token, slot_index);
                             applied = true;
@@ -2958,8 +3004,9 @@ let _ = db.basic_ref(storage_owner);
                                 )
                             })?;
                         mark_account_touched(db, storage_owner);
-                        let Ok(balance) = erc20_balance_of(db, block_env, token, to) else {
-                            break;
+                        let balance = if strict { strict_balance_of(db, block_env, token, to)? } else {
+                            let Ok(balance) = erc20_balance_of(db, block_env, token, to) else { break; };
+                            balance
                         };
 eprintln!("[revm-sim] deal slot try token={token:#x} owner={storage_owner:#x} slot={slot:#x} amount={amount}");
 eprintln!("[revm-sim] deal slot balance after write: {balance}");
@@ -2999,6 +3046,11 @@ eprintln!("[revm-sim] deal slot balance after write: {balance}");
 
 const EIP1967_IMPLEMENTATION_SLOT: &str =
     "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
+
+fn deal_balance<D: ExecutionProfile>(db: &mut CacheDB<D>, env: &BlockEnv, token: Address, account: Address, strict: bool) -> Result<U256> {
+    if strict { strict_balance_of(db, env, token, account) }
+    else { Ok(erc20_balance_of(db, env, token, account).unwrap_or(U256::ZERO)) }
+}
 
 /// Read the EIP-1967 implementation slot for a possibly-proxied token.
 /// Returns None when the slot is empty (non-proxy) or the read fails.
@@ -3390,6 +3442,120 @@ fn hex_quantity_u64(value: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug, Clone)]
+    struct LocalStrictDb;
+    impl DatabaseRef for LocalStrictDb {
+        type Error = RpcError;
+        fn basic_ref(&self, _: Address) -> Result<Option<AccountInfo>, RpcError> { Ok(None) }
+        fn code_by_hash_ref(&self, _: B256) -> Result<Bytecode, RpcError> { Err(RpcError("unseeded test code".into())) }
+        fn storage_ref(&self, _: Address, _: U256) -> Result<U256, RpcError> { Ok(U256::ZERO) }
+        fn block_hash_ref(&self, _: u64) -> Result<B256, RpcError> { Ok(B256::ZERO) }
+    }
+    impl ExecutionProfile for LocalStrictDb {
+        fn execution_profile(&self) -> Option<MainnetProfile> { Some(test_source().profile) }
+    }
+    fn local_strict(inner: bool, code: &str) -> (CacheDB<LocalStrictDb>, StrictRequest) {
+        let actor = format!("0x{}", "aa".repeat(20));
+        let target = format!("0x{}", "bb".repeat(20));
+        let origin = format!("0x{}", "dd".repeat(20));
+        let mut value = json!({"blockNumber":300, "from":actor, "to":target, "data":"0x", "gasLimit":100000});
+        if inner { value["callerMode"] = json!("impersonated-call-frame"); value["transactionOrigin"] = json!(origin); value["executionGasLimit"] = json!(200000); }
+        let req: StrictRequest = serde_json::from_value(value).unwrap();
+        let mut db = CacheDB::new(LocalStrictDb);
+        for (address, nonce, code) in [(actor, 7, "0x"), (origin, 9, "0x"), (target, 5, code)] {
+            let bytes = Bytes::from(parse_hex_bytes(code).unwrap());
+            db.insert_account_info(parse_address(&address).unwrap(), AccountInfo { nonce, balance: U256::from(20),
+                code_hash: keccak256(&bytes), code: Some(Bytecode::new_raw(bytes)), ..Default::default() });
+        }
+        (db, req)
+    }
+    fn setup(req: &StrictRequest, data: &str) -> PreCall {
+        PreCall { from: req.from.clone(), to: req.to.clone(), calldata: data.into(), gas_limit: Some(100000), allowance_slot: None }
+    }
+
+    #[test]
+    fn strict_nonce_conventions_preserve_inner_origin_actor_and_top_level_progression() {
+        for inner in [false, true] {
+            let (mut db, mut req) = local_strict(inner, "0x00");
+            req.pre_calls = vec![setup(&req, "0x"), setup(&req, "0x")];
+            let plan = StrictPlan::validate(&req).unwrap();
+            if inner {
+                let mut info = db.basic(plan.origin).unwrap().unwrap(); info.nonce = u64::MAX;
+                db.insert_account_info(plan.origin, info);
+            }
+            let (outcome, _, _) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+            assert!(matches!(outcome, StrictOutcome::Success { .. }));
+            assert_eq!(db.basic(plan.actor).unwrap().unwrap().nonce, if inner { 7 } else { 10 });
+            if inner { assert_eq!(db.basic(plan.origin).unwrap().unwrap().nonce, u64::MAX); }
+            assert_eq!(db.basic(plan.actor).unwrap().unwrap().balance, U256::from(20));
+        }
+    }
+
+    #[test]
+    fn strict_nested_create_changes_only_real_creator_nonce() {
+        let (mut db, req) = local_strict(true, "0x600060006000f060005260206000f3");
+        let plan = StrictPlan::validate(&req).unwrap();
+        let (result, _, _) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+        assert!(matches!(result, StrictOutcome::Success { .. }));
+        assert_eq!(db.basic(parse_address(&req.to).unwrap()).unwrap().unwrap().nonce, 6);
+        assert_eq!(db.basic(plan.actor).unwrap().unwrap().nonce, 7);
+        assert_eq!(db.basic(plan.origin).unwrap().unwrap().nonce, 9);
+    }
+
+    #[test]
+    fn strict_failed_main_rolls_back_setup_storage_nonce_and_logs() {
+        // Nonempty calldata performs a setup write/log; empty calldata reverts.
+        for inner in [false, true] {
+            let (mut db, mut req) = local_strict(inner, "0x3615601057600160005560006000a0005b60006000fd");
+            let to = parse_address(&req.to).unwrap();
+            db.insert_account_storage(to, U256::ZERO, U256::from(9)).unwrap();
+            req.pre_calls = vec![setup(&req, "0x01")];
+            let plan = StrictPlan::validate(&req).unwrap();
+            let (outcome, _, logs) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+            assert!(matches!(outcome, StrictOutcome::Revert { stage: StrictStage::Main, .. }));
+            assert!(logs.is_empty()); assert_eq!(db.storage(to, U256::ZERO).unwrap(), U256::from(9));
+            assert_eq!(db.basic(plan.actor).unwrap().unwrap().nonce, 7);
+        }
+    }
+
+    #[test]
+    fn strict_static_probes_cannot_change_cache_state_or_execution_warmness() {
+        let (db, req) = local_strict(true, "0x60005460005260206000f3");
+        let target = parse_address(&req.to).unwrap();
+        let snapshot = format!("{:?}", db.cache);
+        assert_eq!(strict_probe(&db, &test_source().env, target, Bytes::new()).unwrap(), U256::ZERO);
+        assert_eq!(format!("{:?}", db.cache), snapshot);
+        let plan = StrictPlan::validate(&req).unwrap();
+        let mut probed = db.clone(); let mut unprobed = db;
+        let (_, probed_gas, _) = strict_execute(&mut probed, &test_source().env, &req, &plan).unwrap();
+        let (_, plain_gas, _) = strict_execute(&mut unprobed, &test_source().env, &req, &plan).unwrap();
+        assert_eq!(probed_gas, plain_gas);
+        for code in ["0x600160005560005460005260206000f3", "0x600160005d60005c60005260206000f3", "0x60006000a060206000f3"] {
+            let (db, req) = local_strict(true, code); let before = format!("{:?}", db.cache);
+            assert!(strict_probe(&db, &test_source().env, parse_address(&req.to).unwrap(), Bytes::new()).is_err());
+            assert_eq!(format!("{:?}", db.cache), before);
+        }
+    }
+
+    #[test]
+    fn strict_raw_daemon_validation_rejects_new_shape_faults_before_endpoint_resolution() {
+        let (_, req) = local_strict(true, "0x00");
+        for extra in [json!({"nativeBalanceWei":"-1"}), json!({"nativeBalanceWei":null}), json!({"value":"1"}),
+            json!({"transactionOrigin":null}), json!({"executionGasLimit":0}),
+            json!({"observeTokenBalances":[], "observeTokens":[]}),
+            json!({"observeTokenBalances":[{"token":req.to,"account":req.from},{"token":req.to,"account":req.from}]}),
+            json!({"preCalls":[{"from":req.from,"to":req.to,"calldata":"0x","value":"1"}]})] {
+            let mut daemon = Daemon::default();
+            let mut wire = json!({"op":"strictSimulate","epoch":"strict-test","requestId":"1","blockNumber":300,
+                "from":req.from,"to":req.to,"data":"0x","callerMode":"impersonated-call-frame",
+                "transactionOrigin":req.transaction_origin,"executionGasLimit":100000});
+            wire.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            let response = daemon.handle_line(&wire.to_string());
+            assert!(!response.response.ok); assert!(matches!(response.error_kind, Some(StrictFailureKind::Validation)));
+            assert!(daemon.http.is_none()); assert!(daemon.warm.is_none()); assert!(response.fatal.is_none());
+        }
+    }
 
     fn pinned_header() -> Value {
         json!({"number":"0x12c", "hash":format!("0x{}", "11".repeat(32)),
