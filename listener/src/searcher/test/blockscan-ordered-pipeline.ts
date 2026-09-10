@@ -154,9 +154,9 @@ test("actual Solver keeps exact propagation, grid/GSS sizing and finalist bytes"
         quoteSafetyBps: 10_000n, quoteProfitFloorBps: 0n, strictSession: fixture.session,
         signal, timing, onDeferredCandidates: (values) => { finalists = values; },
       });
-      assert.equal(timing.amountPoints, 9);
+      assert.equal(timing.amountPoints, 8);
       assert.equal(timing.gssPoints, 4);
-      assert.equal(timing.hopExactCalls, 18);
+      assert.equal(timing.hopExactCalls, 16);
       assert.equal(timing.simMs, 0);
       const selected = finalists.length ? finalists : [solved];
       assert.equal(selected.length, 3);

@@ -63,6 +63,8 @@ assert(
 console.log("[runtime-defaults] deploy preserves block-scan multicall mode: PASS");
 
 const searcherMain = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+assert(/SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS\s*\?\? "200"/.test(searcherMain),
+  "enumeration defaults to 2%, independently of Exact admission");
 assert(
   searcherMain.includes("SEARCHER_DRY_RUN_USE_READY_GENERATION") &&
     searcherMain.includes("requires SEARCHER_DRY_RUN=1") &&

@@ -94,6 +94,8 @@ export interface SolveOptions {
   gssMaxTries?: number;
   /** Geometric grid doublings each side of the victim-anchored center. Default 3. */
   gridHalfWidth?: number;
+  /** Block-scan coarse grid only. Default multiples: [P, 5P, 10P, 15P]. */
+  blockScanAmountGrid?: "multiples" | "geometric";
   /** How many top quote-ranked amount candidates get a full BotVM simulate.
    *  Default 3 — the whole point is to NOT full-sim every searched point. */
   finalSimTopN?: number;
@@ -388,11 +390,17 @@ export class AnvilSolver implements Solver {
         lastFailure = `deadline ${deadlineMs}ms reached during quote search`;
         break;
       }
-      // Coarse pass: swap victims use a victim-anchored grid; oracle victims
-      // search down from the live flash-liquidity cap.
+      // Coarse pass: block-scan defaults to multiples of its scanner seed;
+      // swap victims keep their geometric grid, oracle victims their cap grid.
       const grid = isOracleVictim
         ? oracleSearchGrid(maxFlashAmount!)
-        : capGrid(geometricGrid(center, gridHalfWidth), maxFlashAmount);
+        : capGrid(
+            plan.opportunity.kind === "block-scan-arb" &&
+              (opts.blockScanAmountGrid ?? "multiples") === "multiples"
+              ? [center, center * 5n, center * 10n, center * 15n]
+              : geometricGrid(center, gridHalfWidth),
+            maxFlashAmount,
+          );
       let bestX = grid[0] ?? center;
       let bestVal = FAIL_SCORE;
       // Independent amounts share a pinned session; each amount's dependent

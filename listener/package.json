@@ -58,6 +58,8 @@
     "searcher:sim-gas-on-revert": "node --import tsx src/searcher/test/sim-gas-on-revert.ts",
     "searcher:cycle-fingerprint": "node --import tsx src/searcher/test/cycle-fingerprint.ts",
     "searcher:blockscan-solver-center": "node --import tsx src/searcher/test/blockscan-solver-center.ts",
+    "searcher:blockscan-amount-reference": "node --import tsx src/searcher/test/blockscan-amount-reference.ts",
+    "searcher:blockscan-solver-amount-grid": "node --import tsx src/searcher/test/blockscan-solver-amount-grid.ts",
     "searcher:blockscan-solver-search-config": "node --import tsx src/searcher/test/blockscan-solver-search-config.ts",
     "searcher:blockscan-solver-quote-concurrency": "node --import tsx src/searcher/test/blockscan-solver-quote-concurrency.ts",
     "searcher:solver-grid-quote-concurrency": "node --import tsx src/searcher/test/solver-grid-quote-concurrency.ts",

@@ -403,6 +403,8 @@ const tests: TestCase[] = [
       assert(above.opportunities.every(opp => (opp.coarseSpreadBps ?? 0) > 500), "output must satisfy enumeration floor");
       assert(above.selection.admittedCount === 1, "unchanged 50bps Exact guard accepts the subset");
       assert(scanAtReturn(1.049, 50).opportunities.length === 1, "lower enumeration floor still works without changing Exact");
+      assert(scanAtReturn(1.019, 200).opportunities.length === 0, "1.9% loop fails the new 2% floor");
+      assert(scanAtReturn(1.021, 200).opportunities.length === 1, "2.1% loop passes without changing Exact's 50bps guard");
       console.log("[blockscan-scanner] enumeration spread floor independent of exact admission: PASS");
     },
   },

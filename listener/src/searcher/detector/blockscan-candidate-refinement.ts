@@ -5,7 +5,7 @@ import {
   withStateCallControl,
 } from "../../shared/state/state-backend.js";
 import type { BlockScanOpportunity } from "./detector.js";
-import { BLOCKSCAN_MIN_EXECUTABLE_INPUT } from "./blockscan-sizing-constants.js";
+import { resolveExactProbe } from "../blockscan-amount-reference.js";
 import {
   BlockScanFamilyAttributedError,
   BlockScanFamilyStageBudget,
@@ -76,6 +76,7 @@ export interface BlockScanProbeDiagnostic {
 export interface BlockScanProbeFailureDiagnostic {
   readonly reason:
     | "exact_not_admitted"
+    | "amount_reference_over_cap"
     | "family_circuit_open"
     | "instance_circuit_open"
     | "composite_circuit_open"
@@ -95,6 +96,8 @@ export interface BlockScanProbeFailureDiagnostic {
 }
 
 export interface BlockScanRefinementOptions {
+  /** Frozen current-source reference amounts. Missing means the explicit 10-raw-unit probe. */
+  readonly gasMinimumByOpportunity?: ReadonlyMap<BlockScanOpportunity, bigint>;
   /** Uniform deadline for each exact route probe. */
   readonly probeTimeoutMs?: number;
   /**
@@ -163,7 +166,10 @@ export async function refineBlockScanCandidates(
   // The central scheduler owns one global work queue. Family IDs remain
   // opaque attribution data only; they must not create separate queues or
   // concurrency quotas.
-  let work = opportunities.map((opportunity, index) => ({ opportunity, index }));
+  let work = opportunities.map((opportunity, index) => ({
+    opportunity, index,
+    probeAmount: resolveExactProbe(options.gasMinimumByOpportunity?.get(opportunity)),
+  }));
   const routeFamilyIds = (
     opportunity: BlockScanOpportunity,
   ): readonly string[] => {
@@ -322,6 +328,19 @@ export async function refineBlockScanCandidates(
       shadow.admittedSpreadBuckets[bucket].total++;
     }
   };
+  // Amount policy runs before deadlines and Family circuits, so a cap-rejected
+  // route can never become a deadline fallback or a Family-attributed failure.
+  work = work.filter(({ opportunity, index, probeAmount }) => {
+    const ceiling = minBigint(opportunity.searchSeed.searchCenter, opportunity.searchSeed.maxInput);
+    if (probeAmount <= ceiling) return true;
+    recordShadowTotal(opportunity);
+    recordShadow(opportunity, "unprobed");
+    onProbe?.({
+      index, status: "unprobed", marginBps: null, attempted: false,
+      failure: probeFailureDiagnostic("amount_reference_over_cap", []),
+    });
+    return false;
+  });
   const workerCount = Math.max(1, Math.min(concurrency, work.length));
   const probeTimeoutMs = positiveInteger(
     options.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS,
@@ -408,7 +427,7 @@ export async function refineBlockScanCandidates(
     item: typeof work[number],
     familyIds: readonly string[],
   ): Promise<void> => {
-    const { opportunity, index } = item;
+    const { opportunity, index, probeAmount } = item;
     const probeController = new AbortController();
     const detachGlobal = linkAbort(
       deadlineController.signal,
@@ -442,6 +461,7 @@ export async function refineBlockScanCandidates(
       const probe = exactProbeMarginBps(
         controlledState,
         opportunity,
+        probeAmount,
         probeDeadlineAtMs,
         probeController.signal,
         options.executor,
@@ -471,13 +491,8 @@ export async function refineBlockScanCandidates(
         throw probeController.signal.reason ?? new ProbeTimeoutError(localBudgetMs);
       }
       if (marginBps > 0) {
-        // The exact admission probe is deliberately cheap: it prices one
-        // small executable amount (ceiling / 1024).  Preserve that amount as
-        // the solver's search anchor.  The coarse scanner's center is a
-        // capacity estimate, not evidence that this much capital remains
-        // profitable; restoring it here can move the solver ~1000x away from
-        // the only amount that just passed exact admission.
-        const probeAmount = exactProbeAmount(opportunity);
+        // Preserve the amount actually quoted, including the explicit cold
+        // start floor. Do not recompute against a later gas reference.
         const anchoredOpportunity: BlockScanOpportunity = {
           ...opportunity,
           searchSeed: {
@@ -759,6 +774,7 @@ export function exactProbePriority(
 async function exactProbeMarginBps(
   state: StateBackend,
   opportunity: BlockScanOpportunity,
+  amountIn: bigint,
   deadlineAtMs: number,
   signal: AbortSignal,
   executor?: string,
@@ -771,11 +787,6 @@ async function exactProbeMarginBps(
   ) => void = () => {},
   onRouteSuccess: () => void = () => {},
 ): Promise<number> {
-  const ceiling = minBigint(opportunity.searchSeed.searchCenter, opportunity.searchSeed.maxInput);
-  const amountIn = exactProbeAmount(opportunity);
-  if (amountIn > ceiling || amountIn <= 0n) {
-    return 0;
-  }
   let amount = amountIn;
   for (const edge of opportunity.seedEdges) {
     if (Date.now() >= deadlineAtMs) {
@@ -818,20 +829,8 @@ async function exactProbeMarginBps(
   return Number.isFinite(marginBps) && marginBps > 0 ? marginBps : 0;
 }
 
-function exactProbeAmount(opportunity: BlockScanOpportunity): bigint {
-  const ceiling = minBigint(
-    opportunity.searchSeed.searchCenter,
-    opportunity.searchSeed.maxInput,
-  );
-  return maxBigint(BLOCKSCAN_MIN_EXECUTABLE_INPUT, ceiling / 1024n);
-}
-
 function minBigint(a: bigint, b: bigint): bigint {
   return a < b ? a : b;
-}
-
-function maxBigint(a: bigint, b: bigint): bigint {
-  return a > b ? a : b;
 }
 
 function probeFailureDiagnostic(

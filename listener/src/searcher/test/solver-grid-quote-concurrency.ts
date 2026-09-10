@@ -205,6 +205,7 @@ async function measure(Solver: SolverClass, scenario: Scenario, pairParallel: bo
     console.log = (...args) => { logs.push(args.join(" ")); };
     returned = await new Solver().solve(plan, noState, probe, {
       strictSession: fixture.session, deferPhase2Sim: true, finalSimTopN: scenario.finalists ?? 6,
+      blockScanAmountGrid: "geometric", // Compare scheduling, not the new amount policy.
       gridHalfWidth: scenario.halfWidth ?? 2, gssMaxTries: 4,
       quoteSafetyBps: safetyBps, quoteProfitFloorBps: scenario.floor ?? 0n, timing,
       onDeferredCandidates(value) { callbackCount++; deferred = value; },
@@ -282,6 +283,7 @@ async function cancellation(Solver: SolverClass, mode: "abort" | "deadline", par
   const deadlineAtMs = mode === "deadline" ? Date.now() + 250 : undefined;
   const solve = new Solver().solve(plan, noState, probe, {
     strictSession: fixture.session, deferPhase2Sim: true, finalSimTopN: 3,
+    blockScanAmountGrid: "geometric",
     gridHalfWidth: 6, gssMaxTries: 4, quoteSafetyBps: 10_000n, quoteProfitFloorBps: 0n,
     signal: controller.signal, deadlineAtMs, timing,
     onDeferredCandidates() { candidates++; if (stopped) violations.push("late candidate"); },
@@ -374,7 +376,7 @@ async function transportReuse(Solver: SolverClass, positive = false, pairParalle
       ordinal = 0;
       phaseByAmount.clear();
       const solve = new Solver().solve(plan, noState, probe, {
-        strictSession: fixture.session, gridHalfWidth: 2, gssMaxTries: 4,
+        strictSession: fixture.session, blockScanAmountGrid: "geometric", gridHalfWidth: 2, gssMaxTries: 4,
         quoteSafetyBps: 10_000n, quoteProfitFloorBps: 0n, timing,
         deferPhase2Sim: true, finalSimTopN: 1,
       });
@@ -449,7 +451,7 @@ async function finalFallbacks(Solver: SolverClass, reuse: boolean,
           : { success: false, netProfit: 0n, revertReason: "fixture final simulation rejection" };
       },
     }, {
-      strictSession: session, gridHalfWidth: 2, gssMaxTries: 4, finalSimTopN: 3,
+      strictSession: session, blockScanAmountGrid: "geometric", gridHalfWidth: 2, gssMaxTries: 4, finalSimTopN: 3,
       quoteSafetyBps: 10000n, quoteProfitFloorBps: 0n, timing,
       onDeferredCandidates() { assert.fail("full simulation path deferred candidates"); },
     });
@@ -491,7 +493,7 @@ async function solveLocalHandles() {
     const before = fixture.stats.calls;
     const timing = timingSink();
     const result = await solver.solve(plan, noState, probe, {
-      strictSession: fixture.session, gridHalfWidth: 2, gssMaxTries: 4, finalSimTopN: 3,
+      strictSession: fixture.session, blockScanAmountGrid: "geometric", gridHalfWidth: 2, gssMaxTries: 4, finalSimTopN: 3,
       quoteSafetyBps: 10000n, quoteProfitFloorBps: 0n, deferPhase2Sim: true, timing,
       onDeferredCandidates(candidates) { assert.equal(candidates.length, 3); },
     });
@@ -521,7 +523,7 @@ async function constructionCancellation(Solver: SolverClass, boundary: "search-e
   }) as unknown as typeof fixture.session;
   try {
     await assert.rejects(new Solver().solve(plan, noState, probe, {
-      strictSession: session, gridHalfWidth: 2, gssMaxTries: 4, finalSimTopN: 3,
+      strictSession: session, blockScanAmountGrid: "geometric", gridHalfWidth: 2, gssMaxTries: 4, finalSimTopN: 3,
       quoteSafetyBps: 10000n, quoteProfitFloorBps: 0n, deferPhase2Sim: true,
       signal: controller.signal, timing, onDeferredCandidates() { candidates++; },
     }), /abort|deadline/);

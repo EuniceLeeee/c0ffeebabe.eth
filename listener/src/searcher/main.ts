@@ -30,6 +30,7 @@ import {
 } from "./blockscan-enumeration-solver-telemetry.js";
 import { blockScanRouteId } from "./blockscan-route-identity.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
+import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import type { CanonicalSource } from
@@ -889,7 +890,7 @@ async function main(): Promise<void> {
     );
   }
   const blockScanMinSpreadBps = Number(
-    process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "500",
+    process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "200",
   );
   const blockScanCfg: BlockScanCoreConfig | undefined = enableBlockScan
     ? {
@@ -897,7 +898,7 @@ async function main(): Promise<void> {
         minSpreadBps: blockScanMinSpreadBps,
         requireDislocatedPair: true,
         /*
-         * Enumeration defaults to 500bps (5%). Exact keeps its independent
+         * Enumeration defaults to 200bps (2%). Exact keeps its independent
          * 50bps (0.5%) admission guard and consumes the enumerated subset.
          */
         exactAdmissionSpreadBps: Number(
@@ -1306,6 +1307,7 @@ async function main(): Promise<void> {
       `solveConcurrency=${blockScanSolveConcurrency} ` +
       `solverQuoteConcurrency=${blockScanSolverSearch.quoteConcurrency} ` +
       `solverGridHalfWidth=${blockScanSolverSearch.gridHalfWidth} ` +
+      `solverAmountGrid=${blockScanSolverSearch.amountGrid} ` +
       `solverGssMaxTries=${blockScanSolverSearch.gssMaxTries} ` +
       `refineCandidates=${blockScanRefineCandidates} ` +
       `passBudgetMs=${blockScanPassBudgetMs} ` +
@@ -2076,6 +2078,7 @@ async function main(): Promise<void> {
   }
 
   const blockScanSimRejects = new BlockScanSimRejectCache();
+  const blockScanAmountReference = new BlockScanAmountReference(ADDR.WETH);
   let activeBlindSourceHead: BlindProductionSourceHeadControl | null = null;
   let preparedBlindBase: BlindProductionPrepareControl | null = null;
   let preparedBlindDynamicResetNonce: string | null = null;
@@ -2092,6 +2095,7 @@ async function main(): Promise<void> {
       ) {
         throw new Error(`missing canonical header ${blockNumber}`);
       }
+      blockScanAmountReference.observeHeader(block);
       return Object.freeze({
         number: block.number,
         hash: block.hash.toLowerCase(),
@@ -2134,6 +2138,8 @@ async function main(): Promise<void> {
     refineCandidates: blockScanRefineCandidates,
     solveReserveMs: blockScanSolveReserveMs,
     solverGridHalfWidth: blockScanSolverSearch.gridHalfWidth,
+    solverAmountGrid: blockScanSolverSearch.amountGrid,
+    amountReference: blockScanAmountReference,
     solverGssMaxTries: blockScanSolverSearch.gssMaxTries,
     solverQuoteConcurrency: blockScanSolverSearch.quoteConcurrency,
     exactConcurrency: blockScanExactConcurrency,
@@ -2199,6 +2205,7 @@ async function main(): Promise<void> {
         bundleRouter,
         submissionCoordinator,
         simRejects: blockScanSimRejects,
+        onSuccessfulSimulation: (sample) => blockScanAmountReference.recordSimulation(sample),
         strategyVersions: {
           strategy_view_version:
             strategyViews.versions.strategy_view_version,
@@ -4354,6 +4361,7 @@ async function maybeSubmitBlockScanAtomic(params: {
   plans: number;
   passDeadlineAtMs: number;
   simRejects: BlockScanSimRejectCache;
+  onSuccessfulSimulation?: (sample: Parameters<BlockScanAmountReference["recordSimulation"]>[0]) => void;
   profitTokenValuation: ProfitTokenValuation;
   sourceBlockHash: string;
   signal: AbortSignal;
@@ -4603,6 +4611,14 @@ async function maybeSubmitBlockScanAtomic(params: {
         return finish("blockscan_stale_after_sim");
       }
       finalSimStatus = "succeeded";
+      // Record before EV can reject a gas-expensive but successfully executed
+      // route. Reuse the source/hash check above; no extra RPC for sizing.
+      params.onSuccessfulSimulation?.({
+        opportunity: opp,
+        source: { number: sourceBlock, hash: sourceBlockHash, generation: sourceGeneration },
+        gasUsed: sim.gasUsed,
+        success: sim.success,
+      });
     }
     emitEvent({
       type: "simulation_result",

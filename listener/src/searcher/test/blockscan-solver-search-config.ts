@@ -3,6 +3,7 @@ import { resolveBlockScanSolverSearchConfig } from
   "../blockscan-solver-search-config.js";
 
 assert.deepEqual(resolveBlockScanSolverSearchConfig({}), {
+  amountGrid: "multiples",
   gridHalfWidth: 2,
   gssMaxTries: 4,
   quoteConcurrency: 16,
@@ -13,6 +14,7 @@ assert.deepEqual(resolveBlockScanSolverSearchConfig({
   SEARCHER_BLOCKSCAN_SOLVER_GSS_MAX_TRIES: "8",
   SEARCHER_BLOCKSCAN_SOLVER_QUOTE_CONCURRENCY: "12",
 }), {
+  amountGrid: "multiples",
   gridHalfWidth: 3,
   gssMaxTries: 8,
   quoteConcurrency: 12,

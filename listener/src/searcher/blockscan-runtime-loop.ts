@@ -78,6 +78,7 @@ import type {
   BlockScanStatePrepareResult,
   BlockScanStateSnapshot,
 } from "./blockscan-state-coordinator.js";
+import type { BlockScanAmountReference } from "./blockscan-amount-reference.js";
 import type {
   BufferedBlockScanBackrunStatePublisher,
 } from "./blockscan-backrun-state-bridge.js";
@@ -680,6 +681,8 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly solveReserveMs: number;
   /** Block-scan-only amount search width; generic/offline solver defaults stay unchanged. */
   readonly solverGridHalfWidth: number;
+  readonly solverAmountGrid?: "multiples" | "geometric";
+  readonly amountReference?: Pick<BlockScanAmountReference, "prepare">;
   /** Block-scan-only golden-section exact-evaluation cap. */
   readonly solverGssMaxTries: number;
   /**
@@ -2354,6 +2357,7 @@ export class BlockScanRuntimeLoop {
         }
       };
       let coarse: BlockScanOutcome;
+      let amountPricingSnapshot: BlockScanStateSnapshot | null = null;
       let fallbackEnvelopes: readonly NMinusOneCoarseCandidate[] | null = null;
       let exactRefineStarted = false;
       let exactFundingTokens: readonly string[] = [];
@@ -2534,6 +2538,7 @@ export class BlockScanRuntimeLoop {
         }
 
         const snapshot = runtime.snapshot;
+        amountPricingSnapshot = snapshot.pricing;
         this.deps.backrunStatePublisher.publish(snapshot.pricing);
         if (this.deps.blind.enabled) auditRuntime = snapshot;
         runtimeSourceBlock = snapshot.sourceBlock;
@@ -2657,6 +2662,7 @@ export class BlockScanRuntimeLoop {
           expectedCoarseBlock,
           "predecessor canonical header",
         );
+        amountPricingSnapshot = predecessorPricing;
         /*
          * The N-1 state this pass needs is guaranteed (or abandoned). Start
          * current-N production now so the N+1 head finds it ready, and a
@@ -2964,6 +2970,19 @@ export class BlockScanRuntimeLoop {
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
       const exactQuoteStateRef: StateBackend = exactQuoteState;
+      const gasMinimumByOpportunity = this.deps.amountReference?.prepare({
+        source: exactSource,
+        pricing: amountPricingSnapshot,
+        enumerationSpreadBps: blockScanCfg.minSpreadBps,
+        opportunities: coarse.opportunities,
+      });
+      console.log(`[searcher/blockscan-amount-reference] ${JSON.stringify({
+        block: blockNumber, sourceBlock: exactSource.number,
+        enumerationSpreadBps: blockScanCfg.minSpreadBps,
+        candidates: coarse.opportunities.length,
+        gasReferences: gasMinimumByOpportunity?.size ?? 0,
+        missingGasProbeRaw: "10",
+      })}`);
       const refinement = await refineBlockScanCandidates(
         exactQuoteStateRef,
         coarse.opportunities,
@@ -2994,6 +3013,7 @@ export class BlockScanRuntimeLoop {
           : undefined,
         this.deps.exactConcurrency,
         {
+          gasMinimumByOpportunity,
           executor: this.deps.executorAddress,
           strictSession,
           runtimeEvidence,
@@ -3288,6 +3308,7 @@ export class BlockScanRuntimeLoop {
               deferPhase2Sim: true,
               finalSimTopN: 3,
               gridHalfWidth: this.deps.solverGridHalfWidth,
+              blockScanAmountGrid: this.deps.solverAmountGrid,
               gssMaxTries: this.deps.solverGssMaxTries,
               quoteProfitFloorBps: 0n,
               quoteSafetyBps: 10000n,

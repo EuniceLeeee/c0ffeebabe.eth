@@ -1036,13 +1036,13 @@ async function testBlockScanSearchBudgetTelemetry(): Promise<void> {
     },
   );
 
-  assert(timing.amountPoints === 9, `solver amount points ${timing.amountPoints}`);
+  assert(timing.amountPoints === 8, `solver amount points ${timing.amountPoints}`);
   assert(timing.gssPoints === 4, `solver GSS points ${timing.gssPoints}`);
-  assert(timing.hopExactCalls === 18, `solver must reuse searched handles for all 3 finalists: ${timing.hopExactCalls}`);
+  assert(timing.hopExactCalls === 16, `solver must reuse searched handles for all 3 finalists: ${timing.hopExactCalls}`);
   assert(timing.quoteMs >= 0, `solver quote ms ${timing.quoteMs}`);
   assert(timing.planBuildMs >= 0, `solver plan build ms ${timing.planBuildMs}`);
   assert(timing.simMs === 0, `deferred solver sim ms ${timing.simMs}`);
-  console.log("[amtsearch] block-scan 5+4 search budget telemetry: PASS");
+  console.log("[amtsearch] block-scan 4+4 search budget telemetry: PASS");
 }
 
 async function testSolverPreservesTypedLegOwner(): Promise<void> {

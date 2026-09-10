@@ -1,4 +1,5 @@
 export interface BlockScanSolverSearchConfig {
+  readonly amountGrid: "multiples" | "geometric";
   readonly gridHalfWidth: number;
   readonly gssMaxTries: number;
   readonly quoteConcurrency: number;
@@ -17,6 +18,7 @@ export function resolveBlockScanSolverSearchConfig(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): BlockScanSolverSearchConfig {
   return Object.freeze({
+    amountGrid: readAmountGrid(env.SEARCHER_BLOCKSCAN_SOLVER_AMOUNT_GRID),
     gridHalfWidth: readInteger(
       env.SEARCHER_BLOCKSCAN_SOLVER_GRID_HALF_WIDTH,
       DEFAULT_GRID_HALF_WIDTH,
@@ -39,6 +41,16 @@ export function resolveBlockScanSolverSearchConfig(
       64,
     ),
   });
+}
+
+function readAmountGrid(
+  raw: string | undefined,
+): BlockScanSolverSearchConfig["amountGrid"] {
+  if (raw === undefined) return "multiples";
+  if (raw === "multiples" || raw === "geometric") return raw;
+  throw new Error(
+    "SEARCHER_BLOCKSCAN_SOLVER_AMOUNT_GRID must be multiples or geometric",
+  );
 }
 
 function readInteger(

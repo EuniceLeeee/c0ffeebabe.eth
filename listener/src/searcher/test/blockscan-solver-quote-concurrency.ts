@@ -17,7 +17,7 @@ export const EXECUTOR = "0x00000000000000000000000000000000000000ee";
 const TOKEN_A = "0x00000000000000000000000000000000000000a1";
 const TOKEN_B = "0x00000000000000000000000000000000000000b1";
 const PLAN_COUNT = 24;
-const EXPECTED_EXACT_CALLS_PER_PLAN = 18; // 5 grid + 4 GSS, two hops; no finalist reissuance.
+const EXPECTED_EXACT_CALLS_PER_PLAN = 16; // 4 grid + 4 GSS, two hops; no finalist reissuance.
 
 interface ExactBinding {
   readonly edge: TokenEdge;
@@ -279,7 +279,7 @@ async function solveWithConcurrency(
       );
       const resolved = deferred.length > 0 ? deferred : [returned];
       assert.equal(resolved.length, 3, "solver lost top-3 fallback candidates");
-      assert.equal(timing.amountPoints, 9, "solver changed the 5+4 search budget");
+      assert.equal(timing.amountPoints, 8, "solver changed the 4+4 search budget");
       assert.equal(timing.gssPoints, 4, "solver changed the GSS budget");
       assert.equal(
         timing.hopExactCalls,

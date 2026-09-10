@@ -625,7 +625,7 @@ async function differentInstanceFailuresDoNotOpenFamilyCircuit(): Promise<void> 
   );
   assert.equal(
     result.opportunities[0]?.searchSeed.searchCenter,
-    9n,
+    10n,
     "an exact-positive route must carry its executable probe amount into solver sizing",
   );
 }
@@ -1303,7 +1303,7 @@ async function completionNotificationPreservesOrder(): Promise<void> {
   assert.equal(result.positive, 64);
   assert.equal(result.peakConcurrentProbes, 4);
   assert.equal(result.deadlineHit, false);
-  assert.deepEqual(amounts, Array(64).fill(9n), "all original probe amounts are retained");
+  assert.deepEqual(amounts, Array(64).fill(10n), "all cold-start probes use the explicit ten-raw-unit floor");
   assert.equal(new Set(diagnostics.map((diagnostic) => diagnostic.index)).size, 64);
   assert.deepEqual(result.opportunities.map((candidate) => candidate.cycleId),
     candidates.slice(0, 20).map((candidate) => candidate.cycleId),
