@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
-import { AnvilStateBackend } from "../../shared/state/state-backend.js";
+import { AnvilStateBackend, type StateBackend } from "../../shared/state/state-backend.js";
+import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
 import { BotVMSimulator } from "../simulator/botvm-simulator.js";
 import { runOrderedBlockScanPipeline } from "../blockscan-ordered-pipeline.js";
 import {
   executeFinalSimulationWork,
+  executeAdapterWork,
+  snapshotCentralCallerAuthority,
   type AdapterGenerationFence,
   type FinalSimulationScheduleDecision,
   type FinalSimulationWorkIntent,
@@ -794,6 +798,61 @@ async function lateSimulatorCannotMutateSuccessor(): Promise<void> {
   }
 }
 
+async function trustedOriginMatchesRealSimulatorSend(): Promise<void> {
+  const configuration = { executor: `0x${"11".repeat(20)}`, transactionOrigin: `0x${"AB".repeat(20)}` };
+  const identity = snapshotCentralCallerAuthority(configuration);
+  const executor = identity.executor!;
+  const origin = identity.transactionOrigin!;
+  const observed = `0x${"22".repeat(20)}`, probe = `0x${"33".repeat(20)}`;
+  const reads: string[] = [], sends: { from: string; to: string }[] = [];
+  const runtime = createStrictCentralAdapterRuntime({
+    ...identity, observedSender: observed, verifiedActors: { probe },
+    generationFence: { assertCurrent() {} },
+    provider: { call: async tx => { reads.push(tx.from!); return "0x"; },
+      getCode: async () => "0x", getStorage: async () => "0x" },
+  });
+  configuration.transactionOrigin = observed;
+  configuration.executor = probe;
+  assert(Object.isFrozen(identity));
+  let balances = 0;
+  const state = {
+    snapshot: async () => "0x1", revert: async () => {},
+    getTokenBalance: async () => BigInt(balances++), getGasUsed: async () => 1n,
+    send: async (tx: { from: string; to: string }) => { sends.push(tx); return "0x1"; },
+  } as unknown as StateBackend;
+  const simulator = new BotVMSimulator(state, executor, origin);
+  const quote = await executeAdapterWork({ runtime, intent: {
+    stage: "exact-refine", familyId: "test:simulation-origin" as never,
+    source: source(1), generation: 1, programInput: {}, program: {
+      requirements: () => ({ transports: ["eth-call"], caller: "transaction-origin" }),
+      buildRequests: () => [{ id: "origin", kind: "eth-call", to: probe, data: "0x",
+        caller: { kind: "transaction-origin" }, completion: "return-data" }],
+      decode: () => true,
+    },
+  } });
+  assert.equal(quote.status, "resolved");
+  const result = await simulator.simulate({
+    root: { adapterId: "skip" }, profitToken: probe,
+  } as ResolvedPlan);
+  assert.equal(result.success, true);
+  assert.deepEqual(reads, [origin]);
+  assert.equal(sends.length, 1);
+  assert.equal(sends[0]!.from, reads[0], "actual BotVM send.from equals trusted quote origin");
+  assert.equal(sends[0]!.to, executor);
+  assert.notEqual(origin, executor); assert.notEqual(origin, observed); assert.notEqual(origin, probe);
+
+  // Supplement the executable sender test with the thin main wiring contract;
+  // importing main itself would start external services.
+  const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+  const constructors = main.match(/new BotVMSimulator\([^)]*\)/g)!;
+  assert.equal(constructors.length, 4);
+  assert(constructors.every(call => call.includes("executionIdentity.executor") &&
+    call.includes("executionIdentity.transactionOrigin")));
+  assert.match(main, /new RevmLiveBackend\(\s*revmSimClient,\s*executionIdentity.executor,\s*executionIdentity.transactionOrigin/);
+  assert.match(main, /createStrictCentralAdapterRuntime\(\{[\s\S]*?\.\.\.executionIdentity,/);
+}
+
+await trustedOriginMatchesRealSimulatorSend();
 await scheduleAndRethIsolation();
 await boundedIngressAndNoReuse();
 await generationFences();

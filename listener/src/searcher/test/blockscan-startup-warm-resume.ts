@@ -28,6 +28,7 @@ import { readBlockScanObservedHeader } from "../blockscan-observed-header.js";
 const N = 101;
 const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 const EXECUTOR = `0x${"64".repeat(20)}`;
+const TRANSACTION_ORIGIN = `0x${"ab".repeat(20)}`;
 const QUOTER = `0x${"65".repeat(20)}`;
 const TAIL = "0xbeef02";
 const balance = new ethers.Interface(["function balanceOf(address) view returns (uint256)"]);
@@ -162,12 +163,20 @@ async function setup(mode: Mode) {
     const forbidden = async (): Promise<never> => { throw new Error("unexpected direct provider transport"); };
     const runtime = createStrictCentralAdapterRuntime({
       provider: { call: forbidden, getCode: forbidden, getStorage: forbidden }, executor: EXECUTOR,
+      transactionOrigin: TRANSACTION_ORIGIN,
       producerCallBackend: request.pricingCallBackend, exactCallBackend: request.exactCallBackend,
       generationFence: { assertCurrent(generation, current) {
         assert.equal(generation, source.generation); assert.deepEqual(current, source);
       } },
     });
-    const session = await root.createSession({ source, runtime, fundingAssets: request.fundingAssets,
+    const callerAuthority = runtime.callerAuthority;
+    const boundRuntime = { ...runtime, callerAuthority: { bind(input: Parameters<typeof callerAuthority.bind>[0]) {
+      const authority = callerAuthority.bind(input);
+      assert.equal(authority.transactionOrigin, TRANSACTION_ORIGIN);
+      assert.equal(authority.executor, EXECUTOR);
+      return authority;
+    } } };
+    const session = await root.createSession({ source, runtime: boundRuntime, fundingAssets: request.fundingAssets,
       kind: request.purpose === "exact-execution" ? "exact" : "pricing", control: request.control,
       touchedPools: request.touchedPools, requiredEdgeIds: request.requiredEdgeIds });
     sessions.push(session);

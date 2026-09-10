@@ -1,9 +1,13 @@
 import {
   assertAdapterWorkControl,
+  adapterWorkSubjectKey,
   executeAdapterWork,
+  snapshotCentralCallerAuthority,
   type AdapterWorkOutcome,
   type AdapterWorkControl,
   type CentralAdapterRuntime,
+  type CentralCallerAuthority,
+  type CentralCallerAuthorityInput,
 } from "../adapter-work-intent.js";
 import {
   assertIssuedAdapterFamilyLifecycleContentCache,
@@ -324,6 +328,7 @@ interface SealedFamilyExactQuoteHandleRecord {
   readonly amountOut: bigint;
   readonly evidence: unknown;
   readonly executor: string;
+  readonly callerContext: ExactCallerContext;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
   readonly runtimeEvidenceFingerprint: string;
   readonly source: CanonicalSource;
@@ -1119,6 +1124,77 @@ interface ResolvedFamilyExactQuoteInvocation
   readonly routeRecord: FamilyRouteRuntimeHandleRecord;
   readonly instance: PreparedFamilyInstance;
   readonly route: FamilyRouteDescriptor;
+  readonly callerContext: ExactCallerContext;
+}
+
+interface ExactCallerContext {
+  readonly executor?: string;
+  readonly transactionOrigin?: string;
+  /** Rebind through the original trusted service, never through Family evidence. */
+  assertCurrent(): void;
+}
+
+class ExactCallerContextError extends Error {}
+
+function bindExactCallerContext(
+  invocation: Omit<ResolvedFamilyExactQuoteInvocation, "callerContext">,
+): ResolvedFamilyExactQuoteInvocation {
+  assertExactInvocation(invocation);
+  assertAdapterWorkControl(invocation.control);
+  const runtime = invocation.runtime;
+  runtime.generationFence.assertCurrent(invocation.generation, invocation.source);
+  const subject = Object.freeze({
+    familyId: invocation.family.plugin.manifest.familyId,
+    instanceKey: invocation.instance.instanceKey,
+    routeKey: invocation.route.routeKey,
+  });
+  const binding = Object.freeze({
+    stage: "exact-refine" as const, familyId: subject.familyId, subject,
+    subjectKey: adapterWorkSubjectKey(subject), source: invocation.source,
+    callerRole: "none" as const,
+  });
+  const snapshot = (input: CentralCallerAuthorityInput = binding) => {
+    try {
+      return snapshotCentralCallerAuthority(runtime.callerAuthority.bind(input));
+    } catch (error) {
+      throw new ExactCallerContextError(`exact caller context invalid: ${errorMessage(error)}`);
+    }
+  };
+  const captured = snapshot();
+  if (captured.transactionOrigin !== undefined &&
+      captured.executor !== invocation.executor.toLowerCase()) {
+    throw new ExactCallerContextError("exact caller context executor differs from invocation executor");
+  }
+  const assertMatches = (current: CentralCallerAuthority): void => {
+    if (current.executor !== captured.executor ||
+        current.transactionOrigin !== captured.transactionOrigin) {
+      throw new ExactCallerContextError("exact caller context changed");
+    }
+  };
+  const callerContext: ExactCallerContext = Object.freeze({
+    ...(captured.executor === undefined ? {} : { executor: captured.executor }),
+    ...(captured.transactionOrigin === undefined ? {} : { transactionOrigin: captured.transactionOrigin }),
+    assertCurrent() { assertMatches(snapshot()); },
+  });
+  const guardedRuntime: CentralAdapterRuntime = Object.freeze({
+    clock: runtime.clock, policy: runtime.policy, budgets: runtime.budgets,
+    scheduler: runtime.scheduler,
+    ...(runtime.staticEvidenceCache === undefined ? {} : { staticEvidenceCache: runtime.staticEvidenceCache }),
+    ...(runtime.exactQuoteCache === undefined ? {} : { exactQuoteCache: runtime.exactQuoteCache }),
+    callerAuthority: Object.freeze({ bind(input: CentralCallerAuthorityInput) {
+      const current = snapshot(input);
+      assertMatches(current);
+      return current;
+    } }),
+    generationFence: Object.freeze({ assertCurrent(generation: number, source: CanonicalSource) {
+      runtime.generationFence.assertCurrent(generation, source);
+      callerContext.assertCurrent();
+    } }),
+  });
+  guardedRuntime.generationFence.assertCurrent(invocation.generation, invocation.source);
+  assertAdapterWorkControl(invocation.control);
+  return Object.freeze({ ...invocation, executor: invocation.executor.toLowerCase(),
+    runtime: guardedRuntime, callerContext });
 }
 
 export interface FamilyAmountQuoteReuseContext {
@@ -1140,7 +1216,7 @@ export function describeFamilyAmountQuoteReuse(
   try {
     assertAdapterWorkControl(input.control);
     const routeRecord = resolveFamilyRouteRuntimeHandle(input.family, input.route);
-    const invocation: ResolvedFamilyExactQuoteInvocation = Object.freeze({
+    const invocation = bindExactCallerContext({
       ...input, source: snapshotCanonicalSource(input.source),
       runtimeEvidence: snapshotRuntimeEvidence(input.runtimeEvidence),
       routeHandle: input.route, routeRecord,
@@ -1167,7 +1243,7 @@ export function describeFamilyAmountQuoteReuse(
       identity = ++nextAmountQuoteFamilyIdentity;
       amountQuoteFamilyIdentities.set(input.family, identity);
     }
-    input.runtime.generationFence.assertCurrent(input.generation, input.source);
+    invocation.runtime.generationFence.assertCurrent(input.generation, input.source);
     assertAdapterWorkControl(input.control);
     return Object.freeze({
       contextFingerprint: hashCanonical({
@@ -1197,8 +1273,12 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
     descriptor: invocation.instance.descriptor, route: invocation.route,
     amountIn: invocation.amountIn, source: invocation.source,
     executor: invocation.executor.toLowerCase(), runtimeEvidence: invocation.runtimeEvidence,
+    ...(invocation.callerContext.transactionOrigin === undefined ? {} : {
+      transactionOrigin: invocation.callerContext.transactionOrigin,
+    }),
   });
   const methods = declareExactMethods(invocation.family.plugin.exact.methods(programInput));
+  invocation.callerContext.assertCurrent();
   const methodOrderFingerprint = hashCanonical({
     namespace: "adapter-family-exact-method-order-v1",
     methods: methods.map((method, methodIndex) => ({
@@ -1216,8 +1296,10 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
     capability: invocation.family.hashes.exact.contentHash,
     projection: invocation.family.plugin.exact.cacheCompatibilityProjection(programInput),
     executor: programInput.executor,
+    transactionOrigin: programInput.transactionOrigin ?? null,
     runtimeEvidence: runtimeEvidenceProjection(programInput.runtimeEvidence),
   });
+  invocation.callerContext.assertCurrent();
   return { programInput, methods, methodOrderFingerprint, compatibilityFingerprint, maxDependentReadRounds };
 }
 
@@ -1253,7 +1335,7 @@ export async function executeFamilyExactQuote(
       captured.family,
       captured.route,
     );
-    invocation = Object.freeze({
+    invocation = bindExactCallerContext({
       ...captured,
       routeHandle: captured.route,
       routeRecord,
@@ -1263,6 +1345,10 @@ export async function executeFamilyExactQuote(
     ({ programInput, methods, methodOrderFingerprint, compatibilityFingerprint,
       maxDependentReadRounds } = declareFamilyExactQuote(invocation));
   } catch (error) {
+    try { assertAdapterWorkControl(captured.control); } catch {
+      return terminalUnboundExact(captured, invocation, "unresolved",
+        captured.control?.signal?.aborted ? "exact-control:aborted" : "exact-control:deadline", []);
+    }
     return terminalUnboundExact(
       captured,
       invocation,
@@ -1396,6 +1482,7 @@ async function executeExactRequestMethod(input: {
   let initial: DeclaredExactRound;
   try {
     initial = declareInitialExactRound(input.program, input.programInput);
+    invocation.callerContext.assertCurrent();
     assertNewExactRequestIds(initial.requests, new Set<string>());
   } catch (error) {
     return terminalExact(
@@ -1455,8 +1542,9 @@ async function executeExactRequestMethod(input: {
         invocation.source,
       );
       if (cached !== undefined) {
+        let quote: ExactQuoteResult<unknown> | undefined;
         try {
-          const quote = replayCachedExactRequestProgram({
+          quote = replayCachedExactRequestProgram({
             program: input.program,
             programInput: input.programInput,
             initial,
@@ -1464,11 +1552,20 @@ async function executeExactRequestMethod(input: {
             expectedRoundFingerprints: cached.roundFingerprints,
             source: invocation.source,
             maxDependentReadRounds: input.maxDependentReadRounds,
+            assertCurrent: () => invocation.callerContext.assertCurrent(),
           });
-          invocation.runtime.generationFence.assertCurrent(
-            invocation.generation,
-            invocation.source,
-          );
+        } catch (error) {
+          if (error instanceof ExactCallerContextError) throw error;
+          // Decode failure does not excuse changed authority, even when the
+          // decoder itself threw after mutating the trusted service.
+          invocation.callerContext.assertCurrent();
+          evidenceRefs.push(`exact-cache-redecode-failed:${cached.cacheKey}`);
+        }
+        invocation.runtime.generationFence.assertCurrent(
+          invocation.generation,
+          invocation.source,
+        );
+        if (quote !== undefined) {
           return resolvedExactQuote({
             invocation,
             quote,
@@ -1485,10 +1582,6 @@ async function executeExactRequestMethod(input: {
             ],
             reasonCode: "exact-cache-reused",
           });
-        } catch {
-          // Transport cache material is non-authoritative. Re-run this same
-          // selected method; never advance to a later exact method.
-          evidenceRefs.push(`exact-cache-redecode-failed:${cached.cacheKey}`);
         }
       }
     } catch (error) {
@@ -1525,12 +1618,14 @@ async function executeExactRequestMethod(input: {
   for (;;) {
     let bound: BoundRequestProgram<unknown> | null;
     try {
+      invocation.callerContext.assertCurrent();
       bound = input.program.buildDependentProgram?.({
         programInput: input.programInput,
         completedRound,
         initialResults,
         priorEvidence: Object.freeze([...dependentEvidence]),
       }) ?? null;
+      invocation.callerContext.assertCurrent();
     } catch (error) {
       return terminalExact(
         invocation,
@@ -1552,6 +1647,7 @@ async function executeExactRequestMethod(input: {
     let round: DeclaredExactRound;
     try {
       round = declareDependentExactRound(bound);
+      invocation.callerContext.assertCurrent();
       assertNewExactRequestIds(round.requests, seenRequestIds);
     } catch (error) {
       return terminalExact(
@@ -1697,7 +1793,9 @@ function replayCachedExactRequestProgram(input: {
   readonly expectedRoundFingerprints: readonly string[];
   readonly source: CanonicalSource;
   readonly maxDependentReadRounds: number;
+  readonly assertCurrent: () => void;
 }): ExactQuoteResult<unknown> {
+  input.assertCurrent();
   const byId = new Map<string, AdapterRequestResult>();
   for (const result of input.trustedResults) {
     if (byId.has(result.id)) {
@@ -1721,17 +1819,20 @@ function replayCachedExactRequestProgram(input: {
   const dependentEvidence: unknown[] = [];
   let completedRound = 0;
   for (;;) {
+    input.assertCurrent();
     const bound = input.program.buildDependentProgram?.({
       programInput: input.programInput,
       completedRound,
       initialResults,
       priorEvidence: Object.freeze([...dependentEvidence]),
     }) ?? null;
+    input.assertCurrent();
     if (bound === null) break;
     if (completedRound >= input.maxDependentReadRounds) {
       throw new Error("cached exact dependent round budget exhausted");
     }
     const round = declareDependentExactRound(bound);
+    input.assertCurrent();
     if (
       input.expectedRoundFingerprints[completedRound + 1] !==
         round.fingerprint
@@ -1751,6 +1852,7 @@ function replayCachedExactRequestProgram(input: {
       round.decode!(roundResults),
       `cached exact dependent round ${completedRound} decode`,
     ));
+    input.assertCurrent();
     completedRound++;
   }
   if (input.expectedRoundFingerprints.length !== completedRound + 1) {
@@ -1768,6 +1870,7 @@ function replayCachedExactRequestProgram(input: {
     "cached exact request program decode",
   );
   validateExactQuote(quote);
+  input.assertCurrent();
   return quote;
 }
 
@@ -2033,6 +2136,9 @@ function resolvedExactQuote(input: {
   // A fresh handle must obey the same control as a cold transport request.
   const stopped = exactControlFailure(invocation, input.evidenceRefs);
   if (stopped !== null) return stopped;
+  try { invocation.callerContext.assertCurrent(); } catch (error) {
+    return terminalExact(invocation, "unresolved", errorMessage(error), input.evidenceRefs);
+  }
   const evidenceRefs = uniqueSorted(input.evidenceRefs);
   const source = Object.freeze({ ...invocation.source });
   const runtimeEvidence = sealRuntimeEvidence(input.invocation.runtimeEvidence);
@@ -2070,7 +2176,7 @@ function resolvedExactQuote(input: {
     evidenceRefs: Object.freeze(evidenceRefs),
     outcome,
   }) as unknown as SealedFamilyExactQuoteHandle;
-  issuedSealedFamilyExactQuoteHandles.set(handle, Object.freeze({
+  const record: SealedFamilyExactQuoteHandleRecord = Object.freeze({
     family: invocation.family,
     routeHandle: invocation.routeHandle,
     routeRecord: invocation.routeRecord,
@@ -2078,11 +2184,16 @@ function resolvedExactQuote(input: {
     amountOut: input.quote.amountOut,
     evidence: input.quote.evidence,
     executor: invocation.executor.toLowerCase(),
+    callerContext: invocation.callerContext,
     runtimeEvidence,
     runtimeEvidenceFingerprint,
     source,
     generation: invocation.generation,
-  }));
+  });
+  try { invocation.callerContext.assertCurrent(); } catch (error) {
+    return terminalExact(invocation, "unresolved", errorMessage(error), input.evidenceRefs);
+  }
+  issuedSealedFamilyExactQuoteHandles.set(handle, record);
   return handle;
 }
 
@@ -2343,7 +2454,8 @@ export function buildFamilyExecutionFragment(
     );
     resolved = Object.freeze({ input, routeRecord, exactRecord });
     assertExecutionInvocation(resolved);
-    const fragment = input.family.plugin.execution.buildFragment({
+    exactRecord.callerContext.assertCurrent();
+    const fragment = input.family.plugin.execution.buildFragment(Object.freeze({
       descriptor: routeRecord.instance.descriptor,
       route: routeRecord.route,
       amountIn: exactRecord.amountIn,
@@ -2351,19 +2463,25 @@ export function buildFamilyExecutionFragment(
       minAmountOut: input.minAmountOut,
       exactEvidence: exactRecord.evidence,
       executor: exactRecord.executor,
+      ...(exactRecord.callerContext.transactionOrigin === undefined ? {} : {
+        transactionOrigin: exactRecord.callerContext.transactionOrigin,
+      }),
       runtimeEvidence: exactRecord.runtimeEvidence,
-    });
+    }));
+    exactRecord.callerContext.assertCurrent();
     assertFamilyOwnedPlanFragment({
       family: input.family,
       actionOwnership: input.actionOwnership,
       fragment,
     });
+    exactRecord.callerContext.assertCurrent();
     const expectedEffects = input.family.plugin.execution.expectedEffects({
       descriptor: routeRecord.instance.descriptor,
       route: routeRecord.route,
       amountIn: exactRecord.amountIn,
       quotedAmountOut: exactRecord.amountOut,
     });
+    exactRecord.callerContext.assertCurrent();
     if (!Array.isArray(expectedEffects)) {
       throw new Error("execution expectedEffects must return an array");
     }
@@ -2371,6 +2489,7 @@ export function buildFamilyExecutionFragment(
     const sealedEffects = Object.freeze(expectedEffects.map((effect) =>
       Object.freeze({ ...effect })
     ));
+    exactRecord.callerContext.assertCurrent();
     const outcome = executionOutcome(resolved, "verified", "plan-fragment-built");
     return Object.freeze({
       status: "resolved" as const,
@@ -3803,7 +3922,7 @@ function validateIdentity(
   }
 }
 
-function assertExactInvocation(input: ResolvedFamilyExactQuoteInvocation): void {
+function assertExactInvocation(input: Omit<ResolvedFamilyExactQuoteInvocation, "callerContext">): void {
   assertDefinedFamilyPlugin(input.family.plugin);
   assertSource(input.source, input.generation);
   if (typeof input.amountIn !== "bigint" || input.amountIn < 0n) {

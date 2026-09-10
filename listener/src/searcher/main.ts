@@ -37,6 +37,7 @@ import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
+import { normalizeTransactionOrigin } from "./adapter-work-intent.js";
 import {
   createStrictCentralAdapterRuntime,
   type StrictSimulationTransport,
@@ -784,6 +785,11 @@ async function main(): Promise<void> {
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
+  // Quote authority and final simulation share one immutable execution identity.
+  const executionIdentity = Object.freeze({
+    executor: ethers.getAddress(config.botvmAddress).toLowerCase(),
+    transactionOrigin: normalizeTransactionOrigin(config.wallet.address),
+  });
   const dryRunUseReadyGeneration = dryRunOnlyFlag(
     "SEARCHER_DRY_RUN_USE_READY_GENERATION",
     process.env.SEARCHER_DRY_RUN_USE_READY_GENERATION,
@@ -1082,8 +1088,8 @@ async function main(): Promise<void> {
     const isolatedSolver = new AnvilSolver();
     const isolatedSimulator = new BotVMSimulator(
       isolatedState,
-      config.botvmAddress,
-      config.wallet.address,
+      executionIdentity.executor,
+      executionIdentity.transactionOrigin,
     );
     const forkPreparation = (
       workerState: AnvilStateBackend,
@@ -1117,8 +1123,8 @@ async function main(): Promise<void> {
         solver: new AnvilSolver(),
         simulator: new BotVMSimulator(
           workerState,
-          config.botvmAddress,
-          config.wallet.address,
+          executionIdentity.executor,
+          executionIdentity.transactionOrigin,
         ),
         ...forkPreparation(workerState),
       });
@@ -1139,8 +1145,8 @@ async function main(): Promise<void> {
         solver: new AnvilSolver(),
         simulator: new BotVMSimulator(
           workerState,
-          config.botvmAddress,
-          config.wallet.address,
+          executionIdentity.executor,
+          executionIdentity.transactionOrigin,
         ),
         ...forkPreparation(workerState),
       });
@@ -1202,7 +1208,7 @@ async function main(): Promise<void> {
     config.liveFixtureDir,
     config.recordLiveFixtures,
   );
-  const simulator = new BotVMSimulator(state, config.botvmAddress, config.wallet.address);
+  const simulator = new BotVMSimulator(state, executionIdentity.executor, executionIdentity.transactionOrigin);
   const rpcLiveBackend = new RpcAnvilLiveBackend(state, simulator);
   // revm/hybrid backends are constructed after the routing graph is built (they
   // need it to encode the victim overlay); default to rpc until then.
@@ -1747,8 +1753,8 @@ async function main(): Promise<void> {
     });
     const revmLiveBackend = new RevmLiveBackend(
       revmSimClient,
-      config.botvmAddress,
-      config.wallet.address,
+      executionIdentity.executor,
+      executionIdentity.transactionOrigin,
       provider,
       graph,
       config.rpcUrl,
@@ -1853,7 +1859,7 @@ async function main(): Promise<void> {
         },
       }),
       verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
-      executor: config.botvmAddress,
+      ...executionIdentity,
       ...(request.exactCallBackend === undefined
         ? {}
         : { exactCallBackend: request.exactCallBackend }),

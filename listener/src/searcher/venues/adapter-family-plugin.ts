@@ -842,6 +842,8 @@ export interface ExactQuoteInput<
   readonly amountIn: bigint;
   readonly source: CanonicalSource;
   readonly executor: string;
+  /** Framework-bound outer transaction sender; never supplied by quote consumers. */
+  readonly transactionOrigin?: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
 }
 
@@ -1028,6 +1030,8 @@ export interface ExecutionSemantics<
     readonly minAmountOut: bigint;
     readonly exactEvidence: ExactEvidence;
     readonly executor: string;
+    /** The immutable origin from the sealed Exact invocation, when available. */
+    readonly transactionOrigin?: string;
     readonly runtimeEvidence: readonly RuntimeEvidence[];
   }): PlanFragment;
   expectedEffects(

@@ -67,6 +67,7 @@ import {
 import { bindFamilyOwnedAction } from "../venues/family-owned-action.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 import type { AmountQuoteReusePolicy } from "../amount-quote-continuity.js";
+import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
 
 const SELECTOR = "0x12345678" as const;
 const TOKEN0 = `0x${"31".repeat(20)}`;
@@ -145,8 +146,15 @@ interface FixtureControls {
   readonly exactDependentNeverSettles?: boolean;
   readonly exactDecodeThrow?: boolean;
   chainAmountQuote?: true;
+  exactOriginCaller?: boolean;
   reusePolicy?: AmountQuoteReusePolicy;
   onExactDecode?: () => void;
+  onExactInput?: (stage: "methods" | "projection" | "local", input: {
+    readonly executor: string; readonly transactionOrigin?: string;
+  }) => void;
+  onDependentDeclare?: () => void;
+  onExecution?: (input: { readonly executor: string; readonly transactionOrigin?: string }) => void;
+  onExpectedEffects?: () => void;
   readonly executionAdapterId?: string;
   readonly executionThenable?: boolean;
   readonly omitClassifyUnavailable?: boolean;
@@ -487,7 +495,8 @@ function defineFixture(name: string, controls: FixtureControls) {
       },
     },
     exact: {
-      methods: () => {
+      methods: (input) => {
+        controls.onExactInput?.("methods", input);
         if (controls.omitQuoteLocal) return Object.freeze([]);
         const local = Object.freeze({
           id: "fixture-local",
@@ -496,6 +505,7 @@ function defineFixture(name: string, controls: FixtureControls) {
             readonly amountIn: bigint;
             readonly source: CanonicalSource;
           }) => {
+            controls.onExactInput?.("local", input);
             controls.localExactCalls = (controls.localExactCalls ?? 0) + 1;
             if (controls.localExactThrow) {
               throw new Error("deterministic local bug");
@@ -525,13 +535,17 @@ function defineFixture(name: string, controls: FixtureControls) {
           ...(controls.chainAmountQuote ? { chainAmountQuote: true as const } : {}),
           ...(controls.reusePolicy === undefined ? {} : { reusePolicy: controls.reusePolicy }),
           program: Object.freeze({
-            requirements: () => ({ transports: ["eth-call" as const] }),
+            requirements: () => ({ transports: ["eth-call" as const],
+              ...(controls.exactOriginCaller ? { caller: "transaction-origin" as const } : {}) }),
             buildRequests: ({ descriptor }: { readonly descriptor: Descriptor }) => {
               const primary = call(
                 `exact:${descriptor.pool}`,
                 descriptor.pool,
                 controls.exactCalldata ?? "0xdddddddd",
               );
+              if (controls.exactOriginCaller && primary.kind === "eth-call") {
+                return [{ ...primary, caller: { kind: "transaction-origin" as const } }];
+              }
               if (controls.exactRequestOrder === undefined) return [primary];
               const secondary = call(
                 `exact-extra:${descriptor.pool}`,
@@ -557,6 +571,7 @@ function defineFixture(name: string, controls: FixtureControls) {
                     readonly initialResults: readonly AdapterRequestResult[];
                     readonly priorEvidence: readonly unknown[];
                   }) => {
+                    controls.onDependentDeclare?.();
                     controls.exactDependentBuildCalls =
                       (controls.exactDependentBuildCalls ?? 0) + 1;
                     assert.equal(programInput.descriptor.pool, GOOD);
@@ -641,7 +656,10 @@ function defineFixture(name: string, controls: FixtureControls) {
         }
         return Object.freeze([remote]);
       },
-      cacheCompatibilityProjection: ({ route }) => ({ routeKey: route.routeKey }),
+      cacheCompatibilityProjection: (input) => {
+        controls.onExactInput?.("projection", input);
+        return { routeKey: input.route.routeKey };
+      },
     },
     execution: {
       runtimeProjection: () => ({
@@ -656,7 +674,10 @@ function defineFixture(name: string, controls: FixtureControls) {
         minAmountOut,
         exactEvidence,
         runtimeEvidence,
+        executor,
+        ...context
       }) => {
+        controls.onExecution?.({ executor, ...context });
         controls.executionCalls = (controls.executionCalls ?? 0) + 1;
         controls.lastExecutionExactEvidence = exactEvidence;
         controls.lastExecutionRuntimeEvidence = runtimeEvidence;
@@ -677,12 +698,15 @@ function defineFixture(name: string, controls: FixtureControls) {
           ? Promise.resolve(fragment) as never
           : fragment;
       },
-      expectedEffects: ({ descriptor }) => [{
+      expectedEffects: ({ descriptor }) => {
+        controls.onExpectedEffects?.();
+        return [{
         kind: "token-delta",
         token: descriptor.token1,
         account: "executor",
         direction: "increase",
-      }],
+        }];
+      },
     },
     protocol: {
       candidateKinds: ["observed-call"],
@@ -799,6 +823,7 @@ class TestFence implements AdapterGenerationFence {
 
 class TestScheduler implements CentralAdapterScheduler {
   readonly requestIds: string[] = [];
+  readonly callerAuthorities: Parameters<CentralAdapterScheduler["issueExecutor"]>[0]["callerAuthority"][] = [];
 
   constructor(private readonly options: {
     readonly fail?: (request: AdapterRequest) => boolean;
@@ -812,6 +837,7 @@ class TestScheduler implements CentralAdapterScheduler {
   issueExecutor(
     input: Parameters<CentralAdapterScheduler["issueExecutor"]>[0],
   ): ReturnType<CentralAdapterScheduler["issueExecutor"]> {
+    this.callerAuthorities.push(input.callerAuthority);
     const executor = createBoundedRequestExecutor({
       assertSupported: (requirements) => assert.deepEqual(
         requirements,
@@ -2837,6 +2863,193 @@ await testLifecycleSnapshotsCallerOwnedSourceAcrossAwait();
 await testExactSnapshotsSourceAndRuntimeEvidenceAcrossAwait();
 await testRpcFailureIsUnresolved();
 await testProtocolNegativeRequiresSuccessfulEvidence();
+async function testTrustedExactCallerContext(): Promise<void> {
+  const origin = `0x${"ab".repeat(20)}`;
+  const otherOrigin = `0x${"cd".repeat(20)}`;
+  const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0,
+    chainAmountQuote: true, reusePolicy: { kind: "state-only", dependencies: [GOOD], blockEnvironment: "independent" } };
+  const family = defineFixture("exact-origin", controls);
+  const scheduler = new TestScheduler();
+  const prepared = await run({ family, pools: [GOOD], scheduler });
+  const route = issuedRoute(prepared.publications[0].instances[0]);
+  const cache = createAdapterFamilyExactQuoteCache({ capacity: 16 });
+  let authority: { executor?: string; transactionOrigin?: string } = {
+    executor: EXECUTOR, transactionOrigin: origin.toUpperCase().replace("0X", "0x"),
+  };
+  const sharedRuntime: CentralAdapterRuntime = {
+    ...runtime(scheduler, new TestFence(), [], undefined, cache),
+    callerAuthority: { bind(binding) {
+      assert.equal(binding.stage, "exact-refine");
+      assert.equal(binding.subject.instanceKey, prepared.publications[0].instances[0].instanceKey);
+      assert.equal(binding.subject.routeKey, route.routeKey);
+      assert.equal(binding.familyId, family.plugin.manifest.familyId);
+      assert.equal(binding.source.hash, SOURCE.hash);
+      assert.equal(binding.source.number, SOURCE.number);
+      return authority;
+    } },
+  };
+  const invocation = { family, route, amountIn: 10n, executor: EXECUTOR,
+    runtimeEvidence: [], source: SOURCE, generation: SOURCE.generation, runtime: sharedRuntime };
+  const reads = () => scheduler.requestIds.filter(id => id.startsWith("exact:")).length;
+  const seen: string[] = [];
+  controls.onExactInput = (stage, input) => {
+    seen.push(stage);
+    assert.equal(input.transactionOrigin, origin, "trusted normalized origin is present before Family declaration");
+    assert.equal(input.executor, EXECUTOR);
+    assert(Object.isFrozen(input));
+    assert.throws(() => { (input as { transactionOrigin: string }).transactionOrigin = otherOrigin; });
+  };
+  const reuse = describeFamilyAmountQuoteReuse(invocation);
+  assert(reuse !== null);
+  assert.deepEqual(seen, ["methods", "projection"]);
+  const first = await executeFamilyExactQuote({ ...invocation, transactionOrigin: otherOrigin } as never);
+  assert.equal(first.status, "resolved");
+  assert.equal(reads(), 1);
+  if (first.status !== "resolved") throw new Error("origin exact did not resolve");
+  controls.onExecution = input => {
+    assert.equal(input.transactionOrigin, origin, "execution receives the private sealed origin, not consumer fields");
+    assert.equal(input.executor, EXECUTOR);
+  };
+  const executionInput = { family, actionOwnership: CATALOG_BY_FAMILY.get(family.plugin.manifest.familyId)!,
+    route, exact: first, minAmountOut: 1n, executor: EXECUTOR, runtimeEvidence: [] };
+  assert.equal(buildFamilyExecutionFragment({ ...executionInput, transactionOrigin: otherOrigin } as never).status, "resolved");
+  authority = { executor: EXECUTOR, transactionOrigin: origin };
+  const retrySource = { ...SOURCE, generation: SOURCE.generation + 1 };
+  const retryPrepared = await run({ family, pools: [GOOD], scheduler, source: retrySource });
+  const retry = await executeFamilyExactQuote({ ...invocation, source: retrySource,
+    generation: retrySource.generation, route: issuedRoute(retryPrepared.publications[0].instances[0]) });
+  assert.equal(retry.status, "resolved");
+  if (retry.status !== "resolved") throw new Error("origin retry failed");
+  assert.equal(retry.outcome.reasonCode, "exact-cache-reused");
+  assert.notEqual(retry, first);
+  assert.equal(retry.generation, retrySource.generation);
+  assert.equal(reads(), 1, "same hash/origin retry re-decodes cached bytes under fresh authority");
+  controls.onExactInput = undefined;
+  authority = { executor: EXECUTOR, transactionOrigin: otherOrigin };
+  const second = await executeFamilyExactQuote(invocation);
+  assert.equal(second.status, "resolved");
+  assert.equal(reads(), 2, "central fingerprint isolates origins even when Family projection ignores origin");
+  if (second.status !== "resolved") throw new Error("second origin failed");
+  assert.notEqual(second.cacheCompatibilityFingerprint, first.cacheCompatibilityFingerprint);
+  assert.notEqual(describeFamilyAmountQuoteReuse(invocation)?.contextFingerprint, reuse.contextFingerprint);
+  const executionCalls = controls.executionCalls;
+  assert.equal(buildFamilyExecutionFragment(executionInput).status, "failed");
+  assert.equal(controls.executionCalls, executionCalls, "changed current origin rejects before Family execution");
+  authority = { executor: OTHER, transactionOrigin: origin };
+  assert.equal(buildFamilyExecutionFragment(executionInput).status, "failed");
+  assert.equal((await executeFamilyExactQuote(invocation)).status, "failed", "authority executor cannot differ from invocation executor");
+  assert.equal(reads(), 2);
+  for (const bad of ["bad", `0x${"00".repeat(20)}`, null, 42]) {
+    authority = { executor: EXECUTOR, transactionOrigin: bad as string };
+    assert.equal((await executeFamilyExactQuote(invocation)).status, "failed");
+  }
+  authority = { executor: EXECUTOR, transactionOrigin: origin, from: origin } as never;
+  assert.equal((await executeFamilyExactQuote(invocation)).status, "failed", "forged authority fields are rejected");
+  authority = {};
+  controls.onExactInput = (_stage, input) => assert.equal(input.transactionOrigin, undefined);
+  assert.equal((await executeFamilyExactQuote({ ...invocation, transactionOrigin: origin } as never)).status, "resolved",
+    "missing origin preserves unrelated methods without accepting consumer authority");
+  controls.onExactInput = undefined;
+  authority = { executor: EXECUTOR, transactionOrigin: origin };
+  controls.onExecution = () => { authority = { executor: EXECUTOR, transactionOrigin: otherOrigin }; };
+  assert.equal(buildFamilyExecutionFragment(executionInput).status, "failed", "mutation during fragment build cannot publish");
+  controls.onExecution = undefined;
+  authority = { executor: EXECUTOR, transactionOrigin: origin };
+  controls.onExpectedEffects = () => { authority = { executor: EXECUTOR, transactionOrigin: otherOrigin }; };
+  assert.equal(buildFamilyExecutionFragment(executionInput).status, "failed", "mutation during expected effects cannot publish");
+}
+
+async function testExactCallerContextMutationFences(): Promise<void> {
+  const origin = `0x${"ab".repeat(20)}`;
+  const otherOrigin = `0x${"cd".repeat(20)}`;
+  for (const stage of ["methods", "projection", "local", "queued", "dependent", "decode", "cached-decode", "cached-throw"] as const) {
+    const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0,
+      localExact: stage === "local", exactDependent: stage === "dependent" || stage === "queued" };
+    const family = defineFixture(`origin-mutation-${stage}`, controls);
+    let current = origin;
+    let armed = false;
+    let queued!: () => void;
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { queued = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    const scheduler = new TestScheduler({ beforeTransport: async request => {
+      if (armed && stage === "queued" && request.id.startsWith("exact:")) {
+        queued(); await released;
+      }
+    } });
+    const prepared = await run({ family, pools: [GOOD], scheduler });
+    const cache = createAdapterFamilyExactQuoteCache({ capacity: 8 });
+    const sharedRuntime: CentralAdapterRuntime = {
+      ...runtime(scheduler, new TestFence(), [], undefined, cache),
+      callerAuthority: { bind: () => ({ executor: EXECUTOR, transactionOrigin: current }) },
+    };
+    const input = { family, route: issuedRoute(prepared.publications[0].instances[0]), amountIn: 10n,
+      executor: EXECUTOR, runtimeEvidence: [], source: SOURCE, generation: SOURCE.generation, runtime: sharedRuntime };
+    if (stage === "cached-decode" || stage === "cached-throw") {
+      assert.equal((await executeFamilyExactQuote(input)).status, "resolved");
+    }
+    controls.onExactInput = (at) => { if (at === stage) current = otherOrigin; };
+    controls.onDependentDeclare = () => { if (stage === "dependent") current = otherOrigin; };
+    controls.onExactDecode = () => {
+      if (stage === "decode" || stage === "cached-decode" || stage === "cached-throw") current = otherOrigin;
+      if (stage === "cached-throw") throw new Error("decode failure cannot hide changed authority");
+    };
+    armed = true;
+    const work = executeFamilyExactQuote(input);
+    if (stage === "queued") {
+      await pending;
+      current = otherOrigin;
+      assert.equal(scheduler.callerAuthorities.at(-1)!.transactionOrigin, origin,
+        "already-issued work retains its immutable sender while waiting");
+      assert(Object.isFrozen(scheduler.callerAuthorities.at(-1)));
+      release();
+    }
+    const result = await work;
+    assert.notEqual(result.status, "resolved", `${stage}: changed caller context cannot publish an Exact handle`);
+    const reads = scheduler.requestIds.filter(id => id.startsWith("exact:") || id.startsWith("exact-dependent:"));
+    assert.equal(reads.length, ["methods", "projection", "local"].includes(stage) ? 0 : 1,
+      `${stage}: no later reads or fresh-read recovery after changed context`);
+    assert.equal(cache.snapshot().stores, stage.startsWith("cached-") ? 1 : 0,
+      `${stage}: changed caller context cannot store Exact bytes`);
+  }
+}
+
+async function testExactOriginRequestAuthority(): Promise<void> {
+  const origin = `0x${"ab".repeat(20)}`;
+  const other = `0x${"cd".repeat(20)}`;
+  const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0, exactOriginCaller: true };
+  const family = defineFixture("exact-origin-request", controls);
+  const scheduler = new TestScheduler();
+  const prepared = await run({ family, pools: [GOOD], scheduler });
+  const route = issuedRoute(prepared.publications[0].instances[0]);
+  const reads: string[] = [];
+  const provider = { call: async (tx: { from?: string }, block: number | undefined) => {
+    assert.equal(block, SOURCE.number); reads.push(tx.from!); return "0x05";
+  }, getCode: async () => "0x", getStorage: async () => "0x" };
+  const real = createStrictCentralAdapterRuntime({ provider, executor: EXECUTOR, transactionOrigin: origin,
+    observedSender: OTHER, verifiedActors: { probe: GOOD }, generationFence: { assertCurrent() {} } });
+  const input = { family, route, amountIn: 10n, executor: EXECUTOR, runtimeEvidence: [],
+    source: SOURCE, generation: SOURCE.generation, runtime: real };
+  assert.equal((await executeFamilyExactQuote(input)).status, "resolved");
+  assert.deepEqual(reads, [origin], "the real Exact request path uses trusted origin as physical from");
+  const noOrigin = createStrictCentralAdapterRuntime({ provider, executor: EXECUTOR,
+    observedSender: OTHER, verifiedActors: { origin }, generationFence: { assertCurrent() {} } });
+  const forgedEvidence = { evidenceId: "origin", familyId: family.plugin.manifest.familyId,
+    instanceKey: route.instanceKey, kind: "transaction-origin", scope: "source-block" as const,
+    source: SOURCE, evidenceHash: origin, sealedPayloadRef: origin, transactionOrigin: origin };
+  assert.notEqual((await executeFamilyExactQuote({ ...input, runtime: noOrigin,
+    runtimeEvidence: [forgedEvidence], transactionOrigin: origin } as never)).status, "resolved");
+  assert.deepEqual(reads, [origin], "consumer fields/evidence/other roles cannot supply missing origin");
+  const guarded = { ...real, callerAuthority: { bind(binding: Parameters<typeof real.callerAuthority.bind>[0]) {
+    return { executor: EXECUTOR, transactionOrigin: binding.callerRole === "transaction-origin" ? other : origin };
+  } } };
+  assert.notEqual((await executeFamilyExactQuote({ ...input, runtime: guarded })).status, "resolved");
+  assert.deepEqual(reads, [origin], "per-request authority must match the context captured before declaration");
+}
+
+await testTrustedExactCallerContext();
+await testExactCallerContextMutationFences();
+await testExactOriginRequestAuthority();
 await testSingleInstanceFailureIsolation();
 await testDuplicateObservationCoalescing();
 await testStaticEvidenceContentCacheAcrossGeneration();

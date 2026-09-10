@@ -491,7 +491,7 @@ export async function executeAdapterWork<Input, Evidence>(input: {
       assertSupported(requirements) {
         declaredRequirements = requirements;
         phase = "caller-authority";
-        callerAuthority = freezeCallerAuthority(runtime.callerAuthority.bind({
+        callerAuthority = snapshotCentralCallerAuthority(runtime.callerAuthority.bind({
           stage: intent.stage,
           familyId: intent.familyId,
           subject,
@@ -904,7 +904,8 @@ function freezeFinalSimulationSchedule(
 
 const EMPTY_CALLER_AUTHORITY: CentralCallerAuthority = Object.freeze({});
 
-function freezeCallerAuthority(
+/** Detached, normalized trusted authority snapshot shared by work and Exact. */
+export function snapshotCentralCallerAuthority(
   authority: CentralCallerAuthority,
 ): CentralCallerAuthority {
   if (

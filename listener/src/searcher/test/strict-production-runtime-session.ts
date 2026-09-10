@@ -2650,6 +2650,26 @@ const execution = session.buildExecution({
 });
 assert.equal(execution.status, "resolved");
 
+// Direct session consumers never supply origin: only the injected runtime may
+// bind it, and issued Exact authority must remain current at buildExecution.
+{
+  let authority = { executor: EXECUTOR, transactionOrigin: `0x${"ab".repeat(20)}` };
+  const originRuntime = { ...runtime(CURRENT), callerAuthority: { bind: () => authority } };
+  const originSession = await root.createSession({
+    source: CURRENT, runtime: originRuntime, fundingAssets: [], kind: "exact",
+  });
+  const originEdge = originSession.edges[0]!;
+  const quoted = await originSession.issueExact({ edge: originEdge, amountIn: 1_000_000n,
+    executor: EXECUTOR, runtimeEvidence: [], transactionOrigin: `0x${"cd".repeat(20)}` } as never);
+  const build = () => originSession.buildExecution({ edge: originEdge, exact: quoted,
+    minAmountOut: quoted.amountOut - 1n, executor: EXECUTOR });
+  assert.equal(build().status, "resolved");
+  authority = { ...authority, transactionOrigin: `0x${"cd".repeat(20)}` };
+  assert.equal(build().status, "failed", "direct session execution rejects changed trusted origin");
+  authority = { executor: `0x${"ef".repeat(20)}`, transactionOrigin: `0x${"ab".repeat(20)}` };
+  assert.equal(build().status, "failed", "direct session execution rejects changed trusted executor independently");
+}
+
 // A searched handle may be consumed again in its own current session without
 // another quote, but retaining it must not retain authority after retirement.
 const readsBeforeReuse = currentPricingReads;
