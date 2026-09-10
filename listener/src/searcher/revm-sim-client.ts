@@ -257,6 +257,10 @@ export class RevmSimClient {
   private readonly manifestPath: string;
   private readonly executablePath?: string;
 
+  get isTerminal(): boolean {
+    return this.terminal !== undefined;
+  }
+
   constructor(options: { manifestPath?: string; executablePath?: string; timeoutMs?: number;
     onFatal?: (reason: RevmFatalReason) => void } = {}) {
     this.timeoutMs = options.timeoutMs ?? 60_000;
