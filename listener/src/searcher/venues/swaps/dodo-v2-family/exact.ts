@@ -1,10 +1,13 @@
 import {
+  bindRequestResultRound,
+  collectRequestProgramResults,
   localZeroExactMethod,
+  type ExactQuoteInput,
   type ExactQuoteSemantics,
   type ExactRequestProgram,
 } from "../../adapter-family-plugin.js";
 import type { AdapterRequestResult } from "../../adapter-request-program.js";
-import { quoteDodoPmmExactInput } from "../dodo-pmm-math.js";
+import { DODO_DECIMAL_ONE } from "../dodo-pmm-math.js";
 import {
   assertSameSource,
   canonicalAddress,
@@ -29,6 +32,7 @@ const EXACT_PMM_ID = "exact-pmm-state";
 const EXACT_FEE_ID = "exact-actor-fee";
 const EXACT_INPUT_ID = "exact-input-semantics";
 const EXACT_QUERY_ID = "exact-actor-query";
+const EXACT_EFFECTIVE_QUERY_ID = "exact-effective-actor-query";
 
 const dodoV2RequestProgram: ExactRequestProgram<
   DodoV2Descriptor,
@@ -90,62 +94,49 @@ const dodoV2RequestProgram: ExactRequestProgram<
       }),
     ]);
   },
-  decode({ programInput, initialResults }) {
-    const results = initialResults;
+  buildDependentProgram({ programInput, completedRound, initialResults }) {
+    assertInvocation(programInput.descriptor, programInput.route, programInput.executor);
+    if (programInput.amountIn === 0n || completedRound !== 0) return null;
+    const { effectiveInput } = decodeInitialInput(programInput, initialResults);
+    if (effectiveInput === programInput.amountIn) return null;
+    return bindRequestResultRound(
+      { transports: ["eth-call"], caller: "verified-actor" },
+      [Object.freeze({
+        id: EXACT_EFFECTIVE_QUERY_ID,
+        kind: "eth-call" as const,
+        to: programInput.descriptor.pool,
+        caller: Object.freeze({
+          kind: "verified-actor" as const,
+          evidenceId: DODO_V2_QUOTE_ACTOR_EVIDENCE_ID,
+        }),
+        data: DODO_V2_POOL_INTERFACE.encodeFunctionData(
+          programInput.route.direction === "sell-base" ? "querySellBase" : "querySellQuote",
+          [programInput.descriptor.quoteActorBinding.actor, effectiveInput],
+        ),
+        completion: "return-data" as const,
+      })],
+    );
+  },
+  decode({ programInput, initialResults, dependentEvidence }) {
     assertInvocation(
       programInput.descriptor,
       programInput.route,
       programInput.executor,
     );
     if (programInput.amountIn === 0n) return zeroQuote(programInput);
-    if (programInput.amountIn < 0n) {
-      throw new Error("dodo-v2 exact amountIn cannot be negative");
-    }
-    const pmmResult = requireSuccessfulResult(results, EXACT_PMM_ID);
-    const feeResult = requireSuccessfulResult(results, EXACT_FEE_ID);
-    const inputResult = requireSuccessfulResult(results, EXACT_INPUT_ID);
-    const queryResult = requireSuccessfulResult(results, EXACT_QUERY_ID);
-    assertSameSource([pmmResult, feeResult, inputResult, queryResult]);
-    assertSource(queryResult.source, programInput.source);
-    const inputState = decodeInputSemanticsResult({
-      result: inputResult,
-      pool: programInput.descriptor.pool,
-      baseToken: programInput.descriptor.baseToken,
-      quoteToken: programInput.descriptor.quoteToken,
-    });
-    const sellBase = programInput.route.direction === "sell-base";
-    const effectiveInput = applyDodoTransferToInput(
-      sellBase ? inputState.baseInput : inputState.quoteInput,
-      programInput.amountIn,
-      programInput.descriptor.pool,
-    );
-    let amountOut: bigint;
-    let quotePath: DodoV2ExactEvidence["quotePath"];
-    if (effectiveInput === programInput.amountIn) {
-      amountOut = decodeFirstWord(queryResult.data, "actor-bound exact query");
-      quotePath = "actor-query";
-    } else {
-      const fees = decodeFeeRates(feeResult.data);
-      const local = quoteDodoPmmExactInput({
-        state: decodeDodoPmmState(pmmResult.data),
-        sellBase,
-        payAmount: effectiveInput,
-        lpFeeRate: fees.lpFeeRate,
-        mtFeeRate: fees.mtFeeRate,
-      });
-      if (local.status !== "quote") {
-        throw new Error(
-          `dodo-v2 exact effective input ${effectiveInput} requires a ` +
-            "dependent actor query that the single-round exact contract cannot prove",
+    const { effectiveInput, queryResult } = decodeInitialInput(programInput, initialResults);
+    const amountResult = effectiveInput === programInput.amountIn
+      ? queryResult
+      : requireSuccessfulResult(
+          collectRequestProgramResults(initialResults, dependentEvidence),
+          EXACT_EFFECTIVE_QUERY_ID,
         );
-      }
-      amountOut = local.amountOut;
-      quotePath = "pmm-derived-after-input-adjustment";
-    }
+    assertSource(amountResult.source, programInput.source);
+    const amountOut = decodeFirstWord(amountResult.data, "actor-bound exact query");
     if (amountOut < 0n) throw new Error("dodo-v2 exact quote returned negative output");
     return Object.freeze({
       amountOut,
-      evidence: evidence(programInput, effectiveInput, amountOut, quotePath),
+      evidence: evidence(programInput, effectiveInput, amountOut, "actor-query"),
     });
   },
 };
@@ -162,6 +153,7 @@ export const dodoV2Exact = {
     Object.freeze({
       id: "actor-bound-query",
       kind: "request-program" as const,
+      chainAmountQuote: true,
       program: dodoV2RequestProgram,
     }),
   ]),
@@ -190,6 +182,40 @@ export const dodoV2Exact = {
   DodoV2Route,
   DodoV2ExactEvidence
 >;
+
+function decodeInitialInput(
+  input: ExactQuoteInput<DodoV2Descriptor, DodoV2Route>,
+  results: readonly AdapterRequestResult[],
+) {
+  if (input.amountIn < 0n) throw new Error("dodo-v2 exact amountIn cannot be negative");
+  const pmmResult = requireSuccessfulResult(results, EXACT_PMM_ID);
+  const feeResult = requireSuccessfulResult(results, EXACT_FEE_ID);
+  const inputResult = requireSuccessfulResult(results, EXACT_INPUT_ID);
+  // Retain the four-request initial contract: a failed gross-input query still
+  // fails closed, even when a later effective-input query might have succeeded.
+  const queryResult = requireSuccessfulResult(results, EXACT_QUERY_ID);
+  assertSameSource([pmmResult, feeResult, inputResult, queryResult]);
+  assertSource(queryResult.source, input.source);
+  const inputState = decodeInputSemanticsResult({
+    result: inputResult,
+    pool: input.descriptor.pool,
+    baseToken: input.descriptor.baseToken,
+    quoteToken: input.descriptor.quoteToken,
+  });
+  const effectiveInput = applyDodoTransferToInput(
+    input.route.direction === "sell-base" ? inputState.baseInput : inputState.quoteInput,
+    input.amountIn,
+    input.descriptor.pool,
+  );
+  if (effectiveInput !== input.amountIn) {
+    // Preserve adjusted-input fee/state domain checks without computing a
+    // discarded local quote. The actor query owns output arithmetic and fees.
+    decodeFeeRates(feeResult.data);
+    const pmm = decodeDodoPmmState(pmmResult.data);
+    if (pmm.K > DODO_DECIMAL_ONE) throw new Error("dodo PMM K exceeds one");
+  }
+  return { effectiveInput, queryResult };
+}
 
 function zeroQuote(input: {
   readonly descriptor: DodoV2Descriptor;

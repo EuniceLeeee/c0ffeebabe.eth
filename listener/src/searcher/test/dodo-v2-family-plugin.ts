@@ -5,8 +5,11 @@ import { ethers } from "ethers";
 import { dodoV2ActionAdapter } from "../../adapters/dodo-v2.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { TokenQueryBackend } from "../planner/token-graph.js";
+import { instanceKey } from "../venues/adapter-family-identifiers.js";
 import {
   definedFamilyPluginContractSummary,
+  type ExactQuoteInput,
+  type ExactRequestProgram,
   type UnifiedObservation,
 } from "../venues/adapter-family-plugin.js";
 import type {
@@ -39,9 +42,13 @@ import {
 } from "../venues/swaps/dodo-v2-family/identity.js";
 import type {
   DodoV2Candidate,
+  DodoV2Descriptor,
+  DodoV2ExactEvidence,
   DodoV2Identity,
   DodoV2IdentityEvidence,
+  DodoV2Route,
 } from "../venues/swaps/dodo-v2-family/types.js";
+import { quoteDodoPmmExactInput } from "../venues/swaps/dodo-pmm-math.js";
 import {
   dodoV2Adapter,
   dodoV2BlockScanState,
@@ -328,6 +335,23 @@ assert.deepEqual(
 );
 const exactRequests = exactRequestMethod.program.buildRequests(exactInput);
 assert.equal(exactRequests.length, 4);
+const adjustedInitialResults = await adapterResults(exactRequests, new DodoBackend({
+  baseBalance: 1_050n,
+  baseInput: 50n,
+}));
+const adjustedRound = exactRequestMethod.program.buildDependentProgram?.({
+  programInput: exactInput,
+  completedRound: 0,
+  initialResults: adjustedInitialResults,
+  priorEvidence: [],
+});
+assert.deepEqual({
+  chainAmountQuote: exactRequestMethod.chainAmountQuote,
+  adjustedDependentRequests: adjustedRound?.requests.length,
+}, {
+  chainAmountQuote: true,
+  adjustedDependentRequests: 1,
+}, "positive DODO Exact must declare chain output and query adjusted pool input");
 const queryRequest = exactRequests.find((request) => request.id === "exact-actor-query");
 assert(queryRequest?.kind === "eth-call");
 assert.deepEqual(queryRequest.caller, {
@@ -366,6 +390,8 @@ try {
 assert.equal(strictExact.amountOut, legacyExact);
 assert.equal(strictExact.evidence.actor, DODO_V2_QUOTE_ACTOR);
 assert.equal(strictExact.evidence.quotePath, "actor-query");
+assert.equal(exactRequestMethod.reusePolicy, undefined, "no cross-block reuse declaration");
+await testDependentExact(exactInput, routes, exactRequestMethod.program);
 assert.throws(
   () => exactRequestMethod.program.requirements({
     ...exactInput,
@@ -525,8 +551,205 @@ assert(
 
 console.log(
   "dodo-v2-family-plugin PASS " +
-    "(registry behavior proof, descriptor PMM parity, actor-bound exact, ownership, detect-only victim)",
+    "(registry behavior proof, descriptor PMM parity, dependent chain exact, ownership, detect-only victim)",
 );
+}
+
+async function testDependentExact(
+  original: ExactQuoteInput<DodoV2Descriptor, DodoV2Route>,
+  routes: readonly DodoV2Route[],
+  program: ExactRequestProgram<DodoV2Descriptor, DodoV2Route, DodoV2ExactEvidence>,
+): Promise<void> {
+  const buildDependent = program.buildDependentProgram;
+  assert(buildDependent !== undefined);
+  const next = (
+    programInput: typeof original,
+    initialResults: readonly AdapterRequestResult[],
+  ) => buildDependent({ programInput, initialResults, completedRound: 0, priorEvidence: [] });
+  const replace = (
+    results: readonly AdapterRequestResult[],
+    replacement: AdapterRequestResult,
+  ) => results.map((result) => result.id === replacement.id ? replacement : result);
+  const failed = (id: string): AdapterRequestResult => ({
+    id, ok: false, source: SOURCE, failure: "rpc",
+  });
+  const staleSources = [
+    { ...SOURCE, number: SOURCE.number - 1 },
+    { ...SOURCE, hash: `0x${"33".repeat(32)}` },
+    { ...SOURCE, generation: SOURCE.generation + 1 },
+  ];
+  for (const route of routes) {
+    const input = Object.freeze({ ...original, route });
+    const sellBase = route.direction === "sell-base";
+    const queryFunction = sellBase ? "querySellBase" : "querySellQuote";
+    for (const adjustment of ["unchanged", "surplus", "deficit"] as const) {
+      const effectiveInput = adjustment === "unchanged" ? 200n
+        : adjustment === "surplus" ? 250n : 170n;
+      const chainOut = sellBase ? 503n : 137n;
+      const feeRates = [10n ** 16n, 2n * 10n ** 16n] as const;
+      const backend = new DodoBackend({
+        ...(adjustment === "unchanged" ? {} : sellBase ? {
+          baseBalance: adjustment === "surplus" ? 1_050n : 970n,
+          baseInput: adjustment === "surplus" ? 50n : "revert",
+        } : {
+          quoteBalance: adjustment === "surplus" ? 2_050n : 1_970n,
+          quoteInput: adjustment === "surplus" ? 50n : "revert",
+        }),
+        feeRates,
+        queryOutput: (direction, amount) => amount === original.amountIn
+          ? direction === "sell-base" ? amount * 2n : amount / 2n
+          : chainOut,
+      });
+      const requests = program.buildRequests(input);
+      assert.equal(requests.length, 4);
+      const grossRequest = requests.find((request) => request.id === "exact-actor-query");
+      assert(grossRequest?.kind === "eth-call");
+      assert.equal(
+        BigInt(DODO_V2_POOL_INTERFACE.decodeFunctionData(queryFunction, grossRequest.data)[1]),
+        original.amountIn,
+      );
+      const initial = await adapterResults(requests, backend);
+      const round = next(input, initial);
+      if (adjustment === "unchanged") {
+        assert.equal(round, null, "unchanged pool input stays four requests / one round");
+        const quote = program.decode({ programInput: input, initialResults: initial, dependentEvidence: [] });
+        assert.equal(quote.amountOut, sellBase ? 400n : 100n);
+        assert.equal(quote.evidence.effectiveInput, original.amountIn);
+        continue;
+      }
+      assert(round !== null);
+      assert.equal(round.requests.length, 1, "only one additional actor query");
+      assert.equal(new Set([...requests, ...round.requests].map((request) => request.id)).size, 5);
+      assert.deepEqual(round.requirements, { transports: ["eth-call"], caller: "verified-actor" });
+      const dependent = round.requests[0];
+      assert(dependent.kind === "eth-call");
+      assert.equal(dependent.to, input.descriptor.pool);
+      assert.equal(dependent.completion, "return-data");
+      assert.deepEqual(dependent.caller, {
+        kind: "verified-actor", evidenceId: DODO_V2_QUOTE_ACTOR_EVIDENCE_ID,
+      });
+      const args = DODO_V2_POOL_INTERFACE.decodeFunctionData(queryFunction, dependent.data);
+      assert.equal(ethers.getAddress(String(args[0])), DODO_V2_QUOTE_ACTOR);
+      assert.equal(BigInt(args[1]), effectiveInput);
+      const dependentResults = await adapterResults(round.requests, backend);
+      const dependentEvidence = [round.decode(dependentResults)];
+      assert.equal(buildDependent({
+        programInput: input, initialResults: initial, completedRound: 1, priorEvidence: dependentEvidence,
+      }), null, "no third round");
+      const decode = (results = dependentResults, initialResults = initial, programInput = input) =>
+        program.decode({ programInput, initialResults, dependentEvidence: [round.decode(results)] });
+      const quote = decode();
+      assert.equal(quote.amountOut, chainOut, "choose chain response without a second fee deduction");
+      const oldLocal = quoteDodoPmmExactInput({
+        state: { i: 2n * 10n ** 18n, K: 0n, B: 1_000n, Q: 2_000n, B0: 1_000n, Q0: 2_000n, R: 0 },
+        sellBase, payAmount: effectiveInput, lpFeeRate: feeRates[0], mtFeeRate: feeRates[1],
+      });
+      assert(oldLocal.status === "quote");
+      assert.notEqual(quote.amountOut, oldLocal.amountOut, "adjusted result is not the former local PMM output");
+      assert.equal(quote.evidence.amountIn, original.amountIn);
+      assert.equal(quote.evidence.effectiveInput, effectiveInput);
+      assert.equal(quote.evidence.quotePath, "actor-query");
+      assert.deepEqual(quote.evidence.source, SOURCE);
+      const fragment = dodoV2StrictFamilyPlugin.execution.buildFragment({
+        ...input, quotedAmountOut: quote.amountOut, minAmountOut: quote.amountOut,
+        exactEvidence: quote.evidence,
+      });
+      assert.deepEqual(fragment.requirements, [{
+        kind: "transfer-to-pool", token: route.tokenIn, pool: input.descriptor.pool, amount: original.amountIn,
+      }]);
+      assert.equal(fragment.nodes[0].amount, original.amountIn);
+      assert.equal(input.amountIn, original.amountIn);
+      assert.throws(() => decode([]), /is missing/);
+      assert.throws(() => program.decode({
+        programInput: input, initialResults: initial, dependentEvidence: [],
+      }), /is missing/, "no fallback to gross or local output");
+      for (const badData of ["0x", "0x01", "not-hex"]) {
+        assert.throws(() => decode([success(dependent.id, badData)]), /returned malformed data/);
+      }
+      assert.throws(() => decode([failed(dependent.id)]), /unresolved: rpc/);
+      assert.throws(() => decode([{
+        ...success(dependent.id, "0x"), ok: true, completion: "reverted-as-declared", data: "0x", provenance: PROVENANCE,
+      }]), /did not return normally/);
+      for (const source of staleSources) {
+        assert.throws(() => decode(dependentResults.map((result) => ({ ...result, source }))), /foreign source/);
+        for (const request of requests) {
+          const stale = initial.map((result) => result.id === request.id ? { ...result, source } : result);
+          assert.throws(() => next(input, stale), /different canonical sources/);
+          assert.throws(() => decode(dependentResults, stale), /different canonical sources/);
+        }
+        assert.throws(() => next({ ...input, source }, initial), /foreign source/);
+        assert.throws(() => decode(dependentResults, initial, { ...input, source }), /foreign source/);
+      }
+      for (const request of requests) {
+        const broken = replace(initial, failed(request.id));
+        assert.throws(() => next(input, broken), /unresolved: rpc/);
+        assert.throws(() => decode(dependentResults, broken), /unresolved: rpc/);
+      }
+      // In particular, the initial gross-input query is still required even
+      // when we have a successful effective-input response available.
+      for (const invalid of [
+        { ...input, executor: FORGED_POOL },
+        { ...input, route: { ...route, pool: FORGED_POOL } },
+        { ...input, route: { ...route, tokenIn: route.tokenOut } },
+        { ...input, route: { ...route, instanceKey: instanceKey(`${route.instanceKey}-foreign`) } },
+      ]) {
+        assert.throws(() => program.requirements(invalid), /does not match/);
+        assert.throws(() => program.buildRequests(invalid), /does not match/);
+        assert.throws(() => next(invalid, initial), /does not match/);
+        assert.throws(() => decode(dependentResults, initial, invalid), /does not match/);
+      }
+    }
+    const invalidInputs: readonly BackendOptions[] = sellBase ? [
+      { baseBalance: 800n, baseInput: "revert" }, // net zero
+      { baseBalance: 799n, baseInput: "revert" }, // deficit not cleared
+      { baseBalance: 970n }, // successful getter below liability
+      { baseBalance: 1_050n, baseInput: 49n }, // inconsistent getter
+      { baseInput: "revert" }, // revert without deficit
+      { baseReserve: 0n, baseBalance: ethers.MaxUint256, baseInput: ethers.MaxUint256 },
+    ] : [
+      { quoteBalance: 1_800n, quoteInput: "revert" },
+      { quoteBalance: 1_799n, quoteInput: "revert" },
+      { quoteBalance: 1_970n },
+      { quoteBalance: 2_050n, quoteInput: 49n },
+      { quoteInput: "revert" },
+      { quoteReserve: 0n, quoteBalance: ethers.MaxUint256, quoteInput: ethers.MaxUint256 },
+    ];
+    for (const options of invalidInputs) {
+      const initial = await adapterResults(program.buildRequests(input), new DodoBackend(options));
+      assert.throws(() => next(input, initial), /deficit|liability|semantics mismatch|uint256|overflow/);
+      assert.throws(() => program.decode({
+        programInput: input, initialResults: initial, dependentEvidence: [],
+      }), /deficit|liability|semantics mismatch|uint256|overflow/);
+    }
+  }
+  const initial = await adapterResults(program.buildRequests(original), new DodoBackend({
+    baseBalance: 1_050n, baseInput: 50n,
+  }));
+  const badDomainResults = [
+    success("exact-actor-fee", "0x"),
+    success("exact-actor-fee", DODO_V2_POOL_INTERFACE.encodeFunctionResult("getUserFeeRate", [10n ** 18n, 0n])),
+    success("exact-pmm-state", "0x"),
+    success("exact-pmm-state", DODO_V2_POOL_INTERFACE.encodeFunctionResult(
+      "getPMMStateForCall", [2n * 10n ** 18n, 10n ** 18n + 1n, 1_000n, 2_000n, 1_000n, 2_000n, 0],
+    )),
+    success("exact-pmm-state", DODO_V2_POOL_INTERFACE.encodeFunctionResult(
+      "getPMMStateForCall", [2n * 10n ** 18n, 0n, 1_000n, 2_000n, 1_000n, 2_000n, 3],
+    )),
+    success("exact-input-semantics", blockScanMulticallIface.encodeFunctionResult("aggregate3", [[]])),
+  ];
+  for (const result of badDomainResults) {
+    const broken = replace(initial, result);
+    assert.throws(() => next(original, broken));
+    assert.throws(() => program.decode({ programInput: original, initialResults: broken, dependentEvidence: [] }));
+  }
+  const zero = { ...original, amountIn: 0n };
+  assert.deepEqual(program.buildRequests(zero), []);
+  assert.equal(next(zero, []), null);
+  assert.equal(program.decode({ programInput: zero, initialResults: [], dependentEvidence: [] }).amountOut, 0n);
+  const negative = { ...original, amountIn: -1n };
+  assert.throws(() => program.buildRequests(negative), /cannot be negative/);
+  assert.throws(() => next(negative, []), /cannot be negative/);
+  assert.throws(() => program.decode({ programInput: negative, initialResults: [], dependentEvidence: [] }), /cannot be negative/);
 }
 
 async function runIdentity(
@@ -670,8 +893,10 @@ interface BackendOptions {
   readonly quoteBalance?: bigint;
   readonly baseReserve?: bigint;
   readonly quoteReserve?: bigint;
-  readonly baseInput?: bigint;
-  readonly quoteInput?: bigint;
+  readonly baseInput?: bigint | "revert";
+  readonly quoteInput?: bigint | "revert";
+  readonly feeRates?: readonly [bigint, bigint];
+  readonly queryOutput?: (direction: DodoV2Route["direction"], amount: bigint) => bigint;
   readonly mtFeeTotal?: readonly [bigint, bigint];
   readonly pmm?: readonly [bigint, bigint, bigint, bigint, bigint, bigint, number];
 }
@@ -760,14 +985,16 @@ class DodoBackend implements TokenQueryBackend {
           DODO_V2_POOL_INTERFACE.decodeFunctionData("getUserFeeRate", request.data)[0],
         );
         this.lastFeeActor = ethers.getAddress(actor);
-        return DODO_V2_POOL_INTERFACE.encodeFunctionResult("getUserFeeRate", [0n, 0n]);
+        return DODO_V2_POOL_INTERFACE.encodeFunctionResult("getUserFeeRate", this.options.feeRates ?? [0n, 0n]);
       }
       if (selector === DODO_V2_POOL_INTERFACE.getFunction("getBaseInput")!.selector) {
+        if (this.options.baseInput === "revert") throw new Error("execution reverted: base input deficit");
         return DODO_V2_POOL_INTERFACE.encodeFunctionResult("getBaseInput", [
           this.options.baseInput ?? 0n,
         ]);
       }
       if (selector === DODO_V2_POOL_INTERFACE.getFunction("getQuoteInput")!.selector) {
+        if (this.options.quoteInput === "revert") throw new Error("execution reverted: quote input deficit");
         return DODO_V2_POOL_INTERFACE.encodeFunctionResult("getQuoteInput", [
           this.options.quoteInput ?? 0n,
         ]);
@@ -789,7 +1016,7 @@ class DodoBackend implements TokenQueryBackend {
         this.lastQueryActor = ethers.getAddress(String(decoded[0]));
         return ethers.AbiCoder.defaultAbiCoder().encode(
           ["uint256", "uint256"],
-          [BigInt(decoded[1]) * 2n, 0n],
+          [this.options.queryOutput?.("sell-base", BigInt(decoded[1])) ?? BigInt(decoded[1]) * 2n, 0n],
         );
       }
       if (selector === DODO_V2_POOL_INTERFACE.getFunction("querySellQuote")!.selector) {
@@ -800,7 +1027,7 @@ class DodoBackend implements TokenQueryBackend {
         this.lastQueryActor = ethers.getAddress(String(decoded[0]));
         return ethers.AbiCoder.defaultAbiCoder().encode(
           ["uint256", "uint256", "uint256", "uint256"],
-          [BigInt(decoded[1]) / 2n, 0n, 0n, 0n],
+          [this.options.queryOutput?.("sell-quote", BigInt(decoded[1])) ?? BigInt(decoded[1]) / 2n, 0n, 0n, 0n],
         );
       }
     }

@@ -1120,7 +1120,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "07cae6d5c1d3db59e5dbc4e95c1e4a2696eb28aa08bee0fafbc734ffb88150f6",
+        "contentHash": "606ec1ef58be125b375772ad9301d5bb2c4f130fb9bb3930da3d7894af0b4295",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -7694,5 +7694,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "c3ff7d43366ba336c5fb9876bb34d0b59f2ac1dc0fc2bee212d62de44ddac6a7"
+  "artifactHash": "1a2756532e3d104c33ef85a5f6f5b08a4e81daa0135bd43b13866a8ad9a8d7cb"
 }
