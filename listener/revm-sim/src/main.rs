@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     env, fmt, fs,
     io::{self, BufRead, Write as IoWrite},
@@ -145,6 +145,40 @@ impl fmt::Display for RpcError {
 impl std::error::Error for RpcError {}
 impl DBErrorMarker for RpcError {}
 
+/// Physical transport evidence only. Never infer quota from contract/revert text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
+enum FatalReason {
+    RpcThrottle {
+        category: ThrottleCategory,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        http_status: Option<u16>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        rpc_code: Option<i64>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum ThrottleCategory {
+    Http429,
+    RpcLimitCode,
+    RpcRateLimit,
+    RpcQuota,
+}
+
+impl fmt::Display for FatalReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("revm-sim fatal rpc-throttle")
+    }
+}
+impl std::error::Error for FatalReason {}
+type FatalLatch = Rc<Cell<Option<FatalReason>>>;
+
 #[derive(Debug)]
 struct RpcClient {
     url: String,
@@ -154,14 +188,16 @@ struct RpcClient {
     /// keep-alive connection wall time is roughly round_trips × warm RTT, so the
     /// lever is keeping this number minimal while preserving batch structure.
     round_trips: std::cell::Cell<u64>,
+    fatal: FatalLatch,
 }
 
 impl RpcClient {
-    fn new(url: String, client: Client) -> Result<Self> {
+    fn new(url: String, client: Client, fatal: FatalLatch) -> Result<Self> {
         Ok(Self {
             url,
             client,
             round_trips: std::cell::Cell::new(0),
+            fatal,
         })
     }
 
@@ -169,26 +205,142 @@ impl RpcClient {
         self.round_trips.get()
     }
 
-    fn call(&self, method: &str, params: Value) -> Result<Value> {
+    fn check_fatal(&self) -> Result<()> {
+        if let Some(reason) = self.fatal.get() {
+            return Err(reason.into());
+        }
+        Ok(())
+    }
+
+    fn latch(&self, reason: FatalReason) {
+        if self.fatal.get().is_none() {
+            self.fatal.set(Some(reason));
+        }
+    }
+
+    fn inspect_rpc_error(&self, response: &Value) {
+        let Some(error) = response.get("error").filter(|error| error.is_object()) else {
+            return;
+        };
+        let code = error.get("code").and_then(Value::as_i64);
+        let hex_data = error
+            .get("data")
+            .and_then(Value::as_str)
+            .is_some_and(|data| {
+                data.get(..2)
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("0x"))
+                    && data[2..].bytes().all(|byte| byte.is_ascii_hexdigit())
+            });
+        if code == Some(3)
+            || error.get("code").and_then(Value::as_str) == Some("CALL_EXCEPTION")
+            || (code == Some(-32000) && hex_data)
+        {
+            return;
+        }
+        let message = error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        // Inspect only structured RPC errors, never result/revert output. Also
+        // keep explicitly marked execution reverts out of message classification.
+        let words: Vec<&str> = message
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .collect();
+        let category = if matches!(code, Some(429 | -32005)) {
+            ThrottleCategory::RpcLimitCode
+        } else if words
+            .windows(2)
+            .any(|pair| pair == ["execution", "reverted"])
+            || words
+                .first()
+                .is_some_and(|word| *word == "revert" || *word == "reverted")
+        {
+            return;
+        } else if words
+            .windows(3)
+            .any(|phrase| phrase == ["too", "many", "requests"])
+            || words
+                .windows(2)
+                .any(|pair| pair == ["rate", "limit"] || pair == ["http", "429"])
+            || words.contains(&"ratelimit")
+        {
+            ThrottleCategory::RpcRateLimit
+        } else if words.iter().enumerate().any(|(i, word)| {
+            (*word == "quota"
+                || *word == "throughput"
+                || (*word == "compute" && matches!(words.get(i + 1), Some(&"unit" | &"units"))))
+                && words[i + 1..].iter().any(|tail| {
+                    tail.starts_with("exceed")
+                        || tail.starts_with("limit")
+                        || *tail == "capacity"
+                        || tail.starts_with("exhaust")
+                        || tail.starts_with("deplet")
+                })
+        }) {
+            ThrottleCategory::RpcQuota
+        } else {
+            return;
+        };
+        self.latch(FatalReason::RpcThrottle {
+            category,
+            http_status: None,
+            rpc_code: code,
+        });
+    }
+
+    fn send_json(&self, body: &Value) -> Result<Value> {
+        self.check_fatal()?;
         self.round_trips.set(self.round_trips.get() + 1);
+        let response = self
+            .client
+            .post(&self.url)
+            .json(body)
+            .send()
+            .map_err(|_| anyhow!("rpc send failed"))?;
+        let status = response.status();
+        if status.as_u16() == 429 {
+            self.latch(FatalReason::RpcThrottle {
+                category: ThrottleCategory::Http429,
+                http_status: Some(429),
+                rpc_code: None,
+            });
+            self.check_fatal()?;
+        }
+        // Strip reqwest errors and remote messages: neither endpoint credentials
+        // nor provider-supplied body text belong in the daemon's error/log surface.
+        let value: Value = response
+            .json()
+            .map_err(|_| anyhow!("rpc json decode failed"))?;
+        self.inspect_rpc_error(&value);
+        if let Some(items) = value.as_array() {
+            // Scan EVERY item before ID selection/domain conversion. This also
+            // catches quota errors attached to unknown or duplicate batch IDs.
+            for item in items {
+                self.inspect_rpc_error(item);
+            }
+        }
+        self.check_fatal()?;
+        if !status.is_success() {
+            bail!("rpc http status {}", status.as_u16());
+        }
+        Ok(value)
+    }
+
+    fn call(&self, method: &str, params: Value) -> Result<Value> {
         let body = json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": method,
             "params": params,
         });
-        let response: Value = self
-            .client
-            .post(&self.url)
-            .json(&body)
-            .send()
-            .with_context(|| format!("rpc {method} send failed"))?
-            .error_for_status()
-            .with_context(|| format!("rpc {method} http status failed"))?
-            .json()
-            .with_context(|| format!("rpc {method} json decode failed"))?;
+        let response = self.send_json(&body)?;
         if let Some(error) = response.get("error") {
-            bail!("rpc {method} error: {error}");
+            bail!(
+                "rpc {method} error code {:?}",
+                error.get("code").and_then(Value::as_i64)
+            );
         }
         response
             .get("result")
@@ -200,10 +352,10 @@ impl RpcClient {
     /// same order as `calls`; a per-call error becomes an `Err` entry while a
     /// transport failure fails the whole batch.
     fn batch_call(&self, calls: &[(&str, Value)]) -> Result<Vec<Result<Value>>> {
+        self.check_fatal()?;
         if calls.is_empty() {
             return Ok(Vec::new());
         }
-        self.round_trips.set(self.round_trips.get() + 1);
         let body: Vec<Value> = calls
             .iter()
             .enumerate()
@@ -211,16 +363,7 @@ impl RpcClient {
                 json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params })
             })
             .collect();
-        let response: Value = self
-            .client
-            .post(&self.url)
-            .json(&body)
-            .send()
-            .context("rpc batch send failed")?
-            .error_for_status()
-            .context("rpc batch http status failed")?
-            .json()
-            .context("rpc batch json decode failed")?;
+        let response = self.send_json(&Value::Array(body))?;
         let items = response
             .as_array()
             .ok_or_else(|| anyhow!("rpc batch: non-array response"))?;
@@ -235,7 +378,10 @@ impl RpcClient {
                 None => Err(anyhow!("rpc batch: missing response for id {id}")),
                 Some(item) => {
                     if let Some(error) = item.get("error") {
-                        Err(anyhow!("rpc batch error: {error}"))
+                        Err(anyhow!(
+                            "rpc batch error code {:?}",
+                            error.get("code").and_then(Value::as_i64)
+                        ))
                     } else {
                         item.get("result")
                             .cloned()
@@ -332,9 +478,10 @@ impl RemoteRevmDb {
         funded: HashSet<Address>,
         persist: Rc<RefCell<PersistentCache>>,
         http: Client,
+        fatal: FatalLatch,
     ) -> Result<Self> {
         Ok(Self {
-            rpc: RpcClient::new(rpc_url, http)?,
+            rpc: RpcClient::new(rpc_url, http, fatal)?,
             block_tag: hex_quantity_u64(block_number),
             funded,
             persist,
@@ -794,6 +941,7 @@ fn simulate(req: SimRequest, started: Instant) -> Result<SimResponse> {
         funded,
         Rc::new(RefCell::new(PersistentCache::default())),
         build_http_client()?,
+        FatalLatch::default(),
     )?;
     let block_env = load_block_env(&remote.rpc, req.block_number)?;
     let mut db = CacheDB::new(remote);
@@ -840,6 +988,7 @@ fn simulate(req: SimRequest, started: Instant) -> Result<SimResponse> {
     let post = erc20_balance_of(&mut db, &block_env, profit_token, executor)?;
     let profit = post.saturating_sub(pre);
 
+    db.db.rpc.check_fatal()?;
     Ok(SimResponse {
         success: success && profit > U256::ZERO,
         profit: profit.to_string(),
@@ -948,6 +1097,18 @@ enum DaemonRequest {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct DaemonResponseEnvelope {
+    // Missing/invalid framing has no usable identity and must poison the client.
+    epoch: Option<String>,
+    request_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fatal: Option<FatalReason>,
+    #[serde(flatten)]
+    response: DaemonResponse,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DaemonResponse {
     ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1038,6 +1199,10 @@ struct WarmBlock {
 
 #[derive(Default)]
 struct Daemon {
+    epoch: Option<String>,
+    last_request_id: u64,
+    // Shared by every RemoteRevmDb, including after reset/new block/cache reuse.
+    fatal: FatalLatch,
     warm: Option<WarmBlock>,
     prepared: Option<CacheDB<SharedRemote>>,
     block_env: Option<BlockEnv>,
@@ -1064,11 +1229,7 @@ fn serve() -> Result<()> {
         if line.trim().is_empty() {
             continue;
         }
-        let started = Instant::now();
-        let response = match serde_json::from_str::<DaemonRequest>(&line) {
-            Ok(req) => daemon.handle(req, started),
-            Err(err) => DaemonResponse::err(format!("bad request: {err}"), started),
-        };
+        let response = daemon.handle_line(&line);
         serde_json::to_writer(&mut stdout, &response)?;
         stdout.write_all(b"\n")?;
         stdout.flush()?;
@@ -1077,6 +1238,53 @@ fn serve() -> Result<()> {
 }
 
 impl Daemon {
+    fn handle_line(&mut self, line: &str) -> DaemonResponseEnvelope {
+        let started = Instant::now();
+        let value = serde_json::from_str::<Value>(line).unwrap_or(Value::Null);
+        let epoch = value
+            .get("epoch")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty() && s.len() <= 128)
+            .map(str::to_owned);
+        let request_id = value
+            .get("requestId")
+            .and_then(Value::as_str)
+            .filter(|s| {
+                s.parse::<u64>()
+                    .is_ok_and(|id| id > 0 && id.to_string() == *s)
+            })
+            .map(str::to_owned);
+        let response = match (&epoch, &request_id) {
+            (Some(epoch), Some(id)) => {
+                let id = id.parse::<u64>().expect("validated above");
+                if self.epoch.as_ref().is_some_and(|bound| bound != epoch)
+                    || id <= self.last_request_id
+                {
+                    DaemonResponse::err("request identity violation".into(), started)
+                } else {
+                    self.epoch = Some(epoch.clone());
+                    self.last_request_id = id;
+                    match serde_json::from_value::<DaemonRequest>(value) {
+                        Ok(req) => self.handle(req, started),
+                        // Do not echo serde's untrusted field values (including URLs).
+                        Err(_) => DaemonResponse::err("bad daemon request".into(), started),
+                    }
+                }
+            }
+            _ => DaemonResponse::err("bad request envelope".into(), started),
+        };
+        let fatal = self.fatal.get();
+        DaemonResponseEnvelope {
+            epoch,
+            request_id,
+            fatal,
+            response: match fatal {
+                Some(reason) => DaemonResponse::err(reason.to_string(), started),
+                None => response,
+            },
+        }
+    }
+
     fn http_client(&mut self) -> Result<Client> {
         if self.http.is_none() {
             self.http = Some(build_http_client()?);
@@ -1085,7 +1293,16 @@ impl Daemon {
     }
 
     fn handle(&mut self, req: DaemonRequest, started: Instant) -> DaemonResponse {
-        match self.dispatch(req, started) {
+        if let Some(reason) = self.fatal.get() {
+            return DaemonResponse::err(reason.to_string(), started);
+        }
+        let result = self.dispatch(req, started);
+        // Optional prefetch/probes may intentionally swallow ordinary errors.
+        // They may NEVER turn a physically latched throttle into success/revert.
+        if let Some(reason) = self.fatal.get() {
+            return DaemonResponse::err(reason.to_string(), started);
+        }
+        match result {
             Ok(resp) => resp,
             Err(err) => DaemonResponse::err(err.to_string(), started),
         }
@@ -1325,6 +1542,7 @@ impl Daemon {
             HashSet::new(),
             Rc::clone(&self.persist),
             http,
+            Rc::clone(&self.fatal),
         )?;
         // block_env left None — fetched lazily, batched with the prepare warm-up.
         self.warm = Some(WarmBlock {
@@ -2795,6 +3013,411 @@ fn hex_quantity_u64(value: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // One deterministic loopback exchange; no external endpoints or env input.
+    fn rpc_fixture(status: u16, body: Value) -> (RpcClient, std::thread::JoinHandle<()>) {
+        rpc_fixture_steps(vec![(status, body)])
+    }
+
+    fn rpc_fixture_steps(steps: Vec<(u16, Value)>) -> (RpcClient, std::thread::JoinHandle<()>) {
+        use std::io::Read;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let thread = std::thread::spawn(move || {
+            listener.set_nonblocking(true).unwrap();
+            for (status, body) in steps {
+                let until = Instant::now() + Duration::from_secs(5);
+                let mut stream = loop {
+                    match listener.accept() {
+                        Ok((stream, _)) => break stream,
+                        Err(err)
+                            if err.kind() == io::ErrorKind::WouldBlock
+                                && Instant::now() < until =>
+                        {
+                            std::thread::sleep(Duration::from_millis(1));
+                        }
+                        Err(err) => panic!("fixture accept failed: {err}"),
+                    }
+                };
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut bytes = Vec::new();
+                let mut byte = [0u8; 1];
+                while !bytes.ends_with(b"\r\n\r\n") {
+                    stream.read_exact(&mut byte).unwrap();
+                    bytes.push(byte[0]);
+                }
+                let header = String::from_utf8(bytes).unwrap();
+                let length: usize = header
+                    .lines()
+                    .find_map(|line| {
+                        let (key, value) = line.split_once(':')?;
+                        key.eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse().unwrap())
+                    })
+                    .unwrap();
+                stream.read_exact(&mut vec![0; length]).unwrap();
+                let body = body.to_string();
+                write!(stream, "HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            }
+        });
+        let http = Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap();
+        (
+            RpcClient::new(url, http, FatalLatch::default()).unwrap(),
+            thread,
+        )
+    }
+
+    #[test]
+    fn physical_429_latches_before_any_later_call_or_batch() {
+        for batch in [false, true] {
+            let (rpc, thread) = rpc_fixture(429, json!({"error": "untrusted provider body"}));
+            if batch {
+                assert!(rpc.batch_call(&[("eth_call", json!([]))]).is_err());
+            } else {
+                assert!(rpc.call("eth_call", json!([])).is_err());
+            }
+            thread.join().unwrap();
+            assert!(rpc.call("eth_call", json!([])).is_err());
+            assert!(rpc.batch_call(&[("eth_call", json!([]))]).is_err());
+            assert_eq!(rpc.round_trips(), 1, "latched calls must perform zero I/O");
+        }
+    }
+
+    fn request_line(daemon: &mut Daemon, id: u64, mut req: Value) -> Value {
+        req["epoch"] = json!("fixture-epoch");
+        req["requestId"] = json!(id.to_string());
+        serde_json::to_value(daemon.handle_line(&req.to_string())).unwrap()
+    }
+
+    fn quota_error(code: Value, message: &str) -> Value {
+        json!({"jsonrpc":"2.0", "id":0, "error":{"code":code,"message":message}})
+    }
+
+    #[test]
+    fn explicit_quota_codes_and_messages_latch_single_whole_batch_and_every_item() {
+        for (code, message, category) in [
+            (429, "", "rpc-limit-code"),
+            (-32005, "", "rpc-limit-code"),
+            (-32000, "rate limit exceeded", "rpc-rate-limit"),
+            (-32603, "too many requests", "rpc-rate-limit"),
+            (-32010, "compute units capacity exceeded", "rpc-quota"),
+            (-32000, "compute-unit limit exceeded", "rpc-quota"),
+            (-32000, "quota exceeded", "rpc-quota"),
+            (-32002, "throughput limit reached", "rpc-quota"),
+            (-32000, "account quota exhausted", "rpc-quota"),
+            (-32000, "compute units depleted", "rpc-quota"),
+            (-32000, "account quota exhaustion", "rpc-quota"),
+            (-32000, "compute-unit depletion", "rpc-quota"),
+        ] {
+            for shape in [
+                "single",
+                "whole-batch",
+                "per-item",
+                "unknown-id",
+                "duplicate-id",
+            ] {
+                let mut error = quota_error(json!(code), message);
+                if shape == "unknown-id" {
+                    error["id"] = json!(900);
+                }
+                if shape == "per-item" {
+                    error["id"] = json!(1);
+                }
+                let body = if shape == "single" || shape == "whole-batch" {
+                    error
+                } else {
+                    json!([{"id":0,"result":"0x"}, error])
+                };
+                let (rpc, thread) = rpc_fixture(200, body);
+                let failure = if shape == "single" {
+                    rpc.call("eth_call", json!([])).unwrap_err()
+                } else {
+                    rpc.batch_call(&[("eth_call", json!([])), ("eth_call", json!([]))])
+                        .unwrap_err()
+                };
+                assert!(failure.downcast_ref::<FatalReason>().is_some());
+                assert_eq!(
+                    serde_json::to_value(rpc.fatal.get()).unwrap()["category"],
+                    category
+                );
+                assert!(rpc.call("eth_call", json!([])).is_err());
+                assert!(rpc.batch_call(&[]).is_err());
+                assert_eq!(rpc.round_trips(), 1);
+                thread.join().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn revert_data_and_bare_429_are_not_physical_quota_evidence() {
+        let mut hex_revert = quota_error(json!(-32000), "rate limit exceeded 429");
+        hex_revert["error"]["data"] = json!("0xdeadbeef");
+        let mut exhausted_revert = quota_error(json!(-32000), "account quota exhausted");
+        exhausted_revert["error"]["data"] = json!("0xdeadbeef");
+        for error in [
+            quota_error(json!(3), "quota exceeded 429"),
+            quota_error(json!("CALL_EXCEPTION"), "too many requests"),
+            hex_revert,
+            exhausted_revert,
+            quota_error(json!(3), "account quota exhausted"),
+            quota_error(json!("CALL_EXCEPTION"), "compute units depleted"),
+            quota_error(json!(-32000), "execution reverted: compute units depleted"),
+            quota_error(json!(-32000), "account balance depleted"),
+            quota_error(json!(-32000), "429"),
+            quota_error(json!(-32603), "internal error 429"),
+            quota_error(json!(-32000), "execution reverted: rate limit exceeded"),
+            json!({"id":0,"error":"429"}),
+            json!({"id":0,"result":"429 rate limit exceeded"}),
+        ] {
+            for batch in [false, true] {
+                let body = if batch {
+                    json!([error.clone()])
+                } else {
+                    error.clone()
+                };
+                let (rpc, thread) = rpc_fixture(200, body);
+                if batch {
+                    let _ = rpc.batch_call(&[("eth_call", json!([]))]);
+                } else {
+                    let _ = rpc.call("eth_call", json!([]));
+                }
+                assert_eq!(rpc.fatal.get(), None);
+                assert!(rpc.batch_call(&[]).is_ok());
+                thread.join().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn physical_errors_do_not_echo_remote_body_or_endpoint() {
+        for (status, body) in [
+            (429, json!("must-not-echo")),
+            (
+                500,
+                quota_error(json!(-32000), "quota exceeded must-not-echo"),
+            ),
+            (
+                200,
+                quota_error(json!(-32000), "ordinary failure must-not-echo"),
+            ),
+        ] {
+            let (rpc, thread) = rpc_fixture(status, body);
+            let err = rpc.call("eth_call", json!([])).unwrap_err();
+            let printed = format!("{err:#}");
+            assert!(!printed.contains("must-not-echo"));
+            assert!(!printed.contains(&rpc.url));
+            thread.join().unwrap();
+        }
+    }
+
+    fn daemon_fixture(rpc: &RpcClient) -> Daemon {
+        Daemon {
+            http: Some(rpc.client.clone()),
+            fatal: Rc::clone(&rpc.fatal),
+            ..Daemon::default()
+        }
+    }
+
+    #[test]
+    fn swallowed_warm_batch_or_trace_error_overrides_success_and_gates_all_later_ops() {
+        for trace in [false, true] {
+            for body in [
+                quota_error(json!(-32000), "compute units limit exceeded"),
+                json!([quota_error(json!(-32000), "quota exceeded")]),
+                quota_error(json!(-32000), "account quota exhausted"),
+                json!([quota_error(json!(-32000), "compute units depleted")]),
+            ] {
+                let (rpc, thread) = rpc_fixture(200, body);
+                let mut daemon = daemon_fixture(&rpc);
+                daemon.ensure_warm(1, Some(rpc.url.clone())).unwrap();
+                let remote = Rc::clone(&daemon.warm.as_ref().unwrap().remote);
+                let mut req = json!({"op":"warm", "blockNumber":1, "rpcUrl":rpc.url});
+                if trace {
+                    remote.seed_account(Address::ZERO, U256::MAX, 0, None);
+                    daemon.warm.as_mut().unwrap().block_env = Some(BlockEnv::default());
+                    req["prewarmCalls"] = json!([{"from":format!("{:#x}", Address::ZERO),
+                        "to":format!("{:#x}", Address::ZERO), "calldata":"0x"}]);
+                }
+                let result = request_line(&mut daemon, 1, req);
+                assert_eq!(result["ok"], false);
+                assert_eq!(result["fatal"]["kind"], "rpc-throttle");
+                assert!(result.get("success").is_none());
+                for (i, op) in [
+                    "health",
+                    "reset",
+                    "warm",
+                    "prepare",
+                    "quote",
+                    "simulate",
+                    "strictSimulate",
+                ]
+                .iter()
+                .enumerate()
+                {
+                    let result = request_line(&mut daemon, i as u64 + 2, json!({"op":op}));
+                    assert_eq!(result["ok"], false);
+                    assert_eq!(result["fatal"]["kind"], "rpc-throttle");
+                    assert!(result.get("success").is_none());
+                }
+                // Replacing the warm DB also preserves the lifetime latch.
+                daemon.ensure_warm(2, Some(rpc.url.clone())).unwrap();
+                let next = &daemon.warm.as_ref().unwrap().remote.rpc;
+                assert!(next.call("eth_call", json!([])).is_err());
+                assert_eq!(next.round_trips(), 0);
+                assert_eq!(remote.rpc.round_trips(), 1);
+                thread.join().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn envelope_covers_every_op_and_rejects_bad_framing_without_dispatch() {
+        let mut daemon = Daemon::default();
+        for (i, op) in [
+            "health",
+            "reset",
+            "warm",
+            "prepare",
+            "quote",
+            "simulate",
+            "strictSimulate",
+            "unknown",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let result = request_line(&mut daemon, i as u64 + 1, json!({"op":op}));
+            assert_eq!(result["epoch"], "fixture-epoch");
+            assert_eq!(result["requestId"], (i + 1).to_string());
+            assert_eq!(result["ok"], *op == "health" || *op == "reset");
+        }
+        assert!(daemon.http.is_none());
+        assert!(daemon.warm.is_none());
+        for raw in [
+            "not-json",
+            r#"{"op":"health"}"#,
+            r#"{"op":"health","epoch":"fixture-epoch","requestId":"8"}"#,
+            r#"{"op":"health","epoch":"old","requestId":"9"}"#,
+            r#"{"op":"health","epoch":"fixture-epoch","requestId":9}"#,
+            r#"{"op":"health","epoch":"fixture-epoch","requestId":"09"}"#,
+        ] {
+            assert!(!daemon.handle_line(raw).response.ok);
+        }
+        assert_eq!(daemon.last_request_id, 8);
+        assert_eq!(
+            request_line(&mut daemon, 10, json!({"op":"health"}))["ok"],
+            true
+        );
+    }
+
+    fn cached_daemon(rpc: &RpcClient, revert: bool) -> (Daemon, String, String, String) {
+        let mut daemon = daemon_fixture(rpc);
+        daemon.ensure_warm(1, Some(rpc.url.clone())).unwrap();
+        let caller = Address::from([0x11; 20]);
+        let target = Address::from([0x22; 20]);
+        let token = Address::from([0x33; 20]);
+        let remote = &daemon.warm.as_ref().unwrap().remote;
+        let zero_word =
+            Bytecode::new_raw(Bytes::from(hex::decode("600060005260206000f3").unwrap()));
+        let target_code = if revert {
+            Bytecode::new_raw(Bytes::from(hex::decode("60006000fd").unwrap()))
+        } else {
+            zero_word.clone()
+        };
+        remote.seed_account(Address::ZERO, U256::MAX, 0, None);
+        remote.seed_account(caller, U256::MAX, 0, None);
+        remote.seed_account(target, U256::ZERO, 1, Some(target_code));
+        remote.seed_account(token, U256::ZERO, 1, Some(zero_word));
+        daemon.warm.as_mut().unwrap().block_env = Some(BlockEnv::default());
+        (
+            daemon,
+            format!("{caller:#x}"),
+            format!("{target:#x}"),
+            format!("{token:#x}"),
+        )
+    }
+
+    fn fixture_header() -> Value {
+        json!({"id":1, "result":{"timestamp":"0x1", "gasLimit":"0x1c9c380",
+            "mixHash":format!("0x{}", "00".repeat(32))}})
+    }
+
+    #[test]
+    fn every_success_and_revert_constructor_passes_through_the_same_envelope() {
+        for revert in [false, true] {
+            let (rpc, thread) = rpc_fixture_steps(vec![
+                (200, fixture_header()),
+                (200, json!([{"id":0,"result":{}}])),
+            ]);
+            let (mut daemon, caller, target, token) = cached_daemon(&rpc, revert);
+            let requests = [
+                json!({"op":"health"}),
+                json!({"op":"warm","blockNumber":1}),
+                json!({"op":"prepare","blockNumber":1,"funded":[caller]}),
+                json!({"op":"quote","from":caller,"to":target,"data":"0x"}),
+                json!({"op":"simulate","owner":caller,"executor":target,"calldata":"0x","profitToken":token}),
+                json!({"op":"strictSimulate","blockNumber":1,"from":caller,"to":target,"data":"0x"}),
+                json!({"op":"reset"}),
+            ];
+            for (i, req) in requests.into_iter().enumerate() {
+                let op = req["op"].as_str().unwrap().to_owned();
+                let result = request_line(&mut daemon, i as u64 + 1, req);
+                assert_eq!(result["ok"], true, "{op}: {result}");
+                assert_eq!(result["epoch"], "fixture-epoch");
+                assert_eq!(result["requestId"], (i + 1).to_string());
+                assert!(result.get("fatal").is_none());
+                if op == "quote" || op == "strictSimulate" {
+                    assert_eq!(result["success"], !revert);
+                }
+                if op == "simulate" {
+                    assert_eq!(result["profit"], "0");
+                } // No fabricated profit.
+            }
+            assert_eq!(daemon.warm.as_ref().unwrap().remote.rpc.round_trips(), 2);
+            thread.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn strict_cached_return_and_revert_cannot_hide_a_swallowed_trace_throttle() {
+        for revert in [false, true] {
+            for (status, body) in [
+                (429, json!("ignored")),
+                (
+                    200,
+                    json!([quota_error(json!(-32000), "compute units quota exceeded")]),
+                ),
+                (200, quota_error(json!(-32000), "account quota exhausted")),
+                (
+                    200,
+                    json!([quota_error(json!(-32000), "compute units depleted")]),
+                ),
+            ] {
+                let (rpc, thread) =
+                    rpc_fixture_steps(vec![(200, fixture_header()), (status, body)]);
+                let (mut daemon, caller, target, _) = cached_daemon(&rpc, revert);
+                let result = request_line(
+                    &mut daemon,
+                    1,
+                    json!({"op":"strictSimulate",
+                    "blockNumber":1,"from":caller,"to":target,"data":"0x"}),
+                );
+                assert_eq!(result["ok"], false);
+                assert_eq!(result["fatal"]["kind"], "rpc-throttle");
+                assert!(result.get("strict").is_none());
+                assert!(result.get("success").is_none());
+                assert_eq!(daemon.warm.as_ref().unwrap().remote.rpc.round_trips(), 2);
+                thread.join().unwrap();
+            }
+        }
+    }
 
     #[test]
     fn prestate_balance_slot_discovery_keeps_all_proxy_candidates() {
