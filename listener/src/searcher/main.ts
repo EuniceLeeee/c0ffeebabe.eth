@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -40,11 +40,10 @@ import type { CanonicalSource } from
 import { normalizeTransactionOrigin } from "./adapter-work-intent.js";
 import {
   createStrictCentralAdapterRuntime,
-  type StrictSimulationTransport,
 } from "./strict-central-adapter-runtime.js";
 import {
-  createRevmStrictSimulationTransport,
-} from "./revm-strict-simulation-transport.js";
+  createRevmStrictSourceSimulation,
+} from "./revm-strict-source-simulation.js";
 import {
   productionFamilyStartupManifest,
 } from "./production-family-startup-manifest.js";
@@ -159,6 +158,8 @@ import { StrictReadyGraphViewCoordinator } from
   "./strict-ready-graph-view.js";
 import {
   BlockScanRuntimeLoop,
+  SourceSimulationWork,
+  type SourceSimulationFactory,
   prepareBlockScanExecutionWorkerFork,
   type BlockScanAtomicResult,
   type BlockScanExecutionWorker,
@@ -200,7 +201,7 @@ import {
 } from "./live-state-backend.js";
 import type { LiveStateBackend, QuoteHop, QuoteRequest } from "./live-state-backend.js";
 import { DEFAULT_BRIBE_BPS, validateLiveEnvelope } from "./live-envelope.js";
-import { RevmSimClient } from "./revm-sim-client.js";
+import { RevmFatalError, RevmSimClient, type RevmFatalReason } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
 import { HybridLiveBackend } from "./live-backends/hybrid-live-backend.js";
@@ -753,6 +754,80 @@ function dryRunOnlyFlag(
   return true;
 }
 
+/** Only terminal shutdown: retain an early fatal until the runtime drain exists. */
+export function createLiveRuntimeStop({ runtimeAbort, emitFatal, exit }: {
+  runtimeAbort: AbortController;
+  emitFatal: (kind: RevmFatalReason["kind"]) => void;
+  exit: (code: number) => void;
+}) {
+  let drain: (() => Promise<void>) | undefined;
+  let requestedCode: 0 | 1 | undefined;
+  let started = false;
+  let fatal = false;
+  const request = (code: 0 | 1): void => {
+    requestedCode = requestedCode === 1 || code === 1 ? 1 : 0;
+    if (started || drain === undefined) return;
+    started = true;
+    // Promise dispatch also captures a synchronous drain failure. Never leave
+    // an unhandled rejection on the fire-and-forget signal/fatal callback path.
+    void Promise.resolve().then(drain).then(
+      () => exit(requestedCode!),
+      () => exit(1),
+    ).catch(() => {});
+  };
+  return Object.freeze({
+    fatal(reason: RevmFatalReason): void {
+      if (fatal) return;
+      fatal = true;
+      requestedCode = 1;
+      if (!runtimeAbort.signal.aborted) runtimeAbort.abort(new RevmFatalError(reason));
+      try { emitFatal(reason.kind); } catch { /* Reporting cannot prevent shutdown. */ }
+      request(1);
+    },
+    installDrain(value: () => Promise<void>): void {
+      if (drain !== undefined) return;
+      drain = value;
+      if (requestedCode !== undefined) request(requestedCode);
+    },
+    shutdown: () => request(0),
+  });
+}
+
+/** Production dependency factory, separate from the prepared live backend. */
+export function createLiveSourceSimulationFactory(input: {
+  readonly rpcUrl: string;
+  readonly chainId: number;
+  readonly executablePath: string | undefined;
+  readonly timeoutMs: number;
+  readonly runtimeAbort: AbortController;
+  readonly onFatal: (reason: RevmFatalReason) => void;
+  readonly createClient?: Parameters<typeof createRevmStrictSourceSimulation>[0]["createClient"];
+}): SourceSimulationFactory {
+  const { rpcUrl, chainId, executablePath, timeoutMs, runtimeAbort, onFatal, createClient } = input;
+  if (!executablePath || !isAbsolute(executablePath) || !existsSync(executablePath)) {
+    throw new Error("strict simulation requires an explicit existing SEARCHER_REVM_SIM_BIN");
+  }
+  if (!Number.isSafeInteger(chainId) || chainId <= 0 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("invalid strict simulation chain or timeout");
+  }
+  return ({ source, control }) => {
+    if (runtimeAbort.signal.aborted) throw runtimeAbort.signal.reason;
+    return createRevmStrictSourceSimulation({
+      identity: { source, chainId, rpcUrl },
+      control: { ...control, signal: AbortSignal.any([runtimeAbort.signal, control.signal]) },
+      // Explicitly bind the existing engine DEFAULT_GAS_LIMIT (main.rs), not
+      // the unrelated profit-cost estimate or a construction-time caller.
+      executionGasLimit: 0x1000000,
+      createClient: createClient ?? (({ onFatal }) => new RevmSimClient({ executablePath, timeoutMs, onFatal })),
+      onFatal(reason) {
+        // Task-wide admission closes synchronously, before domain conversion.
+        if (!runtimeAbort.signal.aborted) runtimeAbort.abort(new RevmFatalError(reason));
+        onFatal(reason);
+      },
+    });
+  };
+}
+
 async function main(): Promise<void> {
   // Blind acceptance must be enabled by the process supervisor. Letting .env
   // turn it on would make the nominal production process execute audit-only
@@ -933,6 +1008,15 @@ async function main(): Promise<void> {
   const blockScanFinalSimulationWorkers: BlockScanExecutionWorker[] = [];
   const blockScanRuntimeAbort = new AbortController();
   let shuttingDown = false;
+  const requestRuntimeStop = createLiveRuntimeStop({
+    runtimeAbort: blockScanRuntimeAbort,
+    emitFatal: (kind) => console.error(JSON.stringify({ type: "strict_simulation_fatal", kind })),
+    exit: (code) => process.exit(code),
+  });
+  const onSimulationFatal = (reason: RevmFatalReason): void => {
+    shuttingDown = true;
+    requestRuntimeStop.fatal(reason);
+  };
   const blockScanPassBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000",
   );
@@ -1470,6 +1554,8 @@ async function main(): Promise<void> {
   const rebuildWiring = createRebuildWiring({
     rpcUrl: config.rpcUrl,
     startupCandidates,
+    executionIdentity,
+    onSimulationFatal,
   });
   let rebuildEnvelope = await rebuildStore.load();
   let readyUniverse;
@@ -1740,16 +1826,10 @@ async function main(): Promise<void> {
   );
 
   // Now that the graph exists, wire the configured revm/hybrid backend.
-  let strictSimulationTransport: StrictSimulationTransport | undefined;
   if (config.liveBackend !== "rpc") {
     const revmSimClient = new RevmSimClient({
       executablePath: process.env.SEARCHER_REVM_SIM_BIN,
       timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
-    });
-    strictSimulationTransport = createRevmStrictSimulationTransport({
-      client: revmSimClient,
-      executor: config.botvmAddress,
-      verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
     });
     const revmLiveBackend = new RevmLiveBackend(
       revmSimClient,
@@ -1765,6 +1845,14 @@ async function main(): Promise<void> {
       : new HybridLiveBackend(revmLiveBackend, rpcLiveBackend);
   }
 
+  const blockScanChainId = (await provider.getNetwork()).chainId;
+  const sourceSimulationFactory = createLiveSourceSimulationFactory({
+    rpcUrl: config.rpcUrl, chainId: Number(blockScanChainId),
+    executablePath: process.env.SEARCHER_REVM_SIM_BIN,
+    timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
+    runtimeAbort: blockScanRuntimeAbort,
+    onFatal: onSimulationFatal,
+  });
   const strictSessionCache = new Map<
     string,
     Promise<StrictProductionRuntimeSession>
@@ -1772,6 +1860,7 @@ async function main(): Promise<void> {
   const strictSessionFor: StrictSessionProvider = (
     request: StrictSessionRequest,
   ): Promise<StrictProductionRuntimeSession> => {
+    if (blockScanRuntimeAbort.signal.aborted) throw blockScanRuntimeAbort.signal.reason;
     if (
       request.purpose === "coarse-pricing" &&
       request.fundingAssets.length !== 0
@@ -1828,7 +1917,7 @@ async function main(): Promise<void> {
     // this map is an in-flight de-duplication guard, not a history cache.
     const cacheable = request.exactCallBackend === undefined &&
       request.pricingCallBackend === undefined &&
-      request.pricingCallCache === undefined;
+      request.pricingCallCache === undefined && request.simulationTransport === undefined;
     const incumbent = cacheable ? strictSessionCache.get(key) : undefined;
     if (incumbent !== undefined) {
       console.log(
@@ -1843,11 +1932,12 @@ async function main(): Promise<void> {
     );
     const runtime = createStrictCentralAdapterRuntime({
       provider,
-      ...(strictSimulationTransport === undefined
+      ...(request.simulationTransport === undefined
         ? {}
-        : { simulator: strictSimulationTransport }),
+        : { simulator: request.simulationTransport }),
       generationFence: Object.freeze({
         assertCurrent(generation: number, candidate: CanonicalSource) {
+          if (blockScanRuntimeAbort.signal.aborted) throw blockScanRuntimeAbort.signal.reason;
           if (
             generation !== source.generation ||
             candidate.number !== source.number ||
@@ -1933,12 +2023,11 @@ async function main(): Promise<void> {
   };
   const blockScanAmountReference = new BlockScanAmountReference(ADDR.WETH);
   // Network identity is established once, never guessed for activity reuse.
-  const blockScanChainId = enableBlockScan ? (await provider.getNetwork()).chainId : 0n;
   currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
     strictSessionFor,
     () => strictSessionCache.clear(),
     (publication) => blockScanRouteTelemetry.recordPricing(publication),
-    blockScanCfg === undefined ? undefined : async (pricing, control, pricingBackend, reuse) => {
+    blockScanCfg === undefined ? undefined : async (pricing, control, pricingBackend, reuse, simulationTransport) => {
       const controller = new AbortController();
       const effectiveControl = { ...control, signal: control.signal === undefined
         ? controller.signal : AbortSignal.any([control.signal, controller.signal]) };
@@ -1956,6 +2045,7 @@ async function main(): Promise<void> {
       ) : undefined;
       try {
         const session = await strictSessionFor({ purpose: "exact-execution", source,
+          simulationTransport,
           control: effectiveControl, fundingAssets: [], requiredEdgeIds: new Set(pricing.mids.keys()),
           exactCallBackend: pricingBackend ?? ownedBackend! });
         console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} mids=${pricing.mids.size}`);
@@ -2070,6 +2160,7 @@ async function main(): Promise<void> {
     warmTimer = null;
   };
   const runWarm = (blockNumber: number, reason: "block" | "after-hint"): void => {
+    if (shuttingDown || blockScanRuntimeAbort.signal.aborted) return;
     if (!liveBackend.warmHotPools || warming) {
       pendingWarmBlock = blockNumber;
       pendingWarmReason = reason;
@@ -2101,6 +2192,7 @@ async function main(): Promise<void> {
       });
   };
   const scheduleWarm = (blockNumber: number, reason: "block" | "after-hint"): void => {
+    if (shuttingDown || blockScanRuntimeAbort.signal.aborted) return;
     pendingWarmBlock = blockNumber;
     pendingWarmReason = reason;
     if (busy || warming || warmTimer) return;
@@ -2114,6 +2206,7 @@ async function main(): Promise<void> {
     }, warmIdleDelayMs);
   };
   const flushPendingWarm = (): void => {
+    if (shuttingDown || blockScanRuntimeAbort.signal.aborted) return;
     if (busy || pendingWarmBlock === null || warming) return;
     const blockNumber = pendingWarmBlock;
     const reason = pendingWarmReason;
@@ -2139,6 +2232,9 @@ async function main(): Promise<void> {
   let activeBlindSourceHead: BlindProductionSourceHeadControl | null = null;
   let preparedBlindBase: BlindProductionPrepareControl | null = null;
   let preparedBlindDynamicResetNonce: string | null = null;
+  let activeBlindSimulationWork: SourceSimulationWork | undefined;
+  let activeHintSimulationWork: SourceSimulationWork | undefined;
+  let hintGeneration = 0;
   const frozenProducerTopology = Object.freeze({
     topologyKey:
       `strict-ready:${readyUniverse.generation}:${readyUniverse.graphHash}`,
@@ -2178,6 +2274,7 @@ async function main(): Promise<void> {
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
     rpcUrl: config.rpcUrl,
     strictSession: strictSessionFor,
+    sourceSimulationFactory,
     rethTransportScheduler: blockScanRethTransportScheduler,
     runtimeAbort: blockScanRuntimeAbort,
     sharedPlanner: planner,
@@ -2294,6 +2391,7 @@ async function main(): Promise<void> {
   let stateUpdating = false;
   let pendingStateUpdateBlock: number | null = null;
   const runStateUpdate = (blockNumber: number, reason: "block" | "pending"): void => {
+    if (shuttingDown || blockScanRuntimeAbort.signal.aborted) return;
     if (stateUpdating) {
       pendingStateUpdateBlock = blockNumber;
       return;
@@ -2495,20 +2593,31 @@ async function main(): Promise<void> {
                 }),
           },
         );
+    const baseSimulationWork = new SourceSimulationWork(sourceSimulationFactory);
+    activeBlindSimulationWork = baseSimulationWork;
+    const baseDeadlineAtMs = Date.now() + blindPrepareBudgetMs;
     const baseRuntime = await (async () => {
       try {
         return await currentRuntimeCoordinator!.prepare({
           graph: baseGraph,
+          simulationTransport: baseSimulationWork.transportFor({ number: baseGraph.sourceBlock,
+            hash: baseGraph.sourceBlockHash, generation: baseGraph.generation },
+            { signal: blockScanRuntimeAbort.signal, deadlineAtMs: baseDeadlineAtMs }),
           // Blind prewarm funding surface is the solidified universe as well;
           // graph-token expansion re-creates the balanceOf blowout.
           fundingTokens: [...new Set(flashTokens)],
-          deadlineAtMs: Date.now() + blindPrepareBudgetMs,
+          deadlineAtMs: baseDeadlineAtMs,
+          signal: blockScanRuntimeAbort.signal,
           ...(basePricingBackend === null
             ? {}
             : { pricingCallBackend: basePricingBackend }),
         });
       } finally {
-        await basePricingBackend?.closeAndDrain();
+        try { await baseSimulationWork.closeAndDrain(); }
+        finally {
+          activeBlindSimulationWork = undefined;
+          await basePricingBackend?.closeAndDrain();
+        }
         if (
           basePricingBackend !== null &&
           blindBasePricingCachePath !== undefined
@@ -2640,11 +2749,15 @@ async function main(): Promise<void> {
     stopRuntimePromise = (async () => {
       console.log("\n[searcher/live] shutting down");
       shuttingDown = true;
+      if (!blockScanRuntimeAbort.signal.aborted) blockScanRuntimeAbort.abort(new Error("searcher shutdown"));
       logStageCounters(counters);
       cancelScheduledWarm();
       provider.removeAllListeners("block");
       try {
-        await blockScanRuntimeLoop.shutdown();
+        const settled = await Promise.allSettled([blockScanRuntimeLoop.shutdown(),
+          activeHintSimulationWork?.closeAndDrain(), activeBlindSimulationWork?.closeAndDrain()]);
+        const failure = settled.find(result => result.status === "rejected");
+        if (failure?.status === "rejected") throw failure.reason;
       } catch (error) {
         console.warn(
           `[searcher/live] block-scan shutdown failed: ` +
@@ -2663,9 +2776,8 @@ async function main(): Promise<void> {
     })();
     return stopRuntimePromise;
   };
-  const shutdown = (): void => {
-    void stopRuntime().finally(() => process.exit(0));
-  };
+  requestRuntimeStop.installDrain(stopRuntime);
+  const shutdown = requestRuntimeStop.shutdown;
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
@@ -2693,6 +2805,7 @@ async function main(): Promise<void> {
 
   try {
     for await (const hint of hintStream) {
+      if (shuttingDown || blockScanRuntimeAbort.signal.aborted) break;
       processedHints++;
       counters.hints++;
       if (busy) {
@@ -2702,6 +2815,7 @@ async function main(): Promise<void> {
       if (hint.hashes.length === 0) continue;
 
       for (const txHash of hint.hashes) {
+        if (shuttingDown || blockScanRuntimeAbort.signal.aborted) break;
         const key = txHash.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
@@ -2709,6 +2823,8 @@ async function main(): Promise<void> {
         cancelScheduledWarm();
         busy = true;
         const tHint = Date.now();
+        const hintSimulationWork = new SourceSimulationWork(sourceSimulationFactory);
+        activeHintSimulationWork = hintSimulationWork;
         try {
           await handleHint(hint, txHash, {
             config,
@@ -2738,6 +2854,9 @@ async function main(): Promise<void> {
             blockTracker,
             fundingAssets: flashTokens,
             strictSessionFor,
+            simulationWork: hintSimulationWork,
+            simulationGeneration: ++hintGeneration,
+            sourceControl: { signal: blockScanRuntimeAbort.signal, deadlineAtMs: tHint + config.oppTtlMs },
           });
         } catch (err) {
           console.log(
@@ -2745,11 +2864,15 @@ async function main(): Promise<void> {
               `${err instanceof Error ? err.message : String(err)}`,
           );
         } finally {
-          console.log(`[searcher/live] ${txHash.slice(0, 10)} end-to-end ${Date.now() - tHint}ms`);
-          logStageCounters(counters);
-          busy = false;
-          backrunStatePublisher.flush();
-          flushPendingWarm();
+          try { await hintSimulationWork.closeAndDrain(); }
+          finally {
+            activeHintSimulationWork = undefined;
+            console.log(`[searcher/live] ${txHash.slice(0, 10)} end-to-end ${Date.now() - tHint}ms`);
+            logStageCounters(counters);
+            busy = false;
+            backrunStatePublisher.flush();
+            flushPendingWarm();
+          }
         }
       }
       if (config.maxHints > 0 && processedHints >= config.maxHints) break;
@@ -2793,6 +2916,9 @@ interface HandleCtx {
   /** Explicit support universe used by source-N runtime sessions. */
   fundingAssets: readonly string[];
   strictSessionFor: StrictSessionProvider;
+  simulationWork: SourceSimulationWork;
+  simulationGeneration: number;
+  sourceControl: Parameters<SourceSimulationFactory>[0]["control"];
 }
 
 /**
@@ -2812,6 +2938,7 @@ async function handleHint(
   txHash: string,
   ctx: HandleCtx,
 ): Promise<void> {
+  ctx.sourceControl.signal.throwIfAborted();
   const victimSource = hint.source ?? "mev-share";
   console.log(`[searcher/live] hint tx=${txHash} src=${victimSource}`);
 
@@ -2868,6 +2995,7 @@ async function handleHint(
   await drainPendingVictimOutcomes(ctx, latestBlock);
   let anvilForkReady = false;
   const ensureHintFork = async (blockNumber: number, forceRefresh = false): Promise<void> => {
+    ctx.sourceControl.signal.throwIfAborted();
     if (anvilForkReady && !forceRefresh) return;
     // Fork-reuse: reset to baseline (~ms) instead of re-forking (~s) each hint;
     // only re-fork every forkRefreshBlocks to refresh state (~7x faster setup).
@@ -3423,6 +3551,7 @@ async function processOpportunities(
   const hint = { source: sourceMeta.victimSource };
 
   for (let oppIndex = 0; oppIndex < opportunities.length; oppIndex++) {
+    if (ctx.sourceControl.signal.aborted) throw ctx.sourceControl.signal.reason;
     const opp = opportunities[oppIndex];
     if (!opp) continue;
     const opportunityId = opportunityIdFor(sourceMeta.eventBlockNumber, sourceMeta.victimTxHash, opp);
@@ -3492,6 +3621,7 @@ async function processOpportunities(
     const plans = await ctx.planner.plan(opp, [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY], {
       deadlineAtMs: Date.now() + Math.min(ctx.config.planBudgetMs, Math.floor(sliceMs / 2)),
     });
+    ctx.sourceControl.signal.throwIfAborted();
     deps.segMark("plan");
     ctx.counters.plans += plans.length;
     deps.addFixturePlans(plans.length);
@@ -3528,15 +3658,16 @@ async function processOpportunities(
       ctx.provider,
       prepareBaseBlock,
     );
+    const simulationSource = Object.freeze({ number: prepareBaseBlock,
+      hash: prepareBaseBlockHash, generation: ctx.simulationGeneration });
     const strictSession = await ctx.strictSessionFor({
       purpose: "source-n-runtime",
-      source: Object.freeze({
-        number: prepareBaseBlock,
-        hash: prepareBaseBlockHash,
-        generation: prepareBaseBlock,
-      }),
+      source: simulationSource,
+      simulationTransport: ctx.simulationWork.transportFor(simulationSource, ctx.sourceControl),
+      control: { signal: ctx.sourceControl.signal, deadlineAtMs: oppDeadlineAtMs },
       fundingAssets: ctx.fundingAssets,
     });
+    ctx.sourceControl.signal.throwIfAborted();
     if (fixturePath === "hash-only" && opp.victimEffect.kind === "swap") {
       const generation = oppImpact?.sourceGeneration;
       const transitionGeneration = opp.victimEffect.transition?.sourceGeneration;
@@ -3849,6 +3980,7 @@ async function processOpportunities(
 	    let candidatesTried = 0;
 	    let skipPostSolverDrop = false;
 	    for (const candidate of plans) {
+      ctx.sourceControl.signal.throwIfAborted();
       // Candidate cap: a single opportunity can spawn ~20 candidate plans, each
       // running a full quote search + top-N sim that virtually all revert
       // (unprofitable). Grinding every one burns the shared per-hint TTL and
@@ -3901,6 +4033,7 @@ async function processOpportunities(
       try {
         ctx.counters.solverEntered++;
         const resolved = await ctx.solver.solve(candidate, solveState, solveProbe, {
+          signal: ctx.sourceControl.signal,
           deadlineMs: Math.min(ctx.config.solverDeadlineMs, remainingMs),
           gssMaxTries: ctx.config.gssMaxTries,
           finalSimTopN: ctx.config.finalSimTopN,
@@ -3911,6 +4044,7 @@ async function processOpportunities(
           strictSession,
           runtimeEvidence: Object.freeze([]),
         });
+        ctx.sourceControl.signal.throwIfAborted();
         deps.segMark("solve");
         ctx.counters.solverSuccess++;
         // Terminal verify (v7 AC-3a.4): re-simulate the resolved plan and require

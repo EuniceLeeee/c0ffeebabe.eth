@@ -54,6 +54,7 @@ import type {
   "./strict-current-runtime-coordinator.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
+import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 import {
   BotVMSimulator,
   type SimulationResult,
@@ -610,6 +611,59 @@ export interface ExactQuoteStateFactoryInput {
   readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
 }
 
+export interface SourceSimulationContext {
+  readonly transport: StrictSimulationTransport;
+  closeAndDrain(reason?: Error): Promise<void>;
+}
+export type SourceSimulationFactory = (input: {
+  readonly source: CanonicalSource;
+  readonly control: { readonly signal: AbortSignal; readonly deadlineAtMs: number };
+}) => SourceSimulationContext;
+
+/** One existing pass/producer/hint slot; no scheduling or quote-time admission.
+ * Failed creation is memoized too. A generation cannot be rebound or reopened.
+ */
+export class SourceSimulationWork {
+  private readonly sources = new Map<number, {
+    source: CanonicalSource; context?: SourceSimulationContext; error?: unknown;
+    drain?: Promise<void>;
+  }>();
+  private closed = false;
+  constructor(private readonly factory?: SourceSimulationFactory) {}
+  transportFor(source: CanonicalSource, control: Parameters<SourceSimulationFactory>[0]["control"]): StrictSimulationTransport | undefined {
+    if (this.closed) throw new Error("source simulation work closed");
+    if (!this.factory) return undefined;
+    const previous = this.sources.get(source.generation);
+    if (previous) {
+      if (previous.source.number !== source.number || previous.source.hash.toLowerCase() !== source.hash.toLowerCase()) {
+        throw new Error("source simulation generation rebound");
+      }
+      if (previous.drain) throw new Error("source simulation generation retired");
+      if (Object.hasOwn(previous, "error")) throw previous.error;
+      return previous.context?.transport;
+    }
+    const entry: { source: CanonicalSource; context?: SourceSimulationContext; error?: unknown } = {
+      source: Object.freeze({ ...source }),
+    };
+    this.sources.set(source.generation, entry);
+    try {
+      if (control.signal.aborted || Date.now() >= control.deadlineAtMs) throw new Error("source simulation control closed");
+      entry.context = this.factory?.({ source: entry.source, control: Object.freeze({ ...control }) });
+      return entry.context?.transport;
+    } catch (error) { entry.error = error; throw error; }
+  }
+  async retire(source: CanonicalSource): Promise<void> {
+    const entry = this.sources.get(source.generation);
+    if (entry) await (entry.drain ??= Promise.resolve().then(() => entry.context?.closeAndDrain()));
+  }
+  async closeAndDrain(): Promise<void> {
+    this.closed = true;
+    const settled = await Promise.allSettled([...this.sources.values()].map(entry => this.retire(entry.source)));
+    const failure = settled.find(result => result.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
+  }
+}
+
 export interface BlockScanRuntimeLoopDependencies {
   readonly enabled: boolean;
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
@@ -619,6 +673,7 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly rpcUrl: string;
   /** Sole current-source Family/exact/execution/Funding authority. */
   readonly strictSession?: StrictSessionProvider;
+  readonly sourceSimulationFactory?: SourceSimulationFactory;
   /**
    * Override the exact-probe quote backend. Production uses the source-hash
    * pinned reth micro-batch backend; harnesses inject a deterministic fake.
@@ -763,6 +818,7 @@ export interface CurrentSourceRuntimeCoordinator {
   latestPricingSnapshot(): BlockScanStateSnapshot | null;
   prepareCoarsePricing(input: {
     readonly graph: VerifiedGraphView;
+    readonly simulationTransport?: StrictSimulationTransport;
     readonly deadlineAtMs: number;
     readonly familySettleDeadlineAtMs?: number;
     readonly laggingTopologyRefreshMode?:
@@ -792,6 +848,7 @@ export interface CurrentSourceRuntimeCoordinator {
  */
 export class BlockScanRuntimeLoop {
   private generation = 0;
+  private pendingGeneration = 0;
   private producerCriticalActive = false;
   private startupWarmPending: boolean;
   private readonly scheduler: LatestHeadScheduler;
@@ -886,6 +943,7 @@ export class BlockScanRuntimeLoop {
     blockNumber: number,
     observation?: LatestHeadObservation,
   ): void {
+    if (this.deps.runtimeAbort.signal.aborted || this.deps.isShuttingDown()) return;
     this.advanceLatestHead(blockNumber);
     this.scheduler.schedule(blockNumber, observation);
     this.maybeStartProducerAtObservation(blockNumber);
@@ -987,6 +1045,7 @@ export class BlockScanRuntimeLoop {
     trigger: BlockScanPendingEvidenceTrigger,
     resumeInterruptedContext: boolean,
   ): boolean {
+    if (this.deps.runtimeAbort.signal.aborted || this.deps.isShuttingDown()) return false;
     validateBlockScanPendingEvidenceTrigger(trigger);
     const evidence = Object.freeze(trigger.evidence.filter((item) =>
       this.deps.isCurrentHeadEvidenceFamily(item.familyId)
@@ -1165,6 +1224,7 @@ export class BlockScanRuntimeLoop {
     readonly coordinator: CurrentSourceRuntimeCoordinator;
     readonly graph: VerifiedGraphView;
   }): void {
+    if (this.deps.runtimeAbort.signal.aborted || this.deps.isShuttingDown()) return;
     if (this.coarsePricingActive) {
       if (
         !this.pendingCoarsePricing ||
@@ -1305,8 +1365,8 @@ export class BlockScanRuntimeLoop {
           this.producerCriticalActive = false;
           break;
         }
-        const generation = this.nextGeneration();
-        const anchoredGraph: VerifiedGraphView = Object.freeze({
+        let generation = this.nextGeneration();
+        let anchoredGraph: VerifiedGraphView = Object.freeze({
           ...input.graph,
           id: `blockscan-coarse-${nextBlock}-${generation}`,
           generation,
@@ -1316,7 +1376,7 @@ export class BlockScanRuntimeLoop {
         let prepared: BlockScanStatePrepareResult;
         let bootstrapEscalated = false;
         const producerTouched = await this.deps.readBlockSwapTouched(nextBlock, header);
-        const producerActivity: StrictCanonicalActivityProof = Object.freeze({
+        let producerActivity: StrictCanonicalActivityProof = Object.freeze({
           source: Object.freeze({
             number: anchoredGraph.sourceBlock,
             hash: anchoredGraph.sourceBlockHash,
@@ -1331,6 +1391,7 @@ export class BlockScanRuntimeLoop {
         });
         const producerController = new AbortController();
         const detachProducerAbort = linkAbortController(this.deps.runtimeAbort.signal, producerController);
+        const simulationWork = new SourceSimulationWork(this.deps.sourceSimulationFactory);
         const producerPricingBackend = new PinnedRethQuoteBackend(
           this.deps.rpcUrl,
           anchoredGraph.sourceBlockHash,
@@ -1349,8 +1410,12 @@ export class BlockScanRuntimeLoop {
           },
         );
         try {
+          const simulationTransport = simulationWork.transportFor(producerActivity.source, {
+            signal: producerController.signal, deadlineAtMs: generationDeadlineAtMs,
+          });
           prepared = await input.coordinator.prepareCoarsePricing({
             graph: anchoredGraph,
+            simulationTransport,
             touchedPools: producerTouched,
             canonicalActivity: producerActivity,
             deadlineAtMs: generationDeadlineAtMs,
@@ -1372,11 +1437,38 @@ export class BlockScanRuntimeLoop {
              * to the startup-warm budget and bootstrap mode, which commits the
              * rebuilt schema and lets the hot chain resume from this block.
              */
+            // The old source lifetime is terminal, not extensible. Join every
+            // old simulation before revalidating the pin and issuing fresh
+            // bootstrap authority; even a late fatal during drain bars retry.
+            await simulationWork.retire(producerActivity.source);
+            await producerPricingBackend.drain();
+            producerController.signal.throwIfAborted();
             const bootstrapBudgetMs = Math.max(
               stateBudgetMs,
               this.deps.startupWarmBudgetMs ?? 300_000,
             );
             const bootstrapDeadlineAtMs = Date.now() + bootstrapBudgetMs;
+            const bootstrapHeader = await this.observeStartupWarmHeader(
+              nextBlock, bootstrapDeadlineAtMs, producerController.signal,
+              "producer bootstrap canonical header",
+            );
+            producerController.signal.throwIfAborted();
+            if (bootstrapHeader.number !== anchoredGraph.sourceBlock ||
+                bootstrapHeader.hash.toLowerCase() !== anchoredGraph.sourceBlockHash.toLowerCase()) {
+              throw new Error("producer bootstrap canonical source changed");
+            }
+            generation = this.nextGeneration();
+            anchoredGraph = Object.freeze({ ...anchoredGraph,
+              id: `blockscan-coarse-${nextBlock}-${generation}`, generation,
+            });
+            const bootstrapSource = Object.freeze({ number: anchoredGraph.sourceBlock,
+              hash: anchoredGraph.sourceBlockHash, generation });
+            producerActivity = Object.freeze({ ...producerActivity, source: bootstrapSource,
+              amountQuoteActivity: amountQuoteActivityForTouched(producerTouched, bootstrapSource) ?? undefined,
+            });
+            const bootstrapSimulationTransport = simulationWork.transportFor(bootstrapSource, {
+              signal: producerController.signal, deadlineAtMs: bootstrapDeadlineAtMs,
+            });
             const bootstrapFamilySettleDeadlineAtMs = Math.min(
               bootstrapDeadlineAtMs,
               Math.max(
@@ -1396,6 +1488,7 @@ export class BlockScanRuntimeLoop {
             );
             prepared = await input.coordinator.prepareCoarsePricing({
               graph: anchoredGraph,
+              simulationTransport: bootstrapSimulationTransport,
               pricingCallBackend: producerPricingBackend,
               deadlineAtMs: bootstrapDeadlineAtMs,
               familySettleDeadlineAtMs: bootstrapFamilySettleDeadlineAtMs,
@@ -1425,8 +1518,8 @@ export class BlockScanRuntimeLoop {
               );
             }
           } finally {
-            detachProducerAbort();
-            this.producerCriticalActive = false;
+            try { await simulationWork.closeAndDrain(); }
+            finally { detachProducerAbort(); this.producerCriticalActive = false; }
           }
         }
         const recoveryPending = blockScanStateHasRecoveryBacklog(
@@ -1646,6 +1739,7 @@ export class BlockScanRuntimeLoop {
     input: PrepareStrictRuntimeInput,
     backend: PinnedRethQuoteBackend,
     passController: AbortController,
+    simulationWork: SourceSimulationWork,
   ): Promise<{ runtime: AdapterRuntimePrepareResult; graph: VerifiedGraphView }> {
     const pin = Object.freeze({ number: input.graph.sourceBlock,
       hash: input.graph.sourceBlockHash.toLowerCase(), topologyKey: this.topologyKey() });
@@ -1711,6 +1805,7 @@ export class BlockScanRuntimeLoop {
           preparationSettleDeadlineAtMs: settleDeadlineAtMs,
           pricingFamilySettleDeadlineAtMs: settleDeadlineAtMs,
           signal: controller.signal, pricingCallBackend: calls,
+          simulationTransport: simulationWork.transportFor(source, { signal: passController.signal, deadlineAtMs }),
           canonicalActivity: input.canonicalActivity === undefined ? undefined : {
             ...input.canonicalActivity, source,
             amountQuoteActivity: amountQuoteActivityForTouched(input.canonicalActivity.touchedStateKeys, source) ?? undefined,
@@ -1737,7 +1832,12 @@ export class BlockScanRuntimeLoop {
         detach();
         // prepare joins its workers; caller cancellation removes queued work
         // before drain (which would otherwise dispatch it). Keep the memo open.
-        await backend.drain();
+        try { await backend.drain(); }
+        finally {
+          if (retry || passController.signal.aborted) await simulationWork.retire({
+            number: pin.number, hash: pin.hash, generation: graph.generation,
+          });
+        }
       }
       if (retry) {
         console.log(`[searcher/blockscan-startup-warm-resume] ${JSON.stringify({
@@ -1914,6 +2014,7 @@ export class BlockScanRuntimeLoop {
       passController,
     );
     const passSignal = passController.signal;
+    const simulationWork = new SourceSimulationWork(this.deps.sourceSimulationFactory);
     this.activePass = Object.freeze({
       blockNumber,
       mode: passMode,
@@ -2330,7 +2431,7 @@ export class BlockScanRuntimeLoop {
         throw new Error("block-scan strict ready graph disappeared");
       }
       const graphEdges = Object.freeze([...currentGraph]);
-      let generation = this.nextGeneration();
+      let generation = executionContext === null ? this.nextGeneration() : ++this.pendingGeneration;
       let graphView = this.deps.buildGraphView({
         id: `blockscan:${this.topologyKey()}`,
         generation,
@@ -2447,6 +2548,9 @@ export class BlockScanRuntimeLoop {
       const fundingTokens = [...new Set(this.deps.flashTokens())];
       const sourcePricingStartedAtMs = Date.now();
       const resumableStartupWarm = startupWarmAttempt && passMode === "periodic";
+      const simulationTransport = resumableStartupWarm ? undefined : simulationWork.transportFor({
+        number: graphView.sourceBlock, hash: graphView.sourceBlockHash, generation: graphView.generation,
+      }, { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs });
       if (!useNMinusOneFallback) {
         const backend = new PinnedRethQuoteBackend(
           this.deps.rpcUrl,
@@ -2481,6 +2585,7 @@ export class BlockScanRuntimeLoop {
             ? null : Date.now();
           fundingPreparation = currentRuntimeCoordinator.startFundingPreparation?.({
             graph: graphView,
+            simulationTransport,
             fundingTokens,
             deadlineAtMs: runtimeDeadlineAtMs,
             preparationSettleDeadlineAtMs,
@@ -2590,6 +2695,7 @@ export class BlockScanRuntimeLoop {
         try {
           const request: PrepareStrictRuntimeInput = {
             graph: graphView,
+            simulationTransport,
             // The funding surface is the solidified funding-token universe
             // (provider support surface, chain-truth enumerated), never the
             // graph token set: balanceOf reads for every graph token blew the
@@ -2610,7 +2716,7 @@ export class BlockScanRuntimeLoop {
           };
           if (resumableStartupWarm) {
             const prepared = await this.prepareStartupWarm(
-              currentRuntimeCoordinator, request, sourcePricingBackend, passController,
+              currentRuntimeCoordinator, request, sourcePricingBackend, passController, simulationWork,
             );
             runtime = prepared.runtime;
             graphView = prepared.graph;
@@ -3049,15 +3155,10 @@ export class BlockScanRuntimeLoop {
       if (this.deps.strictSession === undefined) {
         throw new Error("block-scan requires a strict current-source session");
       }
-      // Reuse the N-1 producer's session for this exact source. The strict
-      // session cache is keyed number:hash:generation and the producer built
-      // its session under latestPricingSnapshot's generation; a per-pass
-      // generation missed the cache and re-ran the full 1706-instance
-      // createSession inside exact_refine (~13s per pass, one leaked session
-      // per block). The producer's published snapshot is the exact
-      // predecessor this pass enumerated against, so bind its source/hash/
-      // generation verbatim.
-      const producerSnapshot = currentRuntimeCoordinator.latestPricingSnapshot();
+      // Bind the snapshot actually selected by this pass, never a concurrently
+      // advancing latest publication. N-1 coarse/current-N exact deliberately
+      // uses the current graph's generation when the selected pricing pin differs.
+      const producerSnapshot = amountPricingSnapshot;
       const exactSource = producerSnapshot !== null &&
           producerSnapshot.sourceBlock === runtimeSourceBlock &&
           producerSnapshot.sourceBlockHash?.toLowerCase() ===
@@ -3154,6 +3255,7 @@ export class BlockScanRuntimeLoop {
       const strictSession = await this.deps.strictSession({
         purpose: "exact-execution",
         source: exactSource,
+        simulationTransport: simulationWork.transportFor(exactSource, { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs }),
         control: Object.freeze({
           deadlineAtMs: refineDeadline,
           signal: passSignal,
@@ -3278,6 +3380,9 @@ export class BlockScanRuntimeLoop {
           await currentRuntimeCoordinator
             .prepareCurrentNExactExecutionContext({
               graph: graphView,
+              simulationTransport: simulationWork.transportFor({ number: graphView.sourceBlock,
+                hash: graphView.sourceBlockHash, generation: graphView.generation },
+                { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs }),
               fundingTokens: exactFundingTokens,
               deadlineAtMs: runtimeDeadlineAtMs,
               preparationSettleDeadlineAtMs,
@@ -3844,7 +3949,8 @@ export class BlockScanRuntimeLoop {
             } finally {
               // Existing activity I/O has no cancel API: join it even when
               // resource cleanup fails. Funding uses the drained backend.
-              await Promise.all([activity, fundingSettlement]);
+              try { await simulationWork.closeAndDrain(); }
+              finally { await Promise.all([activity, fundingSettlement]); }
             }
           }
         }
