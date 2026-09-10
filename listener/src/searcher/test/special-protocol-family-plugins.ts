@@ -71,7 +71,9 @@ import {
 } from "../venues/protocols/self-burn-native-family-plugin.js";
 import {
   SELF_BURN_NATIVE_TOKEN_INTERFACE,
+  selfBurnNativeSimulation,
 } from "../venues/protocols/self-burn-native-family/shared.js";
+import { selfBurnNativeExact } from "../venues/protocols/self-burn-native-family/exact.js";
 import {
   SELF_BURN_NATIVE_FAMILY_ID,
   SELF_BURN_NATIVE_LINEAGE_ID,
@@ -99,7 +101,7 @@ assert.equal(new Set(familyIds).size, familyIds.length);
 
 verifyDiscoveryBoundaries();
 verifyMetronomeHgUsdcDependentExact();
-verifySelfBurnNativeEffects();
+await verifySelfBurnNativeEffects();
 await verifyEtherTokenNativeEffects();
 await verifySiloDependentCurrentAndEffects();
 verifyMetronomeSynthOracleAndQuote();
@@ -298,7 +300,7 @@ function verifyMetronomeHgUsdcDependentExact(): void {
   }]);
 }
 
-function verifySelfBurnNativeEffects(): void {
+async function verifySelfBurnNativeEffects(): Promise<void> {
   const identity: SelfBurnNativeIdentity = Object.freeze({
     familyId: SELF_BURN_NATIVE_FAMILY_ID,
     lineageId: SELF_BURN_NATIVE_LINEAGE_ID,
@@ -327,21 +329,83 @@ function verifySelfBurnNativeEffects(): void {
     SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionResult("transfer", [true]),
     nativeEffects(tokenA, actor, 100n, 87n),
   );
-  const selfBurnProgram = exactRequestProgram(
-    selfBurnNativeStrictFamilyPlugin.exact,
-    input,
-  );
-  for (const amountIn of [1n, 137n, 10n ** 18n]) {
-    const [request] = selfBurnProgram.buildRequests({ ...input, amountIn });
-    assert.equal(request.kind, "effect-delta-simulation");
+  const method = selfBurnNativeExact.methods().find(m => m.kind === "request-program");
+  assert(method && method.kind === "request-program");
+  assert("chainAmountQuote" in method && method.chainAmountQuote === true,
+    "self-burn's existing effect method must explicitly declare chain amount quoting");
+  assert(!("reusePolicy" in method), "chain provenance is not a cross-block carry policy");
+  const selfBurnProgram = method.program;
+  for (const [amountIn, amountOut] of [[1n, 7n], [137n, 89n],
+    [10n ** 18n, 10n ** 17n + 19n], [(1n << 128n) + 37n, 321n]]) {
+    const programInput = Object.freeze({ ...input, amountIn });
+    const requests = selfBurnProgram.buildRequests(programInput);
+    assert.equal(requests.length, 1);
+    const [request] = requests;
+    assert(request.kind === "effect-delta-simulation");
     assert.equal(request.call.executionMode, "impersonated-call-frame");
     assert.deepEqual(request.call.caller, { kind: "executor" });
-    assert.equal(request.overrideIntent.tokenBalances[0].amount, amountIn);
+    assert.equal(request.call.to, tokenA);
+    assert.equal(request.overrideIntent.caller, request.call.caller);
+    assert.deepEqual(request.overrideIntent.tokenBalances, [{ token: tokenA, amount: amountIn }]);
+    assert.deepEqual(request.observeTokenBalances, [{ token: tokenA, account: request.call.caller }]);
+    assert(Object.isFrozen(request.observeTokenBalances) && request.observeTokenBalances?.every(Object.isFrozen));
+    assert.deepEqual(request.observe, ["return-data", "token-delta", "native-delta", "total-supply-delta", "logs"]);
     const args = SELF_BURN_NATIVE_TOKEN_INTERFACE.decodeFunctionData(
       "transfer", request.call.data,
     );
     assert.equal(args[0], tokenA);
     assert.equal(BigInt(args[1]), amountIn);
+    const effects = nativeEffects(tokenA, actor, amountIn, amountOut);
+    const result = ok("exact-self-burn", SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionResult("transfer", [true]), effects);
+    const decode = (item: AdapterRequestResult) => selfBurnProgram.decode({
+      programInput, initialResults: [item], dependentEvidence: [],
+    });
+    const quote = decode(result);
+    assert.equal(quote.amountOut, amountOut, "native payout is observed, not 1:1 or a rescaled probe");
+    assert.equal(quote.evidence.amountIn, amountIn); assert.equal(quote.evidence.amountOut, amountOut);
+    assert.equal(quote.evidence.executor, actor); assert.equal(quote.evidence.token, tokenA);
+    assert.deepEqual(quote.evidence.source, source);
+    assert.equal(quote.evidence.bindingFingerprint, route.bindingRef.fingerprint);
+    const changedPayout = decode({ ...result, effects: nativeEffects(tokenA, actor, amountIn, amountOut + 1n) });
+    assert.equal(changedPayout.amountOut, amountOut + 1n, "any positive payout retains the variable-rate semantics");
+    assert.notEqual(changedPayout.evidence.effectsHash, quote.evidence.effectsHash);
+    const executionInput = { descriptor, route, amountIn, quotedAmountOut: quote.amountOut,
+      minAmountOut: quote.amountOut, exactEvidence: quote.evidence, executor: actor, runtimeEvidence: [] };
+    const fragment = selfBurnNativeStrictFamilyPlugin.execution.buildFragment(executionInput);
+    assert.deepEqual(fragment.nodes.map(node => [node.adapterId, node.target, node.amount]), [
+      ["self-burn-native-redeem", tokenA, amountIn], ["weth-deposit-value", ADDR.WETH, amountOut],
+    ]);
+    for (const exactEvidence of [
+      { ...quote.evidence, amountIn: amountIn + 1n }, { ...quote.evidence, amountOut: amountOut + 1n },
+      { ...quote.evidence, token: tokenB }, { ...quote.evidence, executor: router },
+      { ...quote.evidence, bindingFingerprint: "wrong-binding" },
+    ]) assert.throws(() => selfBurnNativeStrictFamilyPlugin.execution.buildFragment({
+      ...executionInput, exactEvidence,
+    }), /incompatible exact evidence/);
+    const wrongEffects: ObservedEffects[] = [
+      {}, { ...effects, tokenDeltas: [] },
+      { ...effects, tokenDeltas: [{ token: tokenA, account: actor, delta: -amountIn + 1n }] },
+      { ...effects, tokenDeltas: [{ token: tokenB, account: actor, delta: -amountIn }] },
+      { ...effects, tokenDeltas: [{ token: tokenA, account: router, delta: -amountIn }] },
+      { ...effects, totalSupplyDeltas: [] },
+      { ...effects, totalSupplyDeltas: [{ token: tokenA, delta: -amountIn + 1n }] },
+      { ...effects, totalSupplyDeltas: [{ token: tokenB, delta: -amountIn }] },
+      { ...effects, nativeDeltas: [] },
+      ...[0n, -amountOut].map(delta => ({ ...effects, nativeDeltas: [{ account: actor, delta }] })),
+      { ...effects, nativeDeltas: [{ account: router, delta: amountOut }] },
+    ];
+    for (const invalid of wrongEffects) assert.throws(() => decode({ ...result, effects: invalid }), /effect invariants/);
+    for (const changedSource of [{ ...source, number: source.number - 1 },
+      { ...source, hash: `0x${"12".repeat(32)}` }, { ...source, generation: source.generation + 1 }]) {
+      assert.throws(() => decode({ ...result, source: changedSource }), /source/);
+    }
+    assert.throws(() => decode({ ...result, completion: "reverted-as-declared" }), /did not return/);
+    assert.throws(() => decode({ ...result, data: SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionResult("transfer", [false]) }), /returned false/);
+    for (const data of ["0x", "0x01", "not-hex"]) assert.throws(() => decode({ ...result, data }));
+    assert.throws(() => selfBurnProgram.decode({ programInput, initialResults: [], dependentEvidence: [] }), /missing/);
+    for (const failure of ["rpc", "deadline", "aborted", "resource-limited"] as const) {
+      assert.throws(() => decode({ id: "exact-self-burn", ok: false, source, failure }), /unresolved/);
+    }
   }
   const decoded = selfBurnProgram.decode({
     programInput: input,
@@ -375,6 +439,109 @@ function verifySelfBurnNativeEffects(): void {
     )],
     dependentEvidence: [],
   }), /effect invariants/);
+
+  // Identity, pricing and Exact share this builder. The observation must keep
+  // the supplied symbolic caller rather than materialize a probe's address.
+  for (const callerRef of [{ kind: "executor" },
+    { kind: "verified-actor", evidenceId: "self-burn-test-probe" }] satisfies CallerRef[]) {
+    const request = selfBurnNativeSimulation({ id: "symbolic-self-burn", token: tokenA,
+      actor, callerRef, amountIn: 137n });
+    assert(request.kind === "effect-delta-simulation");
+    assert.equal(request.call.caller, callerRef); assert.equal(request.overrideIntent.caller, callerRef);
+    assert.equal(request.observeTokenBalances?.[0].account, callerRef);
+  }
+  const zero = { ...input, amountIn: 0n };
+  assert.deepEqual(selfBurnProgram.requirements(zero), { transports: [] });
+  assert.deepEqual(selfBurnProgram.buildRequests(zero), []);
+  assert.equal(selfBurnProgram.decode({ programInput: zero, initialResults: [], dependentEvidence: [] }).amountOut, 0n);
+  const local = selfBurnNativeExact.methods()[0]; assert(local.kind === "local");
+  assert.equal(local.quote(zero).status, "quoted"); assert.equal(local.quote(input).status, "not-applicable");
+  assert.throws(() => selfBurnProgram.buildRequests({ ...input, amountIn: -1n }), /negative/);
+  assert.throws(() => selfBurnProgram.buildRequests({ ...input, route: { ...route, tokenOut: tokenB } }), /incompatible/);
+
+  // Real central issuance and typed transport, with a local injected lease and
+  // no RPC/child. Exact burns 137 of the original token and observes 89 native;
+  // executor, transaction origin and identity probe are distinct authorities.
+  const pin = { chainId: 1, blockHash: source.hash, stateRoot: `0x${"16".repeat(32)}` };
+  const rpcUrl = "http://127.0.0.1:1/not-opened-self-burn-test", origin = router, probe = tokenC;
+  const amountIn = 137n, amountOut = 89n;
+  for (const mode of ["success", "revert", "source-mismatch", "wrong-account", "missing-effects",
+    "false-return", "malformed-return", "zero-payout", "missing-origin", "cancelled", "deadline", "generation-changed"] as const) {
+    let dispatched = 0, validatedRequests = 0, decoded = 0, fatal = 0, fallbackReads = 0;
+    let currentGeneration = source.generation;
+    const controller = new AbortController();
+    const now = Date.now;
+    let clock = now();
+    const deadlineAtMs = clock + 60_000;
+    if (mode === "deadline") Date.now = () => clock;
+    try {
+      const transport = createRevmStrictSimulationTransport({ rpcUrl, executionGasLimit: 1_000_000,
+        onFatal() { fatal++; }, leaseFor: async requested => {
+          assert.deepEqual(requested, source);
+          return { source, sourcePin: pin, closeAndDrain: async () => {},
+            strictSimulate: async (request: StrictSimulateRequest, control): Promise<DaemonResponse> => {
+              dispatched++;
+              assert.equal(control?.signal, controller.signal); assert.equal(control?.deadlineAtMs, deadlineAtMs);
+              assert.equal(request.from, actor.toLowerCase()); assert.equal(request.transactionOrigin, origin.toLowerCase());
+              assert.equal(request.callerMode, "impersonated-call-frame"); assert.equal(request.rpcUrl, rpcUrl);
+              assert.equal(request.to, tokenA.toLowerCase()); assert.equal(request.blockNumber, source.number);
+              assert.deepEqual([...SELF_BURN_NATIVE_TOKEN_INTERFACE.decodeFunctionData("transfer", request.data)], [tokenA, amountIn]);
+              assert.deepEqual(request.tokenDeals, [{ token: tokenA.toLowerCase(), to: actor.toLowerCase(), amount: amountIn.toString() }]);
+              assert.deepEqual(request.sourcePin, pin);
+              assert.deepEqual(request.observeTokenBalances, [{ token: tokenA.toLowerCase(), account: actor.toLowerCase() }]);
+              assert.deepEqual(request.observeNativeBalances, [actor.toLowerCase()]);
+              assert.deepEqual(request.observeTotalSupply, [tokenA.toLowerCase()]);
+              validatedRequests++;
+              const output = mode === "revert" ? "0x1234" : mode === "malformed-return" ? "0x"
+                : SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionResult("transfer", [mode !== "false-return"]);
+              const nativeOut = mode === "zero-payout" ? 0n : amountOut;
+              if (mode === "cancelled") controller.abort();
+              if (mode === "deadline") clock = deadlineAtMs;
+              if (mode === "generation-changed") currentGeneration++;
+              return { ok: true, success: mode !== "revert", latencyMs: 0, output, gasUsed: "21000",
+                ...(mode === "revert" ? { revertReason: output } : {}),
+                sourceAttestation: { kind: "node-attested", ...pin, blockNumber: source.number,
+                  stateRoot: mode === "source-mismatch" ? `0x${"17".repeat(32)}` : pin.stateRoot, parentHash: `0x${"18".repeat(32)}` },
+                strict: { outcome: { kind: mode === "revert" ? "Revert" : "Success", phase: "main", output }, executionGasUsed: "21000",
+                  logs: [], tokenDeltas: mode === "revert" || mode === "missing-effects" ? [] : [{ token: tokenA.toLowerCase(),
+                    account: mode === "wrong-account" ? probe.toLowerCase() : actor.toLowerCase(), delta: (-amountIn).toString() }],
+                  nativeDeltas: mode === "revert" ? [] : [{ account: actor.toLowerCase(), before: "0", after: nativeOut.toString(), delta: nativeOut.toString() }],
+                  totalSupplyDeltas: mode === "revert" ? [] : [{ token: tokenA.toLowerCase(), delta: (-amountIn).toString() }] } };
+            } };
+        } });
+      const runtime = createStrictCentralAdapterRuntime({ executor: actor,
+        ...(mode === "missing-origin" ? {} : { transactionOrigin: origin }),
+        verifiedActors: { "self-burn-test-probe": probe }, simulator: transport,
+        provider: { call: async () => { fallbackReads++; throw new Error("unexpected view fallback"); },
+          getCode: async () => { fallbackReads++; throw new Error("unexpected code read"); },
+          getStorage: async () => { fallbackReads++; throw new Error("unexpected storage read"); } },
+        generationFence: { assertCurrent(g, s) { assert.equal(g, currentGeneration); assert.deepEqual(s, source); } } });
+      const work = await executeAdapterWork({ runtime, control: { signal: controller.signal, deadlineAtMs }, intent: {
+        stage: "exact-refine", familyId: SELF_BURN_NATIVE_FAMILY_ID, instanceKey: descriptor.instanceKey, routeKey: route.routeKey,
+        source, generation: source.generation, programInput: { ...input, amountIn },
+        program: { requirements: selfBurnProgram.requirements, buildRequests: selfBurnProgram.buildRequests,
+          decode({ programInput, results }) { decoded++; return selfBurnProgram.decode({ programInput, initialResults: results, dependentEvidence: [] }); } },
+      } });
+      if (mode === "success") {
+        assert.equal(work.status, "resolved"); assert(work.status === "resolved");
+        const quote = work.executed.evidence;
+        assert.equal(quote.amountOut, amountOut); assert.equal(quote.evidence.amountIn, amountIn);
+        assert.deepEqual(quote.evidence.source, source);
+        const fragment = selfBurnNativeStrictFamilyPlugin.execution.buildFragment({ descriptor, route,
+          amountIn, quotedAmountOut: quote.amountOut, minAmountOut: quote.amountOut,
+          exactEvidence: quote.evidence, executor: actor, runtimeEvidence: [] });
+        assert.deepEqual(fragment.nodes.map(node => node.amount), [amountIn, amountOut]);
+        assert.equal(decoded, 1);
+      } else {
+        assert.equal(work.status, "unresolved", mode);
+        assert.equal(decoded, mode === "false-return" || mode === "malformed-return" || mode === "zero-payout" ? 1 : 0, mode);
+      }
+      assert.equal(dispatched, mode === "missing-origin" ? 0 : 1, mode);
+      assert.equal(validatedRequests, dispatched, "fail-closed transport must not hide test assertion failures");
+      assert.equal(fallbackReads, 0, mode);
+      assert.equal(fatal, mode === "source-mismatch" || mode === "wrong-account" || mode === "missing-effects" ? 1 : 0, mode);
+    } finally { Date.now = now; }
+  }
 }
 
 async function verifyEtherTokenNativeEffects(): Promise<void> {

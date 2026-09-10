@@ -101,6 +101,7 @@ export const selfBurnNativeExact = {
     Object.freeze({
       id: "burn-effect-simulation",
       kind: "request-program" as const,
+      chainAmountQuote: true as const,
       program: selfBurnNativeRequestProgram,
     }),
   ]),

@@ -108,6 +108,9 @@ export function selfBurnNativeSimulation(input: {
         amount: input.amountIn,
       })]),
     }),
+    observeTokenBalances: Object.freeze([
+      Object.freeze({ token, account: input.callerRef }),
+    ]),
     observe: Object.freeze([
       "return-data" as const,
       "token-delta" as const,
