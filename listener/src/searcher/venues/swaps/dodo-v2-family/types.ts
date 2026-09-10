@@ -154,7 +154,10 @@ export interface DodoV2ExactEvidence {
   readonly kind: "dodo-v2-actor-bound-query";
   readonly source: CanonicalSource;
   readonly pool: string;
-  readonly actor: string;
+  /** Runtime fee/query trader (tx.origin), independent of descriptor probe actor. */
+  readonly transactionOrigin: string;
+  /** BotVM transfer source and sellBase/sellQuote output recipient. */
+  readonly executor: string;
   readonly direction: DodoV2Direction;
   readonly tokenIn: string;
   readonly tokenOut: string;

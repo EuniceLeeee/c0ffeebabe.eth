@@ -70,13 +70,15 @@ function assertExecutionEvidence(input: {
   readonly quotedAmountOut: bigint;
   readonly exactEvidence: DodoV2ExactEvidence;
   readonly executor: string;
+  readonly transactionOrigin?: string;
 }): void {
   const evidence = input.exactEvidence;
   if (
     evidence.kind !== "dodo-v2-actor-bound-query" ||
     !sameAddress(evidence.pool, input.descriptor.pool) ||
-    !sameAddress(evidence.actor, input.descriptor.quoteActorBinding.actor) ||
-    !sameAddress(evidence.actor, input.executor) ||
+    typeof input.transactionOrigin !== "string" ||
+    !sameAddress(evidence.transactionOrigin, input.transactionOrigin) ||
+    !sameAddress(evidence.executor, input.executor) ||
     evidence.direction !== input.route.direction ||
     !sameAddress(evidence.tokenIn, input.route.tokenIn) ||
     !sameAddress(evidence.tokenOut, input.route.tokenOut) ||

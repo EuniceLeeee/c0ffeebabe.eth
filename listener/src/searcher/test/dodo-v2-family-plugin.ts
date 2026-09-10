@@ -23,7 +23,7 @@ import type {
 } from "../venues/blockscan-state-capability.js";
 import { hashCanonical } from "../venues/canonical-value.js";
 import { generateCapabilityClosure } from "../venues/capability-content-hash.js";
-import { dodoV2StrictFamilyPlugin } from "../venues/swaps/dodo-v2-family-plugin.js";
+import { plugin as dodoV2StrictFamilyPlugin } from "../venues/production-families/dodo-v2.production.js";
 import {
   BLOCKSCAN_MULTICALL3,
   blockScanMulticallIface,
@@ -49,6 +49,13 @@ import type {
   DodoV2Route,
 } from "../venues/swaps/dodo-v2-family/types.js";
 import { quoteDodoPmmExactInput } from "../venues/swaps/dodo-pmm-math.js";
+import { dodoV2FixtureRuntime } from "../architecture-migration-fixture-replay.js";
+import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
+import {
+  executeAdapterFamilyLifecycleBatch, executeFamilyExactQuote, buildFamilyExecutionFragment,
+} from "../venues/adapter-family-runtime.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from
+  "../venues/production-family-composition.js";
 import {
   dodoV2Adapter,
   dodoV2BlockScanState,
@@ -65,6 +72,8 @@ const REGISTRY = ethers.getAddress(
 );
 const TRADER = ethers.getAddress("0x0000000000000000000000000000000000000a12");
 const RECEIVER = ethers.getAddress("0x0000000000000000000000000000000000000a13");
+const EXECUTOR = ethers.getAddress("0x0000000000000000000000000000000000000a14");
+const TRANSACTION_ORIGIN = ethers.getAddress("0x0000000000000000000000000000000000000a15");
 const SOURCE: CanonicalSource = Object.freeze({
   number: 22_000_000,
   hash: `0x${"11".repeat(32)}`,
@@ -321,7 +330,8 @@ const exactInput = Object.freeze({
   route: routes[0],
   amountIn: AMOUNT_IN,
   source: SOURCE,
-  executor: DODO_V2_QUOTE_ACTOR,
+  executor: EXECUTOR,
+  transactionOrigin: TRANSACTION_ORIGIN,
   runtimeEvidence: Object.freeze([]),
 });
 const exactRequestMethod = dodoV2StrictFamilyPlugin.exact.methods(exactInput)[1];
@@ -331,10 +341,15 @@ if (exactRequestMethod.kind !== "request-program") {
 }
 assert.deepEqual(
   exactRequestMethod.program.requirements(exactInput),
-  { transports: ["eth-call"], caller: "verified-actor" },
+  { transports: ["eth-call"], caller: "transaction-origin" },
 );
 const exactRequests = exactRequestMethod.program.buildRequests(exactInput);
 assert.equal(exactRequests.length, 4);
+assert.equal(new Set([EXECUTOR, TRANSACTION_ORIGIN, TRADER, DODO_V2_QUOTE_ACTOR]).size, 4);
+for (const request of exactRequests) {
+  assert(request.kind === "eth-call");
+  assert.deepEqual(request.caller, { kind: "transaction-origin" }, "all initial reads include PMM/Multicall origin");
+}
 const adjustedInitialResults = await adapterResults(exactRequests, new DodoBackend({
   baseBalance: 1_050n,
   baseInput: 50n,
@@ -355,20 +370,21 @@ assert.deepEqual({
 const queryRequest = exactRequests.find((request) => request.id === "exact-actor-query");
 assert(queryRequest?.kind === "eth-call");
 assert.deepEqual(queryRequest.caller, {
-  kind: "verified-actor",
-  evidenceId: DODO_V2_QUOTE_ACTOR_EVIDENCE_ID,
+  kind: "transaction-origin",
 });
 const queryArgs = DODO_V2_POOL_INTERFACE.decodeFunctionData(
   "querySellBase",
   queryRequest.data,
 );
-assert.equal(ethers.getAddress(String(queryArgs[0])), DODO_V2_QUOTE_ACTOR);
+assert.equal(ethers.getAddress(String(queryArgs[0])), TRANSACTION_ORIGIN);
 assert.equal(BigInt(queryArgs[1]), AMOUNT_IN);
 const strictExact = exactRequestMethod.program.decode({
   programInput: exactInput,
   initialResults: await adapterResults(exactRequests, backend),
   dependentEvidence: [],
 });
+assert.equal(backend.lastFeeActor, TRANSACTION_ORIGIN);
+assert.equal(backend.lastQueryActor, TRANSACTION_ORIGIN);
 
 const previousActor = process.env.BOTVM_OWNER;
 process.env.BOTVM_OWNER = DODO_V2_QUOTE_ACTOR;
@@ -388,17 +404,16 @@ try {
   else process.env.BOTVM_OWNER = previousActor;
 }
 assert.equal(strictExact.amountOut, legacyExact);
-assert.equal(strictExact.evidence.actor, DODO_V2_QUOTE_ACTOR);
+assert.equal(strictExact.evidence.transactionOrigin, TRANSACTION_ORIGIN);
+assert.equal(strictExact.evidence.executor, EXECUTOR);
 assert.equal(strictExact.evidence.quotePath, "actor-query");
 assert.equal(exactRequestMethod.reusePolicy, undefined, "no cross-block reuse declaration");
 await testDependentExact(exactInput, routes, exactRequestMethod.program);
-assert.throws(
-  () => exactRequestMethod.program.requirements({
-    ...exactInput,
-    executor: FORGED_POOL,
-  }),
-  /does not match the verified quote actor/,
-);
+for (const transactionOrigin of [undefined, null, "bad", ethers.ZeroAddress]) {
+  for (const declare of [exactRequestMethod.program.requirements, exactRequestMethod.program.buildRequests]) {
+    assert.throws(() => declare({ ...exactInput, transactionOrigin } as never), /transaction origin/);
+  }
+}
 assert.notEqual(
   hashCanonical(dodoV2StrictFamilyPlugin.exact.cacheCompatibilityProjection(
     exactInput,
@@ -407,8 +422,11 @@ assert.notEqual(
     ...exactInput,
     executor: FORGED_POOL,
   })),
-  "exact cache compatibility includes the concrete actor",
+  "exact cache compatibility includes the executor independently",
 );
+assert.notEqual(hashCanonical(dodoV2StrictFamilyPlugin.exact.cacheCompatibilityProjection(exactInput)),
+  hashCanonical(dodoV2StrictFamilyPlugin.exact.cacheCompatibilityProjection({ ...exactInput, transactionOrigin: TRADER })),
+  "exact cache compatibility includes the runtime trader independently of probe evidence");
 
 const strictFragment = dodoV2StrictFamilyPlugin.execution.buildFragment({
   descriptor,
@@ -417,17 +435,33 @@ const strictFragment = dodoV2StrictFamilyPlugin.execution.buildFragment({
   quotedAmountOut: strictExact.amountOut,
   minAmountOut: strictExact.amountOut,
   exactEvidence: strictExact.evidence,
-  executor: DODO_V2_QUOTE_ACTOR,
+  executor: EXECUTOR,
+  transactionOrigin: TRANSACTION_ORIGIN,
   runtimeEvidence: [],
 });
 const legacyFragment = await dodoV2Adapter.buildPlanFragment({
   edge: legacyEdges[0],
   amountIn: AMOUNT_IN,
   amountOut: strictExact.amountOut,
-  executor: DODO_V2_QUOTE_ACTOR,
+  executor: EXECUTOR,
   state: backend as unknown as StateBackend,
 });
 assert.deepEqual(strictFragment, legacyFragment);
+for (const patch of [
+  { transactionOrigin: TRADER }, { transactionOrigin: DODO_V2_QUOTE_ACTOR }, { executor: FORGED_POOL },
+]) {
+  assert.throws(() => dodoV2StrictFamilyPlugin.execution.buildFragment({
+    ...exactInput, quotedAmountOut: strictExact.amountOut, minAmountOut: strictExact.amountOut,
+    exactEvidence: { ...strictExact.evidence, ...patch },
+  }), /incompatible exact evidence/, "Family execution rejects forged origin/executor evidence");
+}
+for (const patch of [{ transactionOrigin: undefined }, { transactionOrigin: TRADER }, { executor: FORGED_POOL }]) {
+  assert.throws(() => dodoV2StrictFamilyPlugin.execution.buildFragment({
+    ...exactInput, ...patch, quotedAmountOut: strictExact.amountOut, minAmountOut: strictExact.amountOut,
+    exactEvidence: strictExact.evidence,
+  }), /incompatible exact evidence/);
+}
+await testRuntimeOriginAuthority();
 assert.throws(
   () => dodoV2StrictFamilyPlugin.execution.buildFragment({
     descriptor,
@@ -436,7 +470,8 @@ assert.throws(
     quotedAmountOut: strictExact.amountOut + 1n,
     minAmountOut: strictExact.amountOut,
     exactEvidence: strictExact.evidence,
-    executor: DODO_V2_QUOTE_ACTOR,
+    executor: EXECUTOR,
+    transactionOrigin: TRANSACTION_ORIGIN,
     runtimeEvidence: [],
   }),
   /incompatible exact evidence/,
@@ -449,12 +484,12 @@ const inner = new Uint8Array([1, 2, 3]);
 assert.deepEqual(
   dodoV2StrictFamilyPlugin.actionAdapters[0].encode(
     strictFragment.nodes[0],
-    DODO_V2_QUOTE_ACTOR,
+    EXECUTOR,
     inner,
   ),
   dodoV2ActionAdapter.encode(
     strictFragment.nodes[0],
-    DODO_V2_QUOTE_ACTOR,
+    EXECUTOR,
     inner,
   ),
 );
@@ -620,16 +655,16 @@ async function testDependentExact(
       assert(round !== null);
       assert.equal(round.requests.length, 1, "only one additional actor query");
       assert.equal(new Set([...requests, ...round.requests].map((request) => request.id)).size, 5);
-      assert.deepEqual(round.requirements, { transports: ["eth-call"], caller: "verified-actor" });
+      assert.deepEqual(round.requirements, { transports: ["eth-call"], caller: "transaction-origin" });
       const dependent = round.requests[0];
       assert(dependent.kind === "eth-call");
       assert.equal(dependent.to, input.descriptor.pool);
       assert.equal(dependent.completion, "return-data");
       assert.deepEqual(dependent.caller, {
-        kind: "verified-actor", evidenceId: DODO_V2_QUOTE_ACTOR_EVIDENCE_ID,
+        kind: "transaction-origin",
       });
       const args = DODO_V2_POOL_INTERFACE.decodeFunctionData(queryFunction, dependent.data);
-      assert.equal(ethers.getAddress(String(args[0])), DODO_V2_QUOTE_ACTOR);
+      assert.equal(ethers.getAddress(String(args[0])), TRANSACTION_ORIGIN);
       assert.equal(BigInt(args[1]), effectiveInput);
       const dependentResults = await adapterResults(round.requests, backend);
       const dependentEvidence = [round.decode(dependentResults)];
@@ -688,7 +723,6 @@ async function testDependentExact(
       // In particular, the initial gross-input query is still required even
       // when we have a successful effective-input response available.
       for (const invalid of [
-        { ...input, executor: FORGED_POOL },
         { ...input, route: { ...route, pool: FORGED_POOL } },
         { ...input, route: { ...route, tokenIn: route.tokenOut } },
         { ...input, route: { ...route, instanceKey: instanceKey(`${route.instanceKey}-foreign`) } },
@@ -750,6 +784,94 @@ async function testDependentExact(
   assert.throws(() => program.buildRequests(negative), /cannot be negative/);
   assert.throws(() => next(negative, []), /cannot be negative/);
   assert.throws(() => program.decode({ programInput: negative, initialResults: [], dependentEvidence: [] }), /cannot be negative/);
+}
+
+async function testRuntimeOriginAuthority(): Promise<void> {
+  const family = catalog.forFamily(dodoV2StrictFamilyPlugin.manifest.familyId);
+  const prepared = await executeAdapterFamilyLifecycleBatch({
+    family, matches: [{ matchedPatternId: DODO_V2_SWAP_LOG_PATTERN_ID, observation: swapObservation }],
+    source: SOURCE, generation: SOURCE.generation,
+    runtime: dodoV2FixtureRuntime({ baseToken: BASE, quoteToken: QUOTE, pool: POOL }),
+    publisher: { publish() {} },
+  });
+  assert(prepared.publication);
+  const instance = prepared.publication.instances[0]!;
+  assert.equal((instance.descriptor as DodoV2Descriptor).quoteActorBinding.actor, DODO_V2_QUOTE_ACTOR,
+    "runtime quote context does not relabel descriptor probe evidence");
+  for (const [routeIndex, route] of instance.routeHandles.entries()) {
+    const projectedRoute = instance.routes[routeIndex]!;
+    const sellBase = projectedRoute.tokenIn.toLowerCase() === BASE.toLowerCase();
+    const queryFunction = sellBase ? "querySellBase" : "querySellQuote";
+    for (const adjustment of ["unchanged", "surplus", "deficit"] as const) {
+      const effectiveInput = adjustment === "unchanged" ? 200n : adjustment === "surplus" ? 250n : 170n;
+      const output = sellBase ? 503n : 137n;
+      const backend = new DodoBackend({
+        ...(adjustment === "unchanged" ? {} : sellBase ? {
+          baseBalance: adjustment === "surplus" ? 1050n : 970n,
+          baseInput: adjustment === "surplus" ? 50n : "revert",
+        } : {
+          quoteBalance: adjustment === "surplus" ? 2050n : 1970n,
+          quoteInput: adjustment === "surplus" ? 50n : "revert",
+        }),
+        feeRates: [10n ** 16n, 2n * 10n ** 16n], queryOutput: () => output,
+      });
+      const calls: { to: string; data: string; from?: string }[] = [];
+      const options = {
+        executor: EXECUTOR, observedSender: TRADER,
+        verifiedActors: { [DODO_V2_QUOTE_ACTOR_EVIDENCE_ID]: DODO_V2_QUOTE_ACTOR },
+        provider: { call: async (tx: { to: string; data: string; from?: string }, block?: number) => {
+          assert.equal(block, SOURCE.number); calls.push(tx); return backend.call(tx);
+        }, getCode: async () => "0x", getStorage: async () => "0x" },
+        generationFence: { assertCurrent(generation: number, source: CanonicalSource) {
+          assert.equal(generation, SOURCE.generation); assert.deepEqual(source, SOURCE);
+        } },
+      };
+      const input = { family, route, amountIn: 200n, executor: EXECUTOR, runtimeEvidence: [],
+        source: SOURCE, generation: SOURCE.generation, requireChainAmountQuote: true };
+      const absent = await executeFamilyExactQuote({ ...input,
+        transactionOrigin: TRANSACTION_ORIGIN, runtime: createStrictCentralAdapterRuntime(options) } as never);
+      assert.notEqual(absent.status, "resolved");
+      assert.equal(calls.length, 0, "missing trusted origin cannot fall back to consumer/executor/probe/observed sender");
+      const strictRuntime = createStrictCentralAdapterRuntime({ ...options, transactionOrigin: TRANSACTION_ORIGIN });
+      let context = { executor: EXECUTOR, transactionOrigin: TRANSACTION_ORIGIN };
+      const runtime = { ...strictRuntime, callerAuthority: { bind: () => context } };
+      const quote = await executeFamilyExactQuote({ ...input, runtime });
+      assert.equal(quote.status, "resolved");
+      if (quote.status !== "resolved") throw new Error("runtime-origin DODO quote failed");
+      assert.equal(quote.amountIn, 200n); assert.equal(quote.amountOut, output);
+      assert.equal(calls.length, adjustment === "unchanged" ? 4 : 5);
+      assert(calls.every(tx => tx.from === TRANSACTION_ORIGIN.toLowerCase()),
+        "all physical initial/dependent calls, including Multicall, use trusted transaction origin");
+      const fee = calls.find(tx => tx.data.startsWith(DODO_V2_POOL_INTERFACE.getFunction("getUserFeeRate")!.selector))!;
+      assert.equal(ethers.getAddress(String(DODO_V2_POOL_INTERFACE.decodeFunctionData("getUserFeeRate", fee.data)[0])), TRANSACTION_ORIGIN);
+      const queries = calls.filter(tx => tx.data.startsWith(DODO_V2_POOL_INTERFACE.getFunction(queryFunction)!.selector));
+      assert.deepEqual(queries.map(tx => {
+        const args = DODO_V2_POOL_INTERFACE.decodeFunctionData(queryFunction, tx.data);
+        assert.equal(ethers.getAddress(String(args[0])), TRANSACTION_ORIGIN);
+        return BigInt(args[1]);
+      }), adjustment === "unchanged" ? [200n] : [200n, effectiveInput]);
+      const buildInput = { family, actionOwnership: catalog, route, exact: quote,
+        executor: EXECUTOR, runtimeEvidence: [], minAmountOut: output };
+      const built = buildFamilyExecutionFragment(buildInput);
+      assert.equal(built.status, "resolved");
+      if (built.status !== "resolved") throw new Error("runtime-origin DODO execution failed");
+      assert.deepEqual(built.fragment.requirements, [{ kind: "transfer-to-pool", token: projectedRoute.tokenIn,
+        pool: (instance.descriptor as DodoV2Descriptor).pool, amount: 200n }]);
+      const encoded = dodoV2ActionAdapter.encode(built.fragment.nodes[0], EXECUTOR, new Uint8Array());
+      const sellData = DODO_V2_POOL_INTERFACE.encodeFunctionData(sellBase ? "sellBase" : "sellQuote", [EXECUTOR]);
+      assert(Buffer.from(encoded).toString("hex").includes(sellData.slice(2)), "sell recipient remains executor, not origin");
+      for (const source of [{ ...SOURCE, number: SOURCE.number + 1 },
+        { ...SOURCE, hash: `0x${"cc".repeat(32)}` }, { ...SOURCE, generation: SOURCE.generation + 1 }]) {
+        assert.equal(buildFamilyExecutionFragment({ ...buildInput, exact: { ...quote, source } as never }).status, "failed",
+          "caller cannot forge source on a sealed Exact handle");
+      }
+      context = { ...context, transactionOrigin: TRADER };
+      assert.equal(buildFamilyExecutionFragment(buildInput).status, "failed");
+      context = { executor: FORGED_POOL, transactionOrigin: TRANSACTION_ORIGIN };
+      assert.equal(buildFamilyExecutionFragment(buildInput).status, "failed");
+      assert.equal(calls.length, adjustment === "unchanged" ? 4 : 5, "execution checks never add RPC");
+    }
+  }
 }
 
 async function runIdentity(
@@ -830,7 +952,7 @@ async function adapterResults(
       data: request.data,
       ...(request.caller?.kind === "verified-actor"
         ? { from: DODO_V2_QUOTE_ACTOR }
-        : {}),
+        : request.caller?.kind === "transaction-origin" ? { from: TRANSACTION_ORIGIN } : {}),
     }));
   })));
 }

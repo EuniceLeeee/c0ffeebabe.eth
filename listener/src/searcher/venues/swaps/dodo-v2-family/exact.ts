@@ -21,7 +21,6 @@ import {
   DODO_V2_POOL_INTERFACE,
 } from "./codec.js";
 import { applyDodoTransferToInput } from "./pricing-helpers.js";
-import { DODO_V2_QUOTE_ACTOR_EVIDENCE_ID } from "./identity.js";
 import type {
   DodoV2Descriptor,
   DodoV2ExactEvidence,
@@ -40,14 +39,15 @@ const dodoV2RequestProgram: ExactRequestProgram<
   DodoV2ExactEvidence
 > = {
   requirements(input) {
-    assertInvocation(input.descriptor, input.route, input.executor);
-    return { transports: ["eth-call"], caller: "verified-actor" };
+    assertInvocation(input.descriptor, input.route, input.executor, input.transactionOrigin);
+    return { transports: ["eth-call"], caller: "transaction-origin" };
   },
   buildRequests(input) {
-    assertInvocation(input.descriptor, input.route, input.executor);
+    assertInvocation(input.descriptor, input.route, input.executor, input.transactionOrigin);
     if (input.amountIn < 0n) throw new Error("dodo-v2 exact amountIn cannot be negative");
     if (input.amountIn === 0n) return [];
-    const actor = input.descriptor.quoteActorBinding.actor;
+    const origin = requireTransactionOrigin(input.transactionOrigin);
+    const caller = Object.freeze({ kind: "transaction-origin" as const });
     const inputCall = inputSemanticsCall(input.descriptor);
     const queryFunction = input.route.direction === "sell-base"
       ? "querySellBase"
@@ -57,6 +57,7 @@ const dodoV2RequestProgram: ExactRequestProgram<
         id: EXACT_PMM_ID,
         kind: "eth-call" as const,
         to: input.descriptor.pool,
+        caller,
         data: DODO_V2_POOL_INTERFACE.encodeFunctionData("getPMMStateForCall"),
         completion: "return-data" as const,
       }),
@@ -64,17 +65,15 @@ const dodoV2RequestProgram: ExactRequestProgram<
         id: EXACT_FEE_ID,
         kind: "eth-call" as const,
         to: input.descriptor.pool,
-        caller: Object.freeze({
-          kind: "verified-actor" as const,
-          evidenceId: DODO_V2_QUOTE_ACTOR_EVIDENCE_ID,
-        }),
-        data: DODO_V2_POOL_INTERFACE.encodeFunctionData("getUserFeeRate", [actor]),
+        caller,
+        data: DODO_V2_POOL_INTERFACE.encodeFunctionData("getUserFeeRate", [origin]),
         completion: "return-data" as const,
       }),
       Object.freeze({
         id: EXACT_INPUT_ID,
         kind: "eth-call" as const,
         to: inputCall.to,
+        caller,
         data: inputCall.data,
         completion: "return-data" as const,
       }),
@@ -82,12 +81,9 @@ const dodoV2RequestProgram: ExactRequestProgram<
         id: EXACT_QUERY_ID,
         kind: "eth-call" as const,
         to: input.descriptor.pool,
-        caller: Object.freeze({
-          kind: "verified-actor" as const,
-          evidenceId: DODO_V2_QUOTE_ACTOR_EVIDENCE_ID,
-        }),
+        caller,
         data: DODO_V2_POOL_INTERFACE.encodeFunctionData(queryFunction, [
-          actor,
+          origin,
           input.amountIn,
         ]),
         completion: "return-data" as const,
@@ -95,23 +91,22 @@ const dodoV2RequestProgram: ExactRequestProgram<
     ]);
   },
   buildDependentProgram({ programInput, completedRound, initialResults }) {
-    assertInvocation(programInput.descriptor, programInput.route, programInput.executor);
+    assertInvocation(programInput.descriptor, programInput.route, programInput.executor, programInput.transactionOrigin);
     if (programInput.amountIn === 0n || completedRound !== 0) return null;
     const { effectiveInput } = decodeInitialInput(programInput, initialResults);
     if (effectiveInput === programInput.amountIn) return null;
     return bindRequestResultRound(
-      { transports: ["eth-call"], caller: "verified-actor" },
+      { transports: ["eth-call"], caller: "transaction-origin" },
       [Object.freeze({
         id: EXACT_EFFECTIVE_QUERY_ID,
         kind: "eth-call" as const,
         to: programInput.descriptor.pool,
         caller: Object.freeze({
-          kind: "verified-actor" as const,
-          evidenceId: DODO_V2_QUOTE_ACTOR_EVIDENCE_ID,
+          kind: "transaction-origin" as const,
         }),
         data: DODO_V2_POOL_INTERFACE.encodeFunctionData(
           programInput.route.direction === "sell-base" ? "querySellBase" : "querySellQuote",
-          [programInput.descriptor.quoteActorBinding.actor, effectiveInput],
+          [requireTransactionOrigin(programInput.transactionOrigin), effectiveInput],
         ),
         completion: "return-data" as const,
       })],
@@ -122,6 +117,7 @@ const dodoV2RequestProgram: ExactRequestProgram<
       programInput.descriptor,
       programInput.route,
       programInput.executor,
+      programInput.transactionOrigin,
     );
     if (programInput.amountIn === 0n) return zeroQuote(programInput);
     const { effectiveInput, queryResult } = decodeInitialInput(programInput, initialResults);
@@ -146,7 +142,7 @@ export const dodoV2Exact = {
     localZeroExactMethod<DodoV2Descriptor, DodoV2Route, DodoV2ExactEvidence>(
       "local-zero",
       (input) => {
-        assertInvocation(input.descriptor, input.route, input.executor);
+        assertInvocation(input.descriptor, input.route, input.executor, input.transactionOrigin);
         return zeroQuote(input);
       },
     ),
@@ -157,7 +153,7 @@ export const dodoV2Exact = {
       program: dodoV2RequestProgram,
     }),
   ]),
-  cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
+  cacheCompatibilityProjection: ({ descriptor, route, executor, transactionOrigin }) => ({
     pool: descriptor.pool,
     baseToken: descriptor.baseToken,
     quoteToken: descriptor.quoteToken,
@@ -175,7 +171,8 @@ export const dodoV2Exact = {
       querySemantics: descriptor.quoteActorBinding.querySemantics,
       inputSemantics: descriptor.quoteActorBinding.inputSemantics,
     },
-    caller: canonicalAddress(executor),
+    executor: canonicalAddress(executor),
+    transactionOrigin: requireTransactionOrigin(transactionOrigin),
   }),
 } satisfies ExactQuoteSemantics<
   DodoV2Descriptor,
@@ -223,6 +220,7 @@ function zeroQuote(input: {
   readonly amountIn: bigint;
   readonly source: DodoV2ExactEvidence["source"];
   readonly executor: string;
+  readonly transactionOrigin?: string;
 }) {
   return Object.freeze({
     amountOut: 0n,
@@ -236,6 +234,8 @@ function evidence(
     readonly route: DodoV2Route;
     readonly amountIn: bigint;
     readonly source: DodoV2ExactEvidence["source"];
+    readonly executor: string;
+    readonly transactionOrigin?: string;
   },
   effectiveInput: bigint,
   amountOut: bigint,
@@ -245,7 +245,8 @@ function evidence(
     kind: "dodo-v2-actor-bound-query" as const,
     source: input.source,
     pool: input.descriptor.pool,
-    actor: input.descriptor.quoteActorBinding.actor,
+    transactionOrigin: requireTransactionOrigin(input.transactionOrigin),
+    executor: canonicalAddress(input.executor),
     direction: input.route.direction,
     tokenIn: input.route.tokenIn,
     tokenOut: input.route.tokenOut,
@@ -260,6 +261,7 @@ function assertInvocation(
   descriptor: DodoV2Descriptor,
   route: DodoV2Route,
   executor: string,
+  transactionOrigin: string | undefined,
 ): void {
   const sellBase = route.direction === "sell-base";
   const expectedIn = sellBase ? descriptor.baseToken : descriptor.quoteToken;
@@ -272,11 +274,18 @@ function assertInvocation(
   ) {
     throw new Error(`dodo-v2 exact route binding does not match ${descriptor.pool}`);
   }
-  if (!sameAddress(executor, descriptor.quoteActorBinding.actor)) {
-    throw new Error(
-      `dodo-v2 exact caller ${executor} does not match the verified quote actor`,
-    );
-  }
+  canonicalAddress(executor);
+  requireTransactionOrigin(transactionOrigin);
+}
+
+function requireTransactionOrigin(value: string | undefined): string {
+  try {
+    if (typeof value === "string") {
+      const origin = canonicalAddress(value);
+      if (!/^0x0{40}$/i.test(origin)) return origin;
+    }
+  } catch { /* Fall through to the Family-owned missing authority diagnostic. */ }
+  throw new Error("dodo-v2 exact transaction origin is missing or invalid");
 }
 
 function assertSource(

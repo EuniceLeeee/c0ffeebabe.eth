@@ -1120,7 +1120,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "606ec1ef58be125b375772ad9301d5bb2c4f130fb9bb3930da3d7894af0b4295",
+        "contentHash": "08a4233b57d21aadf0ce0561f2bfc418afb91b7ed736dd52f6bd5d8addef5827",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -1138,7 +1138,6 @@
           "src/searcher/venues/swaps/dodo-pmm-math.ts",
           "src/searcher/venues/swaps/dodo-v2-abi.ts",
           "src/searcher/venues/swaps/dodo-v2-family/codec.ts",
-          "src/searcher/venues/swaps/dodo-v2-family/identity.ts",
           "src/searcher/venues/swaps/dodo-v2-family/manifest.ts",
           "src/searcher/venues/swaps/dodo-v2-family/pricing-helpers.ts"
         ],
@@ -1160,7 +1159,7 @@
         "familyId": "custom-swap:dodo-v2",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "8bd6f10ec246c6cb7bf9b60c9e5daba8e60438ee57bd35263dee18b923133836",
+        "contentHash": "571741972d537e326a22d0fb21ad30f6e3b7e08035023fc2e9c4c1f6fe5af4e7",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -7694,5 +7693,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "1a2756532e3d104c33ef85a5f6f5b08a4e81daa0135bd43b13866a8ad9a8d7cb"
+  "artifactHash": "073fcd18963861396bc8f457f6b540021e95e27fb00b69f22a7c90a404f4575c"
 }
