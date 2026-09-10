@@ -78,6 +78,12 @@ export type StrictFundingPreparationInput = Pick<PrepareAdapterRuntimeInput,
 export interface PrepareStrictRuntimeInput extends PrepareAdapterRuntimeInput {
   readonly fundingPreparation?: StrictFundingPreparation;
   readonly canonicalActivity?: StrictCanonicalActivityProof;
+  /**
+   * Source-owned canonical recheck for a resumed startup. Cached eth_call bytes
+   * do not perform a new requireCanonical check. The callback must obey this
+   * request's work controls; it supplies no pricing or execution authority.
+   */
+  readonly validateBeforePublish?: () => Promise<void>;
 }
 
 const EMPTY_FUNDING_ASSETS: readonly string[] = Object.freeze([]);
@@ -335,6 +341,16 @@ export class StrictCurrentRuntimeCoordinator
       pricing,
       funding,
     });
+    const canonicalStartedAtMs = Date.now();
+    if (input.validateBeforePublish !== undefined) {
+      assertWorkOpen(settleDeadlineAtMs, input.signal);
+      await input.validateBeforePublish();
+      // Validation yields: shutdown, deadline or a newer preparation may have
+      // retired this work. publishPricing performs the final epoch check.
+      assertWorkOpen(settleDeadlineAtMs, input.signal);
+    }
+    const finalCanonicalCasMs = input.validateBeforePublish === undefined
+      ? 0 : Math.max(0, Date.now() - canonicalStartedAtMs);
     this.publishPricing(built, pricingEpoch);
     const finishedAtMs = Date.now();
     const timing: AdapterRuntimePrepareTiming = Object.freeze({
@@ -344,7 +360,7 @@ export class StrictCurrentRuntimeCoordinator
       pricingMs,
       fundingMs: 0,
       executionMs,
-      finalCanonicalCasMs: 0,
+      finalCanonicalCasMs,
     });
     return Object.freeze({
       status: completeness,

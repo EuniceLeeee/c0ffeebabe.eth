@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import "../shared/adapters/index.js";
 import { ADDR } from "../shared/constants/addresses.js";
-import { AnvilStateBackend, type StateBackend } from "../shared/state/state-backend.js";
+import { AnvilStateBackend, StateCallAbortedError, type StateBackend, type StateCallControl } from "../shared/state/state-backend.js";
 import {
   forkBotVmInstallationEnabled,
   forkBotVmRuntimeReceipt,
@@ -32,7 +32,7 @@ import { blockScanRouteId } from "./blockscan-route-identity.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
 import { buildEffectiveMids, effectiveMidPairStatistics } from "./blockscan-effective-mid.js";
-import { parseBlockScanObservedHeader } from "./blockscan-observed-header.js";
+import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
 import type { CanonicalSource } from
@@ -2136,10 +2136,16 @@ async function main(): Promise<void> {
   const frozenProducerTopology = Object.freeze({
     topologyKey:
       `strict-ready:${readyUniverse.generation}:${readyUniverse.graphHash}`,
-    async observeHeader(blockNumber: number) {
-      const block = parseBlockScanObservedHeader(await provider.send("eth_getBlockByNumber", [
-        ethers.toQuantity(blockNumber), true,
-      ]), blockNumber, blockScanChainId);
+    async observeHeader(blockNumber: number, control?: StateCallControl) {
+      const block = control === undefined
+        ? parseBlockScanObservedHeader(await provider.send("eth_getBlockByNumber", [
+          ethers.toQuantity(blockNumber), true,
+        ]), blockNumber, blockScanChainId)
+        : await readBlockScanObservedHeader(config.rpcUrl, blockScanChainId, blockNumber, control);
+      if (control?.signal?.aborted) throw new StateCallAbortedError("source header signal aborted", "signal");
+      if (control?.deadlineAtMs !== undefined && Date.now() >= control.deadlineAtMs) {
+        throw new StateCallAbortedError("source header deadline aborted", "deadline");
+      }
       // Keep the actual observed anchor, before any pricing or fork work.
       // A later RPC rejection alone cannot explain where a source mismatch began.
       console.log(`[searcher/source-header] ${JSON.stringify({

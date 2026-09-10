@@ -1,8 +1,11 @@
 import {
   AnvilStateBackend,
+  StateCallAbortedError,
   type StateBackend,
+  type StateCallControl,
 } from "../shared/state/state-backend.js";
 import { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
+import { isRpcThrottleError } from "./rpc-throttle-guard.js";
 import {
   isPassScopedExactStateBackend,
   type PassScopedExactStateBackend,
@@ -529,8 +532,9 @@ interface PlannedBlockScanSolve {
 }
 
 export interface BlockScanFrozenTopologyDependencies {
-  /** Canonical current-head observation; never scans or publishes topology. */
-  observeHeader(blockNumber: number): Promise<BlockScanSourceHeader>;
+  /** Canonical current-head observation; never scans or publishes topology.
+   * Supplied controls cancel physical I/O; settlement must include retirement. */
+  observeHeader(blockNumber: number, control?: StateCallControl): Promise<BlockScanSourceHeader>;
   /** Hash/root of the startup-ready Graph/catalog generation. */
   readonly topologyKey: string;
 }
@@ -1605,10 +1609,157 @@ export class BlockScanRuntimeLoop {
     if (stopError !== undefined) throw stopError;
   }
 
+  private async observeStartupWarmHeader(
+    number: number, deadlineAtMs: number, signal: AbortSignal,
+    stage = "startup canonical header",
+  ): Promise<BlockScanSourceHeader> {
+    const controller = new AbortController();
+    const detach = linkAbortController(signal, controller);
+    const pending = Promise.resolve().then(() => {
+      if (controller.signal.aborted) throw controller.signal.reason;
+      if (Date.now() >= deadlineAtMs) throw new StateCallAbortedError("startup header deadline", "deadline");
+      return this.deps.frozenTopology.observeHeader(number, { deadlineAtMs, signal: controller.signal });
+    }).catch(error => {
+      // The controlled raw observer sees the first HTTP response, without a
+      // provider's internal throttle retry. Observe even retirement-time errors.
+      if (isRpcThrottleError(error) && !this.deps.runtimeAbort.signal.aborted) {
+        console.warn("[searcher/blockscan-startup-warm] HTTP 429 during canonical header observation");
+        this.deps.runtimeAbort.abort(error);
+      }
+      throw error;
+    });
+    try {
+      return await awaitBlockScanDeadline(pending, deadlineAtMs, stage,
+        () => controller.abort(new StateCallAbortedError("startup header retired", "signal")), signal);
+    } finally {
+      controller.abort(new Error("startup header settled"));
+      // Do not detach this join behind another deadline wrapper: a successor
+      // head/shutdown must not finish while the retired header read still runs.
+      await pending.catch(() => {});
+      detach();
+    }
+  }
+
+  /** One worker, one physical source, fresh authority/controls on every retry. */
+  private async prepareStartupWarm(
+    coordinator: CurrentSourceRuntimeCoordinator,
+    input: PrepareStrictRuntimeInput,
+    backend: PinnedRethQuoteBackend,
+    passController: AbortController,
+  ): Promise<{ runtime: AdapterRuntimePrepareResult; graph: VerifiedGraphView }> {
+    const pin = Object.freeze({ number: input.graph.sourceBlock,
+      hash: input.graph.sourceBlockHash.toLowerCase(), topologyKey: this.topologyKey() });
+    let graph = input.graph;
+    let deadlineAtMs = input.deadlineAtMs;
+    const reserveMs = input.deadlineAtMs - input.preparationSettleDeadlineAtMs!;
+    let attempt = 0;
+    const assertOpen = (): void => {
+      if (passController.signal.aborted) throw passController.signal.reason;
+      if (this.deps.runtimeAbort.signal.aborted) throw this.deps.runtimeAbort.signal.reason;
+      if (this.deps.isShuttingDown()) throw new Error("startup warm shutdown");
+    };
+    const validate = async (stage: string, signal: AbortSignal): Promise<void> => {
+      try {
+        assertOpen();
+        const header = await this.observeStartupWarmHeader(pin.number, deadlineAtMs, signal, stage);
+        assertOpen();
+        if (header.number !== pin.number || header.hash.toLowerCase() !== pin.hash ||
+            this.topologyKey() !== pin.topologyKey ||
+            this.deps.currentRuntimeCoordinator() !== coordinator) {
+          throw new Error("startup warm canonical source or runtime changed");
+        }
+      } catch (error) {
+        // Failure to revalidate is fatal for this pin, not a pricing retry.
+        passController.abort(error);
+        backend.abort(error);
+        throw error;
+      }
+    };
+    for (;;) {
+      assertOpen();
+      const controller = new AbortController();
+      const detach = linkAbortController(passController.signal, controller);
+      const settleDeadlineAtMs = deadlineAtMs - reserveMs;
+      const admittedAtMs = Date.now();
+      const deadlineError = new StateCallAbortedError("startup warm attempt deadline reached", "deadline");
+      const timer = setTimeout(() => controller.abort(deadlineError),
+        Math.max(0, deadlineAtMs - Date.now()));
+      // This facade also fences callers which omit their own work controls.
+      // Only successful bytes survive; no session or issued handle is retained.
+      const calls: Pick<StateBackend, "call"> = Object.freeze({
+        call: (request, control = {}) => backend.call(request, {
+          deadlineAtMs: Math.min(settleDeadlineAtMs, control.deadlineAtMs ?? Infinity),
+          signal: control.signal === undefined ? controller.signal
+            : AbortSignal.any([controller.signal, control.signal]),
+        }),
+      });
+      let retry = false;
+      try {
+        if (attempt++ > 0) {
+          await validate("startup warm retry canonical header", controller.signal);
+          graph = this.deps.buildGraphView({
+            id: input.graph.id, generation: this.nextGeneration(),
+            sourceBlock: pin.number, sourceBlockHash: pin.hash,
+            edges: input.graph.edges, landedCoverage: this.landedCoverage(),
+            topologyKey: pin.topologyKey,
+          });
+        }
+        assertOpen();
+        const source = Object.freeze({ number: pin.number, hash: pin.hash, generation: graph.generation });
+        const request: PrepareStrictRuntimeInput = {
+          ...input, graph, deadlineAtMs,
+          preparationSettleDeadlineAtMs: settleDeadlineAtMs,
+          pricingFamilySettleDeadlineAtMs: settleDeadlineAtMs,
+          signal: controller.signal, pricingCallBackend: calls,
+          canonicalActivity: input.canonicalActivity === undefined ? undefined : {
+            ...input.canonicalActivity, source,
+            amountQuoteActivity: amountQuoteActivityForTouched(input.canonicalActivity.touchedStateKeys, source) ?? undefined,
+          },
+          validateBeforePublish: () => validate("startup warm publication canonical header", controller.signal),
+        };
+        const runtime = await coordinator.prepare(request);
+        assertOpen();
+        if (runtime.status === "incomplete" && Date.now() >= settleDeadlineAtMs) throw deadlineError;
+        return { runtime, graph };
+      } catch (error) {
+        // Do not retry arbitrary failures merely because a clock also expired.
+        retry = !passController.signal.aborted && !this.deps.runtimeAbort.signal.aborted &&
+          !this.deps.isShuttingDown() && admittedAtMs < settleDeadlineAtMs &&
+          Date.now() >= settleDeadlineAtMs && (
+            controller.signal.reason === deadlineError ||
+            (error instanceof StateCallAbortedError && error.kind === "deadline") ||
+            (error instanceof Error && error.message === "strict current runtime deadline expired")
+          );
+        if (!retry) throw error;
+      } finally {
+        clearTimeout(timer);
+        controller.abort(new Error("startup warm attempt settled"));
+        detach();
+        // prepare joins its workers; caller cancellation removes queued work
+        // before drain (which would otherwise dispatch it). Keep the memo open.
+        await backend.drain();
+      }
+      if (retry) {
+        console.log(`[searcher/blockscan-startup-warm-resume] ${JSON.stringify({
+          sourceBlock: pin.number, sourceBlockHash: pin.hash,
+          generation: graph.generation, attempt, ...backend.stats(),
+          processMemory: process.memoryUsage(),
+        })}`);
+        // Yield even for a tiny configured budget; shutdown/evidence retain
+        // their ordinary opportunity to interrupt this single worker.
+        await new Promise<void>(resolve => setImmediate(resolve));
+        deadlineAtMs = Date.now() + Math.max(1, this.deps.startupWarmBudgetMs);
+      }
+    }
+  }
+
   readonly runHead = async (
     blockNumber: number,
     sourceHead: LatestHeadObservation,
   ): Promise<void> => {
+    // Runtime abort is independently authoritative; a standalone caller need
+    // not have advanced its external shutdown flag before the next head drains.
+    if (this.deps.runtimeAbort.signal.aborted) return;
     const revision = sourceHead.revision ?? 0;
     const refresh = revision === 0
       ? null
@@ -2086,7 +2237,9 @@ export class BlockScanRuntimeLoop {
       canonicalBlock: number,
       stage: string,
     ): Promise<BlockScanSourceHeader> =>
-      awaitBlockScanDeadline(
+      startupWarmAttempt && passMode === "periodic"
+        ? this.observeStartupWarmHeader(canonicalBlock, passDeadlineAtMs, passSignal, stage)
+        : awaitBlockScanDeadline(
         this.observeTopologyHeader(canonicalBlock),
         passDeadlineAtMs,
         stage,
@@ -2177,8 +2330,8 @@ export class BlockScanRuntimeLoop {
         throw new Error("block-scan strict ready graph disappeared");
       }
       const graphEdges = Object.freeze([...currentGraph]);
-      const generation = this.nextGeneration();
-      const graphView = this.deps.buildGraphView({
+      let generation = this.nextGeneration();
+      let graphView = this.deps.buildGraphView({
         id: `blockscan:${this.topologyKey()}`,
         generation,
         sourceBlock: blockNumber,
@@ -2293,13 +2446,15 @@ export class BlockScanRuntimeLoop {
         Math.max(1, this.deps.runtimePublicationReserveMs ?? 1_500);
       const fundingTokens = [...new Set(this.deps.flashTokens())];
       const sourcePricingStartedAtMs = Date.now();
+      const resumableStartupWarm = startupWarmAttempt && passMode === "periodic";
       if (!useNMinusOneFallback) {
         const backend = new PinnedRethQuoteBackend(
           this.deps.rpcUrl,
           graphView.sourceBlockHash,
           {
-            signal: passSignal,
-            deadlineAtMs: runtimeDeadlineAtMs,
+            ...(resumableStartupWarm
+              ? { signal: this.deps.runtimeAbort.signal }
+              : { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs }),
             maxBatchSize: 128,
             maxConcurrentBatches: 4,
             transportLane: "producer-bulk",
@@ -2433,7 +2588,7 @@ export class BlockScanRuntimeLoop {
         const sourcePricingBackend = sourcePricingCalls!.backend;
         let runtime: AdapterRuntimePrepareResult;
         try {
-          runtime = await currentRuntimeCoordinator.prepare({
+          const request: PrepareStrictRuntimeInput = {
             graph: graphView,
             // The funding surface is the solidified funding-token universe
             // (provider support surface, chain-truth enumerated), never the
@@ -2452,7 +2607,20 @@ export class BlockScanRuntimeLoop {
             touchedPools,
             canonicalActivity,
             pricingCallBackend: sourcePricingBackend,
-          });
+          };
+          if (resumableStartupWarm) {
+            const prepared = await this.prepareStartupWarm(
+              currentRuntimeCoordinator, request, sourcePricingBackend, passController,
+            );
+            runtime = prepared.runtime;
+            graphView = prepared.graph;
+            generation = graphView.generation;
+            sourcePricingCalls = { backend: sourcePricingBackend, source: Object.freeze({
+              number: graphView.sourceBlock, hash: graphView.sourceBlockHash, generation,
+            }) };
+          } else {
+            runtime = await currentRuntimeCoordinator.prepare(request);
+          }
         } catch (error) {
           sourcePricingBackend.abort(error);
           throw error;

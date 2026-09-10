@@ -2445,6 +2445,78 @@ for (const path of ["coarse", "runtime"] as const) for (const rejection of ["abo
   assert(guarded.latestPricingSnapshot(), `${path}/${rejection} cannot retire admitted work`);
 }
 
+// Resumed startup may use same-hash successful RPC bytes. The last canonical
+// recheck is still an atomic publication barrier, including when no new quote
+// needed the backend's requireCanonical check.
+for (const disposition of [
+  "success", "source-mismatch", "source-unavailable", "throttle", "sync-throw",
+  "abort", "deadline", "newer-prepare", "reset",
+] as const) {
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  const barrier = new Promise<void>(resolve => { release = resolve; });
+  const controller = new AbortController();
+  let effectiveBuilds = 0, publications = 0, validations = 0;
+  const guarded = new StrictCurrentRuntimeCoordinator(
+    request => root.createSession({ source: request.source, runtime: strictRuntime,
+      fundingAssets: request.fundingAssets, kind: "pricing", control: request.control }),
+    () => {}, () => { publications++; },
+    async pricing => {
+      effectiveBuilds++;
+      return { source: { number: pricing.sourceBlock, hash: pricing.sourceBlockHash,
+        generation: pricing.generation }, rows: new Map(), reference: "default",
+        referenceWethInput: 1n, complete: true, wallMs: 0 };
+    },
+  );
+  const args = { graph: currentGraph, fundingTokens: [UNIV2_FIXTURE_TOKEN0],
+    deadlineAtMs: Date.now() + 60_000, signal: controller.signal };
+  await guarded.prepare(args);
+  const previous = guarded.latestPricingSnapshot();
+  const pending = guarded.prepare({ ...args, validateBeforePublish: () => {
+    validations++;
+    assert.equal(effectiveBuilds, 2, "canonical barrier must follow complete amount pricing");
+    assert.equal(guarded.latestPricingSnapshot(), previous, "no raw-only publication while validating");
+    entered();
+    if (disposition === "sync-throw") throw new Error("canonical check failed synchronously");
+    return barrier.then(() => {
+      if (["source-mismatch", "source-unavailable", "throttle"].includes(disposition)) {
+        throw new Error(`canonical validation ${disposition}`);
+      }
+    });
+  } });
+  const observed = Promise.allSettled([pending]);
+  await started;
+  assert.equal(publications, 1);
+  if (disposition === "abort") controller.abort(new Error("shutdown during canonical check"));
+  if (disposition === "newer-prepare") await guarded.prepare(args);
+  if (disposition === "reset") await guarded.resetDynamicStateForReplay();
+  const retained = guarded.latestPricingSnapshot();
+  const publicationCount = publications;
+  const realNow = Date.now;
+  try {
+    // All sessions have settled at the barrier; deterministically expire the
+    // request during validation without timing-dependent slow-machine sleeps.
+    if (disposition === "deadline") Date.now = () => args.deadlineAtMs + 1;
+    release();
+    const [result] = await observed;
+    assert.equal(validations, 1);
+    if (disposition === "success") {
+      assert.equal(result.status, "fulfilled");
+      assert.notEqual(guarded.latestPricingSnapshot(), previous);
+      assert.equal(publications, publicationCount + 1);
+    } else {
+      assert.equal(result.status, "rejected", disposition);
+      assert.equal(guarded.latestPricingSnapshot(), retained, disposition);
+      assert.equal(publications, publicationCount, disposition);
+    }
+  } finally {
+    Date.now = realNow;
+    release();
+    await observed;
+  }
+  console.log(`strict startup canonical publication barrier: PASS ${disposition}`);
+}
+
 const failingCoordinator = new StrictCurrentRuntimeCoordinator(
   async (request: StrictSessionRequest) => await root.createSession({
     source: request.source,
