@@ -7,9 +7,15 @@ export function isRpcThrottleError(error: unknown): boolean {
     // Contract revert text is not evidence of transport throttling.
     if (item.code === 3 || item.code === "CALL_EXCEPTION" ||
         (item.code === -32000 && typeof item.data === "string" && /^0x[0-9a-f]*$/i.test(item.data))) return false;
-    if (item.code === 429 || item.status === 429 || item.statusCode === 429 ||
-        /\bHTTP[ :]+429\b|\btoo many requests\b|\brate.?limit\b|(?:compute units|throughput|quota).*(?:exceed|limit|capacity)/i.test(
-          typeof item.message === "string" ? item.message : String(cause))) return true;
+    if (item.code === 429 || item.status === 429 || item.statusCode === 429) return true;
+    const message = typeof item.message === "string" ? item.message : String(cause);
+    // Ignore revert text itself, not a transport failure it may be wrapping.
+    if (/\bexecution revert(?:ed)?\b/i.test(message)) {
+      cause = item.cause;
+      continue;
+    }
+    if (/\bHTTP[ :]+429\b|\btoo many requests\b|\brate.?limit\b|(?:compute units|throughput|quota).*(?:exceed|limit|capacity)/i.test(message) ||
+        /\b(?:quota|compute[ -]units?)\b.*\b(?:exhaust(?:ed|ion)|deplet(?:ed|ion))\b/i.test(message)) return true;
     cause = item.cause;
   }
   return false;
