@@ -19,6 +19,29 @@ authority. Workflows never expand the active task's authorization.
   Constants may supply infrastructure identity evidence or provenance, never per-instance admission.
   Mandatory final sim remains fail-closed.
 
+### Decoupling contract
+
+- **Keep the central pipeline protocol-independent.** Main/runtime, coordinators, Graph, enumeration,
+  Exact/Solver, and shared simulation/EV code own generic orchestration, search, transport and safety.
+  Family IDs may be opaque registry keys, never semantic branch conditions.
+- **No protocol special cases in central code:** no named Family/protocol branches, pool/factory address
+  checks, protocol ABI/selectors/topics, storage layouts, fee curves or protocol math. Moving such logic
+  into a central helper, configuration table or protocol-shaped DTO does not make it decoupled.
+- **Family owns protocol meaning:** identity, state decoding, pricing model, amount-sensitive quotes,
+  capacity constraints and execution encoding. Shared protocol-math libraries are called by Families,
+  not imported by the central pipeline. Infrastructure identity constants stay with their owning module.
+- **Separate generic policy from protocol semantics.** Token valuation and gas/amount-reference policies
+  belong in reusable protocol-independent modules consuming generic inputs, not protocol state fields.
+  Central code passes inputs and consumes results; it does not duplicate these calculations.
+- **Keep module contracts stable.** Cache, incremental-search and internal algorithm changes must not
+  force unrelated producers or consumers to maintain module-private versions, invalidation signals or
+  result branches. Modules own their cache validity and fallback. Lifecycle wiring may be thin and generic;
+  readiness must not introduce protocol-specific startup gates or duplicate schedulers.
+- **Review the dependency direction.** Adding/changing a Family should touch only its implementation,
+  generated catalog artifacts and semantic tests. A genuinely missing universal capability requires an
+  explicit generic contract and contract tests, not a one-Family exception. Check imports and delegated
+  helpers as well as visible branches; final source/authority, simulation and EV gates remain intact.
+
 ## 3. Mission
 
 Build a profitable, position-conserving arbitrage searcher. Study comparable competitor successes to find
