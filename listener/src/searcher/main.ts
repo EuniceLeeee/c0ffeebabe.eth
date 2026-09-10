@@ -722,7 +722,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     poolUniverseHighSpreadMinFee: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_MIN_FEE ?? "10000"),
     recordLiveFixtures: process.env.SEARCHER_RECORD_LIVE_FIXTURES === "1",
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
-    maxProfitBpsOfFlash: BigInt(process.env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "2000"),
+    maxProfitBpsOfFlash: BigInt(process.env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "10000"),
     bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? DEFAULT_BRIBE_BPS.toString()),
     bribeAllAboveGas: process.env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
     evGate: process.env.SEARCHER_EV_GATE === "1",
@@ -3988,10 +3988,9 @@ async function processOpportunities(
           continue;
         }
 
-        // Phantom-profit guard: a closed-loop backrun capturing a large fraction
-        // of the flash notional is not real — it means the revm victim overlay
-        // dislocated the pool (curve/univ3 state bug). Reject before submitting
-        // so we never spam builders or bribe against a fake profit.
+        // Upper-ratio sanity guard; a high ratio alone does not prove that a
+        // simulation is wrong. The configurable ceiling defaults to 100%;
+        // source, execution and net-EV checks remain independently required.
         if (
           resolved.flashAmount > 0n &&
           sim.netProfit * 10000n > resolved.flashAmount * ctx.config.maxProfitBpsOfFlash

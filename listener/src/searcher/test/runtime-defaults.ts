@@ -63,6 +63,28 @@ assert(
 console.log("[runtime-defaults] deploy preserves block-scan multicall mode: PASS");
 
 const searcherMain = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+const profitRatioDefault = searcherMain.match(
+  /SEARCHER_MAX_PROFIT_BPS_OF_FLASH\s*\?\? "(\d+)"/,
+);
+assert(profitRatioDefault?.[1] === "10000", "profit ratio guard defaults to 100%, not 20%");
+// Execute both production guard expressions, keeping the strict > boundary.
+const profitRatioGuards = [...searcherMain.matchAll(
+  /resolved\.flashAmount > 0n &&\s+sim\.netProfit \* 10000n > resolved\.flashAmount \* (?:ctx\.)?config\.maxProfitBpsOfFlash/g,
+)];
+assert(profitRatioGuards.length === 2, "both live and blockscan retain their ratio guards");
+for (const [index, match] of profitRatioGuards.entries()) {
+  const rejects = new Function("resolved", "sim", "config", "ctx", `return (${match[0]});`) as
+    (resolved: { flashAmount: bigint }, sim: { netProfit: bigint }, config: { maxProfitBpsOfFlash: bigint }, ctx: { config: { maxProfitBpsOfFlash: bigint } }) => boolean;
+  const config = { maxProfitBpsOfFlash: BigInt(profitRatioDefault![1]!) };
+  for (const [profit, expected] of [[107n, false], [267n, false], [268n, true]] as const) {
+    assert(rejects({ flashAmount: 267n }, { netProfit: profit }, config, { config }) === expected,
+      `guard ${index}: profit=${profit}, flash=267, 100% boundary`);
+  }
+  const legacy = { maxProfitBpsOfFlash: 2000n };
+  assert(rejects({ flashAmount: 267n }, { netProfit: 107n }, legacy, { config: legacy }),
+    "an explicit 20% environment setting still selects the old threshold");
+}
+console.log("[runtime-defaults] 100% ratio guard and strict boundary: PASS");
 assert(/SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS\s*\?\? "200"/.test(searcherMain),
   "enumeration defaults to 2%, independently of Exact admission");
 assert(
