@@ -49,6 +49,7 @@ import { UNIV2_PAIR_INTERFACE } from
 import { scanBlockStateFromResolvedMids } from
   "../detector/blockscan-scanner-core.js";
 import { readBlockTouchedStateKeys } from "../blockscan-touched-state.js";
+import { buildEffectiveMids, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
 
 const STARTUP: CanonicalSource = Object.freeze({
   number: 25_800_000,
@@ -2393,6 +2394,94 @@ for (const path of ["coarse", "runtime", "prefunded", "exact"] as const) {
   }
 }
 
+// Real raw-mid/session + shared touched-reader integration. Amount quote
+// responses are fixtures: this proves orchestration, NOT on-chain Family support.
+for (const path of ["coarse", "runtime"] as const) {
+  const rawReads: string[] = [], amountReads: string[] = [];
+  let gasCostWei: bigint | null = null;
+  let sharedTouched: ReadonlySet<string> | undefined;
+  const paired = new StrictCurrentRuntimeCoordinator(
+    request => parallelRoot.createSession({ source: request.source,
+      runtime: runtime(request.source, {
+        reserves: request.source.number === carryNextSource.number
+          ? { reserve0: 2_000_000_000n, reserve1: 4_000_000_000n, blockTimestampLast: 2 }
+          : pool.reserves,
+        onCurrentPricingReadStart: target => { rawReads.push(target); },
+      }),
+      fundingAssets: request.fundingAssets, kind: "pricing", control: request.control,
+      touchedPools: request.touchedPools,
+    }), () => {}, undefined,
+    async (pricing, control, _backend, reuse) => {
+      assert.equal(reuse?.touchedStateKeys, sharedTouched,
+        "effective receives the exact SAME raw-mid activity set, no separately issued proof");
+      return buildEffectiveMids({ pricing, control, weth: UNIV2_FIXTURE_TOKEN0,
+        previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
+        gasCostWei, enumerationSpreadBps: 200, concurrency: 2,
+        quote: async ({ edge, amountIn, requireChainAmountQuote }) => {
+          assert.equal(requireChainAmountQuote, true);
+          amountReads.push(edge.instanceKey!.toLowerCase());
+          return { source: { number: pricing.sourceBlock, hash: pricing.sourceBlockHash,
+            generation: pricing.generation }, amountIn,
+            amountOut: amountIn * 2n - (pricing.sourceBlock === carryNextSource.number ? 2n : 1n) };
+        },
+      });
+    },
+  );
+  const prepare = (graph: typeof carryBaseGraph) => {
+    const args = { graph, deadlineAtMs: Date.now() + 10_000,
+      touchedPools: sharedTouched,
+      canonicalActivity: sharedTouched === undefined ? undefined : {
+        source: { number: graph.sourceBlock, hash: graph.sourceBlockHash, generation: graph.generation },
+        touchedStateKeys: sharedTouched, complete: true as const,
+      } };
+    return path === "coarse" ? paired.prepareCoarsePricing(args)
+      : paired.prepare({ ...args, fundingTokens: [] });
+  };
+  await prepare(carryBaseGraph);
+  const before = paired.latestPricingSnapshot()!;
+  assert.equal(before.effectiveMids!.rows.size, carryBaseGraph.scannerEdgeCount);
+  assert.equal(amountReads.length, carryBaseGraph.scannerEdgeCount);
+  let activityReads = 0;
+  const txHash = `0x${"a1".repeat(32)}`;
+  sharedTouched = await readBlockTouchedStateKeys({
+    getLogs: async () => { activityReads++; return []; },
+    send: async () => { activityReads++; return [{ txHash, result: {
+      type: "CALL", from: EXECUTOR, to: firstParallelTarget,
+      gas: "0x100", gasUsed: "0x80", input: "0x12345678", output: "0x",
+    } }]; },
+  }, carryNextSource.number, ethers.ZeroAddress, {
+    hash: carryNextSource.hash, parentHash: CURRENT.hash,
+    transactionHashes: [txHash], passiveTouchedAddresses: [],
+  });
+  assert(sharedTouched.has(firstParallelTarget), "arbitrary contract call counts, not just swap selectors");
+  gasCostWei = 100_000_000_000_000n;
+  rawReads.length = 0; amountReads.length = 0;
+  await prepare(carryNextGraph);
+  const after = paired.latestPricingSnapshot()!;
+  assert.equal(activityReads, 2, "one log read plus one trace, never a second effective activity scan");
+  assert.deepEqual(rawReads, [firstParallelTarget]);
+  assert.deepEqual(amountReads, [firstParallelTarget, firstParallelTarget]);
+  for (const [key, oldRow] of before.effectiveMids!.rows) {
+    const newRow = after.effectiveMids!.rows.get(key)!;
+    assert.equal(after.mids.get(key)!.mid, before.mids.get(key)!.mid,
+      "reserve ratio stays the same, so numerical-mid comparison cannot drive invalidation");
+    if (oldRow.instanceKey === firstParallelTarget) {
+      assert.equal(after.pricingProvenanceByEdgeKey!.get(key), "refreshed");
+      assert.equal(newRow.carried, undefined);
+      assert.notEqual(newRow.amountIn, oldRow.amountIn, "a touched row uses the current amount reference");
+      assert.deepEqual(newRow.quotedAt, carryNextSource);
+    } else {
+      assert.equal(after.pricingProvenanceByEdgeKey!.get(key), "carried");
+      assert.equal(newRow.carried, true);
+      assert.equal(newRow.amountIn, oldRow.amountIn);
+      assert.equal(newRow.amountOut, oldRow.amountOut);
+      assert.equal(newRow.effectiveMid, oldRow.effectiveMid);
+      assert.deepEqual(newRow.quotedAt, CURRENT);
+    }
+  }
+  console.log(`strict shared touched raw/effective: PASS ${path}`);
+}
+
 // The existing warm/publication boundary awaits amount quotes atomically in
 // both producer paths. Cancellation, mismatch and partial work never replace
 // an already published raw/effective pair.
@@ -2451,6 +2540,63 @@ for (const path of ["coarse", "runtime"] as const) {
   assert.equal(publications, 1);
   await enriched.resetDynamicStateForReplay();
   assert.equal(enriched.latestPricingSnapshot(), null);
+}
+
+// Raw and effective use the SAME published base. Incomplete/cancelled drafts
+// never become another reuse cursor, including before the first publication
+// and after a source mismatch. Retry may retain the published table only.
+for (const path of ["coarse", "runtime"] as const) {
+  let publications = 0;
+  let observedPrevious: EffectiveMidSnapshot | undefined;
+  let returned!: EffectiveMidSnapshot;
+  let mode: "partial" | "complete" | "mismatch" | "abort" = "partial";
+  let controller = new AbortController();
+  const coordinated = new StrictCurrentRuntimeCoordinator(
+    request => root.createSession({ source: request.source, runtime: strictRuntime,
+      fundingAssets: request.fundingAssets, kind: "pricing", control: request.control }),
+    () => {}, () => { publications++; },
+    async (pricing, _control, _backend, reuse) => {
+      observedPrevious = reuse?.previous;
+      returned = Object.freeze({ source: { number: pricing.sourceBlock,
+        hash: mode === "mismatch" ? WRONG_HASH.hash : pricing.sourceBlockHash,
+        generation: pricing.generation }, rows: new Map(), reference: "default",
+        referenceWethInput: 1_000_000_000_000_000n, complete: mode === "complete", wallMs: 0 });
+      if (mode === "abort") controller.abort(new Error("fixture head superseded"));
+      return returned;
+    },
+  );
+  const prepare = () => path === "coarse"
+    ? coordinated.prepareCoarsePricing({ graph: currentGraph, deadlineAtMs: Date.now() + 10_000,
+        signal: controller.signal })
+    : coordinated.prepare({ graph: currentGraph, fundingTokens: [UNIV2_FIXTURE_TOKEN0],
+        deadlineAtMs: Date.now() + 10_000, signal: controller.signal });
+  await assert.rejects(prepare, /effective pricing incomplete/);
+  assert.equal(observedPrevious, undefined);
+  assert.equal(publications, 0);
+  assert.equal(coordinated.latestPricingSnapshot(), null);
+  mode = "mismatch";
+  await assert.rejects(prepare, /effective pricing incomplete or mismatched source/);
+  assert.equal(observedPrevious, undefined, "unpublished draft is not a raw-mid reuse base");
+  mode = "complete";
+  await prepare();
+  assert.equal(observedPrevious, undefined, "partial or foreign-source drafts must not be reused");
+  const published = coordinated.latestPricingSnapshot();
+  assert(published);
+  assert.equal(publications, 1);
+  mode = "abort";
+  await assert.rejects(prepare);
+  assert.equal(observedPrevious, published.effectiveMids);
+  assert.equal(coordinated.latestPricingSnapshot(), published);
+  assert.equal(publications, 1, "retained data is never a consumer publication");
+  controller = new AbortController();
+  mode = "complete";
+  await prepare();
+  assert.equal(observedPrevious, published.effectiveMids, "cancelled rows never replace the common published base");
+  assert.equal(publications, 2);
+  await coordinated.resetDynamicStateForReplay();
+  assert.equal(coordinated.latestPricingSnapshot(), null);
+  await prepare();
+  assert.equal(observedPrevious, undefined, "reset clears the one published pricing base");
 }
 
 // Completion order/reset must not replace the latest raw/effective publication.

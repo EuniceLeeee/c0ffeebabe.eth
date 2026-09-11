@@ -24,7 +24,8 @@ import {
 import {
   resolveBlockScanSolverSearchConfig,
 } from "./blockscan-solver-search-config.js";
-import { readBlockTouchedStateKeys } from "./blockscan-touched-state.js";
+import { readBlockTouchedStateKeys, type BlockTouchedProvider } from "./blockscan-touched-state.js";
+import { isRpcThrottleError } from "./rpc-throttle-guard.js";
 import {
   initBlockScanEnumerationSolverTelemetry,
 } from "./blockscan-enumeration-solver-telemetry.js";
@@ -2050,9 +2051,7 @@ async function main(): Promise<void> {
           exactCallBackend: pricingBackend ?? ownedBackend! });
         console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} mids=${pricing.mids.size}`);
         const effective = await buildEffectiveMids({ pricing, weth: ADDR.WETH,
-          previous: reuse?.previous, activity: reuse?.activity,
-          describeReuse: request => session.describeAmountQuoteReuse({ ...request,
-            executor: config.botvmAddress, runtimeEvidence: [] }),
+          previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
           gasCostWei: blockScanAmountReference.estimateGasCost(source),
           enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 128,
           quote: async (request) => {
@@ -2267,6 +2266,26 @@ async function main(): Promise<void> {
       });
     },
   });
+  // The existing activity reader owns both pricing modes. Observe either
+  // physical sibling's throttle before their joined range can be cancelled,
+  // and keep one provider identity for its completed-block memoization.
+  const activityReadFailed = (error: unknown): never => {
+    if (isRpcThrottleError(error)) {
+      console.error("[searcher/blockscan-activity] RPC throttle; stopping live");
+      onSimulationFatal({ kind: "rpc-throttle", category: "rpc-rate-limit" });
+    }
+    throw error;
+  };
+  const blockScanActivityProvider: BlockTouchedProvider = {
+    getLogs(filter) {
+      blockScanRuntimeAbort.signal.throwIfAborted();
+      return provider.getLogs(filter).catch(activityReadFailed);
+    },
+    send(method, params) {
+      blockScanRuntimeAbort.signal.throwIfAborted();
+      return provider.send(method, params).catch(activityReadFailed);
+    },
+  };
   const blockScanRuntimeLoop = new BlockScanRuntimeLoop({
     enabled: enableBlockScan,
     blockScanConfig: blockScanCfg,
@@ -2314,15 +2333,24 @@ async function main(): Promise<void> {
     executorAddress: config.botvmAddress,
     // One refresh set: log identities retain singleton poolIds while the
     // call trace adds contracts reached through top-level or internal calls.
-    readBlockSwapTouched: (blockNumber, header) =>
+    readBlockSwapTouched: (blockNumber, header, range) =>
       readBlockTouchedStateKeys(
-        provider,
+        blockScanActivityProvider,
         blockNumber,
         ADDR.UNISWAP_V4_POOL_MANAGER,
         header?.transactionHashes === undefined ? undefined : {
           hash: header.hash, parentHash: header.parentHash,
           transactionHashes: header.transactionHashes,
           passiveTouchedAddresses: header.passiveTouchedAddresses,
+        },
+        range === undefined ? undefined : {
+          ...range,
+          readHeader: (number) => {
+            blockScanRuntimeAbort.signal.throwIfAborted();
+            return readBlockScanObservedHeader(config.rpcUrl, blockScanChainId, number, {
+              signal: range.signal, deadlineAtMs: range.deadlineAtMs,
+            }).catch(activityReadFailed);
+          },
         },
       ),
     currentHeadEvidenceFamilyForEdge(edgeAdapterId) {

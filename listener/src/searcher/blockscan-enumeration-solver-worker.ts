@@ -477,8 +477,8 @@ async function handleMidBatch(batch: RawMidBatch): Promise<void> {
 }
 
 function serializeEffectiveMids(snapshot: EffectiveMidSnapshot) {
-  // Equal-reference notional indications only; this is not a closed-loop
-  // execution quote or a final simulation/EV verdict. Compare exact amounts.
+  // Each row retains its actual reference amount and original quote block;
+  // an untouched row is not relabelled with this pass's new gas reference.
   const summary = effectiveMidPairStatistics(snapshot, 100);
   return {
     source: snapshot.source,
@@ -495,6 +495,8 @@ function serializeEffectiveMids(snapshot: EffectiveMidSnapshot) {
       amount_out: row.amountOut?.toString() ?? null,
       effective_mid: row.effectiveMid,
       status: row.status,
+      ...(row.quotedAt === undefined ? {} : { quoted_at: row.quotedAt }),
+      ...(row.carried === true ? { carried: true } : {}),
     }]),
     summary: {
       directions: summary.directions,

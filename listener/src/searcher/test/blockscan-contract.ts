@@ -1,8 +1,7 @@
 import { ethers } from "ethers";
 import { deepEqual, rejects } from "node:assert/strict";
-import { amountQuoteActivityForTouched, readBlockTouchedStateKeys,
+import { readBlockTouchedStateKeys,
   type BlockTouchedCanonicalAnchor, type BlockTouchedProvider } from "../blockscan-touched-state.js";
-import { carryAmountQuote } from "../amount-quote-continuity.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import { emitEvent, makeBlockScanOpportunityId } from "../events.js";
 
@@ -330,8 +329,8 @@ const sender = addr(1), callee = addr(2), delegate = addr(3), created = addr(4);
 const destroyed = addr(5), beneficiary = addr(6), miner = addr(7), withdrawal = addr(8);
 const emitter = addr(9), manager = addr(10), transferFrom = addr(11), transferTo = addr(12), clean = addr(99);
 const poolId = `0x${"e5".repeat(32)}`;
-const currentSource = { number: SOURCE_BLOCK, hash: blockHash, generation: 20 };
-const originalSource = { number: SOURCE_BLOCK - 1, hash: parentHash, generation: 19 };
+const anchoredTouchedKeys = [poolId, sender, callee, delegate, created, destroyed, beneficiary,
+  miner, withdrawal, emitter, manager, transferFrom, transferTo];
 
 function activityAnchor() {
   return { hash: blockHash, parentHash, transactionHashes: [...txHashes], passiveTouchedAddresses: [miner, withdrawal] };
@@ -366,18 +365,8 @@ function readAnchored(logs: unknown = activityLogs(), traces: unknown = activity
     send: async () => traces,
   }, SOURCE_BLOCK, manager, anchor);
 }
-function carriedAt(touched: ReadonlySet<string>, dependency: string) {
-  const policy = { kind: "state-only" as const, dependencies: [dependency], blockEnvironment: "independent" as const };
-  return carryAmountQuote({
-    previous: { complete: true, chainAmountQuote: true, validAt: originalSource, quotedAt: originalSource,
-      amountIn: 13n, amountOut: 17n, contextFingerprint: "test-context", reusePolicy: policy },
-    current: currentSource, amountIn: 13n, contextFingerprint: "test-context", policy,
-    activity: amountQuoteActivityForTouched(touched, currentSource),
-  });
-}
-
 tests.push({
-  name: "anchored logs and complete ordered traces produce address-only carry proof in two reads",
+  name: "anchored logs and complete ordered traces produce the shared touched union in two reads",
   run: async () => {
     let reads = 0;
     const touched = await readBlockTouchedStateKeys({
@@ -389,18 +378,9 @@ tests.push({
       },
     }, SOURCE_BLOCK, manager, activityAnchor());
     assert(reads === 2, "hash anchoring adds no RPC");
-    assert(touched.has(poolId), "legacy singleton state key is retained");
-    assert(amountQuoteActivityForTouched(touched, currentSource) !== null, "complete anchored proof exists");
-    for (const dependency of [sender, callee, delegate, created, destroyed, beneficiary,
-      miner, withdrawal, emitter, manager, transferFrom, transferTo]) {
-      assert(touched.has(dependency), "all trace, log and passive addresses enter the refresh set");
-      assert(carriedAt(touched, dependency) === null, "every touched address prevents amount-quote carry");
-    }
-    const carried = carriedAt(touched, clean);
-    assert(carried !== null, "poolIds must not contaminate the address-only proof");
-    deepEqual(carried.quotedAt, originalSource);
-    deepEqual(carried.validAt, currentSource);
-    assert(carried.amountIn === 13n && carried.amountOut === 17n, "exact amounts preserved");
+    deepEqual(touched, new Set(anchoredTouchedKeys),
+      "singleton keys, trace participants, donation endpoints and passive addresses share one exact refresh set");
+    assert(!touched.has(clean), "unobserved addresses are not introduced");
   },
 });
 
@@ -454,7 +434,7 @@ tests.push({
 });
 
 tests.push({
-  name: "activity proof is hash-bound, detached from input and returned Set mutation, and not copyable",
+  name: "anchored touched output is detached from later anchor and response mutation",
   run: async () => {
     const anchor = activityAnchor(), logs = activityLogs(), traces = activityTraces();
     const read = readAnchored(logs, traces, anchor);
@@ -463,39 +443,567 @@ tests.push({
     anchor.transactionHashes[0] = parentHash;
     anchor.passiveTouchedAddresses.push(clean);
     const touched = await read;
-    const copy = new Set(touched);
-    assert(amountQuoteActivityForTouched(copy, currentSource) === null, "copied keys do not copy authority");
-    assert(amountQuoteActivityForTouched(Object.freeze(copy), currentSource) === null, "freezing a copy does not mint proof");
+    deepEqual(touched, new Set(anchoredTouchedKeys), "anchor hash, transaction order and passive addresses were captured before await");
     logs[0]!.address = clean;
     traces[0]!.result.from = clean;
-    (touched as Set<string>).clear();
-    (touched as Set<string>).add(clean);
-    assert(carriedAt(touched, manager) === null && carriedAt(touched, sender) === null && carriedAt(touched, miner) === null,
-      "original dirty addresses survive mutation of every public input");
-    assert(carriedAt(touched, clean) !== null, "later public mutations cannot change the anchored snapshot");
-    const source = { ...currentSource };
-    for (const change of [{ hash: parentHash }, { number: SOURCE_BLOCK + 1 }, { generation: -1 }]) {
-      Object.assign(source, currentSource, change);
-      assert(amountQuoteActivityForTouched(touched, source) === null, "source values are checked on every preparation");
-    }
-    assert(amountQuoteActivityForTouched(touched, { ...currentSource, hash: blockHash.toUpperCase().replace("0X", "0x") }) !== null,
-      "physical hash identity is case insensitive");
+    deepEqual(touched, new Set(anchoredTouchedKeys), "later response mutation cannot change returned keys");
+    const uppercase = (value: string) => value.toUpperCase().replace("0X", "0x");
+    const normalized = await readAnchored(activityLogs(), activityTraces(), {
+      hash: uppercase(blockHash), parentHash: uppercase(parentHash),
+      transactionHashes: txHashes.map(uppercase), passiveTouchedAddresses: [miner, withdrawal].map(uppercase),
+    });
+    deepEqual(normalized, touched, "canonical hash and address identity is case insensitive");
   },
 });
 
 tests.push({
-  name: "legacy or missing passive evidence cannot mint proof; complete empty anchored block can",
+  name: "legacy and optional passive inputs retain their shared touched semantics, including empty blocks",
   run: async () => {
     const legacy = await readBlockTouchedStateKeys({ getLogs: async () => activityLogs(), send: async () => activityTraces() },
       SOURCE_BLOCK, manager);
-    assert(amountQuoteActivityForTouched(legacy, currentSource) === null, "never invent proof from unanchored reads");
+    deepEqual(legacy, new Set([poolId, emitter, transferFrom, transferTo, callee, delegate, created, beneficiary]),
+      "legacy reads retain call targets and log keys without inventing anchored participants or passive addresses");
     const noPassive = await readAnchored(activityLogs(), activityTraces(), { ...activityAnchor(), passiveTouchedAddresses: undefined });
-    assert(amountQuoteActivityForTouched(noPassive, currentSource) === null, "missing passive activity is not empty proof");
+    deepEqual(noPassive, new Set(anchoredTouchedKeys.filter(key => key !== miner && key !== withdrawal)));
     const empty = await readAnchored([], [], { ...activityAnchor(), transactionHashes: [], passiveTouchedAddresses: [] });
-    assert(carriedAt(empty, clean) !== null, "explicit empty complete activity permits clean carry");
+    deepEqual(empty, new Set(), "an empty block with no passive addresses has no touched keys");
     const passiveOnly = await readAnchored([], [], { ...activityAnchor(), transactionHashes: [] });
-    assert(carriedAt(passiveOnly, miner) === null && carriedAt(passiveOnly, withdrawal) === null,
-      "empty transaction list does not erase header-only state activity");
+    deepEqual(passiveOnly, new Set([miner, withdrawal]), "empty transactions do not erase header-only activity");
+  },
+});
+
+const rangeStart = 25_948_083;
+const rangeHash = (number: number) => `0x${number.toString(16).padStart(64, "0")}`;
+const rangeMutationBlock = rangeStart + 7;
+const rangeMutationAddress = addr(200);
+function rangeAnchor(number: number): BlockTouchedCanonicalAnchor {
+  return { hash: rangeHash(number), parentHash: rangeHash(number - 1),
+    transactionHashes: [rangeHash(number + 1_000_000)], passiveTouchedAddresses: [miner] };
+}
+function rangeFixture(target = rangeStart + 119) {
+  const reads: string[] = [];
+  const provider: BlockTouchedProvider = {
+    async getLogs(filter) {
+      assert("blockHash" in filter, "range logs must be hash-pinned");
+      const number = Number(BigInt(filter.blockHash));
+      reads.push(`logs:${number}`);
+      return number === rangeMutationBlock
+        ? [{ address: rangeMutationAddress, blockHash: filter.blockHash, topics: [] },
+          { address: manager, blockHash: filter.blockHash, topics: [rangeHash(123), poolId] }]
+        : [];
+    },
+    async send(method, params) {
+      const number = Number(BigInt(String(params[0])));
+      reads.push(`trace:${number}`);
+      deepEqual([method, params], ["debug_traceBlockByHash", [rangeHash(number),
+        { tracer: "callTracer", tracerConfig: { onlyTopCall: false } }]]);
+      return [{ txHash: rangeHash(number + 1_000_000), result: callFrame() }];
+    },
+  };
+  const range = { previousSource: { number: rangeStart, hash: rangeHash(rangeStart) },
+    async readHeader(number: number) { reads.push(`header:${number}`); return rangeAnchor(number); } };
+  return { reads, provider, range, target, anchor: rangeAnchor(target),
+    read() { return readBlockTouchedStateKeys(provider, target, manager, this.anchor, range); } };
+}
+tests.push({
+  name: "joined activity preserves recognized throttle over concurrent cancellation or deadline, never revert text",
+  run: async () => {
+    const throttleErrors = [
+      Object.assign(new Error("provider request failed"), { status: 429 }),
+      Object.assign(new Error("provider request failed"), { statusCode: 429 }),
+      { code: 429, message: "request rejected" },
+      new Error("JSON-RPC HTTP 429"),
+      new Error("account quota exhausted"),
+      new Error("compute-unit depleted"),
+      new Error("outer provider error", { cause: { code: 429, message: "throttled" } }),
+    ];
+    const reverts = [
+      { code: 3, message: "execution reverted: HTTP 429", data: "0x" },
+      { code: "CALL_EXCEPTION", message: "account quota exhausted" },
+      { code: -32000, message: "HTTP 429", data: "0x1234" },
+    ];
+    for (const failed of ["logs", "trace"] as const) for (const expires of ["abort", "deadline"] as const) {
+      for (const transportError of [...throttleErrors, ...reverts]) {
+        const fixture = rangeFixture(rangeStart + 3);
+        const control = new AbortController(), cancellation = new Error("concurrent activity cancellation");
+        const originalNow = Date.now;
+        let now = 100, started = 0, settled = false;
+        let rejectLogs!: (error: unknown) => void, rejectTrace!: (error: unknown) => void;
+        fixture.provider.getLogs = () => { started++; return new Promise((_, reject) => { rejectLogs = reject; }); };
+        fixture.provider.send = () => { started++; return new Promise((_, reject) => { rejectTrace = reject; }); };
+        Date.now = () => now;
+        try {
+          const pending = readBlockTouchedStateKeys(fixture.provider, fixture.target, manager, fixture.anchor,
+            { ...fixture.range, signal: control.signal, deadlineAtMs: 150 });
+          const observed = pending.then(() => { settled = true; }, error => { settled = true; return error; });
+          await new Promise<void>(resolve => setImmediate(resolve));
+          assert(started === 2, "both siblings were physically admitted before the control changed");
+          if (expires === "abort") control.abort(cancellation);
+          else now = 200;
+          (failed === "logs" ? rejectLogs : rejectTrace)(transportError);
+          await new Promise<void>(resolve => setImmediate(resolve));
+          assert(!settled, "even a fatal response must join its already-dispatched sibling");
+          (failed === "logs" ? rejectTrace : rejectLogs)(new Error("ordinary sibling failure"));
+          const error = await observed;
+          if (throttleErrors.some(error => error === transportError)) assert(error === transportError, "original recognized throttle outranks control and sibling error");
+          else if (expires === "abort") assert(error === cancellation, "typed revert text does not gain throttle priority");
+          else assert(error instanceof Error && /deadline/.test(error.message), "typed revert text does not override deadline");
+          deepEqual(fixture.reads, [`header:${rangeStart + 1}`]);
+        } finally { Date.now = originalNow; }
+      }
+    }
+  },
+});
+
+tests.push({
+  name: "119 canonical transitions retain earlier-only mutations in the shared touched union",
+  run: async () => {
+    const fixture = rangeFixture();
+    const touched = await fixture.read();
+    deepEqual(fixture.reads, Array.from({ length: 119 }, (_, index) => {
+      const number = rangeStart + 1 + index;
+      return [...(number === fixture.target ? [] : [`header:${number}`]), `logs:${number}`, `trace:${number}`];
+    }).flat());
+    assert(fixture.reads.length === 118 + 119 * 2, "119 transitions read only 118 missing headers plus existing logs/trace");
+    deepEqual(touched, new Set([rangeMutationAddress, poolId, manager, sender, callee, miner]),
+      "shared refresh retains earlier-only log mutations alongside all call and passive addresses");
+    fixture.reads.length = 0;
+    const suffix = await readBlockTouchedStateKeys(fixture.provider, fixture.target, manager, fixture.anchor,
+      { ...fixture.range, previousSource: { number: rangeMutationBlock, hash: rangeHash(rangeMutationBlock) } });
+    deepEqual(suffix, new Set([sender, callee, miner]), "a later published base excludes mutations before its requested range");
+    deepEqual(fixture.reads, [], "a covered suffix uses the same completed observations");
+  },
+});
+
+tests.push({
+  name: "one-transition steady activity reuses the frozen target with zero header reads",
+  run: async () => {
+    const fixture = rangeFixture(rangeStart + 1);
+    fixture.range.readHeader = async () => { throw new Error("duplicate target header read forbidden"); };
+    const pending = fixture.read();
+    (fixture.anchor as { hash: string }).hash = blockHash;
+    const touched = await pending;
+    deepEqual(fixture.reads, [`logs:${fixture.target}`, `trace:${fixture.target}`]);
+    deepEqual(touched, new Set([sender, callee, miner]), "the frozen target validates the original reads despite later caller mutation");
+  },
+});
+
+tests.push({
+  name: "range rejects missing, skipped, duplicated, reorged and mismatched final headers without partial return",
+  run: async () => {
+    for (const malformed of [undefined, null,
+      rangeAnchor(rangeStart + 1), rangeAnchor(rangeStart + 3),
+      { ...rangeAnchor(rangeStart + 2), parentHash: blockHash },
+      { ...rangeAnchor(rangeStart + 2), hash: rangeHash(rangeStart), parentHash: rangeHash(rangeStart + 1) },
+    ]) {
+      const fixture = rangeFixture(rangeStart + 3);
+      fixture.range.readHeader = async number => {
+        fixture.reads.push(`header:${number}`);
+        return number === rangeStart + 2 ? malformed as BlockTouchedCanonicalAnchor : rangeAnchor(number);
+      };
+      await rejects(fixture.read(), /anchor|chain|duplicate/);
+      assert(!fixture.reads.includes(`logs:${rangeStart + 2}`) && !fixture.reads.some(read => read.endsWith(`:${fixture.target}`)),
+        "bad intermediate header admits neither its state reads nor another header");
+    }
+    for (const anchor of [
+      { ...rangeAnchor(rangeStart + 3), hash: rangeHash(rangeStart) },
+      { ...rangeAnchor(rangeStart + 3), parentHash: parentHash },
+    ]) {
+      const fixture = rangeFixture(rangeStart + 3);
+      fixture.anchor = anchor;
+      await rejects(fixture.read(), /chain|duplicate/);
+      assert(!fixture.reads.some(read => read.endsWith(`:${fixture.target}`)), "frozen target chain mismatch rejects before target logs/trace");
+    }
+    for (const transactionHashes of [[], [blockHash]]) {
+      const fixture = rangeFixture(rangeStart + 3);
+      fixture.anchor = { ...fixture.anchor, transactionHashes };
+      await rejects(fixture.read(), /anchored block trace/);
+      assert(!fixture.reads.includes(`header:${fixture.target}`), "target trace coverage is validated against supplied anchor, not a second header");
+    }
+    const firstParent = rangeFixture();
+    firstParent.range.previousSource.hash = blockHash;
+    await rejects(firstParent.read(), /chain/);
+    deepEqual(firstParent.reads, [`header:${rangeStart + 1}`]);
+    for (const malformed of ["logs", "trace"] as const) {
+      const fixture = rangeFixture(rangeStart + 3);
+      const getLogs = fixture.provider.getLogs.bind(fixture.provider), send = fixture.provider.send.bind(fixture.provider);
+      if (malformed === "logs") fixture.provider.getLogs = filter =>
+        "blockHash" in filter && filter.blockHash === rangeHash(rangeStart + 2)
+          ? Promise.resolve([{ address: emitter, topics: [], blockHash }]) : getLogs(filter);
+      else fixture.provider.send = (method, params) => params[0] === rangeHash(rangeStart + 2)
+        ? Promise.resolve([{ txHash: blockHash, result: callFrame() }]) : send(method, params);
+      await rejects(fixture.read(), /anchored block/);
+      assert(!fixture.reads.some(read => read.endsWith(`:${fixture.target}`)), "intermediate logs and traces use the existing anchored validators");
+    }
+  },
+});
+
+tests.push({
+  name: "optional passive addresses contribute only supplied keys across every transition",
+  run: async () => {
+    for (const missingAt of [rangeStart + 1, rangeStart + 60, rangeStart + 119]) {
+      const fixture = rangeFixture();
+      const header = (number: number) => ({ ...rangeAnchor(number),
+        passiveTouchedAddresses: number === missingAt ? undefined : [addr(number)] });
+      fixture.range.readHeader = async number => { fixture.reads.push(`header:${number}`); return header(number); };
+      fixture.anchor = header(fixture.target);
+      const touched = await fixture.read();
+      deepEqual(touched, new Set([rangeMutationAddress, poolId, manager, sender, callee,
+        ...Array.from({ length: 119 }, (_, index) => rangeStart + 1 + index)
+          .filter(number => number !== missingAt).map(addr)]),
+      "missing optional addresses do not discard other transitions or invent passive activity");
+      assert(fixture.reads.length === 118 + 119 * 2, "optional passive data never skips block reads");
+    }
+  },
+});
+
+tests.push({
+  name: "range bounds, empty range, rollback and malformed inputs reject safely without history truncation",
+  run: async () => {
+    const empty = rangeFixture(rangeStart);
+    const touched = await empty.read();
+    assert(touched.size === 0 && empty.reads.length === 0, "same-height same-hash has no transitions or I/O");
+    for (const target of [rangeStart - 1, rangeStart + 257, Number.MAX_SAFE_INTEGER, NaN, -1]) {
+      const fixture = rangeFixture(target);
+      await rejects(fixture.read(), /range|anchor/);
+      assert(fixture.reads.length === 0, "invalid or over-bound range must not read a partial history");
+    }
+    const mismatch = rangeFixture(rangeStart);
+    mismatch.range.previousSource.hash = parentHash;
+    await rejects(mismatch.read(), /same.height|anchor|chain/);
+    assert(mismatch.reads.length === 0, "same-height reorg cannot look like an empty range");
+    const max = rangeFixture(rangeStart + 256);
+    await max.read();
+    assert(max.reads.length === 255 + 256 * 2, "exact bound reads all 256 transitions without rereading target header");
+    const emptyBlocks = rangeFixture(rangeStart + 2);
+    emptyBlocks.provider.getLogs = async filter => { emptyBlocks.reads.push(`logs:${"blockHash" in filter ? Number(BigInt(filter.blockHash)) : "unpinned"}`); return []; };
+    emptyBlocks.provider.send = async (_method, params) => { emptyBlocks.reads.push(`trace:${Number(BigInt(String(params[0])))}`); return []; };
+    emptyBlocks.range.readHeader = async number => {
+      emptyBlocks.reads.push(`header:${number}`);
+      return { ...rangeAnchor(number), transactionHashes: [], passiveTouchedAddresses: [] };
+    };
+    emptyBlocks.anchor = { ...emptyBlocks.anchor, transactionHashes: [], passiveTouchedAddresses: [] };
+    const emptyActivity = await emptyBlocks.read();
+    assert(emptyActivity.size === 0, "empty blocks contribute no keys");
+    deepEqual(emptyBlocks.reads, [`header:${rangeStart + 1}`, `logs:${rangeStart + 1}`, `trace:${rangeStart + 1}`,
+      `logs:${rangeStart + 2}`, `trace:${rangeStart + 2}`], "empty blocks are still read and validated, unlike an empty interval");
+    for (const bad of [null, {}, { number: -1, hash: parentHash }, { number: 1.5, hash: parentHash },
+      { number: rangeStart, hash: "bad" }]) {
+      const fixture = rangeFixture();
+      fixture.range.previousSource = bad as typeof fixture.range.previousSource;
+      await rejects(fixture.read(), /range/);
+      assert(fixture.reads.length === 0, "malformed predecessor fails before I/O");
+    }
+    const unanchored = rangeFixture();
+    await rejects(readBlockTouchedStateKeys(unanchored.provider, unanchored.target, manager, undefined, unanchored.range), /anchor/);
+    assert(unanchored.reads.length === 0, "range cannot use number-only target reads");
+    for (const deadlineAtMs of [NaN, Infinity, -Infinity, "200"] as unknown[]) {
+      const fixture = rangeFixture();
+      await rejects(readBlockTouchedStateKeys(fixture.provider, fixture.target, manager, fixture.anchor,
+        { ...fixture.range, deadlineAtMs: deadlineAtMs as number }), /range/);
+      assert(fixture.reads.length === 0, "malformed deadline cannot remove the caller's bound");
+    }
+    const noHeaderReader = rangeFixture();
+    await rejects(readBlockTouchedStateKeys(noHeaderReader.provider, noHeaderReader.target, manager, noHeaderReader.anchor,
+      { ...noHeaderReader.range, readHeader: undefined as never }), /range/);
+    assert(noHeaderReader.reads.length === 0, "no unanchored fallback when header reader is missing");
+  },
+});
+
+tests.push({
+  name: "range checks cancellation before each dispatch and joins outstanding header and sibling reads",
+  run: async () => {
+    const before = rangeFixture();
+    const cancelled = new AbortController();
+    cancelled.abort(new Error("cancel before range"));
+    await rejects(readBlockTouchedStateKeys(before.provider, before.target, manager, before.anchor,
+      { ...before.range, signal: cancelled.signal }), /cancel before range/);
+    assert(before.reads.length === 0, "pre-cancelled range does zero I/O");
+    for (const held of ["header", "logs", "trace"] as const) {
+      const fixture = rangeFixture(rangeStart + 2);
+      const control = new AbortController();
+      let release!: () => void, started!: () => void, settled = false;
+      const waiting = new Promise<void>(resolve => { release = resolve; });
+      const entered = new Promise<void>(resolve => { started = resolve; });
+      if (held === "header") {
+        fixture.range.readHeader = async number => {
+          fixture.reads.push(`header:${number}`); started(); await waiting; return rangeAnchor(number);
+        };
+      } else {
+        const provider = fixture.provider;
+        const getLogs = provider.getLogs.bind(provider), send = provider.send.bind(provider);
+        if (held === "logs") provider.getLogs = async filter => { const result = await getLogs(filter); started(); await waiting; return result; };
+        else provider.send = async (method, params) => { const result = await send(method, params); started(); await waiting; return result; };
+      }
+      const pending = readBlockTouchedStateKeys(fixture.provider, fixture.target, manager, fixture.anchor,
+        { ...fixture.range, signal: control.signal });
+      const observed = pending.then(() => { settled = true; }, error => { settled = true; return error; });
+      await entered;
+      control.abort(new Error(`cancel held ${held}`));
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert(!settled, "cancellation cannot detach already dispatched activity I/O");
+      release();
+      const error = await observed;
+      assert(error instanceof Error && error.message === `cancel held ${held}`, "joined work still rejects on cancellation");
+      assert(!fixture.reads.some(read => read.endsWith(`:${rangeStart + 2}`)), "no successor reads after cancellation");
+      if (held === "header") assert(fixture.reads.length === 1, "header cancellation starts no logs or trace");
+    }
+    const between = rangeFixture(rangeStart + 1);
+    const control = new AbortController();
+    between.provider.getLogs = async () => { between.reads.push("cancel-in-logs"); control.abort(new Error("cancel before trace")); return []; };
+    await rejects(readBlockTouchedStateKeys(between.provider, between.target, manager, between.anchor,
+      { ...between.range, signal: control.signal }), /cancel before trace/);
+    assert(!between.reads.some(read => read.startsWith("trace:")), "each sibling dispatch rechecks cancellation");
+  },
+});
+
+tests.push({
+  name: "range deadline gates each physical read and is rechecked after joined work",
+  run: async () => {
+    const originalNow = Date.now;
+    let now = 100;
+    Date.now = () => now;
+    try {
+      for (const expire of ["before", "header", "logs", "trace"] as const) {
+        now = 100;
+        const fixture = rangeFixture(rangeStart + 2);
+        if (expire === "header") fixture.range.readHeader = async number => { fixture.reads.push(`header:${number}`); now = 200; return rangeAnchor(number); };
+        const getLogs = fixture.provider.getLogs.bind(fixture.provider), send = fixture.provider.send.bind(fixture.provider);
+        if (expire === "logs") fixture.provider.getLogs = filter => { now = 200; return getLogs(filter); };
+        if (expire === "trace") fixture.provider.send = (method, params) => { now = 200; return send(method, params); };
+        await rejects(readBlockTouchedStateKeys(fixture.provider, fixture.target, manager, fixture.anchor,
+          { ...fixture.range, deadlineAtMs: expire === "before" ? 100 : 150 }), /deadline/);
+        assert(!fixture.reads.some(read => read.endsWith(`:${rangeStart + 2}`)), "expiry never starts a successor transition");
+        if (expire === "before") assert(fixture.reads.length === 0, "expired range does zero I/O");
+        if (expire === "header") assert(fixture.reads.length === 1, "expiry after header starts no state reads");
+        if (expire === "logs") assert(!fixture.reads.some(read => read.startsWith("trace:")), "trace dispatch has its own deadline check");
+      }
+    } finally { Date.now = originalNow; }
+  },
+});
+
+tests.push({
+  name: "range snapshots target and predecessor before await and never returns a failed partial range",
+  run: async () => {
+    const fixture = rangeFixture(rangeStart + 3);
+    fixture.range.readHeader = async number => {
+      fixture.reads.push(`header:${number}`);
+      fixture.range.previousSource.hash = blockHash;
+      fixture.range.previousSource.number = -1;
+      (fixture.anchor as { hash: string }).hash = parentHash;
+      return rangeAnchor(number);
+    };
+    const touched = await fixture.read();
+    deepEqual(touched, new Set([sender, callee, miner]), "later caller mutation cannot re-anchor the range");
+    deepEqual(fixture.reads, [
+      `header:${rangeStart + 1}`, `logs:${rangeStart + 1}`, `trace:${rangeStart + 1}`,
+      `header:${rangeStart + 2}`, `logs:${rangeStart + 2}`, `trace:${rangeStart + 2}`,
+      `logs:${fixture.target}`, `trace:${fixture.target}`,
+    ], "all reads stay bound to the captured predecessor and target");
+    const once = rangeFixture(rangeStart + 1);
+    let numberReads = 0, hashReads = 0;
+    once.range.previousSource = {
+      get number() { numberReads++; return numberReads === 1 ? rangeStart : NaN; },
+      get hash() { hashReads++; return hashReads === 1 ? rangeHash(rangeStart) : "bad"; },
+    };
+    await once.read();
+    assert(numberReads === 1 && hashReads === 1, "predecessor fields are captured once before validation and dispatch");
+    for (const failed of ["logs", "trace"] as const) {
+      const partial = rangeFixture(rangeStart + 3);
+      let release!: () => void, entered!: () => void, settled = false;
+      const waiting = new Promise<void>(resolve => { release = resolve; });
+      const started = new Promise<void>(resolve => { entered = resolve; });
+      const getLogs = partial.provider.getLogs.bind(partial.provider), send = partial.provider.send.bind(partial.provider);
+      partial.provider.getLogs = async filter => {
+        if ("blockHash" in filter && filter.blockHash === rangeHash(rangeStart + 2)) {
+          if (failed === "logs") throw new Error("range logs failure");
+          entered(); await waiting;
+        }
+        return getLogs(filter);
+      };
+      partial.provider.send = async (method, params) => {
+        if (params[0] === rangeHash(rangeStart + 2)) {
+          if (failed === "trace") throw new Error("range trace failure");
+          entered(); await waiting;
+        }
+        return send(method, params);
+      };
+      const observed = partial.read().then(() => { settled = true; }, error => { settled = true; return error; });
+      await started;
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert(!settled, "failed range waits for its already-dispatched sibling");
+      release();
+      const error = await observed;
+      assert(error instanceof Error && error.message === `range ${failed} failure`, "original range transport failure preserved");
+      assert(!partial.reads.some(read => read.endsWith(`:${partial.target}`)), "a failed range neither truncates nor retries");
+    }
+  },
+});
+
+tests.push({
+  name: "completed range observations are provider-local immutable data reused with fresh Sets and no repeated historical I/O",
+  run: async () => {
+    const fixture = rangeFixture();
+    const returnedHeaders: BlockTouchedCanonicalAnchor[] = [];
+    const returnedLogs: Awaited<ReturnType<BlockTouchedProvider["getLogs"]>>[] = [];
+    const readHeader = fixture.range.readHeader, getLogs = fixture.provider.getLogs.bind(fixture.provider);
+    fixture.range.readHeader = async number => { const header = await readHeader(number); returnedHeaders.push(header); return header; };
+    fixture.provider.getLogs = async filter => { const logs = await getLogs(filter); returnedLogs.push(logs); return logs; };
+    const first = await fixture.read();
+    assert(fixture.reads.length === 118 + 119 * 2, "first attempt collects the actual complete range once");
+    for (const header of returnedHeaders) {
+      (header as { hash: string }).hash = blockHash;
+      (header.transactionHashes as string[]).fill(blockHash);
+      (header.passiveTouchedAddresses as string[]).push(clean);
+    }
+    for (const logs of returnedLogs) for (const log of logs) (log as { address: string }).address = clean;
+    (first as Set<string>).clear();
+    (first as Set<string>).add(clean);
+    fixture.reads.length = 0;
+    const repeated = await fixture.read();
+    assert(first !== repeated, "every public range gets a new Set");
+    deepEqual(fixture.reads, []);
+    assert(repeated.has(rangeMutationAddress) && repeated.has(poolId) && !repeated.has(clean), "cached raw observations are detached from all public mutation");
+    deepEqual(repeated, new Set([rangeMutationAddress, poolId, manager, sender, callee, miner]),
+      "memoized keys retain exactly the original touched union");
+    const advanced = fixture.target + 1;
+    const next = await readBlockTouchedStateKeys(fixture.provider, advanced, manager, rangeAnchor(advanced), fixture.range);
+    deepEqual(fixture.reads, [`logs:${advanced}`, `trace:${advanced}`]);
+    assert(next.has(rangeMutationAddress), "unchanged published base plus next head reuses all historical activity");
+    const independent = rangeFixture(rangeStart + 1);
+    await independent.read();
+    deepEqual(independent.reads, [`logs:${independent.target}`, `trace:${independent.target}`]);
+    const managerInput = rangeFixture(rangeMutationBlock);
+    managerInput.range.previousSource = { number: rangeMutationBlock - 1, hash: rangeHash(rangeMutationBlock - 1) };
+    const singleton = await managerInput.read();
+    assert(singleton.has(poolId), "the original manager interpretation retains its singleton key");
+    managerInput.reads.length = 0;
+    await readBlockTouchedStateKeys(managerInput.provider, managerInput.target,
+      manager.toUpperCase().replace("0X", "0x"), managerInput.anchor, managerInput.range);
+    deepEqual(managerInput.reads, [], "equivalent address casing does not change cache context");
+    const reinterpreted = await readBlockTouchedStateKeys(managerInput.provider, managerInput.target,
+      addr(999), managerInput.anchor, managerInput.range);
+    assert(!reinterpreted.has(poolId) && reinterpreted.has(manager), "changed parsing input cannot reuse the old raw singleton interpretation");
+    deepEqual(managerInput.reads, [`logs:${managerInput.target}`, `trace:${managerInput.target}`]);
+  },
+});
+
+tests.push({
+  name: "retry retains only settled successful blocks after cancellation or either child failure",
+  run: async () => {
+    for (const completed of [12, 118]) for (const failure of ["abort", "logs", "trace"] as const) {
+      const fixture = rangeFixture();
+      const control = new AbortController(), injected = new Error(`interrupted ${failure}`);
+      const interrupted = rangeStart + completed + 1;
+      const getLogs = fixture.provider.getLogs.bind(fixture.provider), send = fixture.provider.send.bind(fixture.provider);
+      let armed = true;
+      fixture.provider.getLogs = async filter => {
+        const logs = await getLogs(filter);
+        if (armed && failure === "logs" && "blockHash" in filter && filter.blockHash === rangeHash(interrupted)) throw injected;
+        return logs;
+      };
+      fixture.provider.send = async (method, params) => {
+        const traces = await send(method, params);
+        if (armed && params[0] === rangeHash(interrupted)) {
+          if (failure === "trace") throw injected;
+          if (failure === "abort") control.abort(injected);
+        }
+        return traces;
+      };
+      await rejects(readBlockTouchedStateKeys(fixture.provider, fixture.target, manager, fixture.anchor,
+        { ...fixture.range, signal: control.signal }), error => error === injected);
+      assert(!fixture.reads.some(read => read.endsWith(`:${interrupted + 1}`)), "interruption stops later activity immediately");
+      armed = false;
+      fixture.reads.length = 0;
+      const resumed = await fixture.read();
+      deepEqual(fixture.reads, Array.from({ length: 119 - completed }, (_, index) => {
+        const number = interrupted + index;
+        return [...(number === fixture.target ? [] : [`header:${number}`]), `logs:${number}`, `trace:${number}`];
+      }).flat());
+      deepEqual(resumed, new Set([rangeMutationAddress, poolId, manager, sender, callee, miner]),
+        "completed retry returns the whole union, including earlier cached mutation, not just the newly read suffix");
+    }
+  },
+});
+
+tests.push({
+  name: "cached target or ancestry mismatch invalidates observations and fails closed without relabeling or retry",
+  run: async () => {
+    for (const mismatch of ["target", "parent", "transactions", "passive", "predecessor", "advanced-parent"] as const) {
+      const fixture = rangeFixture(rangeStart + 3);
+      await fixture.read();
+      fixture.reads.length = 0;
+      let target = fixture.target;
+      let anchor = fixture.anchor;
+      let range = fixture.range;
+      if (mismatch === "target") anchor = { ...anchor, hash: blockHash };
+      if (mismatch === "parent") anchor = { ...anchor, parentHash: blockHash };
+      if (mismatch === "transactions") anchor = { ...anchor, transactionHashes: [] };
+      if (mismatch === "passive") anchor = { ...anchor, passiveTouchedAddresses: undefined };
+      if (mismatch === "predecessor") range = { ...range, previousSource: { ...range.previousSource, hash: blockHash } };
+      if (mismatch === "advanced-parent") { target++; anchor = { ...rangeAnchor(target), parentHash: blockHash }; }
+      await rejects(readBlockTouchedStateKeys(fixture.provider, target, manager, anchor, range), /chain|cached.*anchor/);
+      deepEqual(fixture.reads, [], "known contradictory evidence cannot cause replacement reads inside this invocation");
+      await fixture.read();
+      deepEqual(fixture.reads, [
+        `header:${rangeStart + 1}`, `logs:${rangeStart + 1}`, `trace:${rangeStart + 1}`,
+        `header:${rangeStart + 2}`, `logs:${rangeStart + 2}`, `trace:${rangeStart + 2}`,
+        `logs:${rangeStart + 3}`, `trace:${rangeStart + 3}`,
+      ], "a subsequent invocation must rebuild the invalidated observations rather than relabel hashes");
+    }
+  },
+});
+
+tests.push({
+  name: "completed provider memo is bounded at 256 blocks and never shares in-flight reads",
+  run: async () => {
+    const fixture = rangeFixture();
+    const readOne = (number: number) => readBlockTouchedStateKeys(fixture.provider, number, manager, rangeAnchor(number),
+      { ...fixture.range, previousSource: { number: number - 1, hash: rangeHash(number - 1) } });
+    for (let number = rangeStart + 1; number <= rangeStart + 257; number++) await readOne(number);
+    fixture.reads.length = 0;
+    await readOne(rangeStart + 2);
+    deepEqual(fixture.reads, [], "the oldest of the retained 256 blocks is still reusable");
+    await readOne(rangeStart + 1);
+    deepEqual(fixture.reads, [`logs:${rangeStart + 1}`, `trace:${rangeStart + 1}`], "the 257th-oldest block has been evicted");
+    const concurrent = rangeFixture(rangeStart + 1);
+    const getLogs = concurrent.provider.getLogs.bind(concurrent.provider);
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    concurrent.provider.getLogs = async filter => { const logs = await getLogs(filter); await held; return logs; };
+    const first = concurrent.read(), second = concurrent.read();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    deepEqual(concurrent.reads, [
+      `logs:${concurrent.target}`, `trace:${concurrent.target}`,
+      `logs:${concurrent.target}`, `trace:${concurrent.target}`,
+    ], "in-flight work is owned by each caller, never memoized as a promise");
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    assert(a !== b, "independent callers cannot mutate each other's result Set");
+    concurrent.reads.length = 0;
+    await concurrent.read();
+    deepEqual(concurrent.reads, [], "completed observations become reusable only after both child reads settle");
+    const retired = rangeFixture(rangeStart + 3);
+    await retired.read();
+    const pendingTarget = retired.target + 1;
+    const originalLogs = retired.provider.getLogs.bind(retired.provider);
+    let releaseOld!: () => void;
+    const oldHeld = new Promise<void>(resolve => { releaseOld = resolve; });
+    retired.provider.getLogs = async filter => {
+      const logs = await originalLogs(filter);
+      if ("blockHash" in filter && filter.blockHash === rangeHash(pendingTarget)) await oldHeld;
+      return logs;
+    };
+    const oldPending = readBlockTouchedStateKeys(retired.provider, pendingTarget, manager, rangeAnchor(pendingTarget), retired.range);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    await rejects(readBlockTouchedStateKeys(retired.provider, retired.target, manager,
+      { ...retired.anchor, hash: blockHash }, retired.range), /cached.*anchor/);
+    releaseOld();
+    await oldPending;
+    retired.reads.length = 0;
+    await readBlockTouchedStateKeys(retired.provider, pendingTarget, manager, rangeAnchor(pendingTarget), retired.range);
+    assert(retired.reads.length === 3 + 4 * 2 && retired.reads.includes(`logs:${pendingTarget}`),
+      "late settlement cannot repopulate the retired provider memo after a source contradiction");
   },
 });
 

@@ -36,7 +36,6 @@ import type { StateBackend } from "../shared/state/state-backend.js";
 import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
-import type { PreparedAmountQuoteActivity } from "./amount-quote-continuity.js";
 import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 
 export type StrictSessionPurpose =
@@ -95,8 +94,6 @@ export interface StrictCanonicalActivityProof {
   readonly source: CanonicalSource;
   readonly touchedStateKeys: ReadonlySet<string>;
   readonly complete: true;
-  /** Stronger, hash-bound activity for amount quotes; raw carry alone is insufficient. */
-  readonly amountQuoteActivity?: PreparedAmountQuoteActivity;
 }
 
 export type StrictPricingPublication =
@@ -155,7 +152,7 @@ export class StrictCurrentRuntimeCoordinator
       control: AdapterWorkControl,
       backend?: Pick<StateBackend, "call">,
       reuse?: { readonly previous?: EffectiveMidSnapshot;
-        readonly activity?: PreparedAmountQuoteActivity },
+        readonly touchedStateKeys?: ReadonlySet<string> },
       simulationTransport?: StrictSimulationTransport,
     ) => Promise<EffectiveMidSnapshot>,
   ) {}
@@ -247,7 +244,7 @@ export class StrictCurrentRuntimeCoordinator
     const built = await this.enrichPricing(buildStrictPricingSnapshot(session, input.graph, {
       previous,
       canonicalActivity: input.canonicalActivity,
-    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity,
+    }), pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity,
     simulationTransport);
     this.publishPricing(built, pricingEpoch);
     return completePricingResult(built.snapshot);
@@ -331,7 +328,7 @@ export class StrictCurrentRuntimeCoordinator
     const built = await this.enrichPricing(buildStrictPricingSnapshot(session, input.graph, {
       previous,
       canonicalActivity: input.canonicalActivity,
-    }), controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity,
+    }), pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity,
     simulationTransport);
     const pricing = built.snapshot;
     const pricingMs = Math.max(0, Date.now() - pricingStartedAtMs) +
@@ -388,6 +385,7 @@ export class StrictCurrentRuntimeCoordinator
 
   private async enrichPricing(
     built: StrictPricingBuildResult,
+    pricingEpoch: number,
     control: AdapterWorkControl,
     backend?: Pick<StateBackend, "call">,
     activity?: StrictCanonicalActivityProof,
@@ -395,17 +393,27 @@ export class StrictCurrentRuntimeCoordinator
   ): Promise<StrictPricingBuildResult> {
     if (!this.effectivePricing) return built;
     const effectiveMids = await this.effectivePricing(built.snapshot, control, backend, {
+      // Use the SAME published base as raw mid. Unpublished drafts have no
+      // matching activity interval and must not become a separate reuse base.
       previous: this.publishedPricing?.effectiveMids,
-      activity: activity?.amountQuoteActivity,
+      // One activity input for both reference-price columns. It is produced
+      // by the existing full-range reader, not a second quote-reuse pipeline.
+      touchedStateKeys: activity?.complete === true &&
+        sameCanonicalSource(activity.source, sourceFor(built.snapshot.graph))
+        ? activity.touchedStateKeys : undefined,
     }, simulationTransport);
-    assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
+    // Retired/reset preparations must not overwrite the published table.
+    // The amount builder itself rejects late quotes.
+    if (pricingEpoch !== this.pricingEpoch) throw new Error("pricing publication retired during prepare");
     const source = sourceFor(built.snapshot.graph);
-    if (!effectiveMids.complete || effectiveMids.source.number !== source.number ||
+    if (effectiveMids.source.number !== source.number ||
         effectiveMids.source.hash.toLowerCase() !== source.hash.toLowerCase() ||
         effectiveMids.source.generation !== source.generation) {
       throw new Error("effective pricing incomplete or mismatched source");
     }
     const snapshot = Object.freeze({ ...built.snapshot, effectiveMids });
+    assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
+    if (!effectiveMids.complete) throw new Error("effective pricing incomplete or mismatched source");
     return { snapshot, publication: Object.freeze({ ...built.publication, snapshot }) };
   }
 

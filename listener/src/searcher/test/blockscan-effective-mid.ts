@@ -12,8 +12,6 @@ import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
-import { prepareAmountQuoteActivity } from "../amount-quote-continuity.js";
-import type { FamilyAmountQuoteReuseContext } from "../venues/adapter-family-runtime.js";
 
 // Offline behavior tests only: callbacks are fixtures, not chain-quote evidence
 // or full production acceptance. Shapes follow blockscan-amount-reference.ts.
@@ -40,6 +38,7 @@ function pricing(rows: readonly PriceRow[]): EffectivePricingInput {
   return {
     sourceBlock: SOURCE.number, sourceBlockHash: SOURCE.hash, generation: SOURCE.generation,
     graph: { edges: rows.map(([e]) => e) },
+    pricingStateKeyByEdgeKey: new Map(rows.map(([e]) => [blockScanEdgeKey(e), e.instanceKey ?? e.target])),
     coverage: { resolvedEdgeKeys: rows.map(([e]) => blockScanEdgeKey(e)) },
     mids: new Map(rows.map(([e, mid, feeBps = 0]) => [blockScanEdgeKey(e), {
       edges: [e], kind: "external-swap", pool: e.target, mid, feeBps, depthProxy: 1,
@@ -215,7 +214,7 @@ test("unresolved, invalid, absent and standing-position marks cannot manufacture
   assert.equal(snapshot.rows.has(blockScanEdgeKey(absent)), false, "no row without a ready mid");
   for (const r of snapshot.rows.values()) {
     assert.equal(r.amountIn, null);
-    noQuote(r, "missing-valuation");
+    noQuote(r, r.edgeId === "standing" ? "unsupported" : "missing-valuation");
   }
   assert.equal(snapshot.complete, true, "complete means work finished, not every direction quoted");
 });
@@ -683,54 +682,368 @@ test("enumeration rejects malformed quoted rows instead of exposing a spot fallb
   assert.equal(prices.mids.get("valid")!.feeBps, 30);
 });
 
-test("effective carry rechecks current context/amount and complete consecutive activity; never carries authority", async () => {
-  const a = edge(W, U, "carry-a"), b = edge(W, U, "carry-b");
-  const depA = "0x" + "11".repeat(20), depB = "0x" + "22".repeat(20);
-  const prices = pricing([[a, 2], [b, 3]]);
-  const context = (e: TokenEdge): FamilyAmountQuoteReuseContext => ({
-    contextFingerprint: e.target, policy: { kind: "state-only", blockEnvironment: "independent",
-      dependencies: [e === a ? depA : depB] }, methodId: "chain", methodIndex: 0,
-    methodOrderFingerprint: "methods", cacheCompatibilityFingerprint: "compat", initialRequestFingerprint: "calls",
+function atSource(prices: EffectivePricingInput, source: EffectiveMidSnapshot["source"]): EffectivePricingInput {
+  return { ...prices, sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation };
+}
+
+function assertReferenceRetained(current: EffectiveMidRow, original: EffectiveMidRow): void {
+  assert.equal(current.status, "quoted");
+  assert.equal(current.carried, true);
+  assert.equal(current.amountIn, original.amountIn, "do not relabel the input to this pass's new notional");
+  assert.equal(current.amountOut, original.amountOut, "do not fabricate an output at the new notional");
+  assert.equal(current.effectiveMid, original.effectiveMid, "retain the recorded reference rate exactly");
+  assert.deepEqual(current.quotedAt, original.quotedAt, "do not relabel the original observation source");
+  assert(Object.isFrozen(current));
+  assert.notStrictEqual(current, original);
+}
+
+// Opaque IDs from the existing 20-Family cache inventory. These generic fixture
+// callbacks test reference-table policy, NOT those Families' live quote paths,
+// chain success, transitive dependency closure or Exact/execution equivalence.
+const OFFLINE_FAMILY_IDS = Object.freeze([
+  "curve-underlying", "custom-swap:angstrom-v4", "custom-swap:dodo-v2", "fluid-dex",
+  "protocol:astra-multitoken", "protocol:eigenpie", "protocol:erc4626",
+  "protocol:erc4626-silo-redeem", "protocol:ethertoken-native-redeem", "protocol:goldx",
+  "protocol:metronome-hgusdc", "protocol:metronome-synth", "protocol:psm",
+  "protocol:rocksolid", "protocol:self-burn-native", "protocol:wsteth",
+  "univ2-standard", "univ3-standard", "univ4", "univ4-fee-hook",
+]);
+
+test("offline reference contract for all 20 opaque Family IDs: clean reuse, unchanged raw ratio plus touched requotes", async () => {
+  assert.equal(new Set(OFFLINE_FAMILY_IDS).size, 20);
+  const all = OFFLINE_FAMILY_IDS.flatMap((family, index) => [
+    { ...edge(W, U, family + "/forward", "instance-" + index), adapterId: family },
+    { ...edge(U, W, family + "/reverse", "instance-" + index), adapterId: family },
+  ]);
+  const stateKeys = all.map((_, index) => "opaque-state-" + Math.floor(index / 2));
+  const prices = { ...pricing(all.map(e => [e, e.tokenIn === W ? 2e-9 : 5e8])),
+    pricingStateKeyByEdgeKey: new Map(all.map((e, index) => [blockScanEdgeKey(e), stateKeys[index]!])),
+  };
+  const initialCalls: QuoteInput[] = [];
+  const previous = await build(prices, { quote: async call => {
+    initialCalls.push(call);
+    return { source: SOURCE, amountIn: call.amountIn, amountOut: call.amountIn * 2n + 137n };
+  } });
+  assert.equal(initialCalls.length, 40);
+  assert.equal(new Set(initialCalls.map(call => call.edge.adapterId)).size, 20);
+  assert(initialCalls.every(call => call.requireChainAmountQuote === true));
+  const before = structuredClone(previous);
+  const nextSource = { number: SOURCE.number + 119, hash: hash(321), generation: SOURCE.generation + 1 };
+  const nextPrices = atSource(prices, nextSource);
+  let calls = 0;
+  const clean = await build(nextPrices, { previous, touchedStateKeys: new Set(),
+    quote: async () => { calls++; throw new Error("clean reference must not invoke quote"); },
   });
-  const fresh = await build(prices, { describeReuse: ({ edge }) => context(edge),
-    quote: async ({ edge, amountIn }) => ({ source: SOURCE, amountIn, amountOut: amountIn * 2n,
-      ...context(edge), reusePolicy: context(edge).policy, amountQuoteReuse: context(edge) }) });
-  assert.equal(row(fresh, a).quoteProvenance?.quotedAt.number, SOURCE.number);
-  const nextSource = { number: SOURCE.number + 1, hash: hash(321), generation: SOURCE.generation + 1 };
-  const nextPrices = { ...prices, sourceBlock: nextSource.number, sourceBlockHash: nextSource.hash,
-    generation: nextSource.generation };
-  const activity = prepareAmountQuoteActivity({ source: nextSource, parentHash: SOURCE.hash,
-    complete: true, touchedAddresses: new Set([depA]) });
-  const calls: string[] = [];
-  const overrides: Partial<BuildInput> = { previous: fresh, activity, describeReuse: ({ edge }) => context(edge),
-    quote: async ({ edge, amountIn }) => { calls.push(edge.target);
-      return { source: nextSource, amountIn, amountOut: amountIn * 3n,
-        ...context(edge), reusePolicy: context(edge).policy, amountQuoteReuse: context(edge) }; } };
-  const next = await build(nextPrices, overrides);
-  assert.deepEqual(calls, [a.target]);
-  assert.equal(row(next, a).effectiveMid, 3);
-  assert.equal(row(next, b).effectiveMid, 2);
-  assert.equal(row(next, b).carried, true);
-  assert.deepEqual(row(next, b).quoteProvenance?.quotedAt, SOURCE);
-  assert.deepEqual(row(next, b).quoteProvenance?.validAt, nextSource);
-  assert.equal("outcome" in row(next, b).quoteProvenance!, false, "no Exact authority or execution evidence");
-  assert.deepEqual(row(fresh, b).quoteProvenance?.validAt, SOURCE);
-  for (const invalidation of [
-    { activity: undefined },
-    { describeReuse: () => null },
-    { gasCostWei: 1n },
-    { describeReuse: ({ edge }: QuoteInput) => ({ ...context(edge), contextFingerprint: "changed" }) },
-  ] as Partial<BuildInput>[]) {
-    calls.length = 0;
-    const rebuilt = await build(nextPrices, { ...overrides, ...invalidation });
-    assert.equal(calls.length, 2, "unproven rows use fresh chain work");
-    assert([...rebuilt.rows.values()].every(r => !r.carried));
+  assert.equal(calls, 0);
+  assert.equal(clean.complete, true);
+  assert.deepEqual(clean.source, nextSource);
+  for (const e of all) {
+    assertReferenceRetained(row(clean, e), row(previous, e));
+    assert.deepEqual(row(clean, e).quotedAt, SOURCE);
+    assert.deepEqual(Object.keys(row(clean, e)).sort(), [
+      "edgeId", "instanceKey", "tokenIn", "tokenOut", "amountIn", "amountOut",
+      "effectiveMid", "status", "quotedAt", "carried",
+    ].sort(), "the reference row carries data only, no Exact handle or execution authority");
   }
-  const controller = new AbortController();
-  const aborted = await build(nextPrices, { ...overrides, control: { signal: controller.signal },
-    describeReuse: ({ edge }) => { controller.abort(); return context(edge); } });
-  assert.equal(aborted.complete, false);
-  assert([...aborted.rows.values()].every(r => r.status === "cancelled" && !r.quoteProvenance));
+  const touchedCalls: QuoteInput[] = [];
+  const touched = await build(nextPrices, { previous: clean, touchedStateKeys: new Set(stateKeys),
+    quote: async call => {
+      touchedCalls.push(call);
+      return { source: nextSource, amountIn: call.amountIn, amountOut: call.amountIn * 3n + 89n };
+    },
+  });
+  assert.equal(touchedCalls.length, 40, "unchanged raw ratios do not override the raw state-key touched set");
+  assert.deepEqual(touchedCalls.map(call => call.edge), all);
+  assert.strictEqual(nextPrices.mids, prices.mids);
+  for (const e of all) {
+    assert.equal(row(touched, e).carried, undefined);
+    assert.deepEqual(row(touched, e).quotedAt, nextSource);
+    assert.notEqual(row(touched, e).amountOut, row(clean, e).amountOut);
+  }
+  const laterSource = { ...nextSource, number: nextSource.number + 7, hash: hash(322), generation: nextSource.generation + 1 };
+  const later = await build(atSource(prices, laterSource), { previous: clean, touchedStateKeys: new Set(),
+    gasCostWei: 1n, quote: async () => { calls++; throw new Error("no TTL or notional invalidation"); },
+  });
+  assert.equal(calls, 0);
+  for (const e of all) assertReferenceRetained(row(later, e), row(previous, e));
+  assert.deepEqual(previous, before, "current classification must not mutate original reference data");
+});
+
+for (const change of ["gas", "mark", "gas-and-mark"] as const) {
+  test("changed " + change + " affects dirty/new rows only, not a clean row's original amounts or rate", async () => {
+    const clean = edge(U, W, "reference-clean"), dirty = edge(U, W, "reference-dirty");
+    const prices = pricing([[clean, 5e8], [dirty, 5e8]]);
+    const previous = await build(prices);
+    const original = row(previous, clean);
+    assert.equal(original.amountIn, 2_000_000n);
+    const added = edge(W, U, "new-reference-row");
+    const mark = change === "gas" ? 5e8 : 1e9;
+    const gasCostWei = change === "mark" ? null : 100_000_000_000_000n;
+    const current = { number: SOURCE.number + 1, hash: hash(555), generation: SOURCE.generation + 1 };
+    const currentPrices = atSource(pricing([[clean, mark], [dirty, mark], [added, 2e-9]]), current);
+    const calls: QuoteInput[] = [];
+    const next = await build(currentPrices, { previous, touchedStateKeys: new Set([dirty.instanceKey!]), gasCostWei,
+      quote: async call => {
+        calls.push(call);
+        return { source: current, amountIn: call.amountIn, amountOut: call.amountIn * 11n + 1n };
+      },
+    });
+    assert.deepEqual(calls.map(call => call.edge), [dirty, added]);
+    assertReferenceRetained(row(next, clean), original);
+    const expectedDirtyAmount = change === "gas" ? 10_000_001n
+      : change === "mark" ? 1_000_000n : 5_000_001n;
+    assert.equal(row(next, dirty).amountIn, expectedDirtyAmount);
+    assert.equal(row(next, dirty).amountOut, expectedDirtyAmount * 11n + 1n);
+    assert.deepEqual(row(next, dirty).quotedAt, current);
+    assert.equal(row(next, dirty).carried, undefined);
+    const expectedWethAmount = gasCostWei === null ? DEFAULT_RAW : 5_000_000_000_000_001n;
+    assert.equal(next.referenceWethInput, expectedWethAmount);
+    assert.equal(row(next, added).amountIn, expectedWethAmount);
+    assert.equal(row(next, added).carried, undefined);
+    assert.equal(next.reference, gasCostWei === null ? "default" : "gas");
+    assert.equal(next.complete, true);
+  });
+}
+
+test("a lost sizing mark does not erase a clean reference; a touched unvalued row remains unavailable", async () => {
+  const clean = edge(U, W, "lost-mark-clean"), dirty = edge(U, W, "lost-mark-dirty");
+  const previous = await build(pricing([[clean, 5e8], [dirty, 5e8]]));
+  let calls = 0;
+  const next = await build(pricing([[clean, 0], [dirty, 0]]), { previous, gasCostWei: 1n,
+    touchedStateKeys: new Set([dirty.instanceKey!]),
+    quote: async () => { calls++; throw new Error("no valued fresh input"); },
+  });
+  assert.equal(calls, 0);
+  assertReferenceRetained(row(next, clean), row(previous, clean));
+  assert.equal(row(next, dirty).amountIn, null);
+  noQuote(row(next, dirty), "missing-valuation");
+});
+
+test("the declared raw state key, not target/instance/direction, chooses refresh; instance fallback remains supported", async () => {
+  const a = { ...edge(W, U, "key-a", "instance-a"), target: "shared-manager" };
+  const b = { ...edge(W, U, "key-b", "instance-b"), target: "shared-manager" };
+  const base = pricing([[a, 2], [b, 2]]);
+  const prices = { ...base, pricingStateKeyByEdgeKey: new Map([
+    [blockScanEdgeKey(a), "MANAGER\u001fPOOL-A"], [blockScanEdgeKey(b), "MANAGER\u001fPOOL-B"],
+  ]) };
+  const previous = await build(prices);
+  for (const [touchedStateKeys, expected] of [
+    [new Set(["manager\u001fpool-a"]), [a]],
+    [new Set(["shared-manager", "instance-a", "key-b"]), []],
+  ] as const) {
+    const calls: TokenEdge[] = [];
+    const result = await build(prices, { previous, touchedStateKeys,
+      quote: async ({ edge, amountIn }) => { calls.push(edge); return { source: SOURCE, amountIn, amountOut: 89n }; },
+    });
+    assert.deepEqual(calls, expected);
+    for (const e of [a, b]) if (!expected.some(value => value === e)) assertReferenceRetained(row(result, e), row(previous, e));
+  }
+  const calls: TokenEdge[] = [];
+  await build({ ...base, pricingStateKeyByEdgeKey: undefined }, {
+    previous, touchedStateKeys: new Set(["instance-b"]),
+    quote: async ({ edge, amountIn }) => { calls.push(edge); return { source: SOURCE, amountIn, amountOut: 89n }; },
+  });
+  assert.deepEqual(calls, [b]);
+});
+
+test("absent touched set means full refresh even at the same physical source", async () => {
+  const all = [edge(W, U, "full-a"), edge(W, U, "full-b")];
+  const prices = pricing(all.map(e => [e, 2]));
+  const previous = await build(prices);
+  for (const current of [SOURCE, { number: SOURCE.number + 1, hash: hash(77), generation: SOURCE.generation + 1 }]) {
+    const calls: TokenEdge[] = [];
+    const next = await build(atSource(prices, current), { previous,
+      quote: async ({ edge, amountIn }) => { calls.push(edge); return { source: current, amountIn, amountOut: 89n }; },
+    });
+    assert.deepEqual(calls, all);
+    assert([...next.rows.values()].every(r => r.carried === undefined && r.amountOut === 89n));
+  }
+});
+
+test("reference reuse requires a newer generation across blocks and the same hash within a block", async () => {
+  const e = edge(W, U, "source-fence");
+  const prices = pricing([[e, 2]]), previous = await build(prices);
+  for (const current of [
+    { ...SOURCE, number: SOURCE.number - 1 },
+    { ...SOURCE, generation: SOURCE.generation - 1 },
+    { ...SOURCE, hash: hash(0xbad) },
+    { ...SOURCE, hash: hash(0xbad), generation: SOURCE.generation + 1 },
+    { number: SOURCE.number + 1, hash: hash(101), generation: SOURCE.generation - 1 },
+    { number: SOURCE.number + 1, hash: hash(102), generation: SOURCE.generation },
+  ]) {
+    let calls = 0;
+    const result = await build(atSource(prices, current), { previous, touchedStateKeys: new Set(),
+      quote: async ({ amountIn }) => { calls++; return { source: current, amountIn, amountOut: 89n }; },
+    });
+    assert.equal(calls, 1, "rollback, same-height reorg or equal-generation forward reuse must require a fresh request");
+    assert.equal(row(result, e).carried, undefined);
+    assert.equal(row(result, e).amountOut, 89n);
+  }
+  for (const current of [SOURCE, { ...SOURCE, hash: SOURCE.hash.toUpperCase(), generation: SOURCE.generation + 1 },
+    { number: SOURCE.number + 1, hash: hash(102), generation: SOURCE.generation + 1 }]) {
+    let calls = 0;
+    const result = await build(atSource(prices, current), { previous, touchedStateKeys: new Set(),
+      quote: async () => { calls++; throw new Error("unchanged reference"); },
+    });
+    assert.equal(calls, 0);
+    assertReferenceRetained(row(result, e), row(previous, e));
+  }
+});
+
+for (const reason of ["abort", "deadline"] as const) {
+  test("partition before quotes: " + reason + " behind dirty work retains later clean reference rows but bars publication", async () => {
+    const originalNow = Date.now;
+    let now = 1000;
+    Date.now = () => now;
+    try {
+      const dirty = [0, 1, 2].map(i => edge(W, U, "dirty-" + i));
+      const clean = [0, 1].map(i => edge(W, U, "clean-" + i));
+      const missing = edge("unvalued", U, "missing");
+      const standing = { ...edge(W, U, "standing"), leavesStandingPosition: true };
+      const all = [...dirty, missing, standing, ...clean];
+      const prices = pricing(all.map(e => [e, 99]));
+      let initialCalls = 0;
+      const previous = await build(prices, { quote: async ({ amountIn }) => {
+        initialCalls++;
+        return { source: SOURCE, amountIn, amountOut: amountIn * 2n };
+      } });
+      assert.equal(initialCalls, 5);
+      const before = structuredClone(previous);
+      const current = { number: SOURCE.number + 1, hash: hash(987), generation: SOURCE.generation + 1 };
+      const currentPrices = atSource(prices, current);
+      const touchedStateKeys = new Set(dirty.map(e => e.instanceKey!));
+      const has = touchedStateKeys.has.bind(touchedStateKeys);
+      const checked: string[] = [], checksAtDispatch: number[] = [];
+      touchedStateKeys.has = key => { checked.push(key); return has(key); };
+      const controller = new AbortController();
+      const control = { signal: controller.signal, deadlineAtMs: 1100 };
+      const pending = deferred<QuoteResult>(), calls: QuoteInput[] = [];
+      const promise = build(currentPrices, { previous, touchedStateKeys, control, concurrency: 2, gasCostWei: 1n,
+        quote: call => { calls.push(call); checksAtDispatch.push(checked.length); return pending.promise; },
+      });
+      if (reason === "abort") controller.abort(); else now = 1100;
+      pending.resolve({ source: current, amountIn: 51n, amountOut: 51n * 999n });
+      const result = await promise;
+      assert.deepEqual(calls.map(call => call.edge), dirty.slice(0, 2), "only two fresh quote requests are invoked");
+      assert(calls.every(call => call.amountIn === 51n && call.control === control && call.requireChainAmountQuote === true));
+      assert.deepEqual(checksAtDispatch, [5, 5], "all clean/dirty classification precedes quote dispatch");
+      assert.equal(result.complete, false);
+      assert.deepEqual([...result.rows.keys()], [...prices.mids.keys()]);
+      for (const e of dirty) noQuote(row(result, e), "cancelled");
+      noQuote(row(result, missing), "missing-valuation");
+      noQuote(row(result, standing), "unsupported");
+      for (const e of clean) assertReferenceRetained(row(result, e), row(previous, e));
+      assert.throws(() => effectiveEnumerationMids(enumerationPricing(currentPrices, result)), /incomplete/);
+      assert.deepEqual(previous, before);
+    } finally { Date.now = originalNow; }
+  });
+}
+
+test("partial previous tables reuse completed rows only; every unquoted or absent row retries when valued", async () => {
+  const names = ["complete-a", "complete-b", "failed", "unsupported", "zero", "missing", "cancelled", "absent"];
+  const all = names.map(id => edge(id === "missing" ? "newly-valued" : W, id === "missing" ? W : U, id));
+  const controller = new AbortController(), initialCalls: TokenEdge[] = [];
+  const previous = await build(pricing(all.slice(0, -1).map(e => [e, e.target === "missing" ? 0 : 19])), {
+    concurrency: 1, control: { signal: controller.signal }, quote: async ({ edge, amountIn }) => {
+      initialCalls.push(edge);
+      if (edge.target === "failed") throw new Error("ordinary failure");
+      if (edge.target === "unsupported") throw { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" };
+      if (edge.target === "cancelled") controller.abort();
+      return { source: SOURCE, amountIn, amountOut: edge.target === "zero" ? 0n : amountIn * 2n };
+    },
+  });
+  assert.equal(initialCalls.length, 6);
+  assert.equal(previous.complete, false);
+  assert.deepEqual([...previous.rows.values()].map(r => r.status),
+    ["quoted", "quoted", "quote-failed", "unsupported", "no-output", "missing-valuation", "cancelled"]);
+  // Leftover values/observation metadata cannot convert an unquoted status into a reference.
+  const pending: EffectiveMidSnapshot = { ...previous, rows: new Map([...previous.rows].map(([key, value]) => [key,
+    value.status === "quoted" ? value : { ...value, amountIn: 137n, amountOut: 89n, effectiveMid: 89 / 137, quotedAt: SOURCE },
+  ])) };
+  for (const forward of [false, true]) {
+    const current = { number: SOURCE.number + (forward ? 1 : 0), hash: forward ? hash(988) : SOURCE.hash,
+      generation: SOURCE.generation + 1 };
+    const calls: TokenEdge[] = [];
+    const result = await build(atSource(pricing(all.map(e => [e, 2])), current), {
+      previous: pending, touchedStateKeys: new Set(), gasCostWei: 1n,
+      quote: async ({ edge, amountIn }) => {
+        calls.push(edge);
+        return { source: current, amountIn, amountOut: amountIn * 3n };
+      },
+    });
+    assert.deepEqual(calls, all.slice(2), "all six unquoted/absent rows require fresh requests");
+    assert.equal(result.complete, true);
+    assert.equal(result.rows.size, 8);
+    for (const e of all.slice(0, 2)) assertReferenceRetained(row(result, e), row(previous, e));
+    for (const e of all.slice(2)) {
+      assert.equal(row(result, e).carried, undefined);
+      assert.equal(row(result, e).amountIn, e.target === "missing" ? 26n : 51n);
+      assert.deepEqual(row(result, e).quotedAt, current);
+    }
+  }
+});
+
+test("already closed work never accepts clean references and never invokes fresh requests", async () => {
+  const all = ["clean-a", "clean-b", "dirty"].map(id => edge(W, U, id));
+  const prices = pricing(all.map(e => [e, 1])), previous = await build(prices);
+  const controller = new AbortController(); controller.abort();
+  let calls = 0;
+  const result = await build(prices, { previous, touchedStateKeys: new Set(["dirty"]), control: { signal: controller.signal },
+    quote: async () => { calls++; throw new Error("closed work"); },
+  });
+  assert.equal(calls, 0);
+  assert.equal(result.complete, false);
+  for (const r of result.rows.values()) {
+    noQuote(r, "cancelled");
+    assert.equal(r.carried, undefined);
+    assert.equal(r.quotedAt, undefined);
+  }
+});
+
+test("changed row identity cannot borrow a reference despite an unchanged opaque edge key", async () => {
+  const original = edge(W, U, "same-edge-id", "old-instance");
+  const prices = pricing([[original, 2]]), previous = await build(prices);
+  for (const changed of [
+    { ...original, instanceKey: "new-instance" },
+    { ...original, tokenIn: U, tokenOut: W },
+    { ...original, tokenOut: "new-output" },
+  ]) {
+    let calls = 0;
+    const result = await build(pricing([[changed, 2]]), { previous, touchedStateKeys: new Set(),
+      quote: async ({ edge, amountIn }) => {
+        calls++; assert.strictEqual(edge, changed);
+        return { source: SOURCE, amountIn, amountOut: 89n };
+      },
+    });
+    assert.equal(calls, 1);
+    assert.equal(row(result, changed).amountOut, 89n);
+    assert.equal(row(result, changed).carried, undefined);
+  }
+  const wrongId = { ...previous, rows: new Map([[blockScanEdgeKey(original), { ...row(previous, original), edgeId: "other" }]]) };
+  let calls = 0;
+  await build(prices, { previous: wrongId, touchedStateKeys: new Set(), quote: async ({ amountIn }) => {
+    calls++; return { source: SOURCE, amountIn, amountOut: 89n };
+  } });
+  assert.equal(calls, 1);
+  assert.equal(row(previous, original).amountOut, DEFAULT_RAW * 7n);
+});
+
+test("legacy quoted rows without quotedAt bind their previous snapshot source once, not each later carry", async () => {
+  const e = edge(W, U, "legacy-reference");
+  const prices = pricing([[e, 2]]);
+  const previous = snapshotOf([quoted("legacy-reference", W, U, "legacy-reference", 137n, 89n)]);
+  const nextSource = { number: SOURCE.number + 1, hash: hash(991), generation: SOURCE.generation + 1 };
+  let calls = 0;
+  const quote: Quote = async () => { calls++; throw new Error("legacy clean reference"); };
+  const next = await build(atSource(prices, nextSource), { previous, touchedStateKeys: new Set(), quote });
+  assert.deepEqual(row(next, e).quotedAt, SOURCE);
+  const laterSource = { ...nextSource, number: nextSource.number + 1, hash: hash(992), generation: nextSource.generation + 1 };
+  const later = await build(atSource(prices, laterSource), { previous: next, touchedStateKeys: new Set(), gasCostWei: 1n, quote });
+  assertReferenceRetained(row(later, e), row(next, e));
+  assert.equal(row(later, e).amountIn, 137n);
+  assert.equal(row(later, e).amountOut, 89n);
+  assert.equal(calls, 0);
+  assert.equal(row(previous, e).quotedAt, undefined);
 });
 
 let failed = 0;

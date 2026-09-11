@@ -1,5 +1,4 @@
-import { prepareAmountQuoteActivity, type PreparedAmountQuoteActivity } from "./amount-quote-continuity.js";
-import type { CanonicalSource } from "./venues/adapter-request-program.js";
+import { isRpcThrottleError } from "./rpc-throttle-guard.js";
 
 interface BlockTouchedLog {
   readonly address: string;
@@ -21,17 +20,22 @@ export interface BlockTouchedCanonicalAnchor {
   readonly parentHash: string;
   /** Full already-observed header transaction list, in order; never default missing data to []. */
   readonly transactionHashes: readonly string[];
-  /** Complete caller-observed non-trace activity (including miner/withdrawals
+  /** Caller-observed non-trace activity (including miner/withdrawals
    * and any protocol-level writes not represented by transaction callTracer).
-   * Omission permits pinned refresh, but cannot establish amount-quote carry. */
+   * Omission contributes no additional passive addresses to the refresh set. */
   readonly passiveTouchedAddresses?: readonly string[];
 }
 
-const anchoredActivities = new WeakMap<ReadonlySet<string>, {
-  readonly number: number;
-  readonly hash: string;
-  readonly parentHash: string;
-  readonly addresses: readonly string[];
+const MAX_ACTIVITY_TRANSITIONS = 256;
+interface CompletedBlockActivity {
+  readonly anchor: BlockTouchedCanonicalAnchor;
+  readonly touchedKeys: readonly string[];
+}
+// Completed data only, scoped to the existing reader's provider. A cancelled
+// range keeps its settled blocks, never promises, failed children or quote authority.
+const completedByProvider = new WeakMap<BlockTouchedProvider, {
+  readonly poolManager: string;
+  readonly blocks: Map<number, CompletedBlockActivity>;
 }>();
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -44,35 +48,142 @@ const ERC20_TRANSFER_TOPIC =
   "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
 /**
- * Reads one block's log identities and call targets into the single refresh
- * set consumed by block-scan pricing. Logs retain singleton pool identities;
- * callTracer adds contracts reached through top-level or internal calls.
+ * Reads log identities and call targets into the single refresh set consumed
+ * by block-scan pricing. Optional catch-up covers every transition after the
+ * previous source, with at most 256 transitions and no partial-range return.
+ * Same-height/same-hash is an empty set without I/O; rollback
+ * or same-height reorg rejects before I/O. Ordinary one-block calls are unchanged.
  */
 export async function readBlockTouchedStateKeys(
   provider: BlockTouchedProvider,
   blockNumber: number,
   uniswapV4PoolManager: string,
   anchor?: BlockTouchedCanonicalAnchor,
+  range?: {
+    readonly previousSource: { readonly number: number; readonly hash: string };
+    readonly readHeader: (number: number) => Promise<BlockTouchedCanonicalAnchor>;
+    readonly signal?: AbortSignal;
+    readonly deadlineAtMs?: number;
+  },
 ): Promise<ReadonlySet<string>> {
   // Snapshot before either async read; later caller mutation cannot re-anchor it.
   const pinned = anchor === undefined ? undefined : snapshotAnchor(anchor, blockNumber);
+  if (range === undefined) return readTouchedBlock(provider, blockNumber, uniswapV4PoolManager, pinned);
+  if (pinned === undefined) throw new Error("activity range requires a canonical target anchor");
+  if (!isRecord(range)) throw new Error("malformed activity range");
+  const { previousSource, readHeader, signal, deadlineAtMs } = range;
+  if (!isRecord(previousSource)) throw new Error("malformed activity range");
+  const { number: previousNumber, hash: rawPreviousHash } = previousSource;
+  if (!Number.isSafeInteger(previousNumber) || previousNumber < 0 ||
+      !matches(HASH_RE, rawPreviousHash) || typeof readHeader !== "function" ||
+      (deadlineAtMs !== undefined && !Number.isFinite(deadlineAtMs))) throw new Error("malformed activity range");
+  const previousHash = rawPreviousHash.toLowerCase();
+  const transitions = blockNumber - previousNumber;
+  if (transitions < 0 || transitions > MAX_ACTIVITY_TRANSITIONS) {
+    throw new Error("activity range must contain 0..256 forward transitions; full refresh required");
+  }
+  const assertOpen = (): void => {
+    if (signal?.aborted) throw signal.reason ?? new Error("activity range aborted");
+    if (deadlineAtMs !== undefined && Date.now() >= deadlineAtMs) throw new Error("activity range deadline exceeded");
+  };
+  assertOpen();
+  const touched = new Set<string>();
+  if (transitions === 0) {
+    if (previousHash !== pinned.hash) throw new Error("same-height activity range source hash mismatch");
+    return touched;
+  }
+  const poolManager = uniswapV4PoolManager.toLowerCase();
+  let memo = completedByProvider.get(provider);
+  if (memo === undefined || memo.poolManager !== poolManager) {
+    // Log-to-state-key interpretation is part of the existing reader input.
+    // Changing it cannot borrow a union parsed for a different manager.
+    memo = { poolManager, blocks: new Map() };
+    completedByProvider.set(provider, memo);
+  }
+  const completed = memo.blocks;
+  const rejectChain = (message: string): never => {
+    completed.clear();
+    // Retire this table as well: an older pending invocation may settle later,
+    // but cannot refill the provider's current memo after invalidation.
+    if (completedByProvider.get(provider)?.blocks === completed) completedByProvider.delete(provider);
+    throw new Error(message);
+  };
+  const cachedTarget = completed.get(blockNumber);
+  if (cachedTarget !== undefined && !sameAnchor(cachedTarget.anchor, pinned)) {
+    rejectChain("cached activity target anchor mismatch");
+  }
+  const seenHashes = new Set([previousHash]);
+  let lastHash = previousHash;
+  for (let number = previousNumber + 1; number <= blockNumber; number++) {
+    assertOpen();
+    let observation = completed.get(number);
+    // The caller already supplied the frozen target header. Only missing
+    // historical headers belong to this invocation's incremental reads.
+    const header = number === blockNumber ? pinned
+      : observation?.anchor ?? snapshotAnchor(await readHeader(number), number);
+    assertOpen();
+    if (header.parentHash !== lastHash || seenHashes.has(header.hash)) {
+      rejectChain("activity range canonical hash chain mismatch or duplicate");
+    }
+    if (observation !== undefined && !sameAnchor(observation.anchor, header)) {
+      rejectChain("cached activity block anchor mismatch");
+    }
+    if (observation === undefined) {
+      const blockTouched = await readTouchedBlock(provider, number, uniswapV4PoolManager, header, assertOpen);
+      assertOpen();
+      observation = Object.freeze({ anchor: header, touchedKeys: Object.freeze([...blockTouched]) });
+      const concurrent = completed.get(number);
+      if (concurrent !== undefined && !sameAnchor(concurrent.anchor, header)) {
+        rejectChain("cached activity concurrent block anchor mismatch");
+      }
+      completed.set(number, observation);
+      while (completed.size > MAX_ACTIVITY_TRANSITIONS) completed.delete(completed.keys().next().value!);
+    }
+    for (const key of observation.touchedKeys) touched.add(key);
+    seenHashes.add(header.hash);
+    lastHash = header.hash;
+  }
+  assertOpen();
+  // Only a whole chain reaching the supplied target returns the shared union.
+  // Cached blocks cannot silently relabel a fork. Each caller gets a fresh Set.
+  return touched;
+}
+
+async function readTouchedBlock(
+  provider: BlockTouchedProvider,
+  blockNumber: number,
+  uniswapV4PoolManager: string,
+  pinned?: BlockTouchedCanonicalAnchor,
+  assertOpen: () => void = () => {},
+): Promise<ReadonlySet<string>> {
   const traceMethod = pinned === undefined ? "debug_traceBlockByNumber" : "debug_traceBlockByHash";
   const [logsResult, tracesResult] = await Promise.allSettled([
-    Promise.resolve().then(() => provider.getLogs(pinned === undefined
-      ? { fromBlock: blockNumber, toBlock: blockNumber } : { blockHash: pinned.hash })),
-    Promise.resolve().then(() => provider.send(traceMethod, [
-      pinned === undefined ? `0x${blockNumber.toString(16)}` : pinned.hash,
-      { tracer: "callTracer", tracerConfig: { onlyTopCall: false } },
-    ])),
+    Promise.resolve().then(() => {
+      assertOpen();
+      return provider.getLogs(pinned === undefined
+        ? { fromBlock: blockNumber, toBlock: blockNumber } : { blockHash: pinned.hash });
+    }),
+    Promise.resolve().then(() => {
+      assertOpen();
+      return provider.send(traceMethod, [
+        pinned === undefined ? `0x${blockNumber.toString(16)}` : pinned.hash,
+        { tracer: "callTracer", tracerConfig: { onlyTopCall: false } },
+      ]);
+    }),
   ]);
   // The pass owns both reads. A failed sibling must not leave activity I/O
   // running after this generation has been settled and its Funding drained.
+  // Preserve transport-fatal evidence even if its sibling or owner concurrently
+  // cancelled this range. The shared classifier retains typed-revert exclusions.
+  for (const result of [logsResult, tracesResult]) {
+    if (result.status === "rejected" && isRpcThrottleError(result.reason)) throw result.reason;
+  }
+  assertOpen();
   if (logsResult.status === "rejected") throw logsResult.reason;
   if (tracesResult.status === "rejected") throw tracesResult.reason;
   const logs = logsResult.value;
   const traces = tracesResult.value;
   const touched = new Set<string>();
-  const addresses = pinned === undefined ? undefined : new Set(pinned.passiveTouchedAddresses);
   const manager = uniswapV4PoolManager.toLowerCase();
 
   if (pinned !== undefined && !Array.isArray(logs)) throw new Error("anchored block logs must be an array");
@@ -131,29 +242,17 @@ export async function readBlockTouchedStateKeys(
     }
   }
 
-  if (pinned !== undefined && addresses !== undefined) {
-    for (const address of addresses) touched.add(address);
-    for (const key of touched) if (ADDRESS_RE.test(key)) addresses.add(key);
-    if (pinned.passiveTouchedAddresses !== undefined) {
-      anchoredActivities.set(touched, Object.freeze({
-        number: blockNumber, hash: pinned.hash, parentHash: pinned.parentHash,
-        addresses: Object.freeze([...addresses]),
-      }));
-    }
-  }
+  for (const address of pinned?.passiveTouchedAddresses ?? []) touched.add(address);
   return touched;
 }
 
-/** Prepare once per source, outside the quote-row loop. Copies/legacy sets have no proof. */
-export function amountQuoteActivityForTouched(
-  touched: ReadonlySet<string>, source: CanonicalSource,
-): PreparedAmountQuoteActivity | null {
-  const anchor = anchoredActivities.get(touched);
-  if (anchor === undefined || source === null || source === undefined) return null;
-  const snapshot = { number: source.number, hash: source.hash, generation: source.generation };
-  if (snapshot.number !== anchor.number || !matches(HASH_RE, snapshot.hash) || snapshot.hash.toLowerCase() !== anchor.hash) return null;
-  return prepareAmountQuoteActivity({ source: snapshot, parentHash: anchor.parentHash,
-    touchedAddresses: new Set(anchor.addresses), complete: true });
+function sameAnchor(left: BlockTouchedCanonicalAnchor, right: BlockTouchedCanonicalAnchor): boolean {
+  const passive = (addresses: readonly string[] | undefined) => addresses === undefined
+    ? undefined : JSON.stringify([...new Set(addresses)].sort());
+  return left.hash === right.hash && left.parentHash === right.parentHash &&
+    left.transactionHashes.length === right.transactionHashes.length &&
+    left.transactionHashes.every((hash, index) => hash === right.transactionHashes[index]) &&
+    passive(left.passiveTouchedAddresses) === passive(right.passiveTouchedAddresses);
 }
 
 function snapshotAnchor(anchor: BlockTouchedCanonicalAnchor, number: number): BlockTouchedCanonicalAnchor {

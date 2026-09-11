@@ -6,11 +6,9 @@ import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
-import { carryAmountQuote, type CompletedAmountQuote,
-  type PreparedAmountQuoteActivity } from "./amount-quote-continuity.js";
-import type { FamilyAmountQuoteReuseContext } from "./venues/adapter-family-runtime.js";
 
-export type EffectivePricingInput = Parameters<typeof tokenToWethReferences>[0];
+export type EffectivePricingInput = Parameters<typeof tokenToWethReferences>[0] &
+  Pick<BlockScanStateSnapshot, "pricingStateKeyByEdgeKey">;
 export const DEFAULT_EFFECTIVE_WETH_INPUT = 1_000_000_000_000_000n;
 
 export interface EffectiveMidRow {
@@ -24,14 +22,15 @@ export interface EffectiveMidRow {
   readonly effectiveMid: number | null;
   readonly status: "quoted" | "missing-valuation" | "unsupported" |
     "quote-failed" | "no-output" | "cancelled";
-  /** Data, not an Exact handle. Original quote anchor is never rewritten. */
-  readonly quoteProvenance?: CompletedAmountQuote;
+  /** Original chain observation, not a current-block Exact handle. */
+  readonly quotedAt?: CanonicalSource;
   readonly carried?: true;
 }
 
 export interface EffectiveMidSnapshot {
   readonly source: CanonicalSource;
   readonly reference: "gas" | "default";
+  /** Reference for newly quoted rows. Carried rows retain their original amounts. */
   readonly referenceWethInput: bigint;
   readonly rows: ReadonlyMap<string, EffectiveMidRow>;
   readonly complete: boolean;
@@ -68,9 +67,7 @@ type RouteExactResult = Extract<Awaited<ReturnType<ExactCall>>, { readonly amoun
 type EffectiveMidQuote = (
   input: Pick<Parameters<ExactCall>[0],
     "edge" | "amountIn" | "control" | "requireChainAmountQuote">,
-) => Promise<Pick<RouteExactResult, "source" | "amountIn" | "amountOut"> &
-  Partial<Pick<RouteExactResult, "methodId" | "methodIndex" |
-    "methodOrderFingerprint" | "cacheCompatibilityFingerprint" | "reusePolicy" | "amountQuoteReuse">>>;
+) => Promise<Pick<RouteExactResult, "source" | "amountIn" | "amountOut">>;
 
 /** A sizing mark is used ONLY for amountIn, never to derive amountOut.
  * All input tokens share one immutable, at-most-three-hop valuation pass. */
@@ -83,10 +80,10 @@ export async function buildEffectiveMids(input: {
   readonly control: AdapterWorkControl;
   readonly concurrency: number;
   readonly previous?: EffectiveMidSnapshot;
-  readonly activity?: PreparedAmountQuoteActivity | null;
-  /** Current declaration only; fresh output still exclusively uses quote. */
-  readonly describeReuse?: (input: Pick<Parameters<EffectiveMidQuote>[0],
-    "edge" | "amountIn" | "control">) => FamilyAmountQuoteReuseContext | null;
+  /** The SAME complete touched set used by raw-mid preparation. Undefined is
+   * bootstrap/full refresh, not an empty block. Pricing references only: no
+   * per-method reuse declaration and no amount-change invalidation. */
+  readonly touchedStateKeys?: ReadonlySet<string>;
 }): Promise<EffectiveMidSnapshot> {
   const started = Date.now();
   const { pricing, control } = input;
@@ -118,94 +115,81 @@ export async function buildEffectiveMids(input: {
   const rows = new Array<EffectiveMidRow>(work.length);
   const closed = () => control.signal?.aborted === true ||
     (control.deadlineAtMs !== undefined && Date.now() >= control.deadlineAtMs);
+  const writeRow = (index: number, result: Pick<EffectiveMidRow,
+    "status" | "amountOut" | "effectiveMid" | "quotedAt" | "carried">) => {
+    const { edgeId, edge, amountIn } = work[index]!;
+    rows[index] = Object.freeze({ edgeId, instanceKey: edgeInstanceKey(edge),
+      tokenIn: edge.tokenIn.toLowerCase(), tokenOut: edge.tokenOut.toLowerCase(), amountIn, ...result });
+  };
+  const unavailable = (index: number, status: EffectiveMidRow["status"]) =>
+    writeRow(index, { status, amountOut: null, effectiveMid: null });
+  const failed = (index: number, error: unknown) => unavailable(index, closed() ? "cancelled" :
+    (error as { code?: unknown })?.code === "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" ? "unsupported" : "quote-failed");
+  const accept = (index: number, result: Awaited<ReturnType<EffectiveMidQuote>>) => {
+    if (closed()) { unavailable(index, "cancelled"); return; }
+    const { amountIn } = work[index]!;
+    if (amountIn === null || result.source.number !== source.number || result.source.hash.toLowerCase() !== source.hash ||
+        result.source.generation !== source.generation || result.amountIn !== amountIn) {
+      throw new Error("effective quote changed source or amount");
+    }
+    const amountOut = result.amountOut;
+    const rate = Number(amountOut) / Number(amountIn);
+    if (amountOut < 0n || !Number.isFinite(rate) || (amountOut > 0n && rate <= 0)) {
+      throw new Error("invalid quote output");
+    }
+    const status = amountOut > 0n ? "quoted" : "no-output";
+    if (closed()) { unavailable(index, "cancelled"); return; }
+    writeRow(index, { status, amountOut, effectiveMid: amountOut > 0n ? rate : null,
+      ...(status === "quoted" ? { quotedAt: source } : {}) });
+  };
+
+  // Classify the existing mid table before any quote can yield. A blocked dirty
+  // row must not delay validation of reusable data later in that same table.
+  const previous = input.previous;
+  const canReuse = previous !== undefined && input.touchedStateKeys !== undefined &&
+    ((source.number > previous.source.number && source.generation > previous.source.generation) ||
+      (source.number === previous.source.number && source.generation >= previous.source.generation &&
+        source.hash === previous.source.hash.toLowerCase()));
+  const fresh: number[] = [];
+  for (const [index, { edgeId, edge, amountIn }] of work.entries()) {
+    if (edge.leavesStandingPosition) unavailable(index, "unsupported");
+    else if (closed()) unavailable(index, "cancelled");
+    else {
+      const prior = canReuse ? previous.rows.get(edgeId) : undefined;
+      const stateKey = pricing.pricingStateKeyByEdgeKey?.get(edgeId) ?? edgeInstanceKey(edge);
+      if (prior?.status === "quoted" && prior.edgeId === edgeId &&
+          prior.instanceKey === edgeInstanceKey(edge) &&
+          prior.tokenIn === edge.tokenIn.toLowerCase() && prior.tokenOut === edge.tokenOut.toLowerCase() &&
+          !input.touchedStateKeys!.has(stateKey.toLowerCase())) {
+        // This is an approximate pricing reference, not proof that a new
+        // amount would receive the old output. Keep the ORIGINAL pair of
+        // amounts and observation block even if this pass's gas/mark changed.
+        rows[index] = Object.freeze({ ...prior, carried: true,
+          quotedAt: prior.quotedAt ?? previous!.source });
+      } else if (amountIn === null) unavailable(index, "missing-valuation");
+      else fresh.push(index);
+    }
+  }
   let next = 0;
   const worker = async () => {
     for (;;) {
-      const index = next++;
-      const item = work[index];
-      if (!item) return;
-      const { edgeId, edge, amountIn } = item;
-      let amountOut: bigint | null = null;
-      let effectiveMid: number | null = null;
-      let quoteProvenance: CompletedAmountQuote | undefined;
-      let carried = false;
-      let status: EffectiveMidRow["status"];
-      if (amountIn === null) status = "missing-valuation";
-      else if (edge.leavesStandingPosition) status = "unsupported";
-      else if (closed()) status = "cancelled";
-      else {
-        try {
-          const previous = input.previous?.rows.get(edgeId);
-          const priorQuote = previous?.status === "quoted" &&
-            previous.amountIn === amountIn && previous.quoteProvenance?.validAt.number === input.previous?.source.number &&
-            previous.quoteProvenance?.validAt.hash === input.previous?.source.hash &&
-            previous.quoteProvenance?.validAt.generation === input.previous?.source.generation
-              ? previous.quoteProvenance : undefined;
-          let context = priorQuote === undefined ? null :
-            input.describeReuse?.({ edge, amountIn, control }) ?? null;
-          const reused = context === null ? null : carryAmountQuote({
-            previous: priorQuote, current: source, amountIn,
-            contextFingerprint: context.contextFingerprint, policy: context.policy,
-            activity: input.activity,
-          });
-          if (closed()) throw new Error("effective quote work retired during declaration");
-          const result = reused === null
-            ? await input.quote({ edge, amountIn, control, requireChainAmountQuote: true })
-            : { source, amountIn, amountOut: reused.amountOut };
-          if (closed()) status = "cancelled";
-          else {
-            if (result.source.number !== source.number || result.source.hash.toLowerCase() !== source.hash ||
-                result.source.generation !== source.generation || result.amountIn !== amountIn) {
-              throw new Error("effective quote changed source or amount");
-            }
-            amountOut = result.amountOut;
-            const rate = Number(amountOut) / Number(amountIn);
-            if (amountOut < 0n || !Number.isFinite(rate) || (amountOut > 0n && rate <= 0)) {
-              throw new Error("invalid quote output");
-            }
-            status = amountOut > 0n ? "quoted" : "no-output";
-            effectiveMid = amountOut > 0n ? rate : null;
-            if (reused !== null) {
-              quoteProvenance = reused;
-              carried = true;
-            } else if (status === "quoted" && "amountQuoteReuse" in result && result.amountQuoteReuse !== undefined) {
-              context = result.amountQuoteReuse;
-              // Only the method actually used may supply the cached pricing data.
-              if (context !== null && result.methodId === context.methodId &&
-                  result.methodIndex === context.methodIndex &&
-                  result.methodOrderFingerprint === context.methodOrderFingerprint &&
-                  result.cacheCompatibilityFingerprint === context.cacheCompatibilityFingerprint) {
-                quoteProvenance = Object.freeze({ complete: true, chainAmountQuote: true,
-                  quotedAt: source, validAt: source, amountIn, amountOut,
-                  contextFingerprint: context.contextFingerprint, reusePolicy: context.policy });
-              }
-            }
-          }
-        } catch (error) {
-          amountOut = null;
-          effectiveMid = null;
-          quoteProvenance = undefined;
-          carried = false;
-          status = closed() ? "cancelled" :
-            (error as { code?: unknown })?.code === "CHAIN_AMOUNT_QUOTE_UNAVAILABLE"
-              ? "unsupported" : "quote-failed";
-        }
-      }
-      rows[index] = Object.freeze({ edgeId, instanceKey: edgeInstanceKey(edge),
-        tokenIn: edge.tokenIn.toLowerCase(), tokenOut: edge.tokenOut.toLowerCase(),
-        amountIn, amountOut, effectiveMid, status,
-        ...(quoteProvenance === undefined ? {} : { quoteProvenance }),
-        ...(carried ? { carried: true as const } : {}) });
+      const index = fresh[next++];
+      if (index === undefined) return;
+      if (closed()) { unavailable(index, "cancelled"); continue; }
+      const { edge, amountIn } = work[index]!;
+      try {
+        accept(index, await input.quote({ edge, amountIn: amountIn!, control, requireChainAmountQuote: true }));
+      } catch (error) { failed(index, error); }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(input.concurrency, work.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(input.concurrency, fresh.length) }, worker));
   return Object.freeze({ source, reference: input.gasCostWei === null ? "default" : "gas",
     referenceWethInput, rows: new Map(rows.map(row => [row.edgeId, row])),
     complete: !closed() && rows.every(row => row.status !== "cancelled"), wallMs: Date.now() - started });
 }
 
-/** Best two-venue pair indication at equal reference NOTIONALS, not a
- * matched-quantity closed-loop quote, and never a sim/EV verdict. */
+/** Best two-venue indication at each row's recorded reference amount. Carried
+ * rows may use older notionals; this is not a matched-quantity loop or sim/EV. */
 export function effectiveMidPairStatistics(snapshot: EffectiveMidSnapshot, thresholdBps = 100): {
   directions: number; quoted: number; byStatus: Record<string, number>;
   comparablePairs: number; pairsAboveThreshold: number; thresholdBps: number;

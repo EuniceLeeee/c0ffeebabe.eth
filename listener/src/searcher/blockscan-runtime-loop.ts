@@ -94,7 +94,6 @@ import {
   type CanonicalHeader,
 } from "./canonical-header-journal.js";
 import type { BlockScanObservedHeader } from "./blockscan-observed-header.js";
-import { amountQuoteActivityForTouched } from "./blockscan-touched-state.js";
 
 type BlockScanSourceHeader = CanonicalHeader & Partial<Pick<BlockScanObservedHeader,
   "transactionHashes" | "passiveTouchedAddresses">>;
@@ -806,7 +805,11 @@ export interface BlockScanRuntimeLoopDependencies {
    * refresh scope. Victim-independent: built from the block's logs and call
    * trace.
    */
-  readBlockSwapTouched(blockNumber: number, header?: BlockScanSourceHeader): Promise<ReadonlySet<string>>;
+  readBlockSwapTouched(blockNumber: number, header?: BlockScanSourceHeader, range?: {
+    readonly previousSource: { readonly number: number; readonly hash: string };
+    readonly signal?: AbortSignal;
+    readonly deadlineAtMs?: number;
+  }): Promise<ReadonlySet<string>>;
   formatRouteKey(opportunity: Pick<BlockScanOpportunity, "seedEdges">): string;
   formatRing(
     opportunity: Pick<BlockScanOpportunity, "seedEdges" | "affectedTokens">,
@@ -1375,7 +1378,12 @@ export class BlockScanRuntimeLoop {
         });
         let prepared: BlockScanStatePrepareResult;
         let bootstrapEscalated = false;
-        const producerTouched = await this.deps.readBlockSwapTouched(nextBlock, header);
+        const activityBase = input.coordinator.latestPricingSnapshot();
+        const producerTouched = await this.deps.readBlockSwapTouched(nextBlock, header,
+          activityBase === null || activityBase.sourceBlock >= nextBlock ? undefined : {
+            previousSource: { number: activityBase.sourceBlock, hash: activityBase.sourceBlockHash },
+            signal: this.deps.runtimeAbort.signal, deadlineAtMs: generationDeadlineAtMs,
+          });
         let producerActivity: StrictCanonicalActivityProof = Object.freeze({
           source: Object.freeze({
             number: anchoredGraph.sourceBlock,
@@ -1384,10 +1392,6 @@ export class BlockScanRuntimeLoop {
           }),
           touchedStateKeys: producerTouched,
           complete: true,
-          amountQuoteActivity: amountQuoteActivityForTouched(producerTouched, {
-            number: anchoredGraph.sourceBlock, hash: anchoredGraph.sourceBlockHash,
-            generation: anchoredGraph.generation,
-          }) ?? undefined,
         });
         const producerController = new AbortController();
         const detachProducerAbort = linkAbortController(this.deps.runtimeAbort.signal, producerController);
@@ -1464,7 +1468,6 @@ export class BlockScanRuntimeLoop {
             const bootstrapSource = Object.freeze({ number: anchoredGraph.sourceBlock,
               hash: anchoredGraph.sourceBlockHash, generation });
             producerActivity = Object.freeze({ ...producerActivity, source: bootstrapSource,
-              amountQuoteActivity: amountQuoteActivityForTouched(producerTouched, bootstrapSource) ?? undefined,
             });
             const bootstrapSimulationTransport = simulationWork.transportFor(bootstrapSource, {
               signal: producerController.signal, deadlineAtMs: bootstrapDeadlineAtMs,
@@ -1808,7 +1811,6 @@ export class BlockScanRuntimeLoop {
           simulationTransport: simulationWork.transportFor(source, { signal: passController.signal, deadlineAtMs }),
           canonicalActivity: input.canonicalActivity === undefined ? undefined : {
             ...input.canonicalActivity, source,
-            amountQuoteActivity: amountQuoteActivityForTouched(input.canonicalActivity.touchedStateKeys, source) ?? undefined,
           },
           validateBeforePublish: () => validate("startup warm publication canonical header", controller.signal),
         };
@@ -2360,6 +2362,10 @@ export class BlockScanRuntimeLoop {
     let fundingPreparation: StrictFundingPreparation | undefined;
     let fundingSettlement: Promise<void> | undefined;
     const activityStartedAtMs = Date.now();
+    // The SAME refresh range serves raw and amount-sensitive pricing. A warm
+    // publication can be many blocks behind; latest-block-only touched data
+    // must not certify all intervening changes as absent.
+    const activityBase = currentRuntimeCoordinator.latestPricingSnapshot();
     let activityFinishedAtMs: number | null = null;
     let fundingStartedAtMs: number | null = null;
     let fundingFinishedAtMs: number | null = null;
@@ -2374,7 +2380,11 @@ export class BlockScanRuntimeLoop {
       .then(async () => {
         const header = await sourceHeaderRead;
         if (header.status === "rejected") throw header.reason;
-        return this.deps.readBlockSwapTouched(blockNumber, header.value);
+        return this.deps.readBlockSwapTouched(blockNumber, header.value,
+          activityBase === null || activityBase.sourceBlock >= blockNumber ? undefined : {
+            previousSource: { number: activityBase.sourceBlock, hash: activityBase.sourceBlockHash },
+            signal: passSignal, deadlineAtMs: passDeadlineAtMs,
+          });
       })
       .then(
         (value): PromiseSettledResult<ReadonlySet<string>> => {
@@ -2674,10 +2684,6 @@ export class BlockScanRuntimeLoop {
           }),
           touchedStateKeys: touchedPools,
           complete: true,
-          amountQuoteActivity: amountQuoteActivityForTouched(touchedPools, {
-            number: graphView.sourceBlock, hash: graphView.sourceBlockHash,
-            generation: graphView.generation,
-          }) ?? undefined,
         });
         /*
          * Source-N is also a producer generation. Keep its pricing calls on

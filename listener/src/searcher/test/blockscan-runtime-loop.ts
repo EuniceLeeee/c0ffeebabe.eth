@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { test } from "node:test";
+import ts from "typescript";
 import { ethers } from "ethers";
 import { BlockScanRuntimeLoop, SourceSimulationWork, type BlockScanRuntimeLoopDependencies,
   type SourceSimulationFactory } from "../blockscan-runtime-loop.js";
 import { createLiveRuntimeStop, createLiveSourceSimulationFactory } from "../main.js";
 import { RevmFatalError, RevmStrictError, type RevmFatalReason, type StrictSimulateRequest } from "../revm-sim-client.js";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
+import { isRpcThrottleError } from "../rpc-throttle-guard.js";
 import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedGraphView } from "../venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 
@@ -81,6 +84,48 @@ test("ordinary shutdown remains zero unless a fatal arrives during its joined dr
     stop.installDrain(() => gate.promise); stop.shutdown(); await turn(); assert.deepEqual(exits, []);
     if (fatalDuringDrain) stop.fatal({ kind: "source-fault" });
     gate.resolve(); await turn(); assert.deepEqual(exits, [fatalDuringDrain ? 1 : 0]);
+  }
+});
+
+test("actual shared activity provider latches throttle before joined reads settle and bars successor I/O", async () => {
+  // Extract only the real thin main wiring, not a parallel copy of its behavior.
+  const text = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("main.ts", text, ts.ScriptTarget.Latest, true);
+  const names = new Set(["activityReadFailed", "blockScanActivityProvider"]);
+  const statements: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration =>
+      ts.isIdentifier(declaration.name) && names.has(declaration.name.text))) statements.push(node.getText(ast));
+    ts.forEachChild(node, visit);
+  };
+  visit(ast); assert.equal(statements.length, 2);
+  const js = ts.transpileModule(`${statements.join("\n")}\nblockScanActivityProvider;`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  for (const method of ["logs", "trace"] as const) {
+    const runtimeAbort = new AbortController();
+    const slow = deferred(); const exits: number[] = []; let calls = 0;
+    const stop = createLiveRuntimeStop({ runtimeAbort, emitFatal() {}, exit: code => { exits.push(code); } });
+    stop.installDrain(() => slow.promise);
+    const throttle = Object.assign(new Error("fixture HTTP 429"), { statusCode: 429 });
+    const provider = {
+      async getLogs() { calls++; if (method === "logs") throw throttle; await slow.promise; return []; },
+      async send() { calls++; if (method === "trace") throw throttle; await slow.promise; return []; },
+    };
+    const guarded = runInNewContext(js, {
+      provider, blockScanRuntimeAbort: runtimeAbort, console: { error() {} },
+      isRpcThrottleError,
+      onSimulationFatal: stop.fatal,
+    }, { timeout: 1000 }) as typeof provider;
+    const a = guarded.getLogs(), b = guarded.send();
+    const failed = assert.rejects(method === "logs" ? a : b, error => error === throttle);
+    await failed;
+    assert(runtimeAbort.signal.aborted);
+    assert.deepEqual(exits, [], "stop still joins the already-running sibling");
+    assert.throws(() => guarded.getLogs()); assert.throws(() => guarded.send());
+    assert.equal(calls, 2, "a caller retry cannot dispatch after the throttle");
+    slow.resolve(); await Promise.allSettled([a, b]); await turn();
+    assert.deepEqual(exits, [1]);
   }
 });
 
@@ -268,6 +313,59 @@ test("runHead creates SOURCE-controlled context before prefunding and drains it 
     for (const i of f.inputs) { assert.equal(i.simulationTransport, transport); assert.equal(i.signal, contexts[0]!.control.signal);
       assert.equal(i.deadlineAtMs, contexts[0]!.control.deadlineAtMs); }
     assert.equal(closes, 1);
+  } finally { await f.loop.shutdown(); }
+});
+
+test("source-N refresh asks the existing activity reader for the full published-mid gap", async () => {
+  const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } }, async closeAndDrain() {} }));
+  const base = { sourceBlock: 100, sourceBlockHash: hash(100) };
+  f.coordinator.latestPricingSnapshot = () => base;
+  const touched = new Set([target]);
+  let activityReads = 0;
+  f.deps.readBlockSwapTouched = async (number, header, range) => {
+    activityReads++;
+    assert.equal(number, 219); assert.equal(header!.hash, hash(219));
+    assert.deepEqual(range!.previousSource, { number: 100, hash: hash(100) });
+    assert(range!.signal && range!.deadlineAtMs! > Date.now());
+    return touched;
+  };
+  try {
+    await assert.rejects(f.loop.runHead(219, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }),
+      /fixture prepared boundary/);
+    assert.equal(activityReads, 1, "one shared activity request, not a separate effective reader");
+    const prepared = f.inputs.find(input => input.kind === "runtime");
+    assert.equal(prepared.touchedPools, touched);
+    assert.equal(prepared.canonicalActivity.touchedStateKeys, touched);
+  } finally { await f.loop.shutdown(); }
+});
+
+test("N-1 producer binds the same activity reader to its preceding published mid", async () => {
+  const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } }, async closeAndDrain() {} }));
+  let latest: any = { sourceBlock: 100, sourceBlockHash: hash(100) };
+  f.coordinator.latestPricingSnapshot = () => latest;
+  const touched = new Set([target]);
+  let activityReads = 0;
+  f.deps.readBlockSwapTouched = async (number, header, range) => {
+    activityReads++;
+    assert.equal(number, 101); assert.equal(header!.hash, hash(101));
+    assert.deepEqual(range!.previousSource, { number: 100, hash: hash(100) });
+    assert.equal(range!.signal, f.runtimeAbort.signal);
+    assert(range!.deadlineAtMs! > Date.now());
+    return touched;
+  };
+  f.coordinator.prepareCoarsePricing = async (input: any) => {
+    assert.equal(input.touchedPools, touched);
+    assert.equal(input.canonicalActivity.touchedStateKeys, touched);
+    latest = pricingFixture(input.graph);
+    return { ...latest, snapshot: latest, status: "complete", issues: [] };
+  };
+  const graph = f.deps.buildGraphView({ id: "fixture", generation: 0, sourceBlock: 101,
+    sourceBlockHash: hash(101), edges: [], landedCoverage: [], topologyKey: "fixture" });
+  try {
+    (f.loop as any).startCoarsePricing({ coordinator: f.coordinator, graph });
+    await (f.loop as any).coarsePricingActive;
+    assert.equal(activityReads, 1);
+    assert.equal(latest.sourceBlock, 101);
   } finally { await f.loop.shutdown(); }
 });
 

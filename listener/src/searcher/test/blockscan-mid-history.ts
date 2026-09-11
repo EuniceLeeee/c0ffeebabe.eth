@@ -278,6 +278,37 @@ test("effective history preserves every status, null and zero amounts, and incom
   });
 });
 
+test("carried effective history keeps its observed amounts and quote block, not the new reference", async () => {
+  await withTempDir(async (directory) => {
+    const historyPath = join(directory, "mids.jsonl");
+    const eventsPath = join(directory, "events.jsonl");
+    await writeFile(eventsPath, "");
+    const sink = await initBlockScanEnumerationSolverTelemetry({
+      path: join(directory, "routes.jsonl"), midHistoryPath: historyPath,
+      eventsPath, runId: "effective-carried-observation", minFreeBytes: 1,
+    });
+    const previous = effectiveSnapshot(300);
+    const current = effectiveSnapshot(301);
+    const rows = new Map([...previous.rows].map(([id, row]) => [id,
+      { ...row, carried: true as const, quotedAt: previous.source },
+    ]));
+    try { sink.recordPricing(baseline(301, new Map(), { ...current, rows })); }
+    finally { await sink.shutdown(5_000); }
+    assert.equal(sink.telemetry().failed, false);
+    const [record] = await readJsonl(historyPath);
+    const effective = record!.effective_mids as JsonRecord;
+    assert.deepEqual(effective.source, current.source);
+    assert.equal(effective.reference_weth_input, current.referenceWethInput.toString());
+    const persisted = new Map(effective.rows as [string, JsonRecord][]);
+    for (const [id, prior] of previous.rows) {
+      assert.equal(persisted.get(id)!.amount_in, prior.amountIn!.toString());
+      assert.equal(persisted.get(id)!.amount_out, prior.amountOut!.toString());
+      assert.deepEqual(persisted.get(id)!.quoted_at, previous.source);
+      assert.equal(persisted.get(id)!.carried, true);
+    }
+  });
+});
+
 test("a full queue records a gap and resumes only with a fresh baseline", async () => {
   await withTempDir(async (directory) => {
     const historyPath = join(directory, "mids.jsonl");
