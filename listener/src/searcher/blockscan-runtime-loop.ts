@@ -1405,6 +1405,7 @@ export class BlockScanRuntimeLoop {
             onRpcThrottle: (error) => this.deps.runtimeAbort.abort(error),
             maxBatchSize: 128,
             maxConcurrentBatches: 4,
+            retryRpcThrottle: true,
             transportLane: "producer-bulk",
             scopeLabel: `block-scan producer generation ${generation}`,
             allowSingleCallFallback: false,
@@ -2571,6 +2572,7 @@ export class BlockScanRuntimeLoop {
               : { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs }),
             maxBatchSize: 128,
             maxConcurrentBatches: 4,
+            retryRpcThrottle: true,
             transportLane: "producer-bulk",
             scopeLabel:
               `block-scan source-N pricing block ${blockNumber} ` +
@@ -3234,6 +3236,7 @@ export class BlockScanRuntimeLoop {
               onSourceUnavailable: (error) => passController.abort(error),
               onRpcThrottle: (error) => this.deps.runtimeAbort.abort(error),
               maxBatchSize: exactFactoryInput.maxBatchSize,
+              retryRpcThrottle: true,
               maxConcurrentBatches:
                 exactFactoryInput.maxConcurrentBatches,
               transportScheduler: exactTransportScheduler,

@@ -21,6 +21,21 @@ export function isRpcThrottleError(error: unknown): boolean {
   return false;
 }
 
+/** A spent allocation cannot recover from a short throughput backoff. */
+export function isRpcQuotaExhaustedError(error: unknown): boolean {
+  if (!isRpcThrottleError(error)) return false;
+  let cause: unknown = error;
+  for (let depth = 0; depth < 8 && cause; depth++) {
+    const item = cause as { code?: unknown; status?: unknown; statusCode?: unknown; message?: unknown; cause?: unknown };
+    const message = typeof item.message === "string" ? item.message : String(cause);
+    if (item.code !== 429 && item.status !== 429 && item.statusCode !== 429 &&
+        /\bexecution revert(?:ed)?\b/i.test(message)) { cause = item.cause; continue; }
+    if (/\b(?:monthly|daily)\b.*\b(?:limit|quota|capacity)\b|\b(?:quota|credits?|compute[ -]units?)\b.*\b(?:exhaust(?:ed|ion)|deplet(?:ed|ion))\b/i.test(message)) return true;
+    cause = item.cause;
+  }
+  return false;
+}
+
 /** Observe transport failures before a Family turns them into unresolved quotes.
  * A tripped guard never dispatches again, including a caller's retry. */
 export function guardRpcThrottle(

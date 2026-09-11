@@ -57,6 +57,7 @@ interface StubState {
   httpStatus?: number;
   batchErrorEnvelope?: boolean;
   rawResponse?: string;
+  replyBatch?: (items: Array<Record<string, unknown>>) => { status: number; body: unknown };
 }
 
 function startStub(): Promise<{ server: Server; state: StubState; port: number }> {
@@ -119,6 +120,12 @@ function startStub(): Promise<{ server: Server; state: StubState; port: number }
         );
         maybeHold(() => {
           state.activeBatches--;
+          if (state.replyBatch) {
+            const response = state.replyBatch(body);
+            res.writeHead(response.status, { "content-type": "application/json" });
+            res.end(JSON.stringify(response.body));
+            return;
+          }
           if (state.batchErrorEnvelope) {
             reply({ jsonrpc: "2.0", id: null, error: state.rpcError });
             return;
@@ -765,6 +772,137 @@ async function pendingCallTests(): Promise<void> {
   if (failures.length) throw new AggregateError(failures, "pending-call coalescing regressions");
 }
 
+async function adaptiveRetryTests(): Promise<void> {
+  const limited = { code: 429, message: "Your app has exceeded its compute units per second capacity" };
+  const results = (items: Array<Record<string, unknown>>) => items.map(item =>
+    ({ jsonrpc: "2.0", id: item.id, result: RESULT }));
+  await pendingCase("adaptive mixed response retries only throttled item, preserving pin and sender", async ({ state, backend }) => {
+    const b = backend({ retryRpcThrottle: true, maxConcurrentBatches: 4 });
+    state.replyBatch = items => ({ status: 200, body: items.map(item => state.batches.length === 1 && item.id === 2
+      ? { jsonrpc: "2.0", id: item.id, error: limited }
+      : { jsonrpc: "2.0", id: item.id, result: RESULT }) });
+    const first = { to: OK_A, data: "0xcafe", from: OK_B };
+    const second = { to: OK_B, data: "0xbeef", from: OK_A };
+    check.deepEqual(await Promise.all([b.call(first), b.call(second)]), [RESULT, RESULT]);
+    await b.drain();
+    check.equal(state.batches.length, 2);
+    check.deepEqual(state.batches[1], [state.batches[0]![1]]);
+    check.deepEqual(state.batches[1]![0]!.params, [second, { blockHash: HASH, requireCanonical: true }]);
+    check.equal(b.stats().currentConcurrentBatchLimit, 2);
+    check.equal(b.stats().throttleRetries, 1);
+    check.equal(await b.call(first), RESULT);
+    check.equal(state.batches.length, 2);
+    check.equal(state.singles.length, 0);
+  });
+  await pendingCase("adaptive HTTP and whole-envelope RPC limits recover through reduced pump", async ({ state, backend }) => {
+    const b = backend({ retryRpcThrottle: true, maxConcurrentBatches: 4, deadlineAtMs: Date.now() + 10_000 });
+    const limits: number[] = [], times: number[] = [];
+    state.replyBatch = items => {
+      limits.push(b.stats().currentConcurrentBatchLimit); times.push(Date.now());
+      return state.batches.length <= 2
+        ? { status: state.batches.length === 1 ? 429 : 200, body: { error: limited } }
+        : { status: 200, body: results(items) };
+    };
+    check.equal(await b.call({ to: OK_A, data: "0xcafe" }), RESULT);
+    check.deepEqual(limits, [4, 2, 1]);
+    check.ok(times[1]! - times[0]! >= 900 && times[2]! - times[1]! >= 900);
+    check.equal(state.singles.length, 0);
+  });
+  await pendingCase("adaptive concurrent failures reduce later physical dispatch without consuming floor retries", async ({ state, backend, release }) => {
+    state.pauseResponses = true;
+    const scheduler = new RethTransportScheduler({ capacity: 5, producerReserved: 1 });
+    const b = backend({ retryRpcThrottle: true, maxBatchSize: 1, maxConcurrentBatches: 4,
+      transportScheduler: scheduler, deadlineAtMs: Date.now() + 10_000 });
+    state.replyBatch = items => ({ status: 200, body: state.pauseResponses
+      ? items.map(item => ({ id: item.id, error: limited })) : results(items) });
+    const work = Promise.all(Array.from({ length: 8 }, (_, i) => b.call({ to: OK_A, data: `0x${i.toString(16).padStart(2, "0")}` })));
+    await until(() => state.heldResponses.length === 4, "four initial physical batches");
+    release();
+    await until(() => b.stats().throttleRetries === 4, "initial failure wave queued");
+    check.equal(state.batches.length, 4);
+    check.equal(b.stats().currentConcurrentBatchLimit, 1);
+    state.maxActiveBatches = 0; state.pauseResponses = false; state.holdResponses = true;
+    check.deepEqual(await work, Array(8).fill(RESULT));
+    await b.drain();
+    check.equal(state.maxActiveBatches, 1);
+    check.equal(state.singles.length, 0);
+    check.equal(scheduler.snapshot().activeTotal, 0);
+  });
+  await pendingCase("adaptive backoff also bars batches already waiting for a shared permit", async ({ state, backend }) => {
+    const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+    const b = backend({ retryRpcThrottle: true, maxBatchSize: 1, maxConcurrentBatches: 4, transportScheduler: scheduler });
+    const times: number[] = [];
+    state.replyBatch = items => {
+      times.push(Date.now());
+      return { status: 200, body: state.batches.length === 1
+        ? items.map(item => ({ id: item.id, error: limited })) : results(items) };
+    };
+    check.deepEqual(await Promise.all(Array.from({ length: 4 }, (_, i) =>
+      b.call({ to: OK_A, data: `0x${i.toString(16).padStart(2, "0")}` }))), Array(4).fill(RESULT));
+    await b.drain();
+    check.ok(times[1]! - times[0]! >= 900, "scheduler-queued work bypassed cooldown");
+    check.equal(state.batches.length, 5);
+    check.equal(scheduler.snapshot().activeTotal, 0);
+  });
+  await pendingCase("adaptive floor stops after three retries, not infinite or single-call fallback", async ({ state, backend }) => {
+    const notified: Error[] = [];
+    state.replyBatch = items => ({ status: 200, body: items.map(item => ({ id: item.id, error: limited })) });
+    const b = backend({ retryRpcThrottle: true, maxConcurrentBatches: 4, allowSingleCallFallback: true,
+      deadlineAtMs: Date.now() + 20_000, onRpcThrottle: error => { notified.push(error); } });
+    await check.rejects(b.call({ to: OK_A, data: "0xcafe" }), isRpcThrottleError);
+    await b.closeAndDrain();
+    check.equal(state.batches.length, 6); // at four, at two, then initial + three retries at one
+    check.equal(b.stats().throttleRetries, 5);
+    check.equal(notified.length, 1);
+    check.equal(state.singles.length, 0);
+    check.equal(b.stats().liveItems, 0);
+    check.equal(b.stats().activeTransports, 0);
+  });
+  for (const reason of ["caller", "deadline", "scope"] as const) {
+    await pendingCase(`adaptive ${reason} cancellation during backoff drains without another request`, async ({ state, backend }) => {
+      const controller = new AbortController();
+      state.replyBatch = () => ({ status: 429, body: { error: limited } });
+      const b = backend({ retryRpcThrottle: true, maxConcurrentBatches: 4 });
+      const work = observe(b.call({ to: OK_A, data: "0xcafe" }, reason === "deadline"
+        ? { deadlineAtMs: Date.now() + 300 } : { signal: controller.signal }));
+      await until(() => b.stats().throttleRetries === 1, "retry queued");
+      if (reason === "caller") controller.abort();
+      if (reason === "scope") await b.closeAndDrain();
+      aborted(await work, reason === "deadline" ? "deadline" : "signal");
+      await b.closeAndDrain();
+      check.equal(state.batches.length, 1);
+      check.equal(b.stats().liveItems, 0);
+      check.equal(b.stats().pendingItems, 0);
+    });
+  }
+  for (const revert of [{ code: 3 }, { code: "CALL_EXCEPTION" }, { code: -32000, data: "0x1234" }]) {
+    await pendingCase(`adaptive HTTP429 keeps nested revert exclusions ${revert.code}`, async ({ state, backend }) => {
+      let stops = 0;
+      const b = backend({ retryRpcThrottle: true, onRpcThrottle: () => { stops++; } });
+      state.replyBatch = items => state.batches.length === 1
+        ? { status: 429, body: { error: { ...revert, message: "execution reverted: account quota exhausted" } } }
+        : { status: 200, body: results(items) };
+      check.equal(await b.call({ to: OK_A, data: "0xcafe" }), RESULT);
+      check.equal(state.batches.length, 2);
+      check.equal(b.stats().throttleRetries, 1);
+      check.equal(stops, 0);
+    });
+  }
+  for (const kind of ["quota", "source", "revert"] as const) {
+    await pendingCase(`adaptive ${kind} is not retried`, async ({ state, backend }) => {
+      const b = backend({ retryRpcThrottle: true });
+      state.replyBatch = items => ({ status: kind === "quota" ? 429 : 200, body: kind === "quota"
+        ? { error: { code: 429, message: "Monthly compute units quota exhausted" } }
+        : items.map(item => ({ id: item.id, error: kind === "source" ? SOURCE_ERROR
+          : { code: 3, message: "execution reverted: HTTP429 quota exhausted", data: REVERT_DATA } })) });
+      await check.rejects(b.call({ to: OK_A, data: "0xcafe" }));
+      await b.closeAndDrain();
+      check.equal(state.batches.length, 1);
+      check.equal(b.stats().throttleRetries, 0);
+    });
+  }
+}
+
 async function run(): Promise<void> {
   const { server, state, port } = await startStub();
   const rpcUrl = `http://127.0.0.1:${port}`;
@@ -1190,6 +1328,7 @@ async function run(): Promise<void> {
       );
     }
     await pendingCallTests();
+    await adaptiveRetryTests();
   } finally {
     server.close();
     await once(server, "close").catch(() => undefined);

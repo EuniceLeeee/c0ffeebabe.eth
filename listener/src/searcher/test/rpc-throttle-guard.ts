@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { guardRpcThrottle, isRpcThrottleError } from "../rpc-throttle-guard.js";
+import { guardRpcThrottle, isRpcQuotaExhaustedError, isRpcThrottleError } from "../rpc-throttle-guard.js";
 
 const throttleFailures = [
   new Error("HTTP 429 Too Many Requests"),
@@ -107,3 +107,10 @@ for (let depth = 0; depth < 7; depth++) atBound = new Error("execution reverted"
 assert.equal(isRpcThrottleError(atBound), true);
 assert.equal(isRpcThrottleError(new Error("execution reverted", { cause: atBound })), false);
 console.log("RPC throttle guard: PASS");
+assert.equal(isRpcQuotaExhaustedError({ code: 429, message: "compute units per second capacity exceeded" }), false);
+assert.equal(isRpcQuotaExhaustedError({ code: 429, message: "monthly capacity exceeded" }), true);
+assert.equal(isRpcQuotaExhaustedError(new Error("wrapper", { cause: { code: 429, message: "account quota exhausted" } })), true);
+assert.equal(isRpcQuotaExhaustedError({ code: 3, message: "execution reverted: quota exhausted" }), false);
+assert.equal(isRpcQuotaExhaustedError(new Error("execution reverted: quota exhausted", {
+  cause: { code: 429, message: "compute units per second capacity exceeded" },
+})), false);

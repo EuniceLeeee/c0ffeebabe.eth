@@ -2042,6 +2042,7 @@ async function main(): Promise<void> {
           onRpcThrottle: (error) => blockScanRuntimeAbort.abort(error),
           scopeLabel: "effective mid", allowSingleCallFallback: false,
           maxBatchSize: 128, maxConcurrentBatches: 4,
+          retryRpcThrottle: true,
           transportScheduler: blockScanRethTransportScheduler },
       ) : undefined;
       try {

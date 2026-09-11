@@ -29,7 +29,7 @@ import {
 import type {
   RethTransportScheduler,
 } from "./reth-transport-scheduler.js";
-import { isRpcThrottleError } from "./rpc-throttle-guard.js";
+import { isRpcQuotaExhaustedError, isRpcThrottleError } from "./rpc-throttle-guard.js";
 
 /**
  * Pass-scoped source-hash pinned quote backend for block-scan producer and
@@ -69,6 +69,8 @@ export function isPassScopedExactStateBackend(
 export interface PinnedRethQuoteBackendOptions {
   readonly maxBatchSize?: number;
   readonly maxConcurrentBatches?: number;
+  /** Recover batch rate limits by halving concurrency; three retries at one. */
+  readonly retryRpcThrottle?: boolean;
   /** Physical lane used when acquiring the shared reth transport permit. */
   readonly transportLane?: "producer-bulk" | "exact";
   /** Human-readable scope included in diagnostics and abort errors. */
@@ -104,6 +106,10 @@ export class PinnedRethQuoteBackend
 {
   private readonly maxBatchSize: number;
   private readonly maxConcurrentBatches: number;
+  private currentConcurrentBatchLimit: number;
+  private retryNotBeforeMs = 0;
+  private retryWake: { promise: Promise<void>; cancel: () => void } | undefined;
+  private throttleRetries = 0;
   private readonly transportLane: "producer-bulk" | "exact";
   private readonly scopeLabel: string;
   private readonly allowSingleCallFallback: boolean;
@@ -163,6 +169,7 @@ export class PinnedRethQuoteBackend
      */
     this.maxBatchSize = options.maxBatchSize ?? 32;
     this.maxConcurrentBatches = options.maxConcurrentBatches ?? 8;
+    this.currentConcurrentBatchLimit = this.maxConcurrentBatches;
     this.transportLane = options.transportLane ?? "exact";
     this.scopeLabel = options.scopeLabel ?? "exact quote";
     this.allowSingleCallFallback = options.allowSingleCallFallback ??
@@ -501,6 +508,7 @@ export class PinnedRethQuoteBackend
       this.rejectItem(item, error);
     }
     this.pending.length = 0;
+    this.retryWake?.cancel();
   }
 
   async closeAndDrain(
@@ -528,7 +536,8 @@ export class PinnedRethQuoteBackend
       // Include the partial batch whose setImmediate flush has not run yet.
       // Callers stop issuing phase work before awaiting this boundary.
       this.pump();
-      const active = [...this.activeFlushes, ...this.activeTransports];
+      const active = [...this.activeFlushes, ...this.activeTransports,
+        ...(this.retryWake ? [this.retryWake.promise] : [])];
       if (active.length === 0) return;
       await Promise.allSettled(active);
     }
@@ -541,6 +550,7 @@ export class PinnedRethQuoteBackend
     maxBatchSize: number;
     maxConcurrentBatches: number;
     currentConcurrentBatchLimit: number;
+    throttleRetries: number;
     totalCalls: number;
     memoHits: number;
     batchesSent: number;
@@ -577,7 +587,8 @@ export class PinnedRethQuoteBackend
       allowSingleCallFallback: this.allowSingleCallFallback,
       maxBatchSize: this.maxBatchSize,
       maxConcurrentBatches: this.maxConcurrentBatches,
-      currentConcurrentBatchLimit: this.maxConcurrentBatches,
+      currentConcurrentBatchLimit: this.currentConcurrentBatchLimit,
+      throttleRetries: this.throttleRetries,
       totalCalls: this.totalCalls,
       memoHits: this.memoHits,
       batchesSent: this.batchesSent,
@@ -753,8 +764,45 @@ export class PinnedRethQuoteBackend
     });
   }
 
+  private queueThrottleRetry(items: PendingQuoteItem[], error: Error, sentLimit: number): boolean {
+    if (!this.options.retryRpcThrottle || !isRpcThrottleError(error) ||
+        isRpcQuotaExhaustedError(error) || this.closed) return false;
+    const live = items.filter(item => !item.settled);
+    if (!live.length) return true;
+    // Count only attempts actually sent at one, not sibling failures already
+    // in flight at the previous wider limit. Never extend caller deadlines.
+    if (sentLimit === 1 && live.some(item => (item.throttleRetriesAtOne ?? 0) >= 3)) return false;
+    const previous = this.currentConcurrentBatchLimit;
+    this.currentConcurrentBatchLimit = Math.max(1, Math.floor(previous / 2));
+    if (sentLimit === 1) for (const item of live) {
+      item.throttleRetriesAtOne = (item.throttleRetriesAtOne ?? 0) + 1;
+    }
+    const atOne = Math.max(...live.map(item => item.throttleRetriesAtOne ?? 0));
+    const delayMs = Math.min(4_000, 1_000 * 2 ** Math.max(0, atOne - 1));
+    this.retryNotBeforeMs = Math.max(this.retryNotBeforeMs, Date.now() + delayMs);
+    this.throttleRetries++;
+    this.pending.unshift(...live);
+    console.warn(`[pinned-reth-quote-backend] rpc-throttle-retry status=429 concurrency=${previous}->${this.currentConcurrentBatchLimit} retry_at_one=${atOne}/3 delay_ms=${delayMs} items=${live.length}`);
+    return true;
+  }
+
   private pump(): void {
-    const concurrencyLimit = this.maxConcurrentBatches;
+    if (!this.closed && this.pending.length && Date.now() < this.retryNotBeforeMs) {
+      if (!this.retryWake) {
+        let finish!: () => void;
+        const promise = new Promise<void>(resolve => { finish = resolve; });
+        const timer = setTimeout(() => {
+          this.retryWake = undefined;
+          finish();
+          this.pump();
+        }, this.retryNotBeforeMs - Date.now());
+        this.retryWake = { promise, cancel: () => {
+          clearTimeout(timer); this.retryWake = undefined; finish();
+        } };
+      }
+      return;
+    }
+    const concurrencyLimit = this.currentConcurrentBatchLimit;
     while (
       !this.closed &&
       this.pending.length > 0 &&
@@ -764,6 +812,12 @@ export class PinnedRethQuoteBackend
       const batch = this.pending.splice(0, this.maxBatchSize);
       const alive: PendingQuoteItem[] = [];
       for (const item of batch) {
+        if (item.settled) continue;
+        // One admitted batch is one physical request, even for mixed callers.
+        if (this.options.retryRpcThrottle && alive.length && item.kind !== alive[0]!.kind) {
+          this.pending.push(item);
+          continue;
+        }
         const deadline = item.control.deadlineAtMs;
         if (deadline !== undefined && deadline <= now) {
           this.rejectItem(
@@ -795,7 +849,7 @@ export class PinnedRethQuoteBackend
         this.peakInFlightBatches,
         this.inFlightBatches,
       );
-      const task = this.flushBatch(alive).finally(() => {
+      const task = this.flushBatch(alive, concurrencyLimit).finally(() => {
         this.inFlightBatches--;
         this.activeFlushes.delete(task);
         this.scheduleFlush();
@@ -808,15 +862,15 @@ export class PinnedRethQuoteBackend
     }
   }
 
-  private async flushBatch(alive: PendingQuoteItem[]): Promise<void> {
+  private async flushBatch(alive: PendingQuoteItem[], sentLimit: number): Promise<void> {
     const calls = alive.filter((item) => item.kind === "eth_call");
     const simulations = alive.filter(
       (item) => item.kind === "eth_simulateV1",
     );
     await Promise.all([
-      ...(calls.length > 0 ? [this.sendCallBatch(calls)] : []),
+      ...(calls.length > 0 ? [this.sendCallBatch(calls, sentLimit)] : []),
       ...(simulations.length > 0
-        ? [this.sendSimulationBatch(simulations)]
+        ? [this.sendSimulationBatch(simulations, sentLimit)]
         : []),
     ]);
   }
@@ -824,24 +878,35 @@ export class PinnedRethQuoteBackend
   private async runTransport(
     signal: AbortSignal,
     work: () => Promise<JsonRpcHttpResponse>,
+    retryThrottle?: (error: Error) => boolean,
   ): Promise<JsonRpcHttpResponse> {
     const checkedWork = async (): Promise<JsonRpcHttpResponse> => {
       try {
         const response = await work();
         if (response.statusCode === 429) {
-          const error = new Error("JSON-RPC HTTP 429");
+          // Keep structured error codes/data: contract revert text inside an
+          // HTTP 429 body is not proof that the account allocation is spent.
+          const envelopes = Array.isArray(response.body) ? response.body : [response.body];
+          const quotaExhausted = envelopes.some(envelope => envelope && typeof envelope === "object" &&
+            isRpcQuotaExhaustedError((envelope as { error?: unknown }).error));
+          const error = new Error("JSON-RPC HTTP 429", quotaExhausted
+            ? { cause: new Error("account quota exhausted") } : undefined);
           (error as Error & { statusCode: number }).statusCode = 429;
-          this.abortForRpcFailure(error);
+          throw error;
         }
         // Singles and whole-batch RPC rejections use an object envelope.
         if (response.statusCode >= 200 && response.statusCode < 300 && !Array.isArray(response.body)) {
           const body = response.body as { error?: unknown } | null;
           if (body?.error != null) {
-            this.abortForRpcFailure(rpcItemError({ to: this.sourceBlockHash }, body.error));
+            const error = rpcItemError({ to: this.sourceBlockHash }, body.error);
+            if (isRpcThrottleError(error)) throw error;
+            this.abortForRpcFailure(error);
           }
         }
         return response;
       } catch (error) {
+        if (error instanceof QueuedThrottleRetry) throw error;
+        if (error instanceof Error && retryThrottle?.(error)) throw new QueuedThrottleRetry();
         if (error instanceof Error) this.abortForRpcFailure(error);
         throw error;
       }
@@ -876,7 +941,7 @@ export class PinnedRethQuoteBackend
     }
   }
 
-  private async sendCallBatch(items: PendingQuoteItem[]): Promise<void> {
+  private async sendCallBatch(items: PendingQuoteItem[], sentLimit: number): Promise<void> {
     const payloads = items.map((item) => ({
       jsonrpc: "2.0",
       id: item.id,
@@ -890,11 +955,12 @@ export class PinnedRethQuoteBackend
         this.blockSpecifier,
       ],
     }));
-    await this.sendBatchPayloads(payloads, items, "eth_call");
+    await this.sendBatchPayloads(payloads, items, "eth_call", sentLimit);
   }
 
   private async sendSimulationBatch(
     items: PendingQuoteItem[],
+    sentLimit: number,
   ): Promise<void> {
     const payloads = items.map((item) => ({
       jsonrpc: "2.0",
@@ -902,13 +968,14 @@ export class PinnedRethQuoteBackend
       method: "eth_simulateV1",
       params: [item.simulation, this.blockSpecifier],
     }));
-    await this.sendBatchPayloads(payloads, items, "eth_simulateV1");
+    await this.sendBatchPayloads(payloads, items, "eth_simulateV1", sentLimit);
   }
 
   private async sendBatchPayloads(
     payloads: unknown[],
     items: PendingQuoteItem[],
     method: string,
+    sentLimit: number,
   ): Promise<void> {
     if (this.closed || this.scopeController.signal.aborted) {
       const error = this.scopeAbortError(method);
@@ -917,6 +984,7 @@ export class PinnedRethQuoteBackend
     }
 
     const byId = new Map(items.map((item) => [item.id, item]));
+    const retryIds = new Set<number>();
     const controller = new AbortController();
     const onScopeAbort = (): void => {
       if (!controller.signal.aborted) {
@@ -967,6 +1035,14 @@ export class PinnedRethQuoteBackend
     try {
       if (controller.signal.aborted) throw controller.signal.reason;
       response = await this.runTransport(controller.signal, async () => {
+        // A shared permit may arrive after another batch lowered our limit.
+        // This envelope has not reached the wire: return it to the same pump,
+        // rather than letting pre-admitted work bypass the new limit/backoff.
+        if (this.options.retryRpcThrottle &&
+            (Date.now() < this.retryNotBeforeMs || sentLimit > this.currentConcurrentBatchLimit)) {
+          this.pending.unshift(...items.filter(item => !item.settled));
+          throw new QueuedThrottleRetry();
+        }
         this.batchesSent++;
         this.batchedItems += items.length;
         this.maxBatchItemsSent = Math.max(
@@ -977,18 +1053,28 @@ export class PinnedRethQuoteBackend
         // Inspect before releasing the shared permit or settling any sibling.
         // Otherwise the scheduler can dispatch queued RPCs on the dead source.
         if (response.statusCode >= 200 && response.statusCode < 300 && Array.isArray(response.body)) {
+          const throttled = new Map<PendingQuoteItem, Error>();
           for (const entry of response.body) {
             if (!entry || typeof entry !== "object") continue;
             const record = entry as { id?: unknown; error?: unknown };
             const item = typeof record.id === "number" ? byId.get(record.id) : undefined;
             if (item && record.error != null) {
-              this.abortForRpcFailure(rpcItemError({ to: item.req.to }, record.error));
+              const error = rpcItemError({ to: item.req.to }, record.error);
+              if (this.options.retryRpcThrottle && isRpcThrottleError(error) && !isRpcQuotaExhaustedError(error)) {
+                throttled.set(item, error);
+              } else this.abortForRpcFailure(error);
             }
+          }
+          if (throttled.size) {
+            const error = throttled.values().next().value!;
+            if (!this.queueThrottleRetry([...throttled.keys()], error, sentLimit)) this.abortForRpcFailure(error);
+            for (const item of throttled.keys()) retryIds.add(item.id);
           }
         }
         return response;
-      });
+      }, error => this.queueThrottleRetry(items, error, sentLimit));
     } catch (transportError) {
+      if (transportError instanceof QueuedThrottleRetry) return;
       /*
        * Pass/head/deadline abort must never fall back to single calls:
        * cancelling one old batch would immediately manufacture N old
@@ -1057,6 +1143,7 @@ export class PinnedRethQuoteBackend
       const item = byId.get(record.id);
       if (!item || settledIds.has(record.id)) continue;
       settledIds.add(record.id);
+      if (retryIds.has(record.id)) continue;
 
       if (record.error !== undefined && record.error !== null) {
         this.rejectItem(
@@ -1900,7 +1987,10 @@ function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+class QueuedThrottleRetry extends Error {}
+
 interface PendingQuoteItem {
+  throttleRetriesAtOne?: number;
   readonly id: number;
   readonly kind: "eth_call" | "eth_simulateV1";
   readonly control: StateCallControl;
