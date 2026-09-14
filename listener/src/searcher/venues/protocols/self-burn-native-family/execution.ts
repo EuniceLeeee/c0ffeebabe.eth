@@ -19,7 +19,11 @@ export const selfBurnNativeExecution = {
     if (
       input.amountIn <= 0n ||
       input.quotedAmountOut <= 0n ||
-      evidence.kind !== "self-burn-native-effect-delta" ||
+      evidence.kind !== "self-burn-native-fee-quote" ||
+      evidence.fees === null ||
+      evidence.fee < 0n ||
+      evidence.fee > input.amountIn ||
+      evidence.amountOut !== input.amountIn - evidence.fee ||
       evidence.amountIn !== input.amountIn ||
       evidence.amountOut !== input.quotedAmountOut ||
       !sameAddress(evidence.token, input.descriptor.token) ||

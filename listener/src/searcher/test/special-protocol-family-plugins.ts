@@ -20,6 +20,7 @@ import {
   ERC4626_SILO_INTERFACE,
   ERC4626_SILO_PAYOUT_INTERFACE,
   erc4626SiloRedeemSimulation,
+  validateErc4626SiloRedeemEffects,
 } from "../venues/protocols/erc4626-silo-redeem-family/shared.js";
 import { erc4626SiloRedeemExact } from "../venues/protocols/erc4626-silo-redeem-family/exact.js";
 import {
@@ -33,6 +34,7 @@ import {
 import {
   ETHERTOKEN_NATIVE_INTERFACE,
   etherTokenWithdrawalSimulation,
+  validateEtherTokenWithdrawal,
 } from "../venues/protocols/ethertoken-native-redeem-family/shared.js";
 import { etherTokenNativeRedeemExact } from "../venues/protocols/ethertoken-native-redeem-family/exact.js";
 import {
@@ -71,9 +73,14 @@ import {
 } from "../venues/protocols/self-burn-native-family-plugin.js";
 import {
   SELF_BURN_NATIVE_TOKEN_INTERFACE,
+  SELF_BURN_NATIVE_PRICING_ACTOR,
+  SELF_BURN_NATIVE_PRICING_ACTOR_EVIDENCE_ID,
   selfBurnNativeSimulation,
+  validateSelfBurnNativeEffects,
 } from "../venues/protocols/self-burn-native-family/shared.js";
 import { selfBurnNativeExact } from "../venues/protocols/self-burn-native-family/exact.js";
+import { selfBurnNativePricing } from "../venues/protocols/self-burn-native-family/pricing.js";
+import { assertSource, returnedResult } from "../venues/protocols/standard-family/common.js";
 import {
   SELF_BURN_NATIVE_FAMILY_ID,
   SELF_BURN_NATIVE_LINEAGE_ID,
@@ -101,6 +108,7 @@ assert.equal(new Set(familyIds).size, familyIds.length);
 
 verifyDiscoveryBoundaries();
 verifyMetronomeHgUsdcDependentExact();
+await verifySelfBurnNativeFeeQuote();
 await verifySelfBurnNativeEffects();
 await verifyEtherTokenNativeEffects();
 await verifySiloDependentCurrentAndEffects();
@@ -300,6 +308,126 @@ function verifyMetronomeHgUsdcDependentExact(): void {
   }]);
 }
 
+async function verifySelfBurnNativeFeeQuote(): Promise<void> {
+  const identity: SelfBurnNativeIdentity = { familyId: SELF_BURN_NATIVE_FAMILY_ID,
+    lineageId: SELF_BURN_NATIVE_LINEAGE_ID, subject: tokenA, provenance: [], token: tokenA };
+  const descriptor = selfBurnNativeStrictFamilyPlugin.instance.finalizeDescriptor({ identity,
+    draft: selfBurnNativeStrictFamilyPlugin.instance.compileDraft(identity), staticEvidence: undefined, sharedBindings: [] });
+  assert(!descriptor.runtimeRequirements.some(requirement => (requirement.kind as string) === "quote-completion"),
+    "fee-read quotes must not require execution-delta quote completion");
+  assert(descriptor.runtimeRequirements.some(requirement => requirement.kind === "effect-observation"),
+    "identity and execution still require effect observation");
+  const [route] = selfBurnNativeStrictFamilyPlugin.routes.project({ descriptor });
+  const input = { descriptor, route, amountIn: 137n, source, executor: actor, runtimeEvidence: [] };
+  const method = selfBurnNativeExact.methods().find(m => m.kind === "request-program");
+  assert(method && method.kind === "request-program");
+  assert(!("chainAmountQuote" in method) || method.chainAmountQuote !== true, "getter-based local output must not claim chain amount quoting");
+  assert.equal(method.id, "source-fee-quote");
+  const program = method.program;
+  const names = ["wrapFeeParts", "wrapFeeRate", "wrapFeeMin", "wrapFeeMax"];
+  const abi = new ethers.Interface(names.map(name => `function ${name}() view returns (uint256)`));
+  const results = (values: readonly bigint[]) => names.map((name, i) => ok(`exact-${name}`, abi.encodeFunctionResult(name, [values[i]])));
+  const decode = (amountIn: bigint, values: readonly bigint[]) => program.decode({ programInput: { ...input, amountIn },
+    initialResults: amountIn === 0n ? [] : results(values), dependentEvidence: [] });
+  const max = (1n << 256n) - 1n;
+  for (const [amountIn, fees, expected] of [
+    [137n, [1000n, 13n, 0n, max], 136n],
+    [100n, [1000n, 0n, 50n, 1n], 100n],
+    [100n, [1000n, 100n, 20n, 40n], 80n],
+    [1000n, [1000n, 100n, 20n, 40n], 960n],
+    [100n, [1000n, 100n, 50n, 1n], 50n], // min branch does not also apply max
+    [100n, [1000n, 100n, 10n, 1n], 99n], // equal min enters max branch
+    [5n, [1000n, 100n, 20n, 40n], 0n],
+    [100n, [1000n, 100n, 0n, 0n], 100n],
+    [12306616935116519n, [1000000n, 1234n, 0n, max], 12291430569818586n],
+    [max, [1n, 1n, 0n, max], 0n],
+  ] as const) {
+    const quote = decode(amountIn, fees);
+    assert.equal(quote.amountOut, expected);
+    assert.equal(quote.evidence.kind, "self-burn-native-fee-quote");
+    assert.equal(quote.evidence.amountIn, amountIn); assert.equal(quote.evidence.amountOut, expected);
+    assert.equal(quote.evidence.executor, actor); assert.deepEqual(quote.evidence.source, source);
+    assert(Object.isFrozen(quote.evidence) && Object.isFrozen(quote.evidence.fees) && Object.isFrozen(quote.evidence.source));
+    assert.notEqual(quote.evidence.source, source, "evidence detaches source metadata");
+    assert(!("effectsHash" in quote.evidence));
+    assert.deepEqual(decode(amountIn, fees), quote, "repeat has no mutable quote state");
+    if (expected > 0n) {
+      const build = { descriptor, route, amountIn, quotedAmountOut: expected, minAmountOut: expected,
+        exactEvidence: quote.evidence, executor: actor, runtimeEvidence: [] };
+      assert.deepEqual(selfBurnNativeStrictFamilyPlugin.execution.buildFragment(build).nodes.map(n => [n.adapterId, n.amount]),
+        [["self-burn-native-redeem", amountIn], ["weth-deposit-value", expected]]);
+      for (const exactEvidence of [{ ...quote.evidence, amountIn: amountIn + 1n },
+        { ...quote.evidence, amountOut: expected + 1n }, { ...quote.evidence, token: tokenB },
+        { ...quote.evidence, executor: router }, { ...quote.evidence, bindingFingerprint: "wrong" },
+        { ...quote.evidence, fee: quote.evidence.fee + 1n }, { ...quote.evidence, fees: null },
+        { ...quote.evidence, kind: "self-burn-native-effect-delta" }]) {
+        assert.throws(() => selfBurnNativeStrictFamilyPlugin.execution.buildFragment({ ...build, exactEvidence } as never), /incompatible/);
+      }
+    } else {
+      assert.throws(() => selfBurnNativeStrictFamilyPlugin.execution.buildFragment({ descriptor, route, amountIn,
+        quotedAmountOut: 0n, minAmountOut: 0n, exactEvidence: quote.evidence, executor: actor, runtimeEvidence: [] }), /incompatible/);
+    }
+  }
+  const requests = program.buildRequests(input);
+  assert.equal(requests.length, 4); assert.deepEqual(program.requirements(input), { transports: ["eth-call"] });
+  for (const [i, r] of requests.entries()) {
+    assert(r.kind === "eth-call"); assert.equal(r.to, tokenA); assert.equal(r.completion, "return-data");
+    assert.equal(r.data, abi.encodeFunctionData(names[i])); assert.equal(r.caller, undefined);
+  }
+  for (const amountIn of [-1n, max + 1n]) {
+    assert.throws(() => program.requirements({ ...input, amountIn }), /range|negative/);
+    assert.throws(() => program.buildRequests({ ...input, amountIn }), /range|negative/);
+    assert.throws(() => decode(amountIn, [1000n, 1n, 0n, max]), /range|negative/);
+  }
+  assert.throws(() => decode(max, [1000n, 2n, 0n, 0n]), /overflow/);
+  assert.throws(() => decode(1n, [0n, 0n, 0n, 0n]), /parts|fee/i);
+  assert.throws(() => decode(1n, [100n, 101n, 0n, 0n]), /rate|fee/i);
+  const valid = results([1000n, 13n, 0n, max]);
+  const decodeResults = (initialResults: readonly AdapterRequestResult[]) => program.decode({ programInput: input, initialResults, dependentEvidence: [] });
+  for (const invalid of [[], valid.slice(1), [...valid, valid[0]], [valid[0], valid[0], ...valid.slice(2)],
+    [{ ...valid[0], id: "unknown" }, ...valid.slice(1)]]) assert.throws(() => decodeResults(invalid), /missing|ambiguous|invalid/i);
+  for (const index of [0, 1, 2, 3]) {
+    for (const data of ["0x", "0x01", "not-hex", `0x${"ff".repeat(33)}`, `${valid[index].data}00`]) {
+      assert.throws(() => decodeResults(valid.map((r, i) => i === index ? { ...r, data } : r)));
+    }
+    for (const changed of [{ ...source, number: source.number + 1 }, { ...source, hash: `0x${"11".repeat(32)}` }, { ...source, generation: source.generation + 1 }]) {
+      assert.throws(() => decodeResults(valid.map((r, i) => i === index ? { ...r, source: changed } : r)), /source/);
+    }
+    assert.throws(() => decodeResults(valid.map((r, i) => i === index ? { ...r, completion: "reverted-as-declared" } : r)), /return/);
+    for (const failure of ["rpc", "deadline", "aborted", "resource-limited"] as const) {
+      assert.throws(() => decodeResults(valid.map((r, i) => i === index ? { id: r.id, ok: false, source, failure } : r)), /unresolved/);
+    }
+  }
+  const zero = { ...input, amountIn: 0n };
+  assert.deepEqual(program.requirements(zero), { transports: [] }); assert.deepEqual(program.buildRequests(zero), []);
+  const zeroQuote = program.decode({ programInput: zero, initialResults: [], dependentEvidence: [] });
+  assert.equal(zeroQuote.amountOut, 0n); assert.equal(zeroQuote.evidence.fees, null);
+  assert.throws(() => selfBurnNativeStrictFamilyPlugin.execution.buildFragment({ descriptor, route, amountIn: 0n,
+    quotedAmountOut: 0n, minAmountOut: 0n, exactEvidence: zeroQuote.evidence, executor: actor, runtimeEvidence: [] }), /incompatible/);
+  const local = selfBurnNativeExact.methods()[0]; assert(local.kind === "local");
+  assert.equal(local.quote(zero).status, "quoted"); assert.equal(local.quote(input).status, "not-applicable");
+  assert.throws(() => program.decode({ programInput: zero, initialResults: valid, dependentEvidence: [] }), /unexpected/);
+  assert.throws(() => program.buildRequests({ ...input, route: { ...route, tokenOut: tokenB } }), /incompatible/);
+
+  let calls = 0, simulations = 0;
+  const runtime = createStrictCentralAdapterRuntime({ executor: actor,
+    simulator: { async simulate() { simulations++; throw new Error("amount quote must not simulate"); } },
+    provider: { async call(tx, block) { calls++; assert.equal(block, source.number); assert.equal(tx.to, tokenA);
+      const index = names.findIndex(name => abi.encodeFunctionData(name) === tx.data); assert(index >= 0); return valid[index].data; },
+      async getCode() { throw new Error("no model recognition"); }, async getStorage() { throw new Error("no model recognition"); } },
+    generationFence: { assertCurrent(g, s) { assert.equal(g, source.generation); assert.deepEqual(s, source); } } });
+  assert.equal(calls, 0, "local zero never dispatches an empty central batch");
+  for (const amountIn of [137n, 137n, 12306616935116519n]) {
+    const work = await executeAdapterWork({ runtime, intent: { stage: "exact-refine", familyId: SELF_BURN_NATIVE_FAMILY_ID,
+      instanceKey: descriptor.instanceKey, routeKey: route.routeKey, source, generation: source.generation, programInput: { ...input, amountIn },
+      program: { requirements: program.requirements, buildRequests: program.buildRequests,
+        decode({ programInput, results }) { return program.decode({ programInput, initialResults: results, dependentEvidence: [] }); } } } });
+    assert.equal(work.status, "resolved", JSON.stringify(work, (_, value) => typeof value === "bigint" ? value.toString() : value)); assert(work.status === "resolved");
+    assert.equal(work.executed.evidence.amountOut, decode(amountIn, [1000n, 13n, 0n, max]).amountOut);
+  }
+  assert.equal(calls, 12); assert.equal(simulations, 0);
+}
+
 async function verifySelfBurnNativeEffects(): Promise<void> {
   const identity: SelfBurnNativeIdentity = Object.freeze({
     familyId: SELF_BURN_NATIVE_FAMILY_ID,
@@ -316,6 +444,23 @@ async function verifySelfBurnNativeEffects(): Promise<void> {
       sharedBindings: [],
     });
   const [route] = selfBurnNativeStrictFamilyPlugin.routes.project({ descriptor });
+  const draft = selfBurnNativePricing.compileDraft({ descriptor, stateKey: descriptor.instanceKey, routes: [route] });
+  const pricingDescriptor = selfBurnNativePricing.finalizePricingDescriptor({ draft, sharedBindings: [],
+    staticEvidence: selfBurnNativePricing.staticEvidence.decode({ programInput: draft,
+      results: [ok("static-token-decimals", SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionResult("decimals", [18]))] }) });
+  const pricingRequests = selfBurnNativePricing.current.buildRequests({ descriptor: pricingDescriptor, routes: [route], source });
+  assert.equal(pricingRequests.length, 4, "raw pricing reads fees once, not four redemption simulations");
+  const feeNames = ["wrapFeeParts", "wrapFeeRate", "wrapFeeMin", "wrapFeeMax"];
+  const feeAbi = new ethers.Interface(feeNames.map(name => `function ${name}() view returns (uint256)`));
+  for (const [index, request] of pricingRequests.entries()) {
+    assert(request.kind === "eth-call");
+    assert.equal(request.to, tokenA);
+    assert.equal(request.data, feeAbi.encodeFunctionData(feeNames[index]));
+  }
+  const pricingSnapshot = selfBurnNativePricing.current.decodeSnapshot({ descriptor: pricingDescriptor, dependentEvidence: [],
+    initialResults: pricingRequests.map((request, index) => ok(request.id,
+      feeAbi.encodeFunctionResult(feeNames[index], [[1000000n, 10000n, 0n, (1n << 256n)-1n][index]]))) });
+  assert.equal(pricingSnapshot.amountOut, pricingDescriptor.probeAmounts[0] * 99n / 100n);
   const input = Object.freeze({
     descriptor,
     route,
@@ -324,17 +469,23 @@ async function verifySelfBurnNativeEffects(): Promise<void> {
     executor: actor,
     runtimeEvidence: Object.freeze([]),
   });
-  const result = ok(
-    "exact-self-burn",
-    SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionResult("transfer", [true]),
-    nativeEffects(tokenA, actor, 100n, 87n),
-  );
-  const method = selfBurnNativeExact.methods().find(m => m.kind === "request-program");
-  assert(method && method.kind === "request-program");
-  assert("chainAmountQuote" in method && method.chainAmountQuote === true,
-    "self-burn's existing effect method must explicitly declare chain amount quoting");
-  assert(!("reusePolicy" in method), "chain provenance is not a cross-block carry policy");
-  const selfBurnProgram = method.program;
+  // Behavior probes remain simulations for identity/raw pricing. They no
+  // longer provide Exact fee-quote evidence or execution authority.
+  type BehaviorInput = Omit<typeof input, "amountIn"> & { readonly amountIn: bigint };
+  const selfBurnProgram = {
+    requirements: () => ({ transports: ["effect-delta-simulation" as const], caller: "executor" as const,
+      effects: ["return-data", "token-delta", "native-delta", "total-supply-delta", "logs"] as const }),
+    buildRequests: (programInput: BehaviorInput) => [selfBurnNativeSimulation({ id: "behavior-self-burn",
+      token: programInput.descriptor.token, actor: programInput.executor, callerRef: { kind: "executor" },
+      amountIn: programInput.amountIn })],
+    decode: ({ programInput, initialResults }: { programInput: BehaviorInput;
+      initialResults: readonly AdapterRequestResult[]; dependentEvidence: readonly unknown[] }) => {
+      const result = returnedResult(initialResults, "behavior-self-burn");
+      assertSource(result.source, programInput.source);
+      return { amountOut: validateSelfBurnNativeEffects({ result, token: programInput.descriptor.token,
+        actor: programInput.executor, amountIn: programInput.amountIn }) };
+    },
+  };
   for (const [amountIn, amountOut] of [[1n, 7n], [137n, 89n],
     [10n ** 18n, 10n ** 17n + 19n], [(1n << 128n) + 37n, 321n]]) {
     const programInput = Object.freeze({ ...input, amountIn });
@@ -356,32 +507,14 @@ async function verifySelfBurnNativeEffects(): Promise<void> {
     assert.equal(args[0], tokenA);
     assert.equal(BigInt(args[1]), amountIn);
     const effects = nativeEffects(tokenA, actor, amountIn, amountOut);
-    const result = ok("exact-self-burn", SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionResult("transfer", [true]), effects);
+    const result = ok("behavior-self-burn", SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionResult("transfer", [true]), effects);
     const decode = (item: AdapterRequestResult) => selfBurnProgram.decode({
       programInput, initialResults: [item], dependentEvidence: [],
     });
     const quote = decode(result);
     assert.equal(quote.amountOut, amountOut, "native payout is observed, not 1:1 or a rescaled probe");
-    assert.equal(quote.evidence.amountIn, amountIn); assert.equal(quote.evidence.amountOut, amountOut);
-    assert.equal(quote.evidence.executor, actor); assert.equal(quote.evidence.token, tokenA);
-    assert.deepEqual(quote.evidence.source, source);
-    assert.equal(quote.evidence.bindingFingerprint, route.bindingRef.fingerprint);
     const changedPayout = decode({ ...result, effects: nativeEffects(tokenA, actor, amountIn, amountOut + 1n) });
     assert.equal(changedPayout.amountOut, amountOut + 1n, "any positive payout retains the variable-rate semantics");
-    assert.notEqual(changedPayout.evidence.effectsHash, quote.evidence.effectsHash);
-    const executionInput = { descriptor, route, amountIn, quotedAmountOut: quote.amountOut,
-      minAmountOut: quote.amountOut, exactEvidence: quote.evidence, executor: actor, runtimeEvidence: [] };
-    const fragment = selfBurnNativeStrictFamilyPlugin.execution.buildFragment(executionInput);
-    assert.deepEqual(fragment.nodes.map(node => [node.adapterId, node.target, node.amount]), [
-      ["self-burn-native-redeem", tokenA, amountIn], ["weth-deposit-value", ADDR.WETH, amountOut],
-    ]);
-    for (const exactEvidence of [
-      { ...quote.evidence, amountIn: amountIn + 1n }, { ...quote.evidence, amountOut: amountOut + 1n },
-      { ...quote.evidence, token: tokenB }, { ...quote.evidence, executor: router },
-      { ...quote.evidence, bindingFingerprint: "wrong-binding" },
-    ]) assert.throws(() => selfBurnNativeStrictFamilyPlugin.execution.buildFragment({
-      ...executionInput, exactEvidence,
-    }), /incompatible exact evidence/);
     const wrongEffects: ObservedEffects[] = [
       {}, { ...effects, tokenDeltas: [] },
       { ...effects, tokenDeltas: [{ token: tokenA, account: actor, delta: -amountIn + 1n }] },
@@ -404,43 +537,10 @@ async function verifySelfBurnNativeEffects(): Promise<void> {
     for (const data of ["0x", "0x01", "not-hex"]) assert.throws(() => decode({ ...result, data }));
     assert.throws(() => selfBurnProgram.decode({ programInput, initialResults: [], dependentEvidence: [] }), /missing/);
     for (const failure of ["rpc", "deadline", "aborted", "resource-limited"] as const) {
-      assert.throws(() => decode({ id: "exact-self-burn", ok: false, source, failure }), /unresolved/);
+      assert.throws(() => decode({ id: "behavior-self-burn", ok: false, source, failure }), /unresolved/);
     }
   }
-  const decoded = selfBurnProgram.decode({
-    programInput: input,
-    initialResults: [result],
-    dependentEvidence: [],
-  });
-  assert.equal(decoded.amountOut, 87n, "self-burn payout may be non-1:1");
-  const fragment = selfBurnNativeStrictFamilyPlugin.execution.buildFragment({
-    descriptor,
-    route,
-    amountIn: 100n,
-    quotedAmountOut: 87n,
-    minAmountOut: 87n,
-    exactEvidence: decoded.evidence,
-    executor: actor,
-    runtimeEvidence: [],
-  });
-  assert.deepEqual(
-    fragment.nodes.map((node) => node.adapterId),
-    ["self-burn-native-redeem", "weth-deposit-value"],
-  );
-  assert.throws(() => selfBurnProgram.decode({
-    programInput: input,
-    initialResults: [ok(
-      "exact-self-burn",
-      SELF_BURN_NATIVE_TOKEN_INTERFACE.encodeFunctionResult("transfer", [true]),
-      {
-        ...nativeEffects(tokenA, actor, 100n, 87n),
-        totalSupplyDeltas: [{ token: tokenA, delta: -99n }],
-      },
-    )],
-    dependentEvidence: [],
-  }), /effect invariants/);
-
-  // Identity, pricing and Exact share this builder. The observation must keep
+  // Identity and raw pricing share this builder. The observation must keep
   // the supplied symbolic caller rather than materialize a probe's address.
   for (const callerRef of [{ kind: "executor" },
     { kind: "verified-actor", evidenceId: "self-burn-test-probe" }] satisfies CallerRef[]) {
@@ -450,17 +550,8 @@ async function verifySelfBurnNativeEffects(): Promise<void> {
     assert.equal(request.call.caller, callerRef); assert.equal(request.overrideIntent.caller, callerRef);
     assert.equal(request.observeTokenBalances?.[0].account, callerRef);
   }
-  const zero = { ...input, amountIn: 0n };
-  assert.deepEqual(selfBurnProgram.requirements(zero), { transports: [] });
-  assert.deepEqual(selfBurnProgram.buildRequests(zero), []);
-  assert.equal(selfBurnProgram.decode({ programInput: zero, initialResults: [], dependentEvidence: [] }).amountOut, 0n);
-  const local = selfBurnNativeExact.methods()[0]; assert(local.kind === "local");
-  assert.equal(local.quote(zero).status, "quoted"); assert.equal(local.quote(input).status, "not-applicable");
-  assert.throws(() => selfBurnProgram.buildRequests({ ...input, amountIn: -1n }), /negative/);
-  assert.throws(() => selfBurnProgram.buildRequests({ ...input, route: { ...route, tokenOut: tokenB } }), /incompatible/);
-
   // Real central issuance and typed transport, with a local injected lease and
-  // no RPC/child. Exact burns 137 of the original token and observes 89 native;
+  // no RPC/child. A behavior probe burns 137 and observes 89 native;
   // executor, transaction origin and identity probe are distinct authorities.
   const pin = { chainId: 1, blockHash: source.hash, stateRoot: `0x${"16".repeat(32)}` };
   const rpcUrl = "http://127.0.0.1:1/not-opened-self-burn-test", origin = router, probe = tokenC;
@@ -517,7 +608,7 @@ async function verifySelfBurnNativeEffects(): Promise<void> {
           getStorage: async () => { fallbackReads++; throw new Error("unexpected storage read"); } },
         generationFence: { assertCurrent(g, s) { assert.equal(g, currentGeneration); assert.deepEqual(s, source); } } });
       const work = await executeAdapterWork({ runtime, control: { signal: controller.signal, deadlineAtMs }, intent: {
-        stage: "exact-refine", familyId: SELF_BURN_NATIVE_FAMILY_ID, instanceKey: descriptor.instanceKey, routeKey: route.routeKey,
+        stage: "pricing-current", familyId: SELF_BURN_NATIVE_FAMILY_ID, instanceKey: descriptor.instanceKey, routeKey: route.routeKey,
         source, generation: source.generation, programInput: { ...input, amountIn },
         program: { requirements: selfBurnProgram.requirements, buildRequests: selfBurnProgram.buildRequests,
           decode({ programInput, results }) { decoded++; return selfBurnProgram.decode({ programInput, initialResults: results, dependentEvidence: [] }); } },
@@ -525,12 +616,7 @@ async function verifySelfBurnNativeEffects(): Promise<void> {
       if (mode === "success") {
         assert.equal(work.status, "resolved"); assert(work.status === "resolved");
         const quote = work.executed.evidence;
-        assert.equal(quote.amountOut, amountOut); assert.equal(quote.evidence.amountIn, amountIn);
-        assert.deepEqual(quote.evidence.source, source);
-        const fragment = selfBurnNativeStrictFamilyPlugin.execution.buildFragment({ descriptor, route,
-          amountIn, quotedAmountOut: quote.amountOut, minAmountOut: quote.amountOut,
-          exactEvidence: quote.evidence, executor: actor, runtimeEvidence: [] });
-        assert.deepEqual(fragment.nodes.map(node => node.amount), [amountIn, amountOut]);
+        assert.equal(quote.amountOut, amountOut);
         assert.equal(decoded, 1);
       } else {
         assert.equal(work.status, "unresolved", mode);
@@ -572,12 +658,31 @@ async function verifyEtherTokenNativeEffects(): Promise<void> {
     executor: actor,
     runtimeEvidence: Object.freeze([]),
   });
-  const method = etherTokenNativeRedeemExact.methods().find(m => m.kind === "request-program");
-  assert(method && method.kind === "request-program");
-  assert("chainAmountQuote" in method && method.chainAmountQuote === true,
-    "EtherToken's existing effect method must explicitly declare chain amount quoting");
-  assert(!("reusePolicy" in method), "chain provenance is not a cross-block carry policy");
-  const etherTokenProgram = method.program;
+  const method = etherTokenNativeRedeemExact.methods()[0];
+  assert(method.kind === "local");
+  assert.equal(method.id, "identity-proven-one-to-one");
+  assert(!("chainAmountQuote" in method), "local formula is not chain-returned amountOut");
+  type ProofInput = Omit<typeof input, "amountIn"> & { readonly amountIn: bigint };
+  // Preserve the identity simulation/transport regression independently of the
+  // production local quote: only the test constructs an active proof program.
+  const etherTokenProgram = {
+    requirements: (programInput: ProofInput) => ({ transports: programInput.amountIn === 0n ? [] : ["effect-delta-simulation" as const],
+      ...(programInput.amountIn === 0n ? {} : { caller: "executor" as const,
+        effects: ["return-data", "token-delta", "native-delta", "total-supply-delta", "logs"] as const }) }),
+    buildRequests(programInput: ProofInput) {
+      method.quote(programInput);
+      return programInput.amountIn === 0n ? [] : [etherTokenWithdrawalSimulation({ id: "exact-withdraw", token: tokenB,
+        actor, callerRef: { kind: "executor" }, amountIn: programInput.amountIn })];
+    },
+    decode({ programInput, initialResults }: { programInput: ProofInput; initialResults: readonly AdapterRequestResult[]; dependentEvidence: readonly unknown[] }) {
+      if (programInput.amountIn > 0n) {
+        const result = returnedResult(initialResults, "exact-withdraw");
+        assertSource(result.source, programInput.source);
+        assert.equal(validateEtherTokenWithdrawal({ result, token: tokenB, actor, amountIn: programInput.amountIn }), programInput.amountIn);
+      }
+      return method.quote(programInput).result;
+    },
+  };
   for (const amountIn of [1n, 137n, 10n ** 18n, (1n << 128n) + 37n]) {
     const programInput = Object.freeze({ ...input, amountIn });
     const requests = etherTokenProgram.buildRequests(programInput);
@@ -665,8 +770,7 @@ async function verifyEtherTokenNativeEffects(): Promise<void> {
     dependentEvidence: [],
   }), /effect invariants/);
 
-  // The same builder is used by identity probing and Exact. Never substitute
-  // the historical probe address for the caller supplied by either path.
+  // Identity probing retains its symbolic caller authority.
   for (const callerRef of [{ kind: "executor" },
     { kind: "verified-actor", evidenceId: "ethertoken-test-probe" }] satisfies CallerRef[]) {
     const request = etherTokenWithdrawalSimulation({ id: "symbolic-withdraw", token: tokenB,
@@ -680,8 +784,8 @@ async function verifyEtherTokenNativeEffects(): Promise<void> {
   assert.deepEqual(etherTokenProgram.buildRequests(zero), []);
   assert.equal(etherTokenProgram.decode({ programInput: zero, initialResults: [], dependentEvidence: [] }).amountOut, 0n);
   const local = etherTokenNativeRedeemExact.methods()[0]; assert(local.kind === "local");
-  assert.equal(local.quote(zero).status, "quoted"); assert.equal(local.quote(input).status, "not-applicable");
-  assert.throws(() => etherTokenProgram.buildRequests({ ...input, amountIn: -1n }), /negative/);
+  assert.equal(local.quote(zero).status, "quoted"); assert.equal(local.quote(input).status, "quoted");
+  assert.throws(() => etherTokenProgram.buildRequests({ ...input, amountIn: -1n }), /range/);
   assert.throws(() => etherTokenProgram.buildRequests({ ...input, route: { ...route, tokenOut: tokenC } }), /incompatible/);
 
   // Exercise central issuance and the real typed transport without RPC/child
@@ -852,69 +956,82 @@ async function verifySiloDependentCurrentAndEffects(): Promise<void> {
     executor: actor,
     runtimeEvidence: Object.freeze([]),
   });
-  const exactProgram = exactRequestProgram(
-    erc4626SiloRedeemStrictFamilyPlugin.exact,
-    exactInput,
-  );
-  const exact = exactProgram.decode({
-    programInput: exactInput,
-    initialResults: [ok(
-      "exact-active-redeem",
-      ERC4626_SILO_INTERFACE.encodeFunctionResult("redeem", [80n]),
-      {
-        tokenDeltas: [
-          { token: tokenA, account: actor, delta: -100n },
-          { token: tokenB, account: actor, delta: 80n },
-        ],
-        totalSupplyDeltas: [{ token: tokenA, delta: -100n }],
-      },
-    )],
-    dependentEvidence: [],
-  });
-  assert.equal(exact.amountOut, 80n);
-
   const method = erc4626SiloRedeemExact.methods().find(m => m.kind === "request-program");
   assert(method && method.kind === "request-program");
   assert("chainAmountQuote" in method && method.chainAmountQuote === true,
-    "Silo's existing effect method must explicitly declare chain amount quoting");
+    "Silo's preview method must explicitly declare chain amount quoting");
   assert(!("reusePolicy" in method), "chain provenance is not a cross-block carry policy");
   const program = method.program;
   for (const amountIn of [1n, 137n, (1n << 128n) + 37n]) {
     const input = Object.freeze({ ...exactInput, amountIn });
+    assert.deepEqual(program.requirements(input), { transports: ["eth-call"] });
     const requests = program.buildRequests(input);
     assert.equal(requests.length, 1);
     const request = requests[0];
-    assert(request.kind === "effect-delta-simulation");
-    assert.equal(request.call.executionMode, "impersonated-call-frame");
-    assert.deepEqual(request.call.caller, { kind: "executor" });
-    assert.equal(request.call.to, tokenA);
-    assert.deepEqual([...ERC4626_SILO_INTERFACE.decodeFunctionData("redeem", request.call.data)],
-      [tokenB, amountIn, actor, actor]);
-    assert.equal(request.overrideIntent.caller, request.call.caller);
-    assert.deepEqual(request.overrideIntent.tokenBalances, [{ token: tokenA, amount: amountIn }]);
-    assert.deepEqual(request.observeTokenBalances, [
-      { token: tokenA, account: request.call.caller },
-      { token: tokenB, account: request.call.caller },
-    ]);
-    assert(Object.isFrozen(request.observeTokenBalances) && request.observeTokenBalances?.every(Object.isFrozen));
+    assert(request.kind === "eth-call");
+    assert.equal(request.to, tokenA);
+    assert.deepEqual([...ERC4626_SILO_INTERFACE.decodeFunctionData("previewRedeem", request.data)], [amountIn]);
     // Deliberately not the pricing fixture's unit ratio or a rescaled probe.
+    const previewAssets = amountIn * 2n + 7n;
     const amountOut = amountIn / 3n + 19n;
-    const effects: ObservedEffects = {
-      tokenDeltas: [{ token: tokenA, account: actor, delta: -amountIn }, { token: tokenB, account: actor, delta: amountOut }],
-      totalSupplyDeltas: [{ token: tokenA, delta: -amountIn }],
-    };
-    const result = ok("exact-active-redeem", ERC4626_SILO_INTERFACE.encodeFunctionResult("redeem", [amountOut]), effects);
-    const decode = (item: AdapterRequestResult) => program.decode({ programInput: input, initialResults: [item], dependentEvidence: [] });
-    const quote = decode(result);
+    const previewResult = ok("exact-preview-redeem",
+      ERC4626_SILO_INTERFACE.encodeFunctionResult("previewRedeem", [previewAssets]));
+    const payoutResult = ok("exact-preview-withdraw",
+      ERC4626_SILO_PAYOUT_INTERFACE.encodeFunctionResult("previewWithdraw", [amountOut]));
+    const next = program.buildDependentProgram!({ programInput: input, completedRound: 0,
+      initialResults: [previewResult], priorEvidence: [] });
+    assert(next);
+    assert.deepEqual(next.requirements, { transports: ["eth-call"] });
+    assert.equal(next.requests.length, 1);
+    const payoutRequest = next.requests[0]; assert(payoutRequest.kind === "eth-call");
+    assert.equal(payoutRequest.to, tokenB);
+    assert.deepEqual([...ERC4626_SILO_PAYOUT_INTERFACE.decodeFunctionData("previewWithdraw", payoutRequest.data)], [previewAssets]);
+    const decodeQuote = (first: AdapterRequestResult = previewResult, second: AdapterRequestResult = payoutResult) =>
+      program.decode({ programInput: input, initialResults: [first], dependentEvidence: [next.decode([second])] });
+    const quote = decodeQuote();
     assert.equal(quote.amountOut, amountOut);
+    assert.notEqual(quote.amountOut, previewAssets, "underlying assets are not payout shares");
+    assert.equal(quote.evidence.kind, "erc4626-silo-preview-chain");
+    assert.equal(quote.evidence.previewAssets, previewAssets);
     assert.equal(quote.evidence.amountIn, amountIn);
     assert.equal(quote.evidence.amountOut, amountOut);
     assert.deepEqual(quote.evidence.source, source);
+    assert.equal(program.buildDependentProgram!({ programInput: input, completedRound: 1,
+      initialResults: [previewResult], priorEvidence: [next.decode([payoutResult])] }), null);
     const fragment = erc4626SiloRedeemStrictFamilyPlugin.execution.buildFragment({
       descriptor, route, amountIn, quotedAmountOut: amountOut, exactEvidence: quote.evidence, executor: actor,
       minAmountOut: amountOut, runtimeEvidence: [],
     });
     assert.equal(fragment.nodes[0].amount, amountIn, "normal execution retains the gross original input");
+    for (const changedSource of [{ ...source, number: source.number - 1 }, { ...source, hash: `0x${"12".repeat(32)}` },
+      { ...source, generation: source.generation + 1 }]) {
+      assert.throws(() => decodeQuote({ ...previewResult, source: changedSource }), /source/);
+      assert.throws(() => decodeQuote(previewResult, { ...payoutResult, source: changedSource }), /source/);
+      assert.throws(() => decodeQuote({ ...previewResult, source: changedSource }, { ...payoutResult, source: changedSource }), /source/);
+      assert.throws(() => program.buildDependentProgram!({ programInput: input, completedRound: 0,
+        initialResults: [{ ...previewResult, source: changedSource }], priorEvidence: [] }), /source/);
+    }
+    for (const patch of [{ completion: "reverted-as-declared" as const }, { data: "0x" }]) {
+      assert.throws(() => decodeQuote({ ...previewResult, ...patch }));
+      assert.throws(() => decodeQuote(previewResult, { ...payoutResult, ...patch }));
+    }
+    assert.throws(() => decodeQuote({ ...previewResult,
+      data: ERC4626_SILO_INTERFACE.encodeFunctionResult("previewRedeem", [0n]) }), /no output/);
+    assert.throws(() => decodeQuote(previewResult, { ...payoutResult,
+      data: ERC4626_SILO_PAYOUT_INTERFACE.encodeFunctionResult("previewWithdraw", [0n]) }), /no output/);
+    assert.throws(() => program.decode({ programInput: input, initialResults: [previewResult], dependentEvidence: [] }), /missing/);
+
+    // Identity still proves the preview model against an actual redemption.
+    const effects: ObservedEffects = {
+      tokenDeltas: [{ token: tokenA, account: actor, delta: -amountIn }, { token: tokenB, account: actor, delta: amountOut }],
+      totalSupplyDeltas: [{ token: tokenA, delta: -amountIn }],
+    };
+    const result = ok("exact-active-redeem", ERC4626_SILO_INTERFACE.encodeFunctionResult("redeem", [amountOut]), effects);
+    const decode = (item: typeof result) => {
+      assertSource(item.source, source);
+      return validateErc4626SiloRedeemEffects({ result: item, vault: tokenA, payoutToken: tokenB, actor, amountIn });
+    };
+    assert.equal(decode(result), amountOut);
     const wrongEffects: ObservedEffects[] = [
       {}, { ...effects, tokenDeltas: effects.tokenDeltas!.slice(0, 1) },
       { ...effects, tokenDeltas: effects.tokenDeltas!.slice(1) },
@@ -933,7 +1050,7 @@ async function verifySiloDependentCurrentAndEffects(): Promise<void> {
     assert.throws(() => decode({ ...result, data: ERC4626_SILO_INTERFACE.encodeFunctionResult("redeem", [0n]) }), /effect invariants/);
     assert.throws(() => program.decode({ programInput: input, initialResults: [], dependentEvidence: [] }), /missing/);
   }
-  // Identity and Exact share the builder. Both observations must retain the
+  // Identity's simulation builder must retain the
   // supplied symbolic authority rather than freeze the probe's address into it.
   for (const callerRef of [{ kind: "executor" }, { kind: "verified-actor", evidenceId: "silo-test-probe" }] satisfies CallerRef[]) {
     const request = erc4626SiloRedeemSimulation({ id: "symbolic-silo", vault: tokenA, payoutToken: tokenB,
@@ -951,7 +1068,7 @@ async function verifySiloDependentCurrentAndEffects(): Promise<void> {
   assert.throws(() => program.buildRequests({ ...exactInput, amountIn: -1n }), /negative/);
   assert.throws(() => program.buildRequests({ ...exactInput, route: { ...route, tokenOut: tokenC } }), /incompatible/);
 
-  // Actual central issuance + approved typed transport, with an injected lease:
+  // Identity's active behavior proof still uses the approved typed transport:
   // no RPC or child, and no construction-time/per-protocol caller inference.
   const pin = { chainId: 1, blockHash: source.hash, stateRoot: `0x${"13".repeat(32)}` };
   const rpcUrl = "http://127.0.0.1:1/not-opened-silo-test", origin = router;
@@ -993,8 +1110,20 @@ async function verifySiloDependentCurrentAndEffects(): Promise<void> {
     const work = await executeAdapterWork({ runtime, control: { signal: controller.signal }, intent: {
       stage: "exact-refine", familyId: ERC4626_SILO_REDEEM_FAMILY_ID, instanceKey: descriptor.instanceKey, routeKey: route.routeKey,
       source, generation: source.generation, programInput: input,
-      program: { requirements: program.requirements, buildRequests: program.buildRequests,
-        decode({ programInput, results }) { decoded++; return program.decode({ programInput, initialResults: results, dependentEvidence: [] }); } },
+      program: {
+        requirements: () => ({ transports: ["effect-delta-simulation"], caller: "executor",
+          effects: ["return-data", "token-delta", "total-supply-delta", "logs"] }),
+        buildRequests: input => [erc4626SiloRedeemSimulation({ id: "active-redeem-proof", vault: tokenA,
+          payoutToken: tokenB, actor, callerRef: { kind: "executor" }, amountIn: input.amountIn })],
+        decode({ programInput, results }) {
+          decoded++;
+          const result = returnedResult(results, "active-redeem-proof");
+          assertSource(result.source, programInput.source);
+          const amountOut = validateErc4626SiloRedeemEffects({ result, vault: tokenA, payoutToken: tokenB,
+            actor, amountIn: programInput.amountIn });
+          return { amountOut, evidence: { amountIn: programInput.amountIn } };
+        },
+      },
     } });
     if (mode === "success") {
       assert.equal(work.status, "resolved"); assert(work.status === "resolved");

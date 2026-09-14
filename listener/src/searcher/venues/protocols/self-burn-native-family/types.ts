@@ -69,13 +69,23 @@ export interface SelfBurnNativePricingSnapshot
   readonly amountOut: bigint;
 }
 
+export interface SelfBurnNativeFeeParameters {
+  readonly parts: bigint;
+  readonly rate: bigint;
+  readonly min: bigint;
+  readonly max: bigint;
+}
+
 export interface SelfBurnNativeExactEvidence {
-  readonly kind: "self-burn-native-effect-delta";
+  readonly kind: "self-burn-native-fee-quote";
   readonly source: CanonicalSource;
   readonly token: string;
   readonly amountIn: bigint;
   readonly amountOut: bigint;
   readonly executor: string;
   readonly bindingFingerprint: string;
-  readonly effectsHash: string;
+  readonly fee: bigint;
+  /** Null only for a zero-input, no-read quote; these are fee parameters,
+   * not evidence that execution has transferred or burned tokens. */
+  readonly fees: SelfBurnNativeFeeParameters | null;
 }

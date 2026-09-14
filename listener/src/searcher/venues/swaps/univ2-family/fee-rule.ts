@@ -8,7 +8,7 @@ const PANCAKE_V2_FACTORY = canonicalAddress(
 /**
  * Fee provenance is pricing metadata, never an admission list. Unknown
  * reverse-verified factories use the standard 30 bps rule and remain subject
- * to exact/final simulation. The measured 25 bps fork is the sole non-default
+ * to final simulation. The measured 25 bps fork is the sole non-default
  * rule in the frozen implementation baseline.
  */
 export function uniV2FeeRuleForFactory(factory: string): UniV2FeeRule {

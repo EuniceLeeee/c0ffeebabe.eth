@@ -93,12 +93,12 @@ export interface Erc4626SiloRedeemPricingSnapshot
 }
 
 export interface Erc4626SiloRedeemExactEvidence {
-  readonly kind: "erc4626-silo-active-redeem";
+  readonly kind: "erc4626-silo-preview-chain";
   readonly source: CanonicalSource;
   readonly vault: string;
   readonly payoutToken: string;
   readonly amountIn: bigint;
+  readonly previewAssets: bigint;
   readonly amountOut: bigint;
   readonly bindingFingerprint: string;
-  readonly effectsHash: string;
 }

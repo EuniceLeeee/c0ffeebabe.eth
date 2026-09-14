@@ -14,6 +14,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import type { BlockScanRouteLocator } from "./blockscan-route-identity.js";
 import {
   effectiveMidPairStatistics,
+  effectiveMidRowCarried,
   type EffectiveMidSnapshot,
 } from "./blockscan-effective-mid.js";
 
@@ -496,7 +497,7 @@ function serializeEffectiveMids(snapshot: EffectiveMidSnapshot) {
       effective_mid: row.effectiveMid,
       status: row.status,
       ...(row.quotedAt === undefined ? {} : { quoted_at: row.quotedAt }),
-      ...(row.carried === true ? { carried: true } : {}),
+      ...(effectiveMidRowCarried(snapshot, row) ? { carried: true } : {}),
     }]),
     summary: {
       directions: summary.directions,

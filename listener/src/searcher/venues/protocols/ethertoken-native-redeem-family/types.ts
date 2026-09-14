@@ -69,12 +69,11 @@ export interface EtherTokenNativeRedeemPricingSnapshot
 }
 
 export interface EtherTokenNativeRedeemExactEvidence {
-  readonly kind: "ethertoken-native-effect-delta";
+  readonly kind: "ethertoken-native-one-to-one";
   readonly source: CanonicalSource;
   readonly token: string;
   readonly amountIn: bigint;
   readonly amountOut: bigint;
   readonly executor: string;
   readonly bindingFingerprint: string;
-  readonly effectsHash: string;
 }

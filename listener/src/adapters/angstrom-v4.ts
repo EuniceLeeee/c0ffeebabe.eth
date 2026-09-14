@@ -29,6 +29,8 @@ const swapSelector = angstromAdapterIface.getFunction("swap")!.selector;
  * explicit in node.params. Because ResolvedParam deliberately has no nested
  * object-array type, attestations use two parallel arrays:
  * `attestationBlockNumbers: bigint[]` and `attestationUnlockData: string[]`.
+ * The distinct source-unlocked variant accepts only `sourceBlock: bigint` and
+ * emits one empty-data entry for that exact block, not the next block.
  */
 export const angstromV4SwapActionAdapter: ActionAdapter = {
   id: "angstrom-v4-swap",
@@ -75,14 +77,6 @@ export const angstromV4SwapActionAdapter: ActionAdapter = {
       );
     }
     const deadline = requiredUint(node.params, "deadline", UINT256_MAX, false);
-    const attestationBlockNumbers = requiredBigintArray(
-      node.params,
-      "attestationBlockNumbers",
-    );
-    const attestationUnlockData = requiredStringArray(
-      node.params,
-      "attestationUnlockData",
-    );
 
     if (amountSpecified !== node.amount) {
       throw new Error(
@@ -90,30 +84,7 @@ export const angstromV4SwapActionAdapter: ActionAdapter = {
       );
     }
     assertRouteCurrencies(node, currency0, currency1, zeroForOne);
-    if (attestationBlockNumbers.length === 0) {
-      throw new Error("angstrom-v4-swap requires at least one attestation");
-    }
-    if (attestationBlockNumbers.length !== attestationUnlockData.length) {
-      throw new Error(
-        "angstrom-v4-swap attestation block/data arrays must have equal length",
-      );
-    }
-
-    const seenBlocks = new Set<bigint>();
-    const attestations = attestationBlockNumbers.map((blockNumber, index) => {
-      assertUint("attestationBlockNumbers", blockNumber, UINT64_MAX);
-      if (seenBlocks.has(blockNumber)) {
-        throw new Error(
-          `angstrom-v4-swap has duplicate attestation block ${blockNumber}`,
-        );
-      }
-      seenBlocks.add(blockNumber);
-      const unlockData = normalizeAttestationBytes(
-        attestationUnlockData[index],
-        index,
-      );
-      return { blockNumber, unlockData };
-    });
+    const attestations = executionEntries(node.params);
 
     const calldata = angstromAdapterIface.encodeFunctionData("swap", [
       {
@@ -144,6 +115,33 @@ export const angstromV4SwapActionAdapter: ActionAdapter = {
     }
   },
 };
+
+function executionEntries(params: ResolvedPlanNode["params"]) {
+  if (params.unlockMode === "source-unlocked") {
+    if ("attestationBlockNumbers" in params || "attestationUnlockData" in params) {
+      throw new Error("angstrom-v4-swap cannot mix source-unlocked and signed parameters");
+    }
+    return [{ blockNumber: requiredUint(params, "sourceBlock", UINT64_MAX), unlockData: "0x" }];
+  }
+  if ((params.unlockMode !== undefined && params.unlockMode !== "signed") || "sourceBlock" in params) {
+    throw new Error("angstrom-v4-swap invalid unlock mode or mixed sourceBlock");
+  }
+  const blocks = requiredBigintArray(params, "attestationBlockNumbers");
+  const data = requiredStringArray(params, "attestationUnlockData");
+  if (blocks.length === 0) throw new Error("angstrom-v4-swap requires at least one attestation");
+  if (blocks.length !== data.length) {
+    throw new Error("angstrom-v4-swap attestation block/data arrays must have equal length");
+  }
+  const seenBlocks = new Set<bigint>();
+  return blocks.map((blockNumber, index) => {
+    assertUint("attestationBlockNumbers", blockNumber, UINT64_MAX);
+    if (seenBlocks.has(blockNumber)) {
+      throw new Error(`angstrom-v4-swap has duplicate attestation block ${blockNumber}`);
+    }
+    seenBlocks.add(blockNumber);
+    return { blockNumber, unlockData: normalizeAttestationBytes(data[index], index) };
+  });
+}
 
 function assertOfficialTarget(target: string): void {
   let normalized: string;

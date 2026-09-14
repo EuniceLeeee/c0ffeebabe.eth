@@ -4,8 +4,12 @@ import type {
 } from "./blockscan-state-coordinator.js";
 import type {
   RethTransportLane,
+  RethTransportLease,
+  RethTransportRetryState,
   RethTransportScheduler,
 } from "./reth-transport-scheduler.js";
+import { isRethTransportTimeout } from "./reth-transport-scheduler.js";
+import { StateCallAbortedError } from "../shared/state/state-backend.js";
 import type {
   BlockSource,
   BlockScanPricingLane,
@@ -1924,51 +1928,7 @@ export class JsonRpcBlockScanStateReadBackend
     signal: AbortSignal,
     lane: RethTransportLane = this.transportLane,
   ): Promise<readonly JsonRpcResponse[]> {
-    let physicalStarted = false;
-    let settleLogical!: (value: readonly JsonRpcResponse[]) => void;
-    let rejectLogical!: (reason?: unknown) => void;
-    const logical = new Promise<readonly JsonRpcResponse[]>((resolve, reject) => {
-      settleLogical = resolve;
-      rejectLogical = reject;
-    });
-    const physicalLifetime = slots.run(signal, async () => {
-      if (signal.aborted) {
-        throw signal.reason ?? new DOMException("Aborted", "AbortError");
-      }
-      const send = async (): Promise<readonly JsonRpcResponse[]> => {
-        physicalStarted = true;
-        const physical = (async (): Promise<readonly JsonRpcResponse[]> => {
-          const response = await this.fetchImpl(this.rpcUrl, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-            signal,
-          });
-          if (!response.ok) {
-            throw new Error(
-              `JSON-RPC HTTP ${response.status} ${response.statusText}`,
-            );
-          }
-          const value: unknown = await response.json();
-          if (!Array.isArray(value)) {
-            throw new Error("JSON-RPC batch returned non-array");
-          }
-          return value as readonly JsonRpcResponse[];
-        })();
-        this.withHardRequestTimeout(physical, signal).then(
-          settleLogical,
-          rejectLogical,
-        );
-        return physical;
-      };
-      return this.transportScheduler
-        ? this.transportScheduler.run(lane, signal, () => send())
-        : send();
-    });
-    void physicalLifetime.catch((error) => {
-      if (!physicalStarted) rejectLogical(error);
-    });
-    return logical;
+    return (await this.postWithSlotsMeasured(slots, body, signal, lane)).responses;
   }
 
   private async postWithSlotsMeasured(
@@ -1984,68 +1944,140 @@ export class JsonRpcBlockScanStateReadBackend
     let localQueueWaitMs = 0;
     let sharedQueueWaitMs = 0;
     let physicalStarted = false;
+    let rpcRequests = 0;
+    let rpcItems = 0;
+    let responseBytes = 0;
+    // Closing the consumer cancels admission, not the physical lifetime. An
+    // uncooperative fetch/body must still own both permits until it settles.
+    const admission = new AbortController();
+    const detach = linkAbort(signal, admission);
     let settleLogical!: (value: readonly JsonRpcResponse[]) => void;
     let rejectLogical!: (reason?: unknown) => void;
     const logical = new Promise<readonly JsonRpcResponse[]>((resolve, reject) => {
       settleLogical = resolve;
       rejectLogical = reject;
     });
-    const physicalLifetime = slots.run(signal, async (waitMs) => {
+    const physicalLifetime = slots.run(admission.signal, async (waitMs) => {
       localQueueWaitMs = waitMs;
-      const send = async (): Promise<readonly JsonRpcResponse[]> => {
-        if (signal.aborted) {
-          throw signal.reason ?? new DOMException("Aborted", "AbortError");
-        }
-        physicalStarted = true;
-        const physical = (async (): Promise<readonly JsonRpcResponse[]> => {
-          const response = await this.fetchImpl(this.rpcUrl, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-            signal,
-          });
-          if (!response.ok) {
-            throw new Error(
-              `JSON-RPC HTTP ${response.status} ${response.statusText}`,
+      const pending = body.map(payload => ({ payload, retry: {} as RethTransportRetryState }));
+      const responses: JsonRpcResponse[] = [];
+      while (pending.length > 0) {
+        const send = async (lease?: RethTransportLease): Promise<void> => {
+          if (admission.signal.aborted) {
+            throw admission.signal.reason ?? new DOMException("Aborted", "AbortError");
+          }
+          sharedQueueWaitMs += lease?.queueWaitMs ?? 0;
+          const load = lease?.load;
+          // Read limits at admission, not before queueing. The configured
+          // limits (never active counts) identify the shared retry tier.
+          const attempt = load?.limits(this.maxBatchSize, this.maxConcurrentBatches);
+          const chunk = pending.slice(0, attempt?.batchSize ?? pending.length);
+          if (!physicalStarted) {
+            physicalStarted = true;
+            this.withHardRequestTimeout(physicalLifetime, signal).then(
+              settleLogical,
+              (error) => {
+                admission.abort(error);
+                rejectLogical(error);
+              },
             );
           }
-          const value: unknown = await response.json();
-          if (!Array.isArray(value)) {
-            throw new Error("JSON-RPC batch returned non-array");
+          rpcRequests++;
+          rpcItems += chunk.length;
+          try {
+            const value = await this.postPhysical(
+              chunk.map(item => item.payload), signal, load?.timeoutMs,
+            );
+            if (load) {
+              const expected = new Set(chunk.map(item => (item.payload as { id: number }).id));
+              const seen = new Set<number>();
+              for (const item of value) {
+                if (!item || !expected.has(item.id) || seen.has(item.id)) {
+                  throw new Error("JSON-RPC sub-batch returned an unexpected or duplicate id");
+                }
+                seen.add(item.id);
+              }
+              if (seen.size !== expected.size) throw new Error("JSON-RPC sub-batch omitted a response");
+            }
+            responseBytes += JSON.stringify(value).length;
+            responses.push(...value);
+            pending.splice(0, chunk.length);
+          } catch (error) {
+            // Do not extend existing 429/revert/source/proof-error policy.
+            // Only typed physical wire timeouts notify the shared controller.
+            if (admission.signal.aborted || !load || !attempt ||
+                !isRethTransportTimeout(error) ||
+                !load.retry(error, chunk.map(item => item.retry), attempt)) throw error;
           }
-          return value as readonly JsonRpcResponse[];
-        })();
-        this.withHardRequestTimeout(physical, signal).then(
-          settleLogical,
-          rejectLogical,
-        );
-        return physical;
-      };
-      return this.transportScheduler
-        ? this.transportScheduler.run(
-            lane,
-            signal,
-            async ({ queueWaitMs }) => {
-              sharedQueueWaitMs = queueWaitMs;
-              return send();
-            },
-          )
-        : send();
+        };
+        // Each retry/sub-batch releases the old physical lease and reacquires;
+        // the scheduler alone owns reduction/backoff. No local retry timer.
+        if (this.transportScheduler) {
+          await this.transportScheduler.run(lane, admission.signal, send);
+        } else {
+          await send();
+        }
+      }
+      return responses;
     }, this.now);
-    void physicalLifetime.catch((error) => {
-      if (!physicalStarted) rejectLogical(error);
-    });
+    void physicalLifetime.then(
+      (responses) => { detach(); if (!physicalStarted) settleLogical(responses); },
+      (error) => { detach(); rejectLogical(error); },
+    );
     const responses = await logical;
     return Object.freeze({
       responses,
       telemetry: Object.freeze({
         queueWaitMs: localQueueWaitMs + sharedQueueWaitMs,
         wallMs: Math.max(0, this.now() - startedAtMs),
-        rpcRequests: 1,
-        rpcItems: body.length,
-        responseBytes: JSON.stringify(responses).length,
+        rpcRequests,
+        rpcItems,
+        responseBytes,
       }),
     });
+  }
+
+  private async postPhysical(
+    body: readonly object[],
+    signal: AbortSignal,
+    timeoutMs?: number,
+  ): Promise<readonly JsonRpcResponse[]> {
+    const wire = new AbortController();
+    const detach = linkAbort(signal, wire);
+    const timer = timeoutMs === undefined ? undefined : setTimeout(() => {
+      wire.abort(new StateCallAbortedError("reth RPC wire timeout", "timeout"));
+    }, timeoutMs);
+    try {
+      const response = await this.fetchImpl(this.rpcUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: timeoutMs === undefined ? signal : wire.signal,
+      });
+      if (!response.ok) {
+        // Stop the error body before releasing the physical permit; retain
+        // the original HTTP failure if cancelling that stream also fails.
+        try { await response.body?.cancel(); } catch { /* preserve HTTP failure */ }
+        throw new Error(`JSON-RPC HTTP ${response.status} ${response.statusText}`);
+      }
+      const value: unknown = await response.json();
+      if (!Array.isArray(value)) throw new Error("JSON-RPC batch returned non-array");
+      if (timeoutMs !== undefined && wire.signal.aborted) {
+        // A late explicit RPC error must not be disguised as a retryable
+        // timeout just because an uncooperative body outlived its wire timer.
+        const failed = value.find(item => item && typeof item === "object" && "error" in item);
+        if (failed) throw new Error("JSON-RPC error after wire timeout", { cause: failed.error });
+        throw wire.signal.reason;
+      }
+      return value as readonly JsonRpcResponse[];
+    } catch (error) {
+      if (timeoutMs !== undefined && wire.signal.aborted &&
+          error instanceof Error && error.name === "AbortError") throw wire.signal.reason;
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      detach();
+    }
   }
 }
 

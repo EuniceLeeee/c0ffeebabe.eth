@@ -19,7 +19,7 @@ export const etherTokenNativeRedeemExecution = {
     if (
       input.amountIn <= 0n ||
       input.quotedAmountOut !== input.amountIn ||
-      evidence.kind !== "ethertoken-native-effect-delta" ||
+      evidence.kind !== "ethertoken-native-one-to-one" ||
       evidence.amountIn !== input.amountIn ||
       evidence.amountOut !== input.quotedAmountOut ||
       !sameAddress(evidence.token, input.descriptor.token) ||

@@ -9,6 +9,8 @@ export const EIGENPIE_INTERFACE = new ethers.Interface([
 
 export const EIGENPIE_ERC20_INTERFACE = new ethers.Interface([
   "function decimals() view returns (uint8)",
+  "function approve(address spender,uint256 amount) returns (bool)",
+  "function totalSupply() view returns (uint256)",
 ]);
 
 export const EIGENPIE_CALL_PATTERN_ID = "eigenpie-deposit-asset-call";

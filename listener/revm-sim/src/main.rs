@@ -2615,10 +2615,12 @@ fn strict_probe<D: ExecutionProfile>(db: &CacheDB<D>, env: &BlockEnv, token: Add
         let result = handler.run_exec_loop(&mut evm, frame)?;
         revm::context_interface::context::take_error::<EVMError<RpcError>, _>(evm.ctx.error())?;
         let bytes = result.output().into_data();
-        if !result.instruction_result().is_ok() || bytes.len() != 32 { bail!("invalid static observation"); }
+        if !result.instruction_result().is_ok() || bytes.len() != 32 { return Err(BalanceProbeRejected.into()); }
         Ok(U256::from_be_slice(&bytes))
     };
-    probe().map_err(|_| StrictFailure(StrictFailureKind::Observation).into())
+    // Keep the underlying DB/engine error: a failed speculative storage trial
+    // may skip a local probe rejection, never a missing/failed source read.
+    probe().context(StrictFailure(StrictFailureKind::Observation))
 }
 
 fn strict_balance_of<D: ExecutionProfile>(db: &CacheDB<D>, env: &BlockEnv, token: Address, account: Address) -> Result<U256> {
@@ -2832,15 +2834,14 @@ where
         false,
     )?;
     if !output.result.is_success() {
-        bail!(
-            "balanceOf({token:#x},{account:#x}) failed: {}",
-            format_execution_result(&output.result)
-        );
+        return Err(anyhow!(BalanceProbeRejected).context(format!(
+            "balanceOf({token:#x},{account:#x}) failed: {}", format_execution_result(&output.result)
+        )));
     }
     let bytes = output
         .result
         .output()
-        .ok_or_else(|| anyhow!("balanceOf returned no output"))?;
+        .ok_or(BalanceProbeRejected)?;
     Ok(parse_u256_from_evm_output(bytes.as_ref()))
 }
 
@@ -2912,7 +2913,10 @@ where
         if amount.is_zero() {
             continue;
         }
-        if deal_balance(db, block_env, token, to, strict)? >= amount {
+        if let Some(remote) = remote { remote.rpc.check_fatal()?; }
+        let current = deal_balance(db, block_env, token, to, strict);
+        if let Some(remote) = remote { remote.rpc.check_fatal()?; }
+        if current? >= amount {
             continue;
         }
 
@@ -2921,21 +2925,11 @@ where
             mapping_slot_candidates(deal.balance_slot, balance_slots.get(&token).copied())
         {
             let slot = erc20_balance_slot(to, slot_index);
-            let original = db
-                .storage(token, slot)
-                .map_err(|err| anyhow!("failed reading deal slot {token:#x}:{slot:#x}: {err}"))?;
-            db.insert_account_storage(token, slot, amount)
-                .map_err(|err| anyhow!("failed writing deal slot {token:#x}:{slot:#x}: {err}"))?;
-            mark_account_touched(db, token);
-            let balance = deal_balance(db, block_env, token, to, strict)?;
-            if balance >= amount {
+            if try_token_deal_slot(db, block_env, token, to, token, slot, amount, remote, strict, 1)? {
                 balance_slots.insert(token, slot_index);
                 applied = true;
                 break;
             }
-            db.insert_account_storage(token, slot, original)
-                .map_err(|err| anyhow!("failed restoring deal slot {token:#x}:{slot:#x}: {err}"))?;
-            mark_account_touched(db, token);
         }
         if !applied {
             // Prestate diff discovery can return nothing when both the probe
@@ -2958,24 +2952,11 @@ where
                         mapping_slot_candidates(deal.balance_slot, balance_slots.get(&token).copied())
                     {
                         let slot = erc20_balance_slot(to, slot_index);
-                        let original = db.storage(*owner, slot).map_err(|err| {
-                            anyhow!("failed reading fallback slot {owner:#x}:{slot:#x}: {err}")
-                        })?;
-                        db.insert_account_storage(*owner, slot, amount).map_err(|err| {
-                            anyhow!("failed writing fallback slot {owner:#x}:{slot:#x}: {err}")
-                        })?;
-                        mark_account_touched(db, *owner);
-                        let balance =
-                            deal_balance(db, block_env, token, to, strict)?;
-                        if balance >= amount {
+                        if try_token_deal_slot(db, block_env, token, to, *owner, slot, amount, Some(remote), strict, 1)? {
                             balance_slots.insert(token, slot_index);
                             applied = true;
                             break 'fallback_outer;
                         }
-                        db.insert_account_storage(*owner, slot, original).map_err(|err| {
-                            anyhow!("failed restoring fallback slot {owner:#x}:{slot:#x}: {err}")
-                        })?;
-                        mark_account_touched(db, *owner);
                     }
                 }
             }
@@ -2985,55 +2966,14 @@ where
                 for (storage_owner, slot) in
                     discover_erc20_balance_storage_candidates(remote, token, to)?
                 {
-// The balance may live in a proxy implementation: its
-// code must be warm before balanceOf executes, or
-// code_by_hash_ref fails and the call reverts to 0.
-let _ = db.basic_ref(token);
-let _ = db.basic_ref(storage_owner);
-                    let original = db.storage(storage_owner, slot).map_err(|err| {
-                        anyhow!(
-                            "failed reading discovered slot {storage_owner:#x}:{slot:#x}: {err}"
-                        )
-                    })?;
-                    let mut override_value = amount;
-                    for attempt in 0..4 {
-                        db.insert_account_storage(storage_owner, slot, override_value)
-                            .map_err(|err| {
-                                anyhow!(
-                                    "failed writing discovered slot {storage_owner:#x}:{slot:#x}: {err}"
-                                )
-                            })?;
-                        mark_account_touched(db, storage_owner);
-                        let balance = if strict { strict_balance_of(db, block_env, token, to)? } else {
-                            let Ok(balance) = erc20_balance_of(db, block_env, token, to) else { break; };
-                            balance
-                        };
-eprintln!("[revm-sim] deal slot try token={token:#x} owner={storage_owner:#x} slot={slot:#x} amount={amount}");
-eprintln!("[revm-sim] deal slot balance after write: {balance}");
-                        if balance >= amount {
-                            applied = true;
-                            break;
-                        }
-                        let Some(next) = next_discovered_balance_override(
-                            amount,
-                            override_value,
-                            balance,
-                            attempt,
-                        ) else {
-                            break;
-                        };
-                        override_value = next;
-                    }
-                    if applied {
+                    // Warm code for external storage owners; source errors are
+                    // not a reason to try another speculative balance slot.
+                    db.basic_ref(token)?;
+                    db.basic_ref(storage_owner)?;
+                    if try_token_deal_slot(db, block_env, token, to, storage_owner, slot, amount, Some(remote), strict, 4)? {
+                        applied = true;
                         break;
                     }
-                    db.insert_account_storage(storage_owner, slot, original)
-                        .map_err(|err| {
-                            anyhow!(
-                                "failed restoring discovered slot {storage_owner:#x}:{slot:#x}: {err}"
-                            )
-                        })?;
-                    mark_account_touched(db, storage_owner);
                 }
             }
         }
@@ -3047,9 +2987,62 @@ eprintln!("[revm-sim] deal slot balance after write: {balance}");
 const EIP1967_IMPLEMENTATION_SLOT: &str =
     "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 
+#[derive(Debug)]
+struct BalanceProbeRejected;
+impl fmt::Display for BalanceProbeRejected {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str("invalid balance probe result") }
+}
+impl std::error::Error for BalanceProbeRejected {}
+
+// All three candidate loops use the same speculative write boundary. Restoring
+// the account snapshot also restores absent keys/account_state, so rejected
+// trials cannot leak into trace overrides. Earlier accepted funding is retained.
+fn try_token_deal_slot<D: ExecutionProfile>(
+    db: &mut CacheDB<D>, env: &BlockEnv, token: Address, account: Address,
+    owner: Address, slot: U256, amount: U256, remote: Option<&RemoteRevmDb>,
+    strict: bool, attempts: usize,
+) -> Result<bool> {
+    if let Some(remote) = remote { remote.rpc.check_fatal()?; }
+    let original = db.cache.accounts.get(&owner).cloned();
+    let result = (|| -> Result<bool> {
+        db.storage(owner, slot)?;
+        let mut value = amount;
+        for attempt in 0..attempts {
+            db.insert_account_storage(owner, slot, value)?;
+            mark_account_touched(db, owner);
+            let observed = if strict { strict_balance_of(db, env, token, account) }
+                else { erc20_balance_of(db, env, token, account) };
+            // A latched physical fault wins even over a cached successful read.
+            if let Some(remote) = remote { remote.rpc.check_fatal()?; }
+            let balance = match observed {
+                Ok(balance) => balance,
+                Err(error) if error.is::<BalanceProbeRejected>() => return Ok(false),
+                Err(error) => return Err(error),
+            };
+            if balance >= amount { return Ok(true); }
+            let Some(next) = next_discovered_balance_override(amount, value, balance, attempt) else { break; };
+            value = next;
+        }
+        Ok(false)
+    })();
+    let result = if let Some(remote) = remote { remote.rpc.check_fatal().and(result) } else { result };
+    if !matches!(result, Ok(true)) {
+        match original {
+            Some(original) => { db.cache.accounts.insert(owner, original); }
+            None => { db.cache.accounts.remove(&owner); }
+        }
+    }
+    result
+}
+
 fn deal_balance<D: ExecutionProfile>(db: &mut CacheDB<D>, env: &BlockEnv, token: Address, account: Address, strict: bool) -> Result<U256> {
     if strict { strict_balance_of(db, env, token, account) }
-    else { Ok(erc20_balance_of(db, env, token, account).unwrap_or(U256::ZERO)) }
+    else {
+        match erc20_balance_of(db, env, token, account) {
+            Err(error) if error.is::<BalanceProbeRejected>() => Ok(U256::ZERO),
+            result => result,
+        }
+    }
 }
 
 /// Read the EIP-1967 implementation slot for a possibly-proxied token.
@@ -3320,7 +3313,7 @@ where
     let mut evm = ctx.build_mainnet();
     let result = evm
         .transact(tx)
-        .map_err(|err| anyhow!("revm transact failed: {err:?}"))?;
+        .context("revm transact failed")?;
     if stateful { Ok(result) } else { Ok(result) }
 }
 
@@ -3472,6 +3465,264 @@ mod tests {
     }
     fn setup(req: &StrictRequest, data: &str) -> PreCall {
         PreCall { from: req.from.clone(), to: req.to.clone(), calldata: data.into(), gas_limit: Some(100000), allowance_slot: None }
+    }
+
+    // Synthetic delegate proxy: changing the pointer to an empty account makes
+    // balanceOf return malformed data. No chain data or network is involved.
+    fn deal_proxy(pointer: U256, balance: U256, implementation_code: Option<&str>) -> (CacheDB<LocalStrictDb>, TokenDeal) {
+        let mut proxy = parse_hex_bytes("0x36600060003760006000366000").unwrap();
+        proxy.push(0x7f); proxy.extend_from_slice(&pointer.to_be_bytes::<32>());
+        proxy.extend_from_slice(&parse_hex_bytes("0x545af43d600060003e").unwrap());
+        let jump = proxy.len();
+        proxy.extend_from_slice(&[0x60, 0, 0x57, 0x3d, 0x60, 0, 0xfd]);
+        proxy[jump + 1] = proxy.len() as u8;
+        proxy.extend_from_slice(&[0x5b, 0x3d, 0x60, 0, 0xf3]);
+        let (mut db, req) = local_strict(true, &format!("0x{}", hex::encode(proxy)));
+        let token = parse_address(&req.to).unwrap();
+        let implementation = Address::repeat_byte(0xcc);
+        let code = implementation_code.map(str::to_owned).unwrap_or_else(||
+            format!("0x7f{balance:064x}5460005260206000f3"));
+        let code = Bytecode::new_raw(Bytes::from(parse_hex_bytes(&code).unwrap()));
+        db.insert_account_info(implementation, AccountInfo::default().with_code(code));
+        db.insert_account_storage(token, pointer, U256::from_be_slice(implementation.as_slice())).unwrap();
+        db.cache.accounts.get_mut(&token).unwrap().account_state = AccountState::None;
+        (db, TokenDeal { token: req.to, to: req.from, amount: "100".into(), balance_slot: None })
+    }
+
+    #[test]
+    fn token_deal_primary_bad_pointer_restored_before_next_candidate() {
+        let account = Address::repeat_byte(0xaa);
+        let bad = erc20_balance_slot(account, 0);
+        let good = erc20_balance_slot(account, 1);
+        for first in [0, 1] {
+            let (mut db, mut deal) = deal_proxy(bad, good, None);
+            deal.balance_slot = Some(first);
+            let token = parse_address(&deal.token).unwrap();
+            let original = db.storage(token, bad).unwrap();
+            let mut slots = HashMap::new();
+            let result = apply_token_deals(&mut db, &test_source().env, &[deal], &mut slots, None, true);
+            assert_eq!(db.storage(token, bad).unwrap(), original, "rejected proxy pointer must be restored");
+            assert!(result.is_ok(), "failed trial must continue to the valid balance slot: {result:?}");
+            assert_eq!(strict_balance_of(&db, &test_source().env, token, account).unwrap(), U256::from(100));
+            assert_eq!(slots.get(&token), Some(&1));
+            assert_eq!(db.storage(token, good).unwrap(), U256::from(100));
+        }
+    }
+
+    #[test]
+    fn token_deal_rejected_trials_restore_absence_account_state_and_prior_funding() {
+        let account = Address::repeat_byte(0xaa);
+        let bad = erc20_balance_slot(account, 0);
+        // The real balance is outside the primary candidate list.
+        let (mut db, deal) = deal_proxy(bad, U256::MAX, None);
+        let token = parse_address(&deal.token).unwrap();
+        let unrelated = Address::repeat_byte(0xee);
+        db.insert_account_info(unrelated, AccountInfo::default().with_balance(U256::from(777)));
+        db.insert_account_storage(token, U256::from(7), U256::from(888)).unwrap();
+        for state in [AccountState::None, AccountState::Touched] {
+            db.cache.accounts.get_mut(&token).unwrap().account_state = state;
+            let before = format!("{:?}", db.cache.accounts.get(&token));
+            let unrelated_before = format!("{:?}", db.cache.accounts.get(&unrelated));
+            let mut slots = HashMap::from([(unrelated, 51)]);
+            assert!(apply_token_deals(&mut db, &test_source().env, std::slice::from_ref(&deal), &mut slots, None, true).is_err());
+            assert_eq!(format!("{:?}", db.cache.accounts.get(&token)), before);
+            assert_eq!(format!("{:?}", db.cache.accounts.get(&unrelated)), unrelated_before);
+            assert_eq!(slots, HashMap::from([(unrelated, 51)]));
+        }
+    }
+
+    #[test]
+    fn token_deal_initial_untouched_balance_failure_is_not_a_trial() {
+        for code in ["0x00", "0x60006000fd", "0xfe"] {
+            let (mut db, deal) = deal_proxy(U256::from(2), U256::MAX, Some(code));
+            let before = format!("{:?}", db.cache);
+            let mut slots = HashMap::new();
+            assert!(apply_token_deals(&mut db, &test_source().env, &[deal], &mut slots, None, true).is_err());
+            assert_eq!(format!("{:?}", db.cache), before);
+            assert!(slots.is_empty());
+        }
+    }
+
+    #[test]
+    fn token_deal_discovered_proxy_order_and_scaled_balance_keep_verified_candidate_only() {
+        let pointer = parse_u256(EIP1967_IMPLEMENTATION_SLOT).unwrap();
+        let balance = U256::MAX;
+        for reverse in [false, true] {
+            // balanceOf = storage / 2, requiring the existing second scaled write.
+            let code = format!("0x60027f{balance:064x}540460005260206000f3");
+            let (mut db, deal) = deal_proxy(pointer, balance, Some(&code));
+            let token = parse_address(&deal.token).unwrap();
+            let account = parse_address(&deal.to).unwrap();
+            let original = db.storage(token, pointer).unwrap();
+            let observed = json!({format!("{token:#x}"): {"storage": {
+                format!("{balance:#066x}"): "0x0", EIP1967_IMPLEMENTATION_SLOT: format!("{original:#x}")}}});
+            let mut candidates = prestate_storage_candidates(&observed, token);
+            assert_eq!(candidates, vec![(token, pointer), (token, balance)], "proxy metadata sorts first");
+            if reverse { candidates.reverse(); }
+            let mut applied = false;
+            for (owner, slot) in candidates {
+                if try_token_deal_slot(&mut db, &test_source().env, token, account, owner, slot, U256::from(100), None, true, 4).unwrap() {
+                    applied = true; break;
+                }
+                assert_eq!(db.storage(token, pointer).unwrap(), original);
+            }
+            assert!(applied);
+            assert_eq!(db.storage(token, pointer).unwrap(), original);
+            assert_eq!(db.storage(token, balance).unwrap(), U256::from(200));
+            assert_eq!(strict_balance_of(&db, &test_source().env, token, account).unwrap(), U256::from(100));
+        }
+    }
+
+    #[test]
+    fn token_deal_fallback_owner_trials_restore_rejected_token_and_absent_owner() {
+        let account = Address::repeat_byte(0xaa);
+        let slot = erc20_balance_slot(account, 1);
+        let (mut db, deal) = deal_proxy(U256::from(2), slot, None);
+        let token = parse_address(&deal.token).unwrap();
+        let ledger = Address::repeat_byte(0xcc);
+        // The real balance is in an external ledger, reached by STATICCALL.
+        let code = format!("0x602060006000600073{ledger:x}5afa5060206000f3");
+        let code = Bytecode::new_raw(Bytes::from(parse_hex_bytes(&code).unwrap()));
+        db.insert_account_info(token, AccountInfo::default().with_code(code));
+        for owner in [Address::repeat_byte(0xef), token, ledger] {
+            let before = format!("{:?}", db.cache.accounts.get(&owner));
+            let applied = try_token_deal_slot(&mut db, &test_source().env, token, account, owner, slot, U256::from(100), None, true, 1).unwrap();
+            assert_eq!(applied, owner == ledger);
+            if !applied { assert_eq!(format!("{:?}", db.cache.accounts.get(&owner)), before); }
+        }
+        assert_eq!(strict_balance_of(&db, &test_source().env, token, account).unwrap(), U256::from(100));
+    }
+
+    #[test]
+    fn token_deal_domain_trial_failures_restore_then_continue_in_both_probe_modes() {
+        let account = Address::repeat_byte(0xaa);
+        let bad = erc20_balance_slot(account, 0);
+        let good = erc20_balance_slot(account, 1);
+        for strict in [false, true] {
+            for attempts in [1, 4] {
+                // Empty/malformed output, REVERT, INVALID and out of gas.
+                for code in ["0x00", "0x60016000f3", "0x60006000fd", "0x606460005260206000fd", "0xfe", "0x5b600056"] {
+                    let (mut db, deal) = deal_proxy(bad, good, None);
+                    let token = parse_address(&deal.token).unwrap();
+                    let code = Bytecode::new_raw(Bytes::from(parse_hex_bytes(code).unwrap()));
+                    db.insert_account_info(Address::from_word(B256::from(U256::from(100).to_be_bytes::<32>())), AccountInfo::default().with_code(code));
+                    let before = format!("{:?}", db.cache.accounts.get(&token));
+                    let mut env = test_source().env; env.basefee = 0;
+                    assert!(!try_token_deal_slot(&mut db, &env, token, account, token, bad, U256::from(100), None, strict, attempts).unwrap());
+                    assert_eq!(format!("{:?}", db.cache.accounts.get(&token)), before);
+                    assert!(try_token_deal_slot(&mut db, &env, token, account, token, good, U256::from(100), None, strict, attempts).unwrap());
+                    assert_eq!(deal_balance(&mut db, &env, token, account, strict).unwrap(), U256::from(100));
+                    assert_eq!(deal.to, format!("{account:#x}"));
+                }
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    struct DealFaultDb {
+        fatal: FatalLatch,
+        reason: Option<FatalReason>,
+        success_after_fault: bool,
+        reads: Cell<usize>,
+    }
+    impl DatabaseRef for DealFaultDb {
+        type Error = RpcError;
+        fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, RpcError> {
+            if address != Address::from_word(B256::from(U256::from(100).to_be_bytes::<32>())) { return Ok(None); }
+            self.reads.set(self.reads.get() + 1);
+            self.fatal.set(self.reason);
+            if !self.success_after_fault { return Err(RpcError("injected database read failure".into())); }
+            Ok(Some(AccountInfo::default().with_code(Bytecode::new_raw(Bytes::from_static(&[0x60, 100, 0x60, 0, 0x52, 0x60, 32, 0x60, 0, 0xf3])))))
+        }
+        fn code_by_hash_ref(&self, _: B256) -> Result<Bytecode, RpcError> { Err(RpcError("unexpected test code read".into())) }
+        fn storage_ref(&self, _: Address, _: U256) -> Result<U256, RpcError> { Ok(U256::ZERO) }
+        fn block_hash_ref(&self, _: u64) -> Result<B256, RpcError> { Ok(B256::ZERO) }
+    }
+    impl ExecutionProfile for DealFaultDb {
+        fn execution_profile(&self) -> Option<MainnetProfile> { Some(test_source().profile) }
+    }
+    fn deal_guard(fatal: FatalLatch) -> RemoteRevmDb {
+        RemoteRevmDb::new("http://127.0.0.1:1".into(), 300, HashSet::new(),
+            Rc::new(RefCell::new(PersistentCache::default())), Client::builder().no_proxy().build().unwrap(), fatal).unwrap()
+    }
+
+    #[test]
+    fn token_deal_db_errors_and_fatal_latches_restore_and_never_try_next_candidate() {
+        let account = Address::repeat_byte(0xaa);
+        let bad = erc20_balance_slot(account, 0);
+        let good = erc20_balance_slot(account, 1);
+        for strict in [false, true] {
+            for reason in [None, Some(FatalReason::SourceFault), Some(FatalReason::RpcThrottle {
+                category: ThrottleCategory::Http429, http_status: Some(429), rpc_code: None })] {
+                for success_after_fault in [false, true] {
+                    if reason.is_none() && success_after_fault { continue; }
+                    let (base, deal) = deal_proxy(bad, good, None);
+                    let token = parse_address(&deal.token).unwrap();
+                    let remote = deal_guard(FatalLatch::default());
+                    let mut db = CacheDB::new(DealFaultDb { fatal: remote.rpc.fatal.clone(), reason, success_after_fault, reads: Cell::new(0) });
+                    db.cache = base.cache;
+                    let mut env = test_source().env; env.basefee = 0;
+                    // Legacy initial reads may populate real read-through keys;
+                    // the trial must restore the state after that untouched read.
+                    assert_eq!(deal_balance(&mut db, &env, token, account, strict).unwrap(), U256::ZERO);
+                    let before = format!("{:?}", db.cache.accounts.get(&token));
+                    let mut slots = HashMap::new();
+                    let error = apply_token_deals(&mut db, &env, &[deal], &mut slots, Some(&remote), strict).unwrap_err();
+                    assert_eq!(format!("{:?}", db.cache.accounts.get(&token)), before);
+                    assert!(slots.is_empty());
+                    assert_eq!(db.db.reads.get(), 1);
+                    assert_eq!(remote.rpc.fatal.get(), reason);
+                    if let Some(reason) = reason {
+                        assert_eq!(error.downcast_ref::<FatalReason>(), Some(&reason));
+                        assert!(remote.rpc.check_fatal().is_err());
+                    } else {
+                        assert!(matches!(error.downcast_ref::<EVMError<RpcError>>(), Some(EVMError::Database(_))), "{error:?}");
+                    }
+                    assert_eq!(remote.rpc.round_trips(), 0, "in-memory faults only; no RPC");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn token_deal_existing_fatal_beats_cached_sufficient_balance_without_writes() {
+        let (mut db, deal) = deal_proxy(U256::from(2), U256::from(3), None);
+        let token = parse_address(&deal.token).unwrap();
+        db.insert_account_storage(token, U256::from(3), U256::from(100)).unwrap();
+        let remote = deal_guard(Rc::new(Cell::new(Some(FatalReason::SourceFault))));
+        let before = format!("{:?}", db.cache);
+        let error = apply_token_deals(&mut db, &test_source().env, &[deal], &mut HashMap::new(), Some(&remote), true).unwrap_err();
+        assert_eq!(error.downcast_ref::<FatalReason>(), Some(&FatalReason::SourceFault));
+        assert_eq!(format!("{:?}", db.cache), before);
+        assert_eq!(remote.rpc.round_trips(), 0);
+    }
+
+    #[test]
+    fn token_deal_rejected_trials_do_not_change_trace_overrides_or_earlier_deal() {
+        let pointer = parse_u256(EIP1967_IMPLEMENTATION_SLOT).unwrap();
+        let balance = U256::MAX;
+        let (base, deal) = deal_proxy(pointer, balance, None);
+        let token = parse_address(&deal.token).unwrap();
+        let account = parse_address(&deal.to).unwrap();
+        let remote = Rc::new(deal_guard(FatalLatch::default()));
+        let mut db = CacheDB::new(SharedRemote(remote.clone()));
+        db.cache = base.cache;
+        // Preseed all reads so the actual production remote wrapper performs no I/O.
+        db.insert_account_info(Address::ZERO, AccountInfo::default());
+        db.insert_account_info(Address::from_word(B256::from(U256::from(200).to_be_bytes::<32>())), AccountInfo::default());
+        for slot in [balance, U256::from(7)] { remote.inner.borrow_mut().storage.insert((token, slot), U256::ZERO); }
+        for prior_deal in [false, true] {
+            if prior_deal {
+                assert!(try_token_deal_slot(&mut db, &test_source().env, token, account, token, balance, U256::from(100), Some(&remote), true, 1).unwrap());
+            }
+            let before = build_trace_overrides(&db);
+            for slot in [pointer, U256::from(7)] {
+                assert!(!try_token_deal_slot(&mut db, &test_source().env, token, account, token, slot, U256::from(200), Some(&remote), true, 4).unwrap());
+                assert_eq!(build_trace_overrides(&db), before);
+            }
+            assert_eq!(strict_balance_of(&db, &test_source().env, token, account).unwrap(), U256::from(if prior_deal { 100 } else { 0 }));
+        }
+        assert_eq!(remote.rpc.round_trips(), 0);
     }
 
     #[test]

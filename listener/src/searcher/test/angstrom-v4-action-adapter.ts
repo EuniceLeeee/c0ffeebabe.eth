@@ -314,4 +314,33 @@ testExactEncoding();
 testTraceMatching();
 testReverseDirection();
 testFailClosedValidation();
-console.log("angstrom-v4 action adapter PASS (4/4)");
+const unlockedNode = baseNode();
+delete unlockedNode.params.attestationBlockNumbers;
+delete unlockedNode.params.attestationUnlockData;
+unlockedNode.params.unlockMode = "source-unlocked";
+unlockedNode.params.sourceBlock = BLOCKS[0];
+const unlocked = iface.decodeFunctionData("swap", encodedPayload(
+  angstromV4SwapActionAdapter.encode(unlockedNode, OUTER_EXECUTOR, new Uint8Array()),
+));
+assert(unlocked[4].length === 1, "source-unlocked has exactly one entry");
+assert(unlocked[4][0].blockNumber === BLOCKS[0], "retain source B, never B+1");
+assert(unlocked[4][0].unlockData === "0x", "explicit empty-data variant");
+for (const mutate of [
+  (node: ResolvedPlanNode) => { node.params.attestationBlockNumbers = []; },
+  (node: ResolvedPlanNode) => { node.params.attestationUnlockData = []; },
+  (node: ResolvedPlanNode) => { delete node.params.sourceBlock; },
+  (node: ResolvedPlanNode) => { node.params.sourceBlock = -1n; },
+  (node: ResolvedPlanNode) => { node.params.sourceBlock = 1n << 64n; },
+  (node: ResolvedPlanNode) => { node.params.sourceBlock = "24000001"; },
+  (node: ResolvedPlanNode) => { node.params.unlockMode = "other"; },
+]) {
+  const node = { ...unlockedNode, params: { ...unlockedNode.params } };
+  mutate(node);
+  let rejected = false;
+  try { angstromV4SwapActionAdapter.encode(node, OUTER_EXECUTOR, new Uint8Array()); } catch { rejected = true; }
+  assert(rejected, "malformed or mixed source-unlocked parameters must reject");
+}
+expectFailure(node => { node.params.sourceBlock = BLOCKS[0]; }, "mixed sourceBlock");
+expectFailure(node => { node.params.unlockMode = "source-unlocked"; node.params.sourceBlock = BLOCKS[0]; }, "cannot mix");
+expectFailure(node => { node.params.attestationUnlockData = ["0x", UNLOCK_DATA[1]]; }, "non-empty signature");
+console.log("angstrom-v4 action adapter PASS (legacy encoding + explicit source-unlocked controls)");

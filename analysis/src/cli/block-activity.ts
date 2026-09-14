@@ -87,6 +87,7 @@ interface RouteExactDiagnostic {
     | "global_deadline"
     | "quote_error"
     | "amount_reference_over_cap"
+    | "amount_reference_missing"
     | null;
 }
 
@@ -987,6 +988,7 @@ function parseExactDiagnostics(
     "global_deadline",
     "quote_error",
     "amount_reference_over_cap",
+    "amount_reference_missing",
   ] as const;
   const result: RouteExactDiagnostic[] = [];
   for (let index = 0; index < enumeration.length; index++) {

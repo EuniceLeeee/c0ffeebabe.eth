@@ -16,19 +16,13 @@ export const angstromV4Instance = {
       provenance: identity.provenance,
       runtimeRequirements: [{
         kind: "source-state" as const,
-        freshness: "tx-bound" as const,
-      }, {
-        kind: "head-evidence" as const,
-        scope: "family" as const,
-        evidenceKind: "angstrom-empty-block-attestation",
+        freshness: "pinned-block" as const,
       }, {
         kind: "extension-policy" as const,
-        mode: "tx-bound" as const,
+        // Signed payload requirements are method-specific. Empty-data quotes
+        // still execute the real hook and never authorize next-block execution.
+        mode: "quote-and-final-sim" as const,
         extensionBinding: identity.facts.immutableBinding.hook,
-      }, {
-        kind: "opaque-payload" as const,
-        slot: "unlockData",
-        evidenceKind: "angstrom-empty-block-attestation",
       }],
       poolId: identity.facts.poolId,
       poolKey: identity.facts.poolKey,

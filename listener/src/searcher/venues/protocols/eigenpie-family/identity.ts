@@ -20,6 +20,7 @@ import {
 import {
   decodeEigenpieQuote,
   EIGENPIE_DEPOSIT_TOPIC,
+  EIGENPIE_ERC20_INTERFACE,
   EIGENPIE_INTERFACE,
 } from "./codec.js";
 import {
@@ -74,23 +75,47 @@ export const eigenpieIdentity = {
         ]);
       }
       const quote = evidence as EigenpieQuoteEvidence;
+      const caller = Object.freeze({ kind: "observed-sender" as const });
       return Object.freeze([
         codeRequest("identity-receipt-code", quote.tokenOut),
         Object.freeze({
           id: "identity-active-deposit",
           kind: "effect-delta-simulation" as const,
+          preCalls: Object.freeze([
+            Object.freeze({
+              caller,
+              to: quote.tokenIn,
+              data: EIGENPIE_ERC20_INTERFACE.encodeFunctionData("approve", [
+                quote.target,
+                quote.amountIn,
+              ]),
+            }),
+            Object.freeze({
+              caller,
+              to: quote.target,
+              data: EIGENPIE_INTERFACE.encodeFunctionData("depositAsset", [
+                quote.tokenIn,
+                quote.amountIn,
+                quote.amountOut,
+                ethers.ZeroAddress,
+              ]),
+            }),
+          ]),
+          // One isolated ordered program: baselines precede approval/deposit,
+          // and the final receipt read scopes the required supply observation
+          // to the receipt, not the router. All sibling effects remain bound.
           call: Object.freeze({
-            caller: Object.freeze({ kind: "observed-sender" as const }),
-            to: quote.target,
-            data: EIGENPIE_INTERFACE.encodeFunctionData("depositAsset", [
-              quote.tokenIn,
-              quote.amountIn,
-              quote.amountOut,
-              ethers.ZeroAddress,
-            ]),
+            caller,
+            executionMode: "impersonated-call-frame" as const,
+            to: quote.tokenOut,
+            data: EIGENPIE_ERC20_INTERFACE.encodeFunctionData("totalSupply"),
           }),
+          observeTokenBalances: Object.freeze([
+            Object.freeze({ token: quote.tokenIn, account: caller }),
+            Object.freeze({ token: quote.tokenOut, account: caller }),
+          ]),
           overrideIntent: Object.freeze({
-            caller: Object.freeze({ kind: "observed-sender" as const }),
+            caller,
             tokenBalances: Object.freeze([Object.freeze({
               token: quote.tokenIn,
               amount: quote.amountIn,

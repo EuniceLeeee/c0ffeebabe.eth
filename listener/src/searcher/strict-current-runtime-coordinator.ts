@@ -37,6 +37,7 @@ import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
 import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
+import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
 
 export type StrictSessionPurpose =
   | "coarse-pricing"
@@ -152,7 +153,9 @@ export class StrictCurrentRuntimeCoordinator
       control: AdapterWorkControl,
       backend?: Pick<StateBackend, "call">,
       reuse?: { readonly previous?: EffectiveMidSnapshot;
-        readonly touchedStateKeys?: ReadonlySet<string> },
+        readonly touchedStateKeys?: ReadonlySet<string>;
+        /** Explicit quote target; snapshot remains the unmodified sizing reference. */
+        readonly quoteGraph?: VerifiedGraphView },
       simulationTransport?: StrictSimulationTransport,
     ) => Promise<EffectiveMidSnapshot>,
   ) {}
@@ -227,7 +230,7 @@ export class StrictCurrentRuntimeCoordinator
     assertWorkOpen(settleDeadlineAtMs, input.signal);
     const pricingEpoch = ++this.pricingEpoch;
     const previous = this.publishedPricing;
-    const session = await this.sessionFor({
+    const sessionPromise = Promise.resolve().then(() => this.sessionFor({
       purpose: "coarse-pricing",
       source: sourceFor(input.graph),
       control: controlFor(settleDeadlineAtMs, input.signal),
@@ -239,13 +242,11 @@ export class StrictCurrentRuntimeCoordinator
       ...(previous === null || input.touchedPools === undefined
         ? {}
         : { touchedPools: input.touchedPools }),
-    });
+    }));
+    const { built } = await this.preparePricing(sessionPromise, input.graph, previous,
+      pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend,
+      input.canonicalActivity, simulationTransport);
     assertWorkOpen(settleDeadlineAtMs, input.signal);
-    const built = await this.enrichPricing(buildStrictPricingSnapshot(session, input.graph, {
-      previous,
-      canonicalActivity: input.canonicalActivity,
-    }), pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity,
-    simulationTransport);
     this.publishPricing(built, pricingEpoch);
     return completePricingResult(built.snapshot);
   }
@@ -304,17 +305,20 @@ export class StrictCurrentRuntimeCoordinator
           deadlineAtMs: settleDeadlineAtMs,
           signal: input.signal ?? new AbortController().signal,
         }));
-    const [sessionResult, executionResult, fundingResult] = await Promise.allSettled([
-      sessionPromise,
+    const pricingPromise = this.preparePricing(sessionPromise, input.graph, previous,
+      pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend,
+      input.canonicalActivity, simulationTransport);
+    const [pricingResult, executionResult, fundingResult] = await Promise.allSettled([
+      pricingPromise,
       executionPromise,
       prefunding?.result,
     ] as const);
-    if (sessionResult.status === "rejected") throw sessionResult.reason;
+    if (pricingResult.status === "rejected") throw pricingResult.reason;
     if (executionResult.status === "rejected") throw executionResult.reason;
     if (fundingResult.status === "rejected") throw fundingResult.reason;
     const preparedFunding = fundingResult.value;
     if (preparedFunding?.status === "rejected") throw preparedFunding.reason;
-    const session = sessionResult.value;
+    const { session, built } = pricingResult.value;
     const fundingSession = preparedFunding?.value ?? session;
     if (prefunding !== undefined && prefunding.epoch !== this.fundingEpoch) {
       throw new Error("strict Funding preparation retired during join");
@@ -324,15 +328,8 @@ export class StrictCurrentRuntimeCoordinator
       ? 0
       : Math.max(0, Date.now() - executionStartedAtMs);
     assertWorkOpen(input.deadlineAtMs, input.signal);
-    const pricingStartedAtMs = Date.now();
-    const built = await this.enrichPricing(buildStrictPricingSnapshot(session, input.graph, {
-      previous,
-      canonicalActivity: input.canonicalActivity,
-    }), pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend, input.canonicalActivity,
-    simulationTransport);
     const pricing = built.snapshot;
-    const pricingMs = Math.max(0, Date.now() - pricingStartedAtMs) +
-      Math.max(0, pricingStartedAtMs - sessionStartedAtMs);
+    const pricingMs = Math.max(0, Date.now() - sessionStartedAtMs);
     const funding = buildStrictFundingSnapshot(
       fundingSession.fundingProjection(prefunding === undefined
         ? undefined : controlFor(settleDeadlineAtMs, input.signal)),
@@ -383,38 +380,64 @@ export class StrictCurrentRuntimeCoordinator
     });
   }
 
-  private async enrichPricing(
-    built: StrictPricingBuildResult,
+  /** One preparation path for bootstrap and steady producers; one atomic join. */
+  private async preparePricing(
+    sessionPromise: Promise<StrictProductionRuntimeSession>,
+    graph: VerifiedGraphView,
+    previous: BlockScanStateSnapshot | null,
     pricingEpoch: number,
     control: AdapterWorkControl,
     backend?: Pick<StateBackend, "call">,
     activity?: StrictCanonicalActivityProof,
     simulationTransport?: StrictSimulationTransport,
-  ): Promise<StrictPricingBuildResult> {
-    if (!this.effectivePricing) return built;
-    const effectiveMids = await this.effectivePricing(built.snapshot, control, backend, {
-      // Use the SAME published base as raw mid. Unpublished drafts have no
-      // matching activity interval and must not become a separate reuse base.
-      previous: this.publishedPricing?.effectiveMids,
-      // One activity input for both reference-price columns. It is produced
-      // by the existing full-range reader, not a second quote-reuse pipeline.
-      touchedStateKeys: activity?.complete === true &&
-        sameCanonicalSource(activity.source, sourceFor(built.snapshot.graph))
-        ? activity.touchedStateKeys : undefined,
-    }, simulationTransport);
+  ): Promise<{ session: StrictProductionRuntimeSession; built: StrictPricingBuildResult }> {
+    const raw = sessionPromise.then(session => {
+      // Soft Family settlement may return degraded coverage while the outer
+      // runtime pass is still open. Cancellation, unlike that deadline, retires it.
+      if (control.signal?.aborted) throw control.signal.reason ?? new Error("strict current runtime aborted");
+      return { session, built: buildStrictPricingSnapshot(session, graph, { previous, canonicalActivity: activity }) };
+    });
+    const quote = this.effectivePricing;
+    if (!quote) return raw;
+    const effective = (async () => {
+      // Only bootstrap waits for raw. Never relabel an old sizing snapshot as
+      // current state: quoteGraph carries the independently bound quote source.
+      const sizing = previous ?? (await raw).built.snapshot;
+      assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
+      return quote(sizing, control, backend, {
+        previous: previous?.effectiveMids,
+        quoteGraph: previous === null ? undefined : graph,
+        touchedStateKeys: activity?.complete === true &&
+          sameCanonicalSource(activity.source, sourceFor(graph))
+          ? activity.touchedStateKeys : undefined,
+      }, simulationTransport);
+    })();
+    // A rejection cannot leave the sibling pricing work detached from the
+    // producer's existing cancellation/drain boundary.
+    const [rawResult, effectiveResult] = await Promise.allSettled([raw, effective]);
+    if (rawResult.status === "rejected") throw rawResult.reason;
+    if (effectiveResult.status === "rejected") throw effectiveResult.reason;
+    const { session, built } = rawResult.value;
+    let effectiveMids = effectiveResult.value;
     // Retired/reset preparations must not overwrite the published table.
     // The amount builder itself rejects late quotes.
     if (pricingEpoch !== this.pricingEpoch) throw new Error("pricing publication retired during prepare");
-    const source = sourceFor(built.snapshot.graph);
+    const source = sourceFor(graph);
     if (effectiveMids.source.number !== source.number ||
         effectiveMids.source.hash.toLowerCase() !== source.hash.toLowerCase() ||
         effectiveMids.source.generation !== source.generation) {
       throw new Error("effective pricing incomplete or mismatched source");
     }
+    // Parallel work may have quoted a direction whose raw read failed. Keep
+    // the original published-table membership, without another quote pass.
+    if ([...effectiveMids.rows.keys()].some(key => !built.snapshot.mids.has(key))) {
+      effectiveMids = Object.freeze({ ...effectiveMids,
+        rows: new Map([...effectiveMids.rows].filter(([key]) => built.snapshot.mids.has(key))) });
+    }
     const snapshot = Object.freeze({ ...built.snapshot, effectiveMids });
     assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
     if (!effectiveMids.complete) throw new Error("effective pricing incomplete or mismatched source");
-    return { snapshot, publication: Object.freeze({ ...built.publication, snapshot }) };
+    return { session, built: { snapshot, publication: Object.freeze({ ...built.publication, snapshot }) } };
   }
 
   private publishPricing(built: StrictPricingBuildResult, pricingEpoch: number): void {
@@ -884,18 +907,6 @@ function sameStateKeyCoverage(
   return "reason" in left && left.reason === right.reason;
 }
 
-function deltaMap<K, V>(
-  previous: ReadonlyMap<K, V>,
-  updates: readonly (readonly [K, V])[],
-  removals: readonly K[],
-): ReadonlyMap<K, V> {
-  if (updates.length === 0 && removals.length === 0) return previous;
-  const next = new Map(previous);
-  for (const [key, value] of updates) next.set(key, value);
-  for (const key of removals) next.delete(key);
-  return next;
-}
-
 function compatibleCarryForEdge(input: {
   readonly edge: VerifiedGraphView["edges"][number];
   readonly edgeKey: string;
@@ -1125,12 +1136,4 @@ function assertSessionGraphSource(
   ) {
     throw new Error("strict session source differs from current GraphView");
   }
-}
-
-function scannerConsumesEdge(edge: {
-  readonly slotKind: string;
-  readonly leavesStandingPosition: boolean;
-}): boolean {
-  return edge.slotKind === "swap" ||
-    (edge.slotKind === "protocol" && !edge.leavesStandingPosition);
 }

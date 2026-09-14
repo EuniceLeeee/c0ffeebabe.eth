@@ -5,6 +5,8 @@ import {
   sameAddress,
 } from "./codec.js";
 import { requireAngstromRuntimeEvidence } from "./evidence.js";
+import { hashCanonical } from "../../canonical-value.js";
+import { angstromV4StaticBindingProjection } from "./binding.js";
 import type {
   AngstromV4Descriptor,
   AngstromV4ExactEvidence,
@@ -20,11 +22,16 @@ export const angstromV4Execution = {
     prewarmQuoteCalls: Object.freeze([]),
   }),
   buildFragment(input) {
-    const runtime = requireAngstromRuntimeEvidence({
-      descriptor: input.descriptor,
-      source: input.exactEvidence.source,
-      runtimeEvidence: input.runtimeEvidence,
-    });
+    const runtime = input.exactEvidence.kind === "angstrom-v4-tx-bound-quoter"
+      ? requireAngstromRuntimeEvidence({
+        descriptor: input.descriptor,
+        source: input.exactEvidence.source,
+        runtimeEvidence: input.runtimeEvidence,
+      }) : undefined;
+    if (runtime === undefined &&
+        (!Array.isArray(input.runtimeEvidence) || input.runtimeEvidence.length !== 0)) {
+      throw new Error("angstrom-v4 source-unlocked execution requires empty runtime evidence");
+    }
     assertExecutionEvidence(input, runtime);
     if (
       input.amountIn <= 0n || input.amountIn > UINT128_MAX ||
@@ -55,12 +62,19 @@ export const angstromV4Execution = {
           zeroForOne: input.route.direction === "zero-for-one",
           amountSpecified: input.amountIn,
           minAmountOut: input.minAmountOut,
-          attestationBlockNumbers: runtime.attestations.map(
-            (item) => item.blockNumber,
-          ),
-          attestationUnlockData: runtime.attestations.map(
-            (item) => item.unlockData,
-          ),
+          ...(runtime === undefined ? {
+            unlockMode: "source-unlocked",
+            // The adapter selects the entry matching block.number. B+1 must
+            // fail its real lock checks; never relabel this quote's source.
+            sourceBlock: BigInt(input.exactEvidence.source.number),
+          } : {
+            attestationBlockNumbers: runtime.attestations.map(
+              (item) => item.blockNumber,
+            ),
+            attestationUnlockData: runtime.attestations.map(
+              (item) => item.unlockData,
+            ),
+          }),
           recipient: input.executor,
           deadline: UINT256_MAX,
         },
@@ -95,22 +109,15 @@ function assertExecutionEvidence(
     readonly amountIn: bigint;
     readonly quotedAmountOut: bigint;
     readonly exactEvidence: AngstromV4ExactEvidence;
+    readonly executor: string;
   },
-  runtime: ReturnType<typeof requireAngstromRuntimeEvidence>,
+  runtime: ReturnType<typeof requireAngstromRuntimeEvidence> | undefined,
 ): void {
   const evidence = input.exactEvidence;
   if (
-    evidence.kind !== "angstrom-v4-tx-bound-quoter" ||
     evidence.poolId !== input.descriptor.poolId ||
     evidence.poolKeyFingerprint !== poolKeyFingerprint(input.descriptor.poolKey) ||
     !sameAddress(evidence.quoter, input.descriptor.immutableBinding.quoter) ||
-    evidence.txHash.toLowerCase() !== runtime.runtime.txHash!.toLowerCase() ||
-    evidence.runtimeEvidenceHash !== runtime.runtime.evidenceHash ||
-    evidence.payloadHash.toLowerCase() !== runtime.payloadHash.toLowerCase() ||
-    evidence.attestationEvidenceHashes.length !== runtime.attestations.length ||
-    evidence.attestationEvidenceHashes.some(
-      (hash, index) => hash !== runtime.attestations[index].evidenceHash
-    ) ||
     !sameAddress(evidence.tokenIn, input.route.tokenIn) ||
     !sameAddress(evidence.tokenOut, input.route.tokenOut) ||
     evidence.amountIn !== input.amountIn ||
@@ -120,4 +127,15 @@ function assertExecutionEvidence(
       "angstrom-v4 execution received incompatible exact/runtime evidence",
     );
   }
+  if (evidence.kind === "angstrom-v4-source-unlocked-quoter" && runtime === undefined &&
+      evidence.bindingFingerprint === hashCanonical(angstromV4StaticBindingProjection(input.descriptor)) &&
+      sameAddress(evidence.executor, input.executor)) return;
+  if (evidence.kind === "angstrom-v4-tx-bound-quoter" && runtime !== undefined &&
+      evidence.txHash.toLowerCase() === runtime.runtime.txHash!.toLowerCase() &&
+      evidence.runtimeEvidenceHash === runtime.runtime.evidenceHash &&
+      evidence.payloadHash.toLowerCase() === runtime.payloadHash.toLowerCase() &&
+      evidence.attestationEvidenceHashes.length === runtime.attestations.length &&
+      evidence.attestationEvidenceHashes.every((hash, index) => hash === runtime.attestations[index].evidenceHash)) return;
+  // In particular, local-zero evidence is never an executable unlock proof.
+  throw new Error("angstrom-v4 execution received incompatible exact/runtime evidence");
 }

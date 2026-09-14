@@ -5,6 +5,8 @@ import { buildFamilyCapabilityShadowArtifact } from
   "../build-family-capability-manifest.js";
 import { definedFamilyPluginContractSummary } from
   "../venues/adapter-family-plugin.js";
+import { FAMILY_CAPABILITY_NAMES } from
+  "../venues/family-capability-catalog.js";
 import { eigenpieStrictFamilyPlugin } from
   "../venues/protocols/eigenpie-family-plugin.js";
 import { goldxStrictFamilyPlugin } from
@@ -55,6 +57,7 @@ assert.equal(artifact.complete, true, JSON.stringify(artifact.issues));
 assert.deepEqual(artifact.issues, []);
 
 const presentCapabilities = Object.freeze([
+  "capture",
   "discovery",
   "identity",
   "instance",
@@ -69,7 +72,11 @@ for (const family of families) {
   const records = artifact.exact.filter((record) =>
     record.identity.familyId === familyId
   );
-  assert.equal(records.length, 10, `${familyId} capability row count`);
+  const capabilities = records.map((record) => record.identity.capability);
+  assert.equal(new Set(capabilities).size, records.length,
+    `${familyId} capability rows must be unique`);
+  assert.deepEqual([...capabilities].sort(), [...FAMILY_CAPABILITY_NAMES].sort(),
+    `${familyId} must have exactly the canonical capability set`);
   const present = records.filter((record) => record.root.absence === null);
   assert.deepEqual(
     present.map((record) => record.identity.capability).sort(),
@@ -96,10 +103,19 @@ for (const family of families) {
       `${familyId}/${record.identity.capability} cannot hash the compatibility assembly`,
     );
     assert(
-      directRootFiles.every((root) =>
-        !record.identity.semanticDependencies.includes(root)
-      ),
-      `${familyId}/${record.identity.capability} cannot depend on a sibling semantic root`,
+      record.identity.semanticDependencies.every((dependency) => {
+        const isSemanticRoot = directRootFiles.includes(dependency) || (
+          dependency.startsWith("src/searcher/venues/") &&
+          FAMILY_CAPABILITY_NAMES.some((capability) =>
+            dependency.endsWith(`-family/${capability}.ts`)
+          )
+        );
+        // Existing capture materialization composes its declared discovery.
+        // No other sibling or cross-Family semantic dependency is allowed.
+        return !isSemanticRoot || (record.identity.capability === "capture" &&
+          dependency === `src/searcher/venues/protocols/${family.name}-family/discovery.ts`);
+      }),
+      `${familyId}/${record.identity.capability} cannot depend on a sibling or cross-Family semantic root except capture -> declared discovery`,
     );
   }
 }

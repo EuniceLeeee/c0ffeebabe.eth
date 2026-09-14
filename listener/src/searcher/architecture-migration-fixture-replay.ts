@@ -5443,7 +5443,8 @@ function erc4626SiloSuccessResult(
               [10n ** 30n],
             )
           : request.id === "identity-preview-redeem" ||
-              request.id === "current-preview-redeem"
+              request.id === "current-preview-redeem" ||
+              request.id === "exact-preview-redeem"
             ? (() => {
                 const shares = BigInt(
                   ERC4626_SILO_INTERFACE.decodeFunctionData(
@@ -5457,7 +5458,8 @@ function erc4626SiloSuccessResult(
                 );
               })()
             : request.id === "identity-preview-withdraw" ||
-                request.id === "current-preview-withdraw"
+                request.id === "current-preview-withdraw" ||
+                request.id === "exact-preview-withdraw"
               ? (() => {
                   const assets = BigInt(
                     ERC4626_SILO_PAYOUT_INTERFACE.decodeFunctionData(
@@ -5589,8 +5591,8 @@ async function runErc4626SiloLifecycle(
 /**
  * Runs the ERC4626 Silo payout lifecycle over the observed redeem fixture.
  * Identity proves the vault/payout asset relation, preview chain and the
- * active redeem effect-delta simulation; exact re-runs the simulation with
- * the executor as actor.
+ * active redeem effect-delta simulation; exact queries the proven preview
+ * chain with the requested amount, without another redemption simulation.
  */
 async function buildErc4626SiloCaseCapture(input: {
   readonly source: CanonicalSource;
@@ -5672,7 +5674,7 @@ async function buildErc4626SiloCaseCapture(input: {
     }));
   const exactMethod = erc4626SiloRedeemExact.methods().find(
     (method) => method.kind === "request-program" &&
-      method.id === "active-redeem-simulation",
+      method.id === "preview-redeem-then-withdraw",
   );
   if (exactMethod === undefined || exactMethod.kind !== "request-program") {
     throw new Error("erc4626-silo exact request program is missing");
@@ -5710,10 +5712,22 @@ async function buildErc4626SiloCaseCapture(input: {
       const results = requests.map((request) =>
         erc4626SiloSuccessResult(request, input.source)
       );
+      const dependent = program.buildDependentProgram?.({
+        programInput: exactInput,
+        completedRound: 0,
+        initialResults: results,
+        priorEvidence: Object.freeze([]),
+      });
+      if (dependent === null || dependent === undefined) {
+        throw new Error(`erc4626-silo exact route ${route.routeKey} has no dependent round`);
+      }
+      const dependentResults = dependent.requests.map((request) =>
+        erc4626SiloSuccessResult(request, input.source)
+      );
       const decoded = program.decode({
         programInput: exactInput,
         initialResults: results,
-        dependentEvidence: Object.freeze([]),
+        dependentEvidence: Object.freeze([dependent.decode(dependentResults)]),
       });
       const edge = edgeByRouteKey.get(route.routeKey);
       if (edge === undefined) {
@@ -6806,13 +6820,12 @@ async function buildEtherTokenCaseCapture(input: {
       }),
     }));
   const exactMethod = etherTokenNativeRedeemExact.methods().find(
-    (method) => method.kind === "request-program" &&
-      method.id === "withdraw-effect-simulation",
+    (method) => method.kind === "local" &&
+      method.id === "identity-proven-one-to-one",
   );
-  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
-    throw new Error("ethertoken-native exact request program is missing");
+  if (exactMethod === undefined || exactMethod.kind !== "local") {
+    throw new Error("ethertoken-native local quote is missing");
   }
-  const program = exactMethod.program;
   const exactByRouteKey = new Map<
     string,
     {
@@ -6841,15 +6854,7 @@ async function buildEtherTokenCaseCapture(input: {
         executor: MIGRATION_CAPTURE_EXECUTOR,
         runtimeEvidence: Object.freeze([]),
       });
-      const requests = program.buildRequests(exactInput);
-      const results = requests.map((request) =>
-        etherTokenNativeSuccessResult(request, input.source)
-      );
-      const decoded = program.decode({
-        programInput: exactInput,
-        initialResults: results,
-        dependentEvidence: Object.freeze([]),
-      });
+      const decoded = exactMethod.quote(exactInput).result;
       const edge = edgeByRouteKey.get(route.routeKey);
       if (edge === undefined) {
         throw new Error(
@@ -7135,8 +7140,22 @@ function selfBurnNativeSuccessResult(
   if (request.kind === "effect-delta-simulation") {
     return selfBurnNativeSimulationResult(request, canonical);
   }
+  // This fixture's simulated redemption has no fee; Exact reads the same
+  // zero-fee state through the Family's source-bound getter requests.
+  const feeValues: Readonly<Record<string, bigint>> = {
+    "exact-wrapFeeParts": 1_000_000n,
+    "exact-wrapFeeRate": 0n,
+    "exact-wrapFeeMin": 0n,
+    "exact-wrapFeeMax": 0n,
+    "current-wrapFeeParts": 1_000_000n,
+    "current-wrapFeeRate": 0n,
+    "current-wrapFeeMin": 0n,
+    "current-wrapFeeMax": 0n,
+  };
   const data =
-    request.id === "identity-token-code"
+    Object.hasOwn(feeValues, request.id)
+      ? ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [feeValues[request.id]])
+      : request.id === "identity-token-code"
       ? "0x00"
       : request.id === "identity-token-balance-surface" ||
           request.id === "identity-token-supply"
@@ -7265,7 +7284,7 @@ async function runSelfBurnNativeLifecycle(
 /**
  * Runs the self-burn native lifecycle over the observed transfer-self
  * fixture: active effect-delta proof, probe-based variable-native-out
- * pricing, exact burn simulation and a two-node redeem + WETH deposit
+ * pricing, source-fee Exact quote and a two-node redeem + WETH deposit
  * execution fragment.
  */
 async function buildSelfBurnCaseCapture(input: {
@@ -7348,7 +7367,7 @@ async function buildSelfBurnCaseCapture(input: {
     }));
   const exactMethod = selfBurnNativeExact.methods().find(
     (method) => method.kind === "request-program" &&
-      method.id === "burn-effect-simulation",
+      method.id === "source-fee-quote",
   );
   if (exactMethod === undefined || exactMethod.kind !== "request-program") {
     throw new Error("self-burn-native exact request program is missing");
@@ -10017,14 +10036,6 @@ async function buildAngstromCaseCapture(input: {
         order,
       }),
     }));
-  const exactMethod = angstromV4Exact.methods().find(
-    (method) => method.kind === "request-program" &&
-      method.id === "tx-bound-quoter",
-  );
-  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
-    throw new Error("angstrom-v4 exact request program is missing");
-  }
-  const program = exactMethod.program;
   const exactByRouteKey = new Map<
     string,
     {
@@ -10055,6 +10066,13 @@ async function buildAngstromCaseCapture(input: {
         executor: MIGRATION_CAPTURE_EXECUTOR,
         runtimeEvidence,
       });
+      const exactMethod = angstromV4Exact.methods(exactInput).find(
+        (method) => method.kind === "request-program" && method.id === "tx-bound-quoter",
+      );
+      if (exactMethod === undefined || exactMethod.kind !== "request-program") {
+        throw new Error("angstrom-v4 exact request program is missing");
+      }
+      const program = exactMethod.program;
       const requests = program.buildRequests(exactInput);
       const results = requests.map((request) =>
         angstromSuccessResult(request, input.source)

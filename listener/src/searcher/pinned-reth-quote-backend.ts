@@ -26,8 +26,13 @@ import {
   type TokenToNativeDeltaRequest,
   type TokenToNativeDeltaResult,
 } from "../shared/state/state-backend.js";
-import type {
+import {
   RethTransportScheduler,
+  isRethTransportTimeout,
+  type RethTransportAttempt,
+  type RethTransportLease,
+  type RethTransportLoad,
+  type RethTransportRetryState,
 } from "./reth-transport-scheduler.js";
 import { isRpcQuotaExhaustedError, isRpcThrottleError } from "./rpc-throttle-guard.js";
 
@@ -69,7 +74,7 @@ export function isPassScopedExactStateBackend(
 export interface PinnedRethQuoteBackendOptions {
   readonly maxBatchSize?: number;
   readonly maxConcurrentBatches?: number;
-  /** Recover batch rate limits by halving concurrency; three retries at one. */
+  /** Opt into shared throughput recovery; physical timeouts always use it. */
   readonly retryRpcThrottle?: boolean;
   /** Physical lane used when acquiring the shared reth transport permit. */
   readonly transportLane?: "producer-bulk" | "exact";
@@ -106,10 +111,11 @@ export class PinnedRethQuoteBackend
 {
   private readonly maxBatchSize: number;
   private readonly maxConcurrentBatches: number;
-  private currentConcurrentBatchLimit: number;
-  private retryNotBeforeMs = 0;
-  private retryWake: { promise: Promise<void>; cancel: () => void } | undefined;
+  private readonly transportScheduler: Pick<RethTransportScheduler, "run">;
+  private standaloneScheduler: RethTransportScheduler | undefined;
+  private transportLoad: RethTransportLoad | undefined;
   private throttleRetries = 0;
+  private timeoutRetries = 0;
   private readonly transportLane: "producer-bulk" | "exact";
   private readonly scopeLabel: string;
   private readonly allowSingleCallFallback: boolean;
@@ -169,7 +175,7 @@ export class PinnedRethQuoteBackend
      */
     this.maxBatchSize = options.maxBatchSize ?? 32;
     this.maxConcurrentBatches = options.maxConcurrentBatches ?? 8;
-    this.currentConcurrentBatchLimit = this.maxConcurrentBatches;
+    this.transportScheduler = options.transportScheduler ?? this.localScheduler();
     this.transportLane = options.transportLane ?? "exact";
     this.scopeLabel = options.scopeLabel ?? "exact quote";
     this.allowSingleCallFallback = options.allowSingleCallFallback ??
@@ -508,7 +514,6 @@ export class PinnedRethQuoteBackend
       this.rejectItem(item, error);
     }
     this.pending.length = 0;
-    this.retryWake?.cancel();
   }
 
   async closeAndDrain(
@@ -536,8 +541,7 @@ export class PinnedRethQuoteBackend
       // Include the partial batch whose setImmediate flush has not run yet.
       // Callers stop issuing phase work before awaiting this boundary.
       this.pump();
-      const active = [...this.activeFlushes, ...this.activeTransports,
-        ...(this.retryWake ? [this.retryWake.promise] : [])];
+      const active = [...this.activeFlushes, ...this.activeTransports];
       if (active.length === 0) return;
       await Promise.allSettled(active);
     }
@@ -550,7 +554,9 @@ export class PinnedRethQuoteBackend
     maxBatchSize: number;
     maxConcurrentBatches: number;
     currentConcurrentBatchLimit: number;
+    currentBatchSizeLimit: number;
     throttleRetries: number;
+    timeoutRetries: number;
     totalCalls: number;
     memoHits: number;
     batchesSent: number;
@@ -588,7 +594,9 @@ export class PinnedRethQuoteBackend
       maxBatchSize: this.maxBatchSize,
       maxConcurrentBatches: this.maxConcurrentBatches,
       currentConcurrentBatchLimit: this.currentConcurrentBatchLimit,
+      currentBatchSizeLimit: this.currentBatchSizeLimit,
       throttleRetries: this.throttleRetries,
+      timeoutRetries: this.timeoutRetries,
       totalCalls: this.totalCalls,
       memoHits: this.memoHits,
       batchesSent: this.batchesSent,
@@ -687,7 +695,7 @@ export class PinnedRethQuoteBackend
     // waiting for the setImmediate tail flush. This keeps wide exact fan-out
     // from fragmenting into many half-filled HTTP batches while preserving a
     // zero-delay flush for the final partial batch.
-    if (this.pending.length >= this.maxBatchSize) this.pump();
+    if (this.pending.length >= this.currentBatchSizeLimit) this.pump();
     else this.scheduleFlush();
   }
 
@@ -764,44 +772,47 @@ export class PinnedRethQuoteBackend
     });
   }
 
-  private queueThrottleRetry(items: PendingQuoteItem[], error: Error, sentLimit: number): boolean {
-    if (!this.options.retryRpcThrottle || !isRpcThrottleError(error) ||
-        isRpcQuotaExhaustedError(error) || this.closed) return false;
-    const live = items.filter(item => !item.settled);
-    if (!live.length) return true;
-    // Count only attempts actually sent at one, not sibling failures already
-    // in flight at the previous wider limit. Never extend caller deadlines.
-    if (sentLimit === 1 && live.some(item => (item.throttleRetriesAtOne ?? 0) >= 3)) return false;
-    const previous = this.currentConcurrentBatchLimit;
-    this.currentConcurrentBatchLimit = Math.max(1, Math.floor(previous / 2));
-    if (sentLimit === 1) for (const item of live) {
-      item.throttleRetriesAtOne = (item.throttleRetriesAtOne ?? 0) + 1;
-    }
-    const atOne = Math.max(...live.map(item => item.throttleRetriesAtOne ?? 0));
-    const delayMs = Math.min(4_000, 1_000 * 2 ** Math.max(0, atOne - 1));
-    this.retryNotBeforeMs = Math.max(this.retryNotBeforeMs, Date.now() + delayMs);
-    this.throttleRetries++;
-    this.pending.unshift(...live);
-    console.warn(`[pinned-reth-quote-backend] rpc-throttle-retry status=429 concurrency=${previous}->${this.currentConcurrentBatchLimit} retry_at_one=${atOne}/3 delay_ms=${delayMs} items=${live.length}`);
+  private get currentConcurrentBatchLimit(): number {
+    return this.transportLoad?.limits(this.maxBatchSize, this.maxConcurrentBatches).concurrency ?? this.maxConcurrentBatches;
+  }
+
+  private localScheduler(): RethTransportScheduler {
+    return this.standaloneScheduler ??= new RethTransportScheduler({
+      capacity: this.maxConcurrentBatches + 1, producerReserved: 1,
+    });
+  }
+
+  private get currentBatchSizeLimit(): number {
+    return this.transportLoad?.limits(this.maxBatchSize, this.maxConcurrentBatches).batchSize ?? this.maxBatchSize;
+  }
+
+  private retryTransport(error: unknown, items: readonly RethTransportRetryState[], attempt: RethTransportAttempt): boolean {
+    if (this.closed || this.scopeController.signal.aborted ||
+        (this.options.deadlineAtMs !== undefined && Date.now() >= this.options.deadlineAtMs) ||
+        (!isRethTransportTimeout(error) && !this.options.retryRpcThrottle)) return false;
+    if (!this.transportLoad?.retry(error, items, attempt)) return false;
+    if (isRethTransportTimeout(error)) this.timeoutRetries++;
+    else this.throttleRetries++;
+    const marker = isRethTransportTimeout(error) ? "transport-timeout-retry" : "rpc-throttle-retry status=429";
+    const atOne = Math.max(...items.map(item => item.transportRetriesAtOne ?? 0));
+    console.warn(`[pinned-reth-quote-backend] ${marker} concurrency=${attempt.concurrency}->${this.currentConcurrentBatchLimit} retry_at_one=${atOne}/3 delay_ms=${this.transportLoad.retryDelayMs()} items=${items.length}`);
     return true;
   }
 
+  private queueTransportRetry(items: PendingQuoteItem[], error: unknown, attempt: RethTransportAttempt): "queued" | "unused" | "refused" {
+    const live = items.filter(item => {
+      if (item.settled) return false;
+      const cancelled = this.callControlError(item.control, item.req.to);
+      if (cancelled) this.rejectItem(item, cancelled);
+      return !cancelled;
+    });
+    if (!live.length) return "unused";
+    if (!this.retryTransport(error, live, attempt)) return "refused";
+    this.pending.unshift(...live);
+    return "queued";
+  }
+
   private pump(): void {
-    if (!this.closed && this.pending.length && Date.now() < this.retryNotBeforeMs) {
-      if (!this.retryWake) {
-        let finish!: () => void;
-        const promise = new Promise<void>(resolve => { finish = resolve; });
-        const timer = setTimeout(() => {
-          this.retryWake = undefined;
-          finish();
-          this.pump();
-        }, this.retryNotBeforeMs - Date.now());
-        this.retryWake = { promise, cancel: () => {
-          clearTimeout(timer); this.retryWake = undefined; finish();
-        } };
-      }
-      return;
-    }
     const concurrencyLimit = this.currentConcurrentBatchLimit;
     while (
       !this.closed &&
@@ -809,12 +820,12 @@ export class PinnedRethQuoteBackend
       this.inFlightBatches < concurrencyLimit
     ) {
       const now = Date.now();
-      const batch = this.pending.splice(0, this.maxBatchSize);
+      const batch = this.pending.splice(0, this.currentBatchSizeLimit);
       const alive: PendingQuoteItem[] = [];
       for (const item of batch) {
         if (item.settled) continue;
         // One admitted batch is one physical request, even for mixed callers.
-        if (this.options.retryRpcThrottle && alive.length && item.kind !== alive[0]!.kind) {
+        if (alive.length && item.kind !== alive[0]!.kind) {
           this.pending.push(item);
           continue;
         }
@@ -862,27 +873,51 @@ export class PinnedRethQuoteBackend
     }
   }
 
-  private async flushBatch(alive: PendingQuoteItem[], sentLimit: number): Promise<void> {
+  private async flushBatch(alive: PendingQuoteItem[], scheduledLimit: number): Promise<void> {
     const calls = alive.filter((item) => item.kind === "eth_call");
     const simulations = alive.filter(
       (item) => item.kind === "eth_simulateV1",
     );
     await Promise.all([
-      ...(calls.length > 0 ? [this.sendCallBatch(calls, sentLimit)] : []),
+      ...(calls.length > 0 ? [this.sendCallBatch(calls, scheduledLimit)] : []),
       ...(simulations.length > 0
-        ? [this.sendSimulationBatch(simulations, sentLimit)]
+        ? [this.sendSimulationBatch(simulations, scheduledLimit)]
         : []),
     ]);
   }
 
   private async runTransport(
     signal: AbortSignal,
-    work: () => Promise<JsonRpcHttpResponse>,
-    retryThrottle?: (error: Error) => boolean,
+    work: (wireSignal: AbortSignal, attempt: RethTransportAttempt) => Promise<JsonRpcHttpResponse>,
+    retry?: (error: unknown, attempt: RethTransportAttempt) => boolean,
   ): Promise<JsonRpcHttpResponse> {
-    const checkedWork = async (): Promise<JsonRpcHttpResponse> => {
+    const checkedWork = async (lease: RethTransportLease): Promise<JsonRpcHttpResponse> => {
+      // Legacy run-only test doubles may not provide load. Real shared
+      // schedulers always do, including through run-only forwarding wrappers.
+      if (!lease.load) return this.localScheduler().run(this.transportLane, signal, checkedWork);
+      this.transportLoad = lease.load;
+      this.transportQueueWaitMs += lease.queueWaitMs;
+      this.maxTransportQueueWaitMs = Math.max(this.maxTransportQueueWaitMs, lease.queueWaitMs);
+      this.peakSchedulerActiveTotal = Math.max(this.peakSchedulerActiveTotal, lease.activeTotal);
+      this.peakSchedulerLaneActive = Math.max(this.peakSchedulerLaneActive, lease.activeByLane[this.transportLane]);
+      if (signal.aborted) throw signal.reason;
+      if (this.closed) throw this.scopeAbortError(this.sourceBlockHash);
+      if (this.options.deadlineAtMs !== undefined && Date.now() >= this.options.deadlineAtMs) {
+        throw new StateCallAbortedError("scope absolute deadline reached", "deadline");
+      }
+      const attempt = lease.load.limits(this.maxBatchSize, this.maxConcurrentBatches);
+      const wire = new AbortController();
+      const onAbort = (): void => wire.abort(signal.reason);
+      signal.addEventListener("abort", onAbort, { once: true });
+      // Permit waiting is covered only by original caller/scope controls. This
+      // timer measures a physical attempt, never time in the shared queue.
+      const timeout = setTimeout(() => wire.abort(new StateCallAbortedError(
+        "JSON-RPC physical transport timeout", "timeout",
+      )), lease.load.timeoutMs);
       try {
-        const response = await work();
+        const response = await work(wire.signal, attempt);
+        if (signal.aborted) throw signal.reason;
+        if (wire.signal.aborted) throw wire.signal.reason;
         if (response.statusCode === 429) {
           // Keep structured error codes/data: contract revert text inside an
           // HTTP 429 body is not proof that the account allocation is spent.
@@ -905,34 +940,17 @@ export class PinnedRethQuoteBackend
         }
         return response;
       } catch (error) {
-        if (error instanceof QueuedThrottleRetry) throw error;
-        if (error instanceof Error && retryThrottle?.(error)) throw new QueuedThrottleRetry();
+        if (error instanceof QueuedTransportRetry) throw error;
+        if (signal.aborted) throw signal.reason;
+        if (retry?.(error, attempt)) throw new QueuedTransportRetry();
         if (error instanceof Error) this.abortForRpcFailure(error);
         throw error;
+      } finally {
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", onAbort);
       }
     };
-    const operation = this.options.transportScheduler
-      ? this.options.transportScheduler.run(
-          this.transportLane,
-          signal,
-          async ({ queueWaitMs, activeTotal, activeByLane }) => {
-            this.transportQueueWaitMs += queueWaitMs;
-            this.maxTransportQueueWaitMs = Math.max(
-              this.maxTransportQueueWaitMs,
-              queueWaitMs,
-            );
-            this.peakSchedulerActiveTotal = Math.max(
-              this.peakSchedulerActiveTotal,
-              activeTotal,
-            );
-            this.peakSchedulerLaneActive = Math.max(
-              this.peakSchedulerLaneActive,
-              activeByLane[this.transportLane],
-            );
-            return checkedWork();
-          },
-        )
-      : checkedWork();
+    const operation = this.transportScheduler.run(this.transportLane, signal, checkedWork);
     this.activeTransports.add(operation);
     try {
       return await operation;
@@ -941,7 +959,7 @@ export class PinnedRethQuoteBackend
     }
   }
 
-  private async sendCallBatch(items: PendingQuoteItem[], sentLimit: number): Promise<void> {
+  private async sendCallBatch(items: PendingQuoteItem[], scheduledLimit: number): Promise<void> {
     const payloads = items.map((item) => ({
       jsonrpc: "2.0",
       id: item.id,
@@ -955,12 +973,12 @@ export class PinnedRethQuoteBackend
         this.blockSpecifier,
       ],
     }));
-    await this.sendBatchPayloads(payloads, items, "eth_call", sentLimit);
+    await this.sendBatchPayloads(payloads, items, "eth_call", scheduledLimit);
   }
 
   private async sendSimulationBatch(
     items: PendingQuoteItem[],
-    sentLimit: number,
+    scheduledLimit: number,
   ): Promise<void> {
     const payloads = items.map((item) => ({
       jsonrpc: "2.0",
@@ -968,14 +986,14 @@ export class PinnedRethQuoteBackend
       method: "eth_simulateV1",
       params: [item.simulation, this.blockSpecifier],
     }));
-    await this.sendBatchPayloads(payloads, items, "eth_simulateV1", sentLimit);
+    await this.sendBatchPayloads(payloads, items, "eth_simulateV1", scheduledLimit);
   }
 
   private async sendBatchPayloads(
     payloads: unknown[],
     items: PendingQuoteItem[],
     method: string,
-    sentLimit: number,
+    scheduledLimit: number,
   ): Promise<void> {
     if (this.closed || this.scopeController.signal.aborted) {
       const error = this.scopeAbortError(method);
@@ -1012,36 +1030,17 @@ export class PinnedRethQuoteBackend
     for (const signal of itemSignals) signal.addEventListener("abort", abortIfUnused);
     abortIfUnused();
 
-    const remainingScopeMs = Math.min(
-      30_000,
-      Math.max(
-        0,
-        (this.options.deadlineAtMs ?? Date.now() + 30_000) - Date.now(),
-      ),
-    );
-    const timeout = setTimeout(
-      () =>
-        controller.abort(
-          new StateCallAbortedError(
-            `JSON-RPC batch ${method} transport timeout`,
-            "timeout",
-          ),
-        ),
-      remainingScopeMs,
-    );
-
     const batchStartedAtMs = Date.now();
     let response: JsonRpcHttpResponse;
     try {
       if (controller.signal.aborted) throw controller.signal.reason;
-      response = await this.runTransport(controller.signal, async () => {
+      response = await this.runTransport(controller.signal, async (wireSignal, attempt) => {
         // A shared permit may arrive after another batch lowered our limit.
         // This envelope has not reached the wire: return it to the same pump,
         // rather than letting pre-admitted work bypass the new limit/backoff.
-        if (this.options.retryRpcThrottle &&
-            (Date.now() < this.retryNotBeforeMs || sentLimit > this.currentConcurrentBatchLimit)) {
+        if (items.length > attempt.batchSize || scheduledLimit > attempt.concurrency) {
           this.pending.unshift(...items.filter(item => !item.settled));
-          throw new QueuedThrottleRetry();
+          throw new QueuedTransportRetry();
         }
         this.batchesSent++;
         this.batchedItems += items.length;
@@ -1049,7 +1048,7 @@ export class PinnedRethQuoteBackend
           this.maxBatchItemsSent,
           items.length,
         );
-        const response = await postJsonRpc(this.rpcUrl, payloads as never, controller.signal);
+        const response = await postJsonRpc(this.rpcUrl, payloads as never, wireSignal);
         // Inspect before releasing the shared permit or settling any sibling.
         // Otherwise the scheduler can dispatch queued RPCs on the dead source.
         if (response.statusCode >= 200 && response.statusCode < 300 && Array.isArray(response.body)) {
@@ -1067,14 +1066,16 @@ export class PinnedRethQuoteBackend
           }
           if (throttled.size) {
             const error = throttled.values().next().value!;
-            if (!this.queueThrottleRetry([...throttled.keys()], error, sentLimit)) this.abortForRpcFailure(error);
+            // An abandoned recoverable item needs neither retry nor fatal
+            // escalation. Source/quota errors were still inspected above.
+            if (this.queueTransportRetry([...throttled.keys()], error, attempt) === "refused") this.abortForRpcFailure(error);
             for (const item of throttled.keys()) retryIds.add(item.id);
           }
         }
         return response;
-      }, error => this.queueThrottleRetry(items, error, sentLimit));
+      }, (error, attempt) => this.queueTransportRetry(items, error, attempt) === "queued");
     } catch (transportError) {
-      if (transportError instanceof QueuedThrottleRetry) return;
+      if (transportError instanceof QueuedTransportRetry) return;
       /*
        * Pass/head/deadline abort must never fall back to single calls:
        * cancelling one old batch would immediately manufacture N old
@@ -1091,11 +1092,14 @@ export class PinnedRethQuoteBackend
         return;
       }
       this.batchFailures++;
+      if (isRethTransportTimeout(transportError)) {
+        for (const item of items) this.rejectItem(item, transportError);
+        return; // Exhaustion must not manufacture single-call retries.
+      }
       await this.handleBatchFailure(items, method, transportError);
       return;
     } finally {
       this.batchLatencyMs += Math.max(0, Date.now() - batchStartedAtMs);
-      clearTimeout(timeout);
       this.scopeController.signal.removeEventListener(
         "abort",
         onScopeAbort,
@@ -1284,7 +1288,6 @@ export class PinnedRethQuoteBackend
     const deadlineAtMs = Math.min(
       control.deadlineAtMs ?? Number.POSITIVE_INFINITY,
       scopeDeadline ?? Number.POSITIVE_INFINITY,
-      now + 30_000,
     );
     if (deadlineAtMs <= now) {
       throw new StateCallAbortedError(
@@ -1315,52 +1318,59 @@ export class PinnedRethQuoteBackend
       }
     };
     control.signal?.addEventListener("abort", onCallerAbort, { once: true });
-    const timeout = setTimeout(
+    const deadlineTimer = Number.isFinite(deadlineAtMs) ? setTimeout(
       () =>
         controller.abort(
           new StateCallAbortedError(
-            `${method} ${label} aborted: transport timeout reached`,
-            "timeout",
+            `${method} ${label} aborted: absolute deadline reached`,
+            "deadline",
           ),
         ),
       Math.max(1, deadlineAtMs - now),
-    );
+    ) : undefined;
+    const retryState: RethTransportRetryState = {};
     try {
-      const response = await this.runTransport(controller.signal, () =>
-        postJsonRpc(
-          this.rpcUrl,
-          {
-            jsonrpc: "2.0",
-            id: 1,
-            method,
-            params: [...params],
-          } as never,
-          controller.signal,
-        ),
-      );
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw new Error(
-          `${method} ${label} HTTP ${response.statusCode} ${response.statusMessage}`,
-        );
+      for (;;) {
+        if (controller.signal.aborted) throw controller.signal.reason;
+        if (Date.now() >= deadlineAtMs) throw new StateCallAbortedError("absolute deadline reached", "deadline");
+        let response: JsonRpcHttpResponse;
+        try {
+          response = await this.runTransport(controller.signal, wireSignal =>
+            postJsonRpc(
+              this.rpcUrl,
+              {
+                jsonrpc: "2.0",
+                id: 1,
+                method,
+                params: [...params],
+              } as never,
+              wireSignal,
+            ),
+            // Single-request 429 remains fatal. Only physical timeouts gained
+            // recovery here; the prior opt-in 429 policy is batch-only.
+            (error, attempt) => isRethTransportTimeout(error) && !controller.signal.aborted && Date.now() < deadlineAtMs &&
+              this.retryTransport(error, [retryState], attempt),
+          );
+        } catch (error) {
+          if (error instanceof QueuedTransportRetry) continue;
+          throw error;
+        }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw new Error(
+            `${method} ${label} HTTP ${response.statusCode} ${response.statusMessage}`,
+          );
+        }
+        const body = response.body as Partial<{
+          result?: unknown;
+          error?: { code?: unknown; message?: unknown; data?: unknown };
+        }>;
+        if (body.error !== undefined && body.error !== null) {
+          throw rpcItemError({ to: label }, body.error);
+        }
+        return body.result;
       }
-      const body = response.body as Partial<{
-        result?: unknown;
-        error?: { code?: unknown; message?: unknown; data?: unknown };
-      }>;
-      if (body.error !== undefined && body.error !== null) {
-        throw rpcItemError({ to: label }, body.error);
-      }
-      return body.result;
-    } catch (error) {
-      if (
-        controller.signal.aborted &&
-        isStateCallAbortedError(error)
-      ) {
-        throw error;
-      }
-      throw error;
     } finally {
-      clearTimeout(timeout);
+      if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
       control.signal?.removeEventListener("abort", onCallerAbort);
       this.scopeController.signal.removeEventListener(
         "abort",
@@ -1987,10 +1997,9 @@ function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-class QueuedThrottleRetry extends Error {}
+class QueuedTransportRetry extends Error {}
 
-interface PendingQuoteItem {
-  throttleRetriesAtOne?: number;
+interface PendingQuoteItem extends RethTransportRetryState {
   readonly id: number;
   readonly kind: "eth_call" | "eth_simulateV1";
   readonly control: StateCallControl;

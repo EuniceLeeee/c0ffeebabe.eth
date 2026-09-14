@@ -21,6 +21,8 @@ import type {
   RethTransportLane,
   RethTransportLease,
 } from "../reth-transport-scheduler.js";
+import { RethTransportScheduler } from "../reth-transport-scheduler.js";
+import { StateCallAbortedError } from "../../shared/state/state-backend.js";
 
 const sourceBlock = 100;
 const sourceGeneration = 7;
@@ -77,6 +79,13 @@ await testCanonicalActivityFailureFallsBackToMutationTransport();
 await testCanonicalAddressTouchesIncludeDirectTargetsAndLogEmitters();
 await testCanonicalAddressTouchesFailClosed();
 await testHardRequestTimeoutRetainsPhysicalPermits();
+await testSharedWireTimeoutSplitAndReuse();
+await testSharedQueueIsNotWireTime();
+await testSharedWireRetryControls();
+await testSharedWireTimeoutRetainsPhysicalPermits();
+await testSharedHardConsumerTimeoutStopsAdmission();
+await testSharedGlobalCapacityIsNotLocalSlotReduction();
+await testSharedMeasuredTransport();
 
 console.log("blockscan-state-read-backend PASS");
 
@@ -3484,6 +3493,326 @@ async function testCanonicalAddressTouchesFailClosed(): Promise<void> {
     /canonical path discontinuity/,
   );
   console.log("[state-read-backend] address-touch proof fails closed: PASS");
+}
+
+async function testSharedWireTimeoutSplitAndReuse(): Promise<void> {
+  const scheduler = new RethTransportScheduler({
+    capacity: 4, producerReserved: 1, transportTimeoutMs: 15, retryDelayMs: 1,
+  });
+  const batches: RpcRequest[][] = [];
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxBatchSize: 4, maxConcurrentBatches: 4, transportScheduler: scheduler,
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      batches.push(body);
+      for (const request of body) assert.deepEqual(request.params[1], {
+        blockHash: sourceBlockHash, requireCanonical: true,
+      });
+      if (batches.length === 1) await rejectWhenAborted(init!.signal!);
+      if (batches.length === 3) throw Object.assign(new Error("fixture socket"), { code: "ETIMEDOUT" });
+      return fakeResponse(body.map(request => success(request.id, request.params[0].data)));
+    }) as typeof fetch,
+  });
+  const reads = [1, 2, 3, 4].map(n => read(`split-${n}`, `0x0${n}`));
+  const result = await backend.readBatch("swap", reads, control());
+  assert(result.every(item => item.ok));
+  assert.deepEqual(batches.map(batch => batch.map(item => item.params[0].data)), [
+    ["0x01", "0x02", "0x03", "0x04"], ["0x01", "0x02"],
+    ["0x03", "0x04"], ["0x03"], ["0x04"],
+  ], "completed sub-batch must not be replayed after a later timeout");
+  assert.equal(scheduler.snapshot().reductionVersion, 2);
+  const nextSizes: number[] = [];
+  const next = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxBatchSize: 4, maxConcurrentBatches: 4, transportScheduler: scheduler,
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      nextSizes.push(body.length);
+      return fakeResponse(body.map(request => success(request.id, "0x01")));
+    }) as typeof fetch,
+  });
+  assert((await next.readBatch("swap", reads, control())).every(item => item.ok));
+  assert.deepEqual(nextSizes, [1, 1, 1, 1], "new backend inherits shared limits");
+  assert.equal(scheduler.snapshot().activeTotal, 0);
+  console.log("[state-read-backend] shared wire timeout + split + completed item reuse: PASS");
+}
+
+async function testSharedQueueIsNotWireTime(): Promise<void> {
+  const scheduler = new RethTransportScheduler({
+    capacity: 2, producerReserved: 1, transportTimeoutMs: 10, retryDelayMs: 1,
+  });
+  let release!: () => void;
+  const held = scheduler.run("exact", new AbortController().signal,
+    async () => new Promise<void>(resolve => { release = resolve; }));
+  await waitFor(() => release !== undefined);
+  let starts = 0;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    transportScheduler: scheduler, transportLane: "exact",
+    fetchImpl: (async (_url, init) => {
+      starts++;
+      assert.equal(init!.signal!.aborted, false);
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      return fakeResponse(body.map(request => success(request.id, "0x01")));
+    }) as typeof fetch,
+  });
+  const queued = backend.readBatch("swap", [read("queued", "0x01")], control());
+  const expired = backend.readBatch("swap", [read("expired", "0x02")],
+    control({ deadlineAtMs: Date.now() + 15 }));
+  assertFailure((await expired)[0], "deadline", /deadline/);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(starts, 0);
+  release();
+  await held;
+  assert.equal((await queued)[0]?.ok, true);
+  assert.equal(starts, 1);
+  assert.equal(scheduler.snapshot().reductionVersion, 0);
+  console.log("[state-read-backend] shared queue excluded from wire timer + queued deadline: PASS");
+}
+
+async function testSharedWireRetryControls(): Promise<void> {
+  const cases: Array<{ name: string; respond: (body: RpcRequest[]) => Response }> = [
+    { name: "HTTP429", respond: () => ({ ok: false, status: 429, statusText: "Too Many Requests" }) as Response },
+    { name: "HTTP500", respond: () => ({ ok: false, status: 500, statusText: "Internal Server Error" }) as Response },
+    { name: "quota", respond: body => fakeResponse(body.map(r => failure(r.id, "quota exhausted"))) },
+    { name: "source", respond: body => fakeResponse(body.map(r => failure(r.id, "hash is not currently canonical"))) },
+    { name: "revert", respond: body => fakeResponse(body.map(r => failure(r.id, "execution reverted", "0x"))) },
+    { name: "untyped timeout", respond: () => { throw new Error("request timeout"); } },
+    { name: "typed deadline", respond: () => { throw new StateCallAbortedError("deadline", "deadline"); } },
+    { name: "malformed body", respond: () => fakeResponse({ result: "0x01" }) },
+    { name: "foreign id", respond: body => fakeResponse(body.map(r => success(r.id + 100, "0x01"))) },
+    { name: "missing id", respond: () => fakeResponse([]) },
+    { name: "duplicate id", respond: body => fakeResponse(body.map(() => success(body[0].id, "0x01"))) },
+  ];
+  for (const test of cases) {
+    const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1, retryDelayMs: 1 });
+    let starts = 0;
+    const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+      transportScheduler: scheduler,
+      fetchImpl: (async (_url, init) => {
+        starts++;
+        return test.respond(JSON.parse(String(init?.body)) as RpcRequest[]);
+      }) as typeof fetch,
+    });
+    const result = await backend.readBatch("swap", [read("first", "0x01"), read("second", "0x02")], control());
+    assert(result.every(item => !item.ok), test.name);
+    assert.equal(starts, 1, test.name);
+    assert.equal(scheduler.snapshot().reductionVersion, 0, test.name);
+  }
+  for (const shared of [false, true]) {
+    const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1, retryDelayMs: 1 });
+    let starts = 0;
+    const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+      maxConcurrentBatches: 1,
+      ...(shared ? { transportScheduler: scheduler } : {}),
+      fetchImpl: (async () => {
+        starts++;
+        throw Object.assign(new Error("fixture socket"), { code: "ETIMEDOUT" });
+      }) as typeof fetch,
+    });
+    assert.equal((await backend.readBatch("swap", [read("floor", "0x01")], control()))[0]?.ok, false);
+    assert.equal(starts, shared ? 4 : 1, "shared floor retry budget; legacy has no new retry");
+  }
+  for (const outcome of ["abort", "deadline"] as const) {
+    const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1, retryDelayMs: 30 });
+    const controller = new AbortController();
+    let starts = 0;
+    const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+      transportScheduler: scheduler,
+      fetchImpl: (async () => {
+        starts++;
+        if (outcome === "abort") controller.abort(new Error("fixture cancelled"));
+        throw Object.assign(new Error("fixture socket"), { code: "ETIMEDOUT" });
+      }) as typeof fetch,
+    });
+    const result = await backend.readBatch("swap", [read(outcome, "0x01")], control({
+      signal: controller.signal, deadlineAtMs: Date.now() + 15,
+    }));
+    assert.equal(result[0]?.ok, false);
+    assert.equal(starts, 1, "scope termination prevents retry admission");
+    assert.equal(scheduler.snapshot().activeTotal, 0);
+    assert.equal(scheduler.snapshot().queuedByLane["producer-bulk"], 0);
+    assert.equal(scheduler.snapshot().reductionVersion, outcome === "abort" ? 0 : 1);
+  }
+  console.log("[state-read-backend] shared retry error exclusions + floor + cancellation: PASS");
+}
+
+async function testSharedWireTimeoutRetainsPhysicalPermits(): Promise<void> {
+  for (const phase of ["fetch", "body"] as const) {
+    const scheduler = new RethTransportScheduler({
+      capacity: 2, producerReserved: 1, transportTimeoutMs: 10, retryDelayMs: 1,
+    });
+    let release!: () => void;
+    let starts = 0;
+    let wireSignal!: AbortSignal;
+    const controller = new AbortController();
+    const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+      maxConcurrentBatches: 1, transportScheduler: scheduler, transportLane: "exact",
+      fetchImpl: (async (_url, init) => {
+        starts++;
+        wireSignal = init!.signal!;
+        const body = JSON.parse(String(init?.body)) as RpcRequest[];
+        const held = new Promise<void>(resolve => { release = resolve; });
+        if (phase === "fetch") await held;
+        return { ok: true, json: async () => {
+          if (phase === "body") await held;
+          return body.map(r => success(r.id, "0x01"));
+        } } as Response;
+      }) as typeof fetch,
+    });
+    const pending = backend.readBatch("swap", [read(phase, "0x01")], control({ signal: controller.signal }));
+    await waitFor(() => wireSignal?.aborted === true);
+    assert.equal(starts, 1);
+    assert.equal(scheduler.snapshot().activeTotal, 1, `${phase} still owns shared permit after wire timeout`);
+    assert.equal(scheduler.snapshot().reductionVersion, 0, "do not retry while old physical request is running");
+    controller.abort(new Error("fixture stop"));
+    assert.equal((await pending)[0]?.ok, false);
+    let nextAdmitted = false;
+    const next = scheduler.run("exact", new AbortController().signal, async () => { nextAdmitted = true; });
+    await new Promise(resolve => setTimeout(resolve, 15));
+    assert.equal(nextAdmitted, false, `${phase} retains permit after logical cancellation too`);
+    release();
+    await next;
+    assert.equal(starts, 1);
+    assert.equal(scheduler.snapshot().activeTotal, 0);
+    assert.equal(scheduler.snapshot().reductionVersion, 0);
+  }
+  // A late source error must win over our elapsed wire timer, not be retried.
+  const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1, transportTimeoutMs: 5, retryDelayMs: 1 });
+  let starts = 0;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    transportScheduler: scheduler,
+    fetchImpl: (async (_url, init) => {
+      starts++;
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      return { ok: true, json: async () => {
+        await new Promise(resolve => setTimeout(resolve, 15));
+        return body.map(r => failure(r.id, "hash is not currently canonical"));
+      } } as Response;
+    }) as typeof fetch,
+  });
+  assert.equal((await backend.readBatch("swap", [read("late-source", "0x01")], control()))[0]?.ok, false);
+  assert.equal(starts, 1);
+  assert.equal(scheduler.snapshot().reductionVersion, 0);
+  console.log("[state-read-backend] shared wire timeout retains fetch/body permits + late source error: PASS");
+}
+
+async function testSharedHardConsumerTimeoutStopsAdmission(): Promise<void> {
+  const scheduler = new RethTransportScheduler({
+    capacity: 2, producerReserved: 1, transportTimeoutMs: 5, retryDelayMs: 1,
+  });
+  const controller = new AbortController();
+  let release!: () => void;
+  let starts = 0;
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    hardRequestTimeoutMs: 1_000, transportScheduler: scheduler,
+    fetchImpl: (async (_url, init) => {
+      starts++;
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      return { ok: true, json: async () => {
+        await new Promise<void>(resolve => { release = resolve; });
+        return body.map(r => success(r.id, { hash: sourceBlockHash }));
+      } } as Response;
+    }) as typeof fetch,
+  });
+  await assert.rejects(backend.probeEip1898({
+    number: sourceBlock, hash: sourceBlockHash, generation: sourceGeneration,
+  }, controller.signal), /hard request timeout/);
+  assert.equal(controller.signal.aborted, false, "consumer hard bound must close admission independently of parent");
+  assert.equal(starts, 1);
+  assert.equal(scheduler.snapshot().activeTotal, 1, "late body still owns physical permit");
+  release();
+  await waitFor(() => scheduler.snapshot().activeTotal === 0);
+  assert.equal(starts, 1, "neither retry nor subsequent probe may dispatch after hard consumer timeout");
+  assert.equal(scheduler.snapshot().reductionVersion, 0, "late body cannot notify shared retry policy after closure");
+  console.log("[state-read-backend] hard consumer timeout + late reply never reopens admission: PASS");
+}
+
+async function testSharedGlobalCapacityIsNotLocalSlotReduction(): Promise<void> {
+  const scheduler = new RethTransportScheduler({ capacity: 20, producerReserved: 4, retryDelayMs: 1 });
+  await scheduler.run("producer-bulk", new AbortController().signal, async ({ load }) => {
+    assert(load);
+    assert.equal(load.retry(Object.assign(new Error("fixture socket"), { code: "ETIMEDOUT" }), [{}], load.limits(4, 4)), true);
+  });
+  assert.equal(scheduler.snapshot().capacity, 10);
+  const releases: Array<() => void> = [];
+  const starts = [0, 0];
+  const make = (index: number, concurrency: number) => new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxBatchSize: 1, maxConcurrentBatches: concurrency, transportScheduler: scheduler,
+    fetchImpl: (async (_url, init) => {
+      starts[index]++;
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      await new Promise<void>(resolve => releases.push(resolve));
+      return fakeResponse(body.map(r => success(r.id, "0x01")));
+    }) as typeof fetch,
+  });
+  const first = make(0, 4).readBatch("swap", [1, 2, 3, 4].map(n => read(`local-${n}`, "0x01")), control());
+  await waitFor(() => starts[0] === 4);
+  const second = make(1, 20).readBatch("swap", Array.from({ length: 8 }, (_, n) => read(`shared-${n}`, "0x01")), control());
+  await waitFor(() => scheduler.snapshot().activeTotal === 10);
+  assert.deepEqual(starts, [4, 6], "shared global cap applies; local slots are not an independent adaptive controller");
+  for (const release of releases.splice(0)) release();
+  await waitFor(() => starts[1] === 8);
+  for (const release of releases.splice(0)) release();
+  assert((await first).every(item => item.ok));
+  assert((await second).every(item => item.ok));
+  assert.equal(scheduler.snapshot().activeTotal, 0);
+  console.log("[state-read-backend] shared global physical cap; local slot ownership unchanged: PASS");
+}
+
+async function testSharedMeasuredTransport(): Promise<void> {
+  const scheduler = new RethTransportScheduler({ capacity: 4, producerReserved: 1, retryDelayMs: 1 });
+  const previousHash = `0x${"10".repeat(32)}`;
+  const telemetry: import("../blockscan-state-read-backend.js").MutationProofTransportTelemetry[] = [];
+  const sizes: number[] = [];
+  const backend = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    maxBatchSize: 2, maxConcurrentBatches: 4, transportScheduler: scheduler,
+    onMutationProofTelemetry: value => telemetry.push(value),
+    fetchImpl: (async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as RpcRequest[];
+      sizes.push(body.length);
+      if (sizes.length === 1) throw Object.assign(new Error("fixture socket"), { code: "ETIMEDOUT" });
+      return fakeResponse(body.map(request => {
+        if (request.method === "eth_getLogs") return success(request.id, []);
+        const number = Number(BigInt(request.params[0]));
+        return success(request.id, {
+          number: request.params[0], hash: number === sourceBlock - 1 ? previousHash : sourceBlockHash,
+          parentHash: number === sourceBlock ? previousHash : `0x${"09".repeat(32)}`,
+        });
+      }));
+    }) as typeof fetch,
+  });
+  const range = await backend.readCanonicalMutationRange(
+    createMutationQueryDescriptor({ topics: [[`0x${"aa".repeat(32)}`]] }),
+    { number: sourceBlock - 1, hash: previousHash, generation: sourceGeneration - 1 },
+    { number: sourceBlock, hash: sourceBlockHash, generation: sourceGeneration }, control(),
+  );
+  assert.equal(range.complete, true);
+  assert.deepEqual(sizes.slice(0, 3), [2, 1, 1]);
+  assert.equal(telemetry.length, 1);
+  assert.equal(telemetry[0].phases.headers.rpcRequests, 3);
+  assert.equal(telemetry[0].phases.headers.rpcItems, 4);
+  assert.equal(scheduler.snapshot().activeTotal, 0);
+  const failedScheduler = new RethTransportScheduler({ capacity: 4, producerReserved: 1, retryDelayMs: 1 });
+  let failedRequests = 0;
+  let cancelledBodies = 0;
+  const failed = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
+    transportScheduler: failedScheduler,
+    fetchImpl: (async () => {
+      failedRequests++;
+      return { ok: false, status: 429, statusText: "Too Many Requests",
+        body: { cancel: async () => { cancelledBodies++; } },
+      } as unknown as Response;
+    }) as typeof fetch,
+  });
+  await assert.rejects(failed.readCanonicalMutationRange(
+    createMutationQueryDescriptor({ topics: [[`0x${"aa".repeat(32)}`]] }),
+    { number: sourceBlock - 1, hash: previousHash, generation: sourceGeneration - 1 },
+    { number: sourceBlock, hash: sourceBlockHash, generation: sourceGeneration }, control(),
+  ), /HTTP 429/);
+  assert.equal(failedRequests, 1, "proof HTTP429 remains fail-closed, not adaptive retry");
+  assert.equal(cancelledBodies, 1, "HTTP error stream is stopped before physical lease release");
+  assert.equal(failedScheduler.snapshot().reductionVersion, 0);
+  assert.equal(failedScheduler.snapshot().activeTotal, 0);
+  console.log("[state-read-backend] measured proof transport uses shared wire policy + actual counts: PASS");
 }
 
 async function testHardRequestTimeoutRetainsPhysicalPermits(): Promise<void> {

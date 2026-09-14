@@ -65,30 +65,64 @@ export const erc4626SiloRedeemDiscovery = {
       observation.kind === "address-surface" &&
       matchedPatternId === "silo-redeem-vault-surface"
     ) {
-      const opaque = observation.opaque as
-        Readonly<Record<string, unknown>> | undefined;
-      const payoutToken = typeof opaque?.payoutToken === "string"
-        ? canonicalAddress(String(opaque.payoutToken))
-        : null;
-      const shares = typeof opaque?.sampleShares === "string"
-        ? BigInt(opaque.sampleShares)
-        : null;
-      const assets = typeof opaque?.sampleAssets === "string"
-        ? BigInt(opaque.sampleAssets)
-        : null;
-      if (
-        payoutToken === null || shares === null || assets === null ||
-        shares <= 0n || assets <= 0n ||
-        sameAddress(observation.address, payoutToken) ||
-        payoutToken === ethers.ZeroAddress
-      ) return null;
-      return Object.freeze({
-        candidateKind: "erc4626-silo-payout" as const,
-        vault: canonicalAddress(observation.address),
-        payoutToken,
-        observedMode: "redeem" as const,
-        observedAmount: shares,
-      });
+      try {
+        if (observation.opaque === null || typeof observation.opaque !== "object" ||
+            Array.isArray(observation.opaque)) return null;
+        const opaque = observation.opaque as Readonly<Record<string, unknown>>;
+        const payoutToken = typeof opaque.payoutToken === "string"
+          ? canonicalAddress(opaque.payoutToken)
+          : null;
+        if (payoutToken === null || payoutToken === ethers.ZeroAddress ||
+            sameAddress(observation.address, payoutToken)) return null;
+
+        // The production durable decoder restores this Family's observed-call
+        // candidate, not a legacy behavior sample. Preserve its mode/units and
+        // original provenance; current previews and active proof still belong
+        // exclusively to identity. A malformed typed record cannot downgrade
+        // to the legacy sample path, even when sample fields are also present.
+        if ("candidateKind" in opaque || "vault" in opaque ||
+            "observedMode" in opaque || "observedAmount" in opaque) {
+          if (opaque.candidateKind !== "erc4626-silo-payout" ||
+              typeof opaque.vault !== "string" ||
+              (opaque.observedMode !== "redeem" && opaque.observedMode !== "withdraw") ||
+              typeof opaque.observedAmount !== "bigint" ||
+              opaque.observedAmount <= 0n || opaque.observedAmount >= (1n << 256n)) return null;
+          const vault = canonicalAddress(opaque.vault);
+          if (vault === ethers.ZeroAddress || !sameAddress(vault, observation.address)) return null;
+          const { transactionHash, blockNumber, blockHash } = opaque;
+          if ((transactionHash !== undefined && transactionHash !== null &&
+                (typeof transactionHash !== "string" || !ethers.isHexString(transactionHash, 32))) ||
+              (blockNumber !== undefined && (typeof blockNumber !== "number" ||
+                !Number.isSafeInteger(blockNumber) || blockNumber < 0)) ||
+              (blockHash !== undefined &&
+                (typeof blockHash !== "string" || !ethers.isHexString(blockHash, 32)))) return null;
+          return Object.freeze({
+            candidateKind: "erc4626-silo-payout" as const,
+            vault,
+            payoutToken,
+            observedMode: opaque.observedMode,
+            observedAmount: opaque.observedAmount,
+            ...(transactionHash === undefined ? {} : { transactionHash }),
+            ...(blockNumber === undefined ? {} : { blockNumber }),
+            ...(blockHash === undefined ? {} : { blockHash }),
+          });
+        }
+
+        const shares = typeof opaque.sampleShares === "string"
+          ? BigInt(opaque.sampleShares) : null;
+        const assets = typeof opaque.sampleAssets === "string"
+          ? BigInt(opaque.sampleAssets) : null;
+        if (shares === null || assets === null || shares <= 0n || assets <= 0n) return null;
+        return Object.freeze({
+          candidateKind: "erc4626-silo-payout" as const,
+          vault: canonicalAddress(observation.address),
+          payoutToken,
+          observedMode: "redeem" as const,
+          observedAmount: shares,
+        });
+      } catch {
+        return null;
+      }
     }
     if (observation.kind !== "call") return null;
     const mode = matchedPatternId === REDEEM_PATTERN_ID

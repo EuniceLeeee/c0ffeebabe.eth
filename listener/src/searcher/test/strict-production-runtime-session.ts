@@ -6,6 +6,7 @@ import {
   buildFamilyRouteGraphView,
 } from "../adapter-family-graph-runtime.js";
 import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
+import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import {
   fluidDexFixtureRuntime,
   runUniv2Lifecycle,
@@ -49,7 +50,7 @@ import { UNIV2_PAIR_INTERFACE } from
 import { scanBlockStateFromResolvedMids } from
   "../detector/blockscan-scanner-core.js";
 import { readBlockTouchedStateKeys } from "../blockscan-touched-state.js";
-import { buildEffectiveMids, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
+import { buildEffectiveMids, effectiveMidRowCarried, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
 
 const STARTUP: CanonicalSource = Object.freeze({
   number: 25_800_000,
@@ -66,9 +67,14 @@ const WRONG_HASH: CanonicalSource = Object.freeze({
   hash: `0x${"63".repeat(32)}`,
 });
 const EXECUTOR = `0x${"64".repeat(20)}`;
+const ORIGIN = `0x${"65".repeat(20)}`;
 const ERC20_BALANCE = new ethers.Interface([
   "function balanceOf(address account) view returns (uint256)",
 ]);
+const ERC20_TRANSFER = new ethers.Interface([
+  "function transfer(address to, uint256 amount) returns (bool)",
+]);
+let fixtureAmountSimulations = 0;
 
 const pool = Object.freeze({
   pool: UNIV2_FIXTURE_POOL,
@@ -140,6 +146,7 @@ function runtime(
     readonly producerCallBackend?: StrictSessionRequest["pricingCallBackend"];
     readonly producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">;
     readonly exactCallBackend?: PinnedRethQuoteBackend;
+    readonly omitAmountSimulation?: boolean;
   } = {},
 ) {
   const reserves = options.reserves ?? pool.reserves;
@@ -206,6 +213,40 @@ function runtime(
       getStorage: async () => `0x${"00".repeat(32)}`,
     },
     executor: EXECUTOR,
+    transactionOrigin: ORIGIN,
+    // Session/transport fixture only, not an EVM or live acceptance result.
+    // State-read RPC accounting below excludes this controlled simulator.
+    ...(options.omitAmountSimulation ? {} : { simulator: {
+      async simulate({ request, source: actualSource, callerAuthority }) {
+        assert.deepEqual(actualSource, source);
+        assert.equal(request.kind, "effect-delta-simulation");
+        assert.equal(request.call.executionMode, "impersonated-call-frame");
+        assert.ok(callerAuthority.transactionOrigin);
+        assert.equal(callerAuthority.executor, EXECUTOR);
+        assert.equal(request.preCalls?.length, 1);
+        const transfer = request.preCalls![0]!;
+        const [recipient, amountIn] = ERC20_TRANSFER.decodeFunctionData("transfer", transfer.data);
+        assert.equal(String(recipient).toLowerCase(), request.call.to.toLowerCase());
+        const [amount0Out, amount1Out, receiver, callback] =
+          UNIV2_PAIR_INTERFACE.decodeFunctionData("swap", request.call.data);
+        assert.equal(String(receiver).toLowerCase(), EXECUTOR);
+        assert.equal(callback, "0x");
+        assert.ok((amount0Out > 0n) !== (amount1Out > 0n));
+        const amountOut = BigInt(amount0Out) + BigInt(amount1Out);
+        const outputToken = amount0Out > 0n ? pool.token0 : pool.token1;
+        const inputToken = amount0Out > 0n ? pool.token1 : pool.token0;
+        assert.equal(transfer.to.toLowerCase(), inputToken.toLowerCase());
+        assert.equal(request.overrideIntent.tokenBalances?.[0]?.amount, amountIn);
+        assert.equal(request.observeTokenBalances?.length, 4);
+        fixtureAmountSimulations++;
+        return { data: "0x", effects: { tokenDeltas: [
+          { token: inputToken, account: EXECUTOR, delta: -BigInt(amountIn) },
+          { token: inputToken, account: request.call.to, delta: BigInt(amountIn) },
+          { token: outputToken, account: request.call.to, delta: -amountOut },
+          { token: outputToken, account: EXECUTOR, delta: amountOut },
+        ] } };
+      },
+    } satisfies NonNullable<Parameters<typeof createStrictCentralAdapterRuntime>[0]["simulator"]> }),
     ...(options.producerCallBackend === undefined ? {} : { producerCallBackend: options.producerCallBackend }),
     ...(options.producerCallCache === undefined ? {} : { producerCallCache: options.producerCallCache }),
     ...(options.exactCallBackend === undefined ? {} : { exactCallBackend: options.exactCallBackend }),
@@ -662,7 +703,7 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     assert.deepEqual(quote.source, CURRENT);
     assert.equal(refined.buildExecution({ edge, exact: quote, minAmountOut: quote.amountOut - 1n, executor: EXECUTOR }).status, "resolved");
     await exactBackend.drain();
-    assert.equal(wire.length, pricingWireCount, "Exact reuses producer reserves and capacity balance with zero extra RPC");
+    assert.equal(wire.length, pricingWireCount, "Exact reuses producer state reads for the local reserve formula");
     assert.equal(producer.stats().memoHits, 4);
     assert.equal(exactBackend.stats().totalCalls, 0);
     assert.equal(directReads, 0);
@@ -771,7 +812,7 @@ assert.equal(twoTokenFundingProjection.sources.size, 2);
     assert.equal(projectionBackend.stats().liveItems, 0);
     assert.equal(directReads, 0);
     assert.deepEqual(stubErrors, []);
-  console.log("strict same-source phase reuse: PASS (pricing 4 Funding + reserves + 2 balances in one batch; warm Funding/Exact 0 RPC; cold Exact 2 reads; reorg bypass; miss/revert Funding 2 direct each)");
+  console.log("strict same-source phase reuse: PASS (pricing 4 Funding + reserves + 2 balances in one batch; warm Funding/Exact 0 additional state-read RPC; cold Exact 2 reads; no amount simulation; reorg bypass; miss/revert Funding 2 direct each)");
     console.log("strict pricing/Funding transport: PASS (one mixed batch; mixed failure unresolved; projection failure waits; caller drains)");
   } finally {
     const closed = await Promise.allSettled(backends.map((client) => client.closeAndDrain()));
@@ -2414,15 +2455,17 @@ for (const path of ["coarse", "runtime"] as const) {
     async (pricing, control, _backend, reuse) => {
       assert.equal(reuse?.touchedStateKeys, sharedTouched,
         "effective receives the exact SAME raw-mid activity set, no separately issued proof");
-      return buildEffectiveMids({ pricing, control, weth: UNIV2_FIXTURE_TOKEN0,
+      const target = reuse?.quoteGraph ?? pricing;
+      return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, control, weth: UNIV2_FIXTURE_TOKEN0,
         previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
         gasCostWei, enumerationSpreadBps: 200, concurrency: 2,
-        quote: async ({ edge, amountIn, requireChainAmountQuote }) => {
-          assert.equal(requireChainAmountQuote, true);
+        quote: async request => {
+          assert.equal(Object.hasOwn(request, "requireChainAmountQuote"), false);
+          const { edge, amountIn } = request;
           amountReads.push(edge.instanceKey!.toLowerCase());
-          return { source: { number: pricing.sourceBlock, hash: pricing.sourceBlockHash,
-            generation: pricing.generation }, amountIn,
-            amountOut: amountIn * 2n - (pricing.sourceBlock === carryNextSource.number ? 2n : 1n) };
+          return { source: { number: target.sourceBlock, hash: target.sourceBlockHash,
+            generation: target.generation }, amountIn,
+            amountOut: amountIn * 2n - (target.sourceBlock === carryNextSource.number ? 2n : 1n) };
         },
       });
     },
@@ -2472,7 +2515,8 @@ for (const path of ["coarse", "runtime"] as const) {
       assert.deepEqual(newRow.quotedAt, carryNextSource);
     } else {
       assert.equal(after.pricingProvenanceByEdgeKey!.get(key), "carried");
-      assert.equal(newRow.carried, true);
+      assert.equal(effectiveMidRowCarried(after.effectiveMids!, newRow), true);
+      assert.equal(newRow, oldRow, "clean rows retain identity");
       assert.equal(newRow.amountIn, oldRow.amountIn);
       assert.equal(newRow.amountOut, oldRow.amountOut);
       assert.equal(newRow.effectiveMid, oldRow.effectiveMid);
@@ -2480,6 +2524,90 @@ for (const path of ["coarse", "runtime"] as const) {
     }
   }
   console.log(`strict shared touched raw/effective: PASS ${path}`);
+}
+
+// Deterministic gates prove overlap, not merely faster elapsed fixture time.
+for (const path of ["coarse", "runtime"] as const) {
+  const nextTurn = () => new Promise<void>(resolve => setImmediate(resolve));
+  for (const mode of ["raw-first", "effective-first", "raw-reject", "effective-reject", "abort", "reset"] as const) {
+    let rawGate = preparationGate(), quoteGate = preparationGate();
+    let rawStarted = preparationGate(), quoteStarted = preparationGate();
+    let steady = false, publications = 0, effectiveCalls = 0;
+    let previous: BlockScanStateSnapshot | null = null;
+    const controller = new AbortController();
+    const touched = new Set<string>([firstParallelTarget]);
+    const paired = new StrictCurrentRuntimeCoordinator(async request => {
+      rawStarted.release();
+      await rawGate.promise;
+      if (steady && mode === "raw-reject") throw new Error("raw fixture rejected");
+      return parallelRoot.createSession({ source: request.source, runtime: runtime(request.source),
+        fundingAssets: [], kind: "pricing", control: request.control, touchedPools: request.touchedPools });
+    }, () => {}, () => { publications++; }, async (sizing, _control, _backend, reuse) => {
+      effectiveCalls++;
+      if (steady) {
+        assert.strictEqual(sizing, previous, "steady sizing is the unmodified previous publication");
+        assert.strictEqual(reuse?.quoteGraph, carryNextGraph, "quote target is independently current");
+        assert.strictEqual(reuse?.touchedStateKeys, touched);
+      } else assert.equal(reuse?.quoteGraph, undefined);
+      quoteStarted.release();
+      await quoteGate.promise;
+      if (steady && mode === "effective-reject") throw new Error("effective fixture rejected");
+      const target = reuse?.quoteGraph ?? sizing;
+      return { source: { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation },
+        rows: new Map(), reference: "default", referenceWethInput: 1_000_000_000_000_000n,
+        complete: true, wallMs: 0 };
+    });
+    const prepare = (graph: typeof carryBaseGraph) => {
+      const args = { graph, deadlineAtMs: Date.now() + 10_000, signal: controller.signal,
+        touchedPools: touched, canonicalActivity: { source: { number: graph.sourceBlock,
+          hash: graph.sourceBlockHash, generation: graph.generation }, touchedStateKeys: touched, complete: true as const } };
+      return path === "coarse" ? paired.prepareCoarsePricing(args) : paired.prepare({ ...args, fundingTokens: [] });
+    };
+    const bootstrap = prepare(carryBaseGraph);
+    await awaitPreparationGate(rawStarted.promise, "bootstrap raw starts");
+    await nextTurn();
+    assert.equal(effectiveCalls, 0, "only bootstrap waits for its first raw conversion");
+    rawGate.release();
+    await awaitPreparationGate(quoteStarted.promise, "bootstrap effective starts after raw");
+    assert.equal(publications, 0);
+    quoteGate.release();
+    await bootstrap;
+    previous = paired.latestPricingSnapshot();
+    assert(previous);
+    steady = true;
+    rawGate = preparationGate(); quoteGate = preparationGate();
+    rawStarted = preparationGate(); quoteStarted = preparationGate();
+    let settled = false;
+    const pending = prepare(carryNextGraph).finally(() => { settled = true; });
+    const observed = Promise.allSettled([pending]);
+    try {
+      await awaitPreparationGate(Promise.all([rawStarted.promise, quoteStarted.promise]), "both steady branches start before either finishes");
+      assert.equal(publications, 1);
+      assert.equal(paired.latestPricingSnapshot(), previous);
+      if (mode === "abort") controller.abort(new Error("parallel fixture cancelled"));
+      if (mode === "reset") await paired.resetDynamicStateForReplay();
+      if (mode === "raw-first" || mode === "raw-reject") rawGate.release();
+      else quoteGate.release();
+      await nextTurn();
+      assert.equal(settled, false, "one completed/rejected branch cannot detach the sibling");
+      assert.equal(publications, 1, "no half publication");
+    } finally {
+      rawGate.release(); quoteGate.release();
+      await observed;
+    }
+    if (mode === "raw-first" || mode === "effective-first") {
+      await pending;
+      assert.equal(publications, 2);
+      assert.equal(paired.latestPricingSnapshot()!.sourceBlock, carryNextSource.number);
+      assert.deepEqual(paired.latestPricingSnapshot()!.effectiveMids!.source, carryNextSource);
+    } else {
+      await assert.rejects(pending, mode === "abort" ? /parallel fixture cancelled/
+        : mode === "reset" ? /retired/ : /fixture rejected/);
+      assert.equal(publications, 1);
+      assert.equal(paired.latestPricingSnapshot(), mode === "reset" ? null : previous);
+    }
+    console.log(`strict parallel raw/effective: PASS ${path}/${mode}`);
+  }
 }
 
 // The existing warm/publication boundary awaits amount quotes atomically in
@@ -2830,13 +2958,33 @@ if (victim.status === "resolved") {
     "v2",
   );
 }
-const readsBeforeUnsupportedEffective = currentPricingReads;
-await assert.rejects(session.issueExact({
+const simulationsBeforeEffective = fixtureAmountSimulations;
+const effectiveExact = await session.issueExact({
   edge, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [],
-  requireChainAmountQuote: true,
-}), (error: unknown) => (error as { code?: string }).code === "CHAIN_AMOUNT_QUOTE_UNAVAILABLE");
-assert.equal(currentPricingReads, readsBeforeUnsupportedEffective,
-  "constant-product local amount model must not become a chain effective quote");
+});
+assert.ok(effectiveExact.amountOut > 0n);
+assert.equal(fixtureAmountSimulations, simulationsBeforeEffective,
+  "V2 without a matched Router uses source reserves, never the local execution simulator");
+const noSimulationSession = await root.createSession({
+  source: CURRENT, kind: "exact", fundingAssets: [],
+  runtime: runtime(CURRENT, { omitAmountSimulation: true, reserves: {
+    reserve0: pool.reserves.reserve0 * 3n,
+    reserve1: pool.reserves.reserve1,
+    blockTimestampLast: pool.reserves.blockTimestampLast + 1,
+  } }),
+});
+const noSimulationEdge = noSimulationSession.edges.find(candidate => candidate.canonicalEdgeId === edge.canonicalEdgeId)!;
+assert(noSimulationEdge);
+await assert.rejects(noSimulationSession.issueExact({
+  edge: noSimulationEdge, amountIn: 1_000_000n,
+  executor: EXECUTOR, runtimeEvidence: [], requireChainAmountQuote: true,
+}), { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" }, "reserve reads alone cannot manufacture a positive chain amount quote");
+const noSimulationExact = await noSimulationSession.issueExact({
+  edge: noSimulationEdge, amountIn: 1_000_000n,
+  executor: EXECUTOR, runtimeEvidence: [],
+});
+assert.equal(noSimulationExact.amountOut, effectiveExact.amountOut);
+assert.equal(fixtureAmountSimulations, simulationsBeforeEffective);
 const exact = await session.issueExact({
   edge,
   amountIn: 1_000_000n,

@@ -1,11 +1,12 @@
 import { gasReferenceInput, tokenToWethReferences } from "./blockscan-amount-reference.js";
 import type { StrictProductionRuntimeSession } from "./strict-production-runtime-session.js";
 import type { CanonicalSource } from "./venues/adapter-request-program.js";
-import { blockScanEdgeKey } from "./venues/blockscan-state-capability.js";
+import { blockScanEdgeKey, type VerifiedGraphView } from "./venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
+import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
 
 export type EffectivePricingInput = Parameters<typeof tokenToWethReferences>[0] &
   Pick<BlockScanStateSnapshot, "pricingStateKeyByEdgeKey">;
@@ -24,6 +25,7 @@ export interface EffectiveMidRow {
     "quote-failed" | "no-output" | "cancelled";
   /** Original chain observation, not a current-block Exact handle. */
   readonly quotedAt?: CanonicalSource;
+  /** Legacy serialized flag; current carry is derived from quotedAt + snapshot.source. */
   readonly carried?: true;
 }
 
@@ -35,6 +37,12 @@ export interface EffectiveMidSnapshot {
   readonly rows: ReadonlyMap<string, EffectiveMidRow>;
   readonly complete: boolean;
   readonly wallMs: number;
+}
+
+export function effectiveMidRowCarried(snapshot: EffectiveMidSnapshot, row: EffectiveMidRow): boolean {
+  const at = row.quotedAt;
+  return at === undefined ? row.carried === true : at.number !== snapshot.source.number ||
+    at.hash.toLowerCase() !== snapshot.source.hash.toLowerCase() || at.generation !== snapshot.source.generation;
 }
 
 /** Consumer-only projection; never mutate the original mid or its carry proof.
@@ -66,17 +74,23 @@ type ExactCall = StrictProductionRuntimeSession["issueExact"];
 type RouteExactResult = Extract<Awaited<ReturnType<ExactCall>>, { readonly amountIn: bigint }>;
 type EffectiveMidQuote = (
   input: Pick<Parameters<ExactCall>[0],
-    "edge" | "amountIn" | "control" | "requireChainAmountQuote">,
+    "edge" | "amountIn" | "control">,
 ) => Promise<Pick<RouteExactResult, "source" | "amountIn" | "amountOut">>;
 
 /** A sizing mark is used ONLY for amountIn, never to derive amountOut.
  * All input tokens share one immutable, at-most-three-hop valuation pass. */
 export async function buildEffectiveMids(input: {
+  /** Only an amountIn valuation reference; it need not be the quote block. */
   readonly pricing: EffectivePricingInput;
+  readonly quoteGraph?: VerifiedGraphView;
   readonly weth: string;
   readonly gasCostWei: bigint | null;
   readonly enumerationSpreadBps: number;
   readonly quote: EffectiveMidQuote;
+  /** Bind this source's existing quote session only after carry/missing rows
+   * have been classified. Called once for the actual work, never for clean
+   * references; this does not carry old Exact authority across blocks. */
+  readonly prepareQuote?: (requiredEdgeIds: ReadonlySet<string>) => Promise<void>;
   readonly control: AdapterWorkControl;
   readonly concurrency: number;
   readonly previous?: EffectiveMidSnapshot;
@@ -92,26 +106,42 @@ export async function buildEffectiveMids(input: {
     throw new Error("invalid effective-mid work or spread policy");
   }
   if (input.gasCostWei !== null && input.gasCostWei <= 0n) throw new Error("invalid gas cost");
+  const target = input.quoteGraph ?? pricing;
   const source = Object.freeze({
-    number: pricing.sourceBlock, hash: pricing.sourceBlockHash.toLowerCase(), generation: pricing.generation,
+    number: target.sourceBlock, hash: target.sourceBlockHash.toLowerCase(), generation: target.generation,
   });
-  const marks = tokenToWethReferences(pricing, input.weth);
+  let marks: ReturnType<typeof tokenToWethReferences> | undefined;
   const referenceWethInput = input.gasCostWei === null ? DEFAULT_EFFECTIVE_WETH_INPUT :
     gasReferenceInput(input.gasCostWei, { num: 1n, den: 1n }, input.enumerationSpreadBps)!;
   const amounts = new Map<string, bigint | null>();
-  const edges = new Map(pricing.graph.edges.map(e => [blockScanEdgeKey(e), e]));
-  const work = [...pricing.mids.keys()].map(edgeId => {
+  const edges = new Map((input.quoteGraph ?? pricing.graph).edges.map(e => [blockScanEdgeKey(e), e]));
+  const stateKeyFor = (edgeId: string, edge: (typeof pricing.graph.edges)[number]) =>
+    (pricing.pricingStateKeyByEdgeKey?.get(edgeId) ?? edgeInstanceKey(edge)).toLowerCase();
+  // Keep the published mid membership. A direction missing from that table
+  // may recover only in the SAME touched subset raw is refreshing, not by
+  // expanding every steady pass to all unpriced Ready graph directions.
+  const keys = input.quoteGraph === undefined ? [...pricing.mids.keys()] :
+    input.quoteGraph.edges.filter(edge => scannerConsumesEdge(edge) && (
+      pricing.mids.has(blockScanEdgeKey(edge)) || input.touchedStateKeys === undefined ||
+      input.touchedStateKeys.has(stateKeyFor(blockScanEdgeKey(edge), edge))
+    )).map(blockScanEdgeKey);
+  const work = keys.map(edgeId => {
     const edge = edges.get(edgeId);
     if (!edge) throw new Error("effective mid is outside the Ready Graph");
-    const token = edge.tokenIn.toLowerCase();
+    return { edgeId, edge, amountIn: null as bigint | null };
+  });
+  const amountFor = (index: number): bigint | null => {
+    const item = work[index]!;
+    const token = item.edge.tokenIn.toLowerCase();
     if (!amounts.has(token)) {
+      marks ??= tokenToWethReferences(pricing, input.weth);
       const mark = marks.get(token);
       amounts.set(token, !mark ? null : input.gasCostWei === null
         ? (DEFAULT_EFFECTIVE_WETH_INPUT * mark.den + mark.num - 1n) / mark.num
         : gasReferenceInput(input.gasCostWei, mark, input.enumerationSpreadBps));
     }
-    return { edgeId, edge, amountIn: amounts.get(token)! };
-  });
+    return item.amountIn = amounts.get(token)!;
+  };
   const rows = new Array<EffectiveMidRow>(work.length);
   const closed = () => control.signal?.aborted === true ||
     (control.deadlineAtMs !== undefined && Date.now() >= control.deadlineAtMs);
@@ -151,24 +181,29 @@ export async function buildEffectiveMids(input: {
       (source.number === previous.source.number && source.generation >= previous.source.generation &&
         source.hash === previous.source.hash.toLowerCase()));
   const fresh: number[] = [];
-  for (const [index, { edgeId, edge, amountIn }] of work.entries()) {
-    if (edge.leavesStandingPosition) unavailable(index, "unsupported");
-    else if (closed()) unavailable(index, "cancelled");
+  for (const [index, { edgeId, edge }] of work.entries()) {
+    if (edge.leavesStandingPosition) { amountFor(index); unavailable(index, "unsupported"); }
+    else if (closed()) { amountFor(index); unavailable(index, "cancelled"); }
     else {
       const prior = canReuse ? previous.rows.get(edgeId) : undefined;
-      const stateKey = pricing.pricingStateKeyByEdgeKey?.get(edgeId) ?? edgeInstanceKey(edge);
-      if (prior?.status === "quoted" && prior.edgeId === edgeId &&
+      const stateKey = stateKeyFor(edgeId, edge);
+      if (prior && (prior.status === "quoted" || (previous!.complete && prior.status !== "cancelled")) && prior.edgeId === edgeId &&
           prior.instanceKey === edgeInstanceKey(edge) &&
           prior.tokenIn === edge.tokenIn.toLowerCase() && prior.tokenOut === edge.tokenOut.toLowerCase() &&
-          !input.touchedStateKeys!.has(stateKey.toLowerCase())) {
+          !input.touchedStateKeys!.has(stateKey)) {
         // This is an approximate pricing reference, not proof that a new
         // amount would receive the old output. Keep the ORIGINAL pair of
         // amounts and observation block even if this pass's gas/mark changed.
-        rows[index] = Object.freeze({ ...prior, carried: true,
-          quotedAt: prior.quotedAt ?? previous!.source });
-      } else if (amountIn === null) unavailable(index, "missing-valuation");
+        // A complete table's unavailable clean rows also stay unavailable
+        // until touched, just like raw mid. They are never priced fallbacks.
+        rows[index] = prior.status === "quoted" && prior.quotedAt === undefined
+          ? Object.freeze({ ...prior, quotedAt: previous!.source }) : prior;
+      } else if (amountFor(index) === null) unavailable(index, "missing-valuation");
       else fresh.push(index);
     }
+  }
+  if (input.prepareQuote && fresh.length > 0 && !closed()) {
+    await input.prepareQuote(new Set(fresh.map(index => work[index]!.edgeId)));
   }
   let next = 0;
   const worker = async () => {
@@ -178,13 +213,18 @@ export async function buildEffectiveMids(input: {
       if (closed()) { unavailable(index, "cancelled"); continue; }
       const { edge, amountIn } = work[index]!;
       try {
-        accept(index, await input.quote({ edge, amountIn: amountIn!, control, requireChainAmountQuote: true }));
+        accept(index, await input.quote({ edge, amountIn: amountIn!, control }));
       } catch (error) { failed(index, error); }
     }
   };
   await Promise.all(Array.from({ length: Math.min(input.concurrency, fresh.length) }, worker));
+  const previousRows = canReuse ? previous.rows : new Map<string, EffectiveMidRow>();
+  const updates = rows.filter(row => previousRows.get(row.edgeId) !== row)
+    .map(row => [row.edgeId, row] as const);
+  const present = new Set(keys);
+  const removals = [...previousRows.keys()].filter(key => !present.has(key));
   return Object.freeze({ source, reference: input.gasCostWei === null ? "default" : "gas",
-    referenceWethInput, rows: new Map(rows.map(row => [row.edgeId, row])),
+    referenceWethInput, rows: deltaMap(previousRows, updates, removals),
     complete: !closed() && rows.every(row => row.status !== "cancelled"), wallMs: Date.now() - started });
 }
 

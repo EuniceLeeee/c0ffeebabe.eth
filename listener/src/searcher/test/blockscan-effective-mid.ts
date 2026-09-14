@@ -4,6 +4,7 @@ import {
   DEFAULT_EFFECTIVE_WETH_INPUT,
   effectiveEnumerationMids,
   effectiveMidPairStatistics,
+  effectiveMidRowCarried,
   type EffectiveMidRow,
   type EffectiveMidSnapshot,
   type EffectivePricingInput,
@@ -12,6 +13,7 @@ import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
+import type { StrictProductionRuntimeSession } from "../strict-production-runtime-session.js";
 
 // Offline behavior tests only: callbacks are fixtures, not chain-quote evidence
 // or full production acceptance. Shapes follow blockscan-amount-reference.ts.
@@ -144,7 +146,7 @@ for (const gasCostWei of [null, 100_000_000_000_000n]) {
     assert.deepEqual(new Set(calls.map(c => blockScanEdgeKey(c.edge))), quotedIds);
     for (const call of calls) {
       assert.strictEqual(call.control, control);
-      assert.equal(call.requireChainAmountQuote, true);
+      assert.equal(Object.hasOwn(call, "requireChainAmountQuote"), false);
       assert.strictEqual(call.edge, rows.find(([e]) => e === call.edge)![0]);
       assert.equal(call.amountIn, expected.get(call.edge.tokenIn.toLowerCase()), "explicit Exact input preserved");
     }
@@ -160,6 +162,38 @@ test("gas reference replaces the default even when smaller; threshold and strict
   const wider = await build(prices, { gasCostWei: 100_000_000_000_000n, enumerationSpreadBps: 500 });
   assert.equal(wider.referenceWethInput, 2_000_000_000_000_001n);
   assert.equal(row(wider, e).amountIn, 2_000_000_000_000_001n);
+});
+
+test("effective leaves original Exact method selection unset and preserves its returned output", async () => {
+  const e = edge(W, U, "original-exact"), prices = pricing([[e, 123]]);
+  const control = { signal: new AbortController().signal };
+  const runtimeEvidence = Object.freeze([]);
+  const calls: Parameters<StrictProductionRuntimeSession["issueExact"]>[0][] = [];
+  const session = {
+    async issueExact(input: Parameters<StrictProductionRuntimeSession["issueExact"]>[0]) {
+      calls.push(input);
+      assert.notEqual(input.requireChainAmountQuote, true, "fixture's original method is not chain-only");
+      return { source: SOURCE, amountIn: input.amountIn, amountOut: input.amountIn * 13n + 17n };
+    },
+  };
+  for (const requireChainAmountQuote of [undefined, false]) {
+    const result = await build(prices, { control, quote: call => {
+      assert.deepEqual(Object.keys(call).sort(), ["amountIn", "control", "edge"]);
+      return session.issueExact({ ...call, executor: "fixture-executor", runtimeEvidence,
+        ...(requireChainAmountQuote === undefined ? {} : { requireChainAmountQuote }) });
+    } });
+    assert.equal(result.complete, true);
+    assert.equal(row(result, e).status, "quoted");
+    assert.equal(row(result, e).amountOut, DEFAULT_RAW * 13n + 17n);
+    assert.deepEqual(row(result, e).quotedAt, SOURCE);
+  }
+  assert.equal(calls.length, 2);
+  for (const call of calls) {
+    assert.strictEqual(call.edge, e);
+    assert.strictEqual(call.control, control);
+    assert.strictEqual(call.runtimeEvidence, runtimeEvidence);
+    assert.equal(call.amountIn, DEFAULT_RAW);
+  }
 });
 
 test("one immutable sizing pass; shortest paths and instance-deduplicated medians", async () => {
@@ -688,13 +722,12 @@ function atSource(prices: EffectivePricingInput, source: EffectiveMidSnapshot["s
 
 function assertReferenceRetained(current: EffectiveMidRow, original: EffectiveMidRow): void {
   assert.equal(current.status, "quoted");
-  assert.equal(current.carried, true);
   assert.equal(current.amountIn, original.amountIn, "do not relabel the input to this pass's new notional");
   assert.equal(current.amountOut, original.amountOut, "do not fabricate an output at the new notional");
   assert.equal(current.effectiveMid, original.effectiveMid, "retain the recorded reference rate exactly");
   assert.deepEqual(current.quotedAt, original.quotedAt, "do not relabel the original observation source");
   assert(Object.isFrozen(current));
-  assert.notStrictEqual(current, original);
+  assert.strictEqual(current, original, "clean immutable rows are reused, not copied to stamp a carry flag");
 }
 
 // Opaque IDs from the existing 20-Family cache inventory. These generic fixture
@@ -726,7 +759,7 @@ test("offline reference contract for all 20 opaque Family IDs: clean reuse, unch
   } });
   assert.equal(initialCalls.length, 40);
   assert.equal(new Set(initialCalls.map(call => call.edge.adapterId)).size, 20);
-  assert(initialCalls.every(call => call.requireChainAmountQuote === true));
+  assert(initialCalls.every(call => !Object.hasOwn(call, "requireChainAmountQuote")));
   const before = structuredClone(previous);
   const nextSource = { number: SOURCE.number + 119, hash: hash(321), generation: SOURCE.generation + 1 };
   const nextPrices = atSource(prices, nextSource);
@@ -737,12 +770,15 @@ test("offline reference contract for all 20 opaque Family IDs: clean reuse, unch
   assert.equal(calls, 0);
   assert.equal(clean.complete, true);
   assert.deepEqual(clean.source, nextSource);
+  assert.strictEqual(clean.rows, previous.rows, "an unchanged table reuses its original Map");
   for (const e of all) {
     assertReferenceRetained(row(clean, e), row(previous, e));
     assert.deepEqual(row(clean, e).quotedAt, SOURCE);
+    assert.equal(effectiveMidRowCarried(clean, row(clean, e)), true);
+    assert.equal(effectiveMidRowCarried(previous, row(previous, e)), false);
     assert.deepEqual(Object.keys(row(clean, e)).sort(), [
       "edgeId", "instanceKey", "tokenIn", "tokenOut", "amountIn", "amountOut",
-      "effectiveMid", "status", "quotedAt", "carried",
+      "effectiveMid", "status", "quotedAt",
     ].sort(), "the reference row carries data only, no Exact handle or execution authority");
   }
   const touchedCalls: QuoteInput[] = [];
@@ -767,6 +803,49 @@ test("offline reference contract for all 20 opaque Family IDs: clean reuse, unch
   assert.equal(calls, 0);
   for (const e of all) assertReferenceRetained(row(later, e), row(previous, e));
   assert.deepEqual(previous, before, "current classification must not mutate original reference data");
+});
+
+test("previous raw sizes current quotes, including a recovered direction missing from that raw table", async () => {
+  const old = edge(U, W, "valuation"), recovered = edge(U, "new-output", "recovered");
+  const prices = pricing([[old, 5e8]]);
+  const current = { number: SOURCE.number + 1, hash: hash(700), generation: SOURCE.generation + 1 };
+  const quoteGraph = { ...prices.graph, edges: [recovered], sourceBlock: current.number,
+    sourceBlockHash: current.hash, generation: current.generation } as BuildInput["quoteGraph"];
+  const previous = await build(prices);
+  const calls: QuoteInput[] = [];
+  const result = await build(prices, { quoteGraph, previous, touchedStateKeys: new Set(["recovered"]),
+    quote: async call => { calls.push(call); return { source: current, amountIn: call.amountIn, amountOut: 456n }; },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.edge, recovered);
+  assert.equal(calls[0]!.amountIn, 2_000_000n, "amount uses the old raw conversion, not a current quote");
+  assert.deepEqual(result.source, current);
+  assert.deepEqual(row(result, recovered).quotedAt, current);
+  assert.equal(row(result, recovered).amountOut, 456n);
+  assert.equal(result.rows.has(blockScanEdgeKey(old)), false, "delta removes a retired graph direction");
+  assert.equal(previous.rows.has(blockScanEdgeKey(old)), true, "old table remains immutable");
+  const wrong = await build(prices, { quoteGraph });
+  noQuote(row(wrong, recovered), "quote-failed");
+  const clean = await build(prices, { quoteGraph, previous, touchedStateKeys: new Set(),
+    quote: async () => { throw new Error("unpriced clean graph directions must not issue quotes"); } });
+  assert.equal(clean.rows.size, 0, "the current graph cannot silently broaden the raw touched work set");
+});
+
+test("all-clean steady work reuses the Map without even reading valuation coverage", async () => {
+  const e = edge(U, W, "clean-no-sizing"), prices = pricing([[e, 5e8]]);
+  const previous = await build(prices);
+  const unpriced = Array.from({length: 2364}, (_, i) => edge(W, U, "unpriced-clean-" + i));
+  const current = { ...prices.graph, edges: [e, ...unpriced], sourceBlock: SOURCE.number + 1,
+    sourceBlockHash: hash(701), generation: SOURCE.generation + 1 } as BuildInput["quoteGraph"];
+  const noSizing = { ...prices, get coverage(): EffectivePricingInput["coverage"] {
+    throw new Error("clean rows must not compute valuation");
+  } };
+  const result = await build(noSizing, { quoteGraph: current, previous, touchedStateKeys: new Set(),
+    quote: async () => { throw new Error("clean rows must not quote"); },
+  });
+  assert.strictEqual(result.rows, previous.rows);
+  assert.equal(result.rows.size, 1, "unpriced clean graph directions do not expand the table or work set");
+  assert.equal(effectiveMidRowCarried(result, row(result, e)), true);
 });
 
 for (const change of ["gas", "mark", "gas-and-mark"] as const) {
@@ -925,8 +1004,10 @@ for (const reason of ["abort", "deadline"] as const) {
       pending.resolve({ source: current, amountIn: 51n, amountOut: 51n * 999n });
       const result = await promise;
       assert.deepEqual(calls.map(call => call.edge), dirty.slice(0, 2), "only two fresh quote requests are invoked");
-      assert(calls.every(call => call.amountIn === 51n && call.control === control && call.requireChainAmountQuote === true));
-      assert.deepEqual(checksAtDispatch, [5, 5], "all clean/dirty classification precedes quote dispatch");
+      assert(calls.every(call => call.amountIn === 51n && call.control === control && !Object.hasOwn(call, "requireChainAmountQuote")));
+      assert.deepEqual(checked, [...dirty, missing, ...clean].map(e => e.instanceKey!),
+        "unavailable clean rows use the same touched classification as quoted rows");
+      assert.deepEqual(checksAtDispatch, [6, 6], "all clean/dirty classification precedes quote dispatch");
       assert.equal(result.complete, false);
       assert.deepEqual([...result.rows.keys()], [...prices.mids.keys()]);
       for (const e of dirty) noQuote(row(result, e), "cancelled");
@@ -1044,6 +1125,79 @@ test("legacy quoted rows without quotedAt bind their previous snapshot source on
   assert.equal(row(later, e).amountOut, 89n);
   assert.equal(calls, 0);
   assert.equal(row(previous, e).quotedAt, undefined);
+});
+
+test("quote session is prepared once for actual work, excluding carried and missing-price rows", async () => {
+  const clean = Array.from({ length: 512 }, (_, i) => edge(W, U, `clean-${i}`));
+  const dirty = edge(W, U, "dirty"), retry = edge(W, U, "unavailable"), missing = edge("unknown", U, "missing");
+  const prices = pricing([...clean, dirty, retry, missing].map(e => [e, 1]));
+  const base = await build(prices);
+  const priorRows = new Map(base.rows);
+  priorRows.set(retry.canonicalEdgeId!, { ...row(base, retry), status: "unsupported", amountOut: null, effectiveMid: null });
+  const previous = { ...base, rows: priorRows };
+  const current = { number: SOURCE.number + 1, hash: hash(996), generation: SOURCE.generation + 1 };
+  const prepared: string[][] = [], issued: string[] = [];
+  let ready = false;
+  const result = await build(atSource(prices, current), { previous, touchedStateKeys: new Set([dirty.instanceKey!]),
+    prepareQuote: async required => {
+      prepared.push([...required]);
+      await Promise.resolve();
+      ready = true;
+    },
+    quote: async ({ edge, amountIn }) => {
+      assert(ready, "no issuance before source-bound preparation settles");
+      issued.push(blockScanEdgeKey(edge));
+      return { source: current, amountIn, amountOut: 123n };
+    },
+  });
+  assert.deepEqual(prepared, [[blockScanEdgeKey(dirty)]]);
+  assert.deepEqual(issued, prepared[0]);
+  assert.equal(result.complete, true);
+  for (const e of clean) assertReferenceRetained(row(result, e), row(previous, e));
+  noQuote(row(result, missing), "missing-valuation");
+  assert.strictEqual(row(result, retry), row(previous, retry), "complete clean unavailable rows await touch, like raw mid");
+  assert.equal(row(result, dirty).quotedAt?.number, current.number);
+  const retried = await build(atSource(prices, current), { previous: result,
+    touchedStateKeys: new Set([retry.instanceKey!]),
+    quote: async ({edge, amountIn}) => {
+      assert.equal(edge, retry);
+      return {source: current, amountIn, amountOut: 789n};
+    },
+  });
+  assert.equal(row(retried, retry).status, "quoted", "touch reopens the unavailable row through the same quote entry");
+});
+
+test("no quote session is prepared for all-clean, no-valued-input or already-cancelled work", async () => {
+  const prices = pricing([[edge(W, U, "clean"), 1]]), previous = await build(prices);
+  const controller = new AbortController(); controller.abort();
+  let prepared = 0, issued = 0;
+  const hooks = { prepareQuote: async () => { prepared++; }, quote: async () => { issued++; throw new Error("no quote work"); } };
+  const clean = await build(prices, { previous, touchedStateKeys: new Set(), ...hooks });
+  assert.equal(clean.complete, true);
+  const absent = await build(pricing([[edge("unknown", U, "no-mark"), 1]]), hooks);
+  assert.equal(absent.complete, true);
+  const closed = await build(prices, { control: { signal: controller.signal }, ...hooks });
+  assert.equal(closed.complete, false);
+  assert.equal(prepared, 0);
+  assert.equal(issued, 0);
+});
+
+test("preparation cancellation issues no quote and preparation failure cannot publish a table", async () => {
+  const e = edge(W, U, "fresh"), prices = pricing([[e, 1]]);
+  const controller = new AbortController();
+  let calls = 0;
+  const cancelled = await build(prices, { control: { signal: controller.signal },
+    prepareQuote: async required => { assert.deepEqual([...required], [blockScanEdgeKey(e)]); controller.abort(); },
+    quote: async () => { calls++; throw new Error("cancelled preparation"); },
+  });
+  assert.equal(cancelled.complete, false);
+  noQuote(row(cancelled, e), "cancelled");
+  const failure = new Error("current source session unavailable");
+  await assert.rejects(build(prices, {
+    prepareQuote: async () => { throw failure; },
+    quote: async () => { calls++; throw new Error("failed preparation"); },
+  }), error => error === failure);
+  assert.equal(calls, 0);
 });
 
 let failed = 0;

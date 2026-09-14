@@ -1,21 +1,16 @@
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
 import type { AdapterRequestResult } from "../../adapter-request-program.js";
 import {
-  assertSameSource,
   callRequest,
   decodeDecimals,
   protocolMid,
   sameAddress,
 } from "../standard-family/common.js";
 import {
-  SELF_BURN_NATIVE_PRICING_ACTOR,
-  SELF_BURN_NATIVE_PRICING_ACTOR_EVIDENCE_ID,
   SELF_BURN_NATIVE_TOKEN_INTERFACE,
   assertSelfBurnNativeInvocation,
   selfBurnNativeProbeAmounts,
-  selfBurnNativeSimulation,
   selfBurnNativeStaticProjection,
-  validateSelfBurnNativeEffects,
 } from "./shared.js";
 import type {
   SelfBurnNativeDescriptor,
@@ -24,6 +19,8 @@ import type {
   SelfBurnNativePricingSnapshot,
   SelfBurnNativeRoute,
 } from "./types.js";
+
+import { selfBurnFeeRequests, decodeSelfBurnFees, calculateSelfBurnFee } from "./fee-quote.js";
 
 export interface SelfBurnNativePricingStaticEvidence {
   readonly probeAmounts: readonly bigint[];
@@ -35,7 +32,7 @@ export const selfBurnNativePricing = {
     selfBurnNativeStaticProjection(descriptor),
   snapshotCompatibilityProjection: ({ descriptor }) => ({
     token: descriptor.token,
-    call: "transfer-self",
+    quote: "source-fee-formula-v1",
   }),
   compileDraft({ descriptor, stateKey, routes }) {
     if (stateKey !== descriptor.instanceKey || routes.length !== 1) {
@@ -85,81 +82,17 @@ export const selfBurnNativePricing = {
     return Object.freeze({ ...draft, ...staticEvidence });
   },
   current: {
-    requirements: () => ({
-      transports: ["effect-delta-simulation" as const],
-      caller: "verified-actor" as const,
-      effects: [
-        "return-data" as const,
-        "token-delta" as const,
-        "native-delta" as const,
-        "total-supply-delta" as const,
-        "logs" as const,
-      ],
-    }),
-    buildRequests: ({ descriptor }) => Object.freeze(
-      descriptor.probeAmounts.map((amountIn, index) =>
-        selfBurnNativeSimulation({
-          id: `current-self-burn:${index}`,
-          token: descriptor.token,
-          actor: SELF_BURN_NATIVE_PRICING_ACTOR,
-          callerRef: Object.freeze({
-            kind: "verified-actor" as const,
-            evidenceId: SELF_BURN_NATIVE_PRICING_ACTOR_EVIDENCE_ID,
-          }),
-          amountIn,
-        })
-      ),
-    ),
+    requirements: () => ({ transports: ["eth-call" as const] }),
+    buildRequests: ({ descriptor }) => selfBurnFeeRequests(descriptor.token, "current"),
     decodeSnapshot({ descriptor, initialResults }) {
-      const results = initialResults;
-      const successful = results.filter(
-        (result): result is Extract<
-          AdapterRequestResult,
-          { readonly ok: true }
-        > => result.ok,
-      );
-      if (successful.length === 0) {
-        throw new Error("self-burn native current reads are unresolved");
+      const { source, fees } = decodeSelfBurnFees(initialResults, "current");
+      for (const amountIn of descriptor.probeAmounts) {
+        const amountOut = amountIn - calculateSelfBurnFee(amountIn, fees);
+        if (amountOut <= 0n) continue;
+        return Object.freeze({ source, amountIn, amountOut,
+          quotes: Object.freeze({ [descriptor.route.routeKey]: Object.freeze({ amountIn, amountOut }) }) });
       }
-      const source = assertSameSource(successful);
-      for (const [index, amountIn] of descriptor.probeAmounts.entries()) {
-        const result = results.find(
-          (candidate) => candidate.id === `current-self-burn:${index}`,
-        );
-        if (!result?.ok) continue;
-        try {
-          const amountOut = validateSelfBurnNativeEffects({
-            result,
-            token: descriptor.token,
-            actor: SELF_BURN_NATIVE_PRICING_ACTOR,
-            amountIn,
-          });
-          return Object.freeze({
-            source,
-            amountIn,
-            amountOut,
-            quotes: Object.freeze({
-              [descriptor.route.routeKey]: Object.freeze({
-              amountIn,
-              amountOut,
-              }),
-            }),
-          });
-        } catch {
-          // Another successful probe may establish the current conversion.
-        }
-      }
-      if (results.some((result) => !result.ok)) {
-        throw new Error(
-          "self-burn native current reads are partially unresolved",
-        );
-      }
-      return Object.freeze({
-        source,
-        amountIn: 0n,
-        amountOut: 0n,
-        quotes: {},
-      });
+      return Object.freeze({ source, amountIn: 0n, amountOut: 0n, quotes: {} });
     },
     deriveMids({ descriptor, snapshot, routes }) {
       const mids = new Map<
@@ -184,7 +117,7 @@ export const selfBurnNativePricing = {
       return snapshot.amountIn === 0n || snapshot.amountOut === 0n
         ? new Map(routes.map((route) => [
             route.routeKey,
-            "self_burn_active_effect_unavailable",
+            "self_burn_quote_unavailable",
           ] as const))
         : new Map();
     },

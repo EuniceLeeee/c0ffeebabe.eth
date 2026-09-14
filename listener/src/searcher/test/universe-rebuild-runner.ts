@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -10,6 +10,7 @@ import {
   type DurableSourceReceipt,
   type DurableVerifiedMemo,
   type StartupCheckpointEnvelope,
+  type ReadyUniverseGeneration,
 } from "../universe-rebuild-checkpoint.js";
 import {
   assertReceiptsMatchCurrentSourcePlan,
@@ -73,6 +74,27 @@ interface Fixture {
   readonly scanCalls: () => number;
   readonly maxConcurrentAttestations: () => number;
   readonly input: RebuildUniverseInput;
+}
+
+// Execute the actual main startup selection/root-check statements with the
+// existing refresh fixture, without importing main's runtime or invoking RPC.
+async function startupReadyFromMain(
+  wiring: RebuildUniverseInput,
+  flags: { readonly blind: boolean; readonly dryRun: boolean },
+  refresh: typeof refreshReadyInstances = refreshReadyInstances,
+): Promise<{ readyUniverse: ReadyUniverseGeneration; rebuildEnvelope: StartupCheckpointEnvelope }> {
+  const source = await readFile(new URL("../main.ts", import.meta.url), "utf8");
+  const start = source.indexOf("  let rebuildEnvelope = await rebuildStore.load();");
+  const end = source.indexOf("  const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);", start);
+  assert(start >= 0 && end > start, "main Ready selection/root-check boundary must exist");
+  const run = new Function(
+    "rebuildStore", "rebuildWiring", "refreshReadyInstances", "rebuildUniverse",
+    "UniverseRunIncomplete", "blindUseIncumbentReady", "dryRunUseReadyGeneration", "console", "process",
+    `return (async () => { ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
+  );
+  return run(wiring.store, wiring, refresh,
+    async () => { throw new Error("Ready reuse must not start discovery/rebuild"); },
+    UniverseRunIncomplete, flags.blind, flags.dryRun, { log() {} }, { env: {} });
 }
 
 function makeFixture(
@@ -1107,6 +1129,8 @@ async function main(): Promise<void> {
     const refreshDir = await mkdtemp(join(tmpdir(), "ready-instance-refresh-"));
     try {
       const refresh = makeFixture(refreshDir);
+      await assert.rejects(startupReadyFromMain(refresh.input, { blind: false, dryRun: true }),
+        /requires one complete Ready checkpoint/);
       refresh.terminalKeys.add("c");
       const priorReady = await rebuildUniverse(refresh.input);
       const prior = (await refresh.store.load())!;
@@ -1118,7 +1142,25 @@ async function main(): Promise<void> {
         scanSwapWindow: noScan,
         expectedSourcePlanFingerprints: () => { throw new Error("do not relabel old discovery"); },
       };
-      const unchanged = await refreshReadyInstances(refreshInput);
+      await assert.rejects(startupReadyFromMain({ ...refreshInput,
+        store: { load: async () => ({ ...prior, inProgressRun: {} }) } as unknown as UniverseRebuildCheckpointStore,
+      }, { blind: false, dryRun: true }), /requires one complete Ready checkpoint/);
+      let startupRefreshes = 0;
+      const countRefresh: typeof refreshReadyInstances = async (input) => {
+        startupRefreshes++;
+        assert.equal(input.store, refresh.store, "main forwards its existing store");
+        assert.equal(input.attestFamilyInstanceOnce, refreshInput.attestFamilyInstanceOnce,
+          "main forwards existing production attestation wiring");
+        return refreshReadyInstances(input);
+      };
+      for (const dryRun of [false, true]) {
+        const blind = await startupReadyFromMain(refreshInput, { blind: true, dryRun }, countRefresh);
+        assert.deepEqual(blind.readyUniverse, priorReady, "blind fixed Ready is never refreshed, even with both flags");
+      }
+      assert.equal(startupRefreshes, 0);
+      const unchangedStartup = await startupReadyFromMain(refreshInput, { blind: false, dryRun: true }, countRefresh);
+      assert.equal(startupRefreshes, 1, "dry-run reuse invokes the existing selective refresh exactly once");
+      const unchanged = unchangedStartup.readyUniverse;
       assert.equal(unchanged.generation, priorReady.generation);
       assert.equal((await refresh.store.load())!.revision, prior.revision);
       await refreshReadyInstances({
@@ -1130,7 +1172,7 @@ async function main(): Promise<void> {
 
       refresh.invalidReusableKeys.add("a");
       const seal = refresh.input.sealDurableVerifiedMemo;
-      const revised = await refreshReadyInstances({
+      const revisedStartup = await startupReadyFromMain({
         ...refreshInput,
         isReadyMemoDefinitionCurrent: (memo) => memo.familyCandidateKey !== "cand:a",
         findReusableMemo: async () => { throw new Error("refresh uses the existing Family definition hash"); },
@@ -1138,7 +1180,8 @@ async function main(): Promise<void> {
           ...seal(input),
           compiledDescriptor: { kind: "descriptor", quoteModel: "pool-owned" },
         }),
-      });
+      }, { blind: false, dryRun: true });
+      const revised = revisedStartup.readyUniverse;
       assert.equal(refresh.scanCalls(), scansBefore);
       assert.equal(refresh.attestCalls.get("a"), 2, "only invalidated instance re-attested");
       assert.equal(refresh.attestCalls.get("b"), 1, "unchanged instance reused");
@@ -1150,6 +1193,9 @@ async function main(): Promise<void> {
         assert.deepEqual(revised[key], priorReady[key], `${key} stays bound to original discovery`);
       }
       const after = (await refresh.store.load())!;
+      assert.deepEqual(revisedStartup.rebuildEnvelope, after,
+        "main reloads the committed envelope: runtime memo rehydration cannot use pre-refresh memos");
+      assert.notDeepEqual(revisedStartup.rebuildEnvelope.verifiedMemos["cand:a"], prior.verifiedMemos["cand:a"]);
       assert.deepEqual(after.retryableAttemptsByCandidateKey, prior.retryableAttemptsByCandidateKey);
       assert.deepEqual(after.verifiedMemos["cand:b"], prior.verifiedMemos["cand:b"]);
 
@@ -1158,7 +1204,7 @@ async function main(): Promise<void> {
       for (const outcome of ["retryable", "terminal"] as const) {
         const keys = outcome === "retryable" ? refresh.failKeys : refresh.terminalKeys;
         keys.add("a");
-        await assert.rejects(refreshReadyInstances(refreshInput), /incumbent unchanged/);
+        await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, dryRun: true }), /incumbent unchanged/);
         assert.deepEqual(await refresh.store.load(), after);
         keys.delete("a");
       }
@@ -1173,6 +1219,15 @@ async function main(): Promise<void> {
         }),
       }), /changed identity/);
       assert.deepEqual(await refresh.store.load(), after);
+      await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, dryRun: true },
+        async () => { throw new Error("fixture source/fatal stop"); }), /fixture source\/fatal stop/);
+      await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, dryRun: true },
+        async () => ({ ...revised, generation: revised.generation + 1 })), /root verification/);
+      let reloads = 0;
+      await assert.rejects(startupReadyFromMain({ ...refreshInput,
+        store: { load: async () => reloads++ === 0 ? after : null } as unknown as UniverseRebuildCheckpointStore,
+      }, { blind: false, dryRun: true }, async () => revised), /root verification/);
+      assert.deepEqual(await refresh.store.load(), after, "startup refresh failure never falls back or mutates incumbent");
       let fences = 0;
       await assert.rejects(refreshReadyInstances({
         ...refreshInput,

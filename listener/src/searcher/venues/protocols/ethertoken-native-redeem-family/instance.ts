@@ -22,7 +22,6 @@ export const etherTokenNativeRedeemInstance = {
     runtimeRequirements: Object.freeze([
       { kind: "source-state" as const, freshness: "pinned-block" as const },
       { kind: "execution-actor" as const, role: "executor" as const },
-      { kind: "quote-completion" as const, mode: "effect-delta" as const },
       {
         kind: "effect-observation" as const,
         effects: Object.freeze([

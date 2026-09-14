@@ -3,6 +3,7 @@ import {
   runStrictFamilyLifecycle,
 } from "../strict-family-lifecycle-runner.js";
 import {
+  captureSelfBurnNativeFixtureCase,
   wstethFixtureRuntime,
 } from "../architecture-migration-fixture-replay.js";
 import type { CanonicalSource } from
@@ -54,6 +55,18 @@ async function main(): Promise<void> {
     }),
     /no matched observation/,
   );
+  // Fixture-only regression: raw pricing and Exact share the source-fee
+  // formula, which must flow into the existing execution capture.
+  const selfBurn = await captureSelfBurnNativeFixtureCase({ source: SOURCE });
+  assert(selfBurn.stages.exactQuotes);
+  assert(selfBurn.stages.executionFragments);
+  const quotes = selfBurn.stages.exactQuotes.items;
+  const fragments = selfBurn.stages.executionFragments.items;
+  assert.equal(quotes.length, 1);
+  assert.equal(fragments.length, 1);
+  assert.equal((quotes[0]!.value as { amountIn: string }).amountIn, "1000000");
+  assert.equal((quotes[0]!.value as { amountOut: string }).amountOut, "1000000");
+  assert.equal((fragments[0]!.value as { amountOut: string }).amountOut, "1000000");
   console.log("strict-family-lifecycle-runner PASS");
 }
 

@@ -1,5 +1,7 @@
+import { ethers } from "ethers";
 import {
   localZeroExactMethod,
+  type ExactQuoteInput,
   type ExactQuoteSemantics,
   type ExactRequestProgram,
 } from "../../adapter-family-plugin.js";
@@ -19,14 +21,18 @@ import {
 import {
   requireAngstromRuntimeEvidence,
 } from "./evidence.js";
+import { hashCanonical, type CanonicalValue } from "../../canonical-value.js";
+import { angstromV4StaticBindingProjection } from "./binding.js";
 import type {
   AngstromV4Descriptor,
   AngstromV4ExactEvidence,
+  AngstromV4SignedExactEvidence,
   AngstromV4Route,
 } from "./types.js";
 
 const EXACT_QUOTE_REQUEST_ID = "exact-angstrom-v4-quotes";
 const UINT128_MAX = (1n << 128n) - 1n;
+type AngstromExactInput = ExactQuoteInput<AngstromV4Descriptor, AngstromV4Route>;
 
 const angstromV4RequestProgram: ExactRequestProgram<
   AngstromV4Descriptor,
@@ -91,27 +97,103 @@ const angstromV4RequestProgram: ExactRequestProgram<
   },
 };
 
+const sourceUnlockedProgram: ExactRequestProgram<
+  AngstromV4Descriptor, AngstromV4Route, AngstromV4ExactEvidence
+> = {
+  requirements: () => ({ transports: ["eth-call"] }),
+  buildRequests(input) {
+    assertUnsignedInput(input);
+    if (input.amountIn === 0n) return [];
+    return [Object.freeze({
+      id: EXACT_QUOTE_REQUEST_ID,
+      kind: "eth-call" as const,
+      to: BLOCKSCAN_MULTICALL3,
+      completion: "return-data" as const,
+      data: encodeMulticall([{
+        label: "angstrom-v4-source-unlocked",
+        target: input.descriptor.immutableBinding.quoter,
+        callData: UNIV4_QUOTER_INTERFACE.encodeFunctionData("quoteExactInputSingle", [{
+          poolKey: input.descriptor.poolKey,
+          zeroForOne: input.route.direction === "zero-for-one",
+          exactAmount: input.amountIn,
+          hookData: "0x",
+        }]),
+        allowFailure: true,
+      }]),
+    })];
+  },
+  decode({ programInput: input, initialResults }) {
+    assertUnsignedInput(input);
+    if (input.amountIn === 0n) return unsignedQuote(input, 0n);
+    if (initialResults.length !== 1) throw new Error("angstrom-v4 source-unlocked requires one quote result");
+    const result = requireSuccessfulResult(initialResults, EXACT_QUOTE_REQUEST_ID);
+    assertSource(result.source, input.source);
+    const aggregate = blockScanMulticallIface.decodeFunctionResult("aggregate3", result.data)[0];
+    if (aggregate.length !== 1 || !aggregate[0].success) {
+      throw new Error("angstrom-v4 source-unlocked hook quote did not succeed");
+    }
+    const amountOut = BigInt(UNIV4_QUOTER_INTERFACE.decodeFunctionResult(
+      "quoteExactInputSingle", aggregate[0].returnData,
+    )[0]);
+    if (amountOut <= 0n || amountOut > UINT128_MAX) {
+      throw new Error("angstrom-v4 source-unlocked output must fit positive uint128");
+    }
+    return unsignedQuote(input, amountOut);
+  },
+};
+
 export const angstromV4Exact = {
-  methods: () => Object.freeze([
-    localZeroExactMethod<
-      AngstromV4Descriptor,
-      AngstromV4Route,
-      AngstromV4ExactEvidence
-    >(
-      "local-zero",
-      (input) => {
-        assertRoute(input.descriptor, input.route);
-        return zeroQuote(input, requireAngstromRuntimeEvidence(input));
-      },
-    ),
-    Object.freeze({
-      id: "tx-bound-quoter",
-      kind: "request-program" as const,
-      chainAmountQuote: true as const,
-      program: angstromV4RequestProgram,
-    }),
-  ]),
-  cacheCompatibilityProjection(input) {
+  methods(input: AngstromExactInput) {
+    assertRoute(input.descriptor, input.route);
+    assertAmount(input.amountIn);
+    // Only a genuinely empty list selects this mode. Never catch a rejected
+    // signed envelope and try an unsigned call instead.
+    if (!Array.isArray(input.runtimeEvidence)) throw new Error("angstrom-v4 runtime evidence must be an array");
+    if (input.runtimeEvidence.length === 0) {
+      assertUnsignedInput(input);
+      return Object.freeze([
+        localZeroExactMethod<AngstromV4Descriptor, AngstromV4Route, AngstromV4ExactEvidence>(
+          "local-zero", (zeroInput) => {
+            assertUnsignedInput(zeroInput);
+            return unsignedQuote(zeroInput, 0n);
+          },
+        ),
+        Object.freeze({ id: "source-unlocked-quoter", kind: "request-program" as const,
+          chainAmountQuote: true as const, program: sourceUnlockedProgram }),
+      ]);
+    }
+    requireAngstromRuntimeEvidence(input);
+    return Object.freeze([
+      localZeroExactMethod<
+        AngstromV4Descriptor,
+        AngstromV4Route,
+        AngstromV4ExactEvidence
+      >(
+        "local-zero",
+        (input) => {
+          assertRoute(input.descriptor, input.route);
+          return zeroQuote(input, requireAngstromRuntimeEvidence(input));
+        },
+      ),
+      Object.freeze({
+        id: "tx-bound-quoter",
+        kind: "request-program" as const,
+        chainAmountQuote: true as const,
+        program: angstromV4RequestProgram,
+      }),
+    ]);
+  },
+  cacheCompatibilityProjection(input): CanonicalValue {
+    if (Array.isArray(input.runtimeEvidence) && input.runtimeEvidence.length === 0) {
+      assertUnsignedInput(input);
+      return {
+        mode: "source-unlocked",
+        source: { ...input.source, hash: input.source.hash.toLowerCase() },
+        bindingFingerprint: hashCanonical(angstromV4StaticBindingProjection(input.descriptor)),
+        direction: [input.route.tokenIn, input.route.tokenOut],
+        executor: input.executor.toLowerCase(),
+      };
+    }
     const runtime = requireAngstromRuntimeEvidence(input);
     return {
       poolId: input.descriptor.poolId,
@@ -178,7 +260,7 @@ function exactEvidence(
   },
   runtime: ReturnType<typeof requireAngstromRuntimeEvidence>,
   amountOut: bigint,
-): AngstromV4ExactEvidence {
+): AngstromV4SignedExactEvidence {
   return Object.freeze({
     kind: "angstrom-v4-tx-bound-quoter" as const,
     source: input.source,
@@ -196,6 +278,37 @@ function exactEvidence(
     amountIn: input.amountIn,
     amountOut,
   });
+}
+
+function assertUnsignedInput(input: AngstromExactInput): void {
+  assertRoute(input.descriptor, input.route);
+  assertAmount(input.amountIn);
+  if (!Array.isArray(input.runtimeEvidence) || input.runtimeEvidence.length !== 0) {
+    throw new Error("angstrom-v4 source-unlocked requires empty runtime evidence");
+  }
+  if (!Number.isSafeInteger(input.source.number) || input.source.number < 0 ||
+      !Number.isSafeInteger(input.source.generation) || input.source.generation < 0 ||
+      !ethers.isHexString(input.source.hash, 32) ||
+      !ethers.isAddress(input.executor) || input.executor === ethers.ZeroAddress) {
+    throw new Error("angstrom-v4 source-unlocked requires a canonical source and executor");
+  }
+}
+
+function unsignedQuote(input: AngstromExactInput, amountOut: bigint) {
+  return Object.freeze({ amountOut, evidence: Object.freeze({
+    kind: input.amountIn === 0n ? "angstrom-v4-unsigned-local-zero" as const
+      : "angstrom-v4-source-unlocked-quoter" as const,
+    source: Object.freeze({ ...input.source }),
+    poolId: input.descriptor.poolId,
+    poolKeyFingerprint: poolKeyFingerprint(input.descriptor.poolKey),
+    quoter: input.descriptor.immutableBinding.quoter,
+    bindingFingerprint: hashCanonical(angstromV4StaticBindingProjection(input.descriptor)),
+    executor: input.executor,
+    tokenIn: input.route.tokenIn,
+    tokenOut: input.route.tokenOut,
+    amountIn: input.amountIn,
+    amountOut,
+  }) });
 }
 
 function assertAmount(amountIn: bigint): void {

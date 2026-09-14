@@ -102,7 +102,7 @@ export interface UniV2PricingSnapshot {
   readonly quoted1?: bigint;
 }
 
-export interface UniV2ExactEvidence {
+export interface UniV2ReserveExactEvidence {
   readonly quoteModel: UniV2QuoteModel["kind"];
   readonly kind: "univ2-reserves-exact";
   readonly source: CanonicalSource;
@@ -118,6 +118,14 @@ export interface UniV2ExactEvidence {
   readonly maxAmountIn?: bigint;
   readonly unavailableReason?: "input-reserve-capacity";
 }
+
+export interface UniV2RouterExactEvidence extends Omit<UniV2ReserveExactEvidence, "kind" | "quoteModel"> {
+  readonly kind: "univ2-router-amounts";
+  readonly quoteModel: "constant-product";
+  readonly router: string;
+}
+
+export type UniV2ExactEvidence = UniV2ReserveExactEvidence | UniV2RouterExactEvidence;
 
 export type UniV2IdentityEvidence =
   | {

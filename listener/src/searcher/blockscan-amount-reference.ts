@@ -108,16 +108,12 @@ export function gasReferenceInput(
   return gasWei * 10_000n * rate.den * spread.den / (spread.num * rate.num) + 1n;
 }
 
-export function resolveExactProbe(gasMinRaw: bigint | null | undefined): bigint {
-  return gasMinRaw == null || gasMinRaw < 10n ? 10n : gasMinRaw;
-}
-
 /** One instance per configured live process; never persists across execution-config changes. */
 export class BlockScanAmountReference {
   private readonly headers = new Map<number, ReferenceHeader>();
   private readonly samples = new Map<number, { source: BlockSource; gasUsed: bigint }>();
 
-  constructor(private readonly weth: string, private readonly capacity = 2048) {
+  constructor(private readonly capacity = 2048) {
     if (!Number.isSafeInteger(capacity) || capacity <= 0) throw new Error("invalid amount reference capacity");
   }
 
@@ -191,28 +187,31 @@ export class BlockScanAmountReference {
   }
 
   prepare(input: {
-    source: BlockSource;
-    pricing: PricingReference | null;
-    enumerationSpreadBps: number;
+    pricing: Pick<BlockScanStateSnapshot,
+      "sourceBlock" | "sourceBlockHash" | "generation" | "effectiveMids"> | null;
     opportunities: readonly BlockScanOpportunity[];
   }): ReadonlyMap<BlockScanOpportunity, bigint> {
     const result = new Map<BlockScanOpportunity, bigint>();
-    const { pricing, source } = input;
-    if (!pricing || pricing.sourceBlock !== source.number ||
-        pricing.sourceBlockHash.toLowerCase() !== source.hash.toLowerCase() ||
-        pricing.generation !== source.generation) return result;
-    const gasCostWei = this.estimateGasCost(source);
-    if (gasCostWei === null || input.opportunities.length === 0) return result;
-    const marks = tokenToWethReferences(pricing, this.weth);
-    const amounts = new Map<string, bigint | null>();
+    const { pricing } = input;
+    const effective = pricing?.effectiveMids;
+    if (!pricing || !effective?.complete ||
+        effective.source.number !== pricing.sourceBlock ||
+        effective.source.hash.toLowerCase() !== pricing.sourceBlockHash.toLowerCase() ||
+        effective.source.generation !== pricing.generation) return result;
+    // Read the first directed edge used by enumeration, not a token-wide new
+    // valuation. Clean carried rows retain their recorded amount. This only
+    // supplies sizing; Exact still quotes every leg at its own current source.
     for (const opportunity of input.opportunities) {
-      const token = opportunity.flashToken.toLowerCase();
-      const mark = marks.get(token);
-      if (!mark) continue;
-      if (!amounts.has(token)) amounts.set(token, gasReferenceInput(gasCostWei, mark, input.enumerationSpreadBps));
-      const amount = amounts.get(token);
-      if (amount != null) result.set(opportunity, amount);
+      const first = opportunity.seedEdges[0];
+      if (!first) continue;
+      const key = blockScanEdgeKey(first);
+      const row = effective.rows.get(key);
+      if (row?.status !== "quoted" || row.edgeId !== key || row.amountIn == null || row.amountIn <= 0n ||
+          row.tokenIn.toLowerCase() !== first.tokenIn.toLowerCase() ||
+          row.tokenIn.toLowerCase() !== opportunity.flashToken.toLowerCase() ||
+          row.tokenOut.toLowerCase() !== first.tokenOut.toLowerCase()) continue;
+      result.set(opportunity, row.amountIn);
     }
-    return result; // A pass-owned value map; later samples/headers cannot change it.
+    return result;
   }
 }

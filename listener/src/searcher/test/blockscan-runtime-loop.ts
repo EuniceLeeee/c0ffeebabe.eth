@@ -316,7 +316,7 @@ test("runHead creates SOURCE-controlled context before prefunding and drains it 
   } finally { await f.loop.shutdown(); }
 });
 
-test("source-N refresh asks the existing activity reader for the full published-mid gap", async () => {
+test("source-N raw/effective refresh uses only current-block touched even with an old publication", async () => {
   const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } }, async closeAndDrain() {} }));
   const base = { sourceBlock: 100, sourceBlockHash: hash(100) };
   f.coordinator.latestPricingSnapshot = () => base;
@@ -325,8 +325,7 @@ test("source-N refresh asks the existing activity reader for the full published-
   f.deps.readBlockSwapTouched = async (number, header, range) => {
     activityReads++;
     assert.equal(number, 219); assert.equal(header!.hash, hash(219));
-    assert.deepEqual(range!.previousSource, { number: 100, hash: hash(100) });
-    assert(range!.signal && range!.deadlineAtMs! > Date.now());
+    assert.equal(range, undefined, "must not accumulate the unpublished gap");
     return touched;
   };
   try {
@@ -339,7 +338,7 @@ test("source-N refresh asks the existing activity reader for the full published-
   } finally { await f.loop.shutdown(); }
 });
 
-test("N-1 producer binds the same activity reader to its preceding published mid", async () => {
+test("N-1 producer also uses one current-block activity set for both prices", async () => {
   const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } }, async closeAndDrain() {} }));
   let latest: any = { sourceBlock: 100, sourceBlockHash: hash(100) };
   f.coordinator.latestPricingSnapshot = () => latest;
@@ -348,9 +347,7 @@ test("N-1 producer binds the same activity reader to its preceding published mid
   f.deps.readBlockSwapTouched = async (number, header, range) => {
     activityReads++;
     assert.equal(number, 101); assert.equal(header!.hash, hash(101));
-    assert.deepEqual(range!.previousSource, { number: 100, hash: hash(100) });
-    assert.equal(range!.signal, f.runtimeAbort.signal);
-    assert(range!.deadlineAtMs! > Date.now());
+    assert.equal(range, undefined);
     return touched;
   };
   f.coordinator.prepareCoarsePricing = async (input: any) => {
@@ -593,7 +590,8 @@ test("production call sites carry transport rather than a constructor-bound fall
   const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
   const loop = readFileSync(new URL("../blockscan-runtime-loop.ts", import.meta.url), "utf8");
   assert.doesNotMatch(main, /createRevmStrictSimulationTransport\(/);
-  assert.match(main, /pricing\.sourceBlockHash[\s\S]*?generation: pricing\.generation/);
+  assert.match(main, /const quoteTarget = reuse\?\.quoteGraph \?\? pricing/);
+  assert.match(main, /quoteTarget\.sourceBlockHash[\s\S]*?generation: quoteTarget\.generation/);
   assert.match(main, /async \(pricing, control, pricingBackend, reuse, simulationTransport\)/);
   assert.match(main, /purpose: "exact-execution", source,\s+simulationTransport,/);
   assert.match(main, /pricingCallCache === undefined && request\.simulationTransport === undefined/);

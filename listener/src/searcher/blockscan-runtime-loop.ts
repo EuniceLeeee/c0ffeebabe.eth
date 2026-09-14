@@ -683,7 +683,7 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly rethTransportScheduler?: Pick<
     RethTransportScheduler,
     "run"
-  >;
+  > & Partial<Pick<RethTransportScheduler, "completeStartup">>;
   readonly runtimeAbort: AbortController;
   readonly sharedPlanner: Pick<TemplatePlanner, "setFlashLiquidity">;
   readonly backrunStatePublisher: Pick<
@@ -1378,12 +1378,7 @@ export class BlockScanRuntimeLoop {
         });
         let prepared: BlockScanStatePrepareResult;
         let bootstrapEscalated = false;
-        const activityBase = input.coordinator.latestPricingSnapshot();
-        const producerTouched = await this.deps.readBlockSwapTouched(nextBlock, header,
-          activityBase === null || activityBase.sourceBlock >= nextBlock ? undefined : {
-            previousSource: { number: activityBase.sourceBlock, hash: activityBase.sourceBlockHash },
-            signal: this.deps.runtimeAbort.signal, deadlineAtMs: generationDeadlineAtMs,
-          });
+        const producerTouched = await this.deps.readBlockSwapTouched(nextBlock, header);
         let producerActivity: StrictCanonicalActivityProof = Object.freeze({
           source: Object.freeze({
             number: anchoredGraph.sourceBlock,
@@ -2363,10 +2358,8 @@ export class BlockScanRuntimeLoop {
     let fundingPreparation: StrictFundingPreparation | undefined;
     let fundingSettlement: Promise<void> | undefined;
     const activityStartedAtMs = Date.now();
-    // The SAME refresh range serves raw and amount-sensitive pricing. A warm
-    // publication can be many blocks behind; latest-block-only touched data
-    // must not certify all intervening changes as absent.
-    const activityBase = currentRuntimeCoordinator.latestPricingSnapshot();
+    // Both price columns use this block's activity, as in the original mid
+    // producer. Carried references are not new current-block observations.
     let activityFinishedAtMs: number | null = null;
     let fundingStartedAtMs: number | null = null;
     let fundingFinishedAtMs: number | null = null;
@@ -2381,11 +2374,7 @@ export class BlockScanRuntimeLoop {
       .then(async () => {
         const header = await sourceHeaderRead;
         if (header.status === "rejected") throw header.reason;
-        return this.deps.readBlockSwapTouched(blockNumber, header.value,
-          activityBase === null || activityBase.sourceBlock >= blockNumber ? undefined : {
-            previousSource: { number: activityBase.sourceBlock, hash: activityBase.sourceBlockHash },
-            signal: passSignal, deadlineAtMs: passDeadlineAtMs,
-          });
+        return this.deps.readBlockSwapTouched(blockNumber, header.value);
       })
       .then(
         (value): PromiseSettledResult<ReadonlySet<string>> => {
@@ -3279,18 +3268,18 @@ export class BlockScanRuntimeLoop {
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
       const exactQuoteStateRef: StateBackend = exactQuoteState;
-      const gasMinimumByOpportunity = this.deps.amountReference?.prepare({
-        source: exactSource,
+      const probeAmountsByOpportunity = this.deps.amountReference?.prepare({
         pricing: amountPricingSnapshot,
-        enumerationSpreadBps: blockScanCfg.minSpreadBps,
         opportunities: coarse.opportunities,
       });
       console.log(`[searcher/blockscan-amount-reference] ${JSON.stringify({
         block: blockNumber, sourceBlock: exactSource.number,
         enumerationSpreadBps: blockScanCfg.minSpreadBps,
         candidates: coarse.opportunities.length,
-        gasReferences: gasMinimumByOpportunity?.size ?? 0,
-        missingGasProbeRaw: "10",
+        reference: "effective-first-edge",
+        referenceSourceBlock: amountPricingSnapshot?.sourceBlock ?? null,
+        effectiveReferences: probeAmountsByOpportunity?.size ?? 0,
+        missingReferences: coarse.opportunities.length - (probeAmountsByOpportunity?.size ?? 0),
       })}`);
       const refinement = await refineBlockScanCandidates(
         exactQuoteStateRef,
@@ -3322,7 +3311,7 @@ export class BlockScanRuntimeLoop {
           : undefined,
         this.deps.exactConcurrency,
         {
-          gasMinimumByOpportunity,
+          probeAmountsByOpportunity,
           executor: this.deps.executorAddress,
           strictSession,
           runtimeEvidence,
@@ -3962,6 +3951,12 @@ export class BlockScanRuntimeLoop {
               finally { await Promise.all([activity, fundingSettlement]); }
             }
           }
+        }
+        if (outcome === "startup_warm" && startupWarmAttempt &&
+            !passSignal.aborted && !this.deps.runtimeAbort.signal.aborted &&
+            !this.deps.isShuttingDown() &&
+            this.deps.rethTransportScheduler?.completeStartup?.()) {
+          console.log("[searcher/blockscan-transport-steady] startup drained; restored configured transport limits");
         }
         if (exactQuoteState instanceof PinnedRethQuoteBackend) {
           console.log(

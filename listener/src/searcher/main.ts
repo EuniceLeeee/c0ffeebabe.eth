@@ -32,7 +32,7 @@ import {
 import { blockScanRouteId } from "./blockscan-route-identity.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
-import { buildEffectiveMids, effectiveMidPairStatistics } from "./blockscan-effective-mid.js";
+import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried } from "./blockscan-effective-mid.js";
 import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
@@ -75,6 +75,7 @@ import { UniverseRebuildCheckpointStore } from
 import {
   UniverseRunIncomplete,
   rebuildUniverse,
+  refreshReadyInstances,
 } from "./universe-rebuild-runner.js";
 import { createRebuildWiring } from "./universe-rebuild-production.js";
 import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
@@ -1572,6 +1573,17 @@ async function main(): Promise<void> {
       );
     }
     readyUniverse = rebuildEnvelope.readyGeneration;
+    if (dryRunUseReadyGeneration && !blindUseIncumbentReady) {
+      readyUniverse = await refreshReadyInstances({
+        ...rebuildWiring,
+        store: rebuildStore,
+        log: (message) => console.log("[searcher/startup] " + message),
+      });
+      rebuildEnvelope = await rebuildStore.load();
+      if (rebuildEnvelope === null) {
+        throw new Error("strict startup readyGeneration failed root verification");
+      }
+    }
     console.log(
       "[searcher/startup] " +
         (blindUseIncumbentReady ? "blind replay" : "dry-run live observation") +
@@ -2022,7 +2034,7 @@ async function main(): Promise<void> {
     strictSessionCache.set(key, pending);
     return pending;
   };
-  const blockScanAmountReference = new BlockScanAmountReference(ADDR.WETH);
+  const blockScanAmountReference = new BlockScanAmountReference();
   // Network identity is established once, never guessed for activity reuse.
   currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
     strictSessionFor,
@@ -2032,8 +2044,9 @@ async function main(): Promise<void> {
       const controller = new AbortController();
       const effectiveControl = { ...control, signal: control.signal === undefined
         ? controller.signal : AbortSignal.any([control.signal, controller.signal]) };
-      const source = Object.freeze({ number: pricing.sourceBlock,
-        hash: pricing.sourceBlockHash, generation: pricing.generation });
+      const quoteTarget = reuse?.quoteGraph ?? pricing;
+      const source = Object.freeze({ number: quoteTarget.sourceBlock,
+        hash: quoteTarget.sourceBlockHash, generation: quoteTarget.generation });
       // Use the existing source-pinned producer transport. The fallback is
       // lifecycle-owned here only for callers without a supplied transport.
       const ownedBackend = pricingBackend === undefined ? new PinnedRethQuoteBackend(
@@ -2046,16 +2059,20 @@ async function main(): Promise<void> {
           transportScheduler: blockScanRethTransportScheduler },
       ) : undefined;
       try {
-        const session = await strictSessionFor({ purpose: "exact-execution", source,
-          simulationTransport,
-          control: effectiveControl, fundingAssets: [], requiredEdgeIds: new Set(pricing.mids.keys()),
-          exactCallBackend: pricingBackend ?? ownedBackend! });
-        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} mids=${pricing.mids.size}`);
-        const effective = await buildEffectiveMids({ pricing, weth: ADDR.WETH,
+        let session: StrictProductionRuntimeSession | undefined;
+        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} sizingSourceBlock=${pricing.sourceBlock} sizingRawMids=${pricing.mids.size}`);
+        const effective = await buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
           previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
           gasCostWei: blockScanAmountReference.estimateGasCost(source),
           enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 128,
+          prepareQuote: async (requiredEdgeIds) => {
+            session = await strictSessionFor({ purpose: "exact-execution", source,
+              simulationTransport,
+              control: effectiveControl, fundingAssets: [], requiredEdgeIds,
+              exactCallBackend: pricingBackend ?? ownedBackend! });
+          },
           quote: async (request) => {
+            if (!session) throw new Error("effective quote session was not prepared");
             const quote = await session.issueExact({ ...request,
               executor: config.botvmAddress, runtimeEvidence: [] });
             if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
@@ -2064,10 +2081,10 @@ async function main(): Promise<void> {
         });
         console.log(`[searcher/effective-mid] ${JSON.stringify({
           sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
-          rawMids: pricing.mids.size, reference: effective.reference,
+          sizingRawMids: pricing.mids.size, sizingSourceBlock: pricing.sourceBlock, reference: effective.reference,
           referenceWethInput: effective.referenceWethInput.toString(),
           complete: effective.complete, wallMs: effective.wallMs,
-          carried: [...effective.rows.values()].filter(row => row.carried).length,
+          carried: [...effective.rows.values()].filter(row => effectiveMidRowCarried(effective, row)).length,
           ...effectiveMidPairStatistics(effective),
         })}`);
         return effective;

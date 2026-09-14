@@ -82,21 +82,40 @@ export interface AngstromV4PricingSnapshot {
   readonly inactiveReason: string | null;
 }
 
-export interface AngstromV4ExactEvidence {
-  readonly kind: "angstrom-v4-tx-bound-quoter";
+interface AngstromV4QuoteBinding {
   readonly source: CanonicalSource;
   readonly poolId: string;
   readonly poolKeyFingerprint: string;
   readonly quoter: string;
-  readonly txHash: string;
-  readonly runtimeEvidenceHash: string;
-  readonly payloadHash: string;
-  readonly attestationEvidenceHashes: readonly string[];
   readonly tokenIn: string;
   readonly tokenOut: string;
   readonly amountIn: bigint;
   readonly amountOut: bigint;
 }
+
+export interface AngstromV4SignedExactEvidence extends AngstromV4QuoteBinding {
+  readonly kind: "angstrom-v4-tx-bound-quoter";
+  readonly txHash: string;
+  readonly runtimeEvidenceHash: string;
+  readonly payloadHash: string;
+  readonly attestationEvidenceHashes: readonly string[];
+}
+
+/** A successful hook-aware quote at this source, not a signed unlock or B+1 authority. */
+export interface AngstromV4SourceUnlockedEvidence extends AngstromV4QuoteBinding {
+  readonly kind: "angstrom-v4-source-unlocked-quoter";
+  readonly bindingFingerprint: string;
+  readonly executor: string;
+}
+
+export interface AngstromV4UnsignedZeroEvidence extends AngstromV4QuoteBinding {
+  readonly kind: "angstrom-v4-unsigned-local-zero";
+  readonly bindingFingerprint: string;
+  readonly executor: string;
+}
+
+export type AngstromV4ExactEvidence = AngstromV4SignedExactEvidence |
+  AngstromV4SourceUnlockedEvidence | AngstromV4UnsignedZeroEvidence;
 
 export type AngstromV4IdentityEvidence =
   | {

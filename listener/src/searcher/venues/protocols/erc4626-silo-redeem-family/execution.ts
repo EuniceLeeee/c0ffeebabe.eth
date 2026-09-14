@@ -18,7 +18,8 @@ export const erc4626SiloRedeemExecution = {
     if (
       input.amountIn <= 0n ||
       input.quotedAmountOut <= 0n ||
-      evidence.kind !== "erc4626-silo-active-redeem" ||
+      evidence.kind !== "erc4626-silo-preview-chain" ||
+      evidence.previewAssets <= 0n ||
       evidence.amountIn !== input.amountIn ||
       evidence.amountOut !== input.quotedAmountOut ||
       !sameAddress(evidence.vault, input.descriptor.vault) ||

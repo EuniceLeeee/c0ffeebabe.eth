@@ -1058,7 +1058,9 @@ function writeCompactExactDiagnostic(
                   ? 7
                   : reason === "amount_reference_over_cap"
                     ? 8
-                    : -1;
+                    : reason === "amount_reference_missing"
+                      ? 9
+                      : -1;
   if (
     failure < 0 ||
     (

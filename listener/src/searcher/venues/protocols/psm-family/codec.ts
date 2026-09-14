@@ -23,5 +23,9 @@ export function psmSellQuote(
     throw new Error(`PSM tin returned invalid fee ${tin}`);
   }
   const scaled = amountIn * scale;
+  const max = (1n << 256n) - 1n;
+  if (scale <= 0n || scaled > max || scaled * tin > max) {
+    throw new Error("PSM scaling or fee multiplication overflow");
+  }
   return scaled - scaled * tin / PSM_WAD;
 }

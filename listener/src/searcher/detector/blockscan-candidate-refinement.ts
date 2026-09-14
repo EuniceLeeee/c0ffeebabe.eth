@@ -5,7 +5,6 @@ import {
   withStateCallControl,
 } from "../../shared/state/state-backend.js";
 import type { BlockScanOpportunity } from "./detector.js";
-import { resolveExactProbe } from "../blockscan-amount-reference.js";
 import {
   BlockScanFamilyAttributedError,
   BlockScanFamilyStageBudget,
@@ -77,6 +76,7 @@ export interface BlockScanProbeFailureDiagnostic {
   readonly reason:
     | "exact_not_admitted"
     | "amount_reference_over_cap"
+    | "amount_reference_missing"
     | "family_circuit_open"
     | "instance_circuit_open"
     | "composite_circuit_open"
@@ -96,8 +96,8 @@ export interface BlockScanProbeFailureDiagnostic {
 }
 
 export interface BlockScanRefinementOptions {
-  /** Frozen current-source reference amounts. Missing means the explicit 10-raw-unit probe. */
-  readonly gasMinimumByOpportunity?: ReadonlyMap<BlockScanOpportunity, bigint>;
+  /** Recorded reference inputs, consumed unchanged. Missing inputs are not probed. */
+  readonly probeAmountsByOpportunity?: ReadonlyMap<BlockScanOpportunity, bigint>;
   /** Uniform deadline for each exact route probe. */
   readonly probeTimeoutMs?: number;
   /**
@@ -168,7 +168,7 @@ export async function refineBlockScanCandidates(
   // concurrency quotas.
   let work = opportunities.map((opportunity, index) => ({
     opportunity, index,
-    probeAmount: resolveExactProbe(options.gasMinimumByOpportunity?.get(opportunity)),
+    probeAmount: options.probeAmountsByOpportunity?.get(opportunity) ?? 0n,
   }));
   const routeFamilyIds = (
     opportunity: BlockScanOpportunity,
@@ -332,12 +332,12 @@ export async function refineBlockScanCandidates(
   // route can never become a deadline fallback or a Family-attributed failure.
   work = work.filter(({ opportunity, index, probeAmount }) => {
     const ceiling = minBigint(opportunity.searchSeed.searchCenter, opportunity.searchSeed.maxInput);
-    if (probeAmount <= ceiling) return true;
+    if (probeAmount > 0n && probeAmount <= ceiling) return true;
     recordShadowTotal(opportunity);
     recordShadow(opportunity, "unprobed");
     onProbe?.({
       index, status: "unprobed", marginBps: null, attempted: false,
-      failure: probeFailureDiagnostic("amount_reference_over_cap", []),
+      failure: probeFailureDiagnostic(probeAmount <= 0n ? "amount_reference_missing" : "amount_reference_over_cap", []),
     });
     return false;
   });

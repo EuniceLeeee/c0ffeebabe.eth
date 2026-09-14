@@ -10,6 +10,7 @@ import { StrictCurrentRuntimeCoordinator, type PrepareStrictRuntimeInput, type S
 import { StrictProductionRuntimeRoot, type StrictProductionRuntimeSession } from "../strict-production-runtime-session.js";
 import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
 import { PinnedRethQuoteBackend } from "../pinned-reth-quote-backend.js";
+import { RethTransportScheduler } from "../reth-transport-scheduler.js";
 import { buildEffectiveMids } from "../blockscan-effective-mid.js";
 import { buildFamilyRouteGraphView } from "../adapter-family-graph-runtime.js";
 import { createVerifiedGraphView } from "../venues/blockscan-state-capability.js";
@@ -183,13 +184,14 @@ async function setup(mode: Mode) {
     return session;
   };
   const coordinator = new StrictCurrentRuntimeCoordinator(sessionFor, () => {},
-    publication => published.push(publication.snapshot), async (pricing, control, backend) => {
+    publication => published.push(publication.snapshot), async (pricing, control, backend, reuse) => {
       assert(backend);
-      const source = { number: pricing.sourceBlock, hash: pricing.sourceBlockHash, generation: pricing.generation };
+      const target = reuse?.quoteGraph ?? pricing;
+      const source = { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation };
       const session = await sessionFor({ purpose: "exact-execution", source, fundingAssets: [], control,
         exactCallBackend: backend, requiredEdgeIds: new Set(pricing.mids.keys()) });
       let index = 0;
-      return buildEffectiveMids({ pricing, control, weth: pool.token0, gasCostWei: null,
+      return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, control, weth: pool.token0, gasCostWei: null,
         enumerationSpreadBps: 20, concurrency: 1,
         quote: async request => {
           // Synthetic expensive remote step plus real Family decode/authority.
@@ -308,6 +310,73 @@ function assertIdle(backend: PinnedRethQuoteBackend): void {
 const observe = () => ({ sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
 const values = (snapshot: BlockScanStateSnapshot) => ({ mids: [...snapshot.mids],
   rows: [...snapshot.effectiveMids!.rows].map(([key, row]) => [key, row.amountIn, row.amountOut, row.status]) });
+
+function attachTransport(f: Awaited<ReturnType<typeof setup>>) {
+  const scheduler = new RethTransportScheduler({ capacity: 8, producerReserved: 4, retryDelayMs: 1 });
+  let transitions = 0;
+  const completeStartup = () => {
+    transitions++;
+    for (const backend of f.backends) assertIdle(backend);
+    assert.equal(scheduler.snapshot().activeTotal, 0, "startup physical transport must drain before restoration");
+    return scheduler.completeStartup();
+  };
+  Object.assign(f.deps, { rethTransportScheduler: { run: scheduler.run.bind(scheduler), completeStartup } });
+  return { scheduler, get transitions() { return transitions; } };
+}
+
+await fixture("normal", async f => {
+  const transport = attachTransport(f);
+  const load = await transport.scheduler.run("producer-bulk", new AbortController().signal, async lease => lease.load!);
+  load.retry(new StateCallAbortedError("startup socket timeout", "timeout"), [{}], load.limits(128, 4));
+  let closing = false, release!: () => void;
+  const drained = new Promise<void>(resolve => { release = resolve; });
+  const sourceSimulationFactory: BlockScanRuntimeLoopDependencies["sourceSimulationFactory"] = () => ({
+    transport: { async simulate() { return { data: "0x" }; } },
+    async closeAndDrain() { closing = true; await drained; },
+  });
+  Object.assign(f.deps, { sourceSimulationFactory });
+  const pass = f.loop.runHead(N, observe());
+  try {
+    await until(() => closing, "startup physical cleanup held");
+    assert.equal(f.published.length, 1);
+    assert.equal(transport.transitions, 0, "publication alone must not restore startup limits");
+    assert.equal(load.limits(128, 4).concurrency, 2);
+  } finally { release(); await pass; }
+  assert.equal(transport.transitions, 1);
+  assert.deepEqual(load.limits(128, 4), { version: 2, batchSize: 128, concurrency: 4 });
+  load.retry(Object.assign(new Error("steady 429"), { code: 429 }), [{}], load.limits(128, 4));
+  // This preparation fixture intentionally has no downstream Exact session.
+  await assert.rejects(f.loop.runHead(N + 1, observe()), /requires a strict current-source session/);
+  assert.equal(f.published.at(-1)!.sourceBlock, N + 1);
+  assert.equal(transport.transitions, 1, "ordinary heads must not reset shared limits");
+  assert.equal(load.limits(128, 4).batchSize, 64);
+  assert.equal(load.limits(128, 4).concurrency, 2);
+});
+
+for (const mode of ["ordinary-error", "publish-hash"] as const) {
+  await fixture(mode, async f => {
+    const transport = attachTransport(f);
+    await assert.rejects(f.loop.runHead(N, observe()));
+    assert.equal(transport.transitions, 0, "failed startup must retain its current transport tier");
+  });
+}
+for (const cleanup of ["failed", "shutdown"] as const) {
+  await fixture("normal", async f => {
+    const transport = attachTransport(f);
+    const sourceSimulationFactory: BlockScanRuntimeLoopDependencies["sourceSimulationFactory"] = () => ({
+      transport: { async simulate() { return { data: "0x" }; } },
+      async closeAndDrain() {
+        if (cleanup === "failed") throw new Error("fixture cleanup failure");
+        f.runtimeAbort.abort(new Error("fixture shutdown during startup cleanup"));
+      },
+    });
+    Object.assign(f.deps, { sourceSimulationFactory });
+    if (cleanup === "failed") await assert.rejects(f.loop.runHead(N, observe()), /fixture cleanup failure/);
+    else await f.loop.runHead(N, observe());
+    assert.equal(f.published.length, 1);
+    assert.equal(transport.transitions, 0, "failed/shutdown cleanup must not restore limits");
+  });
+}
 let baseline: ReturnType<typeof values>;
 await fixture("normal", async f => {
   await f.loop.runHead(N, observe());
@@ -320,14 +389,17 @@ await fixture("normal", async f => {
   for (const backend of f.backends) assertIdle(backend);
 });
 await fixture("resume", async f => {
+  const transport = attachTransport(f);
   f.loop.schedule(N);
   await until(() => f.held.length === 1, "first attempt effective tail");
   assert.equal(f.published.length, 0); assert.equal(f.coordinator.latestPricingSnapshot(), null);
   f.loop.schedule(N + 1);
   await until(() => f.held.length === 2, "resumed attempt effective tail");
+  assert.equal(transport.transitions, 0, "startup retries must not reset transport limits");
   f.loop.schedule(N + 2);
   f.releases[1]!();
   await until(() => f.starts.includes(N + 2) && f.published.length === 2, "warm then newest pending head");
+  assert.equal(transport.transitions, 1, "restore exactly once before the queued steady head");
   assert.deepEqual(f.starts, [N, N + 2]); assert(f.drops.includes(N + 1));
   assert.deepEqual(f.requests.map(r => r.graph.sourceBlock), [N, N, N + 2]);
   assert.deepEqual(f.requests.map(r => r.graph.generation), [1, 2, 3]);
@@ -380,7 +452,11 @@ for (const mode of ["retry-hash", "retry-height", "publish-hash", "resumed-publi
 }
 for (const mode of ["fatal-source", "fatal-429"] as const) {
   await fixture(mode, async f => {
+    // Exercise bounded physical 429 retries within the 350ms fixture budget;
+    // the production 1s backoff would outlast each synthetic warm attempt.
+    const transport = mode === "fatal-429" ? attachTransport(f) : null;
     await assert.rejects(f.loop.runHead(N, observe()));
+    if (transport) assert.equal(transport.transitions, 0);
     assert.equal(f.requests.length, 1); assert.equal(f.published.length, 0);
     assert.equal(f.runtimeAbort.signal.aborted, mode === "fatal-429");
     const markers = f.logs.filter(s => s.startsWith("[pinned-reth-quote-backend]") &&
