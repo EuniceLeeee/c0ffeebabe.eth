@@ -6,6 +6,7 @@ import {
 } from "../../shared/state/state-backend.js";
 import {
   exactProbePriority,
+  prepareBlockScanCandidatesWithoutExactRefinement,
   refineBlockScanCandidates as refineBlockScanCandidatesStrict,
   type BlockScanProbeDiagnostic,
   type BlockScanRefinementOptions,
@@ -22,10 +23,6 @@ import { buildTokenPaths, type TokenEdge } from "../planner/token-graph.js";
 import { canonicalEdgeId } from "../venues/blockscan-state-capability.js";
 import type { StrictProductionRuntimeSession } from
   "../strict-production-runtime-session.js";
-import {
-  quoteV2ExactInput,
-  v2FeeBpsForFactory,
-} from "../solver/v2-fee.js";
 
 /**
  * This budget/circuit suite uses a deliberately small test-only exact oracle
@@ -70,7 +67,8 @@ function refineBlockScanCandidates(
     pricedTokens,
     onProbe,
     concurrency,
-    { ...options, executor: options.executor ?? ethers.ZeroAddress, strictSession },
+    { probeAmountsByOpportunity: new Map(opportunities.map(o => [o, 10n])),
+      ...options, executor: options.executor ?? ethers.ZeroAddress, strictSession },
   );
 }
 
@@ -93,17 +91,30 @@ async function quoteTestUniV2Exact(
     data: pair.encodeFunctionData("factory"),
   });
   const factory = pair.decodeFunctionResult("factory", factoryRaw)[0] as string;
-  const feeBps = v2FeeBpsForFactory(factory);
-  if (feeBps === null) throw new Error("test V2 factory has no fee rule");
+  assert.equal(
+    factory.toLowerCase(),
+    "0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f",
+    "test V2 oracle expects the canonical 30bps UniV2 factory",
+  );
   const zeroForOne = input.edge.tokenIn.toLowerCase() === token0.toLowerCase();
   const reserve0 = BigInt(reserves[0]);
   const reserve1 = BigInt(reserves[1]);
-  return quoteV2ExactInput(
+  return quoteTestV2ExactInput(
     zeroForOne ? reserve0 : reserve1,
     zeroForOne ? reserve1 : reserve0,
     input.amountIn,
-    feeBps,
   );
+}
+
+function quoteTestV2ExactInput(
+  reserveIn: bigint,
+  reserveOut: bigint,
+  amountIn: bigint,
+): bigint {
+  if (amountIn <= 0n || reserveIn <= 0n || reserveOut <= 0n) return 0n;
+  const amountInWithFee = amountIn * 9_970n;
+  return (amountInWithFee * reserveOut) /
+    (reserveIn * 10_000n + amountInWithFee);
 }
 
 async function quoteTestSelfBurnExact(
@@ -286,6 +297,7 @@ await transientCircuitWaitsForInflightRecovery();
 await confirmedPositiveSurvivesLaterInstanceCircuit();
 await executorQuoteContextReachesFamily();
 await admissionFloorSkipsLowSpreadProbes();
+exactRefinementDisabledUsesPreparedPWithoutQuotes();
 await completionNotificationPreservesOrder();
 await completionNotificationDrainsOnCallbackFailure();
 await probeTimingLoggingPreservesResults();
@@ -1242,7 +1254,8 @@ async function probeTimingLoggingPreservesResults(): Promise<void> {
     { async call(): Promise<string> { throw new Error("test oracle owns quotes"); } } as unknown as StateBackend,
     candidates, 1, now + 2_000, pricedTokens,
     observe ? (diagnostic) => { diagnostics.push(diagnostic); } : undefined,
-    1, { strictSession, executor: ethers.ZeroAddress, deferProbeTimingLog: defer },
+    1, { strictSession, executor: ethers.ZeroAddress, deferProbeTimingLog: defer,
+      probeAmountsByOpportunity: new Map(candidates.map(o => [o, 10n])) },
   );
   try {
     Date.now = () => now;
@@ -1292,7 +1305,8 @@ async function completionNotificationPreservesOrder(): Promise<void> {
     { async call(): Promise<string> { throw new Error("scheduler oracle owns all quotes"); } } as unknown as StateBackend,
     candidates, 20, Date.now() + 2_000, pricedTokens,
     (diagnostic) => { diagnostics.push(diagnostic); }, 4,
-    { strictSession, executor: ethers.ZeroAddress, probeTimeoutMs: 1_500 },
+    { strictSession, executor: ethers.ZeroAddress, probeTimeoutMs: 1_500,
+      probeAmountsByOpportunity: new Map(candidates.map(o => [o, 10n])) },
   );
   await waitUntil(() => diagnostics.length === 63, "fast probes did not free their slots");
   assert.equal(started, 64, "a slow first probe must not block later work");
@@ -1303,7 +1317,7 @@ async function completionNotificationPreservesOrder(): Promise<void> {
   assert.equal(result.positive, 64);
   assert.equal(result.peakConcurrentProbes, 4);
   assert.equal(result.deadlineHit, false);
-  assert.deepEqual(amounts, Array(64).fill(10n), "all cold-start probes use the explicit ten-raw-unit floor");
+  assert.deepEqual(amounts, Array(64).fill(10n), "all probes use the fixture's explicit reference amounts");
   assert.equal(new Set(diagnostics.map((diagnostic) => diagnostic.index)).size, 64);
   assert.deepEqual(result.opportunities.map((candidate) => candidate.cycleId),
     candidates.slice(0, 20).map((candidate) => candidate.cycleId),
@@ -1333,7 +1347,8 @@ async function completionNotificationDrainsOnCallbackFailure(): Promise<void> {
     candidates, 3, Date.now() + 2_000, pricedTokens,
     (diagnostic) => {
       if (diagnostic.index === 0) { failures++; throw failure; }
-    }, 2, { strictSession, executor: ethers.ZeroAddress, probeTimeoutMs: 1_500 },
+    }, 2, { strictSession, executor: ethers.ZeroAddress, probeTimeoutMs: 1_500,
+      probeAmountsByOpportunity: new Map(candidates.map(o => [o, 10n])) },
   );
   const rejected = assert.rejects(refinement, (error) => error === failure)
     .then(() => { settled = true; });
@@ -1476,6 +1491,80 @@ async function admissionFloorSkipsLowSpreadProbes(): Promise<void> {
     "the admitted candidate alone is retained",
   );
   assert.equal(thinCalls, 0, "the thin candidate must never execute a quote");
+}
+
+function exactRefinementDisabledUsesPreparedPWithoutQuotes(): void {
+  const make = (
+    cycleId: string,
+    searchCenter: bigint,
+    maxInput: bigint,
+    coarseSpreadBps = 100,
+  ): BlockScanOpportunity => ({
+    ...opportunity(TOKEN_6, searchCenter),
+    cycleId,
+    cycleFingerprint: cycleId,
+    coarseSpreadBps,
+    searchSeed: {
+      startToken: TOKEN_6,
+      searchCenter,
+      maxInput,
+    },
+    seedEdges: [familyEdge("disabled-family", 700, {
+      adapterId: "univ2-swap",
+      tokenIn: TOKEN_6,
+      tokenOut: TOKEN_18,
+    })],
+  });
+  const thin = make("thin", 100n, 100n, 49.9);
+  const missing = make("missing", 100n, 100n);
+  const overCap = make("over-cap", 100n, 50n);
+  const first = make("first", 100n, 100n);
+  const second = make("second", 100n, 100n);
+  const third = make("third", 100n, 100n);
+  const result = prepareBlockScanCandidatesWithoutExactRefinement(
+    [thin, missing, overCap, first, second, third],
+    2,
+    {
+      admissionSpreadBps: 50,
+      probeAmountsByOpportunity: new Map<BlockScanOpportunity, bigint>([
+        [thin, 10n],
+        [overCap, 60n],
+        [first, 30n],
+        [second, 20n],
+        [third, 10n],
+      ]),
+      concurrency: 5,
+    },
+  );
+  assert.deepEqual(
+    result.opportunities.map(({ cycleId }) => cycleId),
+    ["first", "second"],
+    "disabled refinement keeps coarse order and applies maxCandidates",
+  );
+  assert.deepEqual(
+    result.opportunities.map(({ searchSeed }) => searchSeed.searchCenter),
+    [30n, 20n],
+    "disabled refinement must seed Solver at prepared P",
+  );
+  assert.equal(result.attempted, 0);
+  assert.equal(result.positive, 0);
+  assert.equal(result.negative, 0);
+  assert.equal(result.failed, 0);
+  assert.equal(result.deadlineHit, false);
+  assert.deepEqual(result.openFamilyIds, []);
+  assert.deepEqual(result.openInstanceCircuitKeys, []);
+  assert.deepEqual(result.openCompositeKeys, []);
+  assert.deepEqual(result.disabled, {
+    enabled: false,
+    amountSource: "effective-first-edge",
+    selected: 2,
+    rejectedMissing: 1,
+    rejectedOverCap: 1,
+    rejectedAdmission: 1,
+    eligibleNotSelected: 1,
+  });
+  assert.equal(result.concurrencyLimit, 5);
+  assert.equal(result.peakConcurrentProbes, 0);
 }
 
 function familyEdge(

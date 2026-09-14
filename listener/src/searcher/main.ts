@@ -31,7 +31,7 @@ import {
 } from "./blockscan-enumeration-solver-telemetry.js";
 import { blockScanRouteId } from "./blockscan-route-identity.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
-import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
+import { BlockScanAmountReference, TokenToWethReferenceCache } from "./blockscan-amount-reference.js";
 import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried } from "./blockscan-effective-mid.js";
 import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
@@ -181,6 +181,8 @@ import {
   type LocalVictimApplyResult,
 } from "./solver/victim-apply.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
+import { EthSimulateV1Simulator } from "./simulator/eth-simulate-v1.js";
+import { resolveBlockScanFinalSimulationMethod } from "./blockscan-final-simulation-method.js";
 import {
   executeFinalSimulationWork,
   type AdapterWorkControl,
@@ -262,6 +264,7 @@ import {
 } from "./blind-production-runtime.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
+const DEFAULT_BLOCKSCAN_MAX_HOPS = 4;
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
@@ -656,7 +659,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const finalVerifyMaxHops = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1"
     ? Math.max(
         maxHops,
-        Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "6"),
+        Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS),
       )
     : maxHops;
   const quoteSafetyBps = BigInt(process.env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999");
@@ -754,6 +757,17 @@ function dryRunOnlyFlag(
   if (value !== "1") throw new Error(`${name} must be 0 or 1`);
   if (!dryRun) throw new Error(`${name}=1 requires SEARCHER_DRY_RUN=1`);
   return true;
+}
+
+function booleanEnvFlag(
+  name: string,
+  value: string | undefined,
+  defaultValue: boolean,
+): boolean {
+  if (value === undefined) return defaultValue;
+  if (value === "0") return false;
+  if (value === "1") return true;
+  throw new Error(`${name} must be 0 or 1`);
 }
 
 /** Only terminal shutdown: retain an early fatal until the runtime drain exists. */
@@ -957,7 +971,7 @@ async function main(): Promise<void> {
   const maxPoolsPerToken = Number(process.env.SEARCHER_MAX_POOLS_PER_TOKEN ?? "8");
   const maxRotationsPerPath = Number(process.env.SEARCHER_MAX_ROTATIONS_PER_PATH ?? "3");
   const blockScanMaxHops = Number(
-    process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? "6",
+    process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS,
   );
   const enableBlockScan = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1";
   const blockScanPricingSource = resolveBlockScanPricingSourceMode(
@@ -966,6 +980,21 @@ async function main(): Promise<void> {
   );
   const blockScanNMinusOneFallback =
     blockScanPricingSource.mode === "n-1";
+  const blockScanExactRefineEnabled = booleanEnvFlag(
+    "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED",
+    process.env.SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED,
+    false,
+  );
+  if (!blockScanExactRefineEnabled && blockScanNMinusOneFallback) {
+    throw new Error(
+      "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED=0 is incompatible with N-minus-one fallback",
+    );
+  }
+  if (!blockScanExactRefineEnabled && blindProductionAudit) {
+    throw new Error(
+      "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED=0 is incompatible with blind production audit",
+    );
+  }
   if (blindProductionAudit && !enableBlockScan) {
     throw new Error("blind production audit requires SEARCHER_ENABLE_BLOCK_SCAN=1");
   }
@@ -975,7 +1004,7 @@ async function main(): Promise<void> {
     );
   }
   const blockScanMinSpreadBps = Number(
-    process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "200",
+    process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "100",
   );
   const blockScanCfg: BlockScanCoreConfig | undefined = enableBlockScan
     ? {
@@ -983,7 +1012,7 @@ async function main(): Promise<void> {
         minSpreadBps: blockScanMinSpreadBps,
         requireDislocatedPair: true,
         /*
-         * Enumeration defaults to 200bps (2%). Exact keeps its independent
+         * Enumeration defaults to 100bps (1%). Exact keeps its independent
          * 50bps (0.5%) admission guard and consumes the enumerated subset.
          */
         exactAdmissionSpreadBps: Number(
@@ -1095,6 +1124,10 @@ async function main(): Promise<void> {
     ? Math.max(1, Math.floor(blockScanSolveConcurrencyRaw))
     : 4;
   const blockScanSolverSearch = resolveBlockScanSolverSearchConfig();
+  const blockScanFinalSimulationMethod = resolveBlockScanFinalSimulationMethod();
+  if (enableBlockScan && blindInstallForkBotVm && blockScanFinalSimulationMethod !== "anvil") {
+    throw new Error("fork-only executor installation requires the anvil final simulation method");
+  }
   const blockScanFinalSimulationConcurrencyRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_FINAL_SIM_CONCURRENCY ?? "1",
   );
@@ -1103,6 +1136,9 @@ async function main(): Promise<void> {
   )
     ? Math.max(1, Math.floor(blockScanFinalSimulationConcurrencyRaw))
     : 1;
+  if (enableBlockScan) {
+    console.log(`[searcher/live] block-scan final simulation method=${blockScanFinalSimulationMethod} slots=${blockScanFinalSimulationConcurrency}`);
+  }
   const blockScanRefineCandidatesRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_REFINE_CANDIDATES ?? "512",
   );
@@ -1217,7 +1253,7 @@ async function main(): Promise<void> {
     }
     for (
       let worker = 0;
-      worker < blockScanFinalSimulationConcurrency;
+      blockScanFinalSimulationMethod === "anvil" && worker < blockScanFinalSimulationConcurrency;
       worker++
     ) {
       const port = blockScanAnvilPort + blockScanSolveConcurrency + worker;
@@ -1408,6 +1444,7 @@ async function main(): Promise<void> {
       `largeGraphBudgetMs=${blockScanLargeGraphPassBudgetMs} ` +
       `largeGraphEdges=${blockScanLargeGraphEdgeThreshold} ` +
       `solveReserveMs=${blockScanSolveReserveMs} ` +
+      `exactRefineEnabled=${blockScanExactRefineEnabled ? "on" : "off"} ` +
       `exactRefineHardBudgetMs=${blockScanExactRefineHardBudgetMs} ` +
       `exactConcurrency=${blockScanExactConcurrency} ` +
       `exactProbeTimeoutMs=${blockScanExactProbeTimeoutMs} ` +
@@ -1419,6 +1456,7 @@ async function main(): Promise<void> {
       `nMinusOneStateBudgetMs=${blockScanNMinusOneStateBudgetMs} ` +
       `nMinusOneFamilySettleMs=${blockScanNMinusOneFamilySettleMs} ` +
       `nMinusOneMaxGraphLagBlocks=${blockScanNMinusOneMaxGraphLagBlocks} ` +
+      `SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED=${process.env.SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED ?? "0"} ` +
       `(SEARCHER_BLOCKSCAN_SUBMIT=${process.env.SEARCHER_BLOCKSCAN_SUBMIT ?? "0"})`,
   );
   console.log(`[searcher/live] hashOnly=${config.enableHashOnly ? "enabled" : "disabled"}`);
@@ -2035,11 +2073,15 @@ async function main(): Promise<void> {
     return pending;
   };
   const blockScanAmountReference = new BlockScanAmountReference();
+  const blockScanTokenReferences = new TokenToWethReferenceCache(ADDR.WETH);
   // Network identity is established once, never guessed for activity reuse.
   currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
     strictSessionFor,
     () => strictSessionCache.clear(),
-    (publication) => blockScanRouteTelemetry.recordPricing(publication),
+    (publication) => {
+      if (blockScanCfg !== undefined) blockScanTokenReferences.observe(publication);
+      blockScanRouteTelemetry.recordPricing(publication);
+    },
     blockScanCfg === undefined ? undefined : async (pricing, control, pricingBackend, reuse, simulationTransport) => {
       const controller = new AbortController();
       const effectiveControl = { ...control, signal: control.signal === undefined
@@ -2062,6 +2104,7 @@ async function main(): Promise<void> {
         let session: StrictProductionRuntimeSession | undefined;
         console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} sizingSourceBlock=${pricing.sourceBlock} sizingRawMids=${pricing.mids.size}`);
         const effective = await buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
+          tokenReferences: () => blockScanTokenReferences.get(pricing),
           previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
           gasCostWei: blockScanAmountReference.estimateGasCost(source),
           enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 128,
@@ -2084,6 +2127,7 @@ async function main(): Promise<void> {
           sizingRawMids: pricing.mids.size, sizingSourceBlock: pricing.sourceBlock, reference: effective.reference,
           referenceWethInput: effective.referenceWethInput.toString(),
           complete: effective.complete, wallMs: effective.wallMs,
+          tokenValuationWork: blockScanTokenReferences.stats,
           carried: [...effective.rows.values()].filter(row => effectiveMidRowCarried(effective, row)).length,
           ...effectiveMidPairStatistics(effective),
         })}`);
@@ -2281,6 +2325,10 @@ async function main(): Promise<void> {
         parentHash: block.parentHash.toLowerCase(),
         transactionHashes: block.transactionHashes,
         passiveTouchedAddresses: block.passiveTouchedAddresses,
+        timestamp: block.timestamp,
+        baseFeePerGas: block.baseFeePerGas,
+        gasUsed: block.gasUsed,
+        gasLimit: block.gasLimit,
       });
     },
   });
@@ -2309,6 +2357,10 @@ async function main(): Promise<void> {
     blockScanConfig: blockScanCfg,
     executionWorkers: blockScanExecutionWorkers,
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
+    directFinalSimulation: enableBlockScan && blockScanFinalSimulationMethod === "eth_simulateV1"
+      ? Object.assign(new EthSimulateV1Simulator(config.rpcUrl, executionIdentity.executor, executionIdentity.transactionOrigin),
+          { concurrency: blockScanFinalSimulationConcurrency })
+      : undefined,
     rpcUrl: config.rpcUrl,
     strictSession: strictSessionFor,
     sourceSimulationFactory,
@@ -2326,6 +2378,7 @@ async function main(): Promise<void> {
       dynamicResetNonce: () => preparedBlindDynamicResetNonce,
     },
     exactRefineHardBudgetMs: blockScanExactRefineHardBudgetMs,
+    exactRefineEnabled: blockScanExactRefineEnabled,
     largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
     largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
     passBudgetMs: blockScanPassBudgetMs,
@@ -2501,6 +2554,7 @@ async function main(): Promise<void> {
       exactProbeTimeoutMs: blockScanExactProbeTimeoutMs,
       exactRpcBatchSize: blockScanExactRpcBatchSize,
       exactRpcBatchConcurrency: blockScanExactRpcBatchConcurrency,
+      exactRefineEnabled: blockScanExactRefineEnabled,
       passBudgetMs: blockScanPassBudgetMs,
       refineCandidates: blockScanRefineCandidates,
       solveConcurrency: blockScanSolveConcurrency,

@@ -63,6 +63,24 @@ assert(
 console.log("[runtime-defaults] deploy preserves block-scan multicall mode: PASS");
 
 const searcherMain = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+const blockscanHopDefault = searcherMain.match(/const DEFAULT_BLOCKSCAN_MAX_HOPS = (\d+);/);
+assert(blockscanHopDefault?.[1] === "4", "blockscan defaults to at most four hops");
+const blockscanHopReads = [...searcherMain.matchAll(
+  /Number\(\s*process\.env\.SEARCHER_BLOCKSCAN_MAX_HOPS \?\? DEFAULT_BLOCKSCAN_MAX_HOPS,?\s*\)/g,
+)];
+assert(blockscanHopReads.length === 2, "scanner and existing final-floor derivation share one hop default");
+for (const read of blockscanHopReads) {
+  const resolve = new Function("process", "DEFAULT_BLOCKSCAN_MAX_HOPS", `return ${read[0]};`) as
+    (process: { env: { SEARCHER_BLOCKSCAN_MAX_HOPS?: string } }, fallback: number) => number;
+  for (const [configured, expected] of [[undefined, 4], ["3", 3], ["6", 6]] as const) {
+    assert(resolve({ env: { SEARCHER_BLOCKSCAN_MAX_HOPS: configured } }, Number(blockscanHopDefault![1])) === expected,
+      `blockscan hop default/override: ${configured} -> ${expected}`);
+  }
+}
+assert(/SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS \?\? "1500"/.test(searcherMain),
+  "reducing hops must preserve the 1500ms enumeration budget");
+assert(/SEARCHER_MAX_HOPS \?\? "3"/.test(searcherMain), "generic/backrun hop default is unchanged");
+console.log("[runtime-defaults] shared four-hop blockscan default and explicit overrides: PASS");
 const profitRatioDefault = searcherMain.match(
   /SEARCHER_MAX_PROFIT_BPS_OF_FLASH\s*\?\? "(\d+)"/,
 );
@@ -85,8 +103,38 @@ for (const [index, match] of profitRatioGuards.entries()) {
     "an explicit 20% environment setting still selects the old threshold");
 }
 console.log("[runtime-defaults] 100% ratio guard and strict boundary: PASS");
-assert(/SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS\s*\?\? "200"/.test(searcherMain),
-  "enumeration defaults to 2%, independently of Exact admission");
+assert(/SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS\s*\?\? "100"/.test(searcherMain),
+  "enumeration defaults to 1%, independently of Exact admission");
+assert(
+  searcherMain.includes("SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED") &&
+    searcherMain.includes("SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED\",") &&
+    /const blockScanExactRefineEnabled = booleanEnvFlag\(\s*"SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED",\s*process\.env\.SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED,\s*false,\s*\)/.test(searcherMain) &&
+    searcherMain.includes("SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED=0 is incompatible with N-minus-one fallback") &&
+    searcherMain.includes("SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED=0 is incompatible with blind production audit") &&
+    searcherMain.includes("exactRefineEnabled: blockScanExactRefineEnabled") &&
+    searcherMain.includes("exactRefineEnabled=${blockScanExactRefineEnabled ? \"on\" : \"off\"}"),
+  "blockscan independent Exact refinement must default off, log, wire, and reject incompatible modes",
+);
+const exactFlagBody = searcherMain.match(
+  /function booleanEnvFlag\([\s\S]*?\): boolean \{\n([\s\S]*?)\n\}/,
+)?.[1];
+assert(exactFlagBody !== undefined, "Exact toggle must use the validated boolean parser");
+const resolveExactFlag = new Function("name", "value", "defaultValue", exactFlagBody) as
+  (name: string, value: string | undefined, fallback: boolean) => boolean;
+for (const [value, expected] of [[undefined, false], ["0", false], ["1", true]] as const) {
+  assert(resolveExactFlag("SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED", value, false) === expected,
+    `Exact switch default/override ${value} -> ${expected}`);
+}
+for (const value of ["", "true", "false", "2", "yes"]) {
+  let rejected = false;
+  try { resolveExactFlag("SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED", value, false); }
+  catch (error) { rejected = error instanceof Error && error.message.endsWith("must be 0 or 1"); }
+  assert(rejected, `invalid Exact toggle must fail closed: ${value}`);
+}
+assert(
+  /SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS === undefined\s*\?\s*\{\}/.test(searcherMain),
+  "live startup universe rebuild leaves observationWindowBlocks absent unless configured",
+);
 assert(
   searcherMain.includes("SEARCHER_DRY_RUN_USE_READY_GENERATION") &&
     searcherMain.includes("requires SEARCHER_DRY_RUN=1") &&

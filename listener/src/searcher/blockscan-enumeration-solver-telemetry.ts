@@ -1099,7 +1099,7 @@ function validCompactExactDiagnostics(
       failure === undefined ||
       !Number.isSafeInteger(failure) ||
       failure < 0 ||
-      failure > 8
+      failure > 9
     ) return false;
   }
   return true;

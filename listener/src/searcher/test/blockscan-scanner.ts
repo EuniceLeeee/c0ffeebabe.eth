@@ -350,6 +350,29 @@ function resolvedMids(
 
 const tests: TestCase[] = [
   {
+    name: "four-hop cap permits shorter rings and excludes longer rings",
+    run: () => {
+      const rings = [2, 3, 4, 5, 6].map((hops) => {
+        const tokens = [WETH, ...Array.from({ length: hops - 1 }, (_, i) => tokenAt(hops * 10 + i)), WETH];
+        return Array.from({ length: hops }, (_, i) => swap(tokens[i], tokens[i + 1], poolAt(hops * 10 + i, 0)));
+      });
+      const edges = rings.flat();
+      const mids = resolvedMids(rings.flatMap(ring => ring.map((edge, i) =>
+        [edge, i === ring.length - 1 ? 1.02 : 1] as [TokenEdge, number])));
+      for (const maxHops of [4, 6]) {
+        const outcome = scanBlockStateFromResolvedMids({
+          edges, sourceBlock: BLOCK, swapTouched: null, mids,
+          cfg: cfg({ maxHops, maxCandidates: 100 }),
+        });
+        assert(outcome.outcome === "ran", "small hop-boundary fixture must finish");
+        const found = [...new Set(outcome.opportunities.map(op => op.seedEdges.length))].sort();
+        assert(found.join(",") === (maxHops === 4 ? "2,3,4" : "2,3,4,5,6"),
+          `maxHops=${maxHops} returned hop lengths ${found}`);
+      }
+      console.log("[blockscan-scanner] four-hop cap and six-hop override: PASS");
+    },
+  },
+  {
     name: "pair and whole-ring spread gates both apply to multi-hop search",
     run: () => {
       const a = tokenAt(901);

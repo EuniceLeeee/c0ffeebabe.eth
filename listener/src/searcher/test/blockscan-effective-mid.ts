@@ -14,13 +14,15 @@ import type { TokenEdge } from "../planner/token-graph.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 import type { StrictProductionRuntimeSession } from "../strict-production-runtime-session.js";
+import { BlockScanAmountReference } from "../blockscan-amount-reference.js";
+import type { BlockScanOpportunity } from "../detector/detector.js";
 
 // Offline behavior tests only: callbacks are fixtures, not chain-quote evidence
 // or full production acceptance. Shapes follow blockscan-amount-reference.ts.
 const W = "weth", U = "usdc";
 const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 const SOURCE = Object.freeze({ number: 42, hash: hash(0xabcdef), generation: 7 });
-const DEFAULT_RAW = 1_000_000_000_000_000n; // 0.001 ETH in wei.
+const DEFAULT_RAW = 5_000_000_000_000_000n; // Independent expectation: 0.005 ETH in wei.
 type BuildInput = Parameters<typeof buildEffectiveMids>[0];
 type Quote = BuildInput["quote"];
 type QuoteInput = Parameters<Quote>[0];
@@ -73,7 +75,7 @@ const tests: [string, () => void | Promise<void>][] = [];
 const test = (name: string, run: () => void | Promise<void>) => { tests.push([name, run]); };
 
 for (const gasCostWei of [null, 100_000_000_000_000n]) {
-  test(`${gasCostWei === null ? "default 0.001 ETH" : "gas at 200 bps"}: every input token, three hops and raw units`, async () => {
+  test(`${gasCostWei === null ? "default 0.005 ETH" : "gas at 200 bps"}: every input token, three hops and raw units`, async () => {
     const rows: PriceRow[] = [
       // Deliberately order the four-hop chain backwards to catch in-pass propagation.
       [edge("z", "y", "z-y"), 4], [edge("y", "x", "y-x"), 3],
@@ -91,9 +93,9 @@ for (const gasCostWei of [null, 100_000_000_000_000n]) {
     ];
     // Independent expected values, not calls back into the amount-reference helper.
     const expected = new Map<string, bigint | null>(gasCostWei === null ? [
-      [W, DEFAULT_RAW], [U, 2_000_000n], ["x", 1_000_000n], ["y", 333_334n],
+      [W, DEFAULT_RAW], [U, 10_000_000n], ["x", 5_000_000n], ["y", 1_666_667n],
       ["fee", (DEFAULT_RAW + 98n) / 99n], ["fee2", (DEFAULT_RAW * 10n + 1880n) / 1881n],
-      ["third", 333_333_333_333_334n], ["large-unit", 1n], ["tiny-unit", 10n ** 35n],
+      ["third", 1_666_666_666_666_667n], ["large-unit", 1n], ["tiny-unit", 5n * 10n ** 35n],
       ["z", null], ["reverse-only", null], ["disconnected", null],
     ] : [
       [W, 5_000_000_000_000_001n], [U, 10_000_001n], ["x", 5_000_001n], ["y", 1_666_667n],
@@ -119,6 +121,15 @@ for (const gasCostWei of [null, 100_000_000_000_000n]) {
     assert.equal(snapshot.referenceWethInput, expected.get(W));
     assert.equal(snapshot.complete, true);
     assert.deepEqual(snapshot.source, SOURCE);
+    const opportunities = rows.map(([e]) => ({ seedEdges: [e], flashToken: e.tokenIn } as BlockScanOpportunity));
+    const exactInputs = new BlockScanAmountReference().prepare({
+      pricing: { ...prices, effectiveMids: snapshot }, opportunities,
+    });
+    for (const [index, candidate] of opportunities.entries()) {
+      const amount = row(snapshot, rows[index]![0]).amountIn;
+      assert.equal(exactInputs.get(candidate), amount ?? undefined,
+        "Exact must reuse effective's default/gas input, including converted tokens and sub-ten raw units");
+    }
     assert.equal(snapshot.rows.size, rows.length);
     assert.deepEqual([...snapshot.rows.keys()], [...prices.mids.keys()]);
     assert(Number.isFinite(snapshot.wallMs) && snapshot.wallMs >= 0);
@@ -215,8 +226,8 @@ test("one immutable sizing pass; shortest paths and instance-deduplicated median
     },
   });
   for (const [e] of rows) {
-    const expected = e.tokenIn === U ? 333_333_333_333_334n
-      : e.tokenIn === "linked" ? 166_666_666_666_667n : 10_000_000_000_000n;
+    const expected = e.tokenIn === U ? 1_666_666_666_666_667n
+      : e.tokenIn === "linked" ? 833_333_333_333_334n : 50_000_000_000_000n;
     assert.equal(row(snapshot, e).amountIn, expected, "later mid changes cannot reprice this pass");
     assert.equal(row(snapshot, e).effectiveMid, 11);
   }
@@ -344,7 +355,7 @@ test("explicit raw amounts below the probe floor and above safe integers reach E
       return { source: SOURCE, amountIn, amountOut: amountIn + 17n };
     },
   });
-  assert.deepEqual(calls, [1n, 10n ** 35n]);
+  assert.deepEqual(calls, [1n, 5n * 10n ** 35n]);
   for (let i = 0; i < edges.length; i++) {
     const r = row(snapshot, edges[i]!);
     assert.equal(r.status, "quoted");
@@ -359,7 +370,7 @@ test("positive output with an unrepresentable effective rate fails closed; measu
     const snapshot = await build(pricing([[e, 1e-300]]), {
       quote: async ({ amountIn }) => ({ source: SOURCE, amountIn, amountOut }),
     });
-    assert.equal(row(snapshot, e).amountIn, 10n ** 315n);
+    assert.equal(row(snapshot, e).amountIn, 5n * 10n ** 315n);
     if (amountOut > 0n) noQuote(row(snapshot, e), "quote-failed");
     else {
       assert.equal(row(snapshot, e).status, "no-output");
@@ -577,9 +588,9 @@ test("end-to-end raw USDC/WETH pair uses distinct instances even with a shared e
   const reverse = { ...edge(W, U, "reverse", "pool-b"), target: "shared-manager" };
   const snapshot = await build(pricing([[forward, 5e8], [reverse, 2e-9]]), {
     quote: async ({ edge: e, amountIn }) => ({ source: SOURCE, amountIn,
-      amountOut: e === forward ? 1_010_000_000_000_000n : 2_001_000n }),
+      amountOut: e === forward ? 5_050_000_000_000_000n : 10_005_000n }),
   });
-  assert.equal(row(snapshot, forward).amountIn, 2_000_000n);
+  assert.equal(row(snapshot, forward).amountIn, 10_000_000n);
   assert.equal(row(snapshot, reverse).amountIn, DEFAULT_RAW);
   assert.equal(row(snapshot, forward).effectiveMid, 505_000_000);
   assert.equal(row(snapshot, reverse).effectiveMid, 2.001e-9);
@@ -818,7 +829,7 @@ test("previous raw sizes current quotes, including a recovered direction missing
   });
   assert.equal(calls.length, 1);
   assert.equal(calls[0]!.edge, recovered);
-  assert.equal(calls[0]!.amountIn, 2_000_000n, "amount uses the old raw conversion, not a current quote");
+  assert.equal(calls[0]!.amountIn, 10_000_000n, "amount uses the old raw conversion, not a current quote");
   assert.deepEqual(result.source, current);
   assert.deepEqual(row(result, recovered).quotedAt, current);
   assert.equal(row(result, recovered).amountOut, 456n);
@@ -854,7 +865,7 @@ for (const change of ["gas", "mark", "gas-and-mark"] as const) {
     const prices = pricing([[clean, 5e8], [dirty, 5e8]]);
     const previous = await build(prices);
     const original = row(previous, clean);
-    assert.equal(original.amountIn, 2_000_000n);
+    assert.equal(original.amountIn, 10_000_000n);
     const added = edge(W, U, "new-reference-row");
     const mark = change === "gas" ? 5e8 : 1e9;
     const gasCostWei = change === "mark" ? null : 100_000_000_000_000n;
@@ -870,7 +881,7 @@ for (const change of ["gas", "mark", "gas-and-mark"] as const) {
     assert.deepEqual(calls.map(call => call.edge), [dirty, added]);
     assertReferenceRetained(row(next, clean), original);
     const expectedDirtyAmount = change === "gas" ? 10_000_001n
-      : change === "mark" ? 1_000_000n : 5_000_001n;
+      : change === "mark" ? 5_000_000n : 5_000_001n;
     assert.equal(row(next, dirty).amountIn, expectedDirtyAmount);
     assert.equal(row(next, dirty).amountOut, expectedDirtyAmount * 11n + 1n);
     assert.deepEqual(row(next, dirty).quotedAt, current);
@@ -1198,6 +1209,34 @@ test("preparation cancellation issues no quote and preparation failure cannot pu
     quote: async () => { calls++; throw new Error("failed preparation"); },
   }), error => error === failure);
   assert.equal(calls, 0);
+});
+
+test("effective consumes the supplied raw valuation index lazily, once per pass", async () => {
+  const a = edge(U, W, "indexed-a"), b = edge(U, W, "indexed-b");
+  const prices = pricing([[a, 5e8], [b, 5e8]]);
+  let lookups = 0;
+  const tokenReferences = () => {
+    lookups++;
+    return new Map([[U, { num: 500_000_000n, den: 1n }]]);
+  };
+  const poisoned = { ...prices, coverage: { ...prices.coverage,
+    get resolvedEdgeKeys(): readonly string[] { throw new Error("effective rebuilt the raw valuation index"); },
+  } };
+  const first = await build(poisoned, { tokenReferences });
+  assert.equal(lookups, 1);
+  assert.equal(row(first, a).amountIn, 10_000_000n);
+  assert.equal(row(first, b).amountIn, 10_000_000n);
+  const clean = await build(poisoned, { previous: first, touchedStateKeys: new Set(),
+    gasCostWei: 100_000_000_000_000n,
+    tokenReferences: () => { throw new Error("clean rows must not request valuations"); },
+  });
+  assert.strictEqual(clean.rows, first.rows);
+  const dirty = await build(poisoned, { previous: first, touchedStateKeys: new Set([a.instanceKey!]),
+    gasCostWei: 100_000_000_000_000n, tokenReferences,
+  });
+  assert.equal(lookups, 2);
+  assert.equal(row(dirty, a).amountIn, 10_000_001n);
+  assert.strictEqual(row(dirty, b), row(first, b));
 });
 
 let failed = 0;

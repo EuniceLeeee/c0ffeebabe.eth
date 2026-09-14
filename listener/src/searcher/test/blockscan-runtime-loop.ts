@@ -13,6 +13,7 @@ import { StateCallAbortedError } from "../../shared/state/state-backend.js";
 import { isRpcThrottleError } from "../rpc-throttle-guard.js";
 import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedGraphView } from "../venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { AnvilSolver } from "../solver/solver.js";
 
 const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 const source = (generation = 1, number = 101) => ({ number, hash: hash(number), generation });
@@ -302,6 +303,38 @@ function loopFixture(factory: SourceSimulationFactory) {
   return { loop: new BlockScanRuntimeLoop(deps), deps, inputs, coordinator, runtimeAbort };
 }
 
+test("runtime rejects disabled Exact refinement with evidence-promoting modes", () => {
+  const makeDeps = (): BlockScanRuntimeLoopDependencies => {
+    const base = loopFixture(() => ({
+      transport: { async simulate() { return { data: "0x" }; } },
+      async closeAndDrain() {},
+    })).deps;
+    return { ...base, executionWorkers: [...base.executionWorkers], finalSimulationWorkers: [...base.finalSimulationWorkers] };
+  };
+  assert.throws(
+    () => new BlockScanRuntimeLoop({
+      ...makeDeps(),
+      exactRefineEnabled: false,
+      nMinusOneFallbackEnabled: true,
+    }),
+    /incompatible with N-minus-one fallback/,
+  );
+  assert.throws(
+    () => new BlockScanRuntimeLoop({
+      ...makeDeps(),
+      exactRefineEnabled: false,
+      blind: {
+        enabled: true,
+        activeSource: () => null,
+        preparedBase: () => null,
+        preparedArtifacts: () => null,
+        dynamicResetNonce: () => null,
+      },
+    }),
+    /incompatible with blind production audit/,
+  );
+});
+
 test("runHead creates SOURCE-controlled context before prefunding and drains it on failed runtime", async () => {
   const contexts: Parameters<SourceSimulationFactory>[0][] = []; let closes = 0;
   const transport = { async simulate() { return { data: "0x" }; } };
@@ -539,6 +572,12 @@ function pricingFixture(graph: VerifiedGraphView): any {
     incompleteFamilyIds: [], laneTelemetry: [] };
 }
 
+function twoWayPoolEdges(pools: readonly string[]) {
+  return pools.flatMap(pool => [[actor, origin], [origin, actor]].map(([tokenIn, tokenOut]) => ({
+    adapterId: "univ2-swap", slotKind: "swap" as const, target: pool, tokenIn: tokenIn!, tokenOut: tokenOut!, ...deriveEdgeTaxonomy("swap"),
+  })));
+}
+
 for (const nMinusOne of [false, true]) test(`${nMinusOne ? "N-1 enumeration" : "source-N pass"} Exact retains current-N source and selected generation despite newer publication`, async () => {
   const contexts: Parameters<SourceSimulationFactory>[0][] = []; const transports: unknown[] = []; let closes = 0;
   const f = loopFixture(input => { contexts.push(input); const transport = { async simulate() { return { data: "0x" }; } };
@@ -584,6 +623,300 @@ for (const nMinusOne of [false, true]) test(`${nMinusOne ? "N-1 enumeration" : "
       /fixture exact boundary reached/);
     assert.equal(exactCalls, 1); assert.equal(closes, 1);
   } finally { await f.loop.shutdown(); }
+});
+
+test("disabled independent Exact keeps Solver strict-session wiring without pre-Solver quotes", async () => {
+  const contexts: Parameters<SourceSimulationFactory>[0][] = []; const transports: unknown[] = []; let closes = 0;
+  const f = loopFixture(input => { contexts.push(input); const transport = { async simulate() { return { data: "0x" }; } };
+    transports.push(transport); return { transport, async closeAndDrain() { closes++; } }; });
+  const edges = twoWayPoolEdges([
+    target,
+    `0x${"dd".repeat(20)}`,
+    `0x${"ee".repeat(20)}`,
+    `0x${"ff".repeat(20)}`,
+  ]);
+  const exactQuoteState = Object.freeze({
+    async call() {
+      throw new Error("disabled independent Exact must not issue pre-Solver quotes");
+    },
+  });
+  const empty = exactSetHash([]);
+  f.coordinator.prepare = async (input: any) => {
+    f.inputs.push({ kind: "runtime", ...input });
+    const pricing = pricingFixture(input.graph);
+    const funding = { generation: input.graph.generation, sourceBlock: 101, sourceBlockHash: hash(101),
+      coverage: { expectedKeys: [], resolvedKeys: [], unresolvedKeys: [], expectedHash: empty, resolvedHash: empty, unresolvedHash: empty },
+      coverageByFundingId: new Map(), freshnessByFundingId: new Map(), sources: new Map(), borrowable: () => 0n, source: () => null };
+    return { status: "complete", pricing: { ...pricing, status: "complete", issues: [] }, issues: [], timing: {},
+      snapshot: { completeness: "complete", graph: input.graph, pricing, funding, generation: input.graph.generation,
+        sourceBlock: 101, sourceBlockHash: hash(101) } };
+  };
+  let issueExactCalls = 0;
+  let strictSessionCalls = 0;
+  let strictSessionDeadlineAtMs = 0;
+  let exactFactoryDeadlineAtMs = 0;
+  let solverCalls = 0;
+  const plannerCenters: bigint[] = [];
+  let telemetryEnumeration = 0;
+  let telemetryCoarseEnumeration = 0;
+  let telemetryCoarseSelected = 0;
+  let telemetryExact = 0;
+  let telemetryPlanner = 0;
+  let telemetrySolver = 0;
+  let telemetryFinish: {
+    passOutcome: string;
+    passReason: string | null;
+  } | null = null;
+  const strictSessionFixture = Object.freeze({
+    edges,
+    async issueExact() {
+      issueExactCalls++;
+      throw new Error("disabled independent Exact must not call issueExact before Solver");
+    },
+    runtimeEvidenceFromPendingExecution() { return []; },
+    familyIdForEdge() { return "fixture"; },
+  });
+  const fakePlanner = {
+    setFlashLiquidity() {},
+    setGraph() {},
+    async planBlockScanFromSeedEdges(opp: any) {
+      plannerCenters.push(opp.searchSeed.searchCenter);
+      return [{
+        templateName: "fixture",
+        root: {},
+        opportunity: { ...opp, startToken: opp.flashToken, profitToken: opp.flashToken, victimAmountIn: opp.searchSeed.searchCenter },
+        tokenPath: { edges: [...opp.seedEdges] },
+        flashAdapterIds: ["fixture-flash"],
+        flashAdapterId: "fixture-flash",
+        maxFlashAmount: opp.searchSeed.maxInput,
+        cycleTokens: [opp.flashToken],
+        borrowableTokens: [{ token: opp.flashToken, amount: opp.searchSeed.maxInput, adapterId: "fixture-flash" }],
+      }];
+    },
+  };
+  const originalSolve = AnvilSolver.prototype.solve;
+  const originalLog = console.log;
+  const logs: string[] = [];
+  (AnvilSolver.prototype.solve as any) = async function(_plan: any, state: any, _probe: any, opts: any) {
+    solverCalls++;
+    assert.equal(state, exactQuoteState, "Solver must receive the source-pinned quote backend");
+    assert.equal(opts.strictSession, strictSessionFixture, "Solver must receive the strict session");
+    assert.deepEqual(opts.runtimeEvidence, []);
+    return { netProfit: 0n };
+  };
+  console.log = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "));
+  };
+  const sourceHeadSeenAtMs = Date.now();
+  Object.assign(f.deps, {
+    exactRefineEnabled: false,
+    exactRefineHardBudgetMs: 1_000,
+    passBudgetMs: 5_000,
+    blockScanGraph: () => edges,
+    blockScanPlanner: () => fakePlanner,
+    exactQuoteStateFactory: (input: any) => {
+      exactFactoryDeadlineAtMs = input.deadlineAtMs;
+      return exactQuoteState;
+    },
+    routeTelemetry: {
+      beginPass(sourceBlock: number) {
+        assert.equal(sourceBlock, 101);
+        return {
+          recordEnumeration(opportunities: readonly unknown[], coarse?: readonly unknown[], selected?: number) {
+            telemetryEnumeration = opportunities.length;
+            telemetryCoarseEnumeration = coarse?.length ?? 0;
+            telemetryCoarseSelected = selected ?? opportunities.length;
+          },
+          recordExact() {
+            telemetryExact++;
+            throw new Error("disabled Exact must not record compact exact diagnostics");
+          },
+          recordPlanner() {
+            telemetryPlanner++;
+          },
+          recordSolver() {
+            telemetrySolver++;
+          },
+          finish(input: { passOutcome: string; passReason: string | null }) {
+            telemetryFinish = input;
+          },
+        };
+      },
+      recordNotStarted() {
+        throw new Error("fixture starts a pass");
+      },
+    },
+    amountReference: {
+      prepare(input: any) {
+        return new Map(input.opportunities.map((opp: any, index: number) => [
+          opp,
+          index === 1 ? 10n ** 30n : 123n,
+        ]));
+      },
+    },
+    blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0, exactAdmissionSpreadBps: 0,
+      maxCandidates: 1, pricedTokens: new Map([[actor, { maxBorrow: 10n ** 20n }]]) },
+    refineCandidates: 10,
+    strictSession: async (input: any) => {
+      strictSessionCalls++;
+      strictSessionDeadlineAtMs = input.control.deadlineAtMs;
+      assert.deepEqual(input.source, source(1));
+      assert.equal(input.simulationTransport, transports[0]);
+      assert(input.requiredEdgeIds.size > 0, "real enumeration reached strict session setup");
+      return strictSessionFixture;
+    },
+  });
+  try {
+    await f.loop.runHead(101, {
+      sourceHeadSeenAtMs,
+      sourceHeadSeenAtMonotonicMs: performance.now(),
+    });
+    assert.equal(strictSessionCalls, 1);
+    assert.equal(issueExactCalls, 0);
+    assert(solverCalls > 0, "disabled refinement must still enter Solver");
+    assert(plannerCenters.length > 0);
+    assert(plannerCenters.every(center => center === 123n), "Solver candidates must be anchored at prepared P");
+    assert(strictSessionDeadlineAtMs - sourceHeadSeenAtMs >= 4_500,
+      "disabled mode strict-session setup must use the full pass deadline");
+    assert(exactFactoryDeadlineAtMs - sourceHeadSeenAtMs >= 4_500,
+      "disabled mode quote backend setup must use the full pass deadline");
+    const skip = logs.find(line => line.includes("[searcher/blockscan-exact-refine-skip]"));
+    assert(skip, "disabled mode must emit an explicit skip log");
+    const skipPayload = JSON.parse(skip.slice(skip.indexOf("{")));
+    assert.equal(skipPayload.enabled, false);
+    assert.equal(skipPayload.selected, 1);
+    assert.equal(skipPayload.rejectedOverCap, 1);
+    assert(skipPayload.eligibleNotSelected > 0, "disabled mode must preserve coarse order and cap without promoting every valid route");
+    assert.equal(skipPayload.amountSource, "effective-first-edge");
+    assert.equal(telemetryExact, 0, "disabled mode must not record compact Exact diagnostics");
+    assert(telemetryEnumeration > skipPayload.selected + skipPayload.rejectedOverCap,
+      "runtime fixture must enumerate more valid candidates than the off-mode cap");
+    assert.equal(telemetryCoarseSelected, telemetryEnumeration);
+    assert(telemetryCoarseEnumeration >= telemetryEnumeration);
+    assert.equal(telemetryPlanner, plannerCenters.length);
+    assert.equal(telemetrySolver, solverCalls);
+    const telemetryFinishPayload = telemetryFinish as {
+      passOutcome: string;
+      passReason: string | null;
+    } | null;
+    assert(telemetryFinishPayload, "route telemetry pass must finish");
+    assert.equal(telemetryFinishPayload.passOutcome, "ran");
+    assert.equal(telemetryFinishPayload.passReason, null);
+    const timing = logs.find(line => line.includes('"type":"block_scan_timing"'));
+    assert(timing, "runtime must emit pass timing");
+    const timingPayload = JSON.parse(timing.slice(timing.indexOf("{")));
+    assert.equal(timingPayload.stages.exact_refine.status, "not-run");
+    assert.equal(timingPayload.stage_timing_ms.exact_refine, 0);
+    assert.equal(closes, 1);
+  } finally {
+    (AnvilSolver.prototype.solve as any) = originalSolve;
+    console.log = originalLog;
+    await f.loop.shutdown();
+  }
+});
+
+test("disabled independent Exact checks deadline after setup before Planner/Solver", async () => {
+  const contexts: Parameters<SourceSimulationFactory>[0][] = []; const transports: unknown[] = []; let closes = 0;
+  const f = loopFixture(input => { contexts.push(input); const transport = { async simulate() { return { data: "0x" }; } };
+    transports.push(transport); return { transport, async closeAndDrain() { closes++; } }; });
+  const edges = twoWayPoolEdges([target, `0x${"dd".repeat(20)}`]);
+  const exactQuoteState = Object.freeze({ async call() { throw new Error("no pre-Solver quote"); } });
+  const empty = exactSetHash([]);
+  f.coordinator.prepare = async (input: any) => {
+    f.inputs.push({ kind: "runtime", ...input });
+    const pricing = pricingFixture(input.graph);
+    const funding = { generation: input.graph.generation, sourceBlock: 101, sourceBlockHash: hash(101),
+      coverage: { expectedKeys: [], resolvedKeys: [], unresolvedKeys: [], expectedHash: empty, resolvedHash: empty, unresolvedHash: empty },
+      coverageByFundingId: new Map(), freshnessByFundingId: new Map(), sources: new Map(), borrowable: () => 0n, source: () => null };
+    return { status: "complete", pricing: { ...pricing, status: "complete", issues: [] }, issues: [], timing: {},
+      snapshot: { completeness: "complete", graph: input.graph, pricing, funding, generation: input.graph.generation,
+        sourceBlock: 101, sourceBlockHash: hash(101) } };
+  };
+  let strictSessionCalls = 0;
+  let plannerCalls = 0;
+  let solverCalls = 0;
+  const strictSessionFixture = Object.freeze({
+    async issueExact() {
+      throw new Error("disabled independent Exact must not issue pre-Solver quotes");
+    },
+    runtimeEvidenceFromPendingExecution() { return []; },
+    familyIdForEdge() { return "fixture"; },
+  });
+  const fakePlanner = {
+    setFlashLiquidity() {},
+    setGraph() {},
+    async planBlockScanFromSeedEdges(opp: any) {
+      plannerCalls++;
+      return [{
+        templateName: "fixture",
+        root: {},
+        opportunity: { ...opp, startToken: opp.flashToken, profitToken: opp.flashToken, victimAmountIn: opp.searchSeed.searchCenter },
+        tokenPath: { edges: [...opp.seedEdges] },
+        flashAdapterIds: ["fixture-flash"],
+        flashAdapterId: "fixture-flash",
+        maxFlashAmount: opp.searchSeed.maxInput,
+        cycleTokens: [opp.flashToken],
+        borrowableTokens: [{ token: opp.flashToken, amount: opp.searchSeed.maxInput, adapterId: "fixture-flash" }],
+      }];
+    },
+  };
+  const originalSolve = AnvilSolver.prototype.solve;
+  const originalLog = console.log;
+  const originalDateNow = Date.now;
+  const logs: string[] = [];
+  let nowMs = originalDateNow();
+  (AnvilSolver.prototype.solve as any) = async function() {
+    solverCalls++;
+    return { netProfit: 0n };
+  };
+  console.log = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "));
+  };
+  Date.now = () => nowMs;
+  const sourceHeadSeenAtMs = nowMs;
+  Object.assign(f.deps, {
+    exactRefineEnabled: false,
+    passBudgetMs: 5_000,
+    blockScanGraph: () => edges,
+    blockScanPlanner: () => fakePlanner,
+    exactQuoteStateFactory: () => exactQuoteState,
+    amountReference: {
+      prepare(input: any) {
+        return new Map(input.opportunities.map((opp: any) => [opp, 123n]));
+      },
+    },
+    blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0, exactAdmissionSpreadBps: 0,
+      maxCandidates: 1, pricedTokens: new Map([[actor, { maxBorrow: 10n ** 20n }]]) },
+    strictSession: async () => {
+      strictSessionCalls++;
+      nowMs = sourceHeadSeenAtMs + 5_001;
+      return strictSessionFixture;
+    },
+  });
+  try {
+    await f.loop.runHead(101, {
+      sourceHeadSeenAtMs,
+      sourceHeadSeenAtMonotonicMs: performance.now(),
+    });
+    assert.equal(strictSessionCalls, 1);
+    assert.equal(plannerCalls, 0, "expired off-mode pass must not start Planner");
+    assert.equal(solverCalls, 0, "expired off-mode pass must not start Solver");
+    const skip = logs.find(line => line.includes("[searcher/blockscan-exact-refine-skip]"));
+    assert(skip, "disabled mode still logs local selection before the deadline stop");
+    const timing = logs.find(line => line.includes('"type":"block_scan_timing"'));
+    assert(timing, "runtime must emit pass timing");
+    const timingPayload = JSON.parse(timing.slice(timing.indexOf("{")));
+    assert.equal(timingPayload.outcome, "budget_exceeded");
+    assert.equal(timingPayload.decision, "post_refinement_deadline");
+    assert.equal(timingPayload.stages.exact_refine.status, "not-run");
+    assert.equal(timingPayload.stages.planner_solver.status, "not-run");
+    assert.equal(closes, 1);
+  } finally {
+    Date.now = originalDateNow;
+    (AnvilSolver.prototype.solve as any) = originalSolve;
+    console.log = originalLog;
+    await f.loop.shutdown();
+  }
 });
 
 test("production call sites carry transport rather than a constructor-bound fallback", () => {

@@ -36,6 +36,21 @@ export interface BlockScanRefinementResult {
   openCompositeKeys: readonly string[];
 }
 
+export interface BlockScanExactRefinementDisabledSummary {
+  readonly enabled: false;
+  readonly amountSource: "effective-first-edge";
+  readonly selected: number;
+  readonly rejectedMissing: number;
+  readonly rejectedOverCap: number;
+  readonly rejectedAdmission: number;
+  readonly eligibleNotSelected: number;
+}
+
+export interface BlockScanExactRefinementDisabledResult
+  extends BlockScanRefinementResult {
+  readonly disabled: BlockScanExactRefinementDisabledSummary;
+}
+
 export interface BlockScanRefinementShadow {
   readonly admissionSpreadBps: number;
   readonly admitted: BlockScanShadowBand;
@@ -130,6 +145,12 @@ export interface BlockScanRefinementOptions {
   readonly deferProbeTimingLog?: boolean;
 }
 
+export interface BlockScanExactRefinementDisabledOptions {
+  readonly probeAmountsByOpportunity?: ReadonlyMap<BlockScanOpportunity, bigint>;
+  readonly admissionSpreadBps?: number;
+  readonly concurrency?: number;
+}
+
 interface RankedProbe {
   opportunity: BlockScanOpportunity;
   marginBps: number;
@@ -145,6 +166,81 @@ class ProbeTimeoutError extends Error {
     );
     this.name = "ProbeTimeoutError";
   }
+}
+
+export function prepareBlockScanCandidatesWithoutExactRefinement(
+  opportunities: readonly BlockScanOpportunity[],
+  maxCandidates: number,
+  options: BlockScanExactRefinementDisabledOptions = {},
+): BlockScanExactRefinementDisabledResult {
+  const selected: BlockScanOpportunity[] = [];
+  let rejectedMissing = 0;
+  let rejectedOverCap = 0;
+  let rejectedAdmission = 0;
+  let eligibleNotSelected = 0;
+  const limit = Math.max(0, Math.floor(maxCandidates));
+  const concurrencyLimit = Math.max(
+    1,
+    Math.min(
+      positiveInteger(options.concurrency ?? DEFAULT_CONCURRENCY, "concurrency"),
+      opportunities.length,
+    ),
+  );
+  opportunities.forEach((opportunity) => {
+    const spread = opportunity.coarseSpreadBps;
+    if (
+      options.admissionSpreadBps !== undefined &&
+      typeof spread === "number" &&
+      spread < options.admissionSpreadBps
+    ) {
+      rejectedAdmission++;
+      return;
+    }
+    const probeAmount =
+      options.probeAmountsByOpportunity?.get(opportunity) ?? 0n;
+    const ceiling = minBigint(
+      opportunity.searchSeed.searchCenter,
+      opportunity.searchSeed.maxInput,
+    );
+    if (probeAmount <= 0n || probeAmount > ceiling) {
+      if (probeAmount <= 0n) rejectedMissing++;
+      else rejectedOverCap++;
+      return;
+    }
+    if (selected.length >= limit) {
+      eligibleNotSelected++;
+      return;
+    }
+    selected.push({
+      ...opportunity,
+      searchSeed: {
+        ...opportunity.searchSeed,
+        searchCenter: probeAmount,
+      },
+    });
+  });
+  return Object.freeze({
+    opportunities: selected,
+    concurrencyLimit,
+    peakConcurrentProbes: 0,
+    attempted: 0,
+    positive: 0,
+    negative: 0,
+    failed: 0,
+    deadlineHit: false,
+    openFamilyIds: Object.freeze([]),
+    openInstanceCircuitKeys: Object.freeze([]),
+    openCompositeKeys: Object.freeze([]),
+    disabled: Object.freeze({
+      enabled: false,
+      amountSource: "effective-first-edge",
+      selected: selected.length,
+      rejectedMissing,
+      rejectedOverCap,
+      rejectedAdmission,
+      eligibleNotSelected,
+    }),
+  });
 }
 
 /**
@@ -177,7 +273,7 @@ export async function refineBlockScanCandidates(
     return ids.length > 0 ? ids : ["<unowned-family>"];
   };
   const ranked: RankedProbe[] = [];
-  const fallback: Array<{ opportunity: BlockScanOpportunity; index: number }> = [];
+  const fallback: Array<{ opportunity: BlockScanOpportunity; index: number; probeAmount: bigint }> = [];
   const stageBudget = new BlockScanFamilyStageBudget();
   let attempted = 0;
   let negative = 0;
@@ -552,7 +648,7 @@ export async function refineBlockScanCandidates(
           probeCause.kind !== "timeout")
       ) {
         deadlineHit = true;
-        fallback.push({ opportunity, index });
+        fallback.push({ opportunity, index, probeAmount });
         recordShadow(opportunity, "unprobed");
         onProbe?.({
           index,
@@ -694,7 +790,9 @@ export async function refineBlockScanCandidates(
   );
   const selected = [
     ...selectedRanked.map((entry) => entry.opportunity),
-    ...selectedFallback.map((entry) => entry.opportunity),
+    ...selectedFallback.map(({ opportunity, probeAmount }) => ({
+      ...opportunity, searchSeed: { ...opportunity.searchSeed, searchCenter: probeAmount },
+    })),
   ];
   return {
     opportunities: selected,

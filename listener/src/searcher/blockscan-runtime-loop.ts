@@ -22,6 +22,7 @@ import type {
   BlockScanOutcome,
 } from "./detector/blockscan-scanner-core.js";
 import {
+  prepareBlockScanCandidatesWithoutExactRefinement,
   refineBlockScanCandidates,
   type BlockScanProbeDiagnostic,
 } from "./detector/blockscan-candidate-refinement.js";
@@ -94,9 +95,10 @@ import {
   type CanonicalHeader,
 } from "./canonical-header-journal.js";
 import type { BlockScanObservedHeader } from "./blockscan-observed-header.js";
+import { requireFinalSimulationHeader, type BlockScanDirectFinalSimulation } from "./blockscan-final-simulation-method.js";
 
 type BlockScanSourceHeader = CanonicalHeader & Partial<Pick<BlockScanObservedHeader,
-  "transactionHashes" | "passiveTouchedAddresses">>;
+  "transactionHashes" | "passiveTouchedAddresses" | "timestamp" | "baseFeePerGas" | "gasUsed" | "gasLimit">>;
 import type { LandedPoolDiscoveryCoverage } from "./venues/landed-pool-discovery.js";
 import type { VerifiedGraphView } from "./venues/blockscan-state-capability.js";
 import {
@@ -669,6 +671,8 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly executionWorkers: readonly BlockScanExecutionWorker[];
   /** Dedicated S5 resources; never used by exact refinement or solver work. */
   readonly finalSimulationWorkers: readonly BlockScanExecutionWorker[];
+  /** Alternative stateless S5 capability. Uses the same reserved-slot runtime. */
+  readonly directFinalSimulation?: BlockScanDirectFinalSimulation;
   readonly rpcUrl: string;
   /** Sole current-source Family/exact/execution/Funding authority. */
   readonly strictSession?: StrictSessionProvider;
@@ -699,6 +703,11 @@ export interface BlockScanRuntimeLoopDependencies {
    * head cadence even after enumeration has completed successfully.
    */
   readonly exactRefineHardBudgetMs?: number;
+  /**
+   * Independent pre-Solver Exact route probes. Undefined preserves legacy
+   * runtime-call behavior for harnesses and non-main callers.
+   */
+  readonly exactRefineEnabled?: boolean;
   readonly routeTelemetry?: BlockScanEnumerationSolverTelemetrySink;
   readonly largeGraphEdgeThreshold: number;
   readonly largeGraphPassBudgetMs: number;
@@ -890,6 +899,23 @@ export class BlockScanRuntimeLoop {
   ) {
     if ("discovery" in deps) {
       throw new Error("block-scan rejects mutable discovery authority");
+    }
+    if ((deps.exactRefineEnabled ?? true) === false) {
+      if (deps.nMinusOneFallbackEnabled === true) {
+        throw new Error(
+          "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED=0 is incompatible with N-minus-one fallback",
+        );
+      }
+      if (deps.blind.enabled) {
+        throw new Error(
+          "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED=0 is incompatible with blind production audit",
+        );
+      }
+    }
+    if (deps.directFinalSimulation && (deps.finalSimulationWorkers.length !== 0 ||
+        !Number.isSafeInteger(deps.directFinalSimulation.concurrency) ||
+        deps.directFinalSimulation.concurrency < 1)) {
+      throw new Error("select exactly one final simulation method with positive slot capacity");
     }
     this.startupWarmPending =
       deps.startupWarmEnabled && !deps.blind.enabled;
@@ -1952,13 +1978,14 @@ export class BlockScanRuntimeLoop {
     const currentRuntimeCoordinator = this.deps.currentRuntimeCoordinator();
     const blockScanExecutionWorkers = this.deps.executionWorkers;
     const blockScanFinalSimulationWorkers = this.deps.finalSimulationWorkers;
+    const directFinalSimulation = this.deps.directFinalSimulation;
     console.log(
       `[searcher/blockscan-debug] runHead enter block=${blockNumber} ` +
         `enabled=${this.deps.enabled} graph=${blockScanGraph?.length ?? "none"} ` +
         `cfg=${blockScanCfg ? "yes" : "no"} planner=${blockScanPlanner ? "yes" : "no"} ` +
         `coord=${currentRuntimeCoordinator ? "yes" : "no"} ` +
         `workers=${blockScanExecutionWorkers.length} ` +
-        `finalSimWorkers=${blockScanFinalSimulationWorkers.length} ` +
+        `finalSimWorkers=${directFinalSimulation?.concurrency ?? blockScanFinalSimulationWorkers.length} ` +
         `shutdown=${this.deps.isShuttingDown()}`,
     );
     if (
@@ -1969,7 +1996,7 @@ export class BlockScanRuntimeLoop {
       !blockScanPlanner ||
       !currentRuntimeCoordinator ||
       blockScanExecutionWorkers.length === 0 ||
-      blockScanFinalSimulationWorkers.length === 0
+      (directFinalSimulation === undefined && blockScanFinalSimulationWorkers.length === 0)
     ) {
       try {
         routeTelemetryPass?.finish({
@@ -3122,19 +3149,26 @@ export class BlockScanRuntimeLoop {
         return;
       }
 
-      const refinementReserveMs = Math.min(
-        Math.max(0, this.deps.solveReserveMs),
-        Math.max(1, Math.floor((passDeadlineAtMs - Date.now()) / 3)),
-      );
-      const refineDeadline = resolveExactRefineDeadline({
-        nowMs: Date.now(),
-        passDeadlineAtMs,
-        refinementReserveMs,
-        ...(this.deps.exactRefineHardBudgetMs === undefined
-          ? {}
-          : { hardBudgetMs: this.deps.exactRefineHardBudgetMs }),
-      });
-      if (!exactRefineStarted) beginStage("exact_refine");
+      const exactRefineEnabled = this.deps.exactRefineEnabled ?? true;
+      const refinementReserveMs = exactRefineEnabled
+        ? Math.min(
+            Math.max(0, this.deps.solveReserveMs),
+            Math.max(1, Math.floor((passDeadlineAtMs - Date.now()) / 3)),
+          )
+        : 0;
+      const refineDeadline = exactRefineEnabled
+        ? resolveExactRefineDeadline({
+            nowMs: Date.now(),
+            passDeadlineAtMs,
+            refinementReserveMs,
+            ...(this.deps.exactRefineHardBudgetMs === undefined
+              ? {}
+              : { hardBudgetMs: this.deps.exactRefineHardBudgetMs }),
+          })
+        : passDeadlineAtMs;
+      if (exactRefineEnabled && !exactRefineStarted) {
+        beginStage("exact_refine");
+      }
       /* Exact scope is the complete edge closure emitted by coarse
        * enumeration. Touched state is a refresh input only and cannot remove
        * a clean closing leg from exact. */
@@ -3255,7 +3289,7 @@ export class BlockScanRuntimeLoop {
         source: exactSource,
         simulationTransport: simulationWork.transportFor(exactSource, { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs }),
         control: Object.freeze({
-          deadlineAtMs: refineDeadline,
+          deadlineAtMs: exactRefineEnabled ? refineDeadline : passDeadlineAtMs,
           signal: passSignal,
         }),
         fundingAssets: exactFundingTokens,
@@ -3281,14 +3315,9 @@ export class BlockScanRuntimeLoop {
         effectiveReferences: probeAmountsByOpportunity?.size ?? 0,
         missingReferences: coarse.opportunities.length - (probeAmountsByOpportunity?.size ?? 0),
       })}`);
-      const refinement = await refineBlockScanCandidates(
-        exactQuoteStateRef,
-        coarse.opportunities,
-        blockScanCfg.maxCandidates,
-        refineDeadline,
-        blockScanCfg.pricedTokens,
+      const onRefinementDiagnostic =
         routeTelemetryPass !== null || this.deps.blind.enabled
-          ? (diagnostic) => {
+          ? (diagnostic: BlockScanProbeDiagnostic) => {
               const opportunity = coarse.opportunities[diagnostic.index];
               if (!opportunity) return;
               recordExact(opportunity, diagnostic);
@@ -3308,63 +3337,114 @@ export class BlockScanRuntimeLoop {
                     },
               });
             }
-          : undefined,
-        this.deps.exactConcurrency,
-        {
-          probeAmountsByOpportunity,
-          executor: this.deps.executorAddress,
-          strictSession,
-          runtimeEvidence,
-          signal: passSignal,
-          admissionSpreadBps:
-            blockScanCfg.exactAdmissionSpreadBps ??
-            blockScanCfg.minSpreadBps,
-          minCapitalFraction:
-            blockScanCfg.minCapitalFraction ?? 0,
-          probeTimeoutMs: this.deps.exactProbeTimeoutMs,
-          deferProbeTimingLog: routeTelemetryPass !== null,
-        },
-      );
-      if (refinement.shadow) {
+          : undefined;
+      let exactOpportunities: readonly BlockScanOpportunity[] | null;
+      if (exactRefineEnabled) {
+        const refinement = await refineBlockScanCandidates(
+          exactQuoteStateRef,
+          coarse.opportunities,
+          blockScanCfg.maxCandidates,
+          refineDeadline,
+          blockScanCfg.pricedTokens,
+          onRefinementDiagnostic,
+          this.deps.exactConcurrency,
+          {
+            probeAmountsByOpportunity,
+            executor: this.deps.executorAddress,
+            strictSession,
+            runtimeEvidence,
+            signal: passSignal,
+            admissionSpreadBps:
+              blockScanCfg.exactAdmissionSpreadBps ??
+              blockScanCfg.minSpreadBps,
+            minCapitalFraction:
+              blockScanCfg.minCapitalFraction ?? 0,
+            probeTimeoutMs: this.deps.exactProbeTimeoutMs,
+            deferProbeTimingLog: routeTelemetryPass !== null,
+          },
+        );
+        if (refinement.shadow) {
+          console.log(
+            `[searcher/blockscan-refine-shadow] ${JSON.stringify({
+              block: blockNumber,
+              exactNotAdmitted: refinement.shadow.notAdmitted.total,
+              ...refinement.shadow,
+            })}`,
+          );
+        }
+        if (exactQuoteState instanceof PinnedRethQuoteBackend) {
+          console.log(
+            `[searcher/blockscan-exact-quote-stats] ${JSON.stringify({
+              block: blockNumber,
+              logicalConcurrency: this.deps.exactConcurrency,
+              activeConcurrencyLimit: refinement.concurrencyLimit,
+              peakConcurrentProbes: refinement.peakConcurrentProbes,
+              ...exactQuoteState.stats(),
+            })}`,
+          );
+        }
+        finishStage(
+          "exact_refine",
+          refinement.deadlineHit ? "failed" : "ran",
+        );
+        timing.exactRefineMs = stageBoundaries.exact_refine.stage_ms;
+        sealAuditBoundary("exact_refine_done", "exact_refine");
+        candidates = refinement.opportunities.length;
+        if (refinement.deadlineHit || Date.now() >= passDeadlineAtMs) {
+          outcome = "budget_exceeded";
+          skippedReason = refinement.deadlineHit
+            ? "exact_refinement_deadline"
+            : "post_refinement_deadline";
+          exactOpportunities = null;
+        } else {
+          exactOpportunities = fallbackEnvelopes
+            ? promoteNMinusOneExactCandidates(
+                fallbackEnvelopes,
+                refinement.opportunities,
+              )
+            : refinement.opportunities;
+        }
+      } else {
+        const prepared =
+          prepareBlockScanCandidatesWithoutExactRefinement(
+            coarse.opportunities,
+            blockScanCfg.maxCandidates,
+            {
+              probeAmountsByOpportunity,
+              admissionSpreadBps:
+                blockScanCfg.exactAdmissionSpreadBps ??
+                blockScanCfg.minSpreadBps,
+              concurrency: this.deps.exactConcurrency,
+            },
+          );
+        candidates = prepared.opportunities.length;
         console.log(
-          `[searcher/blockscan-refine-shadow] ${JSON.stringify({
+          `[searcher/blockscan-exact-refine-skip] ${JSON.stringify({
             block: blockNumber,
-            exactNotAdmitted: refinement.shadow.notAdmitted.total,
-            ...refinement.shadow,
+            enabled: false,
+            amountSource: prepared.disabled.amountSource,
+            coarseCandidates: coarse.opportunities.length,
+            selected: prepared.disabled.selected,
+            rejectedMissing: prepared.disabled.rejectedMissing,
+            rejectedOverCap: prepared.disabled.rejectedOverCap,
+            rejectedAdmission: prepared.disabled.rejectedAdmission,
+            eligibleNotSelected: prepared.disabled.eligibleNotSelected,
+            maxCandidates: blockScanCfg.maxCandidates,
+            sourceBlock: exactSource.number,
+            sourceBlockHash: exactSource.hash,
           })}`,
         );
+        exactOpportunities = prepared.opportunities;
       }
-      if (exactQuoteState instanceof PinnedRethQuoteBackend) {
-        console.log(
-          `[searcher/blockscan-exact-quote-stats] ${JSON.stringify({
-            block: blockNumber,
-            logicalConcurrency: this.deps.exactConcurrency,
-            activeConcurrencyLimit: refinement.concurrencyLimit,
-            peakConcurrentProbes: refinement.peakConcurrentProbes,
-            ...exactQuoteState.stats(),
-          })}`,
-        );
+      if (exactOpportunities === null) return;
+      if (!exactRefineEnabled) {
+        if (passSignal.aborted) throw passSignal.reason;
+        if (Date.now() >= passDeadlineAtMs) {
+          outcome = "budget_exceeded";
+          skippedReason = "post_refinement_deadline";
+          return;
+        }
       }
-      finishStage(
-        "exact_refine",
-        refinement.deadlineHit ? "failed" : "ran",
-      );
-      timing.exactRefineMs = stageBoundaries.exact_refine.stage_ms;
-      sealAuditBoundary("exact_refine_done", "exact_refine");
-      candidates = refinement.opportunities.length;
-      if (refinement.deadlineHit || Date.now() >= passDeadlineAtMs) {
-        outcome = "budget_exceeded";
-        skippedReason = refinement.deadlineHit
-          ? "exact_refinement_deadline"
-          : "post_refinement_deadline";
-        return;
-      }
-      const exactOpportunities = fallbackEnvelopes
-        ? promoteNMinusOneExactCandidates(
-            fallbackEnvelopes,
-            refinement.opportunities,
-          )
-        : refinement.opportunities;
 
       beginStage("planner_solver");
       if (useNMinusOneFallback && exactOpportunities.length > 0) {
@@ -3723,18 +3803,34 @@ export class BlockScanRuntimeLoop {
             new Error("block-scan final simulation generation is stale");
         }
       };
-      const finalSimulationRuntime = createFinalSimulationWorkRuntime({
-        reservedResources: blockScanFinalSimulationWorkers.map(
+      const finalSimulationResources = directFinalSimulation
+        ? Array.from({ length: directFinalSimulation.concurrency }, (_, index) => Object.freeze({
+            id: `blockscan-final-sim-${index}`,
+            value: null as BlockScanExecutionWorker | null,
+          }))
+        : blockScanFinalSimulationWorkers.map(
           (worker, index) => Object.freeze({
             id: `blockscan-final-sim-${index}`,
-            value: worker,
+            value: worker as BlockScanExecutionWorker | null,
           }),
-        ),
+        );
+      const finalSimulationRuntime = createFinalSimulationWorkRuntime({
+        reservedResources: finalSimulationResources,
         runner: Object.freeze({
           async simulate(input: FinalSimulationRunnerInput<
-            BlockScanExecutionWorker,
+            BlockScanExecutionWorker | null,
             ResolvedPlan
           >) {
+            if (input.resource === null) {
+              assertFinalSimulationSource(input.generation, input.source);
+              if (!directFinalSimulation) throw new Error("missing direct final simulation method");
+              return directFinalSimulation.simulate(input.resolvedPlan, {
+                source: input.source,
+                header: requireFinalSimulationHeader(sourceHeader),
+                deadlineAtMs: input.schedule.deadlineAtMs,
+                signal: input.signal,
+              });
+            }
             if (useNMinusOneFallback) {
               await ensureExecutionWorkerForked(input.resource, input.signal);
             } else {
@@ -3756,13 +3852,14 @@ export class BlockScanRuntimeLoop {
             if (Date.now() >= input.schedule.deadlineAtMs) {
               throw new Error("final simulation deadline elapsed during fork preparation");
             }
-            return blockScanWorkerRunner.simulate(input);
+            return blockScanWorkerRunner.simulate({ ...input, resource: input.resource });
           },
-          terminate(input: Parameters<NonNullable<
-            typeof blockScanWorkerRunner.terminate
-          >>[0]) {
+          terminate(input: { readonly resource: BlockScanExecutionWorker | null;
+            readonly reason: Parameters<NonNullable<typeof blockScanWorkerRunner.terminate>>[0]["reason"] }) {
+            // Direct I/O is owned by the runtime's abort signal; there is no fork to retire.
+            if (input.resource === null) return;
             backgroundFinalSimForks.get(input.resource)?.cancel(input.reason);
-            blockScanWorkerRunner.terminate?.(input);
+            blockScanWorkerRunner.terminate?.({ ...input, resource: input.resource });
           },
         }),
         generationFence: {

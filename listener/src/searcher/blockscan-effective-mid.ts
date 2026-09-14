@@ -10,7 +10,9 @@ import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
 
 export type EffectivePricingInput = Parameters<typeof tokenToWethReferences>[0] &
   Pick<BlockScanStateSnapshot, "pricingStateKeyByEdgeKey">;
-export const DEFAULT_EFFECTIVE_WETH_INPUT = 1_000_000_000_000_000n;
+/** Single global default P (0.005 WETH); available gas still selects G instead.
+ * Exact reuses the resulting row amount and hands that same input to Solver. */
+export const DEFAULT_EFFECTIVE_WETH_INPUT = 5_000_000_000_000_000n;
 
 export interface EffectiveMidRow {
   readonly edgeId: string;
@@ -86,6 +88,9 @@ export async function buildEffectiveMids(input: {
   readonly weth: string;
   readonly gasCostWei: bigint | null;
   readonly enumerationSpreadBps: number;
+  /** Lazy lookup in the existing raw publication's valuation index. Standalone
+   * snapshot callers can still use the full, deterministic fallback. */
+  readonly tokenReferences?: () => ReturnType<typeof tokenToWethReferences>;
   readonly quote: EffectiveMidQuote;
   /** Bind this source's existing quote session only after carry/missing rows
    * have been classified. Called once for the actual work, never for clean
@@ -134,7 +139,7 @@ export async function buildEffectiveMids(input: {
     const item = work[index]!;
     const token = item.edge.tokenIn.toLowerCase();
     if (!amounts.has(token)) {
-      marks ??= tokenToWethReferences(pricing, input.weth);
+      marks ??= input.tokenReferences?.() ?? tokenToWethReferences(pricing, input.weth);
       const mark = marks.get(token);
       amounts.set(token, !mark ? null : input.gasCostWei === null
         ? (DEFAULT_EFFECTIVE_WETH_INPUT * mark.den + mark.num - 1n) / mark.num

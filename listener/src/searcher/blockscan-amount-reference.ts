@@ -3,6 +3,8 @@ import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
 import { nextBlockBaseFee } from "./ev-evaluator.js";
 import { blockScanEdgeKey, type BlockSource } from "./venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
+import type { StrictPricingPublication } from "./strict-current-runtime-coordinator.js";
+import type { RouteVenueMid } from "./venues/mid-readers.js";
 
 export interface RawTokenRate {
   /** WETH wei per input-token raw unit; token decimals must NOT be applied again. */
@@ -94,6 +96,204 @@ export function tokenToWethReferences(
     if (candidates.size === 0) break;
   }
   return marks;
+}
+
+interface ValuationPair {
+  readonly from: string;
+  readonly to: string;
+  readonly contributions: Map<string, { instance: string; rate: RawTokenRate }>;
+  rate?: RawTokenRate;
+}
+
+interface ValuationIndex {
+  pricing: PricingReference;
+  fingerprint?: string;
+  readonly edges: Map<string, PricingReference["graph"]["edges"][number]>;
+  readonly pairByEdge: Map<string, ValuationPair>;
+  readonly outgoing: Map<string, Map<string, ValuationPair>>;
+  readonly incoming: Map<string, Set<string>>;
+  readonly layers: Map<string, RawTokenRate>[];
+  view: ReadonlyMap<string, RawTokenRate>;
+}
+
+const equalRate = (a: RawTokenRate | undefined, b: RawTokenRate | undefined): boolean =>
+  a === b || (a !== undefined && b !== undefined && compareRates(a, b) === 0);
+const samePricingReference = (a: PricingReference, b: PricingReference): boolean =>
+  a.generation === b.generation && a.sourceBlock === b.sourceBlock &&
+  a.sourceBlockHash.toLowerCase() === b.sourceBlockHash.toLowerCase() &&
+  a.graph === b.graph && a.mids === b.mids &&
+  a.coverage.resolvedEdgeKeys === b.coverage.resolvedEdgeKeys;
+
+/** One consumer of the EXISTING raw baseline/delta, not another producer.
+ * Keeps a current working index and four immutable-by-ownership output views.
+ * Old/overlapping callers cannot mutate the index or see a newer source's rates. */
+export class TokenToWethReferenceCache {
+  private readonly weth: string;
+  private current?: ValuationIndex;
+  private readonly recent: { pricing: PricingReference; marks: ReadonlyMap<string, RawTokenRate> }[] = [];
+  private readonly work = { fullBuilds: 0, updatedEdges: 0, recomputedPairs: 0, recomputedTokens: 0, hits: 0 };
+
+  constructor(weth: string) { this.weth = weth.toLowerCase(); }
+
+  get stats(): Readonly<typeof this.work> { return Object.freeze({ ...this.work }); }
+
+  get(pricing: PricingReference): ReadonlyMap<string, RawTokenRate> {
+    if (this.current && samePricingReference(this.current.pricing, pricing)) {
+      this.work.hits++;
+      return this.remember(pricing, this.current.view);
+    }
+    const cached = this.recent.find(entry => samePricingReference(entry.pricing, pricing));
+    if (cached) { this.work.hits++; return cached.marks; }
+    const index = this.build(pricing);
+    // Bootstrap can ask for its raw view before the first baseline is published.
+    // A late standalone read must never replace a newer publication's working index.
+    this.current ??= index;
+    return this.remember(pricing, index.view);
+  }
+
+  observe(publication: StrictPricingPublication): void {
+    const pricing = publication.snapshot;
+    const index = this.current;
+    if (index && samePricingReference(index.pricing, pricing)) {
+      // Adopt the first baseline after bootstrap, without a second full build.
+      if (index.fingerprint === undefined || index.fingerprint === publication.graphFingerprint) {
+        index.fingerprint = publication.graphFingerprint;
+        this.remember(pricing, index.view);
+        return;
+      }
+    }
+    if (!index || publication.kind !== "delta" ||
+        index.fingerprint !== publication.graphFingerprint ||
+        index.pricing.generation !== publication.previousGeneration ||
+        index.pricing.sourceBlock !== publication.previousSourceBlock ||
+        index.pricing.sourceBlockHash.toLowerCase() !== publication.previousSourceBlockHash.toLowerCase() ||
+        pricing.generation < index.pricing.generation || pricing.sourceBlock < index.pricing.sourceBlock ||
+        (pricing.sourceBlock === index.pricing.sourceBlock &&
+          pricing.sourceBlockHash.toLowerCase() !== index.pricing.sourceBlockHash.toLowerCase()) ||
+        publication.updates.some(([key]) => !index.edges.has(key)) ||
+        publication.removals.some(key => !index.edges.has(key))) {
+      const rebuilt = this.build(pricing);
+      rebuilt.fingerprint = publication.graphFingerprint;
+      this.current = rebuilt;
+      this.remember(pricing, rebuilt.view);
+      return;
+    }
+
+    const changedPairs = new Set<ValuationPair>();
+    for (const [key, mid] of publication.updates) {
+      this.work.updatedEdges++;
+      const pair = index.pairByEdge.get(key);
+      if (!pair) continue;
+      this.setContribution(index, key, mid);
+      changedPairs.add(pair);
+    }
+    for (const key of publication.removals) {
+      this.work.updatedEdges++;
+      const pair = index.pairByEdge.get(key);
+      if (!pair) continue;
+      pair.contributions.delete(key);
+      changedPairs.add(pair);
+    }
+    const sources = new Set<string>();
+    for (const pair of changedPairs) {
+      const before = pair.rate;
+      this.repricePair(pair);
+      if (!equalRate(before, pair.rate)) sources.add(pair.from);
+    }
+    let changed = new Set<string>();
+    for (let hop = 1; hop <= 3; hop++) {
+      const affected = new Set(sources);
+      for (const token of changed) {
+        affected.add(token);
+        for (const parent of index.incoming.get(token) ?? []) affected.add(parent);
+      }
+      const nextChanged = new Set<string>();
+      for (const token of affected) {
+        const layer = index.layers[hop]!;
+        const next = this.mark(index, token, hop);
+        if (equalRate(layer.get(token), next)) continue;
+        if (next === undefined) layer.delete(token); else layer.set(token, next);
+        nextChanged.add(token);
+      }
+      changed = nextChanged;
+    }
+    // Working layers stay private; never mutate a Map handed to an in-flight caller.
+    if (changed.size > 0) index.view = new Map(index.layers[3]);
+    index.pricing = pricing;
+    this.remember(pricing, index.view);
+  }
+
+  private remember(pricing: PricingReference, marks: ReadonlyMap<string, RawTokenRate>): ReadonlyMap<string, RawTokenRate> {
+    const old = this.recent.findIndex(entry => samePricingReference(entry.pricing, pricing));
+    if (old >= 0) this.recent.splice(old, 1);
+    this.recent.unshift({ pricing, marks });
+    if (this.recent.length > 4) this.recent.pop();
+    return marks;
+  }
+
+  private setContribution(index: ValuationIndex, key: string, mid: RouteVenueMid): void {
+    const pair = index.pairByEdge.get(key)!;
+    pair.contributions.delete(key);
+    if (!Number.isFinite(mid.feeBps) || mid.feeBps < 0 || mid.feeBps >= 10_000) return;
+    const rate = ratio(mid.mid), fee = ratio(10_000 - mid.feeBps);
+    if (!rate || !fee) return;
+    pair.contributions.set(key, { instance: edgeInstanceKey(index.edges.get(key)!),
+      rate: multiply(rate, { num: fee.num, den: fee.den * 10_000n }) });
+  }
+
+  private repricePair(pair: ValuationPair): void {
+    this.work.recomputedPairs++;
+    const instances = new Map<string, RawTokenRate>();
+    for (const { instance, rate } of pair.contributions.values()) {
+      const prior = instances.get(instance);
+      if (!prior || compareRates(rate, prior) < 0) instances.set(instance, rate);
+    }
+    pair.rate = instances.size === 0 ? undefined : lowerMedian([...instances.values()]);
+  }
+
+  private mark(index: ValuationIndex, token: string, hop: number): RawTokenRate | undefined {
+    this.work.recomputedTokens++;
+    const previous = index.layers[hop - 1]!;
+    const shorter = previous.get(token);
+    if (shorter) return shorter;
+    const candidates: RawTokenRate[] = [];
+    for (const pair of index.outgoing.get(token)?.values() ?? []) {
+      const tail = previous.get(pair.to);
+      if (pair.rate && tail) candidates.push(multiply(pair.rate, tail));
+    }
+    return candidates.length === 0 ? undefined : lowerMedian(candidates);
+  }
+
+  private build(pricing: PricingReference): ValuationIndex {
+    this.work.fullBuilds++;
+    const index: ValuationIndex = { pricing, edges: new Map(), pairByEdge: new Map(),
+      outgoing: new Map(), incoming: new Map(),
+      layers: Array.from({ length: 4 }, () => new Map([[this.weth, { num: 1n, den: 1n }]])), view: new Map() };
+    const resolved = new Set(pricing.coverage.resolvedEdgeKeys);
+    for (const edge of pricing.graph.edges) {
+      const key = blockScanEdgeKey(edge);
+      index.edges.set(key, edge);
+      const from = edge.tokenIn.toLowerCase(), to = edge.tokenOut.toLowerCase();
+      if (edge.leavesStandingPosition || from === to) continue;
+      let outgoing = index.outgoing.get(from);
+      if (!outgoing) { outgoing = new Map(); index.outgoing.set(from, outgoing); }
+      let pair = outgoing.get(to);
+      if (!pair) { pair = { from, to, contributions: new Map() }; outgoing.set(to, pair); }
+      index.pairByEdge.set(key, pair);
+      let incoming = index.incoming.get(to);
+      if (!incoming) { incoming = new Set(); index.incoming.set(to, incoming); }
+      incoming.add(from);
+      const mid = pricing.mids.get(key);
+      if (resolved.has(key) && mid) this.setContribution(index, key, mid);
+    }
+    for (const outgoing of index.outgoing.values()) for (const pair of outgoing.values()) this.repricePair(pair);
+    for (let hop = 1; hop <= 3; hop++) for (const token of index.outgoing.keys()) {
+      const value = this.mark(index, token, hop);
+      if (value) index.layers[hop]!.set(token, value);
+    }
+    index.view = new Map(index.layers[3]);
+    return index;
+  }
 }
 
 export function gasReferenceInput(

@@ -14,6 +14,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { Worker } from "node:worker_threads";
 import type { BlockScanOpportunity } from "../detector/detector.js";
+import { prepareBlockScanCandidatesWithoutExactRefinement } from "../detector/blockscan-candidate-refinement.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import {
   blockScanRouteId,
@@ -21,6 +22,54 @@ import {
 } from "../blockscan-route-identity.js";
 import { initBlockScanEnumerationSolverTelemetry } from
   "../blockscan-enumeration-solver-telemetry.js";
+
+test("Exact OFF preserves the complete real telemetry record with exact=null", async () => {
+  await withTempDir(async (dir) => {
+    const path = join(dir, "routes.jsonl");
+    await writeFile(join(dir, "events.jsonl"), '{"type":"searcher_start","run_id":"exact-off-roundtrip"}\n');
+    const sink = await initBlockScanEnumerationSolverTelemetry({
+      path, eventsPath: join(dir, "events.jsonl"), runId: "exact-off-roundtrip", minFreeBytes: 1,
+    });
+    try {
+      const candidates = [101, 103, 105, 107].map(pool => ({
+        ...opportunity(100, [
+          edge("adapter-a", address(pool), address(1), address(2)),
+          edge("adapter-b", address(pool + 1), address(2), address(1)),
+        ]),
+        searchSeed: { startToken: address(1), searchCenter: 100n, maxInput: 100n },
+      }));
+      const prepared = prepareBlockScanCandidatesWithoutExactRefinement(candidates, 1, {
+        probeAmountsByOpportunity: new Map([
+          [candidates[0]!, 30n], [candidates[1]!, 200n], [candidates[2]!, 20n],
+        ]),
+      });
+      assert.equal(prepared.disabled.selected, 1);
+      assert.equal(prepared.disabled.rejectedOverCap, 1);
+      assert.equal(prepared.disabled.rejectedMissing, 1);
+      assert.equal(prepared.disabled.eligibleNotSelected, 1);
+      const pass = sink.beginPass(100);
+      assert.ok(pass);
+      pass.recordEnumeration(candidates);
+      // Runtime OFF is separately tested to emit no recordExact callbacks.
+      for (const candidate of prepared.opportunities) {
+        pass.recordPlanner(candidate);
+        pass.recordSolver(candidate);
+      }
+      pass.finish({ sourceBlockHash: `0x${"ab".repeat(32)}`, midSourceBlock: 100,
+        midSourceBlockHash: `0x${"ab".repeat(32)}`, pricingMode: "source_n",
+        passOutcome: "ran", passReason: null });
+      await sink.shutdown(5_000);
+      const rows = (await readFile(path, "utf8")).trim().split("\n").map(line => JSON.parse(line));
+      const record = rows.find(row => row.type === "block_scan_enumeration_solver");
+      assert.ok(record, "skipping Exact must not drop the whole route pass");
+      assert.deepEqual(record.enumeration, [1, 2, 3, 4]);
+      assert.equal(record.exact, null, "no independent Exact result was measured");
+      assert.deepEqual(record.planner, [1]);
+      assert.deepEqual(record.solver, [1]);
+      assert.equal(sink.telemetry().droppedBatches, 0);
+    } finally { await sink.shutdown(5_000); }
+  });
+});
 
 test(
   "worker truncates on startup, writes ordered Enumeration/Solver refs, and cleans its lock",
@@ -230,6 +279,7 @@ test("worker preserves amount-cap evidence, healthy siblings, and legacy reason 
       "exact_not_admitted", "family_circuit_open", "instance_circuit_open",
       "composite_circuit_open", "probe_timeout", "global_deadline", "quote_error",
       "amount_reference_over_cap",
+      "amount_reference_missing",
     ] as const;
     const routes = Array.from({ length: reasons.length + 1 }, (_, index) =>
       opportunity(100, [edge("adapter-a", address(301 + index), address(1), address(2))])
@@ -271,11 +321,12 @@ test("worker preserves amount-cap evidence, healthy siblings, and legacy reason 
     assert.equal(catalogs.length, routes.length);
     assert.equal(blocks.length, 1);
     assert.deepEqual(catalogs.map((row) => row.route_id), routes.map((route) => blockScanRouteId(route.seedEdges)));
-    assert.deepEqual(blocks[0]!.enumeration, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    assert.deepEqual(blocks[0]!.enumeration, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     assert.deepEqual(blocks[0]!.exact, [
       1, 1, 125, 0,
       4, 0, null, 1, 4, 0, null, 2, 4, 0, null, 3, 4, 0, null, 4,
       4, 0, null, 5, 4, 0, null, 6, 4, 0, null, 7, 4, 0, null, 8,
+      4, 0, null, 9,
     ]);
     assert.deepEqual(blocks[0]!.planner, [1]);
     assert.deepEqual(blocks[0]!.solver, [1]);
@@ -287,7 +338,7 @@ test("worker preserves amount-cap evidence, healthy siblings, and legacy reason 
   });
 });
 
-test("worker rejects unknown compact exact reason code 9 without writing route evidence", async () => {
+test("worker rejects unknown compact exact reason code 10 without writing route evidence", async () => {
   await withTempDir(async (dir) => {
     const eventsPath = join(dir, "events.jsonl");
     const routePath = join(dir, "blockscan-routes.jsonl");
@@ -316,7 +367,7 @@ test("worker rejects unknown compact exact reason code 9 without writing route e
           routes: [blockScanRouteLocator(opportunity(100, [
             edge("adapter-a", address(301), address(1), address(2)),
           ]))],
-          enumeration: [0], exact: [4, 0, null, 9], planner: [], solver: [],
+          enumeration: [0], exact: [4, 0, null, 10], planner: [], solver: [],
         },
       });
       const [ack] = await reply;
