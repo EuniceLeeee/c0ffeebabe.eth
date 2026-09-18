@@ -45,13 +45,45 @@ export function uniV3StateRequestData(descriptor: UniV3Descriptor): string {
 export function readUniV3State(data: string, descriptor: UniV3Descriptor): V3PoolState {
   const reader = resolveUniV3StateReader(descriptor);
   if (reader === null) throw new Error("univ3 state reader compatibility unavailable");
-  const decoded = reader.iface.decodeFunctionResult("getFullStateWithRelativeBitmaps", data);
-  if (reader.iface.encodeFunctionResult("getFullStateWithRelativeBitmaps", decoded).toLowerCase() !== data.toLowerCase()) {
-    throw new Error("univ3 non-canonical pool state");
-  }
-  const raw = decoded[0];
-  const tick = Number(raw.slot0.tick), spacing = Number(raw.tickSpacing);
-  if (!sameAddress(raw.pool, descriptor.pool) || !sameAddress(raw.pool, descriptor.factoryBinding.reversePool)) {
+  // This ABI has one dynamic tuple with an 18-word head and two arrays of
+  // static tuples (2 words per bitmap, 7 per tick). Validate its exact packed
+  // layout and EVERY scalar, including unused observation fields. This is the
+  // same canonicality check as decode + re-encode, without ethers Result trees
+  // and their repeated copying for large tick arrays. No decoded-state cache.
+  const failCanonical = (): never => { throw new Error("univ3 non-canonical pool state"); };
+  if (!/^0x[0-9a-fA-F]+$/.test(data) || (data.length - 2) % 64 !== 0) failCanonical();
+  const wordCount = (data.length - 2) / 64;
+  if (wordCount < 21) failCanonical();
+  const uint = (word: number, bits = 256): bigint => {
+    if (word >= wordCount) failCanonical();
+    const value = BigInt("0x" + data.slice(2 + word * 64, 2 + (word + 1) * 64));
+    if (bits !== 256 && value !== BigInt.asUintN(bits, value)) failCanonical();
+    return value;
+  };
+  const sint = (word: number, bits: number): bigint => {
+    const value = BigInt.asIntN(256, uint(word));
+    if (value !== BigInt.asIntN(bits, value)) failCanonical();
+    return value;
+  };
+  if (uint(0) !== 32n || uint(17) !== 18n * 32n) failCanonical();
+  const bitmapCount = uint(19);
+  if (bitmapCount > BigInt(Math.floor((wordCount - 21) / 2))) failCanonical();
+  const ticksOffset = 20 + 2 * Number(bitmapCount);
+  if (uint(18) !== BigInt((ticksOffset - 1) * 32)) failCanonical();
+  const tickCount = uint(ticksOffset);
+  if (tickCount * 7n !== BigInt(wordCount - ticksOffset - 1)) failCanonical();
+
+  uint(1, 160); // pool address padding
+  uint(2); // blockTimestamp
+  const sqrtPriceX96 = uint(3, 160), tick = Number(sint(4, 24));
+  uint(5, 16); uint(6, 16); uint(7, 16); // observation indices/cardinalities
+  uint(8, reader === PANCAKE_READER ? 32 : 8); // feeProtocol
+  uint(9, 1); // unlocked bool
+  const liquidity = uint(10, 128), spacing = Number(sint(11, 24));
+  uint(12, 128); // maxLiquidityPerTick
+  uint(13, 32); sint(14, 56); uint(15, 160); uint(16, 1); // observation
+  const pool = "0x" + data.slice(2 + 64 + 24, 2 + 2 * 64).toLowerCase();
+  if (!sameAddress(pool, descriptor.pool) || !sameAddress(pool, descriptor.factoryBinding.reversePool)) {
     throw new Error("univ3 pool state belongs to a foreign pool");
   }
   if (!Number.isSafeInteger(tick) || tick < MIN_TICK || tick > MAX_TICK ||
@@ -64,8 +96,9 @@ export function readUniV3State(data: string, descriptor: UniV3Descriptor): V3Poo
   const center = Math.floor(tick / spacing) >> 8;
   const firstWord = center - UNIV3_STATE_WORD_RADIUS, lastWord = center + UNIV3_STATE_WORD_RADIUS;
   const bitmaps = new Map<number, bigint>();
-  for (const entry of raw.tickBitmap) {
-    const word = Number(entry.index), value = BigInt(entry.value);
+  for (let i = 0; i < Number(bitmapCount); i++) {
+    const offset = 20 + i * 2;
+    const word = Number(sint(offset, 16)), value = uint(offset + 1);
     if (word < firstReadWord || word > lastReadWord || value === 0n || bitmaps.has(word)) {
       throw new Error("univ3 duplicate or out-of-range bitmap");
     }
@@ -73,11 +106,14 @@ export function readUniV3State(data: string, descriptor: UniV3Descriptor): V3Poo
   }
   const populatedBits = new Map<number, bigint>();
   const allTicks = new Set<number>(), ticks = new Map<number, bigint>();
-  for (const entry of raw.ticks) {
-    const tk = Number(entry.index), net = BigInt(entry.value.liquidityNet), gross = BigInt(entry.value.liquidityGross);
+  for (let i = 0; i < Number(tickCount); i++) {
+    const offset = ticksOffset + 1 + i * 7;
+    const tk = Number(sint(offset, 24)), gross = uint(offset + 1, 128), net = sint(offset + 2, 128);
+    sint(offset + 3, 56); uint(offset + 4, 160); uint(offset + 5, 32);
+    const initialized = uint(offset + 6, 1) === 1n;
     const compressed = Math.floor(tk / spacing), word = compressed >> 8;
     if (tk < MIN_TICK || tk > MAX_TICK || tk % spacing !== 0 || allTicks.has(tk) ||
-        !entry.value.initialized || gross <= 0n || net > gross || -net > gross ||
+        !initialized || gross <= 0n || net > gross || -net > gross ||
         word < firstReadWord || word > lastReadWord) {
       throw new Error("univ3 invalid initialized tick");
     }
@@ -92,6 +128,6 @@ export function readUniV3State(data: string, descriptor: UniV3Descriptor): V3Poo
   }
   const tickBitmap = new Map<number, bigint>();
   for (let word = firstWord; word <= lastWord; word++) tickBitmap.set(word, bitmaps.get(word) ?? 0n);
-  return { sqrtPriceX96: BigInt(raw.slot0.sqrtPriceX96), tick, liquidity: BigInt(raw.liquidity),
+  return { sqrtPriceX96, tick, liquidity,
     fee: descriptor.fee, tickSpacing: spacing, tickBitmap, ticks };
 }

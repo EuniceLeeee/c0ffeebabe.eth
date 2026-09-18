@@ -7674,7 +7674,7 @@
         "familyId": "univ3-standard",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "c9281408e1d642bfb094ad28844d87794e907d96d1497a9f1b3699940e1213ab",
+        "contentHash": "291671bb228f7fd19d7a0ad0d83888db354c2498e407e635f4c08afb585ee6ec",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -8675,5 +8675,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "eb9052b339d603f6799860d65bf1a66932a61542b2c086084050928e1c411ae8"
+  "artifactHash": "640c9370d8bae5e5b6918b27c21911fac27b78373b10af0afe39848e952ba763"
 }
