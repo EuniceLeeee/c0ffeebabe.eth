@@ -14,13 +14,13 @@ const edges:TokenEdge[]=tokens.slice(0,-1).map((tokenIn,i)=>({
   slotKind:"swap",...deriveEdgeTaxonomy("swap"),
 }));
 const mids=new Map<string,ResolvedBlockScanMid>(edges.map((edge,i)=>[blockScanEdgeKey(edge),{
-  kind:"test",pool:edge.target,edges:[edge],mid:i===5?1.2:1,feeBps:0,
-  quoteAmountIn:1000n,quoteAmountOut:i===5?1200n:1000n,
+  kind:"test",pool:edge.target,edges:[edge],mid:i===5?1.2:1.01,feeBps:0,
+  quoteAmountIn:1000n,quoteAmountOut:i===5?1200n:1010n,
   reserveA:1000000n*unit,reserveB:1000000n*unit,depthProxy:1e24,
 }]));
 const quotes=edges.map((e,i)=>({id:blockScanEdgeKey(e),instance:edgeInstanceKey(e),
-  tokenIn:e.tokenIn,tokenOut:e.tokenOut,num:i===5?1200n:1000n,den:1000n,
-  value:{num:i===5?1200n:1000n,den:1000n}}));
+  tokenIn:e.tokenIn,tokenOut:e.tokenOut,num:i===5?1200n:1010n,den:1000n,
+  value:{num:i===5?1200n:1010n,den:1000n}}));
 const view:BlockScanUsdView={quotes,signals:[{token:weth,buy:quotes[5]!.id,sell:quotes[0]!.id,num:120n,den:100n}],
   signalPairsPerToken:1,referenceUsdPerRaw:new Map(),comparableTokens:1,missingBuyReference:0,missingSellReference:0};
 const scan=(enumerationMethod:"dfs"|"layered",maxHops=6,usdView=view,budgetMs=5000)=>
@@ -28,6 +28,15 @@ const scan=(enumerationMethod:"dfs"|"layered",maxHops=6,usdView=view,budgetMs=50
     captureCoarseEnumeration:true,cfg:{enumerationMethod,maxHops,minSpreadBps:50,budgetMs,
       maxCandidates:100,pricedTokens:new Map([[weth,{maxBorrow:1000n*unit}]])}});
 const a=scan("dfs"),b=scan("layered");
+const zeroPrefixView={...view,quotes:quotes.map((q,i)=>i<2?{...q,value:{num:1000n,den:1000n}}:q)};
+assert.equal(scan("dfs",6,zeroPrefixView,5000).opportunities.length,0,
+  "scanner passes strict cumulative gate through; zero-profit second prefix is rejected");
+const recoveryView={...view,quotes:quotes.map((q,i)=>({...q,
+  value:{num:[90n,120n,99n,99n,120n,90n][i]!,den:100n}}))};
+const recovered=scan("dfs",6,recoveryView,5000);
+assert.equal(recovered.opportunities.length,1);
+assert.equal(recovered.enumeration?.gateRule,"cumulative-positive-after-first");
+assert.deepEqual(recovered.opportunities,scan("layered",6,recoveryView,5000).opportunities);
 assert.equal(a.outcome,"ran");assert.equal(a.enumeration?.algorithm,"paired-dfs");
 assert.equal(b.enumeration?.algorithm,"paired-layered");
 assert.equal(a.opportunities.length,1);assert.equal(a.opportunities[0]!.seedEdges.length,6);

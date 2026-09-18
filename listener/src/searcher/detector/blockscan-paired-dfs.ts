@@ -22,7 +22,6 @@ export function resolvePairedEnumerationMethod(value?: string): PairedEnumeratio
   if (value === "layered") return value;
   throw new Error("SEARCHER_BLOCKSCAN_ENUMERATION_METHOD must be dfs or layered");
 }
-export const PAIRED_MAX_STEP_DROP_BPS = 10;
 export const aboveSpread = (num: bigint, den: bigint, bps: number): boolean =>
   num * 10_000n > den * BigInt(10_000 + bps);
 interface EnumerationInput {
@@ -67,8 +66,9 @@ class HalfLayer {
 }
 const gcd = (a: bigint, b: bigint): bigint => { while (b) [a, b] = [b, a % b]; return a; };
 
-/** 1..3 + 1..3 simple halves, joined by token. Both traversals share the exact
- * absolute 0.1pp step gate, sorted index, storage and join rules. No future-return
+/** 1..3 + 1..3 simple halves, joined by token. Both directions keep the first
+ * edge; subsequent prefixes must have cumulative reference value >1.
+ * Both traversals share this gate, sorted index, storage and join rules. No future-return
  * or signal-completion pruning. Live caller deadline remains explicitly partial. */
 function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) {
   if (!Number.isSafeInteger(input.minSpreadBps) || input.minSpreadBps < 0 ||
@@ -76,7 +76,7 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
     throw new Error("paired enumeration requires integer spread bps and 2..6 hops");
   const stats = { expanded: 0, completedFunding: 0, deadlineHit: false, closed: 0,
     halfPaths: 0, joins: 0, signalMatched: 0, indexedGateComparisons: 0,
-    gateSkippedBeforeConflicts: 0, maxStepDropBps: PAIRED_MAX_STEP_DROP_BPS,
+    gateSkippedBeforeConflicts: 0, gateRule: "cumulative-positive-after-first" as const,
     traversal, phase: "prepare" };
   const expired = () => stats.deadlineHit ||= Date.now() >= input.deadlineAtMs;
   if (expired()) return stats;
@@ -119,14 +119,16 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
       return left < right ? -1 : left > right ? 1 : x.quote.id.localeCompare(y.quote.id);
     });
   if (expired()) return stats;
-  const firstEligible = (ids: readonly number[], n: bigint, d: bigint): number => {
-    const left = 10000n * n, right = left - BigInt(PAIRED_MAX_STEP_DROP_BPS) * d;
-    if (right <= 0n) return 0;
+  const firstEligible = (ids: readonly number[], n: bigint, d: bigint, depth: number): number => {
+    // Both directions keep every valid first edge. Later cumulative value must
+    // strictly exceed 1; do not invert reverse-traversed execution quotes.
+    if (depth === 0) return 0;
     let low = 0, high = ids.length;
     while (low < high) {
       const mid = Math.floor((low + high) / 2), edge = edges[ids[mid]!]!;
       stats.indexedGateComparisons++;
-      if (left * edge.n >= right * edge.d) high = mid; else low = mid + 1;
+      const eligible = n * edge.n > d * edge.d;
+      if (eligible) high = mid; else low = mid + 1;
     }
     stats.gateSkippedBeforeConflicts += low;
     return low;
@@ -135,7 +137,7 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
     let n = 1n, d = 1n;
     for (let i = 0; i < path.length; i++) {
       const e = edges[path[reverse ? path.length - 1 - i : i]!]!;
-      if (10000n * n * e.n < (10000n * n - BigInt(PAIRED_MAX_STEP_DROP_BPS) * d) * e.d) return false;
+      if (i > 0 && n * e.n <= d * e.d) return false;
       n *= e.n; d *= e.d;
     }
     return true;
@@ -154,7 +156,7 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
     const path: number[] = [], executionPath: number[] = [];
     stats.phase = reverse ? "reverse" : "forward";
     const extend = (token: number, n: bigint, d: bigint, recurse: boolean): void => {
-      const ids = (reverse ? incoming : outgoing)[token]!, begin = firstEligible(ids, n, d);
+      const ids = (reverse ? incoming : outgoing)[token]!, begin = firstEligible(ids, n, d, path.length);
       for (let i = begin; i < ids.length; i++) {
         if ((stats.expanded++ & 4095) === 0 && expired()) return;
         const id = ids[i]!, edge = edges[id]!, next = reverse ? edge.from : edge.to;

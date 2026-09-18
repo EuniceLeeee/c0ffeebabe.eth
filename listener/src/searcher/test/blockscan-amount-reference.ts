@@ -63,9 +63,9 @@ assert.equal(marks.has("reverse-only"), false, "never invent reverse prices");
 assert(marks.get("tiny2")!.num > 0n, "no fixed-scale underflow across legs");
 assert.deepEqual(marks.get(W), { num: 1n, den: 1n });
 const duplicate = { ...forward, canonicalEdgeId: "a2" as TokenEdge["canonicalEdgeId"], executionVariantKey: "variant" };
-const medians = pricing(2, [[forward, 1], [duplicate, 1], [edge(U, W, "c"), 2], [edge(U, W, "d"), 3]]);
-const medianMark = tokenToWethReferences(medians, W).get(U)!;
-assert.equal(medianMark.num / medianMark.den, 2n, "variants cannot multiply one instance's votes");
+const alternatives = pricing(2, [[forward, 1], [duplicate, 1], [edge(U, W, "c"), 2], [edge(U, W, "d"), 3]]);
+const bestMark = tokenToWethReferences(alternatives, W).get(U)!;
+assert.equal(bestMark.num / bestMark.den, 3n, "choose the best available instance, not the median");
 const directWins = tokenToWethReferences(pricing(2, [[forward, 2], [edge(U, "x", "u-x"), 100], [edge("x", W, "x-w"), 100]]), W).get(U)!;
 assert.equal(directWins.num / directWins.den, 2n, "prefer direct to longer profitable cycles");
 

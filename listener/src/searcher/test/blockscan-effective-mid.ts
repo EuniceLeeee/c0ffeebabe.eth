@@ -243,7 +243,7 @@ test("effective leaves original Exact method selection unset and preserves its r
   }
 });
 
-test("one immutable sizing pass; shortest paths and instance-deduplicated medians", async () => {
+test("one immutable sizing pass; best available rates on shortest paths", async () => {
   const direct = edge(U, W, "u-direct", "one");
   const rows: PriceRow[] = [
     [direct, 2], [edge(U, W, "u-variant", "one"), 100],
@@ -262,8 +262,7 @@ test("one immutable sizing pass; shortest paths and instance-deduplicated median
     },
   });
   for (const [e] of rows) {
-    const expected = e.tokenIn === U ? 1_666_666_666_666_667n
-      : e.tokenIn === "linked" ? 833_333_333_333_334n : 50_000_000_000_000n;
+    const expected = e.tokenIn === "linked" ? 25_000_000_000_000n : 50_000_000_000_000n;
     assert.equal(row(snapshot, e).amountIn, expected, "later mid changes cannot reprice this pass");
     assert.equal(row(snapshot, e).effectiveMid, 11);
   }

@@ -27,10 +27,10 @@ function oracle(quotes: DfsQuote[], signals: DirectedPriceSignal[], funding: str
   const found = new Set<string>();
   const halfOK = (path: DfsQuote[]): boolean => {
     let n = 1n, d = 1n;
-    for (const edge of path) {
+    for (const [i, edge] of path.entries()) {
       if (!edge.value) return false;
       const nextN = n * edge.value.num, nextD = d * edge.value.den;
-      if ((nextN * d - n * nextD) * 10000n < -10n * d * nextD) return false;
+      if (i > 0 && nextN <= nextD) return false;
       n = nextN; d = nextD;
     }
     return true;
@@ -59,8 +59,8 @@ function oracle(quotes: DfsQuote[], signals: DirectedPriceSignal[], funding: str
   }
   return found;
 }
-const ring = [q("0", "f", "a"), q("1", "a", "b"), q("2", "b", "join"),
-  q("3", "join", "c"), q("4", "c", "d"), q("5", "d", "f", 120n)];
+const ring = [q("0", "f", "a", 101n), q("1", "a", "b", 101n), q("2", "b", "join", 101n),
+  q("3", "join", "c", 101n), q("4", "c", "d", 101n), q("5", "d", "f", 120n)];
 const originalSignal = signal("f", "5", "0");
 assert.deepEqual([...run(ring, [originalSignal])], [key(ring)], "join need not equal signal token");
 assert.equal(run(ring, [originalSignal], ["f"], 5).size, 0);
@@ -69,7 +69,7 @@ assert.throws(() => run(ring.map((e, i) => i === 5 ? { ...e, instance: ring[0]!.
 assert.equal(run(ring.map((e, i) => i === 3 ? { ...e, instance: ring[1]!.instance } : e), [originalSignal]).size, 0);
 assert.equal(run(ring, [], ["f"]).size, 0);
 assert.equal(run(ring, [{ ...originalSignal, num: 101n }]).size, 0, "strict signal threshold");
-assert.equal(run(ring.map((e, i) => i === 5 ? { ...e, num: 101n } : e), [originalSignal]).size, 0, "strict cycle threshold");
+assert.equal(run(ring.map((e, i) => ({ ...e, num: i === 5 ? 101n : 100n })), [originalSignal]).size, 0, "strict cycle threshold");
 assert.equal(run(ring, [signal("a", "0", "1")]).size, 0, "same-half pair cannot qualify a 6-hop ring");
 assert.equal(run(ring, [originalSignal], ["join"]).size, 1, "buy then sell orientation also qualifies");
 const alternative = { ...ring[5]!, id: "alternative", instance: "alternative-pool" };
@@ -78,6 +78,22 @@ const changed = [...ring]; changed[4] = q("4", "c", "a"); changed[5] = q("5", "a
 assert.deepEqual(run(changed, [originalSignal]), new Set(["0|5"]),
   "reject repeated-token long walk while retaining the genuine simple 2-hop shortcut");
 let callbacks = 0;
+// Both first edges lose 10%, then recover; a later losing edge is allowed
+// because each half's cumulative product still exceeds 1.
+const recovery = [q("0", "f", "a", 90n), q("1", "a", "b", 120n), q("2", "b", "join", 99n),
+  q("3", "join", "c", 99n), q("4", "c", "d", 120n), q("5", "d", "f", 90n)];
+assert.equal(run(recovery, [originalSignal], ["f"], 6, 0).size, 1);
+for (const second of [1, 4]) {
+  const failed = recovery.map((e, i) => i === second ? q(e.id, e.tokenIn, e.tokenOut, 100n) : e);
+  assert.equal(run(failed, [originalSignal], ["f"], 6, 0).size, 0,
+    "second prefix must recover in both directions");
+}
+for (const first of [0, 5]) {
+  const equal = recovery.map((e, i) => i === first ? q(e.id, e.tokenIn, e.tokenOut, 100n)
+    : i === (first === 0 ? 1 : 4) ? q(e.id, e.tokenIn, e.tokenOut, 100n) : e);
+  assert.equal(run(equal, [originalSignal], ["f"], 6, 0).size, 0,
+    "exactly 1 is not strictly positive, even if the whole cycle is positive");
+}
 assert.equal(resolvePairedEnumerationMethod(), "dfs");
 assert.equal(resolvePairedEnumerationMethod("dfs"), "dfs");
 assert.equal(resolvePairedEnumerationMethod("layered"), "layered");

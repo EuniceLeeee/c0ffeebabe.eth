@@ -238,22 +238,23 @@ test("one-edge increases, decreases and fees propagate through three hops; retai
   assert.equal(cache.stats.fullBuilds, 1, "valid deltas must stay incremental");
 });
 
-test("duplicate execution variants contribute the lowest instance rate, then the lower median across instances", () => {
+test("best execution variant and instance survive incremental updates and removals", () => {
   const lo = edge("a", W, "lo", "same"), hi = edge("a", W, "hi", "same");
   const two = edge("a", W, "two"), three = edge("a", W, "three"), four = edge("a", W, "four");
   const parent = edge("parent", "a", "parent");
   let p = fixture(20, [lo, hi, two, three, four, parent], [[lo, 1], [hi, 100], [two, 4], [three, 9], [four, 20], [parent, 3]]);
   const cache = new TokenToWethReferenceCache(W);
   cache.observe(baseline(p));
-  equalRate(parity(cache, p, "four instances").get("a"), { num: 4n, den: 1n }, "lower median, one vote per instance");
+  equalRate(parity(cache, p, "four instances").get("a"), { num: 100n, den: 1n }, "best variant across all instances");
   const transitions: [Row[], TokenEdge[], bigint][] = [
-    [[[hi, 200]], [], 4n], [[[lo, 8]], [], 8n], [[], [lo], 9n], [[], [hi], 9n],
-    [[], [four], 4n], [[[lo, 2]], [], 4n], [[[two, 4, 7500]], [], 2n],
+    [[[hi, 200]], [], 200n], [[[lo, 8]], [], 200n], [[], [lo], 200n], [[], [hi], 20n],
+    [[], [four], 9n], [[[lo, 2]], [], 9n], [[[two, 4, 7500]], [], 9n],
+    [[], [three], 2n], [[[two, 12, 7500]], [], 3n],
   ];
   for (const [updates, removals, expected] of transitions) {
     const current = next(p, updates, removals);
     cache.observe(delta(p, current));
-    equalRate(parity(cache, current, `variant block ${current.sourceBlock}`).get("a"), { num: expected, den: 1n }, "instance median");
+    equalRate(parity(cache, current, `variant block ${current.sourceBlock}`).get("a"), { num: expected, den: 1n }, "best net-fee rate");
     p = current;
   }
   assert.equal(cache.stats.fullBuilds, 1);
@@ -283,14 +284,14 @@ test("unavailable edges recover; shorter paths appear/disappear and change the t
   assert.equal(cache.stats.fullBuilds, 1);
 });
 
-test("equal-hop alternatives use lower medians and cycles cannot amplify a shortest path", () => {
+test("equal-hop alternatives use the best rate and cycles cannot amplify a shortest path", () => {
   const aw = edge("a", W, "aw"), bw = edge("b", W, "bw");
   const ca = edge("c", "a", "ca"), cb = edge("c", "b", "cb"), ac = edge("a", "c", "ac");
   const dc = edge("d", "c", "dc");
   let p = fixture(40, [aw, bw, ca, cb, ac, dc], [[aw, 2], [bw, 3], [ca, 5], [cb, 7], [ac, 10000], [dc, 11]]);
   const cache = new TokenToWethReferenceCache(W);
   cache.observe(baseline(p));
-  equalRate(parity(cache, p, "diamond").get("c"), { num: 10n, den: 1n }, "two path lower median");
+  equalRate(parity(cache, p, "diamond").get("c"), { num: 21n, den: 1n }, "best of two equal-hop paths");
   for (const [updates, removals] of [[[[aw, 20]], []], [[], [bw]], [[[bw, 0.1]], []]] as [Row[], TokenEdge[]][]) {
     const current = next(p, updates, removals);
     publishGuarded(cache, p, current);
@@ -359,7 +360,7 @@ test("valid sparse delta never reads graph.edges, untouched mid maps or saved un
   const after = work(cache);
   assert.equal(after.fullBuilds, before.fullBuilds);
   assert.equal(after.updatedEdges - before.updatedEdges, 1, "exactly one delta edge processed");
-  assert.equal(after.recomputedPairs - before.recomputedPairs, 1, "only the changed pair median recomputed");
+  assert.equal(after.recomputedPairs - before.recomputedPairs, 1, "only the changed pair best rate recomputed");
   assert(after.recomputedTokens - before.recomputedTokens > 0);
   assert(after.recomputedTokens - before.recomputedTokens <= 12, "work stays in the <=3-hop dependency neighborhood");
   assert.deepEqual(old, oldCopy);
