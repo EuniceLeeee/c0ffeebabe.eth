@@ -126,7 +126,7 @@ function makeMemo(
     }),
     verifiedIdentity: Object.freeze({}),
     compiledDescriptor: Object.freeze({}),
-    staticProjection: Object.freeze({}),
+    staticProjection: Object.freeze({ routes: [{ routeKey: "fixture" }], pricingInstances: [{ stateKey: "fixture" }] }),
     evidenceFingerprint: "ef",
     candidateSnapshot: candidate,
     memoFingerprint: "",
@@ -672,6 +672,12 @@ async function main(): Promise<void> {
   // Memo reuse rules (audit §8).
   const candidate = candidateFromLog(a);
   const familyId = String(candidate.familyId ?? "");
+  for (const staticProjection of [{}, { routes: [], pricingInstances: [] },
+    { routes: [{ routeKey: "fixture" }], pricingInstances: [] }]) {
+    assert.equal(canReuseMemo({ memo: makeMemo(candidate, { staticProjection }), candidate, cutoff: SOURCE,
+      familyId, currentAuthorityFingerprint: authorityFor(candidate) }), false,
+      "a matching semantic hash cannot restore a missing current pricing projection");
+  }
   assert.equal(
     canReuseMemo({
       memo: makeMemo(candidate),
@@ -902,9 +908,9 @@ async function main(): Promise<void> {
           pool: String(candidate.address),
           lineageId: familyId,
         }),
-        routes: Object.freeze([]),
+        routes: Object.freeze([{ routeKey: "route:0" }]),
         pricingInstances: Object.freeze([Object.freeze({
-          routes: Object.freeze([]),
+          routes: Object.freeze([{ routeKey: "route:0" }]),
           mids,
           unavailable,
         })]),

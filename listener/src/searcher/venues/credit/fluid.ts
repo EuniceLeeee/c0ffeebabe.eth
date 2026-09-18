@@ -13,6 +13,7 @@ import type {
   ProtocolDiscoveryContext,
 } from "../route-leg-adapter.js";
 import type { OnchainIdentityResolver } from "../identity.js";
+import { FLUID_CREDIT_DEBT_BPS_CANDIDATES } from "./fluid-family/credit.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
 const IMPLEMENTATION_SLOT = BigInt(
@@ -147,9 +148,10 @@ export const fluidCreditAdapter = Object.freeze({
   requiredInfraActionAdapterIds: ["erc20-approve"],
   creditActionAdapterIds: ["fluid-vault", "fluid-dex-liquidate"],
   creditPolicy: {
-    debtBpsCandidates: [8500n, 9500n, 10000n, 10400n, 10800n, 11200n],
-    quoteOutputByDebtBps: (collateralAmount, debtBps) =>
-      (collateralAmount * debtBps) / 10000n / 10n ** 12n,
+    debtBpsCandidates: FLUID_CREDIT_DEBT_BPS_CANDIDATES,
+    quoteOutputByDebtBps: () => {
+      throw new Error("legacy Fluid ratio quote removed: use strict current-oracle operate quote");
+    },
     blocksPrefixInversion: true,
   },
   discovery: fluidVaultDiscovery,

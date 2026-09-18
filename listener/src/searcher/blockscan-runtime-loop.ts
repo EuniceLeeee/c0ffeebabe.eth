@@ -67,7 +67,7 @@ import {
   type FinalSimulationRunnerInput,
   type FinalSimulationWorkRuntime,
 } from "./final-simulation-work-runtime.js";
-import { FLASH_SWAP_REPAY } from "./templates/path-template.js";
+import { FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY } from "./templates/path-template.js";
 import type {
   AdapterRuntimePrepareResult,
   AdapterRuntimeSnapshot,
@@ -3557,7 +3557,7 @@ export class BlockScanRuntimeLoop {
           recordPlanner(opp);
           const plans = await blockScanPlanner.planBlockScanFromSeedEdges(
             opp,
-            [FLASH_SWAP_REPAY],
+            [FLASH_LEND_SWAP_REPAY, FLASH_SWAP_REPAY],
           );
           plannerFamilyBudget.recordSuccess(opp.seedEdges);
           if (plans[0]) {

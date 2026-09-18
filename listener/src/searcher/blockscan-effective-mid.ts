@@ -133,7 +133,8 @@ export async function buildEffectiveMids(input: {
   // may recover only in the SAME touched subset raw is refreshing, not by
   // expanding every steady pass to all unpriced Ready graph directions.
   const keys = input.quoteGraph === undefined ? [...pricing.mids.keys()] :
-    input.quoteGraph.edges.filter(edge => scannerConsumesEdge(edge) && (
+    input.quoteGraph.edges.filter(edge => (scannerConsumesEdge(edge) ||
+      pricing.pricingStateKeyByEdgeKey?.has(blockScanEdgeKey(edge))) && (
       pricing.mids.has(blockScanEdgeKey(edge)) || input.touchedStateKeys === undefined ||
       input.touchedStateKeys.has(stateKeyFor(blockScanEdgeKey(edge), edge))
     )).map(blockScanEdgeKey);
@@ -194,7 +195,9 @@ export async function buildEffectiveMids(input: {
         source.hash === previous.source.hash.toLowerCase()));
   const fresh: number[] = [];
   for (const [index, { edgeId, edge }] of work.entries()) {
-    if (edge.leavesStandingPosition) { amountFor(index); unavailable(index, "unsupported"); }
+    if (edge.leavesStandingPosition && !pricing.pricingStateKeyByEdgeKey?.has(edgeId)) {
+      amountFor(index); unavailable(index, "unsupported");
+    }
     else if (closed()) { amountFor(index); unavailable(index, "cancelled"); }
     else {
       const prior = canReuse ? previous.rows.get(edgeId) : undefined;

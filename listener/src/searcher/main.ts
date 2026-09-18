@@ -5226,7 +5226,11 @@ export async function maybeSubmitBlockScanAtomic(params: {
         standingPosition: containsStandingPosition,
       };
     }
-    if (!standingGuard.allowed) {
+    // The marker authorizes LIVE standing-position submission. Explicitly
+    // non-broadcast historical diagnostics can evaluate cash EV while keeping
+    // the position visible. Taxonomy mismatches still fail closed.
+    if (!standingGuard.allowed && !(params.historicalReadOnly &&
+        standingGuard.reason === "standing_position_unauthorized")) {
       const error = standingGuard.reason === "edge_taxonomy_inconsistent"
         ? "standing guard: edge taxonomy inconsistent"
         : `standing position unauthorized: marker missing ${creditLiveMarkerPath}`;

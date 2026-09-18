@@ -121,22 +121,6 @@ export function tokenDelta(
   return matches[0].delta;
 }
 
-export function fluidDebtAmount(input: {
-  readonly collateralAmount: bigint;
-  readonly debtBps: bigint;
-  readonly supplyDecimals: number;
-  readonly borrowDecimals: number;
-}): bigint {
-  if (input.collateralAmount < 0n || input.debtBps < 0n) {
-    throw new Error("fluid-credit risk inputs cannot be negative");
-  }
-  let amount = input.collateralAmount * input.debtBps / 10_000n;
-  const decimalDelta = input.supplyDecimals - input.borrowDecimals;
-  if (decimalDelta > 0) amount /= 10n ** BigInt(decimalDelta);
-  else if (decimalDelta < 0) amount *= 10n ** BigInt(-decimalDelta);
-  return amount;
-}
-
 export function assertSource(
   actual: Extract<AdapterRequestResult, { readonly ok: true }>["source"],
   expected: Extract<AdapterRequestResult, { readonly ok: true }>["source"],

@@ -38,9 +38,12 @@ import type {
   CentralAdapterScheduler,
 } from "../adapter-work-intent.js";
 import {
+  bindRequestResultRound,
+  collectRequestProgramResults,
   defineCreditFamily,
   definedFamilyPluginContractSummary,
   type AnyDefinedStrictFamilyPlugin,
+  type CreditRiskSemantics,
   type RuntimeEvidence,
 } from "../venues/adapter-family-plugin.js";
 import {
@@ -71,8 +74,9 @@ import {
   FLUID_CREDIT_PROBE_ACTOR,
   FLUID_VAULT_FACTORY_INTERFACE,
   FLUID_VAULT_INTERFACE,
-  fluidDebtAmount,
 } from "../venues/credit/fluid-family/codec.js";
+import { fluidMaxBorrowRequest } from "../venues/credit/fluid-family/borrow-math.js";
+import { BORROW_STATE, stateFixture } from "../venues/credit/fluid-family/test/quote-fixture.js";
 import { FLUID_CREDIT_OPERATE_CALL_PATTERN_ID } from
   "../venues/credit/fluid-family/discovery.js";
 import { FLUID_CREDIT_PROBE_ACTOR_EVIDENCE_ID } from
@@ -88,6 +92,8 @@ const SUPPLY_B = ethers.getAddress(`0x${"33".repeat(20)}`);
 const BORROW_B = ethers.getAddress(`0x${"34".repeat(20)}`);
 const EXECUTOR = ethers.getAddress(`0x${"41".repeat(20)}`);
 const OTHER_EXECUTOR = ethers.getAddress(`0x${"42".repeat(20)}`);
+const TRANSACTION_ORIGIN = ethers.getAddress(`0x${"61".repeat(20)}`);
+const OTHER_ORIGIN = ethers.getAddress(`0x${"62".repeat(20)}`);
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_444,
   hash: `0x${"51".repeat(32)}`,
@@ -181,7 +187,9 @@ const runtimeEvidenceA = runtimeEvidence(descriptorA, SOURCE, "a");
 const runtimeEvidenceB = runtimeEvidence(descriptorB, SOURCE, "b");
 
 instanceCapabilityRejectsRawForgedAndStaleInputs();
+await dependentRiskProgramsStayBoundedAndAuthenticated();
 await happyPathPublishesOneCommonCreditGraphAndExecutes();
+await creditRiskUsesTrustedTransactionOrigin();
 await undeclaredDebtFailsBeforeSchedulerOrFamily();
 await routeAndRiskAuthorityRejectStructuralFakes();
 await familyBoxAuthorityRejectsForeignAndHotReloadBoxes();
@@ -196,8 +204,219 @@ await creditBatchStagesExactInstancePartition();
 
 console.log(
   "adapter Credit runtime PASS " +
-    "(issuer handles, central risk work, common Graph, execution fail-closed)",
+    "(issuer handles, bounded dependent risk work, common Graph, execution fail-closed)",
 );
+
+async function dependentRiskProgramsStayBoundedAndAuthenticated(): Promise<void> {
+  const cases = [
+    ["legacy", 1, true], ["chain", 3, true], ["four-rounds", 5, true],
+    ["failed-round", 2, false], ["duplicate-initial", 1, false],
+    ["duplicate-prior", 2, false], ["loop", 5, false],
+    ["forged-results", 2, false], ["abort", 2, false],
+    ["deadline", 2, false], ["stale", 2, false], ["caller", 1, false],
+    ["legacy-decode-failure", 1, false],
+    ["trusted-origin", 3, true], ["origin-drift", 2, false],
+    ["transport-origin-drift", 2, false], ["executor-drift", 2, false],
+    ["executor-mismatch", 0, false], ["legacy-promise", 1, false],
+    ["legacy-async", 0, false], ["decode-abort", 3, false],
+    ["decode-stale", 3, false], ["decode-origin-drift", 3, false],
+  ] as const;
+  for (const [mode, expectedIssues, succeeds] of cases) {
+    let decodes = 0;
+    let quotes = 0;
+    let stale = false;
+    let callerAvailable = true;
+    let trustedExecutor = mode === "executor-mismatch" ? OTHER_EXECUTOR : EXECUTOR;
+    const initialOrigin = mode.includes("origin") ? TRANSACTION_ORIGIN : undefined;
+    let trustedOrigin = initialOrigin;
+    const abort = new AbortController();
+    const control = { signal: abort.signal, deadlineAtMs: Date.now() + 60_000 };
+    const request = (id: string): AdapterRequest => ({
+      id, kind: "eth-call", to: VAULT_A, data: "0x12345678",
+      completion: "return-data", caller: { kind: "executor" },
+    });
+    const evidence: NonNullable<CreditRiskSemantics<
+      FluidCreditDescriptor, StrictFluidCreditRoute, { readonly amountOut: bigint }
+    >["evidence"]> = {
+      requirements: () => ({ transports: ["eth-call"], caller: "executor" }),
+      buildRequests: () => [request("initial")],
+      ...(mode.startsWith("legacy") ? {} : {
+        buildDependentProgram({ programInput, completedRound, initialResults, priorEvidence }) {
+          assert.equal(decodes, 0, "final decoder must wait for every dependent round");
+          assert.equal(programInput.collateralAmount, COLLATERAL_AMOUNT);
+          assert.deepEqual(programInput.source, SOURCE);
+          assert.equal(programInput.transactionOrigin, initialOrigin,
+            "only the detached trusted caller origin reaches Family code");
+          assert.equal(priorEvidence.length, completedRound);
+          assert.equal(collectRequestProgramResults(initialResults, priorEvidence).length,
+            completedRound + 1);
+          if (mode === "caller") callerAvailable = false;
+          if (completedRound === 1) {
+            if (mode === "abort") abort.abort();
+            if (mode === "deadline") control.deadlineAtMs = 0;
+            if (mode === "stale") stale = true;
+            if (mode === "origin-drift") trustedOrigin = OTHER_ORIGIN;
+            if (mode === "executor-drift") trustedExecutor = OTHER_EXECUTOR;
+          }
+          if (mode !== "loop" && completedRound === (mode === "four-rounds" ? 4 : 2)) {
+            return null;
+          }
+          const id = mode === "duplicate-initial" ? "initial" :
+            mode === "duplicate-prior" ? "round-0" : `round-${completedRound}`;
+          const round = bindRequestResultRound(
+            { transports: ["eth-call"], caller: "executor" }, [request(id)],
+          );
+          return mode === "forged-results" ? {
+            ...round,
+            decode: (results: readonly AdapterRequestResult[]) => ({
+              results: results.map((result) => ({ ...result })),
+            }),
+          } : round;
+        },
+      }),
+      decode({ programInput, results }) {
+        decodes++;
+        assert.equal(programInput.transactionOrigin, initialOrigin);
+        if (mode === "legacy-decode-failure") throw new Error("synthetic decode failure");
+        if (mode === "legacy-promise") {
+          return Promise.resolve({ amountOut: 123_456n }) as unknown as { readonly amountOut: bigint };
+        }
+        if (mode.startsWith("decode-")) {
+          if (mode === "decode-abort") abort.abort(new Error("decode aborted"));
+          if (mode === "decode-stale") stale = true;
+          if (mode === "decode-origin-drift") trustedOrigin = OTHER_ORIGIN;
+          throw new Error("decoder failed after retiring its context");
+        }
+        assert.equal(results.length, expectedIssues);
+        assert.deepEqual(results.map((result) => result.id),
+          ["initial", ...Array.from({ length: expectedIssues - 1 }, (_, index) => `round-${index}`)]);
+        assert(results.every((result) => result.ok));
+        return Object.freeze({ amountOut: 123_456n });
+      },
+    };
+    if (mode === "legacy-async") {
+      evidence.decode = (async () => ({ amountOut: 123_456n })) as unknown as typeof evidence.decode;
+    }
+    const { exact: _exact, ...definition } = mutableClone(plugin);
+    const defineSynthetic = () => defineCreditFamily<FluidCreditCandidate, FluidCreditIdentity,
+      FluidCreditDescriptor, StrictFluidCreditRoute, { readonly amountOut: bigint }>({
+      ...definition,
+      actionAdapters: plugin.actionAdapters,
+      execution: {
+        ...definition.execution,
+        buildFragment() { throw new Error("synthetic quote does not build an execution fragment"); },
+      },
+      credit: {
+        ...definition.credit,
+        risk: {
+          debtBpsCandidates: [DEBT_BPS], blocksPrefixInversion: true, evidence,
+          quoteOutputByDebtBps({ evidence: finalEvidence }) {
+            quotes++;
+            assert(finalEvidence !== undefined);
+            return finalEvidence.amountOut;
+          },
+        },
+      },
+    });
+    if (mode === "legacy-async") {
+      assert.throws(defineSynthetic, /synchronous|async/);
+      continue;
+    }
+    const synthetic = defineSynthetic();
+    const { family: syntheticFamily } = loadedFamily(synthetic);
+    const lifecycle = await executeCreditFamilyInstanceLifecycle({
+      family: syntheticFamily, match: creditLifecycleMatch(VAULT_A),
+      source: SOURCE, generation: SOURCE.generation,
+      runtime: creditLifecycleHarness({ vault: VAULT_A, supplyToken: SUPPLY_A, borrowToken: BORROW_A }),
+    });
+    assert(lifecycle.instance !== null);
+    const route = only(prepareCreditFamilyRoutes({
+      family: syntheticFamily, instance: lifecycle.instance,
+      source: SOURCE, generation: SOURCE.generation,
+    }).routes);
+    const harness = runtimeHarness({
+      descriptor: lifecycle.instance.descriptor as FluidCreditDescriptor,
+      currentSource: SOURCE, executor: EXECUTOR,
+      result: (declared, source) => {
+        if (mode === "transport-origin-drift" && declared.id === "round-0") trustedOrigin = OTHER_ORIGIN;
+        return mode === "failed-round" && declared.id === "round-0"
+          ? { id: declared.id, ok: false, source, failure: "rpc" }
+          : { id: declared.id, ok: true, source, completion: "returned", data: "0x1234",
+              provenance: { kind: "fixture", fingerprint: "generic-credit-round" } };
+      },
+    });
+    const invocation = {
+      family: syntheticFamily, route, collateralAmount: COLLATERAL_AMOUNT,
+      debtBps: DEBT_BPS, executor: EXECUTOR, runtimeEvidence: [],
+      transactionOrigin: OTHER_ORIGIN, // Consumer-supplied extras must not enter the Family input.
+      source: SOURCE, generation: SOURCE.generation, control,
+      runtime: {
+        ...harness.runtime,
+        callerAuthority: { bind(binding: Parameters<CentralAdapterRuntime["callerAuthority"]["bind"]>[0]) {
+          assert.equal(binding.stage, "runtime-evidence");
+          assert.equal(binding.subject.routeKey, route.routeKey);
+          assert.deepEqual(binding.source, SOURCE);
+          assert.equal(binding.callerRole, "executor");
+          return callerAvailable ? { executor: trustedExecutor,
+            ...(trustedOrigin === undefined ? {} : { transactionOrigin: trustedOrigin }) } : {};
+        } },
+        generationFence: { assertCurrent(generation: number, source: CanonicalSource) {
+          if (stale) throw new Error("retired dependent generation");
+          harness.runtime.generationFence.assertCurrent(generation, source);
+        } },
+      },
+    };
+    const outcome = await executeCreditRiskQuote(invocation);
+    assert.equal(harness.issues.length, expectedIssues, mode);
+    assert(harness.issues.every((issue) => issue.control === control &&
+      issue.source.hash === SOURCE.hash && issue.generation === SOURCE.generation &&
+      issue.subject.routeKey === route.routeKey && issue.callerAuthority.executor === EXECUTOR), mode);
+    assert.equal(decodes, succeeds || mode === "legacy-decode-failure" ||
+      mode === "legacy-promise" || mode.startsWith("decode-") ? 1 : 0, mode);
+    assert.equal(quotes, succeeds ? 1 : 0, mode);
+    if (succeeds) {
+      assert.equal(outcome.status, "resolved", mode);
+      assert.equal(outcome.amountOut, 123_456n);
+      assert.equal(outcome.evidenceRefs.filter((ref) => ref.startsWith("risk-transport:")).length, expectedIssues);
+      assert.equal("evidence" in outcome, false);
+      issueCreditExecutionHandle({ ...invocation, risk: outcome, minAmountOut: outcome.amountOut });
+      assert.throws(() => issueCreditExecutionHandle({
+        ...invocation, risk: Object.freeze({ ...outcome }), minAmountOut: outcome.amountOut,
+      }), /must be issued by the central runtime/);
+    } else {
+      assert.equal(outcome.status, "unresolved", mode);
+      assert.equal("amountOut" in outcome, false);
+      if (mode === "loop") assert.match(outcome.reasonCode, /round-budget-exhausted/);
+      if (mode === "forged-results") assert.match(outcome.reasonCode, /preserve issued request results/);
+      if (mode === "legacy-decode-failure") assert.equal(outcome.reasonCode, "risk-work:decode:family-decode");
+      if (mode === "legacy-promise") assert.equal(outcome.reasonCode, "risk-work:decode:family-decode");
+      if (mode === "decode-abort") assert.match(outcome.reasonCode, /decode aborted/);
+      if (mode === "decode-stale") assert.match(outcome.reasonCode, /retired dependent generation/);
+      if (mode === "decode-origin-drift") assert.match(outcome.reasonCode, /caller context changed/);
+    }
+  }
+}
+
+async function creditRiskUsesTrustedTransactionOrigin(): Promise<void> {
+  const harness = runtimeHarness({
+    descriptor: descriptorA, currentSource: SOURCE, executor: EXECUTOR,
+    transactionOrigin: TRANSACTION_ORIGIN,
+  });
+  const invocation = {
+    family, route: routeA, collateralAmount: COLLATERAL_AMOUNT, debtBps: DEBT_BPS,
+    executor: EXECUTOR, runtimeEvidence: runtimeEvidenceA,
+    source: SOURCE, generation: SOURCE.generation, runtime: harness.runtime,
+    transactionOrigin: OTHER_ORIGIN,
+  };
+  const risk = await executeCreditRiskQuote(invocation);
+  assert.equal(risk.status, "resolved");
+  assert.equal(harness.issues.length, 3);
+  assert(harness.issues.every((issue) => issue.callerAuthority.transactionOrigin === TRANSACTION_ORIGIN));
+  const operate = only(harness.issues[2]!.requests);
+  assert.equal(operate.kind, "effect-delta-simulation");
+  if (operate.kind !== "effect-delta-simulation") throw new Error("expected operate effect proof");
+  assert.equal(operate.call.executionMode, "impersonated-call-frame");
+}
 
 function instanceCapabilityRejectsRawForgedAndStaleInputs(): void {
   const attempts: Array<{
@@ -309,11 +528,12 @@ async function happyPathPublishesOneCommonCreditGraphAndExecutes(): Promise<void
   });
   if (risk.status !== "resolved") throw new Error(risk.reasonCode);
   assert.equal(risk.status, "resolved");
-  assert.equal(harness.issues.length, 1);
+  assert.equal(harness.issues.length, 3);
   assert.equal(harness.issues[0]?.schedule.lane, "critical-proof");
-  assert.equal(harness.issues[0]?.schedule.transportPool, "effect-sim");
+  assert.deepEqual(harness.issues.map((issue) => issue.schedule.transportPool),
+    ["state-read", "state-read", "effect-sim"]);
   assert.equal(risk.blocksPrefixInversion, true);
-  assert.equal(risk.amountOut, debtAmount(descriptorA));
+  assert.equal(risk.amountOut, debtAmount());
   assert(Object.isFrozen(risk));
 
   const executionHandle = issueCreditExecutionHandle({
@@ -1045,6 +1265,9 @@ function observedFluidCreditPlugin(
             callbacks.riskBuild++;
             return evidence.buildRequests(input);
           },
+          buildDependentProgram(input) {
+            return evidence.buildDependentProgram?.(input) ?? null;
+          },
           decode(input) {
             callbacks.riskDecode++;
             return evidence.decode(input);
@@ -1292,6 +1515,8 @@ function runtimeHarness(input: {
   readonly descriptor: FluidCreditDescriptor;
   readonly currentSource: CanonicalSource;
   readonly executor: string;
+  readonly transactionOrigin?: string;
+  readonly result?: (request: AdapterRequest, source: CanonicalSource) => AdapterRequestResult;
 }): {
   readonly runtime: CentralAdapterRuntime;
   readonly issues: Array<Parameters<CentralAdapterScheduler["issueExecutor"]>[0]>;
@@ -1308,14 +1533,14 @@ function runtimeHarness(input: {
           },
           assertCallerBinding(binding) {
             assert.equal(binding.familyId, input.descriptor.familyId);
-            assert.equal(binding.callerRef.kind, "executor");
+            assert(["none", "executor"].includes(binding.callerRef.kind));
           },
           assertWithinBudget(familyIdValue, requests) {
             assert.equal(familyIdValue, input.descriptor.familyId);
             assert.deepEqual(requests, issue.requests);
           },
           execute: async ({ requests, source }) => Object.freeze(
-            requests.map((request) => riskResult(request, source, input)),
+            requests.map((request) => input.result?.(request, source) ?? riskResult(request, source, input)),
           ),
           sealStaticEvidenceReuseProof: () => ({
             proofHash: "ab".repeat(32),
@@ -1343,7 +1568,8 @@ function runtimeHarness(input: {
       },
     },
     callerAuthority: {
-      bind: () => Object.freeze({ executor: input.executor }),
+      bind: () => Object.freeze({ executor: input.executor,
+        ...(input.transactionOrigin === undefined ? {} : { transactionOrigin: input.transactionOrigin }) }),
     },
     policy: {
       bind(policyInput) {
@@ -1352,7 +1578,8 @@ function runtimeHarness(input: {
           lane: "critical-proof" as const,
           deadlineAtMs: 10_000,
           maxAttempts: 1,
-          transportPool: "effect-sim" as const,
+          transportPool: policyInput.requirements.transports.includes("effect-delta-simulation")
+            ? "effect-sim" as const : "state-read" as const,
           fairnessKey: policyInput.subjectKey,
         });
       },
@@ -1369,13 +1596,25 @@ function riskResult(
   input: {
     readonly descriptor: FluidCreditDescriptor;
     readonly executor: string;
+    readonly transactionOrigin?: string;
   },
 ): AdapterRequestResult {
+  if (request.kind === "eth-call") {
+    const result = stateFixture(source).find((item) => item.id === request.id);
+    assert(result !== undefined, `unexpected Credit state request ${request.id}`);
+    return Object.freeze({ ...result, provenance: Object.freeze({
+      kind: "fixture", fingerprint: "credit-runtime-current-state-v1",
+    }) });
+  }
   assert.equal(request.kind, "effect-delta-simulation");
   if (request.kind !== "effect-delta-simulation") {
     throw new Error("unexpected Credit risk request");
   }
-  const debt = debtAmount(input.descriptor);
+  assert.equal(request.id, "credit-exact-operate");
+  assert.equal(request.call.executionMode,
+    input.transactionOrigin === undefined ? "top-level" : "impersonated-call-frame");
+  const debt = debtAmount();
+  assert.equal(FLUID_VAULT_INTERFACE.decodeFunctionData("operate", request.call.data)[2], debt);
   return Object.freeze({
     id: request.id,
     ok: true as const,
@@ -1426,17 +1665,12 @@ async function resolvedRisk(input: {
   });
   if (risk.status !== "resolved") throw new Error(risk.reasonCode);
   assert.equal(risk.status, "resolved");
-  assert.equal(risk.amountOut, debtAmount(input.descriptor));
+  assert.equal(risk.amountOut, debtAmount());
   return risk;
 }
 
-function debtAmount(descriptor: FluidCreditDescriptor): bigint {
-  return fluidDebtAmount({
-    collateralAmount: COLLATERAL_AMOUNT,
-    debtBps: DEBT_BPS,
-    supplyDecimals: descriptor.supplyDecimals,
-    borrowDecimals: descriptor.borrowDecimals,
-  });
+function debtAmount(): bigint {
+  return fluidMaxBorrowRequest(COLLATERAL_AMOUNT, BORROW_STATE, DEBT_BPS);
 }
 
 function snapshotCallbacks(): CallbackCounters {

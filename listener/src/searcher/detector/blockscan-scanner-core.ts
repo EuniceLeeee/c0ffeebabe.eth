@@ -3,7 +3,7 @@ import { enumeratePairedDfs, enumeratePairedLayered, type PairedEnumerationMetho
 import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "./detector.js";
 import { type TokenEdge, v4PoolId } from "../planner/token-graph.js";
-import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
+import { pathLeavesStandingPosition, isBlockScanConversionEdge } from "../strategy-taxonomy.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "../venues/route-instance-identity.js";
 import {
@@ -170,7 +170,7 @@ export function scanBlockStateFromResolvedMids(input: {
   onTiming?: (timing: BlockScanScanTiming) => void;
 }): BlockScanOutcome {
   const started = Date.now(), deadlineAtMs = started + input.cfg.budgetMs;
-  const eligibleEdges = input.edges.filter(edge => !pathLeavesStandingPosition([edge]) &&
+  const eligibleEdges = input.edges.filter(edge => isBlockScanConversionEdge(edge) &&
     (!input.edgeEligible || input.edgeEligible(edge)));
   const edgesById = new Map(eligibleEdges.map(edge => [blockScanEdgeKey(edge), edge]));
   const view = input.usdView ?? buildBlockScanUsdView(eligibleEdges, input.mids, input.cfg.usdSignalPairsPerToken);
@@ -204,7 +204,7 @@ export function scanBlockStateFromResolvedMids(input: {
         cycleId: canonicalRing.join("|"), cycleFingerprint: cycleFingerprint(input.sourceBlock, ringTokens),
         seedEdges, flashToken, coarseSpreadBps: estSpreadBps, coarseMaxInput: maxBorrow,
         searchSeed: { startToken: flashToken, searchCenter, maxInput: maxBorrow },
-        leavesStandingPosition: false, affectedPools: uniqueLowercase(seedEdges.map(edgeVenueIdentity)),
+        leavesStandingPosition: pathLeavesStandingPosition(seedEdges), affectedPools: uniqueLowercase(seedEdges.map(edgeVenueIdentity)),
         affectedTokens: canonicalRing,
       };
       const key = directedRouteFingerprint(seedEdges);

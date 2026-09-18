@@ -34,12 +34,32 @@ import { assertAtomicBlockScanRuntime } from
   "../detector/blockscan-scanner-production.js";
 import { PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND } from
   "../runtime-evidence.js";
-import { executeFamilyExactQuote } from
+import { executeCreditFamilyInstanceLifecycle, executeFamilyExactQuote,
+  reissuePreparedInstanceAuthority, reissuePreparedInstanceRouteHandles,
+  assertIssuedPreparedFamilyPricingStateInstance } from
   "../venues/adapter-family-runtime.js";
+import { prepareCreditFamilyRoutes, projectCreditRouteGraph } from "../adapter-credit-runtime.js";
+import type { CentralAdapterRuntime } from "../adapter-work-intent.js";
+import { createBoundedRequestExecutor, type AdapterRequest, type AdapterRequestResult } from
+  "../venues/adapter-request-program.js";
+import { defineCreditFamily, definedFamilyPluginContractSummary } from "../venues/adapter-family-plugin.js";
+import { capabilityManifestHash, FAMILY_CAPABILITY_NAMES, FamilyCapabilityCatalog, asPricedFamily } from
+  "../venues/family-capability-catalog.js";
+import { plugin as fluidCreditStrictFamilyPlugin } from "../venues/production-families/fluid-credit.production.js";
+import { FLUID_CREDIT_PROBE_ACTOR, FLUID_VAULT_FACTORY_INTERFACE, FLUID_VAULT_INTERFACE } from
+  "../venues/credit/fluid-family/codec.js";
+import { FLUID_CREDIT_PROBE_ACTOR_EVIDENCE_ID } from "../venues/credit/fluid-family/identity.js";
+import { BORROW_STATE, stateFixture } from "../venues/credit/fluid-family/test/quote-fixture.js";
+import { StrictAdapterFamilyShadowCatalogPublicationRoot, createStrictCatalogConsumer,
+  strictPricingPublicationKeysByFamily } from "../adapter-family-shadow-catalog-publication.js";
+import { catalogDiscoverySourceFingerprint, createCatalogStateInstanceMutationIssuer,
+  createCatalogSourceTransitionIssuer, createCatalogTerminalRemovalIssuer } from
+  "../adapter-family-catalog-publication.js";
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
 import { blockScanEdgeKey, createVerifiedGraphView } from
   "../venues/blockscan-state-capability.js";
+import { scannerConsumesEdge } from "../blockscan-pricing-delta.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "../venues/production-family-composition.js";
 import type {
@@ -88,6 +108,8 @@ const pool = Object.freeze({
     blockTimestampLast: 1,
   }),
 });
+
+await creditOptionalCapabilities();
 
 const publication = await runUniv2Lifecycle(STARTUP, pool);
 const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
@@ -3191,5 +3213,263 @@ assert.throws(
   /absent from Graph/,
   "the ready pricing index must reject a graph missing a pricing route",
 );
+
+async function creditOptionalCapabilities(): Promise<void> {
+  const vault = `0x${"71".repeat(20)}`;
+  const supply = `0x${"72".repeat(20)}`;
+  const borrow = `0x${"73".repeat(20)}`;
+  const factory = `0x${"74".repeat(20)}`;
+  const collateral = 1_000n * 10n ** 18n;
+  function mutableDefinition<T>(value: T): T {
+    if (Array.isArray(value)) return value.map(mutableDefinition) as T;
+    if (value !== null && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([key, entry]) =>
+        [key, mutableDefinition(entry)])) as T;
+    }
+    return value;
+  }
+  // Real Family programs and centrally issued handles; only transport is synthetic.
+  function fixtureRuntime(source: CanonicalSource, options: {
+    readonly failPricing?: boolean;
+    readonly failOperate?: boolean;
+    readonly onRequest?: (request: AdapterRequest) => void;
+    readonly doubledRate?: boolean;
+  } = {}): CentralAdapterRuntime {
+    const result = (request: AdapterRequest): AdapterRequestResult => {
+      options.onRequest?.(request);
+      const state = stateFixture(source).find((entry) => entry.id === request.id);
+      if (state !== undefined) {
+        if (options.failPricing) throw new Error("fixture pricing read failed");
+        if (request.id === "credit-current-oracle" && options.doubledRate && state.ok) {
+          return { ...state, data: ethers.AbiCoder.defaultAbiCoder().encode(
+            ["uint256"], [BORROW_STATE.oracleRate * 2n],
+          ) };
+        }
+        return state;
+      }
+      const base = { id: request.id, ok: true as const, source,
+        provenance: { kind: "session-credit-fixture", fingerprint: request.id },
+        completion: "returned" as const };
+      if (request.kind === "effect-delta-simulation") {
+        if (options.failOperate) throw new Error("fixture operate failed");
+        const [, amountIn, amountOut] = FLUID_VAULT_INTERFACE.decodeFunctionData("operate", request.call.data);
+        const actor = request.call.caller.kind === "verified-actor" ? FLUID_CREDIT_PROBE_ACTOR : EXECUTOR;
+        if (request.id === "credit-exact-operate") {
+          assert.equal(request.call.executionMode, "impersonated-call-frame");
+        }
+        return { ...base,
+          data: FLUID_VAULT_INTERFACE.encodeFunctionResult("operate", [1n, amountIn, amountOut]),
+          effects: { tokenDeltas: [
+            { token: supply, account: actor, delta: -BigInt(amountIn) },
+            { token: borrow, account: actor, delta: BigInt(amountOut) },
+          ] },
+        };
+      }
+      const data = request.id === "vault-constants"
+        ? FLUID_VAULT_INTERFACE.encodeFunctionResult("constantsView", [[
+            factory, factory, ethers.ZeroAddress, ethers.ZeroAddress,
+            supply, borrow, 18, 6, 1n,
+            ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash,
+          ]])
+        : request.kind === "get-code" ? "0x6000"
+        : request.id === "factory-reverse-vault"
+          ? FLUID_VAULT_FACTORY_INTERFACE.encodeFunctionResult("getVaultAddress", [vault])
+          : (() => { throw new Error(`unexpected Credit fixture request ${request.id}`); })();
+      return { ...base, data };
+    };
+    return {
+      clock: { nowMs: () => 1_000 },
+      generationFence: { assertCurrent(generation, actual) {
+        assert.equal(generation, source.generation);
+        assert.deepEqual(actual, source);
+      } },
+      callerAuthority: { bind: () => ({ executor: EXECUTOR, transactionOrigin: ORIGIN,
+        verifiedActors: { [FLUID_CREDIT_PROBE_ACTOR_EVIDENCE_ID]: FLUID_CREDIT_PROBE_ACTOR } }) },
+      policy: { bind: input => ({ lane: "background", deadlineAtMs: 100_000, maxAttempts: 1,
+        transportPool: "state-read", fairnessKey: input.subjectKey }) },
+      budgets: { assertAdmitted() {} },
+      scheduler: { issueExecutor(issue) {
+        return {
+          executor: createBoundedRequestExecutor({
+            assertSupported: requirements => assert.deepEqual(requirements, issue.requirements),
+            assertCallerBinding() {},
+            assertWithinBudget: (_familyId, requests) => assert.deepEqual(requests, issue.requests),
+            execute: async ({ requests }) => requests.map(result),
+            sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
+          }),
+          timing: () => ({ queueWaitMs: 0, transportWallMs: 1, attempts: 1 }),
+        };
+      } },
+    };
+  }
+
+  for (const slots of ["none", "pricing-only", "exact-only", "both"]) {
+    const priced = slots === "both";
+    const { pricing: _pricing, exact: _exact, ...legacy } = fluidCreditStrictFamilyPlugin;
+    const plugin = priced ? fluidCreditStrictFamilyPlugin : defineCreditFamily({
+      ...mutableDefinition({
+        ...legacy,
+        ...(slots === "pricing-only" ? { pricing: _pricing } : {}),
+        ...(slots === "exact-only" ? { exact: _exact } : {}),
+      }),
+      actionAdapters: fluidCreditStrictFamilyPlugin.actionAdapters,
+    });
+    const entries = FAMILY_CAPABILITY_NAMES.map(capability => ({
+      familyId: plugin.manifest.familyId, capability, contractVersion: "session-credit-fixture-v1",
+      contentHash: ethers.sha256(ethers.toUtf8Bytes(capability)).slice(2),
+      semanticDependencies: [`contract:${capability}`], provenanceCommit: null,
+    }));
+    const catalog = new FamilyCapabilityCatalog({
+      modules: [{ sourceFile: "fixture/session-credit.production.ts", plugin,
+        definitionBoundaryHash: definedFamilyPluginContractSummary(plugin).definitionBoundaryHash }],
+      generatedManifest: { format: "adapter-family-capabilities-v1", entries,
+        manifestHash: capabilityManifestHash(entries) },
+    });
+    const family = catalog.forStrictFamily(plugin.manifest.familyId);
+    assert.throws(() => catalog.forFamily(plugin.manifest.familyId), /unknown|not|route/i,
+      "pricing does not change Credit taxonomy");
+    const lifecycle = await executeCreditFamilyInstanceLifecycle({
+      family, source: STARTUP, generation: STARTUP.generation, runtime: fixtureRuntime(STARTUP),
+      match: { matchedPatternId: "fluid-credit-operate-call", observation: {
+        kind: "call", source: STARTUP, target: vault, sender: EXECUTOR,
+        data: FLUID_VAULT_INTERFACE.encodeFunctionData("operate", [0n, collateral, 1_000_000n, EXECUTOR]),
+      } },
+    });
+    assert(lifecycle.instance, JSON.stringify(lifecycle.outcomes));
+    const instance = lifecycle.instance;
+    assert.equal(instance.pricingInstances.length, priced ? 1 : 0);
+    if (priced) {
+      const authority = reissuePreparedInstanceAuthority({ family, instance, source: CURRENT, generation: CURRENT.generation });
+      const reissued = reissuePreparedInstanceRouteHandles({ family: asPricedFamily(family),
+        instance: authority, source: CURRENT, generation: CURRENT.generation });
+      for (const [owner, source] of [[instance, STARTUP], [authority, CURRENT], [reissued, CURRENT]] as const) {
+        assertIssuedPreparedFamilyPricingStateInstance({ family, instance: owner,
+          pricing: owner.pricingInstances[0]!, source, generation: source.generation });
+      }
+      assert.notEqual(instance.pricingInstances[0], reissued.pricingInstances[0]);
+      assert.throws(() => assertIssuedPreparedFamilyPricingStateInstance({ family, instance,
+        pricing: reissued.pricingInstances[0]!, source: STARTUP, generation: STARTUP.generation }), /issuer-bound/);
+    }
+    const publication = prepareCreditFamilyRoutes({ family, instance,
+      source: STARTUP, generation: STARTUP.generation });
+    const graph = buildFamilyRouteGraphView({ routes: [], creditRoutes:
+      publication.routes.map(route => projectCreditRouteGraph({ family, route })) });
+    const root = new StrictProductionRuntimeRoot({ catalog, readySource: STARTUP,
+      readyGraph: graph.edges, readyInstances: [instance], readyFundingAssets: [] });
+    const edgeKey = graph.edges[0]!.canonicalEdgeId;
+    assert.equal(root.pricingIndex().stateKeyByEdgeKey.has(edgeKey), priced);
+    assert.equal(root.pricingIndex().familyIdByEdgeKey.has(edgeKey), priced);
+    assert.equal(root.pricingIndex().edgeIdByRouteIdentity.size, priced ? 1 : 0);
+    assert.deepEqual(root.pricingIndex().expectedEdgeKeys, priced ? [edgeKey] : []);
+    assert.equal(scannerConsumesEdge(graph.edges[0]!), false,
+      "Credit pricing coverage must not expand scanner consumption");
+    const shadow = new StrictAdapterFamilyShadowCatalogPublicationRoot({ catalog, chainId: "1",
+      terminalRemovalAuthority: createCatalogTerminalRemovalIssuer().authority,
+      sourceTransitionAuthority: createCatalogSourceTransitionIssuer().authority,
+      stateMutationAuthority: createCatalogStateInstanceMutationIssuer().authority });
+    const stage = shadow.stageCreditFamily({ family, instance, publication });
+    assert.equal(stage.instances[0]!.pricingEntries.size, priced ? 1 : 0);
+    const sourceAnchors = plugin.discovery.sources.map(sourceId => ({
+      familyId: plugin.manifest.familyId, sourceId,
+      sourceFingerprint: catalogDiscoverySourceFingerprint({ familyId: plugin.manifest.familyId,
+        sourceId, source: STARTUP }),
+      authority: "append-only-nomination" as const, status: "complete" as const,
+      completeThroughBlock: STARTUP.number, completeThroughHash: STARTUP.hash,
+    }));
+    if (priced) {
+      const bundle = stage.instances[0]!;
+      const [key, entry] = [...bundle.pricingEntries][0]!;
+      const forged = { ...stage, instances: [{ ...bundle, pricingEntries:
+        new Map([[key, { ...entry, value: Object.freeze({ ...entry.value }) }]]) }] };
+      assert.throws(() => shadow.prepare({ source: STARTUP, previous: null,
+        stages: [forged], sourceAnchors }), /pricing state was not staged/);
+    }
+    const prepared = shadow.prepare({ source: STARTUP, previous: null, stages: [stage], sourceAnchors });
+    assert.equal(await shadow.compareAndPublish({ expected: null, staged: prepared,
+      verifyCanonicalSource() {}, assertGenerationCurrent() {} }), true);
+    const committed = shadow.capture()!;
+    assert.equal(committed.views.edges[0]!.canonicalEdgeId, edgeKey);
+    assert.equal(committed.views.edges[0]!.leavesStandingPosition, true);
+    const keys = strictPricingPublicationKeysByFamily({ views: committed.views, familyId: plugin.manifest.familyId });
+    assert.equal(keys.length, priced ? 1 : 0);
+    if (priced) {
+      assert.equal(committed.views.pricingByPublicationKey.get(keys[0]!), instance.pricingInstances[0]);
+      assert.equal(createStrictCatalogConsumer(committed.views).resolvePricingMid({
+        pricingPublicationKey: keys[0]!, routeKey: publication.routes[0]!.routeKey,
+      }).kind, "mid");
+    }
+    const reads: string[] = [];
+    const session = await root.createSession({ source: CURRENT, fundingAssets: [],
+      runtime: fixtureRuntime(CURRENT, { doubledRate: true, onRequest: request => reads.push(request.id) }) });
+    const edge = session.edges[0]!;
+    assert.equal(edge.slotKind, "lend");
+    assert.equal(edge.leavesStandingPosition, true);
+    assert.equal(session.blocksPrefixInversion(edge), true);
+    assert.equal(session.currentPricingForEdge(edge)?.status ?? null, priced ? "priced" : null);
+    assert.equal(reads.length, priced ? 3 : 0);
+    if (priced) {
+      const pricing = session.currentPricingForEdge(edge);
+      assert(pricing?.status === "priced");
+      const startupMid = instance.pricingInstances[0]!.mids.get(instance.routes[0]!.routeKey)!;
+      assert.equal(pricing.mid.mid, startupMid.mid * 2);
+      assert.equal(session.stateKeyForEdge(edge), String(instance.pricingInstances[0]!.stateKey).toLowerCase());
+      const refreshedExact = await session.issueExact({ edge, amountIn: collateral,
+        executor: EXECUTOR, runtimeEvidence: [], requireChainAmountQuote: true });
+      assert.equal(session.buildExecution({ edge, exact: refreshedExact,
+        minAmountOut: refreshedExact.amountOut, executor: EXECUTOR }).status, "resolved",
+        "refreshed Credit pricing must retain its authenticated generic Exact route");
+      const touched = await root.createSession({ source: CURRENT, fundingAssets: [],
+        touchedPools: new Set([session.stateKeyForEdge(edge)!]), runtime: fixtureRuntime(CURRENT) });
+      assert.equal(touched.currentPricingForEdge(touched.edges[0]!)?.status, "priced");
+      const failed = await root.createSession({ source: CURRENT, fundingAssets: [],
+        runtime: fixtureRuntime(CURRENT, { failPricing: true }) });
+      assert.equal(failed.currentPricingForEdge(failed.edges[0]!)?.status, "unresolved");
+      assert.equal(failed.edges[0]!.canonicalEdgeId, edgeKey);
+      assert.equal(failed.creationTiming.failedInstanceCount, 1);
+    }
+    const exactReads: string[] = [];
+    const exactSession = await root.createSession({ source: CURRENT, kind: "exact", fundingAssets: [],
+      requiredEdgeIds: new Set([edgeKey]),
+      runtime: fixtureRuntime(CURRENT, { onRequest: request => exactReads.push(request.id) }) });
+    assert.deepEqual(exactReads, [], "reissuing Exact authority performs no pricing reads");
+    const exactEdge = exactSession.edges[0]!;
+    assert.deepEqual(exactSession.creditDebtBpsCandidates({ edges: [exactEdge] }),
+      priced ? [0n] : [...plugin.credit.risk.debtBpsCandidates],
+      "priced Credit reuses effective's ordinary Exact, not a separate debt sizing grid");
+    const request = { edge: exactEdge, amountIn: collateral, executor: EXECUTOR, runtimeEvidence: [] };
+    const risk = await exactSession.issueExact({ ...request, creditDebtBps: 8_500n });
+    assert("debtBps" in risk);
+    const riskExecution = exactSession.buildExecution({ edge: exactEdge, exact: risk,
+      minAmountOut: risk.amountOut, executor: EXECUTOR });
+    assert.equal(riskExecution.status, "resolved");
+    if (priced) {
+      for (const requireChainAmountQuote of [false, true]) {
+        const exact = await exactSession.issueExact({ ...request, requireChainAmountQuote });
+        assert.equal("debtBps" in exact, false, "omitted debtBps selects ordinary Exact");
+        assert(exact.amountOut > risk.amountOut);
+        assert.deepEqual(exact.source, CURRENT);
+        const execution = exactSession.buildExecution({ edge: exactEdge, exact,
+          minAmountOut: exact.amountOut, executor: EXECUTOR });
+        assert.equal(execution.status, "resolved");
+        assert.throws(() => session.buildExecution({ edge, exact,
+          minAmountOut: exact.amountOut, executor: EXECUTOR }), /same session-issued/);
+        assert.throws(() => exactSession.buildExecution({ edge: exactEdge, exact: { ...exact },
+          minAmountOut: exact.amountOut, executor: EXECUTOR }), /same session-issued/);
+        assert.throws(() => exactSession.buildExecution({ edge: exactEdge, exact,
+          minAmountOut: exact.amountOut, executor: ORIGIN }), /same session-issued/);
+      }
+      const failedExactSession = await root.createSession({ source: CURRENT, kind: "exact", fundingAssets: [],
+        runtime: fixtureRuntime(CURRENT, { failOperate: true }) });
+      await assert.rejects(() => failedExactSession.issueExact({ ...request,
+        edge: failedExactSession.edges[0]! }), /strict exact unresolved/);
+    } else {
+      await assert.rejects(() => exactSession.issueExact(request), /pricing and exact/);
+    }
+    await assert.rejects(() => exactSession.issueExact({ ...request, creditDebtBps: 8_500n,
+      requireChainAmountQuote: true }), /no declared chain amount quote/);
+    assert.equal(session.edges[0]!.canonicalEdgeId, edgeKey);
+  }
+  console.log("strict Credit optional pricing/Exact and shadow provenance: PASS");
+}
 
 console.log("strict production runtime session contract: PASS");

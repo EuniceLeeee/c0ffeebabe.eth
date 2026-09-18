@@ -11,6 +11,7 @@ import type {
   LineageId,
 } from "../../adapter-family-identifiers.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
+import type { FluidCreditSnapshot } from "./state.js";
 
 export interface FluidCreditCandidate extends FamilyCandidate {
   readonly candidateKind: "fluid-credit-vault";
@@ -72,6 +73,7 @@ export interface FluidCreditRiskEvidence {
   readonly finalBorrow: bigint;
   readonly collateralDelta: bigint;
   readonly debtDelta: bigint;
+  readonly borrowState: FluidCreditSnapshot;
 }
 
 export type FluidCreditIdentityEvidence =

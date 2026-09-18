@@ -64,9 +64,9 @@ import { hashCanonical, type CanonicalValue } from "./canonical-value.js";
 import type {
   FamilyCapabilityCatalog,
   LoadedFamilyBox,
-  LoadedFamilyPlugin,
+  LoadedPricedFamilyPlugin,
 } from "./family-capability-catalog.js";
-import { assertIssuedLoadedFamilyBox } from "./family-capability-catalog.js";
+import { assertIssuedLoadedFamilyBox, isPricedFamily } from "./family-capability-catalog.js";
 import type { RouteVenueMid } from "./mid-readers.js";
 import type { PlanFragment } from "./route-leg-adapter.js";
 import type { ResolvedPlanNode } from "../../types.js";
@@ -276,7 +276,7 @@ export type FamilyVictimReplayOutcome =
   | TerminalFamilyVictimReplay;
 
 export interface FamilyVictimReplayInvocation {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly route: FamilyRouteRuntimeHandle;
   readonly impact: NormalizedSwapVictimImpact;
   readonly preState: CanonicalValue | null;
@@ -322,7 +322,7 @@ interface PreparedPricingStateInstanceIssue extends PreparedFamilyInstanceIssue 
 }
 
 interface SealedFamilyExactQuoteHandleRecord {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly routeHandle: FamilyRouteRuntimeHandle;
   readonly routeRecord: FamilyRouteRuntimeHandleRecord;
   readonly amountIn: bigint;
@@ -644,7 +644,7 @@ async function executeStaticEvidenceWork<Input, Evidence>(input: {
  * legacy Family surface crosses this boundary.
  */
 export async function executeAdapterFamilyLifecycleBatch(input: {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly matches: readonly FamilyLifecycleMatch[];
   readonly source: CanonicalSource;
   readonly generation: number;
@@ -762,7 +762,7 @@ export async function executeAdapterFamilyLifecycleBatch(input: {
 }
 
 export async function executeAdapterFamilyLifecycle(input: {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly match: FamilyLifecycleMatch;
   readonly source: CanonicalSource;
   readonly generation: number;
@@ -804,6 +804,17 @@ export async function executeCreditFamilyInstanceLifecycle(input: {
   const plugin = runtimeInstanceLifecyclePlugin(family);
   if (plugin.manifest.domain !== "credit") {
     throw new Error("Credit instance lifecycle requires a Credit FamilyBox");
+  }
+  if (isPricedFamily(family)) {
+    const lifecycle = await executeAdapterFamilyLifecycle({ family, match, source,
+      generation: input.generation, runtime: input.runtime, publisher: { publish() {} },
+      ...(input.maxIdentityStepsPerVariant === undefined ? {} : {
+        limits: { maxIdentityStepsPerVariant: input.maxIdentityStepsPerVariant } }),
+    });
+    const instances = lifecycle.publication?.instances ?? [];
+    if (instances.length > 1) throw new Error("Credit candidate resolved multiple instances");
+    return creditLifecycleResult({ familyId: plugin.manifest.familyId, source, generation: input.generation,
+      instance: instances[0] ?? null, outcomes: lifecycle.outcomes });
   }
   if (input.runtime.staticEvidenceCache !== undefined) {
     assertIssuedAdapterFamilyLifecycleContentCache(
@@ -1104,7 +1115,7 @@ export function assertIssuedPreparedFamilyPricingStateInstance(input: {
 }
 
 export interface FamilyExactQuoteInvocation {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly route: FamilyRouteRuntimeHandle;
   readonly amountIn: bigint;
   readonly executor: string;
@@ -2480,7 +2491,7 @@ export function executeFamilyVictimReplay(
 }
 
 export interface FamilyExecutionInvocation {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly actionOwnership: Pick<FamilyCapabilityCatalog, "ownerOfAction">;
   readonly route: FamilyRouteRuntimeHandle;
   readonly exact: SealedFamilyExactQuoteHandle;
@@ -2623,7 +2634,7 @@ export function assertFamilyOwnedPlanFragment(input: {
 }
 
 function coalesceCandidateMatches(
-  family: LoadedFamilyPlugin,
+  family: LoadedPricedFamilyPlugin,
   matches: readonly FamilyLifecycleMatch[],
   source: CanonicalSource,
 ): {
@@ -2778,7 +2789,7 @@ function preparedInstanceFingerprint(instance: PreparedFamilyInstance): string {
 }
 
 function createFamilySharedBindingBatchResolver(input: {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly source: CanonicalSource;
   readonly generation: number;
   readonly runtime: CentralAdapterRuntime;
@@ -2810,7 +2821,7 @@ function createFamilySharedBindingBatchResolver(input: {
 }
 
 async function executeFamilySharedBinding(input: {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly request: SharedBindingRequestKey;
   readonly source: CanonicalSource;
   readonly generation: number;
@@ -2891,7 +2902,7 @@ function issueFamilySharedBindingRef(input: FamilySharedBindingRef):
 }
 
 async function prepareCandidate(input: {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly decoded: DecodedCandidateMatch;
   readonly source: CanonicalSource;
   readonly generation: number;
@@ -3433,7 +3444,7 @@ function mergeIdentityProvenance(
 }
 
 function groupRoutes(
-  family: LoadedFamilyPlugin,
+  family: LoadedPricedFamilyPlugin,
   routes: readonly FamilyRouteDescriptor[],
   input: { readonly source: CanonicalSource },
   candidateKey: string,
@@ -3471,7 +3482,7 @@ function groupRoutes(
 }
 
 async function preparePricingState(input: {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly candidateKey: string;
   readonly identity: VerifiedIdentity;
   readonly descriptor: CompiledInstanceDescriptor;
@@ -3612,7 +3623,7 @@ async function preparePricingState(input: {
 }
 
 interface PreparedPricingCurrentInput {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly candidateKey: string;
   readonly identity: Pick<VerifiedIdentity, "lineageId">;
   readonly instanceKey: InstanceKey;
@@ -3860,7 +3871,7 @@ export interface PreparedFamilyPricingRefreshResult {
  * unavailable to the current-source session.
  */
 export async function refreshPreparedFamilyInstancePricing(input: {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly instance: PreparedFamilyInstance;
   readonly source: CanonicalSource;
   readonly generation: number;
@@ -3935,7 +3946,7 @@ export async function refreshPreparedFamilyInstancePricing(input: {
 
 function executeCurrentWork<Input, Evidence>(
   input: {
-    readonly family: LoadedFamilyPlugin;
+    readonly family: LoadedPricedFamilyPlugin;
     readonly instanceKey: InstanceKey;
     readonly source: CanonicalSource;
     readonly generation: number;
@@ -4074,7 +4085,7 @@ function assertExecutionInvocation(
 }
 
 function assertPreparedRoute(
-  family: LoadedFamilyPlugin,
+  family: LoadedPricedFamilyPlugin,
   instance: PreparedFamilyInstance,
   route: FamilyRouteDescriptor,
 ): void {
@@ -4103,7 +4114,7 @@ function assertPreparedRoute(
  * source. No identity RPC runs here - only local assembly + issuance.
  */
 export function reissuePreparedInstanceRouteHandles(input: {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly instance: PreparedFamilyInstance;
   readonly source: CanonicalSource;
   readonly generation: number;
@@ -4116,6 +4127,9 @@ export function reissuePreparedInstanceRouteHandles(input: {
   const prepared = {
     ...input.instance,
     routeHandles: [] as FamilyRouteRuntimeHandle[],
+    // Issuer records bind a state object to one owning instance. Reissuing
+    // authority must not overwrite the still-live owner's WeakMap record.
+    pricingInstances: Object.freeze(input.instance.pricingInstances.map(state => Object.freeze({ ...state }))),
   } satisfies PreparedFamilyInstance;
   prepared.routeHandles = Object.freeze(prepared.routes.map((route) =>
     issueFamilyRouteRuntimeHandle({
@@ -4164,6 +4178,7 @@ export function reissuePreparedInstanceAuthority(input: {
   const prepared = Object.freeze({
     ...input.instance,
     routeHandles: Object.freeze([]),
+    pricingInstances: Object.freeze(input.instance.pricingInstances.map(state => Object.freeze({ ...state }))),
   }) as PreparedFamilyInstance;
   registerIssuedPreparedFamilyInstance({
     family: input.family,
@@ -4175,7 +4190,7 @@ export function reissuePreparedInstanceAuthority(input: {
 }
 
 function issueFamilyRouteRuntimeHandle(input: {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly instance: PreparedFamilyInstance;
   readonly route: FamilyRouteDescriptor;
   readonly source: CanonicalSource;
@@ -4226,7 +4241,7 @@ export function assertIssuedFamilyRouteRuntimeHandle(
 
 /** Publication-facing exact source check without exposing issuer records. */
 export function assertIssuedFamilyRouteRuntimeHandleAtSource(input: {
-  readonly family: LoadedFamilyPlugin;
+  readonly family: LoadedPricedFamilyPlugin;
   readonly handle: FamilyRouteRuntimeHandle;
   readonly source: CanonicalSource;
   readonly generation: number;
@@ -4265,7 +4280,7 @@ export function assertFamilyRouteRuntimeHandleBinding(
 }
 
 function resolveFamilyRouteRuntimeHandle(
-  family: LoadedFamilyPlugin,
+  family: LoadedPricedFamilyPlugin,
   handle: FamilyRouteRuntimeHandle,
 ): FamilyRouteRuntimeHandleRecord {
   assertIssuedFamilyRouteRuntimeHandle(family, handle);
@@ -4286,7 +4301,7 @@ function resolveFamilyRouteRuntimeHandle(
 }
 
 function resolveSealedFamilyExactQuoteHandle(
-  family: LoadedFamilyPlugin,
+  family: LoadedPricedFamilyPlugin,
   handle: SealedFamilyExactQuoteHandle,
 ): SealedFamilyExactQuoteHandleRecord {
   if (
@@ -4814,7 +4829,7 @@ function validateDescriptor(
 function validateRoutes(
   value: unknown,
   descriptor: CompiledInstanceDescriptor,
-  family: LoadedFamilyPlugin,
+  family: LoadedPricedFamilyPlugin,
 ): readonly FamilyRouteDescriptor[] {
   if (!Array.isArray(value)) throw new Error("route projection must return an array");
   const seen = new Set<string>();
@@ -4901,7 +4916,7 @@ function validateAndFingerprintStateInstanceGroup(input: {
 }
 
 function declareSharedBindingRequests(
-  family: LoadedFamilyPlugin,
+  family: LoadedPricedFamilyPlugin,
   descriptor: CompiledInstanceDescriptor,
 ): readonly SharedBindingRequestKey[] {
   if (family.plugin.sharedBindings === undefined) return Object.freeze([]);
@@ -5099,7 +5114,7 @@ function workFailureOutcome(input: {
 }
 
 function instanceFailure(
-  input: { readonly family: LoadedFamilyPlugin; readonly source: CanonicalSource },
+  input: { readonly family: LoadedPricedFamilyPlugin; readonly source: CanonicalSource },
   candidateKey: string,
   identity: VerifiedIdentity,
   instanceKey: InstanceKey,
@@ -5123,7 +5138,7 @@ function instanceFailure(
 
 function pricingOutcome(
   input: {
-    readonly family: LoadedFamilyPlugin;
+    readonly family: LoadedPricedFamilyPlugin;
     readonly candidateKey: string;
     readonly identity: Pick<VerifiedIdentity, "lineageId">;
     readonly instanceKey: InstanceKey;
@@ -5160,7 +5175,7 @@ function makeOutcome(
 }
 
 function terminalCandidate(
-  input: { readonly family: LoadedFamilyPlugin; readonly source: CanonicalSource },
+  input: { readonly family: LoadedPricedFamilyPlugin; readonly source: CanonicalSource },
   candidateKey: string,
   terminal: {
     readonly stage: "discovery";
@@ -5291,7 +5306,7 @@ function assertPublicationUniqueness(
 }
 
 function sealLifecycleResult(
-  input: { readonly family: LoadedFamilyPlugin; readonly source: CanonicalSource; readonly generation: number },
+  input: { readonly family: LoadedPricedFamilyPlugin; readonly source: CanonicalSource; readonly generation: number },
   outcomes: readonly AdapterInstanceOutcome[],
   publication: AdapterFamilyPublication | null,
 ): AdapterFamilyLifecycleResult {
@@ -5387,7 +5402,7 @@ function creditLifecycleResult(
   });
 }
 
-function assertFamilyCapabilities(family: LoadedFamilyPlugin): void {
+function assertFamilyCapabilities(family: LoadedPricedFamilyPlugin): void {
   for (const capability of ["instance", "pricing"] as const) {
     if (family.hashes[capability].familyId !== family.plugin.manifest.familyId) {
       throw new Error(`${capability} capability hash escaped its Family`);

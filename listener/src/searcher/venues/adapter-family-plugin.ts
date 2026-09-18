@@ -1392,6 +1392,8 @@ export interface CreditRiskProgramInput<
   readonly debtBps: bigint;
   readonly source: CanonicalSource;
   readonly executor: string;
+  /** Trusted outer sender from the central caller authority, not quote consumers. */
+  readonly transactionOrigin?: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
 }
 
@@ -1418,7 +1420,7 @@ export interface CreditRiskSemantics<
   readonly evidence?: RequestProgram<
     CreditRiskProgramInput<Descriptor, Route>,
     Evidence
-  >;
+  > & Pick<DependentRequestProgram<CreditRiskProgramInput<Descriptor, Route>, Evidence>, "buildDependentProgram">;
   quoteOutputByDebtBps(input: {
     readonly descriptor: Descriptor;
     readonly route: Route;
@@ -1678,19 +1680,23 @@ export type CreditFamilyPlugin<
   RiskEvidence,
   InstanceDraft extends object = Descriptor,
   InstanceStaticEvidence = unknown,
+  PricingDescriptor extends object = object,
+  PricingSnapshot extends object = object,
+  PricingDraft extends object = PricingDescriptor,
+  PricingStaticEvidence = unknown,
 > = MasterTemplate<
   "credit",
   Candidate,
   Identity,
   Descriptor,
   Route,
-  object,
-  object,
+  PricingDescriptor,
+  PricingSnapshot,
   RiskEvidence,
   InstanceDraft,
-  object,
+  PricingDraft,
   InstanceStaticEvidence,
-  object,
+  PricingStaticEvidence,
   FundingSourceDescriptor,
   unknown,
   RiskEvidence
@@ -1973,9 +1979,13 @@ export function defineCreditFamily<
   E,
   ID extends object = D,
   ISE = unknown,
+  PD extends object = object,
+  PS extends object = object,
+  PDr extends object = PD,
+  PSE = unknown,
 >(
-  plugin: CreditFamilyPlugin<C, I, D, R, E, ID, ISE>,
-): DefinedFamilyPlugin<CreditFamilyPlugin<C, I, D, R, E, ID, ISE>> {
+  plugin: CreditFamilyPlugin<C, I, D, R, E, ID, ISE, PD, PS, PDr, PSE>,
+): DefinedFamilyPlugin<CreditFamilyPlugin<C, I, D, R, E, ID, ISE, PD, PS, PDr, PSE>> {
   return defineFamily(plugin);
 }
 
@@ -2173,6 +2183,7 @@ function installSynchronousGuards(
 
   if (domain === "credit") {
     const creditPlugin = pluginForDomain(plugin, "credit");
+    guardOptionalPriceCapabilities(creditPlugin);
     guardSynchronousMethod(
       creditPlugin.execution,
       "buildFragment",
@@ -2198,6 +2209,9 @@ function installSynchronousGuards(
         creditPlugin.credit.risk.evidence,
         "credit.risk.evidence",
       );
+      if (creditPlugin.credit.risk.evidence.buildDependentProgram !== undefined) {
+        guardSynchronousMethod(creditPlugin.credit.risk.evidence, "buildDependentProgram", "credit.risk.evidence.buildDependentProgram");
+      }
     }
     for (const action of creditPlugin.actionAdapters) {
       assertBoundFamilyOwnedAction(action);
@@ -2209,93 +2223,7 @@ function installSynchronousGuards(
     ? pluginForDomain(plugin, "swap")
     : pluginForDomain(plugin, "protocol");
 
-  guardSynchronousMethod(pricedPlugin.pricing, "stateKey", "pricing.stateKey");
-  guardSynchronousMethod(
-    pricedPlugin.pricing,
-    "staticBindingProjection",
-    "pricing.staticBindingProjection",
-  );
-  guardSynchronousMethod(
-    pricedPlugin.pricing,
-    "snapshotCompatibilityProjection",
-    "pricing.snapshotCompatibilityProjection",
-  );
-  guardSynchronousMethod(
-    pricedPlugin.pricing,
-    "compileDraft",
-    "pricing.compileDraft",
-  );
-  guardSynchronousMethod(
-    pricedPlugin.pricing,
-    "finalizePricingDescriptor",
-    "pricing.finalizePricingDescriptor",
-  );
-  guardSynchronousMethod(
-    pricedPlugin.pricing,
-    "dependencies",
-    "pricing.dependencies",
-  );
-  if (pricedPlugin.pricing.staticEvidence !== undefined) {
-    guardRequestProgram(
-      pricedPlugin.pricing.staticEvidence,
-      "pricing.staticEvidence",
-    );
-  }
-  guardSynchronousMethod(
-    pricedPlugin.pricing.current,
-    "requirements",
-    "pricing.current.requirements",
-  );
-  guardSynchronousMethod(
-    pricedPlugin.pricing.current,
-    "buildRequests",
-    "pricing.current.buildRequests",
-  );
-  if (pricedPlugin.pricing.current.buildDependentProgram !== undefined) {
-    guardSynchronousMethod(
-      pricedPlugin.pricing.current,
-      "buildDependentProgram",
-      "pricing.current.buildDependentProgram",
-    );
-  }
-  guardSynchronousMethod(
-    pricedPlugin.pricing.current,
-    "decodeSnapshot",
-    "pricing.current.decodeSnapshot",
-  );
-  guardSynchronousMethod(
-    pricedPlugin.pricing.current,
-    "deriveMids",
-    "pricing.current.deriveMids",
-  );
-  if (pricedPlugin.pricing.current.classifyUnavailable !== undefined) {
-    guardSynchronousMethod(
-      pricedPlugin.pricing.current,
-      "classifyUnavailable",
-      "pricing.current.classifyUnavailable",
-    );
-  }
-  if (pricedPlugin.pricing.mutation !== undefined) {
-    guardSynchronousMethod(
-      pricedPlugin.pricing.mutation,
-      "affectedStateKeys",
-      "pricing.mutation.affectedStateKeys",
-    );
-  }
-  if (pricedPlugin.pricing.liveStateProjection !== undefined) {
-    guardSynchronousMethod(
-      pricedPlugin.pricing.liveStateProjection,
-      "project",
-      "pricing.liveStateProjection.project",
-    );
-  }
-
-  guardSynchronousMethod(pricedPlugin.exact, "methods", "exact.methods");
-  guardSynchronousMethod(
-    pricedPlugin.exact,
-    "cacheCompatibilityProjection",
-    "exact.cacheCompatibilityProjection",
-  );
+  guardOptionalPriceCapabilities(pricedPlugin);
   guardSynchronousMethod(
     pricedPlugin.execution,
     "buildFragment",
@@ -2390,6 +2318,32 @@ function installSynchronousGuards(
         "protocol.oracleVictim.decode",
       );
     }
+  }
+}
+
+function guardOptionalPriceCapabilities(plugin: {
+  readonly pricing?: PricingSemantics<any, any, any, any, any, any>;
+  readonly exact?: ExactQuoteSemantics<any, any, any>;
+}): void {
+  const { pricing, exact } = plugin;
+  if (pricing !== undefined) {
+    for (const method of ["stateKey", "staticBindingProjection", "snapshotCompatibilityProjection",
+      "compileDraft", "finalizePricingDescriptor", "dependencies"] as const) {
+      guardSynchronousMethod(pricing, method, `pricing.${method}`);
+    }
+    if (pricing.staticEvidence !== undefined) guardRequestProgram(pricing.staticEvidence, "pricing.staticEvidence");
+    for (const method of ["requirements", "buildRequests", "decodeSnapshot", "deriveMids"] as const) {
+      guardSynchronousMethod(pricing.current, method, `pricing.current.${method}`);
+    }
+    for (const method of ["buildDependentProgram", "classifyUnavailable"] as const) {
+      if (pricing.current[method] !== undefined) guardSynchronousMethod(pricing.current, method, `pricing.current.${method}`);
+    }
+    if (pricing.mutation !== undefined) guardSynchronousMethod(pricing.mutation, "affectedStateKeys", "pricing.mutation.affectedStateKeys");
+    if (pricing.liveStateProjection !== undefined) guardSynchronousMethod(pricing.liveStateProjection, "project", "pricing.liveStateProjection.project");
+  }
+  if (exact !== undefined) {
+    guardSynchronousMethod(exact, "methods", "exact.methods");
+    guardSynchronousMethod(exact, "cacheCompatibilityProjection", "exact.cacheCompatibilityProjection");
   }
 }
 
@@ -2553,7 +2507,10 @@ function validateFamilyPlugin(
     validateRoutes(routedPlugin.routes);
     validateExecution(routedPlugin.execution);
     if (expectedDomain === "credit") {
-      validateCreditDomain(pluginForDomain(plugin, "credit").credit);
+      const creditPlugin = pluginForDomain(plugin, "credit");
+      validateCreditDomain(creditPlugin.credit);
+      if (creditPlugin.pricing !== undefined) validatePricing(creditPlugin.pricing);
+      if (creditPlugin.exact !== undefined) validateExact(creditPlugin.exact);
     } else {
       const pricedPlugin = expectedDomain === "swap"
         ? pluginForDomain(plugin, "swap")
@@ -4002,20 +3959,23 @@ function validateRequestProgram(
   program: RequestProgram<any, any>,
   label: string,
   allowStatic: boolean,
+  allowDependent = false,
 ): void {
   assertPlainRecord(program, label);
   assertExactKeys(
     program,
-    allowStatic
-      ? ["buildRequests", "decode", "requirements", "reusePolicy"]
-      : ["buildRequests", "decode", "requirements"],
+    ["buildRequests", "decode", "requirements", ...(allowStatic ? ["reusePolicy"] : []),
+      ...(allowDependent ? ["buildDependentProgram"] : [])],
     label,
-    allowStatic,
+    allowStatic || allowDependent,
     ["buildRequests", "decode", "requirements"],
   );
   assertSynchronousFunction(program.requirements, `${label}.requirements`);
   assertSynchronousFunction(program.buildRequests, `${label}.buildRequests`);
   assertSynchronousFunction(program.decode, `${label}.decode`);
+  if ("buildDependentProgram" in program) {
+    assertSynchronousFunction(program.buildDependentProgram, `${label}.buildDependentProgram`);
+  }
   if ("reusePolicy" in program) {
     if (!allowStatic) throw new Error(`${label} cannot declare reusePolicy`);
     const staticProgram = program as StaticEvidenceProgram<any, any>;
@@ -4335,6 +4295,7 @@ function validateCreditDomain(
       credit.risk.evidence,
       "credit.risk.evidence",
       false,
+      true,
     );
   }
 }

@@ -83,3 +83,14 @@ export function pathLeavesStandingPosition(
 ): boolean {
   return edges.some((edge) => edge.leavesStandingPosition);
 }
+
+/** Searchable cash-flow legs. Credit keeps its position metadata; only a
+ * successful amount quote can supply its exchange rate to the common search.
+ * This is not live broadcast authority or a spot valuation for collateral. */
+export function isBlockScanConversionEdge(edge: {
+  readonly slotKind: string;
+  readonly leavesStandingPosition: boolean;
+}): boolean {
+  return edge.slotKind === "lend" ||
+    ((edge.slotKind === "swap" || edge.slotKind === "protocol") && !edge.leavesStandingPosition);
+}

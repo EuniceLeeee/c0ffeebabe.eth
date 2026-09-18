@@ -18,8 +18,10 @@ import {
   FLUID_VAULT_FACTORY_INTERFACE,
   FLUID_VAULT_INTERFACE,
   FLUID_VAULT_OPERATE_SELECTOR,
-  fluidDebtAmount,
 } from "../venues/credit/fluid-family/codec.js";
+import { fluidMaxBorrowRequest } from "../venues/credit/fluid-family/borrow-math.js";
+import { BORROW_STATE, stateFixture } from "../venues/credit/fluid-family/test/quote-fixture.js";
+import { verifyFluidQuoteContract } from "../venues/credit/fluid-family/test/quote-contract.js";
 import {
   FLUID_CREDIT_ADDRESS_SURFACE_PATTERN_ID,
   FLUID_CREDIT_OPERATE_CALL_PATTERN_ID,
@@ -126,6 +128,13 @@ assert.deepEqual(
 );
 
 const validReverse = runThroughReverse(callCandidate, VAULT);
+const activeRequests = fluidCreditStrictFamilyPlugin.identity.variants[0].buildRequests({
+  candidate: callCandidate, step: 2, evidence: validReverse });
+assert.equal(activeRequests[0].kind, "effect-delta-simulation");
+if (activeRequests[0].kind === "effect-delta-simulation") {
+  assert.deepEqual(activeRequests[0].observeTokenBalances?.map(row => row.token), [SUPPLY_TOKEN, BORROW_TOKEN],
+    "identity observes actual collateral/debt ERC20s, never balanceOf(vault)");
+}
 const inactive = decodeActiveBehavior(callCandidate, validReverse, {
   tokenDeltas: [{
     token: SUPPLY_TOKEN,
@@ -206,17 +215,8 @@ assert.notEqual(
 
 const collateralAmount = 2_000n * 10n ** 18n;
 const debtBps = 8_500n;
-const debtAmount = collateralAmount * debtBps / 10_000n / 10n ** 12n;
-assert.equal(
-  fluidDebtAmount({
-    collateralAmount,
-    debtBps,
-    supplyDecimals: SUPPLY_DECIMALS,
-    borrowDecimals: BORROW_DECIMALS,
-  }),
-  debtAmount,
-  "18-to-6 decimal scaling preserves the legacy /1e12 debt formula",
-);
+const debtAmount = fluidMaxBorrowRequest(collateralAmount, BORROW_STATE, debtBps);
+const stateResults = stateFixture(SOURCE);
 
 const riskProgram = fluidCreditStrictFamilyPlugin.credit.risk.evidence;
 assert(riskProgram !== undefined);
@@ -230,13 +230,19 @@ const riskInput = Object.freeze({
   runtimeEvidence: Object.freeze([]),
 });
 assert.deepEqual(riskProgram.requirements(riskInput), {
-  transports: ["effect-delta-simulation"],
-  caller: "executor",
-  effects: ["return-data", "token-delta"],
+  transports: ["eth-call"],
 });
 const riskRequests = riskProgram.buildRequests(riskInput);
 assert.equal(riskRequests.length, 1);
-const riskRequest = riskRequests[0];
+assert.equal(riskRequests[0].id, "credit-current-config");
+const rateRound = riskProgram.buildDependentProgram!({ programInput: riskInput,
+  completedRound: 0, initialResults: stateResults.slice(0, 1), priorEvidence: [] });
+assert(rateRound);
+const operateRound = riskProgram.buildDependentProgram!({ programInput: riskInput,
+  completedRound: 1, initialResults: stateResults.slice(0, 1),
+  priorEvidence: [rateRound.decode(stateResults.slice(1))] });
+assert(operateRound);
+const riskRequest = operateRound.requests[0];
 assert.equal(riskRequest.kind, "effect-delta-simulation");
 if (riskRequest.kind !== "effect-delta-simulation") {
   throw new Error("fluid-credit risk request kind");
@@ -269,8 +275,8 @@ assert.equal(operateArgs[3], EXECUTOR);
 
 const riskEvidence = riskProgram.decode({
   programInput: riskInput,
-  results: [operateSuccess({
-    id: "risk-operate-effect-proof",
+  results: [...stateResults, operateSuccess({
+    id: "credit-exact-operate",
     actor: EXECUTOR,
     collateralAmount,
     debtAmount,
@@ -293,8 +299,8 @@ assert.equal(
 assert.throws(
   () => riskProgram.decode({
     programInput: riskInput,
-    results: [operateSuccess({
-      id: "risk-operate-effect-proof",
+    results: [...stateResults, operateSuccess({
+      id: "credit-exact-operate",
       actor: EXECUTOR,
       collateralAmount,
       debtAmount,
@@ -307,8 +313,8 @@ assert.throws(
 assert.throws(
   () => riskProgram.decode({
     programInput: riskInput,
-    results: [success(
-      "risk-operate-effect-proof",
+    results: [...stateResults, success(
+      "credit-exact-operate",
       encodedOperateResult(9n, collateralAmount, debtAmount),
       {
         tokenDeltas: [{
@@ -319,14 +325,14 @@ assert.throws(
       },
     )],
   }),
-  /did not prove standing position effects/,
+  /did not prove requested collateral/,
   "missing debt-token effects fail closed",
 );
 assert.throws(
   () => riskProgram.decode({
     programInput: riskInput,
-    results: [{
-      id: "risk-operate-effect-proof",
+    results: [...stateResults, {
+      id: "credit-exact-operate",
       ok: false,
       source: SOURCE,
       failure: "deadline",
@@ -379,7 +385,7 @@ assert.throws(
       collateralAmount: collateralAmount + 1n,
     },
   }),
-  /incompatible evidence/,
+  /compatible current oracle and operate evidence/,
   "risk sizing rejects evidence for another amount",
 );
 
@@ -391,8 +397,9 @@ assert.deepEqual(summary.suppliedActionAdapterIds, [
   "fluid-dex-liquidate",
   "fluid-vault",
 ]);
-assert(!("pricing" in fluidCreditStrictFamilyPlugin));
-assert(!("exact" in fluidCreditStrictFamilyPlugin));
+assert("pricing" in fluidCreditStrictFamilyPlugin);
+assert("exact" in fluidCreditStrictFamilyPlugin);
+verifyFluidQuoteContract({ descriptor, route, source: SOURCE, executor: EXECUTOR });
 assert.equal(fluidCreditStrictFamilyPlugin.actionAdapters.length, 2);
 for (const action of fluidCreditStrictFamilyPlugin.actionAdapters) {
   assert.equal(action.descriptor.edgeKind, "credit");

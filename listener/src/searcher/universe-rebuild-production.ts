@@ -44,6 +44,7 @@ import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { FamilyCapabilityIdentitySet } from
   "./venues/family-capability-catalog.js";
+import { isPricedFamily } from "./venues/family-capability-catalog.js";
 import type { FamilyId } from "./venues/adapter-family-identifiers.js";
 
 /**
@@ -1957,11 +1958,25 @@ export function memoCheapBindingValid(input: {
     input.memo.familyDefinitionHash === familyDefinitionHash(input.familyId) ||
     input.memo.familyDefinitionHash === familyMemoDefinitionHash(input.familyId);
   if (!definitionMatches) return false;
+  if (!memoPricingProjectionCompatible(input.memo)) return false;
   if (input.memo.validity.policy !== "immutable-code") return false;
   if (input.memo.validity.proofSource.number > input.cutoff.number) return false;
   return input.memo.validity.proofSource.number !== input.cutoff.number ||
     input.memo.validity.proofSource.hash.toLowerCase() ===
       input.cutoff.hash.toLowerCase();
+}
+
+/** A memo can predate capability wiring while already carrying its semantic
+ * hash. A priced Family must restore the route/state projection its runtime
+ * consumes; missing projection is a revalidation request, not admission. */
+function memoPricingProjectionCompatible(memo: DurableVerifiedMemo): boolean {
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forStrictFamily(memo.familyId as never);
+  if (!isPricedFamily(family)) return true;
+  const projection = decodeDurableValue(memo.staticProjection) as {
+    routes?: unknown[]; pricingInstances?: unknown[];
+  } | null;
+  return Array.isArray(projection?.routes) && projection.routes.length > 0 &&
+    Array.isArray(projection?.pricingInstances) && projection.pricingInstances.length > 0;
 }
 
 export function canReuseMemo(input: {
@@ -3327,8 +3342,8 @@ export function createRebuildWiring(input?: {
       });
     },
     isReadyMemoDefinitionCurrent: (memo) =>
-      memo.familyDefinitionHash === familyDefinitionHash(memo.familyId) ||
-      memo.familyDefinitionHash === familyMemoDefinitionHash(memo.familyId),
+      (memo.familyDefinitionHash === familyDefinitionHash(memo.familyId) ||
+      memo.familyDefinitionHash === familyMemoDefinitionHash(memo.familyId)) && memoPricingProjectionCompatible(memo),
     findReusableMemo: async (memoInput) => {
       assertOpen();
       const candidate = memoInput.candidate as
@@ -3472,7 +3487,7 @@ export function createRebuildWiring(input?: {
           rehydrateInput.memo.evidenceFingerprint,
         evidenceRefs: Object.freeze(projection?.evidenceRefs ?? []),
       }) as never;
-      const rehydrated = family.plugin.manifest.domain === "credit"
+      let rehydrated = family.plugin.manifest.domain === "credit"
         ? reissuePreparedInstanceAuthority({
             family,
             instance: instance as never,
@@ -3487,6 +3502,14 @@ export function createRebuildWiring(input?: {
             source: Object.freeze({ ...rehydrateInput.cutoff }),
             generation: rehydrateInput.cutoff.generation,
           });
+      if (family.plugin.manifest.domain === "credit" && isPricedFamily(family)) {
+        rehydrated = reissuePreparedInstanceRouteHandles({
+          family,
+          instance: rehydrated,
+          source: Object.freeze({ ...rehydrateInput.cutoff }),
+          generation: rehydrateInput.cutoff.generation,
+        });
+      }
       // Return the exact centrally-issued instance.  Wrapping/spreading it
       // after handle issuance would create an unissued look-alike that the
       // catalog/exact boundary must reject.

@@ -11,6 +11,8 @@ import { fluidCreditIdentity } from "../credit/fluid-family/identity.js";
 import { fluidCreditInstance } from "../credit/fluid-family/instance.js";
 import { fluidCreditFamilyManifest } from "../credit/fluid-family/manifest.js";
 import { fluidCreditRoutes } from "../credit/fluid-family/routes.js";
+import { fluidCreditPricing } from "../credit/fluid-family/pricing.js";
+import { fluidCreditExact } from "../credit/fluid-family/exact.js";
 
 export const plugin = defineCreditFamily({
   manifest: fluidCreditFamilyManifest,
@@ -19,6 +21,8 @@ export const plugin = defineCreditFamily({
   identity: fluidCreditIdentity,
   instance: fluidCreditInstance,
   routes: fluidCreditRoutes,
+  pricing: fluidCreditPricing,
+  exact: fluidCreditExact,
   execution: fluidCreditExecution,
   credit: fluidCreditDomain,
   actionAdapters: [fluidCreditVaultAction, fluidCreditLiquidateAction],

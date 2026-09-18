@@ -533,9 +533,16 @@ function buildStrictPricingSnapshot(
   const sessionCoveredEdgeIds = new Set(session.edges.map(blockScanEdgeKey));
   const pricingIndex = session.pricingIndex();
   const graphFingerprint = strictGraphPublicationFingerprint(graph);
+  // Pricing capability is independent of strategy admission. A declared
+  // Credit quote can be displayed without making a standing debt searchable.
+  const pricedEdgeKeys = new Set(pricingIndex.expectedEdgeKeys);
+  const scannerKeys = graph.edges.filter(scannerConsumesEdge).map(blockScanEdgeKey);
   if (
-    pricingIndex.expectedEdgeKeys.length !== graph.scannerEdgeCount ||
-    pricingIndex.expectedEdgeKeyHash !== graph.scannerEdgeKeyHash ||
+    scannerKeys.length !== graph.scannerEdgeCount ||
+    exactSetHash(scannerKeys) !== graph.scannerEdgeKeyHash ||
+    scannerKeys.some(key => !pricedEdgeKeys.has(key)) ||
+    pricedEdgeKeys.size !== pricingIndex.expectedEdgeKeys.length ||
+    exactSetHash([...pricedEdgeKeys]) !== pricingIndex.expectedEdgeKeyHash ||
     pricingIndex.readyGraphContractFingerprint !==
       strictReadyGraphContractFingerprint(graph.edges)
   ) {
@@ -557,15 +564,15 @@ function buildStrictPricingSnapshot(
   const previous = input.previous;
   const canDeltaPublish = previous !== null &&
     strictGraphPublicationFingerprint(previous.graph) === graphFingerprint &&
-    previous.coverage.expectedEdgeKeys.length === graph.scannerEdgeCount &&
-    previous.coverage.expectedEdgeKeyHash === graph.scannerEdgeKeyHash &&
-    previous.coverageByEdgeKey.size === graph.scannerEdgeCount &&
+    previous.coverage.expectedEdgeKeys.length === pricedEdgeKeys.size &&
+    previous.coverage.expectedEdgeKeyHash === pricingIndex.expectedEdgeKeyHash &&
+    previous.coverageByEdgeKey.size === pricedEdgeKeys.size &&
     previous.pricingProvenanceByEdgeKey !== undefined &&
-    previous.pricingProvenanceByEdgeKey.size === graph.scannerEdgeCount &&
+    previous.pricingProvenanceByEdgeKey.size === pricedEdgeKeys.size &&
     previous.pricingStateKeyByEdgeKey !== undefined &&
-    previous.pricingStateKeyByEdgeKey.size === graph.scannerEdgeCount &&
+    previous.pricingStateKeyByEdgeKey.size === pricedEdgeKeys.size &&
     previous.pricingFamilyIdByEdgeKey !== undefined &&
-    previous.pricingFamilyIdByEdgeKey.size === graph.scannerEdgeCount;
+    previous.pricingFamilyIdByEdgeKey.size === pricedEdgeKeys.size;
   const previousForDelta = canDeltaPublish ? previous : null;
   const fullMids = canDeltaPublish ? null : new Map<string, RouteVenueMid>();
   const midUpdates: (readonly [string, RouteVenueMid])[] = [];
@@ -635,8 +642,8 @@ function buildStrictPricingSnapshot(
   const unavailableEdgeKeys: string[] = [];
   const unresolvedEdgeKeys: string[] = [];
   for (const edge of graph.edges) {
-    if (!scannerConsumesEdge(edge)) continue;
     const edgeKey = blockScanEdgeKey(edge);
+    if (!pricedEdgeKeys.has(edgeKey)) continue;
     expectedEdgeKeys.push(edgeKey);
     const covered = sessionCoveredEdgeIds.has(edgeKey);
     const familyId = pricingIndex.familyIdByEdgeKey.get(edgeKey);
@@ -750,8 +757,8 @@ function buildStrictPricingSnapshot(
     throw new Error("strict pricing edge partition violates expected count invariant");
   }
   if (
-    expectedEdgeKeys.length !== graph.scannerEdgeCount ||
-    expectedEdgeKeyHash !== graph.scannerEdgeKeyHash
+    expectedEdgeKeys.length !== pricedEdgeKeys.size ||
+    expectedEdgeKeyHash !== pricingIndex.expectedEdgeKeyHash
   ) {
     throw new Error("strict pricing edge partition differs from ready Graph");
   }

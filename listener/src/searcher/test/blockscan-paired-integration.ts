@@ -64,4 +64,26 @@ for(const q of usd.quotes){
   assert(a&&b&&q.value);
   assert.equal(q.value.num*q.den*b.den*a.num,q.value.den*q.num*b.num*a.den);
 }
+// Credit keeps its standing-position label but joins the identical amount-
+// quoted USD/DFS flow. Its oracle limit alone must never become a quote.
+const credit: TokenEdge = { ...e0, adapterId: "test-credit", target: address(999),
+  slotKind: "lend", ...deriveEdgeTaxonomy("lend") };
+const cashMids = new Map(priced);
+cashMids.set(blockScanEdgeKey(credit), { kind: "protocol", pool: credit.target, edges: [credit],
+  mid: 2.2e-9, feeBps: 0, depthProxy: 0, quoteAmountIn: unit, quoteAmountOut: 2_200_000_000n });
+const cashEdges = [e0, e1, credit];
+for (const enumerationMethod of ["dfs", "layered"] as const) {
+  const result = scanBlockStateFromResolvedMids({ edges: cashEdges, sourceBlock: 10, swapTouched: null,
+    mids: cashMids, cfg: { enumerationMethod, maxHops: 6, minSpreadBps: 0, budgetMs: 5000,
+      maxCandidates: 100, pricedTokens: new Map([[weth, { maxBorrow: 100n * unit }]]) } });
+  const candidate = result.opportunities.find(opp => opp.seedEdges.some(e => e.slotKind === "lend"));
+  assert(candidate, "a real Credit amount quote naturally joins the same funded ring search");
+  assert.equal(candidate.leavesStandingPosition, true);
+  assert.equal(candidate.searchSeed.searchCenter, unit);
+}
+const limitOnly = new Map(cashMids);
+limitOnly.set(blockScanEdgeKey(credit), { ...limitOnly.get(blockScanEdgeKey(credit))!,
+  quoteAmountIn: undefined, quoteAmountOut: undefined });
+assert(!buildBlockScanUsdView(cashEdges, limitOnly).quotes.some(q => q.id === blockScanEdgeKey(credit)),
+  "Credit requires actual amount output, not a linear oracle-limit fallback");
 console.log("paired integration: PASS (actual scanner DFS/layered switch, six hops, cap, missing reference, deadline, frozen USD value ratios)");
