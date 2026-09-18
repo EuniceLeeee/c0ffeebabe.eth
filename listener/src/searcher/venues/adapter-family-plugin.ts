@@ -883,6 +883,11 @@ export type ExactMethod<
        * NOT capacity, caller eligibility or final execution success.
        * Absence is unknown. Declared per invocation by the owning Family. */
       readonly chainAmountQuote?: true;
+      /** This method reads only amount-independent state for local math.
+       * All reads depend on the route's existing pricing state key and not
+       * block environment or caller state. Central touched invalidation owns
+       * retention; this is a data declaration, never a Family reuse hook. */
+      readonly stateOnlyReads?: true;
       /** Optional Family guarantee for carrying an amount quote as pricing data.
        * Covers every transitive state/code dependency and excludes block-environment
        * dependence of method selection, requests and output. Absence means fresh

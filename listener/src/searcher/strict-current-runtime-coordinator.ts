@@ -38,6 +38,7 @@ import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
 import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
+import type { AdapterFamilyExactQuoteCache } from "./adapter-family-exact-quote-cache.js";
 
 export type StrictSessionPurpose =
   | "coarse-pricing"
@@ -93,6 +94,7 @@ const EMPTY_FUNDING_ASSETS: readonly string[] = Object.freeze([]);
 
 export interface StrictCanonicalActivityProof {
   readonly source: CanonicalSource;
+  readonly parentHash?: string;
   readonly touchedStateKeys: ReadonlySet<string>;
   readonly complete: true;
 }
@@ -158,6 +160,7 @@ export class StrictCurrentRuntimeCoordinator
         readonly quoteGraph?: VerifiedGraphView },
       simulationTransport?: StrictSimulationTransport,
     ) => Promise<EffectiveMidSnapshot>,
+    private readonly exactQuoteCache?: AdapterFamilyExactQuoteCache,
   ) {}
 
   latestPricingSnapshot(): BlockScanStateSnapshot | null {
@@ -168,6 +171,7 @@ export class StrictCurrentRuntimeCoordinator
     this.pricingEpoch++;
     this.fundingEpoch++;
     this.publishedPricing = null;
+    this.exactQuoteCache?.resetState();
     this.resetSessions();
   }
 
@@ -391,6 +395,9 @@ export class StrictCurrentRuntimeCoordinator
     activity?: StrictCanonicalActivityProof,
     simulationTransport?: StrictSimulationTransport,
   ): Promise<{ session: StrictProductionRuntimeSession; built: StrictPricingBuildResult }> {
+    // Same current-block activity as raw/effective; amount changes do not
+    // invalidate local state. This happens before either pricing branch runs.
+    this.exactQuoteCache?.advanceState(sourceFor(graph), activity);
     const raw = sessionPromise.then(session => {
       // Soft Family settlement may return degraded coverage while the outer
       // runtime pass is still open. Cancellation, unlike that deadline, retires it.

@@ -21,6 +21,7 @@ import {
   UNIV4_STATE_VIEW_INTERFACE,
 } from "../venues/swaps/univ4-abi.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
+import { BLOCKSCAN_MULTICALL3 } from "../blockscan-multicall.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_000,
@@ -283,19 +284,91 @@ assert.equal(exactRequestMethod.kind, "request-program");
 if (exactRequestMethod.kind !== "request-program") {
   throw new Error("univ4 exact request program missing");
 }
-const exactRequest = exactRequestMethod.program.buildRequests(exactInput)[0];
+const exactRequests = exactRequestMethod.program.buildRequests(exactInput);
+assert.equal(exactRequests.length, 2, "quote and payout balance use one request round");
+const [exactRequest, balanceRequest] = exactRequests;
+const balanceIface = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
+  "function getEthBalance(address account) view returns (uint256)",
+]);
+assert.equal(balanceRequest.kind, "eth-call");
+if (balanceRequest.kind !== "eth-call") throw new Error("missing V4 balance call");
+assert.equal(balanceRequest.to, TOKEN1);
+assert.equal(balanceIface.decodeFunctionData("balanceOf", balanceRequest.data)[0].toLowerCase(),
+  descriptor.managerBinding.manager.toLowerCase());
+const quoteResult = success(exactRequest.id, UNIV4_QUOTER_INTERFACE.encodeFunctionResult(
+  "quoteExactInputSingle", [900_000n, 70_000n],
+));
+const balanceResult = (amount: bigint) => success(balanceRequest.id,
+  balanceIface.encodeFunctionResult("balanceOf", [amount]));
 const exact = exactRequestMethod.program.decode({
   programInput: exactInput,
-  initialResults: [success(
-    exactRequest.id,
-    UNIV4_QUOTER_INTERFACE.encodeFunctionResult(
-      "quoteExactInputSingle",
-      [900_000n, 70_000n],
-    ),
-  )],
+  initialResults: [quoteResult, balanceResult(900_000n)],
   dependentEvidence: [],
 });
 assert.equal(exact.amountOut, 900_000n);
+const decodeWithBalance = (result: AdapterRequestResult) => exactRequestMethod.program.decode({
+  programInput: exactInput, initialResults: [quoteResult, result], dependentEvidence: [],
+});
+assert.equal(decodeWithBalance(balanceResult(900_001n)).amountOut, 900_000n);
+for (const balance of [0n, 899_999n]) {
+  assert.throws(() => decodeWithBalance(balanceResult(balance)), /output-balance-capacity/);
+}
+assert.throws(() => exactRequestMethod.program.decode({
+  programInput: exactInput, initialResults: [quoteResult], dependentEvidence: [],
+}), /output-balance.*missing/);
+for (const data of ["0x", "0x01", `0x${"00".repeat(64)}`]) {
+  assert.throws(() => decodeWithBalance(success(balanceRequest.id, data)), /invalid uint256/);
+}
+assert.throws(() => decodeWithBalance({
+  id: balanceRequest.id, ok: false, source: SOURCE, failure: "rpc",
+}), /unresolved: rpc/);
+for (const source of [
+  { ...SOURCE, number: SOURCE.number + 1 },
+  { ...SOURCE, hash: `0x${"cd".repeat(32)}` },
+  { ...SOURCE, generation: SOURCE.generation + 1 },
+]) {
+  assert.throws(() => decodeWithBalance({ ...balanceResult(900_000n), source }), /foreign source/);
+}
+assert.deepEqual(exactRequestMethod.program.buildRequests({ ...exactInput, amountIn: 0n }), []);
+assert.equal(exactRequestMethod.program.decode({
+  programInput: { ...exactInput, amountIn: 0n }, initialResults: [], dependentEvidence: [],
+}).amountOut, 0n);
+
+// Same recorded AMPL quote/balance at 25975843 and 25976005. Offline
+// regression over recorded values, not a fresh chain or final-sim receipt.
+assert.throws(() => exactRequestMethod.program.decode({
+  programInput: { ...exactInput, amountIn: 12_601_758n },
+  initialResults: [success(exactRequest.id, UNIV4_QUOTER_INTERFACE.encodeFunctionResult(
+    "quoteExactInputSingle", [11_829_800_840n, 70_000n],
+  )), balanceResult(70_134n)], dependentEvidence: [],
+}), /amountOut=11829800840 balance=70134/);
+
+const reverseRequests = exactRequestMethod.program.buildRequests({ ...exactInput, route: routes[1] });
+assert.equal(reverseRequests[1].kind, "eth-call");
+if (reverseRequests[1].kind !== "eth-call") throw new Error("missing reverse balance");
+assert.equal(reverseRequests[1].to, TOKEN0, "reverse direction reads the other currency");
+
+// Native currency is projected as WETH in Graph, but payout is actual ETH.
+const nativeKey = { ...KEY, currency0: ethers.ZeroAddress };
+const nativePoolId = v4PoolId(nativeKey);
+const nativeDescriptor = { ...descriptor, poolKey: nativeKey, poolId: nativePoolId,
+  graphToken0: ADDR.WETH,
+  instanceKey: instanceKey(`${descriptor.managerBinding.manager.toLowerCase()}\u001f${nativePoolId}`) };
+const nativeRoute = univ4StrictFamilyPlugin.routes.project({ descriptor: nativeDescriptor })[1];
+const nativeInput = { ...exactInput, descriptor: nativeDescriptor, route: nativeRoute };
+const nativeRequests = exactRequestMethod.program.buildRequests(nativeInput);
+assert.equal(nativeRequests[1].kind, "eth-call");
+if (nativeRequests[1].kind !== "eth-call") throw new Error("missing native balance");
+assert.equal(nativeRequests[1].to, BLOCKSCAN_MULTICALL3);
+assert.equal(balanceIface.decodeFunctionData("getEthBalance", nativeRequests[1].data)[0].toLowerCase(),
+  descriptor.managerBinding.manager.toLowerCase());
+assert.equal(exactRequestMethod.program.decode({
+  programInput: nativeInput, initialResults: [quoteResult, balanceResult(900_000n)], dependentEvidence: [],
+}).amountOut, 900_000n);
+assert.throws(() => exactRequestMethod.program.decode({
+  programInput: nativeInput, initialResults: [quoteResult, balanceResult(899_999n)], dependentEvidence: [],
+}), /output-balance-capacity/);
 const fragment = univ4StrictFamilyPlugin.execution.buildFragment({
   descriptor,
   route: routes[0],

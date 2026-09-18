@@ -10,6 +10,7 @@ export function uniV3StaticBindingProjection(
     token1: descriptor.token1,
     fee: descriptor.fee,
     tickSpacing: descriptor.tickSpacing,
+    swapAccess: { ...descriptor.swapAccess },
     factoryBinding: {
       factory: descriptor.factoryBinding.factory,
       reversePool: descriptor.factoryBinding.reversePool,

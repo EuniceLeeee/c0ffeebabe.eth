@@ -16,7 +16,7 @@ use revm::{
     Database, DatabaseCommit, ExecuteEvm, MainBuilder, MainContext,
     bytecode::Bytecode,
     context::{BlockEnv, Context, TxEnv},
-    context_interface::{ContextTr, JournalTr, Transaction,
+    context_interface::{ContextTr, JournalTr, LocalContextTr, Transaction,
         journaled_state::account::JournaledAccountTr,
         result::{ExecutionResult, EVMError, HaltReason, ResultGas}},
     handler::{Handler, EvmTr, EvmTrError, FrameTr, FrameResult, MainnetHandler},
@@ -2561,6 +2561,10 @@ fn strict_execute<D: ExecutionProfile>(db: &mut CacheDB<D>, env: &BlockEnv, req:
                     .map_err(|_| StrictFailure(StrictFailureKind::Validation))?;
                 handler.load_accounts(&mut evm)?;
             }
+            // The inner loop skips Handler::execution_result to preserve the
+            // transaction journal. Reset only CALL-local memory/context before
+            // each sibling; storage, transient storage and warmth stay shared.
+            evm.ctx.local_mut().clear();
             let frame = handler.first_frame_input(&mut evm, cap, 0)?;
             let mut result = handler.run_exec_loop(&mut evm, frame)?;
             revm::context_interface::context::take_error::<EVMError<RpcError>, _>(evm.ctx.error())?;
@@ -3723,6 +3727,89 @@ mod tests {
             assert_eq!(strict_balance_of(&db, &test_source().env, token, account).unwrap(), U256::from(if prior_deal { 100 } else { 0 }));
         }
         assert_eq!(remote.rpc.round_trips(), 0);
+    }
+
+    #[test]
+    fn strict_sibling_calls_have_fresh_memory() {
+        // A CALL's memory is fresh even when prior siblings share storage and
+        // transient state. First sibling writes 0x42; main reads untouched 0.
+        for inner in [false, true] {
+            let (mut db, mut req) = local_strict(inner, "0x60005160005260206000f3");
+            let setup_target = format!("0x{}", "cc".repeat(20));
+            let bytes = Bytes::from(parse_hex_bytes("0x604260005200").unwrap());
+            db.insert_account_info(parse_address(&setup_target).unwrap(), AccountInfo {
+                code_hash: keccak256(&bytes), code: Some(Bytecode::new_raw(bytes)), ..Default::default()
+            });
+            let mut pre = setup(&req, "0x"); pre.to = setup_target;
+            req.pre_calls = vec![pre];
+            let plan = StrictPlan::validate(&req).unwrap();
+            let (outcome, _, _) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+            let StrictOutcome::Success { output, .. } = outcome else { panic!("unexpected outcome"); };
+            assert_eq!(output, format!("0x{}", "00".repeat(32)), "memory leaked across inner={inner} sibling CALLs");
+        }
+    }
+
+    #[test]
+    fn strict_sibling_memory_size_and_expansion_reset_each_call() {
+        // Every sibling checks fresh MSIZE, return-data and low/high memory,
+        // then dirties both words and returns nonempty data. Three calls also
+        // prove memory expansion is charged anew, not inherited from a sibling.
+        let mut code = parse_hex_bytes("0x593d176000511761400051171560005760006000fd").unwrap();
+        code[14] = code.len() as u8;
+        code.extend_from_slice(&parse_hex_bytes("0x5b604260005260436140005260206000f3").unwrap());
+        for inner in [false, true] {
+            let (mut db, mut req) = local_strict(inner, &format!("0x{}", hex::encode(&code)));
+            let plan = StrictPlan::validate(&req).unwrap();
+            let (single, single_gas, _) = strict_execute(&mut db.clone(), &test_source().env, &req, &plan).unwrap();
+            assert!(matches!(single, StrictOutcome::Success { .. }));
+            req.pre_calls = vec![setup(&req, "0x"), setup(&req, "0x")];
+            let plan = StrictPlan::validate(&req).unwrap();
+            let (outcome, gas, _) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+            let StrictOutcome::Success { output, .. } = outcome else { panic!("sibling memory check failed: {outcome:?}"); };
+            assert_eq!(parse_u256(&output).unwrap(), U256::from(0x42));
+            assert_eq!(gas, single_gas * 3, "memory expansion gas leaked across inner={inner} siblings");
+        }
+    }
+
+    #[test]
+    fn strict_sibling_memory_reset_preserves_transaction_state() {
+        let warmed = Address::repeat_byte(0xcc);
+        // Nonempty setup: SSTORE/TSTORE, dirty memory, and warm another account.
+        let mut code = parse_hex_bytes("0x3615600057602a600055602b60005d604460005260456101005273").unwrap();
+        code.extend_from_slice(warmed.as_slice());
+        code.extend_from_slice(&[0x31, 0x50, 0x00]); // BALANCE; POP; STOP
+        code[3] = code.len() as u8;
+        // Empty main returns [initial MSIZE, untouched memory, SLOAD value/cost,
+        // TLOAD value, BALANCE value/cost]. Costs include PUSH/SWAP/GAS (8 gas).
+        code.extend_from_slice(&parse_hex_bytes(concat!(
+            "0x5b5960005261010051602052",
+            "5a600054905a9003606052604052",
+            "60005c6080525a73"
+        )).unwrap());
+        code.extend_from_slice(warmed.as_slice());
+        code.extend_from_slice(&parse_hex_bytes("0x31905a900360c05260a05260e06000f3").unwrap());
+        for inner in [false, true] {
+            let (mut db, mut req) = local_strict(inner, &format!("0x{}", hex::encode(&code)));
+            db.insert_account_info(warmed, AccountInfo { balance: U256::from(55), ..Default::default() });
+            req.pre_calls = vec![setup(&req, "0x01")];
+            let plan = StrictPlan::validate(&req).unwrap();
+            let (outcome, _, _) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+            let StrictOutcome::Success { output, .. } = outcome else { panic!("unexpected outcome: {outcome:?}"); };
+            let words = parse_hex_bytes(&output).unwrap().chunks_exact(32).map(U256::from_be_slice).collect::<Vec<_>>();
+            assert_eq!(words, [0u64, 0, 42, if inner { 108 } else { 2108 },
+                if inner { 43 } else { 0 }, 55, if inner { 108 } else { 2608 }].map(U256::from),
+                "CALL-local reset changed shared state for inner={inner}");
+            assert_eq!(db.storage(plan.calls.last().unwrap().to, U256::ZERO).unwrap(), U256::from(42));
+
+            // A new simulation keeps committed storage, never the previous
+            // transaction's transient state or warm account/storage sets.
+            req.pre_calls.clear();
+            let plan = StrictPlan::validate(&req).unwrap();
+            let (outcome, _, _) = strict_execute(&mut db, &test_source().env, &req, &plan).unwrap();
+            let StrictOutcome::Success { output, .. } = outcome else { panic!("unexpected outcome: {outcome:?}"); };
+            let words = parse_hex_bytes(&output).unwrap().chunks_exact(32).map(U256::from_be_slice).collect::<Vec<_>>();
+            assert_eq!(words, [0u64, 0, 42, 2108, 0, 55, 2608].map(U256::from));
+        }
     }
 
     #[test]

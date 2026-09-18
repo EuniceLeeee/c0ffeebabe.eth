@@ -60,6 +60,7 @@ import {
   UNIV2_POOL_QUOTE_INTERFACE,
 } from "../venues/swaps/univ2-family/codec.js";
 import { UNIV2_MAX_RESERVE } from "../venues/swaps/univ2-family/reserve-capacity.js";
+import { createUniV2Exact, univ2Exact } from "../venues/swaps/univ2-family/exact.js";
 import type {
   UniV2Candidate,
   UniV2Identity,
@@ -666,6 +667,8 @@ console.log("univ2 local amount: PASS (state/source/fee/capacity, no simulation,
 
 // Router is a source-bound amount quote, not a swap simulation or a new
 // admission rule. All transport results here are mocks, not live acceptance.
+const routerExact = createUniV2Exact("router");
+assert.equal(univ2StrictFamilyPlugin.exact, univ2Exact);
 for (const [factory, feeBps] of [
   ["0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f", 30n],
   ["0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac", 30n],
@@ -678,9 +681,60 @@ for (const [factory, feeBps] of [
   const router = uniV2QuoteRouter(routerDescriptor);
   assert(router);
   for (const route of univ2StrictFamilyPlugin.routes.project({ descriptor: routerDescriptor })) {
+    const reserveIn = route.direction === "zero-for-one" ? 1_000_000_000n : 2_000_000_000n;
+    const reserveOut = route.direction === "zero-for-one" ? 2_000_000_000n : 1_000_000_000n;
+    for (const amountIn of [1n, 1_000n, reserveIn / 100n, reserveIn / 2n]) {
+      const input = { ...exactInput, descriptor: routerDescriptor, route, amountIn };
+      const method = univ2StrictFamilyPlugin.exact.methods(input)[1];
+      assert.equal(method.id, "pair-reserves");
+      assert(method.kind === "request-program");
+      assert.equal(method.chainAmountQuote, undefined);
+      const requests = method.program.buildRequests(input);
+      assert.deepEqual(requests.map(r => r.id), ["exact-reserves", "exact-input-balance"],
+        "local default must not issue Router calls even for nominated infrastructures");
+      assert(requests[0].kind === "eth-call" && requests[1].kind === "eth-call");
+      assert.equal(requests[0].to, POOL);
+      assert.equal(requests[1].to, route.tokenIn);
+      const initial = initialStateFor(input, reserveIn, reserveOut);
+      const quoted = method.program.decode({ programInput: input, initialResults: initial, dependentEvidence: [] });
+      const out = quoteV2ExactInputPure(reserveIn, reserveOut, amountIn, feeBps);
+      assert.equal(quoted.amountOut, out);
+      assert(quoted.evidence.kind === "univ2-reserves-exact");
+      const evidence = quoted.evidence;
+      assert.deepEqual(quoted.evidence.source, SOURCE);
+      assert.equal(quoted.evidence.reserveIn, reserveIn);
+      assert.equal(quoted.evidence.reserveOut, reserveOut);
+      assert.equal(quoted.evidence.feeBps, feeBps);
+      assert.equal(quoted.evidence.maxAmountIn, UNIV2_MAX_RESERVE - reserveIn);
+      assert.equal(method.program.buildDependentProgram!({ programInput: input, initialResults: initial,
+        completedRound: 0, priorEvidence: [] }), null);
+      const executionInput = { ...input, quotedAmountOut: out, minAmountOut: out, exactEvidence: quoted.evidence };
+      if (out === 0n) {
+        assert.throws(() => univ2StrictFamilyPlugin.execution.buildFragment(executionInput), /incompatible exact evidence/);
+      } else {
+        const fragment = univ2StrictFamilyPlugin.execution.buildFragment(executionInput);
+        assert.deepEqual(fragment.requirements, [{ kind: "transfer-to-pool", token: route.tokenIn, pool: POOL, amount: amountIn }]);
+        assert.deepEqual(fragment.nodes[0].children, []);
+        assert.equal(fragment.nodes[0].params[route.direction === "zero-for-one" ? "amount1Out" : "amount0Out"], out);
+        for (const change of [{ amountIn: amountIn + 1n }, { amountOut: out + 1n }, { pool: FORGED_POOL },
+          { tokenIn: route.tokenOut }, { tokenOut: route.tokenIn }, { feeBps: feeBps + 1n },
+          { quoteModel: "pool-get-amount-out" as const }]) {
+          assert.throws(() => univ2StrictFamilyPlugin.execution.buildFragment({ ...executionInput,
+            exactEvidence: { ...evidence, ...change } }), /incompatible exact evidence/);
+        }
+      }
+      if (amountIn === reserveIn / 2n) {
+        assert(out < amountIn * (10_000n - feeBps) * reserveOut / (reserveIn * 10_000n),
+          "large inputs must include price impact instead of scaling the spot price");
+      }
+      assert.notEqual(hashCanonical(univ2Exact.cacheCompatibilityProjection(input)),
+        hashCanonical(routerExact.cacheCompatibilityProjection(input)), "quote selection is part of cache compatibility");
+      assert.deepEqual(univ2Exact.cacheCompatibilityProjection(input),
+        createUniV2Exact("local").cacheCompatibilityProjection(input));
+    }
     const input = { ...exactInput, descriptor: routerDescriptor, route, amountIn: 1_000_000n,
       transactionOrigin: undefined };
-    const method = univ2StrictFamilyPlugin.exact.methods(input)[1];
+    const method = routerExact.methods(input)[1];
     assert.equal(method.id, "router-amounts-out");
     assert.equal(method.kind, "request-program");
     if (method.kind !== "request-program") throw new Error("missing router method");
@@ -713,8 +767,8 @@ for (const [factory, feeBps] of [
     assert.equal(fragment.nodes[0].target, POOL, "quote Router is not execution target/spender");
     assert.deepEqual(fragment.nodes[0].children, []);
     assert.deepEqual(fragment.requirements, [{ kind: "transfer-to-pool", token: route.tokenIn, pool: POOL, amount: input.amountIn }]);
-    assert.deepEqual(univ2StrictFamilyPlugin.exact.cacheCompatibilityProjection(input),
-      univ2StrictFamilyPlugin.exact.cacheCompatibilityProjection({ ...input, executor: FORGED_POOL, transactionOrigin: FORGED_POOL }),
+    assert.deepEqual(routerExact.cacheCompatibilityProjection(input),
+      routerExact.cacheCompatibilityProjection({ ...input, executor: FORGED_POOL, transactionOrigin: FORGED_POOL }),
       "Router's view quote does not depend on the later execution actor");
     const replace = (id: string, data: string) => initial.map(r => r.id === id ? success(id, data) : r);
     assert.throws(() => decode(replace("exact-router-factory",
@@ -756,6 +810,8 @@ for (const [factory, feeBps] of [
   }
 }
 assert.equal(uniV2QuoteRouter(descriptor), null, "unknown factories retain the existing quote method");
+assert.equal(routerExact.methods(exactInput)[1].id, "pair-reserves", "Router preference preserves local quoting without a nominated Router");
+console.log("univ2 local default: PASS (3 infrastructures, both directions, 4 input sizes, price impact, cache selection, no Router calls)");
 console.log("univ2 Router quote: PASS (3 infrastructures, both directions, amount/source/pair/fee/capacity, no swap simulation)");
 
 const summary = definedFamilyPluginContractSummary(univ2StrictFamilyPlugin);
@@ -1215,6 +1271,17 @@ for (const route of stableRoutes) {
       success("exact-pool-quote", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [123_457n])),
     ], dependentEvidence: [] });
     assert.equal(result.amountOut, 123_457n, "output comes from the pool, not a local formula");
+    const routerMethod = routerExact.methods(input)[1];
+    assert(routerMethod.kind === "request-program");
+    assert.equal(routerMethod.id, method.id);
+    assert.equal(routerMethod.chainAmountQuote, true);
+    assert.deepEqual(routerMethod.program.buildRequests(input), method.program.buildRequests(input),
+      "local/Router preference cannot change the pool-owned curve request");
+    assert.deepEqual(routerMethod.program.decode({ programInput: input, initialResults: [
+      success("exact-reserves", reservesData),
+      success("exact-input-balance", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [RESERVE0])),
+      success("exact-pool-quote", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [123_457n])),
+    ], dependentEvidence: [] }), result);
   }
 }
 const stableRequests = exactRequestMethod.program.buildRequests(stableInput);

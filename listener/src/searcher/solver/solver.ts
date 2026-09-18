@@ -104,6 +104,8 @@ export interface SolveOptions {
   cache?: PoolStateCache;
   /** Per-hop quote haircut. 10000 = no haircut. */
   quoteSafetyBps?: bigint;
+  /** Absolute per-hop tolerance (0 or 1 token raw unit); replaces legacy BPS. */
+  quoteToleranceRawUnits?: bigint;
   /** Admit near-miss quote candidates into phase-2 sim.
    *  0 = only positive quote profit. 20 = allow quoteProfit >= -20bps. */
   quoteProfitFloorBps?: bigint;
@@ -222,8 +224,10 @@ export class AnvilSolver implements Solver {
     const gssMaxTries = opts.gssMaxTries ?? 12;
     const gridHalfWidth = opts.gridHalfWidth ?? 3;
     const finalSimTopN = opts.finalSimTopN ?? 3;
-    const quoteSafetyBps = opts.quoteSafetyBps ??
-      BigInt(process.env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999");
+    const quoteToleranceRawUnits = opts.quoteToleranceRawUnits;
+    const quoteSafetyBps = quoteToleranceRawUnits === undefined
+      ? opts.quoteSafetyBps ?? BigInt(process.env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999")
+      : 10000n;
     const quoteProfitFloorBps = opts.quoteProfitFloorBps ??
       BigInt(process.env.SEARCHER_QUOTE_PROFIT_FLOOR_BPS ?? (process.env.SEARCHER_DRY_RUN === "1" ? "20" : "0"));
     const deferPhase2Sim = opts.deferPhase2Sim ?? false;
@@ -305,6 +309,7 @@ export class AnvilSolver implements Solver {
       }),
     );
     const maxFlashAmount = normalizedMaxFlashAmount(plan);
+    const isBlockScan = plan.opportunity.kind === "block-scan-arb";
     if (maxFlashAmount !== null && maxFlashAmount <= 0n) {
       throw new Error(`no profitable plan (flash cap is zero)`);
     }
@@ -313,7 +318,10 @@ export class AnvilSolver implements Solver {
     if (isOracleVictim && maxFlashAmount === null) {
       throw new Error("no profitable plan (oracle victim requires a live flash cap)");
     }
-    const center = clampToMax(rawCenter, maxFlashAmount);
+    if (isBlockScan && (rawCenter <= 0n || (maxFlashAmount !== null && rawCenter > maxFlashAmount))) {
+      throw new Error("no profitable plan (effective input missing or exceeds flash cap)");
+    }
+    const center = isBlockScan ? rawCenter : clampToMax(rawCenter, maxFlashAmount);
 
     // ── Phase 1: quote-only amount search (no Anvil sim) ──────────
     // Closed-loop arb: profitToken == startToken == flashToken, so the quote
@@ -351,6 +359,7 @@ export class AnvilSolver implements Solver {
             runtimeEvidence: opts.runtimeEvidence,
             adapterWorkControl,
             safetyBps: quoteSafetyBps,
+            toleranceRawUnits: quoteToleranceRawUnits,
             shouldStop: pastDeadline,
             onExactCall: recordExactCall,
           }),
@@ -375,7 +384,7 @@ export class AnvilSolver implements Solver {
       if (!bestObserved || profit > bestObserved.profit) {
         bestObserved = { flashAmount, fluidDebtBps, profit, amounts };
       }
-      if (shouldAdmitQuoteCandidate(profit, flashAmount, quoteProfitFloorBps)) {
+      if (shouldAdmitQuoteCandidate(profit, flashAmount, isBlockScan ? 0n : quoteProfitFloorBps)) {
         scored.push({ flashAmount, fluidDebtBps, quoteProfit: profit, propagated: result.propagated });
       }
       return profit;
@@ -392,10 +401,10 @@ export class AnvilSolver implements Solver {
       }
       // Coarse pass: block-scan defaults to multiples of its scanner seed;
       // swap victims keep their geometric grid, oracle victims their cap grid.
-      const grid = isOracleVictim
+      let grid = isOracleVictim
         ? oracleSearchGrid(maxFlashAmount!)
         : capGrid(
-            plan.opportunity.kind === "block-scan-arb" &&
+            isBlockScan &&
               (opts.blockScanAmountGrid ?? "multiples") === "multiples"
               ? [center, center * 5n, center * 10n, center * 15n]
               : geometricGrid(center, gridHalfWidth),
@@ -403,6 +412,17 @@ export class AnvilSolver implements Solver {
           );
       let bestX = grid[0] ?? center;
       let bestVal = FAIL_SCORE;
+      if (isBlockScan) {
+        // Search policy: only a positive P opens the remaining grid/GSS.
+        // Preserve quote errors (including RPC/timeout) rather than turning
+        // missing evidence into an economic rejection or a Family failure.
+        const probeResult = await quoteAmount(center, fluidDebtBps);
+        if (probeResult.status === "failed") throw probeResult.error;
+        bestVal = recordQuote(center, fluidDebtBps, probeResult);
+        if (bestVal <= 0n) continue;
+        bestX = center;
+        grid = grid.filter((amount) => amount !== center);
+      }
       // Independent amounts share a pinned session; each amount's dependent
       // hops remain serial. Bound fan-out even for a wide offline/oracle grid.
       const gridQuoteConcurrency = 8;
@@ -455,7 +475,7 @@ export class AnvilSolver implements Solver {
 
     if (scored.length === 0) {
       if (debugQuotes && bestObserved) {
-        logBestObservedQuote(plan, bestObserved, center, quoteSafetyBps);
+        logBestObservedQuote(plan, bestObserved, center, quoteSafetyBps, quoteToleranceRawUnits);
       }
       logV4QuoteStatsOnce("no-profitable");
       const error = new Error(
@@ -502,7 +522,8 @@ export class AnvilSolver implements Solver {
       `[searcher/ac3] solver: quote search ${quoteCount} pts → ` +
         `${positiveQuotes} positive${floorQuotes > 0 ? ` + ${floorQuotes} floor-admitted` : ""}, ` +
         `sim top-${ranked.length} amounts x ${fundingActions.length} flash ` +
-        `safetyBps=${quoteSafetyBps} quoteFloorBps=${quoteProfitFloorBps} ` +
+        `safetyBps=${quoteSafetyBps} toleranceRawUnits=${quoteToleranceRawUnits ?? "legacy-bps"} ` +
+        `quoteFloorBps=${quoteProfitFloorBps} ` +
         `maxFlash=${maxFlashAmount ?? "unbounded"} ` +
         `path=${pathSummary(plan.tokenPath)}`,
     );
@@ -557,6 +578,12 @@ export class AnvilSolver implements Solver {
               rawOutputs,
               strictSession,
               exactHandles,
+              quoteToleranceRawUnits === 1n ? {
+                runtimeEvidence: opts.runtimeEvidence ?? Object.freeze([]),
+                control: adapterWorkControl,
+                shouldStop: pastDeadline,
+                onExactCall: () => { if (opts.timing) opts.timing.hopExactCalls++; },
+              } : undefined,
             ),
           );
         } catch (err) {
@@ -793,10 +820,12 @@ function logBestObservedQuote(
   best: { flashAmount: bigint; fluidDebtBps: bigint; profit: bigint; amounts: bigint[] },
   center: bigint,
   safetyBps: bigint,
+  toleranceRawUnits: bigint | undefined,
 ): void {
   console.log(
     `[searcher/ac3] solver: best non-positive quote center=${center} ` +
-      `safetyBps=${safetyBps} flashAmount=${best.flashAmount} ` +
+      `safetyBps=${safetyBps} toleranceRawUnits=${toleranceRawUnits ?? "legacy-bps"} ` +
+      `flashAmount=${best.flashAmount} ` +
       `fluidDebtBps=${best.fluidDebtBps} quoteProfit=${best.profit} ` +
       `path=${pathSummary(plan.tokenPath)}`,
   );

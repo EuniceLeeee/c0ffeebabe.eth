@@ -559,6 +559,60 @@
       },
       "created_at": "2026-09-04T10:24:17Z",
       "updated_at": "2026-09-04T10:24:17Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260916-canonical-family-metadata-classified-as-dispatch",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": ["swap"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "shared_surface_checker_misclassified_generated_identity_metadata",
+      "evidence": {
+        "manual": "The checker treated canonical generated exact[].identity.familyId declarations as executable central protocol semantics. The original source emits 253 such findings; the candidate emits 286 after adding capabilities.",
+        "independent_review": "logs/shared-surface-independent-review.wPiAkB/review.json",
+        "mirror_source_sha256": "5e7ad02be33fd493941118ec31d2d294f933b39827281cbebde62b31e613c251",
+        "regression": "286 validated identity nodes and 13 malformed/noncanonical/duplicate-key/extra-node cases passed independent execution. The exact 78 non-generated findings remain and the actual gate still exits 1.",
+        "implementation_location": "logs/checker-repair.Fy7eCH/listener/src/searcher/test/adapter-family-shared-surface-conformance.ts",
+        "integration_status": "Mirror only. Canonical source remains unchanged during active historical rebuild; no integration or acceptance verdict."
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:adapter-family-shared-surface",
+        "issue": "Canonical generated Family identity data was mistaken for central semantic dispatch, obscuring genuine source/import findings.",
+        "evidence": "Independent before/after coordinate comparison removes exactly the 286 validated metadata nodes while preserving the complete residual finding multiset.",
+        "codify_target": "listener/src/searcher/test/adapter-family-shared-surface-conformance.ts: narrowly recognize only schema/hash/current-manifest validated identity nodes; keep every other literal, import and branch check, with negative regressions.",
+        "status": "open"
+      },
+      "created_at": "2026-09-16T13:52:28Z",
+      "updated_at": "2026-09-16T13:52:28Z"
+    },
+    {
+      "learning_case_id": "tooldef-20260916-runtime-session-stale-valuation-and-gas-fixtures",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": ["swap"],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "runtime_session_positive_fixture_lacked_production_valuation_and_distinct_amount",
+      "evidence": {
+        "manual": "Original and candidate fail identically: 40 synthetic directed mids without a WETH valuation path yield no USD paired signals; the old positive assertion expected a ring anyway. A later fixed-gas fixture implies G=P+1 wei and Token conversion may round to the same amountIn as the current global P.",
+        "independent_review": "logs/runtime-session-fixture-independent-review.MqxyW5/review-final-comment-binding.json",
+        "mirror_source_sha256": "37ca9cf703b7d593424b96d09b13f9683fb7af01e40de7d82512c1d7b4a1e51d",
+        "regression": "Retain the unanchored graph as a negative; create the positive valuation pool through real same-source lifecycle issuers; derive a meaningfully larger gas reference from global P. All 481 original assertion expressions retained, eight added. Full runtime test and full build pass; production files unchanged.",
+        "implementation_location": "logs/checker-repair.Fy7eCH/listener/src/searcher/test/strict-production-runtime-session.ts",
+        "integration_status": "Mirror only. Canonical source remains unchanged during active historical rebuild; no integration or production acceptance verdict."
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:strict-production-runtime-session",
+        "issue": "Positive fixture assumptions became incompatible with required production valuation and the shared 0.005 WETH default, producing unrelated Family-adaptation failures.",
+        "evidence": "Independent source-bound baseline/candidate runs fail at the same unvalued ring; corrected fixture retains predicates and passes the complete original test with unchanged production source.",
+        "codify_target": "listener/src/searcher/test/strict-production-runtime-session.ts: keep missing-valuation rejection, add issuer-produced valuation for the positive case, and derive distinct gas-reference input from global P without relaxing production policy.",
+        "status": "open"
+      },
+      "created_at": "2026-09-16T13:52:28Z",
+      "updated_at": "2026-09-16T13:52:28Z"
     }
   ]
 }

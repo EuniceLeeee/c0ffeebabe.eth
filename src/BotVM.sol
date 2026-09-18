@@ -192,6 +192,16 @@ contract BotVM {
                 );
                 ip += 52;
             }
+            else if (op == 0x09) {
+                // ACTUAL_AMOUNT_FLOW v1. All amounts/scripts were separately
+                // quoted and encoded by their original Family. Runtime chooses
+                // only the case matching the preceding leg's measured delta.
+                require(ip + 3 <= end, "flow header");
+                uint256 size = _readUint24(script, ip);
+                require(ip + 3 + size <= end, "flow bounds");
+                _runAmountFlow(_readBytes(script, ip + 3, size));
+                ip += 3 + size;
+            }
             else if (op == 0x0d) {
                 // ── REVERT ──
                 // Layout: [data_len:3][data:N]
@@ -210,6 +220,89 @@ contract BotVM {
     }
 
     // ─── TSLOT 0x1337 State Management ────────────────────────────
+
+    /// @dev No persistent/transient amount register: protocol callbacks cannot
+    /// overwrite the parent flow's measured amount. Only ERC20 balance DELTAS,
+    /// never the executor's total inventory, select the next exact input.
+    function _runAmountFlow(bytes memory data) internal {
+        require(data.length >= 34, "flow short");
+        uint256 amount = _readUint256(data, 0);
+        uint256 tolerance = uint8(data[32]);
+        uint256 steps = uint8(data[33]);
+        require(amount > 0 && tolerance <= 1 && steps > 0 && steps <= 6, "flow config");
+        uint256 ip = 34;
+        address previousToken;
+        for (uint256 step; step < steps; ++step) {
+            require(ip + 44 <= data.length, "flow step");
+            address tokenIn = _readAddress(data, ip);
+            address tokenOut = _readAddress(data, ip + 20);
+            uint256 cases = uint8(data[ip + 40]);
+            uint256 end = ip + 44 + _readUint24(data, ip + 41);
+            require(end <= data.length && cases > 0 && cases <= 32 && tokenIn != tokenOut, "flow step bounds");
+            require(step == 0 || tokenIn == previousToken, "flow continuity");
+            (bytes memory action, uint256 quoted) = _selectAmountAction(data, ip + 44, end, cases, amount);
+            ip = end;
+            require(quoted > tolerance, "flow quote");
+            uint256 beforeIn = IERC20(tokenIn).balanceOf(address(this));
+            uint256 beforeOut = IERC20(tokenOut).balanceOf(address(this));
+            require(beforeIn >= amount, "flow input balance");
+            _runVM(action);
+            require(IERC20(tokenIn).balanceOf(address(this)) == beforeIn - amount, "flow input delta");
+            uint256 afterOut = IERC20(tokenOut).balanceOf(address(this));
+            require(afterOut >= beforeOut, "flow output balance");
+            amount = afterOut - beforeOut;
+            require(amount >= quoted - tolerance, "flow output shortfall");
+            // Unquoted intermediate amounts (including overdelivery) fail at
+            // the next step, never spending inventory or inventing a quote.
+            previousToken = tokenOut;
+        }
+        require(ip == data.length, "flow trailing data");
+    }
+
+    function _selectAmountAction(bytes memory data, uint256 ip, uint256 end, uint256 cases, uint256 amount)
+        internal pure returns (bytes memory action, uint256 quoted)
+    {
+            require(ip + 3 <= end, "flow template");
+            uint256 baseSize = _readUint24(data, ip);
+            uint256 baseStart = ip + 3;
+            ip = baseStart + baseSize;
+            require(ip <= end, "flow template bounds");
+            uint256 selected;
+            uint256 selectedSize;
+            uint256 selectedMode;
+            bool found;
+            for (uint256 c; c < cases; ++c) {
+                require(ip + 68 <= end, "flow case");
+                uint256 mode = uint8(data[ip + 64]);
+                uint256 size = _readUint24(data, ip + 65);
+                require(mode <= 1 && (mode == 1 || size > 0) && ip + 68 + size <= end, "flow case bounds");
+                if (_readUint256(data, ip) == amount) {
+                    require(!found, "flow duplicate input");
+                    found = true;
+                    quoted = _readUint256(data, ip + 32);
+                    selected = ip + 68;
+                    selectedSize = size;
+                    selectedMode = mode;
+                }
+                ip += 68 + size;
+            }
+            require(ip == end && found, "flow unquoted input");
+            action = selectedMode == 0 ? _readBytes(data, selected, selectedSize)
+                : _readBytes(data, baseStart, baseSize);
+            if (selectedMode == 1) {
+                uint256 patchEnd = selected + selectedSize;
+                while (selected < patchEnd) {
+                    require(selected + 4 <= patchEnd, "flow patch");
+                    uint256 offset = _readUint24(data, selected);
+                    uint256 size = uint8(data[selected + 3]);
+                    selected += 4;
+                    require(size > 0 && selected + size <= patchEnd && offset + size <= action.length, "flow patch bounds");
+                    for (uint256 j; j < size; ++j) action[offset + j] = data[selected + j];
+                    selected += size;
+                }
+            }
+            require(action.length > 0, "flow empty action");
+    }
 
     /// @dev Unpack field1 (1B), field2 (3B), field3 (3B) from TSLOT 0x1337.
     ///      Exact replica of the original bot's bit layout.

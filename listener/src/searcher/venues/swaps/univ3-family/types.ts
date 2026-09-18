@@ -10,6 +10,7 @@ import type {
   LineageId,
 } from "../../adapter-family-identifiers.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
+import type { UniV3SwapAccess } from "./swap-access.js";
 
 export type UniV3CandidateSource =
   | "pool-created"
@@ -66,6 +67,8 @@ export interface UniV3Descriptor extends CompiledInstanceDescriptor {
   readonly tickSpacing: number;
   readonly factoryBinding: UniV3FactoryBinding;
   readonly quoterBinding: UniV3QuoterBinding;
+  /** Interface evidence only; live executor permission is read by Exact. */
+  readonly swapAccess: UniV3SwapAccess;
 }
 
 export type UniV3Direction = "zero-for-one" | "one-for-zero";
@@ -109,7 +112,7 @@ export interface UniV3PricingSnapshot {
 }
 
 export interface UniV3ExactEvidence {
-  readonly kind: "univ3-factory-bound-quoter";
+  readonly kind: "univ3-factory-bound-quoter" | "univ3-local-ticks";
   readonly source: CanonicalSource;
   readonly pool: string;
   readonly quoter: string | null;

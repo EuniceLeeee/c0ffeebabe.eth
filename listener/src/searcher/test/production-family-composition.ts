@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { GENERATED_PRODUCTION_FAMILY_ENTRIES } from "../generated/production-family-entries.generated.js";
+import { FAMILY_CAPABILITY_NAMES } from "../venues/family-capability-catalog.js";
 import "../../adapters/index.js";
 import { listAll } from "../../adapters/registry.js";
 import {
@@ -14,14 +16,22 @@ import {
 
 assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.modules.length, 0);
 assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.issues.length, 0);
-assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins.length, 23);
+const expectedFamilyCount = GENERATED_PRODUCTION_FAMILY_ENTRIES.length;
+const expectedCapabilityCount = expectedFamilyCount * FAMILY_CAPABILITY_NAMES.length;
+assert(expectedFamilyCount > 0);
+assert.deepEqual(
+  PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins.map((entry) => entry.sourceFile).sort(),
+  GENERATED_PRODUCTION_FAMILY_ENTRIES.map((entry) => entry.sourceFile).sort(),
+  "every generated production entry must load exactly once",
+);
+assert.equal(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins.length, expectedFamilyCount);
 assert.equal(
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll().length,
-  23,
+  expectedFamilyCount,
 );
 assert.equal(
   PRODUCTION_STRICT_SHADOW_GENERATED_CAPABILITY_MANIFEST.entries.length,
-  253,
+  expectedCapabilityCount,
 );
 assert.equal(
   new Set(
@@ -29,7 +39,7 @@ assert.equal(
       (entry) => `${entry.familyId}\0${entry.capability}`,
     ),
   ).size,
-  253,
+  expectedCapabilityCount,
 );
 
 const familyActionIds = PRODUCTION_STRICT_SHADOW_FAMILY_OWNED_ACTION_ADAPTERS.map(
@@ -65,5 +75,5 @@ assert.deepEqual(
 
 console.log(
   "production-family-composition PASS " +
-    "(22 strict Families / 242 exact capabilities / complete strict action closure)",
+    `(${expectedFamilyCount} strict Families / ${expectedCapabilityCount} exact capabilities / complete strict action closure)`,
 );

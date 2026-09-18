@@ -18,7 +18,7 @@ import type { RuntimeEvidence } from
 import type { AdapterWorkControl } from "../adapter-work-intent.js";
 
 export interface PropagatedAmounts {
-  /** Haircutted per-edge amounts used for downstream sizing and profit checks. */
+  /** Nominal per-edge amounts in raw-unit mode; legacy BPS retains its haircut. */
   amounts: bigint[];
   /** Raw pre-haircut quote output for each edge; rawOutputs[i] is edge i output. */
   rawOutputs: bigint[];
@@ -47,6 +47,8 @@ export async function propagateAmounts(
     runtimeEvidence?: readonly RuntimeEvidence[];
     adapterWorkControl?: AdapterWorkControl;
     safetyBps?: bigint;
+    /** Raw-unit execution mode (0/1): nominal quotes, no pre-subtracted dust. */
+    toleranceRawUnits?: bigint;
     /** Counts strict per-leg exact issuance without changing quote behavior. */
     onExactCall?: () => void;
     /** Abort between hops when the solver deadline passes, so a single cold
@@ -70,6 +72,8 @@ export async function propagateAmountsWithRawOutputs(
     runtimeEvidence?: readonly RuntimeEvidence[];
     adapterWorkControl?: AdapterWorkControl;
     safetyBps?: bigint;
+    /** Raw-unit execution mode (0/1): nominal quotes, no pre-subtracted dust. */
+    toleranceRawUnits?: bigint;
     /** Counts strict per-leg exact issuance without changing quote behavior. */
     onExactCall?: () => void;
     /** Abort between hops when the solver deadline passes, so a single cold
@@ -81,7 +85,14 @@ export async function propagateAmountsWithRawOutputs(
   const rawOutputs: bigint[] = [];
   const exactHandles: StrictProductionExactHandle[] = [];
   let cur = flashAmount;
+  const toleranceRawUnits = options.toleranceRawUnits;
+  if (toleranceRawUnits !== undefined && toleranceRawUnits !== 0n && toleranceRawUnits !== 1n) {
+    throw new Error("propagation tolerance must be 0 or 1 token raw unit");
+  }
   const safetyBps = options.safetyBps ?? 10000n;
+  if (toleranceRawUnits === undefined && (safetyBps < 1n || safetyBps > 10000n)) {
+    throw new Error("propagation retained output must be in [1, 10000] bps");
+  }
   for (const edge of path.edges) {
     if (options.shouldStop?.()) {
       throw new Error(`propagation aborted: deadline reached before edge ${edge.adapterId}`);
@@ -130,7 +141,14 @@ export async function propagateAmountsWithRawOutputs(
       );
     }
     rawOutputs.push(out);
-    const spendable = applySafetyBps(out, safetyBps);
+    const spendable = toleranceRawUnits === undefined
+      ? (out * safetyBps) / 10000n
+      : out;
+    if (spendable <= 0n) {
+      // Local amount policy, not a failed Family quote. Never send zero to
+      // the next Family and accidentally attribute this rejection to it.
+      throw new Error("propagation tolerance left no spendable output");
+    }
     amounts.push(spendable);
     cur = spendable;
   }
@@ -142,8 +160,4 @@ export async function propagateAmountsWithRawOutputs(
 function isControlFailure(error: unknown): boolean {
   return error instanceof Error &&
     /\b(?:abort(?:ed)?|deadline|timed?\s*out|timeout)\b/i.test(error.message);
-}
-
-function applySafetyBps(amount: bigint, safetyBps: bigint): bigint {
-  return (amount * safetyBps) / 10000n;
 }

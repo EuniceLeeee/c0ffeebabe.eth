@@ -1518,7 +1518,7 @@ function exactRefinementDisabledUsesPreparedPWithoutQuotes(): void {
   const thin = make("thin", 100n, 100n, 49.9);
   const missing = make("missing", 100n, 100n);
   const overCap = make("over-cap", 100n, 50n);
-  const first = make("first", 100n, 100n);
+  const first = make("first", 1n, 100n);
   const second = make("second", 100n, 100n);
   const third = make("third", 100n, 100n);
   const result = prepareBlockScanCandidatesWithoutExactRefinement(

@@ -1,5 +1,5 @@
 import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
-import { effectiveEnumerationMids } from "../blockscan-effective-mid.js";
+import { effectiveUsdPricing } from "../blockscan-usd-view.js";
 import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import {
@@ -54,6 +54,7 @@ export function detectProductionBlockScanOpportunities(
   input: ProductionBlockScanInput,
 ): ProductionBlockScanOutcome {
   assertAtomicRuntime(input.runtime);
+  const usd = effectiveUsdPricing(input.runtime.pricing, input.cfg.usdSignalPairsPerToken);
   const resolvedEdgeKeys = new Set(
     input.runtime.pricing.coverage.resolvedEdgeKeys,
   );
@@ -65,7 +66,8 @@ export function detectProductionBlockScanOpportunities(
     sourceBlock: input.runtime.sourceBlock,
     swapTouched: input.swapTouched,
     cfg: input.cfg,
-    mids: effectiveEnumerationMids(input.runtime.pricing),
+    mids: usd.mids,
+    usdView: usd.view,
     routeEligible: input.routeEligible,
     edgeEligible: input.edgeEligible,
     captureCoarseEnumeration: input.captureCoarseEnumeration,

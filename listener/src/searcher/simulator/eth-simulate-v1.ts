@@ -1,4 +1,5 @@
-import { Interface } from "ethers";
+import { isDeepStrictEqual } from "node:util";
+import { getBytes, Interface } from "ethers";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import { bytesToHex } from "../../shared/compiler/encoder.js";
 import { buildExecuteCalldata } from "../../shared/executor/botvm-executor.js";
@@ -25,6 +26,108 @@ type Context = {
   deadlineAtMs: number;
 };
 
+type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> } : T;
+
+/** Versioned, endpoint-free snapshot. Source identity retains CanonicalSource's
+ * safe integers; all source-header quantities are canonical decimal strings.
+ * The two parameter tuples are the exact wire payloads, not RPC method names.
+ */
+export type EthSimulateV1ExecutionInput = DeepReadonly<ReturnType<typeof prepareExecutionInput>>;
+
+/** Pure preparation from an already compiled script: no quote, compilation, I/O
+ * or deadline dependency. Every nested object is owned by the frozen snapshot. */
+export function buildEthSimulateV1ExecutionInput(input: {
+  source: CanonicalSource; header: BlockScanObservedHeader; executor: string;
+  owner: string; profitToken: string; scriptHex: string;
+}): EthSimulateV1ExecutionInput {
+  return freezeInput(prepareExecutionInput(input));
+}
+
+function prepareExecutionInput({ source, header, executor, owner, profitToken, scriptHex }: {
+  source: CanonicalSource; header: BlockScanObservedHeader; executor: string;
+  owner: string; profitToken: string; scriptHex: string;
+}) {
+  const blockOverrides = targetContext(source, header);
+  validateCaller(executor, owner);
+  if (typeof profitToken !== "string" || !ADDRESS.test(profitToken) ||
+      typeof scriptHex !== "string" || !/^0x(?:[0-9a-fA-F]{2})*$/.test(scriptHex)) {
+    throw new Error("invalid final simulation profit token or script");
+  }
+  const calldata = buildExecuteCalldata(getBytes(scriptHex));
+  const pinnedBlock = { blockHash: source.hash, requireCanonical: true as const };
+  // The zero-address observation cannot spend owner funds or change main state.
+  const observer = { from: ZERO_ADDRESS, to: profitToken,
+    data: ERC20.encodeFunctionData("balanceOf", [executor]), gasPrice: "0x0" };
+  return {
+    schemaVersion: 1 as const,
+    source: { number: source.number, hash: source.hash, generation: source.generation },
+    sourceHeader: { number: String(header.number), hash: header.hash, parentHash: header.parentHash,
+      timestamp: String(header.timestamp), baseFeePerGas: header.baseFeePerGas!.toString(),
+      gasUsed: header.gasUsed.toString(), gasLimit: header.gasLimit.toString() },
+    executor, owner, profitToken, scriptHex, calldata,
+    preBalanceParams: [{ ...observer, gas: blockOverrides.gasLimit }, pinnedBlock] as const,
+    simulateParams: [{
+      blockStateCalls: [{ blockOverrides,
+        stateOverrides: { [owner]: { balance: hex(OWNER_GAS_BALANCE) } },
+        calls: [
+          { from: owner, to: executor, data: calldata, value: "0x0",
+            gas: hex(TX_GAS), gasPrice: blockOverrides.baseFeePerGas },
+          { ...observer, gas: hex(header.gasLimit - TX_GAS) },
+        ] as const,
+      }] as const,
+      validation: false as const, traceTransfers: false as const, returnFullTransactions: false as const,
+    }, pinnedBlock] as const,
+  };
+}
+
+/** Saved primary fields must rebuild every payload exactly, including all keys.
+ * Returns a new frozen canonical snapshot, never caller-owned RPC parameters.
+ * This checks consistency/policy, not authenticity of the original recording.
+ */
+export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulateV1ExecutionInput {
+  try {
+    const saved = record(value), source = record(saved?.source), header = record(saved?.sourceHeader);
+    if (!saved || saved.schemaVersion !== 1 || !source || !header ||
+        typeof source.number !== "number" || typeof source.hash !== "string" ||
+        typeof source.generation !== "number" || typeof header.hash !== "string" ||
+        typeof header.parentHash !== "string" || typeof saved.executor !== "string" ||
+        typeof saved.owner !== "string" || typeof saved.profitToken !== "string" ||
+        typeof saved.scriptHex !== "string") throw new Error();
+    const decimal = (field: unknown): bigint => {
+      if (typeof field !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(field)) throw new Error();
+      return BigInt(field);
+    };
+    const canonical = buildEthSimulateV1ExecutionInput({
+      source: { number: source.number, hash: source.hash, generation: source.generation },
+      header: { number: Number(decimal(header.number)), hash: header.hash, parentHash: header.parentHash,
+        timestamp: Number(decimal(header.timestamp)), baseFeePerGas: decimal(header.baseFeePerGas),
+        gasUsed: decimal(header.gasUsed), gasLimit: decimal(header.gasLimit), transactionHashes: [] },
+      executor: saved.executor, owner: saved.owner, profitToken: saved.profitToken, scriptHex: saved.scriptHex,
+    });
+    if (!isDeepStrictEqual(value, canonical)) throw new Error();
+    return canonical;
+  } catch {
+    // Never echo untrusted saved data (or a decoder's unsanitized cause).
+    throw new Error("invalid final simulation execution input");
+  }
+}
+
+function freezeInput<T>(value: T): DeepReadonly<T> {
+  if (value !== null && typeof value === "object") {
+    for (const child of Object.values(value)) freezeInput(child);
+    Object.freeze(value);
+  }
+  return value as DeepReadonly<T>;
+}
+
+function validateCaller(executor: string, owner: string): void {
+  if (typeof executor !== "string" || typeof owner !== "string" ||
+      !ADDRESS.test(executor) || !ADDRESS.test(owner) || owner.toLowerCase() === ZERO_ADDRESS ||
+      executor.toLowerCase() === owner.toLowerCase()) {
+    throw new Error("invalid final simulation caller");
+  }
+}
+
 /** Stateless final simulation; the existing scheduler owns generation fencing.
  * Only the owner's native gas balance is overridden (exactly 10,000 ETH, unlike
  * Anvil's minimum floor). No token/code/storage/nonce overrides are installed.
@@ -37,20 +140,41 @@ export class EthSimulateV1Simulator {
     readonly executor: string,
     readonly owner: string,
   ) {
-    if (!ADDRESS.test(executor) || !ADDRESS.test(owner) || owner.toLowerCase() === ZERO_ADDRESS ||
-        executor.toLowerCase() === owner.toLowerCase()) {
-      throw new Error("invalid final simulation caller");
-    }
+    validateCaller(executor, owner);
   }
 
   async simulate(plan: ResolvedPlan, context: Context): Promise<SimulationResult> {
     const { source, header, signal, deadlineAtMs } = context;
-    const blockOverrides = targetContext(source, header);
+    targetContext(source, header);
     if (!Number.isSafeInteger(deadlineAtMs) || !signal || !ADDRESS.test(plan.profitToken)) {
       throw new Error("invalid final simulation control or profit token");
     }
-    const pinnedBlock = { blockHash: source.hash, requireCanonical: true };
     const profitToken = plan.profitToken;
+    // Keep the original pre-compilation cancellation boundary. Synchronous
+    // compilation needs no timer/listener; replay checks the deadline again.
+    if (signal.aborted) throw new StateCallAbortedError("final simulation signal aborted", "signal");
+    if (Date.now() >= deadlineAtMs) throw new StateCallAbortedError("final simulation deadline aborted", "deadline");
+    const scriptHex = bytesToHex(compilePlan(plan.root, this.executor));
+    const input = buildEthSimulateV1ExecutionInput({ source, header, executor: this.executor,
+      owner: this.owner, profitToken, scriptHex });
+    return this.simulateExecutionInput(input, { signal, deadlineAtMs });
+  }
+
+  /** Read-only diagnostic replay. Production still owns the latest-head gate. */
+  async simulateExecutionInput(input: EthSimulateV1ExecutionInput,
+    control: { signal: AbortSignal; deadlineAtMs: number }): Promise<SimulationResult> {
+    const saved = validateEthSimulateV1ExecutionInput(input);
+    if (saved.executor.toLowerCase() !== this.executor.toLowerCase() ||
+        saved.owner.toLowerCase() !== this.owner.toLowerCase()) {
+      throw new Error("final simulation execution input caller mismatch");
+    }
+    const { signal, deadlineAtMs } = control;
+    if (!Number.isSafeInteger(deadlineAtMs) || !signal) {
+      throw new Error("invalid final simulation control or profit token");
+    }
+    const { profitToken, calldata, scriptHex, preBalanceParams, simulateParams } = saved;
+    const blockOverrides = simulateParams[0].blockStateCalls[0].blockOverrides;
+    const pinnedBlock = simulateParams[1];
     const controller = new AbortController();
     const cancel = (kind: "signal" | "deadline"): void => {
       if (!controller.signal.aborted) {
@@ -69,7 +193,7 @@ export class EthSimulateV1Simulator {
       if (remaining <= 0) { cancel("deadline"); return; }
       timer = setTimeout(armDeadline, Math.min(remaining, 2_147_483_647));
     };
-    const request = async (id: number, method: string, params: unknown[]): Promise<unknown> => {
+    const request = async (id: number, method: "eth_call" | "eth_simulateV1", params: readonly unknown[]): Promise<unknown> => {
       assertOpen();
       let response;
       try {
@@ -100,29 +224,9 @@ export class EthSimulateV1Simulator {
       assertOpen();
       signal.addEventListener("abort", onAbort, { once: true });
       armDeadline();
-      const script = compilePlan(plan.root, this.executor);
-      const calldata = buildExecuteCalldata(script);
-      const scriptHex = bytesToHex(script);
-      // Old getTokenBalance used eth_call without `from`: zero-address observer,
-      // zero gas price. Its writes must never enter the main transaction's state.
-      const observer = { from: ZERO_ADDRESS, to: profitToken,
-        data: ERC20.encodeFunctionData("balanceOf", [this.executor]), gasPrice: "0x0" };
-      const pre = balance(await request(1, "eth_call", [
-        { ...observer, gas: blockOverrides.gasLimit }, pinnedBlock,
-      ]));
+      const pre = balance(await request(1, "eth_call", preBalanceParams));
       const observerGas = quantity(blockOverrides.gasLimit) - TX_GAS;
-      const raw = await request(2, "eth_simulateV1", [{
-        blockStateCalls: [{
-          blockOverrides,
-          stateOverrides: { [this.owner]: { balance: hex(OWNER_GAS_BALANCE) } },
-          calls: [
-            { from: this.owner, to: this.executor, data: calldata, value: "0x0",
-              gas: hex(TX_GAS), gasPrice: blockOverrides.baseFeePerGas },
-            { ...observer, gas: hex(observerGas) },
-          ],
-        }],
-        validation: false, traceTransfers: false, returnFullTransactions: false,
-      }, pinnedBlock]);
+      const raw = await request(2, "eth_simulateV1", simulateParams);
       if (!Array.isArray(raw) || raw.length !== 1) throw new Error("invalid final simulation block count");
       const block = record(raw[0]);
       if (!block || typeof block.parentHash !== "string" || !HASH.test(block.parentHash) ||
@@ -167,10 +271,11 @@ export class EthSimulateV1Simulator {
 
 function targetContext(source: CanonicalSource, header: BlockScanObservedHeader) {
   if (!source || !header || !Number.isSafeInteger(source.number) || source.number < 0 ||
-      !Number.isSafeInteger(source.number + 1) || !HASH.test(source.hash) ||
+      !Number.isSafeInteger(source.number + 1) || typeof source.hash !== "string" || !HASH.test(source.hash) ||
       !Number.isSafeInteger(source.generation) || source.generation < 0 ||
-      source.number !== header.number || !HASH.test(header.hash) ||
-      source.hash.toLowerCase() !== header.hash.toLowerCase() || !HASH.test(header.parentHash) ||
+      source.number !== header.number || typeof header.hash !== "string" || !HASH.test(header.hash) ||
+      source.hash.toLowerCase() !== header.hash.toLowerCase() ||
+      typeof header.parentHash !== "string" || !HASH.test(header.parentHash) ||
       !Number.isSafeInteger(header.timestamp) || header.timestamp < 0 ||
       !Number.isSafeInteger(header.timestamp + 12) || typeof header.baseFeePerGas !== "bigint" ||
       header.baseFeePerGas <= 0n || typeof header.gasLimit !== "bigint" || header.gasLimit <= TX_GAS ||

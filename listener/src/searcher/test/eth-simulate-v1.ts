@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { inspect } from "node:util";
 import { erc20TransferAdapter } from "../../adapters/erc20.js";
 import { register } from "../../adapters/registry.js";
@@ -10,8 +13,10 @@ import { buildExecuteCalldata } from "../../shared/executor/botvm-executor.js";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
 import type { BlockScanObservedHeader } from "../blockscan-observed-header.js";
 import { isRpcThrottleError } from "../rpc-throttle-guard.js";
-import { EthSimulateV1Simulator } from "../simulator/eth-simulate-v1.js";
+import { buildEthSimulateV1ExecutionInput, EthSimulateV1Simulator,
+  validateEthSimulateV1ExecutionInput, type EthSimulateV1ExecutionInput } from "../simulator/eth-simulate-v1.js";
 import type { ResolvedPlan } from "../solver/solver.js";
+import { createSolverExecutionInputRecorder } from "../solver-execution-input-recorder.js";
 
 const hash = (c: string): string => `0x${c.repeat(64)}`;
 const addr = (c: string): string => `0x${c.repeat(40)}`;
@@ -24,6 +29,10 @@ const header: BlockScanObservedHeader = { number: 100, hash: source.hash, parent
   gasUsed: 60_000_000n, gasLimit: 60_000_000n, transactionHashes: [] };
 const target = { number: "0x65", time: hex(header.timestamp + 12),
   gasLimit: hex(header.gasLimit), baseFeePerGas: hex(1_125_000_000n) };
+// Preparation needs neither registered adapters nor an endpoint/server/control.
+const pure = buildEthSimulateV1ExecutionInput({ source, header, executor, owner,
+  profitToken: token, scriptHex: "0x0102" });
+assert.equal(pure.calldata, buildExecuteCalldata(Uint8Array.of(1, 2)));
 register(erc20TransferAdapter);
 const plan: ResolvedPlan = { root: { adapterId: "erc20-transfer", target: token,
   tokenIn: token, tokenOut: token, amount: 17n, params: { to: owner }, children: [] },
@@ -32,6 +41,31 @@ const originalPlan = structuredClone(plan);
 const script = compilePlan(plan.root, executor);
 assert(script.length > 0);
 const calldata = buildExecuteCalldata(script), scriptHex = bytesToHex(script);
+const capture = () => buildEthSimulateV1ExecutionInput({ source, header, executor, owner,
+  profitToken: token, scriptHex });
+const prepared = capture();
+const serialized = JSON.stringify(prepared);
+type Mutable<T> = T extends object ? { -readonly [K in keyof T]: Mutable<T[K]> } : T;
+const reload = (): Mutable<EthSimulateV1ExecutionInput> => JSON.parse(serialized);
+assert.deepEqual(reload(), prepared);
+assert.deepEqual(validateEthSimulateV1ExecutionInput(reload()), prepared);
+assert.deepEqual(prepared.sourceHeader, { number: "100", hash: source.hash, parentHash: header.parentHash,
+  timestamp: String(header.timestamp), baseFeePerGas: "1000000000", gasUsed: "60000000", gasLimit: "60000000" });
+const assertFrozen = (value: unknown): void => {
+  if (value === null || typeof value !== "object") return;
+  assert(Object.isFrozen(value));
+  for (const child of Object.values(value)) assertFrozen(child);
+};
+assertFrozen(prepared);
+assertFrozen(validateEthSimulateV1ExecutionInput(reload()));
+assert.throws(() => Object.assign(prepared.source, { hash: hash("c") }), TypeError);
+assert.throws(() => Object.assign(prepared.simulateParams[0].blockStateCalls[0].calls[1], { from: owner }), TypeError);
+const mutableSource = { ...source }, mutableHeader = { ...header, transactionHashes: [hash("c")] };
+const detached = buildEthSimulateV1ExecutionInput({ source: mutableSource, header: mutableHeader,
+  executor, owner, profitToken: token, scriptHex });
+mutableSource.hash = hash("d"); mutableSource.generation++;
+mutableHeader.hash = hash("d"); mutableHeader.gasUsed = 0n; mutableHeader.transactionHashes.push(hash("e"));
+assert.equal(JSON.stringify(detached), serialized);
 const result = (post = 125n) => [{ number: target.number, parentHash: source.hash,
   timestamp: target.time, gasLimit: target.gasLimit, baseFeePerGas: target.baseFeePerGas,
   // Deliberately different from main gas: block/helper totals must never become EV gas.
@@ -98,7 +132,7 @@ try {
   const pin = { blockHash: source.hash, requireCanonical: true };
   const observer = { from: addr("0"), to: token,
     data: `0x70a08231${executor.slice(2).padStart(64, "0")}`, gasPrice: "0x0" };
-  assert.deepEqual(requests.slice(0, 2), [
+  const expectedWire: RpcRequest[] = [
     { jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ ...observer, gas: target.gasLimit }, pin] },
     { jsonrpc: "2.0", id: 2, method: "eth_simulateV1", params: [{
       blockStateCalls: [{ blockOverrides: target,
@@ -107,7 +141,99 @@ try {
           gasPrice: target.baseFeePerGas }, { ...observer, gas: hex(header.gasLimit - 0x1000000n) }],
       }], validation: false, traceTransfers: false, returnFullTransactions: false,
     }, pin] },
-  ]);
+  ];
+  assert.deepEqual(requests.slice(0, 2), expectedWire);
+  assert.deepEqual(prepared.preBalanceParams, expectedWire[0]!.params);
+  assert.deepEqual(prepared.simulateParams, expectedWire[1]!.params);
+
+  // Capture before starting simulation, then discard the root's usable adapter.
+  // Neither persistence nor replay may re-quote or compile this mutated plan.
+  reset();
+  const mutablePlan = structuredClone(plan), start = requests.length;
+  const fromPlan = simulator.simulate(mutablePlan, context());
+  mutablePlan.root.adapterId = "unregistered-after-capture";
+  mutablePlan.root.amount = 999n;
+  mutablePlan.root.params.to = addr("4");
+  mutablePlan.root.children.push(structuredClone(plan.root));
+  mutablePlan.profitToken = addr("5");
+  const liveResult = await fromPlan;
+  const reloaded = reload(), replayControl = context();
+  const fromSaved = simulator.simulateExecutionInput(reloaded, replayControl);
+  // Caller mutation during the first await cannot change the second request/result.
+  reloaded.scriptHex = "0x"; reloaded.calldata = "0x"; reloaded.source.hash = hash("e");
+  reloaded.simulateParams[0].blockStateCalls[0].calls[0].data = "0x";
+  reloaded.simulateParams[0].blockStateCalls[0].calls[1].from = owner;
+  assert.deepEqual(await fromSaved, liveResult);
+  assert.deepEqual(requests.slice(start), [...expectedWire, ...expectedWire]);
+  // Real file roundtrip through the same sidecar writer used before the live
+  // simulation queue; replay does not need the old root, quote cache or Ready.
+  const evidenceDir = mkdtempSync(join(tmpdir(), "mev-sim-replay-"));
+  try {
+    const path = join(evidenceDir, "inputs.jsonl");
+    const writer = createSolverExecutionInputRecorder({ path, runId: "fixture", chainId: 1, runtimeCommit: "a".repeat(40) });
+    try {
+      writer.record({ source, opportunityId: hash("d"),
+        route: { routeId: hash("d"), edgeIds: [], tokenRing: [token], venuePath: [], flashToken: token },
+        solverIndex: 0, candidateIndex: 0, flashAmount: plan.flashAmount,
+        quoteProfit: plan.netProfit, profitToken: token, templateName: plan.templateName, executionInput: prepared });
+    } finally { writer.close(); }
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    const beforeReplay = requests.length;
+    assert.deepEqual(await simulator.simulateExecutionInput(saved.execution_input, context()), liveResult);
+    assert.deepEqual(requests.slice(beforeReplay), expectedWire);
+  } finally { rmSync(evidenceDir, { recursive: true, force: true }); }
+  assert.equal(getEventListeners(replayControl.signal, "abort").length, 0);
+  assert.equal(JSON.stringify(prepared), serialized);
+
+  const noValidationRequests = requests.length;
+  const changes: Array<(saved: Mutable<EthSimulateV1ExecutionInput>) => void> = [
+    saved => Object.assign(saved, { schemaVersion: 2 }),
+    saved => { saved.source.number++; },
+    saved => { saved.source.hash = hash("c"); },
+    saved => { saved.source.generation = -1; },
+    saved => { saved.source.generation = 0.5; },
+    saved => { saved.sourceHeader.hash = hash("c"); },
+    saved => { saved.sourceHeader.parentHash = "bad"; },
+    saved => { saved.sourceHeader.number = "0100"; },
+    saved => { saved.sourceHeader.timestamp = "1800000001"; },
+    saved => { saved.sourceHeader.gasUsed = "60000001"; },
+    saved => { saved.sourceHeader.baseFeePerGas = "0"; },
+    saved => Object.assign(saved.sourceHeader, { gasLimit: 60_000_000n }),
+    saved => { saved.executor = owner; },
+    saved => { saved.owner = addr("0"); },
+    saved => { saved.profitToken = "invalid-token"; },
+    saved => { saved.scriptHex = "0x1"; },
+    saved => { saved.scriptHex = "0x0102"; },
+    saved => { saved.calldata = "0x"; saved.simulateParams[0].blockStateCalls[0].calls[0].data = "0x"; },
+    saved => { saved.preBalanceParams[1].blockHash = hash("c"); },
+    saved => { saved.simulateParams[1].blockHash = hash("c"); },
+    saved => Object.assign(saved.simulateParams[1], { requireCanonical: false }),
+    saved => { saved.preBalanceParams[0].from = owner; },
+    saved => { saved.simulateParams[0].blockStateCalls[0].calls[1].from = owner; },
+    saved => { saved.simulateParams[0].blockStateCalls[0].calls[1].data = "0x"; },
+    saved => { saved.simulateParams[0].blockStateCalls[0].calls[0].gas = "0x1"; },
+    saved => { saved.simulateParams[0].blockStateCalls[0].stateOverrides[addr("4")] = { balance: "0x1" }; },
+    saved => Object.assign(saved.simulateParams[0].blockStateCalls[0].stateOverrides[owner]!, { nonce: "0x0" }),
+    saved => Object.assign(saved.simulateParams[0].blockStateCalls[0].blockOverrides, { feeRecipient: owner }),
+    saved => Object.assign(saved.simulateParams[0], { validation: true }),
+    saved => Object.assign(saved, { method: "eth_sendTransaction", rpcUrl: secret }),
+  ];
+  for (const change of changes) {
+    const changed = reload(); change(changed);
+    assert.throws(() => validateEthSimulateV1ExecutionInput(changed), sanitized);
+    await assert.rejects(simulator.simulateExecutionInput(changed, context()), sanitized);
+  }
+  for (const invalid of [null, [], {}, serialized, { ...reload(), source: null }]) {
+    assert.throws(() => validateEthSimulateV1ExecutionInput(invalid), sanitized);
+  }
+  // JSON object key ordering is irrelevant; array order and every field are exact.
+  const reordered = Object.fromEntries(Object.entries(reload()).reverse());
+  assert.deepEqual(validateEthSimulateV1ExecutionInput(reordered), prepared);
+  for (const other of [new EthSimulateV1Simulator(url, addr("4"), owner),
+    new EthSimulateV1Simulator(url, executor, addr("4"))]) {
+    await assert.rejects(other.simulateExecutionInput(prepared, context()), sanitized);
+  }
+  assert.equal(requests.length, noValidationRequests, "validation and pure preparation perform no RPC");
 
   // Concrete fee expectations cover full/target/empty parent blocks and 1-wei rounding.
   for (const [gasUsed, baseFee, nextFee] of [
@@ -216,24 +342,36 @@ try {
   const aborted = new AbortController(); aborted.abort(new Error(secret));
   await assert.rejects(simulator.simulate(plan, { ...context(), signal: aborted.signal }), sanitized);
   await assert.rejects(simulator.simulate(plan, { ...context(), deadlineAtMs: Date.now() - 1 }), sanitized);
+  await assert.rejects(simulator.simulateExecutionInput(prepared,
+    { signal: aborted.signal, deadlineAtMs: Date.now() + 5_000 }), sanitized);
+  await assert.rejects(simulator.simulateExecutionInput(prepared,
+    { signal: new AbortController().signal, deadlineAtMs: Date.now() - 1 }), sanitized);
   assert.equal(requests.length, noRequests);
 
-  for (const stage of [1, 2]) {
+  for (const [stage, replay] of [[1, false], [2, false], [1, true], [2, true]] as const) {
     for (const kind of ["signal", "deadline"]) {
       const before = requests.length, closed = interrupted, caller = new AbortController();
+      const liveControl = { signal: caller.signal,
+        deadlineAtMs: Date.now() + (kind === "deadline" ? 100 : 5_000) };
+      const capturedBeforeDeadline = capture();
+      assert(Date.now() < liveControl.deadlineAtMs, "pure capture finishes before the live deadline");
       reply = (req, res) => {
         if (req.id !== stage) res.end(JSON.stringify(envelope(req, word(100n))));
         else if (kind === "signal") caller.abort(new Error(secret));
         // Intentionally leave the selected local response hanging.
       };
-      const promise = simulator.simulate(plan, { ...context(), signal: caller.signal,
-        deadlineAtMs: Date.now() + (kind === "deadline" ? 100 : 5_000) });
+      const promise = replay ? simulator.simulateExecutionInput(capturedBeforeDeadline, liveControl)
+        : simulator.simulate(plan, { source, header, ...liveControl });
       await assert.rejects(promise, error => {
         sanitized(error); assert(error instanceof StateCallAbortedError); assert.equal(error.kind, kind); return true;
       });
       await waitUntil(() => interrupted > closed);
       assert.equal(getEventListeners(caller.signal, "abort").length, 0);
       assert.equal(requests.length, before + stage);
+      // Expiry/abort ends this control only; the saved execution remains replayable.
+      reset();
+      assert.deepEqual(await simulator.simulateExecutionInput(
+        JSON.parse(JSON.stringify(capturedBeforeDeadline)), context()), liveResult);
     }
   }
   const count = requests.length;
@@ -241,7 +379,7 @@ try {
   assert.equal(requests.length, count, "no delayed retry or fallback");
   assert(requests.every(req => req.method === "eth_call" || req.method === "eth_simulateV1"));
   await assert.rejects(new EthSimulateV1Simulator(`invalid:${secret}`, executor, owner).simulate(plan, context()), sanitized);
-  console.log("eth-simulate-v1: PASS (local HTTP, exact requests/results, fees, reverts, malformed data, cancellation, no fallback)");
+  console.log("eth-simulate-v1: PASS (local HTTP, exact wire/results, pure frozen JSON replay, tamper rejection, fees, reverts, malformed data, cancellation, no fallback)");
 } finally {
   const closed = new Promise<void>(resolve => server.close(() => resolve()));
   server.closeAllConnections();

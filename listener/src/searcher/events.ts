@@ -167,6 +167,9 @@ export type SearcherEvent =
       ok: boolean;
       simulated_profit?: string;
       profit_token?: string;
+      /** Join private saved inputs without putting calldata in redacted events. */
+      calldata_hash?: string;
+      flash_amount?: string;
 	      gas_estimate?: string;
 	      failure_reason?: string;
 	    }

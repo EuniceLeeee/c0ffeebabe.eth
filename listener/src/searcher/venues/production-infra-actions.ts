@@ -1,4 +1,5 @@
 import { assertBalanceAdapter } from "../../adapters/assert-balance.js";
+import { actualAmountCaseAdapter, actualAmountStepAdapter, actualAmountFlowAdapter } from "../../adapters/actual-amount-flow.js";
 import {
   erc20ApproveAdapter,
   erc20TransferAdapter,
@@ -16,6 +17,9 @@ import type { ActionAdapter } from "../../types.js";
  */
 export const PRODUCTION_INFRA_ACTION_ADAPTERS = Object.freeze([
   assertBalanceAdapter,
+  actualAmountCaseAdapter,
+  actualAmountStepAdapter,
+  actualAmountFlowAdapter,
   erc20ApproveAdapter,
   erc20TransferAdapter,
   wethDepositValueAdapter,

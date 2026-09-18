@@ -11,7 +11,7 @@ import {
 } from "../blockscan-effective-mid.js";
 import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
-import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
+import { blockScanEdgeKey, createVerifiedGraphView } from "../venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 import type { StrictProductionRuntimeSession } from "../strict-production-runtime-session.js";
 import { BlockScanAmountReference } from "../blockscan-amount-reference.js";
@@ -38,16 +38,30 @@ function edge(a: string, b: string, id: string, instanceKey = id): TokenEdge {
   };
 }
 
+function graphAt(edges: readonly TokenEdge[], source: EffectiveMidSnapshot["source"]) {
+  return createVerifiedGraphView({
+    id: `effective-mid-${source.number}-${source.generation}`,
+    sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
+    completenessWatermark: source.number,
+    perSourceCoverage: [{
+      familyId: "test-swap", sourceId: "effective-mid-fixture", sourceFingerprint: "offline-fixture",
+      completeThroughBlock: source.number, completeThroughHash: source.hash,
+    }],
+    edges,
+  });
+}
+
 function pricing(rows: readonly PriceRow[]): EffectivePricingInput {
+  const mids = new Map<string, RouteVenueMid>(rows.map(([e, mid, feeBps = 0]) => [blockScanEdgeKey(e), {
+    edges: [e], kind: "external-swap", pool: e.target, mid, feeBps, depthProxy: 1,
+  }]));
   return {
     sourceBlock: SOURCE.number, sourceBlockHash: SOURCE.hash, generation: SOURCE.generation,
     graph: { edges: rows.map(([e]) => e) },
     pricingStateKeyByEdgeKey: new Map(rows.map(([e]) => [blockScanEdgeKey(e), e.instanceKey ?? e.target])),
     coverage: { resolvedEdgeKeys: rows.map(([e]) => blockScanEdgeKey(e)) },
-    mids: new Map(rows.map(([e, mid, feeBps = 0]) => [blockScanEdgeKey(e), {
-      edges: [e], kind: "external-swap", pool: e.target, mid, feeBps, depthProxy: 1,
-    }])),
-  } as unknown as EffectivePricingInput;
+    mids,
+  };
 }
 
 function build(prices: EffectivePricingInput, overrides: Partial<BuildInput> = {}) {
@@ -600,6 +614,23 @@ test("end-to-end raw USDC/WETH pair uses distinct instances even with a shared e
   });
 });
 
+test("zero spread builds real amount quotes with the global fallback P, including when gas is known", async () => {
+  const forward = edge(W, U, "zero-w-u"), reverse = edge(U, W, "zero-u-w");
+  const prices = pricing([[forward, 2e-9], [reverse, 5e8]]);
+  for (const gasCostWei of [null, 100_000_000_000_000n]) {
+    const snapshot = await build(prices, { gasCostWei, enumerationSpreadBps: 0 });
+    assert.equal(snapshot.complete, true);
+    assert.equal(snapshot.reference, "default", "0% cannot define a gas-cover amount");
+    assert.equal(snapshot.referenceWethInput, DEFAULT_RAW);
+    assert.equal(row(snapshot, forward).amountIn, DEFAULT_RAW);
+    assert.equal(row(snapshot, reverse).amountIn, 10_000_000n);
+    for (const r of snapshot.rows.values()) {
+      assert.equal(r.status, "quoted");
+      assert.equal(r.amountOut, r.amountIn! * 7n);
+    }
+  }
+});
+
 test("invalid policy and a mid outside the graph reject before invoking quotes; empty input completes", async () => {
   const e = edge(W, U, "policy");
   const prices = pricing([[e, 1]]);
@@ -608,7 +639,7 @@ test("invalid policy and a mid outside the graph reject before invoking quotes; 
   for (const concurrency of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
     await assert.rejects(build(prices, { concurrency, quote }), /invalid effective-mid work or spread policy/);
   }
-  for (const enumerationSpreadBps of [0, -1, NaN, Infinity]) {
+  for (const enumerationSpreadBps of [-1, NaN, Infinity]) {
     await assert.rejects(build(prices, { enumerationSpreadBps, quote }), /invalid effective-mid work or spread policy/);
   }
   for (const gasCostWei of [0n, -1n]) {
@@ -638,8 +669,8 @@ function enumerationPricing(prices: EffectivePricingInput, effectiveMids?: Effec
 test("enumeration uses quoted effective prices with zero fee and preserves original prices, depth and metadata", async () => {
   const e = edge(W, U, "projected");
   const base = pricing([[e, 987, 125]]);
-  const original = Object.freeze({
-    ...base.mids.get(blockScanEdgeKey(e))!, depthProxy: 4321,
+  const original: Readonly<RouteVenueMid> = Object.freeze({
+    kind: "external-swap", pool: e.target, edges: [e], mid: 987, feeBps: 125, depthProxy: 4321,
     reserveA: 10n ** 24n, reserveB: 10n ** 12n, balanceHeadroomIn: 10n ** 18n,
     sqrtABX96: 2n ** 96n, liquidity: 900_000n,
   });
@@ -653,8 +684,15 @@ test("enumeration uses quoted effective prices with zero fee and preserves origi
   assert.equal(projected.size, 1);
   assert.notStrictEqual(projected, input.mids);
   assert.notStrictEqual(result, original);
-  assert.deepEqual(result, { ...original, mid: 2, feeBps: 0 });
+  assert.equal(result.mid, 2);
+  assert.equal(result.feeBps, 0);
+  assert.equal(result.quoteAmountIn, 5_000_000_000_000_000n);
+  assert.equal(result.quoteAmountOut, 10_000_000_000_000_000n);
+  for (const key of ["kind", "pool", "depthProxy", "reserveA", "reserveB", "balanceHeadroomIn", "sqrtABX96", "liquidity"] as const) {
+    assert.strictEqual(result[key], original[key], `preserved ${key}`);
+  }
   assert.strictEqual(result.edges, original.edges);
+  assert.strictEqual(result.edges[0], e);
   assert.strictEqual(input.mids.get(blockScanEdgeKey(e)), original);
   assert.equal(original.mid, 987);
   assert.equal(original.feeBps, 125);
@@ -817,11 +855,11 @@ test("offline reference contract for all 20 opaque Family IDs: clean reuse, unch
 });
 
 test("previous raw sizes current quotes, including a recovered direction missing from that raw table", async () => {
-  const old = edge(U, W, "valuation"), recovered = edge(U, "new-output", "recovered");
+  const old = edge(U, W, "valuation");
   const prices = pricing([[old, 5e8]]);
   const current = { number: SOURCE.number + 1, hash: hash(700), generation: SOURCE.generation + 1 };
-  const quoteGraph = { ...prices.graph, edges: [recovered], sourceBlock: current.number,
-    sourceBlockHash: current.hash, generation: current.generation } as BuildInput["quoteGraph"];
+  const quoteGraph = graphAt([edge(U, "new-output", "recovered")], current);
+  const recovered = quoteGraph.edges[0]!;
   const previous = await build(prices);
   const calls: QuoteInput[] = [];
   const result = await build(prices, { quoteGraph, previous, touchedStateKeys: new Set(["recovered"]),
@@ -843,11 +881,12 @@ test("previous raw sizes current quotes, including a recovered direction missing
 });
 
 test("all-clean steady work reuses the Map without even reading valuation coverage", async () => {
-  const e = edge(U, W, "clean-no-sizing"), prices = pricing([[e, 5e8]]);
-  const previous = await build(prices);
   const unpriced = Array.from({length: 2364}, (_, i) => edge(W, U, "unpriced-clean-" + i));
-  const current = { ...prices.graph, edges: [e, ...unpriced], sourceBlock: SOURCE.number + 1,
-    sourceBlockHash: hash(701), generation: SOURCE.generation + 1 } as BuildInput["quoteGraph"];
+  const current = graphAt([edge(U, W, "clean-no-sizing"), ...unpriced], {
+    number: SOURCE.number + 1, hash: hash(701), generation: SOURCE.generation + 1,
+  });
+  const e = current.edges[0]!, prices = pricing([[e, 5e8]]);
+  const previous = await build(prices);
   const noSizing = { ...prices, get coverage(): EffectivePricingInput["coverage"] {
     throw new Error("clean rows must not compute valuation");
   } };

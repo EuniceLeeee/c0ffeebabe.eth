@@ -14,6 +14,7 @@ import {
 } from "../shared/executor/botvm-executor.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
 import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
+import { resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
 import {
   awaitBlockScanDeadline,
   BlockScanPassDeadlineError,
@@ -29,10 +30,12 @@ import { isRpcThrottleError } from "./rpc-throttle-guard.js";
 import {
   initBlockScanEnumerationSolverTelemetry,
 } from "./blockscan-enumeration-solver-telemetry.js";
-import { blockScanRouteId } from "./blockscan-route-identity.js";
+import { blockScanRouteId, blockScanRouteLocator } from "./blockscan-route-identity.js";
+import { createSolverExecutionInputRecorder } from "./solver-execution-input-recorder.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { BlockScanAmountReference, TokenToWethReferenceCache } from "./blockscan-amount-reference.js";
 import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried } from "./blockscan-effective-mid.js";
+import { effectiveUsdPricing, resolveUsdSignalPairsPerToken, usdViewStatistics } from "./blockscan-usd-view.js";
 import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
@@ -42,6 +45,7 @@ import { normalizeTransactionOrigin } from "./adapter-work-intent.js";
 import {
   createStrictCentralAdapterRuntime,
 } from "./strict-central-adapter-runtime.js";
+import { createAdapterFamilyExactQuoteCache } from "./adapter-family-exact-quote-cache.js";
 import {
   createRevmStrictSourceSimulation,
 } from "./revm-strict-source-simulation.js";
@@ -160,6 +164,7 @@ import { StrictReadyGraphViewCoordinator } from
   "./strict-ready-graph-view.js";
 import {
   BlockScanRuntimeLoop,
+  type BlockScanRuntimeLoopDependencies,
   SourceSimulationWork,
   type SourceSimulationFactory,
   prepareBlockScanExecutionWorkerFork,
@@ -181,7 +186,7 @@ import {
   type LocalVictimApplyResult,
 } from "./solver/victim-apply.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
-import { EthSimulateV1Simulator } from "./simulator/eth-simulate-v1.js";
+import { EthSimulateV1Simulator, buildEthSimulateV1ExecutionInput } from "./simulator/eth-simulate-v1.js";
 import { resolveBlockScanFinalSimulationMethod } from "./blockscan-final-simulation-method.js";
 import {
   executeFinalSimulationWork,
@@ -264,7 +269,7 @@ import {
 } from "./blind-production-runtime.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
-const DEFAULT_BLOCKSCAN_MAX_HOPS = 4;
+const DEFAULT_BLOCKSCAN_MAX_HOPS = 6;
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
@@ -469,7 +474,7 @@ async function validateHintExecutionEvidence(
 
 export { computeBidEth, valueInEth };
 
-function buildBlockScanPricedTokens(): BlockScanCoreConfig["pricedTokens"] {
+export function buildBlockScanPricedTokens(): BlockScanCoreConfig["pricedTokens"] {
   return new Map([
     [ADDR.WETH.toLowerCase(), { maxBorrow: 2_000n * 10n ** 18n }],
     [ADDR.USDC.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 6n }],
@@ -638,6 +643,57 @@ function parseAddressList(value: string | undefined): string[] {
     .map((addr) => BYTES32_RE.test(addr) ? addr.toLowerCase() : ethers.getAddress(addr));
 }
 
+export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env, maxHops = Number(env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS)): BlockScanCoreConfig {
+  const blockScanMaxHops = maxHops;
+  const blockScanMinSpreadBps = Number(env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "100");
+  return {
+        maxHops: blockScanMaxHops,
+        enumerationMethod: resolvePairedEnumerationMethod(env.SEARCHER_BLOCKSCAN_ENUMERATION_METHOD),
+        usdSignalPairsPerToken: resolveUsdSignalPairsPerToken(env.SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN),
+        minSpreadBps: blockScanMinSpreadBps,
+        requireDislocatedPair: true,
+        /*
+         * Enumeration defaults to 100bps (1%). Exact keeps its independent
+         * 50bps (0.5%) admission guard and consumes the enumerated subset.
+         */
+        exactAdmissionSpreadBps: Number(
+          env.SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS ??
+            "50",
+        ),
+        minCapitalFraction: Number(
+          env.SEARCHER_BLOCKSCAN_MIN_CAPITAL_FRACTION ?? "0.001",
+        ),
+        maxCandidates: Number(env.SEARCHER_BLOCKSCAN_MAX_CANDIDATES ?? "100"),
+        budgetMs: Number(env.SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS ?? "1500"),
+        pricedTokens: buildBlockScanPricedTokens(),
+      };
+}
+
+export type BlockScanAtomicPolicy = Pick<LiveConfig,
+  "finalVerifyFloorBps" | "maxProfitBpsOfFlash" | "profitHaircutBps" | "bribeBps" | "bribeAllAboveGas" | "evGate" | "minNetEth" | "blockScanSubmit" | "inclusionWatchBlocks" | "dryRun">;
+
+export function resolveBlockScanAtomicPolicy(env: NodeJS.ProcessEnv = process.env, finalVerifyMaxHops = Number(env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS)): BlockScanAtomicPolicy {
+  const quoteSafetyBps = BigInt(env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999");
+  return {
+    dryRun: env.SEARCHER_DRY_RUN === "1",
+    finalVerifyFloorBps: BigInt(
+      env.SEARCHER_FINAL_VERIFY_FLOOR_BPS ??
+        defaultFinalVerifyFloorBps(
+          quoteSafetyBps,
+          finalVerifyMaxHops,
+        ).toString(),
+    ),
+    maxProfitBpsOfFlash: BigInt(env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "10000"),
+    profitHaircutBps: Number(env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "0"),
+    bribeBps: Number(env.SEARCHER_BRIBE_BPS ?? DEFAULT_BRIBE_BPS.toString()),
+    bribeAllAboveGas: env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
+    evGate: env.SEARCHER_EV_GATE === "1",
+    minNetEth: BigInt(env.SEARCHER_MIN_NET_ETH ?? "0"),
+    blockScanSubmit: env.SEARCHER_BLOCKSCAN_SUBMIT === "1",
+    inclusionWatchBlocks: Number(env.SEARCHER_INCLUSION_WATCH_BLOCKS ?? "3"),
+  };
+}
+
 function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const rpcUrl = liveRpcUrl();
 
@@ -692,9 +748,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     wallet,
     minProfit: BigInt(process.env.SEARCHER_MIN_PROFIT_RAW ?? "1"),
     defaultGasUsed: Number(process.env.SEARCHER_BACKRUN_GAS_USED ?? "12000000"),
-    inclusionWatchBlocks: Number(process.env.SEARCHER_INCLUSION_WATCH_BLOCKS ?? "3"),
-    dryRun,
-    blockScanSubmit: process.env.SEARCHER_BLOCKSCAN_SUBMIT === "1",
+    ...resolveBlockScanAtomicPolicy(process.env, finalVerifyMaxHops),
     enableHashOnly: process.env.SEARCHER_ENABLE_HASH_ONLY === "1",
     maxHints: Number(process.env.SEARCHER_MAX_HINTS ?? "0"),
     forkRefreshBlocks: Number(process.env.SEARCHER_FORK_REFRESH_BLOCKS ?? "5"),
@@ -708,13 +762,6 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     quoteSafetyBps,
     quoteProfitFloorBps: BigInt(
       process.env.SEARCHER_QUOTE_PROFIT_FLOOR_BPS ?? (dryRun ? "20" : "0"),
-    ),
-    finalVerifyFloorBps: BigInt(
-      process.env.SEARCHER_FINAL_VERIFY_FLOOR_BPS ??
-        defaultFinalVerifyFloorBps(
-          quoteSafetyBps,
-          finalVerifyMaxHops,
-        ).toString(),
     ),
     revmPrewarmRouteHops: Number(process.env.SEARCHER_REVM_PREWARM_ROUTE_HOPS ?? "0"),
     stateUpdaterEnabled: process.env.SEARCHER_STATE_UPDATER_ENABLED !== "0",
@@ -731,12 +778,6 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     poolUniverseHighSpreadMinFee: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_MIN_FEE ?? "10000"),
     recordLiveFixtures: process.env.SEARCHER_RECORD_LIVE_FIXTURES === "1",
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
-    maxProfitBpsOfFlash: BigInt(process.env.SEARCHER_MAX_PROFIT_BPS_OF_FLASH ?? "10000"),
-    bribeBps: Number(process.env.SEARCHER_BRIBE_BPS ?? DEFAULT_BRIBE_BPS.toString()),
-    bribeAllAboveGas: process.env.SEARCHER_BRIBE_ALL_ABOVE_GAS === "1",
-    evGate: process.env.SEARCHER_EV_GATE === "1",
-    minNetEth: BigInt(process.env.SEARCHER_MIN_NET_ETH ?? "0"),
-    profitHaircutBps: Number(process.env.SEARCHER_PROFIT_HAIRCUT_BPS ?? "0"),
     allowHashOnlySubmit: process.env.SEARCHER_ALLOW_HASHONLY_SUBMIT === "1",
     allowHashOnlyMevShareSubmit: process.env.SEARCHER_SUBMIT_HASHONLY_MEVSHARE === "1",
     victimSourceFilter: {
@@ -806,6 +847,10 @@ export function createLiveRuntimeStop({ runtimeAbort, emitFatal, exit }: {
       if (requestedCode !== undefined) request(requestedCode);
     },
     shutdown: () => request(0),
+    fail(error: Error): void {
+      if (!runtimeAbort.signal.aborted) runtimeAbort.abort(error);
+      request(1);
+    },
   });
 }
 
@@ -842,6 +887,274 @@ export function createLiveSourceSimulationFactory(input: {
       },
     });
   };
+}
+
+export function createBlockScanPriceRuntime(input: {
+  provider: ethers.JsonRpcProvider;
+  rpcUrl: string;
+  executor: string;
+  transactionOrigin: string;
+  strictRuntimeRoot: StrictProductionRuntimeRoot;
+  blockScanRuntimeAbort: AbortController;
+  blockScanRethTransportScheduler?: RethTransportScheduler;
+  blockScanCfg: BlockScanCoreConfig | undefined;
+  recordPricing: (publication: import("./strict-current-runtime-coordinator.js").StrictPricingPublication) => void;
+}) {
+  const { provider, strictRuntimeRoot, blockScanRuntimeAbort,
+    blockScanRethTransportScheduler, blockScanCfg } = input;
+  const config = { rpcUrl: input.rpcUrl, botvmAddress: input.executor };
+  const executionIdentity = { executor: input.executor, transactionOrigin: input.transactionOrigin };
+  const blockScanRouteTelemetry = { recordPricing: input.recordPricing };
+  const strictSessionCache = new Map<
+    string,
+    Promise<StrictProductionRuntimeSession>
+  >();
+  // One shared state/quote cache for effective, Exact and Solver sessions.
+  const strictExactQuoteCache = createAdapterFamilyExactQuoteCache();
+  const strictSessionFor: StrictSessionProvider = (
+    request: StrictSessionRequest,
+  ): Promise<StrictProductionRuntimeSession> => {
+    if (blockScanRuntimeAbort.signal.aborted) throw blockScanRuntimeAbort.signal.reason;
+    if (
+      request.purpose === "coarse-pricing" &&
+      request.fundingAssets.length !== 0
+    ) {
+      throw new Error(
+        "coarse-pricing strict session must not request Funding assets",
+      );
+    }
+    if (
+      request.purpose === "exact-execution" &&
+      request.requiredEdgeIds === undefined
+    ) {
+      throw new Error(
+        "exact-execution strict session requires requiredEdgeIds",
+      );
+    }
+    if (
+      request.purpose === "exact-execution" &&
+      request.touchedPools !== undefined
+    ) {
+      throw new Error(
+        "exact-execution strict session cannot use touchedPools as scope",
+      );
+    }
+    const source = request.source;
+    const kind = request.purpose === "exact-execution" ? "exact" : "pricing";
+    const fundingAssets = request.fundingAssets;
+    const fundingKey = [...new Set(fundingAssets.map((token) =>
+      token.toLowerCase()
+    ))].sort().join(",");
+    const fundingFingerprint = createHash("sha256")
+      .update(fundingKey)
+      .digest("hex")
+      .slice(0, 16);
+    // The refresh scope is part of the session identity: the same source with
+    // a different touched set must not reuse a fully-refreshed session.
+    const touchedFingerprint = request.touchedPools === undefined
+      ? "all"
+      : createHash("sha256")
+          .update([...request.touchedPools].sort().join(","))
+          .digest("hex")
+          .slice(0, 16);
+    const requiredEdgeFingerprint = request.requiredEdgeIds === undefined
+      ? "all-edges"
+      : createHash("sha256")
+          .update([...request.requiredEdgeIds].sort().join(","))
+          .digest("hex")
+          .slice(0, 16);
+    const key = `${request.purpose}:${source.number}:${source.hash.toLowerCase()}:` +
+      `${source.generation}:${fundingFingerprint}:${touchedFingerprint}:` +
+      `${requiredEdgeFingerprint}`;
+    // Custom backends are pass-scoped and must never be retained by the
+    // coalescing cache. Even ordinary sessions are removed after settlement;
+    // this map is an in-flight de-duplication guard, not a history cache.
+    const cacheable = request.exactCallBackend === undefined &&
+      request.pricingCallBackend === undefined &&
+      request.pricingCallCache === undefined && request.simulationTransport === undefined;
+    const incumbent = cacheable ? strictSessionCache.get(key) : undefined;
+    if (incumbent !== undefined) {
+      console.log(
+        "[strict-session-cache] hit key=" + key +
+          " size=" + strictSessionCache.size,
+      );
+      return incumbent;
+    }
+    console.log(
+      "[strict-session-cache] MISS key=" + key +
+        " size=" + strictSessionCache.size,
+    );
+    const runtime = createStrictCentralAdapterRuntime({
+      provider,
+      exactQuoteCache: strictExactQuoteCache,
+      ...(request.simulationTransport === undefined
+        ? {}
+        : { simulator: request.simulationTransport }),
+      generationFence: Object.freeze({
+        assertCurrent(generation: number, candidate: CanonicalSource) {
+          if (blockScanRuntimeAbort.signal.aborted) throw blockScanRuntimeAbort.signal.reason;
+          if (
+            generation !== source.generation ||
+            candidate.number !== source.number ||
+            candidate.hash.toLowerCase() !== source.hash.toLowerCase() ||
+            candidate.generation !== source.generation
+          ) {
+            throw new Error("strict current-source generation is stale");
+          }
+        },
+      }),
+      verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+      ...executionIdentity,
+      ...(request.exactCallBackend === undefined
+        ? {}
+        : { exactCallBackend: request.exactCallBackend }),
+      ...(request.pricingCallBackend === undefined
+        ? {}
+        : { producerCallBackend: request.pricingCallBackend }),
+      ...(request.pricingCallCache === undefined
+        ? {}
+        : { producerCallCache: request.pricingCallCache }),
+      // Shared physical-transport permit scheduler: exact/discovery share the
+      // residual capacity after the N-1 producer reserve, so exact probes can
+      // never starve the producer chain (same contract as the legacy runtime).
+      ...(blockScanRethTransportScheduler === undefined
+        ? {}
+        : { transportScheduler: blockScanRethTransportScheduler }),
+    });
+    const createStartedAtMs = Date.now();
+    const created = strictRuntimeRoot.createSession({
+      source,
+      runtime,
+      fundingAssets,
+      kind,
+      ...(request.control === undefined ? {} : { control: request.control }),
+      ...(request.touchedPools === undefined
+        ? {}
+        : { touchedPools: request.touchedPools }),
+      ...(request.requiredEdgeIds === undefined
+        ? {}
+        : { requiredEdgeIds: request.requiredEdgeIds }),
+    }).then((session) => {
+      console.log(
+        `[searcher/strict-session-timing] ${JSON.stringify({
+          purpose: request.purpose,
+          status: "complete",
+          sourceBlock: source.number,
+          generation: source.generation,
+          requestedFundingAssets: new Set(fundingAssets.map((token) =>
+            token.toLowerCase()
+          )).size,
+          ...session.creationTiming,
+        })}`,
+      );
+      return session;
+    }, (error: unknown) => {
+      console.log(
+        `[searcher/strict-session-timing] ${JSON.stringify({
+          purpose: request.purpose,
+          status: "failed",
+          sourceBlock: source.number,
+          generation: source.generation,
+          requestedFundingAssets: new Set(fundingAssets.map((token) =>
+            token.toLowerCase()
+          )).size,
+          totalMs: Math.max(0, Date.now() - createStartedAtMs),
+          error: (error instanceof Error ? error.message : String(error))
+            .replace(/\s+/g, " ")
+            .slice(0, 160),
+        })}`,
+      );
+      throw error;
+    });
+    if (!cacheable) return created;
+    let pending: Promise<StrictProductionRuntimeSession>;
+    pending = created.finally(() => {
+      if (strictSessionCache.get(key) === pending) {
+        strictSessionCache.delete(key);
+      }
+    });
+    strictSessionCache.set(key, pending);
+    return pending;
+  };
+  const blockScanAmountReference = new BlockScanAmountReference();
+  const blockScanTokenReferences = new TokenToWethReferenceCache(ADDR.WETH);
+  // Network identity is established once, never guessed for activity reuse.
+  const currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
+    strictSessionFor,
+    () => strictSessionCache.clear(),
+    (publication) => {
+      if (blockScanCfg !== undefined) blockScanTokenReferences.observe(publication);
+      blockScanRouteTelemetry.recordPricing(publication);
+      if (blockScanCfg !== undefined && publication.snapshot.effectiveMids?.complete) {
+        const start = Date.now();
+        const { view } = effectiveUsdPricing(publication.snapshot, blockScanCfg.usdSignalPairsPerToken);
+        console.log(`[searcher/effective-usd-view] ${JSON.stringify({
+          sourceBlock: publication.snapshot.sourceBlock,
+          sourceBlockHash: publication.snapshot.sourceBlockHash,
+          generation: publication.snapshot.generation, algorithm: "paired-dfs",
+          reference: "USDC=1 reference USD; effective-only <=3-hop valuation",
+          ...usdViewStatistics(view, blockScanCfg.minSpreadBps), wallMs: Date.now() - start,
+        })}`);
+      }
+    },
+    blockScanCfg === undefined ? undefined : async (pricing, control, pricingBackend, reuse, simulationTransport) => {
+      const controller = new AbortController();
+      const effectiveControl = { ...control, signal: control.signal === undefined
+        ? controller.signal : AbortSignal.any([control.signal, controller.signal]) };
+      const quoteTarget = reuse?.quoteGraph ?? pricing;
+      const source = Object.freeze({ number: quoteTarget.sourceBlock,
+        hash: quoteTarget.sourceBlockHash, generation: quoteTarget.generation });
+      // Use the existing source-pinned producer transport. The fallback is
+      // lifecycle-owned here only for callers without a supplied transport.
+      const ownedBackend = pricingBackend === undefined ? new PinnedRethQuoteBackend(
+        config.rpcUrl, source.hash, { ...effectiveControl, transportLane: "producer-bulk",
+          onSourceUnavailable: (error) => controller.abort(error),
+          onRpcThrottle: (error) => blockScanRuntimeAbort.abort(error),
+          scopeLabel: "effective mid", allowSingleCallFallback: false,
+          maxBatchSize: 128, maxConcurrentBatches: 4,
+          retryRpcThrottle: true,
+          transportScheduler: blockScanRethTransportScheduler },
+      ) : undefined;
+      try {
+        let session: StrictProductionRuntimeSession | undefined;
+        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} sizingSourceBlock=${pricing.sourceBlock} sizingRawMids=${pricing.mids.size}`);
+        const effective = await buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
+          tokenReferences: () => blockScanTokenReferences.get(pricing),
+          previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
+          gasCostWei: blockScanAmountReference.estimateGasCost(source),
+          enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 128,
+          prepareQuote: async (requiredEdgeIds) => {
+            session = await strictSessionFor({ purpose: "exact-execution", source,
+              simulationTransport,
+              control: effectiveControl, fundingAssets: [], requiredEdgeIds,
+              exactCallBackend: pricingBackend ?? ownedBackend! });
+          },
+          quote: async (request) => {
+            if (!session) throw new Error("effective quote session was not prepared");
+            const quote = await session.issueExact({ ...request,
+              executor: config.botvmAddress, runtimeEvidence: [] });
+            if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
+            return quote;
+          },
+        });
+        console.log(`[searcher/effective-mid] ${JSON.stringify({
+          sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
+          sizingRawMids: pricing.mids.size, sizingSourceBlock: pricing.sourceBlock, reference: effective.reference,
+          referenceWethInput: effective.referenceWethInput.toString(),
+          complete: effective.complete, wallMs: effective.wallMs,
+          tokenValuationWork: blockScanTokenReferences.stats,
+          localQuoteCache: strictExactQuoteCache.snapshot(),
+          carried: [...effective.rows.values()].filter(row => effectiveMidRowCarried(effective, row)).length,
+          ...effectiveMidPairStatistics(effective),
+        })}`);
+        return effective;
+      } finally {
+        await ownedBackend?.closeAndDrain();
+      }
+    },
+    strictExactQuoteCache,
+  );
+  return { strictSessionFor, currentRuntimeCoordinator, blockScanAmountReference };
 }
 
 async function main(): Promise<void> {
@@ -1006,27 +1319,7 @@ async function main(): Promise<void> {
   const blockScanMinSpreadBps = Number(
     process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "100",
   );
-  const blockScanCfg: BlockScanCoreConfig | undefined = enableBlockScan
-    ? {
-        maxHops: blockScanMaxHops,
-        minSpreadBps: blockScanMinSpreadBps,
-        requireDislocatedPair: true,
-        /*
-         * Enumeration defaults to 100bps (1%). Exact keeps its independent
-         * 50bps (0.5%) admission guard and consumes the enumerated subset.
-         */
-        exactAdmissionSpreadBps: Number(
-          process.env.SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS ??
-            "50",
-        ),
-        minCapitalFraction: Number(
-          process.env.SEARCHER_BLOCKSCAN_MIN_CAPITAL_FRACTION ?? "0.001",
-        ),
-        maxCandidates: Number(process.env.SEARCHER_BLOCKSCAN_MAX_CANDIDATES ?? "100"),
-        budgetMs: Number(process.env.SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS ?? "1500"),
-        pricedTokens: buildBlockScanPricedTokens(),
-      }
-    : undefined;
+  const blockScanCfg = enableBlockScan ? resolveBlockScanCoreConfig(process.env, blockScanMaxHops) : undefined;
   planner.setMaxHops(maxHops);
   planner.setMaxPoolsPerToken(maxPoolsPerToken);
   planner.setMaxRotationsPerPath(maxRotationsPerPath);
@@ -1376,6 +1669,18 @@ async function main(): Promise<void> {
           : ""
       : configuredMidHistoryPath
     : "";
+  const solverInputPath = (process.env.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_PATH ?? "").trim();
+  if (solverInputPath && (!enableBlockScan || blindProductionAudit || !eventContext.enabled ||
+      blockScanFinalSimulationMethod !== "eth_simulateV1")) {
+    throw new Error("private solver input recording requires ordinary blockscan, events and eth_simulateV1");
+  }
+  const solverInputRecorder = solverInputPath ? createSolverExecutionInputRecorder({
+    path: solverInputPath, runId: eventContext.runId, chainId: eventContext.chainId,
+    runtimeCommit: process.env.SEARCHER_RUNTIME_COMMIT ?? "",
+    protectedPaths: [eventContext.path, blockScanRouteEventsPath, blockScanMidHistoryPath,
+      process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH ?? ""],
+  }) : undefined;
+  if (solverInputRecorder) console.log("[searcher/solver-inputs] enabled private complete execution input recording");
   const blockScanRouteTelemetry =
     await initBlockScanEnumerationSolverTelemetry({
       path: blockScanRouteEventsPath,
@@ -1438,6 +1743,7 @@ async function main(): Promise<void> {
       `solverQuoteConcurrency=${blockScanSolverSearch.quoteConcurrency} ` +
       `solverGridHalfWidth=${blockScanSolverSearch.gridHalfWidth} ` +
       `solverAmountGrid=${blockScanSolverSearch.amountGrid} ` +
+      `solverQuoteToleranceRawUnits=${blockScanSolverSearch.quoteToleranceRawUnits} ` +
       `solverGssMaxTries=${blockScanSolverSearch.gssMaxTries} ` +
       `refineCandidates=${blockScanRefineCandidates} ` +
       `passBudgetMs=${blockScanPassBudgetMs} ` +
@@ -1904,239 +2210,13 @@ async function main(): Promise<void> {
     runtimeAbort: blockScanRuntimeAbort,
     onFatal: onSimulationFatal,
   });
-  const strictSessionCache = new Map<
-    string,
-    Promise<StrictProductionRuntimeSession>
-  >();
-  const strictSessionFor: StrictSessionProvider = (
-    request: StrictSessionRequest,
-  ): Promise<StrictProductionRuntimeSession> => {
-    if (blockScanRuntimeAbort.signal.aborted) throw blockScanRuntimeAbort.signal.reason;
-    if (
-      request.purpose === "coarse-pricing" &&
-      request.fundingAssets.length !== 0
-    ) {
-      throw new Error(
-        "coarse-pricing strict session must not request Funding assets",
-      );
-    }
-    if (
-      request.purpose === "exact-execution" &&
-      request.requiredEdgeIds === undefined
-    ) {
-      throw new Error(
-        "exact-execution strict session requires requiredEdgeIds",
-      );
-    }
-    if (
-      request.purpose === "exact-execution" &&
-      request.touchedPools !== undefined
-    ) {
-      throw new Error(
-        "exact-execution strict session cannot use touchedPools as scope",
-      );
-    }
-    const source = request.source;
-    const kind = request.purpose === "exact-execution" ? "exact" : "pricing";
-    const fundingAssets = request.fundingAssets;
-    const fundingKey = [...new Set(fundingAssets.map((token) =>
-      token.toLowerCase()
-    ))].sort().join(",");
-    const fundingFingerprint = createHash("sha256")
-      .update(fundingKey)
-      .digest("hex")
-      .slice(0, 16);
-    // The refresh scope is part of the session identity: the same source with
-    // a different touched set must not reuse a fully-refreshed session.
-    const touchedFingerprint = request.touchedPools === undefined
-      ? "all"
-      : createHash("sha256")
-          .update([...request.touchedPools].sort().join(","))
-          .digest("hex")
-          .slice(0, 16);
-    const requiredEdgeFingerprint = request.requiredEdgeIds === undefined
-      ? "all-edges"
-      : createHash("sha256")
-          .update([...request.requiredEdgeIds].sort().join(","))
-          .digest("hex")
-          .slice(0, 16);
-    const key = `${request.purpose}:${source.number}:${source.hash.toLowerCase()}:` +
-      `${source.generation}:${fundingFingerprint}:${touchedFingerprint}:` +
-      `${requiredEdgeFingerprint}`;
-    // Custom backends are pass-scoped and must never be retained by the
-    // coalescing cache. Even ordinary sessions are removed after settlement;
-    // this map is an in-flight de-duplication guard, not a history cache.
-    const cacheable = request.exactCallBackend === undefined &&
-      request.pricingCallBackend === undefined &&
-      request.pricingCallCache === undefined && request.simulationTransport === undefined;
-    const incumbent = cacheable ? strictSessionCache.get(key) : undefined;
-    if (incumbent !== undefined) {
-      console.log(
-        "[strict-session-cache] hit key=" + key +
-          " size=" + strictSessionCache.size,
-      );
-      return incumbent;
-    }
-    console.log(
-      "[strict-session-cache] MISS key=" + key +
-        " size=" + strictSessionCache.size,
-    );
-    const runtime = createStrictCentralAdapterRuntime({
-      provider,
-      ...(request.simulationTransport === undefined
-        ? {}
-        : { simulator: request.simulationTransport }),
-      generationFence: Object.freeze({
-        assertCurrent(generation: number, candidate: CanonicalSource) {
-          if (blockScanRuntimeAbort.signal.aborted) throw blockScanRuntimeAbort.signal.reason;
-          if (
-            generation !== source.generation ||
-            candidate.number !== source.number ||
-            candidate.hash.toLowerCase() !== source.hash.toLowerCase() ||
-            candidate.generation !== source.generation
-          ) {
-            throw new Error("strict current-source generation is stale");
-          }
-        },
-      }),
-      verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
-      ...executionIdentity,
-      ...(request.exactCallBackend === undefined
-        ? {}
-        : { exactCallBackend: request.exactCallBackend }),
-      ...(request.pricingCallBackend === undefined
-        ? {}
-        : { producerCallBackend: request.pricingCallBackend }),
-      ...(request.pricingCallCache === undefined
-        ? {}
-        : { producerCallCache: request.pricingCallCache }),
-      // Shared physical-transport permit scheduler: exact/discovery share the
-      // residual capacity after the N-1 producer reserve, so exact probes can
-      // never starve the producer chain (same contract as the legacy runtime).
-      ...(blockScanRethTransportScheduler === undefined
-        ? {}
-        : { transportScheduler: blockScanRethTransportScheduler }),
-    });
-    const createStartedAtMs = Date.now();
-    const created = strictRuntimeRoot.createSession({
-      source,
-      runtime,
-      fundingAssets,
-      kind,
-      ...(request.control === undefined ? {} : { control: request.control }),
-      ...(request.touchedPools === undefined
-        ? {}
-        : { touchedPools: request.touchedPools }),
-      ...(request.requiredEdgeIds === undefined
-        ? {}
-        : { requiredEdgeIds: request.requiredEdgeIds }),
-    }).then((session) => {
-      console.log(
-        `[searcher/strict-session-timing] ${JSON.stringify({
-          purpose: request.purpose,
-          status: "complete",
-          sourceBlock: source.number,
-          generation: source.generation,
-          requestedFundingAssets: new Set(fundingAssets.map((token) =>
-            token.toLowerCase()
-          )).size,
-          ...session.creationTiming,
-        })}`,
-      );
-      return session;
-    }, (error: unknown) => {
-      console.log(
-        `[searcher/strict-session-timing] ${JSON.stringify({
-          purpose: request.purpose,
-          status: "failed",
-          sourceBlock: source.number,
-          generation: source.generation,
-          requestedFundingAssets: new Set(fundingAssets.map((token) =>
-            token.toLowerCase()
-          )).size,
-          totalMs: Math.max(0, Date.now() - createStartedAtMs),
-          error: (error instanceof Error ? error.message : String(error))
-            .replace(/\s+/g, " ")
-            .slice(0, 160),
-        })}`,
-      );
-      throw error;
-    });
-    if (!cacheable) return created;
-    let pending: Promise<StrictProductionRuntimeSession>;
-    pending = created.finally(() => {
-      if (strictSessionCache.get(key) === pending) {
-        strictSessionCache.delete(key);
-      }
-    });
-    strictSessionCache.set(key, pending);
-    return pending;
-  };
-  const blockScanAmountReference = new BlockScanAmountReference();
-  const blockScanTokenReferences = new TokenToWethReferenceCache(ADDR.WETH);
-  // Network identity is established once, never guessed for activity reuse.
-  currentRuntimeCoordinator = new StrictCurrentRuntimeCoordinator(
-    strictSessionFor,
-    () => strictSessionCache.clear(),
-    (publication) => {
-      if (blockScanCfg !== undefined) blockScanTokenReferences.observe(publication);
-      blockScanRouteTelemetry.recordPricing(publication);
-    },
-    blockScanCfg === undefined ? undefined : async (pricing, control, pricingBackend, reuse, simulationTransport) => {
-      const controller = new AbortController();
-      const effectiveControl = { ...control, signal: control.signal === undefined
-        ? controller.signal : AbortSignal.any([control.signal, controller.signal]) };
-      const quoteTarget = reuse?.quoteGraph ?? pricing;
-      const source = Object.freeze({ number: quoteTarget.sourceBlock,
-        hash: quoteTarget.sourceBlockHash, generation: quoteTarget.generation });
-      // Use the existing source-pinned producer transport. The fallback is
-      // lifecycle-owned here only for callers without a supplied transport.
-      const ownedBackend = pricingBackend === undefined ? new PinnedRethQuoteBackend(
-        config.rpcUrl, source.hash, { ...effectiveControl, transportLane: "producer-bulk",
-          onSourceUnavailable: (error) => controller.abort(error),
-          onRpcThrottle: (error) => blockScanRuntimeAbort.abort(error),
-          scopeLabel: "effective mid", allowSingleCallFallback: false,
-          maxBatchSize: 128, maxConcurrentBatches: 4,
-          retryRpcThrottle: true,
-          transportScheduler: blockScanRethTransportScheduler },
-      ) : undefined;
-      try {
-        let session: StrictProductionRuntimeSession | undefined;
-        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} sizingSourceBlock=${pricing.sourceBlock} sizingRawMids=${pricing.mids.size}`);
-        const effective = await buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
-          tokenReferences: () => blockScanTokenReferences.get(pricing),
-          previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
-          gasCostWei: blockScanAmountReference.estimateGasCost(source),
-          enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 128,
-          prepareQuote: async (requiredEdgeIds) => {
-            session = await strictSessionFor({ purpose: "exact-execution", source,
-              simulationTransport,
-              control: effectiveControl, fundingAssets: [], requiredEdgeIds,
-              exactCallBackend: pricingBackend ?? ownedBackend! });
-          },
-          quote: async (request) => {
-            if (!session) throw new Error("effective quote session was not prepared");
-            const quote = await session.issueExact({ ...request,
-              executor: config.botvmAddress, runtimeEvidence: [] });
-            if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
-            return quote;
-          },
-        });
-        console.log(`[searcher/effective-mid] ${JSON.stringify({
-          sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
-          sizingRawMids: pricing.mids.size, sizingSourceBlock: pricing.sourceBlock, reference: effective.reference,
-          referenceWethInput: effective.referenceWethInput.toString(),
-          complete: effective.complete, wallMs: effective.wallMs,
-          tokenValuationWork: blockScanTokenReferences.stats,
-          carried: [...effective.rows.values()].filter(row => effectiveMidRowCarried(effective, row)).length,
-          ...effectiveMidPairStatistics(effective),
-        })}`);
-        return effective;
-      } finally {
-        await ownedBackend?.closeAndDrain();
-      }
-    },
-  );
+  const priceRuntime = createBlockScanPriceRuntime({
+    provider, rpcUrl: config.rpcUrl, ...executionIdentity, strictRuntimeRoot,
+    blockScanRuntimeAbort, blockScanRethTransportScheduler, blockScanCfg,
+    recordPricing: publication => blockScanRouteTelemetry.recordPricing(publication),
+  });
+  const { strictSessionFor, blockScanAmountReference } = priceRuntime;
+  currentRuntimeCoordinator = priceRuntime.currentRuntimeCoordinator;
 
   // The ready envelope is the only startup catalog/Graph lineage. Rehydrated
   // instances are handed directly to StrictProductionRuntimeRoot above; there
@@ -2369,6 +2449,38 @@ async function main(): Promise<void> {
     sharedPlanner: planner,
     backrunStatePublisher,
     routeTelemetry: blockScanRouteTelemetry,
+    ...(solverInputRecorder === undefined ? {} : {
+      recordSolvedInput(input: Parameters<NonNullable<BlockScanRuntimeLoopDependencies["recordSolvedInput"]>>[0]) {
+        try {
+          const executionInput = buildEthSimulateV1ExecutionInput({
+            source: input.source, header: input.header,
+            executor: executionIdentity.executor, owner: executionIdentity.transactionOrigin,
+            profitToken: input.resolved.profitToken, scriptHex: input.scriptHex,
+          });
+          const receipt = solverInputRecorder.record({
+            source: input.source,
+            opportunityId: makeBlockScanOpportunityId({
+              sourceBlock: input.source.number, cycleId: input.opportunity.cycleId,
+              startToken: input.opportunity.flashToken,
+              seedPools: input.opportunity.seedEdges.map(edge => edge.target),
+            }),
+            route: blockScanRouteLocator(input.opportunity),
+            solverIndex: input.solverIndex, candidateIndex: input.candidateIndex,
+            flashAmount: input.resolved.flashAmount, quoteProfit: input.resolved.netProfit,
+            profitToken: input.resolved.profitToken, templateName: input.resolved.templateName,
+            executionInput,
+          });
+          if (receipt.sequence === 1) console.log(`[searcher/solver-inputs] first complete input saved source=${input.source.number}`);
+        } catch {
+          // An opted-in diagnostic run must not silently lose replay inputs.
+          // Use the existing shutdown/drain path, not a simulation-fatal label.
+          console.error("[searcher/solver-inputs] fatal recording failed; stopping observation");
+          const failure = new Error("private solver execution input recording failed");
+          requestRuntimeStop.fail(failure);
+          throw failure;
+        }
+      },
+    }),
     frozenTopology: frozenProducerTopology,
     blind: {
       enabled: blindProductionAudit,
@@ -2394,6 +2506,7 @@ async function main(): Promise<void> {
     solveReserveMs: blockScanSolveReserveMs,
     solverGridHalfWidth: blockScanSolverSearch.gridHalfWidth,
     solverAmountGrid: blockScanSolverSearch.amountGrid,
+    solverQuoteToleranceRawUnits: blockScanSolverSearch.quoteToleranceRawUnits,
     amountReference: blockScanAmountReference,
     solverGssMaxTries: blockScanSolverSearch.gssMaxTries,
     solverQuoteConcurrency: blockScanSolverSearch.quoteConcurrency,
@@ -2562,6 +2675,7 @@ async function main(): Promise<void> {
       solverQuoteConcurrency: blockScanSolverSearch.quoteConcurrency,
       solverGridHalfWidth: blockScanSolverSearch.gridHalfWidth,
       solverGssMaxTries: blockScanSolverSearch.gssMaxTries,
+      solverQuoteToleranceRawUnits: blockScanSolverSearch.quoteToleranceRawUnits.toString(),
       nMinusOneFallback: blockScanNMinusOneFallback,
       nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
       nMinusOneMaxGraphLagBlocks: blockScanNMinusOneMaxGraphLagBlocks,
@@ -2871,6 +2985,10 @@ async function main(): Promise<void> {
           `[searcher/live] block-scan route telemetry shutdown failed: ` +
             `${error instanceof Error ? error.message : String(error)}`,
         );
+      }
+      if (solverInputRecorder) {
+        solverInputRecorder.close();
+        console.log(`[searcher/solver-inputs] closed ${JSON.stringify(solverInputRecorder.snapshot())}`);
       }
       state.stop();
     })();
@@ -4607,8 +4725,11 @@ async function processOpportunities(
 
 async function readUncachedLatestBlock(
   provider: ethers.JsonRpcProvider,
+  blockTag: "latest" | number = "latest",
 ): Promise<{ number: number; hash: string }> {
-  const block = await provider.send("eth_getBlockByNumber", ["latest", false]) as {
+  const block = await provider.send("eth_getBlockByNumber", [
+    blockTag === "latest" ? blockTag : ethers.toQuantity(blockTag), false,
+  ]) as {
     number?: unknown;
     hash?: unknown;
   } | null;
@@ -4649,16 +4770,18 @@ async function readLatestBlockAnchor(
   };
 }
 
-async function maybeSubmitBlockScanAtomic(params: {
-  config: LiveConfig;
+export async function maybeSubmitBlockScanAtomic(params: {
+  /** Explicit read-only historical mode. Live callers retain the latest-head gate. */
+  historicalReadOnly?: boolean;
+  config: BlockScanAtomicPolicy;
   provider: ethers.JsonRpcProvider;
   finalSimulationRuntime: FinalSimulationWorkRuntime<
     ResolvedPlan,
     SimulationResult
   >;
   sourceGeneration: number;
-  bundleRouter: BundleRouter;
-  submissionCoordinator: SubmissionCoordinator;
+  bundleRouter: Pick<BundleRouter, "submit">;
+  submissionCoordinator: Pick<SubmissionCoordinator, "offer">;
   opp: BlockScanOpportunity;
   resolved: ResolvedPlan;
   sourceBlock: number;
@@ -4678,6 +4801,9 @@ async function maybeSubmitBlockScanAtomic(params: {
     blockscan_view_hash: string;
   };
 }): Promise<BlockScanAtomicResult> {
+  if (params.historicalReadOnly && (!params.config.dryRun || params.config.blockScanSubmit)) {
+    throw new Error("historical block-scan requires dry-run with submission disabled");
+  }
   const timing = {
     finalSimMs: 0,
     evMs: 0,
@@ -4832,7 +4958,7 @@ async function maybeSubmitBlockScanAtomic(params: {
   let targetBlock = sourceBlock + 1;
   try {
     const latestAtVerify = await awaitBlockScanDeadline(
-      readUncachedLatestBlock(provider),
+      readUncachedLatestBlock(provider, params.historicalReadOnly ? sourceBlock : "latest"),
       passDeadlineAtMs,
       "source-head verification",
       undefined,
@@ -4888,7 +5014,7 @@ async function maybeSubmitBlockScanAtomic(params: {
     }
     if (sim.success && sim.netProfit > 0n) {
       const latestAfterSim = await awaitBlockScanDeadline(
-        readUncachedLatestBlock(provider),
+        readUncachedLatestBlock(provider, params.historicalReadOnly ? sourceBlock : "latest"),
         passDeadlineAtMs,
         "post-simulation source-head verification",
         undefined,
@@ -4933,6 +5059,8 @@ async function maybeSubmitBlockScanAtomic(params: {
       simulated_profit: sim.netProfit.toString(),
       profit_token: resolved.profitToken,
       gas_estimate: sim.gasUsed.toString(),
+      calldata_hash: ethers.keccak256(sim.calldata),
+      flash_amount: resolved.flashAmount.toString(),
       failure_reason: sim.success ? undefined : sim.revertReason,
     });
 

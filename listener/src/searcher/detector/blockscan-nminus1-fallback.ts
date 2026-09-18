@@ -108,12 +108,14 @@ export function enumerateNMinusOneCoarseCandidates(input: {
   );
   const edgeFilterFinishedAtMs = Date.now();
   let scanTimingMs: BlockScanScanTiming | null = null;
+  const usd = effectiveUsdPricing(coarse, input.cfg.usdSignalPairsPerToken);
   const scan = scanBlockStateFromResolvedMids({
     edges: scannerEdges,
     sourceBlock: coarse.sourceBlock,
     swapTouched: null,
     cfg: input.cfg,
-    mids: effectiveEnumerationMids(coarse),
+    mids: usd.mids,
+    usdView: usd.view,
     routeEligible: input.routeEligible,
     edgeEligible: input.edgeEligible,
     captureCoarseEnumeration: input.captureCoarseEnumeration,
@@ -282,4 +284,4 @@ function scannerConsumesEdge(edge: {
   return edge.slotKind === "swap" ||
     (edge.slotKind === "protocol" && !edge.leavesStandingPosition);
 }
-import { effectiveEnumerationMids } from "../blockscan-effective-mid.js";
+import { effectiveUsdPricing } from "../blockscan-usd-view.js";

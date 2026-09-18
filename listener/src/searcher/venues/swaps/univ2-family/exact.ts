@@ -26,12 +26,13 @@ import type {
 const EXACT_RESERVES_REQUEST_ID = "exact-reserves";
 const EXACT_INPUT_BALANCE_REQUEST_ID = "exact-input-balance";
 type Input = ExactQuoteInput<UniV2Descriptor, UniV2Route>;
+type UniV2QuotePreference = "local" | "router";
 
-const univ2RequestProgram: ExactRequestProgram<
+const createUniV2RequestProgram = (quotePreference: UniV2QuotePreference): ExactRequestProgram<
   UniV2Descriptor,
   UniV2Route,
   UniV2ExactEvidence
-> = {
+> => ({
   requirements: () => ({ transports: ["eth-call"] }),
   buildRequests(input) {
     assertRoute(input.descriptor, input.route);
@@ -51,7 +52,8 @@ const univ2RequestProgram: ExactRequestProgram<
       completion: "return-data" as const,
     }), ...(input.descriptor.quoteModel.kind === "pool-get-amount-out" ? [
       poolQuoteRequest("exact-pool-quote", input.descriptor.pool, input.route.tokenIn, input.amountIn),
-    ] : routerQuoteRequests(input.descriptor, input.route, input.amountIn))];
+    ] : usesRouter(input.descriptor, quotePreference)
+      ? routerQuoteRequests(input.descriptor, input.route, input.amountIn) : [])];
   },
   buildDependentProgram: () => null,
   decode({ programInput, initialResults, dependentEvidence }) {
@@ -65,7 +67,7 @@ const univ2RequestProgram: ExactRequestProgram<
     if (programInput.amountIn < 0n) {
       throw new Error("univ2 exact amountIn cannot be negative");
     }
-    const state = readInitialState(programInput, initialResults);
+    const state = readInitialState(programInput, initialResults, quotePreference);
     // Zero is an unavailable amount, not a pool blacklist. The solver can
     // still quote a smaller legal input at this same source. Read balanceOf
     // as donations/unsynced transfers also consume uint112 headroom.
@@ -79,7 +81,7 @@ const univ2RequestProgram: ExactRequestProgram<
       const amountOut = capacityExceeded ? 0n : decodePoolQuote(initialResults, "exact-pool-quote") ?? 0n;
       return Object.freeze({ amountOut, evidence: Object.freeze({ ...evidence, amountOut }) });
     }
-    if (uniV2QuoteRouter(programInput.descriptor) !== null) {
+    if (usesRouter(programInput.descriptor, quotePreference)) {
       if (dependentEvidence.length !== 0) throw new Error("univ2 unexpected router quote round");
       const quote = decodeRouterQuote(programInput.descriptor, programInput.amountIn,
         quoteV2ExactInput(state.reserveIn, state.reserveOut, programInput.amountIn, programInput.descriptor.feeRule.feeBps),
@@ -94,48 +96,58 @@ const univ2RequestProgram: ExactRequestProgram<
     const amountOut = trialOutput(programInput, state);
     return Object.freeze({ amountOut, evidence: Object.freeze({ ...evidence, amountOut }) });
   },
-};
+});
 
-export const univ2Exact = {
-  methods: (input) => Object.freeze([
-    localZeroExactMethod<UniV2Descriptor, UniV2Route, UniV2ExactEvidence>(
-      "local-zero",
-      (input) => {
-        assertRoute(input.descriptor, input.route);
-        return Object.freeze({ amountOut: 0n, evidence: zeroEvidence(input) });
-      },
-    ),
-    Object.freeze({
-      id: input.descriptor.quoteModel.kind === "pool-get-amount-out" ? "pair-reserves"
-        : uniV2QuoteRouter(input.descriptor) !== null ? "router-amounts-out" : "pair-reserves",
-      kind: "request-program" as const,
-      // Only an actual pool/Router return is a chain amount quote.
-      ...(input.descriptor.quoteModel.kind === "pool-get-amount-out" || uniV2QuoteRouter(input.descriptor) !== null
-        ? { chainAmountQuote: true as const } : {}),
-      program: univ2RequestProgram,
-    }),
-  ]),
-  cacheCompatibilityProjection: ({ descriptor, route }) => ({
-    quoteModel: descriptor.quoteModel,
-    pool: descriptor.pool,
-    tokenIn: route.tokenIn,
-    tokenOut: route.tokenOut,
-    feeRule: {
-      kind: descriptor.feeRule.kind,
-      feeBps: descriptor.feeRule.feeBps,
-      evidence: descriptor.feeRule.evidence,
-    },
-    ...(uniV2QuoteRouter(descriptor) !== null ? {
-      quoteRouter: uniV2QuoteRouter(descriptor), quoteSemantics: "router-factory-pair-amounts-v1",
-    } : descriptor.quoteModel.kind === "constant-product" ? {
-      quoteSemantics: "source-reserves-constant-product-v1",
-    } : {}),
-  }),
-} satisfies ExactQuoteSemantics<
+/** Ordinary V2 defaults to source-reserve math; Router parity stays explicitly selectable. */
+export function createUniV2Exact(quotePreference: UniV2QuotePreference = "local"): ExactQuoteSemantics<
   UniV2Descriptor,
   UniV2Route,
   UniV2ExactEvidence
->;
+> {
+  const program = createUniV2RequestProgram(quotePreference);
+  return {
+    methods: (input) => Object.freeze([
+      localZeroExactMethod<UniV2Descriptor, UniV2Route, UniV2ExactEvidence>(
+        "local-zero",
+        (input) => {
+          assertRoute(input.descriptor, input.route);
+          return Object.freeze({ amountOut: 0n, evidence: zeroEvidence(input) });
+        },
+      ),
+      Object.freeze({
+        id: usesRouter(input.descriptor, quotePreference) ? "router-amounts-out" : "pair-reserves",
+        kind: "request-program" as const,
+        // Only an actual pool/Router return is a chain amount quote.
+        ...(input.descriptor.quoteModel.kind === "pool-get-amount-out" || usesRouter(input.descriptor, quotePreference)
+          ? { chainAmountQuote: true as const } : { stateOnlyReads: true as const }),
+        program,
+      }),
+    ]),
+    cacheCompatibilityProjection: ({ descriptor, route }) => ({
+      quotePreference,
+      quoteModel: descriptor.quoteModel,
+      pool: descriptor.pool,
+      tokenIn: route.tokenIn,
+      tokenOut: route.tokenOut,
+      feeRule: {
+        kind: descriptor.feeRule.kind,
+        feeBps: descriptor.feeRule.feeBps,
+        evidence: descriptor.feeRule.evidence,
+      },
+      ...(usesRouter(descriptor, quotePreference) ? {
+        quoteRouter: uniV2QuoteRouter(descriptor), quoteSemantics: "router-factory-pair-amounts-v1",
+      } : descriptor.quoteModel.kind === "constant-product" ? {
+        quoteSemantics: "source-reserves-constant-product-v1",
+      } : {}),
+    }),
+  };
+}
+
+export const univ2Exact = createUniV2Exact();
+
+function usesRouter(descriptor: UniV2Descriptor, quotePreference: UniV2QuotePreference): boolean {
+  return quotePreference === "router" && uniV2QuoteRouter(descriptor) !== null;
+}
 
 function assertResults(results: readonly AdapterRequestResult[], ids: readonly string[], source: CanonicalSource): void {
   if (results.length !== ids.length || new Set(results.map(result => result.id)).size !== ids.length ||
@@ -147,12 +159,12 @@ function assertResults(results: readonly AdapterRequestResult[], ids: readonly s
   }
 }
 
-function readInitialState(input: Input, results: readonly AdapterRequestResult[]) {
+function readInitialState(input: Input, results: readonly AdapterRequestResult[], quotePreference: UniV2QuotePreference) {
   assertRoute(input.descriptor, input.route);
   if (input.amountIn < 0n) throw new Error("univ2 exact amountIn cannot be negative");
   assertResults(results, [EXACT_RESERVES_REQUEST_ID, EXACT_INPUT_BALANCE_REQUEST_ID,
     ...(input.descriptor.quoteModel.kind === "pool-get-amount-out" ? ["exact-pool-quote"]
-      : uniV2QuoteRouter(input.descriptor) !== null ? ROUTER_QUOTE_REQUEST_IDS : [])], input.source);
+      : usesRouter(input.descriptor, quotePreference) ? ROUTER_QUOTE_REQUEST_IDS : [])], input.source);
   const reserves = decodeReservesResult(results, EXACT_RESERVES_REQUEST_ID);
   const balance = requireSuccessfulResult(results, EXACT_INPUT_BALANCE_REQUEST_ID);
   if (!/^0x[0-9a-fA-F]{64}$/.test(balance.data)) throw new Error("univ2 invalid input balance result");

@@ -557,7 +557,7 @@ async function testBlockScanPlannerBinding(): Promise<void> {
 
   const liveFundingPlanner = new TemplatePlanner();
   liveFundingPlanner.setFlashLiquidity(fakeLiquidity([
-    [REAL_WETH, 1_234n, "morpho-flash"],
+    [REAL_WETH, 12_340n, "morpho-flash"],
   ]));
   const fundedPlans = await liveFundingPlanner.planBlockScanFromSeedEdges(
     opp,
@@ -569,16 +569,19 @@ async function testBlockScanPlannerBinding(): Promise<void> {
     `block-scan binding: expected live provider, got ${fundedPlans[0].flashAdapterId}`,
   );
   assert(
-    fundedPlans[0].maxFlashAmount === 1_234n,
+    fundedPlans[0].maxFlashAmount === 12_340n,
     `block-scan binding: expected funding cap, got ${fundedPlans[0].maxFlashAmount}`,
   );
   const fundedOpportunity = fundedPlans[0].opportunity;
   assert(
     "searchSeed" in fundedOpportunity &&
-      fundedOpportunity.searchSeed.searchCenter === 1_234n &&
-      fundedOpportunity.searchSeed.maxInput === 1_234n,
-    "block-scan binding: solver domain must be capped to current-N funding",
+      fundedOpportunity.searchSeed.searchCenter === 5_000n &&
+      fundedOpportunity.searchSeed.maxInput === 12_340n,
+    "block-scan binding: funding caps the search domain but preserves P",
   );
+  liveFundingPlanner.setFlashLiquidity(fakeLiquidity([[REAL_WETH, 1_234n, "morpho-flash"]]));
+  assert((await liveFundingPlanner.planBlockScanFromSeedEdges(opp, [FLASH_SWAP_REPAY])).length === 0,
+    "block-scan binding: insufficient funding must reject, not shrink P");
 
   const unfundedPlanner = new TemplatePlanner();
   unfundedPlanner.setFlashLiquidity(fakeLiquidity([]));

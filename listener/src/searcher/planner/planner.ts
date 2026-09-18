@@ -357,7 +357,9 @@ export class TemplatePlanner implements Planner {
       ? minBigint(opp.searchSeed.maxInput, liveFlashSource.amount)
       : opp.searchSeed.maxInput;
     if (maxFlashAmount <= 0n) return candidates;
-    const searchCenter = minBigint(opp.searchSeed.searchCenter, maxFlashAmount);
+    const searchCenter = opp.searchSeed.searchCenter;
+    // P is the actual first-edge effective input, never a funding-clamped substitute.
+    if (searchCenter <= 0n || searchCenter > maxFlashAmount) return candidates;
     const plannedOpportunity: BlockScanPlannedOpportunity = {
       ...opp,
       searchSeed: {

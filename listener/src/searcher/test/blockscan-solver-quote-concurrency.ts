@@ -30,6 +30,7 @@ export type FixtureExactHandle = Awaited<ReturnType<StrictProductionRuntimeSessi
 interface SessionOptions {
   readonly debtBps?: readonly bigint[];
   readonly safetyBps?: bigint;
+  readonly toleranceRawUnits?: bigint;
   readonly quote?: (input: FixtureExactInput, leg: number) => Promise<bigint>;
   readonly onBuild?: () => void;
   readonly onExact?: (input: FixtureExactInput, handle: FixtureExactHandle) => void;
@@ -161,8 +162,13 @@ export function sharedSession(
               location.leg === 0 ? input.amountIn * 2n : (input.amountIn * 3n) / 5n,
             )));
         if (location.leg === 0) {
-          const key = outputKey(amountOut * (options.safetyBps ?? 10000n) / 10000n);
+          const output = options.toleranceRawUnits === undefined
+            ? amountOut * (options.safetyBps ?? 10000n) / 10000n : amountOut;
+          const key = outputKey(output);
           completedOutputs.set(key, (completedOutputs.get(key) ?? 0) + 1);
+          if (options.toleranceRawUnits === 1n) {
+            completedOutputs.set(outputKey(output - 1n), Number.MAX_SAFE_INTEGER);
+          }
         }
         const handle = Object.freeze({ amountOut }) as ExactHandle;
         issued.set(handle as object, {

@@ -99,6 +99,7 @@ export interface StrictSimulationTransport {
  * `runStrictFamilyLifecycle` can run with this runtime in production.
  */
 export function createStrictCentralAdapterRuntime(input: {
+  readonly exactQuoteCache?: import("./adapter-family-exact-quote-cache.js").AdapterFamilyExactQuoteCache;
   readonly provider: Pick<
     StrictProvider,
     "call" | "getCode" | "getStorage"
@@ -362,6 +363,7 @@ export function createStrictCentralAdapterRuntime(input: {
     },
   });
   return Object.freeze({
+    ...(input.exactQuoteCache === undefined ? {} : { exactQuoteCache: input.exactQuoteCache }),
     clock: { nowMs: () => now++ },
     generationFence: input.generationFence,
     callerAuthority: {

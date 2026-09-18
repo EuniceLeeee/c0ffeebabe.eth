@@ -1,12 +1,8 @@
-import { ADDR } from "../../shared/constants/addresses.js";
-import {
-  BLOCKSCAN_MIN_EXECUTABLE_INPUT,
-  BLOCKSCAN_VENUE_DEPTH_DIVISOR,
-} from "./blockscan-sizing-constants.js";
+import { buildBlockScanUsdView, usdViewStatistics, type BlockScanUsdView } from "../blockscan-usd-view.js";
+import { enumeratePairedDfs, enumeratePairedLayered, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
 import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "./detector.js";
 import { type TokenEdge, v4PoolId } from "../planner/token-graph.js";
-import { getAmount0Delta, getAmount1Delta } from "../solver/v3-math.js";
 import { pathLeavesStandingPosition } from "../strategy-taxonomy.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "../venues/route-instance-identity.js";
@@ -15,9 +11,12 @@ import {
 } from "../venues/route-immutable-binding.js";
 
 export interface BlockScanCoreConfig {
+  enumerationMethod?: PairedEnumerationMethod;
+  /** Maximum compatible buy/sell signal pairs per token; defaults to 20. */
+  usdSignalPairsPerToken?: number;
   maxHops: number;
   minSpreadBps: number;
-  /** Require a ring to include a cross-venue pair above minSpreadBps too. */
+  /** Historical caller compatibility only; DFS always requires a paired USD signal. */
   requireDislocatedPair?: boolean;
   /**
    * Coarse spread floor for exact-refine admission. Rings above minSpreadBps
@@ -26,12 +25,7 @@ export interface BlockScanCoreConfig {
    * Defaults to minSpreadBps when omitted.
    */
   exactAdmissionSpreadBps?: number;
-  /**
-   * Minimum executable capital fraction (maxInput / maxBorrow) for a ring to
-   * be enumerated. Filters dust rings whose spread is huge on paper but whose
-   * deployable capital is negligible, before they consume exact probes.
-   * Defaults to 0 (no filter) when omitted.
-   */
+  /** Legacy configuration retained for refinement shadow telemetry only. */
   minCapitalFraction?: number;
   maxCandidates: number;
   budgetMs: number;
@@ -59,6 +53,7 @@ export interface BlockScanOutcome {
     readonly forcedSelectionCount: number;
   };
   debug?: { skippedVenues: number; capitalRejected: number };
+  enumeration?: { algorithm: "paired-dfs" | "paired-layered" } & ReturnType<typeof usdViewStatistics> & ReturnType<typeof enumeratePairedDfs>;
 }
 
 export interface BlockScanScanTiming {
@@ -92,12 +87,6 @@ export function blockScanSelectionProvenance(
   });
 }
 
-interface PairGroup {
-  a: string;
-  b: string;
-  venues: Map<string, TokenEdge[]>;
-}
-
 /**
  * Minimal scanner projection of a family-owned current-block mid.
  * The state coordinator's published mid is structurally compatible without
@@ -108,6 +97,8 @@ export interface ResolvedBlockScanMid {
   readonly pool: string;
   readonly edges: readonly TokenEdge[];
   readonly mid: number;
+  readonly quoteAmountIn?: bigint;
+  readonly quoteAmountOut?: bigint;
   readonly feeBps: number;
   readonly reserveA?: bigint;
   readonly reserveB?: bigint;
@@ -166,918 +157,96 @@ interface RankedOpportunity {
   estSpreadBps: number;
 }
 
-interface SearchEdgeIndex {
-  readonly edge: TokenEdge;
-  readonly tokenIn: string;
-  readonly tokenOut: string;
-  readonly tokenInId: number;
-  readonly tokenOutId: number;
-  readonly stableKey: string;
-  readonly activityTieBreak: number;
-}
-
-interface PricedSearchEdge extends SearchEdgeIndex {
-  readonly logRate: number;
-  readonly inputDepth: number;
-}
-
-interface ScannerTopologyIndex {
-  readonly edges: readonly TokenEdge[];
-  readonly groups: ReadonlyMap<string, PairGroup>;
-  readonly tokenIds: Map<string, number>;
-  searchEdges?: readonly SearchEdgeIndex[];
-}
-
-type ReverseReturnBounds = readonly (Float64Array | ReadonlyMap<number, number>)[];
-const MAX_DENSE_RETURN_BOUND_BYTES = 8 * 1024 * 1024;
-
-// One bounded static index, never prices/eligibility/bounds. Production creates
-// new filtered arrays each pass, so compare their ordered immutable edge objects.
-let previousScannerTopology: ScannerTopologyIndex | null = null;
-
-function scannerTopologyFor(edges: readonly TokenEdge[]): ScannerTopologyIndex {
-  const previous = previousScannerTopology;
-  if (previous && previous.edges.length === edges.length &&
-    edges.every((edge, index) => edge === previous.edges[index])) return previous;
-  const topology: ScannerTopologyIndex = {
-    edges: [...edges],
-    groups: groupPairs(edges),
-    tokenIds: new Map(),
-  };
-  previousScannerTopology = edges.every((edge) => Object.isFrozen(edge) &&
-      (edge.routeBinding === undefined || Object.isFrozen(edge.routeBinding)) &&
-      (edge.v4PoolKey === undefined || Object.isFrozen(edge.v4PoolKey)))
-    ? topology
-    : null;
-  return topology;
-}
-
-interface PriceSearchNode {
-  readonly anchorToken: string;
-  readonly token: string;
-  readonly edge: PricedSearchEdge;
-  readonly parent: PriceSearchNode | null;
-  readonly depth: number;
-  readonly cumulativeLogReturn: number;
-  readonly upperBoundLogReturn: number;
-  readonly maxStartDepth: number;
-  readonly upperBoundRank: number;
-  readonly activityTieBreak: number;
-  readonly sequence: number;
-  /** At most one non-funded token may have appeared twice in an open path. */
-  readonly repeatedToken: string | null;
-}
-
-interface PriceRankedRingSearchResult {
-  readonly rings: readonly TokenEdge[][];
-  readonly deadlineHit: boolean;
-}
-
-const Q96 = 1n << 96n;
-const MIN_SEARCH_CENTER = 1_000n;
-const WETH = ADDR.WETH.toLowerCase();
-
 export function scanBlockStateFromResolvedMids(input: {
   edges: TokenEdge[];
   sourceBlock: number;
   swapTouched: Set<string> | null;
   cfg: BlockScanCoreConfig;
-  /** Required exact edge-key map; this kernel has no cache or legacy fallback. */
   mids: ReadonlyMap<string, ResolvedBlockScanMid>;
-  /**
-   * Per-pass execution availability. This never removes graph edges; it
-   * prevents routes that cannot execute in the current immutable context from
-   * consuming ranking/candidate capacity.
-   */
+  usdView?: BlockScanUsdView;
   routeEligible?: (edges: readonly TokenEdge[]) => boolean;
-  /** Per-edge execution availability applied only to this scanner pass. */
   edgeEligible?: (edge: TokenEdge) => boolean;
   captureCoarseEnumeration?: boolean;
-  /** Non-semantic timing observer; never becomes part of scanner output. */
   onTiming?: (timing: BlockScanScanTiming) => void;
 }): BlockScanOutcome {
-  const scanStartedAtMs = Date.now();
-  const deadlineAtMs = scanStartedAtMs + input.cfg.budgetMs;
-  const touched = input.swapTouched
-    ? new Set([...input.swapTouched].map((pool) => pool.toLowerCase()))
-    : null;
-  const eligibleEdges = input.edgeEligible
-    ? input.edges.filter(input.edgeEligible)
-    : input.edges;
-  const topology = scannerTopologyFor(eligibleEdges);
-  const groups = topology.groups;
-  const dislocatedPairs = input.cfg.requireDislocatedPair ? new Set<string>() : null;
-  const routeEligible = (edges: readonly TokenEdge[]): boolean =>
-    (!input.routeEligible || input.routeEligible(edges)) &&
-    (dislocatedPairs === null || edges.some((edge) =>
-      dislocatedPairs.has(tokenPairKey(edge.tokenIn, edge.tokenOut))
-    ));
-  const ranked: RankedOpportunity[] = [];
-  let scannedPairs = 0;
-  let skippedVenues = 0;
+  const started = Date.now(), deadlineAtMs = started + input.cfg.budgetMs;
+  const eligibleEdges = input.edges.filter(edge => !pathLeavesStandingPosition([edge]) &&
+    (!input.edgeEligible || input.edgeEligible(edge)));
+  const edgesById = new Map(eligibleEdges.map(edge => [blockScanEdgeKey(edge), edge]));
+  const view = input.usdView ?? buildBlockScanUsdView(eligibleEdges, input.mids, input.cfg.usdSignalPairsPerToken);
+  const quotes = view.quotes.filter(q => edgesById.has(q.id));
+  const ranked = new Map<string, RankedOpportunity>();
   let capitalRejected = 0;
-  const preprocessingFinishedAtMs = Date.now();
-  let activePhase: "pairs" | "general" = "pairs";
-  let phaseStartedAtMs = preprocessingFinishedAtMs;
-  const phaseMs = { pairs: 0, general: 0 };
-  const enterPhase = (next: typeof activePhase): void => {
-    const now = Date.now();
-    phaseMs[activePhase] += Math.max(0, now - phaseStartedAtMs);
-    activePhase = next;
-    phaseStartedAtMs = now;
-  };
-
-  const finish = (outcome: BlockScanOutcome["outcome"]): BlockScanOutcome => {
-    const finalizeStartedAtMs = Date.now();
-    phaseMs[activePhase] += Math.max(0, finalizeStartedAtMs - phaseStartedAtMs);
-    const admissionSpreadBps =
-      input.cfg.exactAdmissionSpreadBps ?? input.cfg.minSpreadBps;
-    ranked.sort((a, b) => b.rank - a.rank);
-    const deduped: RankedOpportunity[] = [];
-    const seenRoutes = new Set<string>();
-    for (const entry of ranked) {
-      const route = directedRouteFingerprint(entry.opportunity.seedEdges);
-      if (seenRoutes.has(route)) continue;
-      seenRoutes.add(route);
-      deduped.push(entry);
-    }
-    const admitted = deduped.filter(
-      (entry) => entry.estSpreadBps > admissionSpreadBps,
-    );
-    const selected = deduped.slice(0, input.cfg.maxCandidates);
-    const result: BlockScanOutcome = {
-      outcome,
-      stateBlock: input.sourceBlock,
-      scannedPairs,
-      swapTouchedPools: touched?.size ?? 0,
-      opportunities: selected.map((entry) => entry.opportunity),
-      ...(input.captureCoarseEnumeration
-        ? { coarseEnumeration: deduped.map((entry) => entry.opportunity) }
-        : {}),
-      selection: Object.freeze({
-        mode: "natural_ranked" as const,
-        enumeratedCount: deduped.length,
-        admittedCount: admitted.length,
-        selectedCount: selected.length,
-        forcedSelectionCount: 0,
-      }),
-      debug: { skippedVenues, capitalRejected },
-    };
-    const finishedAtMs = Date.now();
-    input.onTiming?.(Object.freeze({
-      preprocessing: Math.max(0, preprocessingFinishedAtMs - scanStartedAtMs),
-      ...phaseMs,
-      finalization: Math.max(0, finishedAtMs - finalizeStartedAtMs),
-      total: Math.max(0, finishedAtMs - scanStartedAtMs),
-    }));
-    return result;
-  };
-
-  for (const group of groups.values()) {
-    if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
-    if (group.venues.size < 2) continue;
-    const pairIsTouched = touched === null || pairTouches(group, touched);
-    if (!pairIsTouched && dislocatedPairs === null) continue;
-    scannedPairs++;
-
-    const venues: VenueMid[] = [];
-    for (const edges of group.venues.values()) {
-      if (Date.now() >= deadlineAtMs) return finish("budget_exceeded");
-      const mid = readVenueMid(
-        group.a,
-        group.b,
-        edges,
-        input.mids,
-      );
-      if (mid) venues.push(mid);
-      else skippedVenues++;
-    }
-    if (venues.length < 2) continue;
-
-    let minVenue = venues[0];
-    let maxVenue = venues[0];
-    for (const venue of venues.slice(1)) {
-      if (venue.mid < minVenue.mid) minVenue = venue;
-      if (venue.mid > maxVenue.mid) maxVenue = venue;
-    }
-    if (minVenue.mid <= 0 || maxVenue.mid <= minVenue.mid) continue;
-
-    const estSpreadBps =
-      ((maxVenue.mid - minVenue.mid) / minVenue.mid) * 10_000 -
-      minVenue.feeBps -
-      maxVenue.feeBps;
-    if (!Number.isFinite(estSpreadBps) || estSpreadBps <= input.cfg.minSpreadBps) continue;
-    // Pair evidence must not require a funding anchor or a two-leg loop:
-    // multi-hop rings may reach this pair through other tokens.
-    dislocatedPairs?.add(`${group.a}|${group.b}`);
-    if (!pairIsTouched) continue;
-    const flashToken = pickFlashToken(group.a, group.b, input.cfg.pricedTokens);
-    if (!flashToken) continue;
-    const otherToken = flashToken === group.a ? group.b : group.a;
-    const cheapVenue = flashToken === group.a ? maxVenue : minVenue;
-    const richVenue = flashToken === group.a ? minVenue : maxVenue;
-    if (cheapVenue.pool === richVenue.pool) continue;
-
-    const buyCheap = findEdge(cheapVenue.edges, flashToken, otherToken);
-    const sellRich = findEdge(richVenue.edges, otherToken, flashToken);
-    if (!buyCheap || !sellRich) continue;
-    const seedEdges = [buyCheap, sellRich];
-    if (input.routeEligible && !input.routeEligible(seedEdges)) continue;
-
-    const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
-    const routeScore = scoreRing(seedEdges, input.mids);
-    if (!routeScore || routeScore.estSpreadBps <= input.cfg.minSpreadBps) continue;
-    const routeMaxInput = bigintFloor(routeScore.maxStartDepth / 4);
-    const sizing = estimateSizing(
-      cheapVenue,
-      flashToken,
-      group.a,
-      group.b,
-      minVenue.mid,
-      maxVenue.mid,
-      routeScore.estSpreadBps,
-      maxBorrow,
-      routeMaxInput,
-    );
-    if (!sizing || sizing.searchCenter <= 8n) continue;
-    if (!passesMinimumCapitalFraction(
-      sizing.maxInput,
-      maxBorrow,
-      input.cfg.minCapitalFraction,
-    )) {
-      // Shadow-only: record the would-reject count for calibration but keep
-      // the ring so its exact outcome can be measured.
-      capitalRejected++;
-    }
-
-    const ring = [flashToken, otherToken];
-    const canonicalRing = canonicalTokenRing(ring);
-    const opportunity: BlockScanOpportunity = {
-      kind: "block-scan-arb",
-      sourceBlock: input.sourceBlock,
-      stateBlock: input.sourceBlock,
-      cycleId: canonicalRing.join("|"),
-      cycleFingerprint: cycleFingerprint(input.sourceBlock, ring),
-      seedEdges,
-      flashToken,
-      coarseSpreadBps: routeScore.estSpreadBps,
-      coarseMaxInput: sizing.maxInput,
-      searchSeed: {
-        startToken: flashToken,
-        searchCenter: sizing.searchCenter,
-        maxInput: sizing.maxInput,
-      },
-      leavesStandingPosition: pathLeavesStandingPosition(seedEdges),
-      affectedPools: [cheapVenue.pool, richVenue.pool],
-      affectedTokens: canonicalRing,
-    };
-    ranked.push({
-      opportunity,
-      rank: expectedReturnRank(routeScore.estSpreadBps, sizing.searchCenter, maxBorrow),
-      estSpreadBps: routeScore.estSpreadBps,
-    });
-  }
-
-  const considerRing = (ringEdges: TokenEdge[]): void => {
-    if (!routeEligible(ringEdges)) return;
-    if (touched && !ringEdges.some((edge) => touched.has(edgeVenueIdentity(edge)))) return;
-    if (pathLeavesStandingPosition(ringEdges)) return;
-    if (!isAdmissibleBlockScanRingShape(ringEdges, input.cfg.pricedTokens)) return;
-    const score = scoreRing(ringEdges, input.mids);
-    if (!score || score.estSpreadBps <= input.cfg.minSpreadBps) return;
-
-    const ringTokens = ringTokensWithoutRepeat(ringEdges);
-    const flashToken = pickRingFlashToken(ringTokens, input.cfg.pricedTokens);
-    if (!flashToken) return;
-    const seedEdges = rotateRingEdges(ringEdges, flashToken);
-    if (!seedEdges) return;
-
-    const rotatedScore = scoreRing(seedEdges, input.mids);
-    if (!rotatedScore || rotatedScore.estSpreadBps <= input.cfg.minSpreadBps) return;
-
-    const firstVenue = readEdgeVenueMid(
-      seedEdges[0],
-      input.mids,
-    );
-    if (!firstVenue) return;
-    const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
-    const spreadMultiplier = 1 + rotatedScore.estSpreadBps / 10_000;
-    const minMid = firstVenue.mid / Math.max(spreadMultiplier, 1);
-    const routeMaxInput = bigintFloor(rotatedScore.maxStartDepth / 4);
-    const sizing = estimateSizing(
-      firstVenue,
-      flashToken,
-      seedEdges[0].tokenIn.toLowerCase(),
-      seedEdges[0].tokenOut.toLowerCase(),
-      minMid,
-      firstVenue.mid,
-      rotatedScore.estSpreadBps,
-      maxBorrow,
-      routeMaxInput,
-    );
-    if (!sizing || sizing.searchCenter <= 8n) return;
-    if (!passesMinimumCapitalFraction(
-      sizing.maxInput,
-      maxBorrow,
-      input.cfg.minCapitalFraction,
-    )) {
-      capitalRejected++;
-    }
-
-    const rotatedRingTokens = ringTokensWithoutRepeat(seedEdges);
-    const canonicalRing = canonicalTokenRing(rotatedRingTokens);
-    const opportunity: BlockScanOpportunity = {
-      kind: "block-scan-arb",
-      sourceBlock: input.sourceBlock,
-      stateBlock: input.sourceBlock,
-      cycleId: canonicalRing.join("|"),
-      cycleFingerprint: cycleFingerprint(input.sourceBlock, rotatedRingTokens),
-      seedEdges,
-      flashToken,
-      coarseSpreadBps: rotatedScore.estSpreadBps,
-      coarseMaxInput: sizing.maxInput,
-      searchSeed: {
-        startToken: flashToken,
-        searchCenter: sizing.searchCenter,
-        maxInput: sizing.maxInput,
-      },
-      leavesStandingPosition: pathLeavesStandingPosition(seedEdges),
-      affectedPools: uniqueLowercase(seedEdges.map(edgeVenueIdentity)),
-      affectedTokens: canonicalRing,
-    };
-    ranked.push({
-      opportunity,
-      rank: expectedReturnRank(rotatedScore.estSpreadBps, sizing.searchCenter, maxBorrow),
-      estSpreadBps: rotatedScore.estSpreadBps,
-    });
-  };
-
-  enterPhase("general");
-  if (dislocatedPairs?.size === 0) return finish("ran");
-  const priceSearch = enumeratePriceRankedRings({
-    topology,
-    mids: input.mids,
-    pricedTokens: input.cfg.pricedTokens,
-    touched,
-    maxHops: input.cfg.maxHops,
-    minSpreadBps: input.cfg.minSpreadBps,
-    maxRings: Math.max(2_000, input.cfg.maxCandidates * 20),
-    deadlineAtMs,
-    routeEligible,
+  const preprocessingFinished = Date.now();
+  const method = input.cfg.enumerationMethod ?? "dfs";
+  const dfs = (method === "layered" ? enumeratePairedLayered : enumeratePairedDfs)({
+    quotes, signals: view.signals, minSpreadBps: input.cfg.minSpreadBps,
+    maxHops: input.cfg.maxHops, deadlineAtMs,
+    funding: [...input.cfg.pricedTokens].filter(([, value]) => value.maxBorrow > 0n).map(([token]) => token),
+    onCycle(path, estSpreadBps) {
+      const seedEdges = path.map(q => edgesById.get(q.id)!);
+      // DFS's validated split is relative to THIS funded start. Do not rotate
+      // it after signal validation; a different rotation needs its own DFS proof.
+      if (input.routeEligible && !input.routeEligible(seedEdges)) return;
+      if (!isAdmissibleBlockScanRingShape(seedEdges, input.cfg.pricedTokens)) return;
+      const firstVenue = readEdgeVenueMid(seedEdges[0]!, input.mids);
+      if (!firstVenue || !Number.isFinite(estSpreadBps)) return;
+      const flashToken = seedEdges[0]!.tokenIn.toLowerCase();
+      const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
+      // The published effective quote owns P. Pool-depth proxies must not
+      // recalculate or cap it; actual funding and amount quotes constrain execution.
+      const searchCenter = firstVenue.quoteAmountIn ?? 0n;
+      if (searchCenter <= 0n) return;
+      if (searchCenter > maxBorrow) { capitalRejected++; return; }
+      const ringTokens = ringTokensWithoutRepeat(seedEdges), canonicalRing = canonicalTokenRing(ringTokens);
+      const opportunity: BlockScanOpportunity = {
+        kind: "block-scan-arb", sourceBlock: input.sourceBlock, stateBlock: input.sourceBlock,
+        cycleId: canonicalRing.join("|"), cycleFingerprint: cycleFingerprint(input.sourceBlock, ringTokens),
+        seedEdges, flashToken, coarseSpreadBps: estSpreadBps, coarseMaxInput: maxBorrow,
+        searchSeed: { startToken: flashToken, searchCenter, maxInput: maxBorrow },
+        leavesStandingPosition: false, affectedPools: uniqueLowercase(seedEdges.map(edgeVenueIdentity)),
+        affectedTokens: canonicalRing,
+      };
+      const key = directedRouteFingerprint(seedEdges);
+      const entry = { opportunity, rank: expectedReturnRank(estSpreadBps, searchCenter, maxBorrow), estSpreadBps };
+      const previous = ranked.get(key);
+      if (!previous || entry.rank > previous.rank) ranked.set(key, entry);
+    },
   });
-  for (const ring of priceSearch.rings) {
-    considerRing(ring);
-  }
-
-  return finish(priceSearch.deadlineHit ? "budget_exceeded" : "ran");
-}
-
-/**
- * Enumerate profitable closed rings from current resolved prices without an
- * edge-count gate. A reverse dynamic program supplies an optimistic return
- * bound for every token/hop budget; a best-first queue then spends the global
- * time/result budget only on partial paths that can still clear the spread
- * floor. Activity is a deterministic tie-break only and can never make an
- * otherwise profitable edge unreachable.
- *
- * With a touched set, the observed edge is seeded before any budgeting. This
- * preserves causal backrun recall without teaching the central scanner any
- * Family or protocol identity.
- */
-function enumeratePriceRankedRings(input: {
-  readonly topology: ScannerTopologyIndex;
-  readonly mids: ReadonlyMap<string, ResolvedBlockScanMid>;
-  readonly pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>;
-  readonly touched: ReadonlySet<string> | null;
-  readonly maxHops: number;
-  readonly minSpreadBps: number;
-  readonly maxRings: number;
-  readonly deadlineAtMs: number;
-  readonly routeEligible?: (edges: readonly TokenEdge[]) => boolean;
-}): PriceRankedRingSearchResult {
-  if (
-    !Number.isSafeInteger(input.maxHops) || input.maxHops <= 0 ||
-    !Number.isSafeInteger(input.maxRings) || input.maxRings <= 0
-  ) {
-    throw new Error("price-ranked ring search requires positive integer budgets");
-  }
-  const minLogReturn = Math.log1p(input.minSpreadBps / 10_000);
-  if (!Number.isFinite(minLogReturn)) {
-    throw new Error(`invalid block-scan spread floor ${input.minSpreadBps}`);
-  }
-
-  const pricedEdges = buildPricedSearchEdges(input.topology, input.mids);
-  const outgoing = new Map<string, PricedSearchEdge[]>();
-  for (const priced of pricedEdges) {
-    const entries = outgoing.get(priced.tokenIn);
-    if (entries) entries.push(priced);
-    else outgoing.set(priced.tokenIn, [priced]);
-  }
-  // Filtering the globally stable-sorted index already preserves outgoing order.
-
-  const boundsByAnchor = new Map<
-    string,
-    ReverseReturnBounds
-  >();
-  let denseBoundBytes = 0;
-  const boundsFor = (
-    anchorToken: string,
-  ): ReverseReturnBounds => {
-    const anchor = anchorToken.toLowerCase();
-    const cached = boundsByAnchor.get(anchor);
-    if (cached) return cached;
-    const bytes = (input.maxHops + 1) * input.topology.tokenIds.size * 8;
-    const dense = denseBoundBytes + bytes <= MAX_DENSE_RETURN_BOUND_BYTES;
-    if (dense) denseBoundBytes += bytes;
-    const bounds = buildReverseReturnBounds(
-      pricedEdges,
-      input.topology.tokenIds.get(anchor),
-      input.topology.tokenIds.size,
-      input.maxHops,
-      dense,
-    );
-    boundsByAnchor.set(anchor, bounds);
-    return bounds;
+  const finalizing = Date.now();
+  const ordered = [...ranked.values()].sort((a, b) => b.rank - a.rank ||
+    directedRouteFingerprint(a.opportunity.seedEdges).localeCompare(directedRouteFingerprint(b.opportunity.seedEdges)));
+  const opportunities = ordered.slice(0, input.cfg.maxCandidates).map(entry => entry.opportunity);
+  const result: BlockScanOutcome = {
+    outcome: dfs.deadlineHit ? "budget_exceeded" : "ran", stateBlock: input.sourceBlock,
+    // Retained contract field; the DFS debug record names its new token-signal meaning.
+    scannedPairs: view.comparableTokens, swapTouchedPools: input.swapTouched?.size ?? 0,
+    opportunities,
+    ...(input.captureCoarseEnumeration ? { coarseEnumeration: ordered.map(entry => entry.opportunity) } : {}),
+    selection: { mode: "natural_ranked", enumeratedCount: ordered.length,
+      admittedCount: ordered.filter(entry => entry.estSpreadBps >
+        (input.cfg.exactAdmissionSpreadBps ?? input.cfg.minSpreadBps)).length,
+      selectedCount: opportunities.length, forcedSelectionCount: 0 },
+    debug: { skippedVenues: eligibleEdges.length - quotes.length, capitalRejected },
+    enumeration: { algorithm: method === "dfs" ? "paired-dfs" : "paired-layered",
+      ...usdViewStatistics(view, input.cfg.minSpreadBps), ...dfs },
   };
-
-  const queue = new PriceSearchMaxHeap();
-  let sequence = 0;
-  const pushFirstEdge = (
-    anchorToken: string,
-    priced: PricedSearchEdge,
-  ): void => {
-    const anchor = anchorToken.toLowerCase();
-    if (priced.tokenIn !== anchor || priced.tokenOut === anchor) return;
-    const tailBound = returnBoundAt(boundsFor(anchor), input.maxHops - 1, priced.tokenOutId);
-    if (tailBound === -Infinity) return;
-    const upperBoundLogReturn = priced.logRate + tailBound;
-    if (!(upperBoundLogReturn > minLogReturn)) return;
-    const maxBorrow = input.pricedTokens.get(anchor)?.maxBorrow ?? null;
-    queue.push(Object.freeze({
-      anchorToken: anchor,
-      token: priced.tokenOut,
-      edge: priced,
-      parent: null,
-      depth: 1,
-      cumulativeLogReturn: priced.logRate,
-      upperBoundLogReturn,
-      maxStartDepth: priced.inputDepth,
-      upperBoundRank: optimisticSearchRank(
-        upperBoundLogReturn,
-        priced.inputDepth,
-        maxBorrow,
-      ),
-      activityTieBreak: priced.activityTieBreak,
-      sequence: sequence++,
-      repeatedToken: null,
-    }));
-  };
-
-  if (input.touched) {
-    for (const priced of pricedEdges) {
-      if (!input.touched.has(edgeVenueIdentity(priced.edge))) continue;
-      pushFirstEdge(priced.tokenIn, priced);
-      if (Date.now() >= input.deadlineAtMs) {
-        return Object.freeze({ rings: Object.freeze([]), deadlineHit: true });
-      }
-    }
-  } else {
-    const anchors = [...input.pricedTokens.keys()]
-      .map((token) => token.toLowerCase())
-      .sort();
-    for (const anchor of anchors) {
-      for (const priced of outgoing.get(anchor) ?? []) {
-        pushFirstEdge(anchor, priced);
-      }
-      if (Date.now() >= input.deadlineAtMs) {
-        return Object.freeze({ rings: Object.freeze([]), deadlineHit: true });
-      }
-    }
-  }
-
-  const rings: TokenEdge[][] = [];
-  const seenRings = new Set<string>();
-  let workUnits = 0;
-  while (queue.size > 0 && rings.length < input.maxRings) {
-    if ((workUnits++ & 0xff) === 0 && Date.now() >= input.deadlineAtMs) {
-      return Object.freeze({ rings: Object.freeze(rings), deadlineHit: true });
-    }
-    const node = queue.pop()!;
-    if (node.token === node.anchorToken) {
-      const ring = materializePriceSearchPath(node);
-      if (
-        node.cumulativeLogReturn > minLogReturn &&
-        pickRingFlashToken(
-          ringTokensWithoutRepeat(ring),
-          input.pricedTokens,
-        ) !== null &&
-        isAdmissibleBlockScanRingShape(ring, input.pricedTokens) &&
-        (!input.routeEligible || input.routeEligible(ring))
-      ) {
-        const fingerprint = directedRouteFingerprint(ring);
-        if (!seenRings.has(fingerprint)) {
-          seenRings.add(fingerprint);
-          rings.push(ring);
-        }
-      }
-      continue;
-    }
-    if (node.depth >= input.maxHops) continue;
-
-    const remainingAfterNext = input.maxHops - node.depth - 1;
-    const bounds = boundsFor(node.anchorToken);
-    for (const next of outgoing.get(node.token) ?? []) {
-      if ((workUnits++ & 0xff) === 0 && Date.now() >= input.deadlineAtMs) {
-        return Object.freeze({ rings: Object.freeze(rings), deadlineHit: true });
-      }
-      if (priceSearchPathUsesEdge(node, next.stableKey)) continue;
-      const closes = next.tokenOut === node.anchorToken;
-      const tailBound = closes
-        ? 0
-        : returnBoundAt(bounds, remainingAfterNext, next.tokenOutId);
-      if (tailBound === -Infinity) continue;
-      const cumulativeMidBeforeNext = Math.exp(node.cumulativeLogReturn);
-      if (
-        !Number.isFinite(cumulativeMidBeforeNext) ||
-        cumulativeMidBeforeNext <= 0
-      ) continue;
-      const nextStartDepth = next.inputDepth / cumulativeMidBeforeNext;
-      if (!Number.isFinite(nextStartDepth) || nextStartDepth <= 0) continue;
-      const maxStartDepth = Math.min(node.maxStartDepth, nextStartDepth);
-      const cumulativeLogReturn = node.cumulativeLogReturn + next.logRate;
-      const upperBoundLogReturn = cumulativeLogReturn + tailBound;
-      if (!(upperBoundLogReturn > minLogReturn)) continue;
-      const repeatedToken = closes
-        ? node.repeatedToken
-        : extendedPathRepeatedToken(node, next, input.pricedTokens);
-      if (repeatedToken === false) continue;
-      const child: PriceSearchNode = Object.freeze({
-        anchorToken: node.anchorToken,
-        token: next.tokenOut,
-        edge: next,
-        parent: node,
-        depth: node.depth + 1,
-        cumulativeLogReturn,
-        upperBoundLogReturn,
-        maxStartDepth,
-        upperBoundRank: optimisticSearchRank(
-          upperBoundLogReturn,
-          maxStartDepth,
-          input.pricedTokens.get(node.anchorToken)?.maxBorrow ?? null,
-        ),
-        activityTieBreak: node.activityTieBreak + next.activityTieBreak,
-        sequence: sequence++,
-        repeatedToken,
-      });
-      queue.push(child);
-    }
-  }
-  return Object.freeze({
-    rings: Object.freeze(rings),
-    deadlineHit: Date.now() >= input.deadlineAtMs,
-  });
-}
-
-function buildPricedSearchEdges(
-  topology: ScannerTopologyIndex,
-  mids: ReadonlyMap<string, ResolvedBlockScanMid>,
-): PricedSearchEdge[] {
-  if (topology.searchEdges === undefined) {
-    const tokenId = (token: string): number => {
-      const existing = topology.tokenIds.get(token);
-      if (existing !== undefined) return existing;
-      const id = topology.tokenIds.size;
-      topology.tokenIds.set(token, id);
-      return id;
-    };
-    const entries: SearchEdgeIndex[] = [];
-    for (const edge of topology.edges) {
-      if (edge.leavesStandingPosition) continue;
-      const tokenIn = edge.tokenIn.toLowerCase();
-      const tokenOut = edge.tokenOut.toLowerCase();
-      if (tokenIn === tokenOut) continue;
-      entries.push({
-        edge, tokenIn, tokenOut,
-        tokenInId: tokenId(tokenIn), tokenOutId: tokenId(tokenOut),
-        stableKey: blockScanEdgeKey(edge),
-        activityTieBreak: typeof edge.score === "number" && Number.isFinite(edge.score)
-          ? Math.max(0, edge.score) : 0,
-      });
-    }
-    topology.searchEdges = entries.sort((a, b) => a.stableKey.localeCompare(b.stableKey));
-  }
-  const priced: PricedSearchEdge[] = [];
-  for (const entry of topology.searchEdges) {
-    const venue = mids.get(entry.stableKey);
-    if (!venue || venue.feeBps < 0 || venue.feeBps >= 10_000) continue;
-    const inputDepth = venue.reserveA ?? venue.liquidity;
-    if (inputDepth === undefined || inputDepth <= 0n) continue;
-    const inputDepthNumber = Number(inputDepth);
-    if (!Number.isFinite(inputDepthNumber) || inputDepthNumber <= 0) continue;
-    const adjustedMid = venue.mid * (1 - venue.feeBps / 10_000);
-    if (!Number.isFinite(adjustedMid) || adjustedMid <= 0) continue;
-    const logRate = Math.log(adjustedMid);
-    if (!Number.isFinite(logRate)) continue;
-    priced.push(Object.freeze({
-      ...entry,
-      logRate,
-      inputDepth: inputDepthNumber,
-    }));
-  }
-  return priced;
-}
-
-function buildReverseReturnBounds(
-  edges: readonly PricedSearchEdge[],
-  anchorTokenId: number | undefined,
-  tokenCount: number,
-  maxHops: number,
-  dense: boolean,
-): ReverseReturnBounds {
-  // Touched searches can have many non-funded anchors. Do not allocate a
-  // whole-graph dense matrix for each: retain the sparse representation once
-  // the per-scan dense-memory allowance is used, without pruning any search.
-  if (!dense) {
-    const bounds: Map<number, number>[] = [new Map(
-      anchorTokenId === undefined ? [] : [[anchorTokenId, 0]],
-    )];
-    for (let hops = 1; hops <= maxHops; hops++) {
-      const previous = bounds[hops - 1];
-      const current = new Map(previous);
-      for (const edge of edges) {
-        if (edge.tokenInId === anchorTokenId) continue;
-        const tail = previous.get(edge.tokenOutId);
-        if (tail === undefined) continue;
-        const candidate = edge.logRate + tail;
-        if (candidate > (current.get(edge.tokenInId) ?? -Infinity)) {
-          current.set(edge.tokenInId, candidate);
-        }
-      }
-      bounds.push(current);
-    }
-    return bounds;
-  }
-  const initial = new Float64Array(tokenCount).fill(-Infinity);
-  if (anchorTokenId !== undefined) initial[anchorTokenId] = 0;
-  const bounds = [initial];
-  for (let hops = 1; hops <= maxHops; hops++) {
-    const previous = bounds[hops - 1];
-    const current = previous.slice();
-    for (const edge of edges) {
-      // Reaching the anchor ends a production route. Keeping it absorbing
-      // makes this a tight bound instead of pretending the route may leave
-      // the funding token for another cycle after it has already closed.
-      if (edge.tokenInId === anchorTokenId) continue;
-      const tail = previous[edge.tokenOutId];
-      if (tail === -Infinity) continue;
-      const candidate = edge.logRate + tail;
-      if (candidate > current[edge.tokenInId]) {
-        current[edge.tokenInId] = candidate;
-      }
-    }
-    bounds.push(current);
-  }
-  return bounds;
-}
-
-function returnBoundAt(bounds: ReverseReturnBounds, hops: number, tokenId: number): number {
-  const row = bounds[hops];
-  return row instanceof Float64Array ? row[tokenId] : row.get(tokenId) ?? -Infinity;
-}
-
-function materializePriceSearchPath(node: PriceSearchNode): TokenEdge[] {
-  const path = new Array<TokenEdge>(node.depth);
-  let current: PriceSearchNode | null = node;
-  for (let index = node.depth - 1; index >= 0; index--) {
-    if (!current) throw new Error("price search path depth mismatch");
-    path[index] = current.edge.edge;
-    current = current.parent;
-  }
-  return path;
-}
-
-function priceSearchPathUsesEdge(
-  node: PriceSearchNode,
-  stableKey: string,
-): boolean {
-  let current: PriceSearchNode | null = node;
-  while (current) {
-    if (current.edge.stableKey === stableKey) return true;
-    current = current.parent;
-  }
-  return false;
-}
-
-function extendedPathRepeatedToken(
-  node: PriceSearchNode,
-  next: PricedSearchEdge,
-  pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
-): string | null | false {
-  // The parent already passed the shape check. Only the appended token can
-  // introduce a violation; inspect parent links without materializing a path.
-  let hasProtocol = next.edge.slotKind === "protocol";
-  let cursor: PriceSearchNode | null = node;
-  while (cursor) {
-    if (cursor.token === next.tokenOut) {
-      return node.repeatedToken === null && hasProtocol &&
-          !pricedTokens.has(next.tokenOut)
-        ? next.tokenOut : false;
-    }
-    hasProtocol ||= cursor.edge.edge.slotKind === "protocol";
-    cursor = cursor.parent;
-  }
-  // Returning to the anchor is handled by the complete-ring validator.
-  return node.repeatedToken;
-}
-
-class PriceSearchMaxHeap {
-  readonly #items: PriceSearchNode[] = [];
-
-  get size(): number {
-    return this.#items.length;
-  }
-
-  push(node: PriceSearchNode): void {
-    const items = this.#items;
-    items.push(node);
-    let index = items.length - 1;
-    while (index > 0) {
-      const parent = (index - 1) >> 1;
-      if (!priceSearchNodeBefore(items[index], items[parent])) break;
-      [items[index], items[parent]] = [items[parent], items[index]];
-      index = parent;
-    }
-  }
-
-  pop(): PriceSearchNode | undefined {
-    const items = this.#items;
-    if (items.length === 0) return undefined;
-    const first = items[0];
-    const last = items.pop()!;
-    if (items.length === 0) return first;
-    items[0] = last;
-    let index = 0;
-    while (true) {
-      const left = index * 2 + 1;
-      const right = left + 1;
-      let next = index;
-      if (
-        left < items.length &&
-        priceSearchNodeBefore(items[left], items[next])
-      ) next = left;
-      if (
-        right < items.length &&
-        priceSearchNodeBefore(items[right], items[next])
-      ) next = right;
-      if (next === index) break;
-      [items[index], items[next]] = [items[next], items[index]];
-      index = next;
-    }
-    return first;
-  }
-}
-
-function priceSearchNodeBefore(
-  a: PriceSearchNode,
-  b: PriceSearchNode,
-): boolean {
-  if (a.upperBoundRank !== b.upperBoundRank) {
-    return a.upperBoundRank > b.upperBoundRank;
-  }
-  if (a.upperBoundLogReturn !== b.upperBoundLogReturn) {
-    return a.upperBoundLogReturn > b.upperBoundLogReturn;
-  }
-  if (a.cumulativeLogReturn !== b.cumulativeLogReturn) {
-    return a.cumulativeLogReturn > b.cumulativeLogReturn;
-  }
-  if (a.activityTieBreak !== b.activityTieBreak) {
-    return a.activityTieBreak > b.activityTieBreak;
-  }
-  return a.sequence < b.sequence;
-}
-
-/**
- * Safe coarse upper bound for a partially explored route. Future legs may
- * improve the quoted rate but can only reduce the currently executable input
- * depth, so this rank never excludes a path whose feasible gross return can
- * still beat the queue. Non-funded touched-edge searches fall back to spread;
- * their eventual ring is rotated to a real funding token before admission.
- */
-function optimisticSearchRank(
-  upperBoundLogReturn: number,
-  maxStartDepth: number,
-  maxBorrow: bigint | null,
-): number {
-  const spreadBps = Math.expm1(upperBoundLogReturn) * 10_000;
-  if (!(spreadBps > 0)) return 0;
-  if (maxBorrow === null || maxBorrow <= 0n) return spreadBps;
-  const executableDepth =
-    maxStartDepth / Number(BLOCKSCAN_VENUE_DEPTH_DIVISOR);
-  const capacityShare = executableDepth / Number(maxBorrow);
-  if (!(capacityShare > 0)) return 0;
-  return spreadBps * Math.min(1, capacityShare);
-}
-
-function groupPairs(edges: readonly TokenEdge[]): Map<string, PairGroup> {
-  const groups = new Map<string, PairGroup>();
-  for (const edge of edges) {
-    if (edge.slotKind !== "swap" && (edge.slotKind !== "protocol" || edge.leavesStandingPosition)) continue;
-    const tokenIn = edge.tokenIn.toLowerCase();
-    const tokenOut = edge.tokenOut.toLowerCase();
-    if (tokenIn === tokenOut) continue;
-    const [a, b] = tokenIn < tokenOut ? [tokenIn, tokenOut] : [tokenOut, tokenIn];
-    const key = `${a}|${b}`;
-    let group = groups.get(key);
-    if (!group) {
-      group = { a, b, venues: new Map() };
-      groups.set(key, group);
-    }
-    const pool = routeVenueIdentity(edge);
-    const venueEdges = group.venues.get(pool);
-    if (venueEdges) venueEdges.push(edge);
-    else group.venues.set(pool, [edge]);
-  }
-  return groups;
-}
-
-function tokenPairKey(tokenIn: string, tokenOut: string): string {
-  const a = tokenIn.toLowerCase();
-  const b = tokenOut.toLowerCase();
-  return a < b ? `${a}|${b}` : `${b}|${a}`;
-}
-
-function pairTouches(group: PairGroup, touched: Set<string>): boolean {
-  for (const edges of group.venues.values()) {
-    if (edges.some((edge) => touched.has(edgeVenueIdentity(edge)))) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function readVenueMid(
-  a: string,
-  b: string,
-  edges: TokenEdge[],
-  mids: ReadonlyMap<string, ResolvedBlockScanMid>,
-): VenueMid | null {
-  const direct = findEdge(edges, a, b);
-  if (!direct) return null;
-  const mid = mids.get(blockScanEdgeKey(direct));
-  return mid ? { ...mid, edges } : null;
-}
-
-function pickFlashToken(a: string, b: string, pricedTokens: Map<string, { maxBorrow: bigint }>): string | null {
-  const hasA = pricedTokens.has(a);
-  const hasB = pricedTokens.has(b);
-  if (!hasA && !hasB) return null;
-  if ((a === WETH && hasA) || (b === WETH && hasB)) return WETH;
-  return hasA ? a : b;
-}
-
-function findEdge(
-  edges: readonly TokenEdge[],
-  tokenIn: string,
-  tokenOut: string,
-): TokenEdge | null {
-  return edges.find(
-    (edge) => edge.tokenIn.toLowerCase() === tokenIn && edge.tokenOut.toLowerCase() === tokenOut,
-  ) ?? null;
+  input.onTiming?.({ preprocessing: preprocessingFinished - started, pairs: 0,
+    general: finalizing - preprocessingFinished, finalization: Date.now() - finalizing, total: Date.now() - started });
+  return result;
 }
 
 function readEdgeVenueMid(
   edge: TokenEdge,
   mids: ReadonlyMap<string, ResolvedBlockScanMid>,
 ): VenueMid | null {
-  return readVenueMid(
-    edge.tokenIn.toLowerCase(),
-    edge.tokenOut.toLowerCase(),
-    [edge],
-    mids,
-  );
+  return mids.get(blockScanEdgeKey(edge)) ?? null;
 }
 
 function edgeVenueIdentity(edge: TokenEdge): string {
   if (edge.poolId) return edge.poolId.toLowerCase();
   if (edge.v4PoolKey) return v4PoolId(edge.v4PoolKey).toLowerCase();
   return edge.target.toLowerCase();
-}
-
-/**
- * Pricing venue identity retains immutable family metadata even when logical
- * instances share one physical target and token pair. Touched matching remains
- * tied to the physical identity above.
- */
-function routeVenueIdentity(edge: TokenEdge): string {
-  const physicalIdentity = edgeVenueIdentity(edge);
-  const routeBindingHash =
-    validatedRouteImmutableBindingHash(edge.routeBinding);
-  if (routeBindingHash === null) return physicalIdentity;
-  return [
-    physicalIdentity,
-    edgeInstanceKey(edge),
-    routeBindingHash,
-  ].join("\u001f");
 }
 
 function scoreRing(
@@ -1228,8 +397,8 @@ export function estimateResolvedRingSpreadBps(
 
 /**
  * Explain one already-resolved ring without changing scanner enumeration or
- * selection. The production scorer and this diagnostic execute the same
- * arithmetic; trace allocation occurs only for an explicit diagnostic call.
+ * selection. This legacy depth diagnostic is not a sizing/admission gate for
+ * production effective-price enumeration.
  */
 export function diagnoseResolvedRingScore(
   edges: TokenEdge[],
@@ -1347,25 +516,6 @@ export function isAdmissibleBlockScanRingShape(
   return edges.slice(start, end).some((edge) => edge.slotKind === "protocol");
 }
 
-function pickRingFlashToken(
-  ringTokens: string[],
-  pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
-): string | null {
-  const tokens = ringTokens.map((token) => token.toLowerCase());
-  if (tokens.includes(WETH) && pricedTokens.has(WETH)) return WETH;
-  return tokens.find((token) => pricedTokens.has(token)) ?? null;
-}
-
-function rotateRingEdges(edges: TokenEdge[], startToken: string): TokenEdge[] | null {
-  const wanted = startToken.toLowerCase();
-  for (let i = 0; i < edges.length; i++) {
-    if (edges[i].tokenIn.toLowerCase() !== wanted) continue;
-    const rotated = [...edges.slice(i), ...edges.slice(0, i)];
-    if (isClosedContinuousRing(rotated) && rotated[0].tokenIn.toLowerCase() === wanted) return rotated;
-  }
-  return null;
-}
-
 function uniqueLowercase(values: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -1403,78 +553,4 @@ function expectedReturnRank(estSpreadBps: number, searchCenter: bigint, maxBorro
   const capitalFraction = Number(searchCenter) / Number(maxBorrow);
   if (!Number.isFinite(capitalFraction) || capitalFraction <= 0) return 0;
   return estSpreadBps * Math.min(1, capitalFraction);
-}
-
-function passesMinimumCapitalFraction(
-  maxInput: bigint,
-  maxBorrow: bigint,
-  minCapitalFraction: number | undefined,
-): boolean {
-  if (minCapitalFraction === undefined || minCapitalFraction <= 0) return true;
-  if (maxBorrow <= 0n || maxInput <= 0n) return false;
-  return Number(maxInput) / Number(maxBorrow) >= minCapitalFraction;
-}
-
-function bigintFloor(value: number): bigint {
-  if (!Number.isFinite(value) || value <= 0) return 0n;
-  return BigInt(Math.floor(value));
-}
-
-function estimateSizing(
-  cheapVenue: VenueMid,
-  flashToken: string,
-  a: string,
-  b: string,
-  minMid: number,
-  maxMid: number,
-  estSpreadBps: number,
-  maxBorrow: bigint,
-  routeMaxInput?: bigint,
-): { searchCenter: bigint; maxInput: bigint } | null {
-  const reserveIn = reserveForToken(cheapVenue, flashToken, a, b);
-  const venueCeiling = minBigint(
-    reserveIn / BLOCKSCAN_VENUE_DEPTH_DIVISOR,
-    maxBorrow,
-  );
-  const ceiling = routeMaxInput === undefined
-    ? venueCeiling
-    : minBigint(venueCeiling, routeMaxInput);
-  if (ceiling < BLOCKSCAN_MIN_EXECUTABLE_INPUT) return null;
-
-  let rawCenter: bigint;
-  if (cheapVenue.kind === "v3" && cheapVenue.sqrtABX96 && cheapVenue.liquidity) {
-    const targetMid = Math.sqrt(minMid * maxMid);
-    const targetSqrtABX96 = numberToSqrtPriceX96(Math.sqrt(targetMid));
-    if (targetSqrtABX96 <= 0n) return null;
-    rawCenter = flashToken === a
-      ? getAmount0Delta(targetSqrtABX96, cheapVenue.sqrtABX96, cheapVenue.liquidity, true)
-      : getAmount1Delta(cheapVenue.sqrtABX96, targetSqrtABX96, cheapVenue.liquidity, true);
-  } else {
-    rawCenter = (reserveIn * BigInt(Math.max(1, Math.floor(estSpreadBps)))) / 20_000n;
-  }
-
-  const lower = ceiling < MIN_SEARCH_CENTER ? ceiling : MIN_SEARCH_CENTER;
-  return { searchCenter: clampBigint(rawCenter, lower, ceiling), maxInput: ceiling };
-}
-
-function reserveForToken(venue: VenueMid, token: string, a: string, b: string): bigint {
-  if (venue.reserveA !== undefined && venue.reserveB !== undefined) {
-    return token === a ? venue.reserveA : token === b ? venue.reserveB : 0n;
-  }
-  return venue.liquidity ?? 0n;
-}
-
-function numberToSqrtPriceX96(sqrtPrice: number): bigint {
-  if (!Number.isFinite(sqrtPrice) || sqrtPrice <= 0) return 0n;
-  return BigInt(Math.floor(sqrtPrice * Number(Q96)));
-}
-
-function clampBigint(value: bigint, min: bigint, max: bigint): bigint {
-  if (value < min) return min;
-  if (value > max) return max;
-  return value;
-}
-
-function minBigint(a: bigint, b: bigint): bigint {
-  return a < b ? a : b;
 }

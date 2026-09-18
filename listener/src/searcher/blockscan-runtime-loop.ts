@@ -709,6 +709,17 @@ export interface BlockScanRuntimeLoopDependencies {
    */
   readonly exactRefineEnabled?: boolean;
   readonly routeTelemetry?: BlockScanEnumerationSolverTelemetrySink;
+  /** Private post-Solver evidence; record before ordered consumption, source
+   * freshness/revert gates or final sim. No additional quote/RPC is permitted. */
+  readonly recordSolvedInput?: (input: {
+    readonly source: CanonicalSource;
+    readonly header: BlockScanObservedHeader;
+    readonly opportunity: BlockScanOpportunity;
+    readonly resolved: ResolvedPlan;
+    readonly scriptHex: string;
+    readonly solverIndex: number;
+    readonly candidateIndex: number;
+  }) => void;
   readonly largeGraphEdgeThreshold: number;
   readonly largeGraphPassBudgetMs: number;
   readonly passBudgetMs: number;
@@ -754,6 +765,8 @@ export interface BlockScanRuntimeLoopDependencies {
   /** Block-scan-only amount search width; generic/offline solver defaults stay unchanged. */
   readonly solverGridHalfWidth: number;
   readonly solverAmountGrid?: "multiples" | "geometric";
+  /** Optional quote/output tolerance. Final simulation and EV stay fail-closed. */
+  readonly solverQuoteToleranceRawUnits?: bigint;
   readonly amountReference?: Pick<BlockScanAmountReference, "prepare">;
   /** Block-scan-only golden-section exact-evaluation cap. */
   readonly solverGssMaxTries: number;
@@ -1406,6 +1419,7 @@ export class BlockScanRuntimeLoop {
         let bootstrapEscalated = false;
         const producerTouched = await this.deps.readBlockSwapTouched(nextBlock, header);
         let producerActivity: StrictCanonicalActivityProof = Object.freeze({
+          parentHash: header.parentHash,
           source: Object.freeze({
             number: anchoredGraph.sourceBlock,
             hash: anchoredGraph.sourceBlockHash,
@@ -1880,6 +1894,15 @@ export class BlockScanRuntimeLoop {
   readonly runHead = async (
     blockNumber: number,
     sourceHead: LatestHeadObservation,
+    diagnostic?: {
+      readonly through: "prices" | "enumerate" | "solver" | "ev";
+      readonly onSnapshot: (snapshot: AdapterRuntimeSnapshot) => void;
+      readonly onEnumeration: (result: BlockScanOutcome) => void;
+      readonly onComplete: (result: {
+        outcome: string; reason: string | undefined; timing: typeof BlockScanPassTimeline.prototype.timing;
+        totalMs: number; planned: number; quotePositive: number; atomicResults: readonly BlockScanAtomicResult[];
+      }) => void;
+    },
   ): Promise<void> => {
     // Runtime abort is independently authoritative; a standalone caller need
     // not have advanced its external shutdown flag before the next head drains.
@@ -2208,6 +2231,8 @@ export class BlockScanRuntimeLoop {
 
     const recordPass = (): void => {
       const totalMs = Math.max(0, performance.now() - passStarted);
+      diagnostic?.onComplete({ outcome, reason: skippedReason, timing: { ...timing }, totalMs,
+        planned: plannedCount, quotePositive, atomicResults });
       const preSimMs = firstFinalSimStartedAtMs === null
         ? null
         : Math.max(0, firstFinalSimStartedAtMs - passStartedAtMs);
@@ -2695,6 +2720,7 @@ export class BlockScanRuntimeLoop {
         }
         const touchedPools = passTouchedPools;
         const canonicalActivity: StrictCanonicalActivityProof = Object.freeze({
+          parentHash: sourceHeader.parentHash,
           source: Object.freeze({
             number: graphView.sourceBlock,
             hash: graphView.sourceBlockHash,
@@ -2864,6 +2890,8 @@ export class BlockScanRuntimeLoop {
         }
 
         const snapshot = runtime.snapshot;
+        diagnostic?.onSnapshot(snapshot);
+        if (diagnostic?.through === "prices") return;
         amountPricingSnapshot = snapshot.pricing;
         this.deps.backrunStatePublisher.publish(snapshot.pricing);
         if (this.deps.blind.enabled) auditRuntime = snapshot;
@@ -2949,6 +2977,7 @@ export class BlockScanRuntimeLoop {
             capitalRejected:
               productionCoarse.debug?.capitalRejected ?? 0,
             scannedPairs: productionCoarse.scannedPairs,
+            enumeration: productionCoarse.enumeration,
           })}`,
         );
       } else {
@@ -3135,6 +3164,8 @@ export class BlockScanRuntimeLoop {
       sealAuditBoundary("enumeration_done", "enumeration");
       scannedPairs = coarse.scannedPairs;
       candidates = coarse.opportunities.length;
+      diagnostic?.onEnumeration(coarse);
+      if (diagnostic?.through === "enumerate") return;
       const requiredEdgeIds = requiredCanonicalEdgeIds(coarse.opportunities);
       // The exact/solver session only needs Funding authority for the
       // candidate start tokens.  Passing this bounded set avoids re-running
@@ -3692,7 +3723,7 @@ export class BlockScanRuntimeLoop {
               blockScanAmountGrid: this.deps.solverAmountGrid,
               gssMaxTries: this.deps.solverGssMaxTries,
               quoteProfitFloorBps: 0n,
-              quoteSafetyBps: 10000n,
+              quoteToleranceRawUnits: this.deps.solverQuoteToleranceRawUnits ?? 0n,
               strictSession,
               runtimeEvidence,
               signal,
@@ -3724,6 +3755,12 @@ export class BlockScanRuntimeLoop {
               candidate,
               blindProductionCalldataSha256(planBytes),
             );
+            this.deps.recordSolvedInput?.({
+              source: { number: blockNumber, hash: sourceBlockHash, generation },
+              header: requireFinalSimulationHeader(sourceHeader),
+              opportunity: item.opp, resolved: candidate, scriptHex: planBytes,
+              solverIndex: index, candidateIndex,
+            });
             completed.push({
               index,
               candidateIndex,
@@ -3879,6 +3916,7 @@ export class BlockScanRuntimeLoop {
         signal: AbortSignal,
       ): Promise<void> => {
         solvePipelineSignal = signal;
+        if (diagnostic?.through === "solver") return;
         for (const quoted of quotes) {
           if (terminalQuoteSets.has(quoted.index)) continue;
           if (finalSimFamilyBudget.blocks(quoted.item.opp.seedEdges)) continue;

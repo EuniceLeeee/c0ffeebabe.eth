@@ -106,8 +106,8 @@ function assertExecutionEvidence(input: {
     !sameAddress(input.route.tokenOut, zeroForOne ? input.descriptor.token1 : input.descriptor.token0) ||
     (input.descriptor.quoteModel.kind === "pool-get-amount-out"
       ? evidence.kind !== "univ2-reserves-exact"
-      : (input.amountIn > 0n || input.quotedAmountOut > 0n) && (uniV2QuoteRouter(input.descriptor) !== null
-        ? evidence.kind !== "univ2-router-amounts" || !sameAddress(evidence.router, uniV2QuoteRouter(input.descriptor)!)
+      : (input.amountIn > 0n || input.quotedAmountOut > 0n) && (evidence.kind === "univ2-router-amounts"
+        ? uniV2QuoteRouter(input.descriptor) === null || !sameAddress(evidence.router, uniV2QuoteRouter(input.descriptor)!)
         : evidence.kind !== "univ2-reserves-exact" || evidence.amountOut <= 0n)) ||
     evidence.quoteModel !== input.descriptor.quoteModel.kind ||
     !sameAddress(evidence.pool, input.descriptor.pool) ||

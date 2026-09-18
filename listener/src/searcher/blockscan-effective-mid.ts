@@ -9,7 +9,7 @@ import type { RouteVenueMid } from "./venues/mid-readers.js";
 import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
 
 export type EffectivePricingInput = Parameters<typeof tokenToWethReferences>[0] &
-  Pick<BlockScanStateSnapshot, "pricingStateKeyByEdgeKey">;
+  Pick<BlockScanStateSnapshot, "sourceBlock" | "sourceBlockHash" | "generation" | "pricingStateKeyByEdgeKey">;
 /** Single global default P (0.005 WETH); available gas still selects G instead.
  * Exact reuses the resulting row amount and hands that same input to Solver. */
 export const DEFAULT_EFFECTIVE_WETH_INPUT = 5_000_000_000_000_000n;
@@ -49,7 +49,8 @@ export function effectiveMidRowCarried(snapshot: EffectiveMidSnapshot, row: Effe
 
 /** Consumer-only projection; never mutate the original mid or its carry proof.
  * Existing snapshots without the companion retain their legacy contract. */
-export function effectiveEnumerationMids(pricing: BlockScanStateSnapshot): ReadonlyMap<string, RouteVenueMid> {
+export function effectiveEnumerationMids(pricing: BlockScanStateSnapshot): ReadonlyMap<string,
+  RouteVenueMid & { readonly quoteAmountIn?: bigint; readonly quoteAmountOut?: bigint }> {
   const effective = pricing.effectiveMids;
   if (effective === undefined) return pricing.mids;
   if (!effective.complete || effective.source.number !== pricing.sourceBlock ||
@@ -57,15 +58,17 @@ export function effectiveEnumerationMids(pricing: BlockScanStateSnapshot): Reado
       effective.source.generation !== pricing.generation) {
     throw new Error("enumeration effective pricing incomplete or mismatched source");
   }
-  const mids = new Map<string, RouteVenueMid>();
+  const mids = new Map<string, RouteVenueMid & { quoteAmountIn: bigint; quoteAmountOut: bigint }>();
   for (const [key, row] of effective.rows) {
     const original = pricing.mids.get(key);
     if (row.status !== "quoted") continue;
     if (!original || row.edgeId !== key || row.effectiveMid === null ||
-        !Number.isFinite(row.effectiveMid) || row.effectiveMid <= 0) {
+        !Number.isFinite(row.effectiveMid) || row.effectiveMid <= 0 ||
+        row.amountIn === null || row.amountOut === null || row.amountIn <= 0n || row.amountOut <= 0n) {
       throw new Error("invalid effective enumeration row");
     }
-    mids.set(key, { ...original, mid: row.effectiveMid, feeBps: 0 });
+    mids.set(key, { ...original, mid: row.effectiveMid, feeBps: 0,
+      quoteAmountIn: row.amountIn, quoteAmountOut: row.amountOut });
   }
   return mids;
 }
@@ -107,7 +110,7 @@ export async function buildEffectiveMids(input: {
   const started = Date.now();
   const { pricing, control } = input;
   if (!Number.isSafeInteger(input.concurrency) || input.concurrency < 1 ||
-      !Number.isFinite(input.enumerationSpreadBps) || input.enumerationSpreadBps <= 0) {
+      !Number.isFinite(input.enumerationSpreadBps) || input.enumerationSpreadBps < 0) {
     throw new Error("invalid effective-mid work or spread policy");
   }
   if (input.gasCostWei !== null && input.gasCostWei <= 0n) throw new Error("invalid gas cost");
@@ -116,8 +119,12 @@ export async function buildEffectiveMids(input: {
     number: target.sourceBlock, hash: target.sourceBlockHash.toLowerCase(), generation: target.generation,
   });
   let marks: ReturnType<typeof tokenToWethReferences> | undefined;
-  const referenceWethInput = input.gasCostWei === null ? DEFAULT_EFFECTIVE_WETH_INPUT :
-    gasReferenceInput(input.gasCostWei, { num: 1n, den: 1n }, input.enumerationSpreadBps)!;
+  // A strictly-positive opportunity filter may have a zero threshold. There
+  // is no finite gas-cover notional at 0%; use the same global fallback P,
+  // without changing the enumeration threshold or pretending this covers gas.
+  const gasCostWei = input.enumerationSpreadBps === 0 ? null : input.gasCostWei;
+  const referenceWethInput = gasCostWei === null ? DEFAULT_EFFECTIVE_WETH_INPUT :
+    gasReferenceInput(gasCostWei, { num: 1n, den: 1n }, input.enumerationSpreadBps)!;
   const amounts = new Map<string, bigint | null>();
   const edges = new Map((input.quoteGraph ?? pricing.graph).edges.map(e => [blockScanEdgeKey(e), e]));
   const stateKeyFor = (edgeId: string, edge: (typeof pricing.graph.edges)[number]) =>
@@ -141,9 +148,9 @@ export async function buildEffectiveMids(input: {
     if (!amounts.has(token)) {
       marks ??= input.tokenReferences?.() ?? tokenToWethReferences(pricing, input.weth);
       const mark = marks.get(token);
-      amounts.set(token, !mark ? null : input.gasCostWei === null
+      amounts.set(token, !mark ? null : gasCostWei === null
         ? (DEFAULT_EFFECTIVE_WETH_INPUT * mark.den + mark.num - 1n) / mark.num
-        : gasReferenceInput(input.gasCostWei, mark, input.enumerationSpreadBps));
+        : gasReferenceInput(gasCostWei, mark, input.enumerationSpreadBps));
     }
     return item.amountIn = amounts.get(token)!;
   };
@@ -228,7 +235,7 @@ export async function buildEffectiveMids(input: {
     .map(row => [row.edgeId, row] as const);
   const present = new Set(keys);
   const removals = [...previousRows.keys()].filter(key => !present.has(key));
-  return Object.freeze({ source, reference: input.gasCostWei === null ? "default" : "gas",
+  return Object.freeze({ source, reference: gasCostWei === null ? "default" : "gas",
     referenceWethInput, rows: deltaMap(previousRows, updates, removals),
     complete: !closed() && rows.every(row => row.status !== "cancelled"), wallMs: Date.now() - started });
 }

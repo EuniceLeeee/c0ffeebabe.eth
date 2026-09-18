@@ -90,7 +90,7 @@ function assertExecutionEvidence(input: {
 }): void {
   const evidence = input.exactEvidence;
   if (
-    evidence.kind !== "univ3-factory-bound-quoter" ||
+    (evidence.kind !== "univ3-factory-bound-quoter" && evidence.kind !== "univ3-local-ticks") ||
     !sameAddress(evidence.pool, input.descriptor.pool) ||
     evidence.quoter !== input.descriptor.quoterBinding.quoter ||
     !sameAddress(evidence.caller, canonicalAddress(input.executor)) ||

@@ -198,10 +198,7 @@ export function prepareBlockScanCandidatesWithoutExactRefinement(
     }
     const probeAmount =
       options.probeAmountsByOpportunity?.get(opportunity) ?? 0n;
-    const ceiling = minBigint(
-      opportunity.searchSeed.searchCenter,
-      opportunity.searchSeed.maxInput,
-    );
+    const ceiling = opportunity.searchSeed.maxInput;
     if (probeAmount <= 0n || probeAmount > ceiling) {
       if (probeAmount <= 0n) rejectedMissing++;
       else rejectedOverCap++;
@@ -427,7 +424,7 @@ export async function refineBlockScanCandidates(
   // Amount policy runs before deadlines and Family circuits, so a cap-rejected
   // route can never become a deadline fallback or a Family-attributed failure.
   work = work.filter(({ opportunity, index, probeAmount }) => {
-    const ceiling = minBigint(opportunity.searchSeed.searchCenter, opportunity.searchSeed.maxInput);
+    const ceiling = opportunity.searchSeed.maxInput;
     if (probeAmount > 0n && probeAmount <= ceiling) return true;
     recordShadowTotal(opportunity);
     recordShadow(opportunity, "unprobed");

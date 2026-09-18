@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import {
   localZeroExactMethod,
   type ExactQuoteSemantics,
@@ -5,6 +6,7 @@ import {
 } from "../../adapter-family-plugin.js";
 import { hashCanonical } from "../../canonical-value.js";
 import { UNIV4_QUOTER_INTERFACE } from "../univ4-abi.js";
+import { BLOCKSCAN_MULTICALL3 } from "../../../blockscan-multicall.js";
 import {
   poolKeyFingerprint,
   poolKeyProjection,
@@ -18,6 +20,11 @@ import type {
 } from "./types.js";
 
 const EXACT_QUOTE_REQUEST_ID = "exact-univ4-quote";
+const OUTPUT_BALANCE_REQUEST_ID = "exact-univ4-output-balance";
+const OUTPUT_BALANCE_INTERFACE = new ethers.Interface([
+  "function balanceOf(address account) view returns (uint256)",
+  "function getEthBalance(address account) view returns (uint256)",
+]);
 const MAX_UINT128 = (1n << 128n) - 1n;
 
 const univ4RequestProgram: ExactRequestProgram<
@@ -30,6 +37,9 @@ const univ4RequestProgram: ExactRequestProgram<
     assertRoute(input.descriptor, input.route);
     assertAmount(input.amountIn);
     if (input.amountIn === 0n) return [];
+    const currencyOut = input.route.direction === "zero-for-one"
+      ? input.descriptor.poolKey.currency1 : input.descriptor.poolKey.currency0;
+    const nativeOut = sameAddress(currencyOut, ethers.ZeroAddress);
     return [Object.freeze({
       id: EXACT_QUOTE_REQUEST_ID,
       kind: "eth-call" as const,
@@ -42,6 +52,15 @@ const univ4RequestProgram: ExactRequestProgram<
           exactAmount: input.amountIn,
           hookData: "0x",
         }],
+      ),
+      completion: "return-data" as const,
+    }), Object.freeze({
+      id: OUTPUT_BALANCE_REQUEST_ID,
+      kind: "eth-call" as const,
+      to: nativeOut ? BLOCKSCAN_MULTICALL3 : currencyOut,
+      data: OUTPUT_BALANCE_INTERFACE.encodeFunctionData(
+        nativeOut ? "getEthBalance" : "balanceOf",
+        [input.descriptor.managerBinding.manager],
       ),
       completion: "return-data" as const,
     })];
@@ -58,6 +77,20 @@ const univ4RequestProgram: ExactRequestProgram<
       result.data,
     );
     const amountOut = BigInt(decoded[0]);
+    const balanceResult = requireSuccessfulResult(results, OUTPUT_BALANCE_REQUEST_ID);
+    assertSource(balanceResult.source, programInput.source);
+    if (!ethers.isHexString(balanceResult.data, 32)) {
+      throw new Error("univ4 output balance returned invalid uint256");
+    }
+    const outputBalance = BigInt(balanceResult.data);
+    // The Quoter computes swap deltas without executing our take(). The
+    // manager's shared balance is a payout ceiling, not this pool's reserves
+    // or proof that the full route can execute. Never clip the quoted output.
+    if (amountOut > outputBalance) {
+      throw new Error(
+        `univ4 output-balance-capacity: amountOut=${amountOut} balance=${outputBalance}`,
+      );
+    }
     return Object.freeze({
       amountOut,
       evidence: exactEvidence(programInput, amountOut, BigInt(decoded[1])),
@@ -75,7 +108,7 @@ export const univ4Exact = {
       },
     ),
     Object.freeze({
-      id: "univ4-quoter",
+      id: "univ4-quoter-with-output-balance",
       kind: "request-program" as const,
       chainAmountQuote: true as const,
       program: univ4RequestProgram,
@@ -85,6 +118,8 @@ export const univ4Exact = {
     poolId: descriptor.poolId,
     poolKey: poolKeyProjection(descriptor.poolKey),
     quoter: descriptor.managerBinding.quoter,
+    manager: descriptor.managerBinding.manager,
+    payoutCheck: "same-source-output-balance-v1",
     direction: [route.tokenIn, route.tokenOut],
     hookData: "0x",
   }),

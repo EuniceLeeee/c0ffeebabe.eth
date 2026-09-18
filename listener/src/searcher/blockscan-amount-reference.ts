@@ -47,7 +47,9 @@ const lowerMedian = (rates: RawTokenRate[]): RawTokenRate =>
 
 /** Approximate marks for sizing only, never trusted final-EV valuation. No RPC. */
 export function tokenToWethReferences(
-  pricing: PricingReference,
+  pricing: { graph: { edges: readonly import("./planner/token-graph.js").TokenEdge[] };
+    mids: ReadonlyMap<string, { mid: number; feeBps: number }>;
+    coverage: { resolvedEdgeKeys: readonly string[] } },
   weth: string,
 ): ReadonlyMap<string, RawTokenRate> {
   const pairs = new Map<string, { from: string; to: string; instances: Map<string, RawTokenRate> }>();

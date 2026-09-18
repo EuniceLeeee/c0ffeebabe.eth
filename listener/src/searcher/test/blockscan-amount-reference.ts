@@ -182,13 +182,15 @@ for (const bad of [
 }
 
 const refs = new Map<BlockScanOpportunity, bigint>();
-const candidates = [opportunity(), opportunity(), opportunity(), opportunity(), wethOpp];
+const aboveOldCenter = { ...opportunity(), cycleId: "above-old-center" };
+const candidates = [opportunity(), opportunity(), opportunity(), opportunity(), wethOpp, aboveOldCenter];
 candidates[1]!.cycleId = "below-ten";
 candidates[2]!.cycleId = "effective-sized";
 candidates[3]!.cycleId = "over-cap";
 refs.set(candidates[1]!, 5n);
 refs.set(candidates[2]!, 1_000n);
-refs.set(candidates[3]!, 100_000_001n);
+refs.set(candidates[3]!, 200_000_001n);
+refs.set(aboveOldCenter, 100_000_001n);
 refs.set(wethOpp, frozen.get(wethOpp)!);
 const quoted: bigint[] = [];
 const diagnostics: BlockScanProbeDiagnostic[] = [];
@@ -200,18 +202,21 @@ const strictSession = {
 } as unknown as StrictProductionRuntimeSession;
 const result = await refineBlockScanCandidates(
   { async call() { throw new Error("unexpected RPC"); } } as unknown as StateBackend,
-  candidates, 5, Date.now() + 3000,
+  candidates, 6, Date.now() + 3000,
   new Map([[U, { maxBorrow: 1_000_000_000n }]]), d => diagnostics.push(d), 1,
   { probeAmountsByOpportunity: refs, executor: "executor", strictSession, admissionSpreadBps: 50 },
 );
-assert.deepEqual(quoted, [5n, 15n, 1_000n, 1_010n, DEFAULT_EFFECTIVE_WETH_INPUT, DEFAULT_EFFECTIVE_WETH_INPUT + 10n]);
-assert.equal(result.attempted, 3);
+assert.deepEqual(quoted, [5n, 15n, 1_000n, 1_010n, DEFAULT_EFFECTIVE_WETH_INPUT, DEFAULT_EFFECTIVE_WETH_INPUT + 10n,
+  100_000_001n, 100_000_011n]);
+assert.equal(result.attempted, 4);
 assert.equal(result.failed, 0);
-assert.equal(result.positive, 3);
+assert.equal(result.positive, 4);
 assert.equal(result.deadlineHit, false);
 assert.deepEqual(result.openFamilyIds, []);
 assert.equal(result.opportunities.find(o => o.cycleId === "effective-sized")!.searchSeed.searchCenter, 1_000n);
 assert.equal(result.opportunities.find(o => o.cycleId === "below-ten")!.searchSeed.searchCenter, 5n);
+assert.equal(result.opportunities.find(o => o.cycleId === "above-old-center")!.searchSeed.searchCenter, 100_000_001n,
+  "old searchCenter cannot reject or resize the actual effective input");
 assert.equal(result.opportunities.find(o => o.flashToken === W)!.searchSeed.searchCenter, DEFAULT_EFFECTIVE_WETH_INPUT);
 assert.equal(diagnostics.find(d => d.index === 0)!.failure?.reason, "amount_reference_missing");
 assert(!result.opportunities.some(o => o.cycleId === "over-cap"));
@@ -236,7 +241,7 @@ for (const expired of [false, true]) {
   assert.equal(rejected.failed, failures.length, "cap exclusions must not inflate quote failure counts");
 }
 const deadlineCandidates = [opportunity(), opportunity(), opportunity()];
-const deadlineInputs = new Map([[deadlineCandidates[0]!, 2_000_000n], [deadlineCandidates[2]!, 100_000_001n]]);
+const deadlineInputs = new Map([[deadlineCandidates[0]!, 2_000_000n], [deadlineCandidates[2]!, 200_000_001n]]);
 const deadlineResult = await refineBlockScanCandidates(
   {} as StateBackend, deadlineCandidates, 3, Date.now() - 1, new Map(), undefined, 1,
   { probeAmountsByOpportunity: deadlineInputs },

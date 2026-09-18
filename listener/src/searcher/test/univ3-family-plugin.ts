@@ -6,7 +6,7 @@ import { univ3Adapter } from "../../adapters/univ3.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import type { PoolEntry } from "../planner/token-graph.js";
 import { PoolStateCache } from "../solver/pool-state-cache.js";
-import { v3SwapToState } from "../solver/v3-math.js";
+import { getSqrtRatioAtTick, V3MissingBitmapWordError, v3SwapToState } from "../solver/v3-math.js";
 import {
   definedFamilyPluginContractSummary,
   type UnifiedObservation,
@@ -18,6 +18,8 @@ import type {
 import { hashCanonical } from "../venues/canonical-value.js";
 import { generateCapabilityClosure } from "../venues/capability-content-hash.js";
 import {
+  PANCAKE_V3_FACTORY,
+  PANCAKE_V3_QUOTER_V2,
   PANCAKE_V3_SWAP_TOPIC,
   UNIV3_BURN_TOPIC,
   UNIV3_FACTORY_INTERFACE,
@@ -26,7 +28,18 @@ import {
   UNIV3_QUOTER_V2,
   UNIV3_QUOTER_V2_INTERFACE,
   UNIV3_SWAP_TOPIC,
+  UNIV3_TICK_LENS,
+  UNIV3_TICK_LENS_INTERFACE,
 } from "../venues/swaps/univ3-abi.js";
+import { createUniV3Exact } from "../venues/swaps/univ3-family/exact.js";
+import { UNIV3_SWAPPER_INTERFACE, uniV3SwapAccessRequest } from "../venues/swaps/univ3-family/swap-access.js";
+import {
+  readUniV3State,
+  resolveUniV3StateReader,
+  UNIV3_STATE_READER,
+  UNIV3_STATE_READER_INTERFACE,
+  UNIV3_STATE_WORD_RADIUS,
+} from "../venues/swaps/univ3-family/state-reader.js";
 import { univ3StrictFamilyPlugin } from "../venues/swaps/univ3-family-plugin.js";
 import {
   UNIV3_POOL_CREATED_PATTERN_ID,
@@ -151,9 +164,12 @@ assert.throws(
 );
 
 const descriptorDraft = univ3StrictFamilyPlugin.instance.compileDraft(identity);
+// Synthetic descriptor metadata for offline behavior tests, not chain proof.
+const noSwapAccess = { kind: "no-is-swapper-getter" as const, codeHash: `0x${"ab".repeat(32)}` };
 const descriptor = univ3StrictFamilyPlugin.instance.finalizeDescriptor({
   identity,
   draft: descriptorDraft,
+  staticEvidence: noSwapAccess,
   sharedBindings: [],
 });
 const routes = univ3StrictFamilyPlugin.routes.project({ descriptor });
@@ -476,11 +492,17 @@ const exactInput = {
   executor: EXECUTOR,
   runtimeEvidence: [],
 };
-const exactRequestMethod = univ3StrictFamilyPlugin.exact.methods(exactInput)[1];
+// Keep the original factory-bound Quoter executable and tested explicitly.
+const exactRequestMethod = createUniV3Exact("quoter").methods(exactInput)[1];
 assert.equal(exactRequestMethod.kind, "request-program");
 if (exactRequestMethod.kind !== "request-program") {
   throw new Error("univ3 exact request program missing");
 }
+assert.equal(exactRequestMethod.id, "quoter-v2");
+assert("chainAmountQuote" in exactRequestMethod);
+assert.equal(exactRequestMethod.chainAmountQuote, true);
+assert.equal("stateOnlyReads" in exactRequestMethod ? exactRequestMethod.stateOnlyReads : undefined,
+  undefined, "Quoter outputs remain amount-dependent");
 assert.deepEqual(
   exactRequestMethod.program.requirements(exactInput),
   { transports: ["eth-call"], caller: "executor" },
@@ -500,6 +522,9 @@ const strictExact = exactRequestMethod.program.decode({
   initialResults: [success(exactRequests[0].id, quoterData)],
   dependentEvidence: [],
 });
+assert.equal(exactRequestMethod.program.buildDependentProgram?.({ programInput: exactInput,
+  initialResults: [success(exactRequests[0].id, quoterData)], completedRound: 0, priorEvidence: [] }) ?? null,
+  null, "Quoter mode does not launch state-reading dependent rounds");
 const legacyExact = await univ3StandardAdapter.quoteExact({
   state: { call: async ({ to, data }: { readonly to: string; readonly data: string }) =>
     legacyExactRead(to, data, quoterData) } as unknown as StateBackend,
@@ -527,6 +552,7 @@ const unknownDescriptor =
   univ3StrictFamilyPlugin.instance.finalizeDescriptor({
     identity: unknownFactoryIdentity,
     draft: unknownDescriptorDraft,
+    staticEvidence: noSwapAccess,
     sharedBindings: [],
   });
 const unknownRoute = univ3StrictFamilyPlugin.routes.project({
@@ -539,26 +565,399 @@ const unknownExactInput = {
 };
 const unknownExactRequests =
   exactRequestMethod.program.buildRequests(unknownExactInput);
-assert.equal(unknownExactRequests.length, 2);
-assert.equal(unknownExactRequests[0].id, "local-slot0");
-assert.equal(unknownExactRequests[1].id, "local-liquidity");
-const unknownLocalExact = exactRequestMethod.program.decode({
+assert.deepEqual(unknownExactRequests.map(request => request.id), ["local-slot0", "local-liquidity"]);
+for (const request of unknownExactRequests) {
+  assert(request.kind === "eth-call");
+  assert.equal(request.to, POOL, "unknown reverse-verified factory keeps its pool-state reads");
+}
+assert.throws(() => exactRequestMethod.program.decode({
   programInput: unknownExactInput,
-  initialResults: [
-    success(
-      "local-slot0",
-      UNIV3_POOL_INTERFACE.encodeFunctionResult("slot0", [Q96, 0, 0, 0, 0, 0, true]),
-    ),
-    success("local-liquidity", UNIV3_POOL_INTERFACE.encodeFunctionResult("liquidity", [1n << 64n])),
-  ],
+  initialResults: [],
   dependentEvidence: [],
+}), /missing|incomplete/, "missing state is not a successful zero-liquidity quote");
+
+const pancakeIdentity = runIdentity(unknownFactoryCandidate, PANCAKE_V3_FACTORY, POOL);
+assert.equal(pancakeIdentity.facts.quoterBinding.quoter, PANCAKE_V3_QUOTER_V2);
+const pancakeDescriptor = univ3StrictFamilyPlugin.instance.finalizeDescriptor({
+  identity: pancakeIdentity,
+  draft: univ3StrictFamilyPlugin.instance.compileDraft(pancakeIdentity),
+  staticEvidence: noSwapAccess,
+  sharedBindings: [],
 });
-assert.equal(unknownLocalExact.amountOut, 0n);
-assert.equal(
-  unknownLocalExact.evidence.quoter,
-  null,
-  "quoter-less fork pool quotes locally with null quoter evidence",
-);
+const uniReader = resolveUniV3StateReader(descriptor);
+const pancakeReader = resolveUniV3StateReader(pancakeDescriptor);
+assert(uniReader !== null);
+assert(pancakeReader !== null);
+assert.equal(uniReader.address, UNIV3_STATE_READER);
+assert.equal(pancakeReader.address.toLowerCase(), "0x80898f80cfa3fa3abf410d90e69adc432ae5d4c2");
+assert.notEqual(uniReader.address, pancakeReader.address, "Pancake does not borrow the incompatible Uni helper");
+assert.equal(resolveUniV3StateReader(unknownDescriptor), null,
+  "no compatible aggregate helper does not revoke reverse-verified instance admission");
+assert.equal(resolveUniV3StateReader({ ...pancakeDescriptor,
+  factoryBinding: { ...pancakeDescriptor.factoryBinding, factory: PANCAKE_V3_FACTORY.toLowerCase() } })?.address,
+  pancakeReader.address, "helper selection canonicalizes factory addresses");
+const readerCompatibilities = [descriptor, pancakeDescriptor, unknownDescriptor].map(descriptorToUse =>
+  createUniV3Exact("local").cacheCompatibilityProjection({ ...exactInput, descriptor: descriptorToUse,
+    route: univ3StrictFamilyPlugin.routes.project({ descriptor: descriptorToUse })[0] }));
+assert.deepEqual(readerCompatibilities.map(compatibility => compatibility.stateReader),
+  [uniReader.address, pancakeReader.address, null], "cache compatibility records the selected reader, not just the factory");
+const readerCompatibilityHashes = readerCompatibilities.map(compatibility => hashCanonical(compatibility));
+assert.equal(new Set(readerCompatibilityHashes).size, 3, "factory/reader changes cannot share cache compatibility");
+for (const [reader, expectedType] of [[uniReader, "uint8"], [pancakeReader, "uint32"]] as const) {
+  const stateOutput = reader.iface.getFunction("getFullStateWithRelativeBitmaps")!.outputs[0];
+  const slot0Output = stateOutput.components!.find(component => component.name === "slot0")!;
+  assert.equal(slot0Output.components!.find(component => component.name === "feeProtocol")!.type, expectedType);
+}
+const wideProtocolFeeState = stateReaderFixture({ feeProtocol: 0x12345678 });
+const wideProtocolFeeData = encodeStateReaderFixture(wideProtocolFeeState, pancakeReader.iface);
+assert.equal(pancakeReader.iface.decodeFunctionResult("getFullStateWithRelativeBitmaps", wideProtocolFeeData)[0].slot0.feeProtocol,
+  0x12345678n, "Pancake uint32 protocol fees must not be truncated to Uni uint8");
+assert.deepEqual(readUniV3State(wideProtocolFeeData, pancakeDescriptor),
+  readUniV3State(encodeStateReaderFixture(stateReaderFixture(), pancakeReader.iface), pancakeDescriptor),
+  "protocol-fee metadata does not change the common local swap state");
+assert.throws(() => encodeStateReaderFixture(wideProtocolFeeState), "Uni ABI rejects the wide Pancake field");
+assert.throws(() => readUniV3State(wideProtocolFeeData, descriptor), "wide Pancake state cannot be silently decoded as Uni state");
+
+const localMethod = univ3StrictFamilyPlugin.exact.methods(exactInput)[1];
+assert.equal(localMethod.id, "local-state-49");
+assert.equal(localMethod.kind, "request-program");
+if (localMethod.kind !== "request-program") throw new Error("missing local tick program");
+assert.equal(localMethod.chainAmountQuote, undefined, "local math is not a Quoter-returned amount");
+assert.equal(localMethod.stateOnlyReads, true, "amount changes reuse the existing generic state cache");
+const localProgram = localMethod.program;
+// The shared Exact program checks executor permissions before publishing a
+// quote, without changing the amount-independent tick request/cache identity.
+{
+  const gatedInput = { ...exactInput, descriptor: { ...descriptor,
+    swapAccess: { ...noSwapAccess, kind: "is-swapper" as const } } };
+  const initialResults = [success("local-pool-state", encodeStateReaderFixture(stateReaderFixture()))];
+  const access = uniV3SwapAccessRequest(gatedInput)!;
+  assert.equal(access.caller, undefined, "pure getter is eligible for state-only caching");
+  assert.deepEqual([...UNIV3_SWAPPER_INTERFACE.decodeFunctionData("isSwapper", access.data)], [EXECUTOR]);
+  assert.deepEqual(localProgram.buildRequests(gatedInput), localProgram.buildRequests(exactInput));
+  assert.equal(uniV3SwapAccessRequest({ ...gatedInput, amountIn: AMOUNT_IN * 5n } as typeof gatedInput)?.id,
+    access.id, "same-block Solver amounts share permission reads");
+  for (const source of [{ ...SOURCE, number: SOURCE.number + 1 },
+    { ...SOURCE, generation: SOURCE.generation + 1 }, { ...SOURCE, hash: `0x${"cd".repeat(32)}` }]) {
+    const next = { ...gatedInput, source };
+    assert.notEqual(uniV3SwapAccessRequest(next)?.id, access.id, "permission reads cannot carry across sources");
+    assert.deepEqual(localProgram.buildRequests(next), localProgram.buildRequests(gatedInput),
+      "tick request fingerprint remains reusable");
+    assert.deepEqual(univ3StrictFamilyPlugin.exact.cacheCompatibilityProjection(next),
+      univ3StrictFamilyPlugin.exact.cacheCompatibilityProjection(gatedInput), "do not invalidate the whole tick cache");
+  }
+  const round = localProgram.buildDependentProgram!({ programInput: gatedInput, initialResults,
+    completedRound: 0, priorEvidence: [] });
+  assert(round);
+  assert.deepEqual(round.requests, [access]);
+  const allowed = success(access.id, UNIV3_SWAPPER_INTERFACE.encodeFunctionResult("isSwapper", [true]));
+  const denied = success(access.id, UNIV3_SWAPPER_INTERFACE.encodeFunctionResult("isSwapper", [false]));
+  const allowEvidence = round.decode([allowed]);
+  const decode = (result: AdapterRequestResult) => localProgram.decode({ programInput: gatedInput,
+    initialResults, dependentEvidence: [round.decode([result])] });
+  assert.equal(decode(allowed).amountOut, localProgram.decode({ programInput: exactInput,
+    initialResults, dependentEvidence: [] }).amountOut, "authorization must not change the price formula");
+  assert.equal(localProgram.buildDependentProgram!({ programInput: gatedInput, initialResults,
+    completedRound: 1, priorEvidence: [allowEvidence] }), null);
+  assert.throws(() => decode(denied), /not an allowed swapper/);
+  for (const bad of [success(access.id, "0x"), success(access.id, ethers.toBeHex(2, 32)),
+    declaredRevert(access.id), { id: access.id, ok: false as const, source: SOURCE, failure: "rpc" as const }]) {
+    assert.throws(() => decode(bad), /swap access/);
+  }
+  assert.throws(() => localProgram.decode({ programInput: gatedInput, initialResults,
+    dependentEvidence: [] }), /missing.*swap access/);
+  assert.throws(() => localProgram.buildDependentProgram!({ programInput: gatedInput, initialResults,
+    completedRound: 1, priorEvidence: [round.decode([denied])] }), /not an allowed swapper/);
+  assert.throws(() => exactRequestMethod.program.decode({ programInput: gatedInput,
+    initialResults: [success(exactRequests[0].id, quoterData)], dependentEvidence: [round.decode([denied])] }),
+    /not an allowed swapper/, "switching to Quoter cannot bypass authorization");
+  const { swapAccess: _removed, ...legacyDescriptor } = descriptor;
+  assert.throws(() => localProgram.decode({ programInput: { ...exactInput,
+    descriptor: legacyDescriptor as typeof descriptor }, initialResults, dependentEvidence: [] }),
+    /unsupported swap access/, "old Ready descriptors require selective revalidation");
+
+  const unknownGated = { ...unknownExactInput, descriptor: { ...unknownDescriptor, swapAccess: gatedInput.descriptor.swapAccess } };
+  const core = [success("local-slot0", tinySlot0Data), success("local-liquidity", liquidityData)];
+  const permissionRound = localProgram.buildDependentProgram!({ programInput: unknownGated,
+    initialResults: core, completedRound: 0, priorEvidence: [] });
+  assert(permissionRound);
+  const permissionEvidence = permissionRound.decode([allowed]);
+  const ticksRound = localProgram.buildDependentProgram!({ programInput: unknownGated,
+    initialResults: core, completedRound: 1, priorEvidence: [permissionEvidence] });
+  assert(ticksRound);
+  assert.equal(ticksRound.requests.length, 49, "permission check preserves the unknown-factory tick round");
+  const ticksEvidence = ticksRound.decode(ticksRound.requests.map(request => success(request.id,
+    UNIV3_TICK_LENS_INTERFACE.encodeFunctionResult("getPopulatedTicksInWord", [[]]))));
+  assert.equal(localProgram.buildDependentProgram!({ programInput: unknownGated,
+    initialResults: core, completedRound: 2, priorEvidence: [permissionEvidence, ticksEvidence] }), null);
+  assert(localProgram.decode({ programInput: unknownGated, initialResults: core,
+    dependentEvidence: [permissionEvidence, ticksEvidence] }).amountOut > 0n);
+}
+assert.deepEqual(localProgram.requirements(exactInput), { transports: ["eth-call"] });
+assert.equal(localProgram.buildRequests(exactInput).length, 1);
+assert.equal(UNIV3_STATE_WORD_RADIUS, 24);
+assert.equal(UNIV3_STATE_READER.toLowerCase(), "0x9c764d2e92da68e4cdfd784b902283a095ff8b63");
+assert.notDeepEqual(createUniV3Exact("local").cacheCompatibilityProjection(exactInput),
+  createUniV3Exact("quoter").cacheCompatibilityProjection(exactInput));
+
+for (const descriptorToUse of [descriptor, pancakeDescriptor]) {
+  const reader = resolveUniV3StateReader(descriptorToUse);
+  assert(reader !== null);
+  for (const route of univ3StrictFamilyPlugin.routes.project({ descriptor: descriptorToUse })) {
+    const programInput = { ...exactInput, descriptor: descriptorToUse, route, amountIn: 100_000_000_000n };
+    assert.equal(univ3StrictFamilyPlugin.exact.methods(programInput)[1].id, "local-state-49");
+    const requests = localProgram.buildRequests(programInput);
+    assert.equal(requests.length, 1, "both directions of a helper-compatible factory use one state read");
+    const request = requests[0];
+    assert(request.kind === "eth-call");
+    assert.equal(request.id, "local-pool-state");
+    assert.equal(request.to, reader.address);
+    assert.equal(request.completion, "return-data");
+    assert.equal(request.caller, undefined, "state reads do not depend on the executor");
+    assert.deepEqual([...reader.iface.decodeFunctionData(
+      "getFullStateWithRelativeBitmaps", request.data,
+    )], [descriptorToUse.factoryBinding.factory, TOKEN0, TOKEN1, FEE, 25n, 24n]);
+    for (const multiplier of [5n, 10n, 15n]) {
+      assert.deepEqual(localProgram.buildRequests({ ...programInput, amountIn: programInput.amountIn * multiplier }),
+        requests, "changing amount only changes local math, not the state request");
+    }
+    const rawState = stateReaderFixture({ liquidity: 1_000_000_000_000n,
+      initializedTicks: [[-1024, 1000n], [1024, -1000n]],
+      feeProtocol: descriptorToUse === pancakeDescriptor ? 0x12345678 : 0 });
+    const initialResults: readonly AdapterRequestResult[] = [success(request.id, encodeStateReaderFixture(rawState, reader.iface))];
+    assert.equal(localProgram.buildDependentProgram?.({ programInput, initialResults,
+      completedRound: 0, priorEvidence: [] }) ?? null, null, "aggregate success has no dependent round");
+    const decode = (results: readonly AdapterRequestResult[] = initialResults, amountIn = programInput.amountIn) =>
+      localProgram.decode({ programInput: { ...programInput, amountIn }, initialResults: results,
+        dependentEvidence: [] });
+    const quote = decode();
+    assert(quote.amountOut > 0n);
+    assert.equal(quote.evidence.kind, "univ3-local-ticks");
+    assert.equal(quote.evidence.amountIn, programInput.amountIn);
+    assert.equal(quote.evidence.initializedTicksCrossed, 1);
+    assert.notEqual(quote.evidence.sqrtPriceX96After, Q96, "evidence uses returned post-swap state, not the starting price");
+    const words = Array.from({ length: 49 }, (_, i) => i - 24);
+    const state = { sqrtPriceX96: Q96, tick: 0, liquidity: 1_000_000_000_000n, fee: FEE,
+      tickSpacing: TICK_SPACING, ticks: new Map([[-1024, 1000n], [1024, -1000n]]),
+      tickBitmap: new Map(words.map(w => [w, w === -4 || w === 4 ? 1n : 0n])) };
+    const expected = v3SwapToState(state, route.direction === "zero-for-one", programInput.amountIn);
+    assert.equal(quote.amountOut, expected.amountOut);
+    assert.equal(quote.evidence.sqrtPriceX96After, expected.state.sqrtPriceX96);
+    assert.throws(() => v3SwapToState({ ...state, tickBitmap: new Map([[-1, 0n], [0, 0n], [1, 0n]]) },
+      route.direction === "zero-for-one", programInput.amountIn), V3MissingBitmapWordError,
+      "same amount exceeds the previous three-word window");
+    assert.notEqual(decode(initialResults, programInput.amountIn / 2n).amountOut * 2n, quote.amountOut,
+      "amount-sensitive swap math, not a spot-price multiplier");
+    assert.equal(decode(initialResults, 100_000_000_000_000n).amountOut, 0n,
+      "out-of-window amount never gets a fabricated output");
+    const fragment = univ3StrictFamilyPlugin.execution.buildFragment({ ...programInput,
+      quotedAmountOut: quote.amountOut, minAmountOut: quote.amountOut, exactEvidence: quote.evidence });
+    assert.equal(fragment.nodes[0].amount, programInput.amountIn);
+    for (const change of [{ amountIn: programInput.amountIn + 1n }, { amountOut: quote.amountOut + 1n },
+      { tokenIn: route.tokenOut }, { pool: FORGED_POOL }, { fee: FEE + 1n }]) {
+      assert.throws(() => univ3StrictFamilyPlugin.execution.buildFragment({ ...programInput,
+        quotedAmountOut: quote.amountOut, minAmountOut: quote.amountOut, exactEvidence: { ...quote.evidence, ...change } }), /incompatible/);
+    }
+    for (const source of [{ ...SOURCE, number: SOURCE.number + 1 }, { ...SOURCE, generation: SOURCE.generation + 1 },
+      { ...SOURCE, hash: `0x${"cd".repeat(32)}` }]) {
+      assert.throws(() => decode(initialResults.map(r => ({ ...r, source }))), /foreign source/);
+    }
+    assert.throws(() => decode([]), /missing|incomplete/);
+    const failedResults: readonly AdapterRequestResult[] = [{ id: request.id, ok: false, failure: "rpc", source: SOURCE }];
+    assert.throws(() => decode(failedResults), /unresolved/);
+    assert.equal(localProgram.buildDependentProgram?.({ programInput, initialResults: failedResults,
+      completedRound: 0, priorEvidence: [] }) ?? null, null, "aggregate failure cannot trigger an automatic TickLens fallback");
+    const revertedResults = [declaredRevert(request.id)];
+    assert.throws(() => decode(revertedResults));
+    assert.equal(localProgram.buildDependentProgram?.({ programInput, initialResults: revertedResults,
+      completedRound: 0, priorEvidence: [] }) ?? null, null, "helper revert cannot silently switch the read method");
+    assert.deepEqual(localProgram.buildRequests(programInput), requests, "failure never mutates the selected read method");
+    assert.throws(() => decode([success(request.id, "0x")]));
+    assert.throws(() => decode([success(request.id, encodeStateReaderFixture({ ...rawState, pool: FORGED_POOL }, reader.iface))]),
+      /pool|binding/, "an aggregate helper cannot substitute another pool's state");
+  }
+}
+// Unknown reverse-verified factories remain quoteable through their original
+// factory-agnostic state program; this is selected before I/O, not after failure.
+for (const route of univ3StrictFamilyPlugin.routes.project({ descriptor: unknownDescriptor })) {
+  const programInput = { ...unknownExactInput, route, amountIn: 10_000_000_000n };
+  const method = univ3StrictFamilyPlugin.exact.methods(programInput)[1];
+  assert.equal(method.kind, "request-program");
+  if (method.kind !== "request-program") throw new Error("missing unknown-factory local program");
+  assert.equal(method.id, "local-ticks-49");
+  assert.equal(method.stateOnlyReads, true);
+  assert.equal(method.chainAmountQuote, undefined);
+  const program = method.program;
+  assert.deepEqual(program.requirements(programInput), { transports: ["eth-call"] });
+  const requests = program.buildRequests(programInput);
+  assert.deepEqual(requests.map(request => request.id), ["local-slot0", "local-liquidity"]);
+  for (const request of requests) {
+    assert(request.kind === "eth-call");
+    assert.equal(request.to, POOL);
+    assert.equal(request.caller, undefined);
+  }
+  const initialResults = [
+    success("local-slot0", UNIV3_POOL_INTERFACE.encodeFunctionResult("slot0", [Q96, 0, 0, 1, 1, 0, true])),
+    success("local-liquidity", UNIV3_POOL_INTERFACE.encodeFunctionResult("liquidity", [1_000_000_000_000n])),
+  ];
+  const round = program.buildDependentProgram!({ programInput, initialResults, completedRound: 0, priorEvidence: [] });
+  assert(round !== null);
+  assert.equal(requests.length + round.requests.length, 51, "2 core reads plus 49 TickLens words");
+  const words = round.requests.map(request => {
+    assert(request.kind === "eth-call");
+    assert.equal(request.to, UNIV3_TICK_LENS);
+    const args = UNIV3_TICK_LENS_INTERFACE.decodeFunctionData("getPopulatedTicksInWord", request.data);
+    assert.equal(args[0], POOL);
+    return Number(args[1]);
+  });
+  assert.deepEqual(words, Array.from({ length: 49 }, (_, i) => i - 24));
+  const tickResults = round.requests.map((request, i) => success(request.id,
+    UNIV3_TICK_LENS_INTERFACE.encodeFunctionResult("getPopulatedTicksInWord", [
+      words[i] === -4 ? [[-1024, 1000n, 1000n]] : words[i] === 4 ? [[1024, -1000n, 1000n]] : [],
+    ])));
+  const decode = (results: readonly AdapterRequestResult[] = tickResults, amountIn = programInput.amountIn) =>
+    program.decode({ programInput: { ...programInput, amountIn }, initialResults,
+      dependentEvidence: [round.decode(results)] });
+  const state = { sqrtPriceX96: Q96, tick: 0, liquidity: 1_000_000_000_000n, fee: FEE,
+    tickSpacing: TICK_SPACING, ticks: new Map([[-1024, 1000n], [1024, -1000n]]),
+    tickBitmap: new Map(words.map(word => [word, word === -4 || word === 4 ? 1n : 0n])) };
+  for (const multiplier of [1n, 5n, 10n, 15n]) {
+    const amountIn = programInput.amountIn * multiplier;
+    assert.deepEqual(program.buildRequests({ ...programInput, amountIn }), requests);
+    const quote = decode(tickResults, amountIn);
+    assert(quote.amountOut > 0n, "unknown factory remains usable in both directions at all four sample amounts");
+    assert.equal(quote.evidence.kind, "univ3-local-ticks");
+    assert.equal(quote.evidence.amountIn, amountIn);
+    const expected = v3SwapToState(state, route.direction === "zero-for-one", amountIn);
+    assert.equal(quote.amountOut, expected.amountOut);
+    assert.equal(quote.evidence.sqrtPriceX96After, expected.state.sqrtPriceX96);
+    const fragment = univ3StrictFamilyPlugin.execution.buildFragment({ ...programInput, amountIn,
+      quotedAmountOut: quote.amountOut, minAmountOut: quote.amountOut, exactEvidence: quote.evidence });
+    assert.equal(fragment.nodes[0].amount, amountIn);
+  }
+  assert.throws(() => decode(tickResults.slice(1)), /incomplete|missing/);
+  assert.throws(() => decode([...tickResults.slice(1), tickResults[1]]), /duplicate/);
+  assert.throws(() => decode(tickResults.map((result, i) => i === 0
+    ? { id: result.id, ok: false, failure: "rpc" as const, source: SOURCE } : result)), /unresolved/);
+  assert.throws(() => decode(tickResults.map((result, i) => i === 0
+    ? { ...result, source: { ...SOURCE, generation: SOURCE.generation + 1 } } : result)), /foreign source/);
+  assert.equal(decode(tickResults, 100_000_000_000_000n).amountOut, 0n, "unknown-factory window bounds stay fail-closed");
+  assert.equal(program.buildDependentProgram!({ programInput, initialResults, completedRound: 1,
+    priorEvidence: [round.decode(tickResults)] }), null, "unknown factory uses exactly one dependent round");
+}
+// Zero active liquidity can still reach funded ticks within the loaded window.
+for (const route of routes) {
+  const programInput = { ...exactInput, route, amountIn: 100_000_000n };
+  const fundedTicks = [[-100, 1_000_000_000_000n], [-10, -1_000_000_000_000n],
+    [10, 1_000_000_000_000n], [100, -1_000_000_000_000n]] as const;
+  const makeResults = (funded: boolean) => [success("local-pool-state", encodeStateReaderFixture(
+    stateReaderFixture({ liquidity: 0n, initializedTicks: funded ? fundedTicks : [] }),
+  ))];
+  const quote = localProgram.decode({ programInput, initialResults: makeResults(true), dependentEvidence: [] });
+  assert.equal(quote.amountOut, 99_840_130n, "swap crosses the empty region before consuming input");
+  assert.equal(quote.evidence.kind, "univ3-local-ticks");
+  assert.equal(quote.evidence.initializedTicksCrossed, 1);
+  assert.equal(localProgram.decode({ programInput, initialResults: makeResults(false),
+    dependentEvidence: [] }).amountOut, 0n,
+    "no funded ticks in the known window stays unavailable");
+}
+for (const spacing of [1, 60]) {
+  for (const tick of [-15361, -15360, -257, -256, -1, 0, 255, 256, 15360]) {
+    const boundDescriptor = { ...descriptor, tickSpacing: spacing };
+    const rawState = stateReaderFixture({ tick, tickSpacing: spacing });
+    const state = readUniV3State(encodeStateReaderFixture(rawState), boundDescriptor);
+    const floorCenter = Math.floor(tick / spacing) >> 8;
+    const helperCenter = Math.trunc(tick / spacing) >> 8;
+    const expectedWords = Array.from({ length: 49 }, (_, i) => floorCenter - 24 + i);
+    assert.deepEqual([...state.tickBitmap.keys()].sort((a, b) => a - b), expectedWords,
+      `tick=${tick}/spacing=${spacing} preserves the original floor-centered 49-word window`);
+    assert([...state.tickBitmap.values()].every(word => word === 0n), "sparse omitted words are known empty");
+    assert(expectedWords.every(word => word >= helperCenter - 25 && word <= helperCenter + 24),
+      "never invent a word outside the helper's actual scanned range");
+    assert.equal(state.tickBitmap.has(floorCenter - 25), false);
+    assert.equal(state.tickBitmap.has(floorCenter + 25), false);
+    if (spacing === 60 && (tick === -1 || tick === -15361)) {
+      assert.equal(floorCenter, helperCenter - 1, "fixture exercises signed truncation vs floor at a word boundary");
+      const boundaryTick = (floorCenter - 24) * 256 * spacing;
+      const boundary = readUniV3State(encodeStateReaderFixture(stateReaderFixture({ tick, tickSpacing: spacing,
+        initializedTicks: [[boundaryTick, 1000n]] })), boundDescriptor);
+      assert.equal(boundary.ticks.get(boundaryTick), 1000n, "the extra left read preserves a real boundary tick");
+    }
+  }
+}
+const readerDescriptor = { ...descriptor, tickSpacing: 60 };
+const readerFixture = stateReaderFixture({ tickSpacing: 60,
+  initializedTicks: [[-15360, 1000n], [60, 2000n], [15360, -3000n]] });
+const readFixture = (value: ReturnType<typeof stateReaderFixture>) =>
+  readUniV3State(encodeStateReaderFixture(value), readerDescriptor);
+const sparseState = readFixture(readerFixture);
+assert.equal(sparseState.tickBitmap.size, 49);
+assert.deepEqual([...sparseState.ticks], [[-15360, 1000n], [60, 2000n], [15360, -3000n]]);
+assert.equal(sparseState.tickBitmap.get(-1), 1n);
+assert.equal(sparseState.tickBitmap.get(0), 2n);
+assert.equal(sparseState.tickBitmap.get(1), 1n);
+const reversedSparseState = readFixture({ ...readerFixture,
+  tickBitmap: [...readerFixture.tickBitmap].reverse(), ticks: [...readerFixture.ticks].reverse() });
+assert.deepEqual([...reversedSparseState.ticks].sort(([a], [b]) => a - b), [...sparseState.ticks],
+  "sparse mappings are validated by identity, not assumed array ordering");
+
+const malformedStates: readonly (readonly [string, ReturnType<typeof stateReaderFixture>])[] = [
+  ["foreign pool", { ...readerFixture, pool: FORGED_POOL }],
+  ["spacing differs from bound descriptor", { ...readerFixture, tickSpacing: 1 }],
+  ["zero spacing", { ...readerFixture, tickSpacing: 0 }],
+  ["negative spacing", { ...readerFixture, tickSpacing: -60 }],
+  ["bitmap references a missing tick", { ...readerFixture, ticks: readerFixture.ticks.slice(1) }],
+  ["tick lacks its bitmap word", { ...readerFixture, tickBitmap: readerFixture.tickBitmap.slice(1) }],
+  ["duplicate bitmap word", { ...readerFixture, tickBitmap: [...readerFixture.tickBitmap, readerFixture.tickBitmap[0]] }],
+  ["duplicate tick", { ...readerFixture, ticks: [...readerFixture.ticks, readerFixture.ticks[0]] }],
+  ["extra tick without a corresponding set bit", { ...readerFixture,
+    ticks: [...readerFixture.ticks, { ...readerFixture.ticks[1], index: 120 }] }],
+  ["extra bitmap bit without a corresponding tick", { ...readerFixture,
+    tickBitmap: readerFixture.tickBitmap.map(word => word.index === 0 ? { ...word, value: word.value | 4n } : word) }],
+  ["tick is not aligned to spacing", { ...readerFixture,
+    ticks: readerFixture.ticks.map((tick, i) => i === 1 ? { ...tick, index: 61 } : tick) }],
+  ["uninitialized tick behind set bit", { ...readerFixture,
+    ticks: readerFixture.ticks.map((tick, i) => i === 1 ? { ...tick, value: { ...tick.value, initialized: false } } : tick) }],
+  ["zero gross liquidity behind set bit", { ...readerFixture,
+    ticks: readerFixture.ticks.map((tick, i) => i === 1 ? { ...tick, value: { ...tick.value, liquidityGross: 0n } } : tick) }],
+  ["net liquidity exceeds gross", { ...readerFixture,
+    ticks: readerFixture.ticks.map((tick, i) => i === 1 ? { ...tick, value: { ...tick.value, liquidityGross: 1n } } : tick) }],
+  ["negative net liquidity magnitude exceeds gross", { ...readerFixture,
+    ticks: readerFixture.ticks.map((tick, i) => i === 2 ? { ...tick, value: { ...tick.value, liquidityGross: 1n } } : tick) }],
+  ["slot0 tick outside V3 bounds", { ...readerFixture, slot0: { ...readerFixture.slot0, tick: 887273 } }],
+  ["word left of helper range", stateReaderFixture({ tickSpacing: 60, initializedTicks: [[-26 * 256 * 60, 1000n]] })],
+  ["word right of helper range", stateReaderFixture({ tickSpacing: 60, initializedTicks: [[25 * 256 * 60, 1000n]] })],
+];
+for (const [label, value] of malformedStates) {
+  assert.throws(() => readFixture(value), `reject malformed aggregate: ${label}`);
+}
+const extraLeft = stateReaderFixture({ tickSpacing: 60, initializedTicks: [[-25 * 256 * 60, 1000n]] });
+const clippedExtraLeft = readFixture(extraLeft);
+assert.equal(clippedExtraLeft.tickBitmap.size, 49);
+assert.equal(clippedExtraLeft.tickBitmap.has(-25), false);
+assert.equal(clippedExtraLeft.ticks.size, 0, "valid helper-only extra word is not added to the local quote window");
+assert.throws(() => readFixture({ ...extraLeft, ticks: [] }),
+  "validate bitmap/tick consistency even in the extra word discarded from the local window");
+const extraRight = stateReaderFixture({ tick: -1, tickSpacing: 60, initializedTicks: [[24 * 256 * 60, 1000n]] });
+const clippedExtraRight = readFixture(extraRight);
+assert.equal(clippedExtraRight.tickBitmap.size, 49);
+assert.equal(clippedExtraRight.tickBitmap.has(24), false);
+assert.equal(clippedExtraRight.ticks.size, 0, "negative boundary clips the helper-only right word instead");
+assert.throws(() => readFixture({ ...extraRight, ticks: [] }),
+  "discarding the helper-only right word must not hide malformed data");
+assert.throws(() => readUniV3State(encodeStateReaderFixture(readerFixture), { ...readerDescriptor,
+  factoryBinding: { ...readerDescriptor.factoryBinding, reversePool: FORGED_POOL } }),
+  /pool|binding/, "returned pool must also match the descriptor's reverse-verified binding");
+assert.throws(() => readUniV3State(encodeStateReaderFixture(readerFixture) + "00".repeat(32), readerDescriptor),
+  /canonical/, "trailing data is not a canonical complete state response");
+for (const tickSpacing of [0, -1, 1.5, NaN]) {
+  assert.throws(() => readUniV3State(encodeStateReaderFixture(readerFixture), { ...readerDescriptor, tickSpacing }),
+    "invalid descriptor spacing fails closed");
+}
+assert.deepEqual(localProgram.buildRequests({ ...exactInput, amountIn: 0n }), []);
+assert.equal(localProgram.decode({ programInput: { ...exactInput, amountIn: 0n },
+  initialResults: [], dependentEvidence: [] }).amountOut, 0n);
+console.log("univ3 local amount: PASS (Uni/Pancake aggregates, unknown-factory TickLens, 49-word bounds, source, amounts, execution, Quoter switch)");
 assert.equal(
   univ3StrictFamilyPlugin.swap.replay!.buildOverlay({
     descriptor: unknownDescriptor,
@@ -845,6 +1244,48 @@ console.log(
   "univ3-family-plugin PASS " +
     "(strict eight-capability parity, reverse identity, precision, victim, ownership)",
 );
+
+function stateReaderFixture(input: {
+  readonly tick?: number;
+  readonly tickSpacing?: number;
+  readonly liquidity?: bigint;
+  readonly feeProtocol?: number;
+  readonly initializedTicks?: readonly (readonly [number, bigint])[];
+} = {}) {
+  const tick = input.tick ?? 0;
+  const tickSpacing = input.tickSpacing ?? TICK_SPACING;
+  const bitmap = new Map<number, bigint>();
+  const ticks = (input.initializedTicks ?? []).map(([index, liquidityNet]) => {
+    const compressed = Math.floor(index / tickSpacing);
+    const word = compressed >> 8;
+    bitmap.set(word, (bitmap.get(word) ?? 0n) | (1n << BigInt(compressed & 255)));
+    return { index, value: {
+      liquidityGross: liquidityNet < 0n ? -liquidityNet : liquidityNet === 0n ? 1n : liquidityNet,
+      liquidityNet,
+      tickCumulativeOutside: 0n,
+      secondsPerLiquidityOutsideX128: 0n,
+      secondsOutside: 0,
+      initialized: true,
+    } };
+  });
+  return {
+    pool: POOL,
+    blockTimestamp: 1_800_000_000n,
+    slot0: { sqrtPriceX96: getSqrtRatioAtTick(tick), tick, observationIndex: 0,
+      observationCardinality: 1, observationCardinalityNext: 1, feeProtocol: input.feeProtocol ?? 0, unlocked: true },
+    liquidity: input.liquidity ?? LIQUIDITY,
+    tickSpacing,
+    maxLiquidityPerTick: (1n << 128n) - 1n,
+    observation: { blockTimestamp: 1_800_000_000, tickCumulative: 0n,
+      secondsPerLiquidityCumulativeX128: 0n, initialized: true },
+    tickBitmap: [...bitmap].map(([index, value]) => ({ index, value })),
+    ticks,
+  };
+}
+
+function encodeStateReaderFixture(value: ReturnType<typeof stateReaderFixture>, iface = UNIV3_STATE_READER_INTERFACE): string {
+  return iface.encodeFunctionResult("getFullStateWithRelativeBitmaps", [value]);
+}
 
 function runIdentity(
   candidateInput: UniV3Candidate,

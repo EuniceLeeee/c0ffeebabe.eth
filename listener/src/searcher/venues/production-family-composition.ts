@@ -21,9 +21,6 @@ import {
   loadStrictProductionFamilyPlugins,
 } from "./production-families/loader.js";
 
-const EXPECTED_STRICT_FAMILIES = 23;
-const EXPECTED_EXACT_CAPABILITIES = 253;
-
 const shadowShape = capabilityShadowArtifact as unknown as {
   readonly complete?: unknown;
   readonly legacy?: unknown;
@@ -49,11 +46,8 @@ assertCompleteProductionFamilyLoad(strictLoad);
 if (strictLoad.modules.length !== 0) {
   throw new Error("strict production composition admitted a legacy module");
 }
-if (strictLoad.plugins.length !== EXPECTED_STRICT_FAMILIES) {
-  throw new Error(
-    `strict production composition requires ${EXPECTED_STRICT_FAMILIES} ` +
-      `Families, received ${strictLoad.plugins.length}`,
-  );
+if (strictLoad.plugins.length === 0) {
+  throw new Error("strict production composition requires a nonempty Family catalog");
 }
 
 const strictFamilyIds = strictLoad.plugins.map((module) => module.familyId);
@@ -61,12 +55,8 @@ const generatedManifest = generatedCapabilityManifestFromShadowArtifact({
   artifact: capabilityShadowArtifact,
   strictFamilyIds,
 });
-if (generatedManifest.entries.length !== EXPECTED_EXACT_CAPABILITIES) {
-  throw new Error(
-    `strict production composition requires ${EXPECTED_EXACT_CAPABILITIES} ` +
-      `exact capabilities, received ${generatedManifest.entries.length}`,
-  );
-}
+// The generated manifest validator checks exact Family-set equality and every
+// required capability. Adding a Family must not require a central count edit.
 
 const catalog = new FamilyCapabilityCatalog({
   requireCapture: true,
@@ -77,7 +67,7 @@ const catalog = new FamilyCapabilityCatalog({
   })),
   generatedManifest,
 });
-if (catalog.listAll().length !== EXPECTED_STRICT_FAMILIES) {
+if (catalog.listAll().length !== strictLoad.plugins.length) {
   throw new Error("strict production Family catalog is incomplete");
 }
 

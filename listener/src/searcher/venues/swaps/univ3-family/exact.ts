@@ -1,24 +1,22 @@
 import {
   localZeroExactMethod,
+  bindRequestResultRound,
+  collectRequestProgramResults,
   type ExactQuoteSemantics,
   type ExactRequestProgram,
 } from "../../adapter-family-plugin.js";
 import {
-  UNIV3_POOL_INTERFACE,
   UNIV3_QUOTER_V2_INTERFACE,
-  UNIV3_TICK_LENS,
-  UNIV3_TICK_LENS_INTERFACE,
 } from "../univ3-abi.js";
 import {
   V3MissingBitmapWordError,
+  MIN_SQRT_RATIO,
+  MAX_SQRT_RATIO,
   v3SwapToState,
-  type V3PoolState,
 } from "../../../solver/v3-math.js";
-import {
-  bindRequestResultRound,
-  collectRequestProgramResults,
-} from "../../adapter-family-plugin.js";
-import type { RequestRequirements } from "../../adapter-request-program.js";
+import { resolveUniV3StateReader, UNIV3_STATE_WORD_RADIUS, readUniV3State, uniV3StateRequestData } from "./state-reader.js";
+import { tickLensStateRequests, tickLensDependentProgram, readTickLensState } from "./tick-lens-state.js";
+import { assertUniV3SwapAccess, uniV3SwapAccessRequest } from "./swap-access.js";
 import {
   canonicalAddress,
   requireSuccessfulResult,
@@ -31,250 +29,196 @@ import type {
 } from "./types.js";
 
 const EXACT_QUOTE_REQUEST_ID = "exact-factory-bound-quote";
-const LOCAL_SLOT0_REQUEST_ID = "local-slot0";
-const LOCAL_LIQUIDITY_REQUEST_ID = "local-liquidity";
-const LOCAL_TICK_WORD_PREFIX = "local-tick-word:";
+const LOCAL_STATE_REQUEST_ID = "local-pool-state";
+type QuoteMode = "local" | "quoter";
 
 /**
- * Reverse-verified V3 pools with a factory-bound quoter quote through the
- * quoter contract.  Quoter-less fork pools (reverse-verified factories
- * without a known QuoterV2) quote locally: read slot0 + liquidity, warm the
- * current tick word via TickLens, and run the bit-exact local v3 swap math.
- * The local path is the same pricing surface the scanner already trusts for
- * forks (slot0/liquidity mids), and the final revm simulation still gates
- * execution, so a local quote can never bypass the real state.
+ * One aggregated state read supplies 49 source-bound bitmap words. The existing
+ * request transport owns deduplication and reuse; the Family owns only reads,
+ * decoding and swap math. The factory-bound Quoter remains an explicit option.
+ * Neither quote mode proves transfer eligibility; mandatory final sim remains.
  */
-const univ3RequestProgram: ExactRequestProgram<
+function requestProgram(mode: QuoteMode): ExactRequestProgram<
   UniV3Descriptor,
   UniV3Route,
   UniV3ExactEvidence
-> = {
-  requirements: (input) => input.descriptor.quoterBinding.quoter === null
-    ? ({ transports: ["eth-call"] })
-    : ({ transports: ["eth-call"], caller: "executor" }),
-  buildRequests(input) {
-    assertRoute(input.descriptor, input.route);
-    if (input.amountIn <= 0n) return [];
-    const quoter = input.descriptor.quoterBinding.quoter;
-    if (quoter !== null) {
-      return [Object.freeze({
-        id: EXACT_QUOTE_REQUEST_ID,
-        kind: "eth-call" as const,
-        to: quoter,
-        caller: Object.freeze({ kind: "executor" as const }),
-        data: UNIV3_QUOTER_V2_INTERFACE.encodeFunctionData(
-          "quoteExactInputSingle",
-          [{
-            tokenIn: input.route.tokenIn,
-            tokenOut: input.route.tokenOut,
-            amountIn: input.amountIn,
-            fee: input.descriptor.fee,
-            sqrtPriceLimitX96: 0n,
-          }],
-        ),
-        completion: "return-data" as const,
-      })];
-    }
-    return Object.freeze([
-      Object.freeze({
-        id: LOCAL_SLOT0_REQUEST_ID,
-        kind: "eth-call" as const,
-        to: input.descriptor.pool,
-        data: UNIV3_POOL_INTERFACE.encodeFunctionData("slot0"),
-        completion: "return-data" as const,
-      }),
-      Object.freeze({
-        id: LOCAL_LIQUIDITY_REQUEST_ID,
-        kind: "eth-call" as const,
-        to: input.descriptor.pool,
-        data: UNIV3_POOL_INTERFACE.encodeFunctionData("liquidity"),
-        completion: "return-data" as const,
-      }),
-    ]);
-  },
-  buildDependentProgram({ programInput, completedRound, initialResults, priorEvidence }) {
-    if (completedRound !== 0) return null;
-    if (programInput.descriptor.quoterBinding.quoter !== null) return null;
-    assertRoute(programInput.descriptor, programInput.route);
-    const results = collectRequestProgramResults(initialResults, priorEvidence);
-    const slot0Result = requireSuccessfulResult(results, LOCAL_SLOT0_REQUEST_ID);
-    assertSource(slot0Result.source, programInput.source);
-    const decoded = UNIV3_POOL_INTERFACE.decodeFunctionResult(
-      "slot0",
-      slot0Result.data,
-    );
-    const tick = Number(decoded[1]);
-    const tickSpacing = programInput.descriptor.tickSpacing;
-    const compressed = Math.floor(tick / tickSpacing);
-    const currentWord = compressed >> 8;
-    const words: number[] = [];
-    for (let word = currentWord - 1; word <= currentWord + 1; word++) {
-      if (!words.includes(word)) words.push(word);
-    }
-    const requests = words.map((word) => Object.freeze({
-      id: LOCAL_TICK_WORD_PREFIX + word,
-      kind: "eth-call" as const,
-      to: UNIV3_TICK_LENS,
-      data: UNIV3_TICK_LENS_INTERFACE.encodeFunctionData(
-        "getPopulatedTicksInWord",
-        [programInput.descriptor.pool, word],
-      ),
-      completion: "return-data" as const,
-    }));
-    return bindRequestResultRound(
-      { transports: ["eth-call"] } satisfies RequestRequirements,
-      Object.freeze(requests),
-    );
-  },
-  decode({ programInput, initialResults, dependentEvidence }) {
-    assertRoute(programInput.descriptor, programInput.route);
-    if (programInput.amountIn <= 0n) return zeroQuote(programInput);
-    const quoter = programInput.descriptor.quoterBinding.quoter;
-    if (quoter !== null) {
-      const results = initialResults;
-      const result = requireSuccessfulResult(results, EXACT_QUOTE_REQUEST_ID);
-      assertSource(result.source, programInput.source);
-      const decoded = UNIV3_QUOTER_V2_INTERFACE.decodeFunctionResult(
-        "quoteExactInputSingle",
-        result.data,
-      );
-      const amountOut = BigInt(decoded[0]);
-      const initializedTicksCrossed = Number(decoded[2]);
-      if (
-        !Number.isSafeInteger(initializedTicksCrossed) ||
-        initializedTicksCrossed < 0
-      ) {
-        throw new Error("univ3 exact quote returned invalid initialized tick count");
+> {
+  const quoteThroughChain = (input: { readonly descriptor: UniV3Descriptor }) =>
+    mode === "quoter" && input.descriptor.quoterBinding.quoter !== null;
+  return {
+    requirements: (input) => !quoteThroughChain(input)
+      ? ({ transports: ["eth-call"] })
+      : ({ transports: ["eth-call"], caller: "executor" }),
+    buildRequests(input) {
+      assertRoute(input.descriptor, input.route);
+      if (input.amountIn <= 0n) return [];
+      const quoter = input.descriptor.quoterBinding.quoter;
+      if (quoteThroughChain(input)) {
+        return [Object.freeze({
+          id: EXACT_QUOTE_REQUEST_ID,
+          kind: "eth-call" as const,
+          to: quoter!,
+          caller: Object.freeze({ kind: "executor" as const }),
+          data: UNIV3_QUOTER_V2_INTERFACE.encodeFunctionData(
+            "quoteExactInputSingle",
+            [{
+              tokenIn: input.route.tokenIn,
+              tokenOut: input.route.tokenOut,
+              amountIn: input.amountIn,
+              fee: input.descriptor.fee,
+              sqrtPriceLimitX96: 0n,
+            }],
+          ),
+          completion: "return-data" as const,
+        })];
       }
-      return Object.freeze({
-        amountOut,
-        evidence: evidence(programInput, {
-          amountOut,
-          sqrtPriceX96After: BigInt(decoded[1]),
-          initializedTicksCrossed,
-          gasEstimate: BigInt(decoded[3]),
+      const reader = resolveUniV3StateReader(input.descriptor);
+      if (reader === null) return tickLensStateRequests(input.descriptor);
+      return Object.freeze([
+        Object.freeze({
+          id: LOCAL_STATE_REQUEST_ID,
+          kind: "eth-call" as const,
+          to: reader.address,
+          data: uniV3StateRequestData(input.descriptor),
+          completion: "return-data" as const,
         }),
-      });
-    }
-    const results = collectRequestProgramResults(initialResults, dependentEvidence);
-    const slot0Result = requireSuccessfulResult(results, LOCAL_SLOT0_REQUEST_ID);
-    const liquidityResult = requireSuccessfulResult(results, LOCAL_LIQUIDITY_REQUEST_ID);
-    assertSource(slot0Result.source, programInput.source);
-    assertSource(liquidityResult.source, programInput.source);
-    const slot0 = UNIV3_POOL_INTERFACE.decodeFunctionResult(
-      "slot0",
-      slot0Result.data,
-    );
-    const sqrtPriceX96 = BigInt(slot0[0]);
-    const tick = Number(slot0[1]);
-    const liquidity = BigInt(
-      UNIV3_POOL_INTERFACE.decodeFunctionResult(
-        "liquidity",
-        liquidityResult.data,
-      )[0],
-    );
-    if (sqrtPriceX96 === 0n || liquidity === 0n) {
-      return zeroQuote(programInput);
-    }
-    const tickSpacing = programInput.descriptor.tickSpacing;
-    const tickBitmap = new Map<number, bigint>();
-    const ticks = new Map<number, bigint>();
-    for (const wordResult of results) {
-      if (!wordResult.id.startsWith(LOCAL_TICK_WORD_PREFIX)) continue;
-      if (!wordResult.ok) continue;
-      const word = Number(wordResult.id.slice(LOCAL_TICK_WORD_PREFIX.length));
-      const populated = UNIV3_TICK_LENS_INTERFACE.decodeFunctionResult(
-        "getPopulatedTicksInWord",
-        wordResult.data,
-      )[0] as Array<{ tick: bigint; liquidityNet: bigint }>;
-      if (!tickBitmap.has(word)) tickBitmap.set(word, 0n);
-      for (const entry of populated) {
-        const tk = Number(entry.tick);
-        ticks.set(tk, BigInt(entry.liquidityNet));
-        const compressed = Math.floor(tk / tickSpacing);
-        const bitmapWord = compressed >> 8;
-        const bit = ((compressed % 256) + 256) % 256;
-        tickBitmap.set(
-          bitmapWord,
-          (tickBitmap.get(bitmapWord) ?? 0n) | (1n << BigInt(bit)),
-        );
+      ]);
+    },
+    buildDependentProgram(input) {
+      if (input.programInput.amountIn <= 0n) return null;
+      const results = collectRequestProgramResults(input.initialResults, input.priorEvidence);
+      const access = uniV3SwapAccessRequest(input.programInput);
+      // Keep authorization in its own round: its source-bound id cannot make
+      // the unchanged tick rounds miss their existing cross-block state cache.
+      if (access && !results.some(result => result.id === access.id)) {
+        return bindRequestResultRound({ transports: ["eth-call"] }, [access]);
       }
-    }
-    const zeroForOne = programInput.route.direction === "zero-for-one";
-    const state: V3PoolState = {
-      sqrtPriceX96,
-      tick,
-      liquidity,
-      fee: programInput.descriptor.fee,
-      tickSpacing,
-      tickBitmap,
-      ticks,
-    };
-    let amountOut: bigint;
-    try {
-      amountOut = v3SwapToState(state, zeroForOne, programInput.amountIn).amountOut;
-    } catch (error) {
-      if (error instanceof V3MissingBitmapWordError) {
-        // The swap crossed beyond the warmed words; report zero rather than
-        // failing the probe: a fork pool with deeper tick movement than the
-        // local window cannot be quoted safely, and zero keeps it out of the
-        // solver (final sim remains the authority for everything admitted).
+      assertUniV3SwapAccess(input.programInput, results);
+      if (quoteThroughChain(input.programInput) || resolveUniV3StateReader(input.programInput.descriptor) !== null) return null;
+      return tickLensDependentProgram({ ...input, completedRound: input.completedRound - (access ? 1 : 0) });
+    },
+    decode(input) {
+      const { programInput, initialResults } = input;
+      assertRoute(programInput.descriptor, programInput.route);
+      if (programInput.amountIn <= 0n) return zeroQuote(programInput);
+      assertUniV3SwapAccess(programInput, collectRequestProgramResults(initialResults, input.dependentEvidence));
+      if (quoteThroughChain(programInput)) {
+        const results = initialResults;
+        const result = requireSuccessfulResult(results, EXACT_QUOTE_REQUEST_ID);
+        assertSource(result.source, programInput.source);
+        const decoded = UNIV3_QUOTER_V2_INTERFACE.decodeFunctionResult(
+          "quoteExactInputSingle",
+          result.data,
+        );
+        const amountOut = BigInt(decoded[0]);
+        const initializedTicksCrossed = Number(decoded[2]);
+        if (
+          !Number.isSafeInteger(initializedTicksCrossed) ||
+          initializedTicksCrossed < 0
+        ) {
+          throw new Error("univ3 exact quote returned invalid initialized tick count");
+        }
+        return Object.freeze({
+          amountOut,
+          evidence: evidence(programInput, {
+            amountOut,
+            sqrtPriceX96After: BigInt(decoded[1]),
+            initializedTicksCrossed,
+            gasEstimate: BigInt(decoded[3]),
+          }),
+        });
+      }
+      const state = resolveUniV3StateReader(programInput.descriptor) === null ? readTickLensState(input) : (() => {
+        if (initialResults.length !== 1) throw new Error("univ3 incomplete or duplicate pool state result");
+        const result = requireSuccessfulResult(initialResults, LOCAL_STATE_REQUEST_ID);
+        assertSource(result.source, programInput.source);
+        return readUniV3State(result.data, programInput.descriptor);
+      })();
+      const { tick, ticks } = state;
+      if (state.sqrtPriceX96 === 0n) {
         return zeroQuote(programInput);
       }
-      throw error;
-    }
-    return Object.freeze({
-      amountOut,
-      evidence: evidence(programInput, {
-        amountOut,
-        sqrtPriceX96After: state.sqrtPriceX96,
-        initializedTicksCrossed: 0,
-        gasEstimate: 0n,
+      const zeroForOne = programInput.route.direction === "zero-for-one";
+      let swap: ReturnType<typeof v3SwapToState>;
+      try {
+        swap = v3SwapToState(state, zeroForOne, programInput.amountIn);
+      } catch (error) {
+        if (error instanceof V3MissingBitmapWordError) {
+          // This amount exceeded the known window, not proof of zero liquidity.
+          // Never publish a point-price or partial-fill substitute.
+          return zeroQuote(programInput, "univ3-local-ticks");
+        }
+        throw error;
+      }
+      if (swap.state.sqrtPriceX96 === MIN_SQRT_RATIO + 1n || swap.state.sqrtPriceX96 === MAX_SQRT_RATIO - 1n) {
+        return zeroQuote(programInput, "univ3-local-ticks");
+      }
+      const initializedTicksCrossed = [...ticks.keys()].filter(tk => zeroForOne
+        ? tk <= tick && tk > swap.state.tick : tk > tick && tk <= swap.state.tick).length;
+      return Object.freeze({
+        amountOut: swap.amountOut,
+        evidence: evidence(programInput, {
+          amountOut: swap.amountOut,
+          sqrtPriceX96After: swap.state.sqrtPriceX96,
+          initializedTicksCrossed,
+          gasEstimate: 0n,
+        }, "univ3-local-ticks"),
+      });
+    },
+  };
+}
+
+// Family-owned selection: effective/Exact/Solver keep the same central entry.
+export function createUniV3Exact(mode: QuoteMode = "local") {
+  const program = requestProgram(mode);
+  return {
+    methods: (input) => Object.freeze([
+      localZeroExactMethod<UniV3Descriptor, UniV3Route, UniV3ExactEvidence>(
+        "local-zero",
+        (input) => {
+          assertRoute(input.descriptor, input.route);
+          return zeroQuote(input);
+        },
+      ),
+      Object.freeze({
+        id: mode === "quoter" && input.descriptor.quoterBinding.quoter !== null ? "quoter-v2" :
+          resolveUniV3StateReader(input.descriptor) === null ? "local-ticks-49" : "local-state-49",
+        kind: "request-program" as const,
+        ...(mode !== "quoter" || input.descriptor.quoterBinding.quoter === null
+          ? { stateOnlyReads: true as const } : { chainAmountQuote: true as const }),
+        program,
       }),
-    });
-  },
-};
-
-export const univ3Exact = {
-  methods: (input) => Object.freeze([
-    localZeroExactMethod<UniV3Descriptor, UniV3Route, UniV3ExactEvidence>(
-      "local-zero",
-      (input) => {
-        assertRoute(input.descriptor, input.route);
-        return zeroQuote(input);
+    ]),
+    cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
+      pool: descriptor.pool,
+      tokenIn: route.tokenIn,
+      tokenOut: route.tokenOut,
+      fee: descriptor.fee,
+      quoteMode: mode,
+      tickWordRadius: UNIV3_STATE_WORD_RADIUS,
+      stateReader: resolveUniV3StateReader(descriptor)?.address ?? null,
+      swapAccess: { ...descriptor.swapAccess },
+      factoryBinding: {
+        factory: descriptor.factoryBinding.factory,
+        reversePool: descriptor.factoryBinding.reversePool,
       },
-    ),
-    Object.freeze({
-      id: "quoter-v2",
-      kind: "request-program" as const,
-      ...(input.descriptor.quoterBinding.quoter === null
-        ? {} : { chainAmountQuote: true as const }),
-      program: univ3RequestProgram,
+      quoterBinding: {
+        quoter: descriptor.quoterBinding.quoter,
+        router: descriptor.quoterBinding.router,
+        provenance: descriptor.quoterBinding.provenance,
+      },
+      caller: canonicalAddress(executor),
     }),
-  ]),
-  cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
-    pool: descriptor.pool,
-    tokenIn: route.tokenIn,
-    tokenOut: route.tokenOut,
-    fee: descriptor.fee,
-    factoryBinding: {
-      factory: descriptor.factoryBinding.factory,
-      reversePool: descriptor.factoryBinding.reversePool,
-    },
-    quoterBinding: {
-      quoter: descriptor.quoterBinding.quoter,
-      router: descriptor.quoterBinding.router,
-      provenance: descriptor.quoterBinding.provenance,
-    },
-    caller: canonicalAddress(executor),
-  }),
-} satisfies ExactQuoteSemantics<
-  UniV3Descriptor,
-  UniV3Route,
-  UniV3ExactEvidence
->;
+  } satisfies ExactQuoteSemantics<
+    UniV3Descriptor,
+    UniV3Route,
+    UniV3ExactEvidence
+  >;
+}
 
-function zeroQuote(input: Parameters<typeof evidence>[0]) {
+export const univ3Exact = createUniV3Exact();
+
+function zeroQuote(input: Parameters<typeof evidence>[0], kind: UniV3ExactEvidence["kind"] = "univ3-factory-bound-quoter") {
   return Object.freeze({
     amountOut: 0n,
     evidence: evidence(input, {
@@ -282,7 +226,7 @@ function zeroQuote(input: Parameters<typeof evidence>[0]) {
       sqrtPriceX96After: 0n,
       initializedTicksCrossed: 0,
       gasEstimate: 0n,
-    }),
+    }, kind),
   });
 }
 
@@ -300,9 +244,10 @@ function evidence(
     readonly initializedTicksCrossed: number;
     readonly gasEstimate: bigint;
   },
+  kind: UniV3ExactEvidence["kind"] = "univ3-factory-bound-quoter",
 ): UniV3ExactEvidence {
   return Object.freeze({
-    kind: "univ3-factory-bound-quoter" as const,
+    kind,
     source: input.source,
     pool: input.descriptor.pool,
     quoter: input.descriptor.quoterBinding.quoter,
@@ -326,6 +271,8 @@ function assertRoute(
   const expectedIn = zeroForOne ? descriptor.token0 : descriptor.token1;
   const expectedOut = zeroForOne ? descriptor.token1 : descriptor.token0;
   if (
+    (route.direction !== "zero-for-one" && route.direction !== "one-for-zero") ||
+    descriptor.fee < 0n || descriptor.fee >= 1_000_000n ||
     route.instanceKey !== descriptor.instanceKey ||
     !sameAddress(route.pool, descriptor.pool) ||
     !sameAddress(route.tokenIn, expectedIn) ||

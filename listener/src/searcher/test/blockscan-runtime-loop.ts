@@ -14,11 +14,13 @@ import { isRpcThrottleError } from "../rpc-throttle-guard.js";
 import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedGraphView } from "../venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { AnvilSolver } from "../solver/solver.js";
+import { ADDR } from "../../shared/constants/addresses.js";
 
 const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 const source = (generation = 1, number = 101) => ({ number, hash: hash(number), generation });
 const control = () => ({ signal: new AbortController().signal, deadlineAtMs: Date.now() + 10_000 });
 const actor = `0x${"aa".repeat(20)}`, origin = `0x${"bb".repeat(20)}`, target = `0x${"cc".repeat(20)}`;
+const priceFundingToken = ADDR.WETH.toLowerCase(), priceOutputToken = ADDR.USDC.toLowerCase();
 const invocation = (s = source()) => ({ source: s, request: {
   id: "generic-effect", kind: "effect-delta-simulation" as const,
   call: { caller: { kind: "executor" as const }, executionMode: "impersonated-call-frame" as const, to: target, data: "0x" },
@@ -86,6 +88,21 @@ test("ordinary shutdown remains zero unless a fatal arrives during its joined dr
     if (fatalDuringDrain) stop.fatal({ kind: "source-fault" });
     gate.resolve(); await turn(); assert.deepEqual(exits, [fatalDuringDrain ? 1 : 0]);
   }
+});
+
+test("private recording failure joins the ordinary drain but exits nonzero without a simulation-fatal marker", async () => {
+  const gate = deferred(), runtimeAbort = new AbortController(), exits: number[] = [], markers: string[] = [];
+  const stop = createLiveRuntimeStop({ runtimeAbort, emitFatal: kind => { markers.push(kind); },
+    exit: code => { exits.push(code); } });
+  const failure = new Error("private solver execution input recording failed");
+  stop.fail(failure); stop.shutdown();
+  assert.equal(runtimeAbort.signal.reason, failure);
+  stop.installDrain(() => gate.promise);
+  await turn(); assert.deepEqual(exits, []);
+  gate.resolve(); await turn();
+  assert.deepEqual(exits, [1]); assert.deepEqual(markers, []);
+  const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+  assert.match(main, /private solver execution input recording failed"\);\s+requestRuntimeStop\.fail\(failure\);/);
 });
 
 test("actual shared activity provider latches throttle before joined reads settle and bars successor I/O", async () => {
@@ -552,7 +569,7 @@ test("actual pending evidence passes use their own source generation without adv
   } finally { await f.loop.shutdown(); }
 });
 
-// Generic synthetic two-venue prices; no chain/provider is involved. The real
+// Generic synthetic effective quotes; no chain/provider is involved. The real
 // scanner must emit a candidate before the production Exact callsite is reached.
 function pricingFixture(graph: VerifiedGraphView): any {
   const keys = graph.edges.map(blockScanEdgeKey).sort();
@@ -561,19 +578,29 @@ function pricingFixture(graph: VerifiedGraphView): any {
     const values = axis === "Edge" && ["expected", "resolved"].includes(disposition) ? keys : [];
     coverage[`${disposition}${axis}Keys`] = values; coverage[`${disposition}${axis}KeyHash`] = exactSetHash(values);
   }
-  return { generation: graph.generation, sourceBlock: graph.sourceBlock, sourceBlockHash: graph.sourceBlockHash, graph,
-    mids: new Map(graph.edges.map(edge => {
+  const mids = new Map(graph.edges.map(edge => {
       const a = edge.target === target ? 1000 : 1100, b = 2_000_000;
-      const [reserveA, reserveB] = edge.tokenIn === actor ? [a, b] : [b, a];
+      const [reserveA, reserveB] = edge.tokenIn === priceFundingToken ? [a, b] : [b, a];
       return [blockScanEdgeKey(edge), { kind: "v2", pool: edge.target, edges: [edge], mid: reserveB / reserveA,
-        feeBps: 30, reserveA: BigInt(reserveA) * 10n ** 18n, reserveB: BigInt(reserveB) * 10n ** 18n, depthProxy: reserveA }];
-    })), coverage, coverageByReadKey: new Map(), freshnessByReadKey: new Map(), stateByStateKey: new Map(),
+        feeBps: 30, reserveA: BigInt(reserveA) * 10n ** 18n, reserveB: BigInt(reserveB) * 10n ** 18n, depthProxy: reserveA }] as const;
+    }));
+  const quoteSource = source(graph.generation, graph.sourceBlock);
+  const rows = new Map(graph.edges.map(edge => {
+    const edgeId = blockScanEdgeKey(edge), mid = mids.get(edgeId)!;
+    const amountIn = 1_000_000n;
+    const amountOut = amountIn * mid.reserveB * 9970n / (mid.reserveA * 10000n);
+    return [edgeId, { edgeId, instanceKey: edge.target, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut,
+      amountIn, amountOut, effectiveMid: Number(amountOut) / Number(amountIn), status: "quoted", quotedAt: quoteSource }];
+  }));
+  return { generation: graph.generation, sourceBlock: graph.sourceBlock, sourceBlockHash: graph.sourceBlockHash, graph,
+    mids, effectiveMids: { source: quoteSource, reference: "default", referenceWethInput: 1_000_000n,
+      rows, complete: true, wallMs: 0 }, coverage, coverageByReadKey: new Map(), freshnessByReadKey: new Map(), stateByStateKey: new Map(),
     coverageByEdgeKey: new Map(keys.map(k => [k, { status: "resolved" }])), resolvedFamilyIds: ["fixture"],
     incompleteFamilyIds: [], laneTelemetry: [] };
 }
 
 function twoWayPoolEdges(pools: readonly string[]) {
-  return pools.flatMap(pool => [[actor, origin], [origin, actor]].map(([tokenIn, tokenOut]) => ({
+  return pools.flatMap(pool => [[priceFundingToken, priceOutputToken], [priceOutputToken, priceFundingToken]].map(([tokenIn, tokenOut]) => ({
     adapterId: "univ2-swap", slotKind: "swap" as const, target: pool, tokenIn: tokenIn!, tokenOut: tokenOut!, ...deriveEdgeTaxonomy("swap"),
   })));
 }
@@ -582,9 +609,7 @@ for (const nMinusOne of [false, true]) test(`${nMinusOne ? "N-1 enumeration" : "
   const contexts: Parameters<SourceSimulationFactory>[0][] = []; const transports: unknown[] = []; let closes = 0;
   const f = loopFixture(input => { contexts.push(input); const transport = { async simulate() { return { data: "0x" }; } };
     transports.push(transport); return { transport, async closeAndDrain() { closes++; } }; });
-  const edges = [target, `0x${"dd".repeat(20)}`].flatMap(pool => [[actor, origin], [origin, actor]].map(([tokenIn, tokenOut]) => ({
-    adapterId: "univ2-swap", slotKind: "swap" as const, target: pool, tokenIn: tokenIn!, tokenOut: tokenOut!, ...deriveEdgeTaxonomy("swap"),
-  })));
+  const edges = twoWayPoolEdges([target, `0x${"dd".repeat(20)}`, `0x${"ee".repeat(20)}`, `0x${"ff".repeat(20)}`]);
   const graph = (number: number, generation: number) => f.deps.buildGraphView({ id: "fixture", generation,
     sourceBlock: number, sourceBlockHash: hash(number), edges, landedCoverage: [], topologyKey: "fixture" });
   let latest = nMinusOne ? pricingFixture(graph(100, 70)) : null;
@@ -604,7 +629,7 @@ for (const nMinusOne of [false, true]) test(`${nMinusOne ? "N-1 enumeration" : "
   let exactCalls = 0;
   Object.assign(f.deps, { nMinusOneFallbackEnabled: nMinusOne, blockScanGraph: () => edges,
     blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0,
-      pricedTokens: new Map([[actor, { maxBorrow: 10n ** 20n }]]) },
+      pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
     frozenTopology: { topologyKey: "fixture", async observeHeader(number: number) {
       if (number === 100) latest = newerPublication;
       return { number, hash: hash(number), parentHash: hash(number - 1) };
@@ -701,6 +726,8 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
     solverCalls++;
     assert.equal(state, exactQuoteState, "Solver must receive the source-pinned quote backend");
     assert.equal(opts.strictSession, strictSessionFixture, "Solver must receive the strict session");
+    assert.equal(opts.quoteToleranceRawUnits, 1n, "live loop must forward the one-raw-unit tolerance");
+    assert.equal(opts.quoteSafetyBps, undefined, "live must not add a percentage haircut");
     assert.deepEqual(opts.runtimeEvidence, []);
     return { netProfit: 0n };
   };
@@ -711,6 +738,7 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
   Object.assign(f.deps, {
     exactRefineEnabled: false,
     exactRefineHardBudgetMs: 1_000,
+    solverQuoteToleranceRawUnits: 1n,
     passBudgetMs: 5_000,
     blockScanGraph: () => edges,
     blockScanPlanner: () => fakePlanner,
@@ -755,7 +783,7 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
       },
     },
     blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0, exactAdmissionSpreadBps: 0,
-      maxCandidates: 1, pricedTokens: new Map([[actor, { maxBorrow: 10n ** 20n }]]) },
+      maxCandidates: 1, pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
     refineCandidates: 10,
     strictSession: async (input: any) => {
       strictSessionCalls++;
@@ -886,7 +914,7 @@ test("disabled independent Exact checks deadline after setup before Planner/Solv
       },
     },
     blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0, exactAdmissionSpreadBps: 0,
-      maxCandidates: 1, pricedTokens: new Map([[actor, { maxBorrow: 10n ** 20n }]]) },
+      maxCandidates: 1, pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
     strictSession: async () => {
       strictSessionCalls++;
       nowMs = sourceHeadSeenAtMs + 5_001;

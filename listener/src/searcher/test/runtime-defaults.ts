@@ -64,7 +64,7 @@ console.log("[runtime-defaults] deploy preserves block-scan multicall mode: PASS
 
 const searcherMain = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
 const blockscanHopDefault = searcherMain.match(/const DEFAULT_BLOCKSCAN_MAX_HOPS = (\d+);/);
-assert(blockscanHopDefault?.[1] === "4", "blockscan defaults to at most four hops");
+assert(blockscanHopDefault?.[1] === "6", "paired blockscan defaults to at most six hops");
 const blockscanHopReads = [...searcherMain.matchAll(
   /Number\(\s*process\.env\.SEARCHER_BLOCKSCAN_MAX_HOPS \?\? DEFAULT_BLOCKSCAN_MAX_HOPS,?\s*\)/g,
 )];
@@ -72,7 +72,7 @@ assert(blockscanHopReads.length === 2, "scanner and existing final-floor derivat
 for (const read of blockscanHopReads) {
   const resolve = new Function("process", "DEFAULT_BLOCKSCAN_MAX_HOPS", `return ${read[0]};`) as
     (process: { env: { SEARCHER_BLOCKSCAN_MAX_HOPS?: string } }, fallback: number) => number;
-  for (const [configured, expected] of [[undefined, 4], ["3", 3], ["6", 6]] as const) {
+  for (const [configured, expected] of [[undefined, 6], ["3", 3], ["4", 4], ["6", 6]] as const) {
     assert(resolve({ env: { SEARCHER_BLOCKSCAN_MAX_HOPS: configured } }, Number(blockscanHopDefault![1])) === expected,
       `blockscan hop default/override: ${configured} -> ${expected}`);
   }
@@ -80,7 +80,9 @@ for (const read of blockscanHopReads) {
 assert(/SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS \?\? "1500"/.test(searcherMain),
   "reducing hops must preserve the 1500ms enumeration budget");
 assert(/SEARCHER_MAX_HOPS \?\? "3"/.test(searcherMain), "generic/backrun hop default is unchanged");
-console.log("[runtime-defaults] shared four-hop blockscan default and explicit overrides: PASS");
+assert(searcherMain.includes("resolvePairedEnumerationMethod(process.env.SEARCHER_BLOCKSCAN_ENUMERATION_METHOD)"),
+  "main forwards the shared DFS/layered switch");
+console.log("[runtime-defaults] shared six-hop blockscan default and explicit overrides: PASS");
 const profitRatioDefault = searcherMain.match(
   /SEARCHER_MAX_PROFIT_BPS_OF_FLASH\s*\?\? "(\d+)"/,
 );

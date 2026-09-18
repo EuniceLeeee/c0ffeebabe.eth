@@ -22,6 +22,7 @@ import {
   executeAdapterFamilyLifecycleBatch,
   executeFamilyExactQuote,
   describeFamilyAmountQuoteReuse,
+  reissuePreparedInstanceRouteHandles,
   type AdapterFamilyPublication,
   type FamilyRouteRuntimeHandle,
   type PreparedFamilyInstance,
@@ -146,6 +147,8 @@ interface FixtureControls {
   readonly exactDependentNeverSettles?: boolean;
   readonly exactDecodeThrow?: boolean;
   chainAmountQuote?: true;
+  stateOnlyReads?: true;
+  readonly stateKeyPrefix?: string;
   exactOriginCaller?: boolean;
   reusePolicy?: AmountQuoteReusePolicy;
   onExactDecode?: () => void;
@@ -163,6 +166,7 @@ interface FixtureControls {
   readonly sharedReferenceDrift?: boolean;
   exactRequestOrder?: "forward" | "reverse";
   exactCalldata?: string;
+  exactDependentCalldata?: string;
   readonly descriptorPools: string[];
   readonly finalSharedBindingCounts?: number[];
   lastPlanNode?: {
@@ -172,6 +176,7 @@ interface FixtureControls {
   exactDependentBuildCalls?: number;
   exactDependentDecodeCalls?: number;
   lastExactResultIds?: readonly string[];
+  lastExactResults?: readonly AdapterRequestResult[];
   lastExactSourceGeneration?: number;
   lastProducedExactEvidence?: FixtureExactEvidence;
   lastExecutionExactEvidence?: FixtureExactEvidence;
@@ -381,7 +386,7 @@ function defineFixture(name: string, controls: FixtureControls) {
       }),
     },
     pricing: {
-      stateKey: (route) => route.instanceKey,
+      stateKey: (route) => (controls.stateKeyPrefix ?? "") + route.instanceKey,
       staticBindingProjection: ({ descriptor, routes }) => ({
         pool: descriptor.pool,
         instanceCode: descriptor.instanceCode,
@@ -533,6 +538,7 @@ function defineFixture(name: string, controls: FixtureControls) {
           id: "fixture-request-program",
           kind: "request-program" as const,
           ...(controls.chainAmountQuote ? { chainAmountQuote: true as const } : {}),
+          ...(controls.stateOnlyReads ? { stateOnlyReads: true as const } : {}),
           ...(controls.reusePolicy === undefined ? {} : { reusePolicy: controls.reusePolicy }),
           program: Object.freeze({
             requirements: () => ({ transports: ["eth-call" as const],
@@ -589,7 +595,7 @@ function defineFixture(name: string, controls: FixtureControls) {
                         `exact-dependent:${programInput.descriptor.pool}:` +
                           completedRound,
                         programInput.descriptor.pool,
-                        "0xeeeeeeee",
+                        controls.exactDependentCalldata ?? "0xeeeeeeee",
                       )],
                       decode: (results: readonly AdapterRequestResult[]) => {
                         controls.exactDependentDecodeCalls =
@@ -626,6 +632,7 @@ function defineFixture(name: string, controls: FixtureControls) {
                 }).results]
               );
               const results = [...initialResults, ...dependentResults];
+              controls.lastExactResults = Object.freeze(results);
               controls.lastExactResultIds = Object.freeze(
                 results.map((result) => result.id),
               );
@@ -642,7 +649,8 @@ function defineFixture(name: string, controls: FixtureControls) {
               };
               controls.lastProducedExactEvidence = evidence;
               return {
-                amountOut: programInput.amountIn + dependentAmount,
+                amountOut: programInput.amountIn * (controls.stateOnlyReads
+                  ? BigInt(successful(initialResults[0]).data) : 1n) + dependentAmount,
                 evidence,
               };
             },
@@ -832,6 +840,7 @@ class TestScheduler implements CentralAdapterScheduler {
       request: AdapterRequest,
     ) => void | Promise<void>;
     readonly afterTransport?: (request: AdapterRequest) => void;
+    readonly data?: (request: AdapterRequest, source: CanonicalSource) => string;
   } = {}) {}
 
   issueExecutor(
@@ -869,7 +878,8 @@ class TestScheduler implements CentralAdapterScheduler {
                 fingerprint: `issued:${request.id}`,
               },
               completion: "returned" as const,
-              data: responseData(request, this.options.identityAccepted ?? true),
+              data: this.options.data?.(request, execution.source) ??
+                responseData(request, this.options.identityAccepted ?? true),
             };
       })),
       sealStaticEvidenceReuseProof: () => ({ proofHash: "ab".repeat(32) }),
@@ -2266,6 +2276,11 @@ async function testExactCacheBindsAmountAndPhysicalSource(): Promise<void> {
     misses: 3,
     stores: 3,
     evictions: 0,
+    stateSize: 0,
+    stateHits: 0,
+    stateMisses: 0,
+    stateStores: 0,
+    stateEvictions: 0,
   });
 }
 
@@ -2314,6 +2329,11 @@ async function testExactCacheBindsDeclaredRequestShape(): Promise<void> {
     misses: 2,
     stores: 2,
     evictions: 0,
+    stateSize: 0,
+    stateHits: 0,
+    stateMisses: 0,
+    stateStores: 0,
+    stateEvictions: 0,
   });
 }
 
@@ -2511,6 +2531,283 @@ async function testExactDependentRoundsAreCentralBoundedAndCached(): Promise<voi
   );
 }
 
+async function prepareExactStateFixture(
+  name: string,
+  controls: FixtureControls,
+  scheduler = new TestScheduler(),
+  fence = new TestFence(),
+) {
+  const family = defineFixture(name, controls);
+  const prepared = await run({ family, pools: [GOOD], scheduler });
+  const instance = prepared.publications[0].instances[0];
+  const cache = createAdapterFamilyExactQuoteCache({ capacity: 16 });
+  const observedStages: string[] = [];
+  const sharedRuntime = runtime(scheduler, fence, observedStages, undefined, cache);
+  const sources = [SOURCE, ...[1, 2].map(offset => Object.freeze({
+    number: SOURCE.number + offset,
+    hash: `0x${(0x61 + offset).toString(16).repeat(32)}`,
+    generation: SOURCE.generation + offset,
+  }))];
+  const stateKey = instance.pricingInstances[0].stateKey;
+  cache.advanceState(SOURCE, {
+    source: SOURCE, touchedStateKeys: new Set([stateKey]), complete: true,
+  });
+  return {
+    cache, scheduler, observedStages, sources, stateKey,
+    advance(source: CanonicalSource, parent: CanonicalSource, touchedStateKeys: readonly string[] = []) {
+      cache.advanceState(source, {
+        source, parentHash: parent.hash, touchedStateKeys: new Set(touchedStateKeys), complete: true,
+      });
+    },
+    input(source: CanonicalSource, amountIn: bigint) {
+      // Keep one Family box, descriptor and route object; only source-bound
+      // runtime authority is reissued, as in production rehydration.
+      const current = reissuePreparedInstanceRouteHandles({
+        family, instance, source, generation: source.generation,
+      });
+      assert.equal(current.descriptor, instance.descriptor);
+      assert.equal(current.routes[0], instance.routes[0]);
+      return {
+        family, route: issuedRoute(current), amountIn, executor: EXECUTOR,
+        runtimeEvidence: [], source, generation: source.generation, runtime: sharedRuntime,
+      };
+    },
+  };
+}
+
+function assertExactReadReceipts(
+  controls: FixtureControls,
+  source: CanonicalSource,
+  expected: readonly { readonly id: string; readonly data: string; readonly retained: boolean }[],
+): void {
+  const results = controls.lastExactResults;
+  assert(results, "the Family decoder must receive actual request results");
+  assert.deepEqual(results.map(result => result.id), expected.map(result => result.id));
+  for (const [index, result] of results.entries()) {
+    const receipt = successful(result);
+    assert.deepEqual(receipt.source, source, "raw bytes must be valid at the current source/generation");
+    assert.equal(receipt.data, expected[index].data);
+    assert.equal(receipt.provenance.kind,
+      expected[index].retained ? "retained-local-state" : "fixture-scheduler");
+    assert.equal(receipt.completion, "returned");
+    assert(Object.isFrozen(receipt));
+    if (expected[index].retained) assert.match(receipt.provenance.fingerprint, /^[a-f0-9]{64}$/);
+  }
+  assert.equal(controls.lastProducedExactEvidence?.sourceGeneration, source.generation);
+}
+
+async function testExactStateReadsReuseAcrossAmountsAndSources(): Promise<void> {
+  for (const dependentRounds of [0, 2]) {
+    const controls: FixtureControls = {
+      descriptorPools: [], unavailableCalls: 0, stateOnlyReads: true,
+      stateKeyPrefix: "State:", // Opaque identifiers are case-sensitive.
+      exactDependent: dependentRounds > 0, exactDependentRounds: dependentRounds,
+    };
+    const scheduler = new TestScheduler({ data: (request, source) =>
+      request.id.startsWith("exact") && source.number === SOURCE.number + 2
+        ? "0x09" : responseData(request, true),
+    });
+    const fixture = await prepareExactStateFixture(`state-carry-${dependentRounds}`, controls, scheduler);
+    const { cache, sources: [n, n1, n2] } = fixture;
+    const ids = [`exact:${GOOD}`, ...Array.from({ length: dependentRounds },
+      (_, index) => `exact-dependent:${GOOD}:${index}`)];
+    const first = await executeFamilyExactQuote(fixture.input(n, 10n));
+    assert.equal(first.status, "resolved", first.outcome.reasonCode);
+    assert.equal(first.amountOut, 50n + BigInt(dependentRounds) * 5n);
+    assertExactReadReceipts(controls, n, ids.map(id => ({ id, data: "0x05", retained: false })));
+    assert.equal(cache.snapshot().stateSize, ids.length, "each completed request round retains its raw bytes");
+    assert.equal(cache.snapshot().stateStores, ids.length);
+    const coldResults = controls.lastExactResults;
+    const coldEvidence = controls.lastProducedExactEvidence;
+    const physicalRequests = [...scheduler.requestIds];
+    const schedulerIssues = scheduler.callerAuthorities.length;
+    const workCount = fixture.observedStages.length;
+
+    const sameSource = await executeFamilyExactQuote(fixture.input(n, 11n));
+    assert.equal(sameSource.status, "resolved", sameSource.outcome.reasonCode);
+    assert.equal(sameSource.amountOut, 55n + BigInt(dependentRounds) * 5n);
+    assertExactReadReceipts(controls, n, ids.map(id => ({ id, data: "0x05", retained: true })));
+
+    // Previous-source touches do not matter: only this head's complete activity
+    // and its canonical parent can prove that retained state remains valid.
+    fixture.advance(n1, n, [OTHER]);
+    const carried = await executeFamilyExactQuote(fixture.input(n1, 12n));
+    assert.equal(carried.status, "resolved", carried.outcome.reasonCode);
+    assert.equal(carried.amountOut, 60n + BigInt(dependentRounds) * 5n);
+    assert.deepEqual(carried.source, n1);
+    assert.equal(carried.generation, n1.generation);
+    assert.notEqual(carried, first, "retaining bytes must issue a fresh Exact handle");
+    assert.notEqual(controls.lastProducedExactEvidence, coldEvidence, "Family evidence must be decoded anew");
+    assert.equal(controls.exactDecodeCalls, 3);
+    assert.equal(controls.exactDependentDecodeCalls ?? 0, dependentRounds * 3);
+    assertExactReadReceipts(controls, n1, ids.map(id => ({ id, data: "0x05", retained: true })));
+    assert.deepEqual(coldResults?.map(result => result.source), ids.map(() => n),
+      "relabeling a retained read must not mutate the earlier receipts");
+    assert.deepEqual(scheduler.requestIds, physicalRequests, "new amount/source requires no physical reads");
+    assert.equal(scheduler.callerAuthorities.length, schedulerIssues, "retained rounds must not issue scheduler work");
+    assert.deepEqual(fixture.observedStages.slice(workCount), Array(ids.length * 2).fill("exact-refine"),
+      "every retained round must still pass through executeAdapterWork policy/admission");
+    assert.equal(cache.snapshot().hits, 0);
+    assert.equal(cache.snapshot().misses, 0, "marked methods must skip full amount-result cache lookup");
+    assert.equal(cache.snapshot().size, 0, "sampled amounts must not duplicate state in the full quote cache");
+    assert.equal(cache.snapshot().stores, 0);
+    assert(cache.snapshot().stateHits >= ids.length * 2);
+    assert.equal(cache.snapshot().stateStores, ids.length);
+
+    fixture.advance(n2, n1, [fixture.stateKey]);
+    assert.equal(cache.snapshot().stateSize, 0, "current touched state must retire every retained round");
+    const changed = await executeFamilyExactQuote(fixture.input(n2, 12n));
+    assert.equal(changed.status, "resolved", changed.outcome.reasonCode);
+    assert.equal(changed.amountOut, 108n + BigInt(dependentRounds) * 9n);
+    assert.notEqual(changed.amountOut, carried.amountOut, "same amount must reflect the changed raw state");
+    assert.equal(controls.exactDecodeCalls, 4);
+    assert.equal(controls.exactDependentDecodeCalls ?? 0, dependentRounds * 4);
+    assert.deepEqual(scheduler.requestIds.slice(physicalRequests.length), ids);
+    assert.equal(scheduler.callerAuthorities.length, schedulerIssues + ids.length);
+    assertExactReadReceipts(controls, n2, ids.map(id => ({ id, data: "0x09", retained: false })));
+    assert.equal(cache.snapshot().stateSize, ids.length);
+    assert.equal(cache.snapshot().stateStores, ids.length * 2);
+    assert.equal(cache.snapshot().size, 0);
+    assert.equal(cache.snapshot().stores, 0);
+  }
+}
+
+async function testExactStateReadsBindEachRequestRound(): Promise<void> {
+  for (const changedRound of ["initial", "dependent"] as const) {
+    const controls: FixtureControls = {
+      descriptorPools: [], unavailableCalls: 0, stateOnlyReads: true,
+      exactDependent: true, exactDependentRounds: 2,
+    };
+    const scheduler = new TestScheduler({ data: request =>
+      request.kind === "eth-call" && request.data === "0xffffffff"
+        ? "0x09" : responseData(request, true),
+    });
+    const fixture = await prepareExactStateFixture(`state-request-${changedRound}`, controls, scheduler);
+    const [n, n1] = fixture.sources;
+    assert.equal((await executeFamilyExactQuote(fixture.input(n, 10n))).status, "resolved");
+    const reads = scheduler.requestIds.length;
+    const issues = scheduler.callerAuthorities.length;
+    const hits = fixture.cache.snapshot().stateHits;
+    fixture.advance(n1, n);
+    if (changedRound === "initial") controls.exactCalldata = "0xffffffff";
+    else controls.exactDependentCalldata = "0xffffffff";
+    const quoted = await executeFamilyExactQuote(fixture.input(n1, 11n));
+    assert.equal(quoted.status, "resolved", quoted.outcome.reasonCode);
+    assert.equal(quoted.amountOut, changedRound === "initial" ? 109n : 73n);
+    const changedIds = changedRound === "initial"
+      ? [`exact:${GOOD}`] : [`exact-dependent:${GOOD}:0`, `exact-dependent:${GOOD}:1`];
+    assert.deepEqual(scheduler.requestIds.slice(reads), changedIds,
+      "only actual rounds with changed fingerprints need fresh reads");
+    assert.equal(scheduler.callerAuthorities.length, issues + changedIds.length);
+    assert(fixture.cache.snapshot().stateHits > hits, "unchanged rounds should retain their raw bytes");
+    assert.equal(controls.exactDependentDecodeCalls, 4, "fresh and retained dependent evidence must both be decoded");
+    assertExactReadReceipts(controls, n1,
+      [`exact:${GOOD}`, `exact-dependent:${GOOD}:0`, `exact-dependent:${GOOD}:1`].map(id => ({
+        id, data: changedIds.includes(id) ? "0x09" : "0x05", retained: !changedIds.includes(id),
+      })));
+  }
+}
+
+async function testChainAmountQuotesDoNotUseExactStateCache(): Promise<void> {
+  const controls: FixtureControls = {
+    descriptorPools: [], unavailableCalls: 0, chainAmountQuote: true,
+  };
+  const fixture = await prepareExactStateFixture("chain-amount-no-state", controls);
+  const [n, n1, n2] = fixture.sources;
+  const reads = fixture.scheduler.requestIds.length;
+  const issues = fixture.scheduler.callerAuthorities.length;
+  for (const [source, amountIn] of [[n, 10n], [n, 11n], [n1, 12n], [n2, 12n]] as const) {
+    if (source === n1) fixture.advance(n1, n);
+    if (source === n2) fixture.advance(n2, n1);
+    const quoted = await executeFamilyExactQuote({ ...fixture.input(source, amountIn), requireChainAmountQuote: true });
+    assert.equal(quoted.status, "resolved", quoted.outcome.reasonCode);
+    assert.equal(quoted.amountOut, amountIn);
+    assertExactReadReceipts(controls, source, [{ id: `exact:${GOOD}`, data: "0x05", retained: false }]);
+  }
+  assert.deepEqual(fixture.scheduler.requestIds.slice(reads), Array(4).fill(`exact:${GOOD}`));
+  assert.equal(fixture.scheduler.callerAuthorities.length, issues + 4);
+  const snapshot = fixture.cache.snapshot();
+  assert.equal(snapshot.stateSize, 0);
+  assert.equal(snapshot.stateHits, 0);
+  assert.equal(snapshot.stateMisses, 0, "unmarked chain methods must never consult raw state reuse");
+  assert.equal(snapshot.stateStores, 0);
+}
+
+async function testExactStateReadsRequireContinuityAndReset(): Promise<void> {
+  for (const boundary of ["missing-activity", "wrong-parent", "reset"] as const) {
+    const controls: FixtureControls = { descriptorPools: [], unavailableCalls: 0, stateOnlyReads: true };
+    const scheduler = new TestScheduler({ data: (request, source) =>
+      request.id.startsWith("exact") && source.number > SOURCE.number ? "0x09" : responseData(request, true),
+    });
+    const fixture = await prepareExactStateFixture(`state-boundary-${boundary}`, controls, scheduler);
+    const [n, n1] = fixture.sources;
+    assert.equal((await executeFamilyExactQuote(fixture.input(n, 10n))).status, "resolved");
+    const reads = scheduler.requestIds.length;
+    if (boundary === "missing-activity") fixture.cache.advanceState(n1);
+    else {
+      if (boundary === "reset") fixture.cache.resetState();
+      fixture.advance(n1, boundary === "wrong-parent" ? n1 : n);
+    }
+    assert.equal(fixture.cache.snapshot().stateSize, 0);
+    const quoted = await executeFamilyExactQuote(fixture.input(n1, 11n));
+    assert.equal(quoted.status, "resolved", quoted.outcome.reasonCode);
+    assert.equal(quoted.amountOut, 99n);
+    assert.deepEqual(scheduler.requestIds.slice(reads), [`exact:${GOOD}`]);
+    assertExactReadReceipts(controls, n1, [{ id: `exact:${GOOD}`, data: "0x09", retained: false }]);
+    assert.equal(fixture.cache.snapshot().stateHits, 0, `${boundary} must prevent cross-source reuse`);
+  }
+}
+
+async function testExactStateReadsHonorCancellationAndGeneration(): Promise<void> {
+  for (const invalidation of ["abort", "generation"] as const) {
+    for (const stage of ["before", "dependent", "decode"] as const) {
+      const controls: FixtureControls = {
+        descriptorPools: [], unavailableCalls: 0, stateOnlyReads: true,
+        exactDependent: true, exactDependentRounds: 2,
+      };
+      const fence = new TestFence();
+      const fixture = await prepareExactStateFixture(`state-${invalidation}-${stage}`, controls, new TestScheduler(), fence);
+      const [n, n1] = fixture.sources;
+      assert.equal((await executeFamilyExactQuote(fixture.input(n, 10n))).status, "resolved");
+      fixture.advance(n1, n);
+      const requests = [...fixture.scheduler.requestIds];
+      const issues = fixture.scheduler.callerAuthorities.length;
+      const decodes = controls.exactDecodeCalls;
+      const abort = new AbortController();
+      const invalidate = () => invalidation === "abort" ? abort.abort() : fence.failAfter(0);
+      if (stage === "before") invalidate();
+      if (stage === "dependent") controls.onDependentDeclare = invalidate;
+      if (stage === "decode") controls.onExactDecode = invalidate;
+      const stopped = await executeFamilyExactQuote({
+        ...fixture.input(n1, 11n), control: { signal: abort.signal },
+      });
+      assert.notEqual(stopped.status, "resolved", `${invalidation} during ${stage} must not issue an Exact handle`);
+      if (stage === "dependent") {
+        assert.equal(stopped.outcome.reasonCode, "adapter-work:generation-fence-before-io:stale-generation",
+          "central work classifies both controls at its generation fence");
+      } else {
+        assert.match(stopped.outcome.reasonCode, invalidation === "abort" ? /aborted/ : /synthetic stale generation/);
+      }
+      assert.equal(controls.exactDecodeCalls, decodes! + (stage === "decode" ? 1 : 0));
+      if (stage !== "before") {
+        assert(fixture.cache.snapshot().stateHits > 0, "invalidate while retained state is being consumed");
+      }
+      assert.equal(fixture.cache.snapshot().stateStores, 3, "failed replay cannot replace retained raw state");
+      assert.deepEqual(fixture.scheduler.requestIds, requests, "invalidation must not fall back to physical reads");
+      assert.equal(fixture.scheduler.callerAuthorities.length, issues);
+      controls.onDependentDeclare = undefined;
+      controls.onExactDecode = undefined;
+      const recovered = await executeFamilyExactQuote({
+        ...fixture.input(n1, 12n),
+        runtime: runtime(fixture.scheduler, new TestFence(), [], undefined, fixture.cache),
+      });
+      assert.equal(recovered.status, "resolved", "a healthy caller can still decode the retained state");
+      assert.equal(recovered.amountOut, 70n);
+      assert.deepEqual(fixture.scheduler.requestIds, requests);
+    }
+  }
+}
+
 async function testOnlyLocalNotApplicableCanFallback(): Promise<void> {
   const fallbackControls: FixtureControls = {
     localExactNotApplicable: true,
@@ -2686,6 +2983,11 @@ async function testExactCacheIsolatedByIssuedFamilyBox(): Promise<void> {
     misses: 2,
     stores: 2,
     evictions: 0,
+    stateSize: 0,
+    stateHits: 0,
+    stateMisses: 0,
+    stateStores: 0,
+    stateEvictions: 0,
   });
 }
 
@@ -3073,6 +3375,11 @@ await testExactCacheBindsAmountAndPhysicalSource();
 await testExactCacheBindsDeclaredRequestShape();
 await testExactCacheUsesCurrentRequestOrder();
 await testExactDependentRoundsAreCentralBoundedAndCached();
+await testExactStateReadsReuseAcrossAmountsAndSources();
+await testExactStateReadsBindEachRequestRound();
+await testChainAmountQuotesDoNotUseExactStateCache();
+await testExactStateReadsRequireContinuityAndReset();
+await testExactStateReadsHonorCancellationAndGeneration();
 await testOnlyLocalNotApplicableCanFallback();
 await testExactCacheIsolatedByIssuedFamilyBox();
 await testLocalExactSkipsScheduler();

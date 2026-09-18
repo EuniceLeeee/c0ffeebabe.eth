@@ -3,6 +3,8 @@ export interface BlockScanSolverSearchConfig {
   readonly gridHalfWidth: number;
   readonly gssMaxTries: number;
   readonly quoteConcurrency: number;
+  /** Per-hop output tolerance in token raw units: 0 disables, 1 tolerates one unit. */
+  readonly quoteToleranceRawUnits: bigint;
 }
 
 const DEFAULT_GRID_HALF_WIDTH = 2;
@@ -11,8 +13,8 @@ const DEFAULT_QUOTE_CONCURRENCY = 16;
 
 /**
  * Block-scan has a smaller search budget than the generic/offline solver.
- * These values bound repeated current-source exact traversals; they do not
- * change candidate admission, pass scheduling, or the mandatory final sim.
+ * Bounds current-source exact traversals and optional conservative amount
+ * propagation. Pass scheduling and mandatory final simulation are unchanged.
  */
 export function resolveBlockScanSolverSearchConfig(
   env: Readonly<Record<string, string | undefined>> = process.env,
@@ -40,7 +42,16 @@ export function resolveBlockScanSolverSearchConfig(
       1,
       64,
     ),
+    // Opt-in for blockscan; independent of legacy percentage settings.
+    // The same conservative output becomes minAmountOut AND the next hop input.
+    quoteToleranceRawUnits: readFlag(env.SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED) ? 1n : 0n,
   });
+}
+
+function readFlag(raw: string | undefined): boolean {
+  if (raw === undefined || raw === "0" || raw === "false") return false;
+  if (raw === "1" || raw === "true") return true;
+  throw new Error("SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED must be 0, 1, false or true");
 }
 
 function readAmountGrid(

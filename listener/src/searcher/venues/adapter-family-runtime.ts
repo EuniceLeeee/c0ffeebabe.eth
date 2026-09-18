@@ -16,6 +16,7 @@ import {
 import {
   assertIssuedAdapterFamilyExactQuoteCache,
   type AdapterExactQuoteCacheAddress,
+  type AdapterExactStateCacheAddress,
 } from "../adapter-family-exact-quote-cache.js";
 import {
   assertDefinedFamilyPlugin,
@@ -58,7 +59,7 @@ import type {
   RequestRequirements,
   StaticEvidenceProgram,
 } from "./adapter-request-program.js";
-import { requestSetFingerprint } from "./adapter-request-program.js";
+import { createBoundedRequestExecutor, requestSetFingerprint } from "./adapter-request-program.js";
 import { hashCanonical, type CanonicalValue } from "./canonical-value.js";
 import type {
   FamilyCapabilityCatalog,
@@ -1285,6 +1286,8 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
       methodIndex, methodId: method.id, kind: method.kind,
       ...(method.kind === "request-program" && method.chainAmountQuote === true
         ? { chainAmountQuote: true } : {}),
+      ...(method.kind === "request-program" && method.stateOnlyReads === true
+        ? { stateOnlyReads: true } : {}),
       ...(method.kind === "request-program" && method.reusePolicy !== undefined
         ? { reusePolicy: { kind: method.reusePolicy.kind,
             dependencies: [...method.reusePolicy.dependencies],
@@ -1377,6 +1380,7 @@ export async function executeFamilyExactQuote(
         invocation,
         programInput,
         program: method.program,
+        stateOnlyReads: method.stateOnlyReads === true,
         ...(method.reusePolicy === undefined ? {} : { reusePolicy: method.reusePolicy }),
         methodId: method.id,
         methodIndex,
@@ -1465,6 +1469,7 @@ async function executeExactRequestMethod(input: {
   readonly invocation: ResolvedFamilyExactQuoteInvocation;
   readonly programInput: RuntimeExactQuoteInput;
   readonly reusePolicy?: AmountQuoteReusePolicy;
+  readonly stateOnlyReads: boolean;
   readonly program: ExactRequestProgram<
     CompiledInstanceDescriptor,
     FamilyRouteDescriptor,
@@ -1528,7 +1533,9 @@ async function executeExactRequestMethod(input: {
     source: invocation.source,
   });
 
-  const exactCache = invocation.runtime.exactQuoteCache;
+  // Local math reuses raw state rounds, not another copy of a tick snapshot
+  // for every sampled amount. Chain quote caching stays amount/source-bound.
+  const exactCache = input.stateOnlyReads ? undefined : invocation.runtime.exactQuoteCache;
   if (exactCache !== undefined) {
     try {
       assertIssuedAdapterFamilyExactQuoteCache(exactCache);
@@ -1594,10 +1601,16 @@ async function executeExactRequestMethod(input: {
     }
   }
 
+  const pricingState = input.stateOnlyReads ? invocation.instance.pricingInstances.find(state =>
+    state.routes.some(route => route.routeKey === invocation.route.routeKey)) : undefined;
+  const stateAddress = pricingState === undefined ? undefined : Object.freeze({
+    ...cacheAddress, stateKey: pricingState.stateKey,
+  });
   const initialWork = await executeExactRoundWork({
     invocation,
     programInput: input.programInput,
     round: initial,
+    stateAddress,
     decode: (results) => Object.freeze([...results]),
   });
   if (initialWork.status === "unresolved") {
@@ -1665,6 +1678,7 @@ async function executeExactRequestMethod(input: {
       invocation,
       programInput: input.programInput,
       round,
+      stateAddress,
       decode: round.decode!,
     });
     if (work.status === "unresolved") {
@@ -1750,10 +1764,11 @@ async function executeExactRequestMethod(input: {
   });
 }
 
-function executeExactRoundWork<Evidence>(input: {
+async function executeExactRoundWork<Evidence>(input: {
   readonly invocation: ResolvedFamilyExactQuoteInvocation;
   readonly programInput: RuntimeExactQuoteInput;
   readonly round: DeclaredExactRound;
+  readonly stateAddress?: AdapterExactStateCacheAddress;
   readonly decode: (
     results: readonly AdapterRequestResult[],
   ) => Evidence;
@@ -1763,7 +1778,41 @@ function executeExactRoundWork<Evidence>(input: {
     buildRequests: () => input.round.requests,
     decode: ({ results }) => input.decode(results),
   };
-  return executeAdapterWork({
+  const runtime = input.invocation.runtime;
+  const cache = runtime.exactQuoteCache;
+  // Only explicitly declared state-read methods enter this cache. Amount
+  // Quoters/simulations retain their original source+amount-bound behavior.
+  const stateAddress = input.stateAddress === undefined ? undefined : Object.freeze({
+    ...input.stateAddress, requestFingerprint: input.round.fingerprint,
+  });
+  if (stateAddress !== undefined && input.round.requests.some(request =>
+    request.kind !== "eth-call" || request.completion !== "return-data" ||
+    (request.caller !== undefined && request.caller.kind !== "none"))) {
+    throw new Error("local state reads must be caller-independent return-data calls");
+  }
+  if (cache !== undefined) assertIssuedAdapterFamilyExactQuoteCache(cache);
+  const cached = stateAddress === undefined ? undefined : cache?.lookupState(stateAddress);
+  const workRuntime: CentralAdapterRuntime = cached === undefined ? runtime : {
+    ...runtime,
+    scheduler: { issueExecutor() {
+      return {
+        executor: createBoundedRequestExecutor({
+          assertSupported() {}, assertCallerBinding() {}, assertWithinBudget() {},
+          execute: async () => {
+            runtime.generationFence.assertCurrent(input.invocation.generation, input.invocation.source);
+            assertAdapterWorkControl(input.invocation.control);
+            // Recheck after issuance: a newer head may have invalidated state.
+            const current = cache!.lookupState(stateAddress!);
+            if (current === undefined) throw new Error("local state retired before decode");
+            return current.trustedResults;
+          },
+          sealStaticEvidenceReuseProof() { throw new Error("exact state is not static evidence"); },
+        }),
+        timing: () => ({ queueWaitMs: 0, transportWallMs: 0, attempts: 0 }),
+      };
+    } },
+  };
+  const work = await executeAdapterWork({
     intent: {
       stage: "exact-refine",
       familyId: input.invocation.family.plugin.manifest.familyId,
@@ -1774,11 +1823,17 @@ function executeExactRoundWork<Evidence>(input: {
       program,
       programInput: input.programInput,
     },
-    runtime: input.invocation.runtime,
+    runtime: workRuntime,
     ...(input.invocation.control === undefined
       ? {}
       : { control: input.invocation.control }),
   });
+  if (cached === undefined && stateAddress !== undefined && cache !== undefined && work.status === "resolved") {
+    cache.storeState(stateAddress, { trustedResults: work.executed.trustedResults,
+      roundFingerprints: [input.round.fingerprint],
+      evidenceRefs: [transportEvidenceRef(work.executed.trustedResultsFingerprint)] });
+  }
+  return work;
 }
 
 function replayCachedExactRequestProgram(input: {
@@ -1920,6 +1975,10 @@ function declareExactMethods(value: unknown): readonly RuntimeExactMethod[] {
     if (method.kind === "request-program") {
       if (method.chainAmountQuote !== undefined && method.chainAmountQuote !== true) {
         throw new Error(`request exact method ${id} has invalid chain amount declaration`);
+      }
+      if (method.stateOnlyReads !== undefined &&
+          (method.stateOnlyReads !== true || method.chainAmountQuote === true || method.reusePolicy !== undefined)) {
+        throw new Error(`request exact method ${id} has conflicting state-read semantics`);
       }
       const program = requireObject(
         method.program,

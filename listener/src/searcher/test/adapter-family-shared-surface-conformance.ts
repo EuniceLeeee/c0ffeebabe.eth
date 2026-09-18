@@ -5,7 +5,13 @@ import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+  PRODUCTION_STRICT_SHADOW_GENERATED_CAPABILITY_MANIFEST,
 } from "../venues/production-family-composition.js";
+import {
+  createFamilyCapabilityShadowArtifact,
+  generatedCapabilityManifestFromShadowArtifact,
+  type FamilyCapabilityShadowArtifact,
+} from "../venues/family-capability-shadow.js";
 
 type FindingRule =
   | "concrete-family-import"
@@ -40,6 +46,10 @@ const TSCONFIG = resolve(LISTENER_ROOT, "tsconfig.json");
 const GENERATED_CATALOG_BOUNDARY = resolve(
   LISTENER_ROOT,
   "src/searcher/generated/production-family-entries.generated.ts",
+);
+const GENERATED_CAPABILITY_METADATA = resolve(
+  LISTENER_ROOT,
+  "src/searcher/generated/family-capability-shadow.generated.json",
 );
 const LEGACY_AUTHORITY_BOUNDARIES = new Set([
   "src/searcher/venues/production-registry.ts",
@@ -398,8 +408,10 @@ function scanFamilyLogic(
   chain: readonly string[],
 ): readonly Finding[] {
   const findings: Finding[] = [];
+  const declarativeIds = canonicalCapabilityIdentityNodes(source);
   const visit = (node: ts.Node): void => {
-    if (isStaticStringNode(node) && !isModuleSpecifier(node)) {
+    if (isStaticStringNode(node) && !isModuleSpecifier(node) &&
+        !declarativeIds.has(node)) {
       const value = node.text.toLowerCase();
       if (vocabulary.familyIds.has(value) ||
           vocabulary.familyAliases.has(value) ||
@@ -462,6 +474,84 @@ function scanFamilyLogic(
   };
   visit(source);
   return Object.freeze(findings);
+}
+
+/**
+ * Only validated exact[].identity.familyId values are opaque metadata keys.
+ * This is not a file-wide exemption: all other nodes still reach the detector.
+ */
+function canonicalCapabilityIdentityNodes(
+  source: ts.SourceFile,
+): ReadonlySet<ts.Node> {
+  const none = new Set<ts.Node>();
+  if (resolve(source.fileName) !== GENERATED_CAPABILITY_METADATA ||
+      (source.flags & ts.NodeFlags.JsonFile) === 0 ||
+      source.statements.length !== 1) return none;
+  const statement = source.statements[0]!;
+  if (!ts.isExpressionStatement(statement) ||
+      !ts.isObjectLiteralExpression(statement.expression)) return none;
+
+  // JSON.parse silently keeps the last duplicate key. Never let validation of
+  // that projection authorize an earlier, unchecked AST identity position.
+  let unambiguous = true;
+  const checkKeys = (node: ts.Node): void => {
+    if (ts.isObjectLiteralExpression(node)) {
+      const seen = new Set<string>();
+      for (const property of node.properties) {
+        if (!ts.isPropertyAssignment(property) ||
+            !ts.isStringLiteral(property.name) ||
+            seen.has(property.name.text)) {
+          unambiguous = false;
+          return;
+        }
+        seen.add(property.name.text);
+      }
+    }
+    ts.forEachChild(node, checkKeys);
+  };
+  checkKeys(statement.expression);
+  if (!unambiguous) return none;
+  try {
+    const artifact: unknown = JSON.parse(source.text);
+    const manifest = generatedCapabilityManifestFromShadowArtifact({
+      artifact,
+      strictFamilyIds: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .listAll().map((loaded) => loaded.plugin.manifest.familyId),
+    });
+    if ((artifact as FamilyCapabilityShadowArtifact).legacy.length !== 0 ||
+        manifest.manifestHash !==
+          PRODUCTION_STRICT_SHADOW_GENERATED_CAPABILITY_MANIFEST.manifestHash) {
+      return none;
+    }
+  } catch {
+    // Invalid schema, content hash or Family/capability membership grants no
+    // exemption. Production composition independently rejects invalid input.
+    return none;
+  }
+
+  const exact = jsonPropertyValue(statement.expression, "exact");
+  if (exact === undefined || !ts.isArrayLiteralExpression(exact)) return none;
+  const identities = new Set<ts.Node>();
+  for (const record of exact.elements) {
+    const identity = jsonPropertyValue(record, "identity");
+    const id = identity === undefined
+      ? undefined
+      : jsonPropertyValue(identity, "familyId");
+    if (id === undefined || !ts.isStringLiteral(id)) return none;
+    identities.add(id);
+  }
+  return identities;
+}
+
+function jsonPropertyValue(node: ts.Node, name: string): ts.Expression | undefined {
+  if (!ts.isObjectLiteralExpression(node)) return undefined;
+  for (const property of node.properties) {
+    if (ts.isPropertyAssignment(property) &&
+        ts.isStringLiteral(property.name) && property.name.text === name) {
+      return property.initializer;
+    }
+  }
+  return undefined;
 }
 
 function isStaticStringNode(
@@ -596,7 +686,11 @@ function addFinding(
   }));
 }
 
-function assertDetectorSelfTest(vocabulary: ProductionVocabulary): void {
+function assertDetectorSelfTest(
+  vocabulary: ProductionVocabulary,
+  graph: ImportGraph,
+  entries: readonly string[],
+): void {
   const exampleFamilyId = [...vocabulary.familyIds][0]!;
   const bad = ts.createSourceFile(
     "synthetic-bad.ts",
@@ -656,6 +750,92 @@ function assertDetectorSelfTest(vocabulary: ProductionVocabulary): void {
     )),
     false,
   );
+
+  const metadata = graph.sourceByPath.get(GENERATED_CAPABILITY_METADATA)!;
+  assert(metadata, "canonical capability metadata must be in the program");
+  const artifact = JSON.parse(metadata.text) as FamilyCapabilityShadowArtifact;
+  const metadataSource = (text: string, path = GENERATED_CAPABILITY_METADATA) =>
+    ts.createSourceFile(path, text, ts.ScriptTarget.JSON, true, ts.ScriptKind.JSON);
+  const scan = (source: ts.SourceFile) => scanFamilyLogic(source, vocabulary, []);
+  assert.equal(canonicalCapabilityIdentityNodes(metadata).size, artifact.exact.length);
+  assert.equal(scan(metadata).length, 0, "canonical declarative identities are legal");
+  const compact = JSON.stringify(artifact);
+  assert.equal(scan(metadataSource(compact)).length, 0, "formatting is not authority");
+
+  const rejectedMetadata = [
+    ["arbitrary JSON path", metadataSource(compact, resolve(HERE, "arbitrary.json"))],
+    ["arbitrary familyId field", metadataSource(JSON.stringify({ familyId: exampleFamilyId }))],
+    ["extra field", metadataSource(JSON.stringify({ ...artifact, dispatch: exampleFamilyId }))],
+    ["stale hash", metadataSource(JSON.stringify({ ...artifact, artifactHash: "0".repeat(64) }))],
+    ["incomplete artifact", metadataSource(JSON.stringify({ ...artifact, complete: false }))],
+    ["missing capability", metadataSource(JSON.stringify(createFamilyCapabilityShadowArtifact({
+      exact: artifact.exact.slice(1), legacy: [],
+    })))],
+    ["validly rehashed but non-current identity", metadataSource(JSON.stringify(
+      createFamilyCapabilityShadowArtifact({
+        exact: artifact.exact.map((record, index) => index === 0
+          ? { ...record, identity: { ...record.identity, contentHash: "0".repeat(64) } }
+          : record),
+        legacy: [],
+      }),
+    ))],
+    ["duplicate JSON key", metadataSource(compact.replace(
+      '"familyId":', `"familyId":${JSON.stringify(exampleFamilyId)},"familyId":`,
+    ))],
+    ["escaped duplicate JSON key", metadataSource(compact.replace(
+      '"familyId":', `"fam\\u0069lyId":${JSON.stringify(exampleFamilyId)},"familyId":`,
+    ))],
+    ["duplicate top-level key", metadataSource(compact.replace(
+      '"exact":', '"exact":[],"exact":',
+    ))],
+    ["misplaced identity", metadataSource(JSON.stringify({
+      ...artifact, exact: artifact.exact.map((record, index) => index === 0
+        ? { ...record, identity: { ...record.identity, familyId: undefined },
+          familyId: record.identity.familyId }
+        : record),
+    }))],
+    ["executable content at JSON path", ts.createSourceFile(
+      GENERATED_CAPABILITY_METADATA, bad.text, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS,
+    )],
+    ["trailing executable content", metadataSource(`${compact}\n${bad.text}`)],
+  ] as const;
+  for (const [label, source] of rejectedMetadata) {
+    assert.equal(canonicalCapabilityIdentityNodes(source).size, 0, label);
+    assert(scan(source).some((finding) => finding.rule === "production-family-literal"), label);
+  }
+
+  // This remains a schema/hash-valid artifact with the same capability IDs.
+  // A named Family outside the identity position must still be diagnosed.
+  const outsideIdentity = createFamilyCapabilityShadowArtifact({
+    exact: artifact.exact.map((record) => record.root.absence === null
+      ? { ...record, root: { ...record.root, entryExport: exampleFamilyId } }
+      : record),
+    legacy: [],
+  });
+  const outsideSource = metadataSource(JSON.stringify(outsideIdentity));
+  assert.equal(canonicalCapabilityIdentityNodes(outsideSource).size, artifact.exact.length);
+  assert.equal(scan(outsideSource).length,
+    artifact.exact.filter((record) => record.root.absence === null).length,
+    "non-identity fields in valid metadata are not exempt");
+
+  const importPath = resolve(LISTENER_ROOT, "src/searcher/synthetic-import.ts");
+  const entry = entries[0]!;
+  const importSource = ts.createSourceFile(importPath,
+    `import * as namedFamily from ${JSON.stringify(
+      `./${relative(dirname(importPath), entry).replace(/\.ts$/, ".js")}`,
+    )};\n${bad.text}`, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TS);
+  const importFindings = scanClosure({
+    graph: { sourceByPath: new Map([[importPath, importSource]]),
+      dependencies: new Map([[importPath, [entry]]]) },
+    closure: { paths: new Set([importPath]), parent: new Map([[importPath, null]]) },
+    vocabulary, productionEntries: new Set(entries),
+  });
+  assert(importFindings.some((finding) => finding.rule === "concrete-family-import"));
+  assert(importFindings.some((finding) => finding.rule === "family-dispatch-branch"));
+  assert(importFindings.some((finding) => finding.rule === "production-family-literal"));
+  console.log(`adapter-family-shared-surface detector selftests PASS ` +
+    `(canonicalIds=${artifact.exact.length} rejectedMetadata=${rejectedMetadata.length} ` +
+    `nonIdentityFields=checked centralImportAndBranch=checked)`);
 }
 
 function formatFindings(findings: readonly Finding[]): string {
@@ -690,7 +870,7 @@ function main(): void {
     PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll().length,
     "generated entry/catalog cardinality mismatch",
   );
-  assertDetectorSelfTest(vocabulary);
+  assertDetectorSelfTest(vocabulary, graph, entries);
   const roots = [...CENTRAL_ROOTS, ...FRAMEWORK_TEST_ROOTS];
   const closure = reachableClosure({ graph, roots });
   const findings = scanClosure({

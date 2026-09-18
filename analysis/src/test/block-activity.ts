@@ -236,6 +236,7 @@ test("block-activity renders amount-cap exclusions alongside healthy and legacy 
       "exact_not_admitted", "family_circuit_open", "instance_circuit_open",
       "composite_circuit_open", "probe_timeout", "global_deadline", "quote_error",
       "amount_reference_over_cap",
+      "amount_reference_missing",
     ];
     const refs = Array.from({ length: reasons.length + 1 }, (_, index) => index + 1);
     await writeFile(routeEventsPath, [
@@ -255,19 +256,19 @@ test("block-activity renders amount-cap exclusions alongside healthy and legacy 
         `rank=${ref} ref=${ref} .*exact_status=unprobed exact_attempted=false exact_margin_bps=null exact_reason=${reason} planner_entered=false .*selected_for_solver=false`,
       ));
     }
-    assert.match(stdout, /Enumeration: 9/);
+    assert.match(stdout, /Enumeration: 10/);
     assert.match(stdout, /Planner entered: 1/);
     assert.match(stdout, /Solver entered: 1/);
   });
 });
 
-test("block-activity rejects unknown compact exact reason code 9", async () => {
+test("block-activity rejects unknown compact exact reason code 10", async () => {
   await withFixture(async ({ eventsPath, logPath, routeEventsPath }) => {
     await writeFile(routeEventsPath, [
       routeCatalogWithEdges(1, ROUTE_A, ["edge-a"]),
       JSON.stringify({
         ...JSON.parse(routeLifecycleWithMid(99, 98, [1])),
-        exact: [4, 0, null, 9], planner: [], solver: [],
+        exact: [4, 0, null, 10], planner: [], solver: [],
       }),
     ].join("\n"));
     const stdout = await runBlockActivity(eventsPath, logPath, routeEventsPath);

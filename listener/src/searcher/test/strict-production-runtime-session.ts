@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
 import {
   buildFamilyRouteGraphView,
 } from "../adapter-family-graph-runtime.js";
@@ -50,7 +51,7 @@ import { UNIV2_PAIR_INTERFACE } from
 import { scanBlockStateFromResolvedMids } from
   "../detector/blockscan-scanner-core.js";
 import { readBlockTouchedStateKeys } from "../blockscan-touched-state.js";
-import { buildEffectiveMids, effectiveMidRowCarried, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
+import { buildEffectiveMids, DEFAULT_EFFECTIVE_WETH_INPUT, effectiveMidRowCarried, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
 
 const STARTUP: CanonicalSource = Object.freeze({
   number: 25_800_000,
@@ -1426,28 +1427,84 @@ assert.equal(
   sparseSession.creationTiming.selectedInstanceCount,
   1,
 );
-const enumerated = scanBlockStateFromResolvedMids({
+const carryEnumerationConfig = {
+  maxHops: 2,
+  minSpreadBps: 1,
+  maxCandidates: 20,
+  budgetMs: 1_000,
+  pricedTokens: new Map([
+    [UNIV2_FIXTURE_TOKEN0.toLowerCase(), { maxBorrow: 10n ** 18n }],
+    [UNIV2_FIXTURE_TOKEN1.toLowerCase(), { maxBorrow: 10n ** 18n }],
+  ]),
+};
+const unanchoredEnumeration = scanBlockStateFromResolvedMids({
   edges: [...carryNextGraph.edges],
   sourceBlock: carryNextSource.number,
   swapTouched: null,
-  cfg: {
-    maxHops: 2,
-    minSpreadBps: 1,
-    maxCandidates: 20,
-    budgetMs: 1_000,
-    pricedTokens: new Map([
-      [UNIV2_FIXTURE_TOKEN0.toLowerCase(), { maxBorrow: 10n ** 18n }],
-      [UNIV2_FIXTURE_TOKEN1.toLowerCase(), { maxBorrow: 10n ** 18n }],
-    ]),
-  },
+  cfg: carryEnumerationConfig,
   mids: carriedPricing.mids,
 });
+assert.equal(unanchoredEnumeration.opportunities.length, 0,
+  "disconnected fixture Tokens cannot manufacture a paired valuation signal");
+assert.equal(unanchoredEnumeration.enumeration?.missingBuyReference, carryNextGraph.edges.length);
+assert.equal(unanchoredEnumeration.enumeration?.tokensAboveThreshold, 0);
+
+// The current scanner needs a WETH-valued buy/sell signal, not just a raw
+// profitable ring. Add only a valuation path through the same real lifecycle
+// and pricing issuers; do not inject prices, signals, or an expected route.
+const valuationPublication = await runUniv2Lifecycle(carryNextSource, {
+  ...pool,
+  pool: `0x${"2000".padStart(40, "0")}`,
+  token1: ADDR.WETH,
+});
+const valuationView = buildFamilyRouteGraphView({
+  routes: valuationPublication.instances.flatMap((instance) =>
+    instance.routes.map((route, index) => ({
+      family, descriptor: instance.descriptor, route,
+      handle: instance.routeHandles[index],
+    }))),
+});
+const valuationRoot = new StrictProductionRuntimeRoot({
+  catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+  readySource: carryNextSource,
+  readyGraph: valuationView.edges,
+  readyInstances: valuationPublication.instances,
+  readyFundingAssets: [],
+});
+const valuationGraph = createVerifiedGraphView({
+  ...carryNextGraph,
+  id: "strict-carry-valuation",
+  familyIdForEdge: () => valuationPublication.familyId,
+  edges: valuationView.edges,
+});
+const valuationCoordinator = new StrictCurrentRuntimeCoordinator(
+  request => valuationRoot.createSession({
+    source: request.source, runtime: runtime(request.source),
+    fundingAssets: request.fundingAssets, kind: "pricing", control: request.control,
+  }),
+  () => {},
+);
+const valuationPricing = await valuationCoordinator.prepareCoarsePricing({
+  graph: valuationGraph,
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(valuationPricing.status, "complete");
+assert.equal(valuationPricing.snapshot.sourceBlockHash, carryNextSource.hash);
+assert.equal(valuationPricing.snapshot.mids.size, valuationView.edges.length);
+const enumerated = scanBlockStateFromResolvedMids({
+  edges: [...carryNextGraph.edges, ...valuationView.edges],
+  sourceBlock: carryNextSource.number,
+  swapTouched: null,
+  cfg: carryEnumerationConfig,
+  mids: new Map([...carriedPricing.mids, ...valuationPricing.snapshot.mids]),
+});
+assert.ok(enumerated.enumeration!.tokensAboveThreshold > 0);
 assert.ok(
   enumerated.opportunities.some((opportunity) =>
     opportunity.seedEdges.some((candidate) => candidate.instanceKey?.toLowerCase() === firstParallelTarget) &&
     opportunity.seedEdges.some((candidate) => candidate.instanceKey?.toLowerCase() === secondParallelTarget)
   ),
-  "A→B→A remains enumerable from the dense coarse snapshot",
+  "A→B→A remains enumerable from carried mids with a same-source valuation path",
 );
 const requiredCarryEdges = new Set([edgeA.canonicalEdgeId!, edgeB.canonicalEdgeId!]);
 const exactCarrySession = await parallelRoot.createSession({
@@ -2440,6 +2497,7 @@ for (const path of ["coarse", "runtime", "prefunded", "exact"] as const) {
 for (const path of ["coarse", "runtime"] as const) {
   const rawReads: string[] = [], amountReads: string[] = [];
   let gasCostWei: bigint | null = null;
+  const enumerationSpreadBps = 200;
   let sharedTouched: ReadonlySet<string> | undefined;
   const paired = new StrictCurrentRuntimeCoordinator(
     request => parallelRoot.createSession({ source: request.source,
@@ -2458,7 +2516,7 @@ for (const path of ["coarse", "runtime"] as const) {
       const target = reuse?.quoteGraph ?? pricing;
       return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, control, weth: UNIV2_FIXTURE_TOKEN0,
         previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
-        gasCostWei, enumerationSpreadBps: 200, concurrency: 2,
+        gasCostWei, enumerationSpreadBps, concurrency: 2,
         quote: async request => {
           assert.equal(Object.hasOwn(request, "requireChainAmountQuote"), false);
           const { edge, amountIn } = request;
@@ -2497,10 +2555,15 @@ for (const path of ["coarse", "runtime"] as const) {
     transactionHashes: [txHash], passiveTouchedAddresses: [],
   });
   assert(sharedTouched.has(firstParallelTarget), "arbitrary contract call counts, not just swap selectors");
-  gasCostWei = 100_000_000_000_000n;
+  // Exercise a changed reference independently of the global default P.
+  // The old fixed gas value implied G = P + 1 wei; Token conversion can
+  // still round that to the same amountIn as the default P.
+  gasCostWei = DEFAULT_EFFECTIVE_WETH_INPUT * BigInt(enumerationSpreadBps) * 2n / 10_000n;
   rawReads.length = 0; amountReads.length = 0;
   await prepare(carryNextGraph);
   const after = paired.latestPricingSnapshot()!;
+  assert(after.effectiveMids!.referenceWethInput > before.effectiveMids!.referenceWethInput,
+    "this fixture must actually change the gas-sized reference");
   assert.equal(activityReads, 2, "one log read plus one trace, never a second effective activity scan");
   assert.deepEqual(rawReads, [firstParallelTarget]);
   assert.deepEqual(amountReads, [firstParallelTarget, firstParallelTarget]);
