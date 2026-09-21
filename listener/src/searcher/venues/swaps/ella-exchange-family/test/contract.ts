@@ -99,10 +99,16 @@ test("shared Exact arithmetic agrees with actual original receipt output, not gr
   const q2 = quoteAmount(x.state, "buy-token", BigInt(sample.amountIn) / 2n);
   assert(q2.amountOut > 0n && q2.amountOut < x.q.amountOut);
 });
-test("production P and original amount at N reject inventory; smaller legal amount remains quotable", () => {
+test("production P is quotable at N-1; depleted N and over-capacity inputs reject inventory", () => {
   const s = setup(), p = DEFAULT_EFFECTIVE_WETH_INPUT;
-  assert.equal(exact(p).q.evidence.unavailableReason, "gross-output-exceeds-inventory");
+  const reference = exact(p).q;
+  assert(reference.amountOut > 0n);
+  assert.equal(reference.evidence.amountIn, p);
+  assert.equal(reference.evidence.unavailableReason, undefined);
+  const overCapacity = (s.state.tokenBalance + 1n) * s.state.price / UNIT + 1n;
+  assert.equal(exact(overCapacity).q.evidence.unavailableReason, "gross-output-exceeds-inventory");
   const after = { ...s.state, tokenBalance: BigInt(sample.states[1].calls.balanceOf), nativeBalance: BigInt(sample.states[1].nativeBalance) };
+  assert.equal(quoteAmount(after, "buy-token", p).amountOut, 0n);
   assert.equal(quoteAmount(after, "buy-token", BigInt(sample.amountIn)).amountOut, 0n);
   const within = after.tokenBalance * after.price / UNIT / 100n;
   assert(quoteAmount(after, "buy-token", within).amountOut > 0n);
