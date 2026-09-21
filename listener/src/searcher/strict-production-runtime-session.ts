@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import type { BlockTouchedStateKeyResolver } from "./blockscan-touched-state.js";
 import type {
   AdapterWorkControl,
   CentralAdapterRuntime,
@@ -224,6 +225,10 @@ export class StrictProductionRuntimeRoot {
   readonly #readyInstances: readonly PreparedFamilyInstance[];
   readonly #instanceIndexesByKey: ReadonlyMap<string, readonly number[]>;
   readonly #pricingIndex: StrictReadyPricingIndex;
+  readonly #pricingEntriesByDependency: ReadonlyMap<string, readonly {
+    readonly pricing: PreparedFamilyInstance["pricingInstances"][number];
+    readonly semantics: ReturnType<typeof asPricedFamily>["plugin"]["pricing"];
+  }[]>;
   readonly #readyFundingAssetsByFamily: ReadonlyMap<
     FamilyId,
     readonly string[]
@@ -249,6 +254,10 @@ export class StrictProductionRuntimeRoot {
     const stateKeyByRouteIdentity = new Map<string, string>();
     const instanceIndexesByStateKey = new Map<string, number[]>();
     const instanceIndexesByKey = new Map<string, number[]>();
+    const pricingEntriesByDependency = new Map<string, {
+      readonly pricing: PreparedFamilyInstance["pricingInstances"][number];
+      readonly semantics: ReturnType<typeof asPricedFamily>["plugin"]["pricing"];
+    }[]>();
     for (let index = 0; index < input.readyInstances.length; index++) {
       const instance = input.readyInstances[index]!;
       const family = input.catalog.forStrictFamily(instance.familyId);
@@ -265,6 +274,15 @@ export class StrictProductionRuntimeRoot {
       indexes.push(index);
       instanceIndexesByKey.set(instanceKey, indexes);
       for (const pricing of instance.pricingInstances) {
+        const semantics = asPricedFamily(family).plugin.pricing;
+        const entry = Object.freeze({ pricing, semantics });
+        // Dependencies were validated and issued with this prepared pricing
+        // entry. They may include opaque canonical keys, not just addresses.
+        for (const dependency of new Set(pricing.dependencies.map(key => key.toLowerCase()))) {
+          const entries = pricingEntriesByDependency.get(dependency) ?? [];
+          entries.push(entry);
+          pricingEntriesByDependency.set(dependency, entries);
+        }
         const stateKey = String(pricing.stateKey).toLowerCase();
         const stateIndexes = instanceIndexesByStateKey.get(stateKey) ?? [];
         if (!stateIndexes.includes(index)) stateIndexes.push(index);
@@ -310,6 +328,9 @@ export class StrictProductionRuntimeRoot {
     this.#readySource = Object.freeze({ ...input.readySource });
     this.#readyEdgeBindings = readyEdgeBindings;
     this.#readyInstances = Object.freeze([...input.readyInstances]);
+    this.#pricingEntriesByDependency = new Map([...pricingEntriesByDependency].map(
+      ([address, entries]) => [address, Object.freeze(entries)],
+    ));
     this.#instanceIndexesByKey = new Map([...instanceIndexesByKey].map(
       ([key, indexes]) => [key, Object.freeze(indexes)],
     ));
@@ -321,6 +342,24 @@ export class StrictProductionRuntimeRoot {
     );
     Object.freeze(this);
   }
+
+  /** Stable per Ready root: the reader's derived cache cannot cross this binding. */
+  readonly resolveBlockTouchedStateKeys: BlockTouchedStateKeyResolver = (observation, block) => {
+    const address = observation.kind === "log" ? observation.address : observation.target;
+    const entries = this.#pricingEntriesByDependency.get(address.toLowerCase());
+    if (entries === undefined) return [];
+    const source = Object.freeze({ ...block, generation: this.#readySource.generation });
+    assertCanonicalSource(source);
+    const currentObservation: UnifiedObservation = { ...observation, source };
+    const touched = new Set<string>();
+    for (const { pricing, semantics } of entries) {
+      const keys = semantics.mutation === undefined ? [pricing.stateKey]
+        : semantics.mutation.affectedStateKeys({ descriptor: pricing.pricingDescriptor,
+            routes: pricing.routes, observation: currentObservation });
+      for (const key of keys) touched.add(key.toLowerCase());
+    }
+    return [...touched];
+  };
 
   async createSession(input: {
     readonly source: CanonicalSource;

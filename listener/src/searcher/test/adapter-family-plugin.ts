@@ -424,6 +424,34 @@ assert.match(
   /^[a-f0-9]{64}$/,
 );
 
+assert.equal(definedSwap.identity.memoReuse, undefined);
+for (const memoReuse of [undefined, "recheck-identity"] as const) {
+  const definition = swapDefinition();
+  const plugin = defineSwapFamily({
+    ...definition,
+    identity: { ...definition.identity, memoReuse },
+  });
+  assert.equal(plugin.identity.memoReuse, memoReuse);
+}
+for (const memoReuse of ["reuse", "", null, true, 0, [], {}]) {
+  const definition = swapDefinition();
+  (definition.identity as unknown as Record<string, unknown>).memoReuse = memoReuse;
+  assert.throws(
+    () => defineSwapFamily(definition),
+    /identity\.memoReuse must be recheck-identity when declared/,
+  );
+}
+for (const requiredKey of ["identityKey", "variants"] as const) {
+  const definition = swapDefinition();
+  const identity = definition.identity as unknown as Record<string, unknown>;
+  identity.memoReuse = "recheck-identity";
+  delete identity[requiredKey];
+  assert.throws(
+    () => defineSwapFamily(definition),
+    new RegExp(`identity semantics is missing required field ${requiredKey}`),
+  );
+}
+
 function captureDefinition(input?: {
   readonly materialize?: (
     descriptor: FamilyCaptureDescriptor,

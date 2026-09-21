@@ -18,7 +18,7 @@ import { buildFamilyRouteGraphView } from "./adapter-family-graph-runtime.js";
 import { executeFundingFamilyLiquidity } from "./adapter-funding-runtime.js";
 import { reissuePreparedInstanceRouteHandles } from
   "./venues/adapter-family-runtime.js";
-import { reissuePreparedInstanceAuthority } from
+import { reissuePreparedInstanceAuthority, recheckFamilyInstanceMemoBinding } from
   "./venues/adapter-family-runtime.js";
 import {
   prepareCreditFamilyRoutes,
@@ -3432,6 +3432,43 @@ export function createRebuildWiring(input?: {
         proofHash.toLowerCase() !==
           memo.validity.proofSource.hash.toLowerCase()
       ) return null;
+      const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+        .forStrictFamily(familyId as FamilyId);
+      if ("identity" in family.plugin &&
+        family.plugin.identity.memoReuse === "recheck-identity") {
+        // Only the Family interprets mutable identity bindings. Compare its
+        // normal lifecycle projection, not identityKey (which may stay stable)
+        // or provenance (which necessarily changes with the source block).
+        if (!isPricedFamily(family) || typeof candidate.candidateKind !== "string") return null;
+        const oldBinding = decodeDurableValue(memo.staticProjection) as {
+          readonly staticBindingFingerprint?: string;
+        } | null;
+        const oldIdentity = decodeDurableValue(memo.verifiedIdentity) as {
+          readonly lineageId?: string;
+        } | null;
+        if (!oldBinding?.staticBindingFingerprint || !oldIdentity?.lineageId) return null;
+        const source = Object.freeze({ ...memoInput.cutoff });
+        const runtime = createStrictCentralAdapterRuntime({
+          provider: providerAdapter(provider, assertOpen),
+          verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+          generationFence: { assertCurrent(generation, requested) {
+            assertOpen();
+            if (generation !== source.generation || requested.generation !== source.generation ||
+              requested.number !== source.number || requested.hash.toLowerCase() !== source.hash.toLowerCase()) {
+              throw new Error("memo identity recheck escaped the fixed canonical cutoff");
+            }
+          } },
+        });
+        const binding = await recheckFamilyInstanceMemoBinding({
+          family, candidate: { ...candidate, candidateKind: candidate.candidateKind }, source,
+          generation: source.generation, runtime,
+        });
+        assertOpen();
+        if (binding === null || binding.instanceKey !== memo.instanceKey ||
+          binding.lineageId !== oldIdentity.lineageId ||
+          binding.fingerprint !== oldBinding.staticBindingFingerprint) return null;
+      }
+      assertOpen();
       return memo;
     },
     attestFamilyInstanceOnce: probe.attestFamilyInstanceOnce,

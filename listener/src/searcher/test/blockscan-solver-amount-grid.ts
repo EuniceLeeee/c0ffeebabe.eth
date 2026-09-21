@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { StateBackend } from "../../shared/state/state-backend.js";
 import { resolveBlockScanSolverSearchConfig } from
   "../blockscan-solver-search-config.js";
-import { AnvilSolver, type SolveOptions, type SolverTiming } from "../solver/solver.js";
+import { AnvilSolver, type ResolvedPlan, type SolveOptions, type SolverTiming } from "../solver/solver.js";
 import { EXECUTOR, makePlans, sharedSession } from "./blockscan-solver-quote-concurrency.js";
 import { BlockScanFamilyAttributedError } from "../detector/blockscan-family-budget.js";
 
@@ -14,6 +14,8 @@ interface SearchCase {
   amountGrid?: SolveOptions["blockScanAmountGrid"];
   halfWidth?: number;
   profit?: bigint;
+  profitAt?: (amount: bigint) => bigint;
+  onResolved?: (plan: ResolvedPlan) => void;
   floor?: bigint;
   includeGss?: boolean;
 }
@@ -49,6 +51,7 @@ async function observeSearch(input: SearchCase = {}) {
   const fixture = sharedSession([plan], {
     async quote(request, leg) {
       if (leg === 0) amounts.push(request.amountIn);
+      if (leg > 0 && input.profitAt) return request.amountIn + input.profitAt(request.amountIn);
       return leg === 0 ? request.amountIn : request.amountIn +
         ((input.lane ?? "blockscan") === "blockscan" && profit <= 0n && request.amountIn !== center ? 1n : profit);
     },
@@ -60,7 +63,7 @@ async function observeSearch(input: SearchCase = {}) {
     executor: EXECUTOR,
     async simulate(resolved) {
       simulated.push(resolved.flashAmount);
-      return { success: true, netProfit: profit };
+      return { success: true, netProfit: input.profitAt?.(resolved.flashAmount) ?? profit };
     },
   }, {
     strictSession: fixture.session,
@@ -81,8 +84,14 @@ async function observeSearch(input: SearchCase = {}) {
     assert.deepEqual(amounts, []);
   } else if (profit > 0n) {
     const resolved = await solve;
+    input.onResolved?.(resolved);
     assert.deepEqual(simulated, [resolved.flashAmount], "final sim must precede success");
-    assert.ok(timing.gssPoints >= 2 && timing.gssPoints <= 4, "GSS budget must stay bounded");
+    if ((input.lane ?? "blockscan") === "blockscan" &&
+        (input.amountGrid ?? "multiples") === "multiples" && input.cap === center) {
+      assert.equal(timing.gssPoints, 0, "a singleton funded domain needs no refine quotes");
+    } else {
+      assert.ok(timing.gssPoints >= 2 && timing.gssPoints <= 4, "GSS budget must stay bounded");
+    }
   } else {
     await assert.rejects(solve, /quotes completed but no profitable amount/);
     assert.equal(timing.gssPoints, 0, "non-positive quotes must not trigger GSS");
@@ -161,9 +170,67 @@ test("blockscan grid option does not alter swap backrun or oracle searches", asy
   }
 });
 
-test("multiples retain GSS bracket, evaluation budget and mandatory final sim", async () => {
+test("multiples use sui-mev's 10x bracket within P..100P with the same GSS budget", async () => {
   assert.deepEqual(await observeSearch({ profit: 1n, includeGss: true }),
-    [10n, 100n, 1000n, 11n, 14n, 9n, 8n]);
+    [10n, 100n, 1000n, 45n, 65n, 32n, 24n]);
+});
+
+test("refine chooses one bracket for the coarse winner and preserves its quote", async () => {
+  const center = 1_000_000n;
+  for (const [winner, lo, hi] of [
+    [center, center, center * 10n],
+    [center * 10n, center, center * 100n],
+    [center * 100n, center * 10n, center * 100n],
+  ]) {
+    const amounts = await observeSearch({
+      center, includeGss: true,
+      profitAt: (amount) => amount === winner ? 100n : 1n,
+      onResolved: (plan) => assert.equal(plan.flashAmount, winner,
+        "unsuccessful refinement must retain the coarse winner"),
+    });
+    const fine = amounts.slice(3);
+    assert.equal(fine.length, 4, "one refine pass, not overlapping passes");
+    assert.deepEqual(fine.slice(0, 2), [
+      hi - (hi - lo) * 618n / 1000n,
+      lo + (hi - lo) * 618n / 1000n,
+    ]);
+    assert.ok(fine.every((amount) => amount >= lo && amount <= hi));
+    assert.equal(new Set(amounts).size, amounts.length);
+  }
+});
+
+test("positive P with larger coarse capacity failures can refine beyond 2P", async () => {
+  const center = 1_000_000n;
+  const amounts = await observeSearch({
+    center, includeGss: true,
+    profitAt: (amount) => {
+      if (amount > center * 3n) {
+        throw Object.assign(new Error("amount exceeds fixture inventory"), { code: "CALL_EXCEPTION" });
+      }
+      return amount / 100n;
+    },
+    onResolved: (plan) => {
+      assert.ok(plan.flashAmount > center * 2n);
+      assert.ok(plan.flashAmount <= center * 3n);
+    },
+  });
+  assert.equal(amounts.length, 7, "three coarse and at most four fine amounts");
+});
+
+test("refinement never exceeds P..100P or the actual funding cap", async () => {
+  const center = 1_000_000n;
+  for (const cap of [center, center * 3n, center * 50n, center * 1000n]) {
+    const amounts = await observeSearch({
+      center, cap, includeGss: true, profitAt: (amount) => amount / 100n,
+    });
+    assert.ok(amounts.every((amount) => amount >= center && amount <= center * 100n && amount <= cap));
+    if (cap === center) assert.deepEqual(amounts, [center]);
+  }
+});
+
+test("explicit geometric mode retains the existing refine points", async () => {
+  assert.deepEqual(await observeSearch({ amountGrid: "geometric", includeGss: true }),
+    [10n, 1n, 2n, 5n, 20n, 40n, 80n, 11n, 14n, 9n, 8n]);
 });
 
 test("P's complete route must finish positive before any other amount starts", async () => {
@@ -260,7 +327,7 @@ for (const mode of ["caller abort", "deadline"] as const) {
 test("config defaults to multiples and accepts only the two exact mode names", () => {
   const defaults = resolveBlockScanSolverSearchConfig({});
   assert.deepEqual(defaults, {
-    amountGrid: "multiples", gridHalfWidth: 2, gssMaxTries: 4, quoteConcurrency: 16,
+    amountGrid: "multiples", gridHalfWidth: 2, gssMaxTries: 8, quoteConcurrency: 16,
     quoteToleranceRawUnits: 0n,
   });
   assert.equal(Object.isFrozen(defaults), true);

@@ -154,7 +154,7 @@ const cold = new BlockScanAmountReference();
 cold.estimateGasCost = () => { throw new Error("Exact sizing must not independently recalculate gas"); };
 const frozen = cold.prepare(input);
 assert.equal(frozen.get(opp), 2_000_000n, "USDC input is already in raw units");
-assert.equal(frozen.get(wethOpp), DEFAULT_EFFECTIVE_WETH_INPUT, "cold start reuses effective's shared 0.005 ETH input");
+assert.equal(frozen.get(wethOpp), DEFAULT_EFFECTIVE_WETH_INPUT, "cold start reuses effective's single shared default input");
 assert.equal(frozen.get(other), 3_000_000n, "select the exact first edge, not another pool for the token");
 const nextBlockOpp = { ...opp, sourceBlock: 3, stateBlock: 3 };
 assert.equal(cold.prepare({ ...input, opportunities: [nextBlockOpp] }).get(nextBlockOpp), 2_000_000n,

@@ -310,6 +310,8 @@ export class AnvilSolver implements Solver {
     );
     const maxFlashAmount = normalizedMaxFlashAmount(plan);
     const isBlockScan = plan.opportunity.kind === "block-scan-arb";
+    const usesBlockScanMultiples = isBlockScan &&
+      (opts.blockScanAmountGrid ?? "multiples") === "multiples";
     if (maxFlashAmount !== null && maxFlashAmount <= 0n) {
       throw new Error(`no profitable plan (flash cap is zero)`);
     }
@@ -404,8 +406,7 @@ export class AnvilSolver implements Solver {
       let grid = isOracleVictim
         ? oracleSearchGrid(maxFlashAmount!)
         : capGrid(
-            isBlockScan &&
-              (opts.blockScanAmountGrid ?? "multiples") === "multiples"
+            usesBlockScanMultiples
               ? [center, center * 10n, center * 100n]
               : geometricGrid(center, gridHalfWidth),
             maxFlashAmount,
@@ -445,12 +446,25 @@ export class AnvilSolver implements Solver {
       // Refine pass: only around a profitable grid point. The near-miss floor
       // below is only a phase-2 admission policy; letting negative grid points
       // trigger GSS can burn the live TTL on quotes before sim gets a chance.
-      if (bestVal > 0n && !pastDeadline()) {
+      // Like sui-mev, a 10x coarse grid needs a best/10..best*10 bracket.
+      // Intersect with blockscan's P..100P domain and the live funding cap;
+      // keep the existing 2x bracket for geometric/backrun search. Coarse
+      // candidates remain in scored if the bounded refine finds no improvement.
+      const refineLower = usesBlockScanMultiples
+        ? (bestX / 10n > center ? bestX / 10n : center)
+        : (bestX > 1n ? bestX / 2n : 1n);
+      const refineUpper = clampToMax(
+        usesBlockScanMultiples
+          ? (bestX * 10n < center * 100n ? bestX * 10n : center * 100n)
+          : bestX * 2n,
+        maxFlashAmount,
+      );
+      if (bestVal > 0n && (!usesBlockScanMultiples || refineLower < refineUpper) && !pastDeadline()) {
         evaluatingGss = true;
         try {
           await goldenSectionMaximize(
-            bestX > 1n ? bestX / 2n : 1n,
-            clampToMax(bestX * 2n, maxFlashAmount),
+            refineLower,
+            refineUpper,
             (x) => quoteProfit(x, fluidDebtBps),
             {
               maxTries: gssMaxTries,

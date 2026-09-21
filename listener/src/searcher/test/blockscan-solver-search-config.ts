@@ -5,10 +5,14 @@ import { resolveBlockScanSolverSearchConfig } from
 assert.deepEqual(resolveBlockScanSolverSearchConfig({}), {
   amountGrid: "multiples",
   gridHalfWidth: 2,
-  gssMaxTries: 4,
+  gssMaxTries: 8,
   quoteConcurrency: 16,
   quoteToleranceRawUnits: 0n,
 });
+
+assert.equal(resolveBlockScanSolverSearchConfig({
+  SEARCHER_BLOCKSCAN_SOLVER_GSS_MAX_TRIES: "4",
+}).gssMaxTries, 4, "explicit per-run overrides remain available after the default becomes eight");
 
 assert.deepEqual(resolveBlockScanSolverSearchConfig({
   SEARCHER_BLOCKSCAN_SOLVER_GRID_HALF_WIDTH: "3",
