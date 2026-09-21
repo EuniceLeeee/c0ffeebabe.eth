@@ -185,8 +185,8 @@ export function scanBlockStateFromResolvedMids(input: {
     funding: [...input.cfg.pricedTokens].filter(([, value]) => value.maxBorrow > 0n).map(([token]) => token),
     onCycle(path, estSpreadBps) {
       const seedEdges = path.map(q => edgesById.get(q.id)!);
-      // DFS's validated split is relative to THIS funded start. Do not rotate
-      // it after signal validation; a different rotation needs its own DFS proof.
+      // The enumerator joins from the signal token using whole-cycle profit,
+      // then rotates the completed cycle to this funded execution start.
       if (input.routeEligible && !input.routeEligible(seedEdges)) return;
       if (!isAdmissibleBlockScanRingShape(seedEdges, input.cfg.pricedTokens)) return;
       const firstVenue = readEdgeVenueMid(seedEdges[0]!, input.mids);

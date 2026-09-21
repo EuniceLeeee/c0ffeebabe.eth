@@ -29,14 +29,17 @@ const scan=(enumerationMethod:"dfs"|"layered",maxHops=6,usdView=view,budgetMs=50
       maxCandidates:100,pricedTokens:new Map([[weth,{maxBorrow:1000n*unit}]])}});
 const a=scan("dfs"),b=scan("layered");
 const zeroPrefixView={...view,quotes:quotes.map((q,i)=>i<2?{...q,value:{num:1000n,den:1000n}}:q)};
-assert.equal(scan("dfs",6,zeroPrefixView,5000).opportunities.length,0,
-  "scanner passes strict cumulative gate through; zero-profit second prefix is rejected");
+assert.equal(scan("dfs",6,zeroPrefixView,5000).opportunities.length,1,
+  "zero-profit prefixes do not reject a profitable closed cycle");
 const recoveryView={...view,quotes:quotes.map((q,i)=>({...q,
-  value:{num:[90n,120n,99n,99n,120n,90n][i]!,den:100n}}))};
+  value:{num:[120n,90n,99n,99n,90n,120n][i]!,den:100n}}))};
 const recovered=scan("dfs",6,recoveryView,5000);
 assert.equal(recovered.opportunities.length,1);
-assert.equal(recovered.enumeration?.gateRule,"cumulative-positive-after-first");
+assert.equal(recovered.enumeration?.gateRule,"signal-rooted-sorted-profitable-join");
 assert.deepEqual(recovered.opportunities,scan("layered",6,recoveryView,5000).opportunities);
+const unfundedSignalView={...view,signals:[{...view.signals[0]!,token:usdc,buy:quotes[0]!.id,sell:quotes[1]!.id}]};
+assert.equal(scan("dfs",6,unfundedSignalView).opportunities.length,1,
+  "a non-funded signal token can anchor enumeration then rotate to WETH for execution");
 assert.equal(a.outcome,"ran");assert.equal(a.enumeration?.algorithm,"paired-dfs");
 assert.equal(b.enumeration?.algorithm,"paired-layered");
 assert.equal(a.opportunities.length,1);assert.equal(a.opportunities[0]!.seedEdges.length,6);
