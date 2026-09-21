@@ -2536,6 +2536,7 @@ async function main(): Promise<void> {
             }).catch(activityReadFailed);
           },
         },
+        strictRuntimeRoot.resolveBlockTouchedStateKeys,
       ),
     currentHeadEvidenceFamilyForEdge(edgeAdapterId) {
       return PRODUCTION_STRICT_FAMILY_DECLARATIONS

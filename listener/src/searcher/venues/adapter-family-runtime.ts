@@ -397,6 +397,12 @@ type IdentityResult = VerifiedIdentityResult | TerminalIdentityResult;
 interface PreparedCandidate {
   readonly instance: PreparedFamilyInstance | null;
   readonly outcomes: readonly AdapterInstanceOutcome[];
+  /** Binding-only preparation never issues an admitted instance or route handle. */
+  readonly binding?: {
+    readonly instanceKey: InstanceKey;
+    readonly lineageId: LineageId;
+    readonly fingerprint: string;
+  };
 }
 
 interface PricingPreparation {
@@ -2901,14 +2907,51 @@ function issueFamilySharedBindingRef(input: FamilySharedBindingRef):
   return ref;
 }
 
+/** Reuse the lifecycle's identity/descriptor stages without preparing prices. */
+export async function recheckFamilyInstanceMemoBinding(input: {
+  readonly family: LoadedPricedFamilyPlugin;
+  readonly candidate: FamilyCandidate;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+  readonly runtime: CentralAdapterRuntime;
+}): Promise<NonNullable<PreparedCandidate["binding"]> | null> {
+  assertIssuedLoadedFamilyBox(input.family);
+  assertDefinedFamilyPlugin(input.family.plugin);
+  assertSource(input.source, input.generation);
+  assertFamilyCapabilities(input.family);
+  if (input.family.plugin.identity.memoReuse !== "recheck-identity") {
+    throw new Error("Family has not opted into identity memo rechecking");
+  }
+  const source = snapshotCanonicalSource(input.source);
+  input.runtime.generationFence.assertCurrent(input.generation, source);
+  const candidate = structuredClone(input.candidate);
+  deepFreezeOpaqueRuntimeValue(candidate, "memo recheck candidate");
+  const candidateKey = canonicalKey(
+    input.family.plugin.discovery.candidateKey(candidate), "candidate key",
+  );
+  const prepared = await prepareCandidate({
+    ...input,
+    source,
+    decoded: { candidate, candidateKey },
+    sharedBindingResolver: createFamilySharedBindingBatchResolver({ ...input, source }),
+    limits: DEFAULT_LIMITS,
+    bindingOnly: true,
+  });
+  // A changed binding is not an admission credential. The rebuild caller must
+  // fall back to full strict attestation before issuing a replacement memo.
+  input.runtime.generationFence.assertCurrent(input.generation, source);
+  return prepared.binding ?? null;
+}
+
 async function prepareCandidate(input: {
   readonly family: LoadedPricedFamilyPlugin;
-  readonly decoded: DecodedCandidateMatch;
+  readonly decoded: CandidateContext;
   readonly source: CanonicalSource;
   readonly generation: number;
   readonly runtime: CentralAdapterRuntime;
   readonly sharedBindingResolver: FamilySharedBindingBatchResolver;
   readonly limits: AdapterFamilyLifecycleLimits;
+  readonly bindingOnly?: boolean;
 }): Promise<PreparedCandidate> {
   const familyId = input.family.plugin.manifest.familyId;
   const { candidate, candidateKey } = input.decoded;
@@ -3118,6 +3161,13 @@ async function prepareCandidate(input: {
     source: input.source,
     evidenceRefs: instanceEvidenceRefs,
   }));
+
+  if (input.bindingOnly) {
+    return Object.freeze({ instance: null, outcomes: Object.freeze(outcomes),
+      binding: Object.freeze({ instanceKey, lineageId: identity.lineageId,
+        fingerprint: instanceBindingFingerprint }),
+    });
+  }
 
   let routes: readonly FamilyRouteDescriptor[];
   try {

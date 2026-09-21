@@ -8,7 +8,7 @@ export interface BlockScanSolverSearchConfig {
 }
 
 const DEFAULT_GRID_HALF_WIDTH = 2;
-const DEFAULT_GSS_MAX_TRIES = 4;
+const DEFAULT_GSS_MAX_TRIES = 8;
 const DEFAULT_QUOTE_CONCURRENCY = 16;
 
 /**

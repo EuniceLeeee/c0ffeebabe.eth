@@ -540,6 +540,8 @@ export interface IdentitySemantics<
   Candidate extends FamilyCandidate,
   Identity extends VerifiedIdentity,
 > {
+  /** Recheck identity/instance bindings before memo reuse at a new rebuild cutoff. */
+  readonly memoReuse?: "recheck-identity";
   readonly variants: readonly IdentityVariant<Candidate, Identity, unknown>[];
   identityKey(identity: Identity): string;
 }
@@ -3664,9 +3666,14 @@ function validateIdentity(
   assertPlainRecord(identity, "identity semantics");
   assertExactKeys(
     identity,
-    ["identityKey", "variants"],
+    ["identityKey", "memoReuse", "variants"],
     "identity semantics",
+    false,
+    ["identityKey", "variants"],
   );
+  if (identity.memoReuse !== undefined && identity.memoReuse !== "recheck-identity") {
+    throw new Error("identity.memoReuse must be recheck-identity when declared");
+  }
   assertSynchronousFunction(identity.identityKey, "identity.identityKey");
   if (!Array.isArray(identity.variants) || identity.variants.length === 0) {
     throw new Error(`${manifest.familyId} must declare an identity variant`);

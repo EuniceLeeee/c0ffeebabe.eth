@@ -1,8 +1,21 @@
 import { isRpcThrottleError } from "./rpc-throttle-guard.js";
+import type { UnifiedObservation } from "./venues/adapter-family-plugin.js";
+
+export type BlockTouchedObservation =
+  | Omit<Extract<UnifiedObservation, { kind: "log" }>, "source">
+  | Omit<Extract<UnifiedObservation, { kind: "call" }>, "source">;
+
+/** A stable, root/generation-bound interpreter; replace it when its bindings change. */
+export type BlockTouchedStateKeyResolver = (
+  observation: BlockTouchedObservation,
+  block: { readonly number: number; readonly hash: string },
+) => readonly string[];
 
 interface BlockTouchedLog {
   readonly address: string;
   readonly topics: readonly string[];
+  readonly data?: string;
+  readonly transactionHash?: string;
   readonly blockHash?: string;
   readonly removed?: boolean;
 }
@@ -35,6 +48,7 @@ interface CompletedBlockActivity {
 // range keeps its settled blocks, never promises, failed children or quote authority.
 const completedByProvider = new WeakMap<BlockTouchedProvider, {
   readonly poolManager: string;
+  readonly resolver: BlockTouchedStateKeyResolver | undefined;
   readonly blocks: Map<number, CompletedBlockActivity>;
 }>();
 
@@ -65,10 +79,14 @@ export async function readBlockTouchedStateKeys(
     readonly signal?: AbortSignal;
     readonly deadlineAtMs?: number;
   },
+  resolver?: BlockTouchedStateKeyResolver,
 ): Promise<ReadonlySet<string>> {
   // Snapshot before either async read; later caller mutation cannot re-anchor it.
   const pinned = anchor === undefined ? undefined : snapshotAnchor(anchor, blockNumber);
-  if (range === undefined) return readTouchedBlock(provider, blockNumber, uniswapV4PoolManager, pinned);
+  if (resolver !== undefined && pinned === undefined) {
+    throw new Error("activity resolver requires a canonical block anchor");
+  }
+  if (range === undefined) return readTouchedBlock(provider, blockNumber, uniswapV4PoolManager, pinned, undefined, resolver);
   if (pinned === undefined) throw new Error("activity range requires a canonical target anchor");
   if (!isRecord(range)) throw new Error("malformed activity range");
   const { previousSource, readHeader, signal, deadlineAtMs } = range;
@@ -94,10 +112,11 @@ export async function readBlockTouchedStateKeys(
   }
   const poolManager = uniswapV4PoolManager.toLowerCase();
   let memo = completedByProvider.get(provider);
-  if (memo === undefined || memo.poolManager !== poolManager) {
+  if (memo === undefined || memo.poolManager !== poolManager || memo.resolver !== resolver) {
     // Log-to-state-key interpretation is part of the existing reader input.
-    // Changing it cannot borrow a union parsed for a different manager.
-    memo = { poolManager, blocks: new Map() };
+    // Changing the manager or root/generation interpreter cannot borrow a
+    // union derived under different dependency bindings or mutation semantics.
+    memo = { poolManager, resolver, blocks: new Map() };
     completedByProvider.set(provider, memo);
   }
   const completed = memo.blocks;
@@ -129,7 +148,7 @@ export async function readBlockTouchedStateKeys(
       rejectChain("cached activity block anchor mismatch");
     }
     if (observation === undefined) {
-      const blockTouched = await readTouchedBlock(provider, number, uniswapV4PoolManager, header, assertOpen);
+      const blockTouched = await readTouchedBlock(provider, number, uniswapV4PoolManager, header, assertOpen, resolver);
       assertOpen();
       observation = Object.freeze({ anchor: header, touchedKeys: Object.freeze([...blockTouched]) });
       const concurrent = completed.get(number);
@@ -155,6 +174,7 @@ async function readTouchedBlock(
   uniswapV4PoolManager: string,
   pinned?: BlockTouchedCanonicalAnchor,
   assertOpen: () => void = () => {},
+  resolver?: BlockTouchedStateKeyResolver,
 ): Promise<ReadonlySet<string>> {
   const traceMethod = pinned === undefined ? "debug_traceBlockByNumber" : "debug_traceBlockByHash";
   const [logsResult, tracesResult] = await Promise.allSettled([
@@ -185,6 +205,15 @@ async function readTouchedBlock(
   const traces = tracesResult.value;
   const touched = new Set<string>();
   const manager = uniswapV4PoolManager.toLowerCase();
+  const resolve = resolver === undefined ? undefined : (observation: BlockTouchedObservation): void => {
+    assertOpen();
+    const keys = resolver(observation, { number: blockNumber, hash: pinned!.hash });
+    if (!Array.isArray(keys) || keys.some(key => typeof key !== "string" || key.length === 0)) {
+      throw new Error("activity resolver returned malformed state keys");
+    }
+    for (const key of keys) touched.add(key.toLowerCase());
+    assertOpen();
+  };
 
   if (pinned !== undefined && !Array.isArray(logs)) throw new Error("anchored block logs must be an array");
   for (const log of logs) {
@@ -214,6 +243,14 @@ async function readTouchedBlock(
         }
       }
     }
+    if (resolve !== undefined) {
+      if (!matches(BYTES_RE, log.data) || (log.transactionHash !== undefined &&
+          (!matches(HASH_RE, log.transactionHash) || !pinned!.transactionHashes.includes(log.transactionHash.toLowerCase())))) {
+        throw new Error("activity resolver requires complete canonical log observations");
+      }
+      resolve({ kind: "log", address: log.address.toLowerCase(), topics: [...log.topics], data: log.data,
+        ...(log.transactionHash === undefined ? {} : { transactionHash: log.transactionHash.toLowerCase() }) });
+    }
   }
 
   if (!Array.isArray(traces)) {
@@ -238,7 +275,7 @@ async function readTouchedBlock(
       if (!matches(HASH_RE, trace.txHash) || trace.txHash.toLowerCase() !== pinned.transactionHashes[index]) {
         throw new Error(`anchored block trace ${index} transaction hash mismatch`);
       }
-      addAnchoredCallAddresses(trace.result, touched);
+      addAnchoredCallAddresses(trace.result, touched, resolve, trace.txHash.toLowerCase());
     }
   }
 
@@ -279,7 +316,12 @@ function snapshotAnchor(anchor: BlockTouchedCanonicalAnchor, number: number): Bl
   });
 }
 
-function addAnchoredCallAddresses(root: unknown, touched: Set<string>): void {
+function addAnchoredCallAddresses(
+  root: unknown,
+  touched: Set<string>,
+  resolve?: (observation: BlockTouchedObservation) => void,
+  transactionHash?: string,
+): void {
   // Require completed callTracer fields, not a target-only projection. As with
   // getLogs, completeness still relies on the provider honoring the requested
   // full tracer: a silently omitted, otherwise well-formed subtree is not attestable here.
@@ -300,6 +342,8 @@ function addAnchoredCallAddresses(root: unknown, touched: Set<string>): void {
     if (matches(ADDRESS_RE, frame.to)) {
       // CALL targets, created addresses, and SELFDESTRUCT recipients use `to`.
       touched.add(frame.to.toLowerCase());
+      resolve?.({ kind: "call", target: frame.to.toLowerCase(), sender: frame.from.toLowerCase(),
+        data: frame.input, ...(transactionHash === undefined ? {} : { transactionHash }) });
     } else if (frame.to !== undefined || (frame.type !== "CREATE" && frame.type !== "CREATE2") || !frame.error) {
       throw new Error("anchored block trace contains a malformed call target");
     }

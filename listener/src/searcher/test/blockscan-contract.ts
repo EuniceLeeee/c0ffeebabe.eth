@@ -1,7 +1,8 @@
 import { ethers } from "ethers";
 import { deepEqual, rejects } from "node:assert/strict";
 import { readBlockTouchedStateKeys,
-  type BlockTouchedCanonicalAnchor, type BlockTouchedProvider } from "../blockscan-touched-state.js";
+  type BlockTouchedCanonicalAnchor, type BlockTouchedProvider,
+  type BlockTouchedStateKeyResolver } from "../blockscan-touched-state.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 import { emitEvent, makeBlockScanOpportunityId } from "../events.js";
 
@@ -1004,6 +1005,98 @@ tests.push({
     await readBlockTouchedStateKeys(retired.provider, pendingTarget, manager, rangeAnchor(pendingTarget), retired.range);
     assert(retired.reads.length === 3 + 4 * 2 && retired.reads.includes(`logs:${pendingTarget}`),
       "late settlement cannot repopulate the retired provider memo after a source contradiction");
+  },
+});
+
+tests.push({
+  name: "dependency resolver receives real log bytes and nested call observations in the shared union",
+  run: async () => {
+    const observed: unknown[] = [];
+    let reads = 0;
+    const logs = activityLogs().map(log => ({ ...log, data: "0x1234", transactionHash: txHashes[0] }));
+    const resolver: BlockTouchedStateKeyResolver = (observation, block) => {
+      observed.push({ observation, block });
+      return observation.kind === "log" && observation.address === emitter ? ["ORACLE:POOL"]
+        : observation.kind === "call" && observation.target === delegate ? ["CALL:POOL"] : [];
+    };
+    const touched = await readBlockTouchedStateKeys({
+      getLogs: async () => { reads++; return logs; },
+      send: async () => { reads++; return activityTraces(); },
+    }, SOURCE_BLOCK, manager, activityAnchor(), undefined, resolver);
+    deepEqual(touched, new Set([...anchoredTouchedKeys, "oracle:pool", "call:pool"]));
+    assert(reads === 2, "mutation resolution adds no activity RPC");
+    deepEqual(observed[1], { observation: { kind: "log", address: emitter, topics: logs[1]!.topics,
+      data: "0x1234", transactionHash: txHashes[0] }, block: { number: SOURCE_BLOCK, hash: blockHash } });
+    assert(observed.some(item => {
+      const value = item as { observation: { kind: string; target?: string; sender?: string; data: string; transactionHash: string } };
+      return value.observation.kind === "call" && value.observation.target === delegate &&
+        value.observation.sender === callee && value.observation.data === "0x" && value.observation.transactionHash === txHashes[1];
+    }), "nested observations retain actual caller, calldata and transaction identity");
+  },
+});
+
+tests.push({
+  name: "catchup derived cache is isolated by resolver identity, including installing and removing it",
+  run: async () => {
+    const fixture = rangeFixture(rangeStart + 3);
+    const first: BlockTouchedStateKeyResolver = (_, block) => [`first:${block.number}`];
+    const second: BlockTouchedStateKeyResolver = (_, block) => [`second:${block.number}`];
+    const read = (resolver?: BlockTouchedStateKeyResolver) => readBlockTouchedStateKeys(
+      fixture.provider, fixture.target, manager, fixture.anchor, fixture.range, resolver);
+    await read();
+    fixture.reads.length = 0;
+    const original = await read(first);
+    assert(original.has(`first:${rangeStart + 1}`) && original.has(`first:${fixture.target}`),
+      "each historical observation is interpreted at its actual block");
+    assert(fixture.reads.length === 8, "installing a resolver discards previously uninterpreted cached keys");
+    fixture.reads.length = 0;
+    deepEqual(await read(first), original);
+    deepEqual(fixture.reads, [], "same root retains catchup reuse");
+    const replaced = await read(second);
+    assert(replaced.has(`second:${rangeStart + 1}`) && !replaced.has(`first:${rangeStart + 1}`),
+      "new root/generation never borrows old derived state keys");
+    assert(fixture.reads.length === 8, "changed interpreter re-reads the bounded range");
+    fixture.reads.length = 0;
+    const removed = await read();
+    assert(!removed.has(`second:${rangeStart + 1}`), "removing the resolver removes derived keys");
+    assert(fixture.reads.length === 8, "removing the interpreter also changes the cache scope");
+  },
+});
+
+tests.push({
+  name: "dependency interpretation fails closed on missing evidence, resolver failure or cancellation",
+  run: async () => {
+    const resolver: BlockTouchedStateKeyResolver = () => ["derived:pool"];
+    for (const log of [
+      { ...activityLogs()[0], data: undefined },
+      { ...activityLogs()[0], data: "0x1" },
+      { ...activityLogs()[0], data: "0x", transactionHash: parentHash },
+    ]) await rejects(readBlockTouchedStateKeys({ getLogs: async () => [log], send: async () => activityTraces() },
+      SOURCE_BLOCK, manager, activityAnchor(), undefined, resolver), /complete canonical log/);
+    await rejects(readBlockTouchedStateKeys({ getLogs: async () => [], send: async () => [] },
+      SOURCE_BLOCK, manager, undefined, undefined, resolver), /canonical block anchor/);
+    for (const mode of ["throw", "malformed", "abort"] as const) {
+      const fixture = rangeFixture(rangeStart + 1);
+      const control = new AbortController();
+      let failing = true;
+      const interpret: BlockTouchedStateKeyResolver = () => {
+        if (failing) {
+          if (mode === "throw") throw new Error("mutation decode failed");
+          if (mode === "malformed") return [null] as unknown as string[];
+          control.abort(new Error("mutation cancelled"));
+        }
+        return ["derived:pool"];
+      };
+      await rejects(readBlockTouchedStateKeys(fixture.provider, fixture.target, manager, fixture.anchor,
+        { ...fixture.range, signal: control.signal }, interpret), /mutation|malformed state keys/);
+      failing = false;
+      fixture.reads.length = 0;
+      const retried = await readBlockTouchedStateKeys(fixture.provider, fixture.target, manager, fixture.anchor,
+        fixture.range, interpret);
+      assert(retried.has("derived:pool"), "successful retry may publish the completed interpretation");
+      deepEqual(fixture.reads, [`logs:${fixture.target}`, `trace:${fixture.target}`],
+        "failed or cancelled interpretation is never cached as a clean completed block");
+    }
   },
 });
 
