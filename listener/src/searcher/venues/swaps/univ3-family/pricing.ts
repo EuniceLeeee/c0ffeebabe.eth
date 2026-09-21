@@ -253,10 +253,12 @@ export const univ3Pricing = {
   ]),
   mutation: {
     affectedStateKeys({ descriptor, observation }) {
+      // Shared-token dependencies fan out to many pools. Reject unrelated
+      // events before repeating checksum validation for each dependent pool.
       if (
         observation.kind !== "log" ||
-        !sameAddress(observation.address, descriptor.pool) ||
-        !MUTATION_TOPICS.has(observation.topics[0]?.toLowerCase() ?? "")
+        !MUTATION_TOPICS.has(observation.topics[0]?.toLowerCase() ?? "") ||
+        !sameAddress(observation.address, descriptor.pool)
       ) {
         return [];
       }

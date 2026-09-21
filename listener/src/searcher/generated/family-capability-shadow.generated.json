@@ -8178,7 +8178,7 @@
         "familyId": "univ3-standard",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "186039484ac5fb872b0e7149b87d4f695e56f845bffdfded3b2cef16b64a62c5",
+        "contentHash": "5875bd1e7ebe6ceff471a9a7ab3660b129a8ad846caae96157a1bb7fe61b39d5",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -8545,7 +8545,7 @@
         "familyId": "univ4",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "04ad5e17f326c89d630b66278148389547b38479c6bd69eb7f807ca0ca84dcca",
+        "contentHash": "8ac7f989d07f63bb3b3db984e76d630f36db041cae506ced4de72aca52f347f1",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -8916,7 +8916,7 @@
         "familyId": "univ4-fee-hook",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "b2609d1cd50f0c8160f2c76cadcb1eb07de1d1523856b952a0b7238ee93ab203",
+        "contentHash": "99c5b8db026c05ec439470760bbdcd5baf89bb56e68b4fac990d3b0dfd83913e",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -9033,5 +9033,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "4506b5cd45ae790dbaa6523e55616e627b831edf54907ff72c8bad8b792feb54"
+  "artifactHash": "f40b1c7e34c1ee1d7c3c2522cf871132d1720f4ebc8cd1c88170ebb065dc99de"
 }

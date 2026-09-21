@@ -222,11 +222,13 @@ export const univ4Pricing = {
   ]),
   mutation: {
     affectedStateKeys({ descriptor, observation }) {
+      // A manager event reaches every dependent pool. Only its matching
+      // topic/poolId needs the (more expensive) emitter address validation.
       if (
         observation.kind !== "log" ||
-        !sameAddress(observation.address, descriptor.managerBinding.manager) ||
         !MUTATION_TOPICS.has(observation.topics[0]?.toLowerCase() ?? "") ||
-        observation.topics[1]?.toLowerCase() !== descriptor.poolId
+        observation.topics[1]?.toLowerCase() !== descriptor.poolId ||
+        !sameAddress(observation.address, descriptor.managerBinding.manager)
       ) {
         return [];
       }
