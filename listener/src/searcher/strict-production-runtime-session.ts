@@ -29,11 +29,14 @@ import type { FlashLiquidityView, FlashSource } from
 import type { ResolvedPlanNode } from "../shared/types/plan.js";
 import type { RuntimeEvidence } from
   "./venues/adapter-family-plugin.js";
+import { sealCompiledMutationIndex } from "./venues/adapter-family-plugin.js";
 import { PENDING_EXECUTION_RUNTIME_EVIDENCE_KIND } from
   "./runtime-evidence.js";
 import type {
   NormalizedSwapVictimImpact,
   UnifiedObservation,
+  CompiledMutationIndex,
+  MutationPricingEntry,
 } from "./venues/adapter-family-plugin.js";
 import {
   buildFamilyExecutionFragment,
@@ -225,10 +228,7 @@ export class StrictProductionRuntimeRoot {
   readonly #readyInstances: readonly PreparedFamilyInstance[];
   readonly #instanceIndexesByKey: ReadonlyMap<string, readonly number[]>;
   readonly #pricingIndex: StrictReadyPricingIndex;
-  readonly #pricingEntriesByDependency: ReadonlyMap<string, readonly {
-    readonly pricing: PreparedFamilyInstance["pricingInstances"][number];
-    readonly semantics: ReturnType<typeof asPricedFamily>["plugin"]["pricing"];
-  }[]>;
+  readonly #mutationIndexesByDependency: ReadonlyMap<string, readonly CompiledMutationIndex[]>;
   readonly #readyFundingAssetsByFamily: ReadonlyMap<
     FamilyId,
     readonly string[]
@@ -254,10 +254,11 @@ export class StrictProductionRuntimeRoot {
     const stateKeyByRouteIdentity = new Map<string, string>();
     const instanceIndexesByStateKey = new Map<string, number[]>();
     const instanceIndexesByKey = new Map<string, number[]>();
-    const pricingEntriesByDependency = new Map<string, {
-      readonly pricing: PreparedFamilyInstance["pricingInstances"][number];
-      readonly semantics: ReturnType<typeof asPricedFamily>["plugin"]["pricing"];
-    }[]>();
+    type Pricing = PreparedFamilyInstance["pricingInstances"][number];
+    type Semantics = ReturnType<typeof asPricedFamily>["plugin"]["pricing"];
+    const mutationGroups = new Map<Semantics, MutationPricingEntry<
+      Pricing["pricingDescriptor"], Pricing["routes"][number]
+    >[]>();
     for (let index = 0; index < input.readyInstances.length; index++) {
       const instance = input.readyInstances[index]!;
       const family = input.catalog.forStrictFamily(instance.familyId);
@@ -275,14 +276,10 @@ export class StrictProductionRuntimeRoot {
       instanceIndexesByKey.set(instanceKey, indexes);
       for (const pricing of instance.pricingInstances) {
         const semantics = asPricedFamily(family).plugin.pricing;
-        const entry = Object.freeze({ pricing, semantics });
-        // Dependencies were validated and issued with this prepared pricing
-        // entry. They may include opaque canonical keys, not just addresses.
-        for (const dependency of new Set(pricing.dependencies.map(key => key.toLowerCase()))) {
-          const entries = pricingEntriesByDependency.get(dependency) ?? [];
-          entries.push(entry);
-          pricingEntriesByDependency.set(dependency, entries);
-        }
+        const entries = mutationGroups.get(semantics) ?? [];
+        entries.push(Object.freeze({ descriptor: pricing.pricingDescriptor,
+          routes: pricing.routes, stateKey: pricing.stateKey, dependencies: pricing.dependencies }));
+        mutationGroups.set(semantics, entries);
         const stateKey = String(pricing.stateKey).toLowerCase();
         const stateIndexes = instanceIndexesByStateKey.get(stateKey) ?? [];
         if (!stateIndexes.includes(index)) stateIndexes.push(index);
@@ -300,6 +297,31 @@ export class StrictProductionRuntimeRoot {
             );
           }
           stateKeyByRouteIdentity.set(routeIdentity, stateKey);
+        }
+      }
+    }
+    const mutationIndexesByDependency = new Map<string, CompiledMutationIndex[]>();
+    for (const [semantics, entries] of mutationGroups) {
+      const declared = new Set(entries.flatMap(entry => entry.dependencies.map(key => key.toLowerCase())));
+      const indexes: readonly CompiledMutationIndex[] = semantics.mutation?.compile !== undefined
+        ? [semantics.mutation.compile({ entries: Object.freeze(entries) })]
+        : entries.map(entry => ({
+            // Compatibility for plugins without a compiler; opaque dependency
+            // keys remain valid. No protocol interpretation belongs here.
+            dependencies: entry.dependencies,
+            affectedStateKeys: ({ observation }) => semantics.mutation === undefined
+              ? [entry.stateKey] : semantics.mutation.affectedStateKeys({ ...entry, observation }),
+          }));
+      for (const returnedIndex of indexes) {
+        const index = sealCompiledMutationIndex(returnedIndex);
+        for (const dependency of new Set(index.dependencies)) {
+          if (typeof dependency !== "string" || !declared.has(dependency.toLowerCase())) {
+            throw new Error("compiled mutation index exceeds declared dependencies");
+          }
+          const key = dependency.toLowerCase();
+          const subscribers = mutationIndexesByDependency.get(key) ?? [];
+          if (!subscribers.includes(index)) subscribers.push(index);
+          mutationIndexesByDependency.set(key, subscribers);
         }
       }
     }
@@ -328,8 +350,8 @@ export class StrictProductionRuntimeRoot {
     this.#readySource = Object.freeze({ ...input.readySource });
     this.#readyEdgeBindings = readyEdgeBindings;
     this.#readyInstances = Object.freeze([...input.readyInstances]);
-    this.#pricingEntriesByDependency = new Map([...pricingEntriesByDependency].map(
-      ([address, entries]) => [address, Object.freeze(entries)],
+    this.#mutationIndexesByDependency = new Map([...mutationIndexesByDependency].map(
+      ([address, indexes]) => [address, Object.freeze(indexes)],
     ));
     this.#instanceIndexesByKey = new Map([...instanceIndexesByKey].map(
       ([key, indexes]) => [key, Object.freeze(indexes)],
@@ -346,16 +368,14 @@ export class StrictProductionRuntimeRoot {
   /** Stable per Ready root: the reader's derived cache cannot cross this binding. */
   readonly resolveBlockTouchedStateKeys: BlockTouchedStateKeyResolver = (observation, block) => {
     const address = observation.kind === "log" ? observation.address : observation.target;
-    const entries = this.#pricingEntriesByDependency.get(address.toLowerCase());
-    if (entries === undefined) return [];
+    const indexes = this.#mutationIndexesByDependency.get(address.toLowerCase());
+    if (indexes === undefined) return [];
     const source = Object.freeze({ ...block, generation: this.#readySource.generation });
     assertCanonicalSource(source);
     const currentObservation: UnifiedObservation = { ...observation, source };
     const touched = new Set<string>();
-    for (const { pricing, semantics } of entries) {
-      const keys = semantics.mutation === undefined ? [pricing.stateKey]
-        : semantics.mutation.affectedStateKeys({ descriptor: pricing.pricingDescriptor,
-            routes: pricing.routes, observation: currentObservation });
+    for (const index of indexes) {
+      const keys = index.affectedStateKeys({ observation: currentObservation });
       for (const key of keys) touched.add(key.toLowerCase());
     }
     return [...touched];

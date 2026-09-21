@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
 import {
   callRequest,
@@ -94,6 +95,9 @@ export const wstethPricing = {
     ])].sort(),
   ),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.target], keys: [descriptor.instanceKey],
+    }), { kinds: ["log"] }),
     affectedStateKeys: ({ descriptor, observation }) =>
       observation.kind === "log" &&
         sameAddress(observation.address, descriptor.target)

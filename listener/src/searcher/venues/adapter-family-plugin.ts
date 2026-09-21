@@ -755,7 +755,46 @@ export interface DependentRequestProgram<Input, Evidence> {
   }): Evidence;
 }
 
+export interface MutationPricingEntry<PricingDescriptor, Route> {
+  readonly descriptor: PricingDescriptor;
+  readonly routes: readonly Route[];
+  readonly stateKey: string;
+  readonly dependencies: readonly string[];
+}
+
+/** Ready-root-local, synchronous event index. No RPC or dynamic state is captured. */
+export interface CompiledMutationIndex {
+  readonly dependencies: readonly string[];
+  affectedStateKeys(input: { readonly observation: UnifiedObservation }): readonly string[];
+}
+
+/** Bind the returned runtime callback as strictly as definition-time methods. */
+export function sealCompiledMutationIndex(input: CompiledMutationIndex): CompiledMutationIndex {
+  const label = "compiled mutation index";
+  assertPlainRecord(input, label);
+  assertExactKeys(input, ["dependencies", "affectedStateKeys"], label);
+  if (!Array.isArray(input.dependencies) || input.dependencies.some(key => typeof key !== "string" || key.length === 0)) {
+    throw new Error("invalid compiled mutation dependencies");
+  }
+  // Keep neither the caller's mutable object nor its dependency array. A stable
+  // resolver identity must not silently change behavior under the reader cache.
+  const index: CompiledMutationIndex = {
+    dependencies: Object.freeze([...input.dependencies]),
+    affectedStateKeys: input.affectedStateKeys,
+  };
+  guardSynchronousMethod(index, "affectedStateKeys", `${label}.affectedStateKeys`, result => {
+    if (!Array.isArray(result) || result.some(key => typeof key !== "string" || key.length === 0)) {
+      throw new Error("invalid compiled mutation state keys");
+    }
+  });
+  return Object.freeze(index);
+}
+
 export interface MutationSemantics<PricingDescriptor, Route> {
+  /** Compile all directions together once, so shared events are decoded once. */
+  compile?(input: {
+    readonly entries: readonly MutationPricingEntry<PricingDescriptor, Route>[];
+  }): CompiledMutationIndex;
   affectedStateKeys(input: {
     readonly descriptor: PricingDescriptor;
     readonly routes: readonly Route[];
@@ -2340,7 +2379,10 @@ function guardOptionalPriceCapabilities(plugin: {
     for (const method of ["buildDependentProgram", "classifyUnavailable"] as const) {
       if (pricing.current[method] !== undefined) guardSynchronousMethod(pricing.current, method, `pricing.current.${method}`);
     }
-    if (pricing.mutation !== undefined) guardSynchronousMethod(pricing.mutation, "affectedStateKeys", "pricing.mutation.affectedStateKeys");
+    if (pricing.mutation !== undefined) {
+      guardSynchronousMethod(pricing.mutation, "affectedStateKeys", "pricing.mutation.affectedStateKeys");
+      if (pricing.mutation.compile !== undefined) guardSynchronousMethod(pricing.mutation, "compile", "pricing.mutation.compile");
+    }
     if (pricing.liveStateProjection !== undefined) guardSynchronousMethod(pricing.liveStateProjection, "project", "pricing.liveStateProjection.project");
   }
   if (exact !== undefined) {
@@ -3877,13 +3919,18 @@ function validatePricing(pricing: PricingSemantics<any, any, any, any, any, any>
     assertPlainRecord(pricing.mutation, "pricing.mutation");
     assertExactKeys(
       pricing.mutation,
-      ["affectedStateKeys"],
+      ["affectedStateKeys", "compile"],
       "pricing.mutation",
+      true,
+      ["affectedStateKeys"],
     );
     assertSynchronousFunction(
       pricing.mutation.affectedStateKeys,
       "pricing.mutation.affectedStateKeys",
     );
+    if (pricing.mutation.compile !== undefined) {
+      assertSynchronousFunction(pricing.mutation.compile, "pricing.mutation.compile");
+    }
   }
   if (pricing.liveStateProjection !== undefined) {
     assertPlainRecord(pricing.liveStateProjection, "pricing.liveStateProjection");

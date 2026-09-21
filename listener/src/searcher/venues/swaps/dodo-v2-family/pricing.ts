@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { TokenEdge } from "../../../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import {
@@ -224,6 +225,9 @@ export const dodoV2Pricing = {
     BLOCKSCAN_MULTICALL3,
   ]),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.pool], keys: [descriptor.instanceKey],
+    }), { kinds: ["log"], accept: observation => observation.kind === "log" && observation.topics[0]?.toLowerCase() === DODO_V2_SWAP_TOPIC }),
     affectedStateKeys({ descriptor, observation }) {
       if (
         observation.kind !== "log" ||

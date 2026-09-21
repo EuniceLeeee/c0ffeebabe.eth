@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import {
   bindRequestResultRound,
   collectRequestProgramResults,
@@ -195,6 +196,9 @@ export const erc4626SiloRedeemPricing = {
     descriptor.underlyingAsset,
   ]),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.vault, descriptor.payoutToken], keys: [descriptor.instanceKey],
+    }), { kinds: ["log"] }),
     affectedStateKeys({ descriptor, observation }) {
       return observation.kind === "log" &&
           (sameAddress(observation.address, descriptor.vault) ||

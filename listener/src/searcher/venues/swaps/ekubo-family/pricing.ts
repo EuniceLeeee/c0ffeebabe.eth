@@ -1,4 +1,5 @@
-import { bindRequestResultRound, collectRequestProgramResults, type PricingSemantics } from "../../adapter-family-plugin.js";
+import { bindRequestResultRound, collectRequestProgramResults, type CompiledMutationIndex, type PricingSemantics } from "../../adapter-family-plugin.js";
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { AdapterRequestResult } from "../../adapter-request-program.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import { quotedPoolMid } from "../blockscan-state-shared.js";
@@ -79,7 +80,38 @@ export const ekuboPricing = {
     },
   },
   dependencies: ({ descriptor }) => [EKUBO_CORE, EKUBO_ROUTER, descriptor.instance.poolKey.token0, descriptor.instance.poolKey.token1],
-  mutation: { affectedStateKeys({ descriptor, routes, observation }) {
+  mutation: {
+    compile({ entries }): CompiledMutationIndex {
+      const direct = compileAddressMutations(entries, ({ descriptor, routes }) => ({
+        addresses: [EKUBO_CORE, EKUBO_ROUTER, descriptor.instance.poolKey.token0, descriptor.instance.poolKey.token1],
+        keys: routes.map(route => route.routeKey),
+      }), { kinds: ["log", "call"] });
+      const core = EKUBO_CORE.toLowerCase();
+      const poolKeys = new Map<string, Set<string>>();
+      for (const entry of entries) {
+        if (!entry.dependencies.some(address => address.toLowerCase() === core)) continue;
+        const poolId = entry.descriptor.instance.poolId;
+        const keys = poolKeys.get(poolId) ?? new Set<string>();
+        for (const route of entry.routes) keys.add(route.routeKey);
+        poolKeys.set(poolId, keys);
+      }
+      const pools = new Map([...poolKeys].map(([poolId, keys]) => [poolId, Object.freeze([...keys])]));
+      return {
+        dependencies: direct.dependencies,
+        affectedStateKeys({ observation }) {
+          if (observation.kind === "log" && observation.address.toLowerCase() === core && observation.topics.length === 0) {
+            try {
+              return pools.get(parseEkuboCoreSwapLog(observation.data).poolId) ?? [];
+            } catch {
+              // The old predicate conservatively invalidates all Core owners
+              // on a malformed anonymous event; the direct index is that set.
+            }
+          }
+          return direct.affectedStateKeys({ observation });
+        },
+      };
+    },
+    affectedStateKeys({ descriptor, routes, observation }) {
     if (observation.kind === "log" && same(observation.address, EKUBO_CORE) && observation.topics.length === 0) {
       try { if (parseEkuboCoreSwapLog(observation.data).poolId !== descriptor.instance.poolId) return []; } catch { /* conservatively invalidate */ }
     }

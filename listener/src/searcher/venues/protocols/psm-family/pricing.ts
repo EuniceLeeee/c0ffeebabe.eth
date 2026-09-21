@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
 import {
   callRequest,
@@ -90,6 +91,9 @@ export const psmPricing = {
     descriptor.route.tokenOut,
   ]),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.target], keys: [descriptor.instanceKey],
+    }), { kinds: ["call"] }),
     affectedStateKeys: ({ descriptor, observation }) =>
       observation.kind === "call" &&
         sameAddress(observation.target, descriptor.target)

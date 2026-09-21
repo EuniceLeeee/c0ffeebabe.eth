@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
 import type { AdapterRequestResult } from
   "../../adapter-request-program.js";
@@ -130,6 +131,9 @@ export const eigenpiePricing = {
     descriptor.route.tokenOut,
   ]),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.target], keys: [descriptor.instanceKey],
+    }), { kinds: ["log", "call"] }),
     affectedStateKeys: ({ descriptor, observation }) =>
       (observation.kind === "call" &&
           sameAddress(observation.target, descriptor.target)) ||

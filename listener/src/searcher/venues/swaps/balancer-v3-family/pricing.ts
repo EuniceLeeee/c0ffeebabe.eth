@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
-import { bindRequestResultRound, collectRequestProgramResults, type PricingSemantics } from "../../adapter-family-plugin.js";
+import { bindRequestResultRound, collectRequestProgramResults, type CompiledMutationIndex, type PricingSemantics } from "../../adapter-family-plugin.js";
+import { compileAddressMutations, createMutationLookup } from "../../mutation-index.js";
 import { VAULT, ROUTER, PERMIT2, VAULT_ABI, assertSource, call, hooksConfig, poolInfo, probeAmounts, queryData,
   resultSource, returned, same, uint } from "./codec.js";
 import { staticBinding } from "./instance.js";
@@ -80,7 +81,35 @@ export const balancerV3Pricing = {
   dependencies: ({ descriptor }) => [...new Set([descriptor.instance.pool, VAULT, ROUTER, PERMIT2,
     ...descriptor.instance.binding.tokens, ...[descriptor.instance.binding.hooks.address, ...descriptor.instance.binding.tokenInfo.map(info => info.rateProvider)]
       .filter(address => address !== ethers.ZeroAddress)])],
-  mutation: { affectedStateKeys({ descriptor, routes, observation }) {
+  mutation: {
+    compile({ entries }): CompiledMutationIndex {
+      const direct = compileAddressMutations(entries, ({ descriptor, routes }) => ({
+        addresses: [descriptor.instance.pool, ...descriptor.instance.binding.tokens,
+          descriptor.instance.binding.hooks.address, ...descriptor.instance.binding.tokenInfo.map(info => info.rateProvider)],
+        keys: routes.map(route => route.routeKey),
+      }), { kinds: ["log", "call"] });
+      const vault = VAULT.toLowerCase();
+      const pools = createMutationLookup();
+      for (const entry of entries) {
+        // Preserve the old per-entry dependency gate, not merely its union.
+        if (entry.dependencies.some(address => address.toLowerCase() === vault)) {
+          pools.add(entry.descriptor.instance.pool, entry.routes.map(route => route.routeKey));
+        }
+      }
+      return {
+        dependencies: [...new Set([...direct.dependencies, ...(pools.addresses().length === 0 ? [] : [vault])])],
+        affectedStateKeys({ observation }) {
+          // Vault logs always take this branch, including when Vault also
+          // appears as a token/hook dependency. Decode once for all directions.
+          if (observation.kind === "log" && observation.address.toLowerCase() === vault) {
+            const swap = decodeSwapLog(observation);
+            return swap === null ? [] : pools.get(swap.pool);
+          }
+          return direct.affectedStateKeys({ observation });
+        },
+      };
+    },
+    affectedStateKeys({ descriptor, routes, observation }) {
     if (observation.kind === "log" && same(observation.address, VAULT)) {
       const swap = decodeSwapLog(observation);
       return swap && same(swap.pool, descriptor.instance.pool) ? routes.map(route => route.routeKey) : [];

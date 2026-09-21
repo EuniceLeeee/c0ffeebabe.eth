@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import {
   bindRequestResultRound,
   collectRequestProgramResults,
@@ -204,6 +205,9 @@ export const metronomeHgUsdcPricing = {
     descriptor.tokenOut,
   ]),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.router, descriptor.curve, descriptor.vault, descriptor.tokenIn, descriptor.curveIntermediate, descriptor.tokenOut], keys: [descriptor.instanceKey],
+    }), { kinds: ["log"] }),
     affectedStateKeys({ descriptor, observation }) {
       return observation.kind === "log" && [
           descriptor.router,

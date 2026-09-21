@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
 import type { AdapterRequestResult } from "../../adapter-request-program.js";
@@ -171,6 +172,18 @@ export const metronomeSynthPricing = {
     ADDR.METRONOME_ORACLE,
   ]),
   mutation: {
+    compile({ entries }) {
+      const logs = compileAddressMutations(entries, ({ descriptor }) => ({
+        addresses: [descriptor.pool], keys: [descriptor.instanceKey],
+      }), { kinds: ["log"] });
+      const calls = compileAddressMutations(entries, ({ descriptor }) => ({
+        addresses: [ADDR.METRONOME_ORACLE_FORWARDER], keys: [descriptor.instanceKey],
+      }), { kinds: ["call"] });
+      return {
+        dependencies: [...new Set([...logs.dependencies, ...calls.dependencies])],
+        affectedStateKeys: input => (input.observation.kind === "log" ? logs : calls).affectedStateKeys(input),
+      };
+    },
     affectedStateKeys({ descriptor, observation }) {
       if (
         observation.kind === "log" &&

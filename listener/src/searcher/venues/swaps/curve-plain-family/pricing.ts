@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import { bindRequestResultRound, collectRequestProgramResults, type PricingSemantics } from "../../adapter-family-plugin.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import { quotedPoolMid } from "../blockscan-state-shared.js";
@@ -63,7 +64,12 @@ export const curvePlainPricing = {
     },
   },
   dependencies: ({ descriptor }) => [descriptor.instance.pool, descriptor.instance.binding.registry, ...descriptor.instance.binding.coins],
-  mutation: { affectedStateKeys({ descriptor, routes, observation }) {
+  mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.instance.pool, ...descriptor.instance.binding.coins],
+      keys: routes.map(route => route.routeKey),
+    }), { kinds: ["log", "call"] }),
+    affectedStateKeys({ descriptor, routes, observation }) {
     const target = observation.kind === "call" ? observation.target : observation.kind === "log" ? observation.address : null;
     return target !== null && [descriptor.instance.pool, ...descriptor.instance.binding.coins].some(a => same(a, target))
       ? routes.map(route => route.routeKey) : [];

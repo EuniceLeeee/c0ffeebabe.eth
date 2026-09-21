@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { TokenEdge } from "../../../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
@@ -149,6 +150,9 @@ export const univ2Pricing = {
     descriptor.token1,
   ]),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.pool], keys: [descriptor.instanceKey],
+    }), { kinds: ["log"], accept: observation => observation.kind === "log" && observation.topics[0]?.toLowerCase() === UNIV2_SYNC_TOPIC.toLowerCase() }),
     affectedStateKeys({ descriptor, observation }) {
       if (
         observation.kind !== "log" ||

@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
 import type { AdapterRequestResult } from "../../adapter-request-program.js";
 import {
@@ -176,6 +177,9 @@ export const erc4626Pricing: PricingSemantics<
     ])].sort(),
   ),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.vault], keys: [descriptor.instanceKey],
+    }), { kinds: ["log"] }),
     affectedStateKeys: ({ descriptor, observation }) =>
       observation.kind === "log" &&
         observation.address.toLowerCase() === descriptor.vault.toLowerCase()

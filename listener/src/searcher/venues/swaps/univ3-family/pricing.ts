@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { TokenEdge } from "../../../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import {
@@ -252,6 +253,9 @@ export const univ3Pricing = {
       : [descriptor.quoterBinding.quoter]),
   ]),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.pool], keys: [descriptor.instanceKey],
+    }), { kinds: ["log"], accept: observation => observation.kind === "log" && MUTATION_TOPICS.has(observation.topics[0]?.toLowerCase() ?? "") }),
     affectedStateKeys({ descriptor, observation }) {
       // Shared-token dependencies fan out to many pools. Reject unrelated
       // events before repeating checksum validation for each dependent pool.

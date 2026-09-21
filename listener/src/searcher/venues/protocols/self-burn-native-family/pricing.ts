@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
 import type { AdapterRequestResult } from "../../adapter-request-program.js";
 import {
@@ -127,6 +128,9 @@ export const selfBurnNativePricing = {
     descriptor.nativeAnchor,
   ]),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.token], keys: [descriptor.instanceKey],
+    }), { kinds: ["log"] }),
     affectedStateKeys({ descriptor, observation }) {
       return observation.kind === "log" &&
           sameAddress(observation.address, descriptor.token)

@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { TokenEdge } from "../../../planner/token-graph.js";
 import type { PricingSemantics, UnifiedObservation } from "../../adapter-family-plugin.js";
 import type {
@@ -147,6 +148,10 @@ export const astraMultiTokenPricing = {
     descriptor.route.tokenOut,
   ]),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor }) => ({
+      addresses: [descriptor.target], keys: [descriptor.route.routeKey],
+    }), { kinds: ["log"], accept: observation => observation.kind === "log" &&
+      observation.topics[0]?.toLowerCase() === ASTRA_MULTITOKEN_CHANGE_TOPIC }),
     affectedStateKeys({ descriptor, observation }) {
       return isTargetChange(observation, descriptor.target)
         ? [descriptor.route.routeKey]

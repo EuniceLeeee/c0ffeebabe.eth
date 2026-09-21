@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import type { TokenEdge } from "../../../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import {
@@ -221,6 +222,25 @@ export const univ4Pricing = {
     descriptor.poolKey.currency1,
   ]),
   mutation: {
+    compile({ entries }) {
+      const poolsByManager = new Map<string, Set<string>>();
+      for (const { descriptor, dependencies } of entries) {
+        const manager = ethers.getAddress(descriptor.managerBinding.manager).toLowerCase();
+        if (!dependencies.some(key => key.toLowerCase() === manager)) continue;
+        const pools = poolsByManager.get(manager) ?? new Set<string>();
+        pools.add(descriptor.poolId);
+        poolsByManager.set(manager, pools);
+      }
+      return {
+        dependencies: [...poolsByManager.keys()],
+        affectedStateKeys({ observation }) {
+          if (observation.kind !== "log" || !(MUTATION_TOPICS.has(observation.topics[0]?.toLowerCase() ?? ""))) return [];
+          const poolId = observation.topics[1]?.toLowerCase();
+          return poolId !== undefined && poolsByManager.get(observation.address.toLowerCase())?.has(poolId)
+            ? [poolId] : [];
+        },
+      };
+    },
     affectedStateKeys({ descriptor, observation }) {
       // A manager event reaches every dependent pool. Only its matching
       // topic/poolId needs the (more expensive) emitter address validation.

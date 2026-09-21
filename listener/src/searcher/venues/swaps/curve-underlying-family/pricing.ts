@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import type { TokenEdge } from "../../../planner/token-graph.js";
 import {
@@ -196,6 +197,9 @@ export const curveUnderlyingPricing = {
     ...descriptor.coins,
   ]),
   mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
+      addresses: [descriptor.pool], keys: routes.map(route => route.routeKey),
+    }), { kinds: ["log"] }),
     affectedStateKeys({ descriptor, routes, observation }) {
       if (
         observation.kind !== "log" ||

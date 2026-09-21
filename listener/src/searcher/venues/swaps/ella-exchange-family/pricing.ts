@@ -1,3 +1,4 @@
+import { compileAddressMutations } from "../../mutation-index.js";
 import type { PricingSemantics } from "../../adapter-family-plugin.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import { quotedPoolMid } from "../blockscan-state-shared.js";
@@ -41,7 +42,11 @@ export const ellaPricing = {
     },
   },
   dependencies: ({ descriptor }) => dependencies(descriptor.instance),
-  mutation: { affectedStateKeys({ descriptor, observation }) {
+  mutation: {
+    compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor }) => ({
+      addresses: dependencies(descriptor.instance), keys: [descriptor.instance.instanceKey],
+    }), { kinds: ["log", "call"] }),
+    affectedStateKeys({ descriptor, observation }) {
     const target = observation.kind === "call" ? observation.target : observation.kind === "log" ? observation.address : null;
     return target && dependencies(descriptor.instance).some(d => same(d, target)) ? [descriptor.instance.instanceKey] : [];
   } },
