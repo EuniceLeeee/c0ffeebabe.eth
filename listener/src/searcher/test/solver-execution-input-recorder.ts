@@ -60,6 +60,16 @@ try {
     assert.equal(bounded.snapshot().failed, true);
     bounded.close();
   }
+  const longRun = createSolverExecutionInputRecorder({ ...defaults,
+    path: join(dir, "long-run.jsonl"), maxFileBytes: Number("1073741824") });
+  longRun.record(input);
+  assert.equal(longRun.snapshot().records, 1);
+  longRun.close();
+  for (const value of ["", "0", "-1", "1.5", "invalid", "Infinity", "9007199254740992"]) {
+    const invalidPath = join(dir, "invalid-limit.jsonl");
+    assert.throws(() => createSolverExecutionInputRecorder({ ...defaults,
+      path: invalidPath, maxFileBytes: Number(value) }), /configuration/);
+  }
 
   // Persistence is a producer-side boundary, not a pass-finish batch. An
   // ordered consumer aborted by a new head cannot erase already-produced data.

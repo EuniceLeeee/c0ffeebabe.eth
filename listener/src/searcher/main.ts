@@ -1677,6 +1677,9 @@ async function main(): Promise<void> {
   const solverInputRecorder = solverInputPath ? createSolverExecutionInputRecorder({
     path: solverInputPath, runId: eventContext.runId, chainId: eventContext.chainId,
     runtimeCommit: process.env.SEARCHER_RUNTIME_COMMIT ?? "",
+    maxFileBytes: process.env.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_MAX_BYTES === undefined
+      ? undefined
+      : Number(process.env.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_MAX_BYTES),
     protectedPaths: [eventContext.path, blockScanRouteEventsPath, blockScanMidHistoryPath,
       process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH ?? ""],
   }) : undefined;
