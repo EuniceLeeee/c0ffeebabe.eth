@@ -3,6 +3,8 @@ import {
   definedFamilyPluginContractSummary,
   type AnyDefinedFamilyPlugin,
   type AnyDefinedStrictFamilyPlugin,
+  type AnyCreditFamilyPlugin,
+  type DefinedFamilyPlugin,
   type CaptureReverseBindingSemantics,
   type DiscoveryCandidateSourceKind,
   type FamilyDomain,
@@ -65,6 +67,19 @@ export const FAMILY_CAPABILITIES_BY_DOMAIN: Readonly<
   ] as const),
 } as const);
 
+/** Credit pricing/exact supplement the domain's required capabilities only when supplied. */
+export function familyCapabilitiesForDefinition(
+  domain: FamilyDomain,
+  declares: (capability: "pricing" | "exact") => boolean,
+): readonly FamilyCapabilityName[] {
+  const required = FAMILY_CAPABILITIES_BY_DOMAIN[domain];
+  if (domain !== "credit") return required;
+  return Object.freeze([
+    ...required,
+    ...(["pricing", "exact"] as const).filter(declares),
+  ]);
+}
+
 /**
  * Proxy-implementation address surfaces match any EIP-1967 proxy
  * (implementation word non-zero), so the pattern fingerprint is a family
@@ -122,6 +137,24 @@ export interface LoadedStrictFamilyPlugin {
  * must not accept structurally forged boxes from Family code.
  */
 export type LoadedFamilyBox = LoadedStrictFamilyPlugin;
+
+/** Optional Credit price capabilities use the same route/price runtime, while
+ * retaining their Credit domain and position safety semantics. */
+export interface LoadedPricedFamilyPlugin extends Omit<LoadedStrictFamilyPlugin, "plugin"> {
+  readonly plugin: AnyDefinedFamilyPlugin | DefinedFamilyPlugin<AnyCreditFamilyPlugin &
+    Required<Pick<AnyCreditFamilyPlugin, "pricing" | "exact">> & { readonly sharedBindings?: never }>;
+}
+
+export function isPricedFamily(family: LoadedFamilyBox): family is LoadedPricedFamilyPlugin {
+  assertIssuedLoadedFamilyBox(family);
+  return "pricing" in family.plugin && family.plugin.pricing !== undefined &&
+    "exact" in family.plugin && family.plugin.exact !== undefined;
+}
+
+export function asPricedFamily(family: LoadedFamilyBox): LoadedPricedFamilyPlugin {
+  if (!isPricedFamily(family)) throw new Error("Family does not declare pricing and exact capabilities");
+  return family;
+}
 
 const issuedLoadedFamilyBoxes = new WeakSet<object>();
 
@@ -201,9 +234,12 @@ export class FamilyCapabilityCatalog {
         );
       }
       const hashes = capabilitySetForFamily(summary.familyId, generated);
-      const applicableCapabilities = FAMILY_CAPABILITIES_BY_DOMAIN[
-        summary.domain
-      ];
+      const applicableCapabilities = familyCapabilitiesForDefinition(
+        summary.domain,
+        (capability) => capability === "pricing"
+          ? "pricing" in module.plugin && module.plugin.pricing !== undefined
+          : "exact" in module.plugin && module.plugin.exact !== undefined,
+      );
       const family: LoadedStrictFamilyPlugin = Object.freeze({
         sourceFile: module.sourceFile,
         definitionBoundaryHash: module.definitionBoundaryHash,

@@ -7,6 +7,7 @@ import { aboveSpread, type DfsQuote, type DirectedPriceSignal } from "./detector
 import type { TokenEdge } from "./planner/token-graph.js";
 import { blockScanEdgeKey } from "./venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
+import { isBlockScanConversionEdge } from "./strategy-taxonomy.js";
 
 const compare = (a: RawTokenRate, b: RawTokenRate): number => {
   const delta = a.num * b.den - b.num * a.den;
@@ -60,9 +61,12 @@ export function buildBlockScanUsdView(
   const quotes: DfsQuote[] = [], seen = new Set<string>();
   let missingBuyReference = 0, missingSellReference = 0;
   for (const edge of edges) {
-    if (edge.leavesStandingPosition) continue;
+    if (!isBlockScanConversionEdge(edge)) continue;
     const id = blockScanEdgeKey(edge), mid = mids.get(id);
     if (!mid || seen.has(id)) continue;
+    // A borrow limit/oracle mark is not an executable amount quote.
+    if (edge.slotKind === "lend" &&
+        (mid.quoteAmountIn === undefined || mid.quoteAmountOut === undefined)) continue;
     seen.add(id);
     // Production effective rows supply exact integer amounts. Decimal-rate
     // compatibility exists only for historical resolved/raw-mid diagnostics.

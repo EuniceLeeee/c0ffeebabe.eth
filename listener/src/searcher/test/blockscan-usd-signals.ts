@@ -108,6 +108,29 @@ test("publication cache distinguishes cap, retains mids and supports switching b
   assert.throws(() => effectiveUsdPricing(pricing, 0), /positive safe integer/);
 });
 
+test("USD hop value uses the best equal-hop reference without changing effective amounts", () => {
+  const input = address(701), output = address(702), other = address(703);
+  const edges: TokenEdge[] = [], mids = new Map<string, ResolvedBlockScanMid>();
+  const add = (tokenIn: string, tokenOut: string, amountOut: bigint) => {
+    const edge: TokenEdge = { adapterId: "test", target: address(800 + edges.length),
+      tokenIn, tokenOut, slotKind: "swap", ...deriveEdgeTaxonomy("swap") };
+    edges.push(edge);
+    mids.set(blockScanEdgeKey(edge), { kind: "test", pool: edge.target, edges: [edge],
+      mid: Number(amountOut) / 1000, feeBps: 0, depthProxy: 1,
+      quoteAmountIn: 1000n, quoteAmountOut: amountOut });
+    return blockScanEdgeKey(edge);
+  };
+  add(usdc, weth, 1000n); add(input, weth, 1000n); add(other, weth, 1000n);
+  add(output, input, 1100n); add(output, other, 1050n);
+  const id = add(input, output, 900n);
+  const view = buildBlockScanUsdView(edges, mids);
+  const quote = view.quotes.find(q => q.id === id)!;
+  assert.equal(quote.num, 900n); assert.equal(quote.den, 1000n);
+  assert(quote.value);
+  assert.equal(quote.value.num * 100n, quote.value.den * 99n,
+    "0.9 × 1.1 = 0.99; the weaker 1.05 reference must not manufacture a 5.5% loss");
+});
+
 test("large many-pool input returns only top 20 pairs per token", () => {
   const {edges, mids} = fixture(4000);
   const view = buildBlockScanUsdView(edges, mids, 20);

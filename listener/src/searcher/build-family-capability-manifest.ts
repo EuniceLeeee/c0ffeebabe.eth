@@ -19,7 +19,7 @@ import {
   generateRuntimeSourceClosure,
 } from "./venues/capability-content-hash.js";
 import {
-  FAMILY_CAPABILITIES_BY_DOMAIN,
+  familyCapabilitiesForDefinition,
   FAMILY_CAPABILITY_NAMES,
   type FamilyCapabilityName,
 } from "./venues/family-capability-catalog.js";
@@ -340,7 +340,11 @@ async function strictProductionRecords(input: {
     return [];
   }
   const domain = STRICT_DOMAIN_CONSTRUCTORS[call.expression.text]!;
-  const capabilities = FAMILY_CAPABILITIES_BY_DOMAIN[domain].filter(
+  const properties = objectProperties(definition);
+  const capabilities = familyCapabilitiesForDefinition(
+    domain,
+    (capability) => properties.has(capability),
+  ).filter(
     (capability) => capability !== "victim",
   );
   const semanticKeys = domain === "swap" || domain === "protocol"
@@ -351,7 +355,6 @@ async function strictProductionRecords(input: {
     ...semanticKeys,
     "actionAdapters",
   ];
-  const properties = objectProperties(definition);
   if (requiredKeys.some((key) => !properties.has(key))) {
     const missing = requiredKeys.filter((key) => !properties.has(key));
     input.issues.push(issue(

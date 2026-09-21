@@ -42,8 +42,9 @@ const compareRates = (a: RawTokenRate, b: RawTokenRate): number => {
 };
 const multiply = (a: RawTokenRate, b: RawTokenRate): RawTokenRate =>
   ({ num: a.num * b.num, den: a.den * b.den });
-const lowerMedian = (rates: RawTokenRate[]): RawTokenRate =>
-  rates.sort(compareRates)[Math.floor((rates.length - 1) / 2)]!;
+/** Highest available directed conversion value; not a final-EV oracle. */
+const bestRate = (rates: readonly RawTokenRate[]): RawTokenRate =>
+  rates.reduce((best, rate) => compareRates(rate, best) > 0 ? rate : best);
 
 /** Approximate marks for sizing only, never trusted final-EV valuation. No RPC. */
 export function tokenToWethReferences(
@@ -75,11 +76,11 @@ export function tokenToWethReferences(
     const adjusted = multiply(rate, { num: residualFee.num, den: residualFee.den * 10_000n });
     const instance = edgeInstanceKey(edge);
     const previous = pair.instances.get(instance);
-    // Multiple execution variants of one logical venue get one vote.
-    if (!previous || compareRates(adjusted, previous) < 0) pair.instances.set(instance, adjusted);
+    // Keep the best available execution variant of each logical venue.
+    if (!previous || compareRates(adjusted, previous) > 0) pair.instances.set(instance, adjusted);
   }
   const directed = [...pairs.values()].map(pair => ({
-    from: pair.from, to: pair.to, rate: lowerMedian([...pair.instances.values()]),
+    from: pair.from, to: pair.to, rate: bestRate([...pair.instances.values()]),
   }));
   const marks = new Map<string, RawTokenRate>([[weth.toLowerCase(), { num: 1n, den: 1n }]]);
   // Shortest directed paths only. Each layer reads the completed prior layer,
@@ -94,7 +95,7 @@ export function tokenToWethReferences(
       values.push(multiply(pair.rate, tail));
       candidates.set(pair.from, values);
     }
-    for (const [token, values] of candidates) marks.set(token, lowerMedian(values));
+    for (const [token, values] of candidates) marks.set(token, bestRate(values));
     if (candidates.size === 0) break;
   }
   return marks;
@@ -248,9 +249,9 @@ export class TokenToWethReferenceCache {
     const instances = new Map<string, RawTokenRate>();
     for (const { instance, rate } of pair.contributions.values()) {
       const prior = instances.get(instance);
-      if (!prior || compareRates(rate, prior) < 0) instances.set(instance, rate);
+      if (!prior || compareRates(rate, prior) > 0) instances.set(instance, rate);
     }
-    pair.rate = instances.size === 0 ? undefined : lowerMedian([...instances.values()]);
+    pair.rate = instances.size === 0 ? undefined : bestRate([...instances.values()]);
   }
 
   private mark(index: ValuationIndex, token: string, hop: number): RawTokenRate | undefined {
@@ -263,7 +264,7 @@ export class TokenToWethReferenceCache {
       const tail = previous.get(pair.to);
       if (pair.rate && tail) candidates.push(multiply(pair.rate, tail));
     }
-    return candidates.length === 0 ? undefined : lowerMedian(candidates);
+    return candidates.length === 0 ? undefined : bestRate(candidates);
   }
 
   private build(pricing: PricingReference): ValuationIndex {

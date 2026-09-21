@@ -94,7 +94,7 @@ export interface SolveOptions {
   gssMaxTries?: number;
   /** Geometric grid doublings each side of the victim-anchored center. Default 3. */
   gridHalfWidth?: number;
-  /** Block-scan coarse grid only. Default multiples: [P, 5P, 10P, 15P]. */
+  /** Block-scan coarse grid only. Default multiples: [P, 10P, 100P]. */
   blockScanAmountGrid?: "multiples" | "geometric";
   /** How many top quote-ranked amount candidates get a full BotVM simulate.
    *  Default 3 — the whole point is to NOT full-sim every searched point. */
@@ -406,7 +406,7 @@ export class AnvilSolver implements Solver {
         : capGrid(
             isBlockScan &&
               (opts.blockScanAmountGrid ?? "multiples") === "multiples"
-              ? [center, center * 5n, center * 10n, center * 15n]
+              ? [center, center * 10n, center * 100n]
               : geometricGrid(center, gridHalfWidth),
             maxFlashAmount,
           );

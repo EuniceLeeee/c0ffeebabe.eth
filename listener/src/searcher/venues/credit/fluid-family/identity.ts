@@ -180,6 +180,10 @@ function activeOperateRequests(
       })]),
     }),
     observe: Object.freeze(["return-data" as const, "token-delta" as const]),
+    observeTokenBalances: [constants.supplyToken, constants.borrowToken].map(token => ({
+      token,
+      account: { kind: "verified-actor" as const, evidenceId: FLUID_CREDIT_PROBE_ACTOR_EVIDENCE_ID },
+    })),
   })]);
 }
 

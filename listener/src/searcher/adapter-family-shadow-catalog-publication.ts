@@ -69,9 +69,11 @@ import {
   type AdapterFamilySnapshotInventoryClosureReceipt,
 } from "./adapter-family-snapshot-inventory-closure.js";
 import {
+  isPricedFamily,
   type FamilyCapabilityCatalog,
   type LoadedFamilyPlugin,
   type LoadedFamilyBox,
+  type LoadedPricedFamilyPlugin,
 } from "./venues/family-capability-catalog.js";
 
 export interface StrictFundingPublicationState {
@@ -409,7 +411,8 @@ interface GraphValueOwner extends RouteValueOwner {
   readonly handle: FamilyRouteRuntimeHandle;
 }
 
-interface PricingValueOwner extends RouteValueOwner {
+interface PricingValueOwner extends Omit<RouteValueOwner, "family"> {
+  readonly family: LoadedPricedFamilyPlugin;
   readonly pricingKey: string;
 }
 
@@ -819,6 +822,16 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
         value: projected,
       });
     }
+    const pricingEntries = isPricedFamily(input.family)
+      ? this.#stageInstancePricing({
+          family: input.family,
+          instance: input.instance,
+          source,
+        })
+      : new Map<string, {
+          readonly fingerprint: string;
+          readonly value: PreparedPricingStateInstance;
+        }>();
     return Object.freeze({
       familyId: manifest.familyId,
       domain: "credit",
@@ -838,12 +851,18 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
             lineageId: input.instance.lineageId,
             instanceKey: input.instance.instanceKey,
             routes: input.publication.routes.map((route) => route.routeKey),
+            ...(pricingEntries.size === 0 ? {} : {
+              prepared: preparedInstancePublicationFingerprint(input.instance),
+              pricing: [...pricingEntries]
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([key, entry]) => ({ key, fingerprint: entry.fingerprint })),
+            }),
           }),
           value: input.instance,
         }),
         routeHandles,
         graphEntries,
-        pricingEntries: new Map(),
+        pricingEntries,
       }]),
       terminalRemovals: Object.freeze([]),
       outcomeRefs: Object.freeze([]),
@@ -1094,33 +1113,7 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     if (handles.size !== input.instance.routeHandles.length) {
       throw new Error("prepared instance has an unprojected route handle");
     }
-    const pricing = new Map<string, {
-      readonly fingerprint: string;
-      readonly value: PreparedPricingStateInstance;
-    }>();
-    for (const state of input.instance.pricingInstances) {
-      assertIssuedPreparedFamilyPricingStateInstance({
-        family: input.family,
-        instance: input.instance,
-        pricing: state,
-        source: input.source,
-        generation: input.source.generation,
-      });
-      const key = pricingPublicationKey(input.instance, state);
-      if (pricing.has(key)) {
-        throw new Error(`prepared instance duplicates pricing shard ${key}`);
-      }
-      this.#pricingOwners.set(state, Object.freeze({
-        family: input.family,
-        instance: input.instance,
-        publicationKey,
-        pricingKey: key,
-      }));
-      pricing.set(key, Object.freeze({
-        fingerprint: pricingPublicationFingerprint(state),
-        value: state,
-      }));
-    }
+    const pricing = this.#stageInstancePricing(input);
     return Object.freeze({
       instancePublicationKey: publicationKey,
       source: freezeSource(input.source),
@@ -1407,6 +1400,45 @@ export class StrictAdapterFamilyShadowCatalogPublicationRoot {
     }
   }
 
+  #stageInstancePricing(input: {
+    readonly family: LoadedPricedFamilyPlugin;
+    readonly instance: PreparedFamilyInstance;
+    readonly source: CanonicalSource;
+  }): ReadonlyMap<string, {
+    readonly fingerprint: string;
+    readonly value: PreparedPricingStateInstance;
+  }> {
+    const publicationKey = catalogInstancePublicationKey(input.instance);
+    const pricing = new Map<string, {
+      readonly fingerprint: string;
+      readonly value: PreparedPricingStateInstance;
+    }>();
+    for (const state of input.instance.pricingInstances) {
+      assertIssuedPreparedFamilyPricingStateInstance({
+        family: input.family,
+        instance: input.instance,
+        pricing: state,
+        source: input.source,
+        generation: input.source.generation,
+      });
+      const key = pricingPublicationKey(input.instance, state);
+      if (pricing.has(key)) {
+        throw new Error(`prepared instance duplicates pricing shard ${key}`);
+      }
+      this.#pricingOwners.set(state, Object.freeze({
+        family: input.family,
+        instance: input.instance,
+        publicationKey,
+        pricingKey: key,
+      }));
+      pricing.set(key, Object.freeze({
+        fingerprint: pricingPublicationFingerprint(state),
+        value: state,
+      }));
+    }
+    return pricing;
+  }
+
   #assertPricing(
     value: PreparedPricingStateInstance,
     binding: CatalogValueBinding,
@@ -1576,7 +1608,7 @@ function assertBindingIdentity(
 }
 
 function assertOwnerBinding(
-  owner: RouteValueOwner,
+  owner: RouteValueOwner | PricingValueOwner,
   binding: CatalogValueBinding,
 ): void {
   if (

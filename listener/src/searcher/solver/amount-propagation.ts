@@ -111,7 +111,8 @@ export async function propagateAmountsWithRawOutputs(
         ...(options.adapterWorkControl === undefined
           ? {}
           : { control: options.adapterWorkControl }),
-        ...(options.strictSession.blocksPrefixInversion(edge)
+        ...(options.strictSession.blocksPrefixInversion(edge) &&
+            options.fluidDebtBps !== undefined && options.fluidDebtBps > 0n
           ? { creditDebtBps: options.fluidDebtBps }
           : {}),
       });

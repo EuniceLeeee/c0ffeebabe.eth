@@ -102,28 +102,29 @@ test("blockscan stops at non-positive P even when larger inputs would be profita
   }
 });
 
-test("blockscan defaults to 10/50/100/150 raw units", async () => {
-  assert.deepEqual(await observeSearch(), [10n, 50n, 100n, 150n]);
+test("blockscan defaults to P/10P/100P raw units", async () => {
+  assert.deepEqual(await observeSearch(), [10n, 100n, 1000n]);
   for (const halfWidth of [0, 2, 16]) {
     assert.deepEqual(await observeSearch({ amountGrid: "multiples", halfWidth }),
-      [10n, 50n, 100n, 150n]);
+      [10n, 100n, 1000n]);
   }
 });
 
 test("multiples retain raw bigint precision without token scaling", async () => {
   const center = 9_007_199_254_740_993n;
   assert.deepEqual(await observeSearch({ center }), [
-    9_007_199_254_740_993n, 45_035_996_273_704_965n,
-    90_071_992_547_409_930n, 135_107_988_821_114_895n,
+    9_007_199_254_740_993n, 90_071_992_547_409_930n,
+    900_719_925_474_099_300n,
   ]);
-  assert.deepEqual(await observeSearch({ center: 1n }), [1n, 5n, 10n, 15n]);
+  assert.deepEqual(await observeSearch({ center: 1n }), [1n, 10n, 100n]);
 });
 
 test("multiples use the existing clamp and deduplicate capped amounts", async () => {
   for (const [cap, expected] of [
-    [150n, [10n, 50n, 100n, 150n]],
-    [100n, [10n, 50n, 100n]],
-    [75n, [10n, 50n, 75n]],
+    [1000n, [10n, 100n, 1000n]],
+    [150n, [10n, 100n, 150n]],
+    [100n, [10n, 100n]],
+    [75n, [10n, 75n]],
     [10n, [10n]],
     [7n, []],
     [1n, []],
@@ -162,7 +163,7 @@ test("blockscan grid option does not alter swap backrun or oracle searches", asy
 
 test("multiples retain GSS bracket, evaluation budget and mandatory final sim", async () => {
   assert.deepEqual(await observeSearch({ profit: 1n, includeGss: true }),
-    [10n, 50n, 100n, 150n, 11n, 14n, 9n, 8n]);
+    [10n, 100n, 1000n, 11n, 14n, 9n, 8n]);
 });
 
 test("P's complete route must finish positive before any other amount starts", async () => {
@@ -184,7 +185,7 @@ test("P's complete route must finish positive before any other amount starts", a
   await reached;
   try { assert.deepEqual(amounts, [1024n]); } finally { release(); }
   await solve;
-  assert.deepEqual(amounts.slice(0, 4), [1024n, 5120n, 10240n, 15360n]);
+  assert.deepEqual(amounts.slice(0, 3), [1024n, 10240n, 102400n]);
 });
 
 test("P failure preserves revert/RPC/timeout evidence and issues no larger amounts", async () => {

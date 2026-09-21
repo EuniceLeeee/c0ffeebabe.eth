@@ -1,13 +1,19 @@
 import {
+  assertAdapterWorkControl,
+  adapterWorkSubjectKey,
   executeAdapterWork,
+  snapshotCentralCallerAuthority,
   type AdapterWorkOutcome,
   type AdapterWorkControl,
   type CentralAdapterRuntime,
+  type CentralCallerAuthority,
+  type CentralCallerAuthorityInput,
 } from "./adapter-work-intent.js";
 import { deriveEdgeTaxonomy } from "./strategy-taxonomy.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import {
   assertDefinedFamilyPlugin,
+  collectRequestProgramResults,
   type CompiledInstanceDescriptor,
   type CreditFamilyPlugin,
   type CreditRiskProgramInput,
@@ -24,7 +30,7 @@ import type {
   LineageId,
   RouteKey,
 } from "./venues/adapter-family-identifiers.js";
-import type { CanonicalSource } from
+import type { AdapterRequest, AdapterRequestResult, CanonicalSource, RequestProgram } from
   "./venues/adapter-request-program.js";
 import {
   canonicalEdgeId,
@@ -36,12 +42,16 @@ import {
 } from "./venues/canonical-value.js";
 import {
   assertIssuedLoadedFamilyBox,
+  asPricedFamily,
   type FamilyCapabilityCatalog,
   type LoadedFamilyBox,
 } from "./venues/family-capability-catalog.js";
 import {
   assertFamilyOwnedPlanFragment,
   assertIssuedPreparedFamilyInstance,
+  assertFamilyRouteRuntimeHandleBinding,
+  assertIssuedFamilyRouteRuntimeHandleAtSource,
+  type FamilyRouteRuntimeHandle,
   type PreparedFamilyInstance,
 } from "./venues/adapter-family-runtime.js";
 import type { PlanFragment } from "./venues/route-leg-adapter.js";
@@ -214,7 +224,7 @@ export function prepareCreditFamilyRoutes(input: {
     throw new Error("Credit descriptor binding projection is unstable");
   }
   const first = validateCreditRoutes(
-    plugin.routes.project({ descriptor: instance.descriptor }),
+    instance.routes.length > 0 ? instance.routes : plugin.routes.project({ descriptor: instance.descriptor }),
     instance.descriptor,
     input.family,
   );
@@ -373,6 +383,23 @@ export function assertIssuedProjectedCreditRoute(
   }
 }
 
+/** Bind a Credit edge to the original generic Exact authority, never a copied
+ * route descriptor. Only families declaring both optional slots can use it. */
+export function resolveCreditExactBinding(input: {
+  readonly family: LoadedFamilyBox;
+  readonly route: CreditRouteRuntimeHandle;
+}): { readonly family: import("./venues/family-capability-catalog.js").LoadedPricedFamilyPlugin;
+  readonly route: FamilyRouteRuntimeHandle } {
+  const record = resolveCreditRouteHandle(input.family, input.route);
+  const family = asPricedFamily(input.family);
+  const index = record.instance.routes.indexOf(record.route);
+  const route = record.instance.routeHandles[index];
+  if (index < 0 || route === undefined) throw new Error("Credit route lacks prepared Exact authority");
+  assertFamilyRouteRuntimeHandleBinding(family, route, record.descriptor, record.route);
+  assertIssuedFamilyRouteRuntimeHandleAtSource({ family, handle: route, source: record.source, generation: record.generation });
+  return Object.freeze({ family, route });
+}
+
 export async function executeCreditRiskQuote(input: {
   readonly family: LoadedFamilyBox;
   readonly route: CreditRouteRuntimeHandle;
@@ -408,6 +435,46 @@ export async function executeCreditRiskQuote(input: {
   if (program === undefined) {
     return terminalRisk("failed", "risk-declaration:evidence-program-required");
   }
+  const subject = Object.freeze({
+    familyId: input.family.plugin.manifest.familyId,
+    instanceKey: routeRecord.route.instanceKey,
+    routeKey: routeRecord.route.routeKey,
+  });
+  const callerBinding: CentralCallerAuthorityInput = Object.freeze({
+    stage: "runtime-evidence", familyId: subject.familyId, subject,
+    subjectKey: adapterWorkSubjectKey(subject), source: freezeSource(input.source),
+    callerRole: "executor",
+  });
+  const snapshotCaller = (binding = callerBinding) =>
+    snapshotCentralCallerAuthority(input.runtime.callerAuthority.bind(binding));
+  let caller: CentralCallerAuthority;
+  try {
+    assertAdapterWorkControl(input.control);
+    input.runtime.generationFence.assertCurrent(input.generation, input.source);
+    caller = snapshotCaller();
+    if (caller.executor !== executor) {
+      throw new Error("Credit risk caller executor differs from invocation executor");
+    }
+  } catch (error) {
+    return terminalRisk("unresolved", `risk-work:${errorMessage(error)}`);
+  }
+  const assertCaller = (current: CentralCallerAuthority) => {
+    if (current.executor !== caller.executor || current.transactionOrigin !== caller.transactionOrigin) {
+      throw new Error("Credit risk caller context changed");
+    }
+  };
+  const runtime: CentralAdapterRuntime = Object.freeze({
+    ...input.runtime,
+    callerAuthority: Object.freeze({ bind(binding: CentralCallerAuthorityInput) {
+      const current = snapshotCaller(binding);
+      assertCaller(current);
+      return current;
+    } }),
+    generationFence: Object.freeze({ assertCurrent(generation: number, source: CanonicalSource) {
+      input.runtime.generationFence.assertCurrent(generation, source);
+      assertCaller(snapshotCaller());
+    } }),
+  });
   const programInput: CreditRiskProgramInput<
     CompiledInstanceDescriptor,
     FamilyRouteDescriptor
@@ -418,11 +485,11 @@ export async function executeCreditRiskQuote(input: {
     debtBps: input.debtBps,
     source: freezeSource(input.source),
     executor,
+    ...(caller.transactionOrigin === undefined ? {} : { transactionOrigin: caller.transactionOrigin }),
     runtimeEvidence,
   });
-  let work: AdapterWorkOutcome<unknown>;
-  try {
-    work = await executeAdapterWork({
+  const runWork = <Evidence>(roundProgram: RequestProgram<typeof programInput, Evidence>) =>
+    executeAdapterWork({
       intent: {
         stage: "runtime-evidence",
         familyId: input.family.plugin.manifest.familyId,
@@ -430,11 +497,33 @@ export async function executeCreditRiskQuote(input: {
         routeKey: routeRecord.route.routeKey,
         source: input.source,
         generation: input.generation,
-        program,
+        program: roundProgram,
         programInput,
       },
-      runtime: input.runtime,
+      runtime,
       ...(input.control === undefined ? {} : { control: input.control }),
+    });
+  const seenRequestIds = new Set<string>();
+  const uniqueRequests = (requests: readonly AdapterRequest[]) => {
+    if (!Array.isArray(requests)) throw new Error("Credit risk requests must be an array");
+    for (const request of requests) {
+      if (seenRequestIds.has(request.id)) {
+        throw new Error(`Credit risk duplicate request id: ${request.id}`);
+      }
+      seenRequestIds.add(request.id);
+    }
+    return requests;
+  };
+  const assertCurrent = () => {
+    assertAdapterWorkControl(input.control);
+    runtime.generationFence.assertCurrent(input.generation, input.source);
+  };
+  let work: AdapterWorkOutcome<readonly AdapterRequestResult[]>;
+  try {
+    work = await runWork({
+      requirements: (current) => program.requirements(current),
+      buildRequests: (current) => uniqueRequests(program.buildRequests(current)),
+      decode: ({ results }) => Object.freeze([...results]),
     });
   } catch (error) {
     return terminalRisk("unresolved", `risk-work:${errorMessage(error)}`);
@@ -446,14 +535,74 @@ export async function executeCreditRiskQuote(input: {
     );
   }
 
+  const initialResults = work.executed.evidence;
+  const priorEvidence: unknown[] = [];
+  const transportRefs = [`risk-transport:${work.executed.trustedResultsFingerprint}`];
   try {
-    deepFreezeOpaqueValue(work.executed.evidence, "Credit risk evidence");
+    for (let completedRound = 0; ; completedRound++) {
+      assertCurrent();
+      const bound = program.buildDependentProgram === undefined ? null :
+        program.buildDependentProgram({
+          programInput,
+          completedRound,
+          initialResults,
+          priorEvidence: Object.freeze([...priorEvidence]),
+        });
+      assertCurrent();
+      if (bound === null) break;
+      if (completedRound >= 4) {
+        return terminalRisk("unresolved", "risk-work:dependent-read-round-budget-exhausted");
+      }
+      requireObject(bound, "Credit risk dependent program");
+      if (typeof bound.decode !== "function") {
+        throw new Error("Credit risk dependent decode must be a function");
+      }
+      const round = await runWork({
+        requirements: () => bound.requirements,
+        buildRequests: () => uniqueRequests(bound.requests),
+        decode: ({ results }) => bound.decode(results),
+      });
+      if (round.status === "unresolved") {
+        return terminalRisk("unresolved", `risk-work:${round.failure.stage}:${round.failure.code}`);
+      }
+      const roundResults = collectRequestProgramResults([], [round.executed.evidence]);
+      if (roundResults.length !== round.executed.trustedResults.length ||
+          roundResults.some((result, index) => result !== round.executed.trustedResults[index])) {
+        throw new Error("Credit risk dependent evidence must preserve issued request results");
+      }
+      deepFreezeOpaqueValue(round.executed.evidence, "Credit risk dependent evidence");
+      priorEvidence.push(round.executed.evidence);
+      transportRefs.push(`risk-transport:${round.executed.trustedResultsFingerprint}`);
+    }
+  } catch (error) {
+    return terminalRisk("unresolved", `risk-work:${errorMessage(error)}`);
+  }
+  const results = collectRequestProgramResults(initialResults, priorEvidence);
+  let evidence: unknown;
+  try {
+    evidence = program.decode({ programInput, results });
+  } catch {
+    try {
+      assertCurrent();
+    } catch (error) {
+      return terminalRisk("unresolved", `risk-work:${errorMessage(error)}`);
+    }
+    return terminalRisk("unresolved", results.some((result) => !result.ok)
+      ? "risk-work:decode:decode-failure" : "risk-work:decode:family-decode");
+  }
+  try {
+    assertCurrent();
+  } catch (error) {
+    return terminalRisk("unresolved", `risk-work:${errorMessage(error)}`);
+  }
+  try {
+    deepFreezeOpaqueValue(evidence, "Credit risk evidence");
     const amountOut = plugin.credit.risk.quoteOutputByDebtBps({
       descriptor: routeRecord.descriptor,
       route: routeRecord.route,
       collateralAmount: input.collateralAmount,
       debtBps: input.debtBps,
-      evidence: work.executed.evidence,
+      evidence,
     });
     if (typeof amountOut !== "bigint" || amountOut < 0n) {
       throw new Error("Credit risk quote must be a non-negative bigint");
@@ -462,10 +611,10 @@ export async function executeCreditRiskQuote(input: {
       descriptor: routeRecord.descriptor,
       route: routeRecord.route,
     }), "Credit position key");
-    input.runtime.generationFence.assertCurrent(input.generation, input.source);
+    assertCurrent();
     const source = freezeSource(input.source);
     const evidenceRefs = Object.freeze([
-      `risk-transport:${work.executed.trustedResultsFingerprint}`,
+      ...transportRefs,
       `risk-debt-bps:${input.debtBps}`,
     ]);
     const handle = Object.freeze({
@@ -490,7 +639,7 @@ export async function executeCreditRiskQuote(input: {
       collateralAmount: input.collateralAmount,
       debtBps: input.debtBps,
       amountOut,
-      evidence: work.executed.evidence,
+      evidence,
       executor,
       runtimeEvidence,
       runtimeEvidenceFingerprint: runtimeEvidenceHash(runtimeEvidence),

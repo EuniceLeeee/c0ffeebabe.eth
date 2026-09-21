@@ -15,6 +15,7 @@ import { blockScanEdgeKey, createVerifiedGraphView } from "../venues/blockscan-s
 import type { RouteVenueMid } from "../venues/mid-readers.js";
 import type { StrictProductionRuntimeSession } from "../strict-production-runtime-session.js";
 import { BlockScanAmountReference } from "../blockscan-amount-reference.js";
+import { scannerConsumesEdge } from "../blockscan-pricing-delta.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 
 // Offline behavior tests only: callbacks are fixtures, not chain-quote evidence
@@ -58,7 +59,8 @@ function pricing(rows: readonly PriceRow[]): EffectivePricingInput {
   return {
     sourceBlock: SOURCE.number, sourceBlockHash: SOURCE.hash, generation: SOURCE.generation,
     graph: { edges: rows.map(([e]) => e) },
-    pricingStateKeyByEdgeKey: new Map(rows.map(([e]) => [blockScanEdgeKey(e), e.instanceKey ?? e.target])),
+    pricingStateKeyByEdgeKey: new Map(rows.filter(([e]) => !e.leavesStandingPosition)
+      .map(([e]) => [blockScanEdgeKey(e), e.instanceKey ?? e.target])),
     coverage: { resolvedEdgeKeys: rows.map(([e]) => blockScanEdgeKey(e)) },
     mids,
   };
@@ -87,6 +89,26 @@ function noQuote(r: EffectiveMidRow, status: EffectiveMidRow["status"]) {
 
 const tests: [string, () => void | Promise<void>][] = [];
 const test = (name: string, run: () => void | Promise<void>) => { tests.push([name, run]); };
+
+test("declared standing-position pricing shares Exact but does not grant scanner admission", async () => {
+  const graph = graphAt([{ ...edge(W, U, "credit"), slotKind: "lend" as const,
+    edgeKind: "credit" as const, leavesStandingPosition: true }], SOURCE);
+  const credit = graph.edges[0]!;
+  const prices = pricing([[credit, 2], [edge(W, U, "spot"), 2]]);
+  const declared = { ...prices, pricingStateKeyByEdgeKey: new Map([[blockScanEdgeKey(credit), "credit"]]) };
+  let calls = 0;
+  const effective = await build(declared, { quoteGraph: graph, quote: async input => {
+    calls++; assert.equal(input.amountIn, DEFAULT_RAW);
+    return { source: SOURCE, amountIn: input.amountIn, amountOut: 12_345n };
+  } });
+  assert.equal(calls, 1);
+  assert.equal(row(effective, credit).amountOut, 12_345n);
+  assert.equal(row(effective, credit).status, "quoted");
+  assert.equal(scannerConsumesEdge(credit), false);
+  assert.equal(graph.scannerEdgeCount, 0);
+  const unsupported = await build(prices);
+  noQuote(row(unsupported, credit), "unsupported");
+});
 
 for (const gasCostWei of [null, 100_000_000_000_000n]) {
   test(`${gasCostWei === null ? "default 0.005 ETH" : "gas at 200 bps"}: every input token, three hops and raw units`, async () => {
@@ -221,7 +243,7 @@ test("effective leaves original Exact method selection unset and preserves its r
   }
 });
 
-test("one immutable sizing pass; shortest paths and instance-deduplicated medians", async () => {
+test("one immutable sizing pass; best available rates on shortest paths", async () => {
   const direct = edge(U, W, "u-direct", "one");
   const rows: PriceRow[] = [
     [direct, 2], [edge(U, W, "u-variant", "one"), 100],
@@ -240,8 +262,7 @@ test("one immutable sizing pass; shortest paths and instance-deduplicated median
     },
   });
   for (const [e] of rows) {
-    const expected = e.tokenIn === U ? 1_666_666_666_666_667n
-      : e.tokenIn === "linked" ? 833_333_333_333_334n : 50_000_000_000_000n;
+    const expected = e.tokenIn === "linked" ? 25_000_000_000_000n : 50_000_000_000_000n;
     assert.equal(row(snapshot, e).amountIn, expected, "later mid changes cannot reprice this pass");
     assert.equal(row(snapshot, e).effectiveMid, 11);
   }

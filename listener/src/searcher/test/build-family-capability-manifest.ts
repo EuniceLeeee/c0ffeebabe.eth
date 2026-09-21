@@ -20,7 +20,7 @@ import {
   writeProductionFamilyStaticImports,
 } from "../build-family-capability-manifest.js";
 import { familyId } from "../venues/adapter-family-identifiers.js";
-import { FAMILY_CAPABILITY_NAMES } from
+import { FAMILY_CAPABILITY_NAMES, familyCapabilitiesForDefinition } from
   "../venues/family-capability-catalog.js";
 import {
   createFamilyCapabilityShadowArtifact,
@@ -184,6 +184,81 @@ try {
     ],
     "Credit must omit fake pricing/exact while preserving route and risk roots",
   );
+
+  const creditBuildOptions = {
+    rootDirectory: fixtureRoot,
+    productionDirectory,
+    productionRegistryFile: registryFile,
+  };
+  for (const slots of [[], ["pricing"], ["exact"], ["pricing", "exact"]] as const) {
+    await writeCreditProductionEntry({ optionalCapabilities: slots });
+    const artifact = await buildFamilyCapabilityShadowArtifact(creditBuildOptions);
+    assert.equal(artifact.complete, true, JSON.stringify(artifact.issues));
+    const supplied = new Set<string>(slots);
+    assert.deepEqual(
+      artifact.exact.filter((record) => record.root.absence === null)
+        .map((record) => record.identity.capability).sort(),
+      [...familyCapabilitiesForDefinition("credit", (slot) => supplied.has(slot))].sort(),
+      "catalog applicability and generated Credit roots must agree",
+    );
+    const manifest = generatedCapabilityManifestFromShadowArtifact({
+      artifact,
+      strictFamilyIds: [familyId("credit:fixture")],
+    });
+    for (const slot of ["pricing", "exact"] as const) {
+      const record = artifact.exact.find((item) => item.identity.capability === slot)!;
+      const absent = creditArtifact.exact.find((item) => item.identity.capability === slot)!;
+      assert.equal(record.root.absence, supplied.has(slot) ? null : "declared-absent");
+      assert.equal(record.root.entrySourceFile, supplied.has(slot) ? `src/${slot}.ts` : null);
+      if (supplied.has(slot)) {
+        assert.notEqual(record.identity.contentHash, absent.identity.contentHash);
+        assert(record.identity.semanticDependencies.includes("src/manifest.ts"));
+      } else {
+        assert.deepEqual(record.identity, absent.identity, "legacy absent identity must be stable");
+      }
+      assert.deepEqual(manifest.entries.find((entry) => entry.capability === slot), record.identity);
+    }
+  }
+
+  // Both optional slots must hash their transitive implementation dependencies.
+  for (const slot of ["pricing", "exact"] as const) {
+    await writeFixtureFile(`src/${slot}-math.ts`, `export const rate = 1;`);
+    await writeFixtureFile(`src/${slot}.ts`, `
+      import { rate } from "./${slot}-math.js";
+      export const ${slot} = { run: () => rate };
+    `);
+  }
+  let creditBefore = await buildFamilyCapabilityShadowArtifact(creditBuildOptions);
+  assert.equal(creditBefore.complete, true, JSON.stringify(creditBefore.issues));
+  for (const slot of ["pricing", "exact"] as const) {
+    await writeFixtureFile(`src/${slot}-math.ts`, `export const rate = 2;`);
+    const changed = await buildFamilyCapabilityShadowArtifact(creditBuildOptions);
+    assert.equal(changed.complete, true, JSON.stringify(changed.issues));
+    for (const record of changed.exact) {
+      const before = creditBefore.exact.find((item) =>
+        item.identity.capability === record.identity.capability
+      )!;
+      if (record.identity.capability === slot) {
+        assert(record.identity.semanticDependencies.includes(`src/${slot}-math.ts`));
+        assert.notEqual(record.identity.contentHash, before.identity.contentHash);
+      } else {
+        assert.equal(record.identity.contentHash, before.identity.contentHash,
+          `${record.identity.capability} must ignore a Credit ${slot}-only edit`);
+      }
+    }
+    creditBefore = changed;
+  }
+  await writeCreditProductionEntry();
+  const legacyCredit = await buildFamilyCapabilityShadowArtifact(creditBuildOptions);
+  assert.deepEqual(legacyCredit.exact, creditArtifact.exact,
+    "undeclared pricing/exact files must not change legacy Credit identities");
+
+  await writeCreditProductionEntry({ optionalCapabilities: ["exact"], inlineExact: true });
+  const inlineCredit = await buildFamilyCapabilityShadowArtifact(creditBuildOptions);
+  assert.equal(inlineCredit.complete, false);
+  assert(inlineCredit.issues.some((item) =>
+    item.code === "strict_root_not_direct_import" && item.message.includes("exact")
+  ), "optional Credit slots retain direct-import closure validation");
 
   await writeFixtureFile("src/manifest.ts", `
     export const manifest = { familyId: "swap:fixture" } as const;
@@ -592,7 +667,11 @@ async function writeFundingProductionEntry(): Promise<void> {
   `);
 }
 
-async function writeCreditProductionEntry(): Promise<void> {
+async function writeCreditProductionEntry(input?: {
+  readonly optionalCapabilities?: readonly ("pricing" | "exact")[];
+  readonly inlineExact?: boolean;
+}): Promise<void> {
+  const slots = input?.optionalCapabilities ?? [];
   await writeFixtureFile("src/production/fixture.production.ts", `
     import { defineCreditFamily } from "../framework.js";
     import { manifest } from "../manifest.js";
@@ -601,6 +680,7 @@ async function writeCreditProductionEntry(): Promise<void> {
     import { identity } from "../identity.js";
     import { instance } from "../instance.js";
     import { routes } from "../routes.js";
+    ${slots.map((slot) => `import { ${slot} } from "../${slot}.js";`).join("\n")}
     import { execution } from "../execution.js";
     import { credit } from "../credit.js";
     import { action } from "../action.js";
@@ -611,6 +691,8 @@ async function writeCreditProductionEntry(): Promise<void> {
       identity,
       instance,
       routes,
+      ${slots.map((slot) => slot === "exact" && input?.inlineExact
+        ? "exact: {}," : `${slot},`).join("\n")}
       execution,
       credit,
       actionAdapters: [action],

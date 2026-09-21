@@ -18,6 +18,7 @@ import {
   issueCreditExecutionHandle,
   prepareCreditFamilyRoutes,
   projectCreditRouteGraph,
+  resolveCreditExactBinding,
   type CreditRouteRuntimeHandle,
   type SealedCreditRiskQuoteHandle,
 } from "./adapter-credit-runtime.js";
@@ -65,10 +66,13 @@ import {
   deterministicHash,
   exactSetHash,
 } from "./venues/blockscan-state-capability.js";
-import type {
-  FamilyCapabilityCatalog,
-  LoadedFamilyBox,
-  LoadedFamilyPlugin,
+import {
+  asPricedFamily,
+  isPricedFamily,
+  type FamilyCapabilityCatalog,
+  type LoadedFamilyBox,
+  type LoadedFamilyPlugin,
+  type LoadedPricedFamilyPlugin,
 } from "./venues/family-capability-catalog.js";
 
 export type StrictProductionExactHandle =
@@ -121,11 +125,25 @@ export type StrictCurrentRoutePricing =
       readonly reason: string;
     };
 
-interface ExactBinding {
+type ExactBinding = {
   readonly route: StrictRouteBinding;
   readonly executor: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
-}
+} & (
+  | {
+      readonly kind: "credit-risk";
+      readonly route: CreditBinding;
+      readonly exact: SealedCreditRiskQuoteHandle;
+    }
+  | {
+      readonly kind: "exact";
+      readonly exact: SealedFamilyExactQuoteHandle;
+      readonly exactBinding: {
+        readonly family: LoadedPricedFamilyPlugin;
+        readonly route: FamilyRouteRuntimeHandle;
+      };
+    }
+);
 
 interface InstanceRefreshOutcome {
   readonly routes: readonly {
@@ -136,7 +154,7 @@ interface InstanceRefreshOutcome {
   }[];
   readonly creditRoutes: readonly ReturnType<typeof projectCreditRouteGraph>[];
   readonly pricing: readonly [
-    FamilyRouteRuntimeHandle,
+    FamilyRouteRuntimeHandle | CreditRouteRuntimeHandle,
     StrictCurrentRoutePricing,
   ][];
 }
@@ -187,6 +205,7 @@ export interface StrictReadyPricingIndex {
   readonly edgeIdByRouteIdentity: ReadonlyMap<string, string>;
   readonly stateKeyByRouteIdentity: ReadonlyMap<string, string>;
   readonly instanceIndexesByStateKey: ReadonlyMap<string, readonly number[]>;
+  /** Pricing coverage, including optional Credit; not the Graph scanner subset. */
   readonly expectedEdgeKeys: readonly string[];
   readonly expectedEdgeKeyHash: string;
   readonly readyGraphContractFingerprint: string;
@@ -268,6 +287,7 @@ export class StrictProductionRuntimeRoot {
     }
     this.#pricingIndex = buildStrictReadyPricingIndex({
       catalog: input.catalog,
+      source: input.readySource,
       graph: input.readyGraph,
       instances: input.readyInstances,
       stateKeyByRouteIdentity,
@@ -327,7 +347,7 @@ export class StrictProductionRuntimeRoot {
     }[] = [];
     const creditRoutes = [] as ReturnType<typeof projectCreditRouteGraph>[];
     const pricingByHandle = new Map<
-      FamilyRouteRuntimeHandle,
+      FamilyRouteRuntimeHandle | CreditRouteRuntimeHandle,
       StrictCurrentRoutePricing
     >();
     const kind = input.kind ?? "pricing";
@@ -502,12 +522,20 @@ export class StrictProductionRuntimeRoot {
           readyInstance.familyId,
         );
         if (strictFamily.plugin.manifest.domain === "credit") {
-          const currentInstance = reissuePreparedInstanceAuthority({
+          const currentAuthority = reissuePreparedInstanceAuthority({
             family: strictFamily,
             instance: readyInstance,
             source: input.source,
             generation: input.source.generation,
           });
+          const currentInstance = isPricedFamily(strictFamily)
+            ? reissuePreparedInstanceRouteHandles({
+                family: strictFamily,
+                instance: currentAuthority,
+                source: input.source,
+                generation: input.source.generation,
+              })
+            : currentAuthority;
           const publication = prepareCreditFamilyRoutes({
             family: strictFamily,
             instance: currentInstance,
@@ -579,14 +607,12 @@ export class StrictProductionRuntimeRoot {
       if (stateKey !== undefined) {
         stateKeyByEdge.set(projected.edge.canonicalEdgeId, stateKey);
       }
-      if (binding.kind === "route") {
-        const pricing = pricingByHandle.get(binding.handle);
-        if (pricing !== undefined) {
-          currentPricing.set(
-            projected.edge.canonicalEdgeId,
-            bindCurrentPricingToEdge(pricing, projected.edge),
-          );
-        }
+      const pricing = pricingByHandle.get(binding.handle);
+      if (pricing !== undefined) {
+        currentPricing.set(
+          projected.edge.canonicalEdgeId,
+          bindCurrentPricingToEdge(pricing, projected.edge),
+        );
       }
     }
 
@@ -655,12 +681,20 @@ export class StrictProductionRuntimeRoot {
   }): InstanceRefreshOutcome {
     const strictFamily = this.#catalog.forStrictFamily(input.readyInstance.familyId);
     if (strictFamily.plugin.manifest.domain === "credit") {
-      const currentInstance = reissuePreparedInstanceAuthority({
+      const currentAuthority = reissuePreparedInstanceAuthority({
         family: strictFamily,
         instance: input.readyInstance,
         source: input.source,
         generation: input.source.generation,
       });
+      const currentInstance = isPricedFamily(strictFamily)
+        ? reissuePreparedInstanceRouteHandles({
+            family: strictFamily,
+            instance: currentAuthority,
+            source: input.source,
+            generation: input.source.generation,
+          })
+        : currentAuthority;
       const publication = prepareCreditFamilyRoutes({
         family: strictFamily,
         instance: currentInstance,
@@ -706,16 +740,21 @@ export class StrictProductionRuntimeRoot {
     readonly reason: string;
   }): InstanceRefreshOutcome {
     const unpriced = this.unpricedInstanceRoutes(input);
-    if (unpriced.routes.length === 0) return unpriced;
+    const family = this.#catalog.forStrictFamily(input.readyInstance.familyId);
+    if (!isPricedFamily(family)) return unpriced;
+    const handles = [
+      ...unpriced.routes.map(({ handle }) => handle),
+      ...unpriced.creditRoutes.map(({ handle }) => handle),
+    ];
     return Object.freeze({
       ...unpriced,
-      pricing: Object.freeze(unpriced.routes.map(({ handle }) => [
+      pricing: Object.freeze(handles.map((handle) => [
         handle,
         Object.freeze({
           status: "unresolved" as const,
           reason: input.reason,
         }),
-      ] as [FamilyRouteRuntimeHandle, StrictCurrentRoutePricing])),
+      ] as [FamilyRouteRuntimeHandle | CreditRouteRuntimeHandle, StrictCurrentRoutePricing])),
     });
   }
 
@@ -727,36 +766,10 @@ export class StrictProductionRuntimeRoot {
   }): Promise<InstanceRefreshOutcome> {
     const { readyInstance, source, runtime, control } = input;
     const strictFamily = this.#catalog.forStrictFamily(readyInstance.familyId);
-    if (strictFamily.plugin.manifest.domain === "credit") {
-      const currentInstance = reissuePreparedInstanceAuthority({
-        family: strictFamily,
-        instance: readyInstance,
-        source,
-        generation: source.generation,
-      });
-      const publication = prepareCreditFamilyRoutes({
-        family: strictFamily,
-        instance: currentInstance,
-        source,
-        generation: source.generation,
-      });
-      return Object.freeze({
-        routes: Object.freeze([]),
-        creditRoutes: Object.freeze(publication.routes.map((route) =>
-          projectCreditRouteGraph({ family: strictFamily, route })
-        )),
-        pricing: Object.freeze([]),
-      });
+    if (strictFamily.plugin.manifest.domain === "credit" && !isPricedFamily(strictFamily)) {
+      return this.unpricedInstanceRoutes(input);
     }
-    if (
-      strictFamily.plugin.manifest.domain !== "swap" &&
-      strictFamily.plugin.manifest.domain !== "protocol"
-    ) {
-      throw new Error(
-        `strict ready instance has unsupported domain ${strictFamily.plugin.manifest.domain}`,
-      );
-    }
-    const family = this.#catalog.forFamily(readyInstance.familyId);
+    const family = asPricedFamily(strictFamily);
     const currentAuthority = reissuePreparedInstanceAuthority({
       family,
       instance: readyInstance,
@@ -790,6 +803,25 @@ export class StrictProductionRuntimeRoot {
       source,
       generation: source.generation,
     });
+    if (family.plugin.manifest.domain === "credit") {
+      const publication = prepareCreditFamilyRoutes({
+        family,
+        instance: currentInstance,
+        source,
+        generation: source.generation,
+      });
+      return Object.freeze({
+        routes: Object.freeze([]),
+        creditRoutes: Object.freeze(publication.routes.map((route) =>
+          projectCreditRouteGraph({ family, route })
+        )),
+        pricing: Object.freeze(publication.routes.map((handle) => [
+          handle,
+          currentPricingForRoute(currentInstance, handle.routeKey),
+        ] as [CreditRouteRuntimeHandle, StrictCurrentRoutePricing])),
+      });
+    }
+    const routeFamily = this.#catalog.forFamily(readyInstance.familyId);
     const pricing: [
       FamilyRouteRuntimeHandle,
       StrictCurrentRoutePricing,
@@ -801,7 +833,7 @@ export class StrictProductionRuntimeRoot {
         currentPricingForRoute(currentInstance, route.routeKey),
       ]);
       return {
-        family,
+        family: routeFamily,
         descriptor: currentInstance.descriptor,
         route,
         handle,
@@ -876,12 +908,11 @@ export class StrictProductionRuntimeSession {
   }
 
   /**
-   * Current-source coarse pricing for one ready swap/protocol edge. Credit is
-   * exact-only and therefore returns null rather than inventing a coarse mid.
+   * Current-source coarse pricing for a ready edge with declared pricing.
+   * Legacy Credit without pricing remains unpriced.
    */
   currentPricingForEdge(edge: TokenEdge): StrictCurrentRoutePricing | null {
     const binding = this.#resolve(edge);
-    if (binding.kind === "credit") return null;
     const pricing = this.#currentPricing.get(binding.edge.canonicalEdgeId);
     return pricing ?? null;
   }
@@ -1159,6 +1190,9 @@ export class StrictProductionRuntimeSession {
     for (const edge of path.edges) {
       const route = this.#resolve(edge);
       if (route.kind !== "credit") continue;
+      // Amount-capable Credit uses the same default Exact program as its
+      // effective row. Legacy risk-only Families retain their explicit grid.
+      if (isPricedFamily(route.family)) continue;
       const plugin = route.family.plugin;
       if (plugin.manifest.domain !== "credit") {
         throw new Error("strict Credit binding escaped its domain");
@@ -1205,54 +1239,59 @@ export class StrictProductionRuntimeSession {
       this.source,
     );
     const route = this.#resolve(input.edge);
-    if (input.requireChainAmountQuote && route.kind === "credit") {
-      throw new ChainAmountQuoteUnavailableError();
-    }
-    const exact = route.kind === "credit"
-      ? await executeCreditRiskQuote({
-          family: route.family,
-          route: route.handle,
-          collateralAmount: input.amountIn,
-          debtBps: input.creditDebtBps ?? (() => {
-            throw new Error("strict Credit quote requires a declared debtBps");
-          })(),
-          executor: input.executor,
-          runtimeEvidence: input.runtimeEvidence,
-          source: this.source,
-          generation: this.source.generation,
-          runtime: this.#runtime,
-          ...(input.control === undefined ? {} : { control: input.control }),
-        })
-      : await executeFamilyExactQuote({
-          family: route.family,
-          route: route.handle,
-          amountIn: input.amountIn,
-          executor: input.executor,
-          runtimeEvidence: input.runtimeEvidence,
-          source: this.source,
-          generation: this.source.generation,
-          runtime: this.#runtime,
-          ...(input.control === undefined ? {} : { control: input.control }),
-          ...(input.requireChainAmountQuote === undefined
-            ? {} : { requireChainAmountQuote: input.requireChainAmountQuote }),
-        });
-    if (exact.status !== "resolved") {
-      const reason = "reasonCode" in exact
-        ? exact.reasonCode
-        : exact.outcome.reasonCode;
-      if (reason === "exact-chain-amount-quote-unavailable") {
-        throw new ChainAmountQuoteUnavailableError();
-      }
-      throw new Error(
-        `strict exact unresolved for ${route.edge.canonicalEdgeId}: ${reason}`,
-      );
-    }
-    this.#exactBindings.set(exact, Object.freeze({
-      route,
+    const authority = {
       executor: input.executor.toLowerCase(),
       runtimeEvidence: Object.freeze([...input.runtimeEvidence]),
-    }));
-    return exact;
+    };
+    let binding: ExactBinding;
+    if (route.kind === "credit" && input.creditDebtBps !== undefined) {
+      if (input.requireChainAmountQuote) throw new ChainAmountQuoteUnavailableError();
+      const exact = await executeCreditRiskQuote({
+        family: route.family,
+        route: route.handle,
+        collateralAmount: input.amountIn,
+        debtBps: input.creditDebtBps,
+        executor: input.executor,
+        runtimeEvidence: input.runtimeEvidence,
+        source: this.source,
+        generation: this.source.generation,
+        runtime: this.#runtime,
+        ...(input.control === undefined ? {} : { control: input.control }),
+      });
+      if (exact.status !== "resolved") {
+        throw new Error(
+          `strict exact unresolved for ${route.edge.canonicalEdgeId}: ${exact.reasonCode}`,
+        );
+      }
+      binding = { ...authority, kind: "credit-risk", route, exact };
+    } else {
+      const exactBinding = route.kind === "credit"
+        ? resolveCreditExactBinding({ family: route.family, route: route.handle })
+        : { family: route.family, route: route.handle };
+      const exact = await executeFamilyExactQuote({
+        ...exactBinding,
+        amountIn: input.amountIn,
+        executor: input.executor,
+        runtimeEvidence: input.runtimeEvidence,
+        source: this.source,
+        generation: this.source.generation,
+        runtime: this.#runtime,
+        ...(input.control === undefined ? {} : { control: input.control }),
+        ...(input.requireChainAmountQuote === undefined
+          ? {} : { requireChainAmountQuote: input.requireChainAmountQuote }),
+      });
+      if (exact.status !== "resolved") {
+        if (exact.outcome.reasonCode === "exact-chain-amount-quote-unavailable") {
+          throw new ChainAmountQuoteUnavailableError();
+        }
+        throw new Error(
+          `strict exact unresolved for ${route.edge.canonicalEdgeId}: ${exact.outcome.reasonCode}`,
+        );
+      }
+      binding = { ...authority, kind: "exact", route, exact, exactBinding };
+    }
+    this.#exactBindings.set(binding.exact, Object.freeze(binding));
+    return binding.exact;
   }
 
   buildExecution(input: {
@@ -1276,11 +1315,11 @@ export class StrictProductionRuntimeSession {
         "strict execution requires the same session-issued route/exact authority",
       );
     }
-    if (route.kind === "credit") {
+    if (exactBinding.kind === "credit-risk") {
       const handle = issueCreditExecutionHandle({
-        family: route.family,
-        route: route.handle,
-        risk: input.exact as SealedCreditRiskQuoteHandle,
+        family: exactBinding.route.family,
+        route: exactBinding.route.handle,
+        risk: exactBinding.exact,
         minAmountOut: input.minAmountOut,
         executor: input.executor,
         runtimeEvidence: exactBinding.runtimeEvidence,
@@ -1288,16 +1327,15 @@ export class StrictProductionRuntimeSession {
         generation: this.source.generation,
       });
       return buildCreditExecutionFragment({
-        family: route.family,
+        family: exactBinding.route.family,
         actionOwnership: this.#catalog,
         handle,
       });
     }
     return buildFamilyExecutionFragment({
-      family: route.family,
+      ...exactBinding.exactBinding,
       actionOwnership: this.#catalog,
-      route: route.handle,
-      exact: input.exact as SealedFamilyExactQuoteHandle,
+      exact: exactBinding.exact,
       minAmountOut: input.minAmountOut,
       executor: input.executor,
       runtimeEvidence: exactBinding.runtimeEvidence,
@@ -1377,6 +1415,7 @@ function currentPricingForRoute(
 
 function buildStrictReadyPricingIndex(input: {
   readonly catalog: FamilyCapabilityCatalog;
+  readonly source: CanonicalSource;
   readonly graph: readonly TokenEdge[];
   readonly instances: readonly PreparedFamilyInstance[];
   readonly stateKeyByRouteIdentity: ReadonlyMap<string, string>;
@@ -1385,7 +1424,7 @@ function buildStrictReadyPricingIndex(input: {
   const graphByEdgeKey = new Map<string, TokenEdge>();
   const instanceKeyByEdgeKey = new Map<string, string>();
   const edgeIdsByInstanceKey = new Map<string, string[]>();
-  const expectedEdgeKeys = input.graph
+  const scannerEdgeKeys = input.graph
     .filter((edge) => scannerConsumesPricingEdge(edge))
     .map((edge) => {
       const edgeKey = requiredCanonicalEdgeId(edge);
@@ -1405,8 +1444,8 @@ function buildStrictReadyPricingIndex(input: {
     .sort();
 
   // Include non-scanner edges in the instance closure used by exact sessions.
-  // Credit/lend edges do not own coarse pricing state, but they still need an
-  // instance binding when a candidate's complete closure requests them.
+  // Even edges without coarse pricing need an instance binding when a
+  // candidate's complete closure requests them.
   for (const edge of input.graph) {
     const edgeKey = requiredCanonicalEdgeId(edge);
     if (graphByEdgeKey.has(edgeKey)) continue;
@@ -1425,27 +1464,32 @@ function buildStrictReadyPricingIndex(input: {
   const edgeIdByRouteIdentity = new Map<string, string>();
   for (const instance of input.instances) {
     const strictFamily = input.catalog.forStrictFamily(instance.familyId);
-    if (
-      strictFamily.plugin.manifest.domain !== "swap" &&
-      strictFamily.plugin.manifest.domain !== "protocol"
-    ) continue;
-    const family = input.catalog.forFamily(instance.familyId);
-    const routeInputs = instance.routes.map((route, index) => {
-      const handle = instance.routeHandles[index];
-      if (handle === undefined) {
-        throw new Error(
-          `strict ready pricing route lacks authority ${instance.familyId}:` +
-            `${instance.instanceKey}:${route.routeKey}`,
-        );
-      }
-      return {
-        family,
-        descriptor: instance.descriptor,
-        route,
-        handle,
-      };
-    });
-    const projected = buildFamilyRouteGraphView({ routes: routeInputs });
+    if (!isPricedFamily(strictFamily)) continue;
+    const creditRoutes = strictFamily.plugin.manifest.domain === "credit"
+      ? prepareCreditFamilyRoutes({
+          family: strictFamily,
+          instance,
+          source: input.source,
+          generation: input.source.generation,
+        }).routes.map((route) => projectCreditRouteGraph({ family: strictFamily, route }))
+      : [];
+    const routeInputs = strictFamily.plugin.manifest.domain === "credit"
+      ? [] : instance.routes.map((route, index) => {
+          const handle = instance.routeHandles[index];
+          if (handle === undefined) {
+            throw new Error(
+              `strict ready pricing route lacks authority ${instance.familyId}:` +
+                `${instance.instanceKey}:${route.routeKey}`,
+            );
+          }
+          return {
+            family: input.catalog.forFamily(instance.familyId),
+            descriptor: instance.descriptor,
+            route,
+            handle,
+          };
+        });
+    const projected = buildFamilyRouteGraphView({ routes: routeInputs, creditRoutes });
     for (const item of projected.routes) {
       const edgeKey = requiredCanonicalEdgeId(item.edge);
       const readyEdge = graphByEdgeKey.get(edgeKey);
@@ -1482,7 +1526,7 @@ function buildStrictReadyPricingIndex(input: {
     }
   }
 
-  for (const edgeKey of expectedEdgeKeys) {
+  for (const edgeKey of scannerEdgeKeys) {
     if (
       familyIdByEdgeKey.get(edgeKey) === undefined ||
       stateKeyByEdgeKey.get(edgeKey) === undefined
@@ -1491,6 +1535,7 @@ function buildStrictReadyPricingIndex(input: {
     }
   }
 
+  const expectedEdgeKeys = [...stateKeyByEdgeKey.keys()].sort();
   return Object.freeze({
     familyIdByEdgeKey: new Map(familyIdByEdgeKey),
     stateKeyByEdgeKey: new Map(stateKeyByEdgeKey),

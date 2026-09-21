@@ -284,9 +284,14 @@ export function assertAtomicBlockScanPricingView(
     );
   }
   const midsFinishedAtMs = Date.now();
+  const pricingEdges = graph.edges.filter(edge => scannerConsumesEdge(edge) ||
+    pricing.pricingStateKeyByEdgeKey?.has(blockScanEdgeKey(edge)));
+  const pricingEdgeKeys = pricingEdges.map(blockScanEdgeKey);
   if (
-    graph.scannerEdgeCount !== expectedEdgeSet.size ||
-    graph.scannerEdgeKeyHash !== coverage.expectedEdgeKeyHash
+    pricingEdgeKeys.length !== expectedEdgeSet.size ||
+    exactSetHash(pricingEdgeKeys) !== coverage.expectedEdgeKeyHash ||
+    graph.edges.filter(scannerConsumesEdge).length !== graph.scannerEdgeCount ||
+    exactSetHash(graph.edges.filter(scannerConsumesEdge).map(blockScanEdgeKey)) !== graph.scannerEdgeKeyHash
   ) {
     throw new Error(
       "production scanner missing current-N mid or pricing coverage does not exactly match its graph",

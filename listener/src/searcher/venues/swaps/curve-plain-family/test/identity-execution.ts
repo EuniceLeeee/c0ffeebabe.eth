@@ -61,6 +61,9 @@ const successful = requests.map(request => {
   ] } };
 });
 const unavailable = (id: string): AdapterRequestResult => ({ id, ok: false, source, failure: "resource-limited" });
+const reverted = (id: string): AdapterRequestResult => ({
+  ...returned(id, "0x"), completion: "reverted-as-declared",
+});
 const decide = (results: readonly AdapterRequestResult[], observed = candidate) => variant.decide({
   candidate: observed, step: 4, evidence: variant.decode({ step, results }),
 });
@@ -68,18 +71,38 @@ const decide = (results: readonly AdapterRequestResult[], observed = candidate) 
 // Mirrors the existing transport's preCall-failure classification: optional
 // approval failure cannot erase an independently successful received proof.
 for (const mode of ["received", "received-no-receiver", "exchange"] as const) {
-  const results = successful.map(result => result.id === `execution:0:1:${mode}` ? result : unavailable(result.id));
+  const results = successful.map(result => result.id.endsWith(`:${mode}`) ? result : unavailable(result.id));
   const decision = decide(results);
   assert.equal(decision.status, "verified");
   if (decision.status !== "verified") throw new Error("missing verified direction");
-  assert.deepEqual(decision.identity.facts.directions.map(d => [d.i, d.j, d.executionMode]), [[0, 1, mode]]);
+  assert.deepEqual(decision.identity.facts.directions.map(d => [d.i, d.j, d.executionMode]), [[0, 1, mode], [1, 0, mode]]);
+}
+// A positive quote with no proved mode is unresolved if even one alternative
+// timed out. A different direction's success must not publish a subset.
+for (const unresolvedDirection of ["0:1", "1:0"]) {
+  for (const onlyOneTimeout of [false, true]) {
+    const results = successful.map(result => {
+      if (!result.id.startsWith(`execution:${unresolvedDirection}:`)) return result;
+      return !onlyOneTimeout || result.id.endsWith(":exchange")
+        ? unavailable(result.id) : reverted(result.id);
+    });
+    assert.throws(() => decide(results), /unresolved execution proof/);
+  }
+}
+// Actual EVM reverts are negative evidence, not unknown transport outcomes.
+// A fully reverted reverse direction may be omitted without inventing support.
+const reverseReverted = successful.map(result => result.id.startsWith("execution:1:0:") ? reverted(result.id) : result);
+const oneDirection = decide(reverseReverted);
+assert.equal(oneDirection.status, "verified");
+if (oneDirection.status === "verified") {
+  assert.deepEqual(oneDirection.identity.facts.directions.map(d => [d.i, d.j]), [[0, 1]]);
 }
 const alternativesFailed = successful.map(result => result.id.endsWith(":exchange") ? unavailable(result.id) : result);
 const selected = decide(alternativesFailed);
 assert.equal(selected.status, "verified");
 if (selected.status === "verified") assert(selected.identity.facts.directions.every(d => d.executionMode === "received"));
 assert.throws(() => decide(successful.map(result => unavailable(result.id))), /unresolved/);
-assert.equal(decide(successful.map(result => ({ ...result, completion: "reverted-as-declared" }))).status, "retryable");
+assert.equal(decide(successful.map(result => reverted(result.id))).status, "retryable");
 assert.throws(() => decide(successful.slice(1)), /missing/);
 assert.throws(() => decide([...successful, successful[0]]), /duplicate/);
 assert.throws(() => decide(successful.map(result => ({ ...unavailable(result.id), source: { ...source, hash: ethers.id("foreign") } }))), /foreign source/);
@@ -94,7 +117,6 @@ for (const corrupt of [
   assert.throws(() => decide(successful.map(result => result.id.endsWith(":received") ? corrupt(result) : unavailable(result.id))), /unresolved/);
 }
 const hinted = { ...candidate, hintedI: 1, hintedJ: 0 };
-const otherDirectionOnly = successful.map(result => result.id.startsWith("execution:0:") ? result : unavailable(result.id));
-const observedMissing = variant.decide({ candidate: hinted, step: 4, evidence: variant.decode({ step, results: otherDirectionOnly }) });
+const observedMissing = variant.decide({ candidate: hinted, step: 4, evidence: variant.decode({ step, results: reverseReverted }) });
 assert.equal(observedMissing.status, "retryable", "never invent an unproved observed direction");
-console.log("PASS optional execution modes: complete proofs only; exact amounts, effects, source and observed direction remain enforced");
+console.log("PASS per-direction execution proof: unknown modes cannot publish a subset; proved alternatives and actual reverts remain distinct; exact effects/source enforced");

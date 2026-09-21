@@ -131,9 +131,12 @@ function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainC
         // invalidate another mode's complete proof or create a fallback edge.
         const supported = modes.filter(mode => provesExecution(results, prior.pool, quote, mode));
         if (supported.length) directions.push({ ...quote, executionMode: supported[0] });
-      }
-      if (directions.length === 0 && results.some(read => !read.ok)) {
-        throw new Error("curve-plain unresolved execution proof");
+        // Another direction's success cannot turn unknown execution evidence
+        // for this positive quote into proof that the direction is unsupported.
+        else if (results.some(read => !read.ok && modes.some(mode =>
+          read.id === `execution:${quote.i}:${quote.j}:${mode}`))) {
+          throw new Error("curve-plain unresolved execution proof");
+        }
       }
       return { ...prior, phase: "execution", directions, requestIds } satisfies Evidence;
     },
