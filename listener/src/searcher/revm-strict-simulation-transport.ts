@@ -49,8 +49,12 @@ export function createRevmStrictSimulationTransport(input: {
       // Fatal delivery wins even if the quote was cancelled concurrently.
       if (error instanceof RevmFatalError) fatal(error.fatal);
       open(control);
+      const message = error instanceof Error ? error.message : undefined;
+      const safeMessage = message === "revm-sim request deadline timed out" ? "strict simulation deadline reached"
+        : message === "revm-sim request aborted" ? "strict simulation cancelled"
+        : "strict simulation transport failed";
       throw new RevmStrictError(error instanceof RevmStrictError ? error.kind : "execution",
-        "strict simulation transport failed");
+        safeMessage);
     }
   }
   function leasePin(lease: RevmStrictSourceLease, source: CanonicalSource): Readonly<RevmSourcePin> {

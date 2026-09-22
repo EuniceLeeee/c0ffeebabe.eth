@@ -848,6 +848,17 @@ export function upgradeLegacyVerifiedMemo(
   );
 }
 
+/** Startup-only override; callers outside rebuild keep their existing deadlines. */
+export function resolveRebuildRevmTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const override = env.SEARCHER_REBUILD_REVM_TIMEOUT_MS;
+  if (override === undefined) return Number(env.SEARCHER_REVM_TIMEOUT_MS ?? "60000");
+  const timeoutMs = Number(override);
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("SEARCHER_REBUILD_REVM_TIMEOUT_MS must be a positive safe integer");
+  }
+  return timeoutMs;
+}
+
 export function createProbeWiring(
   input?: {
     readonly rpcUrl?: string;
@@ -855,6 +866,7 @@ export function createProbeWiring(
     readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
   },
 ): UniverseRebuildProbeWiring {
+  const timeoutMs = resolveRebuildRevmTimeoutMs();
   const rpcUrl = input?.rpcUrl ??
     process.env.SEARCHER_LIVE_RPC_URL ??
     process.env.MAINNET_RPC_URL;
@@ -869,7 +881,6 @@ export function createProbeWiring(
   const executionIdentity = input?.executionIdentity === undefined
     ? undefined : Object.freeze({ ...input.executionIdentity });
   const executor = executionIdentity?.executor ?? process.env.BOTVM_ADDRESS;
-  const timeoutMs = Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000");
   const notifyFatal = input?.onSimulationFatal;
   const probeController = new AbortController();
   let fatal: RevmFatalError | undefined;

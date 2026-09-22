@@ -156,6 +156,60 @@ test("unattested thrown CALL_EXCEPTION is not evidence", async () => {
   const f = fixture(async () => { throw Object.assign(new Error("secret"), { code: "CALL_EXCEPTION", data: "0xdead" }); });
   await assert.rejects(f.transport.simulate(invocation()), notEvidence); assert.equal(f.fatals.length, 0);
 });
+const safeClientErrors = [
+  ["revm-sim request deadline timed out", "strict simulation deadline reached"],
+  ["revm-sim request aborted", "strict simulation cancelled"],
+] as const;
+for (const [message, expected] of safeClientErrors) for (const stage of ["lease", "request"] as const) {
+  test(`known client ${message} is safely distinguished at ${stage}`, async () => {
+    let first = true;
+    const failOnce = () => { if (first) { first = false; throw new Error(message); } };
+    const f = fixture(async req => { if (stage === "request") failOnce(); return response(req); });
+    const transport = createRevmStrictSimulationTransport({ ...f.options,
+      async leaseFor(source) { if (stage === "lease") failOnce(); return f.options.leaseFor(source); },
+    });
+    await assert.rejects(transport.simulate(invocation()), error => {
+      assert(error instanceof RevmStrictError); assert.equal(error.kind, "execution");
+      assert.equal(error.message, expected); return notEvidence(error);
+    });
+    await transport.simulate(invocation());
+    assert.equal(f.fatals.length, 0, "timeout/cancellation must not poison the source");
+  });
+}
+test("only exact Error messages map; malicious text and error-like objects stay redacted", async () => {
+  for (const error of [
+    new Error(`revm-sim request deadline timed out ${RPC_URL}`),
+    new Error(`revm-sim request aborted: ${RPC_URL}`),
+    new Error(`${RPC_URL} revm-sim request aborted`),
+    new Error("revm-sim request deadline timed out\n"),
+    "revm-sim request aborted",
+    { message: "revm-sim request deadline timed out", secret: RPC_URL },
+  ]) {
+    const f = fixture(async () => { throw error; });
+    await assert.rejects(f.transport.simulate(invocation()), actual => {
+      assert(actual instanceof RevmStrictError); assert.equal(actual.kind, "execution");
+      assert.equal(actual.message, "strict simulation transport failed"); return notEvidence(actual);
+    });
+    assert.equal(f.fatals.length, 0);
+  }
+});
+test("safe error mapping preserves strict error kinds and fatal/control precedence", async () => {
+  const strict = fixture(async () => { throw new RevmStrictError("observation", safeClientErrors[0][0]); });
+  await assert.rejects(strict.transport.simulate(invocation()), error => {
+    assert(error instanceof RevmStrictError); assert.equal(error.kind, "observation");
+    assert.equal(error.message, safeClientErrors[0][1]); return true;
+  });
+  const controller = new AbortController();
+  const cancelled = fixture(async () => { controller.abort(new Error(RPC_URL)); throw new Error(safeClientErrors[0][0]); });
+  await assert.rejects(cancelled.transport.simulate({ ...invocation(), control: { signal: controller.signal } }),
+    { message: "strict simulation cancelled" });
+  const fatal = fixture(async () => {
+    const error = new RevmFatalError({ kind: "source-fault" }); error.message = safeClientErrors[1][0]; throw error;
+  });
+  await assert.rejects(fatal.transport.simulate(invocation()), RevmFatalError);
+  await assert.rejects(fatal.transport.simulate(invocation()), RevmFatalError);
+  assert.equal(fatal.calls.length, 1); assert.equal(fatal.fatals.length, 1);
+});
 const corruptions: [string, (r: any) => void, "source-fault" | "protocol-fault"][] = [
   ["missing attestation", r => delete r.sourceAttestation, "source-fault"], ["wrong hash", r => r.sourceAttestation.blockHash = hash("9"), "source-fault"],
   ["wrong number", r => r.sourceAttestation.blockNumber++, "source-fault"], ["wrong chain", r => r.sourceAttestation.chainId = 2, "source-fault"],
