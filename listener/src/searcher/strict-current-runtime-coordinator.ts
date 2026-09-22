@@ -395,6 +395,14 @@ export class StrictCurrentRuntimeCoordinator
     activity?: StrictCanonicalActivityProof,
     simulationTransport?: StrictSimulationTransport,
   ): Promise<{ session: StrictProductionRuntimeSession; built: StrictPricingBuildResult }> {
+    // Bootstrap refreshes everything. Thereafter the already-published Ready
+    // policy adds only environment-sensitive state keys, before both parallel
+    // branches and cache invalidation. No extra reads or protocol dispatch.
+    if (activity !== undefined && previous?.perBlockRefreshStateKeys?.length) {
+      activity = { ...activity, touchedStateKeys: new Set([
+        ...activity.touchedStateKeys, ...previous.perBlockRefreshStateKeys,
+      ]) };
+    }
     // Same current-block activity as raw/effective; amount changes do not
     // invalidate local state. This happens before either pricing branch runs.
     this.exactQuoteCache?.advanceState(sourceFor(graph), activity);
@@ -532,6 +540,7 @@ function buildStrictPricingSnapshot(
   assertSessionGraphSource(session, graph);
   const sessionCoveredEdgeIds = new Set(session.edges.map(blockScanEdgeKey));
   const pricingIndex = session.pricingIndex();
+  const perBlockRefresh = new Set(pricingIndex.perBlockRefreshStateKeys);
   const graphFingerprint = strictGraphPublicationFingerprint(graph);
   // Pricing capability is independent of strategy admission. A declared
   // Credit quote can be displayed without making a standing debt searchable.
@@ -668,7 +677,7 @@ function buildStrictPricingSnapshot(
       ? session.currentPricingForEdge(edge)
       : null;
     if (current === null) {
-      const carried = compatibleCarryForEdge({
+      const carried = perBlockRefresh.has(stateKey) ? null : compatibleCarryForEdge({
         edge,
         edgeKey,
         stateKey,
@@ -832,6 +841,7 @@ function buildStrictPricingSnapshot(
     carriedEdgeKeyHash: exactSetHash(carriedEdgeKeys),
   });
   const snapshot: BlockScanStateSnapshot = Object.freeze({
+    perBlockRefreshStateKeys: pricingIndex.perBlockRefreshStateKeys,
     generation: graph.generation,
     sourceBlock: graph.sourceBlock,
     sourceBlockHash: graph.sourceBlockHash,

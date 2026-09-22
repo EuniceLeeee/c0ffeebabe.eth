@@ -290,6 +290,8 @@ export interface BlockScanFamilyTelemetry {
 }
 
 export interface BlockScanStateSnapshot {
+  /** Ready-bound Family policy, carried atomically with prices; not observed activity. */
+  readonly perBlockRefreshStateKeys?: readonly string[];
   /** Optional amount-sensitive companion. Raw pricing/carry contracts stay unchanged. */
   readonly effectiveMids?: import("./blockscan-effective-mid.js").EffectiveMidSnapshot;
   readonly generation: number;

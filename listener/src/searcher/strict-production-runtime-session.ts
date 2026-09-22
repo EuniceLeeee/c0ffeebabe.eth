@@ -202,6 +202,7 @@ export interface StrictProductionSessionCreationTiming {
  * this index to map dirty results back onto the dense ready Graph.
  */
 export interface StrictReadyPricingIndex {
+  readonly perBlockRefreshStateKeys: readonly string[];
   readonly familyIdByEdgeKey: ReadonlyMap<string, string>;
   readonly stateKeyByEdgeKey: ReadonlyMap<string, string>;
   readonly instanceKeyByEdgeKey: ReadonlyMap<string, string>;
@@ -254,6 +255,7 @@ export class StrictProductionRuntimeRoot {
     const stateKeyByRouteIdentity = new Map<string, string>();
     const instanceIndexesByStateKey = new Map<string, number[]>();
     const instanceIndexesByKey = new Map<string, number[]>();
+    const perBlockRefreshStateKeys = new Set<string>();
     type Pricing = PreparedFamilyInstance["pricingInstances"][number];
     type Semantics = ReturnType<typeof asPricedFamily>["plugin"]["pricing"];
     const mutationGroups = new Map<Semantics, MutationPricingEntry<
@@ -281,6 +283,7 @@ export class StrictProductionRuntimeRoot {
           routes: pricing.routes, stateKey: pricing.stateKey, dependencies: pricing.dependencies }));
         mutationGroups.set(semantics, entries);
         const stateKey = String(pricing.stateKey).toLowerCase();
+        if (semantics.refreshPolicy === "each-block") perBlockRefreshStateKeys.add(stateKey);
         const stateIndexes = instanceIndexesByStateKey.get(stateKey) ?? [];
         if (!stateIndexes.includes(index)) stateIndexes.push(index);
         instanceIndexesByStateKey.set(stateKey, stateIndexes);
@@ -332,6 +335,7 @@ export class StrictProductionRuntimeRoot {
       instances: input.readyInstances,
       stateKeyByRouteIdentity,
       instanceIndexesByStateKey,
+      perBlockRefreshStateKeys: Object.freeze([...perBlockRefreshStateKeys]),
     });
     const fundingAssetsByFamily = new Map<FamilyId, Set<string>>();
     for (const entry of input.readyFundingAssets) {
@@ -422,7 +426,8 @@ export class StrictProductionRuntimeRoot {
         ? Array.from({ length: this.#readyInstances.length }, (_, index) => index)
         : selectedInstanceIndexesForTouchedPools(
             this.#pricingIndex.instanceIndexesByStateKey,
-            input.touchedPools,
+            this.#pricingIndex.perBlockRefreshStateKeys.length === 0 ? input.touchedPools
+              : new Set([...input.touchedPools, ...this.#pricingIndex.perBlockRefreshStateKeys]),
           )
       : [];
     // Preserve the old instance-key selection and Ready order, including
@@ -1473,6 +1478,7 @@ function currentPricingForRoute(
 }
 
 function buildStrictReadyPricingIndex(input: {
+  readonly perBlockRefreshStateKeys: readonly string[];
   readonly catalog: FamilyCapabilityCatalog;
   readonly source: CanonicalSource;
   readonly graph: readonly TokenEdge[];
@@ -1596,6 +1602,7 @@ function buildStrictReadyPricingIndex(input: {
 
   const expectedEdgeKeys = [...stateKeyByEdgeKey.keys()].sort();
   return Object.freeze({
+    perBlockRefreshStateKeys: input.perBlockRefreshStateKeys,
     familyIdByEdgeKey: new Map(familyIdByEdgeKey),
     stateKeyByEdgeKey: new Map(stateKeyByEdgeKey),
     instanceKeyByEdgeKey: new Map(instanceKeyByEdgeKey),
