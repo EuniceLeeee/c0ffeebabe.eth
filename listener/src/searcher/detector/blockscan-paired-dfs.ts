@@ -42,6 +42,8 @@ export interface PairedEnumerationInput {
   readonly allowRepeatedPools?: boolean;
   readonly prefixPruningEnabled?: boolean;
   readonly maxPrefixDrawdownBps?: number;
+  readonly rustThreads?: number;
+  readonly rustScratchMb?: number;
   readonly deadlineAtMs: number;
   readonly onCycle: (quotes: readonly DfsQuote[], spreadBps: number) => void;
 }
@@ -50,13 +52,19 @@ export function resolvePairedEnumerationOptions(input: PairedEnumerationInput) {
   const allowRepeatedPools = input.allowRepeatedPools ?? DEFAULT_ALLOW_REPEATED_POOLS;
   const prefixPruningEnabled = input.prefixPruningEnabled ?? BLOCKSCAN_ENUMERATION_DEFAULTS.prefixPruningEnabled;
   const maxPrefixDrawdownBps = input.maxPrefixDrawdownBps ?? BLOCKSCAN_ENUMERATION_DEFAULTS.maxPrefixDrawdownBps;
+  const rustThreads = input.rustThreads ?? BLOCKSCAN_ENUMERATION_DEFAULTS.rustThreads;
+  const rustScratchMb = input.rustScratchMb ?? BLOCKSCAN_ENUMERATION_DEFAULTS.rustScratchMb;
   if (!Number.isSafeInteger(input.minSpreadBps) || input.minSpreadBps < 0 ||
       !Number.isSafeInteger(input.maxHops) || input.maxHops < 2)
     throw new Error("paired enumeration requires integer spread bps and maxHops >= 2");
   if (typeof prefixPruningEnabled !== "boolean") throw new Error("prefixPruningEnabled must be boolean");
   if (!Number.isSafeInteger(maxPrefixDrawdownBps) || maxPrefixDrawdownBps < 0 || maxPrefixDrawdownBps > 10_000)
     throw new Error("maxPrefixDrawdownBps must be a safe integer from 0 to 10000");
-  return { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps };
+  if (!Number.isSafeInteger(rustThreads) || rustThreads < 1 || rustThreads > 8)
+    throw new Error("rustThreads must be an integer from 1 to 8");
+  if (!Number.isSafeInteger(rustScratchMb) || rustScratchMb < 1 || rustScratchMb > 2048)
+    throw new Error("rustScratchMb must be an integer from 1 to 2048");
+  return { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps, rustThreads, rustScratchMb };
 }
 interface IndexedQuote {
   readonly quote: DfsQuote;

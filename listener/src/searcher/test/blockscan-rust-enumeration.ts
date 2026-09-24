@@ -1,11 +1,13 @@
 /** Offline differential contract for the native engine; the current TS engine is the oracle. */
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { buildBlockScanUsdView } from "../blockscan-usd-view.js";
 import {
-  enumeratePairedDfs, enumeratePairedLayered,
+  enumeratePairedDfs, enumeratePairedLayered, resolvePairedEnumerationOptions,
   type DfsQuote, type DirectedPriceSignal, type PairedEnumerationMethod,
 } from "../detector/blockscan-paired-dfs.js";
 import { enumerateRustPaired } from "../detector/blockscan-paired-rust.js";
@@ -19,9 +21,11 @@ type Input = Parameters<typeof enumeratePairedDfs>[0];
 type Case = Omit<Input, "deadlineAtMs" | "onCycle">;
 type Engine = (input: Input) => ReturnType<typeof enumeratePairedDfs>;
 const methods = ["dfs", "layered"] as const;
+const threadCounts = [1, 2, 4] as const;
 const reference = (method: PairedEnumerationMethod): Engine =>
   method === "dfs" ? enumeratePairedDfs : enumeratePairedLayered;
-const native = (method: PairedEnumerationMethod): Engine => input => enumerateRustPaired(input, method);
+const native = (method: PairedEnumerationMethod, rustThreads?: number): Engine => input =>
+  enumerateRustPaired(rustThreads === undefined ? input : { ...input, rustThreads }, method);
 const quote = (id: string, tokenIn: string, tokenOut: string, num = 100n, den = 100n,
   instance = id): DfsQuote => Object.freeze({ id, tokenIn, tokenOut, num, den, instance,
   value: Object.freeze({ num, den }) });
@@ -47,16 +51,27 @@ function collect(engine: Engine, input: Case) {
   return { calls, stats };
 }
 
-function compare(input: Case, label: string) {
+function compare(input: Case, label: string, threads: readonly number[] = threadCounts) {
   const unchanged = structuredClone(input);
   const results = methods.map(method => {
-    const expected = collect(reference(method), input), actual = collect(native(method), input);
-    assert.deepEqual(actual.calls, expected.calls, `${label}: ${method} ordered callbacks/spreads`);
-    assert.deepEqual(actual.stats, expected.stats, `${label}: ${method} every statistics field`);
-    return actual;
+    const expected = collect(reference(method), input);
+    for (const count of threads) {
+      const actual = collect(native(method, count), input);
+      assert.deepEqual(actual.calls, expected.calls, `${label}: ${method}/${count} threads ordered callbacks/spreads`);
+      assert.deepEqual(actual.stats, expected.stats, `${label}: ${method}/${count} threads every statistics field`);
+    }
+    return expected;
   });
   assert.deepEqual(input, unchanged, `${label}: neither backend may mutate caller-owned input`);
   return results[0]!;
+}
+
+// Synchronous native deadlocks cannot be interrupted by node:test's event-loop
+// timeout. Run cancellation/throw cases in one owned, time-bounded child process.
+if (process.argv.includes("--parallel-cancellation-child")) {
+  await cancellationChecks();
+  console.log("parallel cancellation checks: PASS");
+  process.exit(0);
 }
 
 test("Rust preserves empty, missing-reference and exact funded callback order", () => {
@@ -189,7 +204,8 @@ test("Rust matches all ordered callbacks and statistics on 120 deterministic ran
         ...[0, 1000, 10_000].map(maxPrefixDrawdownBps => ({ prefixPruningEnabled: true, maxPrefixDrawdownBps }))]) {
         for (const inputQuotes of [quotes, [...quotes].reverse()]) compare(scenario(inputQuotes, signals, {
           funding: ["g", "f"], allowRepeatedPools, ...prefix, maxHops: 2 + sample % 6, minSpreadBps: sample % 3 * 50,
-        }), `random ${sample}, reuse ${allowRepeatedPools}, prefix ${JSON.stringify(prefix)}, reverse ${inputQuotes !== quotes}`);
+        }), `random ${sample}, reuse ${allowRepeatedPools}, prefix ${JSON.stringify(prefix)}, reverse ${inputQuotes !== quotes}`,
+        sample < 40 ? threadCounts : [2]);
       }
     }
   }
@@ -219,26 +235,106 @@ test("Rust validates malformed inputs like TS and ignores them only after an exp
     assert.throws(() => invoke(native(method)), (error: unknown) =>
       error instanceof Error && error.message === expectedMessage, `invalid case ${index}, ${method}`);
   }
-  for (const method of methods) {
+  for (const method of methods) for (const count of threadCounts) {
     const input = { ...valid, quotes: [valid.quotes[0]!, valid.quotes[0]!], deadlineAtMs: Date.now() - 1,
       onCycle: () => assert.fail("expired invocation must never emit") };
-    const expected = reference(method)(input), actual = native(method)(input);
+    const expected = reference(method)(input), actual = native(method, count)(input);
     assert.equal(actual.deadlineHit, true);
     assert.deepEqual(actual, expected);
   }
 });
 
-test("Rust deadline includes callback work and propagates callback throws without poisoning later calls", () => {
-  const input = scenario(ring, [ringSignal], { funding: ["f", "a", "b", "join", "c", "d"] });
+test("Rust worker/scratch defaults and limits are validated even by the TS backend", () => {
+  const valid = scenario([quote("sell", "f", "a"), quote("buy", "a", "f", 120n)],
+    [signal("f", "buy", "sell"), signal("a", "sell", "buy")], { funding: ["f", "a"], maxHops: 2 });
+  const options = resolvePairedEnumerationOptions({ ...valid, deadlineAtMs: Date.now() + 60_000, onCycle() {} });
+  assert.equal(options.rustThreads, 1);
+  assert.equal(options.rustScratchMb, 512);
   for (const method of methods) {
-    const sentinel = new Error(`callback sentinel ${method}`);
-    assert.throws(() => native(method)({ ...input, deadlineAtMs: Date.now() + 60_000,
-      onCycle: () => { throw sentinel; } }), error => error === sentinel);
-    compare(input, `fresh enumeration after throwing ${method}`);
-    for (const engine of [reference(method), native(method)]) {
+    const expected = collect(reference(method), valid);
+    assert.deepEqual(collect(native(method), valid), expected, `${method}: omitted worker count`);
+    for (const rustThreads of [1, 8]) {
+      assert.deepEqual(collect(native(method), { ...valid, rustThreads, rustScratchMb: 2048 }), expected,
+        `${method}: valid boundary ${rustThreads} workers / 2048 MiB`);
+    }
+    for (const [key, upper, message] of [
+      ["rustThreads", 8, "rustThreads must be an integer from 1 to 8"],
+      ["rustScratchMb", 2048, "rustScratchMb must be an integer from 1 to 2048"],
+    ] as const) {
+      for (const value of [0, -1, upper + 1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "2"]) {
+        for (const engine of [reference(method), native(method)]) for (const expired of [false, true]) {
+          assert.throws(() => engine({ ...valid, [key]: value, deadlineAtMs: Date.now() + (expired ? -1 : 60_000),
+            onCycle: () => assert.fail("invalid resource configuration emitted a callback") }),
+          error => error instanceof Error && error.message === message,
+          `${method}: ${key}=${value}, including expired=${expired}`);
+        }
+      }
+    }
+  }
+  for (const enumerationBackend of ["typescript", "rust"] as const) {
+    for (const [key, upper, message] of [
+      ["rustEnumerationThreads", 8, "rustThreads must be an integer from 1 to 8"],
+      ["rustEnumerationScratchMb", 2048, "rustScratchMb must be an integer from 1 to 2048"],
+    ] as const) for (const value of [0, -1, upper + 1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "2"]) {
+      assert.throws(() => scanBlockStateFromResolvedMids({ edges: [], mids: new Map(), sourceBlock: 1,
+        swapTouched: null, cfg: { enumerationBackend, [key]: value, maxHops: 2, minSpreadBps: 0,
+          maxCandidates: 10, budgetMs: 60_000, pricedTokens: new Map() } }),
+      error => error instanceof Error && error.message === message,
+      `${enumerationBackend} scanner: ${key}=${value}`);
+    }
+  }
+});
+
+async function cancellationChecks() {
+  const input = scenario(ring, [ringSignal], { funding: ["f", "a", "b", "join", "c", "d"] });
+  // Several overlapping anchors ensure there is real worker work to cancel,
+  // not only a one-anchor input which a parallel engine could execute serially.
+  const multiAnchor = { ...input, signals: [ringSignal, signal("a", "sell", "ab"),
+    signal("b", "ab", "bj"), signal("join", "bj", "jc"), signal("c", "jc", "cd"), signal("d", "cd", "buy")] };
+  // Four parallel choices per hop produce 4096 cycles per anchor. Workers
+  // cannot buffer all of these in their bounded result queues while JS blocks
+  // or throws in its first callback, so cancellation must wake real producers.
+  const busyQuotes = ring.flatMap(q => Array.from({ length: 4 }, (_, i) => ({
+    ...q, id: `${q.id}:${i}`, instance: `${q.instance}:${i}`,
+  })));
+  const busyAnchor = { ...multiAnchor, quotes: busyQuotes, signals: ring.flatMap(edge =>
+    busyQuotes.filter(q => q.tokenOut === edge.tokenIn).flatMap(buy =>
+      busyQuotes.filter(q => q.tokenIn === edge.tokenIn).map(sell => signal(edge.tokenIn, buy.id, sell.id)))) };
+  // Two CHUNK=65536 one-hop half buffers already consume 1 MiB, before
+  // their heads/metadata. This tiny graph deterministically hits the native
+  // scratch bound without large input, expensive traversal or a deadline race.
+  const pressure = scenario([quote("sell", "f", "a"), quote("buy", "a", "f", 120n)],
+    [signal("f", "buy", "sell"), signal("a", "sell", "buy")], { maxHops: 2, funding: ["f", "a"], rustScratchMb: 1 });
+  const yieldToCallbacks = () => new Promise<void>(resolve => setTimeout(resolve, 5));
+  for (const method of methods) {
+    for (const count of threadCounts) {
+      let pressureCalls = 0, pressureReturned = false;
+      assert.throws(() => native(method, count)({ ...pressure, deadlineAtMs: Date.now() + 60_000, onCycle() {
+        assert(!pressureReturned, "callback after scratch-limit error returned"); pressureCalls++;
+      } }), /blockscan Rust enumeration scratch memory limit exceeded/,
+      "scratch exhaustion must throw, never return complete or deadline-limited results");
+      pressureReturned = true;
+      assert.equal(pressureCalls, 0, "the initial half-buffer allocation must fail before joining");
+      await yieldToCallbacks();
+      assert.equal(pressureCalls, 0, "scratch failure must drain workers before returning");
+      compare(multiAnchor, `fresh enumeration after scratch pressure ${method}/${count}`, [count]);
+      const sentinel = new Error(`callback sentinel ${method}, threads ${count}`);
+      let callbacks = 0, returned = false;
+      assert.throws(() => native(method, count)({ ...busyAnchor, deadlineAtMs: Date.now() + 60_000,
+        onCycle: () => { assert(!returned, "callback after synchronous throw returned"); callbacks++; throw sentinel; } }),
+      error => error === sentinel);
+      returned = true;
+      assert.equal(callbacks, 1, "callback exception must stop further delivery immediately");
+      await yieldToCallbacks();
+      assert.equal(callbacks, 1, "no queued callbacks may escape after an exception");
+      compare(multiAnchor, `fresh enumeration after throwing ${method}/${count}`, [count]);
+    }
+    for (const engine of [reference(method), ...threadCounts.map(count => native(method, count))]) {
       let calls = 0;
+      let returned = false;
       const deadlineAtMs = Date.now() + 100;
-      const result = engine({ ...input, deadlineAtMs, onCycle() {
+      const result = engine({ ...busyAnchor, deadlineAtMs, onCycle() {
+        assert(!returned, "callback after deadline result returned");
         calls++;
         // Deliberately charge real wall time; mocking Date.now would not test a native deadline.
         if (calls === 1) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(0, deadlineAtMs - Date.now()) + 5);
@@ -246,8 +342,23 @@ test("Rust deadline includes callback work and propagates callback throws withou
       assert(calls > 0, "the tiny warm fixture must reach its callback before the deadline");
       assert.equal(result.deadlineHit, true, "callback cost is part of the caller's budget");
       assert.equal(result.closed, calls);
+      returned = true;
+      const settledCalls = calls;
+      await yieldToCallbacks();
+      assert.equal(calls, settledCalls, "no worker callback may escape after timeout returns");
     }
+    compare(multiAnchor, `healthy after all deadline cancellations ${method}`);
   }
+}
+
+test("Rust parallel deadline/throw/scratch cancellation drains workers and subsequent calls stay healthy", () => {
+  const child = spawnSync(process.execPath, ["--import", "tsx", fileURLToPath(import.meta.url), "--parallel-cancellation-child"], {
+    env: { ...process.env, SEARCHER_TEST_DISABLE_DOTENV: "1" }, encoding: "utf8", timeout: 20_000,
+    killSignal: "SIGKILL", maxBuffer: 2 * 1024 * 1024,
+  });
+  assert.equal(child.error, undefined, `cancellation child exceeded its bound: ${child.error?.message}`);
+  assert.equal(child.status, 0, child.stderr || child.stdout);
+  assert.match(child.stdout, /parallel cancellation checks: PASS/);
 });
 
 function frozenEffectiveInput() {
@@ -283,9 +394,9 @@ test("Rust matches the real frozen effective table, not raw mids or reconstructe
 });
 
 function compareScanner(input: Parameters<typeof scanBlockStateFromResolvedMids>[0], label: string) {
-  const run = (enumerationBackend: "typescript" | "rust") => {
+  const run = (enumerationBackend: "typescript" | "rust", rustEnumerationThreads?: number) => {
     const result = scanBlockStateFromResolvedMids({ ...input, captureCoarseEnumeration: true,
-      cfg: { ...input.cfg, enumerationBackend, budgetMs: 60_000 } });
+      cfg: { ...input.cfg, enumerationBackend, rustEnumerationThreads, budgetMs: 60_000 } });
     assert.equal(result.outcome, "ran", `${label}: scanner must complete`);
     assert(result.enumeration);
     const { backend, ...enumeration } = result.enumeration;
@@ -293,11 +404,13 @@ function compareScanner(input: Parameters<typeof scanBlockStateFromResolvedMids>
     assert.equal(result.selection.forcedSelectionCount, 0);
     return { ...result, enumeration };
   };
-  const expected = run("typescript"), actual = run("rust");
+  const expected = run("typescript");
   // Only the declared engine tag is excluded. Ordered pre-cap rows, final ranks,
   // P/maxBorrow, rotation choice, selection counters and all other stats must match.
-  assert.deepEqual(actual, expected, label);
-  return actual;
+  for (const count of threadCounts) {
+    assert.deepEqual(run("rust", count), expected, `${label}: ${count} threads`);
+  }
+  return expected;
 }
 
 test("Rust scanner preserves the frozen fixture's final coarse ranking and every policy switch", () => {

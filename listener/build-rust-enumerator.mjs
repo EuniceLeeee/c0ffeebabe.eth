@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { RUST_ENUMERATOR_ROOT, RUST_ENUMERATOR_BINARY, RUST_ENUMERATOR_RECEIPT,
+import { RUST_ENUMERATOR_API_VERSION, RUST_ENUMERATOR_ROOT, RUST_ENUMERATOR_BINARY, RUST_ENUMERATOR_RECEIPT,
   enumerationSha256, rustEnumerationSourceHash } from "./src/searcher/detector/blockscan-rust-artifact.ts";
 
 const sourceSha256 = rustEnumerationSourceHash();
@@ -16,7 +16,7 @@ const library = process.platform === "darwin" ? "libblockscan_enumerator.dylib"
   : process.platform === "win32" ? "blockscan_enumerator.dll" : "libblockscan_enumerator.so";
 copyFileSync(join(RUST_ENUMERATOR_ROOT, "target", host, "release", library), RUST_ENUMERATOR_BINARY);
 writeFileSync(RUST_ENUMERATOR_RECEIPT, JSON.stringify({
-  apiVersion: 1, profile: "release", platform: process.platform, arch: process.arch, target: host,
+  apiVersion: RUST_ENUMERATOR_API_VERSION, profile: "release", platform: process.platform, arch: process.arch, target: host,
   rustc: compiler.trim(),
   sourceSha256, binarySha256: enumerationSha256(readFileSync(RUST_ENUMERATOR_BINARY)),
 }, null, 2) + "\n");

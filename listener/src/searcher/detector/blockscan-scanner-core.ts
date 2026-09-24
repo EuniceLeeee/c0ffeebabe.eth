@@ -13,6 +13,8 @@ import {
 
 export interface BlockScanCoreConfig {
   enumerationBackend?: PairedEnumerationBackend;
+  rustEnumerationThreads?: number;
+  rustEnumerationScratchMb?: number;
   enumerationMethod?: PairedEnumerationMethod;
   /** Merge different execution starts of one directed cycle; defaults to false. */
   deduplicateRotations?: boolean;
@@ -197,6 +199,8 @@ export function scanBlockStateFromResolvedMids(input: {
     maxHops: input.cfg.maxHops, deadlineAtMs, allowRepeatedPools,
     prefixPruningEnabled: input.cfg.prefixPruningEnabled,
     maxPrefixDrawdownBps: input.cfg.maxPrefixDrawdownBps,
+    rustThreads: input.cfg.rustEnumerationThreads,
+    rustScratchMb: input.cfg.rustEnumerationScratchMb,
     funding: [...input.cfg.pricedTokens].filter(([, value]) => value.maxBorrow > 0n).map(([token]) => token),
     onCycle(path, estSpreadBps) {
       const seedEdges = path.map(q => edgesById.get(q.id)!);

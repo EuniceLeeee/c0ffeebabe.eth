@@ -41,6 +41,8 @@ test("CLI and live share the same policy resolvers, without changing defaults", 
   assert.equal(cfg.allowRepeatedPools, true);
   assert.equal(cfg.enumerationMethod, "dfs");
   assert.equal(cfg.enumerationBackend, "typescript");
+  assert.equal(cfg.rustEnumerationThreads, 1);
+  assert.equal(cfg.rustEnumerationScratchMb, 512);
   for (const backend of ["rust", "typescript"])
     assert.equal(resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND: backend }).enumerationBackend, backend);
   for (const raw of ["", "auto", "js"])
@@ -95,6 +97,8 @@ test("enumeration defaults have one source and prefix pruning is explicitly conf
   assert.equal(cfg.budgetMs, defaults.budgetMs);
   assert.equal(cfg.enumerationMethod, defaults.method);
   assert.equal(cfg.enumerationBackend, defaults.backend);
+  assert.equal(cfg.rustEnumerationThreads, defaults.rustThreads);
+  assert.equal(cfg.rustEnumerationScratchMb, defaults.rustScratchMb);
   assert.equal(cfg.allowRepeatedPools, defaults.allowRepeatedPools);
   assert.equal(cfg.deduplicateRotations, defaults.deduplicateRotations);
   assert.equal(cfg.usdSignalPairsPerToken, defaults.signalPairsPerToken);

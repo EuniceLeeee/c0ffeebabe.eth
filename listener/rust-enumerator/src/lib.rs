@@ -1,5 +1,11 @@
-use std::collections::{HashMap, HashSet};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::mem::size_of;
+use std::ops::Range;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
+use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use napi::{bindgen_prelude::BigInt, Env, Error, JsFunction, Result};
 use napi_derive::napi;
@@ -9,6 +15,10 @@ use num_integer::Integer;
 const NONE: u32 = u32::MAX;
 const CHUNK: usize = 65_536;
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
+const CYCLE_BATCH_SIZE: usize = 16;
+const CYCLE_BATCH_BYTES: usize = 64 * 1024;
+const SCRATCH_ERROR: &str = "blockscan Rust enumeration scratch memory limit exceeded";
+const CANCELLED_ERROR: &str = "blockscan Rust parallel enumeration cancelled";
 
 #[napi(object)]
 pub struct QuoteValue {
@@ -48,8 +58,11 @@ pub struct EnumerationInput {
     pub max_prefix_drawdown_bps: f64,
     pub deadline_at_ms: f64,
     pub traversal: String,
+    pub threads: u32,
+    pub memory_limit_bytes: f64,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 #[napi(object)]
 pub struct EnumerationStats {
     pub expanded: f64,
@@ -93,6 +106,74 @@ impl EnumerationStats {
             phase: "prepare".into(),
         }
     }
+
+    fn add_work(&mut self, other: &Self) {
+        self.expanded += other.expanded;
+        self.half_paths += other.half_paths;
+        self.joins += other.joins;
+        self.signal_matched += other.signal_matched;
+        self.indexed_join_comparisons += other.indexed_join_comparisons;
+        self.join_skipped_before_conflicts += other.join_skipped_before_conflicts;
+        self.prefix_pruned_forward += other.prefix_pruned_forward;
+        self.prefix_pruned_join += other.prefix_pruned_join;
+        self.prefix_pruned_total += other.prefix_pruned_total;
+    }
+}
+
+/// One non-blocking quota per invocation. Shared indexes and JavaScript/N-API
+/// storage remain outside this scratch budget and need the caller's RSS guard.
+struct ScratchBudget {
+    used: AtomicUsize,
+    limit: usize,
+}
+
+struct ScratchLease {
+    budget: Arc<ScratchBudget>,
+    bytes: usize,
+}
+
+impl ScratchBudget {
+    fn reserve(self: &Arc<Self>, bytes: usize) -> Result<ScratchLease> {
+        let mut lease = ScratchLease {
+            budget: Arc::clone(self),
+            bytes: 0,
+        };
+        lease.grow(bytes)?;
+        Ok(lease)
+    }
+}
+
+impl ScratchLease {
+    fn grow(&mut self, bytes: usize) -> Result<()> {
+        self.budget
+            .used
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+                used.checked_add(bytes)
+                    .filter(|next| *next <= self.budget.limit)
+            })
+            .map_err(|_| Error::from_reason(SCRATCH_ERROR))?;
+        self.bytes += bytes;
+        Ok(())
+    }
+}
+
+impl Drop for ScratchLease {
+    fn drop(&mut self) {
+        self.budget.used.fetch_sub(self.bytes, Ordering::AcqRel);
+    }
+}
+
+fn integer_bytes(bits: u64) -> usize {
+    // Include spare limb capacity; num-bigint multiplication owns temporaries.
+    (bits as usize)
+        .div_ceil(64)
+        .saturating_add(1)
+        .saturating_mul(16)
+}
+
+fn route_key_bytes(length: usize) -> usize {
+    // Hash table growth, key Vec capacity and allocator metadata.
+    2 * (size_of::<Vec<usize>>() + length * size_of::<usize>()) + 128
 }
 
 #[derive(Clone)]
@@ -140,16 +221,19 @@ struct HalfLayer {
     chunks: Vec<Vec<u32>>,
     count: usize,
     hops: usize,
+    memory: ScratchLease,
 }
 
 impl HalfLayer {
-    fn new(tokens: usize, hops: usize) -> Self {
-        Self {
+    fn new(tokens: usize, hops: usize, memory: &Arc<ScratchBudget>) -> Result<Self> {
+        let lease = memory.reserve(tokens * size_of::<u32>() + size_of::<Self>() + 128)?;
+        Ok(Self {
             head: vec![NONE; tokens],
             chunks: Vec::new(),
             count: 0,
             hops,
-        }
+            memory: lease,
+        })
     }
 
     fn add(&mut self, token: usize, path: &[usize]) -> Result<()> {
@@ -162,6 +246,8 @@ impl HalfLayer {
         let chunk = index / CHUNK;
         let offset = (index % CHUNK) * stride;
         if chunk == self.chunks.len() {
+            self.memory
+                .grow(CHUNK * stride * size_of::<u32>() + 2 * size_of::<Vec<u32>>() + 128)?;
             self.chunks.push(vec![0; CHUNK * stride]);
         }
         let values = &mut self.chunks[chunk];
@@ -191,13 +277,14 @@ struct SortedHalf {
     min_prefix: Option<Rate>,
 }
 
+#[derive(Clone)]
 struct Enumerator {
-    edges: Vec<IndexedQuote>,
-    outgoing: Vec<Vec<usize>>,
-    incoming: Vec<Vec<usize>>,
-    partners: Vec<HashSet<usize>>,
-    anchors: Vec<Anchor>,
-    funding: HashSet<String>,
+    edges: Arc<Vec<IndexedQuote>>,
+    outgoing: Arc<Vec<Vec<usize>>>,
+    incoming: Arc<Vec<Vec<usize>>>,
+    partners: Arc<Vec<HashSet<usize>>>,
+    anchors: Arc<Vec<Anchor>>,
+    funding: Arc<HashSet<String>>,
     max_half: usize,
     max_hops: usize,
     threshold: BigUint,
@@ -206,6 +293,8 @@ struct Enumerator {
     prefix_pruning_enabled: bool,
     deadline_at_ms: f64,
     stats: EnumerationStats,
+    memory: Arc<ScratchBudget>,
+    cancelled: Option<Arc<AtomicBool>>,
 }
 
 fn positive(value: &BigInt, message: &'static str) -> Result<BigUint> {
@@ -232,13 +321,17 @@ fn intern(map: &mut HashMap<String, usize>, key: &str) -> usize {
 
 fn expired(stats: &mut EnumerationStats, deadline_at_ms: f64) -> bool {
     if !stats.deadline_hit {
-        let now = match SystemTime::now().duration_since(UNIX_EPOCH) {
-            Ok(duration) => duration.as_millis() as f64,
-            Err(error) => -(error.duration().as_millis() as f64),
-        };
-        stats.deadline_hit = now >= deadline_at_ms;
+        stats.deadline_hit = deadline_expired(deadline_at_ms);
     }
     stats.deadline_hit
+}
+
+fn deadline_expired(deadline_at_ms: f64) -> bool {
+    let now = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration.as_millis() as f64,
+        Err(error) => -(error.duration().as_millis() as f64),
+    };
+    now >= deadline_at_ms
 }
 
 fn above_spread(n: &BigUint, d: &BigUint, threshold: &BigUint) -> bool {
@@ -247,7 +340,40 @@ fn above_spread(n: &BigUint, d: &BigUint, threshold: &BigUint) -> bool {
 
 impl Enumerator {
     fn expired(&mut self) -> bool {
+        if self
+            .cancelled
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::Acquire))
+        {
+            self.stats.deadline_hit = true;
+            return true;
+        }
         expired(&mut self.stats, self.deadline_at_ms)
+    }
+
+    fn sorted_half_bytes(&self, path: &[usize]) -> usize {
+        let mut raw_n = 0u64;
+        let mut raw_d = 0u64;
+        let mut value_n = 0u64;
+        let mut value_d = 0u64;
+        for id in path {
+            let quote = &self.edges[*id];
+            raw_n = raw_n.saturating_add(quote.rate.n.bits());
+            raw_d = raw_d.saturating_add(quote.rate.d.bits());
+            if self.prefix_pruning_enabled {
+                let value = quote.value.as_ref().unwrap();
+                value_n = value_n.saturating_add(value.n.bits());
+                value_d = value_d.saturating_add(value.d.bits());
+            }
+        }
+        // Product bit lengths cannot exceed the sums above. Charge spare Vec
+        // capacity and several products for value-prefix and sort temporaries.
+        2 * size_of::<SortedHalf>()
+            + 128
+            + 4 * (integer_bytes(raw_n)
+                + integer_bytes(raw_d)
+                + integer_bytes(value_n)
+                + integer_bytes(value_d))
     }
 
     fn rate(&self, path: &[usize], value: bool) -> Rate {
@@ -374,8 +500,8 @@ impl Enumerator {
         seeds: &HashSet<usize>,
     ) -> Result<Vec<HalfLayer>> {
         let mut result = (1..=self.max_half)
-            .map(|hops| HalfLayer::new(self.outgoing.len(), hops))
-            .collect::<Vec<_>>();
+            .map(|hops| HalfLayer::new(self.outgoing.len(), hops, &self.memory))
+            .collect::<Result<Vec<_>>>()?;
         let mut path = Vec::new();
         let mut execution_path = Vec::new();
         self.stats.phase = if reverse { "reverse" } else { "forward" }.into();
@@ -446,15 +572,16 @@ impl Enumerator {
         Ok(result)
     }
 
-    fn run<F>(&mut self, emit: &mut F) -> Result<()>
+    fn run<F>(&mut self, anchor_range: Range<usize>, emit: &mut F) -> Result<()>
     where
         F: FnMut(&[usize], &BigUint, &BigUint) -> Result<()>,
     {
         if self.funding.is_empty() {
             return Ok(());
         }
+        let mut emitted_memory = self.memory.reserve(0)?;
         let mut emitted = HashSet::<Vec<usize>>::new();
-        for anchor_index in 0..self.anchors.len() {
+        for anchor_index in anchor_range {
             if self.expired() {
                 break;
             }
@@ -481,6 +608,7 @@ impl Enumerator {
                     if b.head[token] == NONE {
                         continue;
                     }
+                    let mut sorted_memory = self.memory.reserve(0)?;
                     let mut sorted = Vec::new();
                     let mut qi = b.head[token];
                     while qi != NONE {
@@ -489,6 +617,7 @@ impl Enumerator {
                         }
                         let index = qi;
                         qi = b.read(qi, &mut q);
+                        sorted_memory.grow(self.sorted_half_bytes(&q))?;
                         sorted.push(SortedHalf {
                             index,
                             rate: self.rate(&q, false),
@@ -585,9 +714,11 @@ impl Enumerator {
                                     let rotated = (0..path.len())
                                         .map(|offset| path[(start + offset) % path.len()])
                                         .collect::<Vec<_>>();
-                                    if !emitted.insert(rotated.clone()) {
+                                    if emitted.contains(&rotated) {
                                         continue;
                                     }
+                                    emitted_memory.grow(route_key_bytes(rotated.len()))?;
+                                    emitted.insert(rotated.clone());
                                     self.stats.closed += 1.0;
                                     emit(&rotated, &n, &d)?;
                                 }
@@ -608,6 +739,313 @@ impl Enumerator {
             "complete"
         }
         .into();
+        Ok(())
+    }
+}
+
+struct Cycle {
+    path: Vec<usize>,
+    n: BigUint,
+    d: BigUint,
+    _memory: ScratchLease,
+}
+
+enum WorkerStatus {
+    Complete,
+    Cancelled,
+    Failed(String),
+}
+
+struct WorkerOutcome {
+    stats: EnumerationStats,
+    status: WorkerStatus,
+}
+
+struct Worker {
+    receiver: Option<Receiver<Vec<Cycle>>>,
+    handle: Option<JoinHandle<WorkerOutcome>>,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl Worker {
+    fn finish(&mut self) -> std::result::Result<WorkerOutcome, String> {
+        self.receiver.take();
+        self.handle
+            .take()
+            .unwrap()
+            .join()
+            .map_err(|_| "blockscan Rust enumeration worker panicked".to_owned())
+    }
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        // Also cover unwinding: no worker may outlive its synchronous caller.
+        if let Some(handle) = self.handle.take() {
+            self.cancelled.store(true, Ordering::Release);
+            self.receiver.take();
+            let _ = handle.join();
+        }
+    }
+}
+
+fn send_batch(
+    sender: &SyncSender<Vec<Cycle>>,
+    mut batch: Vec<Cycle>,
+    deadline: f64,
+    cancelled: &AtomicBool,
+) -> bool {
+    loop {
+        if cancelled.load(Ordering::Acquire) || deadline_expired(deadline) {
+            return false;
+        }
+        match sender.try_send(batch) {
+            Ok(()) => return true,
+            Err(TrySendError::Disconnected(_)) => return false,
+            Err(TrySendError::Full(returned)) => batch = returned,
+        }
+        // Never wait indefinitely on a later anchor's full queue.
+        thread::sleep(Duration::from_millis(1));
+    }
+}
+
+fn spawn_worker(
+    template: &Enumerator,
+    anchor: usize,
+    cancelled: &Arc<AtomicBool>,
+) -> Result<Worker> {
+    let mut engine = template.clone();
+    engine.cancelled = Some(Arc::clone(cancelled));
+    let cancelled_worker = Arc::clone(cancelled);
+    let memory = Arc::clone(&engine.memory);
+    let deadline = engine.deadline_at_ms;
+    let (sender, receiver) = mpsc::sync_channel(1);
+    let handle = thread::Builder::new()
+        .name(format!("blockscan-anchor-{anchor}"))
+        .spawn(move || {
+            let mut batch = Vec::new();
+            let mut batch_bytes = 0usize;
+            let mut send_cancelled = false;
+            let result = engine.run(anchor..anchor + 1, &mut |path, n, d| {
+                if cancelled_worker.load(Ordering::Acquire) || deadline_expired(deadline) {
+                    send_cancelled = true;
+                    return Err(Error::from_reason(CANCELLED_ERROR));
+                }
+                let bytes = 2 * size_of::<Cycle>()
+                    + route_key_bytes(path.len())
+                    + integer_bytes(n.bits())
+                    + integer_bytes(d.bits())
+                    + 128;
+                if !batch.is_empty() && batch_bytes.saturating_add(bytes) > CYCLE_BATCH_BYTES {
+                    if !send_batch(
+                        &sender,
+                        std::mem::take(&mut batch),
+                        deadline,
+                        &cancelled_worker,
+                    ) {
+                        send_cancelled = true;
+                        return Err(Error::from_reason(CANCELLED_ERROR));
+                    }
+                    batch_bytes = 0;
+                }
+                let lease = memory.reserve(bytes)?;
+                batch.push(Cycle {
+                    path: path.to_vec(),
+                    n: n.clone(),
+                    d: d.clone(),
+                    _memory: lease,
+                });
+                batch_bytes += bytes;
+                if batch.len() == CYCLE_BATCH_SIZE || batch_bytes >= CYCLE_BATCH_BYTES {
+                    if !send_batch(
+                        &sender,
+                        std::mem::take(&mut batch),
+                        deadline,
+                        &cancelled_worker,
+                    ) {
+                        send_cancelled = true;
+                        return Err(Error::from_reason(CANCELLED_ERROR));
+                    }
+                    batch_bytes = 0;
+                }
+                Ok(())
+            });
+            let status = match result {
+                Err(error) if !send_cancelled => {
+                    cancelled_worker.store(true, Ordering::Release);
+                    WorkerStatus::Failed(error.reason)
+                }
+                _ if send_cancelled
+                    || engine.stats.deadline_hit
+                    || cancelled_worker.load(Ordering::Acquire) =>
+                {
+                    WorkerStatus::Cancelled
+                }
+                _ => {
+                    if batch.is_empty() || send_batch(&sender, batch, deadline, &cancelled_worker) {
+                        WorkerStatus::Complete
+                    } else {
+                        WorkerStatus::Cancelled
+                    }
+                }
+            };
+            WorkerOutcome {
+                stats: engine.stats,
+                status,
+            }
+        })
+        .map_err(|error| {
+            Error::from_reason(format!(
+                "blockscan Rust enumeration worker spawn failed: {error}"
+            ))
+        })?;
+    Ok(Worker {
+        receiver: Some(receiver),
+        handle: Some(handle),
+        cancelled: Arc::clone(cancelled),
+    })
+}
+
+impl Enumerator {
+    fn run_parallel<F>(&mut self, threads: usize, emit: &mut F) -> Result<()>
+    where
+        F: FnMut(&[usize], &BigUint, &BigUint) -> Result<()>,
+    {
+        if self.funding.is_empty() {
+            return Ok(());
+        }
+        let template = self.clone();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let mut workers = VecDeque::<Worker>::new();
+        let mut next_anchor = 0usize;
+        let mut error = None;
+        let mut timed_out = false;
+        let mut emitted_memory = self.memory.reserve(0)?;
+        let mut emitted = HashSet::<Vec<usize>>::new();
+        while next_anchor < self.anchors.len() && workers.len() < threads {
+            match spawn_worker(&template, next_anchor, &cancelled) {
+                Ok(worker) => {
+                    workers.push_back(worker);
+                    next_anchor += 1;
+                }
+                Err(failure) => {
+                    error = Some(failure);
+                    break;
+                }
+            }
+        }
+        'drain: while error.is_none() && !workers.is_empty() {
+            if deadline_expired(self.deadline_at_ms) {
+                timed_out = true;
+                break;
+            }
+            if cancelled.load(Ordering::Acquire) {
+                break;
+            }
+            let received = workers
+                .front()
+                .unwrap()
+                .receiver
+                .as_ref()
+                .unwrap()
+                .recv_timeout(Duration::from_millis(2));
+            match received {
+                Ok(batch) => {
+                    for cycle in batch {
+                        if deadline_expired(self.deadline_at_ms) {
+                            timed_out = true;
+                            break 'drain;
+                        }
+                        if cancelled.load(Ordering::Acquire) {
+                            break 'drain;
+                        }
+                        if emitted.contains(&cycle.path) {
+                            continue;
+                        }
+                        if let Err(failure) = emitted_memory.grow(route_key_bytes(cycle.path.len()))
+                        {
+                            error = Some(failure);
+                            break 'drain;
+                        }
+                        emitted.insert(cycle.path.clone());
+                        self.stats.closed += 1.0;
+                        if let Err(failure) = emit(&cycle.path, &cycle.n, &cycle.d) {
+                            // Preserve the original N-API exception across cleanup.
+                            error = Some(failure);
+                            break 'drain;
+                        }
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Disconnected) => {
+                    let mut worker = workers.pop_front().unwrap();
+                    match worker.finish() {
+                        Ok(outcome) => {
+                            self.stats.add_work(&outcome.stats);
+                            match outcome.status {
+                                WorkerStatus::Complete => self.stats.completed_signal_tokens += 1.0,
+                                WorkerStatus::Cancelled => {
+                                    timed_out |= deadline_expired(self.deadline_at_ms);
+                                    break;
+                                }
+                                WorkerStatus::Failed(reason) => {
+                                    error = Some(Error::from_reason(reason));
+                                    break;
+                                }
+                            }
+                        }
+                        Err(reason) => {
+                            error = Some(Error::from_reason(reason));
+                            break;
+                        }
+                    }
+                    if next_anchor < self.anchors.len() {
+                        match spawn_worker(&template, next_anchor, &cancelled) {
+                            Ok(worker) => {
+                                workers.push_back(worker);
+                                next_anchor += 1;
+                            }
+                            Err(failure) => {
+                                error = Some(failure);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        cancelled.store(true, Ordering::Release);
+        // Disconnect every queue before joining any producer, including later
+        // anchors blocked behind the ordered consumer.
+        for worker in &mut workers {
+            worker.receiver.take();
+        }
+        for mut worker in workers {
+            match worker.finish() {
+                Ok(outcome) => {
+                    self.stats.add_work(&outcome.stats);
+                    if let WorkerStatus::Failed(reason) = outcome.status {
+                        if error.is_none() {
+                            error = Some(Error::from_reason(reason));
+                        }
+                    }
+                }
+                Err(reason) => {
+                    if error.is_none() {
+                        error = Some(Error::from_reason(reason));
+                    }
+                }
+            }
+        }
+        if let Some(error) = error {
+            return Err(error);
+        }
+        timed_out |= deadline_expired(self.deadline_at_ms);
+        if !timed_out && self.stats.completed_signal_tokens != self.anchors.len() as f64 {
+            return Err(Error::from_reason(CANCELLED_ERROR));
+        }
+        self.stats.deadline_hit = timed_out;
+        self.stats.phase = if timed_out { "interrupted" } else { "complete" }.into();
         Ok(())
     }
 }
@@ -638,6 +1076,18 @@ where
     if input.traversal != "dfs" && input.traversal != "layered" {
         return Err(Error::from_reason(
             "SEARCHER_BLOCKSCAN_ENUMERATION_METHOD must be dfs or layered",
+        ));
+    }
+    if !(1..=8).contains(&input.threads) {
+        return Err(Error::from_reason(
+            "Rust enumeration threads must be an integer from 1 to 8",
+        ));
+    }
+    if !safe_integer(input.memory_limit_bytes)
+        || !(1.0..=2_147_483_648.0).contains(&input.memory_limit_bytes)
+    {
+        return Err(Error::from_reason(
+            "Rust enumeration memoryLimitBytes must be an integer from 1 to 2147483648",
         ));
     }
     let mut stats = EnumerationStats::new(&input);
@@ -737,12 +1187,12 @@ where
     let max_hops = input.max_hops as usize;
     let max_half = ((max_hops + 1) / 2).min(tokens.len().saturating_sub(1));
     let mut engine = Enumerator {
-        edges,
-        outgoing,
-        incoming,
-        partners,
-        anchors,
-        funding: input.funding.into_iter().collect(),
+        edges: Arc::new(edges),
+        outgoing: Arc::new(outgoing),
+        incoming: Arc::new(incoming),
+        partners: Arc::new(partners),
+        anchors: Arc::new(anchors),
+        funding: Arc::new(input.funding.into_iter().collect()),
         max_half,
         max_hops,
         threshold,
@@ -755,8 +1205,17 @@ where
         prefix_pruning_enabled: input.prefix_pruning_enabled,
         deadline_at_ms: input.deadline_at_ms,
         stats,
+        memory: Arc::new(ScratchBudget {
+            used: AtomicUsize::new(0),
+            limit: input.memory_limit_bytes as usize,
+        }),
+        cancelled: None,
     };
-    engine.run(&mut emit)?;
+    if input.threads == 1 {
+        engine.run(0..engine.anchors.len(), &mut emit)?;
+    } else {
+        engine.run_parallel(input.threads as usize, &mut emit)?;
+    }
     Ok(engine.stats)
 }
 
@@ -791,7 +1250,7 @@ pub fn enumerate(
 
 #[napi]
 pub fn api_version() -> u32 {
-    1
+    2
 }
 
 #[cfg(test)]
@@ -847,6 +1306,8 @@ mod tests {
             max_prefix_drawdown_bps: 1_000.0,
             deadline_at_ms: f64::INFINITY,
             traversal: traversal.into(),
+            threads: 1,
+            memory_limit_bytes: 512.0 * 1024.0 * 1024.0,
         }
     }
 
@@ -983,5 +1444,113 @@ mod tests {
         });
         assert_eq!(calls, 1);
         assert!(result.is_err());
+    }
+
+    fn parallel_input(traversal: &str, threads: u32) -> EnumerationInput {
+        let mut value = input(traversal);
+        value.threads = threads;
+        value.quotes = vec![quote("sell", "f", "a", 200)];
+        value.signals.clear();
+        for index in 0..64 {
+            let id = format!("buy-{index}");
+            value.quotes.push(quote(&id, "a", "f", 51 + index % 17));
+            value.signals.push(DirectedPriceSignal {
+                token: "f".into(),
+                buy: id,
+                sell: "sell".into(),
+                num: bigint(120),
+                den: bigint(100),
+            });
+        }
+        for index in 0..64 {
+            value.signals.push(DirectedPriceSignal {
+                token: "a".into(),
+                buy: "sell".into(),
+                sell: format!("buy-{index}"),
+                num: bigint(120),
+                den: bigint(100),
+            });
+        }
+        value
+    }
+
+    #[test]
+    fn ordered_parallel_results_and_all_complete_stats_match_serial() {
+        for traversal in ["dfs", "layered"] {
+            let mut expected = Vec::new();
+            let expected_stats = enumerate_inner(parallel_input(traversal, 1), |path, n, d| {
+                expected.push((path.to_vec(), n.clone(), d.clone()));
+                Ok(())
+            })
+            .unwrap();
+            for threads in [2, 4, 8] {
+                let mut actual = Vec::new();
+                let stats = enumerate_inner(parallel_input(traversal, threads), |path, n, d| {
+                    actual.push((path.to_vec(), n.clone(), d.clone()));
+                    Ok(())
+                })
+                .unwrap();
+                assert_eq!(actual, expected);
+                assert_eq!(stats, expected_stats);
+                assert_eq!(stats.completed_signal_tokens, 2.0);
+            }
+        }
+    }
+
+    #[test]
+    fn scratch_pressure_is_an_error_before_callbacks_for_every_backend_width() {
+        for traversal in ["dfs", "layered"] {
+            for threads in [1, 2, 4] {
+                let mut input = parallel_input(traversal, threads);
+                input.memory_limit_bytes = 1024.0 * 1024.0;
+                let mut calls = 0;
+                let error = enumerate_inner(input, |_, _, _| {
+                    calls += 1;
+                    Ok(())
+                })
+                .unwrap_err();
+                assert_eq!(error.reason, SCRATCH_ERROR);
+                assert_eq!(calls, 0);
+            }
+        }
+    }
+
+    #[test]
+    fn callback_failure_cancels_backpressured_workers_and_allows_a_fresh_call() {
+        for threads in [2, 4, 8] {
+            let mut calls = 0;
+            let error = enumerate_inner(parallel_input("dfs", threads), |_, _, _| {
+                calls += 1;
+                Err(Error::from_reason("original callback failure"))
+            })
+            .unwrap_err();
+            assert_eq!(error.reason, "original callback failure");
+            assert_eq!(calls, 1);
+            let stats = enumerate_inner(parallel_input("dfs", threads), |_, _, _| Ok(())).unwrap();
+            assert_eq!(stats.phase, "complete");
+        }
+    }
+
+    #[test]
+    fn parallel_callback_time_is_in_the_shared_deadline() {
+        for threads in [2, 4] {
+            let mut input = parallel_input("dfs", threads);
+            input.deadline_at_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as f64
+                + 1000.0;
+            let mut calls = 0;
+            let stats = enumerate_inner(input, |_, _, _| {
+                calls += 1;
+                thread::sleep(Duration::from_millis(1100));
+                Ok(())
+            })
+            .unwrap();
+            assert_eq!(calls, 1);
+            assert!(stats.deadline_hit);
+            assert_eq!(stats.phase, "interrupted");
+            assert_eq!(stats.completed_signal_tokens, 0.0);
+        }
     }
 }

@@ -15,7 +15,7 @@ import {
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
 import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
 import { resolveAllowRepeatedPools, resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
-import { resolvePairedEnumerationBackend } from "./detector/blockscan-paired-enumerator.js";
+import { resolvePairedEnumerationBackend, resolveRustEnumerationThreads, resolveRustEnumerationScratchMb } from "./detector/blockscan-paired-enumerator.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "./blockscan-enumeration-config.js";
 import {
   awaitBlockScanDeadline,
@@ -684,6 +684,8 @@ export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env,
         maxPrefixDrawdownBps,
         enumerationMethod: resolvePairedEnumerationMethod(env.SEARCHER_BLOCKSCAN_ENUMERATION_METHOD),
         enumerationBackend: resolvePairedEnumerationBackend(env.SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND),
+        rustEnumerationThreads: resolveRustEnumerationThreads(env.SEARCHER_BLOCKSCAN_RUST_THREADS),
+        rustEnumerationScratchMb: resolveRustEnumerationScratchMb(env.SEARCHER_BLOCKSCAN_RUST_SCRATCH_MB),
         usdSignalPairsPerToken: resolveUsdSignalPairsPerToken(env.SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN),
         minSpreadBps: blockScanMinSpreadBps,
         requireDislocatedPair: true,

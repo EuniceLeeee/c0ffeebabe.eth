@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const RUST_ENUMERATOR_ROOT = fileURLToPath(new URL("../../../rust-enumerator/", import.meta.url));
+export const RUST_ENUMERATOR_API_VERSION = 2;
 export const RUST_ENUMERATOR_BINARY = join(RUST_ENUMERATOR_ROOT, "blockscan_enumerator.node");
 export const RUST_ENUMERATOR_RECEIPT = join(RUST_ENUMERATOR_ROOT, "blockscan_enumerator.build.json");
 export const enumerationSha256 = (bytes: string | Buffer): string => createHash("sha256").update(bytes).digest("hex");
@@ -28,7 +29,7 @@ export function verifyRustEnumerationArtifact(): { sourceSha256: string; binaryS
   const receipt = JSON.parse(readFileSync(RUST_ENUMERATOR_RECEIPT, "utf8"));
   const sourceSha256 = rustEnumerationSourceHash();
   const binarySha256 = enumerationSha256(readFileSync(RUST_ENUMERATOR_BINARY));
-  if (receipt.apiVersion !== 1 || receipt.profile !== "release" ||
+  if (receipt.apiVersion !== RUST_ENUMERATOR_API_VERSION || receipt.profile !== "release" ||
       receipt.platform !== process.platform || receipt.arch !== process.arch ||
       receipt.sourceSha256 !== sourceSha256 || receipt.binarySha256 !== binarySha256) {
     throw new Error("Rust enumeration artifact is stale or incompatible");

@@ -9,6 +9,17 @@ export function resolvePairedEnumerationBackend(raw?: string): PairedEnumeration
   throw new Error("SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND must be rust or typescript");
 }
 
+function resourceOption(raw: string | undefined, fallback: number, maximum: number, name: string): number {
+  const value = raw === undefined ? fallback : Number(raw);
+  if ((raw !== undefined && !/^\d+$/.test(raw)) || !Number.isSafeInteger(value) || value < 1 || value > maximum)
+    throw new Error(`${name} must be an integer from 1 to ${maximum}`);
+  return value;
+}
+export const resolveRustEnumerationThreads = (raw?: string) =>
+  resourceOption(raw, BLOCKSCAN_ENUMERATION_DEFAULTS.rustThreads, 8, "SEARCHER_BLOCKSCAN_RUST_THREADS");
+export const resolveRustEnumerationScratchMb = (raw?: string) =>
+  resourceOption(raw, BLOCKSCAN_ENUMERATION_DEFAULTS.rustScratchMb, 2048, "SEARCHER_BLOCKSCAN_RUST_SCRATCH_MB");
+
 export function enumeratePaired(input: PairedEnumerationInput, method: PairedEnumerationMethod,
   backend: PairedEnumerationBackend) {
   if (backend === "rust") return enumerateRustPaired(input, method);

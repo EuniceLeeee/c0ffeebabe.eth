@@ -1,11 +1,12 @@
 import { createRequire } from "node:module";
 import { resolvePairedEnumerationOptions, type DfsQuote, type enumeratePairedDfs, type PairedEnumerationInput, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
-import { RUST_ENUMERATOR_BINARY, verifyRustEnumerationArtifact } from "./blockscan-rust-artifact.js";
+import { RUST_ENUMERATOR_API_VERSION, RUST_ENUMERATOR_BINARY, verifyRustEnumerationArtifact } from "./blockscan-rust-artifact.js";
 
 type EnumerationStats = ReturnType<typeof enumeratePairedDfs>;
 type NativeQuote = Omit<DfsQuote, "value"> & { readonly value?: NonNullable<DfsQuote["value"]> };
 type NativeInput = Omit<PairedEnumerationInput, "onCycle" | "quotes"> & {
   quotes: readonly NativeQuote[]; traversal: PairedEnumerationMethod;
+  threads: number; memoryLimitBytes: number;
 };
 interface NativeEnumerator {
   apiVersion(): number;
@@ -19,7 +20,7 @@ function load(): NativeEnumerator {
     try {
       verifyRustEnumerationArtifact();
       const candidate = require(RUST_ENUMERATOR_BINARY) as NativeEnumerator;
-      if (candidate.apiVersion() !== 1 || typeof candidate.enumerate !== "function") {
+      if (candidate.apiVersion() !== RUST_ENUMERATOR_API_VERSION || typeof candidate.enumerate !== "function") {
         throw new Error("unsupported Rust enumeration interface");
       }
       native = candidate;
@@ -38,6 +39,7 @@ export function enumerateRustPaired(input: PairedEnumerationInput, traversal: Pa
   const options = resolvePairedEnumerationOptions(input);
   return load().enumerate({
     ...data, ...options, traversal,
+    threads: options.rustThreads, memoryLimitBytes: options.rustScratchMb * 1024 * 1024,
     // napi-rs optional objects use undefined, while the TS contract uses null.
     // Keep original quote objects for callbacks and normalize only the wire shape.
     quotes: input.quotes.map(quote => ({ ...quote, value: quote.value ?? undefined })),
