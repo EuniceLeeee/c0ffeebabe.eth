@@ -980,7 +980,7 @@ const strictLifecycle = await executeAdapterFamilyLifecycle({
   runtime: lifecycleFixtureRuntime(),
   publisher: { publish() {} },
 });
-assert(strictLifecycle.publication !== null);
+assert(strictLifecycle.publication !== null, JSON.stringify(strictLifecycle, (_, v) => typeof v === "bigint" ? v.toString() : v));
 const preparedStrictInstance = strictLifecycle.publication.instances[0];
 assert(preparedStrictInstance !== undefined);
 const strictVictimRoute = preparedStrictInstance.routeHandles.find(
@@ -1495,6 +1495,10 @@ function lifecycleRequestResult(
     case "pair-token1":
       data = UNIV2_PAIR_INTERFACE.encodeFunctionResult("token1", [TOKEN1]);
       break;
+    case "transfer-code-0":
+    case "transfer-code-1":
+      data = "0x6000";
+      break;
     case "factory-get-pair":
       data = UNIV2_FACTORY_INTERFACE.encodeFunctionResult("getPair", [POOL]);
       break;
@@ -1567,8 +1571,9 @@ function runIdentityDecision(
     step: 1,
   };
   assert.deepEqual(identityVariant.decide(reverseStep), { status: "continue" });
+  assert.deepEqual(identityVariant.requirements(reverseStep), { transports: ["eth-call", "get-code"] });
   const reverseRequests = identityVariant.buildRequests(reverseStep);
-  assert.equal(reverseRequests.length, 6);
+  assert.equal(reverseRequests.length, 8);
   assert.equal(reverseRequests[0].kind, "eth-call");
   if (reverseRequests[0].kind !== "eth-call") {
     throw new Error("univ2 reverse binding request must be eth-call");
@@ -1591,6 +1596,8 @@ function runIdentityDecision(
       ...[0, 1].map((index) => ownQuote
         ? success(`model-decimals-${index}`, UNIV2_TOKEN_INTERFACE.encodeFunctionResult("decimals", [index ? ownQuote.decimals1 : ownQuote.decimals0]))
         : declaredRevert(`model-decimals-${index}`)),
+      success("transfer-code-0", "0x6000"),
+      success("transfer-code-1", "0x6000"),
     ],
   }) as UniV2IdentityEvidence;
   const modelStep = {

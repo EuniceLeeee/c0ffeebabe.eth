@@ -145,19 +145,23 @@ const repeat = [edge(WETH, a, 401), edge(a, b, 402, true),
 const repeatInput = inputFor(repeat.map(value => Object.freeze(value)));
 repeatInput.mids = new Map([...repeatInput.mids].map(([key, value]) =>
   [key, { ...value, mid: 1.02, quoteAmountOut: 102n * UNIT / 100n }]));
-assert(!check(repeatInput).opportunities.some(route => route.seedEdges.length === 4),
-  "current paired DFS excludes repeated tokens even around a protocol leg");
+assert(check(repeatInput).opportunities.some(route => route.seedEdges.length === 4),
+  "repeated tokens are legal around a protocol leg");
 const simple = inputFor([edge(WETH, a, 411), edge(a, b, 412, true), edge(b, c, 413), edge(c, WETH, 414)]);
 simple.mids = new Map([...simple.mids].map(([key, value]) =>
   [key, { ...value, mid: 1.02, quoteAmountOut: 102n * UNIT / 100n }]));
 assert(check(simple).opportunities.some(route => route.seedEdges.length === 4),
-  "simple protocol ring is a positive control for repeated-token exclusion");
+  "simple protocol ring remains a positive control");
 const swapOnly = inputFor(repeat.map(value => ({ ...value, slotKind: "swap",
   protocolAction: undefined, edgeKind: "swap" })));
-assert(!check(swapOnly).opportunities.some(route => route.seedEdges.length === 4));
+// Preserve each swap edge's key while assigning an explicitly profitable amount.
+swapOnly.mids=new Map(swapOnly.edges.map(e=>[blockScanEdgeKey(e),{
+  kind:"test",pool:e.target,edges:[e],mid:1.02,quoteAmountIn:UNIT,quoteAmountOut:102n*UNIT/100n,feeBps:0,depthProxy:0}]));
+assert(check(swapOnly).opportunities.some(route => route.seedEdges.length === 4));
 const thirdVisit = inputFor([...repeat.slice(0, 3), edge(a, c, 405, true),
   edge(c, a, 406), repeat[3]]);
-assert(!check(thirdVisit).opportunities.some(route => route.seedEdges.length === 6));
+thirdVisit.mids=new Map([...thirdVisit.mids].map(([k,v])=>[k,{...v,mid:1.02,quoteAmountOut:102n*UNIT/100n}]));
+assert(check(thirdVisit).opportunities.some(route => route.seedEdges.length === 6));
 
 const mutable = inputFor([edge(WETH, a, 501), edge(a, WETH, 502)]);
 check(mutable);

@@ -8,6 +8,15 @@ import { DEFAULT_PROFIT_TOKEN_VALUATION } from "../profit-token-valuation.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
 
 const base = ["--ready", "ready.json", "--block", "123", "--out", "logs/new-run"];
+test("live and historical policy allow WBTC starts with an eight-decimal search cap", () => {
+  const tokens = resolveBlockScanCoreConfig({}).pricedTokens;
+  assert.equal(tokens.size, 5);
+  assert.equal(tokens.get("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599")?.maxBorrow, 50n * 10n ** 8n);
+  assert.equal(tokens.get("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")?.maxBorrow, 2_000n * 10n ** 18n);
+  assert.equal(tokens.get("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")?.maxBorrow, 5_000_000n * 10n ** 6n);
+  assert.equal(tokens.get("0xdac17f958d2ee523a2206206994597c13d831ec7")?.maxBorrow, 5_000_000n * 10n ** 6n);
+  assert.equal(tokens.get("0x6b175474e89094c44da98b954eedeac495271d0f")?.maxBorrow, 5_000_000n * 10n ** 18n);
+});
 test("historical executor code is opt-in, hash-bound and cannot override account state", () => {
   assert.throws(() => parseAtBlockArgs([...base, "--executor-runtime-code", "code.json"]));
   assert.throws(() => parseAtBlockArgs(["--prices", "p", "--block", "123", "--out", "o", "--offline",
@@ -36,18 +45,26 @@ test("price serialization preserves bigint, readonly maps, sets and unavailable 
   assert.deepEqual(parseAtBlockJson(atBlockJson(values)), values);
 });
 
-test("CLI and live share the same policy resolvers, without changing defaults", () => {
+test("CLI and live share joint-DFS defaults and retain explicit rollback methods", () => {
   const cfg = resolveBlockScanCoreConfig({});
   assert.equal(cfg.allowRepeatedPools, true);
-  assert.equal(cfg.enumerationMethod, "dfs");
+  assert.equal(cfg.enumerationMethod, "joint-dfs");
   assert.equal(cfg.enumerationBackend, "typescript");
   assert.equal(cfg.rustEnumerationThreads, 1);
   assert.equal(cfg.rustEnumerationScratchMb, 512);
-  for (const backend of ["rust", "typescript"])
-    assert.equal(resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND: backend }).enumerationBackend, backend);
+  assert.equal(BLOCKSCAN_ENUMERATION_DEFAULTS.rustEnabled, false);
+  assert.equal(resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND: "typescript",
+    SEARCHER_BLOCKSCAN_ENUMERATION_METHOD: "dfs" }).enumerationBackend, "typescript");
+  for (const method of ["joint-dfs", "dfs", "layered"])
+    assert.throws(() => resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND: "rust",
+      SEARCHER_BLOCKSCAN_ENUMERATION_METHOD: method }), /Rust enumeration is disabled/);
+  const nativeKnobsOff = resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_RUST_THREADS: "8",
+    SEARCHER_BLOCKSCAN_RUST_SCRATCH_MB: "bad" });
+  assert.equal(nativeKnobsOff.rustEnumerationThreads, 1);
+  assert.equal(nativeKnobsOff.rustEnumerationScratchMb, 512);
   for (const raw of ["", "auto", "js"])
     assert.throws(() => resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND: raw }), /must be rust or typescript/);
-  for (const method of ["dfs", "layered"]) for (const reuse of ["0", "1"]) for (const dedup of ["0", "1"]) {
+  for (const method of ["joint-dfs", "dfs", "layered"]) for (const reuse of ["0", "1"]) for (const dedup of ["0", "1"]) {
     const current = resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED: reuse,
       SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED: dedup, SEARCHER_BLOCKSCAN_ENUMERATION_METHOD: method });
     assert.equal(current.allowRepeatedPools, reuse === "1");
@@ -62,10 +79,17 @@ test("CLI and live share the same policy resolvers, without changing defaults", 
   assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED:"false"}), /must be 0 or 1/);
   assert.equal(cfg.maxHops, 6); assert.equal(cfg.minSpreadBps, 100);
   assert.equal(cfg.usdSignalPairsPerToken, 20);
+  assert.equal(cfg.hopQuotesPerPair, 1);
+  for (const n of ["0", "1", "2", "20"])
+    assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_QUOTES_PER_PAIR:n}).hopQuotesPerPair, Number(n));
+  for (const n of ["", "-1", "1.5", "NaN", "Infinity", "9007199254740992"])
+    assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_QUOTES_PER_PAIR:n}), /nonnegative safe integer/);
   assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"1"}).usdSignalPairsPerToken, 1);
   assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"0"}), /positive safe integer/);
   assert.equal(cfg.exactAdmissionSpreadBps, 50); assert.equal(cfg.maxCandidates, 100);
-  assert.equal(cfg.budgetMs, 1500);
+  assert.equal(cfg.budgetMs, 15000);
+  assert.equal(resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS: "1500" }).budgetMs, 1500,
+    "explicit historical budgets remain configurable");
   const policy = resolveBlockScanAtomicPolicy({});
   assert.equal(policy.maxProfitBpsOfFlash, 10000n);
   assert.equal(policy.dryRun, false); assert.equal(policy.blockScanSubmit, false);
@@ -105,8 +129,8 @@ test("enumeration defaults have one source and prefix pruning is explicitly conf
   assert.equal(cfg.minSpreadBps, defaults.minSpreadBps);
   assert.equal(cfg.exactAdmissionSpreadBps, defaults.exactAdmissionSpreadBps);
   assert.equal(cfg.minCapitalFraction, defaults.minCapitalFraction);
-  assert.equal(cfg.prefixPruningEnabled, false);
-  assert.equal(cfg.maxPrefixDrawdownBps, 1000);
+  assert.equal(cfg.prefixPruningEnabled, true);
+  assert.equal(cfg.maxPrefixDrawdownBps, 0);
   for (const enabled of ["0", "1"]) for (const drawdown of [0, 1000, 2000, 10000]) {
     const current = resolveBlockScanCoreConfig({
       SEARCHER_BLOCKSCAN_PREFIX_PRUNING_ENABLED: enabled,

@@ -439,14 +439,9 @@ impl Enumerator {
             if path.is_empty() && !seeds.contains(&id) {
                 continue;
             }
-            if next == anchor {
-                continue;
-            }
             if path.iter().any(|old_id| {
                 let old = &self.edges[*old_id];
-                (!self.allow_repeated_pools && old.pool == edge.pool)
-                    || old.from == next
-                    || old.to == next
+                !self.allow_repeated_pools && old.pool == edge.pool
             }) {
                 continue;
             }
@@ -696,9 +691,7 @@ impl Enumerator {
                                     let left = &self.edges[*p_id];
                                     q.iter().any(|q_id| {
                                         let right = &self.edges[*q_id];
-                                        left.from == right.from
-                                            || (!self.allow_repeated_pools
-                                                && left.pool == right.pool)
+                                        !self.allow_repeated_pools && left.pool == right.pool
                                     })
                                 });
                                 if conflict {
@@ -1164,9 +1157,6 @@ where
         if !above_spread(&num, &den, &threshold) {
             continue;
         }
-        if !input.prefix_pruning_enabled {
-            partners[b].insert(s);
-        }
         partners[s].insert(b);
         pair_count += 1;
         let index = *anchor_index.entry(sell.from).or_insert_with(|| {
@@ -1185,7 +1175,7 @@ where
         return Ok(stats);
     }
     let max_hops = input.max_hops as usize;
-    let max_half = ((max_hops + 1) / 2).min(tokens.len().saturating_sub(1));
+    let max_half = (max_hops + 1) / 2;
     let mut engine = Enumerator {
         edges: Arc::new(edges),
         outgoing: Arc::new(outgoing),

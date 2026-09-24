@@ -10,6 +10,7 @@ import type {
   LineageId,
 } from "../../adapter-family-identifiers.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
+import type { TokenTransferModel } from "../../token-transfer-semantics/index.js";
 
 export type UniV2CandidateSource =
   | "pair-created"
@@ -47,6 +48,7 @@ export interface UniV2FactoryBinding {
 }
 
 export interface UniV2IdentityFacts {
+  readonly tokenTransfers?: readonly [TokenTransferModel, TokenTransferModel];
   readonly quoteModel: UniV2QuoteModel;
   readonly pool: string;
   readonly token0: string;
@@ -62,6 +64,7 @@ export interface UniV2Identity extends VerifiedIdentity {
 }
 
 export interface UniV2Descriptor extends CompiledInstanceDescriptor {
+  readonly tokenTransfers?: readonly [TokenTransferModel, TokenTransferModel];
   readonly quoteModel: UniV2QuoteModel;
   readonly familyId: FamilyId;
   readonly lineageId: LineageId;
@@ -82,6 +85,7 @@ export interface UniV2Route extends FamilyRouteDescriptor {
 }
 
 export interface UniV2PricingDescriptor {
+  readonly tokenTransfers?: readonly [TokenTransferModel, TokenTransferModel];
   readonly quoteModel: UniV2QuoteModel;
   readonly instanceKey: InstanceKey;
   readonly pool: string;
@@ -103,6 +107,10 @@ export interface UniV2PricingSnapshot {
 }
 
 export interface UniV2ReserveExactEvidence {
+  /** Credit to the pair, distinct from the executor's nominal debit. */
+  readonly receivedAmountIn?: bigint;
+  /** Pair.swap's gross transfer, distinct from receiver's quoted net credit. */
+  readonly poolAmountOut?: bigint;
   readonly quoteModel: UniV2QuoteModel["kind"];
   readonly kind: "univ2-reserves-exact";
   readonly source: CanonicalSource;
@@ -136,6 +144,7 @@ export type UniV2IdentityEvidence =
     }
   | {
       readonly phase: "reverse-binding";
+      readonly tokenTransfers?: readonly [TokenTransferModel, TokenTransferModel];
       readonly factory: string;
       readonly token0: string;
       readonly token1: string;

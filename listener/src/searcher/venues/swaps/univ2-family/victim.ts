@@ -46,7 +46,7 @@ export interface UniV2ExactPostState {
 
 export const univ2VictimReplay = {
   bind({ descriptor, routes, impact }) {
-    if (descriptor.quoteModel.kind !== "constant-product") return null;
+    if (descriptor.quoteModel.kind !== "constant-product" || hasTransferTax(descriptor)) return null;
     if (!samePool(descriptor.pool, impact.pool)) return null;
     return routes.find((route) =>
       samePool(route.pool, descriptor.pool) &&
@@ -55,7 +55,7 @@ export const univ2VictimReplay = {
     ) ?? null;
   },
   applyLocal({ descriptor, route, preState, impact, source }) {
-    if (descriptor.quoteModel.kind !== "constant-product") return null;
+    if (descriptor.quoteModel.kind !== "constant-product" || hasTransferTax(descriptor)) return null;
     if (!routeMatches(descriptor, route, impact)) return null;
     const parsed = decodePreState(preState);
     if (
@@ -79,7 +79,7 @@ export const univ2VictimReplay = {
     });
   },
   exactPostState({ descriptor, route, impact, source }) {
-    if (descriptor.quoteModel.kind !== "constant-product") return null;
+    if (descriptor.quoteModel.kind !== "constant-product" || hasTransferTax(descriptor)) return null;
     if (
       !routeMatches(descriptor, route, impact) ||
       impact.exactPostState === undefined
@@ -102,11 +102,15 @@ export const univ2VictimReplay = {
     }) as unknown as CanonicalValue;
   },
   buildOverlay({ descriptor, route, impact, validUntil }) {
-    if (descriptor.quoteModel.kind !== "constant-product") return null;
+    if (descriptor.quoteModel.kind !== "constant-product" || hasTransferTax(descriptor)) return null;
     if (!routeMatches(descriptor, route, impact)) return null;
     return buildUniV2VictimOverlayIntent({ impact, validUntil });
   },
 } satisfies VictimReplaySpec<UniV2Descriptor, UniV2Route>;
+
+function hasTransferTax(descriptor: UniV2Descriptor): boolean {
+  return descriptor.tokenTransfers?.some(model => model.kind === "verified-transfer-tax") ?? false;
+}
 
 export function applyUniV2VictimState(input: {
   readonly preState: UniV2VictimPreState;

@@ -1,5 +1,5 @@
 import { buildBlockScanUsdView, usdViewStatistics, type BlockScanUsdView } from "../blockscan-usd-view.js";
-import { DEFAULT_ALLOW_REPEATED_POOLS, enumeratePairedDfs, resolvePairedEnumerationMethod, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
+import { DEFAULT_ALLOW_REPEATED_POOLS, resolvePairedEnumerationMethod, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
 import { enumeratePaired, resolvePairedEnumerationBackend, type PairedEnumerationBackend } from "./blockscan-paired-enumerator.js";
 import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "./detector.js";
@@ -20,11 +20,13 @@ export interface BlockScanCoreConfig {
   deduplicateRotations?: boolean;
   /** Allow a logical pool/instance on multiple legs; final sim remains mandatory. */
   allowRepeatedPools?: boolean;
-  /** Optional reference-value floor on prefixes from the signal anchor. */
+  /** Optional reference-value floor: joint buy/sell prefixes for joint-dfs. */
   prefixPruningEnabled?: boolean;
   maxPrefixDrawdownBps?: number;
   /** Maximum compatible buy/sell signal pairs per token; defaults to 20. */
   usdSignalPairsPerToken?: number;
+  /** Top N distinct pools for each tokenIn -> tokenOut; 0 disables this independent cap. */
+  hopQuotesPerPair?: number;
   maxHops: number;
   minSpreadBps: number;
   /** Historical caller compatibility only; DFS always requires a paired USD signal. */
@@ -64,7 +66,7 @@ export interface BlockScanOutcome {
     readonly forcedSelectionCount: number;
   };
   debug?: { skippedVenues: number; capitalRejected: number };
-  enumeration?: { algorithm: "paired-dfs" | "paired-layered"; backend: PairedEnumerationBackend } & ReturnType<typeof usdViewStatistics> & ReturnType<typeof enumeratePairedDfs>;
+  enumeration?: { algorithm: "joint-dfs" | "paired-dfs" | "paired-layered"; backend: PairedEnumerationBackend } & ReturnType<typeof usdViewStatistics> & ReturnType<typeof enumeratePaired>;
 }
 
 export interface BlockScanScanTiming {
@@ -197,6 +199,7 @@ export function scanBlockStateFromResolvedMids(input: {
   const dfs = enumeratePaired({
     quotes, signals: view.signals, minSpreadBps: input.cfg.minSpreadBps,
     maxHops: input.cfg.maxHops, deadlineAtMs, allowRepeatedPools,
+    hopQuotesPerPair: input.cfg.hopQuotesPerPair,
     prefixPruningEnabled: input.cfg.prefixPruningEnabled,
     maxPrefixDrawdownBps: input.cfg.maxPrefixDrawdownBps,
     rustThreads: input.cfg.rustEnumerationThreads,
@@ -247,7 +250,7 @@ export function scanBlockStateFromResolvedMids(input: {
         (input.cfg.exactAdmissionSpreadBps ?? input.cfg.minSpreadBps)).length,
       selectedCount: opportunities.length, forcedSelectionCount: 0 },
     debug: { skippedVenues: eligibleEdges.length - quotes.length, capitalRejected },
-    enumeration: { algorithm: method === "dfs" ? "paired-dfs" : "paired-layered", backend,
+    enumeration: { algorithm: method === "joint-dfs" ? "joint-dfs" : method === "dfs" ? "paired-dfs" : "paired-layered", backend,
       ...usdViewStatistics(view, input.cfg.minSpreadBps), ...dfs },
   };
   input.onTiming?.({ preprocessing: preprocessingFinished - started, pairs: 0,
@@ -513,26 +516,11 @@ function ringTokensWithoutRepeat(edges: TokenEdge[]): string[] {
 
 export function isAdmissibleBlockScanRingShape(
   edges: TokenEdge[],
-  pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
+  _pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
 ): boolean {
-  const tokens = ringTokensWithoutRepeat(edges);
-  const positions = new Map<string, number[]>();
-  for (let i = 0; i < tokens.length; i++) {
-    const seen = positions.get(tokens[i]);
-    if (seen) seen.push(i);
-    else positions.set(tokens[i], [i]);
-  }
-  const repeated = [...positions.entries()].filter(([, indexes]) => indexes.length > 1);
-  if (repeated.length === 0) return true;
-  if (repeated.length !== 1) return false;
-
-  const [token, indexes] = repeated[0];
-  if (indexes.length !== 2 || pricedTokens.has(token)) return false;
-  const [start, end] = indexes;
-  // Admit a nested conversion cycle only when it is protocol-defined. This
-  // covers funded NAV/conversion loops without letting arbitrary concatenated
-  // AMM cycles crowd out the scanner's bounded candidate set.
-  return edges.slice(start, end).some((edge) => edge.slotKind === "protocol");
+  // Repeated tokens (including a funded token) are valid bounded walks.
+  // Continuity/closure still apply; amount-sensitive execution stays in Solver.
+  return edges.length >= 2 && isClosedContinuousRing(edges);
 }
 
 function uniqueLowercase(values: string[]): string[] {

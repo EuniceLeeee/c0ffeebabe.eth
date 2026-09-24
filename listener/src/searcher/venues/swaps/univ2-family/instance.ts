@@ -17,6 +17,7 @@ export const univ2Instance = {
       token1: identity.facts.token1,
       feeRule: identity.facts.feeRule,
       quoteModel: identity.facts.quoteModel,
+      tokenTransfers: identity.facts.tokenTransfers,
       factoryBinding: identity.facts.factoryBinding,
     };
   },
@@ -31,6 +32,7 @@ export const univ2Instance = {
     });
   },
   staticBindingProjection: (descriptor) => ({
+    tokenTransfers: descriptor.tokenTransfers ?? null,
     quoteModel: descriptor.quoteModel,
     pool: descriptor.pool,
     token0: descriptor.token0,

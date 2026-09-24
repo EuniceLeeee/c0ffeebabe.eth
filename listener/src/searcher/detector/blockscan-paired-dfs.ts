@@ -18,7 +18,7 @@ export interface DirectedPriceSignal {
   readonly num: bigint;
   readonly den: bigint;
 }
-export type PairedEnumerationMethod = "dfs" | "layered";
+export type PairedEnumerationMethod = "joint-dfs" | "dfs" | "layered";
 export const DEFAULT_ALLOW_REPEATED_POOLS: boolean = BLOCKSCAN_ENUMERATION_DEFAULTS.allowRepeatedPools;
 export function resolveAllowRepeatedPools(raw?: string): boolean {
   if (raw === undefined) return DEFAULT_ALLOW_REPEATED_POOLS;
@@ -27,9 +27,10 @@ export function resolveAllowRepeatedPools(raw?: string): boolean {
 }
 export function resolvePairedEnumerationMethod(value?: string): PairedEnumerationMethod {
   if (value === undefined) return BLOCKSCAN_ENUMERATION_DEFAULTS.method;
+  if (value === "joint-dfs") return value;
   if (value === "dfs") return value;
   if (value === "layered") return value;
-  throw new Error("SEARCHER_BLOCKSCAN_ENUMERATION_METHOD must be dfs or layered");
+  throw new Error("SEARCHER_BLOCKSCAN_ENUMERATION_METHOD must be joint-dfs, dfs or layered");
 }
 export const aboveSpread = (num: bigint, den: bigint, bps: number): boolean =>
   num * 10_000n > den * BigInt(10_000 + bps);
@@ -39,6 +40,8 @@ export interface PairedEnumerationInput {
   readonly funding: readonly string[];
   readonly minSpreadBps: number;
   readonly maxHops: number;
+  /** Shared production dispatcher selects top N pools per directed pair; 0 is unlimited. */
+  readonly hopQuotesPerPair?: number;
   readonly allowRepeatedPools?: boolean;
   readonly prefixPruningEnabled?: boolean;
   readonly maxPrefixDrawdownBps?: number;
@@ -96,7 +99,7 @@ class HalfLayer {
     return values[offset + this.hops]!;
   }
 }
-/** Simple halves rooted at the price-signal token, joined by token. Each half
+/** Bounded walks rooted at the price-signal token, joined by token. Each half
  * uses at most ceil(maxHops / 2) edges; their combined length cannot exceed maxHops.
  * No per-half profit gate. Join buckets are sorted by rate so binary search
  * skips combinations below the whole-cycle threshold before conflict checks.
@@ -146,10 +149,8 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
         (!allowRepeatedPools && buy.pool === sell.pool) || signal.den <= 0n || signal.num <= 0n)
       throw new Error("invalid directed price signal");
     if (!aboveSpread(signal.num, signal.den, input.minSpreadBps)) continue;
-    // Without a prefix bound, reversed partner lookup only changes which
-    // anchor emits a qualifying cycle first. Preserve that callback order.
-    // With the bound, admission belongs to the signal's actual sell anchor.
-    if (!prefixPruningEnabled) partners[b]!.add(s);
+    // Bind this directed signal to its actual sell anchor. With token revisits,
+    // reversing a pair can join unrelated occurrences of the signal token.
     partners[s]!.add(b); pairCount++;
     let seeds = anchors.get(sell.from);
     if (!seeds) { seeds = { buys: new Set(), sells: new Set() }; anchors.set(sell.from, seeds); }
@@ -181,7 +182,7 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
     }
     return { n: minN, d: minD };
   };
-  const maxHalf = Math.min(Math.ceil(input.maxHops / 2), tokens.size - 1);
+  const maxHalf = Math.ceil(input.maxHops / 2);
   const halves = (anchor: number, reverse: boolean, seeds: ReadonlySet<number>): HalfLayer[] => {
     const result = Array.from({ length: maxHalf }, (_, i) => new HalfLayer(tokens.size, i + 1));
     const path: number[] = [], executionPath: number[] = [];
@@ -192,11 +193,10 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
         if ((stats.expanded++ & 4095) === 0 && expired()) return;
         const id = ids[i]!, edge = edges[id]!, next = reverse ? edge.from : edge.to;
         if (path.length === 0 && !seeds.has(id)) continue;
-        if (next === anchor) continue;
         let conflict = false;
         for (const oldId of path) {
           const old = edges[oldId]!;
-          if ((!allowRepeatedPools && old.pool === edge.pool) || old.from === next || old.to === next) { conflict = true; break; }
+          if (!allowRepeatedPools && old.pool === edge.pool) { conflict = true; break; }
         }
         if (conflict) continue;
         let nextN = prefixN, nextD = prefixD;
@@ -292,15 +292,14 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
                   forwardValue.d * br.minPrefix!.d * prefixFloor) {
                 stats.prefixPrunedJoin++; stats.prefixPrunedTotal++; continue;
               }
-              // Each half already satisfies token/pool uniqueness. Only
-              // cross-half collisions remain; reject them before allocating
-              // the joined path and its funded rotations.
+              // Token revisits are legal. Pool reuse remains an independent
+              // policy, checked both within halves and across this join.
               let conflict = false;
               for (const pId of p) {
                 const left = edges[pId]!;
                 for (const qId of q) {
                   const right = edges[qId]!;
-                  if (left.from === right.from || (!allowRepeatedPools && left.pool === right.pool)) {
+                  if (!allowRepeatedPools && left.pool === right.pool) {
                     conflict = true; break;
                   }
                 }

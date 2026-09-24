@@ -15,6 +15,7 @@ import {
 } from "./codec.js";
 import { uniV2InputCapacity } from "./reserve-capacity.js";
 import { decodePoolQuote, poolQuoteRequest } from "./pool-quote.js";
+import { tokenTransferReceived } from "../../token-transfer-semantics/index.js";
 import { decodeRouterQuote, routerQuoteRequests, ROUTER_QUOTE_REQUEST_IDS, uniV2QuoteRouter } from "./router-quote.js";
 import type {
   UniV2Descriptor,
@@ -51,9 +52,9 @@ const createUniV2RequestProgram = (quotePreference: UniV2QuotePreference): Exact
       data: UNIV2_TOKEN_INTERFACE.encodeFunctionData("balanceOf", [input.descriptor.pool]),
       completion: "return-data" as const,
     }), ...(input.descriptor.quoteModel.kind === "pool-get-amount-out" ? [
-      poolQuoteRequest("exact-pool-quote", input.descriptor.pool, input.route.tokenIn, input.amountIn),
+      poolQuoteRequest("exact-pool-quote", input.descriptor.pool, input.route.tokenIn, receivedInput(input)),
     ] : usesRouter(input.descriptor, quotePreference)
-      ? routerQuoteRequests(input.descriptor, input.route, input.amountIn) : [])];
+      ? routerQuoteRequests(input.descriptor, input.route, receivedInput(input)) : [])];
   },
   buildDependentProgram: () => null,
   decode({ programInput, initialResults, dependentEvidence }) {
@@ -71,30 +72,35 @@ const createUniV2RequestProgram = (quotePreference: UniV2QuotePreference): Exact
     // Zero is an unavailable amount, not a pool blacklist. The solver can
     // still quote a smaller legal input at this same source. Read balanceOf
     // as donations/unsynced transfers also consume uint112 headroom.
-    const capacityExceeded = programInput.amountIn > state.maxAmountIn;
+    const receivedAmountIn = receivedInput(programInput);
+    const capacityExceeded = receivedAmountIn > state.maxAmountIn;
     const evidence: UniV2ReserveExactEvidence = Object.freeze({
-      ...zeroEvidence(programInput), ...state,
+      ...zeroEvidence(programInput), ...state, receivedAmountIn,
       ...(capacityExceeded ? { unavailableReason: "input-reserve-capacity" as const } : {}),
     });
     if (programInput.descriptor.quoteModel.kind === "pool-get-amount-out") {
       if (dependentEvidence.length !== 0) throw new Error("univ2 unexpected pool-quote round");
-      const amountOut = capacityExceeded ? 0n : decodePoolQuote(initialResults, "exact-pool-quote") ?? 0n;
-      return Object.freeze({ amountOut, evidence: Object.freeze({ ...evidence, amountOut }) });
+      const poolAmountOut = capacityExceeded ? 0n : decodePoolQuote(initialResults, "exact-pool-quote") ?? 0n;
+      const amountOut = receivedOutput(programInput, poolAmountOut);
+      return Object.freeze({ amountOut, evidence: Object.freeze({ ...evidence, poolAmountOut, amountOut }) });
     }
     if (usesRouter(programInput.descriptor, quotePreference)) {
       if (dependentEvidence.length !== 0) throw new Error("univ2 unexpected router quote round");
-      const quote = decodeRouterQuote(programInput.descriptor, programInput.amountIn,
-        quoteV2ExactInput(state.reserveIn, state.reserveOut, programInput.amountIn, programInput.descriptor.feeRule.feeBps),
+      const quote = decodeRouterQuote(programInput.descriptor, receivedAmountIn,
+        quoteV2ExactInput(state.reserveIn, state.reserveOut, receivedAmountIn, programInput.descriptor.feeRule.feeBps),
         initialResults);
       // Capacity is still an independent hard ceiling; a Router quote alone
       // is not an executable-capacity or transfer-eligibility proof.
       if (capacityExceeded) return Object.freeze({ amountOut: 0n, evidence });
-      return Object.freeze({ amountOut: quote.amountOut, evidence: Object.freeze({ ...evidence,
-        kind: "univ2-router-amounts" as const, quoteModel: "constant-product" as const, ...quote }) });
+      const amountOut = receivedOutput(programInput, quote.amountOut);
+      return Object.freeze({ amountOut, evidence: Object.freeze({ ...evidence,
+        kind: "univ2-router-amounts" as const, quoteModel: "constant-product" as const,
+        router: quote.router, poolAmountOut: quote.amountOut, amountOut }) });
     }
     if (dependentEvidence.length !== 0) throw new Error("univ2 unexpected local-quote round");
-    const amountOut = trialOutput(programInput, state);
-    return Object.freeze({ amountOut, evidence: Object.freeze({ ...evidence, amountOut }) });
+    const poolAmountOut = trialOutput(programInput, state);
+    const amountOut = receivedOutput(programInput, poolAmountOut);
+    return Object.freeze({ amountOut, evidence: Object.freeze({ ...evidence, poolAmountOut, amountOut }) });
   },
 });
 
@@ -123,7 +129,10 @@ export function createUniV2Exact(quotePreference: UniV2QuotePreference = "local"
         program,
       }),
     ]),
-    cacheCompatibilityProjection: ({ descriptor, route }) => ({
+    cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
+      tokenTransfers: descriptor.tokenTransfers ?? null,
+      outputTaxRecipient: descriptor.tokenTransfers?.[route.direction === "zero-for-one" ? 1 : 0]?.kind === "verified-transfer-tax"
+        && sameAddress(route.tokenOut, executor),
       quotePreference,
       quoteModel: descriptor.quoteModel,
       pool: descriptor.pool,
@@ -176,12 +185,22 @@ function readInitialState(input: Input, results: readonly AdapterRequestResult[]
 }
 
 function trialOutput(input: Input, state: ReturnType<typeof readInitialState>): bigint {
-  if (input.amountIn > state.maxAmountIn) return 0n;
+  const amountIn = receivedInput(input);
+  if (amountIn > state.maxAmountIn) return 0n;
   const fee = input.descriptor.feeRule;
   if (fee.kind !== "constant-bps" || fee.feeBps < 0n || fee.feeBps >= 10_000n) {
     throw new Error("univ2 invalid constant-product fee rule");
   }
-  return quoteV2ExactInput(state.reserveIn, state.reserveOut, input.amountIn, fee.feeBps);
+  return quoteV2ExactInput(state.reserveIn, state.reserveOut, amountIn, fee.feeBps);
+}
+
+function receivedInput(input: Input): bigint {
+  return tokenTransferReceived(input.descriptor.tokenTransfers?.[input.route.direction === "zero-for-one" ? 0 : 1],
+    input.amountIn, input.descriptor.pool);
+}
+function receivedOutput(input: Input, amount: bigint): bigint {
+  return tokenTransferReceived(input.descriptor.tokenTransfers?.[input.route.direction === "zero-for-one" ? 1 : 0],
+    amount, input.executor);
 }
 
 function assertRoute(

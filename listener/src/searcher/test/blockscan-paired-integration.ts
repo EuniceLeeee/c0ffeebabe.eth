@@ -25,7 +25,7 @@ const view:BlockScanUsdView={quotes,signals:[{token:weth,buy:quotes[5]!.id,sell:
   signalPairsPerToken:1,allowRepeatedPools:true,referenceUsdPerRaw:new Map(),comparableTokens:1,missingBuyReference:0,missingSellReference:0};
 const scan=(enumerationMethod:"dfs"|"layered",maxHops=6,usdView=view,budgetMs=5000)=>
   scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:new Set(),mids,usdView,
-    captureCoarseEnumeration:true,cfg:{enumerationMethod,maxHops,minSpreadBps:50,budgetMs,
+    captureCoarseEnumeration:true,cfg:{enumerationMethod,maxHops,minSpreadBps:50,budgetMs,prefixPruningEnabled:false,
       maxCandidates:100,pricedTokens:new Map([[weth,{maxBorrow:1000n*unit}]])}});
 const a=scan("dfs"),b=scan("layered");
 // The scanner must pass both pruning controls through to the actual enumerator.
@@ -49,7 +49,7 @@ const multiStart=(enumerationMethod:"dfs"|"layered",deduplicateRotations?:boolea
   scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:null,mids,
     // Multiple signals for the same route must not produce exact duplicates.
     usdView:{...view,signals:[...view.signals,...view.signals]},
-    cfg:{enumerationMethod,deduplicateRotations,maxHops:6,minSpreadBps:50,budgetMs:5000,
+    cfg:{enumerationMethod,deduplicateRotations,maxHops:6,minSpreadBps:50,budgetMs:5000,prefixPruningEnabled:false,
       maxCandidates,pricedTokens:new Map([[weth,{maxBorrow:2000n*unit}],[usdc,{maxBorrow:1000n*unit}]])}});
 for(const method of ["dfs","layered"] as const) {
   const distinct=multiStart(method);

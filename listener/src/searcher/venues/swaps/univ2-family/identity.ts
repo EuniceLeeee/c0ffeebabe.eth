@@ -20,6 +20,7 @@ import {
 } from "./codec.js";
 import { decodePoolQuote, poolQuoteRequest } from "./pool-quote.js";
 import { uniV2FeeRuleForFactory } from "./fee-rule.js";
+import { identifyTokenTransferModel } from "../../token-transfer-semantics/index.js";
 import {
   UNIV2_FACTORY_LINEAGE_ID,
   UNIV2_FAMILY_ID,
@@ -41,7 +42,8 @@ export const univ2Identity = {
     kind: "factory-child",
     lineageId: UNIV2_FACTORY_LINEAGE_ID,
     applies: () => true,
-    requirements: () => ({ transports: ["eth-call"] }),
+    requirements: input => ({ transports: identityEvidence(input.evidence)?.phase === "pool-static"
+      ? ["eth-call", "get-code"] : ["eth-call"] }),
     buildRequests(input) {
       const evidence = identityEvidence(input.evidence);
       if (evidence === undefined) return buildPoolStaticRequests(input.candidate);
@@ -67,6 +69,9 @@ export const univ2Identity = {
           id: `model-decimals-${index}`, kind: "eth-call" as const, to: token,
           data: UNIV2_TOKEN_INTERFACE.encodeFunctionData("decimals"),
           completion: "return-or-revert-data" as const, required: false,
+        })),
+        ...[evidence.token0, evidence.token1].map((address, index) => Object.freeze({
+          id: `transfer-code-${index}`, kind: "get-code" as const, address,
         })),
         ];
       }
@@ -111,6 +116,10 @@ export const univ2Identity = {
         ? "pool-get-amount-out" : "no-pool-quote-witness";
       return Object.freeze({
         phase: "reverse-binding" as const,
+        tokenTransfers: Object.freeze([
+          identifyTokenTransferModel(prior.token0, requireSuccessfulResult(results, "transfer-code-0").data),
+          identifyTokenTransferModel(prior.token1, requireSuccessfulResult(results, "transfer-code-1").data),
+        ] as const),
         factory: prior.factory,
         token0: prior.token0,
         token1: prior.token1,
@@ -228,6 +237,7 @@ function decideIdentity(
     token1,
     reversePool,
     quoteModel,
+    tokenTransfers: evidence.tokenTransfers ?? null,
   });
   return {
     status: "verified",
@@ -246,6 +256,7 @@ function decideIdentity(
         token1,
         feeRule,
         quoteModel,
+        tokenTransfers: evidence.tokenTransfers,
         factoryBinding: Object.freeze({ factory, reversePool }),
       }),
     }),

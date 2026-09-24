@@ -16,7 +16,7 @@ import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./
 import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
 import { resolveAllowRepeatedPools, resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
 import { resolvePairedEnumerationBackend, resolveRustEnumerationThreads, resolveRustEnumerationScratchMb } from "./detector/blockscan-paired-enumerator.js";
-import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "./blockscan-enumeration-config.js";
+import { BLOCKSCAN_ENUMERATION_DEFAULTS, resolveHopQuotesPerPair } from "./blockscan-enumeration-config.js";
 import {
   awaitBlockScanDeadline,
   BlockScanPassDeadlineError,
@@ -491,6 +491,7 @@ export { computeBidEth, valueInEth };
 export function buildBlockScanPricedTokens(): BlockScanCoreConfig["pricedTokens"] {
   return new Map([
     [ADDR.WETH.toLowerCase(), { maxBorrow: 2_000n * 10n ** 18n }],
+    [ADDR.WBTC.toLowerCase(), { maxBorrow: 50n * 10n ** 8n }],
     [ADDR.USDC.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 6n }],
     [ADDR.USDT.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 6n }],
     [ADDR.DAI.toLowerCase(), { maxBorrow: 5_000_000n * 10n ** 18n }],
@@ -676,17 +677,26 @@ export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env,
       !Number.isSafeInteger(maxPrefixDrawdownBps) || maxPrefixDrawdownBps < 0 || maxPrefixDrawdownBps > 10_000) {
     throw new Error("SEARCHER_BLOCKSCAN_MAX_PREFIX_DRAWDOWN_BPS must be an integer from 0 to 10000");
   }
+  const enumerationMethod = resolvePairedEnumerationMethod(env.SEARCHER_BLOCKSCAN_ENUMERATION_METHOD);
+  const enumerationBackend = resolvePairedEnumerationBackend(env.SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND);
+  if (enumerationBackend === "rust" && enumerationMethod === "joint-dfs") {
+    throw new Error("joint-dfs currently requires the typescript backend; Rust supports only legacy dfs or layered");
+  }
   return {
         maxHops: blockScanMaxHops,
         deduplicateRotations: deduplicateRotations === "1",
         allowRepeatedPools: resolveAllowRepeatedPools(env.SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED),
         prefixPruningEnabled: prefixPruning === "1",
         maxPrefixDrawdownBps,
-        enumerationMethod: resolvePairedEnumerationMethod(env.SEARCHER_BLOCKSCAN_ENUMERATION_METHOD),
-        enumerationBackend: resolvePairedEnumerationBackend(env.SEARCHER_BLOCKSCAN_ENUMERATION_BACKEND),
-        rustEnumerationThreads: resolveRustEnumerationThreads(env.SEARCHER_BLOCKSCAN_RUST_THREADS),
-        rustEnumerationScratchMb: resolveRustEnumerationScratchMb(env.SEARCHER_BLOCKSCAN_RUST_SCRATCH_MB),
+        enumerationMethod,
+        enumerationBackend,
+        // Native resource knobs are inert while the TypeScript backend is selected.
+        rustEnumerationThreads: enumerationBackend === "rust"
+          ? resolveRustEnumerationThreads(env.SEARCHER_BLOCKSCAN_RUST_THREADS) : 1,
+        rustEnumerationScratchMb: enumerationBackend === "rust"
+          ? resolveRustEnumerationScratchMb(env.SEARCHER_BLOCKSCAN_RUST_SCRATCH_MB) : BLOCKSCAN_ENUMERATION_DEFAULTS.rustScratchMb,
         usdSignalPairsPerToken: resolveUsdSignalPairsPerToken(env.SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN),
+        hopQuotesPerPair: resolveHopQuotesPerPair(env.SEARCHER_BLOCKSCAN_HOP_QUOTES_PER_PAIR),
         minSpreadBps: blockScanMinSpreadBps,
         requireDislocatedPair: true,
         /*
@@ -1119,7 +1129,9 @@ export function createBlockScanPriceRuntime(input: {
         console.log(`[searcher/effective-usd-view] ${JSON.stringify({
           sourceBlock: publication.snapshot.sourceBlock,
           sourceBlockHash: publication.snapshot.sourceBlockHash,
-          generation: publication.snapshot.generation, algorithm: "paired-dfs",
+          generation: publication.snapshot.generation,
+          algorithm: blockScanCfg.enumerationMethod === "joint-dfs" ? "joint-dfs"
+            : blockScanCfg.enumerationMethod === "layered" ? "paired-layered" : "paired-dfs",
           reference: "USDC=1 reference USD; effective-only <=3-hop valuation",
           ...usdViewStatistics(view, blockScanCfg.minSpreadBps), wallMs: Date.now() - start,
         })}`);
@@ -2635,7 +2647,6 @@ async function main(): Promise<void> {
           blockscan_view_hash:
             strategyViews.versions.blockscan_view_hash,
         },
-        profitTokenValuation,
         collectBlindAudit: blindProductionAudit,
       });
     },

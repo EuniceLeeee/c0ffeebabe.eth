@@ -193,7 +193,7 @@ export async function evaluateEv(
   ) {
     throw new Error("bribeBps must be an integer between 0 and 10000");
   }
-  const needsFeeState = policy.evGate || policy.bribeAllAboveGas || feeEnvironment !== undefined;
+  const needsFeeState = policy.evGate || policy.bribeAllAboveGas || feeEnvironment !== undefined || valuation.source !== undefined;
   const parentBefore = needsFeeState
     ? await provider.getBlock(sourceBlock ?? "latest")
     : null;
@@ -221,12 +221,15 @@ export async function evaluateEv(
     feeStateAvailable = false;
   }
 
-  const valueWithoutUsd = valuation.valueInEth(
+  const valuationSourceMatches = valuation.source === undefined ||
+    (valuation.source.number === sourceBlock && valuation.source.number === parentBefore?.number &&
+      valuation.source.hash.toLowerCase() === sourceBlockHash);
+  const valueWithoutUsd = valuationSourceMatches ? valuation.valueInEth(
     profitToken,
     netProfit,
     Number.NaN,
-  );
-  const ethUsdObservation = valueWithoutUsd === null
+  ) : null;
+  const ethUsdObservation = valuationSourceMatches && valuation.source === undefined && valueWithoutUsd === null
     ? await readPinnedEthUsd(
         provider,
         sourceBlock,
@@ -251,11 +254,11 @@ export async function evaluateEv(
     }
   }
 
-  const valuedProfit = valueWithoutUsd ?? valuation.valueInEth(
+  const valuedProfit = valuationSourceMatches && (valuation.source === undefined || feeStateAvailable) ? valueWithoutUsd ?? valuation.valueInEth(
     profitToken,
     netProfit,
     ethUsd ?? Number.NaN,
-  );
+  ) : null;
   const valuationAvailable = valuedProfit !== null;
   const rawProfitEth = valuedProfit ?? 0n;
   const expectedProfitEth =

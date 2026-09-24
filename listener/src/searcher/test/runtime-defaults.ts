@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { evaluateEv } from "../ev-evaluator.js";
 import { DEFAULT_BRIBE_BPS } from "../live-envelope.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
+import { resolveLiveBackrunSettings } from "../backrun-live-policy.js";
 
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 
@@ -80,10 +81,11 @@ for (const read of blockscanHopReads) {
       `blockscan hop default/override: ${configured} -> ${expected}`);
   }
 }
-assert(BLOCKSCAN_ENUMERATION_DEFAULTS.budgetMs === 1500 &&
+assert(BLOCKSCAN_ENUMERATION_DEFAULTS.budgetMs === 15000 &&
   /SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS \?\? BLOCKSCAN_ENUMERATION_DEFAULTS\.budgetMs/.test(searcherMain),
-  "reducing hops must preserve the 1500ms enumeration budget");
-assert(/SEARCHER_MAX_HOPS \?\? "3"/.test(searcherMain), "generic/backrun hop default is unchanged");
+  "hop policy must preserve the configured 15000ms enumeration budget");
+assert(resolveLiveBackrunSettings({}).planner.maxHops === 6,
+  "backrun keeps its existing six-hop production default");
 assert(searcherMain.includes("resolvePairedEnumerationMethod(env.SEARCHER_BLOCKSCAN_ENUMERATION_METHOD)"),
   "main forwards the shared DFS/layered switch");
 console.log("[runtime-defaults] shared six-hop blockscan default and explicit overrides: PASS");

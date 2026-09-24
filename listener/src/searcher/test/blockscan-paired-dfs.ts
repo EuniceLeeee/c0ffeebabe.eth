@@ -9,6 +9,8 @@ const key = (path: readonly DfsQuote[]) => path.map(e => e.id).join("|");
 interface PrefixOptions { prefixPruningEnabled?: boolean; maxPrefixDrawdownBps?: number }
 function run(quotes: DfsQuote[], signals: DirectedPriceSignal[], funding = ["f"], maxHops = 6, bps = 100,
   allowRepeatedPools = true, prefix: PrefixOptions = {}) {
+  // This suite pins the legacy half-path policy; new defaults are exercised by joint-DFS tests.
+  prefix = { prefixPruningEnabled: false, maxPrefixDrawdownBps: 1000, ...prefix };
   const cycles = new Set<string>();
   const stats = enumeratePairedDfs({ quotes, signals, funding, maxHops, minSpreadBps: bps, allowRepeatedPools,
     ...prefix, deadlineAtMs: Date.now() + 10_000, onCycle: path => { cycles.add(key(path)); } });
@@ -35,38 +37,41 @@ function oracle(quotes: DfsQuote[], signals: DirectedPriceSignal[], funding: str
   allowRepeatedPools: boolean, prefix: PrefixOptions = {}) {
   const found = new Set<string>();
   for (const start of funding) {
-    const visit = (token: string, path: DfsQuote[], visited: string[]) => {
+    const visit = (token: string, path: DfsQuote[]) => {
       for (const edge of quotes) {
         if (!edge.value || edge.tokenIn !== token || (!allowRepeatedPools && path.some(e => e.instance === edge.instance))) continue;
         const next = [...path, edge];
         if (edge.tokenOut === start) {
           const num = next.reduce((n, e) => n * e.num, 1n), den = next.reduce((n, e) => n * e.den, 1n);
-          if (next.length < 2 || num * 10_000n <= den * BigInt(10_000 + bps)) continue;
-          for (const s of signals) {
-            if (s.num * 10_000n <= s.den * BigInt(10_000 + bps)) continue;
-            const sell = next.findIndex(e => e.id === s.sell && e.tokenIn === s.token);
-            if (sell < 0) continue;
-            const anchored = [...next.slice(sell), ...next.slice(0, sell)];
-            if (anchored.at(-1)!.id !== s.buy) continue;
-            if (prefix.prefixPruningEnabled) {
-              let prefixNum = 1n, prefixDen = 1n, admissible = true;
-              for (const step of anchored) {
-                prefixNum *= step.value!.num; prefixDen *= step.value!.den;
-                if (prefixNum * 10_000n < prefixDen * BigInt(10_000 - (prefix.maxPrefixDrawdownBps ?? 1000))) {
-                  admissible = false; break;
+          if (next.length >= 2 && num * 10_000n > den * BigInt(10_000 + bps)) {
+            for (const s of signals) {
+              if (s.num * 10_000n <= s.den * BigInt(10_000 + bps)) continue;
+              for (let sell = 0; sell < next.length; sell++) {
+                if (next[sell]!.id !== s.sell || next[sell]!.tokenIn !== s.token) continue;
+                const anchored = [...next.slice(sell), ...next.slice(0, sell)];
+                if (anchored.at(-1)!.id !== s.buy) continue;
+                if (prefix.prefixPruningEnabled) {
+                  let prefixNum = 1n, prefixDen = 1n, admissible = true;
+                  for (const step of anchored) {
+                    prefixNum *= step.value!.num; prefixDen *= step.value!.den;
+                    if (prefixNum * 10_000n < prefixDen * BigInt(10_000 - (prefix.maxPrefixDrawdownBps ?? 1000))) {
+                      admissible = false; break;
+                    }
+                  }
+                  if (!admissible) continue;
+                }
+                for (let split = 1; split < anchored.length; split++) {
+                  if (split > Math.ceil(maxHops / 2) || anchored.length - split > Math.ceil(maxHops / 2)) continue;
+                  found.add(key(next));
                 }
               }
-              if (!admissible) continue;
-            }
-            for (let split = 1; split < anchored.length; split++) {
-              if (split > Math.ceil(maxHops / 2) || anchored.length - split > Math.ceil(maxHops / 2)) continue;
-              found.add(key(next));
             }
           }
-        } else if (next.length < maxHops && !visited.includes(edge.tokenOut)) visit(edge.tokenOut, next, [...visited, edge.tokenOut]);
+        }
+        if (next.length < maxHops) visit(edge.tokenOut, next);
       }
     };
-    visit(start, [], [start]);
+    visit(start, []);
   }
   return found;
 }
@@ -95,9 +100,20 @@ assert.equal(run(ring, [originalSignal], ["join"]).size, 1, "buy then sell orien
 const alternative = { ...ring[5]!, id: "alternative", instance: "alternative-pool" };
 assert(![...run([...ring, alternative], [originalSignal])].some(k => k.includes("alternative")), "different pool cannot impersonate signal");
 const changed = [...ring]; changed[4] = q("4", "c", "a"); changed[5] = q("5", "a", "f", 120n);
-assert.deepEqual(run(changed, [originalSignal]), new Set(["0|5"]),
-  "reject repeated-token long walk while retaining the genuine simple 2-hop shortcut");
+assert.deepEqual(run(changed, [originalSignal]), oracle(changed,[originalSignal],["f"],6,100,true),
+  "retain repeated-token walks as well as the simple shortcut");
+assert(run(changed,[originalSignal]).has(key(changed)));
+assert.deepEqual(run(roundTrip,[signal("a","buy","sell")],["f"],6),
+  new Set(["buy|sell","buy|sell|buy|sell","buy|sell|buy|sell|buy|sell"]),
+  "even a two-token graph may revisit tokens up to the configured hop bound");
 let callbacks = 0;
+const revisitSignalQuotes=[q("s","f","a",110n),q("b","a","f",110n),
+  q("fd","f","d",110n),q("df","d","f",110n),q("ca","c","a",110n)];
+const revisitSignals=[signal("f","b","s"),signal("a","ca","b")];
+const revisitCycles=run(revisitSignalQuotes,revisitSignals,["f"],4,0);
+assert(revisitCycles.has("s|b"));
+assert(!revisitCycles.has("fd|df|s|b"),"a reversed pair cannot match different visits to the signal token");
+assert.deepEqual(revisitCycles,oracle(revisitSignalQuotes,revisitSignals,["f"],4,0,true));
 // A losing half is allowed when the completed cycle is profitable.
 const recovery = [q("0", "f", "a", 120n), q("1", "a", "b", 90n), q("2", "b", "join", 99n),
   q("3", "join", "c", 99n), q("4", "c", "d", 90n), q("5", "d", "f", 120n)];
@@ -197,7 +213,7 @@ const expectedSequence = [
 for (const enumerate of [enumeratePairedDfs, enumeratePairedLayered]) {
   for (const quotes of [sequenceQuotes, [...sequenceQuotes].reverse()]) {
     for (const allowRepeatedPools of [false, true]) {
-      for (const prefix of [{}, ...[0, 1000, 10_000].map(maxPrefixDrawdownBps =>
+      for (const prefix of [{ prefixPruningEnabled: false }, ...[0, 1000, 10_000].map(maxPrefixDrawdownBps =>
         ({ prefixPruningEnabled: false, maxPrefixDrawdownBps }))]) {
         const sequence: string[][] = [];
         const stats = enumerate({ quotes, signals: sequenceSignals, funding: ["f", "a"], maxHops: 2,
@@ -223,8 +239,8 @@ for (const enumerate of [enumeratePairedDfs, enumeratePairedLayered]) {
   assert.equal(valueReads, quotes.length * 2, "disabled only validates values; no prefix products are computed");
 }
 
-// Every half is simple, but dense joins frequently repeat a token or a pool
-// across the two halves. The independent closed-walk oracle owns admission.
+// Dense bounded walks revisit tokens; only the independent pool-reuse policy
+// rejects collisions. The complete-walk oracle owns admission.
 const denseTokens = ["f", "a", "b", "c", "d", "g"], denseQuotes: DfsQuote[] = [];
 for (let from = 0; from < denseTokens.length; from++) {
   for (let to = 0; to < denseTokens.length; to++) {
@@ -244,7 +260,7 @@ for (const allowRepeatedPools of [false, true]) {
       minSpreadBps: 0, allowRepeatedPools, deadlineAtMs: Date.now() + 10_000,
       onCycle: path => { assert(!actual.has(key(path))); actual.add(key(path)); } });
     assert(!stats.deadlineHit);
-    assert(stats.signalMatched > stats.closed, "fixture exercises cross-half collision rejection");
+    if (!allowRepeatedPools) assert(stats.signalMatched > stats.closed, "fixture exercises pool collision rejection");
     assert.equal(stats.closed, actual.size);
     assert.deepEqual(actual, expected, `dense cross-half conflicts, reuse ${allowRepeatedPools}`);
   }
@@ -267,7 +283,8 @@ for (const maxPrefixDrawdownBps of [-1, 10_001, 0.5, NaN, Infinity, Number.MAX_S
 }
 assert.throws(() => run(ring, [originalSignal], ["f"], 6, 0, true,
   { prefixPruningEnabled: "1" as unknown as boolean }), /prefixPruningEnabled/);
-assert.equal(resolvePairedEnumerationMethod(), "dfs");
+assert.equal(resolvePairedEnumerationMethod(), "joint-dfs");
+assert.equal(resolvePairedEnumerationMethod("joint-dfs"), "joint-dfs");
 assert.equal(resolvePairedEnumerationMethod("dfs"), "dfs");
 assert.equal(resolvePairedEnumerationMethod("layered"), "layered");
 assert.throws(() => resolvePairedEnumerationMethod("unknown"), /must be/);

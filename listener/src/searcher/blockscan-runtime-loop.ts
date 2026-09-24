@@ -35,6 +35,8 @@ import { BlockScanFamilyStageBudget } from "./detector/blockscan-family-budget.j
 import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
 import { runOrderedBlockScanPipeline } from "./blockscan-ordered-pipeline.js";
 import { blockScanGrossProfitWeth } from "./blockscan-profit-priority.js";
+import { createScannedProfitTokenValuation } from "./scanned-profit-token-valuation.js";
+import type { ProfitTokenValuation } from "./profit-token-valuation.js";
 import { effectiveUsdPricing } from "./blockscan-usd-view.js";
 import { emitEvent } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
@@ -510,6 +512,7 @@ export function startBlockScanBackgroundFork(input: {
 }
 
 export interface BlockScanAtomicExecutionInput {
+  readonly profitTokenValuation: ProfitTokenValuation;
   readonly finalSimulationRuntime: FinalSimulationWorkRuntime<
     ResolvedPlan,
     SimulationResult
@@ -3625,6 +3628,9 @@ export class BlockScanRuntimeLoop {
       const profitReferences = amountPricingSnapshot === null ? new Map() : effectiveUsdPricing(
         amountPricingSnapshot, blockScanCfg.usdSignalPairsPerToken, blockScanCfg.allowRepeatedPools,
       ).view.referenceUsdPerRaw;
+      // Freeze the pass's existing price publication. Later producer deltas
+      // cannot change the value used by an in-flight final simulation/EV.
+      const profitTokenValuation = createScannedProfitTokenValuation(amountPricingSnapshot, exactSource);
       let solvePipelineSignal = passSignal;
       const finalSimulationPlanCommitments = new WeakMap<ResolvedPlan, string>();
       const finalSimulationPlanIdentity = createBotVmFinalSimulationPlanIdentity({
@@ -3951,6 +3957,7 @@ export class BlockScanRuntimeLoop {
             calldataSha256: finalSimulationPlanCommitments.get(quoted.resolved),
           })}`);
           const atomic = await this.deps.submitAtomic({
+            profitTokenValuation,
             finalSimulationRuntime,
             sourceGeneration: generation,
             opp: quoted.item.opp,

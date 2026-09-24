@@ -59,6 +59,7 @@ function route(
 
 function staticBinding(descriptor: UniV2Descriptor) {
   return {
+    tokenTransfers: descriptor.tokenTransfers ?? null,
     quoteModel: descriptor.quoteModel,
     pool: descriptor.pool,
     token0: descriptor.token0,

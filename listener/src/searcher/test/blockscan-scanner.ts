@@ -27,20 +27,58 @@ function quote(e:TokenEdge,n=100n,d=100n):ResolvedBlockScanMid {
 function input(edges:TokenEdge[],amounts:readonly bigint[]=[],overrides:Partial<BlockScanCoreConfig>={}):Input {
   return {edges,sourceBlock:BLOCK,swapTouched:null,captureCoarseEnumeration:true,
     mids:new Map(edges.map((e,i)=>[blockScanEdgeKey(e),quote(e,amounts[i]??100n)])),
-    cfg:{maxHops:6,minSpreadBps:10,maxCandidates:100,budgetMs:10_000,
-      pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}]]),...overrides}};
+    cfg:{maxHops:Math.min(6,edges.length),minSpreadBps:10,maxCandidates:100,budgetMs:10_000,
+      // Legacy coverage fixtures keep all pools; Top-N is tested independently below.
+      hopQuotesPerPair:0,pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}]]),...overrides}};
 }
 const ring=(tokens:string[],id=100)=>tokens.slice(0,-1).map((t,i)=>edge(t,tokens[i+1]!,id+i));
 const anchor=()=>input(ring([WETH,USDC,WETH]),[100n,110n]);
 const hasRoute=(result:ReturnType<typeof scan>,route:TokenEdge[])=>result.opportunities.some(o=>
   o.seedEdges.length===route.length&&o.seedEdges.every((e,i)=>blockScanEdgeKey(e)===blockScanEdgeKey(route[i]!)));
 
+test("live scanner applies independent per-direction Top-N to seed and intermediate pools",()=>{
+  const token=address(901);
+  const edges=[edge(WETH,token,301),edge(WETH,token,302),edge(token,USDC,303),
+    edge(token,USDC,304),edge(USDC,WETH,305),edge(USDC,WETH,306)];
+  const data=input(edges,[120n,110n,120n,110n,120n,110n],{
+    maxHops:3,minSpreadBps:0,usdSignalPairsPerToken:100,prefixPruningEnabled:false,
+    allowRepeatedPools:false,maxCandidates:1000,
+  });
+  const best=[edges[0]!,edges[2]!,edges[4]!];
+  for(const enumerationMethod of ["joint-dfs","dfs","layered"] as const) {
+    const run=(hopQuotesPerPair:number|undefined)=>scan({...data,
+      cfg:{...data.cfg,enumerationMethod,hopQuotesPerPair}});
+    const one=run(1),two=run(2),all=run(0);
+    assert.equal(one.outcome,"ran");
+    assert.equal(one.selection.enumeratedCount,1);
+    assert(hasRoute(one,best));
+    assert.equal(one.enumeration?.hopQuotesSelected,3);
+    assert.equal(one.enumeration?.hopQuotesPruned,3);
+    assert.equal(two.selection.enumeratedCount,8);
+    assert.deepEqual(two.opportunities,all.opportunities);
+    assert.deepEqual(run(undefined).opportunities,one.opportunities,"default N=1");
+    // A prebuilt full USD view must not bypass the cap or restore a removed seed.
+    const view=buildBlockScanUsdView(edges,data.mids,100,false);
+    const prebuilt=scan({...data,usdView:view,cfg:{...data.cfg,enumerationMethod,hopQuotesPerPair:1}});
+    assert.deepEqual(prebuilt.opportunities,one.opportunities);
+    assert.equal(one.opportunities[0]!.searchSeed.searchCenter,P);
+    assert(Math.abs(one.opportunities[0]!.coarseSpreadBps!-7280)<1e-8,
+      "each edge's effective rate participates in the full compounded return");
+  }
+});
+
+test("Rust production dispatch stays disabled even for explicit scanner configs",()=>{
+  for(const enumerationMethod of ["joint-dfs","dfs","layered"] as const)
+    assert.throws(()=>scan({...anchor(),cfg:{...anchor().cfg,enumerationMethod,enumerationBackend:"rust"}}),
+      /Rust enumeration is disabled/);
+});
+
 test("configured hop caps (4/6/8), with directed USD references",()=>{
   const rings=[2,3,4,5,6,7,8].map(h=>ring([WETH,...Array.from({length:h-1},(_,i)=>address(1000+h*10+i)),WETH],h*100));
   const spokes=rings.flatMap((r,h)=>r.slice(1,-1).map((e,i)=>edge(e.tokenIn,WETH,9000+h*10+i)));
   const data=input([...rings.flat(),...spokes],rings.flatMap(r=>r.map((_,i)=>i===r.length-1?102n:100n)));
   for(const maxHops of [4,6,8]) {
-    const result=scan({...data,cfg:{...data.cfg,maxHops,maxCandidates:1000,usdSignalPairsPerToken:100}});
+    const result=scan({...data,cfg:{...data.cfg,maxHops,maxCandidates:100_000,usdSignalPairsPerToken:100}});
     assert.equal(result.outcome,"ran");
     for(const r of rings) assert.equal(hasRoute(result,r),r.length<=maxHops,"cap "+maxHops+", ring "+r.length);
     assert(result.opportunities.every(o=>o.seedEdges.length<=maxHops));
@@ -124,7 +162,7 @@ test("funding start, rank, cap, fingerprints and deadline",()=>{
   const data=anchor();
   assert.equal(scan({...data,cfg:{...data.cfg,pricedTokens:new Map()}}).opportunities.length,0);
   const rings=Array.from({length:5},(_,i)=>ring([WETH,address(300+i),WETH],400+i*2));
-  const result=scan(input(rings.flat(),rings.flatMap((_,i)=>[100n,104n+BigInt(i)]),{maxCandidates:3}));
+  const result=scan(input(rings.flat(),rings.flatMap((_,i)=>[100n,104n+BigInt(i)]),{maxCandidates:3,maxHops:2}));
   assert.equal(result.selection.enumeratedCount,5);assert.equal(result.opportunities.length,3);
   assert.deepEqual(result.opportunities.map(o=>o.seedEdges[0]!.tokenOut),[address(304),address(303),address(302)]);
   assert.equal(scan(data).opportunities[0]!.cycleFingerprint,cycleFingerprint(BLOCK,[WETH,USDC]));
@@ -142,10 +180,16 @@ test("six-hop low activity route survives dead-end flood",()=>{
   const data=input([...decoys,...target,...spokes],[...decoys.map(()=>100n),100n,100n,100n,100n,100n,102n]);
   const result=scan(data);assert.equal(result.outcome,"ran");assert(hasRoute(result,target));
 });
-test("repeated tokens reject even around protocols; simple protocol ring remains",()=>{
+test("repeated tokens are admitted with or without protocols and funded intermediates",()=>{
   const a=address(801),b=address(802),c=address(803);
   const repeated=ring([WETH,a,b,a,WETH],810);repeated[1]=edge(a,b,811,"protocol");
-  assert.equal(scan(input(repeated,[102n,102n,102n,102n])).opportunities.filter(o=>o.seedEdges.length===4).length,0);
+  for(const protocol of [true,false]) {
+    const route=repeated.map(e=>protocol?e:{...e,slotKind:"swap" as const,protocolAction:undefined,edgeKind:"swap" as const});
+    const result=scan(input(route,[102n,102n,102n,102n],{
+      pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}],[a,{maxBorrow:1000n*P}]])}));
+    assert(hasRoute(result,route));
+    assert(result.opportunities.every(o=>o.seedEdges.length<=4));
+  }
   const simple=ring([WETH,a,b,c,WETH],820);simple[1]=edge(a,b,821,"protocol");
   assert(hasRoute(scan(input(simple,[102n,102n,102n,102n])),simple));
 });
@@ -160,7 +204,7 @@ test("identical routes deduplicate; execution-start rotations obey switch",()=>{
 });
 test("Exact admission is independent telemetry, not enumeration erasure",()=>{
   const edges=[...ring([WETH,address(901),WETH],910),...ring([WETH,address(902),WETH],920)];
-  const data=input(edges);
+  const data=input(edges,[],{maxHops:2});
   data.mids=new Map(edges.map((e,i)=>[blockScanEdgeKey(e),quote(e,[10_000n,10_030n,10_000n,10_100n][i]!,10_000n)]));
   const baseline=scan(data),gated=scan({...data,cfg:{...data.cfg,exactAdmissionSpreadBps:50}});
   assert.equal(baseline.selection.enumeratedCount,2);assert.equal(baseline.selection.admittedCount,2);
@@ -199,7 +243,7 @@ test("legacy depth diagnostic is not the effective scanner's admission rule",()=
   assert.equal(scan(data).opportunities.length,1);
 });
 
-test("real frozen effective table: rotation switch 29/60 and USDC original route rank 5",()=>{
+test("real frozen effective table: simple routes retained alongside repeated-token walks",()=>{
   const saved=JSON.parse(readFileSync(new URL("./fixtures/blockscan-effective-26029875.json",import.meta.url),"utf8")) as {
     sourceBlock:number; rows:{edge:TokenEdge;quote:{amountIn:string;amountOut:string;mid:number}|null}[];
   };
@@ -214,13 +258,15 @@ test("real frozen effective table: rotation switch 29/60 and USDC original route
     "0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a","0xf6e72db5454dd049d0788e411b06cfaf16853042"];
   for(const deduplicateRotations of [true,false]) {
     const result=scan({edges,mids,sourceBlock:saved.sourceBlock,swapTouched:null,
-      cfg:{maxHops:6,minSpreadBps:50,exactAdmissionSpreadBps:50,usdSignalPairsPerToken:50,
-        enumerationMethod:"dfs",deduplicateRotations,pricedTokens:caps,maxCandidates:100,budgetMs:10_000}});
+      cfg:{maxHops:6,minSpreadBps:50,exactAdmissionSpreadBps:50,usdSignalPairsPerToken:50,hopQuotesPerPair:0,
+        enumerationMethod:"dfs",deduplicateRotations,pricedTokens:caps,maxCandidates:100_000,budgetMs:10_000}});
     assert.equal(result.outcome,"ran");assert.equal(result.selection.forcedSelectionCount,0);
-    assert.equal(result.opportunities.length,deduplicateRotations?29:60);
-    const rank=result.opportunities.findIndex(o=>o.flashToken===USDC&&o.seedEdges.length===4&&
+    const simple=result.opportunities.filter(o=>new Set(o.seedEdges.map(e=>e.tokenIn.toLowerCase())).size===o.seedEdges.length);
+    assert.equal(simple.length,deduplicateRotations?29:60);
+    assert(result.opportunities.length>simple.length,"new walks must not suppress old simple routes before top-K");
+    const rank=simple.findIndex(o=>o.flashToken===USDC&&o.seedEdges.length===4&&
       o.seedEdges.every((e,i)=>e.instanceKey===targetPools[i]))+1;
     assert.equal(rank,deduplicateRotations?0:5);
-    if(rank>0) assert.equal(result.opportunities[rank-1]!.searchSeed.searchCenter,5_492_842n);
+    if(rank>0) assert.equal(simple[rank-1]!.searchSeed.searchCenter,5_492_842n);
   }
 });

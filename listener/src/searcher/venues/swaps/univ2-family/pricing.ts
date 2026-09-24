@@ -7,6 +7,7 @@ import type { RouteVenueMid } from "../../mid-readers.js";
 import { directedPoolMid, quotedPoolMid } from "../blockscan-state-shared.js";
 import { decodePoolQuote, poolQuoteRequest } from "./pool-quote.js";
 import { uniV2InputCapacity } from "./reserve-capacity.js";
+import { tokenTransferReceived } from "../../token-transfer-semantics/index.js";
 import {
   decodeReservesResult,
   requireSuccessfulResult,
@@ -28,6 +29,7 @@ const CURRENT_RESERVES_REQUEST_ID = "current-reserves";
 export const univ2Pricing = {
   stateKey: (route) => route.instanceKey,
   staticBindingProjection: ({ descriptor }) => ({
+    tokenTransfers: descriptor.tokenTransfers ?? null,
     quoteModel: descriptor.quoteModel,
     pool: descriptor.pool,
     token0: descriptor.token0,
@@ -43,6 +45,7 @@ export const univ2Pricing = {
     },
   }),
   snapshotCompatibilityProjection: ({ descriptor }) => ({
+    tokenTransfers: descriptor.tokenTransfers ?? null,
     quoteModel: descriptor.quoteModel,
     pool: descriptor.pool,
     token0: descriptor.token0,
@@ -60,6 +63,7 @@ export const univ2Pricing = {
       token1: descriptor.token1,
       feeRule: descriptor.feeRule,
       quoteModel: descriptor.quoteModel,
+      tokenTransfers: descriptor.tokenTransfers,
       factoryBinding: descriptor.factoryBinding,
     };
   },
@@ -82,8 +86,10 @@ export const univ2Pricing = {
       data: UNIV2_TOKEN_INTERFACE.encodeFunctionData("balanceOf", [descriptor.pool]),
       completion: "return-data" as const,
     })), ...(descriptor.quoteModel.kind === "pool-get-amount-out" ? [
-      poolQuoteRequest("current-quote-0", descriptor.pool, descriptor.token0, descriptor.quoteModel.probe0),
-      poolQuoteRequest("current-quote-1", descriptor.pool, descriptor.token1, descriptor.quoteModel.probe1),
+      poolQuoteRequest("current-quote-0", descriptor.pool, descriptor.token0,
+        tokenTransferReceived(descriptor.tokenTransfers?.[0], descriptor.quoteModel.probe0, descriptor.pool)),
+      poolQuoteRequest("current-quote-1", descriptor.pool, descriptor.token1,
+        tokenTransferReceived(descriptor.tokenTransfers?.[1], descriptor.quoteModel.probe1, descriptor.pool)),
     ] : [])],
     decodeSnapshot: ({ descriptor, initialResults }) => Object.freeze({
       ...decodeReservesResult(initialResults, CURRENT_RESERVES_REQUEST_ID),
@@ -108,7 +114,7 @@ export const univ2Pricing = {
           mids.set(route.routeKey, { ...quotedPoolMid({
             kind: "v2", edge: routeEdge(descriptor, route),
             amountIn: zeroForOne ? descriptor.quoteModel.probe0 : descriptor.quoteModel.probe1,
-            amountOut,
+            amountOut: tokenTransferReceived(descriptor.tokenTransfers?.[zeroForOne ? 1 : 0], amountOut),
             depthIn: zeroForOne ? snapshot.reserve0 : snapshot.reserve1,
             depthOut: zeroForOne ? snapshot.reserve1 : snapshot.reserve0,
             // The pool quote already includes its current fee. Applying the
@@ -117,13 +123,17 @@ export const univ2Pricing = {
           }), balanceHeadroomIn });
           continue;
         }
-        mids.set(route.routeKey, { ...directedPoolMid({
+        const mid = directedPoolMid({
           kind: "v2",
           edge: routeEdge(descriptor, route),
           reserveIn: zeroForOne ? snapshot.reserve0 : snapshot.reserve1,
           reserveOut: zeroForOne ? snapshot.reserve1 : snapshot.reserve0,
           feeBps: Number(descriptor.feeRule.feeBps),
-        }), balanceHeadroomIn });
+        });
+        const scale = 10000n;
+        const transferFactor = Number(tokenTransferReceived(descriptor.tokenTransfers?.[0], scale)) / Number(scale) *
+          Number(tokenTransferReceived(descriptor.tokenTransfers?.[1], scale)) / Number(scale);
+        mids.set(route.routeKey, { ...mid, mid: mid.mid * transferFactor, balanceHeadroomIn });
       }
       return mids;
     },
@@ -165,7 +175,9 @@ export const univ2Pricing = {
     },
   },
   liveStateProjection: {
-    project: ({ descriptor, snapshot }) => descriptor.quoteModel.kind !== "constant-product" ? null : ({
+    // Legacy post-impact shapes cannot express transfer credit vs nominal debit.
+    project: ({ descriptor, snapshot }) => descriptor.quoteModel.kind !== "constant-product" ||
+      descriptor.tokenTransfers?.some(model => model.kind === "verified-transfer-tax") ? null : ({
       kind: "v2",
       pool: descriptor.pool,
       token0: descriptor.token0,

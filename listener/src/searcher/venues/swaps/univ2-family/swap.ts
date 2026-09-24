@@ -44,7 +44,8 @@ export const univ2Swap = {
       if (!binding || binding.familyId !== UNIV2_FAMILY_ID) return null;
       const descriptor = binding.descriptor as UniV2Descriptor;
       if (descriptor.pool.toLowerCase() !== edge.target.toLowerCase() ||
-          descriptor.quoteModel.kind !== "constant-product") return null;
+          descriptor.quoteModel.kind !== "constant-product" ||
+          descriptor.tokenTransfers?.some(model => model.kind === "verified-transfer-tax")) return null;
       const forward = edge.tokenIn.toLowerCase() === descriptor.token0.toLowerCase() &&
         edge.tokenOut.toLowerCase() === descriptor.token1.toLowerCase();
       const reverse = edge.tokenIn.toLowerCase() === descriptor.token1.toLowerCase() &&

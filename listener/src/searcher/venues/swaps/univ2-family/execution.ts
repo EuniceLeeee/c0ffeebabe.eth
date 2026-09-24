@@ -2,6 +2,7 @@ import type { ResolvedPlanNode } from "../../../../shared/types/plan.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { UNIV2_PAIR_INTERFACE, sameAddress } from "./codec.js";
 import { uniV2QuoteRouter } from "./router-quote.js";
+import { tokenTransferReceived } from "../../token-transfer-semantics/index.js";
 import type {
   UniV2Descriptor,
   UniV2ExactEvidence,
@@ -48,8 +49,8 @@ export const univ2Execution = {
         params: {
           // Pair.swap specifies an exact transfer, not a minimum-output
           // threshold. A relaxed acceptance floor must not request less.
-          amount0Out: zeroForOne ? 0n : input.quotedAmountOut,
-          amount1Out: zeroForOne ? input.quotedAmountOut : 0n,
+          amount0Out: zeroForOne ? 0n : input.exactEvidence.poolAmountOut ?? input.quotedAmountOut,
+          amount1Out: zeroForOne ? input.exactEvidence.poolAmountOut ?? input.quotedAmountOut : 0n,
           to: input.executor,
         },
         children: transferFirst ? [] : [transfer],
@@ -99,6 +100,12 @@ function assertExecutionEvidence(input: {
 }): void {
   const evidence = input.exactEvidence;
   const zeroForOne = input.route.direction === "zero-for-one";
+  const receivedAmountIn = tokenTransferReceived(input.descriptor.tokenTransfers?.[zeroForOne ? 0 : 1], input.amountIn, input.descriptor.pool);
+  const poolAmountOut = evidence.poolAmountOut ?? evidence.amountOut;
+  if ((evidence.receivedAmountIn ?? input.amountIn) !== receivedAmountIn ||
+      tokenTransferReceived(input.descriptor.tokenTransfers?.[zeroForOne ? 1 : 0], poolAmountOut, input.executor) !== input.quotedAmountOut) {
+    throw new Error("univ2 execution received incompatible exact evidence: transfer receipts differ");
+  }
   if (
     input.amountIn < 0n ||
     (input.route.direction !== "zero-for-one" && input.route.direction !== "one-for-zero") ||

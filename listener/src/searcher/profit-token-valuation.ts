@@ -20,6 +20,8 @@ export type ProfitTokenValuationRule =
  * neither the planner hot path nor EV arithmetic performs network I/O.
  */
 export interface ProfitTokenValuation {
+  /** Present on scanned views; EV must reject use at another state source. */
+  readonly source?: { readonly number: number; readonly hash: string };
   canValue(token: string): boolean;
   valueInEth(token: string, amount: bigint, ethUsd: number): bigint | null;
 }

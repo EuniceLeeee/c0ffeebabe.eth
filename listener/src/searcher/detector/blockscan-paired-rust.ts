@@ -35,6 +35,9 @@ function load(): NativeEnumerator {
 /** Only successful cycles cross the native boundary. The synchronous callback's
  * admission/ranking cost still consumes the caller's original absolute deadline. */
 export function enumerateRustPaired(input: PairedEnumerationInput, traversal: PairedEnumerationMethod): EnumerationStats {
+  if (traversal === "joint-dfs") {
+    throw new Error("joint-dfs currently requires the typescript backend; Rust supports only legacy dfs or layered");
+  }
   const { onCycle, ...data } = input;
   const options = resolvePairedEnumerationOptions(input);
   return load().enumerate({

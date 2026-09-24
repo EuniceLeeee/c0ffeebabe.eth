@@ -112,7 +112,8 @@ function successResult(
       provenance: { kind: "strict-solver-consumer-fixture", fingerprint: `fixture:${request.id}` },
       completion: "reverted-as-declared", data: "0x" });
   }
-  const data = request.id.startsWith("current-balance-")
+  const data = request.id.startsWith("transfer-code-") ? "0x6000"
+    : request.id.startsWith("current-balance-")
     ? `0x${(request.id.endsWith("0") ? 1_000_000n : 2_000_000n).toString(16).padStart(64, "0")}`
     : request.id === "pair-factory"
     ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("factory", [`0x${"42".repeat(20)}`])

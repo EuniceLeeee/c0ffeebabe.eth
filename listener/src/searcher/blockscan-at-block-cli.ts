@@ -338,7 +338,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
               sourceBlockHash: input.sourceBlockHash, implementation, calldataSha256: sha256(Buffer.from(ethers.getBytes(calldata))),
               flashAmount: input.resolved.flashAmount, profitToken: input.resolved.profitToken, policy, evaluation }),
         } : {}),
-        collectBlindAudit: true, simRejects, profitTokenValuation: DEFAULT_PROFIT_TOKEN_VALUATION,
+        collectBlindAudit: true, simRejects,
         strategyVersions: { strategy_view_version: "historical-diagnostic", blockscan_view_hash: ready.graphHash },
         bundleRouter: { async submit() { throw new Error("historical CLI cannot submit"); } },
         submissionCoordinator: { offer() { throw new Error("historical CLI cannot submit"); } },
