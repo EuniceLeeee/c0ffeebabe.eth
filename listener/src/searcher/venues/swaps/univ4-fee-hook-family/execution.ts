@@ -1,4 +1,5 @@
 import { ADDR } from "../../../../shared/constants/addresses.js";
+import { hookDataFor, sat1Permissions } from "./sat1.js";
 import type { ResolvedPlanNode } from "../../../../shared/types/plan.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
@@ -49,6 +50,7 @@ export const univ4FeeHookExecution = {
           fee: BigInt(key.fee),
           tickSpacing: BigInt(key.tickSpacing),
           hooks: key.hooks,
+          hookData: input.exactEvidence.hookData,
           zeroForOne,
           amountSpecified: -input.amountIn,
           sqrtPriceLimit: zeroForOne ? MIN_SQRT_PRICE : MAX_SQRT_PRICE,
@@ -193,13 +195,14 @@ function assertExecutionEvidence(input: {
     !sameAddress(evidence.tokenOut, input.route.tokenOut) ||
     evidence.amountIn !== input.amountIn ||
     evidence.amountOut !== input.quotedAmountOut ||
-    evidence.hookData !== "0x"
+    evidence.hookData !== hookDataFor(input.descriptor, input.executor ?? "", input.route.direction === "zero-for-one")
   ) {
     throw new Error(
       "univ4 fee-hook execution received incompatible exact evidence",
     );
   }
-  if (!sameAddress(input.descriptor.hook, UNIV4_FEE_HOOK_ADDRESS)) {
+  if (!sameAddress(input.descriptor.hook, input.descriptor.poolKey.hooks) ||
+    !(input.descriptor.hookModel === "sat1" ? sat1Permissions(input.descriptor.hook) : sameAddress(input.descriptor.hook, UNIV4_FEE_HOOK_ADDRESS))) {
     throw new Error("univ4 fee-hook execution hook binding diverged");
   }
 }

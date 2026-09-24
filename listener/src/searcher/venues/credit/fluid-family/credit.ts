@@ -3,7 +3,7 @@ import { hashCanonical } from "../../canonical-value.js";
 import { sameAddress } from "./codec.js";
 import { fluidMaxBorrowRequest } from "./borrow-math.js";
 import { assertFluidCreditRoute, fluidCreditBorrowProgram } from "./exact.js";
-import type { FluidCreditDescriptor, FluidCreditRiskEvidence, FluidCreditRoute } from "./types.js";
+import type { FluidCreditDescriptor, FluidCreditExactEvidence, FluidCreditRoute } from "./types.js";
 
 // Fractions of the current oracle/CF ceiling, not assumed token/USD parity.
 export const FLUID_CREDIT_DEBT_BPS_CANDIDATES = Object.freeze([8_500n, 9_500n, 10_000n]);
@@ -42,4 +42,4 @@ export const fluidCreditDomain = {
       return proof.debtDelta;
     },
   },
-} satisfies CreditDomainSemantics<FluidCreditDescriptor, FluidCreditRoute, FluidCreditRiskEvidence>;
+} satisfies CreditDomainSemantics<FluidCreditDescriptor, FluidCreditRoute, FluidCreditExactEvidence>;

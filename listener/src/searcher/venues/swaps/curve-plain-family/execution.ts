@@ -1,10 +1,10 @@
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
-import { MAX_UINT } from "./codec.js";
+import { MAX_UINT, pullsInput } from "./codec.js";
 import { actionId, assertRoute } from "./routes.js";
 import type { CurvePlainDescriptor, CurvePlainExactEvidence, CurvePlainRoute } from "./types.js";
 
 export const curvePlainExecution = {
-  runtimeProjection: ({ hop }) => ({ allowanceSpender: hop.adapterId === "curve-exchange-plain" ? hop.target : null,
+  runtimeProjection: ({ hop }) => ({ allowanceSpender: ["curve-exchange-plain", "curve-exchange-uint"].includes(hop.adapterId) ? hop.target : null,
     prewarmQuoteCalls: [] }),
   buildFragment(input) {
     assertRoute(input.descriptor, input.route);
@@ -13,7 +13,7 @@ export const curvePlainExecution = {
       evidence.kind !== "curve-plain-get-dy" || evidence.quoteAbi !== input.route.quoteAbi || evidence.binding !== input.route.bindingRef.fingerprint ||
       evidence.routeKey !== input.route.routeKey || evidence.amountIn !== input.amountIn || evidence.amountOut !== input.quotedAmountOut ||
       evidence.amountOut <= 0n) throw new Error("curve-plain incompatible exact execution evidence");
-    const regular = input.route.executionMode === "exchange";
+    const regular = pullsInput(input.route.executionMode);
     return { requirements: regular
       ? [{ kind: "approve" as const, token: input.route.tokenIn, spender: input.descriptor.pool, amount: MAX_UINT }]
       : [{ kind: "transfer-to-pool" as const, token: input.route.tokenIn, pool: input.descriptor.pool, amount: input.amountIn }],

@@ -3,7 +3,7 @@ export interface BlockScanSolverSearchConfig {
   readonly gridHalfWidth: number;
   readonly gssMaxTries: number;
   readonly quoteConcurrency: number;
-  /** Per-hop output tolerance in token raw units: 0 disables, 1 tolerates one unit. */
+  /** Per-hop output tolerance in token raw units: 0 disables, 1 allows +/-1. */
   readonly quoteToleranceRawUnits: bigint;
 }
 
@@ -43,7 +43,7 @@ export function resolveBlockScanSolverSearchConfig(
       64,
     ),
     // Opt-in for blockscan; independent of legacy percentage settings.
-    // The same conservative output becomes minAmountOut AND the next hop input.
+    // Quotes stay unchanged; execution passes the measured +/-1 output onward.
     quoteToleranceRawUnits: readFlag(env.SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED) ? 1n : 0n,
   });
 }

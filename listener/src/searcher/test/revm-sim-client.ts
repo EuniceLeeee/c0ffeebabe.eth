@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { PassThrough, Writable } from "node:stream";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { keccak256 } from "ethers";
 import { RevmFatalError, RevmSimClient, RevmStrictError, type RevmFatalReason, type StrictSimulateRequest } from "../revm-sim-client.js";
 import { ETHEREUM_BLOCK_ACTIVITY_PROFILE } from "../../shared/state/ethereum-block-activity.js";
 import { RevmStrictSourceOwner } from "../revm-strict-source-owner.js";
@@ -65,6 +66,47 @@ const pinnedRequest = () => ({ blockNumber: 300, from: `0x${"aa".repeat(20)}`,
   sourcePin: { chainId: 1, blockHash: PIN_HASH, stateRoot: PIN_ROOT } });
 const attestation = () => ({ kind: "node-attested" as const, chainId: 1, blockNumber: 300,
   blockHash: PIN_HASH, stateRoot: PIN_ROOT, parentHash: PIN_PARENT });
+
+test("counterfactual executor code is hash-bound, target-only and pinned; invalid requests never dispatch", async () => {
+  const f = new Fixture(); const c = new FixtureClient(f);
+  const code = "0x60006000f3", valid = { code, keccak256: keccak256(code) };
+  for (const value of [null, {}, { code }, { ...valid, keccak256: PIN_HASH },
+    { code: "0x", keccak256: keccak256("0x") }, { ...valid, code: "0x1" },
+    ...["address", "balance", "nonce", "storage", "state", "stateDiff"].map(k => ({ ...valid, [k]: "0x01" }))]) {
+    await assert.rejects(c.strictSimulate({ ...pinnedRequest(), executorRuntimeCode: value } as any), RevmStrictError);
+  }
+  for (const patch of [{ sourcePin: undefined }, { to: pinnedRequest().from }])
+    await assert.rejects(c.strictSimulate({ ...pinnedRequest(), ...patch, executorRuntimeCode: valid }), RevmStrictError);
+  assert.equal(c.starts, 0); assert.equal(f.requests.length, 0);
+  await c.closeAndDrain();
+});
+
+test("queued executor code detaches caller bytes and requires matching counterfactual response evidence", async () => {
+  const f = new Fixture(); const c = new FixtureClient(f); const hold = c.health();
+  const code = "0x60006000f3", hash = keccak256(code);
+  const req = { ...pinnedRequest(), executorRuntimeCode: { code, keccak256: hash } };
+  const result = c.strictSimulate(req);
+  req.executorRuntimeCode.code = "0x00"; req.executorRuntimeCode.keccak256 = keccak256("0x00");
+  f.reply(0); await hold; await tick();
+  assert.deepEqual(f.requests[1]!.executorRuntimeCode, { code, keccak256: hash });
+  f.reply(1, { sourceAttestation: attestation(), strict: {
+    counterfactualExecutorCode: { address: req.to, keccak256: hash },
+    outcome: { kind: "Success", phase: "main", output: "0x" }, executionGasUsed: "0",
+    tokenDeltas: [], nativeDeltas: [], totalSupplyDeltas: [], logs: [],
+  } });
+  assert.equal((await result).strict!.counterfactualExecutorCode!.keccak256, hash);
+  c.stop(); f.close(); await c.closeAndDrain();
+});
+
+for (const evidence of [undefined, { address: pinnedRequest().from, keccak256: keccak256("0x00") },
+  { address: pinnedRequest().to, keccak256: PIN_HASH }]) test("missing/wrong executor code evidence poisons strict response", async () => {
+  const f = new Fixture(); const c = new FixtureClient(f);
+  const result = assert.rejects(c.strictSimulate({ ...pinnedRequest(), executorRuntimeCode: { code: "0x00", keccak256: keccak256("0x00") } }), RevmFatalError);
+  f.reply(0, { sourceAttestation: attestation(), strict: { counterfactualExecutorCode: evidence,
+    outcome: { kind: "Success", phase: "main", output: "0x" }, executionGasUsed: "0",
+    tokenDeltas: [], nativeDeltas: [], totalSupplyDeltas: [], logs: [] } });
+  await result; f.close(); await c.closeAndDrain();
+});
 
 test("E2d: real owner plus pipe client latches matched late fixture throttle before replacement", async () => {
   const f = new Fixture(); const reports: RevmFatalReason[] = []; let factories = 0;
@@ -718,6 +760,23 @@ async function pinnedFixture(run: (f: PinnedRpcFixture, c: PinnedDirectClient, f
 }
 
 if (process.env.REVM_SIM_TEST_BINARY) {
+  test("pinned direct: code override precedes real balance probes, preserves source storage/native and never leaks", async () => pinnedFixture(async (f, c) => {
+    f.hook = call => call.method === "eth_getBalance" ? { result: "0xd" }
+      : call.method === "eth_getTransactionCount" ? { result: "0x7" } : undefined;
+    const request = { ...f.request(), observeTokenBalances: [{ token: target, account: f.request().from }], observeNativeBalances: [target] };
+    const baseline = await c.strictSimulate(request);
+    assert.equal(baseline.output, word(42));
+    for (const code of [storageCode, returnCode(99)]) {
+      const result = await c.strictSimulate({ ...request, executorRuntimeCode: { code, keccak256: keccak256(code) } });
+      assert.equal(result.output, word(code === storageCode ? 7 : 99));
+      // If override is applied after the baseline probe, this delta is nonzero.
+      assert.deepEqual(result.strict!.tokenDeltas, [{ token: target, account: request.from, delta: "0" }]);
+      assert.deepEqual(result.strict!.nativeDeltas, [{ account: target, before: "13", after: "13", delta: "0" }]);
+      assert.deepEqual(result.strict!.counterfactualExecutorCode, { address: target, keccak256: keccak256(code) });
+    }
+    const clean = await c.strictSimulate(request);
+    assert.equal(clean.output, baseline.output); assert.deepEqual(clean.strict, baseline.strict);
+  }));
   for (const delegate of [false, true]) test(`E2d: nested ${delegate ? "DELEGATECALL" : "CALL"} uses natural real code`, async () => pinnedFixture(async (f, c) => {
     const nested = `0x${"ee".repeat(20)}`; const actor = f.request().from;
     f.hook = call => call.method === "eth_getCode" ? call.params[0] === nested

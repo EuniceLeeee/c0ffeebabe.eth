@@ -46,12 +46,14 @@ export interface FeeHookIdentity extends VerifiedIdentity {
     readonly poolKey: V4PoolKey;
     readonly managerBinding: UniV4ManagerBinding;
     readonly hookCodeHash: string;
+    readonly hookModel?: "sat1";
   };
 }
 
 export interface FeeHookDescriptor extends UniV4Descriptor {
   readonly hookPolicy: "fee-hook";
   readonly hook: string;
+  readonly hookModel?: "sat1";
 }
 
 export type FeeHookRoute = FamilyRouteDescriptor & {
@@ -63,8 +65,17 @@ export type FeeHookRoute = FamilyRouteDescriptor & {
   readonly realTokenOut: string;
 };
 
-export type FeeHookPricingDescriptor = UniV4PricingDescriptor;
-export type FeeHookPricingSnapshot = UniV4PricingSnapshot;
+export type FeeHookPricingDescriptor = UniV4PricingDescriptor & { readonly hookModel?: "sat1" };
+export interface Sat1PricingSnapshot {
+  readonly kind: "sat1";
+  readonly source: CanonicalSource;
+  readonly ethCum: bigint;
+  readonly marginalPrice: bigint;
+  readonly fairSupply: bigint;
+  readonly actualSupply: bigint;
+  readonly deprecated: boolean;
+}
+export type FeeHookPricingSnapshot = UniV4PricingSnapshot | Sat1PricingSnapshot;
 export type FeeHookPrecisionOutcome = UniV4PrecisionOutcome;
 
 export interface FeeHookExactEvidence {
@@ -78,7 +89,7 @@ export interface FeeHookExactEvidence {
   readonly amountIn: bigint;
   readonly amountOut: bigint;
   readonly gasEstimate: bigint;
-  readonly hookData: "0x";
+  readonly hookData: string;
 }
 
 export interface FeeHookIdentityEvidence {

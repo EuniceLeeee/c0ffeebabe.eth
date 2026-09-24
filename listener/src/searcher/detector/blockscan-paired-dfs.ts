@@ -1,3 +1,5 @@
+import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
+
 /** Pure, amount-sensitive directed enumeration. No protocol state or RPC. */
 export interface DfsQuote {
   readonly id: string;
@@ -17,8 +19,15 @@ export interface DirectedPriceSignal {
   readonly den: bigint;
 }
 export type PairedEnumerationMethod = "dfs" | "layered";
+export const DEFAULT_ALLOW_REPEATED_POOLS: boolean = BLOCKSCAN_ENUMERATION_DEFAULTS.allowRepeatedPools;
+export function resolveAllowRepeatedPools(raw?: string): boolean {
+  if (raw === undefined) return DEFAULT_ALLOW_REPEATED_POOLS;
+  if (raw === "0" || raw === "1") return raw === "1";
+  throw new Error("SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED must be 0 or 1");
+}
 export function resolvePairedEnumerationMethod(value?: string): PairedEnumerationMethod {
-  if (value === undefined || value === "dfs") return "dfs";
+  if (value === undefined) return BLOCKSCAN_ENUMERATION_DEFAULTS.method;
+  if (value === "dfs") return value;
   if (value === "layered") return value;
   throw new Error("SEARCHER_BLOCKSCAN_ENUMERATION_METHOD must be dfs or layered");
 }
@@ -30,6 +39,9 @@ interface EnumerationInput {
   readonly funding: readonly string[];
   readonly minSpreadBps: number;
   readonly maxHops: number;
+  readonly allowRepeatedPools?: boolean;
+  readonly prefixPruningEnabled?: boolean;
+  readonly maxPrefixDrawdownBps?: number;
   readonly deadlineAtMs: number;
   readonly onCycle: (quotes: readonly DfsQuote[], spreadBps: number) => void;
 }
@@ -68,16 +80,27 @@ class HalfLayer {
  * No per-half profit gate. Join buckets are sorted by rate so binary search
  * skips combinations below the whole-cycle threshold before conflict checks.
  * Only after joining do we rotate to each available funding token for execution.
+ * Optional prefix pruning bounds reference-value loss from the signal anchor,
+ * not from a funding rotation or a later peak. Reverse halves are suffixes, so
+ * their execution-order prefixes are checked only with the forward value at join.
  * Both traversals share this gate, sorted index, storage and join rules. No future-return
  * or signal-completion pruning. Live caller deadline remains explicitly partial. */
 function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) {
+  const allowRepeatedPools = input.allowRepeatedPools ?? DEFAULT_ALLOW_REPEATED_POOLS;
+  const prefixPruningEnabled = input.prefixPruningEnabled ?? BLOCKSCAN_ENUMERATION_DEFAULTS.prefixPruningEnabled;
+  const maxPrefixDrawdownBps = input.maxPrefixDrawdownBps ?? BLOCKSCAN_ENUMERATION_DEFAULTS.maxPrefixDrawdownBps;
   if (!Number.isSafeInteger(input.minSpreadBps) || input.minSpreadBps < 0 ||
       !Number.isSafeInteger(input.maxHops) || input.maxHops < 2)
     throw new Error("paired enumeration requires integer spread bps and maxHops >= 2");
+  if (typeof prefixPruningEnabled !== "boolean") throw new Error("prefixPruningEnabled must be boolean");
+  if (!Number.isSafeInteger(maxPrefixDrawdownBps) || maxPrefixDrawdownBps < 0 || maxPrefixDrawdownBps > 10_000)
+    throw new Error("maxPrefixDrawdownBps must be a safe integer from 0 to 10000");
+  const prefixFloor = prefixPruningEnabled ? BigInt(10_000 - maxPrefixDrawdownBps) : 0n;
   const stats = { expanded: 0, completedSignalTokens: 0, deadlineHit: false, closed: 0,
     halfPaths: 0, joins: 0, signalMatched: 0, indexedJoinComparisons: 0,
     joinSkippedBeforeConflicts: 0, gateRule: "signal-rooted-sorted-profitable-join" as const,
-    traversal, phase: "prepare" };
+    prefixPruningEnabled, maxPrefixDrawdownBps, prefixPrunedForward: 0, prefixPrunedJoin: 0,
+    prefixPrunedTotal: 0, traversal, phase: "prepare" };
   const expired = () => stats.deadlineHit ||= Date.now() >= input.deadlineAtMs;
   if (expired()) return stats;
   const tokens = new Map<string, number>(), pools = new Map<string, number>();
@@ -107,10 +130,14 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
     if (b === undefined || s === undefined) continue;
     const buy = edges[b]!, sell = edges[s]!;
     if (buy.quote.tokenOut !== signal.token || sell.quote.tokenIn !== signal.token ||
-        buy.pool === sell.pool || signal.den <= 0n || signal.num <= 0n)
+        (!allowRepeatedPools && buy.pool === sell.pool) || signal.den <= 0n || signal.num <= 0n)
       throw new Error("invalid directed price signal");
     if (!aboveSpread(signal.num, signal.den, input.minSpreadBps)) continue;
-    partners[b]!.add(s); partners[s]!.add(b); pairCount++;
+    // Without a prefix bound, reversed partner lookup only changes which
+    // anchor emits a qualifying cycle first. Preserve that callback order.
+    // With the bound, admission belongs to the signal's actual sell anchor.
+    if (!prefixPruningEnabled) partners[b]!.add(s);
+    partners[s]!.add(b); pairCount++;
     let seeds = anchors.get(sell.from);
     if (!seeds) { seeds = { buys: new Set(), sells: new Set() }; anchors.set(sell.from, seeds); }
     seeds.buys.add(b); seeds.sells.add(s);
@@ -124,12 +151,29 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
     }
     return { n, d };
   };
+  const valueRate = (path: readonly number[]) => {
+    let n = 1n, d = 1n;
+    for (const id of path) {
+      const value = edges[id]!.quote.value!;
+      n *= value.num; d *= value.den;
+    }
+    return { n, d };
+  };
+  const minimumValuePrefix = (path: readonly number[]) => {
+    let n = 1n, d = 1n, minN = 1n, minD = 1n;
+    for (const id of path) {
+      const value = edges[id]!.quote.value!;
+      n *= value.num; d *= value.den;
+      if (n * minD < minN * d) { minN = n; minD = d; }
+    }
+    return { n: minN, d: minD };
+  };
   const maxHalf = Math.min(Math.ceil(input.maxHops / 2), tokens.size - 1);
   const halves = (anchor: number, reverse: boolean, seeds: ReadonlySet<number>): HalfLayer[] => {
     const result = Array.from({ length: maxHalf }, (_, i) => new HalfLayer(tokens.size, i + 1));
     const path: number[] = [], executionPath: number[] = [];
     stats.phase = reverse ? "reverse" : "forward";
-    const extend = (token: number, recurse: boolean): void => {
+    const extend = (token: number, recurse: boolean, prefixN = 1n, prefixD = 1n): void => {
       const ids = (reverse ? incoming : outgoing)[token]!;
       for (let i = 0; i < ids.length; i++) {
         if ((stats.expanded++ & 4095) === 0 && expired()) return;
@@ -139,14 +183,21 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
         let conflict = false;
         for (const oldId of path) {
           const old = edges[oldId]!;
-          if (old.pool === edge.pool || old.from === next || old.to === next) { conflict = true; break; }
+          if ((!allowRepeatedPools && old.pool === edge.pool) || old.from === next || old.to === next) { conflict = true; break; }
         }
         if (conflict) continue;
+        let nextN = prefixN, nextD = prefixD;
+        if (prefixPruningEnabled && !reverse) {
+          nextN *= edge.quote.value!.num; nextD *= edge.quote.value!.den;
+          if (nextN * 10_000n < nextD * prefixFloor) {
+            stats.prefixPrunedForward++; stats.prefixPrunedTotal++; continue;
+          }
+        }
         path.push(id);
         executionPath.length = path.length;
         for (let j = 0; j < path.length; j++) executionPath[j] = path[reverse ? path.length - 1 - j : j]!;
         result[path.length - 1]!.add(next, executionPath); stats.halfPaths++;
-        if (recurse && path.length < maxHalf) extend(next, true);
+        if (recurse && path.length < maxHalf) extend(next, true, nextN, nextD);
         path.pop();
         if (stats.deadlineHit) return;
       }
@@ -161,7 +212,10 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
           previous.read(pi, path);
           if (reverse) path.reverse();
           const endpoint = reverse ? edges[path.at(-1)!]!.from : edges[path.at(-1)!]!.to;
-          extend(endpoint, false);
+          if (prefixPruningEnabled && !reverse) {
+            const prefix = valueRate(path);
+            extend(endpoint, false, prefix.n, prefix.d);
+          } else extend(endpoint, false);
           if (stats.deadlineHit) break;
         }
       }
@@ -184,11 +238,13 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
         // Same endpoint and hop count. Reference-value scaling is common to
         // this bucket, so sorting exact token rates has the same order; on
         // closing the cycle the USD reference factors cancel completely.
-        const sorted: { index: number; n: bigint; d: bigint }[] = [];
+        const sorted: { index: number; n: bigint; d: bigint; minPrefix?: { n: bigint; d: bigint } }[] = [];
         for (let qi = b.head[token]!; qi !== NONE;) {
           if ((sorted.length & 4095) === 0 && expired()) break outer;
           const index = qi; qi = b.read(qi, q);
-          sorted.push({ index, ...rate(q) });
+          const entry: (typeof sorted)[number] = { index, ...rate(q) };
+          if (prefixPruningEnabled) entry.minPrefix = minimumValuePrefix(q);
+          sorted.push(entry);
         }
         sorted.sort((x, y) => {
           const delta = x.n * y.d - y.n * x.d;
@@ -197,13 +253,14 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
         if (expired()) break outer;
         for (const a of forward) {
           if (a.hops + b.hops > input.maxHops) continue;
-          // Every split is eligible now. Emit only the first legal split,
-          // without keeping a profit-dependent prefix test.
+          // Emit only the first legal split; the anchored prefix bound, when
+          // enabled, is identical for every split of the complete cycle.
           if (a.hops !== Math.max(1, a.hops + b.hops - maxHalf)) continue;
           for (let pi = a.head[token]!; pi !== NONE;) {
             if (expired()) break outer;
             pi = a.read(pi, p);
             const ar = rate(p);
+            const forwardValue = prefixPruningEnabled ? valueRate(p) : null;
             let low = 0, high = sorted.length;
             while (low < high) {
               const mid = Math.floor((low + high) / 2), br = sorted[mid]!;
@@ -218,18 +275,40 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
               if ((stats.joins++ & 4095) === 0 && expired()) break outer;
               if (!partners[p[0]!]!.has(q[q.length - 1]!)) continue;
               stats.signalMatched++;
+              if (forwardValue && forwardValue.n * br.minPrefix!.n * 10_000n <
+                  forwardValue.d * br.minPrefix!.d * prefixFloor) {
+                stats.prefixPrunedJoin++; stats.prefixPrunedTotal++; continue;
+              }
+              // Each half already satisfies token/pool uniqueness. Only
+              // cross-half collisions remain; reject them before allocating
+              // the joined path and its funded rotations.
+              let conflict = false;
+              for (const pId of p) {
+                const left = edges[pId]!;
+                for (const qId of q) {
+                  const right = edges[qId]!;
+                  if (left.from === right.from || (!allowRepeatedPools && left.pool === right.pool)) {
+                    conflict = true; break;
+                  }
+                }
+                if (conflict) break;
+              }
+              if (conflict) continue;
               const path = [...p, ...q];
-              if (new Set(path.map(id => edges[id]!.pool)).size !== path.length ||
-                  new Set(path.map(id => edges[id]!.from)).size !== path.length) continue;
               const n = ar.n * br.n, d = ar.d * br.d;
-              const quotes = path.map(id => edges[id]!.quote);
               const spread = (Number(n) / Number(d) - 1) * 10000;
-              for (let start = 0; start < quotes.length; start++) {
-                if (!funding.has(quotes[start]!.tokenIn)) continue;
-                const rotated = [...quotes.slice(start), ...quotes.slice(0, start)];
-                const key = JSON.stringify(rotated.map(quote => quote.id));
+              for (let start = 0; start < path.length; start++) {
+                if (!funding.has(edges[path[start]!]!.quote.tokenIn)) continue;
+                // Interned edge indexes are unique within this enumeration;
+                // their delimited sequence has the same identity as quote IDs.
+                let key = "";
+                for (let offset = 0; offset < path.length; offset++) {
+                  key += (offset === 0 ? "" : ",") + path[(start + offset) % path.length]!;
+                }
                 if (emitted.has(key)) continue;
                 emitted.add(key); stats.closed++;
+                const rotated = Array.from({ length: path.length }, (_, offset) =>
+                  edges[path[(start + offset) % path.length]!]!.quote);
                 input.onCycle(rotated, Number.isFinite(spread) ? spread
                   : Number(n * 1_000_000_000n / d - 1_000_000_000n) / 100_000);
               }

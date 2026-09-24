@@ -10,6 +10,9 @@ import {
   detectBlockScanOpportunities,
   type BlockScanConfig,
 } from "../detector/blockscan-scanner.js";
+import { scanBlockStateFromResolvedMids, blockScanSelectionProvenance } from "../detector/blockscan-scanner-core.js";
+import { effectiveEnumerationMids } from "../blockscan-effective-mid.js";
+import { edgeInstanceKey } from "../venues/route-instance-identity.js";
 import {
   assertAtomicBlockScanPricingView,
   assertAtomicBlockScanRuntime,
@@ -29,7 +32,6 @@ import {
 } from "../venues/blockscan-state-capability.js";
 import {
   LegacyConcentratedLiquidityPrecisionUnsupportedError,
-  readV2WarmMid,
   type RouteVenueMid,
 } from "../venues/mid-readers.js";
 
@@ -43,25 +45,6 @@ const edges = [
   ...venueEdges(pool1),
   ...venueEdges(pool2),
 ];
-const cache = new PoolStateCache();
-cache.seedV2({
-  pool: pool1,
-  token0: token,
-  token1: ADDR.WETH,
-  reserve0: 2_000_000n * unit,
-  reserve1: 1_000n * unit,
-  feeBps: 30n,
-  blockNumber: block,
-});
-cache.seedV2({
-  pool: pool2,
-  token0: token,
-  token1: ADDR.WETH,
-  reserve0: 2_000_000n * unit,
-  reserve1: 1_100n * unit,
-  feeBps: 30n,
-  blockNumber: block,
-});
 
 const cfg: BlockScanConfig = {
   maxHops: 3,
@@ -74,9 +57,9 @@ const mids = buildMids();
 const runtime = buildRuntime(edges, mids);
 const runtimeEdges = [...runtime.graph.edges];
 
-const legacy = detectBlockScanOpportunities({
+const core = scanBlockStateFromResolvedMids({
   edges: runtimeEdges,
-  cache,
+  mids: effectiveEnumerationMids(runtime.pricing),
   sourceBlock: block,
   swapTouched: null,
   cfg,
@@ -86,7 +69,7 @@ const production = detectProductionBlockScanOpportunities({
   swapTouched: null,
   cfg,
 });
-assert(legacy.opportunities.length > 0, "fixture must exercise a real opportunity");
+assert(core.opportunities.length > 0, "fixture must exercise a real opportunity");
 const {
   completeness: productionCompleteness,
   incompleteFamilyIds: productionIncompleteFamilies,
@@ -100,10 +83,10 @@ assert.equal(productionSelectionMode, "production");
 assert.equal(productionForcedSelectionCount, 0);
 assert.deepEqual(
   productionCore,
-  legacy,
+  { ...core, selectionProvenance: blockScanSelectionProvenance(core, cfg.maxCandidates) },
   "strict atomic wrapper must preserve the single scanner kernel output",
 );
-console.log("[blockscan-production-boundary] legacy/current-N kernel equivalence: PASS");
+console.log("[blockscan-production-boundary] published effective/current-N kernel equivalence: PASS");
 
 {
   const uncapped = detectProductionBlockScanOpportunities({ runtime, swapTouched: null, cfg });
@@ -347,6 +330,10 @@ console.log("[blockscan-production-boundary] generation/block/hash pinning: PASS
     pricing: {
       ...runtime.pricing,
       mids: availableMids,
+      effectiveMids: {
+        ...runtime.pricing.effectiveMids!,
+        rows: new Map([...runtime.pricing.effectiveMids!.rows].filter(([key]) => key !== unavailableKey)),
+      },
       coverage,
       coverageByEdgeKey: new Map(
         runtime.pricing.coverage.expectedEdgeKeys.map((edgeKey) => [
@@ -653,18 +640,11 @@ function edge(pool: string, tokenIn: string, tokenOut: string): TokenEdge {
 
 function buildMids(): ReadonlyMap<string, RouteVenueMid> {
   const out = new Map<string, RouteVenueMid>();
-  for (const edgeValue of edges) {
-    const mid = readV2WarmMid({
-      cache,
-      sourceBlock: block,
-      a: edgeValue.tokenIn.toLowerCase(),
-      b: edgeValue.tokenOut.toLowerCase(),
-      pool: edgeValue.target,
-      edges: [edgeValue],
-    });
-    assert(mid, `missing test mid for ${blockScanEdgeKey(edgeValue)}`);
-    out.set(blockScanEdgeKey(edgeValue), mid);
-  }
+  // Explicit synthetic amount quotes test the boundary, not protocol pricing math.
+  for (const [i, edgeValue] of edges.entries()) out.set(blockScanEdgeKey(edgeValue), {
+    kind: "v2", pool: edgeValue.target, edges: [edgeValue], mid: [1, 1, 1.1, 0.9][i]!,
+    feeBps: 0, depthProxy: 0,
+  });
   return out;
 }
 
@@ -717,6 +697,16 @@ function buildRuntime(
     sourceBlockHash: graph.sourceBlockHash,
     graph,
     mids: canonicalMids,
+    effectiveMids: {
+      source: { number: graph.sourceBlock, hash: graph.sourceBlockHash, generation: graph.generation },
+      reference: "default", referenceWethInput: unit, complete: true, wallMs: 0,
+      rows: new Map(graph.edges.map((edgeValue, i) => {
+        const key = blockScanEdgeKey(edgeValue), amountOut = [unit, unit, 11n * unit / 10n, 9n * unit / 10n][i]!;
+        return [key, { edgeId: key, instanceKey: edgeInstanceKey(edgeValue),
+          tokenIn: edgeValue.tokenIn, tokenOut: edgeValue.tokenOut, amountIn: unit, amountOut,
+          effectiveMid: Number(amountOut) / Number(unit), status: "quoted" as const }];
+      })),
+    },
     coverageByReadKey: new Map(readKeys.map((readKey) => [
       readKey,
       { status: "resolved" as const },

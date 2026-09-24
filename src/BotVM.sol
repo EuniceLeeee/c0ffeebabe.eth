@@ -202,6 +202,15 @@ contract BotVM {
                 _runAmountFlow(_readBytes(script, ip + 3, size));
                 ip += 3 + size;
             }
+            else if (op == 0x0a) {
+                // ENSURE_ALLOWANCE: token, spender, minimum required, grant.
+                // Checked where the spend occurs, including repeated uses and
+                // actual-amount branches. No off-chain allowance assumption.
+                require(ip + 104 <= end, "allowance bounds");
+                _ensureAllowance(_readAddress(script, ip), _readAddress(script, ip + 20),
+                    _readUint256(script, ip + 40), _readUint256(script, ip + 72));
+                ip += 104;
+            }
             else if (op == 0x0d) {
                 // ── REVERT ──
                 // Layout: [data_len:3][data:N]
@@ -217,6 +226,37 @@ contract BotVM {
                 revert("invalid opcode");
             }
         }
+    }
+
+    function _ensureAllowance(address token, address spender, uint256 minimum, uint256 grant) internal {
+        require(token != address(0) && spender != address(0) && minimum > 0 && grant >= minimum, "allowance config");
+        require(token.code.length > 0, "allowance token has no code");
+        if (_readAllowance(token, spender) >= minimum) return;
+        // Tokens requiring zero-before-nonzero use the fallback only when the
+        // direct approval fails. Neither path revokes after the swap or widens
+        // the requested grant. Explicit raw approve(0) remains a separate op.
+        if (!_tryApprove(token, spender, grant)) {
+            require(_tryApprove(token, spender, 0), "allowance reset failed");
+            require(_readAllowance(token, spender) == 0, "allowance not reset");
+            require(_tryApprove(token, spender, grant), "allowance approve failed");
+        }
+        require(_readAllowance(token, spender) == grant, "allowance not set");
+    }
+
+    function _readAllowance(address token, address spender) internal view returns (uint256 value) {
+        (bool ok, bytes memory result) = token.staticcall(abi.encodeCall(IERC20.allowance, (address(this), spender)));
+        require(ok && result.length == 32, "allowance read failed");
+        value = abi.decode(result, (uint256));
+    }
+
+    function _tryApprove(address token, address spender, uint256 amount) internal returns (bool) {
+        (bool ok, bytes memory result) = token.call(abi.encodeCall(IERC20.approve, (spender, amount)));
+        if (!ok) return false;
+        if (result.length == 0) return true;
+        if (result.length != 32) return false;
+        uint256 returned;
+        assembly { returned := mload(add(result, 32)) }
+        return returned == 1;
     }
 
     // ─── TSLOT 0x1337 State Management ────────────────────────────
@@ -238,7 +278,7 @@ contract BotVM {
             address tokenOut = _readAddress(data, ip + 20);
             uint256 cases = uint8(data[ip + 40]);
             uint256 end = ip + 44 + _readUint24(data, ip + 41);
-            require(end <= data.length && cases > 0 && cases <= 32 && tokenIn != tokenOut, "flow step bounds");
+            require(end <= data.length && cases > 0 && tokenIn != tokenOut, "flow step bounds");
             require(step == 0 || tokenIn == previousToken, "flow continuity");
             (bytes memory action, uint256 quoted) = _selectAmountAction(data, ip + 44, end, cases, amount);
             ip = end;
@@ -252,8 +292,10 @@ contract BotVM {
             require(afterOut >= beforeOut, "flow output balance");
             amount = afterOut - beforeOut;
             require(amount >= quoted - tolerance, "flow output shortfall");
-            // Unquoted intermediate amounts (including overdelivery) fail at
-            // the next step, never spending inventory or inventing a quote.
+            // Subtraction avoids overflowing quoted + tolerance at uint256.max.
+            require(amount <= quoted || amount - quoted <= tolerance, "flow output surplus");
+            // The next step still requires a separately quoted exact input;
+            // accepting +/-1 never leaves dust or spends prior inventory.
             previousToken = tokenOut;
         }
         require(ip == data.length, "flow trailing data");

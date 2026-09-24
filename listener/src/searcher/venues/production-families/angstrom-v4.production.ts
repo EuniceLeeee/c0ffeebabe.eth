@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineSwapFamily } from "../adapter-family-plugin.js";
 import { angstromV4Capture } from "../swaps/angstrom-v4-family/capture.js";
 import { angstromV4FamilyOwnedAction } from "../swaps/angstrom-v4-family/action.js";
@@ -10,6 +11,8 @@ import { angstromV4FamilyManifest } from "../swaps/angstrom-v4-family/manifest.j
 import { angstromV4Pricing } from "../swaps/angstrom-v4-family/pricing.js";
 import { angstromV4Routes } from "../swaps/angstrom-v4-family/routes.js";
 import { angstromV4Swap } from "../swaps/angstrom-v4-family/swap.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED" });
 
 export const plugin = defineSwapFamily({
   manifest: angstromV4FamilyManifest,

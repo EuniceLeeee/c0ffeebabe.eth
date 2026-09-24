@@ -34,6 +34,8 @@ import {
 import { BlockScanFamilyStageBudget } from "./detector/blockscan-family-budget.js";
 import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
 import { runOrderedBlockScanPipeline } from "./blockscan-ordered-pipeline.js";
+import { blockScanGrossProfitWeth } from "./blockscan-profit-priority.js";
+import { effectiveUsdPricing } from "./blockscan-usd-view.js";
 import { emitEvent } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
 import { type TokenEdge } from "./planner/token-graph.js";
@@ -2611,8 +2613,8 @@ export class BlockScanRuntimeLoop {
             ...(resumableStartupWarm
               ? { signal: this.deps.runtimeAbort.signal }
               : { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs }),
-            maxBatchSize: 128,
-            maxConcurrentBatches: 4,
+            maxBatchSize: 64,
+            maxConcurrentBatches: 8,
             retryRpcThrottle: true,
             transportLane: "producer-bulk",
             scopeLabel:
@@ -3618,6 +3620,11 @@ export class BlockScanRuntimeLoop {
 
       const solverFamilyBudget = new BlockScanFamilyStageBudget();
       const solverQueue = planned.map((item, index) => ({ item, index }));
+      // Use the already-published reference view only for cross-token queue
+      // priority. Exact execution and final EV retain their original sources.
+      const profitReferences = amountPricingSnapshot === null ? new Map() : effectiveUsdPricing(
+        amountPricingSnapshot, blockScanCfg.usdSignalPairsPerToken, blockScanCfg.allowRepeatedPools,
+      ).view.referenceUsdPerRaw;
       let solvePipelineSignal = passSignal;
       const finalSimulationPlanCommitments = new WeakMap<ResolvedPlan, string>();
       const finalSimulationPlanIdentity = createBotVmFinalSimulationPlanIdentity({
@@ -3633,6 +3640,7 @@ export class BlockScanRuntimeLoop {
       type QuotedBlockScanPlan = {
         index: number;
         candidateIndex: number;
+        quoteGrossProfitWeth: bigint | null;
         item: PlannedBlockScanSolve;
         resolved: ResolvedPlan;
       };
@@ -3764,6 +3772,7 @@ export class BlockScanRuntimeLoop {
             completed.push({
               index,
               candidateIndex,
+              quoteGrossProfitWeth: blockScanGrossProfitWeth(candidate.profitToken, candidate.netProfit, profitReferences),
               item,
               resolved: candidate,
             });
@@ -3934,6 +3943,13 @@ export class BlockScanRuntimeLoop {
               : "final_sim_deadline";
             break;
           }
+          console.log(`[searcher/blockscan-sim-priority] ${JSON.stringify({
+            block: blockNumber, mode: "ready-quote-gross-weth", solverIndex: quoted.index,
+            candidateIndex: quoted.candidateIndex, quoteProfitRaw: quoted.resolved.netProfit.toString(),
+            profitToken: quoted.resolved.profitToken, quoteGrossProfitWeth: quoted.quoteGrossProfitWeth?.toString() ?? null,
+            referenceSourceBlock: amountPricingSnapshot?.sourceBlock ?? null,
+            calldataSha256: finalSimulationPlanCommitments.get(quoted.resolved),
+          })}`);
           const atomic = await this.deps.submitAtomic({
             finalSimulationRuntime,
             sourceGeneration: generation,
@@ -4003,6 +4019,11 @@ export class BlockScanRuntimeLoop {
           signal: passSignal,
           deadlineAtMs: passDeadlineAtMs,
           produce: solvePlan,
+          // Rank completed route quote sets by their best absolute gross value;
+          // per-route finalist fallback/terminal behavior remains unchanged.
+          priority: quotes => quotes.reduce<bigint | null>((best, quote) =>
+            quote.quoteGrossProfitWeth !== null && (best === null || quote.quoteGrossProfitWeth > best)
+              ? quote.quoteGrossProfitWeth : best, null),
           consume: consumePlan,
           onProducersSettled: (completed) => {
             solverWallMs = Math.max(0, performance.now() - solverStartedAt);

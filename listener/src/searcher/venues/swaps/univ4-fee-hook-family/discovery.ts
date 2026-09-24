@@ -5,6 +5,7 @@ import {
   UNIV4_FEE_HOOK_PATTERN_IDS,
 } from "./manifest.js";
 import type { FeeHookCandidate } from "./types.js";
+import { sat1Permissions } from "./sat1.js";
 
 /**
  * The fee-hook Family shares the manager nomination surface (same
@@ -32,7 +33,7 @@ export const univ4FeeHookDiscovery = {
         UNIV4_FEE_HOOK_PATTERN_IDS,
       );
       if (candidate === null) return null;
-      if (!sameAddress(candidate.poolKey.hooks, UNIV4_FEE_HOOK_ADDRESS)) {
+      if (!sameAddress(candidate.poolKey.hooks, UNIV4_FEE_HOOK_ADDRESS) && !sat1Permissions(candidate.poolKey.hooks)) {
         return null;
       }
       return candidate;

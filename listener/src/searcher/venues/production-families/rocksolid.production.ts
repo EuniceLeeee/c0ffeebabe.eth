@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { rocksolidCapture } from "../protocols/rocksolid-family/capture.js";
 import { rocksolidFamilyOwnedAction } from "../protocols/rocksolid-family/action.js";
@@ -10,6 +11,8 @@ import { rocksolidFamilyManifest } from "../protocols/rocksolid-family/manifest.
 import { rocksolidPricing } from "../protocols/rocksolid-family/pricing.js";
 import { rocksolidProtocol } from "../protocols/rocksolid-family/protocol.js";
 import { rocksolidRoutes } from "../protocols/rocksolid-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ROCKSOLID_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: rocksolidFamilyManifest,

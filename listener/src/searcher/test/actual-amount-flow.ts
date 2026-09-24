@@ -6,8 +6,13 @@ import type { ResolvedPlanNode } from "../../types.js";
 
 const a = "0x0000000000000000000000000000000000000001";
 const b = "0x0000000000000000000000000000000000000002";
-test("generic flow compression losslessly preserves each Family's whole encoded action", () => {
-  const scripts = [new Uint8Array(220), new Uint8Array(220), new Uint8Array([1, 2, 3])];
+for (const count of [3, 243, 255]) test(`generic flow compression losslessly preserves ${count} Family actions`, () => {
+  const scripts = Array.from({ length: count }, (_, i) => {
+    const script = new Uint8Array(220);
+    script.fill(123); script[100] = i;
+    return script;
+  });
+  scripts[2] = new Uint8Array([1, 2, 3]);
   scripts[0]!.fill(123); scripts[1]!.fill(123);
   scripts[1]![3] = 1; scripts[1]![4] = 2; scripts[1]![219] = 0;
   const cases = scripts.map((_, i): ResolvedPlanNode => ({ adapterId: "actual-amount-case",
@@ -33,5 +38,15 @@ test("generic flow compression losslessly preserves each Family's whole encoded 
     }
     assert.deepEqual(decoded, script); modes.push(mode);
   }
-  assert.deepEqual(modes, [1, 1, 0]); assert.equal(at, packed.length);
+  assert.deepEqual(modes.slice(0, 3), [1, 1, 0]); assert.equal(at, packed.length);
+  assert.equal(packed[40], count, "case count is not truncated");
+});
+
+test("case-count overflow fails before encoding", () => {
+  const branch: ResolvedPlanNode = { adapterId: "actual-amount-case", target: a,
+    tokenIn: a, tokenOut: b, amount: 1n, params: { quotedAmountOut: 2n }, children: [] };
+  assert.throws(() => actualAmountStepAdapter.encode({
+    adapterId: "actual-amount-step", target: a, tokenIn: a, tokenOut: b,
+    amount: 0n, params: {}, children: Array.from({ length: 256 }, () => branch),
+  }, a, new Uint8Array()), /invalid amount-flow records/);
 });

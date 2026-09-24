@@ -1,0 +1,245 @@
+{
+  "schemaVersion": 1,
+  "claim": "Implemented strict Balancer V3; historical same-source lifecycle/Graph/Exact/encoded execution proven. Not production acceptance.",
+  "sampleProvenance": "Existing docs/research/reports/step1-R15-20260704.json; receipt and state re-read from historical RPC",
+  "txHash": "0x38840fe7b3be155e5065e25f022e3076ec35c58264c407e5f2416a132e43c698",
+  "source": {
+    "number": 25453353,
+    "hash": "0xb1bd4e5ff1aa3cdc74ac83d1fdf756ba68ef37e0ad026132ac027323c650a06b",
+    "generation": 1
+  },
+  "pool": "0x57c23c58B1D8C3292c15BEcF07c62C5c52457A42",
+  "tokens": [
+    "0x0bfc9d54Fc184518A81162F8fB99c2eACa081202",
+    "0xf1C9acDc66974dFB6dEcB12aA385b9cD01190E38"
+  ],
+  "routes": 2,
+  "catalogHash": "d8b9c29da23bc235a6197c20695d0745fa9514341567b999c90a4cf3bfdd9e63",
+  "publicationFingerprint": "6dcb661138ad82827d3617881d8b64e055476069b74dd0cf63b03de954616ebc",
+  "graphEdgeIds": [
+    "balancer-v3\u001f0x57c23c58b1d8c3292c15becf07c62c5c52457a42\u001f0x57c23c58b1d8c3292c15becf07c62c5c52457a42\u001f0x0bfc9d54fc184518a81162f8fb99c2eaca081202>0xf1c9acdc66974dfb6decb12aa385b9cd01190e38\u001f3521b6ea4979e504316256547bae95459dc4a2e16b7d32ce2e73d6edd2316043",
+    "balancer-v3\u001f0x57c23c58b1d8c3292c15becf07c62c5c52457a42\u001f0x57c23c58b1d8c3292c15becf07c62c5c52457a42\u001f0xf1c9acdc66974dfb6decb12aa385b9cd01190e38>0x0bfc9d54fc184518a81162f8fb99c2eaca081202\u001f159ab58c305aa45d52ead2450c448c76acbabd172e38c71ce5c370184db6787d"
+  ],
+  "landed": {
+    "amountIn": "3309939901706049",
+    "amountOut": "3308419612143212"
+  },
+  "postBlockPricing": {
+    "amountIn": "1000000000000000000",
+    "amountOut": "999482799741078871"
+  },
+  "postBlockExactQuotes": [
+    {
+      "amountIn": "3309939901706049",
+      "amountOut": "3308418357612869"
+    },
+    {
+      "amountIn": "33099399017060490",
+      "amountOut": "33084127106534725"
+    }
+  ],
+  "rpc": {
+    "sequential": true,
+    "calls": 67,
+    "maxCalls": 96,
+    "minimumSpacingMs": 200,
+    "quoteProbeReverts": 4,
+    "broadcast": false
+  },
+  "unsupportedHookAnchor": {
+    "txHash": "0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87",
+    "source": {
+      "number": 25535037,
+      "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e",
+      "generation": 1
+    },
+    "outcomes": [
+      {
+        "familyId": "balancer-v3",
+        "candidateKey": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+        "stage": "discovery",
+        "status": "candidate",
+        "reasonCode": "candidate-decoded",
+        "source": {
+          "number": 25535037,
+          "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e",
+          "generation": 1
+        },
+        "evidenceRefs": []
+      },
+      {
+        "familyId": "balancer-v3",
+        "candidateKey": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+        "stage": "identity",
+        "status": "unresolved",
+        "reasonCode": "identity-work-unresolved:vault-registered-pool:unsupported-swap-hook-caller-context",
+        "source": {
+          "number": 25535037,
+          "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e",
+          "generation": 1
+        },
+        "evidenceRefs": [
+          "transport:86a951a436ac4b27f70d66595ff528ce1a2b8117c78c5ee29885087c89b014a1",
+          "transport:de3b421f76ca6128da408158f0a08e88edb8d0c0ae260e5dede137f8845dbf57"
+        ]
+      }
+    ]
+  },
+  "executions": [
+    {
+      "status": "same-source-pass",
+      "backend": "debug_traceCall/callTracer+prestateTracer",
+      "source": {
+        "number": 25453353,
+        "hash": "0xb1bd4e5ff1aa3cdc74ac83d1fdf756ba68ef37e0ad026132ac027323c650a06b",
+        "generation": 1
+      },
+      "timestamp": "0x6a47eb1f",
+      "amountIn": "3309939901706049",
+      "amountOut": "3308418357612869",
+      "inputDelta": "-3309939901706049",
+      "outputDelta": "3308418357612869",
+      "nextBlock": {
+        "status": "reverted",
+        "reason": "BalanceNotSettled()",
+        "blockOverrides": {
+          "number": "0x184632a",
+          "time": "0x6a47eb2b",
+          "gasLimit": "0x3938700",
+          "baseFeePerGas": "0x894553d"
+        },
+        "actualSwapOutput": "3308418363751642",
+        "encodedSendAmount": "3308418357612869",
+        "unsettledCredit": "6138773",
+        "unlockRevertData": "0x20f1d86d"
+      },
+      "gasUsed": "226341",
+      "artifactSha256": "31f46f847133f22251e6ebd0aa6397c561ed830cbb50b2df45b169e93416c8c6",
+      "scriptHash": "0xebc8921dc470e15b0cf9eb5e54a1072dad700ae463cd469f1fb3c69a406b125b",
+      "runtimeCodeHash": "0xd82248ab86baac18858b69b906f6c6adde8b70336b42e5eb7d3bd91b4214061a",
+      "callerBalanceSlot": "0xfbb6d79c2d5fc9f9d8e4505ed798f1fc4cad12b6dc532657cb068de9cb9f4ab3",
+      "caveat": "same-source state/time proven; next-block status is separate and may fail on changed rates; isolated actor code/prefunding only; not production gap acceptance",
+      "sourceCallbackSteps": [
+        {
+          "path": "0.0.0.0",
+          "from": "0x1000000000000000000000000000000000000002",
+          "to": "0xf1c9acdc66974dfb6decb12aa385b9cd01190e38",
+          "selector": "0xa9059cbb",
+          "inputHash": "0x2cfa71819d08f57bf386fc1da5a38794088a0544cd7c73784dbdae45e15e09c9",
+          "returnData": "0x0000000000000000000000000000000000000000000000000000000000000001",
+          "error": null
+        },
+        {
+          "path": "0.0.0.1",
+          "from": "0x1000000000000000000000000000000000000002",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0x15afd409",
+          "inputHash": "0xc07784674123ef37592f0d2563815164b33af27d24ad4400882e1fa7b1d103ef",
+          "returnData": "0x000000000000000000000000000000000000000000000000000bc25f7011af41",
+          "error": null
+        },
+        {
+          "path": "0.0.0.2",
+          "from": "0x1000000000000000000000000000000000000002",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0x2bfb780c",
+          "inputHash": "0xf697a2f154d253720442e5f75f7e4a8754f6411cfbce212c309c7f75a799f01e",
+          "returnData": "0x000000000000000000000000000000000000000000000000000bc0fd2cf95145000000000000000000000000000000000000000000000000000bc25f7011af41000000000000000000000000000000000000000000000000000bc0fd2cf95145",
+          "error": null
+        },
+        {
+          "path": "0.0.0.3",
+          "from": "0x1000000000000000000000000000000000000002",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0xae639329",
+          "inputHash": "0x1f178b3b4a12990d0f03ef4b51a9f01f54c2005c40ce5f486aa63afc7a912fb0",
+          "returnData": "0x",
+          "error": null
+        }
+      ]
+    },
+    {
+      "status": "same-source-pass",
+      "backend": "debug_traceCall/callTracer+prestateTracer",
+      "source": {
+        "number": 25453353,
+        "hash": "0xb1bd4e5ff1aa3cdc74ac83d1fdf756ba68ef37e0ad026132ac027323c650a06b",
+        "generation": 1
+      },
+      "timestamp": "0x6a47eb1f",
+      "amountIn": "33099399017060490",
+      "amountOut": "33084127106534725",
+      "inputDelta": "-33099399017060490",
+      "outputDelta": "33084127106534725",
+      "nextBlock": {
+        "status": "reverted",
+        "reason": "BalanceNotSettled()",
+        "blockOverrides": {
+          "number": "0x184632a",
+          "time": "0x6a47eb2b",
+          "gasLimit": "0x3938700",
+          "baseFeePerGas": "0x894553d"
+        },
+        "actualSwapOutput": "33084127167922040",
+        "encodedSendAmount": "33084127106534725",
+        "unsettledCredit": "61387315",
+        "unlockRevertData": "0x20f1d86d"
+      },
+      "gasUsed": "226341",
+      "artifactSha256": "31f46f847133f22251e6ebd0aa6397c561ed830cbb50b2df45b169e93416c8c6",
+      "scriptHash": "0xfa70c1ac447008d889bec67ce582f09ccf3d0e705b6c0ebb750b11646d82e483",
+      "runtimeCodeHash": "0xd82248ab86baac18858b69b906f6c6adde8b70336b42e5eb7d3bd91b4214061a",
+      "callerBalanceSlot": "0xfbb6d79c2d5fc9f9d8e4505ed798f1fc4cad12b6dc532657cb068de9cb9f4ab3",
+      "caveat": "same-source state/time proven; next-block status is separate and may fail on changed rates; isolated actor code/prefunding only; not production gap acceptance",
+      "sourceCallbackSteps": [
+        {
+          "path": "0.0.0.0",
+          "from": "0x1000000000000000000000000000000000000002",
+          "to": "0xf1c9acdc66974dfb6decb12aa385b9cd01190e38",
+          "selector": "0xa9059cbb",
+          "inputHash": "0x3f0f456caca7900bec8572216df44059513248ce4aaf05f3b39621f93166c51e",
+          "returnData": "0x0000000000000000000000000000000000000000000000000000000000000001",
+          "error": null
+        },
+        {
+          "path": "0.0.0.1",
+          "from": "0x1000000000000000000000000000000000000002",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0x15afd409",
+          "inputHash": "0x5de6c5ae7567d3f875d7f04d094f50b62801161ee1311ed3747f83f7dbb167c9",
+          "returnData": "0x000000000000000000000000000000000000000000000000007597ba60b0d88a",
+          "error": null
+        },
+        {
+          "path": "0.0.0.2",
+          "from": "0x1000000000000000000000000000000000000002",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0x2bfb780c",
+          "inputHash": "0xc5c7fa76d232a2329ccdb57758c2f3a2b690fe6417c5ef579221bd19ba80d852",
+          "returnData": "0x000000000000000000000000000000000000000000000000007589d69be38d45000000000000000000000000000000000000000000000000007597ba60b0d88a000000000000000000000000000000000000000000000000007589d69be38d45",
+          "error": null
+        },
+        {
+          "path": "0.0.0.3",
+          "from": "0x1000000000000000000000000000000000000002",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0xae639329",
+          "inputHash": "0x5b738a13d6b4c6da6d1bf5997626dbb7331daa7d76bd03b55a5efd6d40ad6eeb",
+          "returnData": "0x",
+          "error": null
+        }
+      ]
+    }
+  ],
+  "remainingGaps": [
+    "Swap-affecting hooks are retryable unsupported; Router sender parameter does not establish direct-Vault caller equivalence.",
+    "A source-N quote's fixed sendTo amount need not settle at N+1/+12s when rates change; mandatory final simulation must reject. No dynamic settlement or execution-context quote implemented.",
+    "This is receipt-scoped lifecycle/issued Graph evidence, not a full universe Ready, natural enumeration, Solver sizing, EV, sealed-corpus or production-gap claim."
+  ],
+  "localChecks": {
+    "semanticTests": 11,
+    "integrationTests": 1,
+    "typecheck": "pass",
+    "centralIssuerBoundary": "PASS (470 roots / 532 runtime-closure files)"
+  }
+}

@@ -5,6 +5,7 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import {
   createVictimSourceGeneration,
   detectImpactTransitionFromLogs,
+  type PoolImpactTransition,
 } from "../detector/pool-impact.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
@@ -26,6 +27,17 @@ import {
   UNIV4_POOL_MANAGER_INTERFACE,
 } from "../venues/swaps/univ4-abi.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
+import {
+  type UniV3PoolContext,
+  UNIV2_FIXTURE_FACTORY,
+  UNIV3_FIXTURE_FACTORY, UNIV3_FIXTURE_FEE, UNIV3_FIXTURE_TICK_SPACING,
+  UNIV3_FIXTURE_LIQUIDITY, UNIV3_FIXTURE_SQRT_PRICE_X96,
+} from "../architecture-migration-fixture-replay.js";
+import type { CanonicalSource } from "../venues/adapter-request-program.js";
+import type { SwapObservationBindingResolver } from "../venues/swap-observation.js";
+import {
+  createUniv2ReadyReceiptFixture, createUniv3ReadyReceiptFixture, readyReceiptContext,
+} from "./ready-receipt-fixture.js";
 
 const TOKEN0 = "0x1000000000000000000000000000000000000001";
 const TOKEN1 = "0x2000000000000000000000000000000000000002";
@@ -34,6 +46,19 @@ const POOL1 = "0x4000000000000000000000000000000000000004";
 const UNKNOWN_POOL = "0x5000000000000000000000000000000000000005";
 const SENDER = "0x6000000000000000000000000000000000000006";
 const RECIPIENT = "0x7000000000000000000000000000000000000007";
+const SOURCE: CanonicalSource = Object.freeze({
+  number: 25_800_000,
+  hash: `0x${"61".repeat(32)}`,
+  generation: 1,
+});
+
+let metadataCalls = 0;
+const noMetadataRpc = {
+  async call(): Promise<string> {
+    metadataCalls++;
+    throw new Error("receipt token metadata must come from Ready");
+  },
+};
 
 type ReceiptLog = {
   readonly address: string;
@@ -78,10 +103,12 @@ function edge(input: {
   } as TokenEdge;
 }
 
-async function transition(logs: ReceiptLog[], graph: TokenEdge[]) {
+async function transition(
+  logs: ReceiptLog[], graph: TokenEdge[], resolveBinding?: SwapObservationBindingResolver,
+) {
   const sourceGeneration = createVictimSourceGeneration({
-    sourceBlock: null,
-    sourceBlockHash: null,
+    sourceBlock: SOURCE.number,
+    sourceBlockHash: SOURCE.hash,
     receiptId: ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(logs))),
     logs,
     logsCompleteness: "complete-receipt",
@@ -90,16 +117,17 @@ async function transition(logs: ReceiptLog[], graph: TokenEdge[]) {
     logs,
     graph,
     sourceGeneration,
+    null,
+    noMetadataRpc,
+    resolveBinding,
   );
 }
 
 async function testV2ExactTriggerPartition(): Promise<void> {
-  const graph = [edge({
-    adapterId: "univ2-swap",
-    target: POOL0,
-    tokenIn: TOKEN0,
-    tokenOut: TOKEN1,
-  })];
+  const { graph, root } = await createUniv2ReadyReceiptFixture(SOURCE, {
+    pool: POOL0, factory: UNIV2_FIXTURE_FACTORY, token0: TOKEN0, token1: TOKEN1,
+    reserves: { reserve0: 1_000_000_000n, reserve1: 2_000_000_000n, blockTimestampLast: 1 },
+  });
   const result = await transition([
     eventLog(UNIV2_PAIR_INTERFACE, "Sync", POOL0, [101n, 202n]),
     eventLog(UNIV2_PAIR_INTERFACE, "Swap", POOL0, [
@@ -110,39 +138,81 @@ async function testV2ExactTriggerPartition(): Promise<void> {
       9n,
       RECIPIENT,
     ]),
-  ], graph);
+  ], graph, root.resolveSwapObservationBinding);
   assert.equal(result.complete, true);
   assert.equal(result.steps.length, 1, "Sync is post-state evidence, not a second trigger");
   assert.equal(result.steps[0]?.familyId, "univ2-standard");
   assert.equal(result.impacts[0]?.v2PostState?.reserve0, 101n);
   assert.equal(result.impacts[0]?.v2PostState?.reserve1, 202n);
+  assert.equal(result.impacts[0]?.v2PostState?.feeBps, 30n);
+  assert.equal(metadataCalls, 0);
 }
 
 async function testV3LandedPostState(): Promise<void> {
-  const graph = [edge({
-    adapterId: "univ3-swap",
-    target: POOL0,
-    tokenIn: TOKEN0,
-    tokenOut: TOKEN1,
-  })];
-  const result = await transition([
-    eventLog(UNIV3_POOL_INTERFACE, "Swap", POOL0, [
-      SENDER,
-      RECIPIENT,
-      11n,
-      -10n,
-      (1n << 96n) + 7n,
-      123n,
-      4,
-    ]),
-  ], graph);
-  assert.equal(result.complete, true);
-  assert.equal(result.steps[0]?.familyId, "univ3-standard");
-  assert.deepEqual(result.impacts[0]?.v3PostState, {
-    sqrtPriceX96: (1n << 96n) + 7n,
-    liquidity: 123n,
-    tick: 4,
+  const pool = ethers.getAddress(`0x${"a3".repeat(20)}`);
+  const token0 = ethers.getAddress(`0x${"a1".repeat(20)}`);
+  const token1 = ethers.getAddress(`0x${"b2".repeat(20)}`);
+  for (const address of [pool, token0, token1]) {
+    assert.notEqual(address, address.toLowerCase(), "fixture must exercise checksum letters");
+    assert.notEqual(address.slice(2), address.slice(2).toUpperCase());
+  }
+  const ctx: UniV3PoolContext = {
+    pool, factory: UNIV3_FIXTURE_FACTORY, token0, token1,
+    fee: UNIV3_FIXTURE_FEE, tickSpacing: UNIV3_FIXTURE_TICK_SPACING,
+    liquidity: UNIV3_FIXTURE_LIQUIDITY, sqrtPriceX96: UNIV3_FIXTURE_SQRT_PRICE_X96,
+  };
+  const { publication, graph, root } = await createUniv3ReadyReceiptFixture(SOURCE, ctx);
+  // Same issued instance, independently projected Graph: another root cannot
+  // lend its object-bound receipt authority to this root's edges.
+  const foreign = readyReceiptContext(publication, SOURCE);
+  const v2 = await createUniv2ReadyReceiptFixture(SOURCE, {
+    pool: POOL1, factory: UNIV2_FIXTURE_FACTORY, token0: TOKEN0, token1: TOKEN1,
+    reserves: { reserve0: 1_000_000_000n, reserve1: 2_000_000_000n, blockTimestampLast: 1 },
   });
+  const foreignFamilyBinding = v2.root.resolveSwapObservationBinding(v2.graph[0]);
+  assert(foreignFamilyBinding);
+
+  for (const reverse of [false, true]) {
+    const postState = {
+      sqrtPriceX96: (1n << 96n) + (reverse ? -7n : 7n),
+      liquidity: reverse ? 456n : 123n,
+      tick: reverse ? -4 : 4,
+    };
+    const logs = [eventLog(UNIV3_POOL_INTERFACE, "Swap", pool, [
+      SENDER, RECIPIENT, reverse ? -10n : 11n, reverse ? 11n : -10n,
+      postState.sqrtPriceX96, postState.liquidity, postState.tick,
+    ])];
+    const result = await transition(logs, graph, root.resolveSwapObservationBinding);
+    assert.equal(result.complete, true);
+    assert.equal(result.steps.length, 1);
+    assert.equal(result.impacts.length, 1);
+    assert.equal(result.unresolved.length, 0);
+    assert.equal(result.steps[0]?.familyId, "univ3-standard");
+    assert.equal(result.impacts[0]?.pool.toLowerCase(), pool.toLowerCase());
+    assert.equal(result.impacts[0]?.tokenIn.toLowerCase(), (reverse ? token1 : token0).toLowerCase());
+    assert.equal(result.impacts[0]?.tokenOut.toLowerCase(), (reverse ? token0 : token1).toLowerCase());
+    assert.equal(result.impacts[0]?.amountIn, 11n);
+    assert.deepEqual(result.impacts[0]?.v3PostState, postState);
+
+    const rejected: readonly (readonly [string, PoolImpactTransition])[] = [
+      ["missing binding", await transition(logs, graph)],
+      ["foreign root", await transition(logs, graph, foreign.root.resolveSwapObservationBinding)],
+      ["copied edges", await transition(logs, graph.map((item) => ({ ...item })), root.resolveSwapObservationBinding)],
+      ["foreign Family descriptor", await transition(logs, graph, () => foreignFamilyBinding)],
+      ["legacy metadata without authority", await transition(logs, graph.map((item) => ({
+        ...item, poolToken0: token0, poolToken1: token1,
+      })))],
+    ];
+    for (const [label, failure] of rejected) {
+      assert.equal(failure.complete, false, label);
+      assert.equal(failure.hashOnlyReplayable, false, label);
+      assert.equal(failure.steps.length, 0, label);
+      assert.equal(failure.impacts.length, 0, label);
+      assert(failure.unresolved.some((item) => item.reason === "observer-decode-failed"), label);
+    }
+    assert.equal(metadataCalls, 0, "positive and rejected V3 receipts must perform no metadata RPC");
+  }
+  console.log("ok V3 Ready receipt bindings: checksum addresses, both directions; missing/foreign/legacy authority rejected; zero metadata calls");
 }
 
 function v4Key(input: {
@@ -277,10 +347,14 @@ async function testFluidAndForeignEdgesFailClosed(): Promise<void> {
   assert.equal(foreign.impacts.length, 0, "foreign edges cannot gain strict admission by topic");
 }
 
-assert.equal(
-  PRODUCTION_STRICT_FAMILY_DECLARATIONS.swapObservationGroups.length,
-  7,
-);
+for (const familyId of [
+  "univ2-standard", "univ3-standard", "univ4",
+  "custom-swap:angstrom-v4", "fluid-dex",
+]) {
+  assert(PRODUCTION_STRICT_FAMILY_DECLARATIONS.swapObservationGroups.some(
+    (group) => group.familyIds.includes(familyId),
+  ), `missing production receipt observer ${familyId}`);
+}
 await testV2ExactTriggerPartition();
 await testV3LandedPostState();
 await testV4PoolIdentityAndWethAlias();

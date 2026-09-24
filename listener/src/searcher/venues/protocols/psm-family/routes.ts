@@ -9,15 +9,15 @@ import type { PsmDescriptor, PsmRoute } from "./types.js";
 export const psmRoutes = {
   project({ descriptor }) {
     const fingerprint = hashCanonical(psmStaticBindingProjection(descriptor));
-    return Object.freeze([Object.freeze({
+    return Object.freeze((["sell-gem", "buy-gem"] as const).map(direction => Object.freeze({
       routeKey: routeKey(
-        `${PSM_FAMILY_ID}\u001f${lowerAddress(descriptor.target)}\u001fsell-gem`,
+        `${PSM_FAMILY_ID}\u001f${lowerAddress(descriptor.target)}\u001f${direction}`,
       ),
       familyId: PSM_FAMILY_ID,
       lineageId: PSM_LINEAGE_ID,
       instanceKey: descriptor.instanceKey,
-      tokenIn: descriptor.gem,
-      tokenOut: descriptor.dai,
+      tokenIn: direction === "sell-gem" ? descriptor.gem : descriptor.dai,
+      tokenOut: direction === "sell-gem" ? descriptor.dai : descriptor.gem,
       taxonomy: Object.freeze({
         slotKind: "protocol" as const,
         protocolAction: "convert" as const,
@@ -28,9 +28,9 @@ export const psmRoutes = {
       }),
       runtimeRequirements: descriptor.runtimeRequirements,
       target: descriptor.target,
-      direction: "sell-gem" as const,
+      direction,
       adapterId: "psm" as const,
-    })]);
+    })));
   },
   projectGraph({ descriptor, route }) {
     return Object.freeze({

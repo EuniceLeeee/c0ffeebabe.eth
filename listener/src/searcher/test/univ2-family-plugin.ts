@@ -716,6 +716,9 @@ for (const [factory, feeBps] of [
         assert.deepEqual(fragment.requirements, [{ kind: "transfer-to-pool", token: route.tokenIn, pool: POOL, amount: amountIn }]);
         assert.deepEqual(fragment.nodes[0].children, []);
         assert.equal(fragment.nodes[0].params[route.direction === "zero-for-one" ? "amount1Out" : "amount0Out"], out);
+        const relaxed = univ2StrictFamilyPlugin.execution.buildFragment({ ...executionInput, minAmountOut: out - 1n });
+        assert.deepEqual(relaxed, fragment,
+          "V2 minOut tolerance cannot change the actual requested transfer in either direction");
         for (const change of [{ amountIn: amountIn + 1n }, { amountOut: out + 1n }, { pool: FORGED_POOL },
           { tokenIn: route.tokenOut }, { tokenOut: route.tokenIn }, { feeBps: feeBps + 1n },
           { quoteModel: "pool-get-amount-out" as const }]) {
@@ -1325,7 +1328,8 @@ for (const route of stableRoutes) {
     minAmountOut: 998n, exactEvidence: quoted.evidence });
   assert.deepEqual(fragment.requirements, []);
   assert.equal(fragment.nodes[0].children[0].adapterId, "erc20-transfer");
-  assert.equal(fragment.nodes[0].params[route.direction === "zero-for-one" ? "amount1Out" : "amount0Out"], 998n);
+  assert.equal(fragment.nodes[0].params[route.direction === "zero-for-one" ? "amount1Out" : "amount0Out"], 999n,
+    "Pair.swap requests the full quoted amount, not the relaxed acceptance floor");
   assert.deepEqual(univ2StrictFamilyPlugin.exact.cacheCompatibilityProjection(input),
     univ2StrictFamilyPlugin.exact.cacheCompatibilityProjection({ ...input, transactionOrigin: FORGED_POOL }),
     "pool quote compatibility remains independent of simulation actors");

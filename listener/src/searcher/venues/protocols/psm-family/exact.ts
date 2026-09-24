@@ -11,7 +11,7 @@ import {
   returnedResult,
 } from "../standard-family/common.js";
 import { assertPsmInvocation } from "./binding.js";
-import { PSM_INTERFACE, psmSellQuote } from "./codec.js";
+import { PSM_INTERFACE, psmSellQuote, psmBuyQuote } from "./codec.js";
 import type {
   PsmDescriptor,
   PsmExactEvidence,
@@ -35,9 +35,9 @@ const psmRequestProgram: ExactRequestProgram<
     if (input.amountIn > MAX_UINT256) throw new Error("PSM exact input exceeds uint256");
     if (input.amountIn === 0n) return [];
     return Object.freeze([callRequest(
-      "exact-tin",
+      "exact-fee",
       input.descriptor.target,
-      PSM_INTERFACE.encodeFunctionData("tin"),
+      PSM_INTERFACE.encodeFunctionData(input.route.direction === "sell-gem" ? "tin" : "tout"),
     )]);
   },
   decode({ programInput, initialResults }) {
@@ -52,24 +52,24 @@ const psmRequestProgram: ExactRequestProgram<
         evidence: exactEvidence(programInput, 0n, 0n),
       });
     }
-    if (results.length !== 1 || results[0]?.id !== "exact-tin") {
+    if (results.length !== 1 || results[0]?.id !== "exact-fee") {
       throw new Error("PSM exact results are missing or ambiguous");
     }
-    const result = returnedResult(results, "exact-tin");
+    const result = returnedResult(results, "exact-fee");
     if (!/^0x[0-9a-fA-F]{64}$/.test(result.data)) throw new Error("PSM invalid uint256 result");
     assertSource(result.source, programInput.source);
-    const tin = BigInt(
-      PSM_INTERFACE.decodeFunctionResult("tin", result.data)[0],
+    const fee = BigInt(
+      PSM_INTERFACE.decodeFunctionResult(programInput.route.direction === "sell-gem" ? "tin" : "tout", result.data)[0],
     );
-    const amountOut = psmSellQuote(
+    const amountOut = (programInput.route.direction === "sell-gem" ? psmSellQuote : psmBuyQuote)(
       programInput.amountIn,
-      tin,
+      fee,
       programInput.descriptor.decimalScale,
     );
     if (amountOut <= 0n) throw new Error("PSM exact quote returned no output");
     return Object.freeze({
       amountOut,
-      evidence: exactEvidence(programInput, amountOut, tin),
+      evidence: exactEvidence(programInput, amountOut, fee),
     });
   },
 };
@@ -92,7 +92,7 @@ export const psmExact = {
   cacheCompatibilityProjection: ({ descriptor, route }) => ({
     target: lowerAddress(descriptor.target),
     direction: route.direction,
-    quoteSemantics: "source-tin-checked-formula-v1",
+    quoteSemantics: "source-directional-integer-fee-v2",
     decimalScale: descriptor.decimalScale,
     bindingFingerprint: route.bindingRef.fingerprint,
   }),
@@ -106,15 +106,16 @@ function exactEvidence(
     readonly source: PsmExactEvidence["source"];
   },
   amountOut: bigint,
-  tin: bigint,
+  fee: bigint,
 ): PsmExactEvidence {
   return Object.freeze({
-    kind: "psm-sell-gem-fee",
+    kind: "psm-directional-fee",
+    direction: input.route.direction,
     source: input.source,
     target: input.descriptor.target,
     amountIn: input.amountIn,
     amountOut,
-    tin,
+    fee,
     bindingFingerprint: input.route.bindingRef.fingerprint,
   });
 }

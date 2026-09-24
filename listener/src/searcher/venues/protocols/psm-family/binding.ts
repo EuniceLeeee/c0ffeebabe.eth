@@ -12,7 +12,7 @@ export function psmStaticBindingProjection(descriptor: PsmDescriptor) {
     gem: lowerAddress(descriptor.gem),
     dai: lowerAddress(descriptor.dai),
     decimalScale: descriptor.decimalScale,
-    feeSemantics: "lite-psm-tin-tout-wad-v1",
+    feeSemantics: "lite-psm-bidirectional-integer-fee-v2",
   };
 }
 
@@ -27,11 +27,11 @@ export function assertPsmInvocation(
     bindingFingerprint: hashCanonical(psmStaticBindingProjection(descriptor)),
   });
   if (
-    route.direction !== "sell-gem" ||
+    (route.direction !== "sell-gem" && route.direction !== "buy-gem") ||
     route.adapterId !== "psm" ||
-    !sameAddress(route.tokenIn, descriptor.gem) ||
-    !sameAddress(route.tokenOut, descriptor.dai)
+    !sameAddress(route.tokenIn, route.direction === "sell-gem" ? descriptor.gem : descriptor.dai) ||
+    !sameAddress(route.tokenOut, route.direction === "sell-gem" ? descriptor.dai : descriptor.gem)
   ) {
-    throw new Error("PSM route is not the verified sellGem direction");
+    throw new Error("PSM route is not a verified direction");
   }
 }

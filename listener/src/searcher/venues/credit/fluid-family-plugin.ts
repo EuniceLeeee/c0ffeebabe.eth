@@ -43,6 +43,7 @@ export {
 export type {
   FluidCreditCandidate,
   FluidCreditDescriptor,
+  FluidCreditExactEvidence,
   FluidCreditIdentity,
   FluidCreditRiskEvidence,
   FluidCreditRoute,

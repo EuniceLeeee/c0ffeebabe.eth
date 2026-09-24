@@ -27,6 +27,7 @@ import {
 import type { UniV3Descriptor, UniV3Route } from "./types.js";
 import { univ3VictimReplay } from "./victim.js";
 import { createUniV3SwapObservation } from "../../swap-observation.js";
+import { UNIV3_FAMILY_ID } from "./manifest.js";
 
 const SWAP_PATTERN_IDS = Object.freeze([
   UNIV3_SWAP_LOG_PATTERN_ID,
@@ -64,6 +65,17 @@ export const univ3Swap = {
     decode: ({ observation }) => decodeEffects(observation),
   },
   receiptObservation: createUniV3SwapObservation({
+    resolvePool(ctx, edge) {
+      const binding = ctx.resolveBinding?.(edge);
+      if (!binding || binding.familyId !== UNIV3_FAMILY_ID) return null;
+      const descriptor = binding.descriptor as UniV3Descriptor;
+      if (descriptor.pool.toLowerCase() !== edge.target.toLowerCase()) return null;
+      const forward = edge.tokenIn.toLowerCase() === descriptor.token0.toLowerCase() &&
+        edge.tokenOut.toLowerCase() === descriptor.token1.toLowerCase();
+      const reverse = edge.tokenIn.toLowerCase() === descriptor.token1.toLowerCase() &&
+        edge.tokenOut.toLowerCase() === descriptor.token0.toLowerCase();
+      return forward || reverse ? { token0: descriptor.token0, token1: descriptor.token1 } : null;
+    },
     adapterIds: ["univ3-swap"],
     canonicalIntakeTargets: [
       UNIV3_SWAP_ROUTER,

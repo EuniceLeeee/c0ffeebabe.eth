@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { ethers } from "ethers";
+import { RebuildReadProvider } from "./rebuild-read-provider.js";
+import { createSourceCodeProviders } from "./source-code-cache.js";
 import {
   assertDurableVerifiedMemoFingerprint,
   canonicalJson,
@@ -32,7 +34,8 @@ import { RevmFatalError, RevmSimClient, type RevmFatalReason } from "./revm-sim-
 import { createRevmStrictSourceSimulation } from "./revm-strict-source-simulation.js";
 import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
   "./venues/production-verified-actors.js";
-import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+  PRODUCTION_STRICT_SHADOW_FAMILY_LOAD } from
   "./venues/production-family-composition.js";
 import { executeCatalogReverseBindings } from
   "./venues/capture-materialization.js";
@@ -433,37 +436,6 @@ export function isChainProvenTerminalReason(reason: string): boolean {
     normalized === "no_catalog_match" ||
     normalized === "no_matching_family" ||
     normalized.startsWith("identity_rejected:");
-}
-
-class RebuildReadProvider extends ethers.JsonRpcProvider {
-  constructor(
-    private readonly read: <T>(operation: () => Promise<T>) => Promise<T>,
-    ...args: ConstructorParameters<typeof ethers.JsonRpcProvider>
-  ) {
-    super(...args);
-  }
-
-  // Both probe and outer rebuild use the same physical fence. Ethers' delayed
-  // batch flush and network detection must recheck the owning fatal latch,
-  // even when the public read entered before the sibling simulation failed.
-  override _send(...args: Parameters<ethers.JsonRpcProvider["_send"]>) {
-    return this.read(() => super._send(...args));
-  }
-  override send(...args: Parameters<ethers.JsonRpcProvider["send"]>) {
-    return this.read(() => super.send(...args));
-  }
-  override getBlock(...args: Parameters<ethers.JsonRpcProvider["getBlock"]>) {
-    return this.read(() => super.getBlock(...args));
-  }
-  override getCode(...args: Parameters<ethers.JsonRpcProvider["getCode"]>) {
-    return this.read(() => super.getCode(...args));
-  }
-  override getStorage(...args: Parameters<ethers.JsonRpcProvider["getStorage"]>) {
-    return this.read(() => super.getStorage(...args));
-  }
-  override getLogs(...args: Parameters<ethers.JsonRpcProvider["getLogs"]>) {
-    return this.read(() => super.getLogs(...args));
-  }
 }
 
 export function providerAdapter(
@@ -893,8 +865,12 @@ export function createProbeWiring(
     assertOpen();
     return result;
   };
-  const provider = new RebuildReadProvider(read, rpcUrl);
-  const strictProvider = providerAdapter(provider, assertOpen);
+  // Ethers' short cache keys code by height, not canonical hash/generation.
+  // Source-bound code reuse below owns caching instead, including reorg changes.
+  const provider = new RebuildReadProvider(read, rpcUrl, undefined, { cacheTimeout: -1 });
+  const strictProviderFor = createSourceCodeProviders(
+    providerAdapter(provider, assertOpen), assertOpen,
+  );
   const onFatal = (reason: RevmFatalReason): void => {
     if (fatal) return;
     fatal = new RevmFatalError(reason);
@@ -915,6 +891,7 @@ export function createProbeWiring(
   ): Promise<ProbeRuntimeHandle> => {
     assertOpen();
     const source = Object.freeze({ ...cutoff });
+    const strictProvider = strictProviderFor(source);
     const canSimulate = revmBin !== undefined && revmBin.trim() !== "" &&
       executor !== undefined && executor.trim() !== "";
     const networkChainId = canSimulate ? await (chainId ??= read(() => provider.getNetwork()).then(network => {
@@ -1011,6 +988,7 @@ export function createProbeWiring(
       attestInput: Parameters<AttestOnce>[0],
     ): Promise<Awaited<ReturnType<AttestOnce>>> => {
       assertOpen();
+      const strictProvider = strictProviderFor(attestInput.cutoff);
       const candidate = attestInput.candidate as Readonly<Record<string, unknown>>;
       const candidateFamilyId = typeof candidate.familyId === "string"
         ? candidate.familyId
@@ -2627,6 +2605,8 @@ export function createRebuildWiring(input?: {
     {
       staticNetwork: ethers.Network.from(1),
       batchMaxCount: 1,
+      // The existing trace scheduler already bounds these independent requests.
+      maxPhysicalRequests: Infinity,
     },
   );
   // Cross-run memo revalidation usually checks tens of thousands of
@@ -2670,7 +2650,13 @@ export function createRebuildWiring(input?: {
   const probe = createProbeWiring({ rpcUrl, executionIdentity: input?.executionIdentity,
     onSimulationFatal });
 
+  const disabledPlugins = PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins;
+  const disabledFamilyIds = new Set<string>(disabledPlugins.map(module => module.familyId));
+  const disabledAdapterIds = new Set(disabledPlugins.flatMap(module => [
+    ...(module.plugin.manifest.poolAdapterIds ?? []), ...module.plugin.manifest.ownedActionAdapterIds,
+  ]));
   const wiring: UniverseRebuildDependencies = {
+    isFamilyEnabled: (familyId) => !disabledFamilyIds.has(familyId),
     encodeCandidateSnapshot: (candidate) =>
       encodeDurableValue(candidate),
     decodeCandidateSnapshot: (snapshot) =>
@@ -2979,9 +2965,11 @@ export function createRebuildWiring(input?: {
         ) {
           const raw = (observation as { candidate: Readonly<Record<string, unknown>> })
             .candidate;
+          if (typeof raw.adapter === "string" && disabledAdapterIds.has(raw.adapter)) continue;
           const familyId = typeof raw.familyId === "string"
             ? raw.familyId
             : familyIdForCandidate(raw);
+          if (wiring.isFamilyEnabled?.(familyId) === false) continue;
           const candidate = Object.freeze({ ...raw, familyId });
           const key = rebuildFamilyInstanceDedupeKey(candidate);
           const existing = byKey.get(key);

@@ -3,8 +3,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
+import { ADDR } from "../../../../../shared/constants/addresses.js";
 import { plugin } from "../../../production-families/curve-plain.production.js";
-import { EXECUTION, MODES, hasReceiver, selector, uint } from "../codec.js";
+import { EXECUTION, MODES, executionFunction, hasReceiver, selector, uint } from "../codec.js";
 import { actionId } from "../routes.js";
 import type { CurvePlainMode } from "../types.js";
 
@@ -22,7 +23,7 @@ for (const path of paths) {
     assert.deepEqual(row.source, artifact.source);
     const mode = MODES.find(mode => selector(mode) === request.call.data.slice(0, 10));
     assert(mode, "Unrecognized execution selector in Curve identity proof");
-    const fn = mode === "exchange" ? "exchange" : "exchange_received";
+    const fn = executionFunction(mode);
     const args = EXECUTION[mode].decodeFunctionData(fn, request.call.data);
     const amountIn = BigInt(args[2]), amountOut = BigInt(args[3]);
     assert(amountIn > 0n && amountOut > 0n);
@@ -35,10 +36,10 @@ for (const path of paths) {
     const tokenIn = input[0].token;
     const poolInput = deltas.find((d: { account: string; token: string }) =>
       d.account.toLowerCase() === request.call.to.toLowerCase() && d.token.toLowerCase() === tokenIn.toLowerCase());
-    assert.equal(BigInt(poolInput.delta), amountIn);
+    assertPoolEffect(poolInput, amountIn, mode, request.call.to, result.effects?.logs);
     const poolOutput = deltas.find((d: { account: string; token: string }) =>
       d.account.toLowerCase() === request.call.to.toLowerCase() && d.token.toLowerCase() !== tokenIn.toLowerCase());
-    assert.equal(BigInt(poolOutput.delta), -amountOut);
+    assertPoolEffect(poolOutput, -amountOut, mode, request.call.to, result.effects?.logs);
     const tokenOut = poolOutput.token;
     const receiver = hasReceiver(mode) ? String(args[4]) : input[0].account;
     const output = deltas.find((d: { account: string; token: string }) =>
@@ -60,3 +61,19 @@ for (const path of paths) {
 }
 for (const mode of MODES) assert((counts.get(mode) ?? 0) > 0, `Missing real execution effect evidence for ${mode}`);
 console.log("Curve cached real execution effects + current action calldata parity PASS", Object.fromEntries(counts));
+
+function assertPoolEffect(delta: { token: string; delta: string }, expected: bigint, mode: CurvePlainMode,
+  pool: string, logs: readonly { address: string; topics: string[]; data: string }[] | undefined): void {
+  if (BigInt(delta.delta) === expected) return;
+  assert.equal(mode, "exchange-uint");
+  assert.equal(delta.token.toLowerCase(), ADDR.WETH.toLowerCase());
+  assert.equal(BigInt(delta.delta), 0n);
+  const owned = (logs ?? []).filter(log => log.address.toLowerCase() === ADDR.WETH.toLowerCase() &&
+    log.topics.length === 2 && log.topics[1].toLowerCase() === ethers.zeroPadValue(pool, 32).toLowerCase());
+  let wrapped = 0n;
+  for (const log of owned) {
+    if (log.topics[0] === ethers.id("Deposit(address,uint256)")) wrapped += uint(log.data);
+    if (log.topics[0] === ethers.id("Withdrawal(address,uint256)")) wrapped -= uint(log.data);
+  }
+  assert.equal(wrapped, -expected, "pool WETH neutrality needs exact observed native conversion");
+}

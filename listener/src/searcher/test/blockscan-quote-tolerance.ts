@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StateBackend } from "../../shared/state/state-backend.js";
+import { resolveLiveBackrunSettings } from "../backrun-live-policy.js";
 import { resolveBlockScanSolverSearchConfig } from "../blockscan-solver-search-config.js";
 import {
   BlockScanFamilyAttributedError,
@@ -55,11 +56,11 @@ test("zero Family output never calls the downstream Family", async () => {
   ]), false, "a different upstream can still quote the same downstream edge");
 });
 
-for (const enabled of [false, true]) {
-  test(`quote tolerance ${enabled ? "on" : "off"} preserves nominal sizing and binds actual-input cases`, async () => {
-    const config = resolveBlockScanSolverSearchConfig({
-      SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED: enabled ? "1" : "0",
-    });
+for (const lane of ["blockscan", "backrun"] as const) for (const enabled of [false, true]) {
+  test(`${lane} tolerance ${enabled ? "on" : "off"} changes only minimum output, without extra quotes or flow queries`, async () => {
+    const config = lane === "blockscan"
+      ? resolveBlockScanSolverSearchConfig({ SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED: enabled ? "1" : "0" })
+      : resolveLiveBackrunSettings({ SEARCHER_BACKRUN_QUOTE_TOLERANCE_ENABLED: enabled ? "1" : "0" }).execution;
     const plan = makePlans(1)[0]!;
     const seen: bigint[] = [];
     const fixture = sharedSession([plan], {
@@ -77,22 +78,16 @@ for (const enabled of [false, true]) {
     assert.equal(propagated.rawOutputs[0], 20001n, "never rewrite the Family's raw quote/evidence");
     const root = await buildResolvedPlanFromPath(plan.tokenPath, plan.opportunity.startToken,
       10000n, propagated.amounts, EXECUTOR, noState, 1n, "morpho-flash",
-      propagated.rawOutputs, fixture.session, propagated.exactHandles, enabled ? { runtimeEvidence: [] } : undefined);
+      propagated.rawOutputs, fixture.session, propagated.exactHandles, config.quoteToleranceRawUnits);
     assert.equal(root.amount, 10000n);
     assert.equal(root.params.minProfit, 1n, "repayment/profit guard is unchanged");
-    if (enabled) {
-      const flow = root.children[0]!;
-      assert.equal(flow.adapterId, "actual-amount-flow");
-      assert.equal(flow.children[0]!.children[0]!.children[0]!.params.minAmountOut, 20000n);
-      const cases = flow.children[1]!.children;
-      assert.deepEqual(cases.map(c => c.amount), [20001n, 20000n]);
-      assert.deepEqual(cases.map(c => c.params.quotedAmountOut), [12000n, 12000n]);
-      assert.deepEqual(cases.map(c => c.children[0]!.amount), [20001n, 20000n]);
-      assert.equal(seen.at(-1), 20000n, "short input is separately quoted, never scaled");
-    } else {
-      assert.equal(root.children[0]!.params.minAmountOut, 20001n);
-      assert.equal(root.children[1]!.amount, 20001n);
-    }
+    assert.equal(root.children.length, plan.tokenPath.edges.length);
+    assert(root.children.every(n => n.adapterId !== "actual-amount-flow"));
+    assert.equal(root.children[0]!.params.minAmountOut, 20001n - config.quoteToleranceRawUnits);
+    assert.equal(root.children[1]!.params.minAmountOut, 12000n - config.quoteToleranceRawUnits);
+    assert.equal(root.children[1]!.amount, 20001n, "never force an under-spend or add an unquoted input");
+    assert.deepEqual(seen, [10000n, 20001n], "building tolerance must not issue alternative amount quotes");
+
   });
 }
 
@@ -151,7 +146,7 @@ test("legacy percentage validation remains fail-closed before any quote", async 
   assert.equal(fixture.stats.calls, 0);
 });
 
-test("actual-input cases retain finite Family approval bounds", async () => {
+test("minimum-output tolerance retains finite Family approval bounds", async () => {
   const plan = makePlans(1)[0]!;
   const fixture = sharedSession([plan], { toleranceRawUnits: 1n });
   const session = { ...fixture.session,
@@ -170,11 +165,36 @@ test("actual-input cases retain finite Family approval bounds", async () => {
   });
   const root = await buildResolvedPlanFromPath(plan.tokenPath, plan.opportunity.startToken,
     10000n, propagated.amounts, EXECUTOR, noState, 1n, "morpho-flash",
-    propagated.rawOutputs, session, propagated.exactHandles, { runtimeEvidence: [] });
-  assert.equal(root.children.length, 1, "finite approvals are not hoisted or widened");
-  for (const step of root.children[0]!.children) for (const branch of step.children) {
-    assert.equal(branch.children[0]!.adapterId, "erc20-approve");
-    assert.equal(branch.children[0]!.amount, branch.amount);
-    assert.equal(branch.children[0]!.params.amount, branch.amount);
+    propagated.rawOutputs, session, propagated.exactHandles, 1n);
+  assert.equal(root.children.length, 4, "one unchanged approval and action per leg");
+  for (let i = 0; i < plan.tokenPath.edges.length; i++) {
+    const approval = root.children[2 * i]!;
+    assert.equal(approval.adapterId, "erc20-approve");
+    assert.equal(approval.amount, propagated.amounts[i]);
+    assert.equal(approval.params.amount, propagated.amounts[i]);
   }
+});
+
+test("six hops use only six nominal exact handles, without tolerance branches", async () => {
+  const original = makePlans(1)[0]!;
+  const tokens = Array.from({ length: 6 }, (_, i) => `0x${(100 + i).toString(16).padStart(40, "0")}`);
+  const edges = tokens.map((tokenIn, i) => ({ ...original.tokenPath.edges[0]!,
+    tokenIn, tokenOut: tokens[(i + 1) % tokens.length]!,
+    target: `0x${(200 + i).toString(16).padStart(40, "0")}`,
+  }));
+  const plan = { ...original, tokenPath: { edges } };
+  const fixture = sharedSession([plan], { toleranceRawUnits: 1n,
+    async quote(input) { return input.amountIn * 3n; } });
+  const propagated = await propagateAmountsWithRawOutputs(plan.tokenPath, 10000n, noState, {
+    executor: EXECUTOR, strictSession: fixture.session, toleranceRawUnits: 1n,
+  });
+  const root = await buildResolvedPlanFromPath(plan.tokenPath, tokens[0]!, 10000n,
+    propagated.amounts, EXECUTOR, noState, 1n, "morpho-flash",
+    propagated.rawOutputs, fixture.session, propagated.exactHandles, 1n);
+  assert.equal(root.children.length, 6);
+  for (let i = 0; i < root.children.length; i++) {
+    assert.equal(root.children[i]!.amount, propagated.amounts[i]);
+    assert.equal(root.children[i]!.params.minAmountOut, propagated.amounts[i + 1]! - 1n);
+  }
+  assert.equal(fixture.stats.calls, 6, "no extra +/-1 branch queries");
 });

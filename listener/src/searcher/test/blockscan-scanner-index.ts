@@ -40,7 +40,8 @@ function inputFor(edges: TokenEdge[], seed = 1): Input {
     const mid = 1 + (((index * 17 + seed * 7) % 19) - 8) / 100;
     mids.set(blockScanEdgeKey(value), {
       kind: "test", pool: value.target, edges: [value], mid,
-      feeBps: index % 4, reserveA: 10_000n * UNIT,
+      quoteAmountIn: UNIT, quoteAmountOut: BigInt(Math.round(mid * 100)) * UNIT / 100n,
+      feeBps: 0, reserveA: 10_000n * UNIT,
       reserveB: BigInt(Math.round(mid * 10_000)) * UNIT, depthProxy: 10_000,
     });
   }
@@ -131,7 +132,7 @@ for (let seed = 0; seed < 12; seed++) {
   check({ ...input, routeEligible: path => !path.includes(edges[seed % edges.length]) });
   const mids = new Map(input.mids);
   const key = blockScanEdgeKey(edges[0]);
-  mids.set(key, { ...mids.get(key)!, mid: 1.5, feeBps: 37 });
+  mids.set(key, { ...mids.get(key)!, mid: 1.5, quoteAmountOut: 3n * UNIT / 2n });
   check({ ...input, sourceBlock: 101, mids });
   mids.delete(key);
   check({ ...input, sourceBlock: 102, mids });
@@ -143,9 +144,14 @@ const repeat = [edge(WETH, a, 401), edge(a, b, 402, true),
   edge(b, a, 403), edge(a, WETH, 404)];
 const repeatInput = inputFor(repeat.map(value => Object.freeze(value)));
 repeatInput.mids = new Map([...repeatInput.mids].map(([key, value]) =>
-  [key, { ...value, mid: 1.02 }]));
-assert(check(repeatInput).opportunities.some(route => route.seedEdges.length === 4),
-  "a non-funded repeated token enclosing a protocol leg remains admissible");
+  [key, { ...value, mid: 1.02, quoteAmountOut: 102n * UNIT / 100n }]));
+assert(!check(repeatInput).opportunities.some(route => route.seedEdges.length === 4),
+  "current paired DFS excludes repeated tokens even around a protocol leg");
+const simple = inputFor([edge(WETH, a, 411), edge(a, b, 412, true), edge(b, c, 413), edge(c, WETH, 414)]);
+simple.mids = new Map([...simple.mids].map(([key, value]) =>
+  [key, { ...value, mid: 1.02, quoteAmountOut: 102n * UNIT / 100n }]));
+assert(check(simple).opportunities.some(route => route.seedEdges.length === 4),
+  "simple protocol ring is a positive control for repeated-token exclusion");
 const swapOnly = inputFor(repeat.map(value => ({ ...value, slotKind: "swap",
   protocolAction: undefined, edgeKind: "swap" })));
 assert(!check(swapOnly).opportunities.some(route => route.seedEdges.length === 4));
@@ -201,7 +207,7 @@ try {
     assert.deepEqual(scan(input), expectedSparse);
     const allocated = denseAllocatedBytes - before;
     denseAllocationPerScan.push(allocated);
-    assert(allocated > 0);
+    // Zero dense allocation is valid for the paired DFS implementation.
     assert(allocated <= 8 * 1024 * 1024,
       `each scan must allocate at most 8 MiB dense, got ${allocated}`);
   }
@@ -221,9 +227,14 @@ for (let i = 0; i < 96; i++) {
     large.push(Object.freeze(edge(tokens[j], tokens[j + 1], 100_000 + i * 6 + j,
       j === 2)));
   }
+  // The production USD view requires a directed valuation path within 3 hops.
+  if (tokens.length > 4) large.push(Object.freeze(edge(tokens[2], WETH, 900_000 + i)));
 }
 const largeInput = inputFor(large);
 const expectedLarge = check(largeInput);
+assert(expectedLarge.opportunities.length > 0, "large equivalence must not compare two empty outputs");
+assert(expectedLarge.opportunities.some(route => route.seedEdges.length === 6),
+  "large graph must retain six-hop positive controls, not only shorter valuation spokes");
 const timings = { baseline: [] as number[], candidate: [] as number[] };
 const memoryBefore = process.memoryUsage();
 for (let round = 0; round < 12; round++) {

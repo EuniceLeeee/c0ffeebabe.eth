@@ -1,5 +1,5 @@
 import { buildBlockScanUsdView, usdViewStatistics, type BlockScanUsdView } from "../blockscan-usd-view.js";
-import { enumeratePairedDfs, enumeratePairedLayered, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
+import { DEFAULT_ALLOW_REPEATED_POOLS, enumeratePairedDfs, enumeratePairedLayered, resolvePairedEnumerationMethod, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
 import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "./detector.js";
 import { type TokenEdge, v4PoolId } from "../planner/token-graph.js";
@@ -12,6 +12,13 @@ import {
 
 export interface BlockScanCoreConfig {
   enumerationMethod?: PairedEnumerationMethod;
+  /** Merge different execution starts of one directed cycle; defaults to false. */
+  deduplicateRotations?: boolean;
+  /** Allow a logical pool/instance on multiple legs; final sim remains mandatory. */
+  allowRepeatedPools?: boolean;
+  /** Optional reference-value floor on prefixes from the signal anchor. */
+  prefixPruningEnabled?: boolean;
+  maxPrefixDrawdownBps?: number;
   /** Maximum compatible buy/sell signal pairs per token; defaults to 20. */
   usdSignalPairsPerToken?: number;
   maxHops: number;
@@ -152,6 +159,7 @@ export type ResolvedRingScoreDiagnosis =
 type VenueMid = ResolvedBlockScanMid;
 
 interface RankedOpportunity {
+  key: string;
   opportunity: BlockScanOpportunity;
   rank: number;
   estSpreadBps: number;
@@ -173,15 +181,19 @@ export function scanBlockStateFromResolvedMids(input: {
   const eligibleEdges = input.edges.filter(edge => isBlockScanConversionEdge(edge) &&
     (!input.edgeEligible || input.edgeEligible(edge)));
   const edgesById = new Map(eligibleEdges.map(edge => [blockScanEdgeKey(edge), edge]));
-  const view = input.usdView ?? buildBlockScanUsdView(eligibleEdges, input.mids, input.cfg.usdSignalPairsPerToken);
+  const allowRepeatedPools = input.cfg.allowRepeatedPools ?? DEFAULT_ALLOW_REPEATED_POOLS;
+  const view = input.usdView?.allowRepeatedPools === allowRepeatedPools ? input.usdView
+    : buildBlockScanUsdView(eligibleEdges, input.mids, input.cfg.usdSignalPairsPerToken, allowRepeatedPools);
   const quotes = view.quotes.filter(q => edgesById.has(q.id));
   const ranked = new Map<string, RankedOpportunity>();
   let capitalRejected = 0;
   const preprocessingFinished = Date.now();
-  const method = input.cfg.enumerationMethod ?? "dfs";
+  const method = input.cfg.enumerationMethod ?? resolvePairedEnumerationMethod();
   const dfs = (method === "layered" ? enumeratePairedLayered : enumeratePairedDfs)({
     quotes, signals: view.signals, minSpreadBps: input.cfg.minSpreadBps,
-    maxHops: input.cfg.maxHops, deadlineAtMs,
+    maxHops: input.cfg.maxHops, deadlineAtMs, allowRepeatedPools,
+    prefixPruningEnabled: input.cfg.prefixPruningEnabled,
+    maxPrefixDrawdownBps: input.cfg.maxPrefixDrawdownBps,
     funding: [...input.cfg.pricedTokens].filter(([, value]) => value.maxBorrow > 0n).map(([token]) => token),
     onCycle(path, estSpreadBps) {
       const seedEdges = path.map(q => edgesById.get(q.id)!);
@@ -207,15 +219,15 @@ export function scanBlockStateFromResolvedMids(input: {
         leavesStandingPosition: pathLeavesStandingPosition(seedEdges), affectedPools: uniqueLowercase(seedEdges.map(edgeVenueIdentity)),
         affectedTokens: canonicalRing,
       };
-      const key = directedRouteFingerprint(seedEdges);
-      const entry = { opportunity, rank: expectedReturnRank(estSpreadBps, searchCenter, maxBorrow), estSpreadBps };
+      const key = directedRouteFingerprint(seedEdges, input.cfg.deduplicateRotations === true);
+      const entry = { key, opportunity, rank: expectedReturnRank(estSpreadBps, searchCenter, maxBorrow), estSpreadBps };
       const previous = ranked.get(key);
       if (!previous || entry.rank > previous.rank) ranked.set(key, entry);
     },
   });
   const finalizing = Date.now();
   const ordered = [...ranked.values()].sort((a, b) => b.rank - a.rank ||
-    directedRouteFingerprint(a.opportunity.seedEdges).localeCompare(directedRouteFingerprint(b.opportunity.seedEdges)));
+    a.key.localeCompare(b.key));
   const opportunities = ordered.slice(0, input.cfg.maxCandidates).map(entry => entry.opportunity);
   const result: BlockScanOutcome = {
     outcome: dfs.deadlineHit ? "budget_exceeded" : "ran", stateBlock: input.sourceBlock,
@@ -528,7 +540,7 @@ function uniqueLowercase(values: string[]): string[] {
   return out;
 }
 
-function directedRouteFingerprint(edges: TokenEdge[]): string {
+function directedRouteFingerprint(edges: TokenEdge[], deduplicateRotations: boolean): string {
   const parts = edges.map((edge) => {
     const legacy =
       `${edge.adapterId.toLowerCase()}|${edgeVenueIdentity(edge)}|` +
@@ -539,7 +551,9 @@ function directedRouteFingerprint(edges: TokenEdge[]): string {
       ? legacy
       : `${legacy}|${edgeInstanceKey(edge)}|${bindingHash}`;
   });
-  if (parts.length <= 1) return parts.join(";");
+  // Ordered identity still suppresses exact duplicates without conflating
+  // funding starts, which can have different availability and amount quotes.
+  if (!deduplicateRotations || parts.length <= 1) return parts.join(";");
   let canonical = parts.join(";");
   for (let i = 1; i < parts.length; i++) {
     const rotated = [...parts.slice(i), ...parts.slice(0, i)].join(";");

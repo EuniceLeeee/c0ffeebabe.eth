@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { erc4626SiloRedeemCapture } from "../protocols/erc4626-silo-redeem-family/capture.js";
 import { erc4626SiloRedeemFamilyOwnedAction } from "../protocols/erc4626-silo-redeem-family/action.js";
@@ -10,6 +11,8 @@ import { erc4626SiloRedeemFamilyManifest } from "../protocols/erc4626-silo-redee
 import { erc4626SiloRedeemPricing } from "../protocols/erc4626-silo-redeem-family/pricing.js";
 import { erc4626SiloRedeemProtocol } from "../protocols/erc4626-silo-redeem-family/protocol.js";
 import { erc4626SiloRedeemRoutes } from "../protocols/erc4626-silo-redeem-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ERC4626_SILO_REDEEM_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: erc4626SiloRedeemFamilyManifest,

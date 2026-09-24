@@ -25,6 +25,7 @@ import {
   type DiscoverySemantics,
   type ExactMethod,
   type ExactQuoteInput,
+  type ExactQuotePrefixStep,
   type ExactRequestProgram,
   type ExactQuoteResult,
   type ExpectedEffect,
@@ -334,6 +335,7 @@ interface SealedFamilyExactQuoteHandleRecord {
   readonly runtimeEvidenceFingerprint: string;
   readonly source: CanonicalSource;
   readonly generation: number;
+  readonly prefix: readonly SealedFamilyExactQuoteHandle[];
 }
 
 const issuedFamilyRouteRuntimeHandles = new WeakMap<
@@ -1134,6 +1136,7 @@ export interface FamilyExactQuoteInvocation {
   readonly maxDependentReadRounds?: number;
   /** Reuse the existing quote program, without accepting local amount models. */
   readonly requireChainAmountQuote?: boolean;
+  readonly prefix?: readonly SealedFamilyExactQuoteHandle[];
 }
 
 interface ResolvedFamilyExactQuoteInvocation
@@ -1231,6 +1234,8 @@ export interface FamilyAmountQuoteReuseContext {
 export function describeFamilyAmountQuoteReuse(
   input: FamilyExactQuoteInvocation,
 ): FamilyAmountQuoteReuseContext | null {
+  // Cross-source amount reuse cannot represent a trial's mutated prefix state.
+  if (input.prefix?.length) return null;
   try {
     assertAdapterWorkControl(input.control);
     const routeRecord = resolveFamilyRouteRuntimeHandle(input.family, input.route);
@@ -1287,10 +1292,12 @@ let nextAmountQuoteFamilyIdentity = 0;
 function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation) {
   assertIssuedLoadedFamilyBox(invocation.family);
   assertExactInvocation(invocation);
+  const prefix = resolveExactPrefix(invocation);
   const programInput: RuntimeExactQuoteInput = Object.freeze({
     descriptor: invocation.instance.descriptor, route: invocation.route,
     amountIn: invocation.amountIn, source: invocation.source,
     executor: invocation.executor.toLowerCase(), runtimeEvidence: invocation.runtimeEvidence,
+    ...(prefix.length === 0 ? {} : { prefix }),
     ...(invocation.callerContext.transactionOrigin === undefined ? {} : {
       transactionOrigin: invocation.callerContext.transactionOrigin,
     }),
@@ -1303,6 +1310,8 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
       methodIndex, methodId: method.id, kind: method.kind,
       ...(method.kind === "request-program" && method.chainAmountQuote === true
         ? { chainAmountQuote: true } : {}),
+      ...(method.kind === "request-program" && method.sequentialPrefix === true
+        ? { sequentialPrefix: true } : {}),
       ...(method.kind === "request-program" && method.stateOnlyReads === true
         ? { stateOnlyReads: true } : {}),
       ...(method.kind === "request-program" && method.reusePolicy !== undefined
@@ -1318,9 +1327,42 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
     executor: programInput.executor,
     transactionOrigin: programInput.transactionOrigin ?? null,
     runtimeEvidence: runtimeEvidenceProjection(programInput.runtimeEvidence),
+    ...(prefix.length === 0 ? {} : { prefix: invocation.prefix!.map(handle => ({
+      familyId: handle.familyId, routeKey: handle.routeKey, amountIn: handle.amountIn,
+      amountOut: handle.amountOut, compatibility: handle.cacheCompatibilityFingerprint,
+      evidenceRefs: handle.evidenceRefs,
+    })) }),
   });
   invocation.callerContext.assertCurrent();
   return { programInput, methods, methodOrderFingerprint, compatibilityFingerprint, maxDependentReadRounds };
+}
+
+function resolveExactPrefix(invocation: ResolvedFamilyExactQuoteInvocation): readonly ExactQuotePrefixStep[] {
+  const handles = invocation.prefix ?? [];
+  const steps: ExactQuotePrefixStep[] = [];
+  for (let i = 0; i < handles.length; i++) {
+    const handle = handles[i]!;
+    const record = issuedSealedFamilyExactQuoteHandles.get(handle);
+    if (!record) throw new Error("exact prefix requires issued handles");
+    resolveSealedFamilyExactQuoteHandle(record.family, handle);
+    record.callerContext.assertCurrent();
+    if (!sameCanonicalSource(record.source, invocation.source) || record.generation !== invocation.generation ||
+        record.executor !== invocation.executor.toLowerCase() ||
+        record.callerContext.transactionOrigin !== invocation.callerContext.transactionOrigin ||
+        record.prefix.length !== i || record.prefix.some((prior, j) => prior !== handles[j])) {
+      throw new Error("exact prefix escaped trial/source/caller or ordering");
+    }
+    const step = Object.freeze({ descriptor: record.routeRecord.instance.descriptor,
+      route: record.routeRecord.route, amountIn: record.amountIn, amountOut: record.amountOut });
+    const previous = steps.at(-1);
+    if (previous && (previous.route.tokenOut.toLowerCase() !== step.route.tokenIn.toLowerCase() ||
+        previous.amountOut !== step.amountIn)) throw new Error("exact prefix amount/token chain diverged");
+    steps.push(step);
+  }
+  const last = steps.at(-1);
+  if (last && (last.route.tokenOut.toLowerCase() !== invocation.route.tokenIn.toLowerCase() ||
+      last.amountOut !== invocation.amountIn)) throw new Error("exact prefix does not supply current input");
+  return Object.freeze(steps);
 }
 
 /** S3 exact quote boundary. Request-bearing quotes always enter central work. */
@@ -1336,6 +1378,7 @@ export async function executeFamilyExactQuote(
     source: snapshotCanonicalSource(input.source),
     generation: input.generation,
     runtime: input.runtime,
+    ...(input.prefix === undefined ? {} : { prefix: Object.freeze([...input.prefix]) }),
     ...(input.control === undefined ? {} : { control: input.control }),
     ...(input.maxDependentReadRounds === undefined
       ? {}
@@ -1384,6 +1427,8 @@ export async function executeFamilyExactQuote(
   const stopped = exactControlFailure(invocation, evidenceRefs);
   if (stopped !== null) return stopped;
   for (const [methodIndex, method] of methods.entries()) {
+    if (programInput.prefix?.length &&
+        (method.kind !== "request-program" || method.sequentialPrefix !== true)) continue;
     if (invocation.requireChainAmountQuote === true &&
         (method.kind !== "request-program" || method.chainAmountQuote !== true)) continue;
     const methodRef = exactMethodEvidenceRef(
@@ -1458,7 +1503,7 @@ export async function executeFamilyExactQuote(
   return terminalExact(
     invocation,
     "failed",
-    invocation.requireChainAmountQuote === true
+    programInput.prefix?.length ? "exact-sequential-prefix-unsupported" : invocation.requireChainAmountQuote === true
       ? "exact-chain-amount-quote-unavailable" : "exact-no-method-applies",
     evidenceRefs,
   );
@@ -1990,6 +2035,10 @@ function declareExactMethods(value: unknown): readonly RuntimeExactMethod[] {
       return method as RuntimeExactMethod;
     }
     if (method.kind === "request-program") {
+      if (method.sequentialPrefix !== undefined &&
+          (method.sequentialPrefix !== true || method.stateOnlyReads === true || method.reusePolicy !== undefined)) {
+        throw new Error(`request exact method ${id} has invalid sequential declaration`);
+      }
       if (method.chainAmountQuote !== undefined && method.chainAmountQuote !== true) {
         throw new Error(`request exact method ${id} has invalid chain amount declaration`);
       }
@@ -2265,6 +2314,7 @@ function resolvedExactQuote(input: {
     runtimeEvidenceFingerprint,
     source,
     generation: invocation.generation,
+    prefix: Object.freeze([...(invocation.prefix ?? [])]),
   });
   try { invocation.callerContext.assertCurrent(); } catch (error) {
     return terminalExact(invocation, "unresolved", errorMessage(error), input.evidenceRefs);

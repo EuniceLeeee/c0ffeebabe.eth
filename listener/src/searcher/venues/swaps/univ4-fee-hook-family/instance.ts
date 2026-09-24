@@ -3,7 +3,6 @@ import { instanceKey } from "../../adapter-family-identifiers.js";
 import { graphCurrency } from "../univ4-family/codec.js";
 import { uniV4StaticBindingProjection } from "../univ4-family/binding.js";
 import {
-  UNIV4_FEE_HOOK_ADDRESS,
   UNIV4_FEE_HOOK_LINEAGE_ID,
 } from "./manifest.js";
 import type { FeeHookDescriptor, FeeHookIdentity } from "./types.js";
@@ -26,7 +25,7 @@ export const univ4FeeHookInstance = {
         freshness: "pinned-block" as const,
       }, {
         kind: "extension-policy" as const,
-        mode: "proven-transparent" as const,
+        mode: identity.facts.hookModel === "sat1" ? "quote-and-final-sim" as const : "proven-transparent" as const,
         extensionBinding: identity.facts.poolKey.hooks,
       }],
       poolId: identity.facts.poolId,
@@ -35,7 +34,8 @@ export const univ4FeeHookInstance = {
       graphToken1,
       managerBinding: identity.facts.managerBinding,
       hookPolicy: "fee-hook" as const,
-      hook: UNIV4_FEE_HOOK_ADDRESS,
+      hook: identity.facts.poolKey.hooks,
+      ...(identity.facts.hookModel === "sat1" ? { hookModel: "sat1" as const } : {}),
     };
   },
   finalizeDescriptor({ draft }) {
@@ -47,5 +47,5 @@ export const univ4FeeHookInstance = {
       managerBinding: Object.freeze({ ...draft.managerBinding }),
     });
   },
-  staticBindingProjection: uniV4StaticBindingProjection,
+  staticBindingProjection: descriptor => ({ base: uniV4StaticBindingProjection(descriptor), hookModel: descriptor.hookModel ?? "fee" }),
 } satisfies InstanceSemantics<FeeHookIdentity, FeeHookDescriptor>;

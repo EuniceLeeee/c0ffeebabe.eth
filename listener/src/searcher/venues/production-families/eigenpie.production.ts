@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { eigenpieCapture } from "../protocols/eigenpie-family/capture.js";
 import { eigenpieFamilyOwnedAction } from
@@ -16,6 +17,8 @@ import { eigenpieFamilyManifest } from
 import { eigenpiePricing } from "../protocols/eigenpie-family/pricing.js";
 import { eigenpieProtocol } from "../protocols/eigenpie-family/protocol.js";
 import { eigenpieRoutes } from "../protocols/eigenpie-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_EIGENPIE_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: eigenpieFamilyManifest,

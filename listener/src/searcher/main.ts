@@ -14,7 +14,8 @@ import {
 } from "../shared/executor/botvm-executor.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
 import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
-import { resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
+import { resolveAllowRepeatedPools, resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
+import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "./blockscan-enumeration-config.js";
 import {
   awaitBlockScanDeadline,
   BlockScanPassDeadlineError,
@@ -53,8 +54,10 @@ import {
   productionFamilyStartupManifest,
 } from "./production-family-startup-manifest.js";
 import {
+  PRODUCTION_FAMILY_ACTIVATIONS,
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "./venues/production-family-composition.js";
+import { assertFamilyActivationEnvironment } from "./venues/production-families/activation.js";
 import {
   PRODUCTION_STRICT_VERIFIED_ACTORS,
 } from "./venues/production-verified-actors.js";
@@ -62,6 +65,10 @@ import { createBundleRouter } from "./execution/bundle-router.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
 import { TemplatePlanner } from "./planner/planner.js";
+import { resolveBackrunExecutionSource, assertBackrunSourceSimulation,
+  type HistoricalBackrunMode } from "./backrun-execution-source.js";
+import { createLiveBackrunPlanner, resolveLiveBackrunSettings } from "./backrun-live-policy.js";
+import { runBackrunCandidatePipeline } from "./backrun-candidate-pipeline.js";
 import {
   buildTokenIndex,
   type PoolEntry,
@@ -78,6 +85,7 @@ import { UniverseRebuildCheckpointStore } from
   "./universe-rebuild-checkpoint.js";
 import {
   UniverseRunIncomplete,
+  assertReadyFamilyActivation,
   rebuildUniverse,
   refreshReadyInstances,
 } from "./universe-rebuild-runner.js";
@@ -153,6 +161,7 @@ import {
   BufferedBlockScanBackrunStatePublisher,
 } from "./blockscan-backrun-state-bridge.js";
 import { JsonRpcBlockScanStateReadBackend } from "./blockscan-state-read-backend.js";
+import { blockScanEdgeKey } from "./venues/blockscan-state-capability.js";
 import { LiveRethReadPriority } from "./live-reth-read-priority.js";
 import {
   StrictCurrentRuntimeCoordinator,
@@ -225,7 +234,7 @@ import {
   victimUsesLocalCacheApply,
 } from "./venues/victim-runtime-policy.js";
 import type { OrderflowEvent } from "./orderflow/manual-source.js";
-import type { SwapEventLog } from "./venues/swap-observation.js";
+import type { SwapEventLog, SwapObservationBindingResolver } from "./venues/swap-observation.js";
 import type { BundleRouter, BundleSubmission } from "./execution/bundle-router.js";
 import {
   createVictimSourceGeneration,
@@ -269,7 +278,9 @@ import {
 } from "./blind-production-runtime.js";
 
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
-const DEFAULT_BLOCKSCAN_MAX_HOPS = 6;
+const DEFAULT_BLOCKSCAN_MAX_HOPS = BLOCKSCAN_ENUMERATION_DEFAULTS.maxHops;
+const DEFAULT_BLOCKSCAN_CANDIDATES = BLOCKSCAN_ENUMERATION_DEFAULTS.maxCandidates;
+const DEFAULT_BLOCKSCAN_REFINE_CANDIDATES = BLOCKSCAN_ENUMERATION_DEFAULTS.refineCandidates;
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
@@ -309,6 +320,7 @@ interface LiveConfig {
   enableHashOnly: boolean;
   forkRefreshBlocks: number;
   solverDeadlineMs: number;
+  solverQuoteConcurrency: number;
   oppTtlMs: number;
   planBudgetMs: number;
   oppMinSliceMs: number;
@@ -321,6 +333,7 @@ interface LiveConfig {
    *  starving later candidates/opps into `expired-before-solver`. */
   maxCandidatesPerOpp: number;
   quoteSafetyBps: bigint;
+  quoteToleranceRawUnits: bigint;
   /** Near-miss admission floor in bps of the flash amount (magnitude; 20 = -20bps).
    *  Lets the solver sim near-break-even quotes; in DRY-RUN only it also lets the
    *  pipeline emit a recorded (never broadcast) bundle. 0 = strictly positive. */
@@ -645,9 +658,29 @@ function parseAddressList(value: string | undefined): string[] {
 
 export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env, maxHops = Number(env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS)): BlockScanCoreConfig {
   const blockScanMaxHops = maxHops;
-  const blockScanMinSpreadBps = Number(env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "100");
+  const blockScanMinSpreadBps = Number(env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? BLOCKSCAN_ENUMERATION_DEFAULTS.minSpreadBps);
+  const deduplicateRotations = env.SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED ??
+    (BLOCKSCAN_ENUMERATION_DEFAULTS.deduplicateRotations ? "1" : "0");
+  if (deduplicateRotations !== "0" && deduplicateRotations !== "1") {
+    throw new Error("SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED must be 0 or 1");
+  }
+  const prefixPruning = env.SEARCHER_BLOCKSCAN_PREFIX_PRUNING_ENABLED ??
+    (BLOCKSCAN_ENUMERATION_DEFAULTS.prefixPruningEnabled ? "1" : "0");
+  if (prefixPruning !== "0" && prefixPruning !== "1") {
+    throw new Error("SEARCHER_BLOCKSCAN_PREFIX_PRUNING_ENABLED must be 0 or 1");
+  }
+  const rawDrawdown = env.SEARCHER_BLOCKSCAN_MAX_PREFIX_DRAWDOWN_BPS;
+  const maxPrefixDrawdownBps = Number(rawDrawdown ?? BLOCKSCAN_ENUMERATION_DEFAULTS.maxPrefixDrawdownBps);
+  if ((rawDrawdown !== undefined && !/^\d+$/.test(rawDrawdown)) ||
+      !Number.isSafeInteger(maxPrefixDrawdownBps) || maxPrefixDrawdownBps < 0 || maxPrefixDrawdownBps > 10_000) {
+    throw new Error("SEARCHER_BLOCKSCAN_MAX_PREFIX_DRAWDOWN_BPS must be an integer from 0 to 10000");
+  }
   return {
         maxHops: blockScanMaxHops,
+        deduplicateRotations: deduplicateRotations === "1",
+        allowRepeatedPools: resolveAllowRepeatedPools(env.SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED),
+        prefixPruningEnabled: prefixPruning === "1",
+        maxPrefixDrawdownBps,
         enumerationMethod: resolvePairedEnumerationMethod(env.SEARCHER_BLOCKSCAN_ENUMERATION_METHOD),
         usdSignalPairsPerToken: resolveUsdSignalPairsPerToken(env.SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN),
         minSpreadBps: blockScanMinSpreadBps,
@@ -658,15 +691,21 @@ export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env,
          */
         exactAdmissionSpreadBps: Number(
           env.SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS ??
-            "50",
+            BLOCKSCAN_ENUMERATION_DEFAULTS.exactAdmissionSpreadBps,
         ),
         minCapitalFraction: Number(
-          env.SEARCHER_BLOCKSCAN_MIN_CAPITAL_FRACTION ?? "0.001",
+          env.SEARCHER_BLOCKSCAN_MIN_CAPITAL_FRACTION ?? BLOCKSCAN_ENUMERATION_DEFAULTS.minCapitalFraction,
         ),
-        maxCandidates: Number(env.SEARCHER_BLOCKSCAN_MAX_CANDIDATES ?? "100"),
-        budgetMs: Number(env.SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS ?? "1500"),
+        maxCandidates: Number(env.SEARCHER_BLOCKSCAN_MAX_CANDIDATES ?? DEFAULT_BLOCKSCAN_CANDIDATES),
+        budgetMs: Number(env.SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS ?? BLOCKSCAN_ENUMERATION_DEFAULTS.budgetMs),
         pricedTokens: buildBlockScanPricedTokens(),
       };
+}
+
+/** Coarse enumeration cap, shared by live and historical entry points. */
+export function resolveBlockScanRefineCandidates(env: NodeJS.ProcessEnv = process.env, maxCandidates = 0): number {
+  const requested = Number(env.SEARCHER_BLOCKSCAN_REFINE_CANDIDATES ?? DEFAULT_BLOCKSCAN_REFINE_CANDIDATES);
+  return Math.max(maxCandidates, Number.isFinite(requested) ? Math.floor(requested) : DEFAULT_BLOCKSCAN_REFINE_CANDIDATES);
 }
 
 export type BlockScanAtomicPolicy = Pick<LiveConfig,
@@ -711,14 +750,14 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     );
   }
   const dryRun = process.env.SEARCHER_DRY_RUN === "1";
-  const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
+  const backrunSettings = resolveLiveBackrunSettings();
+  const maxHops = backrunSettings.planner.maxHops;
   const finalVerifyMaxHops = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1"
     ? Math.max(
         maxHops,
         Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS),
       )
     : maxHops;
-  const quoteSafetyBps = BigInt(process.env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999");
   const forceIncludePoolIdsPath =
     process.env.SEARCHER_FORCE_INCLUDE_POOLIDS_PATH ?? DEFAULT_FORCE_INCLUDE_POOLIDS_PATH;
   const envForceInclude = parseAddressList(process.env.SEARCHER_POOL_UNIVERSE_FORCE_INCLUDE);
@@ -746,24 +785,11 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     liveBackend: parseLiveBackendKind(process.env.SEARCHER_LIVE_BACKEND ?? "rpc"),
     botvmAddress: ethers.getAddress(botvmAddress),
     wallet,
-    minProfit: BigInt(process.env.SEARCHER_MIN_PROFIT_RAW ?? "1"),
+    ...backrunSettings.execution,
     defaultGasUsed: Number(process.env.SEARCHER_BACKRUN_GAS_USED ?? "12000000"),
     ...resolveBlockScanAtomicPolicy(process.env, finalVerifyMaxHops),
     enableHashOnly: process.env.SEARCHER_ENABLE_HASH_ONLY === "1",
     maxHints: Number(process.env.SEARCHER_MAX_HINTS ?? "0"),
-    forkRefreshBlocks: Number(process.env.SEARCHER_FORK_REFRESH_BLOCKS ?? "5"),
-    solverDeadlineMs: Number(process.env.SEARCHER_SOLVER_DEADLINE_MS ?? "8000"),
-    oppTtlMs: Number(process.env.SEARCHER_OPP_TTL_MS ?? "5000"),
-    planBudgetMs: Number(process.env.SEARCHER_PLAN_BUDGET_MS ?? "300"),
-    oppMinSliceMs: Number(process.env.SEARCHER_OPP_MIN_SLICE_MS ?? "500"),
-    gssMaxTries: Number(process.env.SEARCHER_GSS_MAX_TRIES ?? "12"),
-    finalSimTopN: Number(process.env.SEARCHER_FINAL_SIM_TOP_N ?? "3"),
-    maxCandidatesPerOpp: Number(process.env.SEARCHER_MAX_CANDIDATES_PER_OPP ?? "6"),
-    quoteSafetyBps,
-    quoteProfitFloorBps: BigInt(
-      process.env.SEARCHER_QUOTE_PROFIT_FLOOR_BPS ?? (dryRun ? "20" : "0"),
-    ),
-    revmPrewarmRouteHops: Number(process.env.SEARCHER_REVM_PREWARM_ROUTE_HOPS ?? "0"),
     stateUpdaterEnabled: process.env.SEARCHER_STATE_UPDATER_ENABLED !== "0",
     statePinnedK: Number(process.env.SEARCHER_STATE_PINNED_K ?? "8"),
     stateRecentK: Number(process.env.SEARCHER_STATE_RECENT_K ?? "24"),
@@ -778,8 +804,6 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     poolUniverseHighSpreadMinFee: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_MIN_FEE ?? "10000"),
     recordLiveFixtures: process.env.SEARCHER_RECORD_LIVE_FIXTURES === "1",
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
-    allowHashOnlySubmit: process.env.SEARCHER_ALLOW_HASHONLY_SUBMIT === "1",
-    allowHashOnlyMevShareSubmit: process.env.SEARCHER_SUBMIT_HASHONLY_MEVSHARE === "1",
     victimSourceFilter: {
       enabled: process.env.SEARCHER_VICTIM_SOURCE_FILTER !== "0",
       minStreak: Number(process.env.SEARCHER_VICTIM_SOURCE_MIN_STREAK ?? "3"),
@@ -1087,7 +1111,7 @@ export function createBlockScanPriceRuntime(input: {
       blockScanRouteTelemetry.recordPricing(publication);
       if (blockScanCfg !== undefined && publication.snapshot.effectiveMids?.complete) {
         const start = Date.now();
-        const { view } = effectiveUsdPricing(publication.snapshot, blockScanCfg.usdSignalPairsPerToken);
+        const { view } = effectiveUsdPricing(publication.snapshot, blockScanCfg.usdSignalPairsPerToken, blockScanCfg.allowRepeatedPools);
         console.log(`[searcher/effective-usd-view] ${JSON.stringify({
           sourceBlock: publication.snapshot.sourceBlock,
           sourceBlockHash: publication.snapshot.sourceBlockHash,
@@ -1111,7 +1135,7 @@ export function createBlockScanPriceRuntime(input: {
           onSourceUnavailable: (error) => controller.abort(error),
           onRpcThrottle: (error) => blockScanRuntimeAbort.abort(error),
           scopeLabel: "effective mid", allowSingleCallFallback: false,
-          maxBatchSize: 128, maxConcurrentBatches: 4,
+          maxBatchSize: 64, maxConcurrentBatches: 8,
           retryRpcThrottle: true,
           transportScheduler: blockScanRethTransportScheduler },
       ) : undefined;
@@ -1131,10 +1155,26 @@ export function createBlockScanPriceRuntime(input: {
           },
           quote: async (request) => {
             if (!session) throw new Error("effective quote session was not prepared");
-            const quote = await session.issueExact({ ...request,
-              executor: config.botvmAddress, runtimeEvidence: [] });
-            if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
-            return quote;
+            const startedAtMs = Date.now();
+            let status = "failed";
+            try {
+              const quote = await session.issueExact({ ...request,
+                executor: config.botvmAddress, runtimeEvidence: [] });
+              if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
+              status = "returned";
+              return quote;
+            } finally {
+              try {
+                if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1" && reuse?.previous !== undefined) {
+                  console.log(`[searcher/effective-quote-timing] ${JSON.stringify({
+                    sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
+                    edgeId: blockScanEdgeKey(request.edge), adapterId: request.edge.adapterId,
+                    startedAtMs, wallMs: Date.now() - startedAtMs, status,
+                    aborted: effectiveControl.signal.aborted,
+                  })}`);
+                }
+              } catch { /* Diagnostics cannot change a quote result or cancellation. */ }
+            }
           },
         });
         console.log(`[searcher/effective-mid] ${JSON.stringify({
@@ -1172,6 +1212,7 @@ async function main(): Promise<void> {
       );
     }
   }
+  assertFamilyActivationEnvironment(PRODUCTION_FAMILY_ACTIVATIONS);
   const blindProductionAudit = blindAuditProcessValue === "1";
   const blindUseIncumbentReadyValue =
     process.env.SEARCHER_BLIND_USE_INCUMBENT_READY;
@@ -1276,13 +1317,9 @@ async function main(): Promise<void> {
   }
   const detector = new BackrunDetector();
   const profitTokenValuation = createProfitTokenValuation();
-  const planner = new TemplatePlanner();
+  const planner = createLiveBackrunPlanner();
   planner.setProfitTokenValuation(profitTokenValuation);
-  const maxCandidates = Number(process.env.SEARCHER_MAX_CANDIDATES ?? "20");
-  planner.setMaxCandidates(maxCandidates);
-  const maxHops = Number(process.env.SEARCHER_MAX_HOPS ?? "3");
-  const maxPoolsPerToken = Number(process.env.SEARCHER_MAX_POOLS_PER_TOKEN ?? "8");
-  const maxRotationsPerPath = Number(process.env.SEARCHER_MAX_ROTATIONS_PER_PATH ?? "3");
+  const { maxCandidates, maxHops, maxPoolsPerToken, maxRotationsPerPath } = resolveLiveBackrunSettings().planner;
   const blockScanMaxHops = Number(
     process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS,
   );
@@ -1317,12 +1354,9 @@ async function main(): Promise<void> {
     );
   }
   const blockScanMinSpreadBps = Number(
-    process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? "100",
+    process.env.SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS ?? BLOCKSCAN_ENUMERATION_DEFAULTS.minSpreadBps,
   );
   const blockScanCfg = enableBlockScan ? resolveBlockScanCoreConfig(process.env, blockScanMaxHops) : undefined;
-  planner.setMaxHops(maxHops);
-  planner.setMaxPoolsPerToken(maxPoolsPerToken);
-  planner.setMaxRotationsPerPath(maxRotationsPerPath);
   let blockScanPlanner: TemplatePlanner | undefined;
   let currentRuntimeCoordinator: StrictCurrentRuntimeCoordinator | undefined;
   const liveRethReadPriority = new LiveRethReadPriority();
@@ -1432,12 +1466,7 @@ async function main(): Promise<void> {
   if (enableBlockScan) {
     console.log(`[searcher/live] block-scan final simulation method=${blockScanFinalSimulationMethod} slots=${blockScanFinalSimulationConcurrency}`);
   }
-  const blockScanRefineCandidatesRaw = Number(
-    process.env.SEARCHER_BLOCKSCAN_REFINE_CANDIDATES ?? "512",
-  );
-  const blockScanRefineCandidates = Number.isFinite(blockScanRefineCandidatesRaw)
-    ? Math.max(blockScanCfg?.maxCandidates ?? 0, Math.floor(blockScanRefineCandidatesRaw))
-    : 512;
+  const blockScanRefineCandidates = resolveBlockScanRefineCandidates(process.env, blockScanCfg?.maxCandidates ?? 0);
   const blockScanExactRefineHardBudgetRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_EXACT_REFINE_HARD_BUDGET_MS ?? "4000",
   );
@@ -1640,6 +1669,7 @@ async function main(): Promise<void> {
   });
 
   console.log("[searcher/live] starting V5 searcher");
+  console.log("[searcher/live] family activation " + JSON.stringify(PRODUCTION_FAMILY_ACTIVATIONS));
   try {
     const startupManifest = productionFamilyStartupManifest();
     console.log(
@@ -1788,6 +1818,7 @@ async function main(): Promise<void> {
   );
   console.log(
     `[searcher/live] quoteSafetyBps=${config.quoteSafetyBps} ` +
+      `quoteToleranceRawUnits=${config.quoteToleranceRawUnits} ` +
       `quoteProfitFloorBps=${config.quoteProfitFloorBps} ` +
       `finalVerifyFloorBps=${config.finalVerifyFloorBps}`,
   );
@@ -1989,6 +2020,7 @@ async function main(): Promise<void> {
       seenReadyInstances.add(memo.familyInstanceKey);
       return true;
     });
+  assertReadyFamilyActivation(activeReadyMemos, rebuildWiring.isFamilyEnabled);
   const routeReadyMemos = activeReadyMemos.filter((memo) =>
     PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
       .forStrictFamily(memo.familyId as never).plugin.manifest.domain !==
@@ -2166,6 +2198,7 @@ async function main(): Promise<void> {
   detector.setGraph(graph);
   detector.setPoolAddressMap(allPoolMap);
   detector.setTokenQuery(mainnetBackend);
+  detector.setSwapObservationBindingResolver(strictRuntimeRoot.resolveSwapObservationBinding);
   planner.setGraph(graph);
 
   // Funding tokens are a second Ready projection of the same two-day strict
@@ -3105,6 +3138,10 @@ async function main(): Promise<void> {
 }
 
 interface HandleCtx {
+  /** Explicit historical input only; never submit a materialized past source. */
+  historicalExecutionMode?: HistoricalBackrunMode;
+  onHistoricalEv?: (input: { evaluation: Awaited<ReturnType<typeof evaluateEv>>;
+    source: CanonicalSource; resolved: ResolvedPlan; sim: import("./simulator/botvm-simulator.js").SimulationResult }) => void;
   config: LiveConfig;
   provider: ethers.JsonRpcProvider;
   state: AnvilStateBackend;
@@ -3155,11 +3192,15 @@ interface HandleCtx {
  *   getTransaction → rawTx → applyRawTx on Anvil (current V5 logic)
  *   → detect/plan/solve/simulate → mev_sendBundle (hash-only)
  */
-async function handleHint(
+export async function handleHint(
   hint: HintEnvelope,
   txHash: string,
   ctx: HandleCtx,
 ): Promise<void> {
+  if (ctx.historicalExecutionMode !== undefined && (!ctx.config.dryRun || ctx.config.liveBackend !== "rpc" ||
+      ctx.historicalExecutionMode !== "materialized-source" || !hint.prefetched)) {
+    throw new Error("historical backrun requires dry-run RPC with a real prefetched transaction");
+  }
   ctx.sourceControl.signal.throwIfAborted();
   const victimSource = hint.source ?? "mev-share";
   console.log(`[searcher/live] hint tx=${txHash} src=${victimSource}`);
@@ -3257,6 +3298,7 @@ async function handleHint(
     latestBlock,
     null,
     txHash,
+    ctx.detector.resolveSwapObservationBinding,
   );
   const admittedHintImpacts = hintTransition.impacts.filter((impact) =>
     hashOnlyImpactReplayAdmitted(impact.matchedAdapterId)
@@ -3373,7 +3415,12 @@ async function handleHint(
       throw new Error(`local victim hash mismatch ${appliedHash}`);
     }
 
-    await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
+    // Historical source-pinned calls do not send transactions. Mutating the
+    // owner balance after mining would change the state behind the source hash.
+    // The read-only simulator checks the actual caller/executor state instead.
+    if (!ctx.historicalExecutionMode) {
+      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
+    }
 
     const receipt = await ctx.state.provider.getTransactionReceipt(txHash);
     if (!receipt || receipt.status !== 1) {
@@ -3875,13 +3922,14 @@ async function processOpportunities(
     // 20s+ cold revm overlay on obscure WETH pairs), and it can expire the hint
     // before the solver gets a chance on real candidate plans.
     const oppImpact = poolImpactFromOpportunity(opp) ?? fixtureImpact;
-    const prepareBaseBlock = fixturePath === "mined" ? sourceMeta.eventBlockNumber : latestBlock;
-    const prepareBaseBlockHash = await readBlockHash(
-      ctx.provider,
-      prepareBaseBlock,
-    );
-    const simulationSource = Object.freeze({ number: prepareBaseBlock,
-      hash: prepareBaseBlockHash, generation: ctx.simulationGeneration });
+    const executionSource = await resolveBackrunExecutionSource({
+      historicalMode: ctx.historicalExecutionMode, dryRun: ctx.config.dryRun, path: fixturePath,
+      event, latestBlock, generation: ctx.simulationGeneration,
+      provider: ctx.provider, materializedProvider: ctx.state.provider,
+    });
+    const simulationSource = executionSource.source;
+    const prepareBaseBlock = simulationSource.number;
+    const prepareBaseBlockHash = simulationSource.hash;
     const strictSession = await ctx.strictSessionFor({
       purpose: "source-n-runtime",
       source: simulationSource,
@@ -3889,6 +3937,10 @@ async function processOpportunities(
       control: { signal: ctx.sourceControl.signal, deadlineAtMs: oppDeadlineAtMs },
       fundingAssets: ctx.fundingAssets,
     });
+    if (ctx.historicalExecutionMode && (strictSession.source.number !== simulationSource.number ||
+        strictSession.source.hash !== simulationSource.hash || strictSession.source.generation !== simulationSource.generation)) {
+      throw new Error("historical backrun quote session source mismatch");
+    }
     ctx.sourceControl.signal.throwIfAborted();
     if (fixturePath === "hash-only" && opp.victimEffect.kind === "swap") {
       const generation = oppImpact?.sourceGeneration;
@@ -4199,79 +4251,46 @@ async function processOpportunities(
         ? blockReadState(ctx.state, ctx.provider, prepareInput.baseBlock)
       : ctx.state;
 
-	    let candidatesTried = 0;
-	    let skipPostSolverDrop = false;
-	    for (const candidate of plans) {
-      ctx.sourceControl.signal.throwIfAborted();
-      // Candidate cap: a single opportunity can spawn ~20 candidate plans, each
-      // running a full quote search + top-N sim that virtually all revert
-      // (unprofitable). Grinding every one burns the shared per-hint TTL and
-      // starves later candidates/opps into `expired-before-solver`. Bail after
-      // maxCandidatesPerOpp to leave budget for the rest of the hint. (0 = off)
-      if (ctx.config.maxCandidatesPerOpp > 0 && candidatesTried >= ctx.config.maxCandidatesPerOpp) {
-        console.log(
-          `[searcher/live] candidate cap: tried ${candidatesTried}/${plans.length} for this opp ` +
-            `(hintOpps=${opportunities.length}) — bail to free TTL budget. ${deps.segStr()}`,
-        );
-        emitPipelineDropped("solver", "candidate-cap", lastTerminalError, {
-          plans: plans.length,
-        });
-        skipPostSolverDrop = true;
-        break;
-      }
-	      // Opportunity slice TTL: keep one slow opportunity from consuming the whole
-	      // hint budget. Each solve is further capped to the remaining slice.
-	      const remainingMs = oppDeadlineAtMs - Date.now();
-	      if (remainingMs <= 0) {
-	        const hintElapsedMs = Date.now() - ctx.startedAt;
-	        if (hintElapsedMs >= ctx.config.oppTtlMs) {
-	          ctx.counters.expiredBeforeSolver++;
-	          console.log(
-	            `[searcher/live] opportunity expired (hint TTL) ` +
-	              `(${hintElapsedMs}ms > TTL ${ctx.config.oppTtlMs}ms) — never reached solver ` +
-	              `(hintOpps=${opportunities.length} candidatesTried=${candidatesTried}/${plans.length}). ` +
-	              `stage breakdown: ${deps.segStr()}`,
-	          );
-	          emitPipelineDropped("solver", "expired-before-solver", undefined, { plans: plans.length });
-	          deps.recordFinalState("expired-before-solver");
-	          return;
-	        }
-	        console.log(
-	          `[searcher/live] opportunity expired (slice) ` +
-	            `(${Date.now()} >= sliceDeadline ${oppDeadlineAtMs}) — moving to next opportunity ` +
-	            `(hintOpps=${opportunities.length} candidatesTried=${candidatesTried}/${plans.length}). ` +
-	            `stage breakdown: ${deps.segStr()}`,
-	        );
-	        if (candidatesTried === 0) {
-	          ctx.counters.expiredBeforeSolver++;
-	          lastTerminalState = "expired-before-solver";
-	          lastTerminalError = undefined;
-	          emitPipelineDropped("solver", "expired-before-solver", undefined, { plans: plans.length });
-	          skipPostSolverDrop = true;
-	        }
-	        break;
-	      }
-      candidatesTried++;
-      try {
-        ctx.counters.solverEntered++;
-        const resolved = await ctx.solver.solve(candidate, solveState, solveProbe, {
-          signal: ctx.sourceControl.signal,
-          deadlineMs: Math.min(ctx.config.solverDeadlineMs, remainingMs),
+    let candidatesTried = 0;
+    let skipPostSolverDrop = false;
+    console.log(`[searcher/live] backrun quote pipeline workers=${ctx.config.solverQuoteConcurrency} candidates=${plans.length} cap=${ctx.config.maxCandidatesPerOpp}`);
+    let pipelineCompleted = true;
+    try {
+      pipelineCompleted = await runBackrunCandidatePipeline({
+        plans,
+        maxCandidates: ctx.config.maxCandidatesPerOpp,
+        concurrency: ctx.config.solverQuoteConcurrency,
+        solver: ctx.solver,
+        state: solveState,
+        executor: solveProbe.executor,
+        signal: ctx.sourceControl.signal,
+        deadlineAtMs: oppDeadlineAtMs,
+        solverDeadlineMs: ctx.config.solverDeadlineMs,
+        options: {
           gssMaxTries: ctx.config.gssMaxTries,
           finalSimTopN: ctx.config.finalSimTopN,
           quoteProfitFloorBps: ctx.config.quoteProfitFloorBps,
           quoteSafetyBps: ctx.config.quoteSafetyBps,
+          quoteToleranceRawUnits: ctx.config.quoteToleranceRawUnits,
           cache: ctx.cache,
-          deferPhase2Sim: localVictimApply !== null && useConfiguredBackend && ctx.config.liveBackend !== "rpc",
           strictSession,
           runtimeEvidence: Object.freeze([]),
-        });
-        ctx.sourceControl.signal.throwIfAborted();
-        deps.segMark("solve");
-        ctx.counters.solverSuccess++;
-        // Terminal verify (v7 AC-3a.4): re-simulate the resolved plan and require
-        // strictly positive profit before paying gas — never submit on a plan that
-        // only broke even or drifted negative since the solver picked it.
+        },
+        onQuoteStart: () => { ctx.counters.solverEntered++; candidatesTried++; },
+        consume: async (candidate, quoted, index, signal) => {
+          signal.throwIfAborted();
+          console.log(`[searcher/live] backrun quote ready rank=${index + 1} elapsedMs=${quoted.elapsedMs.toFixed(2)} remainingMs=${oppDeadlineAtMs - Date.now()}`);
+          try {
+            if (!quoted.ok) throw quoted.error;
+            ctx.counters.solverSuccess++;
+            deps.segMark("solve");
+            let positiveSimulationSeen = false;
+            for (const resolved of quoted.finalists) {
+              if (positiveSimulationSeen) break;
+              signal.throwIfAborted();
+              if (Date.now() >= oppDeadlineAtMs) throw new Error("backrun final simulation deadline elapsed");
+        // Quote-only workers never simulate. This single final simulation owns
+        // actual profit, repayment and EV; no quote result can authorize submit.
         if (localVictimApply && useConfiguredBackend && ctx.config.liveBackend !== "rpc") {
           if (!shouldRunFinalVerify(
             resolved.netProfit,
@@ -4325,11 +4344,17 @@ async function processOpportunities(
 	            continue;
 	          }
         }
+        signal.throwIfAborted();
+        if (Date.now() >= oppDeadlineAtMs) throw new Error("backrun final simulation deadline elapsed");
         const sim = useConfiguredBackend
           ? (ctx.liveBackend.finalVerify
               ? await ctx.liveBackend.finalVerify(resolved)
               : await ctx.liveBackend.simulate(resolved))
           : await ctx.simulator.simulate(resolved);
+        signal.throwIfAborted();
+        if (Date.now() >= oppDeadlineAtMs) throw new Error("backrun final simulation deadline elapsed");
+        const historicalSimEvidence = ctx.historicalExecutionMode
+          ? assertBackrunSourceSimulation(sim, simulationSource) : undefined;
         if (hint.source === "mempool") ctx.counters.mempoolToSim++;
         emitEvent({
           type: "simulation_result",
@@ -4383,6 +4408,10 @@ async function processOpportunities(
           deps.recordFinalState("final-verify-failed", lastTerminalError, sim);
           continue;
         }
+
+        // Like blockscan, a positive executed finalist terminates this quote set;
+        // revert/non-positive results retain the original top-N fallback order.
+        positiveSimulationSeen = true;
 
         // Real-victim / hash-only gate (Fix A): approximate hash-only bundles
         // reconstruct the pending swap with a SYNTHETIC overlay (whale swaps
@@ -4446,14 +4475,24 @@ async function processOpportunities(
         // we most over-estimated, and win the losers). Calibrate the haircut from
         // the reconciliation of landed txs (real profit vs the logged sim profit).
         const ev = await evaluateEv(
-          ctx.provider,
+          ctx.historicalExecutionMode ? ctx.state.provider : ctx.provider,
           resolved.profitToken,
           sim.netProfit,
           sim.gasUsed,
           ctx.config,
           ctx.profitTokenValuation,
           prepareInput.baseBlock,
+          executionSource.feeEnvironment,
         );
+        signal.throwIfAborted();
+        if (ctx.historicalExecutionMode) {
+          if (!ev.feeStateAvailable || !ev.gasMeasurementAvailable ||
+              ev.sourceBlockHash !== simulationSource.hash ||
+              ev.maxBaseFeePerGas.toString() !== historicalSimEvidence?.baseFeePerGas) {
+            throw new Error("historical backrun EV source/fee mismatch");
+          }
+          ctx.onHistoricalEv?.({ evaluation: ev, source: simulationSource, resolved, sim });
+        }
         const {
           valuationAvailable,
           gasMeasurementAvailable,
@@ -4602,6 +4641,11 @@ async function processOpportunities(
           );
         }
 
+        if (ctx.historicalExecutionMode) {
+          deps.recordFinalState(netEvWei > ctx.config.minNetEth ? "would-submit" : "no-profitable-quote",
+            "historical read-only: submission disabled", sim);
+          continue;
+        }
         const latestAtSubmit = await readUncachedLatestBlock(ctx.provider);
         if (
           latestAtSubmit.number !== prepareInput.baseBlock ||
@@ -4625,6 +4669,8 @@ async function processOpportunities(
           continue;
         }
         const targetBlock = prepareInput.baseBlock + 1;
+        signal.throwIfAborted();
+        if (Date.now() >= oppDeadlineAtMs) throw new Error("backrun submission deadline elapsed");
         const decision = ctx.submissionCoordinator.offer({
           strategy: "backrun",
           opportunityId,
@@ -4707,7 +4753,8 @@ async function processOpportunities(
           });
         }
         deps.recordFinalState("would-submit", undefined, sim);
-        return;
+        return false;
+            }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         lastTerminalState = isTimeoutMessage(message) ? "quote-timeout" : "no-profitable-quote";
@@ -4718,9 +4765,23 @@ async function processOpportunities(
 	          `[searcher/live] candidate failed: ` +
 	            `${message}`.slice(0, 180),
 	        );
-	      }
-	    }
-		    if (!skipPostSolverDrop) {
+          }
+          return true;
+        },
+      });
+    } catch (error) {
+      ctx.sourceControl.signal.throwIfAborted();
+      lastTerminalError = error instanceof Error ? error.message : String(error);
+      lastTerminalState = isTimeoutMessage(lastTerminalError) ? "quote-timeout" : "no-profitable-quote";
+      if (lastTerminalState === "quote-timeout") ctx.counters.quoteTimeouts++;
+    }
+    if (!pipelineCompleted) return;
+    if (ctx.config.maxCandidatesPerOpp > 0 && plans.length > ctx.config.maxCandidatesPerOpp &&
+        candidatesTried >= ctx.config.maxCandidatesPerOpp && Date.now() < oppDeadlineAtMs) {
+      emitPipelineDropped("solver", "candidate-cap", lastTerminalError, { plans: plans.length });
+      skipPostSolverDrop = true;
+    }
+    if (!skipPostSolverDrop) {
 		      emitPipelineDropped("solver", lastTerminalState, lastTerminalError, { plans: plans.length });
 		    }
 		  }
@@ -4777,6 +4838,9 @@ async function readLatestBlockAnchor(
 export async function maybeSubmitBlockScanAtomic(params: {
   /** Explicit read-only historical mode. Live callers retain the latest-head gate. */
   historicalReadOnly?: boolean;
+  /** Only the explicit read-only historical caller may select source-block. */
+  historicalExecutionMode?: "source-block";
+  onHistoricalEv?: (input: { evaluation: Awaited<ReturnType<typeof evaluateEv>>; calldata: string }) => void;
   config: BlockScanAtomicPolicy;
   provider: ethers.JsonRpcProvider;
   finalSimulationRuntime: FinalSimulationWorkRuntime<
@@ -4805,6 +4869,10 @@ export async function maybeSubmitBlockScanAtomic(params: {
     blockscan_view_hash: string;
   };
 }): Promise<BlockScanAtomicResult> {
+  if (params.historicalExecutionMode !== undefined &&
+      (params.historicalExecutionMode !== "source-block" || !params.historicalReadOnly)) {
+    throw new Error("source-block execution requires historical read-only mode");
+  }
   if (params.historicalReadOnly && (!params.config.dryRun || params.config.blockScanSubmit)) {
     throw new Error("historical block-scan requires dry-run with submission disabled");
   }
@@ -4959,7 +5027,8 @@ export async function maybeSubmitBlockScanAtomic(params: {
     return finish("below_final_verify_floor");
   }
 
-  let targetBlock = sourceBlock + 1;
+  const targetOffset = params.historicalExecutionMode === "source-block" ? 0 : 1;
+  let targetBlock = sourceBlock + targetOffset;
   try {
     const latestAtVerify = await awaitBlockScanDeadline(
       readUncachedLatestBlock(provider, params.historicalReadOnly ? sourceBlock : "latest"),
@@ -4969,7 +5038,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
       signal,
     );
     const currentHead = latestAtVerify.number;
-    targetBlock = Math.max(sourceBlock, currentHead) + 1;
+    targetBlock = Math.max(sourceBlock, currentHead) + targetOffset;
     const canonicalSourceBlockHash = latestAtVerify.hash;
     if (
       currentHead !== sourceBlock ||
@@ -5006,6 +5075,17 @@ export async function maybeSubmitBlockScanAtomic(params: {
         timing.finalSimMs += Math.max(0, performance.now() - finalSimStarted);
         timing.finalSimFinishedAtMs = Date.now();
       });
+    if (params.historicalExecutionMode === "source-block" && sim.success) {
+      const evidence = (sim as import("./simulator/source-block.js").SourceBlockSimulationResult).sourceBlockEvidence;
+      if (!evidence || evidence.executionMode !== "source-block" || evidence.source.number !== sourceBlock ||
+          evidence.source.hash !== sourceBlockHash.toLowerCase() || evidence.source.generation !== sourceGeneration ||
+          !evidence.repaymentVerified || !evidence.conservationVerified) {
+        throw new Error("source-block final simulation evidence missing or mismatched");
+      }
+      // Historical execution success is not a promise of positive profit.
+      // Preserve that distinction when the existing final-profit gate rejects.
+      finalSimStatus = "succeeded";
+    }
     if (collectBlindAudit) {
       auditSimulation = {
         executed: true,
@@ -5028,7 +5108,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
         latestAfterSim.number !== sourceBlock ||
         latestAfterSim.hash !== sourceBlockHash.toLowerCase()
       ) {
-        targetBlock = Math.max(sourceBlock, latestAfterSim.number) + 1;
+        targetBlock = Math.max(sourceBlock, latestAfterSim.number) + targetOffset;
         const error =
           `source advanced during final simulation ` +
           `${sourceBlock}/${sourceBlockHash} -> ` +
@@ -5116,19 +5196,35 @@ export async function maybeSubmitBlockScanAtomic(params: {
     evStartedAt = performance.now();
     const ev = await awaitBlockScanDeadline(
       evaluateEv(
-        provider,
+        params.historicalExecutionMode === "source-block" ? {
+          getBlock: async (tag: number | "latest") => {
+            if (tag !== sourceBlock) throw new Error("source-block EV escaped its source");
+            const raw = await provider.send("eth_getBlockByNumber", [ethers.toQuantity(sourceBlock), false]);
+            return raw ? parseBlockScanObservedHeader(raw, sourceBlock, 1n) : null;
+          },
+          call: async (tx: { to: string; data: string; blockTag?: number }) => {
+            if (tx.blockTag !== sourceBlock) throw new Error("source-block valuation escaped its source");
+            return provider.send("eth_call", [{ to: tx.to, data: tx.data }, { blockHash: sourceBlockHash, requireCanonical: true }]);
+          },
+        } : provider,
         resolved.profitToken,
         sim.netProfit,
         sim.gasUsed,
         config,
         profitTokenValuation,
         sourceBlock,
+        params.historicalExecutionMode === "source-block" ? { mode: "source-block", sourceBlockHash } : undefined,
       ),
       passDeadlineAtMs,
       "EV evaluation",
       undefined,
       signal,
     );
+    if (params.historicalExecutionMode === "source-block" && ev.feeStateAvailable &&
+        ev.maxBaseFeePerGas.toString() !== (sim as import("./simulator/source-block.js").SourceBlockSimulationResult).sourceBlockEvidence.baseFeePerGas) {
+      throw new Error("source-block EV and execution fee disagree");
+    }
+    if (params.historicalReadOnly) params.onHistoricalEv?.({ evaluation: ev, calldata: sim.calldata });
     const {
       valuationAvailable,
       gasMeasurementAvailable,
@@ -5233,7 +5329,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
     // The marker authorizes LIVE standing-position submission. Explicitly
     // non-broadcast historical diagnostics can evaluate cash EV while keeping
     // the position visible. Taxonomy mismatches still fail closed.
-    if (!standingGuard.allowed && !(params.historicalReadOnly &&
+    if (!standingGuard.allowed && !(params.historicalReadOnly && params.historicalExecutionMode !== "source-block" &&
         standingGuard.reason === "standing_position_unauthorized")) {
       const error = standingGuard.reason === "edge_taxonomy_inconsistent"
         ? "standing guard: edge taxonomy inconsistent"
@@ -5454,7 +5550,7 @@ function enqueuePendingVictimOutcome(
   while (pending.length > MAX_PENDING_VICTIM_OUTCOMES) pending.shift();
 }
 
-function createStageCounters(): StageCounters {
+export function createStageCounters(): StageCounters {
   return {
     hints: 0,
     impacts: 0,
@@ -5596,7 +5692,7 @@ function resolvedRouteSummary(root: ResolvedPlanNode): string {
  * they are excluded here; otherwise high-frequency bluechip paths crowd out the
  * just-seen longtail pools we are trying to catch on their second/third swap.
  */
-class RecentWarmTracker {
+export class RecentWarmTracker {
   private hops = new Map<string, { hop: QuoteRequest; count: number; lastSeenBlock: number }>();
 
   constructor(private readonly ttlBlocks: number) {}
@@ -5751,6 +5847,7 @@ async function matchPoolImpactFromLogs(
   sourceBlock: number,
   sourceBlockHash: string | null,
   receiptId: string,
+  resolveBinding?: SwapObservationBindingResolver,
 ): Promise<PoolImpactTransition> {
   const sourceGeneration = createVictimSourceGeneration({
     sourceBlock,
@@ -5765,6 +5862,7 @@ async function matchPoolImpactFromLogs(
     sourceGeneration,
     broadPoolAddrs,
     null,
+    resolveBinding,
   );
 }
 

@@ -2,10 +2,12 @@ import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
 } from "../../adapter-family-plugin.js";
-import { sameAddress } from "./codec.js";
+import { assertSource, sameAddress } from "./codec.js";
+import { assertFluidCreditRoute } from "./exact.js";
+import { fluidLocalBorrowQuote } from "./local-quote.js";
 import type {
   FluidCreditDescriptor,
-  FluidCreditRiskEvidence,
+  FluidCreditExactEvidence,
   FluidCreditRoute,
 } from "./types.js";
 
@@ -66,7 +68,7 @@ export const fluidCreditExecution = {
 } satisfies ExecutionSemantics<
   FluidCreditDescriptor,
   FluidCreditRoute,
-  FluidCreditRiskEvidence
+  FluidCreditExactEvidence
 >;
 
 function assertExecutionEvidence(input: {
@@ -74,10 +76,26 @@ function assertExecutionEvidence(input: {
   readonly route: FluidCreditRoute;
   readonly amountIn: bigint;
   readonly quotedAmountOut: bigint;
-  readonly exactEvidence: FluidCreditRiskEvidence;
+  readonly exactEvidence: FluidCreditExactEvidence;
   readonly executor: string;
 }): void {
   const evidence = input.exactEvidence;
+  assertFluidCreditRoute(input.descriptor, input.route);
+  if (evidence.kind === "fluid-credit-local-amount") {
+    assertSource(evidence.source, evidence.borrowState.source);
+    if (input.descriptor.localQuoteModel !== "t1-view-v1" || !sameAddress(evidence.vault, input.descriptor.vault) ||
+        !sameAddress(evidence.borrowState.vault, input.descriptor.vault) ||
+        !sameAddress(evidence.borrowState.supplyToken, input.route.tokenIn) ||
+        !sameAddress(evidence.borrowState.borrowToken, input.route.tokenOut) ||
+        evidence.routeKey !== input.route.routeKey || !sameAddress(evidence.executor, input.executor) ||
+        evidence.collateralAmount !== input.amountIn || evidence.debtAmount !== input.quotedAmountOut ||
+        fluidLocalBorrowQuote(input.amountIn, evidence.borrowState) !== input.quotedAmountOut) {
+      throw new Error("fluid-credit execution received incompatible local amount evidence");
+    }
+    // This encodes a candidate, not a successful operate proof. Standing-position,
+    // repayment and mandatory final simulation still decide executability.
+    return;
+  }
   if (
     evidence.kind !== "fluid-credit-effect-delta-risk-proof" ||
     !sameAddress(evidence.vault, input.descriptor.vault) ||

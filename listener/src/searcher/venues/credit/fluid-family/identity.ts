@@ -8,6 +8,7 @@ import type {
   AdapterRequestResult,
 } from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
+import { fluidLocalModelForCode } from "./model.js";
 import {
   canonicalAddress,
   decodeFactoryVault,
@@ -193,11 +194,13 @@ function decodeConstants(
 ): FluidCreditIdentityEvidence {
   const constantsResult = requireSuccessfulResult(results, CONSTANTS_ID);
   const codeResult = requireSuccessfulResult(results, VAULT_CODE_ID);
+  const localQuoteModel = fluidLocalModelForCode(codeResult.data);
   return Object.freeze({
     phase: "constants" as const,
     vault: canonicalAddress(candidate.vault),
     ...decodeFluidVaultConstants(constantsResult.data),
     vaultHasCode: codeResult.data !== "0x",
+    ...(localQuoteModel === null ? {} : { localQuoteModel }),
   });
 }
 
@@ -303,6 +306,7 @@ function decideIdentity(
     supplyDecimals: constants.supplyDecimals,
     borrowDecimals: constants.borrowDecimals,
     factoryBinding,
+    localQuoteModel: constants.localQuoteModel ?? null,
     activeProbe: {
       actor: evidence.actor,
       collateralAmount: evidence.collateralAmount,
@@ -328,6 +332,7 @@ function decideIdentity(
         borrowDecimals: constants.borrowDecimals,
         factoryBinding,
         activeProbeActor: evidence.actor,
+        ...(constants.localQuoteModel === undefined ? {} : { localQuoteModel: constants.localQuoteModel }),
       }),
     }),
   };

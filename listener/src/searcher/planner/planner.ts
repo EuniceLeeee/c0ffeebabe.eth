@@ -132,7 +132,7 @@ export class TemplatePlanner implements Planner {
     this.maxCandidates = n;
   }
 
-  /** Cap DFS depth (hops). Live should use a small value (e.g. 3); AC-3 keeps 8. */
+  /** Cap DFS depth (hops). Live policy supplies its limit; fixtures may override. */
   setMaxHops(n: number): void {
     this.maxHops = n;
   }

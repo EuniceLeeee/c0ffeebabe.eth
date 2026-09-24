@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { erc4626Capture } from "../protocols/erc4626-family/capture.js";
 import {
@@ -13,6 +14,8 @@ import { erc4626FamilyManifest } from "../protocols/erc4626-family/manifest.js";
 import { erc4626Pricing } from "../protocols/erc4626-family/pricing.js";
 import { erc4626Protocol } from "../protocols/erc4626-family/protocol.js";
 import { erc4626Routes } from "../protocols/erc4626-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ERC4626_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: erc4626FamilyManifest,

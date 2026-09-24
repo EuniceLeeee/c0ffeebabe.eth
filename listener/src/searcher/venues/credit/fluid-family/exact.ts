@@ -5,7 +5,9 @@ import { assertSource, decodeOperateResult, FLUID_ERC20_INTERFACE, FLUID_VAULT_I
   requireSuccessfulResult, sameAddress, tokenDelta } from "./codec.js";
 import { fluidMaxBorrowRequest } from "./borrow-math.js";
 import { decodeFluidCurrentState, fluidConfigRequests, fluidRateProgram } from "./state.js";
-import type { FluidCreditDescriptor, FluidCreditRiskEvidence, FluidCreditRoute } from "./types.js";
+import { decodeFluidCapacity, fluidCapacityRequests } from "./capacity.js";
+import { fluidLocalBorrowQuote } from "./local-quote.js";
+import type { FluidCreditDescriptor, FluidCreditExactEvidence, FluidCreditLocalEvidence, FluidCreditRiskEvidence, FluidCreditRoute } from "./types.js";
 
 type Input = ExactQuoteInput<FluidCreditDescriptor, FluidCreditRoute> & { readonly debtBps?: bigint };
 const OPERATE_ID = "credit-exact-operate";
@@ -20,6 +22,12 @@ function validate(input: Input): void {
   assertFluidCreditRoute(input.descriptor, input.route);
   if (input.amountIn < 10_000n || input.amountIn > (1n << 127n) - 1n) {
     throw new Error("fluid-credit exact requires int128 collateral at least 10000 raw units");
+  }
+}
+function validateLocal(input: Input): void {
+  validate(input);
+  if (input.descriptor.localQuoteModel !== "t1-view-v1") {
+    throw new Error("fluid-credit local quote requires a verified runtime model");
   }
 }
 
@@ -76,9 +84,42 @@ export const fluidCreditBorrowProgram = {
 
 export const fluidCreditExactProgram: ExactRequestProgram<FluidCreditDescriptor, FluidCreditRoute, FluidCreditRiskEvidence> = fluidCreditBorrowProgram;
 
-export const fluidCreditExact = {
-  methods: () => [{ id: "fluid-credit-oracle-operate", kind: "request-program" as const,
-    chainAmountQuote: true as const, program: fluidCreditExactProgram }],
-  cacheCompatibilityProjection: ({ descriptor, route }) => ({ vault: descriptor.vault,
-    binding: route.bindingRef.fingerprint, routeKey: route.routeKey, tokenIn: route.tokenIn, tokenOut: route.tokenOut }),
-} satisfies ExactQuoteSemantics<FluidCreditDescriptor, FluidCreditRoute, FluidCreditRiskEvidence>;
+/** Amount-independent source reads are shared by the existing backend memo.
+ * Do not declare stateOnlyReads: exchange prices and limits depend on time. */
+export const fluidCreditLocalExactProgram: ExactRequestProgram<FluidCreditDescriptor, FluidCreditRoute, FluidCreditLocalEvidence> = {
+  requirements: () => ({ transports: ["eth-call"] }),
+  buildRequests(input) {
+    validateLocal(input);
+    return fluidCapacityRequests(input.descriptor.vault);
+  },
+  decode({ programInput: input, initialResults, dependentEvidence }) {
+    validateLocal(input);
+    if (initialResults.length !== 1 || dependentEvidence.length !== 0) throw new Error("fluid-credit unexpected local quote results");
+    const state = decodeFluidCapacity(input.descriptor, initialResults, input.source);
+    const amountOut = fluidLocalBorrowQuote(input.amountIn, state);
+    return { amountOut, evidence: Object.freeze({ kind: "fluid-credit-local-amount" as const,
+      source: input.source, vault: input.descriptor.vault, routeKey: input.route.routeKey, executor: input.executor,
+      collateralAmount: input.amountIn, debtAmount: amountOut, borrowState: state }) };
+  },
+};
+
+export function createFluidCreditExact(mode: "local" | "simulate") {
+  return {
+    methods: (input: Input) => {
+      // Code-derived model, never a vault-instance allowlist. Unknown/upgraded
+      // implementations retain execution quoting until separately validated.
+      const local = mode === "local" && input.descriptor.localQuoteModel === "t1-view-v1";
+      const program: ExactRequestProgram<FluidCreditDescriptor, FluidCreditRoute, FluidCreditExactEvidence> =
+        local ? fluidCreditLocalExactProgram : fluidCreditExactProgram;
+      return [{ id: local ? "fluid-credit-local-amount" : "fluid-credit-oracle-operate",
+        kind: "request-program" as const, ...(local ? {} : { chainAmountQuote: true as const }), program }];
+    },
+    cacheCompatibilityProjection: ({ descriptor, route }) => ({ mode, vault: descriptor.vault,
+      localQuoteModel: descriptor.localQuoteModel ?? null,
+      binding: route.bindingRef.fingerprint, routeKey: route.routeKey, tokenIn: route.tokenIn, tokenOut: route.tokenOut }),
+  } satisfies ExactQuoteSemantics<FluidCreditDescriptor, FluidCreditRoute, FluidCreditExactEvidence>;
+}
+
+// Same-source production-input/local-encoded-operate parity is covered by the
+// opt-in local-parity acceptance. Unknown runtime models retain simulation.
+export const fluidCreditExact = createFluidCreditExact("local");

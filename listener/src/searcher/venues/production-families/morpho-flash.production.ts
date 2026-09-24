@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineFundingFamily } from "../adapter-family-plugin.js";
 import { morphoFlashCapture } from "../funding/morpho-flash-family/capture.js";
 import {
@@ -7,6 +8,8 @@ import {
 } from "../funding/morpho-flash-family/parts.js";
 import { morphoFlashDiscovery } from
   "../funding/morpho-flash-family/discovery.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED" });
 
 export const plugin = defineFundingFamily({
   manifest: morphoFlashManifest,

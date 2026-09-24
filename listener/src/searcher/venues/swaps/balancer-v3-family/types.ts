@@ -1,5 +1,6 @@
 import type { CompiledInstanceDescriptor, FamilyCandidate, FamilyRouteDescriptor, VerifiedIdentity } from "../../adapter-family-plugin.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
+import type { BalancerLocalModel } from "./local-model.js";
 
 export interface BalancerV3Candidate extends FamilyCandidate {
   readonly candidateKind: "balancer-v3-pool";
@@ -8,6 +9,8 @@ export interface BalancerV3Candidate extends FamilyCandidate {
   readonly hintedTokenOut: string | null;
 }
 export interface BalancerV3Binding {
+  /** Proven runtime math, not an admission gate. Unknown models retain Router quotes. */
+  readonly localModel?: BalancerLocalModel | null;
   readonly vault: string;
   readonly router: string;
   readonly permit2: string;
@@ -45,7 +48,7 @@ export interface BalancerV3Snapshot {
   readonly balanceOut: bigint;
 }
 export interface BalancerV3ExactEvidence {
-  readonly kind: "balancer-v3-router-exact-in";
+  readonly kind: "balancer-v3-router-exact-in" | "balancer-v3-local-exact-in";
   readonly source: CanonicalSource;
   readonly binding: string;
   readonly routeKey: BalancerV3Route["routeKey"];

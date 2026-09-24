@@ -24,6 +24,7 @@ import {
   type SealedCreditRiskQuoteHandle,
 } from "./adapter-credit-runtime.js";
 import type { TokenEdge } from "./planner/token-graph.js";
+import type { SwapObservationBinding, SwapObservationBindingResolver } from "./venues/swap-observation.js";
 import type { FlashLiquidityView, FlashSource } from
   "./solver/flash-liquidity.js";
 import type { ResolvedPlanNode } from "../shared/types/plan.js";
@@ -88,6 +89,9 @@ export class ChainAmountQuoteUnavailableError extends Error {
   constructor() { super("Family has no declared chain amount quote for this route"); }
 }
 
+import { SequentialQuoteUnsupportedError } from "./solver/sequential-quote-error.js";
+export { SequentialQuoteUnsupportedError } from "./solver/sequential-quote-error.js";
+
 /**
  * A pricing session refreshes every ready instance and publishes current mids.
  * An exact session only re-issues the ready route authorities at the pinned
@@ -133,6 +137,7 @@ type ExactBinding = {
   readonly route: StrictRouteBinding;
   readonly executor: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
+  readonly priorQuotes: readonly StrictProductionExactHandle[];
 } & (
   | {
       readonly kind: "credit-risk";
@@ -223,6 +228,14 @@ export interface StrictReadyPricingIndex {
  * backfills, traces or changes topology.
  */
 export class StrictProductionRuntimeRoot {
+  readonly #observationBindings = new WeakMap<TokenEdge, {
+    readonly fingerprint: string;
+    readonly binding: SwapObservationBinding;
+  }>();
+  readonly resolveSwapObservationBinding: SwapObservationBindingResolver = (edge) => {
+    const entry = this.#observationBindings.get(edge);
+    return entry && entry.fingerprint === edgeBindingFingerprint(edge) ? entry.binding : null;
+  };
   readonly #catalog: FamilyCapabilityCatalog;
   readonly #readySource: CanonicalSource;
   readonly #readyEdgeBindings: ReadonlyMap<CanonicalEdgeId, string>;
@@ -329,6 +342,11 @@ export class StrictProductionRuntimeRoot {
       }
     }
     this.#pricingIndex = buildStrictReadyPricingIndex({
+      registerObservationBinding: (edge, binding) => {
+        this.#observationBindings.set(edge, {
+          fingerprint: edgeBindingFingerprint(edge), binding: Object.freeze(binding),
+        });
+      },
       catalog: input.catalog,
       source: input.readySource,
       graph: input.readyGraph,
@@ -1297,18 +1315,33 @@ export class StrictProductionRuntimeSession {
     readonly creditDebtBps?: bigint;
     readonly control?: AdapterWorkControl;
     readonly requireChainAmountQuote?: boolean;
+    /** Full ordered prefix for a repeated-state route; handles must be issued here. */
+    readonly priorQuotes?: readonly StrictProductionExactHandle[];
   }): Promise<StrictProductionExactHandle> {
     this.#runtime.generationFence.assertCurrent(
       this.source.generation,
       this.source,
     );
     const route = this.#resolve(input.edge);
+    const priorQuotes = Object.freeze([...(input.priorQuotes ?? [])]);
+    const prefix: SealedFamilyExactQuoteHandle[] = [];
+    for (let i = 0; i < priorQuotes.length; i++) {
+      const prior = this.#exactBindings.get(priorQuotes[i]!);
+      if (!prior || prior.kind !== "exact" || prior.executor !== input.executor.toLowerCase() ||
+          prior.priorQuotes.length !== i || prior.priorQuotes.some((handle, j) => handle !== priorQuotes[j]) ||
+          JSON.stringify(prior.runtimeEvidence) !== JSON.stringify(input.runtimeEvidence)) {
+        throw new Error("sequential quote requires same-session ordered exact prefix");
+      }
+      prefix.push(prior.exact);
+    }
     const authority = {
       executor: input.executor.toLowerCase(),
       runtimeEvidence: Object.freeze([...input.runtimeEvidence]),
+      priorQuotes,
     };
     let binding: ExactBinding;
     if (route.kind === "credit" && input.creditDebtBps !== undefined) {
+      if (prefix.length) throw new SequentialQuoteUnsupportedError();
       if (input.requireChainAmountQuote) throw new ChainAmountQuoteUnavailableError();
       const exact = await executeCreditRiskQuote({
         family: route.family,
@@ -1340,6 +1373,7 @@ export class StrictProductionRuntimeSession {
         source: this.source,
         generation: this.source.generation,
         runtime: this.#runtime,
+        ...(prefix.length === 0 ? {} : { prefix }),
         ...(input.control === undefined ? {} : { control: input.control }),
         ...(input.requireChainAmountQuote === undefined
           ? {} : { requireChainAmountQuote: input.requireChainAmountQuote }),
@@ -1347,6 +1381,9 @@ export class StrictProductionRuntimeSession {
       if (exact.status !== "resolved") {
         if (exact.outcome.reasonCode === "exact-chain-amount-quote-unavailable") {
           throw new ChainAmountQuoteUnavailableError();
+        }
+        if (exact.outcome.reasonCode === "exact-sequential-prefix-unsupported") {
+          throw new SequentialQuoteUnsupportedError();
         }
         throw new Error(
           `strict exact unresolved for ${route.edge.canonicalEdgeId}: ${exact.outcome.reasonCode}`,
@@ -1363,6 +1400,7 @@ export class StrictProductionRuntimeSession {
     readonly exact: StrictProductionExactHandle;
     readonly minAmountOut: bigint;
     readonly executor: string;
+    readonly priorQuotes?: readonly StrictProductionExactHandle[];
   }): StrictProductionExecutionOutcome {
     this.#runtime.generationFence.assertCurrent(
       this.source.generation,
@@ -1378,6 +1416,11 @@ export class StrictProductionRuntimeSession {
       throw new Error(
         "strict execution requires the same session-issued route/exact authority",
       );
+    }
+    if (exactBinding.priorQuotes.length &&
+        (input.priorQuotes?.length !== exactBinding.priorQuotes.length ||
+         exactBinding.priorQuotes.some((handle, i) => input.priorQuotes![i] !== handle))) {
+      throw new Error("strict execution requires its original sequential quote prefix");
     }
     if (exactBinding.kind === "credit-risk") {
       const handle = issueCreditExecutionHandle({
@@ -1478,6 +1521,7 @@ function currentPricingForRoute(
 }
 
 function buildStrictReadyPricingIndex(input: {
+  readonly registerObservationBinding: (edge: TokenEdge, binding: SwapObservationBinding) => void;
   readonly perBlockRefreshStateKeys: readonly string[];
   readonly catalog: FamilyCapabilityCatalog;
   readonly source: CanonicalSource;
@@ -1586,6 +1630,9 @@ function buildStrictReadyPricingIndex(input: {
         throw new Error(`strict ready pricing index state conflict ${edgeKey}`);
       }
       familyIdByEdgeKey.set(edgeKey, instance.familyId);
+      input.registerObservationBinding(readyEdge, {
+        familyId: instance.familyId, descriptor: instance.descriptor,
+      });
       stateKeyByEdgeKey.set(edgeKey, stateKey);
       edgeIdByRouteIdentity.set(routeIdentity, edgeKey);
     }

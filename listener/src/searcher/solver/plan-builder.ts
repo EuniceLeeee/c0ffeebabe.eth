@@ -24,8 +24,6 @@ import type {
 import type {
   PlanFragment,
 } from "../venues/route-leg-adapter.js";
-import type { RuntimeEvidence } from "../venues/adapter-family-plugin.js";
-import type { AdapterWorkControl } from "../adapter-work-intent.js";
 
 const MAX_UINT = (1n << 256n) - 1n;
 
@@ -54,12 +52,7 @@ export async function buildResolvedPlanFromPath(
   rawOutputs?: bigint[],
   strictSession?: StrictProductionRuntimeSession,
   exactHandles?: readonly StrictProductionExactHandle[],
-  actualFlow?: {
-    runtimeEvidence: readonly RuntimeEvidence[];
-    control?: AdapterWorkControl;
-    shouldStop?: () => boolean;
-    onExactCall?: () => void;
-  },
+  quoteToleranceRawUnits: bigint = 0n,
 ): Promise<ResolvedPlanNode> {
   if (amounts.length !== path.edges.length + 1) {
     throw new Error(
@@ -83,22 +76,29 @@ export async function buildResolvedPlanFromPath(
     );
   }
 
-  const inner: ResolvedPlanNode[] = [];
-  const approvedSpenders = new Set<string>(); // key = "token@spender" lowercased
+  if (quoteToleranceRawUnits !== 0n && quoteToleranceRawUnits !== 1n) {
+    throw new Error("execution tolerance must be 0 or 1 token raw unit");
+  }
 
-  function ensureApprove(token: string, spender: string, amount: bigint = MAX_UINT): void {
-    const key = `${token.toLowerCase()}@${spender.toLowerCase()}`;
-    if (approvedSpenders.has(key)) return;
-    approvedSpenders.add(key);
-    inner.push({
+  const inner: ResolvedPlanNode[] = [];
+  function approval(token: string, spender: string, amount: bigint,
+    inputToken: string, inputAmount: bigint): ResolvedPlanNode {
+    // Only an unlimited input-token grant can use this exact leg's spend as
+    // its minimum. Finite requirements and other assets retain their declared
+    // minimum; do not infer conversions or reduce a Family's requested bound.
+    const minimumAllowance = amount === MAX_UINT && token.toLowerCase() === inputToken.toLowerCase() ? inputAmount : amount;
+    if (minimumAllowance <= 0n || amount < minimumAllowance || amount > MAX_UINT) {
+      throw new Error("Family approval does not cover its exact input");
+    }
+    return {
       adapterId: "erc20-approve",
       target: token,
       tokenIn: token,
       tokenOut: token,
       amount,
-      params: { spender, amount },
+      params: { spender, amount, minimumAllowance },
       children: [],
-    });
+    };
   }
 
   function transferToPool(token: string, pool: string, amount: bigint): void {
@@ -122,6 +122,7 @@ export async function buildResolvedPlanFromPath(
         exact,
         minAmountOut,
         executor,
+        priorQuotes: exactHandles!.slice(0, i),
       });
       if (execution.status !== "resolved") {
         const reason = "reasonCode" in execution
@@ -147,69 +148,20 @@ export async function buildResolvedPlanFromPath(
     return fragment;
   }
 
-  if (actualFlow) {
-    // Only finalists prepare the finite exact-input cases. No haircuts affect
-    // Solver search/ranking. At most 1+2+4+8+16+32 cases for six hops; equal
-    // amounts are deduplicated. Every case has its own unmodified exact handle.
-    if (!path.edges.length || path.edges.length > 6 || path.edges.some(edge =>
-      edge.tokenIn.toLowerCase() === edge.tokenOut.toLowerCase() ||
-      edge.leavesStandingPosition || strictSession.blocksPrefixInversion(edge))) {
-      throw new Error("actual amount flow requires a closed fungible exact-input path of at most six hops");
+  // Tolerance only relaxes a Family's existing minimum-output argument.
+  // Do not wrap legs in ACTUAL_AMOUNT_FLOW, query balances, re-quote +/-1
+  // branches, or pre-subtract from the nominal input/output amount chain.
+  // A middle-leg shortfall can still fail downstream; final simulation and
+  // conservation/repayment remain mandatory, never subsidized from inventory.
+  for (let i = 0; i < path.edges.length; i++) {
+    const nominalOut = amounts[i + 1]!;
+    if (nominalOut <= quoteToleranceRawUnits) {
+      throw new Error("execution tolerance has no positive minimum output");
     }
-    let inputs = new Set([flashAmount]);
-    const steps: ResolvedPlanNode[] = [];
-    for (let i = 0; i < path.edges.length; i++) {
-      const edge = path.edges[i]!;
-      const cases: ResolvedPlanNode[] = [];
-      const next = new Set<bigint>();
-      for (const amountIn of inputs) {
-        if (actualFlow.shouldStop?.()) throw new Error("actual amount flow aborted: deadline");
-        let exact = amountIn === amounts[i] ? exactHandles[i]! : undefined;
-        if (!exact) {
-          actualFlow.onExactCall?.();
-          exact = await strictSession.issueExact({ edge, amountIn, executor,
-            runtimeEvidence: actualFlow.runtimeEvidence,
-            ...(actualFlow.control ? { control: actualFlow.control } : {}) });
-        }
-        if (exact.amountOut <= 1n) throw new Error("actual amount flow has no positive one-unit minimum");
-        const fragment = buildFragment(i, exact, exact.amountOut - 1n);
-        const children: ResolvedPlanNode[] = [];
-        for (const requirement of fragment.requirements) {
-          if (requirement.kind === "approve") {
-            if (requirement.amount === undefined || requirement.amount === MAX_UINT) {
-              ensureApprove(requirement.token, requirement.spender, requirement.amount);
-            } else {
-              // A finite Family allowance belongs to this exact-input case.
-              // Do not widen it to unlimited or hoist one alternative's bound.
-              children.push({ adapterId: "erc20-approve", target: requirement.token,
-                tokenIn: requirement.token, tokenOut: requirement.token, amount: requirement.amount,
-                params: { spender: requirement.spender, amount: requirement.amount }, children: [] });
-            }
-          } else {
-            children.push({ adapterId: "erc20-transfer", target: requirement.token,
-              tokenIn: requirement.token, tokenOut: requirement.token, amount: requirement.amount,
-              params: { to: requirement.pool, amount: requirement.amount }, children: [] });
-          }
-        }
-        children.push(...fragment.nodes);
-        cases.push({ adapterId: "actual-amount-case", target: executor,
-          tokenIn: edge.tokenIn, tokenOut: edge.tokenOut, amount: amountIn,
-          params: { quotedAmountOut: exact.amountOut }, children });
-        next.add(exact.amountOut);
-        next.add(exact.amountOut - 1n);
-      }
-      steps.push({ adapterId: "actual-amount-step", target: executor,
-        tokenIn: edge.tokenIn, tokenOut: edge.tokenOut, amount: 0n, params: {}, children: cases });
-      inputs = next;
-    }
-    inner.push({ adapterId: "actual-amount-flow", target: executor,
-      tokenIn: flashToken, tokenOut: flashToken, amount: flashAmount,
-      params: { toleranceRawUnits: 1n }, children: steps });
-  } else for (let i = 0; i < path.edges.length; i++) {
-    const fragment = buildFragment(i, exactHandles[i]!, amounts[i + 1]!);
+    const fragment = buildFragment(i, exactHandles[i]!, nominalOut - quoteToleranceRawUnits);
     for (const requirement of fragment.requirements) {
       if (requirement.kind === "approve") {
-        ensureApprove(requirement.token, requirement.spender, requirement.amount);
+        inner.push(approval(requirement.token, requirement.spender, requirement.amount, path.edges[i]!.tokenIn, amounts[i]!));
       } else {
         transferToPool(requirement.token, requirement.pool, requirement.amount);
       }

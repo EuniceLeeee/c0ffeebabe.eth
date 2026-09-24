@@ -22,12 +22,47 @@ const quotes=edges.map((e,i)=>({id:blockScanEdgeKey(e),instance:edgeInstanceKey(
   tokenIn:e.tokenIn,tokenOut:e.tokenOut,num:i===5?1200n:1010n,den:1000n,
   value:{num:i===5?1200n:1010n,den:1000n}}));
 const view:BlockScanUsdView={quotes,signals:[{token:weth,buy:quotes[5]!.id,sell:quotes[0]!.id,num:120n,den:100n}],
-  signalPairsPerToken:1,referenceUsdPerRaw:new Map(),comparableTokens:1,missingBuyReference:0,missingSellReference:0};
+  signalPairsPerToken:1,allowRepeatedPools:true,referenceUsdPerRaw:new Map(),comparableTokens:1,missingBuyReference:0,missingSellReference:0};
 const scan=(enumerationMethod:"dfs"|"layered",maxHops=6,usdView=view,budgetMs=5000)=>
   scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:new Set(),mids,usdView,
     captureCoarseEnumeration:true,cfg:{enumerationMethod,maxHops,minSpreadBps:50,budgetMs,
       maxCandidates:100,pricedTokens:new Map([[weth,{maxBorrow:1000n*unit}]])}});
 const a=scan("dfs"),b=scan("layered");
+// The scanner must pass both pruning controls through to the actual enumerator.
+const dipView={...view,quotes:quotes.map((q,i)=>({...q,
+  value:{num:i===0?85n:i===1?140n:101n,den:100n}}))};
+for(const enumerationMethod of ["dfs","layered"] as const) {
+  const run=(prefixPruningEnabled:boolean,maxPrefixDrawdownBps:number)=>
+    scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:null,mids,usdView:dipView,
+      cfg:{enumerationMethod,prefixPruningEnabled,maxPrefixDrawdownBps,maxHops:6,
+        minSpreadBps:50,budgetMs:5000,maxCandidates:100,
+        pricedTokens:new Map([[weth,{maxBorrow:1000n*unit}]])}});
+  assert.equal(run(false,1000).opportunities.length,1);
+  const pruned=run(true,1000);
+  assert.equal(pruned.opportunities.length,0);
+  assert.equal(pruned.enumeration?.prefixPruningEnabled,true);
+  assert.equal(pruned.enumeration?.maxPrefixDrawdownBps,1000);
+  assert(Number(pruned.enumeration?.prefixPrunedForward)>0);
+  assert.equal(run(true,2000).opportunities.length,1);
+}
+const multiStart=(enumerationMethod:"dfs"|"layered",deduplicateRotations?:boolean,maxCandidates=100)=>
+  scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:null,mids,
+    // Multiple signals for the same route must not produce exact duplicates.
+    usdView:{...view,signals:[...view.signals,...view.signals]},
+    cfg:{enumerationMethod,deduplicateRotations,maxHops:6,minSpreadBps:50,budgetMs:5000,
+      maxCandidates,pricedTokens:new Map([[weth,{maxBorrow:2000n*unit}],[usdc,{maxBorrow:1000n*unit}]])}});
+for(const method of ["dfs","layered"] as const) {
+  const distinct=multiStart(method);
+  assert.equal(distinct.outcome,"ran");
+  assert.equal(distinct.opportunities.length,2,"default retains both execution starts, once each");
+  assert.deepEqual(new Set(distinct.opportunities.map(o=>o.flashToken)),new Set([weth,usdc]));
+  assert.deepEqual(distinct.opportunities,multiStart(method,false).opportunities);
+  const merged=multiStart(method,true);
+  assert.equal(merged.opportunities.length,1,"enabled restores rotation merging");
+  assert.equal(merged.opportunities[0]!.flashToken,usdc,"legacy rank still selects larger P/cap");
+  assert.equal(multiStart(method,false,1).opportunities.length,1,"candidate cap remains enforced");
+}
+assert.deepEqual(multiStart("dfs").opportunities,multiStart("layered").opportunities);
 const zeroPrefixView={...view,quotes:quotes.map((q,i)=>i<2?{...q,value:{num:1000n,den:1000n}}:q)};
 assert.equal(scan("dfs",6,zeroPrefixView,5000).opportunities.length,1,
   "zero-profit prefixes do not reject a profitable closed cycle");
@@ -70,6 +105,26 @@ const priced=new Map<string,ResolvedBlockScanMid>([
     quoteAmountIn:2_000_000_000n,quoteAmountOut:102n*unit/100n}],
 ]);
 const usd=buildBlockScanUsdView([e0,e1],priced);
+// All eight top-level policy combinations, with no forced route supplied.
+const samePoolEdges=[e0,{...e1,target:e0.target}];
+const samePoolMids=new Map(samePoolEdges.map((edge,i)=>[blockScanEdgeKey(edge),{
+  ...priced.get(blockScanEdgeKey(i===0?e0:e1))!,pool:edge.target,edges:[edge],
+}]));
+for(const enumerationMethod of ["dfs","layered"] as const) {
+  for(const allowRepeatedPools of [false,true]) for(const deduplicateRotations of [false,true]) {
+    const cfg={enumerationMethod,allowRepeatedPools,deduplicateRotations,maxHops:2,minSpreadBps:50,
+      maxCandidates:100,budgetMs:5000,pricedTokens:new Map([[weth,{maxBorrow:100n*unit}],[usdc,{maxBorrow:100n*unit}]])};
+    const input={edges:samePoolEdges,mids:samePoolMids,sourceBlock:10,swapTouched:null,cfg};
+    const result=scanBlockStateFromResolvedMids(input);
+    assert.equal(result.opportunities.length,allowRepeatedPools?(deduplicateRotations?1:2):0);
+    assert.equal(result.enumeration?.allowRepeatedPools,allowRepeatedPools);
+    assert.deepEqual(scanBlockStateFromResolvedMids({...input,
+      usdView:buildBlockScanUsdView(samePoolEdges,samePoolMids,20,!allowRepeatedPools)}).opportunities,result.opportunities,
+      "a stale USD view cannot override the top-level switch");
+    assert.equal(scanBlockStateFromResolvedMids({...input,cfg:{...cfg,maxCandidates:1}}).opportunities.length,allowRepeatedPools?1:0);
+    assert.equal(scanBlockStateFromResolvedMids({...input,cfg:{...cfg,budgetMs:0}}).outcome,"budget_exceeded");
+  }
+}
 assert.equal(usd.quotes.length,2);
 for(const q of usd.quotes){
   const a=usd.referenceUsdPerRaw.get(q.tokenIn)!,b=usd.referenceUsdPerRaw.get(q.tokenOut)!;

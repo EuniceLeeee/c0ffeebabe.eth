@@ -1212,7 +1212,7 @@ export const UNIV3_FIXTURE_TICK_SPACING = 1;
 export const UNIV3_FIXTURE_LIQUIDITY = 1_000_000_000_000_000_000n;
 export const UNIV3_FIXTURE_SQRT_PRICE_X96 = 1n << 96n;
 
-interface UniV3PoolContext {
+export interface UniV3PoolContext {
   readonly pool: string;
   readonly factory: string;
   readonly token0: string;
@@ -1367,7 +1367,7 @@ export function univ3FixtureRuntime(ctx: UniV3PoolContext): CentralAdapterRuntim
   };
 }
 
-async function runUniv3Lifecycle(
+export async function runUniv3Lifecycle(
   canonical: CanonicalSource,
   ctx: UniV3PoolContext,
   runtime: CentralAdapterRuntime = univ3FixtureRuntime(ctx),

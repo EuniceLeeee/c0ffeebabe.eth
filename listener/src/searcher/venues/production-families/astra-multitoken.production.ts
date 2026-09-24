@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { astraMultiTokenCapture } from "../protocols/astra-multitoken-family/capture.js";
 import { astraMultiTokenFamilyOwnedAction } from "../protocols/astra-multitoken-family/action.js";
@@ -10,6 +11,8 @@ import { astraMultiTokenFamilyManifest } from "../protocols/astra-multitoken-fam
 import { astraMultiTokenPricing } from "../protocols/astra-multitoken-family/pricing.js";
 import { astraMultiTokenProtocol } from "../protocols/astra-multitoken-family/protocol.js";
 import { astraMultiTokenRoutes } from "../protocols/astra-multitoken-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ASTRA_MULTITOKEN_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: astraMultiTokenFamilyManifest,

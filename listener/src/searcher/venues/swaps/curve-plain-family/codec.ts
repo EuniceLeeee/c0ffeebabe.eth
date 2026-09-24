@@ -44,19 +44,24 @@ export const EXECUTION = Object.freeze({
   "received-no-receiver": new ethers.Interface(["function exchange_received(int128,int128,uint256,uint256) returns (uint256)"]),
   exchange: new ethers.Interface(["function exchange(int128,int128,uint256,uint256) returns (uint256)"]),
   "received-uint": new ethers.Interface(["function exchange_received(uint256,uint256,uint256,uint256,address) returns (uint256)"]),
+  "exchange-uint": new ethers.Interface(["function exchange(uint256,uint256,uint256,uint256) returns (uint256)"]),
 });
 export const INT_MODES = Object.freeze(["received", "received-no-receiver", "exchange"] as const);
-export const MODES: readonly CurvePlainMode[] = Object.freeze([...INT_MODES, "received-uint"]);
+export const UINT_MODES = Object.freeze(["received-uint", "exchange-uint"] as const);
+export const MODES: readonly CurvePlainMode[] = Object.freeze([...INT_MODES, ...UINT_MODES]);
+export const pullsInput = (mode: CurvePlainMode): boolean => mode === "exchange" || mode === "exchange-uint";
+export const executionFunction = (mode: CurvePlainMode): "exchange" | "exchange_received" =>
+  pullsInput(mode) ? "exchange" : "exchange_received";
 export const hasReceiver = (mode: CurvePlainMode): boolean => mode === "received" || mode === "received-uint";
 export const MAX_UINT = (1n << 256n) - 1n;
 export const lower = (value: string): string => ethers.getAddress(value).toLowerCase();
 export const same = (a: string, b: string): boolean => lower(a) === lower(b);
 export const validIndex = (i: number): boolean => Number.isInteger(i) && i >= 0 && i < 8;
 export function selector(mode: CurvePlainMode): `0x${string}` {
-  return EXECUTION[mode].getFunction(mode === "exchange" ? "exchange" : "exchange_received")!.selector as `0x${string}`;
+  return EXECUTION[mode].getFunction(executionFunction(mode))!.selector as `0x${string}`;
 }
 export function executionData(mode: CurvePlainMode, i: number, j: number, dx: bigint, minDy: bigint, receiver: string): string {
-  return EXECUTION[mode].encodeFunctionData(mode === "exchange" ? "exchange" : "exchange_received",
+  return EXECUTION[mode].encodeFunctionData(executionFunction(mode),
     hasReceiver(mode) ? [i, j, dx, minDy, receiver] : [i, j, dx, minDy]);
 }
 export function call(id: string, to: string, data: string): AdapterRequest {

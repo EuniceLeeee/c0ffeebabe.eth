@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
@@ -42,14 +43,18 @@ import { prepareCreditFamilyRoutes, projectCreditRouteGraph } from "../adapter-c
 import type { CentralAdapterRuntime } from "../adapter-work-intent.js";
 import { createBoundedRequestExecutor, type AdapterRequest, type AdapterRequestResult } from
   "../venues/adapter-request-program.js";
-import { defineCreditFamily, definedFamilyPluginContractSummary } from "../venues/adapter-family-plugin.js";
+import { defineCreditFamily, defineSwapFamily, definedFamilyPluginContractSummary } from "../venues/adapter-family-plugin.js";
+import { plugin as baseV2Plugin } from "../venues/production-families/univ2-standard.production.js";
+import { createAdapterFamilyExactQuoteCache } from "../adapter-family-exact-quote-cache.js";
 import { capabilityManifestHash, FAMILY_CAPABILITY_NAMES, FamilyCapabilityCatalog, asPricedFamily } from
   "../venues/family-capability-catalog.js";
 import { plugin as fluidCreditStrictFamilyPlugin } from "../venues/production-families/fluid-credit.production.js";
 import { FLUID_CREDIT_PROBE_ACTOR, FLUID_VAULT_FACTORY_INTERFACE, FLUID_VAULT_INTERFACE } from
   "../venues/credit/fluid-family/codec.js";
 import { FLUID_CREDIT_PROBE_ACTOR_EVIDENCE_ID } from "../venues/credit/fluid-family/identity.js";
-import { BORROW_STATE, stateFixture } from "../venues/credit/fluid-family/test/quote-fixture.js";
+import { BORROW_STATE, capacityFixture, stateFixture } from "../venues/credit/fluid-family/test/quote-fixture.js";
+import type { FluidCreditDescriptor } from "../venues/credit/fluid-family/types.js";
+import { FLUID_RESOLVER_FACTORY } from "../venues/credit/fluid-family/capacity.js";
 import { StrictAdapterFamilyShadowCatalogPublicationRoot, createStrictCatalogConsumer,
   strictPricingPublicationKeysByFamily } from "../adapter-family-shadow-catalog-publication.js";
 import { catalogDiscoverySourceFingerprint, createCatalogStateInstanceMutationIssuer,
@@ -72,6 +77,7 @@ import { scanBlockStateFromResolvedMids } from
   "../detector/blockscan-scanner-core.js";
 import { readBlockTouchedStateKeys } from "../blockscan-touched-state.js";
 import { buildEffectiveMids, DEFAULT_EFFECTIVE_WETH_INPUT, effectiveMidRowCarried, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
+import { effectiveUsdPricing } from "../blockscan-usd-view.js";
 
 const STARTUP: CanonicalSource = Object.freeze({
   number: 25_800_000,
@@ -1471,14 +1477,17 @@ assert.equal(unanchoredEnumeration.opportunities.length, 0,
 assert.equal(unanchoredEnumeration.enumeration?.missingBuyReference, carryNextGraph.edges.length);
 assert.equal(unanchoredEnumeration.enumeration?.tokensAboveThreshold, 0);
 
-// The current scanner needs a WETH-valued buy/sell signal, not just a raw
-// profitable ring. Add only a valuation path through the same real lifecycle
-// and pricing issuers; do not inject prices, signals, or an expected route.
-const valuationPublication = await runUniv2Lifecycle(carryNextSource, {
+// The scanner consumes amount-sensitive effective prices, not raw spot mids.
+// Obtain both the WETH valuation and Exact quotes through the real lifecycle;
+// do not inject prices, amounts, signals, or an expected route. WETH reserves
+// use 18-decimal raw units so the production default P fits this small fixture.
+const valuationPool = {
   ...pool,
   pool: `0x${"2000".padStart(40, "0")}`,
   token1: ADDR.WETH,
-});
+  reserves: { reserve0: 1_000_000_000n, reserve1: 2n * 10n ** 18n, blockTimestampLast: 1 },
+};
+const valuationPublication = await runUniv2Lifecycle(STARTUP, valuationPool);
 const valuationView = buildFamilyRouteGraphView({
   routes: valuationPublication.instances.flatMap((instance) =>
     instance.routes.map((route, index) => ({
@@ -1488,37 +1497,86 @@ const valuationView = buildFamilyRouteGraphView({
 });
 const valuationRoot = new StrictProductionRuntimeRoot({
   catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-  readySource: carryNextSource,
-  readyGraph: valuationView.edges,
-  readyInstances: valuationPublication.instances,
+  readySource: STARTUP,
+  readyGraph: [...carryNextGraph.edges, ...valuationView.edges],
+  readyInstances: [...parallelReadyInstances, ...valuationPublication.instances],
   readyFundingAssets: [],
 });
 const valuationGraph = createVerifiedGraphView({
   ...carryNextGraph,
   id: "strict-carry-valuation",
   familyIdForEdge: () => valuationPublication.familyId,
-  edges: valuationView.edges,
+  edges: [...carryNextGraph.edges, ...valuationView.edges],
+});
+const valuationRuntime = (source: CanonicalSource) => runtime(source, {
+  omitAmountSimulation: true,
+  reservesByTarget: new Map([
+    [firstParallelTarget, { reserve0: 1_000_000_000n, reserve1: 3_000_000_000n, blockTimestampLast: 2 }],
+    [secondParallelTarget, { reserve0: 3_000_000_000n, reserve1: 1_000_000_000n, blockTimestampLast: 2 }],
+    [valuationPool.pool, valuationPool.reserves],
+  ]),
 });
 const valuationCoordinator = new StrictCurrentRuntimeCoordinator(
   request => valuationRoot.createSession({
-    source: request.source, runtime: runtime(request.source),
+    source: request.source, runtime: valuationRuntime(request.source),
     fundingAssets: request.fundingAssets, kind: "pricing", control: request.control,
+    touchedPools: request.touchedPools,
   }),
   () => {},
 );
+const valuationBase = await valuationCoordinator.prepareCoarsePricing({
+  graph: createVerifiedGraphView({
+    ...carryBaseGraph,
+    id: "strict-carry-valuation-base",
+    familyIdForEdge: () => valuationPublication.familyId,
+    edges: valuationGraph.edges,
+  }),
+  deadlineAtMs: Date.now() + 10_000,
+});
+assert.equal(valuationBase.status, "complete");
 const valuationPricing = await valuationCoordinator.prepareCoarsePricing({
   graph: valuationGraph,
+  touchedPools: touchedA,
+  canonicalActivity: { source: carryNextSource, touchedStateKeys: touchedA, complete: true },
   deadlineAtMs: Date.now() + 10_000,
 });
 assert.equal(valuationPricing.status, "complete");
 assert.equal(valuationPricing.snapshot.sourceBlockHash, carryNextSource.hash);
-assert.equal(valuationPricing.snapshot.mids.size, valuationView.edges.length);
+assert.equal(valuationPricing.snapshot.mids.size, valuationGraph.edges.length);
+assert.equal(valuationPricing.snapshot.pricingProvenanceByEdgeKey?.get(edgeB.canonicalEdgeId!), "carried");
+assert.strictEqual(valuationPricing.snapshot.mids.get(edgeB.canonicalEdgeId!),
+  valuationBase.snapshot.mids.get(edgeB.canonicalEdgeId!));
+let valuationExactSession: StrictProductionRuntimeSession | undefined;
+const carryEffectiveMids = await buildEffectiveMids({
+  pricing: valuationPricing.snapshot,
+  weth: ADDR.WETH, gasCostWei: null, enumerationSpreadBps: carryEnumerationConfig.minSpreadBps,
+  concurrency: 2, control: { deadlineAtMs: Date.now() + 10_000 },
+  prepareQuote: async requiredEdgeIds => {
+    valuationExactSession = await valuationRoot.createSession({
+      source: carryNextSource, runtime: valuationRuntime(carryNextSource),
+      fundingAssets: [], kind: "exact", requiredEdgeIds,
+    });
+  },
+  quote: async request => {
+    assert(valuationExactSession);
+    const quote = await valuationExactSession.issueExact({ ...request, executor: EXECUTOR, runtimeEvidence: [] });
+    assert.equal(quote.status, "resolved");
+    assert("amountIn" in quote);
+    return quote;
+  },
+});
+assert.equal(carryEffectiveMids.complete, true);
+assert.deepEqual(carryEffectiveMids.source, carryNextSource);
+assert.equal(carryEffectiveMids.referenceWethInput, DEFAULT_EFFECTIVE_WETH_INPUT);
+assert.ok([...carryEffectiveMids.rows.values()].every(row => row.status === "quoted"));
+const carryUsdPricing = effectiveUsdPricing({ ...valuationPricing.snapshot, effectiveMids: carryEffectiveMids });
 const enumerated = scanBlockStateFromResolvedMids({
-  edges: [...carryNextGraph.edges, ...valuationView.edges],
+  edges: [...valuationGraph.edges],
   sourceBlock: carryNextSource.number,
   swapTouched: null,
   cfg: carryEnumerationConfig,
-  mids: new Map([...carriedPricing.mids, ...valuationPricing.snapshot.mids]),
+  mids: carryUsdPricing.mids,
+  usdView: carryUsdPricing.view,
 });
 assert.ok(enumerated.enumeration!.tokensAboveThreshold > 0);
 assert.ok(
@@ -3086,6 +3144,88 @@ const execution = session.buildExecution({
 });
 assert.equal(execution.status, "resolved");
 
+// Sequential issuance cannot reuse a starting-state method, forged handle,
+// foreign session, wrong caller, reordered prefix or disconnected amount.
+{
+  const reverse = session.edges.find(e => e.instanceKey === edge.instanceKey &&
+    e.tokenIn.toLowerCase() === edge.tokenOut.toLowerCase() &&
+    e.tokenOut.toLowerCase() === edge.tokenIn.toLowerCase())!;
+  assert(reverse);
+  const request = { edge: reverse, amountIn: exact.amountOut, executor: EXECUTOR,
+    runtimeEvidence: [], priorQuotes: [exact] };
+  await assert.rejects(session.issueExact(request), /exact-sequential-prefix-unsupported/);
+  await assert.rejects(session.issueExact({ ...request, amountIn: exact.amountOut + 1n }), /prefix does not supply/);
+  await assert.rejects(session.issueExact({ ...request, priorQuotes: [Object.freeze({ ...exact }) as typeof exact] }), /same-session/);
+  await assert.rejects(noSimulationSession.issueExact({ ...request, edge: noSimulationSession.edges.find(e =>
+    e.canonicalEdgeId === reverse.canonicalEdgeId)! }), /same-session/);
+  await assert.rejects(session.issueExact({ ...request, executor: ORIGIN }), /same-session/);
+  await assert.rejects(session.issueExact({ ...request, priorQuotes: [exact, exact] }), /same-session/);
+  assert("amountIn" in exact);
+  assert.equal((await session.issueExact({ edge, amountIn: exact.amountIn, executor: EXECUTOR,
+    runtimeEvidence: [] })).amountOut, exact.amountOut, "failed sequential trials never mutate effective/start state");
+}
+
+// Test-only sequential capability: exercise real issuer/cache/plan authority,
+// not V2 sequential pricing support (the production V2 method stays unchanged).
+{
+  function mutable<T>(value: T): T {
+    if (Array.isArray(value)) return value.map(mutable) as T;
+    if (value && typeof value === "object") return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, mutable(v)])) as T;
+    return value;
+  }
+  const definition = mutable(baseV2Plugin);
+  const plugin = defineSwapFamily({ ...definition, actionAdapters: baseV2Plugin.actionAdapters,
+    exact: { ...definition.exact, methods(input) {
+      return baseV2Plugin.exact.methods(input).map(method => {
+        if (method.kind !== "request-program") return method;
+        return { id: "fixture-sequential", kind: "request-program" as const, sequentialPrefix: true as const,
+          program: { ...method.program, decode(args) {
+            const result = method.program.decode(args);
+            const amountOut = result.amountOut + BigInt(args.programInput.prefix?.length ?? 0);
+            return { amountOut, evidence: { ...result.evidence, amountOut } };
+          } } };
+      });
+    } },
+  });
+  const entries = FAMILY_CAPABILITY_NAMES.map(capability => ({
+    familyId: plugin.manifest.familyId, capability, contractVersion: "sequential-fixture-v1",
+    contentHash: ethers.sha256(ethers.toUtf8Bytes(capability)).slice(2),
+    semanticDependencies: [`contract:${capability}`], provenanceCommit: null,
+  }));
+  const catalog = new FamilyCapabilityCatalog({
+    modules: [{ sourceFile: "fixture/sequential.production.ts", plugin,
+      definitionBoundaryHash: definedFamilyPluginContractSummary(plugin).definitionBoundaryHash }],
+    generatedManifest: { format: "adapter-family-capabilities-v1", entries, manifestHash: capabilityManifestHash(entries) },
+  });
+  const published = await runUniv2Lifecycle(STARTUP, pool, catalog);
+  const loaded = catalog.forFamily(plugin.manifest.familyId);
+  const graph = buildFamilyRouteGraphView({ routes: published.instances.flatMap(instance =>
+    instance.routes.map((route, i) => ({ family: loaded, descriptor: instance.descriptor,
+      route, handle: instance.routeHandles[i]! }))) });
+  const sequentialRoot = new StrictProductionRuntimeRoot({ catalog, readySource: STARTUP,
+    readyGraph: graph.edges, readyInstances: published.instances, readyFundingAssets: [] });
+  const exactQuoteCache = createAdapterFamilyExactQuoteCache();
+  const session = await sequentialRoot.createSession({ source: CURRENT, kind: "exact", fundingAssets: [],
+    runtime: { ...runtime(CURRENT), exactQuoteCache } });
+  const firstEdge = session.edges[0]!;
+  const secondEdge = session.edges.find(e => e.tokenIn === firstEdge.tokenOut)!;
+  const first = await session.issueExact({ edge: firstEdge, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [] });
+  const request = { edge: secondEdge, amountIn: first.amountOut, executor: EXECUTOR, runtimeEvidence: [] };
+  const starting = await session.issueExact(request);
+  const sequential = await session.issueExact({ ...request, priorQuotes: [first] });
+  assert.equal(sequential.amountOut, starting.amountOut + 1n, "prefix cannot hit an initial-state cache entry");
+  const cached = await session.issueExact({ ...request, priorQuotes: [first] });
+  assert.equal(cached.amountOut, sequential.amountOut);
+  assert("outcome" in cached && cached.outcome.reasonCode === "exact-cache-reused");
+  const execution = { edge: secondEdge, exact: cached, minAmountOut: cached.amountOut, executor: EXECUTOR };
+  assert.throws(() => session.buildExecution(execution), /original sequential quote prefix/);
+  assert.equal(session.buildExecution({ ...execution, priorQuotes: [first] }).status, "resolved");
+  const otherFirst = await session.issueExact({ edge: firstEdge, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [] });
+  assert.throws(() => session.buildExecution({ ...execution, priorQuotes: [otherFirst] }), /original sequential quote prefix/);
+  assert.equal((await session.issueExact(request)).amountOut, starting.amountOut, "trial does not mutate effective state");
+}
+
 // Direct session consumers never supply origin: only the injected runtime may
 // bind it, and issued Exact authority must remain current at buildExecution.
 {
@@ -3218,8 +3358,29 @@ async function creditOptionalCapabilities(): Promise<void> {
   const vault = `0x${"71".repeat(20)}`;
   const supply = `0x${"72".repeat(20)}`;
   const borrow = `0x${"73".repeat(20)}`;
-  const factory = `0x${"74".repeat(20)}`;
+  const factory = FLUID_RESOLVER_FACTORY;
+  const liquidity = "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497";
   const collateral = 1_000n * 10n ** 18n;
+  const capacityBinding = { vault, supplyToken: supply, borrowToken: borrow, supplyDecimals: 18, borrowDecimals: 6,
+    factoryBinding: { factory, vaultId: 1n, reverseVault: vault } } as FluidCreditDescriptor;
+  const modelFixture = JSON.parse(readFileSync(new URL(
+    "../venues/credit/fluid-family/test/fixtures/local-models.json", import.meta.url), "utf8")) as {
+    runtimeCode: string; immutableReferences: readonly { name: string; offsets: readonly number[] }[];
+  };
+  const modelConstants: Record<string, string | bigint> = {
+    SUPPLY_TOKEN: supply, BORROW_TOKEN: borrow, SUPPLY_DECIMALS: 18n, BORROW_DECIMALS: 6n,
+    ADMIN_IMPLEMENTATION: ethers.ZeroAddress, SECONDARY_IMPLEMENTATION: ethers.ZeroAddress,
+    LIQUIDITY: liquidity, VAULT_FACTORY: factory, VAULT_ID: 1n,
+    LIQUIDITY_SUPPLY_EXCHANGE_PRICE_SLOT: ethers.ZeroHash, LIQUIDITY_BORROW_EXCHANGE_PRICE_SLOT: ethers.ZeroHash,
+    LIQUIDITY_USER_SUPPLY_SLOT: ethers.ZeroHash, LIQUIDITY_USER_BORROW_SLOT: ethers.ZeroHash,
+  };
+  const modelRuntime = Buffer.from(modelFixture.runtimeCode.slice(2), "hex");
+  for (const immutable of modelFixture.immutableReferences) {
+    assert(Object.hasOwn(modelConstants, immutable.name));
+    const word = Buffer.from(ethers.toBeHex(BigInt(modelConstants[immutable.name]!), 32).slice(2), "hex");
+    for (const offset of immutable.offsets) word.copy(modelRuntime, offset);
+  }
+  const vaultCode = "0x" + modelRuntime.toString("hex");
   function mutableDefinition<T>(value: T): T {
     if (Array.isArray(value)) return value.map(mutableDefinition) as T;
     if (value !== null && typeof value === "object") {
@@ -3237,6 +3398,12 @@ async function creditOptionalCapabilities(): Promise<void> {
   } = {}): CentralAdapterRuntime {
     const result = (request: AdapterRequest): AdapterRequestResult => {
       options.onRequest?.(request);
+      if (request.id === "credit-current-capacity") {
+        if (options.failPricing) throw new Error("fixture pricing read failed");
+        assert.equal(request.kind, "eth-call", "local quote reads current capacity, never an operate receipt");
+        return capacityFixture(source, capacityBinding, { liquidity,
+          ...(options.doubledRate ? { oracleRate: BORROW_STATE.oracleRate * 2n } : {}) })[0]!;
+      }
       const state = stateFixture(source).find((entry) => entry.id === request.id);
       if (state !== undefined) {
         if (options.failPricing) throw new Error("fixture pricing read failed");
@@ -3267,11 +3434,11 @@ async function creditOptionalCapabilities(): Promise<void> {
       }
       const data = request.id === "vault-constants"
         ? FLUID_VAULT_INTERFACE.encodeFunctionResult("constantsView", [[
-            factory, factory, ethers.ZeroAddress, ethers.ZeroAddress,
+            liquidity, factory, ethers.ZeroAddress, ethers.ZeroAddress,
             supply, borrow, 18, 6, 1n,
             ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash,
           ]])
-        : request.kind === "get-code" ? "0x6000"
+        : request.kind === "get-code" ? request.id === "vault-code" ? vaultCode : "0x6000"
         : request.id === "factory-reverse-vault"
           ? FLUID_VAULT_FACTORY_INTERFACE.encodeFunctionResult("getVaultAddress", [vault])
           : (() => { throw new Error(`unexpected Credit fixture request ${request.id}`); })();
@@ -3337,6 +3504,8 @@ async function creditOptionalCapabilities(): Promise<void> {
     });
     assert(lifecycle.instance, JSON.stringify(lifecycle.outcomes));
     const instance = lifecycle.instance;
+    assert.equal((instance.descriptor as FluidCreditDescriptor).localQuoteModel, "t1-view-v1",
+      "actual compiler-template runtime selects the local model through identity");
     assert.equal(instance.pricingInstances.length, priced ? 1 : 0);
     if (priced) {
       const authority = reissuePreparedInstanceAuthority({ family, instance, source: CURRENT, generation: CURRENT.generation });
@@ -3406,7 +3575,8 @@ async function creditOptionalCapabilities(): Promise<void> {
     assert.equal(edge.leavesStandingPosition, true);
     assert.equal(session.blocksPrefixInversion(edge), true);
     assert.equal(session.currentPricingForEdge(edge)?.status ?? null, priced ? "priced" : null);
-    assert.equal(reads.length, priced ? 3 : 0);
+    assert.deepEqual(reads, priced ? ["credit-current-capacity"] : [],
+      "priced Credit uses one amount-independent source-state request");
     if (priced) {
       const pricing = session.currentPricingForEdge(edge);
       assert(pricing?.status === "priced");
@@ -3414,13 +3584,26 @@ async function creditOptionalCapabilities(): Promise<void> {
       assert.equal(pricing.mid.mid, startupMid.mid * 2);
       assert.equal(session.stateKeyForEdge(edge), String(instance.pricingInstances[0]!.stateKey).toLowerCase());
       const refreshedExact = await session.issueExact({ edge, amountIn: collateral,
-        executor: EXECUTOR, runtimeEvidence: [], requireChainAmountQuote: true });
+        executor: EXECUTOR, runtimeEvidence: [] });
+      assert("methodId" in refreshedExact);
+      assert.equal(refreshedExact.methodId, "fluid-credit-local-amount");
       assert.equal(session.buildExecution({ edge, exact: refreshedExact,
         minAmountOut: refreshedExact.amountOut, executor: EXECUTOR }).status, "resolved",
         "refreshed Credit pricing must retain its authenticated generic Exact route");
       const touched = await root.createSession({ source: CURRENT, fundingAssets: [],
         touchedPools: new Set([session.stateKeyForEdge(edge)!]), runtime: fixtureRuntime(CURRENT) });
       assert.equal(touched.currentPricingForEdge(touched.edges[0]!)?.status, "priced");
+      const nextSource = { number: CURRENT.number + 1, hash: `0x${"76".repeat(32)}`,
+        generation: CURRENT.generation + 1 };
+      const nextReads: string[] = [];
+      const untouched = await root.createSession({ source: nextSource, kind: "pricing", fundingAssets: [],
+        touchedPools: new Set(), runtime: fixtureRuntime(nextSource, { doubledRate: true,
+          onRequest: request => nextReads.push(request.id) }) });
+      const untouchedPricing = untouched.currentPricingForEdge(untouched.edges[0]!);
+      assert(untouchedPricing?.status === "priced");
+      assert.equal(untouchedPricing.mid.mid, startupMid.mid * 2);
+      assert.deepEqual(nextReads, ["credit-current-capacity"],
+        "time-dependent Credit rates/limits refresh each block even with no touched pools");
       const failed = await root.createSession({ source: CURRENT, fundingAssets: [],
         runtime: fixtureRuntime(CURRENT, { failPricing: true }) });
       assert.equal(failed.currentPricingForEdge(failed.edges[0]!)?.status, "unresolved");
@@ -3439,13 +3622,19 @@ async function creditOptionalCapabilities(): Promise<void> {
     const request = { edge: exactEdge, amountIn: collateral, executor: EXECUTOR, runtimeEvidence: [] };
     const risk = await exactSession.issueExact({ ...request, creditDebtBps: 8_500n });
     assert("debtBps" in risk);
+    assert.equal(exactReads.filter(id => id === "credit-exact-operate").length, 1,
+      "explicit Credit risk remains simulated");
     const riskExecution = exactSession.buildExecution({ edge: exactEdge, exact: risk,
       minAmountOut: risk.amountOut, executor: EXECUTOR });
     assert.equal(riskExecution.status, "resolved");
     if (priced) {
-      for (const requireChainAmountQuote of [false, true]) {
-        const exact = await exactSession.issueExact({ ...request, requireChainAmountQuote });
+      for (const amountIn of [collateral, collateral * 2n]) {
+        const exact = await exactSession.issueExact({ ...request, amountIn });
         assert.equal("debtBps" in exact, false, "omitted debtBps selects ordinary Exact");
+        assert("methodId" in exact);
+        assert.equal(exact.methodId, "fluid-credit-local-amount");
+        assert.equal(exact.amountQuoteReuse, undefined, "local output is not declared chain-amount evidence");
+        assert.equal(exact.reusePolicy, undefined, "time-dependent local state is not cross-block reusable");
         assert(exact.amountOut > risk.amountOut);
         assert.deepEqual(exact.source, CURRENT);
         const execution = exactSession.buildExecution({ edge: exactEdge, exact,
@@ -3458,10 +3647,22 @@ async function creditOptionalCapabilities(): Promise<void> {
         assert.throws(() => exactSession.buildExecution({ edge: exactEdge, exact,
           minAmountOut: exact.amountOut, executor: ORIGIN }), /same session-issued/);
       }
+      assert.equal(exactReads.filter(id => id === "credit-exact-operate").length, 1,
+        "ordinary local Exact must not fabricate or request an execution simulation receipt");
+      const beforeChainRequirement = exactReads.length;
+      await assert.rejects(() => exactSession.issueExact({ ...request, requireChainAmountQuote: true }),
+        /no declared chain amount quote/);
+      assert.equal(exactReads.length, beforeChainRequirement, "chain-only rejection happens before transport");
       const failedExactSession = await root.createSession({ source: CURRENT, kind: "exact", fundingAssets: [],
         runtime: fixtureRuntime(CURRENT, { failOperate: true }) });
+      const stillLocal = await failedExactSession.issueExact({ ...request, edge: failedExactSession.edges[0]! });
+      assert(stillLocal.amountOut > 0n, "local amount calculation does not require a per-amount operate simulation");
       await assert.rejects(() => failedExactSession.issueExact({ ...request,
-        edge: failedExactSession.edges[0]! }), /strict exact unresolved/);
+        edge: failedExactSession.edges[0]!, creditDebtBps: 8_500n }), /strict exact unresolved/);
+      const failedStateSession = await root.createSession({ source: CURRENT, kind: "exact", fundingAssets: [],
+        runtime: fixtureRuntime(CURRENT, { failPricing: true }) });
+      await assert.rejects(() => failedStateSession.issueExact({ ...request,
+        edge: failedStateSession.edges[0]! }), /strict exact unresolved/);
     } else {
       await assert.rejects(() => exactSession.issueExact(request), /pricing and exact/);
     }

@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { goldxCapture } from "../protocols/goldx-family/capture.js";
 import { goldxFamilyOwnedAction } from "../protocols/goldx-family/action.js";
@@ -10,6 +11,8 @@ import { goldxFamilyManifest } from "../protocols/goldx-family/manifest.js";
 import { goldxPricing } from "../protocols/goldx-family/pricing.js";
 import { goldxProtocol } from "../protocols/goldx-family/protocol.js";
 import { goldxRoutes } from "../protocols/goldx-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_GOLDX_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: goldxFamilyManifest,

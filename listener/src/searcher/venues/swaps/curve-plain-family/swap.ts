@@ -5,7 +5,7 @@ import { CURVE_METAREGISTRY, META, addressArray, lower, same } from "./codec.js"
 import { LOG_ID, SWAP_TOPIC, UINT_LOG_ID, UINT_SWAP_TOPIC, UINT_NG_LOG_ID, UINT_NG_SWAP_TOPIC, decodeSwapLog } from "./discovery.js";
 import type { CurvePlainDescriptor, CurvePlainRoute } from "./types.js";
 const patternIds = [LOG_ID, UINT_LOG_ID, UINT_NG_LOG_ID];
-const actionIds = new Set(["curve-exchange", "curve-exchange-nr", "curve-exchange-plain", "curve-exchange-received-uint"]);
+const actionIds = new Set(["curve-exchange", "curve-exchange-nr", "curve-exchange-plain", "curve-exchange-received-uint", "curve-exchange-uint"]);
 const receiptSwap = (log: SwapEventLog) => decodeSwapLog({ ...log, kind: "log" });
 // Strict Graph edges deliberately omit protocol indices. Resolve the event's
 // coin indices with the same on-chain registry binding used by identity, then

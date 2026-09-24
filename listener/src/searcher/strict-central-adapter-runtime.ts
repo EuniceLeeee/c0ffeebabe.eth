@@ -33,7 +33,7 @@ import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 
 interface StrictProvider {
   call(
-    tx: { readonly to: string; readonly data: string; readonly from?: string },
+    tx: { readonly to: string; readonly data: string; readonly from?: string; readonly blockTag?: number },
     block?: number,
     control?: AdapterWorkControl,
   ): Promise<string>;
@@ -226,8 +226,10 @@ export function createStrictCentralAdapterRuntime(input: {
             request: AdapterRequest,
           ): Promise<AdapterRequestResult> => {
             assertCurrent();
+            const requestStartedAtMs = Date.now();
+            let requestStatus = "failed";
             try {
-              return await executeRequest(
+              const result = await executeRequest(
                 input.provider,
                 input.simulator,
                 request,
@@ -241,7 +243,20 @@ export function createStrictCentralAdapterRuntime(input: {
                   ? input.producerCallCache
                   : undefined,
               );
+              requestStatus = result.ok ? "returned" : "not-ok";
+              return result;
             } finally {
+              try {
+                if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1" &&
+                    (request.kind === "state-override-simulation" || request.kind === "effect-delta-simulation")) {
+                  console.log(`[strict-simulation-timing] ${JSON.stringify({
+                    sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
+                    familyId: execution.familyId, requestId: request.id, kind: request.kind,
+                    startedAtMs: requestStartedAtMs, wallMs: Date.now() - requestStartedAtMs,
+                    status: requestStatus, aborted: control?.signal?.aborted === true,
+                  })}`);
+                }
+              } catch { /* Diagnostics cannot bypass the source fence below. */ }
               // Outside request/domain error conversion, including direct
               // executor use without executeAdapterWork's outer fence.
               assertCurrent();
@@ -457,7 +472,9 @@ async function executeRequest(
           const data = cached !== undefined
             ? await cached
             : exactCallBackend === undefined
-            ? await provider.call(tx, source.number, control)
+            // ethers v6 reads blockTag from the transaction, not argument two.
+            // Keep the legacy argument for controlled provider implementations.
+            ? await provider.call({ ...tx, blockTag: source.number }, source.number, control)
             : await exactCallBackend.call(tx, control);
           return { completion: "returned" as const, data };
         } catch (error) {

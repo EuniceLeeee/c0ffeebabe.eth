@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { evaluateEv } from "../ev-evaluator.js";
 import { DEFAULT_BRIBE_BPS } from "../live-envelope.js";
+import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
 
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 
@@ -63,8 +64,10 @@ assert(
 console.log("[runtime-defaults] deploy preserves block-scan multicall mode: PASS");
 
 const searcherMain = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
-const blockscanHopDefault = searcherMain.match(/const DEFAULT_BLOCKSCAN_MAX_HOPS = (\d+);/);
-assert(blockscanHopDefault?.[1] === "6", "paired blockscan defaults to at most six hops");
+const blockscanHopDefault = BLOCKSCAN_ENUMERATION_DEFAULTS.maxHops;
+assert(blockscanHopDefault === 6 && searcherMain.includes(
+  "const DEFAULT_BLOCKSCAN_MAX_HOPS = BLOCKSCAN_ENUMERATION_DEFAULTS.maxHops;",
+), "paired blockscan defaults to at most six hops from the shared configuration");
 const blockscanHopReads = [...searcherMain.matchAll(
   /Number\(\s*process\.env\.SEARCHER_BLOCKSCAN_MAX_HOPS \?\? DEFAULT_BLOCKSCAN_MAX_HOPS,?\s*\)/g,
 )];
@@ -73,14 +76,15 @@ for (const read of blockscanHopReads) {
   const resolve = new Function("process", "DEFAULT_BLOCKSCAN_MAX_HOPS", `return ${read[0]};`) as
     (process: { env: { SEARCHER_BLOCKSCAN_MAX_HOPS?: string } }, fallback: number) => number;
   for (const [configured, expected] of [[undefined, 6], ["3", 3], ["4", 4], ["6", 6]] as const) {
-    assert(resolve({ env: { SEARCHER_BLOCKSCAN_MAX_HOPS: configured } }, Number(blockscanHopDefault![1])) === expected,
+    assert(resolve({ env: { SEARCHER_BLOCKSCAN_MAX_HOPS: configured } }, blockscanHopDefault) === expected,
       `blockscan hop default/override: ${configured} -> ${expected}`);
   }
 }
-assert(/SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS \?\? "1500"/.test(searcherMain),
+assert(BLOCKSCAN_ENUMERATION_DEFAULTS.budgetMs === 1500 &&
+  /SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS \?\? BLOCKSCAN_ENUMERATION_DEFAULTS\.budgetMs/.test(searcherMain),
   "reducing hops must preserve the 1500ms enumeration budget");
 assert(/SEARCHER_MAX_HOPS \?\? "3"/.test(searcherMain), "generic/backrun hop default is unchanged");
-assert(searcherMain.includes("resolvePairedEnumerationMethod(process.env.SEARCHER_BLOCKSCAN_ENUMERATION_METHOD)"),
+assert(searcherMain.includes("resolvePairedEnumerationMethod(env.SEARCHER_BLOCKSCAN_ENUMERATION_METHOD)"),
   "main forwards the shared DFS/layered switch");
 console.log("[runtime-defaults] shared six-hop blockscan default and explicit overrides: PASS");
 const profitRatioDefault = searcherMain.match(
@@ -105,7 +109,8 @@ for (const [index, match] of profitRatioGuards.entries()) {
     "an explicit 20% environment setting still selects the old threshold");
 }
 console.log("[runtime-defaults] 100% ratio guard and strict boundary: PASS");
-assert(/SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS\s*\?\? "100"/.test(searcherMain),
+assert(BLOCKSCAN_ENUMERATION_DEFAULTS.minSpreadBps === 100 &&
+  /SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS\s*\?\? BLOCKSCAN_ENUMERATION_DEFAULTS\.minSpreadBps/.test(searcherMain),
   "enumeration defaults to 1%, independently of Exact admission");
 assert(
   searcherMain.includes("SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED") &&

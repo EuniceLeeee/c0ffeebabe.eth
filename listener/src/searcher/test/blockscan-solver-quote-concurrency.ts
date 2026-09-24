@@ -17,7 +17,7 @@ export const EXECUTOR = "0x00000000000000000000000000000000000000ee";
 const TOKEN_A = "0x00000000000000000000000000000000000000a1";
 const TOKEN_B = "0x00000000000000000000000000000000000000b1";
 const PLAN_COUNT = 24;
-const EXPECTED_EXACT_CALLS_PER_PLAN = 16; // 4 grid + 4 GSS, two hops; no finalist reissuance.
+const EXPECTED_EXACT_CALLS_PER_PLAN = 16; // P/10P/100P/1000P + 4 GSS, two hops; no finalist reissuance.
 
 interface ExactBinding {
   readonly edge: TokenEdge;
@@ -161,13 +161,14 @@ export function sharedSession(
           : await new Promise<bigint>((resolve) => setImmediate(() => resolve(
               location.leg === 0 ? input.amountIn * 2n : (input.amountIn * 3n) / 5n,
             )));
-        if (location.leg === 0) {
+        if (location.leg < plans[location.planIndex]!.tokenPath.edges.length - 1) {
           const output = options.toleranceRawUnits === undefined
             ? amountOut * (options.safetyBps ?? 10000n) / 10000n : amountOut;
           const key = outputKey(output);
           completedOutputs.set(key, (completedOutputs.get(key) ?? 0) + 1);
           if (options.toleranceRawUnits === 1n) {
             completedOutputs.set(outputKey(output - 1n), Number.MAX_SAFE_INTEGER);
+            completedOutputs.set(outputKey(output + 1n), Number.MAX_SAFE_INTEGER);
           }
         }
         const handle = Object.freeze({ amountOut }) as ExactHandle;

@@ -36,6 +36,7 @@ import {
   loadProductionFamilyModules,
 } from "../venues/production-families/loader.js";
 import type { AdapterFamily } from "../venues/route-leg-adapter.js";
+import { defineFamilyActivation } from "../venues/production-families/activation.js";
 
 interface LoaderCandidate extends FamilyCandidate {
   readonly candidateKind: "loader-pool";
@@ -576,3 +577,43 @@ console.log(
   "production-family-loader strict PASS " +
     "(brand + mixed-boundary conflicts + definition hash)",
 );
+
+const activationKey = "SEARCHER_FAMILY_LOADER_FIXTURE_ENABLED";
+const disabled = defineFamilyActivation({ enabled: true, envKey: activationKey }, { [activationKey]: "0" });
+const enabled = defineFamilyActivation({ enabled: false, envKey: activationKey }, { [activationKey]: "1" });
+const disabledResult = await loadFixture({ "fixture.production.ts": { plugin: brandedPlugin, activation: disabled } });
+assertCompleteProductionFamilyLoad(disabledResult);
+assert.deepEqual(disabledResult.plugins, []);
+assert.equal(disabledResult.disabledPlugins[0]!.plugin, brandedPlugin);
+assert.equal(disabledResult.disabledPlugins[0]!.activation, disabled);
+const restoredResult = await loadFixture({ "fixture.production.ts": { plugin: brandedPlugin, activation: enabled } });
+assertCompleteProductionFamilyLoad(restoredResult);
+assert.equal(restoredResult.plugins[0]!.plugin, brandedPlugin);
+assert.deepEqual(restoredResult.disabledPlugins, []);
+assert.notEqual(restoredResult.scanSha256, disabledResult.scanSha256);
+assert.deepEqual(strictContractResult.plugins[0]!.activation,
+  { enabled: true, defaultEnabled: true, envKey: null }, "legacy fixtures without activation remain enabled");
+
+const disabledConflict = await loadFixture({
+  "a-disabled.production.ts": { plugin: brandedPlugin, activation: disabled },
+  "b-duplicate.production.ts": { plugin: brandedPlugin },
+  "c-invalid.production.ts": { plugin: { ...spreadSourcePlugin }, activation: disabled },
+  "d-invalid-activation.production.ts": { plugin: spreadSourcePlugin, activation: { ...disabled } },
+});
+assert.deepEqual(disabledConflict.plugins, []);
+assert.equal(disabledConflict.disabledPlugins.length, 1);
+assert.deepEqual(disabledConflict.issues.map(issue => [issue.sourceFile, issue.code]), [
+  ["b-duplicate.production.ts", "family_registration_conflict"],
+  ["c-invalid.production.ts", "invalid_module_contract"],
+  ["d-invalid-activation.production.ts", "invalid_module_contract"],
+]);
+assert.throws(() => assertCompleteProductionFamilyLoad(disabledConflict), /incomplete/);
+const unknownInfraDefinition = strictDefinition({ familyIdValue: "swap:disabled-unknown-infra",
+  actionId: "disabled-unknown-infra-swap" });
+const unknownInfra = defineSwapFamily({ ...unknownInfraDefinition,
+  manifest: { ...unknownInfraDefinition.manifest, requiredInfraActionAdapterIds: ["fixture-unknown-infra"] } });
+const unknownInfraResult = await loadFixture({ "unknown.production.ts": { plugin: unknownInfra, activation: disabled } });
+assert.equal(unknownInfraResult.issues[0]!.code, "invalid_module_contract");
+assert.match(unknownInfraResult.issues[0]!.message, /unknown shared infra/);
+assert.equal(unknownInfraResult.disabledPlugins.length, 0);
+console.log("production-family-loader activation PASS (disabled definitions still fully validated; restore; legacy default)");

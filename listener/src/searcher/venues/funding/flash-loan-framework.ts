@@ -208,7 +208,7 @@ export function createErc20BalanceFlashFundingCapability(
         tokenIn: _offer.asset,
         tokenOut: _offer.asset,
         amount: MAX_UINT,
-        params: { spender: config.target, amount: MAX_UINT },
+        params: { spender: config.target, amount: MAX_UINT, minimumAllowance: amount },
         children: [],
       };
     },

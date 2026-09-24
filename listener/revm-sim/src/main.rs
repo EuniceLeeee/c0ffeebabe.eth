@@ -1360,6 +1360,8 @@ struct StrictRequest {
     block_number: u64,
     #[serde(default, deserialize_with = "deserialize_source_pin")]
     source_pin: Option<SourcePin>,
+    #[serde(default, deserialize_with = "deserialize_executor_runtime_code")]
+    executor_runtime_code: Option<ExecutorRuntimeCode>,
     rpc_url: Option<String>,
     from: String,
     to: String,
@@ -1386,6 +1388,17 @@ struct StrictRequest {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExactTokenObservation { token: String, account: String }
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExecutorRuntimeCode { code: String, keccak256: String }
+
+fn deserialize_executor_runtime_code<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<ExecutorRuntimeCode>, D::Error> {
+    ExecutorRuntimeCode::deserialize(d).map(Some)
+}
+
+#[derive(Debug, Serialize)]
+struct CounterfactualExecutorCode { address: String, keccak256: String }
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -1443,6 +1456,8 @@ struct DaemonResponse {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StrictSimulateEffects {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    counterfactual_executor_code: Option<CounterfactualExecutorCode>,
     outcome: StrictOutcome,
     execution_gas_used: String,
     native_deltas: Vec<SimNativeDelta>,
@@ -2325,8 +2340,37 @@ impl Daemon {
         allowance_slots: &mut HashMap<Address, u64>,
         req: &StrictRequest, plan: &StrictPlan, started: Instant,
     ) -> Result<DaemonResponse> {
+        // Hydrate only source values before local overrides and deal-slot trials.
+        // Remote cache warmth is separate from EVM transaction warmth.
+        let mut accounts: Vec<_> = plan.calls.iter().flat_map(|c| [c.from, c.to])
+            .chain([Address::ZERO, plan.actor, plan.origin])
+            .chain(plan.native.iter().copied())
+            .chain(plan.pairs.iter().flat_map(|(token, account)| [*token, *account]))
+            .chain(plan.supply.iter().copied()).collect();
+        let mut storage = Vec::new();
+        for deal in &req.token_deals {
+            let token = parse_address(&deal.token)?;
+            let to = parse_address(&deal.to)?;
+            accounts.extend([token, to]);
+            for index in mapping_slot_candidates(deal.balance_slot, balance_slots.get(&token).copied()) {
+                storage.push((token, erc20_balance_slot(to, index)));
+            }
+        }
+        for call in &plan.calls[..plan.calls.len() - 1] {
+            if let Some(spender) = decode_approve_spender(&call.calldata) {
+                for index in mapping_slot_candidates(call.allowance_slot, allowance_slots.get(&call.to).copied()) {
+                    storage.push((call.to, erc20_allowance_slot(plan.actor, spender, index)));
+                }
+            }
+        }
+        accounts.sort_unstable(); accounts.dedup();
+        storage.sort_unstable(); storage.dedup();
+        let warmed = remote.warm_batch(&accounts, &storage, None).is_ok();
+        remote.rpc.check_fatal()?;
+
         // No prepared overlay, invented funding or transaction-prefix state.
         let mut db = CacheDB::new(SharedRemote(Rc::clone(&remote)));
+        apply_executor_runtime_code(&mut db, plan)?;
         if let Some(balance) = plan.native_balance {
             let mut info = db.basic(plan.actor)?.unwrap_or_default();
             info.balance = balance;
@@ -2334,29 +2378,21 @@ impl Daemon {
         }
         apply_token_deals(&mut db, &env, &req.token_deals, balance_slots, Some(&remote), true)
             .map_err(|_| StrictFailure(StrictFailureKind::Observation))?;
-
-        // Performance-only hints. Trace values never enter pinned state; every
-        // missed/unsupported hint still executes against the identical source.
-        let accounts: Vec<_> = plan.calls.iter().flat_map(|c| [c.from, c.to])
-            .chain([plan.origin]).collect();
-        let mut storage = Vec::new();
-        for deal in &req.token_deals {
-            let token = parse_address(&deal.token)?;
-            for index in mapping_slot_candidates(deal.balance_slot, balance_slots.get(&token).copied()) {
-                storage.push((token, erc20_balance_slot(plan.actor, index)));
-            }
-        }
         for call in &plan.calls[..plan.calls.len() - 1] {
-            if let Some(spender) = decode_approve_spender(&call.calldata) {
+            if decode_approve_spender(&call.calldata).is_some() {
                 if let Some(slot) = call.allowance_slot { allowance_slots.insert(call.to, slot); }
-                for index in mapping_slot_candidates(call.allowance_slot, allowance_slots.get(&call.to).copied()) {
-                    storage.push((call.to, erc20_allowance_slot(plan.actor, spender, index)));
-                }
             }
         }
-        if remote.warm_batch(&accounts, &storage, None).is_ok() {
-            let refs: Vec<_> = plan.calls.iter().collect();
-            let _ = trace_prefetch(&remote, &db, &refs);
+
+        // Trace hints must see the completed local deal/override state. Trace
+        // values never enter pinned state; missed hints retain lazy source reads.
+        if warmed {
+            // The legacy warm-hint overlay has no code field. Do not trace old
+            // chain code for a counterfactual request; normal lazy reads suffice.
+            if plan.executor_code.is_none() {
+                let refs: Vec<_> = plan.calls.iter().collect();
+                let _ = trace_prefetch(&remote, &db, &refs);
+            }
         }
         remote.rpc.check_fatal()?;
 
@@ -2377,6 +2413,9 @@ impl Daemon {
         };
         let revert_reason = match &outcome { StrictOutcome::Revert { output, .. } => Some(output.clone()), _ => None };
         let mut effects = StrictSimulateEffects { outcome, execution_gas_used: gas_used.to_string(),
+            counterfactual_executor_code: plan.executor_code.as_ref().map(|(target, code)| CounterfactualExecutorCode {
+                address: format!("{target:#x}"), keccak256: format!("{:#x}", code.hash_slow()),
+            }),
             native_deltas: Vec::new(), token_deltas: Vec::new(), total_supply_deltas: Vec::new(),
             logs: if success && req.observe_logs { logs } else { Vec::new() } };
         // A failed sibling has no accepted effects, not partial setup effects.
@@ -2404,6 +2443,7 @@ impl Daemon {
 }
 
 struct StrictPlan {
+    executor_code: Option<(Address, Bytecode)>,
     actor: Address,
     origin: Address,
     inner: bool,
@@ -2427,6 +2467,18 @@ impl StrictPlan {
             Ok(out)
         };
         let actor = address(&req.from)?;
+        let executor_code = if let Some(v) = &req.executor_runtime_code {
+            let target = address(&req.to)?;
+            if req.source_pin.is_none() || target == actor { bail!("counterfactual code requires pinned distinct target"); }
+            strict_hex(&json!(v.code), None)?;
+            strict_hex(&json!(v.keccak256), Some(32))?;
+            let bytes = parse_hex_bytes(&v.code)?;
+            if bytes.is_empty() || format!("{:#x}", keccak256(&bytes)) != v.keccak256.to_lowercase() {
+                bail!("counterfactual code hash mismatch");
+            }
+            Some((target, Bytecode::new_raw_checked(Bytes::from(bytes))
+                .map_err(|_| anyhow!("invalid counterfactual bytecode"))?))
+        } else { None };
         let inner = match req.caller_mode.as_deref() { None | Some("top-level") => false,
             Some("impersonated-call-frame") => true, _ => bail!("invalid caller mode") };
         let origin = req.transaction_origin.as_deref().map(address).transpose()?;
@@ -2463,11 +2515,23 @@ impl StrictPlan {
             if accounts.is_empty() { accounts.push(actor); }
             tokens.iter().flat_map(|t| accounts.iter().map(move |a| (*t, *a))).collect()
         };
-        Ok(Self { actor, origin: origin.unwrap_or(actor), inner,
+        Ok(Self { executor_code, actor, origin: origin.unwrap_or(actor), inner,
             native_balance: req.native_balance_wei.as_deref().map(uint).transpose()?,
             native: addresses(req.observe_native_balances.as_deref().unwrap_or(&[]))?, pairs,
             supply: addresses(&req.observe_total_supply)?, calls })
     }
+}
+
+/// Request-local code only, before all baseline probes. Preserve the source
+/// account's balance, nonce and storage; never mutate the remote/pinned cache.
+fn apply_executor_runtime_code<D: ExecutionProfile>(db: &mut CacheDB<D>, plan: &StrictPlan) -> Result<()> {
+    if let Some((target, code)) = &plan.executor_code {
+        let mut info = db.basic(*target)?.unwrap_or_default();
+        info.code_hash = code.hash_slow();
+        info.code = Some(code.clone());
+        db.insert_account_info(*target, info);
+    }
+    Ok(())
 }
 
 /// Ordinary mainnet execution with fee bookkeeping removed, not balances
@@ -3469,6 +3533,61 @@ mod tests {
     }
     fn setup(req: &StrictRequest, data: &str) -> PreCall {
         PreCall { from: req.from.clone(), to: req.to.clone(), calldata: data.into(), gas_limit: Some(100000), allowance_slot: None }
+    }
+
+    #[test]
+    fn executor_code_override_preserves_account_and_precedes_independent_probes() {
+        let (mut db, mut req) = local_strict(false, "0x60006000fd");
+        let target = parse_address(&req.to).unwrap();
+        let actor = parse_address(&req.from).unwrap();
+        let env = test_source().env;
+        db.insert_account_storage(target, U256::ZERO, U256::from(42)).unwrap();
+        let original = db.basic(target).unwrap().unwrap();
+        let caller = db.basic(actor).unwrap().unwrap();
+        assert!(strict_balance_of(&db, &env, target, actor).is_err());
+        let code = "0x60005460005260206000f3";
+        req.source_pin = Some(serde_json::from_value(json!({"chainId":1,"blockHash":format!("{:#x}", B256::ZERO)})).unwrap());
+        req.executor_runtime_code = Some(ExecutorRuntimeCode { code: code.into(), keccak256: format!("{:#x}", keccak256(parse_hex_bytes(code).unwrap())) });
+        let plan = StrictPlan::validate(&req).unwrap();
+        apply_executor_runtime_code(&mut db, &plan).unwrap();
+        let changed = db.basic(target).unwrap().unwrap();
+        assert_eq!(changed.balance, original.balance);
+        assert_eq!(changed.nonce, original.nonce);
+        assert_ne!(changed.code_hash, original.code_hash);
+        assert_eq!(db.basic(actor).unwrap().unwrap(), caller);
+        assert_eq!(db.storage(target, U256::ZERO).unwrap(), U256::from(42));
+        assert_eq!(strict_balance_of(&db, &env, target, actor).unwrap(), U256::from(42));
+        let (outcome, _, _) = strict_execute(&mut db, &env, &req, &plan).unwrap();
+        assert!(matches!(outcome, StrictOutcome::Success { .. }));
+        assert_eq!(strict_balance_of(&db, &env, target, actor).unwrap(), U256::from(42));
+        assert_eq!(db.basic(target).unwrap().unwrap().nonce, original.nonce);
+        assert_eq!(db.basic(target).unwrap().unwrap().balance, original.balance);
+        let (mut fresh, plain) = local_strict(false, "0x60006000fd");
+        let plain_plan = StrictPlan::validate(&plain).unwrap();
+        apply_executor_runtime_code(&mut fresh, &plain_plan).unwrap();
+        assert!(matches!(strict_execute(&mut fresh, &env, &plain, &plain_plan).unwrap().0, StrictOutcome::Revert { .. }));
+    }
+
+    #[test]
+    fn executor_code_override_rejects_bad_hash_unpinned_alias_and_account_fields() {
+        let valid = json!({"blockNumber":300, "sourcePin":{"chainId":1,"blockHash":format!("{:#x}", B256::ZERO)},
+            "from":format!("{:#x}", Address::repeat_byte(0xaa)), "to":format!("{:#x}", Address::repeat_byte(0xbb)), "data":"0x",
+            "executorRuntimeCode":{"code":"0x00","keccak256":format!("{:#x}", keccak256([0u8]))}});
+        assert!(StrictPlan::validate(&serde_json::from_value(valid.clone()).unwrap()).is_ok());
+        let mut null = valid.clone(); null["executorRuntimeCode"] = Value::Null;
+        assert!(serde_json::from_value::<StrictRequest>(null).is_err());
+        for key in ["address", "balance", "nonce", "storage", "state", "stateDiff"] {
+            let mut v = valid.clone(); v["executorRuntimeCode"][key] = json!("0x01");
+            assert!(serde_json::from_value::<StrictRequest>(v).is_err());
+        }
+        for (field, value) in [("code", json!("0x")), ("code", json!("0x1")), ("keccak256", json!(format!("{:#x}", B256::ZERO)))] {
+            let mut v = valid.clone(); v["executorRuntimeCode"][field] = value;
+            assert!(StrictPlan::validate(&serde_json::from_value(v).unwrap()).is_err());
+        }
+        let mut v = valid.clone(); v.as_object_mut().unwrap().remove("sourcePin");
+        assert!(StrictPlan::validate(&serde_json::from_value(v).unwrap()).is_err());
+        let mut v = valid.clone(); v["to"] = v["from"].clone();
+        assert!(StrictPlan::validate(&serde_json::from_value(v).unwrap()).is_err());
     }
 
     // Synthetic delegate proxy: changing the pointer to an empty account makes

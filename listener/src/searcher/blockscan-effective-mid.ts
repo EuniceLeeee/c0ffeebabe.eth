@@ -10,9 +10,9 @@ import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
 
 export type EffectivePricingInput = Parameters<typeof tokenToWethReferences>[0] &
   Pick<BlockScanStateSnapshot, "sourceBlock" | "sourceBlockHash" | "generation" | "pricingStateKeyByEdgeKey">;
-/** Single global default P (0.002 WETH); available gas still selects G instead.
+/** Single global default P (0.01 WETH); available gas still selects G instead.
  * Exact reuses the resulting row amount and hands that same input to Solver. */
-export const DEFAULT_EFFECTIVE_WETH_INPUT = 2_000_000_000_000_000n;
+export const DEFAULT_EFFECTIVE_WETH_INPUT = 10_000_000_000_000_000n;
 
 export interface EffectiveMidRow {
   readonly edgeId: string;

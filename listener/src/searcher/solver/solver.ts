@@ -46,6 +46,8 @@ import { buildResolvedPlanFromPath } from "./plan-builder.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 import type { V4QuotePathStats } from "./quoter.js";
 
+const BLOCKSCAN_AMOUNT_MULTIPLIERS = [1n, 10n, 100n, 1000n] as const;
+
 export interface ResolvedPlan {
   root: ResolvedPlanNode;
   netProfit: bigint;
@@ -94,7 +96,7 @@ export interface SolveOptions {
   gssMaxTries?: number;
   /** Geometric grid doublings each side of the victim-anchored center. Default 3. */
   gridHalfWidth?: number;
-  /** Block-scan coarse grid only. Default multiples: [P, 10P, 100P]. */
+  /** Block-scan coarse grid only. Default multiples: [P, 10P, 100P, 1000P]. */
   blockScanAmountGrid?: "multiples" | "geometric";
   /** How many top quote-ranked amount candidates get a full BotVM simulate.
    *  Default 3 — the whole point is to NOT full-sim every searched point. */
@@ -104,7 +106,7 @@ export interface SolveOptions {
   cache?: PoolStateCache;
   /** Per-hop quote haircut. 10000 = no haircut. */
   quoteSafetyBps?: bigint;
-  /** Absolute per-hop tolerance (0 or 1 token raw unit); replaces legacy BPS. */
+  /** Absolute per-hop +/- tolerance (0 or 1 token raw unit); replaces legacy BPS. */
   quoteToleranceRawUnits?: bigint;
   /** Admit near-miss quote candidates into phase-2 sim.
    *  0 = only positive quote profit. 20 = allow quoteProfit >= -20bps. */
@@ -324,6 +326,8 @@ export class AnvilSolver implements Solver {
       throw new Error("no profitable plan (effective input missing or exceeds flash cap)");
     }
     const center = isBlockScan ? rawCenter : clampToMax(rawCenter, maxFlashAmount);
+    const blockScanSearchUpper = center *
+      BLOCKSCAN_AMOUNT_MULTIPLIERS[BLOCKSCAN_AMOUNT_MULTIPLIERS.length - 1]!;
 
     // ── Phase 1: quote-only amount search (no Anvil sim) ──────────
     // Closed-loop arb: profitToken == startToken == flashToken, so the quote
@@ -407,7 +411,7 @@ export class AnvilSolver implements Solver {
         ? oracleSearchGrid(maxFlashAmount!)
         : capGrid(
             usesBlockScanMultiples
-              ? [center, center * 10n, center * 100n]
+              ? BLOCKSCAN_AMOUNT_MULTIPLIERS.map((multiple) => center * multiple)
               : geometricGrid(center, gridHalfWidth),
             maxFlashAmount,
           );
@@ -447,7 +451,7 @@ export class AnvilSolver implements Solver {
       // below is only a phase-2 admission policy; letting negative grid points
       // trigger GSS can burn the live TTL on quotes before sim gets a chance.
       // Like sui-mev, a 10x coarse grid needs a best/10..best*10 bracket.
-      // Intersect with blockscan's P..100P domain and the live funding cap;
+      // Intersect with blockscan's P..1000P domain and the live funding cap;
       // keep the existing 2x bracket for geometric/backrun search. Coarse
       // candidates remain in scored if the bounded refine finds no improvement.
       const refineLower = usesBlockScanMultiples
@@ -455,7 +459,7 @@ export class AnvilSolver implements Solver {
         : (bestX > 1n ? bestX / 2n : 1n);
       const refineUpper = clampToMax(
         usesBlockScanMultiples
-          ? (bestX * 10n < center * 100n ? bestX * 10n : center * 100n)
+          ? (bestX * 10n < blockScanSearchUpper ? bestX * 10n : blockScanSearchUpper)
           : bestX * 2n,
         maxFlashAmount,
       );
@@ -592,12 +596,7 @@ export class AnvilSolver implements Solver {
               rawOutputs,
               strictSession,
               exactHandles,
-              quoteToleranceRawUnits === 1n ? {
-                runtimeEvidence: opts.runtimeEvidence ?? Object.freeze([]),
-                control: adapterWorkControl,
-                shouldStop: pastDeadline,
-                onExactCall: () => { if (opts.timing) opts.timing.hopExactCalls++; },
-              } : undefined,
+              quoteToleranceRawUnits ?? 0n,
             ),
           );
         } catch (err) {

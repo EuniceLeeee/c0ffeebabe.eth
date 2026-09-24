@@ -17,6 +17,7 @@ import type { UniV2Descriptor, UniV2Route } from "./types.js";
 import { univ2VictimReplay } from "./victim.js";
 import { UNIV2_ROUTER } from "./victim.js";
 import { createUniV2SwapObservation } from "../../swap-observation.js";
+import { UNIV2_FAMILY_ID } from "./manifest.js";
 
 export const univ2Swap = {
   landedEvents: {
@@ -38,6 +39,21 @@ export const univ2Swap = {
     decode: ({ observation }) => decodeEffects(observation),
   },
   receiptObservation: createUniV2SwapObservation({
+    resolvePool(ctx, edge) {
+      const binding = ctx.resolveBinding?.(edge);
+      if (!binding || binding.familyId !== UNIV2_FAMILY_ID) return null;
+      const descriptor = binding.descriptor as UniV2Descriptor;
+      if (descriptor.pool.toLowerCase() !== edge.target.toLowerCase() ||
+          descriptor.quoteModel.kind !== "constant-product") return null;
+      const forward = edge.tokenIn.toLowerCase() === descriptor.token0.toLowerCase() &&
+        edge.tokenOut.toLowerCase() === descriptor.token1.toLowerCase();
+      const reverse = edge.tokenIn.toLowerCase() === descriptor.token1.toLowerCase() &&
+        edge.tokenOut.toLowerCase() === descriptor.token0.toLowerCase();
+      return forward || reverse ? {
+        token0: descriptor.token0, token1: descriptor.token1,
+        feeBps: descriptor.feeRule.feeBps,
+      } : null;
+    },
     adapterIds: ["univ2-swap"],
     canonicalIntakeTargets: [UNIV2_ROUTER],
     topics: [UNIV2_SWAP_TOPIC],

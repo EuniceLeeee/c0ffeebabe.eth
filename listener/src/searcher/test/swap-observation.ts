@@ -21,6 +21,14 @@ import {
 import { scanAddressLandedSwapActivity } from "../venues/landed-event-scanner.js";
 import { createStrictSwapObservation } from "../venues/swap-observation.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
+import {
+  UNIV2_FIXTURE_FACTORY,
+  UNIV3_FIXTURE_FACTORY, UNIV3_FIXTURE_FEE, UNIV3_FIXTURE_TICK_SPACING,
+  UNIV3_FIXTURE_LIQUIDITY, UNIV3_FIXTURE_SQRT_PRICE_X96,
+} from "../architecture-migration-fixture-replay.js";
+import {
+  createUniv2ReadyReceiptFixture, createUniv3ReadyReceiptFixture,
+} from "./ready-receipt-fixture.js";
 
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -31,6 +39,35 @@ const TOKEN0 = "0x00000000000000000000000000000000000000a0";
 const TOKEN1 = "0x00000000000000000000000000000000000000b1";
 const SENDER = "0x0000000000000000000000000000000000000aaa";
 const RECIPIENT = "0x0000000000000000000000000000000000000bbb";
+
+const READY_SOURCE = { number: 123, hash: ethers.ZeroHash, generation: 1 };
+
+function readyV2() {
+  return createUniv2ReadyReceiptFixture(READY_SOURCE, {
+    pool: ethers.getAddress(POOL), factory: UNIV2_FIXTURE_FACTORY,
+    token0: ethers.getAddress(TOKEN0), token1: ethers.getAddress(TOKEN1),
+    reserves: { reserve0: 1_000_000_000n, reserve1: 2_000_000_000n, blockTimestampLast: 1 },
+  });
+}
+
+function readyV3(pool = POOL) {
+  return createUniv3ReadyReceiptFixture(READY_SOURCE, {
+    pool: ethers.getAddress(pool), factory: UNIV3_FIXTURE_FACTORY,
+    token0: ethers.getAddress(TOKEN0), token1: ethers.getAddress(TOKEN1),
+    fee: UNIV3_FIXTURE_FEE, tickSpacing: UNIV3_FIXTURE_TICK_SPACING,
+    liquidity: UNIV3_FIXTURE_LIQUIDITY, sqrtPriceX96: UNIV3_FIXTURE_SQRT_PRICE_X96,
+  });
+}
+
+async function readyV2AndV3(v3Pool: string) {
+  const v2 = await readyV2();
+  const v3 = await readyV3(v3Pool);
+  return {
+    // Preserve the issued edge identities; neither root may bind synthetic edges.
+    graph: [...v2.graph, ...v3.graph],
+    resolveBinding: (item: TokenEdge) => v2.resolveBinding(item) ?? v3.resolveBinding(item),
+  };
+}
 
 const V2_IFACE = new ethers.Interface([
   "event Sync(uint112 reserve0,uint112 reserve1)",
@@ -88,16 +125,11 @@ function edge(input: Partial<TokenEdge> & Pick<TokenEdge, "adapterId" | "target"
 }
 
 async function testReceiptLevelV2Correlation(): Promise<void> {
-  const graph = [edge({
-    adapterId: "univ2-swap",
-    target: POOL,
-    poolToken0: TOKEN0,
-    poolToken1: TOKEN1,
-  })];
+  const { graph, resolveBinding } = await readyV2();
   const impacts = await detectImpactFromLogs([
     eventLog(V2_IFACE, "Sync", POOL, [101n, 202n]),
     eventLog(V2_IFACE, "Swap", POOL, [SENDER, 10n, 0n, 0n, 9n, RECIPIENT]),
-  ], graph);
+  ], graph, undefined, undefined, resolveBinding);
   const impact = impacts.find((candidate) => candidate.matchedAdapterId === "univ2-swap");
   assert(impact !== undefined, "V2 Swap should decode from the receipt");
   assert(impact.v2PostState?.reserve0 === 101n, "V2 observer should pair the Sync reserve0");
@@ -106,20 +138,7 @@ async function testReceiptLevelV2Correlation(): Promise<void> {
 
 async function testV2FinalReceiptStateAndMalformedIsolation(): Promise<void> {
   const v3Pool = "0x0000000000000000000000000000000000000c03";
-  const graph = [
-    edge({
-      adapterId: "univ2-swap",
-      target: POOL,
-      poolToken0: TOKEN0,
-      poolToken1: TOKEN1,
-    }),
-    edge({
-      adapterId: "univ3-swap",
-      target: v3Pool,
-      poolToken0: TOKEN0,
-      poolToken1: TOKEN1,
-    }),
-  ];
+  const { graph, resolveBinding } = await readyV2AndV3(v3Pool);
   const malformed = eventLog(V2_IFACE, "Swap", POOL, [SENDER, 10n, 0n, 0n, 9n, RECIPIENT]);
   malformed.data = "0x1234";
   const logs = [
@@ -149,6 +168,9 @@ async function testV2FinalReceiptStateAndMalformedIsolation(): Promise<void> {
     logs,
     graph,
     sourceGeneration,
+    undefined,
+    undefined,
+    resolveBinding,
   );
   assert(!transition.complete, "a malformed owned V2 trigger must fail the V2 family closed");
   assert(
@@ -163,12 +185,7 @@ async function testV2FinalReceiptStateAndMalformedIsolation(): Promise<void> {
 
 async function testUnknownSameTopicPoolIsNoMatch(): Promise<void> {
   const unknownPool = "0x0000000000000000000000000000000000000c99";
-  const graph = [edge({
-    adapterId: "univ2-swap",
-    target: POOL,
-    poolToken0: TOKEN0,
-    poolToken1: TOKEN1,
-  })];
+  const { graph, resolveBinding } = await readyV2();
   const logs = [
     eventLog(V2_IFACE, "Sync", POOL, [101n, 202n]),
     eventLog(V2_IFACE, "Swap", POOL, [
@@ -207,6 +224,7 @@ async function testUnknownSameTopicPoolIsNoMatch(): Promise<void> {
         throw new Error("an unowned same-topic pool must never trigger enrichment reads");
       },
     },
+    resolveBinding,
   );
   assert(
     transition.complete && transition.impacts.length === 1,
@@ -423,45 +441,19 @@ async function testRetiredBalancerV3HasNoReceiptAuthority(): Promise<void> {
 
 async function testCrossFamilyReceiptOrder(): Promise<void> {
   const v3Pool = "0x0000000000000000000000000000000000000c03";
-  const graph = [
-    edge({
-      adapterId: "univ3-swap",
-      target: v3Pool,
-      poolToken0: TOKEN0,
-      poolToken1: TOKEN1,
-    }),
-    edge({
-      adapterId: "univ2-swap",
-      target: POOL,
-      poolToken0: TOKEN0,
-      poolToken1: TOKEN1,
-    }),
-  ];
+  const { graph, resolveBinding } = await readyV2AndV3(v3Pool);
   const impacts = await detectImpactFromLogs([
     eventLog(V3_IFACE, "Swap", v3Pool, [SENDER, RECIPIENT, 10n, -9n, 1n << 96n, 123n, 1]),
     eventLog(V2_IFACE, "Sync", POOL, [101n, 202n]),
     eventLog(V2_IFACE, "Swap", POOL, [SENDER, 10n, 0n, 0n, 9n, RECIPIENT]),
-  ], graph);
+  ], graph, undefined, undefined, resolveBinding);
   assert(impacts[0]?.matchedAdapterId === "univ3-swap", "first log impact must stay first");
   assert(impacts[1]?.matchedAdapterId === "univ2-swap", "later V2 impact must stay second");
 }
 
 async function testMultiPoolTransitionRetainsEveryAffectedPool(): Promise<void> {
   const v3Pool = "0x0000000000000000000000000000000000000c03";
-  const graph = [
-    edge({
-      adapterId: "univ2-swap",
-      target: POOL,
-      poolToken0: TOKEN0,
-      poolToken1: TOKEN1,
-    }),
-    edge({
-      adapterId: "univ3-swap",
-      target: v3Pool,
-      poolToken0: TOKEN0,
-      poolToken1: TOKEN1,
-    }),
-  ];
+  const { graph, resolveBinding } = await readyV2AndV3(v3Pool);
   const logs = [
     eventLog(V2_IFACE, "Sync", POOL, [101n, 202n]),
     eventLog(V2_IFACE, "Swap", POOL, [SENDER, 10n, 0n, 0n, 9n, RECIPIENT]),
@@ -486,6 +478,9 @@ async function testMultiPoolTransitionRetainsEveryAffectedPool(): Promise<void> 
     logs,
     graph,
     sourceGeneration,
+    undefined,
+    undefined,
+    resolveBinding,
   );
   assert(transition.complete, "two admitted pool observations should form a complete transition");
   assert(transition.steps.length === 2, "transition should retain both receipt swap steps");
@@ -501,12 +496,7 @@ async function testMultiPoolTransitionRetainsEveryAffectedPool(): Promise<void> 
 }
 
 async function testRepeatedV3UsesTransactionFinalPostState(): Promise<void> {
-  const graph = [edge({
-    adapterId: "univ3-swap",
-    target: POOL,
-    poolToken0: TOKEN0,
-    poolToken1: TOKEN1,
-  })];
+  const { graph, resolveBinding } = await readyV3();
   const impacts = await detectImpactFromLogs([
     eventLog(V3_IFACE, "Swap", POOL, [
       SENDER,
@@ -526,7 +516,7 @@ async function testRepeatedV3UsesTransactionFinalPostState(): Promise<void> {
       222n,
       2,
     ]),
-  ], graph);
+  ], graph, undefined, undefined, resolveBinding);
   assert(impacts.length === 1, "repeated same-pool V3 impacts should collapse to final state");
   assert(
     impacts[0].amountIn === 20n &&
@@ -537,12 +527,7 @@ async function testRepeatedV3UsesTransactionFinalPostState(): Promise<void> {
 }
 
 async function testMalformedObserverCannotFallBackToTransfers(): Promise<void> {
-  const graph = [edge({
-    adapterId: "univ3-swap",
-    target: POOL,
-    poolToken0: TOKEN0,
-    poolToken1: TOKEN1,
-  })];
+  const { graph, resolveBinding } = await readyV3();
   const malformed = eventLog(V3_IFACE, "Swap", POOL, [
     SENDER,
     RECIPIENT,
@@ -568,6 +553,9 @@ async function testMalformedObserverCannotFallBackToTransfers(): Promise<void> {
       logs,
       logsCompleteness: "complete-receipt",
     }),
+    undefined,
+    undefined,
+    resolveBinding,
   );
   assert(transition.impacts.length === 0, "malformed family observation must not become an impact");
   assert(!transition.complete, "malformed family observation must make the transition unresolved");
@@ -582,12 +570,7 @@ async function testMalformedObserverCannotFallBackToTransfers(): Promise<void> {
 }
 
 async function testReceiptFragmentsAndGenerationMismatchFailClosed(): Promise<void> {
-  const graph = [edge({
-    adapterId: "univ3-swap",
-    target: POOL,
-    poolToken0: TOKEN0,
-    poolToken1: TOKEN1,
-  })];
+  const { graph, resolveBinding } = await readyV3();
   const logs = [
     eventLog(V3_IFACE, "Swap", POOL, [
       SENDER,
@@ -610,6 +593,9 @@ async function testReceiptFragmentsAndGenerationMismatchFailClosed(): Promise<vo
     logs,
     graph,
     fragmentGeneration,
+    undefined,
+    undefined,
+    resolveBinding,
   );
   assert(fragment.impacts.length === 1, "fragment may retain observation evidence");
   assert(!fragment.complete && !fragment.hashOnlyReplayable, "fragment must never certify a receipt");
@@ -639,6 +625,9 @@ async function testReceiptFragmentsAndGenerationMismatchFailClosed(): Promise<vo
       logs,
       logsCompleteness: "complete-receipt",
     }),
+    undefined,
+    undefined,
+    resolveBinding,
   );
   assert(mismatch.impacts.length === 0, "receipt B must not be relabeled with generation A");
   assert(
@@ -648,6 +637,7 @@ async function testReceiptFragmentsAndGenerationMismatchFailClosed(): Promise<vo
 
   const detector = new BackrunDetector();
   detector.setGraph(graph);
+  detector.setSwapObservationBindingResolver(resolveBinding);
   const baseEvent = {
     txHash: ethers.id("fragment-detector"),
     blockNumber: 124,
@@ -688,19 +678,9 @@ async function testAmbiguousDeltaSignsNeverGuessDirection(): Promise<void> {
     hooks: ethers.ZeroAddress,
   };
   const poolId = v4PoolId(v4Key);
+  const ready = await readyV2AndV3(v3Pool);
   const graph = [
-    edge({
-      adapterId: "univ2-swap",
-      target: POOL,
-      poolToken0: TOKEN0,
-      poolToken1: TOKEN1,
-    }),
-    edge({
-      adapterId: "univ3-swap",
-      target: v3Pool,
-      poolToken0: TOKEN0,
-      poolToken1: TOKEN1,
-    }),
+    ...ready.graph,
     edge({
       adapterId: "univ4-unlock",
       target: ADDR.UNISWAP_V4_POOL_MANAGER,
@@ -740,6 +720,9 @@ async function testAmbiguousDeltaSignsNeverGuessDirection(): Promise<void> {
       logs,
       logsCompleteness: "complete-receipt",
     }),
+    undefined,
+    undefined,
+    ready.resolveBinding,
   );
   assert(transition.impacts.length === 0, "ambiguous V2/V3/V4 signs must not create directions");
   assert(
@@ -771,14 +754,10 @@ async function testTransferOnlyCandidateNeverGuessesProtocol(): Promise<void> {
     "Transfer touches of an unowned broad-map pool are diagnostics only",
   );
 
+  const { graph, resolveBinding } = await readyV2();
   const admitted = await detectImpactTransitionFromLogs(
     logs,
-    [edge({
-      adapterId: "univ2-swap",
-      target: POOL,
-      poolToken0: TOKEN0,
-      poolToken1: TOKEN1,
-    })],
+    graph,
     createVictimSourceGeneration({
       sourceBlock: 123,
       sourceBlockHash: ethers.ZeroHash,
@@ -786,6 +765,9 @@ async function testTransferOnlyCandidateNeverGuessesProtocol(): Promise<void> {
       logs,
       logsCompleteness: "complete-receipt",
     }),
+    undefined,
+    undefined,
+    resolveBinding,
   );
   assert(
     admitted.unresolved.some(
@@ -796,12 +778,7 @@ async function testTransferOnlyCandidateNeverGuessesProtocol(): Promise<void> {
 }
 
 async function testV2EnrichmentIsPinnedToSourceGeneration(): Promise<void> {
-  const graph = [edge({
-    adapterId: "univ2-swap",
-    target: POOL,
-    poolToken0: TOKEN0,
-    poolToken1: TOKEN1,
-  })];
+  const { graph, resolveBinding } = await readyV2();
   const logs = [
     eventLog(V2_IFACE, "Swap", POOL, [SENDER, 10n, 0n, 0n, 9n, RECIPIENT]),
   ];
@@ -826,9 +803,7 @@ async function testV2EnrichmentIsPinnedToSourceGeneration(): Promise<void> {
           return V2_READ_IFACE.encodeFunctionResult("getReserves", [100n, 200n, 7]);
         }
         if (selector === V2_READ_IFACE.getFunction("factory")!.selector) {
-          return V2_READ_IFACE.encodeFunctionResult("factory", [
-            "0x0000000000000000000000000000000000000fac",
-          ]);
+          return V2_READ_IFACE.encodeFunctionResult("factory", [UNIV2_FIXTURE_FACTORY]);
         }
         if (selector === V2_READ_IFACE.getFunction("token0")!.selector) {
           return V2_READ_IFACE.encodeFunctionResult("token0", [TOKEN0]);
@@ -839,13 +814,14 @@ async function testV2EnrichmentIsPinnedToSourceGeneration(): Promise<void> {
         throw new Error(`unexpected V2 selector ${selector}`);
       },
     },
+    resolveBinding,
   );
   assert(transition.complete, "source-pinned V2 enrichment should decode");
   assert(transition.impacts[0]?.v2PostState?.reserve0 === 110n, "V2 final reserve0");
   assert(transition.impacts[0]?.v2PostState?.reserve1 === 191n, "V2 final reserve1");
   assert(
     transition.impacts[0]?.v2PostState?.feeBps === 30n,
-    "unmeasured V2 enrichment must use the standard fee",
+    "V2 enrichment must use the Ready descriptor fee",
   );
   assert(seenBlockTags.length === 4, "all V2 enrichment reads should be source-pinned");
   assert(

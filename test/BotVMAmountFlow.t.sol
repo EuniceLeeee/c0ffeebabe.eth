@@ -46,11 +46,12 @@ contract BotVMAmountFlowTest is Test {
         return abi.encodePacked(address(input), address(output), cases, uint24(section.length), section);
     }
 
-    function script(uint8 tolerance, uint256 firstOut, uint256 finalShortfall) private view returns (bytes memory) {
+    function script(uint8 tolerance, uint256 firstOut, int256 finalDelta) private view returns (bytes memory) {
         bytes memory one = step(a, b, 1, variant(first, a, b, 100, 200, firstOut));
-        bytes memory two = step(b, a, 2, bytes.concat(
-            variant(second, b, a, 200, 1000, 1000 - finalShortfall),
-            variant(second, b, a, 199, 995, 995 - finalShortfall)));
+        bytes memory two = step(b, a, 3, bytes.concat(
+            variant(second, b, a, 200, 1000, uint256(1000 + finalDelta)),
+            variant(second, b, a, 199, 995, uint256(995 + finalDelta)),
+            variant(second, b, a, 201, 1005, uint256(1005 + finalDelta))));
         bytes memory data = abi.encodePacked(uint256(100), tolerance, uint8(2), one, two);
         return abi.encodePacked(uint8(9), uint24(data.length), data);
     }
@@ -65,6 +66,18 @@ contract BotVMAmountFlowTest is Test {
         assertEq(second.received(), 199); assertEq(b.balanceOf(address(bot)), 777);
         assertEq(a.balanceOf(address(bot)), 1995);
     }
+    function testOneUnitExtraUsesActualInputWithoutLeavingDust() public {
+        bot.execute(script(1, 201, 0));
+        assertEq(second.received(), 201); assertEq(b.balanceOf(address(bot)), 777);
+        assertEq(a.balanceOf(address(bot)), 2005);
+    }
+    function testOffRejectsOneUnitExtra() public {
+        vm.expectRevert("flow output surplus"); bot.execute(script(0, 201, 0));
+        assertEq(b.balanceOf(address(bot)), 777);
+    }
+    function testTwoUnitsExtraRejected() public {
+        vm.expectRevert("flow output surplus"); bot.execute(script(1, 202, 0));
+    }
     function testOffRejectsOneUnitShortDespiteInventory() public {
         vm.expectRevert("flow output shortfall"); bot.execute(script(0, 199, 0));
         assertEq(b.balanceOf(address(bot)), 777);
@@ -73,16 +86,55 @@ contract BotVMAmountFlowTest is Test {
         vm.expectRevert("flow output shortfall"); bot.execute(script(1, 198, 0));
     }
     function testEachActualInputHasItsOwnQuoteAndOneUnitMinimum() public {
-        bot.execute(script(1, 199, 1));
+        bot.execute(script(1, 199, -1));
         assertEq(a.balanceOf(address(bot)), 1994);
+    }
+    function testFinalHopAllowsOneExtraUnit() public {
+        bot.execute(script(1, 201, 1));
+        assertEq(a.balanceOf(address(bot)), 2006);
+        assertEq(b.balanceOf(address(bot)), 777);
+    }
+    function testMixedSignedDeltasUseActualQuotesAtEachHop() public {
+        bot.execute(script(1, 199, 1));
+        assertEq(a.balanceOf(address(bot)), 1996);
+        assertEq(second.received(), 199);
+        assertEq(b.balanceOf(address(bot)), 777);
+    }
+    function testFinalHopRejectsTwoExtraUnits() public {
+        vm.expectRevert("flow output surplus"); bot.execute(script(1, 200, 2));
     }
     function testNoBroadWorstCaseFloorForFullInput() public {
         // 998 exceeds the lower-input quote (995), but is two units below the
         // quote for the actual 200 input (1000). It must still revert.
-        vm.expectRevert("flow output shortfall"); bot.execute(script(1, 200, 2));
+        vm.expectRevert("flow output shortfall"); bot.execute(script(1, 200, -2));
     }
     function testUnquotedOverdeliveryFailsClosed() public {
-        vm.expectRevert("flow unquoted input"); bot.execute(script(1, 201, 0));
+        bytes memory one = step(a, b, 1, variant(first, a, b, 100, 200, 201));
+        bytes memory two = step(b, a, 1, variant(second, b, a, 200, 1000, 1000));
+        bytes memory data = abi.encodePacked(uint256(100), uint8(1), uint8(2), one, two);
+        vm.expectRevert("flow unquoted input");
+        bot.execute(abi.encodePacked(uint8(9), uint24(data.length), data));
+    }
+    function testUint256MaximumQuoteDoesNotOverflowTolerance() public {
+        FlowToken output = new FlowToken();
+        bytes memory one = step(a, output, 1,
+            variant(first, a, output, 100, type(uint256).max, type(uint256).max));
+        bytes memory data = abi.encodePacked(uint256(100), uint8(1), uint8(1), one);
+        bot.execute(abi.encodePacked(uint8(9), uint24(data.length), data));
+        assertEq(output.balanceOf(address(bot)), type(uint256).max);
+    }
+    function testSelectsLastOf243DistinctCasesWithoutSpendingInventory() public {
+        bytes memory records;
+        for (uint256 i; i < 243; ++i) {
+            uint256 amount = 79 + i;
+            records = bytes.concat(records, variant(second, b, a, amount, amount * 5, amount * 5));
+        }
+        bytes memory one = step(a, b, 1, variant(first, a, b, 100, 320, 321));
+        bytes memory two = step(b, a, 243, records);
+        bytes memory data = abi.encodePacked(uint256(100), uint8(1), uint8(2), one, two);
+        bot.execute(abi.encodePacked(uint8(9), uint24(data.length), data));
+        assertEq(second.received(), 321); assertEq(b.balanceOf(address(bot)), 777);
+        assertEq(a.balanceOf(address(bot)), 2605);
     }
     function testRejectMalformedFlow() public {
         vm.expectRevert("flow bounds"); bot.execute(hex"090000ff");

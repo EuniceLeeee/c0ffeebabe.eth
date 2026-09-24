@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineSwapFamily } from "../adapter-family-plugin.js";
 import { fluidDexCapture } from "../swaps/fluid-dex-family/capture.js";
 import { fluidDexFamilyOwnedAction } from "../swaps/fluid-dex-family/action.js";
@@ -10,6 +11,8 @@ import { fluidDexFamilyManifest } from "../swaps/fluid-dex-family/manifest.js";
 import { fluidDexPricing } from "../swaps/fluid-dex-family/pricing.js";
 import { fluidDexRoutes } from "../swaps/fluid-dex-family/routes.js";
 import { fluidDexSwap } from "../swaps/fluid-dex-family/swap.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_FLUID_DEX_ENABLED" });
 
 export const plugin = defineSwapFamily({
   manifest: fluidDexFamilyManifest,

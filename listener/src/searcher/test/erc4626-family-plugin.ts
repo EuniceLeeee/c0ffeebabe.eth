@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
-import type {
-  AdapterRequestResult,
-  CanonicalSource,
-  ObservedEffects,
+import {
+  createBoundedRequestExecutor,
+  FamilyDecodeError,
+  runRequestProgram,
+  type AdapterRequestResult,
+  type CanonicalSource,
+  type ObservedEffects,
 } from "../venues/adapter-request-program.js";
 import { RequiredAdapterRequestError } from
   "../venues/adapter-request-failure.js";
@@ -230,7 +233,143 @@ for (const route of quoteRoutes) {
       "explicit raw amount must not be replaced by oneAsset / oneShare");
   }
 }
-console.log("erc4626-family-plugin PASS (direction-isolated proof + unchanged exact amount)");
+// Register after the raw Family checks above: registration installs the same
+// active-proof guards used in production, so raw decode alone is insufficient.
+const { plugin: erc4626FamilyPlugin } = await import(
+  "../venues/production-families/erc4626.production.js"
+);
+const registeredVariant = erc4626FamilyPlugin.identity.variants[0]!;
+let registeredDecodeCalls = 0;
+
+const registeredDepositOnly = await runRegisteredActiveProgram([
+  ...commonActiveResults(),
+  depositSuccess(),
+  failure("active-redeem", "deadline"),
+]);
+assert.deepEqual(
+  verifiedDirections(registeredDepositOnly.evidence),
+  { deposit: true, redeem: false },
+  "registered central execution must retain only the independently proven deposit direction",
+);
+assert.equal(registeredDepositOnly.trustedResults.length, requests.length);
+assert.equal(registeredDepositOnly.reuseProof, undefined);
+
+const registeredRedeemOnly = await runRegisteredActiveProgram([
+  ...commonActiveResults(),
+  failure("active-deposit", "deadline"),
+  redeemSuccess(),
+]);
+assert.deepEqual(
+  verifiedDirections(registeredRedeemOnly.evidence),
+  { deposit: false, redeem: true },
+  "registered central execution must retain only the independently proven redeem direction",
+);
+
+await assert.rejects(
+  runRegisteredActiveProgram([
+    ...commonActiveResults(),
+    failure("active-deposit", "resource-limited"),
+    failure("active-redeem", "deadline"),
+  ]),
+  (error: unknown) => error instanceof FamilyDecodeError &&
+    error.uncertainty === "transport" &&
+    /required adapter request active-deposit failed: resource-limited/.test(error.message),
+  "two unresolved directions remain retryable and cannot produce verified evidence",
+);
+
+const decodeCallsBeforeRequiredFailure = registeredDecodeCalls;
+await assert.rejects(
+  runRegisteredActiveProgram([
+    failure("active-asset-code", "rpc"),
+    ...commonActiveResults().slice(1),
+    depositSuccess(),
+    redeemSuccess(),
+  ]),
+  (error: unknown) => error instanceof RequiredAdapterRequestError &&
+    error.failureCode === "rpc",
+);
+assert.equal(
+  registeredDecodeCalls,
+  decodeCallsBeforeRequiredFailure,
+  "the central required-request gate must reject before invoking Family decode",
+);
+
+const completeActiveResults = [
+  ...commonActiveResults(), depositSuccess(), redeemSuccess(),
+];
+const malformedResultSets: readonly {
+  readonly results: readonly AdapterRequestResult[];
+  readonly error: RegExp;
+}[] = [
+  {
+    results: completeActiveResults.slice(0, -1),
+    error: /omitted result id: active-redeem/,
+  },
+  {
+    results: [...completeActiveResults, depositSuccess()],
+    error: /duplicate result id: active-deposit/,
+  },
+  {
+    results: [...completeActiveResults, failure("unknown-request", "deadline")],
+    error: /unknown result id: unknown-request/,
+  },
+  {
+    results: completeActiveResults.map((result) => result.id === "active-redeem"
+      ? { ...result, source: { ...SOURCE, hash: `0x${"cd".repeat(32)}` } }
+      : result),
+    error: /source mismatch for active-redeem/,
+  },
+];
+for (const malformed of malformedResultSets) {
+  const beforeDecode = registeredDecodeCalls;
+  await assert.rejects(runRegisteredActiveProgram(malformed.results), malformed.error);
+  assert.equal(registeredDecodeCalls, beforeDecode,
+    "optional failures must not weaken central result-set validation");
+}
+
+console.log("erc4626-family-plugin PASS (raw + registered direction-isolated proof, required failures, exact amount)");
+
+async function runRegisteredActiveProgram(
+  results: readonly AdapterRequestResult[],
+) {
+  return runRequestProgram({
+    familyId: erc4626FamilyPlugin.manifest.familyId,
+    source: SOURCE,
+    programInput: activeStep,
+    program: {
+      requirements: (step: typeof activeStep) => registeredVariant.requirements(step),
+      buildRequests: (step: typeof activeStep) => registeredVariant.buildRequests(step),
+      decode: ({ programInput, results }) => {
+        registeredDecodeCalls++;
+        return registeredVariant.decode({
+          step: programInput,
+          results,
+        }) as Erc4626ActiveEvidence;
+      },
+    },
+    executor: createBoundedRequestExecutor({
+      assertSupported(requirements) {
+        assert(requirements.transports.includes("effect-delta-simulation"));
+      },
+      assertCallerBinding({ callerRef }) {
+        assert.deepEqual(callerRef, {
+          kind: "verified-actor",
+          evidenceId: "erc4626-probe-actor",
+        });
+      },
+      assertWithinBudget(familyId, actualRequests) {
+        assert.equal(familyId, erc4626FamilyPlugin.manifest.familyId);
+        assert.deepEqual(actualRequests, requests);
+      },
+      async execute() {
+        return results;
+      },
+      sealStaticEvidenceReuseProof() {
+        throw new Error("active behavior proof must not enter the static cache");
+      },
+    }),
+  });
+}
 
 function decodeActive(
   deposit: AdapterRequestResult,

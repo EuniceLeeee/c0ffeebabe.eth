@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { etherTokenNativeRedeemCapture } from "../protocols/ethertoken-native-redeem-family/capture.js";
 import { etherTokenNativeRedeemFamilyOwnedAction } from "../protocols/ethertoken-native-redeem-family/action.js";
@@ -10,6 +11,8 @@ import { etherTokenNativeRedeemFamilyManifest } from "../protocols/ethertoken-na
 import { etherTokenNativeRedeemPricing } from "../protocols/ethertoken-native-redeem-family/pricing.js";
 import { etherTokenNativeRedeemProtocol } from "../protocols/ethertoken-native-redeem-family/protocol.js";
 import { etherTokenNativeRedeemRoutes } from "../protocols/ethertoken-native-redeem-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ETHERTOKEN_NATIVE_REDEEM_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: etherTokenNativeRedeemFamilyManifest,

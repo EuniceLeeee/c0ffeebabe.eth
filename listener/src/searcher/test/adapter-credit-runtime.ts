@@ -68,7 +68,7 @@ import {
   type FluidCreditCandidate,
   type FluidCreditDescriptor,
   type FluidCreditIdentity,
-  type FluidCreditRiskEvidence,
+  type FluidCreditExactEvidence,
 } from "../venues/credit/fluid-family-plugin.js";
 import {
   FLUID_CREDIT_PROBE_ACTOR,
@@ -1218,7 +1218,7 @@ function observedFluidCreditPlugin(
     FluidCreditIdentity,
     FluidCreditDescriptor,
     StrictFluidCreditRoute,
-    FluidCreditRiskEvidence
+    FluidCreditExactEvidence
   >({
     manifest: {
       ...mutableClone(base.manifest),

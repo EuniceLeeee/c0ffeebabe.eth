@@ -30,6 +30,7 @@ export const fluidCreditInstance = {
       instanceKey: instanceKey(lowerAddress(identity.subject)),
       provenance: identity.provenance,
       runtimeRequirements: FLUID_CREDIT_RUNTIME_REQUIREMENTS,
+      ...(identity.facts.localQuoteModel === undefined ? {} : { localQuoteModel: identity.facts.localQuoteModel }),
       vault: canonicalAddress(identity.facts.vault),
       supplyToken: canonicalAddress(identity.facts.supplyToken),
       borrowToken: canonicalAddress(identity.facts.borrowToken),
@@ -56,6 +57,7 @@ export function fluidCreditStaticBindingProjection(
     borrowToken: descriptor.borrowToken,
     supplyDecimals: descriptor.supplyDecimals,
     borrowDecimals: descriptor.borrowDecimals,
+    localQuoteModel: descriptor.localQuoteModel ?? null,
     factoryBinding: {
       factory: descriptor.factoryBinding.factory,
       vaultId: descriptor.factoryBinding.vaultId,

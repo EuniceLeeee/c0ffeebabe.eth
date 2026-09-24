@@ -11,6 +11,7 @@ export function actionId(mode: CurvePlainMode): string {
     case "received-no-receiver": return "curve-exchange-nr";
     case "exchange": return "curve-exchange-plain";
     case "received-uint": return "curve-exchange-received-uint";
+    case "exchange-uint": return "curve-exchange-uint";
     default: throw new Error("curve-plain unsupported execution mode");
   }
 }

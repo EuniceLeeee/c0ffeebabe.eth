@@ -19,6 +19,69 @@ function untilAborted(signal: AbortSignal): Promise<never> {
   return new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
 }
 
+test("profit priority consumes a ready later plan without waiting for a slow prefix", async () => {
+  const releases = Array.from({ length: 4 }, () => deferred<bigint | null>());
+  const finishFirst = deferred();
+  const consumed: number[] = [];
+  const run = runOrderedBlockScanPipeline({
+    ...defaults(), count: 4, workers: [0, 1, 2, 3],
+    produce: index => releases[index]!.promise,
+    priority: value => value,
+    consume: async index => { consumed.push(index); if (consumed.length === 1) await finishFirst.promise; },
+  });
+  releases[1]!.resolve(1n);
+  await turn();
+  assert.deepEqual(consumed, [1], "no head-of-line wait for unfinished index 0");
+  releases[3]!.resolve(null);
+  releases[2]!.resolve(10n ** 30n);
+  releases[0]!.resolve(10n ** 30n + 1n);
+  await turn();
+  finishFirst.resolve();
+  await run;
+  assert.deepEqual(consumed, [1, 0, 2, 3], "exact bigint absolute priority, unknown last but retained");
+});
+
+test("ready profit ties retain plan order and priority selection does not lose results", async () => {
+  const release = deferred();
+  const entered = deferred();
+  const seen: number[] = [];
+  const run = runOrderedBlockScanPipeline({
+    ...defaults(), count: 64, workers: [0], produce: async index => index,
+    priority: index => index === 0 ? 1000n : index % 7 === 0 ? null : BigInt(index % 5),
+    consume: async index => { seen.push(index); if (seen.length === 1) { entered.resolve(); await release.promise; } },
+  });
+  await entered.promise;
+  await turn();
+  release.resolve();
+  await run;
+  const score = (i: number) => i % 7 === 0 ? null : BigInt(i % 5);
+  const expected = Array.from({ length: 63 }, (_, i) => i + 1).sort((a, b) => {
+    const x = score(a), y = score(b);
+    return x === y ? a - b : x === null ? 1 : y === null ? -1 : x > y ? -1 : 1;
+  });
+  assert.deepEqual(seen, [0, ...expected]);
+});
+
+test("profit priority preserves abort, drain and early-stop semantics", async () => {
+  for (const mode of ["abort", "stop", "score-error"] as const) {
+    const controller = new AbortController();
+    let drained = false;
+    const run = runOrderedBlockScanPipeline({
+      ...defaults(), signal: controller.signal, count: 2, workers: [0, 1],
+      produce: async (index, _worker, signal) => {
+        if (index === 1) return index;
+        try { return await untilAborted(signal); }
+        finally { await turn(); drained = true; }
+      },
+      priority: () => { if (mode === "score-error") throw new Error("priority failed"); return 1n; },
+      consume: async () => { if (mode === "abort") controller.abort(new Error("new head")); else return false; },
+    });
+    if (mode === "stop") assert.equal(await run, false);
+    else await assert.rejects(run, mode === "abort" ? /new head/ : /priority failed/);
+    assert.equal(drained, true);
+  }
+});
+
 test("ordered prefix reaches the consumer while a later solver is still pending", async () => {
   const releases = Array.from({ length: 3 }, () => deferred<number[]>());
   const consumed: number[] = [];
@@ -139,7 +202,7 @@ test("pre-cancelled source issues no work; observer failure is not an unhandled 
 
 test("actual Solver keeps exact propagation, grid/GSS sizing and finalist bytes", async () => {
   const plans = makePlans(6);
-  const run = async (pipelined: boolean) => {
+  const run = async (pipelined: boolean, priority = false) => {
     const fixture = sharedSession(plans);
     const results: unknown[] = [];
     const produce = async (index: number, solver: AnvilSolver, signal: AbortSignal) => {
@@ -154,7 +217,7 @@ test("actual Solver keeps exact propagation, grid/GSS sizing and finalist bytes"
         quoteSafetyBps: 10_000n, quoteProfitFloorBps: 0n, strictSession: fixture.session,
         signal, timing, onDeferredCandidates: (values) => { finalists = values; },
       });
-      assert.equal(timing.amountPoints, 8);
+      assert.equal(timing.amountPoints, 8); // P, 10P, 100P, 1000P plus four GSS points.
       assert.equal(timing.gssPoints, 4);
       assert.equal(timing.hopExactCalls, 16);
       assert.equal(timing.simMs, 0);
@@ -165,15 +228,18 @@ test("actual Solver keeps exact propagation, grid/GSS sizing and finalist bytes"
     if (pipelined) {
       await runOrderedBlockScanPipeline({
         ...defaults(), count: plans.length, workers: [new AnvilSolver(), new AnvilSolver()],
+        ...(priority ? { priority: (values: readonly ResolvedPlan[]) => values.reduce((best, value) => value.netProfit > best ? value.netProfit : best, 0n) } : {}),
         produce, consume: async (index, values) => { results.push({ index, values }); },
       });
     } else {
       const all = await Promise.all(plans.map((_plan, index) => produce(index, new AnvilSolver(), defaults().signal)));
       all.forEach((values, index) => results.push({ index, values }));
     }
+    results.sort((a, b) => (a as { index: number }).index - (b as { index: number }).index);
     return { results: canonical(results), calls: fixture.stats.calls };
   };
   assert.deepEqual(await run(true), await run(false));
+  assert.deepEqual(await run(true, true), await run(false));
 });
 
 test("atomic stage times remain independent when EV finishes before all solvers", () => {

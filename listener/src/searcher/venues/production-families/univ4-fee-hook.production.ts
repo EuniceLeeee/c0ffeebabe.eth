@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineSwapFamily } from "../adapter-family-plugin.js";
 import { univ4FeeHookCapture } from "../swaps/univ4-fee-hook-family/capture.js";
 import {
@@ -17,6 +18,8 @@ import { univ4FeeHookFamilyManifest } from "../swaps/univ4-fee-hook-family/manif
 import { univ4FeeHookPricing } from "../swaps/univ4-fee-hook-family/pricing.js";
 import { univ4FeeHookRoutes } from "../swaps/univ4-fee-hook-family/routes.js";
 import { univ4FeeHookSwap } from "../swaps/univ4-fee-hook-family/swap.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED" });
 
 export const plugin = defineSwapFamily({
   manifest: univ4FeeHookFamilyManifest,

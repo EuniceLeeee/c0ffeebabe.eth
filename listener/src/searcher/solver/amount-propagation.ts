@@ -9,9 +9,10 @@ import {
 import type { TokenEdge, TokenPath } from "../planner/token-graph.js";
 import type { PoolStateCache } from "./pool-state-cache.js";
 import type { V4QuotePathStats } from "./quoter.js";
-import type {
-  StrictProductionExactHandle,
-  StrictProductionRuntimeSession,
+import {
+  SequentialQuoteUnsupportedError,
+  type StrictProductionExactHandle,
+  type StrictProductionRuntimeSession,
 } from "../strict-production-runtime-session.js";
 import type { RuntimeEvidence } from
   "../venues/adapter-family-plugin.js";
@@ -90,6 +91,15 @@ export async function propagateAmountsWithRawOutputs(
     throw new Error("propagation tolerance must be 0 or 1 token raw unit");
   }
   const safetyBps = options.safetyBps ?? 10000n;
+  // Opaque logical instance/state identities, never singleton contract addresses
+  // or protocol IDs. Only repeated-state paths opt into isolated prefix quotes.
+  const repeats = (keys: readonly (string | null | undefined)[]) => {
+    const known = keys.filter((key): key is string => key !== undefined && key !== null);
+    return new Set(known).size !== known.length;
+  };
+  // A pricing key may be directional; it must not hide a repeated instance.
+  const sequential = repeats(path.edges.map(edge => edge.instanceKey)) ||
+    repeats(path.edges.map(edge => options.strictSession?.stateKeyForEdge?.(edge)));
   if (toleranceRawUnits === undefined && (safetyBps < 1n || safetyBps > 10000n)) {
     throw new Error("propagation retained output must be in [1, 10000] bps");
   }
@@ -108,6 +118,7 @@ export async function propagateAmountsWithRawOutputs(
         amountIn: cur,
         executor: options.executor,
         runtimeEvidence: options.runtimeEvidence ?? Object.freeze([]),
+        ...(sequential ? { priorQuotes: [...exactHandles] } : {}),
         ...(options.adapterWorkControl === undefined
           ? {}
           : { control: options.adapterWorkControl }),
@@ -121,6 +132,7 @@ export async function propagateAmountsWithRawOutputs(
     } catch (error) {
       if (
         error instanceof BlockScanFamilyAttributedError ||
+        error instanceof SequentialQuoteUnsupportedError ||
         isStateCallAbortedError(error) ||
         isControlFailure(error)
       ) {

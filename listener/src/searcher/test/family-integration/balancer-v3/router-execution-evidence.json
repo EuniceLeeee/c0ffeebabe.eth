@@ -1,0 +1,628 @@
+{
+  "schemaVersion": 1,
+  "claim": "Strict Balancer V3 single-leg execution evidence; source-time and changed-rate context both pass. Not Ready or production-gap acceptance.",
+  "priorDiagnostic": {
+    "path": "historical-evidence.json",
+    "disposition": "Preserved unchanged as baseline: fixed sendTo amount reverted BalanceNotSettled at N+1/+12. Its dynamic-settlement gap is superseded by this run; other acceptance gaps remain."
+  },
+  "sampleProvenance": "Existing docs/research/reports/step1-R15-20260704.json, reverified by historical receipt and source-hash-pinned state.",
+  "txHash": "0x38840fe7b3be155e5065e25f022e3076ec35c58264c407e5f2416a132e43c698",
+  "source": {
+    "number": 25453353,
+    "hash": "0xb1bd4e5ff1aa3cdc74ac83d1fdf756ba68ef37e0ad026132ac027323c650a06b",
+    "generation": 1
+  },
+  "pool": "0x57c23c58B1D8C3292c15BEcF07c62C5c52457A42",
+  "tokens": [
+    "0x0bfc9d54Fc184518A81162F8fB99c2eACa081202",
+    "0xf1C9acDc66974dFB6dEcB12aA385b9cD01190E38"
+  ],
+  "routes": 2,
+  "catalogHash": "472163010875f0d84e8d5b61886c4b3978472c913c35fcab888007e027b894f6",
+  "publicationFingerprint": "703bce8a5b7607c4c02ce5e284cea4073c6b4f31e5b422ceff0584c70faa0232",
+  "graphEdgeIds": [
+    "balancer-v3\u001f0x57c23c58b1d8c3292c15becf07c62c5c52457a42\u001f0x57c23c58b1d8c3292c15becf07c62c5c52457a42\u001f0x0bfc9d54fc184518a81162f8fb99c2eaca081202>0xf1c9acdc66974dfb6decb12aa385b9cd01190e38\u001f0459d24c3b132910b801975445430d35efce6d964fa6d5a8044ebdf0fd1be6ea",
+    "balancer-v3\u001f0x57c23c58b1d8c3292c15becf07c62c5c52457a42\u001f0x57c23c58b1d8c3292c15becf07c62c5c52457a42\u001f0xf1c9acdc66974dfb6decb12aa385b9cd01190e38>0x0bfc9d54fc184518a81162f8fb99c2eaca081202\u001f08410fcb95036f700a4d9b0a8e2a60cb873e0dd7aa72c9207fa3f558a833420a"
+  ],
+  "landed": {
+    "amountIn": "3309939901706049",
+    "amountOut": "3308419612143212"
+  },
+  "postBlockPricing": {
+    "amountIn": "1000000000000000000",
+    "amountOut": "999482799741078871"
+  },
+  "postBlockExactQuotes": [
+    {
+      "amountIn": "3309939901706049",
+      "amountOut": "3308418357612869"
+    },
+    {
+      "amountIn": "33099399017060490",
+      "amountOut": "33084127106534725"
+    }
+  ],
+  "routerSourceProof": {
+    "status": "deployed-runtime-matches-published-build",
+    "source": {
+      "blockHash": "0xb1bd4e5ff1aa3cdc74ac83d1fdf756ba68ef37e0ad026132ac027323c650a06b",
+      "requireCanonical": true
+    },
+    "sourceUrl": "https://raw.githubusercontent.com/balancer/balancer-deployments/master/v3/tasks/20250307-v3-router-v2/build-info/Router.json",
+    "buildInfoSha256": "845b6950baed6f77ae68654044af17e98849f95b474d6e090ea150c3d9bba622",
+    "runtimeCodeHash": "0x76d58a2f13ee78e52e3f414f0181bc77ff0fcc65ae35b0d215a26b6fd2980a18",
+    "immutableBindings": [
+      {
+        "name": "_IS_RETURN_ETH_LOCKED_SLOT",
+        "value": "0x609328430f79f2ede73ac914d80ff784aa9f4477668742ea3d9a02706b512300",
+        "referenceCount": 2
+      },
+      {
+        "name": "_weth",
+        "value": "0x000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "referenceCount": 13
+      },
+      {
+        "name": "_permit2",
+        "value": "0x000000000000000000000000000000000022d473030f116ddee9f6b43ac78ba3",
+        "referenceCount": 6
+      },
+      {
+        "name": "_SENDER_SLOT",
+        "value": "0x03742126af6146ecb751bbca18a39b433abd2a8a5047affb64612c849505be00",
+        "referenceCount": 8
+      },
+      {
+        "name": "_vault",
+        "value": "0x000000000000000000000000ba1333333333a1ba1108e8412f11850a5c319ba9",
+        "referenceCount": 32
+      }
+    ],
+    "sourceFiles": {
+      "contracts/Router.sol": "dcafda2de87d439c31906015834f93ecc2273ebc348a9112c5d13de563e34996",
+      "contracts/RouterCommon.sol": "f706edfb70c2d8e1065ad25878b23841afa7af461459317b9c16a8c19718ef2d"
+    }
+  },
+  "executionDesign": {
+    "actionId": "balancer-v3-router-swap",
+    "rootTarget": "0xAE563E3f8219521950555F5962419C8919758Ea2",
+    "logicalVenue": "pool indexed in canonical Vault Swap log",
+    "order": [
+      "ERC20 approve(Permit2,0)",
+      "ERC20 approve(Permit2,exactInput)",
+      "Permit2 approve(token,Router,exactInput,maxUint48)",
+      "Router.swapSingleTokenExactIn(pool,in,out,exactInput,minimum,maxUint256,false,empty)",
+      "Permit2 approve(token,Router,0,0)",
+      "ERC20 approve(Permit2,0)"
+    ],
+    "settlement": "Router receives (calculated,input,output) from Vault.swap and calls transferFrom/settle(input) and sendTo(output); raw quote is never encoded as withdrawal amount.",
+    "inputBound": "uint160 for Permit2; on-chain Vault/pool minimum and capacity reverts remain authoritative",
+    "hookPolicy": "Swap-affecting hook flags remain retryable unsupported-swap-hook-caller-context; using the same Router does not certify arbitrary hook query/execution equivalence."
+  },
+  "executions": [
+    {
+      "status": "same-source-pass",
+      "backend": "debug_traceCall/callTracer+prestateTracer",
+      "source": {
+        "number": 25453353,
+        "hash": "0xb1bd4e5ff1aa3cdc74ac83d1fdf756ba68ef37e0ad026132ac027323c650a06b",
+        "generation": 1
+      },
+      "timestamp": "0x6a47eb1f",
+      "amountIn": "3309939901706049",
+      "amountOut": "3308418357612869",
+      "inputDelta": "-3309939901706049",
+      "outputDelta": "3308418357612869",
+      "nextBlock": {
+        "status": "pass",
+        "blockOverrides": {
+          "number": "0x184632a",
+          "time": "0x6a47eb2b",
+          "gasLimit": "0x3938700",
+          "baseFeePerGas": "0x894553d"
+        },
+        "actualSwapOutput": "3308418363751642",
+        "outputDelta": "3308418363751642",
+        "inputDelta": "-3309939901706049",
+        "shiftedQuote": "3308418363751642",
+        "sourceQuote": "3308418357612869",
+        "outputDifferenceFromSourceQuote": "6138773",
+        "erc20Allowance": "0",
+        "permit2Allowance": "0",
+        "gasUsed": "292853",
+        "protocolFrames": [
+          {
+            "path": "0.3",
+            "type": "CALL",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "selector": "0x750283bc",
+            "inputHash": "0xe974eb154e474edd4ece07ee118e79aa28167668be8066311182baa5b5610c4f",
+            "returnData": "0x000000000000000000000000000000000000000000000000000bc0fd2d56fcda",
+            "error": null
+          },
+          {
+            "path": "0.3.0",
+            "type": "CALL",
+            "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "selector": "0x48c89491",
+            "inputHash": "0xeb55c83e950f1a2cbaac79433b19478f32764e39b1df83c2bd97001e093a3a08",
+            "returnData": "0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000bc0fd2d56fcda",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0",
+            "type": "CALL",
+            "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "to": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "selector": "0x68a24fe0",
+            "inputHash": "0x94c520d268d3880737829d93e740a7f6d2414e9f861c6eec6ef019793750bfff",
+            "returnData": "0x000000000000000000000000000000000000000000000000000bc0fd2d56fcda",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.0",
+            "type": "CALL",
+            "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "selector": "0x2bfb780c",
+            "inputHash": "0xf697a2f154d253720442e5f75f7e4a8754f6411cfbce212c309c7f75a799f01e",
+            "returnData": "0x000000000000000000000000000000000000000000000000000bc0fd2d56fcda000000000000000000000000000000000000000000000000000bc25f7011af41000000000000000000000000000000000000000000000000000bc0fd2d56fcda",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.0.0",
+            "type": "STATICCALL",
+            "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "to": "0xbe7be04807762bc433911dd927fd54a385fa91d6",
+            "selector": "0x679aefce",
+            "inputHash": "0x9b7a8b2ef1f0539d208300c60b5b65bce484a2d2ac9c62c6cb904ae7f9d831d4",
+            "returnData": "0x0000000000000000000000000000000000000000000000000ed0fc572e3d8e0d",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.0.1",
+            "type": "STATICCALL",
+            "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "to": "0x8023518b2192fb5384dadc596765b3dd1cdfe471",
+            "selector": "0x679aefce",
+            "inputHash": "0x9b7a8b2ef1f0539d208300c60b5b65bce484a2d2ac9c62c6cb904ae7f9d831d4",
+            "returnData": "0x0000000000000000000000000000000000000000000000000ee906bf532c0111",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.1",
+            "type": "CALL",
+            "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "to": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "selector": "0x36c78516",
+            "inputHash": "0xe3ede9e132ffc1d306cd1b40b643cd1935062830dba2293145ed2b424ef021c1",
+            "returnData": "0x",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.2",
+            "type": "CALL",
+            "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "selector": "0x15afd409",
+            "inputHash": "0xc07784674123ef37592f0d2563815164b33af27d24ad4400882e1fa7b1d103ef",
+            "returnData": "0x000000000000000000000000000000000000000000000000000bc25f7011af41",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.3",
+            "type": "CALL",
+            "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "selector": "0xae639329",
+            "inputHash": "0x5b3aa55d1c3ae7a63ce488af3a27b3fa0d92bb5176d471300bb7924a60908979",
+            "returnData": "0x",
+            "error": null
+          }
+        ]
+      },
+      "minimumOutputGuard": {
+        "status": "reverted-as-required",
+        "minimum": "3308418357612870",
+        "errors": [
+          "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+          "0xe2ea151b000000000000000000000000000000000000000000000000000bc0fd2cf95145000000000000000000000000000000000000000000000000000bc0fd2cf95146"
+        ]
+      },
+      "gasUsed": "279130",
+      "artifactSha256": "31f46f847133f22251e6ebd0aa6397c561ed830cbb50b2df45b169e93416c8c6",
+      "scriptHash": "0x5835f64e6325878170ad5c6b7adc95da1b9d88f40eb69f412bb0d53fe7c3da00",
+      "runtimeCodeHash": "0xd82248ab86baac18858b69b906f6c6adde8b70336b42e5eb7d3bd91b4214061a",
+      "callerBalanceSlot": "0xfbb6d79c2d5fc9f9d8e4505ed798f1fc4cad12b6dc532657cb068de9cb9f4ab3",
+      "caveat": "same-source and changed-rate N+1 context both executed; isolated actor code/prefunding only; not Ready, full-route EV or production gap acceptance",
+      "sourceProtocolFrames": [
+        {
+          "path": "0.3",
+          "type": "CALL",
+          "from": "0x1000000000000000000000000000000000000002",
+          "to": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "selector": "0x750283bc",
+          "inputHash": "0xe974eb154e474edd4ece07ee118e79aa28167668be8066311182baa5b5610c4f",
+          "returnData": "0x000000000000000000000000000000000000000000000000000bc0fd2cf95145",
+          "error": null
+        },
+        {
+          "path": "0.3.0",
+          "type": "CALL",
+          "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0x48c89491",
+          "inputHash": "0xeb55c83e950f1a2cbaac79433b19478f32764e39b1df83c2bd97001e093a3a08",
+          "returnData": "0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000bc0fd2cf95145",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0",
+          "type": "CALL",
+          "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "to": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "selector": "0x68a24fe0",
+          "inputHash": "0x94c520d268d3880737829d93e740a7f6d2414e9f861c6eec6ef019793750bfff",
+          "returnData": "0x000000000000000000000000000000000000000000000000000bc0fd2cf95145",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.0",
+          "type": "CALL",
+          "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0x2bfb780c",
+          "inputHash": "0xf697a2f154d253720442e5f75f7e4a8754f6411cfbce212c309c7f75a799f01e",
+          "returnData": "0x000000000000000000000000000000000000000000000000000bc0fd2cf95145000000000000000000000000000000000000000000000000000bc25f7011af41000000000000000000000000000000000000000000000000000bc0fd2cf95145",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.0.0",
+          "type": "STATICCALL",
+          "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "to": "0xbe7be04807762bc433911dd927fd54a385fa91d6",
+          "selector": "0x679aefce",
+          "inputHash": "0x9b7a8b2ef1f0539d208300c60b5b65bce484a2d2ac9c62c6cb904ae7f9d831d4",
+          "returnData": "0x0000000000000000000000000000000000000000000000000ed0fc55cabcf696",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.0.1",
+          "type": "STATICCALL",
+          "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "to": "0x8023518b2192fb5384dadc596765b3dd1cdfe471",
+          "selector": "0x679aefce",
+          "inputHash": "0x9b7a8b2ef1f0539d208300c60b5b65bce484a2d2ac9c62c6cb904ae7f9d831d4",
+          "returnData": "0x0000000000000000000000000000000000000000000000000ee906bd755460f5",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.1",
+          "type": "CALL",
+          "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "to": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+          "selector": "0x36c78516",
+          "inputHash": "0xe3ede9e132ffc1d306cd1b40b643cd1935062830dba2293145ed2b424ef021c1",
+          "returnData": "0x",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.2",
+          "type": "CALL",
+          "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0x15afd409",
+          "inputHash": "0xc07784674123ef37592f0d2563815164b33af27d24ad4400882e1fa7b1d103ef",
+          "returnData": "0x000000000000000000000000000000000000000000000000000bc25f7011af41",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.3",
+          "type": "CALL",
+          "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0xae639329",
+          "inputHash": "0x1f178b3b4a12990d0f03ef4b51a9f01f54c2005c40ce5f486aa63afc7a912fb0",
+          "returnData": "0x",
+          "error": null
+        }
+      ]
+    },
+    {
+      "status": "same-source-pass",
+      "backend": "debug_traceCall/callTracer+prestateTracer",
+      "source": {
+        "number": 25453353,
+        "hash": "0xb1bd4e5ff1aa3cdc74ac83d1fdf756ba68ef37e0ad026132ac027323c650a06b",
+        "generation": 1
+      },
+      "timestamp": "0x6a47eb1f",
+      "amountIn": "33099399017060490",
+      "amountOut": "33084127106534725",
+      "inputDelta": "-33099399017060490",
+      "outputDelta": "33084127106534725",
+      "nextBlock": {
+        "status": "pass",
+        "blockOverrides": {
+          "number": "0x184632a",
+          "time": "0x6a47eb2b",
+          "gasLimit": "0x3938700",
+          "baseFeePerGas": "0x894553d"
+        },
+        "actualSwapOutput": "33084127167922040",
+        "outputDelta": "33084127167922040",
+        "inputDelta": "-33099399017060490",
+        "shiftedQuote": "33084127167922040",
+        "sourceQuote": "33084127106534725",
+        "outputDifferenceFromSourceQuote": "61387315",
+        "erc20Allowance": "0",
+        "permit2Allowance": "0",
+        "gasUsed": "292853",
+        "protocolFrames": [
+          {
+            "path": "0.3",
+            "type": "CALL",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "selector": "0x750283bc",
+            "inputHash": "0x40fa2dfecba51a815efb3929d5c00a0b9e57414db76a9537cf9e103edbe5b4b4",
+            "returnData": "0x000000000000000000000000000000000000000000000000007589d69f8c3f78",
+            "error": null
+          },
+          {
+            "path": "0.3.0",
+            "type": "CALL",
+            "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "selector": "0x48c89491",
+            "inputHash": "0xe623f7ec102bc166b77fd8cd61606d43ac46c52cbcccb8acba106a481e13e457",
+            "returnData": "0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000007589d69f8c3f78",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0",
+            "type": "CALL",
+            "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "to": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "selector": "0x68a24fe0",
+            "inputHash": "0x4a75916db3e5b7812e6f4ec3f7f3d272380984837d925546a12a094832f6343a",
+            "returnData": "0x000000000000000000000000000000000000000000000000007589d69f8c3f78",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.0",
+            "type": "CALL",
+            "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "selector": "0x2bfb780c",
+            "inputHash": "0xc5c7fa76d232a2329ccdb57758c2f3a2b690fe6417c5ef579221bd19ba80d852",
+            "returnData": "0x000000000000000000000000000000000000000000000000007589d69f8c3f78000000000000000000000000000000000000000000000000007597ba60b0d88a000000000000000000000000000000000000000000000000007589d69f8c3f78",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.0.0",
+            "type": "STATICCALL",
+            "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "to": "0xbe7be04807762bc433911dd927fd54a385fa91d6",
+            "selector": "0x679aefce",
+            "inputHash": "0x9b7a8b2ef1f0539d208300c60b5b65bce484a2d2ac9c62c6cb904ae7f9d831d4",
+            "returnData": "0x0000000000000000000000000000000000000000000000000ed0fc572e3d8e0d",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.0.1",
+            "type": "STATICCALL",
+            "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "to": "0x8023518b2192fb5384dadc596765b3dd1cdfe471",
+            "selector": "0x679aefce",
+            "inputHash": "0x9b7a8b2ef1f0539d208300c60b5b65bce484a2d2ac9c62c6cb904ae7f9d831d4",
+            "returnData": "0x0000000000000000000000000000000000000000000000000ee906bf532c0111",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.1",
+            "type": "CALL",
+            "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "to": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+            "selector": "0x36c78516",
+            "inputHash": "0xd98cb4e6a9cdcc5b435a73fa42aa5d7cfe117455320ac54e84d7590fb1116330",
+            "returnData": "0x",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.2",
+            "type": "CALL",
+            "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "selector": "0x15afd409",
+            "inputHash": "0x5de6c5ae7567d3f875d7f04d094f50b62801161ee1311ed3747f83f7dbb167c9",
+            "returnData": "0x000000000000000000000000000000000000000000000000007597ba60b0d88a",
+            "error": null
+          },
+          {
+            "path": "0.3.0.0.3",
+            "type": "CALL",
+            "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+            "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+            "selector": "0xae639329",
+            "inputHash": "0xc8107397d869de54672ff555cf8ccd0e3685fa784285d2539445ed7202be12aa",
+            "returnData": "0x",
+            "error": null
+          }
+        ]
+      },
+      "minimumOutputGuard": {
+        "status": "reverted-as-required",
+        "minimum": "33084127106534726",
+        "errors": [
+          "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+          "0xe2ea151b000000000000000000000000000000000000000000000000007589d69be38d45000000000000000000000000000000000000000000000000007589d69be38d46"
+        ]
+      },
+      "gasUsed": "279130",
+      "artifactSha256": "31f46f847133f22251e6ebd0aa6397c561ed830cbb50b2df45b169e93416c8c6",
+      "scriptHash": "0xf522112780cd9c6bb1c126e59f81aa6a4152dbdfa4642a862ea41d5a5502e3ce",
+      "runtimeCodeHash": "0xd82248ab86baac18858b69b906f6c6adde8b70336b42e5eb7d3bd91b4214061a",
+      "callerBalanceSlot": "0xfbb6d79c2d5fc9f9d8e4505ed798f1fc4cad12b6dc532657cb068de9cb9f4ab3",
+      "caveat": "same-source and changed-rate N+1 context both executed; isolated actor code/prefunding only; not Ready, full-route EV or production gap acceptance",
+      "sourceProtocolFrames": [
+        {
+          "path": "0.3",
+          "type": "CALL",
+          "from": "0x1000000000000000000000000000000000000002",
+          "to": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "selector": "0x750283bc",
+          "inputHash": "0x40fa2dfecba51a815efb3929d5c00a0b9e57414db76a9537cf9e103edbe5b4b4",
+          "returnData": "0x000000000000000000000000000000000000000000000000007589d69be38d45",
+          "error": null
+        },
+        {
+          "path": "0.3.0",
+          "type": "CALL",
+          "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0x48c89491",
+          "inputHash": "0xe623f7ec102bc166b77fd8cd61606d43ac46c52cbcccb8acba106a481e13e457",
+          "returnData": "0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000007589d69be38d45",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0",
+          "type": "CALL",
+          "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "to": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "selector": "0x68a24fe0",
+          "inputHash": "0x4a75916db3e5b7812e6f4ec3f7f3d272380984837d925546a12a094832f6343a",
+          "returnData": "0x000000000000000000000000000000000000000000000000007589d69be38d45",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.0",
+          "type": "CALL",
+          "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0x2bfb780c",
+          "inputHash": "0xc5c7fa76d232a2329ccdb57758c2f3a2b690fe6417c5ef579221bd19ba80d852",
+          "returnData": "0x000000000000000000000000000000000000000000000000007589d69be38d45000000000000000000000000000000000000000000000000007597ba60b0d88a000000000000000000000000000000000000000000000000007589d69be38d45",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.0.0",
+          "type": "STATICCALL",
+          "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "to": "0xbe7be04807762bc433911dd927fd54a385fa91d6",
+          "selector": "0x679aefce",
+          "inputHash": "0x9b7a8b2ef1f0539d208300c60b5b65bce484a2d2ac9c62c6cb904ae7f9d831d4",
+          "returnData": "0x0000000000000000000000000000000000000000000000000ed0fc55cabcf696",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.0.1",
+          "type": "STATICCALL",
+          "from": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "to": "0x8023518b2192fb5384dadc596765b3dd1cdfe471",
+          "selector": "0x679aefce",
+          "inputHash": "0x9b7a8b2ef1f0539d208300c60b5b65bce484a2d2ac9c62c6cb904ae7f9d831d4",
+          "returnData": "0x0000000000000000000000000000000000000000000000000ee906bd755460f5",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.1",
+          "type": "CALL",
+          "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "to": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+          "selector": "0x36c78516",
+          "inputHash": "0xd98cb4e6a9cdcc5b435a73fa42aa5d7cfe117455320ac54e84d7590fb1116330",
+          "returnData": "0x",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.2",
+          "type": "CALL",
+          "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0x15afd409",
+          "inputHash": "0x5de6c5ae7567d3f875d7f04d094f50b62801161ee1311ed3747f83f7dbb167c9",
+          "returnData": "0x000000000000000000000000000000000000000000000000007597ba60b0d88a",
+          "error": null
+        },
+        {
+          "path": "0.3.0.0.3",
+          "type": "CALL",
+          "from": "0xae563e3f8219521950555f5962419c8919758ea2",
+          "to": "0xba1333333333a1ba1108e8412f11850a5c319ba9",
+          "selector": "0xae639329",
+          "inputHash": "0x5b738a13d6b4c6da6d1bf5997626dbb7331daa7d76bd03b55a5efd6d40ad6eeb",
+          "returnData": "0x",
+          "error": null
+        }
+      ]
+    }
+  ],
+  "unsupportedHookAnchor": {
+    "txHash": "0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87",
+    "source": {
+      "number": 25535037,
+      "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e",
+      "generation": 1
+    },
+    "outcomes": [
+      {
+        "familyId": "balancer-v3",
+        "candidateKey": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+        "stage": "discovery",
+        "status": "candidate",
+        "reasonCode": "candidate-decoded",
+        "source": {
+          "number": 25535037,
+          "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e",
+          "generation": 1
+        },
+        "evidenceRefs": []
+      },
+      {
+        "familyId": "balancer-v3",
+        "candidateKey": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+        "stage": "identity",
+        "status": "unresolved",
+        "reasonCode": "identity-work-unresolved:vault-registered-pool:unsupported-swap-hook-caller-context",
+        "source": {
+          "number": 25535037,
+          "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e",
+          "generation": 1
+        },
+        "evidenceRefs": [
+          "transport:0a1a34b7ae8e9169d1e975f7708de11e8fcbe6c979b9561f19ae66351c646891",
+          "transport:86a951a436ac4b27f70d66595ff528ce1a2b8117c78c5ee29885087c89b014a1"
+        ]
+      }
+    ]
+  },
+  "rpc": {
+    "sequential": true,
+    "calls": 75,
+    "sourceBytecodeProofAdditionalCalls": 1,
+    "maxCalls": 96,
+    "minimumSpacingMs": 200,
+    "quoteProbeReverts": 4,
+    "broadcast": false,
+    "overrides": "isolated owner native balance, executor BotVM runtime/owner, exact actor input-token prefunding only; no pool/code/reserve overrides"
+  },
+  "localChecks": {
+    "semanticTests": "11/11 pass",
+    "integrationTests": "1/1 pass",
+    "typecheck": "tsc --noEmit pass",
+    "centralIssuerBoundary": "PASS (471 roots / 532 runtime-closure files)",
+    "strictExecutionProjection": "pass",
+    "strictCentralAdapterRuntime": "pass, 58/58 controls",
+    "strictFamilyLifecycleRunner": "pass",
+    "npmBuild": "prebuild fails stale generated capability manifest; main owns regeneration; compiler typecheck independently passed"
+  },
+  "remainingGaps": [
+    "Swap-affecting hooks remain unsupported and outside Graph.",
+    "Historical EVM coverage is one real hook-free two-token pool, two specified input amounts, source state/time and state-N N+1/+12 contexts. Other pool/token implementations and multi-token execution are not all historically sampled.",
+    "No full universe Ready, natural enumeration, Solver sizing, closed-loop repayment/EV, sealed-corpus or core adapter_merge_ready verdict is claimed. Main owns catalog regeneration, full strict regression and integration before further stages."
+  ]
+}

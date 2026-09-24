@@ -958,17 +958,40 @@ const proofStep = { candidate: protocolCandidate, step: 0 };
 assert.deepEqual(activeVariant.requirements(proofStep).transports, ["get-code"]);
 assert.equal(activeVariant.buildRequests(proofStep).length, 1);
 assert.equal(activeVariant.decide(proofStep).status, "continue");
-const activeEvidence = activeVariant.decode({
-  step: proofStep,
-  results: [{
+const activeResults = [{
     id: "active-behavior-code",
-    ok: true,
+    ok: true as const,
     source: { number: 1, hash: HASH, generation: 1 },
     provenance: { kind: "fixture", fingerprint: "fixture-proof" },
-    completion: "returned",
+    completion: "returned" as const,
     data: "0x01",
-  }],
+  }];
+const activeEvidence = activeVariant.decode({
+  step: proofStep,
+  results: activeResults,
 });
+assert.throws(
+  () => activeVariant.decode({
+    step: proofStep,
+    results: [{
+      id: "active-behavior-code",
+      ok: false,
+      source: activeResults[0]!.source,
+      failureCode: "rpc",
+      message: "all optional requests failed",
+    }] as never,
+  }),
+  /requires successful results and explicit evidence/,
+  "an evidence object alone cannot prove behavior when every request failed",
+);
+assert.throws(
+  () => activeVariant.decode({
+    step: proofStep,
+    results: [...activeResults, null] as never,
+  }),
+  /requires successful results and explicit evidence/,
+  "one successful result cannot hide malformed results",
+);
 assert.equal(
   activeVariant.decide({
     candidate: protocolCandidate,

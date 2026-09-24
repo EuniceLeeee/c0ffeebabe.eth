@@ -7,7 +7,7 @@ import { definedFamilyPluginContractSummary, type IdentityDecision } from "../..
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../../adapter-request-program.js";
 import type { ResolvedPlanNode } from "../../../../../types.js";
 import { VAULT, ROUTER, PERMIT2, PERMIT2_ABI, MAX_INPUT, MAX_EXPIRATION, VAULT_ABI, POOL_ABI, TOKEN_ABI, ROUTER_ABI, SWAP_ABI, MAX_UINT,
-  addressWord, bool, lower, hooksConfig, poolInfo, probeAmounts, uint } from "../codec.js";
+  addressWord, bool, call, lower, hooksConfig, poolInfo, probeAmounts, queryData, uint } from "../codec.js";
 import { CALL_ID, LOG_ID, SURFACE_ID, SURFACE, SWAP_TOPIC, decodeSwapLog } from "../discovery.js";
 import { reverseBindBalancerV3, nominateBalancerV3 } from "../nomination.js";
 import { balancerV3ReceiptObservation } from "../swap.js";
@@ -96,6 +96,33 @@ function exact(at = setup(), amountIn = 653072044530122959n) {
   const results = requests.map(at.f.answer);
   const quote = method.program.decode({ programInput: input, initialResults: results, dependentEvidence: [] });
   return { input, method, requests, results, quote };
+}
+function currentPricing(s = setup(), route = s.routes[0]) {
+  const draft = plugin.pricing.compileDraft({ descriptor: s.descriptor, routes: [route], stateKey: route.routeKey });
+  const descriptor = plugin.pricing.finalizePricingDescriptor({ draft, sharedBindings: [] });
+  const current = { descriptor, routes: [route], source: SOURCE };
+  const initialResults = plugin.pricing.current.buildRequests(current).map(s.f.answer);
+  const program = (completedRound: number, priorEvidence: readonly unknown[]) =>
+    plugin.pricing.current.buildDependentProgram!({ current, completedRound, initialResults, priorEvidence });
+  const decode = (dependentEvidence: readonly unknown[]) =>
+    plugin.pricing.current.decodeSnapshot({ descriptor, initialResults, dependentEvidence });
+  const run = (answer = s.f.answer) => {
+    const evidence: unknown[] = [], batches: (readonly AdapterRequest[])[] = [];
+    for (let round = 0; round <= 2; round++) {
+      const next = program(round, evidence);
+      if (next === null) return { snapshot: decode(evidence), batches };
+      assert(round < 2, "pricing must use at most two dependent rounds");
+      batches.push(next.requests);
+      evidence.push(next.decode(next.requests.map(answer)));
+    }
+    throw new Error("pricing exceeded two dependent rounds");
+  };
+  const amounts = probeAmounts(s.descriptor.binding.decimals[route.i], s.f.balances[route.i]);
+  const eagerRequests = amounts.map((amount, i) => ({
+    ...call(`current-quote:${i}`, ROUTER, queryData(route.pool, route.tokenIn, route.tokenOut, amount, ethers.ZeroAddress)),
+    required: false,
+  }));
+  return { descriptor, route, program, decode, run, amounts, eagerRequests };
 }
 function log(pool = POOL) {
   const encoded = SWAP_ABI.encodeEventLog(SWAP_ABI.getEvent("Swap")!, [pool, ...TOKENS,
@@ -204,31 +231,75 @@ test("actual specified input drives nonlinear exact quotation; zero, overflow, s
   assert.throws(() => small.method.program.buildRequests({ ...small.input, route: { ...small.input.route, pool: FOREIGN } }), /descriptor/);
   assert.throws(() => small.method.program.buildRequests({ ...small.input, route: { ...small.input.route, tokenOut: EXTRA } }), /descriptor/);
 });
+test("current pricing sends only the first successful probe with the same snapshot as eager quotes", () => {
+  for (const decimals of [6, 18]) {
+    const f = fixture(TOKENS, [decimals, decimals]);
+    for (let i = 0; i < f.balances.length; i++) f.balances[i] /= 100000n;
+    const s = setup(f), p = currentPricing(s);
+    assert.equal(p.amounts.length, decimals === 6 ? 6 : 10);
+    const { snapshot, batches } = p.run();
+    assert.deepEqual(batches.map(batch => batch.map(request => request.id)), [["current-quote:0"]]);
+    assert.deepEqual(batches[0], p.eagerRequests.slice(0, 1));
+    assert.equal(snapshot.amountIn, p.amounts[0]);
+    assert.deepEqual(snapshot, p.decode([{ results: p.eagerRequests.map(s.f.answer) }]));
+  }
+});
+test("current pricing batches remaining probes in original order and chooses the earliest usable output", () => {
+  const s = setup(), p = currentPricing(s);
+  const firstFailures: AdapterRequestResult[] = [
+    { ...success("current-quote:0", "0x"), completion: "reverted-as-declared" },
+    { id: "current-quote:0", ok: false, failure: "rpc", source: SOURCE },
+    ...[0n, s.f.balances[p.route.j], s.f.balances[p.route.j] + 1n].map(value => success("current-quote:0", word(value))),
+  ];
+  for (const first of firstFailures) {
+    const answer = (request: AdapterRequest): AdapterRequestResult => request.id === first.id ? first :
+      success(request.id, word(BigInt(request.id.split(":")[1])));
+    const { snapshot, batches } = p.run(answer);
+    assert.deepEqual(batches, [p.eagerRequests.slice(0, 1), p.eagerRequests.slice(1)]);
+    assert.equal(snapshot.amountIn, p.amounts[1]); assert.equal(snapshot.amountOut, 1n);
+    assert.deepEqual(snapshot, p.decode([{ results: p.eagerRequests.map(answer) }]));
+  }
+});
 test("current pricing retries minimum trade amounts without relabelling failed probes unavailable", () => {
   const s = setup(fixture([...TOKENS, EXTRA], [18, 18, 6]));
-  const route = s.routes.find(r => r.i === 2 && r.j === 0)!;
-  const draft = plugin.pricing.compileDraft({ descriptor: s.descriptor, routes: [route], stateKey: route.routeKey });
-  const descriptor = plugin.pricing.finalizePricingDescriptor({ draft, sharedBindings: [] });
-  const current = { descriptor, routes: [route], source: SOURCE };
-  const initialResults = plugin.pricing.current.buildRequests(current).map(s.f.answer);
-  const program = plugin.pricing.current.buildDependentProgram!({ current, completedRound: 0, initialResults, priorEvidence: [] })!;
+  const p = currentPricing(s, s.routes.find(r => r.i === 2 && r.j === 0)!);
+  const { descriptor, route } = p;
   const minimum = 10000000n;
-  const results = program.requests.map(request => {
+  const answer = (request: AdapterRequest): AdapterRequestResult => {
     assert(request.kind === "eth-call");
     const amount = BigInt(ROUTER_ABI.decodeFunctionData("querySwapSingleTokenExactIn", request.data)[3]);
-    return amount < minimum ? { ...success(request.id, "0x"), completion: "reverted-as-declared" as const } : s.f.answer(request);
-  });
-  const snapshot = plugin.pricing.current.decodeSnapshot({ descriptor, initialResults, dependentEvidence: [program.decode(results)] });
-  assert(snapshot.amountIn >= minimum);
+    return amount < minimum ? { ...success(request.id, "0x"), completion: "reverted-as-declared" } : s.f.answer(request);
+  };
+  const { snapshot, batches } = p.run(answer);
+  assert.equal(snapshot.amountIn, p.amounts.find(amount => amount >= minimum));
+  assert.deepEqual(batches, [p.eagerRequests.slice(0, 1), p.eagerRequests.slice(1)]);
+  assert.deepEqual(snapshot, p.decode([{ results: p.eagerRequests.map(answer) }]));
   const mid = plugin.pricing.current.deriveMids({ descriptor, routes: [route], snapshot }).get(route.routeKey)!;
   assert.equal(mid.mid, Number(snapshot.amountOut) / Number(snapshot.amountIn)); assert.equal(mid.feeBps, 0);
   assert.equal(mid.reserveA, s.f.balances[2]); assert.equal(mid.reserveB, s.f.balances[0]);
-  assert.throws(() => plugin.pricing.current.decodeSnapshot({ descriptor, initialResults,
-    dependentEvidence: [program.decode(results.map(r => ({ ...success(r.id, "0x"), completion: "reverted-as-declared" })))] }), /unresolved/);
-  assert.throws(() => plugin.pricing.current.decodeSnapshot({ descriptor, initialResults,
-    dependentEvidence: [program.decode(results.map(r => ({ ...r, source: { ...SOURCE, number: SOURCE.number + 1 } })))] }), /foreign source/);
+  for (const completion of ["returned", "reverted-as-declared"] as const) {
+    const requested: string[] = [];
+    assert.throws(() => p.run(request => {
+      requested.push(request.id); return { ...success(request.id, word(0n)), completion };
+    }), /unresolved/);
+    assert.deepEqual(requested, p.eagerRequests.map(request => request.id));
+  }
   assert.throws(() => probeAmounts(37, 1n), /scale/); assert.throws(() => probeAmounts(18, 0n), /liquidity/);
   assert(probeAmounts(18, 1n).includes(1n)); assert(probeAmounts(6, 1000000000n).includes(1000000n));
+});
+test("current pricing rejects malformed, missing, duplicate and foreign first probes before fallback", () => {
+  const p = currentPricing();
+  for (const [result, error] of [[success("current-quote:0", "0x"), /noncanonical/],
+    [{ ...success("current-quote:0", word(0n)), source: { ...SOURCE, number: SOURCE.number + 1 } }, /foreign source/]] as const) {
+    const requested: string[] = [];
+    assert.throws(() => p.run(request => { requested.push(request.id); return result; }), error);
+    assert.deepEqual(requested, ["current-quote:0"]);
+  }
+  const first = success("current-quote:0", word(0n));
+  assert.throws(() => p.program(1, [{ results: [] }]), /missing\/duplicate/);
+  assert.throws(() => p.program(1, [{ results: [first, first] }]), /missing\/duplicate/);
+  assert.throws(() => p.run(request => ({ ...success(request.id, word(0n)),
+    source: request.id === "current-quote:1" ? { ...SOURCE, hash: ethers.ZeroHash } : SOURCE })), /foreign source/);
 });
 test("execution encodes exact limited approvals, Router dynamic settlement and cleanup", () => {
   const q = exact();

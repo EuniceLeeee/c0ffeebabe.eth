@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Readable, Writable } from "node:stream";
+import { keccak256 } from "ethers";
 
 type DaemonProc = ChildProcessByStdio<Writable, Readable, null>;
 
@@ -107,6 +108,7 @@ export interface DaemonResponse {
     roundTrips: number;
   };
   strict?: {
+    counterfactualExecutorCode?: { address: string; keccak256: string };
     outcome: StrictExecutionOutcome;
     /** Unrefunded execution gas; inner mode excludes outer/intrinsic gas. */
     executionGasUsed: string;
@@ -139,9 +141,13 @@ export class RevmStrictError extends Error {
   }
 }
 
+/** Counterfactual code for the strict request's `to` only; never account state. */
+export interface ExecutorRuntimeCode { code: string; keccak256: string }
+
 export interface StrictSimulateRequest {
   blockNumber: number;
   sourcePin?: RevmSourcePin;
+  executorRuntimeCode?: ExecutorRuntimeCode;
   rpcUrl?: string;
   from: string;
   to: string;
@@ -182,7 +188,7 @@ function strictRequest(req: StrictSimulateRequest): void {
     && Object.keys(v).every(k => keys.includes(k));
   if (!record(req, ["blockNumber", "sourcePin", "rpcUrl", "from", "to", "data", "gasLimit", "executionGasLimit",
     "transactionOrigin", "nativeBalanceWei", "observeNativeBalances", "observeTokenBalances", "preCalls", "tokenDeals",
-    "observeTokens", "observeAccounts", "observeTotalSupply", "observeLogs", "callerMode"])
+    "observeTokens", "observeAccounts", "observeTotalSupply", "observeLogs", "callerMode", "executorRuntimeCode"])
     || !Number.isSafeInteger(req.blockNumber) || req.blockNumber < 0 || !address20(req.from) || !address20(req.to)
     || (req.rpcUrl !== undefined && (typeof req.rpcUrl !== "string" || !req.rpcUrl.trim()))
     || !bytesHex(req.data) || (req.gasLimit !== undefined && !gasAmount(req.gasLimit))
@@ -191,6 +197,12 @@ function strictRequest(req: StrictSimulateRequest): void {
     || (req.callerMode !== undefined && !["top-level", "impersonated-call-frame"].includes(req.callerMode))
     || (req.transactionOrigin !== undefined && !address20(req.transactionOrigin))
     || (req.observeLogs !== undefined && typeof req.observeLogs !== "boolean")) bad();
+  if (req.executorRuntimeCode !== undefined) {
+    const v = req.executorRuntimeCode;
+    if (!req.sourcePin || req.to.toLowerCase() === req.from.toLowerCase()
+      || !record(v, ["code", "keccak256"]) || !bytesHex(v.code) || v.code === "0x"
+      || !hash32(v.keccak256) || keccak256(v.code) !== v.keccak256.toLowerCase()) bad();
+  }
   if (req.callerMode === "impersonated-call-frame") {
     if (req.transactionOrigin === undefined || req.executionGasLimit === undefined) bad();
   } else if (req.transactionOrigin !== undefined && req.transactionOrigin.toLowerCase() !== req.from.toLowerCase()) bad();
@@ -237,6 +249,10 @@ function strictResponse(resp: DaemonResponse, req: StrictSimulateRequest): void 
     return;
   }
   const s = resp.strict; const o = s?.outcome;
+  const override = req.executorRuntimeCode;
+  if (override ? s?.counterfactualExecutorCode?.address !== req.to.toLowerCase()
+    || s.counterfactualExecutorCode.keccak256 !== override.keccak256.toLowerCase()
+    : s?.counterfactualExecutorCode !== undefined) bad();
   if (!s || !o || !["Success", "Revert", "Halt"].includes(o.kind)
     || resp.errorKind !== undefined || resp.error !== undefined
     || (o.phase !== "main" && o.phase !== "preCall")
@@ -361,6 +377,7 @@ function normalizedFatal(fatal: RevmFatalReason | undefined): RevmFatalReason | 
 interface Pending {
   id: string;
   line: string;
+  dispatchedAtMs?: number;
   resolve: (value: DaemonResponse) => void;
   reject: (err: Error) => void;
   cleanup: () => void;
@@ -576,6 +593,7 @@ export class RevmSimClient {
     const expired = pending.expired();
     if (expired) { pending.cleanup(); pending.reject(expired); this.pump(); return; }
     this.active = pending;
+    pending.dispatchedAtMs = Date.now();
     try {
       const proc = this.ensureProc();
       proc.stdin.write(pending.line, (err) => {
@@ -602,7 +620,25 @@ export class RevmSimClient {
     }
     const id = (++this.nextId).toString();
     const line = JSON.stringify({ ...payload, ...(pin ? { sourcePin: pin } : {}), epoch: this.epoch, requestId: id }) + "\n";
+    const enqueuedAtMs = Date.now();
     return new Promise<DaemonResponse>((resolveP, rejectP) => {
+      const timing = (status: string, response?: DaemonResponse): void => {
+        try {
+          if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS !== "1" || !pin) return;
+          const finishedAtMs = Date.now();
+          const metric = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value : undefined;
+          console.log(`[revm-request-timing] ${JSON.stringify({
+            sourceBlock: pending.blockNumber, sourceBlockHash: pin.blockHash, epoch: this.epoch, requestId: id,
+            target: pending.strictRequest?.to, enqueuedAtMs, dispatchedAtMs: pending.dispatchedAtMs ?? null,
+            queueMs: (pending.dispatchedAtMs ?? finishedAtMs) - enqueuedAtMs,
+            serviceMs: pending.dispatchedAtMs === undefined ? null : finishedAtMs - pending.dispatchedAtMs,
+            status, aborted: signal?.aborted === true,
+            daemonLatencyMs: metric(response?.latencyMs), warmHits: metric(response?.cacheStats?.warmHits),
+            coldMisses: metric(response?.cacheStats?.coldMisses), traceMs: metric(response?.seedStats?.traceMs),
+            traceRoundTrips: metric(response?.seedStats?.roundTrips),
+          })}`);
+        } catch { /* Observability must never prevent settling or draining work. */ }
+      };
       let timer: NodeJS.Timeout;
       const cancel = () => {
         const err = expired();
@@ -613,7 +649,9 @@ export class RevmSimClient {
         this.queue.splice(idx, 1); pending.cleanup(); pending.reject(err);
       };
       const arm = () => { timer = setTimeout(cancel, Math.min(2_147_483_647, Math.max(1, deadline - Date.now()))); };
-      const pending: Pending = { id, line, resolve: resolveP, reject: rejectP, expired,
+      const pending: Pending = { id, line,
+        resolve: response => { timing(response.ok ? "returned" : "not-ok", response); resolveP(response); },
+        reject: error => { timing("rejected"); rejectP(error); }, expired,
         pin, blockNumber: payload.blockNumber as number | undefined,
         strictRequest: payload.op === "strictSimulate" ? JSON.parse(line) : undefined,
         cleanup: () => { clearTimeout(timer); signal?.removeEventListener("abort", cancel); } };

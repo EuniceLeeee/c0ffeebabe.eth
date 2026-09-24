@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { sat1IdentityVariant } from "./sat1-identity.js";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import type {
   IdentityDecision,
@@ -41,7 +42,7 @@ export const univ4FeeHookIdentity = {
     id: "fee-hook-poolkey-active-proof",
     kind: "singleton-subinstance",
     lineageId: UNIV4_FEE_HOOK_LINEAGE_ID,
-    applies: () => true,
+    applies: candidate => sameAddress(candidate.poolKey.hooks, UNIV4_FEE_HOOK_ADDRESS),
     requirements: () => ({ transports: ["get-code", "eth-call"] }),
     buildRequests(input) {
       if (feeHookEvidence(input.evidence) !== undefined) return [];
@@ -79,7 +80,7 @@ export const univ4FeeHookIdentity = {
         feeHookEvidence(input.evidence),
       );
     },
-  }],
+  }, sat1IdentityVariant],
   identityKey: (identity) => identity.subject,
 } satisfies IdentitySemantics<FeeHookCandidate, FeeHookIdentity>;
 

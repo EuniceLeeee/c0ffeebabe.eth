@@ -4,6 +4,7 @@ import {
 } from "../../adapter-family-plugin.js";
 import { MAX_UINT256 } from "../standard-family/common.js";
 import { assertPsmInvocation } from "./binding.js";
+import { psmBuyQuote, psmSellQuote } from "./codec.js";
 import type { PsmDescriptor, PsmExactEvidence, PsmRoute } from "./types.js";
 
 export const psmExecution = {
@@ -14,12 +15,18 @@ export const psmExecution = {
     if (
       input.amountIn <= 0n ||
       input.quotedAmountOut <= 0n ||
-      evidence.kind !== "psm-sell-gem-fee" ||
+      evidence.kind !== "psm-directional-fee" ||
+      evidence.direction !== input.route.direction ||
       evidence.amountIn !== input.amountIn ||
       evidence.amountOut !== input.quotedAmountOut ||
       evidence.bindingFingerprint !== input.route.bindingRef.fingerprint
     ) {
       throw new Error("PSM execution received incompatible exact evidence");
+    }
+    const sell = input.route.direction === "sell-gem";
+    if ((sell ? psmSellQuote : psmBuyQuote)(input.amountIn, evidence.fee,
+      input.descriptor.decimalScale) !== input.quotedAmountOut) {
+      throw new Error("PSM execution fee does not reproduce exact output");
     }
     return Object.freeze({
       requirements: Object.freeze([Object.freeze({
@@ -34,7 +41,9 @@ export const psmExecution = {
         tokenIn: input.route.tokenIn,
         tokenOut: input.route.tokenOut,
         amount: input.amountIn,
-        params: {},
+        params: { direction: input.route.direction,
+          gemAmount: sell ? input.amountIn : input.quotedAmountOut,
+          fee: evidence.fee, scale: input.descriptor.decimalScale },
         children: [],
       })]),
     });

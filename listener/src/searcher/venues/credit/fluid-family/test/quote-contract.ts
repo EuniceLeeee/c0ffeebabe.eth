@@ -12,10 +12,12 @@ import { fluidCreditPricing } from "../pricing.js";
 import { decodeFluidCurrentState } from "../state.js";
 import type { FluidCreditDescriptor, FluidCreditRoute } from "../types.js";
 import { BORROW_STATE, ORACLE, stateFixture } from "./quote-fixture.js";
+import { verifyFluidLocalQuoteContract } from "./local-quote-contract.js";
 
 export function verifyFluidQuoteContract(input: { descriptor: FluidCreditDescriptor; route: FluidCreditRoute;
   source: CanonicalSource; executor: string }): void {
   const { descriptor, route, source, executor } = input;
+  verifyFluidLocalQuoteContract(input);
   assert.throws(() => fluidCreditAdapter.creditPolicy.quoteOutputByDebtBps(), /legacy Fluid ratio quote removed/);
   const states = stateFixture(source);
   const snapshot = decodeFluidCurrentState(states);
@@ -96,8 +98,10 @@ export function verifyFluidQuoteContract(input: { descriptor: FluidCreditDescrip
   assert.equal(fluidTickAtRatio(1n << 96n), 0);
   assert.equal(fluidTickAtRatio((1n << 96n) - 1n), -1);
   assert.throws(() => fluidTickAtRatio(1n), /outside tick range/);
-  assert.equal(fluidCreditExact.methods()[0].program, fluidCreditBorrowProgram);
-  assert.equal(fluidCreditExact.methods()[0].chainAmountQuote, true);
+  const unknownModelInput = { ...input, descriptor: { ...descriptor, localQuoteModel: undefined },
+    amountIn: 10n ** 18n, runtimeEvidence: [] };
+  assert.equal(fluidCreditExact.methods(unknownModelInput)[0].program, fluidCreditBorrowProgram);
+  assert.equal(fluidCreditExact.methods(unknownModelInput)[0].chainAmountQuote, true);
   assert.throws(() => defineCreditFamily({ ...fluidCreditStrictFamilyPlugin,
     pricing: {} as never }), /pricing/);
   assert.throws(() => defineCreditFamily({ ...fluidCreditStrictFamilyPlugin,

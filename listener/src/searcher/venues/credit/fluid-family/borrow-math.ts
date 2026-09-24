@@ -56,6 +56,43 @@ export function assertFluidBorrowState(state: FluidBorrowState): void {
  * never an assumed USD parity between the collateral and debt tokens.
  */
 export function fluidMaxBorrowRequest(amountIn: bigint, state: FluidBorrowState, debtBps = 10_000n): bigint {
+  const requested = borrowCeiling(amountIn, state, debtBps);
+  const collateralRaw = amountIn * 10n ** 12n / state.supplyExchangePrice;
+  const principal = requested * 10n ** 12n / state.borrowExchangePrice + 1n;
+  const debtRaw = principal + principal * state.borrowFeeBps / 10_000n;
+  const netDebtRaw = debtRaw * 1_000_000_001n / 1_000_000_000n + 1n;
+  if (requested < 10_000n || netDebtRaw < 10_000n) throw new Error("fluid-credit below minimum borrow amount");
+  fluidTickAtRatio(netDebtRaw * Q96 / collateralRaw);
+  return requested;
+}
+
+/** Input ceiling at a fixed CF/debt-fraction policy, not a deposit limit.
+ * Invert the same integer quote; never shrink an actual requested input.
+ */
+export function fluidMaxInputForBorrowCapacity(state: FluidBorrowState, capacity: bigint, debtBps = 10_000n): bigint {
+  assertFluidBorrowState(state);
+  if (capacity < 0n || debtBps <= 0n || debtBps > 10_000n) throw new Error("fluid-credit invalid capacity or ceiling fraction");
+  if (capacity < 10_000n) return 0n;
+  let low = 10_000n;
+  const collateralBound = ((1n << 128n) * state.supplyExchangePrice - 1n) / 10n ** 12n;
+  let high = collateralBound < (1n << 127n) - 1n ? collateralBound : (1n << 127n) - 1n;
+  // Avoid zero raw collateral for very small raw input units.
+  const minCollateral = (state.supplyExchangePrice + 10n ** 12n - 1n) / 10n ** 12n;
+  if (low < minCollateral) low = minCollateral;
+  if (low > high || borrowCeiling(low, state, debtBps) > capacity) return 0n;
+  while (low < high) {
+    const mid = (low + high + 1n) / 2n;
+    if (borrowCeiling(mid, state, debtBps) <= capacity) low = mid;
+    else high = mid - 1n;
+  }
+  const requested = borrowCeiling(low, state, debtBps);
+  const principal = requested * 10n ** 12n / state.borrowExchangePrice + 1n;
+  const debtRaw = principal + principal * state.borrowFeeBps / 10_000n;
+  if (requested < 10_000n || debtRaw * 1_000_000_001n / 1_000_000_000n + 1n < 10_000n) return 0n;
+  return fluidMaxBorrowRequest(low, state, debtBps) <= capacity ? low : 0n;
+}
+
+function borrowCeiling(amountIn: bigint, state: FluidBorrowState, debtBps: bigint): bigint {
   assertFluidBorrowState(state);
   if (amountIn < 10_000n || amountIn > (1n << 127n) - 1n || debtBps <= 0n || debtBps > 10_000n) {
     throw new Error("fluid-credit invalid collateral amount or ceiling fraction");
@@ -81,11 +118,5 @@ export function fluidMaxBorrowRequest(amountIn: bigint, state: FluidBorrowState,
     const mid = (low + high + 1n) / 2n;
     if (withinCf(mid)) low = mid; else high = mid - 1n;
   }
-  const requested = low * debtBps / 10_000n;
-  const principal = requested * 10n ** 12n / state.borrowExchangePrice + 1n;
-  const debtRaw = principal + principal * state.borrowFeeBps / 10_000n;
-  const netDebtRaw = debtRaw * 1_000_000_001n / 1_000_000_000n + 1n;
-  if (requested < 10_000n || netDebtRaw < 10_000n) throw new Error("fluid-credit below minimum borrow amount");
-  fluidTickAtRatio(netDebtRaw * Q96 / collateralRaw);
-  return requested;
+  return low * debtBps / 10_000n;
 }

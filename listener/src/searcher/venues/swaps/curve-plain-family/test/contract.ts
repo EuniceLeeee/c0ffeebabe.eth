@@ -5,7 +5,7 @@ import { plugin } from "../../../production-families/curve-plain.production.js";
 import { definedFamilyPluginContractSummary } from "../../../adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../../adapter-request-program.js";
 import { CURVE_METAREGISTRY, ERC20, EXECUTION, MAX_UINT, META, MODES, POOL, SIGNED_GETTERS, address, addressArray,
-  executionData, getterPool, hasReceiver, lower, probeAmount, quotePool, selector, uint, UINT_POOL } from "../codec.js";
+  executionData, executionFunction, pullsInput, getterPool, hasReceiver, lower, probeAmount, quotePool, selector, uint, UINT_POOL } from "../codec.js";
 import { LOG_ID, SURFACE, SURFACE_ID, SWAP_TOPIC, UINT_LOG_ID, UINT_SWAP_TOPIC, UINT_NG_LOG_ID, UINT_NG_SWAP_TOPIC, decodeSwapLog } from "../discovery.js";
 import { PROBE_RECEIVER } from "../identity.js";
 import { reverseBindCurvePlain } from "../nomination.js";
@@ -51,13 +51,13 @@ function fixture(anchor: Anchor, allowedModes: readonly CurvePlainMode[] = ["rec
       if (!allowedModes.includes(mode)) return revert(request.id);
       assert.equal(request.call.caller.kind, "executor");
       assert.equal(request.call.executionMode, "impersonated-call-frame");
-      const args = EXECUTION[mode].decodeFunctionData(mode === "exchange" ? "exchange" : "exchange_received", request.call.data);
+      const args = EXECUTION[mode].decodeFunctionData(executionFunction(mode), request.call.data);
       const [i, j, dx, minDy] = [Number(args[0]), Number(args[1]), BigInt(args[2]), BigInt(args[3])];
       const amountOut = dy(i, j, dx);
       assert.equal(minDy, amountOut);
       const setup = request.preCalls![0];
       assert.equal(lower(setup.to), anchor.coins[i]);
-      const setupArgs = ERC20.decodeFunctionData(mode === "exchange" ? "approve" : "transfer", setup.data);
+      const setupArgs = ERC20.decodeFunctionData(pullsInput(mode) ? "approve" : "transfer", setup.data);
       assert.equal(lower(String(setupArgs[0])), anchor.pool);
       assert.equal(setupArgs[1], dx);
       const receiver = hasReceiver(mode) ? String(args[4]) : EXECUTOR;
@@ -124,7 +124,7 @@ function check(name: string, run: () => void) { run(); tests++; console.log(`PAS
 
 check("all three anchored identities, both direct directions, and all execution modes", () => {
   for (const anchor of ANCHORS) for (const mode of MODES) {
-    const abi = mode === "received-uint" ? "uint256" : "int128";
+    const abi = mode.endsWith("-uint") ? "uint256" : "int128";
     const verified = identity(anchor, fixture(anchor, [mode]).answer, abi);
     const routes = plugin.routes.project({ descriptor: descriptor(verified) });
     assert.equal(routes.length, 2);
@@ -360,14 +360,14 @@ check("current pricing uses required read-only state and fee-inclusive get_dy", 
 check("received transfer requirement and encoded selector/receiver/minDy are exact", () => {
   const anchor = ANCHORS[0];
   for (const mode of MODES) {
-    const f = fixture(anchor, [mode]), d = descriptor(identity(anchor, f.answer, mode === "received-uint" ? "uint256" : "int128")), route = plugin.routes.project({ descriptor: d })[1];
+    const f = fixture(anchor, [mode]), d = descriptor(identity(anchor, f.answer, mode.endsWith("-uint") ? "uint256" : "int128")), route = plugin.routes.project({ descriptor: d })[1];
     const input = { descriptor: d, route, amountIn: 1000000n, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [] };
     const method = plugin.exact.methods(input)[1];
     if (method.kind !== "request-program") throw new Error("missing get_dy program");
     const exact = method.program.decode({ programInput: input, initialResults: method.program.buildRequests(input).map(f.answer), dependentEvidence: [] });
     const buildInput = { ...input, quotedAmountOut: exact.amountOut, minAmountOut: exact.amountOut - 1n, exactEvidence: exact.evidence };
     const fragment = plugin.execution.buildFragment(buildInput);
-    assert.equal(fragment.requirements[0].kind, mode === "exchange" ? "approve" : "transfer-to-pool");
+    assert.equal(fragment.requirements[0].kind, pullsInput(mode) ? "approve" : "transfer-to-pool");
     const node = fragment.nodes[0];
     assert.equal(node.adapterId, actionId(mode));
     const action = plugin.actionAdapters.find(a => a.id === node.adapterId)!;
@@ -387,7 +387,7 @@ check("received transfer requirement and encoded selector/receiver/minDy are exa
 check("manifest owns only declared plain actions and no credit or underlying action", () => {
   const summary = definedFamilyPluginContractSummary(plugin);
   assert.equal(summary.domain, "swap");
-  assert.deepEqual([...summary.suppliedActionAdapterIds].sort(), ["curve-exchange", "curve-exchange-nr", "curve-exchange-plain", "curve-exchange-received-uint"]);
+  assert.deepEqual([...summary.suppliedActionAdapterIds].sort(), ["curve-exchange", "curve-exchange-nr", "curve-exchange-plain", "curve-exchange-received-uint", "curve-exchange-uint"]);
   assert.deepEqual([...plugin.manifest.requiredInfraActionAdapterIds].sort(), ["erc20-approve", "erc20-transfer"]);
 });
 

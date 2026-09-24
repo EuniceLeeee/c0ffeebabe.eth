@@ -108,7 +108,7 @@ export function enumerateNMinusOneCoarseCandidates(input: {
   );
   const edgeFilterFinishedAtMs = Date.now();
   let scanTimingMs: BlockScanScanTiming | null = null;
-  const usd = effectiveUsdPricing(coarse, input.cfg.usdSignalPairsPerToken);
+  const usd = effectiveUsdPricing(coarse, input.cfg.usdSignalPairsPerToken, input.cfg.allowRepeatedPools);
   const scan = scanBlockStateFromResolvedMids({
     edges: scannerEdges,
     sourceBlock: coarse.sourceBlock,

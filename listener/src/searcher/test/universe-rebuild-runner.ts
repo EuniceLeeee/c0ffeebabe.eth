@@ -94,7 +94,8 @@ async function startupReadyFromMain(
   );
   return run(wiring.store, wiring, refresh,
     async () => { throw new Error("Ready reuse must not start discovery/rebuild"); },
-    UniverseRunIncomplete, flags.blind, flags.dryRun, { log() {} }, { env: {} });
+    UniverseRunIncomplete, flags.blind, flags.dryRun,
+    { log(message: string) { wiring.log?.(message); } }, { env: {} });
 }
 
 function makeFixture(
@@ -1126,6 +1127,52 @@ async function main(): Promise<void> {
     assert.equal(retained.attestCalls.get("b"), bCallsAfterTerminal);
     await rm(retentionDir, { recursive: true, force: true });
 
+    // Entry-owned activation suppresses retained work without deleting its
+    // identity evidence; a later rebuild can re-enable the same instances.
+    const activationDir = await mkdtemp(join(tmpdir(), "ready-family-activation-"));
+    try {
+      const activation = makeFixture(activationDir);
+      let enabled = true;
+      let scans = 0;
+      const activationInput: RebuildUniverseInput = {
+        ...activation.input,
+        isFamilyEnabled: familyId => familyId !== "fixture:optional" || enabled,
+        scanSwapWindow: async scan => ({
+          observations: (scans++ === 0 ? ["a", "b", "c"] : ["a", "c"])
+            .map(id => ({ id, block: SOURCE.number })),
+          sourceReceipts: sourceReceipts(scan.fromBlock),
+        }),
+        sealDurableVerifiedMemo: input => sealFixtureMemo({
+          ...activation.input.sealDurableVerifiedMemo(input),
+          familyId: (input.candidate as { id: string }).id === "b"
+            ? "fixture:optional" : "fixture:active",
+        }),
+      };
+      const before = await rebuildUniverse(activationInput);
+      const checkpointBefore = (await activation.store.load())!;
+      const bMemo = checkpointBefore.verifiedMemos["cand:b"];
+      enabled = false;
+      await assert.rejects(refreshReadyInstances({
+        ...activationInput,
+        assertCanonicalHead: async () => { throw new Error("disabled Ready must fail before RPC"); },
+      }), /Ready contains disabled Families: fixture:optional.*rebuild Ready/);
+      assert.deepEqual(await activation.store.load(), checkpointBefore,
+        "a switch cannot silently shrink the exact incumbent Ready");
+      const disabled = await rebuildUniverse(activationInput);
+      assert.deepEqual(disabled.activeInstanceKeys, ["inst:a", "inst:c"]);
+      assert.equal(disabled.candidateAccounting.verified, 2);
+      assert.equal(activation.attestCalls.get("b"), 1, "disabled Family must never re-attest");
+      assert.deepEqual((await activation.store.load())!.verifiedMemos["cand:b"], bMemo,
+        "operator exclusion retains the memo instead of terminally rejecting it");
+      enabled = true;
+      const restored = await rebuildUniverse(activationInput);
+      assert.deepEqual(restored.activeInstanceKeys, before.activeInstanceKeys,
+        "re-enable restores retained instances without requiring new activity");
+      assert.equal(activation.attestCalls.get("b"), 1);
+    } finally {
+      await rm(activationDir, { recursive: true, force: true });
+    }
+
     const refreshDir = await mkdtemp(join(tmpdir(), "ready-instance-refresh-"));
     try {
       const refresh = makeFixture(refreshDir);
@@ -1172,10 +1219,20 @@ async function main(): Promise<void> {
 
       refresh.invalidReusableKeys.add("a");
       const seal = refresh.input.sealDurableVerifiedMemo;
+      const retryCutoffs: unknown[] = [];
+      const retryLogs: string[] = [];
+      refresh.failKeys.add("a");
       const revisedStartup = await startupReadyFromMain({
         ...refreshInput,
         isReadyMemoDefinitionCurrent: (memo) => memo.familyCandidateKey !== "cand:a",
         findReusableMemo: async () => { throw new Error("refresh uses the existing Family definition hash"); },
+        attestFamilyInstanceOnce: async (input) => {
+          retryCutoffs.push(input.cutoff);
+          const result = await refresh.input.attestFamilyInstanceOnce(input);
+          refresh.failKeys.delete("a");
+          return result;
+        },
+        log: (message) => retryLogs.push(message),
         sealDurableVerifiedMemo: (input) => sealFixtureMemo({
           ...seal(input),
           compiledDescriptor: { kind: "descriptor", quoteModel: "pool-owned" },
@@ -1183,7 +1240,12 @@ async function main(): Promise<void> {
       }, { blind: false, dryRun: true });
       const revised = revisedStartup.readyUniverse;
       assert.equal(refresh.scanCalls(), scansBefore);
-      assert.equal(refresh.attestCalls.get("a"), 2, "only invalidated instance re-attested");
+      assert.equal(refresh.attestCalls.get("a"), 3, "invalidated instance retries a transient failure then verifies");
+      assert.deepEqual(retryCutoffs, [priorReady.cutoff, priorReady.cutoff],
+        "retryable recovery retains the exact original cutoff");
+      assert.ok(retryLogs.some((message) =>
+        /ready refresh cand:a: attempt=1\/3 retryable factory-child-reverse-binding:rpc/.test(message)),
+      "retry log identifies candidate, attempt budget and failure reason");
       assert.equal(refresh.attestCalls.get("b"), 1, "unchanged instance reused");
       assert.equal(refresh.attestCalls.get("c"), 1, "excluded candidate not retried");
       assert.equal(revised.generation, priorReady.generation + 1);
@@ -1204,8 +1266,35 @@ async function main(): Promise<void> {
       for (const outcome of ["retryable", "terminal"] as const) {
         const keys = outcome === "retryable" ? refresh.failKeys : refresh.terminalKeys;
         keys.add("a");
-        await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, dryRun: true }), /incumbent unchanged/);
+        const attemptsBefore = refresh.attestCalls.get("a")!;
+        const siblingAttemptsBefore = refresh.attestCalls.get("b")!;
+        const checkpointBefore = await readFile(join(refreshDir, "checkpoint.json"), "utf8");
+        const failureLogs: string[] = [];
+        const failureCutoffs: unknown[] = [];
+        const expectedAttempts = outcome === "retryable" ? 3 : 1;
+        await assert.rejects(startupReadyFromMain({
+          ...refreshInput,
+          findReusableMemo: async () => null,
+          attestFamilyInstanceOnce: async (input) => {
+            if ((input.candidate as { id: string }).id === "a") failureCutoffs.push(input.cutoff);
+            return refresh.input.attestFamilyInstanceOnce(input);
+          },
+          sealDurableVerifiedMemo: (input) => sealFixtureMemo({
+            ...seal(input), compiledDescriptor: { kind: "must-not-persist" },
+          }),
+          log: (message) => failureLogs.push(message),
+        }, { blind: false, dryRun: true }),
+        new RegExp(`ready refresh cand:a: attempt=${expectedAttempts}/3 .*incumbent unchanged`));
+        assert.equal(refresh.attestCalls.get("a")! - attemptsBefore, expectedAttempts,
+          "only retryable outcomes use the bounded three-attempt budget");
+        assert.equal(refresh.attestCalls.get("b")! - siblingAttemptsBefore, 1,
+          "a sibling may verify before the refresh fails");
+        assert.deepEqual(failureCutoffs, Array(expectedAttempts).fill(priorReady.cutoff));
+        assert.equal(failureLogs.filter((message) => message.includes("ready refresh cand:a:")).length,
+          expectedAttempts, "every failed attempt is logged, including exhaustion");
         assert.deepEqual(await refresh.store.load(), after);
+        assert.equal(await readFile(join(refreshDir, "checkpoint.json"), "utf8"), checkpointBefore,
+          "even successfully refreshed siblings are not partially persisted");
         keys.delete("a");
       }
       await assert.rejects(refreshReadyInstances({
@@ -1252,6 +1341,26 @@ async function main(): Promise<void> {
       assert.deepEqual(attemptedAfterFailure, ["a"],
         "a delayed sibling must not start attestation after the first worker failed");
       assert.deepEqual(await refresh.store.load(), after);
+      const attemptsDuringBackoff: string[] = [];
+      await assert.rejects(refreshReadyInstances({
+        ...refreshInput,
+        findReusableMemo: async () => null,
+        attestFamilyInstanceOnce: async ({ candidate }) => {
+          const id = (candidate as { id: string }).id;
+          attemptsDuringBackoff.push(id);
+          if (id === "b") throw new Error("sibling failed during retry backoff");
+          return {
+            status: "retryable" as const,
+            stage: "identity" as const,
+            failureCode: "rpc" as const,
+            reasonCode: "fixture-timeout",
+            candidateSnapshot: candidate,
+          };
+        },
+      }), /sibling failed during retry backoff/);
+      assert.deepEqual(attemptsDuringBackoff, ["a", "b"],
+        "a pending retry cannot start after another worker has failed");
+      assert.deepEqual(await refresh.store.load(), after);
       await assert.rejects(refresh.store.casRefreshReadyInstances({
         expectedRevision: after.revision,
         memos: active.slice(0, 1), graphSnapshot: revised.graphSnapshot,
@@ -1268,7 +1377,7 @@ async function main(): Promise<void> {
         graphSnapshot: revised.graphSnapshot,
       }), /CAS conflict/);
       assert.deepEqual(await refresh.store.load(), after);
-      console.log("ready instance refresh PASS (no scan, same set/cutoff/coverage, scoped re-attestation, atomic failure)");
+      console.log("ready instance refresh PASS (no scan, same set/cutoff/coverage, scoped re-attestation, bounded retry, atomic failure)");
     } finally {
       await rm(refreshDir, { recursive: true, force: true });
     }

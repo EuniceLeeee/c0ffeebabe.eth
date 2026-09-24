@@ -1,7 +1,9 @@
 import { ethers } from "ethers";
+import { hookDataFor, SAT1_MAX_BUY, sat1Permissions } from "./sat1.js";
 import {
   localZeroExactMethod,
   type ExactQuoteSemantics,
+  type ExactQuoteInput,
   type ExactRequestProgram,
 } from "../../adapter-family-plugin.js";
 import { UNIV4_QUOTER_INTERFACE } from "../univ4-abi.js";
@@ -22,6 +24,55 @@ import type {
 
 const EXACT_QUOTE_REQUEST_ID = "exact-univ4-fee-hook-quote";
 const MAX_UINT128 = (1n << 128n) - 1n;
+const SEQUENTIAL_QUOTER = new ethers.Interface([
+  "function quoteExactInput((address exactCurrency,(address intermediateCurrency,uint24 fee,int24 tickSpacing,address hooks,bytes hookData)[] path,uint128 exactAmount) params) returns (uint256 amountOut,uint256 gasEstimate)",
+]);
+
+/** The audited Sat1 hook's state changes are reproduced by the Quoter's
+ * multi-swap unlock. It reverts the entire trial after returning the quote.
+ * Do not silently omit interleaved foreign legs or assume another hook has
+ * the same caller/transient/settlement semantics. */
+function sequenceParams(input: ExactQuoteInput<FeeHookDescriptor, FeeHookRoute>) {
+  if (!input.prefix?.length) return null;
+  const steps = [...input.prefix, input].map(step => {
+    const descriptor = step.descriptor as FeeHookDescriptor;
+    const route = step.route as FeeHookRoute;
+    if (descriptor.familyId !== input.descriptor.familyId || descriptor.hookModel !== "sat1" ||
+        descriptor.instanceKey !== input.descriptor.instanceKey || descriptor.poolId !== input.descriptor.poolId ||
+        !sameAddress(descriptor.managerBinding.quoter, input.descriptor.managerBinding.quoter) ||
+        !sameAddress(descriptor.managerBinding.manager, input.descriptor.managerBinding.manager)) {
+      throw new Error("sequential quote unsupported: requires a complete same-instance Sat1 prefix");
+    }
+    assertRoute(descriptor, route);
+    if (step.amountIn <= 0n || step.amountIn >= (1n << 127n)) throw new Error("invalid sequential exact amount");
+    if (route.direction === "zero-for-one" && step.amountIn > SAT1_MAX_BUY) throw new Error("sat1 buy exceeds contract MAX_BUY");
+    return { descriptor, route, amountIn: step.amountIn };
+  });
+  for (let i = 1; i < steps.length; i++) {
+    if (!sameAddress(steps[i - 1]!.route.realTokenOut, steps[i]!.route.realTokenIn) ||
+        input.prefix[i - 1]!.amountOut !== steps[i]!.amountIn) throw new Error("sequential exact token/amount mismatch");
+  }
+  return {
+    exactCurrency: steps[0]!.route.realTokenIn,
+    exactAmount: steps[0]!.amountIn,
+    path: steps.map(({ descriptor, route }) => ({
+      intermediateCurrency: route.realTokenOut,
+      fee: descriptor.poolKey.fee, tickSpacing: descriptor.poolKey.tickSpacing,
+      hooks: descriptor.hook,
+      hookData: hookDataFor(descriptor, input.executor, route.direction === "zero-for-one"),
+    })),
+  };
+}
+
+function supportsPrefix(input: ExactQuoteInput<FeeHookDescriptor, FeeHookRoute>): boolean {
+  return !input.prefix?.length || [input, ...input.prefix].every(step => {
+    const descriptor = step.descriptor as FeeHookDescriptor;
+    return descriptor.familyId === input.descriptor.familyId && descriptor.hookModel === "sat1" &&
+      descriptor.instanceKey === input.descriptor.instanceKey && descriptor.poolId === input.descriptor.poolId &&
+      sameAddress(descriptor.managerBinding.quoter, input.descriptor.managerBinding.quoter) &&
+      sameAddress(descriptor.managerBinding.manager, input.descriptor.managerBinding.manager);
+  });
+}
 
 /**
  * Exact quotes reuse the standard V4 quoter (same poolKey, same
@@ -39,18 +90,22 @@ const feeHookRequestProgram: ExactRequestProgram<
   buildRequests(input) {
     assertRoute(input.descriptor, input.route);
     assertAmount(input.amountIn);
+    if (input.descriptor.hookModel === "sat1" && input.route.direction === "zero-for-one" && input.amountIn > SAT1_MAX_BUY) {
+      throw new Error("sat1 buy exceeds contract MAX_BUY");
+    }
     if (input.amountIn === 0n) return [];
+    const sequence = sequenceParams(input);
     return [Object.freeze({
       id: EXACT_QUOTE_REQUEST_ID,
       kind: "eth-call" as const,
       to: input.descriptor.managerBinding.quoter,
-      data: UNIV4_QUOTER_INTERFACE.encodeFunctionData(
+      data: sequence ? SEQUENTIAL_QUOTER.encodeFunctionData("quoteExactInput", [sequence]) : UNIV4_QUOTER_INTERFACE.encodeFunctionData(
         "quoteExactInputSingle",
         [{
           poolKey: input.descriptor.poolKey,
           zeroForOne: input.route.direction === "zero-for-one",
           exactAmount: input.amountIn,
-          hookData: "0x",
+          hookData: hookDataFor(input.descriptor, input.executor, input.route.direction === "zero-for-one"),
         }],
       ),
       completion: "return-data" as const,
@@ -63,8 +118,9 @@ const feeHookRequestProgram: ExactRequestProgram<
     if (programInput.amountIn === 0n) return zeroQuote(programInput);
     const result = requireSuccessfulResult(results, EXACT_QUOTE_REQUEST_ID);
     assertSource(result.source, programInput.source);
-    const decoded = UNIV4_QUOTER_INTERFACE.decodeFunctionResult(
-      "quoteExactInputSingle",
+    const sequence = sequenceParams(programInput);
+    const decoded = (sequence ? SEQUENTIAL_QUOTER : UNIV4_QUOTER_INTERFACE).decodeFunctionResult(
+      sequence ? "quoteExactInput" : "quoteExactInputSingle",
       result.data,
     );
     const amountOut = BigInt(decoded[0]);
@@ -76,7 +132,7 @@ const feeHookRequestProgram: ExactRequestProgram<
 };
 
 export const univ4FeeHookExact = {
-  methods: () => Object.freeze([
+  methods: (input: ExactQuoteInput<FeeHookDescriptor, FeeHookRoute>) => Object.freeze([
     localZeroExactMethod<FeeHookDescriptor, FeeHookRoute, FeeHookExactEvidence>(
       "local-zero",
       (input) => {
@@ -84,19 +140,20 @@ export const univ4FeeHookExact = {
         return zeroQuote(input);
       },
     ),
-    Object.freeze({
+    ...(supportsPrefix(input) ? [Object.freeze({
       id: "univ4-fee-hook-quoter",
       kind: "request-program" as const,
       chainAmountQuote: true as const,
+      sequentialPrefix: true as const,
       program: feeHookRequestProgram,
-    }),
+    })] : []),
   ]),
-  cacheCompatibilityProjection: ({ descriptor, route }) => ({
+  cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
     poolId: descriptor.poolId,
     poolKey: poolKeyProjection(descriptor.poolKey),
     quoter: descriptor.managerBinding.quoter,
     direction: [route.tokenIn, route.tokenOut],
-    hookData: "0x",
+    hookData: hookDataFor(descriptor, executor, route.direction === "zero-for-one"),
   }),
 } satisfies ExactQuoteSemantics<
   FeeHookDescriptor,
@@ -117,6 +174,7 @@ function exactEvidence(
     readonly route: FeeHookRoute;
     readonly amountIn: bigint;
     readonly source: FeeHookExactEvidence["source"];
+    readonly executor: string;
   },
   amountOut: bigint,
   gasEstimate: bigint,
@@ -132,7 +190,7 @@ function exactEvidence(
     amountIn: input.amountIn,
     amountOut,
     gasEstimate,
-    hookData: "0x" as const,
+    hookData: hookDataFor(input.descriptor, input.executor, input.route.direction === "zero-for-one"),
   });
 }
 
@@ -160,7 +218,8 @@ function assertRoute(
     !sameAddress(route.manager, descriptor.managerBinding.manager) ||
     !sameAddress(route.tokenIn, expectedIn) ||
     !sameAddress(route.tokenOut, expectedOut) ||
-    !sameAddress(descriptor.hook, UNIV4_FEE_HOOK_ADDRESS)
+    !sameAddress(descriptor.hook, descriptor.poolKey.hooks) ||
+    !(descriptor.hookModel === "sat1" ? sat1Permissions(descriptor.hook) : sameAddress(descriptor.hook, UNIV4_FEE_HOOK_ADDRESS))
   ) {
     throw new Error(
       "univ4 fee-hook exact route binding does not match " + descriptor.poolId,

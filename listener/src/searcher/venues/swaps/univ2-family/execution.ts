@@ -46,8 +46,10 @@ export const univ2Execution = {
         tokenOut: input.route.tokenOut,
         amount: input.amountIn,
         params: {
-          amount0Out: zeroForOne ? 0n : input.minAmountOut,
-          amount1Out: zeroForOne ? input.minAmountOut : 0n,
+          // Pair.swap specifies an exact transfer, not a minimum-output
+          // threshold. A relaxed acceptance floor must not request less.
+          amount0Out: zeroForOne ? 0n : input.quotedAmountOut,
+          amount1Out: zeroForOne ? input.quotedAmountOut : 0n,
           to: input.executor,
         },
         children: transferFirst ? [] : [transfer],

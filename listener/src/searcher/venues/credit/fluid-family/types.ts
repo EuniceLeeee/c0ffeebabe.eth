@@ -12,6 +12,8 @@ import type {
 } from "../../adapter-family-identifiers.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import type { FluidCreditSnapshot } from "./state.js";
+import type { FluidCreditCapacity } from "./capacity.js";
+import type { FluidLocalQuoteModel } from "./model.js";
 
 export interface FluidCreditCandidate extends FamilyCandidate {
   readonly candidateKind: "fluid-credit-vault";
@@ -33,6 +35,7 @@ export interface FluidCreditIdentityFacts {
   readonly borrowDecimals: number;
   readonly factoryBinding: FluidCreditFactoryBinding;
   readonly activeProbeActor: string;
+  readonly localQuoteModel?: FluidLocalQuoteModel;
 }
 
 export interface FluidCreditIdentity extends VerifiedIdentity {
@@ -52,6 +55,7 @@ export interface FluidCreditDescriptor extends CompiledInstanceDescriptor {
   readonly borrowDecimals: number;
   readonly factoryBinding: FluidCreditFactoryBinding;
   readonly runtimeRequirements: readonly RuntimeRequirement[];
+  readonly localQuoteModel?: FluidLocalQuoteModel;
 }
 
 export interface FluidCreditRoute extends FamilyRouteDescriptor {
@@ -76,6 +80,19 @@ export interface FluidCreditRiskEvidence {
   readonly borrowState: FluidCreditSnapshot;
 }
 
+/** A source-bound amount calculation, never an observed execution/risk proof. */
+export interface FluidCreditLocalEvidence {
+  readonly kind: "fluid-credit-local-amount";
+  readonly source: CanonicalSource;
+  readonly vault: string;
+  readonly routeKey: FluidCreditRoute["routeKey"];
+  readonly executor: string;
+  readonly collateralAmount: bigint;
+  readonly debtAmount: bigint;
+  readonly borrowState: FluidCreditCapacity;
+}
+export type FluidCreditExactEvidence = FluidCreditRiskEvidence | FluidCreditLocalEvidence;
+
 export type FluidCreditIdentityEvidence =
   | {
       readonly phase: "constants";
@@ -87,6 +104,7 @@ export type FluidCreditIdentityEvidence =
       readonly borrowDecimals: number;
       readonly vaultId: bigint;
       readonly vaultHasCode: boolean;
+      readonly localQuoteModel?: FluidLocalQuoteModel;
     }
   | {
       readonly phase: "reverse-binding";

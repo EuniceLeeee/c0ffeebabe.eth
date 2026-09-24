@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { metronomeHgUsdcCapture } from "../protocols/metronome-hgusdc-family/capture.js";
 import { metronomeHgUsdcFamilyOwnedAction } from "../protocols/metronome-hgusdc-family/action.js";
@@ -10,6 +11,8 @@ import { metronomeHgUsdcFamilyManifest } from "../protocols/metronome-hgusdc-fam
 import { metronomeHgUsdcPricing } from "../protocols/metronome-hgusdc-family/pricing.js";
 import { metronomeHgUsdcProtocol } from "../protocols/metronome-hgusdc-family/protocol.js";
 import { metronomeHgUsdcRoutes } from "../protocols/metronome-hgusdc-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_METRONOME_HGUSDC_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: metronomeHgUsdcFamilyManifest,

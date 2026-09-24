@@ -304,7 +304,7 @@ async function setup(mode: Mode) {
 function assertIdle(backend: PinnedRethQuoteBackend): void {
   const s = backend.stats();
   assert.deepEqual([s.pendingItems, s.liveItems, s.inFlightBatches, s.activeTransports], [0, 0, 0, 0]);
-  assert.equal(s.maxBatchSize, 128); assert.equal(s.maxConcurrentBatches, 4);
+  assert.equal(s.maxBatchSize, 64); assert.equal(s.maxConcurrentBatches, 8);
   assert.equal(s.allowSingleCallFallback, false); assert.equal(s.persistentCacheConfigured, false);
 }
 const observe = () => ({ sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
@@ -534,13 +534,13 @@ await fixture("revert", async f => {
 for (const mode of ["shutdown", "queued"] as const) {
   await fixture(mode, async f => {
     f.loop.schedule(N);
-    await until(() => f.held.length === (mode === "queued" ? 4 : 1), "outstanding work");
+    await until(() => f.held.length === (mode === "queued" ? 8 : 1), "outstanding work");
     f.loop.schedule(N + 1);
     const before = f.wire.length;
     await f.loop.shutdown(); await turn();
     assert.equal(f.requests.length, 1); assert.equal(f.published.length, 0);
     assert.equal(f.wire.length, before); assert.deepEqual(f.starts, [N]);
-    if (mode === "queued") assert.equal(before, 512, "queued fifth/sixth batch must never be sent");
+    if (mode === "queued") assert.equal(before, 512, "queued ninth and later batches must never be sent");
     for (const backend of f.backends) { assertIdle(backend); await assert.rejects(backend.call({ to: QUOTER, data: TAIL })); }
   });
 }

@@ -389,7 +389,7 @@ function repaymentFragment(
         tokenIn: offer.asset,
         tokenOut: offer.asset,
         amount: MAX_UINT256,
-        params: { spender: target, amount: MAX_UINT256 },
+        params: { spender: target, amount: MAX_UINT256, minimumAllowance: amount },
         children,
       };
   Object.freeze(node.params);

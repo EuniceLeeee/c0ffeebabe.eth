@@ -4,6 +4,7 @@ import { bigintRatio } from "../../swaps/blockscan-state-shared.js";
 import { fluidCreditStaticBindingProjection } from "./instance.js";
 import { assertFluidCreditRoute } from "./exact.js";
 import { decodeFluidCurrentState, fluidConfigRequests, fluidRateProgram, type FluidCreditSnapshot } from "./state.js";
+import { decodeFluidCapacity, fluidCapacityRequests } from "./capacity.js";
 import type { FluidCreditDescriptor, FluidCreditRoute } from "./types.js";
 
 export interface FluidCreditPricingDescriptor {
@@ -11,6 +12,9 @@ export interface FluidCreditPricingDescriptor {
   readonly route: FluidCreditRoute;
 }
 export const fluidCreditPricing = {
+  // Interest/exchange prices, oracle rates and expanding limits can change
+  // without a vault transaction. Use the existing per-source refresh policy.
+  refreshPolicy: "each-block" as const,
   stateKey: route => route.instanceKey,
   staticBindingProjection: ({ descriptor }) => fluidCreditStaticBindingProjection(descriptor),
   snapshotCompatibilityProjection: ({ descriptor }) => fluidCreditStaticBindingProjection(descriptor),
@@ -22,12 +26,15 @@ export const fluidCreditPricing = {
   finalizePricingDescriptor: ({ draft }) => Object.freeze(draft),
   current: {
     requirements: () => ({ transports: ["eth-call"] }),
-    buildRequests: ({ descriptor }) => fluidConfigRequests(descriptor.instance.vault),
+    buildRequests: ({ descriptor }) => descriptor.instance.localQuoteModel === "t1-view-v1"
+      ? fluidCapacityRequests(descriptor.instance.vault) : fluidConfigRequests(descriptor.instance.vault),
     buildDependentProgram({ current, completedRound, initialResults }) {
+      if (current.descriptor.instance.localQuoteModel === "t1-view-v1") return null;
       return completedRound === 0 ? fluidRateProgram(current.descriptor.instance.vault, initialResults) : null;
     },
-    decodeSnapshot: ({ initialResults, dependentEvidence }) =>
-      decodeFluidCurrentState(collectRequestProgramResults(initialResults, dependentEvidence)),
+    decodeSnapshot: ({ descriptor, initialResults, dependentEvidence }) => descriptor.instance.localQuoteModel === "t1-view-v1"
+      ? decodeFluidCapacity(descriptor.instance, initialResults, initialResults[0].source)
+      : decodeFluidCurrentState(collectRequestProgramResults(initialResults, dependentEvidence)),
     deriveMids({ descriptor, snapshot, routes }) {
       if (routes.length !== 1 || routes[0].routeKey !== descriptor.route.routeKey) throw new Error("fluid-credit pricing route mismatch");
       const route = routes[0];

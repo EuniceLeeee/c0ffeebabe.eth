@@ -3,17 +3,18 @@ import { tokenToWethReferences, type RawTokenRate } from "./blockscan-amount-ref
 import { effectiveEnumerationMids } from "./blockscan-effective-mid.js";
 import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
 import type { ResolvedBlockScanMid } from "./detector/blockscan-scanner-core.js";
-import { aboveSpread, type DfsQuote, type DirectedPriceSignal } from "./detector/blockscan-paired-dfs.js";
+import { aboveSpread, DEFAULT_ALLOW_REPEATED_POOLS, type DfsQuote, type DirectedPriceSignal } from "./detector/blockscan-paired-dfs.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import { blockScanEdgeKey } from "./venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import { isBlockScanConversionEdge } from "./strategy-taxonomy.js";
+import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "./blockscan-enumeration-config.js";
 
 const compare = (a: RawTokenRate, b: RawTokenRate): number => {
   const delta = a.num * b.den - b.num * a.den;
   return delta < 0n ? -1 : delta > 0n ? 1 : 0;
 };
-export const DEFAULT_USD_SIGNAL_PAIRS_PER_TOKEN = 20;
+export const DEFAULT_USD_SIGNAL_PAIRS_PER_TOKEN: number = BLOCKSCAN_ENUMERATION_DEFAULTS.signalPairsPerToken;
 export function resolveUsdSignalPairsPerToken(raw?: string): number {
   const value = raw === undefined ? DEFAULT_USD_SIGNAL_PAIRS_PER_TOKEN : Number(raw);
   if ((raw !== undefined && !/^[1-9]\d*$/.test(raw)) || !Number.isSafeInteger(value) || value < 1)
@@ -33,6 +34,7 @@ export interface BlockScanUsdView {
   /** Top compatible buy/sell pairs per token, ranked by reference spread. */
   readonly signals: readonly DirectedPriceSignal[];
   readonly signalPairsPerToken: number;
+  readonly allowRepeatedPools: boolean;
   readonly referenceUsdPerRaw: ReadonlyMap<string, RawTokenRate>;
   readonly comparableTokens: number;
   readonly missingBuyReference: number;
@@ -46,6 +48,7 @@ export interface BlockScanUsdView {
 export function buildBlockScanUsdView(
   edges: readonly TokenEdge[], mids: ReadonlyMap<string, ResolvedBlockScanMid>,
   signalPairsPerToken = DEFAULT_USD_SIGNAL_PAIRS_PER_TOKEN,
+  allowRepeatedPools = DEFAULT_ALLOW_REPEATED_POOLS,
 ): BlockScanUsdView {
   if (!Number.isSafeInteger(signalPairsPerToken) || signalPairsPerToken < 1)
     throw new Error("USD signal pairs per token must be a positive safe integer");
@@ -106,7 +109,7 @@ export function buildBlockScanUsdView(
     };
     const push = (bi: number, si: number) => {
       const b = buys[bi]!;
-      while (si < sells.length && sells[si]!.quote.instance === b.quote.instance) si++;
+      while (!allowRepeatedPools && si < sells.length && sells[si]!.quote.instance === b.quote.instance) si++;
       if (si === sells.length) return;
       const s = sells[si]!;
       const item: Pair = { buy: bi, sell: si, signal: { token, buy: b.quote.id, sell: s.quote.id,
@@ -133,9 +136,9 @@ export function buildBlockScanUsdView(
       }
       return first;
     };
-    const firstOtherPool = sells.findIndex(s => s.quote.instance !== sells[0]!.quote.instance);
+    const firstOtherPool = allowRepeatedPools ? 0 : sells.findIndex(s => s.quote.instance !== sells[0]!.quote.instance);
     for (let bi = 0; bi < buys.length; bi++) {
-      const si = buys[bi]!.quote.instance === sells[0]!.quote.instance ? firstOtherPool : 0;
+      const si = !allowRepeatedPools && buys[bi]!.quote.instance === sells[0]!.quote.instance ? firstOtherPool : 0;
       if (si >= 0) push(bi, si);
     }
     if (heap.length > 0) comparableTokens++;
@@ -147,17 +150,18 @@ export function buildBlockScanUsdView(
     }
   }
   signals.sort((a, b) => compare(b, a) || a.token.localeCompare(b.token));
-  return { quotes, signals, signalPairsPerToken, referenceUsdPerRaw, comparableTokens, missingBuyReference, missingSellReference };
+  return { quotes, signals, signalPairsPerToken, allowRepeatedPools, referenceUsdPerRaw, comparableTokens, missingBuyReference, missingSellReference };
 }
 
 const published = new WeakMap<BlockScanStateSnapshot, {
   mids: ReadonlyMap<string, ResolvedBlockScanMid>; view: BlockScanUsdView;
 }>();
-export function effectiveUsdPricing(pricing: BlockScanStateSnapshot, signalPairsPerToken = DEFAULT_USD_SIGNAL_PAIRS_PER_TOKEN) {
+export function effectiveUsdPricing(pricing: BlockScanStateSnapshot, signalPairsPerToken = DEFAULT_USD_SIGNAL_PAIRS_PER_TOKEN,
+  allowRepeatedPools = DEFAULT_ALLOW_REPEATED_POOLS) {
   let result = published.get(pricing);
-  if (!result || result.view.signalPairsPerToken !== signalPairsPerToken) {
+  if (!result || result.view.signalPairsPerToken !== signalPairsPerToken || result.view.allowRepeatedPools !== allowRepeatedPools) {
     const mids = result?.mids ?? effectiveEnumerationMids(pricing);
-    result = { mids, view: buildBlockScanUsdView(pricing.graph.edges, mids, signalPairsPerToken) };
+    result = { mids, view: buildBlockScanUsdView(pricing.graph.edges, mids, signalPairsPerToken, allowRepeatedPools) };
     published.set(pricing, result);
   }
   return result;
@@ -168,6 +172,6 @@ export function usdViewStatistics(view: BlockScanUsdView, thresholdBps: number) 
   return { quotedDirections: view.quotes.length, referenceUsdTokens: view.referenceUsdPerRaw.size,
     comparableTokens: view.comparableTokens,
     tokensAboveThreshold: new Set(above.map(s => s.token)).size,
-    signalPairsPerToken: view.signalPairsPerToken, signalPairsAboveThreshold: above.length,
+    signalPairsPerToken: view.signalPairsPerToken, allowRepeatedPools: view.allowRepeatedPools, signalPairsAboveThreshold: above.length,
     thresholdBps, missingBuyReference: view.missingBuyReference, missingSellReference: view.missingSellReference };
 }

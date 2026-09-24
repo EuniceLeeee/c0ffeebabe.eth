@@ -1,1064 +1,226 @@
-/**
- * Deterministic block-scan scanner tests.
- * Pure in-memory: no RPC, no anvil.
- */
-
+/** Explicit synthetic effective amounts; calls the LIVE scanner kernel.
+ * No protocol math, warm-mid fallback, RPC or alternate search implementation. */
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { cycleFingerprint } from "../detector/cycle-fingerprint.js";
-import {
-  detectBlockScanOpportunities,
-  isAdmissibleBlockScanRingShape,
-  type BlockScanConfig,
-  type ProtocolMid,
-} from "../detector/blockscan-scanner.js";
-import {
-  diagnoseResolvedRingScore,
-  estimateResolvedRingSpreadBps,
-  scanBlockStateFromResolvedMids,
-  type ResolvedBlockScanMid,
+import { scanBlockStateFromResolvedMids as scan, diagnoseResolvedRingScore,
+  estimateResolvedRingSpreadBps, type BlockScanCoreConfig, type ResolvedBlockScanMid,
 } from "../detector/blockscan-scanner-core.js";
-import type { BlockScanOpportunity } from "../detector/detector.js";
-import { type TokenEdge, type V4PoolKey, v4PoolId } from "../planner/token-graph.js";
-import { PoolStateCache } from "../solver/pool-state-cache.js";
-import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { buildBlockScanUsdView } from "../blockscan-usd-view.js";
+import { type TokenEdge, v4PoolId } from "../planner/token-graph.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
-
-function assert(cond: boolean, msg: string): asserts cond {
-  if (!cond) throw new Error(`FAIL: ${msg}`);
+import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+const WETH=ADDR.WETH.toLowerCase(),USDC=ADDR.USDC.toLowerCase(),P=10n**18n,BLOCK=100;
+const address=(n:number)=>"0x"+n.toString(16).padStart(40,"0");
+type Input=Parameters<typeof scan>[0];
+function edge(from:string,to:string,id:number,kind:"swap"|"protocol"|"lend"="swap"):TokenEdge {
+  return {adapterId:"fixture-"+kind,target:address(id),tokenIn:from,tokenOut:to,slotKind:kind,
+    ...(kind==="protocol"?{protocolAction:"convert" as const}:{}),
+    ...deriveEdgeTaxonomy(kind,kind==="protocol"?"convert":undefined)};
 }
-
-type TestCase = {
-  name: string;
-  run: () => void;
-};
-
-const BLOCK = 25_455_296;
-const UNIT = 10n ** 18n;
-const WETH = ADDR.WETH.toLowerCase();
-const USDC = ADDR.USDC.toLowerCase();
-const USDT = ADDR.USDT.toLowerCase();
-const P1 = "0x0000000000000000000000000000000000000101";
-const P2 = "0x0000000000000000000000000000000000000102";
-const P3 = "0x0000000000000000000000000000000000000103";
-const P4 = "0x0000000000000000000000000000000000000104";
-const P5 = "0x0000000000000000000000000000000000000105";
-const P6 = "0x0000000000000000000000000000000000000106";
-const P7 = "0x0000000000000000000000000000000000000107";
-const P8 = "0x0000000000000000000000000000000000000108";
-const P9 = "0x0000000000000000000000000000000000000109";
-const Q96 = 1n << 96n;
-
-function cfg(overrides: Partial<BlockScanConfig> = {}): BlockScanConfig {
-  return {
-    maxHops: 4,
-    minSpreadBps: 10,
-    maxCandidates: 8,
-    budgetMs: 2_000,
-    pricedTokens: new Map([[WETH, { maxBorrow: 10_000n * UNIT }]]),
-    ...overrides,
-  };
+function quote(e:TokenEdge,n=100n,d=100n):ResolvedBlockScanMid {
+  return {kind:"fixture",pool:e.target,edges:[e],mid:Number(n)/Number(d),feeBps:0,
+    quoteAmountIn:d*P/100n,quoteAmountOut:n*P/100n,depthProxy:0};
 }
-
-function swap(tokenIn: string, tokenOut: string, pool: string, adapterId = "univ2-swap"): TokenEdge {
-  return {
-    adapterId,
-    target: pool,
-    tokenIn,
-    tokenOut,
-    slotKind: "swap",
-    ...deriveEdgeTaxonomy("swap"),
-    score: 100,
-  };
+function input(edges:TokenEdge[],amounts:readonly bigint[]=[],overrides:Partial<BlockScanCoreConfig>={}):Input {
+  return {edges,sourceBlock:BLOCK,swapTouched:null,captureCoarseEnumeration:true,
+    mids:new Map(edges.map((e,i)=>[blockScanEdgeKey(e),quote(e,amounts[i]??100n)])),
+    cfg:{maxHops:6,minSpreadBps:10,maxCandidates:100,budgetMs:10_000,
+      pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}]]),...overrides}};
 }
+const ring=(tokens:string[],id=100)=>tokens.slice(0,-1).map((t,i)=>edge(t,tokens[i+1]!,id+i));
+const anchor=()=>input(ring([WETH,USDC,WETH]),[100n,110n]);
+const hasRoute=(result:ReturnType<typeof scan>,route:TokenEdge[])=>result.opportunities.some(o=>
+  o.seedEdges.length===route.length&&o.seedEdges.every((e,i)=>blockScanEdgeKey(e)===blockScanEdgeKey(route[i]!)));
 
-function lend(tokenIn: string, tokenOut: string, pool: string, adapterId = "univ2-lend"): TokenEdge {
-  return {
-    adapterId,
-    target: pool,
-    tokenIn,
-    tokenOut,
-    slotKind: "lend",
-    ...deriveEdgeTaxonomy("lend"),
-    score: 100,
-  };
-}
-
-function protocol(
-  tokenIn: string,
-  tokenOut: string,
-  pool: string,
-  adapterId: "erc4626-deposit" | "erc4626-redeem",
-  protocolAction: "wrap" | "redeem",
-): TokenEdge {
-  return {
-    adapterId,
-    target: pool,
-    tokenIn,
-    tokenOut,
-    slotKind: "protocol",
-    protocolAction,
-    ...deriveEdgeTaxonomy("protocol", protocolAction),
-    score: 100,
-  };
-}
-
-function venueEdges(token: string, pool: string, adapterId = "univ2-swap"): TokenEdge[] {
-  return [
-    swap(token, WETH, pool, adapterId),
-    swap(WETH, token, pool, adapterId),
-  ];
-}
-
-function fluidVenueEdges(token: string, pool: string): TokenEdge[] {
-  return [
-    { ...swap(token, WETH, pool, "fluid-dex-swap"), poolToken0: token, poolToken1: WETH },
-    { ...swap(WETH, token, pool, "fluid-dex-swap"), poolToken0: token, poolToken1: WETH },
-  ];
-}
-
-function v4VenueEdges(token: string, fee: number): { edges: TokenEdge[]; poolId: string; key: V4PoolKey } {
-  const key: V4PoolKey = {
-    currency0: token,
-    currency1: WETH,
-    fee,
-    tickSpacing: fee === 500 ? 10 : 60,
-    hooks: "0x0000000000000000000000000000000000000000",
-  };
-  const poolId = v4PoolId(key);
-  const edge = (tokenIn: string, tokenOut: string): TokenEdge => ({
-    ...swap(tokenIn, tokenOut, ADDR.UNISWAP_V4_POOL_MANAGER, "univ4-unlock"),
-    poolId,
-    v4PoolKey: key,
-  });
-  return { edges: [edge(token, WETH), edge(WETH, token)], poolId, key };
-}
-
-function seedV4(cache: PoolStateCache, poolId: string, midWethPerToken: number, fee: number): void {
-  cache.seedV4({
-    poolId,
-    sqrtPriceX96: sqrtPriceX96FromMid(midWethPerToken),
-    tick: 0,
-    liquidity: 10_000_000n * UNIT,
-    protocolFee: 0n,
-    lpFee: BigInt(fee),
-    blockNumber: BLOCK,
-  });
-}
-
-function seedV2(cache: PoolStateCache, pool: string, token: string, tokenReserve: bigint, wethReserve: bigint): void {
-  cache.seedV2({
-    pool,
-    token0: token,
-    token1: WETH,
-    reserve0: tokenReserve,
-    reserve1: wethReserve,
-    feeBps: 30n,
-    blockNumber: BLOCK,
-  });
-}
-
-function seedV2Pair(
-  cache: PoolStateCache,
-  pool: string,
-  token0: string,
-  token1: string,
-  reserve0: bigint,
-  reserve1: bigint,
-): void {
-  cache.seedV2({
-    pool,
-    token0,
-    token1,
-    reserve0,
-    reserve1,
-    feeBps: 30n,
-    blockNumber: BLOCK,
-  });
-}
-
-function seedV3(cache: PoolStateCache, pool: string, token: string, midWethPerToken: number): void {
-  cache.seedV3Ticks({
-    pool,
-    token0: token,
-    token1: WETH,
-    fee: 3_000n,
-    tickSpacing: 60,
-    tickBitmap: new Map([[0, 0n], [-1, 0n]]),
-    ticks: new Map(),
-    blockNumber: BLOCK,
-  });
-  cache.seedV3Live({
-    pool,
-    sqrtPriceX96: sqrtPriceX96FromMid(midWethPerToken),
-    tick: 0,
-    liquidity: 10_000_000n * UNIT,
-    blockNumber: BLOCK,
-  });
-}
-
-function sqrtPriceX96FromMid(mid: number): bigint {
-  return BigInt(Math.floor(Math.sqrt(mid) * Number(Q96)));
-}
-
-function run(edges: TokenEdge[], cache: PoolStateCache, overrides: Partial<BlockScanConfig> = {}, touched: Set<string> | null = null) {
-  return detectBlockScanOpportunities({
-    edges,
-    cache,
-    sourceBlock: BLOCK,
-    swapTouched: touched,
-    cfg: cfg(overrides),
-  });
-}
-
-function mainAnchor(): { cache: PoolStateCache; edges: TokenEdge[] } {
-  const cache = new PoolStateCache();
-  seedV2(cache, P1, USDC, 2_000_000n * UNIT, 1_000n * UNIT);
-  seedV3(cache, P2, USDC, 0.00055);
-  return { cache, edges: [...venueEdges(USDC, P1), ...venueEdges(USDC, P2, "univ3-swap")] };
-}
-
-function pairEdges(token0: string, token1: string, pool: string): TokenEdge[] {
-  return [
-    swap(token0, token1, pool),
-    swap(token1, token0, pool),
-  ];
-}
-
-function erc4626Edges(underlying: string, vault: string): TokenEdge[] {
-  return [
-    protocol(underlying, vault, vault, "erc4626-deposit", "wrap"),
-    protocol(vault, underlying, vault, "erc4626-redeem", "redeem"),
-  ];
-}
-
-function protocolKey(pool: string, tokenIn: string, tokenOut: string): string {
-  return `${pool.toLowerCase()}|${tokenIn.toLowerCase()}|${tokenOut.toLowerCase()}`;
-}
-
-function navProtocolMids(underlying: string, vault: string, redeemMid: number): ReadonlyMap<string, ProtocolMid> {
-  return new Map<string, ProtocolMid>([
-    [protocolKey(vault, underlying, vault), { mid: 1 / redeemMid, feeBps: 0, depthIn: 10_000_000n * UNIT }],
-    [protocolKey(vault, vault, underlying), { mid: redeemMid, feeBps: 0, depthIn: 10_000_000n * UNIT }],
-  ]);
-}
-
-function fluidMid(pool: string, token: string, midWethPerToken: number): ReadonlyMap<string, ProtocolMid> {
-  return new Map<string, ProtocolMid>([
-    [protocolKey(pool, token, WETH), { mid: midWethPerToken, feeBps: 0, depthIn: 10_000_000n * UNIT }],
-  ]);
-}
-
-function navFixture(redeemMid: number): {
-  cache: PoolStateCache;
-  edges: TokenEdge[];
-  protocolMids: ReadonlyMap<string, ProtocolMid>;
-  underlying: string;
-  vault: string;
-} {
-  const cache = new PoolStateCache();
-  const underlying = tokenAt(60);
-  const vault = tokenAt(61);
-  seedV2Pair(cache, P8, vault, USDT, 1_000_000n * UNIT, 1_000_000n * UNIT);
-  seedV2Pair(cache, P9, underlying, USDT, 1_000_000n * UNIT, 1_000_000n * UNIT);
-  return {
-    cache,
-    edges: [...erc4626Edges(underlying, vault), ...pairEdges(vault, USDT, P8), ...pairEdges(underlying, USDT, P9)],
-    protocolMids: navProtocolMids(underlying, vault, redeemMid),
-    underlying,
-    vault,
-  };
-}
-
-function addWethAnchor(cache: PoolStateCache, edges: TokenEdge[]): void {
-  seedV2(cache, P6, USDC, 2_000_000n * UNIT, 1_000n * UNIT);
-  seedV2(cache, P7, USDC, 2_000_000n * UNIT, 1_040n * UNIT);
-  edges.push(...venueEdges(USDC, P6), ...venueEdges(USDC, P7));
-}
-
-function triangleFixture(profitable: boolean): { cache: PoolStateCache; edges: TokenEdge[]; ringPools: string[] } {
-  const cache = new PoolStateCache();
-  const edges: TokenEdge[] = [];
-  const a = tokenAt(20);
-  const b = tokenAt(21);
-  addWethAnchor(cache, edges);
-  seedV2Pair(cache, P1, WETH, a, 1_000n * UNIT, 1_200n * UNIT);
-  seedV2Pair(cache, P2, a, b, 1_000n * UNIT, 1_000n * UNIT);
-  seedV2Pair(cache, P3, b, WETH, 1_000n * UNIT, (profitable ? 860n : 833n) * UNIT);
-  edges.push(...pairEdges(WETH, a, P1), ...pairEdges(a, b, P2), ...pairEdges(b, WETH, P3));
-  return { cache, edges, ringPools: [P1, P2, P3] };
-}
-
-function repeatedIntermediateFixture(): {
-  cache: PoolStateCache;
-  edges: TokenEdge[];
-  protocolMids: ReadonlyMap<string, ProtocolMid>;
-  reth: string;
-  rockReth: string;
-} {
-  const cache = new PoolStateCache();
-  const reth = tokenAt(30);
-  const rockReth = tokenAt(31);
-  seedV2Pair(cache, P1, WETH, reth, 1_000_000n * UNIT, 1_000_000n * UNIT);
-  seedV2Pair(cache, P3, rockReth, reth, 1_000_000n * UNIT, 1_009_300n * UNIT);
-  const wrap = protocol(reth, rockReth, P2, "erc4626-deposit", "wrap");
-  return {
-    cache,
-    edges: [...pairEdges(WETH, reth, P1), wrap, ...pairEdges(rockReth, reth, P3)],
-    protocolMids: new Map([
-      [protocolKey(P2, reth, rockReth), { mid: 1, feeBps: 0, depthIn: 1_000_000n * UNIT }],
-    ]),
-    reth,
-    rockReth,
-  };
-}
-
-function assertMainAnchor(opp: BlockScanOpportunity): void {
-  assert(opp.kind === "block-scan-arb", "opportunity kind");
-  assert(opp.seedEdges.length === 2, "seed edge count");
-  assert(opp.seedEdges[0].tokenIn.toLowerCase() === WETH, "first edge starts in WETH");
-  assert(opp.seedEdges[0].tokenOut.toLowerCase() === USDC, "first edge buys USDC");
-  assert(opp.seedEdges[0].target.toLowerCase() === P1, "first edge uses cheap venue");
-  assert(opp.seedEdges[1].tokenIn.toLowerCase() === USDC, "second edge sells USDC");
-  assert(opp.seedEdges[1].tokenOut.toLowerCase() === WETH, "second edge ends in WETH");
-  assert(opp.seedEdges[1].target.toLowerCase() === P2, "second edge uses rich venue");
-  assert(opp.flashToken === WETH, "flashToken is WETH");
-  assert(opp.searchSeed.startToken === WETH, "search seed startToken is WETH");
-  assert(opp.searchSeed.searchCenter > 8n, "search center is usable");
-  assert(opp.searchSeed.maxInput >= opp.searchSeed.searchCenter, "max input covers search center");
-}
-
-function resolvedMids(
-  entries: readonly [
-    edge: TokenEdge,
-    mid: number,
-    depth?: bigint | null,
-  ][],
-): ReadonlyMap<string, ResolvedBlockScanMid> {
-  return new Map(entries.map(([edge, mid, depth = 1_000_000n * UNIT]) => [
-    blockScanEdgeKey(edge),
-    {
-      kind: "test",
-      pool: edge.target,
-      edges: [edge],
-      mid,
-      feeBps: 0,
-      ...(depth === null ? {} : { reserveA: depth, reserveB: depth }),
-      depthProxy: depth === null ? 1 : Number(depth),
-    },
-  ]));
-}
-
-const tests: TestCase[] = [
-  {
-    name: "four-hop cap permits shorter rings and excludes longer rings",
-    run: () => {
-      const rings = [2, 3, 4, 5, 6].map((hops) => {
-        const tokens = [WETH, ...Array.from({ length: hops - 1 }, (_, i) => tokenAt(hops * 10 + i)), WETH];
-        return Array.from({ length: hops }, (_, i) => swap(tokens[i], tokens[i + 1], poolAt(hops * 10 + i, 0)));
-      });
-      const edges = rings.flat();
-      const mids = resolvedMids(rings.flatMap(ring => ring.map((edge, i) =>
-        [edge, i === ring.length - 1 ? 1.02 : 1] as [TokenEdge, number])));
-      for (const maxHops of [4, 6]) {
-        const outcome = scanBlockStateFromResolvedMids({
-          edges, sourceBlock: BLOCK, swapTouched: null, mids,
-          cfg: cfg({ maxHops, maxCandidates: 100 }),
-        });
-        assert(outcome.outcome === "ran", "small hop-boundary fixture must finish");
-        const found = [...new Set(outcome.opportunities.map(op => op.seedEdges.length))].sort();
-        assert(found.join(",") === (maxHops === 4 ? "2,3,4" : "2,3,4,5,6"),
-          `maxHops=${maxHops} returned hop lengths ${found}`);
-      }
-      console.log("[blockscan-scanner] four-hop cap and six-hop override: PASS");
-    },
-  },
-  {
-    name: "pair and whole-ring spread gates both apply to multi-hop search",
-    run: () => {
-      const a = tokenAt(901);
-      const b = tokenAt(902);
-      const ring = [swap(WETH, a, P1), swap(a, b, P2), swap(b, WETH, P3)];
-      const comparison = swap(a, b, P4);
-      const runCase = (pairRate: number | null, returnRate: number, requirePair = true, touched: Set<string> | null = null) =>
-        scanBlockStateFromResolvedMids({
-          edges: pairRate === null ? ring : [...ring, comparison],
-          sourceBlock: BLOCK, swapTouched: touched,
-          cfg: cfg({ maxHops: 3, minSpreadBps: 500, exactAdmissionSpreadBps: 50, requireDislocatedPair: requirePair }),
-          mids: resolvedMids([
-            [ring[0], 1], [ring[1], 1], [ring[2], returnRate],
-            ...(pairRate === null ? [] : [[comparison, pairRate] as [TokenEdge, number]]),
-          ]),
-        });
-      const hasOriginalRing = (result: ReturnType<typeof runCase>) =>
-        result.opportunities.some(opp => opp.seedEdges.length === ring.length &&
-          ring.every(edge => opp.seedEdges.some(candidate => candidate.target === edge.target)));
-      assert(hasOriginalRing(runCase(null, 1.1, false)), "control: a 10% triangle is discoverable without the pair policy");
-      assert(runCase(null, 1.1).opportunities.length === 0, "profitable triangle alone cannot satisfy pair evidence");
-      assert(runCase(1.049, 1.1).opportunities.length === 0, "4.9% pair must not qualify even with a 10% ring");
-      assert(hasOriginalRing(runCase(1.051, 1.1)), "5.1% intermediate pair and 10% ring must qualify without requiring every pair to dislocate");
-      assert(!hasOriginalRing(runCase(1.051, 1.03)), "5.1% pair cannot exempt a 3% ring from its own floor");
-      assert(hasOriginalRing(runCase(1.051, 1.1, true, new Set([P1]))), "touched outside the qualifying pair must not erase pair evidence");
-      console.log("[blockscan-scanner] pair and whole-ring gates apply to multi-hop search: PASS");
-    },
-  },
-  {
-    name: "enumeration spread floor is independent of exact admission",
-    run: () => {
-      const edges = [...venueEdges(USDC, P1), ...venueEdges(USDC, P2)];
-      // Pair preselection sees a 10% dislocation. Directional mids need not
-      // be reciprocal: the actual closed-loop return is set independently.
-      const scanAtReturn = (returnRate: number, floor: number) =>
-        scanBlockStateFromResolvedMids({
-          edges, sourceBlock: BLOCK, swapTouched: null,
-          cfg: cfg({ maxHops: 2, minSpreadBps: floor, requireDislocatedPair: true, exactAdmissionSpreadBps: 50 }),
-          mids: resolvedMids([
-            [edges[0], 1], [edges[1], returnRate / 1.1],
-            [edges[2], 1.1], [edges[3], 0.9],
-          ]),
-          captureCoarseEnumeration: true,
-        });
-      const below = scanAtReturn(1.049, 500);
-      assert(below.outcome === "ran", "threshold fixture must finish");
-      assert(below.opportunities.length === 0, "4.9% closed loop must not pass 5% enumeration floor");
-      assert(below.coarseEnumeration?.length === 0, "below-floor ring must not be enumerated either");
-      const above = scanAtReturn(1.051, 500);
-      assert(above.opportunities.length === 1, "5.1% closed loop must pass");
-      assert(above.opportunities.every(opp => (opp.coarseSpreadBps ?? 0) > 500), "output must satisfy enumeration floor");
-      assert(above.selection.admittedCount === 1, "unchanged 50bps Exact guard accepts the subset");
-      assert(scanAtReturn(1.049, 50).opportunities.length === 1, "lower enumeration floor still works without changing Exact");
-      assert(scanAtReturn(1.019, 200).opportunities.length === 0, "1.9% loop fails the new 2% floor");
-      assert(scanAtReturn(1.021, 200).opportunities.length === 1, "2.1% loop passes without changing Exact's 50bps guard");
-      console.log("[blockscan-scanner] enumeration spread floor independent of exact admission: PASS");
-    },
-  },
-  {
-    name: "resolved-ring diagnosis shares production score",
-    run: () => {
-      const token = tokenAt(100);
-      const route = [
-        swap(WETH, token, P1),
-        swap(token, WETH, P2),
-      ];
-      const mids = resolvedMids([
-        [route[0], 2],
-        [route[1], 0.6],
-      ]);
-      const diagnosis = diagnoseResolvedRingScore(route, mids);
-      assert(diagnosis.status === "accepted", "positive ring diagnosis should pass");
-      assert(
-        diagnosis.estSpreadBps === estimateResolvedRingSpreadBps(route, mids),
-        "diagnostic and production spread must be bit-identical",
-      );
-
-      const missing = diagnoseResolvedRingScore(
-        route,
-        resolvedMids([[route[0], 2]]),
-      );
-      assert(
-        missing.status === "rejected" &&
-          missing.reason === "missing_mid" &&
-          missing.edgeIndex === 1,
-        "missing mid must identify the exact rejected edge",
-      );
-      const missingDepth = diagnoseResolvedRingScore(
-        route,
-        resolvedMids([
-          [route[0], 2],
-          [route[1], 0.6, null],
-        ]),
-      );
-      assert(
-        missingDepth.status === "rejected" &&
-          missingDepth.reason === "missing_or_nonpositive_input_depth",
-        "missing depth must not be misreported as ranking",
-      );
-      const nonPositive = diagnoseResolvedRingScore(
-        route,
-        resolvedMids([
-          [route[0], 1],
-          [route[1], 0.9],
-        ]),
-      );
-      assert(
-        nonPositive.status === "rejected" &&
-          nonPositive.reason === "nonpositive_log_return",
-        "non-positive route return must be explicit",
-      );
-      console.log("[blockscan-scanner] resolved-ring diagnosis shares production score: PASS");
-    },
-  },
-  {
-    name: "v4 poolId venues admitted",
-    run: () => {
-      const cache = new PoolStateCache();
-      const token = tokenAt(90);
-      const low = v4VenueEdges(token, 500);
-      const high = v4VenueEdges(token, 3_000);
-      seedV4(cache, low.poolId, 0.00050, 500);
-      seedV4(cache, high.poolId, 0.00060, 3_000);
-      const outcome = run([...low.edges, ...high.edges], cache);
-      assert(outcome.opportunities.length === 1, "two v4 pools sharing PoolManager should remain distinct venues");
-      const opp = outcome.opportunities[0];
-      assert(opp.seedEdges.every((edge) => edge.adapterId === "univ4-unlock"), "v4 route adapters");
-      assert(opp.affectedPools?.includes(low.poolId) ?? false, "affected pools should contain first poolId");
-      assert(opp.affectedPools?.includes(high.poolId) ?? false, "affected pools should contain second poolId");
-      assert(!opp.affectedPools?.includes(ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase()), "PoolManager is not a venue identity");
-      console.log("[blockscan-scanner] v4 poolId venues admitted: PASS");
-    },
-  },
-  {
-    name: "anchor found",
-    run: () => {
-      const { cache, edges } = mainAnchor();
-      const outcome = run(edges, cache);
-      assert(outcome.outcome === "ran", "scanner should run");
-      assert(outcome.opportunities.length === 1, `expected one opportunity, got ${outcome.opportunities.length}`);
-      assertMainAnchor(outcome.opportunities[0]);
-      console.log("[blockscan-scanner] anchor found: PASS");
-    },
-  },
-  {
-    name: "no-spread control",
-    run: () => {
-      const cache = new PoolStateCache();
-      seedV2(cache, P1, USDC, 2_000_000n * UNIT, 1_000n * UNIT);
-      seedV2(cache, P2, USDC, 2_000_000n * UNIT, 1_002n * UNIT);
-      const outcome = run([...venueEdges(USDC, P1), ...venueEdges(USDC, P2)], cache);
-      assert(outcome.opportunities.length === 0, "fee-adjusted near-equal mids should not emit");
-      console.log("[blockscan-scanner] no-spread control: PASS");
-    },
-  },
-  {
-    name: "single venue",
-    run: () => {
-      const cache = new PoolStateCache();
-      seedV2(cache, P1, USDC, 2_000_000n * UNIT, 1_000n * UNIT);
-      const outcome = run(venueEdges(USDC, P1), cache);
-      assert(outcome.opportunities.length === 0, "single venue should not emit");
-      console.log("[blockscan-scanner] single venue: PASS");
-    },
-  },
-  {
-    name: "delta-restrict",
-    run: () => {
-      const { cache, edges } = mainAnchor();
-      const gatedOut = run(edges, cache, {}, new Set([P3]));
-      assert(gatedOut.opportunities.length === 0, "untouched anchor should be filtered");
-      assert(gatedOut.swapTouchedPools === 1, "touched pool count");
-
-      const gatedIn = run(edges, cache, {}, new Set([P1]));
-      assert(gatedIn.opportunities.length === 1, "one touched anchor pool should admit the pair");
-      assertMainAnchor(gatedIn.opportunities[0]);
-      console.log("[blockscan-scanner] delta-restrict: PASS");
-    },
-  },
-  {
-    name: "priced-token gate",
-    run: () => {
-      const { cache, edges } = mainAnchor();
-      const outcome = run(edges, cache, { pricedTokens: new Map() });
-      assert(outcome.opportunities.length === 0, "unfunded ring should not emit");
-      console.log("[blockscan-scanner] priced-token gate: PASS");
-    },
-  },
-  {
-    name: "ranking and cap",
-    run: () => {
-      const cache = new PoolStateCache();
-      const edges: TokenEdge[] = [];
-      const expectedTop: string[] = [];
-      for (let i = 0; i < 5; i++) {
-        const token = tokenAt(i);
-        const cheapPool = poolAt(i, 0);
-        const richPool = poolAt(i, 1);
-        seedV2(cache, cheapPool, token, 2_000_000n * UNIT, 1_000n * UNIT);
-        seedV2(cache, richPool, token, 2_000_000n * UNIT, BigInt(1_040 + i * 10) * UNIT);
-        edges.push(...venueEdges(token, cheapPool), ...venueEdges(token, richPool));
-      }
-      for (let i = 4; i >= 2; i--) expectedTop.push(tokenAt(i));
-
-      const outcome = run(edges, cache, { maxCandidates: 3 });
-      assert(outcome.opportunities.length === 3, `cap expected 3, got ${outcome.opportunities.length}`);
-      const actualTop = outcome.opportunities.map((opp) => opp.seedEdges[0].tokenOut.toLowerCase());
-      assert(
-        actualTop.join(",") === expectedTop.join(","),
-        `ranking expected ${expectedTop.join(",")}, got ${actualTop.join(",")}`,
-      );
-      console.log("[blockscan-scanner] ranking and cap: PASS");
-    },
-  },
-  {
-    name: "cycleFingerprint set",
-    run: () => {
-      const { cache, edges } = mainAnchor();
-      const outcome = run(edges, cache);
-      const opp = outcome.opportunities[0];
-      assert(opp.cycleFingerprint === cycleFingerprint(BLOCK, [WETH, USDC]), "cycle fingerprint");
-      console.log("[blockscan-scanner] cycleFingerprint set: PASS");
-    },
-  },
-  {
-    name: "3-hop cycle found",
-    run: () => {
-      const { cache, edges, ringPools } = triangleFixture(true);
-      const outcome = run(edges, cache);
-      const rings = outcome.opportunities.filter((opp) => opp.seedEdges.length === 3);
-      assert(rings.length === 1, `expected one 3-hop ring, got ${rings.length}`);
-      const ring = rings[0];
-      assert(ring.seedEdges[0].tokenIn.toLowerCase() === WETH, "3-hop ring starts at WETH");
-      assert(ring.seedEdges[2].tokenOut.toLowerCase() === WETH, "3-hop ring ends at WETH");
-      const actualPools = [...new Set(ring.seedEdges.map((edge) => edge.target.toLowerCase()))].sort();
-      assert(actualPools.join(",") === ringPools.sort().join(","), "3-hop ring pools");
-      assert(ring.searchSeed.searchCenter > 8n, "3-hop ring search center is usable");
-      console.log("[blockscan-scanner] 3-hop cycle found: PASS");
-    },
-  },
-  {
-    name: "price search recalls a six-hop ring behind an outgoing-edge flood",
-    run: () => {
-      const intermediate = Array.from(
-        { length: 5 },
-        (_, index) => tokenAt(110 + index),
-      );
-      const tokens = [WETH, ...intermediate, WETH];
-      const ring = Array.from({ length: 6 }, (_, index) => ({
-        ...swap(
-          tokens[index],
-          tokens[index + 1],
-          poolAt(210 + index, 0),
-        ),
-        score: 0,
-      }));
-      const decoys = Array.from({ length: 3_000 }, (_, index) => ({
-        ...swap(
-          WETH,
-          tokenAt(1_000 + index),
-          poolAt(1_000 + index, 0),
-        ),
-        score: 10_000 - index,
-      }));
-      const midEntries: Array<[
-        edge: TokenEdge,
-        mid: number,
-        depth?: bigint | null,
-      ]> = [
-        ...decoys.map((edge) => [edge, 1] as [TokenEdge, number]),
-        ...ring.map((edge, index) => [
-          edge,
-          index === ring.length - 1 ? 1.02 : 1,
-        ] as [TokenEdge, number]),
-      ];
-      const mids = resolvedMids(midEntries);
-      const scan = (touched: Set<string> | null) =>
-        scanBlockStateFromResolvedMids({
-          edges: [...decoys, ...ring],
-          sourceBlock: BLOCK,
-          swapTouched: touched,
-          cfg: cfg({ maxHops: 6 }),
-          mids,
-        });
-      const hasRing = (outcome: ReturnType<typeof scan>): boolean =>
-        outcome.opportunities.some((opportunity) =>
-          opportunity.seedEdges.length === ring.length &&
-          ring.every((edge) =>
-            opportunity.seedEdges.some(
-              (candidate) => candidate.target.toLowerCase() ===
-                edge.target.toLowerCase(),
-            )
-          )
-        );
-
-      const standing = scan(null);
-      assert(standing.outcome === "ran", "price search should finish its bounded work");
-      assert(
-        hasRing(standing),
-        "a profitable route must not depend on its activity rank among WETH exits",
-      );
-
-      const observed = scan(new Set([ring[3].target.toLowerCase()]));
-      assert(
-        hasRing(observed),
-        "an observed edge must seed causal search before any global budget",
-      );
-      console.log(
-        "[blockscan-scanner] price-ranked six-hop flood recall: PASS",
-      );
-    },
-  },
-  {
-    name: "executable capacity outranks high-spread dust-ring flood",
-    run: () => {
-      const targetIntermediate = Array.from(
-        { length: 5 },
-        (_, index) => tokenAt(310 + index),
-      );
-      const targetTokens = [WETH, ...targetIntermediate, WETH];
-      const targetRing = Array.from({ length: 6 }, (_, index) => ({
-        ...swap(
-          targetTokens[index],
-          targetTokens[index + 1],
-          poolAt(410 + index, 0),
-        ),
-        score: 0,
-      }));
-      const dustRings = Array.from({ length: 2_500 }, (_, index) => {
-        const tokenA = tokenAt(5_000 + index * 2);
-        const tokenB = tokenAt(5_001 + index * 2);
-        return [
-          swap(WETH, tokenA, poolAt(5_000 + index * 3, 0)),
-          swap(tokenA, tokenB, poolAt(5_001 + index * 3, 0)),
-          swap(tokenB, WETH, poolAt(5_002 + index * 3, 0)),
-        ];
-      });
-      const dustEdges = dustRings.flat();
-      const mids = resolvedMids([
-        ...dustRings.flatMap((ring) => ring.map((edge, index) => [
-          edge,
-          index === ring.length - 1 ? 1.05 : 1,
-          100n,
-        ] as [TokenEdge, number, bigint])),
-        ...targetRing.map((edge, index) => [
-          edge,
-          index === targetRing.length - 1 ? 1.02 : 1,
-          1_000_000n * UNIT,
-        ] as [TokenEdge, number, bigint]),
-      ]);
-      const outcome = scanBlockStateFromResolvedMids({
-        edges: [...dustEdges, ...targetRing],
-        sourceBlock: BLOCK,
-        swapTouched: null,
-        cfg: cfg({ maxHops: 6, budgetMs: 5_000 }),
-        mids,
-      });
-      const targetPools = new Set(
-        targetRing.map((edge) => edge.target.toLowerCase()),
-      );
-      assert(outcome.outcome === "ran", "capacity-ranked search should finish");
-      assert(
-        outcome.opportunities.some((opportunity) =>
-          opportunity.seedEdges.length === targetRing.length &&
-          opportunity.seedEdges.every((edge) =>
-            targetPools.has(edge.target.toLowerCase())
-          )
-        ),
-        "executable route must survive more than 2,000 higher-spread dust rings",
-      );
-      console.log(
-        "[blockscan-scanner] capacity-ranked dust flood recall: PASS",
-      );
-    },
-  },
-  {
-    name: "repeated intermediate low-spread cycle found",
-    run: () => {
-      const { cache, edges, protocolMids, reth, rockReth } = repeatedIntermediateFixture();
-      const productionThreshold = run(edges, cache, { minSpreadBps: 0, protocolMids });
-      const ring = productionThreshold.opportunities.find((opp) =>
-        opp.seedEdges.length === 4 &&
-        opp.seedEdges.map((edge) => edge.tokenIn.toLowerCase()).join(",") ===
-          [WETH, reth, rockReth, reth].join(","),
-      );
-      assert(ring !== undefined, "WETH->rETH->rock.rETH->rETH->WETH ring should be admitted");
-      assert(ring.seedEdges[3].tokenOut.toLowerCase() === WETH, "repeated-token ring closes in WETH");
-      assert(
-        !isAdmissibleBlockScanRingShape(ring.seedEdges, new Map([
-          [WETH, { maxBorrow: 10_000n * UNIT }],
-          [reth, { maxBorrow: 10_000n * UNIT }],
-        ])),
-        "a priced repeated token should use its own smaller funding ring",
-      );
-      assert(
-        !isAdmissibleBlockScanRingShape(
-          ring.seedEdges.map((edge) => ({ ...edge, slotKind: "swap" as const })),
-          new Map([[WETH, { maxBorrow: 10_000n * UNIT }]]),
-        ),
-        "a repeated segment without a protocol edge should be rejected",
-      );
-      const a = tokenAt(32);
-      const b = tokenAt(33);
-      const c = tokenAt(34);
-      const multiRepeat = [
-        swap(WETH, a, P1),
-        { ...swap(a, b, P2), slotKind: "protocol" as const },
-        swap(b, a, P3),
-        swap(a, c, P4),
-        { ...swap(c, b, P5), slotKind: "protocol" as const },
-        swap(b, WETH, P6),
-      ];
-      assert(
-        !isAdmissibleBlockScanRingShape(
-          multiRepeat,
-          new Map([[WETH, { maxBorrow: 10_000n * UNIT }]]),
-        ),
-        "rings with multiple repeated intermediates should be rejected",
-      );
-
-      const legacyThreshold = run(edges, cache, { minSpreadBps: 10, protocolMids });
-      assert(
-        !legacyThreshold.opportunities.some((opp) => opp.seedEdges.length === 4),
-        "legacy 10 bps threshold should demonstrate the pre-fix miss",
-      );
-      console.log("[blockscan-scanner] repeated intermediate low-spread cycle found: PASS");
-    },
-  },
-  {
-    name: "unprofitable-cycle control",
-    run: () => {
-      const { cache, edges, ringPools } = triangleFixture(false);
-      const outcome = run(edges, cache);
-      const ringPoolKey = ringPools.sort().join(",");
-      const falsePositive = outcome.opportunities.some((opp) => {
-        if (opp.seedEdges.length !== 3) return false;
-        const pools = [...new Set(opp.seedEdges.map((edge) => edge.target.toLowerCase()))].sort();
-        return pools.join(",") === ringPoolKey;
-      });
-      assert(!falsePositive, "unprofitable 3-hop ring should not emit");
-      console.log("[blockscan-scanner] unprofitable-cycle control: PASS");
-    },
-  },
-  {
-    name: "identical route dedup",
-    run: () => {
-      const { cache, edges } = triangleFixture(true);
-      const outcome = run(edges, cache);
-      const seen = new Set<string>();
-      for (const opp of outcome.opportunities) {
-        const route = opp.seedEdges.map((edge) =>
-          `${edge.adapterId}|${edge.poolId ?? edge.target}|${edge.tokenIn}>${edge.tokenOut}`.toLowerCase()
-        ).join(";");
-        assert(!seen.has(route), "duplicate directed route");
-        seen.add(route);
-      }
-      console.log("[blockscan-scanner] identical route dedup: PASS");
-    },
-  },
-  {
-    name: "exact admission spread shadow funnel",
-    run: () => {
-      // P1 mid = 1000 USDC/WETH; P2 is +90bps raw (≈30bps net after 2x30bps
-      // fees); P3 is +160bps raw (≈100bps net). Both rings pass the 10bps
-      // enumeration floor; the 50bps admission floor is shadow-only and must
-      // NOT remove either ring from the opportunity set.
-      const cache = new PoolStateCache();
-      seedV2Pair(cache, P1, USDC, WETH, 1_000_000n * UNIT, 1_000n * UNIT);
-      seedV2Pair(cache, P2, USDC, WETH, 1_000_000n * UNIT, 1_009n * UNIT);
-      seedV2Pair(cache, P3, USDC, WETH, 1_000_000n * UNIT, 1_016n * UNIT);
-      const edges = [
-        ...venueEdges(USDC, P1),
-        ...venueEdges(USDC, P2),
-        ...venueEdges(USDC, P3),
-      ];
-
-      const baseline = run(edges, cache);
-      assert(
-        baseline.selection.enumeratedCount === 2 &&
-          baseline.selection.admittedCount === 2 &&
-          baseline.opportunities.length === 2,
-        `default shadow admission should admit all enumerated rings ` +
-          `(enumerated=${baseline.selection.enumeratedCount}, ` +
-          `admitted=${baseline.selection.admittedCount}, ` +
-          `selected=${baseline.opportunities.length})`,
-      );
-
-      const gated = run(edges, cache, { exactAdmissionSpreadBps: 50 });
-      assert(
-        gated.selection.enumeratedCount === 2,
-        `10-50bps rings must stay in the enumerated funnel, got ${gated.selection.enumeratedCount}`,
-      );
-      assert(
-        gated.selection.admittedCount === 1,
-        `50bps shadow admission must count only the wide ring, got ` +
-          `${gated.selection.admittedCount}`,
-      );
-      assert(
-        gated.opportunities.length === 2,
-        `50bps shadow must not remove rings from the opportunity set, got ` +
-          `${gated.opportunities.length}`,
-      );
-      for (const opp of gated.opportunities) {
-        assert(
-          typeof opp.coarseSpreadBps === "number" &&
-            opp.coarseSpreadBps > 0,
-          "shadow opportunities must carry coarseSpreadBps",
-        );
-      }
-      console.log("[blockscan-scanner] exact admission spread shadow funnel: PASS");
-    },
-  },
-  {
-    name: "minimum capital fraction shadow counts dust rings",
-    run: () => {
-      const liquid = mainAnchor();
-      const kept = run(liquid.edges, liquid.cache, {
-        minCapitalFraction: 0.001,
-      });
-      assert(
-        kept.opportunities.length === 1,
-        "liquid ring must be kept at a 0.1% capital floor",
-      );
-      assert(
-        kept.debug?.capitalRejected === 0,
-        "liquid ring must not be capital-rejected at 0.1%",
-      );
-      const dropped = run(liquid.edges, liquid.cache, {
-        minCapitalFraction: 1,
-      });
-      assert(
-        dropped.opportunities.length === 1 &&
-          (dropped.debug?.capitalRejected ?? 0) >= 1,
-        "shadow capital floor must count without dropping the ring: " +
-          `opps=${dropped.opportunities.length} ` +
-          `capitalRejected=${dropped.debug?.capitalRejected}`,
-      );
-
-      // P1 is a liquid venue; P2 has the same mid but only ~5 WETH of
-      // depth, so the ring's deployable capital is dust relative to a
-      // 10k WETH borrow cap.
-      const dustCache = new PoolStateCache();
-      seedV2Pair(dustCache, P1, USDC, WETH, 2_000_000n * UNIT, 1_000n * UNIT);
-      seedV2Pair(dustCache, P2, USDC, WETH, 9_615n * UNIT, 5n * UNIT);
-      const dustEdges = [
-        ...venueEdges(USDC, P1),
-        ...venueEdges(USDC, P2),
-      ];
-      const noFloor = run(dustEdges, dustCache, {
-        minCapitalFraction: 0,
-      });
-      assert(
-        noFloor.opportunities.length >= 1,
-        "dust ring must enumerate without a capital floor",
-      );
-      const withFloor = run(dustEdges, dustCache, {
-        minCapitalFraction: 0.001,
-      });
-      assert(
-        withFloor.opportunities.length >= 1 &&
-          (withFloor.debug?.capitalRejected ?? 0) >= 1,
-        "dust ring must be counted as capital-rejected without being dropped",
-      );
-      console.log("[blockscan-scanner] minimum capital fraction shadow: PASS");
-    },
-  },
-  {
-    name: "T-nav-dislocation",
-    run: () => {
-      const { cache, edges, protocolMids } = navFixture(1.05);
-      const outcome = run(edges, cache, {
-        pricedTokens: new Map([[USDT, { maxBorrow: 100_000n * UNIT }]]),
-        protocolMids,
-      });
-      const protocolOpp = outcome.opportunities.find((opp) =>
-        opp.seedEdges.some((edge) => edge.adapterId === "erc4626-redeem"),
-      );
-      assert(protocolOpp !== undefined, "expected NAV protocol opportunity");
-      assert(protocolOpp.leavesStandingPosition === false, "NAV opportunity should not leave a standing position");
-      assert(protocolOpp.searchSeed.searchCenter > 8n, "NAV search center is usable");
-      assert(protocolOpp.flashToken === USDT, "NAV flashToken is USDT");
-      assert(protocolOpp.seedEdges[0].tokenIn.toLowerCase() === USDT, "NAV ring starts at USDT");
-      assert(
-        protocolOpp.seedEdges[protocolOpp.seedEdges.length - 1].tokenOut.toLowerCase() === USDT,
-        "NAV ring closes at USDT",
-      );
-      console.log("[blockscan-scanner] T-nav-dislocation: PASS");
-    },
-  },
-  {
-    name: "T-fluid-mid-flip",
-    run: () => {
-      const cache = new PoolStateCache();
-      const token = tokenAt(90);
-      const v2Pool = poolAt(90, 0);
-      const fluidPool = poolAt(90, 1);
-      const edges = [...venueEdges(token, v2Pool), ...fluidVenueEdges(token, fluidPool)];
-      seedV2(cache, v2Pool, token, 2_000_000n * UNIT, 1_000n * UNIT);
-
-      const noMid = run(edges, cache);
-      assert(noMid.opportunities.length === 0, "missing Fluid mid should not emit a Fluid candidate");
-      assert(noMid.debug?.skippedVenues === 1, `expected one skipped Fluid venue, got ${noMid.debug?.skippedVenues}`);
-
-      const withMid = run(edges, cache, { protocolMids: fluidMid(fluidPool, token, 0.00056) });
-      const fluidOpp = withMid.opportunities.find((opp) =>
-        opp.seedEdges.some((edge) => edge.adapterId === "fluid-dex-swap"),
-      );
-      assert(fluidOpp !== undefined, "supplied Fluid mid should emit a candidate through Fluid DEX");
-      assert(fluidOpp.searchSeed.searchCenter > 8n, "Fluid candidate search center is usable");
-      console.log("[blockscan-scanner] T-fluid-mid-flip: PASS");
-    },
-  },
-  {
-    name: "T-nav-par control",
-    run: () => {
-      const { cache, edges, protocolMids } = navFixture(1.00);
-      const outcome = run(edges, cache, {
-        pricedTokens: new Map([[USDT, { maxBorrow: 100_000n * UNIT }]]),
-        protocolMids,
-      });
-      const protocolOpp = outcome.opportunities.some((opp) =>
-        opp.seedEdges.some((edge) => edge.slotKind === "protocol"),
-      );
-      assert(!protocolOpp, "par NAV protocol ring should not emit");
-      console.log("[blockscan-scanner] T-nav-par control: PASS");
-    },
-  },
-  {
-    name: "T-standing-ring-rejected",
-    run: () => {
-      const cache = new PoolStateCache();
-      const edges: TokenEdge[] = [];
-      const a = tokenAt(70);
-      const b = tokenAt(71);
-      addWethAnchor(cache, edges);
-      seedV2Pair(cache, P1, WETH, a, 1_000n * UNIT, 1_200n * UNIT);
-      seedV2Pair(cache, P2, a, b, 1_000n * UNIT, 1_000n * UNIT);
-      seedV2Pair(cache, P3, b, WETH, 1_000n * UNIT, 1_000n * UNIT);
-      edges.push(...pairEdges(WETH, a, P1), lend(a, b, P2), ...pairEdges(b, WETH, P3));
-      const outcome = run(edges, cache);
-      const standingOpp = outcome.opportunities.some((opp) =>
-        opp.seedEdges.some((edge) => edge.slotKind === "lend"),
-      );
-      assert(!standingOpp, "standing-position ring should not emit");
-      console.log("[blockscan-scanner] T-standing-ring-rejected: PASS");
-    },
-  },
-  {
-    name: "T-missing-protocolMids",
-    run: () => {
-      const { cache, edges } = mainAnchor();
-      const vault = tokenAt(80);
-      seedV2Pair(cache, P8, USDC, vault, 1_000_000n * UNIT, 1_000_000n * UNIT);
-      edges.push(...pairEdges(USDC, vault, P8), ...erc4626Edges(USDC, vault));
-      const outcome = run(edges, cache);
-      assert(outcome.opportunities.length === 1, "swap-only opportunity should remain");
-      assertMainAnchor(outcome.opportunities[0]);
-      assert(
-        outcome.opportunities.every((opp) => opp.seedEdges.every((edge) => edge.slotKind !== "protocol")),
-        "missing protocol mids should not emit protocol opportunities",
-      );
-      assert(outcome.debug?.skippedVenues === 1, `expected one skipped protocol venue, got ${outcome.debug?.skippedVenues}`);
-      console.log("[blockscan-scanner] T-missing-protocolMids: PASS");
-    },
-  },
-];
-
-function tokenAt(i: number): string {
-  return `0x0000000000000000000000000000000000000${(0x200 + i).toString(16).padStart(3, "0")}`;
-}
-
-function poolAt(i: number, j: number): string {
-  return `0x000000000000000000000000000000000000${(0x300 + i * 2 + j).toString(16).padStart(4, "0")}`;
-}
-
-let passed = 0;
-for (const test of tests) {
-  try {
-    test.run();
-    passed++;
-  } catch (err) {
-    console.error(`[blockscan-scanner] ${test.name}: FAIL`);
-    console.error(err instanceof Error ? err.message : String(err));
-    console.error(`blockscan-scanner FAIL (${passed}/${tests.length})`);
-    process.exit(1);
+test("configured hop caps (4/6/8), with directed USD references",()=>{
+  const rings=[2,3,4,5,6,7,8].map(h=>ring([WETH,...Array.from({length:h-1},(_,i)=>address(1000+h*10+i)),WETH],h*100));
+  const spokes=rings.flatMap((r,h)=>r.slice(1,-1).map((e,i)=>edge(e.tokenIn,WETH,9000+h*10+i)));
+  const data=input([...rings.flat(),...spokes],rings.flatMap(r=>r.map((_,i)=>i===r.length-1?102n:100n)));
+  for(const maxHops of [4,6,8]) {
+    const result=scan({...data,cfg:{...data.cfg,maxHops,maxCandidates:1000,usdSignalPairsPerToken:100}});
+    assert.equal(result.outcome,"ran");
+    for(const r of rings) assert.equal(hasRoute(result,r),r.length<=maxHops,"cap "+maxHops+", ring "+r.length);
+    assert(result.opportunities.every(o=>o.seedEdges.length<=maxHops));
   }
-}
+});
+test("paired signal and whole-cycle floors independently apply; legacy toggle cannot bypass",()=>{
+  const data=anchor(),view=buildBlockScanUsdView(data.edges,data.mids);
+  assert(view.signals.length>0);
+  const run=(signalBps:number,cycleBps:number,requireDislocatedPair=true)=>{
+    const mids=new Map(data.mids),last=data.edges[1]!;
+    mids.set(blockScanEdgeKey(last),quote(last,BigInt(10_000+cycleBps),10_000n));
+    const current=buildBlockScanUsdView(data.edges,mids);
+    return scan({...data,mids,cfg:{...data.cfg,minSpreadBps:500,requireDislocatedPair},
+      usdView:{...current,signals:current.signals.map(s=>({...s,num:BigInt(10_000+signalBps),den:10_000n}))}});
+  };
+  assert.equal(run(490,1000).opportunities.length,0);
+  assert.equal(run(510,490).opportunities.length,0);
+  assert.equal(run(510,510).opportunities.length,1);
+  assert.equal(run(490,1000,false).opportunities.length,0);
+  assert.equal(scan({...data,usdView:{...view,signals:[]}}).opportunities.length,0);
+});
+test("effective P/spread ignore stale depth; fees already included in amountOut",()=>{
+  const data=anchor(),baseline=scan(data);
+  assert.equal(baseline.opportunities.length,1);
+  const mids=new Map([...data.mids].map(([k,v])=>[k,{...v,reserveA:1n,reserveB:0n,liquidity:0n,depthProxy:0}]));
+  assert.deepEqual(scan({...data,mids}).opportunities,baseline.opportunities);
+  assert.equal(baseline.opportunities[0]!.searchSeed.searchCenter,P);
+  assert.equal(baseline.opportunities[0]!.searchSeed.maxInput,1000n*P);
+  const fees=new Map([...mids].map(([k,v])=>[k,{...v,feeBps:3000}]));
+  assert.equal(scan({...data,mids:fees}).opportunities[0]!.coarseSpreadBps,baseline.opportunities[0]!.coarseSpreadBps);
+});
+test("missing, nonpositive and over-funding P fail closed",()=>{
+  for(const p of [undefined,0n,-1n,1001n*P]) {
+    const data=anchor(),mids=new Map(data.mids),key=blockScanEdgeKey(data.edges[0]!);
+    mids.set(key,{...mids.get(key)!,quoteAmountIn:p,...(p!==undefined&&p>0n?{quoteAmountOut:p}:{})});
+    const result=scan({...data,mids});assert.equal(result.opportunities.length,0);
+    if(p===1001n*P) assert.equal(result.debug?.capitalRejected,1);
+  }
+});
+test("V4 logical pool IDs remain distinct behind one manager",()=>{
+  const a=address(40),keys=[500,3000].map(fee=>({currency0:a,currency1:WETH,fee,tickSpacing:10,hooks:address(0)}));
+  const edges=ring([WETH,a,WETH]).map((e,i)=>({...e,target:ADDR.UNISWAP_V4_POOL_MANAGER,
+    poolId:v4PoolId(keys[i]!),instanceKey:v4PoolId(keys[i]!),v4PoolKey:keys[i]}));
+  const result=scan(input(edges,[100n,110n]));assert.equal(result.opportunities.length,1);
+  assert.deepEqual(new Set(result.opportunities[0]!.affectedPools),new Set(keys.map(v4PoolId)));
+  assert(!result.opportunities[0]!.affectedPools?.includes(ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase()));
+});
+test("nonpositive loops, disabled pool reuse, missing quotes and missing USD valuation reject",()=>{
+  for(const output of [100n,99n]) assert.equal(scan(input(anchor().edges,[100n,output])).opportunities.length,0);
+  const data=anchor();
+  assert.equal(scan(input([data.edges[0]!,{...data.edges[1]!,target:data.edges[0]!.target}],[100n,110n],{allowRepeatedPools:false})).opportunities.length,0);
+  const missing=new Map(data.mids);missing.delete(blockScanEdgeKey(data.edges[1]!));
+  assert.equal(scan({...data,mids:missing}).opportunities.length,0);
+  const isolated=ring([address(71),address(72),address(71)]);
+  assert.equal(scan(input(isolated,[100n,110n],{pricedTokens:new Map([[address(71),{maxBorrow:100n*P}]])})).opportunities.length,0);
+});
+test("touched is telemetry, not a gate on effective USD enumeration",()=>{
+  const data=anchor(),baseline=scan(data);
+  for(const swapTouched of [new Set([address(999)]),new Set([data.edges[0]!.target])]) {
+    const result=scan({...data,swapTouched});assert.deepEqual(result.opportunities,baseline.opportunities);
+    assert.equal(result.swapTouchedPools,1);
+  }
+});
+test("pool reuse and rotation dedup are independent, including supplied USD views",()=>{
+  const data=anchor(),edges=[data.edges[0]!,{...data.edges[1]!,target:data.edges[0]!.target}];
+  for(const enumerationMethod of ["dfs","layered"] as const) {
+    for(const allowRepeatedPools of [false,true]) for(const deduplicateRotations of [false,true]) {
+      const current=input(edges,[100n,110n],{enumerationMethod,allowRepeatedPools,deduplicateRotations,
+        pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}],[USDC,{maxBorrow:1000n*P}]])});
+      const result=scan(current);
+      assert.equal(result.opportunities.length,allowRepeatedPools?(deduplicateRotations?1:2):0);
+      assert.equal(result.enumeration?.allowRepeatedPools,allowRepeatedPools);
+      const stale=buildBlockScanUsdView(edges,current.mids,20,!allowRepeatedPools);
+      assert.deepEqual(scan({...current,usdView:stale}).opportunities,result.opportunities,
+        "a view built with the opposite policy cannot silently override the top-level switch");
+    }
+    assert.equal(scan(input(edges,[100n,110n],{enumerationMethod})).opportunities.length,1,"default permits reuse");
+  }
+});
+test("funding start, rank, cap, fingerprints and deadline",()=>{
+  const data=anchor();
+  assert.equal(scan({...data,cfg:{...data.cfg,pricedTokens:new Map()}}).opportunities.length,0);
+  const rings=Array.from({length:5},(_,i)=>ring([WETH,address(300+i),WETH],400+i*2));
+  const result=scan(input(rings.flat(),rings.flatMap((_,i)=>[100n,104n+BigInt(i)]),{maxCandidates:3}));
+  assert.equal(result.selection.enumeratedCount,5);assert.equal(result.opportunities.length,3);
+  assert.deepEqual(result.opportunities.map(o=>o.seedEdges[0]!.tokenOut),[address(304),address(303),address(302)]);
+  assert.equal(scan(data).opportunities[0]!.cycleFingerprint,cycleFingerprint(BLOCK,[WETH,USDC]));
+  assert.equal(scan({...data,cfg:{...data.cfg,budgetMs:0}}).outcome,"budget_exceeded");
+});
+test("three-hop positive/negative controls",()=>{
+  const edges=ring([WETH,address(500),address(501),WETH]);
+  assert(hasRoute(scan(input(edges,[100n,100n,103n])),edges));
+  assert(!hasRoute(scan(input(edges,[100n,100n,99n])),edges));
+});
+test("six-hop low activity route survives dead-end flood",()=>{
+  const target=ring([WETH,...[601,602,603,604,605].map(address),WETH],610);
+  const decoys=Array.from({length:3000},(_,i)=>({...edge(WETH,address(10_000+i),20_000+i),score:10000}));
+  const spokes=target.slice(1,-1).map((e,i)=>edge(e.tokenIn,WETH,700+i));
+  const data=input([...decoys,...target,...spokes],[...decoys.map(()=>100n),100n,100n,100n,100n,100n,102n]);
+  const result=scan(data);assert.equal(result.outcome,"ran");assert(hasRoute(result,target));
+});
+test("repeated tokens reject even around protocols; simple protocol ring remains",()=>{
+  const a=address(801),b=address(802),c=address(803);
+  const repeated=ring([WETH,a,b,a,WETH],810);repeated[1]=edge(a,b,811,"protocol");
+  assert.equal(scan(input(repeated,[102n,102n,102n,102n])).opportunities.filter(o=>o.seedEdges.length===4).length,0);
+  const simple=ring([WETH,a,b,c,WETH],820);simple[1]=edge(a,b,821,"protocol");
+  assert(hasRoute(scan(input(simple,[102n,102n,102n,102n])),simple));
+});
+test("identical routes deduplicate; execution-start rotations obey switch",()=>{
+  const data=anchor();
+  for(const deduplicateRotations of [undefined,false,true]) {
+    const result=scan({...data,edges:[...data.edges,...data.edges],cfg:{...data.cfg,deduplicateRotations,
+      pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}],[USDC,{maxBorrow:1000n*P}]])}});
+    assert.equal(result.opportunities.length,deduplicateRotations?1:2);
+    assert.equal(new Set(result.opportunities.map(o=>o.seedEdges.map(blockScanEdgeKey).join(";"))).size,result.opportunities.length);
+  }
+});
+test("Exact admission is independent telemetry, not enumeration erasure",()=>{
+  const edges=[...ring([WETH,address(901),WETH],910),...ring([WETH,address(902),WETH],920)];
+  const data=input(edges);
+  data.mids=new Map(edges.map((e,i)=>[blockScanEdgeKey(e),quote(e,[10_000n,10_030n,10_000n,10_100n][i]!,10_000n)]));
+  const baseline=scan(data),gated=scan({...data,cfg:{...data.cfg,exactAdmissionSpreadBps:50}});
+  assert.equal(baseline.selection.enumeratedCount,2);assert.equal(baseline.selection.admittedCount,2);
+  assert.equal(gated.selection.admittedCount,1);assert.deepEqual(gated.opportunities,baseline.opportunities);
+});
+test("legacy minimum-capital setting cannot override effective P",()=>{
+  const data=anchor(),a=scan({...data,cfg:{...data.cfg,minCapitalFraction:0}});
+  const b=scan({...data,cfg:{...data.cfg,minCapitalFraction:1}});
+  assert.deepEqual(a.opportunities,b.opportunities);assert.equal(b.debug?.capitalRejected,0);
+});
+test("protocol quotes join search; missing quotes cannot be replaced by NAV",()=>{
+  const a=address(950),b=address(951),edges=ring([WETH,a,b,WETH],960);
+  edges[1]=edge(a,b,961,"protocol");
+  const data=input(edges,[100n,105n,100n]);assert(hasRoute(scan(data),edges));
+  const mids=new Map(data.mids);mids.delete(blockScanEdgeKey(edges[1]!));
+  assert(!hasRoute(scan({...data,mids}),edges));assert(!hasRoute(scan(input(edges,[100n,100n,100n])),edges));
+});
+test("Credit amount quote required; standing-position label preserved",()=>{
+  const a=address(970),data=input([edge(WETH,a,971,"lend"),edge(a,WETH,972)],[110n,100n]);
+  const result=scan(data);assert.equal(result.opportunities.length,1);assert.equal(result.opportunities[0]!.leavesStandingPosition,true);
+  const mids=new Map(data.mids),key=blockScanEdgeKey(data.edges[0]!);
+  mids.set(key,{...mids.get(key)!,quoteAmountIn:undefined,quoteAmountOut:undefined});
+  assert.equal(scan({...data,mids}).opportunities.length,0);
+});
+test("legacy depth diagnostic is not the effective scanner's admission rule",()=>{
+  const data=anchor(),mids=new Map([...data.mids].map(([k,v])=>[k,{...v,reserveA:1000n*P,reserveB:1000n*P}]));
+  const diagnosis=diagnoseResolvedRingScore(data.edges,mids);
+  assert.equal(diagnosis.status,"accepted");assert.equal(diagnosis.estSpreadBps,estimateResolvedRingSpreadBps(data.edges,mids));
+  const missing=new Map(mids);missing.delete(blockScanEdgeKey(data.edges[1]!));
+  const missingMid=diagnoseResolvedRingScore(data.edges,missing);
+  const missingDepth=diagnoseResolvedRingScore(data.edges,data.mids);
+  assert(missingMid.status==="rejected");
+  assert(missingDepth.status==="rejected");
+  assert.equal(missingMid.reason,"missing_mid");
+  assert.equal(missingDepth.reason,"missing_or_nonpositive_input_depth");
+  assert.equal(scan(data).opportunities.length,1);
+});
 
-console.log(`blockscan-scanner PASS (${passed}/${tests.length})`);
+test("real frozen effective table: rotation switch 29/60 and USDC original route rank 5",()=>{
+  const saved=JSON.parse(readFileSync(new URL("./fixtures/blockscan-effective-26029875.json",import.meta.url),"utf8")) as {
+    sourceBlock:number; rows:{edge:TokenEdge;quote:{amountIn:string;amountOut:string;mid:number}|null}[];
+  };
+  const edges=saved.rows.map(row=>row.edge),mids=new Map<string,ResolvedBlockScanMid>();
+  for(const {edge:e,quote:q} of saved.rows) if(q) mids.set(blockScanEdgeKey(e),{
+    kind:"historical-effective",pool:e.target,edges:[e],mid:q.mid,feeBps:0,depthProxy:0,
+    quoteAmountIn:BigInt(q.amountIn),quoteAmountOut:BigInt(q.amountOut)});
+  const caps=new Map([[WETH,{maxBorrow:2000n*P}],[USDC,{maxBorrow:5_000_000n*10n**6n}],
+    [ADDR.USDT.toLowerCase(),{maxBorrow:5_000_000n*10n**6n}],[ADDR.DAI.toLowerCase(),{maxBorrow:5_000_000n*P}]]);
+  const targetPools=["0x5f06cfafaa77f98acf24f25b7a6d24af7896e165e2e78045855e432e5245d136",
+    "0xedeaae143f233a3a5d4fabd3166afa0e2108fe7741489237274b939ca17fcff8",
+    "0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a","0xf6e72db5454dd049d0788e411b06cfaf16853042"];
+  for(const deduplicateRotations of [true,false]) {
+    const result=scan({edges,mids,sourceBlock:saved.sourceBlock,swapTouched:null,
+      cfg:{maxHops:6,minSpreadBps:50,exactAdmissionSpreadBps:50,usdSignalPairsPerToken:50,
+        enumerationMethod:"dfs",deduplicateRotations,pricedTokens:caps,maxCandidates:100,budgetMs:10_000}});
+    assert.equal(result.outcome,"ran");assert.equal(result.selection.forcedSelectionCount,0);
+    assert.equal(result.opportunities.length,deduplicateRotations?29:60);
+    const rank=result.opportunities.findIndex(o=>o.flashToken===USDC&&o.seedEdges.length===4&&
+      o.seedEdges.every((e,i)=>e.instanceKey===targetPools[i]))+1;
+    assert.equal(rank,deduplicateRotations?0:5);
+    if(rank>0) assert.equal(result.opportunities[rank-1]!.searchSeed.searchCenter,5_492_842n);
+  }
+});

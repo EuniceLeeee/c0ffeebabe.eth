@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import type { CompiledInstanceDescriptor } from "./adapter-family-plugin.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
 import { v2FeeBpsForFactory } from "../solver/v2-fee.js";
@@ -88,11 +89,20 @@ export interface VictimSourceGeneration {
 
 export type ReceiptLogsCompleteness = "complete-receipt" | "fragment";
 
+/** Opaque Ready authority; only the owning Family interprets the descriptor. */
+export interface SwapObservationBinding {
+  readonly familyId: string;
+  readonly descriptor: CompiledInstanceDescriptor;
+}
+export type SwapObservationBindingResolver =
+  (edge: TokenEdge) => SwapObservationBinding | null;
+
 export interface SwapObservationContext {
   readonly logs: readonly SwapEventLog[];
   readonly graph: readonly TokenEdge[];
   readonly edgesByTarget: ReadonlyMap<string, readonly TokenEdge[]>;
   readonly tokenQuery?: TokenQueryBackend | null;
+  readonly resolveBinding?: SwapObservationBindingResolver;
   readonly sourceGeneration: VictimSourceGeneration;
 }
 
@@ -380,6 +390,9 @@ export function createUniV2SwapObservation(input: {
   canonicalIntakeTargets: readonly string[];
   landedEvents?: readonly LandedSwapEventDeclaration[];
   topics?: readonly string[];
+  resolvePool?: (ctx: ReceiptSwapObservationContext, edge: TokenEdge) => {
+    readonly token0: string; readonly token1: string; readonly feeBps: bigint;
+  } | null;
 }): SwapObservationCapability {
   const topics = observationTopics(input);
   return createStrictSwapObservation({
@@ -405,7 +418,8 @@ export function createUniV2SwapObservation(input: {
         const log = ctx.logs[index];
         if (topic0(log) !== UNIV2_SWAP_TOPIC) continue;
         try {
-          const edges = matchingTargetEdges(ctx, log.address, input.adapterIds);
+          const edges = matchingTargetEdges(ctx, log.address, input.adapterIds)
+            .filter((edge) => !input.resolvePool || input.resolvePool(ctx, edge) !== null);
           if (edges.length === 0) continue;
 
           const swap = decodeUniV2SwapData(log.data);
@@ -418,18 +432,23 @@ export function createUniV2SwapObservation(input: {
             swap.amount1Out === 0n &&
             swap.amount0Out > 0n;
           if (!zeroForOne && !oneForZero) continue;
-          const sample = edges.find((edge) => edge.poolToken0 && edge.poolToken1);
-          if (!sample?.poolToken0 || !sample.poolToken1) continue;
-          const tokenIn = zeroForOne ? sample.poolToken0 : sample.poolToken1;
-          const tokenOut = zeroForOne ? sample.poolToken1 : sample.poolToken0;
+          const sample = input.resolvePool ? edges[0]
+            : edges.find((edge) => edge.poolToken0 && edge.poolToken1);
+          if (!sample) continue;
+          const metadata = input.resolvePool ? input.resolvePool(ctx, sample) : {
+            token0: sample.poolToken0, token1: sample.poolToken1, feeBps: sample.v2FeeBps,
+          };
+          if (!metadata?.token0 || !metadata.token1) continue;
+          const tokenIn = zeroForOne ? metadata.token0 : metadata.token1;
+          const tokenOut = zeroForOne ? metadata.token1 : metadata.token0;
           const edge = edges.find((candidate) =>
             sameAddress(candidate.tokenIn, tokenIn) && sameAddress(candidate.tokenOut, tokenOut)
           );
           if (!edge) continue;
 
           const v2PostState = finalPostStates.get(log.address.toLowerCase()) ?? null;
-          if (v2PostState && sample.v2FeeBps !== undefined) {
-            v2PostState.feeBps = sample.v2FeeBps;
+          if (v2PostState && metadata.feeBps !== undefined) {
+            v2PostState.feeBps = metadata.feeBps;
           }
           impacts.push({
             logIndex: index,
@@ -439,8 +458,8 @@ export function createUniV2SwapObservation(input: {
               tokenOut: edge.tokenOut,
               amountIn: zeroForOne ? swap.amount0In : swap.amount1In,
               matchedAdapterId: edge.adapterId,
-              poolToken0: sample.poolToken0,
-              poolToken1: sample.poolToken1,
+              poolToken0: metadata.token0,
+              poolToken1: metadata.token1,
               ...(v2PostState ? { v2PostState } : {}),
             },
           });
@@ -458,6 +477,9 @@ export function createUniV3SwapObservation(input: {
   canonicalIntakeTargets: readonly string[];
   landedEvents?: readonly LandedSwapEventDeclaration[];
   topics?: readonly string[];
+  resolvePool?: (ctx: ReceiptSwapObservationContext, edge: TokenEdge) => {
+    readonly token0: string; readonly token1: string;
+  } | null;
 }): SwapObservationCapability {
   const topics = observationTopics(input);
   return createStrictSwapObservation({
@@ -470,16 +492,22 @@ export function createUniV3SwapObservation(input: {
         const log = ctx.logs[index];
         if (!topics.includes(topic0(log))) continue;
         try {
-          const edges = matchingTargetEdges(ctx, log.address, input.adapterIds);
+          const edges = matchingTargetEdges(ctx, log.address, input.adapterIds)
+            .filter((edge) => !input.resolvePool || input.resolvePool(ctx, edge) !== null);
           if (edges.length === 0) continue;
           const { amount0, amount1, v3PostState } = decodeUniV3SwapData(log.data);
           const zeroForOne = amount0 > 0n && amount1 < 0n;
           const oneForZero = amount1 > 0n && amount0 < 0n;
           if (!zeroForOne && !oneForZero) continue;
-          const sample = edges.find((edge) => edge.poolToken0 && edge.poolToken1);
-          if (!sample?.poolToken0 || !sample.poolToken1) continue;
-          const tokenIn = zeroForOne ? sample.poolToken0 : sample.poolToken1;
-          const tokenOut = zeroForOne ? sample.poolToken1 : sample.poolToken0;
+          const sample = input.resolvePool ? edges[0]
+            : edges.find((edge) => edge.poolToken0 && edge.poolToken1);
+          if (!sample) continue;
+          const metadata = input.resolvePool ? input.resolvePool(ctx, sample) : {
+            token0: sample.poolToken0, token1: sample.poolToken1,
+          };
+          if (!metadata?.token0 || !metadata.token1) continue;
+          const tokenIn = zeroForOne ? metadata.token0 : metadata.token1;
+          const tokenOut = zeroForOne ? metadata.token1 : metadata.token0;
           const edge = edges.find((candidate) =>
             sameAddress(candidate.tokenIn, tokenIn) && sameAddress(candidate.tokenOut, tokenOut)
           );

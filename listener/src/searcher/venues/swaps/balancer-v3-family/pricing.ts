@@ -7,6 +7,7 @@ import { staticBinding } from "./instance.js";
 import { assertRoute } from "./routes.js";
 import { decodeSwapLog } from "./discovery.js";
 import type { BalancerV3Descriptor, BalancerV3PricingDescriptor, BalancerV3Route, BalancerV3Snapshot } from "./types.js";
+import { decodeLocalState, localStateRequests, quoteLocal } from "./local-state.js";
 
 function state(descriptor: BalancerV3PricingDescriptor, results: Parameters<typeof resultSource>[0]) {
   assertRoute(descriptor.instance, descriptor.route);
@@ -25,6 +26,9 @@ function state(descriptor: BalancerV3PricingDescriptor, results: Parameters<type
   return { balanceIn, balanceOut, amounts: probeAmounts(binding.decimals[descriptor.route.i], balanceIn) };
 }
 export const balancerV3Pricing = {
+  // A ramps and rate providers can change with block time without pool logs.
+  // The existing coordinator refreshes raw and effective together; no private cache.
+  refreshPolicy: "each-block" as const,
   stateKey: route => route.routeKey,
   staticBindingProjection: ({ descriptor, routes }) => ({ ...staticBinding(descriptor), routeKeys: routes.map(route => route.routeKey) }),
   snapshotCompatibilityProjection: ({ descriptor, routes }) => ({ ...staticBinding(descriptor), routeKeys: routes.map(route => route.routeKey) }),
@@ -38,20 +42,51 @@ export const balancerV3Pricing = {
     requirements: () => ({ transports: ["eth-call"] }),
     buildRequests({ descriptor }) {
       assertRoute(descriptor.instance, descriptor.route);
+      if (descriptor.instance.binding.localModel) return localStateRequests(descriptor.instance);
       return [call("current-tokens", VAULT, VAULT_ABI.encodeFunctionData("getPoolTokenInfo", [descriptor.instance.pool])),
         call("current-hooks", VAULT, VAULT_ABI.encodeFunctionData("getHooksConfig", [descriptor.instance.pool]))];
     },
-    buildDependentProgram({ current, completedRound, initialResults }) {
-      if (completedRound !== 0) return null;
-      assertSource(resultSource(initialResults), current.source);
-      const { amounts } = state(current.descriptor, initialResults);
+    buildDependentProgram({ current, completedRound, initialResults, priorEvidence }) {
+      if (current.descriptor.instance.binding.localModel) return null;
+      if (completedRound > 1) return null;
+      const results = collectRequestProgramResults(initialResults, priorEvidence);
+      assertSource(resultSource(results), current.source);
+      const { amounts, balanceOut } = state(current.descriptor, results);
+      if (completedRound === 1) {
+        const matches = results.filter(read => read.id === "current-quote:0");
+        if (matches.length !== 1) throw new Error("balancer-v3 missing/duplicate current quote");
+        const read = matches[0];
+        if (read.ok && read.completion === "returned") {
+          const amountOut = uint(read.data);
+          if (amountOut > 0n && amountOut < balanceOut) return null;
+        }
+      }
+      // The decoder chooses the first usable probe; fetch the rest only if needed.
+      const offset = completedRound === 0 ? 0 : 1;
+      const probes = completedRound === 0 ? amounts.slice(0, 1) : amounts.slice(1);
+      if (probes.length === 0) return null;
       const { route } = current.descriptor;
-      return bindRequestResultRound({ transports: ["eth-call"] }, amounts.map((amount, i) => ({
-        ...call(`current-quote:${i}`, ROUTER, queryData(route.pool, route.tokenIn, route.tokenOut, amount, ethers.ZeroAddress)),
+      return bindRequestResultRound({ transports: ["eth-call"] }, probes.map((amount, i) => ({
+        ...call(`current-quote:${i + offset}`, ROUTER, queryData(route.pool, route.tokenIn, route.tokenOut, amount, ethers.ZeroAddress)),
         required: false,
       })));
     },
     decodeSnapshot({ descriptor, initialResults, dependentEvidence }) {
+      if (descriptor.instance.binding.localModel) {
+        if (dependentEvidence.length !== 0) throw new Error("balancer-v3 unexpected local pricing round");
+        const local = decodeLocalState(descriptor.instance, initialResults);
+        const { route } = descriptor;
+        const balanceIn = local.balancesRaw[route.i], balanceOut = local.balancesRaw[route.j];
+        for (const amountIn of probeAmounts(descriptor.instance.binding.decimals[route.i], balanceIn)) {
+          // Preserve the existing first-usable probe policy, now with no quote I/O.
+          try {
+            const amountOut = quoteLocal(descriptor.instance, route, local, amountIn, local.source);
+            if (amountOut > 0n && amountOut < balanceOut) return Object.freeze({
+              source: local.source, balanceIn, balanceOut, amountIn, amountOut });
+          } catch { /* A minimum/maximum amount failure is not a pool rejection. */ }
+        }
+        throw new Error("balancer-v3 local current quote unresolved");
+      }
       const results = collectRequestProgramResults(initialResults, dependentEvidence);
       const source = resultSource(results);
       const { balanceIn, balanceOut, amounts } = state(descriptor, results);
@@ -119,6 +154,7 @@ export const balancerV3Pricing = {
       descriptor.instance.binding.hooks.address, ...descriptor.instance.binding.tokenInfo.map(info => info.rateProvider)].some(address => same(address, target))
       ? routes.map(route => route.routeKey) : [];
   } },
-  liveStateProjection: { project: ({ descriptor, snapshot }) => ({ kind: "balancer-v3-router-exact-in", pool: descriptor.instance.pool,
+  liveStateProjection: { project: ({ descriptor, snapshot }) => ({ kind: descriptor.instance.binding.localModel
+    ? "balancer-v3-local-exact-in" : "balancer-v3-router-exact-in", pool: descriptor.instance.pool,
     i: descriptor.route.i, j: descriptor.route.j, ...snapshot, source: { ...snapshot.source } }) },
 } satisfies PricingSemantics<BalancerV3Descriptor, BalancerV3Route, BalancerV3PricingDescriptor, BalancerV3Snapshot>;

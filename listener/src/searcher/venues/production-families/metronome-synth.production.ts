@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { metronomeSynthCapture } from "../protocols/metronome-synth-family/capture.js";
 import { metronomeSynthFamilyOwnedAction } from "../protocols/metronome-synth-family/action.js";
@@ -10,6 +11,8 @@ import { metronomeSynthFamilyManifest } from "../protocols/metronome-synth-famil
 import { metronomeSynthPricing } from "../protocols/metronome-synth-family/pricing.js";
 import { metronomeSynthProtocol } from "../protocols/metronome-synth-family/protocol.js";
 import { metronomeSynthRoutes } from "../protocols/metronome-synth-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_METRONOME_SYNTH_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: metronomeSynthFamilyManifest,

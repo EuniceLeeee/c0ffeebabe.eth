@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineSwapFamily } from "../adapter-family-plugin.js";
 import { curveUnderlyingCapture } from "../swaps/curve-underlying-family/capture.js";
 import { curveUnderlyingFamilyOwnedAction } from "../swaps/curve-underlying-family/action.js";
@@ -10,6 +11,8 @@ import { curveUnderlyingFamilyManifest } from "../swaps/curve-underlying-family/
 import { curveUnderlyingPricing } from "../swaps/curve-underlying-family/pricing.js";
 import { curveUnderlyingRoutes } from "../swaps/curve-underlying-family/routes.js";
 import { curveUnderlyingSwap } from "../swaps/curve-underlying-family/swap.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED" });
 
 export const plugin = defineSwapFamily({
   manifest: curveUnderlyingFamilyManifest,

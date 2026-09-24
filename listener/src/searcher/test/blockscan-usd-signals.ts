@@ -47,7 +47,7 @@ function oracle(view: BlockScanUsdView, limit: number, legacy = false) {
     const topTwo = <T extends {q: {instance: string}}>(offers: T[]) =>
       offers.length ? [offers[0]!, offers.find(o => o.q.instance !== offers[0]!.q.instance)].filter((o): o is T => o !== undefined) : [];
     const pairs = (legacy ? topTwo(buys) : buys).flatMap((b, bi) =>
-      (legacy ? topTwo(sells) : sells).flatMap((s, si) => b.q.instance === s.q.instance ? [] : [{
+      (legacy ? topTwo(sells) : sells).flatMap((s, si) => !view.allowRepeatedPools && b.q.instance === s.q.instance ? [] : [{
         token, buy: b.q.id, sell: s.q.id, num: s.num * b.den, den: s.den * b.num, bi, si,
       }]));
     pairs.sort((a, b) => cmp(b, a) || a.bi - b.bi || a.si - b.si);
@@ -67,11 +67,11 @@ test("default 20, selectable positive integer, rejects malformed limits", () => 
 test("top-K matches exhaustive ranking, K=1 matches old best pair, stable ties/order", () => {
   for (let seed = 1; seed <= 20; seed++) {
     const {edges, mids} = fixture(36, false, seed);
-    for (const limit of [1, 2, 20, 1000]) {
-      const view = buildBlockScanUsdView(edges, mids, limit);
+    for (const allowRepeatedPools of [false, true]) for (const limit of [1, 2, 20, 1000]) {
+      const view = buildBlockScanUsdView(edges, mids, limit, allowRepeatedPools);
       assert.deepEqual(identities(view.signals), identities(oracle(view, limit)));
-      if (limit === 1) assert.deepEqual(identities(view.signals), identities(oracle(view, 1, true)));
-      assert.deepEqual(identities(view.signals), identities(buildBlockScanUsdView([...edges].reverse(), mids, limit).signals));
+      if (limit === 1 && !allowRepeatedPools) assert.deepEqual(identities(view.signals), identities(oracle(view, 1, true)));
+      assert.deepEqual(identities(view.signals), identities(buildBlockScanUsdView([...edges].reverse(), mids, limit, allowRepeatedPools).signals));
       for (const token of new Set(view.signals.map(s => s.token)))
         assert(view.signals.filter(s => s.token === token).length <= limit);
       assert.equal(new Set(identities(view.signals)).size, view.signals.length);
@@ -85,8 +85,11 @@ test("counts tokens separately from signal pairs; no same-pool or zero-spread si
   assert.equal(view.signals.length, 40); assert.equal(stats.tokensAboveThreshold, 2);
   assert.equal(stats.signalPairsAboveThreshold, 40); assert.equal(stats.signalPairsPerToken, 20);
   const single = fixture(36, true);
-  const samePool = buildBlockScanUsdView(single.edges, single.mids, 20);
+  const samePool = buildBlockScanUsdView(single.edges, single.mids, 20, false);
   assert.equal(samePool.signals.length, 0); assert.equal(samePool.comparableTokens, 0);
+  const reused = buildBlockScanUsdView(single.edges, single.mids, 20);
+  assert.equal(reused.allowRepeatedPools, true); assert.equal(reused.signals.length, 40);
+  assert.deepEqual(identities(reused.signals), identities(oracle(reused, 20)));
   const flat = new Map([...mids].map(([k, m]) => [k, {...m, mid: 1, quoteAmountOut: m.quoteAmountIn}]));
   const noSpread = buildBlockScanUsdView(edges, flat, 20);
   assert.equal(noSpread.signals.length, 0); assert.equal(noSpread.comparableTokens, 2);
@@ -106,6 +109,13 @@ test("publication cache distinguishes cap, retains mids and supports switching b
   assert.equal(effectiveUsdPricing(pricing), twenty);
   assert.deepEqual(identities(effectiveUsdPricing(pricing, 1).view.signals), identities(one.view.signals));
   assert.throws(() => effectiveUsdPricing(pricing, 0), /positive safe integer/);
+  const on = effectiveUsdPricing(pricing, 20, true);
+  const off = effectiveUsdPricing(pricing, 20, false);
+  assert.notEqual(on, off); assert.equal(on.mids, off.mids);
+  assert.equal(off.view.allowRepeatedPools, false);
+  assert.deepEqual(identities(off.view.signals), identities(buildBlockScanUsdView(edges, mids, 20, false).signals));
+  assert.equal(effectiveUsdPricing(pricing, 20, false), off);
+  assert.deepEqual(identities(effectiveUsdPricing(pricing, 20, true).view.signals), identities(on.view.signals));
 });
 
 test("USD hop value uses the best equal-hop reference without changing effective amounts", () => {

@@ -12,6 +12,7 @@ import type {
   ReceiptSwapObservationContext,
   SwapEventLog,
   SwapObservationCapability,
+  SwapObservationBindingResolver,
   VictimSourceGeneration,
 } from "../venues/swap-observation.js";
 
@@ -252,6 +253,7 @@ export async function detectImpactTransitionFromLogs(
   sourceGeneration: VictimSourceGeneration,
   broadPoolAddrs?: Map<string, string> | null,
   tokenQuery?: TokenQueryBackend | null,
+  resolveBinding?: SwapObservationBindingResolver,
 ): Promise<PoolImpactTransition> {
   const expectedGeneration = createVictimSourceGeneration({
     sourceBlock: sourceGeneration.sourceBlock,
@@ -303,6 +305,10 @@ export async function detectImpactTransitionFromLogs(
         graph,
         edgesByTarget,
         tokenQuery,
+        resolveBinding: resolveBinding ? (edge) => {
+          const binding = resolveBinding(edge);
+          return binding && group.familyIds.includes(binding.familyId) ? binding : null;
+        } : undefined,
         sourceGeneration,
         matchedOwnedTriggers,
       },
@@ -484,6 +490,7 @@ export async function detectImpactFromLogs(
   graph: TokenEdge[],
   broadPoolAddrs?: Map<string, string> | null,
   tokenQuery?: TokenQueryBackend | null,
+  resolveBinding?: SwapObservationBindingResolver,
 ): Promise<PoolImpact[]> {
   const sourceGeneration = createVictimSourceGeneration({
     sourceBlock: null,
@@ -499,6 +506,7 @@ export async function detectImpactFromLogs(
       sourceGeneration,
       broadPoolAddrs,
       tokenQuery,
+      resolveBinding,
     )).impacts,
   ];
 }
@@ -508,6 +516,7 @@ export async function detectPoolImpactTransition(
   graph: TokenEdge[],
   broadPoolAddrs?: Map<string, string> | null,
   tokenQuery?: TokenQueryBackend | null,
+  resolveBinding?: SwapObservationBindingResolver,
 ): Promise<PoolImpactTransition> {
   const sourceGeneration = createVictimSourceGeneration({
     sourceBlock: Math.max(0, event.blockNumber - 1),
@@ -528,6 +537,7 @@ export async function detectPoolImpactTransition(
       sourceGeneration,
       broadPoolAddrs,
       tokenQuery,
+      resolveBinding,
     ),
   ]);
   const receiptPoolKeys = new Set(
@@ -557,6 +567,7 @@ export async function detectPoolImpact(
   graph: TokenEdge[],
   broadPoolAddrs?: Map<string, string> | null,
   tokenQuery?: TokenQueryBackend | null,
+  resolveBinding?: SwapObservationBindingResolver,
 ): Promise<PoolImpact[]> {
   return [
     ...(await detectPoolImpactTransition(
@@ -564,6 +575,7 @@ export async function detectPoolImpact(
       graph,
       broadPoolAddrs,
       tokenQuery,
+      resolveBinding,
     )).impacts,
   ];
 }

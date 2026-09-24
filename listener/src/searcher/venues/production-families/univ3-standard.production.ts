@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineSwapFamily } from "../adapter-family-plugin.js";
 import { univ3Capture } from "../swaps/univ3-family/capture.js";
 import { univ3FamilyOwnedAction } from "../swaps/univ3-family/action.js";
@@ -10,6 +11,8 @@ import { univ3FamilyManifest } from "../swaps/univ3-family/manifest.js";
 import { univ3Pricing } from "../swaps/univ3-family/pricing.js";
 import { univ3Routes } from "../swaps/univ3-family/routes.js";
 import { univ3Swap } from "../swaps/univ3-family/swap.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_UNIV3_STANDARD_ENABLED" });
 
 export const plugin = defineSwapFamily({
   manifest: univ3FamilyManifest,

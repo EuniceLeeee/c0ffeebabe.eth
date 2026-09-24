@@ -100,6 +100,8 @@ export interface UniverseRebuildDependencies {
   readonly upgradeLegacyVerifiedMemo?: (
     memo: LegacyDurableVerifiedMemo,
   ) => DurableVerifiedMemo;
+  /** Operator activation only; inactive Family memos stay durable for re-enabling. */
+  readonly isFamilyEnabled?: (familyId: string) => boolean;
   /** Exact Family x source set declared by the loaded strict catalog. */
   readonly requiredSourceCoverageKeys: () => readonly string[];
   /**
@@ -254,7 +256,8 @@ export async function rebuildUniverse(
       DurableVerifiedMemo | LegacyDurableVerifiedMemo,
     ][];
     const legacyMemos = memoEntries.filter(
-      ([, memo]) => !hasDurableCandidateSnapshot(memo),
+      ([, memo]) => input.isFamilyEnabled?.(memo.familyId) !== false &&
+        !hasDurableCandidateSnapshot(memo),
     );
     if (legacyMemos.length > 0) {
       if (input.upgradeLegacyVerifiedMemo === undefined) {
@@ -282,19 +285,21 @@ export async function rebuildUniverse(
     for (const memo of Object.values(checkpoint.verifiedMemos) as readonly (
       DurableVerifiedMemo | LegacyDurableVerifiedMemo
     )[]) {
+      assertDurableVerifiedMemoFingerprint(memo);
+      if (input.isFamilyEnabled?.(memo.familyId) === false) continue;
       if (!hasDurableCandidateSnapshot(memo)) {
         throw new Error(
           "universe rebuild: verified memo has no retained candidate snapshot " +
             memo.familyCandidateKey,
         );
       }
-      assertDurableVerifiedMemoFingerprint(memo);
     }
   }
   checkpoint = await migrateAlreadyReadyKeptRun(input.store, checkpoint, log);
   const incumbentRun = checkpoint?.inProgressRun ?? null;
   const retainedCandidates = Object.freeze(
     Object.values(checkpoint?.verifiedMemos ?? {})
+      .filter((memo) => input.isFamilyEnabled?.(memo.familyId) !== false)
       .sort((left, right) =>
         left.familyCandidateKey.localeCompare(right.familyCandidateKey)
       )
@@ -941,9 +946,12 @@ export async function rebuildUniverse(
   return ready;
 }
 
+const READY_REFRESH_MAX_ATTEMPTS = 3;
+
 /** Same attestation/Graph pipeline, restricted to the existing Ready set.
  * Never scans, invents source receipts, retries excluded candidates or moves
- * the historical cutoff. Non-verified results cannot shrink the reused set.
+ * the historical cutoff. Only explicitly retryable attestations get bounded
+ * retries; non-verified results cannot shrink the reused set.
  */
 export async function refreshReadyInstances(input: UniverseRebuildDependencies & {
   readonly store: UniverseRebuildCheckpointStore;
@@ -953,6 +961,7 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
   const checkpoint = await input.store.load();
   if (checkpoint === null) throw new Error("ready refresh checkpoint is absent");
   const oldMemos = activeReadyMemos(checkpoint);
+  assertReadyFamilyActivation(oldMemos, input.isFamilyEnabled);
   const ready = checkpoint.readyGeneration!;
   const cutoff = ready.cutoff;
   const concurrency = input.attestationConcurrency ?? 24;
@@ -989,9 +998,18 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
         memos[index] = reusable;
       } else {
         if (stop) return;
-        const result = await input.attestFamilyInstanceOnce({ candidate, cutoff });
-        if (result.status !== "verified") {
-          throw new Error(`ready refresh ${old.familyCandidateKey}: ${result.status} ${result.reasonCode}; incumbent unchanged`);
+        let attempt = 1;
+        let result = await input.attestFamilyInstanceOnce({ candidate, cutoff });
+        while (result.status !== "verified") {
+          const failure = `ready refresh ${old.familyCandidateKey}: attempt=${attempt}/${READY_REFRESH_MAX_ATTEMPTS} ${result.status} ${result.reasonCode}`;
+          input.log?.(failure);
+          if (result.status !== "retryable" || attempt === READY_REFRESH_MAX_ATTEMPTS) {
+            throw new Error(`${failure}; incumbent unchanged`);
+          }
+          await new Promise<void>((resolve) => setTimeout(resolve, attempt * 250));
+          if (stop) return;
+          attempt++;
+          result = await input.attestFamilyInstanceOnce({ candidate, cutoff });
         }
         memos[index] = input.sealDurableVerifiedMemo({
           candidate, result: result.result, proofSource: cutoff,
@@ -1025,6 +1043,22 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
     expectedRevision: checkpoint.revision, memos, graphSnapshot,
   });
   return updated.readyGeneration!;
+}
+
+/** Reuse proves an exact Ready set; an operator switch cannot silently shrink it. */
+export function assertReadyFamilyActivation(
+  memos: readonly { readonly familyId: string }[],
+  isFamilyEnabled: UniverseRebuildDependencies["isFamilyEnabled"],
+): void {
+  const disabled = [...new Set(memos
+    .filter((memo) => isFamilyEnabled?.(memo.familyId) === false)
+    .map((memo) => memo.familyId))].sort();
+  if (disabled.length > 0) {
+    throw new Error(
+      "Ready contains disabled Families: " + disabled.join(",") +
+        "; rebuild Ready with the plugin activation settings before reusing it",
+    );
+  }
 }
 
 function validateExplicitObservationRange(input: {

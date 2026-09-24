@@ -1,8 +1,9 @@
 import { ethers } from "ethers";
+import { ADDR } from "../../../../shared/constants/addresses.js";
 import type { IdentityDecision, IdentitySemantics } from "../../adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
-import { CURVE_METAREGISTRY, META, POOL, ERC20, GETTER_ABIS, INT_MODES, address, addressArray, assertSource,
+import { CURVE_METAREGISTRY, META, POOL, ERC20, GETTER_ABIS, INT_MODES, UINT_MODES, pullsInput, address, addressArray, assertSource,
   call, executionData, getterPool, getterReadId, hasReceiver, lower, probeAmount, quotePool, result, resultSource, returned, same, uint } from "./codec.js";
 import { CURVE_PLAIN_FAMILY_ID, CURVE_PLAIN_LINEAGE } from "./manifest.js";
 import type { CurveIndexAbi, CurvePlainBinding, CurvePlainCandidate, CurvePlainDirection, CurvePlainIdentity, CurvePlainMode } from "./types.js";
@@ -28,13 +29,13 @@ interface Evidence {
 }
 
 function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainCandidate, CurvePlainIdentity>["variants"][number] {
-  const modes: readonly CurvePlainMode[] = quoteAbi === "int128" ? INT_MODES : ["received-uint"];
+  const modes: readonly CurvePlainMode[] = quoteAbi === "int128" ? INT_MODES : UINT_MODES;
   return {
     id: `registry-direct-coin-behavior-${quoteAbi}`, kind: "registry-member", lineageId: CURVE_PLAIN_LINEAGE,
     applies: candidate => candidate.candidateKind === "curve-plain-pool",
     requirements({ evidence }) {
       return (evidence as Evidence | undefined)?.phase === "quotes"
-        ? { transports: ["effect-delta-simulation"], caller: "executor", effects: ["return-data", "revert-data", "token-delta"] }
+        ? { transports: ["effect-delta-simulation"], caller: "executor", effects: ["return-data", "revert-data", "token-delta", "logs"] }
         : { transports: evidence === undefined ? ["eth-call", "get-code"] : ["eth-call"] };
     },
     buildRequests({ candidate, evidence }) {
@@ -203,7 +204,7 @@ function executionProbe(pool: string, quote: QuoteDirection, mode: CurvePlainMod
   return {
     id: `execution:${quote.i}:${quote.j}:${mode}`, kind: "effect-delta-simulation", required: false,
     preCalls: [{ caller, to: quote.tokenIn,
-      data: ERC20.encodeFunctionData(mode === "exchange" ? "approve" : "transfer", [pool, quote.amountIn]) }],
+      data: ERC20.encodeFunctionData(pullsInput(mode) ? "approve" : "transfer", [pool, quote.amountIn]) }],
     call: { caller, executionMode: "impersonated-call-frame", to: pool,
       data: executionData(mode, quote.i, quote.j, quote.amountIn, quote.amountOut, PROBE_RECEIVER) },
     overrideIntent: { caller, tokenBalances: [{ token: quote.tokenIn, amount: quote.amountIn }] },
@@ -212,7 +213,7 @@ function executionProbe(pool: string, quote: QuoteDirection, mode: CurvePlainMod
       { token: quote.tokenOut, account: hasReceiver(mode) ? PROBE_RECEIVER : caller },
       { token: quote.tokenOut, account: pool },
     ],
-    observe: ["return-data", "revert-data", "token-delta"],
+    observe: ["return-data", "revert-data", "token-delta", "logs"],
   };
 }
 function provesExecution(results: readonly AdapterRequestResult[], pool: string, quote: QuoteDirection, mode: CurvePlainMode): boolean {
@@ -230,9 +231,27 @@ function provesExecution(results: readonly AdapterRequestResult[], pool: string,
   const poolOut = deltas.filter(d => same(d.token, quote.tokenOut) && same(d.account, pool));
   const input = deltas.filter(d => same(d.token, quote.tokenIn) && !same(d.account, pool));
   const output = deltas.filter(d => same(d.token, quote.tokenOut) && !same(d.account, pool));
-  return poolIn.length === 1 && poolIn[0].delta === quote.amountIn &&
-    poolOut.length === 1 && poolOut[0].delta === -quote.amountOut &&
+  return poolIn.length === 1 && poolEffect(poolIn[0], quote.amountIn, mode, pool, read) &&
+    poolOut.length === 1 && poolEffect(poolOut[0], -quote.amountOut, mode, pool, read) &&
     input.length === 1 && input[0].delta === -quote.amountIn &&
     output.length === 1 && output[0].delta === quote.amountOut &&
     (hasReceiver(mode) ? same(output[0].account, PROBE_RECEIVER) : same(output[0].account, input[0].account));
+}
+
+// Tricrypto keeps native ETH internally even for its ERC20-only exchange ABI.
+// A zero pool WETH delta is valid only with the independently observed wrapping
+// effects from THIS simulation. Executor debits/receipts stay exact above.
+function poolEffect(delta: { token: string; delta: bigint }, expected: bigint,
+  mode: CurvePlainMode, pool: string, read: Extract<AdapterRequestResult, { ok: true }>): boolean {
+  if (delta.delta === expected) return true;
+  if (mode !== "exchange-uint" || !same(delta.token, ADDR.WETH) || delta.delta !== 0n) return false;
+  const deposit = ethers.id("Deposit(address,uint256)"), withdrawal = ethers.id("Withdrawal(address,uint256)");
+  let wrapped = 0n;
+  for (const log of read.effects?.logs ?? []) {
+    if (!same(log.address, ADDR.WETH) || log.topics.length !== 2 ||
+      log.topics[1].toLowerCase() !== ethers.zeroPadValue(pool, 32).toLowerCase()) continue;
+    if (log.topics[0] === deposit) wrapped += uint(log.data);
+    if (log.topics[0] === withdrawal) wrapped -= uint(log.data);
+  }
+  return wrapped === -expected;
 }

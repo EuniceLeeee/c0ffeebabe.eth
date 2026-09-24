@@ -7,6 +7,9 @@ import {
   univ4UnlockAdapter,
 } from "../../../../adapters/univ4.js";
 import type { ActionAdapter } from "../../../../types.js";
+import { ethers } from "ethers";
+import { encodeCall } from "../../../../encoder.js";
+import { hookDataFor, sat1Permissions } from "./sat1.js";
 import { bindFamilyOwnedAction } from "../../family-owned-action.js";
 
 /**
@@ -51,7 +54,27 @@ export const univ4FeeHookUnlockFamilyOwnedAction = owned(
   false,
 );
 export const univ4FeeHookSwapFamilyOwnedAction = owned(
-  clonedAdapter(univ4SwapAdapter, "univ4-fee-hook-swap"),
+  { ...clonedAdapter(univ4SwapAdapter, "univ4-fee-hook-swap"),
+    encode(node, executor, inner) {
+      if (node.params.hookData === undefined || node.params.hookData === "0x") {
+        if (sat1Permissions(String(node.params.hooks))) throw new Error("sat1 swap requires actor binding");
+        return univ4SwapAdapter.encode(node, executor, inner);
+      }
+      if (!sat1Permissions(String(node.params.hooks)) ||
+        typeof node.params.zeroForOne !== "boolean" ||
+        node.params.hookData !== hookDataFor({ hookModel: "sat1", hook: String(node.params.hooks) }, executor, node.params.zeroForOne) ||
+        node.params.amountSpecified !== -node.amount || node.amount <= 0n || node.children.length !== 0) {
+        throw new Error("sat1 swap actor or amount mismatch");
+      }
+      const iface = new ethers.Interface([
+        "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks),(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96),bytes)",
+      ]);
+      return encodeCall(node.target, ethers.getBytes(iface.encodeFunctionData("swap", [
+        [node.params.currency0, node.params.currency1, node.params.fee, node.params.tickSpacing, node.params.hooks],
+        [node.params.zeroForOne, node.params.amountSpecified, node.params.sqrtPriceLimit], node.params.hookData,
+      ])));
+    },
+  },
   false,
 );
 export const univ4FeeHookTakeFamilyOwnedAction = owned(

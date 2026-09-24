@@ -1,29 +1,33 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import { AnvilStateBackend } from "../shared/state/state-backend.js";
 import { activeReadyMemos, UniverseRebuildCheckpointStore } from "./universe-rebuild-checkpoint.js";
 import { createRebuildWiring, familyDefinitionHash, familyMemoDefinitionHash } from "./universe-rebuild-production.js";
 import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
+import { assertReadyFamilyActivation } from "./universe-rebuild-runner.js";
+import { assertFamilyActivationEnvironment } from "./venues/production-families/activation.js";
 import { StrictReadyGraphViewCoordinator } from "./strict-ready-graph-view.js";
 import { StrictProductionRuntimeRoot, type StrictReadyFundingAsset } from "./strict-production-runtime-session.js";
 import { assertIssuedPreparedFamilyInstance, type PreparedFamilyInstance } from "./venues/adapter-family-runtime.js";
 import { familyId } from "./venues/adapter-family-identifiers.js";
-import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "./venues/production-family-composition.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog,
+  PRODUCTION_FAMILY_ACTIVATIONS } from "./venues/production-family-composition.js";
 import { PRODUCTION_STRICT_FAMILY_DECLARATIONS as declarations } from "./strict-production-family-declarations.js";
 import { BlockScanRuntimeLoop } from "./blockscan-runtime-loop.js";
 import { createBlockScanPriceRuntime, createLiveSourceSimulationFactory, maybeSubmitBlockScanAtomic,
-  resolveBlockScanCoreConfig, resolveBlockScanAtomicPolicy } from "./main.js";
+  resolveBlockScanCoreConfig, resolveBlockScanRefineCandidates, resolveBlockScanAtomicPolicy } from "./main.js";
 import { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import { parseBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { TemplatePlanner } from "./planner/planner.js";
 import { AnvilSolver } from "./solver/solver.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
 import { EthSimulateV1Simulator, buildEthSimulateV1ExecutionInput } from "./simulator/eth-simulate-v1.js";
+import { SourceBlockSimulator } from "./simulator/source-block.js";
 import { resolveBlockScanSolverSearchConfig } from "./blockscan-solver-search-config.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { DEFAULT_PROFIT_TOKEN_VALUATION } from "./profit-token-valuation.js";
@@ -41,8 +45,12 @@ const HELP = `Usage: npm run searcher:at-block -- --ready CHECKPOINT --block NUM
   --env-file FILE        Read RPC URL, public executor/owner and simulator path only.
   --executor ADDRESS --owner ADDRESS  Public execution identity, required through EV.
   --revm-bin FILE        Existing strict quote-simulation engine.
+  --execution-mode MODE next-block (default) | source-block (historical only).
+  --executor-runtime-code FILE  Hash-bound {code, keccak256}; source-block only, no deployment.
 No discovery/rebuild, latest-head subscription, signing or broadcasting.
---block is the end-state source; final simulation executes the next block context.
+--block is the end-state source. source-block executes that block's environment
+using pinned REVM plus debug_traceCall charged gas, and that block's fee in EV.
+Default next-block simulation remains eth_simulateV1; no implicit fallback.
 Prices from a newer Ready are explicitly hindsight-topology diagnostics, not discovery proof.
 `;
 
@@ -52,6 +60,8 @@ export function parseAtBlockArgs(argv: string[]) {
     through: { type: "string" }, offline: { type: "boolean" }, help: { type: "boolean" },
     "spread-bps": { type: "string" }, "admission-bps": { type: "string" }, "budget-ms": { type: "string" },
     "env-file": { type: "string" }, executor: { type: "string" }, owner: { type: "string" }, "revm-bin": { type: "string" },
+    "execution-mode": { type: "string" },
+    "executor-runtime-code": { type: "string" },
   } });
   if (v.help) return null;
   const block = Number(v.block), budgetMs = Number(v["budget-ms"] ?? "120000");
@@ -60,13 +70,17 @@ export function parseAtBlockArgs(argv: string[]) {
   assert(!(v.ready && v.prices), "Use one input: --ready or --prices");
   assert(v.out, "--out is required");
   const through = v.through ?? (v.offline ? "enumerate" : "ev");
+  const executionMode = v["execution-mode"] ?? "next-block";
+  assert(executionMode === "next-block" || executionMode === "source-block", "invalid --execution-mode");
+  assert(!v["executor-runtime-code"] || (executionMode === "source-block" && !v.offline),
+    "--executor-runtime-code requires online source-block mode");
   assert(through === "prices" || through === "enumerate" || through === "solver" || through === "ev", "invalid --through");
   assert(!v.offline || (v.prices && through === "enumerate"), "--offline requires --prices and --through enumerate");
   assert(Number.isSafeInteger(budgetMs) && budgetMs > 0 && budgetMs <= 3_600_000, "invalid --budget-ms");
   for (const k of ["spread-bps", "admission-bps"] as const) {
     assert(v[k] === undefined || (/^\d+(?:\.\d+)?$/.test(v[k]!) && Number(v[k]) <= 10_000), `invalid --${k}`);
   }
-  return { ...v, through: through as "prices" | "enumerate" | "solver" | "ev", block, budgetMs, out: resolve(v.out) };
+  return { ...v, executionMode, through: through as "prices" | "enumerate" | "solver" | "ev", block, budgetMs, out: resolve(v.out) };
 }
 
 // Lossless data serialization only. Authority-bearing sessions are always reissued,
@@ -88,12 +102,42 @@ export const parseAtBlockJson = (value: string): any => JSON.parse(value, (_key,
 });
 const sha256 = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
 
+export function parseHistoricalExecutorRuntimeCode(bytes: string) {
+  const value = JSON.parse(bytes);
+  assert(value && typeof value === "object" && !Array.isArray(value)
+    && Object.keys(value).length === 2 && Object.keys(value).every(k => ["code", "keccak256"].includes(k)),
+    "executor override accepts only code and keccak256");
+  assert(typeof value.code === "string" && /^0x(?:[0-9a-fA-F]{2})+$/.test(value.code), "invalid executor runtime code");
+  assert(typeof value.keccak256 === "string" && /^0x[0-9a-fA-F]{64}$/.test(value.keccak256)
+    && ethers.keccak256(value.code) === value.keccak256.toLowerCase(), "executor runtime code hash mismatch");
+  return Object.freeze({ code: value.code.toLowerCase() as string, keccak256: value.keccak256.toLowerCase() as string });
+}
+
+/** Historical evidence only: bind the loaded source tree and actual engine,
+ * including dirty/untracked runtime files, without trusting a Git HEAD label. */
+function historicalImplementation(executablePath: string) {
+  const sourceRoot = fileURLToPath(new URL("../", import.meta.url));
+  const files: [string, string][] = [];
+  const visit = (relative: string) => {
+    for (const entry of readdirSync(resolve(sourceRoot, relative), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name === "test" || entry.name === "templates") continue;
+      const path = relative ? `${relative}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) visit(path);
+      else if (entry.isFile()) files.push([path, sha256(readFileSync(resolve(sourceRoot, path)))]);
+      else throw new Error("historical source tree contains an unsupported file type");
+    }
+  };
+  visit("");
+  return { sourceTreeSha256: sha256(JSON.stringify(files)), revmBinarySha256: sha256(readFileSync(executablePath)) };
+}
+
 function publicEnvironment(file: string | undefined): Record<string, string> {
   if (!file) return {};
-  const allowed = new Set(["MAINNET_RPC_URL", "BOTVM_ADDRESS", "BOTVM_OWNER", "SEARCHER_REVM_SIM_BIN"]);
+  const allowed = new Set(["MAINNET_RPC_URL", "BOTVM_ADDRESS", "BOTVM_OWNER", "SEARCHER_REVM_SIM_BIN",
+    ...PRODUCTION_FAMILY_ACTIVATIONS.flatMap(entry => entry.envKey === null ? [] : [entry.envKey])]);
   const result: Record<string, string> = {};
   for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
-    const match = line.trim().match(/^(?:export\s+)?([A-Z_]+)=(.*)$/);
+    const match = line.trim().match(/^(?:export\s+)?([A-Z0-9_]+)=(.*)$/);
     if (match && allowed.has(match[1])) result[match[1]] = match[2].trim().replace(/^(['"])(.*)\1$/, "$2");
   }
   return result;
@@ -102,9 +146,14 @@ function publicEnvironment(file: string | undefined): Record<string, string> {
 export async function runAtBlock(argv: string[]): Promise<void> {
   const args = parseAtBlockArgs(argv);
   if (!args) { console.log(HELP); return; }
+  const env = { ...publicEnvironment(args["env-file"]), ...process.env };
+  assertFamilyActivationEnvironment(PRODUCTION_FAMILY_ACTIVATIONS, env);
   assert(!existsSync(args.out), "--out must be a new directory; input files are never overwritten");
   mkdirSync(args.out, { recursive: true, mode: 0o700 });
   const save = (name: string, value: unknown) => writeFileSync(resolve(args.out, name), atBlockJson(value), { flag: "wx", mode: 0o600 });
+  const executorRuntimeCode = args["executor-runtime-code"]
+    ? parseHistoricalExecutorRuntimeCode(readFileSync(args["executor-runtime-code"], "utf8")) : undefined;
+  if (executorRuntimeCode) save("executor-runtime-code.json", executorRuntimeCode);
   const inputBytes = readFileSync(args.ready ?? args.prices!);
   const saved = args.prices ? parseAtBlockJson(inputBytes.toString()) : null;
   const configEnv: NodeJS.ProcessEnv = { ...process.env,
@@ -112,7 +161,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     ...(args["admission-bps"] === undefined ? {} : { SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS: args["admission-bps"] }),
   };
   const cfg = resolveBlockScanCoreConfig(configEnv);
-  const coarseCfg = { ...cfg, maxCandidates: Number(configEnv.SEARCHER_BLOCKSCAN_REFINE_CANDIDATES ?? "512") };
+  const coarseCfg = { ...cfg, maxCandidates: resolveBlockScanRefineCandidates(configEnv, cfg.maxCandidates) };
   const eligibility = createBlockScanExecutionAvailability({ mode: "periodic", evidence: [],
     familyForEdge: id => declarations.currentHeadEvidenceFamilyForEdge(id),
     edgeScopeKey: edge => declarations.currentHeadEvidenceScopeKeyForEdge(edge),
@@ -122,6 +171,14 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     const snapshot = (saved.runtime ?? saved) as AdapterRuntimeSnapshot;
     assert.equal(snapshot.sourceBlock, args.block, "saved price source differs from --block; reprice online first");
     assertAtomicBlockScanRuntime(snapshot);
+    const adapterIds = new Set([
+      ...snapshot.graph.edges.map(edge => edge.adapterId),
+      ...[...snapshot.funding.sources.values()].map(source => source.adapterId),
+    ]);
+    for (const adapterId of adapterIds) {
+      try { catalog.ownerOfAction(adapterId); }
+      catch { throw new Error(`saved prices contain a disabled or unknown adapter ${adapterId}; regenerate prices with the active plugin settings`); }
+    }
     const start = performance.now();
     const result = detectProductionBlockScanOpportunities({ runtime: snapshot, cfg: coarseCfg, swapTouched: null,
       ...eligibility, captureCoarseEnumeration: true });
@@ -133,7 +190,6 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     return;
   }
 
-  const env = { ...publicEnvironment(args["env-file"]), ...process.env };
   const rpcUrl = env.MAINNET_RPC_URL;
   assert(rpcUrl && /^https?:\/\//.test(rpcUrl), "MAINNET_RPC_URL is required");
   const executor = args.executor ?? env.BOTVM_ADDRESS;
@@ -155,7 +211,9 @@ export async function runAtBlock(argv: string[]): Promise<void> {
   const identity = { executor: executor.toLowerCase(), transactionOrigin: owner.toLowerCase() };
   const wiring = createRebuildWiring({ rpcUrl, executionIdentity: identity });
   const instances: PreparedFamilyInstance[] = [], funding: StrictReadyFundingAsset[] = [];
-  for (const memo of activeReadyMemos(envelope)) {
+  const readyMemos = activeReadyMemos(envelope);
+  assertReadyFamilyActivation(readyMemos, wiring.isFamilyEnabled);
+  for (const memo of readyMemos) {
     assert([familyDefinitionHash(memo.familyId), familyMemoDefinitionHash(memo.familyId)].includes(memo.familyDefinitionHash),
       `Ready requires existing selective revalidation: ${memo.familyId}; CLI will not rebuild or drop it`);
     const family = catalog.forStrictFamily(familyId(memo.familyId));
@@ -186,12 +244,14 @@ export async function runAtBlock(argv: string[]): Promise<void> {
   try {
     const chainId = (await provider.getNetwork()).chainId;
     let anchor: ReturnType<typeof parseBlockScanObservedHeader> | undefined;
+    let rawAnchor: Record<string, unknown> | undefined;
     const observeHeader = async (number: number) => {
       assert.equal(number, args.block);
       abort.signal.throwIfAborted();
-      const header = parseBlockScanObservedHeader(await provider.send("eth_getBlockByNumber", [ethers.toQuantity(number), false]), number, chainId);
+      const raw = await provider.send("eth_getBlockByNumber", [ethers.toQuantity(number), false]);
+      const header = parseBlockScanObservedHeader(raw, number, chainId);
       if (anchor) assert.equal(header.hash, anchor.hash, "historical source reorganized");
-      else anchor = header;
+      else { anchor = header; rawAnchor = raw; }
       return header;
     };
     await observeHeader(args.block);
@@ -205,14 +265,38 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     const search = resolveBlockScanSolverSearchConfig(configEnv);
     const simRejects = new BlockScanSimRejectCache();
     let sequence = 0;
+    let simulationSequence = 0;
+    let evSequence = 0;
+    const executablePath = args["revm-bin"] ?? env.SEARCHER_REVM_SIM_BIN;
+    const implementation = args.executionMode === "source-block" ? historicalImplementation(executablePath!) : undefined;
+    const sourceSimulator = args.executionMode === "source-block" ? new SourceBlockSimulator({
+      rpcUrl, executor, owner, chainId: Number(chainId), stateRoot: String(rawAnchor!.stateRoot), executablePath: executablePath!,
+      ...(executorRuntimeCode ? { executorRuntimeCode } : {}),
+      fundingForPlan: plan => {
+        const matches = catalog.listAll().filter(f => f.plugin.manifest.domain === "funding" &&
+          f.plugin.manifest.ownedActionAdapterIds.includes(plan.root.adapterId));
+        assert.equal(matches.length, 1, "source-block requires one registered Funding root");
+        const plugin = matches[0]!.plugin;
+        assert(plugin.manifest.domain === "funding" && "funding" in plugin);
+        const repayment = plugin.funding.repayment;
+        assert.equal(plan.root.target.toLowerCase(), repayment.target.toLowerCase());
+        assert.equal(plan.root.amount, plan.flashAmount);
+        return { asset: plan.profitToken, amount: plan.flashAmount.toString(), target: repayment.target,
+          liquidityHolder: repayment.liquidityHolder };
+      },
+      onResult: (executionInput, result) => save(`simulation-${++simulationSequence}.json`, { implementation, executionInput, result }),
+    }) : undefined;
     const provenance = { readyPath, readySha256: readyHash, topologySource: ready.cutoff, stateSource: anchor,
+      executionMode: args.executionMode, sourceHeader: rawAnchor, chainId: chainId.toString(),
+      ...(executorRuntimeCode ? { counterfactualExecutorCode: { address: executor.toLowerCase(), keccak256: executorRuntimeCode.keccak256 } } : {}),
+      ...(implementation ? { implementation } : {}),
       topologyContainsFutureDiscovery: ready.cutoff.number > args.block, historicalNaturalDiscoveryProven: false,
       broadcast: false, cfg, coarseCfg, policy, search, executor, owner, through: args.through, budgetMs: args.budgetMs };
     save("input.json", provenance);
     loop = new BlockScanRuntimeLoop({
       enabled: true, blockScanConfig: cfg, executionWorkers: [{ state, solver: new AnvilSolver(),
         simulator: new BotVMSimulator(state, executor, owner) }], finalSimulationWorkers: [],
-      directFinalSimulation: Object.assign(new EthSimulateV1Simulator(rpcUrl, executor, owner), { concurrency: 1 }),
+      directFinalSimulation: sourceSimulator ?? Object.assign(new EthSimulateV1Simulator(rpcUrl, executor, owner), { concurrency: 1 }),
       rpcUrl, strictSession: prices.strictSessionFor, runtimeAbort: abort, rethTransportScheduler: scheduler,
       sourceSimulationFactory: createLiveSourceSimulationFactory({ rpcUrl, chainId: Number(chainId),
         executablePath: args["revm-bin"] ?? env.SEARCHER_REVM_SIM_BIN, timeoutMs: 120_000, runtimeAbort: abort,
@@ -229,6 +313,8 @@ export async function runAtBlock(argv: string[]): Promise<void> {
       refineCandidates: coarseCfg.maxCandidates, solveReserveMs: 2500,
       solverGridHalfWidth: search.gridHalfWidth, solverAmountGrid: search.amountGrid, solverGssMaxTries: search.gssMaxTries,
       solverQuoteConcurrency: search.quoteConcurrency, amountReference: prices.blockScanAmountReference,
+      // Historical opt-in forwards the resolved setting; default/live policy is unchanged.
+      ...(sourceSimulator ? { solverQuoteToleranceRawUnits: search.quoteToleranceRawUnits } : {}),
       exactConcurrency: 16, exactProbeTimeoutMs: 4000, executorAddress: executor,
       readBlockSwapTouched: async () => new Set(graph.map(edge => (edge.poolId ?? edge.target).toLowerCase())),
       currentHeadEvidenceFamilyForEdge: id => declarations.currentHeadEvidenceFamilyForEdge(id),
@@ -241,10 +327,17 @@ export async function runAtBlock(argv: string[]): Promise<void> {
       formatRouteKey: opportunity => opportunity.seedEdges.map(e => `${e.adapterId}:${e.poolId ?? e.target}:${e.tokenIn}:${e.tokenOut}`).join("|"),
       formatRing: opportunity => opportunity.seedEdges.map(e => e.tokenIn).join(" → "),
       recordSolvedInput: input => save(`solver-${++sequence}.json`, { route: input.opportunity.seedEdges,
+        ...(implementation ? { implementation } : {}),
         flashAmount: input.resolved.flashAmount, quoteProfit: input.resolved.netProfit,
-        executionInput: buildEthSimulateV1ExecutionInput({ ...input, executor, owner,
+        executionInput: sourceSimulator ? sourceSimulator.captureInput(input.resolved, input, input.scriptHex) : buildEthSimulateV1ExecutionInput({ ...input, executor, owner,
           profitToken: input.resolved.profitToken }) }),
       submitAtomic: input => maybeSubmitBlockScanAtomic({ ...input, provider, config: policy, historicalReadOnly: true,
+        ...(sourceSimulator ? { historicalExecutionMode: "source-block" as const,
+          onHistoricalEv: ({ evaluation, calldata }: { evaluation: Awaited<ReturnType<typeof import("./ev-evaluator.js").evaluateEv>>; calldata: string }) =>
+            save(`ev-${++evSequence}.json`, { executionMode: "source-block", sourceBlock: input.sourceBlock,
+              sourceBlockHash: input.sourceBlockHash, implementation, calldataSha256: sha256(Buffer.from(ethers.getBytes(calldata))),
+              flashAmount: input.resolved.flashAmount, profitToken: input.resolved.profitToken, policy, evaluation }),
+        } : {}),
         collectBlindAudit: true, simRejects, profitTokenValuation: DEFAULT_PROFIT_TOKEN_VALUATION,
         strategyVersions: { strategy_view_version: "historical-diagnostic", blockscan_view_hash: ready.graphHash },
         bundleRouter: { async submit() { throw new Error("historical CLI cannot submit"); } },
@@ -265,6 +358,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     assert(finished, "single pass did not produce a terminal result");
     await observeHeader(args.block);
     assert.equal(sha256(readFileSync(readyPath)), readyHash, "Ready changed during diagnostic");
+    if (implementation) assert.deepEqual(historicalImplementation(executablePath!), implementation, "historical implementation changed during pass");
     console.log(`Historical pass complete; results: ${args.out}`);
   } finally {
     clearTimeout(timeout); process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", interrupt);

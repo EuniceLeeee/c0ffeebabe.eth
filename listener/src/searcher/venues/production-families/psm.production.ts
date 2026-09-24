@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { psmCapture } from "../protocols/psm-family/capture.js";
 import { psmFamilyOwnedAction } from "../protocols/psm-family/action.js";
@@ -10,6 +11,8 @@ import { psmFamilyManifest } from "../protocols/psm-family/manifest.js";
 import { psmPricing } from "../protocols/psm-family/pricing.js";
 import { psmProtocol } from "../protocols/psm-family/protocol.js";
 import { psmRoutes } from "../protocols/psm-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_PSM_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: psmFamilyManifest,

@@ -5,6 +5,7 @@ import {
   mutationOnlyTransitionDiagnostic,
 } from "./pool-impact.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
+import type { SwapObservationBindingResolver } from "../venues/swap-observation.js";
 import {
   matchOracleVictimEffect,
   oracleAffectedGraphEdges,
@@ -60,6 +61,14 @@ export class BackrunDetector implements Detector {
   private graph: TokenEdge[] | null = null;
   private poolAddrs: Map<string, string> | null = null;
   private tokenQuery: TokenQueryBackend | null = null;
+  private resolveBinding?: SwapObservationBindingResolver;
+
+  readonly resolveSwapObservationBinding: SwapObservationBindingResolver = (edge) =>
+    this.resolveBinding?.(edge) ?? null;
+
+  setSwapObservationBindingResolver(resolve: SwapObservationBindingResolver): void {
+    this.resolveBinding = resolve;
+  }
 
   constructor(
     private readonly oracleVictims: readonly OracleVictimRuntimeDescriptor[] =
@@ -95,6 +104,7 @@ export class BackrunDetector implements Detector {
       graph,
       this.poolAddrs,
       this.tokenQuery,
+      this.resolveBinding,
     );
     const reportedUnresolved = event.victimState === "must-overlay"
       ? transition.unresolved

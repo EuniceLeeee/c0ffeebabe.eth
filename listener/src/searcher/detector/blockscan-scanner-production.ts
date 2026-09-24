@@ -54,7 +54,7 @@ export function detectProductionBlockScanOpportunities(
   input: ProductionBlockScanInput,
 ): ProductionBlockScanOutcome {
   assertAtomicRuntime(input.runtime);
-  const usd = effectiveUsdPricing(input.runtime.pricing, input.cfg.usdSignalPairsPerToken);
+  const usd = effectiveUsdPricing(input.runtime.pricing, input.cfg.usdSignalPairsPerToken, input.cfg.allowRepeatedPools);
   const resolvedEdgeKeys = new Set(
     input.runtime.pricing.coverage.resolvedEdgeKeys,
   );

@@ -1,0 +1,1703 @@
+{
+  "schema": "public-effective-enumeration-fixture-v1",
+  "sourceBlock": 26029875,
+  "sourceHash": "0x38ca214bcbd8018d6723e9c50caad370f60b9d785fd5c4a8992402783aca675b",
+  "sourcePriceSha256": "48fea74169fde994269eb4f5b5dab76e389c2ef2fde3acf32d335bfa5cca79ce",
+  "description": "Public graph identities and published amount quotes only; no calldata, secrets, RPC endpoints, balances or artificial funding. Full price snapshot at B=26029875 from N=26029876 hindsight Ready.",
+  "rows": [
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x11950d141EcB863F01007AdD7D1A342041227b58",
+        "instanceKey": "0x11950d141ecb863f01007add7d1a342041227b58",
+        "executionVariantKey": "1b46a18e2dbf2185f1d119666a2f0843117b2a32b41611e8b6c31a2569e6ae61",
+        "canonicalEdgeId": "univ3-standard\u001f0x11950d141ecb863f01007add7d1a342041227b58\u001f0x11950d141ecb863f01007add7d1a342041227b58\u001f0x6982508145454ce325ddbe47a25d4ec3d2311933>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f1b46a18e2dbf2185f1d119666a2f0843117b2a32b41611e8b6c31a2569e6ae61",
+        "tokenIn": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "1080428300731491711962244",
+        "amountOut": "1998025853838801",
+        "mid": 1.8492905567968371e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x11950d141EcB863F01007AdD7D1A342041227b58",
+        "instanceKey": "0x11950d141ecb863f01007add7d1a342041227b58",
+        "executionVariantKey": "cb231d77691f16ee67245869bc60b773f696b05af41049c3d9d9229b8438ad3e",
+        "canonicalEdgeId": "univ3-standard\u001f0x11950d141ecb863f01007add7d1a342041227b58\u001f0x11950d141ecb863f01007add7d1a342041227b58\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x6982508145454ce325ddbe47a25d4ec3d2311933\u001fcb231d77691f16ee67245869bc60b773f696b05af41049c3d9d9229b8438ad3e",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "1074934540326263118460263",
+        "mid": 537467270.1631316
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x11b815efB8f581194ae79006d24E0d814B7697F6",
+        "instanceKey": "0x11b815efb8f581194ae79006d24e0d814b7697f6",
+        "executionVariantKey": "36f7d0e0344290121f77e41275c11a5b48bf8cee98d406cfcab7cedb216edd31",
+        "canonicalEdgeId": "univ3-standard\u001f0x11b815efb8f581194ae79006d24e0d814b7697f6\u001f0x11b815efb8f581194ae79006d24e0d814b7697f6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f36f7d0e0344290121f77e41275c11a5b48bf8cee98d406cfcab7cedb216edd31",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "5489287",
+        "mid": 2.7446435e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x11b815efB8f581194ae79006d24E0d814B7697F6",
+        "instanceKey": "0x11b815efb8f581194ae79006d24e0d814b7697f6",
+        "executionVariantKey": "df9c2fcdf636cf148b37fdd44002f1bd19aebd10c13c9c7ccaeabd1c165eef78",
+        "canonicalEdgeId": "univ3-standard\u001f0x11b815efb8f581194ae79006d24e0d814b7697f6\u001f0x11b815efb8f581194ae79006d24e0d814b7697f6\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fdf9c2fcdf636cf148b37fdd44002f1bd19aebd10c13c9c7ccaeabd1c165eef78",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5491990",
+        "amountOut": "1998983426630506",
+        "mid": 363981621.7128047
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x135Cd19cb3c15f7eB10FC21FF79e1259a65Fc958",
+        "instanceKey": "0x135cd19cb3c15f7eb10fc21ff79e1259a65fc958",
+        "executionVariantKey": "3435fcb9a08ddce5e1256aebad079cbcec082bd5e5a0f158274e8c9291008dcd",
+        "canonicalEdgeId": "univ3-standard\u001f0x135cd19cb3c15f7eb10fc21ff79e1259a65fc958\u001f0x135cd19cb3c15f7eb10fc21ff79e1259a65fc958\u001f0x626e8036deb333b408be468f951bdb42433cbf18>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f3435fcb9a08ddce5e1256aebad079cbcec082bd5e5a0f158274e8c9291008dcd",
+        "tokenIn": "0x626E8036dEB333b408Be468F951bdB42433cBF18",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "43397105924785152064",
+        "amountOut": "1999936491239274",
+        "mid": 0.000046084559064964314
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x135Cd19cb3c15f7eB10FC21FF79e1259a65Fc958",
+        "instanceKey": "0x135cd19cb3c15f7eb10fc21ff79e1259a65fc958",
+        "executionVariantKey": "2fdabbd9fa3b6a802c4cb2a920424d40cfe8c64b94c233aeb973470d6b524a7d",
+        "canonicalEdgeId": "univ3-standard\u001f0x135cd19cb3c15f7eb10fc21ff79e1259a65fc958\u001f0x135cd19cb3c15f7eb10fc21ff79e1259a65fc958\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x626e8036deb333b408be468f951bdb42433cbf18\u001f2fdabbd9fa3b6a802c4cb2a920424d40cfe8c64b94c233aeb973470d6b524a7d",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x626E8036dEB333b408Be468F951bdB42433cBF18",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "43179023888301184122",
+        "mid": 21589.511944150592
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x1445F32D1A74872bA41f3D8cF4022E9996120b31",
+        "instanceKey": "0x1445f32d1a74872ba41f3d8cf4022e9996120b31",
+        "executionVariantKey": "b08e2726e144d80540f73f6b1b5d571614c1a8b63814e0900d59084198f71bbe",
+        "canonicalEdgeId": "univ3-standard\u001f0x1445f32d1a74872ba41f3d8cf4022e9996120b31\u001f0x1445f32d1a74872ba41f3d8cf4022e9996120b31\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fb08e2726e144d80540f73f6b1b5d571614c1a8b63814e0900d59084198f71bbe",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "1999991123213465",
+        "mid": 364108620.494357
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x1445F32D1A74872bA41f3D8cF4022E9996120b31",
+        "instanceKey": "0x1445f32d1a74872ba41f3d8cf4022e9996120b31",
+        "executionVariantKey": "f19d237b02a615fec94d6375b5e219bedb5d88e1b48c4e263366bbe839e00541",
+        "canonicalEdgeId": "univ3-standard\u001f0x1445f32d1a74872ba41f3d8cf4022e9996120b31\u001f0x1445f32d1a74872ba41f3d8cf4022e9996120b31\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001ff19d237b02a615fec94d6375b5e219bedb5d88e1b48c4e263366bbe839e00541",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "5491717",
+        "mid": 2.7458585e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x25392D7129040710f152174Af5019004a6F9b18d",
+        "instanceKey": "0x25392d7129040710f152174af5019004a6f9b18d",
+        "executionVariantKey": "ac3dc9c29aa054f9381ea2143886994763414513ad00495bfa22bbfaadd35e83",
+        "canonicalEdgeId": "univ3-standard\u001f0x25392d7129040710f152174af5019004a6f9b18d\u001f0x25392d7129040710f152174af5019004a6f9b18d\u001f0x72e4f9f808c49a2a61de9c5896298920dc4eeea9>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fac3dc9c29aa054f9381ea2143886994763414513ad00495bfa22bbfaadd35e83",
+        "tokenIn": "0x72e4f9F808C49A2a61dE9C5896298920Dc4EEEa9",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "32132603656",
+        "amountOut": "1999980716128195",
+        "mid": 62241.47714698949
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x25392D7129040710f152174Af5019004a6F9b18d",
+        "instanceKey": "0x25392d7129040710f152174af5019004a6f9b18d",
+        "executionVariantKey": "d06c4a09ea00adec6bb4ad796d327a1d9efa6e8d7399f26251b01a4470729b04",
+        "canonicalEdgeId": "univ3-standard\u001f0x25392d7129040710f152174af5019004a6f9b18d\u001f0x25392d7129040710f152174af5019004a6f9b18d\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x72e4f9f808c49a2a61de9c5896298920dc4eeea9\u001fd06c4a09ea00adec6bb4ad796d327a1d9efa6e8d7399f26251b01a4470729b04",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x72e4f9F808C49A2a61dE9C5896298920Dc4EEEa9",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "31939790185",
+        "mid": 0.0000159698950925
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x3202AcfD55232f3706aa81a4F18A98686B5e1d1B",
+        "instanceKey": "0x3202acfd55232f3706aa81a4f18a98686b5e1d1b",
+        "executionVariantKey": "afba948a971bb33a50236c6e3c6db22b7b49bbabf75afd6b5e0e789b2400289e",
+        "canonicalEdgeId": "univ3-standard\u001f0x3202acfd55232f3706aa81a4f18a98686b5e1d1b\u001f0x3202acfd55232f3706aa81a4f18a98686b5e1d1b\u001f0x6982508145454ce325ddbe47a25d4ec3d2311933>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fafba948a971bb33a50236c6e3c6db22b7b49bbabf75afd6b5e0e789b2400289e",
+        "tokenIn": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "1080428300731491711962244",
+        "amountOut": "1963964388911807",
+        "mid": 1.8177646657183333e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x3202AcfD55232f3706aa81a4F18A98686B5e1d1B",
+        "instanceKey": "0x3202acfd55232f3706aa81a4f18a98686b5e1d1b",
+        "executionVariantKey": "db8c1a316ca6741e6b9312295d1ce7dc8c35eb8354a7fa0bd7f1de0e9ea45640",
+        "canonicalEdgeId": "univ3-standard\u001f0x3202acfd55232f3706aa81a4f18a98686b5e1d1b\u001f0x3202acfd55232f3706aa81a4f18a98686b5e1d1b\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x6982508145454ce325ddbe47a25d4ec3d2311933\u001fdb8c1a316ca6741e6b9312295d1ce7dc8c35eb8354a7fa0bd7f1de0e9ea45640",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "1077952247520523659113319",
+        "mid": 538976123.7602618
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x3470447f3CecfFAc709D3e783A307790b0208d60",
+        "instanceKey": "0x3470447f3cecffac709d3e783a307790b0208d60",
+        "executionVariantKey": "0a0d630ea70ae34c4aa3a7b8a60fef009272e9291e45e8ac0e0228ba53b7ee9a",
+        "canonicalEdgeId": "univ3-standard\u001f0x3470447f3cecffac709d3e783a307790b0208d60\u001f0x3470447f3cecffac709d3e783a307790b0208d60\u001f0x1f9840a85d5af5bf1d1762f925bdaddc4201f984>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f0a0d630ea70ae34c4aa3a7b8a60fef009272e9291e45e8ac0e0228ba53b7ee9a",
+        "tokenIn": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "603055634877085682",
+        "amountOut": "5470477",
+        "mid": 9.071264214478301e-12
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x3470447f3CecfFAc709D3e783A307790b0208d60",
+        "instanceKey": "0x3470447f3cecffac709d3e783a307790b0208d60",
+        "executionVariantKey": "036f9eb42dda6bdb4d6aad923ca36ede79e44408606c9b3325b01ce63478504b",
+        "canonicalEdgeId": "univ3-standard\u001f0x3470447f3cecffac709d3e783a307790b0208d60\u001f0x3470447f3cecffac709d3e783a307790b0208d60\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0x1f9840a85d5af5bf1d1762f925bdaddc4201f984\u001f036f9eb42dda6bdb4d6aad923ca36ede79e44408606c9b3325b01ce63478504b",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5491990",
+        "amountOut": "601799142244630960",
+        "mid": 109577610710.2582
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x5d4F3C6fA16908609BAC31Ff148Bd002AA6b8c83",
+        "instanceKey": "0x5d4f3c6fa16908609bac31ff148bd002aa6b8c83",
+        "executionVariantKey": "1062e2d6aba7598c8a34479b58b5d92bf9826aad59dbe8da014c02840dc90056",
+        "canonicalEdgeId": "univ3-standard\u001f0x5d4f3c6fa16908609bac31ff148bd002aa6b8c83\u001f0x5d4f3c6fa16908609bac31ff148bd002aa6b8c83\u001f0x514910771af9ca656af840dff83e8264ecf986ca>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f1062e2d6aba7598c8a34479b58b5d92bf9826aad59dbe8da014c02840dc90056",
+        "tokenIn": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "423436433490345401",
+        "amountOut": "1999994362231172",
+        "mid": 0.00472324581459704
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x5d4F3C6fA16908609BAC31Ff148Bd002AA6b8c83",
+        "instanceKey": "0x5d4f3c6fa16908609bac31ff148bd002aa6b8c83",
+        "executionVariantKey": "533badabedc889f9d3b34af2596f263348af8c6494eb556f23572b3c69e93b13",
+        "canonicalEdgeId": "univ3-standard\u001f0x5d4f3c6fa16908609bac31ff148bd002aa6b8c83\u001f0x5d4f3c6fa16908609bac31ff148bd002aa6b8c83\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x514910771af9ca656af840dff83e8264ecf986ca\u001f533badabedc889f9d3b34af2596f263348af8c6494eb556f23572b3c69e93b13",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "423011911087131632",
+        "mid": 211.50595554356582
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x6CA298D2983aB03Aa1dA7679389D955A4eFEE15C",
+        "instanceKey": "0x6ca298d2983ab03aa1da7679389d955a4efee15c",
+        "executionVariantKey": "3a65de597f2f47d774c9e9f623353fbe76cc8531681757c49ed0266cefcd295a",
+        "canonicalEdgeId": "univ3-standard\u001f0x6ca298d2983ab03aa1da7679389d955a4efee15c\u001f0x6ca298d2983ab03aa1da7679389d955a4efee15c\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f3a65de597f2f47d774c9e9f623353fbe76cc8531681757c49ed0266cefcd295a",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "5486432",
+        "mid": 2.743216e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x6CA298D2983aB03Aa1dA7679389D955A4eFEE15C",
+        "instanceKey": "0x6ca298d2983ab03aa1da7679389d955a4efee15c",
+        "executionVariantKey": "47e16fa0e4f9fb2206cbdb4666991b110bd7eb851e439863046ec3b59fec09a7",
+        "canonicalEdgeId": "univ3-standard\u001f0x6ca298d2983ab03aa1da7679389d955a4efee15c\u001f0x6ca298d2983ab03aa1da7679389d955a4efee15c\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f47e16fa0e4f9fb2206cbdb4666991b110bd7eb851e439863046ec3b59fec09a7",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5491990",
+        "amountOut": "1999975859613461",
+        "mid": 364162327.2463098
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+        "instanceKey": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+        "executionVariantKey": "e8e4a8db9aeee952664a7a33f9cb77dde358972d463540ec946aa457efc0afd7",
+        "canonicalEdgeId": "univ3-standard\u001f0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640\u001f0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fe8e4a8db9aeee952664a7a33f9cb77dde358972d463540ec946aa457efc0afd7",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "1999422752917458",
+        "mid": 364005145.772891
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+        "instanceKey": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+        "executionVariantKey": "d2eb24ab8555138480c3b26d2fbc72904f984a3863364052724aae1bd6953e42",
+        "canonicalEdgeId": "univ3-standard\u001f0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640\u001f0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fd2eb24ab8555138480c3b26d2fbc72904f984a3863364052724aae1bd6953e42",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "5488933",
+        "mid": 2.7444665e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x99ac8cA7087fA4A2A1FB6357269965A2014ABc35",
+        "instanceKey": "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35",
+        "executionVariantKey": "19d097ba3f450fe9b68b4a5f73433dc2231a418fd4c9a39e6eda9fc2687a75d4",
+        "canonicalEdgeId": "univ3-standard\u001f0x99ac8ca7087fa4a2a1fb6357269965a2014abc35\u001f0x99ac8ca7087fa4a2a1fb6357269965a2014abc35\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f19d097ba3f450fe9b68b4a5f73433dc2231a418fd4c9a39e6eda9fc2687a75d4",
+        "tokenIn": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "6418",
+        "amountOut": "5481974",
+        "mid": 854.1561234029292
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x99ac8cA7087fA4A2A1FB6357269965A2014ABc35",
+        "instanceKey": "0x99ac8ca7087fa4a2a1fb6357269965a2014abc35",
+        "executionVariantKey": "39a934ad012e1aa3ca96737d33d6ba4251a5a6369a59d1b986aba16b78c06e1d",
+        "canonicalEdgeId": "univ3-standard\u001f0x99ac8ca7087fa4a2a1fb6357269965a2014abc35\u001f0x99ac8ca7087fa4a2a1fb6357269965a2014abc35\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x2260fac5e5542a773aa44fbcfedf7c193bc2c599\u001f39a934ad012e1aa3ca96737d33d6ba4251a5a6369a59d1b986aba16b78c06e1d",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "6391",
+        "mid": 0.00116351426092358
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x9a772018FbD77fcD2d25657e5C547BAfF3Fd7D16",
+        "instanceKey": "0x9a772018fbd77fcd2d25657e5c547baff3fd7d16",
+        "executionVariantKey": "7b259093a626e938db5a0cc396c55543b76564de34fdaecbec8dcb7a68b0fde1",
+        "canonicalEdgeId": "univ3-standard\u001f0x9a772018fbd77fcd2d25657e5c547baff3fd7d16\u001f0x9a772018fbd77fcd2d25657e5c547baff3fd7d16\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f7b259093a626e938db5a0cc396c55543b76564de34fdaecbec8dcb7a68b0fde1",
+        "tokenIn": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "6418",
+        "amountOut": "5486241",
+        "mid": 854.8209722655033
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x9a772018FbD77fcD2d25657e5C547BAfF3Fd7D16",
+        "instanceKey": "0x9a772018fbd77fcd2d25657e5c547baff3fd7d16",
+        "executionVariantKey": "c86d9ae072b840bac5a63073053d2847bf0f52e4165b35c9a3c71dbbc65e98ba",
+        "canonicalEdgeId": "univ3-standard\u001f0x9a772018fbd77fcd2d25657e5c547baff3fd7d16\u001f0x9a772018fbd77fcd2d25657e5c547baff3fd7d16\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x2260fac5e5542a773aa44fbcfedf7c193bc2c599\u001fc86d9ae072b840bac5a63073053d2847bf0f52e4165b35c9a3c71dbbc65e98ba",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "6418",
+        "mid": 0.0011684297491171237
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x9e0905249CeEFfFB9605E034b534544684A58BE6",
+        "instanceKey": "0x9e0905249ceefffb9605e034b534544684a58be6",
+        "executionVariantKey": "8d0a2e8108af1c173b2f0d8b5e1dad0a95ed6507cb8603b903b5b17a356209fa",
+        "canonicalEdgeId": "univ3-standard\u001f0x9e0905249ceefffb9605e034b534544684a58be6\u001f0x9e0905249ceefffb9605e034b534544684a58be6\u001f0x2b591e99afe9f32eaa6214f7b7629768c40eeb39>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f8d0a2e8108af1c173b2f0d8b5e1dad0a95ed6507cb8603b903b5b17a356209fa",
+        "tokenIn": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "429979005588",
+        "amountOut": "1996455287619114",
+        "mid": 4643.145971485153
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0x9e0905249CeEFfFB9605E034b534544684A58BE6",
+        "instanceKey": "0x9e0905249ceefffb9605e034b534544684a58be6",
+        "executionVariantKey": "fb7620bf7eb7a2830a319e54e74084b9c85ce58c8f85fe6ff42e0e94b4999217",
+        "canonicalEdgeId": "univ3-standard\u001f0x9e0905249ceefffb9605e034b534544684a58be6\u001f0x9e0905249ceefffb9605e034b534544684a58be6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x2b591e99afe9f32eaa6214f7b7629768c40eeb39\u001ffb7620bf7eb7a2830a319e54e74084b9c85ce58c8f85fe6ff42e0e94b4999217",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "428104968462",
+        "mid": 0.000214052484231
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+        "instanceKey": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+        "executionVariantKey": "272116a02f2aed97aaf15afbad97abd5184bd2915679430586ee1ea2b633a6c8",
+        "canonicalEdgeId": "univ3-standard\u001f0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b\u001f0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f272116a02f2aed97aaf15afbad97abd5184bd2915679430586ee1ea2b633a6c8",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "5493736",
+        "mid": 2.746868e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+        "instanceKey": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+        "executionVariantKey": "b43678075e8549e515839d2dd6707afbb412d1d0a78f0b6747fbf60f8478efb4",
+        "canonicalEdgeId": "univ3-standard\u001f0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b\u001f0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fb43678075e8549e515839d2dd6707afbb412d1d0a78f0b6747fbf60f8478efb4",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5491990",
+        "amountOut": "1998960413196566",
+        "mid": 363977431.3493954
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xD0fC8bA7E267f2bc56044A7715A489d851dC6D78",
+        "instanceKey": "0xd0fc8ba7e267f2bc56044a7715a489d851dc6d78",
+        "executionVariantKey": "c3f6e6fbd9b486c4a87a6ca5366d8c23d9caa0024e53caea9bc3c1282db889e9",
+        "canonicalEdgeId": "univ3-standard\u001f0xd0fc8ba7e267f2bc56044a7715a489d851dc6d78\u001f0xd0fc8ba7e267f2bc56044a7715a489d851dc6d78\u001f0x1f9840a85d5af5bf1d1762f925bdaddc4201f984>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc3f6e6fbd9b486c4a87a6ca5366d8c23d9caa0024e53caea9bc3c1282db889e9",
+        "tokenIn": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "603055634877085682",
+        "amountOut": "5470169",
+        "mid": 9.070753482164089e-12
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xD0fC8bA7E267f2bc56044A7715A489d851dC6D78",
+        "instanceKey": "0xd0fc8ba7e267f2bc56044a7715a489d851dc6d78",
+        "executionVariantKey": "d986ef3701b174738bd2ddffc1affb74a4f7d7883f76133d39d8fe6a5852e424",
+        "canonicalEdgeId": "univ3-standard\u001f0xd0fc8ba7e267f2bc56044a7715a489d851dc6d78\u001f0xd0fc8ba7e267f2bc56044a7715a489d851dc6d78\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x1f9840a85d5af5bf1d1762f925bdaddc4201f984\u001fd986ef3701b174738bd2ddffc1affb74a4f7d7883f76133d39d8fe6a5852e424",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "601924581980839836",
+        "mid": 109583450967.79405
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xE0554a476A092703abdB3Ef35c80e0D76d32939F",
+        "instanceKey": "0xe0554a476a092703abdb3ef35c80e0d76d32939f",
+        "executionVariantKey": "6305cc9feb1e67fd47a4bfd11d513ae30238c1bbd4c0432c646fdb4494980cc3",
+        "canonicalEdgeId": "univ3-standard\u001f0xe0554a476a092703abdb3ef35c80e0d76d32939f\u001f0xe0554a476a092703abdb3ef35c80e0d76d32939f\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f6305cc9feb1e67fd47a4bfd11d513ae30238c1bbd4c0432c646fdb4494980cc3",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "1999650898565424",
+        "mid": 364046680.85581636
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xE0554a476A092703abdB3Ef35c80e0D76d32939F",
+        "instanceKey": "0xe0554a476a092703abdb3ef35c80e0d76d32939f",
+        "executionVariantKey": "3053f4feaca216359dee3af107ffcfe17dd719d1e12d8366bb02d55be040b025",
+        "canonicalEdgeId": "univ3-standard\u001f0xe0554a476a092703abdb3ef35c80e0d76d32939f\u001f0xe0554a476a092703abdb3ef35c80e0d76d32939f\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f3053f4feaca216359dee3af107ffcfe17dd719d1e12d8366bb02d55be040b025",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "5492700",
+        "mid": 2.74635e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xe6ff8b9A37B0fab776134636D9981Aa778c4e718",
+        "instanceKey": "0xe6ff8b9a37b0fab776134636d9981aa778c4e718",
+        "executionVariantKey": "c1a5dbd2040ad332e0360bfad38ed3a10f80e11b0bb0026dc94fc017935b046b",
+        "canonicalEdgeId": "univ3-standard\u001f0xe6ff8b9a37b0fab776134636d9981aa778c4e718\u001f0xe6ff8b9a37b0fab776134636d9981aa778c4e718\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fc1a5dbd2040ad332e0360bfad38ed3a10f80e11b0bb0026dc94fc017935b046b",
+        "tokenIn": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "6418",
+        "amountOut": "1999956637383019",
+        "mid": 311616802334.5308
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xe6ff8b9A37B0fab776134636D9981Aa778c4e718",
+        "instanceKey": "0xe6ff8b9a37b0fab776134636d9981aa778c4e718",
+        "executionVariantKey": "0946231520c76b37c710ddcc285a00f7769250f9948876bf28055567c28bbf47",
+        "canonicalEdgeId": "univ3-standard\u001f0xe6ff8b9a37b0fab776134636d9981aa778c4e718\u001f0xe6ff8b9a37b0fab776134636d9981aa778c4e718\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x2260fac5e5542a773aa44fbcfedf7c193bc2c599\u001f0946231520c76b37c710ddcc285a00f7769250f9948876bf28055567c28bbf47",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "6416",
+        "mid": 3.208e-12
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xf8e349d1d827a6EdF17eE673664CFAd4ca78C533",
+        "instanceKey": "0xf8e349d1d827a6edf17ee673664cfad4ca78c533",
+        "executionVariantKey": "5d1b43f50b76af3e8b9af23ed199b012a6b083325ef25e2e7ed0255fec501183",
+        "canonicalEdgeId": "univ3-standard\u001f0xf8e349d1d827a6edf17ee673664cfad4ca78c533\u001f0xf8e349d1d827a6edf17ee673664cfad4ca78c533\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xbdf43ecadc5cef51b7d1772f722e40596bc1788b\u001f5d1b43f50b76af3e8b9af23ed199b012a6b083325ef25e2e7ed0255fec501183",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0xbdF43ecAdC5ceF51B7D1772F722E40596BC1788B",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "92257157923767731955",
+        "mid": 16795887797931.877
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xf8e349d1d827a6EdF17eE673664CFAd4ca78C533",
+        "instanceKey": "0xf8e349d1d827a6edf17ee673664cfad4ca78c533",
+        "executionVariantKey": "7e013b97eb40c8421b299981d17f185ef917bf9eca9876ba017ee0e23a01519f",
+        "canonicalEdgeId": "univ3-standard\u001f0xf8e349d1d827a6edf17ee673664cfad4ca78c533\u001f0xf8e349d1d827a6edf17ee673664cfad4ca78c533\u001f0xbdf43ecadc5cef51b7d1772f722e40596bc1788b>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f7e013b97eb40c8421b299981d17f185ef917bf9eca9876ba017ee0e23a01519f",
+        "tokenIn": "0xbdF43ecAdC5ceF51B7D1772F722E40596BC1788B",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "92813239684002173359",
+        "amountOut": "5492838",
+        "mid": 5.91816212719356e-14
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xfaA318479b7755b2dBfDD34dC306cb28B420Ad12",
+        "instanceKey": "0xfaa318479b7755b2dbfdd34dc306cb28b420ad12",
+        "executionVariantKey": "1bdb1507578c9f558215c81c9da3e9e1ec195d9f66e8c7b916b2eb3190462987",
+        "canonicalEdgeId": "univ3-standard\u001f0xfaa318479b7755b2dbfdd34dc306cb28b420ad12\u001f0xfaa318479b7755b2dbfdd34dc306cb28b420ad12\u001f0x1f9840a85d5af5bf1d1762f925bdaddc4201f984>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f1bdb1507578c9f558215c81c9da3e9e1ec195d9f66e8c7b916b2eb3190462987",
+        "tokenIn": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "603055634877085682",
+        "amountOut": "1999958980692015",
+        "mid": 0.003316375579675406
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ3-swap",
+        "target": "0xfaA318479b7755b2dBfDD34dC306cb28B420Ad12",
+        "instanceKey": "0xfaa318479b7755b2dbfdd34dc306cb28b420ad12",
+        "executionVariantKey": "94757517af0fbe1335815a77068fae721e1748ae7af44a40d7cf95d6bc2af5c5",
+        "canonicalEdgeId": "univ3-standard\u001f0xfaa318479b7755b2dbfdd34dc306cb28b420ad12\u001f0xfaa318479b7755b2dbfdd34dc306cb28b420ad12\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x1f9840a85d5af5bf1d1762f925bdaddc4201f984\u001f94757517af0fbe1335815a77068fae721e1748ae7af44a40d7cf95d6bc2af5c5",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "602440380087000054",
+        "mid": 301.22019004350005
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0x43DE4318b6EB91a7cF37975dBB574396A7b5B5c6",
+        "instanceKey": "0x43de4318b6eb91a7cf37975dbb574396a7b5b5c6",
+        "executionVariantKey": "622d783c06b20e387dcafd5885b4ab80d65152d6d5c650c5702d47579b0fc827",
+        "canonicalEdgeId": "univ2-standard\u001f0x43de4318b6eb91a7cf37975dbb574396a7b5b5c6\u001f0x43de4318b6eb91a7cf37975dbb574396a7b5b5c6\u001f0x38e68a37e401f7271568cecaac63c6b1e19130b4>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f622d783c06b20e387dcafd5885b4ab80d65152d6d5c650c5702d47579b0fc827",
+        "tokenIn": "0x38E68A37E401F7271568CecaAc63c6B1e19130B4",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "1333318649340648812",
+        "amountOut": "1999993491528313",
+        "mid": 0.0015000116382661772
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0x43DE4318b6EB91a7cF37975dBB574396A7b5B5c6",
+        "instanceKey": "0x43de4318b6eb91a7cf37975dbb574396a7b5b5c6",
+        "executionVariantKey": "fddb7ab891c158b0caf0278b46a5f0b02d2c912df0705cc40587c7c25345d4fb",
+        "canonicalEdgeId": "univ2-standard\u001f0x43de4318b6eb91a7cf37975dbb574396a7b5b5c6\u001f0x43de4318b6eb91a7cf37975dbb574396a7b5b5c6\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x38e68a37e401f7271568cecaac63c6b1e19130b4\u001ffddb7ab891c158b0caf0278b46a5f0b02d2c912df0705cc40587c7c25345d4fb",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x38E68A37E401F7271568CecaAc63c6B1e19130B4",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "1325326437312433743",
+        "mid": 662.6632186562168
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0x55D5c232D921B9eAA6b37b5845E439aCD04b4DBa",
+        "instanceKey": "0x55d5c232d921b9eaa6b37b5845e439acd04b4dba",
+        "executionVariantKey": "e8f0c94b04139dcd131e2a1e7c526e519f3499af7389c9ddf10367a83f6b88b6",
+        "canonicalEdgeId": "univ2-standard\u001f0x55d5c232d921b9eaa6b37b5845e439acd04b4dba\u001f0x55d5c232d921b9eaa6b37b5845e439acd04b4dba\u001f0x2b591e99afe9f32eaa6214f7b7629768c40eeb39>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fe8f0c94b04139dcd131e2a1e7c526e519f3499af7389c9ddf10367a83f6b88b6",
+        "tokenIn": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "429979005588",
+        "amountOut": "1994762813696485",
+        "mid": 4639.209793437774
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0x55D5c232D921B9eAA6b37b5845E439aCD04b4DBa",
+        "instanceKey": "0x55d5c232d921b9eaa6b37b5845e439acd04b4dba",
+        "executionVariantKey": "a36f74fbb9e834fb72ac8e689dee0810cb270cda332fe6ba5a416b7f00acf295",
+        "canonicalEdgeId": "univ2-standard\u001f0x55d5c232d921b9eaa6b37b5845e439acd04b4dba\u001f0x55d5c232d921b9eaa6b37b5845e439acd04b4dba\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x2b591e99afe9f32eaa6214f7b7629768c40eeb39\u001fa36f74fbb9e834fb72ac8e689dee0810cb270cda332fe6ba5a416b7f00acf295",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "428508031083",
+        "mid": 0.0002142540155415
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0x746Ef017b78F8e4155ABd1840EE56E2EABe8BDFf",
+        "instanceKey": "0x746ef017b78f8e4155abd1840ee56e2eabe8bdff",
+        "executionVariantKey": "f651d625941ff803201cbaccf5380f54ddb012088b5395ff7d4d207159e07ead",
+        "canonicalEdgeId": "univ2-standard\u001f0x746ef017b78f8e4155abd1840ee56e2eabe8bdff\u001f0x746ef017b78f8e4155abd1840ee56e2eabe8bdff\u001f0x2b591e99afe9f32eaa6214f7b7629768c40eeb39>0xd0a69fd9da28840603fbd76a8a0bccf0adb979e8\u001ff651d625941ff803201cbaccf5380f54ddb012088b5395ff7d4d207159e07ead",
+        "tokenIn": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "tokenOut": "0xD0A69fd9DA28840603FBD76A8a0bCCF0aDb979E8",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "429979005588",
+        "amountOut": "29316734835338426210",
+        "mid": 68181782.02735163
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0x746Ef017b78F8e4155ABd1840EE56E2EABe8BDFf",
+        "instanceKey": "0x746ef017b78f8e4155abd1840ee56e2eabe8bdff",
+        "executionVariantKey": "e3b11fe41424d27e36f5db5a3ebaa48594e65d8d4db911c7da2a3c8d6f6de724",
+        "canonicalEdgeId": "univ2-standard\u001f0x746ef017b78f8e4155abd1840ee56e2eabe8bdff\u001f0x746ef017b78f8e4155abd1840ee56e2eabe8bdff\u001f0xd0a69fd9da28840603fbd76a8a0bccf0adb979e8>0x2b591e99afe9f32eaa6214f7b7629768c40eeb39\u001fe3b11fe41424d27e36f5db5a3ebaa48594e65d8d4db911c7da2a3c8d6f6de724",
+        "tokenIn": "0xD0A69fd9DA28840603FBD76A8a0bCCF0aDb979E8",
+        "tokenOut": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "28902958331538892935",
+        "amountOut": "419599282758",
+        "mid": 1.4517520246366389e-8
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0x7fd91C569F66bA7EDA9b72454e879c206c44c0E1",
+        "instanceKey": "0x7fd91c569f66ba7eda9b72454e879c206c44c0e1",
+        "executionVariantKey": "e19aa6e8ae982119497568d00291be5f03a94ca9566b47632db23db08b6127e6",
+        "canonicalEdgeId": "univ2-standard\u001f0x7fd91c569f66ba7eda9b72454e879c206c44c0e1\u001f0x7fd91c569f66ba7eda9b72454e879c206c44c0e1\u001f0x54d2252757e1672eead234d27b1270728ff90581>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fe19aa6e8ae982119497568d00291be5f03a94ca9566b47632db23db08b6127e6",
+        "tokenIn": "0x54D2252757e1672EEaD234D27B1270728fF90581",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2584968221351598307",
+        "amountOut": "1999957056817704",
+        "mid": 0.0007736872895760358
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0x7fd91C569F66bA7EDA9b72454e879c206c44c0E1",
+        "instanceKey": "0x7fd91c569f66ba7eda9b72454e879c206c44c0e1",
+        "executionVariantKey": "6e7580fb461228545d547ebc33893f3ad9ff5ac3cf2d43752f13c20b62064829",
+        "canonicalEdgeId": "univ2-standard\u001f0x7fd91c569f66ba7eda9b72454e879c206c44c0e1\u001f0x7fd91c569f66ba7eda9b72454e879c206c44c0e1\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x54d2252757e1672eead234d27b1270728ff90581\u001f6e7580fb461228545d547ebc33893f3ad9ff5ac3cf2d43752f13c20b62064829",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x54D2252757e1672EEaD234D27B1270728fF90581",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "2569426671386494132",
+        "mid": 1284.713335693247
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0x9e4C98a6E67f2aD1eA41e37536E86a22bb445B4A",
+        "instanceKey": "0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a",
+        "executionVariantKey": "3ac18af7558320da2d504f4d19bfaf1827d1da4d45992bc814a99b1ef22a9e6c",
+        "canonicalEdgeId": "univ2-standard\u001f0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a\u001f0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a\u001f0x6b175474e89094c44da98b954eedeac495271d0f>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f3ac18af7558320da2d504f4d19bfaf1827d1da4d45992bc814a99b1ef22a9e6c",
+        "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5525111583382223805",
+        "amountOut": "1999217835006847",
+        "mid": 0.00036184207410758137
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0x9e4C98a6E67f2aD1eA41e37536E86a22bb445B4A",
+        "instanceKey": "0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a",
+        "executionVariantKey": "ba286004c143abf93ac26d0f2a30ac1ef994a097cf54dc6f428af6417b6ceab4",
+        "canonicalEdgeId": "univ2-standard\u001f0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a\u001f0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x6b175474e89094c44da98b954eedeac495271d0f\u001fba286004c143abf93ac26d0f2a30ac1ef994a097cf54dc6f428af6417b6ceab4",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "5489869251629227512",
+        "mid": 2744.9346258146134
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0xA43fe16908251ee70EF74718545e4FE6C5cCEc9f",
+        "instanceKey": "0xa43fe16908251ee70ef74718545e4fe6c5ccec9f",
+        "executionVariantKey": "8564915c51283d676d79fa4568bc992d61e2de15f2bf4ce42f975045f1da107f",
+        "canonicalEdgeId": "univ2-standard\u001f0xa43fe16908251ee70ef74718545e4fe6c5ccec9f\u001f0xa43fe16908251ee70ef74718545e4fe6c5ccec9f\u001f0x6982508145454ce325ddbe47a25d4ec3d2311933>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f8564915c51283d676d79fa4568bc992d61e2de15f2bf4ce42f975045f1da107f",
+        "tokenIn": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "1080428300731491711962244",
+        "amountOut": "1999999366412425",
+        "mid": 1.8511171588696336e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0xA43fe16908251ee70EF74718545e4FE6C5cCEc9f",
+        "instanceKey": "0xa43fe16908251ee70ef74718545e4fe6c5ccec9f",
+        "executionVariantKey": "94b805d8ac1e900ab7aed7899827608f64eaa94541835ca93bb2a1af7eb1163f",
+        "canonicalEdgeId": "univ2-standard\u001f0xa43fe16908251ee70ef74718545e4fe6c5ccec9f\u001f0xa43fe16908251ee70ef74718545e4fe6c5ccec9f\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x6982508145454ce325ddbe47a25d4ec3d2311933\u001f94b805d8ac1e900ab7aed7899827608f64eaa94541835ca93bb2a1af7eb1163f",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "1073955115580060162509269",
+        "mid": 536977557.79003
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0xDDd23787a6B80A794d952f5fb036D0b31A8E6aff",
+        "instanceKey": "0xddd23787a6b80a794d952f5fb036d0b31a8e6aff",
+        "executionVariantKey": "be8ec9806ddf2b55402fb64a3ca24765d8401ddc9aa586b10615c6d443c80891",
+        "canonicalEdgeId": "univ2-standard\u001f0xddd23787a6b80a794d952f5fb036d0b31a8e6aff\u001f0xddd23787a6b80a794d952f5fb036d0b31a8e6aff\u001f0xa9e8acf069c58aec8825542845fd754e41a9489a>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fbe8ec9806ddf2b55402fb64a3ca24765d8401ddc9aa586b10615c6d443c80891",
+        "tokenIn": "0xA9E8aCf069C58aEc8825542845Fd754e41a9489A",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "36792289158576009419",
+        "amountOut": "1999988732585421",
+        "mid": 0.00005435890993260577
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0xDDd23787a6B80A794d952f5fb036D0b31A8E6aff",
+        "instanceKey": "0xddd23787a6b80a794d952f5fb036d0b31a8e6aff",
+        "executionVariantKey": "aae4e621873e083882d8b0991edd4b7faf2da6f51ed6781cc6136740f410768f",
+        "canonicalEdgeId": "univ2-standard\u001f0xddd23787a6b80a794d952f5fb036d0b31a8e6aff\u001f0xddd23787a6b80a794d952f5fb036d0b31a8e6aff\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa9e8acf069c58aec8825542845fd754e41a9489a\u001faae4e621873e083882d8b0991edd4b7faf2da6f51ed6781cc6136740f410768f",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xA9E8aCf069C58aEc8825542845Fd754e41a9489A",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "36571661137137882977",
+        "mid": 18285.83056856894
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0xeC649b868feC4a8155592377868005827c16bDEd",
+        "instanceKey": "0xec649b868fec4a8155592377868005827c16bded",
+        "executionVariantKey": "6556838204f6f4a3f6ab17ca6deb3a436cbfaa2f3496341a85ef1de0115dbfa8",
+        "canonicalEdgeId": "univ2-standard\u001f0xec649b868fec4a8155592377868005827c16bded\u001f0xec649b868fec4a8155592377868005827c16bded\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd0a69fd9da28840603fbd76a8a0bccf0adb979e8\u001f6556838204f6f4a3f6ab17ca6deb3a436cbfaa2f3496341a85ef1de0115dbfa8",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xD0A69fd9DA28840603FBD76A8a0bCCF0aDb979E8",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "28699394287123152684",
+        "mid": 14349.697143561576
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0xeC649b868feC4a8155592377868005827c16bDEd",
+        "instanceKey": "0xec649b868fec4a8155592377868005827c16bded",
+        "executionVariantKey": "3505bb98fc385af0631e65e15fc21e452d289dd91bc53a3368ad6f38210ec412",
+        "canonicalEdgeId": "univ2-standard\u001f0xec649b868fec4a8155592377868005827c16bded\u001f0xec649b868fec4a8155592377868005827c16bded\u001f0xd0a69fd9da28840603fbd76a8a0bccf0adb979e8>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f3505bb98fc385af0631e65e15fc21e452d289dd91bc53a3368ad6f38210ec412",
+        "tokenIn": "0xD0A69fd9DA28840603FBD76A8a0bCCF0aDb979E8",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "28902958331538892935",
+        "amountOut": "1997876921042269",
+        "mid": 0.00006912361351129191
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0xF6DCdce0ac3001B2f67F750bc64ea5beB37B5824",
+        "instanceKey": "0xf6dcdce0ac3001b2f67f750bc64ea5beb37b5824",
+        "executionVariantKey": "f1bbcbdedb28e26eec22001d556b2eb87af16961766dc068001a7b7c74dc44d4",
+        "canonicalEdgeId": "univ2-standard\u001f0xf6dcdce0ac3001b2f67f750bc64ea5beb37b5824\u001f0xf6dcdce0ac3001b2f67f750bc64ea5beb37b5824\u001f0x2b591e99afe9f32eaa6214f7b7629768c40eeb39>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001ff1bbcbdedb28e26eec22001d556b2eb87af16961766dc068001a7b7c74dc44d4",
+        "tokenIn": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "429979005588",
+        "amountOut": "5505511",
+        "mid": 0.00001280413910551555
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0xF6DCdce0ac3001B2f67F750bc64ea5beB37B5824",
+        "instanceKey": "0xf6dcdce0ac3001b2f67f750bc64ea5beb37b5824",
+        "executionVariantKey": "fe2a7995888936a9403b09109e46e1eeaeec14a48a324c89e81cc6fd206fafaf",
+        "canonicalEdgeId": "univ2-standard\u001f0xf6dcdce0ac3001b2f67f750bc64ea5beb37b5824\u001f0xf6dcdce0ac3001b2f67f750bc64ea5beb37b5824\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x2b591e99afe9f32eaa6214f7b7629768c40eeb39\u001ffe2a7995888936a9403b09109e46e1eeaeec14a48a324c89e81cc6fd206fafaf",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "426321742208",
+        "mid": 77614.05520275296
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0xfCd13EA0B906f2f87229650b8D93A51B2e839EBD",
+        "instanceKey": "0xfcd13ea0b906f2f87229650b8d93a51b2e839ebd",
+        "executionVariantKey": "f28d592c9aa34ea018073a65c7d5f60415c37d84d2035b96ae38dcc8cef336cc",
+        "canonicalEdgeId": "univ2-standard\u001f0xfcd13ea0b906f2f87229650b8d93a51b2e839ebd\u001f0xfcd13ea0b906f2f87229650b8d93a51b2e839ebd\u001f0x4206931337dc273a630d328da6441786bfad668f>0xdac17f958d2ee523a2206206994597c13d831ec7\u001ff28d592c9aa34ea018073a65c7d5f60415c37d84d2035b96ae38dcc8cef336cc",
+        "tokenIn": "0x4206931337dc273a630d328dA6441786BfaD668f",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5523576651",
+        "amountOut": "5491970",
+        "mid": 0.0009942778650506683
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ2-swap",
+        "target": "0xfCd13EA0B906f2f87229650b8D93A51B2e839EBD",
+        "instanceKey": "0xfcd13ea0b906f2f87229650b8d93a51b2e839ebd",
+        "executionVariantKey": "44331834d3be9fe634def225187326f0c76284523dd5e559aa389feb53712e39",
+        "canonicalEdgeId": "univ2-standard\u001f0xfcd13ea0b906f2f87229650b8d93a51b2e839ebd\u001f0xfcd13ea0b906f2f87229650b8d93a51b2e839ebd\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0x4206931337dc273a630d328da6441786bfad668f\u001f44331834d3be9fe634def225187326f0c76284523dd5e559aa389feb53712e39",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0x4206931337dc273a630d328dA6441786BfaD668f",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5491990",
+        "amountOut": "5490466667",
+        "mid": 999.7226264068215
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "erc4626-deposit",
+        "target": "0xA2EAaD0D586cF9FD73bb2c09cF6A7E3e187D68cd",
+        "instanceKey": "0xa2eaad0d586cf9fd73bb2c09cf6a7e3e187d68cd",
+        "executionVariantKey": "762952858759f608c95b17397d0c963da9b71ea1800299aa60e5f16440e67428",
+        "canonicalEdgeId": "protocol:erc4626\u001f0xa2eaad0d586cf9fd73bb2c09cf6a7e3e187d68cd\u001f0xa2eaad0d586cf9fd73bb2c09cf6a7e3e187d68cd\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xa2eaad0d586cf9fd73bb2c09cf6a7e3e187d68cd\u001f762952858759f608c95b17397d0c963da9b71ea1800299aa60e5f16440e67428",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0xA2EAaD0D586cF9FD73bb2c09cF6A7E3e187D68cd",
+        "slotKind": "protocol",
+        "protocolAction": "wrap",
+        "edgeKind": "protocol",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "5393198892740339081",
+        "mid": 981859462322.1165
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "curve-exchange",
+        "target": "0xF4d0CF32908b2C7f1021339c43Df0F77f06896d7",
+        "instanceKey": "0xf4d0cf32908b2c7f1021339c43df0f77f06896d7",
+        "executionVariantKey": "be7830e4a091579756c46537e606691016d00988e75687700b71cdd8953f46f3",
+        "canonicalEdgeId": "curve-plain\u001f0xf4d0cf32908b2c7f1021339c43df0f77f06896d7\u001f0xf4d0cf32908b2c7f1021339c43df0f77f06896d7\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x23238f20b894f29041f48d88ee91131c395aaa71\u001fbe7830e4a091579756c46537e606691016d00988e75687700b71cdd8953f46f3",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "5493046",
+        "mid": 1.000037139244129
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "curve-exchange",
+        "target": "0xF4d0CF32908b2C7f1021339c43Df0F77f06896d7",
+        "instanceKey": "0xf4d0cf32908b2c7f1021339c43df0f77f06896d7",
+        "executionVariantKey": "421cb9497b86d0f82c792bdbcb712b0b3c485c4d7afc376ca7f950ad55666d3b",
+        "canonicalEdgeId": "curve-plain\u001f0xf4d0cf32908b2c7f1021339c43df0f77f06896d7\u001f0xf4d0cf32908b2c7f1021339c43df0f77f06896d7\u001f0x23238f20b894f29041f48d88ee91131c395aaa71>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f421cb9497b86d0f82c792bdbcb712b0b3c485c4d7afc376ca7f950ad55666d3b",
+        "tokenIn": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5494149",
+        "amountOut": "5492844",
+        "mid": 0.9997624745888762
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "ekubo-router-swap",
+        "target": "0xd26f20001a72a18c002b00e6710000d68700ce00",
+        "instanceKey": "0x5f06cfafaa77f98acf24f25b7a6d24af7896e165e2e78045855e432e5245d136",
+        "executionVariantKey": "594e827234d85573ca89de43f641a098facc6f1017fb0c729d72587fccf2e41b",
+        "canonicalEdgeId": "custom-swap:ekubo-router-v1\u001f0x5f06cfafaa77f98acf24f25b7a6d24af7896e165e2e78045855e432e5245d136\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0x04c46e830bb56ce22735d5d8fc9cb90309317d0f>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f594e827234d85573ca89de43f641a098facc6f1017fb0c729d72587fccf2e41b",
+        "tokenIn": "0x04C46E830Bb56ce22735d5d8Fc9CB90309317d0f",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "7571736559228849320",
+        "amountOut": "5191862",
+        "mid": 6.856897304056192e-13
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "ekubo-router-swap",
+        "target": "0xd26f20001a72a18c002b00e6710000d68700ce00",
+        "instanceKey": "0x5f06cfafaa77f98acf24f25b7a6d24af7896e165e2e78045855e432e5245d136",
+        "executionVariantKey": "ae6365465cc0969dd37519fafa1af2aa87317018cebb04711ab1ece0d69d7fbb",
+        "canonicalEdgeId": "custom-swap:ekubo-router-v1\u001f0x5f06cfafaa77f98acf24f25b7a6d24af7896e165e2e78045855e432e5245d136\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x04c46e830bb56ce22735d5d8fc9cb90309317d0f\u001fae6365465cc0969dd37519fafa1af2aa87317018cebb04711ab1ece0d69d7fbb",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x04C46E830Bb56ce22735d5d8Fc9CB90309317d0f",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "7956096690223613213",
+        "mid": 1448448123980.9216
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "ekubo-router-swap",
+        "target": "0xd26f20001a72a18c002b00e6710000d68700ce00",
+        "instanceKey": "0xedeaae143f233a3a5d4fabd3166afa0e2108fe7741489237274b939ca17fcff8",
+        "executionVariantKey": "e2c67f2ceadd5d9014b3755ad48a04eca04383dd03181dec0c518809c4418d57",
+        "canonicalEdgeId": "custom-swap:ekubo-router-v1\u001f0xedeaae143f233a3a5d4fabd3166afa0e2108fe7741489237274b939ca17fcff8\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x04c46e830bb56ce22735d5d8fc9cb90309317d0f\u001fe2c67f2ceadd5d9014b3755ad48a04eca04383dd03181dec0c518809c4418d57",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x04C46E830Bb56ce22735d5d8Fc9CB90309317d0f",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "7409337180305541424",
+        "mid": 3704.668590152771
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "ekubo-router-swap",
+        "target": "0xd26f20001a72a18c002b00e6710000d68700ce00",
+        "instanceKey": "0xedeaae143f233a3a5d4fabd3166afa0e2108fe7741489237274b939ca17fcff8",
+        "executionVariantKey": "4f72c2ec207389feadedf39e603458387126f61500ff35deeea25442f6488bc0",
+        "canonicalEdgeId": "custom-swap:ekubo-router-v1\u001f0xedeaae143f233a3a5d4fabd3166afa0e2108fe7741489237274b939ca17fcff8\u001f0xd26f20001a72a18c002b00e6710000d68700ce00\u001f0x04c46e830bb56ce22735d5d8fc9cb90309317d0f>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f4f72c2ec207389feadedf39e603458387126f61500ff35deeea25442f6488bc0",
+        "tokenIn": "0x04C46E830Bb56ce22735d5d8Fc9CB90309317d0f",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "7571736559228849320",
+        "amountOut": "1968893902405255",
+        "mid": 0.000260032013396644
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "psm",
+        "target": "0xf6e72Db5454dd049d0788e411b06CfAF16853042",
+        "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+        "executionVariantKey": "98700eb7f9c80b0dca242665005ec66b72357e9c4873ed566393782f17b027b3",
+        "canonicalEdgeId": "protocol:psm\u001f0xf6e72db5454dd049d0788e411b06cfaf16853042\u001f0xf6e72db5454dd049d0788e411b06cfaf16853042\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x6b175474e89094c44da98b954eedeac495271d0f\u001f98700eb7f9c80b0dca242665005ec66b72357e9c4873ed566393782f17b027b3",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "slotKind": "protocol",
+        "protocolAction": "convert",
+        "edgeKind": "protocol",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "5492842000000000000",
+        "mid": 1000000000000
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "psm",
+        "target": "0xf6e72Db5454dd049d0788e411b06CfAF16853042",
+        "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+        "executionVariantKey": "c4526ce84bf0a66a7c290be7822c2d018f98ef1ad2bcf12f6caf43c812e45dfc",
+        "canonicalEdgeId": "protocol:psm\u001f0xf6e72db5454dd049d0788e411b06cfaf16853042\u001f0xf6e72db5454dd049d0788e411b06cfaf16853042\u001f0x6b175474e89094c44da98b954eedeac495271d0f>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fc4526ce84bf0a66a7c290be7822c2d018f98ef1ad2bcf12f6caf43c812e45dfc",
+        "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "protocol",
+        "protocolAction": "convert",
+        "edgeKind": "protocol",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5525111583382223805",
+        "amountOut": "5525111",
+        "mid": 9.999998944125898e-13
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x21c67e77068de97969ba93d4aab21826d33ca12bb9f565d8496e8fda8a82ca27",
+        "executionVariantKey": "91355643cbd5a39d759918fab72fdbc4e97912372d0d28ae1095fd5c418bd1dd",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x21c67e77068de97969ba93d4aab21826d33ca12bb9f565d8496e8fda8a82ca27\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f91355643cbd5a39d759918fab72fdbc4e97912372d0d28ae1095fd5c418bd1dd",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "5487099",
+        "mid": 2.7435495e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x21c67e77068de97969ba93d4aab21826d33ca12bb9f565d8496e8fda8a82ca27",
+        "executionVariantKey": "847d62f1dc3caadad5cc641b69e9b3f867ce88474d20a5f2d8919d572fea3639",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x21c67e77068de97969ba93d4aab21826d33ca12bb9f565d8496e8fda8a82ca27\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f847d62f1dc3caadad5cc641b69e9b3f867ce88474d20a5f2d8919d572fea3639",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "1999588489555275",
+        "mid": 364035318.976092
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x3f3bf41037593aef692932773869027b3db1078c924a0dbc751a0a570b394a3d",
+        "executionVariantKey": "1f28b7d6b3302e99acd172f783f2c55a8f9ee9fba2397605d23735e60c0419d4",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x3f3bf41037593aef692932773869027b3db1078c924a0dbc751a0a570b394a3d\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x2b591e99afe9f32eaa6214f7b7629768c40eeb39>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f1f28b7d6b3302e99acd172f783f2c55a8f9ee9fba2397605d23735e60c0419d4",
+        "tokenIn": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "429979005588",
+        "amountOut": "5499866",
+        "mid": 0.000012791010557547771
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x3f3bf41037593aef692932773869027b3db1078c924a0dbc751a0a570b394a3d",
+        "executionVariantKey": "59acffd4c74c49494e57bd5c9c8e4e625b62a13c6563bbc4164187dd04bd933f",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x3f3bf41037593aef692932773869027b3db1078c924a0dbc751a0a570b394a3d\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x2b591e99afe9f32eaa6214f7b7629768c40eeb39\u001f59acffd4c74c49494e57bd5c9c8e4e625b62a13c6563bbc4164187dd04bd933f",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "419965353583",
+        "mid": 76456.84211979882
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x50508bab3879f108ec45ff1417cd8bbbe28a3f58dec357f35af3a824d145fe8e",
+        "executionVariantKey": "f2bae8914c6498a459cf5be1d9083f2edd16c6dd2dda05c673b24635deabe6af",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x50508bab3879f108ec45ff1417cd8bbbe28a3f58dec357f35af3a824d145fe8e\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x2260fac5e5542a773aa44fbcfedf7c193bc2c599>0x2b591e99afe9f32eaa6214f7b7629768c40eeb39\u001ff2bae8914c6498a459cf5be1d9083f2edd16c6dd2dda05c673b24635deabe6af",
+        "tokenIn": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "tokenOut": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "6418",
+        "amountOut": "420113803769",
+        "mid": 65458679.303365536
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x50508bab3879f108ec45ff1417cd8bbbe28a3f58dec357f35af3a824d145fe8e",
+        "executionVariantKey": "5b2eee0ec4c55d3932c3d5f5072e3c1e39fff0cfa10f19b0306e303e42d5c355",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x50508bab3879f108ec45ff1417cd8bbbe28a3f58dec357f35af3a824d145fe8e\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x2b591e99afe9f32eaa6214f7b7629768c40eeb39>0x2260fac5e5542a773aa44fbcfedf7c193bc2c599\u001f5b2eee0ec4c55d3932c3d5f5072e3c1e39fff0cfa10f19b0306e303e42d5c355",
+        "tokenIn": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "tokenOut": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "429979005588",
+        "amountOut": "6424",
+        "mid": 1.4940264330383118e-8
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x58c9c6cfbc36c9848c62fbca6583cc5f08a6ef7fb5c99338983d84e6d8946069",
+        "executionVariantKey": "7329171dc28f2374a0b0ff9a67395582eb380661b79052e1285a8063d3a3cdec",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x58c9c6cfbc36c9848c62fbca6583cc5f08a6ef7fb5c99338983d84e6d8946069\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x0a5aa8eda423a6ee19d4dc3e1d39befc8acc2477>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f7329171dc28f2374a0b0ff9a67395582eb380661b79052e1285a8063d3a3cdec",
+        "tokenIn": "0x0a5Aa8EdA423A6ee19D4dC3E1d39bEfC8aCC2477",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "9084355706674765074",
+        "amountOut": "5045879",
+        "mid": 5.554470964069055e-13
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x58c9c6cfbc36c9848c62fbca6583cc5f08a6ef7fb5c99338983d84e6d8946069",
+        "executionVariantKey": "776e46341a54ae78b97007322a5175470cff898960593514be1bf8e3921df3cb",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x58c9c6cfbc36c9848c62fbca6583cc5f08a6ef7fb5c99338983d84e6d8946069\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0x0a5aa8eda423a6ee19d4dc3e1d39befc8acc2477\u001f776e46341a54ae78b97007322a5175470cff898960593514be1bf8e3921df3cb",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0x0a5Aa8EdA423A6ee19D4dC3E1d39bEfC8aCC2477",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5491990",
+        "amountOut": "5428921215333979067",
+        "mid": 988516223688.3132
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x5a5c7cab5f55c7ea020e97d4fa6dd5d99270e56ce76afa61d8cbddec0af92060",
+        "executionVariantKey": "2b0203380fb917fb3c5a0400f54e860a30f9c2772f577698b4ec09432e0fad9f",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x5a5c7cab5f55c7ea020e97d4fa6dd5d99270e56ce76afa61d8cbddec0af92060\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f2b0203380fb917fb3c5a0400f54e860a30f9c2772f577698b4ec09432e0fad9f",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "1999316390828695",
+        "mid": 363985782.0102408
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x5a5c7cab5f55c7ea020e97d4fa6dd5d99270e56ce76afa61d8cbddec0af92060",
+        "executionVariantKey": "e5dbe8999dd9eac26edcfb7203c153300eac042b861b3831f1e993e5d49ffaa5",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x5a5c7cab5f55c7ea020e97d4fa6dd5d99270e56ce76afa61d8cbddec0af92060\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001fe5dbe8999dd9eac26edcfb7203c153300eac042b861b3831f1e993e5d49ffaa5",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "5491563",
+        "mid": 2.7457815e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73",
+        "executionVariantKey": "e9f4c86030b758bf665f32a1478b6fc3732a15f758def6c9df7ba07510211f81",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xdac17f958d2ee523a2206206994597c13d831ec7\u001fe9f4c86030b758bf665f32a1478b6fc3732a15f758def6c9df7ba07510211f81",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "5488003",
+        "mid": 2.7440015e-9
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73",
+        "executionVariantKey": "9c878e83911920581f74b83fa2eef181545e5e6508833ae6bd245c5b4eb64f5f",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x72331fcb696b0151904c03584b66dc8365bc63f8a144d89a773384e3a579ca73\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f9c878e83911920581f74b83fa2eef181545e5e6508833ae6bd245c5b4eb64f5f",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5491990",
+        "amountOut": "1998950231150941",
+        "mid": 363975577.36830205
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xb07d640fd9e2eb9dc81b953c8e4fd006bdfeaf276010fb5418eb763ca15abfb3",
+        "executionVariantKey": "7aabe9b7ce9e06221a116b3f4bfe4320a3c508e8d853e01ee4887e7805c629f0",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xb07d640fd9e2eb9dc81b953c8e4fd006bdfeaf276010fb5418eb763ca15abfb3\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7\u001f7aabe9b7ce9e06221a116b3f4bfe4320a3c508e8d853e01ee4887e7805c629f0",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "1209595882631234686",
+        "mid": 604.7979413156173
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xb07d640fd9e2eb9dc81b953c8e4fd006bdfeaf276010fb5418eb763ca15abfb3",
+        "executionVariantKey": "324743127620bf5286f769ae82cf5c9ae82acbf9e6790508b6e2f9a4970d843e",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xb07d640fd9e2eb9dc81b953c8e4fd006bdfeaf276010fb5418eb763ca15abfb3\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xd34a99bc0f67ae1bbd63c660e6d0b0dd03e263b7>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f324743127620bf5286f769ae82cf5c9ae82acbf9e6790508b6e2f9a4970d843e",
+        "tokenIn": "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "1235399129223331365",
+        "amountOut": "1997986670242961",
+        "mid": 0.0016172802966916869
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xb2b92b56988a4edbe255989792c6ea239b25eaf66b42093145cbf8f630db3a17",
+        "executionVariantKey": "3e6495a81f773f281580f2004f0dce8a2b025d06f7798975b5422c28c00cf331",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xb2b92b56988a4edbe255989792c6ea239b25eaf66b42093145cbf8f630db3a17\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x1abaea1f7c830bd89acc67ec4af516284b1bc33c>0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f3e6495a81f773f281580f2004f0dce8a2b025d06f7798975b5422c28c00cf331",
+        "tokenIn": "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "4791051",
+        "amountOut": "5492406",
+        "mid": 1.1463885481494562
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xb2b92b56988a4edbe255989792c6ea239b25eaf66b42093145cbf8f630db3a17",
+        "executionVariantKey": "8a007bfa3b36d1ce8ab26e056f74af1890a3bf5efe534559d82dd5da03133e73",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xb2b92b56988a4edbe255989792c6ea239b25eaf66b42093145cbf8f630db3a17\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x1abaea1f7c830bd89acc67ec4af516284b1bc33c\u001f8a007bfa3b36d1ce8ab26e056f74af1890a3bf5efe534559d82dd5da03133e73",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5492842",
+        "amountOut": "4787798",
+        "mid": 0.8716431311878259
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xd47ced88028cc19c872ce696564cd669ec253db675a1b795a36bebc8a695ba58",
+        "executionVariantKey": "8b6900d5be2bf954393430def650309f7a3249d362fe4577d45276e810b3d9d5",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xd47ced88028cc19c872ce696564cd669ec253db675a1b795a36bebc8a695ba58\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x94a8b4ee5cd64c79d0ee816f467ea73009f51aa0>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f8b6900d5be2bf954393430def650309f7a3249d362fe4577d45276e810b3d9d5",
+        "tokenIn": "0x94a8b4EE5CD64C79D0Ee816f467EA73009f51aA0",
+        "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "113005005246802186752",
+        "amountOut": "5483461",
+        "mid": 4.85240542047156e-14
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xd47ced88028cc19c872ce696564cd669ec253db675a1b795a36bebc8a695ba58",
+        "executionVariantKey": "d2c3a2d52832976cb6a6da774c4b9a63a9c4936ce5e0e7c55c214852e2b6f2be",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xd47ced88028cc19c872ce696564cd669ec253db675a1b795a36bebc8a695ba58\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0x94a8b4ee5cd64c79d0ee816f467ea73009f51aa0\u001fd2c3a2d52832976cb6a6da774c4b9a63a9c4936ce5e0e7c55c214852e2b6f2be",
+        "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "tokenOut": "0x94a8b4EE5CD64C79D0Ee816f467EA73009f51aA0",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "5491990",
+        "amountOut": "108583886690445361711",
+        "mid": 19771319082963.617
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe09349c11513a8ea1bfb51d0054c07112d81da9ee0006aa4b829d63520f62b36",
+        "executionVariantKey": "e42c80ab9c12d5d36c07179d2eb9ef4f3c5f22216dad44410cb570ed277c4385",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe09349c11513a8ea1bfb51d0054c07112d81da9ee0006aa4b829d63520f62b36\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x2b591e99afe9f32eaa6214f7b7629768c40eeb39\u001fe42c80ab9c12d5d36c07179d2eb9ef4f3c5f22216dad44410cb570ed277c4385",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "427105251384",
+        "mid": 0.000213552625692
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe09349c11513a8ea1bfb51d0054c07112d81da9ee0006aa4b829d63520f62b36",
+        "executionVariantKey": "ece4a6db45037e92e7c13d7c7775b443bd76471c2368b1f2625a71b31c8d47c3",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe09349c11513a8ea1bfb51d0054c07112d81da9ee0006aa4b829d63520f62b36\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x2b591e99afe9f32eaa6214f7b7629768c40eeb39>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001fece4a6db45037e92e7c13d7c7775b443bd76471c2368b1f2625a71b31c8d47c3",
+        "tokenIn": "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "429979005588",
+        "amountOut": "1998605521302646",
+        "mid": 4648.146759094751
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd",
+        "executionVariantKey": "67e62a7ae3b3c9a7571ffad1d7c4be62f7ad072c740e7cb62044237cfe138ab5",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2>0x6982508145454ce325ddbe47a25d4ec3d2311933\u001f67e62a7ae3b3c9a7571ffad1d7c4be62f7ad072c740e7cb62044237cfe138ab5",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "2000000000000000",
+        "amountOut": "1074995345385872324966493",
+        "mid": 537497672.6929362
+      }
+    },
+    {
+      "edge": {
+        "adapterId": "univ4-unlock",
+        "target": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd",
+        "executionVariantKey": "122d5ae2efb031a820a7030fd475ba1092b8fc8c589d661614135e9cfeb2226d",
+        "canonicalEdgeId": "univ4\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd\u001f0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x6982508145454ce325ddbe47a25d4ec3d2311933>0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f122d5ae2efb031a820a7030fd475ba1092b8fc8c589d661614135e9cfeb2226d",
+        "tokenIn": "0x6982508145454Ce325dDbE47a25d4ec3d2311933",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "slotKind": "swap",
+        "edgeKind": "swap",
+        "leavesStandingPosition": false
+      },
+      "quote": {
+        "amountIn": "1080428300731491711962244",
+        "amountOut": "1966098536482333",
+        "mid": 1.8197399449377698e-9
+      }
+    }
+  ]
+}

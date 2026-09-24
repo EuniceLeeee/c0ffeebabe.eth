@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineSwapFamily } from "../adapter-family-plugin.js";
 import { dodoV2Capture } from "../swaps/dodo-v2-family/capture.js";
 import { dodoV2FamilyOwnedAction } from "../swaps/dodo-v2-family/action.js";
@@ -10,6 +11,8 @@ import { dodoV2FamilyManifest } from "../swaps/dodo-v2-family/manifest.js";
 import { dodoV2Pricing } from "../swaps/dodo-v2-family/pricing.js";
 import { dodoV2Routes } from "../swaps/dodo-v2-family/routes.js";
 import { dodoV2Swap } from "../swaps/dodo-v2-family/swap.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_DODO_V2_ENABLED" });
 
 export const plugin = defineSwapFamily({
   manifest: dodoV2FamilyManifest,

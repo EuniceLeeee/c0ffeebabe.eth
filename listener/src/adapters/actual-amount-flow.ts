@@ -25,7 +25,9 @@ export const actualAmountCaseAdapter = action("actual-amount-case", (node, _exec
 });
 
 export const actualAmountStepAdapter = action("actual-amount-step", (node, _executor, inner) => {
-  requireChildren(node, "actual-amount-case", 32);
+  // One-byte count. Symmetric +/-1 branching needs at most 3**5 = 243
+  // separately quoted inputs on the sixth hop (before amount deduplication).
+  requireChildren(node, "actual-amount-case", 255);
   if (node.tokenIn.toLowerCase() === node.tokenOut.toLowerCase() ||
       new Set(node.children.map(child => child.amount)).size !== node.children.length) {
     throw new Error("invalid amount-flow token or duplicate input");

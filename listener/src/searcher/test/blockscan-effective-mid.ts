@@ -23,7 +23,7 @@ import type { BlockScanOpportunity } from "../detector/detector.js";
 const W = "weth", U = "usdc";
 const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 const SOURCE = Object.freeze({ number: 42, hash: hash(0xabcdef), generation: 7 });
-const DEFAULT_RAW = 2_000_000_000_000_000n; // Independent expectation: 0.002 ETH in wei.
+const DEFAULT_RAW = 10_000_000_000_000_000n; // Independent expectation: 0.01 ETH in wei.
 type BuildInput = Parameters<typeof buildEffectiveMids>[0];
 type Quote = BuildInput["quote"];
 type QuoteInput = Parameters<Quote>[0];
@@ -111,7 +111,7 @@ test("declared standing-position pricing shares Exact but does not grant scanner
 });
 
 for (const gasCostWei of [null, 100_000_000_000_000n]) {
-  test(`${gasCostWei === null ? "default 0.002 ETH" : "gas at 200 bps"}: every input token, three hops and raw units`, async () => {
+  test(`${gasCostWei === null ? "default 0.01 ETH" : "gas at 200 bps"}: every input token, three hops and raw units`, async () => {
     const rows: PriceRow[] = [
       // Deliberately order the four-hop chain backwards to catch in-pass propagation.
       [edge("z", "y", "z-y"), 4], [edge("y", "x", "y-x"), 3],
@@ -129,9 +129,9 @@ for (const gasCostWei of [null, 100_000_000_000_000n]) {
     ];
     // Independent expected values, not calls back into the amount-reference helper.
     const expected = new Map<string, bigint | null>(gasCostWei === null ? [
-      [W, DEFAULT_RAW], [U, 4_000_000n], ["x", 2_000_000n], ["y", 666_667n],
+      [W, DEFAULT_RAW], [U, 20_000_000n], ["x", 10_000_000n], ["y", 3_333_334n],
       ["fee", (DEFAULT_RAW + 98n) / 99n], ["fee2", (DEFAULT_RAW * 10n + 1880n) / 1881n],
-      ["third", 666_666_666_666_667n], ["large-unit", 1n], ["tiny-unit", 2n * 10n ** 35n],
+      ["third", 3_333_333_333_333_334n], ["large-unit", 1n], ["tiny-unit", 10n ** 36n],
       ["z", null], ["reverse-only", null], ["disconnected", null],
     ] : [
       [W, 5_000_000_000_000_001n], [U, 10_000_001n], ["x", 5_000_001n], ["y", 1_666_667n],
@@ -623,7 +623,7 @@ test("end-to-end raw USDC/WETH pair uses distinct instances even with a shared e
   const reverse = { ...edge(W, U, "reverse", "pool-b"), target: "shared-manager" };
   const snapshot = await build(pricing([[forward, 5e8], [reverse, 2e-9]]), {
     quote: async ({ edge: e, amountIn }) => ({ source: SOURCE, amountIn,
-      amountOut: e === forward ? 5_050_000_000_000_000n : 10_005_000n }),
+      amountOut: e === forward ? 25_250_000_000_000_000n : 50_025_000n }),
   });
   assert.equal(row(snapshot, forward).amountIn, DEFAULT_RAW / 500_000_000n);
   assert.equal(row(snapshot, reverse).amountIn, DEFAULT_RAW);

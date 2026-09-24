@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
 import { wstethCapture } from "../protocols/wsteth-family/capture.js";
 import {
@@ -13,6 +14,8 @@ import { wstethFamilyManifest } from "../protocols/wsteth-family/manifest.js";
 import { wstethPricing } from "../protocols/wsteth-family/pricing.js";
 import { wstethProtocol } from "../protocols/wsteth-family/protocol.js";
 import { wstethRoutes } from "../protocols/wsteth-family/routes.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_WSTETH_ENABLED" });
 
 export const plugin = defineProtocolFamily({
   manifest: wstethFamilyManifest,

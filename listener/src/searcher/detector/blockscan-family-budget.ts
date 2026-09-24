@@ -1,4 +1,5 @@
 import type { TokenEdge } from "../planner/token-graph.js";
+import { SequentialQuoteUnsupportedError } from "../solver/sequential-quote-error.js";
 
 const EDGE_ID_SEPARATOR = "\u001f";
 const ROUTE_COMPOSITE_PREFIX = "\u0000blockscan-route:";
@@ -231,6 +232,9 @@ export class BlockScanFamilyStageBudget {
     edges: readonly TokenEdge[],
     error?: unknown,
   ): void {
+    // Repeating an unsupported route must not open family/composite circuits
+    // for otherwise healthy routes sharing those Families.
+    if (error instanceof SequentialQuoteUnsupportedError) return;
     const attribution = blockScanFailureCircuitAttribution(edges, error);
     this.circuit.recordFailure([attribution.key]);
   }

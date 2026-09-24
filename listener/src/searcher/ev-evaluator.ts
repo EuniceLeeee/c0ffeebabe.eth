@@ -9,6 +9,9 @@ const CHAINLINK_ETH_USD_DECIMALS = 8;
 const BASE_FEE_MAX_CHANGE_DENOMINATOR = 8n;
 const BLOCK_HASH = /^0x[0-9a-fA-F]{64}$/;
 
+/** Historical-only opt-in. Never synthesize a parent to obtain a desired fee. */
+export type EvFeeEnvironment = { mode: "source-block"; sourceBlockHash: string };
+
 export interface EvPolicy {
   profitHaircutBps: number;
   evGate: boolean;
@@ -170,7 +173,12 @@ export async function evaluateEv(
   policy: EvPolicy,
   valuation: ProfitTokenValuation = DEFAULT_PROFIT_TOKEN_VALUATION,
   sourceBlock?: number,
+  feeEnvironment?: EvFeeEnvironment,
 ): Promise<EvEvaluation> {
+  if (feeEnvironment !== undefined && (feeEnvironment.mode !== "source-block" ||
+      !BLOCK_HASH.test(feeEnvironment.sourceBlockHash) || !Number.isSafeInteger(sourceBlock) || sourceBlock! < 0)) {
+    throw new Error("source-block EV requires an explicit source number and hash");
+  }
   if (
     !Number.isInteger(policy.profitHaircutBps) ||
     policy.profitHaircutBps < 0 ||
@@ -185,16 +193,23 @@ export async function evaluateEv(
   ) {
     throw new Error("bribeBps must be an integer between 0 and 10000");
   }
-  const needsFeeState = policy.evGate || policy.bribeAllAboveGas;
+  const needsFeeState = policy.evGate || policy.bribeAllAboveGas || feeEnvironment !== undefined;
   const parentBefore = needsFeeState
     ? await provider.getBlock(sourceBlock ?? "latest")
     : null;
-  const targetBaseFee = parentBefore ? nextBlockBaseFee(parentBefore) : null;
+  const targetBaseFee = feeEnvironment
+    ? (typeof parentBefore?.baseFeePerGas === "bigint" && parentBefore.baseFeePerGas >= 0n
+      ? parentBefore.baseFeePerGas : null)
+    : parentBefore ? nextBlockBaseFee(parentBefore) : null;
   let sourceBlockHash =
     typeof parentBefore?.hash === "string" && BLOCK_HASH.test(parentBefore.hash)
       ? parentBefore.hash.toLowerCase()
       : null;
   let feeStateAvailable = !needsFeeState || targetBaseFee !== null;
+  if (feeEnvironment && parentBefore?.hash?.toLowerCase() !== feeEnvironment.sourceBlockHash.toLowerCase()) {
+    feeStateAvailable = false;
+    sourceBlockHash = null;
+  }
   if (
     needsFeeState &&
     sourceBlock !== undefined &&

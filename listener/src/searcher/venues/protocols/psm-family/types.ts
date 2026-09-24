@@ -32,14 +32,14 @@ export interface PsmDescriptor extends CompiledInstanceDescriptor {
 
 export interface PsmRoute extends FamilyRouteDescriptor {
   readonly target: string;
-  readonly direction: "sell-gem";
+  readonly direction: "sell-gem" | "buy-gem";
   readonly adapterId: "psm";
 }
 
 export interface PsmPricingDescriptor {
   readonly instanceKey: InstanceKey;
   readonly target: string;
-  readonly route: PsmRoute;
+  readonly routes: readonly PsmRoute[];
   readonly decimalScale: bigint;
 }
 
@@ -52,11 +52,12 @@ export interface PsmIdentityEvidence {
 }
 
 export interface PsmExactEvidence {
-  readonly kind: "psm-sell-gem-fee";
+  readonly kind: "psm-directional-fee";
+  readonly direction: PsmRoute["direction"];
   readonly source: CanonicalSource;
   readonly target: string;
   readonly amountIn: bigint;
   readonly amountOut: bigint;
-  readonly tin: bigint;
+  readonly fee: bigint;
   readonly bindingFingerprint: string;
 }

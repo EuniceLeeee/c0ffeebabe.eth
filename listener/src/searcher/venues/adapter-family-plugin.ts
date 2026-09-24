@@ -876,6 +876,16 @@ export interface PricingSemantics<
   readonly liveStateProjection?: LiveStateProjection<PricingDescriptor, Snapshot>;
 }
 
+/** Ordered, issuer-validated prior legs of the SAME trial. Not a state override
+ * or a consumer-authored route hint. A supporting Family replays their state
+ * effects before quoting the current leg; unsupported prefixes fail closed. */
+export interface ExactQuotePrefixStep {
+  readonly descriptor: CompiledInstanceDescriptor;
+  readonly route: FamilyRouteDescriptor;
+  readonly amountIn: bigint;
+  readonly amountOut: bigint;
+}
+
 export interface ExactQuoteInput<
   Descriptor extends CompiledInstanceDescriptor,
   Route extends FamilyRouteDescriptor,
@@ -888,6 +898,7 @@ export interface ExactQuoteInput<
   /** Framework-bound outer transaction sender; never supplied by quote consumers. */
   readonly transactionOrigin?: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
+  readonly prefix?: readonly ExactQuotePrefixStep[];
 }
 
 export interface ExactQuoteResult<Evidence> {
@@ -926,6 +937,8 @@ export type ExactMethod<
        * NOT capacity, caller eligibility or final execution success.
        * Absence is unknown. Declared per invocation by the owning Family. */
       readonly chainAmountQuote?: true;
+      /** Replays the full input.prefix in order, in isolated trial state. */
+      readonly sequentialPrefix?: true;
       /** This method reads only amount-independent state for local math.
        * All reads depend on the route's existing pricing state key and not
        * block environment or caller state. Central touched invalidation owns
@@ -2490,14 +2503,17 @@ function requireActiveProofEvidence(
     results.some((item) =>
       item === null ||
       typeof item !== "object" ||
-      (item as { readonly ok?: unknown }).ok !== true
+      typeof (item as { readonly ok?: unknown }).ok !== "boolean"
     ) ||
+    !results.some((item) => item.ok === true) ||
     result === undefined
   ) {
     throw new Error(
       "identity active behavior proof requires successful results and explicit evidence",
     );
   }
+  // runRequestProgram already enforces required requests and result bindings.
+  // Optional failures remain visible to the Family, which owns proof sufficiency.
 }
 
 function requireActiveProofDecision(

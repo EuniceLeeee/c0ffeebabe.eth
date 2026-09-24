@@ -18,6 +18,7 @@ interface SearchCase {
   onResolved?: (plan: ResolvedPlan) => void;
   floor?: bigint;
   includeGss?: boolean;
+  gssMaxTries?: number;
 }
 
 // Exercise the real Solver with issued exact handles and poisoned state I/O.
@@ -25,6 +26,7 @@ interface SearchCase {
 async function observeSearch(input: SearchCase = {}) {
   const center = input.center ?? 10n;
   const profit = input.profit ?? 1n;
+  const gssMaxTries = input.gssMaxTries ?? 4;
   const plan = makePlans(1)[0]!;
   assert.equal(plan.opportunity.kind, "block-scan-arb");
   if (plan.opportunity.kind !== "block-scan-arb") throw new Error("invalid fixture");
@@ -69,7 +71,7 @@ async function observeSearch(input: SearchCase = {}) {
     strictSession: fixture.session,
     blockScanAmountGrid: input.amountGrid,
     gridHalfWidth: input.halfWidth,
-    gssMaxTries: 4, finalSimTopN: 1,
+    gssMaxTries, finalSimTopN: 1,
     quoteSafetyBps: 10000n, quoteProfitFloorBps: input.floor ?? 0n, timing,
   });
   if (input.cap !== undefined && input.cap <= 0n) {
@@ -90,7 +92,7 @@ async function observeSearch(input: SearchCase = {}) {
         (input.amountGrid ?? "multiples") === "multiples" && input.cap === center) {
       assert.equal(timing.gssPoints, 0, "a singleton funded domain needs no refine quotes");
     } else {
-      assert.ok(timing.gssPoints >= 2 && timing.gssPoints <= 4, "GSS budget must stay bounded");
+      assert.ok(timing.gssPoints >= 2 && timing.gssPoints <= gssMaxTries, "GSS budget must stay bounded");
     }
   } else {
     await assert.rejects(solve, /quotes completed but no profitable amount/);
@@ -111,11 +113,11 @@ test("blockscan stops at non-positive P even when larger inputs would be profita
   }
 });
 
-test("blockscan defaults to P/10P/100P raw units", async () => {
-  assert.deepEqual(await observeSearch(), [10n, 100n, 1000n]);
+test("blockscan defaults to P/10P/100P/1000P raw units", async () => {
+  assert.deepEqual(await observeSearch(), [10n, 100n, 1000n, 10000n]);
   for (const halfWidth of [0, 2, 16]) {
     assert.deepEqual(await observeSearch({ amountGrid: "multiples", halfWidth }),
-      [10n, 100n, 1000n]);
+      [10n, 100n, 1000n, 10000n]);
   }
 });
 
@@ -123,13 +125,16 @@ test("multiples retain raw bigint precision without token scaling", async () => 
   const center = 9_007_199_254_740_993n;
   assert.deepEqual(await observeSearch({ center }), [
     9_007_199_254_740_993n, 90_071_992_547_409_930n,
-    900_719_925_474_099_300n,
+    900_719_925_474_099_300n, 9_007_199_254_740_993_000n,
   ]);
-  assert.deepEqual(await observeSearch({ center: 1n }), [1n, 10n, 100n]);
+  assert.deepEqual(await observeSearch({ center: 1n }), [1n, 10n, 100n, 1000n]);
 });
 
 test("multiples use the existing clamp and deduplicate capped amounts", async () => {
   for (const [cap, expected] of [
+    [20000n, [10n, 100n, 1000n, 10000n]],
+    [10000n, [10n, 100n, 1000n, 10000n]],
+    [1500n, [10n, 100n, 1000n, 1500n]],
     [1000n, [10n, 100n, 1000n]],
     [150n, [10n, 100n, 150n]],
     [100n, [10n, 100n]],
@@ -170,9 +175,9 @@ test("blockscan grid option does not alter swap backrun or oracle searches", asy
   }
 });
 
-test("multiples use sui-mev's 10x bracket within P..100P with the same GSS budget", async () => {
+test("multiples use sui-mev's 10x bracket within P..1000P with the same GSS budget", async () => {
   assert.deepEqual(await observeSearch({ profit: 1n, includeGss: true }),
-    [10n, 100n, 1000n, 45n, 65n, 32n, 24n]);
+    [10n, 100n, 1000n, 10000n, 45n, 65n, 32n, 24n]);
 });
 
 test("refine chooses one bracket for the coarse winner and preserves its quote", async () => {
@@ -180,7 +185,8 @@ test("refine chooses one bracket for the coarse winner and preserves its quote",
   for (const [winner, lo, hi] of [
     [center, center, center * 10n],
     [center * 10n, center, center * 100n],
-    [center * 100n, center * 10n, center * 100n],
+    [center * 100n, center * 10n, center * 1000n],
+    [center * 1000n, center * 100n, center * 1000n],
   ]) {
     const amounts = await observeSearch({
       center, includeGss: true,
@@ -188,7 +194,7 @@ test("refine chooses one bracket for the coarse winner and preserves its quote",
       onResolved: (plan) => assert.equal(plan.flashAmount, winner,
         "unsuccessful refinement must retain the coarse winner"),
     });
-    const fine = amounts.slice(3);
+    const fine = amounts.slice(4);
     assert.equal(fine.length, 4, "one refine pass, not overlapping passes");
     assert.deepEqual(fine.slice(0, 2), [
       hi - (hi - lo) * 618n / 1000n,
@@ -214,16 +220,32 @@ test("positive P with larger coarse capacity failures can refine beyond 2P", asy
       assert.ok(plan.flashAmount <= center * 3n);
     },
   });
-  assert.equal(amounts.length, 7, "three coarse and at most four fine amounts");
+  assert.equal(amounts.length, 8, "four coarse and at most four fine amounts");
 });
 
-test("refinement never exceeds P..100P or the actual funding cap", async () => {
+test("refinement can select an interior amount above 100P for final sim", async () => {
   const center = 1_000_000n;
-  for (const cap of [center, center * 3n, center * 50n, center * 1000n]) {
+  const peak = center * 300n;
+  const amounts = await observeSearch({
+    center, includeGss: true, gssMaxTries: resolveBlockScanSolverSearchConfig({}).gssMaxTries,
+    profitAt: (amount) => (2n * peak * amount - amount * amount) / (center * 1000n),
+    onResolved: (plan) => {
+      assert.ok(plan.flashAmount > center * 100n);
+      assert.ok(plan.flashAmount < center * 1000n);
+      assert.ok(plan.flashAmount > peak * 9n / 10n && plan.flashAmount < peak * 11n / 10n);
+    },
+  });
+  assert.deepEqual(amounts.slice(0, 4), [center, center * 10n, center * 100n, center * 1000n]);
+  assert.equal(amounts.length, 12, "four coarse plus the unchanged eight-try production refine budget");
+});
+
+test("refinement never exceeds P..1000P or the actual funding cap", async () => {
+  const center = 1_000_000n;
+  for (const cap of [center, center * 3n, center * 50n, center * 100n, center * 500n, center * 1000n, center * 2000n]) {
     const amounts = await observeSearch({
       center, cap, includeGss: true, profitAt: (amount) => amount / 100n,
     });
-    assert.ok(amounts.every((amount) => amount >= center && amount <= center * 100n && amount <= cap));
+    assert.ok(amounts.every((amount) => amount >= center && amount <= center * 1000n && amount <= cap));
     if (cap === center) assert.deepEqual(amounts, [center]);
   }
 });
@@ -252,7 +274,7 @@ test("P's complete route must finish positive before any other amount starts", a
   await reached;
   try { assert.deepEqual(amounts, [1024n]); } finally { release(); }
   await solve;
-  assert.deepEqual(amounts.slice(0, 3), [1024n, 10240n, 102400n]);
+  assert.deepEqual(amounts.slice(0, 4), [1024n, 10240n, 102400n, 1024000n]);
 });
 
 test("P failure preserves revert/RPC/timeout evidence and issues no larger amounts", async () => {

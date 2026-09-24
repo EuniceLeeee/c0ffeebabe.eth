@@ -1,3 +1,4 @@
+import { defineFamilyActivation } from "./activation.js";
 import { defineCreditFamily } from "../adapter-family-plugin.js";
 import { fluidCreditCapture } from "../credit/fluid-family/capture.js";
 import {
@@ -13,6 +14,8 @@ import { fluidCreditFamilyManifest } from "../credit/fluid-family/manifest.js";
 import { fluidCreditRoutes } from "../credit/fluid-family/routes.js";
 import { fluidCreditPricing } from "../credit/fluid-family/pricing.js";
 import { fluidCreditExact } from "../credit/fluid-family/exact.js";
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED" });
 
 export const plugin = defineCreditFamily({
   manifest: fluidCreditFamilyManifest,

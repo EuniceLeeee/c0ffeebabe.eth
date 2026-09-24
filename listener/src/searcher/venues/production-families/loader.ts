@@ -34,6 +34,7 @@ import {
   PRODUCTION_ENTRY_PATTERN,
   productionFamilySourceDirectory,
 } from "./tracked-sources.js";
+import { assertDefinedFamilyActivation, DEFAULT_FAMILY_ACTIVATION, type FamilyActivation } from "./activation.js";
 
 export type ProductionFamilyLoadIssueCode =
   | "source_scan_failed"
@@ -59,12 +60,15 @@ export interface LoadedDefinedFamilyPluginModule {
   readonly plugin: AnyDefinedStrictFamilyPlugin;
   readonly actionAdapters: readonly StrictFamilyOwnedActionAdapter[];
   readonly sourceFile: string;
+  readonly activation: FamilyActivation;
 }
 
 export interface ProductionFamilyLoadResult {
   readonly modules: readonly LoadedProductionFamilyModule[];
   /** Terminal plugins are scanned and validated but not silently legacy-adapted. */
   readonly plugins: readonly LoadedDefinedFamilyPluginModule[];
+  /** Fully validated definitions omitted only from runtime activation. */
+  readonly disabledPlugins: readonly LoadedDefinedFamilyPluginModule[];
   readonly issues: readonly ProductionFamilyLoadIssue[];
   readonly scanSha256: string;
 }
@@ -136,6 +140,7 @@ export async function loadProductionFamilyModules(
 
   const accepted: LoadedProductionFamilyModule[] = [];
   const acceptedPlugins: LoadedDefinedFamilyPluginModule[] = [];
+  const disabledPlugins: LoadedDefinedFamilyPluginModule[] = [];
   const issues: ProductionFamilyLoadIssue[] = [];
   const acceptedActionIds = new Set<string>();
   const reservedBaseActionIds = new Set(
@@ -250,18 +255,20 @@ export async function loadProductionFamilyModules(
         sourceFile,
       }));
     } else {
-      acceptedPlugins.push(Object.freeze({
+      const target = candidate.runtimeActivation.enabled ? acceptedPlugins : disabledPlugins;
+      target.push(Object.freeze({
         contractKind: candidate.contractKind,
         familyId: candidate.familyId,
         definitionBoundaryHash: candidate.definitionBoundaryHash,
         plugin: candidate.plugin,
         actionAdapters: candidate.actionAdapters,
         sourceFile,
+        activation: candidate.runtimeActivation,
       }));
     }
   }
 
-  return freezeResult(accepted, acceptedPlugins, issues);
+  return freezeResult(accepted, acceptedPlugins, issues, disabledPlugins);
 }
 
 /**
@@ -320,6 +327,7 @@ function validateModuleContract(
   const namespace = imported as {
     readonly productionFamilyModule?: unknown;
     readonly plugin?: unknown;
+    readonly activation?: unknown;
   };
   const hasLegacy = "productionFamilyModule" in namespace;
   const hasPlugin = "plugin" in namespace;
@@ -338,16 +346,22 @@ function validateModuleContract(
       summary.requiredInfraActionAdapterIds,
       sharedInfraIds,
     );
+    const runtimeActivation = "activation" in namespace ? namespace.activation : DEFAULT_FAMILY_ACTIVATION;
+    if ("activation" in namespace) assertDefinedFamilyActivation(runtimeActivation);
     return Object.freeze({
       contractKind: "defined-family-plugin" as const,
       familyId: summary.familyId,
       definitionBoundaryHash: summary.definitionBoundaryHash,
       plugin,
+      runtimeActivation: runtimeActivation as FamilyActivation,
       actionAdapters: Object.freeze([...plugin.actionAdapters]),
     });
   }
 
   const module = namespace.productionFamilyModule;
+  if ("activation" in namespace) {
+    throw new Error("entry activation requires a strict plugin, not a legacy migration module");
+  }
   if (contractMode === "strict-only") {
     throw new Error(
       "productionFamilyModule is a migration-only contract; export a strict plugin",
@@ -385,6 +399,7 @@ type ValidatedProductionContract =
       readonly familyId: FamilyId;
       readonly definitionBoundaryHash: string;
       readonly plugin: AnyDefinedStrictFamilyPlugin;
+      readonly runtimeActivation: FamilyActivation;
       readonly actionAdapters: readonly StrictFamilyOwnedActionAdapter[];
     };
 
@@ -428,9 +443,11 @@ function freezeResult(
   modules: readonly LoadedProductionFamilyModule[],
   plugins: readonly LoadedDefinedFamilyPluginModule[],
   issues: readonly ProductionFamilyLoadIssue[],
+  disabledPlugins: readonly LoadedDefinedFamilyPluginModule[] = [],
 ): ProductionFamilyLoadResult {
   const frozenModules = Object.freeze([...modules]);
   const frozenPlugins = Object.freeze([...plugins]);
+  const frozenDisabledPlugins = Object.freeze([...disabledPlugins]);
   const frozenIssues = Object.freeze([...issues]);
   const scanSha256 = createHash("sha256")
     .update(JSON.stringify({
@@ -448,6 +465,13 @@ function freezeResult(
         definitionBoundaryHash: module.definitionBoundaryHash,
         actionAdapterIds: module.actionAdapters.map((adapter) => adapter.id),
       })),
+      disabledPlugins: frozenDisabledPlugins.map((module) => ({
+        sourceFile: module.sourceFile,
+        familyId: module.familyId,
+        definitionBoundaryHash: module.definitionBoundaryHash,
+        activation: module.activation,
+        actionAdapterIds: module.actionAdapters.map((adapter) => adapter.id),
+      })),
       issues: frozenIssues.map((issue) => ({
         sourceFile: issue.sourceFile,
         code: issue.code,
@@ -457,6 +481,7 @@ function freezeResult(
   return Object.freeze({
     modules: frozenModules,
     plugins: frozenPlugins,
+    disabledPlugins: frozenDisabledPlugins,
     issues: frozenIssues,
     scanSha256,
   });

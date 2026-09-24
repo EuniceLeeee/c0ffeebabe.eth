@@ -1,7 +1,7 @@
 import type { CompiledInstanceDescriptor, FamilyCandidate, FamilyRouteDescriptor, VerifiedIdentity } from "../../adapter-family-plugin.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
 
-export type CurvePlainMode = "received" | "received-no-receiver" | "exchange" | "received-uint";
+export type CurvePlainMode = "received" | "received-no-receiver" | "exchange" | "received-uint" | "exchange-uint";
 export type CurveIndexAbi = "int128" | "uint256";
 export interface CurvePlainCandidate extends FamilyCandidate {
   readonly candidateKind: "curve-plain-pool";

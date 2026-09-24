@@ -6,6 +6,8 @@ import { VAULT, ROUTER, PERMIT2, ROUTER_ABI, VAULT_ABI, POOL_ABI, TOKEN_ABI, add
   nonzero, hooksConfig, hasSwapHooks, UNSUPPORTED_SWAP_HOOK, poolInfo, resultSource, returned, same, assertSource, uint } from "./codec.js";
 import { BALANCER_V3_FAMILY_ID, BALANCER_V3_LINEAGE } from "./manifest.js";
 import type { BalancerV3Binding, BalancerV3Candidate, BalancerV3Identity } from "./types.js";
+import { classifyBalancerPoolCode } from "./local-model.js";
+import { BALANCER_VAULT_EXTENSION, BALANCER_VAULT_ADMIN, supportsBalancerLocalVault } from "./vault-model.js";
 
 interface Evidence {
   readonly phase: "membership" | "tokens" | "complete";
@@ -33,6 +35,8 @@ export const balancerV3Identity: IdentitySemantics<BalancerV3Candidate, Balancer
         { id: "vault-code", kind: "get-code", address: VAULT },
         { id: "router-code", kind: "get-code", address: ROUTER },
         { id: "permit2-code", kind: "get-code", address: PERMIT2 },
+        { id: "vault-extension-code", kind: "get-code", address: BALANCER_VAULT_EXTENSION },
+        { id: "vault-admin-code", kind: "get-code", address: BALANCER_VAULT_ADMIN },
         call("router-permit2", ROUTER, ROUTER_ABI.encodeFunctionData("getPermit2")),
         call("pool-vault", pool, POOL_ABI.encodeFunctionData("getVault")),
         call("registered", VAULT, VAULT_ABI.encodeFunctionData("isPoolRegistered", [pool])),
@@ -79,6 +83,10 @@ export const balancerV3Identity: IdentitySemantics<BalancerV3Candidate, Balancer
         else if (!same(addressWord(returned(results, "pool-vault").data), VAULT)) rejection = "foreign-vault";
         return { phase: "membership", source, pool, requestIds, proofHashes: [proof],
           binding: { vault: VAULT, router: ROUTER, permit2: PERMIT2, poolCodeHash: ethers.keccak256(codes[0]),
+            // Unknown infrastructure keeps Router pricing; this is a pricing
+            // proof, not an additional pool-admission allowlist.
+            localModel: supportsBalancerLocalVault(codes[1], returned(results, "vault-extension-code").data,
+              returned(results, "vault-admin-code").data) ? classifyBalancerPoolCode(codes[0]) : null,
             vaultCodeHash: ethers.keccak256(codes[1]), routerCodeHash: ethers.keccak256(codes[2]),
             permit2CodeHash: ethers.keccak256(codes[3]),
             tokens: [], tokenInfo: [], decimals: [], hooks: { address: ethers.ZeroAddress, flags: [], codeHash: ethers.keccak256("0x") } },
