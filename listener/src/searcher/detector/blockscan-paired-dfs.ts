@@ -33,7 +33,7 @@ export function resolvePairedEnumerationMethod(value?: string): PairedEnumeratio
 }
 export const aboveSpread = (num: bigint, den: bigint, bps: number): boolean =>
   num * 10_000n > den * BigInt(10_000 + bps);
-interface EnumerationInput {
+export interface PairedEnumerationInput {
   readonly quotes: readonly DfsQuote[];
   readonly signals: readonly DirectedPriceSignal[];
   readonly funding: readonly string[];
@@ -44,6 +44,19 @@ interface EnumerationInput {
   readonly maxPrefixDrawdownBps?: number;
   readonly deadlineAtMs: number;
   readonly onCycle: (quotes: readonly DfsQuote[], spreadBps: number) => void;
+}
+/** Shared policy resolution keeps the TS and native boundary on one contract. */
+export function resolvePairedEnumerationOptions(input: PairedEnumerationInput) {
+  const allowRepeatedPools = input.allowRepeatedPools ?? DEFAULT_ALLOW_REPEATED_POOLS;
+  const prefixPruningEnabled = input.prefixPruningEnabled ?? BLOCKSCAN_ENUMERATION_DEFAULTS.prefixPruningEnabled;
+  const maxPrefixDrawdownBps = input.maxPrefixDrawdownBps ?? BLOCKSCAN_ENUMERATION_DEFAULTS.maxPrefixDrawdownBps;
+  if (!Number.isSafeInteger(input.minSpreadBps) || input.minSpreadBps < 0 ||
+      !Number.isSafeInteger(input.maxHops) || input.maxHops < 2)
+    throw new Error("paired enumeration requires integer spread bps and maxHops >= 2");
+  if (typeof prefixPruningEnabled !== "boolean") throw new Error("prefixPruningEnabled must be boolean");
+  if (!Number.isSafeInteger(maxPrefixDrawdownBps) || maxPrefixDrawdownBps < 0 || maxPrefixDrawdownBps > 10_000)
+    throw new Error("maxPrefixDrawdownBps must be a safe integer from 0 to 10000");
+  return { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps };
 }
 interface IndexedQuote {
   readonly quote: DfsQuote;
@@ -85,16 +98,8 @@ class HalfLayer {
  * their execution-order prefixes are checked only with the forward value at join.
  * Both traversals share this gate, sorted index, storage and join rules. No future-return
  * or signal-completion pruning. Live caller deadline remains explicitly partial. */
-function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) {
-  const allowRepeatedPools = input.allowRepeatedPools ?? DEFAULT_ALLOW_REPEATED_POOLS;
-  const prefixPruningEnabled = input.prefixPruningEnabled ?? BLOCKSCAN_ENUMERATION_DEFAULTS.prefixPruningEnabled;
-  const maxPrefixDrawdownBps = input.maxPrefixDrawdownBps ?? BLOCKSCAN_ENUMERATION_DEFAULTS.maxPrefixDrawdownBps;
-  if (!Number.isSafeInteger(input.minSpreadBps) || input.minSpreadBps < 0 ||
-      !Number.isSafeInteger(input.maxHops) || input.maxHops < 2)
-    throw new Error("paired enumeration requires integer spread bps and maxHops >= 2");
-  if (typeof prefixPruningEnabled !== "boolean") throw new Error("prefixPruningEnabled must be boolean");
-  if (!Number.isSafeInteger(maxPrefixDrawdownBps) || maxPrefixDrawdownBps < 0 || maxPrefixDrawdownBps > 10_000)
-    throw new Error("maxPrefixDrawdownBps must be a safe integer from 0 to 10000");
+function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMethod) {
+  const { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps } = resolvePairedEnumerationOptions(input);
   const prefixFloor = prefixPruningEnabled ? BigInt(10_000 - maxPrefixDrawdownBps) : 0n;
   const stats = { expanded: 0, completedSignalTokens: 0, deadlineHit: false, closed: 0,
     halfPaths: 0, joins: 0, signalMatched: 0, indexedJoinComparisons: 0,
@@ -323,5 +328,5 @@ function enumerate(input: EnumerationInput, traversal: PairedEnumerationMethod) 
   expired(); stats.phase = stats.deadlineHit ? "interrupted" : "complete";
   return stats;
 }
-export const enumeratePairedDfs = (input: EnumerationInput) => enumerate(input, "dfs");
-export const enumeratePairedLayered = (input: EnumerationInput) => enumerate(input, "layered");
+export const enumeratePairedDfs = (input: PairedEnumerationInput) => enumerate(input, "dfs");
+export const enumeratePairedLayered = (input: PairedEnumerationInput) => enumerate(input, "layered");

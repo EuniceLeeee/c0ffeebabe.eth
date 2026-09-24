@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "prebuild": "node --import tsx src/searcher/build-family-capability-manifest.ts --check",
-    "build": "tsc",
+    "build": "npm run build:enumerator && tsc",
+    "build:enumerator": "node --import tsx build-rust-enumerator.mjs",
+    "searcher:rust-enumeration": "node --import tsx src/searcher/test/blockscan-rust-enumeration.ts",
     "build:live": "tsc -p tsconfig.live.json --noEmit",
     "start": "node dist/searcher/main.js",
     "dev": "tsx src/searcher/main.ts",

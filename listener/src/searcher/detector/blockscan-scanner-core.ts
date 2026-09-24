@@ -1,5 +1,6 @@
 import { buildBlockScanUsdView, usdViewStatistics, type BlockScanUsdView } from "../blockscan-usd-view.js";
-import { DEFAULT_ALLOW_REPEATED_POOLS, enumeratePairedDfs, enumeratePairedLayered, resolvePairedEnumerationMethod, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
+import { DEFAULT_ALLOW_REPEATED_POOLS, enumeratePairedDfs, resolvePairedEnumerationMethod, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
+import { enumeratePaired, resolvePairedEnumerationBackend, type PairedEnumerationBackend } from "./blockscan-paired-enumerator.js";
 import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
 import type { BlockScanOpportunity } from "./detector.js";
 import { type TokenEdge, v4PoolId } from "../planner/token-graph.js";
@@ -11,6 +12,7 @@ import {
 } from "../venues/route-immutable-binding.js";
 
 export interface BlockScanCoreConfig {
+  enumerationBackend?: PairedEnumerationBackend;
   enumerationMethod?: PairedEnumerationMethod;
   /** Merge different execution starts of one directed cycle; defaults to false. */
   deduplicateRotations?: boolean;
@@ -60,7 +62,7 @@ export interface BlockScanOutcome {
     readonly forcedSelectionCount: number;
   };
   debug?: { skippedVenues: number; capitalRejected: number };
-  enumeration?: { algorithm: "paired-dfs" | "paired-layered" } & ReturnType<typeof usdViewStatistics> & ReturnType<typeof enumeratePairedDfs>;
+  enumeration?: { algorithm: "paired-dfs" | "paired-layered"; backend: PairedEnumerationBackend } & ReturnType<typeof usdViewStatistics> & ReturnType<typeof enumeratePairedDfs>;
 }
 
 export interface BlockScanScanTiming {
@@ -189,7 +191,8 @@ export function scanBlockStateFromResolvedMids(input: {
   let capitalRejected = 0;
   const preprocessingFinished = Date.now();
   const method = input.cfg.enumerationMethod ?? resolvePairedEnumerationMethod();
-  const dfs = (method === "layered" ? enumeratePairedLayered : enumeratePairedDfs)({
+  const backend = input.cfg.enumerationBackend ?? resolvePairedEnumerationBackend();
+  const dfs = enumeratePaired({
     quotes, signals: view.signals, minSpreadBps: input.cfg.minSpreadBps,
     maxHops: input.cfg.maxHops, deadlineAtMs, allowRepeatedPools,
     prefixPruningEnabled: input.cfg.prefixPruningEnabled,
@@ -224,7 +227,7 @@ export function scanBlockStateFromResolvedMids(input: {
       const previous = ranked.get(key);
       if (!previous || entry.rank > previous.rank) ranked.set(key, entry);
     },
-  });
+  }, method, backend);
   const finalizing = Date.now();
   const ordered = [...ranked.values()].sort((a, b) => b.rank - a.rank ||
     a.key.localeCompare(b.key));
@@ -240,7 +243,7 @@ export function scanBlockStateFromResolvedMids(input: {
         (input.cfg.exactAdmissionSpreadBps ?? input.cfg.minSpreadBps)).length,
       selectedCount: opportunities.length, forcedSelectionCount: 0 },
     debug: { skippedVenues: eligibleEdges.length - quotes.length, capitalRejected },
-    enumeration: { algorithm: method === "dfs" ? "paired-dfs" : "paired-layered",
+    enumeration: { algorithm: method === "dfs" ? "paired-dfs" : "paired-layered", backend,
       ...usdViewStatistics(view, input.cfg.minSpreadBps), ...dfs },
   };
   input.onTiming?.({ preprocessing: preprocessingFinished - started, pairs: 0,

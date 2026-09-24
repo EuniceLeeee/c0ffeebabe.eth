@@ -1,6 +1,7 @@
 /** Enumeration defaults. Environment overrides are resolved by the live/CLI
  * shared config resolver. 100 bps = 1%; time budgets are milliseconds. */
 export const BLOCKSCAN_ENUMERATION_DEFAULTS = {
+  backend: "typescript" as "rust" | "typescript", // Rust is opt-in until same-input latency/coverage validation passes.
   maxHops: 6,
   refineCandidates: 512, // Returned after coarse enumeration and ranking.
   maxCandidates: 100, // Downstream candidate selection / Planner / Solver.
