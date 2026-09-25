@@ -29,9 +29,10 @@ export function enumeratePaired(input: PairedEnumerationInput, method: PairedEnu
   backend: PairedEnumerationBackend) {
   // Validate at dispatch too: a deserialized/explicit config cannot bypass the switch.
   resolvePairedEnumerationBackend(backend);
-  // One best effective quote per directed pair is implicit in next-token ranking.
-  // It is no longer a separate user-facing pool-count policy.
-  const quotes = selectTopHopQuotes(input.quotes, 1);
+  // Pool and token limits have separate scopes. Every retained pair keeps its
+  // best rate, so its best reference-value score for token ranking is unchanged.
+  const hopPoolsPerPair = input.hopPoolsPerPair ?? BLOCKSCAN_ENUMERATION_DEFAULTS.hopPoolsPerPair;
+  const quotes = selectTopHopQuotes(input.quotes, hopPoolsPerPair);
   const kept = new Set(quotes.map(quote => quote.id));
   // Anchor buy/sell legs obey the same per-hop pool cap as both frontiers.
   // Other signal policy (including its own top-K) remains unchanged.
@@ -42,7 +43,7 @@ export function enumeratePaired(input: PairedEnumerationInput, method: PairedEnu
     : method === "dfs" ? enumeratePairedDfs(selected)
     : method === "layered" ? enumeratePairedLayered(selected)
     : (() => { throw new Error("unsupported enumeration method"); })();
-  return { ...stats, hopQuotesBefore: input.quotes.length,
+  return { ...stats, hopPoolsPerPair, hopQuotesBefore: input.quotes.length,
     hopQuotesSelected: quotes.length, hopQuotesPruned: input.quotes.length - quotes.length,
     hopSignalPairsAfterBestPool: signals.length };
 }

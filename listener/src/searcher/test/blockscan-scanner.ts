@@ -28,15 +28,15 @@ function input(edges:TokenEdge[],amounts:readonly bigint[]=[],overrides:Partial<
   return {edges,sourceBlock:BLOCK,swapTouched:null,captureCoarseEnumeration:true,
     mids:new Map(edges.map((e,i)=>[blockScanEdgeKey(e),quote(e,amounts[i]??100n)])),
     cfg:{maxHops:Math.min(6,edges.length),minSpreadBps:10,maxCandidates:100,budgetMs:10_000,
-      // Legacy coverage fixtures keep all next tokens; implicit best-pool selection still applies.
-      hopTokensPerStep:0,pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}]]),...overrides}};
+      // Legacy coverage fixtures keep all next tokens and explicitly retain their one-pool policy.
+      hopTokensPerStep:0,hopPoolsPerPair:1,pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}]]),...overrides}};
 }
 const ring=(tokens:string[],id=100)=>tokens.slice(0,-1).map((t,i)=>edge(t,tokens[i+1]!,id+i));
 const anchor=()=>input(ring([WETH,USDC,WETH]),[100n,110n]);
 const hasRoute=(result:ReturnType<typeof scan>,route:TokenEdge[])=>result.opportunities.some(o=>
   o.seedEdges.length===route.length&&o.seedEdges.every((e,i)=>blockScanEdgeKey(e)===blockScanEdgeKey(route[i]!)));
 
-test("live scanner implicitly selects the best pool before next-token ranking",()=>{
+test("live scanner honors an explicit one-pool cap before next-token ranking",()=>{
   const token=address(901);
   const edges=[edge(WETH,token,301),edge(WETH,token,302),edge(token,USDC,303),
     edge(token,USDC,304),edge(USDC,WETH,305),edge(USDC,WETH,306)];
@@ -56,7 +56,7 @@ test("live scanner implicitly selects the best pool before next-token ranking",(
     assert.equal(one.enumeration?.hopQuotesPruned,3);
     assert.equal(two.selection.enumeratedCount,1,"Token N=2 does not restore worse pools for the same pair");
     assert.deepEqual(two.opportunities,all.opportunities);
-    assert.deepEqual(run(undefined).opportunities,one.opportunities,"default N=1");
+    assert.deepEqual(run(undefined).opportunities,one.opportunities,"default N=3 does not restore pools beyond M=1");
     // A prebuilt full USD view must not bypass the cap or restore a removed seed.
     const view=buildBlockScanUsdView(edges,data.mids,100,false);
     const prebuilt=scan({...data,usdView:view,cfg:{...data.cfg,enumerationMethod,hopTokensPerStep:1}});
@@ -64,6 +64,40 @@ test("live scanner implicitly selects the best pool before next-token ranking",(
     assert.equal(one.opportunities[0]!.searchSeed.searchCenter,P);
     assert(Math.abs(one.opportunities[0]!.coarseSpreadBps!-7280)<1e-8,
       "each edge's effective rate participates in the full compounded return");
+  }
+});
+
+test("live scanner uses Top 3 tokens times Top 3 pools and keeps sparse neighbors",()=>{
+  for(const counts of [[4,4,4,4],[3,1,1,4]]) {
+    let nextId=40_000;
+    const edges=[0,1,2,3].flatMap(n=>{
+      const token=address(30_000+n);
+      return [...Array.from({length:counts[n]!},()=>edge(WETH,token,nextId++)),edge(token,WETH,nextId++)];
+    });
+    const amounts=edges.map(e=>e.tokenIn===WETH?120n:110n);
+    const data=input(edges,amounts,{maxHops:2,minSpreadBps:0,usdSignalPairsPerToken:100,
+      prefixPruningEnabled:false,allowRepeatedPools:false,maxCandidates:1000,
+      hopTokensPerStep:3,hopPoolsPerPair:3});
+    const fullView=buildBlockScanUsdView(edges,data.mids,100,false);
+    // Bound one signal root's expansion, not the total across all possible signal roots.
+    const usdView={...fullView,signals:fullView.signals.filter(signal=>signal.token===WETH)};
+    for(const enumerationMethod of ["joint-dfs","dfs","layered"] as const) {
+      const run=(hopTokensPerStep:number|undefined,hopPoolsPerPair:number|undefined)=>scan({...data,usdView,
+        cfg:{...data.cfg,enumerationMethod,hopTokensPerStep,hopPoolsPerPair}});
+      const result=run(3,3);
+      assert.equal(result.outcome,"ran");
+      assert.equal(result.selection.enumeratedCount,counts[1]===1?5:9);
+      assert.equal(result.opportunities.length,counts[1]===1?5:9);
+      assert(result.opportunities.every(o=>o.seedEdges[0]!.tokenOut!==address(30_003)));
+      assert.equal(result.opportunities.filter(o=>o.seedEdges[0]!.tokenOut===address(30_000)).length,3,
+        "three distinct pools for the same token survive end to end");
+      assert.deepEqual(run(undefined,undefined).opportunities,result.opportunities,"scanner defaults are 3x3");
+      if(counts[1]===4) {
+        assert.equal(run(3,0).selection.enumeratedCount,12);
+        assert.equal(run(0,3).selection.enumeratedCount,12);
+        assert.equal(run(0,0).selection.enumeratedCount,16);
+      }
+    }
   }
 });
 
@@ -258,11 +292,11 @@ test("real frozen effective table: best-pool routes retain repeated-token walks 
     "0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a","0xf6e72db5454dd049d0788e411b06cfaf16853042"];
   for(const deduplicateRotations of [true,false]) {
     const result=scan({edges,mids,sourceBlock:saved.sourceBlock,swapTouched:null,
-      cfg:{maxHops:6,minSpreadBps:50,exactAdmissionSpreadBps:50,usdSignalPairsPerToken:50,hopTokensPerStep:0,
+      cfg:{maxHops:6,minSpreadBps:50,exactAdmissionSpreadBps:50,usdSignalPairsPerToken:50,hopTokensPerStep:0,hopPoolsPerPair:1,
         enumerationMethod:"dfs",deduplicateRotations,pricedTokens:caps,maxCandidates:100_000,budgetMs:10_000}});
     assert.equal(result.outcome,"ran");assert.equal(result.selection.forcedSelectionCount,0);
     const simple=result.opportunities.filter(o=>new Set(o.seedEdges.map(e=>e.tokenIn.toLowerCase())).size===o.seedEdges.length);
-    // Implicit best-pool selection deliberately removes inferior parallel pools.
+    // Explicit one-pool selection deliberately removes inferior parallel pools.
     // The old all-pool fixture had 29/60 simple routes; this policy has 9/19.
     assert.equal(simple.length,deduplicateRotations?9:19);
     assert.equal(result.opportunities.length,deduplicateRotations?154:497);

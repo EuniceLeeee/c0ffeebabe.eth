@@ -55,8 +55,9 @@ export function selectTopHopQuotes(quotes: readonly DfsQuote[], limit: number): 
 
 /**
  * Directional neighbor eligibility for every hop, including seed legs. Production
- * calls this after selectTopHopQuotes(quotes, 1), so zero disables only the token
- * cap. This selector retains all eligible quotes of each chosen neighbor.
+ * applies an independent per-pair pool cap before this selector. Zero disables
+ * only the token cap. All eligible retained pools of each chosen neighbor survive:
+ * N tokens and M pools per pair yield at most N*M edges per directional frontier.
  *
  * Rank by the best reference-value ratio, never raw token units. Higher execution
  * value wins in both directions: in reverse it costs less input for fixed output.

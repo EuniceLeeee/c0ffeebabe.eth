@@ -41,9 +41,10 @@ export interface PairedEnumerationInput {
   readonly funding: readonly string[];
   readonly minSpreadBps: number;
   readonly maxHops: number;
-  /** Top N next tokens by effective reference-value ratio; 0 keeps all tokens.
-   * Production dispatch first retains one best pool per directed pair. */
+  /** Top N next tokens by effective reference-value ratio; 0 keeps all tokens. */
   readonly hopTokensPerStep?: number;
+  /** Dispatch retains top M distinct pools per directed pair; 0 keeps all pools. */
+  readonly hopPoolsPerPair?: number;
   readonly allowRepeatedPools?: boolean;
   readonly prefixPruningEnabled?: boolean;
   readonly maxPrefixDrawdownBps?: number;

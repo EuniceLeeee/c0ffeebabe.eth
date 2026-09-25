@@ -239,7 +239,7 @@ test("best variant ranks the neighbor while all its eligible pools and variants 
   }
 });
 
-test("zero token cap preserves upstream implicit best-pool selection", () => {
+test("zero token cap preserves the independently configured pool cap", () => {
   const quotes = [tokenQuote("ab-best", "a", "b", 3n, 1n, { num: 3n }),
     tokenQuote("ab-lower", "a", "b", 2n, 1n, { num: 2n }),
     tokenQuote("ac-best", "a", "c", 4n, 1n, { num: 4n }),
@@ -249,6 +249,60 @@ test("zero token cap preserves upstream implicit best-pool selection", () => {
   assert.deepEqual(selectedIds(unlimited.forward), ["ab-best", "ac-best"]);
   assert.deepEqual(selectedIds(unlimited.reverse), ["ab-best", "ac-best"]);
   assert.deepEqual(selectedIds(selectTopHopTokens(bestPools, 1).forward), ["ac-best"]);
+});
+
+test("Top 3 tokens each retain Top 3 pools, yielding nine or fewer edges in either direction", () => {
+  for (const reverse of [false, true]) for (const counts of [[4, 4, 4, 4], [3, 1, 1, 4]]) {
+    const quotes = ["b", "c", "d", "e"].flatMap((neighbor, n) =>
+      Array.from({ length: counts[n]! }, (_, p) => tokenQuote(`${neighbor}-${p}`,
+        reverse ? neighbor : "a", reverse ? "a" : neighbor,
+        BigInt(100 - n * 10 - p), 1n, { num: BigInt(100 - n * 10 - p) })));
+    const before = structuredClone(quotes);
+    for (const input of [quotes, [...quotes].reverse()]) {
+      const pools = selectTopHopQuotes(input, 3);
+      const selected = selectTopHopTokens(pools, 3)[reverse ? "reverse" : "forward"];
+      const expected = quotes.filter(quote => quote.id[0] !== "e" && Number(quote.id.slice(2)) < 3);
+      assert.deepEqual(selectedIds(selected), expected.map(quote => quote.id).sort());
+      assert.equal(selected.size, counts[1] === 1 ? 5 : 9);
+      assert.deepEqual([...new Set(expected.map(quote => reverse ? quote.tokenIn : quote.tokenOut))], ["b", "c", "d"]);
+      assert.deepEqual(selectedIds(selected).filter(id => id.startsWith("b-")), ["b-0", "b-1", "b-2"],
+        "one token's three best pools must all survive without consuming other token slots");
+    }
+    assert.deepEqual(quotes, before);
+  }
+});
+
+test("Token and pool caps independently disable, and increasing either does not redistribute the other slots", () => {
+  const quotes = ["b", "c", "d", "e"].flatMap((neighbor, n) =>
+    Array.from({ length: 4 }, (_, p) => tokenQuote(`${neighbor}-${p}`, "a", neighbor,
+      BigInt(100 - n * 10 - p), 1n, { num: BigInt(100 - n * 10 - p) })));
+  const select = (tokens: number, pools: number) =>
+    selectTopHopTokens(selectTopHopQuotes(quotes, pools), tokens).forward;
+  assert.equal(select(3, 3).size, 9);
+  assert.equal(select(3, 0).size, 12, "pool zero retains four pools for each of three tokens");
+  assert.equal(select(0, 3).size, 12, "token zero retains three pools for each of four tokens");
+  assert.equal(select(0, 0).size, 16);
+  assert.deepEqual(selectedIds(select(1, 3)), ["b-0", "b-1", "b-2"]);
+  assert.deepEqual(selectedIds(select(3, 1)), ["b-0", "c-0", "d-0"]);
+  for (const token of ["b", "c", "d"])
+    assert.deepEqual(selectedIds(select(3, 3)).filter(id => id.startsWith(token)),
+      selectedIds(select(0, 3)).filter(id => id.startsWith(token)));
+  assert.deepEqual([...new Set(selectedIds(select(3, 1)).map(id => id[0]))],
+    [...new Set(selectedIds(select(3, 3)).map(id => id[0]))]);
+});
+
+test("combined caps resolve token and pool ties independently without mutating frozen input", () => {
+  const quotes = Object.freeze(["c", "a", "b", "d"].flatMap(neighbor =>
+    ["z", "A", "Z", "a"].map(pool => Object.freeze(tokenQuote(`${neighbor}-${pool}`, "root", neighbor,
+      2n, 2n, { num: 2n, den: 2n, value: Object.freeze({ num: 2n, den: 2n }) })))));
+  const before = structuredClone(quotes);
+  const expected = ["a-A", "a-Z", "a-a", "b-A", "b-Z", "b-a", "c-A", "c-Z", "c-a"];
+  for (const input of [quotes, [...quotes].reverse()]) {
+    const pools = selectTopHopQuotes(input, 3);
+    assert.deepEqual(selectedIds(selectTopHopTokens(pools, 3).forward), expected);
+    for (const quote of pools) assert.strictEqual(quote, quotes.find(original => original.id === quote.id));
+  }
+  assert.deepEqual(quotes, before);
 });
 
 test("null values never compete, including zero limit and selected neighbor variants", () => {
