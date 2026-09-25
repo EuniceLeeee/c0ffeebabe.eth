@@ -56,7 +56,7 @@ test("live scanner honors an explicit one-pool cap before next-token ranking",()
     assert.equal(one.enumeration?.hopQuotesPruned,3);
     assert.equal(two.selection.enumeratedCount,1,"Token N=2 does not restore worse pools for the same pair");
     assert.deepEqual(two.opportunities,all.opportunities);
-    assert.deepEqual(run(undefined).opportunities,one.opportunities,"default N=3 does not restore pools beyond M=1");
+    assert.deepEqual(run(undefined).opportunities,one.opportunities,"default N=2 does not restore pools beyond M=1");
     // A prebuilt full USD view must not bypass the cap or restore a removed seed.
     const view=buildBlockScanUsdView(edges,data.mids,100,false);
     const prebuilt=scan({...data,usdView:view,cfg:{...data.cfg,enumerationMethod,hopTokensPerStep:1}});
@@ -67,7 +67,7 @@ test("live scanner honors an explicit one-pool cap before next-token ranking",()
   }
 });
 
-test("live scanner uses Top 3 tokens times Top 3 pools and keeps sparse neighbors",()=>{
+test("live scanner defaults to Top 2 tokens times Top 2 pools and retains explicit 3x3",()=>{
   for(const counts of [[4,4,4,4],[3,1,1,4]]) {
     let nextId=40_000;
     const edges=[0,1,2,3].flatMap(n=>{
@@ -91,7 +91,12 @@ test("live scanner uses Top 3 tokens times Top 3 pools and keeps sparse neighbor
       assert(result.opportunities.every(o=>o.seedEdges[0]!.tokenOut!==address(30_003)));
       assert.equal(result.opportunities.filter(o=>o.seedEdges[0]!.tokenOut===address(30_000)).length,3,
         "three distinct pools for the same token survive end to end");
-      assert.deepEqual(run(undefined,undefined).opportunities,result.opportunities,"scanner defaults are 3x3");
+      const two=run(2,2);
+      assert.equal(two.selection.enumeratedCount,counts[1]===1?3:4);
+      assert.equal(two.opportunities.length,counts[1]===1?3:4);
+      assert(two.opportunities.every(o=>[address(30_000),address(30_001)].includes(o.seedEdges[0]!.tokenOut)));
+      assert.equal(two.opportunities.filter(o=>o.seedEdges[0]!.tokenOut===address(30_000)).length,2);
+      assert.deepEqual(run(undefined,undefined).opportunities,two.opportunities,"scanner defaults are 2x2");
       if(counts[1]===4) {
         assert.equal(run(3,0).selection.enumeratedCount,12);
         assert.equal(run(0,3).selection.enumeratedCount,12);

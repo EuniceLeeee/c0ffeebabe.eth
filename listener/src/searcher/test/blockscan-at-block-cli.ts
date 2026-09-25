@@ -79,15 +79,15 @@ test("CLI and live share joint-DFS defaults and retain explicit rollback methods
   assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED:"false"}), /must be 0 or 1/);
   assert.equal(cfg.maxHops, 6); assert.equal(cfg.minSpreadBps, 100);
   assert.equal(cfg.usdSignalPairsPerToken, 20);
-  assert.equal(cfg.hopTokensPerStep, 3);
-  assert.equal(cfg.hopPoolsPerPair, 3);
+  assert.equal(cfg.hopTokensPerStep, 2);
+  assert.equal(cfg.hopPoolsPerPair, 2);
   for (const n of ["0", "1", "2", "3", "20"]) {
     const tokens = resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP:n});
     assert.equal(tokens.hopTokensPerStep, Number(n));
-    assert.equal(tokens.hopPoolsPerPair, 3);
+    assert.equal(tokens.hopPoolsPerPair, 2);
     const pools = resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR:n});
     assert.equal(pools.hopPoolsPerPair, Number(n));
-    assert.equal(pools.hopTokensPerStep, 3);
+    assert.equal(pools.hopTokensPerStep, 2);
   }
   for (const n of ["", "-1", "1.5", "NaN", "Infinity", "9007199254740992"]) {
     assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP:n}), /nonnegative safe integer/);
@@ -96,6 +96,9 @@ test("CLI and live share joint-DFS defaults and retain explicit rollback methods
   const unlimited = resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP:"0",
     SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR:"0"});
   assert.equal(unlimited.hopTokensPerStep, 0); assert.equal(unlimited.hopPoolsPerPair, 0);
+  const rollback = resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP:"3",
+    SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR:"3"});
+  assert.equal(rollback.hopTokensPerStep, 3); assert.equal(rollback.hopPoolsPerPair, 3);
   assert.deepEqual(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_QUOTES_PER_PAIR:"99"}), cfg,
     "retired setting cannot override the explicit HOP_POOLS_PER_PAIR policy");
   assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"1"}).usdSignalPairsPerToken, 1);

@@ -31,7 +31,7 @@ test("Token N limits anchor directions after explicit one-pool selection", () =>
     const two = run(quotes, signals, method, 2, 2);
     assert.deepEqual(two.paths, ["fa/af", "fb/bf"]);
     assert.deepEqual(run(quotes, signals, method, undefined, 2).paths, two.paths,
-      "default Token N=3 includes both neighbors while the explicit pool cap stays one");
+      "default Token N=2 includes both neighbors while the explicit pool cap stays one");
     assert.deepEqual(run(quotes, signals, method, 0, 2).paths, two.paths,
       "zero removes only the Token cap, never restores worse same-pair pools");
     assert.equal(one.stats.hopQuotesSelected, 4);
@@ -52,8 +52,13 @@ test("production dispatch honors independent Top N tokens and Top M pools across
         Number(quote.id.slice(-1)) < 3).map(quote => `${quote.id}/${quote.tokenOut}f`).sort();
       assert.deepEqual(selected.paths, expected);
       assert.equal(selected.paths.length, counts[1] === 1 ? 5 : 9);
-      assert.deepEqual(run(quotes, signals, method, undefined, 2, "default").paths, expected,
-        "default settings are three tokens and three pools");
+      const two = run(quotes, signals, method, 2, 2, 2);
+      const expectedTwo = quotes.filter(quote => quote.tokenIn === "f" && ["a", "b"].includes(quote.tokenOut) &&
+        Number(quote.id.slice(-1)) < 2).map(quote => `${quote.id}/${quote.tokenOut}f`).sort();
+      assert.deepEqual(two.paths, expectedTwo);
+      assert.equal(two.paths.length, counts[1] === 1 ? 3 : 4);
+      assert.deepEqual(run(quotes, signals, method, undefined, 2, "default").paths, expectedTwo,
+        "default settings are two tokens and two pools; explicit three-by-three remains available");
       assert.equal(run(quotes, signals, method, 1, 2, 3).paths.length, 3);
       assert.equal(run(quotes, signals, method, 3, 2, 1).paths.length, 3);
       if (counts[1] === 4) {

@@ -13,8 +13,8 @@ export const BLOCKSCAN_ENUMERATION_DEFAULTS = {
   allowRepeatedPools: true,
   deduplicateRotations: true, // Retain one funded execution start per directed cycle.
   signalPairsPerToken: 20,
-  hopTokensPerStep: 3, // Top N distinct next tokens by reference value; 0 keeps all tokens.
-  hopPoolsPerPair: 3, // Top M distinct pools per directed pair; 0 keeps all pools/variants.
+  hopTokensPerStep: 2, // Top N distinct next tokens by reference value; 0 keeps all tokens.
+  hopPoolsPerPair: 2, // Top M distinct pools per directed pair; 0 keeps all pools/variants.
   minSpreadBps: 100,
   exactAdmissionSpreadBps: 50,
   // Joint DFS shares one reference-value floor across the buy and sell sides.
