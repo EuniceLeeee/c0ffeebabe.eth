@@ -12,11 +12,11 @@ function run(quotes: DfsQuote[], signals: DirectedPriceSignal[], funding = ["f"]
   // This suite pins the legacy half-path policy; new defaults are exercised by joint-DFS tests.
   prefix = { prefixPruningEnabled: false, maxPrefixDrawdownBps: 1000, ...prefix };
   const cycles = new Set<string>();
-  const stats = enumeratePairedDfs({ quotes, signals, funding, maxHops, minSpreadBps: bps, allowRepeatedPools,
+  const stats = enumeratePairedDfs({ quotes, signals, funding, maxHops, minSpreadBps: bps, allowRepeatedPools, hopTokensPerStep: 0,
     ...prefix, deadlineAtMs: Date.now() + 10_000, onCycle: path => { cycles.add(key(path)); } });
   assert.equal(stats.deadlineHit, false);
   const layered = new Set<string>();
-  const other = enumeratePairedLayered({ quotes, signals, funding, maxHops, minSpreadBps: bps, allowRepeatedPools,
+  const other = enumeratePairedLayered({ quotes, signals, funding, maxHops, minSpreadBps: bps, allowRepeatedPools, hopTokensPerStep: 0,
     ...prefix, deadlineAtMs: Date.now() + 10_000, onCycle: path => {
       assert(!layered.has(key(path)), "duplicate layered route"); layered.add(key(path));
     } });
@@ -195,7 +195,7 @@ assert.equal(run(coveredSuffix, middleSignal, ["f"], 3, 0, true,
 // Binary search excludes a negative and an exactly-zero pair before joins.
 const joinQuotes=[q("sell","f","a",200n),...[49n,50n,51n,60n].map(n=>q(String(n),"a","f",n))];
 const joinSignals=joinQuotes.slice(1).map(e=>signal("f",e.id,"sell"));
-const indexed=enumeratePairedDfs({quotes:joinQuotes,signals:joinSignals,funding:["f"],maxHops:2,
+const indexed=enumeratePairedDfs({quotes:joinQuotes,signals:joinSignals,funding:["f"],maxHops:2,hopTokensPerStep:0,
   minSpreadBps:0,deadlineAtMs:Date.now()+10000,onCycle:()=>{}});
 assert.equal(indexed.joinSkippedBeforeConflicts,2);
 assert.equal(indexed.joins,2);
@@ -217,7 +217,7 @@ for (const enumerate of [enumeratePairedDfs, enumeratePairedLayered]) {
         ({ prefixPruningEnabled: false, maxPrefixDrawdownBps }))]) {
         const sequence: string[][] = [];
         const stats = enumerate({ quotes, signals: sequenceSignals, funding: ["f", "a"], maxHops: 2,
-          minSpreadBps: 0, allowRepeatedPools, ...prefix, deadlineAtMs: Date.now() + 10_000,
+          minSpreadBps: 0, hopTokensPerStep: 0, allowRepeatedPools, ...prefix, deadlineAtMs: Date.now() + 10_000,
           onCycle: path => { sequence.push(path.map(e => e.id)); } });
         assert(!stats.deadlineHit);
         assert.equal(stats.closed, expectedSequence.length);
@@ -235,7 +235,7 @@ for (const enumerate of [enumeratePairedDfs, enumeratePairedLayered]) {
     get den() { valueReads++; return edge.value!.den; },
   } }));
   enumerate({ quotes, signals: [originalSignal], funding: ["f"], maxHops: 6, minSpreadBps: 0,
-    prefixPruningEnabled: false, deadlineAtMs: Date.now() + 10_000, onCycle: () => {} });
+    prefixPruningEnabled: false, hopTokensPerStep: 0, deadlineAtMs: Date.now() + 10_000, onCycle: () => {} });
   assert.equal(valueReads, quotes.length * 2, "disabled only validates values; no prefix products are computed");
 }
 
@@ -257,7 +257,7 @@ for (const allowRepeatedPools of [false, true]) {
   for (const enumerate of [enumeratePairedDfs, enumeratePairedLayered]) {
     const actual = new Set<string>();
     const stats = enumerate({ quotes: denseQuotes, signals: denseSignals, funding: ["f"], maxHops: 6,
-      minSpreadBps: 0, allowRepeatedPools, deadlineAtMs: Date.now() + 10_000,
+      minSpreadBps: 0, hopTokensPerStep: 0, allowRepeatedPools, deadlineAtMs: Date.now() + 10_000,
       onCycle: path => { assert(!actual.has(key(path))); actual.add(key(path)); } });
     assert(!stats.deadlineHit);
     if (!allowRepeatedPools) assert(stats.signalMatched > stats.closed, "fixture exercises pool collision rejection");

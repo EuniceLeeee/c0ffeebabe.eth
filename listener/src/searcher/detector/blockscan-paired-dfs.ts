@@ -1,4 +1,5 @@
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
+import { selectTopHopTokens } from "./blockscan-hop-quotes.js";
 
 /** Pure, amount-sensitive directed enumeration. No protocol state or RPC. */
 export interface DfsQuote {
@@ -40,8 +41,9 @@ export interface PairedEnumerationInput {
   readonly funding: readonly string[];
   readonly minSpreadBps: number;
   readonly maxHops: number;
-  /** Shared production dispatcher selects top N pools per directed pair; 0 is unlimited. */
-  readonly hopQuotesPerPair?: number;
+  /** Top N next tokens by effective reference-value ratio; 0 keeps all tokens.
+   * Production dispatch first retains one best pool per directed pair. */
+  readonly hopTokensPerStep?: number;
   readonly allowRepeatedPools?: boolean;
   readonly prefixPruningEnabled?: boolean;
   readonly maxPrefixDrawdownBps?: number;
@@ -57,6 +59,9 @@ export function resolvePairedEnumerationOptions(input: PairedEnumerationInput) {
   const maxPrefixDrawdownBps = input.maxPrefixDrawdownBps ?? BLOCKSCAN_ENUMERATION_DEFAULTS.maxPrefixDrawdownBps;
   const rustThreads = input.rustThreads ?? BLOCKSCAN_ENUMERATION_DEFAULTS.rustThreads;
   const rustScratchMb = input.rustScratchMb ?? BLOCKSCAN_ENUMERATION_DEFAULTS.rustScratchMb;
+  const hopTokensPerStep = input.hopTokensPerStep ?? BLOCKSCAN_ENUMERATION_DEFAULTS.hopTokensPerStep;
+  if (!Number.isSafeInteger(hopTokensPerStep) || hopTokensPerStep < 0)
+    throw new Error("hopTokensPerStep must be a nonnegative safe integer");
   if (!Number.isSafeInteger(input.minSpreadBps) || input.minSpreadBps < 0 ||
       !Number.isSafeInteger(input.maxHops) || input.maxHops < 2)
     throw new Error("paired enumeration requires integer spread bps and maxHops >= 2");
@@ -67,7 +72,7 @@ export function resolvePairedEnumerationOptions(input: PairedEnumerationInput) {
     throw new Error("rustThreads must be an integer from 1 to 8");
   if (!Number.isSafeInteger(rustScratchMb) || rustScratchMb < 1 || rustScratchMb > 2048)
     throw new Error("rustScratchMb must be an integer from 1 to 2048");
-  return { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps, rustThreads, rustScratchMb };
+  return { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps, rustThreads, rustScratchMb, hopTokensPerStep };
 }
 interface IndexedQuote {
   readonly quote: DfsQuote;
@@ -110,15 +115,19 @@ class HalfLayer {
  * Both traversals share this gate, sorted index, storage and join rules. No future-return
  * or signal-completion pruning. Live caller deadline remains explicitly partial. */
 function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMethod) {
-  const { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps } = resolvePairedEnumerationOptions(input);
+  const { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps, hopTokensPerStep } = resolvePairedEnumerationOptions(input);
   const prefixFloor = prefixPruningEnabled ? BigInt(10_000 - maxPrefixDrawdownBps) : 0n;
   const stats = { expanded: 0, completedSignalTokens: 0, deadlineHit: false, closed: 0,
     halfPaths: 0, joins: 0, signalMatched: 0, indexedJoinComparisons: 0,
     joinSkippedBeforeConflicts: 0, gateRule: "signal-rooted-sorted-profitable-join" as const,
     prefixPruningEnabled, maxPrefixDrawdownBps, prefixPrunedForward: 0, prefixPrunedJoin: 0,
-    prefixPrunedTotal: 0, traversal, phase: "prepare" };
+    prefixPrunedTotal: 0, traversal, phase: "prepare", hopTokensPerStep,
+    hopTokenForwardQuotes: 0, hopTokenReverseQuotes: 0, hopSignalPairsSelected: 0 };
   const expired = () => stats.deadlineHit ||= Date.now() >= input.deadlineAtMs;
   if (expired()) return stats;
+  const selected = selectTopHopTokens(input.quotes, hopTokensPerStep);
+  stats.hopTokenForwardQuotes = selected.forward.size;
+  stats.hopTokenReverseQuotes = selected.reverse.size;
   const tokens = new Map<string, number>(), pools = new Map<string, number>();
   const intern = (map: Map<string, number>, key: string): number => {
     let id = map.get(key); if (id === undefined) { id = map.size; map.set(key, id); } return id;
@@ -126,9 +135,7 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
   const byId = new Map<string, number>(), edges: IndexedQuote[] = [];
   for (const q of input.quotes) {
     if (byId.has(q.id)) throw new Error("duplicate directed quote id");
-    if (q.num <= 0n || q.den <= 0n) throw new Error("invalid directed quote amount");
     byId.set(q.id, edges.length);
-    if (q.value && (q.value.num <= 0n || q.value.den <= 0n)) throw new Error("invalid quote value");
     edges.push({ quote: q, from: intern(tokens, q.tokenIn), to: intern(tokens, q.tokenOut),
       pool: intern(pools, q.instance) });
   }
@@ -136,7 +143,8 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
   const incoming: number[][] = Array.from({ length: tokens.size }, () => []);
   for (let id = 0; id < edges.length; id++) {
     const e = edges[id]!; if (!e.quote.value) continue;
-    outgoing[e.from]!.push(id); incoming[e.to]!.push(id);
+    if (selected.forward.has(e.quote.id)) outgoing[e.from]!.push(id);
+    if (selected.reverse.has(e.quote.id)) incoming[e.to]!.push(id);
   }
   const partners = edges.map(() => new Set<number>());
   const anchors = new Map<number, { buys: Set<number>; sells: Set<number> }>();
@@ -149,6 +157,10 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
         (!allowRepeatedPools && buy.pool === sell.pool) || signal.den <= 0n || signal.num <= 0n)
       throw new Error("invalid directed price signal");
     if (!aboveSpread(signal.num, signal.den, input.minSpreadBps)) continue;
+    // With the Token cap disabled, preserve legacy anchor/counter semantics;
+    // null-valued quotes still never enter either traversal adjacency.
+    if (hopTokensPerStep > 0 && (!selected.forward.has(sell.quote.id) || !selected.reverse.has(buy.quote.id))) continue;
+    stats.hopSignalPairsSelected++;
     // Bind this directed signal to its actual sell anchor. With token revisits,
     // reversing a pair can join unrelated occurrences of the signal token.
     partners[s]!.add(b); pairCount++;
@@ -266,9 +278,10 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
         if (expired()) break outer;
         for (const a of forward) {
           if (a.hops + b.hops > input.maxHops) continue;
-          // Emit only the first legal split; the anchored prefix bound, when
-          // enabled, is identical for every split of the complete cycle.
-          if (a.hops !== Math.max(1, a.hops + b.hops - maxHalf)) continue;
+          // With no directional Token cap, every split has the same eligibility.
+          // Under Top-N an edge may win only one frontier, so the first nominal
+          // split may be absent. Try other splits; emitted still deduplicates.
+          if (hopTokensPerStep === 0 && a.hops !== Math.max(1, a.hops + b.hops - maxHalf)) continue;
           for (let pi = a.head[token]!; pi !== NONE;) {
             if (expired()) break outer;
             pi = a.read(pi, p);

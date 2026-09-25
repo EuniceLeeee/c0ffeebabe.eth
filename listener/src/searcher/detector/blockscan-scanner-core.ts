@@ -26,7 +26,7 @@ export interface BlockScanCoreConfig {
   /** Maximum compatible buy/sell signal pairs per token; defaults to 20. */
   usdSignalPairsPerToken?: number;
   /** Top N distinct pools for each tokenIn -> tokenOut; 0 disables this independent cap. */
-  hopQuotesPerPair?: number;
+  hopTokensPerStep?: number;
   maxHops: number;
   minSpreadBps: number;
   /** Historical caller compatibility only; DFS always requires a paired USD signal. */
@@ -199,7 +199,7 @@ export function scanBlockStateFromResolvedMids(input: {
   const dfs = enumeratePaired({
     quotes, signals: view.signals, minSpreadBps: input.cfg.minSpreadBps,
     maxHops: input.cfg.maxHops, deadlineAtMs, allowRepeatedPools,
-    hopQuotesPerPair: input.cfg.hopQuotesPerPair,
+    hopTokensPerStep: input.cfg.hopTokensPerStep,
     prefixPruningEnabled: input.cfg.prefixPruningEnabled,
     maxPrefixDrawdownBps: input.cfg.maxPrefixDrawdownBps,
     rustThreads: input.cfg.rustEnumerationThreads,

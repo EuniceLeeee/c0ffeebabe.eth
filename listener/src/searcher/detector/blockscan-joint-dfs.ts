@@ -1,5 +1,6 @@
 import { aboveSpread, resolvePairedEnumerationOptions, type DfsQuote,
   type PairedEnumerationInput } from "./blockscan-paired-dfs.js";
+import { selectTopHopTokens } from "./blockscan-hop-quotes.js";
 
 interface IndexedQuote {
   readonly quote: DfsQuote;
@@ -17,7 +18,7 @@ const MEMO_MAX_ENTRIES = 16_384, MEMO_MAX_CHARACTERS = 1_048_576;
  * Token revisits and extensions after a closure remain legal; only pool reuse
  * has an independent policy. Funding rotations are emitted after closure. */
 export function enumerateJointDfs(input: PairedEnumerationInput) {
-  const { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps } = resolvePairedEnumerationOptions(input);
+  const { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps, hopTokensPerStep } = resolvePairedEnumerationOptions(input);
   const prefixFloor = BigInt(10_000 - maxPrefixDrawdownBps);
   const stats = { expanded: 0, completedSignalTokens: 0, completedSignalPairs: 0,
     deadlineHit: false, closed: 0, halfPaths: 0, joins: 0, signalMatched: 0,
@@ -26,13 +27,17 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
     prefixPruningEnabled, maxPrefixDrawdownBps, prefixPrunedForward: 0,
     prefixPrunedJoin: 0, prefixPrunedTotal: 0, prefixPrunedJoint: 0,
     jointStates: 0, duplicateStatesSkipped: 0, traversal: "joint-dfs" as const,
-    phase: "prepare" };
+    phase: "prepare", hopTokensPerStep, hopTokenForwardQuotes: 0,
+    hopTokenReverseQuotes: 0, hopSignalPairsSelected: 0 };
   const expired = () => stats.deadlineHit ||= Date.now() >= input.deadlineAtMs;
   const finish = () => {
     expired(); stats.phase = stats.deadlineHit ? "interrupted" : "complete";
     return stats;
   };
   if (expired()) return finish();
+  const selected = selectTopHopTokens(input.quotes, hopTokensPerStep);
+  stats.hopTokenForwardQuotes = selected.forward.size;
+  stats.hopTokenReverseQuotes = selected.reverse.size;
 
   const tokens = new Map<string, number>(), pools = new Map<string, number>();
   const intern = (map: Map<string, number>, key: string): number => {
@@ -44,9 +49,6 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
   for (const quote of input.quotes) {
     if ((edges.length & 1023) === 0 && expired()) return finish();
     if (byId.has(quote.id)) throw new Error("duplicate directed quote id");
-    if (quote.num <= 0n || quote.den <= 0n) throw new Error("invalid directed quote amount");
-    if (quote.value && (quote.value.num <= 0n || quote.value.den <= 0n))
-      throw new Error("invalid quote value");
     byId.set(quote.id, edges.length);
     edges.push({ quote, from: intern(tokens, quote.tokenIn), to: intern(tokens, quote.tokenOut),
       pool: intern(pools, quote.instance) });
@@ -57,7 +59,8 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
     if ((id & 1023) === 0 && expired()) return finish();
     const edge = edges[id]!;
     if (!edge.quote.value) continue;
-    outgoing[edge.from]!.push(id); incoming[edge.to]!.push(id);
+    if (selected.forward.has(edge.quote.id)) outgoing[edge.from]!.push(id);
+    if (selected.reverse.has(edge.quote.id)) incoming[edge.to]!.push(id);
   }
   const anchors = new Map<number, { buy: number; sell: number }[]>();
   const seedKeys = new Set<string>();
@@ -72,9 +75,11 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
       throw new Error("invalid directed price signal");
     if (!buy.quote.value || !sell.quote.value ||
         !aboveSpread(signal.num, signal.den, input.minSpreadBps)) continue;
+    if (!selected.forward.has(sell.quote.id) || !selected.reverse.has(buy.quote.id)) continue;
     const key = `${s},${b}`;
     if (seedKeys.has(key)) continue;
     seedKeys.add(key);
+    stats.hopSignalPairsSelected++;
     let seeds = anchors.get(sell.from);
     if (!seeds) { seeds = []; anchors.set(sell.from, seeds); }
     seeds.push({ buy: b, sell: s });

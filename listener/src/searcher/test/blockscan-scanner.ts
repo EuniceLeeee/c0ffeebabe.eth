@@ -28,15 +28,15 @@ function input(edges:TokenEdge[],amounts:readonly bigint[]=[],overrides:Partial<
   return {edges,sourceBlock:BLOCK,swapTouched:null,captureCoarseEnumeration:true,
     mids:new Map(edges.map((e,i)=>[blockScanEdgeKey(e),quote(e,amounts[i]??100n)])),
     cfg:{maxHops:Math.min(6,edges.length),minSpreadBps:10,maxCandidates:100,budgetMs:10_000,
-      // Legacy coverage fixtures keep all pools; Top-N is tested independently below.
-      hopQuotesPerPair:0,pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}]]),...overrides}};
+      // Legacy coverage fixtures keep all next tokens; implicit best-pool selection still applies.
+      hopTokensPerStep:0,pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}]]),...overrides}};
 }
 const ring=(tokens:string[],id=100)=>tokens.slice(0,-1).map((t,i)=>edge(t,tokens[i+1]!,id+i));
 const anchor=()=>input(ring([WETH,USDC,WETH]),[100n,110n]);
 const hasRoute=(result:ReturnType<typeof scan>,route:TokenEdge[])=>result.opportunities.some(o=>
   o.seedEdges.length===route.length&&o.seedEdges.every((e,i)=>blockScanEdgeKey(e)===blockScanEdgeKey(route[i]!)));
 
-test("live scanner applies independent per-direction Top-N to seed and intermediate pools",()=>{
+test("live scanner implicitly selects the best pool before next-token ranking",()=>{
   const token=address(901);
   const edges=[edge(WETH,token,301),edge(WETH,token,302),edge(token,USDC,303),
     edge(token,USDC,304),edge(USDC,WETH,305),edge(USDC,WETH,306)];
@@ -46,20 +46,20 @@ test("live scanner applies independent per-direction Top-N to seed and intermedi
   });
   const best=[edges[0]!,edges[2]!,edges[4]!];
   for(const enumerationMethod of ["joint-dfs","dfs","layered"] as const) {
-    const run=(hopQuotesPerPair:number|undefined)=>scan({...data,
-      cfg:{...data.cfg,enumerationMethod,hopQuotesPerPair}});
+    const run=(hopTokensPerStep:number|undefined)=>scan({...data,
+      cfg:{...data.cfg,enumerationMethod,hopTokensPerStep}});
     const one=run(1),two=run(2),all=run(0);
     assert.equal(one.outcome,"ran");
     assert.equal(one.selection.enumeratedCount,1);
     assert(hasRoute(one,best));
     assert.equal(one.enumeration?.hopQuotesSelected,3);
     assert.equal(one.enumeration?.hopQuotesPruned,3);
-    assert.equal(two.selection.enumeratedCount,8);
+    assert.equal(two.selection.enumeratedCount,1,"Token N=2 does not restore worse pools for the same pair");
     assert.deepEqual(two.opportunities,all.opportunities);
     assert.deepEqual(run(undefined).opportunities,one.opportunities,"default N=1");
     // A prebuilt full USD view must not bypass the cap or restore a removed seed.
     const view=buildBlockScanUsdView(edges,data.mids,100,false);
-    const prebuilt=scan({...data,usdView:view,cfg:{...data.cfg,enumerationMethod,hopQuotesPerPair:1}});
+    const prebuilt=scan({...data,usdView:view,cfg:{...data.cfg,enumerationMethod,hopTokensPerStep:1}});
     assert.deepEqual(prebuilt.opportunities,one.opportunities);
     assert.equal(one.opportunities[0]!.searchSeed.searchCenter,P);
     assert(Math.abs(one.opportunities[0]!.coarseSpreadBps!-7280)<1e-8,
@@ -243,7 +243,7 @@ test("legacy depth diagnostic is not the effective scanner's admission rule",()=
   assert.equal(scan(data).opportunities.length,1);
 });
 
-test("real frozen effective table: simple routes retained alongside repeated-token walks",()=>{
+test("real frozen effective table: best-pool routes retain repeated-token walks and funding rotations",()=>{
   const saved=JSON.parse(readFileSync(new URL("./fixtures/blockscan-effective-26029875.json",import.meta.url),"utf8")) as {
     sourceBlock:number; rows:{edge:TokenEdge;quote:{amountIn:string;amountOut:string;mid:number}|null}[];
   };
@@ -258,15 +258,18 @@ test("real frozen effective table: simple routes retained alongside repeated-tok
     "0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a","0xf6e72db5454dd049d0788e411b06cfaf16853042"];
   for(const deduplicateRotations of [true,false]) {
     const result=scan({edges,mids,sourceBlock:saved.sourceBlock,swapTouched:null,
-      cfg:{maxHops:6,minSpreadBps:50,exactAdmissionSpreadBps:50,usdSignalPairsPerToken:50,hopQuotesPerPair:0,
+      cfg:{maxHops:6,minSpreadBps:50,exactAdmissionSpreadBps:50,usdSignalPairsPerToken:50,hopTokensPerStep:0,
         enumerationMethod:"dfs",deduplicateRotations,pricedTokens:caps,maxCandidates:100_000,budgetMs:10_000}});
     assert.equal(result.outcome,"ran");assert.equal(result.selection.forcedSelectionCount,0);
     const simple=result.opportunities.filter(o=>new Set(o.seedEdges.map(e=>e.tokenIn.toLowerCase())).size===o.seedEdges.length);
-    assert.equal(simple.length,deduplicateRotations?29:60);
+    // Implicit best-pool selection deliberately removes inferior parallel pools.
+    // The old all-pool fixture had 29/60 simple routes; this policy has 9/19.
+    assert.equal(simple.length,deduplicateRotations?9:19);
+    assert.equal(result.opportunities.length,deduplicateRotations?154:497);
     assert(result.opportunities.length>simple.length,"new walks must not suppress old simple routes before top-K");
     const rank=simple.findIndex(o=>o.flashToken===USDC&&o.seedEdges.length===4&&
       o.seedEdges.every((e,i)=>e.instanceKey===targetPools[i]))+1;
-    assert.equal(rank,deduplicateRotations?0:5);
+    assert.equal(rank,deduplicateRotations?0:3);
     if(rank>0) assert.equal(simple[rank-1]!.searchSeed.searchCenter,5_492_842n);
   }
 });

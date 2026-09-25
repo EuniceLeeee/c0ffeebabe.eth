@@ -35,13 +35,20 @@ const signal = (token: string, buy: string, sell: string, num = 120n, den = 100n
 const scenario = (quotes: readonly DfsQuote[], signals: readonly DirectedPriceSignal[], extra: Partial<Case> = {}): Case =>
   Object.freeze({ quotes: Object.freeze([...quotes]), signals: Object.freeze([...signals]),
     funding: Object.freeze(["f"]), maxHops: 6, minSpreadBps: 0, allowRepeatedPools: true,
-    prefixPruningEnabled: false, maxPrefixDrawdownBps: 1000, ...extra });
+    prefixPruningEnabled: false, maxPrefixDrawdownBps: 1000, hopTokensPerStep: 0, ...extra });
 const ring = [quote("sell", "f", "a", 101n), quote("ab", "a", "b", 101n),
   quote("bj", "b", "join", 101n), quote("jc", "join", "c", 101n),
   quote("cd", "c", "d", 101n), quote("buy", "d", "f", 120n)];
 const ringSignal = signal("f", "buy", "sell");
 
+// Standalone native diagnostics have no Token cap or its TS-only telemetry.
+function legacyStats(stats: ReturnType<typeof enumeratePairedDfs>) {
+  const { hopTokensPerStep, hopTokenForwardQuotes, hopTokenReverseQuotes, hopSignalPairsSelected, ...legacy } = stats;
+  return legacy;
+}
+
 function collect(engine: Engine, input: Case) {
+  assert.equal(input.hopTokensPerStep, 0, "native parity controls must disable the TS-only Token cap");
   const calls: { path: readonly DfsQuote[]; spreadBps: number }[] = [];
   const byId = new Map(input.quotes.map(q => [q.id, q]));
   const stats = engine({ ...input, deadlineAtMs: Date.now() + 60_000, onCycle(path, spreadBps) {
@@ -50,7 +57,7 @@ function collect(engine: Engine, input: Case) {
   } });
   assert.equal(stats.deadlineHit, false, "differential cases must finish, not compare truncated samples");
   assert.equal(stats.closed, calls.length);
-  return { calls, stats };
+  return { calls, stats: legacyStats(stats) };
 }
 
 function compare(input: Case, label: string, threads: readonly number[] = threadCounts) {
@@ -60,7 +67,7 @@ function compare(input: Case, label: string, threads: readonly number[] = thread
     for (const count of threads) {
       const actual = collect(native(method, count), input);
       assert.deepEqual(actual.calls, expected.calls, `${label}: ${method}/${count} threads ordered callbacks/spreads`);
-      assert.deepEqual(actual.stats, expected.stats, `${label}: ${method}/${count} threads every statistics field`);
+      assert.deepEqual(actual.stats, expected.stats, `${label}: ${method}/${count} threads legacy statistics`);
     }
     return expected;
   });
@@ -244,7 +251,7 @@ test("Rust validates malformed inputs like TS and ignores them only after an exp
       onCycle: () => assert.fail("expired invocation must never emit") };
     const expected = reference(method)(input), actual = native(method, count)(input);
     assert.equal(actual.deadlineHit, true);
-    assert.deepEqual(actual, expected);
+    assert.deepEqual(legacyStats(actual), legacyStats(expected));
   }
 });
 
@@ -401,7 +408,7 @@ test("Rust matches the real frozen effective table, not raw mids or reconstructe
 function compareScanner(input: Parameters<typeof scanBlockStateFromResolvedMids>[0], label: string) {
   const run = (enumerationBackend: "typescript" | "rust", rustEnumerationThreads?: number) => {
     const result = scanBlockStateFromResolvedMids({ ...input, captureCoarseEnumeration: true,
-      cfg: { ...input.cfg, hopQuotesPerPair: 0, enumerationBackend, rustEnumerationThreads, budgetMs: 60_000 } });
+      cfg: { ...input.cfg, hopTokensPerStep: 0, enumerationBackend, rustEnumerationThreads, budgetMs: 60_000 } });
     assert.equal(result.outcome, "ran", `${label}: scanner must complete`);
     assert(result.enumeration);
     const { backend, ...enumeration } = result.enumeration;

@@ -13,7 +13,7 @@ export const BLOCKSCAN_ENUMERATION_DEFAULTS = {
   allowRepeatedPools: true,
   deduplicateRotations: true, // Retain one funded execution start per directed cycle.
   signalPairsPerToken: 20,
-  hopQuotesPerPair: 1, // Top N distinct pools per directed token pair; 0 keeps all quotes.
+  hopTokensPerStep: 1, // Best pool per directed pair, then top N next tokens; 0 keeps all tokens.
   minSpreadBps: 100,
   exactAdmissionSpreadBps: 50,
   // Joint DFS shares one reference-value floor across the buy and sell sides.
@@ -24,9 +24,9 @@ export const BLOCKSCAN_ENUMERATION_DEFAULTS = {
   minCapitalFraction: 0.001, // Legacy exact-refinement shadow telemetry.
 } as const;
 
-export function resolveHopQuotesPerPair(raw?: string): number {
-  const value = raw === undefined ? BLOCKSCAN_ENUMERATION_DEFAULTS.hopQuotesPerPair : Number(raw);
+export function resolveHopTokensPerStep(raw?: string): number {
+  const value = raw === undefined ? BLOCKSCAN_ENUMERATION_DEFAULTS.hopTokensPerStep : Number(raw);
   if ((raw !== undefined && !/^\d+$/.test(raw)) || !Number.isSafeInteger(value) || value < 0)
-    throw new Error("SEARCHER_BLOCKSCAN_HOP_QUOTES_PER_PAIR must be a nonnegative safe integer (0 disables the limit)");
+    throw new Error("SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP must be a nonnegative safe integer (0 disables the token limit)");
   return value;
 }

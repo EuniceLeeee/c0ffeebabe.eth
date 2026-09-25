@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DfsQuote } from "../detector/blockscan-paired-dfs.js";
-import { selectTopHopQuotes } from "../detector/blockscan-hop-quotes.js";
+import { selectTopHopQuotes, selectTopHopTokens } from "../detector/blockscan-hop-quotes.js";
 
 const q = (id: string, num: bigint, den = 1n, overrides: Partial<DfsQuote> = {}): DfsQuote =>
   ({ id, instance: id, tokenIn: "a", tokenOut: "b", num, den, value: { num: 1n, den: 1n }, ...overrides });
@@ -156,3 +156,154 @@ test("rejects invalid limits even with empty input", () => {
     assert.throws(() => selectTopHopQuotes([], limit), /nonnegative safe integer/);
   }
 });
+
+const tokenQuote = (id: string, tokenIn: string, tokenOut: string, num = 1n, den = 1n,
+  overrides: Partial<DfsQuote> = {}): DfsQuote =>
+  ({ id, instance: id, tokenIn, tokenOut, num: 1n, den: 1n, value: { num, den }, ...overrides });
+const selectedIds = (selected: Set<string>) => [...selected].sort();
+
+test("N=1/N=2/0 cap forward neighbors independently for every root", () => {
+  const quotes = [tokenQuote("ab", "a", "b", 3n), tokenQuote("ac", "a", "c", 5n), tokenQuote("ad", "a", "d", 1n),
+    tokenQuote("ef", "e", "f", 2n), tokenQuote("eg", "e", "g", 4n), tokenQuote("eh", "e", "h", 1n)];
+  assert.deepEqual(selectedIds(selectTopHopTokens(quotes, 1).forward), ["ac", "eg"]);
+  assert.deepEqual(selectedIds(selectTopHopTokens(quotes, 2).forward), ["ab", "ac", "ef", "eg"]);
+  for (const limit of [0, Number.MAX_SAFE_INTEGER]) {
+    const selected = selectTopHopTokens(quotes, limit);
+    assert.deepEqual(selectedIds(selected.forward), quotes.map(quote => quote.id));
+    assert.deepEqual(selectedIds(selected.reverse), quotes.map(quote => quote.id));
+  }
+});
+
+test("reverse ranks higher execution value first for N=1/N=2/0", () => {
+  const quotes = [tokenQuote("ar", "a", "r", 4n, 3n), tokenQuote("br", "b", "r", 3n, 2n), tokenQuote("cr", "c", "r")];
+  assert.deepEqual(selectedIds(selectTopHopTokens(quotes, 1).reverse), ["br"]);
+  assert.deepEqual(selectedIds(selectTopHopTokens(quotes, 2).reverse), ["ar", "br"]);
+  assert.deepEqual(selectedIds(selectTopHopTokens(quotes, 0).reverse), ["ar", "br", "cr"]);
+  assert.deepEqual(selectedIds(selectTopHopTokens(quotes, 1).forward), ["ar", "br", "cr"]);
+});
+
+test("forward and reverse sets are not statically intersected, including seed quotes", () => {
+  const quotes = [tokenQuote("ab-seed", "a", "b", 4n), tokenQuote("ac-seed", "a", "c", 3n),
+    tokenQuote("db", "d", "b", 5n), tokenQuote("de", "d", "e", 2n)];
+  const selected = selectTopHopTokens(quotes, 1);
+  assert.deepEqual(selectedIds(selected.forward), ["ab-seed", "db"]);
+  assert.deepEqual(selectedIds(selected.reverse), ["ac-seed", "db", "de"]);
+});
+
+test("different raw token units and raw exchange rates never rank neighbors", () => {
+  for (const reverse of [false, true]) {
+    const quotes = [
+      tokenQuote("large-raw", reverse ? "a" : "root", reverse ? "root" : "a", 1n, 2n,
+        { num: 10n ** 30n, den: 1n }),
+      tokenQuote("best-value", reverse ? "b" : "root", reverse ? "root" : "b", 3n, 2n,
+        { num: 1n, den: 10n ** 30n }),
+    ];
+    assert.deepEqual(selectedIds(selectTopHopTokens(quotes, 1)[reverse ? "reverse" : "forward"]), ["best-value"]);
+  }
+});
+
+test("exact value ratios distinguish enormous BigInts in both directions", () => {
+  const huge = 10n ** 400n;
+  for (const reverse of [false, true]) {
+    const quotes = [tokenQuote("lower", reverse ? "a" : "root", reverse ? "root" : "a", huge + 1n, huge),
+      tokenQuote("higher", reverse ? "z" : "root", reverse ? "root" : "z", huge, huge - 1n)];
+    assert.deepEqual(selectedIds(selectTopHopTokens(quotes, 1)[reverse ? "reverse" : "forward"]), ["higher"]);
+  }
+});
+
+test("exact ties use neighbor lexical order, not quote IDs or input order", () => {
+  for (const reverse of [false, true]) {
+    const quotes = [tokenQuote("first-id", reverse ? "a" : "root", reverse ? "root" : "a", 1n),
+      tokenQuote("middle-id", reverse ? "Z" : "root", reverse ? "root" : "Z", 2n, 2n),
+      tokenQuote("last-id", reverse ? "A" : "root", reverse ? "root" : "A", 3n, 3n)];
+    for (const input of [quotes, [...quotes].reverse()]) {
+      const direction = reverse ? "reverse" : "forward";
+      assert.deepEqual(selectedIds(selectTopHopTokens(input, 1)[direction]), ["last-id"]);
+      assert.deepEqual(selectedIds(selectTopHopTokens(input, 2)[direction]), ["last-id", "middle-id"]);
+    }
+  }
+});
+
+test("best variant ranks the neighbor while all its eligible pools and variants survive", () => {
+  for (const reverse of [false, true]) {
+    const quotes = [
+      tokenQuote("weak-variant", reverse ? "a" : "root", reverse ? "root" : "a", 1n, 1n, { instance: "same-pool" }),
+      tokenQuote("other-neighbor", reverse ? "b" : "root", reverse ? "root" : "b", 4n),
+      tokenQuote("best-variant", reverse ? "a" : "root", reverse ? "root" : "a", 5n, 1n, { instance: "same-pool" }),
+      tokenQuote("other-pool", reverse ? "a" : "root", reverse ? "root" : "a", 2n),
+    ];
+    for (const input of [quotes, [...quotes].reverse()]) {
+      assert.deepEqual(selectedIds(selectTopHopTokens(input, 1)[reverse ? "reverse" : "forward"]),
+        ["best-variant", "other-pool", "weak-variant"]);
+    }
+  }
+});
+
+test("zero token cap preserves upstream implicit best-pool selection", () => {
+  const quotes = [tokenQuote("ab-best", "a", "b", 3n, 1n, { num: 3n }),
+    tokenQuote("ab-lower", "a", "b", 2n, 1n, { num: 2n }),
+    tokenQuote("ac-best", "a", "c", 4n, 1n, { num: 4n }),
+    tokenQuote("ac-lower", "a", "c", 1n)];
+  const bestPools = selectTopHopQuotes(quotes, 1);
+  const unlimited = selectTopHopTokens(bestPools, 0);
+  assert.deepEqual(selectedIds(unlimited.forward), ["ab-best", "ac-best"]);
+  assert.deepEqual(selectedIds(unlimited.reverse), ["ab-best", "ac-best"]);
+  assert.deepEqual(selectedIds(selectTopHopTokens(bestPools, 1).forward), ["ac-best"]);
+});
+
+test("null values never compete, including zero limit and selected neighbor variants", () => {
+  const quotes = [tokenQuote("null-only", "a", "b", 100n, 1n, { value: null }),
+    tokenQuote("eligible", "a", "c"), tokenQuote("null-variant", "a", "c", 100n, 1n, { value: null })];
+  for (const limit of [0, 1, 2]) {
+    const selected = selectTopHopTokens(quotes, limit);
+    assert.deepEqual(selectedIds(selected.forward), ["eligible"]);
+    assert.deepEqual(selectedIds(selected.reverse), ["eligible"]);
+    assert.deepEqual(selectTopHopTokens([quotes[0]!], limit), { forward: new Set(), reverse: new Set() });
+  }
+});
+
+test("does not mutate frozen quotes and returns independent direction sets", () => {
+  const quotes = Object.freeze([Object.freeze(tokenQuote("ab", "a", "b", 2n, 1n,
+    { value: Object.freeze({ num: 2n, den: 1n }) })), Object.freeze(tokenQuote("ac", "a", "c", 1n, 1n,
+    { value: Object.freeze({ num: 1n, den: 1n }) }))]);
+  const before = structuredClone(quotes);
+  for (const limit of [0, 1, 2]) {
+    const selected = selectTopHopTokens(quotes, limit);
+    assert.notStrictEqual(selected.forward, selected.reverse);
+    selected.forward.clear();
+    assert.equal(selected.reverse.size, 2);
+    assert.deepEqual(quotes, before);
+  }
+});
+
+test("empty inputs and invalid limits", () => {
+  for (const limit of [0, 1, 2, Number.MAX_SAFE_INTEGER]) {
+    assert.deepEqual(selectTopHopTokens([], limit), { forward: new Set(), reverse: new Set() });
+  }
+  for (const limit of [-1, -0.5, 0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => selectTopHopTokens([], limit), /nonnegative safe integer/);
+  }
+});
+
+test("rejects duplicate IDs before pruning, even across directions and in null quotes", () => {
+  const winner = tokenQuote("same-id", "a", "b", 100n);
+  for (const limit of [0, 1, 2]) {
+    for (const bad of [winner, tokenQuote("same-id", "a", "c"), tokenQuote("same-id", "b", "a", 1n, 1n, { value: null })]) {
+      assert.throws(() => selectTopHopTokens([winner, bad], limit), /duplicate directed quote id/);
+    }
+  }
+});
+
+for (const field of ["num", "den"] as const) for (const invalid of [0n, -1n]) {
+  test(`rejects ${field}=${invalid} amounts and values before any pruning`, () => {
+    const winner = tokenQuote("winner", "a", "b", 100n);
+    for (const limit of [0, 1, 2]) {
+      for (const value of [null, { num: 1n, den: 100n }]) {
+        const bad = tokenQuote("bad", "a", "c", 1n, 100n, { [field]: invalid, value });
+        assert.throws(() => selectTopHopTokens([winner, bad], limit), /invalid directed quote amount/);
+      }
+      const badValue = tokenQuote("bad-value", "a", "c", 1n, 100n, { value: { num: 1n, den: 100n, [field]: invalid } });
+      assert.throws(() => selectTopHopTokens([winner, badValue], limit), /invalid quote value/);
+    }
+  });
+}

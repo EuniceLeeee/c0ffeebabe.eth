@@ -19,7 +19,7 @@ const quote = (id: string, tokenIn: string, tokenOut: string, num = 110n, den = 
 const signal = (token: string, buy: string, sell: string, num = 120n, den = 100n): DirectedPriceSignal =>
   ({ token, buy, sell, num, den });
 const scenario = (quotes: readonly DfsQuote[], signals: readonly DirectedPriceSignal[], extra: Partial<Case> = {}): Case =>
-  ({ quotes, signals, funding: ["f"], maxHops: 6, minSpreadBps: 0,
+  ({ quotes, signals, funding: ["f"], maxHops: 6, minSpreadBps: 0, hopTokensPerStep: 0,
     allowRepeatedPools: true, prefixPruningEnabled: true, maxPrefixDrawdownBps: 0, ...extra });
 const key = (path: readonly DfsQuote[]) => JSON.stringify(path.map(q => q.id));
 const sorted = (rows: Iterable<Row>) => [...rows].sort((a, b) => JSON.stringify(a.ids).localeCompare(JSON.stringify(b.ids)));
