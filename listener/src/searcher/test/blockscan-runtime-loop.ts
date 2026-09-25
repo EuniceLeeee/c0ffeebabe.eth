@@ -10,6 +10,7 @@ import { BlockScanRuntimeLoop, SourceSimulationWork, type BlockScanRuntimeLoopDe
 import { createLiveRuntimeStop, createLiveSourceSimulationFactory } from "../main.js";
 import { RevmFatalError, RevmStrictError, type RevmFatalReason, type StrictSimulateRequest } from "../revm-sim-client.js";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
+import { BlockActivityRangeInvalidatedError } from "../blockscan-touched-state.js";
 import { isRpcThrottleError } from "../rpc-throttle-guard.js";
 import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedGraphView } from "../venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
@@ -366,7 +367,8 @@ test("runHead creates SOURCE-controlled context before prefunding and drains it 
   } finally { await f.loop.shutdown(); }
 });
 
-test("source-N raw/effective refresh uses only current-block touched even with an old publication", async () => {
+test("source-N binds the full published-to-target activity range, with bounded full-refresh fallback", async () => {
+  for (const targetBlock of [101, 219, 356, 357]) {
   const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } }, async closeAndDrain() {} }));
   const base = { sourceBlock: 100, sourceBlockHash: hash(100) };
   f.coordinator.latestPricingSnapshot = () => base;
@@ -374,18 +376,66 @@ test("source-N raw/effective refresh uses only current-block touched even with a
   let activityReads = 0;
   f.deps.readBlockSwapTouched = async (number, header, range) => {
     activityReads++;
-    assert.equal(number, 219); assert.equal(header!.hash, hash(219));
-    assert.equal(range, undefined, "must not accumulate the unpublished gap");
+    assert.equal(number, targetBlock); assert.equal(header!.hash, hash(targetBlock));
+    if (targetBlock <= 356) {
+      assert.deepEqual(range!.previousSource, { number: 100, hash: hash(100) });
+      assert.equal(range!.signal!.aborted, false);
+      assert(range!.deadlineAtMs! > Date.now());
+    } else assert.equal(range, undefined, "an oversized range supplies no carry proof");
     return touched;
   };
   try {
-    await assert.rejects(f.loop.runHead(219, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }),
+    await assert.rejects(f.loop.runHead(targetBlock, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }),
       /fixture prepared boundary/);
     assert.equal(activityReads, 1, "one shared activity request, not a separate effective reader");
     const prepared = f.inputs.find(input => input.kind === "runtime");
     assert.equal(prepared.touchedPools, touched);
     assert.equal(prepared.canonicalActivity.touchedStateKeys, touched);
+    assert.deepEqual(prepared.canonicalActivity.previousSource,
+      targetBlock <= 356 ? { number: 100, hash: hash(100) } : undefined);
   } finally { await f.loop.shutdown(); }
+  }
+});
+
+test("orphaned range anchor resets only after independent canonical check and owned work drain", async () => {
+  for (const kind of ["orphaned", "canonical", "ordinary-error", "recheck-failed"] as const) {
+    let closed = false, reset = false, checked = false;
+    const funding = deferred();
+    const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } },
+      async closeAndDrain() { closed = true; } }));
+    const base = { sourceBlock: 100, sourceBlockHash: hash(100) };
+    f.coordinator.latestPricingSnapshot = () => base;
+    f.coordinator.startFundingPreparation = () => ({ settle: () => funding.promise });
+    f.coordinator.resetDynamicStateForReplay = async () => {
+      assert(closed, "old simulation work must be drained before retiring publication");
+      reset = true;
+    };
+    f.deps.frozenTopology.observeHeader = async number => {
+      if (number === 100) {
+        checked = true;
+        if (kind === "recheck-failed") throw new Error("anchor recheck failed");
+        return { number, hash: hash(kind === "orphaned" ? 900 : 100), parentHash: hash(99) };
+      }
+      return { number, hash: hash(number), parentHash: hash(number - 1) };
+    };
+    f.deps.readBlockSwapTouched = async () => {
+      if (kind === "ordinary-error") throw new Error("trace unavailable");
+      throw new BlockActivityRangeInvalidatedError("fixture broken range");
+    };
+    const result = assert.rejects(f.loop.runHead(103, {
+      sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now(),
+    }), /fixture broken range|trace unavailable|anchor recheck failed/);
+    try {
+      await until(() => closed);
+      assert.equal(reset, false, "pending Funding still owns old generation work");
+      funding.resolve();
+      await result;
+      assert.equal(checked, kind !== "ordinary-error");
+      assert.equal(reset, kind === "orphaned");
+      assert.equal(f.inputs.some(input => input.kind === "runtime"), false,
+        "failed activity never reaches pricing publication");
+    } finally { funding.resolve(); await f.loop.shutdown(); }
+  }
 });
 
 test("N-1 producer also uses one current-block activity set for both prices", async () => {
@@ -435,7 +485,7 @@ test("startup retry retires the old generation before creating a new source cont
   try {
     await assert.rejects((f.loop as any).prepareStartupWarm(f.coordinator, { graph, fundingTokens: [],
       deadlineAtMs: Date.now() + 30, preparationSettleDeadlineAtMs: Date.now() + 20 },
-      { async drain() {}, abort() {}, stats: () => ({}) }, pass, work), /second attempt observed/);
+      [], { async drain() {}, abort() {}, stats: () => ({}) }, pass, work), /second attempt observed/);
     assert.equal(contexts.length, 2); assert.equal(contexts[0]!.source.generation + 1, contexts[1]!.source.generation);
     assert.equal(contexts[0]!.control.signal, pass.signal); assert.equal(contexts[1]!.control.signal, pass.signal);
   } finally { await work.closeAndDrain(); await f.loop.shutdown(); }

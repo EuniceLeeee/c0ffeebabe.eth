@@ -97,6 +97,9 @@ const EMPTY_FUNDING_ASSETS: readonly string[] = Object.freeze([]);
 export interface StrictCanonicalActivityProof {
   readonly source: CanonicalSource;
   readonly parentHash?: string;
+  /** Present only after the activity reader verified every canonical transition
+   * from this published source through source; never a target-only touched set. */
+  readonly previousSource?: { readonly number: number; readonly hash: string };
   readonly touchedStateKeys: ReadonlySet<string>;
   readonly complete: true;
 }
@@ -559,10 +562,16 @@ function activityAllowsEffectiveCarry(previous: BlockScanStateSnapshot | null,
 ): activity is StrictCanonicalActivityProof {
   if (previous === null || activity?.complete !== true ||
       !sameCanonicalSource(activity.source, sourceFor(graph))) return false;
+  const base = activity.previousSource;
+  if (base !== undefined && (base.number !== previous.sourceBlock ||
+      base.hash.toLowerCase() !== previous.sourceBlockHash.toLowerCase())) return false;
   if (graph.sourceBlock === previous.sourceBlock) {
     return graph.sourceBlockHash.toLowerCase() === previous.sourceBlockHash.toLowerCase() &&
       graph.generation >= previous.generation;
   }
+  // Only a complete range rooted in the still-published table can bridge a
+  // cancelled/coalesced block. A naked forward source remains insufficient.
+  if (base !== undefined) return graph.sourceBlock > previous.sourceBlock && graph.generation > previous.generation;
   return graph.sourceBlock === previous.sourceBlock + 1 && graph.generation > previous.generation &&
     activity.parentHash?.toLowerCase() === previous.sourceBlockHash.toLowerCase();
 }

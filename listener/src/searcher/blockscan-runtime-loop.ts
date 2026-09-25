@@ -6,6 +6,7 @@ import {
 } from "../shared/state/state-backend.js";
 import { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import { isRpcThrottleError } from "./rpc-throttle-guard.js";
+import { BlockActivityRangeInvalidatedError, MAX_ACTIVITY_TRANSITIONS } from "./blockscan-touched-state.js";
 import {
   isPassScopedExactStateBackend,
   type PassScopedExactStateBackend,
@@ -1781,6 +1782,7 @@ export class BlockScanRuntimeLoop {
   private async prepareStartupWarm(
     coordinator: CurrentSourceRuntimeCoordinator,
     input: PrepareStrictRuntimeInput,
+    readyEdges: readonly TokenEdge[],
     backend: PinnedRethQuoteBackend,
     passController: AbortController,
     simulationWork: SourceSimulationWork,
@@ -1838,7 +1840,8 @@ export class BlockScanRuntimeLoop {
           graph = this.deps.buildGraphView({
             id: input.graph.id, generation: this.nextGeneration(),
             sourceBlock: pin.number, sourceBlockHash: pin.hash,
-            edges: input.graph.edges, landedCoverage: this.landedCoverage(),
+            // Rebind the original Ready authority, not the GraphView's copies.
+            edges: readyEdges, landedCoverage: this.landedCoverage(),
             topologyKey: pin.topologyKey,
           });
         }
@@ -2415,8 +2418,18 @@ export class BlockScanRuntimeLoop {
     let fundingPreparation: StrictFundingPreparation | undefined;
     let fundingSettlement: Promise<void> | undefined;
     const activityStartedAtMs = Date.now();
-    // Both price columns use this block's activity, as in the original mid
-    // producer. Carried references are not new current-block observations.
+    // Source-N must cover every transition since the last published price
+    // table, not merely the newest block after startup/coalescing/cancellation.
+    // The reader retains completed block observations across interrupted ranges.
+    // N-1's separate sequential producer keeps its existing one-block scope.
+    const activityBasis = useNMinusOneFallback || startupWarmAttempt
+      ? null : currentRuntimeCoordinator.latestPricingSnapshot();
+    const activityPreviousSource = activityBasis !== null &&
+        blockNumber > activityBasis.sourceBlock &&
+        blockNumber - activityBasis.sourceBlock <= MAX_ACTIVITY_TRANSITIONS
+      ? Object.freeze({ number: activityBasis.sourceBlock, hash: activityBasis.sourceBlockHash })
+      : undefined;
+    let activityBasisInvalidated = false;
     let activityFinishedAtMs: number | null = null;
     let fundingStartedAtMs: number | null = null;
     let fundingFinishedAtMs: number | null = null;
@@ -2431,11 +2444,42 @@ export class BlockScanRuntimeLoop {
       .then(async () => {
         const header = await sourceHeaderRead;
         if (header.status === "rejected") throw header.reason;
-        return this.deps.readBlockSwapTouched(blockNumber, header.value);
+        try {
+          return await this.deps.readBlockSwapTouched(blockNumber, header.value,
+            activityPreviousSource === undefined ? undefined : {
+              previousSource: activityPreviousSource, signal: passSignal,
+              deadlineAtMs: passDeadlineAtMs,
+            });
+        } catch (error) {
+          if (error instanceof BlockActivityRangeInvalidatedError &&
+              activityPreviousSource !== undefined && !this.deps.blind.enabled) {
+            // A stale cached child or inconsistent provider response may break
+            // the range without orphaning our publication. Independently check
+            // its canonical anchor before retiring any pricing authority.
+            passSignal.throwIfAborted();
+            if (Date.now() >= passDeadlineAtMs) throw new Error("activity published anchor recheck deadline exceeded");
+            const canonicalBase = await observeCanonicalHeader(
+              activityPreviousSource.number, "activity published anchor recheck");
+            activityBasisInvalidated = !passSignal.aborted &&
+              canonicalBase.number === activityPreviousSource.number &&
+              canonicalBase.hash.toLowerCase() !== activityPreviousSource.hash.toLowerCase();
+          }
+          throw error; // This pass never publishes or carries an invalid range.
+        }
       })
       .then(
         (value): PromiseSettledResult<ReadonlySet<string>> => {
           activityFinishedAtMs = Date.now();
+          if (activityPreviousSource !== undefined) {
+            console.log(`[searcher/blockscan-activity-range] ${JSON.stringify({
+              previousSourceBlock: activityPreviousSource.number,
+              sourceBlock: blockNumber,
+              transitions: blockNumber - activityPreviousSource.number,
+              touchedStateKeys: value.size,
+              wallMs: activityFinishedAtMs - activityStartedAtMs,
+              aborted: passSignal.aborted,
+            })}`);
+          }
           return { status: "fulfilled", value };
         },
         (reason): PromiseSettledResult<ReadonlySet<string>> => {
@@ -2726,6 +2770,7 @@ export class BlockScanRuntimeLoop {
         const touchedPools = passTouchedPools;
         const canonicalActivity: StrictCanonicalActivityProof = Object.freeze({
           parentHash: sourceHeader.parentHash,
+          ...(activityPreviousSource === undefined ? {} : { previousSource: activityPreviousSource }),
           source: Object.freeze({
             number: graphView.sourceBlock,
             hash: graphView.sourceBlockHash,
@@ -2771,7 +2816,7 @@ export class BlockScanRuntimeLoop {
           };
           if (resumableStartupWarm) {
             const prepared = await this.prepareStartupWarm(
-              currentRuntimeCoordinator, request, sourcePricingBackend, passController, simulationWork,
+              currentRuntimeCoordinator, request, graphEdges, sourcePricingBackend, passController, simulationWork,
             );
             runtime = prepared.runtime;
             graphView = prepared.graph;
@@ -4111,7 +4156,21 @@ export class BlockScanRuntimeLoop {
               // Existing activity I/O has no cancel API: join it even when
               // resource cleanup fails. Funding uses the drained backend.
               try { await simulationWork.closeAndDrain(); }
-              finally { await Promise.all([activity, fundingSettlement]); }
+              finally {
+                await Promise.all([activity, fundingSettlement]);
+                if (activityBasisInvalidated &&
+                    currentRuntimeCoordinator.latestPricingSnapshot() === activityBasis) {
+                  // Only after all old-generation work has settled can the next
+                  // head rebuild a new raw/effective epoch using the same Ready.
+                  await currentRuntimeCoordinator.resetDynamicStateForReplay();
+                  this.startupWarmPending = this.deps.startupWarmEnabled;
+                  console.log(`[searcher/blockscan-activity-anchor-retired] ${JSON.stringify({
+                    previousSourceBlock: activityPreviousSource!.number,
+                    sourceBlock: blockNumber,
+                    startupWarmPending: this.startupWarmPending,
+                  })}`);
+                }
+              }
             }
           }
         }

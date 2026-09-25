@@ -2748,6 +2748,80 @@ for (const path of ["coarse", "runtime"] as const) {
   console.log("strict frozen raw: PASS missing-direction recovery, carry, full effective refresh, empty raw deltas");
 }
 
+// A complete activity range is anchored to the LAST PUBLISHED source. A pool
+// touched only in the skipped middle block must refresh; every other row carries.
+for (const path of ["coarse", "runtime"] as const) {
+  for (const mode of ["range", "missing-base", "wrong-base-number", "wrong-base-hash", "cancelled-range"] as const) {
+    const amountReads: string[] = [];
+    let rawReads = 0, publications = 0, cancel = false;
+    let originalSizing: BlockScanStateSnapshot | undefined;
+    let controller = new AbortController();
+    const coordinator = new StrictCurrentRuntimeCoordinator(request => parallelRoot.createSession({
+      source: request.source, fundingAssets: [], control: request.control,
+      kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+      requiredEdgeIds: request.requiredEdgeIds,
+      runtime: runtime(request.source, { onCurrentPricingReadStart: () => { rawReads++; } }),
+    }), () => {}, () => { publications++; }, async (sizing, control, _backend, reuse) => {
+      if (originalSizing) assert.strictEqual(sizing, originalSizing);
+      else originalSizing = sizing;
+      const target = reuse?.quoteGraph ?? sizing;
+      const effective = await buildEffectiveMids({ pricing: sizing, quoteGraph: reuse?.quoteGraph, control,
+        weth: UNIV2_FIXTURE_TOKEN0, gasCostWei: null, enumerationSpreadBps: 200, concurrency: 2,
+        previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
+        quote: async ({ edge, amountIn }) => {
+          amountReads.push(edge.instanceKey!);
+          return { source: { number: target.sourceBlock, hash: target.sourceBlockHash,
+            generation: target.generation }, amountIn, amountOut: amountIn * 2n };
+        },
+      });
+      if (cancel) controller.abort(new Error("range draft cancelled before publication"));
+      return effective;
+    });
+    const prepare = (graph: typeof carryBaseGraph, previousSource?: { number: number; hash: string }) => {
+      const proof = { source: { number: graph.sourceBlock, hash: graph.sourceBlockHash, generation: graph.generation },
+        parentHash: carryNextSource.hash,
+        // Target block has no touches; the union includes this middle-block pool.
+        touchedStateKeys: new Set([firstParallelTarget]), complete: true as const,
+        ...(previousSource === undefined ? {} : { previousSource }) };
+      const args = { graph, deadlineAtMs: Date.now() + 10_000, signal: controller.signal,
+        ...(graph === carryBaseGraph ? {} : { canonicalActivity: proof }) };
+      return path === "coarse" ? coordinator.prepareCoarsePricing(args)
+        : coordinator.prepare({ ...args, fundingTokens: [] });
+    };
+    await prepare(carryBaseGraph);
+    const baseline = coordinator.latestPricingSnapshot()!;
+    const baselineRawReads = rawReads;
+    amountReads.length = 0;
+    const previousSource = mode === "missing-base" ? undefined : {
+      number: mode === "wrong-base-number" ? carryNextSource.number : CURRENT.number,
+      hash: mode === "wrong-base-hash" ? WRONG_HASH.hash : CURRENT.hash,
+    };
+    if (mode === "cancelled-range") {
+      cancel = true;
+      await assert.rejects(prepare(carryThirdGraph, previousSource), /range draft cancelled/);
+      assert.strictEqual(coordinator.latestPricingSnapshot(), baseline);
+      assert.equal(publications, 1, "a completed but cancelled range draft cannot advance publication");
+      cancel = false; controller = new AbortController(); amountReads.length = 0;
+    }
+    await prepare(carryThirdGraph, previousSource);
+    const published = coordinator.latestPricingSnapshot()!;
+    const acceptsRange = mode === "range" || mode === "cancelled-range";
+    if (acceptsRange) {
+      assert.deepEqual(amountReads, [firstParallelTarget, firstParallelTarget],
+        "complete anchored range must quote only the middle-block dirty pair, not the full table");
+      for (const [key, prior] of baseline.effectiveMids!.rows) {
+        if (prior.instanceKey !== firstParallelTarget) assert.strictEqual(published.effectiveMids!.rows.get(key), prior);
+      }
+    } else assert.equal(amountReads.length, carryThirdGraph.scannerEdgeCount,
+      "missing or foreign range base must not authorize carry across skipped blocks");
+    assert.strictEqual(published.mids, baseline.mids);
+    assert.deepEqual(published.rawMidSource, CURRENT);
+    assert.equal(rawReads, baselineRawReads, "range handling must not refresh startup raw");
+    assert.equal(publications, 2);
+    console.log(`strict effective range carry: PASS ${path}/${mode}`);
+  }
+}
+
 // Current effective status owns coverage even when every raw entry is healthy.
 {
   const statuses = ["quoted", "no-output", "unsupported", "quote-failed", "missing-valuation", "missing-row"] as const;

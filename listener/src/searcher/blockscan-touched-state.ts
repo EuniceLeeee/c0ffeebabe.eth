@@ -39,7 +39,10 @@ export interface BlockTouchedCanonicalAnchor {
   readonly passiveTouchedAddresses?: readonly string[];
 }
 
-const MAX_ACTIVITY_TRANSITIONS = 256;
+export const MAX_ACTIVITY_TRANSITIONS = 256;
+/** A broken range is not by itself proof that its published base was reorged. */
+export class BlockActivityRangeInvalidatedError extends Error {}
+
 interface CompletedBlockActivity {
   readonly anchor: BlockTouchedCanonicalAnchor;
   readonly touchedKeys: readonly string[];
@@ -125,7 +128,7 @@ export async function readBlockTouchedStateKeys(
     // Retire this table as well: an older pending invocation may settle later,
     // but cannot refill the provider's current memo after invalidation.
     if (completedByProvider.get(provider)?.blocks === completed) completedByProvider.delete(provider);
-    throw new Error(message);
+    throw new BlockActivityRangeInvalidatedError(message);
   };
   const cachedTarget = completed.get(blockNumber);
   if (cachedTarget !== undefined && !sameAnchor(cachedTarget.anchor, pinned)) {
