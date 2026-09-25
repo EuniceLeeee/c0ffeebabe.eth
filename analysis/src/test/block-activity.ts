@@ -375,10 +375,106 @@ test("block-activity reconstructs the route mid table from baseline, updates, an
     assert.equal(output.baseline_source_block, 97);
     assert.equal(output.applied_deltas, 1);
     assert.equal(output.mid_count, 2);
+    assert.equal(Object.hasOwn(output, "raw_mid_source"), false);
+    assert.equal(Object.hasOwn(output, "raw_mid_role"), false);
+    assert.doesNotMatch(stdout, /raw_mid_role|raw_mid_source/);
     assert.deepEqual(output.mids, [
       ["edge-a", { ...compactMid(2.5), balance_headroom_in: "12418514181387341316211902860" }],
       ["edge-c", compactMid(4)],
     ]);
+  });
+});
+
+test("block-activity preserves frozen startup raw provenance independently of publication block", async () => {
+  await withFixture(async ({ root, eventsPath, logPath, routeEventsPath }) => {
+    const historyPath = join(root, "mids.jsonl");
+    const midOutPath = join(root, "mid-table.json");
+    const rawMidSource = { number: 95, hash: blockHash(95), generation: 95 };
+    await writeFile(routeEventsPath, [
+      routeCatalogWithEdges(1, ROUTE_A, ["edge-a"]),
+      routeLifecycleWithMid(99, 98, [1]),
+    ].join("\n"));
+    await writeFile(historyPath, [
+      midBaseline(1, 97, [["edge-a", compactMid(2)]]),
+      midDelta(2, 97, 98, [], []),
+    ].map(line => JSON.stringify({ ...JSON.parse(line), raw_mid_source: rawMidSource }))
+      .join("\n") + "\n");
+
+    const stdout = await runBlockActivity(
+      eventsPath, logPath, routeEventsPath, historyPath, midOutPath,
+    );
+
+    assert.match(stdout, /Mid table: status=complete source_block=98 .*raw_mid_role=startup_amount_in_reference/);
+    const output = JSON.parse(await readFile(midOutPath, "utf8")) as Record<string, unknown>;
+    assert.equal(output.source_block, 98);
+    assert.equal(output.generation, 98);
+    assert.deepEqual(output.raw_mid_source, rawMidSource);
+    assert.equal(output.raw_mid_role, "startup_amount_in_reference");
+    assert.deepEqual(output.mids, [["edge-a", compactMid(2)]]);
+  });
+});
+
+test("block-activity fails closed on malformed or future raw provenance", async () => {
+  await withFixture(async ({ root, eventsPath, logPath, routeEventsPath }) => {
+    const historyPath = join(root, "mids.jsonl");
+    const midOutPath = join(root, "mid-table.json");
+    const source = { number: 95, hash: blockHash(95), generation: 95 };
+    await writeFile(routeEventsPath, [
+      routeCatalogWithEdges(1, ROUTE_A, ["edge-a"]),
+      routeLifecycleWithMid(99, 98, [1]),
+    ].join("\n"));
+    for (const invalidSource of [
+      null,
+      { ...source, number: -1 },
+      { ...source, hash: "" },
+      { number: 95, hash: source.hash },
+      { ...source, number: 99 },
+      { ...source, generation: 99 },
+    ]) {
+      await writeFile(historyPath, JSON.stringify({
+        ...JSON.parse(midBaseline(1, 98, [["edge-a", compactMid(2)]])),
+        raw_mid_source: invalidSource,
+      }) + "\n");
+      const stdout = await runBlockActivity(
+        eventsPath, logPath, routeEventsPath, historyPath, midOutPath,
+      );
+      assert.match(stdout, /Mid table: status=unknown_not_reconstructable .*reason=.*raw_mid_source/);
+      assert.match(stdout, /edge_mids=unknown_mid_table/);
+      await assert.rejects(readFile(midOutPath, "utf8"), { code: "ENOENT" });
+    }
+  });
+});
+
+test("block-activity rejects changed or dropped raw provenance within a delta chain", async () => {
+  await withFixture(async ({ root, eventsPath, logPath, routeEventsPath }) => {
+    const historyPath = join(root, "mids.jsonl");
+    const source = { number: 95, hash: blockHash(95), generation: 95 };
+    await writeFile(routeEventsPath, [
+      routeCatalogWithEdges(1, ROUTE_A, ["edge-a"]),
+      routeLifecycleWithMid(99, 98, [1]),
+    ].join("\n"));
+    for (const deltaSource of [
+      undefined,
+      { ...source, number: 96 },
+      { ...source, hash: blockHash(96) },
+      { ...source, generation: 96 },
+    ]) {
+      await writeFile(historyPath, [
+        JSON.stringify({
+          ...JSON.parse(midBaseline(1, 97, [["edge-a", compactMid(2)]])),
+          raw_mid_source: source,
+        }),
+        JSON.stringify({
+          ...JSON.parse(midDelta(2, 97, 98, [], [])),
+          ...(deltaSource === undefined ? {} : { raw_mid_source: deltaSource }),
+        }),
+      ].join("\n") + "\n");
+      const stdout = await runBlockActivity(
+        eventsPath, logPath, routeEventsPath, historyPath,
+      );
+      assert.match(stdout, /Mid table: status=unknown_not_reconstructable .*reason=raw_mid_source changes within delta chain/);
+      assert.match(stdout, /edge_mids=unknown_mid_table/);
+    }
   });
 });
 

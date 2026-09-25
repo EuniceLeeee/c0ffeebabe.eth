@@ -522,6 +522,11 @@ function successResult(
   canonical: CanonicalSource,
   pool: PoolContext,
 ): AdapterRequestResult {
+  if (request.kind === "get-code" && (request.id === "transfer-code-0" || request.id === "transfer-code-1")) {
+    return Object.freeze({ id: request.id, ok: true, source: canonical,
+      provenance: { kind: "migration-capture-fixture", fingerprint: `fixture:${request.id}` },
+      completion: "returned", data: "0x6000" });
+  }
   if (request.id.startsWith("model-surface-") || request.id.startsWith("model-decimals-") || request.id === "model-amplification") {
     return Object.freeze({ id: request.id, ok: true, source: canonical,
       provenance: { kind: "migration-capture-fixture", fingerprint: `fixture:${request.id}` },

@@ -112,7 +112,8 @@ for (const policy of [undefined, "on-touch", "each-block"] as const) {
   const cache = createAdapterFamilyExactQuoteCache();
   const coordinator = new StrictCurrentRuntimeCoordinator(request => root.createSession({
     source: request.source, runtime: runtime(request.source, "raw"),
-    fundingAssets: [], kind: "pricing", touchedPools: request.touchedPools, control: request.control,
+    fundingAssets: [], kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+    touchedPools: request.touchedPools, requiredEdgeIds: request.requiredEdgeIds, control: request.control,
   }), () => {}, undefined, async (pricing, control, _backend, reuse) => {
     const target = reuse?.quoteGraph ?? pricing;
     const at = { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation };
@@ -163,7 +164,9 @@ for (const policy of [undefined, "on-touch", "each-block"] as const) {
   assert(cache.storeState(otherAddress, cached));
   reads.length = 0;
   const after = await step(source(901));
-  assert.deepEqual(reads, eachBlock ? ["raw", "exact", "exact"] : []);
+  assert.deepEqual(reads, eachBlock ? ["exact", "exact"] : []);
+  assert.strictEqual(after.mids, before.mids, "even each-block Families retain the startup raw Map");
+  assert.deepEqual(after.rawMidSource, start);
   assert(cache.lookupState({ ...otherAddress, source: source(901) }), "unrelated state must remain reusable");
   assert.equal(Boolean(cache.lookupState({ ...cacheAddress, source: source(901) })), !eachBlock);
   for (const [key, row] of before.effectiveMids!.rows) {
@@ -182,20 +185,25 @@ for (const policy of [undefined, "on-touch", "each-block"] as const) {
     assert.equal(after.effectiveMids!.rows, before.effectiveMids!.rows);
     continue;
   }
-  // Failed quiet blocks must drop prices, not carry source-stale outputs.
+  // Failed effective reads drop current prices without erasing the raw sizing reference.
   failed = true;
   const failure = await step(source(902));
-  assert.equal(failure.mids.size, 0);
-  assert.equal(failure.effectiveMids!.rows.size, 0);
+  assert.strictEqual(failure.mids, before.mids);
+  assert.equal(failure.effectiveMids!.rows.size, 2);
+  assert([...failure.effectiveMids!.rows.values()].every(row => row.status === "quote-failed"));
+  assert.equal(failure.coverage.resolvedEdgeKeys.length, 0);
+  assert.equal(failure.coverage.unresolvedEdgeKeys.length, 2);
   const stillFailed = await step(source(903));
-  assert.equal(stillFailed.mids.size, 0); assert.equal(stillFailed.effectiveMids!.rows.size, 0);
+  assert.strictEqual(stillFailed.mids, before.mids);
+  assert.equal(stillFailed.effectiveMids!.rows.size, 2);
+  assert.equal(stillFailed.coverage.unresolvedEdgeKeys.length, 2);
   failed = false;
   const recovered = await step(source(904));
   assert.equal(recovered.mids.size, 2); assert.equal(recovered.effectiveMids!.rows.size, 2);
-  // Sizing uses the last published raw table. After a total price outage,
-  // WETH can quote immediately; other tokens regain their conversion on
-  // the next block. Never manufacture an old reference during recovery.
-  assert([...recovered.effectiveMids!.rows.values()].some(row => row.status === "quoted"));
+  // The original raw table survives the outage, so both inputs can be sized
+  // immediately without a raw refresh or a staged reference-price recovery.
+  assert.strictEqual(recovered.mids, before.mids);
+  assert([...recovered.effectiveMids!.rows.values()].every(row => row.status === "quoted"));
   const fullyRecovered = await step(source(905));
   assert([...fullyRecovered.effectiveMids!.rows.values()].every(row => row.status === "quoted"));
 
@@ -206,4 +214,4 @@ for (const policy of [undefined, "on-touch", "each-block"] as const) {
   await step(source(905));
   assert(cache.lookupState(retryAddress), "same-source retry preserves refreshed state");
 }
-console.log("Family refresh policy: production raw/effective, selective cache, failure/recovery and default delta reuse PASS");
+console.log("Family refresh policy: frozen raw/current effective, selective cache, failure/recovery and default delta reuse PASS");

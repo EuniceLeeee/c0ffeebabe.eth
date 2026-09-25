@@ -25,11 +25,18 @@ const DEFAULT_BLOCKSCAN_LOG = "/var/log/mev-live.log";
 type JsonRecord = Record<string, unknown>;
 type CompactMid = Record<string, string | number>;
 
+interface RawMidSource {
+  readonly number: number;
+  readonly hash: string;
+  readonly generation: number;
+}
+
 interface MidAnchor {
   readonly sourceBlock: number;
   readonly sourceBlockHash: string;
   readonly generation: number;
   readonly graphFingerprint: string;
+  readonly rawMidSource?: RawMidSource;
 }
 
 interface ReconstructedMidTable extends MidAnchor {
@@ -534,6 +541,10 @@ async function loadMidTable(
       `      Mid table: status=complete source_block=${table.sourceBlock} ` +
         `source_block_hash=${table.sourceBlockHash} mids=${table.mids.length} ` +
         `baseline=${table.baselineSourceBlock} deltas=${table.appliedDeltas}` +
+        (table.rawMidSource === undefined
+          ? ""
+          : ` raw_mid_role=startup_amount_in_reference ` +
+            `raw_mid_source=${JSON.stringify(table.rawMidSource)}`) +
         (input.midOutPath === undefined
           ? ""
           : ` out=${resolve(input.midOutPath)}`),
@@ -558,6 +569,10 @@ function midTableRecord(table: ReconstructedMidTable): JsonRecord {
     graph_fingerprint: table.graphFingerprint,
     baseline_source_block: table.baselineSourceBlock,
     applied_deltas: table.appliedDeltas,
+    ...(table.rawMidSource === undefined ? {} : {
+      raw_mid_source: table.rawMidSource,
+      raw_mid_role: "startup_amount_in_reference",
+    }),
     mid_count: table.mids.length,
     mids: table.mids,
   };
@@ -1251,6 +1266,9 @@ async function reconstructMidHistory(
     if (anchor === null || mids === null || baselineSourceBlock === null) {
       continue;
     }
+    if (!sameRawMidSource(common.rawMidSource, anchor.rawMidSource)) {
+      throw new Error(`raw_mid_source changes within delta chain at line ${lineNumber}`);
+    }
     const previousSourceBlock = requiredInteger(
       record.previous_source_block,
       "previous_source_block",
@@ -1333,26 +1351,53 @@ function parseMidCommon(
   if (record.schema_version !== 1) {
     throw new Error(`unsupported mid history schema at line ${lineNumber}`);
   }
+  const sourceBlock = requiredInteger(record.source_block, "source_block", lineNumber);
+  const generation = requiredInteger(record.generation, "generation", lineNumber);
+  const rawMidSource = parseRawMidSource(record, lineNumber);
+  if (rawMidSource !== undefined && (
+    rawMidSource.number > sourceBlock || rawMidSource.generation > generation
+  )) {
+    throw new Error(`raw_mid_source is newer than publication at line ${lineNumber}`);
+  }
   return Object.freeze({
     runId: requiredText(record.run_id, "run_id", lineNumber),
     sequence: requiredInteger(record.sequence, "sequence", lineNumber),
-    sourceBlock: requiredInteger(
-      record.source_block,
-      "source_block",
-      lineNumber,
-    ),
+    sourceBlock,
     sourceBlockHash: requiredText(
       record.source_block_hash,
       "source_block_hash",
       lineNumber,
     ),
-    generation: requiredInteger(record.generation, "generation", lineNumber),
+    generation,
     graphFingerprint: requiredText(
       record.graph_fingerprint,
       "graph_fingerprint",
       lineNumber,
     ),
+    ...(rawMidSource === undefined ? {} : { rawMidSource }),
   });
+}
+
+function parseRawMidSource(
+  record: JsonRecord,
+  lineNumber: number,
+): RawMidSource | undefined {
+  if (!Object.hasOwn(record, "raw_mid_source")) return undefined;
+  if (!isRecord(record.raw_mid_source)) {
+    throw new Error(`invalid raw_mid_source at line ${lineNumber}`);
+  }
+  const source = record.raw_mid_source;
+  return Object.freeze({
+    number: requiredInteger(source.number, "raw_mid_source.number", lineNumber),
+    hash: requiredText(source.hash, "raw_mid_source.hash", lineNumber),
+    generation: requiredInteger(source.generation, "raw_mid_source.generation", lineNumber),
+  });
+}
+
+function sameRawMidSource(left?: RawMidSource, right?: RawMidSource): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return left.number === right.number && left.generation === right.generation &&
+    left.hash.toLowerCase() === right.hash.toLowerCase();
 }
 
 function parseMidEntries(

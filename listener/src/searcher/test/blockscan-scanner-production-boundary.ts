@@ -359,6 +359,30 @@ console.log("[blockscan-production-boundary] generation/block/hash pinning: PASS
 console.log("[blockscan-production-boundary] exact edge/mid coverage: PASS");
 
 {
+  const rawMidSource = { number: block - 1, hash: `0x${"22".repeat(32)}`, generation: 6 };
+  const separated = { ...runtime, pricing: { ...runtime.pricing, rawMidSource, mids: new Map() } };
+  const result = detectProductionBlockScanOpportunities({ runtime: separated, swapTouched: null, cfg });
+  assert.deepEqual(result.opportunities, production.opportunities,
+    "current effective quotes need no row or metadata from the startup raw table");
+  for (const source of [
+    { ...rawMidSource, number: block + 1 },
+    { ...rawMidSource, generation: runtime.generation + 1 },
+    { ...rawMidSource, number: block },
+    { ...rawMidSource, hash: "not-a-block-hash" },
+  ]) assert.throws(() => assertAtomicBlockScanRuntime({ ...separated,
+    pricing: { ...separated.pricing, rawMidSource: source } }), /startup raw reference source/);
+  assert.throws(() => assertAtomicBlockScanRuntime({ ...separated,
+    pricing: { ...separated.pricing, effectiveMids: undefined } }), /effective/);
+  const rows = new Map(runtime.pricing.effectiveMids!.rows);
+  rows.delete(runtime.pricing.coverage.resolvedEdgeKeys[0]!);
+  assert.throws(() => assertAtomicBlockScanRuntime({ ...runtime,
+    pricing: { ...runtime.pricing, rawMidSource,
+      effectiveMids: { ...runtime.pricing.effectiveMids!, rows } } }), /non-exact atomic mid coverage/,
+    "raw entries cannot fill a missing effective quote claimed by current coverage");
+}
+console.log("[blockscan-production-boundary] startup raw/current effective separation: PASS");
+
+{
   const readKeys = Array.from(
     { length: 20_000 },
     (_, index) => `large-read-key-${index.toString().padStart(5, "0")}`,

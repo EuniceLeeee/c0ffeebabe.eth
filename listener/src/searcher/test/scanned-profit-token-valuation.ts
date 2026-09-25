@@ -75,7 +75,7 @@ test("missing, partial and mismatched publications have no raw/default fallback"
     { ...p, generation: source.generation + 1 },
     { ...p, effectiveMids: { ...p.effectiveMids!, source: { ...source, generation: 0 } } },
     { ...p, effectiveMids: { ...p.effectiveMids!, source: { ...source, hash: hash(1) } } },
-    { ...p, coverage: { ...p.coverage, resolvedEdgeKeys: [] } }, { ...p, mids: new Map() },
+    { ...p, coverage: { ...p.coverage, resolvedEdgeKeys: [] } },
   ];
   for (const changed of variants) {
     const v = createScannedProfitTokenValuation(changed, source);
@@ -83,10 +83,19 @@ test("missing, partial and mismatched publications have no raw/default fallback"
     assert.equal(v.valueInEth(W, 1n, 0), 1n);
   }
 });
+test("current effective profit marks are independent of frozen raw membership and metadata", () => {
+  const p = snapshot([[BTC, W, 100n, 200n]]);
+  const noRaw = { ...p, mids: new Map() };
+  assert.equal(createScannedProfitTokenValuation(noRaw, source).valueInEth(BTC, 50n, 0), 100n);
+  const poisoned = { ...p, get mids(): Pricing["mids"] { throw new Error("profit valuation read raw mids"); } };
+  assert.equal(createScannedProfitTokenValuation(poisoned, source).valueInEth(BTC, 50n, 0), 100n);
+  const missingCoverage = { ...noRaw, coverage: { ...noRaw.coverage, resolvedEdgeKeys: [] } };
+  assert.equal(createScannedProfitTokenValuation(missingCoverage, source).canValue(BTC), false);
+});
 test("reject invalid rows, future/fork observations and standing positions", () => {
   const p = snapshot([[BTC, W, 100n, 200n]]);
   for (const patch of [{ status: "quote-failed" as const }, { amountOut: 0n }, { amountIn: null },
-    { edgeId: "wrong" }, { tokenIn: "wrong" }, { tokenOut: "wrong" }, { quotedAt: undefined },
+    { edgeId: "wrong" }, { instanceKey: "wrong" }, { tokenIn: "wrong" }, { tokenOut: "wrong" }, { quotedAt: undefined },
     { quotedAt: { ...source, number: 43 } }, { quotedAt: { ...source, hash: hash(9) } },
     { quotedAt: { ...source, generation: 8 } }]) {
     assert.equal(createScannedProfitTokenValuation(withRow(p, patch), source).canValue(BTC), false);

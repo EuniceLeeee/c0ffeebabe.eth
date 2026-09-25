@@ -292,7 +292,10 @@ export interface BlockScanFamilyTelemetry {
 export interface BlockScanStateSnapshot {
   /** Ready-bound Family policy, carried atomically with prices; not observed activity. */
   readonly perBlockRefreshStateKeys?: readonly string[];
-  /** Optional amount-sensitive companion. Raw pricing/carry contracts stay unchanged. */
+  /** When present, mids is the frozen startup sizing table at this source,
+   * not current prices. Snapshot source/coverage instead describe effectiveMids. */
+  readonly rawMidSource?: import("./venues/adapter-request-program.js").CanonicalSource;
+  /** Amount-sensitive publication; required by enumeration (no raw fallback). */
   readonly effectiveMids?: import("./blockscan-effective-mid.js").EffectiveMidSnapshot;
   readonly generation: number;
   readonly sourceBlock: number;

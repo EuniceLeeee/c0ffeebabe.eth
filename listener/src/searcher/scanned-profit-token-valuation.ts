@@ -4,6 +4,7 @@ import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
 import type { EffectivePricingInput } from "./blockscan-effective-mid.js";
 import type { CanonicalSource } from "./venues/adapter-request-program.js";
 import { blockScanEdgeKey } from "./venues/blockscan-state-capability.js";
+import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 
 type Mark = { num: bigint; den: bigint; maxInput: bigint | null; path: readonly Quote[] };
 type Quote = { id: string; from: string; to: string; amountIn: bigint; amountOut: bigint };
@@ -37,7 +38,8 @@ export function createScannedProfitTokenValuation(
     for (const edge of pricing.graph.edges) {
       if (edge.leavesStandingPosition || (edge.slotKind !== "swap" && edge.slotKind !== "protocol")) continue;
       const id = blockScanEdgeKey(edge), row = effective.rows.get(id);
-      if (!resolved.has(id) || !pricing.mids.has(id) || !row || row.status !== "quoted" || row.edgeId !== id ||
+      if (!resolved.has(id) || !row || row.status !== "quoted" || row.edgeId !== id ||
+          row.instanceKey !== edgeInstanceKey(edge) ||
           row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() || row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase() ||
           row.amountIn === null || row.amountOut === null || row.amountIn <= 0n || row.amountOut <= 0n) continue;
       // Older rows are valid only as members of this complete publication:

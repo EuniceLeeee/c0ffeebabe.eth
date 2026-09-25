@@ -1122,7 +1122,8 @@ export function createBlockScanPriceRuntime(input: {
     strictSessionFor,
     () => strictSessionCache.clear(),
     (publication) => {
-      if (blockScanCfg !== undefined) blockScanTokenReferences.observe(publication);
+      // Effective publication coverage is independent of the frozen raw sizing
+      // table. get(pricing) below indexes that original reference once, lazily.
       blockScanRouteTelemetry.recordPricing(publication);
       if (blockScanCfg !== undefined && publication.snapshot.effectiveMids?.complete) {
         const start = Date.now();

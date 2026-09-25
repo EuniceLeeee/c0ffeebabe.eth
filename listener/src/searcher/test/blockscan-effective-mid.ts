@@ -687,8 +687,8 @@ function enumerationPricing(prices: EffectivePricingInput, effectiveMids?: Effec
   return { ...prices, ...(effectiveMids === undefined ? {} : { effectiveMids }) } as BlockScanStateSnapshot;
 }
 
-test("enumeration uses quoted effective prices with zero fee and preserves original prices, depth and metadata", async () => {
-  const e = edge(W, U, "projected");
+test("enumeration constructs only effective amounts and graph identity without copying raw metadata", async () => {
+  const e = edge(W, U, "projected", "logical-instance");
   const base = pricing([[e, 987, 125]]);
   const original: Readonly<RouteVenueMid> = Object.freeze({
     kind: "external-swap", pool: e.target, edges: [e], mid: 987, feeBps: 125, depthProxy: 4321,
@@ -709,10 +709,9 @@ test("enumeration uses quoted effective prices with zero fee and preserves origi
   assert.equal(result.feeBps, 0);
   assert.equal(result.quoteAmountIn, DEFAULT_RAW);
   assert.equal(result.quoteAmountOut, DEFAULT_RAW * 2n);
-  for (const key of ["kind", "pool", "depthProxy", "reserveA", "reserveB", "balanceHeadroomIn", "sqrtABX96", "liquidity"] as const) {
-    assert.strictEqual(result[key], original[key], `preserved ${key}`);
-  }
-  assert.strictEqual(result.edges, original.edges);
+  assert.deepEqual(result, { kind: "external-swap", pool: "logical-instance", edges: [e],
+    mid: 2, feeBps: 0, depthProxy: 0, quoteAmountIn: DEFAULT_RAW, quoteAmountOut: DEFAULT_RAW * 2n });
+  assert.notStrictEqual(result.edges, original.edges);
   assert.strictEqual(result.edges[0], e);
   assert.strictEqual(input.mids.get(blockScanEdgeKey(e)), original);
   assert.equal(original.mid, 987);
@@ -720,6 +719,12 @@ test("enumeration uses quoted effective prices with zero fee and preserves origi
   assert.equal(original.depthProxy, 4321);
   assert.equal(row(effective, e).effectiveMid, 2);
   assert.strictEqual(input.effectiveMids, effective);
+  assert.deepEqual(effectiveEnumerationMids({ ...input, mids: new Map() }), projected,
+    "a direction missing from the frozen raw table remains independently quoted");
+  const poisoned = { ...input, get mids(): BlockScanStateSnapshot["mids"] {
+    throw new Error("enumeration read the frozen raw table");
+  } };
+  assert.deepEqual(effectiveEnumerationMids(poisoned), projected);
 });
 
 test("enumeration with a companion includes quoted rows only and never falls back to a missing row's spot price", () => {
@@ -743,7 +748,8 @@ test("enumeration with a companion includes quoted rows only and never falls bac
   assert.equal(effectiveEnumerationMids(enumerationPricing(prices, snapshotOf([]))).size, 0,
     "an empty companion cannot silently restore spot prices");
   const legacy = enumerationPricing(prices);
-  assert.strictEqual(effectiveEnumerationMids(legacy), legacy.mids, "only absence of the companion retains legacy behavior");
+  assert.throws(() => effectiveEnumerationMids(legacy), /enumeration effective pricing missing/,
+    "missing effective publication must fail closed even if every raw direction exists");
 });
 
 test("enumeration rejects partial and stale companions independently for block number, hash and generation", () => {
@@ -775,6 +781,9 @@ test("enumeration rejects malformed quoted rows instead of exposing a spot fallb
   const invalid = [
     ...[null, 0, -1, NaN, Infinity].map(effectiveMid => ({ ...valid, effectiveMid })),
     { ...valid, edgeId: "different-key" },
+    { ...valid, instanceKey: "wrong-instance" }, { ...valid, tokenIn: "wrong-input" },
+    { ...valid, tokenOut: "wrong-output" }, { ...valid, tokenIn: U, tokenOut: W },
+    ...[null, 0n, -1n].flatMap(amount => [{ ...valid, amountIn: amount }, { ...valid, amountOut: amount }]),
   ];
   for (const r of invalid) {
     const companion = { ...snapshotOf([]), rows: new Map([["valid", r]]) };
@@ -784,6 +793,11 @@ test("enumeration rejects malformed quoted rows instead of exposing a spot fallb
   assert.throws(() => effectiveEnumerationMids(enumerationPricing(prices, outside)), /invalid effective enumeration row/);
   assert.equal(prices.mids.get("valid")!.mid, 99);
   assert.equal(prices.mids.get("valid")!.feeBps, 30);
+  for (const changed of [{ ...e, instanceKey: "new-instance" }, { ...e, tokenIn: U, tokenOut: W }]) {
+    const current = { ...prices, graph: { edges: [changed] } };
+    assert.throws(() => effectiveEnumerationMids(enumerationPricing(current, snapshotOf([valid]))),
+      /invalid effective enumeration row/, "a raw edge cannot authorize a changed current graph identity");
+  }
 });
 
 function atSource(prices: EffectivePricingInput, source: EffectiveMidSnapshot["source"]): EffectivePricingInput {
@@ -899,6 +913,30 @@ test("previous raw sizes current quotes, including a recovered direction missing
   const clean = await build(prices, { quoteGraph, previous, touchedStateKeys: new Set(),
     quote: async () => { throw new Error("unpriced clean graph directions must not issue quotes"); } });
   assert.equal(clean.rows.size, 0, "the current graph cannot silently broaden the raw touched work set");
+  const later = { number: current.number + 1, hash: hash(702), generation: current.generation + 1 };
+  const laterGraph = graphAt([recovered], later);
+  let carryCalls = 0;
+  const retained = await build(prices, { quoteGraph: laterGraph, previous: result, touchedStateKeys: new Set(),
+    quote: async () => { carryCalls++; throw new Error("clean recovered effective row must carry without raw membership"); } });
+  assert.equal(carryCalls, 0);
+  assertReferenceRetained(row(retained, recovered), row(result, recovered));
+  assert.strictEqual(retained.rows, result.rows);
+  assert.equal(prices.mids.has(blockScanEdgeKey(recovered)), false);
+  const currentPricing = enumerationPricing({ ...atSource(prices, later), graph: laterGraph }, retained);
+  assert.equal(effectiveEnumerationMids(currentPricing).get(blockScanEdgeKey(recovered))!.quoteAmountOut, 456n);
+  const failed = await build(prices, { quoteGraph: laterGraph, previous: retained,
+    touchedStateKeys: new Set(["recovered"]), quote: async () => { throw new Error("new quote unavailable"); } });
+  noQuote(row(failed, recovered), "quote-failed");
+  assert.equal(effectiveEnumerationMids({ ...currentPricing, effectiveMids: failed }).size, 0);
+  const cleanFailed = await build(prices, { quoteGraph: laterGraph, previous: failed, touchedStateKeys: new Set(),
+    quote: async () => { carryCalls++; throw new Error("clean failed row stays unavailable"); } });
+  assert.equal(carryCalls, 0);
+  assert.strictEqual(row(cleanFailed, recovered), row(failed, recovered));
+  const recoveredAgain = await build(prices, { quoteGraph: laterGraph, previous: cleanFailed,
+    touchedStateKeys: new Set(["recovered"]), quote: async ({ amountIn }) => ({ source: later, amountIn, amountOut: 789n }) });
+  assert.equal(row(recoveredAgain, recovered).status, "quoted");
+  assert.equal(effectiveEnumerationMids({ ...currentPricing, effectiveMids: recoveredAgain })
+    .get(blockScanEdgeKey(recovered))!.quoteAmountOut, 789n);
 });
 
 test("all-clean steady work reuses the Map without even reading valuation coverage", async () => {

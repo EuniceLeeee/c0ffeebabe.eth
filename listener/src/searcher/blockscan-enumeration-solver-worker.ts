@@ -89,7 +89,8 @@ interface MidHistoryGap {
   readonly lastDroppedBlock: number;
 }
 
-type RawMidBatch = { readonly effectiveMids?: EffectiveMidSnapshot } & (
+type RawMidBatch = { readonly effectiveMids?: EffectiveMidSnapshot;
+  readonly rawMidSource?: EffectiveMidSnapshot["source"] } & (
   | (MidHistoryAnchor & {
       readonly kind: "mid-baseline";
       readonly sequence: number;
@@ -449,6 +450,7 @@ async function handleMidBatch(batch: RawMidBatch): Promise<void> {
       };
   const payload = `${JSON.stringify({
     ...record,
+    ...(batch.rawMidSource === undefined ? {} : { raw_mid_source: batch.rawMidSource }),
     ...(batch.effectiveMids === undefined ? {} : {
       effective_mids: serializeEffectiveMids(batch.effectiveMids),
     }),
@@ -732,6 +734,13 @@ function validateMidBatch(batch: RawMidBatch): void {
   ) {
     throw new Error("invalid mid history source anchor");
   }
+  const rawSource = batch.rawMidSource;
+  if (rawSource !== undefined && (
+    !Number.isSafeInteger(rawSource.number) || rawSource.number < 0 || rawSource.number > batch.sourceBlock ||
+    !Number.isSafeInteger(rawSource.generation) || rawSource.generation < 0 || rawSource.generation > batch.generation ||
+    !/^0x[0-9a-f]{64}$/i.test(rawSource.hash) ||
+    (rawSource.number === batch.sourceBlock && rawSource.hash.toLowerCase() !== batch.sourceBlockHash.toLowerCase())
+  )) throw new Error("invalid startup raw mid source anchor");
   if (batch.kind === "mid-baseline") {
     if (!Array.isArray(batch.mids) || batch.mids.length > MAX_MID_ENTRIES) {
       throw new Error("invalid mid history baseline size");

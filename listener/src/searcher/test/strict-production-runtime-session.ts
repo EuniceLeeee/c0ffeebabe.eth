@@ -76,7 +76,7 @@ import { UNIV2_PAIR_INTERFACE } from
 import { scanBlockStateFromResolvedMids } from
   "../detector/blockscan-scanner-core.js";
 import { readBlockTouchedStateKeys } from "../blockscan-touched-state.js";
-import { buildEffectiveMids, DEFAULT_EFFECTIVE_WETH_INPUT, effectiveMidRowCarried, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
+import { buildEffectiveMids, DEFAULT_EFFECTIVE_WETH_INPUT, effectiveEnumerationMids, effectiveMidRowCarried, type EffectiveMidRow, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
 import { effectiveUsdPricing } from "../blockscan-usd-view.js";
 
 const STARTUP: CanonicalSource = Object.freeze({
@@ -2587,12 +2587,12 @@ for (const path of ["coarse", "runtime"] as const) {
           : pool.reserves,
         onCurrentPricingReadStart: target => { rawReads.push(target); },
       }),
-      fundingAssets: request.fundingAssets, kind: "pricing", control: request.control,
-      touchedPools: request.touchedPools,
+      fundingAssets: request.fundingAssets, kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+      control: request.control, touchedPools: request.touchedPools, requiredEdgeIds: request.requiredEdgeIds,
     }), () => {}, undefined,
     async (pricing, control, _backend, reuse) => {
       assert.equal(reuse?.touchedStateKeys, sharedTouched,
-        "effective receives the exact SAME raw-mid activity set, no separately issued proof");
+        "effective receives the existing canonical activity set, no separately issued proof");
       const target = reuse?.quoteGraph ?? pricing;
       return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, control, weth: UNIV2_FIXTURE_TOKEN0,
         previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
@@ -2613,7 +2613,7 @@ for (const path of ["coarse", "runtime"] as const) {
       touchedPools: sharedTouched,
       canonicalActivity: sharedTouched === undefined ? undefined : {
         source: { number: graph.sourceBlock, hash: graph.sourceBlockHash, generation: graph.generation },
-        touchedStateKeys: sharedTouched, complete: true as const,
+        parentHash: CURRENT.hash, touchedStateKeys: sharedTouched, complete: true as const,
       } };
     return path === "coarse" ? paired.prepareCoarsePricing(args)
       : paired.prepare({ ...args, fundingTokens: [] });
@@ -2645,7 +2645,10 @@ for (const path of ["coarse", "runtime"] as const) {
   assert(after.effectiveMids!.referenceWethInput > before.effectiveMids!.referenceWethInput,
     "this fixture must actually change the gas-sized reference");
   assert.equal(activityReads, 2, "one log read plus one trace, never a second effective activity scan");
-  assert.deepEqual(rawReads, [firstParallelTarget]);
+  assert.deepEqual(rawReads, [], "steady producers never refresh the raw reference table");
+  assert.strictEqual(after.mids, before.mids);
+  assert.deepEqual(after.rawMidSource, CURRENT);
+  assert.deepEqual(before.rawMidSource, CURRENT);
   assert.deepEqual(amountReads, [firstParallelTarget, firstParallelTarget]);
   for (const [key, oldRow] of before.effectiveMids!.rows) {
     const newRow = after.effectiveMids!.rows.get(key)!;
@@ -2666,32 +2669,200 @@ for (const path of ["coarse", "runtime"] as const) {
       assert.deepEqual(newRow.quotedAt, CURRENT);
     }
   }
-  console.log(`strict shared touched raw/effective: PASS ${path}`);
+  console.log(`strict frozen raw/current effective: PASS ${path}`);
 }
 
-// Deterministic gates prove overlap, not merely faster elapsed fixture time.
+// A direction missing from bootstrap raw can recover in current effective,
+// without changing the original P/reference table or emitting raw history deltas.
+{
+  let rawReads = 0, amountReads = 0;
+  let originalSizing: BlockScanStateSnapshot | undefined;
+  const publications: StrictPricingPublication[] = [];
+  const coordinator = new StrictCurrentRuntimeCoordinator(request => parallelRoot.createSession({
+    source: request.source, fundingAssets: [], control: request.control,
+    kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+    requiredEdgeIds: request.requiredEdgeIds,
+    runtime: runtime(request.source, {
+      failCurrentPricingTarget: firstParallelTarget,
+      onCurrentPricingReadStart: () => { rawReads++; },
+    }),
+  }), () => {}, item => { publications.push(item); }, async (sizing, control, _backend, reuse) => {
+    if (originalSizing) assert.strictEqual(sizing, originalSizing);
+    else originalSizing = sizing;
+    const target = reuse?.quoteGraph ?? sizing;
+    return buildEffectiveMids({ pricing: sizing, quoteGraph: reuse?.quoteGraph, control,
+      weth: UNIV2_FIXTURE_TOKEN0, gasCostWei: null, enumerationSpreadBps: 200, concurrency: 2,
+      previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
+      quote: async ({ amountIn }) => {
+        amountReads++;
+        return { source: { number: target.sourceBlock, hash: target.sourceBlockHash,
+          generation: target.generation }, amountIn, amountOut: amountIn * 2n };
+      },
+    });
+  });
+  const bootstrap = await coordinator.prepareCoarsePricing({ graph: carryBaseGraph,
+    deadlineAtMs: Date.now() + 10_000 });
+  assert.equal(bootstrap.status, "degraded");
+  const missingKeys = carryBaseGraph.edges.filter(e => e.instanceKey === firstParallelTarget).map(blockScanEdgeKey);
+  assert.equal(missingKeys.length, 2);
+  for (const key of missingKeys) assert.equal(bootstrap.snapshot.mids.has(key), false);
+  const bootstrapReads = rawReads;
+  assert(bootstrapReads > 0);
+  assert.deepEqual(originalSizing!.sourceBlock, CURRENT.number);
+  const originalCoverage = originalSizing!.coverage;
+  amountReads = 0;
+  const recovered = await coordinator.prepareCoarsePricing({ graph: carryNextGraph,
+    deadlineAtMs: Date.now() + 10_000, canonicalActivity: { source: carryNextSource,
+      parentHash: CURRENT.hash, touchedStateKeys: new Set([firstParallelTarget]), complete: true } });
+  assert.equal(recovered.status, "complete");
+  assert.equal(amountReads, 2, "only the formerly absent touched direction pair is newly quoted");
+  for (const key of missingKeys) {
+    assert.equal(recovered.snapshot.mids.has(key), false);
+    assert.equal(recovered.snapshot.effectiveMids!.rows.get(key)!.status, "quoted");
+    assert.equal(effectiveEnumerationMids(recovered.snapshot).has(key), true);
+  }
+  amountReads = 0;
+  const carried = await coordinator.prepareCoarsePricing({ graph: carryThirdGraph,
+    deadlineAtMs: Date.now() + 10_000, canonicalActivity: { source: carryThirdSource,
+      parentHash: carryNextSource.hash, touchedStateKeys: new Set(), complete: true } });
+  assert.equal(carried.status, "complete");
+  assert.equal(amountReads, 0, "recovered effective rows remain in clean-block membership");
+  assert.equal(carried.snapshot.effectiveMids!.rows.size, carryThirdGraph.scannerEdgeCount);
+  // No proof and a mismatched-source proof both force a full effective refresh, never raw.
+  for (const canonicalActivity of [undefined, { source: carryNextSource,
+    touchedStateKeys: new Set<string>(), complete: true as const }]) {
+    amountReads = 0;
+    await coordinator.prepareCoarsePricing({ graph: carryThirdGraph,
+      deadlineAtMs: Date.now() + 10_000, canonicalActivity });
+    assert.equal(amountReads, carryThirdGraph.scannerEdgeCount);
+  }
+  assert.equal(rawReads, bootstrapReads);
+  assert.strictEqual(originalSizing!.coverage, originalCoverage);
+  assert.strictEqual(coordinator.latestPricingSnapshot()!.mids, bootstrap.snapshot.mids);
+  assert.deepEqual(coordinator.latestPricingSnapshot()!.rawMidSource, CURRENT);
+  assert.equal(publications[0]!.kind, "baseline");
+  for (const item of publications.slice(1)) {
+    assert.equal(item.kind, "delta");
+    if (item.kind === "delta") { assert.deepEqual(item.updates, []); assert.deepEqual(item.removals, []); }
+  }
+  console.log("strict frozen raw: PASS missing-direction recovery, carry, full effective refresh, empty raw deltas");
+}
+
+// Current effective status owns coverage even when every raw entry is healthy.
+{
+  const statuses = ["quoted", "no-output", "unsupported", "quote-failed", "missing-valuation", "missing-row"] as const;
+  const coordinator = new StrictCurrentRuntimeCoordinator(request => parallelRoot.createSession({
+    source: request.source, runtime: runtime(request.source), fundingAssets: [], control: request.control,
+    kind: "pricing",
+  }), () => {}, undefined, async sizing => {
+    const rows = new Map<string, EffectiveMidRow>();
+    for (const [index, graphEdge] of sizing.graph.edges.entries()) {
+      const status = statuses[index % statuses.length]!;
+      if (status === "missing-row") continue;
+      const key = blockScanEdgeKey(graphEdge);
+      rows.set(key, { edgeId: key, instanceKey: graphEdge.instanceKey!,
+        tokenIn: graphEdge.tokenIn.toUpperCase(), tokenOut: graphEdge.tokenOut.toUpperCase(), status,
+        amountIn: status === "quoted" ? 1n : null,
+        amountOut: status === "quoted" ? 2n : null, effectiveMid: status === "quoted" ? 2 : null });
+    }
+    return { source: CURRENT, rows, reference: "default", referenceWethInput: DEFAULT_EFFECTIVE_WETH_INPUT,
+      complete: true, wallMs: 0 };
+  });
+  const result = await coordinator.prepare({ graph: carryBaseGraph, fundingTokens: [], deadlineAtMs: Date.now() + 10_000 });
+  assert.equal(result.status, "degraded");
+  const pricing = result.snapshot.pricing;
+  assert.equal(pricing.mids.size, carryBaseGraph.scannerEdgeCount);
+  for (const [index, graphEdge] of carryBaseGraph.edges.entries()) {
+    const status = statuses[index % statuses.length]!;
+    assert.equal(pricing.coverageByEdgeKey.get(blockScanEdgeKey(graphEdge))!.status,
+      status === "quoted" ? "resolved" : status === "no-output" || status === "unsupported" ? "rejected" : "unresolved");
+  }
+  assert.equal(effectiveEnumerationMids(pricing).size, pricing.coverage.resolvedEdgeKeys.length);
+  assert.doesNotThrow(() => assertAtomicBlockScanRuntime(result.snapshot));
+  console.log("strict frozen raw: PASS current effective coverage partition and case-insensitive row tokens");
+}
+
+// Reorg/topology/reset create a fresh raw epoch. A forward source gap retains
+// sizing raw, but does not authorize effective carry across the missing blocks.
+for (const mode of ["same-height-reorg", "parent-mismatch", "backward", "topology", "reset", "forward-gap"] as const) {
+  let selectedRoot = parallelRoot, rawReads = 0;
+  const sizingSnapshots: BlockScanStateSnapshot[] = [];
+  const publications: StrictPricingPublication[] = [];
+  const coordinator = new StrictCurrentRuntimeCoordinator(request => selectedRoot.createSession({
+    source: request.source, runtime: runtime(request.source, { onCurrentPricingReadStart: () => { rawReads++; } }),
+    fundingAssets: [], control: request.control, kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+    requiredEdgeIds: request.requiredEdgeIds,
+  }), () => {}, item => { publications.push(item); }, async (sizing, _control, _backend, reuse) => {
+    sizingSnapshots.push(sizing);
+    assert.equal(reuse?.touchedStateKeys, undefined, "invalid continuity never carries effective state");
+    const target = reuse?.quoteGraph ?? sizing;
+    return { source: { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation },
+      rows: new Map(), reference: "default", referenceWethInput: DEFAULT_EFFECTIVE_WETH_INPUT,
+      complete: true, wallMs: 0 };
+  });
+  await coordinator.prepareCoarsePricing({ graph: carryBaseGraph, deadlineAtMs: Date.now() + 10_000 });
+  const baselineReads = rawReads;
+  let nextGraph = carryNextGraph;
+  if (mode === "reset") await coordinator.resetDynamicStateForReplay();
+  if (mode === "topology") selectedRoot = root;
+  if (mode === "topology" || mode === "same-height-reorg" || mode === "backward") nextGraph = createVerifiedGraphView({
+    ...carryNextGraph, id: `frozen-raw-${mode}`,
+    sourceBlock: mode === "backward" ? CURRENT.number - 1 : mode === "same-height-reorg" ? CURRENT.number : carryNextSource.number,
+    familyIdForEdge: () => publication.familyId,
+    edges: mode === "topology" ? startupView.edges : parallelStartupView.edges,
+  });
+  if (mode === "forward-gap") nextGraph = carryThirdGraph;
+  await coordinator.prepareCoarsePricing({ graph: nextGraph, deadlineAtMs: Date.now() + 10_000,
+    canonicalActivity: { source: { number: nextGraph.sourceBlock, hash: nextGraph.sourceBlockHash,
+      generation: nextGraph.generation }, parentHash: mode === "parent-mismatch" ? WRONG_HASH.hash : CURRENT.hash,
+      touchedStateKeys: new Set(), complete: true } });
+  if (mode === "forward-gap") {
+    assert.equal(rawReads, baselineReads);
+    assert.strictEqual(sizingSnapshots[1], sizingSnapshots[0]);
+    assert.equal(publications[1]!.kind, "delta");
+  } else {
+    assert(rawReads > baselineReads);
+    assert.notStrictEqual(sizingSnapshots[1], sizingSnapshots[0]);
+    assert.equal(publications[1]!.kind, "baseline");
+    assert.equal(coordinator.latestPricingSnapshot()!.rawMidSource!.number, nextGraph.sourceBlock);
+  }
+  console.log(`strict frozen raw epoch: PASS ${mode}`);
+}
+
+// Bootstrap ordering remains raw -> effective. Steady metadata/Funding and
+// effective settlement stays atomic without issuing another raw pricing read.
 for (const path of ["coarse", "runtime"] as const) {
   const nextTurn = () => new Promise<void>(resolve => setImmediate(resolve));
-  for (const mode of ["raw-first", "effective-first", "raw-reject", "effective-reject", "abort", "reset"] as const) {
+  for (const mode of ["session-first", "effective-first", "session-reject", "effective-reject", "abort", "reset"] as const) {
     let rawGate = preparationGate(), quoteGate = preparationGate();
     let rawStarted = preparationGate(), quoteStarted = preparationGate();
     let steady = false, publications = 0, effectiveCalls = 0;
     let previous: BlockScanStateSnapshot | null = null;
+    let originalSizing: BlockScanStateSnapshot | undefined;
+    let rawReads = 0;
     const controller = new AbortController();
     const touched = new Set<string>([firstParallelTarget]);
     const paired = new StrictCurrentRuntimeCoordinator(async request => {
       rawStarted.release();
       await rawGate.promise;
-      if (steady && mode === "raw-reject") throw new Error("raw fixture rejected");
-      return parallelRoot.createSession({ source: request.source, runtime: runtime(request.source),
-        fundingAssets: [], kind: "pricing", control: request.control, touchedPools: request.touchedPools });
+      if (steady && mode === "session-reject") throw new Error("session fixture rejected");
+      if (steady) {
+        assert.equal(request.purpose, "exact-execution");
+        assert.equal(request.requiredEdgeIds?.size, 0);
+        assert.equal(request.touchedPools, undefined);
+      }
+      return parallelRoot.createSession({ source: request.source,
+        runtime: runtime(request.source, { onCurrentPricingReadStart: () => { rawReads++; } }),
+        fundingAssets: [], kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+        control: request.control, touchedPools: request.touchedPools, requiredEdgeIds: request.requiredEdgeIds });
     }, () => {}, () => { publications++; }, async (sizing, _control, _backend, reuse) => {
       effectiveCalls++;
       if (steady) {
-        assert.strictEqual(sizing, previous, "steady sizing is the unmodified previous publication");
+        assert.strictEqual(sizing, originalSizing, "steady sizing is the original startup raw snapshot");
+        assert.equal(sizing.rawMidSource, undefined, "the sizing snapshot itself has never been relabelled");
         assert.strictEqual(reuse?.quoteGraph, carryNextGraph, "quote target is independently current");
         assert.strictEqual(reuse?.touchedStateKeys, touched);
-      } else assert.equal(reuse?.quoteGraph, undefined);
+      } else { originalSizing = sizing; assert.equal(reuse?.quoteGraph, undefined); }
       quoteStarted.release();
       await quoteGate.promise;
       if (steady && mode === "effective-reject") throw new Error("effective fixture rejected");
@@ -2703,7 +2874,8 @@ for (const path of ["coarse", "runtime"] as const) {
     const prepare = (graph: typeof carryBaseGraph) => {
       const args = { graph, deadlineAtMs: Date.now() + 10_000, signal: controller.signal,
         touchedPools: touched, canonicalActivity: { source: { number: graph.sourceBlock,
-          hash: graph.sourceBlockHash, generation: graph.generation }, touchedStateKeys: touched, complete: true as const } };
+          hash: graph.sourceBlockHash, generation: graph.generation }, parentHash: CURRENT.hash,
+          touchedStateKeys: touched, complete: true as const } };
       return path === "coarse" ? paired.prepareCoarsePricing(args) : paired.prepare({ ...args, fundingTokens: [] });
     };
     const bootstrap = prepare(carryBaseGraph);
@@ -2715,6 +2887,8 @@ for (const path of ["coarse", "runtime"] as const) {
     assert.equal(publications, 0);
     quoteGate.release();
     await bootstrap;
+    const bootstrapReads = rawReads;
+    assert(bootstrapReads > 0);
     previous = paired.latestPricingSnapshot();
     assert(previous);
     steady = true;
@@ -2729,7 +2903,7 @@ for (const path of ["coarse", "runtime"] as const) {
       assert.equal(paired.latestPricingSnapshot(), previous);
       if (mode === "abort") controller.abort(new Error("parallel fixture cancelled"));
       if (mode === "reset") await paired.resetDynamicStateForReplay();
-      if (mode === "raw-first" || mode === "raw-reject") rawGate.release();
+      if (mode === "session-first" || mode === "session-reject") rawGate.release();
       else quoteGate.release();
       await nextTurn();
       assert.equal(settled, false, "one completed/rejected branch cannot detach the sibling");
@@ -2738,7 +2912,8 @@ for (const path of ["coarse", "runtime"] as const) {
       rawGate.release(); quoteGate.release();
       await observed;
     }
-    if (mode === "raw-first" || mode === "effective-first") {
+    assert.equal(rawReads, bootstrapReads, "steady metadata/session creation issues no raw reads");
+    if (mode === "session-first" || mode === "effective-first") {
       await pending;
       assert.equal(publications, 2);
       assert.equal(paired.latestPricingSnapshot()!.sourceBlock, carryNextSource.number);
@@ -2749,7 +2924,7 @@ for (const path of ["coarse", "runtime"] as const) {
       assert.equal(publications, 1);
       assert.equal(paired.latestPricingSnapshot(), mode === "reset" ? null : previous);
     }
-    console.log(`strict parallel raw/effective: PASS ${path}/${mode}`);
+    console.log(`strict frozen raw atomic effective: PASS ${path}/${mode}`);
   }
 }
 
@@ -2765,7 +2940,8 @@ for (const path of ["coarse", "runtime"] as const) {
   let publications = 0;
   const enriched = new StrictCurrentRuntimeCoordinator(
     request => root.createSession({ source: request.source, runtime: strictRuntime,
-      fundingAssets: request.fundingAssets, kind: "pricing", control: request.control }),
+      fundingAssets: request.fundingAssets, kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+      requiredEdgeIds: request.requiredEdgeIds, control: request.control }),
     () => {},
     publication => {
       publications++;
@@ -2824,7 +3000,8 @@ for (const path of ["coarse", "runtime"] as const) {
   let controller = new AbortController();
   const coordinated = new StrictCurrentRuntimeCoordinator(
     request => root.createSession({ source: request.source, runtime: strictRuntime,
-      fundingAssets: request.fundingAssets, kind: "pricing", control: request.control }),
+      fundingAssets: request.fundingAssets, kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+      requiredEdgeIds: request.requiredEdgeIds, control: request.control }),
     () => {}, () => { publications++; },
     async (pricing, _control, _backend, reuse) => {
       observedPrevious = reuse?.previous;
@@ -2878,7 +3055,8 @@ for (const retire of ["newer-prepare", "reset"] as const) {
   let first = true;
   const coordinated = new StrictCurrentRuntimeCoordinator(
     request => root.createSession({ source: request.source, runtime: strictRuntime,
-      fundingAssets: [], kind: "pricing", control: request.control }),
+      fundingAssets: [], kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+      requiredEdgeIds: request.requiredEdgeIds, control: request.control }),
     () => {}, undefined,
     async pricing => {
       if (first) { first = false; entered(); await gate; }
@@ -2902,7 +3080,8 @@ for (const path of ["coarse", "runtime"] as const) for (const rejection of ["abo
   const gate = new Promise<void>(resolve => { release = resolve; });
   const guarded = new StrictCurrentRuntimeCoordinator(
     request => root.createSession({ source: request.source, runtime: strictRuntime,
-      fundingAssets: [], kind: "pricing", control: request.control }), () => {}, undefined,
+      fundingAssets: [], kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+      requiredEdgeIds: request.requiredEdgeIds, control: request.control }), () => {}, undefined,
     async pricing => { entered(); await gate; return {
       source: { number: pricing.sourceBlock, hash: pricing.sourceBlockHash, generation: pricing.generation },
       rows: new Map(), reference: "default", referenceWethInput: 1n, complete: true, wallMs: 0,
@@ -2933,7 +3112,8 @@ for (const disposition of [
   let effectiveBuilds = 0, publications = 0, validations = 0;
   const guarded = new StrictCurrentRuntimeCoordinator(
     request => root.createSession({ source: request.source, runtime: strictRuntime,
-      fundingAssets: request.fundingAssets, kind: "pricing", control: request.control }),
+      fundingAssets: request.fundingAssets, kind: request.purpose === "exact-execution" ? "exact" : "pricing",
+      requiredEdgeIds: request.requiredEdgeIds, control: request.control }),
     () => {}, () => { publications++; },
     async pricing => {
       effectiveBuilds++;
@@ -3183,7 +3363,9 @@ assert.equal(execution.status, "resolved");
           program: { ...method.program, decode(args) {
             const result = method.program.decode(args);
             const amountOut = result.amountOut + BigInt(args.programInput.prefix?.length ?? 0);
-            return { amountOut, evidence: { ...result.evidence, amountOut } };
+            // This synthetic untaxed quote changes both the pool output and
+            // its received amount; retaining the old receipt is invalid evidence.
+            return { amountOut, evidence: { ...result.evidence, poolAmountOut: amountOut, amountOut } };
           } } };
       });
     } },

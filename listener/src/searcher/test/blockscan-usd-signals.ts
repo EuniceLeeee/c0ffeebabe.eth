@@ -8,6 +8,7 @@ import type { ResolvedBlockScanMid } from "../detector/blockscan-scanner-core.js
 import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
+import { edgeInstanceKey } from "../venues/route-instance-identity.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 
 const address = (n: number) => `0x${n.toString(16).padStart(40, "0")}`;
@@ -101,6 +102,7 @@ test("publication cache distinguishes cap, retains mids and supports switching b
   const pricing = {graph: {edges}, mids, sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
     effectiveMids: {source, complete: true, rows: new Map([...mids].map(([k, m]) => [k, {
     edgeId: k, status: "quoted", effectiveMid: m.mid, amountIn: m.quoteAmountIn, amountOut: m.quoteAmountOut,
+    instanceKey: edgeInstanceKey(m.edges[0]!), tokenIn: m.edges[0]!.tokenIn, tokenOut: m.edges[0]!.tokenOut,
   }]))}} as unknown as BlockScanStateSnapshot;
   const one = effectiveUsdPricing(pricing, 1);
   assert.equal(effectiveUsdPricing(pricing, 1), one);
@@ -116,6 +118,13 @@ test("publication cache distinguishes cap, retains mids and supports switching b
   assert.deepEqual(identities(off.view.signals), identities(buildBlockScanUsdView(edges, mids, 20, false).signals));
   assert.equal(effectiveUsdPricing(pricing, 20, false), off);
   assert.deepEqual(identities(effectiveUsdPricing(pricing, 20, true).view.signals), identities(on.view.signals));
+  const independent = { ...pricing, get mids(): BlockScanStateSnapshot["mids"] {
+    throw new Error("effective USD view read the frozen raw table");
+  } };
+  const noRaw = effectiveUsdPricing(independent, 20, true);
+  assert.deepEqual(noRaw.mids, on.mids);
+  assert.deepEqual(identities(noRaw.view.signals), identities(on.view.signals));
+  assert.throws(() => effectiveUsdPricing({ ...pricing, effectiveMids: undefined }), /effective pricing missing/);
 });
 
 test("USD hop value uses the best equal-hop reference without changing effective amounts", () => {

@@ -1,5 +1,6 @@
 import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
 import { effectiveUsdPricing } from "../blockscan-usd-view.js";
+import { effectiveEnumerationMids } from "../blockscan-effective-mid.js";
 import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import {
@@ -274,7 +275,18 @@ export function assertAtomicBlockScanPricingView(
     );
   }
   const indexesFinishedAtMs = Date.now();
-  const midKeys = [...pricing.mids.keys()];
+  const rawSource = pricing.rawMidSource;
+  if (rawSource !== undefined && (
+    !Number.isSafeInteger(rawSource.number) || rawSource.number < 0 ||
+    !Number.isSafeInteger(rawSource.generation) || rawSource.generation < 0 ||
+    !/^0x[0-9a-f]{64}$/i.test(rawSource.hash) ||
+    rawSource.number > pricing.sourceBlock || rawSource.generation > pricing.generation ||
+    (rawSource.number === pricing.sourceBlock &&
+      rawSource.hash.toLowerCase() !== pricing.sourceBlockHash.toLowerCase())
+  )) throw new Error("production scanner rejected invalid startup raw reference source");
+  // New publications explicitly separate old sizing marks from current amounts.
+  // Validate current coverage against effective quotes, never the startup map.
+  const midKeys = [...(rawSource === undefined ? pricing.mids : effectiveEnumerationMids(pricing)).keys()];
   if (
     midKeys.length !== resolvedEdgeSet.size ||
     midKeys.some((edgeKey) => !resolvedEdgeSet.has(edgeKey))

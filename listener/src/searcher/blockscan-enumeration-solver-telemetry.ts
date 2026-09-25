@@ -155,7 +155,8 @@ interface MidHistoryGap {
   readonly lastDroppedBlock: number;
 }
 
-type RawMidBatch = { readonly effectiveMids?: EffectiveMidSnapshot } & (
+type RawMidBatch = { readonly effectiveMids?: EffectiveMidSnapshot;
+  readonly rawMidSource?: EffectiveMidSnapshot["source"] } & (
   | (MidHistoryAnchor & {
       readonly kind: "mid-baseline";
       readonly sequence: number;
@@ -566,6 +567,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
       const effective = snapshot.effectiveMids === undefined ? {} : {
         effectiveMids: snapshot.effectiveMids,
       };
+      const rawReference = snapshot.rawMidSource === undefined ? {} : { rawMidSource: snapshot.rawMidSource };
       const anchor: MidHistoryAnchor = Object.freeze({
         generation: publication.snapshot.generation,
         sourceBlock,
@@ -586,6 +588,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
             sequence: this.nextSequence++,
             ...anchor,
             ...effective,
+            ...rawReference,
             previousGeneration: publication.previousGeneration,
             previousSourceBlock: publication.previousSourceBlock,
             previousSourceBlockHash: publication.previousSourceBlockHash,
@@ -598,6 +601,7 @@ class WorkerBlockScanRouteTelemetry implements BlockScanRouteTelemetrySink {
             sequence: this.nextSequence++,
             ...anchor,
             ...effective,
+            ...rawReference,
             mids: compactMids(publication.snapshot.mids),
             gapBefore: this.pendingMidGap,
           });

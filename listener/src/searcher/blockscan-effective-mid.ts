@@ -47,27 +47,31 @@ export function effectiveMidRowCarried(snapshot: EffectiveMidSnapshot, row: Effe
     at.hash.toLowerCase() !== snapshot.source.hash.toLowerCase() || at.generation !== snapshot.source.generation;
 }
 
-/** Consumer-only projection; never mutate the original mid or its carry proof.
- * Existing snapshots without the companion retain their legacy contract. */
+/** Consumer-only projection of current effective amounts and graph identity.
+ * Raw mids are sizing references only and never provide enumeration fallback. */
 export function effectiveEnumerationMids(pricing: BlockScanStateSnapshot): ReadonlyMap<string,
   RouteVenueMid & { readonly quoteAmountIn?: bigint; readonly quoteAmountOut?: bigint }> {
   const effective = pricing.effectiveMids;
-  if (effective === undefined) return pricing.mids;
+  if (effective === undefined) throw new Error("enumeration effective pricing missing");
   if (!effective.complete || effective.source.number !== pricing.sourceBlock ||
       effective.source.hash.toLowerCase() !== pricing.sourceBlockHash.toLowerCase() ||
       effective.source.generation !== pricing.generation) {
     throw new Error("enumeration effective pricing incomplete or mismatched source");
   }
+  const edges = new Map(pricing.graph.edges.map(edge => [blockScanEdgeKey(edge), edge]));
   const mids = new Map<string, RouteVenueMid & { quoteAmountIn: bigint; quoteAmountOut: bigint }>();
   for (const [key, row] of effective.rows) {
-    const original = pricing.mids.get(key);
     if (row.status !== "quoted") continue;
-    if (!original || row.edgeId !== key || row.effectiveMid === null ||
+    const edge = edges.get(key);
+    if (!edge || row.edgeId !== key || row.instanceKey !== edgeInstanceKey(edge) ||
+        row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() ||
+        row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase() || row.effectiveMid === null ||
         !Number.isFinite(row.effectiveMid) || row.effectiveMid <= 0 ||
         row.amountIn === null || row.amountOut === null || row.amountIn <= 0n || row.amountOut <= 0n) {
       throw new Error("invalid effective enumeration row");
     }
-    mids.set(key, { ...original, mid: row.effectiveMid, feeBps: 0,
+    mids.set(key, { kind: "external-swap", pool: edgeInstanceKey(edge), edges: [edge],
+      mid: row.effectiveMid, feeBps: 0, depthProxy: 0,
       quoteAmountIn: row.amountIn, quoteAmountOut: row.amountOut });
   }
   return mids;
@@ -102,7 +106,7 @@ export async function buildEffectiveMids(input: {
   readonly control: AdapterWorkControl;
   readonly concurrency: number;
   readonly previous?: EffectiveMidSnapshot;
-  /** The SAME complete touched set used by raw-mid preparation. Undefined is
+  /** The complete pricing-state touched set. Undefined is
    * bootstrap/full refresh, not an empty block. Pricing references only: no
    * per-method reuse declaration and no amount-change invalidation. */
   readonly touchedStateKeys?: ReadonlySet<string>;
@@ -129,13 +133,15 @@ export async function buildEffectiveMids(input: {
   const edges = new Map((input.quoteGraph ?? pricing.graph).edges.map(e => [blockScanEdgeKey(e), e]));
   const stateKeyFor = (edgeId: string, edge: (typeof pricing.graph.edges)[number]) =>
     (pricing.pricingStateKeyByEdgeKey?.get(edgeId) ?? edgeInstanceKey(edge)).toLowerCase();
-  // Keep the published mid membership. A direction missing from that table
-  // may recover only in the SAME touched subset raw is refreshing, not by
-  // expanding every steady pass to all unpriced Ready graph directions.
+  // Bootstrap retains the raw sizing publication's membership. Steady quote
+  // work additionally retains every prior effective row, including directions
+  // recovered after startup. New rows enter only in the touched subset, not by
+  // expanding each clean pass to all unpriced Ready graph directions.
   const keys = input.quoteGraph === undefined ? [...pricing.mids.keys()] :
     input.quoteGraph.edges.filter(edge => (scannerConsumesEdge(edge) ||
       pricing.pricingStateKeyByEdgeKey?.has(blockScanEdgeKey(edge))) && (
-      pricing.mids.has(blockScanEdgeKey(edge)) || input.touchedStateKeys === undefined ||
+      pricing.mids.has(blockScanEdgeKey(edge)) || input.previous?.rows.has(blockScanEdgeKey(edge)) ||
+      input.touchedStateKeys === undefined ||
       input.touchedStateKeys.has(stateKeyFor(blockScanEdgeKey(edge), edge))
     )).map(blockScanEdgeKey);
   const work = keys.map(edgeId => {

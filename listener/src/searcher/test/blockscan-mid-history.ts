@@ -404,6 +404,35 @@ test("an event-file hardlink is rejected without truncating the event file", asy
   });
 });
 
+test("frozen raw source remains separate from each current effective publication", async () => {
+  await withTempDir(async directory => {
+    const historyPath = join(directory, "mids.jsonl"), eventsPath = join(directory, "events.jsonl");
+    await writeFile(eventsPath, "");
+    const sink = await initBlockScanEnumerationSolverTelemetry({
+      path: join(directory, "routes.jsonl"), midHistoryPath: historyPath, eventsPath,
+      runId: "startup-raw-reference", minFreeBytes: 1,
+    });
+    const rawMidSource = { number: 300, hash: blockHash(300), generation: 300 };
+    const raw = new Map([["edge-a", mid("v2", 2, 30, 100n, 200n)]]);
+    const bind = (publication: StrictPricingPublication): StrictPricingPublication => ({ ...publication,
+      snapshot: { ...publication.snapshot, rawMidSource } });
+    try {
+      sink.recordPricing(bind(baseline(300, raw, effectiveSnapshot(300))));
+      sink.recordPricing(bind(delta({ previousBlock: 300, block: 301,
+        updates: [], removals: [], mids: raw, effectiveMids: effectiveSnapshot(301) })));
+    } finally { await sink.shutdown(5_000); }
+    assert.equal(sink.telemetry().failed, false);
+    const records = await readJsonl(historyPath);
+    assert.equal(records.length, 2);
+    for (const record of records) assert.deepEqual(record.raw_mid_source, rawMidSource);
+    assert.equal(records[1]!.source_block, 301);
+    assert.deepEqual((records[1]!.effective_mids as JsonRecord).source,
+      { number: 301, hash: blockHash(301), generation: 301 });
+    assert.deepEqual(records[1]!.updates, []);
+    assert.deepEqual(records[1]!.removals, []);
+  });
+});
+
 function baseline(
   block: number,
   mids: ReadonlyMap<string, RouteVenueMid>,
