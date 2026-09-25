@@ -2,6 +2,7 @@ import {
   localZeroExactMethod,
   bindRequestResultRound,
   collectRequestProgramResults,
+  type ExactQuoteInput,
   type ExactQuoteSemantics,
   type ExactRequestProgram,
 } from "../../adapter-family-plugin.js";
@@ -13,6 +14,7 @@ import {
   MIN_SQRT_RATIO,
   MAX_SQRT_RATIO,
   v3SwapToState,
+  type V3PoolState,
 } from "../../../solver/v3-math.js";
 import { resolveUniV3StateReader, UNIV3_STATE_WORD_RADIUS, readUniV3State, uniV3StateRequestData } from "./state-reader.js";
 import { tickLensStateRequests, tickLensDependentProgram, readTickLensState } from "./tick-lens-state.js";
@@ -31,6 +33,7 @@ import type {
 const EXACT_QUOTE_REQUEST_ID = "exact-factory-bound-quote";
 const LOCAL_STATE_REQUEST_ID = "local-pool-state";
 type QuoteMode = "local" | "quoter";
+type UniV3ExactInput = ExactQuoteInput<UniV3Descriptor, UniV3Route>;
 
 /**
  * One aggregated state read supplies 49 source-bound bitmap words. The existing
@@ -38,7 +41,10 @@ type QuoteMode = "local" | "quoter";
  * decoding and swap math. The factory-bound Quoter remains an explicit option.
  * Neither quote mode proves transfer eligibility; mandatory final sim remains.
  */
-function requestProgram(mode: QuoteMode): ExactRequestProgram<
+function requestProgram(
+  mode: QuoteMode,
+  retainedStates: WeakMap<UniV3ExactEvidence, V3PoolState>,
+): ExactRequestProgram<
   UniV3Descriptor,
   UniV3Route,
   UniV3ExactEvidence
@@ -134,43 +140,32 @@ function requestProgram(mode: QuoteMode): ExactRequestProgram<
         assertSource(result.source, programInput.source);
         return readUniV3State(result.data, programInput.descriptor);
       })();
-      const { tick, ticks } = state;
-      if (state.sqrtPriceX96 === 0n) {
-        return zeroQuote(programInput);
-      }
-      const zeroForOne = programInput.route.direction === "zero-for-one";
-      let swap: ReturnType<typeof v3SwapToState>;
-      try {
-        swap = v3SwapToState(state, zeroForOne, programInput.amountIn);
-      } catch (error) {
-        if (error instanceof V3MissingBitmapWordError) {
-          // This amount exceeded the known window, not proof of zero liquidity.
-          // Never publish a point-price or partial-fill substitute.
-          return zeroQuote(programInput, "univ3-local-ticks");
-        }
-        throw error;
-      }
-      if (swap.state.sqrtPriceX96 === MIN_SQRT_RATIO + 1n || swap.state.sqrtPriceX96 === MAX_SQRT_RATIO - 1n) {
-        return zeroQuote(programInput, "univ3-local-ticks");
-      }
-      const initializedTicksCrossed = [...ticks.keys()].filter(tk => zeroForOne
-        ? tk <= tick && tk > swap.state.tick : tk > tick && tk <= swap.state.tick).length;
-      return Object.freeze({
-        amountOut: swap.amountOut,
-        evidence: evidence(programInput, {
-          amountOut: swap.amountOut,
-          sqrtPriceX96After: swap.state.sqrtPriceX96,
-          initializedTicksCrossed,
-          gasEstimate: 0n,
-        }, "univ3-local-ticks"),
-      });
+      return localQuote(programInput, state, retainedStates,
+        programInput.retainLocalState === true && supportsIsolatedState(programInput));
     },
   };
 }
 
 // Family-owned selection: effective/Exact/Solver keep the same central entry.
 export function createUniV3Exact(mode: QuoteMode = "local") {
-  const program = requestProgram(mode);
+  // Per-issued-evidence trial state, never a cross-source or amount quote cache.
+  // Tick maps remain private and read-only; each swap copies only its scalars.
+  const retainedStates = new WeakMap<UniV3ExactEvidence, V3PoolState>();
+  const program = requestProgram(mode, retainedStates);
+  const isolatedLocalState = Object.freeze({
+    quote(input: UniV3ExactInput, previousEvidence: UniV3ExactEvidence) {
+      assertRoute(input.descriptor, input.route);
+      if (!supportsIsolatedState(input)) throw new Error("univ3 isolated local state unsupported");
+      const state = retainedStates.get(previousEvidence);
+      if (state === undefined) throw new Error("univ3 isolated local state was not retained");
+      assertSource(previousEvidence.source, input.source);
+      if (!sameAddress(previousEvidence.pool, input.descriptor.pool) ||
+          !sameAddress(previousEvidence.caller, input.executor) || previousEvidence.fee !== input.descriptor.fee) {
+        throw new Error("univ3 isolated local state binding changed");
+      }
+      return localQuote(input, state, retainedStates, true);
+    },
+  });
   return {
     methods: (input) => Object.freeze([
       localZeroExactMethod<UniV3Descriptor, UniV3Route, UniV3ExactEvidence>(
@@ -186,6 +181,8 @@ export function createUniV3Exact(mode: QuoteMode = "local") {
         kind: "request-program" as const,
         ...(mode !== "quoter" || input.descriptor.quoterBinding.quoter === null
           ? { stateOnlyReads: true as const } : { chainAmountQuote: true as const }),
+        ...((mode !== "quoter" || input.descriptor.quoterBinding.quoter === null) && supportsIsolatedState(input)
+          ? { isolatedLocalState } : {}),
         program,
       }),
     ]),
@@ -217,6 +214,46 @@ export function createUniV3Exact(mode: QuoteMode = "local") {
 }
 
 export const univ3Exact = createUniV3Exact();
+
+function supportsIsolatedState(input: UniV3ExactInput): boolean {
+  return input.descriptor.swapAccess?.kind === "no-is-swapper-getter";
+}
+
+function localQuote(
+  input: UniV3ExactInput,
+  state: V3PoolState,
+  retainedStates: WeakMap<UniV3ExactEvidence, V3PoolState>,
+  retain: boolean,
+) {
+  if (input.amountIn <= 0n || state.sqrtPriceX96 === 0n) return zeroQuote(input);
+  const zeroForOne = input.route.direction === "zero-for-one";
+  let swap: ReturnType<typeof v3SwapToState>;
+  try {
+    swap = v3SwapToState(state, zeroForOne, input.amountIn);
+  } catch (error) {
+    if (error instanceof V3MissingBitmapWordError) {
+      // No point-price/partial-fill substitute outside the source-bound window.
+      return zeroQuote(input, "univ3-local-ticks");
+    }
+    throw error;
+  }
+  if (swap.state.sqrtPriceX96 === MIN_SQRT_RATIO + 1n || swap.state.sqrtPriceX96 === MAX_SQRT_RATIO - 1n) {
+    return zeroQuote(input, "univ3-local-ticks");
+  }
+  const initializedTicksCrossed = [...state.ticks.keys()].filter(tk => zeroForOne
+    ? tk <= state.tick && tk > swap.state.tick : tk > state.tick && tk <= swap.state.tick).length;
+  const result = Object.freeze({
+    amountOut: swap.amountOut,
+    evidence: evidence(input, {
+      amountOut: swap.amountOut,
+      sqrtPriceX96After: swap.state.sqrtPriceX96,
+      initializedTicksCrossed,
+      gasEstimate: 0n,
+    }, "univ3-local-ticks"),
+  });
+  if (retain) retainedStates.set(result.evidence, Object.freeze(swap.state));
+  return result;
+}
 
 function zeroQuote(input: Parameters<typeof evidence>[0], kind: UniV3ExactEvidence["kind"] = "univ3-factory-bound-quoter") {
   return Object.freeze({

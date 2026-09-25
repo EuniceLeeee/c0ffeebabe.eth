@@ -899,6 +899,8 @@ export interface ExactQuoteInput<
   readonly transactionOrigin?: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
   readonly prefix?: readonly ExactQuotePrefixStep[];
+  /** Retain isolated post-state only for a trial that may revisit a state key. */
+  readonly retainLocalState?: true;
 }
 
 export interface ExactQuoteResult<Evidence> {
@@ -944,6 +946,14 @@ export type ExactMethod<
        * block environment or caller state. Central touched invalidation owns
        * retention; this is a data declaration, never a Family reuse hook. */
       readonly stateOnlyReads?: true;
+      /** Opt-in guarantee: a swap changes only its own pricing state key.
+       * Every prior mutation must make the same guarantee before local state
+       * may be reused. Shared-key/foreign owners and unknown effects fail closed.
+       * The Family retains post-state with its sealed evidence and this pure
+       * callback advances that state; it must not mutate a prior trial or do I/O. */
+      readonly isolatedLocalState?: {
+        quote(input: ExactQuoteInput<Descriptor, Route>, previousEvidence: Evidence): ExactQuoteResult<Evidence>;
+      };
       /** Optional Family guarantee for carrying an amount quote as pricing data.
        * Covers every transitive state/code dependency and excludes block-environment
        * dependence of method selection, requests and output. Absence means fresh

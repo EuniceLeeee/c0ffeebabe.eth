@@ -1116,6 +1116,100 @@ async function sharedTimeoutTests(): Promise<void> {
   });
 }
 
+async function latencyDiagnosticTests(): Promise<void> {
+  const marker = "[searcher/quote-batch-timing] ";
+  const capture = async (
+    flag: string | undefined,
+    throwOnLog: boolean,
+    work: (records: Array<Record<string, unknown>>) => Promise<void>,
+  ): Promise<void> => {
+    const previousFlag = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+    const previousLog = console.log;
+    const records: Array<Record<string, unknown>> = [];
+    if (flag === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+    else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = flag;
+    console.log = (...args: unknown[]) => {
+      if (typeof args[0] !== "string" || !args[0].startsWith(marker)) {
+        previousLog(...args);
+        return;
+      }
+      records.push(JSON.parse(args[0].slice(marker.length)) as Record<string, unknown>);
+      if (throwOnLog) throw new Error("diagnostic logger failure");
+    };
+    try {
+      await work(records);
+    } finally {
+      console.log = previousLog;
+      if (previousFlag === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+      else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = previousFlag;
+    }
+  };
+  for (const flag of [undefined, "0", "1"]) {
+    for (const throwOnLog of flag === "1" ? [false, true] : [false]) {
+      await pendingCase(`wire timing flag=${flag ?? "unset"} logger-throws=${throwOnLog}`,
+        async ({ state, backend, rpcUrl }) => capture(flag, throwOnLog, async records => {
+          const client = backend({ transportLane: "producer-bulk", scopeLabel: "diagnostic test" });
+          const request = { to: OK_A, data: "0xfacefeed" };
+          const startedAtMs = Date.now();
+          check.deepEqual(await Promise.all([
+            client.call(request), client.call(request), client.call({ to: OK_B, data: "0xabcdef" }),
+          ]), [RESULT, RESULT, RESULT]);
+          await client.closeAndDrain();
+          check.equal(state.batches.length, 1);
+          check.equal(state.batches[0]!.length, 2);
+          check.equal(state.singles.length, 0);
+          const stats = client.stats();
+          check.equal(stats.totalCalls, 2);
+          check.equal(stats.memoHits, 1);
+          check.equal(stats.batchesSent, 1);
+          check.equal(stats.batchedItems, 2);
+          check.equal(stats.batchFailures, 0);
+          check.equal(stats.singleCallFallbacks, 0);
+          check.equal(records.length, flag === "1" ? 1 : 0);
+          if (flag !== "1") return;
+          const row = records[0]!;
+          check.deepEqual(Object.keys(row).sort(), ["sourceBlockHash", "lane", "scopeLabel", "method",
+            "items", "startedAtMs", "wallMs", "status", "statusCode"].sort());
+          check.equal(row.sourceBlockHash, HASH);
+          check.equal(row.lane, "producer-bulk");
+          check.equal(row.scopeLabel, "diagnostic test");
+          check.equal(row.method, "eth_call");
+          check.equal(row.items, 2);
+          check.equal(row.status, "returned");
+          check.equal(row.statusCode, 200);
+          check.ok(typeof row.startedAtMs === "number" && row.startedAtMs >= startedAtMs);
+          check.ok(typeof row.wallMs === "number" && row.wallMs >= 0);
+          const serialized = JSON.stringify(records);
+          for (const excluded of [rpcUrl, request.data, "0xabcdef", OK_A, OK_B, RESULT]) {
+            check.ok(!serialized.includes(excluded), "timing must not expose RPC URL, call payload or returned body");
+          }
+        }));
+    }
+  }
+  for (const throwOnLog of [false, true]) {
+    await pendingCase(`wire timing preserves typed cancellation logger-throws=${throwOnLog}`,
+      async ({ state, backend }) => capture("1", throwOnLog, async records => {
+        state.pauseResponses = true;
+        const scope = new AbortController();
+        const client = backend({ signal: scope.signal });
+        const pending = observe(client.call({ to: OK_A, data: "0xcafe" }));
+        await until(() => state.heldResponses.length === 1, "diagnostic cancellation request reached wire");
+        scope.abort(new Error("source superseded"));
+        aborted(await pending);
+        await client.closeAndDrain();
+        check.equal(records.length, 1);
+        check.equal(records[0]!.status, "transport-failed");
+        check.equal(records[0]!.statusCode, null);
+        check.equal(state.batches.length, 1);
+        check.equal(state.singles.length, 0);
+        check.equal(client.stats().totalCalls, 1);
+        check.equal(client.stats().batchesSent, 1);
+        check.equal(client.stats().timeoutRetries, 0);
+        check.equal(client.stats().singleCallFallbacks, 0);
+      }));
+  }
+}
+
 async function run(): Promise<void> {
   const { server, state, port } = await startStub();
   const rpcUrl = `http://127.0.0.1:${port}`;
@@ -1543,6 +1637,7 @@ async function run(): Promise<void> {
     await pendingCallTests();
     await adaptiveRetryTests();
     await sharedTimeoutTests();
+    await latencyDiagnosticTests();
   } finally {
     server.close();
     await once(server, "close").catch(() => undefined);

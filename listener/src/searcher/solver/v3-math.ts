@@ -218,6 +218,26 @@ export function getSqrtRatioAtTick(tick: number): bigint {
   return (ratio >> 32n) + (ratio % (1n << 32n) === 0n ? 0n : 1n);
 }
 
+/** Greatest tick whose ratio is <= sqrtPriceX96 (v3-core TickMath). */
+export function getTickAtSqrtRatio(sqrtPriceX96: bigint): number {
+  if (sqrtPriceX96 < MIN_SQRT_RATIO || sqrtPriceX96 >= MAX_SQRT_RATIO) throw new Error("R");
+  const ratio = sqrtPriceX96 << 32n;
+  const msb = mostSignificantBit(ratio);
+  let r = msb >= 128 ? ratio >> BigInt(msb - 127) : ratio << BigInt(127 - msb);
+  let log2 = BigInt(msb - 128) << 64n;
+  // Fourteen fractional bits are enough for TickMath's two adjacent bounds.
+  for (let bit = 63n; bit >= 50n; bit--) {
+    r = (r * r) >> 127n;
+    const f = r >> 128n;
+    log2 |= f << bit;
+    r >>= f;
+  }
+  const logSqrt10001 = log2 * 255738958999603826347141n;
+  const tickLow = Number((logSqrt10001 - 3402992956809132418596140100660247210n) >> 128n);
+  const tickHigh = Number((logSqrt10001 + 291339464771989622907027621153398088495n) >> 128n);
+  return tickLow === tickHigh || getSqrtRatioAtTick(tickHigh) > sqrtPriceX96 ? tickLow : tickHigh;
+}
+
 function mostSignificantBit(x: bigint): number {
   let r = 0;
   if (x >= 0x100000000000000000000000000000000n) { x >>= 128n; r += 128; }
@@ -327,6 +347,7 @@ export function v3SwapToState(state: V3PoolState, zeroForOne: boolean, amountIn:
   let liquidity = state.liquidity;
 
   while (amountRemaining > 0n && sqrtPriceX96 !== sqrtPriceLimitX96) {
+    const sqrtPriceStartX96 = sqrtPriceX96;
     let [tickNext, initialized] = nextInitializedTickWithinOneWord(
       state.tickBitmap,
       tick,
@@ -356,7 +377,10 @@ export function v3SwapToState(state: V3PoolState, zeroForOne: boolean, amountIn:
       }
       tick = zeroForOne ? tickNext - 1 : tickNext;
     } else {
-      // swap consumed the remaining input within this tick — loop will exit
+      // A partial step can move across uninitialized ticks. The next swap,
+      // especially a reversal, must start from the actual terminal tick.
+      // No price movement (all input paid as fee) preserves boundary semantics.
+      if (sqrtPriceX96 !== sqrtPriceStartX96) tick = getTickAtSqrtRatio(sqrtPriceX96);
       break;
     }
   }

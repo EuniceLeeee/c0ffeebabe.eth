@@ -12,11 +12,14 @@ import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import {
   fluidDexFixtureRuntime,
   runUniv2Lifecycle,
+  runUniv3Lifecycle,
   runFluidDexLifecycle,
   UNIV2_FIXTURE_FACTORY,
   UNIV2_FIXTURE_POOL,
   UNIV2_FIXTURE_TOKEN0,
   UNIV2_FIXTURE_TOKEN1,
+  UNIV3_FIXTURE_FACTORY,
+  UNIV3_FIXTURE_POOL,
 } from "../architecture-migration-fixture-replay.js";
 import { createStrictCentralAdapterRuntime } from
   "../strict-central-adapter-runtime.js";
@@ -73,11 +76,15 @@ import type {
 } from "../venues/route-leg-adapter.js";
 import { UNIV2_PAIR_INTERFACE } from
   "../venues/swaps/univ2-family/codec.js";
+import { UNIV3_POOL_INTERFACE } from "../venues/swaps/univ3-abi.js";
+import { UNIV3_STATE_READER, UNIV3_STATE_READER_INTERFACE } from
+  "../venues/swaps/univ3-family/state-reader.js";
 import { scanBlockStateFromResolvedMids } from
   "../detector/blockscan-scanner-core.js";
 import { readBlockTouchedStateKeys } from "../blockscan-touched-state.js";
 import { buildEffectiveMids, DEFAULT_EFFECTIVE_WETH_INPUT, effectiveEnumerationMids, effectiveMidRowCarried, type EffectiveMidRow, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
 import { effectiveUsdPricing } from "../blockscan-usd-view.js";
+import { receiptV3FixtureRuntime } from "./ready-receipt-fixture.js";
 
 const STARTUP: CanonicalSource = Object.freeze({
   number: 25_800_000,
@@ -176,12 +183,15 @@ function runtime(
     readonly producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">;
     readonly exactCallBackend?: PinnedRethQuoteBackend;
     readonly omitAmountSimulation?: boolean;
+    readonly callOverride?: (request: Readonly<{ to: string; data: string }>) => string | undefined;
   } = {},
 ) {
   const reserves = options.reserves ?? pool.reserves;
   return createStrictCentralAdapterRuntime({
     provider: {
       call: async (request) => {
+        const overridden = options.callOverride?.(request);
+        if (overridden !== undefined) return overridden;
         if (
           request.data.slice(0, 10).toLowerCase() ===
             UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector.toLowerCase()
@@ -3398,7 +3408,9 @@ const execution = session.buildExecution({
 });
 assert.equal(execution.status, "resolved");
 
-// Sequential issuance cannot reuse a starting-state method, forged handle,
+// Ordinary quotes deliberately do not retain trial post-state. That unsupported
+// prefix must still fail after V2 gains an explicitly retained local-state path.
+// Sequential issuance cannot reuse an unknown mutation, forged handle,
 // foreign session, wrong caller, reordered prefix or disconnected amount.
 {
   const reverse = session.edges.find(e => e.instanceKey === edge.instanceKey &&
@@ -3407,7 +3419,8 @@ assert.equal(execution.status, "resolved");
   assert(reverse);
   const request = { edge: reverse, amountIn: exact.amountOut, executor: EXECUTOR,
     runtimeEvidence: [], priorQuotes: [exact] };
-  await assert.rejects(session.issueExact(request), /exact-sequential-prefix-unsupported/);
+  await assert.rejects(session.issueExact(request), /exact-sequential-prefix-unsupported/,
+    "an ordinary initial-state quote is not an opted-in retained trial prefix");
   await assert.rejects(session.issueExact({ ...request, amountIn: exact.amountOut + 1n }), /prefix does not supply/);
   await assert.rejects(session.issueExact({ ...request, priorQuotes: [Object.freeze({ ...exact }) as typeof exact] }), /same-session/);
   await assert.rejects(noSimulationSession.issueExact({ ...request, edge: noSimulationSession.edges.find(e =>
@@ -3420,7 +3433,7 @@ assert.equal(execution.status, "resolved");
 }
 
 // Test-only sequential capability: exercise real issuer/cache/plan authority,
-// not V2 sequential pricing support (the production V2 method stays unchanged).
+// independently of the production V2 local-state callback below.
 {
   function mutable<T>(value: T): T {
     if (Array.isArray(value)) return value.map(mutable) as T;
@@ -3480,6 +3493,249 @@ assert.equal(execution.status, "resolved");
   const otherFirst = await session.issueExact({ edge: firstEdge, amountIn: 1_000_000n, executor: EXECUTOR, runtimeEvidence: [] });
   assert.throws(() => session.buildExecution({ ...execution, priorQuotes: [otherFirst] }), /original sequential quote prefix/);
   assert.equal((await session.issueExact(request)).amountOut, starting.amountOut, "trial does not mutate effective state");
+}
+
+// Real production V2/V3 methods through the sealed session issuer. These are
+// deterministic transport fixtures, not an EVM parity or live-success claim.
+{
+  const otherPool = { ...pool, pool: `0x${"73".repeat(20)}` };
+  const secondPublication = await runUniv2Lifecycle(STARTUP, otherPool);
+  const v3Context = {
+    pool: UNIV3_FIXTURE_POOL, factory: UNIV3_FIXTURE_FACTORY,
+    token0: pool.token0, token1: pool.token1, fee: 500n,
+    tickSpacing: 1, liquidity: 10n ** 18n, sqrtPriceX96: 1n << 96n,
+  };
+  const v3Publication = await runUniv3Lifecycle(STARTUP, v3Context, receiptV3FixtureRuntime(v3Context));
+  const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+  const instances = [...publication.instances, ...secondPublication.instances, ...v3Publication.instances];
+  const graph = buildFamilyRouteGraphView({ routes: instances.flatMap(instance =>
+    instance.routes.map((route, i) => ({ family: catalog.forFamily(instance.familyId),
+      descriptor: instance.descriptor, route, handle: instance.routeHandles[i]! }))) });
+  const trialRoot = new StrictProductionRuntimeRoot({ catalog, readySource: STARTUP,
+    readyGraph: graph.edges, readyInstances: instances, readyFundingAssets: [] });
+  const v3Data = UNIV3_STATE_READER_INTERFACE.encodeFunctionResult("getFullStateWithRelativeBitmaps", [{
+    pool: v3Context.pool, blockTimestamp: 1_800_000_000n,
+    slot0: { sqrtPriceX96: v3Context.sqrtPriceX96, tick: 0, observationIndex: 0,
+      observationCardinality: 1, observationCardinalityNext: 1, feeProtocol: 0, unlocked: true },
+    liquidity: v3Context.liquidity, tickSpacing: 1, maxLiquidityPerTick: (1n << 128n) - 1n,
+    observation: { blockTimestamp: 1_800_000_000, tickCumulative: 0n,
+      secondsPerLiquidityCumulativeX128: 0n, initialized: true },
+    tickBitmap: [], ticks: [],
+  }]);
+  let reads = 0;
+  let current = true;
+  let origin = ORIGIN;
+  const fixtureRuntime = runtime(CURRENT, {
+    isCurrent: () => current,
+    reservesByTarget: new Map([[otherPool.pool.toLowerCase(), pool.reserves]]),
+    poolBalance: token => token === pool.token0.toLowerCase()
+      ? pool.reserves.reserve0 : pool.reserves.reserve1,
+    callOverride(request) {
+      reads++;
+      if (request.to.toLowerCase() === UNIV3_STATE_READER.toLowerCase()) return v3Data;
+      if (request.to.toLowerCase() !== v3Context.pool.toLowerCase()) return undefined;
+      const selector = request.data.slice(0, 10);
+      if (selector === UNIV3_POOL_INTERFACE.getFunction("slot0")!.selector) {
+        return UNIV3_POOL_INTERFACE.encodeFunctionResult("slot0", [1n << 96n, 0, 0, 1, 1, 0, true]);
+      }
+      if (selector === UNIV3_POOL_INTERFACE.getFunction("liquidity")!.selector) {
+        return UNIV3_POOL_INTERFACE.encodeFunctionResult("liquidity", [v3Context.liquidity]);
+      }
+      throw new Error(`unexpected isolated-state fixture V3 selector ${selector}`);
+    },
+  });
+  const trialSession = await trialRoot.createSession({ source: CURRENT, kind: "exact", fundingAssets: [],
+    runtime: { ...fixtureRuntime, callerAuthority: { bind: () => ({ executor: EXECUTOR, transactionOrigin: origin }) } } });
+  const findEdge = (poolAddress: string, inputToken: string) => {
+    const found = trialSession.edges.find(candidate =>
+      candidate.target.toLowerCase() === poolAddress.toLowerCase() && candidate.tokenIn.toLowerCase() === inputToken.toLowerCase());
+    assert(found);
+    return found;
+  };
+  const forward = findEdge(pool.pool, pool.token0);
+  const reverse = findEdge(pool.pool, pool.token1);
+  const otherReverse = findEdge(otherPool.pool, pool.token1);
+  const v3Forward = findEdge(v3Context.pool, pool.token0);
+  const v3Reverse = findEdge(v3Context.pool, pool.token1);
+  const quote = async (edge: typeof forward, amountIn: bigint,
+    priorQuotes?: Parameters<typeof trialSession.issueExact>[0]["priorQuotes"]) => {
+    const result = await trialSession.issueExact({ edge, amountIn, executor: EXECUTOR, runtimeEvidence: [],
+      ...(priorQuotes === undefined ? {} : { priorQuotes }) });
+    assert("amountIn" in result);
+    return result;
+  };
+  const referenceV2 = (reserveIn: bigint, reserveOut: bigint, amountIn: bigint) =>
+    amountIn * 9_970n * reserveOut / (reserveIn * 10_000n + amountIn * 9_970n);
+
+  const original = await quote(forward, 1_000_000n);
+  const [a, b] = await Promise.all([quote(forward, 1_000_000n, []), quote(forward, 4_000_000n, [])]);
+  assert.equal(a.amountOut, original.amountOut);
+  assert.equal(a.amountOut, referenceV2(pool.reserves.reserve0, pool.reserves.reserve1, a.amountIn));
+  const readsAfterFirstSteps = reads;
+  const [aReverse, bReverse] = await Promise.all([
+    quote(reverse, a.amountOut, [a]), quote(reverse, b.amountOut, [b]),
+  ]);
+  assert.equal(reads, readsAfterFirstSteps, "revisiting retained V2 state performs no new state reads");
+  for (const [first, second] of [[a, aReverse], [b, bReverse]] as const) {
+    assert.equal(second.amountOut, referenceV2(pool.reserves.reserve1 - first.amountOut,
+      pool.reserves.reserve0 + first.amountIn, first.amountOut));
+    assert.ok(second.amountOut < first.amountIn, "same-pool round trip pays both fees");
+  }
+  const aThird = await quote(forward, aReverse.amountOut, [a, aReverse]);
+  assert.equal(aThird.amountOut, referenceV2(pool.reserves.reserve0 + a.amountIn - aReverse.amountOut,
+    pool.reserves.reserve1, aReverse.amountOut), "third visit uses the latest matching state, not first prefix state");
+  assert.equal((await quote(reverse, a.amountOut, [a])).amountOut, aReverse.amountOut,
+    "parallel trial B and a later continuation never mutate trial A's earlier state");
+  assert.equal((await quote(forward, 1_000_000n)).amountOut, original.amountOut,
+    "local-state steps never overwrite the ordinary source-state cache");
+
+  const unrelated = await quote(otherReverse, a.amountOut, [a]);
+  assert.equal(unrelated.amountOut, (await quote(otherReverse, a.amountOut)).amountOut,
+    "a known isolated different V2 owner may use its own initial state");
+  const afterUnrelated = await quote(forward, unrelated.amountOut, [a, unrelated]);
+  assert.equal(afterUnrelated.amountOut, referenceV2(pool.reserves.reserve0 + a.amountIn,
+    pool.reserves.reserve1 - a.amountOut, unrelated.amountOut));
+  await assert.rejects(quote(otherReverse, original.amountOut, [original]), /exact-sequential-prefix-unsupported/,
+    "an unknown mutation cannot be assumed unrelated even when pool IDs differ");
+
+  const v3Start = await quote(v3Reverse, a.amountOut);
+  const mixedV3 = await quote(v3Reverse, a.amountOut, [a]);
+  assert.equal(mixedV3.amountOut, v3Start.amountOut, "known V2 scope leaves distinct V3 initial state unaffected");
+  const mixedV2 = await quote(forward, mixedV3.amountOut, [a, mixedV3]);
+  assert.equal(mixedV2.amountOut, referenceV2(pool.reserves.reserve0 + a.amountIn,
+    pool.reserves.reserve1 - a.amountOut, mixedV3.amountOut));
+  const readsBeforeV3Repeat = reads;
+  const mixedV3Again = await quote(v3Reverse, mixedV2.amountOut, [a, mixedV3, mixedV2]);
+  assert.ok(mixedV3Again.amountOut > 0n);
+  assert.equal(reads, readsBeforeV3Repeat, "V3 retrieves its own sealed post-state through an intervening V2 hop");
+  const [v3a, v3b] = await Promise.all([quote(v3Forward, 10n ** 15n, []), quote(v3Forward, 2n * 10n ** 15n, [])]);
+  const [v3aBack, v3bBack] = await Promise.all([
+    quote(v3Reverse, v3a.amountOut, [v3a]), quote(v3Reverse, v3b.amountOut, [v3b]),
+  ]);
+  assert.ok(v3aBack.amountOut < v3a.amountIn && v3bBack.amountOut < v3b.amountIn);
+  assert.equal((await quote(v3Reverse, v3a.amountOut, [v3a])).amountOut, v3aBack.amountOut,
+    "concurrent V3 trials preserve earlier state branches");
+  assert.equal((await quote(v3Reverse, a.amountOut)).amountOut, v3Start.amountOut,
+    "V3 trial state never contaminates its ordinary source snapshot");
+
+  const boundPlan = { edge: reverse, exact: aReverse, minAmountOut: aReverse.amountOut, executor: EXECUTOR };
+  assert.throws(() => trialSession.buildExecution(boundPlan), /original sequential quote prefix/);
+  assert.equal(trialSession.buildExecution({ ...boundPlan, priorQuotes: [a] }).status, "resolved");
+  assert.throws(() => trialSession.buildExecution({ ...boundPlan, priorQuotes: [b] }), /original sequential quote prefix/);
+  await assert.rejects(quote(reverse, a.amountOut - 1n, [a]), /prefix does not supply/,
+    "a safety haircut cannot silently replace an exact prefix's full output");
+  await assert.rejects(quote(forward, aReverse.amountOut, [aReverse, a]), /same-session/);
+  await assert.rejects(quote(reverse, a.amountOut, [Object.freeze({ ...a }) as typeof a]), /same-session/);
+  await assert.rejects(trialSession.issueExact({ edge: reverse, amountIn: a.amountOut,
+    executor: ORIGIN, runtimeEvidence: [], priorQuotes: [a] }), /same-session/);
+  await assert.rejects(trialSession.issueExact({ edge: reverse, amountIn: a.amountOut,
+    executor: EXECUTOR, runtimeEvidence: [{ kind: "changed-evidence" }] as never, priorQuotes: [a] }), /same-session/);
+  const foreign = await trialRoot.createSession({ source: CURRENT, kind: "exact", fundingAssets: [], runtime: fixtureRuntime });
+  await assert.rejects(foreign.issueExact({ edge: foreign.edges.find(e => e.canonicalEdgeId === reverse.canonicalEdgeId)!,
+    amountIn: a.amountOut, executor: EXECUTOR, runtimeEvidence: [], priorQuotes: [a] }), /same-session/);
+  origin = `0x${"74".repeat(20)}`;
+  await assert.rejects(quote(reverse, a.amountOut, [a]), /caller|origin|authority|prefix/i);
+  origin = ORIGIN;
+  current = false;
+  await assert.rejects(quote(reverse, a.amountOut, [a]), /generation fence/);
+  current = true;
+  const aborted = new AbortController();
+  aborted.abort(new Error("isolated trial cancelled"));
+  await assert.rejects(trialSession.issueExact({ edge: reverse, amountIn: a.amountOut,
+    executor: EXECUTOR, runtimeEvidence: [], priorQuotes: [a], control: { signal: aborted.signal } }), /cancelled|aborted/);
+  assert.equal((await quote(forward, a.amountIn)).amountOut, original.amountOut);
+  console.log("strict isolated local state: PASS real V2/V3, concurrent trials, mixed scopes, immutable baselines and sealed authority");
+}
+
+// Distinct admitted instances can intentionally declare one shared pricing key.
+// Local isolated-state capability is not permission to treat those as disjoint.
+for (const mixedCase of [false, true]) {
+  function copyDefinition<T>(value: T): T {
+    if (Array.isArray(value)) return value.map(copyDefinition) as T;
+    if (value && typeof value === "object") return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, copyDefinition(item)])) as T;
+    return value;
+  }
+  const definition = copyDefinition(baseV2Plugin);
+  let invalidDeclaration = false;
+  let generationCurrent = true;
+  let afterLocalQuote = () => {};
+  const plugin = defineSwapFamily({ ...definition, actionAdapters: baseV2Plugin.actionAdapters,
+    exact: { ...definition.exact, methods(input) {
+      return baseV2Plugin.exact.methods(input).map(method => {
+        if (method.kind !== "request-program") return method;
+        const local = method.isolatedLocalState;
+        const wrapped = { ...method, ...(local === undefined ? {} : { isolatedLocalState: {
+          quote(...args: Parameters<typeof local.quote>) {
+            const result = local.quote(...args);
+            afterLocalQuote();
+            return result;
+          },
+        } }) };
+        if (!invalidDeclaration) return wrapped;
+        return mixedCase ? { ...wrapped, sequentialPrefix: true as const }
+          : { ...wrapped, stateOnlyReads: undefined };
+      });
+    } },
+    pricing: { ...definition.pricing,
+      stateKey: route => mixedCase && route.pool.toLowerCase() === pool.pool.toLowerCase()
+        ? "Fixture:Shared-State" : "fixture:shared-state",
+      compileDraft: input => baseV2Plugin.pricing.compileDraft({ ...input, stateKey: input.descriptor.instanceKey }),
+    },
+  });
+  const entries = FAMILY_CAPABILITY_NAMES.map(capability => ({
+    familyId: plugin.manifest.familyId, capability, contractVersion: "shared-local-scope-fixture-v1",
+    contentHash: ethers.sha256(ethers.toUtf8Bytes(capability)).slice(2),
+    semanticDependencies: [`contract:${capability}`], provenanceCommit: null,
+  }));
+  const catalog = new FamilyCapabilityCatalog({
+    modules: [{ sourceFile: "fixture/shared-local-scope.production.ts", plugin,
+      definitionBoundaryHash: definedFamilyPluginContractSummary(plugin).definitionBoundaryHash }],
+    generatedManifest: { format: "adapter-family-capabilities-v1", entries, manifestHash: capabilityManifestHash(entries) },
+  });
+  const otherPool = { ...pool, pool: `0x${"75".repeat(20)}` };
+  const published = await Promise.all([runUniv2Lifecycle(STARTUP, pool, catalog), runUniv2Lifecycle(STARTUP, otherPool, catalog)]);
+  const instances = published.flatMap(value => value.instances);
+  const graph = buildFamilyRouteGraphView({ routes: instances.flatMap(instance => instance.routes.map((route, i) => ({
+    family: catalog.forFamily(instance.familyId), descriptor: instance.descriptor, route, handle: instance.routeHandles[i]!,
+  }))) });
+  const sharedRoot = new StrictProductionRuntimeRoot({ catalog, readySource: STARTUP,
+    readyGraph: graph.edges, readyInstances: instances, readyFundingAssets: [] });
+  const shared = await sharedRoot.createSession({ source: CURRENT, kind: "exact", fundingAssets: [], runtime: runtime(CURRENT, {
+    isCurrent: () => generationCurrent,
+    reservesByTarget: new Map([[otherPool.pool.toLowerCase(), pool.reserves]]),
+    poolBalance: token => token === pool.token0.toLowerCase() ? pool.reserves.reserve0 : pool.reserves.reserve1,
+  }) });
+  const firstEdge = shared.edges.find(e => e.target.toLowerCase() === pool.pool.toLowerCase() && e.tokenIn.toLowerCase() === pool.token0.toLowerCase())!;
+  const otherEdge = shared.edges.find(e => e.target.toLowerCase() === otherPool.pool.toLowerCase() && e.tokenIn.toLowerCase() === pool.token1.toLowerCase())!;
+  assert.equal(shared.stateKeyForEdge(firstEdge), shared.stateKeyForEdge(otherEdge));
+  const first = await shared.issueExact({ edge: firstEdge, amountIn: 1_000_000n, executor: EXECUTOR,
+    runtimeEvidence: [], priorQuotes: [] });
+  const reverse = shared.edges.find(e => e.target.toLowerCase() === pool.pool.toLowerCase() &&
+    e.tokenIn.toLowerCase() === pool.token1.toLowerCase())!;
+  const repeatRequest = { edge: reverse, amountIn: first.amountOut,
+    executor: EXECUTOR, runtimeEvidence: [], priorQuotes: [first] };
+  afterLocalQuote = () => { generationCurrent = false; };
+  await assert.rejects(shared.issueExact(repeatRequest), /generation/,
+    "a local callback cannot seal fresh authority after retiring its generation");
+  generationCurrent = true;
+  const callbackAbort = new AbortController();
+  afterLocalQuote = () => { callbackAbort.abort(new Error("callback cancelled")); };
+  await assert.rejects(shared.issueExact({ ...repeatRequest, control: { signal: callbackAbort.signal } }), /aborted|cancelled/,
+    "local callback completion still observes cancellation before issuing authority");
+  const callbackDeadline = { deadlineAtMs: Date.now() + 10_000 };
+  afterLocalQuote = () => { callbackDeadline.deadlineAtMs = Date.now() - 1; };
+  await assert.rejects(shared.issueExact({ ...repeatRequest, control: callbackDeadline }), /deadline/,
+    "local callback completion still observes an expired deadline before issuing authority");
+  afterLocalQuote = () => {};
+  await assert.rejects(shared.issueExact({ edge: otherEdge, amountIn: first.amountOut,
+    executor: EXECUTOR, runtimeEvidence: [], priorQuotes: [first] }), /exact-sequential-prefix-unsupported/,
+  `shared pricing state owned by another instance is unsupported (mixed case=${mixedCase})`);
+  invalidDeclaration = true;
+  await assert.rejects(shared.issueExact({ edge: firstEdge, amountIn: 1_000_000n, executor: EXECUTOR,
+    runtimeEvidence: [], priorQuotes: [] }), /invalid isolated local state declaration/,
+  "isolated-local opt-in requires state-only reads and cannot also declare simulated sequential execution");
+  console.log(`strict isolated local state: PASS shared owner rejected (mixed case=${mixedCase})`);
 }
 
 // Direct session consumers never supply origin: only the injected runtime may

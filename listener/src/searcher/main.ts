@@ -2434,6 +2434,7 @@ async function main(): Promise<void> {
     topologyKey:
       `strict-ready:${readyUniverse.generation}:${readyUniverse.graphHash}`,
     async observeHeader(blockNumber: number, control?: StateCallControl) {
+      const readStartedAtMs = Date.now();
       const block = control === undefined
         ? parseBlockScanObservedHeader(await provider.send("eth_getBlockByNumber", [
           ethers.toQuantity(blockNumber), true,
@@ -2451,6 +2452,9 @@ async function main(): Promise<void> {
         parentHash: block.parentHash.toLowerCase(),
         blockTimestamp: block.timestamp,
         observedAtMs: Date.now(),
+        ...(process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1" ? {
+          readStartedAtMs, readWallMs: Date.now() - readStartedAtMs,
+        } : {}),
       })}`);
       blockScanAmountReference.observeHeader(block);
       return Object.freeze({
@@ -2476,14 +2480,34 @@ async function main(): Promise<void> {
     }
     throw error;
   };
+  // Measure the two existing logical reads independently. The provider can
+  // batch them together; these durations are not separate physical envelopes.
+  const timedActivityRead = async <T>(method: string, block: unknown, read: () => Promise<T>): Promise<T> => {
+    if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS !== "1") return read();
+    const startedAtMs = Date.now();
+    let returned = false;
+    try {
+      const result = await read();
+      returned = true;
+      return result;
+    } finally {
+      try {
+        console.log(`[searcher/activity-read-timing] ${JSON.stringify({
+          method, block: typeof block === "string" || typeof block === "number" ? block : null,
+          startedAtMs, wallMs: Date.now() - startedAtMs, status: returned ? "returned" : "failed",
+        })}`);
+      } catch { /* Diagnostics never change activity completeness or failure. */ }
+    }
+  };
   const blockScanActivityProvider: BlockTouchedProvider = {
     getLogs(filter) {
       blockScanRuntimeAbort.signal.throwIfAborted();
-      return provider.getLogs(filter).catch(activityReadFailed);
+      return timedActivityRead("eth_getLogs", "blockHash" in filter ? filter.blockHash : filter.fromBlock,
+        () => provider.getLogs(filter)).catch(activityReadFailed);
     },
     send(method, params) {
       blockScanRuntimeAbort.signal.throwIfAborted();
-      return provider.send(method, params).catch(activityReadFailed);
+      return timedActivityRead(method, params[0], () => provider.send(method, params)).catch(activityReadFailed);
     },
   };
   const blockScanRuntimeLoop = new BlockScanRuntimeLoop({

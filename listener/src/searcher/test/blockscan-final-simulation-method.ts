@@ -56,6 +56,7 @@ test("production observed-header projection preserves direct-simulation context 
     provider: { async send() { reads++; return raw; } },
     async readBlockScanObservedHeader(_url: string, chain: bigint, n: number) { reads++; return parseBlockScanObservedHeader(raw, n, chain); },
     blockScanAmountReference: { observeHeader() { observed++; } }, console: { log() {} },
+    process: { env: {} },
   }, { timeout: 1000 });
   for (const control of [undefined, { signal: new AbortController().signal, deadlineAtMs: Date.now() + 1000 }]) {
     const actual = requireFinalSimulationHeader(await topology.observeHeader(100, control));

@@ -336,6 +336,8 @@ interface SealedFamilyExactQuoteHandleRecord {
   readonly source: CanonicalSource;
   readonly generation: number;
   readonly prefix: readonly SealedFamilyExactQuoteHandle[];
+  readonly localStateKey?: string;
+  readonly localStateMethod?: string;
 }
 
 const issuedFamilyRouteRuntimeHandles = new WeakMap<
@@ -1298,6 +1300,7 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
     amountIn: invocation.amountIn, source: invocation.source,
     executor: invocation.executor.toLowerCase(), runtimeEvidence: invocation.runtimeEvidence,
     ...(prefix.length === 0 ? {} : { prefix }),
+    ...(invocation.prefix === undefined ? {} : { retainLocalState: true as const }),
     ...(invocation.callerContext.transactionOrigin === undefined ? {} : {
       transactionOrigin: invocation.callerContext.transactionOrigin,
     }),
@@ -1314,6 +1317,8 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
         ? { sequentialPrefix: true } : {}),
       ...(method.kind === "request-program" && method.stateOnlyReads === true
         ? { stateOnlyReads: true } : {}),
+      ...(method.kind === "request-program" && method.isolatedLocalState !== undefined
+        ? { isolatedLocalState: true } : {}),
       ...(method.kind === "request-program" && method.reusePolicy !== undefined
         ? { reusePolicy: { kind: method.reusePolicy.kind,
             dependencies: [...method.reusePolicy.dependencies],
@@ -1327,6 +1332,7 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
     executor: programInput.executor,
     transactionOrigin: programInput.transactionOrigin ?? null,
     runtimeEvidence: runtimeEvidenceProjection(programInput.runtimeEvidence),
+    ...(programInput.retainLocalState ? { retainLocalState: true } : {}),
     ...(prefix.length === 0 ? {} : { prefix: invocation.prefix!.map(handle => ({
       familyId: handle.familyId, routeKey: handle.routeKey, amountIn: handle.amountIn,
       amountOut: handle.amountOut, compatibility: handle.cacheCompatibilityFingerprint,
@@ -1348,6 +1354,7 @@ function resolveExactPrefix(invocation: ResolvedFamilyExactQuoteInvocation): rea
     record.callerContext.assertCurrent();
     if (!sameCanonicalSource(record.source, invocation.source) || record.generation !== invocation.generation ||
         record.executor !== invocation.executor.toLowerCase() ||
+        record.runtimeEvidenceFingerprint !== hashCanonical(runtimeEvidenceProjection(invocation.runtimeEvidence)) ||
         record.callerContext.transactionOrigin !== invocation.callerContext.transactionOrigin ||
         record.prefix.length !== i || record.prefix.some((prior, j) => prior !== handles[j])) {
       throw new Error("exact prefix escaped trial/source/caller or ordering");
@@ -1428,7 +1435,8 @@ export async function executeFamilyExactQuote(
   if (stopped !== null) return stopped;
   for (const [methodIndex, method] of methods.entries()) {
     if (programInput.prefix?.length &&
-        (method.kind !== "request-program" || method.sequentialPrefix !== true)) continue;
+        (method.kind !== "request-program" ||
+          (method.sequentialPrefix !== true && method.isolatedLocalState === undefined))) continue;
     if (invocation.requireChainAmountQuote === true &&
         (method.kind !== "request-program" || method.chainAmountQuote !== true)) continue;
     const methodRef = exactMethodEvidenceRef(
@@ -1438,11 +1446,61 @@ export async function executeFamilyExactQuote(
     );
     if (method.kind === "request-program") {
       evidenceRefs.push(methodRef);
+      let localStateKey: string | undefined;
+      if (method.isolatedLocalState !== undefined && programInput.retainLocalState) {
+        const state = invocation.instance.pricingInstances.find(state =>
+          state.routes.some(route => route.routeKey === invocation.route.routeKey));
+        localStateKey = state?.stateKey.toLowerCase();
+        if (localStateKey === undefined) return terminalExact(invocation, "failed",
+          "exact-sequential-prefix-unsupported", evidenceRefs);
+        let previous: SealedFamilyExactQuoteHandleRecord | undefined;
+        for (const handle of invocation.prefix ?? []) {
+          const record = issuedSealedFamilyExactQuoteHandles.get(handle)!;
+          // An opaque unknown mutation cannot prove any other pool unaffected.
+          if (record.localStateKey === undefined) return terminalExact(invocation, "failed",
+            "exact-sequential-prefix-unsupported", evidenceRefs);
+          if (record.localStateKey === localStateKey ||
+              record.routeRecord.instance.instanceKey === invocation.instance.instanceKey) {
+            if (record.localStateKey !== localStateKey || record.family !== invocation.family ||
+                record.routeRecord.instance !== invocation.instance || record.localStateMethod !== method.id) {
+              return terminalExact(invocation, "failed", "exact-sequential-prefix-unsupported", evidenceRefs);
+            }
+            previous = record;
+          }
+        }
+        if (previous !== undefined) {
+          try {
+            invocation.runtime.generationFence.assertCurrent(invocation.generation, invocation.source);
+          } catch (error) {
+            return terminalExact(invocation, "unresolved",
+              `local-exact-generation:${errorMessage(error)}`, evidenceRefs);
+          }
+          let quote: ExactQuoteResult<unknown>;
+          try {
+            invocation.callerContext.assertCurrent();
+            quote = requireSynchronousExactValue(
+              method.isolatedLocalState.quote(programInput, previous.evidence), "isolated local exact quote");
+            validateExactQuote(quote);
+          } catch (error) {
+            return terminalExact(invocation, "failed", `local-state-exact:${errorMessage(error)}`, evidenceRefs);
+          }
+          try {
+            invocation.runtime.generationFence.assertCurrent(invocation.generation, invocation.source);
+          } catch (error) {
+            return terminalExact(invocation, "unresolved",
+              `local-exact-generation:${errorMessage(error)}`, evidenceRefs);
+          }
+          return resolvedExactQuote({ invocation, quote, localStateKey,
+            methodId: method.id, methodIndex, methodOrderFingerprint, compatibilityFingerprint,
+            evidenceRefs, reasonCode: "local-state-exact-derived" });
+        }
+      }
       return executeExactRequestMethod({
         invocation,
         programInput,
         program: method.program,
         stateOnlyReads: method.stateOnlyReads === true,
+        ...(localStateKey === undefined ? {} : { localStateKey }),
         ...(method.reusePolicy === undefined ? {} : { reusePolicy: method.reusePolicy }),
         methodId: method.id,
         methodIndex,
@@ -1532,6 +1590,7 @@ async function executeExactRequestMethod(input: {
   readonly programInput: RuntimeExactQuoteInput;
   readonly reusePolicy?: AmountQuoteReusePolicy;
   readonly stateOnlyReads: boolean;
+  readonly localStateKey?: string;
   readonly program: ExactRequestProgram<
     CompiledInstanceDescriptor,
     FamilyRouteDescriptor,
@@ -1815,6 +1874,7 @@ async function executeExactRequestMethod(input: {
   return resolvedExactQuote({
     invocation,
     quote,
+    ...(input.localStateKey === undefined ? {} : { localStateKey: input.localStateKey }),
     ...(input.reusePolicy === undefined ? {} : { reusePolicy: input.reusePolicy }),
     ...(amountQuoteReuse === undefined ? {} : { amountQuoteReuse }),
     methodId: input.methodId,
@@ -2026,7 +2086,7 @@ function declareExactMethods(value: unknown): readonly RuntimeExactMethod[] {
     if (ids.has(id)) throw new Error(`exact methods duplicate id ${id}`);
     ids.add(id);
     if (method.kind === "local") {
-      if ("reusePolicy" in method) {
+      if ("reusePolicy" in method || "isolatedLocalState" in method) {
         throw new Error(`local exact method ${id} cannot declare chain quote reuse`);
       }
       if (typeof method.quote !== "function") {
@@ -2035,6 +2095,12 @@ function declareExactMethods(value: unknown): readonly RuntimeExactMethod[] {
       return method as RuntimeExactMethod;
     }
     if (method.kind === "request-program") {
+      if (method.isolatedLocalState !== undefined &&
+          (method.stateOnlyReads !== true || method.sequentialPrefix !== undefined ||
+           method.chainAmountQuote !== undefined || method.reusePolicy !== undefined ||
+           typeof method.isolatedLocalState.quote !== "function")) {
+        throw new Error(`request exact method ${id} has invalid isolated local state declaration`);
+      }
       if (method.sequentialPrefix !== undefined &&
           (method.sequentialPrefix !== true || method.stateOnlyReads === true || method.reusePolicy !== undefined)) {
         throw new Error(`request exact method ${id} has invalid sequential declaration`);
@@ -2249,6 +2315,7 @@ function resolvedExactQuote(input: {
   readonly quote: ExactQuoteResult<unknown>;
   readonly reusePolicy?: AmountQuoteReusePolicy;
   readonly amountQuoteReuse?: FamilyAmountQuoteReuseContext;
+  readonly localStateKey?: string;
   readonly methodId: string;
   readonly methodIndex: number;
   readonly methodOrderFingerprint: string;
@@ -2315,6 +2382,9 @@ function resolvedExactQuote(input: {
     source,
     generation: invocation.generation,
     prefix: Object.freeze([...(invocation.prefix ?? [])]),
+    ...(input.localStateKey === undefined ? {} : {
+      localStateKey: input.localStateKey, localStateMethod: input.methodId,
+    }),
   });
   try { invocation.callerContext.assertCurrent(); } catch (error) {
     return terminalExact(invocation, "unresolved", errorMessage(error), input.evidenceRefs);

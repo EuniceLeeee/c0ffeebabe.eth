@@ -1048,7 +1048,24 @@ export class PinnedRethQuoteBackend
           this.maxBatchItemsSent,
           items.length,
         );
-        const response = await postJsonRpc(this.rpcUrl, payloads as never, wireSignal);
+        const wireStartedAtMs = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1" ? Date.now() : undefined;
+        let response: JsonRpcHttpResponse | undefined;
+        try {
+          response = await postJsonRpc(this.rpcUrl, payloads as never, wireSignal);
+        } finally {
+          if (wireStartedAtMs !== undefined) {
+            try {
+              console.log(`[searcher/quote-batch-timing] ${JSON.stringify({
+                sourceBlockHash: this.blockSpecifier.blockHash,
+                lane: this.options.transportLane ?? "exact", scopeLabel: this.options.scopeLabel ?? "exact quote",
+                method, items: items.length, startedAtMs: wireStartedAtMs,
+                wallMs: Date.now() - wireStartedAtMs,
+                status: response === undefined ? "transport-failed" : "returned",
+                statusCode: response?.statusCode ?? null,
+              })}`);
+            } catch { /* No diagnostic may change retry, cancellation or quote results. */ }
+          }
+        }
         // Inspect before releasing the shared permit or settling any sibling.
         // Otherwise the scheduler can dispatch queued RPCs on the dead source.
         if (response.statusCode >= 200 && response.statusCode < 300 && Array.isArray(response.body)) {

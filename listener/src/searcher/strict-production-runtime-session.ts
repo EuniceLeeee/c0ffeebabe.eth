@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { types as nodeTypes } from "node:util";
 import type { BlockTouchedStateKeyResolver } from "./blockscan-touched-state.js";
 import type {
   AdapterWorkControl,
@@ -1373,7 +1374,7 @@ export class StrictProductionRuntimeSession {
         source: this.source,
         generation: this.source.generation,
         runtime: this.#runtime,
-        ...(prefix.length === 0 ? {} : { prefix }),
+        ...(input.priorQuotes === undefined ? {} : { prefix }),
         ...(input.control === undefined ? {} : { control: input.control }),
         ...(input.requireChainAmountQuote === undefined
           ? {} : { requireChainAmountQuote: input.requireChainAmountQuote }),
@@ -1675,11 +1676,47 @@ function buildStrictReadyPricingIndex(input: {
   });
 }
 
+const immutableReadyEdgeFingerprints = new WeakMap<TokenEdge, string>();
+
 /** Full ordered ready-edge contract used to reject a mixed Graph generation. */
 export function strictReadyGraphContractFingerprint(
   edges: readonly TokenEdge[],
 ): string {
-  return deterministicHash(edges.map(blockScanEdgeMetadataFingerprint));
+  return deterministicHash(edges.map(edge => {
+    const cached = immutableReadyEdgeFingerprints.get(edge);
+    if (cached !== undefined) return cached;
+    const immutable = isDeepFrozenPlainData(edge);
+    const fingerprint = blockScanEdgeMetadataFingerprint(edge);
+    if (immutable) immutableReadyEdgeFingerprints.set(edge, fingerprint);
+    return fingerprint;
+  }));
+}
+
+/** A shallow freeze, accessor, proxy or mutable nested binding cannot prove
+ * stable metadata. Inspect descriptors without invoking getters; only positive
+ * proofs are retained with their per-edge hash. Mutable inputs keep rehashing. */
+function isDeepFrozenPlainData(root: object): boolean {
+  const visiting = new Set<object>(), checked = new Set<object>();
+  const pending: { value: unknown; exit?: true }[] = [{ value: root }];
+  while (pending.length > 0) {
+    const { value, exit } = pending.pop()!;
+    if (typeof value === "function") return false;
+    if (value === null || typeof value !== "object") continue;
+    if (exit) { visiting.delete(value); checked.add(value); continue; }
+    if (checked.has(value)) continue;
+    if (visiting.has(value) || nodeTypes.isProxy(value) || !Object.isFrozen(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== null && prototype !== Object.prototype &&
+        !(Array.isArray(value) && prototype === Array.prototype)) return false;
+    visiting.add(value);
+    pending.push({ value, exit: true });
+    for (const key of Reflect.ownKeys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+      if (!("value" in descriptor)) return false;
+      pending.push({ value: descriptor.value });
+    }
+  }
+  return true;
 }
 
 function instanceKeyFor(instance: PreparedFamilyInstance): string {
