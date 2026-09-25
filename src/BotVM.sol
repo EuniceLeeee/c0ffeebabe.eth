@@ -211,6 +211,31 @@ contract BotVM {
                     _readUint256(script, ip + 40), _readUint256(script, ip + 72));
                 ip += 104;
             }
+            else if (op == 0x0b) {
+                // WRAP_NATIVE_DELTA: run a bounded sub-script and wrap only
+                // the ETH it adds. Snapshots are invocation-local, so nested
+                // callbacks cannot overwrite another invocation's baseline.
+                require(ip + 3 <= end, "native wrap header");
+                uint256 size = _readUint24(script, ip);
+                require(ip + 3 + size <= end, "native wrap bounds");
+                uint256 nativeBefore = address(this).balance;
+                // Contain RETURN/STOP in the child invocation: it must never
+                // bypass wrapping and the post-execution inventory checks.
+                (bool executed,) = address(this).call(abi.encodeWithSelector(
+                    SUBSCRIPT_SELECTOR, _readBytes(script, ip + 3, size)));
+                require(executed, "native wrap action failed");
+                require(address(this).balance >= nativeBefore, "native inventory consumed");
+                uint256 received = address(this).balance - nativeBefore;
+                if (received != 0) {
+                    uint256 wethBefore = IERC20(Constants.WETH).balanceOf(address(this));
+                    (bool ok,) = Constants.WETH.call{value: received}(abi.encodeWithSignature("deposit()"));
+                    require(ok, "native wrap failed");
+                    require(IERC20(Constants.WETH).balanceOf(address(this)) == wethBefore + received,
+                        "native wrap amount");
+                }
+                require(address(this).balance == nativeBefore, "native wrap residual");
+                ip += 3 + size;
+            }
             else if (op == 0x0d) {
                 // ── REVERT ──
                 // Layout: [data_len:3][data:N]

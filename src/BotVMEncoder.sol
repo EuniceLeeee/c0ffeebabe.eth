@@ -57,6 +57,13 @@ library BotVMEncoder {
         return abi.encodePacked(uint8(0x08), token, threshold);
     }
 
+    /// @dev Opcode 0x0b: WRAP_NATIVE_DELTA
+    ///      Layout: [0x0b][script_len:3][script:N]
+    function encodeWrapNativeDelta(bytes memory script) internal pure returns (bytes memory) {
+        require(script.length <= type(uint24).max, "native wrap script too large");
+        return abi.encodePacked(uint8(0x0b), uint24(script.length), script);
+    }
+
     /// @dev Opcode 0x0d: REVERT
     ///      Layout: [0x0d][data_len:3][data:N]
     function encodeRevert(bytes memory data) internal pure returns (bytes memory) {

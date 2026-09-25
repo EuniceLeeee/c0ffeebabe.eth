@@ -15,7 +15,7 @@ import { fluidCreditRoutes } from "../credit/fluid-family/routes.js";
 import { fluidCreditPricing } from "../credit/fluid-family/pricing.js";
 import { fluidCreditExact } from "../credit/fluid-family/exact.js";
 
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED" });
+export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED" });
 
 export const plugin = defineCreditFamily({
   manifest: fluidCreditFamilyManifest,

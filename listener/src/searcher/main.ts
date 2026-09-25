@@ -7,9 +7,11 @@ import "../shared/adapters/index.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, StateCallAbortedError, type StateBackend, type StateCallControl } from "../shared/state/state-backend.js";
 import {
+  dryRunBotVmCodeOverrideEnabled,
   forkBotVmInstallationEnabled,
   forkBotVmRuntimeReceipt,
   installForkBotVm,
+  loadBotVmRuntimeCode,
   type ForkBotVmRuntimeReceipt,
 } from "../shared/executor/botvm-executor.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
@@ -1248,6 +1250,9 @@ async function main(): Promise<void> {
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
+  const dryRunBotVmCodeOverride = dryRunBotVmCodeOverrideEnabled(
+    process.env.SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE, config.dryRun, config.blockScanSubmit,
+  );
   // Quote authority and final simulation share one immutable execution identity.
   const executionIdentity = Object.freeze({
     executor: ethers.getAddress(config.botvmAddress).toLowerCase(),
@@ -1472,6 +1477,15 @@ async function main(): Promise<void> {
   const blockScanFinalSimulationMethod = resolveBlockScanFinalSimulationMethod();
   if (enableBlockScan && blindInstallForkBotVm && blockScanFinalSimulationMethod !== "anvil") {
     throw new Error("fork-only executor installation requires the anvil final simulation method");
+  }
+  if (dryRunBotVmCodeOverride && (!enableBlockScan || blockScanFinalSimulationMethod !== "eth_simulateV1")) {
+    throw new Error("dry-run executor code override requires block-scan eth_simulateV1 final simulation");
+  }
+  const finalSimulationExecutorRuntimeCode = dryRunBotVmCodeOverride
+    ? loadBotVmRuntimeCode(executionIdentity.transactionOrigin) : undefined;
+  if (finalSimulationExecutorRuntimeCode !== undefined) {
+    console.log(`[searcher/live] ${JSON.stringify({ counterfactualExecutorCode: true,
+      keccak256: finalSimulationExecutorRuntimeCode.keccak256 })}`);
   }
   const blockScanFinalSimulationConcurrencyRaw = Number(
     process.env.SEARCHER_BLOCKSCAN_FINAL_SIM_CONCURRENCY ?? "1",
@@ -2516,7 +2530,8 @@ async function main(): Promise<void> {
     executionWorkers: blockScanExecutionWorkers,
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
     directFinalSimulation: enableBlockScan && blockScanFinalSimulationMethod === "eth_simulateV1"
-      ? Object.assign(new EthSimulateV1Simulator(config.rpcUrl, executionIdentity.executor, executionIdentity.transactionOrigin),
+      ? Object.assign(new EthSimulateV1Simulator(config.rpcUrl, executionIdentity.executor, executionIdentity.transactionOrigin,
+          finalSimulationExecutorRuntimeCode),
           { concurrency: blockScanFinalSimulationConcurrency })
       : undefined,
     rpcUrl: config.rpcUrl,
@@ -2534,6 +2549,7 @@ async function main(): Promise<void> {
             source: input.source, header: input.header,
             executor: executionIdentity.executor, owner: executionIdentity.transactionOrigin,
             profitToken: input.resolved.profitToken, scriptHex: input.scriptHex,
+            ...(finalSimulationExecutorRuntimeCode === undefined ? {} : { executorRuntimeCode: finalSimulationExecutorRuntimeCode }),
           });
           const receipt = solverInputRecorder.record({
             source: input.source,

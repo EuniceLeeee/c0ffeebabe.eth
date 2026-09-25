@@ -6,7 +6,7 @@ import {
   PRODUCTION_STRICT_FAMILY_DECLARATIONS,
   StrictProductionFamilyDeclarations,
 } from "../strict-production-family-declarations.js";
-import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
+import { PRODUCTION_FAMILY_ACTIVATIONS, PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
   "../venues/production-family-composition.js";
 import type { FamilyCapabilityCatalog } from
   "../venues/family-capability-catalog.js";
@@ -93,7 +93,8 @@ assert.deepEqual(
 );
 assert.deepEqual(
   new Set(PRODUCTION_STRICT_FAMILY_DECLARATIONS.creditActionIds),
-  new Set(["fluid-vault", "fluid-dex-liquidate"]),
+  new Set(PRODUCTION_FAMILY_ACTIVATIONS.some(entry => entry.familyId === "credit:fluid" && entry.enabled)
+    ? ["fluid-vault", "fluid-dex-liquidate"] : []),
 );
 const strictTradeAdapters = deriveTemplateTradeAdapterIds(
   PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies,

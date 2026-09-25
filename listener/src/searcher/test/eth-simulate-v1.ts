@@ -5,11 +5,12 @@ import { createServer, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspect } from "node:util";
+import { keccak256 } from "ethers";
 import { erc20TransferAdapter } from "../../adapters/erc20.js";
 import { register } from "../../adapters/registry.js";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import { bytesToHex } from "../../shared/compiler/encoder.js";
-import { buildExecuteCalldata } from "../../shared/executor/botvm-executor.js";
+import { buildExecuteCalldata, dryRunBotVmCodeOverrideEnabled, loadBotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
 import type { BlockScanObservedHeader } from "../blockscan-observed-header.js";
 import { isRpcThrottleError } from "../rpc-throttle-guard.js";
@@ -23,6 +24,33 @@ const addr = (c: string): string => `0x${c.repeat(40)}`;
 const hex = (n: bigint | number): string => `0x${n.toString(16)}`;
 const word = (n: bigint): string => `0x${n.toString(16).padStart(64, "0")}`;
 const owner = addr("1"), executor = addr("2"), token = addr("3");
+for (const flag of [undefined, "0"]) {
+  for (const dryRun of [false, true]) for (const submit of [false, true]) {
+    assert.equal(dryRunBotVmCodeOverrideEnabled(flag, dryRun, submit), false);
+  }
+}
+assert.equal(dryRunBotVmCodeOverrideEnabled("1", true, false), true);
+for (const [dryRun, submit] of [[false, false], [false, true], [true, true]]) {
+  assert.throws(() => dryRunBotVmCodeOverrideEnabled("1", dryRun!, submit!));
+}
+for (const flag of ["", "true", "2"]) assert.throws(() => dryRunBotVmCodeOverrideEnabled(flag, true, false));
+// Production helper patches every owner immutable once and freezes the exact
+// compiled artifact, not creation bytecode or caller-supplied account state.
+const artifact = JSON.parse(readFileSync(new URL("../../../../out/BotVM.sol/BotVM.json", import.meta.url), "utf8"));
+const loadedRuntime = loadBotVmRuntimeCode(owner);
+assert(Object.isFrozen(loadedRuntime));
+assert.equal(loadedRuntime.keccak256, keccak256(loadedRuntime.code));
+let expectedRuntime: string = artifact.deployedBytecode.object;
+const ownerRefs = Object.values(artifact.deployedBytecode.immutableReferences) as Array<Array<{ start: number; length: number }>>;
+assert(ownerRefs.flat().length > 0);
+for (const ref of ownerRefs.flat()) {
+  assert.equal(ref.length, 32);
+  const start = 2 + ref.start * 2;
+  expectedRuntime = expectedRuntime.slice(0, start) + owner.slice(2).padStart(ref.length * 2, "0") +
+    expectedRuntime.slice(start + ref.length * 2);
+}
+assert.equal(loadedRuntime.code, expectedRuntime.toLowerCase());
+assert.throws(() => loadBotVmRuntimeCode("invalid-owner"));
 const source = { number: 100, hash: hash("a"), generation: 7 };
 const header: BlockScanObservedHeader = { number: 100, hash: source.hash, parentHash: hash("b"),
   timestamp: 1_800_000_000, baseFeePerGas: 1_000_000_000n,
@@ -146,6 +174,68 @@ try {
   assert.deepEqual(prepared.preBalanceParams, expectedWire[0]!.params);
   assert.deepEqual(prepared.simulateParams, expectedWire[1]!.params);
 
+  // Opt-in code overlay is identical for the before/after balance worlds. It
+  // changes neither executor account state nor either transaction's gas/fees.
+  const runtimeCode = { code: loadedRuntime.code, keccak256: loadedRuntime.keccak256 };
+  const codeSimulator = new EthSimulateV1Simulator(url, executor, owner, runtimeCode);
+  const codePrepared = buildEthSimulateV1ExecutionInput({ source, header, executor, owner,
+    profitToken: token, scriptHex, executorRuntimeCode: runtimeCode });
+  runtimeCode.code = "0x00"; runtimeCode.keccak256 = keccak256(runtimeCode.code);
+  assertFrozen(codePrepared);
+  assert.equal(codePrepared.schemaVersion, 2);
+  assert.deepEqual(codePrepared.executorRuntimeCode, loadedRuntime);
+  assert.deepEqual(validateEthSimulateV1ExecutionInput(JSON.parse(JSON.stringify(codePrepared))), codePrepared);
+  const codeWire = structuredClone(expectedWire);
+  codeWire[0]!.params.push({ [owner]: { balance: hex(10_000n * 10n ** 18n) }, [executor]: { code: loadedRuntime.code } });
+  Object.assign((codeWire[1]!.params[0] as { blockStateCalls: [{ stateOverrides: Record<string, unknown> }] })
+    .blockStateCalls[0].stateOverrides, { [executor]: { code: loadedRuntime.code } });
+  const counterfactualEvidence = { address: executor, keccak256: loadedRuntime.keccak256 };
+  reset();
+  let codeStart = requests.length;
+  const codeResult = await codeSimulator.simulate(plan, context());
+  assert.deepEqual(requests.slice(codeStart), codeWire);
+  assert.deepEqual(codeResult, { success: true, profitToken: token, grossProfit: 25n,
+    gasUsed: 0x12345n, netProfit: 25n, calldata, scriptHex, counterfactualExecutorCode: counterfactualEvidence });
+  codeStart = requests.length;
+  assert.deepEqual(await codeSimulator.simulateExecutionInput(JSON.parse(JSON.stringify(codePrepared)), context()), codeResult);
+  assert.deepEqual(requests.slice(codeStart), codeWire);
+  const noCodeRequests = requests.length;
+  await assert.rejects(simulator.simulateExecutionInput(codePrepared, context()), /executor code mismatch/);
+  await assert.rejects(codeSimulator.simulateExecutionInput(prepared, context()), /executor code mismatch/);
+  await assert.rejects(new EthSimulateV1Simulator(url, executor, owner, runtimeCode)
+    .simulateExecutionInput(codePrepared, context()), /executor code mismatch/);
+  for (const invalid of [null, {}, { ...loadedRuntime, code: "0x" }, { ...loadedRuntime, code: "0x1" },
+    { ...loadedRuntime, keccak256: hash("0") }, ...["address", "balance", "nonce", "state", "stateDiff"]
+      .map(field => ({ ...loadedRuntime, [field]: "0x1" }))]) {
+    assert.throws(() => new EthSimulateV1Simulator(url, executor, owner, invalid as never));
+    assert.throws(() => buildEthSimulateV1ExecutionInput({ source, header, executor, owner,
+      profitToken: token, scriptHex, executorRuntimeCode: invalid as never }));
+  }
+  const codeChanges: Array<(saved: Mutable<EthSimulateV1ExecutionInput>) => void> = [
+    saved => { saved.schemaVersion = 1; },
+    saved => { saved.executorRuntimeCode!.code = "0x00"; },
+    saved => { saved.executorRuntimeCode!.keccak256 = hash("0"); },
+    saved => { Object.assign(saved.executorRuntimeCode!, { balance: "0x1" }); },
+    saved => { saved.preBalanceParams.splice(2); },
+    saved => { Object.assign(saved.preBalanceParams[2]![executor]!, { nonce: "0x1" }); },
+    saved => { Object.assign(saved.simulateParams[0].blockStateCalls[0].stateOverrides[executor]!, { state: {} }); },
+    saved => { saved.simulateParams[0].blockStateCalls[0].stateOverrides[addr("4")] = { code: loadedRuntime.code }; },
+    saved => { delete saved.simulateParams[0].blockStateCalls[0].stateOverrides[executor]; },
+  ];
+  for (const change of codeChanges) {
+    const changed = JSON.parse(JSON.stringify(codePrepared)); change(changed);
+    assert.throws(() => validateEthSimulateV1ExecutionInput(changed), sanitized);
+    await assert.rejects(codeSimulator.simulateExecutionInput(changed, context()), sanitized);
+  }
+  assert.equal(requests.length, noCodeRequests, "code policy/tampering rejected before any RPC");
+  const codeRevert = result();
+  Object.assign(codeRevert[0]!.calls[0]!, { status: "0x0", error: { code: 3, message: "reverted" } });
+  reset(codeRevert);
+  const codeFailure = await codeSimulator.simulate(plan, context());
+  assert.equal(codeFailure.success, false);
+  assert.deepEqual(codeFailure.counterfactualExecutorCode, counterfactualEvidence);
+  reset();
+
   // Capture before starting simulation, then discard the root's usable adapter.
   // Neither persistence nor replay may re-quote or compile this mutated plan.
   reset();
@@ -172,15 +262,17 @@ try {
     const path = join(evidenceDir, "inputs.jsonl");
     const writer = createSolverExecutionInputRecorder({ path, runId: "fixture", chainId: 1, runtimeCommit: "a".repeat(40) });
     try {
-      writer.record({ source, opportunityId: hash("d"),
+      for (const executionInput of [prepared, codePrepared]) writer.record({ source, opportunityId: hash("d"),
         route: { routeId: hash("d"), edgeIds: [], tokenRing: [token], venuePath: [], flashToken: token },
         solverIndex: 0, candidateIndex: 0, flashAmount: plan.flashAmount,
-        quoteProfit: plan.netProfit, profitToken: token, templateName: plan.templateName, executionInput: prepared });
+        quoteProfit: plan.netProfit, profitToken: token, templateName: plan.templateName, executionInput });
     } finally { writer.close(); }
-    const saved = JSON.parse(readFileSync(path, "utf8"));
+    const [saved, codeSaved] = readFileSync(path, "utf8").trim().split("\n").map(line => JSON.parse(line));
     const beforeReplay = requests.length;
     assert.deepEqual(await simulator.simulateExecutionInput(saved.execution_input, context()), liveResult);
     assert.deepEqual(requests.slice(beforeReplay), expectedWire);
+    assert.deepEqual(await codeSimulator.simulateExecutionInput(codeSaved.execution_input, context()), codeResult);
+    assert.deepEqual(requests.slice(beforeReplay + 2), codeWire);
   } finally { rmSync(evidenceDir, { recursive: true, force: true }); }
   assert.equal(getEventListeners(replayControl.signal, "abort").length, 0);
   assert.equal(JSON.stringify(prepared), serialized);

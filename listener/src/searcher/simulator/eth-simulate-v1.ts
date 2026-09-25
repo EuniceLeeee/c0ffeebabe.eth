@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from "node:util";
-import { getBytes, Interface } from "ethers";
+import { getBytes, Interface, keccak256 } from "ethers";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import { bytesToHex } from "../../shared/compiler/encoder.js";
-import { buildExecuteCalldata } from "../../shared/executor/botvm-executor.js";
+import { buildExecuteCalldata, type BotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
 import { postJsonRpc, StateCallAbortedError } from "../../shared/state/state-backend.js";
 import type { BlockScanObservedHeader } from "../blockscan-observed-header.js";
 import { nextBlockBaseFee } from "../ev-evaluator.js";
@@ -33,19 +33,24 @@ type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonl
  * The two parameter tuples are the exact wire payloads, not RPC method names.
  */
 export type EthSimulateV1ExecutionInput = DeepReadonly<ReturnType<typeof prepareExecutionInput>>;
+export type EthSimulateV1SimulationResult = SimulationResult & {
+  readonly counterfactualExecutorCode?: { readonly address: string; readonly keccak256: string };
+};
 
 /** Pure preparation from an already compiled script: no quote, compilation, I/O
  * or deadline dependency. Every nested object is owned by the frozen snapshot. */
 export function buildEthSimulateV1ExecutionInput(input: {
   source: CanonicalSource; header: BlockScanObservedHeader; executor: string;
   owner: string; profitToken: string; scriptHex: string;
+  executorRuntimeCode?: BotVmRuntimeCode;
 }): EthSimulateV1ExecutionInput {
   return freezeInput(prepareExecutionInput(input));
 }
 
-function prepareExecutionInput({ source, header, executor, owner, profitToken, scriptHex }: {
+function prepareExecutionInput({ source, header, executor, owner, profitToken, scriptHex, executorRuntimeCode: codeInput }: {
   source: CanonicalSource; header: BlockScanObservedHeader; executor: string;
   owner: string; profitToken: string; scriptHex: string;
+  executorRuntimeCode?: BotVmRuntimeCode;
 }) {
   const blockOverrides = targetContext(source, header);
   validateCaller(executor, owner);
@@ -58,17 +63,24 @@ function prepareExecutionInput({ source, header, executor, owner, profitToken, s
   // The zero-address observation cannot spend owner funds or change main state.
   const observer = { from: ZERO_ADDRESS, to: profitToken,
     data: ERC20.encodeFunctionData("balanceOf", [executor]), gasPrice: "0x0" };
+  const executorRuntimeCode = validateExecutorRuntimeCode(codeInput);
+  const executorOverride = executorRuntimeCode === undefined
+    ? undefined : { [executor]: { code: executorRuntimeCode.code } };
+  const stateOverrides = { [owner]: { balance: hex(OWNER_GAS_BALANCE) }, ...executorOverride };
   return {
-    schemaVersion: 1 as const,
+    schemaVersion: executorRuntimeCode === undefined ? 1 as const : 2 as const,
     source: { number: source.number, hash: source.hash, generation: source.generation },
     sourceHeader: { number: String(header.number), hash: header.hash, parentHash: header.parentHash,
       timestamp: String(header.timestamp), baseFeePerGas: header.baseFeePerGas!.toString(),
       gasUsed: header.gasUsed.toString(), gasLimit: header.gasLimit.toString() },
     executor, owner, profitToken, scriptHex, calldata,
-    preBalanceParams: [{ ...observer, gas: blockOverrides.gasLimit }, pinnedBlock] as const,
+    ...(executorRuntimeCode === undefined ? {} : { executorRuntimeCode }),
+    preBalanceParams: executorOverride === undefined
+      ? [{ ...observer, gas: blockOverrides.gasLimit }, pinnedBlock] as const
+      : [{ ...observer, gas: blockOverrides.gasLimit }, pinnedBlock, stateOverrides] as const,
     simulateParams: [{
       blockStateCalls: [{ blockOverrides,
-        stateOverrides: { [owner]: { balance: hex(OWNER_GAS_BALANCE) } },
+        stateOverrides,
         calls: [
           { from: owner, to: executor, data: calldata, value: "0x0",
             gas: hex(TX_GAS), gasPrice: blockOverrides.baseFeePerGas },
@@ -87,7 +99,7 @@ function prepareExecutionInput({ source, header, executor, owner, profitToken, s
 export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulateV1ExecutionInput {
   try {
     const saved = record(value), source = record(saved?.source), header = record(saved?.sourceHeader);
-    if (!saved || saved.schemaVersion !== 1 || !source || !header ||
+    if (!saved || (saved.schemaVersion !== 1 && saved.schemaVersion !== 2) || !source || !header ||
         typeof source.number !== "number" || typeof source.hash !== "string" ||
         typeof source.generation !== "number" || typeof header.hash !== "string" ||
         typeof header.parentHash !== "string" || typeof saved.executor !== "string" ||
@@ -103,6 +115,9 @@ export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulate
         timestamp: Number(decimal(header.timestamp)), baseFeePerGas: decimal(header.baseFeePerGas),
         gasUsed: decimal(header.gasUsed), gasLimit: decimal(header.gasLimit), transactionHashes: [] },
       executor: saved.executor, owner: saved.owner, profitToken: saved.profitToken, scriptHex: saved.scriptHex,
+      ...(saved.executorRuntimeCode === undefined ? {} : {
+        executorRuntimeCode: validateExecutorRuntimeCode(saved.executorRuntimeCode),
+      }),
     });
     if (!isDeepStrictEqual(value, canonical)) throw new Error();
     return canonical;
@@ -128,22 +143,38 @@ function validateCaller(executor: string, owner: string): void {
   }
 }
 
+function validateExecutorRuntimeCode(value: unknown): BotVmRuntimeCode | undefined {
+  if (value === undefined) return undefined;
+  const code = record(value);
+  if (!code || Object.keys(code).length !== 2 ||
+      !Object.keys(code).every(key => key === "code" || key === "keccak256") ||
+      typeof code.code !== "string" || !/^0x(?:[0-9a-fA-F]{2})+$/.test(code.code) ||
+      typeof code.keccak256 !== "string" || !HASH.test(code.keccak256) ||
+      keccak256(code.code) !== code.keccak256.toLowerCase()) {
+    throw new Error("invalid final simulation executor code");
+  }
+  return Object.freeze({ code: code.code.toLowerCase(), keccak256: code.keccak256.toLowerCase() });
+}
+
 /** Stateless final simulation; the existing scheduler owns generation fencing.
- * Only the owner's native gas balance is overridden (exactly 10,000 ETH, unlike
- * Anvil's minimum floor). No token/code/storage/nonce overrides are installed.
+ * Owner gas balance is exactly 10,000 ETH. Optional dry-run executor bytes are
+ * fixed at startup; no token/balance/storage/nonce state is overridden for them.
  * Target policy: N+1, timestamp+12, parent gas limit, exact next EIP-1559 fee,
  * zero priority fee. Other target header fields retain endpoint semantics.
  */
 export class EthSimulateV1Simulator {
+  private readonly executorRuntimeCode: BotVmRuntimeCode | undefined;
   constructor(
     private readonly rpcUrl: string,
     readonly executor: string,
     readonly owner: string,
+    executorRuntimeCode?: BotVmRuntimeCode,
   ) {
     validateCaller(executor, owner);
+    this.executorRuntimeCode = validateExecutorRuntimeCode(executorRuntimeCode);
   }
 
-  async simulate(plan: ResolvedPlan, context: Context): Promise<SimulationResult> {
+  async simulate(plan: ResolvedPlan, context: Context): Promise<EthSimulateV1SimulationResult> {
     const { source, header, signal, deadlineAtMs } = context;
     targetContext(source, header);
     if (!Number.isSafeInteger(deadlineAtMs) || !signal || !ADDRESS.test(plan.profitToken)) {
@@ -156,23 +187,30 @@ export class EthSimulateV1Simulator {
     if (Date.now() >= deadlineAtMs) throw new StateCallAbortedError("final simulation deadline aborted", "deadline");
     const scriptHex = bytesToHex(compilePlan(plan.root, this.executor));
     const input = buildEthSimulateV1ExecutionInput({ source, header, executor: this.executor,
-      owner: this.owner, profitToken, scriptHex });
+      owner: this.owner, profitToken, scriptHex,
+      ...(this.executorRuntimeCode === undefined ? {} : { executorRuntimeCode: this.executorRuntimeCode }) });
     return this.simulateExecutionInput(input, { signal, deadlineAtMs });
   }
 
   /** Read-only diagnostic replay. Production still owns the latest-head gate. */
   async simulateExecutionInput(input: EthSimulateV1ExecutionInput,
-    control: { signal: AbortSignal; deadlineAtMs: number }): Promise<SimulationResult> {
+    control: { signal: AbortSignal; deadlineAtMs: number }): Promise<EthSimulateV1SimulationResult> {
     const saved = validateEthSimulateV1ExecutionInput(input);
     if (saved.executor.toLowerCase() !== this.executor.toLowerCase() ||
         saved.owner.toLowerCase() !== this.owner.toLowerCase()) {
       throw new Error("final simulation execution input caller mismatch");
+    }
+    if (!isDeepStrictEqual(saved.executorRuntimeCode, this.executorRuntimeCode)) {
+      throw new Error("final simulation execution input executor code mismatch");
     }
     const { signal, deadlineAtMs } = control;
     if (!Number.isSafeInteger(deadlineAtMs) || !signal) {
       throw new Error("invalid final simulation control or profit token");
     }
     const { profitToken, calldata, scriptHex, preBalanceParams, simulateParams } = saved;
+    const codeEvidence = saved.executorRuntimeCode === undefined ? {} : {
+      counterfactualExecutorCode: { address: this.executor.toLowerCase(), keccak256: saved.executorRuntimeCode.keccak256 },
+    };
     const blockOverrides = simulateParams[0].blockStateCalls[0].blockOverrides;
     const pinnedBlock = simulateParams[1];
     const controller = new AbortController();
@@ -254,12 +292,12 @@ export class EthSimulateV1Simulator {
         const cause = Object.assign(new Error("final simulation transaction reverted"), {
           kind: "revert", code: "TRANSACTION_REVERTED",
         });
-        return { success: false, profitToken, grossProfit: 0n, gasUsed: 0n, netProfit: 0n,
+        return { ...codeEvidence, success: false, profitToken, grossProfit: 0n, gasUsed: 0n, netProfit: 0n,
           calldata, scriptHex, revertReason: cause.message,
           failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause } };
       }
       const grossProfit = postBalance - pre;
-      return { success: grossProfit > 0n, profitToken, grossProfit,
+      return { ...codeEvidence, success: grossProfit > 0n, profitToken, grossProfit,
         gasUsed: grossProfit > 0n ? quantity(main.gasUsed) : 0n,
         netProfit: grossProfit, calldata, scriptHex };
     } finally {

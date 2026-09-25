@@ -17,15 +17,19 @@ import * as entry14 from "../venues/production-families/fluid-dex.production.js"
 import * as entry15 from "../venues/production-families/goldx.production.js";
 import * as entry16 from "../venues/production-families/metronome-hgusdc.production.js";
 import * as entry17 from "../venues/production-families/metronome-synth.production.js";
-import * as entry18 from "../venues/production-families/morpho-flash.production.js";
-import * as entry19 from "../venues/production-families/psm.production.js";
-import * as entry20 from "../venues/production-families/rocksolid.production.js";
-import * as entry21 from "../venues/production-families/self-burn-native.production.js";
-import * as entry22 from "../venues/production-families/univ2-standard.production.js";
-import * as entry23 from "../venues/production-families/univ3-standard.production.js";
-import * as entry24 from "../venues/production-families/univ4-fee-hook.production.js";
-import * as entry25 from "../venues/production-families/univ4.production.js";
-import * as entry26 from "../venues/production-families/wsteth.production.js";
+import * as entry18 from "../venues/production-families/mooniswap.production.js";
+import * as entry19 from "../venues/production-families/morpho-flash.production.js";
+import * as entry20 from "../venues/production-families/psm.production.js";
+import * as entry21 from "../venues/production-families/rocksolid.production.js";
+import * as entry22 from "../venues/production-families/self-burn-native.production.js";
+import * as entry23 from "../venues/production-families/token-conversion.production.js";
+import * as entry24 from "../venues/production-families/token-migration.production.js";
+import * as entry25 from "../venues/production-families/uniswap-v1.production.js";
+import * as entry26 from "../venues/production-families/univ2-standard.production.js";
+import * as entry27 from "../venues/production-families/univ3-standard.production.js";
+import * as entry28 from "../venues/production-families/univ4-fee-hook.production.js";
+import * as entry29 from "../venues/production-families/univ4.production.js";
+import * as entry30 from "../venues/production-families/wsteth.production.js";
 
 export const GENERATED_PRODUCTION_FAMILY_ENTRIES = Object.freeze([
   Object.freeze({ sourceFile: "angstrom-v4.production.ts", module: entry0 }),
@@ -46,13 +50,17 @@ export const GENERATED_PRODUCTION_FAMILY_ENTRIES = Object.freeze([
   Object.freeze({ sourceFile: "goldx.production.ts", module: entry15 }),
   Object.freeze({ sourceFile: "metronome-hgusdc.production.ts", module: entry16 }),
   Object.freeze({ sourceFile: "metronome-synth.production.ts", module: entry17 }),
-  Object.freeze({ sourceFile: "morpho-flash.production.ts", module: entry18 }),
-  Object.freeze({ sourceFile: "psm.production.ts", module: entry19 }),
-  Object.freeze({ sourceFile: "rocksolid.production.ts", module: entry20 }),
-  Object.freeze({ sourceFile: "self-burn-native.production.ts", module: entry21 }),
-  Object.freeze({ sourceFile: "univ2-standard.production.ts", module: entry22 }),
-  Object.freeze({ sourceFile: "univ3-standard.production.ts", module: entry23 }),
-  Object.freeze({ sourceFile: "univ4-fee-hook.production.ts", module: entry24 }),
-  Object.freeze({ sourceFile: "univ4.production.ts", module: entry25 }),
-  Object.freeze({ sourceFile: "wsteth.production.ts", module: entry26 }),
+  Object.freeze({ sourceFile: "mooniswap.production.ts", module: entry18 }),
+  Object.freeze({ sourceFile: "morpho-flash.production.ts", module: entry19 }),
+  Object.freeze({ sourceFile: "psm.production.ts", module: entry20 }),
+  Object.freeze({ sourceFile: "rocksolid.production.ts", module: entry21 }),
+  Object.freeze({ sourceFile: "self-burn-native.production.ts", module: entry22 }),
+  Object.freeze({ sourceFile: "token-conversion.production.ts", module: entry23 }),
+  Object.freeze({ sourceFile: "token-migration.production.ts", module: entry24 }),
+  Object.freeze({ sourceFile: "uniswap-v1.production.ts", module: entry25 }),
+  Object.freeze({ sourceFile: "univ2-standard.production.ts", module: entry26 }),
+  Object.freeze({ sourceFile: "univ3-standard.production.ts", module: entry27 }),
+  Object.freeze({ sourceFile: "univ4-fee-hook.production.ts", module: entry28 }),
+  Object.freeze({ sourceFile: "univ4.production.ts", module: entry29 }),
+  Object.freeze({ sourceFile: "wsteth.production.ts", module: entry30 }),
 ]);

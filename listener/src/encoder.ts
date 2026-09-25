@@ -78,6 +78,13 @@ export function addressToBytes(addr: string): Uint8Array {
 
 // ─── Opcode Encoders ───────────────────────────────────────────
 
+/** Opcode 0x0b: execute a sub-script, wrapping only its received ETH delta.
+ * [0x0b][script_len:3][script:N]. No quoted amount or existing balance is swept.
+ */
+export function encodeWrapNativeDelta(script: Uint8Array): Uint8Array {
+  return concatBytes(new Uint8Array([0x0b]), uint24ToBytes(script.length), script);
+}
+
 /** Opcode 0x00: CALL (no value) — [0x00][addr:20][payload_len:3][payload:N] */
 export function encodeCall(target: string, payload: Uint8Array): Uint8Array {
   return concatBytes(

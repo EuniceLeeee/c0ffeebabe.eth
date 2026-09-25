@@ -16,6 +16,32 @@ export interface ForkBotVmRuntimeReceipt {
   readonly runtimeCodeSha256: string;
 }
 
+export interface BotVmRuntimeCode {
+  readonly code: string;
+  readonly keccak256: string;
+}
+
+export function dryRunBotVmCodeOverrideEnabled(
+  flag: string | undefined,
+  dryRun: boolean,
+  blockScanSubmit: boolean,
+): boolean {
+  if (flag !== undefined && flag !== "0" && flag !== "1") {
+    throw new Error("SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE must be 0 or 1");
+  }
+  if (flag !== "1") return false;
+  if (!dryRun || blockScanSubmit) {
+    throw new Error("SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE requires dry-run with block-scan submission disabled");
+  }
+  return true;
+}
+
+/** Read once at startup; callers retain these exact owner-bound bytes per run. */
+export function loadBotVmRuntimeCode(owner: string): BotVmRuntimeCode {
+  const code = patchedBotVmRuntime(ethers.getAddress(owner)).toLowerCase();
+  return Object.freeze({ code, keccak256: ethers.keccak256(code) });
+}
+
 export function forkBotVmInstallationEnabled(
   blindProductionAudit: boolean,
   flag: string | undefined,
