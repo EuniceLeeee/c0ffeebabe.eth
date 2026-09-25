@@ -833,6 +833,9 @@ test("disabled independent Exact keeps Solver strict-session wiring without pre-
       },
     },
     blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0, exactAdmissionSpreadBps: 0,
+      // Keep enough fixture routes to test downstream selection independently
+      // of the production hop-width defaults.
+      hopTokensPerStep: 3, hopPoolsPerPair: 3,
       maxCandidates: 1, pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
     refineCandidates: 10,
     strictSession: async (input: any) => {
