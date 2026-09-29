@@ -81,9 +81,9 @@ for (const read of blockscanHopReads) {
       `blockscan hop default/override: ${configured} -> ${expected}`);
   }
 }
-assert(BLOCKSCAN_ENUMERATION_DEFAULTS.budgetMs === 15000 &&
+assert(BLOCKSCAN_ENUMERATION_DEFAULTS.budgetMs === 1500 &&
   /SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS \?\? BLOCKSCAN_ENUMERATION_DEFAULTS\.budgetMs/.test(searcherMain),
-  "hop policy must preserve the configured 15000ms enumeration budget");
+  "hop policy must preserve the configured 1500ms enumeration budget");
 assert(resolveLiveBackrunSettings({}).planner.maxHops === 6,
   "backrun keeps its existing six-hop production default");
 assert(searcherMain.includes("resolvePairedEnumerationMethod(env.SEARCHER_BLOCKSCAN_ENUMERATION_METHOD)"),
@@ -111,9 +111,9 @@ for (const [index, match] of profitRatioGuards.entries()) {
     "an explicit 20% environment setting still selects the old threshold");
 }
 console.log("[runtime-defaults] 100% ratio guard and strict boundary: PASS");
-assert(BLOCKSCAN_ENUMERATION_DEFAULTS.minSpreadBps === 100 &&
+assert(BLOCKSCAN_ENUMERATION_DEFAULTS.minSpreadBps === 0 &&
   /SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS\s*\?\? BLOCKSCAN_ENUMERATION_DEFAULTS\.minSpreadBps/.test(searcherMain),
-  "enumeration defaults to 1%, independently of Exact admission");
+  "enumeration defaults to strictly positive spread, independently of Exact admission");
 assert(
   searcherMain.includes("SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED") &&
     searcherMain.includes("SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED\",") &&

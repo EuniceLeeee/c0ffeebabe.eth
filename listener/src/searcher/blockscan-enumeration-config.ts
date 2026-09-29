@@ -8,16 +8,16 @@ export const BLOCKSCAN_ENUMERATION_DEFAULTS = {
   maxHops: 6,
   refineCandidates: 512, // Returned after coarse enumeration and ranking.
   maxCandidates: 100, // Downstream candidate selection / Planner / Solver.
-  budgetMs: 15000,
+  budgetMs: 1500,
   method: "joint-dfs" as "joint-dfs" | "dfs" | "layered", // Legacy half-path methods remain explicit rollback choices.
   allowRepeatedPools: true,
-  allowRepeatedTokens: true, // False keeps simple cycles; the final return to the start is allowed.
+  allowRepeatedTokens: false, // Keep simple cycles; the final return to the start is allowed.
   deduplicateRotations: true, // Retain one funded execution start per directed cycle.
-  signalPairsPerToken: 20,
-  hopTokensPerStep: 2, // Top N distinct next tokens by reference value; 0 keeps all tokens.
-  hopPoolsPerPair: 2, // Top M distinct pools per directed pair; 0 keeps all pools/variants.
-  minSpreadBps: 100,
-  exactAdmissionSpreadBps: 50,
+  signalPairsPerToken: 50,
+  hopTokensPerStep: 3, // Top N distinct next tokens by reference value; 0 keeps all tokens.
+  hopPoolsPerPair: 3, // Top M distinct pools per directed pair; 0 keeps all pools/variants.
+  minSpreadBps: 0,
+  exactAdmissionSpreadBps: 0,
   // Joint DFS shares one reference-value floor across the buy and sell sides.
   // 0 bps keeps equality at 1; negative joint prefixes are pruned. This is a
   // coverage tradeoff, not a proof that a pruned path cannot recover later.

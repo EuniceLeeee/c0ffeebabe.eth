@@ -20,7 +20,7 @@ const signal = (token: string, buy: string, sell: string, num = 120n, den = 100n
   ({ token, buy, sell, num, den });
 const scenario = (quotes: readonly DfsQuote[], signals: readonly DirectedPriceSignal[], extra: Partial<Case> = {}): Case =>
   ({ quotes, signals, funding: ["f"], maxHops: 6, minSpreadBps: 0, hopTokensPerStep: 0,
-    allowRepeatedPools: true, prefixPruningEnabled: true, maxPrefixDrawdownBps: 0, ...extra });
+    allowRepeatedPools: true, allowRepeatedTokens: true, prefixPruningEnabled: true, maxPrefixDrawdownBps: 0, ...extra });
 const key = (path: readonly DfsQuote[]) => JSON.stringify(path.map(q => q.id));
 const sorted = (rows: Iterable<Row>) => [...rows].sort((a, b) => JSON.stringify(a.ids).localeCompare(JSON.stringify(b.ids)));
 const profitable = (num: bigint, den: bigint, bps: number) => num * 10_000n > den * BigInt(10_000 + bps);
@@ -241,7 +241,7 @@ test("joint DFS matches an independent oracle on 72 random bounded-walk graphs",
 });
 
 test("token reuse is independent from pool reuse and permits the final two-hop closure", () => {
-  assert.equal(resolveAllowRepeatedTokens(undefined), true);
+  assert.equal(resolveAllowRepeatedTokens(undefined), false);
   assert.equal(resolveAllowRepeatedTokens("0"), false);
   assert.equal(resolveAllowRepeatedTokens("1"), true);
   assert.throws(() => resolveAllowRepeatedTokens("false"), /must be 0 or 1/);

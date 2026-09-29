@@ -707,8 +707,8 @@ export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env,
         minSpreadBps: blockScanMinSpreadBps,
         requireDislocatedPair: true,
         /*
-         * Enumeration defaults to 100bps (1%). Exact keeps its independent
-         * 50bps (0.5%) admission guard and consumes the enumerated subset.
+         * Enumeration and Exact admission default to strictly positive spread.
+         * Their thresholds remain independently configurable.
          */
         exactAdmissionSpreadBps: Number(
           env.SEARCHER_BLOCKSCAN_EXACT_ADMISSION_SPREAD_BPS ??

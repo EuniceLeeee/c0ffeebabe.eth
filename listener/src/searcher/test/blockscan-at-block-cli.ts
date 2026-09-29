@@ -101,23 +101,23 @@ test("CLI and live share joint-DFS defaults and retain explicit rollback methods
     assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED:raw}), /must be 0 or 1/);
   assert.equal(cfg.deduplicateRotations, true, "default keeps one funded execution start per cycle");
   assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED:"0"}).deduplicateRotations, false);
-  assert.equal(resolveBlockScanCoreConfig({}).allowRepeatedTokens, true);
+  assert.equal(resolveBlockScanCoreConfig({}).allowRepeatedTokens, false);
   assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED:"0"}).allowRepeatedTokens, false);
   assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED:"1"}).allowRepeatedTokens, true);
   assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED:"false"}), /must be 0 or 1/);
   assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED:"1"}).deduplicateRotations, true);
   assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED:"false"}), /must be 0 or 1/);
-  assert.equal(cfg.maxHops, 6); assert.equal(cfg.minSpreadBps, 100);
-  assert.equal(cfg.ethSignalPairsPerToken, 20);
-  assert.equal(cfg.hopTokensPerStep, 2);
-  assert.equal(cfg.hopPoolsPerPair, 2);
+  assert.equal(cfg.maxHops, 6); assert.equal(cfg.minSpreadBps, 0);
+  assert.equal(cfg.ethSignalPairsPerToken, 50);
+  assert.equal(cfg.hopTokensPerStep, 3);
+  assert.equal(cfg.hopPoolsPerPair, 3);
   for (const n of ["0", "1", "2", "3", "20"]) {
     const tokens = resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP:n});
     assert.equal(tokens.hopTokensPerStep, Number(n));
-    assert.equal(tokens.hopPoolsPerPair, 2);
+    assert.equal(tokens.hopPoolsPerPair, 3);
     const pools = resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR:n});
     assert.equal(pools.hopPoolsPerPair, Number(n));
-    assert.equal(pools.hopTokensPerStep, 2);
+    assert.equal(pools.hopTokensPerStep, 3);
   }
   for (const n of ["", "-1", "1.5", "NaN", "Infinity", "9007199254740992"]) {
     assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP:n}), /nonnegative safe integer/);
@@ -126,9 +126,9 @@ test("CLI and live share joint-DFS defaults and retain explicit rollback methods
   const unlimited = resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP:"0",
     SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR:"0"});
   assert.equal(unlimited.hopTokensPerStep, 0); assert.equal(unlimited.hopPoolsPerPair, 0);
-  const rollback = resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP:"3",
-    SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR:"3"});
-  assert.equal(rollback.hopTokensPerStep, 3); assert.equal(rollback.hopPoolsPerPair, 3);
+  const rollback = resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP:"2",
+    SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR:"2"});
+  assert.equal(rollback.hopTokensPerStep, 2); assert.equal(rollback.hopPoolsPerPair, 2);
   assert.deepEqual(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_QUOTES_PER_PAIR:"99"}), cfg,
     "retired setting cannot override the explicit HOP_POOLS_PER_PAIR policy");
   assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"1"}).ethSignalPairsPerToken, 1);
@@ -136,9 +136,9 @@ test("CLI and live share joint-DFS defaults and retain explicit rollback methods
   assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ETH_SIGNAL_PAIRS_PER_TOKEN:"3",
     SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"1"}).ethSignalPairsPerToken, 3);
   assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"0"}), /positive safe integer/);
-  assert.equal(cfg.exactAdmissionSpreadBps, 50); assert.equal(cfg.maxCandidates, 100);
-  assert.equal(cfg.budgetMs, 15000);
-  assert.equal(resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS: "1500" }).budgetMs, 1500,
+  assert.equal(cfg.exactAdmissionSpreadBps, 0); assert.equal(cfg.maxCandidates, 100);
+  assert.equal(cfg.budgetMs, 1500);
+  assert.equal(resolveBlockScanCoreConfig({ SEARCHER_BLOCKSCAN_SCAN_BUDGET_MS: "15000" }).budgetMs, 15000,
     "explicit historical budgets remain configurable");
   const policy = resolveBlockScanAtomicPolicy({});
   assert.equal(policy.maxProfitBpsOfFlash, 10000n);
@@ -174,6 +174,7 @@ test("enumeration defaults have one source and prefix pruning is explicitly conf
   assert.equal(cfg.rustEnumerationThreads, defaults.rustThreads);
   assert.equal(cfg.rustEnumerationScratchMb, defaults.rustScratchMb);
   assert.equal(cfg.allowRepeatedPools, defaults.allowRepeatedPools);
+  assert.equal(cfg.allowRepeatedTokens, defaults.allowRepeatedTokens);
   assert.equal(cfg.deduplicateRotations, defaults.deduplicateRotations);
   assert.equal(cfg.ethSignalPairsPerToken, defaults.signalPairsPerToken);
   assert.equal(cfg.minSpreadBps, defaults.minSpreadBps);

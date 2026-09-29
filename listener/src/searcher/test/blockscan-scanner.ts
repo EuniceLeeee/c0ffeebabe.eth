@@ -67,7 +67,7 @@ test("live scanner honors an explicit one-pool cap before next-token ranking",()
   }
 });
 
-test("live scanner defaults to Top 2 tokens times Top 2 pools and retains explicit 3x3",()=>{
+test("live scanner defaults to Top 3 tokens times Top 3 pools and retains explicit 2x2",()=>{
   for(const counts of [[4,4,4,4],[3,1,1,4]]) {
     let nextId=40_000;
     const edges=[0,1,2,3].flatMap(n=>{
@@ -96,7 +96,7 @@ test("live scanner defaults to Top 2 tokens times Top 2 pools and retains explic
       assert.equal(two.opportunities.length,counts[1]===1?3:4);
       assert(two.opportunities.every(o=>[address(30_000),address(30_001)].includes(o.seedEdges[0]!.tokenOut)));
       assert.equal(two.opportunities.filter(o=>o.seedEdges[0]!.tokenOut===address(30_000)).length,2);
-      assert.deepEqual(run(undefined,undefined).opportunities,two.opportunities,"scanner defaults are 2x2");
+      assert.deepEqual(run(undefined,undefined).opportunities,result.opportunities,"scanner defaults are 3x3");
       if(counts[1]===4) {
         assert.equal(run(3,0).selection.enumeratedCount,12);
         assert.equal(run(0,3).selection.enumeratedCount,12);
@@ -237,12 +237,13 @@ test("six-hop low activity route survives dead-end flood",()=>{
   const data=input([...decoys,...target,...spokes],[...decoys.map(()=>100n),100n,100n,100n,100n,100n,102n]);
   const result=scan(data);assert.equal(result.outcome,"ran");assert(hasRoute(result,target));
 });
-test("repeated tokens are admitted with or without protocols and funded intermediates",()=>{
+test("repeated tokens require opt-in with or without protocols and funded intermediates",()=>{
   const a=address(801),b=address(802),c=address(803);
   const repeated=ring([WETH,a,b,a,WETH],810);repeated[1]=edge(a,b,811,"protocol");
   for(const protocol of [true,false]) {
     const route=repeated.map(e=>protocol?e:{...e,slotKind:"swap" as const,protocolAction:undefined,edgeKind:"swap" as const});
-    const result=scan(input(route,[102n,102n,102n,102n],{
+    assert(!hasRoute(scan(input(route,[102n,102n,102n,102n])),route));
+    const result=scan(input(route,[102n,102n,102n,102n],{allowRepeatedTokens:true,
       pricedTokens:new Map([[WETH,{maxBorrow:1000n*P}],[a,{maxBorrow:1000n*P}]])}));
     assert(hasRoute(result,route));
     assert(result.opportunities.every(o=>o.seedEdges.length<=4));
@@ -316,7 +317,7 @@ test("real frozen effective table: best-pool routes retain repeated-token walks 
   for(const deduplicateRotations of [true,false]) {
     const result=scan({edges,mids,sourceBlock:saved.sourceBlock,swapTouched:null,
       cfg:{maxHops:6,minSpreadBps:50,exactAdmissionSpreadBps:50,ethSignalPairsPerToken:50,hopTokensPerStep:0,hopPoolsPerPair:1,
-        enumerationMethod:"dfs",deduplicateRotations,pricedTokens:caps,maxCandidates:100_000,budgetMs:10_000}});
+        enumerationMethod:"dfs",allowRepeatedTokens:true,deduplicateRotations,pricedTokens:caps,maxCandidates:100_000,budgetMs:10_000}});
     assert.equal(result.outcome,"ran");assert.equal(result.selection.forcedSelectionCount,0);
     const simple=result.opportunities.filter(o=>new Set(o.seedEdges.map(e=>e.tokenIn.toLowerCase())).size===o.seedEdges.length);
     // Explicit one-pool selection deliberately removes inferior parallel pools.
