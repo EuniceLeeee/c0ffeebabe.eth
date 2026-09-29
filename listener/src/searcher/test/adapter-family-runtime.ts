@@ -537,7 +537,8 @@ function defineFixture(name: string, controls: FixtureControls) {
         const remote = Object.freeze({
           id: "fixture-request-program",
           kind: "request-program" as const,
-          ...(controls.chainAmountQuote ? { chainAmountQuote: true as const } : {}),
+          ...(controls.chainAmountQuote ? { chainAmountQuote: true as const }
+            : { trialState: { unsupportedReason: "fixture amount math has no execution state model" } }),
           ...(controls.stateOnlyReads ? { stateOnlyReads: true as const } : {}),
           ...(controls.reusePolicy === undefined ? {} : { reusePolicy: controls.reusePolicy }),
           program: Object.freeze({
@@ -656,7 +657,23 @@ function defineFixture(name: string, controls: FixtureControls) {
             },
           }),
         });
-        if (controls.localExact) return Object.freeze([local]);
+        if (controls.localExact) return Object.freeze([Object.freeze({
+          id: "fixture-local",
+          kind: "request-program" as const,
+          trialState: { unsupportedReason: "fixture amount math has no execution state model" },
+          program: {
+            requirements: () => ({ transports: [] }),
+            buildRequests: () => [],
+            decode: ({ programInput }: { readonly programInput: {
+              readonly amountIn: bigint; readonly source: CanonicalSource;
+            } }) => {
+              const attempt = local.quote(programInput);
+              assert.equal(attempt.status, "quoted", "no-read fixture requires available local state");
+              if (attempt.status !== "quoted") throw new Error("fixture local state unavailable");
+              return attempt.result;
+            },
+          },
+        })]);
         if (controls.localExactNotApplicable) {
           return controls.localExactAfterRequest
             ? Object.freeze([remote, local])
@@ -2991,7 +3008,7 @@ async function testExactCacheIsolatedByIssuedFamilyBox(): Promise<void> {
   });
 }
 
-async function testLocalExactSkipsScheduler(): Promise<void> {
+async function testNoReadLocalExactSkipsTransport(): Promise<void> {
   const controls: FixtureControls = {
     localExact: true,
     descriptorPools: [],
@@ -3382,7 +3399,7 @@ await testExactStateReadsRequireContinuityAndReset();
 await testExactStateReadsHonorCancellationAndGeneration();
 await testOnlyLocalNotApplicableCanFallback();
 await testExactCacheIsolatedByIssuedFamilyBox();
-await testLocalExactSkipsScheduler();
+await testNoReadLocalExactSkipsTransport();
 await testEmptyAndThrowingLocalExactFailClosed();
 await testExecutionOwnershipAndThenableFailClosed();
 

@@ -31,3 +31,18 @@ export function quoteAmount(s: State, buy: boolean, amountIn: bigint): bigint {
   if (!buy && out > MAX_VALUE) throw new Error("univ1 native output exceeds executor uint96");
   return out;
 }
+
+/** Reserve transition of the verified issuer-fee implementation, not vanilla
+ * Uniswap V1. The ceil(input / 1000) issuer payment leaves the exchange; only
+ * the remainder of the input becomes its balance. This does not describe the
+ * issuer's own balance change or unknown token-transfer side effects. */
+export function quoteTransition(s: State, buy: boolean, amountIn: bigint): { readonly amountOut: bigint; readonly state: State } {
+  const amountOut = quoteAmount(s, buy, amountIn);
+  const received = checked(amountIn - checked(amountIn + 999n) / 1000n);
+  const state = Object.freeze({
+    source: s.source,
+    nativeReserve: checked(s.nativeReserve + (buy ? received : -amountOut)),
+    tokenReserve: checked(s.tokenReserve + (buy ? -amountOut : received)),
+  });
+  return Object.freeze({ amountOut, state });
+}

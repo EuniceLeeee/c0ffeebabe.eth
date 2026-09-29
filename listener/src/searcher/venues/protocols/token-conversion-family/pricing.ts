@@ -1,24 +1,15 @@
-import { bindRequestResultRound, collectRequestProgramResults, type PricingSemantics } from "../../adapter-family-plugin.js";
-import type { AdapterRequestResult } from "../../adapter-request-program.js";
+import { type PricingSemantics } from "../../adapter-family-plugin.js";
 import { compileAddressMutations } from "../../mutation-index.js";
-import { assertSameSource, callRequest, codeRequest, decodeUint, protocolMid, requireRuntimeCode, sameAddress, successfulResult } from "../standard-family/common.js";
+import { protocolMid, sameAddress } from "../standard-family/common.js";
 import { assertInvocation, staticProjection } from "./binding.js";
-import { ABI, MAX_UINT, proveBearRuntime } from "./variants.js";
-import { proveConversionAssetRuntime } from "./asset-runtime.js";
-import { conversionSimulation, decodeConversionReceipt, simulationRequirements } from "./simulation.js";
+import { bearCapacity, bearStateRequests, decodeBearState, quoteBear, type BearState } from "./bear-local.js";
 import type { ConversionDescriptor, ConversionPricingDescriptor, ConversionRoute, ConversionSnapshot, Direction } from "./types.js";
 import { xwinCurrent } from "./xwin-pricing.js";
 import { xwinStateRequests } from "./xwin.js";
 
-function state(d: ConversionDescriptor, results: readonly AdapterRequestResult[]) {
-  if (d.variant !== "btb-bear-v1") throw new Error("bear state decoder received another conversion variant");
-  const source = assertSameSource(results.map(r => successfulResult(results, r.id)));
-  if (proveBearRuntime(requireRuntimeCode(results, "current-code"), d.target, d.asset) !== d.codeHash) throw new Error("conversion runtime changed");
-  if (proveConversionAssetRuntime(requireRuntimeCode(results, "current-asset-code"), d.asset) !== d.assetCodeHash) throw new Error("conversion asset runtime changed");
-  return { source, supply: decodeUint(ABI, "totalSupply", results, "current-supply"), backing: decodeUint(ABI, "balanceOf", results, "current-backing") };
-}
-function sample(s: { supply: bigint; backing: bigint }, direction: Direction) {
-  return (direction === "mint" ? [10n ** 18n, MAX_UINT - s.supply] : [10n ** 18n, s.supply, s.backing]).reduce((a,b) => a < b ? a : b);
+function sample(s: BearState, direction: Direction) {
+  const capacity = bearCapacity(s, direction);
+  return capacity < 10n ** 18n ? capacity : 10n ** 18n;
 }
 export const pricing = {
   // Family-wide policy: BTBB also pays per-block effective refresh costs.
@@ -36,34 +27,21 @@ export const pricing = {
   finalizePricingDescriptor: ({ draft }) => draft,
   current: {
     requirements: i => i.descriptor.variant === "xwin-allocations-v1" ? xwinCurrent.requirements() : { transports: ["get-code", "eth-call"] },
-    buildRequests: ({ descriptor: d }) => d.variant === "xwin-allocations-v1" ? xwinStateRequests("current-xwin", d.target) : [
-      codeRequest("current-code", d.target),
-      codeRequest("current-asset-code", d.asset),
-      callRequest("current-supply", d.target, ABI.encodeFunctionData("totalSupply")),
-      callRequest("current-backing", d.asset, ABI.encodeFunctionData("balanceOf", [d.target])),
-    ],
+    buildRequests: ({ descriptor: d }) => d.variant === "xwin-allocations-v1" ? xwinStateRequests("current-xwin", d.target) : bearStateRequests("current", d),
     buildDependentProgram({ current, completedRound, initialResults, priorEvidence }) {
       const d = current.descriptor;
       if (d.variant === "xwin-allocations-v1") return xwinCurrent.buildDependentProgram({ current: { ...current, descriptor: d }, completedRound, initialResults, priorEvidence });
-      if (completedRound !== 0) return null;
-      const s = state(d, initialResults);
-      const requests = d.routes.flatMap(r => {
-        const amount = sample(s, r.direction);
-        return amount > 0n ? [conversionSimulation(`current-${r.direction}`, d.target, d.asset, r.direction, amount)] : [];
-      });
-      return requests.length ? bindRequestResultRound(simulationRequirements, requests) : null;
+      return null;
     },
     decodeSnapshot({ descriptor: d, initialResults, dependentEvidence }) {
       if (d.variant === "xwin-allocations-v1") return xwinCurrent.decodeSnapshot({ descriptor: d, initialResults, dependentEvidence });
-      const s = state(d, initialResults);
-      const results = collectRequestProgramResults(initialResults, dependentEvidence);
-      assertSameSource(results.map(r => successfulResult(results, r.id)));
+      if (dependentEvidence.length) throw new Error("unexpected bear dependent evidence");
+      const s = decodeBearState("current", d, initialResults);
       const quotes: Record<string, { amountIn: bigint; amountOut: bigint }> = {};
       for (const r of d.routes) {
         const amountIn = sample(s, r.direction);
         if (amountIn === 0n) continue;
-        const receipt = decodeConversionReceipt(results, `current-${r.direction}`, d.target, d.asset, r.direction, amountIn);
-        quotes[r.routeKey] = { amountIn, amountOut: receipt.amountOut };
+        quotes[r.routeKey] = { amountIn, amountOut: quoteBear(s, r.direction, amountIn) };
       }
       return { ...s, quotes };
     },

@@ -26,6 +26,11 @@ export function resolveAllowRepeatedPools(raw?: string): boolean {
   if (raw === "0" || raw === "1") return raw === "1";
   throw new Error("SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED must be 0 or 1");
 }
+export function resolveAllowRepeatedTokens(raw?: string): boolean {
+  if (raw === undefined) return BLOCKSCAN_ENUMERATION_DEFAULTS.allowRepeatedTokens;
+  if (raw === "0" || raw === "1") return raw === "1";
+  throw new Error("SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED must be 0 or 1");
+}
 export function resolvePairedEnumerationMethod(value?: string): PairedEnumerationMethod {
   if (value === undefined) return BLOCKSCAN_ENUMERATION_DEFAULTS.method;
   if (value === "joint-dfs") return value;
@@ -46,6 +51,7 @@ export interface PairedEnumerationInput {
   /** Dispatch retains top M distinct pools per directed pair; 0 keeps all pools. */
   readonly hopPoolsPerPair?: number;
   readonly allowRepeatedPools?: boolean;
+  readonly allowRepeatedTokens?: boolean;
   readonly prefixPruningEnabled?: boolean;
   readonly maxPrefixDrawdownBps?: number;
   readonly rustThreads?: number;
@@ -56,6 +62,8 @@ export interface PairedEnumerationInput {
 /** Shared policy resolution keeps the TS and native boundary on one contract. */
 export function resolvePairedEnumerationOptions(input: PairedEnumerationInput) {
   const allowRepeatedPools = input.allowRepeatedPools ?? DEFAULT_ALLOW_REPEATED_POOLS;
+  const allowRepeatedTokens = input.allowRepeatedTokens ?? BLOCKSCAN_ENUMERATION_DEFAULTS.allowRepeatedTokens;
+  if (typeof allowRepeatedTokens !== "boolean") throw new Error("allowRepeatedTokens must be boolean");
   const prefixPruningEnabled = input.prefixPruningEnabled ?? BLOCKSCAN_ENUMERATION_DEFAULTS.prefixPruningEnabled;
   const maxPrefixDrawdownBps = input.maxPrefixDrawdownBps ?? BLOCKSCAN_ENUMERATION_DEFAULTS.maxPrefixDrawdownBps;
   const rustThreads = input.rustThreads ?? BLOCKSCAN_ENUMERATION_DEFAULTS.rustThreads;
@@ -73,7 +81,7 @@ export function resolvePairedEnumerationOptions(input: PairedEnumerationInput) {
     throw new Error("rustThreads must be an integer from 1 to 8");
   if (!Number.isSafeInteger(rustScratchMb) || rustScratchMb < 1 || rustScratchMb > 2048)
     throw new Error("rustScratchMb must be an integer from 1 to 2048");
-  return { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps, rustThreads, rustScratchMb, hopTokensPerStep };
+  return { allowRepeatedPools, allowRepeatedTokens, prefixPruningEnabled, maxPrefixDrawdownBps, rustThreads, rustScratchMb, hopTokensPerStep };
 }
 interface IndexedQuote {
   readonly quote: DfsQuote;
@@ -116,7 +124,7 @@ class HalfLayer {
  * Both traversals share this gate, sorted index, storage and join rules. No future-return
  * or signal-completion pruning. Live caller deadline remains explicitly partial. */
 function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMethod) {
-  const { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps, hopTokensPerStep } = resolvePairedEnumerationOptions(input);
+  const { allowRepeatedPools, allowRepeatedTokens, prefixPruningEnabled, maxPrefixDrawdownBps, hopTokensPerStep } = resolvePairedEnumerationOptions(input);
   const prefixFloor = prefixPruningEnabled ? BigInt(10_000 - maxPrefixDrawdownBps) : 0n;
   const stats = { expanded: 0, completedSignalTokens: 0, deadlineHit: false, closed: 0,
     halfPaths: 0, joins: 0, signalMatched: 0, indexedJoinComparisons: 0,
@@ -135,7 +143,6 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
   };
   const byId = new Map<string, number>(), edges: IndexedQuote[] = [];
   for (const q of input.quotes) {
-    if (byId.has(q.id)) throw new Error("duplicate directed quote id");
     byId.set(q.id, edges.length);
     edges.push({ quote: q, from: intern(tokens, q.tokenIn), to: intern(tokens, q.tokenOut),
       pool: intern(pools, q.instance) });
@@ -143,7 +150,7 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
   const outgoing: number[][] = Array.from({ length: tokens.size }, () => []);
   const incoming: number[][] = Array.from({ length: tokens.size }, () => []);
   for (let id = 0; id < edges.length; id++) {
-    const e = edges[id]!; if (!e.quote.value) continue;
+    const e = edges[id]!;
     if (selected.forward.has(e.quote.id)) outgoing[e.from]!.push(id);
     if (selected.reverse.has(e.quote.id)) incoming[e.to]!.push(id);
   }
@@ -206,10 +213,12 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
         if ((stats.expanded++ & 4095) === 0 && expired()) return;
         const id = ids[i]!, edge = edges[id]!, next = reverse ? edge.from : edge.to;
         if (path.length === 0 && !seeds.has(id)) continue;
+        if (!allowRepeatedTokens && next === anchor) continue;
         let conflict = false;
         for (const oldId of path) {
           const old = edges[oldId]!;
           if (!allowRepeatedPools && old.pool === edge.pool) { conflict = true; break; }
+          if (!allowRepeatedTokens && (old.from === next || old.to === next)) { conflict = true; break; }
         }
         if (conflict) continue;
         let nextN = prefixN, nextD = prefixD;
@@ -263,7 +272,7 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
         if (b.head[token] === NONE) continue;
         // Same endpoint and hop count. Reference-value scaling is common to
         // this bucket, so sorting exact token rates has the same order; on
-        // closing the cycle the USD reference factors cancel completely.
+        // closing the cycle the ETH reference factors cancel completely.
         const sorted: { index: number; n: bigint; d: bigint; minPrefix?: { n: bigint; d: bigint } }[] = [];
         for (let qi = b.head[token]!; qi !== NONE;) {
           if ((sorted.length & 4095) === 0 && expired()) break outer;
@@ -321,6 +330,7 @@ function enumerate(input: PairedEnumerationInput, traversal: PairedEnumerationMe
               }
               if (conflict) continue;
               const path = [...p, ...q];
+              if (!allowRepeatedTokens && new Set(path.map(id => edges[id]!.from)).size !== path.length) continue;
               const n = ar.n * br.n, d = ar.d * br.d;
               const spread = (Number(n) / Number(d) - 1) * 10000;
               for (let start = 0; start < path.length; start++) {

@@ -1,8 +1,8 @@
 import { ADDR } from "../shared/constants/addresses.js";
-import { tokenToWethReferences, type RawTokenRate } from "./blockscan-amount-reference.js";
+import { tokenToWethReferencesFromRates, type RawTokenRate } from "./blockscan-amount-reference.js";
 import { effectiveEnumerationMids } from "./blockscan-effective-mid.js";
 import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
-import type { ResolvedBlockScanMid } from "./detector/blockscan-scanner-core.js";
+import type { ResolvedBlockScanQuote } from "./detector/blockscan-scanner-core.js";
 import { aboveSpread, DEFAULT_ALLOW_REPEATED_POOLS, type DfsQuote, type DirectedPriceSignal } from "./detector/blockscan-paired-dfs.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import { blockScanEdgeKey } from "./venues/blockscan-state-capability.js";
@@ -14,51 +14,43 @@ const compare = (a: RawTokenRate, b: RawTokenRate): number => {
   const delta = a.num * b.den - b.num * a.den;
   return delta < 0n ? -1 : delta > 0n ? 1 : 0;
 };
-export const DEFAULT_USD_SIGNAL_PAIRS_PER_TOKEN: number = BLOCKSCAN_ENUMERATION_DEFAULTS.signalPairsPerToken;
-export function resolveUsdSignalPairsPerToken(raw?: string): number {
-  const value = raw === undefined ? DEFAULT_USD_SIGNAL_PAIRS_PER_TOKEN : Number(raw);
+export const DEFAULT_ETH_SIGNAL_PAIRS_PER_TOKEN: number = BLOCKSCAN_ENUMERATION_DEFAULTS.signalPairsPerToken;
+export function resolveEthSignalPairsPerToken(raw?: string): number {
+  const value = raw === undefined ? DEFAULT_ETH_SIGNAL_PAIRS_PER_TOKEN : Number(raw);
   if ((raw !== undefined && !/^[1-9]\d*$/.test(raw)) || !Number.isSafeInteger(value) || value < 1)
-    throw new Error("SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN must be a positive safe integer");
+    throw new Error("SEARCHER_BLOCKSCAN_ETH_SIGNAL_PAIRS_PER_TOKEN must be a positive safe integer");
   return value;
 }
-function decimalRate(value: number): RawTokenRate | null {
-  if (!Number.isFinite(value) || value <= 0) return null;
-  const [m, exponent = "0"] = value.toString().split("e");
-  const [whole, fraction = ""] = m!.split(".");
-  const scale = fraction.length - Number(exponent), digits = BigInt(whole! + fraction);
-  return scale >= 0 ? { num: digits, den: 10n ** BigInt(scale) } : { num: digits * 10n ** BigInt(-scale), den: 1n };
+function quoteRate(quote: ResolvedBlockScanQuote): RawTokenRate {
+  return { num: quote.quoteAmountOut, den: quote.quoteAmountIn };
 }
 
-export interface BlockScanUsdView {
+export interface BlockScanEthView {
   readonly quotes: readonly DfsQuote[];
   /** Top compatible buy/sell pairs per token, ranked by reference spread. */
   readonly signals: readonly DirectedPriceSignal[];
   readonly signalPairsPerToken: number;
   readonly allowRepeatedPools: boolean;
-  readonly referenceUsdPerRaw: ReadonlyMap<string, RawTokenRate>;
+  /** WETH wei per token raw unit, without a USD anchor or extra decimal scaling. */
+  readonly referenceEthPerRaw: ReadonlyMap<string, RawTokenRate>;
   readonly comparableTokens: number;
   readonly missingBuyReference: number;
   readonly missingSellReference: number;
 }
 
-/** One local derived view of published effective amounts, not another producer.
- * USDC=$1 is a reference only. The common USD conversion cancels in the gap
- * ratio, so reference-WETH ratios also remain usable if USDC is unavailable.
+/** One local ETH-reference view of published effective amounts, not another producer.
  * These marks are never final EV or a promise of capacity along a whole path. */
-export function buildBlockScanUsdView(
-  edges: readonly TokenEdge[], mids: ReadonlyMap<string, ResolvedBlockScanMid>,
-  signalPairsPerToken = DEFAULT_USD_SIGNAL_PAIRS_PER_TOKEN,
+export function buildBlockScanEthView(
+  edges: readonly TokenEdge[], mids: ReadonlyMap<string, ResolvedBlockScanQuote>,
+  signalPairsPerToken = DEFAULT_ETH_SIGNAL_PAIRS_PER_TOKEN,
   allowRepeatedPools = DEFAULT_ALLOW_REPEATED_POOLS,
-): BlockScanUsdView {
+): BlockScanEthView {
   if (!Number.isSafeInteger(signalPairsPerToken) || signalPairsPerToken < 1)
-    throw new Error("USD signal pairs per token must be a positive safe integer");
-  const marks = tokenToWethReferences({ graph: { edges }, mids,
-    coverage: { resolvedEdgeKeys: [...mids.keys()] } }, ADDR.WETH);
-  const anchor = marks.get(ADDR.USDC.toLowerCase());
-  const referenceUsdPerRaw = new Map<string, RawTokenRate>();
-  if (anchor) for (const [token, mark] of marks) referenceUsdPerRaw.set(token, {
-    num: mark.num * anchor.den, den: mark.den * anchor.num * 1_000_000n,
-  });
+    throw new Error("ETH signal pairs per token must be a positive safe integer");
+  const marks = tokenToWethReferencesFromRates(edges, key => {
+    const quote = mids.get(key);
+    return quote ? quoteRate(quote) : null;
+  }, ADDR.WETH);
   type Offer = { quote: DfsQuote; price: RawTokenRate };
   const buy = new Map<string, Offer[]>(), sell = new Map<string, Offer[]>();
   const quotes: DfsQuote[] = [], seen = new Set<string>();
@@ -67,16 +59,8 @@ export function buildBlockScanUsdView(
     if (!isBlockScanConversionEdge(edge)) continue;
     const id = blockScanEdgeKey(edge), mid = mids.get(id);
     if (!mid || seen.has(id)) continue;
-    // A borrow limit/oracle mark is not an executable amount quote.
-    if (edge.slotKind === "lend" &&
-        (mid.quoteAmountIn === undefined || mid.quoteAmountOut === undefined)) continue;
     seen.add(id);
-    // Production effective rows supply exact integer amounts. Decimal-rate
-    // compatibility exists only for historical resolved/raw-mid diagnostics.
-    const rate = mid.quoteAmountIn !== undefined && mid.quoteAmountOut !== undefined
-      ? { num: mid.quoteAmountOut, den: mid.quoteAmountIn }
-      : decimalRate(mid.mid * (1 - mid.feeBps / 10_000));
-    if (!rate || rate.num <= 0n || rate.den <= 0n) continue;
+    const rate = quoteRate(mid);
     const tokenIn = edge.tokenIn.toLowerCase(), tokenOut = edge.tokenOut.toLowerCase();
     const mIn = marks.get(tokenIn), mOut = marks.get(tokenOut);
     const q: DfsQuote = { id, instance: edgeInstanceKey(edge), tokenIn, tokenOut, ...rate,
@@ -150,26 +134,26 @@ export function buildBlockScanUsdView(
     }
   }
   signals.sort((a, b) => compare(b, a) || a.token.localeCompare(b.token));
-  return { quotes, signals, signalPairsPerToken, allowRepeatedPools, referenceUsdPerRaw, comparableTokens, missingBuyReference, missingSellReference };
+  return { quotes, signals, signalPairsPerToken, allowRepeatedPools, referenceEthPerRaw: marks, comparableTokens, missingBuyReference, missingSellReference };
 }
 
 const published = new WeakMap<BlockScanStateSnapshot, {
-  mids: ReadonlyMap<string, ResolvedBlockScanMid>; view: BlockScanUsdView;
+  mids: ReadonlyMap<string, ResolvedBlockScanQuote>; view: BlockScanEthView;
 }>();
-export function effectiveUsdPricing(pricing: BlockScanStateSnapshot, signalPairsPerToken = DEFAULT_USD_SIGNAL_PAIRS_PER_TOKEN,
+export function effectiveEthPricing(pricing: BlockScanStateSnapshot, signalPairsPerToken = DEFAULT_ETH_SIGNAL_PAIRS_PER_TOKEN,
   allowRepeatedPools = DEFAULT_ALLOW_REPEATED_POOLS) {
   let result = published.get(pricing);
   if (!result || result.view.signalPairsPerToken !== signalPairsPerToken || result.view.allowRepeatedPools !== allowRepeatedPools) {
     const mids = result?.mids ?? effectiveEnumerationMids(pricing);
-    result = { mids, view: buildBlockScanUsdView(pricing.graph.edges, mids, signalPairsPerToken, allowRepeatedPools) };
+    result = { mids, view: buildBlockScanEthView(pricing.graph.edges, mids, signalPairsPerToken, allowRepeatedPools) };
     published.set(pricing, result);
   }
   return result;
 }
 
-export function usdViewStatistics(view: BlockScanUsdView, thresholdBps: number) {
+export function ethViewStatistics(view: BlockScanEthView, thresholdBps: number) {
   const above = view.signals.filter(s => aboveSpread(s.num, s.den, thresholdBps));
-  return { quotedDirections: view.quotes.length, referenceUsdTokens: view.referenceUsdPerRaw.size,
+  return { quotedDirections: view.quotes.length, referenceEthTokens: view.referenceEthPerRaw.size,
     comparableTokens: view.comparableTokens,
     tokensAboveThreshold: new Set(above.map(s => s.token)).size,
     signalPairsPerToken: view.signalPairsPerToken, allowRepeatedPools: view.allowRepeatedPools, signalPairsAboveThreshold: above.length,

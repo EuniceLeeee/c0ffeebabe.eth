@@ -1286,41 +1286,21 @@ function assertExtremeDirectionScans(
     reserveB: returnReserve,
     depthProxy: Number(returnReserve),
   });
-  const scanned = scanBlockStateFromResolvedMids({
-    edges: [...extremeEdges, ...returnEdges],
-    sourceBlock: SOURCE_BLOCK,
-    swapTouched: null,
-    cfg: {
-      maxHops: 2,
-      minSpreadBps: 0,
-      maxCandidates: 10,
-      budgetMs: 1_000,
-      pricedTokens: new Map([
-        [TOKEN0.toLowerCase(), { maxBorrow: 10n ** 30n }],
-      ]),
-    },
-    mids,
-  });
   const diagnosis = diagnoseResolvedRingScore(
     [extremeEdges[0], returnEdges[1]],
     mids,
   );
-  assert.equal(
-    scanned.opportunities.length,
-    1,
-    `${family} precision route scans: outcome=${scanned.outcome} ` +
-      `diagnosis=${diagnosis.status}`,
-  );
-  assert.equal(
-    scanned.opportunities[0].searchSeed.searchCenter,
-    9n,
-    `${family} scanner sizes at the exact positive-output witness`,
-  );
-  assert.equal(
-    scanned.opportunities[0].searchSeed.maxInput,
-    9n,
-    `${family} scanner ceiling cannot exceed its precision witness`,
-  );
+  assert.equal(diagnosis.status, "accepted", `${family} raw precision diagnostic`);
+  // This suite proves raw precision witnesses, not effective quote amounts.
+  // A raw witness must not be relabelled as an amount-bearing scanner input.
+  const rawInputIsRejectedByType = () => scanBlockStateFromResolvedMids({
+    edges: [...extremeEdges, ...returnEdges], sourceBlock: SOURCE_BLOCK, swapTouched: null,
+    cfg: { maxHops: 2, minSpreadBps: 0, maxCandidates: 10, budgetMs: 1_000,
+      pricedTokens: new Map([[TOKEN0.toLowerCase(), { maxBorrow: 10n ** 30n }]]) },
+    // @ts-expect-error Raw price witnesses are not validated effective amount quotes.
+    mids,
+  });
+  void rawInputIsRejectedByType;
 }
 
 async function runInactiveUniPools(): Promise<void> {

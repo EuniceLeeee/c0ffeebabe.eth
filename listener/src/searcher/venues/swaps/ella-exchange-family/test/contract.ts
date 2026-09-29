@@ -99,6 +99,11 @@ test("shared Exact arithmetic agrees with actual original receipt output, not gr
   const q2 = quoteAmount(x.state, "buy-token", BigInt(sample.amountIn) / 2n);
   assert(q2.amountOut > 0n && q2.amountOut < x.q.amountOut);
 });
+test("unproven transfer and oracle dependencies do not advertise sequential trial capability", () => {
+  const x = exact(BigInt(sample.amountIn));
+  assert.deepEqual(x.method.trialState, { unsupportedReason: "ella-token-oracle-dependency-models-unproven" });
+  assert(x.q.amountOut > 0n, "single-leg quote remains available");
+});
 test("production P is quotable at N-1; depleted N and over-capacity inputs reject inventory", () => {
   const s = setup(), p = DEFAULT_EFFECTIVE_WETH_INPUT;
   const reference = exact(p).q;

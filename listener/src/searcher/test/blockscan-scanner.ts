@@ -6,9 +6,9 @@ import { readFileSync } from "node:fs";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { cycleFingerprint } from "../detector/cycle-fingerprint.js";
 import { scanBlockStateFromResolvedMids as scan, diagnoseResolvedRingScore,
-  estimateResolvedRingSpreadBps, type BlockScanCoreConfig, type ResolvedBlockScanMid,
+  estimateResolvedRingSpreadBps, type BlockScanCoreConfig, type ResolvedBlockScanQuote,
 } from "../detector/blockscan-scanner-core.js";
-import { buildBlockScanUsdView } from "../blockscan-usd-view.js";
+import { buildBlockScanEthView } from "../blockscan-eth-view.js";
 import { type TokenEdge, v4PoolId } from "../planner/token-graph.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
@@ -20,7 +20,7 @@ function edge(from:string,to:string,id:number,kind:"swap"|"protocol"|"lend"="swa
     ...(kind==="protocol"?{protocolAction:"convert" as const}:{}),
     ...deriveEdgeTaxonomy(kind,kind==="protocol"?"convert":undefined)};
 }
-function quote(e:TokenEdge,n=100n,d=100n):ResolvedBlockScanMid {
+function quote(e:TokenEdge,n=100n,d=100n):ResolvedBlockScanQuote {
   return {kind:"fixture",pool:e.target,edges:[e],mid:Number(n)/Number(d),feeBps:0,
     quoteAmountIn:d*P/100n,quoteAmountOut:n*P/100n,depthProxy:0};
 }
@@ -41,7 +41,7 @@ test("live scanner honors an explicit one-pool cap before next-token ranking",()
   const edges=[edge(WETH,token,301),edge(WETH,token,302),edge(token,USDC,303),
     edge(token,USDC,304),edge(USDC,WETH,305),edge(USDC,WETH,306)];
   const data=input(edges,[120n,110n,120n,110n,120n,110n],{
-    maxHops:3,minSpreadBps:0,usdSignalPairsPerToken:100,prefixPruningEnabled:false,
+    maxHops:3,minSpreadBps:0,ethSignalPairsPerToken:100,prefixPruningEnabled:false,
     allowRepeatedPools:false,maxCandidates:1000,
   });
   const best=[edges[0]!,edges[2]!,edges[4]!];
@@ -57,9 +57,9 @@ test("live scanner honors an explicit one-pool cap before next-token ranking",()
     assert.equal(two.selection.enumeratedCount,1,"Token N=2 does not restore worse pools for the same pair");
     assert.deepEqual(two.opportunities,all.opportunities);
     assert.deepEqual(run(undefined).opportunities,one.opportunities,"default N=2 does not restore pools beyond M=1");
-    // A prebuilt full USD view must not bypass the cap or restore a removed seed.
-    const view=buildBlockScanUsdView(edges,data.mids,100,false);
-    const prebuilt=scan({...data,usdView:view,cfg:{...data.cfg,enumerationMethod,hopTokensPerStep:1}});
+    // A prebuilt full ETH view must not bypass the cap or restore a removed seed.
+    const view=buildBlockScanEthView(edges,data.mids,100,false);
+    const prebuilt=scan({...data,ethView:view,cfg:{...data.cfg,enumerationMethod,hopTokensPerStep:1}});
     assert.deepEqual(prebuilt.opportunities,one.opportunities);
     assert.equal(one.opportunities[0]!.searchSeed.searchCenter,P);
     assert(Math.abs(one.opportunities[0]!.coarseSpreadBps!-7280)<1e-8,
@@ -75,14 +75,14 @@ test("live scanner defaults to Top 2 tokens times Top 2 pools and retains explic
       return [...Array.from({length:counts[n]!},()=>edge(WETH,token,nextId++)),edge(token,WETH,nextId++)];
     });
     const amounts=edges.map(e=>e.tokenIn===WETH?120n:110n);
-    const data=input(edges,amounts,{maxHops:2,minSpreadBps:0,usdSignalPairsPerToken:100,
+    const data=input(edges,amounts,{maxHops:2,minSpreadBps:0,ethSignalPairsPerToken:100,
       prefixPruningEnabled:false,allowRepeatedPools:false,maxCandidates:1000,
       hopTokensPerStep:3,hopPoolsPerPair:3});
-    const fullView=buildBlockScanUsdView(edges,data.mids,100,false);
+    const fullView=buildBlockScanEthView(edges,data.mids,100,false);
     // Bound one signal root's expansion, not the total across all possible signal roots.
-    const usdView={...fullView,signals:fullView.signals.filter(signal=>signal.token===WETH)};
+    const ethView={...fullView,signals:fullView.signals.filter(signal=>signal.token===WETH)};
     for(const enumerationMethod of ["joint-dfs","dfs","layered"] as const) {
-      const run=(hopTokensPerStep:number|undefined,hopPoolsPerPair:number|undefined)=>scan({...data,usdView,
+      const run=(hopTokensPerStep:number|undefined,hopPoolsPerPair:number|undefined)=>scan({...data,ethView,
         cfg:{...data.cfg,enumerationMethod,hopTokensPerStep,hopPoolsPerPair}});
       const result=run(3,3);
       assert.equal(result.outcome,"ran");
@@ -112,32 +112,32 @@ test("Rust production dispatch stays disabled even for explicit scanner configs"
       /Rust enumeration is disabled/);
 });
 
-test("configured hop caps (4/6/8), with directed USD references",()=>{
+test("configured hop caps (4/6/8), with directed ETH references",()=>{
   const rings=[2,3,4,5,6,7,8].map(h=>ring([WETH,...Array.from({length:h-1},(_,i)=>address(1000+h*10+i)),WETH],h*100));
   const spokes=rings.flatMap((r,h)=>r.slice(1,-1).map((e,i)=>edge(e.tokenIn,WETH,9000+h*10+i)));
   const data=input([...rings.flat(),...spokes],rings.flatMap(r=>r.map((_,i)=>i===r.length-1?102n:100n)));
   for(const maxHops of [4,6,8]) {
-    const result=scan({...data,cfg:{...data.cfg,maxHops,maxCandidates:100_000,usdSignalPairsPerToken:100}});
+    const result=scan({...data,cfg:{...data.cfg,maxHops,maxCandidates:100_000,ethSignalPairsPerToken:100}});
     assert.equal(result.outcome,"ran");
     for(const r of rings) assert.equal(hasRoute(result,r),r.length<=maxHops,"cap "+maxHops+", ring "+r.length);
     assert(result.opportunities.every(o=>o.seedEdges.length<=maxHops));
   }
 });
 test("paired signal and whole-cycle floors independently apply; legacy toggle cannot bypass",()=>{
-  const data=anchor(),view=buildBlockScanUsdView(data.edges,data.mids);
+  const data=anchor(),view=buildBlockScanEthView(data.edges,data.mids);
   assert(view.signals.length>0);
   const run=(signalBps:number,cycleBps:number,requireDislocatedPair=true)=>{
     const mids=new Map(data.mids),last=data.edges[1]!;
     mids.set(blockScanEdgeKey(last),quote(last,BigInt(10_000+cycleBps),10_000n));
-    const current=buildBlockScanUsdView(data.edges,mids);
+    const current=buildBlockScanEthView(data.edges,mids);
     return scan({...data,mids,cfg:{...data.cfg,minSpreadBps:500,requireDislocatedPair},
-      usdView:{...current,signals:current.signals.map(s=>({...s,num:BigInt(10_000+signalBps),den:10_000n}))}});
+      ethView:{...current,signals:current.signals.map(s=>({...s,num:BigInt(10_000+signalBps),den:10_000n}))}});
   };
   assert.equal(run(490,1000).opportunities.length,0);
   assert.equal(run(510,490).opportunities.length,0);
   assert.equal(run(510,510).opportunities.length,1);
   assert.equal(run(490,1000,false).opportunities.length,0);
-  assert.equal(scan({...data,usdView:{...view,signals:[]}}).opportunities.length,0);
+  assert.equal(scan({...data,ethView:{...view,signals:[]}}).opportunities.length,0);
 });
 test("effective P/spread ignore stale depth; fees already included in amountOut",()=>{
   const data=anchor(),baseline=scan(data);
@@ -149,13 +149,14 @@ test("effective P/spread ignore stale depth; fees already included in amountOut"
   const fees=new Map([...mids].map(([k,v])=>[k,{...v,feeBps:3000}]));
   assert.equal(scan({...data,mids:fees}).opportunities[0]!.coarseSpreadBps,baseline.opportunities[0]!.coarseSpreadBps);
 });
-test("missing, nonpositive and over-funding P fail closed",()=>{
-  for(const p of [undefined,0n,-1n,1001n*P]) {
-    const data=anchor(),mids=new Map(data.mids),key=blockScanEdgeKey(data.edges[0]!);
-    mids.set(key,{...mids.get(key)!,quoteAmountIn:p,...(p!==undefined&&p>0n?{quoteAmountOut:p}:{})});
-    const result=scan({...data,mids});assert.equal(result.opportunities.length,0);
-    if(p===1001n*P) assert.equal(result.debug?.capitalRejected,1);
-  }
+test("missing effective rows and independently insufficient funding fail closed",()=>{
+  const data=anchor(),mids=new Map(data.mids),key=blockScanEdgeKey(data.edges[0]!);
+  mids.delete(key);
+  assert.equal(scan({...data,mids}).opportunities.length,0);
+  mids.set(key,{...data.mids.get(key)!,quoteAmountIn:1001n*P,quoteAmountOut:1001n*P});
+  const result=scan({...data,mids});
+  assert.equal(result.opportunities.length,0);
+  assert.equal(result.debug?.capitalRejected,1);
 });
 test("V4 logical pool IDs remain distinct behind one manager",()=>{
   const a=address(40),keys=[500,3000].map(fee=>({currency0:a,currency1:WETH,fee,tickSpacing:10,hooks:address(0)}));
@@ -165,7 +166,7 @@ test("V4 logical pool IDs remain distinct behind one manager",()=>{
   assert.deepEqual(new Set(result.opportunities[0]!.affectedPools),new Set(keys.map(v4PoolId)));
   assert(!result.opportunities[0]!.affectedPools?.includes(ADDR.UNISWAP_V4_POOL_MANAGER.toLowerCase()));
 });
-test("nonpositive loops, disabled pool reuse, missing quotes and missing USD valuation reject",()=>{
+test("nonpositive loops, disabled pool reuse, missing quotes and missing ETH valuation reject",()=>{
   for(const output of [100n,99n]) assert.equal(scan(input(anchor().edges,[100n,output])).opportunities.length,0);
   const data=anchor();
   assert.equal(scan(input([data.edges[0]!,{...data.edges[1]!,target:data.edges[0]!.target}],[100n,110n],{allowRepeatedPools:false})).opportunities.length,0);
@@ -174,14 +175,14 @@ test("nonpositive loops, disabled pool reuse, missing quotes and missing USD val
   const isolated=ring([address(71),address(72),address(71)]);
   assert.equal(scan(input(isolated,[100n,110n],{pricedTokens:new Map([[address(71),{maxBorrow:100n*P}]])})).opportunities.length,0);
 });
-test("touched is telemetry, not a gate on effective USD enumeration",()=>{
+test("touched is telemetry, not a gate on effective ETH enumeration",()=>{
   const data=anchor(),baseline=scan(data);
   for(const swapTouched of [new Set([address(999)]),new Set([data.edges[0]!.target])]) {
     const result=scan({...data,swapTouched});assert.deepEqual(result.opportunities,baseline.opportunities);
     assert.equal(result.swapTouchedPools,1);
   }
 });
-test("pool reuse and rotation dedup are independent, including supplied USD views",()=>{
+test("pool reuse and rotation dedup are independent, including supplied ETH views",()=>{
   const data=anchor(),edges=[data.edges[0]!,{...data.edges[1]!,target:data.edges[0]!.target}];
   for(const enumerationMethod of ["dfs","layered"] as const) {
     for(const allowRepeatedPools of [false,true]) for(const deduplicateRotations of [false,true]) {
@@ -190,8 +191,8 @@ test("pool reuse and rotation dedup are independent, including supplied USD view
       const result=scan(current);
       assert.equal(result.opportunities.length,allowRepeatedPools?(deduplicateRotations?1:2):0);
       assert.equal(result.enumeration?.allowRepeatedPools,allowRepeatedPools);
-      const stale=buildBlockScanUsdView(edges,current.mids,20,!allowRepeatedPools);
-      assert.deepEqual(scan({...current,usdView:stale}).opportunities,result.opportunities,
+      const stale=buildBlockScanEthView(edges,current.mids,20,!allowRepeatedPools);
+      assert.deepEqual(scan({...current,ethView:stale}).opportunities,result.opportunities,
         "a view built with the opposite policy cannot silently override the top-level switch");
     }
     assert.equal(scan(input(edges,[100n,110n],{enumerationMethod})).opportunities.length,1,"default permits reuse");
@@ -206,6 +207,23 @@ test("funding start, rank, cap, fingerprints and deadline",()=>{
   assert.deepEqual(result.opportunities.map(o=>o.seedEdges[0]!.tokenOut),[address(304),address(303),address(302)]);
   assert.equal(scan(data).opportunities[0]!.cycleFingerprint,cycleFingerprint(BLOCK,[WETH,USDC]));
   assert.equal(scan({...data,cfg:{...data.cfg,budgetMs:0}}).outcome,"budget_exceeded");
+});
+test("final candidate ranking uses closed-loop return, not funding-cap fraction",()=>{
+  const high=ring([WETH,address(321),WETH],430);
+  const low=ring([USDC,address(322),USDC],440);
+  const bridge=edge(USDC,WETH,450);
+  const data=input([...high,...low,bridge],[100n,120n,100n,110n,100n],{
+    maxHops:2,maxCandidates:1,minSpreadBps:0,prefixPruningEnabled:false,
+    pricedTokens:new Map([[WETH,{maxBorrow:1_000_000n*P}],[USDC,{maxBorrow:10n*P}]]),
+  });
+  const result=scan(data);
+  assert.equal(result.selection.enumeratedCount,2);
+  assert(hasRoute(result,high),"higher return must survive the output cap even with a larger borrowing limit");
+  assert(result.coarseEnumeration![0]!.coarseSpreadBps!>result.coarseEnumeration![1]!.coarseSpreadBps!);
+  const changedCaps=scan({...data,cfg:{...data.cfg,
+    pricedTokens:new Map([[WETH,{maxBorrow:10n*P}],[USDC,{maxBorrow:1_000_000n*P}]])}});
+  assert.deepEqual(result.opportunities.map(o=>o.seedEdges.map(blockScanEdgeKey)),
+    changedCaps.opportunities.map(o=>o.seedEdges.map(blockScanEdgeKey)));
 });
 test("three-hop positive/negative controls",()=>{
   const edges=ring([WETH,address(500),address(501),WETH]);
@@ -265,7 +283,7 @@ test("Credit amount quote required; standing-position label preserved",()=>{
   const a=address(970),data=input([edge(WETH,a,971,"lend"),edge(a,WETH,972)],[110n,100n]);
   const result=scan(data);assert.equal(result.opportunities.length,1);assert.equal(result.opportunities[0]!.leavesStandingPosition,true);
   const mids=new Map(data.mids),key=blockScanEdgeKey(data.edges[0]!);
-  mids.set(key,{...mids.get(key)!,quoteAmountIn:undefined,quoteAmountOut:undefined});
+  mids.delete(key);
   assert.equal(scan({...data,mids}).opportunities.length,0);
 });
 test("legacy depth diagnostic is not the effective scanner's admission rule",()=>{
@@ -286,7 +304,7 @@ test("real frozen effective table: best-pool routes retain repeated-token walks 
   const saved=JSON.parse(readFileSync(new URL("./fixtures/blockscan-effective-26029875.json",import.meta.url),"utf8")) as {
     sourceBlock:number; rows:{edge:TokenEdge;quote:{amountIn:string;amountOut:string;mid:number}|null}[];
   };
-  const edges=saved.rows.map(row=>row.edge),mids=new Map<string,ResolvedBlockScanMid>();
+  const edges=saved.rows.map(row=>row.edge),mids=new Map<string,ResolvedBlockScanQuote>();
   for(const {edge:e,quote:q} of saved.rows) if(q) mids.set(blockScanEdgeKey(e),{
     kind:"historical-effective",pool:e.target,edges:[e],mid:q.mid,feeBps:0,depthProxy:0,
     quoteAmountIn:BigInt(q.amountIn),quoteAmountOut:BigInt(q.amountOut)});
@@ -297,7 +315,7 @@ test("real frozen effective table: best-pool routes retain repeated-token walks 
     "0x9e4c98a6e67f2ad1ea41e37536e86a22bb445b4a","0xf6e72db5454dd049d0788e411b06cfaf16853042"];
   for(const deduplicateRotations of [true,false]) {
     const result=scan({edges,mids,sourceBlock:saved.sourceBlock,swapTouched:null,
-      cfg:{maxHops:6,minSpreadBps:50,exactAdmissionSpreadBps:50,usdSignalPairsPerToken:50,hopTokensPerStep:0,hopPoolsPerPair:1,
+      cfg:{maxHops:6,minSpreadBps:50,exactAdmissionSpreadBps:50,ethSignalPairsPerToken:50,hopTokensPerStep:0,hopPoolsPerPair:1,
         enumerationMethod:"dfs",deduplicateRotations,pricedTokens:caps,maxCandidates:100_000,budgetMs:10_000}});
     assert.equal(result.outcome,"ran");assert.equal(result.selection.forcedSelectionCount,0);
     const simple=result.opportunities.filter(o=>new Set(o.seedEdges.map(e=>e.tokenIn.toLowerCase())).size===o.seedEdges.length);

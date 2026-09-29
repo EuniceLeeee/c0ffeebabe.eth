@@ -3,6 +3,7 @@ import { Interface, getAddress, keccak256, TypedDataEncoder, zeroPadValue } from
 export const ABI = new Interface([
   "function BTB_TOKEN() view returns(address)", "function totalSupply() view returns(uint256)",
   "function balanceOf(address) view returns(uint256)", "function decimals() view returns(uint8)",
+  "function getStats() view returns(uint256 btbBalance,uint256 btbbSupply)",
   "function approve(address,uint256) returns(bool)",
   "function mint(uint256) returns(uint256)", "function redeem(uint256) returns(uint256)",
   "function previewTransfer(uint256) pure returns(uint256 netAmount,uint256 taxAmount)",

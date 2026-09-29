@@ -23,7 +23,7 @@ import type { BlockScanOpportunity } from "../detector/detector.js";
 const W = "weth", U = "usdc";
 const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 const SOURCE = Object.freeze({ number: 42, hash: hash(0xabcdef), generation: 7 });
-const DEFAULT_RAW = 2_000_000_000_000_000n; // Independent expectation: 0.002 ETH in wei.
+const DEFAULT_RAW = 10_000_000_000_000_000n; // Independent expectation: 0.01 ETH in wei.
 type BuildInput = Parameters<typeof buildEffectiveMids>[0];
 type Quote = BuildInput["quote"];
 type QuoteInput = Parameters<Quote>[0];
@@ -89,6 +89,23 @@ function noQuote(r: EffectiveMidRow, status: EffectiveMidRow["status"]) {
 
 const tests: [string, () => void | Promise<void>][] = [];
 const test = (name: string, run: () => void | Promise<void>) => { tests.push([name, run]); };
+test("explicit fixed P re-quotes amounts and cannot carry rows from another P", async () => {
+  const e = edge(W, U, "fixed"), prices = pricing([[e, 2]]);
+  const previous = await build(prices);
+  const fixed = 50_000_000_000_000_000n;
+  let calls = 0;
+  const next = await build(prices, { fixedWethInput: fixed, previous, touchedStateKeys: new Set(),
+    gasCostWei: 1n, quote: async ({ amountIn }) => {
+      calls++; assert.equal(amountIn, fixed); return { source: SOURCE, amountIn, amountOut: 123n };
+    } });
+  assert.equal(calls, 1); assert.equal(next.reference, "fixed");
+  assert.equal(next.referenceWethInput, fixed); assert.equal(row(next, e).amountOut, 123n);
+  const reset = await build(prices, { previous: next, touchedStateKeys: new Set() });
+  assert.equal(row(reset, e).amountIn, DEFAULT_RAW);
+  const changed = await build(prices, { fixedWethInput: fixed * 2n, previous: next, touchedStateKeys: new Set() });
+  assert.equal(row(changed, e).amountIn, fixed * 2n);
+  await assert.rejects(build(prices, { fixedWethInput: 0n }), /invalid fixed/);
+});
 
 test("declared standing-position pricing shares Exact but does not grant scanner admission", async () => {
   const graph = graphAt([{ ...edge(W, U, "credit"), slotKind: "lend" as const,
@@ -111,7 +128,7 @@ test("declared standing-position pricing shares Exact but does not grant scanner
 });
 
 for (const gasCostWei of [null, 100_000_000_000_000n]) {
-  test(`${gasCostWei === null ? "default 0.002 ETH" : "gas at 200 bps"}: every input token, three hops and raw units`, async () => {
+  test(`${gasCostWei === null ? "default 0.01 ETH" : "gas at 200 bps"}: every input token, three hops and raw units`, async () => {
     const rows: PriceRow[] = [
       // Deliberately order the four-hop chain backwards to catch in-pass propagation.
       [edge("z", "y", "z-y"), 4], [edge("y", "x", "y-x"), 3],
@@ -129,9 +146,9 @@ for (const gasCostWei of [null, 100_000_000_000_000n]) {
     ];
     // Independent expected values, not calls back into the amount-reference helper.
     const expected = new Map<string, bigint | null>(gasCostWei === null ? [
-      [W, DEFAULT_RAW], [U, 4_000_000n], ["x", 2_000_000n], ["y", 666_667n],
+      [W, DEFAULT_RAW], [U, 20_000_000n], ["x", 10_000_000n], ["y", 3_333_334n],
       ["fee", (DEFAULT_RAW + 98n) / 99n], ["fee2", (DEFAULT_RAW * 10n + 1880n) / 1881n],
-      ["third", 666_666_666_666_667n], ["large-unit", 1n], ["tiny-unit", 2n * 10n ** 35n],
+      ["third", 3_333_333_333_333_334n], ["large-unit", 1n], ["tiny-unit", 10n ** 36n],
       ["z", null], ["reverse-only", null], ["disconnected", null],
     ] : [
       [W, 5_000_000_000_000_001n], [U, 10_000_001n], ["x", 5_000_001n], ["y", 1_666_667n],
@@ -627,8 +644,8 @@ test("end-to-end raw USDC/WETH pair uses distinct instances even with a shared e
   });
   assert.equal(row(snapshot, forward).amountIn, DEFAULT_RAW / 500_000_000n);
   assert.equal(row(snapshot, reverse).amountIn, DEFAULT_RAW);
-  assert.equal(row(snapshot, forward).effectiveMid, 6_312_500_000);
-  assert.equal(row(snapshot, reverse).effectiveMid, 2.50125e-8);
+  assert.equal(row(snapshot, forward).effectiveMid, 1_262_500_000);
+  assert.equal(row(snapshot, reverse).effectiveMid, 5.0025e-9);
   assert.deepEqual(effectiveMidPairStatistics(snapshot), {
     directions: 2, quoted: 2, byStatus: { quoted: 2 },
     comparablePairs: 1, pairsAboveThreshold: 1, thresholdBps: 100,
@@ -1335,6 +1352,46 @@ test("effective consumes the supplied raw valuation index lazily, once per pass"
   assert.equal(lookups, 2);
   assert.equal(row(dirty, a).amountIn, 10_000_001n);
   assert.strictEqual(row(dirty, b), row(first, b));
+});
+
+test("run-disabled directions never prepare, value, quote or carry even on full/touched refresh", async () => {
+  const a = edge(W, U, "disabled-a", "shared-instance");
+  const b = edge(U, W, "disabled-b", "shared-instance");
+  const prices = pricing([[a, 2], [b, 0.5]]);
+  const previous = await build(prices);
+  for (const touchedStateKeys of [undefined, new Set<string>(), new Set(["shared-instance"])]) {
+    const result = await build(prices, { previous, touchedStateKeys,
+      disabledEdgeIds: new Set([a.canonicalEdgeId!, b.canonicalEdgeId!]),
+      tokenReferences: () => { throw new Error("disabled work must not request valuations"); },
+      prepareQuote: async () => { assert.fail("disabled work must not prepare a quote session"); },
+      quote: async () => { assert.fail("disabled work must not quote"); },
+    });
+    assert.equal(result.complete, true);
+    for (const e of [a, b]) {
+      noQuote(row(result, e), "disabled-for-run");
+      assert.equal(row(result, e).amountIn, null);
+      assert.equal(row(result, e).quotedAt, undefined, "no stale effective resurrection");
+    }
+    assert.equal(effectiveMidPairStatistics(result).quoted, 0);
+  }
+});
+
+test("run-disabled work is absent from the prepared closure without suppressing healthy instances", async () => {
+  const a = edge(W, U, "disabled"), b = edge(W, U, "healthy");
+  const prices = pricing([[a, 2], [b, 3]]);
+  const prepared: string[][] = [], quoted: string[] = [];
+  const result = await build(prices, { disabledEdgeIds: new Set([a.canonicalEdgeId!]),
+    prepareQuote: async ids => { prepared.push([...ids]); },
+    quote: async ({ edge, amountIn }) => {
+      quoted.push(blockScanEdgeKey(edge));
+      return { source: SOURCE, amountIn, amountOut: amountIn * 7n };
+    },
+  });
+  assert.deepEqual(prepared, [[b.canonicalEdgeId]]);
+  assert.deepEqual(quoted, [b.canonicalEdgeId]);
+  noQuote(row(result, a), "disabled-for-run");
+  assert.equal(row(result, b).status, "quoted");
+  assert.equal(row(result, b).amountOut, DEFAULT_RAW * 7n);
 });
 
 let failed = 0;

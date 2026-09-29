@@ -63,11 +63,24 @@ test("unsupported sequential composition is not attributed to an entire Family",
   assert.equal(budget.blockingCircuit(unrelated.tokenPath.edges), null);
 });
 
-test("different logical pools retain ordinary quote behavior", async () => {
+test("different logical pools retain trial context for generic dependency checks", async () => {
   const plan = makePlans(1)[0]!;
   plan.tokenPath.edges.forEach((e, i) => { e.instanceKey = `logical-pool-${i}`; });
   const fixture = sharedSession([plan], { async quote(input, leg) {
-    assert.equal(input.priorQuotes, undefined);
+    assert.equal(input.priorQuotes!.length, leg);
+    return leg ? input.amountIn / 2n + 1n : input.amountIn * 2n;
+  } });
+  const result = await propagateAmountsWithRawOutputs(plan.tokenPath, 100n, noState,
+    { executor: EXECUTOR, strictSession: fixture.session, toleranceRawUnits: 0n });
+  assert.deepEqual(result.amounts, [100n, 200n, 101n]);
+});
+
+test("shared dependencies retain the route from its first hop without an opt-in", async () => {
+  const plan = makePlans(1)[0]!;
+  plan.tokenPath.edges.forEach((e, i) => { e.instanceKey = `distinct-instance-${i}`; });
+  const fixture = sharedSession([plan], { async quote(input, leg) {
+    assert.equal(input.priorQuotes!.length, leg,
+      "even the first hop must retain state before the composite dependency is reached");
     return leg ? input.amountIn / 2n + 1n : input.amountIn * 2n;
   } });
   const result = await propagateAmountsWithRawOutputs(plan.tokenPath, 100n, noState,

@@ -1,16 +1,17 @@
 import { bindRequestResultRound, collectRequestProgramResults, localZeroExactMethod, type ExactQuoteInput, type ExactQuoteSemantics, type ExactRequestProgram } from "../../adapter-family-plugin.js";
 import { assertSameSource, assertSource, codeRequest, requireRuntimeCode, successfulResult } from "../standard-family/common.js";
 import { assertInvocation } from "./binding.js";
-import { MAX_UINT, nonzero, proveBearRuntime } from "./variants.js";
-import { proveConversionAssetRuntime } from "./asset-runtime.js";
-import { conversionSimulation, decodeConversionReceipt, simulationRequirements } from "./simulation.js";
+import { MAX_UINT, nonzero } from "./variants.js";
+import { bearStateRequests, decodeBearState } from "./bear-local.js";
 import type { ConversionDescriptor, ConversionRoute, ConversionExactEvidence } from "./types.js";
 import { supportsXwinPrefix, xwinPrefix } from "./sequential.js";
+import { decodeXwinLocal, localSurface, xwinLocalPauseRequest, xwinLocalResources, xwinLocalRound } from "./xwin-local.js";
+import { quoteBearTrial, quoteXwinTrial } from "./trial-state.js";
 import { assertXwinBinding, checkXwinDependencies, decodeXwinReceipt, decodeXwinSurface, xwinDependencyRequests, xwinSimulation, xwinSimulationRequirements, xwinStateRequests } from "./xwin.js";
 type Input = ExactQuoteInput<ConversionDescriptor, ConversionRoute>;
 function check(input: Input) {
   assertInvocation(input.descriptor, input.route); nonzero(input.executor);
-  xwinPrefix(input);
+  if ([input.descriptor.target, input.descriptor.asset].some(a => a.toLowerCase() === input.executor.toLowerCase())) throw new Error("conversion executor aliases token");
   if (input.descriptor.variant === "xwin-allocations-v1" && input.executor.toLowerCase() === input.descriptor.proxyAdmin.toLowerCase()) throw new Error("xWin proxy admin cannot execute conversion");
   if (typeof input.amountIn !== "bigint" || input.amountIn < 0n || input.amountIn > MAX_UINT) throw new Error("conversion exact input outside uint256");
 }
@@ -22,15 +23,13 @@ export const exactProgram: ExactRequestProgram<ConversionDescriptor, ConversionR
   requirements(input) {
     check(input);
     return input.amountIn === 0n ? { transports: [] } : input.descriptor.variant === "xwin-allocations-v1" ?
-      { transports: ["get-code", "get-storage", "eth-call"], caller: "executor" } : { ...simulationRequirements, transports: ["get-code", "effect-delta-simulation"] };
+      { transports: ["get-code", "get-storage", "eth-call"], caller: "executor" } : { transports: ["get-code", "eth-call"] };
   },
   buildRequests(i) {
     check(i);
     if (i.amountIn > 0n && i.descriptor.variant === "xwin-allocations-v1")
       return [...xwinStateRequests("exact-xwin", i.descriptor.target), codeRequest("exact-xwin-actor-code", i.executor)];
-    return i.amountIn === 0n ? [] : [codeRequest("exact-code", i.descriptor.target),
-      codeRequest("exact-asset-code", i.descriptor.asset),
-      conversionSimulation("exact-conversion", i.descriptor.target, i.descriptor.asset, i.route.direction, i.amountIn)];
+    return i.amountIn === 0n ? [] : bearStateRequests("exact", i.descriptor);
   },
   buildDependentProgram({ programInput: i, completedRound, initialResults, priorEvidence }) {
     check(i);
@@ -58,22 +57,51 @@ export const exactProgram: ExactRequestProgram<ConversionDescriptor, ConversionR
       const { amountOut } = decodeXwinReceipt(results, "exact-xwin-conversion", s, i.route.direction, i.amountIn, i.executor, xwinPrefix(i));
       return { amountOut, evidence: evidence(i, amountOut) };
     }
-    if (proveBearRuntime(requireRuntimeCode(results, "exact-code"), i.descriptor.target, i.descriptor.asset) !== i.descriptor.codeHash) throw new Error("conversion runtime changed");
-    if (proveConversionAssetRuntime(requireRuntimeCode(results, "exact-asset-code"), i.descriptor.asset) !== i.descriptor.assetCodeHash) throw new Error("conversion asset runtime changed");
-    const { amountOut } = decodeConversionReceipt(results, "exact-conversion", i.descriptor.target, i.descriptor.asset, i.route.direction, i.amountIn, i.executor);
-    return { amountOut, evidence: evidence(i, amountOut) };
+    return quoteBearTrial(i, decodeBearState("exact", i.descriptor, results))!;
   },
 };
-export const exact = {
+export const xwinLocalProgram: ExactRequestProgram<ConversionDescriptor, ConversionRoute, ConversionExactEvidence> = {
+  requirements: input => { check(input); return input.amountIn === 0n ? { transports: [] } : { transports: ["get-code", "get-storage", "eth-call"], caller: "executor" }; },
+  buildRequests: i => { check(i); return i.amountIn === 0n ? [] : [...xwinStateRequests("exact-xwin", i.descriptor.target),
+    codeRequest("exact-xwin-actor-code", i.executor), xwinLocalPauseRequest("exact-xwin", i.descriptor.target)]; },
+  buildDependentProgram({ programInput: i, completedRound, initialResults, priorEvidence }) {
+    check(i);
+    if (i.amountIn === 0n) return null;
+    const s = localSurface(initialResults, "exact-xwin", i.descriptor);
+    requireRuntimeCode(initialResults, "exact-xwin-actor-code");
+    return xwinLocalRound("exact-xwin", s, i.executor, completedRound, collectRequestProgramResults(initialResults, priorEvidence));
+  },
+  decode({ programInput: i, initialResults, dependentEvidence }) {
+    check(i);
+    if (i.amountIn === 0n) return { amountOut: 0n, evidence: evidence(i, 0n) };
+    const s = localSurface(initialResults, "exact-xwin", i.descriptor);
+    assertSource(s.source, i.source);
+    requireRuntimeCode(initialResults, "exact-xwin-actor-code");
+    const results = collectRequestProgramResults(initialResults, dependentEvidence);
+    const state = decodeXwinLocal("exact-xwin", s, i.executor, results);
+    return quoteXwinTrial(i, { state, resources: xwinLocalResources("exact-xwin", s, i.executor, results) })!;
+  },
+};
+// Explicit receipt mode is retained for same-state validation. Production uses
+// read-state/local; unsupported local semantics fail rather than silently simulate.
+export function createConversionExact(xwinMode: "local" | "simulation" = "local") { return {
   methods: (input: Input) => [
     localZeroExactMethod<ConversionDescriptor, ConversionRoute, ConversionExactEvidence>("zero", i => { check(i); return { amountOut: 0n, evidence: evidence(i, 0n) }; }),
-    // No stateOnlyReads/reusePolicy: underlying execution may depend on caller
-    // or environment. Each amount executes at the requested canonical source.
-    ...(supportsXwinPrefix(input) ? [{ id: "conversion-execution-receipt", kind: "request-program" as const,
-      chainAmountQuote: true as const,
-      ...(input.descriptor.variant === "xwin-allocations-v1" ? { sequentialPrefix: true as const } : {}),
-      program: exactProgram }] : []),
+    // Bear's getStats call can use the existing same-source call memo; code
+    // checks still use the provider. Do not declare stateOnlyReads: it accepts eth_call only,
+    // whereas this program also retains both runtime-code checks.
+    ...(input.descriptor.variant === "btb-bear-v1" || xwinMode === "local" || supportsXwinPrefix(input) ? [{ id: input.descriptor.variant === "btb-bear-v1" ? "bear-local-state" : xwinMode === "local" ? "xwin-local-state" : "conversion-execution-receipt", kind: "request-program" as const,
+      ...(input.descriptor.variant === "xwin-allocations-v1" && xwinMode === "simulation"
+        ? { sequentialPrefix: true as const, chainAmountQuote: true as const }
+        : { trialState: { quote(i: Input) {
+          check(i);
+          const result = i.descriptor.variant === "btb-bear-v1" ? quoteBearTrial(i) : quoteXwinTrial(i);
+          return result === undefined ? { status: "not-applicable" as const, reason: "conversion trial state not loaded" }
+            : { status: "quoted" as const, result };
+        } } }),
+      program: input.descriptor.variant === "xwin-allocations-v1" && xwinMode === "local" ? xwinLocalProgram : exactProgram }] : []),
   ],
   cacheCompatibilityProjection: i => ({ variant: i.descriptor.variant, codeHash: i.descriptor.codeHash,
-    executor: i.executor.toLowerCase(), bindingFingerprint: i.route.bindingRef.fingerprint }),
-} satisfies ExactQuoteSemantics<ConversionDescriptor, ConversionRoute, ConversionExactEvidence>;
+    executor: i.executor.toLowerCase(), bindingFingerprint: i.route.bindingRef.fingerprint, xwinMode }),
+} satisfies ExactQuoteSemantics<ConversionDescriptor, ConversionRoute, ConversionExactEvidence>; }
+export const exact = createConversionExact();

@@ -886,6 +886,27 @@ export interface ExactQuotePrefixStep {
   readonly amountOut: bigint;
 }
 
+/** Identity of an underlying state object, not of the Family that accesses it.
+ * Plugins sharing an object must use the same schema and immutable binding. */
+export interface ExactTrialStateRef {
+  readonly key: string;
+  readonly schema: string;
+  readonly binding: string;
+  /** Opaque resources used by the value, including read-only dependencies. */
+  readonly dependencies?: readonly string[];
+}
+
+export interface ExactTrialState {
+  /** Missing means untouched in this trial. Incompatible bindings throw rather
+   * than permitting a fresh chain read to overwrite an earlier mutation. */
+  get(ref: ExactTrialStateRef): unknown | undefined;
+}
+
+export interface ExactTrialStateChange {
+  readonly ref: ExactTrialStateRef;
+  readonly value: unknown;
+}
+
 export interface ExactQuoteInput<
   Descriptor extends CompiledInstanceDescriptor,
   Route extends FamilyRouteDescriptor,
@@ -899,13 +920,18 @@ export interface ExactQuoteInput<
   readonly transactionOrigin?: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
   readonly prefix?: readonly ExactQuotePrefixStep[];
-  /** Retain isolated post-state only for a trial that may revisit a state key. */
-  readonly retainLocalState?: true;
+  /** Framework-owned, source-bound view of this ordered trial only. */
+  readonly trialState?: ExactTrialState;
 }
 
 export interface ExactQuoteResult<Evidence> {
   readonly amountOut: bigint;
   readonly evidence: Evidence;
+  /** Complete quote-relevant mutations for a trialState-capable method. */
+  readonly stateChanges?: readonly ExactTrialStateChange[];
+  /** Other changed resources (e.g. an inventory payment). Without an updated
+   * cell, a later dependent read must fail rather than use the block baseline. */
+  readonly stateEffects?: readonly string[];
 }
 
 export type LocalExactAttempt<Evidence> =
@@ -918,6 +944,20 @@ export type LocalExactAttempt<Evidence> =
       readonly reason: string;
     };
 
+/** Local amount math must state whether its execution effects are modeled.
+ * An explicit limitation preserves independent quotes, never sequential proof. */
+export type ExactLocalStateModel<
+  Descriptor extends CompiledInstanceDescriptor,
+  Route extends FamilyRouteDescriptor,
+  Evidence,
+> = {
+  quote(input: ExactQuoteInput<Descriptor, Route>): LocalExactAttempt<Evidence>;
+  readonly unsupportedReason?: never;
+} | {
+  readonly unsupportedReason: string;
+  readonly quote?: never;
+};
+
 export type ExactMethod<
   Descriptor extends CompiledInstanceDescriptor,
   Route extends FamilyRouteDescriptor,
@@ -925,20 +965,16 @@ export type ExactMethod<
 > =
   | {
       readonly id: string;
+      /** Zero-input identity only. Positive amounts enter a declared request
+       * method even when its state is already available and needs no reads. */
       readonly kind: "local";
       quote(
         input: ExactQuoteInput<Descriptor, Route>,
       ): LocalExactAttempt<Evidence>;
     }
-  | {
+  | ({
       readonly id: string;
       readonly kind: "request-program";
-      /** Every successful positive-input path quotes input.amountIn through
-       * chain execution (call return/revert data or observed simulation effects).
-       * No local reserves/unit-price fallback. This declares quote provenance,
-       * NOT capacity, caller eligibility or final execution success.
-       * Absence is unknown. Declared per invocation by the owning Family. */
-      readonly chainAmountQuote?: true;
       /** Replays the full input.prefix in order, in isolated trial state. */
       readonly sequentialPrefix?: true;
       /** This method reads only amount-independent state for local math.
@@ -946,14 +982,6 @@ export type ExactMethod<
        * block environment or caller state. Central touched invalidation owns
        * retention; this is a data declaration, never a Family reuse hook. */
       readonly stateOnlyReads?: true;
-      /** Opt-in guarantee: a swap changes only its own pricing state key.
-       * Every prior mutation must make the same guarantee before local state
-       * may be reused. Shared-key/foreign owners and unknown effects fail closed.
-       * The Family retains post-state with its sealed evidence and this pure
-       * callback advances that state; it must not mutate a prior trial or do I/O. */
-      readonly isolatedLocalState?: {
-        quote(input: ExactQuoteInput<Descriptor, Route>, previousEvidence: Evidence): ExactQuoteResult<Evidence>;
-      };
       /** Optional Family guarantee for carrying an amount quote as pricing data.
        * Covers every transitive state/code dependency and excludes block-environment
        * dependence of method selection, requests and output. Absence means fresh
@@ -963,7 +991,20 @@ export type ExactMethod<
         ExactQuoteInput<Descriptor, Route>,
         ExactQuoteResult<Evidence>
       >;
-    };
+    } & ({
+      /** Every successful positive-input path quotes input.amountIn through
+       * chain execution (call return/revert data or observed simulation effects).
+       * Source reads plus a local formula are not chain-produced amount quotes.
+       * This declares provenance, not capacity or final execution success. */
+      readonly chainAmountQuote: true;
+      readonly trialState?: never;
+    } | {
+      readonly chainAmountQuote?: never;
+      /** A local formula must model its quote-relevant execution effects or
+       * explicitly declare why it cannot. This is independent of cross-block
+       * read reuse; existing trial cells must overlay any new source reads. */
+      readonly trialState: ExactLocalStateModel<Descriptor, Route, Evidence>;
+    }));
 
 export type ExactRequestProgram<
   Descriptor extends CompiledInstanceDescriptor,
@@ -2411,7 +2452,7 @@ function guardOptionalPriceCapabilities(plugin: {
     if (pricing.liveStateProjection !== undefined) guardSynchronousMethod(pricing.liveStateProjection, "project", "pricing.liveStateProjection.project");
   }
   if (exact !== undefined) {
-    guardSynchronousMethod(exact, "methods", "exact.methods");
+    guardSynchronousMethod(exact, "methods", "exact.methods", validateExactMethodStateDeclarations);
     guardSynchronousMethod(exact, "cacheCompatibilityProjection", "exact.cacheCompatibilityProjection");
   }
 }
@@ -3987,12 +4028,43 @@ function validateExact(exact: ExactQuoteSemantics<any, any, any>): void {
       "methods",
     ],
     "exact semantics",
+    true,
+    ["cacheCompatibilityProjection", "methods"],
   );
   assertSynchronousFunction(exact.methods, "exact.methods");
   assertSynchronousFunction(
     exact.cacheCompatibilityProjection,
     "exact.cacheCompatibilityProjection",
   );
+}
+
+/** Validate dynamic per-invocation declarations at the plugin boundary. */
+function validateExactMethodStateDeclarations(value: unknown): void {
+  if (!Array.isArray(value)) throw new Error("exact.methods must return an array");
+  for (const method of value) {
+    assertPlainRecord(method, "exact method");
+    if (method.kind === "local") {
+      if (method.chainAmountQuote !== undefined || method.trialState !== undefined) {
+        throw new Error("local exact method is zero-input only and cannot declare an amount model");
+      }
+      continue;
+    }
+    if (method.kind !== "request-program") throw new Error("unsupported exact method kind");
+    const chain = method.chainAmountQuote === true, local = method.trialState !== undefined;
+    if (chain === local || (method.chainAmountQuote !== undefined && !chain)) {
+      throw new Error("request exact method must declare exactly one of chainAmountQuote:true or trialState");
+    }
+    if (!local) continue;
+    const state = method.trialState;
+    assertPlainRecord(state, "exact trialState");
+    assertExactKeys(state, ["quote", "unsupportedReason"], "exact trialState", true, []);
+    if (state.quote !== undefined && state.unsupportedReason === undefined) {
+      assertSynchronousFunction(state.quote, "exact trialState.quote");
+    } else if (state.quote !== undefined || typeof state.unsupportedReason !== "string" ||
+        state.unsupportedReason.length === 0 || state.unsupportedReason.trim() !== state.unsupportedReason) {
+      throw new Error("exact trialState must declare quote or a nonempty unsupportedReason, not both");
+    }
+  }
 }
 
 function validateExecution(execution: ExecutionSemantics<any, any, any>): void {

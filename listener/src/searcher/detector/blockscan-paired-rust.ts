@@ -40,6 +40,7 @@ export function enumerateRustPaired(input: PairedEnumerationInput, traversal: Pa
   }
   const { onCycle, ...data } = input;
   const options = resolvePairedEnumerationOptions(input);
+  if (!options.allowRepeatedTokens) throw new Error("disabling repeated tokens requires the typescript backend");
   return load().enumerate({
     ...data, ...options, traversal,
     threads: options.rustThreads, memoryLimitBytes: options.rustScratchMb * 1024 * 1024,

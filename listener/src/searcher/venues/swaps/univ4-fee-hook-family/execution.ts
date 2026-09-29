@@ -187,7 +187,8 @@ function assertExecutionEvidence(input: {
 }): void {
   const evidence = input.exactEvidence;
   if (
-    evidence.kind !== "univ4-fee-hook-quoter" ||
+    !(evidence.kind === "univ4-fee-hook-quoter" ||
+      (evidence.kind === "sat1-local-exact-in" && input.descriptor.hookModel === "sat1")) ||
     evidence.poolId !== input.descriptor.poolId ||
     evidence.poolKeyFingerprint !== poolKeyFingerprint(input.descriptor.poolKey) ||
     !sameAddress(evidence.quoter, input.descriptor.managerBinding.quoter) ||

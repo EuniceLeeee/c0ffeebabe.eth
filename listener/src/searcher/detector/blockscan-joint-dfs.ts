@@ -15,16 +15,16 @@ const MEMO_MAX_ENTRIES = 16_384, MEMO_MAX_CHARACTERS = 1_048_576;
 /** A signal fixes sell(anchor -> left) and buy(right -> anchor). Either frontier
  * may then move, sharing one total edge budget and one reference-value floor.
  * The floor is a heuristic prefix policy, not an upper bound on future returns.
- * Token revisits and extensions after a closure remain legal; only pool reuse
- * has an independent policy. Funding rotations are emitted after closure. */
+ * Token and pool reuse have independent policies. Simple cycles stop at their
+ * first closure. Funding rotations are emitted after closure. */
 export function enumerateJointDfs(input: PairedEnumerationInput) {
-  const { allowRepeatedPools, prefixPruningEnabled, maxPrefixDrawdownBps, hopTokensPerStep } = resolvePairedEnumerationOptions(input);
+  const { allowRepeatedPools, allowRepeatedTokens, prefixPruningEnabled, maxPrefixDrawdownBps, hopTokensPerStep } = resolvePairedEnumerationOptions(input);
   const prefixFloor = BigInt(10_000 - maxPrefixDrawdownBps);
   const stats = { expanded: 0, completedSignalTokens: 0, completedSignalPairs: 0,
     deadlineHit: false, closed: 0, halfPaths: 0, joins: 0, signalMatched: 0,
     indexedJoinComparisons: 0, joinSkippedBeforeConflicts: 0,
     gateRule: "signal-rooted-joint-prefix" as const,
-    prefixPruningEnabled, maxPrefixDrawdownBps, prefixPrunedForward: 0,
+    allowRepeatedTokens, prefixPruningEnabled, maxPrefixDrawdownBps, prefixPrunedForward: 0,
     prefixPrunedJoin: 0, prefixPrunedTotal: 0, prefixPrunedJoint: 0,
     jointStates: 0, duplicateStatesSkipped: 0, traversal: "joint-dfs" as const,
     phase: "prepare", hopTokensPerStep, hopTokenForwardQuotes: 0,
@@ -48,7 +48,6 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
   const byId = new Map<string, number>(), edges: IndexedQuote[] = [];
   for (const quote of input.quotes) {
     if ((edges.length & 1023) === 0 && expired()) return finish();
-    if (byId.has(quote.id)) throw new Error("duplicate directed quote id");
     byId.set(quote.id, edges.length);
     edges.push({ quote, from: intern(tokens, quote.tokenIn), to: intern(tokens, quote.tokenOut),
       pool: intern(pools, quote.instance) });
@@ -58,7 +57,6 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
   for (let id = 0; id < edges.length; id++) {
     if ((id & 1023) === 0 && expired()) return finish();
     const edge = edges[id]!;
-    if (!edge.quote.value) continue;
     if (selected.forward.has(edge.quote.id)) outgoing[edge.from]!.push(id);
     if (selected.reverse.has(edge.quote.id)) incoming[edge.to]!.push(id);
   }
@@ -73,8 +71,8 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
     if (buy.quote.tokenOut !== signal.token || sell.quote.tokenIn !== signal.token ||
         (!allowRepeatedPools && buy.pool === sell.pool) || signal.den <= 0n || signal.num <= 0n)
       throw new Error("invalid directed price signal");
-    if (!buy.quote.value || !sell.quote.value ||
-        !aboveSpread(signal.num, signal.den, input.minSpreadBps)) continue;
+    if (!aboveSpread(signal.num, signal.den, input.minSpreadBps)) continue;
+    if (!allowRepeatedTokens && (sell.from === sell.to || buy.from === buy.to)) continue;
     if (!selected.forward.has(sell.quote.id) || !selected.reverse.has(buy.quote.id)) continue;
     const key = `${s},${b}`;
     if (seedKeys.has(key)) continue;
@@ -94,6 +92,7 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
       // left is in execution order; right is stored in reverse search order.
       const left = [seed.sell], right = [seed.buy];
       const usedPools = new Set([edges[seed.sell]!.pool, edges[seed.buy]!.pool]);
+      const usedTokens = new Set([edges[seed.sell]!.from, edges[seed.sell]!.to, edges[seed.buy]!.from]);
       const memo = new Set<string>();
       let memoCharacters = 0;
       const emit = (): void => {
@@ -140,7 +139,10 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
           if (key.length <= MEMO_MAX_CHARACTERS) { memo.add(key); memoCharacters += key.length; }
         }
         stats.jointStates++;
-        if (leftToken === rightToken) emit();
+        if (leftToken === rightToken) {
+          emit();
+          if (!allowRepeatedTokens) return;
+        }
         if (stats.deadlineHit || hops >= input.maxHops) return;
         const extend = (reverse: boolean): void => {
           const candidates = reverse ? incoming[rightToken]! : outgoing[leftToken]!;
@@ -149,12 +151,17 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
             if ((stats.expanded++ & 1023) === 0 && expired()) return;
             const edge = edges[id]!;
             if (!allowRepeatedPools && usedPools.has(edge.pool)) continue;
+            const next = reverse ? edge.from : edge.to;
+            const closes = next === (reverse ? leftToken : rightToken);
+            if (!allowRepeatedTokens && usedTokens.has(next) && !closes) continue;
             path.push(id);
             if (!allowRepeatedPools) usedPools.add(edge.pool);
+            if (!allowRepeatedTokens && !closes) usedTokens.add(next);
             const nextN = prefixPruningEnabled ? valueN * edge.quote.value!.num : valueN;
             const nextD = prefixPruningEnabled ? valueD * edge.quote.value!.den : valueD;
             visit(reverse ? leftToken : edge.to, reverse ? edge.from : rightToken, nextN, nextD);
             if (!allowRepeatedPools) usedPools.delete(edge.pool);
+            if (!allowRepeatedTokens && !closes) usedTokens.delete(next);
             path.pop();
             if (stats.deadlineHit) return;
           }

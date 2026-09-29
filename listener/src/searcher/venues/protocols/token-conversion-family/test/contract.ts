@@ -8,6 +8,8 @@ import { FAMILY } from "../manifest.js";
 import { discovery } from "../discovery.js";
 import { identity } from "../identity.js";
 import { exactProgram } from "../exact.js";
+import { bearCapacity, quoteBear } from "../bear-local.js";
+import { provePlainConversionAssetRuntime } from "../asset-runtime.js";
 import { conversionSimulation, decodeConversionReceipt } from "../simulation.js";
 import { mintAction, redeemAction } from "../action.js";
 import type { Direction } from "../types.js";
@@ -34,6 +36,11 @@ const SOURCE: CanonicalSource = { number: 25000000, hash: `0x${"51".repeat(32)}`
 const html = readFileSync(join(cache, "contracts", `${TARGET.toLowerCase()}.html`), "utf8");
 const code = html.slice(html.indexOf("Deployed Bytecode")).match(/<div>(0x[0-9a-fA-F]+)<\/div>/)![1]!;
 const codeHash = proveBearRuntime(code, TARGET, ASSET);
+const assetEvidence = process.env.TOKEN_CONVERSION_ASSET_EVIDENCE;
+assert(assetEvidence, "TOKEN_CONVERSION_ASSET_EVIDENCE must name saved asset evidence");
+const assetHtml = readFileSync(join(assetEvidence, "asset-etherscan.html"), "utf8");
+const plainAssetCode = assetHtml.slice(assetHtml.indexOf("Deployed Bytecode</h6>")).match(/<div>(0x[0-9a-fA-F]+)<\/div>/)![1]!;
+provePlainConversionAssetRuntime(plainAssetCode, ASSET);
 function returned(id: string, data: string, effects?: ObservedEffects): AdapterRequestResult {
   return { id, data, effects, ok: true, completion: "returned", source: SOURCE, provenance: { kind: "offline-fixture", fingerprint: "fixture" } };
 }
@@ -155,7 +162,7 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
   const count = (lane: string, kind: "code" | "call" | "simulation") => {
     cost[lane] ??= { code: 0, call: 0, simulation: 0 }; cost[lane]![kind]++;
   };
-  const runtime = (source: CanonicalSource, backing = 10n ** 24n, assetCode = "0x6000", lane = "other") => createStrictCentralAdapterRuntime({
+  const runtime = (source: CanonicalSource, backing = 10n ** 24n, assetCode = plainAssetCode, lane = "other") => createStrictCentralAdapterRuntime({
     executor: EXECUTOR, transactionOrigin: OTHER, generationFence: { assertCurrent() {} },
     provider: {
       async getCode(address) { count(lane, "code"); return address.toLowerCase() === TARGET.toLowerCase() ? code : assetCode; },
@@ -163,6 +170,10 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
       async call(tx) {
         count(lane, "call");
         const parsed = ABI.parseTransaction(tx)!;
+        if (parsed.name === "getStats") {
+          if (badOutput) throw new Error("fixture stats read failed");
+          return ABI.encodeFunctionResult("getStats", [backing, 10n ** 24n]);
+        }
         if (parsed.name === "BTB_TOKEN") return ABI.encodeFunctionResult("BTB_TOKEN", [ASSET]);
         if (parsed.name === "totalSupply") return ABI.encodeFunctionResult("totalSupply", [10n ** 24n]);
         if (parsed.name === "balanceOf") return ABI.encodeFunctionResult("balanceOf", [backing]);
@@ -202,17 +213,23 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
   }
   const edge = session.edges.find(e => e.adapterId === "token-conversion-mint")!;
   const amount = 123456789012345678901n;
-  const quoted = await session.issueExact({ edge, amountIn: amount, executor: EXECUTOR, runtimeEvidence: [], requireChainAmountQuote: true });
-  assert.equal(quoted.amountOut, amount); assert(observedAmounts.includes(amount));
+  const probesBefore = observedAmounts.length;
+  const quoted = await session.issueExact({ edge, amountIn: amount, executor: EXECUTOR, runtimeEvidence: [] });
+  assert.equal(quoted.amountOut, amount); assert.equal(observedAmounts.length, probesBefore);
+  await assert.rejects(session.issueExact({ edge, amountIn: amount, executor: EXECUTOR, runtimeEvidence: [], requireChainAmountQuote: true }));
   const built = session.buildExecution({ edge, exact: quoted, minAmountOut: amount, executor: EXECUTOR });
   assert.equal(built.status, "resolved");
   const instance = publication.instances[0]!;
   const d = instance.descriptor as ConversionDescriptor;
   const r = instance.routes.find(r => (r as ConversionRoute).direction === "mint") as ConversionRoute;
   const input = { descriptor: d, route: r, source: SOURCE, executor: EXECUTOR, amountIn: amount, runtimeEvidence: [] };
-  const resultSet = [returned("exact-code", code), returned("exact-asset-code", "0x6000"), receipt("exact-conversion", "mint", amount)];
+  for (const executor of [TARGET, ASSET]) assert.throws(() => exactProgram.buildRequests({ ...input, executor }), /executor aliases/);
+  assert.throws(() => exactProgram.buildRequests({ ...input, prefix: [{ descriptor: d, route: r, amountIn: 1n, amountOut: 1n }] }), /prefix unsupported/);
+  assert.deepEqual(exactProgram.buildRequests({ ...input, amountIn: 0n }), []);
+  assert.equal(exactProgram.decode({ programInput: { ...input, amountIn: 0n }, initialResults: [], dependentEvidence: [] }).amountOut, 0n);
+  const resultSet = [returned("exact-code", code), returned("exact-asset-code", plainAssetCode), returned("exact-stats", ABI.encodeFunctionResult("getStats", [10n ** 24n, 10n ** 24n]))];
   assert.equal(exactProgram.decode({ programInput: input, initialResults: resultSet, dependentEvidence: [] }).amountOut, amount);
-  assert.throws(() => exactProgram.decode({ programInput: input, initialResults: resultSet.map(r => r.id === "exact-asset-code" ? returned(r.id, "0x600100") : r), dependentEvidence: [] }), /asset runtime changed/);
+  assert.throws(() => exactProgram.decode({ programInput: input, initialResults: resultSet.map(r => r.id === "exact-asset-code" ? returned(r.id, "0x600100") : r), dependentEvidence: [] }), /closure unproven/);
   assert.throws(() => exactProgram.decode({ programInput: { ...input, source: next }, initialResults: resultSet, dependentEvidence: [] }), /source/);
   assert.throws(() => exactProgram.buildRequests({ ...input, amountIn: MAX_UINT + 1n }), /uint256/);
   assert.throws(() => exactProgram.buildRequests({ ...input, route: { ...r, tokenOut: ASSET } }), /binding/);
@@ -229,7 +246,7 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
     weth: ASSET, gasCostWei: null, enumerationSpreadBps: 10, concurrency: 1,
     control: { deadlineAtMs: Date.now() + 10000 },
     quote: async args => {
-      const quote = await session.issueExact({ ...args, executor: EXECUTOR, runtimeEvidence: [], requireChainAmountQuote: true });
+      const quote = await session.issueExact({ ...args, executor: EXECUTOR, runtimeEvidence: [] });
       assert("amountIn" in quote, "conversion must return an amount-bearing Exact quote");
       return quote;
     },
@@ -241,7 +258,7 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
   assert.deepEqual(root.resolveBlockTouchedStateKeys({ kind: "call", target: ASSET, data: "0x" }, next), [TARGET.toLowerCase()]);
   assert.deepEqual(root.resolveBlockTouchedStateKeys({ kind: "call", target: OTHER, data: "0x" }, next), []);
   const quiet = refreshFixture({ publication, start: SOURCE, executor: EXECUTOR, asset: ASSET,
-    runtime: (at, lane) => runtime(at, 10n ** 24n, "0x6000", lane) });
+    runtime: (at, lane) => runtime(at, 10n ** 24n, plainAssetCode, lane) });
   assert.deepEqual(quiet.root.pricingIndex().perBlockRefreshStateKeys, [TARGET.toLowerCase()]);
   const quietStart = await quiet.step(SOURCE);
   cost.raw = { code: 0, call: 0, simulation: 0 }; cost.exact = { code: 0, call: 0, simulation: 0 };
@@ -254,11 +271,11 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
     assert.equal(quietNext.pricingProvenanceByEdgeKey!.get(key), "refreshed");
   }
   assert.deepEqual(cost.raw, { code: 0, call: 0, simulation: 0 });
-  assert.deepEqual(cost.exact, { code: 4, call: 0, simulation: 2 });
+  assert.deepEqual(cost.exact, { code: 4, call: 2, simulation: 0 });
   console.log(JSON.stringify({ kind: "offline-btbb-empty-block-cost-fixture", perInstancePerBlock: {
     raw: cost.raw, effective: cost.exact }, previouslyUntouchedCarry: "zero quote transport calls",
     excludes: "transport batching/retries, simulator-internal reads, later Solver and final execution",
-    actualUnderlyingRuntimeCompatibility: "unverified", historicalParity: "not run" }));
+    actualUnderlyingRuntimeCompatibility: "exact compiled template", historicalParity: "not run" }));
   const touched = await readBlockTouchedStateKeys({
     async getLogs() { return [{ address: ASSET, topics: [], data: "0x", blockHash: next.hash }]; },
     async send(method) { assert.equal(method, "debug_traceBlockByHash"); return []; },
@@ -266,7 +283,7 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
   assert(touched.has(TARGET.toLowerCase()));
   const empty = await root.createSession({ source: next, runtime: runtime(next, 0n), fundingAssets: [], kind: "pricing", touchedPools: touched });
   // A backing-only update traverses the production dependency resolver and
-  // removes the redeem price; mint still has its independent receipt proof.
+  // removes the redeem price; mint retains independent uint256 capacity.
   assert.equal(empty.edges.length, 2);
   assert.equal(empty.currentPricingForEdge(empty.edges.find(e => e.adapterId === "token-conversion-redeem")!)?.status, "behavior-proven-unavailable");
   assert.equal(empty.currentPricingForEdge(empty.edges.find(e => e.adapterId === "token-conversion-mint")!)?.status, "priced");
@@ -283,4 +300,18 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
   assert.throws(() => mintAction.encode(node, EXECUTOR, new Uint8Array([1])));
   assert.throws(() => redeemAction.encode(node, EXECUTOR, new Uint8Array()));
   console.log("fixture-only production lifecycle and balance-quote checks; no chain acceptance");
+});
+
+test("bear local math checks capacities without applying transfer tax or mutating a trial", () => {
+  const state = { source: SOURCE, supply: 1000n, backing: 900n };
+  for (const direction of ["mint", "redeem"] as const) for (const amount of [1n, 99n, 100n, 101n, 900n])
+    assert.equal(quoteBear(state, direction, amount), amount);
+  assert.equal(bearCapacity(state, "redeem"), 900n);
+  assert.throws(() => quoteBear(state, "redeem", 901n), /capacity/);
+  assert.throws(() => quoteBear({ ...state, supply: 1n }, "redeem", 2n), /capacity/);
+  assert.throws(() => quoteBear({ ...state, supply: MAX_UINT }, "mint", 1n), /capacity/);
+  assert.throws(() => quoteBear({ ...state, backing: MAX_UINT }, "mint", 1n), /capacity/);
+  for (const amount of [0n, -1n, MAX_UINT + 1n]) assert.throws(() => quoteBear(state, "mint", amount), /uint256/);
+  assert.equal(state.supply, 1000n); assert.equal(state.backing, 900n);
+  assert.throws(() => provePlainConversionAssetRuntime("0x6000", ASSET), /closure unproven/);
 });

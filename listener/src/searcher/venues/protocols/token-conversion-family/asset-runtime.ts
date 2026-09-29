@@ -20,6 +20,13 @@ const SHORT_VERSION = "0x3100000000000000000000000000000000000000000000000000000
 export function proveConversionAssetRuntime(code: string, asset: string): string {
   asset = nonzero(asset);
   try { return proveLocalAssetRuntime(code); } catch { /* exact audited template below */ }
+  return provePlainConversionAssetRuntime(code, asset);
+}
+
+// Stronger than dependency closure: local 1:1 math needs the exact no-tax,
+// no-permission ERC20 transfer semantics, not merely absence of external calls.
+export function provePlainConversionAssetRuntime(code: string, asset: string): string {
+  asset = nonzero(asset);
   if (!/^0x[0-9a-fA-F]{11876}$/.test(code)) throw new Error("asset dependency closure unproven: unsupported runtime");
   let normalized = code.toLowerCase();
   const operands: readonly (readonly [number, string])[] = [

@@ -2,6 +2,7 @@ import {
   localZeroExactMethod,
   bindRequestResultRound,
   collectRequestProgramResults,
+  type ExactMethod,
   type ExactQuoteInput,
   type ExactQuoteSemantics,
   type ExactRequestProgram,
@@ -19,6 +20,7 @@ import {
 import { resolveUniV3StateReader, UNIV3_STATE_WORD_RADIUS, readUniV3State, uniV3StateRequestData } from "./state-reader.js";
 import { tickLensStateRequests, tickLensDependentProgram, readTickLensState } from "./tick-lens-state.js";
 import { assertUniV3SwapAccess, uniV3SwapAccessRequest } from "./swap-access.js";
+import { readV3TrialState, v3TrialStateRef, v3TrialStateEffects } from "../../local-state-models/v3-state.js";
 import {
   canonicalAddress,
   requireSuccessfulResult,
@@ -41,10 +43,7 @@ type UniV3ExactInput = ExactQuoteInput<UniV3Descriptor, UniV3Route>;
  * decoding and swap math. The factory-bound Quoter remains an explicit option.
  * Neither quote mode proves transfer eligibility; mandatory final sim remains.
  */
-function requestProgram(
-  mode: QuoteMode,
-  retainedStates: WeakMap<UniV3ExactEvidence, V3PoolState>,
-): ExactRequestProgram<
+function requestProgram(mode: QuoteMode): ExactRequestProgram<
   UniV3Descriptor,
   UniV3Route,
   UniV3ExactEvidence
@@ -140,34 +139,26 @@ function requestProgram(
         assertSource(result.source, programInput.source);
         return readUniV3State(result.data, programInput.descriptor);
       })();
-      return localQuote(programInput, state, retainedStates,
-        programInput.retainLocalState === true && supportsIsolatedState(programInput));
+      const current = supportsTrialState(programInput) ? readV3TrialState(programInput.trialState, programInput.descriptor) : undefined;
+      return localQuote(programInput, current ?? state);
     },
   };
 }
 
 // Family-owned selection: effective/Exact/Solver keep the same central entry.
 export function createUniV3Exact(mode: QuoteMode = "local") {
-  // Per-issued-evidence trial state, never a cross-source or amount quote cache.
-  // Tick maps remain private and read-only; each swap copies only its scalars.
-  const retainedStates = new WeakMap<UniV3ExactEvidence, V3PoolState>();
-  const program = requestProgram(mode, retainedStates);
-  const isolatedLocalState = Object.freeze({
-    quote(input: UniV3ExactInput, previousEvidence: UniV3ExactEvidence) {
+  const program = requestProgram(mode);
+  const trialState = Object.freeze({
+    quote(input: UniV3ExactInput) {
       assertRoute(input.descriptor, input.route);
-      if (!supportsIsolatedState(input)) throw new Error("univ3 isolated local state unsupported");
-      const state = retainedStates.get(previousEvidence);
-      if (state === undefined) throw new Error("univ3 isolated local state was not retained");
-      assertSource(previousEvidence.source, input.source);
-      if (!sameAddress(previousEvidence.pool, input.descriptor.pool) ||
-          !sameAddress(previousEvidence.caller, input.executor) || previousEvidence.fee !== input.descriptor.fee) {
-        throw new Error("univ3 isolated local state binding changed");
-      }
-      return localQuote(input, state, retainedStates, true);
+      if (!supportsTrialState(input)) throw new Error("univ3 shared trial state unsupported");
+      const state = readV3TrialState(input.trialState, input.descriptor);
+      return state === undefined ? { status: "not-applicable" as const, reason: "univ3 trial state not loaded" }
+        : { status: "quoted" as const, result: localQuote(input, state) };
     },
   });
   return {
-    methods: (input) => Object.freeze([
+    methods: (input): readonly ExactMethod<UniV3Descriptor, UniV3Route, UniV3ExactEvidence>[] => Object.freeze([
       localZeroExactMethod<UniV3Descriptor, UniV3Route, UniV3ExactEvidence>(
         "local-zero",
         (input) => {
@@ -180,9 +171,9 @@ export function createUniV3Exact(mode: QuoteMode = "local") {
           resolveUniV3StateReader(input.descriptor) === null ? "local-ticks-49" : "local-state-49",
         kind: "request-program" as const,
         ...(mode !== "quoter" || input.descriptor.quoterBinding.quoter === null
-          ? { stateOnlyReads: true as const } : { chainAmountQuote: true as const }),
-        ...((mode !== "quoter" || input.descriptor.quoterBinding.quoter === null) && supportsIsolatedState(input)
-          ? { isolatedLocalState } : {}),
+          ? { stateOnlyReads: true as const, trialState: supportsTrialState(input) ? trialState : {
+            unsupportedReason: "univ3 swap-access trial-state dependencies are unproven",
+          } } : { chainAmountQuote: true as const }),
         program,
       }),
     ]),
@@ -215,15 +206,13 @@ export function createUniV3Exact(mode: QuoteMode = "local") {
 
 export const univ3Exact = createUniV3Exact();
 
-function supportsIsolatedState(input: UniV3ExactInput): boolean {
+function supportsTrialState(input: UniV3ExactInput): boolean {
   return input.descriptor.swapAccess?.kind === "no-is-swapper-getter";
 }
 
 function localQuote(
   input: UniV3ExactInput,
   state: V3PoolState,
-  retainedStates: WeakMap<UniV3ExactEvidence, V3PoolState>,
-  retain: boolean,
 ) {
   if (input.amountIn <= 0n || state.sqrtPriceX96 === 0n) return zeroQuote(input);
   const zeroForOne = input.route.direction === "zero-for-one";
@@ -250,8 +239,11 @@ function localQuote(
       initializedTicksCrossed,
       gasEstimate: 0n,
     }, "univ3-local-ticks"),
+    ...(input.trialState && supportsTrialState(input) && swap.amountOut > 0n ? {
+      stateChanges: [{ ref: v3TrialStateRef(input.descriptor), value: swap.state }],
+      stateEffects: v3TrialStateEffects(input.descriptor, input.executor),
+    } : {}),
   });
-  if (retain) retainedStates.set(result.evidence, Object.freeze(swap.state));
   return result;
 }
 

@@ -1,5 +1,8 @@
 import {
   localZeroExactMethod,
+  bindRequestResultRound,
+  collectRequestProgramResults,
+  type ExactQuoteInput,
   type ExactQuoteSemantics,
   type ExactRequestProgram,
 } from "../../adapter-family-plugin.js";
@@ -12,6 +15,7 @@ import {
 } from "../standard-family/common.js";
 import { assertPsmInvocation } from "./binding.js";
 import { PSM_INTERFACE, psmSellQuote, psmBuyQuote } from "./codec.js";
+import { decodePsmTrial, psmTrialDependentRequests, psmTrialRequests, quotePsmTrial } from "./trial-state.js";
 import type {
   PsmDescriptor,
   PsmExactEvidence,
@@ -23,9 +27,9 @@ const psmRequestProgram: ExactRequestProgram<
   PsmRoute,
   PsmExactEvidence
 > = {
-  requirements: ({ descriptor, route, amountIn }) => {
+  requirements: ({ descriptor, route, amountIn, trialState }) => {
     assertPsmInvocation(descriptor, route);
-    return { transports: amountIn === 0n ? [] : ["eth-call" as const] };
+    return { transports: amountIn === 0n ? [] : trialState ? ["get-code" as const, "eth-call" as const] : ["eth-call" as const] };
   },
   buildRequests(input) {
     assertPsmInvocation(input.descriptor, input.route);
@@ -34,13 +38,18 @@ const psmRequestProgram: ExactRequestProgram<
     }
     if (input.amountIn > MAX_UINT256) throw new Error("PSM exact input exceeds uint256");
     if (input.amountIn === 0n) return [];
+    if (input.trialState) return psmTrialRequests(input);
     return Object.freeze([callRequest(
       "exact-fee",
       input.descriptor.target,
       PSM_INTERFACE.encodeFunctionData(input.route.direction === "sell-gem" ? "tin" : "tout"),
     )]);
   },
-  decode({ programInput, initialResults }) {
+  buildDependentProgram({ programInput, initialResults, completedRound }) {
+    return programInput.trialState && programInput.amountIn > 0n && completedRound === 0
+      ? bindRequestResultRound({ transports: ["eth-call"] }, psmTrialDependentRequests(programInput, initialResults)) : null;
+  },
+  decode({ programInput, initialResults, dependentEvidence }) {
     assertPsmInvocation(programInput.descriptor, programInput.route);
     if (programInput.amountIn < 0n || programInput.amountIn > MAX_UINT256) {
       throw new Error("PSM exact input is outside uint256 range");
@@ -52,6 +61,9 @@ const psmRequestProgram: ExactRequestProgram<
         evidence: exactEvidence(programInput, 0n, 0n),
       });
     }
+    if (programInput.trialState) return quotePsmTrial(programInput,
+      decodePsmTrial(programInput, initialResults, collectRequestProgramResults(initialResults, dependentEvidence)))!;
+    if (programInput.prefix?.length) throw new Error("PSM prefix requires issued trial state");
     if (results.length !== 1 || results[0]?.id !== "exact-fee") {
       throw new Error("PSM exact results are missing or ambiguous");
     }
@@ -87,6 +99,13 @@ export const psmExact = {
       id: "psm-quote",
       kind: "request-program" as const,
       program: psmRequestProgram,
+      trialState: { quote(input: ExactQuoteInput<PsmDescriptor, PsmRoute>) {
+        assertPsmInvocation(input.descriptor, input.route);
+        if (input.amountIn < 0n || input.amountIn > MAX_UINT256) throw new Error("PSM exact input is outside uint256 range");
+        const result = quotePsmTrial(input);
+        return result === undefined ? { status: "not-applicable" as const, reason: "PSM trial inventory not loaded" }
+          : { status: "quoted" as const, result };
+      } },
     }),
   ]),
   cacheCompatibilityProjection: ({ descriptor, route }) => ({

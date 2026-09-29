@@ -11,11 +11,13 @@ import { createStrictCentralAdapterRuntime } from "../../../../strict-central-ad
 import { StrictCurrentRuntimeCoordinator } from "../../../../strict-current-runtime-coordinator.js";
 import { StrictProductionRuntimeRoot, type StrictProductionRuntimeSession } from "../../../../strict-production-runtime-session.js";
 import { PinnedRethQuoteBackend } from "../../../../pinned-reth-quote-backend.js";
+import { applyExactTrialState, emptyExactTrialState } from "../../../../exact-trial-state.js";
+import { storageState, tokenBalanceState } from "../../../local-state-models/resources.js";
 import { blockScanEdgeKey, createVerifiedGraphView } from "../../../blockscan-state-capability.js";
 import { admitToGraph, localCatalog } from "../../../../test/family-integration/balancer-v3/lifecycle.js";
 import { VAULT, ROUTER, PERMIT2, VAULT_ABI, POOL_ABI, ROUTER_ABI, TOKEN_ABI, SWAP_ABI,
   MAX_INPUT, MAX_UINT, lower, probeAmounts } from "../codec.js";
-import { LOCAL_VAULT_ABI, LOCAL_POOL_ABI, decodeLocalState, localStateRequests, quoteLocal } from "../local-state.js";
+import { LOCAL_VAULT_ABI, LOCAL_POOL_ABI, decodeLocalState, localStateRequests, quoteLocal, quoteLocalTransition } from "../local-state.js";
 import { classifyBalancerPoolCode, type BalancerLocalModel } from "../local-model.js";
 import { BALANCER_MODEL_TEMPLATES } from "../local-math/model-templates.js";
 import type { BalancerV3Descriptor, BalancerV3PricingDescriptor, BalancerV3Snapshot } from "../types.js";
@@ -225,6 +227,142 @@ test("Weighted scaling uses raw units, rounded-up fee and rounded-up output rate
   assert.throws(() => quoteLocal(a.descriptor, a.routes[0], state, -1n, SOURCE), /binding\/amount/);
   assert.throws(() => quoteLocal(a.descriptor, a.routes[0], state, MAX_INPUT, SOURCE), /MaxInRatio|overflow/);
   assert.throws(() => quoteLocal(a.descriptor, a.routes[0], state, amountIn, { ...SOURCE, generation: 2 }), /foreign source/);
+});
+
+for (const model of BALANCER_MODEL_TEMPLATES.map(item => item.model)) {
+  test(`${model}: local transition preserves Vault raw/live rounding and isolates repeated trials`, async () => {
+    const f = fixture(model, [6, 8, 18], true);
+    f.values.rates = [12n * WAD / 10n + 3n, 11n * WAD / 10n + 7n, WAD];
+    f.values.aggregateSwapFee = WAD / 2n;
+    const a = await admitted(f), route = a.routes.find(route => route.i === 0 && route.j === 1)!;
+    const reverse = a.routes.find(candidate => candidate.i === route.j && candidate.j === route.i)!;
+    const state = decodeLocalState(a.descriptor, localStateRequests(a.descriptor).map(request => f.result(request)));
+    const originalRaw = [...state.balancesRaw], originalLive = [...state.balances];
+    const amountIn = 12_345_679n;
+    const transition = quoteLocalTransition(a.descriptor, route, state, amountIn, SOURCE);
+    assert.equal(transition.amountOut, quoteLocal(a.descriptor, route, state, amountIn, SOURCE));
+
+    // Mirror the independently saved Vault._swap accounting rules, not the
+    // pool-math scaled amount: fees first go raw, then aggregate fees floor.
+    const scaled = amountIn * state.scalingFactors[route.i] * state.rates[route.i] / WAD;
+    const feeScaled = ceilDiv(scaled * state.swapFee, WAD);
+    const feeRaw = feeScaled * WAD / (state.scalingFactors[route.i] * state.rates[route.i]);
+    const aggregateFeeRaw = feeRaw * state.aggregateSwapFee / WAD;
+    const expectedRaw = [...originalRaw];
+    expectedRaw[route.i] += amountIn - aggregateFeeRaw;
+    expectedRaw[route.j] -= transition.amountOut;
+    const expectedLive = expectedRaw.map((raw, i) => raw * state.scalingFactors[i] * state.rates[i] / WAD);
+    assert(aggregateFeeRaw > 0n);
+    assert.deepEqual(transition.nextState.balancesRaw, expectedRaw);
+    assert.deepEqual(transition.nextState.balances, expectedLive);
+    assert.equal(transition.nextState.balancesRaw[2], originalRaw[2], "untraded token is unchanged");
+    assert.equal(transition.nextState.source, state.source);
+    assert.equal(transition.nextState.rates, state.rates, "same-source rate snapshot is retained");
+    assert(Object.isFrozen(transition));
+    assert(Object.isFrozen(transition.nextState));
+    assert(Object.isFrozen(transition.nextState.balancesRaw));
+    assert(Object.isFrozen(transition.nextState.balances));
+    assert.notEqual(transition.nextState.balancesRaw, state.balancesRaw);
+
+    // A fresh state read with the exact post-swap raw balances yields the
+    // same reverse quote; the original state's reverse quote must differ.
+    f.values.balancesRaw = [...expectedRaw];
+    const readAfter = decodeLocalState(a.descriptor, localStateRequests(a.descriptor).map(request => f.result(request)));
+    assert.deepEqual(transition.nextState, readAfter);
+    const second = quoteLocalTransition(a.descriptor, reverse, transition.nextState, transition.amountOut, SOURCE);
+    assert.equal(second.amountOut, quoteLocal(a.descriptor, reverse, readAfter, transition.amountOut, SOURCE));
+    assert.notEqual(second.amountOut, quoteLocal(a.descriptor, reverse, state, transition.amountOut, SOURCE));
+    assert.deepEqual(state.balancesRaw, originalRaw, "another amount/route starts from the untouched snapshot");
+    assert.deepEqual(state.balances, originalLive);
+    assert.deepEqual(quoteLocalTransition(a.descriptor, route, state, amountIn, SOURCE), transition);
+    assert.deepEqual(transition.nextState.balancesRaw, expectedRaw, "second swap cannot mutate first result");
+    const zero = quoteLocalTransition(a.descriptor, route, state, 0n, SOURCE);
+    assert.equal(zero.amountOut, 0n);
+    assert.equal(zero.nextState, state);
+  });
+}
+
+test("local transition charges no aggregate fees in recovery mode and preserves rejection guards", async () => {
+  const f = fixture("weighted-v1"), a = await admitted(f), route = a.routes[0];
+  f.values.aggregateSwapFee = WAD / 2n;
+  f.values.configLowBits |= 8n;
+  const state = decodeLocalState(a.descriptor, localStateRequests(a.descriptor).map(request => f.result(request)));
+  const amountIn = WAD, result = quoteLocalTransition(a.descriptor, route, state, amountIn, SOURCE);
+  assert.equal(state.aggregateSwapFee, 0n);
+  assert.equal(result.nextState.balancesRaw[route.i], state.balancesRaw[route.i] + amountIn);
+  assert.throws(() => quoteLocalTransition(a.descriptor, route, state, amountIn, { ...SOURCE, generation: 2 }), /foreign source/);
+  assert.throws(() => quoteLocalTransition(a.descriptor, route, { ...state, model: "stable-v1" }, amountIn, SOURCE), /binding\/amount/);
+  assert.throws(() => quoteLocalTransition(a.descriptor, route, state, MAX_INPUT, SOURCE), /MaxInRatio|overflow/);
+  assert.throws(() => quoteLocalTransition(a.descriptor, route, state, -1n, SOURCE), /binding\/amount/);
+});
+
+test("standard-token Exact carries post-state through the shared trial view without another read", async () => {
+  const f = fixture("weighted-v1", [6, 18]), a = await admitted(f), baseline = emptyExactTrialState();
+  const input = { ...exactInput(a.descriptor, a.routes[0], 12_345_679n), trialState: baseline.view };
+  const method = plugin.exact.methods(input)[1];
+  assert(method.kind === "request-program" && method.trialState);
+  const quoteTrial = method.trialState.quote;
+  assert(typeof quoteTrial === "function", "expected supported Balancer trial model");
+  assert.equal(Object.hasOwn(method, "stateOnlyReads"), false, "time-dependent state is not cross-block cache permission");
+  assert.equal(quoteTrial(input).status, "not-applicable");
+  const initialResults = method.program.buildRequests(input).map(request => f.result(request));
+  const first = method.program.decode({ programInput: input, initialResults, dependentEvidence: [] });
+  assert(first.stateChanges && first.stateEffects);
+  assert.equal(first.stateChanges[0].ref.key, `pool:${lower(POOL)}`);
+  assert(first.stateEffects.includes(tokenBalanceState(input.route.tokenOut, VAULT)));
+  assert(first.stateEffects.includes(tokenBalanceState(input.route.tokenIn, EXECUTOR)));
+  assert(!first.stateEffects.includes(storageState(VAULT)), "one pool swap must not dirty every Vault pool");
+  const after = applyExactTrialState(baseline, first.stateChanges, first.stateEffects);
+  const reverse = { ...input, route: a.routes[1], amountIn: first.amountOut, trialState: after.view };
+  const readsBefore = f.calls.length, second = quoteTrial(reverse);
+  assert.equal(f.calls.length, readsBefore, "loaded shared state path performs no read");
+  assert.equal(second.status, "quoted");
+  if (second.status !== "quoted") throw new Error("missing reverse trial quote");
+  const expectedState = first.stateChanges[0].value as Parameters<typeof quoteLocal>[2];
+  assert.equal(second.result.amountOut, quoteLocal(a.descriptor, reverse.route, expectedState, reverse.amountIn, SOURCE));
+  assert.equal(baseline.view.get(first.stateChanges[0].ref), undefined, "other amount trials retain untouched baseline");
+  assert.deepEqual(quoteTrial(reverse), second);
+  const readFallback = method.program.decode({ programInput: reverse, initialResults, dependentEvidence: [] });
+  assert.equal(readFallback.amountOut, second.result.amountOut, "source read cannot overwrite earlier trial mutation");
+});
+
+test("shared trial dependencies reject changed pool or Vault config but not an unrelated Vault pool", async () => {
+  const f = fixture(), a = await admitted(f), baseline = emptyExactTrialState();
+  const input = { ...exactInput(a.descriptor, a.routes[0], WAD), trialState: baseline.view };
+  const method = plugin.exact.methods(input)[1];
+  assert(method.kind === "request-program" && method.trialState);
+  const quoteTrial = method.trialState.quote;
+  assert(typeof quoteTrial === "function", "expected supported Balancer trial model");
+  const initialResults = method.program.buildRequests(input).map(request => f.result(request));
+  const first = method.program.decode({ programInput: input, initialResults, dependentEvidence: [] });
+  assert(first.stateChanges);
+  const after = applyExactTrialState(baseline, first.stateChanges, first.stateEffects);
+  for (const dependency of [storageState(POOL), storageState(VAULT), `vault-pool:${lower(VAULT)}:${lower(POOL)}`]) {
+    const conflicting = { ...input, trialState: applyExactTrialState(after, [], [dependency]).view };
+    assert.throws(() => quoteTrial(conflicting), /invalidated dependency/);
+    assert.throws(() => method.program.decode({ programInput: conflicting, initialResults, dependentEvidence: [] }), /invalidated dependency/);
+    assert.throws(() => quoteTrial({ ...input,
+      trialState: applyExactTrialState(baseline, [], [dependency]).view }), /invalidated dependency/,
+    "missing state cannot reread baseline after an earlier conflicting effect");
+  }
+  const independent = applyExactTrialState(after, [], [`vault-pool:${lower(VAULT)}:${lower(OTHER)}`,
+    tokenBalanceState(input.route.tokenIn, VAULT), tokenBalanceState(input.route.tokenOut, VAULT)]);
+  assert.equal(quoteTrial({ ...input, trialState: independent.view }).status, "quoted",
+    "pool math has no shared-Vault-inventory read; unrelated pool accounting stays independent");
+});
+
+test("rate-provider pools keep local single-hop quotes without claiming a complete trial dependency closure", async () => {
+  const f = fixture("stable-v3", [18, 18], true), a = await admitted(f);
+  const input = { ...exactInput(a.descriptor, a.routes[0], WAD), trialState: emptyExactTrialState().view };
+  const method = plugin.exact.methods(input)[1];
+  assert(method.kind === "request-program");
+  assert.deepEqual(method.trialState,
+    { unsupportedReason: "balancer-v3 hook, rate-provider or yield-fee transition dependencies are unproven" });
+  assert.equal(Object.hasOwn(method, "chainAmountQuote"), false);
+  const result = method.program.decode({ programInput: input,
+    initialResults: method.program.buildRequests(input).map(request => f.result(request)), dependentEvidence: [] });
+  assert(result.amountOut > 0n);
+  assert.equal(result.stateChanges, undefined);
 });
 
 test("local raw probes use post-yield balances, not the legacy pre-yield stored-balance notional", async () => {
@@ -462,8 +600,15 @@ test("production raw/effective and Solver share source-pinned physical state rea
     assert(a.graph.edges.every(edge => after.mids.has(blockScanEdgeKey(edge))));
     f.values.failLocalData = true;
     const failed = await step({ number: 902, hash: ethers.toBeHex(902, 32), generation: 3 }, next.hash);
-    assert.equal(failed.mids.size, 0, "failed new-source reads must not carry last source's local raw price");
-    assert.equal(failed.effectiveMids!.rows.size, 0);
+    assert.deepEqual(failed.mids, before.mids,
+      "raw mids remain the frozen startup amount-reference table, not current executable prices");
+    assert.equal(failed.effectiveMids!.rows.size, 2);
+    for (const row of failed.effectiveMids!.rows.values()) {
+      assert.equal(row.status, "quote-failed");
+      assert.equal(row.amountOut, null);
+      assert.equal(row.effectiveMid, null);
+      assert.equal(row.quotedAt, undefined, "failed rows must not retain executable prices from an earlier source");
+    }
     assert(physical.every(item => lower(item.to) !== lower(ROUTER)));
   } finally {
     await Promise.all(backends.map(item => item.closeAndDrain()));

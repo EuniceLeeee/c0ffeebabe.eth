@@ -15,6 +15,8 @@ export const SAT1 = new ethers.Interface([
   "function totalMintedFair() view returns (uint256)",
   "function minter() view returns (address)",
   "function totalSupply() view returns (uint256)",
+  "function lastBuyBlock(address account) view returns (uint256)",
+  "function balanceOf(address account) view returns (uint256)",
 ]);
 export const SAT1_MAX_BUY = 5n * 10n ** 18n;
 export const SAT1_FAIR_SUPPLY_CAP = 21_000_000n * 10n ** 18n;

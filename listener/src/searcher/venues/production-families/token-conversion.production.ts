@@ -13,5 +13,4 @@ import { capture } from "../protocols/token-conversion-family/capture.js";
 import { mintAction, redeemAction } from "../protocols/token-conversion-family/action.js";
 export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [mintAction, redeemAction] });
 
-// Keep xWin/BTB installed but off until local amount quotes pass historical acceptance.
-export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED" });
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED" });

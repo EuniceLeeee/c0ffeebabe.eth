@@ -7,10 +7,10 @@ import type {
   BlockScanStateSnapshot,
 } from "../blockscan-state-coordinator.js";
 import {
-  detectBlockScanOpportunities,
-  type BlockScanConfig,
-} from "../detector/blockscan-scanner.js";
-import { scanBlockStateFromResolvedMids, blockScanSelectionProvenance } from "../detector/blockscan-scanner-core.js";
+  scanBlockStateFromResolvedMids,
+  blockScanSelectionProvenance,
+  type BlockScanCoreConfig,
+} from "../detector/blockscan-scanner-core.js";
 import { effectiveEnumerationMids } from "../blockscan-effective-mid.js";
 import { edgeInstanceKey } from "../venues/route-instance-identity.js";
 import {
@@ -32,6 +32,7 @@ import {
 } from "../venues/blockscan-state-capability.js";
 import {
   LegacyConcentratedLiquidityPrecisionUnsupportedError,
+  readAnyWarmMid,
   type RouteVenueMid,
 } from "../venues/mid-readers.js";
 
@@ -46,7 +47,7 @@ const edges = [
   ...venueEdges(pool2),
 ];
 
-const cfg: BlockScanConfig = {
+const cfg: BlockScanCoreConfig = {
   maxHops: 3,
   minSpreadBps: 0,
   maxCandidates: 20,
@@ -183,21 +184,22 @@ console.log("[blockscan-production-boundary] execution availability before ranki
   };
   assert.throws(
     () =>
-      detectBlockScanOpportunities({
+      readAnyWarmMid({
         edges: [precisionEdge],
         cache: precisionCache,
         sourceBlock: block,
-        swapTouched: null,
-        cfg,
+        a: precisionEdge.tokenIn.toLowerCase(),
+        b: precisionEdge.tokenOut.toLowerCase(),
+        pool: precisionPool,
       }),
     (error) =>
       error instanceof LegacyConcentratedLiquidityPrecisionUnsupportedError &&
       error.code === "LEGACY_CONCENTRATED_LIQUIDITY_PRECISION_UNSUPPORTED" &&
       /production pricing-state precision path/.test(error.message),
-    "trusted legacy caller must surface unsupported precision, not skip the venue",
+    "legacy raw-mid diagnostic reader must surface unsupported precision, not skip the venue",
   );
 }
-console.log("[blockscan-production-boundary] legacy precision unsupported passthrough: PASS");
+console.log("[blockscan-production-boundary] raw-mid diagnostic precision rejection: PASS");
 
 assertRejectsRuntime(
   {

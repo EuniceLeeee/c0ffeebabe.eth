@@ -6825,10 +6825,10 @@ async function buildEtherTokenCaseCapture(input: {
       }),
     }));
   const exactMethod = etherTokenNativeRedeemExact.methods().find(
-    (method) => method.kind === "local" &&
+    (method) => method.kind === "request-program" &&
       method.id === "identity-proven-one-to-one",
   );
-  if (exactMethod === undefined || exactMethod.kind !== "local") {
+  if (exactMethod === undefined || exactMethod.kind !== "request-program") {
     throw new Error("ethertoken-native local quote is missing");
   }
   const exactByRouteKey = new Map<
@@ -6859,7 +6859,11 @@ async function buildEtherTokenCaseCapture(input: {
         executor: MIGRATION_CAPTURE_EXECUTOR,
         runtimeEvidence: Object.freeze([]),
       });
-      const decoded = exactMethod.quote(exactInput).result;
+      const decoded = exactMethod.program.decode({
+        programInput: exactInput,
+        initialResults: [],
+        dependentEvidence: [],
+      });
       const edge = edgeByRouteKey.get(route.routeKey);
       if (edge === undefined) {
         throw new Error(

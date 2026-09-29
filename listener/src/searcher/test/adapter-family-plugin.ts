@@ -19,6 +19,7 @@ import {
   type FundingSourceDescriptor,
   type MasterTemplate,
   type FamilyRouteDescriptor,
+  type ExactMethod,
   type ProtocolFamilyPlugin,
   type SwapFamilyPlugin,
   type UnifiedObservation,
@@ -231,15 +232,14 @@ function core(input: {
     },
     exact: {
       methods: () => [Object.freeze({
-        id: "local",
-        kind: "local" as const,
-        quote: ({ amountIn }) => Object.freeze({
-          status: "quoted" as const,
-          result: Object.freeze({
-            amountOut: amountIn,
-            evidence: { witness: "local" },
-          }),
-        }),
+        id: "fixture-local",
+        kind: "request-program" as const,
+        trialState: { unsupportedReason: "fixture identity quote has no execution state model" },
+        program: {
+          requirements: () => ({ transports: [] }),
+          buildRequests: () => [],
+          decode: ({ programInput }) => ({ amountOut: programInput.amountIn, evidence: { witness: "local" } }),
+        },
       })],
       cacheCompatibilityProjection: ({ route }) => ({
         routeKey: route.routeKey,
@@ -832,6 +832,44 @@ assert.throws(
   }),
   /candidateKey returned a thenable; it must be synchronous/,
 );
+
+// Sequential route state is unconditional; Families cannot bypass it with a
+// separate flag. Every positive method declares its actual quote provenance.
+{
+  const definition = swapDefinition();
+  const declared = defineSwapFamily(definition);
+  const identity = { familyId: declared.manifest.familyId, lineageId: declared.manifest.supportedLineages[0], subject: ADDRESS, provenance: [] };
+  const descriptor = declared.instance.finalizeDescriptor({ identity, draft: declared.instance.compileDraft(identity), sharedBindings: [] });
+  const route = declared.routes.project({ descriptor })[0]!;
+  const input = { descriptor, route, amountIn: 1n, source: { number: 1, hash: HASH, generation: 1 },
+    executor: ADDRESS, runtimeEvidence: [] };
+  for (const bad of [true, () => true, false, null, 1, "true", {}, async () => true]) {
+    const badDefinition = swapDefinition();
+    (badDefinition.exact as unknown as Record<string, unknown>).requiresTrialState = bad;
+    assert.throws(() => defineSwapFamily(badDefinition), /exact semantics has unknown field requiresTrialState/);
+  }
+  const ordinary = declared.exact.methods(input)[0];
+  assert(ordinary.kind === "request-program");
+  const base = { id: ordinary.id, kind: ordinary.kind, program: ordinary.program };
+  const quote = () => ({ status: "not-applicable" as const, reason: "no initial state in fixture" });
+  for (const declaration of [{ chainAmountQuote: true as const }, { trialState: { quote } },
+    { trialState: { unsupportedReason: "fixture does not model execution" } }]) {
+    const candidate = swapDefinition();
+    const checked = defineSwapFamily({ ...candidate, exact: { ...candidate.exact,
+      methods: () => [{ ...base, ...declaration }] } });
+    assert.equal(checked.exact.methods(input).length, 1);
+  }
+  for (const bad of [{}, { chainAmountQuote: false }, { chainAmountQuote: true, trialState: { quote } },
+    { trialState: {} }, { trialState: { quote, unsupportedReason: "mixed" } },
+    { trialState: { unsupportedReason: "" } }, { trialState: { unsupportedReason: " padded " } },
+    { trialState: { quote: async () => ({ status: "not-applicable", reason: "async" }) } }]) {
+    const candidate = swapDefinition();
+    // Negative declaration tests intentionally cross the static boundary.
+    const checked = defineSwapFamily({ ...candidate, exact: { ...candidate.exact,
+      methods: () => [{ ...base, ...bad } as ExactMethod<TestDescriptor, TestRoute, TestExactEvidence>] } });
+    assert.throws(() => checked.exact.methods(input), /exact.*(declare|synchronous)/);
+  }
+}
 
 const actionThenableDefinition = swapDefinition();
 (actionThenableDefinition as unknown as {

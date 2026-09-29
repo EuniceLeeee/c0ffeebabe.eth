@@ -1,6 +1,7 @@
-import type { ExactQuoteInput, ExactQuoteSemantics } from "../../adapter-family-plugin.js";
+import { localZeroExactMethod, type ExactQuoteInput, type ExactQuoteSemantics, type ExactRequestProgram } from "../../adapter-family-plugin.js";
 import { canonicalAddress, lowerAddress, MAX_UINT256 } from "../standard-family/common.js";
 import { assertEtherTokenNativeInvocation } from "./shared.js";
+import { decodeEtherTokenTrial, etherTokenTrialRequests, quoteEtherTokenTrial } from "./trial-state.js";
 import type {
   EtherTokenNativeRedeemDescriptor,
   EtherTokenNativeRedeemExactEvidence,
@@ -32,7 +33,13 @@ function quote(input: Input) {
 
 export const etherTokenNativeRedeemExact = {
   methods: () => Object.freeze([
-    Object.freeze({ id: "identity-proven-one-to-one", kind: "local" as const, quote }),
+    localZeroExactMethod<EtherTokenNativeRedeemDescriptor, EtherTokenNativeRedeemRoute, EtherTokenNativeRedeemExactEvidence>("local-zero", i => quote(i).result),
+    Object.freeze({ id: "identity-proven-one-to-one", kind: "request-program" as const, program,
+      trialState: { quote(i: Input) {
+        const result = quoteEtherTokenTrial(i);
+        return result === undefined ? { status: "not-applicable" as const, reason: "EtherToken trial inventory not loaded" }
+          : { status: "quoted" as const, result };
+      } } }),
   ]),
   cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
     token: lowerAddress(descriptor.token),
@@ -45,3 +52,15 @@ export const etherTokenNativeRedeemExact = {
   EtherTokenNativeRedeemRoute,
   EtherTokenNativeRedeemExactEvidence
 >;
+
+const program: ExactRequestProgram<EtherTokenNativeRedeemDescriptor, EtherTokenNativeRedeemRoute, EtherTokenNativeRedeemExactEvidence> = {
+  requirements: i => ({ transports: i.amountIn > 0n && i.trialState ? ["eth-call", "get-code"] : [] }),
+  buildRequests: i => i.amountIn > 0n && i.trialState ? etherTokenTrialRequests(i) : [],
+  decode({ programInput: i, initialResults, dependentEvidence }) {
+    if (dependentEvidence.length) throw new Error("EtherToken unexpected dependent state");
+    if (i.amountIn > 0n && i.trialState) return quoteEtherTokenTrial(i, decodeEtherTokenTrial(i, initialResults))!;
+    if (i.prefix?.length) throw new Error("EtherToken prefix requires issued trial state");
+    if (initialResults.length) throw new Error("EtherToken unexpected independent quote state");
+    return quote(i).result;
+  },
+};

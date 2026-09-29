@@ -38,6 +38,10 @@ export interface BalancerLocalState {
   readonly minTokenBalances?: readonly bigint[];
   readonly amp?: bigint;
 }
+export interface BalancerLocalTransition {
+  readonly amountOut: bigint;
+  readonly nextState: BalancerLocalState;
+}
 
 function read(id: string, to: string, data: string): AdapterRequest {
   return { id, kind: "eth-call", to, data, completion: "return-data" };
@@ -133,12 +137,20 @@ function checkedMul(a: bigint, b: bigint): bigint {
 /** Exact-in Vault scaling and fees, then model math; never a linear mid multiple. */
 export function quoteLocal(descriptor: BalancerV3Descriptor, route: BalancerV3Route,
   state: BalancerLocalState, amountIn: bigint, source: CanonicalSource): bigint {
+  return quoteLocalTransition(descriptor, route, state, amountIn, source).amountOut;
+}
+
+/** PoolData after the verified Vault's exact-in swap, at the same source/rates.
+ * This is not a claim that another operation cannot change a rate provider or
+ * Vault configuration: the caller must establish those dependencies separately. */
+export function quoteLocalTransition(descriptor: BalancerV3Descriptor, route: BalancerV3Route,
+  state: BalancerLocalState, amountIn: bigint, source: CanonicalSource): BalancerLocalTransition {
   assertRoute(descriptor, route);
   assertSource(state.source, source);
   if (state.model !== descriptor.binding.localModel || amountIn < 0n || amountIn > MAX_INPUT) {
     throw new Error("balancer-v3 invalid local quote binding/amount");
   }
-  if (amountIn === 0n) return 0n;
+  if (amountIn === 0n) return Object.freeze({ amountOut: 0n, nextState: state });
   const scaled = checkedMul(checkedMul(amountIn, state.scalingFactors[route.i]), state.rates[route.i]) / WAD;
   const feeProduct = checkedMul(scaled, state.swapFee);
   const feeScaled = feeProduct === 0n ? 0n : (feeProduct - 1n) / WAD + 1n;
@@ -161,5 +173,14 @@ export function quoteLocal(descriptor: BalancerV3Descriptor, route: BalancerV3Ro
   const nextRaw = state.balancesRaw[route.i] + amountIn - aggregateFeeRaw;
   const nextLive = checkedMul(checkedMul(nextRaw, state.scalingFactors[route.i]), state.rates[route.i]) / WAD;
   if (nextRaw > MAX_BALANCE || nextLive > MAX_BALANCE) throw new Error("balancer-v3 local balance overflow");
-  return raw;
+  const balancesRaw = [...state.balancesRaw], balances = [...state.balances];
+  balancesRaw[route.i] = nextRaw;
+  balances[route.i] = nextLive;
+  balancesRaw[route.j] -= raw;
+  // Vault PoolDataLib.updateRawAndLiveBalance rounds both sides DOWN from
+  // their new raw balances. Subtracting the pool's scaled output instead
+  // would lose the raw/rate rounding remainder that stays in the Vault.
+  balances[route.j] = checkedMul(checkedMul(balancesRaw[route.j], state.scalingFactors[route.j]), state.rates[route.j]) / WAD;
+  return Object.freeze({ amountOut: raw, nextState: Object.freeze({ ...state,
+    balancesRaw: Object.freeze(balancesRaw), balances: Object.freeze(balances) }) });
 }

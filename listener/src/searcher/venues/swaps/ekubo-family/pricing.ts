@@ -1,9 +1,11 @@
+import { ethers } from "ethers";
 import { bindRequestResultRound, collectRequestProgramResults, type CompiledMutationIndex, type PricingSemantics } from "../../adapter-family-plugin.js";
 import { compileAddressMutations } from "../../mutation-index.js";
 import type { AdapterRequestResult } from "../../adapter-request-program.js";
 import { deriveEdgeTaxonomy } from "../../../strategy-taxonomy.js";
 import { quotedPoolMid } from "../blockscan-state-shared.js";
 import { EKUBO_CORE, EKUBO_ROUTER, encodeEkuboQuote, parseEkuboCoreSwapLog } from "../ekubo/abi.js";
+import { ekuboPoolExtension } from "../ekubo/pool-key.js";
 import { call, decodeQuote, decodeSizingProbe, returned, same, validateResults } from "./codec.js";
 import { staticBinding } from "./instance.js";
 import { EKUBO_ACTION_ID } from "./manifest.js";
@@ -26,6 +28,10 @@ function probeInputs(descriptor: EkuboPricingDescriptor, results: readonly Adapt
   return { depthIn, amountIn };
 }
 export const ekuboPricing = {
+  // Existing policy is Family-wide: vanilla AND TWAMM refresh every block.
+  // TWAMM beforeSwap executes virtual orders using block.timestamp even when
+  // no pool/extension event occurred. No per-instance callback is available.
+  refreshPolicy: "each-block",
   stateKey: route => route.routeKey,
   staticBindingProjection: ({ descriptor, routes }) => ({ ...staticBinding(descriptor), routeKeys: routes.map(r => r.routeKey) }),
   snapshotCompatibilityProjection: ({ descriptor, routes }) => ({ ...staticBinding(descriptor), routeKeys: routes.map(r => r.routeKey) }),
@@ -79,11 +85,11 @@ export const ekuboPricing = {
       })]]);
     },
   },
-  dependencies: ({ descriptor }) => [EKUBO_CORE, EKUBO_ROUTER, descriptor.instance.poolKey.token0, descriptor.instance.poolKey.token1],
+  dependencies: ({ descriptor }) => dependencies(descriptor),
   mutation: {
     compile({ entries }): CompiledMutationIndex {
       const direct = compileAddressMutations(entries, ({ descriptor, routes }) => ({
-        addresses: [EKUBO_CORE, EKUBO_ROUTER, descriptor.instance.poolKey.token0, descriptor.instance.poolKey.token1],
+        addresses: dependencies(descriptor),
         keys: routes.map(route => route.routeKey),
       }), { kinds: ["log", "call"] });
       const core = EKUBO_CORE.toLowerCase();
@@ -116,9 +122,13 @@ export const ekuboPricing = {
       try { if (parseEkuboCoreSwapLog(observation.data).poolId !== descriptor.instance.poolId) return []; } catch { /* conservatively invalidate */ }
     }
     const address = observation.kind === "call" ? observation.target : observation.kind === "log" ? observation.address : null;
-    return address !== null && [EKUBO_CORE, EKUBO_ROUTER, descriptor.instance.poolKey.token0, descriptor.instance.poolKey.token1].some(a => same(a, address))
+    return address !== null && dependencies(descriptor).some(a => same(a, address))
       ? routes.map(route => route.routeKey) : [];
   } },
   liveStateProjection: { project: ({ descriptor, snapshot }) => ({ kind: "ekubo-directed-router-quote", poolId: descriptor.instance.poolId,
     isToken1: descriptor.route.isToken1, ...snapshot, source: { ...snapshot.source } }) },
 } satisfies PricingSemantics<EkuboDescriptor, EkuboRoute, EkuboPricingDescriptor, EkuboPricingSnapshot>;
+function dependencies(descriptor: EkuboPricingDescriptor): string[] {
+  const key = descriptor.instance.poolKey;
+  return [EKUBO_CORE, EKUBO_ROUTER, key.token0, key.token1, ekuboPoolExtension(key.config)].filter(a => a !== ethers.ZeroAddress);
+}

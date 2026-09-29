@@ -658,11 +658,15 @@ async function verifyEtherTokenNativeEffects(): Promise<void> {
     executor: actor,
     runtimeEvidence: Object.freeze([]),
   });
-  const method = etherTokenNativeRedeemExact.methods()[0];
-  assert(method.kind === "local");
+  const method = etherTokenNativeRedeemExact.methods().find(method => method.id === "identity-proven-one-to-one");
+  assert(method?.kind === "request-program");
   assert.equal(method.id, "identity-proven-one-to-one");
   assert(!("chainAmountQuote" in method), "local formula is not chain-returned amountOut");
   type ProofInput = Omit<typeof input, "amountIn"> & { readonly amountIn: bigint };
+  const independentQuote = (programInput: ProofInput) => method.program.decode({ programInput,
+    initialResults: [], dependentEvidence: [] });
+  assert.deepEqual(method.program.requirements(input), { transports: [] });
+  assert.deepEqual(method.program.buildRequests(input), []);
   // Preserve the identity simulation/transport regression independently of the
   // production local quote: only the test constructs an active proof program.
   const etherTokenProgram = {
@@ -670,7 +674,7 @@ async function verifyEtherTokenNativeEffects(): Promise<void> {
       ...(programInput.amountIn === 0n ? {} : { caller: "executor" as const,
         effects: ["return-data", "token-delta", "native-delta", "total-supply-delta", "logs"] as const }) }),
     buildRequests(programInput: ProofInput) {
-      method.quote(programInput);
+      independentQuote(programInput);
       return programInput.amountIn === 0n ? [] : [etherTokenWithdrawalSimulation({ id: "exact-withdraw", token: tokenB,
         actor, callerRef: { kind: "executor" }, amountIn: programInput.amountIn })];
     },
@@ -680,7 +684,7 @@ async function verifyEtherTokenNativeEffects(): Promise<void> {
         assertSource(result.source, programInput.source);
         assert.equal(validateEtherTokenWithdrawal({ result, token: tokenB, actor, amountIn: programInput.amountIn }), programInput.amountIn);
       }
-      return method.quote(programInput).result;
+      return independentQuote(programInput);
     },
   };
   for (const amountIn of [1n, 137n, 10n ** 18n, (1n << 128n) + 37n]) {
@@ -784,7 +788,7 @@ async function verifyEtherTokenNativeEffects(): Promise<void> {
   assert.deepEqual(etherTokenProgram.buildRequests(zero), []);
   assert.equal(etherTokenProgram.decode({ programInput: zero, initialResults: [], dependentEvidence: [] }).amountOut, 0n);
   const local = etherTokenNativeRedeemExact.methods()[0]; assert(local.kind === "local");
-  assert.equal(local.quote(zero).status, "quoted"); assert.equal(local.quote(input).status, "quoted");
+  assert.equal(local.quote(zero).status, "quoted"); assert.equal(local.quote(input).status, "not-applicable");
   assert.throws(() => etherTokenProgram.buildRequests({ ...input, amountIn: -1n }), /range/);
   assert.throws(() => etherTokenProgram.buildRequests({ ...input, route: { ...route, tokenOut: tokenC } }), /incompatible/);
 

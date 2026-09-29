@@ -38,7 +38,7 @@ import { runOrderedBlockScanPipeline } from "./blockscan-ordered-pipeline.js";
 import { blockScanGrossProfitWeth } from "./blockscan-profit-priority.js";
 import { createScannedProfitTokenValuation } from "./scanned-profit-token-valuation.js";
 import type { ProfitTokenValuation } from "./profit-token-valuation.js";
-import { effectiveUsdPricing } from "./blockscan-usd-view.js";
+import { effectiveEthPricing } from "./blockscan-eth-view.js";
 import { emitEvent } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
 import { type TokenEdge } from "./planner/token-graph.js";
@@ -3670,9 +3670,9 @@ export class BlockScanRuntimeLoop {
       const solverQueue = planned.map((item, index) => ({ item, index }));
       // Use the already-published reference view only for cross-token queue
       // priority. Exact execution and final EV retain their original sources.
-      const profitReferences = amountPricingSnapshot === null ? new Map() : effectiveUsdPricing(
-        amountPricingSnapshot, blockScanCfg.usdSignalPairsPerToken, blockScanCfg.allowRepeatedPools,
-      ).view.referenceUsdPerRaw;
+      const profitReferences = amountPricingSnapshot === null ? new Map() : effectiveEthPricing(
+        amountPricingSnapshot, blockScanCfg.ethSignalPairsPerToken, blockScanCfg.allowRepeatedPools,
+      ).view.referenceEthPerRaw;
       // Freeze the pass's existing price publication. Later producer deltas
       // cannot change the value used by an in-flight final simulation/EV.
       const profitTokenValuation = createScannedProfitTokenValuation(amountPricingSnapshot, exactSource);

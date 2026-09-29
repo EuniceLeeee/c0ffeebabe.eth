@@ -41,7 +41,11 @@ const HELP = `Usage: npm run searcher:at-block -- --ready CHECKPOINT --block NUM
   --through STAGE        prices | enumerate | solver | ev (default: ev).
   --spread-bps NUMBER    Enumeration spread; 50 = 0.5%, 0 = strictly >0%.
   --admission-bps NUMBER Exact/Solver admission; default is the live policy.
+  --funding-token ADDRESS Add an enumeration start from verified snapshot funding (repeatable).
+                        Uses its available amount as search cap; no funding discovery/injection.
+                        Existing default caps and rotation-dedup policy remain in effect.
   --budget-ms NUMBER     Historical single-pass window (default: 120000).
+  --effective-weth-input ETH  Fixed positive P in ETH units; online repricing only.
   --env-file FILE        Read RPC URL, public executor/owner and simulator path only.
   --executor ADDRESS --owner ADDRESS  Public execution identity, required through EV.
   --revm-bin FILE        Existing strict quote-simulation engine.
@@ -62,6 +66,8 @@ export function parseAtBlockArgs(argv: string[]) {
     "env-file": { type: "string" }, executor: { type: "string" }, owner: { type: "string" }, "revm-bin": { type: "string" },
     "execution-mode": { type: "string" },
     "executor-runtime-code": { type: "string" },
+    "funding-token": { type: "string", multiple: true },
+    "effective-weth-input": { type: "string" },
   } });
   if (v.help) return null;
   const block = Number(v.block), budgetMs = Number(v["budget-ms"] ?? "120000");
@@ -80,7 +86,35 @@ export function parseAtBlockArgs(argv: string[]) {
   for (const k of ["spread-bps", "admission-bps"] as const) {
     assert(v[k] === undefined || (/^\d+(?:\.\d+)?$/.test(v[k]!) && Number(v[k]) <= 10_000), `invalid --${k}`);
   }
-  return { ...v, executionMode, through: through as "prices" | "enumerate" | "solver" | "ev", block, budgetMs, out: resolve(v.out) };
+  const fundingTokens = [...new Set((v["funding-token"] ?? []).map(value => {
+    assert(ethers.isAddress(value) && value.toLowerCase() !== ethers.ZeroAddress, "invalid --funding-token address");
+    return ethers.getAddress(value).toLowerCase();
+  }))];
+  let fixedEffectiveWethInput: bigint | undefined;
+  if (v["effective-weth-input"] !== undefined) {
+    assert(!v.offline, "--effective-weth-input requires online repricing, not offline enumeration");
+    assert(/^\d+(?:\.\d{1,18})?$/.test(v["effective-weth-input"]), "invalid --effective-weth-input");
+    fixedEffectiveWethInput = ethers.parseEther(v["effective-weth-input"]);
+    assert(fixedEffectiveWethInput > 0n && fixedEffectiveWethInput <= ethers.MaxUint256, "invalid --effective-weth-input");
+  }
+  return { ...v, fixedEffectiveWethInput, fundingTokens, executionMode, through: through as "prices" | "enumerate" | "solver" | "ev", block, budgetMs, out: resolve(v.out) };
+}
+
+/** CLI-only search eligibility, never a synthetic funding offer. The caller
+ * validates the atomic snapshot; Planner/Solver retain actual funding checks. */
+export function historicalFundingStarts(
+  defaults: ReadonlyMap<string, { maxBorrow: bigint }>,
+  tokens: readonly string[],
+  sources: AdapterRuntimeSnapshot["funding"]["sources"],
+): Map<string, { maxBorrow: bigint }> {
+  const result = new Map(defaults);
+  for (const token of tokens) {
+    const source = sources.get(token);
+    assert(source && source.amount > 0n, `--funding-token ${token} has no positive verified funding in this snapshot; discover/revalidate Ready and reprice first`);
+    const previous = result.get(token)?.maxBorrow;
+    result.set(token, { maxBorrow: previous !== undefined && previous < source.amount ? previous : source.amount });
+  }
+  return result;
 }
 
 // Lossless data serialization only. Authority-bearing sessions are always reissued,
@@ -171,6 +205,8 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     const snapshot = (saved.runtime ?? saved) as AdapterRuntimeSnapshot;
     assert.equal(snapshot.sourceBlock, args.block, "saved price source differs from --block; reprice online first");
     assertAtomicBlockScanRuntime(snapshot);
+    cfg.pricedTokens = historicalFundingStarts(cfg.pricedTokens, args.fundingTokens, snapshot.funding.sources);
+    coarseCfg.pricedTokens = cfg.pricedTokens;
     const adapterIds = new Set([
       ...snapshot.graph.edges.map(edge => edge.adapterId),
       ...[...snapshot.funding.sources.values()].map(source => source.adapterId),
@@ -185,7 +221,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     const wallMs = performance.now() - start;
     save("enumeration.json", result);
     save("summary.json", { mode: "offline", inputSha256: sha256(inputBytes), block: args.block,
-      sourceHash: snapshot.sourceBlockHash, cfg: coarseCfg, wallMs, selection: result.selection, broadcast: false });
+      sourceHash: snapshot.sourceBlockHash, fundingTokens: args.fundingTokens, cfg: coarseCfg, wallMs, selection: result.selection, broadcast: false });
     console.log(atBlockJson({ block: args.block, stage: "enumerate", wallMs, selection: result.selection }));
     return;
   }
@@ -228,6 +264,8 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     }
   }
   assert.equal(instances.length + funding.length, ready.activeInstanceKeys.length);
+  for (const token of args.fundingTokens) assert(funding.some(f => f.asset.toLowerCase() === token),
+    `--funding-token ${token} is absent from Ready funding; CLI does not discover or inject assets`);
   const root = new StrictProductionRuntimeRoot({ catalog, readySource: ready.cutoff, readyGraph: graph,
     readyInstances: instances, readyFundingAssets: funding });
   const views = new StrictReadyGraphViewCoordinator({ catalog, ready, edges: graph });
@@ -256,6 +294,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     };
     await observeHeader(args.block);
     const prices = createBlockScanPriceRuntime({ provider, rpcUrl, ...identity, strictRuntimeRoot: root,
+      fixedEffectiveWethInput: args.fixedEffectiveWethInput,
       blockScanRuntimeAbort: abort, blockScanRethTransportScheduler: scheduler, blockScanCfg: cfg,
       recordPricing: () => {} });
     const planner = new TemplatePlanner(); planner.setGraph([...graph]);
@@ -291,7 +330,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
       ...(executorRuntimeCode ? { counterfactualExecutorCode: { address: executor.toLowerCase(), keccak256: executorRuntimeCode.keccak256 } } : {}),
       ...(implementation ? { implementation } : {}),
       topologyContainsFutureDiscovery: ready.cutoff.number > args.block, historicalNaturalDiscoveryProven: false,
-      broadcast: false, cfg, coarseCfg, policy, search, executor, owner, through: args.through, budgetMs: args.budgetMs };
+      broadcast: false, fixedEffectiveWethInput: args.fixedEffectiveWethInput, fundingTokens: args.fundingTokens, cfg, coarseCfg, policy, search, executor, owner, through: args.through, budgetMs: args.budgetMs };
     save("input.json", provenance);
     loop = new BlockScanRuntimeLoop({
       enabled: true, blockScanConfig: cfg, executionWorkers: [{ state, solver: new AnvilSolver(),
@@ -348,6 +387,13 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     await loop.runHead(args.block, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }, {
       through: args.through,
       onSnapshot: runtime => {
+        if (args.fundingTokens.length > 0) {
+          assertAtomicBlockScanRuntime(runtime);
+          cfg.pricedTokens = historicalFundingStarts(cfg.pricedTokens, args.fundingTokens, runtime.funding.sources);
+          coarseCfg.pricedTokens = cfg.pricedTokens;
+          save("funding-starts.json", { requested: args.fundingTokens, resolved: cfg.pricedTokens,
+            sourceBlock: runtime.sourceBlock, sourceBlockHash: runtime.sourceBlockHash });
+        }
         save("prices.json", { schemaVersion: 1, readyPath, readySha256: readyHash, runtime });
         console.log(atBlockJson({ stage: "prices", block: args.block, raw: runtime.pricing.mids.size,
           effective: [...(runtime.pricing.effectiveMids?.rows.values() ?? [])].filter(r => r.status === "quoted").length }));

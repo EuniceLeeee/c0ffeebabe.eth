@@ -12,6 +12,7 @@ export interface EkuboBinding {
   readonly poolKey: EkuboPoolKey;
   readonly coreCodeHash: string;
   readonly routerCodeHash: string;
+  readonly extensionCodeHash?: string;
   readonly decimals: readonly [number, number];
 }
 export interface EkuboIdentity extends VerifiedIdentity {

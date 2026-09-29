@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
 import { hookDataFor, SAT1_MAX_BUY, sat1Permissions } from "./sat1.js";
+import { sat1LocalExactMethod } from "./sat1-local.js";
 import {
   localZeroExactMethod,
   type ExactQuoteSemantics,
@@ -131,35 +132,47 @@ const feeHookRequestProgram: ExactRequestProgram<
   },
 };
 
-export const univ4FeeHookExact = {
-  methods: (input: ExactQuoteInput<FeeHookDescriptor, FeeHookRoute>) => Object.freeze([
-    localZeroExactMethod<FeeHookDescriptor, FeeHookRoute, FeeHookExactEvidence>(
-      "local-zero",
-      (input) => {
-        assertRoute(input.descriptor, input.route);
-        return zeroQuote(input);
-      },
-    ),
-    ...(supportsPrefix(input) ? [Object.freeze({
-      id: "univ4-fee-hook-quoter",
-      kind: "request-program" as const,
-      chainAmountQuote: true as const,
-      sequentialPrefix: true as const,
-      program: feeHookRequestProgram,
-    })] : []),
-  ]),
-  cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
-    poolId: descriptor.poolId,
-    poolKey: poolKeyProjection(descriptor.poolKey),
-    quoter: descriptor.managerBinding.quoter,
-    direction: [route.tokenIn, route.tokenOut],
-    hookData: hookDataFor(descriptor, executor, route.direction === "zero-for-one"),
-  }),
-} satisfies ExactQuoteSemantics<
-  FeeHookDescriptor,
-  FeeHookRoute,
-  FeeHookExactEvidence
->;
+// Quoter remains an explicit diagnostic/reference mode. Production Sat1 uses
+// one source-pinned state read plus integer local transitions; no prefix shape
+// or Family-name special case is needed for the local model.
+export function createUniv4FeeHookExact(sat1Mode: "local" | "quoter" = "local"):
+  ExactQuoteSemantics<FeeHookDescriptor, FeeHookRoute, FeeHookExactEvidence> {
+  return {
+    methods: (input: ExactQuoteInput<FeeHookDescriptor, FeeHookRoute>) => Object.freeze([
+      localZeroExactMethod<FeeHookDescriptor, FeeHookRoute, FeeHookExactEvidence>(
+        "local-zero",
+        (input) => {
+          assertRoute(input.descriptor, input.route);
+          return zeroQuote(input);
+        },
+      ),
+      ...(input.descriptor.hookModel === "sat1" && sat1Mode === "local" ? [sat1LocalExactMethod(current => {
+        assertRoute(current.descriptor, current.route);
+        assertAmount(current.amountIn);
+        if (current.descriptor.hookModel !== "sat1") throw new Error("unknown local hook model");
+        if (current.amountIn >= (1n << 127n)) throw new Error("sat1 exact input does not fit positive int128");
+        if (current.route.direction === "zero-for-one" && current.amountIn > SAT1_MAX_BUY) throw new Error("sat1 buy exceeds contract MAX_BUY");
+        if (current.prefix?.length && !current.trialState) throw new Error("sat1 sequential quote requires issued trial state");
+      })] : supportsPrefix(input) ? [Object.freeze({
+        id: "univ4-fee-hook-quoter",
+        kind: "request-program" as const,
+        chainAmountQuote: true as const,
+        sequentialPrefix: true as const,
+        program: feeHookRequestProgram,
+      })] : []),
+    ]),
+    cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
+      quoteMode: descriptor.hookModel === "sat1" ? sat1Mode : "quoter",
+      ...(descriptor.hookModel === "sat1" && sat1Mode === "local" ? { localModel: "sat1-post-entropy-v1" } : {}),
+      poolId: descriptor.poolId,
+      poolKey: poolKeyProjection(descriptor.poolKey),
+      quoter: descriptor.managerBinding.quoter,
+      direction: [route.tokenIn, route.tokenOut],
+      hookData: hookDataFor(descriptor, executor, route.direction === "zero-for-one"),
+    }),
+  };
+}
+export const univ4FeeHookExact = createUniv4FeeHookExact();
 
 function zeroQuote(input: Parameters<typeof exactEvidence>[0]) {
   return Object.freeze({

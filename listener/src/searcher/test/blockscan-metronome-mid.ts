@@ -1,20 +1,21 @@
+/** Synthetic amount-quote contract, not a protocol price or historical replay.
+ * Explicit effective amounts are required; raw mid metadata cannot fill gaps. */
+import assert from "node:assert/strict";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
-  detectBlockScanOpportunities,
-  type ProtocolMid,
-} from "../detector/blockscan-scanner.js";
+  scanBlockStateFromResolvedMids,
+  type ResolvedBlockScanMid,
+  type ResolvedBlockScanQuote,
+} from "../detector/blockscan-scanner-core.js";
 import type { TokenEdge } from "../planner/token-graph.js";
-import { PoolStateCache } from "../solver/pool-state-cache.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
 
 const BLOCK = 25_535_037;
 const UNIT = 10n ** 18n;
+const USDC_UNIT = 10n ** 6n;
 const V2_POOL = "0x0000000000000000000000000000000000003131";
-
-function assert(condition: boolean, message: string): asserts condition {
-  if (!condition) throw new Error(`FAIL: ${message}`);
-}
 
 function swap(tokenIn: string, tokenOut: string): TokenEdge {
   return {
@@ -25,10 +26,6 @@ function swap(tokenIn: string, tokenOut: string): TokenEdge {
     slotKind: "swap",
     ...deriveEdgeTaxonomy("swap"),
   };
-}
-
-function protocolKey(pool: string, tokenIn: string, tokenOut: string): string {
-  return `${pool.toLowerCase()}|${tokenIn.toLowerCase()}|${tokenOut.toLowerCase()}`;
 }
 
 const protocolEdge: TokenEdge = {
@@ -44,25 +41,36 @@ const edges = [
   protocolEdge,
   swap(ADDR.USDC, ADDR.MSUSD),
   swap(ADDR.MSUSD, ADDR.USDC),
+  { ...swap(ADDR.USDC, ADDR.WETH), target: "0x0000000000000000000000000000000000003132" },
 ];
-const cache = new PoolStateCache();
-cache.seedV2({
-  pool: V2_POOL,
-  token0: ADDR.USDC,
-  token1: ADDR.MSUSD,
-  reserve0: 1_000_000n * 10n ** 6n,
-  reserve1: 980_000n * UNIT,
-  feeBps: 30n,
-  blockNumber: BLOCK,
-});
+function quote(edge: TokenEdge, amountIn: bigint, amountOut: bigint): ResolvedBlockScanQuote {
+  return {
+    kind: "synthetic-effective",
+    pool: edge.target,
+    edges: [edge],
+    // Deliberately unusable legacy pricing metadata: only amounts may price.
+    mid: 0,
+    feeBps: 10_000,
+    depthProxy: 0,
+    quoteAmountIn: amountIn,
+    quoteAmountOut: amountOut,
+  };
+}
+const effectiveQuotes = new Map<string, ResolvedBlockScanQuote>([
+  [blockScanEdgeKey(edges[0]!), quote(edges[0]!, 98n * UNIT, 103n * USDC_UNIT)],
+  [blockScanEdgeKey(edges[1]!), quote(edges[1]!, 100n * USDC_UNIT, 98n * UNIT)],
+  [blockScanEdgeKey(edges[2]!), quote(edges[2]!, 98n * UNIT, 99n * USDC_UNIT)],
+  // One directed effective quote supplies the ETH reference; it cannot close a ring.
+  [blockScanEdgeKey(edges[3]!), quote(edges[3]!, 2_000n * USDC_UNIT, UNIT)],
+]);
 const pricedTokens = new Map([
-  [ADDR.USDC.toLowerCase(), { maxBorrow: 100_000n * 10n ** 6n }],
+  [ADDR.USDC.toLowerCase(), { maxBorrow: 100_000n * USDC_UNIT }],
 ]);
 
-function scan(protocolMids?: ReadonlyMap<string, ProtocolMid>) {
-  return detectBlockScanOpportunities({
+function scan(mids: ReadonlyMap<string, ResolvedBlockScanQuote>) {
+  return scanBlockStateFromResolvedMids({
     edges,
-    cache,
+    mids,
     sourceBlock: BLOCK,
     swapTouched: null,
     cfg: {
@@ -71,7 +79,6 @@ function scan(protocolMids?: ReadonlyMap<string, ProtocolMid>) {
       maxCandidates: 8,
       budgetMs: 2_000,
       pricedTokens,
-      protocolMids,
     },
   });
 }
@@ -85,27 +92,40 @@ assert(
   "hGUSDC adapter must expose family-owned current-N pricing state",
 );
 
-const beforeWarm = scan();
+const withoutProtocolQuote = new Map(effectiveQuotes);
+withoutProtocolQuote.delete(blockScanEdgeKey(protocolEdge));
+const beforeQuote = scan(withoutProtocolQuote);
 assert(
-  !beforeWarm.opportunities.some((opportunity) =>
+  !beforeQuote.opportunities.some((opportunity) =>
     opportunity.seedEdges.some((edge) => edge.adapterId === "metronome-hgusdc-exit")
   ),
-  "hGUSDC route must not emit before its prewarmed mid exists",
+  "hGUSDC route must not emit without its explicit effective amount quote",
 );
 
-const afterWarm = scan(new Map([[
-  protocolKey(ADDR.METRONOME_HGUSDC_ROUTER, ADDR.MSUSD, ADDR.USDC),
-  {
-    mid: 1.05e-12,
-    feeBps: 0,
-    depthIn: 1_000_000n * UNIT,
+// Runtime negative control for a malformed legacy caller that bypasses the type.
+// A seemingly profitable raw mark still cannot replace missing amount fields.
+const rawOnly = new Map<string, ResolvedBlockScanMid>(effectiveQuotes);
+const { quoteAmountIn: _input, quoteAmountOut: _output, ...rawMetadata } =
+  effectiveQuotes.get(blockScanEdgeKey(protocolEdge))!;
+rawOnly.set(blockScanEdgeKey(protocolEdge), {
+  ...rawMetadata, mid: 2e-12, feeBps: 0,
+});
+assert.throws(
+  () => {
+    // @ts-expect-error Raw rows are deliberately outside the effective-only API.
+    scan(rawOnly);
   },
-]]));
-const opportunity = afterWarm.opportunities.find((item) =>
+  "raw mid metadata cannot fill a missing effective amount quote",
+);
+
+const afterQuote = scan(effectiveQuotes);
+const opportunity = afterQuote.opportunities.find((item) =>
   item.seedEdges.some((edge) => edge.adapterId === "metronome-hgusdc-exit")
 );
-assert(opportunity !== undefined, "prewarmed hGUSDC mid should make scanner enumerate the ring");
+assert(opportunity !== undefined, "explicit hGUSDC amount output should make scanner enumerate the ring");
 assert(opportunity.flashToken === ADDR.USDC.toLowerCase(), "hGUSDC ring should rotate to USDC");
+assert(opportunity.searchSeed.searchCenter === 100n * USDC_UNIT, "effective input owns the search center");
+assert(Math.abs(opportunity.coarseSpreadBps! - 300) < 1e-8, "explicit amounts imply three percent coarse return");
 assert(opportunity.seedEdges[0].tokenIn.toLowerCase() === ADDR.USDC.toLowerCase(), "ring starts in USDC");
 assert(
   opportunity.seedEdges[opportunity.seedEdges.length - 1].tokenOut.toLowerCase() ===
@@ -113,4 +133,4 @@ assert(
   "ring closes in USDC",
 );
 
-console.log("blockscan-metronome-mid PASS (adapter warm -> scanner ring)");
+console.log("blockscan-metronome-mid PASS (synthetic effective amounts required; no raw-mid fallback)");

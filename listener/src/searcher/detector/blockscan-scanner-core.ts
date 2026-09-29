@@ -1,4 +1,4 @@
-import { buildBlockScanUsdView, usdViewStatistics, type BlockScanUsdView } from "../blockscan-usd-view.js";
+import { buildBlockScanEthView, ethViewStatistics, type BlockScanEthView } from "../blockscan-eth-view.js";
 import { DEFAULT_ALLOW_REPEATED_POOLS, resolvePairedEnumerationMethod, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
 import { enumeratePaired, resolvePairedEnumerationBackend, type PairedEnumerationBackend } from "./blockscan-paired-enumerator.js";
 import { canonicalTokenRing, cycleFingerprint } from "./cycle-fingerprint.js";
@@ -20,18 +20,19 @@ export interface BlockScanCoreConfig {
   deduplicateRotations?: boolean;
   /** Allow a logical pool/instance on multiple legs; final sim remains mandatory. */
   allowRepeatedPools?: boolean;
+  allowRepeatedTokens?: boolean;
   /** Optional reference-value floor: joint buy/sell prefixes for joint-dfs. */
   prefixPruningEnabled?: boolean;
   maxPrefixDrawdownBps?: number;
   /** Maximum compatible buy/sell signal pairs per token; defaults to 20. */
-  usdSignalPairsPerToken?: number;
+  ethSignalPairsPerToken?: number;
   /** Top N distinct neighbor tokens per direction; 0 disables the token cap. */
   hopTokensPerStep?: number;
   /** Top M distinct pools per ordered token pair; 0 disables the pool cap. */
   hopPoolsPerPair?: number;
   maxHops: number;
   minSpreadBps: number;
-  /** Historical caller compatibility only; DFS always requires a paired USD signal. */
+  /** Historical caller compatibility only; DFS always requires a paired ETH-value signal. */
   requireDislocatedPair?: boolean;
   /**
    * Coarse spread floor for exact-refine admission. Rings above minSpreadBps
@@ -68,7 +69,7 @@ export interface BlockScanOutcome {
     readonly forcedSelectionCount: number;
   };
   debug?: { skippedVenues: number; capitalRejected: number };
-  enumeration?: { algorithm: "joint-dfs" | "paired-dfs" | "paired-layered"; backend: PairedEnumerationBackend } & ReturnType<typeof usdViewStatistics> & ReturnType<typeof enumeratePaired>;
+  enumeration?: { algorithm: "joint-dfs" | "paired-dfs" | "paired-layered"; backend: PairedEnumerationBackend } & ReturnType<typeof ethViewStatistics> & ReturnType<typeof enumeratePaired>;
 }
 
 export interface BlockScanScanTiming {
@@ -122,6 +123,13 @@ export interface ResolvedBlockScanMid {
   readonly depthProxy: number;
 }
 
+/** Amount-bearing rows admitted by the effective-price boundary. Raw mids are
+ * deliberately not assignable to the enumeration input. */
+export interface ResolvedBlockScanQuote extends ResolvedBlockScanMid {
+  readonly quoteAmountIn: bigint;
+  readonly quoteAmountOut: bigint;
+}
+
 export type ResolvedRingScoreRejection =
   | "empty_route"
   | "not_closed_continuous"
@@ -169,7 +177,7 @@ type VenueMid = ResolvedBlockScanMid;
 interface RankedOpportunity {
   key: string;
   opportunity: BlockScanOpportunity;
-  rank: number;
+  rotationRank: number;
   estSpreadBps: number;
 }
 
@@ -178,8 +186,9 @@ export function scanBlockStateFromResolvedMids(input: {
   sourceBlock: number;
   swapTouched: Set<string> | null;
   cfg: BlockScanCoreConfig;
-  mids: ReadonlyMap<string, ResolvedBlockScanMid>;
-  usdView?: BlockScanUsdView;
+  mids: ReadonlyMap<string, ResolvedBlockScanQuote>;
+  /** Optional precomputed view of these same edges and effective amounts. */
+  ethView?: BlockScanEthView;
   routeEligible?: (edges: readonly TokenEdge[]) => boolean;
   edgeEligible?: (edge: TokenEdge) => boolean;
   captureCoarseEnumeration?: boolean;
@@ -190,8 +199,8 @@ export function scanBlockStateFromResolvedMids(input: {
     (!input.edgeEligible || input.edgeEligible(edge)));
   const edgesById = new Map(eligibleEdges.map(edge => [blockScanEdgeKey(edge), edge]));
   const allowRepeatedPools = input.cfg.allowRepeatedPools ?? DEFAULT_ALLOW_REPEATED_POOLS;
-  const view = input.usdView?.allowRepeatedPools === allowRepeatedPools ? input.usdView
-    : buildBlockScanUsdView(eligibleEdges, input.mids, input.cfg.usdSignalPairsPerToken, allowRepeatedPools);
+  const view = input.ethView?.allowRepeatedPools === allowRepeatedPools ? input.ethView
+    : buildBlockScanEthView(eligibleEdges, input.mids, input.cfg.ethSignalPairsPerToken, allowRepeatedPools);
   const quotes = view.quotes.filter(q => edgesById.has(q.id));
   const ranked = new Map<string, RankedOpportunity>();
   let capitalRejected = 0;
@@ -201,6 +210,7 @@ export function scanBlockStateFromResolvedMids(input: {
   const dfs = enumeratePaired({
     quotes, signals: view.signals, minSpreadBps: input.cfg.minSpreadBps,
     maxHops: input.cfg.maxHops, deadlineAtMs, allowRepeatedPools,
+    allowRepeatedTokens: input.cfg.allowRepeatedTokens,
     hopTokensPerStep: input.cfg.hopTokensPerStep,
     hopPoolsPerPair: input.cfg.hopPoolsPerPair,
     prefixPruningEnabled: input.cfg.prefixPruningEnabled,
@@ -213,17 +223,17 @@ export function scanBlockStateFromResolvedMids(input: {
       // The enumerator joins from the signal token using whole-cycle profit,
       // then rotates the completed cycle to this funded execution start.
       if (input.routeEligible && !input.routeEligible(seedEdges)) return;
-      if (!isAdmissibleBlockScanRingShape(seedEdges, input.cfg.pricedTokens)) return;
-      const firstVenue = readEdgeVenueMid(seedEdges[0]!, input.mids);
-      if (!firstVenue || !Number.isFinite(estSpreadBps)) return;
+      // All enumerator backends emit closed, continuous, funded cycles from
+      // the supplied quotes. Only the numeric conversion may still overflow.
+      if (!Number.isFinite(estSpreadBps)) return;
       const flashToken = seedEdges[0]!.tokenIn.toLowerCase();
-      const maxBorrow = input.cfg.pricedTokens.get(flashToken)?.maxBorrow ?? 0n;
+      const maxBorrow = input.cfg.pricedTokens.get(flashToken)!.maxBorrow;
       // The published effective quote owns P. Pool-depth proxies must not
       // recalculate or cap it; actual funding and amount quotes constrain execution.
-      const searchCenter = firstVenue.quoteAmountIn ?? 0n;
-      if (searchCenter <= 0n) return;
+      const searchCenter = path[0]!.den;
       if (searchCenter > maxBorrow) { capitalRejected++; return; }
-      const ringTokens = ringTokensWithoutRepeat(seedEdges), canonicalRing = canonicalTokenRing(ringTokens);
+      const ringTokens = seedEdges.map(edge => edge.tokenIn.toLowerCase());
+      const canonicalRing = canonicalTokenRing(ringTokens);
       const opportunity: BlockScanOpportunity = {
         kind: "block-scan-arb", sourceBlock: input.sourceBlock, stateBlock: input.sourceBlock,
         cycleId: canonicalRing.join("|"), cycleFingerprint: cycleFingerprint(input.sourceBlock, ringTokens),
@@ -233,13 +243,15 @@ export function scanBlockStateFromResolvedMids(input: {
         affectedTokens: canonicalRing,
       };
       const key = directedRouteFingerprint(seedEdges, input.cfg.deduplicateRotations === true);
-      const entry = { key, opportunity, rank: expectedReturnRank(estSpreadBps, searchCenter, maxBorrow), estSpreadBps };
+      // Preserve the existing funding-start representative when rotations are
+      // merged. This score must not influence ordering between distinct cycles.
+      const entry = { key, opportunity, rotationRank: fundingRotationRank(estSpreadBps, searchCenter, maxBorrow), estSpreadBps };
       const previous = ranked.get(key);
-      if (!previous || entry.rank > previous.rank) ranked.set(key, entry);
+      if (!previous || entry.rotationRank > previous.rotationRank) ranked.set(key, entry);
     },
   }, method, backend);
   const finalizing = Date.now();
-  const ordered = [...ranked.values()].sort((a, b) => b.rank - a.rank ||
+  const ordered = [...ranked.values()].sort((a, b) => b.estSpreadBps - a.estSpreadBps ||
     a.key.localeCompare(b.key));
   const opportunities = ordered.slice(0, input.cfg.maxCandidates).map(entry => entry.opportunity);
   const result: BlockScanOutcome = {
@@ -254,7 +266,7 @@ export function scanBlockStateFromResolvedMids(input: {
       selectedCount: opportunities.length, forcedSelectionCount: 0 },
     debug: { skippedVenues: eligibleEdges.length - quotes.length, capitalRejected },
     enumeration: { algorithm: method === "joint-dfs" ? "joint-dfs" : method === "dfs" ? "paired-dfs" : "paired-layered", backend,
-      ...usdViewStatistics(view, input.cfg.minSpreadBps), ...dfs },
+      ...ethViewStatistics(view, input.cfg.minSpreadBps), ...dfs },
   };
   input.onTiming?.({ preprocessing: preprocessingFinished - started, pairs: 0,
     general: finalizing - preprocessingFinished, finalization: Date.now() - finalizing, total: Date.now() - started });
@@ -510,22 +522,6 @@ function isClosedContinuousRing(edges: TokenEdge[]): boolean {
   return edges[edges.length - 1].tokenOut.toLowerCase() === edges[0].tokenIn.toLowerCase();
 }
 
-function ringTokensWithoutRepeat(edges: TokenEdge[]): string[] {
-  if (edges.length === 0) return [];
-  const tokens = [edges[0].tokenIn.toLowerCase(), ...edges.map((edge) => edge.tokenOut.toLowerCase())];
-  if (tokens.length > 1 && tokens[tokens.length - 1] === tokens[0]) tokens.pop();
-  return tokens;
-}
-
-export function isAdmissibleBlockScanRingShape(
-  edges: TokenEdge[],
-  _pricedTokens: ReadonlyMap<string, { maxBorrow: bigint }>,
-): boolean {
-  // Repeated tokens (including a funded token) are valid bounded walks.
-  // Continuity/closure still apply; amount-sensitive execution stays in Solver.
-  return edges.length >= 2 && isClosedContinuousRing(edges);
-}
-
 function uniqueLowercase(values: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -560,9 +556,7 @@ function directedRouteFingerprint(edges: TokenEdge[], deduplicateRotations: bool
   return canonical;
 }
 
-function expectedReturnRank(estSpreadBps: number, searchCenter: bigint, maxBorrow: bigint): number {
-  if (maxBorrow <= 0n || searchCenter <= 0n) return 0;
-  const capitalFraction = Number(searchCenter) / Number(maxBorrow);
-  if (!Number.isFinite(capitalFraction) || capitalFraction <= 0) return 0;
-  return estSpreadBps * Math.min(1, capitalFraction);
+function fundingRotationRank(estSpreadBps: number, searchCenter: bigint, maxBorrow: bigint): number {
+  // Effective input is positive and funding admission has already checked P <= cap.
+  return estSpreadBps * (Number(searchCenter) / Number(maxBorrow));
 }

@@ -5,6 +5,7 @@ import { blockScanEdgeKey, type BlockSource } from "./venues/blockscan-state-cap
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import type { StrictPricingPublication } from "./strict-current-runtime-coordinator.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
+import type { TokenEdge } from "./planner/token-graph.js";
 
 export interface RawTokenRate {
   /** WETH wei per input-token raw unit; token decimals must NOT be applied again. */
@@ -48,22 +49,34 @@ const bestRate = (rates: readonly RawTokenRate[]): RawTokenRate =>
 
 /** Approximate marks for sizing only, never trusted final-EV valuation. No RPC. */
 export function tokenToWethReferences(
-  pricing: { graph: { edges: readonly import("./planner/token-graph.js").TokenEdge[] };
+  pricing: { graph: { edges: readonly TokenEdge[] };
     mids: ReadonlyMap<string, { mid: number; feeBps: number }>;
     coverage: { resolvedEdgeKeys: readonly string[] } },
   weth: string,
 ): ReadonlyMap<string, RawTokenRate> {
-  const pairs = new Map<string, { from: string; to: string; instances: Map<string, RawTokenRate> }>();
   const resolved = new Set(pricing.coverage.resolvedEdgeKeys);
-  for (const edge of pricing.graph.edges) {
-    if (edge.leavesStandingPosition) continue;
-    const key = blockScanEdgeKey(edge);
-    if (!resolved.has(key)) continue;
+  return tokenToWethReferencesFromRates(pricing.graph.edges, key => {
+    if (!resolved.has(key)) return null;
     const mid = pricing.mids.get(key);
-    if (!mid || !Number.isFinite(mid.feeBps) || mid.feeBps < 0 || mid.feeBps >= 10_000) continue;
+    if (!mid || !Number.isFinite(mid.feeBps) || mid.feeBps < 0 || mid.feeBps >= 10_000) return null;
     const rate = ratio(mid.mid);
     const residualFee = ratio(10_000 - mid.feeBps);
-    if (!rate || !residualFee) continue;
+    return rate && residualFee ? multiply(rate, { num: residualFee.num, den: residualFee.den * 10_000n }) : null;
+  }, weth);
+}
+
+/** Shared directed valuation policy. The caller supplies validated positive raw-unit ratios;
+ * exact amount quotes never need a Number conversion or a second fee adjustment. */
+export function tokenToWethReferencesFromRates(
+  edges: readonly TokenEdge[],
+  rateFor: (edgeKey: string) => RawTokenRate | null | undefined,
+  weth: string,
+): ReadonlyMap<string, RawTokenRate> {
+  const pairs = new Map<string, { from: string; to: string; instances: Map<string, RawTokenRate> }>();
+  for (const edge of edges) {
+    if (edge.leavesStandingPosition) continue;
+    const rate = rateFor(blockScanEdgeKey(edge));
+    if (!rate) continue;
     const from = edge.tokenIn.toLowerCase();
     const to = edge.tokenOut.toLowerCase();
     if (from === to) continue;
@@ -73,11 +86,10 @@ export function tokenToWethReferences(
       pair = { from, to, instances: new Map() };
       pairs.set(pairKey, pair);
     }
-    const adjusted = multiply(rate, { num: residualFee.num, den: residualFee.den * 10_000n });
     const instance = edgeInstanceKey(edge);
     const previous = pair.instances.get(instance);
     // Keep the best available execution variant of each logical venue.
-    if (!previous || compareRates(adjusted, previous) > 0) pair.instances.set(instance, adjusted);
+    if (!previous || compareRates(rate, previous) > 0) pair.instances.set(instance, rate);
   }
   const directed = [...pairs.values()].map(pair => ({
     from: pair.from, to: pair.to, rate: bestRate([...pair.instances.values()]),

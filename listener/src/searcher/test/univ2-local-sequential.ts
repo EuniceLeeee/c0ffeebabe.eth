@@ -10,6 +10,8 @@ import { quoteV2ExactInput } from "../solver/v2-constant-product-math.js";
 import type { UniV2Descriptor } from "../venues/swaps/univ2-family/types.js";
 import type { ExactQuoteInput } from "../venues/adapter-family-plugin.js";
 import type { UniV2Route } from "../venues/swaps/univ2-family/types.js";
+import { trialView } from "../venues/local-state-models/test/trial-view.js";
+import { applyExactTrialState, emptyExactTrialState } from "../exact-trial-state.js";
 
 const addr = (n: number) => ethers.toBeHex(n, 20);
 const descriptor = { familyId: "univ2-standard", lineageId: "univ2-standard", instanceKey: addr(3),
@@ -22,12 +24,23 @@ const [forward, reverse] = univ2Routes.project({ descriptor });
 const exact = createUniV2Exact();
 function input(amountIn: bigint, route = forward!, retain = true): ExactQuoteInput<UniV2Descriptor, UniV2Route> {
   return { descriptor, route, amountIn, source, executor: addr(5), runtimeEvidence: [],
-    ...(retain ? { retainLocalState: true as const } : {}) };
+    ...(retain ? { trialState: trialView() } : {}) };
+}
+function advance(current: ReturnType<typeof input>, previous: ReturnType<typeof initial>) {
+  const attempt = trialQuote(current)({ ...current, trialState: trialView(previous) });
+  assert.equal(attempt.status, "quoted");
+  if (attempt.status !== "quoted") throw new Error("missing retained state");
+  return attempt.result;
 }
 function method(current: ReturnType<typeof input>) {
   const selected = exact.methods(current).find(m => m.kind === "request-program");
   assert(selected?.kind === "request-program");
   return selected;
+}
+function trialQuote(current: ReturnType<typeof input>) {
+  const quote = method(current).trialState?.quote;
+  assert(typeof quote === "function", "expected supported V2 trial model");
+  return quote;
 }
 function initial(current: ReturnType<typeof input>, reserve0 = 1_000_000n, reserve1 = 2_000_000n,
   balance0 = reserve0, balance1 = reserve1) {
@@ -46,25 +59,24 @@ function initial(current: ReturnType<typeof input>, reserve0 = 1_000_000n, reser
 test("V2 carries actual post balances, both directions, without mutating another trial", () => {
   const first = initial(input(1_000n));
   const repeat = input(first.amountOut, reverse!);
-  const transition = method(repeat).isolatedLocalState!;
-  const second = transition.quote(repeat, first.evidence);
+  const second = advance(repeat, first);
   assert.equal(second.amountOut, quoteV2ExactInput(2_000_000n - first.amountOut, 1_001_000n, first.amountOut, 30n));
   assert.notEqual(second.amountOut, initial(repeat).amountOut, "initial state would give a wrong repeat quote");
   const other = initial(input(2_000n));
   assert.notEqual(other.amountOut, first.amountOut);
-  assert.deepEqual(transition.quote(repeat, first.evidence), second, "interleaved amount must not mutate first state");
+  assert.deepEqual(advance(repeat, first), second, "interleaved amount must not mutate first state");
   assert.deepEqual(initial(input(1_000n)), first, "source reserves must remain unchanged");
   const sameDirection = input(5_000n);
-  assert.equal(method(sameDirection).isolatedLocalState!.quote(sameDirection, first.evidence).amountOut,
+  assert.equal(advance(sameDirection, first).amountOut,
     quoteV2ExactInput(1_001_000n, 2_000_000n - first.amountOut, 5_000n, 30n));
-  assert.throws(() => transition.quote(repeat, initial(input(1_000n, forward!, false)).evidence), /unavailable/);
-  assert.throws(() => transition.quote({ ...repeat, source: { ...source, generation: 2 } }, first.evidence), /foreign/);
+  assert.equal(trialQuote(repeat)({ ...repeat,
+    trialState: trialView(initial(input(1_000n, forward!, false))) }).status, "not-applicable");
 });
 
 test("V2 unsynced donations enter both reserves, overflow and deficits fail closed", () => {
   const first = initial(input(1_000n), 1_000_000n, 2_000_000n, 1_000_900n, 2_000_700n);
   const next = input(first.amountOut, reverse!);
-  assert.equal(method(next).isolatedLocalState!.quote(next, first.evidence).amountOut,
+  assert.equal(advance(next, first).amountOut,
     quoteV2ExactInput(2_000_700n - first.amountOut, 1_001_900n, first.amountOut, 30n));
   assert.equal(initial(input(1_000n), 1_000_000n, 2_000_000n, UNIV2_MAX_RESERVE - 1n).amountOut, 0n);
   assert.equal(initial(input(1_000n), 1_000_000n, 2_000_000n, 1_000_000n, UNIV2_MAX_RESERVE + 10_000n).amountOut, 0n);
@@ -75,19 +87,27 @@ test("ordinary reads unchanged; unsupported amount models and taxed transfers do
   assert.equal(method(input(1_000n, forward!, false)).program.buildRequests(input(1_000n, forward!, false)).length, 2);
   assert.equal(method(input(1_000n)).program.buildRequests(input(1_000n)).length, 3);
   const poolQuoted = { ...descriptor, quoteModel: { kind: "pool-get-amount-out", probe0: 1n, probe1: 1n } } as UniV2Descriptor;
-  assert.equal(method({ ...input(1_000n), descriptor: poolQuoted }).isolatedLocalState, undefined);
+  assert.equal(method({ ...input(1_000n), descriptor: poolQuoted }).trialState, undefined);
   const taxed = { ...descriptor, tokenTransfers: [{ kind: "verified-transfer-tax", token: addr(1), codeHash: "tax",
     taxNumerator: 100n, taxDenominator: 10_000n }] } as unknown as UniV2Descriptor;
-  assert.equal(method({ ...input(1_000n), descriptor: taxed }).isolatedLocalState, undefined);
+  assert.deepEqual(method({ ...input(1_000n), descriptor: taxed }).trialState,
+    { unsupportedReason: "univ2 local fee or token-transfer transition model is unproven" });
 });
 
 test("warm local V2 transition same-work timing (descriptive, no RPC)", () => {
   const first = initial(input(1_000n));
   const current = input(first.amountOut, reverse!);
-  const transition = method(current).isolatedLocalState!;
-  for (let i = 0; i < 100; i++) transition.quote(current, first.evidence);
+  const transition = trialQuote(current);
+  const snapshot = applyExactTrialState(emptyExactTrialState(), first.stateChanges!, first.stateEffects);
+  const retained = { ...current, trialState: snapshot.view };
+  for (let i = 0; i < 100; i++) transition(retained);
   const count = 2_000, t = performance.now();
-  for (let i = 0; i < count; i++) transition.quote(current, first.evidence);
-  console.log(JSON.stringify({ benchmark: "v2-local-transition", count, totalMs: performance.now() - t,
-    physicalReadsOnRepeat: 0, scope: "same frozen evidence; pure transition, not full Solver/live" }));
+  for (let i = 0; i < count; i++) transition(retained);
+  const pureQuoteMs = performance.now() - t, result = transition(retained);
+  assert(result.status === "quoted");
+  const applyStarted = performance.now();
+  for (let i = 0; i < count; i++) applyExactTrialState(snapshot, result.result.stateChanges!, result.result.stateEffects);
+  console.log(JSON.stringify({ benchmark: "v2-local-transition", count, pureQuoteMs,
+    snapshotApplyMs: performance.now() - applyStarted, physicalReadsOnRepeat: 0,
+    scope: "same frozen source/post-state; pure quote and framework publication measured separately; not full Solver/live" }));
 });

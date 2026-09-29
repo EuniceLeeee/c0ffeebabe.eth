@@ -1,5 +1,5 @@
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
-import { MOONISWAP_ACTION, assertRoute, assertUint, lower, nonzero } from "./codec.js";
+import { MAX_UINT, MOONISWAP_ACTION, assertRoute, assertUint, lower, nonzero } from "./codec.js";
 import type { MooniswapDescriptor, MooniswapRoute, MooniswapQuoteEvidence } from "./types.js";
 export const mooniswapExecution = {
   runtimeProjection: ({ hop }) => ({ allowanceSpender: hop.target, prewarmQuoteCalls: [] }),
@@ -12,8 +12,10 @@ export const mooniswapExecution = {
         e.routeKey !== input.route.routeKey || e.binding !== input.route.bindingRef.fingerprint ||
         lower(e.executor) !== lower(input.executor) || !e.governance) throw new Error("mooniswap incompatible execution evidence");
     nonzero(e.governance);
+    // The shared conditional approval reuses a sufficient live allowance;
+    // only this Family chooses the standing grant, not the central pipeline.
     return { requirements: [{ kind: "approve" as const, token: input.route.tokenIn,
-      spender: input.descriptor.pool, amount: input.amountIn }], nodes: [{ adapterId: MOONISWAP_ACTION, target: input.descriptor.pool,
+      spender: input.descriptor.pool, amount: MAX_UINT }], nodes: [{ adapterId: MOONISWAP_ACTION, target: input.descriptor.pool,
       tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut, amount: input.amountIn,
       params: { minAmountOut: input.minAmountOut }, children: [] }] };
   },

@@ -11,9 +11,9 @@ test("rebuild timeout overrides the legacy timeout without changing its environm
   assert.equal(resolveRebuildRevmTimeoutMs({ SEARCHER_REBUILD_REVM_TIMEOUT_MS: String(Number.MAX_SAFE_INTEGER) }), Number.MAX_SAFE_INTEGER);
 });
 
-test("absent rebuild override retains the legacy timeout and 60000ms default", () => {
+test("absent rebuild override retains explicit legacy timeout with a 180000ms startup default", () => {
   assert.equal(resolveRebuildRevmTimeoutMs({ SEARCHER_REVM_TIMEOUT_MS: "45000" }), 45_000);
-  assert.equal(resolveRebuildRevmTimeoutMs({}), 60_000);
+  assert.equal(resolveRebuildRevmTimeoutMs({}), 180_000);
 });
 
 test("invalid explicit rebuild timeout fails instead of falling back, without echoing input", () => {

@@ -1,16 +1,27 @@
+import { ethers } from "ethers";
 import type { RouteProjectionSemantics } from "../../adapter-family-plugin.js";
 import { routeKey } from "../../adapter-family-identifiers.js";
 import { hashCanonical } from "../../canonical-value.js";
 import { EKUBO_CORE, EKUBO_ROUTER } from "../ekubo/abi.js";
-import { ekuboDirection, ekuboPoolId } from "../ekubo/pool-key.js";
-import { vanillaKey } from "./codec.js";
+import { ekuboDirection, ekuboPoolId, ekuboGraphToken, ekuboPoolExtension } from "../ekubo/pool-key.js";
+import { EKUBO_SUPPORTED_CORE_HASH, EKUBO_SUPPORTED_ROUTER_HASH, EKUBO_SUPPORTED_TWAMM_HASH } from "./extension.js";
+import { supportedKey } from "./codec.js";
 import { staticBinding } from "./instance.js";
 import { EKUBO_ACTION_ID, EKUBO_FAMILY_ID, EKUBO_LINEAGE } from "./manifest.js";
 import type { EkuboDescriptor, EkuboRoute } from "./types.js";
 
 const key = (poolId: string, isToken1: boolean) => `${EKUBO_FAMILY_ID}:${poolId}:${Number(isToken1)}`;
+function assertBehavior(descriptor: EkuboDescriptor): void {
+  const extension = ekuboPoolExtension(descriptor.poolKey.config);
+  if ((extension !== ethers.ZeroAddress && descriptor.extensionCodeHash !== EKUBO_SUPPORTED_TWAMM_HASH) ||
+      ((extension !== ethers.ZeroAddress || descriptor.poolKey.token0 === ethers.ZeroAddress) &&
+        (descriptor.coreCodeHash !== EKUBO_SUPPORTED_CORE_HASH || descriptor.routerCodeHash !== EKUBO_SUPPORTED_ROUTER_HASH))) {
+    throw new Error("ekubo missing supported behavior binding");
+  }
+}
 export function assertRoute(descriptor: EkuboDescriptor, route: EkuboRoute): void {
-  const poolKey = vanillaKey(descriptor.poolKey);
+  const poolKey = supportedKey(descriptor.poolKey);
+  assertBehavior(descriptor);
   if (descriptor.familyId !== EKUBO_FAMILY_ID || descriptor.lineageId !== EKUBO_LINEAGE ||
       descriptor.poolId !== ekuboPoolId(poolKey) || descriptor.instanceKey !== descriptor.poolId ||
       route.familyId !== descriptor.familyId || route.lineageId !== descriptor.lineageId || route.instanceKey !== descriptor.instanceKey ||
@@ -21,12 +32,13 @@ export function assertRoute(descriptor: EkuboDescriptor, route: EkuboRoute): voi
 }
 export const ekuboRoutes = {
   project({ descriptor }) {
-    const poolKey = vanillaKey(descriptor.poolKey);
+    const poolKey = supportedKey(descriptor.poolKey);
+    assertBehavior(descriptor);
     const fingerprint = hashCanonical(staticBinding(descriptor));
     return Object.freeze([false, true].map(isToken1 => Object.freeze({
       familyId: descriptor.familyId, lineageId: descriptor.lineageId, instanceKey: descriptor.instanceKey,
       routeKey: routeKey(key(descriptor.poolId, isToken1)), poolId: descriptor.poolId, isToken1,
-      tokenIn: isToken1 ? poolKey.token1 : poolKey.token0, tokenOut: isToken1 ? poolKey.token0 : poolKey.token1,
+      tokenIn: ekuboGraphToken(isToken1 ? poolKey.token1 : poolKey.token0), tokenOut: ekuboGraphToken(isToken1 ? poolKey.token0 : poolKey.token1),
       taxonomy: { slotKind: "swap" as const }, bindingRef: { bindingKey: descriptor.poolId, fingerprint },
       runtimeRequirements: descriptor.runtimeRequirements,
     })));

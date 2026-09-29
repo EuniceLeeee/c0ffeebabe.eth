@@ -1,9 +1,8 @@
 /**
- * Legacy/trusted-harness compatibility facade.
+ * Historical raw-mid diagnostics only.
  *
- * Production must import blockscan-scanner-production.ts instead. This file
- * preserves the historical cache + protocolMids API byte-for-byte at its call
- * sites while adapting it to the single resolved-mid scanner kernel.
+ * Enumeration requires explicit effective amounts through the scanner kernel
+ * or the atomic production wrapper. Cache/protocol mids cannot enumerate.
  */
 import type { TokenEdge } from "../planner/token-graph.js";
 import { v4PoolId } from "../planner/token-graph.js";
@@ -18,75 +17,10 @@ import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
   "../strict-production-family-declarations.js";
 import {
-  blockScanSelectionProvenance,
   estimateResolvedRingSpreadBps,
-  isAdmissibleBlockScanRingShape,
-  scanBlockStateFromResolvedMids,
-  type BlockScanCoreConfig,
-  type BlockScanOutcome as CoreBlockScanOutcome,
-  type NaturalBlockScanSelectionProvenance,
 } from "./blockscan-scanner-core.js";
 
-export { isAdmissibleBlockScanRingShape };
-export type { NaturalBlockScanSelectionProvenance };
-
 export interface ProtocolMid extends ExternalMidQuote {}
-
-export interface BlockScanConfig extends BlockScanCoreConfig {
-  protocolMids?: ReadonlyMap<string, ProtocolMid>;
-}
-
-export interface BlockScanOutcome extends CoreBlockScanOutcome {
-  readonly selectionProvenance: NaturalBlockScanSelectionProvenance;
-}
-
-export function naturalBlockScanSelectionProvenance<T>(input: {
-  readonly naturallyEnumerated: readonly T[];
-  readonly selected: readonly T[];
-  readonly maxCandidates: number;
-}): NaturalBlockScanSelectionProvenance {
-  const naturalEntries = new Set(input.naturallyEnumerated);
-  return Object.freeze({
-    kind: "natural_coarse_ranked",
-    selectionMode: "production",
-    forcedSelectionCount: input.selected.reduce(
-      (count, entry) => count + (naturalEntries.has(entry) ? 0 : 1),
-      0,
-    ),
-    eligibleCandidateCount: input.naturallyEnumerated.length,
-    selectedCandidateCount: input.selected.length,
-    maxCandidates: input.maxCandidates,
-  });
-}
-
-export function detectBlockScanOpportunities(input: {
-  edges: TokenEdge[];
-  cache: PoolStateCache;
-  sourceBlock: number;
-  swapTouched: Set<string> | null;
-  cfg: BlockScanConfig;
-}): BlockScanOutcome {
-  const { protocolMids, ...cfg } = input.cfg;
-  const outcome = scanBlockStateFromResolvedMids({
-    edges: input.edges,
-    sourceBlock: input.sourceBlock,
-    swapTouched: input.swapTouched,
-    cfg,
-    mids: buildLegacyMidBook(
-      input.edges,
-      input.cache,
-      input.sourceBlock,
-      protocolMids,
-    ),
-  });
-  return Object.freeze({
-    ...outcome,
-    selectionProvenance: blockScanSelectionProvenance(
-      outcome,
-      input.cfg.maxCandidates,
-    ),
-  });
-}
 
 /** Historical diagnostic signature retained for the trusted harnesses. */
 export function estimateBlockScanRingSpreadBps(

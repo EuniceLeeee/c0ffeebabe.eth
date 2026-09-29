@@ -18,17 +18,21 @@ export const PANCAKE_V3_STATE_READER = ethers.getAddress("0x80898f80cFA3Fa3AbF41
 export const PANCAKE_V3_STATE_READER_INTERFACE = stateInterface("uint32");
 const UNI_READER = Object.freeze({ address: UNIV3_STATE_READER, iface: UNIV3_STATE_READER_INTERFACE });
 const PANCAKE_READER = Object.freeze({ address: PANCAKE_V3_STATE_READER, iface: PANCAKE_V3_STATE_READER_INTERFACE });
+// Also usable by protocol Families executing an internal, reverse-bound V3 swap.
+// This is state decoding, not an issued descriptor or admission authority.
+export type UniV3StateBinding = Pick<UniV3Descriptor,
+  "pool" | "token0" | "token1" | "fee" | "tickSpacing" | "factoryBinding">;
 
 /** Infrastructure compatibility, never admission. Other reverse-verified
  * factories keep the existing direct TickLens state path. */
-export function resolveUniV3StateReader(descriptor: UniV3Descriptor) {
+export function resolveUniV3StateReader(descriptor: UniV3StateBinding) {
   const factory = descriptor.factoryBinding.factory;
   if (sameAddress(factory, UNIV3_CANONICAL_FACTORY)) return UNI_READER;
   if (sameAddress(factory, PANCAKE_V3_FACTORY)) return PANCAKE_READER;
   return null;
 }
 
-export function uniV3StateRequestData(descriptor: UniV3Descriptor): string {
+export function uniV3StateRequestData(descriptor: UniV3StateBinding): string {
   const reader = resolveUniV3StateReader(descriptor);
   if (reader === null) throw new Error("univ3 state reader compatibility unavailable");
   return reader.iface.encodeFunctionData("getFullStateWithRelativeBitmaps", [
@@ -42,7 +46,7 @@ export function uniV3StateRequestData(descriptor: UniV3Descriptor): string {
 
 /** Decode a complete sparse response; absent words are zero only inside its
  * source-bound requested range. Missing/extra tick bits are malformed state. */
-export function readUniV3State(data: string, descriptor: UniV3Descriptor): V3PoolState {
+export function readUniV3State(data: string, descriptor: UniV3StateBinding): V3PoolState {
   const reader = resolveUniV3StateReader(descriptor);
   if (reader === null) throw new Error("univ3 state reader compatibility unavailable");
   // This ABI has one dynamic tuple with an 18-word head and two arrays of

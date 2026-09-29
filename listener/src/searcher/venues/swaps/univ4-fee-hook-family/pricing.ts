@@ -61,7 +61,8 @@ export const univ4FeeHookPricing = {
           !sameAddress(route.tokenIn, buy ? descriptor.graphToken0 : descriptor.graphToken1) ||
           !sameAddress(route.tokenOut, buy ? descriptor.graphToken1 : descriptor.graphToken0)) throw new Error("Sat1 price route mismatch");
         // Raw marginal curve derivative only. Amount-sensitive effective/Solver
-        // both use exact.ts and the real Quoter, including limits/cooldown.
+        // both use exact.ts's post-entropy integer model (or explicit Quoter
+        // mode), including capacity/cooldown, not this raw derivative.
         const mid = buy ? 1e18 / Number(snapshot.marginalPrice) * 0.997
           : Number(snapshot.marginalPrice) / 1e18 * Number(snapshot.fairSupply) / Number(snapshot.actualSupply) * 0.997;
         mids.set(route.routeKey, directedPoolMid({ kind: "v4", mid, feeBps: 30,

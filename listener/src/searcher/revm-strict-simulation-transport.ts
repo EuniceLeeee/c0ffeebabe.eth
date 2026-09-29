@@ -5,6 +5,7 @@ import { RevmFatalError, RevmStrictError, type RevmFatalReason,
 import type { RevmStrictSourceLease } from "./revm-strict-source-owner.js";
 import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 import type { CanonicalSource, ObservedEffects } from "./venues/adapter-request-program.js";
+import { logRevmFault, type RevmFaultStage } from "./revm-fault-diagnostics.js";
 
 type WireCall = Omit<StrictSimulateRequest, "rpcUrl" | "blockNumber" | "sourcePin">;
 const UINT256 = 1n << 256n;
@@ -28,9 +29,10 @@ export function createRevmStrictSimulationTransport(input: {
   } catch { invalid(); }
   if (!positiveInteger(executionGasLimit) || typeof leaseFor !== "function" || typeof onFatal !== "function") invalid();
   let terminal: RevmFatalError | undefined;
-  function fatal(reason: RevmFatalReason): never {
+  function fatal(reason: RevmFatalReason, stage: RevmFaultStage = "transport-operation"): never {
     if (!terminal) {
       terminal = new RevmFatalError(freeze(fatalSnapshot(reason)));
+      logRevmFault(stage, terminal.fatal);
       // Publish the latch BEFORE invoking a possibly throwing/reentrant owner.
       try { onFatal(terminal.fatal); } catch { /* Owner failure cannot undo the latch. */ }
     }
@@ -67,7 +69,7 @@ export function createRevmStrictSimulationTransport(input: {
         (p.stateRoot !== undefined && !hash32(p.stateRoot))) invalid();
       return freeze({ chainId: p.chainId, blockHash: p.blockHash.toLowerCase(),
         ...(p.stateRoot === undefined ? {} : { stateRoot: (p.stateRoot as string).toLowerCase() }) });
-    } catch { return fatal({ kind: "source-fault" }); }
+    } catch { return fatal({ kind: "source-fault" }, "transport-lease-pin"); }
   }
   return Object.freeze({
     async simulate(invocation: Parameters<StrictSimulationTransport["simulate"]>[0]) {
@@ -88,7 +90,7 @@ export function createRevmStrictSimulationTransport(input: {
       const response = await owned(() => lease.strictSimulate(request, control), control);
       const currentPin = leasePin(lease, source);
       if (currentPin.chainId !== pin.chainId || currentPin.blockHash !== pin.blockHash || currentPin.stateRoot !== pin.stateRoot) {
-        fatal({ kind: "source-fault" });
+        fatal({ kind: "source-fault" }, "transport-pin-changed");
       }
       // Validate BEFORE either Success or Revert can become Family evidence.
       // A late integrity fault is not hidden by an expired quote deadline.
@@ -176,8 +178,8 @@ function callerSnapshot(value: unknown, authority: CentralCallerAuthority): { ke
 }
 
 function responseSnapshot(value: unknown, request: StrictSimulateRequest, source: CanonicalSource,
-  observe: ReadonlySet<string>, fatal: (reason: RevmFatalReason) => never): { kind: string; data: string; effects: ObservedEffects } {
-  const bad = (): never => fatal({ kind: "protocol-fault" });
+  observe: ReadonlySet<string>, fatal: (reason: RevmFatalReason, stage?: RevmFaultStage) => never): { kind: string; data: string; effects: ObservedEffects } {
+  const bad = (): never => fatal({ kind: "protocol-fault" }, "transport-response");
   const r = object(value) ? value : bad();
   if (r.ok === false) {
     if (typeof r.errorKind !== "string" || !["validation", "execution", "observation"].includes(r.errorKind) ||
@@ -188,10 +190,10 @@ function responseSnapshot(value: unknown, request: StrictSimulateRequest, source
   const att = r.sourceAttestation, pin = request.sourcePin!;
   if (!object(att) || att.kind !== "node-attested" || att.blockNumber !== source.number || att.chainId !== pin.chainId ||
     !hash32(att.blockHash) || att.blockHash.toLowerCase() !== source.hash || !hash32(att.parentHash) || !hash32(att.stateRoot) ||
-    (pin.stateRoot !== undefined && pin.stateRoot !== att.stateRoot.toLowerCase())) fatal({ kind: "source-fault" });
+    (pin.stateRoot !== undefined && pin.stateRoot !== att.stateRoot.toLowerCase())) fatal({ kind: "source-fault" }, "transport-attestation");
   try {
     record(att, ["kind", "blockNumber", "chainId", "blockHash", "parentHash", "stateRoot"]);
-  } catch { fatal({ kind: "source-fault" }); }
+  } catch { fatal({ kind: "source-fault" }, "transport-attestation-shape"); }
   // Never retain mutable response objects across the evidence boundary.
   try {
     const s = record(r.strict, ["outcome", "executionGasUsed", "tokenDeltas", "nativeDeltas", "totalSupplyDeltas", "logs"]);

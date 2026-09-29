@@ -16,6 +16,7 @@ import {
 import type { UniverseRebuildProbeWiring } from "./universe-rebuild-probe-cli.js";
 import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
 import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
+import { normalizeTransactionOrigin } from "./adapter-work-intent.js";
 import { buildFamilyRouteGraphView } from "./adapter-family-graph-runtime.js";
 import { executeFundingFamilyLiquidity } from "./adapter-funding-runtime.js";
 import { reissuePreparedInstanceRouteHandles } from
@@ -32,6 +33,7 @@ import { createStrictCentralAdapterRuntime } from
   "./strict-central-adapter-runtime.js";
 import { RevmFatalError, RevmSimClient, type RevmFatalReason } from "./revm-sim-client.js";
 import { createRevmStrictSourceSimulation } from "./revm-strict-source-simulation.js";
+import { logRevmFault } from "./revm-fault-diagnostics.js";
 import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
   "./venues/production-verified-actors.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
@@ -820,10 +822,10 @@ export function upgradeLegacyVerifiedMemo(
   );
 }
 
-/** Startup-only override; callers outside rebuild keep their existing deadlines. */
+/** Startup-only budget includes queued admission probes; live deadlines are unchanged. */
 export function resolveRebuildRevmTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
   const override = env.SEARCHER_REBUILD_REVM_TIMEOUT_MS;
-  if (override === undefined) return Number(env.SEARCHER_REVM_TIMEOUT_MS ?? "60000");
+  if (override === undefined) return Number(env.SEARCHER_REVM_TIMEOUT_MS ?? "180000");
   const timeoutMs = Number(override);
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
     throw new Error("SEARCHER_REBUILD_REVM_TIMEOUT_MS must be a positive safe integer");
@@ -853,6 +855,18 @@ export function createProbeWiring(
   const executionIdentity = input?.executionIdentity === undefined
     ? undefined : Object.freeze({ ...input.executionIdentity });
   const executor = executionIdentity?.executor ?? process.env.BOTVM_ADDRESS;
+  const transactionOrigin = executionIdentity?.transactionOrigin ?? process.env.BOTVM_OWNER;
+  const canSimulate = revmBin !== undefined && revmBin.trim() !== "" &&
+    executor !== undefined && executor.trim() !== "";
+  if (canSimulate) {
+    // Standalone startup/probe use the same public identity as live. Fail
+    // before discovery if a launcher omitted the origin; do not turn a
+    // configuration error into per-candidate resource-limited retries.
+    if (transactionOrigin === undefined || transactionOrigin.trim() === "") {
+      throw new Error("universe rebuild simulation requires BOTVM_OWNER or executionIdentity.transactionOrigin");
+    }
+    normalizeTransactionOrigin(transactionOrigin);
+  }
   const notifyFatal = input?.onSimulationFatal;
   const probeController = new AbortController();
   let fatal: RevmFatalError | undefined;
@@ -887,34 +901,38 @@ export function createProbeWiring(
   }
   const runtimeFor = async (
     cutoff: CanonicalSource,
+    candidate: Readonly<Record<string, unknown>>,
     observedSender?: string,
   ): Promise<ProbeRuntimeHandle> => {
     assertOpen();
     const source = Object.freeze({ ...cutoff });
     const strictProvider = strictProviderFor(source);
-    const canSimulate = revmBin !== undefined && revmBin.trim() !== "" &&
-      executor !== undefined && executor.trim() !== "";
     const networkChainId = canSimulate ? await (chainId ??= read(() => provider.getNetwork()).then(network => {
       const id = Number(network.chainId);
       if (!Number.isSafeInteger(id) || id <= 0) throw new Error("invalid rebuild simulation chain identity");
       return id;
     })) : undefined;
     assertOpen();
+    let diagnosticCandidateKey: string | undefined;
+    try { diagnosticCandidateKey = rebuildFamilyCandidateKey(candidate); } catch { /* Observability only. */ }
     const simulation = networkChainId === undefined ? undefined : createRevmStrictSourceSimulation({
       identity: { source, rpcUrl, chainId: networkChainId },
       control: { signal: probeController.signal },
       // Preserve the engine's existing DEFAULT_GAS_LIMIT; make it explicit at
       // the transport boundary rather than relying on an unbound wire default.
       executionGasLimit: 0x1000000,
-      createClient: ({ onFatal }) => new RevmSimClient({ executablePath: revmBin, timeoutMs, onFatal }),
-      onFatal,
+      createClient: ({ onFatal }) => new RevmSimClient({ executablePath: revmBin, timeoutMs, onFatal, diagnosticCandidateKey }),
+      onFatal(reason) {
+        if (!fatal) logRevmFault("rebuild-candidate", reason, { candidateKey: diagnosticCandidateKey, blockNumber: source.number });
+        onFatal(reason);
+      },
     });
     const runtime = simulation === undefined || executor === undefined
       ? createMinimalIdentityRuntime(strictProvider)
       : createStrictCentralAdapterRuntime({
           provider: strictProvider as never,
           executor,
-          ...(executionIdentity === undefined ? {} : { transactionOrigin: executionIdentity.transactionOrigin }),
+          ...(transactionOrigin === undefined ? {} : { transactionOrigin }),
           generationFence: Object.freeze({
             assertCurrent(generation: number, requested: CanonicalSource) {
               assertOpen();
@@ -1009,7 +1027,7 @@ export function createProbeWiring(
             }),
           });
         }
-        const runtimeHandle = await runtimeFor(attestInput.cutoff);
+        const runtimeHandle = await runtimeFor(attestInput.cutoff, candidate);
         try {
           const funding = await executeFundingFamilyLiquidity({
             family: candidateFamily,
@@ -1163,7 +1181,7 @@ export function createProbeWiring(
           code,
           implementationWord,
         });
-        runtimeHandle = await runtimeFor(attestInput.cutoff, observedSender);
+        runtimeHandle = await runtimeFor(attestInput.cutoff, candidate, observedSender);
         result = await attestPoolIdentitiesStrict({
           catalog,
           provider: strictProvider,
@@ -1512,6 +1530,7 @@ export function strictCatalogActivityPlan(): Readonly<{
 export const SOURCE_SCAN_BATCH_BLOCKS = 500;
 export const SOURCE_MIN_CHUNK_BLOCKS = 64;
 export const SOURCE_SCAN_CONCURRENCY = 4;
+const SOURCE_SCAN_REQUEST_TIMEOUT_MS = 60_000;
 export const SOURCE_TRACE_SCAN_CONCURRENCY = 16;
 export const SOURCE_TRACE_SCAN_MAX_ATTEMPTS = 3;
 export const REVERSE_BINDING_CONCURRENCY = 24;
@@ -2593,7 +2612,9 @@ export function createRebuildWiring(input?: {
     fatal = new RevmFatalError(reason);
     input?.onSimulationFatal?.(reason);
   };
-  const provider = new RebuildReadProvider(read, rpcUrl);
+  const provider = new RebuildReadProvider(read, rpcUrl, undefined, {
+    requestTimeoutMs: SOURCE_SCAN_REQUEST_TIMEOUT_MS,
+  });
   // A trace response is already large. Ethers batches concurrent send()
   // calls by default, which couples sixteen block traces to one HTTP timeout.
   // Keep concurrency, but transport each block independently so one long tail
@@ -2607,6 +2628,7 @@ export function createRebuildWiring(input?: {
       batchMaxCount: 1,
       // The existing trace scheduler already bounds these independent requests.
       maxPhysicalRequests: Infinity,
+      requestTimeoutMs: SOURCE_SCAN_REQUEST_TIMEOUT_MS,
     },
   );
   // Cross-run memo revalidation usually checks tens of thousands of

@@ -26,7 +26,7 @@ import { createStrictCentralAdapterRuntime } from
 import { PinnedRethQuoteBackend } from "../pinned-reth-quote-backend.js";
 import { StrictProductionRuntimeRoot } from
   "../strict-production-runtime-session.js";
-import { StrictProductionRuntimeSession } from
+import { StrictProductionRuntimeSession, SequentialQuoteUnsupportedError } from
   "../strict-production-runtime-session.js";
 import {
   StrictCurrentRuntimeCoordinator,
@@ -83,7 +83,7 @@ import { scanBlockStateFromResolvedMids } from
   "../detector/blockscan-scanner-core.js";
 import { readBlockTouchedStateKeys } from "../blockscan-touched-state.js";
 import { buildEffectiveMids, DEFAULT_EFFECTIVE_WETH_INPUT, effectiveEnumerationMids, effectiveMidRowCarried, type EffectiveMidRow, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
-import { effectiveUsdPricing } from "../blockscan-usd-view.js";
+import { effectiveEthPricing } from "../blockscan-eth-view.js";
 import { receiptV3FixtureRuntime } from "./ready-receipt-fixture.js";
 
 const STARTUP: CanonicalSource = Object.freeze({
@@ -1475,17 +1475,8 @@ const carryEnumerationConfig = {
     [UNIV2_FIXTURE_TOKEN1.toLowerCase(), { maxBorrow: 10n ** 18n }],
   ]),
 };
-const unanchoredEnumeration = scanBlockStateFromResolvedMids({
-  edges: [...carryNextGraph.edges],
-  sourceBlock: carryNextSource.number,
-  swapTouched: null,
-  cfg: carryEnumerationConfig,
-  mids: carriedPricing.mids,
-});
-assert.equal(unanchoredEnumeration.opportunities.length, 0,
-  "disconnected fixture Tokens cannot manufacture a paired valuation signal");
-assert.equal(unanchoredEnumeration.enumeration?.missingBuyReference, carryNextGraph.edges.length);
-assert.equal(unanchoredEnumeration.enumeration?.tokensAboveThreshold, 0);
+assert.throws(() => effectiveEnumerationMids(carriedPricing), /effective pricing missing/,
+  "a raw-only publication cannot enter enumeration before effective quotes are built");
 
 // The scanner consumes amount-sensitive effective prices, not raw spot mids.
 // Obtain both the WETH valuation and Exact quotes through the real lifecycle;
@@ -1579,14 +1570,14 @@ assert.equal(carryEffectiveMids.complete, true);
 assert.deepEqual(carryEffectiveMids.source, carryNextSource);
 assert.equal(carryEffectiveMids.referenceWethInput, DEFAULT_EFFECTIVE_WETH_INPUT);
 assert.ok([...carryEffectiveMids.rows.values()].every(row => row.status === "quoted"));
-const carryUsdPricing = effectiveUsdPricing({ ...valuationPricing.snapshot, effectiveMids: carryEffectiveMids });
+const carryUsdPricing = effectiveEthPricing({ ...valuationPricing.snapshot, effectiveMids: carryEffectiveMids });
 const enumerated = scanBlockStateFromResolvedMids({
   edges: [...valuationGraph.edges],
   sourceBlock: carryNextSource.number,
   swapTouched: null,
   cfg: carryEnumerationConfig,
   mids: carryUsdPricing.mids,
-  usdView: carryUsdPricing.view,
+  ethView: carryUsdPricing.view,
 });
 assert.ok(enumerated.enumeration!.tokensAboveThreshold > 0);
 assert.ok(
@@ -2866,6 +2857,120 @@ for (const path of ["coarse", "runtime"] as const) {
   console.log("strict frozen raw: PASS current effective coverage partition and case-insensitive row tokens");
 }
 
+// Run exclusions use real coordinator -> effective-builder wiring. Amount
+// responses are fixtures; this is policy coverage, not live latency evidence.
+for (const path of ["coarse", "runtime"] as const) {
+  for (const failure of ["quote-failed", "unsupported", "no-output", "mixed", "missing-valuation"] as const) {
+    let failing = true;
+    const quoted: string[] = [], prepared: string[] = [];
+    const failedEdges = carryBaseGraph.edges.filter(edge => edge.instanceKey === firstParallelTarget).map(blockScanEdgeKey);
+    const healthyEdges = carryBaseGraph.edges.filter(edge => edge.instanceKey !== firstParallelTarget).map(blockScanEdgeKey);
+    assert.equal(failedEdges.length, 2);
+    const create = () => new StrictCurrentRuntimeCoordinator(request => parallelRoot.createSession({
+      source: request.source, runtime: runtime(request.source), fundingAssets: [], control: request.control,
+      kind: request.purpose === "exact-execution" ? "exact" : "pricing", requiredEdgeIds: request.requiredEdgeIds,
+    }), () => {}, undefined, async (pricing, control, _backend, reuse) => {
+      const target = reuse?.quoteGraph ?? pricing;
+      const result = await buildEffectiveMids({ pricing, control, quoteGraph: reuse?.quoteGraph,
+        previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys, disabledEdgeIds: reuse?.disabledEdgeIds,
+        weth: UNIV2_FIXTURE_TOKEN0, gasCostWei: null, enumerationSpreadBps: 0, concurrency: 2,
+        prepareQuote: async ids => { prepared.push(...ids); },
+        quote: async ({ edge, amountIn }) => {
+          const id = blockScanEdgeKey(edge);
+          quoted.push(id);
+          if (failing && failedEdges.includes(id)) {
+            if (failure === "quote-failed" || failure === "missing-valuation" ||
+                failure === "mixed" && id === failedEdges[0]) throw new Error("opaque quote failure");
+            if (failure === "unsupported") throw Object.assign(new Error("unavailable"), { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" });
+          }
+          return { source: { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation },
+            amountIn, amountOut: failing && failedEdges.includes(id) && failure === "no-output" ? 0n : amountIn * 2n };
+        },
+      });
+      if (!failing || failure !== "missing-valuation") return result;
+      const rows = new Map(result.rows), id = failedEdges[0]!;
+      rows.set(id, { ...rows.get(id)!, status: "missing-valuation", amountIn: null });
+      return { ...result, rows };
+    });
+    let coordinator = create();
+    const prepare = (graph: typeof carryBaseGraph) => {
+      const args = { graph, deadlineAtMs: Date.now() + 10_000,
+        canonicalActivity: { source: { number: graph.sourceBlock, hash: graph.sourceBlockHash, generation: graph.generation },
+          touchedStateKeys: new Set([firstParallelTarget, secondParallelTarget]), complete: true as const } };
+      return path === "coarse" ? coordinator.prepareCoarsePricing(args) : coordinator.prepare({ ...args, fundingTokens: [] });
+    };
+    await prepare(carryBaseGraph);
+    assert.equal(quoted.length, carryBaseGraph.edges.length);
+    const eligible = failure === "mixed" || failure === "missing-valuation";
+    failing = false; quoted.length = 0; prepared.length = 0;
+    await prepare(carryNextGraph);
+    assert.deepEqual(new Set(quoted), new Set(eligible ? [...failedEdges, ...healthyEdges] : healthyEdges));
+    assert.deepEqual(new Set(prepared), new Set(quoted), "no disabled instance in the Exact preparation closure");
+    const current = coordinator.latestPricingSnapshot()!;
+    assert.equal(effectiveEnumerationMids(current).size, eligible ? carryBaseGraph.edges.length : healthyEdges.length);
+    for (const id of failedEdges) assert.equal(current.effectiveMids!.rows.get(id)!.status, eligible ? "quoted" : "disabled-for-run");
+    // The live loop also calls this on anchor retirement. It is NOT a new run.
+    await coordinator.resetDynamicStateForReplay();
+    quoted.length = 0; prepared.length = 0;
+    await prepare(carryBaseGraph);
+    assert.deepEqual(new Set(quoted), new Set(eligible ? [...failedEdges, ...healthyEdges] : healthyEdges));
+    // A new live starts with the identical Ready; its exclusions are empty.
+    coordinator = create(); quoted.length = 0; prepared.length = 0;
+    await prepare(carryBaseGraph);
+    assert.equal(quoted.length, carryBaseGraph.edges.length, "next startup retries every direction");
+    assert.equal(effectiveEnumerationMids(coordinator.latestPricingSnapshot()!).size, carryBaseGraph.edges.length);
+    console.log(`strict effective run exclusions: PASS ${path}/${failure}`);
+  }
+}
+
+// An all-failed amount table may not be committed when the atomic publication
+// fails. The next attempt still invokes every direction, not a poisoned cache.
+for (const mode of ["partial", "source", "abort", "canonical", "newer-prepare", "reset"] as const) {
+  let failing = true, quotes = 0;
+  const controller = new AbortController();
+  const barrier = preparationGate(), entered = preparationGate();
+  const coordinator = new StrictCurrentRuntimeCoordinator(request => root.createSession({
+    source: request.source, runtime: strictRuntime, fundingAssets: [], control: request.control,
+    kind: request.purpose === "exact-execution" ? "exact" : "pricing", requiredEdgeIds: request.requiredEdgeIds,
+  }), () => {}, undefined, async (pricing, control, _backend, reuse) => {
+    const failThisBuild = failing;
+    const target = reuse?.quoteGraph ?? pricing;
+    const result = await buildEffectiveMids({ pricing, control, quoteGraph: reuse?.quoteGraph,
+      previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys, disabledEdgeIds: reuse?.disabledEdgeIds,
+      weth: UNIV2_FIXTURE_TOKEN0, gasCostWei: null, enumerationSpreadBps: 0, concurrency: 2,
+      quote: async ({ amountIn }) => {
+        quotes++;
+        if (failThisBuild) throw new Error("opaque failure");
+        return { source: { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation },
+          amountIn, amountOut: amountIn * 2n };
+      },
+    });
+    if (!failThisBuild) return result;
+    if (mode === "partial") return { ...result, complete: false };
+    if (mode === "source") return { ...result, source: { ...result.source, hash: WRONG_HASH.hash } };
+    if (mode === "abort") controller.abort(new Error("fixture cancelled"));
+    if (mode === "newer-prepare" || mode === "reset") { entered.release(); await barrier.promise; }
+    return result;
+  });
+  const args = { graph: currentGraph, fundingTokens: [], deadlineAtMs: Date.now() + 10_000 };
+  const pending = coordinator.prepare({ ...args, signal: controller.signal,
+    validateBeforePublish: mode === "canonical" ? async () => { throw new Error("canonical failure"); } : undefined });
+  const rejected = assert.rejects(pending);
+  if (mode === "newer-prepare" || mode === "reset") {
+    await awaitPreparationGate(entered.promise, "failed effective draft reaches publication race");
+    failing = false;
+    if (mode === "newer-prepare") await coordinator.prepare(args);
+    else await coordinator.resetDynamicStateForReplay();
+    barrier.release();
+  }
+  await rejected;
+  failing = false; quotes = 0;
+  await coordinator.prepare(args);
+  assert.equal(quotes, currentGraph.edges.length, `${mode}: unpublished failures cannot disable an instance`);
+  assert.equal(effectiveEnumerationMids(coordinator.latestPricingSnapshot()!).size, currentGraph.edges.length);
+  console.log(`strict effective run exclusion atomicity: PASS ${mode}`);
+}
+
 // Reorg/topology/reset create a fresh raw epoch. A forward source gap retains
 // sizing raw, but does not authorize effective carry across the missing blocks.
 for (const mode of ["same-height-reorg", "parent-mismatch", "backward", "topology", "reset", "forward-gap"] as const) {
@@ -3408,8 +3513,8 @@ const execution = session.buildExecution({
 });
 assert.equal(execution.status, "resolved");
 
-// Ordinary quotes deliberately do not retain trial post-state. That unsupported
-// prefix must still fail after V2 gains an explicitly retained local-state path.
+// Independent pricing quotes deliberately do not retain trial post-state.
+// A Solver trial passes an empty prefix from its first hop instead.
 // Sequential issuance cannot reuse an unknown mutation, forged handle,
 // foreign session, wrong caller, reordered prefix or disconnected amount.
 {
@@ -3420,7 +3525,7 @@ assert.equal(execution.status, "resolved");
   const request = { edge: reverse, amountIn: exact.amountOut, executor: EXECUTOR,
     runtimeEvidence: [], priorQuotes: [exact] };
   await assert.rejects(session.issueExact(request), /exact-sequential-prefix-unsupported/,
-    "an ordinary initial-state quote is not an opted-in retained trial prefix");
+    "an independent pricing quote cannot substitute for a retained Solver trial prefix");
   await assert.rejects(session.issueExact({ ...request, amountIn: exact.amountOut + 1n }), /prefix does not supply/);
   await assert.rejects(session.issueExact({ ...request, priorQuotes: [Object.freeze({ ...exact }) as typeof exact] }), /same-session/);
   await assert.rejects(noSimulationSession.issueExact({ ...request, edge: noSimulationSession.edges.find(e =>
@@ -3446,7 +3551,8 @@ assert.equal(execution.status, "resolved");
     exact: { ...definition.exact, methods(input) {
       return baseV2Plugin.exact.methods(input).map(method => {
         if (method.kind !== "request-program") return method;
-        return { id: "fixture-sequential", kind: "request-program" as const, sequentialPrefix: true as const,
+        return { id: "fixture-sequential", kind: "request-program" as const, chainAmountQuote: true as const,
+          sequentialPrefix: true as const,
           program: { ...method.program, decode(args) {
             const result = method.program.decode(args);
             const amountOut = result.amountOut + BigInt(args.programInput.prefix?.length ?? 0);
@@ -3647,8 +3753,8 @@ assert.equal(execution.status, "resolved");
   console.log("strict isolated local state: PASS real V2/V3, concurrent trials, mixed scopes, immutable baselines and sealed authority");
 }
 
-// Distinct admitted instances can intentionally declare one shared pricing key.
-// Local isolated-state capability is not permission to treat those as disjoint.
+// Pricing cache grouping is not trial-state identity. Models explicitly name
+// the physical object; state-only cross-block caching is a separate capability.
 for (const mixedCase of [false, true]) {
   function copyDefinition<T>(value: T): T {
     if (Array.isArray(value)) return value.map(copyDefinition) as T;
@@ -3660,21 +3766,31 @@ for (const mixedCase of [false, true]) {
   let invalidDeclaration = false;
   let generationCurrent = true;
   let afterLocalQuote = () => {};
+  let externalEffect: string | undefined;
+  let omitStateChanges = false;
   const plugin = defineSwapFamily({ ...definition, actionAdapters: baseV2Plugin.actionAdapters,
     exact: { ...definition.exact, methods(input) {
       return baseV2Plugin.exact.methods(input).map(method => {
-        if (method.kind !== "request-program") return method;
-        const local = method.isolatedLocalState;
-        const wrapped = { ...method, ...(local === undefined ? {} : { isolatedLocalState: {
-          quote(...args: Parameters<typeof local.quote>) {
-            const result = local.quote(...args);
+        if (method.kind !== "request-program" || method.chainAmountQuote === true) return method;
+        const local = method.trialState.quote;
+        assert(typeof local === "function", "fixture expects supported V2 trial model");
+        const wrapped = { ...method, program: { ...method.program, decode(input: Parameters<typeof method.program.decode>[0]) {
+          const result = method.program.decode(input);
+          return { ...result,
+            ...(externalEffect === undefined ? {} : { stateEffects: [...(result.stateEffects ?? []), externalEffect] }),
+            ...(omitStateChanges ? { stateChanges: undefined } : {}),
+          };
+        } }, ...(!mixedCase ? { stateOnlyReads: undefined } : {}),
+          trialState: {
+          quote(...args: Parameters<typeof local>) {
+            const result = local(...args);
             afterLocalQuote();
             return result;
           },
-        } }) };
+        } };
         if (!invalidDeclaration) return wrapped;
         return mixedCase ? { ...wrapped, sequentialPrefix: true as const }
-          : { ...wrapped, stateOnlyReads: undefined };
+          : { ...wrapped, trialState: { quote: undefined } } as never;
       });
     } },
     pricing: { ...definition.pricing,
@@ -3728,14 +3844,31 @@ for (const mixedCase of [false, true]) {
   await assert.rejects(shared.issueExact({ ...repeatRequest, control: callbackDeadline }), /deadline/,
     "local callback completion still observes an expired deadline before issuing authority");
   afterLocalQuote = () => {};
-  await assert.rejects(shared.issueExact({ edge: otherEdge, amountIn: first.amountOut,
-    executor: EXECUTOR, runtimeEvidence: [], priorQuotes: [first] }), /exact-sequential-prefix-unsupported/,
-  `shared pricing state owned by another instance is unsupported (mixed case=${mixedCase})`);
+  const other = await shared.issueExact({ edge: otherEdge, amountIn: first.amountOut,
+    executor: EXECUTOR, runtimeEvidence: [], priorQuotes: [first] });
+  const independent = await shared.issueExact({ edge: otherEdge, amountIn: first.amountOut,
+    executor: EXECUTOR, runtimeEvidence: [] });
+  assert.equal(other.amountOut, independent.amountOut,
+    "distinct physical trial objects remain independent despite a shared pricing cache group");
+  externalEffect = `storage:${otherPool.pool.toLowerCase()}`;
+  const mutated = await shared.issueExact({ edge: firstEdge, amountIn: 1_000_000n,
+    executor: EXECUTOR, runtimeEvidence: [], priorQuotes: [] });
+  externalEffect = undefined;
+  await assert.rejects(shared.issueExact({ edge: otherEdge, amountIn: mutated.amountOut,
+    executor: EXECUTOR, runtimeEvidence: [], priorQuotes: [mutated] }),
+    error => error instanceof SequentialQuoteUnsupportedError,
+    "a dependency mutation rejects even a not-yet-read pool without opening a Family circuit");
+  omitStateChanges = true;
+  await assert.rejects(shared.issueExact({ edge: firstEdge, amountIn: 1_000_000n,
+    executor: EXECUTOR, runtimeEvidence: [], priorQuotes: [] }), /stateChanges/,
+    "a method cannot claim complete trial semantics but omit its state transition");
+  omitStateChanges = false;
   invalidDeclaration = true;
   await assert.rejects(shared.issueExact({ edge: firstEdge, amountIn: 1_000_000n, executor: EXECUTOR,
-    runtimeEvidence: [], priorQuotes: [] }), /invalid isolated local state declaration/,
-  "isolated-local opt-in requires state-only reads and cannot also declare simulated sequential execution");
-  console.log(`strict isolated local state: PASS shared owner rejected (mixed case=${mixedCase})`);
+    runtimeEvidence: [], priorQuotes: [] }), mixedCase ? /invalid trial state declaration/
+      : /trialState must declare quote or a nonempty unsupportedReason/,
+  "trial state requires a synchronous callback and cannot also declare full-prefix simulation");
+  console.log(`strict shared trial state: PASS independent cache policy and control fences (mixed case=${mixedCase})`);
 }
 
 // Direct session consumers never supply origin: only the injected runtime may
@@ -3985,6 +4118,7 @@ async function creditOptionalCapabilities(): Promise<void> {
   for (const slots of ["none", "pricing-only", "exact-only", "both"]) {
     const priced = slots === "both";
     const { pricing: _pricing, exact: _exact, ...legacy } = fluidCreditStrictFamilyPlugin;
+    assert(_exact);
     const plugin = priced ? fluidCreditStrictFamilyPlugin : defineCreditFamily({
       ...mutableDefinition({
         ...legacy,

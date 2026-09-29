@@ -270,7 +270,7 @@
     "searcher:live": "tsx src/searcher/main.ts",
     "searcher:at-block": "node --import tsx src/searcher/blockscan-at-block-cli.ts",
     "searcher:at-block-test": "node --import tsx src/searcher/test/blockscan-at-block-cli.ts",
-    "searcher:blockscan-usd-signals": "node --import tsx src/searcher/test/blockscan-usd-signals.ts",
+    "searcher:blockscan-eth-signals": "node --import tsx src/searcher/test/blockscan-eth-signals.ts",
     "searcher:protocol-loop": "tsx src/searcher/test/protocol-loop-execute.ts",
     "searcher:metronome-hgusdc-lifecycle": "node --import tsx src/searcher/test/metronome-hgusdc-lifecycle-smoke.ts",
     "searcher:univ2-nomination": "node --import tsx src/searcher/test/univ2-nomination.ts",

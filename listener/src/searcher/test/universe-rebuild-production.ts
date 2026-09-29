@@ -26,6 +26,7 @@ import {
   providerAdapter,
   rebuildFamilyCandidateKey,
   rebuildFamilyInstanceDedupeKey,
+  resolveRebuildRevmTimeoutMs,
   upgradeLegacyVerifiedMemo,
   validateObservedSenderEvidence,
   type RebuildScanObservation,
@@ -47,7 +48,7 @@ import { familyId } from "../venues/adapter-family-identifiers.js";
 import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
 import { executeAdapterWork } from "../adapter-work-intent.js";
 import { RevmSimClient, RevmFatalError, type RevmFatalReason } from "../revm-sim-client.js";
-import { ETHERTOKEN_NATIVE_INTERFACE } from
+import { ETHERTOKEN_NATIVE_INTERFACE, ETHERTOKEN_NATIVE_PROBE_ACTOR } from
   "../venues/protocols/ethertoken-native-redeem-family/shared.js";
 import { WSTETH_INTERFACE } from
   "../venues/protocols/wsteth-family/codec.js";
@@ -223,11 +224,12 @@ async function assertRebuildCallerForwarding(): Promise<void> {
   }
 }
 
-async function assertRebuildFatalFencing(outer = false): Promise<void> {
+async function assertRebuildFatalFencing(outer = false, identityFromEnv = false): Promise<void> {
   // Exercise actual concurrent candidate nomination and the real provider adapter.
   // No HTTP or daemon is allowed; the second receipt completes only after fatal.
   const a = "0x" + "11".repeat(20), b = "0x" + "22".repeat(20);
   const origin = "0x" + "44".repeat(20);
+  const executor = "0x" + "33".repeat(20);
   let stopped = false, callbacks = 0, heldReceipt = false;
   let client: RevmSimClient | undefined;
   let releaseReceipt: (() => void) | undefined;
@@ -236,6 +238,7 @@ async function assertRebuildFatalFencing(outer = false): Promise<void> {
   let memoPending: Promise<unknown> | undefined;
   const memoAddress = "0x" + "55".repeat(20), proofHash = "0x" + "99".repeat(32);
   const afterFatal: string[] = [];
+  const diagnosticLines: string[] = [];
   const seen = (name: string): void => { if (stopped) afterFatal.push(name); };
   const restorers: (() => void)[] = [];
   function replace(target: object, key: string, value: unknown): void {
@@ -248,10 +251,16 @@ async function assertRebuildFatalFencing(outer = false): Promise<void> {
   }
   const oldBin = process.env.SEARCHER_REVM_SIM_BIN;
   const oldTimeout = process.env.SEARCHER_REVM_TIMEOUT_MS;
+  const oldExecutor = process.env.BOTVM_ADDRESS;
+  const oldOrigin = process.env.BOTVM_OWNER;
   let pa: Promise<unknown> | undefined, pb: Promise<unknown> | undefined;
   try {
     process.env.SEARCHER_REVM_SIM_BIN = process.execPath;
     process.env.SEARCHER_REVM_TIMEOUT_MS = "1000";
+    // Default startup/probe must bind both public addresses. Explicit live or
+    // historical identities must take precedence over unrelated environment values.
+    process.env.BOTVM_ADDRESS = identityFromEnv ? executor : "0x" + "66".repeat(20);
+    process.env.BOTVM_OWNER = identityFromEnv ? origin : "0x" + "77".repeat(20);
     const replacements = {
       async _send() { assert.fail("HTTP forbidden in fatal regression"); },
       async getNetwork() { seen("getNetwork"); return ethers.Network.from(1); },
@@ -290,14 +299,22 @@ async function assertRebuildFatalFencing(outer = false): Promise<void> {
       },
     };
     for (const [key, value] of Object.entries(replacements)) replace(ethers.JsonRpcProvider.prototype, key, value);
+    replace(console, "error", (line: unknown) => { diagnosticLines.push(String(line)); });
     replace(RevmSimClient.prototype, "spawnDaemon", () => { assert.fail("daemon spawn forbidden"); });
-    replace(RevmSimClient.prototype, "strictSimulate", function (this: RevmSimClient) {
+    replace(RevmSimClient.prototype, "strictSimulate", function (
+      this: RevmSimClient, request: Parameters<RevmSimClient["strictSimulate"]>[0],
+    ) {
+      assert.equal(request.from, ETHERTOKEN_NATIVE_PROBE_ACTOR.toLowerCase(),
+        "binding an origin must not replace the Family's verified inner caller");
+      assert.equal(request.transactionOrigin, origin,
+        "default Ready and explicit identity must reach the strict simulation wire unchanged");
+      assert.equal(request.callerMode, "impersonated-call-frame");
       client = this;
       return new Promise<never>((_, reject) => { finishSim = reject; });
     });
     replace(RevmSimClient.prototype, "closeAndDrain", async () => {});
     const options = { rpcUrl: "http://127.0.0.1:1",
-      executionIdentity: { executor: "0x" + "33".repeat(20), transactionOrigin: origin },
+      ...(identityFromEnv ? {} : { executionIdentity: { executor, transactionOrigin: origin } }),
       onSimulationFatal() { stopped = true; callbacks++; },
     };
     const outerWiring = outer ? createRebuildWiring(options) : undefined;
@@ -336,6 +353,11 @@ async function assertRebuildFatalFencing(outer = false): Promise<void> {
     const notify = Reflect.get(client, "onFatal") as (reason: RevmFatalReason) => void;
     notify(reason);
     assert.equal(callbacks, 1);
+    const originLogs = diagnosticLines.filter(line => line.startsWith("[revm-fault] "))
+      .map(line => JSON.parse(line.slice("[revm-fault] ".length))).filter(r => r.stage === "rebuild-candidate");
+    assert.equal(originLogs.length, 1, "log the originating candidate, not every globally aborted sibling");
+    assert.equal(originLogs[0]!.candidateKey, rebuildFamilyCandidateKey(candidate(a, "01")));
+    assert.equal(originLogs[0]!.blockNumber, SOURCE.number);
     releaseReceipt!(); releaseMemo?.(); finishSim!(new RevmFatalError(reason));
     const results = await Promise.all([pa, pb]);
     assert(results.every(result => result instanceof RevmFatalError));
@@ -359,6 +381,37 @@ async function assertRebuildFatalFencing(outer = false): Promise<void> {
     else process.env.SEARCHER_REVM_SIM_BIN = oldBin;
     if (oldTimeout === undefined) delete process.env.SEARCHER_REVM_TIMEOUT_MS;
     else process.env.SEARCHER_REVM_TIMEOUT_MS = oldTimeout;
+    if (oldExecutor === undefined) delete process.env.BOTVM_ADDRESS;
+    else process.env.BOTVM_ADDRESS = oldExecutor;
+    if (oldOrigin === undefined) delete process.env.BOTVM_OWNER;
+    else process.env.BOTVM_OWNER = oldOrigin;
+  }
+}
+
+function assertRebuildExecutionIdentityConfiguration(): void {
+  const keys = ["SEARCHER_REVM_SIM_BIN", "BOTVM_ADDRESS", "BOTVM_OWNER"] as const;
+  const saved = keys.map(key => process.env[key]);
+  try {
+    process.env.SEARCHER_REVM_SIM_BIN = process.execPath;
+    process.env.BOTVM_ADDRESS = "0x" + "33".repeat(20);
+    for (const origin of [undefined, "", " ", "not-an-address", ethers.ZeroAddress]) {
+      if (origin === undefined) delete process.env.BOTVM_OWNER;
+      else process.env.BOTVM_OWNER = origin;
+      for (const create of [createProbeWiring, createRebuildWiring]) {
+        assert.throws(() => create({ rpcUrl: "http://127.0.0.1:1" }),
+          /BOTVM_OWNER|transaction-origin/,
+          "missing/invalid origin must fail at wiring, not create resource-limited candidates");
+      }
+    }
+    delete process.env.SEARCHER_REVM_SIM_BIN;
+    delete process.env.BOTVM_OWNER;
+    assert.doesNotThrow(() => createProbeWiring({ rpcUrl: "http://127.0.0.1:1" }),
+      "read-only wiring without a simulation backend still does not require an origin");
+  } finally {
+    keys.forEach((key, index) => {
+      if (saved[index] === undefined) delete process.env[key];
+      else process.env[key] = saved[index];
+    });
   }
 }
 
@@ -387,13 +440,16 @@ async function assertRebuildQueuedPhysicalFencing(): Promise<void> {
   try {
     process.env.SEARCHER_REVM_SIM_BIN = process.execPath;
     process.env.SEARCHER_REVM_TIMEOUT_MS = "1000";
-    replace(ethers.JsonRpcProvider.prototype, "_send", async function (
-      this: ethers.JsonRpcProvider,
-      payload: ethers.JsonRpcPayload | ethers.JsonRpcPayload[],
-    ) {
-      providers.add(this);
-      return (Array.isArray(payload) ? payload : [payload]).map(request => {
-        physical.push({ provider: this, method: request.method, afterFatal: stopped });
+    // Both legacy and deadline-bound _send use FetchRequest.send. Stub that
+    // physical boundary so the real provider queue/fences remain exercised.
+    replace(ethers.JsonRpcProvider.prototype, "_getConnection", function (this: ethers.JsonRpcProvider) {
+      const provider = this;
+      const connection = new ethers.FetchRequest("http://127.0.0.1:1");
+      connection.send = async () => {
+      providers.add(provider);
+      const payload = JSON.parse(ethers.toUtf8String(connection.body!));
+      const replies = (Array.isArray(payload) ? payload : [payload]).map((request: ethers.JsonRpcPayload) => {
+        physical.push({ provider, method: request.method, afterFatal: stopped });
         const params = request.params as unknown[];
         let result: unknown;
         switch (request.method) {
@@ -427,6 +483,10 @@ async function assertRebuildQueuedPhysicalFencing(): Promise<void> {
         }
         return { jsonrpc: "2.0", id: request.id, result };
       });
+      return new ethers.FetchResponse(200, "OK", { "content-type": "application/json" },
+        ethers.toUtf8Bytes(JSON.stringify(Array.isArray(payload) ? replies : replies[0])), connection);
+      };
+      return connection;
     });
     replace(RevmSimClient.prototype, "spawnDaemon", () => {
       spawnAttempts++; assert.fail("daemon spawn forbidden");
@@ -509,10 +569,26 @@ async function assertRebuildQueuedPhysicalFencing(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  assert.equal(resolveRebuildRevmTimeoutMs({}), 180_000);
+  assert.equal(resolveRebuildRevmTimeoutMs({ SEARCHER_REVM_TIMEOUT_MS: "60000" }), 60_000);
+  assert.equal(resolveRebuildRevmTimeoutMs({
+    SEARCHER_REVM_TIMEOUT_MS: "60000", SEARCHER_REBUILD_REVM_TIMEOUT_MS: "240000",
+  }), 240_000);
+  for (const value of ["", "0", "-1", "1.5", "NaN", "Infinity", "9007199254740992"]) {
+    assert.throws(() => resolveRebuildRevmTimeoutMs({ SEARCHER_REBUILD_REVM_TIMEOUT_MS: value }),
+      /must be a positive safe integer/);
+  }
   await assertRebuildQueuedPhysicalFencing();
   await assertRebuildCallerForwarding();
   await assertRebuildFatalFencing();
   await assertRebuildFatalFencing(true);
+  await assertRebuildFatalFencing(false, true);
+  await assertRebuildFatalFencing(true, true);
+  assertRebuildExecutionIdentityConfiguration();
+  if (process.argv.includes("--execution-identity-only")) {
+    console.log("universe rebuild execution identity wiring PASS");
+    return;
+  }
   // Full log identity: two pools in one transaction never collapse.
   const a = log({ address: "0x" + "11".repeat(20), logIndex: 0 });
   const b = log({ address: "0x" + "44".repeat(20), logIndex: 1 });

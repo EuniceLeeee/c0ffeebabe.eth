@@ -1,6 +1,7 @@
 import { localZeroExactMethod, type ExactQuoteSemantics, type ExactQuoteInput, type ExactRequestProgram } from "../../adapter-family-plugin.js";
 import { MAX_UINT, assertSource, call, quotePool, returned, uint } from "./codec.js";
 import { assertRoute } from "./routes.js";
+import { curveRefreshGuardRequests, curveRefreshRequirements, validateCurveRefreshScope } from "./refresh-scope.js";
 import type { CurvePlainDescriptor, CurvePlainExactEvidence, CurvePlainRoute } from "./types.js";
 
 function validate(input: ExactQuoteInput<CurvePlainDescriptor, CurvePlainRoute>): void {
@@ -12,15 +13,17 @@ function quote(input: ExactQuoteInput<CurvePlainDescriptor, CurvePlainRoute>, am
     binding: input.route.bindingRef.fingerprint, routeKey: input.route.routeKey, amountIn: input.amountIn, amountOut } };
 }
 const program: ExactRequestProgram<CurvePlainDescriptor, CurvePlainRoute, CurvePlainExactEvidence> = {
-  requirements: () => ({ transports: ["eth-call"] }),
+  requirements: ({ descriptor }) => curveRefreshRequirements(descriptor),
   buildRequests(input) {
     validate(input);
     return input.amountIn === 0n ? [] : [call("exact-get-dy", input.descriptor.pool,
-      quotePool(input.route.quoteAbi).encodeFunctionData("get_dy", [input.route.i, input.route.j, input.amountIn]))];
+      quotePool(input.route.quoteAbi).encodeFunctionData("get_dy", [input.route.i, input.route.j, input.amountIn])),
+      ...curveRefreshGuardRequests(input.descriptor)];
   },
   decode({ programInput, initialResults }) {
     validate(programInput);
     if (programInput.amountIn === 0n) return quote(programInput, 0n);
+    validateCurveRefreshScope(programInput.descriptor, programInput.source, initialResults);
     const read = returned(initialResults, "exact-get-dy");
     assertSource(read.source, programInput.source);
     const amountOut = uint(read.data);

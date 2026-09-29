@@ -5,14 +5,14 @@ import { blockScanEdgeKey, type VerifiedGraphView } from "./venues/blockscan-sta
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
-import type { RouteVenueMid } from "./venues/mid-readers.js";
+import type { ResolvedBlockScanQuote } from "./detector/blockscan-scanner-core.js";
 import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
 
 export type EffectivePricingInput = Parameters<typeof tokenToWethReferences>[0] &
   Pick<BlockScanStateSnapshot, "sourceBlock" | "sourceBlockHash" | "generation" | "pricingStateKeyByEdgeKey">;
-/** Single global default P (0.002 WETH); available gas still selects G instead.
+/** Single global default P (0.01 WETH); available gas still selects G instead.
  * Exact reuses the resulting row amount and hands that same input to Solver. */
-export const DEFAULT_EFFECTIVE_WETH_INPUT = 2_000_000_000_000_000n;
+export const DEFAULT_EFFECTIVE_WETH_INPUT = 10_000_000_000_000_000n;
 
 export interface EffectiveMidRow {
   readonly edgeId: string;
@@ -24,7 +24,7 @@ export interface EffectiveMidRow {
   /** Output raw units / input raw units. Fee already included in amountOut. */
   readonly effectiveMid: number | null;
   readonly status: "quoted" | "missing-valuation" | "unsupported" |
-    "quote-failed" | "no-output" | "cancelled";
+    "quote-failed" | "no-output" | "cancelled" | "disabled-for-run";
   /** Original chain observation, not a current-block Exact handle. */
   readonly quotedAt?: CanonicalSource;
   /** Legacy serialized flag; current carry is derived from quotedAt + snapshot.source. */
@@ -33,7 +33,7 @@ export interface EffectiveMidRow {
 
 export interface EffectiveMidSnapshot {
   readonly source: CanonicalSource;
-  readonly reference: "gas" | "default";
+  readonly reference: "gas" | "default" | "fixed";
   /** Reference for newly quoted rows. Carried rows retain their original amounts. */
   readonly referenceWethInput: bigint;
   readonly rows: ReadonlyMap<string, EffectiveMidRow>;
@@ -49,8 +49,7 @@ export function effectiveMidRowCarried(snapshot: EffectiveMidSnapshot, row: Effe
 
 /** Consumer-only projection of current effective amounts and graph identity.
  * Raw mids are sizing references only and never provide enumeration fallback. */
-export function effectiveEnumerationMids(pricing: BlockScanStateSnapshot): ReadonlyMap<string,
-  RouteVenueMid & { readonly quoteAmountIn?: bigint; readonly quoteAmountOut?: bigint }> {
+export function effectiveEnumerationMids(pricing: BlockScanStateSnapshot): ReadonlyMap<string, ResolvedBlockScanQuote> {
   const effective = pricing.effectiveMids;
   if (effective === undefined) throw new Error("enumeration effective pricing missing");
   if (!effective.complete || effective.source.number !== pricing.sourceBlock ||
@@ -59,7 +58,7 @@ export function effectiveEnumerationMids(pricing: BlockScanStateSnapshot): Reado
     throw new Error("enumeration effective pricing incomplete or mismatched source");
   }
   const edges = new Map(pricing.graph.edges.map(edge => [blockScanEdgeKey(edge), edge]));
-  const mids = new Map<string, RouteVenueMid & { quoteAmountIn: bigint; quoteAmountOut: bigint }>();
+  const mids = new Map<string, ResolvedBlockScanQuote>();
   for (const [key, row] of effective.rows) {
     if (row.status !== "quoted") continue;
     const edge = edges.get(key);
@@ -67,7 +66,7 @@ export function effectiveEnumerationMids(pricing: BlockScanStateSnapshot): Reado
         row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() ||
         row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase() || row.effectiveMid === null ||
         !Number.isFinite(row.effectiveMid) || row.effectiveMid <= 0 ||
-        row.amountIn === null || row.amountOut === null || row.amountIn <= 0n || row.amountOut <= 0n) {
+        typeof row.amountIn !== "bigint" || typeof row.amountOut !== "bigint" || row.amountIn <= 0n || row.amountOut <= 0n) {
       throw new Error("invalid effective enumeration row");
     }
     mids.set(key, { kind: "external-swap", pool: edgeInstanceKey(edge), edges: [edge],
@@ -94,6 +93,8 @@ export async function buildEffectiveMids(input: {
   readonly quoteGraph?: VerifiedGraphView;
   readonly weth: string;
   readonly gasCostWei: bigint | null;
+  /** Explicit diagnostic notional. Omitted by live callers. */
+  readonly fixedWethInput?: bigint;
   readonly enumerationSpreadBps: number;
   /** Lazy lookup in the existing raw publication's valuation index. Standalone
    * snapshot callers can still use the full, deterministic fallback. */
@@ -106,6 +107,9 @@ export async function buildEffectiveMids(input: {
   readonly control: AdapterWorkControl;
   readonly concurrency: number;
   readonly previous?: EffectiveMidSnapshot;
+  /** Run-local policy exclusions, not Ready/admission rejections. Apply before
+   * carry and quote preparation, including each-block and full refreshes. */
+  readonly disabledEdgeIds?: ReadonlySet<string>;
   /** The complete pricing-state touched set. Undefined is
    * bootstrap/full refresh, not an empty block. Pricing references only: no
    * per-method reuse declaration and no amount-change invalidation. */
@@ -118,6 +122,7 @@ export async function buildEffectiveMids(input: {
     throw new Error("invalid effective-mid work or spread policy");
   }
   if (input.gasCostWei !== null && input.gasCostWei <= 0n) throw new Error("invalid gas cost");
+  if (input.fixedWethInput !== undefined && input.fixedWethInput <= 0n) throw new Error("invalid fixed effective input");
   const target = input.quoteGraph ?? pricing;
   const source = Object.freeze({
     number: target.sourceBlock, hash: target.sourceBlockHash.toLowerCase(), generation: target.generation,
@@ -126,8 +131,9 @@ export async function buildEffectiveMids(input: {
   // A strictly-positive opportunity filter may have a zero threshold. There
   // is no finite gas-cover notional at 0%; use the same global fallback P,
   // without changing the enumeration threshold or pretending this covers gas.
-  const gasCostWei = input.enumerationSpreadBps === 0 ? null : input.gasCostWei;
-  const referenceWethInput = gasCostWei === null ? DEFAULT_EFFECTIVE_WETH_INPUT :
+  const gasCostWei = input.fixedWethInput !== undefined || input.enumerationSpreadBps === 0 ? null : input.gasCostWei;
+  const defaultInput = input.fixedWethInput ?? DEFAULT_EFFECTIVE_WETH_INPUT;
+  const referenceWethInput = gasCostWei === null ? defaultInput :
     gasReferenceInput(gasCostWei, { num: 1n, den: 1n }, input.enumerationSpreadBps)!;
   const amounts = new Map<string, bigint | null>();
   const edges = new Map((input.quoteGraph ?? pricing.graph).edges.map(e => [blockScanEdgeKey(e), e]));
@@ -156,7 +162,7 @@ export async function buildEffectiveMids(input: {
       marks ??= input.tokenReferences?.() ?? tokenToWethReferences(pricing, input.weth);
       const mark = marks.get(token);
       amounts.set(token, !mark ? null : gasCostWei === null
-        ? (DEFAULT_EFFECTIVE_WETH_INPUT * mark.den + mark.num - 1n) / mark.num
+        ? (defaultInput * mark.den + mark.num - 1n) / mark.num
         : gasReferenceInput(gasCostWei, mark, input.enumerationSpreadBps));
     }
     return item.amountIn = amounts.get(token)!;
@@ -196,12 +202,16 @@ export async function buildEffectiveMids(input: {
   // row must not delay validation of reusable data later in that same table.
   const previous = input.previous;
   const canReuse = previous !== undefined && input.touchedStateKeys !== undefined &&
+    ((input.fixedWethInput === undefined && previous.reference !== "fixed") ||
+      (previous.reference === "fixed" && previous.referenceWethInput === input.fixedWethInput)) &&
     ((source.number > previous.source.number && source.generation > previous.source.generation) ||
       (source.number === previous.source.number && source.generation >= previous.source.generation &&
         source.hash === previous.source.hash.toLowerCase()));
   const fresh: number[] = [];
   for (const [index, { edgeId, edge }] of work.entries()) {
-    if (edge.leavesStandingPosition && !pricing.pricingStateKeyByEdgeKey?.has(edgeId)) {
+    if (input.disabledEdgeIds?.has(edgeId)) {
+      unavailable(index, "disabled-for-run");
+    } else if (edge.leavesStandingPosition && !pricing.pricingStateKeyByEdgeKey?.has(edgeId)) {
       amountFor(index); unavailable(index, "unsupported");
     }
     else if (closed()) { amountFor(index); unavailable(index, "cancelled"); }
@@ -244,7 +254,7 @@ export async function buildEffectiveMids(input: {
     .map(row => [row.edgeId, row] as const);
   const present = new Set(keys);
   const removals = [...previousRows.keys()].filter(key => !present.has(key));
-  return Object.freeze({ source, reference: gasCostWei === null ? "default" : "gas",
+  return Object.freeze({ source, reference: input.fixedWethInput !== undefined ? "fixed" : gasCostWei === null ? "default" : "gas",
     referenceWethInput, rows: deltaMap(previousRows, updates, removals),
     complete: !closed() && rows.every(row => row.status !== "cancelled"), wallMs: Date.now() - started });
 }

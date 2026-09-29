@@ -44,11 +44,32 @@ export function verifyFluidLocalQuoteContract(input: { descriptor: FluidCreditDe
   const local = createFluidCreditExact("local"), simulation = createFluidCreditExact("simulate");
   const supportedInput = { ...quoteInput(10n ** 18n), descriptor: { ...descriptor, localQuoteModel: "t1-view-v1" as const } };
   const localMethod = local.methods(supportedInput)[0];
+  assert("trialState" in localMethod, "verified local model explicitly declares its trial support");
   assert.equal(localMethod.program, program);
   assert.equal(Object.hasOwn(localMethod, "chainAmountQuote"), false, "local math does not masquerade as chain-produced output");
   assert.equal(Object.hasOwn(localMethod, "stateOnlyReads"), false, "time-dependent rates/limits cannot promise cross-source reuse");
-  assert.equal(simulation.methods(supportedInput)[0].chainAmountQuote, true);
-  assert.equal(local.methods({ ...supportedInput, descriptor: { ...descriptor, localQuoteModel: undefined } })[0].chainAmountQuote,
+  assert.deepEqual(localMethod.trialState, { unsupportedReason: "fluid-credit-shared-state-transition-unproven" },
+    "single-borrow math explicitly declines a complete state transition");
+  assert.equal(Object.hasOwn(localMethod.trialState!, "quote"), false, "unsupported state is not a quote implementation");
+  assert.equal(Object.hasOwn(localMethod, "sequentialPrefix"), false, "source reads do not replay a prefix");
+  for (const priorVault of [descriptor.vault, "0x7777777777777777777777777777777777777777"]) {
+    const prefixed = { ...supportedInput, prefix: [{
+      descriptor: { ...descriptor, vault: priorVault }, route,
+      amountIn: supportedInput.amountIn, amountOut: supportedInput.amountIn,
+    }] };
+    assert.throws(() => program.buildRequests(prefixed), /sequential prefix/,
+      "another vault cannot be assumed independent of shared Liquidity or oracle state");
+    assert.throws(() => program.decode({ programInput: prefixed, initialResults, dependentEvidence: [] }),
+      /sequential prefix/, "cached source bytes cannot overwrite an unmodeled preceding operation");
+  }
+  assert.equal(program.decode({ programInput: { ...supportedInput, prefix: [] }, initialResults,
+    dependentEvidence: [] }).amountOut, fluidLocalBorrowQuote(supportedInput.amountIn, state));
+  const simulationMethod = simulation.methods(supportedInput)[0];
+  assert("chainAmountQuote" in simulationMethod);
+  assert.equal(simulationMethod.chainAmountQuote, true);
+  const unknownMethod = local.methods({ ...supportedInput, descriptor: { ...descriptor, localQuoteModel: undefined } })[0];
+  assert("chainAmountQuote" in unknownMethod);
+  assert.equal(unknownMethod.chainAmountQuote,
     true, "unknown bytecode must retain execution quoting, not assume the current T1 model");
   assert.throws(() => program.buildRequests({ ...supportedInput, descriptor: { ...descriptor, localQuoteModel: undefined } }),
     /verified runtime model/);

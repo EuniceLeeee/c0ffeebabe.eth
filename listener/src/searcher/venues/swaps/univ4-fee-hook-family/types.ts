@@ -79,7 +79,7 @@ export type FeeHookPricingSnapshot = UniV4PricingSnapshot | Sat1PricingSnapshot;
 export type FeeHookPrecisionOutcome = UniV4PrecisionOutcome;
 
 export interface FeeHookExactEvidence {
-  readonly kind: "univ4-fee-hook-quoter";
+  readonly kind: "univ4-fee-hook-quoter" | "sat1-local-exact-in";
   readonly source: CanonicalSource;
   readonly poolId: string;
   readonly poolKeyFingerprint: string;

@@ -6,7 +6,7 @@ import { performance } from "node:perf_hooks";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
   scanBlockStateFromResolvedMids as scan,
-  type ResolvedBlockScanMid,
+  type ResolvedBlockScanQuote,
 } from "../detector/blockscan-scanner-core.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
@@ -35,7 +35,7 @@ function edge(from: string, to: string, id: number, protocol = false): TokenEdge
 }
 
 function inputFor(edges: TokenEdge[], seed = 1): Input {
-  const mids = new Map<string, ResolvedBlockScanMid>();
+  const mids = new Map<string, ResolvedBlockScanQuote>();
   for (const [index, value] of edges.entries()) {
     const mid = 1 + (((index * 17 + seed * 7) % 19) - 8) / 100;
     mids.set(blockScanEdgeKey(value), {

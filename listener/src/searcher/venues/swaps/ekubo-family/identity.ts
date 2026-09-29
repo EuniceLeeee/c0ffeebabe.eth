@@ -3,8 +3,9 @@ import type { IdentityDecision, IdentitySemantics } from "../../adapter-family-p
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
 import { EKUBO_CORE, EKUBO_ROUTER, encodeEkuboQuote } from "../ekubo/abi.js";
-import { ekuboPoolId } from "../ekubo/pool-key.js";
-import { ERC20, call, decimals, decodeQuote, decodeSizingProbe, returned, validateResults, vanillaKey } from "./codec.js";
+import { ekuboPoolId, ekuboPoolExtension } from "../ekubo/pool-key.js";
+import { extensionRegistrationSlot, validateExtensionProof, EKUBO_SUPPORTED_CORE_HASH, EKUBO_SUPPORTED_ROUTER_HASH } from "./extension.js";
+import { ERC20, call, decimals, decodeQuote, decodeSizingProbe, returned, validateResults, supportedKey } from "./codec.js";
 import { EKUBO_FAMILY_ID, EKUBO_LINEAGE } from "./manifest.js";
 import type { EkuboBinding, EkuboCandidate, EkuboIdentity } from "./types.js";
 
@@ -19,25 +20,33 @@ interface Evidence {
   readonly unavailable?: string;
 }
 function assertCandidate(candidate: EkuboCandidate, prior?: Evidence): void {
-  const key = vanillaKey(candidate.poolKey);
+  const key = supportedKey(candidate.poolKey);
   if (candidate.candidateKind !== "ekubo-pool-key" || ekuboPoolId(key) !== candidate.poolId ||
       (prior && candidate.poolId !== prior.binding.poolId)) throw new Error("ekubo inconsistent pool identity");
 }
-const STRUCTURE_IDS = ["core-code", "router-code", "decimals:0", "decimals:1"];
+function structureRequests(candidate: EkuboCandidate) {
+  const extension = ekuboPoolExtension(candidate.poolKey.config);
+  return [
+    { id: "core-code", kind: "get-code" as const, address: EKUBO_CORE },
+    { id: "router-code", kind: "get-code" as const, address: EKUBO_ROUTER },
+    ...([candidate.poolKey.token0, candidate.poolKey.token1].flatMap((token, i) => token === ethers.ZeroAddress ? [] :
+      [call(`decimals:${i}`, ERC20.encodeFunctionData("decimals"), token)])),
+    ...(extension === ethers.ZeroAddress ? [] : [
+      { id: "extension-code", kind: "get-code" as const, address: extension },
+      { id: "extension-registration", kind: "get-storage" as const, address: EKUBO_CORE, slot: extensionRegistrationSlot(extension) },
+    ]),
+  ];
+}
 export const ekuboIdentity = {
   variants: [{
     id: "vanilla-core-key-active-quote", kind: "singleton-subinstance", lineageId: EKUBO_LINEAGE,
     applies(candidate) { try { assertCandidate(candidate); return true; } catch { return false; } },
-    requirements: ({ evidence }) => ({ transports: evidence === undefined ? ["get-code", "eth-call"] : ["eth-call"] }),
+    requirements: ({ candidate, evidence }) => ({ transports: evidence === undefined ?
+      (ekuboPoolExtension(candidate.poolKey.config) === ethers.ZeroAddress ? ["get-code", "eth-call"] : ["get-code", "eth-call", "get-storage"]) : ["eth-call"] }),
     buildRequests({ candidate, evidence }) {
       const prior = evidence as Evidence | undefined;
       assertCandidate(candidate, prior);
-      if (!prior) return [
-        { id: "core-code", kind: "get-code", address: EKUBO_CORE },
-        { id: "router-code", kind: "get-code", address: EKUBO_ROUTER },
-        call("decimals:0", ERC20.encodeFunctionData("decimals"), candidate.poolKey.token0),
-        call("decimals:1", ERC20.encodeFunctionData("decimals"), candidate.poolKey.token1),
-      ];
+      if (!prior) return structureRequests(candidate);
       if (prior.rejection || (!prior.unavailable && prior.proof.length === 4) || prior.quoteRounds >= 2) return [];
       return [false, true].flatMap(isToken1 => [1n, 2n].map(multiplier => call(`quote:${Number(isToken1)}:${multiplier}`,
         encodeEkuboQuote(candidate.poolKey, isToken1, multiplier * prior.probeAmounts[Number(isToken1)]))));
@@ -46,15 +55,27 @@ export const ekuboIdentity = {
       const prior = step.evidence as Evidence | undefined;
       assertCandidate(step.candidate, prior);
       if (!prior) {
-        const source = validateResults(results, STRUCTURE_IDS);
+        const source = validateResults(results, structureRequests(step.candidate).map(r => r.id));
         const coreCode = returned(results, "core-code").data, routerCode = returned(results, "router-code").data;
         if (!ethers.isHexString(coreCode) || !ethers.isHexString(routerCode)) throw new Error("ekubo invalid code evidence");
-        const binding: EkuboBinding = { poolId: step.candidate.poolId, poolKey: vanillaKey(step.candidate.poolKey),
+        const key = supportedKey(step.candidate.poolKey);
+        const coreCodeHash = ethers.keccak256(coreCode), routerCodeHash = ethers.keccak256(routerCode);
+        let extensionCodeHash: string | undefined, rejection: string | undefined;
+        if (key.token0 === ethers.ZeroAddress && (coreCodeHash !== EKUBO_SUPPORTED_CORE_HASH || routerCodeHash !== EKUBO_SUPPORTED_ROUTER_HASH)) {
+          rejection = "unsupported-native-core-router-behavior";
+        }
+        if (ekuboPoolExtension(key.config) !== ethers.ZeroAddress) {
+          const code = returned(results, "extension-code").data, registration = returned(results, "extension-registration").data;
+          try { extensionCodeHash = validateExtensionProof(coreCodeHash, routerCodeHash, code, registration); }
+          catch { rejection = "unsupported-or-unregistered-extension-behavior"; }
+        }
+        const binding: EkuboBinding = { poolId: step.candidate.poolId, poolKey: key,
           coreCodeHash: ethers.keccak256(coreCode), routerCodeHash: ethers.keccak256(routerCode),
-          decimals: [decimals(returned(results, "decimals:0").data), decimals(returned(results, "decimals:1").data)] };
+          ...(extensionCodeHash === undefined ? {} : { extensionCodeHash }),
+          decimals: [key.token0 === ethers.ZeroAddress ? 18 : decimals(returned(results, "decimals:0").data), decimals(returned(results, "decimals:1").data)] };
         return { phase: "structure", source, binding, proof: [], quoteRounds: 0,
           probeAmounts: [10n ** BigInt(binding.decimals[0]), 10n ** BigInt(binding.decimals[1])],
-          ...(coreCode === "0x" || routerCode === "0x" ? { rejection: "no-core-or-router-code" } : {}) } satisfies Evidence;
+          ...(rejection ? { rejection } : coreCode === "0x" || routerCode === "0x" ? { rejection: "no-core-or-router-code" } : {}) } satisfies Evidence;
       }
       if ((!prior.unavailable && prior.proof.length === 4) || prior.quoteRounds >= 2) throw new Error("ekubo identity already completed");
       validateResults(results, ["quote:0:1", "quote:0:2", "quote:1:1", "quote:1:2"], prior.source);
@@ -90,7 +111,8 @@ export const ekuboIdentity = {
       const prior = evidence as Evidence | undefined;
       try { assertCandidate(candidate, prior); } catch { return { status: "invalid-program", reasonCode: "unsupported-or-inconsistent-pool-key" }; }
       if (!prior) return { status: "continue" };
-      if (prior.rejection) return { status: "chain-proven-rejected", reasonCode: prior.rejection, evidenceRequestIds: ["core-code", "router-code"] };
+      if (prior.rejection) return { status: "chain-proven-rejected", reasonCode: prior.rejection,
+        evidenceRequestIds: structureRequests(candidate).filter(r => r.kind === "get-code" || r.kind === "get-storage").map(r => r.id) };
       if (prior.unavailable) return prior.quoteRounds < 2 ? { status: "continue" } : { status: "retryable", reasonCode: prior.unavailable };
       if (prior.phase === "structure") return { status: "continue" };
       return { status: "verified", identity: { familyId: EKUBO_FAMILY_ID, lineageId: EKUBO_LINEAGE,

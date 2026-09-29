@@ -386,8 +386,8 @@ async function main(): Promise<void> {
       /integer in \[1, 14400\]/,
     );
 
-    // A new rolling run scans a fresh partition, reuses verified memos, and
-    // inherits the independent retryable without re-attesting it on startup.
+    // A new rolling run reuses verified memos but gives each inherited
+    // retryable one fresh attempt. A repeated failure still permits Ready.
     const resumedReady = await rebuildUniverse(f.input);
     assert.equal(resumedReady.generation, firstReady.generation + 1);
     assert.equal(
@@ -403,8 +403,14 @@ async function main(): Promise<void> {
     assert.equal(f.attestCalls.get("b"), 1);
     assert.equal(
       f.attestCalls.get("c"),
-      1,
-      "resume must preserve retryable keys without re-attesting",
+      2,
+      "startup must retry inherited non-verified candidates once",
+    );
+    assert.deepEqual(resumedReady.candidateAccounting, firstReady.candidateAccounting);
+    assert.equal(
+      (await f.store.load())?.retryableAttemptsByCandidateKey["cand:c"]?.attemptCount,
+      2,
+      "another retryable result is durable without blocking Graph publication",
     );
 
     // A code/family/authority change between process starts invalidates an
@@ -415,6 +421,7 @@ async function main(): Promise<void> {
     assert.equal(reattestedReady.generation, firstReady.generation + 2);
     assert.equal(f.attestCalls.get("a"), 2);
     assert.equal(f.attestCalls.get("b"), 1);
+    assert.equal(f.attestCalls.get("c"), 3);
     f.invalidReusableKeys.delete("a");
 
     // Probe: only the target key, at the queued fixed cutoff. A repeated RPC
@@ -431,7 +438,7 @@ async function main(): Promise<void> {
     assert.equal(stillRetryable.status, "retryable");
     assert.equal(
       stillRetryable.status === "retryable" && stillRetryable.attemptCount,
-      2,
+      4,
     );
     assert.equal(
       (await f.store.load())?.retryableAttemptsByCandidateKey["cand:c"]
@@ -483,6 +490,57 @@ async function main(): Promise<void> {
       f.attestCalls.get("a"),
       aCallsBeforeFinalize,
       "a valid durable memo must not re-attest during finalization",
+    );
+
+    // Old Ready retryables need no new activity to be retried. Only an
+    // actual successful attestation may add their instances to the Graph.
+    const queued = makeFixture(join(dir, "queued-retry"));
+    queued.failKeys.add("b");
+    queued.failKeys.add("c");
+    const queuedFirst = await rebuildUniverse(queued.input);
+    const queuedBefore = (await queued.store.load())!;
+    queued.failKeys.delete("b");
+    const queuedSecond = await rebuildUniverse({
+      ...queued.input,
+      scanSwapWindow: async (scan) => ({
+        observations: [],
+        sourceReceipts: sourceReceipts(scan.fromBlock),
+      }),
+    });
+    assert.equal(queuedSecond.generation, queuedFirst.generation + 1);
+    assert.deepEqual(queuedSecond.activeInstanceKeys, ["inst:a", "inst:b"]);
+    assert.deepEqual(queuedSecond.graphSnapshot, {
+      edges: [
+        { familyId: "univ2", instanceKey: "inst:a" },
+        { familyId: "univ2", instanceKey: "inst:b" },
+      ],
+    });
+    assert.deepEqual(queuedSecond.candidateAccounting, {
+      total: 3, verified: 2, terminalRejected: 0, retryable: 1, remainingUnaccounted: 0,
+    });
+    assert.equal(queued.attestCalls.get("a"), 1);
+    assert.equal(queued.attestCalls.get("b"), 2);
+    assert.equal(queued.attestCalls.get("c"), 2);
+    const queuedAfter = (await queued.store.load())!;
+    assert.equal(queuedAfter.inProgressRun, null);
+    assert.equal(queuedAfter.retryableAttemptsByCandidateKey["cand:b"], undefined);
+    assert.equal(queuedAfter.retryableAttemptsByCandidateKey["cand:c"]?.attemptCount, 2);
+    assert.deepEqual(queuedAfter.verifiedMemos["cand:a"], queuedBefore.verifiedMemos["cand:a"]);
+    const queuedFamilyId = queuedAfter.retryableAttemptsByCandidateKey["cand:c"]!.familyId;
+    const disabledQueued = await rebuildUniverse({
+      ...queued.input,
+      isFamilyEnabled: (familyId) => familyId !== queuedFamilyId,
+      scanSwapWindow: async (scan) => ({
+        observations: [],
+        sourceReceipts: sourceReceipts(scan.fromBlock),
+      }),
+    });
+    assert.deepEqual(disabledQueued.activeInstanceKeys, queuedSecond.activeInstanceKeys);
+    assert.equal(queued.attestCalls.get("c"), 2, "a disabled Family is not retried");
+    assert.deepEqual(
+      (await queued.store.load())?.retryableAttemptsByCandidateKey["cand:c"],
+      queuedAfter.retryableAttemptsByCandidateKey["cand:c"],
+      "disabling a Family preserves its queued failure without changing Graph",
     );
 
     // A deployed checkpoint may already have Ready while the old runtime
@@ -636,6 +694,51 @@ async function main(): Promise<void> {
       "verified",
     );
     assert.equal(afterThrow?.readyGeneration, null);
+
+    // Resuming a fixed partition retries every saved non-verified outcome,
+    // including a bound terminal rejection. It never re-scans or moves the
+    // cutoff, and a valid verified sibling still skips attestation.
+    const failedResume = makeFixture(join(dir, "resume-non-verified"), {
+      scanSwapWindow: async (scan) => ({
+        observations: ["a", "b", "c", "d"].map((id) => ({ id })),
+        sourceReceipts: sourceReceipts(scan.fromBlock),
+      }),
+    });
+    failedResume.failKeys.add("b");
+    failedResume.terminalKeys.add("c");
+    await assert.rejects(rebuildUniverse({
+      ...failedResume.input,
+      attestationConcurrency: 1,
+      attestFamilyInstanceOnce: async (input) => {
+        if ((input.candidate as { id: string }).id === "d") {
+          throw new Error("stop after saving mixed outcomes");
+        }
+        return failedResume.input.attestFamilyInstanceOnce(input);
+      },
+    }), /stop after saving mixed outcomes/);
+    const interrupted = (await failedResume.store.load())!;
+    assert.equal(interrupted.inProgressRun?.outcomesByCandidateKey["cand:b"]?.status, "retryable");
+    assert.equal(interrupted.inProgressRun?.outcomesByCandidateKey["cand:c"]?.status, "terminal-rejected");
+    // An older memo can survive a retryable result. It cannot substitute for
+    // the requested fresh attempt when the latest outcome is non-verified.
+    await failedResume.store.casUpsertMemo(failedResume.input.sealDurableVerifiedMemo({
+      candidate: { id: "b" }, result: {}, proofSource: SOURCE, familyCandidateKey: "cand:b",
+    }));
+    failedResume.failKeys.clear();
+    failedResume.terminalKeys.clear();
+    const recovered = await rebuildUniverse({
+      ...failedResume.input,
+      freezeCanonicalHead: async () => { throw new Error("resume must not move cutoff"); },
+      scanSwapWindow: async () => { throw new Error("resume must not re-scan"); },
+    });
+    assert.deepEqual(recovered.cutoff, SOURCE);
+    assert.deepEqual(recovered.activeInstanceKeys, ["inst:a", "inst:b", "inst:c", "inst:d"]);
+    assert.equal(failedResume.attestCalls.get("a"), 1);
+    assert.equal(failedResume.attestCalls.get("b"), 2);
+    assert.equal(failedResume.attestCalls.get("c"), 2);
+    assert.equal(failedResume.attestCalls.get("d"), 1);
+    assert.equal(failedResume.scanCalls(), 1);
+    assert.deepEqual((await failedResume.store.load())?.retryableAttemptsByCandidateKey, {});
 
     // E: a catalog-shaped but incomplete source set is rejected before the
     // run can attest or mint coverage. A source scan crash likewise leaves no

@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { EKUBO_MAX_EXACT_INPUT, EKUBO_ROUTER } from "../ekubo/abi.js";
 import { createEkuboPoolKeyBinding } from "../ekubo/pool-key.js";
@@ -11,13 +12,15 @@ export const ekuboExecution = {
   buildFragment(input) {
     const { descriptor, route, exactEvidence: evidence } = input;
     assertRoute(descriptor, route);
+    const nativeInput = descriptor.poolKey.token0 === ethers.ZeroAddress && !route.isToken1;
+    if (nativeInput && input.amountIn >= (1n << 96n)) throw new Error("ekubo native input exceeds CALL_VALUE uint96");
     assertSource(evidence.source, evidence.source);
     if (input.amountIn <= 0n || input.amountIn > EKUBO_MAX_EXACT_INPUT || input.minAmountOut <= 0n ||
         input.minAmountOut > input.quotedAmountOut || evidence.kind !== "ekubo-router-exact-input" ||
         evidence.binding !== route.bindingRef.fingerprint || evidence.routeKey !== route.routeKey ||
         evidence.amountIn !== input.amountIn || evidence.amountOut !== input.quotedAmountOut || evidence.amountOut <= 0n ||
         !same(evidence.executor, input.executor)) throw new Error("ekubo incompatible exact execution evidence");
-    return { requirements: [{ kind: "approve" as const, token: route.tokenIn, spender: EKUBO_ROUTER, amount: MAX_UINT }],
+    return { requirements: nativeInput ? [] : [{ kind: "approve" as const, token: route.tokenIn, spender: EKUBO_ROUTER, amount: MAX_UINT }],
       nodes: [{ adapterId: EKUBO_ACTION_ID, target: EKUBO_ROUTER, tokenIn: route.tokenIn, tokenOut: route.tokenOut,
         amount: input.amountIn, params: { ...descriptor.poolKey, poolId: descriptor.poolId,
           bindingHash: createEkuboPoolKeyBinding(descriptor.poolKey).hash, isToken1: route.isToken1,

@@ -2,9 +2,9 @@ import { ethers } from "ethers";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
 import type { UnifiedObservation } from "../../adapter-family-plugin.js";
 import { decodeEkuboBalanceUpdate, exactInputAmountOut, ekuboRouterIface,
-  EKUBO_CORE, EKUBO_ROUTER, EKUBO_POOL_INITIALIZED_TOPIC, EKUBO_ROUTER_SWAP_SELECTOR,
+  EKUBO_CORE, EKUBO_ROUTER, EKUBO_POOL_INITIALIZED_TOPIC, EKUBO_ROUTER_SWAP_SELECTOR, EKUBO_ROUTER_MULTIHOP_SELECTOR,
   EKUBO_MAX_EXACT_INPUT } from "../ekubo/abi.js";
-import { normalizeEkuboPoolKey, ekuboPoolExtension, ekuboPoolId, type EkuboPoolKey } from "../ekubo/pool-key.js";
+import { normalizeEkuboPoolKey, ekuboPoolExtension, ekuboPoolId, ekuboGraphToken, type EkuboPoolKey } from "../ekubo/pool-key.js";
 import type { EkuboCandidate } from "./types.js";
 
 // Reuse only the low-level ABI/key codec. No legacy registry, materializer,
@@ -21,16 +21,45 @@ const abi = ethers.AbiCoder.defaultAbiCoder();
 export const lower = (address: string): string => ethers.getAddress(address).toLowerCase();
 export const same = (a: string, b: string): boolean => lower(a) === lower(b);
 export const MAX_UINT = (1n << 256n) - 1n;
+export const MAX_MULTIHOP_HOPS = 32;
 
-export function vanillaKey(key: EkuboPoolKey): EkuboPoolKey {
+// Structural nomination only. Nonzero extensions MUST separately prove the
+// supported deployed behavior and reverse Core binding in identity.ts.
+export function supportedKey(key: EkuboPoolKey): EkuboPoolKey {
   const normalized = normalizeEkuboPoolKey(key);
-  if (normalized.token0 === ethers.ZeroAddress) throw new Error("ekubo native settlement unsupported");
-  if (ekuboPoolExtension(normalized.config) !== ethers.ZeroAddress) throw new Error("ekubo extension unsupported");
+  if (same(ekuboGraphToken(normalized.token0), ekuboGraphToken(normalized.token1))) throw new Error("ekubo collapsed native/WETH graph pair");
+  if (ekuboPoolExtension(normalized.config) !== ethers.ZeroAddress && (BigInt(normalized.config) & 0xffffffffn) !== 0n) {
+    throw new Error("ekubo supported TWAMM requires full-range config");
+  }
   return normalized;
 }
 export function candidate(key: EkuboPoolKey): EkuboCandidate {
-  const poolKey = vanillaKey(key);
+  const poolKey = supportedKey(key);
   return Object.freeze({ candidateKind: "ekubo-pool-key", poolKey, poolId: ekuboPoolId(poolKey) });
+}
+// Source Router.multihopSwap: every hop must consume the complete specified
+// input, including when the aggregate threshold is int256.min. No amounts for
+// later hops are invented from calldata; actual outputs belong to trace/quote.
+export function decodeMultihopCall(observation: UnifiedObservation): readonly EkuboCandidate[] | null {
+  if (observation.kind !== "call" || !same(observation.target, EKUBO_ROUTER) ||
+      observation.data.slice(0, 10).toLowerCase() !== EKUBO_ROUTER_MULTIHOP_SELECTOR || observation.data.length > 20_000) return null;
+  try {
+    const decoded = ekuboRouterIface.decodeFunctionData("multihopSwap", observation.data);
+    if (ekuboRouterIface.encodeFunctionData("multihopSwap", decoded).toLowerCase() !== observation.data.toLowerCase()) return null;
+    const [hops, initial] = decoded[0];
+    if (hops.length === 0 || hops.length > MAX_MULTIHOP_HOPS || BigInt(initial[1]) <= 0n || BigInt(initial[1]) > EKUBO_MAX_EXACT_INPUT) return null;
+    let token = lower(String(initial[0]));
+    const keys: EkuboCandidate[] = [];
+    for (const hop of hops) {
+      if (BigInt(hop[1]) !== 0n || BigInt(hop[2]) !== 0n) return null;
+      const found = candidate({ token0: String(hop[0][0]), token1: String(hop[0][1]), config: String(hop[0][2]) });
+      if (same(token, found.poolKey.token0)) token = lower(found.poolKey.token1);
+      else if (same(token, found.poolKey.token1)) token = lower(found.poolKey.token0);
+      else return null;
+      keys.push(found);
+    }
+    return Object.freeze(keys);
+  } catch { return null; }
 }
 export function decodeSwapCall(observation: UnifiedObservation) {
   if (observation.kind !== "call" || !same(observation.target, EKUBO_ROUTER)) return null;

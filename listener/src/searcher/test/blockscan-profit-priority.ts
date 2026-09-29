@@ -7,8 +7,8 @@ import type { RawTokenRate } from "../blockscan-amount-reference.js";
 
 const weth = ADDR.WETH.toLowerCase(), usdc = ADDR.USDC.toLowerCase(), dai = "dai-fixture";
 const marks = new Map<string, RawTokenRate>([
-  [weth, { num: 2000n, den: 10n ** 18n }],
-  [usdc, { num: 1n, den: 10n ** 6n }], [dai, { num: 1n, den: 10n ** 18n }],
+  [weth, { num: 1n, den: 1n }],
+  [usdc, { num: 500_000_000n, den: 1n }], [dai, { num: 1n, den: 2000n }],
 ]);
 test("absolute gross ranking normalizes 6/18 decimals and never divides by principal", async () => {
   const plans = [

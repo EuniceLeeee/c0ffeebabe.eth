@@ -2,9 +2,10 @@ import type { SwapDomainSemantics } from "../../adapter-family-plugin.js";
 import { createStrictSwapObservation, type SwapEventLog } from "../../swap-observation.js";
 import { EKUBO_CORE, EKUBO_ROUTER, EKUBO_POOL_INITIALIZED_TOPIC, EKUBO_CORE_SWAP_DATA_BYTES, EKUBO_CORE_SWAP_POOL_ID_OFFSET_BYTES,
   parseEkuboCoreSwapLog } from "../ekubo/abi.js";
+import { ekuboDirection, ekuboPoolId } from "../ekubo/pool-key.js";
 import { decodeInitialized, decodeSwapCall, same } from "./codec.js";
 import { CALL_ID, CALL_NO_RECEIVER_ID, INIT_ID } from "./discovery.js";
-import { EKUBO_ACTION_ID } from "./manifest.js";
+import { EKUBO_ACTION_ID, EKUBO_FAMILY_ID } from "./manifest.js";
 import type { EkuboDescriptor, EkuboRoute } from "./types.js";
 
 function observed(log: Pick<SwapEventLog, "address" | "topics" | "data">) {
@@ -37,10 +38,19 @@ export const ekuboSwap = {
           if (swap.delta0 === 0n || swap.delta1 === 0n) return { logIndex: trigger.logIndex, mutationOnlyReason: "ekubo no directed token flow" };
           throw new Error("ekubo invalid signed swap deltas");
         }
-        // Strict graph edges carry the Family's instanceKey, not legacy
-        // poolToken fields. PoolKey sorting determines the signed direction.
-        const edge = ctx.graph.find(edge => edge.adapterId === EKUBO_ACTION_ID && same(edge.target, EKUBO_ROUTER) &&
-          edge.instanceKey === swap.poolId && (BigInt(edge.tokenIn) > BigInt(edge.tokenOut)) === isToken1);
+        // The admitted PoolKey determines signed direction. Native token0 maps
+        // to WETH in the graph, so sorting graph addresses can reverse it.
+        const edge = ctx.graph.find(edge => {
+          if (edge.adapterId !== EKUBO_ACTION_ID || !same(edge.target, EKUBO_ROUTER) || edge.instanceKey !== swap.poolId) return false;
+          const binding = ctx.resolveBinding?.(edge);
+          if (!binding || binding.familyId !== EKUBO_FAMILY_ID) return false;
+          const descriptor = binding.descriptor as EkuboDescriptor;
+          if (descriptor.poolId !== swap.poolId || descriptor.instanceKey !== edge.instanceKey) return false;
+          try {
+            return ekuboPoolId(descriptor.poolKey) === swap.poolId &&
+              ekuboDirection(edge.tokenIn, edge.tokenOut, descriptor.poolKey) === isToken1;
+          } catch { return false; }
+        });
         if (!edge) return { logIndex: trigger.logIndex, mutationOnlyReason: "ekubo direction absent from admitted graph" };
         return { logIndex: trigger.logIndex, impact: { pool: edge.target, poolId: swap.poolId,
           tokenIn: edge.tokenIn, tokenOut: edge.tokenOut, matchedAdapterId: EKUBO_ACTION_ID,

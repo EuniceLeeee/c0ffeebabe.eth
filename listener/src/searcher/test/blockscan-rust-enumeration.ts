@@ -6,14 +6,14 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
-import { buildBlockScanUsdView } from "../blockscan-usd-view.js";
+import { buildBlockScanEthView } from "../blockscan-eth-view.js";
 import {
   enumeratePairedDfs, enumeratePairedLayered, resolvePairedEnumerationOptions,
   type DfsQuote, type DirectedPriceSignal, type PairedEnumerationMethod,
 } from "../detector/blockscan-paired-dfs.js";
 import { enumerateRustPaired } from "../detector/blockscan-paired-rust.js";
 import { scanBlockStateFromResolvedMids, type BlockScanCoreConfig,
-  type ResolvedBlockScanMid } from "../detector/blockscan-scanner-core.js";
+  type ResolvedBlockScanQuote } from "../detector/blockscan-scanner-core.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
@@ -378,7 +378,7 @@ function frozenEffectiveInput() {
     sourceBlock: number; rows: { edge: TokenEdge; quote: { amountIn: string; amountOut: string; mid: number } | null }[];
   };
   assert.equal(saved.sourceBlock, 26029875);
-  const edges = saved.rows.map(row => row.edge), mids = new Map<string, ResolvedBlockScanMid>();
+  const edges = saved.rows.map(row => row.edge), mids = new Map<string, ResolvedBlockScanQuote>();
   for (const { edge, quote: effective } of saved.rows) if (effective) mids.set(blockScanEdgeKey(edge), {
     kind: "historical-effective", pool: edge.target, edges: [edge], mid: effective.mid, feeBps: 0, depthProxy: 0,
     quoteAmountIn: BigInt(effective.amountIn), quoteAmountOut: BigInt(effective.amountOut),
@@ -394,7 +394,7 @@ function frozenEffectiveInput() {
 test("Rust matches the real frozen effective table, not raw mids or reconstructed prices", () => {
   const { edges, mids, sourceBlock } = frozenEffectiveInput();
   for (const allowRepeatedPools of [false, true]) {
-    const view = buildBlockScanUsdView(edges, mids, 50, allowRepeatedPools);
+    const view = buildBlockScanEthView(edges, mids, 50, allowRepeatedPools);
     assert(view.quotes.length > 0 && view.signals.length > 0);
     for (const prefix of [{ prefixPruningEnabled: false, maxPrefixDrawdownBps: 1000 },
       ...[0, 1000].map(maxPrefixDrawdownBps => ({ prefixPruningEnabled: true, maxPrefixDrawdownBps }))]) {
@@ -435,7 +435,7 @@ test("Rust scanner respects the production disable switch, or preserves ranking 
       const cfg: BlockScanCoreConfig = { enumerationMethod, allowRepeatedPools, deduplicateRotations,
         prefixPruningEnabled: maxPrefixDrawdownBps !== undefined, maxPrefixDrawdownBps,
         maxHops: 6, minSpreadBps: 50, exactAdmissionSpreadBps: 50,
-        usdSignalPairsPerToken: 50, pricedTokens, maxCandidates: 100, budgetMs: 60_000 };
+        ethSignalPairsPerToken: 50, pricedTokens, maxCandidates: 100, budgetMs: 60_000 };
       const result = compareScanner({ edges, mids, sourceBlock, swapTouched: null, cfg },
         `frozen scanner ${enumerationMethod}, reuse ${allowRepeatedPools}, dedup ${deduplicateRotations}, prefix ${maxPrefixDrawdownBps}`);
       if (allowRepeatedPools && maxPrefixDrawdownBps === undefined) {
@@ -449,7 +449,7 @@ test("Rust scanner respects the production disable switch, or preserves ranking 
     compareScanner({ edges, mids, sourceBlock, swapTouched: new Set(), cfg: {
       enumerationMethod, maxHops, allowRepeatedPools: false, deduplicateRotations: true,
       minSpreadBps: 0, exactAdmissionSpreadBps: 200, maxCandidates: 3,
-      usdSignalPairsPerToken: 1, pricedTokens, budgetMs: 60_000,
+      ethSignalPairsPerToken: 1, pricedTokens, budgetMs: 60_000,
     } }, `non-default scanner cap/hops/signals/admission, ${enumerationMethod}/${maxHops}`);
   }
 });
@@ -461,7 +461,7 @@ test("Rust scanner retains deterministic ordering and cap on exactly equal sprea
     tokenIn: tokenIn!, tokenOut: tokenOut!, target: address(n * 10 + i), adapterId: "test-swap", slotKind: "swap" as const,
     ...deriveEdgeTaxonomy("swap"),
   })));
-  const mids = new Map<string, ResolvedBlockScanMid>(edges.map((edge, i) => [blockScanEdgeKey(edge), {
+  const mids = new Map<string, ResolvedBlockScanQuote>(edges.map((edge, i) => [blockScanEdgeKey(edge), {
     kind: "test", pool: edge.target, edges: [edge], mid: i % 2 ? 1.1 : 1, feeBps: 0, depthProxy: 0,
     quoteAmountIn: unit, quoteAmountOut: i % 2 ? 11n * unit / 10n : unit,
   }]));

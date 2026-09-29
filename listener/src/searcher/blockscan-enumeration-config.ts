@@ -11,6 +11,7 @@ export const BLOCKSCAN_ENUMERATION_DEFAULTS = {
   budgetMs: 15000,
   method: "joint-dfs" as "joint-dfs" | "dfs" | "layered", // Legacy half-path methods remain explicit rollback choices.
   allowRepeatedPools: true,
+  allowRepeatedTokens: true, // False keeps simple cycles; the final return to the start is allowed.
   deduplicateRotations: true, // Retain one funded execution start per directed cycle.
   signalPairsPerToken: 20,
   hopTokensPerStep: 2, // Top N distinct next tokens by reference value; 0 keeps all tokens.

@@ -72,6 +72,12 @@ export function verifyFluidQuoteContract(input: { descriptor: FluidCreditDescrip
     const dependentEvidence = [...priorEvidence, operation.decode([result])];
     const quote = program.decode({ programInput: quoteInput, initialResults, dependentEvidence });
     assert.equal(quote.amountOut, requested);
+    const prefixed = { ...quoteInput, prefix: [{ descriptor, route, amountIn, amountOut: amountIn }] };
+    assert.throws(() => program.buildRequests(prefixed), /sequential prefix/);
+    assert.throws(() => program.buildDependentProgram({ programInput: prefixed, completedRound: 1,
+      initialResults, priorEvidence }), /sequential prefix/);
+    assert.throws(() => program.decode({ programInput: prefixed, initialResults, dependentEvidence }),
+      /sequential prefix/, "a successful baseline operate is not a post-prefix execution proof");
     const riskInput = { ...input, collateralAmount: amountIn, debtBps: 10000n, runtimeEvidence: [] };
     const risk = fluidCreditDomain.risk.evidence.decode({ programInput: riskInput, results: [...states, result] });
     assert.equal(risk.debtAmount, quote.amountOut, "Credit and Exact consume the same program and actual receipt");
@@ -101,7 +107,9 @@ export function verifyFluidQuoteContract(input: { descriptor: FluidCreditDescrip
   const unknownModelInput = { ...input, descriptor: { ...descriptor, localQuoteModel: undefined },
     amountIn: 10n ** 18n, runtimeEvidence: [] };
   assert.equal(fluidCreditExact.methods(unknownModelInput)[0].program, fluidCreditBorrowProgram);
-  assert.equal(fluidCreditExact.methods(unknownModelInput)[0].chainAmountQuote, true);
+  const unknownMethod = fluidCreditExact.methods(unknownModelInput)[0];
+  assert("chainAmountQuote" in unknownMethod);
+  assert.equal(unknownMethod.chainAmountQuote, true);
   assert.throws(() => defineCreditFamily({ ...fluidCreditStrictFamilyPlugin,
     pricing: {} as never }), /pricing/);
   assert.throws(() => defineCreditFamily({ ...fluidCreditStrictFamilyPlugin,

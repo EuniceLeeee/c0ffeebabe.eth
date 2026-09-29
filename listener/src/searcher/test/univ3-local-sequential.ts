@@ -6,13 +6,15 @@ import {
   V3MissingBitmapWordError, v3SwapToState, type V3PoolState,
 } from "../solver/v3-math.js";
 import { instanceKey } from "../venues/adapter-family-identifiers.js";
-import type { ExactQuoteInput } from "../venues/adapter-family-plugin.js";
+import type { ExactQuoteInput, ExactQuoteResult } from "../venues/adapter-family-plugin.js";
 import { UNIV3_CANONICAL_FACTORY, UNIV3_QUOTER_V2 } from "../venues/swaps/univ3-abi.js";
 import { createUniV3Exact } from "../venues/swaps/univ3-family/exact.js";
 import { UNIV3_FACTORY_LINEAGE_ID, UNIV3_FAMILY_ID } from "../venues/swaps/univ3-family/manifest.js";
 import { univ3Routes } from "../venues/swaps/univ3-family/routes.js";
 import { UNIV3_STATE_READER_INTERFACE } from "../venues/swaps/univ3-family/state-reader.js";
-import type { UniV3Descriptor, UniV3Route } from "../venues/swaps/univ3-family/types.js";
+import type { UniV3Descriptor, UniV3ExactEvidence, UniV3Route } from "../venues/swaps/univ3-family/types.js";
+import { trialView } from "../venues/local-state-models/test/trial-view.js";
+import { applyExactTrialState, emptyExactTrialState } from "../exact-trial-state.js";
 
 const Q96 = 1n << 96n;
 const POOL = "0x3333333333333333333333333333333333333333";
@@ -32,7 +34,7 @@ type Input = ExactQuoteInput<UniV3Descriptor, UniV3Route>;
 function input(amountIn: bigint, zeroForOne = true, retain = true): Input {
   return { descriptor, route: routes[zeroForOne ? 0 : 1]!, source: SOURCE,
     executor: EXECUTOR, runtimeEvidence: [], amountIn,
-    ...(retain ? { retainLocalState: true as const } : {}) };
+    ...(retain ? { trialState: trialView() } : {}) };
 }
 
 function state(liquidity = 10n ** 18n, fee = descriptor.fee): V3PoolState {
@@ -70,6 +72,18 @@ function method(exact: ReturnType<typeof createUniV3Exact>, programInput = input
   assert.equal(result.kind, "request-program");
   if (result.kind !== "request-program") throw new Error("missing V3 state method");
   return result;
+}
+
+function advance(exact: ReturnType<typeof createUniV3Exact>, current: Input, previous: ExactQuoteResult<UniV3ExactEvidence>) {
+  const attempt = trialQuote(exact, current)({ ...current, trialState: trialView(previous) });
+  assert.equal(attempt.status, "quoted");
+  if (attempt.status !== "quoted") throw new Error("missing retained state");
+  return attempt.result;
+}
+function trialQuote(exact: ReturnType<typeof createUniV3Exact>, current = input(10n ** 15n)) {
+  const quote = method(exact, current).trialState?.quote;
+  assert(typeof quote === "function", "expected supported V3 trial model");
+  return quote;
 }
 
 function first(exact: ReturnType<typeof createUniV3Exact>, programInput: Input, base = state()) {
@@ -146,17 +160,16 @@ test("fee-only input does not replace a downward boundary tick with its inverse"
   assert.equal(quote.state.tick, -61);
 });
 
-test("Family isolated local state quotes sequential same/reverse directions without I/O", () => {
+test("Family shared trial state quotes sequential same/reverse directions without I/O", () => {
   const exact = createUniV3Exact(), base = state(), initialInput = input(4n * 10n ** 15n);
-  const advance = method(exact).isolatedLocalState!;
-  assert(advance);
+  assert(method(exact).trialState);
   const a = first(exact, initialInput, base);
   const expectedA = v3SwapToState(base, true, initialInput.amountIn);
-  const sameInput = input(3n * 10n ** 15n), same = advance.quote(sameInput, a.evidence);
+  const sameInput = input(3n * 10n ** 15n), same = advance(exact, sameInput, a);
   const expectedSame = v3SwapToState(expectedA.state, true, sameInput.amountIn);
   assert.equal(same.amountOut, expectedSame.amountOut);
   assert.equal(same.evidence.sqrtPriceX96After, expectedSame.state.sqrtPriceX96);
-  const reverseInput = input(a.amountOut, false), reverse = advance.quote(reverseInput, a.evidence);
+  const reverseInput = input(a.amountOut, false), reverse = advance(exact, reverseInput, a);
   const expectedReverse = v3SwapToState(expectedA.state, false, reverseInput.amountIn);
   assert.equal(reverse.amountOut, expectedReverse.amountOut);
   assert.equal(reverse.evidence.sqrtPriceX96After, expectedReverse.state.sqrtPriceX96);
@@ -164,18 +177,18 @@ test("Family isolated local state quotes sequential same/reverse directions with
     "a repeated pool must not quote its untouched baseline");
   assert(Object.isFrozen(reverse.evidence));
   assert.equal("state" in reverse.evidence, false, "opaque evidence never contains tick maps");
-  assert.equal(advance.quote(sameInput, a.evidence).amountOut, same.amountOut,
+  assert.equal(advance(exact, sameInput, a).amountOut, same.amountOut,
     "branching from one prior quote cannot mutate it");
 });
 
 test("concurrent amount trials retain isolated evidence and do not leak reverse post-state", async () => {
-  const exact = createUniV3Exact(), advance = method(exact).isolatedLocalState!;
+  const exact = createUniV3Exact();
   const runs = await Promise.all([1n, 8n, 1n].map(async multiplier => {
     const a = first(exact, input(multiplier * 10n ** 15n));
     await Promise.resolve();
-    const b = advance.quote(input(a.amountOut, false), a.evidence);
+    const b = advance(exact, input(a.amountOut, false), a);
     await Promise.resolve();
-    const c = advance.quote(input(b.amountOut), b.evidence);
+    const c = advance(exact, input(b.amountOut), b);
     return [a.amountOut, b.amountOut, c.amountOut];
   }));
   assert.deepEqual(runs[0], runs[2]);
@@ -185,59 +198,58 @@ test("concurrent amount trials retain isolated evidence and do not leak reverse 
 test("ordinary quotes retain no trial state and permission/Quoter variants do not opt in", () => {
   const exact = createUniV3Exact(), ordinaryInput = input(10n ** 15n, true, false);
   const ordinary = first(exact, ordinaryInput), retained = first(exact, input(ordinaryInput.amountIn));
-  assert.deepEqual(ordinary, retained);
+  assert.equal(ordinary.amountOut, retained.amountOut);
+  assert.deepEqual(ordinary.evidence, retained.evidence);
+  assert.equal(ordinary.stateChanges, undefined);
   const local = method(exact);
   assert.deepEqual(local.program.buildRequests(ordinaryInput), local.program.buildRequests(input(ordinaryInput.amountIn)));
-  assert.throws(() => local.isolatedLocalState!.quote(input(1n), ordinary.evidence), /not retained/);
+  const quoteTrial = trialQuote(exact);
+  assert.equal(quoteTrial({ ...input(1n), trialState: trialView(ordinary) }).status, "not-applicable");
   const quoter = method(createUniV3Exact("quoter"));
   assert.equal("chainAmountQuote" in quoter && quoter.chainAmountQuote, true);
-  assert.equal(quoter.isolatedLocalState, undefined);
+  assert.equal(quoter.trialState, undefined);
   for (const kind of ["is-swapper", "unsupported"] as const) {
     const gated = { ...ordinaryInput, descriptor: { ...descriptor,
       swapAccess: { ...descriptor.swapAccess, kind } } };
-    assert.equal(method(exact, gated).isolatedLocalState, undefined);
-    assert.throws(() => local.isolatedLocalState!.quote(gated, retained.evidence), /unsupported/);
+    assert.deepEqual(method(exact, gated).trialState,
+      { unsupportedReason: "univ3 swap-access trial-state dependencies are unproven" });
+    assert.throws(() => quoteTrial({ ...gated, trialState: trialView(retained) }), /unsupported/);
   }
 });
 
 test("missing bitmap coverage fails closed without changing the retained predecessor", () => {
-  const exact = createUniV3Exact(), advance = method(exact).isolatedLocalState!;
+  const exact = createUniV3Exact();
   const a = first(exact, input(10n ** 15n));
   const reverseInput = input(a.amountOut, false);
-  const expected = advance.quote(reverseInput, a.evidence);
-  const outOfRange = advance.quote(input(10n ** 40n), a.evidence);
+  const expected = advance(exact, reverseInput, a);
+  const outOfRange = advance(exact, input(10n ** 40n), a);
   assert.equal(outOfRange.amountOut, 0n);
-  assert.throws(() => advance.quote(input(1n), outOfRange.evidence), /not retained/);
-  assert.deepEqual(advance.quote(reverseInput, a.evidence), expected);
+  assert.equal(trialQuote(exact)({ ...input(1n), trialState: trialView(outOfRange) }).status, "not-applicable");
+  assert.deepEqual(advance(exact, reverseInput, a), expected);
   const missing = state();
   missing.tickBitmap.delete(-1);
   assert.throws(() => v3SwapToState(missing, true, 10n ** 15n), V3MissingBitmapWordError);
   assert.equal(missing.sqrtPriceX96, Q96);
 });
 
-test("retained state requires the original Family evidence and unchanged source/pool/caller", () => {
-  const exact = createUniV3Exact(), advance = method(exact).isolatedLocalState!;
+test("shared model binds the actual pool, token pair and fee, independent of Family callback identity", () => {
+  const exact = createUniV3Exact();
   const a = first(exact, input(10n ** 15n));
-  assert.throws(() => advance.quote(input(a.amountOut, false), { ...a.evidence }), /not retained/);
-  assert.throws(() => method(createUniV3Exact()).isolatedLocalState!
-    .quote(input(a.amountOut, false), a.evidence), /not retained/);
-  for (const source of [{ ...SOURCE, number: SOURCE.number + 1 },
-    { ...SOURCE, generation: SOURCE.generation + 1 }, { ...SOURCE, hash: `0x${"ef".repeat(32)}` }]) {
-    assert.throws(() => advance.quote({ ...input(a.amountOut, false), source }, a.evidence), /foreign source/);
-  }
-  assert.throws(() => advance.quote({ ...input(a.amountOut, false),
-    executor: "0x7777777777777777777777777777777777777777" }, a.evidence), /binding changed/);
+  assert.deepEqual(advance(createUniV3Exact(), input(a.amountOut, false), a), advance(exact, input(a.amountOut, false), a));
+  assert.throws(() => advance(exact, { ...input(a.amountOut, false), descriptor: { ...descriptor, fee: 500n } }, a), /binding/);
   const foreignDescriptor = { ...descriptor, pool: "0x4444444444444444444444444444444444444444" };
   const foreignRoute = { ...routes[1]!, pool: foreignDescriptor.pool };
-  assert.throws(() => advance.quote({ ...input(a.amountOut, false),
-    descriptor: foreignDescriptor, route: foreignRoute }, a.evidence), /binding changed/);
+  assert.equal(trialQuote(exact)({ ...input(a.amountOut, false),
+    descriptor: foreignDescriptor, route: foreignRoute, trialState: trialView(a) }).status, "not-applicable");
 });
 
 // Optional same-work CPU measurement; excludes RPC, issuer/session work and
 // Solver completion. No timing threshold is a correctness assertion.
 test("local V3 same-work microbenchmark", { skip: process.env.MEV_UNIV3_LOCAL_BENCH !== "1" }, t => {
   const exact = createUniV3Exact(), local = method(exact), base = state();
+  const quoteTrial = trialQuote(exact);
   const aInput = input(4n * 10n ** 15n, false), a = first(exact, aInput, base);
+  const snapshot = applyExactTrialState(emptyExactTrialState(), a.stateChanges!, a.stateEffects);
   const postState = v3SwapToState(base, false, aInput.amountIn).state;
   const result = (data: string) => [{ id: "local-pool-state", ok: true as const,
     source: SOURCE, completion: "returned" as const, data,
@@ -246,11 +258,17 @@ test("local V3 same-work microbenchmark", { skip: process.env.MEV_UNIV3_LOCAL_BE
   const amounts = [1n, 2n, 4n, 8n].map(n => n * 10n ** 14n);
   const ordinaryInputs = amounts.map(amount => input(amount, true, false));
   const retainedInputs = amounts.map(amount => input(amount));
+  const sharedInputs = retainedInputs.map(current => ({ ...current, trialState: snapshot.view }));
+  const quoted: ExactQuoteResult<UniV3ExactEvidence>[] = sharedInputs.map(current => {
+    const result = quoteTrial(current);
+    assert(result.status === "quoted");
+    return result.result;
+  });
   const decode = (programInput: Input, results = initialResults) => local.program.decode({
     programInput, initialResults: results, dependentEvidence: [],
   });
   for (const programInput of retainedInputs) {
-    assert.equal(local.isolatedLocalState!.quote(programInput, a.evidence).amountOut,
+    assert.equal(advance(exact, programInput, a).amountOut,
       decode(programInput, postResults).amountOut);
   }
   const count = 3000, rounds = 7;
@@ -259,7 +277,16 @@ test("local V3 same-work microbenchmark", { skip: process.env.MEV_UNIV3_LOCAL_BE
     ["baselineStateDecode", i => decode(ordinaryInputs[i % 4]!).amountOut],
     ["retainStateDecode", i => decode(retainedInputs[i % 4]!).amountOut],
     ["samePostStateDecode", i => decode(retainedInputs[i % 4]!, postResults).amountOut],
-    ["samePostStateTransition", i => local.isolatedLocalState!.quote(retainedInputs[i % 4]!, a.evidence).amountOut],
+    ["samePostStateTransition", i => {
+      const result = quoteTrial(sharedInputs[i % 4]!);
+      assert(result.status === "quoted");
+      return result.result.amountOut;
+    }],
+    ["frameworkSnapshotApply", i => {
+      const result = quoted[i % 4]!;
+      applyExactTrialState(snapshot, result.stateChanges!, result.stateEffects);
+      return result.amountOut;
+    }],
   ];
   let checksum = 0n;
   for (const [, run] of tasks) for (let i = 0; i < 500; i++) checksum ^= run(i);

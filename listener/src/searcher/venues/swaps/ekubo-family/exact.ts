@@ -1,3 +1,4 @@
+import { ethers } from "ethers";
 import { localZeroExactMethod, type ExactQuoteSemantics, type ExactQuoteInput, type ExactRequestProgram } from "../../adapter-family-plugin.js";
 import { EKUBO_MAX_EXACT_INPUT, encodeEkuboQuote } from "../ekubo/abi.js";
 import { assertSource, call, decodeQuote, lower, returned, validateResults } from "./codec.js";
@@ -10,6 +11,7 @@ function validate(input: ExactQuoteInput<EkuboDescriptor, EkuboRoute>): void {
   assertSource(input.source, input.source);
   lower(input.executor);
   if (input.amountIn < 0n || input.amountIn > EKUBO_MAX_EXACT_INPUT) throw new Error("ekubo invalid int128 exact input");
+  if (input.descriptor.poolKey.token0 === ethers.ZeroAddress && !input.route.isToken1 && input.amountIn >= (1n << 96n)) throw new Error("ekubo native input exceeds CALL_VALUE uint96");
 }
 function quote(input: ExactQuoteInput<EkuboDescriptor, EkuboRoute>, amountOut: bigint) {
   return { amountOut, evidence: { kind: "ekubo-router-exact-input" as const, source: Object.freeze({ ...input.source }),

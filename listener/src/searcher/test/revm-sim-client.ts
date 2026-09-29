@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { once } from "node:events";
 import { createServer } from "node:http";
-import { PassThrough, Writable } from "node:stream";
+import { PassThrough, type Readable, Writable } from "node:stream";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { keccak256 } from "ethers";
@@ -66,6 +66,27 @@ const pinnedRequest = () => ({ blockNumber: 300, from: `0x${"aa".repeat(20)}`,
   sourcePin: { chainId: 1, blockHash: PIN_HASH, stateRoot: PIN_ROOT } });
 const attestation = () => ({ kind: "node-attested" as const, chainId: 1, blockNumber: 300,
   blockHash: PIN_HASH, stateRoot: PIN_ROOT, parentHash: PIN_PARENT });
+
+test("fatal logging distinguishes daemon and attestation faults without changing fencing", async () => {
+  const original = console.error, lines: string[] = [];
+  console.error = line => { lines.push(String(line)); };
+  try {
+    for (const stage of ["client-daemon", "client-attestation"] as const) {
+      const key = "ab".repeat(32), f = new Fixture(), fatal: RevmFatalReason[] = [];
+      const c = new FixtureClient(f, { diagnosticCandidateKey: key, onFatal: r => fatal.push(r) });
+      const request = assert.rejects(c.strictSimulate(pinnedRequest()), RevmFatalError);
+      f.reply(0, stage === "client-daemon" ? { fatal: { kind: "source-fault" } } : {});
+      await request;
+      assert.deepEqual(fatal, [{ kind: "source-fault" }]);
+      await assert.rejects(c.health(), RevmFatalError); assert.equal(f.requests.length, 1);
+      const record = JSON.parse(lines.at(-1)!.slice("[revm-fault] ".length));
+      assert.equal(record.stage, stage); assert.equal(record.candidateKey, key);
+      assert.equal(record.requestId, "1"); assert.equal(record.blockNumber, 300);
+      assert(!lines.join().includes(pinnedRequest().rpcUrl));
+      f.close(); await c.closeAndDrain();
+    }
+  } finally { console.error = original; }
+});
 
 test("counterfactual executor code is hash-bound, target-only and pinned; invalid requests never dispatch", async () => {
   const f = new Fixture(); const c = new FixtureClient(f);
@@ -726,15 +747,25 @@ class PinnedRpcFixture {
 }
 class PinnedDirectClient extends RevmSimClient {
   readonly responses: Record<string, any>[] = [];
+  readonly diagnosticLines: string[] = [];
   protected spawnDaemon(command: string, args: string[], detached: boolean) {
     assert.equal(command, process.env.REVM_SIM_TEST_BINARY); assert.equal(detached, false);
-    const child = spawn(command, args, { stdio: ["pipe", "pipe", "inherit"], detached,
+    const child = spawn(command, args, { stdio: ["pipe", "pipe", "pipe"], detached,
       env: { ...process.env, MAINNET_RPC_URL: "", NO_PROXY: "127.0.0.1,localhost,*", no_proxy: "127.0.0.1,localhost,*",
         // Explicit inert proxy avoids platform auto-discovery; NO_PROXY bypasses
         // it for every request. Both possible destinations remain loopback.
         HTTP_PROXY: "http://127.0.0.1:1", http_proxy: "http://127.0.0.1:1",
         HTTPS_PROXY: "http://127.0.0.1:1", https_proxy: "http://127.0.0.1:1",
         ALL_PROXY: "http://127.0.0.1:1", all_proxy: "http://127.0.0.1:1" } });
+    let diagnosticBuffer = "";
+    child.stderr.on("data", chunk => {
+      diagnosticBuffer += chunk.toString();
+      let end: number;
+      while ((end = diagnosticBuffer.indexOf("\n")) >= 0) {
+        this.diagnosticLines.push(diagnosticBuffer.slice(0, end));
+        diagnosticBuffer = diagnosticBuffer.slice(end + 1);
+      }
+    });
     // Observe the real daemon envelope before the production client's domain
     // conversion, so a rejected promise alone cannot hide published attestation.
     let buffered = "";
@@ -746,7 +777,7 @@ class PinnedDirectClient extends RevmSimClient {
         buffered = buffered.slice(end + 1);
       }
     });
-    return child;
+    return child as unknown as ChildProcessByStdio<Writable, Readable, null>;
   }
 }
 async function pinnedFixture(run: (f: PinnedRpcFixture, c: PinnedDirectClient, fatal: RevmFatalReason[]) => Promise<void>,
@@ -760,6 +791,48 @@ async function pinnedFixture(run: (f: PinnedRpcFixture, c: PinnedDirectClient, f
 }
 
 if (process.env.REVM_SIM_TEST_BINARY) {
+  test("pinned direct: connection diagnostics explain bounded retries without exposing the endpoint", async () => pinnedFixture(async (f, c, fatal) => {
+    const closed = createServer(); closed.listen(0, "127.0.0.1"); await once(closed, "listening");
+    const address = closed.address(); assert(address && typeof address === "object");
+    await new Promise<void>((resolve, reject) => closed.close(error => error ? reject(error) : resolve()));
+    const rpcUrl = `http://127.0.0.1:${address.port}/key-must-not-echo?token=must-not-echo`;
+    await assert.rejects(c.strictSimulate({ ...f.request(), rpcUrl }), RevmFatalError);
+    await c.closeAndDrain();
+    assert.deepEqual(fatal, [{ kind: "source-fault" }]);
+    const logs = c.diagnosticLines.filter(line => line.startsWith("[revm-diagnostic] "))
+      .map(line => JSON.parse(line.slice("[revm-diagnostic] ".length)));
+    const requests = logs.filter(row => row.stage === "rpc-send");
+    assert.deepEqual(requests.map(row => row.details.attempt), [1, 2, 3]);
+    assert.deepEqual(requests.map(row => row.details.willRetry), [true, true, false]);
+    assert.deepEqual(requests.map(row => row.details.transport.retryDecision), ["retry", "retry", "attempt-limit"]);
+    for (const { details } of requests) {
+      assert.equal(details.methods.eth_chainId, 1);
+      assert.equal(details.transport.flags.connect, true);
+      assert.equal(details.transport.retryableTransport, true);
+      assert(details.transport.causes.some((cause: { ioKind?: string; osError?: number }) =>
+        cause.ioKind === "ConnectionRefused" && Number.isInteger(cause.osError)));
+    }
+    assert(!c.diagnosticLines.join().includes("must-not-echo"));
+    assert(!c.diagnosticLines.join().includes(rpcUrl));
+    assert.deepEqual(c.responses.at(-1)!.fatal, { kind: "source-fault" });
+  }));
+  test("pinned direct: source-fault stderr preserves RPC cause without exposing payloads", async () => pinnedFixture(async (f, c, fatal) => {
+    const secret = "https://user:must-not-echo@invalid.test/key-must-not-echo";
+    f.hook = call => call.method === "eth_getCode"
+      ? { error: { code: -32603, message: secret, data: { detail: secret } } } : undefined;
+    await assert.rejects(c.strictSimulate(f.request()), RevmFatalError);
+    await c.closeAndDrain();
+    assert.deepEqual(fatal, [{ kind: "source-fault" }]);
+    const logs = c.diagnosticLines.filter(line => line.startsWith("[revm-diagnostic] "))
+      .map(line => JSON.parse(line.slice("[revm-diagnostic] ".length)));
+    assert(logs.some(r => r.stage === "rpc-error" && r.details.rpcCode === -32603
+      && r.details.attempt === 1 && r.details.httpStatus === 200 && r.details.methods.eth_getCode > 0));
+    assert(logs.some(r => r.stage === "source-check" && r.details.category === "pinned-batch-incomplete"));
+    assert(logs.some(r => r.stage === "daemon-response" && r.details.requestId === 1));
+    assert(!c.diagnosticLines.join().includes("must-not-echo"));
+    assert(!c.diagnosticLines.join().includes(f.url));
+    assert.deepEqual(c.responses.at(-1)!.fatal, { kind: "source-fault" });
+  }));
   test("pinned direct: code override precedes real balance probes, preserves source storage/native and never leaks", async () => pinnedFixture(async (f, c) => {
     f.hook = call => call.method === "eth_getBalance" ? { result: "0xd" }
       : call.method === "eth_getTransactionCount" ? { result: "0x7" } : undefined;

@@ -47,3 +47,27 @@ export function quoteAmount(state: EllaState, direction: EllaDirection, amountIn
   return { amountOut: unavailableReason ? 0n : grossOut - fee, grossOut, fee, systemFee,
     ...(unavailableReason ? { unavailableReason } : {}) };
 }
+
+/** Fixed-price, ordinary-transfer transition of the verified exchange runtime.
+ * This kernel does NOT prove arbitrary token/oracle/fee-recipient semantics.
+ * Callers must establish that dependency closure before issuing trial state. */
+export function quoteAmountAndApply(state: EllaState, direction: EllaDirection, amountIn: bigint,
+  pool: string, executor: string) {
+  if (same(executor, pool) || same(state.feesAddress, executor) || same(state.feesAddress, pool)) {
+    throw new Error("ella unsupported trial actor or self-fee recipient");
+  }
+  const q = quoteAmount(state, direction, amountIn);
+  if (amountIn === 0n || q.unavailableReason) return { ...q, nextState: state };
+  const buy = direction === "buy-token";
+  // Pool retains the LP part of the output fee. The system part really leaves
+  // the pool; subtracting grossOut would incorrectly discard the retained fee.
+  const paid = q.amountOut + q.systemFee;
+  const nativeBalance = buy ? state.nativeBalance + amountIn : state.nativeBalance - paid;
+  const tokenBalance = buy ? state.tokenBalance - paid : state.tokenBalance + amountIn;
+  if (nativeBalance < 0n || tokenBalance < 0n || nativeBalance > MAX_UINT || tokenBalance > MAX_UINT) {
+    throw new Error("ella trial inventory overflow");
+  }
+  return { ...q, nextState: Object.freeze({ ...state, nativeBalance, tokenBalance,
+    baseFeesGenerated: state.baseFeesGenerated + (buy ? 0n : q.fee - q.systemFee),
+    feesGenerated: state.feesGenerated + (buy ? q.fee - q.systemFee : 0n) }) };
+}

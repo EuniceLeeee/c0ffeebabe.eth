@@ -1316,7 +1316,7 @@ export class StrictProductionRuntimeSession {
     readonly creditDebtBps?: bigint;
     readonly control?: AdapterWorkControl;
     readonly requireChainAmountQuote?: boolean;
-    /** Full ordered prefix for a repeated-state route; handles must be issued here. */
+    /** Full ordered trial prefix; handles must be issued here. */
     readonly priorQuotes?: readonly StrictProductionExactHandle[];
   }): Promise<StrictProductionExactHandle> {
     this.#runtime.generationFence.assertCurrent(

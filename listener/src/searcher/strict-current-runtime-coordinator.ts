@@ -143,6 +143,9 @@ export class StrictCurrentRuntimeCoordinator
   implements CurrentSourceRuntimeCoordinator {
   private publishedPricing: BlockScanStateSnapshot | null = null;
   private bootstrapRawPricing: BlockScanStateSnapshot | null = null;
+  /** Policy-only exclusions for this live run. Never written into Ready or
+   * cleared by a new block, touched event, raw refresh or reorg. */
+  private readonly disabledEffectiveInstances = new Set<string>();
   private pricingEpoch = 0;
   private fundingEpoch = 0;
   private readonly fundingPreparations = new WeakMap<StrictFundingPreparation, {
@@ -164,6 +167,7 @@ export class StrictCurrentRuntimeCoordinator
       backend?: Pick<StateBackend, "call">,
       reuse?: { readonly previous?: EffectiveMidSnapshot;
         readonly touchedStateKeys?: ReadonlySet<string>;
+        readonly disabledEdgeIds?: ReadonlySet<string>;
         /** Explicit quote target; snapshot remains the unmodified sizing reference. */
         readonly quoteGraph?: VerifiedGraphView },
       simulationTransport?: StrictSimulationTransport,
@@ -180,6 +184,8 @@ export class StrictCurrentRuntimeCoordinator
     this.fundingEpoch++;
     this.publishedPricing = null;
     this.bootstrapRawPricing = null;
+    // This reset also runs on live source-anchor retirement, not just replay.
+    // Run exclusions survive; only a newly started coordinator retries them.
     this.exactQuoteCache?.resetState();
     this.resetSessions();
   }
@@ -455,6 +461,7 @@ export class StrictCurrentRuntimeCoordinator
       assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
       return quote(sizing, control, backend, {
         previous: rawBasis === null ? undefined : previous?.effectiveMids,
+        disabledEdgeIds: this.disabledEffectiveEdges(sizing),
         quoteGraph: rawBasis === null ? undefined : graph,
         touchedStateKeys: rawBasis !== null && activityAllowsEffectiveCarry(previous, graph, activity)
           ? activity.touchedStateKeys : undefined,
@@ -484,6 +491,9 @@ export class StrictCurrentRuntimeCoordinator
 
   private publishPricing(built: StrictPricingBuildResult, pricingEpoch: number): void {
     if (pricingEpoch !== this.pricingEpoch) throw new Error("pricing publication retired during prepare");
+    // Only the successful atomic publication can retire an instance. Failed,
+    // incomplete, cancelled or superseded drafts must not poison the next try.
+    this.recordFailedEffectiveInstances(built.snapshot);
     if (built.rawBasis !== undefined) this.bootstrapRawPricing = built.rawBasis;
     this.publishedPricing = built.snapshot;
     try {
@@ -491,6 +501,40 @@ export class StrictCurrentRuntimeCoordinator
     } catch {
       // Historical evidence is fail-open and cannot suppress pricing.
     }
+  }
+
+  private disabledEffectiveEdges(pricing: BlockScanStateSnapshot): ReadonlySet<string> | undefined {
+    if (this.disabledEffectiveInstances.size === 0) return undefined;
+    const disabled = new Set<string>();
+    for (const edge of pricing.graph.edges) {
+      const edgeId = blockScanEdgeKey(edge);
+      const familyId = pricing.pricingFamilyIdByEdgeKey?.get(edgeId);
+      if (familyId !== undefined && this.disabledEffectiveInstances.has(
+        JSON.stringify([familyId, edgeInstanceKey(edge)]),
+      )) disabled.add(edgeId);
+    }
+    return disabled;
+  }
+
+  private recordFailedEffectiveInstances(pricing: BlockScanStateSnapshot): void {
+    const effective = pricing.effectiveMids;
+    if (!effective?.complete) return;
+    const allFailed = new Map<string, boolean>();
+    for (const edge of pricing.graph.edges) {
+      const edgeId = blockScanEdgeKey(edge);
+      const familyId = pricing.pricingFamilyIdByEdgeKey?.get(edgeId);
+      if (familyId === undefined) continue;
+      const key = JSON.stringify([familyId, edgeInstanceKey(edge)]);
+      if (this.disabledEffectiveInstances.has(key)) continue;
+      const row = effective.rows.get(edgeId);
+      // No protocol/revert-reason interpretation. Missing valuation/rows and
+      // cancelled work are not completed amount-quote failures. A successful
+      // direction keeps the instance eligible, even if its reverse failed.
+      const failed = row !== undefined && row.amountIn !== null && row.amountIn > 0n &&
+        (row.status === "quote-failed" || row.status === "unsupported" || row.status === "no-output");
+      allFailed.set(key, (allFailed.get(key) ?? true) && failed);
+    }
+    for (const [key, failed] of allFailed) if (failed) this.disabledEffectiveInstances.add(key);
   }
 
   async prepareCurrentNExactExecutionContext(
@@ -619,7 +663,7 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
       (carried ? carriedEdgeKeys : refreshedEdgeKeys).push(key);
       pricingProvenanceByEdgeKey.set(key, carried ? "carried" : "refreshed");
       coverageByEdgeKey.set(key, Object.freeze({ status: "resolved" }));
-    } else if (row?.status === "no-output" || row?.status === "unsupported") {
+    } else if (row?.status === "no-output" || row?.status === "unsupported" || row?.status === "disabled-for-run") {
       unavailableEdgeKeys.push(key);
       pricingProvenanceByEdgeKey.set(key, "unavailable");
       coverageByEdgeKey.set(key, Object.freeze({ status: "rejected", reason: `effective-${row.status}` }));

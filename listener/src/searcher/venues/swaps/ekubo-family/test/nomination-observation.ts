@@ -7,11 +7,14 @@ import type { TokenEdge } from "../../../../planner/token-graph.js";
 import { deriveEdgeTaxonomy } from "../../../../strategy-taxonomy.js";
 import { plugin } from "../../../production-families/ekubo.production.js";
 import { EKUBO_CORE, EKUBO_CORE_DEPLOY_BLOCK, EKUBO_POOL_INITIALIZED_TOPIC, EKUBO_ROUTER } from "../../ekubo/abi.js";
+import { ekuboGraphToken } from "../../ekubo/pool-key.js";
 import { candidate } from "../codec.js";
+import { EKUBO_SUPPORTED_CORE_HASH, EKUBO_SUPPORTED_ROUTER_HASH } from "../extension.js";
 import { ekuboNomination, reverseBindEkubo } from "../nomination.js";
-import { EKUBO_ACTION_ID } from "../manifest.js";
+import { EKUBO_ACTION_ID, EKUBO_FAMILY_ID } from "../manifest.js";
 import { CALL_ID, INIT_ID } from "../discovery.js";
-import { descriptor, EXECUTOR, ID, initialized, KEY, SOURCE, swapCall, update, word } from "./fixtures.js";
+import type { EkuboDescriptor } from "../types.js";
+import { descriptor, EXECUTOR, ID, identity, initialized, KEY, SOURCE, swapCall, update, word } from "./fixtures.js";
 
 const nomination = { address: ID, opaque: { adapter: "ekubo-core-pool-v1", poolId: ID } };
 function provider(overrides: Partial<CaptureNominationProvider> = {}): CaptureNominationProvider {
@@ -89,10 +92,15 @@ function anonymous(delta0 = 15809n, delta1 = -11938083n, poolId = ID): SwapEvent
   return { address: EKUBO_CORE, topics: [], data: `${EKUBO_ROUTER}${poolId.slice(2)}${update(delta0, delta1).slice(2)}${word(1n).slice(2)}` };
 }
 const d = descriptor();
-const graph: TokenEdge[] = plugin.routes.project({ descriptor: d }).map(route => ({ instanceKey: route.instanceKey,
+const graphFor = (instance: EkuboDescriptor): TokenEdge[] => plugin.routes.project({ descriptor: instance }).map(route => ({ instanceKey: route.instanceKey,
   adapterId: EKUBO_ACTION_ID, target: EKUBO_ROUTER, tokenIn: route.tokenIn, tokenOut: route.tokenOut, slotKind: "swap", ...deriveEdgeTaxonomy("swap") }));
-function context(logs: SwapEventLog[], edges = graph): ReceiptSwapObservationContext {
+const graph = graphFor(d);
+function context(logs: SwapEventLog[], edges = graph, descriptors: readonly EkuboDescriptor[] = [d]): ReceiptSwapObservationContext {
   return { logs, graph: edges, edgesByTarget: new Map([[EKUBO_ROUTER, edges]]),
+    resolveBinding: edge => {
+      const instance = descriptors.find(entry => entry.instanceKey === edge.instanceKey);
+      return instance ? { familyId: EKUBO_FAMILY_ID, descriptor: instance } : null;
+    },
     matchedOwnedTriggers: logs.map((log, index) => ({ logIndex: index, triggerId: `trigger:${index}`, emitter: log.address, topic0: log.topics[0] ?? "" })),
     control: { deadlineAtMs: Date.now() + 10000, signal: new AbortController().signal },
     sourceGeneration: { id: "synthetic-receipt", sourceBlock: SOURCE.number, sourceBlockHash: SOURCE.hash, receiptId: "fixture",
@@ -107,7 +115,7 @@ test("anonymous receipt selector binds Core, exact byte length and pool id, neve
   for (const log of [{ ...anonymous(), address: EXECUTOR }, { ...anonymous(), topics: [word(1n)] },
     { ...anonymous(), data: `${anonymous().data}00` }]) assert.equal(observer.observedPoolIdentity(log), null);
 });
-test("receipt effects use strict instanceKey and token ordering, not legacy metadata", async () => {
+test("receipt effects use the admitted descriptor token order, not legacy metadata", async () => {
   assert(plugin.swap.receiptObservation);
   assert(graph.every(edge => edge.poolId === undefined && edge.poolToken0 === undefined));
   const result = await plugin.swap.receiptObservation.decodeReceiptImpacts(context([anonymous(), anonymous(-100n, 1000000n)]));
@@ -117,6 +125,36 @@ test("receipt effects use strict instanceKey and token ordering, not legacy meta
     assert.equal(result.impacts[0].impact.amountIn, 15809n); assert.equal(result.impacts[0].impact.amountOut, 11938083n);
     assert.equal(result.impacts[1].impact.tokenIn.toLowerCase(), KEY.token1.toLowerCase());
     assert.deepEqual(result.consumedTriggerIds, ["trigger:0", "trigger:1"]);
+  }
+});
+test("native receipt direction follows PoolKey before ETH maps to WETH in the graph", async () => {
+  assert(plugin.swap.receiptObservation);
+  // Include both sides of WETH's numeric address: graph ordering is not the
+  // protocol's token ordering, even when it happens to agree for one token.
+  for (const token1 of ["0x0400000000000000000000000000000000000001", KEY.token1]) {
+    const poolKey = { token0: ethers.ZeroAddress, token1, config: KEY.config };
+    const base = identity(), found = candidate(poolKey);
+    const native = descriptor({ ...base, subject: found.poolId, facts: { ...base.facts, ...found,
+      coreCodeHash: EKUBO_SUPPORTED_CORE_HASH, routerCodeHash: EKUBO_SUPPORTED_ROUTER_HASH, decimals: [18, 6] } });
+    const result = await plugin.swap.receiptObservation.decodeReceiptImpacts(context(
+      [anonymous(123n, -456n, found.poolId), anonymous(-789n, 321n, found.poolId)], graphFor(native), [native]));
+    assert.equal(result.status, "resolved");
+    if (result.status !== "resolved") throw new Error("native receipt did not resolve");
+    assert.equal(result.impacts.length, 2);
+    assert.deepEqual(result.impacts.map(({ impact }) => [impact.tokenIn, impact.tokenOut, impact.amountIn, impact.amountOut]), [
+      [ekuboGraphToken(ethers.ZeroAddress), ekuboGraphToken(token1), 123n, 456n],
+      [ekuboGraphToken(token1), ekuboGraphToken(ethers.ZeroAddress), 321n, 789n],
+    ]);
+  }
+});
+test("receipt direction cannot be inferred from an unbound or foreign graph edge", async () => {
+  assert(plugin.swap.receiptObservation);
+  for (const resolveBinding of [undefined, () => null,
+    () => ({ familyId: "foreign-family", descriptor: d }),
+    () => ({ familyId: EKUBO_FAMILY_ID, descriptor: { ...d, poolId: word(99n) } })]) {
+    const result = await plugin.swap.receiptObservation.decodeReceiptImpacts({ ...context([anonymous()]), resolveBinding });
+    assert.equal(result.status, "resolved");
+    if (result.status === "resolved") { assert.equal(result.impacts.length, 0); assert.equal(result.mutations.length, 1); }
   }
 });
 test("missing graph routes and zero flow are explicit mutations, bad deltas are unresolved", async () => {

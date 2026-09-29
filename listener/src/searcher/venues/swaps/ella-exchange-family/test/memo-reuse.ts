@@ -221,12 +221,42 @@ try {
     if (expected.oracle !== oracle) assert.deepEqual(affected(oracle), [], "old oracle leaves the new dependency root");
     if (expected.aggregator !== aggregator) assert.deepEqual(affected(aggregator), [], "old aggregator leaves the new dependency root");
     assert.equal(requests.length, readsBefore, "rehydrate/Graph/dependency resolution are local");
-    return { instance, graph, affected };
+    return { instance, graph, affected, root };
   }
 
   const memo = await attestAndSeal(start);
   const original = graphRoot(memo, start, initial);
   const originalBytes = JSON.stringify(memo);
+
+  // The public unsupported declaration preserves ordinary Exact while rejecting
+  // a repeated-pool continuation, even if the caller requested a trial at hop 1.
+  const executor = "0x1000000000000000000000000000000000000002";
+  const read = (method: string, params: readonly unknown[]) => {
+    const request = { id: requests.length, method, params }; requests.push(request);
+    return rpcResult(request) as string;
+  };
+  const exactSession = await original.root.createSession({ source: start, kind: "exact", fundingAssets: [],
+    runtime: createStrictCentralAdapterRuntime({ executor, generationFence: { assertCurrent(generation, at) {
+      assert.deepEqual({ ...at, generation }, start);
+    } }, provider: {
+      async getCode(address, block) { return read("eth_getCode", [address, ethers.toQuantity(block!)]); },
+      async getStorage(address, slot, block) { return read("eth_getStorageAt", [address, slot, ethers.toQuantity(block!)]); },
+      async call(tx, block) { return read("eth_call", [tx, ethers.toQuantity(block!)]); },
+    } }),
+  });
+  const buy = exactSession.edges.find(edge => edge.tokenOut.toLowerCase() === token)!;
+  const sell = exactSession.edges.find(edge => edge.tokenIn.toLowerCase() === token)!;
+  assert(buy && sell);
+  const quoteInput = { edge: buy, amountIn: BigInt(sample.amountIn), executor, runtimeEvidence: [] };
+  const ordinaryQuote = await exactSession.issueExact(quoteInput);
+  const attemptedTrial = await exactSession.issueExact({ ...quoteInput, priorQuotes: [] });
+  assert.equal(ordinaryQuote.amountOut, BigInt(sample.netAmountOut));
+  assert.equal(attemptedTrial.amountOut, ordinaryQuote.amountOut);
+  const readsBeforePrefix = requests.length;
+  await assert.rejects(exactSession.issueExact({ edge: sell, amountIn: attemptedTrial.amountOut,
+    executor, runtimeEvidence: [], priorQuotes: [attemptedTrial] }), /exact-sequential-prefix-unsupported/);
+  assert.equal(requests.length, readsBeforePrefix, "unsupported sequential model rejects before transport");
+  assert.equal((await exactSession.issueExact(quoteInput)).amountOut, ordinaryQuote.amountOut);
 
   requests.length = 0;
   // A fresh wiring/provider rules out an ethers cache masking accidental RPC.

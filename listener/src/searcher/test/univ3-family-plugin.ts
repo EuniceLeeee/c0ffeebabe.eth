@@ -599,7 +599,10 @@ assert.equal(resolveUniV3StateReader({ ...pancakeDescriptor,
 const readerCompatibilities = [descriptor, pancakeDescriptor, unknownDescriptor].map(descriptorToUse =>
   createUniV3Exact("local").cacheCompatibilityProjection({ ...exactInput, descriptor: descriptorToUse,
     route: univ3StrictFamilyPlugin.routes.project({ descriptor: descriptorToUse })[0] }));
-assert.deepEqual(readerCompatibilities.map(compatibility => compatibility.stateReader),
+assert.deepEqual(readerCompatibilities.map(compatibility => {
+  assert(compatibility !== null && typeof compatibility === "object" && "stateReader" in compatibility);
+  return compatibility.stateReader;
+}),
   [uniReader.address, pancakeReader.address, null], "cache compatibility records the selected reader, not just the factory");
 const readerCompatibilityHashes = readerCompatibilities.map(compatibility => hashCanonical(compatibility));
 assert.equal(new Set(readerCompatibilityHashes).size, 3, "factory/reader changes cannot share cache compatibility");

@@ -5,6 +5,7 @@ import { quotedPoolMid } from "../blockscan-state-shared.js";
 import { POOL, call, getterPool, probeAmount, quotePool, resultSource, returned, same, uint } from "./codec.js";
 import { staticBinding } from "./instance.js";
 import { actionId, assertRoute } from "./routes.js";
+import { curveRefreshAddresses, curveRefreshGuardRequests, curveRefreshRequirements, validateCurveRefreshScope } from "./refresh-scope.js";
 import type { CurvePlainDescriptor, CurvePlainPricingDescriptor, CurvePlainPricingSnapshot, CurvePlainRoute } from "./types.js";
 
 export const curvePlainPricing = {
@@ -18,7 +19,7 @@ export const curvePlainPricing = {
   },
   finalizePricingDescriptor: ({ draft }) => Object.freeze({ ...draft }),
   current: {
-    requirements: () => ({ transports: ["eth-call"] }),
+    requirements: ({ descriptor }) => curveRefreshRequirements(descriptor.instance),
     buildRequests({ descriptor }) {
       const { instance, route } = descriptor;
       assertRoute(instance, route);
@@ -26,11 +27,13 @@ export const curvePlainPricing = {
       return [call("current-A", instance.pool, POOL.encodeFunctionData("A")),
         call("current-fee", instance.pool, POOL.encodeFunctionData("fee")),
         call("current-balance-in", instance.pool, balances.encodeFunctionData("balances", [route.i])),
-        call("current-balance-out", instance.pool, balances.encodeFunctionData("balances", [route.j]))];
+        call("current-balance-out", instance.pool, balances.encodeFunctionData("balances", [route.j])),
+        ...curveRefreshGuardRequests(instance)];
     },
     buildDependentProgram({ current, completedRound, initialResults }) {
       if (completedRound !== 0) return null;
       const { instance, route } = current.descriptor;
+      validateCurveRefreshScope(instance, current.source, initialResults);
       const balanceIn = uint(returned(initialResults, "current-balance-in").data);
       const amountIn = probeAmount(instance.binding.decimals[route.i], balanceIn);
       return bindRequestResultRound({ transports: ["eth-call"] }, [
@@ -40,6 +43,7 @@ export const curvePlainPricing = {
     decodeSnapshot({ descriptor, initialResults, dependentEvidence }) {
       const results = collectRequestProgramResults(initialResults, dependentEvidence);
       const source = resultSource(results);
+      validateCurveRefreshScope(descriptor.instance, source, initialResults);
       const balanceIn = uint(returned(results, "current-balance-in").data);
       const balanceOut = uint(returned(results, "current-balance-out").data);
       const amplification = uint(returned(results, "current-A").data);
@@ -63,15 +67,15 @@ export const curvePlainPricing = {
       })]]);
     },
   },
-  dependencies: ({ descriptor }) => [descriptor.instance.pool, descriptor.instance.binding.registry, ...descriptor.instance.binding.coins],
+  dependencies: ({ descriptor }) => [descriptor.instance.binding.registry, ...curveRefreshAddresses(descriptor.instance)],
   mutation: {
     compile: ({ entries }) => compileAddressMutations(entries, ({ descriptor, routes }) => ({
-      addresses: [descriptor.instance.pool, ...descriptor.instance.binding.coins],
+      addresses: curveRefreshAddresses(descriptor.instance),
       keys: routes.map(route => route.routeKey),
     }), { kinds: ["log", "call"] }),
     affectedStateKeys({ descriptor, routes, observation }) {
     const target = observation.kind === "call" ? observation.target : observation.kind === "log" ? observation.address : null;
-    return target !== null && [descriptor.instance.pool, ...descriptor.instance.binding.coins].some(a => same(a, target))
+    return target !== null && curveRefreshAddresses(descriptor.instance).some(a => same(a, target))
       ? routes.map(route => route.routeKey) : [];
   } },
   liveStateProjection: { project: ({ descriptor, snapshot }) => ({ kind: "curve-plain-directed-get-dy",

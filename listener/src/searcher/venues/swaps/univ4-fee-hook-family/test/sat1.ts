@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
+import { createUniv4FeeHookExact } from "../exact.js";
+// Keep the explicit Quoter reference mode covered alongside local tests.
+const exact = createUniv4FeeHookExact("quoter");
 import { ADDR } from "../../../../../shared/constants/addresses.js";
 import { plugin } from "../../../production-families/univ4-fee-hook.production.js";
 import { SAT1, SAT1_HOOK_CODE_HASH, SAT1_TOKEN_CODE_HASH, hookDataFor } from "../sat1.js";
@@ -70,7 +73,7 @@ assert.throws(() => plugin.pricing.current.decodeSnapshot({ descriptor: pricing,
   initialResults: results.map((r, i) => i ? r : { ...r, source: { ...source, number: 1 } }), dependentEvidence: [] }), /source/);
 for (const route of routes) {
   const input = { descriptor, route, source, executor, runtimeEvidence: [], amountIn: 10n ** 15n };
-  const method = plugin.exact.methods(input)[1];
+  const method = exact.methods(input)[1];
   assert(method.kind === "request-program");
   const request = method.program.buildRequests(input)[0];
   assert(request.kind === "eth-call");
@@ -87,7 +90,7 @@ for (const route of routes) {
   const call = UNIV4_POOL_MANAGER_INTERFACE.decodeFunctionData("swap", ethers.hexlify(encoded.slice(24)));
   assert.equal(call[2], hookDataFor(descriptor, executor, zeroForOne));
   assert.equal(quote.evidence.hookData, call[2]);
-  const cacheProjection = plugin.exact.cacheCompatibilityProjection(input) as { hookData: string };
+  const cacheProjection = exact.cacheCompatibilityProjection(input) as { hookData: string };
   assert.equal(cacheProjection.hookData, call[2]);
   const wrongData = hookDataFor(descriptor, executor, !zeroForOne);
   assert.throws(() => plugin.execution.buildFragment({ ...execution,
@@ -96,7 +99,7 @@ for (const route of routes) {
   assert.throws(() => action.encode({ ...swap, params: { ...swap.params, zeroForOne: "false" } }, executor, new Uint8Array()), /actor/);
   assert.throws(() => action.encode(swap, other, new Uint8Array()), /actor/);
   assert.throws(() => plugin.execution.buildFragment({ ...execution, executor: other }), /incompatible/);
-  assert.notDeepEqual(plugin.exact.cacheCompatibilityProjection(input), plugin.exact.cacheCompatibilityProjection({ ...input, executor: other }));
+  assert.notDeepEqual(exact.cacheCompatibilityProjection(input), exact.cacheCompatibilityProjection({ ...input, executor: other }));
   if (route.direction === "zero-for-one") assert.throws(() => method.program.buildRequests({ ...input, amountIn: 6n * 10n ** 18n }), /MAX_BUY/);
 }
 const dependencies = plugin.pricing.dependencies({ descriptor: pricing, routes });
@@ -112,7 +115,7 @@ for (const address of [hook, token, other]) {
   const sell = routes.find(r => r.direction === "one-for-zero")!;
   const prefix = [{ descriptor, route: buy, amountIn: 1000n, amountOut: 2000n }];
   const input = { descriptor, route: sell, source, executor, runtimeEvidence: [], amountIn: 2000n, prefix };
-  const method = plugin.exact.methods(input)[1]!;
+  const method = exact.methods(input)[1]!;
   assert(method.kind === "request-program" && method.sequentialPrefix === true);
   const iface = new ethers.Interface([
     "function quoteExactInput((address exactCurrency,(address intermediateCurrency,uint24 fee,int24 tickSpacing,address hooks,bytes hookData)[] path,uint128 exactAmount) params) returns (uint256 amountOut,uint256 gasEstimate)",
@@ -136,7 +139,7 @@ for (const address of [hook, token, other]) {
   assert.throws(() => method.program.buildRequests({ ...input, amountIn: 2001n }), /mismatch/);
   const unsupportedDescriptor = { ...descriptor, hookModel: undefined };
   const unsupportedInput = { ...input, prefix: [{ ...prefix[0]!, descriptor: unsupportedDescriptor }] };
-  const unsupportedMethods = plugin.exact.methods(unsupportedInput);
+  const unsupportedMethods = exact.methods(unsupportedInput);
   assert.equal(unsupportedMethods.length, 1, "method declaration stays nonempty");
   assert(unsupportedMethods.every(m => m.kind !== "request-program"), "no sequential method: neutral runtime route rejection");
   assert.throws(() => method.program.buildRequests(unsupportedInput), /unsupported/);

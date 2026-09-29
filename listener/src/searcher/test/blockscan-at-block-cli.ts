@@ -1,13 +1,39 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ethers } from "ethers";
-import { parseAtBlockArgs, atBlockJson, parseAtBlockJson, parseHistoricalExecutorRuntimeCode } from "../blockscan-at-block-cli.js";
+import { parseAtBlockArgs, atBlockJson, parseAtBlockJson, parseHistoricalExecutorRuntimeCode, historicalFundingStarts } from "../blockscan-at-block-cli.js";
 import { maybeSubmitBlockScanAtomic, resolveBlockScanAtomicPolicy, resolveBlockScanCoreConfig, resolveBlockScanRefineCandidates } from "../main.js";
 import { BlockScanSimRejectCache } from "../blockscan-sim-reject-cache.js";
 import { DEFAULT_PROFIT_TOKEN_VALUATION } from "../profit-token-valuation.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
 
 const base = ["--ready", "ready.json", "--block", "123", "--out", "logs/new-run"];
+test("fixed effective P requires online repricing and preserves live default", () => {
+  assert.equal(parseAtBlockArgs(base)?.fixedEffectiveWethInput, undefined);
+  assert.equal(parseAtBlockArgs([...base, "--effective-weth-input", "0.05"])?.fixedEffectiveWethInput, 50_000_000_000_000_000n);
+  for (const value of ["0", "-1", "1e-2", "NaN", "0.0000000000000000001"])
+    assert.throws(() => parseAtBlockArgs([...base, "--effective-weth-input", value]));
+  assert.throws(() => parseAtBlockArgs(["--prices", "p", "--block", "123", "--out", "o", "--offline", "--effective-weth-input", "0.05"]), /online repricing/);
+});
+test("CLI funding starts are opt-in, normalized, verified and do not mutate live defaults", () => {
+  const token = "0x1111111111111111111111111111111111111111";
+  assert.deepEqual(parseAtBlockArgs(base)?.fundingTokens, []);
+  const args = parseAtBlockArgs([...base, "--funding-token", token, "--funding-token", token])!;
+  assert.deepEqual(args.fundingTokens, [token]);
+  for (const value of ["wstUSR", "", "0x12", ethers.ZeroAddress])
+    assert.throws(() => parseAtBlockArgs([...base, "--funding-token", value]), /invalid --funding-token/);
+  const defaults = resolveBlockScanCoreConfig({}).pricedTokens;
+  const sources = new Map([[token, { amount: 123n, adapterId: "fixture-flash", fundingId: "fixture" }]]);
+  const resolved = historicalFundingStarts(defaults, args.fundingTokens, sources);
+  assert.equal(resolved.get(token)?.maxBorrow, 123n);
+  assert.equal(resolved.size, defaults.size + 1);
+  assert.equal(defaults.has(token), false);
+  assert.deepEqual(historicalFundingStarts(defaults, [], sources), defaults);
+  assert.throws(() => historicalFundingStarts(defaults, [token], new Map()), /no positive verified funding/);
+  assert.throws(() => historicalFundingStarts(defaults, [token], new Map([[token, { ...sources.get(token)!, amount: 0n }]])), /no positive verified funding/);
+  assert.equal(historicalFundingStarts(new Map([[token, { maxBorrow: 10n }]]), [token], sources).get(token)?.maxBorrow, 10n);
+  assert.equal(historicalFundingStarts(new Map([[token, { maxBorrow: 1000n }]]), [token], sources).get(token)?.maxBorrow, 123n);
+});
 test("live and historical policy allow WBTC starts with an eight-decimal search cap", () => {
   const tokens = resolveBlockScanCoreConfig({}).pricedTokens;
   assert.equal(tokens.size, 5);
@@ -75,10 +101,14 @@ test("CLI and live share joint-DFS defaults and retain explicit rollback methods
     assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED:raw}), /must be 0 or 1/);
   assert.equal(cfg.deduplicateRotations, true, "default keeps one funded execution start per cycle");
   assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED:"0"}).deduplicateRotations, false);
+  assert.equal(resolveBlockScanCoreConfig({}).allowRepeatedTokens, true);
+  assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED:"0"}).allowRepeatedTokens, false);
+  assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED:"1"}).allowRepeatedTokens, true);
+  assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED:"false"}), /must be 0 or 1/);
   assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED:"1"}).deduplicateRotations, true);
   assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_DEDUP_ROTATIONS_ENABLED:"false"}), /must be 0 or 1/);
   assert.equal(cfg.maxHops, 6); assert.equal(cfg.minSpreadBps, 100);
-  assert.equal(cfg.usdSignalPairsPerToken, 20);
+  assert.equal(cfg.ethSignalPairsPerToken, 20);
   assert.equal(cfg.hopTokensPerStep, 2);
   assert.equal(cfg.hopPoolsPerPair, 2);
   for (const n of ["0", "1", "2", "3", "20"]) {
@@ -101,7 +131,10 @@ test("CLI and live share joint-DFS defaults and retain explicit rollback methods
   assert.equal(rollback.hopTokensPerStep, 3); assert.equal(rollback.hopPoolsPerPair, 3);
   assert.deepEqual(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_HOP_QUOTES_PER_PAIR:"99"}), cfg,
     "retired setting cannot override the explicit HOP_POOLS_PER_PAIR policy");
-  assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"1"}).usdSignalPairsPerToken, 1);
+  assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"1"}).ethSignalPairsPerToken, 1);
+  assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ETH_SIGNAL_PAIRS_PER_TOKEN:"3"}).ethSignalPairsPerToken, 3);
+  assert.equal(resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_ETH_SIGNAL_PAIRS_PER_TOKEN:"3",
+    SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"1"}).ethSignalPairsPerToken, 3);
   assert.throws(() => resolveBlockScanCoreConfig({SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN:"0"}), /positive safe integer/);
   assert.equal(cfg.exactAdmissionSpreadBps, 50); assert.equal(cfg.maxCandidates, 100);
   assert.equal(cfg.budgetMs, 15000);
@@ -142,7 +175,7 @@ test("enumeration defaults have one source and prefix pruning is explicitly conf
   assert.equal(cfg.rustEnumerationScratchMb, defaults.rustScratchMb);
   assert.equal(cfg.allowRepeatedPools, defaults.allowRepeatedPools);
   assert.equal(cfg.deduplicateRotations, defaults.deduplicateRotations);
-  assert.equal(cfg.usdSignalPairsPerToken, defaults.signalPairsPerToken);
+  assert.equal(cfg.ethSignalPairsPerToken, defaults.signalPairsPerToken);
   assert.equal(cfg.minSpreadBps, defaults.minSpreadBps);
   assert.equal(cfg.exactAdmissionSpreadBps, defaults.exactAdmissionSpreadBps);
   assert.equal(cfg.minCapitalFraction, defaults.minCapitalFraction);

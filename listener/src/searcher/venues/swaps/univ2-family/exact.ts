@@ -16,6 +16,8 @@ import {
 import { uniV2InputCapacity, UNIV2_MAX_RESERVE } from "./reserve-capacity.js";
 import { decodePoolQuote, poolQuoteRequest } from "./pool-quote.js";
 import { tokenTransferReceived } from "../../token-transfer-semantics/index.js";
+import { hashCanonical } from "../../canonical-value.js";
+import { storageState, tokenBalanceState } from "../../local-state-models/resources.js";
 import { decodeRouterQuote, routerQuoteRequests, ROUTER_QUOTE_REQUEST_IDS, uniV2QuoteRouter } from "./router-quote.js";
 import type {
   UniV2Descriptor,
@@ -31,8 +33,32 @@ type Input = ExactQuoteInput<UniV2Descriptor, UniV2Route>;
 type UniV2QuotePreference = "local" | "router";
 interface LocalPairState { readonly reserve0: bigint; readonly reserve1: bigint; }
 
-const createUniV2RequestProgram = (quotePreference: UniV2QuotePreference,
-  retained: WeakMap<object, LocalPairState>): ExactRequestProgram<
+function trialRef(input: Input) {
+  const d = input.descriptor;
+  return { key: `pool:${d.pool.toLowerCase()}`, schema: "v2-pair-state-v1",
+    dependencies: [storageState(d.pool), tokenBalanceState(d.token0, d.pool), tokenBalanceState(d.token1, d.pool)],
+    binding: hashCanonical({ pool: d.pool.toLowerCase(), token0: d.token0.toLowerCase(),
+      token1: d.token1.toLowerCase(), feeRule: { ...d.feeRule } }) };
+}
+function trialState(input: Input): LocalPairState | undefined {
+  const value = input.trialState?.get(trialRef(input));
+  if (value === undefined) return undefined;
+  const state = value as LocalPairState;
+  if (!state || typeof state.reserve0 !== "bigint" || typeof state.reserve1 !== "bigint" ||
+      state.reserve0 < 0n || state.reserve1 < 0n || state.reserve0 > UNIV2_MAX_RESERVE || state.reserve1 > UNIV2_MAX_RESERVE) {
+    throw new Error("univ2 invalid trial state");
+  }
+  return state;
+}
+function orientedState(input: Input, state: LocalPairState) {
+  const forward = input.route.direction === "zero-for-one";
+  const reserveIn = forward ? state.reserve0 : state.reserve1;
+  const reserveOut = forward ? state.reserve1 : state.reserve0;
+  return { reserveIn, reserveOut, inputBalance: reserveIn, outputBalance: reserveOut,
+    maxAmountIn: uniV2InputCapacity(reserveIn) };
+}
+
+const createUniV2RequestProgram = (quotePreference: UniV2QuotePreference): ExactRequestProgram<
   UniV2Descriptor,
   UniV2Route,
   UniV2ExactEvidence
@@ -54,7 +80,7 @@ const createUniV2RequestProgram = (quotePreference: UniV2QuotePreference,
       to: input.route.tokenIn,
       data: UNIV2_TOKEN_INTERFACE.encodeFunctionData("balanceOf", [input.descriptor.pool]),
       completion: "return-data" as const,
-    }), ...(input.retainLocalState && supportsLocalState(input.descriptor, quotePreference) ? [Object.freeze({
+    }), ...(input.trialState && supportsLocalState(input.descriptor, quotePreference) ? [Object.freeze({
       id: EXACT_OUTPUT_BALANCE_REQUEST_ID, kind: "eth-call" as const,
       to: input.route.tokenOut,
       data: UNIV2_TOKEN_INTERFACE.encodeFunctionData("balanceOf", [input.descriptor.pool]),
@@ -76,7 +102,9 @@ const createUniV2RequestProgram = (quotePreference: UniV2QuotePreference,
     if (programInput.amountIn < 0n) {
       throw new Error("univ2 exact amountIn cannot be negative");
     }
-    const state = readInitialState(programInput, initialResults, quotePreference);
+    const initialState = readInitialState(programInput, initialResults, quotePreference);
+    const current = supportsLocalState(programInput.descriptor, quotePreference) ? trialState(programInput) : undefined;
+    const state = current === undefined ? initialState : orientedState(programInput, current);
     // Zero is an unavailable amount, not a pool blacklist. The solver can
     // still quote a smaller legal input at this same source. Read balanceOf
     // as donations/unsynced transfers also consume uint112 headroom.
@@ -106,7 +134,7 @@ const createUniV2RequestProgram = (quotePreference: UniV2QuotePreference,
         router: quote.router, poolAmountOut: quote.amountOut, amountOut }) });
     }
     if (dependentEvidence.length !== 0) throw new Error("univ2 unexpected local-quote round");
-    return localQuote(programInput, state, retained);
+    return localQuote(programInput, state);
   },
 });
 
@@ -116,8 +144,7 @@ export function createUniV2Exact(quotePreference: UniV2QuotePreference = "local"
   UniV2Route,
   UniV2ExactEvidence
 > {
-  const retained = new WeakMap<object, LocalPairState>();
-  const program = createUniV2RequestProgram(quotePreference, retained);
+  const program = createUniV2RequestProgram(quotePreference);
   return {
     methods: (input) => Object.freeze([
       localZeroExactMethod<UniV2Descriptor, UniV2Route, UniV2ExactEvidence>(
@@ -132,25 +159,17 @@ export function createUniV2Exact(quotePreference: UniV2QuotePreference = "local"
         kind: "request-program" as const,
         // Only an actual pool/Router return is a chain amount quote.
         ...(input.descriptor.quoteModel.kind === "pool-get-amount-out" || usesRouter(input.descriptor, quotePreference)
-          ? { chainAmountQuote: true as const } : { stateOnlyReads: true as const }),
-        ...(supportsLocalState(input.descriptor, quotePreference) ? { isolatedLocalState: {
-          quote(current: Input, previous: UniV2ExactEvidence) {
-            assertRoute(current.descriptor, current.route);
-            const state = retained.get(previous);
-            if (!current.retainLocalState || state === undefined ||
-                !sameAddress(previous.pool, current.descriptor.pool) ||
-                previous.source.number !== current.source.number ||
-                previous.source.hash.toLowerCase() !== current.source.hash.toLowerCase() ||
-                previous.source.generation !== current.source.generation) {
-              throw new Error("univ2 isolated state is unavailable or foreign");
-            }
-            const forward = current.route.direction === "zero-for-one";
-            const reserveIn = forward ? state.reserve0 : state.reserve1;
-            const reserveOut = forward ? state.reserve1 : state.reserve0;
-            return localQuote(current, { reserveIn, reserveOut, inputBalance: reserveIn,
-              outputBalance: reserveOut, maxAmountIn: uniV2InputCapacity(reserveIn) }, retained);
-          },
-        } } : {}),
+          ? { chainAmountQuote: true as const } : {
+            stateOnlyReads: true as const,
+            trialState: supportsLocalState(input.descriptor, quotePreference) ? {
+              quote(current: Input) {
+                assertRoute(current.descriptor, current.route);
+                const state = trialState(current);
+                return state === undefined ? { status: "not-applicable" as const, reason: "univ2 trial state not loaded" }
+                  : { status: "quoted" as const, result: localQuote(current, orientedState(current, state)) };
+              },
+            } : { unsupportedReason: "univ2 local fee or token-transfer transition model is unproven" },
+          }),
         program,
       }),
     ]),
@@ -203,7 +222,7 @@ function readInitialState(input: Input, results: readonly AdapterRequestResult[]
   assertRoute(input.descriptor, input.route);
   if (input.amountIn < 0n) throw new Error("univ2 exact amountIn cannot be negative");
   assertResults(results, [EXACT_RESERVES_REQUEST_ID, EXACT_INPUT_BALANCE_REQUEST_ID,
-    ...(input.retainLocalState && supportsLocalState(input.descriptor, quotePreference) ? [EXACT_OUTPUT_BALANCE_REQUEST_ID] : []),
+    ...(input.trialState && supportsLocalState(input.descriptor, quotePreference) ? [EXACT_OUTPUT_BALANCE_REQUEST_ID] : []),
     ...(input.descriptor.quoteModel.kind === "pool-get-amount-out" ? ["exact-pool-quote"]
       : usesRouter(input.descriptor, quotePreference) ? ROUTER_QUOTE_REQUEST_IDS : [])], input.source);
   const reserves = decodeReservesResult(results, EXACT_RESERVES_REQUEST_ID);
@@ -211,7 +230,7 @@ function readInitialState(input: Input, results: readonly AdapterRequestResult[]
   if (!/^0x[0-9a-fA-F]{64}$/.test(balance.data)) throw new Error("univ2 invalid input balance result");
   const inputBalance = BigInt(balance.data);
   let outputBalance: bigint | undefined;
-  if (input.retainLocalState && supportsLocalState(input.descriptor, quotePreference)) {
+  if (input.trialState && supportsLocalState(input.descriptor, quotePreference)) {
     const output = requireSuccessfulResult(results, EXACT_OUTPUT_BALANCE_REQUEST_ID);
     if (!/^0x[0-9a-fA-F]{64}$/.test(output.data)) throw new Error("univ2 invalid output balance result");
     outputBalance = BigInt(output.data);
@@ -222,7 +241,7 @@ function readInitialState(input: Input, results: readonly AdapterRequestResult[]
     inputBalance, outputBalance, maxAmountIn: uniV2InputCapacity(inputBalance) });
 }
 
-function localQuote(input: Input, state: ReturnType<typeof readInitialState>, retained: WeakMap<object, LocalPairState>) {
+function localQuote(input: Input, state: ReturnType<typeof readInitialState>) {
   let poolAmountOut = trialOutput(input, state);
   const receivedAmountIn = receivedInput(input);
   const capacityExceeded = receivedAmountIn > state.maxAmountIn;
@@ -238,10 +257,13 @@ function localQuote(input: Input, state: ReturnType<typeof readInitialState>, re
     ...zeroEvidence(input), ...state, receivedAmountIn, poolAmountOut, amountOut,
     ...(capacityExceeded ? { unavailableReason: "input-reserve-capacity" as const } : {}),
   });
-  if (input.retainLocalState && amountOut > 0n && afterOut !== undefined) {
+  if (input.trialState && amountOut > 0n && afterOut !== undefined) {
     const forward = input.route.direction === "zero-for-one";
-    retained.set(evidence, Object.freeze({ reserve0: forward ? afterIn : afterOut,
-      reserve1: forward ? afterOut : afterIn }));
+    const ref = trialRef(input);
+    return Object.freeze({ amountOut, evidence, stateEffects: [...ref.dependencies,
+      tokenBalanceState(input.route.tokenIn, input.executor), tokenBalanceState(input.route.tokenOut, input.executor)],
+      stateChanges: [Object.freeze({ ref,
+      value: Object.freeze({ reserve0: forward ? afterIn : afterOut, reserve1: forward ? afterOut : afterIn }) })] });
   }
   return Object.freeze({ amountOut, evidence });
 }

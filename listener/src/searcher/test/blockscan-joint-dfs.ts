@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { ADDR } from "../../shared/constants/addresses.js";
-import { buildBlockScanUsdView } from "../blockscan-usd-view.js";
+import { buildBlockScanEthView } from "../blockscan-eth-view.js";
 import { enumerateJointDfs } from "../detector/blockscan-joint-dfs.js";
-import { enumeratePairedDfs, type DfsQuote, type DirectedPriceSignal,
+import { enumeratePairedDfs, resolveAllowRepeatedTokens, type DfsQuote, type DirectedPriceSignal,
   type PairedEnumerationInput } from "../detector/blockscan-paired-dfs.js";
-import type { ResolvedBlockScanMid } from "../detector/blockscan-scanner-core.js";
+import type { ResolvedBlockScanQuote } from "../detector/blockscan-scanner-core.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 
@@ -60,6 +60,7 @@ function oracle(input: Case): Row[] {
   }
   const result = new Map<string, Row>();
   const admits = (path: readonly DfsQuote[]) => {
+    if (input.allowRepeatedTokens === false && new Set(path.map(q => q.tokenIn)).size !== path.length) return false;
     let num = 1n, den = 1n;
     for (const q of path) { num *= q.num; den *= q.den; }
     if (!profitable(num, den, input.minSpreadBps)) return false;
@@ -227,11 +228,11 @@ test("joint DFS matches an independent oracle on 72 random bounded-walk graphs",
         }
       }
       if (signals.length) signals.push(signals[0]!);
-      for (const prefix of [{ prefixPruningEnabled: false, maxPrefixDrawdownBps: 0 },
+      for (const allowRepeatedTokens of [false, true]) for (const prefix of [{ prefixPruningEnabled: false, maxPrefixDrawdownBps: 0 },
         { prefixPruningEnabled: true, maxPrefixDrawdownBps: 0 }, { prefixPruningEnabled: true, maxPrefixDrawdownBps: 1000 }]) {
-        const result = check(scenario(sample % 2 ? [...quotes].reverse() : quotes, signals, { allowRepeatedPools, ...prefix,
+        const result = check(scenario(sample % 2 ? [...quotes].reverse() : quotes, signals, { allowRepeatedPools, allowRepeatedTokens, ...prefix,
           funding: ["f", "a"], maxHops: 2 + sample % 4, minSpreadBps: sample % 3 * 50,
-        }), `random ${sample}, reuse=${allowRepeatedPools}, policy=${JSON.stringify(prefix)}`, !prefix.prefixPruningEnabled);
+        }), `random ${sample}, pools=${allowRepeatedPools}, tokens=${allowRepeatedTokens}, policy=${JSON.stringify(prefix)}`, !prefix.prefixPruningEnabled);
         if (result.length) nonemptyCases++;
       }
     }
@@ -239,18 +240,38 @@ test("joint DFS matches an independent oracle on 72 random bounded-walk graphs",
   assert(nonemptyCases >= 30, "the random suite must exercise emitted cycles, not only empty graphs");
 });
 
+test("token reuse is independent from pool reuse and permits the final two-hop closure", () => {
+  assert.equal(resolveAllowRepeatedTokens(undefined), true);
+  assert.equal(resolveAllowRepeatedTokens("0"), false);
+  assert.equal(resolveAllowRepeatedTokens("1"), true);
+  assert.throws(() => resolveAllowRepeatedTokens("false"), /must be 0 or 1/);
+  const quotes = [quote("sell", "f", "a"), quote("buy", "a", "f"),
+    quote("ab", "a", "b"), quote("ba", "b", "a"), quote("self", "a", "a")];
+  for (const allowRepeatedPools of [false, true]) {
+    const input = scenario(quotes, [signal("f", "buy", "sell")], {
+      allowRepeatedTokens: false, allowRepeatedPools, prefixPruningEnabled: false,
+    });
+    assert.deepEqual(check(input, "simple two-hop cycle", true).map(row => row.ids), [["sell", "buy"]]);
+    assert(collect({ ...input, allowRepeatedTokens: true }).some(row => row.ids.length > 2));
+  }
+  const shared = quotes.slice(0, 2).map(q => ({ ...q, instance: "one-pool" }));
+  assert.equal(check(scenario(shared, [signal("f", "buy", "sell")], {
+    allowRepeatedTokens: false, allowRepeatedPools: true,
+  }), "same-pool two-hop controlled only by pool flag").length, 1);
+});
+
 test("joint DFS unpruned real effective fixture preserves the old complete cycle set", () => {
   const saved = JSON.parse(readFileSync(new URL("./fixtures/blockscan-effective-26029875.json", import.meta.url), "utf8")) as {
     sourceBlock: number; rows: { edge: TokenEdge; quote: { amountIn: string; amountOut: string; mid: number } | null }[];
   };
   assert.equal(saved.sourceBlock, 26029875);
-  const edges = saved.rows.map(row => row.edge), mids = new Map<string, ResolvedBlockScanMid>();
+  const edges = saved.rows.map(row => row.edge), mids = new Map<string, ResolvedBlockScanQuote>();
   for (const { edge, quote: effective } of saved.rows) if (effective) mids.set(blockScanEdgeKey(edge), {
     kind: "historical-effective", pool: edge.target, edges: [edge], mid: effective.mid, feeBps: 0, depthProxy: 0,
     quoteAmountIn: BigInt(effective.amountIn), quoteAmountOut: BigInt(effective.amountOut),
   });
   for (const allowRepeatedPools of [false, true]) {
-    const view = buildBlockScanUsdView(edges, mids, 50, allowRepeatedPools);
+    const view = buildBlockScanEthView(edges, mids, 50, allowRepeatedPools);
     const result = check(scenario(view.quotes, view.signals, { allowRepeatedPools, minSpreadBps: 50,
       prefixPruningEnabled: false, maxHops: 6,
       funding: [ADDR.WETH, ADDR.USDC, ADDR.USDT, ADDR.DAI].map(token => token.toLowerCase()),

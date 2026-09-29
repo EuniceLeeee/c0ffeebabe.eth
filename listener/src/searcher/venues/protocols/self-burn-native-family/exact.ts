@@ -1,5 +1,7 @@
 import {
   localZeroExactMethod,
+  bindRequestResultRound,
+  collectRequestProgramResults,
   type ExactQuoteInput,
   type ExactQuoteSemantics,
   type ExactRequestProgram,
@@ -18,6 +20,7 @@ import type {
 } from "./types.js";
 
 import { selfBurnFeeRequests, decodeSelfBurnFees, calculateSelfBurnFee } from "./fee-quote.js";
+import { decodeSelfBurnTrial, quoteSelfBurnTrial, selfBurnTrialDependentRequests, selfBurnTrialRequests } from "./trial-state.js";
 
 const MAX_UINT256 = (1n << 256n) - 1n;
 type Input = ExactQuoteInput<SelfBurnNativeDescriptor, SelfBurnNativeRoute>;
@@ -34,18 +37,25 @@ const selfBurnNativeRequestProgram: ExactRequestProgram<
 > = {
   requirements(input) {
     assertInput(input);
-    return { transports: input.amountIn === 0n ? [] : ["eth-call" as const] };
+    return { transports: input.amountIn === 0n ? [] : input.trialState ? ["eth-call" as const, "get-code" as const, "get-storage" as const] : ["eth-call" as const] };
   },
   buildRequests(input) {
     assertInput(input);
-    return input.amountIn === 0n ? Object.freeze([]) : selfBurnFeeRequests(input.descriptor.token, "exact");
+    return input.amountIn === 0n ? Object.freeze([]) : input.trialState ? selfBurnTrialRequests(input) : selfBurnFeeRequests(input.descriptor.token, "exact");
   },
-  decode({ programInput, initialResults }) {
+  buildDependentProgram({ programInput, initialResults, completedRound }) {
+    return programInput.trialState && programInput.amountIn > 0n && completedRound === 0
+      ? bindRequestResultRound({ transports: ["get-code"] }, selfBurnTrialDependentRequests(programInput, initialResults)) : null;
+  },
+  decode({ programInput, initialResults, dependentEvidence }) {
     assertInput(programInput);
     if (programInput.amountIn === 0n) {
       if (initialResults.length !== 0) throw new Error("self-burn native zero quote has unexpected fee results");
       return Object.freeze({ amountOut: 0n, evidence: exactEvidence(programInput, 0n, null) });
     }
+    if (programInput.trialState) return quoteSelfBurnTrial(programInput,
+      decodeSelfBurnTrial(programInput, initialResults, collectRequestProgramResults(initialResults, dependentEvidence)))!;
+    if (programInput.prefix?.length) throw new Error("self-burn prefix requires issued trial state");
     const { source, fees } = decodeSelfBurnFees(initialResults, "exact");
     assertSource(source, programInput.source);
     const fee = calculateSelfBurnFee(programInput.amountIn, fees);
@@ -61,7 +71,12 @@ export const selfBurnNativeExact = {
         assertInput(input);
         return Object.freeze({ amountOut: 0n, evidence: exactEvidence(input, 0n, null) });
       }),
-    Object.freeze({ id: "source-fee-quote", kind: "request-program" as const, program: selfBurnNativeRequestProgram }),
+    Object.freeze({ id: "source-fee-quote", kind: "request-program" as const, program: selfBurnNativeRequestProgram,
+      trialState: { quote(input: Input) {
+        const result = quoteSelfBurnTrial(input);
+        return result === undefined ? { status: "not-applicable" as const, reason: "self-burn trial inventory not loaded" }
+          : { status: "quoted" as const, result };
+      } } }),
   ]),
   cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
     token: lowerAddress(descriptor.token),

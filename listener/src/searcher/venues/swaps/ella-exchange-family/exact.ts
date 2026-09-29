@@ -32,6 +32,10 @@ export const ellaExact = {
   methods: () => [localZeroExactMethod<EllaDescriptor, EllaRoute, EllaEvidence>("local-zero", i => { validate(i); return quote(i, 0n); }),
     // No chainAmountQuote claim: tokenPrice is a rate, amountOut is local math.
     // No cross-block state carry guarantee for a mutable oracle binding.
-    { id: "ella-source-math", kind: "request-program", program }],
+    { id: "ella-source-math", kind: "request-program", program,
+      // Exchange arithmetic is bytecode-verified, but admission currently only
+      // proves nonempty token/oracle code. That cannot prove ordinary transfers
+      // or a fixed-price dependency closure for a sequential trial.
+      trialState: { unsupportedReason: "ella-token-oracle-dependency-models-unproven" } }],
   cacheCompatibilityProjection: i => ({ binding: i.route.bindingRef.fingerprint, direction: i.route.direction, executor: lower(i.executor) }),
 } satisfies ExactQuoteSemantics<EllaDescriptor, EllaRoute, EllaEvidence>;

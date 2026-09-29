@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { getAddress, hexlify, keccak256, zeroPadValue } from "ethers";
+import { getAddress, hexlify, Interface, keccak256, toUtf8Bytes, zeroPadValue } from "ethers";
 import { createStrictCentralAdapterRuntime } from "../../../../strict-central-adapter-runtime.js";
 import { executeAdapterWork } from "../../../../adapter-work-intent.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource, ObservedEffects, RequestRequirements } from "../../../adapter-request-program.js";
@@ -13,9 +13,12 @@ import { xwinIdentity } from "../xwin-identity.js";
 import { instance } from "../instance.js";
 import { routes } from "../routes.js";
 import { pricing } from "../pricing.js";
-import { exact, exactProgram } from "../exact.js";
+import { createConversionExact, exact } from "../exact.js";
+import { xwinCurrent, xwinSimulationCurrent } from "../xwin-pricing.js";
 import { xwinPrefix } from "../sequential.js";
-import type { ExactQuotePrefixStep } from "../../../adapter-family-plugin.js";
+import { defineProtocolFamily, definedFamilyPluginContractSummary, type ExactQuotePrefixStep } from "../../../adapter-family-plugin.js";
+import { capabilityManifestHash, FAMILY_CAPABILITY_NAMES, FamilyCapabilityCatalog } from "../../../family-capability-catalog.js";
+import { plugin as productionPlugin } from "../../../production-families/token-conversion.production.js";
 import { execution } from "../execution.js";
 import { mintAction, redeemAction } from "../action.js";
 import { XWIN_ABI, XWIN_IMPLEMENTATION_HASH, XWIN_IMPLEMENTATION_SLOT, decodeXwinReceipt, proveXwinProxy, xwinCalldata, type XwinSurface } from "../xwin.js";
@@ -43,6 +46,22 @@ function cachedCode(a: string) {
 }
 const PROXY_CODE = cachedCode(TARGET), IMPL_CODE = cachedCode(IMPL);
 const PROXY = proveXwinProxy(PROXY_CODE);
+const NAV_ABI = new Interface(["function getUnitPrice() view returns(uint256)"]);
+const simulationExact = createConversionExact("simulation");
+function simulationFixtureCatalog() {
+  function mutable<T>(value: T): T {
+    if (Array.isArray(value)) return value.map(mutable) as T;
+    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, mutable(item)])) as T;
+    return value;
+  }
+  const definition = mutable(productionPlugin);
+  const plugin = defineProtocolFamily({ ...definition, actionAdapters: productionPlugin.actionAdapters, exact: createConversionExact("simulation") });
+  const entries = FAMILY_CAPABILITY_NAMES.map(capability => ({ familyId: FAMILY, capability, contractVersion: "xwin-simulation-fixture-v1",
+    contentHash: keccak256(toUtf8Bytes(capability)).slice(2), semanticDependencies: [`contract:${capability}`], provenanceCommit: null }));
+  return new FamilyCapabilityCatalog({ modules: [{ sourceFile: "fixture/xwin-simulation.production.ts", plugin,
+    definitionBoundaryHash: definedFamilyPluginContractSummary(plugin).definitionBoundaryHash }],
+    generatedManifest: { format: "adapter-family-capabilities-v1", entries, manifestHash: capabilityManifestHash(entries) } });
+}
 
 test("production re-observation selects xWin by runtime, not the first surface fingerprint", async () => {
   // Real production re-observation + lifecycle, cached deployed proxy code.
@@ -77,6 +96,7 @@ function fixture(source = SOURCE, options: {
   oracle?: string; locking?: string; targets?: string[]; implementation?: string; badImplementation?: boolean;
   actor?: string; eoa?: boolean; missingCode?: string; malformedReceipt?: boolean; supply?: bigint;
   output?: (direction: Direction, input: bigint) => bigint;
+  nav?: bigint;
   nativeDeltas?: ObservedEffects["nativeDeltas"];
   sequence?: boolean;
 } = {}) {
@@ -99,7 +119,7 @@ function fixture(source = SOURCE, options: {
       },
       async getStorage(a, slot) { assert.equal(a.toLowerCase(), TARGET.toLowerCase()); assert.equal(slot, XWIN_IMPLEMENTATION_SLOT); return zeroPadValue(s.implementation, 32); },
       async call(tx) {
-        const parsed = XWIN_ABI.parseTransaction(tx) ?? ABI.parseTransaction(tx);
+        const parsed = XWIN_ABI.parseTransaction(tx) ?? ABI.parseTransaction(tx) ?? NAV_ABI.parseTransaction(tx);
         assert(parsed);
         if (tx.to.toLowerCase() === TARGET.toLowerCase()) {
           assert.equal(tx.from?.toLowerCase(), actor.toLowerCase());
@@ -110,6 +130,7 @@ function fixture(source = SOURCE, options: {
         if (parsed.name === "getTargetNamesAddress") return XWIN_ABI.encodeFunctionResult(parsed.name, [s.targets]);
         if (parsed.name === "totalSupply") return ABI.encodeFunctionResult(parsed.name, [s.supply]);
         if (parsed.name === "decimals") return ABI.encodeFunctionResult(parsed.name, [tx.to.toLowerCase() === ASSET.toLowerCase() ? 6 : 18]);
+        if (parsed.name === "getUnitPrice") return NAV_ABI.encodeFunctionResult(parsed.name, [options.nav ?? 2n * 10n ** 18n]);
         throw new Error(`unexpected xWin fixture call ${parsed.name}`);
       },
     },
@@ -172,6 +193,11 @@ async function descriptors() {
 }
 async function quote(f: ReturnType<typeof fixture>, d: ConversionDescriptor, r: ConversionRoute, amountIn: bigint, prefix?: readonly ExactQuotePrefixStep[]) {
   const input = { descriptor: d, route: r, source: f.source, executor: f.actor, amountIn, runtimeEvidence: [], prefix };
+  // These deliberately nonlinear effects test the retained simulation mode,
+  // never the production local arithmetic or its historical amount parity.
+  const method = simulationExact.methods(input).find(method => method.kind === "request-program");
+  assert(method && method.kind === "request-program");
+  const exactProgram = method.program;
   const initialResults = await f.round(exactProgram.buildRequests(input), exactProgram.requirements(input));
   const dependentEvidence: unknown[] = [];
   for (let completedRound = 0; completedRound < 4; completedRound++) {
@@ -181,16 +207,19 @@ async function quote(f: ReturnType<typeof fixture>, d: ConversionDescriptor, r: 
   }
   return exactProgram.decode({ programInput: input, initialResults, dependentEvidence });
 }
-async function current(f: ReturnType<typeof fixture>, descriptor: ConversionPricingDescriptor) {
+async function current(f: ReturnType<typeof fixture>, descriptor: ConversionPricingDescriptor, mode: "nav" | "simulation" = "simulation") {
+  assert.equal(descriptor.variant, "xwin-allocations-v1");
+  if (descriptor.variant !== "xwin-allocations-v1") throw new Error("xWin fixture expected");
+  const semantics = mode === "nav" ? xwinCurrent : xwinSimulationCurrent;
   const input = { descriptor, routes: descriptor.routes, source: f.source };
-  const initialResults = await f.round(pricing.current.buildRequests(input), pricing.current.requirements(input));
+  const initialResults = await f.round(semantics.buildRequests(input), semantics.requirements());
   const dependentEvidence: unknown[] = [];
   for (let completedRound = 0; completedRound < 5; completedRound++) {
-    const round = pricing.current.buildDependentProgram({ current: input, completedRound, initialResults, priorEvidence: dependentEvidence });
+    const round = semantics.buildDependentProgram({ current: input, completedRound, initialResults, priorEvidence: dependentEvidence });
     if (!round) break;
     dependentEvidence.push(round.decode(await f.round(round.requests, round.requirements)));
   }
-  return pricing.current.decodeSnapshot({ descriptor, initialResults, dependentEvidence });
+  return semantics.decodeSnapshot({ descriptor, initialResults, dependentEvidence });
 }
 
 test("xWin cached templates, implementation identity and canonical call nomination", () => {
@@ -215,7 +244,7 @@ test("xWin identity requires actual executor effects and code, not only selector
   await assert.rejects(identify(fixture(SOURCE, { actor: PROXY.proxyAdmin })), /baseToken did not return/);
   await assert.rejects(identify(fixture(SOURCE, { supply: 0n })), /retryable/);
 });
-test("xWin Exact preserves each amount, re-reads changed dependencies, binds actor and encodes the same call", async () => {
+test("xWin explicit simulation Exact preserves each amount, re-reads dependencies, binds actor and encodes the same call", async () => {
   const { descriptor: d, routes: rs } = await descriptors();
   for (const r of rs) {
     const f = fixture();
@@ -242,7 +271,7 @@ test("xWin Exact preserves each amount, re-reads changed dependencies, binds act
     await assert.rejects(quote(fixture(), d, r, MAX_UINT + 1n), /uint256/);
   }
 });
-test("xWin current refresh recomputes both directions, fails on bad effects, and can recover", async () => {
+test("xWin explicit simulation current baseline recomputes both directions, fails on bad effects, and recovers", async () => {
   const { descriptor, routes: rs } = await descriptors();
   const d = { ...descriptor, routes: rs };
   const first = await current(fixture(), d);
@@ -255,12 +284,31 @@ test("xWin current refresh recomputes both directions, fails on bad effects, and
   assert.equal(Object.keys((await current(fixture(next), d)).quotes).length, 2);
   // Direct calls alone do not prove scheduling; the production-root test does.
 });
-test("xWin repeated-instance Exact replays the complete prefix and checks aggregate effects", async () => {
+test("xWin startup raw NAV references use reads only; production Exact defaults to full local amount calculation", async () => {
+  const { descriptor, routes: rs } = await descriptors();
+  const d = { ...descriptor, routes: rs }, f = fixture(SOURCE, { nav: 1_057_196n * 10n ** 12n, malformedReceipt: true });
+  const snapshot = await current(f, d, "nav");
+  assert.equal(f.simulated.length, 0, "raw startup NAV must never simulate a conversion");
+  assert(f.requests.every(request => request.kind !== "effect-delta-simulation"));
+  for (const route of rs) {
+    assert.deepEqual(snapshot.quotes[route.routeKey], route.direction === "mint" ?
+      { amountIn: 1_057_196n, amountOut: 10n ** 18n } : { amountIn: 10n ** 18n, amountOut: 1_057_196n });
+    const methods = exact.methods({ descriptor, route, source: SOURCE, executor: EXECUTOR, amountIn: 7n, runtimeEvidence: [] });
+    assert(methods.some(method => method.kind === "request-program" && method.id === "xwin-local-state" && !method.chainAmountQuote));
+    assert(!methods.some(method => method.kind === "request-program" && method.id === "conversion-execution-receipt"));
+  }
+  const empty = await current(fixture(SOURCE, { nav: 0n }), d, "nav");
+  assert.deepEqual(empty.quotes, {});
+  await assert.rejects(current(fixture(SOURCE, { nav: 10n ** 18n + 1n }), d, "nav"), /integral base-token/);
+  await assert.rejects(current(fixture(SOURCE, { badImplementation: true }), d, "nav"), /implementation code/);
+});
+test("xWin explicit simulation repeated-instance Exact replays the complete prefix and checks aggregate effects", async () => {
   const { descriptor: d, routes: rs } = await descriptors();
   const mint = rs.find(r => r.direction === "mint")!, redeem = rs.find(r => r.direction === "redeem")!;
   const prefix = [{ descriptor: d, route: mint, amountIn: 7n, amountOut: 13n }];
   const input = { descriptor: d, route: redeem, amountIn: 13n, executor: EXECUTOR, source: SOURCE, runtimeEvidence: [], prefix };
-  assert(exact.methods(input).some(m => m.kind === "request-program" && m.sequentialPrefix));
+  assert(simulationExact.methods(input).some(m => m.kind === "request-program" && m.sequentialPrefix));
+  assert(exact.methods(input).some(m => m.kind === "request-program" && m.trialState && !m.sequentialPrefix));
   assert.equal((await quote(fixture(SOURCE, { sequence: true }), d, redeem, 13n, prefix)).amountOut, 11n);
   assert.notEqual((await quote(fixture(), d, redeem, 13n)).amountOut, 11n, "independent leg state is not reused");
   // An old independent receipt must never be accepted for the sequence.
@@ -276,7 +324,7 @@ test("xWin repeated-instance Exact replays the complete prefix and checks aggreg
     { ...input, prefix: [prefix[0]!, { ...prefix[0]!, descriptor: { ...d, familyId: "foreign" as typeof d.familyId } }] },
   ]) {
     assert.throws(() => xwinPrefix(bad));
-    assert(!exact.methods(bad).some(m => m.kind === "request-program"), "unsupported prefix fails closed");
+    assert(!simulationExact.methods(bad).some(m => m.kind === "request-program"), "unsupported simulated prefix fails closed");
   }
   const f = fixture(SOURCE, { sequence: true });
   await quote(f, d, redeem, 13n, prefix);
@@ -287,14 +335,15 @@ test("xWin repeated-instance Exact replays the complete prefix and checks aggreg
   const doubled = { ...input, prefix: [...prefix, { descriptor: d, route: redeem, amountIn: 13n, amountOut: 11n }, { descriptor: d, route: mint, amountIn: 11n, amountOut: 13n }] };
   assert.equal(xwinPrefix(doubled).length, 3, "full prefix is retained without a hardcoded hop count");
 });
-test("xWin production root/coordinator refreshes quoted rows on empty blocks and fails closed on mutable dependencies", async () => {
-  const publication = await runStrictFamilyLifecycle({ catalog, familyId: FAMILY, source: SOURCE,
+test("xWin coordinator fixture with explicit simulation Exact refreshes empty blocks; startup NAV stays frozen", async () => {
+  const fixtureCatalog = simulationFixtureCatalog();
+  const publication = await runStrictFamilyLifecycle({ catalog: fixtureCatalog, familyId: FAMILY, source: SOURCE,
     runtime: fixture().runtime, observations: [{ kind: "call", source: SOURCE, target: TARGET,
       data: XWIN_ABI.encodeFunctionData("deposit", [7n, 0]) }] });
   assert.equal(publication.instances.length, 1);
   let options: Parameters<typeof fixture>[1] = {};
   const rounds: { lane: string; f: ReturnType<typeof fixture> }[] = [];
-  const harness = refreshFixture({ publication, start: SOURCE, executor: EXECUTOR, asset: ASSET,
+  const harness = refreshFixture({ catalog: fixtureCatalog, publication, start: SOURCE, executor: EXECUTOR, asset: ASSET,
     runtime(at, lane) {
       // Synthetic changing outputs deliberately avoid pretending to implement
       // xWin fees. Real amount parity still requires the serialized chain slot.
@@ -364,6 +413,7 @@ test("xWin production root/coordinator refreshes quoted rows on empty blocks and
   assert.equal(recovered.effectiveMids!.rows.size, 2);
   assert([...recovered.effectiveMids!.rows.values()].every(row => row.status === "quoted"));
   console.log(JSON.stringify({ kind: "offline-production-root-coordinator-fixture",
+    exactMode: "simulation-fixture", rawReference: "source-bound-nav-reads",
     emptyActivity: true, startupRawFrozen: true, effectiveRequoted: true, dependencyRelocationRecovery: true,
     historicalQuoteExecutionParity: "not run", actualCallerExecutionProof: "not run" }));
 });

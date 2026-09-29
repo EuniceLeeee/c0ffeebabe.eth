@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { ADDR } from "../../shared/constants/addresses.js";
-import { buildBlockScanUsdView, type BlockScanUsdView } from "../blockscan-usd-view.js";
-import { scanBlockStateFromResolvedMids, type ResolvedBlockScanMid } from "../detector/blockscan-scanner-core.js";
+import { buildBlockScanEthView, type BlockScanEthView } from "../blockscan-eth-view.js";
+import { scanBlockStateFromResolvedMids, type ResolvedBlockScanMid, type ResolvedBlockScanQuote } from "../detector/blockscan-scanner-core.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "../venues/route-instance-identity.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
@@ -13,7 +13,7 @@ const edges:TokenEdge[]=tokens.slice(0,-1).map((tokenIn,i)=>({
   adapterId:"test-swap",target:address(201+i),tokenIn,tokenOut:tokens[i+1]!,
   slotKind:"swap",...deriveEdgeTaxonomy("swap"),
 }));
-const mids=new Map<string,ResolvedBlockScanMid>(edges.map((edge,i)=>[blockScanEdgeKey(edge),{
+const mids=new Map<string,ResolvedBlockScanQuote>(edges.map((edge,i)=>[blockScanEdgeKey(edge),{
   kind:"test",pool:edge.target,edges:[edge],mid:i===5?1.2:1.01,feeBps:0,
   quoteAmountIn:1000n,quoteAmountOut:i===5?1200n:1010n,
   reserveA:1000000n*unit,reserveB:1000000n*unit,depthProxy:1e24,
@@ -21,19 +21,29 @@ const mids=new Map<string,ResolvedBlockScanMid>(edges.map((edge,i)=>[blockScanEd
 const quotes=edges.map((e,i)=>({id:blockScanEdgeKey(e),instance:edgeInstanceKey(e),
   tokenIn:e.tokenIn,tokenOut:e.tokenOut,num:i===5?1200n:1010n,den:1000n,
   value:{num:i===5?1200n:1010n,den:1000n}}));
-const view:BlockScanUsdView={quotes,signals:[{token:weth,buy:quotes[5]!.id,sell:quotes[0]!.id,num:120n,den:100n}],
-  signalPairsPerToken:1,allowRepeatedPools:true,referenceUsdPerRaw:new Map(),comparableTokens:1,missingBuyReference:0,missingSellReference:0};
-const scan=(enumerationMethod:"dfs"|"layered",maxHops=6,usdView=view,budgetMs=5000)=>
-  scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:new Set(),mids,usdView,
+const view:BlockScanEthView={quotes,signals:[{token:weth,buy:quotes[5]!.id,sell:quotes[0]!.id,num:120n,den:100n}],
+  signalPairsPerToken:1,allowRepeatedPools:true,referenceEthPerRaw:new Map(),comparableTokens:1,missingBuyReference:0,missingSellReference:0};
+const scan=(enumerationMethod:"dfs"|"layered",maxHops=6,ethView=view,budgetMs=5000)=>
+  scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:new Set(),mids,ethView,
     captureCoarseEnumeration:true,cfg:{enumerationMethod,maxHops,minSpreadBps:50,budgetMs,prefixPruningEnabled:false,
       maxCandidates:100,pricedTokens:new Map([[weth,{maxBorrow:1000n*unit}]])}});
+// Compile-only contract: raw mid rows are not enumeration quotes. This closure
+// is never invoked, so invalid rows never reach either runtime entry point.
+void ((rawMids: ReadonlyMap<string, ResolvedBlockScanMid>) => {
+  // @ts-expect-error A raw mid map does not guarantee published quote amounts.
+  buildBlockScanEthView(edges, rawMids);
+  scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:null,
+    // @ts-expect-error The core accepts only validated effective amount quotes.
+    mids:rawMids,cfg:{maxHops:6,minSpreadBps:50,budgetMs:5000,maxCandidates:100,
+      pricedTokens:new Map([[weth,{maxBorrow:1000n*unit}]])}});
+});
 const a=scan("dfs"),b=scan("layered");
 // The scanner must pass both pruning controls through to the actual enumerator.
 const dipView={...view,quotes:quotes.map((q,i)=>({...q,
   value:{num:i===0?85n:i===1?140n:101n,den:100n}}))};
 for(const enumerationMethod of ["dfs","layered"] as const) {
   const run=(prefixPruningEnabled:boolean,maxPrefixDrawdownBps:number)=>
-    scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:null,mids,usdView:dipView,
+    scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:null,mids,ethView:dipView,
       cfg:{enumerationMethod,prefixPruningEnabled,maxPrefixDrawdownBps,maxHops:6,
         minSpreadBps:50,budgetMs:5000,maxCandidates:100,
         pricedTokens:new Map([[weth,{maxBorrow:1000n*unit}]])}});
@@ -48,7 +58,7 @@ for(const enumerationMethod of ["dfs","layered"] as const) {
 const multiStart=(enumerationMethod:"dfs"|"layered",deduplicateRotations?:boolean,maxCandidates=100)=>
   scanBlockStateFromResolvedMids({edges,sourceBlock:10,swapTouched:null,mids,
     // Multiple signals for the same route must not produce exact duplicates.
-    usdView:{...view,signals:[...view.signals,...view.signals]},
+    ethView:{...view,signals:[...view.signals,...view.signals]},
     cfg:{enumerationMethod,deduplicateRotations,maxHops:6,minSpreadBps:50,budgetMs:5000,prefixPruningEnabled:false,
       maxCandidates,pricedTokens:new Map([[weth,{maxBorrow:2000n*unit}],[usdc,{maxBorrow:1000n*unit}]])}});
 for(const method of ["dfs","layered"] as const) {
@@ -87,24 +97,34 @@ assert.deepEqual(scan("dfs").opportunities,a.opportunities,"stale/tiny depth pro
 for(const [key,mid] of mids) mids.set(key,{...mid,reserveA:undefined,reserveB:undefined,liquidity:undefined});
 assert.deepEqual(scan("layered").opportunities,a.opportunities,"missing legacy depth cannot reject effective P");
 const firstKey=blockScanEdgeKey(edges[0]!);
-for(const amount of [undefined,0n,-1n,1000n*unit+1n]) {
-  mids.set(firstKey,{...originalMids.get(firstKey)!,quoteAmountIn:amount});
-  assert.equal(scan("dfs").opportunities.length,0,"missing/invalid/over-funding P must fail closed");
+// Missing/invalid published amounts are rejected by the effective projection,
+// leaving no entry here; they are not a legal core-input quote fixture.
+mids.delete(firstKey);
+for(const method of ["dfs","layered"] as const) {
+  assert.equal(scan(method,6,buildBlockScanEthView(edges,mids)).opportunities.length,0,
+    "a missing effective quote cannot be reconstructed from its raw mid");
 }
+mids.set(firstKey,{...originalMids.get(firstKey)!,
+  quoteAmountIn:1000n*(unit+1n),quoteAmountOut:1010n*(unit+1n)});
+const overFundingView={...view,quotes:quotes.map((q,i)=>i===0?
+  {...q,num:1010n*(unit+1n),den:1000n*(unit+1n)}:q)};
+const overFunding=scan("dfs",6,overFundingView);
+assert.equal(overFunding.opportunities.length,0,"effective P above available funding must fail closed");
+assert(overFunding.debug!.capitalRejected!>0,"profitable cycles reach the real funding cap check");
 for(const [key,mid] of originalMids) mids.set(key,mid);
 assert.equal(scan("dfs",4).opportunities.length,0);
 assert.equal(scan("layered",4).opportunities.length,0);
 assert.equal(scan("dfs",6,{...view,quotes:quotes.map((q,i)=>i===2?{...q,value:null}:q)}).opportunities.length,0);
 assert.equal(scan("dfs",6,view,0).outcome,"budget_exceeded");
-// Verify value multipliers come from the published USD marks, not raw token ratios.
+// Verify value multipliers come from the published ETH marks, not raw token ratios.
 const e0=edges[0]!,e1={...edges[1]!,tokenIn:usdc,tokenOut:weth};
-const priced=new Map<string,ResolvedBlockScanMid>([
+const priced=new Map<string,ResolvedBlockScanQuote>([
   [blockScanEdgeKey(e0),{kind:"test",pool:e0.target,edges:[e0],mid:2e-9,feeBps:0,depthProxy:1e20,
     quoteAmountIn:unit,quoteAmountOut:2_000_000_000n}],
   [blockScanEdgeKey(e1),{kind:"test",pool:e1.target,edges:[e1],mid:5.1e8,feeBps:0,depthProxy:1e20,
     quoteAmountIn:2_000_000_000n,quoteAmountOut:102n*unit/100n}],
 ]);
-const usd=buildBlockScanUsdView([e0,e1],priced);
+const eth=buildBlockScanEthView([e0,e1],priced);
 // All eight top-level policy combinations, with no forced route supplied.
 const samePoolEdges=[e0,{...e1,target:e0.target}];
 const samePoolMids=new Map(samePoolEdges.map((edge,i)=>[blockScanEdgeKey(edge),{
@@ -119,20 +139,20 @@ for(const enumerationMethod of ["dfs","layered"] as const) {
     assert.equal(result.opportunities.length,allowRepeatedPools?(deduplicateRotations?1:2):0);
     assert.equal(result.enumeration?.allowRepeatedPools,allowRepeatedPools);
     assert.deepEqual(scanBlockStateFromResolvedMids({...input,
-      usdView:buildBlockScanUsdView(samePoolEdges,samePoolMids,20,!allowRepeatedPools)}).opportunities,result.opportunities,
-      "a stale USD view cannot override the top-level switch");
+      ethView:buildBlockScanEthView(samePoolEdges,samePoolMids,20,!allowRepeatedPools)}).opportunities,result.opportunities,
+      "a stale ETH view cannot override the top-level switch");
     assert.equal(scanBlockStateFromResolvedMids({...input,cfg:{...cfg,maxCandidates:1}}).opportunities.length,allowRepeatedPools?1:0);
     assert.equal(scanBlockStateFromResolvedMids({...input,cfg:{...cfg,budgetMs:0}}).outcome,"budget_exceeded");
   }
 }
-assert.equal(usd.quotes.length,2);
-for(const q of usd.quotes){
-  const a=usd.referenceUsdPerRaw.get(q.tokenIn)!,b=usd.referenceUsdPerRaw.get(q.tokenOut)!;
+assert.equal(eth.quotes.length,2);
+for(const q of eth.quotes){
+  const a=eth.referenceEthPerRaw.get(q.tokenIn)!,b=eth.referenceEthPerRaw.get(q.tokenOut)!;
   assert(a&&b&&q.value);
   assert.equal(q.value.num*q.den*b.den*a.num,q.value.den*q.num*b.num*a.den);
 }
 // Credit keeps its standing-position label but joins the identical amount-
-// quoted USD/DFS flow. Its oracle limit alone must never become a quote.
+// quoted ETH/DFS flow. Its oracle limit alone must never become a quote.
 const credit: TokenEdge = { ...e0, adapterId: "test-credit", target: address(999),
   slotKind: "lend", ...deriveEdgeTaxonomy("lend") };
 const cashMids = new Map(priced);
@@ -149,8 +169,7 @@ for (const enumerationMethod of ["dfs", "layered"] as const) {
   assert.equal(candidate.searchSeed.searchCenter, unit);
 }
 const limitOnly = new Map(cashMids);
-limitOnly.set(blockScanEdgeKey(credit), { ...limitOnly.get(blockScanEdgeKey(credit))!,
-  quoteAmountIn: undefined, quoteAmountOut: undefined });
-assert(!buildBlockScanUsdView(cashEdges, limitOnly).quotes.some(q => q.id === blockScanEdgeKey(credit)),
+limitOnly.delete(blockScanEdgeKey(credit));
+assert(!buildBlockScanEthView(cashEdges, limitOnly).quotes.some(q => q.id === blockScanEdgeKey(credit)),
   "Credit requires actual amount output, not a linear oracle-limit fallback");
-console.log("paired integration: PASS (actual scanner DFS/layered switch, six hops, cap, missing reference, deadline, frozen USD value ratios)");
+console.log("paired integration: PASS (actual scanner DFS/layered switch, six hops, cap, effective quote contract, missing reference, deadline, frozen ETH value ratios)");

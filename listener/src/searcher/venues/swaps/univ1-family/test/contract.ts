@@ -3,8 +3,9 @@ import { test } from "node:test";
 import { ethers } from "ethers";
 import { plugin } from "../../../production-families/uniswap-v1.production.js";
 import { definedFamilyPluginContractSummary } from "../../../adapter-family-plugin.js";
+import { nativeBalanceState, tokenBalanceState, tokenSupplyState } from "../../../local-state-models/resources.js";
 import { cloneImplementation, IMPLEMENTATION, MAX_UINT, MAX_VALUE, POOL, poolAddress, WETH } from "../codec.js";
-import { quoteAmount } from "../state.js";
+import { quoteAmount, quoteTransition } from "../state.js";
 import { answer, CANDIDATE, CLONE, descriptor, EXECUTOR, ISSUER, POOL_ADDRESS, quote, result, SOURCE, TOKEN_ADDRESS, word } from "./fixtures.js";
 
 test("production contract; arbitrary exchange registration, two directed swap routes", () => {
@@ -65,6 +66,28 @@ test("fee rounding and native reserve adjustment match reviewed execution, not p
   assert.throws(() => quoteAmount(s, false, -1n));
   assert.equal(quoteAmount(s, false, 0n), 0n);
 });
+test("issuer-fee reserve transition is immutable and feeds later amounts and directions", () => {
+  const s = Object.freeze({ source: SOURCE, nativeReserve: 100_000n, tokenReserve: 20_000_000n });
+  for (const buy of [true, false]) for (const amount of [0n, 2n, 999n, 1000n, 1001n, 10_000n]) {
+    const next = quoteTransition(s, buy, amount);
+    const received = amount - (amount + 999n) / 1000n;
+    assert.equal(next.amountOut, quoteAmount(s, buy, amount));
+    assert.equal(next.state.nativeReserve, s.nativeReserve + (buy ? received : -next.amountOut));
+    assert.equal(next.state.tokenReserve, s.tokenReserve + (buy ? -next.amountOut : received));
+    assert(Object.isFrozen(next.state));
+    assert.deepEqual(s, { source: SOURCE, nativeReserve: 100_000n, tokenReserve: 20_000_000n });
+  }
+  const first = quoteTransition(s, true, 10_000n);
+  const repeat = quoteTransition(first.state, true, 10_000n);
+  assert(repeat.amountOut < first.amountOut, "a second buy must not quote the original reserves");
+  const reverse = quoteTransition(first.state, false, first.amountOut);
+  assert(reverse.amountOut > quoteAmount(s, false, first.amountOut), "reverse quote must consume the first buy's reserves");
+  assert(reverse.amountOut < 10_000n, "the issuer and pool fees make this same-pool round trip lossy");
+  assert.equal(reverse.state.tokenReserve, s.tokenReserve - (first.amountOut + 999n) / 1000n);
+  assert.equal(reverse.state.nativeReserve, s.nativeReserve + 9_990n - reverse.amountOut);
+  assert.deepEqual(quoteTransition(s, true, 10_000n), first, "independent amount trials start from the untouched source");
+  assert.throws(() => quoteTransition({ ...s, tokenReserve: MAX_UINT }, false, 10_000n), /overflow/);
+});
 test("Exact preserves input and nonlinear slippage, issuer/caller/source/route fences", () => {
   for (const buy of [true, false]) {
     const a = quote(10n ** 16n, buy), b = quote(10n ** 19n, buy);
@@ -77,6 +100,46 @@ test("Exact preserves input and nonlinear slippage, issuer/caller/source/route f
     assert.throws(() => a.method.program.buildRequests({ ...a.input, route: { ...a.input.route, buy: !buy } }));
     assert.equal(quote(0n, buy).quoted.amountOut, 0n);
   }
+});
+test("Exact uses the shared trial cell in either direction and declares non-pool balance effects", () => {
+  const base = quote(10n ** 16n);
+  assert(base.method.trialState);
+  const quoteTrial = base.method.trialState.quote;
+  assert(typeof quoteTrial === "function", "expected supported V1 trial model");
+  assert.equal(base.quoted.stateChanges, undefined, "ordinary effective quotes do not retain a trial");
+  const input = { ...base.input, trialState: { get: () => undefined } };
+  assert.equal(quoteTrial(input).status, "not-applicable");
+  const results = base.method.program.buildRequests(input).map(answer);
+  const first = base.method.program.decode({ programInput: input, initialResults: results, dependentEvidence: [] });
+  assert.equal(first.amountOut, base.quoted.amountOut);
+  assert.equal(first.stateChanges?.length, 1);
+  const change = first.stateChanges![0];
+  assert.equal(change.ref.key, `pool:${POOL_ADDRESS}`);
+  assert(first.stateEffects?.includes(nativeBalanceState(ISSUER)));
+  assert(first.stateEffects?.includes(nativeBalanceState(WETH)));
+  assert(first.stateEffects?.includes(tokenSupplyState(WETH)));
+  const trial = { get: (ref: typeof change.ref) => {
+    assert.deepEqual(ref, change.ref, "opposite directions share a model binding, not a direction-specific route binding");
+    return change.value;
+  } };
+  const route = plugin.routes.project({ descriptor: base.input.descriptor }).find(r => !r.buy)!;
+  const secondInput = { ...base.input, route, amountIn: first.amountOut, trialState: trial };
+  const second = quoteTrial(secondInput);
+  assert.equal(second.status, "quoted");
+  if (second.status !== "quoted") throw new Error("univ1 trial quote missing");
+  const expected = quoteTransition(change.value as Parameters<typeof quoteTransition>[0], false, first.amountOut);
+  assert.equal(second.result.amountOut, expected.amountOut);
+  assert.deepEqual(second.result.stateChanges?.[0].value, expected.state);
+  assert(second.result.stateEffects?.includes(tokenBalanceState(TOKEN_ADDRESS, ISSUER)));
+  assert.equal(second.result.evidence.routeKey, route.routeKey);
+  const fromProgram = base.method.program.decode({ programInput: secondInput, initialResults: results, dependentEvidence: [] });
+  assert.equal(fromProgram.amountOut, second.result.amountOut, "a read-program completion cannot overwrite earlier trial mutations");
+  assert.throws(() => quoteTrial({ ...secondInput, trialState: { get: () => ({
+    ...(change.value as object), source: { ...SOURCE, generation: 2 },
+  }) } }), /foreign source/);
+  assert.throws(() => quoteTrial({ ...secondInput, trialState: { get: () => ({ nativeReserve: "1" }) } }), /malformed trial state/);
+  assert.equal(quoteTrial({ ...base.input, trialState: { get: () => undefined } }).status, "not-applicable",
+    "a different trial does not observe state retained by the first one");
 });
 test("execution owns wrapping, binds exact evidence and honors the supplied minimum", () => {
   for (const buy of [true, false]) {

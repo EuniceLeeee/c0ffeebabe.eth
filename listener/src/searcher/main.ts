@@ -16,7 +16,7 @@ import {
 } from "../shared/executor/botvm-executor.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
 import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
-import { resolveAllowRepeatedPools, resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
+import { resolveAllowRepeatedPools, resolveAllowRepeatedTokens, resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
 import { resolvePairedEnumerationBackend, resolveRustEnumerationThreads, resolveRustEnumerationScratchMb } from "./detector/blockscan-paired-enumerator.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS, resolveHopTokensPerStep, resolveHopPoolsPerPair } from "./blockscan-enumeration-config.js";
 import {
@@ -39,7 +39,7 @@ import { createSolverExecutionInputRecorder } from "./solver-execution-input-rec
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { BlockScanAmountReference, TokenToWethReferenceCache } from "./blockscan-amount-reference.js";
 import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried } from "./blockscan-effective-mid.js";
-import { effectiveUsdPricing, resolveUsdSignalPairsPerToken, usdViewStatistics } from "./blockscan-usd-view.js";
+import { effectiveEthPricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
 import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
@@ -688,6 +688,7 @@ export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env,
         maxHops: blockScanMaxHops,
         deduplicateRotations: deduplicateRotations === "1",
         allowRepeatedPools: resolveAllowRepeatedPools(env.SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED),
+        allowRepeatedTokens: resolveAllowRepeatedTokens(env.SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED),
         prefixPruningEnabled: prefixPruning === "1",
         maxPrefixDrawdownBps,
         enumerationMethod,
@@ -697,7 +698,10 @@ export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env,
           ? resolveRustEnumerationThreads(env.SEARCHER_BLOCKSCAN_RUST_THREADS) : 1,
         rustEnumerationScratchMb: enumerationBackend === "rust"
           ? resolveRustEnumerationScratchMb(env.SEARCHER_BLOCKSCAN_RUST_SCRATCH_MB) : BLOCKSCAN_ENUMERATION_DEFAULTS.rustScratchMb,
-        usdSignalPairsPerToken: resolveUsdSignalPairsPerToken(env.SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN),
+        // Accept the former environment name so existing launches retain K.
+        ethSignalPairsPerToken: resolveEthSignalPairsPerToken(
+          env.SEARCHER_BLOCKSCAN_ETH_SIGNAL_PAIRS_PER_TOKEN ?? env.SEARCHER_BLOCKSCAN_USD_SIGNAL_PAIRS_PER_TOKEN,
+        ),
         hopTokensPerStep: resolveHopTokensPerStep(env.SEARCHER_BLOCKSCAN_HOP_TOKENS_PER_STEP),
         hopPoolsPerPair: resolveHopPoolsPerPair(env.SEARCHER_BLOCKSCAN_HOP_POOLS_PER_PAIR),
         minSpreadBps: blockScanMinSpreadBps,
@@ -931,6 +935,8 @@ export function createLiveSourceSimulationFactory(input: {
 }
 
 export function createBlockScanPriceRuntime(input: {
+  /** Opt-in historical CLI setting; no live default change. */
+  fixedEffectiveWethInput?: bigint;
   provider: ethers.JsonRpcProvider;
   rpcUrl: string;
   executor: string;
@@ -1129,15 +1135,15 @@ export function createBlockScanPriceRuntime(input: {
       blockScanRouteTelemetry.recordPricing(publication);
       if (blockScanCfg !== undefined && publication.snapshot.effectiveMids?.complete) {
         const start = Date.now();
-        const { view } = effectiveUsdPricing(publication.snapshot, blockScanCfg.usdSignalPairsPerToken, blockScanCfg.allowRepeatedPools);
-        console.log(`[searcher/effective-usd-view] ${JSON.stringify({
+        const { view } = effectiveEthPricing(publication.snapshot, blockScanCfg.ethSignalPairsPerToken, blockScanCfg.allowRepeatedPools);
+        console.log(`[searcher/effective-eth-view] ${JSON.stringify({
           sourceBlock: publication.snapshot.sourceBlock,
           sourceBlockHash: publication.snapshot.sourceBlockHash,
           generation: publication.snapshot.generation,
           algorithm: blockScanCfg.enumerationMethod === "joint-dfs" ? "joint-dfs"
             : blockScanCfg.enumerationMethod === "layered" ? "paired-layered" : "paired-dfs",
-          reference: "USDC=1 reference USD; effective-only <=3-hop valuation",
-          ...usdViewStatistics(view, blockScanCfg.minSpreadBps), wallMs: Date.now() - start,
+          reference: "WETH wei per token raw unit; effective-only <=3-hop valuation",
+          ...ethViewStatistics(view, blockScanCfg.minSpreadBps), wallMs: Date.now() - start,
         })}`);
       }
     },
@@ -1163,10 +1169,12 @@ export function createBlockScanPriceRuntime(input: {
         let session: StrictProductionRuntimeSession | undefined;
         console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} sizingSourceBlock=${pricing.sourceBlock} sizingRawMids=${pricing.mids.size}`);
         const effective = await buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
+          fixedWethInput: input.fixedEffectiveWethInput,
           tokenReferences: () => blockScanTokenReferences.get(pricing),
           previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
+          disabledEdgeIds: reuse?.disabledEdgeIds,
           gasCostWei: blockScanAmountReference.estimateGasCost(source),
-          enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 128,
+          enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 1024,
           prepareQuote: async (requiredEdgeIds) => {
             session = await strictSessionFor({ purpose: "exact-execution", source,
               simulationTransport,

@@ -3,7 +3,7 @@ import type { CaptureNominationInput, CaptureNominationProvider, CaptureNominati
   CaptureReverseBindingSemantics, UnifiedObservation } from "../../adapter-family-plugin.js";
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import { EKUBO_CORE, EKUBO_CORE_DEPLOY_BLOCK, EKUBO_POOL_INITIALIZED_TOPIC } from "../ekubo/abi.js";
-import { assertSource, decodeInitialized, decodeSwapCall } from "./codec.js";
+import { assertSource, decodeInitialized, decodeSwapCall, decodeMultihopCall } from "./codec.js";
 
 type InitIndex = ReadonlyMap<string, Extract<UnifiedObservation, { kind: "log" }>>;
 // Evidence cache, never admission authority: source hash AND provider isolated,
@@ -58,7 +58,7 @@ export const reverseBindEkubo: CaptureReverseBindingSemantics["reverseBinding"] 
     try {
       const observation = (await initializeIndex(input.provider, input.source)).get(poolId(nomination)!);
       outcomes.push(observation ? { status: "verified" as const, observation }
-        : { status: "failed" as const, reason: "no-vanilla-core-initialization-at-source" });
+        : { status: "failed" as const, reason: "no-core-initialization-at-source" });
     } catch {
       outcomes.push({ status: "failed" as const, reason: "ekubo-initialization-read-failed" });
     }
@@ -80,7 +80,7 @@ function traceCalls(trace: unknown, source: CanonicalSource, transactionHash: st
     if (Array.isArray(frame.calls)) queue.push(...frame.calls);
     if (frame.type !== "CALL" || typeof frame.to !== "string" || typeof frame.input !== "string") continue;
     const observation: UnifiedObservation = { kind: "call", source, target: frame.to, data: frame.input, transactionHash };
-    try { if (decodeSwapCall(observation)) out.push(observation); } catch { /* malformed frame */ }
+    try { if (decodeSwapCall(observation) || decodeMultihopCall(observation)) out.push(observation); } catch { /* malformed frame */ }
   }
   return out;
 }
@@ -103,8 +103,26 @@ export const ekuboNomination: CaptureNominationSemantics = {
         }
         if (!input.provider.traceTransaction) continue;
         for (const observation of traceCalls(await input.provider.traceTransaction(txHash), input.source, txHash)) {
-          const found = decodeSwapCall(observation)!;
-          if (id === null || found.poolId === id) observations.push(observation);
+          const multi = decodeMultihopCall(observation);
+          if (multi) {
+            if (id !== null && !multi.some(found => found.poolId === id)) continue;
+            // decodeCandidate is singular. Reuse authentic Core initialization
+            // logs for ALL keys in this actual multihop, never fabricate calls
+            // or graph edges. An unavailable reverse read leaves it unresolved.
+            const index = await initializeIndex(input.provider, input.source);
+            // Singular capture consumers take the first observation. Keep the
+            // requested identity first, while retaining all witnessed keys for
+            // consumers supporting expansion. The production scan independently
+            // expands each hop through the declared call patterns.
+            const ordered = id === null ? multi : [...multi.filter(found => found.poolId === id), ...multi.filter(found => found.poolId !== id)];
+            for (const found of ordered) {
+              const initialized = index.get(found.poolId);
+              if (initialized) observations.push(initialized);
+            }
+          } else {
+            const found = decodeSwapCall(observation)!;
+            if (id === null || found.poolId === id) observations.push(observation);
+          }
         }
       } catch { /* Unavailable evidence stays unresolved; no synthetic calls. */ }
     }

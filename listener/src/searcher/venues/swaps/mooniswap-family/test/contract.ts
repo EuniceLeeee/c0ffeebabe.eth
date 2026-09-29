@@ -136,13 +136,24 @@ test("execution binds exact input, output, receiver, route and minimum", () => {
   const i = input(), q = decode(i);
   const execution = { ...i, quotedAmountOut: q.amountOut, minAmountOut: q.amountOut, exactEvidence: q.evidence };
   const f = mooniswapExecution.buildFragment(execution);
-  assert.deepEqual(f.requirements, [{ kind: "approve", token: i.route.tokenIn, spender: pool, amount: i.amountIn }]);
+  assert.deepEqual(f.requirements, [{ kind: "approve", token: i.route.tokenIn, spender: pool, amount: MAX_UINT }]);
   assert.equal(f.nodes.length, 1); assert.equal(f.nodes[0].amount, i.amountIn);
   assert.equal(f.nodes[0].params.minAmountOut, q.amountOut);
   for (const bad of [{ ...execution, executor: governance }, { ...execution, amountIn: i.amountIn + 1n },
     { ...execution, minAmountOut: q.amountOut + 1n }, { ...execution, quotedAmountOut: q.amountOut + 1n },
     { ...execution, exactEvidence: { ...q.evidence, routeKey: routeKey("foreign") } }]) {
     assert.throws(() => mooniswapExecution.buildFragment(bad));
+  }
+});
+test("reusable allowance policy keeps both directions' exact swap amounts unchanged", () => {
+  for (const reverse of [false, true]) for (const amount of [1n, 123456789123456789n, MAX_UINT]) {
+    const i = input(amount, reverse), q = decode(i);
+    const f = mooniswapExecution.buildFragment({ ...i, quotedAmountOut: q.amountOut,
+      minAmountOut: q.amountOut, exactEvidence: q.evidence });
+    assert.deepEqual(f.requirements, [{ kind: "approve", token: i.route.tokenIn, spender: pool, amount: MAX_UINT }]);
+    assert.equal(f.nodes.length, 1);
+    assert.equal(f.nodes[0].amount, amount);
+    assert.equal(f.nodes[0].params.minAmountOut, q.amountOut);
   }
 });
 function node(): ResolvedPlanNode {

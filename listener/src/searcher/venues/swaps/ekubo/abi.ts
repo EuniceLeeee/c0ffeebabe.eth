@@ -20,6 +20,7 @@ export const EKUBO_CORE_SWAP_DATA_BYTES = 116;
 export const EKUBO_CORE_SWAP_POOL_ID_OFFSET_BYTES = 20;
 
 export const ekuboRouterIface = new ethers.Interface([
+  "function multihopSwap((((address token0,address token1,bytes32 config) poolKey,uint96 sqrtRatioLimit,uint256 skipAhead)[] route,(address token,int128 amount) tokenAmount) swap,int256 calculatedAmountThreshold) payable returns (bytes32[] balanceUpdates)",
   "function quote((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead) returns (bytes32 balanceUpdate,bytes32 stateAfter)",
   "function swap((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead,int256 calculatedAmountThreshold,address recipient) payable returns (bytes32 balanceUpdate)",
   "function swapAllowPartialFill((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead,address recipient) payable returns (bytes32 balanceUpdate)",
@@ -28,6 +29,7 @@ export const ekuboRouterIface = new ethers.Interface([
 export const EKUBO_ROUTER_SWAP_SELECTOR = ekuboRouterIface.getFunction(
   "swap((address,address,bytes32),bool,int128,uint96,uint256,int256,address)",
 )!.selector.toLowerCase();
+export const EKUBO_ROUTER_MULTIHOP_SELECTOR = ekuboRouterIface.getFunction("multihopSwap")!.selector.toLowerCase();
 export const EKUBO_ROUTER_PARTIAL_SWAP_SELECTOR = ekuboRouterIface.getFunction(
   "swapAllowPartialFill((address,address,bytes32),bool,int128,uint96,uint256,address)",
 )!.selector.toLowerCase();

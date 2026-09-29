@@ -2,6 +2,7 @@ use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     env, fmt, fs,
+    error::Error as _,
     io::{self, BufRead, Write as IoWrite},
     path::PathBuf,
     rc::Rc,
@@ -28,11 +29,41 @@ use revm::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+mod diagnostic;
 
 const BALANCE_OF_SELECTOR: [u8; 4] = [0x70, 0xa0, 0x82, 0x31];
 const TOTAL_SUPPLY_SELECTOR: [u8; 4] = [0x18, 0x16, 0x0d, 0xdd];
 const APPROVE_SELECTOR: [u8; 4] = [0x09, 0x5e, 0xa7, 0xb3];
 const DEFAULT_GAS_LIMIT: u64 = 0x1000000;
+const RPC_ATTEMPT_DELAYS: [Duration; 3] = [Duration::ZERO, Duration::from_secs(1), Duration::from_secs(3)];
+
+// Bound server-requested waits within the existing simulation timeout. Never
+// retry earlier than Retry-After; unsupported/long values retain fatal handling.
+fn rate_retry_after(value: Option<&reqwest::header::HeaderValue>) -> Option<Duration> {
+    let Some(value) = value else { return Some(Duration::ZERO); };
+    let seconds = value.to_str().ok()?.trim().parse::<u64>().ok()?;
+    (seconds <= 10).then(|| Duration::from_secs(seconds))
+}
+
+fn retryable_rpc_transport_error(error: &reqwest::Error) -> bool {
+    if error.is_timeout() { return true; }
+    let mut cause = error.source();
+    while let Some(inner) = cause {
+        if let Some(error) = inner.downcast_ref::<io::Error>() {
+            if matches!(error.kind(), io::ErrorKind::ConnectionReset | io::ErrorKind::ConnectionAborted
+                | io::ErrorKind::ConnectionRefused | io::ErrorKind::TimedOut | io::ErrorKind::UnexpectedEof
+                | io::ErrorKind::BrokenPipe | io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock
+                | io::ErrorKind::NotConnected | io::ErrorKind::NetworkDown | io::ErrorKind::NetworkUnreachable
+                | io::ErrorKind::HostUnreachable) { return true; }
+        }
+        // Hyper's header-EOF error has no io::Error source. Match only this
+        // fixed transport diagnostic, not arbitrary request/connect failures
+        // (which also include permanent TLS and HTTP protocol errors).
+        if inner.to_string() == "connection closed before message completed" { return true; }
+        cause = inner.source();
+    }
+    false
+}
 
 #[derive(Debug, Parser)]
 #[command(name = "revm-sim")]
@@ -224,19 +255,27 @@ impl RpcClient {
 
     fn latch(&self, reason: FatalReason) {
         if self.fatal.get().is_none() {
+            diagnostic::emit("fatal-latch", json!({"fatal":reason}));
             self.fatal.set(Some(reason));
         }
     }
 
+    #[track_caller]
     fn checked_source<T>(&self, result: Result<T>) -> Result<T> {
+        if self.pinned && self.fatal.get().is_none() {
+            if let Err(error) = &result {
+                diagnostic::emit("source-check", json!({"category":diagnostic::source_category(error),
+                    "callerLine":std::panic::Location::caller().line()}));
+            }
+        }
         if self.pinned && result.is_err() { self.latch(FatalReason::SourceFault); }
         self.check_fatal()?;
         result
     }
 
-    fn inspect_rpc_error(&self, response: &Value) {
+    fn rpc_error_reason(&self, response: &Value) -> Option<FatalReason> {
         let Some(error) = response.get("error").filter(|error| error.is_object()) else {
-            return;
+            return None;
         };
         let code = error.get("code").and_then(Value::as_i64);
         let hex_data = error
@@ -251,7 +290,7 @@ impl RpcClient {
             || error.get("code").and_then(Value::as_str) == Some("CALL_EXCEPTION")
             || (code == Some(-32000) && hex_data)
         {
-            return;
+            return None;
         }
         let message = error
             .get("message")
@@ -274,13 +313,12 @@ impl RpcClient {
         if self.pinned && !hex_data && !explicit_revert
             && matches!(code, Some(-32000 | -32001))
             && source_selection_diagnostic(message.trim()) {
-            self.latch(FatalReason::SourceFault);
-            return;
+            return Some(FatalReason::SourceFault);
         }
         let category = if matches!(code, Some(429 | -32005)) {
             ThrottleCategory::RpcLimitCode
         } else if explicit_revert {
-            return;
+            return None;
         } else if words
             .windows(3)
             .any(|phrase| phrase == ["too", "many", "requests"])
@@ -304,51 +342,213 @@ impl RpcClient {
         }) {
             ThrottleCategory::RpcQuota
         } else {
-            return;
+            return None;
         };
-        self.latch(FatalReason::RpcThrottle {
+        Some(FatalReason::RpcThrottle {
             category,
             http_status: None,
             rpc_code: code,
-        });
+        })
+    }
+
+    fn inspect_rpc_error(&self, response: &Value) {
+        if let Some(reason) = self.rpc_error_reason(response) { self.latch(reason); }
+    }
+
+    // Only replay a binding-valid response with temporary rate errors. Do not
+    // hide bad IDs, state values, domain/source failures or hard quota failures.
+    fn retryable_rate_response(&self, request: &Value, response: &Value) -> bool {
+        let requests: Vec<&Value> = request.as_array().map(|v| v.iter().collect())
+            .unwrap_or_else(|| vec![request]);
+        let responses: Vec<&Value> = response.as_array().map(|v| v.iter().collect())
+            .unwrap_or_else(|| vec![response]);
+        if request.is_array() != response.is_array() || requests.len() != responses.len() { return false; }
+        let mut seen = HashSet::new();
+        let mut rate_limited = false;
+        for item in responses {
+            let Some(id) = item.get("id").and_then(Value::as_u64) else { return false; };
+            let Some(original) = requests.iter().find(|r| r.get("id").and_then(Value::as_u64) == Some(id)) else { return false; };
+            if !seen.insert(id) || item.get("jsonrpc").and_then(Value::as_str) != Some("2.0") { return false; }
+            if let Some(error) = item.get("error") {
+                if item.get("result").is_some() { return false; }
+                let Some(FatalReason::RpcThrottle { .. }) = self.rpc_error_reason(item) else { return false; };
+                let Some(code) = error.get("code").and_then(Value::as_i64) else { return false; };
+                let Some(message) = error.get("message").and_then(Value::as_str) else { return false; };
+                let message = message.to_ascii_lowercase();
+                let words: Vec<_> = message.split(|c: char| !c.is_ascii_alphanumeric()).collect();
+                if words.iter().any(|w| matches!(*w, "quota" | "credit" | "credits" | "billing" | "monthly" | "daily")
+                    || w.starts_with("exhaust") || w.starts_with("deplet") || w.starts_with("revert")) { return false; }
+                if error.get("data").and_then(Value::as_str).is_some_and(|d| d.starts_with("0x") || d.starts_with("0X")) { return false; }
+                let explicit_rate = words.windows(2).any(|p| p == ["rate", "limit"])
+                    || words.windows(3).any(|p| p == ["too", "many", "requests"])
+                    || words.contains(&"ratelimit") || words.contains(&"throughput")
+                    || (words.contains(&"compute") && words.contains(&"capacity"));
+                if code != 429 && !explicit_rate { return false; }
+                rate_limited = true;
+            } else {
+                let Some(value) = item.get("result") else { return false; };
+                if self.pinned && validate_state_value(original["method"].as_str().unwrap_or(""), value).is_err() { return false; }
+            }
+        }
+        rate_limited
     }
 
     fn send_json(&self, body: &Value) -> Result<Value> {
-        self.check_fatal()?;
-        self.round_trips.set(self.round_trips.get() + 1);
-        let response = self
-            .client
-            .post(&self.url)
-            .json(body)
-            .send()
-            .map_err(|_| anyhow!("rpc send failed"))?;
-        let status = response.status();
-        if status.as_u16() == 429 {
-            self.latch(FatalReason::RpcThrottle {
-                category: ThrottleCategory::Http429,
-                http_status: Some(429),
-                rpc_code: None,
-            });
+        // Retry the identical read before checked_source can latch a transient
+        // transport failure. The caller's operation timeout remains unchanged.
+        let mut rate_wait = Duration::ZERO;
+        let mut rate_reason = None;
+        for (attempt, delay) in RPC_ATTEMPT_DELAYS.iter().enumerate() {
             self.check_fatal()?;
-        }
-        // Strip reqwest errors and remote messages: neither endpoint credentials
-        // nor provider-supplied body text belong in the daemon's error/log surface.
-        let value: Value = response
-            .json()
-            .map_err(|_| anyhow!("rpc json decode failed"))?;
-        self.inspect_rpc_error(&value);
-        if let Some(items) = value.as_array() {
-            // Scan EVERY item before ID selection/domain conversion. This also
-            // catches quota errors attached to unknown or duplicate batch IDs.
-            for item in items {
-                self.inspect_rpc_error(item);
+            let delay = (*delay).max(rate_wait);
+            rate_wait = Duration::ZERO;
+            if !delay.is_zero() { std::thread::sleep(delay); }
+            let can_retry = attempt + 1 < RPC_ATTEMPT_DELAYS.len();
+            self.round_trips.set(self.round_trips.get() + 1);
+            let response = match self.client.post(&self.url).json(body).send() {
+                Ok(response) => response,
+                Err(error) if can_retry && retryable_rpc_transport_error(&error) => {
+                    diagnostic::rpc_transport_failure("rpc-send", body, attempt + 1, None,
+                        &error, true, true);
+                    continue;
+                }
+                Err(error) => {
+                    diagnostic::rpc_transport_failure("rpc-send", body, attempt + 1, None,
+                        &error, true, false);
+                    if let Some(reason) = rate_reason { self.latch(reason); }
+                    self.check_fatal()?;
+                    bail!("rpc send failed");
+                }
+            };
+            let status = response.status();
+            let retry_after = rate_retry_after(response.headers().get(reqwest::header::RETRY_AFTER));
+            let transient_status = matches!(status.as_u16(), 502 | 503 | 504);
+            let json_content = response.headers().get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()).is_some_and(|v| v.to_ascii_lowercase().contains("json"));
+            // Read the body separately: interrupted transfers may retry, but a
+            // complete malformed JSON response on HTTP success must not retry.
+            // Never expose reqwest errors, endpoint credentials or remote text.
+            let bytes = match response.bytes() {
+                Ok(bytes) => bytes,
+                Err(error) if can_retry && (status.is_success() || transient_status)
+                    && retryable_rpc_transport_error(&error) => {
+                    diagnostic::rpc_transport_failure("rpc-body", body, attempt + 1, Some(status.as_u16()),
+                        &error, status.is_success() || transient_status, true);
+                    continue;
+                }
+                Err(error) if status.as_u16() == 429 => {
+                    diagnostic::rpc_transport_failure("rpc-body", body, attempt + 1, Some(429),
+                        &error, false, false);
+                    self.latch(FatalReason::RpcThrottle { category: ThrottleCategory::Http429,
+                        http_status: Some(429), rpc_code: None });
+                    self.check_fatal()?;
+                    unreachable!("429 is latched")
+                }
+                Err(error) => {
+                    diagnostic::rpc_transport_failure("rpc-body", body, attempt + 1, Some(status.as_u16()),
+                        &error, status.is_success() || transient_status, false);
+                    if let Some(reason) = rate_reason { self.latch(reason); }
+                    self.check_fatal()?;
+                    bail!("rpc json decode failed");
+                }
+            };
+            let decoded = serde_json::from_slice::<Value>(&bytes);
+            let json_looking = bytes.iter().find(|byte| !byte.is_ascii_whitespace())
+                .is_some_and(|byte| matches!(*byte, b'{' | b'[' | b'"'));
+            let mut has_rpc_response = false;
+            if let Ok(value) = &decoded {
+                // A JSON-RPC-shaped reply must not be hidden by an HTTP retry,
+                // including wrong IDs/versions, incomplete batches and reverts.
+                has_rpc_response = value.is_array() || ["jsonrpc", "id", "result"].iter()
+                    .any(|key| value.get(*key).is_some()) || value.get("error").is_some_and(Value::is_object);
+                if can_retry && retry_after.is_some() && self.retryable_rate_response(body, value)
+                    && (status.is_success() || transient_status || status.as_u16() == 429) {
+                    rate_wait = retry_after.unwrap();
+                    rate_reason = value.as_array().and_then(|items| items.iter().find_map(|item| self.rpc_error_reason(item)))
+                        .or_else(|| self.rpc_error_reason(value));
+                    diagnostic::emit("rpc-rate-retry", json!({"methods":diagnostic::methods(body),
+                        "attempt":attempt + 1,"httpStatus":status.as_u16(),"fatal":rate_reason,
+                        "waitMs":(*RPC_ATTEMPT_DELAYS.get(attempt + 1).unwrap_or(&Duration::ZERO)).max(rate_wait).as_millis()}));
+                    continue;
+                }
+                let items = value.as_array().map(|v| v.iter().collect::<Vec<_>>()).unwrap_or_else(|| vec![value]);
+                for item in items {
+                    if item.get("error").is_some() && (self.rpc_error_reason(item).is_some()
+                        || diagnostic::methods(body).keys().any(|method| *method != "debug_traceCall")) {
+                        diagnostic::rpc_failure("rpc-error", body, attempt + 1, Some(status.as_u16()),
+                            item["error"]["code"].as_i64(),
+                            if self.rpc_error_reason(item).is_some() { "fatal-rpc-error" } else { "rpc-error" }, false);
+                    }
+                }
+                self.inspect_rpc_error(value);
+                if let Some(items) = value.as_array() {
+                    // Scan EVERY item, including unknown/duplicate IDs, before
+                    // considering an HTTP retry or selecting batch results.
+                    for item in items {
+                        self.inspect_rpc_error(item);
+                    }
+                }
             }
+            if status.as_u16() == 429 {
+                if can_retry && retry_after.is_some() && !has_rpc_response
+                    && (decoded.is_ok() || bytes.is_empty() || (!json_content && !json_looking)) {
+                    rate_wait = retry_after.unwrap();
+                    rate_reason = Some(FatalReason::RpcThrottle { category: ThrottleCategory::Http429,
+                        http_status: Some(429), rpc_code: None });
+                    diagnostic::rpc_failure("rpc-http", body, attempt + 1, Some(429), None, "http429", true);
+                    continue;
+                }
+                diagnostic::rpc_failure("rpc-http", body, attempt + 1, Some(429), None, "http429", false);
+                self.latch(FatalReason::RpcThrottle { category: ThrottleCategory::Http429,
+                    http_status: Some(429), rpc_code: None });
+            }
+            self.check_fatal()?;
+            if can_retry && transient_status && !has_rpc_response {
+                diagnostic::rpc_failure("rpc-http", body, attempt + 1, Some(status.as_u16()), None, "http-status", true);
+                continue;
+            }
+            if !status.is_success() || decoded.is_err() {
+                diagnostic::rpc_failure("rpc-response", body, attempt + 1, Some(status.as_u16()), None,
+                    if decoded.is_err() { "invalid-json" } else { "http-status" }, false);
+            }
+            if let Some(reason) = rate_reason {
+                // Optional traces do not pass through checked_source. A retry
+                // is recovered only by a valid bound response, never by a
+                // malformed body/ID that the optional caller could swallow.
+                if !status.is_success() || !decoded.as_ref().is_ok_and(|value|
+                    self.valid_rate_recovery(body, value)) {
+                    self.latch(reason);
+                    self.check_fatal()?;
+                }
+            }
+            let value = decoded.map_err(|_| anyhow!("rpc json decode failed"))?;
+            if !status.is_success() {
+                bail!("rpc http status {}", status.as_u16());
+            }
+            return Ok(value);
         }
-        self.check_fatal()?;
-        if !status.is_success() {
-            bail!("rpc http status {}", status.as_u16());
-        }
-        Ok(value)
+        unreachable!("last RPC attempt returns without retrying")
+    }
+
+    fn valid_rate_recovery(&self, request: &Value, response: &Value) -> bool {
+        let requests: Vec<&Value> = request.as_array().map(|v| v.iter().collect())
+            .unwrap_or_else(|| vec![request]);
+        let responses: Vec<&Value> = response.as_array().map(|v| v.iter().collect())
+            .unwrap_or_else(|| vec![response]);
+        if request.is_array() != response.is_array() || requests.len() != responses.len() { return false; }
+        let mut seen = HashSet::new();
+        responses.iter().all(|item| {
+            let Some(id) = item.get("id").and_then(Value::as_u64) else { return false; };
+            let Some(original) = requests.iter().find(|r| r.get("id").and_then(Value::as_u64) == Some(id)) else { return false; };
+            if !seen.insert(id) || item.get("jsonrpc").and_then(Value::as_str) != Some("2.0") { return false; }
+            match (item.get("result"), item.get("error")) {
+                (Some(value), None) => !self.pinned || validate_state_value(original["method"].as_str().unwrap_or(""), value).is_ok(),
+                (None, Some(error)) => error.get("code").and_then(Value::as_i64).is_some()
+                    && error.get("message").and_then(Value::as_str).is_some()
+                    && self.rpc_error_reason(item).is_none(),
+                _ => false,
+            }
+        })
     }
 
     fn call(&self, method: &str, params: Value) -> Result<Value> {
@@ -376,6 +576,10 @@ impl RpcClient {
         if self.pinned { validate_state_value(method, &value)?; }
         Ok(value)
         })();
+        if method != "debug_traceCall" && result.is_err() && self.fatal.get().is_none() {
+            diagnostic::emit("rpc-call-validation", json!({"method":diagnostic::method(method),
+                "category":diagnostic::source_category(result.as_ref().unwrap_err())}));
+        }
         if method == "debug_traceCall" { result } else { self.checked_source(result) }
     }
 
@@ -428,6 +632,12 @@ impl RpcClient {
             })
             .collect();
         if self.pinned && calls.iter().any(|(m, _)| *m != "debug_traceCall") && results.iter().any(Result::is_err) {
+            for (index, result) in results.iter().enumerate() {
+                if let Err(error) = result {
+                    diagnostic::emit("rpc-batch-item", json!({"method":diagnostic::method(calls[index].0),
+                        "itemIndex":index,"category":diagnostic::source_category(error)}));
+                }
+            }
             bail!("pinned state batch incomplete");
         }
         Ok(results)
@@ -1041,7 +1251,10 @@ impl DatabaseRef for RemoteRevmDb {
             .borrow_mut()
             .missing_state_keys
             .push(format!("code_hash:{code_hash:#x}"));
-        if self.source.is_some() { self.rpc.latch(FatalReason::SourceFault); }
+        if self.source.is_some() {
+            diagnostic::emit("source-code-cache", json!({"category":"missing-code-hash","codeHash":format!("{code_hash:#x}")}));
+            self.rpc.latch(FatalReason::SourceFault);
+        }
         Err(RpcError(format!("code not cached for hash {code_hash:#x}")))
     }
 
@@ -1641,6 +1854,11 @@ impl Daemon {
             _ => DaemonResponse::err("bad request envelope".into(), started),
         };
         let fatal = self.fatal.get();
+        if fatal.is_some() {
+            // Numeric request identity only; epoch is caller-provided text.
+            diagnostic::emit("daemon-response", json!({"requestId":request_id.as_deref().and_then(|id| id.parse::<u64>().ok()),
+                "fatal":fatal}));
+        }
         DaemonResponseEnvelope {
             epoch,
             request_id,
@@ -4200,17 +4418,33 @@ mod tests {
     }
 
     // One deterministic loopback exchange; no external endpoints or env input.
-    fn rpc_fixture(status: u16, body: Value) -> (RpcClient, std::thread::JoinHandle<()>) {
+    fn rpc_fixture(status: u16, body: Value) -> (RpcClient, std::thread::JoinHandle<Vec<Value>>) {
         rpc_fixture_steps(vec![(status, body)])
     }
 
-    fn rpc_fixture_steps(steps: Vec<(u16, Value)>) -> (RpcClient, std::thread::JoinHandle<()>) {
+    fn rpc_fixture_steps(steps: Vec<(u16, Value)>) -> (RpcClient, std::thread::JoinHandle<Vec<Value>>) {
+        rpc_transport_fixture(steps.into_iter()
+            .map(|(status, body)| RpcFixtureReply::Http(status, body.to_string())).collect())
+    }
+
+    enum RpcFixtureReply {
+        Http(u16, String),
+        ContentType(u16, String, Option<&'static str>),
+        RetryAfter(String, &'static str),
+        Disconnect,
+        Timeout,
+        TruncatedBody(u16),
+        MalformedHeaders,
+    }
+
+    fn rpc_transport_fixture(steps: Vec<RpcFixtureReply>) -> (RpcClient, std::thread::JoinHandle<Vec<Value>>) {
         use std::io::Read;
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let thread = std::thread::spawn(move || {
             listener.set_nonblocking(true).unwrap();
-            for (status, body) in steps {
+            let mut requests = Vec::new();
+            for reply in steps {
                 let until = Instant::now() + Duration::from_secs(5);
                 let mut stream = loop {
                     match listener.accept() {
@@ -4243,10 +4477,31 @@ mod tests {
                             .then(|| value.trim().parse().unwrap())
                     })
                     .unwrap();
-                stream.read_exact(&mut vec![0; length]).unwrap();
-                let body = body.to_string();
-                write!(stream, "HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                let mut request = vec![0; length];
+                stream.read_exact(&mut request).unwrap();
+                requests.push(serde_json::from_slice(&request).unwrap());
+                match reply {
+                    RpcFixtureReply::Http(status, body) => {
+                        write!(stream, "HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                    }
+                    RpcFixtureReply::ContentType(status, body, content_type) => {
+                        let header = content_type.map(|v| format!("Content-Type: {v}\r\n")).unwrap_or_default();
+                        write!(stream, "HTTP/1.1 {status} Fixture\r\n{header}Content-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                    }
+                    RpcFixtureReply::RetryAfter(body, wait) => {
+                        write!(stream, "HTTP/1.1 429 Fixture\r\nRetry-After: {wait}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                    }
+                    RpcFixtureReply::Disconnect => {}
+                    RpcFixtureReply::Timeout => std::thread::sleep(Duration::from_millis(500)),
+                    RpcFixtureReply::TruncatedBody(status) => {
+                        write!(stream, "HTTP/1.1 {status} Fixture\r\nContent-Length: 100\r\nConnection: close\r\n\r\n{{").unwrap();
+                    }
+                    RpcFixtureReply::MalformedHeaders => {
+                        write!(stream, "HTTP/1.1 invalid-status\r\nConnection: close\r\n\r\n").unwrap();
+                    }
+                }
             }
+            requests
         });
         let http = Client::builder()
             .no_proxy()
@@ -4260,9 +4515,358 @@ mod tests {
     }
 
     #[test]
-    fn physical_429_latches_before_any_later_call_or_batch() {
+    fn temporary_rate_limit_recovers_without_poisoning_admission() {
+        let params = json!([format!("{:#x}", Address::ZERO),
+            {"blockHash":format!("0x{}", "11".repeat(32)),"requireCanonical":true}]);
+        for status in [429, 200] {
+            let limited = json!({"jsonrpc":"2.0","id":1,
+                "error":{"code":429,"message":"too many requests"}});
+            let (mut rpc, thread) = rpc_fixture_steps(vec![(status, limited),
+                (200, json!({"jsonrpc":"2.0","id":1,"result":"0x01"})),
+                (200, json!({"jsonrpc":"2.0","id":1,"result":"0x02"}))]);
+            rpc.pinned = true;
+            assert_eq!(rpc.call("eth_getCode", params.clone()).unwrap(), json!("0x01"));
+            assert_eq!(rpc.fatal.get(), None, "recovered rate limit must not revoke admission");
+            assert_eq!(rpc.call("eth_getCode", params.clone()).unwrap(), json!("0x02"));
+            let requests = thread.join().unwrap();
+            assert_eq!(requests.len(), 3);
+            assert!(requests.iter().all(|request| request == &requests[0]), "keep exact request and block pin");
+        }
+    }
+
+    #[test]
+    fn rate_limited_batch_replays_whole_request_with_one_retry_budget() {
+        let limited = json!([
+            {"jsonrpc":"2.0","id":1,"error":{"code":-32005,"message":"throughput limit reached"}},
+            {"jsonrpc":"2.0","id":0,"result":"0x01"}]);
+        let success = json!([
+            {"jsonrpc":"2.0","id":1,"result":"0x02"},
+            {"jsonrpc":"2.0","id":0,"result":"0x01"}]);
+        let (mut rpc, thread) = rpc_transport_fixture(vec![
+            RpcFixtureReply::Http(503, "gateway unavailable".into()),
+            RpcFixtureReply::Http(200, limited.to_string()),
+            RpcFixtureReply::Http(200, success.to_string())]);
+        rpc.pinned = true;
+        let pin = json!(["0x0", {"blockHash":format!("0x{}", "11".repeat(32)), "requireCanonical":true}]);
+        let values = rpc.batch_call(&[("eth_getCode", pin.clone()), ("eth_getCode", pin)]).unwrap();
+        assert_eq!(values.into_iter().map(Result::unwrap).collect::<Vec<_>>(), vec![json!("0x01"), json!("0x02")]);
+        assert_eq!(rpc.fatal.get(), None);
+        let requests = thread.join().unwrap();
+        assert_eq!(requests.len(), 3);
+        assert!(requests.iter().all(|request| request == &requests[0]));
+    }
+
+    #[test]
+    fn rate_retries_never_hide_ambiguous_limits_or_invalid_siblings() {
+        let (mut rpc, thread) = rpc_transport_fixture(vec![]);
+        rpc.pinned = true;
+        let request = json!([
+            {"jsonrpc":"2.0","id":0,"method":"eth_getCode","params":[]},
+            {"jsonrpc":"2.0","id":1,"method":"eth_getCode","params":[]}]);
+        let rate = json!({"jsonrpc":"2.0","id":0,"error":{"code":429,"message":"rate limit exceeded"}});
+        for sibling in [
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":429,"message":"rate limit; monthly quota exhausted"}}),
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"header not found"}}),
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":3,"message":"execution reverted: rate limit"}}),
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":-32005,"message":"limit exceeded"}}),
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":-32005,"message":""}}),
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":429,"message":"rate limit", "data":"0xdeadbeef"}}),
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":429}}),
+            json!({"jsonrpc":"2.0","id":1,"result":"0x1"}),
+            json!({"jsonrpc":"2.0","id":900,"result":"0x01"}),
+            json!({"jsonrpc":"2.0","id":0,"result":"0x01"}),
+            json!({"id":1,"result":"0x01"}),
+            json!({"jsonrpc":"2.0","id":1,"result":"0x01","error":{"code":429,"message":"rate limit"}}),
+        ] {
+            for reversed in [false, true] {
+                let body = if reversed { json!([sibling, rate]) } else { json!([rate, sibling]) };
+                assert!(!rpc.retryable_rate_response(&request, &body), "must not replay {body}");
+            }
+        }
+        assert!(!rpc.retryable_rate_response(&request, &json!([rate])));
+        assert!(!rpc.retryable_rate_response(&request, &rate));
+        assert_eq!(rpc.fatal.get(), None, "eligibility inspection must not mutate latch");
+        thread.join().unwrap();
+    }
+
+    #[test]
+    fn rate_retry_exhaustion_still_fences_optional_traces() {
+        for last_transport_failure in [false, true] {
+            let rate = json!({"jsonrpc":"2.0","id":1,"error":{"code":429,"message":"too many requests"}});
+            let mut replies = vec![RpcFixtureReply::Http(200, rate.to_string()), RpcFixtureReply::Http(503, "gateway".into())];
+            replies.push(if last_transport_failure { RpcFixtureReply::Disconnect }
+                else { RpcFixtureReply::Http(200, rate.to_string()) });
+            let (mut rpc, thread) = rpc_transport_fixture(replies);
+            rpc.pinned = true;
+            let error = rpc.call("debug_traceCall", json!([])).unwrap_err();
+            assert!(matches!(error.downcast_ref::<FatalReason>(), Some(FatalReason::RpcThrottle { .. })));
+            assert!(rpc.call("eth_getCode", json!([])).is_err());
+            assert!(rpc.batch_call(&[("debug_traceCall", json!([]))]).is_err());
+            assert_eq!(rpc.round_trips(), 3);
+            assert_eq!(thread.join().unwrap().len(), 3);
+        }
+    }
+
+    #[test]
+    fn rate_retry_after_is_respected_without_unbounded_waits() {
+        assert_eq!(rate_retry_after(None), Some(Duration::ZERO));
+        for (header, seconds) in [("0", Some(0)), ("2", Some(2)), ("10", Some(10)), ("11", None), ("-1", None), ("tomorrow", None)] {
+            assert_eq!(rate_retry_after(Some(&header.parse().unwrap())), seconds.map(Duration::from_secs));
+        }
+        let rate = json!({"jsonrpc":"2.0","id":1,"error":{"code":429,"message":"too many requests"}});
+        let (mut rpc, thread) = rpc_transport_fixture(vec![
+            RpcFixtureReply::RetryAfter(rate.to_string(), "2"),
+            RpcFixtureReply::Http(200, json!({"jsonrpc":"2.0","id":1,"result":"0x01"}).to_string())]);
+        rpc.pinned = true;
+        let started = Instant::now();
+        assert_eq!(rpc.call("eth_getCode", json!([])).unwrap(), json!("0x01"));
+        assert!(started.elapsed() >= Duration::from_secs(2));
+        assert_eq!(thread.join().unwrap().len(), 2);
+        let (rpc, thread) = rpc_transport_fixture(vec![RpcFixtureReply::RetryAfter(rate.to_string(), "60")]);
+        assert!(rpc.call("eth_getCode", json!([])).is_err());
+        assert_eq!(rpc.round_trips(), 1);
+        thread.join().unwrap();
+    }
+
+    #[test]
+    fn rate_then_invalid_optional_reply_cannot_clear_fatal() {
+        let rate = json!({"jsonrpc":"2.0","id":1,"error":{"code":429,"message":"too many requests"}});
+        for body in [
+            "{",
+            r#"{"jsonrpc":"2.0","id":900,"result":{}}"#,
+            r#"{"id":1,"result":{}}"#,
+            r#"{"jsonrpc":"2.0","id":1}"#,
+            r#"{"jsonrpc":"2.0","id":1,"result":{},"error":{"code":3,"message":"execution reverted"}}"#,
+        ] {
+            let (mut rpc, thread) = rpc_transport_fixture(vec![
+                RpcFixtureReply::Http(200, rate.to_string()), RpcFixtureReply::Http(200, body.into())]);
+            rpc.pinned = true;
+            assert!(rpc.call("debug_traceCall", json!([])).is_err());
+            assert!(matches!(rpc.fatal.get(), Some(FatalReason::RpcThrottle { .. })));
+            assert!(rpc.call("eth_getCode", json!([])).is_err());
+            assert!(rpc.batch_call(&[("eth_getCode", json!([]))]).is_err());
+            assert_eq!(rpc.round_trips(), 2);
+            assert_eq!(thread.join().unwrap().len(), 2);
+        }
+        // A bound domain revert is not an unrecovered transport failure.
+        let (mut rpc, thread) = rpc_fixture_steps(vec![(200, rate),
+            (200, json!({"jsonrpc":"2.0","id":1,"error":{"code":3,"message":"execution reverted","data":"0x"}}))]);
+        rpc.pinned = true;
+        assert!(rpc.call("debug_traceCall", json!([])).is_err());
+        assert_eq!(rpc.fatal.get(), None);
+        assert_eq!(thread.join().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn malformed_json_looking_429_never_retries_without_json_header() {
+        for content_type in [None, Some("text/plain")] {
+            for body in ["  {\"jsonrpc\":", "\n[", "\"unfinished"] {
+                let (rpc, thread) = rpc_transport_fixture(vec![RpcFixtureReply::ContentType(429, body.into(), content_type)]);
+                assert!(rpc.call("debug_traceCall", json!([])).is_err());
+                assert!(matches!(rpc.fatal.get(), Some(FatalReason::RpcThrottle { .. })));
+                assert_eq!(rpc.round_trips(), 1);
+                assert_eq!(thread.join().unwrap().len(), 1);
+            }
+        }
+        let (rpc, thread) = rpc_transport_fixture(vec![
+            RpcFixtureReply::ContentType(429, "too many requests".into(), None),
+            RpcFixtureReply::Http(200, json!({"jsonrpc":"2.0","id":1,"result":"0x01"}).to_string())]);
+        assert_eq!(rpc.call("eth_getCode", json!([])).unwrap(), json!("0x01"));
+        assert_eq!(rpc.fatal.get(), None);
+        assert_eq!(thread.join().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn retry_transient_http_preserves_single_and_batch_pinned_requests() {
+        let params = json!([format!("{:#x}", Address::ZERO),
+            {"blockHash":format!("0x{}", "11".repeat(32)),"requireCanonical":true}]);
+        for (status, body) in [(502, "<html>bad gateway</html>"),
+            (503, r#"{"message":"unavailable"}"#), (504, "gateway timeout")] {
+            for batch in [false, true] {
+                let response = if batch {
+                    json!([{"jsonrpc":"2.0","id":1,"result":"0x02"},
+                        {"jsonrpc":"2.0","id":0,"result":"0x01"}])
+                } else {
+                    json!({"jsonrpc":"2.0","id":1,"result":"0x01"})
+                };
+                let (mut rpc, thread) = rpc_transport_fixture(vec![
+                    RpcFixtureReply::Http(status, body.into()),
+                    RpcFixtureReply::Http(200, response.to_string()),
+                ]);
+                rpc.pinned = true;
+                let expected = if batch {
+                    let results = rpc.batch_call(&[("eth_getCode", params.clone()),
+                        ("eth_getCode", params.clone())]).unwrap();
+                    assert_eq!(results.into_iter().map(Result::unwrap).collect::<Vec<_>>(),
+                        vec![json!("0x01"), json!("0x02")]);
+                    json!([{"jsonrpc":"2.0","id":0,"method":"eth_getCode","params":params},
+                        {"jsonrpc":"2.0","id":1,"method":"eth_getCode","params":params}])
+                } else {
+                    assert_eq!(rpc.call("eth_getCode", params.clone()).unwrap(), json!("0x01"));
+                    json!({"jsonrpc":"2.0","id":1,"method":"eth_getCode","params":params})
+                };
+                assert_eq!(rpc.fatal.get(), None);
+                assert_eq!(rpc.round_trips(), 2);
+                assert_eq!(thread.join().unwrap(), vec![expected.clone(), expected]);
+            }
+        }
+    }
+
+    #[test]
+    fn retry_recovers_from_disconnect_timeout_and_truncated_body() {
+        for reply in [RpcFixtureReply::Disconnect, RpcFixtureReply::Timeout, RpcFixtureReply::TruncatedBody(200)] {
+            let (mut rpc, thread) = rpc_transport_fixture(vec![reply,
+                RpcFixtureReply::Http(200, json!({"jsonrpc":"2.0","id":1,"result":"0x01"}).to_string())]);
+            rpc.pinned = true;
+            rpc.client = Client::builder().no_proxy().timeout(Duration::from_millis(250)).build().unwrap();
+            assert_eq!(rpc.call("eth_getCode", json!([])).unwrap(), json!("0x01"));
+            assert_eq!(rpc.fatal.get(), None);
+            assert_eq!(rpc.round_trips(), 2);
+            let requests = thread.join().unwrap();
+            assert_eq!(requests.len(), 2);
+            assert_eq!(requests[0], requests[1]);
+        }
+    }
+
+    #[test]
+    fn retry_exhaustion_preserves_pinned_fatal_stop() {
         for batch in [false, true] {
-            let (rpc, thread) = rpc_fixture(429, json!({"error": "untrusted provider body"}));
+            for disconnect in [false, true] {
+                let (mut rpc, thread) = rpc_transport_fixture((0..3).map(|_| {
+                    if disconnect { RpcFixtureReply::Disconnect }
+                    else { RpcFixtureReply::Http(503, "must-not-echo".into()) }
+                }).collect());
+                rpc.pinned = true;
+                let error = if batch {
+                    rpc.batch_call(&[("eth_getCode", json!([]))]).unwrap_err()
+                } else {
+                    rpc.call("eth_getCode", json!([])).unwrap_err()
+                };
+                assert_eq!(error.downcast_ref::<FatalReason>(), Some(&FatalReason::SourceFault));
+                assert!(!format!("{error:#}").contains("must-not-echo"));
+                assert!(!format!("{error:#}").contains(&rpc.url));
+                let requests = thread.join().unwrap();
+                assert_eq!(requests.len(), 3);
+                assert!(requests.iter().all(|request| request == &requests[0]));
+                assert!(rpc.call("eth_getCode", json!([])).is_err());
+                assert!(rpc.batch_call(&[("eth_getCode", json!([]))]).is_err());
+                assert_eq!(rpc.round_trips(), 3, "exhaustion must stop, not continue candidates");
+            }
+        }
+    }
+
+    #[test]
+    fn retry_does_not_hide_rpc_faults_behind_transient_http_status() {
+        for (code, message, throttle) in [
+            (-32000, "header not found", false),
+            (-32005, "quota exceeded", true),
+        ] {
+            for status in [200, 502, 503, 504] {
+                for batch in [false, true] {
+                    let error = quota_error(json!(code), message);
+                    // Include an unknown ID so fatal scanning cannot be bypassed.
+                    let body = if batch { json!([{"id":900,"result":"0x"}, error]) } else { error };
+                    let (mut rpc, thread) = rpc_fixture(status, body);
+                    rpc.pinned = true;
+                    if batch { assert!(rpc.batch_call(&[("debug_traceCall", json!([]))]).is_err()); }
+                    else { assert!(rpc.call("debug_traceCall", json!([])).is_err()); }
+                    assert_eq!(matches!(rpc.fatal.get(), Some(FatalReason::RpcThrottle { .. })), throttle);
+                    assert!(rpc.fatal.get().is_some());
+                    assert!(rpc.call("eth_getCode", json!([])).is_err());
+                    assert_eq!(rpc.round_trips(), 1);
+                    assert_eq!(thread.join().unwrap().len(), 1);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn retry_does_not_retry_domain_errors_or_invalid_success_responses() {
+        for status in [200, 503] {
+            let (mut rpc, thread) = rpc_fixture(status,
+                json!({"jsonrpc":"2.0","id":1,"error":{"code":3,"message":"execution reverted","data":"0x"}}));
+            rpc.pinned = true;
+            assert!(rpc.call("debug_traceCall", json!([])).is_err());
+            assert_eq!(rpc.fatal.get(), None);
+            assert_eq!(rpc.round_trips(), 1);
+            thread.join().unwrap();
+        }
+        for (status, body) in [
+            (200, "not json must-not-echo"),
+            (200, r#"{"jsonrpc":"2.0","id":900,"result":"0x01"}"#),
+            (200, r#"{"jsonrpc":"2.0","id":1,"result":"0x1"}"#),
+            (200, r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"invalid params"}}"#),
+            (401, "unauthorized must-not-echo"),
+            (403, "forbidden must-not-echo"),
+            (500, "error must-not-echo"),
+        ] {
+            let (mut rpc, thread) = rpc_transport_fixture(vec![RpcFixtureReply::Http(status, body.into())]);
+            rpc.pinned = true;
+            assert!(rpc.call("eth_getCode", json!([])).is_err());
+            assert_eq!(rpc.fatal.get(), Some(FatalReason::SourceFault));
+            assert_eq!(rpc.round_trips(), 1);
+            thread.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn retry_exhaustion_does_not_echo_remote_body_or_endpoint() {
+        let (mut rpc, thread) = rpc_transport_fixture((0..3)
+            .map(|_| RpcFixtureReply::Http(502, "<html>must-not-echo</html>".into())).collect());
+        rpc.url.push_str("/?key=must-not-echo-key");
+        let error = rpc.call("eth_getCode", json!([])).unwrap_err();
+        assert_eq!(format!("{error:#}"), "rpc json decode failed");
+        assert_eq!(rpc.round_trips(), 3);
+        assert_eq!(thread.join().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn retry_does_not_retry_terminal_status_with_interrupted_body_or_bad_url() {
+        for status in [400, 401, 403, 429, 500] {
+            let (mut rpc, thread) = rpc_transport_fixture(vec![RpcFixtureReply::TruncatedBody(status)]);
+            rpc.pinned = true;
+            assert!(rpc.call("eth_getCode", json!([])).is_err());
+            assert!(rpc.fatal.get().is_some());
+            assert_eq!(rpc.round_trips(), 1);
+            thread.join().unwrap();
+        }
+        let rpc = RpcClient::new("not-a-url-must-not-echo".into(),
+            Client::builder().no_proxy().build().unwrap(), FatalLatch::default()).unwrap();
+        assert_eq!(rpc.call("eth_getCode", json!([])).unwrap_err().to_string(), "rpc send failed");
+        assert_eq!(rpc.round_trips(), 1);
+    }
+
+    #[test]
+    fn retry_does_not_hide_bad_bindings_or_permanent_protocol_errors() {
+        for batch in [false, true] {
+            for response in [
+                json!({"jsonrpc":"2.0","id":900,"result":"0x01"}),
+                json!({"jsonrpc":"wrong","id":1,"result":"0x01"}),
+                json!({"jsonrpc":"2.0","id":1}),
+                json!([]),
+            ] {
+                let body = if batch { json!([response]) } else { response };
+                let (mut rpc, thread) = rpc_fixture(503, body);
+                rpc.pinned = true;
+                if batch { assert!(rpc.batch_call(&[("eth_getCode", json!([]))]).is_err()); }
+                else { assert!(rpc.call("eth_getCode", json!([])).is_err()); }
+                assert_eq!(rpc.fatal.get(), Some(FatalReason::SourceFault));
+                assert_eq!(rpc.round_trips(), 1);
+                thread.join().unwrap();
+            }
+        }
+        let (mut rpc, thread) = rpc_transport_fixture(vec![RpcFixtureReply::MalformedHeaders]);
+        rpc.pinned = true;
+        assert!(rpc.call("eth_getCode", json!([])).is_err());
+        assert_eq!(rpc.fatal.get(), Some(FatalReason::SourceFault));
+        assert_eq!(rpc.round_trips(), 1);
+        thread.join().unwrap();
+    }
+
+    #[test]
+    fn physical_429_latches_after_bounded_retries_before_later_calls() {
+        for batch in [false, true] {
+            let (rpc, thread) = rpc_fixture_steps((0..3).map(|_| (429, json!({"error": "untrusted provider body"}))).collect());
             if batch {
                 assert!(rpc.batch_call(&[("eth_call", json!([]))]).is_err());
             } else {
@@ -4271,7 +4875,7 @@ mod tests {
             thread.join().unwrap();
             assert!(rpc.call("eth_call", json!([])).is_err());
             assert!(rpc.batch_call(&[("eth_call", json!([]))]).is_err());
-            assert_eq!(rpc.round_trips(), 1, "latched calls must perform zero I/O");
+            assert_eq!(rpc.round_trips(), 3, "exhausted calls latch; later calls perform zero I/O");
         }
     }
 
@@ -4585,8 +5189,10 @@ mod tests {
                     json!([quota_error(json!(-32000), "compute units depleted")]),
                 ),
             ] {
-                let (rpc, thread) =
-                    rpc_fixture_steps(vec![(200, fixture_header()), (status, body)]);
+                let attempts = if status == 429 { 3 } else { 1 };
+                let mut replies = vec![(200, fixture_header())];
+                replies.extend(std::iter::repeat_n((status, body), attempts));
+                let (rpc, thread) = rpc_fixture_steps(replies);
                 let (mut daemon, caller, target, _) = cached_daemon(&rpc, revert);
                 let result = request_line(
                     &mut daemon,
@@ -4598,7 +5204,10 @@ mod tests {
                 assert_eq!(result["fatal"]["kind"], "rpc-throttle");
                 assert!(result.get("strict").is_none());
                 assert!(result.get("success").is_none());
-                assert_eq!(daemon.warm.as_ref().unwrap().remote.rpc.round_trips(), 2);
+                assert_eq!(
+                    daemon.warm.as_ref().unwrap().remote.rpc.round_trips(),
+                    (1 + attempts) as u64
+                );
                 thread.join().unwrap();
             }
         }

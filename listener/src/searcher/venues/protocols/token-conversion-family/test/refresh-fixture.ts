@@ -10,23 +10,26 @@ import { runStrictFamilyLifecycle } from "../../../../strict-family-lifecycle-ru
 import type { CanonicalSource } from "../../../adapter-request-program.js";
 import { createVerifiedGraphView } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
+import type { FamilyCapabilityCatalog } from "../../../family-capability-catalog.js";
 import { FAMILY } from "../manifest.js";
 
 // Only the transport/state is synthetic. Admission, graph projection, amount
 // reference selection, raw/effective publication and refresh are production code.
 export function refreshFixture(input: {
+  catalog?: FamilyCapabilityCatalog;
   publication: Awaited<ReturnType<typeof runStrictFamilyLifecycle>>;
   start: CanonicalSource;
   executor: string;
   asset: string;
   runtime(source: CanonicalSource, lane: "raw" | "exact"): CentralAdapterRuntime;
 }) {
-  const family = catalog.forFamily(FAMILY);
+  const selectedCatalog = input.catalog ?? catalog;
+  const family = selectedCatalog.forFamily(FAMILY);
   const edges = buildFamilyRouteGraphView({ routes: input.publication.instances.flatMap(instance =>
     instance.routes.map((route, i) => ({ family, descriptor: instance.descriptor,
       route, handle: instance.routeHandles[i] }))) }).edges;
   assert.equal(edges.length, 2);
-  const root = new StrictProductionRuntimeRoot({ catalog, readySource: input.start,
+  const root = new StrictProductionRuntimeRoot({ catalog: selectedCatalog, readySource: input.start,
     readyGraph: edges, readyInstances: input.publication.instances, readyFundingAssets: [] });
   const cache = createAdapterFamilyExactQuoteCache();
   const coordinator = new StrictCurrentRuntimeCoordinator(request => root.createSession({
@@ -49,7 +52,7 @@ export function refreshFixture(input: {
       quote: async request => {
         assert(exact);
         const result = await exact.issueExact({ ...request, executor: input.executor,
-          runtimeEvidence: [], requireChainAmountQuote: true });
+          runtimeEvidence: [] });
         assert("amountIn" in result); return result;
       },
     });

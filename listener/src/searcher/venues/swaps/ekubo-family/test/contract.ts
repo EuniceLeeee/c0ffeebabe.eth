@@ -7,7 +7,7 @@ import type { AdapterRequestResult } from "../../../adapter-request-program.js";
 import { hashCanonical } from "../../../canonical-value.js";
 import { familyId } from "../../../adapter-family-identifiers.js";
 import { EKUBO_CORE, EKUBO_ROUTER, EKUBO_MAX_EXACT_INPUT, ekuboRouterIface, encodeEkuboQuote } from "../../ekubo/abi.js";
-import { candidate, decodeQuote, decodeInitialized, decimals, MAX_UINT, NO_RECEIVER, NO_RECEIVER_SELECTOR, probeAmount, vanillaKey } from "../codec.js";
+import { candidate, decodeQuote, decodeInitialized, decimals, MAX_UINT, NO_RECEIVER, NO_RECEIVER_SELECTOR, probeAmount, supportedKey } from "../codec.js";
 import { CALL_ID, CALL_NO_RECEIVER_ID, INIT_ID } from "../discovery.js";
 import { EKUBO_ACTION_ID } from "../manifest.js";
 import { descriptor, EXECUTOR, fixture, ID, identity, initialized, KEY, quoteData, result, SOURCE, swapCall, word } from "./fixtures.js";
@@ -62,11 +62,11 @@ test("Initialize requires real Core, exact topic/data/hash and nonzero initial s
     { ...log, topics: [...log.topics, ID] }, { ...log, data: `${word(1n)}${log.data.slice(66)}` },
     { ...log, data: `${log.data}00` }, { ...log, data: `${log.data.slice(0, -64)}${"0".repeat(64)}` } ]) assert.equal(decodeInitialized(mutation), null);
 });
-test("native, unordered/duplicate tokens and every nonzero extension are unsupported", () => {
-  for (const key of [ { ...KEY, token0: ethers.ZeroAddress }, { ...KEY, token0: KEY.token1 },
+test("unordered/duplicate tokens and non-full-range extension keys are unsupported", () => {
+  for (const key of [ { ...KEY, token0: KEY.token1 },
     { ...KEY, token0: KEY.token1, token1: KEY.token0 }, { ...KEY, config: `0x${EXECUTOR.slice(2)}${KEY.config.slice(42)}` },
     { ...KEY, config: `0x5555ff9ff2757500bf4ee020dcfd0210cffa41be${KEY.config.slice(42)}` } ]) {
-    assert.throws(() => vanillaKey(key));
+    assert.throws(() => supportedKey(key));
     assert.equal(plugin.identity.variants[0].applies({ ...candidate(KEY), poolKey: key }), false);
   }
   const wrong = { ...candidate(KEY), poolId: ethers.ZeroHash };

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ethers } from "ethers";
+import { gzipSync } from "node:zlib";
+import { createHook } from "node:async_hooks";
 import { RebuildReadProvider } from "../rebuild-read-provider.js";
 
 type Payload = { id: number; jsonrpc: string; method: string; params: unknown[] };
@@ -65,7 +67,7 @@ function answer(request: Request, result: (payload: Payload) => unknown): void {
 
 const pass = async <T>(operation: () => Promise<T>): Promise<T> => operation();
 const network = ethers.Network.from(1);
-const options = { staticNetwork: network, cacheTimeout: -1 };
+const options = { staticNetwork: network, cacheTimeout: -1, requestTimeoutMs: 2_000 };
 const address = "0x" + "12".repeat(20);
 
 async function batchSizeConcurrencyAndParity(): Promise<void> {
@@ -202,7 +204,7 @@ async function queuedRequestsRemainFifo(): Promise<void> {
   }
 }
 
-async function networkDetectionDoesNotDeadlock(): Promise<void> {
+async function networkDetectionDoesNotDeadlock(requestTimeoutMs?: number): Promise<void> {
   const methods: string[] = [];
   const server = await serve(request => answer(request, payload => {
     methods.push(payload.method);
@@ -210,7 +212,7 @@ async function networkDetectionDoesNotDeadlock(): Promise<void> {
     if (payload.method === "eth_getCode") return "0x6000";
     throw new Error(`unexpected method ${payload.method}`);
   }));
-  const provider = new RebuildReadProvider(pass, server.url);
+  const provider = new RebuildReadProvider(pass, server.url, undefined, { requestTimeoutMs });
   try {
     assert.deepEqual(await bounded(Promise.all(Array.from({ length: 80 }, (_, i) =>
       provider.getCode(ethers.getAddress(ethers.toBeHex(i + 1, 20)), 123)))), Array(80).fill("0x6000"));
@@ -281,11 +283,208 @@ async function destroyRejectsQueue(): Promise<void> {
   }
 }
 
+async function totalTimeoutStopsStreamingAndReleasesSlot(): Promise<void> {
+  const closed = deferred();
+  let received = 0;
+  const server = await serve(request => {
+    received++;
+    if (received > 1) { answer(request, () => []); return; }
+    request.response.writeHead(200, { "content-type": "application/json" });
+    request.response.write("[");
+    // Bytes keep arriving, so an idle timeout never fires.
+    const timer = setInterval(() => request.response.write(" "), 20);
+    request.response.on("close", () => { clearInterval(timer); closed.resolve(); });
+  });
+  const provider = new RebuildReadProvider(pass, server.url, network, {
+    ...options, batchMaxCount: 1, maxPhysicalRequests: 1, requestTimeoutMs: 150,
+  });
+  try {
+    const started = performance.now();
+    const first = provider.send("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x2" }]);
+    const timedOut = assert.rejects(first, error => ethers.isError(error, "TIMEOUT"));
+    const second = provider.send("eth_getLogs", [{ fromBlock: "0x3", toBlock: "0x4" }]);
+    await bounded(timedOut);
+    await bounded(closed.promise);
+    assert(performance.now() - started < 2_000, "stream must be aborted, not left running");
+    assert.deepEqual(await bounded(second), []);
+    assert.equal(received, 2, "queued request proceeds without implicit retry");
+  } finally {
+    provider.destroy();
+    await server.close();
+  }
+}
+
+async function totalTimeoutCoversBatchAndThrottleWait(): Promise<void> {
+  for (const throttled of [false, true]) {
+    let received = 0;
+    const closed = deferred();
+    const server = await serve(request => {
+      received++;
+      if (received > 1) { answer(request, () => []); return; }
+      assert.equal(request.payloads.length, 4);
+      if (throttled) { request.response.writeHead(429, { "retry-after": "500" }).end(); return; }
+      request.response.writeHead(200, { "content-type": "application/json" });
+      request.response.write("[");
+      const timer = setInterval(() => request.response.write(" "), 20);
+      request.response.on("close", () => { clearInterval(timer); closed.resolve(); });
+    });
+    const provider = new RebuildReadProvider(pass, server.url, network, { ...options, requestTimeoutMs: 150 });
+    try {
+      const started = performance.now();
+      const results = await bounded(Promise.allSettled(Array.from({ length: 4 }, (_, i) =>
+        provider.send("eth_getLogs", [{ fromBlock: ethers.toQuantity(i), toBlock: ethers.toQuantity(i) }]))));
+      assert(results.every(result => result.status === "rejected" && ethers.isError(result.reason, "TIMEOUT")));
+      assert(performance.now() - started < 450, "throttle delay cannot extend the absolute deadline");
+      if (!throttled) await bounded(closed.promise);
+      else await new Promise(resolve => setTimeout(resolve, 550));
+      assert.equal(received, 1, "cancelled backoff cannot dispatch a late retry");
+      assert.deepEqual(await bounded(provider.send("eth_getLogs", [{ fromBlock: "0x5", toBlock: "0x5" }])), []);
+    } finally { provider.destroy(); await server.close(); }
+  }
+}
+
+async function noHeadersTimeoutAndDestroyCloseSocket(): Promise<void> {
+  for (const destroy of [false, true]) {
+    const arrived = deferred(), closed = deferred();
+    const server = await serve(request => {
+      request.response.on("close", () => closed.resolve());
+      arrived.resolve(); // Deliberately never send response headers.
+    });
+    const provider = new RebuildReadProvider(pass, server.url, network, {
+      ...options, batchMaxCount: 1, requestTimeoutMs: destroy ? 2_000 : 150,
+    });
+    try {
+      const started = performance.now();
+      const pending = assert.rejects(provider.send("trace_block", ["0x1"]), error =>
+        ethers.isError(error, destroy ? "UNSUPPORTED_OPERATION" : "TIMEOUT"));
+      await bounded(arrived.promise);
+      if (destroy) provider.destroy();
+      await bounded(pending);
+      await bounded(closed.promise);
+      assert(performance.now() - started < 1_000, "no-header socket must close promptly");
+    } finally { provider.destroy(); await server.close(); }
+  }
+}
+
+async function boundedTransportRetainsGzipRedirectAndRpcErrors(): Promise<void> {
+  let received = 0;
+  const server = await serve(request => {
+    received++;
+    if (received === 1) { request.response.writeHead(302, { location: server.url + "/redirected" }).end(); return; }
+    const replies = request.payloads.map(payload => payload.method === "eth_call"
+      ? { jsonrpc: "2.0", id: payload.id, error: { code: 3, message: "execution reverted", data: "0xdeadbeef" } }
+      : { jsonrpc: "2.0", id: payload.id, result: [] });
+    request.response.writeHead(200, { "content-type": "application/json", "content-encoding": "gzip" });
+    request.response.end(gzipSync(JSON.stringify(request.batched ? replies : replies[0])));
+  });
+  const provider = new RebuildReadProvider(pass, server.url, network, { ...options, batchMaxCount: 1 });
+  try {
+    // ethers intentionally refuses POST redirects; use its preserved status behavior.
+    await assert.rejects(provider.send("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x1" }]), error =>
+      ethers.isError(error, "SERVER_ERROR"));
+    assert.equal(received, 1, "POST redirect must not dispatch another request");
+    assert.deepEqual(await bounded(provider.send("eth_getLogs", [{ fromBlock: "0x1", toBlock: "0x1" }])), []);
+    await assert.rejects(provider.call({ to: address, data: "0x", blockTag: 123 }), error =>
+      ethers.isError(error, "CALL_EXCEPTION") && error.data === "0xdeadbeef");
+  } finally { provider.destroy(); await server.close(); }
+  for (const requestTimeoutMs of [0, -1, 1.5, NaN, Infinity]) {
+    assert.throws(() => new RebuildReadProvider(pass, server.url, network, { requestTimeoutMs }), /requestTimeoutMs/);
+  }
+}
+
+async function emptyAndMalformedGzipParity(): Promise<void> {
+  let received = 0;
+  const server = await serve(request => {
+    received++;
+    if (received === 1) {
+      request.response.writeHead(429, { "content-encoding": "gzip", "retry-after": "20" }).end();
+    } else if (received === 2) {
+      answer(request, () => []);
+    } else {
+      request.response.writeHead(200, { "content-encoding": "gzip" }).end("not gzip");
+    }
+  });
+  const provider = new RebuildReadProvider(pass, server.url, network, { ...options, batchMaxCount: 1 });
+  try {
+    assert.deepEqual(await bounded(provider.send("eth_getLogs", [])), []);
+    assert.equal(received, 2, "empty gzip-marked 429 must retain retry handling");
+    await assert.rejects(provider.send("eth_getLogs", []), error => ethers.isError(error, "SERVER_ERROR"));
+  } finally { provider.destroy(); await server.close(); }
+}
+
+async function throttleTimersAreCancelled(): Promise<void> {
+  for (const destroy of [false, true]) {
+    const longTimers = new Set<number>();
+    const sleeping = deferred();
+    const hook = createHook({
+      init(id, type, _trigger, resource) {
+        // Exclude the HTTP server's repeating connection-cleanup interval.
+        if (type === "Timeout" && Reflect.get(resource, "_idleTimeout") === 30_000 && Reflect.get(resource, "_repeat") === null) {
+          longTimers.add(id);
+          sleeping.resolve();
+        }
+      },
+      destroy(id) { longTimers.delete(id); },
+    }).enable();
+    let received = 0;
+    const server = await serve(request => {
+      received++;
+      request.response.writeHead(429, { "retry-after": "30000" }).end();
+    });
+    const provider = new RebuildReadProvider(pass, server.url, network, {
+      ...options, requestTimeoutMs: destroy ? 2_000 : 150,
+    });
+    try {
+      const pending = assert.rejects(provider.send("trace_block", ["0x1"]), error =>
+        ethers.isError(error, destroy ? "UNSUPPORTED_OPERATION" : "TIMEOUT"));
+      await bounded(sleeping.promise);
+      if (destroy) provider.destroy();
+      await bounded(pending);
+      await new Promise(resolve => setTimeout(resolve, 30));
+      assert.equal(longTimers.size, 0, "deadline/destroy must clear the actual backoff timer");
+      assert.equal(received, 1);
+    } finally { hook.disable(); provider.destroy(); await server.close(); }
+  }
+}
+
+async function throttleExhaustionAndVetoRetainPolicy(): Promise<void> {
+  for (const veto of [false, true]) {
+    let received = 0, callbacks = 0;
+    const server = await serve(request => {
+      received++;
+      request.response.writeHead(429, { "retry-after": received === 3 ? "30000" : "20" }).end();
+    });
+    const connection = new ethers.FetchRequest(server.url);
+    connection.setThrottleParams({ maxAttempts: 3 });
+    connection.retryFunc = async (_req, response) => {
+      callbacks++;
+      assert.equal(response.headers["retry-after"], received === 3 ? "30000" : "20");
+      return !veto;
+    };
+    const provider = new RebuildReadProvider(pass, connection, network, options);
+    try {
+      const started = performance.now();
+      await assert.rejects(provider.send("trace_block", ["0x1"]), error => ethers.isError(error, "SERVER_ERROR"));
+      assert.equal(received, veto ? 1 : 3);
+      assert.equal(callbacks, received);
+      assert(performance.now() - started < 1_000, "exhaustion must not sleep after the final response");
+    } finally { provider.destroy(); await server.close(); }
+  }
+}
+
+await totalTimeoutStopsStreamingAndReleasesSlot();
+await totalTimeoutCoversBatchAndThrottleWait();
+await noHeadersTimeoutAndDestroyCloseSocket();
+await boundedTransportRetainsGzipRedirectAndRpcErrors();
+await emptyAndMalformedGzipParity();
+await throttleTimersAreCancelled();
+await throttleExhaustionAndVetoRetainPolicy();
 await batchSizeConcurrencyAndParity();
 await fatalQueueFence();
 await failureReleasesSlots();
 await queuedRequestsRemainFifo();
 await networkDetectionDoesNotDeadlock();
+await networkDetectionDoesNotDeadlock(2_000);
 await callerBoundedTransportRetainsConcurrency();
 await destroyRejectsQueue();
-console.log("rebuild-read-provider PASS (batch limit, HTTP concurrency, parity, fatal fence, failure release, FIFO, network detection, caller-bound override, shutdown)");
+console.log("rebuild-read-provider PASS (total deadline, socket cancellation, batch timeout, retry cancellation, gzip, RPC errors, concurrency, parity, fatal fence, FIFO, shutdown)");

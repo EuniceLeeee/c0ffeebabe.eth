@@ -20,6 +20,15 @@ export function assertFluidCreditRoute(descriptor: FluidCreditDescriptor, route:
 }
 function validate(input: Input): void {
   assertFluidCreditRoute(input.descriptor, input.route);
+  // Both programs read the canonical source, not a preceding operation's
+  // state. The verified local model proves one borrow amount only: it does
+  // not update shared Liquidity limits/rates, vault ticks/positions or the
+  // oracle's transitive dependencies. Even another vault may share those
+  // resources. Do not substitute fresh source reads or debt subtraction for
+  // an unproven transition; the operate proof below also does not replay it.
+  if (input.prefix?.length) {
+    throw new Error("fluid-credit sequential prefix requires an unimplemented state transition");
+  }
   if (input.amountIn < 10_000n || input.amountIn > (1n << 127n) - 1n) {
     throw new Error("fluid-credit exact requires int128 collateral at least 10000 raw units");
   }
@@ -112,7 +121,9 @@ export function createFluidCreditExact(mode: "local" | "simulate") {
       const program: ExactRequestProgram<FluidCreditDescriptor, FluidCreditRoute, FluidCreditExactEvidence> =
         local ? fluidCreditLocalExactProgram : fluidCreditExactProgram;
       return [{ id: local ? "fluid-credit-local-amount" : "fluid-credit-oracle-operate",
-        kind: "request-program" as const, ...(local ? {} : { chainAmountQuote: true as const }), program }];
+        kind: "request-program" as const, ...(local
+          ? { trialState: { unsupportedReason: "fluid-credit-shared-state-transition-unproven" } }
+          : { chainAmountQuote: true as const }), program }];
     },
     cacheCompatibilityProjection: ({ descriptor, route }) => ({ mode, vault: descriptor.vault,
       localQuoteModel: descriptor.localQuoteModel ?? null,

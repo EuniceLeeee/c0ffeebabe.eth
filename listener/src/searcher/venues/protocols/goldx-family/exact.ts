@@ -29,6 +29,7 @@ const goldxRequestProgram: ExactRequestProgram<
   },
   buildRequests(input) {
     assertGoldxInvocation(input.descriptor, input.route);
+    if (input.amountIn > 0n && (input.trialState || input.prefix?.length)) throw new Error("GOLDx local state transition model is unproven");
     if (input.amountIn < 0n) {
       throw new Error("GOLDx exact input cannot be negative");
     }
@@ -42,6 +43,7 @@ const goldxRequestProgram: ExactRequestProgram<
   },
   decode({ programInput, initialResults }) {
     assertGoldxInvocation(programInput.descriptor, programInput.route);
+    if (programInput.amountIn > 0n && (programInput.trialState || programInput.prefix?.length)) throw new Error("GOLDx local state transition model is unproven");
     if (programInput.amountIn < 0n || programInput.amountIn > MAX_UINT256) {
       throw new Error("GOLDx exact input is outside uint256 range");
     }
@@ -84,6 +86,10 @@ export const goldxExact = {
     Object.freeze({
       id: "goldx-unit",
       kind: "request-program" as const,
+      // Verified GOLDx.mint measures the received collateral delta, converts
+      // decimals, then deducts fee[mint.selector]. Unit-only historic equality
+      // does not prove collateral transfer effects or sequential mint state.
+      trialState: { unsupportedReason: "GOLDx collateral transfer, mint fee and supply transition model is unproven" },
       program: goldxRequestProgram,
     }),
   ]),

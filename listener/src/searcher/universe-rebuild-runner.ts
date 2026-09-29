@@ -298,12 +298,17 @@ export async function rebuildUniverse(
   checkpoint = await migrateAlreadyReadyKeptRun(input.store, checkpoint, log);
   const incumbentRun = checkpoint?.inProgressRun ?? null;
   const retainedCandidates = Object.freeze(
-    Object.values(checkpoint?.verifiedMemos ?? {})
-      .filter((memo) => input.isFamilyEnabled?.(memo.familyId) !== false)
+    [
+      ...Object.values(checkpoint?.verifiedMemos ?? {}),
+      // Failed candidates remain retryable even without new activity in the
+      // rolling window. They still need a successful attestation to enter Graph.
+      ...Object.values(checkpoint?.retryableAttemptsByCandidateKey ?? {}),
+    ]
+      .filter((entry) => input.isFamilyEnabled?.(entry.familyId) !== false)
       .sort((left, right) =>
         left.familyCandidateKey.localeCompare(right.familyCandidateKey)
       )
-      .map((memo) => decodeCandidate(memo.candidateSnapshot)),
+      .map((entry) => decodeCandidate(entry.candidateSnapshot)),
   );
   const retainedCandidateInputs = Object.freeze(
     retainedCandidates.map((candidate) => Object.freeze({
@@ -620,59 +625,21 @@ export async function rebuildUniverse(
       hash: cutoff.hash,
     }),
   }));
-  const pendingCandidates = candidates.filter((candidate) => {
-    const candidateKey = input.familyCandidateKey(candidate);
-    const oldOutcome = run.outcomesByCandidateKey[candidateKey];
-    // Residual retryable outcomes are preserved, never re-attested during
-    // startup: they stay durable in the run, stay out of the Graph, and are
-    // closed later by the probe. Re-attesting them here would block startup
-    // on the same slow/failing keys every restart. (Probe runs re-attest
-    // exactly one retryable key at a time.)
-    if (oldOutcome?.status === "retryable") return false;
-    // A verified outcome is revalidated against the current Family hash,
-    // deployment/implementation authority and canonical proof source before
-    // it is trusted after a process/code restart. A valid memo skips the
-    // lifecycle; an invalid one is attested again. Chain-proven terminal
-    // outcomes stay terminal ONLY while every binding (Family definition,
-    // request program, trusted result set, authority, candidate, cutoff)
-    // still equals the current values; any change re-attests.
-    if (oldOutcome?.status !== "terminal-rejected") return true;
-    const binding = oldOutcome;
-    if (
-      typeof binding.familyDefinitionHash !== "string" ||
-      typeof binding.requestFingerprint !== "string" ||
-      typeof binding.authorityFingerprint !== "string" ||
-      binding.cutoff?.hash === undefined ||
-      binding.cutoff.number !== cutoff.number ||
-      binding.cutoff.hash.toLowerCase() !== cutoff.hash.toLowerCase()
-    ) {
-      // Legacy/unbound or cutoff-mismatched terminal outcome: re-attest.
-      return true;
-    }
-    return false;
-  });
-  const pendingCandidateKeys = new Set(
-    pendingCandidates.map((candidate) => input.familyCandidateKey(candidate)),
-  );
+  // Every non-verified candidate gets one fresh attempt per rebuild/resume.
+  // Valid verified memos still skip attestation below; a fresh retryable result
+  // is accounted once and does not block publishing the verified Graph.
   const attestationCounts: Record<RunOutcome["status"], number> = {
     verified: 0,
     "terminal-rejected": 0,
     retryable: 0,
   };
-  for (const candidate of candidates) {
-    const candidateKey = input.familyCandidateKey(candidate);
-    if (pendingCandidateKeys.has(candidateKey)) continue;
-    const outcome = run.outcomesByCandidateKey[candidateKey];
-    if (outcome !== undefined) attestationCounts[outcome.status]++;
-  }
-  const initiallyAccounted = candidates.length - pendingCandidates.length;
   let completedPending = 0;
   const logAttestationProgress = (phase: "start" | "progress"): void => {
-    const processed = initiallyAccounted + completedPending;
+    const processed = completedPending;
     log(
       "universe rebuild attestation " + phase + ": processed=" + processed +
         "/" + candidates.length +
-        " pending=" + (pendingCandidates.length - completedPending) +
+        " pending=" + (candidates.length - completedPending) +
         " verified=" + attestationCounts.verified +
         " terminalRejected=" + attestationCounts["terminal-rejected"] +
         " retryable=" + attestationCounts.retryable,
@@ -685,7 +652,7 @@ export async function rebuildUniverse(
     if (
       completedPending === 1 ||
       completedPending % 100 === 0 ||
-      completedPending === pendingCandidates.length
+      completedPending === candidates.length
     ) {
       logAttestationProgress("progress");
     }
@@ -697,17 +664,19 @@ export async function rebuildUniverse(
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
     let reusableMemo: DurableVerifiedMemo | null = null;
-    try {
-      reusableMemo = await input.findReusableMemo({
-        candidate,
-        checkpoint: attestationCheckpoint,
-        cutoff,
-      });
-    } catch (error) {
-      log(
-        "universe rebuild memo revalidation failed for " + candidateKey +
-          ": " + (error instanceof Error ? error.message : String(error)),
-      );
+    if (oldOutcome === undefined || oldOutcome.status === "verified") {
+      try {
+        reusableMemo = await input.findReusableMemo({
+          candidate,
+          checkpoint: attestationCheckpoint,
+          cutoff,
+        });
+      } catch (error) {
+        log(
+          "universe rebuild memo revalidation failed for " + candidateKey +
+            ": " + (error instanceof Error ? error.message : String(error)),
+        );
+      }
     }
     if (reusableMemo !== null) {
       const duplicateOf = await claimInstanceKey(
@@ -824,21 +793,21 @@ export async function rebuildUniverse(
   }
   try {
     await Promise.all(Array.from({
-      length: Math.min(requestedConcurrency, Math.max(1, pendingCandidates.length)),
+      length: Math.min(requestedConcurrency, Math.max(1, candidates.length)),
     }, async () => {
       while (true) {
         const index = nextCandidate++;
-        if (index >= pendingCandidates.length) return;
-        const candidate = pendingCandidates[index];
+        if (index >= candidates.length) return;
+        const candidate = candidates[index];
         try {
           recordAttestationProgress(await processCandidate(candidate));
         } catch (error) {
           log(
             "universe rebuild attestation failed: candidate=" +
               input.familyCandidateKey(candidate) +
-              " processed=" + (initiallyAccounted + completedPending) +
+              " processed=" + completedPending +
               "/" + candidates.length +
-              " pending=" + (pendingCandidates.length - completedPending) +
+              " pending=" + (candidates.length - completedPending) +
               " error=" + (error instanceof Error
                 ? error.message
                 : String(error)),

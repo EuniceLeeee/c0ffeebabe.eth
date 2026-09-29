@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { keccak256 } from "ethers";
+import { logRevmFault, type RevmFaultStage } from "./revm-fault-diagnostics.js";
 
 type DaemonProc = ChildProcessByStdio<Writable, Readable, null>;
 
@@ -415,18 +416,22 @@ export class RevmSimClient {
   private readonly timeoutMs: number;
   private readonly manifestPath: string;
   private readonly executablePath?: string;
+  private readonly diagnosticCandidateKey?: string;
 
   get isTerminal(): boolean {
     return this.terminal !== undefined;
   }
 
   constructor(options: { manifestPath?: string; executablePath?: string; timeoutMs?: number;
-    onFatal?: (reason: RevmFatalReason) => void } = {}) {
+    onFatal?: (reason: RevmFatalReason) => void; diagnosticCandidateKey?: string } = {}) {
     this.timeoutMs = options.timeoutMs ?? 60_000;
     if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0) throw new Error("invalid revm-sim timeout");
     this.manifestPath = options.manifestPath ?? resolve("revm-sim", "Cargo.toml");
     this.executablePath = options.executablePath;
     this.onFatal = options.onFatal;
+    // An invalid diagnostic label is omitted, never a new execution failure.
+    this.diagnosticCandidateKey = typeof options.diagnosticCandidateKey === "string"
+      && /^[0-9a-f]{64}$/.test(options.diagnosticCandidateKey) ? options.diagnosticCandidateKey : undefined;
   }
 
   /** Overridable only for deterministic child/stdio fixtures. */
@@ -494,7 +499,7 @@ export class RevmSimClient {
         if (!resp || !pending || resp.epoch !== this.epoch || resp.requestId !== pending.id
           || typeof resp.ok !== "boolean") throw new Error("identity");
         const fatal = normalizedFatal(resp.fatal);
-        if (fatal) { this.fail(new RevmFatalError(fatal)); return; }
+        if (fatal) { this.diagnose("client-daemon", fatal); this.fail(new RevmFatalError(fatal)); return; }
         const att = resp.sourceAttestation;
         if (pending.pin && resp.ok) {
           if (!att || att.kind !== "node-attested" || att.chainId !== pending.pin.chainId
@@ -502,6 +507,7 @@ export class RevmSimClient {
             || att.blockHash.toLowerCase() !== pending.pin.blockHash
             || !hash32(att.stateRoot) || !hash32(att.parentHash)
             || (pending.pin.stateRoot !== undefined && att.stateRoot.toLowerCase() !== pending.pin.stateRoot)) {
+            this.diagnose("client-attestation", { kind: "source-fault" });
             this.fail(new RevmFatalError(Object.freeze({ kind: "source-fault" })));
             return;
           }
@@ -511,6 +517,7 @@ export class RevmSimClient {
         } else if (att !== undefined) throw new Error("unexpected attestation");
         if (pending.strictRequest) strictResponse(resp, pending.strictRequest);
       } catch {
+        this.diagnose("client-response", { kind: "protocol-fault" });
         this.fail(new RevmFatalError(Object.freeze({ kind: "protocol-fault" })));
         return;
       }
@@ -540,6 +547,12 @@ export class RevmSimClient {
     try { this.onFatal?.(reason); } catch { /* Observers cannot undo evidence. */ }
   }
 
+  private diagnose(stage: RevmFaultStage, reason: RevmFatalReason): void {
+    logRevmFault(stage, reason, { daemonPid: this.proc?.pid,
+      requestId: this.active?.id ?? this.retiredActiveId,
+      candidateKey: this.diagnosticCandidateKey, blockNumber: this.active?.blockNumber });
+  }
+
   private onRetiredData(chunk: string): void {
     if (this.fullyClosed || this.retiredActiveId === undefined || this.fatalReported) return;
     this.buffer += chunk;
@@ -552,11 +565,14 @@ export class RevmSimClient {
         if (!response || response.epoch !== this.epoch || response.requestId !== this.retiredActiveId
           || typeof response.ok !== "boolean") throw new Error("retired identity");
         const fatal = normalizedFatal(response.fatal);
-        if (fatal) this.reportFatal(fatal);
+        if (fatal) { this.diagnose("client-retired-daemon", fatal); this.reportFatal(fatal); }
         // Never accept late success/attestation/effects, resolve a promise or
         // dispatch queued work. Only already-issued physical fatal evidence
         // survives local cancellation until the actual child/stdio drain.
-      } catch { this.reportFatal(Object.freeze({ kind: "protocol-fault" })); }
+      } catch {
+        this.diagnose("client-retired-response", { kind: "protocol-fault" });
+        this.reportFatal(Object.freeze({ kind: "protocol-fault" }));
+      }
     }
   }
 
