@@ -64,6 +64,7 @@ import { createBoundedRequestExecutor, requestSetFingerprint } from "./adapter-r
 import { hashCanonical, type CanonicalValue } from "./canonical-value.js";
 import { applyExactTrialState, emptyExactTrialState, ExactTrialStateConflictError,
   type ExactTrialSnapshot } from "../exact-trial-state.js";
+import { compileExactPrefix } from "../exact-prefix-plan.js";
 import type {
   FamilyCapabilityCatalog,
   LoadedFamilyBox,
@@ -339,6 +340,8 @@ interface SealedFamilyExactQuoteHandleRecord {
   readonly generation: number;
   readonly prefix: readonly SealedFamilyExactQuoteHandle[];
   readonly trialSnapshot?: ExactTrialSnapshot;
+  /** Every continuation must rebuild from actual execution, not local cells. */
+  readonly evmTrial?: true;
 }
 
 const issuedFamilyRouteRuntimeHandles = new WeakMap<
@@ -1140,6 +1143,8 @@ export interface FamilyExactQuoteInvocation {
   /** Reuse the existing quote program, without accepting local amount models. */
   readonly requireChainAmountQuote?: boolean;
   readonly prefix?: readonly SealedFamilyExactQuoteHandle[];
+  /** Framework catalog used to authenticate execution of prior Exact handles. */
+  readonly actionOwnership?: Pick<FamilyCapabilityCatalog, "ownerOfAction">;
 }
 
 interface ResolvedFamilyExactQuoteInvocation
@@ -1149,6 +1154,7 @@ interface ResolvedFamilyExactQuoteInvocation
   readonly instance: PreparedFamilyInstance;
   readonly route: FamilyRouteDescriptor;
   readonly callerContext: ExactCallerContext;
+  readonly evmTrial?: true;
 }
 
 interface ExactCallerContext {
@@ -1203,6 +1209,9 @@ function bindExactCallerContext(
   const guardedRuntime: CentralAdapterRuntime = Object.freeze({
     clock: runtime.clock, policy: runtime.policy, budgets: runtime.budgets,
     scheduler: runtime.scheduler,
+    ...(runtime.withExactPrefix === undefined ? {} : {
+      withExactPrefix: runtime.withExactPrefix,
+    }),
     ...(runtime.staticEvidenceCache === undefined ? {} : { staticEvidenceCache: runtime.staticEvidenceCache }),
     ...(runtime.exactQuoteCache === undefined ? {} : { exactQuoteCache: runtime.exactQuoteCache }),
     callerAuthority: Object.freeze({ bind(input: CentralCallerAuthorityInput) {
@@ -1301,7 +1310,11 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
     descriptor: invocation.instance.descriptor, route: invocation.route,
     amountIn: invocation.amountIn, source: invocation.source,
     executor: invocation.executor.toLowerCase(), runtimeEvidence: invocation.runtimeEvidence,
-    ...(prefix.length === 0 ? {} : { prefix }),
+    // Production owns prefix orchestration, including method selection. A
+    // Family must not filter out its ordinary Quoter because other Families
+    // preceded it, or replay an already executed prefix a second time.
+    ...(prefix.length === 0 || invocation.evmTrial ||
+        (invocation.runtime.withExactPrefix && invocation.actionOwnership) ? {} : { prefix }),
     ...(trialSnapshot === undefined ? {} : { trialState: trialSnapshot.view }),
     ...(invocation.callerContext.transactionOrigin === undefined ? {} : {
       transactionOrigin: invocation.callerContext.transactionOrigin,
@@ -1336,6 +1349,7 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
     transactionOrigin: programInput.transactionOrigin ?? null,
     runtimeEvidence: runtimeEvidenceProjection(programInput.runtimeEvidence),
     ...(invocation.prefix === undefined ? {} : { trialStateRequested: true }),
+    ...(invocation.evmTrial ? { trialBackend: "evm-prefix" } : {}),
     ...(prefix.length === 0 ? {} : { prefix: invocation.prefix!.map(handle => ({
       familyId: handle.familyId, routeKey: handle.routeKey, amountIn: handle.amountIn,
       amountOut: handle.amountOut, compatibility: handle.cacheCompatibilityFingerprint,
@@ -1348,11 +1362,35 @@ function declareFamilyExactQuote(invocation: ResolvedFamilyExactQuoteInvocation)
 
 function exactTrialBase(invocation: ResolvedFamilyExactQuoteInvocation): ExactTrialSnapshot | undefined {
   if (invocation.prefix === undefined) return undefined;
+  // Safe only because ALL state reads now execute against this prefix. No
+  // source cache or cells from before an unknown chain mutation are inherited.
+  if (invocation.evmTrial) return emptyExactTrialState();
   if (invocation.prefix.length === 0) return emptyExactTrialState();
   // resolveExactPrefix has authenticated the full ordered chain. A snapshot is
   // only issued when every earlier mutation was represented, never inferred
   // from a Family name, pricing key or an unrelated pool address.
   return issuedSealedFamilyExactQuoteHandles.get(invocation.prefix.at(-1)!)?.trialSnapshot;
+}
+
+function bindExactEvmPrefix(invocation: ResolvedFamilyExactQuoteInvocation): ResolvedFamilyExactQuoteInvocation {
+  resolveExactPrefix(invocation);
+  if (!invocation.runtime.withExactPrefix || !invocation.actionOwnership || !invocation.prefix?.length) {
+    throw new Error("exact prefix execution capability unavailable");
+  }
+  const steps = invocation.prefix.map(handle => {
+    const record = issuedSealedFamilyExactQuoteHandles.get(handle)!;
+    const execution = buildFamilyExecutionFragment({ family: record.family,
+      actionOwnership: invocation.actionOwnership!, route: record.routeHandle, exact: handle,
+      minAmountOut: record.amountOut, executor: record.executor, runtimeEvidence: record.runtimeEvidence });
+    if (execution.status !== "resolved") throw new Error(execution.outcome.reasonCode);
+    return { fragment: execution.fragment, tokenIn: record.routeRecord.route.tokenIn,
+      tokenOut: record.routeRecord.route.tokenOut, amountIn: record.amountIn, amountOut: record.amountOut };
+  });
+  const prefix = compileExactPrefix(steps, invocation.executor);
+  invocation.callerContext.assertCurrent();
+  invocation.runtime.generationFence.assertCurrent(invocation.generation, invocation.source);
+  return Object.freeze({ ...invocation, evmTrial: true as const,
+    runtime: invocation.runtime.withExactPrefix(prefix, invocation.source) });
 }
 
 function resolveExactPrefix(invocation: ResolvedFamilyExactQuoteInvocation): readonly ExactQuotePrefixStep[] {
@@ -1397,6 +1435,7 @@ export async function executeFamilyExactQuote(
     source: snapshotCanonicalSource(input.source),
     generation: input.generation,
     runtime: input.runtime,
+    ...(input.actionOwnership === undefined ? {} : { actionOwnership: input.actionOwnership }),
     ...(input.prefix === undefined ? {} : { prefix: Object.freeze([...input.prefix]) }),
     ...(input.control === undefined ? {} : { control: input.control }),
     ...(input.maxDependentReadRounds === undefined
@@ -1426,6 +1465,18 @@ export async function executeFamilyExactQuote(
     });
     ({ programInput, methods, methodOrderFingerprint, compatibilityFingerprint,
       maxDependentReadRounds } = declareFamilyExactQuote(invocation));
+    if (invocation.prefix?.length && invocation.runtime.withExactPrefix && invocation.actionOwnership) {
+      const first = methods.find(method => method.kind === "request-program" &&
+        (!invocation!.requireChainAmountQuote || method.chainAmountQuote === true));
+      const previous = issuedSealedFamilyExactQuoteHandles.get(invocation.prefix.at(-1)!)!;
+      if (previous.evmTrial || previous.trialSnapshot === undefined ||
+          first === undefined ||
+          (first.kind === "request-program" && typeof first.trialState?.quote !== "function")) {
+        invocation = bindExactEvmPrefix(invocation);
+        ({ programInput, methods, methodOrderFingerprint, compatibilityFingerprint,
+          maxDependentReadRounds } = declareFamilyExactQuote(invocation));
+      }
+    }
   } catch (error) {
     try { assertAdapterWorkControl(captured.control); } catch {
       return terminalUnboundExact(captured, invocation, "unresolved",
@@ -1647,7 +1698,7 @@ async function executeExactRequestMethod(input: {
 
   // Local math reuses raw state rounds, not another copy of a tick snapshot
   // for every sampled amount. Chain quote caching stays amount/source-bound.
-  const exactCache = input.stateOnlyReads || (input.trialState && invocation.prefix !== undefined)
+  const exactCache = invocation.evmTrial || input.stateOnlyReads || (input.trialState && invocation.prefix !== undefined)
     ? undefined : invocation.runtime.exactQuoteCache;
   if (exactCache !== undefined) {
     try {
@@ -1715,7 +1766,7 @@ async function executeExactRequestMethod(input: {
     }
   }
 
-  const pricingState = input.stateOnlyReads ? invocation.instance.pricingInstances.find(state =>
+  const pricingState = input.stateOnlyReads && !invocation.evmTrial ? invocation.instance.pricingInstances.find(state =>
     state.routes.some(route => route.routeKey === invocation.route.routeKey)) : undefined;
   const stateAddress = pricingState === undefined ? undefined : Object.freeze({
     ...cacheAddress, stateKey: pricingState.stateKey,
@@ -2348,7 +2399,7 @@ function resolvedExactQuote(input: {
     runtimeEvidenceProjection(runtimeEvidence),
   );
   let trialSnapshot: ExactTrialSnapshot | undefined;
-  if (invocation.prefix !== undefined) {
+  if (invocation.prefix !== undefined && !invocation.evmTrial) {
     const base = exactTrialBase(invocation);
     if (base === undefined && input.trialState) return terminalExact(invocation, "failed",
       "exact-sequential-prefix-unsupported", input.evidenceRefs);
@@ -2414,6 +2465,7 @@ function resolvedExactQuote(input: {
     source,
     generation: invocation.generation,
     prefix: Object.freeze([...(invocation.prefix ?? [])]),
+    ...(invocation.evmTrial ? { evmTrial: true as const } : {}),
     ...(trialSnapshot === undefined ? {} : { trialSnapshot }),
   });
   try { invocation.callerContext.assertCurrent(); } catch (error) {

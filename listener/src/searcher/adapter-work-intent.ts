@@ -192,6 +192,12 @@ export interface CentralAdapterRuntime {
   readonly staticEvidenceCache?: AdapterFamilyLifecycleContentCache;
   /** Completed exact results; always block-hash and compatibility bound. */
   readonly exactQuoteCache?: AdapterFamilyExactQuoteCache;
+  /** An isolated request view after framework-authenticated execution. Never
+   * exposed to Family programs; all reads and dependent rounds use this view. */
+  readonly withExactPrefix?: (
+    prefix: import("./exact-prefix-context.js").CompiledExactPrefix,
+    source: CanonicalSource,
+  ) => CentralAdapterRuntime;
 }
 
 export interface CentralFinalSimulationPolicyInput<ResolvedPlan> {

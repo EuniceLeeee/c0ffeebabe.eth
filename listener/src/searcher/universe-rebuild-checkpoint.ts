@@ -154,6 +154,7 @@ export interface DurableSourceReceipt {
 }
 
 export interface InProgressUniverseRun {
+  readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   readonly runId: string;
   readonly cutoff: CanonicalSource;
   readonly fromBlock: number;
@@ -174,7 +175,24 @@ export interface InProgressUniverseRun {
   readonly outcomesByCandidateKey: Readonly<Record<string, RunOutcome>>;
 }
 
+export interface ReadyFamilyUpdateScope {
+  readonly parentCheckpointFingerprint: string;
+  readonly familyIds: readonly string[];
+}
+
+export interface ReadyFamilyPartition {
+  readonly enabled: boolean;
+  /** Exact durable candidates: membership must remain checkable after promotion. */
+  readonly candidatesByKey: Readonly<Record<string, unknown>>;
+  readonly candidateSetHash: string;
+  readonly discoveryDefinitionHash: string;
+  readonly outcomesByCandidateKey: Readonly<Record<string, RunOutcome>>;
+  /** Actual source receipts, not reconstructed from counters or log messages. */
+  readonly sourceReceipts: readonly DurableSourceReceipt[];
+}
+
 export interface ReadyUniverseGeneration {
+  readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   readonly generation: number;
   readonly cutoff: CanonicalSource;
   readonly universeRange: {
@@ -190,6 +208,8 @@ export interface ReadyUniverseGeneration {
     readonly verified: number;
     readonly terminalRejected: number;
     readonly retryable: number;
+    /** Previously verified, explicitly excluded by an activation-only restriction. */
+    readonly activationExcluded?: number;
     readonly remainingUnaccounted: 0;
   };
   readonly observedThrough: { readonly number: number; readonly hash: string };
@@ -203,6 +223,29 @@ export interface ReadyUniverseGeneration {
   readonly graphSnapshot: unknown;
   readonly graphHash: string;
   readonly catalogSnapshot: unknown;
+  /** New baselines retain the exact per-Family partition for atomic updates. */
+  readonly familyPartitions?: Readonly<Record<string, ReadyFamilyPartition>>;
+  readonly familyUpdate?: {
+    readonly parentGeneration: number;
+    readonly parentCheckpointFingerprint: string;
+    readonly supplementalCheckpointFingerprints: readonly string[];
+    readonly replacedFamilyIds: readonly string[];
+  };
+  /** This is a subset publication, not a new discovery/attestation receipt. */
+  readonly activationRestriction?: {
+    readonly parentGeneration: number;
+    readonly parentCheckpointFingerprint: string;
+    readonly parentGraphHash: string;
+    readonly parentCatalogHash: string;
+    readonly parentPublicationSetHash: string;
+    readonly disabledFamilyIds: readonly string[];
+    readonly excludedVerified: readonly {
+      readonly familyCandidateKey: string;
+      readonly familyInstanceKey: string;
+      readonly familyId: string;
+      readonly memoFingerprint: string;
+    }[];
+  };
 }
 
 export interface AttestationCheckpointWrite {
@@ -346,11 +389,279 @@ export function activeReadyMemos(envelope: StartupCheckpointEnvelope): readonly 
     ready.publicationSetHash !== readyRootHash("publications-v2:", ready.catalogSnapshot)) {
     throw new Error("ready refresh input roots/active memos do not match");
   }
+  const restriction = ready.activationRestriction;
+  const excludedCount = ready.candidateAccounting.activationExcluded ?? 0;
+  if (restriction === undefined) {
+    if (excludedCount !== 0) throw new Error("Ready activation exclusions lack provenance");
+  } else {
+    const disabled = new Set(restriction.disabledFamilyIds);
+    const excluded = restriction.excludedVerified;
+    const accounting = ready.candidateAccounting;
+    if (!Number.isSafeInteger(restriction.parentGeneration) ||
+      restriction.parentGeneration < 1 || restriction.parentGeneration >= ready.generation ||
+      [restriction.parentCheckpointFingerprint, restriction.parentGraphHash,
+        restriction.parentCatalogHash, restriction.parentPublicationSetHash]
+        .some(hash => !/^[0-9a-f]{64}$/.test(hash)) ||
+      disabled.size === 0 || disabled.size !== restriction.disabledFamilyIds.length ||
+      excludedCount !== excluded.length ||
+      new Set(excluded.map(entry => entry.familyCandidateKey)).size !== excluded.length ||
+      new Set(excluded.map(entry => entry.familyInstanceKey)).size !== excluded.length ||
+      accounting.total !== accounting.verified + accounting.terminalRejected +
+        accounting.retryable + excludedCount ||
+      memos.some(memo => disabled.has(memo.familyId)) ||
+      [...disabled].some(id => !ready.sourceCoverage.some(entry => entry.familyId === id)) ||
+      excluded.some(entry => {
+        const memo = envelope.verifiedMemos[entry.familyCandidateKey];
+        return memo === undefined || !disabled.has(entry.familyId) ||
+          keys.includes(entry.familyInstanceKey) || memo.familyId !== entry.familyId ||
+          memo.familyInstanceKey !== entry.familyInstanceKey ||
+          memo.memoFingerprint !== entry.memoFingerprint ||
+          durableVerifiedMemoFingerprint(memo) !== entry.memoFingerprint;
+      })) {
+      throw new Error("Ready activation restriction provenance/accounting mismatch");
+    }
+  }
+  if (ready.familyPartitions !== undefined) {
+    assertReadyFamilyPartitions(envelope, memos);
+  }
   return Object.freeze(memos);
+}
+
+export function readyPartitionAccounting(
+  partitions: Readonly<Record<string, ReadyFamilyPartition>>,
+): ReadyUniverseGeneration["candidateAccounting"] {
+  let total = 0, verified = 0, terminalRejected = 0, retryable = 0, activationExcluded = 0;
+  for (const partition of Object.values(partitions)) {
+    for (const outcome of Object.values(partition.outcomesByCandidateKey)) {
+      total++;
+      if (outcome.status === "verified") {
+        if (partition.enabled) verified++; else activationExcluded++;
+      } else if (outcome.status === "terminal-rejected") terminalRejected++;
+      else if (outcome.status === "retryable") retryable++;
+      else throw new Error("Ready Family partition has an invalid outcome");
+    }
+  }
+  return Object.freeze({ total, verified, terminalRejected, retryable,
+    ...(activationExcluded === 0 ? {} : { activationExcluded }), remainingUnaccounted: 0 });
+}
+
+function assertReadyFamilyPartitions(
+  envelope: StartupCheckpointEnvelope,
+  activeMemos: readonly DurableVerifiedMemo[],
+): void {
+  const ready = envelope.readyGeneration!;
+  const partitions = ready.familyPartitions!;
+  const allKeys = new Set<string>();
+  const activeKeys: string[] = [];
+  if (canonicalJson(readyPartitionAccounting(partitions)) !== canonicalJson(ready.candidateAccounting)) {
+    throw new Error("Ready Family partition accounting mismatch");
+  }
+  const coveredFamilies = new Set(ready.sourceCoverage.map(entry => entry.familyId));
+  if (coveredFamilies.size !== Object.keys(partitions).length ||
+    Object.keys(partitions).some(id => !coveredFamilies.has(id))) {
+    throw new Error("Ready Family partition coverage mismatch");
+  }
+  const disabledIds = Object.keys(partitions).filter(id => !partitions[id]!.enabled).sort();
+  if (canonicalJson(disabledIds) !== canonicalJson([...(ready.activationRestriction?.disabledFamilyIds ?? [])].sort())) {
+    throw new Error("Ready Family partition activation provenance mismatch");
+  }
+  for (const [familyId, partition] of Object.entries(partitions)) {
+    if (!familyId || typeof partition.enabled !== "boolean" || !/^[0-9a-f]{64}$/.test(partition.candidateSetHash) ||
+      !/^[0-9a-f]{64}$/.test(partition.discoveryDefinitionHash)) {
+      throw new Error("Ready Family partition identity is invalid");
+    }
+    if (partition.candidatesByKey === undefined ||
+      canonicalJson(Object.keys(partition.candidatesByKey).sort()) !==
+        canonicalJson(Object.keys(partition.outcomesByCandidateKey).sort()) ||
+      partition.candidateSetHash !== readyRootHash("universe-candidate-partition-v1:", partition.candidatesByKey)) {
+      throw new Error("Ready Family partition candidate membership/hash mismatch");
+    }
+    assertCompleteSourceReceipts(partition.sourceReceipts);
+    assertSourceReceiptsBindRun(partition.sourceReceipts, { cutoff: ready.cutoff, fromBlock: ready.universeRange.fromBlock });
+    const coverage = new Set(partition.sourceReceipts.flatMap(receipt => receipt.coverageKeys));
+    if (ready.sourceCoverage.filter(entry => entry.familyId === familyId)
+      .some(entry => !coverage.has(entry.familyId + "|" + entry.sourceId))) {
+      throw new Error("Ready Family partition lacks source receipts");
+    }
+    for (const [key, outcome] of Object.entries(partition.outcomesByCandidateKey)) {
+      if (allKeys.has(key) || outcome.familyCandidateKey !== key) throw new Error("Ready Family partition candidate collision");
+      allKeys.add(key);
+      if (outcome.status === "verified") {
+        const memo = envelope.verifiedMemos[key];
+        if (memo === undefined || memo.familyId !== familyId) throw new Error("Ready Family partition lost verified memo");
+        assertMemoMatchesVerifiedOutcome(memo, outcome);
+        if (partition.enabled) activeKeys.push(key);
+      } else if (outcome.status === "retryable" && outcome.familyId !== familyId) {
+        throw new Error("Ready Family partition retry Family mismatch");
+      } else if (outcome.status === "terminal-rejected" &&
+        (outcome.cutoff.number !== ready.cutoff.number || outcome.cutoff.hash.toLowerCase() !== ready.cutoff.hash.toLowerCase())) {
+        throw new Error("Ready Family partition rejection source mismatch");
+      }
+    }
+  }
+  if (canonicalJson(activeKeys.sort()) !== canonicalJson(activeMemos.map(memo => memo.familyCandidateKey).sort())) {
+    throw new Error("Ready Family partition active set mismatch");
+  }
 }
 
 function readyRootHash(prefix: string, value: unknown): string {
   return createHash("sha256").update(prefix + canonicalJson(value)).digest("hex");
+}
+
+export interface ReadyFamilyUpdateInput {
+  readonly enabledFamilyIds: readonly string[];
+  readonly supplements: readonly {
+    readonly familyIds: readonly string[];
+    readonly checkpoint: StartupCheckpointEnvelope;
+  }[];
+}
+
+/** Detach JSON-safe durable inputs before any asynchronous fence or lock wait. */
+export function immutableReadyValue<T>(value: T): T {
+  const copy = structuredClone(value);
+  const freeze = (item: unknown): void => {
+    if (item === null || typeof item !== "object" || Object.isFrozen(item)) return;
+    for (const child of Object.values(item)) freeze(child);
+    Object.freeze(item);
+  };
+  freeze(copy);
+  return copy;
+}
+
+export type ReadyFamilyMutation =
+  | { readonly kind: "restrict"; readonly disabledFamilyIds: readonly string[] }
+  | ({ readonly kind: "update" } & ReadyFamilyUpdateInput);
+export interface ReadyFamilyGraphValidation { readonly fingerprint: string }
+const issuedReadyFamilyGraphValidations = new WeakSet<ReadyFamilyGraphValidation>();
+
+function readyFamilyMutationFingerprint(base: StartupCheckpointEnvelope, mutation: ReadyFamilyMutation, graphSnapshot: unknown): string {
+  return fingerprintProjection({ parent: base.checkpointFingerprint, mutation, graphSnapshot });
+}
+
+/** Process-local validation receipt binds the exact immutable plan AND Graph. */
+export function validateReadyFamilyGraph(input: {
+  readonly checkpoint: StartupCheckpointEnvelope;
+  readonly mutation: ReadyFamilyMutation;
+  readonly graphSnapshot: unknown;
+  readonly assertGraph: (graphSnapshot: unknown) => void;
+}): ReadyFamilyGraphValidation {
+  const before = readyFamilyMutationFingerprint(input.checkpoint, input.mutation, input.graphSnapshot);
+  input.assertGraph(input.graphSnapshot);
+  if (before !== readyFamilyMutationFingerprint(input.checkpoint, input.mutation, input.graphSnapshot)) {
+    throw new Error("Ready Family Graph validator mutated its input");
+  }
+  const receipt = Object.freeze({ fingerprint: before });
+  issuedReadyFamilyGraphValidations.add(receipt);
+  return receipt;
+}
+
+function assertReadyFamilyGraphValidation(base: StartupCheckpointEnvelope, mutation: ReadyFamilyMutation,
+  graphSnapshot: unknown, validation: ReadyFamilyGraphValidation): void {
+  if (!issuedReadyFamilyGraphValidations.has(validation) ||
+    validation.fingerprint !== readyFamilyMutationFingerprint(base, mutation, graphSnapshot)) {
+    throw new Error("Ready Family mutation differs from validated Graph/plan");
+  }
+}
+
+/** Pure plan; CAS recomputes it against the incumbent before publishing. */
+export function prepareReadyFamilyUpdate(base: StartupCheckpointEnvelope, input: ReadyFamilyUpdateInput) {
+  const assertSealed = (checkpoint: StartupCheckpointEnvelope) => {
+    const { checkpointFingerprint, ...unsigned } = checkpoint;
+    if (envelopeFingerprint(unsigned) !== checkpointFingerprint) throw new Error("Ready Family update checkpoint fingerprint mismatch");
+  };
+  assertSealed(base);
+  activeReadyMemos(base);
+  const ready = base.readyGeneration!;
+  if (ready.familyPartitions === undefined) throw new Error("Ready Family updates require a new partitioned baseline");
+  const enabled = new Set(input.enabledFamilyIds);
+  if (enabled.size !== input.enabledFamilyIds.length || input.enabledFamilyIds.some(id => !id)) {
+    throw new Error("Ready Family update activation set is invalid");
+  }
+  const partitions = { ...ready.familyPartitions };
+  const verifiedMemos = { ...base.verifiedMemos };
+  const retryableQueue = { ...base.retryableAttemptsByCandidateKey };
+  const replaced = new Set<string>();
+  let sourceCoverage = [...ready.sourceCoverage];
+  for (const supplement of input.supplements) {
+    const checkpoint = supplement.checkpoint;
+    assertSealed(checkpoint);
+    activeReadyMemos(checkpoint);
+    const delta = checkpoint.readyGeneration!;
+    const ids = new Set(supplement.familyIds);
+    if (ids.size === 0 || ids.size !== supplement.familyIds.length || delta.familyPartitions === undefined ||
+      canonicalJson([...ids].sort()) !== canonicalJson(Object.keys(delta.familyPartitions).sort()) ||
+      [...ids].some(id => replaced.has(id) || !enabled.has(id)) ||
+      Object.values(delta.familyPartitions).some(partition => !partition.enabled) ||
+      canonicalJson(delta.cutoff) !== canonicalJson(ready.cutoff) ||
+      canonicalJson(delta.universeRange) !== canonicalJson(ready.universeRange) ||
+      canonicalJson(delta.observedThrough) !== canonicalJson(ready.observedThrough) ||
+      canonicalJson(delta.appliedThrough) !== canonicalJson(ready.appliedThrough) ||
+      delta.sourceCoverage.some(entry => !ids.has(entry.familyId))) {
+      throw new Error("Ready Family supplement scope/source mismatch");
+    }
+    if (delta.familyUpdateScope?.parentCheckpointFingerprint !== base.checkpointFingerprint ||
+      canonicalJson([...(delta.familyUpdateScope?.familyIds ?? [])].sort()) !== canonicalJson([...ids].sort())) {
+      throw new Error("Ready Family supplement parent lineage mismatch");
+    }
+    for (const id of ids) {
+      const requiredKeys = new Set([
+        ...Object.keys(partitions[id]?.candidatesByKey ?? {}),
+        ...Object.values(base.verifiedMemos).filter(memo => memo.familyId === id).map(memo => memo.familyCandidateKey),
+        ...Object.values(base.retryableAttemptsByCandidateKey).filter(entry => entry.familyId === id).map(entry => entry.familyCandidateKey),
+      ]);
+      if ([...requiredKeys].some(key => !Object.prototype.hasOwnProperty.call(delta.familyPartitions![id]!.candidatesByKey, key))) {
+        throw new Error("Ready Family supplement lost retained candidate; unresolved aliases require explicit reconciliation");
+      }
+      replaced.add(id);
+      partitions[id] = delta.familyPartitions[id]!;
+      for (const [key, outcome] of Object.entries(partitions[id]!.outcomesByCandidateKey)) {
+        if (outcome.status === "verified") {
+          const memo = checkpoint.verifiedMemos[key]!;
+          const old = verifiedMemos[key];
+          if (old !== undefined && old.familyId !== id) throw new Error("Ready Family supplement memo ownership collision");
+          verifiedMemos[key] = memo;
+        } else if (outcome.status === "terminal-rejected") {
+          if (verifiedMemos[key]?.familyId !== undefined && verifiedMemos[key]!.familyId !== id) {
+            throw new Error("Ready Family supplement rejection ownership collision");
+          }
+          delete verifiedMemos[key];
+        }
+      }
+    }
+    for (const [key, entry] of Object.entries(retryableQueue)) if (ids.has(entry.familyId)) delete retryableQueue[key];
+    for (const [key, entry] of Object.entries(checkpoint.retryableAttemptsByCandidateKey)) {
+      if (!ids.has(entry.familyId)) continue;
+      if (retryableQueue[key] !== undefined && retryableQueue[key]!.familyId !== entry.familyId) {
+        throw new Error("Ready Family supplement retry ownership collision");
+      }
+      retryableQueue[key] = entry;
+    }
+    sourceCoverage = [...sourceCoverage.filter(entry => !ids.has(entry.familyId)), ...delta.sourceCoverage];
+  }
+  if ([...enabled].some(id => partitions[id] === undefined)) {
+    throw new Error("Ready Family activation lacks a discovered/verified partition");
+  }
+  const memos: DurableVerifiedMemo[] = [];
+  const excluded: DurableVerifiedMemo[] = [];
+  for (const [id, partition] of Object.entries(partitions)) {
+    partitions[id] = Object.freeze({ ...partition, enabled: enabled.has(id) });
+    for (const outcome of Object.values(partition.outcomesByCandidateKey)) {
+      if (outcome.status !== "verified") continue;
+      const memo = verifiedMemos[outcome.familyCandidateKey];
+      if (memo === undefined || memo.familyId !== id) throw new Error("Ready Family update lost verified membership");
+      assertMemoMatchesVerifiedOutcome(memo, outcome);
+      (enabled.has(id) ? memos : excluded).push(memo);
+    }
+  }
+  return Object.freeze({
+    familyPartitions: Object.freeze(partitions),
+    verifiedMemos: Object.freeze(verifiedMemos),
+    retryableAttemptsByCandidateKey: Object.freeze(retryableQueue),
+    activeMemos: Object.freeze(memos.sort((a, b) => a.familyInstanceKey.localeCompare(b.familyInstanceKey))),
+    excludedMemos: Object.freeze(excluded),
+    sourceCoverage: Object.freeze(sourceCoverage.sort((a, b) => (a.familyId + "|" + a.sourceId).localeCompare(b.familyId + "|" + b.sourceId))),
+    replacedFamilyIds: Object.freeze([...replaced].sort()),
+  });
 }
 
 function retryableAttemptFromQueueEntry(
@@ -1562,6 +1873,14 @@ export class UniverseRebuildCheckpointStore {
         verifiedMemos[memo.familyCandidateKey] = Object.freeze(memo);
       }
       const catalogSnapshot = buildReadyCatalogSnapshot(input.memos);
+      const familyPartitions = ready.familyPartitions === undefined ? undefined : Object.freeze(
+        Object.fromEntries(Object.entries(ready.familyPartitions).map(([id, partition]) => [id, Object.freeze({
+          ...partition,
+          outcomesByCandidateKey: Object.freeze(Object.fromEntries(Object.entries(partition.outcomesByCandidateKey)
+            .map(([key, outcome]) => [key, outcome.status === "verified" && verifiedMemos[key] !== undefined
+              ? Object.freeze({ ...outcome, memoFingerprint: verifiedMemos[key]!.memoFingerprint }) : outcome]))),
+        })])),
+      );
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
@@ -1574,8 +1893,169 @@ export class UniverseRebuildCheckpointStore {
           catalogSnapshot,
           catalogHash: readyRootHash("catalog-v1:", catalogSnapshot),
           publicationSetHash: readyRootHash("publications-v2:", catalogSnapshot),
+          ...(familyPartitions === undefined ? {} : { familyPartitions }),
         }),
       });
+    });
+  }
+
+  /** Explicitly publish a Family-disabled subset at the SAME historical cutoff.
+   * Retain all memo/queue evidence; never relabel an operator exclusion as failure.
+   * The caller rebuilds the graph using the existing Family publication pipeline.
+   */
+  async casRestrictReadyFamilies(input: {
+    readonly expectedRevision: number;
+    readonly disabledFamilyIds: readonly string[];
+    readonly graphSnapshot: unknown;
+    readonly graphValidation: ReadyFamilyGraphValidation;
+  }): Promise<StartupCheckpointEnvelope> {
+    const graphValidation = input.graphValidation;
+    input = { ...immutableReadyValue({ expectedRevision: input.expectedRevision,
+      disabledFamilyIds: input.disabledFamilyIds, graphSnapshot: input.graphSnapshot }), graphValidation };
+    return this.#cas(input.expectedRevision, base => {
+      if (base === null) throw new Error("Ready restriction checkpoint is absent");
+      assertReadyFamilyGraphValidation(base, { kind: "restrict", disabledFamilyIds: input.disabledFamilyIds }, input.graphSnapshot, graphValidation);
+      const oldMemos = activeReadyMemos(base);
+      const ready = base.readyGeneration!;
+      const disabled = new Set(input.disabledFamilyIds);
+      const priorDisabled = new Set(ready.activationRestriction?.disabledFamilyIds ?? []);
+      const knownFamilies = new Set(ready.sourceCoverage.map(entry => entry.familyId));
+      if (disabled.size === 0 || disabled.size !== input.disabledFamilyIds.length ||
+        [...disabled].some(id => !knownFamilies.has(id) || priorDisabled.has(id))) {
+        throw new Error("Ready restriction requires distinct active disabled Families");
+      }
+      const memos = oldMemos.filter(memo => !disabled.has(memo.familyId));
+      const removed = oldMemos.filter(memo => disabled.has(memo.familyId));
+      // A restriction cannot invent/alter edges, even if a graph producer drifts.
+      const graph = input.graphSnapshot as { readonly edges?: unknown[] } | null;
+      const oldGraph = ready.graphSnapshot as { readonly edges?: unknown[] } | null;
+      if (!graph || !oldGraph || !Array.isArray(graph.edges) || !Array.isArray(oldGraph.edges)) {
+        throw new Error("Ready restriction requires graph edge snapshots");
+      }
+      const { edges: _newEdges, ...graphMetadata } = graph;
+      const { edges: _oldEdges, ...oldGraphMetadata } = oldGraph;
+      if (canonicalJson(graphMetadata) !== canonicalJson(oldGraphMetadata)) {
+        throw new Error("Ready restriction cannot change graph format");
+      }
+      const available = new Map<string, number>();
+      for (const edge of oldGraph.edges) {
+        const key = canonicalJson(edge);
+        available.set(key, (available.get(key) ?? 0) + 1);
+      }
+      for (const edge of graph.edges) {
+        const key = canonicalJson(edge), count = available.get(key) ?? 0;
+        if (count === 0) throw new Error("Ready restriction graph is not an unchanged subset");
+        available.set(key, count - 1);
+      }
+      const excludedVerified = Object.freeze([
+        ...(ready.activationRestriction?.excludedVerified ?? []),
+        ...removed.map(memo => Object.freeze({
+          familyCandidateKey: memo.familyCandidateKey,
+          familyInstanceKey: memo.familyInstanceKey,
+          familyId: memo.familyId,
+          memoFingerprint: memo.memoFingerprint,
+        })),
+      ].sort((a, b) => a.familyCandidateKey.localeCompare(b.familyCandidateKey)));
+      const catalogSnapshot = buildReadyCatalogSnapshot(memos);
+      const next: StartupCheckpointEnvelope = Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        readyGeneration: Object.freeze({
+          ...ready,
+          generation: ready.generation + 1,
+          activeInstanceKeys: Object.freeze(memos.map(memo => memo.familyInstanceKey).sort()),
+          ...(ready.familyPartitions === undefined ? {} : { familyPartitions: Object.freeze(
+            Object.fromEntries(Object.entries(ready.familyPartitions).map(([id, partition]) =>
+              [id, disabled.has(id) ? Object.freeze({ ...partition, enabled: false }) : partition])),
+          ) }),
+          candidateAccounting: Object.freeze({
+            ...ready.candidateAccounting,
+            verified: memos.length,
+            ...(excludedVerified.length === 0 ? {} : { activationExcluded: excludedVerified.length }),
+          }),
+          graphSnapshot: input.graphSnapshot,
+          graphHash: readyRootHash("graph-v2:", input.graphSnapshot),
+          catalogSnapshot,
+          catalogHash: readyRootHash("catalog-v1:", catalogSnapshot),
+          publicationSetHash: readyRootHash("publications-v2:", catalogSnapshot),
+          activationRestriction: Object.freeze({
+            parentGeneration: ready.generation,
+            parentCheckpointFingerprint: base.checkpointFingerprint,
+            parentGraphHash: ready.graphHash,
+            parentCatalogHash: ready.catalogHash,
+            parentPublicationSetHash: ready.publicationSetHash,
+            disabledFamilyIds: Object.freeze([...new Set([
+              ...(ready.activationRestriction?.disabledFamilyIds ?? []), ...disabled,
+            ])].sort()),
+            excludedVerified,
+          }),
+        }),
+      });
+      activeReadyMemos(next);
+      return next;
+    });
+  }
+
+  /** Atomic activation/restoration/scoped-discovery update of a new baseline. */
+  async casUpdateReadyFamilies(input: ReadyFamilyUpdateInput & {
+    readonly expectedRevision: number;
+    readonly graphSnapshot: unknown;
+    readonly graphValidation: ReadyFamilyGraphValidation;
+  }): Promise<StartupCheckpointEnvelope> {
+    const graphValidation = input.graphValidation;
+    input = { ...immutableReadyValue({ expectedRevision: input.expectedRevision,
+      enabledFamilyIds: input.enabledFamilyIds, supplements: input.supplements,
+      graphSnapshot: input.graphSnapshot }), graphValidation };
+    return this.#cas(input.expectedRevision, base => {
+      if (base === null) throw new Error("Ready Family update checkpoint is absent");
+      assertReadyFamilyGraphValidation(base, { kind: "update", enabledFamilyIds: input.enabledFamilyIds,
+        supplements: input.supplements }, input.graphSnapshot, graphValidation);
+      const plan = prepareReadyFamilyUpdate(base, input);
+      const ready = base.readyGeneration!;
+      const { activationRestriction: _restriction, familyUpdateScope: _scope, ...prior } = ready;
+      const disabledFamilyIds = Object.keys(plan.familyPartitions).filter(id => !plan.familyPartitions[id]!.enabled).sort();
+      const catalogSnapshot = buildReadyCatalogSnapshot(plan.activeMemos);
+      const excludedVerified = Object.freeze(plan.excludedMemos.map(memo => Object.freeze({
+        familyCandidateKey: memo.familyCandidateKey, familyInstanceKey: memo.familyInstanceKey,
+        familyId: memo.familyId, memoFingerprint: memo.memoFingerprint,
+      })).sort((a, b) => a.familyCandidateKey.localeCompare(b.familyCandidateKey)));
+      const next: StartupCheckpointEnvelope = Object.freeze({
+        ...base,
+        revision: base.revision + 1,
+        verifiedMemos: plan.verifiedMemos,
+        retryableAttemptsByCandidateKey: plan.retryableAttemptsByCandidateKey,
+        readyGeneration: Object.freeze({
+          ...prior,
+          generation: ready.generation + 1,
+          universeHash: readyRootHash("ready-family-universe-v1:", Object.fromEntries(
+            Object.entries(plan.familyPartitions).map(([id, partition]) => [id, partition.candidateSetHash]))),
+          familyPartitions: plan.familyPartitions,
+          familyUpdate: Object.freeze({
+            parentGeneration: ready.generation,
+            parentCheckpointFingerprint: base.checkpointFingerprint,
+            supplementalCheckpointFingerprints: Object.freeze(input.supplements.map(entry => entry.checkpoint.checkpointFingerprint)),
+            replacedFamilyIds: plan.replacedFamilyIds,
+          }),
+          candidateAccounting: readyPartitionAccounting(plan.familyPartitions),
+          sourceCoverage: plan.sourceCoverage,
+          activeInstanceKeys: Object.freeze(plan.activeMemos.map(memo => memo.familyInstanceKey).sort()),
+          graphSnapshot: input.graphSnapshot,
+          graphHash: readyRootHash("graph-v2:", input.graphSnapshot),
+          catalogSnapshot,
+          catalogHash: readyRootHash("catalog-v1:", catalogSnapshot),
+          publicationSetHash: readyRootHash("publications-v2:", catalogSnapshot),
+          ...(disabledFamilyIds.length === 0 ? {} : { activationRestriction: Object.freeze({
+            parentGeneration: ready.generation,
+            parentCheckpointFingerprint: base.checkpointFingerprint,
+            parentGraphHash: ready.graphHash, parentCatalogHash: ready.catalogHash,
+            parentPublicationSetHash: ready.publicationSetHash,
+            disabledFamilyIds: Object.freeze(disabledFamilyIds),
+            excludedVerified,
+          }) }),
+        }),
+      });
+      activeReadyMemos(next);
+      return next;
     });
   }
 
@@ -1591,6 +2071,7 @@ export class UniverseRebuildCheckpointStore {
     readonly candidatesByKey: Readonly<Record<string, unknown>>;
     readonly observedThrough: { readonly number: number; readonly hash: string };
     readonly sourceReceipts: readonly DurableSourceReceipt[];
+    readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   }): Promise<StartupCheckpointEnvelope> {
     if (Object.keys(input.candidatesByKey).length !== input.candidateCount) {
       throw new Error(
@@ -1613,6 +2094,7 @@ export class UniverseRebuildCheckpointStore {
           );
         }
         if (
+          canonicalJson(existing.familyUpdateScope ?? null) !== canonicalJson(input.familyUpdateScope ?? null) ||
           existing.cutoff.number !== input.cutoff.number ||
           existing.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
           existing.cutoff.generation !== input.cutoff.generation ||
@@ -1634,6 +2116,20 @@ export class UniverseRebuildCheckpointStore {
         }
         return base;
       }
+      if (input.familyUpdateScope !== undefined) {
+        const scope = input.familyUpdateScope;
+        activeReadyMemos(base);
+        const ids = new Set(scope.familyIds);
+        const covered = [...new Set(input.sourceReceipts.flatMap(receipt => receipt.coverageKeys)
+          .map(key => key.slice(0, key.indexOf("|"))))].sort();
+        if (scope.parentCheckpointFingerprint !== base.checkpointFingerprint ||
+          ids.size === 0 || ids.size !== scope.familyIds.length ||
+          canonicalJson([...ids].sort()) !== canonicalJson(covered) ||
+          canonicalJson(input.cutoff) !== canonicalJson(base.readyGeneration!.cutoff) ||
+          input.fromBlock !== base.readyGeneration!.universeRange.fromBlock) {
+          throw new Error("Ready Family scoped run parent/source mismatch");
+        }
+      }
       const inheritedOutcomes = inheritedQueuedRetryables(
         base.retryableAttemptsByCandidateKey,
         input.candidatesByKey,
@@ -1642,6 +2138,7 @@ export class UniverseRebuildCheckpointStore {
         ...base,
         revision: base.revision + 1,
         inProgressRun: Object.freeze({
+          ...(input.familyUpdateScope === undefined ? {} : { familyUpdateScope: immutableReadyValue(input.familyUpdateScope) }),
           runId: input.runId,
           cutoff: Object.freeze({ ...input.cutoff }),
           fromBlock: input.fromBlock,
@@ -1993,6 +2490,11 @@ function assertReadyPromotion(
   run: InProgressUniverseRun,
   ready: ReadyUniverseGeneration,
 ): void {
+  if (canonicalJson(run.familyUpdateScope ?? null) !== canonicalJson(ready.familyUpdateScope ?? null) ||
+    (run.familyUpdateScope !== undefined && canonicalJson([...run.familyUpdateScope.familyIds].sort()) !==
+      canonicalJson(Object.keys(ready.familyPartitions ?? {}).sort()))) {
+    throw new Error("Ready Family promotion lost scoped parent lineage");
+  }
   const candidateKeys = Object.keys(run.candidatesByKey).sort();
   const outcomeEntries = Object.entries(run.outcomesByCandidateKey)
     .sort(([left], [right]) => left.localeCompare(right));
@@ -2096,6 +2598,23 @@ function assertReadyPromotion(
     throw new Error(
       "universe rebuild checkpoint: ready generation is not bound to completed run",
     );
+  }
+  if (ready.familyPartitions !== undefined) {
+    const joined: Record<string, RunOutcome> = {};
+    for (const partition of Object.values(ready.familyPartitions)) {
+      if (!partition.enabled || canonicalJson(partition.sourceReceipts) !== canonicalJson(run.sourceReceipts)) {
+        throw new Error("Ready Family partitions do not bind completed discovery");
+      }
+      const candidates = Object.fromEntries(Object.keys(partition.outcomesByCandidateKey).map(key => [key, run.candidatesByKey[key]]));
+      if (partition.candidateSetHash !== readyRootHash("universe-candidate-partition-v1:", candidates)) {
+        throw new Error("Ready Family partition candidate hash mismatch");
+      }
+      Object.assign(joined, partition.outcomesByCandidateKey);
+    }
+    if (canonicalJson(joined) !== canonicalJson(run.outcomesByCandidateKey)) {
+      throw new Error("Ready Family partitions do not match completed outcomes");
+    }
+    activeReadyMemos({ ...envelope, inProgressRun: null, readyGeneration: ready });
   }
 }
 

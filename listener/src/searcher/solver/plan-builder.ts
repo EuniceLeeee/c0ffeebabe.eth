@@ -24,8 +24,7 @@ import type {
 import type {
   PlanFragment,
 } from "../venues/route-leg-adapter.js";
-
-const MAX_UINT = (1n << 256n) - 1n;
+import { planFragmentNodes } from "./plan-fragment-requirements.js";
 
 /**
  * Build a complete ResolvedPlanNode wrapped in the flash adapter.
@@ -81,37 +80,6 @@ export async function buildResolvedPlanFromPath(
   }
 
   const inner: ResolvedPlanNode[] = [];
-  function approval(token: string, spender: string, amount: bigint,
-    inputToken: string, inputAmount: bigint): ResolvedPlanNode {
-    // Only an unlimited input-token grant can use this exact leg's spend as
-    // its minimum. Finite requirements and other assets retain their declared
-    // minimum; do not infer conversions or reduce a Family's requested bound.
-    const minimumAllowance = amount === MAX_UINT && token.toLowerCase() === inputToken.toLowerCase() ? inputAmount : amount;
-    if (minimumAllowance <= 0n || amount < minimumAllowance || amount > MAX_UINT) {
-      throw new Error("Family approval does not cover its exact input");
-    }
-    return {
-      adapterId: "erc20-approve",
-      target: token,
-      tokenIn: token,
-      tokenOut: token,
-      amount,
-      params: { spender, amount, minimumAllowance },
-      children: [],
-    };
-  }
-
-  function transferToPool(token: string, pool: string, amount: bigint): void {
-    inner.push({
-      adapterId: "erc20-transfer",
-      target: token,
-      tokenIn: token,
-      tokenOut: token,
-      amount,
-      params: { to: pool, amount },
-      children: [],
-    });
-  }
 
   function buildFragment(i: number, exact: StrictProductionExactHandle, minAmountOut: bigint): PlanFragment {
     const edge = path.edges[i]!;
@@ -159,14 +127,7 @@ export async function buildResolvedPlanFromPath(
       throw new Error("execution tolerance has no positive minimum output");
     }
     const fragment = buildFragment(i, exactHandles[i]!, nominalOut - quoteToleranceRawUnits);
-    for (const requirement of fragment.requirements) {
-      if (requirement.kind === "approve") {
-        inner.push(approval(requirement.token, requirement.spender, requirement.amount, path.edges[i]!.tokenIn, amounts[i]!));
-      } else {
-        transferToPool(requirement.token, requirement.pool, requirement.amount);
-      }
-    }
-    inner.push(...fragment.nodes);
+    inner.push(...planFragmentNodes(fragment, path.edges[i]!.tokenIn, amounts[i]!));
   }
 
   return strictSession.buildFundingRoot({

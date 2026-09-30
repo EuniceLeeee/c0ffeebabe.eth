@@ -17,7 +17,9 @@ function requireChildren(node: ResolvedPlanNode, id: string, max: number): void 
 
 export const actualAmountCaseAdapter = action("actual-amount-case", (node, _executor, inner) => {
   const quote = node.params.quotedAmountOut;
-  if (node.amount <= 0n || typeof quote !== "bigint" || quote <= 1n || !inner.length) {
+  const quotePrefix = node.params.mode === "quote-prefix";
+  if (node.amount <= 0n || typeof quote !== "bigint" || quote <= (quotePrefix ? 0n : 1n) || !inner.length ||
+      (quotePrefix && (node.amount >= 1n << 256n || quote >= 1n << 256n))) {
     throw new Error("invalid amount-flow exact case");
   }
   return concatBytes(uint256ToBytes(node.amount), uint256ToBytes(quote),
@@ -67,10 +69,13 @@ export const actualAmountStepAdapter = action("actual-amount-step", (node, _exec
 
 export const actualAmountFlowAdapter = action("actual-amount-flow", (node, _executor, inner) => {
   requireChildren(node, "actual-amount-step", 6);
-  if (node.amount <= 0n || node.params.toleranceRawUnits !== 1n ||
+  const quotePrefix = node.params.mode === "quote-prefix";
+  const tolerance = quotePrefix ? 0n : 1n;
+  if ((node.params.mode !== undefined && !quotePrefix) ||
+      node.amount <= 0n || node.params.toleranceRawUnits !== tolerance ||
       node.children[0]!.children.length !== 1 || node.children[0]!.children[0]!.amount !== node.amount ||
       node.children[0]!.tokenIn.toLowerCase() !== node.tokenIn.toLowerCase() ||
-      node.children.at(-1)!.tokenOut.toLowerCase() !== node.tokenIn.toLowerCase()) {
+      (!quotePrefix && node.children.at(-1)!.tokenOut.toLowerCase() !== node.tokenIn.toLowerCase())) {
     throw new Error("invalid amount-flow root");
   }
   for (let i = 1; i < node.children.length; i++) {
@@ -78,6 +83,15 @@ export const actualAmountFlowAdapter = action("actual-amount-flow", (node, _exec
       throw new Error("disconnected amount-flow");
     }
   }
-  const payload = concatBytes(uint256ToBytes(node.amount), new Uint8Array([1, node.children.length]), inner);
+  if (quotePrefix) for (let i = 0; i < node.children.length; i++) {
+    const step = node.children[i]!, exact = step.children[0];
+    if (step.children.length !== 1 || exact?.params.mode !== "quote-prefix" ||
+        exact.tokenIn.toLowerCase() !== step.tokenIn.toLowerCase() ||
+        exact.tokenOut.toLowerCase() !== step.tokenOut.toLowerCase() ||
+        (i > 0 && exact.amount !== node.children[i - 1]!.children[0]!.params.quotedAmountOut)) {
+      throw new Error("invalid exact quote-prefix flow");
+    }
+  }
+  const payload = concatBytes(uint256ToBytes(node.amount), new Uint8Array([Number(tolerance), node.children.length]), inner);
   return concatBytes(new Uint8Array([0x09]), uint24ToBytes(payload.length), payload);
 });

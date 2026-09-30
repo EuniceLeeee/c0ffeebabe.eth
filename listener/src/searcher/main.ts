@@ -908,6 +908,7 @@ export function createLiveSourceSimulationFactory(input: {
   readonly runtimeAbort: AbortController;
   readonly onFatal: (reason: RevmFatalReason) => void;
   readonly createClient?: Parameters<typeof createRevmStrictSourceSimulation>[0]["createClient"];
+  readonly executorRuntimeCode?: Parameters<typeof createRevmStrictSourceSimulation>[0]["executorRuntimeCode"];
 }): SourceSimulationFactory {
   const { rpcUrl, chainId, executablePath, timeoutMs, runtimeAbort, onFatal, createClient } = input;
   if (!executablePath || !isAbsolute(executablePath) || !existsSync(executablePath)) {
@@ -920,6 +921,7 @@ export function createLiveSourceSimulationFactory(input: {
     if (runtimeAbort.signal.aborted) throw runtimeAbort.signal.reason;
     return createRevmStrictSourceSimulation({
       identity: { source, chainId, rpcUrl },
+      ...(input.executorRuntimeCode === undefined ? {} : { executorRuntimeCode: input.executorRuntimeCode }),
       control: { ...control, signal: AbortSignal.any([runtimeAbort.signal, control.signal]) },
       // Explicitly bind the existing engine DEFAULT_GAS_LIMIT (main.rs), not
       // the unrelated profit-cost estimate or a construction-time caller.

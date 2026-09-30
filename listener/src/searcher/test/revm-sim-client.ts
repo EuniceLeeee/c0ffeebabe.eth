@@ -67,6 +67,90 @@ const pinnedRequest = () => ({ blockNumber: 300, from: `0x${"aa".repeat(20)}`,
 const attestation = () => ({ kind: "node-attested" as const, chainId: 1, blockNumber: 300,
   blockHash: PIN_HASH, stateRoot: PIN_ROOT, parentHash: PIN_PARENT });
 
+const prefixRequest = (): StrictSimulateRequest => ({ ...pinnedRequest(),
+  callerMode: "impersonated-call-frame", transactionOrigin: `0x${"dd".repeat(20)}`, executionGasLimit: 100000,
+  trialPrefix: { executor: `0x${"cc".repeat(20)}`, calldata: "0x1234", inputToken: `0x${"ee".repeat(20)}`, inputAmount: "100" } });
+
+test("trial prefix rejects malformed, unpinned and conflicting execution context before dispatch", async () => {
+  const f = new Fixture(); const c = new FixtureClient(f);
+  const base = prefixRequest();
+  for (const patch of [{ sourcePin: undefined }, { callerMode: "top-level" }, { transactionOrigin: undefined },
+    { executionGasLimit: undefined }, { trialPrefix: null }, { stateRead: null }, { nativeBalanceWei: "100" },
+    { tokenDeals: [{ token: base.trialPrefix!.inputToken, to: base.from, amount: "100" }] },
+    { executorRuntimeCode: { code: "0x00", keccak256: keccak256("0x00") } },
+    { stateRead: { kind: "get-code", address: base.to, slot: PIN_HASH } },
+    { stateRead: { kind: "get-storage", address: base.to, slot: "0x0" } },
+    { stateRead: { kind: "get-storage", address: base.from, slot: PIN_HASH } },
+    { stateRead: { kind: "get-code", address: base.to }, observeLogs: true },
+    ...[{ inputAmount: "0" }, { inputAmount: "-1" }, { calldata: "0x" }, { executor: `0x${"00".repeat(20)}` },
+      { balance: "100" }, { executorRuntimeCode: null }, { executorRuntimeCode: { code: "0x00", keccak256: PIN_HASH } }]
+      .map(p => ({ trialPrefix: { ...base.trialPrefix, ...p } }))]) {
+    await assert.rejects(c.strictSimulate({ ...base, ...patch } as any), RevmStrictError);
+  }
+  await assert.rejects(c.strictSimulate({ ...base, trialPrefix: undefined,
+    stateRead: { kind: "get-code", address: base.to } }), RevmStrictError);
+  assert.equal(c.starts, 0); assert.equal(f.requests.length, 0);
+  await c.closeAndDrain();
+});
+
+test("trial prefix wire detaches input and attests code at prefix executor, not quote target", async () => {
+  const f = new Fixture(); const c = new FixtureClient(f); const hold = c.health();
+  const req = prefixRequest(), code = "0x00", codeHash = keccak256(code);
+  req.trialPrefix!.executorRuntimeCode = { code, keccak256: codeHash };
+  const prefixExecutor = req.trialPrefix!.executor;
+  req.stateRead = { kind: "get-storage", address: req.to, slot: PIN_HASH };
+  const result = c.strictSimulate(req);
+  req.trialPrefix!.executor = req.from;
+  req.trialPrefix!.inputAmount = "999";
+  req.stateRead.slot = PIN_ROOT;
+  f.reply(0); await hold; await tick();
+  assert.equal(f.requests[1]!.trialPrefix.executor, prefixExecutor);
+  assert.equal(f.requests[1]!.trialPrefix.inputAmount, "100");
+  assert.equal(f.requests[1]!.stateRead.slot, PIN_HASH);
+  const output = `0x${"00".repeat(31)}2a`;
+  f.reply(1, { sourceAttestation: attestation(), output, gasUsed: "10", strict: {
+    counterfactualExecutorCode: { address: prefixExecutor, keccak256: codeHash },
+    outcome: { kind: "Success", phase: "main", output }, executionGasUsed: "10",
+    tokenDeltas: [], nativeDeltas: [], totalSupplyDeltas: [], logs: [],
+  } });
+  assert.equal((await result).output, output);
+  c.stop(); f.close(); await c.closeAndDrain();
+});
+
+test("trial prefix failure is distinct from final quote revert and has no accepted effects", async () => {
+  for (const phase of ["preCall", "main"] as const) {
+    const f = new Fixture(); const c = new FixtureClient(f);
+    const result = c.strictSimulate(prefixRequest());
+    const outcome = { kind: "Revert", phase, ...(phase === "preCall" ? { preCallIndex: 0 } : {}), output: "0xbeef" };
+    f.reply(0, { sourceAttestation: attestation(), success: false, output: "0xbeef", revertReason: "0xbeef", gasUsed: "10", strict: {
+      outcome, executionGasUsed: "10", tokenDeltas: [], nativeDeltas: [], totalSupplyDeltas: [], logs: [],
+    } });
+    assert.deepEqual((await result).strict!.outcome, outcome);
+    c.stop(); f.close(); await c.closeAndDrain();
+  }
+});
+
+test("trial prefix mismatched code target, source, state read or failed-step effects poison response", async () => {
+  for (const fault of ["code-target", "source", "storage-shape", "effects"] as const) {
+    const f = new Fixture(); const c = new FixtureClient(f); const req = prefixRequest();
+    req.trialPrefix!.executorRuntimeCode = { code: "0x00", keccak256: keccak256("0x00") };
+    if (fault === "storage-shape") req.stateRead = { kind: "get-storage", address: req.to, slot: PIN_HASH };
+    const result = assert.rejects(c.strictSimulate(req), RevmFatalError);
+    const failed = fault === "effects";
+    f.reply(0, { sourceAttestation: { ...attestation(), ...(fault === "source" ? { blockHash: PIN_PARENT } : {}) },
+      success: !failed, output: "0x", ...(failed ? { revertReason: "0x" } : {}), gasUsed: "10", strict: {
+        counterfactualExecutorCode: { address: fault === "code-target" ? req.to : req.trialPrefix!.executor,
+          keccak256: req.trialPrefix!.executorRuntimeCode.keccak256 },
+        outcome: failed ? { kind: "Revert", phase: "preCall", preCallIndex: 0, output: "0x" }
+          : { kind: "Success", phase: "main", output: "0x" },
+        executionGasUsed: "10", tokenDeltas: [], nativeDeltas: [], totalSupplyDeltas: [],
+        logs: failed ? [{ address: req.to, topics: [], data: "0x" }] : [],
+      } });
+    await result; assert.equal(c.isTerminal, true);
+    f.close(); await c.closeAndDrain();
+  }
+});
+
 test("fatal logging distinguishes daemon and attestation faults without changing fencing", async () => {
   const original = console.error, lines: string[] = [];
   console.error = line => { lines.push(String(line)); };

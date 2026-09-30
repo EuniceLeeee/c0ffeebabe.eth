@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { keccak256 } from "ethers";
 import { createRevmStrictSimulationTransport } from "../revm-strict-simulation-transport.js";
 import { RevmFatalError, RevmStrictError, type DaemonResponse, type RevmFatalReason,
   type RevmRequestControl, type StrictSimulateRequest } from "../revm-sim-client.js";
-import type { StrictSimulationTransport } from "../strict-central-adapter-runtime.js";
+import { createStrictCentralAdapterRuntime, type StrictSimulationTransport } from "../strict-central-adapter-runtime.js";
+import { executeAdapterWork } from "../adapter-work-intent.js";
 import { RevmStrictSourceOwner, type RevmStrictSourceLease } from "../revm-strict-source-owner.js";
 
 type Invocation = Parameters<StrictSimulationTransport["simulate"]>[0];
 type MutableInvocation = { -readonly [K in keyof Invocation]: Invocation[K] };
+type PrefixInvocation = Parameters<NonNullable<StrictSimulationTransport["simulatePrefix"]>>[0];
 const addr = (n: string) => `0x${n.repeat(40)}`, hash = (n: string) => `0x${n.repeat(64)}`;
 const EXECUTOR = addr("a"), ACTOR = addr("b"), ORIGIN = addr("c"), OBSERVED = addr("d"), TARGET = addr("e"), TOKEN = addr("f");
 const SOURCE = Object.freeze({ number: 25_700_444, hash: hash("1"), generation: 44 });
@@ -52,6 +55,185 @@ function notEvidence(e: unknown): boolean {
   assert(e instanceof Error); assert.notEqual((e as Error & { code?: unknown }).code, "CALL_EXCEPTION");
   assert(!e.message.includes("secret")); assert(!e.message.includes("private-key")); return true;
 }
+function prefixInvocation(request: PrefixInvocation["request"] = {
+  id: "view", kind: "eth-call", to: TARGET, data: "0x1234", caller: { kind: "executor" }, completion: "return-data",
+}): PrefixInvocation {
+  return { ...invocation(), request, prefix: { executor: EXECUTOR, calldata: "0x12345678", inputToken: TOKEN, inputAmount: 123n } };
+}
+test("prefix eth-call keeps caller/source/origin and dispatches isolated requests without a baseline cache", async () => {
+  const f = fixture(), input = prefixInvocation(), controller = new AbortController();
+  const control = { signal: controller.signal, deadlineAtMs: Date.now() + 30_000 };
+  const result = await f.transport.simulatePrefix!({ ...input, control });
+  await f.transport.simulatePrefix!({ ...input, prefix: { ...input.prefix, inputAmount: 456n } });
+  assert.equal(result.completion, "returned"); assert.equal(result.data, "0xbeef");
+  assert.equal(Object.hasOwn(result, "effects"), false);
+  assert.equal(f.calls.length, 2); assert.equal(f.calls[0]!.trialPrefix!.inputAmount, "123");
+  assert.equal(f.calls[1]!.trialPrefix!.inputAmount, "456");
+  assert.equal(f.calls[0]!.from, EXECUTOR); assert.equal(f.calls[0]!.to, TARGET);
+  assert.deepEqual(f.calls[0]!.sourcePin, PIN); assert.equal(f.calls[0]!.transactionOrigin, ORIGIN);
+  assert.equal(f.calls[0]!.callerMode, "impersonated-call-frame"); assert.equal(f.calls[0]!.executionGasLimit, GAS);
+  assert.equal(f.calls[0]!.tokenDeals, undefined); assert.equal(f.calls[0]!.nativeBalanceWei, undefined);
+  assert.equal(f.controls[0]!.signal, controller.signal); assert.equal(f.controls[0]!.deadlineAtMs, control.deadlineAtMs);
+});
+test("real prefix transport results satisfy central RequestProgram validation for every request kind", async () => {
+  const f = fixture(async req => {
+    if (req.data === "0xbad0") return failure(req, "Revert");
+    const r = response(req);
+    if (req.stateRead?.kind === "get-storage") {
+      r.output = hash("7"); r.strict!.outcome = { kind: "Success", phase: "main", output: r.output };
+    }
+    return r;
+  });
+  const base = createStrictCentralAdapterRuntime({ simulator: f.transport, executor: EXECUTOR, transactionOrigin: ORIGIN,
+    generationFence: { assertCurrent(generation, source) { assert.equal(generation, SOURCE.generation); assert.deepEqual(source, SOURCE); } },
+    provider: { call: async () => assert.fail("prefix view must not read baseline"),
+      getCode: async () => assert.fail("prefix view must not read baseline code"),
+      getStorage: async () => assert.fail("prefix view must not read baseline storage") },
+  });
+  const runtime = base.withExactPrefix!(prefixInvocation().prefix, SOURCE);
+  const requests: PrefixInvocation["request"][] = [
+    { id: "call", kind: "eth-call", to: TARGET, data: "0x1234", completion: "return-data" },
+    { id: "revert", kind: "eth-call", to: TARGET, data: "0xbad0", completion: "return-or-revert-data" },
+    { id: "code", kind: "get-code", address: TARGET },
+    { id: "storage", kind: "get-storage", address: TARGET, slot: hash("1") },
+    ...(["state-override-simulation", "effect-delta-simulation"] as const).map(kind => ({
+      ...invocation().request, id: kind, kind, overrideIntent: { caller: { kind: "executor" as const } },
+    })),
+  ];
+  for (const request of requests) {
+    const isSimulation = request.kind === "state-override-simulation" || request.kind === "effect-delta-simulation";
+    const outcome = await executeAdapterWork({ runtime, intent: {
+      stage: "exact-refine", familyId: "test:prefix-wire-validation" as never,
+      source: SOURCE, generation: SOURCE.generation, programInput: undefined,
+      program: { requirements: () => ({ transports: [request.kind],
+          ...(isSimulation ? { caller: "executor" as const, effects: request.observe } : {}) }),
+        buildRequests: () => [request], decode: ({ results }) => results },
+    } });
+    assert.equal(outcome.status, "resolved", `${request.id} must pass RequestProgram result validation`);
+    if (outcome.status !== "resolved") throw new Error("unresolved prefix work");
+    const result = outcome.executed.evidence[0]; assert(result?.ok);
+    assert.equal(result.completion, request.id === "revert" ? "reverted-as-declared" : "returned");
+    assert.equal(Object.hasOwn(result, "effects"), isSimulation);
+  }
+  assert.equal(f.calls.length, requests.length);
+});
+for (const caller of [undefined, { kind: "none" }, { kind: "executor" }, { kind: "observed-sender" },
+  { kind: "verified-actor", evidenceId: "probe" }, { kind: "transaction-origin" }] as const) {
+  test(`prefix read preserves symbolic caller ${caller?.kind ?? "omitted"} independently of executor`, async () => {
+    const f = fixture(), request = { id: "view", kind: "eth-call" as const, to: TARGET, data: "0x", caller, completion: "return-data" as const };
+    await f.transport.simulatePrefix!(prefixInvocation(request));
+    const expected = caller?.kind === "executor" ? EXECUTOR : caller?.kind === "observed-sender" ? OBSERVED
+      : caller?.kind === "verified-actor" ? ACTOR : caller?.kind === "transaction-origin" ? ORIGIN : addr("0");
+    assert.equal(f.calls[0]!.from, expected); assert.equal(f.calls[0]!.trialPrefix!.executor, EXECUTOR);
+    assert.equal(f.calls[0]!.transactionOrigin, ORIGIN);
+  });
+}
+for (const kind of ["get-code", "get-storage"] as const) test(`prefix ${kind} reads advanced trial without effects`, async () => {
+  const f = fixture(async req => { const r = response(req); r.output = hash("7"); r.strict!.outcome = { kind: "Success", phase: "main", output: r.output }; return r; });
+  const request = kind === "get-code" ? { id: kind, kind, address: TARGET } : { id: kind, kind, address: TARGET, slot: "0x1" };
+  const result = await f.transport.simulatePrefix!(prefixInvocation(request)), wire = f.calls[0]!;
+  assert.equal(result.data, hash("7")); assert.equal(wire.to, TARGET); assert.equal(wire.data, "0x");
+  assert.equal(Object.hasOwn(result, "effects"), false);
+  assert.deepEqual(wire.stateRead, kind === "get-code" ? { kind, address: TARGET } : { kind, address: TARGET, slot: `0x${"0".repeat(63)}1` });
+  assert.deepEqual(wire.observeTokenBalances, []); assert.deepEqual(wire.observeNativeBalances, []);
+  assert.deepEqual(wire.observeTotalSupply, []); assert.equal(wire.observeLogs, false);
+});
+for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) test(`prefix ${kind} validates but never reapplies current-leg deals`, async () => {
+  const f = fixture(), base = invocation().request;
+  const input = prefixInvocation({ ...base, kind, overrideIntent: { caller: { kind: "executor" }, tokenBalances: [{ token: TARGET, amount: 700n }] },
+    preCalls: [{ caller: { kind: "executor" }, to: TOKEN, data: "0x4567" }] });
+  const result = await f.transport.simulatePrefix!(input), wire = f.calls[0]!;
+  assert.equal(result.completion, "returned"); assert.equal(wire.tokenDeals, undefined); assert.equal(wire.nativeBalanceWei, undefined);
+  assert.equal(wire.trialPrefix!.inputToken, TOKEN); assert.equal(wire.trialPrefix!.inputAmount, "123");
+  assert.deepEqual(wire.preCalls, [{ from: EXECUTOR, to: TOKEN, calldata: "0x4567" }]);
+  assert.deepEqual(wire.observeTokenBalances, [{ token: TARGET, account: EXECUTOR }]);
+});
+test("prefix current eth-call revert is evidence; prefix failure is never current quote revert", async () => {
+  const good = fixture(async req => failure(req, "Revert"));
+  assert.deepEqual(await good.transport.simulatePrefix!(prefixInvocation()), { data: "0xdeadbeef", completion: "reverted-as-declared" });
+  for (const kind of ["Revert", "Halt"] as const) {
+    const f = fixture(async req => failure(req, kind, "preCall"));
+    await assert.rejects(f.transport.simulatePrefix!(prefixInvocation()), (error: any) => {
+      notEvidence(error); assert.equal(error.data, undefined); assert.equal(error.effects, undefined);
+      assert.deepEqual(error.exactPrefixFailure, { phase: "preCall", kind, preCallIndex: 0,
+        ...(kind === "Revert" ? { output: "0xdeadbeef" } : { reason: "OutOfGas" }) });
+      assert(Object.isFrozen(error.exactPrefixFailure)); return true;
+    });
+    assert.equal(f.fatals.length, 0); // Prefix is valid preCall index 0 even without current-leg preCalls.
+  }
+});
+test("prefix main halt has attested diagnostic detail without quote-revert fields", async () => {
+  const f = fixture(async req => failure(req, "Halt"));
+  await assert.rejects(f.transport.simulatePrefix!(prefixInvocation()), (error: any) => {
+    notEvidence(error); assert.equal(error.data, undefined); assert.equal(error.effects, undefined);
+    assert.deepEqual(error.exactPrefixFailure, { phase: "main", kind: "Halt", reason: "OutOfGas" });
+    assert(Object.isFrozen(error.exactPrefixFailure)); return true;
+  });
+});
+test("prefix simulation main revert retains declared empty effects", async () => {
+  const f = fixture(async req => failure(req, "Revert")), base = invocation().request;
+  const result = await f.transport.simulatePrefix!(prefixInvocation({ ...base, overrideIntent: { caller: { kind: "executor" } } }));
+  assert.equal(result.completion, "reverted-as-declared");
+  assert.deepEqual(result.effects, { tokenDeltas: [], nativeDeltas: [], totalSupplyDeltas: [], logs: [] });
+});
+test("prefix preCall indices include prefix, reject out-of-envelope index", async () => {
+  for (const index of [1, 2]) {
+    const f = fixture(async req => { const r = failure(req, "Revert", "preCall"); (r.strict!.outcome as any).preCallIndex = index; return r; });
+    const base = invocation().request;
+    const input = prefixInvocation({ ...base, overrideIntent: { caller: { kind: "executor" } }, preCalls: [{ caller: { kind: "executor" }, to: TOKEN, data: "0x" }] });
+    await assert.rejects(f.transport.simulatePrefix!(input), notEvidence); assert.equal(f.fatals.length, index === 1 ? 0 : 1);
+  }
+});
+test("prefix and code are detached before awaiting lease; code attests executor, not final target", async () => {
+  const wait = deferred<RevmStrictSourceLease>();
+  const code = { code: "0x60006000", keccak256: keccak256("0x60006000") };
+  const f = fixture(async req => { const r = response(req); r.strict!.counterfactualExecutorCode = { address: EXECUTOR, keccak256: keccak256("0x60006000") }; return r; });
+  const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: code, leaseFor: () => wait.promise });
+  const input = prefixInvocation(), pending = t.simulatePrefix!(input);
+  (input.prefix as any).inputAmount = 999n; (input.prefix as any).calldata = "0x9999"; code.code = "0x00";
+  wait.resolve(f.lease); await pending;
+  assert.equal(f.calls[0]!.trialPrefix!.inputAmount, "123"); assert.equal(f.calls[0]!.trialPrefix!.calldata, "0x12345678");
+  assert.equal(f.calls[0]!.trialPrefix!.executorRuntimeCode!.code, "0x60006000");
+  assert.equal(f.calls[0]!.executorRuntimeCode, undefined); assert(Object.isFrozen(f.calls[0]!.trialPrefix));
+});
+test("prefix proof corruption latches both normal and prefix transport paths", async () => {
+  const code = { code: "0x6000", keccak256: keccak256("0x6000") };
+  const f = fixture(async req => { const r = response(req); r.strict!.counterfactualExecutorCode = { address: TARGET, keccak256: code.keccak256 }; return r; });
+  const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: code });
+  await assert.rejects(t.simulatePrefix!(prefixInvocation()), RevmFatalError);
+  await assert.rejects(t.simulate(invocation()), RevmFatalError); assert.equal(f.calls.length, 1); assert.equal(f.fatals.length, 1);
+});
+test("prefix late cancellation and source mismatch cannot publish returned data", async () => {
+  for (const cause of ["cancel", "source"] as const) {
+    const controller = new AbortController();
+    const f = fixture(async req => { const r = response(req); if (cause === "cancel") controller.abort(); else r.sourceAttestation = { ...r.sourceAttestation!, blockHash: hash("9") }; return r; });
+    await assert.rejects(f.transport.simulatePrefix!({ ...prefixInvocation(), control: { signal: controller.signal } }), notEvidence);
+    assert.equal(f.fatals.length, cause === "source" ? 1 : 0);
+  }
+});
+const badPrefixes: [string, (v: any) => void][] = [
+  ["executor mismatch", v => v.prefix.executor = ACTOR], ["missing origin", v => delete v.callerAuthority.transactionOrigin],
+  ["zero executor", v => { v.prefix.executor = addr("0"); v.callerAuthority.executor = addr("0"); }],
+  ["empty calldata", v => v.prefix.calldata = "0x"], ["zero amount", v => v.prefix.inputAmount = 0n],
+  ["overflow amount", v => v.prefix.inputAmount = 1n << 256n], ["native root token", v => v.prefix.inputToken = addr("0")],
+  ["family code", v => v.prefix.executorRuntimeCode = { code: "0x6000", keccak256: keccak256("0x6000") }],
+  ["invalid eth-call completion", v => v.request.completion = "other"], ["forged caller", v => v.request.caller = { kind: "executor", address: ACTOR }],
+  ["bad slot", v => v.request = { id: "s", kind: "get-storage", address: TARGET, slot: "1" }],
+  ["oversize slot", v => v.request = { id: "s", kind: "get-storage", address: TARGET, slot: `0x${"f".repeat(65)}` }],
+];
+for (const [label, mutate] of badPrefixes) test(`prefix pre-I/O rejection: ${label}`, async () => {
+  const f = fixture(), input = prefixInvocation(); mutate(input);
+  await assert.rejects(f.transport.simulatePrefix!(input), notEvidence); assert.equal(f.sources.length, 0); assert.equal(f.calls.length, 0);
+});
+for (const override of ["native", "multiple-tokens", "top-level", "default-mode"] as const) test(`prefix simulation rejects unsupported ${override}`, async () => {
+  const f = fixture(), base = invocation().request;
+  const request = { ...base, call: { ...base.call }, overrideIntent: { ...base.overrideIntent, nativeBalanceWei: undefined as bigint | undefined } };
+  if (override === "native") request.overrideIntent.nativeBalanceWei = 1n;
+  if (override === "multiple-tokens") request.overrideIntent.tokenBalances = [{ token: TOKEN, amount: 1n }, { token: TARGET, amount: 1n }];
+  if (override === "top-level") request.call.executionMode = "top-level";
+  if (override === "default-mode") request.call.executionMode = undefined;
+  await assert.rejects(f.transport.simulatePrefix!(prefixInvocation(request)), notEvidence); assert.equal(f.sources.length, 0);
+});
 for (const kind of ["state-override-simulation", "effect-delta-simulation"] as const) test(`${kind}: bound source, origin, native effects and controls`, async () => {
   const f = fixture(), input = invocation(); input.request = { ...input.request, kind };
   const controller = new AbortController(); input.control = { signal: controller.signal, deadlineAtMs: Date.now() + 30_000 };

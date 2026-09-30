@@ -11,6 +11,9 @@ export type RebuildReadProviderOptions = ethers.JsonRpcApiProviderOptions & {
   readonly maxPhysicalRequests?: number;
   /** Total time per physical scan request, including body transfer and retries. */
   readonly requestTimeoutMs?: number;
+  /** Optional per-response wire/body limits. Undefined preserves existing behavior. */
+  readonly maxReceivedBytes?: number;
+  readonly maxDecompressedBytes?: number;
 };
 
 /** Read fencing and bounded HTTP transport shared by rebuild providers. */
@@ -18,6 +21,8 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
   private activeRequests = 0;
   private readonly maxPhysicalRequests: number;
   private readonly requestTimeoutMs?: number;
+  private readonly maxReceivedBytes?: number;
+  private readonly maxDecompressedBytes?: number;
   private readonly inflight = new Set<AbortController>();
   private readonly waiting: {
     resolve: () => void;
@@ -30,7 +35,8 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
     network?: ConstructorParameters<typeof ethers.JsonRpcProvider>[1],
     options?: RebuildReadProviderOptions,
   ) {
-    const { maxPhysicalRequests = MAX_PHYSICAL_REQUESTS, requestTimeoutMs, ...rpcOptions } = options ?? {};
+    const { maxPhysicalRequests = MAX_PHYSICAL_REQUESTS, requestTimeoutMs,
+      maxReceivedBytes, maxDecompressedBytes, ...rpcOptions } = options ?? {};
     if (maxPhysicalRequests !== Infinity &&
         (!Number.isSafeInteger(maxPhysicalRequests) || maxPhysicalRequests < 1)) {
       throw new Error("maxPhysicalRequests must be a positive integer or Infinity");
@@ -38,9 +44,14 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
     if (requestTimeoutMs !== undefined && (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs <= 0)) {
       throw new Error("requestTimeoutMs must be a positive integer");
     }
+    for (const [name, limit] of Object.entries({ maxReceivedBytes, maxDecompressedBytes })) {
+      if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)) throw new Error(name + " must be a positive integer");
+    }
     super(url, network, { batchMaxCount: 8, ...rpcOptions });
     this.maxPhysicalRequests = maxPhysicalRequests;
     this.requestTimeoutMs = requestTimeoutMs;
+    this.maxReceivedBytes = maxReceivedBytes;
+    this.maxDecompressedBytes = maxDecompressedBytes;
   }
 
   private assertOpen(): void {
@@ -83,7 +94,8 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
         // or while this batch waited for a slot. Recheck before any HTTP I/O.
         return await this.read(() => {
           this.assertOpen();
-          return this.requestTimeoutMs === undefined ? super._send(...args) : this.sendBounded(...args);
+          return this.requestTimeoutMs === undefined && this.maxReceivedBytes === undefined && this.maxDecompressedBytes === undefined
+            ? super._send(...args) : this.sendBounded(...args);
         });
       } finally {
         this.release();
@@ -95,9 +107,10 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
     const request = this._getConnection();
     request.body = JSON.stringify(payload);
     request.setHeader("content-type", "application/json");
-    const timeoutMs = Math.min(request.timeout, this.requestTimeoutMs!);
+    const timeoutMs = Math.min(request.timeout, this.requestTimeoutMs ?? request.timeout);
     const deadline = performance.now() + timeoutMs;
     const controller = new AbortController();
+    const sizeError = () => Object.assign(new Error("rebuild RPC response exceeds configured byte limit"), { code: "RESPONSE_SIZE_LIMIT" });
     const timeoutError = ethers.makeError("rebuild RPC request deadline timed out", "TIMEOUT", {
       operation: "request.send", reason: "absolute request deadline exceeded",
     });
@@ -148,8 +161,22 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
           method: req.method, headers: req.headers, signal: controller.signal,
         }, response => {
           const chunks: Buffer[] = [];
-          response.on("data", chunk => chunks.push(Buffer.from(chunk)));
+          let receivedBytes = 0;
+          const gzip = response.headers["content-encoding"] === "gzip";
+          const receivedLimit = Math.min(this.maxReceivedBytes ?? Infinity,
+            gzip ? Infinity : this.maxDecompressedBytes ?? Infinity);
           response.on("error", reject);
+          if (Number(response.headers["content-length"]) > receivedLimit) {
+            controller.abort(sizeError()); return;
+          }
+          response.on("data", chunk => {
+            if (controller.signal.aborted) return;
+            receivedBytes += chunk.length;
+            if (receivedBytes > receivedLimit) {
+              chunks.length = 0; controller.abort(sizeError()); return;
+            }
+            chunks.push(Buffer.from(chunk));
+          });
           response.on("end", () => {
             try {
               checkDeadline();
@@ -160,14 +187,21 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
               // uncancellable sleep. The original retry callback sees it above.
               if (response.statusCode === 429) delete headers["retry-after"];
               let body = chunks.length === 0 ? null : Buffer.concat(chunks);
+              chunks.length = 0;
               if (headers["content-encoding"] === "gzip" && body !== null) {
-                try { body = gunzipSync(body); }
+                try { body = gunzipSync(body, this.maxDecompressedBytes === undefined ? {} : { maxOutputLength: this.maxDecompressedBytes }); }
                 catch (error) {
+                  if ((error as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE") {
+                    controller.abort(sizeError()); return;
+                  }
                   reject(ethers.makeError("bad response data", "SERVER_ERROR", {
                     request: req, info: { error },
                   }));
                   return;
                 }
+              }
+              if (body !== null && body.length > (this.maxDecompressedBytes ?? Infinity)) {
+                controller.abort(sizeError()); return;
               }
               checkDeadline();
               resolve({ statusCode: response.statusCode ?? 0, statusMessage: response.statusMessage ?? "", headers, body });

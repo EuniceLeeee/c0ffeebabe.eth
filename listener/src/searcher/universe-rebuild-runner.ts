@@ -7,11 +7,17 @@ import {
   buildReadyCatalogSnapshot,
   canonicalJson,
   hasDurableCandidateSnapshot,
+  prepareReadyFamilyUpdate,
+  immutableReadyValue,
+  validateReadyFamilyGraph,
   type DurableVerifiedMemo,
   type DurableSourceReceipt,
   type InProgressUniverseRun,
   type LegacyDurableVerifiedMemo,
   type ReadyUniverseGeneration,
+  type ReadyFamilyPartition,
+  type ReadyFamilyUpdateInput,
+  type ReadyFamilyUpdateScope,
   type RetryableAttempt,
   type RunOutcome,
   type StartupCheckpointEnvelope,
@@ -70,6 +76,9 @@ export interface UniverseRebuildDependencies {
   }>;
   /** Full log identity key (block + txHash + logIndex + address + topics). */
   readonly familyCandidateKey: (candidate: unknown) => string;
+  /** Present on new baselines to retain exact per-Family outcome partitions. */
+  readonly candidateFamilyId?: (candidate: unknown) => string;
+  readonly familyDiscoveryDefinitionHash?: (familyId: string) => string;
   /** Unique family candidates for the run (dedupe by familyCandidateKey). */
   readonly dedupeFamilyCandidates: (
     observations: readonly unknown[],
@@ -151,6 +160,12 @@ export interface UniverseRebuildDependencies {
   /** Pure definition check for rematerializing the already-validated Ready
    * at its unchanged cutoff. Not cross-block authority or discovery reuse. */
   readonly isReadyMemoDefinitionCurrent?: (memo: DurableVerifiedMemo) => boolean;
+  /** Pure production full-Graph/route/funding validation before subset publication. */
+  readonly assertReadyGraphSnapshot?: (input: {
+    readonly publications: readonly { readonly familyId: string; readonly instances: readonly unknown[] }[];
+    readonly graphSnapshot: unknown;
+    readonly cutoff: CanonicalSource;
+  }) => void;
   /** One full lifecycle for one candidate at the fixed cutoff. */
   readonly attestFamilyInstanceOnce: (input: {
     readonly candidate: unknown;
@@ -211,6 +226,8 @@ export interface UniverseRebuildDependencies {
 }
 
 export interface RebuildUniverseInput extends UniverseRebuildDependencies {
+  /** Explicit copied-parent scope; persists across scratch resume and promotion. */
+  readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   readonly store: UniverseRebuildCheckpointStore;
   readonly runId: string;
   /**
@@ -235,6 +252,7 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
 export async function rebuildUniverse(
   input: RebuildUniverseInput,
 ): Promise<ReadyUniverseGeneration> {
+  const familyUpdateScope = input.familyUpdateScope === undefined ? undefined : immutableReadyValue(input.familyUpdateScope);
   const log = input.log ?? ((): void => undefined);
   if (
     input.observationRange !== undefined &&
@@ -250,6 +268,22 @@ export async function rebuildUniverse(
   const encodeCandidate = input.encodeCandidateSnapshot ?? ((value) => value);
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
   let checkpoint = await input.store.load() ?? null;
+  if (familyUpdateScope !== undefined || checkpoint?.inProgressRun?.familyUpdateScope !== undefined) {
+    if (familyUpdateScope === undefined || checkpoint?.readyGeneration?.familyPartitions === undefined) {
+      throw new Error("Ready Family scoped rebuild requires its partitioned parent and scope");
+    }
+    const ids = [...familyUpdateScope.familyIds].sort();
+    const covered = readyCoverageFamilyIds(input.requiredSourceCoverageKeys());
+    if (ids.length === 0 || new Set(ids).size !== ids.length || canonicalJson(ids) !== canonicalJson(covered) ||
+      (checkpoint.inProgressRun === null
+        ? checkpoint.checkpointFingerprint !== familyUpdateScope.parentCheckpointFingerprint
+        : canonicalJson(checkpoint.inProgressRun.familyUpdateScope ?? null) !== canonicalJson(familyUpdateScope))) {
+      throw new Error("Ready Family scoped rebuild parent/scope mismatch");
+    }
+    for (const id of new Set([...Object.keys(checkpoint.readyGeneration.familyPartitions), ...ids])) {
+      if (input.isFamilyEnabled?.(id) !== ids.includes(id)) throw new Error("Ready Family scoped rebuild activation mismatch");
+    }
+  }
   if (checkpoint !== null) {
     const memoEntries = Object.entries(checkpoint.verifiedMemos) as readonly [
       string,
@@ -310,8 +344,10 @@ export async function rebuildUniverse(
       )
       .map((entry) => decodeCandidate(entry.candidateSnapshot)),
   );
+  const partitionCandidates = familyUpdateScope === undefined ? [] : familyUpdateScope.familyIds.flatMap(id =>
+    Object.values(checkpoint?.readyGeneration?.familyPartitions?.[id]?.candidatesByKey ?? {}).map(decodeCandidate));
   const retainedCandidateInputs = Object.freeze(
-    retainedCandidates.map((candidate) => Object.freeze({
+    [...retainedCandidates, ...partitionCandidates].map((candidate) => Object.freeze({
       kind: "startup-candidate",
       candidate,
     })),
@@ -416,6 +452,11 @@ export async function rebuildUniverse(
   } else {
     // ★ Only with no unfinished run do we create a new time world.
     cutoff = await input.freezeCanonicalHead(explicitRange?.toBlock);
+    if (familyUpdateScope !== undefined && (canonicalJson(cutoff) !== canonicalJson(checkpoint!.readyGeneration!.cutoff) ||
+      explicitRange?.fromBlock !== checkpoint!.readyGeneration!.universeRange.fromBlock ||
+      explicitRange?.toBlock !== checkpoint!.readyGeneration!.universeRange.toBlock)) {
+      throw new Error("Ready Family scoped rebuild must use the exact parent source/range");
+    }
     if (
       explicitRange !== null &&
       cutoff.number !== explicitRange.toBlock
@@ -515,6 +556,7 @@ export async function rebuildUniverse(
         sourceReceipts,
       })
     : await input.store.beginOrResumeRun({
+        ...(familyUpdateScope === undefined ? {} : { familyUpdateScope }),
         expectedRevision: checkpoint?.revision ?? 0,
         runId: input.runId,
         cutoff,
@@ -870,9 +912,12 @@ export async function rebuildUniverse(
     instances.push(input.rehydrateVerifiedInstance({ memo, cutoff }));
   }
   const publications = input.aggregateOnceByFamily(instances);
-  const graphSnapshot = input.buildGraphSnapshot(publications, cutoff);
+  const graphSnapshot = immutableReadyValue(input.buildGraphSnapshot(publications, cutoff));
+  input.assertReadyGraphSnapshot?.({ publications, graphSnapshot, cutoff });
   const catalogSnapshot = buildReadyCatalogSnapshot(activeMemos);
+  const familyPartitions = buildReadyFamilyPartitions(input, currentRun);
   const ready = Object.freeze({
+    ...(currentRun.familyUpdateScope === undefined ? {} : { familyUpdateScope: currentRun.familyUpdateScope }),
     generation: (checkpoint.readyGeneration?.generation ?? 0) + 1,
     cutoff: Object.freeze({ ...cutoff }),
     universeRange: Object.freeze({
@@ -895,6 +940,7 @@ export async function rebuildUniverse(
     graphSnapshot,
     graphHash: hashReadyGraphSnapshot(graphSnapshot),
     catalogSnapshot,
+    ...(familyPartitions === undefined ? {} : { familyPartitions }),
   }) as ReadyUniverseGeneration;
 
   // 7. Final single CAS: Graph, coverage and cutoff become ready together.
@@ -915,6 +961,32 @@ export async function rebuildUniverse(
   return ready;
 }
 
+function buildReadyFamilyPartitions(
+  input: UniverseRebuildDependencies,
+  run: InProgressUniverseRun,
+): Readonly<Record<string, ReadyFamilyPartition>> | undefined {
+  if (input.candidateFamilyId === undefined || input.familyDiscoveryDefinitionHash === undefined) return undefined;
+  const candidatesByFamily = new Map<string, Record<string, unknown>>();
+  for (const key of input.requiredSourceCoverageKeys()) candidatesByFamily.set(key.slice(0, key.indexOf("|")), {});
+  for (const [key, snapshot] of Object.entries(run.candidatesByKey)) {
+    const candidate = input.decodeCandidateSnapshot?.(snapshot) ?? snapshot;
+    const familyId = input.candidateFamilyId(candidate);
+    const candidates = candidatesByFamily.get(familyId);
+    if (candidates === undefined) throw new Error("Ready candidate Family lacks source coverage: " + familyId);
+    candidates[key] = snapshot;
+  }
+  return Object.freeze(Object.fromEntries([...candidatesByFamily].sort(([a], [b]) => a.localeCompare(b))
+    .map(([familyId, candidates]) => [familyId, Object.freeze({
+      enabled: true,
+      candidatesByKey: Object.freeze(candidates),
+      candidateSetHash: hashUniverseCandidatePartition(candidates),
+      discoveryDefinitionHash: input.familyDiscoveryDefinitionHash!(familyId),
+      outcomesByCandidateKey: Object.freeze(Object.fromEntries(Object.keys(candidates).sort()
+        .map(key => [key, run.outcomesByCandidateKey[key]!]))),
+      sourceReceipts: run.sourceReceipts,
+    })])));
+}
+
 const READY_REFRESH_MAX_ATTEMPTS = 3;
 
 /** Same attestation/Graph pipeline, restricted to the existing Ready set.
@@ -929,6 +1001,7 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
 }): Promise<ReadyUniverseGeneration> {
   const checkpoint = await input.store.load();
   if (checkpoint === null) throw new Error("ready refresh checkpoint is absent");
+  assertRestrictionNotExpanded(checkpoint.readyGeneration, input.isFamilyEnabled);
   const oldMemos = activeReadyMemos(checkpoint);
   assertReadyFamilyActivation(oldMemos, input.isFamilyEnabled);
   const ready = checkpoint.readyGeneration!;
@@ -1012,6 +1085,152 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
     expectedRevision: checkpoint.revision, memos, graphSnapshot,
   });
   return updated.readyGeneration!;
+}
+
+/** Explicit activation-only subset of one completed Ready. No discovery,
+ * attestation or retry fallback, and never an authority to activate new Families.
+ */
+export async function restrictReadyFamilies(input: UniverseRebuildDependencies & {
+  readonly store: UniverseRebuildCheckpointStore;
+  readonly log?: (message: string) => void;
+}): Promise<ReadyUniverseGeneration> {
+  const checkpoint = immutableReadyValue(await input.store.load());
+  if (checkpoint === null) throw new Error("Ready restriction checkpoint is absent");
+  const oldMemos = activeReadyMemos(checkpoint);
+  const ready = checkpoint.readyGeneration!;
+  if (input.isFamilyEnabled === undefined || input.isReadyMemoDefinitionCurrent === undefined ||
+    input.assertReadyGraphSnapshot === undefined) {
+    throw new Error("Ready restriction requires activation, definition and Graph validators");
+  }
+  assertRestrictionNotExpanded(ready, input.isFamilyEnabled);
+  const enabledIds = readyActivationFamilies(ready, input.requiredSourceCoverageKeys(), input.isFamilyEnabled);
+  const knownIds = Object.keys(ready.familyPartitions ?? Object.fromEntries(ready.sourceCoverage.map(entry => [entry.familyId, true])));
+  const priorDisabled = new Set(ready.activationRestriction?.disabledFamilyIds ?? []);
+  const enabledByFamily = new Map<string, boolean>();
+  for (const id of knownIds) enabledByFamily.set(id, enabledIds.includes(id));
+  const retained = oldMemos.filter(memo => enabledByFamily.get(memo.familyId));
+  const disabledFamilyIds = Object.freeze([...enabledByFamily].filter(([id, enabled]) => !enabled && !priorDisabled.has(id)).map(([id]) => id).sort());
+  const oldCoverage = new Set(ready.sourceCoverage.map(entry => entry.familyId + "|" + entry.sourceId));
+  if (input.requiredSourceCoverageKeys().some(key => !oldCoverage.has(key))) {
+    throw new Error("Ready restriction cannot expand historical source coverage; rebuild required");
+  }
+  for (const memo of retained) {
+    if (input.isReadyMemoDefinitionCurrent(memo) !== true) {
+      throw new Error("Ready restriction retained definition is stale: " + memo.familyCandidateKey);
+    }
+  }
+  await input.assertCanonicalHead(ready.cutoff);
+  const instances = retained.map(memo => input.rehydrateVerifiedInstance({ memo, cutoff: ready.cutoff }));
+  const publications = input.aggregateOnceByFamily(instances);
+  const graphSnapshot = immutableReadyValue(input.buildGraphSnapshot(publications, ready.cutoff));
+  const graphValidation = validateReadyFamilyGraph({ checkpoint,
+    mutation: { kind: "restrict", disabledFamilyIds }, graphSnapshot,
+    assertGraph: graph => input.assertReadyGraphSnapshot!({ publications, graphSnapshot: graph, cutoff: ready.cutoff }) });
+  await input.assertCanonicalHead(ready.cutoff);
+  if (disabledFamilyIds.length === 0) {
+    if (canonicalJson(graphSnapshot) !== canonicalJson(ready.graphSnapshot)) {
+      throw new Error("Ready restriction no-op Graph differs from incumbent");
+    }
+    if ((await input.store.load())?.revision !== checkpoint.revision) {
+      throw new Error("Ready restriction checkpoint changed during validation");
+    }
+    return ready;
+  }
+  const next = await input.store.casRestrictReadyFamilies({
+    expectedRevision: checkpoint.revision, disabledFamilyIds, graphSnapshot, graphValidation,
+  });
+  input.log?.(`Ready activation restriction: generation=${next.readyGeneration!.generation} ` +
+    `retained=${retained.length} excluded=${oldMemos.length - retained.length} scans=0 attestations=0`);
+  return next.readyGeneration!;
+}
+
+/** Publish desired activation plus completed scoped supplements in one CAS.
+ * Old evidence can restore a disabled set only while both definitions remain current.
+ * Stale/missing Families must first use the ordinary scoped rebuild pipeline.
+ */
+export async function updateReadyFamilies(input: UniverseRebuildDependencies & {
+  readonly store: UniverseRebuildCheckpointStore;
+  readonly expectedRevision?: number;
+  readonly supplements?: ReadyFamilyUpdateInput["supplements"];
+  readonly log?: (message: string) => void;
+}): Promise<ReadyUniverseGeneration> {
+  const supplements = immutableReadyValue(input.supplements ?? []);
+  const checkpoint = immutableReadyValue(await input.store.load());
+  if (checkpoint === null) throw new Error("Ready Family update checkpoint is absent");
+  if (input.expectedRevision !== undefined && checkpoint.revision !== input.expectedRevision) {
+    throw new Error("Ready Family update incumbent changed during preparation");
+  }
+  if (input.isFamilyEnabled === undefined || input.isReadyMemoDefinitionCurrent === undefined ||
+    input.familyDiscoveryDefinitionHash === undefined || input.assertReadyGraphSnapshot === undefined) {
+    throw new Error("Ready Family update requires activation, definition and Graph validators");
+  }
+  const ready = checkpoint.readyGeneration;
+  if (ready === null) throw new Error("Ready Family update checkpoint is absent");
+  const coverageKeys = immutableReadyValue(input.requiredSourceCoverageKeys());
+  const enabledFamilyIds = readyActivationFamilies(ready, coverageKeys, input.isFamilyEnabled, supplements.flatMap(entry => entry.familyIds));
+  const update = Object.freeze({ enabledFamilyIds, supplements });
+  const plan = prepareReadyFamilyUpdate(checkpoint, update);
+  const availableCoverage = new Set(plan.sourceCoverage.map(entry => entry.familyId + "|" + entry.sourceId));
+  if (coverageKeys.some(key => !availableCoverage.has(key))) throw new Error("Ready Family update lacks required source coverage");
+  for (const id of enabledFamilyIds) {
+    if (plan.familyPartitions[id]!.discoveryDefinitionHash !== input.familyDiscoveryDefinitionHash(id)) {
+      throw new Error("Ready Family discovery definition is stale; scoped rebuild required: " + id);
+    }
+  }
+  for (const memo of plan.activeMemos) {
+    if (input.isReadyMemoDefinitionCurrent(memo) !== true) {
+      throw new Error("Ready Family retained definition is stale; scoped rebuild required: " + memo.familyId);
+    }
+  }
+  await input.assertCanonicalHead(ready.cutoff);
+  const instances = plan.activeMemos.map(memo => input.rehydrateVerifiedInstance({ memo, cutoff: ready.cutoff }));
+  const publications = input.aggregateOnceByFamily(instances);
+  const graphSnapshot = immutableReadyValue(input.buildGraphSnapshot(publications, ready.cutoff));
+  const graphValidation = validateReadyFamilyGraph({ checkpoint, mutation: { kind: "update", ...update }, graphSnapshot,
+    assertGraph: graph => input.assertReadyGraphSnapshot!({ publications, graphSnapshot: graph, cutoff: ready.cutoff }) });
+  await input.assertCanonicalHead(ready.cutoff);
+  if (update.supplements.length === 0 && canonicalJson(plan.familyPartitions) === canonicalJson(ready.familyPartitions)) {
+    if (canonicalJson(graphSnapshot) !== canonicalJson(ready.graphSnapshot) ||
+      (await input.store.load())?.revision !== checkpoint.revision) {
+      throw new Error("Ready Family no-op validation differs from incumbent");
+    }
+    return ready;
+  }
+  const next = await input.store.casUpdateReadyFamilies({ expectedRevision: checkpoint.revision, ...update, graphSnapshot, graphValidation });
+  input.log?.(`Ready Family update: generation=${next.readyGeneration!.generation} ` +
+    `active=${plan.activeMemos.length} excluded=${plan.excludedMemos.length} replaced=${plan.replacedFamilyIds.join(",")}`);
+  return next.readyGeneration!;
+}
+
+function assertRestrictionNotExpanded(
+  ready: ReadyUniverseGeneration | null,
+  isFamilyEnabled: UniverseRebuildDependencies["isFamilyEnabled"],
+): void {
+  const disabled = new Set([...(ready?.activationRestriction?.disabledFamilyIds ?? []),
+    ...Object.entries(ready?.familyPartitions ?? {}).filter(([, partition]) => !partition.enabled).map(([id]) => id)]);
+  if ([...disabled].some(id => isFamilyEnabled?.(id) !== false)) {
+    throw new Error("Ready activation restriction cannot re-enable excluded Families; rebuild required");
+  }
+}
+
+function readyCoverageFamilyIds(keys: readonly string[]): string[] {
+  if (new Set(keys).size !== keys.length || keys.some(key => key.indexOf("|") <= 0 || key.endsWith("|") || key.split("|").length !== 2)) {
+    throw new Error("Ready Family activation/coverage keys are invalid");
+  }
+  return [...new Set(keys.map(key => key.slice(0, key.indexOf("|"))))].sort();
+}
+
+function readyActivationFamilies(ready: ReadyUniverseGeneration, coverageKeys: readonly string[],
+  isEnabled: (id: string) => boolean, extra: readonly string[] = []): readonly string[] {
+  const enabled = readyCoverageFamilyIds(coverageKeys);
+  const known = new Set([...Object.keys(ready.familyPartitions ?? {}), ...ready.sourceCoverage.map(entry => entry.familyId), ...extra, ...enabled]);
+  for (const id of known) {
+    const active = isEnabled(id);
+    if (typeof active !== "boolean" || active !== enabled.includes(id)) {
+      throw new Error("Ready Family activation/coverage mismatch: " + id);
+    }
+  }
+  return Object.freeze(enabled);
 }
 
 /** Reuse proves an exact Ready set; an operator switch cannot silently shrink it. */

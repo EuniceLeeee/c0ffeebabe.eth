@@ -14,6 +14,9 @@ import { plugin as baseV2Plugin } from "../venues/production-families/univ2-stan
 import { UNIV2_PAIR_INTERFACE, UNIV2_TOKEN_INTERFACE } from "../venues/swaps/univ2-family/codec.js";
 import type { UniV2Descriptor, UniV2ExactEvidence, UniV2Route } from "../venues/swaps/univ2-family/types.js";
 import type { CanonicalSource } from "../venues/adapter-request-program.js";
+import type { ExactPrefixReadInput, ExactPrefixReadResult } from "../exact-prefix-context.js";
+import * as actionRegistry from "../../adapters/registry.js";
+import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../venues/production-infra-actions.js";
 
 // Real production identity/lifecycle/session/issuer + real V2 state transitions.
 // Other methods are synthetic quote transports. The sequentialPrefix fixture
@@ -30,7 +33,7 @@ const QUOTE = new ethers.Interface([
 type Input = ExactQuoteInput<UniV2Descriptor, UniV2Route>;
 type Method = ExactMethod<UniV2Descriptor, UniV2Route, UniV2ExactEvidence>;
 interface Config {
-  readonly kind: "chain" | "sequential-fixture" | "invalid-dual";
+  readonly kind: "chain" | "prefix-rejecting-chain" | "sequential-fixture" | "invalid-dual";
 }
 function mutable<T>(value: T): T {
   if (Array.isArray(value)) return value.map(mutable) as T;
@@ -44,7 +47,8 @@ function evidence(i: Input, amountOut: bigint): UniV2ExactEvidence {
     amountIn: i.amountIn, amountOut, receivedAmountIn: i.amountIn, poolAmountOut: amountOut,
     reserveIn: RESERVE0, reserveOut: RESERVE1, feeBps: i.descriptor.feeRule.feeBps };
 }
-async function fixture(configs: ReadonlyMap<string, Config>, omitLocalZeroFor: ReadonlySet<string> = new Set()) {
+async function fixture(configs: ReadonlyMap<string, Config>, omitLocalZeroFor: ReadonlySet<string> = new Set(),
+  prefixRead?: (input: ExactPrefixReadInput) => Promise<ExactPrefixReadResult>) {
   const calls: { to: string; data: string }[] = [];
   const semanticInputs: { pool: string; stage: string; prefixLength: number | undefined }[] = [];
   function record(stage: string, input: Input) {
@@ -76,6 +80,7 @@ async function fixture(configs: ReadonlyMap<string, Config>, omitLocalZeroFor: R
   const plugin = defineSwapFamily({ ...definition, actionAdapters: baseV2Plugin.actionAdapters,
     exact: { ...definition.exact, methods(input) {
       const config = configs.get(input.descriptor.pool.toLowerCase());
+      if (config?.kind === "prefix-rejecting-chain" && input.prefix?.length) return [];
       if (config) return [requestMethod(config)];
       const methods = baseV2Plugin.exact.methods(input);
       // Test-only selection of the actual production state-model method, so a
@@ -99,8 +104,14 @@ async function fixture(configs: ReadonlyMap<string, Config>, omitLocalZeroFor: R
   }))) });
   const root = new StrictProductionRuntimeRoot({ catalog, readySource: SOURCE, readyGraph: graph.edges,
     readyInstances: instances, readyFundingAssets: [] });
+  if (prefixRead) for (const adapter of [...PRODUCTION_INFRA_ACTION_ADAPTERS, ...baseV2Plugin.actionAdapters]) {
+    if (!actionRegistry.listAll().some(existing => existing.id === adapter.id)) actionRegistry.register(adapter);
+  }
   const session = await root.createSession({ source: SOURCE, kind: "exact", fundingAssets: [],
     runtime: createStrictCentralAdapterRuntime({ executor: EXECUTOR, exactQuoteCache: createAdapterFamilyExactQuoteCache(),
+      ...(prefixRead === undefined ? {} : { transactionOrigin: address(10), simulator: {
+        simulate() { throw new Error("mixed reads must use the prefix transport"); }, simulatePrefix: prefixRead,
+      } }),
       generationFence: { assertCurrent(generation, source) {
       assert.deepEqual({ ...source, generation }, SOURCE);
     } }, provider: {
@@ -226,4 +237,58 @@ test("V2 unavailable zero output stays a quote but cannot issue or launder local
   await assert.rejects(f.quote(PREFIX, true, 0n, [unavailable, zeroIdentity]), /sequential-prefix-unsupported/,
     "a zero no-op must preserve an unknown snapshot, not replace it with an empty one");
   assert.equal(f.calls.length, before, "continuations cannot reread source state to invent poststate");
+});
+
+test("common prefix view handles local → ordinary chain → local without Family prefix handling or source cache", async () => {
+  const reads: ExactPrefixReadInput[] = [];
+  const subscript = new ethers.Interface(["function execSubscript(bytes)"]);
+  const f = await fixture(new Map([[MIDDLE, { kind: "prefix-rejecting-chain" }]]), new Set(), async input => {
+    reads.push(input);
+    assert.deepEqual(input.source, SOURCE);
+    assert.equal(input.prefix.executor, EXECUTOR);
+    assert.equal(input.callerAuthority.transactionOrigin, address(10));
+    assert.equal(input.prefix.inputToken, TOKEN0);
+    const script = ethers.getBytes(subscript.decodeFunctionData("execSubscript", input.prefix.calldata)[0]);
+    assert.equal(script[0], 9); assert.equal(script[36], 0, "prefix execution measures exact deltas");
+    const count = script[37]; assert(count === 1 || count === 2);
+    const request = input.request; assert.equal(request.kind, "eth-call");
+    if (request.kind !== "eth-call") throw new Error("unexpected state read");
+    let data: string;
+    if (request.to.toLowerCase() === MIDDLE) {
+      const [amount, familyPrefix] = QUOTE.decodeFunctionData("quote", request.data);
+      assert.equal(familyPrefix, 0n, "Family receives its own leg only; framework owns the prefix");
+      data = QUOTE.encodeFunctionResult("quote", [amount / 2n]);
+    } else {
+      assert.equal(count, 2, "local reads include the actual chain step");
+      const r0 = RESERVE0 + input.prefix.inputAmount + 12345n;
+      const r1 = RESERVE1 - v2(RESERVE0, RESERVE1, input.prefix.inputAmount) - 67890n;
+      data = request.data.startsWith(UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector)
+        ? UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves", [r0, r1, 1])
+        : UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [request.to.toLowerCase() === TOKEN0 ? r0 : r1]);
+    }
+    return { data, completion: "returned" };
+  });
+  async function run(amount: bigint) {
+    const first = await f.quote(LOCAL, true, amount), baselineReads = f.calls.length;
+    const middle = await f.quote(MIDDLE, false, first.amountOut, [first]);
+    const last = await f.quote(LOCAL, true, middle.amountOut, [first, middle]);
+    assert.equal(f.calls.length, baselineReads, "EVM-bound rounds never fall back to source reads");
+    assert.equal(last.amountOut, v2(RESERVE0 + amount + 12345n, RESERVE1 - first.amountOut - 67890n, middle.amountOut));
+    assert.notEqual(last.amountOut, v2(RESERVE0 + amount, RESERVE1 - first.amountOut, middle.amountOut));
+    assert.equal(f.session.buildExecution({ edge: f.edge(LOCAL, true), exact: last,
+      minAmountOut: last.amountOut, executor: EXECUTOR, priorQuotes: [first, middle] }).status, "resolved");
+    return last.amountOut;
+  }
+  const first = await run(1000000n), second = await run(4000000n);
+  assert.notEqual(first, second); assert.equal(await run(1000000n), first);
+  assert(reads.length > 3);
+});
+
+test("common prefix replay failure is not a chain quote result or a source fallback", async () => {
+  const f = await fixture(new Map([[MIDDLE, { kind: "chain" }]]), new Set(), async () => {
+    throw new Error("prefix execution rejected");
+  });
+  const first = await f.quote(LOCAL, true, 1000000n), before = f.calls.length;
+  await assert.rejects(f.quote(MIDDLE, false, first.amountOut, [first]));
+  assert.equal(f.calls.length, before);
 });

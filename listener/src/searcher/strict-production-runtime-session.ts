@@ -1368,6 +1368,7 @@ export class StrictProductionRuntimeSession {
         : { family: route.family, route: route.handle };
       const exact = await executeFamilyExactQuote({
         ...exactBinding,
+        actionOwnership: this.#catalog,
         amountIn: input.amountIn,
         executor: input.executor,
         runtimeEvidence: input.runtimeEvidence,

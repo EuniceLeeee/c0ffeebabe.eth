@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { keccak256 } from "ethers";
 import { createRevmStrictSourceSimulation } from "../revm-strict-source-simulation.js";
 import { RevmFatalError, type DaemonResponse, type StrictSimulateRequest } from "../revm-sim-client.js";
 
@@ -121,4 +122,28 @@ test("fatal before close stops the context once and never touches an unrelated o
   assert.equal(h.counts().fatals, 1); assert.equal(h.counts().creates, 1);
   assert.equal(unrelated.counts().drains, 0);
   await Promise.all([h.context.closeAndDrain(), unrelated.context.closeAndDrain()]);
+});
+
+test("source slot shares admission and drainage across normal and prefix requests, pins configured executor code", async () => {
+  let creates = 0, drains = 0;
+  const calls: StrictSimulateRequest[] = [];
+  const code = { code: "0x6000", keccak256: keccak256("0x6000") };
+  const context = createRevmStrictSourceSimulation({ identity, executionGasLimit: 100, executorRuntimeCode: code,
+    createClient() { creates++; return { isTerminal: false, async strictSimulate(request) {
+      calls.push(request); const result = success(request);
+      if (request.trialPrefix) result.strict!.counterfactualExecutorCode = { address: actor, keccak256: keccak256("0x6000") };
+      return result;
+    }, async closeAndDrain() { drains++; } }; }, onFatal() { assert.fail("unexpected fatal"); } });
+  code.code = "0x00";
+  const prefix = { executor: actor, calldata: "0x1234", inputToken: target, inputAmount: 1n };
+  const input = { source, callerAuthority: { executor: actor, transactionOrigin: target }, prefix,
+    request: { id: "q", kind: "eth-call" as const, to: target, data: "0x", completion: "return-data" as const } };
+  try {
+    await context.transport.simulate(invocation());
+    await context.transport.simulatePrefix!(input);
+    assert.equal(creates, 1); assert.equal(calls.length, 2);
+    assert.equal(calls[0]!.trialPrefix, undefined); assert.equal(calls[0]!.executorRuntimeCode, undefined);
+    assert.equal(calls[1]!.trialPrefix!.executorRuntimeCode!.code, "0x6000");
+  } finally { await context.closeAndDrain(); }
+  assert.equal(drains, 1); await assert.rejects(context.transport.simulatePrefix!(input));
 });

@@ -145,10 +145,25 @@ export class RevmStrictError extends Error {
 /** Counterfactual code for the strict request's `to` only; never account state. */
 export interface ExecutorRuntimeCode { code: string; keccak256: string }
 
+/** Quotation-only replay of authenticated earlier execution fragments. */
+export interface StrictTrialPrefix {
+  executor: string;
+  calldata: string;
+  inputToken: string;
+  inputAmount: string;
+  executorRuntimeCode?: ExecutorRuntimeCode;
+}
+
+export type StrictStateRead =
+  | { kind: "get-storage"; address: string; slot: string }
+  | { kind: "get-code"; address: string };
+
 export interface StrictSimulateRequest {
   blockNumber: number;
   sourcePin?: RevmSourcePin;
   executorRuntimeCode?: ExecutorRuntimeCode;
+  trialPrefix?: StrictTrialPrefix;
+  stateRead?: StrictStateRead;
   rpcUrl?: string;
   from: string;
   to: string;
@@ -189,7 +204,7 @@ function strictRequest(req: StrictSimulateRequest): void {
     && Object.keys(v).every(k => keys.includes(k));
   if (!record(req, ["blockNumber", "sourcePin", "rpcUrl", "from", "to", "data", "gasLimit", "executionGasLimit",
     "transactionOrigin", "nativeBalanceWei", "observeNativeBalances", "observeTokenBalances", "preCalls", "tokenDeals",
-    "observeTokens", "observeAccounts", "observeTotalSupply", "observeLogs", "callerMode", "executorRuntimeCode"])
+    "observeTokens", "observeAccounts", "observeTotalSupply", "observeLogs", "callerMode", "executorRuntimeCode", "trialPrefix", "stateRead"])
     || !Number.isSafeInteger(req.blockNumber) || req.blockNumber < 0 || !address20(req.from) || !address20(req.to)
     || (req.rpcUrl !== undefined && (typeof req.rpcUrl !== "string" || !req.rpcUrl.trim()))
     || !bytesHex(req.data) || (req.gasLimit !== undefined && !gasAmount(req.gasLimit))
@@ -207,6 +222,28 @@ function strictRequest(req: StrictSimulateRequest): void {
   if (req.callerMode === "impersonated-call-frame") {
     if (req.transactionOrigin === undefined || req.executionGasLimit === undefined) bad();
   } else if (req.transactionOrigin !== undefined && req.transactionOrigin.toLowerCase() !== req.from.toLowerCase()) bad();
+  if (req.trialPrefix !== undefined) {
+    const p = req.trialPrefix;
+    if (!req.sourcePin || req.callerMode !== "impersonated-call-frame" || req.executorRuntimeCode !== undefined ||
+      req.nativeBalanceWei !== undefined || (req.tokenDeals?.length ?? 0) !== 0 ||
+      !record(p, ["executor", "calldata", "inputToken", "inputAmount", "executorRuntimeCode"]) ||
+      !address20(p.executor) || /^0x0{40}$/i.test(p.executor) || !address20(p.inputToken) || /^0x0{40}$/i.test(p.inputToken) ||
+      !bytesHex(p.calldata) || p.calldata === "0x" ||
+      !uint256(p.inputAmount) || p.inputAmount === "0") bad();
+    if (p.executorRuntimeCode !== undefined) {
+      const c = p.executorRuntimeCode;
+      if (!record(c, ["code", "keccak256"]) || !bytesHex(c.code) || c.code === "0x" ||
+        !hash32(c.keccak256) || keccak256(c.code) !== c.keccak256.toLowerCase()) bad();
+    }
+  }
+  if (req.stateRead !== undefined) {
+    const r = req.stateRead;
+    if (!req.trialPrefix || !record(r, ["kind", "address", "slot"]) || !address20(r.address) ||
+      r.address.toLowerCase() !== req.to.toLowerCase() || req.data !== "0x" ||
+      (r.kind === "get-storage" ? !hash32(r.slot) : r.kind !== "get-code" || "slot" in r) ||
+      req.observeLogs === true || [req.observeNativeBalances, req.observeTokenBalances, req.observeTokens,
+        req.observeAccounts, req.observeTotalSupply].some(v => v !== undefined && v.length !== 0)) bad();
+  }
   const uniqueAddresses = (values: unknown) => {
     if (values === undefined) return;
     if (!Array.isArray(values) || ![...values].every(address20)
@@ -250,20 +287,22 @@ function strictResponse(resp: DaemonResponse, req: StrictSimulateRequest): void 
     return;
   }
   const s = resp.strict; const o = s?.outcome;
-  const override = req.executorRuntimeCode;
-  if (override ? s?.counterfactualExecutorCode?.address !== req.to.toLowerCase()
+  const override = req.trialPrefix?.executorRuntimeCode ?? req.executorRuntimeCode;
+  const overrideAddress = req.trialPrefix?.executorRuntimeCode ? req.trialPrefix.executor : req.to;
+  if (override ? s?.counterfactualExecutorCode?.address !== overrideAddress.toLowerCase()
     || s.counterfactualExecutorCode.keccak256 !== override.keccak256.toLowerCase()
     : s?.counterfactualExecutorCode !== undefined) bad();
   if (!s || !o || !["Success", "Revert", "Halt"].includes(o.kind)
     || resp.errorKind !== undefined || resp.error !== undefined
     || (o.phase !== "main" && o.phase !== "preCall")
     || (o.phase === "preCall" && (!Number.isSafeInteger(o.preCallIndex) || o.preCallIndex < 0
-      || o.preCallIndex >= (req.preCalls?.length ?? 0) || o.kind === "Success"))
+      || o.preCallIndex >= (req.preCalls?.length ?? 0) + (req.trialPrefix ? 1 : 0) || o.kind === "Success"))
     || (o.phase === "main" && "preCallIndex" in o)
     || resp.success !== (o.kind === "Success") || !uint256(s.executionGasUsed) || resp.gasUsed !== s.executionGasUsed) bad();
   if (o.kind === "Halt") {
     if (typeof o.reason !== "string" || !o.reason || "output" in o || resp.output !== undefined) bad();
   } else if (!bytesHex(o.output) || resp.output !== o.output || "reason" in o) bad();
+  if (req.stateRead?.kind === "get-storage" && o.kind === "Success" && !hash32(o.output)) bad();
   if (resp.revertReason !== (o.kind === "Revert" ? o.output : undefined)) bad();
   if (req.callerMode === "impersonated-call-frame" && BigInt(s.executionGasUsed) > BigInt(req.executionGasLimit!)) bad();
   const pairs = req.observeTokenBalances ?? (req.observeTokens ?? []).flatMap(token =>

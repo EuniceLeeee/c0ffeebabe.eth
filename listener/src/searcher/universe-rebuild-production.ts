@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { RebuildReadProvider } from "./rebuild-read-provider.js";
+import { readyActivityPayloadBytes, type ReadyActivityArchive } from "./ready-activity-archive.js";
 import { createSourceCodeProviders } from "./source-code-cache.js";
 import {
   assertDurableVerifiedMemoFingerprint,
@@ -18,6 +20,9 @@ import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
 import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
 import { normalizeTransactionOrigin } from "./adapter-work-intent.js";
 import { buildFamilyRouteGraphView } from "./adapter-family-graph-runtime.js";
+import { StrictProductionRuntimeRoot } from "./strict-production-runtime-session.js";
+import type { TokenEdge } from "./planner/token-graph.js";
+import type { PreparedFamilyInstance } from "./venues/adapter-family-runtime.js";
 import { executeFundingFamilyLiquidity } from "./adapter-funding-runtime.js";
 import { reissuePreparedInstanceRouteHandles } from
   "./venues/adapter-family-runtime.js";
@@ -37,6 +42,7 @@ import { logRevmFault } from "./revm-fault-diagnostics.js";
 import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
   "./venues/production-verified-actors.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+  PRODUCTION_STRICT_SHADOW_GENERATED_CAPABILITY_MANIFEST,
   PRODUCTION_STRICT_SHADOW_FAMILY_LOAD } from
   "./venues/production-family-composition.js";
 import { executeCatalogReverseBindings } from
@@ -49,7 +55,7 @@ import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { FamilyCapabilityIdentitySet } from
   "./venues/family-capability-catalog.js";
-import { isPricedFamily } from "./venues/family-capability-catalog.js";
+import { FamilyCapabilityCatalog, capabilityManifestHash, isPricedFamily } from "./venues/family-capability-catalog.js";
 import type { FamilyId } from "./venues/adapter-family-identifiers.js";
 
 /**
@@ -63,6 +69,45 @@ import type { FamilyId } from "./venues/adapter-family-identifiers.js";
 
 function digest(seed: string): string {
   return createHash("sha256").update(seed).digest("hex");
+}
+
+/** Explicit scratch scope: a nonempty set of currently registered, enabled IDs. */
+function normalizeRebuildFamilyIds(familyIds?: readonly string[]): readonly string[] | undefined {
+  if (familyIds === undefined) return undefined;
+  if (!Array.isArray(familyIds) || familyIds.length === 0) {
+    throw new Error("rebuild familyIds scope must be a nonempty array");
+  }
+  const enabled = new Set(PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .listAll().map(family => String(family.plugin.manifest.familyId)));
+  const disabled = new Set(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins.map(module => String(module.familyId)));
+  const seen = new Set<string>();
+  for (const id of familyIds) {
+    if (seen.has(id)) throw new Error("duplicate rebuild familyIds scope ID: " + id);
+    if (disabled.has(id)) throw new Error("disabled rebuild familyIds scope ID: " + id);
+    if (!enabled.has(id)) throw new Error("unknown rebuild familyIds scope ID: " + String(id));
+    seen.add(id);
+  }
+  return Object.freeze([...seen].sort());
+}
+
+/** Use the existing catalog and lifecycle, with only scoped declarations loaded. */
+function rebuildCatalog(familyIds?: readonly string[]): FamilyCapabilityCatalog {
+  const ids = normalizeRebuildFamilyIds(familyIds);
+  if (ids === undefined) return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+  const selected = new Set(ids);
+  const manifest = PRODUCTION_STRICT_SHADOW_GENERATED_CAPABILITY_MANIFEST;
+  const entries = Object.freeze(manifest.entries.filter(entry => selected.has(entry.familyId)));
+  return new FamilyCapabilityCatalog({
+    requireCapture: true,
+    modules: PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins.filter(module => selected.has(module.familyId)),
+    generatedManifest: Object.freeze({ format: manifest.format, entries, manifestHash: capabilityManifestHash(entries) }),
+  });
+}
+
+function rebuildScopeBinding(familyIds?: readonly string[]): { readonly familyIds?: readonly string[] } {
+  const ids = normalizeRebuildFamilyIds(familyIds);
+  // Preserve the exact legacy hash payload when scope is omitted.
+  return ids === undefined ? {} : { familyIds: ids };
 }
 
 const EIP1967_IMPLEMENTATION_SLOT =
@@ -391,6 +436,13 @@ function familyIdForCandidate(
     }
   }
   return "unknown-family";
+}
+
+/** Pure accounting identity; this does not grant admission or enable a Family. */
+function candidateFamilyId(candidate: unknown): string {
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) return "unknown-family";
+  const item = candidate as Readonly<Record<string, unknown>>;
+  return typeof item.familyId === "string" ? item.familyId : familyIdForCandidate(item);
 }
 
 function classifyFailure(reason: string): RetryableAttempt["failureCode"] {
@@ -836,10 +888,12 @@ export function resolveRebuildRevmTimeoutMs(env: NodeJS.ProcessEnv = process.env
 export function createProbeWiring(
   input?: {
     readonly rpcUrl?: string;
+    readonly familyIds?: readonly string[];
     readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
     readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
   },
 ): UniverseRebuildProbeWiring {
+  const scopedCatalog = rebuildCatalog(input?.familyIds);
   const timeoutMs = resolveRebuildRevmTimeoutMs();
   const rpcUrl = input?.rpcUrl ??
     process.env.SEARCHER_LIVE_RPC_URL ??
@@ -962,7 +1016,7 @@ export function createProbeWiring(
       },
     });
   };
-  const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+  const catalog = scopedCatalog;
 
   type AttestOnce = NonNullable<UniverseRebuildProbeWiring["attestFamilyInstanceOnce"]>;
   type VerifiedReturn = Awaited<ReturnType<AttestOnce>> extends infer U ?
@@ -1134,7 +1188,7 @@ export function createProbeWiring(
           );
           const redecodedCandidates = receiptLog === undefined
             ? Object.freeze([])
-            : candidatesFromLog(Object.freeze({
+            : candidatesFromLogInCatalog(Object.freeze({
                 address: receiptLog.address,
                 topics: Object.freeze([...receiptLog.topics]),
                 data: receiptLog.data,
@@ -1142,7 +1196,7 @@ export function createProbeWiring(
                 blockNumber: receipt?.blockNumber,
                 blockHash: receipt?.blockHash,
                 logIndex: receiptLog.index,
-              }));
+              }), catalog);
           observedSender = validateObservedSenderEvidence({
             candidate,
             evidenceRef: evidence,
@@ -1438,6 +1492,129 @@ export interface RebuildCallObservation {
   readonly traceAddress: readonly number[];
 }
 
+/** Reclassify a complete raw slice using this run's current declarations. */
+function archivedActivityLogs(
+  raw: readonly unknown[],
+  topics: readonly string[],
+  range: { readonly fromBlock: number; readonly toBlock: number },
+): readonly RebuildScanObservation[] {
+  const selected = new Set(topics);
+  const logs: RebuildScanObservation[] = [];
+  for (const value of raw) {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("invalid archived activity log");
+    }
+    const item = value as Readonly<Record<string, unknown>>;
+    const emitter = address(item.address), blockHash = string32(item.blockHash);
+    const transactionHash = string32(item.transactionHash), blockNumber = rpcNumber(item.blockNumber);
+    const logIndex = rpcNumber(item.index ?? item.logIndex);
+    if (emitter === null || blockHash === null || transactionHash === null || blockNumber === null ||
+        blockNumber < range.fromBlock || blockNumber > range.toBlock || logIndex === null ||
+        !Array.isArray(item.topics) || item.topics.some(topic => string32(topic) === null) ||
+        typeof item.data !== "string" || !ethers.isHexString(item.data) || item.removed === true) {
+      throw new Error("invalid archived activity log fields or range");
+    }
+    if (!selected.has(String(item.topics[0]).toLowerCase())) continue;
+    logs.push(Object.freeze({ address: emitter, topics: Object.freeze([...item.topics]),
+      data: item.data, transactionHash, blockNumber, blockHash, logIndex }));
+  }
+  return Object.freeze(logs);
+}
+
+// This is an internal derived-cache identity, NOT a new source-plan or Ready
+// version. Old archives/checkpoints retain their existing authority. Bind the
+// loaded central parser as well as the Family declarations: a decoder change
+// must never reuse a classification merely because its selectors are unchanged.
+const activityClassifierCodeHash = createHash("sha256")
+  .update(readFileSync(new URL(import.meta.url)))
+  .update(canonicalJson.toString())
+  .update(readFileSync(new URL("./venues/family-capability-catalog" +
+    (import.meta.url.endsWith(".ts") ? ".ts" : ".js"), import.meta.url)))
+  .update(ethers.version)
+  .digest("hex");
+
+function activityClassifierKey(activityPlanFingerprint: string): string {
+  return digest("catalog-activity-classification-v1:" + activityClassifierCodeHash + ":" + activityPlanFingerprint);
+}
+
+function decodedLogClassification(
+  data: readonly unknown[], topics: readonly string[], range: { fromBlock: number; toBlock: number },
+): readonly RebuildScanObservation[] {
+  const selected = new Set(topics);
+  return Object.freeze(data.map(value => {
+    const log = value as RebuildScanObservation | null;
+    if (!log || typeof log !== "object" || Array.isArray(log) ||
+        typeof log.address !== "string" || !/^0x[0-9a-f]{40}$/.test(log.address) ||
+        !Number.isSafeInteger(log.blockNumber) || log.blockNumber! < range.fromBlock || log.blockNumber! > range.toBlock ||
+        !Number.isSafeInteger(log.logIndex) || log.logIndex! < 0 ||
+        string32(log.transactionHash) === null || string32(log.blockHash) === null ||
+        typeof log.data !== "string" || !ethers.isHexString(log.data) ||
+        !Array.isArray(log.topics) || log.topics.some(topic => string32(topic) === null) ||
+        !selected.has(log.topics[0]?.toLowerCase())) {
+      throw new Error("invalid archived log classification");
+    }
+    return Object.freeze({ ...log, topics: Object.freeze([...log.topics]) });
+  }));
+}
+
+interface ClassifiedCallRepresentative {
+  readonly call: RebuildCallObservation;
+  readonly candidate: Readonly<Record<string, unknown>>;
+}
+
+interface ClassifiedTraceBlock {
+  readonly format: "catalog-trace-classification/v1";
+  readonly blockNumber: number;
+  readonly observedCallCount: number;
+  // Persist the digest INPUT, not a chunk digest. SHA256(chunk1)||SHA256(chunk2)
+  // cannot reconstruct the existing continuous source receipt hash.
+  readonly digestInput: string;
+  readonly representatives: readonly ClassifiedCallRepresentative[];
+}
+
+function keepCallRepresentative(
+  representatives: Map<string, ClassifiedCallRepresentative>,
+  item: ClassifiedCallRepresentative,
+): void {
+  const key = rebuildFamilyInstanceDedupeKey(item.candidate);
+  const incumbent = representatives.get(key);
+  if (incumbent === undefined || preferCandidateRepresentative(incumbent.candidate, item.candidate)) {
+    representatives.set(key, item);
+  }
+}
+
+function classifyTraceCalls(
+  calls: readonly RebuildCallObservation[],
+  blockNumber: number,
+  catalog: FamilyCapabilityCatalog,
+): ClassifiedTraceBlock {
+  const representatives = new Map<string, ClassifiedCallRepresentative>();
+  const digestParts: string[] = [];
+  for (const call of [...calls].sort(compareRebuildCalls)) {
+    if (call.blockNumber !== blockNumber) throw new Error("classified call escaped its block");
+    digestParts.push(canonicalJson(call), "\0");
+    for (const candidate of candidatesFromCallInCatalog(call, catalog)) {
+      keepCallRepresentative(representatives, { call, candidate });
+    }
+  }
+  return Object.freeze({ format: "catalog-trace-classification/v1", blockNumber,
+    observedCallCount: calls.length, digestInput: digestParts.join(""),
+    representatives: Object.freeze([...representatives.values()]) });
+}
+
+function decodedTraceClassification(data: readonly unknown[], blockNumber: number): ClassifiedTraceBlock {
+  const value = decodeDurableValue(data[0]) as ClassifiedTraceBlock | undefined;
+  if (data.length !== 1 || value?.format !== "catalog-trace-classification/v1" || value.blockNumber !== blockNumber ||
+      !Number.isSafeInteger(value.observedCallCount) || value.observedCallCount < 0 ||
+      typeof value.digestInput !== "string" || !Array.isArray(value.representatives) ||
+      (value.observedCallCount === 0 ? value.digestInput !== "" : !value.digestInput.endsWith("\0")) ||
+      value.representatives.some(item => item?.call?.kind !== "call" || item.call.blockNumber !== blockNumber ||
+        item.candidate === null || typeof item.candidate !== "object" || Array.isArray(item.candidate))) {
+    throw new Error("invalid archived trace classification");
+  }
+  return value;
+}
+
 interface StrictCatalogCallPattern {
   readonly familyId: string;
   readonly id: string;
@@ -1448,10 +1625,9 @@ interface StrictCatalogCallPattern {
   >;
 }
 
-export function strictCatalogLogTopics(): readonly string[] {
+export function strictCatalogLogTopics(familyIds?: readonly string[]): readonly string[] {
   const topics = new Set<string>();
-  for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-    .listAll()) {
+  for (const family of rebuildCatalog(familyIds).listAll()) {
     const discovery = "discovery" in family.plugin
       ? family.plugin.discovery
       : null;
@@ -1462,10 +1638,9 @@ export function strictCatalogLogTopics(): readonly string[] {
   return [...topics].sort();
 }
 
-export function strictCatalogCallPatterns(): readonly StrictCatalogCallPattern[] {
+export function strictCatalogCallPatterns(familyIds?: readonly string[]): readonly StrictCatalogCallPattern[] {
   const patterns: StrictCatalogCallPattern[] = [];
-  for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-    .listAll()) {
+  for (const family of rebuildCatalog(familyIds).listAll()) {
     if (!("discovery" in family.plugin)) continue;
     for (const pattern of family.plugin.discovery.callPatterns ?? []) {
       patterns.push(Object.freeze({
@@ -1482,14 +1657,13 @@ export function strictCatalogCallPatterns(): readonly StrictCatalogCallPattern[]
   ));
 }
 
-export function strictCatalogSourceCoverageKeys(): {
+export function strictCatalogSourceCoverageKeys(familyIds?: readonly string[]): {
   readonly startup: readonly string[];
   readonly activity: readonly string[];
 } {
   const startup: string[] = [];
   const activity: string[] = [];
-  for (const family of PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-    .listAll()) {
+  for (const family of rebuildCatalog(familyIds).listAll()) {
     const familyId = family.plugin.manifest.familyId;
     // This key proves that the exact startup nomination partition for the
     // Family was consumed and attested at the cutoff. It is not an
@@ -1514,15 +1688,15 @@ export function strictCatalogSourceCoverageKeys(): {
 }
 
 /** The sole catalog-issued historical activity plan consumed by the scanner. */
-export function strictCatalogActivityPlan(): Readonly<{
+export function strictCatalogActivityPlan(familyIds?: readonly string[]): Readonly<{
   readonly logTopics: readonly string[];
   readonly callPatterns: readonly StrictCatalogCallPattern[];
   readonly coverageKeys: readonly string[];
 }> {
   return Object.freeze({
-    logTopics: strictCatalogLogTopics(),
-    callPatterns: strictCatalogCallPatterns(),
-    coverageKeys: strictCatalogSourceCoverageKeys().activity,
+    logTopics: strictCatalogLogTopics(familyIds),
+    callPatterns: strictCatalogCallPatterns(familyIds),
+    coverageKeys: strictCatalogSourceCoverageKeys(familyIds).activity,
   });
 }
 
@@ -1533,6 +1707,12 @@ export const SOURCE_SCAN_CONCURRENCY = 4;
 const SOURCE_SCAN_REQUEST_TIMEOUT_MS = 60_000;
 export const SOURCE_TRACE_SCAN_CONCURRENCY = 16;
 export const SOURCE_TRACE_SCAN_MAX_ATTEMPTS = 3;
+// Archive-only acquisition policy. Logs and traces run in separate phases;
+// each worker owns its raw entry until classification finishes. JSON object and
+// transport-copy overhead are additional to the 16 * 64 MiB raw payload bound.
+export const ARCHIVE_ACTIVITY_CONCURRENCY = 16;
+export const ARCHIVE_ACTIVITY_ENTRY_BYTES = 64 * 1024 * 1024;
+export const ARCHIVE_ACTIVITY_RESPONSE_BYTES = ARCHIVE_ACTIVITY_ENTRY_BYTES + 1024 * 1024;
 export const REVERSE_BINDING_CONCURRENCY = 24;
 
 /**
@@ -1542,8 +1722,8 @@ export const REVERSE_BINDING_CONCURRENCY = 24;
  * to them fails closed on resume whenever the sealing code differs from the
  * current catalog.
  */
-export function strictFamilyDefinitionHashes(): readonly string[] {
-  return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+export function strictFamilyDefinitionHashes(familyIds?: readonly string[]): readonly string[] {
+  return rebuildCatalog(familyIds)
     .listAll()
     .map((family) => family.plugin.manifest.familyId)
     .sort()
@@ -1555,8 +1735,8 @@ export function strictFamilyDefinitionHashes(): readonly string[] {
  * pricing/exact/execution-only deploys keep the plan fingerprints stable, so
  * an incumbent fixed run resumes without a historical rescan.
  */
-export function strictFamilyDiscoveryDefinitionHashes(): readonly string[] {
-  return PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+export function strictFamilyDiscoveryDefinitionHashes(familyIds?: readonly string[]): readonly string[] {
+  return rebuildCatalog(familyIds)
     .listAll()
     .map((family) => family.plugin.manifest.familyId)
     .sort()
@@ -1571,11 +1751,13 @@ export function strictFamilyDiscoveryDefinitionHashes(): readonly string[] {
  * instance exists outside it (enumerator/omission authority is absent).
  */
 export function startupSourcePlanFingerprint(input: {
+  readonly familyIds?: readonly string[];
   readonly coverageKeys: readonly string[];
   readonly familyDefinitionHashes: readonly string[];
 }): string {
   return digest("source-plan-v1:" + canonicalJson({
     sourceKind: "startup-candidate-union",
+    ...rebuildScopeBinding(input.familyIds),
     coverageKeys: input.coverageKeys,
     familyDefinitionHashes: input.familyDefinitionHashes,
   }));
@@ -1589,6 +1771,7 @@ export function startupSourcePlanFingerprint(input: {
  * rescan before the run may publish Ready.
  */
 export function catalogActivitySourcePlanFingerprint(input: {
+  readonly familyIds?: readonly string[];
   readonly topics: readonly string[];
   readonly callPatterns: readonly StrictCatalogCallPattern[];
   readonly coverageKeys: readonly string[];
@@ -1596,6 +1779,7 @@ export function catalogActivitySourcePlanFingerprint(input: {
 }): string {
   return digest("source-plan-v1:" + canonicalJson({
     sourceKind: "catalog-activity-union",
+    ...rebuildScopeBinding(input.familyIds),
     topics: input.topics,
     callPatterns: input.callPatterns,
     coverageKeys: input.coverageKeys,
@@ -1612,19 +1796,21 @@ export function catalogActivitySourcePlanFingerprint(input: {
 }
 
 /** Current expected plan fingerprints for nomination and unified activity. */
-export function expectedSourcePlanFingerprints(): {
+export function expectedSourcePlanFingerprints(familyIds?: readonly string[]): {
   readonly startup: string;
   readonly activity: string;
 } {
-  const coverageKeys = strictCatalogSourceCoverageKeys();
-  const activityPlan = strictCatalogActivityPlan();
-  const familyDefinitionHashes = strictFamilyDiscoveryDefinitionHashes();
+  const coverageKeys = strictCatalogSourceCoverageKeys(familyIds);
+  const activityPlan = strictCatalogActivityPlan(familyIds);
+  const familyDefinitionHashes = strictFamilyDiscoveryDefinitionHashes(familyIds);
   return Object.freeze({
     startup: startupSourcePlanFingerprint({
+      familyIds,
       coverageKeys: coverageKeys.startup,
       familyDefinitionHashes,
     }),
     activity: catalogActivitySourcePlanFingerprint({
+      familyIds,
       topics: activityPlan.logTopics,
       callPatterns: activityPlan.callPatterns,
       coverageKeys: activityPlan.coverageKeys,
@@ -1723,8 +1909,16 @@ function candidateForFamilyObservation(
 
 export function candidatesFromLog(
   log: RebuildScanObservation,
+  familyIds?: readonly string[],
 ): readonly Readonly<Record<string, unknown>>[] {
-  const matches = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.matches(
+  return candidatesFromLogInCatalog(log, rebuildCatalog(familyIds));
+}
+
+function candidatesFromLogInCatalog(
+  log: RebuildScanObservation,
+  catalog: FamilyCapabilityCatalog,
+): readonly Readonly<Record<string, unknown>>[] {
+  const matches = catalog.matches(
     Object.freeze({
       kind: "log",
       source: Object.freeze({
@@ -1811,8 +2005,16 @@ function candidateForFamilyCallObservation(
 
 export function candidatesFromCall(
   call: RebuildCallObservation,
+  familyIds?: readonly string[],
 ): readonly Readonly<Record<string, unknown>>[] {
-  const matches = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.matches(
+  return candidatesFromCallInCatalog(call, rebuildCatalog(familyIds));
+}
+
+function candidatesFromCallInCatalog(
+  call: RebuildCallObservation,
+  catalog: FamilyCapabilityCatalog,
+): readonly Readonly<Record<string, unknown>>[] {
+  const matches = catalog.matches(
     Object.freeze({
       kind: "call" as const,
       source: Object.freeze({
@@ -2003,31 +2205,155 @@ type CatalogCallTraceMethod =
   | "trace_block"
   | "debug_traceBlockByNumber";
 
+/** Validate the entire raw response, including frames outside current selectors.
+ * A completed EVM revert is data; an outer debug tracing error is an incomplete
+ * response. This validates schema, not a provider's claim that no records were
+ * omitted. No RPC or selector-dependent classification belongs in this check. */
+function assertArchivedTraceSchema(
+  raw: unknown,
+  method: CatalogCallTraceMethod,
+  blockNumber: number,
+): asserts raw is readonly unknown[] {
+  const invalid = (): never => { throw new Error("invalid archived " + method + " trace schema at block " + blockNumber); };
+  const record = (value: unknown): Readonly<Record<string, unknown>> => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return invalid();
+    return value as Readonly<Record<string, unknown>>;
+  };
+  const bytes = (value: unknown) => typeof value === "string" && /^0x(?:[0-9a-fA-F]{2})*$/.test(value);
+  const quantity = (value: unknown) => typeof value === "string" && /^0x[0-9a-fA-F]+$/.test(value);
+  const natural = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+  if (!Array.isArray(raw)) invalid();
+  if (method === "trace_block") {
+    let blockHash: string | undefined;
+    for (const value of raw as readonly unknown[]) {
+      const entry = record(value), action = record(entry.action);
+      const currentHash = string32(entry.blockHash);
+      if (rpcNumber(entry.blockNumber) !== blockNumber || currentHash === null ||
+          (blockHash !== undefined && currentHash !== blockHash) ||
+          !natural(entry.subtraces) || !Array.isArray(entry.traceAddress) ||
+          !entry.traceAddress.every(natural)) invalid();
+      blockHash = currentHash!;
+      if (entry.type !== "reward" && string32(entry.transactionHash) === null) invalid();
+      if (entry.transactionPosition != null && !natural(entry.transactionPosition)) invalid();
+      const reverted = typeof entry.error === "string" && entry.error.length > 0;
+      if (entry.error != null && !reverted) invalid();
+      if (entry.type === "call") {
+        if (address(action.from) === null || address(action.to) === null || !bytes(action.input) ||
+            !["call", "staticcall", "delegatecall", "callcode"].includes(String(action.callType))) invalid();
+        if (!reverted || entry.result != null) {
+          const result = record(entry.result);
+          if (!quantity(result.gasUsed) || !bytes(result.output)) invalid();
+        }
+      } else if (entry.type === "create") {
+        if (address(action.from) === null || !bytes(action.init)) invalid();
+        if (!reverted || entry.result != null) {
+          const result = record(entry.result);
+          if (address(result.address) === null || !bytes(result.code) || !quantity(result.gasUsed)) invalid();
+        }
+      } else if (entry.type === "suicide") {
+        if (address(action.address) === null || address(action.refundAddress) === null || !quantity(action.balance)) invalid();
+      } else if (entry.type === "reward") {
+        if (address(action.author) === null || typeof action.rewardType !== "string" || !quantity(action.value)) invalid();
+      } else invalid();
+      if ((action.gas !== undefined && !quantity(action.gas)) ||
+          (action.value !== undefined && !quantity(action.value))) invalid();
+    }
+    return;
+  }
+  for (const value of raw as readonly unknown[]) {
+    const transaction = record(value);
+    if (transaction.error != null || string32(transaction.txHash ?? transaction.transactionHash) === null) invalid();
+    const pending: unknown[] = [transaction.result];
+    while (pending.length) {
+      const frame = record(pending.pop());
+      const type = typeof frame.type === "string" ? frame.type.toLowerCase() : "";
+      if (!["call", "staticcall", "delegatecall", "callcode", "create", "create2", "selfdestruct"].includes(type) ||
+          address(frame.from) === null ||
+          (frame.error != null && (typeof frame.error !== "string" || frame.error.length === 0))) invalid();
+      const failedCreate = (type === "create" || type === "create2") && typeof frame.error === "string";
+      if ((!failedCreate || frame.to != null) && address(frame.to) === null) invalid();
+      if ((type !== "selfdestruct" || frame.input !== undefined) && !bytes(frame.input)) invalid();
+      if ((frame.output !== undefined && !bytes(frame.output)) ||
+          [frame.gas, frame.gasUsed, frame.value].some(value => value !== undefined && !quantity(value))) invalid();
+      if (frame.calls !== undefined) {
+        if (!Array.isArray(frame.calls)) invalid();
+        for (const child of frame.calls as readonly unknown[]) pending.push(child);
+      }
+    }
+  }
+}
+
 async function selectCatalogCallTraceMethod(
   provider: ethers.JsonRpcProvider,
   blockNumber: number,
+  activityArchive?: ReadyActivityArchive,
+  classifierKey?: string,
 ): Promise<CatalogCallTraceMethod> {
   const failures: string[] = [];
+  // Cache errors are fatal, never transport fallback. Prefer either cached raw
+  // method before probing an RPC capability that may no longer be needed.
+  if (activityArchive !== undefined) {
+    for (const method of ["trace_block", "debug_traceBlockByNumber"] as const) {
+      if (classifierKey !== undefined) {
+        const classified = await activityArchive.readClassifiedTrace({ blockNumber, method }, classifierKey);
+        if (classified !== null) {
+          decodedTraceClassification(classified, blockNumber);
+          return method;
+        }
+      }
+      const cached = await activityArchive.readTrace({ blockNumber, method });
+      if (cached !== null) {
+        assertArchivedTraceSchema(cached, method, blockNumber);
+        return method;
+      }
+    }
+  }
   for (const method of [
     "trace_block",
     "debug_traceBlockByNumber",
   ] as const) {
+    let raw: unknown;
     try {
-      const raw = await requestCallTraceBlock(provider, method, blockNumber);
+      raw = await requestCallTraceBlock(provider, method, blockNumber);
       if (!Array.isArray(raw)) {
         throw new Error("returned a non-array result");
       }
-      return method;
     } catch (error) {
+      if (activityArchive !== undefined && catalogTraceErrorCode(error) === "RESPONSE_SIZE_LIMIT") throw error;
       failures.push(
         method + ":" + (error instanceof Error ? error.message : String(error)),
       );
+      continue;
     }
+    if (activityArchive !== undefined) {
+      assertArchivedTraceSchema(raw, method, blockNumber);
+      await activityArchive.writeTrace({ blockNumber, method, trace: raw });
+    }
+    return method;
   }
   throw new Error(
     "catalog observed-call scan requires trace_block or " +
       "debug_traceBlockByNumber: " + failures.join(" | "),
   );
+}
+
+async function readArchivedCallTraceBlock(
+  provider: ethers.JsonRpcProvider,
+  method: CatalogCallTraceMethod,
+  blockNumber: number,
+  activityArchive?: ReadyActivityArchive,
+): Promise<unknown> {
+  const cached = await activityArchive?.readTrace({ blockNumber, method });
+  if (cached !== undefined && cached !== null) {
+    assertArchivedTraceSchema(cached, method, blockNumber);
+    return cached;
+  }
+  const raw = await requestCallTraceBlockWithRetry(provider, method, blockNumber);
+  if (activityArchive !== undefined) {
+    assertArchivedTraceSchema(raw, method, blockNumber);
+    await activityArchive.writeTrace({ blockNumber, method, trace: raw });
+  }
+  return raw;
 }
 
 async function requestCallTraceBlock(
@@ -2056,6 +2382,7 @@ async function requestCallTraceBlockWithRetry(
       return await requestCallTraceBlock(provider, method, blockNumber);
     } catch (error) {
       lastCode = catalogTraceErrorCode(error);
+      if (lastCode === "RESPONSE_SIZE_LIMIT") throw error;
       if (attempt === SOURCE_TRACE_SCAN_MAX_ATTEMPTS) break;
       console.log(
         "[universe-rebuild/activity-scan] transport=trace retry block=" +
@@ -2081,8 +2408,22 @@ function catalogTraceErrorCode(error: unknown): string {
   return "unknown";
 }
 
+async function activityWorkers<T>(jobs: readonly Promise<T>[], archive: ReadyActivityArchive | undefined): Promise<T[]> {
+  if (archive === undefined) return Promise.all(jobs);
+  // Drain every owned worker on failure before the caller can retry the scan.
+  // Otherwise a rejected group leaves raw reads/writes running behind its back.
+  const results = await Promise.allSettled(jobs);
+  return results.map(result => {
+    if (result.status === "rejected") throw result.reason;
+    return result.value;
+  });
+}
+
 /** Physical trace reader used only inside the unified activity scan. */
 async function readDeclaredCallActivity(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly activityArchive?: ReadyActivityArchive;
+  readonly classifierKey: string;
   readonly provider: ethers.JsonRpcProvider;
   readonly fromBlock: number;
   readonly toBlock: number;
@@ -2098,6 +2439,8 @@ async function readDeclaredCallActivity(input: {
   const method = await selectCatalogCallTraceMethod(
     input.provider,
     input.toBlock,
+    input.activityArchive,
+    input.classifierKey,
   );
   console.log(
     "[universe-rebuild/activity-scan] transport=trace method=" + method +
@@ -2109,13 +2452,12 @@ async function readDeclaredCallActivity(input: {
     toBlock: input.toBlock,
     logs: input.logs,
   });
-  const representativeByCandidate = new Map<string, {
-    readonly call: RebuildCallObservation;
-    readonly candidate: Readonly<Record<string, unknown>>;
-  }>();
+  const representativeByCandidate = new Map<string, ClassifiedCallRepresentative>();
   const totalBlocks = input.toBlock - input.fromBlock + 1;
+  const concurrency = input.activityArchive === undefined ? SOURCE_TRACE_SCAN_CONCURRENCY : ARCHIVE_ACTIVITY_CONCURRENCY;
   let completedBlocks = 0;
   let observedCallCount = 0;
+  let classificationHits = 0;
   let chunkIndex = 0;
   for (
     let chunkFrom = input.fromBlock;
@@ -2130,49 +2472,44 @@ async function readDeclaredCallActivity(input: {
     for (
       let groupFrom = chunkFrom;
       groupFrom <= chunkTo;
-      groupFrom += SOURCE_TRACE_SCAN_CONCURRENCY
+      groupFrom += concurrency
     ) {
       const groupTo = Math.min(
         chunkTo,
-        groupFrom + SOURCE_TRACE_SCAN_CONCURRENCY - 1,
+        groupFrom + concurrency - 1,
       );
-      const group = await Promise.all(Array.from(
+      const group = await activityWorkers(Array.from(
         { length: groupTo - groupFrom + 1 },
         async (_value, index) => {
           const blockNumber = groupFrom + index;
-          const raw = await requestCallTraceBlockWithRetry(
+          const cacheKey = { blockNumber, method };
+          const cached = await input.activityArchive?.readClassifiedTrace(cacheKey, input.classifierKey);
+          if (cached !== undefined && cached !== null) {
+            classificationHits++;
+            return decodedTraceClassification(cached, blockNumber);
+          }
+          const raw = await readArchivedCallTraceBlock(
             input.provider,
             method,
             blockNumber,
+            input.activityArchive,
           );
-          return callsFromTraceBlock({
+          const calls = await callsFromTraceBlock({
             provider: input.provider,
             method,
             raw,
             blockNumber,
             selectors: input.selectors,
           });
+          const classified = classifyTraceCalls(calls, blockNumber, input.catalog);
+          await input.activityArchive?.writeClassifiedTrace(cacheKey, input.classifierKey, [encodeDurableValue(classified)]);
+          return classified;
         },
-      ));
-      for (const blockCalls of group) {
-        const orderedCalls = [...blockCalls].sort(compareRebuildCalls);
-        for (const call of orderedCalls) {
-          appendCatalogActivityCall(digestState, chunkIndex, call);
-          observedCallCount++;
-          for (const candidate of candidatesFromCall(call)) {
-            const key = rebuildFamilyInstanceDedupeKey(candidate);
-            const incumbent = representativeByCandidate.get(key);
-            if (
-              incumbent === undefined ||
-              preferCandidateRepresentative(incumbent.candidate, candidate)
-            ) {
-              representativeByCandidate.set(key, Object.freeze({
-                call,
-                candidate,
-              }));
-            }
-          }
-        }
+      ), input.activityArchive);
+      for (const classified of group) {
+        appendCatalogActivityClassification(digestState, chunkIndex, classified);
+        observedCallCount += classified.observedCallCount;
+        for (const item of classified.representatives) keepCallRepresentative(representativeByCandidate, item);
       }
     }
     completedBlocks += chunkTo - chunkFrom + 1;
@@ -2181,6 +2518,7 @@ async function readDeclaredCallActivity(input: {
         completedBlocks + "/" +
         totalBlocks + " observedCalls=" + observedCallCount +
         " retainedCandidates=" + representativeByCandidate.size +
+        " classificationHits=" + classificationHits +
         " elapsedMs=" +
         (Date.now() - chunkStartedAtMs),
     );
@@ -2486,21 +2824,21 @@ function beginCatalogActivityDigest(input: {
   return { observationHash, chunks };
 }
 
-function appendCatalogActivityCall(
+function appendCatalogActivityClassification(
   state: CatalogActivityDigestState,
   chunkIndex: number,
-  call: RebuildCallObservation,
+  classified: ClassifiedTraceBlock,
 ): void {
   const chunk = state.chunks[chunkIndex];
   if (
-    chunk === undefined || call.blockNumber < chunk.fromBlock ||
-    call.blockNumber > chunk.toBlock
+    chunk === undefined || classified.blockNumber < chunk.fromBlock ||
+    classified.blockNumber > chunk.toBlock
   ) {
     throw new Error("catalog activity call escaped the scan range");
   }
-  updateActivityDigest(state.observationHash, call);
-  updateActivityDigest(chunk.hash, call);
-  chunk.resultCount++;
+  state.observationHash.update(classified.digestInput);
+  chunk.hash.update(classified.digestInput);
+  chunk.resultCount += classified.observedCallCount;
 }
 
 function finishCatalogActivityDigest(
@@ -2584,10 +2922,31 @@ function catalogActivityChunks(input: {
 
 export function createRebuildWiring(input?: {
   readonly rpcUrl?: string;
+  /** Scratch incremental rebuild only; the owner merges sealed Ready at the same cutoff. */
+  readonly familyIds?: readonly string[];
+  readonly activityArchive?: ReadyActivityArchive;
   readonly startupCandidates?: readonly Readonly<Record<string, unknown>>[];
   readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
   readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
-}): UniverseRebuildDependencies {
+}): UniverseRebuildDependencies & {
+  readonly candidateFamilyId: (candidate: unknown) => string;
+  readonly familyDiscoveryDefinitionHash: (familyId: string) => string;
+} {
+  const activityArchive = input?.activityArchive?.withEntryLimit(ARCHIVE_ACTIVITY_ENTRY_BYTES);
+  const archiveTransportLimits = activityArchive === undefined ? {} : {
+    maxReceivedBytes: ARCHIVE_ACTIVITY_RESPONSE_BYTES,
+    maxDecompressedBytes: ARCHIVE_ACTIVITY_RESPONSE_BYTES,
+    batchMaxCount: 1,
+  };
+  const familyIds = normalizeRebuildFamilyIds(input?.familyIds);
+  const catalog = rebuildCatalog(familyIds);
+  const selectedIds = familyIds === undefined ? undefined : new Set(familyIds);
+  const inScope = (familyId: string): boolean => selectedIds === undefined || selectedIds.has(familyId);
+  const candidateInScope = (candidate: Readonly<Record<string, unknown>>): boolean =>
+    inScope(candidateFamilyId(candidate));
+  const assertInScope = (familyId: string): void => {
+    if (!inScope(familyId)) throw new Error("Family outside rebuild familyIds scope: " + familyId);
+  };
   const rpcUrl = input?.rpcUrl ??
     process.env.SEARCHER_LIVE_RPC_URL ??
     process.env.MAINNET_RPC_URL;
@@ -2614,6 +2973,7 @@ export function createRebuildWiring(input?: {
   };
   const provider = new RebuildReadProvider(read, rpcUrl, undefined, {
     requestTimeoutMs: SOURCE_SCAN_REQUEST_TIMEOUT_MS,
+    ...archiveTransportLimits,
   });
   // A trace response is already large. Ethers batches concurrent send()
   // calls by default, which couples sixteen block traces to one HTTP timeout.
@@ -2629,6 +2989,7 @@ export function createRebuildWiring(input?: {
       // The existing trace scheduler already bounds these independent requests.
       maxPhysicalRequests: Infinity,
       requestTimeoutMs: SOURCE_SCAN_REQUEST_TIMEOUT_MS,
+      ...archiveTransportLimits,
     },
   );
   // Cross-run memo revalidation usually checks tens of thousands of
@@ -2658,18 +3019,20 @@ export function createRebuildWiring(input?: {
     proofHashByFixedRun.set(key, pending);
     return pending;
   };
-  const activityPlan = strictCatalogActivityPlan();
+  const activityPlan = strictCatalogActivityPlan(familyIds);
   const topics = activityPlan.logTopics;
   const callPatterns = activityPlan.callPatterns;
   const callSelectors = new Set(callPatterns.map((pattern) => pattern.selector));
-  const sourceCoverageKeys = strictCatalogSourceCoverageKeys();
+  const sourceCoverageKeys = strictCatalogSourceCoverageKeys(familyIds);
+  const planFingerprints = expectedSourcePlanFingerprints(familyIds);
+  const classifierKey = activityClassifierKey(planFingerprints.activity);
   // reth caps eth_getLogs at 20000 results; the strict-topic union is
   // high-volume, so start small and halve on the max-results error. The
   // chunk policy is a plan-bound constant (SOURCE_SCAN_BATCH_BLOCKS /
   // SOURCE_MIN_CHUNK_BLOCKS): changing it moves the event plan fingerprint
   // and fails closed on resume. Call tracing is another physical transport
   // inside this same catalog activity plan, not a second discovery source.
-  const probe = createProbeWiring({ rpcUrl, executionIdentity: input?.executionIdentity,
+  const probe = createProbeWiring({ rpcUrl, familyIds, executionIdentity: input?.executionIdentity,
     onSimulationFatal });
 
   const disabledPlugins = PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins;
@@ -2677,13 +3040,21 @@ export function createRebuildWiring(input?: {
   const disabledAdapterIds = new Set(disabledPlugins.flatMap(module => [
     ...(module.plugin.manifest.poolAdapterIds ?? []), ...module.plugin.manifest.ownedActionAdapterIds,
   ]));
-  const wiring: UniverseRebuildDependencies = {
-    isFamilyEnabled: (familyId) => !disabledFamilyIds.has(familyId),
+  const wiring: UniverseRebuildDependencies & {
+    readonly candidateFamilyId: (candidate: unknown) => string;
+    readonly familyDiscoveryDefinitionHash: (familyId: string) => string;
+  } = {
+    candidateFamilyId,
+    familyDiscoveryDefinitionHash,
+    isFamilyEnabled: (familyId) => inScope(familyId) && !disabledFamilyIds.has(familyId),
     encodeCandidateSnapshot: (candidate) =>
       encodeDurableValue(candidate),
     decodeCandidateSnapshot: (snapshot) =>
       decodeDurableValue(snapshot),
-    upgradeLegacyVerifiedMemo,
+    upgradeLegacyVerifiedMemo: (memo) => {
+      assertInScope(memo.familyId);
+      return upgradeLegacyVerifiedMemo(memo);
+    },
     requiredSourceCoverageKeys: () => Object.freeze([
       ...sourceCoverageKeys.startup,
       ...activityPlan.coverageKeys,
@@ -2691,7 +3062,7 @@ export function createRebuildWiring(input?: {
     // Current source-plan identity. Every durable receipt sealed by this
     // wiring carries queryFingerprint == plan fingerprint; resume rejects
     // receipts sealed by any other code version (audit P0-STOP-1).
-    expectedSourcePlanFingerprints: () => expectedSourcePlanFingerprints(),
+    expectedSourcePlanFingerprints: () => planFingerprints,
     freezeCanonicalHead: async (requestedBlock) => {
       const block = await provider.getBlock(requestedBlock ?? "latest");
       if (block === null || block.hash === null) {
@@ -2709,39 +3080,63 @@ export function createRebuildWiring(input?: {
     },
     scanSwapWindow: async (scanInput) => {
       assertOpen();
+      const startupCandidates = familyIds === undefined ? input?.startupCandidates ?? []
+        : (input?.startupCandidates ?? []).filter(candidateInScope);
+      await activityArchive?.assertScope({ chainId: 1, fromBlock: scanInput.fromBlock,
+        toBlock: scanInput.cutoff.number, cutoffHash: scanInput.cutoff.hash });
       const logs: RebuildScanObservation[] = [];
       const totalBlocks = scanInput.cutoff.number - scanInput.fromBlock + 1;
       let completedBlocks = 0;
+      let logClassificationHits = 0;
+      // Full unfiltered logs are much larger than the discovery topic union.
+      // Bound each physical archive chunk; logical source receipts remain unchanged.
+      const logSliceBlocks = activityArchive === undefined ? SOURCE_SCAN_BATCH_BLOCKS : 32;
+      const minimumLogChunkBlocks = activityArchive === undefined ? SOURCE_MIN_CHUNK_BLOCKS : 1;
+      const logConcurrency = activityArchive === undefined ? SOURCE_SCAN_CONCURRENCY : ARCHIVE_ACTIVITY_CONCURRENCY;
       const ranges: Array<{ readonly fromBlock: number; readonly toBlock: number }> = [];
       for (
         let start = scanInput.fromBlock;
         start <= scanInput.cutoff.number;
-        start += SOURCE_SCAN_BATCH_BLOCKS
+        start += logSliceBlocks
       ) {
         ranges.push(Object.freeze({
           fromBlock: start,
           toBlock: Math.min(
             scanInput.cutoff.number,
-            start + SOURCE_SCAN_BATCH_BLOCKS - 1,
+            start + logSliceBlocks - 1,
           ),
         }));
       }
       const topicFilter: Array<null | string | Array<string>> =
         topics.length === 1 ? [topics[0]] : [[...topics]];
-      if (topics.length > 0) {
-        // Keep at most four provider reads in flight, then merge completed
-        // slices in block order. Parallel completion can never reorder the
-        // unified activity digest.
+      if (topics.length > 0 || activityArchive !== undefined) {
+        // The worker bound includes fetch/read, validation, durable write and
+        // classification. Merge completed slices in block order.
         for (
           let groupStart = 0;
           groupStart < ranges.length;
-          groupStart += SOURCE_SCAN_CONCURRENCY
+          groupStart += logConcurrency
         ) {
-          const slices = await Promise.all(
-            ranges.slice(groupStart, groupStart + SOURCE_SCAN_CONCURRENCY).map(
+          const slices = await activityWorkers(
+            ranges.slice(groupStart, groupStart + logConcurrency).map(
               async (range, groupIndex) => {
               const slice = groupStart + groupIndex + 1;
               const sliceLogs: RebuildScanObservation[] = [];
+              // Read/write complete logical slices outside adaptive RPC retry.
+              // Corruption or a failed durable write must never become a miss.
+              const classified = await activityArchive?.readClassifiedLogs(range, classifierKey);
+              if (classified !== undefined && classified !== null) {
+                logClassificationHits++;
+                return Object.freeze({ range, logs: decodedLogClassification(classified, topics, range) });
+              }
+              const archived = await activityArchive?.readLogs(range);
+              if (archived !== undefined && archived !== null) {
+                const filtered = archivedActivityLogs(archived, topics, range);
+                await activityArchive!.writeClassifiedLogs(range, classifierKey, filtered);
+                return Object.freeze({ range, logs: filtered });
+              }
+              const rawSlice: unknown[] = [];
+              let rawSliceBytes = 2;
               let batchSize = range.toBlock - range.fromBlock + 1;
               let from = range.fromBlock;
               let attempt = 0;
@@ -2760,12 +3155,27 @@ export function createRebuildWiring(input?: {
                     " span=" + (to - from + 1),
                 );
                 try {
-                  const batch = await provider.getLogs({
+                  const batch = activityArchive === undefined ? await provider.getLogs({
                     topics: topicFilter,
                     fromBlock: from,
                     toBlock: to,
-                  });
+                  }) : [];
+                  let resultCount = batch.length;
+                  if (activityArchive !== undefined) {
+                    const raw: unknown = await provider.send("eth_getLogs", [{
+                      fromBlock: ethers.toQuantity(from), toBlock: ethers.toQuantity(to),
+                    }]);
+                    if (!Array.isArray(raw)) throw new Error("activity log archive requires a complete array response");
+                    const comma = rawSlice.length > 0 && raw.length > 0 ? 1 : 0;
+                    // Adaptive subrequests must not accumulate an unbounded
+                    // logical slice before the archive's streaming write guard.
+                    rawSliceBytes += readyActivityPayloadBytes(raw,
+                      activityArchive.maxEntryBytes - rawSliceBytes + 2 - comma) - 2 + comma;
+                    for (const value of raw) rawSlice.push(value);
+                    resultCount = raw.length;
+                  }
                   for (const log of batch) {
+                    if (selectedIds !== undefined && !topics.includes(log.topics[0]?.toLowerCase())) continue;
                     sliceLogs.push(Object.freeze({
                       address: log.address.toLowerCase(),
                       topics: Object.freeze([...log.topics]),
@@ -2790,7 +3200,7 @@ export function createRebuildWiring(input?: {
                       "/" + ranges.length +
                       " attempt=" + attempt +
                       " range=" + from + "-" + to +
-                      " logs=" + batch.length +
+                      " logs=" + resultCount +
                       " elapsedMs=" + (Date.now() - requestStartedAtMs) +
                       " sliceLogs=" + sliceLogs.length,
                   );
@@ -2800,7 +3210,8 @@ export function createRebuildWiring(input?: {
                     range.toBlock - from + 1,
                   );
                 } catch (error) {
-                  if (batchSize <= SOURCE_MIN_CHUNK_BLOCKS) {
+                  if (catalogTraceErrorCode(error) === "READY_ACTIVITY_ENTRY_LIMIT") throw error;
+                  if (batchSize <= minimumLogChunkBlocks) {
                     throw new Error(
                       "swap window scan failed at " + from + "-" + to +
                         ": " + (error instanceof Error
@@ -2816,19 +3227,24 @@ export function createRebuildWiring(input?: {
                       " range=" + from + "-" + to +
                       " elapsedMs=" + (Date.now() - requestStartedAtMs) +
                       " nextSpan=" + nextBatchSize +
-                      " reason=" + (error instanceof Error
-                        ? error.message
-                        : String(error)).slice(0, 240),
+                      " reason=" + (activityArchive !== undefined ? catalogTraceErrorCode(error)
+                        : (error instanceof Error ? error.message : String(error)).slice(0, 240)),
                   );
                   batchSize = nextBatchSize;
                 }
+              }
+              if (activityArchive !== undefined) {
+                const filtered = archivedActivityLogs(rawSlice, topics, range);
+                await activityArchive.writeLogs({ ...range, logs: rawSlice });
+                await activityArchive.writeClassifiedLogs(range, classifierKey, filtered);
+                return Object.freeze({ range, logs: filtered });
               }
               return Object.freeze({
                 range,
                 logs: Object.freeze(sliceLogs),
               });
               },
-            ),
+            ), activityArchive,
           );
           for (const slice of slices) {
             for (const log of slice.logs) logs.push(log);
@@ -2839,21 +3255,30 @@ export function createRebuildWiring(input?: {
               Math.min(groupStart + slices.length, ranges.length) +
               "/" + ranges.length +
               " completedBlocks=" + completedBlocks + "/" + totalBlocks +
-              " cumulativeLogs=" + logs.length,
+              " cumulativeLogs=" + logs.length + " classificationHits=" + logClassificationHits,
           );
         }
       }
-      const callScan = callPatterns.length === 0
+      const callScan = callPatterns.length === 0 && activityArchive === undefined
         ? null
         : await readDeclaredCallActivity({
+            catalog,
+            activityArchive,
+            classifierKey,
             provider: traceProvider,
             fromBlock: scanInput.fromBlock,
             toBlock: scanInput.cutoff.number,
             selectors: callSelectors,
             logs,
           });
+      if (activityArchive !== undefined) {
+        if (callScan === null) throw new Error("raw activity archive requires complete call traces");
+        console.log("[universe-rebuild/archive] verifying complete compressed inputs");
+        const coverage = await activityArchive.assertComplete({ method: callScan.method });
+        console.log("[universe-rebuild/archive] " + JSON.stringify(coverage.stats));
+      }
       const mutableObservations: unknown[] = [];
-      for (const candidate of input?.startupCandidates ?? []) {
+      for (const candidate of startupCandidates) {
         mutableObservations.push(Object.freeze({
           kind: "startup-candidate",
           candidate,
@@ -2866,7 +3291,7 @@ export function createRebuildWiring(input?: {
       const observations = Object.freeze(mutableObservations);
       const providerIdentity = digest("provider-v1:" + rpcUrl.trim());
       const startupSnapshot = Object.freeze(
-        (input?.startupCandidates ?? []).map((candidate) =>
+        startupCandidates.map((candidate) =>
           encodeDurableValue(candidate)
         ),
       );
@@ -2874,10 +3299,7 @@ export function createRebuildWiring(input?: {
       // (coverage keys + family code identity); the input snapshot itself is
       // bound by observationSetHash below. Resume compares queryFingerprint
       // against the current plan and fails closed on any code drift.
-      const startupQueryFingerprint = startupSourcePlanFingerprint({
-        coverageKeys: sourceCoverageKeys.startup,
-        familyDefinitionHashes: strictFamilyDiscoveryDefinitionHashes(),
-      });
+      const startupQueryFingerprint = planFingerprints.startup;
       const startupObservationHash = digest(
         "startup-candidate-observations-v1:" + canonicalJson(startupSnapshot),
       );
@@ -2920,12 +3342,7 @@ export function createRebuildWiring(input?: {
         // One source plan and one receipt cover every Family-declared log and
         // call pattern over this exact range. Neither physical transport can
         // independently grant source coverage.
-        const activityQueryFingerprint = catalogActivitySourcePlanFingerprint({
-          topics,
-          callPatterns,
-          coverageKeys: activityPlan.coverageKeys,
-          familyDefinitionHashes: strictFamilyDiscoveryDefinitionHashes(),
-        });
+        const activityQueryFingerprint = planFingerprints.activity;
         const calls = callScan?.calls ?? Object.freeze([]);
         const activityObservationHash = callScan?.observationSetHash ??
           catalogActivityObservationHash(logs, calls);
@@ -2988,9 +3405,7 @@ export function createRebuildWiring(input?: {
           const raw = (observation as { candidate: Readonly<Record<string, unknown>> })
             .candidate;
           if (typeof raw.adapter === "string" && disabledAdapterIds.has(raw.adapter)) continue;
-          const familyId = typeof raw.familyId === "string"
-            ? raw.familyId
-            : familyIdForCandidate(raw);
+          const familyId = candidateFamilyId(raw);
           if (wiring.isFamilyEnabled?.(familyId) === false) continue;
           const candidate = Object.freeze({ ...raw, familyId });
           const key = rebuildFamilyInstanceDedupeKey(candidate);
@@ -3011,7 +3426,7 @@ export function createRebuildWiring(input?: {
           const callKey = fullCallIdentityKey(call);
           if (seenCalls.has(callKey)) continue;
           seenCalls.add(callKey);
-          for (const candidate of candidatesFromCall(call)) {
+          for (const candidate of candidatesFromCallInCatalog(call, catalog)) {
             const key = rebuildFamilyInstanceDedupeKey(candidate);
             const existing = byKey.get(key);
             if (
@@ -3027,7 +3442,7 @@ export function createRebuildWiring(input?: {
         const logKey = fullLogIdentityKey(log);
         if (seenLogs.has(logKey)) continue;
         seenLogs.add(logKey);
-        for (const candidate of candidatesFromLog(log)) {
+        for (const candidate of candidatesFromLogInCatalog(log, catalog)) {
           const key = rebuildFamilyInstanceDedupeKey(candidate);
           const existing = byKey.get(key);
           if (
@@ -3051,11 +3466,11 @@ export function createRebuildWiring(input?: {
       // truth (no recent activity needed); verified observations re-enter
       // through the same catalog matching + decodeCandidate admission the
       // scan channel uses.
-      const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
       const materializationKey = (
         familyId: string,
         candidate: Readonly<Record<string, unknown>>,
       ): string | null => {
+        if (!inScope(familyId)) return null;
         let family;
         try {
           family = catalog.forStrictFamily(familyId as never);
@@ -3081,9 +3496,7 @@ export function createRebuildWiring(input?: {
           continue;
         }
         const candidate = raw as Readonly<Record<string, unknown>>;
-        const familyId = typeof candidate.familyId === "string"
-          ? candidate.familyId
-          : familyIdForCandidate(candidate);
+        const familyId = candidateFamilyId(candidate);
         const key = materializationKey(familyId, candidate);
         if (key !== null) knownMaterializations.add(key);
       }
@@ -3363,12 +3776,13 @@ export function createRebuildWiring(input?: {
       });
     },
     isReadyMemoDefinitionCurrent: (memo) =>
-      (memo.familyDefinitionHash === familyDefinitionHash(memo.familyId) ||
+      inScope(memo.familyId) && (memo.familyDefinitionHash === familyDefinitionHash(memo.familyId) ||
       memo.familyDefinitionHash === familyMemoDefinitionHash(memo.familyId)) && memoPricingProjectionCompatible(memo),
     findReusableMemo: async (memoInput) => {
       assertOpen();
       const candidate = memoInput.candidate as
         Readonly<Record<string, unknown>>;
+      if (!candidateInScope(candidate)) return null;
       const familyId = typeof candidate.familyId === "string"
         ? candidate.familyId
         : "unknown-family";
@@ -3492,10 +3906,21 @@ export function createRebuildWiring(input?: {
       assertOpen();
       return memo;
     },
-    attestFamilyInstanceOnce: probe.attestFamilyInstanceOnce,
-    sealDurableVerifiedMemo: probe.sealDurableVerifiedMemo,
+    attestFamilyInstanceOnce: async (attestInput) => {
+      const candidate = attestInput.candidate as Readonly<Record<string, unknown>>;
+      assertInScope(candidateFamilyId(candidate));
+      return probe.attestFamilyInstanceOnce(attestInput);
+    },
+    sealDurableVerifiedMemo: (sealInput) => {
+      const candidate = sealInput.candidate as Readonly<Record<string, unknown>>;
+      assertInScope(candidateFamilyId(candidate));
+      const memo = probe.sealDurableVerifiedMemo(sealInput);
+      assertInScope(memo.familyId);
+      return memo;
+    },
     rehydrateVerifiedInstance: (rehydrateInput) => {
       assertOpen();
+      assertInScope(rehydrateInput.memo.familyId);
       // Rebuild the prepared instance from the memo's canonical data and
       // re-issue the process-local route handles at the memo's proof source
       // (audit §9: handles are never serialized; the central rehydrator
@@ -3580,6 +4005,7 @@ export function createRebuildWiring(input?: {
         const familyId = String(
           (instance as { familyId?: unknown }).familyId ?? "",
         );
+        assertInScope(familyId);
         if (familyId.length === 0) continue;
         const siblings = byFamily.get(familyId);
         if (siblings === undefined) byFamily.set(familyId, [instance]);
@@ -3601,6 +4027,7 @@ export function createRebuildWiring(input?: {
       assertOpen();
       const edges: unknown[] = [];
       for (const publication of publications) {
+        assertInScope(publication.familyId);
         const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
           .forStrictFamily(publication.familyId as never);
         if (family.plugin.manifest.domain === "funding") {
@@ -3643,10 +4070,47 @@ export function createRebuildWiring(input?: {
         edges: Object.freeze(edges),
       });
     },
+    assertReadyGraphSnapshot: ({ publications, graphSnapshot, cutoff }) => {
+      assertOpen();
+      // Reproject ALL routes, not just scanner-consumed edges. The closed-over
+      // production builder is independent of a caller's candidate graph.
+      if (canonicalJson(graphSnapshot) !== canonicalJson(wiring.buildGraphSnapshot(publications, cutoff))) {
+        throw new Error("Ready restriction Graph differs from retained Family publications");
+      }
+      const readyInstances: PreparedFamilyInstance[] = [];
+      const readyFundingAssets: { familyId: FamilyId; asset: string }[] = [];
+      for (const publication of publications) {
+        const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forStrictFamily(publication.familyId as never);
+        for (const instance of publication.instances) {
+          const entry = instance as { readonly familyId?: string; readonly asset?: string };
+          if (entry?.familyId !== publication.familyId) throw new Error("Ready publication Family mismatch");
+          if (family.plugin.manifest.domain === "funding") {
+            readyFundingAssets.push({ familyId: publication.familyId as FamilyId, asset: ethers.getAddress(entry.asset!) });
+          } else {
+            readyInstances.push(instance as PreparedFamilyInstance);
+          }
+        }
+      }
+      new StrictProductionRuntimeRoot({
+        catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+        readySource: cutoff,
+        readyGraph: (graphSnapshot as { edges: TokenEdge[] }).edges,
+        readyInstances, readyFundingAssets,
+      });
+    },
     buildCoverage: (coverageInput) => {
       assertOpen();
       const rows: ReadyUniverseGeneration["sourceCoverage"][number][] = [];
       for (const receipt of coverageInput.sourceReceipts) {
+        if (selectedIds !== undefined) {
+          const startup = receipt.sourceKind === "startup-candidate-union";
+          const expectedKeys = startup ? sourceCoverageKeys.startup : activityPlan.coverageKeys;
+          if ((!startup && receipt.sourceKind !== "catalog-activity-union") ||
+              receipt.queryFingerprint !== (startup ? planFingerprints.startup : planFingerprints.activity) ||
+              canonicalJson([...receipt.coverageKeys].sort()) !== canonicalJson([...expectedKeys].sort())) {
+            throw new Error("source receipt differs from rebuild familyIds scope");
+          }
+        }
         if (
           receipt.status !== "complete" ||
           receipt.retryableCount !== 0 ||

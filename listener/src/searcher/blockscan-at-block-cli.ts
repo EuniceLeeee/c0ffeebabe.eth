@@ -338,6 +338,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
       directFinalSimulation: sourceSimulator ?? Object.assign(new EthSimulateV1Simulator(rpcUrl, executor, owner), { concurrency: 1 }),
       rpcUrl, strictSession: prices.strictSessionFor, runtimeAbort: abort, rethTransportScheduler: scheduler,
       sourceSimulationFactory: createLiveSourceSimulationFactory({ rpcUrl, chainId: Number(chainId),
+        ...(executorRuntimeCode === undefined ? {} : { executorRuntimeCode }),
         executablePath: args["revm-bin"] ?? env.SEARCHER_REVM_SIM_BIN, timeoutMs: 120_000, runtimeAbort: abort,
         onFatal: reason => abort.abort(new Error(`strict simulator fatal: ${reason.kind}`)) }),
       sharedPlanner: planner, backrunStatePublisher: { publish() {} },

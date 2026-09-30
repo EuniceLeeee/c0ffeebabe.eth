@@ -1,4 +1,4 @@
-import { RevmFatalError, type RevmFatalReason, type RevmRequestControl } from "./revm-sim-client.js";
+import { RevmFatalError, type ExecutorRuntimeCode, type RevmFatalReason, type RevmRequestControl } from "./revm-sim-client.js";
 import { RevmStrictSourceOwner, type RevmStrictSourceIdentity,
   type RevmStrictSourceLease } from "./revm-strict-source-owner.js";
 import { createRevmStrictSimulationTransport } from "./revm-strict-simulation-transport.js";
@@ -11,6 +11,7 @@ export function createRevmStrictSourceSimulation(input: {
   readonly identity: RevmStrictSourceIdentity;
   readonly control?: RevmRequestControl;
   readonly executionGasLimit: number;
+  readonly executorRuntimeCode?: ExecutorRuntimeCode;
   readonly createClient: ConstructorParameters<typeof RevmStrictSourceOwner>[0]["createClient"];
   readonly onFatal: (reason: RevmFatalReason) => void;
 }) {
@@ -33,6 +34,7 @@ export function createRevmStrictSourceSimulation(input: {
   const transport = createRevmStrictSimulationTransport({
     rpcUrl: identity.rpcUrl,
     executionGasLimit: input.executionGasLimit,
+    ...(input.executorRuntimeCode === undefined ? {} : { executorRuntimeCode: input.executorRuntimeCode }),
     onFatal: reportFatal,
     leaseFor(source) {
       if (fatal) throw fatal;

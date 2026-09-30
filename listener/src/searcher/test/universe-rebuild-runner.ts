@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   UniverseRebuildCheckpointStore,
   canonicalJson,
   durableVerifiedMemoFingerprint,
+  activeReadyMemos,
+  envelopeFingerprint,
+  prepareReadyFamilyUpdate,
+  readyPartitionAccounting,
+  validateReadyFamilyGraph,
   type DurableSourceReceipt,
   type DurableVerifiedMemo,
   type StartupCheckpointEnvelope,
@@ -16,6 +21,8 @@ import {
   assertReceiptsMatchCurrentSourcePlan,
   UniverseRunIncomplete,
   refreshReadyInstances,
+  restrictReadyFamilies,
+  updateReadyFamilies,
   probeOneFailure,
   rebuildUniverse,
   type RebuildUniverseInput,
@@ -1274,6 +1281,244 @@ async function main(): Promise<void> {
       assert.equal(activation.attestCalls.get("b"), 1);
     } finally {
       await rm(activationDir, { recursive: true, force: true });
+    }
+
+    const updateDir = await mkdtemp(join(tmpdir(), "ready-family-update-"));
+    try {
+      const owner = (id: string) => id === "a" ? "fixture:a" : id === "d" ? "fixture:new" : "fixture:b";
+      let enabled = ["fixture:a", "fixture:b"];
+      const definition = (id: string) => createHash("sha256").update(id).digest("hex");
+      const make = (path: string, ids: string[], families: () => string[]) => {
+        const fixture = makeFixture(path, {
+          scanSwapWindow: async scan => ({ observations: ids.map(id => ({ id, block: SOURCE.number })),
+            sourceReceipts: sourceReceipts(scan.fromBlock).map(receipt => ({ ...receipt,
+              coverageKeys: families().map(id => id + "|startup-universe") })) }),
+          sealDurableVerifiedMemo: input => {
+            const id = String((input.candidate as { id: string }).id);
+            return sealFixtureMemo({
+              familyCandidateKey: "cand:" + id, familyInstanceKey: "inst:" + id,
+              familyId: owner(id), candidateKey: "cand:" + id, instanceKey: "inst:" + id,
+              candidateFingerprint: "cf:" + id, familyDefinitionHash: "fdh",
+              validity: { policy: "immutable-code", authorityFingerprint: "auth", proofSource: SOURCE },
+              verifiedIdentity: {}, compiledDescriptor: {}, staticProjection: {}, evidenceFingerprint: "ef:" + id,
+              candidateSnapshot: { id },
+            });
+          },
+        });
+        const input: RebuildUniverseInput = {
+          ...fixture.input,
+          candidateFamilyId: candidate => owner(String((candidate as { id: string }).id)),
+          familyDiscoveryDefinitionHash: definition,
+          isFamilyEnabled: id => families().includes(id),
+          isReadyMemoDefinitionCurrent: () => true,
+          requiredSourceCoverageKeys: () => families().map(id => id + "|startup-universe"),
+          assertReadyGraphSnapshot: ({ publications, graphSnapshot, cutoff }) => {
+            assert.deepEqual(graphSnapshot, fixture.input.buildGraphSnapshot(publications, cutoff), "complete graph parity");
+          },
+        };
+        return { ...fixture, input };
+      };
+      const base = make(updateDir, ["a", "b", "c"], () => enabled);
+      // Give a retryable outcome its actual owning Family in this fixture.
+      base.failKeys.add("c");
+      const attest = base.input.attestFamilyInstanceOnce;
+      const input: RebuildUniverseInput = { ...base.input, attestFamilyInstanceOnce: async arg => {
+        const result = await attest(arg);
+        return result;
+      } };
+      // The generic runner owns the retry Family through its sealed candidate/memo wiring.
+      base.failKeys.delete("c");
+      base.terminalKeys.add("c");
+      const original = await rebuildUniverse(input);
+      const originalEnvelope = (await base.store.load())!;
+      assert.ok(original.familyPartitions);
+      assert.deepEqual(Object.keys(original.familyPartitions), ["fixture:a", "fixture:b"]);
+      const bytes = () => readFile(join(updateDir, "checkpoint.json"), "utf8");
+      const noWork = async (): Promise<never> => { throw new Error("incremental activation must not scan or attest"); };
+      const pure = { ...input, scanSwapWindow: noWork, freezeCanonicalHead: noWork,
+        attestFamilyInstanceOnce: noWork, findReusableMemo: noWork };
+      const originalBytes = await bytes();
+      const reseal = (value: StartupCheckpointEnvelope): StartupCheckpointEnvelope => {
+        const { checkpointFingerprint: _old, ...unsigned } = value;
+        return { ...unsigned, checkpointFingerprint: envelopeFingerprint(unsigned) };
+      };
+      const missingOutcome = structuredClone(originalEnvelope);
+      const missingPartition = missingOutcome.readyGeneration!.familyPartitions!["fixture:b"]!;
+      delete (missingPartition.outcomesByCandidateKey as Record<string, unknown>)["cand:c"];
+      const recounted = reseal({ ...missingOutcome, readyGeneration: { ...missingOutcome.readyGeneration!,
+        candidateAccounting: readyPartitionAccounting(missingOutcome.readyGeneration!.familyPartitions!) } });
+      assert.throws(() => activeReadyMemos(recounted), /candidate membership\/hash/,
+        "resealing accounting cannot hide a missing terminal candidate");
+      const wrongCandidate = structuredClone(originalEnvelope);
+      (wrongCandidate.readyGeneration!.familyPartitions!["fixture:b"]!.candidatesByKey as Record<string, unknown>)["cand:c"] = { id: "different" };
+      assert.throws(() => activeReadyMemos(reseal(wrongCandidate)), /candidate membership\/hash/);
+      await assert.rejects(updateReadyFamilies({ ...pure,
+        requiredSourceCoverageKeys: () => ["fixture:a|startup-universe"] }), /activation\/coverage mismatch/,
+      "missing coverage must not implicitly disable an enabled Family");
+      assert.equal(await bytes(), originalBytes);
+      enabled = ["fixture:a"];
+      const restricted = await restrictReadyFamilies(pure);
+      assert.deepEqual(restricted.activeInstanceKeys, ["inst:a"]);
+      assert.deepEqual(restricted.candidateAccounting, { total: 3, verified: 1, terminalRejected: 1,
+        retryable: 0, activationExcluded: 1, remainingUnaccounted: 0 });
+      assert.deepEqual((await base.store.load())!.verifiedMemos, originalEnvelope.verifiedMemos);
+      for (const key of ["cutoff", "universeRange", "universeHash", "sourceCoverage", "observedThrough", "appliedThrough"] as const) {
+        assert.deepEqual(restricted[key], original[key]);
+      }
+      assert.equal((await restrictReadyFamilies(pure)).generation, restricted.generation, "restriction is idempotent");
+      enabled = ["fixture:a", "fixture:b"];
+      await assert.rejects(refreshReadyInstances(pure), /cannot re-enable/);
+      const restored = await updateReadyFamilies(pure);
+      assert.deepEqual(restored.activeInstanceKeys, original.activeInstanceKeys);
+      assert.deepEqual(restored.candidateAccounting, original.candidateAccounting);
+      assert.equal(restored.activationRestriction, undefined);
+      assert.equal((await updateReadyFamilies(pure)).generation, restored.generation, "update is idempotent");
+      const beforeFailures = await bytes();
+      await assert.rejects(updateReadyFamilies({ ...pure, isReadyMemoDefinitionCurrent: () => false }), /retained definition is stale/);
+      await assert.rejects(updateReadyFamilies({ ...pure, familyDiscoveryDefinitionHash: () => "f".repeat(64) }), /discovery definition is stale/);
+      await assert.rejects(updateReadyFamilies({ ...pure, assertReadyGraphSnapshot: undefined }), /requires.*validators/);
+      for (const edges of [[], [{ instanceKey: "orphan" }],
+        [...(restored.graphSnapshot as { edges: unknown[] }).edges, { instanceKey: "extra" }]]) {
+        await assert.rejects(updateReadyFamilies({ ...pure, buildGraphSnapshot: () => ({ edges }) }), /complete graph parity/);
+      }
+      let fences = 0;
+      await assert.rejects(updateReadyFamilies({ ...pure, assertCanonicalHead: async () => {
+        if (++fences === 2) throw new Error("late canonical change");
+      } }), /late canonical change/);
+      assert.equal(await bytes(), beforeFailures, "all failed gates retain exact old bytes");
+      enabled.push("fixture:new");
+      await assert.rejects(updateReadyFamilies(pure), /lacks a discovered\/verified partition/);
+      const deltaDir = join(updateDir, "delta");
+      await mkdir(deltaDir);
+      await copyFile(join(updateDir, "checkpoint.json"), join(deltaDir, "checkpoint.json"));
+      const delta = make(deltaDir, ["d"], () => ["fixture:new"]);
+      const parent = (await base.store.load())!;
+      const scopedInput = { ...delta.input, observationRange: parent.readyGeneration!.universeRange,
+        familyUpdateScope: { parentCheckpointFingerprint: parent.checkpointFingerprint, familyIds: ["fixture:new"] } };
+      await assert.rejects(rebuildUniverse({ ...scopedInput,
+        familyUpdateScope: { ...scopedInput.familyUpdateScope, parentCheckpointFingerprint: "0".repeat(64) } }), /parent\/scope mismatch/);
+      await assert.rejects(rebuildUniverse({ ...scopedInput,
+        assertReadyGraphSnapshot: () => { throw new Error("baseline Graph validation failure"); } }), /baseline Graph validation failure/);
+      const unfinished = (await delta.store.load())!;
+      assert.deepEqual(unfinished.inProgressRun!.familyUpdateScope, scopedInput.familyUpdateScope);
+      assert.equal(unfinished.readyGeneration!.generation, parent.readyGeneration!.generation,
+        "failed Graph validation cannot promote the scoped run");
+      await assert.rejects(rebuildUniverse({ ...scopedInput,
+        familyUpdateScope: { ...scopedInput.familyUpdateScope, parentCheckpointFingerprint: "0".repeat(64) } }), /parent\/scope mismatch/);
+      await rebuildUniverse(scopedInput);
+      const deltaEnvelope = (await delta.store.load())!;
+      assert.deepEqual(deltaEnvelope.readyGeneration!.familyUpdateScope, scopedInput.familyUpdateScope);
+      const mutableDelta = structuredClone(deltaEnvelope);
+      let mergeFences = 0;
+      let originalGraph: { edges: unknown[] } | undefined;
+      const merged = await updateReadyFamilies({ ...pure,
+        supplements: [{ familyIds: ["fixture:new"], checkpoint: mutableDelta }],
+        buildGraphSnapshot: (publications, cutoff) => {
+          originalGraph = structuredClone(input.buildGraphSnapshot(publications, cutoff)) as { edges: unknown[] };
+          return originalGraph;
+        },
+        assertCanonicalHead: async () => {
+          if (++mergeFences === 2) {
+            (mutableDelta.readyGeneration!.familyPartitions!["fixture:new"]!.outcomesByCandidateKey as Record<string, unknown>)["injected"] = {};
+            originalGraph!.edges.length = 0;
+          }
+        },
+      });
+      assert.deepEqual(merged.activeInstanceKeys, ["inst:a", "inst:b", "inst:d"]);
+      assert.deepEqual(merged.candidateAccounting, { total: 4, verified: 3, terminalRejected: 1, retryable: 0, remainingUnaccounted: 0 });
+      assert.deepEqual(merged.familyPartitions!["fixture:a"], original.familyPartitions!["fixture:a"]);
+      assert.deepEqual(merged.familyPartitions!["fixture:b"], original.familyPartitions!["fixture:b"]);
+      assert.deepEqual(merged.cutoff, original.cutoff);
+      assert.equal(base.scanCalls(), 1, "original Families were scanned only in the baseline");
+      assert.equal(delta.scanCalls(), 1, "only new Family used scoped discovery");
+      assert.equal(activeReadyMemos((await base.store.load())!).length, 3);
+      const mergedBytes = await bytes();
+      await assert.rejects(updateReadyFamilies({ ...pure, supplements: [{ familyIds: ["fixture:a"], checkpoint: deltaEnvelope }] }), /scope\/source mismatch/);
+      const altered = { ...deltaEnvelope, readyGeneration: { ...deltaEnvelope.readyGeneration!,
+        cutoff: { ...SOURCE, generation: SOURCE.generation + 1 } } };
+      const { checkpointFingerprint: _fingerprint, ...unsigned } = altered;
+      const sealed = { ...unsigned, checkpointFingerprint: envelopeFingerprint(unsigned) };
+      await assert.rejects(updateReadyFamilies({ ...pure, supplements: [{ familyIds: ["fixture:new"], checkpoint: sealed }] }), /scope\/source mismatch/);
+      const loaded = (await base.store.load())!;
+      await assert.rejects(updateReadyFamilies({ ...pure,
+        supplements: [{ familyIds: ["fixture:new"], checkpoint: deltaEnvelope }] }), /parent lineage mismatch/,
+      "a successful supplement cannot be replayed onto a different parent");
+      const mutation = { kind: "update" as const, enabledFamilyIds: enabled, supplements: [] };
+      const graphValidation = validateReadyFamilyGraph({ checkpoint: loaded, mutation, graphSnapshot: merged.graphSnapshot,
+        assertGraph: graph => assert.deepEqual(graph, merged.graphSnapshot) });
+      await assert.rejects(base.store.casUpdateReadyFamilies({ expectedRevision: loaded.revision - 1,
+        enabledFamilyIds: enabled, supplements: [], graphSnapshot: merged.graphSnapshot, graphValidation }), /CAS conflict/);
+      await assert.rejects(base.store.casUpdateReadyFamilies({ expectedRevision: loaded.revision,
+        enabledFamilyIds: enabled, supplements: [], graphSnapshot: { edges: [] }, graphValidation }), /differs from validated Graph\/plan/);
+      await assert.rejects(base.store.casUpdateReadyFamilies({ expectedRevision: loaded.revision,
+        enabledFamilyIds: ["fixture:a"], supplements: [], graphSnapshot: merged.graphSnapshot, graphValidation }), /differs from validated Graph\/plan/);
+      assert.equal(await bytes(), mergedBytes);
+      const empty = make(join(updateDir, "empty-supplement"), [], () => ["fixture:b"]);
+      await rebuildUniverse(empty.input);
+      const emptyEnvelope = (await empty.store.load())!;
+      assert.throws(() => prepareReadyFamilyUpdate(loaded, { enabledFamilyIds: enabled,
+        supplements: [{ familyIds: ["fixture:b"], checkpoint: emptyEnvelope }] }), /parent lineage mismatch/);
+      const emptyWithLineage = reseal({ ...emptyEnvelope, readyGeneration: { ...emptyEnvelope.readyGeneration!,
+        familyUpdateScope: { parentCheckpointFingerprint: loaded.checkpointFingerprint, familyIds: ["fixture:b"] } } });
+      assert.throws(() => prepareReadyFamilyUpdate(loaded, { enabledFamilyIds: enabled,
+        supplements: [{ familyIds: ["fixture:b"], checkpoint: emptyWithLineage }] }), /lost retained candidate/,
+      "even a parent-labeled supplement must account for prior verified AND terminal candidates");
+      const alias = structuredClone(deltaEnvelope);
+      const aliasPartition = alias.readyGeneration!.familyPartitions!["fixture:new"]!;
+      const aliasCandidates = aliasPartition.candidatesByKey as Record<string, unknown>;
+      aliasCandidates["cand:d-alias"] = aliasCandidates["cand:d"];
+      delete aliasCandidates["cand:d"];
+      assert.throws(() => activeReadyMemos(reseal(alias)), /candidate membership\/hash/,
+        "unresolved alias membership cannot be silently reconciled");
+
+      // Re-attestation of an existing Family must carry even previously rejected
+      // candidates when the current raw scan emits no activity for them.
+      const replacementDir = join(updateDir, "replacement");
+      await mkdir(replacementDir);
+      await copyFile(join(updateDir, "checkpoint.json"), join(replacementDir, "checkpoint.json"));
+      const replacement = make(replacementDir, [], () => ["fixture:b"]);
+      replacement.terminalKeys.add("b");
+      await rebuildUniverse({ ...replacement.input,
+        observationRange: loaded.readyGeneration!.universeRange,
+        familyUpdateScope: { parentCheckpointFingerprint: loaded.checkpointFingerprint, familyIds: ["fixture:b"] },
+        findReusableMemo: async () => null,
+      });
+      const replacementEnvelope = (await replacement.store.load())!;
+      assert.deepEqual(Object.keys(replacementEnvelope.readyGeneration!.familyPartitions!["fixture:b"]!.candidatesByKey).sort(), ["cand:b", "cand:c"]);
+      assert.equal(replacement.attestCalls.get("a"), undefined, "unrelated Family is not re-attested");
+      assert.equal(replacement.attestCalls.get("d"), undefined, "previously added Family is not re-attested");
+      assert.equal(replacement.attestCalls.get("b"), 1);
+      assert.equal(replacement.attestCalls.get("c"), 1, "retained rejection gets an explicit fresh result");
+      const replaced = await updateReadyFamilies({ ...pure,
+        supplements: [{ familyIds: ["fixture:b"], checkpoint: replacementEnvelope }],
+      });
+      assert.deepEqual(replaced.activeInstanceKeys, ["inst:a", "inst:c", "inst:d"]);
+      assert.deepEqual(replaced.familyPartitions!["fixture:a"], merged.familyPartitions!["fixture:a"]);
+      assert.deepEqual(replaced.familyPartitions!["fixture:new"], merged.familyPartitions!["fixture:new"]);
+      const replacedEnvelope = (await base.store.load())!;
+      assert.equal(replacedEnvelope.verifiedMemos["cand:b"], undefined, "fresh terminal outcome invalidates old admission");
+      assert(replacedEnvelope.verifiedMemos["cand:c"]);
+
+      let zeroEnabled = ["fixture:a", "fixture:zero"];
+      const zero = make(join(updateDir, "zero-family"), ["a"], () => zeroEnabled);
+      await rebuildUniverse(zero.input);
+      zeroEnabled = ["fixture:a"];
+      const zeroRestricted = await restrictReadyFamilies(zero.input);
+      assert.equal(zeroRestricted.familyPartitions!["fixture:zero"]!.enabled, false);
+      assert.deepEqual(zeroRestricted.activationRestriction!.disabledFamilyIds, ["fixture:zero"]);
+      assert.equal(zeroRestricted.activationRestriction!.excludedVerified.length, 0);
+      assert.equal((await restrictReadyFamilies(zero.input)).generation, zeroRestricted.generation);
+      zeroEnabled = ["fixture:a", "fixture:zero"];
+      await assert.rejects(refreshReadyInstances(zero.input), /cannot re-enable/);
+      const zeroRestored = await updateReadyFamilies(zero.input);
+      assert.equal(zeroRestored.familyPartitions!["fixture:zero"]!.enabled, true);
+      assert.equal(zeroRestored.activationRestriction, undefined);
+      assert.equal(zero.scanCalls(), 1, "zero-instance restore does not scan");
+      const corrupted = { ...loaded, readyGeneration: { ...merged, candidateAccounting: { ...merged.candidateAccounting, verified: 99 } } };
+      assert.throws(() => activeReadyMemos(corrupted), /roots\/active memos/);
+      console.log("Ready Family update PASS (baseline partitions, disable/restore, scoped addition, atomic failures, full graph parity)");
+    } finally {
+      await rm(updateDir, { recursive: true, force: true });
     }
 
     const refreshDir = await mkdtemp(join(tmpdir(), "ready-instance-refresh-"));

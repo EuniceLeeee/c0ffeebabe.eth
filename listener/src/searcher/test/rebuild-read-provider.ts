@@ -472,6 +472,59 @@ async function throttleExhaustionAndVetoRetainPolicy(): Promise<void> {
   }
 }
 
+async function responseByteCeilings(): Promise<void> {
+  const limit = 512;
+  const closed = deferred();
+  const server = await serve(request => {
+    const payload = request.payloads[0];
+    if (payload.method === "wireOverflow") {
+      request.response.once("close", () => closed.resolve());
+      request.response.write(Buffer.alloc(limit + 1, 0x20)); // no Content-Length; do not end
+      return;
+    }
+    if (payload.method === "declaredOverflow") {
+      request.response.writeHead(200, { "content-length": String(limit + 1) });
+      request.response.flushHeaders(); return;
+    }
+    const requestedBytes = payload.method === "gzipOverflow" ? limit + 1 : limit;
+    const envelope = { jsonrpc: "2.0", id: payload.id, result: "" };
+    envelope.result = "x".repeat(requestedBytes - Buffer.byteLength(JSON.stringify(envelope)));
+    const body = Buffer.from(JSON.stringify(envelope));
+    if (payload.method.startsWith("gzip")) {
+      request.response.setHeader("content-encoding", "gzip");
+      request.response.end(gzipSync(body));
+    } else request.response.end(body);
+  });
+  const isLimit = (error: unknown) => (error as { code?: string }).code === "RESPONSE_SIZE_LIMIT";
+  const provider = new RebuildReadProvider(pass, server.url, network, {
+    staticNetwork: network, batchMaxCount: 1, maxPhysicalRequests: 1,
+    maxReceivedBytes: limit, maxDecompressedBytes: limit, // limits work without a custom timeout
+  });
+  try {
+    await bounded(assert.rejects(provider.send("wireOverflow", []), isLimit));
+    await bounded(closed.promise);
+    await bounded(assert.rejects(provider.send("declaredOverflow", []), isLimit));
+    await bounded(assert.rejects(provider.send("gzipOverflow", []), isLimit));
+    for (const method of ["exact", "gzipExact"]) {
+      assert.equal(typeof await bounded(provider.send(method, [])), "string", "boundary-sized replies pass and failures release the slot");
+    }
+  } finally { provider.destroy(); }
+  const decompressedOnly = new RebuildReadProvider(pass, server.url, network, {
+    staticNetwork: network, batchMaxCount: 1, maxDecompressedBytes: limit,
+  });
+  try { await bounded(assert.rejects(decompressedOnly.send("wireOverflow", []), isLimit)); }
+  finally { decompressedOnly.destroy(); }
+  const unlimited = new RebuildReadProvider(pass, server.url, network, options);
+  try { assert.equal(typeof await bounded(unlimited.send("gzipOverflow", [])), "string", "omitted ceilings preserve old behavior"); }
+  finally { unlimited.destroy(); await server.close(); }
+  for (const name of ["maxReceivedBytes", "maxDecompressedBytes"]) {
+    for (const value of [0, -1, 1.5, Infinity, NaN]) {
+      assert.throws(() => new RebuildReadProvider(pass, undefined, network, { [name]: value }), /must be a positive integer/);
+    }
+  }
+}
+
+await responseByteCeilings();
 await totalTimeoutStopsStreamingAndReleasesSlot();
 await totalTimeoutCoversBatchAndThrottleWait();
 await noHeadersTimeoutAndDestroyCloseSocket();

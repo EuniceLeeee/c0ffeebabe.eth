@@ -30,6 +30,7 @@ import {
 } from "./venues/canonical-value.js";
 import type { StateBackend } from "../shared/state/state-backend.js";
 import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
+import type { CompiledExactPrefix, ExactPrefixReadInput, ExactPrefixReadResult } from "./exact-prefix-context.js";
 
 interface StrictProvider {
   call(
@@ -51,6 +52,7 @@ interface StrictProvider {
 }
 
 export interface StrictSimulationTransport {
+  simulatePrefix?(input: ExactPrefixReadInput): Promise<ExactPrefixReadResult>;
   simulate(input: {
     readonly request: Extract<
       AdapterRequest,
@@ -99,6 +101,8 @@ export interface StrictSimulationTransport {
  * `runStrictFamilyLifecycle` can run with this runtime in production.
  */
 export function createStrictCentralAdapterRuntime(input: {
+  /** Internal Exact view: requests cannot fall back to source-only transports. */
+  readonly exactPrefixContext?: { readonly prefix: CompiledExactPrefix; readonly source: CanonicalSource };
   readonly exactQuoteCache?: import("./adapter-family-exact-quote-cache.js").AdapterFamilyExactQuoteCache;
   readonly provider: Pick<
     StrictProvider,
@@ -200,6 +204,12 @@ export function createStrictCentralAdapterRuntime(input: {
           const assertCurrent = (): void => {
             assertTransportControl(control);
             input.generationFence.assertCurrent(issuedGeneration ?? source.generation, source);
+            const prefixSource = input.exactPrefixContext?.source;
+            if (prefixSource !== undefined && (prefixSource.number !== source.number ||
+                prefixSource.hash.toLowerCase() !== source.hash.toLowerCase() ||
+                prefixSource.generation !== source.generation)) {
+              throw new Error("exact prefix escaped its source");
+            }
             assertTransportControl(control);
           };
           assertCurrent();
@@ -242,6 +252,7 @@ export function createStrictCentralAdapterRuntime(input: {
                   rethLane === "producer-critical" || rethLane === "exact"
                   ? input.producerCallCache
                   : undefined,
+                input.exactPrefixContext?.prefix,
               );
               requestStatus = result.ok ? "returned" : "not-ok";
               return result;
@@ -263,10 +274,12 @@ export function createStrictCentralAdapterRuntime(input: {
             }
           };
           const rethBound = execution.requests.filter((request) =>
+            input.exactPrefixContext === undefined &&
             request.kind !== "state-override-simulation" &&
             request.kind !== "effect-delta-simulation"
           );
           const simulated = execution.requests.filter((request) =>
+            input.exactPrefixContext !== undefined ||
             request.kind === "state-override-simulation" ||
             request.kind === "effect-delta-simulation"
           );
@@ -378,6 +391,16 @@ export function createStrictCentralAdapterRuntime(input: {
     },
   });
   return Object.freeze({
+    ...(input.simulator?.simulatePrefix === undefined ? {} : {
+      withExactPrefix(prefix: CompiledExactPrefix, source: CanonicalSource) {
+        input.generationFence.assertCurrent(source.generation, source);
+        return createStrictCentralAdapterRuntime({ ...input,
+          exactQuoteCache: undefined, producerCallCache: undefined,
+          exactPrefixContext: Object.freeze({ prefix: Object.freeze({ ...prefix }),
+            source: Object.freeze({ ...source }) }),
+        });
+      },
+    }),
     ...(input.exactQuoteCache === undefined ? {} : { exactQuoteCache: input.exactQuoteCache }),
     clock: { nowMs: () => now++ },
     generationFence: input.generationFence,
@@ -452,9 +475,24 @@ async function executeRequest(
   control?: AdapterWorkControl,
   exactCallBackend?: Pick<StateBackend, "call">,
   producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">,
+  prefix?: CompiledExactPrefix,
 ): Promise<AdapterRequestResult> {
   assertTransportControl(control);
   try {
+    if (prefix !== undefined) {
+      if (simulator?.simulatePrefix === undefined) throw new Error("exact prefix transport unavailable");
+      const result = await simulator.simulatePrefix({ request, prefix, source, callerAuthority,
+        ...(control === undefined ? {} : { control }) });
+      assertCurrent();
+      return Object.freeze({ id: request.id, ok: true as const, source: Object.freeze({ ...source }),
+        data: result.data, completion: result.completion,
+        provenance: Object.freeze({ kind: "strict-exact-prefix-transport", fingerprint: hashCanonical({
+          prefix: { ...prefix }, source: { ...source }, requestFingerprint: physicalAdapterRequestFingerprint(request),
+          callerAuthority: { ...callerAuthority } as unknown as CanonicalValue, completion: result.completion,
+        }) }),
+        ...(result.effects === undefined ? {} : { effects: Object.freeze(result.effects) }),
+      });
+    }
     if (request.kind === "eth-call") {
       const caller = request.caller;
       const needsCaller = caller !== undefined && caller.kind !== "none";
