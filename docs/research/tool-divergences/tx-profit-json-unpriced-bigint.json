@@ -1,0 +1,19 @@
+{
+  "divergence_id": "tx-profit-json-unpriced-bigint",
+  "status": "open_frozen",
+  "tool": "analysis:tx-profit",
+  "capability": "pnl",
+  "deferred_reason": "TX-gap analysis-tool freeze: retain failure and use supported text output; no analyzer or production-code changes in this diagnostic turn.",
+  "fixed_by": null,
+  "transactions": [{
+    "tx_hash": "0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970",
+    "block": 24710788,
+    "tx_index": 8,
+    "tool_actual": "--json exits 1 with TypeError: Do not know how to serialize a BigInt; text mode exits 0.",
+    "evidence": "logs/tx-f88-solver-compare.Zp9DFG/",
+    "execution_manifest_sha256": "124144f92e14a866bbdb25232ae1371463d41345922cd051e71e62a39e02c4f6"
+  }],
+  "root_cause": "TokenDelta.raw is bigint. Unpriced wstUSR remains in unpricedDeltas and the CLI calls JSON.stringify without a bigint serializer.",
+  "code": ["analysis/src/types.ts:47", "analysis/src/pnl/arb-profit.ts:67", "analysis/src/cli/tx-profit.ts:55", "analysis/src/cli/tx-profit.ts:83"],
+  "independent_review": {"reviewer": "/root/enum_exact_optimization_review", "verdict": "confirmed serialization defect; supported text output safe but reports only priced subtotal"}
+}

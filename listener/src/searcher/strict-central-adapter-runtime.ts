@@ -164,6 +164,7 @@ export function createStrictCentralAdapterRuntime(input: {
 }): CentralAdapterRuntime {
   let now = Date.now();
   const maxRequestsPerBatch = input.maxRequestsPerBatch ?? 512;
+  const sharedCodeReads = createSharedCodeReadCache();
   const verifiedActors = Object.freeze({ ...(input.verifiedActors ?? {}) });
   const transactionOrigin = input.transactionOrigin === undefined
     ? undefined
@@ -181,6 +182,13 @@ export function createStrictCentralAdapterRuntime(input: {
       const issuedSource = issueInput.source === undefined ? undefined
         : Object.freeze({ ...issueInput.source });
       const issuedGeneration = issueInput.generation;
+      // Snapshot diagnostic identifiers at issuance, including for queued work.
+      // Direct executor harnesses may omit subject metadata.
+      const diagnosticSubject = Object.freeze({
+        subjectKey: issueInput.subjectKey ?? null,
+        instanceKey: issueInput.subject?.instanceKey,
+        routeKey: issueInput.subject?.routeKey,
+      });
       let transportWallMs = 0;
       const executor = createBoundedRequestExecutor({
         assertSupported: (requirements) => {
@@ -202,15 +210,20 @@ export function createStrictCentralAdapterRuntime(input: {
             source.generation !== issuedSource.generation
           )) throw new Error("strict execution escaped its issued source");
           const assertCurrent = (): void => {
-            assertTransportControl(control);
-            input.generationFence.assertCurrent(issuedGeneration ?? source.generation, source);
-            const prefixSource = input.exactPrefixContext?.source;
-            if (prefixSource !== undefined && (prefixSource.number !== source.number ||
-                prefixSource.hash.toLowerCase() !== source.hash.toLowerCase() ||
-                prefixSource.generation !== source.generation)) {
-              throw new Error("exact prefix escaped its source");
+            try {
+              assertTransportControl(control);
+              input.generationFence.assertCurrent(issuedGeneration ?? source.generation, source);
+              const prefixSource = input.exactPrefixContext?.source;
+              if (prefixSource !== undefined && (prefixSource.number !== source.number ||
+                  prefixSource.hash.toLowerCase() !== source.hash.toLowerCase() ||
+                  prefixSource.generation !== source.generation)) {
+                throw new Error("exact prefix escaped its source");
+              }
+              assertTransportControl(control);
+            } catch (error) {
+              sharedCodeReads.retire(source, control);
+              throw error;
             }
-            assertTransportControl(control);
           };
           assertCurrent();
           // issueExecutor is the central contract entry; direct harness calls may
@@ -224,6 +237,7 @@ export function createStrictCentralAdapterRuntime(input: {
           const callBackend = rethLane === "exact"
             ? input.exactCallBackend
             : producerCallBackend;
+          const codeReads = new Map<AdapterRequest, SharedCodeRead>();
           /*
            * Simulation requests hit the revm-sim daemon (not reth) and must
            * NOT consume a reth transport permit; only eth-call / get-code /
@@ -238,7 +252,33 @@ export function createStrictCentralAdapterRuntime(input: {
             assertCurrent();
             const requestStartedAtMs = Date.now();
             let requestStatus = "failed";
+            let requestOutcome = "failed";
+            const logEthCall = (phase: "submitted" | "completed"): void => {
+              try {
+                if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS !== "1" || request.kind !== "eth-call") return;
+                const caller = request.caller;
+                const from = caller?.kind === "executor" ? callerAuthority.executor
+                  : caller?.kind === "transaction-origin" ? callerAuthority.transactionOrigin
+                  : caller?.kind === "observed-sender" ? callerAuthority.observedSender
+                  : caller?.kind === "verified-actor" ? callerAuthority.verifiedActors?.[caller.evidenceId]
+                  : undefined;
+                const atMs = Date.now();
+                console.log(`[strict-eth-call-timing] ${JSON.stringify({
+                  phase, atMs, startedAtMs: requestStartedAtMs,
+                  wallMs: Math.max(0, atMs - requestStartedAtMs),
+                  sourceBlock: source.number, sourceBlockHash: source.hash.toLowerCase(), generation: source.generation,
+                  familyId: execution.familyId, requestId: request.id, to: request.to.toLowerCase(),
+                  ...diagnosticSubject,
+                  from: from?.toLowerCase() ?? null,
+                  // Hash calldata bytes, never emit payloads or transport URLs.
+                  calldataSha256: createHash("sha256").update(Buffer.from(request.data.slice(2), "hex")).digest("hex"),
+                  outcome: phase === "submitted" ? "pending" : requestOutcome,
+                  aborted: control?.signal?.aborted === true,
+                })}`);
+              } catch { /* Diagnostics cannot affect transport or its fences. */ }
+            };
             try {
+              logEthCall("submitted");
               const result = await executeRequest(
                 input.provider,
                 input.simulator,
@@ -252,9 +292,11 @@ export function createStrictCentralAdapterRuntime(input: {
                   rethLane === "producer-critical" || rethLane === "exact"
                   ? input.producerCallCache
                   : undefined,
+                codeReads.get(request)?.promise,
                 input.exactPrefixContext?.prefix,
               );
               requestStatus = result.ok ? "returned" : "not-ok";
+              requestOutcome = result.ok ? result.completion : result.failure;
               return result;
             } finally {
               try {
@@ -270,7 +312,14 @@ export function createStrictCentralAdapterRuntime(input: {
               } catch { /* Diagnostics cannot bypass the source fence below. */ }
               // Outside request/domain error conversion, including direct
               // executor use without executeAdapterWork's outer fence.
-              assertCurrent();
+              try {
+                assertCurrent();
+              } catch (error) {
+                requestOutcome = "fenced";
+                throw error;
+              } finally {
+                logEthCall("completed");
+              }
             }
           };
           const rethBound = execution.requests.filter((request) =>
@@ -315,23 +364,57 @@ export function createStrictCentralAdapterRuntime(input: {
           const directReth = callBatchOwned
             ? rethBound.filter((request) => request.kind !== "eth-call")
             : rethBound;
-          const directResults = directReth.length === 0
-            ? []
-            : transportScheduler === undefined || producerInternal
-              ? await Promise.all(directReth.map(runRequest))
-              : await transportScheduler.run(
+          // Reserve raw code reads before queueing the physical group. Only
+          // misses belong to its permit; hits/joiners issue their own results.
+          for (const request of directReth) {
+            if (request.kind !== "get-code") continue;
+            const address = request.address;
+            const shared = sharedCodeReads.reserve(source, rethLane, address, control, async () => {
+              assertCurrent();
+              const data = await withRpcRetry(() => input.provider.getCode(address, source.number, control), control);
+              assertCurrent();
+              return data;
+            });
+            if (shared !== undefined) codeReads.set(request, shared);
+          }
+          const physicalRequests = directReth.filter(request =>
+            !codeReads.has(request) || codeReads.get(request)!.owner !== undefined);
+          const runPhysicalRequests = async (): Promise<AdapterRequestResult[]> =>
+            (await awaitAllDrained(physicalRequests.map(async request => {
+              const owner = codeReads.get(request)?.owner;
+              if (owner !== undefined) { await owner.run(); return []; }
+              return [await runRequest(request)];
+            }))).flat();
+          // Requests in this execution are independent. Enqueue batched calls
+          // while direct reads wait for their permit or response; dependent
+          // programs still wait for this complete, fenced result set.
+          const directWork = async (): Promise<AdapterRequestResult[]> => {
+            try {
+              if (physicalRequests.length === 0) return [];
+              // Preserve one permit for this execution's physical direct
+              // group. Never hold it while waiting on another group's read.
+              return transportScheduler === undefined || producerInternal
+                ? await runPhysicalRequests()
+                : await transportScheduler.run(
                   rethLane,
                   control?.signal ??
                     new AbortController().signal,
                   (lease) => {
                     queueWaitMs = Math.max(0, lease.queueWaitMs);
-                    return Promise.all(directReth.map(runRequest));
+                    return runPhysicalRequests();
                   },
                 );
-          const batchedResults = batchedCalls.length === 0
-            ? []
-            : await Promise.all(batchedCalls.map(runRequest));
-          const rethResults = [...directResults, ...batchedResults];
+            } catch (error) {
+              for (const shared of codeReads.values()) shared.owner?.reject(error);
+              throw error;
+            }
+          };
+          const [directResults, sharedResults, batchedResults] = await awaitAllDrained([
+            directWork(),
+            awaitAllDrained([...codeReads.keys()].map(runRequest)),
+            awaitAllDrained(batchedCalls.map(runRequest)),
+          ]);
+          const rethResults = [...directResults, ...sharedResults, ...batchedResults];
           if (rethBound.length > 0) {
             const elapsedMs = Date.now() - rethStartedAtMs;
             if (elapsedMs > 200) {
@@ -347,7 +430,7 @@ export function createStrictCentralAdapterRuntime(input: {
           }
           const simResults = simulated.length === 0
             ? []
-            : await Promise.all(simulated.map(runRequest));
+            : await awaitAllDrained(simulated.map(runRequest));
           const results = execution.requests.map((request) => {
             const found = [...rethResults, ...simResults].find(
               (result) => result.id === request.id,
@@ -465,6 +548,92 @@ export function createStrictCentralAdapterRuntime(input: {
   });
 }
 
+/** Preserve the first rejection without releasing ownership of running work. */
+async function awaitAllDrained<T>(work: readonly Promise<T>[]): Promise<T[]> {
+  try {
+    return await Promise.all(work);
+  } catch (error) {
+    await Promise.allSettled(work);
+    throw error;
+  }
+}
+
+interface SharedCodeRead {
+  readonly promise: Promise<string>;
+  readonly owner?: { run(): Promise<void>; reject(error: unknown): void };
+}
+
+/** Runtime-local raw bytes only: at most 256 entries, each <=32 KiB of code. */
+function createSharedCodeReadCache() {
+  const entries = new Map<string, {
+    sourceKey: string; signal: AbortSignal; deadlineAtMs: number;
+    settled: boolean; promise: Promise<string>;
+  }>();
+  const signalIds = new WeakMap<AbortSignal, number>();
+  let nextSignalId = 0;
+  const sourceKey = (source: CanonicalSource) =>
+    JSON.stringify([source.number, source.hash.toLowerCase(), source.generation]);
+  return {
+    retire(source: CanonicalSource, control: AdapterWorkControl | undefined): void {
+      const key = sourceKey(source);
+      for (const [id, entry] of entries) {
+        if (entry.sourceKey === key && entry.signal === control?.signal && entry.deadlineAtMs === control?.deadlineAtMs) {
+          // Drop reuse, not the transport or existing waiters' ownership.
+          entries.delete(id);
+        }
+      }
+    },
+    reserve(source: CanonicalSource, lane: string, address: string,
+      control: AdapterWorkControl | undefined, load: () => Promise<string>): SharedCodeRead | undefined {
+      // A shared AbortSignal plus a finite deadline is an explicit lifetime.
+      // Uncontrolled or partially controlled harnesses retain the old path.
+      const signal = control?.signal;
+      const deadlineAtMs = control?.deadlineAtMs;
+      if (signal === undefined || deadlineAtMs === undefined || !Number.isSafeInteger(deadlineAtMs)) return undefined;
+      let signalId = signalIds.get(signal);
+      if (signalId === undefined) signalIds.set(signal, signalId = ++nextSignalId);
+      const pin = sourceKey(source);
+      const key = JSON.stringify([pin, lane, address.toLowerCase(), signalId, deadlineAtMs]);
+      const existing = entries.get(key);
+      if (existing !== undefined) {
+        entries.delete(key); entries.set(key, existing);
+        return { promise: existing.promise };
+      }
+      if (entries.size >= 256) {
+        for (const [id, entry] of entries) {
+          if (entry.settled || entry.signal.aborted || Date.now() >= entry.deadlineAtMs) {
+            entries.delete(id);
+            break;
+          }
+        }
+      }
+      let resolve!: (data: string) => void;
+      let reject!: (error: unknown) => void;
+      const promise = new Promise<string>((yes, no) => { resolve = yes; reject = no; });
+      // A synchronous scheduler rejection can precede waiter attachment.
+      void promise.catch(() => {});
+      const entry = { sourceKey: pin, signal, deadlineAtMs, settled: false, promise };
+      // All slots in flight: execute overflow normally without evicting or
+      // cancelling any owner. Its completion must not repopulate this cache.
+      if (entries.size < 256) entries.set(key, entry);
+      const forget = () => { if (entries.get(key) === entry) entries.delete(key); };
+      const fail = (error: unknown) => { forget(); entry.settled = true; reject(error); };
+      return { promise, owner: {
+        reject: fail,
+        async run() {
+          try {
+            const data = await load();
+            entry.settled = true;
+            if (signal.aborted || Date.now() >= deadlineAtMs || typeof data !== "string" ||
+                data.length > 2 + 2 * 32_768 || !/^0x(?:[0-9a-fA-F]{2})*$/.test(data)) forget();
+            resolve(data);
+          } catch (error) { fail(error); }
+        },
+      } };
+    },
+  };
+}
+
 async function executeRequest(
   provider: Pick<StrictProvider, "call" | "getCode" | "getStorage">,
   simulator: StrictSimulationTransport | undefined,
@@ -475,6 +644,7 @@ async function executeRequest(
   control?: AdapterWorkControl,
   exactCallBackend?: Pick<StateBackend, "call">,
   producerCallCache?: Pick<PinnedRethQuoteBackend, "callCached">,
+  sharedCodeRead?: Promise<string>,
   prefix?: CompiledExactPrefix,
 ): Promise<AdapterRequestResult> {
   assertTransportControl(control);
@@ -543,10 +713,10 @@ async function executeRequest(
       });
     }
     if (request.kind === "get-code") {
-      const data = await withRpcRetry(
+      const data = await (sharedCodeRead ?? withRpcRetry(
         () => provider.getCode(request.address, source.number, control),
         control,
-      );
+      ));
       return issueResult({
         id: request.id,
         source,

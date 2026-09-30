@@ -3,6 +3,9 @@ import { ethereumBlockActivityCoverage } from "../shared/state/ethereum-block-ac
 import { postJsonRpc, StateCallAbortedError, type JsonRpcHttpResponse, type StateCallControl } from "../shared/state/state-backend.js";
 import { isRpcThrottleError } from "./rpc-throttle-guard.js";
 
+/** A head notification may precede availability on the HTTP backend. */
+export class BlockScanHeaderUnavailableError extends Error {}
+
 export interface BlockScanObservedHeader extends CanonicalHeader {
   readonly timestamp: number;
   readonly baseFeePerGas: bigint | null;
@@ -81,6 +84,9 @@ export async function readBlockScanObservedHeader(
     }
     if (Object.hasOwn(body, "error")) {
       if (code === undefined || typeof rpcError?.message !== "string") throw new Error("invalid source header JSON-RPC error");
+      if (code === -32000 && /^(?:block|header) not found$|^unknown block$/i.test(rpcError.message.trim())) {
+        throw new BlockScanHeaderUnavailableError("source header is not available yet");
+      }
       throw Object.assign(new Error(`source header RPC error code ${code}`), { code });
     }
     const header = parseBlockScanObservedHeader(body.result, blockNumber, chainId);
@@ -95,6 +101,7 @@ export async function readBlockScanObservedHeader(
 /** Normalize the existing header RPC without discarding its transaction list or
  * withdrawal recipients. The provider remains the canonical observation source. */
 export function parseBlockScanObservedHeader(value: unknown, expectedNumber: number, chainId: bigint): BlockScanObservedHeader {
+  if (value === null) throw new BlockScanHeaderUnavailableError("missing source header");
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("missing source header");
   const block = value as Record<string, unknown>;
   const quantity = (value: unknown): bigint => {

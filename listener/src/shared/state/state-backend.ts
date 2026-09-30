@@ -1241,6 +1241,20 @@ export interface JsonRpcHttpResponse {
   reusedSocket: boolean;
 }
 
+/** Client-observed transport phases, not per-item provider execution times. */
+export interface JsonRpcHttpTiming {
+  readonly startedAtMs: number;
+  readonly socketAssignedAtMs: number | null;
+  readonly requestFlushedAtMs: number | null;
+  readonly responseHeadersAtMs: number | null;
+  readonly firstBodyByteAtMs: number | null;
+  readonly responseEndedAtMs: number | null;
+  readonly settledAtMs: number;
+  readonly requestBytes: number;
+  readonly responseBytes: number;
+  readonly reusedSocket: boolean;
+}
+
 /*
  * Reuse transport sockets across source-pinned JSON-RPC batches. Agents still
  * keep separate pools per origin, while the caller-owned AbortSignal destroys
@@ -1260,6 +1274,7 @@ export function postJsonRpc(
   endpoint: string,
   payload: JsonRpcPayload,
   signal: AbortSignal,
+  onTiming?: (timing: JsonRpcHttpTiming) => void,
 ): Promise<JsonRpcHttpResponse> {
   if (signal.aborted) {
     return Promise.reject(abortReason(signal));
@@ -1277,12 +1292,28 @@ export function postJsonRpc(
   if (requestFn === null) {
     return Promise.reject(new Error(`unsupported JSON-RPC protocol ${url.protocol}`));
   }
+  const startedAtMs = onTiming === undefined ? 0 : Date.now();
   const encoded = Buffer.from(JSON.stringify(payload));
 
   return new Promise<JsonRpcHttpResponse>((resolve, reject) => {
     let settled = false;
     let response: IncomingMessage | null = null;
     let request: ClientRequest;
+    let socketAssignedAtMs: number | null = null;
+    let requestFlushedAtMs: number | null = null;
+    let responseHeadersAtMs: number | null = null;
+    let firstBodyByteAtMs: number | null = null;
+    let responseEndedAtMs: number | null = null;
+    let responseBytes = 0;
+    const reportTiming = (): void => {
+      if (onTiming === undefined) return;
+      try {
+        onTiming({ startedAtMs, socketAssignedAtMs, requestFlushedAtMs,
+          responseHeadersAtMs, firstBodyByteAtMs, responseEndedAtMs,
+          settledAtMs: Date.now(), requestBytes: encoded.length, responseBytes,
+          reusedSocket: request?.reusedSocket === true });
+      } catch { /* Observability must not change transport settlement. */ }
+    };
 
     const cleanup = (): void => {
       signal.removeEventListener("abort", onAbort);
@@ -1291,6 +1322,7 @@ export function postJsonRpc(
       if (settled) return;
       settled = true;
       cleanup();
+      reportTiming();
       reject(error);
     };
     const onAbort = (): void => {
@@ -1310,12 +1342,20 @@ export function postJsonRpc(
       agent,
     }, (incoming) => {
       response = incoming;
+      if (onTiming !== undefined) responseHeadersAtMs = Date.now();
       const chunks: Buffer[] = [];
-      incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+      incoming.on("data", (chunk: Buffer) => {
+        chunks.push(chunk);
+        if (onTiming !== undefined) {
+          firstBodyByteAtMs ??= Date.now();
+          responseBytes += chunk.length;
+        }
+      });
       incoming.once("aborted", () => rejectOnce(abortReason(signal)));
       incoming.once("error", rejectOnce);
       incoming.once("end", () => {
         if (settled) return;
+        if (onTiming !== undefined) responseEndedAtMs = Date.now();
         try {
           const raw = Buffer.concat(chunks).toString("utf8");
           const statusCode = incoming.statusCode ?? 0;
@@ -1331,6 +1371,7 @@ export function postJsonRpc(
           }
           settled = true;
           cleanup();
+          reportTiming();
           resolve({
             statusCode,
             statusMessage: incoming.statusMessage ?? "",
@@ -1342,6 +1383,10 @@ export function postJsonRpc(
         }
       });
     });
+    if (onTiming !== undefined) {
+      request.once("socket", () => { socketAssignedAtMs = Date.now(); });
+      request.once("finish", () => { requestFlushedAtMs = Date.now(); });
+    }
     request.once("error", rejectOnce);
     signal.addEventListener("abort", onAbort, { once: true });
     request.end(encoded);

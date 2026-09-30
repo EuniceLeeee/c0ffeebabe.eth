@@ -21,6 +21,7 @@ import {
   simulationCalls,
   StateCallAbortedError,
   type JsonRpcHttpResponse,
+  type JsonRpcHttpTiming,
   type StateBackend,
   type StateCallControl,
   type TokenToNativeDeltaRequest,
@@ -106,6 +107,8 @@ interface SharedPendingCall {
   waiters: number;
 }
 
+let nextDiagnosticBackendId = 1;
+
 export class PinnedRethQuoteBackend
   implements PassScopedExactStateBackend
 {
@@ -128,6 +131,7 @@ export class PinnedRethQuoteBackend
   private flushScheduled = false;
   private inFlightBatches = 0;
   private nextId = 1;
+  private readonly diagnosticBackendId = nextDiagnosticBackendId++;
   private closed = false;
   private detachParentAbort: () => void = () => {};
   private scopeDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
@@ -631,6 +635,7 @@ export class PinnedRethQuoteBackend
   }
 
   private enqueue(item: PendingQuoteItem): void {
+    if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1") item.enqueuedAtMs = Date.now();
     this.liveItems.add(item);
 
     if (this.closed || this.scopeController.signal.aborted) {
@@ -888,7 +893,7 @@ export class PinnedRethQuoteBackend
 
   private async runTransport(
     signal: AbortSignal,
-    work: (wireSignal: AbortSignal, attempt: RethTransportAttempt) => Promise<JsonRpcHttpResponse>,
+    work: (wireSignal: AbortSignal, attempt: RethTransportAttempt, lease: RethTransportLease) => Promise<JsonRpcHttpResponse>,
     retry?: (error: unknown, attempt: RethTransportAttempt) => boolean,
   ): Promise<JsonRpcHttpResponse> {
     const checkedWork = async (lease: RethTransportLease): Promise<JsonRpcHttpResponse> => {
@@ -915,7 +920,7 @@ export class PinnedRethQuoteBackend
         "JSON-RPC physical transport timeout", "timeout",
       )), lease.load.timeoutMs);
       try {
-        const response = await work(wire.signal, attempt);
+        const response = await work(wire.signal, attempt, lease);
         if (signal.aborted) throw signal.reason;
         if (wire.signal.aborted) throw wire.signal.reason;
         if (response.statusCode === 429) {
@@ -1034,7 +1039,7 @@ export class PinnedRethQuoteBackend
     let response: JsonRpcHttpResponse;
     try {
       if (controller.signal.aborted) throw controller.signal.reason;
-      response = await this.runTransport(controller.signal, async (wireSignal, attempt) => {
+      response = await this.runTransport(controller.signal, async (wireSignal, attempt, lease) => {
         // A shared permit may arrive after another batch lowered our limit.
         // This envelope has not reached the wire: return it to the same pump,
         // rather than letting pre-admitted work bypass the new limit/backoff.
@@ -1049,19 +1054,43 @@ export class PinnedRethQuoteBackend
           items.length,
         );
         const wireStartedAtMs = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1" ? Date.now() : undefined;
+        const batchId = `${this.diagnosticBackendId}:${this.batchesSent}`;
+        if (wireStartedAtMs !== undefined) {
+          try {
+            console.log(`[searcher/quote-batch-dispatch] ${JSON.stringify({
+              batchId, sourceBlockHash: this.blockSpecifier.blockHash,
+              lane: this.transportLane, scopeLabel: this.scopeLabel, method,
+              createdAtMs: batchStartedAtMs, startedAtMs: wireStartedAtMs,
+              permitQueueWaitMs: lease.queueWaitMs, schedulerActiveTotal: lease.activeTotal,
+              calls: items.map(item => ({
+                rpcId: item.id, target: item.req.to.toLowerCase(),
+                from: item.req.from?.toLowerCase() ?? null,
+                selector: item.req.data.length >= 10 ? item.req.data.slice(0, 10).toLowerCase() : null,
+                calldataSha256: sha256(Buffer.from(item.req.data.slice(2), "hex")),
+                enqueuedAtMs: item.enqueuedAtMs ?? null,
+              })),
+            })}`);
+          } catch { /* No payload, result body or endpoint belongs in diagnostics. */ }
+        }
+        let httpTiming: JsonRpcHttpTiming | undefined;
         let response: JsonRpcHttpResponse | undefined;
         try {
-          response = await postJsonRpc(this.rpcUrl, payloads as never, wireSignal);
+          response = await postJsonRpc(this.rpcUrl, payloads as never, wireSignal,
+            wireStartedAtMs === undefined ? undefined : timing => { httpTiming = timing; });
         } finally {
           if (wireStartedAtMs !== undefined) {
             try {
               console.log(`[searcher/quote-batch-timing] ${JSON.stringify({
+                batchId,
                 sourceBlockHash: this.blockSpecifier.blockHash,
                 lane: this.options.transportLane ?? "exact", scopeLabel: this.options.scopeLabel ?? "exact quote",
                 method, items: items.length, startedAtMs: wireStartedAtMs,
                 wallMs: Date.now() - wireStartedAtMs,
                 status: response === undefined ? "transport-failed" : "returned",
                 statusCode: response?.statusCode ?? null,
+                permitQueueWaitMs: lease.queueWaitMs,
+                createdAtMs: batchStartedAtMs,
+                http: httpTiming ?? null,
               })}`);
             } catch { /* No diagnostic may change retry, cancellation or quote results. */ }
           }
@@ -2022,6 +2051,8 @@ interface PendingQuoteItem extends RethTransportRetryState {
   readonly control: StateCallControl;
   readonly req: { to: string; data: string; from?: string };
   readonly simulation?: unknown;
+  /** Diagnostic-only: original entry into the backend queue, before retries. */
+  enqueuedAtMs?: number;
 
   settled: boolean;
   detachControl: () => void;

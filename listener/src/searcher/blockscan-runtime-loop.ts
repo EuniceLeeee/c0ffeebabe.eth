@@ -1494,7 +1494,7 @@ export class BlockScanRuntimeLoop {
               this.deps.startupWarmBudgetMs ?? 300_000,
             );
             const bootstrapDeadlineAtMs = Date.now() + bootstrapBudgetMs;
-            const bootstrapHeader = await this.observeStartupWarmHeader(
+            const bootstrapHeader = await this.observeControlledHeader(
               nextBlock, bootstrapDeadlineAtMs, producerController.signal,
               "producer bootstrap canonical header",
             );
@@ -1747,7 +1747,7 @@ export class BlockScanRuntimeLoop {
     if (stopError !== undefined) throw stopError;
   }
 
-  private async observeStartupWarmHeader(
+  private async observeControlledHeader(
     number: number, deadlineAtMs: number, signal: AbortSignal,
     stage = "startup canonical header",
   ): Promise<BlockScanSourceHeader> {
@@ -1801,7 +1801,7 @@ export class BlockScanRuntimeLoop {
     const validate = async (stage: string, signal: AbortSignal): Promise<void> => {
       try {
         assertOpen();
-        const header = await this.observeStartupWarmHeader(pin.number, deadlineAtMs, signal, stage);
+        const header = await this.observeControlledHeader(pin.number, deadlineAtMs, signal, stage);
         assertOpen();
         if (header.number !== pin.number || header.hash.toLowerCase() !== pin.hash ||
             this.topologyKey() !== pin.topologyKey ||
@@ -2396,15 +2396,7 @@ export class BlockScanRuntimeLoop {
       canonicalBlock: number,
       stage: string,
     ): Promise<BlockScanSourceHeader> =>
-      startupWarmAttempt && passMode === "periodic"
-        ? this.observeStartupWarmHeader(canonicalBlock, passDeadlineAtMs, passSignal, stage)
-        : awaitBlockScanDeadline(
-        this.observeTopologyHeader(canonicalBlock),
-        passDeadlineAtMs,
-        stage,
-        undefined,
-        passSignal,
-      );
+      this.observeControlledHeader(canonicalBlock, passDeadlineAtMs, passSignal, stage);
     beginStage("state", {
       atMs: passStartedAtMs,
       atPerf: passStarted,
@@ -2660,7 +2652,9 @@ export class BlockScanRuntimeLoop {
             ...(resumableStartupWarm
               ? { signal: this.deps.runtimeAbort.signal }
               : { signal: passSignal, deadlineAtMs: runtimeDeadlineAtMs }),
-            maxBatchSize: 64,
+            // Keep cold startup unchanged. Only steady source-N pricing uses
+            // wider batches, within the configured provider's 1,000-item cap.
+            maxBatchSize: startupWarmAttempt ? 64 : 1000,
             maxConcurrentBatches: 8,
             retryRpcThrottle: true,
             transportLane: "producer-bulk",

@@ -15,9 +15,11 @@ import {
 import {
   physicalAdapterRequestFingerprint,
   type AdapterRequest,
+  type AdapterRequestResult,
   type CanonicalSource,
 } from "../venues/adapter-request-program.js";
 import { hashCanonical } from "../venues/canonical-value.js";
+import { RethTransportScheduler } from "../reth-transport-scheduler.js";
 import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
@@ -625,6 +627,294 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+const schedulingRequests: readonly AdapterRequest[] = [
+  { id: "code", kind: "get-code", address: WSTETH },
+  { id: "call-a", kind: "eth-call", to: WSTETH, data: "0x1111",
+    caller: { kind: "executor" }, completion: "return-data" },
+  { id: "storage", kind: "get-storage", address: STETH, slot: `0x${"00".repeat(32)}` },
+  { id: "call-b", kind: "eth-call", to: STETH, data: "0x2222",
+    caller: { kind: "executor" }, completion: "return-or-revert-data" },
+];
+
+function runSchedulingProgram(runtime: CentralAdapterRuntime,
+  control: AdapterWorkControl | undefined,
+  decode: (results: readonly AdapterRequestResult[]) => void,
+  requests = schedulingRequests) {
+  return executeAdapterWork({ runtime, control, intent: {
+    stage: "exact-refine", familyId: "test:read-scheduling" as never,
+    source: SOURCE, generation: SOURCE.generation, programInput: undefined,
+    program: {
+      requirements: () => ({ transports: [...new Set(requests.map(request => request.kind))],
+        caller: requests.some(request => request.kind === "eth-call" && request.caller?.kind === "executor")
+          ? "executor" : "none" }),
+      buildRequests: () => requests,
+      decode: ({ results }) => { decode(results); return results; },
+    },
+  } });
+}
+
+const schedulingTurn = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+for (const blockedAt of ["permit", "provider"] as const) {
+  test(`mixed reads: batch dispatch while direct ${blockedAt} is blocked`, async () => {
+    const admission = deferred<void>();
+    const code = deferred<string>();
+    const storage = deferred<string>();
+    const batch = deferred<void>();
+    const scheduler = new RethTransportScheduler({ capacity: 4, producerReserved: 1 });
+    const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+    let centralPermits = 0;
+    let backendPermits = 0;
+    let directCalls = 0;
+    let decoded = 0;
+    let dependentDecoded = 0;
+    const enqueued: string[] = [];
+    const completed: string[] = [];
+    const checkControl = (actual: AdapterWorkControl | undefined) => {
+      assert.equal(actual?.signal, control.signal);
+      assert.equal(actual?.deadlineAtMs, control.deadlineAtMs);
+    };
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: {
+        call: async () => assert.fail("batched eth_call bypassed its backend"),
+        getCode: async (address, block, actualControl) => {
+          directCalls++; checkControl(actualControl);
+          assert.equal(address, WSTETH); assert.equal(block, SOURCE.number);
+          const data = await code.promise; completed.push("code"); return data;
+        },
+        getStorage: async (address, slot, block, actualControl) => {
+          directCalls++; checkControl(actualControl);
+          assert.equal(address, STETH); assert.equal(slot, `0x${"00".repeat(32)}`);
+          assert.equal(block, SOURCE.number);
+          const data = await storage.promise; completed.push("storage"); return data;
+        },
+      },
+      executor: STETH,
+      generationFence: { assertCurrent(generation, source) {
+        assert.equal(generation, SOURCE.generation); assert.deepEqual(source, SOURCE);
+      } },
+      transportScheduler: { async run(lane, signal, work) {
+        centralPermits++;
+        assert.equal(lane, "exact"); assert.equal(signal, control.signal);
+        if (blockedAt === "permit") await admission.promise;
+        return scheduler.run(lane, signal, work);
+      } },
+      exactCallBackend: { async call(tx, actualControl) {
+        checkControl(actualControl); assert.equal(tx.from, STETH);
+        enqueued.push(tx.data);
+        // The backend owns its physical permit. A central wrapper around
+        // eth_call would be an extra acquisition, even with spare capacity.
+        return scheduler.run("exact", actualControl!.signal!, async () => {
+          backendPermits++;
+          await batch.promise;
+          completed.push(tx.data);
+          return tx.data;
+        });
+      } },
+    });
+    const pending = (async () => {
+      const first = await runSchedulingProgram(runtime, control, results => {
+        decoded++;
+        assert.deepEqual(results.map(result => result.id), schedulingRequests.map(request => request.id));
+        assert(results.every(result => result.ok));
+        assert(results.every(result => Object.isFrozen(result.source)));
+        assert(results.every(result => result.source.hash === SOURCE.hash));
+        assert.deepEqual(results.map(result => result.ok && result.data), ["0x6000", "0x1111", "0x00", "0x2222"]);
+      });
+      assert(first.status === "resolved");
+      const codeResult = first.executed.evidence[0]!;
+      assert(codeResult.ok);
+      const next = await runSchedulingProgram(runtime, control, () => { dependentDecoded++; }, [
+        { id: "dependent", kind: "eth-call", to: WSTETH, data: codeResult.data,
+          caller: { kind: "executor" }, completion: "return-data" },
+      ]);
+      assert.equal(next.status, "resolved");
+      return first;
+    })();
+    const settled = pending.then(value => ({ value }), error => ({ error }));
+    try {
+      await schedulingTurn();
+      assert.deepEqual(enqueued, ["0x1111", "0x2222"], "independent calls must enqueue before direct reads finish");
+      assert.equal(backendPermits, 2);
+      assert.equal(centralPermits, 1, "batched calls must not take nested central permits");
+      assert.equal(directCalls, blockedAt === "permit" ? 0 : 2);
+      assert.equal(decoded, 0); assert.equal(dependentDecoded, 0);
+      batch.resolve();
+      await schedulingTurn();
+      assert.deepEqual(completed, ["0x1111", "0x2222"]);
+      assert.equal(decoded, 0, "completed independent reads cannot start decode or dependent work");
+      admission.resolve();
+      storage.resolve("0x00");
+      await schedulingTurn();
+      assert.equal(decoded, 0, "every required initial read must complete before decode");
+      code.resolve("0x6000");
+      const outcome = await settled;
+      if ("error" in outcome) throw outcome.error;
+      assert.equal(decoded, 1); assert.equal(dependentDecoded, 1);
+      assert.deepEqual(enqueued, ["0x1111", "0x2222", "0x6000"]);
+      assert.equal(centralPermits, 1); assert.equal(backendPermits, 3);
+      assert.equal(scheduler.snapshot().activeTotal, 0);
+      assert.equal(scheduler.snapshot().queuedByLane.exact, 0);
+    } finally {
+      admission.resolve(); code.resolve("0x6000"); storage.resolve("0x00"); batch.resolve();
+      await settled;
+    }
+  });
+}
+
+for (const interruption of ["abort", "deadline", "generation"] as const) {
+  for (const firstGroup of ["direct", "batch"] as const) {
+    test(`mixed reads: ${interruption} drains ${firstGroup}-first rejection without stale decode`, async context => {
+      const releases = Array.from({ length: 4 }, () => deferred<void>());
+      const scheduler = new RethTransportScheduler({ capacity: 4, producerReserved: 1 });
+      const controller = new AbortController();
+      const control = { signal: controller.signal, deadlineAtMs: Date.now() + 60_000 };
+      let current = true;
+      let entered = 0;
+      let finished = 0;
+      let decoded = 0;
+      let workSettled = false;
+      const read = async (index: number) => {
+        entered++;
+        await releases[index]!.promise;
+        finished++;
+        // Even a late CALL_EXCEPTION must not convert a cancelled/stale
+        // program into successful revert evidence.
+        if (index % 2 === 1) throw Object.assign(new Error("late revert"), { code: "CALL_EXCEPTION", data: "0xbeef" });
+        return "0x00";
+      };
+      const runtime = createStrictCentralAdapterRuntime({
+        provider: { call: async () => assert.fail("unexpected direct eth_call"),
+          getCode: () => read(0), getStorage: () => read(2) },
+        exactCallBackend: { call: (tx, actualControl) => scheduler.run("exact", actualControl!.signal!,
+          () => read(tx.data === "0x1111" ? 1 : 3)) },
+        transportScheduler: scheduler, executor: STETH,
+        generationFence: { assertCurrent() { if (!current) throw new Error("source generation retired"); } },
+      });
+      const pending = runSchedulingProgram(runtime, control, () => { decoded++; });
+      const settled = pending.then(value => { workSettled = true; return value; });
+      try {
+        await schedulingTurn();
+        assert.equal(entered, 4, "both read groups must be in flight");
+        if (interruption === "abort") controller.abort(Object.assign(new Error("owner cancelled"),
+          { code: "CALL_EXCEPTION", data: "0xabcd" }));
+        if (interruption === "generation") current = false;
+        if (interruption === "deadline") context.mock.method(Date, "now", () => control.deadlineAtMs + 1);
+        releases[firstGroup === "direct" ? 0 : 1]!.resolve();
+        await schedulingTurn();
+        assert.equal(workSettled, false, "a rejected group must drain its running siblings");
+        assert.equal(decoded, 0);
+        assert.equal(scheduler.snapshot().activeByLane.exact, firstGroup === "direct" ? 3 : 2,
+          "the direct permit must remain held while storage is in flight");
+        releases[0]!.resolve(); releases[2]!.resolve();
+        await schedulingTurn();
+        assert.equal(workSettled, false, "finishing direct reads must still drain pending batched calls");
+        releases[1]!.resolve(); releases[3]!.resolve();
+        const outcome = await settled;
+        assert.equal(outcome.status, "unresolved");
+        assert.equal(decoded, 0); assert.equal(finished, 4);
+        assert.equal(scheduler.snapshot().activeTotal, 0);
+        assert.equal(scheduler.snapshot().queuedByLane.exact, 0);
+      } finally {
+        for (const release of releases) release.resolve();
+        await settled;
+        context.mock.restoreAll();
+      }
+    });
+  }
+}
+
+for (const synchronous of [false, true]) {
+  test(`mixed reads: ${synchronous ? "synchronous" : "asynchronous"} permit rejection drains batched work`, async () => {
+    const batch = deferred<string>();
+    const error = new Error("direct permit rejected");
+    let batchCalls = 0;
+    let batchFinished = 0;
+    let workSettled = false;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { call: async () => assert.fail("unexpected direct eth_call"),
+        getCode: async () => assert.fail("rejected permit cannot run code read"),
+        getStorage: async () => assert.fail("rejected permit cannot run storage read") },
+      generationFence: { assertCurrent() {} },
+      transportScheduler: { run() { if (synchronous) throw error; return Promise.reject(error); } },
+      exactCallBackend: { async call() { batchCalls++; const data = await batch.promise; batchFinished++; return data; } },
+    });
+    const pending = runtime.scheduler.issueExecutor({ source: SOURCE, generation: SOURCE.generation,
+      callerAuthority: { executor: STETH } } as never).executor.execute({ source: SOURCE, requests: schedulingRequests } as never);
+    const settled = pending.then(value => { workSettled = true; return { value }; },
+      reason => { workSettled = true; return { reason }; });
+    try {
+      await schedulingTurn();
+      assert.equal(batchCalls, 2);
+      assert.equal(workSettled, false, "permit failure cannot orphan independent calls");
+      batch.resolve("0x00");
+      const outcome = await settled;
+      assert("reason" in outcome); assert.equal(outcome.reason, error, "preserve the original rejection");
+      assert.equal(batchFinished, 2);
+    } finally { batch.resolve("0x00"); await settled; }
+  });
+}
+
+for (const failedKind of ["get-code", "get-storage", "eth-call"] as const) {
+  for (const required of [true, false]) {
+    test(`mixed reads: ${failedKind} failure preserves required=${required}`, async () => {
+      let attempts = 0;
+      let decoded = 0;
+      const read = async (kind: string) => {
+        if (kind === failedKind) { attempts++; throw new Error("node unavailable"); }
+        return "0x00";
+      };
+      const requests = schedulingRequests.slice(0, 3).map(request =>
+        request.kind === failedKind ? { ...request, required } : request);
+      const scheduler = new RethTransportScheduler({ capacity: 3, producerReserved: 1 });
+      const runtime = createStrictCentralAdapterRuntime({
+        provider: { call: async () => assert.fail("unexpected direct eth_call"),
+          getCode: () => read("get-code"), getStorage: () => read("get-storage") },
+        exactCallBackend: { call: (_tx, control) => scheduler.run("exact", control?.signal ?? new AbortController().signal,
+          () => read("eth-call")) },
+        transportScheduler: scheduler, executor: STETH, generationFence: { assertCurrent() {} },
+      });
+      const outcome = await runSchedulingProgram(runtime, undefined, results => {
+        decoded++;
+        assert.deepEqual(results.map(result => result.id), requests.map(request => request.id));
+        const failure = results.find(result => result.id === requests.find(request => request.kind === failedKind)!.id);
+        assert(failure && !failure.ok); assert.equal(failure.failure, "rpc");
+      }, requests);
+      assert.equal(outcome.status, required ? "unresolved" : "resolved");
+      assert.equal(decoded, required ? 0 : 1);
+      assert.equal(attempts, 2, "transport failure retains the bounded retry");
+      assert.equal(scheduler.snapshot().activeTotal, 0);
+    });
+  }
+}
+
+for (const fence of ["authority", "abort", "deadline", "generation", "source"] as const) {
+  test(`mixed reads: ${fence} rejects before dispatch`, async () => {
+    let io = 0;
+    let decoded = 0;
+    const read = async () => { io++; return "0x00"; };
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { call: read, getCode: read, getStorage: read }, exactCallBackend: { call: read },
+      ...(fence === "authority" ? {} : { executor: STETH }),
+      generationFence: { assertCurrent() { if (fence === "generation") throw new Error("generation retired"); } },
+    });
+    if (fence === "source") {
+      const issued = runtime.scheduler.issueExecutor({ source: SOURCE, generation: SOURCE.generation } as never);
+      await assert.rejects(issued.executor.execute({
+        source: { ...SOURCE, hash: `0x${"99".repeat(32)}` }, requests: schedulingRequests,
+      } as never), /escaped its issued source/);
+    } else {
+      const outcome = await runSchedulingProgram(runtime, {
+        signal: fence === "abort" ? AbortSignal.abort() : new AbortController().signal,
+        deadlineAtMs: fence === "deadline" ? Date.now() - 1 : Date.now() + 60_000,
+      }, () => { decoded++; });
+      assert.equal(outcome.status, "unresolved");
+      if (fence === "authority" && outcome.status === "unresolved") assert.equal(outcome.failure.stage, "caller-authority");
+    }
+    assert.equal(io, 0); assert.equal(decoded, 0);
+  });
+}
+
 function bindingSimulation(kind: EffectRequest["kind"]): EffectRequest {
   return { id: "bound-simulation", kind,
     call: { caller: { kind: "executor" }, to: STETH, data: "0x1234" },
@@ -1053,5 +1343,655 @@ for (const kind of ["state-override-simulation", "effect-delta-simulation"] as c
     assert.equal(executorOutcome.status, "resolved");
     assert.equal(io, 1, "ordinary executor simulation remains supported");
     assert.equal(decodes, 1);
+  });
+}
+
+// Diagnostics-only regressions: independent of the mixed-read scheduling tests.
+for (const outcome of ["unset", "disabled", "returned", "revert", "rpc", "abort", "deadline", "generation", "logger-error", "logger-error-abort"] as const) {
+  test(`eth-call diagnostics: submission and ${outcome} completion stay redacted and opt-in`, async context => {
+    const previous = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+    const enabled = outcome !== "disabled" && outcome !== "unset";
+    if (outcome === "unset") delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+    else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = enabled ? "1" : "0";
+    const logs: string[] = [];
+    context.mock.method(console, "log", (line: string) => {
+      if (line.startsWith("[strict-eth-call-timing] ")) logs.push(line);
+      if (outcome.startsWith("logger-error")) throw new Error("diagnostic sink failed");
+    });
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const controller = new AbortController();
+    const control = { signal: controller.signal, deadlineAtMs: Date.now() + 60_000 };
+    const authority = { executor: `0x${"AB".repeat(20)}` };
+    const source = { ...SOURCE };
+    let current = true;
+    let reads = 0;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { ...mockProvider(), call: async (tx, block, actualControl) => {
+        assert.equal(tx.to.toLowerCase(), WSTETH.toLowerCase());
+        assert.equal(tx.from, `0x${"ab".repeat(20)}`); assert.equal(tx.data, "0x12345678");
+        assert.equal(tx.blockTag, SOURCE.number); assert.equal(block, SOURCE.number);
+        assert.equal(actualControl?.signal, control.signal); assert.equal(actualControl?.deadlineAtMs, control.deadlineAtMs);
+        reads++; entered.resolve(); await release.promise;
+        if (outcome === "revert") throw Object.assign(new Error("reverted"), { code: "CALL_EXCEPTION", data: "0xdeadbeef" });
+        if (outcome === "rpc") throw new Error("node unavailable at https://private.invalid/rpc");
+        return "0xcafebabe";
+      } },
+      generationFence: { assertCurrent() { if (!current) throw new Error("source generation retired"); } },
+    });
+    const pending = runtime.scheduler.issueExecutor({ source, generation: SOURCE.generation,
+      control, callerAuthority: authority } as never).executor.execute({ familyId: "test:call-diagnostics", source,
+      requests: [{ id: "diagnostic-call", kind: "eth-call", to: WSTETH, data: "0x12345678",
+        caller: { kind: "executor" }, completion: "return-or-revert-data" }],
+    } as never);
+    const settled = pending.then(value => ({ value }), error => ({ error }));
+    try {
+      await entered.promise;
+      assert.equal(logs.length, enabled ? 1 : 0, "submission must be recorded before the response");
+      authority.executor = STETH; source.hash = `0x${"99".repeat(32)}`;
+      const aborted = outcome === "abort" || outcome === "logger-error-abort";
+      if (aborted) controller.abort(new Error("owner cancelled"));
+      if (outcome === "generation") current = false;
+      if (outcome === "deadline") context.mock.method(Date, "now", () => control.deadlineAtMs + 1);
+      release.resolve();
+      const result = await settled;
+      const fenced = aborted || outcome === "deadline" || outcome === "generation";
+      assert.equal("error" in result, fenced, "diagnostics cannot bypass or introduce a rejection");
+      if ("value" in result) {
+        assert.equal(result.value[0]!.ok, outcome !== "rpc");
+        if (result.value[0]!.ok) assert.equal(result.value[0]!.completion,
+          outcome === "revert" ? "reverted-as-declared" : "returned");
+      }
+      assert.equal(reads, outcome === "rpc" ? 2 : 1);
+      if (!enabled) {
+        assert.deepEqual(logs, []);
+      } else {
+        assert.equal(logs.length, 2, "one submission and one completion per logical request, including retries");
+        const records = logs.map(line => JSON.parse(line.slice("[strict-eth-call-timing] ".length)));
+        assert.deepEqual(records.map(record => record.phase), ["submitted", "completed"]);
+        assert.deepEqual(records.map(record => record.outcome), ["pending",
+          fenced ? "fenced" : outcome === "rpc" ? "rpc" : outcome === "revert" ? "reverted-as-declared" : "returned"]);
+        for (const record of records) {
+          assert.equal(record.familyId, "test:call-diagnostics"); assert.equal(record.requestId, "diagnostic-call");
+          assert.equal(record.to, WSTETH.toLowerCase()); assert.equal(record.sourceBlockHash, SOURCE.hash);
+          assert.equal(record.from, `0x${"ab".repeat(20)}`);
+          assert.equal(record.sourceBlock, SOURCE.number); assert.equal(record.generation, SOURCE.generation);
+          // SHA-256 vector for bytes 12 34 56 78, independent of hex casing.
+          assert.equal(record.calldataSha256, "b2ed992186a5cb19f6668aade821f502c1d00970dfd0e35128d51bac4649916c");
+          assert(Number.isSafeInteger(record.atMs)); assert(record.atMs >= record.startedAtMs);
+          assert.equal(record.wallMs, record.atMs - record.startedAtMs);
+        }
+        assert.equal(records[0].startedAtMs, records[1].startedAtMs);
+        assert.equal(records[1].aborted, aborted);
+        assert(!logs.join("\n").match(/0x12345678|0xdeadbeef|0xcafebabe|https?:|private\.invalid/),
+          "no calldata, return/revert payloads, URLs or raw errors in diagnostics");
+      }
+    } finally {
+      release.resolve(); await settled;
+      context.mock.restoreAll();
+      if (previous === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+      else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = previous;
+    }
+  });
+}
+
+test("eth-call diagnostics: caller roles and pinned sources match provider and backend submissions", async context => {
+  const previous = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+  process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = "1";
+  const records: Array<Record<string, unknown>> = [];
+  context.mock.method(console, "log", (line: string) => {
+    if (line.startsWith("[strict-eth-call-timing] ")) records.push(JSON.parse(line.slice("[strict-eth-call-timing] ".length)));
+  });
+  const authority = { executor: `0x${"ab".repeat(20)}`, transactionOrigin: `0x${"bc".repeat(20)}`,
+    observedSender: `0x${"cd".repeat(20)}`, verifiedActors: { actor: `0x${"de".repeat(20)}` } };
+  try {
+    for (const batched of [false, true]) {
+      for (const [index, [caller, expectedFrom]] of [
+        [{ kind: "executor" }, authority.executor],
+        [{ kind: "transaction-origin" }, authority.transactionOrigin],
+        [{ kind: "observed-sender" }, authority.observedSender],
+        [{ kind: "verified-actor", evidenceId: "actor" }, authority.verifiedActors.actor],
+        [{ kind: "none" }, undefined],
+      ].entries()) {
+        records.length = 0;
+        const source = { number: SOURCE.number + index, hash: `0x${String(index + 1).repeat(64)}`,
+          generation: SOURCE.generation + index };
+        const submitted: Array<{ to: string; data: string; from?: string }> = [];
+        const runtime = createStrictCentralAdapterRuntime({
+          provider: { ...mockProvider(), call: async (tx, block) => {
+            assert(!batched); assert.equal(block, source.number); assert.equal(tx.blockTag, source.number);
+            submitted.push(tx); return "0x00";
+          } },
+          ...(batched ? { exactCallBackend: { call: async (tx: { to: string; data: string; from?: string }) => {
+            submitted.push(tx); return "0x00";
+          } } } : {}),
+          generationFence: { assertCurrent(generation, actual) {
+            assert.equal(generation, source.generation); assert.deepEqual(actual, source);
+          } },
+        });
+        const results = await runtime.scheduler.issueExecutor({ source, generation: source.generation,
+          callerAuthority: authority } as never).executor.execute({ familyId: "test:caller-diagnostics", source,
+          requests: [{ id: `caller-${index}`, kind: "eth-call", to: WSTETH, data: "0x12345678",
+            caller, completion: "return-data" }],
+        } as never);
+        assert(results[0]!.ok); assert.equal(submitted.length, 1); assert.equal(records.length, 2);
+        assert.equal(submitted[0]!.from, expectedFrom);
+        for (const record of records) {
+          assert.equal(record.requestId, `caller-${index}`);
+          assert.equal(record.sourceBlock, source.number); assert.equal(record.sourceBlockHash, source.hash);
+          assert.equal(record.generation, source.generation);
+          assert.equal(record.to, submitted[0]!.to.toLowerCase());
+          assert.equal(record.from, submitted[0]!.from ?? null);
+        }
+      }
+    }
+  } finally {
+    context.mock.restoreAll();
+    if (previous === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+    else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = previous;
+  }
+});
+
+test("eth-call diagnostics: subject attribution is detached and missing harness metadata stays optional", async context => {
+  const previous = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+  process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = "1";
+  const records: Array<Record<string, unknown>> = [];
+  context.mock.method(console, "log", (line: string) => {
+    if (!line.startsWith("[strict-eth-call-timing] ")) return;
+    const record = JSON.parse(line.slice("[strict-eth-call-timing] ".length));
+    if (record.requestId === "shared-diagnostic-request") records.push(record);
+  });
+  try {
+    for (const withSubject of [true, false]) {
+      records.length = 0;
+      const entered = deferred<void>();
+      const release = deferred<void>();
+      const subject = { familyId: "test:subject-diagnostics", instanceKey: "instance:original", routeKey: "route:original" };
+      const source = { ...SOURCE };
+      const issueInput = { ...(withSubject ? { subject, subjectKey: "subject:original", source, generation: SOURCE.generation } : {}) };
+      const runtime = createStrictCentralAdapterRuntime({
+        provider: { ...mockProvider(), call: async (_tx, block) => {
+          assert.equal(block, SOURCE.number);
+          entered.resolve(); await release.promise; return "0x00";
+        } },
+        generationFence: { assertCurrent(generation, actual) {
+          assert.equal(generation, SOURCE.generation); assert.deepEqual(actual, SOURCE);
+        } },
+      });
+      const issued = runtime.scheduler.issueExecutor(issueInput as never);
+      // Mutate both the original object and its replacement before execution.
+      // An omitted harness subject must also stay absent if added after issue.
+      subject.instanceKey = "instance:mutated"; subject.routeKey = "route:mutated";
+      issueInput.subject = { ...subject }; issueInput.subjectKey = "subject:mutated";
+      source.hash = `0x${"99".repeat(32)}`; source.generation++;
+      const pending = issued.executor.execute({ familyId: "test:subject-diagnostics", source: SOURCE,
+        requests: [{ id: "shared-diagnostic-request", kind: "eth-call", to: WSTETH, data: "0x12345678", completion: "return-data" }],
+      } as never);
+      const settled = pending.then(value => ({ value }), error => ({ error }));
+      try {
+        await entered.promise;
+        assert.equal(records.length, 1, "the submission must already carry the issued subject");
+        issueInput.subject.instanceKey = "instance:changed-after-submission";
+        issueInput.subject.routeKey = "route:changed-after-submission";
+        issueInput.subjectKey = "subject:changed-after-submission";
+        release.resolve();
+        const outcome = await settled;
+        if ("error" in outcome) throw outcome.error;
+        assert(outcome.value[0]!.ok);
+        assert.deepEqual(records.map(record => record.phase), ["submitted", "completed"]);
+        for (const record of records) {
+          assert.equal(record.subjectKey, withSubject ? "subject:original" : null);
+          assert.equal(record.instanceKey, withSubject ? "instance:original" : undefined);
+          assert.equal(record.routeKey, withSubject ? "route:original" : undefined);
+          assert.equal(Object.hasOwn(record, "instanceKey"), withSubject);
+          assert.equal(Object.hasOwn(record, "routeKey"), withSubject);
+          assert.equal(record.sourceBlock, SOURCE.number); assert.equal(record.sourceBlockHash, SOURCE.hash);
+          assert.equal(record.generation, SOURCE.generation);
+        }
+        assert(!Object.isFrozen(subject), "snapshotting must not freeze caller-owned metadata");
+      } finally { release.resolve(); await settled; }
+    }
+  } finally {
+    context.mock.restoreAll();
+    if (previous === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+    else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = previous;
+  }
+});
+
+function executeSharedRead(runtime: CentralAdapterRuntime, requests: readonly AdapterRequest[],
+  control?: AdapterWorkControl, source = SOURCE, lane = "exact") {
+  return runtime.scheduler.issueExecutor({ source, generation: source.generation,
+    schedule: { rethLane: lane }, control } as never).executor.execute({
+    familyId: "test:shared-code", source, requests,
+  } as never);
+}
+
+function codeRequest(id: string, address = WSTETH): AdapterRequest {
+  return { id, kind: "get-code", address };
+}
+
+test("shared code: duplicate queued reads and successful reuse own only one physical permit", async () => {
+  const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+  const blocker = deferred<void>();
+  const read = deferred<string>();
+  const occupied = scheduler.run("exact", new AbortController().signal, () => blocker.promise);
+  await schedulingTurn();
+  const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+  let calls = 0;
+  let permits = 0;
+  const runtime = createStrictCentralAdapterRuntime({
+    provider: { ...mockProvider(), getCode: async (_address, block, actual) => {
+      calls++; assert.equal(block, SOURCE.number); assert.equal(actual?.signal, control.signal);
+      return read.promise;
+    } },
+    generationFence: { assertCurrent() {} },
+    transportScheduler: { run(lane, signal, work) { permits++; return scheduler.run(lane, signal, work); } },
+  });
+  const first = executeSharedRead(runtime, [codeRequest("first")], control);
+  // Exact's per-invocation caller-context wrapper keeps this scheduler, even
+  // though its runtime/control objects are different snapshots.
+  const second = executeSharedRead(Object.freeze({ ...runtime }),
+    [codeRequest("second", WSTETH.toLowerCase())], { ...control });
+  const settled = Promise.allSettled([first, second]);
+  try {
+    await schedulingTurn();
+    assert.equal(scheduler.snapshot().queuedByLane.exact, 1, "coalesce before either caller acquires a permit");
+    assert.equal(permits, 1); assert.equal(calls, 0);
+    blocker.resolve(); await occupied; await schedulingTurn();
+    assert.equal(calls, 1);
+    read.resolve("0x6000");
+    const [a, b] = await Promise.all([first, second]);
+    assert(a[0]!.ok && b[0]!.ok);
+    assert.notEqual(a[0], b[0], "raw bytes may be shared, never issued result handles");
+    assert.equal(a[0].id, "first"); assert.equal(b[0].id, "second");
+    assert.notEqual(a[0].provenance.fingerprint, b[0].provenance.fingerprint);
+    const cached = await executeSharedRead(runtime, [codeRequest("cached")], control);
+    assert(cached[0]!.ok); assert.equal(cached[0].data, "0x6000");
+    assert.notEqual(cached[0], a[0]); assert.equal(permits, 1); assert.equal(calls, 1);
+    assert.equal(scheduler.snapshot().activeTotal, 0);
+    assert.equal(scheduler.snapshot().queuedByLane.exact, 0);
+  } finally { blocker.resolve(); read.resolve("0x6000"); await occupied; await settled; }
+});
+
+test("shared code: mixed owner and joiner releases its group permit before waiting on another owner", async () => {
+  const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+  const admission = deferred<void>();
+  const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+  let permits = 0;
+  let codeCalls = 0;
+  let storageCalls = 0;
+  let secondSettled = false;
+  const runtime = createStrictCentralAdapterRuntime({
+    provider: { ...mockProvider(), getCode: async () => { codeCalls++; return "0x6000"; },
+      getStorage: async () => { storageCalls++; return "0x00"; } },
+    generationFence: { assertCurrent() {} },
+    transportScheduler: { async run(lane, signal, work) {
+      if (++permits === 1) await admission.promise;
+      return scheduler.run(lane, signal, work);
+    } },
+  });
+  const first = executeSharedRead(runtime, [codeRequest("owner")], control);
+  const second = executeSharedRead(runtime, [
+    { id: "storage", kind: "get-storage", address: STETH, slot: `0x${"00".repeat(32)}` }, codeRequest("joiner"),
+  ], control).then(results => { secondSettled = true; return results; });
+  const settled = Promise.allSettled([first, second]);
+  try {
+    await schedulingTurn();
+    assert.equal(storageCalls, 1); assert.equal(codeCalls, 0);
+    assert.equal(secondSettled, false, "the joiner still needs the first owner's code");
+    assert.equal(scheduler.snapshot().activeTotal, 0, "never hold a permit while waiting on a joined read");
+    admission.resolve();
+    const [, results] = await Promise.all([first, second]);
+    assert.deepEqual(results.map(result => result.id), ["storage", "joiner"]);
+    assert(results.every(result => result.ok)); assert.equal(codeCalls, 1); assert.equal(permits, 2);
+  } finally { admission.resolve(); await settled; }
+});
+
+for (const difference of ["number", "hash", "generation", "lane", "address", "signal", "deadline", "runtime"] as const) {
+  test(`shared code: ${difference} isolates in-flight and completed reads`, async () => {
+    const release = deferred<string>();
+    const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+    let calls = 0;
+    const makeRuntime = () => createStrictCentralAdapterRuntime({
+      provider: { ...mockProvider(), getCode: async () => { calls++; return release.promise; } },
+      generationFence: { assertCurrent() {} },
+    });
+    const runtime = makeRuntime();
+    const otherRuntime = difference === "runtime" ? makeRuntime() : runtime;
+    const otherSource = { ...SOURCE,
+      ...(difference === "number" ? { number: SOURCE.number + 1 } : {}),
+      ...(difference === "hash" ? { hash: `0x${"52".repeat(32)}` } : {}),
+      ...(difference === "generation" ? { generation: SOURCE.generation + 1 } : {}),
+    };
+    const otherControl = { ...control,
+      ...(difference === "signal" ? { signal: new AbortController().signal } : {}),
+      ...(difference === "deadline" ? { deadlineAtMs: control.deadlineAtMs + 1 } : {}),
+    };
+    const address = difference === "address" ? STETH : WSTETH;
+    const lane = difference === "lane" ? "discovery" : "exact";
+    const first = executeSharedRead(runtime, [codeRequest("first")], control);
+    const second = executeSharedRead(otherRuntime, [codeRequest("second", address)], otherControl, otherSource, lane);
+    const settled = Promise.allSettled([first, second]);
+    try {
+      await schedulingTurn();
+      assert.equal(calls, 2, "different ownership or state must not join a pending read");
+      release.resolve("0x6000");
+      const results = await Promise.all([first, second]);
+      assert(results.every(items => items[0]!.ok));
+      assert.deepEqual(results[0]![0]!.source, SOURCE);
+      assert.deepEqual(results[1]![0]!.source, otherSource);
+      await executeSharedRead(runtime, [codeRequest("first-cache")], control);
+      await executeSharedRead(otherRuntime, [codeRequest("second-cache", address)], otherControl, otherSource, lane);
+      assert.equal(calls, 2, "each isolated entry is independently reusable");
+    } finally { release.resolve("0x6000"); await settled; }
+  });
+}
+
+for (const ownership of ["none", "signal-only", "deadline-only", "infinite-deadline"] as const) {
+  test(`shared code: ${ownership} retains uncontrolled direct reads`, async () => {
+    const release = deferred<string>();
+    const control = ownership === "none" ? undefined : {
+      ...(ownership === "deadline-only" ? {} : { signal: new AbortController().signal }),
+      ...(ownership === "signal-only" ? {} : {
+        deadlineAtMs: ownership === "infinite-deadline" ? Infinity : Date.now() + 60_000,
+      }),
+    };
+    let calls = 0;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { ...mockProvider(), getCode: async () => { calls++; return release.promise; } },
+      generationFence: { assertCurrent() {} },
+    });
+    const first = executeSharedRead(runtime, [codeRequest("first")], control);
+    const second = executeSharedRead(runtime, [codeRequest("second")], control);
+    const settled = Promise.allSettled([first, second]);
+    try {
+      await schedulingTurn(); assert.equal(calls, 2);
+      release.resolve("0x6000"); await Promise.all([first, second]);
+      await executeSharedRead(runtime, [codeRequest("uncached")], control);
+      assert.equal(calls, 3);
+    } finally { release.resolve("0x6000"); await settled; }
+  });
+}
+
+test("shared code: storage kind and slots stay unshared with existing direct-group accounting", async () => {
+  const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+  const scheduler = new RethTransportScheduler({ capacity: 3, producerReserved: 1 });
+  let codeCalls = 0;
+  let permits = 0;
+  const slots: string[] = [];
+  const runtime = createStrictCentralAdapterRuntime({
+    provider: { ...mockProvider(), getCode: async () => { codeCalls++; return "0x6000"; },
+      getStorage: async (_address, slot) => { slots.push(slot); return "0x00"; } },
+    generationFence: { assertCurrent() {} },
+    transportScheduler: { run(lane, signal, work) { permits++; return scheduler.run(lane, signal, work); } },
+  });
+  const requests: AdapterRequest[] = [codeRequest("code"),
+    { id: "slot-zero", kind: "get-storage", address: WSTETH, slot: `0x${"00".repeat(32)}` },
+    { id: "slot-one", kind: "get-storage", address: WSTETH, slot: `0x${"00".repeat(31)}01` },
+  ];
+  const results = await Promise.all([executeSharedRead(runtime, requests, control), executeSharedRead(runtime, requests, control)]);
+  assert(results.every(items => items.every(result => result.ok)));
+  assert.equal(codeCalls, 1); assert.equal(slots.length, 4);
+  assert.equal(new Set(slots).size, 2); assert.equal(permits, 2, "one permit per physical direct group, not per read");
+  assert.equal(scheduler.snapshot().activeTotal, 0);
+});
+
+test("shared code: required failed guards block each decoder and retry failures are not cached", async () => {
+  const release = deferred<string>();
+  const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+  let calls = 0;
+  let decoded = 0;
+  let failing = true;
+  const runtime = createStrictCentralAdapterRuntime({
+    provider: { ...mockProvider(), getCode: async () => { calls++; return failing ? release.promise : "0x6000"; } },
+    executor: STETH, generationFence: { assertCurrent() {} },
+  });
+  const run = (id: string) => runSchedulingProgram(runtime, control, () => { decoded++; }, [codeRequest(id)]);
+  const first = run("first");
+  const second = run("second");
+  const settled = Promise.allSettled([first, second]);
+  try {
+    await schedulingTurn(); assert.equal(calls, 1);
+    release.reject(new Error("node unavailable"));
+    const results = await Promise.all([first, second]);
+    assert(results.every(result => result.status === "unresolved"));
+    assert.equal(calls, 2, "one bounded retry for the shared physical read, not per waiter");
+    assert.equal(decoded, 0);
+    failing = false;
+    assert.equal((await run("new-owner")).status, "resolved");
+    assert.equal((await run("cached")).status, "resolved");
+    assert.equal(calls, 3); assert.equal(decoded, 2);
+  } finally { release.resolve("0x6000"); await settled; }
+});
+
+test("shared code: successful cached bytes do not bypass per-program implementation guards", async () => {
+  const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+  let calls = 0;
+  let decoded = 0;
+  const runtime = createStrictCentralAdapterRuntime({
+    provider: { ...mockProvider(), getCode: async () => { calls++; return "0x"; } },
+    executor: STETH, generationFence: { assertCurrent() {} },
+  });
+  for (const id of ["owner", "cached"]) {
+    const outcome = await runSchedulingProgram(runtime, control, results => {
+      decoded++; assert(results[0]!.ok); assert.equal(results[0].data, "0x");
+      throw new Error("required implementation guard rejected empty code");
+    }, [codeRequest(id)]);
+    assert.notEqual(outcome.status, "resolved");
+  }
+  assert.equal(calls, 1); assert.equal(decoded, 2);
+});
+
+for (const interruption of ["abort", "deadline", "generation"] as const) {
+  test(`shared code: pending ${interruption} fences all waiters and retires reuse`, async context => {
+    const release = deferred<string>();
+    const controller = new AbortController();
+    const control = { signal: controller.signal, deadlineAtMs: Date.now() + 60_000 };
+    const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+    let current = true;
+    let calls = 0;
+    let decoded = 0;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { ...mockProvider(), getCode: async () => { calls++; return release.promise; } },
+      executor: STETH, transportScheduler: scheduler,
+      generationFence: { assertCurrent() { if (!current) throw new Error("generation retired"); } },
+    });
+    const first = runSchedulingProgram(runtime, control, () => { decoded++; }, [codeRequest("owner")]);
+    const second = runSchedulingProgram(runtime, control, () => { decoded++; }, [codeRequest("joiner")]);
+    const settled = Promise.allSettled([first, second]);
+    try {
+      await schedulingTurn(); assert.equal(calls, 1);
+      if (interruption === "abort") controller.abort(new Error("owner cancelled"));
+      if (interruption === "deadline") context.mock.method(Date, "now", () => control.deadlineAtMs + 1);
+      if (interruption === "generation") current = false;
+      release.resolve("0x6000");
+      const results = await Promise.all([first, second]);
+      assert(results.every(result => result.status === "unresolved"));
+      assert.equal(decoded, 0); assert.equal(calls, 1);
+      await assert.rejects(executeSharedRead(runtime, [codeRequest("still-fenced")], control));
+      assert.equal(calls, 1); assert.equal(scheduler.snapshot().activeTotal, 0);
+      context.mock.restoreAll(); current = true;
+      // Reaccepting a generation/clock is harness-only: prove retired pending
+      // completions never repopulated the old entry. An aborted signal is final.
+      const nextControl = interruption === "abort" ? { ...control, signal: new AbortController().signal } : control;
+      assert((await executeSharedRead(runtime, [codeRequest("fresh")], nextControl))[0]!.ok);
+      assert.equal(calls, 2);
+    } finally { release.resolve("0x6000"); await settled; context.mock.restoreAll(); }
+  });
+
+  test(`shared code: completed ${interruption} cannot revive cached output`, async context => {
+    const controller = new AbortController();
+    const control = { signal: controller.signal, deadlineAtMs: Date.now() + 60_000 };
+    let current = true;
+    let calls = 0;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { ...mockProvider(), getCode: async () => { calls++; return "0x6000"; } },
+      generationFence: { assertCurrent() { if (!current) throw new Error("generation retired"); } },
+    });
+    try {
+      await executeSharedRead(runtime, [codeRequest("owner")], control);
+      if (interruption === "abort") controller.abort(new Error("owner cancelled"));
+      if (interruption === "deadline") context.mock.method(Date, "now", () => control.deadlineAtMs + 1);
+      if (interruption === "generation") current = false;
+      await assert.rejects(executeSharedRead(runtime, [codeRequest("fenced-hit")], control));
+      assert.equal(calls, 1);
+      context.mock.restoreAll(); current = true;
+      const nextControl = interruption === "abort" ? { ...control, signal: new AbortController().signal } : control;
+      await executeSharedRead(runtime, [codeRequest("fresh")], nextControl);
+      assert.equal(calls, 2);
+    } finally { context.mock.restoreAll(); }
+  });
+}
+
+test("shared code: queued cancellation drains joiners without affecting another control domain", async () => {
+  const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+  const blocker = deferred<void>();
+  const occupied = scheduler.run("exact", new AbortController().signal, () => blocker.promise);
+  const cancelled = new AbortController();
+  const control = { signal: cancelled.signal, deadlineAtMs: Date.now() + 60_000 };
+  const unrelated = { ...control, signal: new AbortController().signal };
+  let calls = 0;
+  const runtime = createStrictCentralAdapterRuntime({
+    provider: { ...mockProvider(), getCode: async (_address, _block, actual) => {
+      calls++; assert.equal(actual?.signal, unrelated.signal); return "0x6000";
+    } },
+    generationFence: { assertCurrent() {} }, transportScheduler: scheduler,
+  });
+  const dead = ["owner", "joiner"].map(id => executeSharedRead(runtime, [codeRequest(id)], control));
+  const alive = ["independent-owner", "independent-joiner"].map(id => executeSharedRead(runtime, [codeRequest(id)], unrelated));
+  const settled = Promise.allSettled([...dead, ...alive]);
+  const cancelledResults = Promise.allSettled(dead);
+  try {
+    await schedulingTurn(); assert.equal(scheduler.snapshot().queuedByLane.exact, 2);
+    cancelled.abort(new Error("owner cancelled"));
+    const failures = await cancelledResults;
+    assert(failures.every(result => result.status === "rejected"));
+    assert.equal(calls, 0); assert.equal(scheduler.snapshot().queuedByLane.exact, 1);
+    blocker.resolve(); await occupied;
+    const results = await Promise.all(alive);
+    assert(results.every(items => items[0]!.ok)); assert.equal(calls, 1);
+    assert((await executeSharedRead(runtime, [codeRequest("unrelated-cache")], unrelated))[0]!.ok);
+    assert.equal(calls, 1); assert.equal(scheduler.snapshot().activeTotal, 0);
+    assert.equal(scheduler.snapshot().queuedByLane.exact, 0);
+  } finally { blocker.resolve(); await occupied; await settled; }
+});
+
+for (const synchronous of [false, true]) {
+  test(`shared code: ${synchronous ? "synchronous" : "asynchronous"} permit failure drains reserved reads and independent calls`, async () => {
+    const batch = deferred<string>();
+    const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+    const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+    const error = new Error("permit rejected");
+    let fail = true;
+    let calls = 0;
+    let enqueued = 0;
+    let finished = false;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { ...mockProvider(), getCode: async () => { calls++; return "0x6000"; } },
+      generationFence: { assertCurrent() {} },
+      transportScheduler: { run(lane, signal, work) {
+        if (fail) { if (synchronous) throw error; return Promise.reject(error); }
+        return scheduler.run(lane, signal, work);
+      } },
+      exactCallBackend: { async call() { enqueued++; return batch.promise; } },
+    });
+    const pending = executeSharedRead(runtime, [codeRequest("owner"), codeRequest("joiner"),
+      { id: "call", kind: "eth-call", to: WSTETH, data: "0x1111", completion: "return-data" },
+    ], control);
+    const settled = pending.then(value => { finished = true; return { value }; },
+      reason => { finished = true; return { reason }; });
+    try {
+      await schedulingTurn(); assert.equal(enqueued, 1); assert.equal(calls, 0); assert.equal(finished, false);
+      batch.resolve("0x00");
+      const result = await settled;
+      assert("reason" in result); assert.equal(result.reason, error);
+      fail = false;
+      assert((await executeSharedRead(runtime, [codeRequest("new-owner")], control))[0]!.ok);
+      assert.equal(calls, 1);
+    } finally { batch.resolve("0x00"); await settled; }
+  });
+}
+
+function cacheTestAddress(index: number): string {
+  return `0x${(index + 1).toString(16).padStart(40, "0")}`;
+}
+
+test("shared code: 256-entry bound evicts settled LRU reads without changing grouped permits", async () => {
+  const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+  const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+  let calls = 0;
+  let permits = 0;
+  const runtime = createStrictCentralAdapterRuntime({
+    provider: { ...mockProvider(), getCode: async () => { calls++; return "0x6000"; } },
+    generationFence: { assertCurrent() {} },
+    transportScheduler: { run(lane, signal, work) { permits++; return scheduler.run(lane, signal, work); } },
+  });
+  const read = (index: number) => executeSharedRead(runtime, [codeRequest(`read-${index}`, cacheTestAddress(index))], control);
+  await executeSharedRead(runtime, Array.from({ length: 256 }, (_, index) => codeRequest(`fill-${index}`, cacheTestAddress(index))), control);
+  assert.equal(calls, 256); assert.equal(permits, 1);
+  await read(0); await read(256); await read(0); await read(256);
+  assert.equal(calls, 257); assert.equal(permits, 2);
+  await read(1);
+  assert.equal(calls, 258); assert.equal(permits, 3);
+  assert.equal(scheduler.snapshot().activeTotal, 0);
+});
+
+test("shared code: all-pending overflow neither evicts active waiters nor repopulates after completion", async () => {
+  const release = deferred<string>();
+  const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+  const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+  let calls = 0;
+  let permits = 0;
+  const runtime = createStrictCentralAdapterRuntime({
+    provider: { ...mockProvider(), getCode: async () => { calls++; return release.promise; } },
+    generationFence: { assertCurrent() {} },
+    transportScheduler: { run(lane, signal, work) { permits++; return scheduler.run(lane, signal, work); } },
+  });
+  const first = executeSharedRead(runtime, Array.from({ length: 257 }, (_, index) => codeRequest(`fill-${index}`, cacheTestAddress(index))), control);
+  const joiner = executeSharedRead(runtime, [codeRequest("joiner", cacheTestAddress(0))], control);
+  const overflow = executeSharedRead(runtime, [codeRequest("overflow", cacheTestAddress(256))], control);
+  const settled = Promise.allSettled([first, joiner, overflow]);
+  try {
+    await schedulingTurn();
+    assert.equal(calls, 257); assert.equal(permits, 2);
+    assert.equal(scheduler.snapshot().queuedByLane.exact, 1, "the cached waiter must not queue another permit");
+    release.resolve("0x6000");
+    const results = await Promise.all([first, joiner, overflow]);
+    assert(results.every(items => items.every(result => result.ok)));
+    assert.equal(calls, 258); assert.equal(scheduler.snapshot().activeTotal, 0);
+    await executeSharedRead(runtime, [codeRequest("uncached-overflow", cacheTestAddress(256))], control);
+    assert.equal(calls, 259); assert.equal(permits, 3);
+  } finally { release.resolve("0x6000"); await settled; }
+});
+
+for (const shape of ["empty", "max-size", "oversize", "odd-hex", "invalid-hex"] as const) {
+  test(`shared code: ${shape} response obeys successful-byte retention bounds`, async () => {
+    const data = shape === "empty" ? "0x" : shape === "max-size" ? `0x${"60".repeat(32_768)}`
+      : shape === "oversize" ? `0x${"60".repeat(32_769)}` : shape === "odd-hex" ? "0x6" : "0xzz";
+    const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+    let calls = 0;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { ...mockProvider(), getCode: async () => { calls++; return data; } },
+      generationFence: { assertCurrent() {} },
+    });
+    await executeSharedRead(runtime, [codeRequest("first")], control);
+    await executeSharedRead(runtime, [codeRequest("second")], control);
+    assert.equal(calls, shape === "empty" || shape === "max-size" ? 1 : 2);
+  });
+}
+
+for (const lane of ["producer-bulk", "producer-critical", "discovery"] as const) {
+  test(`shared code: ${lane} preserves producer bypass`, async () => {
+    const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+    let calls = 0;
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: { ...mockProvider(), getCode: async () => { calls++; return "0x6000"; } },
+      generationFence: { assertCurrent() {} },
+      transportScheduler: { run() { assert.fail("producer-internal work cannot consume a central permit"); } },
+    });
+    const results = await executeSharedRead(runtime, [codeRequest("owner"), codeRequest("joiner")], control, SOURCE, lane);
+    assert.equal(results.length, 2); assert(results.every(result => result.ok));
+    await executeSharedRead(runtime, [codeRequest("cached")], control, SOURCE, lane);
+    assert.equal(calls, 1);
   });
 }

@@ -30,6 +30,8 @@ import {
   resolveBlockScanSolverSearchConfig,
 } from "./blockscan-solver-search-config.js";
 import { readBlockTouchedStateKeys, type BlockTouchedProvider } from "./blockscan-touched-state.js";
+import { BlockScanActivityPrefetch } from "./blockscan-activity-prefetch.js";
+import { startBlockScanHeadFeed } from "./blockscan-head-feed.js";
 import { isRpcThrottleError } from "./rpc-throttle-guard.js";
 import {
   initBlockScanEnumerationSolverTelemetry,
@@ -2458,40 +2460,42 @@ async function main(): Promise<void> {
     topologyKey:
       `strict-ready:${readyUniverse.generation}:${readyUniverse.graphHash}`,
     async observeHeader(blockNumber: number, control?: StateCallControl) {
-      const readStartedAtMs = Date.now();
-      const block = control === undefined
-        ? parseBlockScanObservedHeader(await provider.send("eth_getBlockByNumber", [
-          ethers.toQuantity(blockNumber), true,
-        ]), blockNumber, blockScanChainId)
-        : await readBlockScanObservedHeader(config.rpcUrl, blockScanChainId, blockNumber, control);
-      if (control?.signal?.aborted) throw new StateCallAbortedError("source header signal aborted", "signal");
-      if (control?.deadlineAtMs !== undefined && Date.now() >= control.deadlineAtMs) {
-        throw new StateCallAbortedError("source header deadline aborted", "deadline");
-      }
-      // Keep the actual observed anchor, before any pricing or fork work.
-      // A later RPC rejection alone cannot explain where a source mismatch began.
-      console.log(`[searcher/source-header] ${JSON.stringify({
-        sourceBlock: block.number,
-        sourceBlockHash: block.hash.toLowerCase(),
-        parentHash: block.parentHash.toLowerCase(),
-        blockTimestamp: block.timestamp,
-        observedAtMs: Date.now(),
-        ...(process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1" ? {
-          readStartedAtMs, readWallMs: Date.now() - readStartedAtMs,
-        } : {}),
-      })}`);
-      blockScanAmountReference.observeHeader(block);
-      return Object.freeze({
-        number: block.number,
-        hash: block.hash.toLowerCase(),
-        parentHash: block.parentHash.toLowerCase(),
-        transactionHashes: block.transactionHashes,
-        passiveTouchedAddresses: block.passiveTouchedAddresses,
-        timestamp: block.timestamp,
-        baseFeePerGas: block.baseFeePerGas,
-        gasUsed: block.gasUsed,
-        gasLimit: block.gasLimit,
-      });
+      return blockScanActivityProvider.observeHeader(blockNumber, async () => {
+        const readStartedAtMs = Date.now();
+        const block = control === undefined
+          ? parseBlockScanObservedHeader(await provider.send("eth_getBlockByNumber", [
+            ethers.toQuantity(blockNumber), true,
+          ]).catch(activityReadFailed), blockNumber, blockScanChainId)
+          : await readBlockScanObservedHeader(config.rpcUrl, blockScanChainId, blockNumber, control).catch(activityReadFailed);
+        if (control?.signal?.aborted) throw new StateCallAbortedError("source header signal aborted", "signal");
+        if (control?.deadlineAtMs !== undefined && Date.now() >= control.deadlineAtMs) {
+          throw new StateCallAbortedError("source header deadline aborted", "deadline");
+        }
+        // Keep the actual observed anchor, before any pricing or fork work.
+        // A later RPC rejection alone cannot explain where a source mismatch began.
+        console.log(`[searcher/source-header] ${JSON.stringify({
+          sourceBlock: block.number,
+          sourceBlockHash: block.hash.toLowerCase(),
+          parentHash: block.parentHash.toLowerCase(),
+          blockTimestamp: block.timestamp,
+          observedAtMs: Date.now(),
+          ...(process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1" ? {
+            readStartedAtMs, readWallMs: Date.now() - readStartedAtMs,
+          } : {}),
+        })}`);
+        blockScanAmountReference.observeHeader(block);
+        return Object.freeze({
+          number: block.number,
+          hash: block.hash.toLowerCase(),
+          parentHash: block.parentHash.toLowerCase(),
+          transactionHashes: block.transactionHashes,
+          passiveTouchedAddresses: block.passiveTouchedAddresses,
+          timestamp: block.timestamp,
+          baseFeePerGas: block.baseFeePerGas,
+          gasUsed: block.gasUsed,
+          gasLimit: block.gasLimit,
+        });
+      }, control);
     },
   });
   // The existing activity reader owns both pricing modes. Observe either
@@ -2523,7 +2527,7 @@ async function main(): Promise<void> {
       } catch { /* Diagnostics never change activity completeness or failure. */ }
     }
   };
-  const blockScanActivityProvider: BlockTouchedProvider = {
+  const blockScanRawActivityProvider: BlockTouchedProvider = {
     getLogs(filter) {
       blockScanRuntimeAbort.signal.throwIfAborted();
       return timedActivityRead("eth_getLogs", "blockHash" in filter ? filter.blockHash : filter.fromBlock,
@@ -2534,6 +2538,9 @@ async function main(): Promise<void> {
       return timedActivityRead(method, params[0], () => provider.send(method, params)).catch(activityReadFailed);
     },
   };
+  const blockScanActivityProvider = new BlockScanActivityPrefetch(
+    blockScanRawActivityProvider, blockScanRuntimeAbort.signal,
+  );
   const blockScanRuntimeLoop = new BlockScanRuntimeLoop({
     enabled: enableBlockScan,
     blockScanConfig: blockScanCfg,
@@ -2622,7 +2629,7 @@ async function main(): Promise<void> {
     // One refresh set: log identities retain singleton poolIds while the
     // call trace adds contracts reached through top-level or internal calls.
     readBlockSwapTouched: (blockNumber, header, range) =>
-      readBlockTouchedStateKeys(
+      blockScanActivityProvider.withBlockActivity(header?.hash, () => readBlockTouchedStateKeys(
         blockScanActivityProvider,
         blockNumber,
         ADDR.UNISWAP_V4_POOL_MANAGER,
@@ -2641,7 +2648,7 @@ async function main(): Promise<void> {
           },
         },
         strictRuntimeRoot.resolveBlockTouchedStateKeys,
-      ),
+      ), range),
     currentHeadEvidenceFamilyForEdge(edgeAdapterId) {
       return PRODUCTION_STRICT_FAMILY_DECLARATIONS
         .currentHeadEvidenceFamilyForEdge(
@@ -3039,7 +3046,20 @@ async function main(): Promise<void> {
   if (config.stateUpdaterEnabled && !enableBlockScan) {
     provider.on("block", (blockNumber: number) => runStateUpdate(blockNumber, "block"));
   }
+  const blockScanHeadFeed = enableBlockScan && !blindProductionAudit
+    ? startBlockScanHeadFeed({
+      url: config.wsUrl,
+      signal: blockScanRuntimeAbort.signal,
+      onHead(number, hash) {
+        blockScanActivityProvider.noteHead(number, hash);
+        blockScanRuntimeLoop.schedule(number);
+      },
+      onStatus(status) { console.log(`[searcher/blockscan-head-feed] ${status}`); },
+    })
+    : undefined;
   if (enableBlockScan && !blindProductionAudit) {
+    // HTTP remains the fallback when WS is unavailable. Both feed the same
+    // latest-head scheduler; a hint cannot authorize a canonical source.
     provider.on(
       "block",
       (blockNumber: number) => blockScanRuntimeLoop.schedule(blockNumber),
@@ -3068,11 +3088,12 @@ async function main(): Promise<void> {
       console.log("\n[searcher/live] shutting down");
       shuttingDown = true;
       if (!blockScanRuntimeAbort.signal.aborted) blockScanRuntimeAbort.abort(new Error("searcher shutdown"));
+      blockScanHeadFeed?.close();
       logStageCounters(counters);
       cancelScheduledWarm();
       provider.removeAllListeners("block");
       try {
-        const settled = await Promise.allSettled([blockScanRuntimeLoop.shutdown(),
+        const settled = await Promise.allSettled([blockScanRuntimeLoop.shutdown(), blockScanActivityProvider.closeAndDrain(),
           activeHintSimulationWork?.closeAndDrain(), activeBlindSimulationWork?.closeAndDrain()]);
         const failure = settled.find(result => result.status === "rejected");
         if (failure?.status === "rejected") throw failure.reason;

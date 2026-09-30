@@ -1,0 +1,24 @@
+{
+  "divergence_id": "bundle-postmortem-legacy-blockscan-false-not-running",
+  "status": "open_frozen",
+  "tool": "analysis:bundle-postmortem",
+  "capability": "production-events",
+  "deferred_reason": "tx-gap analysis-tool freeze; no analyzer, hook or gate changes in this transaction analysis",
+  "fixed_by": null,
+  "transactions": [{
+    "tx_hash": "0xb907df9a058ded68a93c6a43e94425b94bd1b453924e2d58aae30a71fd6ffc6e",
+    "block": 25973306,
+    "source_block": 25973305,
+    "source_hash": "0x06cd878c05ac1b7f4a3973ac5e427d506f9b852a935b155a3029141f7a94cc90",
+    "run_id": "5384b94f-1277-495f-ba45-7e199dac4c5a",
+    "tool_actual": "not_running / ran=false",
+    "manual_ground_truth": "The exact canonical-parent source was processed. Same-source header, enumeration/refinement logs and block_scan_result confirm stages ran. Absence of detailed route lifecycle is unknown, not proof of not running.",
+    "evidence": "logs/tx-b907-gap.vBo0sk/pinned-evidence.json",
+    "evidence_sha256": "8cdb5a3a8e9ea8aace3d2d2780de43ec7c259285ab5de280de686ed4ce5cd58c",
+    "execution_manifest_sha256": "583771e2eb26fcd8dcf1f1b27527094a1e1fc97f0f5e800481d816ca0a5395a9"
+  }],
+  "root_cause": "Legacy text-log parsing misses current source-N records and turns absence of a recognized text format into not_running despite structured positive execution evidence.",
+  "code": ["analysis/src/cli/bundle-postmortem.ts:742"],
+  "exclusions": ["analysis:block-activity correctly reports unknown_missing_block_record; do not reinterpret that as a parser false negative or a complete route set", "This does not establish a missed closed-loop opportunity for the inventory-sale transaction"],
+  "independent_review": {"reviewer": "Singer", "agent_id": "01a09e36-b712-7493-8c4a-46cf1b1b9361", "verdict": "confirmed; open_frozen; no writes/RPC/runtime actions by reviewer"}
+}

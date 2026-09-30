@@ -21,6 +21,7 @@ import {
   isStateCallAbortedError,
   postJsonRpc,
   StateCallAbortedError,
+  type JsonRpcHttpTiming,
   type StateCallControl,
 } from "../../shared/state/state-backend.js";
 import {
@@ -1118,17 +1119,24 @@ async function sharedTimeoutTests(): Promise<void> {
 
 async function latencyDiagnosticTests(): Promise<void> {
   const marker = "[searcher/quote-batch-timing] ";
+  const dispatchMarker = "[searcher/quote-batch-dispatch] ";
   const capture = async (
     flag: string | undefined,
     throwOnLog: boolean,
-    work: (records: Array<Record<string, unknown>>) => Promise<void>,
+    work: (records: Array<Record<string, unknown>>, dispatches: Array<Record<string, unknown>>) => Promise<void>,
   ): Promise<void> => {
     const previousFlag = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
     const previousLog = console.log;
     const records: Array<Record<string, unknown>> = [];
+    const dispatches: Array<Record<string, unknown>> = [];
     if (flag === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
     else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = flag;
     console.log = (...args: unknown[]) => {
+      if (typeof args[0] === "string" && args[0].startsWith(dispatchMarker)) {
+        dispatches.push(JSON.parse(args[0].slice(dispatchMarker.length)) as Record<string, unknown>);
+        if (throwOnLog) throw new Error("diagnostic logger failure");
+        return;
+      }
       if (typeof args[0] !== "string" || !args[0].startsWith(marker)) {
         previousLog(...args);
         return;
@@ -1137,7 +1145,7 @@ async function latencyDiagnosticTests(): Promise<void> {
       if (throwOnLog) throw new Error("diagnostic logger failure");
     };
     try {
-      await work(records);
+      await work(records, dispatches);
     } finally {
       console.log = previousLog;
       if (previousFlag === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
@@ -1147,9 +1155,9 @@ async function latencyDiagnosticTests(): Promise<void> {
   for (const flag of [undefined, "0", "1"]) {
     for (const throwOnLog of flag === "1" ? [false, true] : [false]) {
       await pendingCase(`wire timing flag=${flag ?? "unset"} logger-throws=${throwOnLog}`,
-        async ({ state, backend, rpcUrl }) => capture(flag, throwOnLog, async records => {
+        async ({ state, backend, rpcUrl }) => capture(flag, throwOnLog, async (records, dispatches) => {
           const client = backend({ transportLane: "producer-bulk", scopeLabel: "diagnostic test" });
-          const request = { to: OK_A, data: "0xfacefeed" };
+          const request = { to: OK_A, data: "0xfacefeed" + "00".repeat(32) };
           const startedAtMs = Date.now();
           check.deepEqual(await Promise.all([
             client.call(request), client.call(request), client.call({ to: OK_B, data: "0xabcdef" }),
@@ -1166,10 +1174,12 @@ async function latencyDiagnosticTests(): Promise<void> {
           check.equal(stats.batchFailures, 0);
           check.equal(stats.singleCallFallbacks, 0);
           check.equal(records.length, flag === "1" ? 1 : 0);
+          check.equal(dispatches.length, flag === "1" ? 1 : 0);
           if (flag !== "1") return;
           const row = records[0]!;
           check.deepEqual(Object.keys(row).sort(), ["sourceBlockHash", "lane", "scopeLabel", "method",
-            "items", "startedAtMs", "wallMs", "status", "statusCode"].sort());
+            "items", "startedAtMs", "wallMs", "status", "statusCode", "batchId",
+            "permitQueueWaitMs", "createdAtMs", "http"].sort());
           check.equal(row.sourceBlockHash, HASH);
           check.equal(row.lane, "producer-bulk");
           check.equal(row.scopeLabel, "diagnostic test");
@@ -1183,6 +1193,28 @@ async function latencyDiagnosticTests(): Promise<void> {
           for (const excluded of [rpcUrl, request.data, "0xabcdef", OK_A, OK_B, RESULT]) {
             check.ok(!serialized.includes(excluded), "timing must not expose RPC URL, call payload or returned body");
           }
+          const dispatch = dispatches[0]!;
+          check.equal(dispatch.batchId, row.batchId);
+          check.equal(dispatch.sourceBlockHash, HASH);
+          check.equal(dispatch.permitQueueWaitMs, row.permitQueueWaitMs);
+          const calls = dispatch.calls as Array<Record<string, unknown>>;
+          check.equal(calls.length, 2, "memo hit must not manufacture another physical item");
+          check.deepEqual(calls.map(call => call.target), [OK_A, OK_B]);
+          check.equal(calls[0]!.selector, "0xfacefeed");
+          check.equal(calls[1]!.selector, null);
+          check.equal(calls[0]!.calldataSha256, createHash("sha256").update(Buffer.from(request.data.slice(2), "hex")).digest("hex"));
+          check.ok(calls.every(call => typeof call.enqueuedAtMs === "number" && call.enqueuedAtMs <= (row.startedAtMs as number)));
+          for (const excluded of [rpcUrl, request.data, "0xabcdef", RESULT]) {
+            check.ok(!JSON.stringify(dispatch).includes(excluded), "dispatch includes identifiers, not full payloads, RPC URLs or results");
+          }
+          const http = row.http as JsonRpcHttpTiming;
+          check.ok(http.startedAtMs >= (row.startedAtMs as number));
+          check.ok(http.socketAssignedAtMs! >= http.startedAtMs);
+          check.ok(http.requestFlushedAtMs! >= http.socketAssignedAtMs!);
+          check.ok(http.responseHeadersAtMs! >= http.requestFlushedAtMs!);
+          check.ok(http.responseEndedAtMs! >= http.firstBodyByteAtMs!);
+          check.ok(http.settledAtMs >= http.responseEndedAtMs!);
+          check.ok(http.requestBytes > 0 && http.responseBytes > 0);
         }));
     }
   }
@@ -1200,6 +1232,9 @@ async function latencyDiagnosticTests(): Promise<void> {
         check.equal(records.length, 1);
         check.equal(records[0]!.status, "transport-failed");
         check.equal(records[0]!.statusCode, null);
+        const http = records[0]!.http as JsonRpcHttpTiming;
+        check.equal(http.responseEndedAtMs, null);
+        check.equal(http.responseHeadersAtMs, null);
         check.equal(state.batches.length, 1);
         check.equal(state.singles.length, 0);
         check.equal(client.stats().totalCalls, 1);
@@ -1208,6 +1243,56 @@ async function latencyDiagnosticTests(): Promise<void> {
         check.equal(client.stats().singleCallFallbacks, 0);
       }));
   }
+  await pendingCase("diagnostics separate permit queue from own HTTP response", async ({ state, backend }) =>
+    capture("1", false, async (records, dispatches) => {
+      const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+      let release!: () => void;
+      const occupied = scheduler.run("exact", new AbortController().signal,
+        () => new Promise<void>(resolve => { release = resolve; }));
+      await until(() => release !== undefined, "first exact permit occupied");
+      const client = backend({ transportScheduler: scheduler });
+      const pending = observe(client.call({ to: OK_A, data: "0x01" }));
+      try {
+        await new Promise(resolve => setTimeout(resolve, 25));
+        check.equal(state.batches.length, 0);
+        check.equal(dispatches.length, 0, "queue is not a physical dispatch");
+        release(); await occupied;
+        check.deepEqual(await pending, { status: "fulfilled", value: RESULT });
+        await client.closeAndDrain();
+        check.equal(records.length, 1);
+        check.ok((records[0]!.permitQueueWaitMs as number) >= 10);
+        const http = records[0]!.http as JsonRpcHttpTiming;
+        check.ok(http.startedAtMs - (records[0]!.createdAtMs as number) >= 10);
+        check.equal(state.batches.length, 1);
+        check.equal(state.singles.length, 0);
+      } finally { release(); await occupied; await client.closeAndDrain(); }
+    }));
+
+  // Send headers/body prefix first, then finish the same response. The timing
+  // must distinguish download wait from time to headers without extra RPCs.
+  const phased = createServer((req, res) => {
+    req.resume();
+    req.once("end", () => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write('{"jsonrpc":"2.0",');
+      setTimeout(() => res.end('"id":1,"result":"0x01"}'), 40);
+    });
+  });
+  phased.listen(0, "127.0.0.1");
+  await once(phased, "listening");
+  try {
+    const port = (phased.address() as { port: number }).port;
+    for (const throwOnTiming of [false, true]) {
+      const timings: JsonRpcHttpTiming[] = [];
+      const response = await postJsonRpc(`http://127.0.0.1:${port}/private-endpoint`,
+        { jsonrpc: "2.0", id: 1, method: "eth_call", params: [] }, new AbortController().signal,
+        timing => { timings.push(timing); if (throwOnTiming) throw new Error("logger failure"); });
+      check.deepEqual(response.body, { jsonrpc: "2.0", id: 1, result: "0x01" });
+      check.equal(timings.length, 1);
+      check.ok(timings[0]!.responseEndedAtMs! - timings[0]!.firstBodyByteAtMs! >= 15);
+      check.ok(!JSON.stringify(timings).includes("private-endpoint"));
+    }
+  } finally { phased.closeAllConnections(); phased.close(); await once(phased, "close"); }
 }
 
 async function run(): Promise<void> {
@@ -1421,6 +1506,32 @@ async function run(): Promise<void> {
       await backend.closeAndDrain();
       state.holdResponses = false;
       console.log("[pinned-reth-quote-backend] producer-bulk batching: PASS");
+    }
+
+    for (const batchSize of [1000, 1024]) {
+      const backend = new PinnedRethQuoteBackend(rpcUrl, HASH, {
+        maxBatchSize: batchSize,
+        maxConcurrentBatches: 8,
+        transportLane: "producer-bulk",
+        allowSingleCallFallback: false,
+      });
+      const batchesBefore = state.batches.length;
+      state.holdResponses = true;
+      try {
+        const results = await Promise.all(Array.from({ length: 2050 }, (_, index) =>
+          backend.call({ to: OK_A, data: `0x${(index + 1).toString(16).padStart(4, "0")}` })
+        ));
+        assert(results.every(result => result === RESULT), "wide batch results");
+        check.deepEqual(state.batches.slice(batchesBefore).map(batch => batch.length)
+          .sort((a, b) => a - b), [2050 - 2 * batchSize, batchSize, batchSize]);
+        const stats = backend.stats();
+        assert(stats.maxBatchItemsSent === batchSize && stats.peakInFlightBatches <= 8 &&
+          stats.singleCallFallbacks === 0, "wide producer limits and no fallback");
+      } finally {
+        await backend.closeAndDrain();
+        state.holdResponses = false;
+      }
+      console.log(`[pinned-reth-quote-backend] ${batchSize}-item producer batching: PASS`);
     }
 
     {

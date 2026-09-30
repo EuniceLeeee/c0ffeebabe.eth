@@ -12,6 +12,7 @@ import { RevmFatalError, RevmStrictError, type RevmFatalReason, type StrictSimul
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
 import { BlockActivityRangeInvalidatedError } from "../blockscan-touched-state.js";
 import { isRpcThrottleError } from "../rpc-throttle-guard.js";
+import { BlockScanActivityPrefetch } from "../blockscan-activity-prefetch.js";
 import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedGraphView } from "../venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { AnvilSolver } from "../solver/solver.js";
@@ -110,15 +111,15 @@ test("actual shared activity provider latches throttle before joined reads settl
   // Extract only the real thin main wiring, not a parallel copy of its behavior.
   const text = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
   const ast = ts.createSourceFile("main.ts", text, ts.ScriptTarget.Latest, true);
-  const names = new Set(["activityReadFailed", "blockScanActivityProvider"]);
+  const names = new Set(["activityReadFailed", "timedActivityRead", "blockScanRawActivityProvider"]);
   const statements: string[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration =>
       ts.isIdentifier(declaration.name) && names.has(declaration.name.text))) statements.push(node.getText(ast));
     ts.forEachChild(node, visit);
   };
-  visit(ast); assert.equal(statements.length, 2);
-  const js = ts.transpileModule(`${statements.join("\n")}\nblockScanActivityProvider;`, {
+  visit(ast); assert.equal(statements.length, 3);
+  const js = ts.transpileModule(`${statements.join("\n")}\nblockScanRawActivityProvider;`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
   for (const method of ["logs", "trace"] as const) {
@@ -128,23 +129,70 @@ test("actual shared activity provider latches throttle before joined reads settl
     stop.installDrain(() => slow.promise);
     const throttle = Object.assign(new Error("fixture HTTP 429"), { statusCode: 429 });
     const provider = {
-      async getLogs() { calls++; if (method === "logs") throw throttle; await slow.promise; return []; },
-      async send() { calls++; if (method === "trace") throw throttle; await slow.promise; return []; },
+      async getLogs(_filter: unknown) { calls++; if (method === "logs") throw throttle; await slow.promise; return []; },
+      async send(_method: string, _params: unknown[]) { calls++; if (method === "trace") throw throttle; await slow.promise; return []; },
     };
     const guarded = runInNewContext(js, {
       provider, blockScanRuntimeAbort: runtimeAbort, console: { error() {} },
+      process: { env: {} },
       isRpcThrottleError,
       onSimulationFatal: stop.fatal,
     }, { timeout: 1000 }) as typeof provider;
-    const a = guarded.getLogs(), b = guarded.send();
+    const a = guarded.getLogs({ fromBlock: 1, toBlock: 1 }), b = guarded.send("debug_traceBlockByNumber", ["0x1"]);
     const failed = assert.rejects(method === "logs" ? a : b, error => error === throttle);
     await failed;
     assert(runtimeAbort.signal.aborted);
     assert.deepEqual(exits, [], "stop still joins the already-running sibling");
-    assert.throws(() => guarded.getLogs()); assert.throws(() => guarded.send());
+    assert.throws(() => guarded.getLogs({ fromBlock: 1, toBlock: 1 }));
+    assert.throws(() => guarded.send("debug_traceBlockByNumber", ["0x1"]));
     assert.equal(calls, 2, "a caller retry cannot dispatch after the throttle");
     slow.resolve(); await Promise.allSettled([a, b]); await turn();
     assert.deepEqual(exits, [1]);
+  }
+});
+
+test("actual full-header throttle latches before speculative trace drain, then exits after drain", async () => {
+  const text = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("main.ts", text, ts.ScriptTarget.Latest, true);
+  const names = new Set(["frozenProducerTopology", "activityReadFailed", "timedActivityRead",
+    "blockScanRawActivityProvider", "blockScanActivityProvider"]);
+  const statements: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration =>
+      ts.isIdentifier(declaration.name) && names.has(declaration.name.text))) statements.push(node.getText(ast));
+    ts.forEachChild(node, visit);
+  };
+  visit(ast); assert.equal(statements.length, 5);
+  const js = ts.transpileModule(`${statements.join("\n")}\n({frozenProducerTopology, blockScanActivityProvider});`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  for (const controlled of [true, false]) {
+    const runtimeAbort = new AbortController(), slow = deferred(), exits: number[] = [];
+    let fatalities = 0, done = false, traces = 0;
+    const throttle = Object.assign(new Error("fixture header HTTP 429"), { statusCode: 429 });
+    const stop = createLiveRuntimeStop({ runtimeAbort, emitFatal() { fatalities++; }, exit: code => { exits.push(code); } });
+    const wired = runInNewContext(js, {
+      readyUniverse: { generation: 4, graphHash: hash(4) }, config: { rpcUrl: "http://fixture.invalid" },
+      blockScanChainId: 1n, blockScanRuntimeAbort: runtimeAbort, ethers, BlockScanActivityPrefetch,
+      provider: { getLogs: async () => [], send: async (method: string) => {
+        if (method === "eth_getBlockByNumber") throw throttle;
+        traces++; await slow.promise; return [];
+      } },
+      readBlockScanObservedHeader: async () => { throw throttle; },
+      parseBlockScanObservedHeader: () => { throw new Error("unexpected successful header"); },
+      process: { env: {} }, console: { error() {}, log() {} }, isRpcThrottleError,
+      onSimulationFatal: stop.fatal,
+    }, { timeout: 1000 }) as { frozenProducerTopology: { observeHeader: (n: number, c?: unknown) => Promise<unknown> };
+      blockScanActivityProvider: BlockScanActivityPrefetch };
+    stop.installDrain(() => wired.blockScanActivityProvider.closeAndDrain());
+    wired.blockScanActivityProvider.noteHead(42, hash(42));
+    const pending = wired.frozenProducerTopology.observeHeader(42, controlled ? control() : undefined)
+      .finally(() => { done = true; });
+    const rejected = assert.rejects(pending, e => e === throttle);
+    await turn();
+    assert.equal(traces, 1); assert.equal(fatalities, 1); assert(runtimeAbort.signal.aborted);
+    assert.equal(done, false); assert.deepEqual(exits, []);
+    slow.resolve(); await rejected; await turn(); assert.deepEqual(exits, [1]);
   }
 });
 
@@ -294,7 +342,7 @@ test("source cancellation retires the client without reopening the generation or
   assert.deepEqual(f.reports, [], "expected cancellation is not a physical fatal");
 });
 
-function loopFixture(factory: SourceSimulationFactory) {
+function loopFixture(factory: SourceSimulationFactory, startupWarmEnabled = false) {
   const inputs: any[] = []; const runtimeAbort = new AbortController();
   const worker: any = { state: { provider: {}, async forkAt() {}, stop() {}, async stopAndWait() {} }, solver: {}, simulator: {} };
   const coordinator: any = { latestPricingSnapshot: () => null,
@@ -307,7 +355,7 @@ function loopFixture(factory: SourceSimulationFactory) {
     backrunStatePublisher: { publish() {} }, frozenTopology: { topologyKey: "fixture",
       async observeHeader(number) { return { number, hash: hash(number), parentHash: hash(number - 1) }; } },
     blind: { enabled: false, activeSource: () => null, preparedBase: () => null, preparedArtifacts: () => null, dynamicResetNonce: () => null },
-    startupWarmEnabled: false, startupWarmBudgetMs: 100, passBudgetMs: 10_000, largeGraphPassBudgetMs: 10_000,
+    startupWarmEnabled, startupWarmBudgetMs: 100, passBudgetMs: 10_000, largeGraphPassBudgetMs: 10_000,
     largeGraphEdgeThreshold: 1000, refineCandidates: 5, solveReserveMs: 20, solverGridHalfWidth: 1,
     solverGssMaxTries: 1, solverQuoteConcurrency: 1, exactConcurrency: 1, exactProbeTimeoutMs: 100,
     executorAddress: actor, currentHeadEvidenceFamilyForEdge: () => null, currentHeadEvidenceScopeKeyForEdge: () => null,
@@ -365,6 +413,29 @@ test("runHead creates SOURCE-controlled context before prefunding and drains it 
       assert.equal(i.deadlineAtMs, contexts[0]!.control.deadlineAtMs); }
     assert.equal(closes, 1);
   } finally { await f.loop.shutdown(); }
+});
+
+test("startup retains64-item batches; steady source-N pricing uses1000 with the same8-batch limit", async context => {
+  const records: Array<Record<string, number>> = [];
+  const marker = "[searcher/blockscan-source-n-call-stats-final] ";
+  context.mock.method(console, "log", (line: string) => {
+    if (line.startsWith(marker)) records.push(JSON.parse(line.slice(marker.length)));
+  });
+  for (const startup of [true, false]) {
+    records.length = 0;
+    const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } },
+      async closeAndDrain() {} }), startup);
+    try {
+      await assert.rejects(f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }),
+        /fixture prepared boundary/);
+      assert.equal(records.length, 1, "the real phase-owned backend emits one drained receipt");
+      const stats = records[0]!;
+      assert.equal(stats.maxBatchSize, startup ? 64 : 1000);
+      assert.equal(stats.maxConcurrentBatches, 8);
+      assert.equal(stats.totalCalls, 0, "phase selection is offline and does not manufacture calls");
+      assert.equal(stats.singleCallFallbacks, 0);
+    } finally { await f.loop.shutdown(); }
+  }
 });
 
 test("source-N binds the full published-to-target activity range, with bounded full-refresh fallback", async () => {
