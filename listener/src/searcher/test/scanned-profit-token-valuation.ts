@@ -48,7 +48,8 @@ test("raw amounts, best same-distance quote, no token whitelist/extra fees", () 
   assert.equal(v.valueInEth(W, 123n, 0), 123n);
   assert.equal(v.valueInEth(ADDR.USDC, 100n, 3000), null, "no assumed USD peg");
   assert.equal(v.valueInEth(BTC, 6422n, 0), 2000119143355107n);
-  assert.equal(v.valueInEth(BTC, 6423n, 0), null, "no extrapolation above reference amount");
+  assert.equal(v.valueInEth(BTC, 6423n, 0), 6423n * 2000119143355107n / 6422n);
+  assert.equal(v.valueInEth(BTC, 642200n, 0), 100n * 2000119143355107n, "profit can exceed sampled P");
 });
 test("shortest directed path, <=3 hops, not inverse edges or cycles", () => {
   const p = snapshot([["a", W, 100n, 100n], ["a", "b", 100n, 200n], ["b", W, 1000n, 3000n],
@@ -59,13 +60,17 @@ test("shortest directed path, <=3 hops, not inverse edges or cycles", () => {
   assert.equal(v.valueInEth("d", 10n, 0), 10n);
   for (const token of ["four", "reverse-only", "cycle1"]) assert.equal(v.canValue(token), false);
 });
-test("per-hop capacity and integer rounding, conservative loss rounding", () => {
+test("reference rates extrapolate past per-hop samples with conservative integer rounding", () => {
   const v = createScannedProfitTokenValuation(snapshot([["a", "b", 100n, 1000n], ["b", W, 100n, 1n]]), source);
   assert.equal(v.valueInEth("a", 10n, 0), 1n);
-  assert.equal(v.valueInEth("a", 11n, 0), null);
+  assert.equal(v.valueInEth("a", 11n, 0), 1n);
+  assert.equal(v.valueInEth("a", 1000n, 0), 100n, "exceeds both hops' sampled inputs");
   const rounding = createScannedProfitTokenValuation(snapshot([["a", "b", 2n, 3n], ["b", W, 2n, 3n]]), source);
   assert.equal(rounding.valueInEth("a", 1n, 0), 1n, "floor at each hop, not 2 from rational product");
   assert.equal(rounding.valueInEth("a", -1n, 0), -3n);
+  assert.equal(rounding.valueInEth("a", 101n, 0), 226n);
+  assert.equal(rounding.valueInEth("a", -101n, 0), -228n, "loss rounds away from zero above P");
+  assert.equal(rounding.valueInEth("a", 0n, 0), 0n);
 });
 test("missing, partial and mismatched publications have no raw/default fallback", () => {
   const p = snapshot([[BTC, W, 100n, 200n]]);
@@ -82,6 +87,13 @@ test("missing, partial and mismatched publications have no raw/default fallback"
     assert.equal(v.canValue(BTC), false);
     assert.equal(v.valueInEth(W, 1n, 0), 1n);
   }
+});
+test("small downstream samples do not erase a reference path; equal-rate tie-break stays unchanged", () => {
+  const smallSample = createScannedProfitTokenValuation(snapshot([["a", "b", 1n, 1000n], ["b", W, 100n, 1n]]), source);
+  assert.equal(smallSample.valueInEth("a", 1n, 0), 10n, "propagated sample rounds to zero but rate is valid");
+  const equalRate = createScannedProfitTokenValuation(snapshot([["a", "b", 2n, 3n], ["b", W, 2n, 3n],
+    ["a", "c", 4n, 9n], ["c", W, 100n, 100n]]), source);
+  assert.equal(equalRate.valueInEth("a", 5n, 0), 11n, "same rate still prefers the larger sampled path");
 });
 test("current effective profit marks are independent of frozen raw membership and metadata", () => {
   const p = snapshot([[BTC, W, 100n, 200n]]);
@@ -161,6 +173,24 @@ test("source mismatch and reorg fail closed even with EV gate disabled", async (
   assert.equal(reads, 2);
   assert.equal(reorged.valuationAvailable, false);
   assert.equal(reorged.feeStateAvailable, false);
+});
+
+test("EV prices profit above P from effective rates without an additional price RPC", async () => {
+  const amountIn = 4237037n, amountOut = 1999999701923617n, profit = 167645544n;
+  const v = createScannedProfitTokenValuation(snapshot([[ADDR.USDT, W, amountIn, amountOut]]), source);
+  let calls = 0, headers = 0;
+  const header = { number: source.number, hash: source.hash, baseFeePerGas: 2213147948n, gasUsed: 100n, gasLimit: 200n };
+  const ev = await evaluateEv({ getBlock: async () => { headers++; return header; },
+    call: async () => { calls++; throw new Error("unexpected price RPC"); } },
+    ADDR.USDT, profit, 904211n, { evGate: true, profitHaircutBps: 0, bribeBps: 5000, bribeAllAboveGas: false },
+    v, source.number, { mode: "source-block", sourceBlockHash: source.hash });
+  assert.equal(ev.valuationAvailable, true);
+  assert.equal(ev.rawProfitEth, 79133375051674700n);
+  assert.equal(ev.gasCostEth, 2001152719209028n);
+  assert.equal(ev.bidEth, 38566111166232836n);
+  assert.equal(ev.netEvWei, 38566111166232836n);
+  assert.equal(calls, 0);
+  assert.equal(headers, 2, "existing source checks remain, no new requests");
 });
 
 for (const [name, run] of tests) { await run(); console.log(`[scanned-profit-token-valuation] PASS ${name}`); }

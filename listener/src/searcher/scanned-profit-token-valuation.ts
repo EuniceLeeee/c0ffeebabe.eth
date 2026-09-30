@@ -15,8 +15,9 @@ const HASH = /^0x[0-9a-fA-F]{64}$/;
  * No token whitelist, USD peg, protocol math, raw-mid fallback or network I/O.
  * These are reference valuations, not proof of liquidation at that price.
  * As with sizing, shortest directed paths win, then the best quoted rate.
- * Unlike sizing, use integer net amounts and do not extrapolate beyond the
- * smallest sampled amount along the selected path. */
+ * Use integer net amounts, linearly extrapolating the sampled rates for
+ * reference profit valuation. The sample size is not a profit amount cap or
+ * proof of executable liquidity at the extrapolated amount. */
 export function createScannedProfitTokenValuation(
   pricing: (EffectivePricingInput & Pick<BlockScanStateSnapshot, "effectiveMids">) | null,
   source: CanonicalSource,
@@ -59,9 +60,10 @@ export function createScannedProfitTokenValuation(
       for (const q of quotes) {
         if (marks.has(q.from)) continue;
         const tail = marks.get(q.to); if (!tail) continue;
+        // Preserve the existing equal-rate path preference; this sampled
+        // amount is selection metadata, not a limit on profit valuation.
         const propagatedCap = tail.maxInput === null ? q.amountIn : tail.maxInput * q.amountIn / q.amountOut;
         const maxInput = propagatedCap < q.amountIn ? propagatedCap : q.amountIn;
-        if (maxInput <= 0n) continue;
         const mark: Mark = { num: q.amountOut * tail.num, den: q.amountIn * tail.den,
           maxInput, path: Object.freeze([q, ...tail.path]) };
         const previous = layer.get(q.from);
@@ -79,12 +81,11 @@ export function createScannedProfitTokenValuation(
     canValue: (token: string) => marks.has(token.toLowerCase()),
     valueInEth(token: string, amount: bigint): bigint | null {
       const mark = marks.get(token.toLowerCase());
-      if (!mark || (mark.maxInput !== null && (amount < 0n ? -amount : amount) > mark.maxInput)) return null;
+      if (!mark) return null;
       // Round each raw-token conversion, not just the final rational product.
       // Positive profit rounds down; losses round away from zero.
       let value = amount < 0n ? -amount : amount;
       for (const q of mark.path) {
-        if (value > q.amountIn) return null;
         value = amount >= 0n ? value * q.amountOut / q.amountIn
           : (value * q.amountOut + q.amountIn - 1n) / q.amountIn;
       }
