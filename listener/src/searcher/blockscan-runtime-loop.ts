@@ -45,10 +45,12 @@ import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
 import { type TokenEdge } from "./planner/token-graph.js";
 import {
   AnvilSolver,
+  type Solver,
   type ResolvedPlan,
   type SolverProbe,
   type SolverTiming,
 } from "./solver/solver.js";
+import { createTrialLimiter, SimAmountNoOpportunityError, type TrialControl } from "./simulator/sim-amount-selector.js";
 import type { StrictProductionRuntimeSession } from
   "./strict-production-runtime-session.js";
 import type {
@@ -680,6 +682,13 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly finalSimulationWorkers: readonly BlockScanExecutionWorker[];
   /** Alternative stateless S5 capability. Uses the same reserved-slot runtime. */
   readonly directFinalSimulation?: BlockScanDirectFinalSimulation;
+  /** Main installs execution-profit sizing; legacy callers may retain quote sizing.
+   * The runtime supplies a source-bound trial capability, never S5 worker slots. */
+  readonly amountSelectorFactory?: (context: {
+    readonly source: CanonicalSource;
+    readonly workerIndex: number;
+    readonly simulate: (plan: ResolvedPlan, control: TrialControl) => Promise<SimulationResult>;
+  }) => Solver;
   readonly rpcUrl: string;
   /** Sole current-source Family/exact/execution/Funding authority. */
   readonly strictSession?: StrictSessionProvider;
@@ -3726,7 +3735,10 @@ export class BlockScanRuntimeLoop {
       );
       const quoteSolvers = Array.from(
         { length: solverQuoteWorkers },
-        () => new AnvilSolver(),
+        (_, workerIndex) => this.deps.amountSelectorFactory
+          ? this.deps.amountSelectorFactory({ source: exactSource, workerIndex,
+              simulate: (plan, control) => simulateAmount(plan, control) })
+          : new AnvilSolver(),
       );
       const ensureExecutionWorkerForked = async (
         worker: BlockScanExecutionWorker,
@@ -3742,7 +3754,9 @@ export class BlockScanRuntimeLoop {
           const sourceBlock = runtimeSourceBlock;
           const sourceBlockHash = exactSourceBlockHash;
           preparation = startBlockScanBackgroundFork({
-            signal,
+            // A prepared fork belongs to this source pass, not to whichever
+            // amount search first leased it. Each lease owns its wait/retire.
+            signal: passSignal,
             prepare: (preparationSignal) => forkExecutionWorker(
               worker,
               allExecutionWorkers.indexOf(worker),
@@ -3760,9 +3774,56 @@ export class BlockScanRuntimeLoop {
         }
         await preparation.wait(signal, passDeadlineAtMs);
       };
+      // Stateless calls may run in parallel; stateful trials exclusively lease
+      // the existing pre-final workers. Final simulation keeps its own slots.
+      const amountWorkers = [...blockScanExecutionWorkers];
+      const limitAmountTrials = createTrialLimiter(directFinalSimulation
+        ? Math.max(1, Math.floor(this.deps.solverQuoteConcurrency)) : amountWorkers.length);
+      const simulateAmount = (plan: ResolvedPlan, control: TrialControl): Promise<SimulationResult> =>
+        limitAmountTrials(control, async () => {
+          control.signal.throwIfAborted();
+          if (this.deps.isShuttingDown()) throw new Error("block-scan shutdown");
+          if (directFinalSimulation) {
+            // This capability is stateless: each request starts at the same
+            // source. Do not create a different backend/environment for sizing.
+            return directFinalSimulation.simulate(plan, {
+              source: exactSource, header: requireFinalSimulationHeader(sourceHeader), ...control,
+            });
+          }
+          const worker = amountWorkers.pop();
+          if (!worker) throw new Error("missing isolated amount simulation worker");
+          let retired = false;
+          const retire = () => {
+            retired = true;
+            backgroundFinalSimForks.get(worker)?.cancel(control.signal.reason);
+            worker.state.stop();
+          };
+          control.signal.addEventListener("abort", retire, { once: true });
+          try {
+            if (control.signal.aborted) { retire(); control.signal.throwIfAborted(); }
+            await ensureExecutionWorkerForked(worker, control.signal);
+            const result = await worker.simulator.simulate(plan, control.signal);
+            control.signal.throwIfAborted();
+            if (result.failure) retire();
+            return result;
+          } catch (error) {
+            retire();
+            throw error;
+          } finally {
+            control.signal.removeEventListener("abort", retire);
+            // Never return a fork slot while an interrupted request can still
+            // mutate it. The awaited simulate has settled before this cleanup.
+            if (retired) {
+              await backgroundFinalSimForks.get(worker)?.close(control.signal.reason);
+              await worker.state.stopAndWait();
+              backgroundFinalSimForks.delete(worker);
+            }
+            amountWorkers.push(worker);
+          }
+        });
       const solvePlan = async (
         index: number,
-        solver: AnvilSolver,
+        solver: Solver,
         signal: AbortSignal,
       ): Promise<readonly QuotedBlockScanPlan[]> => {
         solvePipelineSignal = signal;
@@ -3820,9 +3881,8 @@ export class BlockScanRuntimeLoop {
           solverPlans++;
           const solved = await solver.solve(
             item.plan,
-            // Phase-1 quotes are current-N view reads; run them through the
-            // same pinned reth batch backend as refinement. Only final
-            // simulation consumes the prepared Anvil fork.
+            // Quotes remain source-pinned transaction construction. The live
+            // selector ranks actual trial profit; final sim stays independent.
             exactQuoteStateRef,
             quoteOnlyProbe,
             {
@@ -3900,8 +3960,10 @@ export class BlockScanRuntimeLoop {
             }
           }
         } catch (error) {
-          solveOutcome = signal.aborted ? "aborted" : "failed";
-          solverFamilyBudget.recordFailure(item.opp.seedEdges, error);
+          const noOpportunity = error instanceof SimAmountNoOpportunityError && error.status !== "deadline";
+          solveOutcome = signal.aborted ? "aborted" : noOpportunity ? "no_opportunity" : "failed";
+          if (noOpportunity) solverFamilyBudget.recordSuccess(item.opp.seedEdges);
+          else solverFamilyBudget.recordFailure(item.opp.seedEdges, error);
           const evidence = auditOpportunities?.get(
             blindOpportunityEvidenceKey(item.opp),
           );
@@ -3911,12 +3973,12 @@ export class BlockScanRuntimeLoop {
               ev: {
                 executionStatus: "not_run",
                 decision: "reject",
-                reason: `solver_error:${blockScanErrorMessage(error)}`,
+                reason: noOpportunity ? "non_positive_sim_amount" : `solver_error:${blockScanErrorMessage(error)}`,
               },
             });
           }
           console.log(
-            `[searcher/blockscan-family] block=${blockNumber} solve_failed ` +
+            `[searcher/blockscan-family] block=${blockNumber} ${noOpportunity ? "sim_amount_no_opportunity" : "solve_failed"} ` +
               `ring=${item.ring} error=${blockScanErrorMessage(error)}`,
           );
         } finally {

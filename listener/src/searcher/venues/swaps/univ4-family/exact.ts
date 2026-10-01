@@ -1,9 +1,6 @@
 import { ethers } from "ethers";
 import {
   localZeroExactMethod,
-  bindRequestResultRound,
-  collectRequestProgramResults,
-  type ExactMethod,
   type ExactQuoteSemantics,
   type ExactRequestProgram,
 } from "../../adapter-family-plugin.js";
@@ -21,13 +18,6 @@ import type {
   UniV4ExactEvidence,
   UniV4Route,
 } from "./types.js";
-import { quoteV4Local } from "./local-math.js";
-import {
-  localV4StateRequests,
-  localV4DependentRequests,
-  readLocalV4State,
-  UNIV4_LOCAL_WORD_RADIUS,
-} from "./local-state.js";
 
 const EXACT_QUOTE_REQUEST_ID = "exact-univ4-quote";
 const OUTPUT_BALANCE_REQUEST_ID = "exact-univ4-output-balance";
@@ -108,61 +98,8 @@ const univ4RequestProgram: ExactRequestProgram<
   },
 };
 
-const localRequestProgram: ExactRequestProgram<UniV4Descriptor, UniV4Route, UniV4ExactEvidence> = {
-  requirements: () => ({ transports: ["eth-call"] }),
-  buildRequests(input) {
-    assertRoute(input.descriptor, input.route);
-    assertAmount(input.amountIn);
-    return input.amountIn === 0n ? [] : localV4StateRequests(input);
-  },
-  buildDependentProgram(input) {
-    const { programInput } = input;
-    if (programInput.amountIn === 0n) return null;
-    const results = collectRequestProgramResults(input.initialResults, input.priorEvidence);
-    if (results.some(result => result.id === EXACT_QUOTE_REQUEST_ID)) return null;
-    const next = localV4DependentRequests(programInput, results);
-    if (next !== null) return bindRequestResultRound({ transports: ["eth-call"] }, next);
-    const state = readLocalV4State(programInput, results);
-    const quoted = state === null ? null : quoteV4Local(state,
-      programInput.route.direction === "zero-for-one", programInput.amountIn);
-    // Missing coverage / unsupported math falls back for the ORIGINAL full
-    // amount. Malformed or failed state reads throw; they are not cache hits.
-    return quoted === null ? bindRequestResultRound(
-      { transports: ["eth-call"] }, univ4RequestProgram.buildRequests(programInput),
-    ) : null;
-  },
-  decode(input) {
-    const { programInput } = input;
-    assertRoute(programInput.descriptor, programInput.route);
-    assertAmount(programInput.amountIn);
-    if (programInput.amountIn === 0n) return zeroQuote(programInput);
-    const results = collectRequestProgramResults(input.initialResults, input.dependentEvidence);
-    if (results.some(result => result.id === EXACT_QUOTE_REQUEST_ID)) {
-      return univ4RequestProgram.decode({ programInput, initialResults: results, dependentEvidence: [] });
-    }
-    const state = readLocalV4State(programInput, results);
-    const quoted = state === null ? null : quoteV4Local(state,
-      programInput.route.direction === "zero-for-one", programInput.amountIn);
-    if (quoted === null || quoted.amountConsumed !== programInput.amountIn) {
-      throw new Error("univ4 local full-input quote unavailable without Quoter fallback");
-    }
-    if (quoted.amountOut > state!.outputBalance) {
-      throw new Error(`univ4 output-balance-capacity: amountOut=${quoted.amountOut} balance=${state!.outputBalance}`);
-    }
-    return Object.freeze({ amountOut: quoted.amountOut,
-      evidence: exactEvidence(programInput, quoted.amountOut, 0n, "univ4-no-hook-local") });
-  },
-};
-
-/** Same production Exact entry for effective and Solver. The transport owns
- * source-pinned reuse; this Family owns decoding and integer amount math.
- * An ordered trial keeps the existing chain Quoter/full-prefix transport:
- * local shared-manager balance mutations have deliberately not been modeled. */
-export function createUniV4Exact(mode: "local" | "quoter" = "local") {
-  const throughChain = (input: { readonly trialState?: unknown }) =>
-    mode === "quoter" || input.trialState !== undefined;
-  return {
-  methods: (input): readonly ExactMethod<UniV4Descriptor, UniV4Route, UniV4ExactEvidence>[] => Object.freeze([
+export const univ4Exact = {
+  methods: () => Object.freeze([
     localZeroExactMethod<UniV4Descriptor, UniV4Route, UniV4ExactEvidence>(
       "local-zero",
       (input) => {
@@ -171,24 +108,19 @@ export function createUniV4Exact(mode: "local" | "quoter" = "local") {
       },
     ),
     Object.freeze({
-      id: throughChain(input) ? "univ4-quoter-with-output-balance" : "univ4-local-ticks-with-output-balance",
+      id: "univ4-quoter-with-output-balance",
       kind: "request-program" as const,
-      ...(throughChain(input) ? { chainAmountQuote: true as const }
-        : { trialState: { unsupportedReason: "univ4 shared-manager trial mutations are unproven" } }),
-      // Not stateOnlyReads: another pool can change the shared payout balance.
-      program: throughChain(input) ? univ4RequestProgram : localRequestProgram,
+      chainAmountQuote: true as const,
+      program: univ4RequestProgram,
     }),
   ]),
-  cacheCompatibilityProjection: (input) => ({
-    poolId: input.descriptor.poolId,
-    poolKey: poolKeyProjection(input.descriptor.poolKey),
-    quoter: input.descriptor.managerBinding.quoter,
-    manager: input.descriptor.managerBinding.manager,
-    stateView: input.descriptor.managerBinding.stateView,
-    quoteMode: throughChain(input) ? "quoter" : "local",
-    tickWordRadius: UNIV4_LOCAL_WORD_RADIUS,
+  cacheCompatibilityProjection: ({ descriptor, route }) => ({
+    poolId: descriptor.poolId,
+    poolKey: poolKeyProjection(descriptor.poolKey),
+    quoter: descriptor.managerBinding.quoter,
+    manager: descriptor.managerBinding.manager,
     payoutCheck: "same-source-output-balance-v1",
-    direction: [input.route.tokenIn, input.route.tokenOut],
+    direction: [route.tokenIn, route.tokenOut],
     hookData: "0x",
   }),
 } satisfies ExactQuoteSemantics<
@@ -196,9 +128,6 @@ export function createUniV4Exact(mode: "local" | "quoter" = "local") {
   UniV4Route,
   UniV4ExactEvidence
 >;
-}
-
-export const univ4Exact = createUniV4Exact();
 
 function zeroQuote(input: Parameters<typeof exactEvidence>[0]) {
   return Object.freeze({
@@ -216,10 +145,9 @@ function exactEvidence(
   },
   amountOut: bigint,
   gasEstimate: bigint,
-  kind: UniV4ExactEvidence["kind"] = "univ4-no-hook-quoter",
 ): UniV4ExactEvidence {
   return Object.freeze({
-    kind,
+    kind: "univ4-no-hook-quoter" as const,
     source: input.source,
     poolId: input.descriptor.poolId,
     poolKeyFingerprint: poolKeyFingerprint(input.descriptor.poolKey),

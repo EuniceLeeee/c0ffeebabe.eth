@@ -18,6 +18,7 @@ import type { RuntimeEvidence } from
   "../venues/adapter-family-plugin.js";
 import type { AdapterWorkControl } from "../adapter-work-intent.js";
 import { edgeInstanceKey } from "../venues/route-instance-identity.js";
+import { AmountNotExecutableError } from "./amount-rejection.js";
 
 export interface PropagatedAmounts {
   /** Nominal per-edge amounts in raw-unit mode; legacy BPS retains its haircut. */
@@ -153,7 +154,7 @@ export async function propagateAmountsWithRawOutputs(
       throw new BlockScanFamilyAttributedError(
         blockScanEdgeFamilyId(edge),
         "amount propagation",
-        new Error(
+        new (out === 0n ? AmountNotExecutableError : Error)(
           `propagation produced zero at edge ${edge.adapterId} ${edge.tokenIn}->${edge.tokenOut}`,
         ),
       );
@@ -165,7 +166,7 @@ export async function propagateAmountsWithRawOutputs(
     if (spendable <= 0n) {
       // Local amount policy, not a failed Family quote. Never send zero to
       // the next Family and accidentally attribute this rejection to it.
-      throw new Error("propagation tolerance left no spendable output");
+      throw new AmountNotExecutableError("propagation tolerance left no spendable output");
     }
     amounts.push(spendable);
     cur = spendable;

@@ -25,6 +25,7 @@ import type {
   PlanFragment,
 } from "../venues/route-leg-adapter.js";
 import { planFragmentNodes } from "./plan-fragment-requirements.js";
+import { AmountNotExecutableError } from "./amount-rejection.js";
 
 /**
  * Build a complete ResolvedPlanNode wrapped in the flash adapter.
@@ -124,7 +125,7 @@ export async function buildResolvedPlanFromPath(
   for (let i = 0; i < path.edges.length; i++) {
     const nominalOut = amounts[i + 1]!;
     if (nominalOut <= quoteToleranceRawUnits) {
-      throw new Error("execution tolerance has no positive minimum output");
+      throw new AmountNotExecutableError("execution tolerance has no positive minimum output");
     }
     const fragment = buildFragment(i, exactHandles[i]!, nominalOut - quoteToleranceRawUnits);
     inner.push(...planFragmentNodes(fragment, path.edges[i]!.tokenIn, amounts[i]!));

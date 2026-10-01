@@ -9811,13 +9811,12 @@
         "familyId": "univ4",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "8d8653f3be4160462bba2f47afda2791220525a4b7342f95a0778259c877df44",
+        "contentHash": "131d4ab6a5734f090d5b0e0ad4363c049ffaa2c021b85d21c4ed65b53bd0139b",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
           "src/searcher/blockscan-multicall.ts",
-          "src/searcher/solver/v3-math.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
@@ -9825,8 +9824,6 @@
           "src/searcher/venues/swaps/univ4-abi.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
           "src/searcher/venues/swaps/univ4-family/codec.ts",
-          "src/searcher/venues/swaps/univ4-family/local-math.ts",
-          "src/searcher/venues/swaps/univ4-family/local-state.ts",
           "src/searcher/venues/swaps/univ4-family/manifest.ts",
           "src/shared/constants/addresses.ts"
         ],
@@ -9848,7 +9845,7 @@
         "familyId": "univ4",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "16d637af0cd53f6821663f50ff6060db07c7c1e856f39598317a99091d45b8ed",
+        "contentHash": "7eb878698e8afd896094f2b0d6b0cc14aad8a44cb0fa055308c3dd9419f2e318",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -10466,5 +10463,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "c1846cf903a2a2d3d44b45d1977e0d98641784c66dfaca35acbd46af7ebec687"
+  "artifactHash": "827f535520ead3084b7c1cba0a44fc1f2db811a5bbb8505d7c2a88a7be96a0fb"
 }

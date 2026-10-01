@@ -201,6 +201,8 @@ import {
 } from "./solver/victim-apply.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
 import { EthSimulateV1Simulator, buildEthSimulateV1ExecutionInput } from "./simulator/eth-simulate-v1.js";
+import { createBlockScanSimAmountSelector } from "./simulator/blockscan-sim-amount-selector.js";
+import { createTrialLimiter } from "./simulator/sim-amount-selector.js";
 import { resolveBlockScanFinalSimulationMethod } from "./blockscan-final-simulation-method.js";
 import {
   executeFinalSimulationWork,
@@ -1486,6 +1488,12 @@ async function main(): Promise<void> {
     ? Math.max(1, Math.floor(blockScanSolveConcurrencyRaw))
     : 4;
   const blockScanSolverSearch = resolveBlockScanSolverSearchConfig();
+  // Bound the complete quote/build/sim trial across every amount worker, not
+  // only its final RPC. Matches the tested selector's shared concurrency cap.
+  const blockScanAmountTrials = createTrialLimiter(blockScanSolverSearch.quoteConcurrency);
+  if (enableBlockScan && blockScanSolverSearch.amountGrid !== "multiples") {
+    throw new Error("block-scan sim amount selection requires the P/10P/100P/1000P multiples grid");
+  }
   const blockScanFinalSimulationMethod = resolveBlockScanFinalSimulationMethod();
   if (enableBlockScan && blindInstallForkBotVm && blockScanFinalSimulationMethod !== "anvil") {
     throw new Error("fork-only executor installation requires the anvil final simulation method");
@@ -1508,7 +1516,7 @@ async function main(): Promise<void> {
     ? Math.max(1, Math.floor(blockScanFinalSimulationConcurrencyRaw))
     : 1;
   if (enableBlockScan) {
-    console.log(`[searcher/live] block-scan final simulation method=${blockScanFinalSimulationMethod} slots=${blockScanFinalSimulationConcurrency}`);
+    console.log(`[searcher/live] block-scan amount selection=sim final simulation method=${blockScanFinalSimulationMethod} slots=${blockScanFinalSimulationConcurrency}`);
   }
   const blockScanRefineCandidates = resolveBlockScanRefineCandidates(process.env, blockScanCfg?.maxCandidates ?? 0);
   const blockScanExactRefineHardBudgetRaw = Number(
@@ -2546,6 +2554,16 @@ async function main(): Promise<void> {
     blockScanConfig: blockScanCfg,
     executionWorkers: blockScanExecutionWorkers,
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
+    amountSelectorFactory: ({ source, workerIndex, simulate }) => createBlockScanSimAmountSelector({
+      source, executor: executionIdentity.executor, simulate, runTrial: blockScanAmountTrials,
+      record(event) {
+        try {
+          console.log(`[searcher/sim-amount] ${JSON.stringify({ ...event,
+            sourceBlock: source.number, generation: source.generation, workerIndex },
+            (_key, value) => typeof value === "bigint" ? value.toString() : value)}`);
+        } catch { /* Telemetry cannot alter amount selection. */ }
+      },
+    }),
     directFinalSimulation: enableBlockScan && blockScanFinalSimulationMethod === "eth_simulateV1"
       ? Object.assign(new EthSimulateV1Simulator(config.rpcUrl, executionIdentity.executor, executionIdentity.transactionOrigin,
           finalSimulationExecutorRuntimeCode),

@@ -5,7 +5,7 @@ import { runInNewContext } from "node:vm";
 import { test } from "node:test";
 import ts from "typescript";
 import { ethers } from "ethers";
-import { BlockScanRuntimeLoop, SourceSimulationWork, type BlockScanRuntimeLoopDependencies,
+import { BlockScanRuntimeLoop, SourceSimulationWork, startBlockScanBackgroundFork, type BlockScanRuntimeLoopDependencies,
   type SourceSimulationFactory } from "../blockscan-runtime-loop.js";
 import { createLiveRuntimeStop, createLiveSourceSimulationFactory, maybeSubmitBlockScanAtomic,
   resolveBlockScanAtomicPolicy } from "../main.js";
@@ -20,6 +20,8 @@ import { BlockScanActivityPrefetch } from "../blockscan-activity-prefetch.js";
 import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedGraphView } from "../venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import { AnvilSolver } from "../solver/solver.js";
+import { createBlockScanSimAmountSelector } from "../simulator/blockscan-sim-amount-selector.js";
+import { createTrialLimiter } from "../simulator/sim-amount-selector.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 
 const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
@@ -1386,6 +1388,181 @@ test(`disabled independent Exact keeps Solver strict-session wiring; sim reject 
     (AnvilSolver.prototype.solve as any) = originalSolve;
     console.log = originalLog;
     await f.loop.shutdown();
+  }
+});
+
+test("Anvil preparation belongs to the pass, while cancelled leases drain before worker reuse", async () => {
+  const text = readFileSync(new URL("../blockscan-runtime-loop.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("blockscan-runtime-loop.ts", text, ts.ScriptTarget.Latest, true);
+  const names = new Set(["ensureExecutionWorkerForked", "amountWorkers", "limitAmountTrials", "simulateAmount"]);
+  const statements: string[] = [];
+  function visit(node: ts.Node): void {
+    if (ts.isVariableStatement(node) && node.declarationList.declarations.some(d =>
+      ts.isIdentifier(d.name) && names.has(d.name.text))) statements.push(node.getText(ast));
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.equal(statements.length, 4);
+  const js = ts.transpileModule(`(function() { ${statements.join("\n")}\n return simulateAmount; }).call(owner)`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  for (const cancelDuringPreparation of [false, true]) {
+    const pass = new AbortController(), a = new AbortController(), b = new AbortController(), gate = deferred();
+    const preparations = new Map(); let forks = 0, simulations = 0, stops = 0, settled = false;
+    const worker = { state: { stop() { stops++; }, async stopAndWait() {} },
+      simulator: { async simulate() { simulations++; return { success: true }; } } };
+    const deadlineAtMs = Date.now() + 10000;
+    const simulate = runInNewContext(js, {
+      owner: { deps: { solverQuoteConcurrency: 1, isShuttingDown: () => false } },
+      directFinalSimulation: undefined, blockScanExecutionWorkers: [worker], allExecutionWorkers: [worker],
+      runtimeSourceBlock: 101, exactSourceBlockHash: hash(101), exactSource: source(1),
+      backgroundFinalSimForks: preparations, passSignal: pass.signal, passDeadlineAtMs: deadlineAtMs,
+      createTrialLimiter, startBlockScanBackgroundFork,
+      async forkExecutionWorker(_worker: unknown, _index: number, input: any) {
+        forks++;
+        if (cancelDuringPreparation && forks === 1) await gate.promise;
+        input.signal.throwIfAborted();
+      },
+    });
+    const first = simulate({}, { signal: a.signal, deadlineAtMs }).finally(() => { settled = true; });
+    const reason = new Error("first search cancelled after another coarse trial failed");
+    if (cancelDuringPreparation) {
+      const rejected = assert.rejects(first, error => error === reason);
+      await until(() => forks === 1); a.abort(reason); await turn();
+      assert(!settled, "cancelled preparation is still owned until its physical drain settles");
+      gate.resolve(); await rejected;
+    } else {
+      await first; a.abort(reason);
+    }
+    assert(!b.signal.aborted);
+    await simulate({}, { signal: b.signal, deadlineAtMs });
+    assert.equal(forks, cancelDuringPreparation ? 2 : 1);
+    assert.equal(simulations, cancelDuringPreparation ? 1 : 2);
+    assert.equal(stops > 0, cancelDuringPreparation);
+    await Promise.all([...preparations.values()].map(p => p.close(new Error("test finished"))));
+  }
+});
+
+function liveSimAmountFactory(): NonNullable<BlockScanRuntimeLoopDependencies["amountSelectorFactory"]> {
+  const text = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("main.ts", text, ts.ScriptTarget.Latest, true);
+  let expression: ts.Expression | undefined;
+  function visit(node: ts.Node): void {
+    if (ts.isNewExpression(node) && node.expression.getText(ast) === "BlockScanRuntimeLoop") {
+      const deps = node.arguments?.[0]; assert(deps && ts.isObjectLiteralExpression(deps));
+      const property = deps.properties.find(p => p.name?.getText(ast) === "amountSelectorFactory");
+      assert(property && ts.isPropertyAssignment(property)); expression = property.initializer;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert(expression);
+  return runInNewContext(ts.transpileModule(`(${expression.getText(ast)})`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText, { createBlockScanSimAmountSelector, blockScanAmountTrials: createTrialLimiter(3),
+    executionIdentity: { executor: actor }, console });
+}
+
+for (const backend of ["direct", "anvil"] as const)
+for (const outcome of ["positive", "nonpositive", "source-fault", "cancel"] as const)
+test(`ordinary live factory selects actual sim profit through runtime (${backend}, ${outcome})`, async () => {
+  const f = loopFixture(() => ({ transport: { async simulate() { return { data: "0x" }; } }, async closeAndDrain() {} }));
+  const edges = twoWayPoolEdges([target, `0x${"dd".repeat(20)}`]);
+  const trialAmounts: bigint[] = [], finalAmounts: bigint[] = [], logs: string[] = [];
+  let active = 0, peak = 0, trialForks = 0, finalForks = 0, retired = 0;
+  const fault = new Error("fixture amount source failure");
+  const result = (profit: bigint): SimulationResult => ({ success: profit > 0n, profitToken: priceFundingToken,
+    netProfit: profit, grossProfit: profit, gasUsed: 10n, calldata: "0x", scriptHex: "0x" });
+  const trial = async (plan: any, signal: AbortSignal) => {
+    trialAmounts.push(plan.flashAmount); peak = Math.max(peak, ++active);
+    try {
+      if (outcome === "cancel") f.runtimeAbort.abort(new Error("fixture new head"));
+      await turn(); signal.throwIfAborted();
+      if (outcome === "source-fault") throw fault;
+      return result(outcome === "nonpositive" ? 0n : plan.flashAmount === 1230n ? 55n : 1n);
+    } finally { active--; }
+  };
+  const final = async (plan: any) => {
+    assert.equal(active, 0, "this single candidate's search must settle before final verification");
+    finalAmounts.push(plan.flashAmount);
+    return { ...result(0n), failure: { kind: "revert", code: 3, cause: new Error("independent final revert") } };
+  };
+  const worker = (kind: "trial" | "final"): any => ({
+    state: { provider: {}, async forkAt() { if (kind === "trial") trialForks++; else finalForks++; },
+      stop() { if (kind === "trial") retired++; }, async stopAndWait() {} }, solver: {},
+    simulator: { async simulate(plan: any, signal: AbortSignal) { return kind === "trial" ? trial(plan, signal) : final(plan); } },
+  });
+  const session: any = {
+    source: source(1), edges, runtimeEvidenceFromPendingExecution: () => [], familyIdForEdge: () => "fixture",
+    blocksPrefixInversion: () => false,
+    async issueExact(input: any) { return { amountIn: input.amountIn, amountOut: input.amountIn + 10n }; },
+    fundingActionIds: () => ["fixture-flash"],
+    buildExecution: () => ({ status: "resolved", fragment: { nodes: [], requirements: [] } }),
+    buildFundingRoot(input: any) { return { adapterId: "skip", target: actor, tokenIn: priceFundingToken,
+      tokenOut: priceFundingToken, amount: input.amount, children: [], params: {} }; },
+  };
+  f.coordinator.prepare = async (input: any) => completeRuntimeFixture(input.graph);
+  const originalSolve = AnvilSolver.prototype.solve, originalLog = console.log;
+  AnvilSolver.prototype.solve = async () => { throw new Error("ordinary live must not call old Solver"); };
+  console.log = (...args: unknown[]) => { logs.push(args.map(String).join(" ")); };
+  const cache = new BlockScanSimRejectCache();
+  Object.assign(f.deps, {
+    exactRefineEnabled: false, solverGssMaxTries: 0, solverAmountGrid: "multiples", solverQuoteConcurrency: 3,
+    amountSelectorFactory: liveSimAmountFactory(), executionWorkers: [worker("trial")],
+    finalSimulationWorkers: backend === "anvil" ? [worker("final")] : [],
+    ...(backend === "direct" ? { directFinalSimulation: { concurrency: 1, async simulate(plan: any, context: any) {
+      assert.deepEqual(context.source, source(1)); assert.equal(context.header.hash, hash(101));
+      assert.equal(context.header.timestamp, 1000); assert(!context.signal.aborted);
+      return plan.netProfit === 0n ? trial(plan, context.signal) : final(plan);
+    } } } : {}),
+    frozenTopology: { topologyKey: "fixture", async observeHeader(number: number) {
+      return { number, hash: hash(number), parentHash: hash(number - 1), timestamp: 1000, baseFeePerGas: 1n,
+        gasUsed: 0n, gasLimit: 30_000_000n, transactionHashes: [] };
+    } },
+    strictSession: async () => session,
+    exactQuoteStateFactory: () => ({ async call() { throw new Error("must use strict quotes"); } }),
+    blockScanGraph: () => edges,
+    blockScanPlanner: () => ({ setFlashLiquidity() {}, setGraph() {}, async planBlockScanFromSeedEdges(opp: any) {
+      return [{ opportunity: { ...opp, profitToken: opp.flashToken }, tokenPath: { edges: [...opp.seedEdges] },
+        templateName: "fixture", maxFlashAmount: 123000n, flashAdapterIds: ["fixture-flash"],
+        flashAdapterId: "fixture-flash", cycleTokens: [opp.flashToken], borrowableTokens: [] }];
+    } }),
+    amountReference: { prepare(input: any) { return new Map(input.opportunities.map((opp: any) => [opp, 123n])); } },
+    blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0, exactAdmissionSpreadBps: 0,
+      hopTokensPerStep: 3, hopPoolsPerPair: 3, maxCandidates: 1,
+      pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
+    async submitAtomic(input: Parameters<BlockScanRuntimeLoopDependencies["submitAtomic"]>[0]) {
+      if (finalAmounts.length === 0) {
+        assert.equal(input.resolved.flashAmount, 1230n); assert.equal(input.resolved.netProfit, 55n);
+      }
+      return maybeSubmitBlockScanAtomic({ ...input, collectBlindAudit: true, simRejects: cache,
+        config: { ...resolveBlockScanAtomicPolicy({}), dryRun: true, blockScanSubmit: false, finalVerifyFloorBps: 0n },
+        provider: { async send() { return { number: "0x65", hash: hash(101) }; } } as any,
+        bundleRouter: { async submit() { throw new Error("must not submit"); } },
+        submissionCoordinator: { offer() { throw new Error("must not submit"); } },
+        strategyVersions: { strategy_view_version: "fixture", blockscan_view_hash: hash(101) },
+      });
+    },
+  });
+  try {
+    const run = f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+    if (outcome === "cancel") await assert.rejects(run, /fixture new head/);
+    else await run;
+    assert.deepEqual(trialAmounts, outcome === "positive" ? [123n, 1230n, 12300n, 123000n] : [123n]);
+    assert.deepEqual(finalAmounts, outcome === "positive" ? [1230n, 123n, 12300n] : []);
+    assert.equal(active, 0); assert.equal(peak, backend === "direct" && outcome === "positive" ? 3 : 1);
+    assert.equal(trialForks, backend === "anvil" ? 1 : 0);
+    assert.equal(finalForks, backend === "anvil" ? 1 : 0);
+    if (backend === "anvil" && ["cancel", "source-fault"].includes(outcome)) assert(retired > 0);
+    if (outcome === "nonpositive") {
+      assert(logs.some(l => l.includes("sim_amount_no_opportunity")));
+      assert(!logs.some(l => l.includes("solve_failed")));
+    }
+    if (outcome === "source-fault") {
+      assert(logs.some(l => l.includes("solve_failed") && l.includes(fault.message)));
+      assert(!logs.some(l => l.includes("sim_amount_no_opportunity")));
+    }
+    assert(!logs.some(l => l.includes("ordinary live must not call old Solver")));
+  } finally {
+    AnvilSolver.prototype.solve = originalSolve; console.log = originalLog; await f.loop.shutdown();
   }
 });
 

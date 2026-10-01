@@ -45,7 +45,7 @@ import {
 } from "./venues/swaps/univ4-abi.js";
 import { v4PoolId } from "./venues/swaps/univ4-common.js";
 import { ADDR } from "../shared/constants/addresses.js";
-import { createUniV4Exact } from "./venues/swaps/univ4-family/exact.js";
+import { univ4Exact } from "./venues/swaps/univ4-family/exact.js";
 import { univ4Execution } from "./venues/swaps/univ4-family/execution.js";
 import {
   v3SwapExactInput,
@@ -2271,7 +2271,7 @@ async function buildUniv4CaseCapture(input: {
       }),
     }));
   // This legacy fixture supplies Quoter responses, not a verified tick snapshot.
-  const referenceExact = createUniV4Exact("quoter");
+  const referenceExact = univ4Exact;
   const exactByRouteKey = new Map<
     string,
     { readonly amountOut: bigint; readonly evidence: UniV4ExactEvidence }
@@ -2295,7 +2295,7 @@ async function buildUniv4CaseCapture(input: {
         executor: MIGRATION_CAPTURE_EXECUTOR,
         runtimeEvidence: Object.freeze([]),
       });
-      const exactMethod = referenceExact.methods(exactInput).find(
+      const exactMethod = referenceExact.methods().find(
         (method) => method.kind === "request-program" && method.id === "univ4-quoter-with-output-balance",
       );
       if (exactMethod === undefined || exactMethod.kind !== "request-program") {
